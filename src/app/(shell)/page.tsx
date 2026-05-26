@@ -7,6 +7,7 @@ import {
   getTrendDataLast7Days,
   getWithdrawalsThisMonth,
 } from "@/features/dashboard/server/queries";
+import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { DashboardHero } from "./_components/dashboard-hero";
 import { KpiGrid } from "./_components/kpi-grid";
@@ -24,6 +25,7 @@ export default async function DashboardPage() {
     attendance,
     announcements,
     trend,
+    todaySchedule,
   ] = await Promise.all([
     getCurrentUserProfile(),
     getEnrolledStudentCount(),
@@ -32,6 +34,7 @@ export default async function DashboardPage() {
     getMostRecentAttendanceSnapshot(),
     getRecentAnnouncements(),
     getTrendDataLast7Days(),
+    getTodaySchedule(),
   ]);
 
   const name = profile?.displayName ?? "원장";
@@ -51,7 +54,7 @@ export default async function DashboardPage() {
           <AnnouncementsCard announcements={announcements} />
         </div>
         <div className="xl:col-span-2">
-          <TodayTimeline />
+          <TodayTimeline slots={todaySchedule} />
         </div>
       </div>
       <TrendCard data={trend} />

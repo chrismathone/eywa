@@ -77,6 +77,23 @@ const CLASSES: { className: string; subject: string; grade: string }[] = [
   { className: "고3 수학 마무리", subject: "math", grade: "고3" },
 ];
 
+const SCHEDULES: { className: string; day: string; start: string; end: string }[] = [
+  { className: "중1 수학 정규", day: "mon", start: "16:00", end: "17:30" },
+  { className: "중1 수학 정규", day: "wed", start: "16:00", end: "17:30" },
+  { className: "중2 수학 심화 A반", day: "tue", start: "16:00", end: "17:30" },
+  { className: "중2 수학 심화 A반", day: "thu", start: "16:00", end: "17:30" },
+  { className: "중3 수학 심화 C반", day: "mon", start: "19:00", end: "20:30" },
+  { className: "중3 수학 심화 C반", day: "wed", start: "19:00", end: "20:30" },
+  { className: "중3 영어 정규", day: "tue", start: "19:00", end: "20:30" },
+  { className: "중3 영어 정규", day: "thu", start: "19:00", end: "20:30" },
+  { className: "고1 영어 정규 B반", day: "mon", start: "17:40", end: "19:00" },
+  { className: "고1 영어 정규 B반", day: "wed", start: "17:40", end: "19:00" },
+  { className: "고2 수학 심화 A반", day: "tue", start: "17:40", end: "19:10" },
+  { className: "고2 수학 심화 A반", day: "thu", start: "17:40", end: "19:10" },
+  { className: "고2 영어 정규 B반", day: "fri", start: "17:00", end: "18:30" },
+  { className: "고3 수학 마무리", day: "fri", start: "19:00", end: "21:00" },
+];
+
 const ANNOUNCEMENTS = [
   {
     title: "6월 정기시험 일정 안내",
@@ -122,6 +139,7 @@ async function main() {
   await sql`delete from classes where tenant_id = ${tenantId}`;
   await sql`delete from classrooms where tenant_id = ${tenantId}`;
   await sql`delete from announcements where tenant_id = ${tenantId}`;
+  await sql`delete from class_schedules where tenant_id = ${tenantId}`;
   await sql`delete from users where tenant_id = ${tenantId} and system_role <> 'master'`;
 
   // --- 2. Teachers (5) ---
@@ -150,7 +168,7 @@ async function main() {
 
   // --- 4. Classes (8) ---
   console.log("Inserting classes…");
-  const classes: { id: string; grade: string }[] = [];
+  const classes: { id: string; grade: string; className: string }[] = [];
   for (let i = 0; i < CLASSES.length; i++) {
     const c = CLASSES[i]!;
     const [row] = await sql<{ id: string }[]>`
@@ -158,7 +176,23 @@ async function main() {
       values (${tenantId}, ${c.className}, ${c.subject}, ${pick(teacherIds, i)}, ${pick(classroomIds, i)}, true)
       returning id
     `;
-    classes.push({ id: row.id, grade: c.grade });
+    classes.push({ id: row.id, grade: c.grade, className: c.className });
+  }
+
+  // --- 4b. Class schedules (weekly recurrence) ---
+  console.log("Inserting class schedules…");
+  const validFrom = new Date();
+  validFrom.setDate(validFrom.getDate() - 60);
+  const validFromStr = validFrom.toISOString().slice(0, 10);
+  for (const sched of SCHEDULES) {
+    const cls = classes.find((c) => c.className === sched.className);
+    if (!cls) continue;
+    await sql`
+      insert into class_schedules
+        (tenant_id, class_id, day_of_week, start_time, end_time, valid_from)
+      values
+        (${tenantId}, ${cls.id}, ${sched.day}, ${sched.start}, ${sched.end}, ${validFromStr})
+    `;
   }
 
   // --- 5. Students (30) ---
@@ -252,12 +286,14 @@ async function main() {
   const [{ count: enrollments_c }] = await sql<{ count: number }[]>`select count(*)::int as count from enrollments where tenant_id = ${tenantId}`;
   const [{ count: attendance_c }] = await sql<{ count: number }[]>`select count(*)::int as count from attendance_records where tenant_id = ${tenantId}`;
   const [{ count: announcements_c }] = await sql<{ count: number }[]>`select count(*)::int as count from announcements where tenant_id = ${tenantId}`;
+  const [{ count: schedules_c }] = await sql<{ count: number }[]>`select count(*)::int as count from class_schedules where tenant_id = ${tenantId}`;
 
   console.log("");
   console.log("Seed complete:");
   console.log(`  students       ${students_c}`);
   console.log(`  teachers       ${teachers_c}`);
   console.log(`  classes        ${classes_c}`);
+  console.log(`  schedules      ${schedules_c}`);
   console.log(`  enrollments    ${enrollments_c}`);
   console.log(`  attendance     ${attendance_c}`);
   console.log(`  announcements  ${announcements_c}`);

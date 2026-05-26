@@ -6,6 +6,7 @@ import {
   pgEnum,
   pgTable,
   text,
+  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -46,6 +47,16 @@ export const announcementAudienceEnum = pgEnum("announcement_audience", [
   "teachers",
   "counselors",
   "accounting",
+]);
+
+export const dayOfWeekEnum = pgEnum("day_of_week", [
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+  "sun",
 ]);
 
 // === tenants ===
@@ -202,6 +213,30 @@ export const attendanceRecords = pgTable(
   ],
 );
 
+// === class_schedules (weekly recurrence pattern for a class) ===
+export const classSchedules = pgTable(
+  "class_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }),
+    dayOfWeek: dayOfWeekEnum("day_of_week").notNull(),
+    startTime: time("start_time").notNull(),
+    endTime: time("end_time").notNull(),
+    validFrom: date("valid_from").notNull(),
+    validTo: date("valid_to"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("schedules_tenant_class_idx").on(t.tenantId, t.classId),
+    index("schedules_tenant_day_idx").on(t.tenantId, t.dayOfWeek),
+  ],
+);
+
 // === announcements ===
 export const announcements = pgTable(
   "announcements",
@@ -236,5 +271,7 @@ export type Enrollment = typeof enrollments.$inferSelect;
 export type NewEnrollment = typeof enrollments.$inferInsert;
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type NewAttendanceRecord = typeof attendanceRecords.$inferInsert;
+export type ClassSchedule = typeof classSchedules.$inferSelect;
+export type NewClassSchedule = typeof classSchedules.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
