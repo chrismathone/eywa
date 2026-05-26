@@ -18,7 +18,7 @@ const KO_DATE = new Intl.DateTimeFormat("ko-KR", {
   weekday: "long",
 });
 
-export function DashboardHero({ name }: { name: string }) {
+export function DashboardHero({ name, enrolledStudents }: { name: string; enrolledStudents: number }) {
   const today = new Date();
   const dateString = KO_DATE.format(today);
   const week = getWeekOfYear(today);
@@ -39,7 +39,7 @@ export function DashboardHero({ name }: { name: string }) {
         <Divider />
         <Stat label="주차" value={`${week}주`} />
         <Divider />
-        <Stat label="재원생" value="248" unit="명" />
+        <Stat label="재원생" value={String(enrolledStudents)} unit="명" />
       </div>
     </header>
   );

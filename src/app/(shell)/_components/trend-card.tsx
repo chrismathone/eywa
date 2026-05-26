@@ -1,37 +1,46 @@
 import { Calendar } from "lucide-react";
-
-const DAYS = [
-  { date: "5/20", day: "월", attendance: 92.1, payment: 79.2 },
-  { date: "5/21", day: "화", attendance: 93.8, payment: 81.5 },
-  { date: "5/22", day: "수", attendance: 91.2, payment: 84.0 },
-  { date: "5/23", day: "목", attendance: 95.0, payment: 85.8 },
-  { date: "5/24", day: "금", attendance: 88.4, payment: 86.4 },
-  { date: "5/25", day: "토", attendance: 94.6, payment: 87.0 },
-  { date: "5/26", day: "일", attendance: 94.2, payment: 87.1 },
-];
+import type { TrendPoint } from "@/features/dashboard/server/queries";
 
 const Y_TICKS = [80, 85, 90, 95, 100];
 
-export function TrendCard() {
+export function TrendCard({ data }: { data: TrendPoint[] }) {
+  if (data.length === 0) {
+    return (
+      <section className="bg-card border-border rounded-lg border p-6">
+        <p className="eyebrow">최근 7일 추세</p>
+        <div className="text-muted-foreground mt-8 text-center text-sm">데이터 없음</div>
+      </section>
+    );
+  }
+
   const w = 720;
   const h = 180;
   const padX = 44;
   const padY = 24;
   const innerW = w - padX * 2;
   const innerH = h - padY * 2;
-  const dx = innerW / (DAYS.length - 1);
+  const dx = innerW / (data.length - 1);
   const yMin = 75;
   const yMax = 100;
   const yRange = yMax - yMin;
   const yAt = (v: number) => padY + innerH - ((v - yMin) / yRange) * innerH;
 
-  const attLine = DAYS.map(
-    (d, i) => `${i === 0 ? "M" : "L"} ${padX + i * dx} ${yAt(d.attendance)}`,
-  ).join(" ");
-  const payLine = DAYS.map(
-    (d, i) => `${i === 0 ? "M" : "L"} ${padX + i * dx} ${yAt(d.payment)}`,
-  ).join(" ");
-  const attArea = `${attLine} L ${padX + (DAYS.length - 1) * dx} ${h - padY} L ${padX} ${h - padY} Z`;
+  const attLine = data
+    .map((d, i) => `${i === 0 ? "M" : "L"} ${padX + i * dx} ${yAt(d.attendance)}`)
+    .join(" ");
+  const payLine = data
+    .map((d, i) => `${i === 0 ? "M" : "L"} ${padX + i * dx} ${yAt(d.payment)}`)
+    .join(" ");
+  const attArea = `${attLine} L ${padX + (data.length - 1) * dx} ${h - padY} L ${padX} ${h - padY} Z`;
+
+  const lastAttendance = data[data.length - 1]?.attendance ?? 0;
+  const firstAttendance = data[0]?.attendance ?? 0;
+  const attDelta = (lastAttendance - firstAttendance).toFixed(1);
+  const lastPayment = data[data.length - 1]?.payment ?? 0;
+  const firstPayment = data[0]?.payment ?? 0;
+  const payDelta = (lastPayment - firstPayment).toFixed(1);
+
+  const rangeLabel = `${data[0]?.date} ~ ${data[data.length - 1]?.date}`;
 
   return (
     <section className="bg-card border-border rounded-lg border p-6">
@@ -41,24 +50,28 @@ export function TrendCard() {
           <h2 className="display text-foreground mt-1.5 text-xl">출석률 · 수납률</h2>
         </div>
         <div className="flex items-center gap-5 text-xs">
-          <Legend colorClass="bg-chart-2" label="출석률" value="94.2%" delta="+2.1pt" positive />
+          <Legend
+            colorClass="bg-chart-2"
+            label="출석률"
+            value={`${lastAttendance.toFixed(1)}%`}
+            delta={`${Number(attDelta) >= 0 ? "+" : ""}${attDelta}pt`}
+            positive={Number(attDelta) >= 0}
+          />
           <Legend
             colorClass="bg-chart-3"
             label="수납률"
-            value="87.1%"
-            delta="+7.9pt"
-            positive
+            value={`${lastPayment.toFixed(1)}%`}
+            delta={`${Number(payDelta) >= 0 ? "+" : ""}${payDelta}pt`}
+            positive={Number(payDelta) >= 0}
             dashed
           />
           <div className="text-muted-foreground inline-flex items-center gap-1.5">
             <Calendar className="size-3" />
-            <span className="num">5/20 ~ 5/26</span>
+            <span className="num">{rangeLabel}</span>
           </div>
         </div>
       </header>
 
-      {/* Chart is constrained so viewBox doesn't blow up on wide screens.
-          padding-left reserves room for HTML Y-axis labels. */}
       <div className="relative mx-auto w-full max-w-[860px] pl-8">
         <div className="relative">
           <svg
@@ -106,7 +119,7 @@ export function TrendCard() {
               strokeDasharray="5 4"
             />
 
-            {DAYS.map((d, i) => (
+            {data.map((d, i) => (
               <g key={d.date}>
                 <circle
                   cx={padX + i * dx}
@@ -128,7 +141,6 @@ export function TrendCard() {
             ))}
           </svg>
 
-          {/* HTML Y-axis labels — positioned at the SVG's gridline percentages */}
           <div className="pointer-events-none absolute inset-0">
             {Y_TICKS.map((g) => {
               const yPct = (yAt(g) / h) * 100;
@@ -144,9 +156,8 @@ export function TrendCard() {
             })}
           </div>
 
-          {/* HTML X-axis labels — positioned at each data point's percentage */}
           <div className="relative mt-2 h-8">
-            {DAYS.map((d, i) => {
+            {data.map((d, i) => {
               const xPct = ((padX + i * dx) / w) * 100;
               return (
                 <div
