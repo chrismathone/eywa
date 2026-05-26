@@ -221,6 +221,78 @@ const PROSPECTS: ProspectSeed[] = [
   },
 ];
 
+const STUDENT_CONSULTATION_TEMPLATES: { summary: string; followUp?: string }[] = [
+  {
+    summary: "최근 모의고사 성적 하락에 대한 학부모 면담. 학교 시험 직전 컨디션 관리와 풀이 시간 분배가 약점으로 확인됨.",
+    followUp: "주 1회 모의고사 시간 측정 풀이 + 컨디션 노트 점검",
+  },
+  {
+    summary: "본인이 직접 진로 상담 요청. 수학 심화반 진입에 대한 자신감과 부담감을 동시에 호소. 단계적 진도 조정 합의.",
+    followUp: "다음 단원 평가에서 80점 이상 시 심화반 합류",
+  },
+  {
+    summary: "결석 누적 3회. 가정 상황 변화로 통원 패턴이 불규칙. 학부모와 통화 후 보강 일정 재조정.",
+    followUp: "수/금 19:00 보강 슬롯 배정",
+  },
+  {
+    summary: "과제 미제출 패턴에 대한 면담. 학습 분량은 적절하지만 우선순위 정리 능력이 부족. 플래너 작성 코칭 시작.",
+    followUp: "주간 플래너 검토 (월요일 16시)",
+  },
+  {
+    summary: "선행 학습 가속화 요청 (학부모). 현재 진도 대비 1.5학년 위 단원 학습 가능 여부 평가 필요.",
+    followUp: "다음 주 진단 평가 예약 → 결과에 따라 결정",
+  },
+];
+
+const MEETINGS: { title: string; daysAgo: number; attendees: string[]; content: string }[] = [
+  {
+    title: "주간 강사 회의 (5월 4주차)",
+    daysAgo: 2,
+    attendees: ["박지훈", "이연우", "김민지", "최서영", "강도현"],
+    content: `안건 1. 6월 정기시험 일정 확정
+  - 6/17(수) ~ 6/19(금) 진행, 시간표는 다음 주 화요일까지 전달
+  - 시험 범위는 각 과목 강사가 학생에게 별도 안내
+
+안건 2. 출석률 추이 점검
+  - 5월 평균 출석률 92% 유지
+  - 결석 3회 이상 학생 5명 → 학생상담 우선순위 등록
+
+안건 3. 여름방학 시간표 사전 공지
+  - 7/21부터 여름 특강 전환, 강사 일정 사전 확인 필요
+  - 강사진 회의 6/25 19:30 예정`,
+  },
+  {
+    title: "수학 교과 분과 회의",
+    daysAgo: 7,
+    attendees: ["박지훈", "김민지", "강도현"],
+    content: `안건 1. 중3 심화반 진도 조정
+  - 도형 단원 시간 부족 → 2주 추가 배정
+  - 자사고 면접 대비 풀이 발표 훈련 도입
+
+안건 2. 고2 모의고사 결과 분석
+  - 평균 1.8등급 (전월 대비 +0.3 향상)
+  - 약점 단원: 적분의 활용 → 6월 보강 진행
+
+안건 3. 신입 강사 코칭
+  - 강도현 강사 수업 참관 후 피드백 진행`,
+  },
+  {
+    title: "원장-부장 운영 회의",
+    daysAgo: 14,
+    attendees: ["박원장", "이부장"],
+    content: `안건 1. 6월 신규 등록 목표
+  - 중1 +5, 중3 +3, 고1 +4 → 총 12명 목표
+  - 등록상담 AI 분석 적극 활용
+
+안건 2. 학부모 만족도 조사 결과
+  - 만족도 92% (전월 대비 +1pt)
+  - 개선 요청: 학원 시간표 모바일 알림 추가
+
+안건 3. 직원 워크숍 일정
+  - 7월 첫째 주 1박 2일 예정`,
+  },
+];
+
 const ANNOUNCEMENTS = [
   {
     title: "6월 정기시험 일정 안내",
@@ -269,6 +341,8 @@ async function main() {
   await sql`delete from class_schedules where tenant_id = ${tenantId}`;
   // Cascade deletes consultation_ai_analysis through FK
   await sql`delete from enrollment_consultations where tenant_id = ${tenantId}`;
+  await sql`delete from student_consultations where tenant_id = ${tenantId}`;
+  await sql`delete from meeting_minutes where tenant_id = ${tenantId}`;
   await sql`delete from users where tenant_id = ${tenantId} and system_role <> 'master'`;
 
   // --- 2. Teachers (5) ---
@@ -491,6 +565,44 @@ async function main() {
     }
   }
 
+  // --- 8b. Student consultations (10 random pairings against active students) ---
+  console.log("Inserting student consultations…");
+  const activeStudents = students.slice(0, ENROLLED_COUNT);
+  for (let i = 0; i < 10; i++) {
+    const stu = activeStudents[Math.floor(Math.random() * activeStudents.length)]!;
+    const template =
+      STUDENT_CONSULTATION_TEMPLATES[i % STUDENT_CONSULTATION_TEMPLATES.length]!;
+    const counselorId = pick(teacherIds, i);
+    const consultedAt = new Date();
+    consultedAt.setDate(consultedAt.getDate() - Math.floor(Math.random() * 28));
+    consultedAt.setHours(14 + Math.floor(Math.random() * 6));
+    await sql`
+      insert into student_consultations (
+        tenant_id, student_id, counselor_id, consulted_at, summary, follow_up_action
+      ) values (
+        ${tenantId}, ${stu.id}, ${counselorId}, ${consultedAt.toISOString()},
+        ${template.summary}, ${template.followUp ?? null}
+      )
+    `;
+  }
+
+  // --- 8c. Meeting minutes ---
+  console.log("Inserting meeting minutes…");
+  for (const m of MEETINGS) {
+    const heldAt = new Date();
+    heldAt.setDate(heldAt.getDate() - m.daysAgo);
+    heldAt.setHours(19, 30, 0, 0);
+    await sql`
+      insert into meeting_minutes (
+        tenant_id, title, content, attendees, held_at, author_id
+      ) values (
+        ${tenantId}, ${m.title}, ${m.content},
+        ${sql.json(m.attendees)},
+        ${heldAt.toISOString()}, ${recordedBy}
+      )
+    `;
+  }
+
   // --- 8. Announcements ---
   console.log("Inserting announcements…");
   for (const a of ANNOUNCEMENTS) {
@@ -514,6 +626,8 @@ async function main() {
     join enrollment_consultations c on c.id = a.consultation_id
     where c.tenant_id = ${tenantId}
   `;
+  const [{ count: stu_consult_c }] = await sql<{ count: number }[]>`select count(*)::int as count from student_consultations where tenant_id = ${tenantId}`;
+  const [{ count: meeting_c }] = await sql<{ count: number }[]>`select count(*)::int as count from meeting_minutes where tenant_id = ${tenantId}`;
 
   console.log("");
   console.log("Seed complete:");
@@ -526,6 +640,8 @@ async function main() {
   console.log(`  announcements  ${announcements_c}`);
   console.log(`  consultations  ${consultations_c}`);
   console.log(`  ai_analyses    ${ai_c}`);
+  console.log(`  stu_consults   ${stu_consult_c}`);
+  console.log(`  meetings       ${meeting_c}`);
 
   await sql.end();
 }

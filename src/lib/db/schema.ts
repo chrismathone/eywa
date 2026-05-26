@@ -295,6 +295,49 @@ export const consultationAiAnalysis = pgTable(
   (t) => [uniqueIndex("ai_consultation_model_idx").on(t.consultationId, t.modelVersion)],
 );
 
+// === student_consultations (재원생 상담 기록) ===
+export const studentConsultations = pgTable(
+  "student_consultations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    counselorId: uuid("counselor_id").references(() => users.id, { onDelete: "set null" }),
+    consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
+    summary: text("summary").notNull(),
+    followUpAction: text("follow_up_action"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("sc_tenant_student_idx").on(t.tenantId, t.studentId),
+    index("sc_tenant_date_idx").on(t.tenantId, t.consultedAt),
+  ],
+);
+
+// === meeting_minutes (회의록) ===
+export const meetingMinutes = pgTable(
+  "meeting_minutes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    attendees: jsonb("attendees"),
+    heldAt: timestamp("held_at", { withTimezone: true }).notNull(),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("mm_tenant_held_idx").on(t.tenantId, t.heldAt)],
+);
+
 // === announcements ===
 export const announcements = pgTable(
   "announcements",
@@ -335,5 +378,9 @@ export type EnrollmentConsultation = typeof enrollmentConsultations.$inferSelect
 export type NewEnrollmentConsultation = typeof enrollmentConsultations.$inferInsert;
 export type ConsultationAiAnalysis = typeof consultationAiAnalysis.$inferSelect;
 export type NewConsultationAiAnalysis = typeof consultationAiAnalysis.$inferInsert;
+export type StudentConsultation = typeof studentConsultations.$inferSelect;
+export type NewStudentConsultation = typeof studentConsultations.$inferInsert;
+export type MeetingMinute = typeof meetingMinutes.$inferSelect;
+export type NewMeetingMinute = typeof meetingMinutes.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
