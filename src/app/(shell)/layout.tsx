@@ -3,23 +3,17 @@ import type { ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar systemRole={user.systemRole} />
       <SidebarInset>
-        <AppHeader email={user.email ?? "익명 사용자"} />
+        <AppHeader email={user.email} />
         <main className="flex-1 p-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>
