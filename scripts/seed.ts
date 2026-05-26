@@ -94,6 +94,133 @@ const SCHEDULES: { className: string; day: string; start: string; end: string }[
   { className: "고3 수학 마무리", day: "fri", start: "19:00", end: "21:00" },
 ];
 
+type AiAnalysisSeed = {
+  diagnosis: {
+    strengths: string[];
+    weaknesses: string[];
+    level: string;
+    summary: string;
+  };
+  learningPlan: {
+    immediate: string[];
+    semester: string[];
+    longTerm: string[];
+  };
+};
+
+type ProspectSeed = {
+  name: string;
+  grade: string;
+  school: string;
+  parentName: string;
+  parentPhone: string;
+  parentRequest: string;
+  learningHistory: { prevAcademy?: string; lastScore?: string; weakSubjects?: string[] };
+  outcome: "pending" | "scheduled" | "consulted" | "ai_done" | "enrolled";
+  consultedDaysAgo: number;
+  aiAnalysis?: AiAnalysisSeed;
+};
+
+const PROSPECTS: ProspectSeed[] = [
+  {
+    name: "황민호",
+    grade: "중1",
+    school: "인재중",
+    parentName: "황**",
+    parentPhone: "010-2001-3001",
+    parentRequest: "초6 때 수학 학원을 다녔지만 중학 수학에 적응이 어렵습니다. 기초 점검 후 적합한 반 추천 부탁드립니다.",
+    learningHistory: { prevAcademy: "ABC수학", lastScore: "초6 단원평가 평균 82점", weakSubjects: ["분수", "방정식"] },
+    outcome: "pending",
+    consultedDaysAgo: 0,
+  },
+  {
+    name: "전소율",
+    grade: "중2",
+    school: "강남중",
+    parentName: "전**",
+    parentPhone: "010-2002-3002",
+    parentRequest: "1학기 중간고사에서 수학 70점대. 개념 보충이 필요한 것 같습니다.",
+    learningHistory: { lastScore: "중2 1학기 중간 수학 74점", weakSubjects: ["일차함수"] },
+    outcome: "scheduled",
+    consultedDaysAgo: 1,
+  },
+  {
+    name: "김지안",
+    grade: "중3",
+    school: "선린중",
+    parentName: "김**",
+    parentPhone: "010-2003-3003",
+    parentRequest: "고입 대비 + 수학 심화. 영재고는 아니지만 자사고 정도 목표.",
+    learningHistory: { prevAcademy: "XYZ학원", lastScore: "중3 1학기 기말 수학 92점", weakSubjects: ["기하"] },
+    outcome: "ai_done",
+    consultedDaysAgo: 3,
+    aiAnalysis: {
+      diagnosis: {
+        strengths: ["대수 영역 안정적", "응용 문제 접근 적극적", "자기주도 학습 가능"],
+        weaknesses: ["기하 도형 직관 약함", "서술형 풀이 정리 부족"],
+        level: "상위권",
+        summary:
+          "전반적인 수학 역량은 상위권. 단 기하 영역의 시각화/증명 단계에서 약점이 보이며, 풀이 과정을 글로 정리하는 훈련이 필요합니다.",
+      },
+      learningPlan: {
+        immediate: ["기하 도형 단원 복습 4주", "주 1회 서술형 풀이 첨삭"],
+        semester: ["중3 2학기 도형의 닮음/원 단원 선행", "기출 문제 풀이 200제 완료"],
+        longTerm: ["고1 수학 상 1단원 선행", "자사고 수학 면접 대비 풀이 발표 훈련"],
+      },
+    },
+  },
+  {
+    name: "이예성",
+    grade: "고1",
+    school: "휘문고",
+    parentName: "이**",
+    parentPhone: "010-2004-3004",
+    parentRequest: "내신과 수능을 동시에 잡고 싶습니다. 영어와 수학 모두 등록 희망.",
+    learningHistory: { lastScore: "중3 기말 영어 89점 / 수학 95점", weakSubjects: ["영어 듣기"] },
+    outcome: "ai_done",
+    consultedDaysAgo: 5,
+    aiAnalysis: {
+      diagnosis: {
+        strengths: ["수학 기본기 견고", "장기 계획 수립 가능", "성실한 학습 태도"],
+        weaknesses: ["영어 듣기 영역", "어휘 정착도 부족"],
+        level: "최상위권 (수학) / 중상위권 (영어)",
+        summary:
+          "수학은 정규반 심화 진도 가능 수준. 영어는 듣기와 어휘 보강이 우선 과제로, 듣기 모의고사 주 2회와 어휘 누적 테스트 도입 권장.",
+      },
+      learningPlan: {
+        immediate: ["고1 수학 상 심화 진도 시작", "영어 듣기 모의고사 주 2회"],
+        semester: ["고1 1학기 내신 대비 4주 집중", "수능 어휘 2,000개 완성"],
+        longTerm: ["고2 진도 선행 (수학 II)", "고2 모의고사 영어 1등급 달성"],
+      },
+    },
+  },
+  {
+    name: "박서린",
+    grade: "고2",
+    school: "서일고",
+    parentName: "박**",
+    parentPhone: "010-2005-3005",
+    parentRequest: "이전 학원에서 영어 1등급 유지하다 떨어져 학원 이동 결정.",
+    learningHistory: { prevAcademy: "DEF영어", lastScore: "고2 모의고사 영어 2등급", weakSubjects: ["독해 속도"] },
+    outcome: "enrolled",
+    consultedDaysAgo: 14,
+    aiAnalysis: {
+      diagnosis: {
+        strengths: ["기본 문법 우수", "어휘력 풍부", "독해 정확도 높음"],
+        weaknesses: ["장문 독해 속도", "EBS 연계 학습 부족"],
+        level: "상위권",
+        summary:
+          "정확도는 높지만 시간 압박 상황에서 속도가 떨어집니다. 빠른 독해 훈련과 EBS 연계 분석을 통해 1등급 회복 가능.",
+      },
+      learningPlan: {
+        immediate: ["주 3회 시간 측정 독해 훈련", "EBS 수능특강 분석 시작"],
+        semester: ["고2 2학기 모의고사 1등급 회복", "어휘 누적 4,000개"],
+        longTerm: ["수능 영어 1등급 안정화", "고3 진학 시 심화반 합류"],
+      },
+    },
+  },
+];
+
 const ANNOUNCEMENTS = [
   {
     title: "6월 정기시험 일정 안내",
@@ -140,6 +267,8 @@ async function main() {
   await sql`delete from classrooms where tenant_id = ${tenantId}`;
   await sql`delete from announcements where tenant_id = ${tenantId}`;
   await sql`delete from class_schedules where tenant_id = ${tenantId}`;
+  // Cascade deletes consultation_ai_analysis through FK
+  await sql`delete from enrollment_consultations where tenant_id = ${tenantId}`;
   await sql`delete from users where tenant_id = ${tenantId} and system_role <> 'master'`;
 
   // --- 2. Teachers (5) ---
@@ -303,6 +432,65 @@ async function main() {
   }
   console.log(`  ${inserted} attendance rows`);
 
+  // --- 8a. Enrollment consultations + AI analysis ---
+  console.log("Inserting enrollment consultations…");
+  for (let i = 0; i < PROSPECTS.length; i++) {
+    const p = PROSPECTS[i]!;
+    const consultedAt = new Date();
+    consultedAt.setDate(consultedAt.getDate() - p.consultedDaysAgo);
+
+    const [consult] = await sql<{ id: string }[]>`
+      insert into enrollment_consultations (
+        tenant_id, prospect_name, prospect_grade, prospect_school,
+        parent_name, parent_phone, parent_request, learning_history,
+        consultant_id, outcome, consulted_at
+      ) values (
+        ${tenantId}, ${p.name}, ${p.grade}, ${p.school},
+        ${p.parentName}, ${p.parentPhone}, ${p.parentRequest},
+        ${sql.json(p.learningHistory)},
+        ${recordedBy}, ${p.outcome}, ${consultedAt.toISOString()}
+      )
+      returning id
+    `;
+
+    if (p.aiAnalysis) {
+      const matching = classes.filter((c) => c.grade === p.grade);
+      const recommendedIds = matching.slice(0, 2).map((c) => c.id);
+
+      const printPayload = {
+        prospect: {
+          name: p.name,
+          grade: p.grade,
+          school: p.school,
+          parentName: p.parentName,
+          parentPhone: p.parentPhone,
+        },
+        consultedAt: consultedAt.toISOString(),
+        consultantName: "원장",
+        parentRequest: p.parentRequest,
+        learningHistory: p.learningHistory,
+        diagnosis: p.aiAnalysis.diagnosis,
+        learningPlan: p.aiAnalysis.learningPlan,
+        recommendedClasses: matching.slice(0, 2).map((c) => c.className),
+      };
+
+      await sql`
+        insert into consultation_ai_analysis (
+          consultation_id, model_version,
+          recommended_class_ids, diagnosis, learning_plan, print_payload,
+          approved_by
+        ) values (
+          ${consult.id}, 'claude-opus-4-7-2026-01-seed',
+          ${recommendedIds.length > 0 ? recommendedIds : null},
+          ${sql.json(p.aiAnalysis.diagnosis)},
+          ${sql.json(p.aiAnalysis.learningPlan)},
+          ${sql.json(printPayload)},
+          ${recordedBy}
+        )
+      `;
+    }
+  }
+
   // --- 8. Announcements ---
   console.log("Inserting announcements…");
   for (const a of ANNOUNCEMENTS) {
@@ -320,6 +508,12 @@ async function main() {
   const [{ count: attendance_c }] = await sql<{ count: number }[]>`select count(*)::int as count from attendance_records where tenant_id = ${tenantId}`;
   const [{ count: announcements_c }] = await sql<{ count: number }[]>`select count(*)::int as count from announcements where tenant_id = ${tenantId}`;
   const [{ count: schedules_c }] = await sql<{ count: number }[]>`select count(*)::int as count from class_schedules where tenant_id = ${tenantId}`;
+  const [{ count: consultations_c }] = await sql<{ count: number }[]>`select count(*)::int as count from enrollment_consultations where tenant_id = ${tenantId}`;
+  const [{ count: ai_c }] = await sql<{ count: number }[]>`
+    select count(*)::int as count from consultation_ai_analysis a
+    join enrollment_consultations c on c.id = a.consultation_id
+    where c.tenant_id = ${tenantId}
+  `;
 
   console.log("");
   console.log("Seed complete:");
@@ -330,6 +524,8 @@ async function main() {
   console.log(`  enrollments    ${enrollments_c}`);
   console.log(`  attendance     ${attendance_c}`);
   console.log(`  announcements  ${announcements_c}`);
+  console.log(`  consultations  ${consultations_c}`);
+  console.log(`  ai_analyses    ${ai_c}`);
 
   await sql.end();
 }

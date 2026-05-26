@@ -15,6 +15,13 @@
       "when": 1779810931154,
       "tag": "0001_parallel_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779812305991,
+      "tag": "0002_abnormal_sway",
+      "breakpoints": true
     }
   ]
 }

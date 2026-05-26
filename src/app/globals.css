@@ -157,6 +157,18 @@
   }
 }
 
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+    font-feature-settings: "ss01", "cv11", "tnum";
+  }
+}
+
 @layer components {
   .num {
     font-variant-numeric: tabular-nums;

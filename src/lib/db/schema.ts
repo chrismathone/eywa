@@ -3,6 +3,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -57,6 +58,16 @@ export const dayOfWeekEnum = pgEnum("day_of_week", [
   "fri",
   "sat",
   "sun",
+]);
+
+export const consultationOutcomeEnum = pgEnum("consultation_outcome", [
+  "pending", // 첫 문의 접수
+  "scheduled", // 상담 예약됨
+  "consulted", // 상담 완료, AI 분석 대기
+  "ai_done", // AI 분석 완료, 인쇄 대기
+  "enrolled", // 등록 완료
+  "declined", // 거절
+  "no_show", // 노쇼
 ]);
 
 // === tenants ===
@@ -237,6 +248,53 @@ export const classSchedules = pgTable(
   ],
 );
 
+// === enrollment_consultations (신입생 상담) ===
+export const enrollmentConsultations = pgTable(
+  "enrollment_consultations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    prospectName: text("prospect_name").notNull(),
+    prospectGrade: text("prospect_grade"),
+    prospectSchool: text("prospect_school"),
+    parentName: text("parent_name"),
+    parentPhone: text("parent_phone"),
+    parentRequest: text("parent_request"),
+    learningHistory: jsonb("learning_history"),
+    consultantId: uuid("consultant_id").references(() => users.id, { onDelete: "set null" }),
+    outcome: consultationOutcomeEnum("outcome").notNull().default("pending"),
+    studentId: uuid("student_id").references(() => students.id, { onDelete: "set null" }),
+    consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("ec_tenant_outcome_idx").on(t.tenantId, t.outcome),
+    index("ec_tenant_consulted_idx").on(t.tenantId, t.consultedAt),
+  ],
+);
+
+// === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
+export const consultationAiAnalysis = pgTable(
+  "consultation_ai_analysis",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    consultationId: uuid("consultation_id")
+      .notNull()
+      .references(() => enrollmentConsultations.id, { onDelete: "cascade" }),
+    modelVersion: text("model_version").notNull(),
+    recommendedClassIds: uuid("recommended_class_ids").array(),
+    diagnosis: jsonb("diagnosis").notNull(),
+    learningPlan: jsonb("learning_plan").notNull(),
+    printPayload: jsonb("print_payload").notNull(),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow().notNull(),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [uniqueIndex("ai_consultation_model_idx").on(t.consultationId, t.modelVersion)],
+);
+
 // === announcements ===
 export const announcements = pgTable(
   "announcements",
@@ -273,5 +331,9 @@ export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type NewAttendanceRecord = typeof attendanceRecords.$inferInsert;
 export type ClassSchedule = typeof classSchedules.$inferSelect;
 export type NewClassSchedule = typeof classSchedules.$inferInsert;
+export type EnrollmentConsultation = typeof enrollmentConsultations.$inferSelect;
+export type NewEnrollmentConsultation = typeof enrollmentConsultations.$inferInsert;
+export type ConsultationAiAnalysis = typeof consultationAiAnalysis.$inferSelect;
+export type NewConsultationAiAnalysis = typeof consultationAiAnalysis.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
