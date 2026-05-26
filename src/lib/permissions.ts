@@ -1,9 +1,11 @@
 export type SystemRole =
   | "master"
   | "admin"
+  | "manager"
   | "teacher"
   | "counselor"
-  | "accountant";
+  | "accountant"
+  | "viewer";
 
 export type MenuKey =
   | "dashboard"
@@ -22,18 +24,18 @@ export type MenuKey =
 export type Access = "full" | "scoped" | "readonly" | "none";
 
 export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
-  dashboard: { master: "full", admin: "full", teacher: "scoped", counselor: "scoped", accountant: "scoped" },
-  timetable: { master: "full", admin: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly" },
-  attendance: { master: "full", admin: "full", teacher: "scoped", counselor: "none", accountant: "readonly" },
-  classes: { master: "full", admin: "full", teacher: "scoped", counselor: "none", accountant: "none" },
-  students: { master: "full", admin: "full", teacher: "scoped", counselor: "full", accountant: "readonly" },
-  enrollment: { master: "full", admin: "full", teacher: "none", counselor: "full", accountant: "none" },
-  consultations: { master: "full", admin: "full", teacher: "scoped", counselor: "full", accountant: "none" },
-  withdrawals: { master: "full", admin: "full", teacher: "readonly", counselor: "full", accountant: "full" },
-  staff: { master: "full", admin: "full", teacher: "readonly", counselor: "none", accountant: "full" },
-  billing: { master: "full", admin: "full", teacher: "none", counselor: "none", accountant: "full" },
-  meetings: { master: "full", admin: "full", teacher: "full", counselor: "full", accountant: "full" },
-  help: { master: "full", admin: "full", teacher: "full", counselor: "full", accountant: "full" },
+  dashboard: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "scoped", accountant: "scoped", viewer: "readonly" },
+  timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly" },
+  attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly" },
+  classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly" },
+  students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly" },
+  enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none" },
+  consultations: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly" },
+  withdrawals: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "full", accountant: "full", viewer: "readonly" },
+  staff: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "none", accountant: "full", viewer: "none" },
+  billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none" },
+  meetings: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "readonly" },
+  help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full" },
 };
 
 export function canAccess(role: SystemRole, menu: MenuKey): boolean {

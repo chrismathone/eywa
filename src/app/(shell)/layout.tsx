@@ -11,7 +11,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   return (
     <SidebarProvider>
-      <AppSidebar systemRole={user.systemRole} />
+      <AppSidebar
+        systemRole={user.systemRole}
+        displayName={user.displayName}
+        email={user.email}
+      />
       <SidebarInset>
         <AppHeader email={user.email} />
         <main className="flex-1 p-6">{children}</main>

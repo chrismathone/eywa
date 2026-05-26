@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -21,7 +22,25 @@ function isItemActive(href: string, pathname: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppSidebar({ systemRole }: { systemRole: SystemRole }) {
+const ROLE_LABEL: Record<SystemRole, string> = {
+  master: "원장",
+  admin: "관리자",
+  manager: "매니저",
+  teacher: "강사",
+  counselor: "상담",
+  accountant: "회계",
+  viewer: "참관",
+};
+
+export function AppSidebar({
+  systemRole,
+  displayName,
+  email,
+}: {
+  systemRole: SystemRole;
+  displayName: string;
+  email: string;
+}) {
   const pathname = usePathname();
 
   return (
@@ -67,6 +86,21 @@ export function AppSidebar({ systemRole }: { systemRole: SystemRole }) {
           );
         })}
       </SidebarContent>
+      <SidebarFooter className="border-t px-3 py-3 group-data-[collapsible=icon]:px-2">
+        <div className="flex items-center gap-2.5">
+          <span className="bg-sidebar-accent text-sidebar-accent-foreground flex size-8 shrink-0 items-center justify-center rounded-md text-sm font-semibold">
+            {displayName.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
+            <p className="text-sidebar-foreground truncate text-sm font-medium">{displayName}</p>
+            <p className="text-sidebar-foreground/60 truncate text-[11px]">
+              <span>{ROLE_LABEL[systemRole]}</span>
+              <span className="mx-1 opacity-50">·</span>
+              <span className="num">{email}</span>
+            </p>
+          </div>
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }
