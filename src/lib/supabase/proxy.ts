@@ -1,47 +1,42 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Cheap auth gate — just checks if a Supabase auth cookie exists.
+ * The (shell) layout still calls supabase.auth.getUser() for the real
+ * verification + tenant lookup, so an invalid/expired cookie still
+ * results in a /login bounce; this middleware is only there to avoid
+ * rendering the full app shell when there's no session at all.
+ *
+ * We previously tried server-side getUser() here, but on Vercel +
+ * Next.js 16 + @supabase/ssr 0.10.x the cookie-format ('base64-...'
+ * prefix) didn't round-trip cleanly through the middleware adapter,
+ * which caused a login → /login loop. Pushing the check into the
+ * layout (where the cookies adapter is the same as data queries)
+ * sidesteps the mismatch.
+ */
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          for (const { name, value } of cookiesToSet) {
-            request.cookies.set(name, value);
-          }
-          response = NextResponse.next({ request });
-          for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, options);
-          }
-        },
-      },
-    },
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const pathname = request.nextUrl.pathname;
+
   const isAuthRoute = pathname.startsWith("/login");
   const isPublicAsset =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/health") ||
     pathname === "/favicon.ico";
 
-  if (!user && !isAuthRoute && !isPublicAsset) {
+  if (isAuthRoute || isPublicAsset) {
+    return NextResponse.next({ request });
+  }
+
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+
+  if (!hasAuthCookie) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  return response;
+  return NextResponse.next({ request });
 }
