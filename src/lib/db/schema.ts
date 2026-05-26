@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -58,6 +59,14 @@ export const dayOfWeekEnum = pgEnum("day_of_week", [
   "fri",
   "sat",
   "sun",
+]);
+
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "unpaid",
+  "partial",
+  "paid",
+  "refunded",
+  "void",
 ]);
 
 export const consultationOutcomeEnum = pgEnum("consultation_outcome", [
@@ -338,6 +347,34 @@ export const meetingMinutes = pgTable(
   (t) => [index("mm_tenant_held_idx").on(t.tenantId, t.heldAt)],
 );
 
+// === invoices (월별 청구서) ===
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "restrict" }),
+    period: text("period").notNull(),
+    amountTotal: numeric("amount_total", { precision: 12, scale: 0 }).notNull(),
+    amountPaid: numeric("amount_paid", { precision: 12, scale: 0 }).notNull().default("0"),
+    status: invoiceStatusEnum("status").notNull().default("unpaid"),
+    lineItems: jsonb("line_items").notNull(),
+    dueDate: date("due_date"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("invoices_tenant_student_period_idx").on(t.tenantId, t.studentId, t.period),
+    index("invoices_tenant_status_idx").on(t.tenantId, t.status),
+    index("invoices_tenant_period_idx").on(t.tenantId, t.period),
+  ],
+);
+
 // === announcements ===
 export const announcements = pgTable(
   "announcements",
@@ -382,5 +419,7 @@ export type StudentConsultation = typeof studentConsultations.$inferSelect;
 export type NewStudentConsultation = typeof studentConsultations.$inferInsert;
 export type MeetingMinute = typeof meetingMinutes.$inferSelect;
 export type NewMeetingMinute = typeof meetingMinutes.$inferInsert;
+export type Invoice = typeof invoices.$inferSelect;
+export type NewInvoice = typeof invoices.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;

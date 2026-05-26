@@ -177,6 +177,39 @@ export type TrendPoint = {
   payment: number; // placeholder until invoices land
 };
 
+export type PaymentSnapshot = {
+  period: string;
+  totalCount: number;
+  paidCount: number;
+  unpaidCount: number;
+  paymentRate: number;
+  outstanding: number;
+};
+
+export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null> {
+  const supabase = await createClient();
+  const d = new Date();
+  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const { data } = await supabase
+    .from("invoices")
+    .select("amount_total, amount_paid, status")
+    .eq("period", period);
+  if (!data || data.length === 0) return null;
+
+  const totalBilled = data.reduce((s, r) => s + Number(r.amount_total), 0);
+  const totalPaid = data.reduce((s, r) => s + Number(r.amount_paid), 0);
+  const paidCount = data.filter((r) => r.status === "paid").length;
+  const unpaidCount = data.filter((r) => r.status === "unpaid" || r.status === "partial").length;
+  return {
+    period,
+    totalCount: data.length,
+    paidCount,
+    unpaidCount,
+    paymentRate: totalBilled > 0 ? (totalPaid / totalBilled) * 100 : 0,
+    outstanding: totalBilled - totalPaid,
+  };
+}
+
 export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
   const supabase = await createClient();
   // Window ends yesterday — today is still in progress and shouldn't drag the

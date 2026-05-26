@@ -2,6 +2,7 @@ import { ArrowDownRight, ArrowUpRight, ClipboardCheck, UserPlus, Users, Wallet }
 import type { LucideIcon } from "lucide-react";
 import type {
   AttendanceSnapshot,
+  PaymentSnapshot,
   TrendPoint,
 } from "@/features/dashboard/server/queries";
 import { Sparkline } from "./sparkline";
@@ -32,12 +33,14 @@ export function KpiGrid({
   newThisMonth,
   withdrawnThisMonth,
   attendance,
+  payment,
   trend,
 }: {
   enrolled: number;
   newThisMonth: number;
   withdrawnThisMonth: number;
   attendance: AttendanceSnapshot | null;
+  payment: PaymentSnapshot | null;
   trend: TrendPoint[];
 }) {
   const attendanceSpark = trend.map((p) => p.attendance);
@@ -76,15 +79,25 @@ export function KpiGrid({
           accent: "sage",
           placeholder: true,
         },
-    {
-      label: "이번 달 수납률",
-      value: "—",
-      helper: "수납 모델 도입 후 표시 (Phase 6)",
-      icon: Wallet,
-      spark: [0],
-      accent: "amber",
-      placeholder: true,
-    },
+    payment && payment.totalCount > 0
+      ? {
+          label: "이번 달 수납률",
+          value: payment.paymentRate.toFixed(1),
+          unit: "%",
+          helper: `완납 ${payment.paidCount} / ${payment.totalCount}건 · 미수 ${payment.unpaidCount}건`,
+          icon: Wallet,
+          spark: trend.map((p) => p.payment),
+          accent: "amber",
+        }
+      : {
+          label: "이번 달 수납률",
+          value: "—",
+          helper: "이번 달 청구 내역이 없습니다",
+          icon: Wallet,
+          spark: [0],
+          accent: "amber",
+          placeholder: true,
+        },
     {
       label: "진행 중 상담",
       value: "—",

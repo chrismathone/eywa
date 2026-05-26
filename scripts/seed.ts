@@ -221,6 +221,15 @@ const PROSPECTS: ProspectSeed[] = [
   },
 ];
 
+const TUITION_BY_GRADE: Record<string, number> = {
+  "중1": 350_000,
+  "중2": 380_000,
+  "중3": 400_000,
+  "고1": 420_000,
+  "고2": 450_000,
+  "고3": 500_000,
+};
+
 const STUDENT_CONSULTATION_TEMPLATES: { summary: string; followUp?: string }[] = [
   {
     summary: "최근 모의고사 성적 하락에 대한 학부모 면담. 학교 시험 직전 컨디션 관리와 풀이 시간 분배가 약점으로 확인됨.",
@@ -343,6 +352,7 @@ async function main() {
   await sql`delete from enrollment_consultations where tenant_id = ${tenantId}`;
   await sql`delete from student_consultations where tenant_id = ${tenantId}`;
   await sql`delete from meeting_minutes where tenant_id = ${tenantId}`;
+  await sql`delete from invoices where tenant_id = ${tenantId}`;
   await sql`delete from users where tenant_id = ${tenantId} and system_role <> 'master'`;
 
   // --- 2. Teachers (5) ---
@@ -565,6 +575,65 @@ async function main() {
     }
   }
 
+  // --- 8a-2. Invoices (current month, active students only) ---
+  console.log("Inserting invoices…");
+  const invoiceNow = new Date();
+  const period = `${invoiceNow.getFullYear()}-${String(invoiceNow.getMonth() + 1).padStart(2, "0")}`;
+  const dueDate = new Date(invoiceNow.getFullYear(), invoiceNow.getMonth(), 25);
+  const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+  const activeStudentRecords = students.slice(0, ENROLLED_COUNT);
+  const studentGrades = new Map<string, string>();
+  for (const stu of activeStudentRecords) studentGrades.set(stu.id, stu.grade);
+
+  for (let i = 0; i < activeStudentRecords.length; i++) {
+    const stu = activeStudentRecords[i]!;
+    const grade = studentGrades.get(stu.id) ?? "중1";
+    const tuition = TUITION_BY_GRADE[grade] ?? 400_000;
+    const classId = studentClass.get(stu.id);
+    const className =
+      classId !== undefined ? classes.find((c) => c.id === classId)?.className ?? "수업료" : "수업료";
+
+    const r = Math.random();
+    let status: "paid" | "partial" | "unpaid";
+    let amountPaid: number;
+    let paidAtIso: string | null;
+    if (r < 0.78) {
+      status = "paid";
+      amountPaid = tuition;
+      const paidAt = new Date(invoiceNow);
+      paidAt.setDate(invoiceNow.getDate() - Math.floor(Math.random() * 18) - 1);
+      paidAtIso = paidAt.toISOString();
+    } else if (r < 0.9) {
+      status = "partial";
+      amountPaid = Math.floor(tuition * 0.5);
+      paidAtIso = null;
+    } else {
+      status = "unpaid";
+      amountPaid = 0;
+      paidAtIso = null;
+    }
+
+    const lineItems = [
+      {
+        kind: "tuition",
+        description: `${className} ${period.slice(5)}월 수업료`,
+        classId,
+        amount: tuition,
+      },
+    ];
+
+    await sql`
+      insert into invoices (
+        tenant_id, student_id, period, amount_total, amount_paid,
+        status, line_items, due_date, paid_at
+      ) values (
+        ${tenantId}, ${stu.id}, ${period}, ${tuition}, ${amountPaid},
+        ${status}, ${sql.json(lineItems)}, ${dueDateStr}, ${paidAtIso}
+      )
+    `;
+  }
+
   // --- 8b. Student consultations (10 random pairings against active students) ---
   console.log("Inserting student consultations…");
   const activeStudents = students.slice(0, ENROLLED_COUNT);
@@ -628,6 +697,8 @@ async function main() {
   `;
   const [{ count: stu_consult_c }] = await sql<{ count: number }[]>`select count(*)::int as count from student_consultations where tenant_id = ${tenantId}`;
   const [{ count: meeting_c }] = await sql<{ count: number }[]>`select count(*)::int as count from meeting_minutes where tenant_id = ${tenantId}`;
+  const [{ count: invoices_c }] = await sql<{ count: number }[]>`select count(*)::int as count from invoices where tenant_id = ${tenantId}`;
+  const [{ count: paid_c }] = await sql<{ count: number }[]>`select count(*)::int as count from invoices where tenant_id = ${tenantId} and status = 'paid'`;
 
   console.log("");
   console.log("Seed complete:");
@@ -642,6 +713,7 @@ async function main() {
   console.log(`  ai_analyses    ${ai_c}`);
   console.log(`  stu_consults   ${stu_consult_c}`);
   console.log(`  meetings       ${meeting_c}`);
+  console.log(`  invoices       ${invoices_c} (paid: ${paid_c})`);
 
   await sql.end();
 }

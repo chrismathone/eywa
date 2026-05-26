@@ -3,6 +3,7 @@ import {
   getEnrolledStudentCount,
   getMostRecentAttendanceSnapshot,
   getNewStudentsThisMonth,
+  getPaymentRateThisMonth,
   getRecentAnnouncements,
   getTrendDataLast7Days,
   getWithdrawalsThisMonth,
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
     announcements,
     trend,
     todaySchedule,
+    payment,
   ] = await Promise.all([
     getCurrentUserProfile(),
     getEnrolledStudentCount(),
@@ -35,6 +37,7 @@ export default async function DashboardPage() {
     getRecentAnnouncements(),
     getTrendDataLast7Days(),
     getTodaySchedule(),
+    getPaymentRateThisMonth(),
   ]);
 
   const name = profile?.displayName ?? "원장";
@@ -47,6 +50,7 @@ export default async function DashboardPage() {
         newThisMonth={newThisMonth}
         withdrawnThisMonth={withdrawnThisMonth}
         attendance={attendance}
+        payment={payment}
         trend={trend}
       />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
