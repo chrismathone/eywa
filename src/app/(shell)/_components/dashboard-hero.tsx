@@ -34,7 +34,7 @@ export function DashboardHero({ name }: { name: string }) {
         </h1>
       </div>
 
-      <div className="border-border bg-card flex items-center gap-5 rounded-md border px-4 py-2.5">
+      <div className="border-border bg-card flex items-center gap-6 rounded-md border px-5 py-3">
         <Stat label="학기" value={semester} />
         <Divider />
         <Stat label="주차" value={`${week}주`} />
@@ -46,14 +46,14 @@ export function DashboardHero({ name }: { name: string }) {
 }
 
 function Divider() {
-  return <span className="bg-border h-7 w-px" aria-hidden />;
+  return <span className="bg-border h-8 w-px" aria-hidden />;
 }
 
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       <p className="eyebrow">{label}</p>
-      <p className="num text-foreground text-sm font-semibold">
+      <p className="num text-foreground text-base font-semibold leading-none">
         {value}
         {unit ? (
           <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span>

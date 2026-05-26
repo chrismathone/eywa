@@ -37,7 +37,7 @@ export default async function LoginPage({
 
 function BrandPanel() {
   return (
-    <aside className="bg-primary text-primary-foreground relative hidden flex-col justify-between overflow-hidden p-12 lg:flex">
+    <aside className="bg-primary text-primary-foreground relative hidden flex-col overflow-hidden p-12 lg:flex">
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.07]"
         style={{
@@ -57,7 +57,7 @@ function BrandPanel() {
         </div>
       </div>
 
-      <div className="relative space-y-7">
+      <div className="relative my-auto space-y-7 py-12">
         <h2 className="display text-5xl xl:text-[3.75rem]">
           매일 같은 시간,<br />
           <span className="opacity-50">같은 자리,</span><br />

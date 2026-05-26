@@ -100,9 +100,9 @@ function KpiCard({ label, value, unit, delta, helper, icon: Icon, spark, accent 
             }`}
           >
             {delta.positive ? (
-              <ArrowUpRight className="size-3" />
+              <ArrowUpRight className="size-3.5" strokeWidth={2.5} />
             ) : (
-              <ArrowDownRight className="size-3" />
+              <ArrowDownRight className="size-3.5" strokeWidth={2.5} />
             )}
             {delta.value}
           </span>
