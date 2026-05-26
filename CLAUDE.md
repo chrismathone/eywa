@@ -4,11 +4,15 @@
 
 이 프로젝트는 [D:\ijw-calander](D:\ijw-calander)(인재원 학원관리 SaaS)의 경량 재작성판입니다. 자세한 설계 결정은 [`C:\Users\user\.claude\plans\curried-popping-finch.md`](C:\Users\user\.claude\plans\curried-popping-finch.md)에 있습니다.
 
+---
+
 ## 메뉴 12개
 
 대시보드 / 시간표 · 출석부 · 수업목록 / 학생목록 · 등록상담 · 학생상담 · 퇴원관리 / 직원관리 · 수납관리 · 회의록 / 도움말
 
 기존 ijw-calander의 43개 탭 중 마케팅, 셔틀관리, 자료실, 역할관리, 매출분석, 지출관리, 시간표배포, 알림센터, 학부모포털 등은 의도적으로 제외했습니다.
+
+---
 
 ## 작업 원칙
 
@@ -18,8 +22,245 @@
 - **출석/급여/수강료 등 계산 함수**는 순수 함수로 분리해서 Vitest 단위테스트 강제(coverage 게이트 70%+).
 - **AI 호출은 캐싱 + 명시적 트리거**: `consultation_ai_analysis(consultation_id, model_version)` UNIQUE. 재분석은 명시 버튼이 있을 때만.
 
+---
+
 ## 데이터 모델 핵심 결정
 
 - `enrollments`는 평면 테이블 + GiST EXCLUDE 제약 → 좀비 enrollment 클래스 자체가 사라짐
 - 학생 자연키는 `(tenant_id, name_normalized, school, grade) WHERE status<>'withdrawn'` 부분 유니크 인덱스
 - AI 분석 결과는 `print_payload jsonb` 스냅샷으로 동결 — 모델 변경에도 인쇄물 불변
+
+---
+
+## 기술 스택 (실제 적용된 것)
+
+| 영역 | 선택 |
+|---|---|
+| 프레임워크 | **Next.js 16.2.6** (App Router, Turbopack) |
+| 언어 | TypeScript (strict) |
+| 스타일 | Tailwind v4 + shadcn/ui (**base-nova preset = base-ui 기반**, Radix 아님) |
+| 폰트 | Pretendard Variable (정적 풀 한글 subset, dynamic-subset 아님) |
+| 백엔드 | Supabase Postgres + Auth + RLS |
+| ORM | Drizzle (`src/lib/db/schema.ts`, `drizzle-kit` for migrations) |
+| Server data | Supabase JS server client (cookies adapter) → RLS 통과 |
+| 클라이언트 데이터 | TanStack Query (현재 거의 미사용) + Server Components |
+| 폼/검증 | react-hook-form + Zod (현재는 useActionState + 수동 검증 위주) |
+| AI | `@anthropic-ai/sdk` — Claude Opus 4.7. 없으면 stub fallback |
+| 테스트 | Vitest (happy-dom) + Playwright (smoke만) |
+| 배포 | Vercel (`bigshols-projects/eywa`, alias `eywa-alpha.vercel.app`) |
+
+### 폴더 컨벤션
+
+```
+src/
+├─ app/
+│  ├─ (auth)/login/             # 로그인 (passthrough layout)
+│  ├─ (shell)/                  # 인증된 12개 메뉴 — 공용 사이드바/헤더
+│  └─ (print)/enrollment/[id]/print/  # A4 인쇄 — 사이드바 없음
+├─ features/<menu>/server/queries.ts  # 메뉴별 서버 쿼리 + actions
+├─ components/                  # shadcn + 공용 컴포넌트
+├─ lib/
+│  ├─ db/schema.ts              # Drizzle 단일 소스
+│  ├─ supabase/{server,client,proxy}.ts
+│  ├─ auth/current-user.ts      # getCurrentUser() (auth.uid → public.users)
+│  ├─ permissions.ts            # SystemRole × MenuKey × Access 매트릭스
+│  ├─ navigation.ts             # NAV_GROUPS (사이드바 + 헤더 page title)
+│  └─ ai/anthropic.ts
+supabase/migrations/
+├─ 0000_*.sql, 0001_*.sql, ...  # drizzle-kit generate 결과 (자동)
+├─ 0001a_*.sql, 0002a_*.sql ... # 손수 작성한 RLS/제약/트리거 (drizzle 무관)
+└─ meta/_journal.json           # drizzle 추적 — 손수 파일은 여기 없음
+scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
+```
+
+---
+
+## 진행 상황 (2026-05-27 기준)
+
+**12개 메뉴 중 11개가 실데이터** — 도움말만 정적 placeholder.
+
+| 메뉴 | 데이터 소스 | 핵심 위젯 |
+|---|---|---|
+| 대시보드 | `students` · `attendance_records` · `announcements` · `class_schedules` · `invoices` | KPI 4 (재원생 / 출석률 / 수납률 / 상담 placeholder) + 공지 3건 + 오늘의 일정 + 7일 추세 |
+| 시간표 | `class_schedules` × `classes` × `users` × `classrooms` | 월~토 6컬럼 그리드, 과목 색상 |
+| 출석부 | `attendance_records` | 날짜별 반 그룹 + status badge + 요약 카드 |
+| 수업목록 | `classes` + 활성 enrollment count | 8개 카드 |
+| 학생목록 | `students` + `enrollments` + `attendance_records` 30일 집계 | 30명 테이블 + 상세 (수강 반 + 출결 통계) |
+| 등록상담 | `enrollment_consultations` + `consultation_ai_analysis` | 4컬럼 칸반 + 신규 폼 + AI 실행 버튼 + A4 인쇄 |
+| 학생상담 | `student_consultations` | 카드 list + follow-up |
+| 퇴원관리 | `students.status='withdrawn'` + 직전 enrollment | 사유 통계 카드 + 테이블 |
+| 직원관리 | `users` + 활성 classes/students 카운트 | 역할 badge + 담당 반/학생 |
+| 수납관리 | `invoices` | 요약 4카드 + 청구서 테이블 (KRW) |
+| 회의록 | `meeting_minutes` | 카드 list + 상세 (whitespace-pre-wrap 본문) |
+| 도움말 | (정적 placeholder) | — |
+
+### 인증 / RLS
+
+- 두 master 계정 (`chrismathone@gmail.com`, `st2000423@gmail.com`)이 `ijw-demo` 테넌트에 sync됨
+- `st2000423`은 teacher role로 변경되어 사이드바 권한 매트릭스 시뮬레이션 가능
+- 권한 매트릭스는 `lib/permissions.ts`의 `canAccess(role, menuKey)` 헬퍼. AppSidebar에서 필터링, 빈 그룹 자동 숨김
+- 실제 데이터 보안은 RLS (`auth_tenant_id()` 함수 + tenant_isolation 정책)에서 강제
+
+---
+
+## 구현 중 실제로 막혔던 점들 (시간순)
+
+미래의 자기/팀이 같은 함정에 빠지지 않도록 기록.
+
+### 1. Next.js 16 — "middleware" 컨벤션 deprecation
+`middleware.ts` 사용 시 dev 서버에 deprecation 경고. Next.js 16에서는 `proxy.ts`로 rename됨. 시그니처는 동일하지만 함수 이름이 `middleware` → `proxy`. `src/middleware.ts` → `src/proxy.ts`, 그리고 helper `src/lib/supabase/middleware.ts` → `proxy.ts`로 정리.
+
+### 2. shadcn base-nova preset = base-ui 기반 (Radix 아님)
+shadcn `init -d`로 부트스트랩하면 기본이 base-nova preset인데 이건 **Radix UI가 아닌 [Base UI](https://base-ui.com)** 기반. 결과:
+- `asChild` prop이 존재하지 않음 → 대신 **`render` prop** 사용 (`<SidebarMenuButton render={<Link href="..." />}>` 형태)
+- `TooltipProvider`는 `delayDuration` 아닌 `delay` prop
+- `DropdownMenuTrigger`도 `render` prop 패턴
+
+shadcn 코드를 외부에서 복붙해서 가져올 때마다 `asChild` → `render` 변환 필요. 첫 빌드에서 typecheck 5개 에러로 발견.
+
+### 3. Pretendard dynamic-subset이 SVG 텍스트를 못 감지
+`pretendardvariable-dynamic-subset.min.css` (CDN) 사용 시 페이지에 등장한 글자만 동적 로딩. 단 **SVG `<text>` 노드 안의 글자는 감지 안 됨** → fallback 시스템 폰트로 일부 글리프 깨짐 ("월"→"원", "수"→"스", "선린중"→"선린종" 같은 자모 수준 변형).
+
+해결: SVG 안 한글 텍스트를 모두 **HTML로 빼서 absolute positioning**으로 align. 또 추후 폰트를 **정적 풀 한국어 subset** (`pretendardvariable.min.css`)으로 전환해서 SVG에 한글이 들어가도 정상 표시.
+
+### 4. SVG viewBox 비례 확대 = fontSize도 확대
+`<svg viewBox="0 0 720 180" className="w-full">`에서 컨테이너 width가 ~1300px이면 `fontSize="9"`가 16px+로 렌더됨 ("거대해 보임" 버그의 진짜 원인).
+
+해결: 
+- 차트의 X축 라벨을 SVG 밖 HTML로 빼서 `left: ${xPct}%` absolute positioning
+- 차트 자체는 `max-w-[860px] mx-auto`로 wrapper 크기 제한해서 SVG의 자연 비례 유지
+
+### 5. postgres-js batch insert의 컬럼 이름
+postgres-js의 `sql`insert into table ${sql(rows)}` ` 형태에서 rows 객체의 키는 **DB 컬럼명 그대로** (snake_case)여야 함. JS 측 camelCase로 주면 "column "tenantId" does not exist" 에러.
+
+`{ tenant_id, class_id, ... }` 형식으로 바로 만들어서 전달.
+
+### 6. drizzle-kit이 .env.local 자동 로드 안 함
+`drizzle-kit migrate` 실행 시 `DATABASE_URL` 누락 에러. drizzle-kit은 Node CLI라 Next.js의 dotenv 처리를 거치지 않음.
+
+해결: `dotenv` 패키지 설치 후 `drizzle.config.ts` 상단에서:
+```ts
+import { config } from "dotenv";
+config({ path: ".env.local" });
+```
+
+### 7. Drizzle migration 번호 vs 손수 RLS SQL의 prefix 충돌
+`drizzle-kit generate`가 `0001_*.sql`을 만드는데, 우리가 손수 작성한 RLS 파일도 같은 prefix를 쓰려다가 보면 두 `0001_*`가 됨. drizzle은 _journal.json 기반이라 자기 파일만 인식해서 실행에는 문제 없지만 git에서 헷갈림.
+
+컨벤션: **drizzle 파일은 `0001_*.sql`, 손수 RLS는 `0001a_*.sql`** 같은 alpha suffix. drizzle은 alpha 파일을 무시하지만 우리는 그 파일을 별도로 `node --env-file=.env.local -e "..."` 스크립트로 적용.
+
+### 8. Supabase 새 프로젝트는 IPv4 direct connection이 deprecated
+처음에 `postgresql://postgres:PWD@db.{ref}.supabase.co:5432/postgres` (direct connection) URL을 사용했더니 `ENOTFOUND` — 새 Supabase 프로젝트는 **IPv6 전용**이라 IPv4만 라우팅되는 환경에서 안 됨. DNS는 AAAA 레코드만 (`Resolve-DnsName ... -Type AAAA`로 확인).
+
+해결: **Session pooler** URL (`postgres.{ref}:PWD@aws-1-{region}.pooler.supabase.com:5432/postgres`) 사용. region 부분은 dashboard에서 확인 필요 (Seoul = `ap-northeast-2`였고 prefix는 `aws-0`이 아니라 `aws-1`이었음). Transaction pooler (port 6543)는 prepared statement 비활성이라 drizzle-kit과 호환 이슈, 그래서 Session pooler를 사용.
+
+### 9. DB password를 Google OAuth secret과 혼동
+사용자가 처음 "db 패스워드"라며 보낸 값이 `GOCSPX-...` 형태였는데 이건 **Google OAuth 2.0 client secret**의 표준 형식 (`GOCSPX-` prefix). Supabase가 자동 생성하는 비번은 그런 prefix 안 씀. 문자열 형식만 보고 "잘못된 키"라고 짚어서 사용자가 진짜 supabase 비번을 다시 보냄.
+
+교훈: 키 형식이 의외이면 사용자 입력을 그대로 적용하기 전에 형식 검증해서 확인할 것.
+
+### 10. Server Action 로그인이 cookie 전파 안 되는 무한 redirect (가장 큰 버그)
+사용자 보고: "로그인 후 바로 로그아웃되버린다". Chrome MCP로 재현해보니:
+1. 로그인 폼 submit → Server Action `signInWithPassword` 호출 → Supabase가 `sb-{ref}-auth-token` cookie를 set (`base64-...` prefix 형식, length 2799)
+2. Server Action이 `redirect("/")` 호출 → 브라우저가 `/`로 navigate
+3. middleware (`proxy.ts`)가 그 cookie로 `supabase.auth.getUser()` 호출 → **user `null` 반환**
+4. middleware가 `/login`으로 다시 redirect → 사용자에겐 "로그인 직후 자동 로그아웃"
+
+원인 추정: `@supabase/ssr 0.10.x`의 `base64-` prefix cookie 포맷이 Next.js 16 + Vercel 환경의 middleware cookies adapter를 통과할 때 server-side `getUser()`가 cookie를 verify 못 함. 클라이언트는 같은 라이브러리지만 정상 동작.
+
+**해결 (2단계)**:
+1. **로그인을 client-side로 전환** — `createBrowserClient`로 `signInWithPassword` 호출. browser SDK는 자체적으로 cookie + localStorage 동기화. 그 후 `router.push(next ?? "/")` + `router.refresh()`.
+2. **middleware를 단순화** — `supabase.auth.getUser()` 호출을 빼고 **단순히 `sb-*-auth-token` cookie 존재 여부만** 체크. 실제 user 검증은 `(shell)/layout`의 `getCurrentUser()`가 처리 (같은 cookies adapter지만 layout 컨텍스트에선 정상 작동). RLS가 최종 보안 레이어이므로 등급 동일.
+
+### 11. React Server Component에서 `Date.now()` 호출 lint 에러
+새 `react-hooks/purity` 룰이 RSC body에서 `Date.now()`를 catch함. 그러나 RSC는 매 request마다 새로 실행되어 "stable per request"이므로 사실 문제 없음.
+
+해결: `const cutoff = Date.now() - 7 * 86_400_000`을 `// eslint-disable-next-line react-hooks/purity -- server component renders once per request` 코멘트와 함께 사용.
+
+### 12. Lucide React 화살표 아이콘이 한글 자모로 오인됨
+KPI 카드의 `<ArrowUpRight className="size-3" />` (12px, default strokeWidth=2)이 작은 화면에서 한글 "ㄱ"/"ㄴ"과 흡사하게 보임. "ㄱ +12 최근 7일" 식으로 읽힘.
+
+해결: `size-3.5 strokeWidth={2.5}`로 굵게 + 살짝 크게. 아이콘 모양이 명확해짐.
+
+### 13. trend window가 오늘 포함하면 0% drop
+대시보드 7일 추세 차트가 마지막 점 (오늘)에서 0%로 떨어짐 — 오늘은 attendance 시드 안 됨 + 진행 중인 날이라 의미 없음. delta "-93.3pt" 같은 거짓 정보 표시.
+
+해결: window를 `end = yesterday`로 잡음. "최근 7일"의 의미를 "어제까지 7일"로 (학원 운영 관점에서 자연스러움).
+
+### 14. 시드 변수 중복 선언 (`today`)
+attendance loop에서 `const today = new Date()` 사용 후, invoice loop에서 또 `const today = new Date()` 추가 → esbuild parse 에러 "The symbol 'today' has already been declared". 둘 다 같은 함수 스코프.
+
+교훈: seed.ts처럼 긴 함수에서는 변수 이름 prefix를 명확하게 (`invoiceNow`, `enrolledAt` 식으로).
+
+### 15. Drizzle이 GiST EXCLUDE / 부분 인덱스 / generated column을 표현 못 함
+- `EXCLUDE USING gist (...)` — Drizzle schema로 표현 불가
+- `CREATE UNIQUE INDEX ... WHERE status<>'withdrawn'` — `uniqueIndex` builder는 WHERE 미지원
+- `name_normalized text GENERATED ALWAYS AS (...) STORED` — Drizzle generated column 미지원
+
+모두 손수 작성한 `0001a_*.sql` raw 파일에서 추가. drizzle generate는 base 테이블만, 손수 SQL이 후처리.
+
+### 16. UI 자잘한 어색함들 (frontend-design swing 후)
+사용자가 "어색해" 피드백한 점들:
+- 트렌드 차트가 거대 (viewBox 비례 확대)
+- KPI 화살표가 한글 자모로 보임
+- 로그인 좌측 패널이 vertical 균형 깨짐 (`justify-between` → `my-auto`)
+- Hero 우측 stats 카드가 작음 (`text-sm` → `text-base`, `py-2.5` → `py-3`)
+- "선린종" 같은 한글 깨짐 (Pretendard subset)
+
+Chrome MCP로 직접 production을 봐가며 조정한 것들. **자동 fix 후 사용자에게 "맞춰주세요" 묻기 전에 실제로 캡처해서 확인하는 사이클**이 중요.
+
+### 17. Vercel deployment queue / dev 서버 hang
+- Push 후 Vercel 빌드가 큐에 대기 (1-2분). 두 번 연달아 push하면 큐에 두 개 쌓임 — 두 번째 push의 결과를 보려면 1-3분 기다림.
+- 로컬 dev 서버가 file convention 변경 (`middleware.ts` → `proxy.ts`) 같은 큰 변경 후 hang. 죽이고 재시작 필요.
+- 포트 3000을 다른 앱이 점유 (MathGen Vite 등). `PORT=3100 pnpm dev`로 우회.
+
+### 18. Server Component의 cookies() / RSC vs Server Action
+Next.js 16의 `cookies()`는 async (`await cookies()`). Server Action에서는 set 가능하지만 Server Component에서는 set 불가. 우리 `lib/supabase/server.ts`의 `setAll`은 try/catch로 swallow (Server Component에서는 무시, Server Action에서는 실제 적용). 이 패턴이 일반적이지만 위 (10) 버그처럼 일부 환경에서 round-trip 깨질 수 있음.
+
+---
+
+## 마이그레이션 & 시드 흐름
+
+1. **스키마 수정** — `src/lib/db/schema.ts`
+2. **`pnpm db:generate`** — drizzle이 SQL diff 생성 (`supabase/migrations/000N_*.sql`)
+3. **손수 RLS/제약/트리거 작성** — `0001a_*.sql` 같은 alpha suffix 파일로
+4. **`pnpm db:migrate`** — drizzle이 자기 파일만 적용
+5. **`node --env-file=.env.local -e "..."`** 식으로 alpha 파일을 raw SQL 실행 (또는 supabase dashboard SQL editor)
+6. **`pnpm db:seed`** — `scripts/seed.ts` 실행. idempotent (테넌트 데이터 전부 삭제 후 재삽입).
+
+## 검증 게이트 (commit 전)
+
+```bash
+pnpm typecheck   # tsc --noEmit
+pnpm lint        # eslint
+pnpm test        # vitest unit
+pnpm build       # next build (Turbopack)
+```
+
+네 단계 모두 그린이어야 push. Vercel은 push 후 자동 빌드.
+
+## 두 master 계정 (현재 상태)
+
+| 이메일 | 비밀번호 | 역할 | 용도 |
+|---|---|---|---|
+| chrismathone@gmail.com | mbplaza2* | master | 주 계정 (사용자 본인) |
+| st2000423@gmail.com | qkrthtjs1234@ | teacher | 권한 매트릭스 시뮬레이션용 |
+
+`st2000423`을 다시 master로 되돌리려면 admin API 한 번:
+```js
+fetch(URL + '/auth/v1/admin/users/fcf735fa-edf7-4095-8fa6-724285a018ed', {
+  method: 'PUT',
+  headers: { apikey: SERVICE_ROLE_KEY, Authorization: 'Bearer ' + SERVICE_ROLE_KEY, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ app_metadata: { system_role: 'master', tenant_id: 'becaa316-e636-42e9-9d09-08b133e0b094' } }),
+});
+```
+
+## 남은 작업
+
+1. **도움말** 정적 콘텐츠 — 12개 메뉴 가이드 + 단축키 + FAQ
+2. **ANTHROPIC_API_KEY 추가** — 신규 등록상담에서 stub 대신 실제 Claude 호출
+3. **Hero 한글 호칭** — `users.display_name`을 한글로 바꾸는 UI (지금은 email prefix `chrismathone`)
+4. **진행 중 상담 KPI 실데이터** — `enrollment_consultations.outcome IN ('pending','scheduled','consulted','ai_done')` 카운트하면 끝
+5. **권한 서버측 강제** — 사이드바는 숨기지만 URL 직접 입력은 통과. 페이지 server component에서 `canAccess()` 게이트 추가
+6. **pgTAP RLS 테스트** — 두 테넌트 격리 자동 검증
+7. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
