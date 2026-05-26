@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { UserPlus } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { getEnrollmentConsultations } from "@/features/enrollment/server/queries";
@@ -43,6 +44,12 @@ export default async function EnrollmentPage() {
       <PageHeader
         title="신입생 등록상담"
         description={`전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`}
+        actions={
+          <Button render={<Link href="/enrollment/new" />}>
+            <Plus className="size-4" />
+            신규 등록
+          </Button>
+        }
       />
 
       {items.length === 0 ? (

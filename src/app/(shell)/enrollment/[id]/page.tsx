@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer, Sparkles } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   getEnrollmentConsultationById,
   type AiAnalysisDetail,
 } from "@/features/enrollment/server/queries";
+import { RunAiButton } from "./run-ai-button";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -64,10 +65,7 @@ export default async function EnrollmentDetailPage({
               인쇄 양식
             </Button>
           ) : (
-            <Button disabled variant="secondary">
-              <Sparkles className="size-4" />
-              AI 분석 대기
-            </Button>
+            <RunAiButton consultationId={id} />
           )}
         </div>
       </header>
