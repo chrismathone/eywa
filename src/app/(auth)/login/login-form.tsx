@@ -1,30 +1,57 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signIn, type LoginState } from "./actions";
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" className="group w-full" size="lg" disabled={pending}>
-      <span>{pending ? "로그인 중…" : "로그인"}</span>
-      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-    </Button>
-  );
-}
+import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm({ next }: { next?: string }) {
-  const [state, formAction] = useActionState<LoginState, FormData>(signIn, undefined);
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setPending(true);
+
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+
+    if (!email) {
+      setError("이메일을 입력해주세요");
+      setPending(false);
+      return;
+    }
+    if (password.length < 6) {
+      setError("비밀번호는 6자 이상이어야 합니다");
+      setPending(false);
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (signInError) {
+      const message = /invalid login credentials/i.test(signInError.message)
+        ? "이메일 또는 비밀번호가 올바르지 않습니다"
+        : signInError.message;
+      setError(message);
+      setPending(false);
+      return;
+    }
+
+    const target = next && next.startsWith("/") ? next : "/";
+    router.push(target);
+    router.refresh();
+  }
 
   return (
-    <form action={formAction} className="space-y-5">
-      <input type="hidden" name="next" value={next ?? ""} />
-
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="email" className="eyebrow">
           이메일
@@ -37,6 +64,7 @@ export function LoginForm({ next }: { next?: string }) {
           required
           placeholder="name@academy.kr"
           className="h-11"
+          disabled={pending}
         />
       </div>
 
@@ -56,20 +84,24 @@ export function LoginForm({ next }: { next?: string }) {
           minLength={6}
           placeholder="••••••••"
           className="h-11"
+          disabled={pending}
         />
       </div>
 
-      {state?.error ? (
+      {error ? (
         <div
           role="alert"
           className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          <span>{state.error}</span>
+          <span>{error}</span>
         </div>
       ) : null}
 
-      <SubmitButton />
+      <Button type="submit" className="group w-full" size="lg" disabled={pending}>
+        <span>{pending ? "로그인 중…" : "로그인"}</span>
+        <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+      </Button>
 
       <p className="text-muted-foreground border-border border-t pt-5 text-center text-xs leading-relaxed">
         계정 발급은 원장 또는 시스템 담당자에게 요청하세요.
