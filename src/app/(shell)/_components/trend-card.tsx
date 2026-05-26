@@ -12,9 +12,9 @@ const DAYS = [
 
 export function TrendCard() {
   const w = 720;
-  const h = 220;
+  const h = 180; // X-axis labels live outside the SVG now
   const padX = 44;
-  const padY = 28;
+  const padY = 24;
   const innerW = w - padX * 2;
   const innerH = h - padY * 2;
   const dx = innerW / (DAYS.length - 1);
@@ -55,105 +55,100 @@ export function TrendCard() {
         </div>
       </header>
 
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <linearGradient id="att-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
+      <div className="relative">
+        <svg viewBox={`0 0 ${w} ${h}`} className="block w-full" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="att-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
 
-        {[80, 85, 90, 95, 100].map((g) => (
-          <g key={g}>
-            <line
-              x1={padX}
-              y1={yAt(g)}
-              x2={w - padX}
-              y2={yAt(g)}
-              stroke="var(--color-border)"
-              strokeDasharray="2 4"
-              opacity="0.7"
-            />
-            <text
-              x={padX - 10}
-              y={yAt(g)}
-              fontSize="10"
-              fill="var(--color-muted-foreground)"
-              textAnchor="end"
-              dominantBaseline="middle"
-              style={{ fontVariantNumeric: "tabular-nums" }}
-            >
-              {g}
-            </text>
-          </g>
-        ))}
+          {[80, 85, 90, 95, 100].map((g) => (
+            <g key={g}>
+              <line
+                x1={padX}
+                y1={yAt(g)}
+                x2={w - padX}
+                y2={yAt(g)}
+                stroke="var(--color-border)"
+                strokeDasharray="2 4"
+                opacity="0.7"
+              />
+              <text
+                x={padX - 10}
+                y={yAt(g)}
+                fontSize="11"
+                fill="var(--color-muted-foreground)"
+                textAnchor="end"
+                dominantBaseline="middle"
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {g}
+              </text>
+            </g>
+          ))}
 
-        <path d={attArea} fill="url(#att-grad)" />
+          <path d={attArea} fill="url(#att-grad)" />
 
-        <path
-          d={attLine}
-          fill="none"
-          stroke="var(--color-chart-2)"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        <path
-          d={payLine}
-          fill="none"
-          stroke="var(--color-chart-3)"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          strokeDasharray="5 4"
-        />
+          <path
+            d={attLine}
+            fill="none"
+            stroke="var(--color-chart-2)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          <path
+            d={payLine}
+            fill="none"
+            stroke="var(--color-chart-3)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            strokeDasharray="5 4"
+          />
 
-        {DAYS.map((d, i) => (
-          <g key={d.date}>
-            <circle
-              cx={padX + i * dx}
-              cy={yAt(d.attendance)}
-              r="3.5"
-              fill="var(--color-card)"
-              stroke="var(--color-chart-2)"
-              strokeWidth="1.5"
-            />
-            <circle
-              cx={padX + i * dx}
-              cy={yAt(d.payment)}
-              r="3.5"
-              fill="var(--color-card)"
-              stroke="var(--color-chart-3)"
-              strokeWidth="1.5"
-            />
-          </g>
-        ))}
+          {DAYS.map((d, i) => (
+            <g key={d.date}>
+              <circle
+                cx={padX + i * dx}
+                cy={yAt(d.attendance)}
+                r="3.5"
+                fill="var(--color-card)"
+                stroke="var(--color-chart-2)"
+                strokeWidth="1.5"
+              />
+              <circle
+                cx={padX + i * dx}
+                cy={yAt(d.payment)}
+                r="3.5"
+                fill="var(--color-card)"
+                stroke="var(--color-chart-3)"
+                strokeWidth="1.5"
+              />
+            </g>
+          ))}
+        </svg>
 
-        {DAYS.map((d, i) => (
-          <g key={d.date}>
-            <text
-              x={padX + i * dx}
-              y={h - padY + 18}
-              fontSize="10"
-              fill="var(--color-muted-foreground)"
-              textAnchor="middle"
-              style={{ fontVariantNumeric: "tabular-nums" }}
-            >
-              {d.date}
-            </text>
-            <text
-              x={padX + i * dx}
-              y={h - padY + 30}
-              fontSize="9"
-              fill="var(--color-muted-foreground)"
-              textAnchor="middle"
-              opacity="0.65"
-            >
-              {d.day}
-            </text>
-          </g>
-        ))}
-      </svg>
+        <div className="relative mt-3 h-9">
+          {DAYS.map((d, i) => {
+            const xPct = ((padX + i * dx) / w) * 100;
+            return (
+              <div
+                key={d.date}
+                className="absolute top-0 -translate-x-1/2 text-center"
+                style={{ left: `${xPct}%` }}
+              >
+                <p className="text-muted-foreground num text-[11px] leading-tight">{d.date}</p>
+                <p className="text-muted-foreground/65 num mt-0.5 text-[10px] leading-tight">
+                  {d.day}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </section>
   );
 }
