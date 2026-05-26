@@ -195,44 +195,75 @@ async function main() {
     `;
   }
 
-  // --- 5. Students (30) ---
+  // --- 5. Students (30 — last 3 are withdrawn) ---
   console.log("Inserting students…");
   const enrolledAt = new Date();
   enrolledAt.setDate(enrolledAt.getDate() - 45);
   const enrolledDate = enrolledAt.toISOString().slice(0, 10);
 
+  const withdrawnAt = new Date();
+  withdrawnAt.setDate(withdrawnAt.getDate() - 7);
+  const withdrawnDate = withdrawnAt.toISOString().slice(0, 10);
+
+  const WITHDRAWAL_REASONS = [
+    "타 학원으로 이동",
+    "학업 부담 (자율 학습 전환)",
+    "이사로 인한 통원 어려움",
+  ];
+
+  const ENROLLED_COUNT = STUDENTS.length - 3;
   const students: { id: string; grade: string }[] = [];
   for (let i = 0; i < STUDENTS.length; i++) {
     const s = STUDENTS[i]!;
+    const isWithdrawn = i >= ENROLLED_COUNT;
+    const reason = isWithdrawn ? WITHDRAWAL_REASONS[i - ENROLLED_COUNT] : null;
     const [row] = await sql<{ id: string }[]>`
       insert into students (
         tenant_id, name, school, grade, status,
-        primary_teacher_id, enrolled_at, parent_name, parent_phone
+        primary_teacher_id, enrolled_at, withdrawn_at, parent_name, parent_phone
       ) values (
-        ${tenantId}, ${s.name}, ${s.school}, ${s.grade}, 'enrolled',
+        ${tenantId}, ${s.name}, ${s.school}, ${s.grade},
+        ${isWithdrawn ? "withdrawn" : "enrolled"},
         ${pick(teacherIds, i)}, ${enrolledDate},
+        ${isWithdrawn ? withdrawnDate : null},
         ${`${s.name.slice(0, 1)}**`}, ${`010-${1000 + i}-${2000 + i}`}
       )
       returning id
     `;
     students.push({ id: row.id, grade: s.grade });
+    // withdrawal_reason is set on the most recent active enrollment after we
+    // create enrollments below — but the 3 withdrawn students get no
+    // enrollment in the first place (loop below uses ENROLLED_COUNT).
+    void reason;
   }
 
-  // --- 6. Enrollments (each student → 1 class matching their grade) ---
+  // --- 6. Enrollments (active students only; withdrawn students get a closed enrollment) ---
   console.log("Inserting enrollments…");
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 30);
   const startStr = startDate.toISOString().slice(0, 10);
 
   const studentClass = new Map<string, string>(); // studentId → classId
-  for (const stu of students) {
+  for (let i = 0; i < students.length; i++) {
+    const stu = students[i]!;
     const matching = classes.filter((c) => c.grade === stu.grade);
-    const klass = matching.length > 0 ? matching[Math.floor(Math.random() * matching.length)]! : classes[0]!;
+    const klass =
+      matching.length > 0 ? matching[Math.floor(Math.random() * matching.length)]! : classes[0]!;
+    const isWithdrawn = i >= ENROLLED_COUNT;
+    const reason = isWithdrawn
+      ? WITHDRAWAL_REASONS[i - ENROLLED_COUNT]
+      : null;
+
     await sql`
-      insert into enrollments (tenant_id, student_id, class_id, start_date)
-      values (${tenantId}, ${stu.id}, ${klass.id}, ${startStr})
+      insert into enrollments (
+        tenant_id, student_id, class_id, start_date, end_date, withdrawal_reason
+      ) values (
+        ${tenantId}, ${stu.id}, ${klass.id}, ${startStr},
+        ${isWithdrawn ? withdrawnDate : null},
+        ${reason}
+      )
     `;
-    studentClass.set(stu.id, klass.id);
+    if (!isWithdrawn) studentClass.set(stu.id, klass.id);
   }
 
   // --- 7. Attendance: last 30 days, weekdays only, ~92% present ---
@@ -253,7 +284,8 @@ async function main() {
 
     const rows: Record<string, string>[] = [];
     for (const stu of students) {
-      const classId = studentClass.get(stu.id)!;
+      const classId = studentClass.get(stu.id);
+      if (!classId) continue; // withdrawn students have no active enrollment
       const r = Math.random();
       const status = r < 0.92 ? "present" : r < 0.96 ? "late" : r < 0.99 ? "absent" : "excused";
       rows.push({
@@ -265,6 +297,7 @@ async function main() {
         recorded_by: recordedBy,
       });
     }
+    if (rows.length === 0) continue;
     await sql`insert into attendance_records ${sql(rows)}`;
     inserted += rows.length;
   }
