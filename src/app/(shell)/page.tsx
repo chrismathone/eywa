@@ -1,21 +1,32 @@
-import { LayoutDashboard } from "lucide-react";
-import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
+import { createClient } from "@/lib/supabase/server";
+import { AnnouncementsCard } from "./_components/announcements-card";
+import { DashboardHero } from "./_components/dashboard-hero";
+import { KpiGrid } from "./_components/kpi-grid";
+import { TodayTimeline } from "./_components/today-timeline";
+import { TrendCard } from "./_components/trend-card";
 
 export const metadata = { title: "대시보드 — eywa" };
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const name = (user?.email ?? "").split("@")[0] || "원장";
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="대시보드"
-        description="재원생, 출석률, 수납 현황을 한눈에. 공지사항은 여기에 표시됩니다."
-      />
-      <EmptyState
-        icon={LayoutDashboard}
-        title="아직 데이터가 없습니다"
-        description="Phase 2에서 데이터 모델과 시드가 들어오면 이 자리에 KPI 카드, 공지, 오늘의 일정이 표시됩니다."
-      />
+    <div className="space-y-8">
+      <DashboardHero name={name} />
+      <KpiGrid />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-1">
+          <AnnouncementsCard />
+        </div>
+        <div className="xl:col-span-2">
+          <TodayTimeline />
+        </div>
+      </div>
+      <TrendCard />
     </div>
   );
 }

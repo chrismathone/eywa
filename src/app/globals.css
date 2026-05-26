@@ -51,73 +51,96 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* "학원 일지" — light: warm paper · ink primary · 인주 red accent */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: oklch(0.970 0.012 82);
+  --foreground: oklch(0.215 0.020 220);
+
+  --card: oklch(0.992 0.005 82);
+  --card-foreground: oklch(0.215 0.020 220);
+
+  --popover: oklch(0.992 0.005 82);
+  --popover-foreground: oklch(0.215 0.020 220);
+
+  --primary: oklch(0.302 0.038 195);
+  --primary-foreground: oklch(0.970 0.012 82);
+
+  --secondary: oklch(0.926 0.014 82);
+  --secondary-foreground: oklch(0.302 0.038 195);
+
+  --muted: oklch(0.932 0.010 82);
+  --muted-foreground: oklch(0.485 0.020 220);
+
+  --accent: oklch(0.918 0.020 30);
+  --accent-foreground: oklch(0.430 0.150 28);
+
+  --destructive: oklch(0.555 0.180 28);
+
+  --border: oklch(0.880 0.012 82);
+  --input: oklch(0.880 0.012 82);
+  --ring: oklch(0.385 0.040 195);
+
+  --chart-1: oklch(0.520 0.085 200);
+  --chart-2: oklch(0.580 0.085 150);
+  --chart-3: oklch(0.700 0.140 70);
+  --chart-4: oklch(0.560 0.180 28);
+  --chart-5: oklch(0.450 0.045 270);
+
+  --radius: 0.5rem;
+
+  --sidebar: oklch(0.950 0.014 82);
+  --sidebar-foreground: oklch(0.245 0.020 220);
+  --sidebar-primary: oklch(0.302 0.038 195);
+  --sidebar-primary-foreground: oklch(0.970 0.012 82);
+  --sidebar-accent: oklch(0.910 0.014 82);
+  --sidebar-accent-foreground: oklch(0.302 0.038 195);
+  --sidebar-border: oklch(0.860 0.014 82);
+  --sidebar-ring: oklch(0.385 0.040 195);
 }
 
+/* "학원 일지" — dark: warm ink dark, not pure black */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.160 0.012 220);
+  --foreground: oklch(0.935 0.012 82);
+
+  --card: oklch(0.200 0.012 220);
+  --card-foreground: oklch(0.935 0.012 82);
+
+  --popover: oklch(0.200 0.012 220);
+  --popover-foreground: oklch(0.935 0.012 82);
+
+  --primary: oklch(0.830 0.060 195);
+  --primary-foreground: oklch(0.175 0.020 220);
+
+  --secondary: oklch(0.250 0.012 220);
+  --secondary-foreground: oklch(0.935 0.012 82);
+
+  --muted: oklch(0.250 0.012 220);
+  --muted-foreground: oklch(0.680 0.012 82);
+
+  --accent: oklch(0.290 0.045 28);
+  --accent-foreground: oklch(0.840 0.130 30);
+
+  --destructive: oklch(0.685 0.180 28);
+
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.615 0.060 195);
+
+  --chart-1: oklch(0.700 0.085 200);
+  --chart-2: oklch(0.720 0.085 150);
+  --chart-3: oklch(0.800 0.140 70);
+  --chart-4: oklch(0.680 0.180 28);
+  --chart-5: oklch(0.640 0.045 270);
+
+  --sidebar: oklch(0.200 0.012 220);
+  --sidebar-foreground: oklch(0.925 0.012 82);
+  --sidebar-primary: oklch(0.830 0.060 195);
+  --sidebar-primary-foreground: oklch(0.175 0.020 220);
+  --sidebar-accent: oklch(0.240 0.012 220);
+  --sidebar-accent-foreground: oklch(0.935 0.012 82);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.615 0.060 195);
 }
 
 @layer base {
@@ -126,8 +149,46 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+    font-synthesis: none;
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "lnum", "ss01";
+  }
+
+  .display {
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted-foreground);
+  }
+
+  @keyframes eywa-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--color-chart-4);
+      opacity: 1;
+    }
+    50% {
+      box-shadow: 0 0 0 6px transparent;
+      opacity: 0.85;
+    }
+  }
+  .pulse-now {
+    animation: eywa-pulse 1.8s ease-out infinite;
   }
 }
