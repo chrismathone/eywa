@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# eywa — 인재원 학원관리 경량 버전
 
-## Getting Started
+[D:\ijw-calander](D:\ijw-calander)의 어설픈 구조와 부풀어 오른 메뉴(43개 탭)를 정리하여 12개 메뉴 + 단순한 카테고리로 다시 짠 데모 프로젝트입니다. 완성도가 충분히 올라가면 실 운영 데이터를 마이그레이션해 기존 시스템을 대체합니다.
 
-First, run the development server:
+## 스택
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 16 (App Router)** + TypeScript + Turbopack
+- **Tailwind v4** + **shadcn/ui** (base-nova preset)
+- **Supabase**: Postgres + Auth + Realtime + Storage + RLS
+- **Drizzle ORM** + drizzle-kit
+- **TanStack Query** (client mutations) + **Zustand** (UI state only)
+- **Zod** (런타임 가드)
+- **Vitest** + **Testing Library** (단위), **Playwright** (E2E)
+- **Anthropic Claude API** (신입생 상담 AI 분석)
+- 배포: **Vercel**
+
+## 메뉴
+
+```
+대시보드 (공지) · 수업 [시간표/출석부/수업목록] · 학생 [학생목록/등록상담/학생상담/퇴원관리] · 운영 [직원관리/수납관리/회의록] · 도움말
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+자세한 구조는 [src/features/README.md](src/features/README.md), 최초 설계 결정은 [`C:\Users\user\.claude\plans\curried-popping-finch.md`](C:\Users\user\.claude\plans\curried-popping-finch.md) 참고.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 시작하기
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# 1. 환경변수 설정
+cp .env.local.example .env.local
+# Supabase Project Settings → API/Database에서 값을 채워 넣기
 
-## Learn More
+# 2. 의존성 설치 (이미 설치되어 있다면 생략)
+pnpm install
 
-To learn more about Next.js, take a look at the following resources:
+# 3. 개발 서버
+pnpm dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+http://localhost:3000 접속.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 주요 스크립트
 
-## Deploy on Vercel
+```bash
+pnpm dev              # Next 개발 서버
+pnpm build            # 프로덕션 빌드
+pnpm typecheck        # tsc --noEmit
+pnpm lint             # ESLint
+pnpm test             # Vitest 단위 테스트
+pnpm test:watch       # Vitest watch
+pnpm test:e2e         # Playwright E2E (dev 서버 자동 기동)
+pnpm db:generate      # Drizzle 스키마 → SQL 마이그레이션 생성
+pnpm db:migrate       # 마이그레이션 적용
+pnpm db:studio        # Drizzle Studio (테이블 탐색기)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 폴더 구조
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├─ app/                # Next 라우트 (Phase 1에서 (shell)/(auth)/(print) 그룹 추가)
+├─ components/ui/      # shadcn 생성물
+├─ features/           # 도메인별 모듈 — 12개 메뉴 = 12개 폴더
+├─ hooks/              # 공용 클라이언트 훅
+└─ lib/
+    ├─ supabase/       # server/client/middleware 클라이언트
+    ├─ db/             # Drizzle 클라이언트 + schema
+    ├─ ai/             # Claude API 래퍼
+    ├─ providers/      # React Query 등 Context Provider
+    ├─ permissions.ts  # 역할 × 메뉴 접근 매트릭스
+    └─ utils.ts        # shadcn 기본 cn() 헬퍼
+supabase/
+├─ migrations/         # drizzle-kit 생성 SQL + 손수 다듬은 RLS 정책
+├─ tests/              # pgTAP RLS 검증
+└─ seed.sql            # 데모 시드
+tests/
+├─ unit/               # Vitest
+└─ e2e/                # Playwright
+```
+
+## 다음 단계 (Phase 1)
+
+1. `(shell)` 레이아웃과 사이드바 IA 구현
+2. Supabase Auth 로그인/로그아웃
+3. 12개 라우트 스텁 + 권한 가드
