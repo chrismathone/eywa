@@ -179,8 +179,11 @@ export type TrendPoint = {
 
 export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
   const supabase = await createClient();
+  // Window ends yesterday — today is still in progress and shouldn't drag the
+  // line to 0% just because attendance hasn't been recorded yet.
   const end = new Date();
-  const start = new Date();
+  end.setDate(end.getDate() - 1);
+  const start = new Date(end);
   start.setDate(end.getDate() - 6);
 
   const { data } = await supabase
