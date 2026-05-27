@@ -1,13 +1,15 @@
-import { Pin } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+/**
+ * Announcements — 시안 사양: 키커 "공지" (amber mono) + 행별 pill + 시간 + 제목 + 작성자
+ */
+import { Pill, type PillColor } from "@/components/atoms/pill";
 import type { AnnouncementRow } from "@/features/dashboard/server/queries";
 
-const AUDIENCE_LABEL: Record<string, string> = {
-  all: "전체",
-  staff: "전체 직원",
-  teachers: "강사",
-  counselors: "상담",
-  accounting: "회계",
+const AUDIENCE_META: Record<string, { label: string; color: PillColor }> = {
+  all: { label: "전체", color: "primary" },
+  staff: { label: "직원", color: "blue" },
+  teachers: { label: "강사", color: "gold" },
+  counselors: { label: "상담", color: "rose" },
+  accounting: { label: "회계", color: "purple" },
 };
 
 function relativeTime(iso: string): string {
@@ -27,60 +29,49 @@ function relativeTime(iso: string): string {
 
 export function AnnouncementsCard({ announcements }: { announcements: AnnouncementRow[] }) {
   return (
-    <section className="bg-card border-border flex h-full flex-col rounded-lg border">
-      <header className="border-border flex items-center justify-between border-b px-5 py-4">
+    <section className="bg-card border-line shadow-card flex h-full flex-col overflow-hidden rounded-2xl border">
+      <header className="flex items-center justify-between px-6 pt-5 pb-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight">공지사항</h2>
-          <p className="text-muted-foreground num mt-0.5 text-xs">최근 {announcements.length}건</p>
+          <p className="text-amber font-mono text-[11px] tracking-wider uppercase">공지</p>
+          <h2 className="text-foreground mt-1 text-[17px] font-bold">최근 알림</h2>
         </div>
         <a
           href="#"
-          className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 transition hover:underline"
+          className="text-text-dim hover:text-foreground text-xs underline-offset-2 transition hover:underline"
         >
           전체 보기 →
         </a>
       </header>
 
       {announcements.length === 0 ? (
-        <div className="text-muted-foreground flex flex-1 items-center justify-center px-5 py-10 text-sm">
+        <div className="text-text-dim flex flex-1 items-center justify-center px-5 py-10 text-sm">
           등록된 공지가 없습니다
         </div>
       ) : (
-        <ul className="divide-border flex-1 divide-y">
-          {announcements.map((a) => (
-            <li
-              key={a.id}
-              className="hover:bg-accent/40 group cursor-pointer px-5 py-4 transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                {a.pinned ? (
-                  <Pin className="text-chart-4 mt-1 size-3.5 shrink-0 -rotate-45 fill-current" />
-                ) : (
-                  <span className="bg-muted-foreground/30 mt-2.5 size-1.5 shrink-0 rounded-full" />
-                )}
-
-                <div className="min-w-0 flex-1 space-y-1">
-                  <h3 className="text-sm font-medium leading-snug">{a.title}</h3>
-                  <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
-                    {a.content}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[11px]">
-                    <Badge
-                      variant="secondary"
-                      className="h-5 rounded-sm px-1.5 text-[10px] font-normal"
-                    >
-                      {AUDIENCE_LABEL[a.audience] ?? a.audience}
-                    </Badge>
-                    {a.authorName ? (
-                      <span className="text-muted-foreground">{a.authorName}</span>
-                    ) : null}
-                    <span className="text-muted-foreground/40">·</span>
-                    <span className="text-muted-foreground num">{relativeTime(a.createdAt)}</span>
+        <ul className="divide-line flex-1 divide-y">
+          {announcements.map((a) => {
+            const meta = AUDIENCE_META[a.audience] ?? { label: a.audience, color: "neutral" as PillColor };
+            return (
+              <li key={a.id} className="hover:bg-bg-soft/60 cursor-pointer px-6 py-3.5 transition">
+                <div className="flex items-start gap-3">
+                  <Pill color={meta.color}>{meta.label}</Pill>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-foreground text-[13px] font-semibold leading-snug">
+                      {a.title}
+                    </h3>
+                    <p className="text-text-dim mt-1 line-clamp-2 text-[12px] leading-relaxed">
+                      {a.content}
+                    </p>
+                    <div className="text-text-faint mt-1.5 flex items-center gap-1.5 text-[11px]">
+                      {a.authorName ? <span>{a.authorName}</span> : null}
+                      <span className="opacity-60">·</span>
+                      <span className="num">{relativeTime(a.createdAt)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

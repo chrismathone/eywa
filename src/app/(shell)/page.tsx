@@ -43,10 +43,17 @@ export default async function DashboardPage() {
   ]);
 
   const name = user.displayName ?? "원장";
+  const attendanceDelta =
+    attendance && attendance.total > 0 ? `${attendance.rate.toFixed(1)}%` : null;
 
   return (
-    <div className="space-y-8">
-      <DashboardHero name={name} enrolledStudents={enrolled} />
+    <div className="space-y-5">
+      <DashboardHero
+        name={name}
+        enrolledStudents={enrolled}
+        attendanceDelta={attendanceDelta}
+        unpaidCount={payment?.unpaidCount}
+      />
       <KpiGrid
         enrolled={enrolled}
         newThisMonth={newThisMonth}
@@ -56,13 +63,9 @@ export default async function DashboardPage() {
         consultations={consultations}
         trend={trend}
       />
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-1">
-          <AnnouncementsCard announcements={announcements} />
-        </div>
-        <div className="xl:col-span-2">
-          <TodayTimeline slots={todaySchedule} />
-        </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <TodayTimeline slots={todaySchedule} />
+        <AnnouncementsCard announcements={announcements} />
       </div>
       <TrendCard data={trend} />
     </div>
