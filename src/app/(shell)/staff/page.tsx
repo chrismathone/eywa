@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { BadgeCheck, CheckCircle2, Pencil, Plus } from "lucide-react";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { Initial, type InitialColor } from "@/components/atoms/initial";
+import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -10,30 +11,20 @@ import { getStaffList } from "@/features/staff/server/queries";
 
 export const metadata = { title: "직원관리 — eywa" };
 
-const ROLE_LABEL: Record<string, string> = {
-  master: "원장",
-  admin: "관리자",
-  manager: "매니저",
-  teacher: "강사",
-  counselor: "상담",
-  accountant: "회계",
-  viewer: "참관",
+const ROLE_META: Record<string, { label: string; color: PillColor; init: InitialColor }> = {
+  master: { label: "원장", color: "danger", init: "danger" },
+  admin: { label: "관리자", color: "blue", init: "blue" },
+  manager: { label: "매니저", color: "blue", init: "blue" },
+  teacher: { label: "강사", color: "primary", init: "primary" },
+  counselor: { label: "상담", color: "rose", init: "rose" },
+  accountant: { label: "회계", color: "purple", init: "purple" },
+  viewer: { label: "참관", color: "neutral", init: "neutral" },
 };
 
-const ROLE_COLOR: Record<string, string> = {
-  master: "text-chart-4 bg-chart-4/10 border-chart-4/20",
-  admin: "text-chart-1 bg-chart-1/10 border-chart-1/20",
-  manager: "text-chart-1 bg-chart-1/10 border-chart-1/20",
-  teacher: "text-chart-2 bg-chart-2/10 border-chart-2/20",
-  counselor: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-  accountant: "text-chart-5 bg-chart-5/10 border-chart-5/20",
-  viewer: "text-muted-foreground bg-muted border-border",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  active: "재직",
-  inactive: "퇴사",
-  pending: "대기",
+const STATUS_META: Record<string, { label: string; color: PillColor }> = {
+  active: { label: "재직", color: "primary" },
+  inactive: { label: "퇴사", color: "neutral" },
+  pending: { label: "대기", color: "amber" },
 };
 
 export default async function StaffPage({
@@ -46,87 +37,134 @@ export default async function StaffPage({
   const canManage = !!user && canManageStaff(user.systemRole);
   const { invited } = await searchParams;
   const staff = await getStaffList();
-  const teachers = staff.filter((s) => s.systemRole === "teacher").length;
-  const total = staff.length;
+
+  const roleCount = (key: string) => staff.filter((s) => s.systemRole === key).length;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="직원관리"
-        description={`전체 ${total}명 · 강사 ${teachers}명. 역할/담당 학생수가 함께 표시됩니다.`}
-        actions={
-          canManage ? (
-            <Button render={<Link href="/staff/new" />}>
-              <Plus className="size-4" />
-              직원 등록
-            </Button>
-          ) : null
-        }
-      />
+    <div className="space-y-5">
+      {/* Stat strip */}
+      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
+        <Stat label="전체" value={staff.length} icon="roots" color="primary" />
+        <Stat label="원장·관리자" value={roleCount("master") + roleCount("admin")} icon="tree" color="danger" />
+        <Stat label="강사" value={roleCount("teacher")} icon="seed" color="primary" />
+        <Stat label="상담" value={roleCount("counselor")} icon="wave" color="rose" />
+        <Stat label="회계" value={roleCount("accountant")} icon="pollen" color="purple" />
+      </section>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="micro">직원 명단</p>
+          <h2 className="text-foreground mt-0.5 text-[17px] font-bold">
+            전체 직원 {staff.length}명
+          </h2>
+        </div>
+        {canManage ? (
+          <Button render={<Link href="/staff/new" />}>
+            <EyIcon name="plus" size={13} className="mr-1" />
+            직원 등록
+          </Button>
+        ) : null}
+      </div>
 
       {invited ? (
-        <p className="border-chart-2/30 bg-chart-2/5 text-chart-2 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <CheckCircle2 className="size-4" />
+        <p className="border-primary/30 bg-primary-soft text-primary inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+          <EyIcon name="check" size={14} />
           <span>{invited} 계정이 생성되었습니다. 임시 비밀번호를 직원에게 안내해주세요.</span>
         </p>
       ) : null}
 
       {staff.length === 0 ? (
-        <EmptyState icon={BadgeCheck} title="등록된 직원이 없습니다" />
+        <EmptyState icon={() => <EyIcon name="roots" size={32} />} title="등록된 직원이 없습니다" />
       ) : (
-        <div className="bg-card border-border overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="border-border text-muted-foreground border-b text-left text-xs">
-              <tr>
-                <th className="eyebrow px-5 py-3 font-normal">이름</th>
-                <th className="eyebrow px-5 py-3 font-normal">역할</th>
-                <th className="eyebrow px-5 py-3 font-normal">이메일</th>
-                <th className="eyebrow num px-5 py-3 text-right font-normal">담당 반</th>
-                <th className="eyebrow num px-5 py-3 text-right font-normal">담당 학생</th>
-                <th className="eyebrow px-5 py-3 font-normal">상태</th>
-                {canManage ? <th className="eyebrow px-5 py-3 font-normal" /> : null}
-              </tr>
-            </thead>
-            <tbody className="divide-border divide-y">
-              {staff.map((s) => (
-                <tr key={s.id} className="hover:bg-accent/40 transition-colors">
-                  <td className="text-foreground px-5 py-3 font-medium">{s.displayName}</td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
-                        ROLE_COLOR[s.systemRole] ?? "bg-muted text-muted-foreground border-border"
-                      }`}
-                    >
-                      {ROLE_LABEL[s.systemRole] ?? s.systemRole}
-                    </span>
-                  </td>
-                  <td className="text-muted-foreground num px-5 py-3 text-xs">{s.email}</td>
-                  <td className="text-foreground num px-5 py-3 text-right">
-                    {s.classesCount > 0 ? `${s.classesCount}개` : "—"}
-                  </td>
-                  <td className="text-foreground num px-5 py-3 text-right">
-                    {s.primaryStudentsCount > 0 ? `${s.primaryStudentsCount}명` : "—"}
-                  </td>
-                  <td className="text-muted-foreground px-5 py-3 text-xs">
-                    {STATUS_LABEL[s.status] ?? s.status}
-                  </td>
-                  {canManage ? (
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        href={`/staff/${s.id}/edit`}
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                      >
-                        <Pencil className="size-3.5" />
-                        <span className="sr-only">수정</span>
-                      </Link>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+          {staff.map((s) => {
+            const role = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
+            const status = STATUS_META[s.status] ?? STATUS_META.active!;
+            const isTeacher = s.systemRole === "teacher";
+            return (
+              <article
+                key={s.id}
+                className="bg-card border-line shadow-card flex flex-col rounded-2xl border p-5"
+              >
+                <header className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Initial name={s.displayName} color={role.init} size="lg" />
+                    <div className="min-w-0">
+                      <p className="text-foreground text-[15px] font-bold">{s.displayName}</p>
+                      <p className="text-text-dim num mt-0.5 truncate text-[11px]">{s.email}</p>
+                    </div>
+                  </div>
+                  <Pill color={role.color}>{role.label}</Pill>
+                </header>
+
+                {isTeacher ? (
+                  <div className="border-line mt-4 grid grid-cols-3 gap-3 border-t pt-4">
+                    <Mini label="담당 반" value={s.classesCount} unit="개" />
+                    <Mini label="담당 학생" value={s.primaryStudentsCount} unit="명" />
+                    <Mini label="상태" value={status.label} />
+                  </div>
+                ) : (
+                  <div className="border-line text-text-dim mt-4 border-t pt-4 text-[12px]">
+                    {status.label} · {s.classesCount > 0 ? `반 ${s.classesCount}개` : "반 없음"}
+                  </div>
+                )}
+
+                {canManage ? (
+                  <Link
+                    href={`/staff/${s.id}/edit`}
+                    className="text-text-dim hover:text-foreground mt-3 inline-flex items-center gap-1 self-end text-[11px] transition"
+                  >
+                    수정 →
+                  </Link>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       )}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: Parameters<typeof EyIcon>[0]["name"];
+  color: "primary" | "blue" | "rose" | "danger" | "purple";
+}) {
+  const ICON_BG = {
+    primary: "bg-primary-soft text-primary",
+    blue: "bg-blue-soft text-blue",
+    rose: "bg-rose-soft text-rose",
+    danger: "bg-danger-soft text-danger",
+    purple: "bg-purple-soft text-purple",
+  } as const;
+  return (
+    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
+      <header className="flex items-center justify-between">
+        <p className="micro truncate">{label}</p>
+        <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
+          <EyIcon name={icon} size={13} />
+        </span>
+      </header>
+      <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>
+    </div>
+  );
+}
+
+function Mini({ label, value, unit }: { label: string; value: number | string; unit?: string }) {
+  return (
+    <div>
+      <p className="micro text-[9px]">{label}</p>
+      <p className="tabular text-foreground mt-1 text-base">
+        {value}
+        {unit ? <span className="text-text-dim ml-0.5 text-[11px]">{unit}</span> : null}
+      </p>
     </div>
   );
 }

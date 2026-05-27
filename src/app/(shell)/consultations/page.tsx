@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { MessagesSquare, Pencil, Plus } from "lucide-react";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { Initial } from "@/components/atoms/initial";
+import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -13,30 +14,21 @@ import {
 
 export const metadata = { title: "학생상담 — eywa" };
 
-const CATEGORY_LABEL: Record<StudentConsultationCategory, string> = {
-  general: "일반",
-  academic: "학습/성적",
-  emotional: "정서/심리",
-  career: "진로",
-  social: "교우관계",
-  other: "기타",
+const CATEGORY_META: Record<StudentConsultationCategory, { label: string; color: PillColor }> = {
+  general: { label: "일반", color: "neutral" },
+  academic: { label: "학습", color: "primary" },
+  emotional: { label: "정서", color: "rose" },
+  career: { label: "진로", color: "blue" },
+  social: { label: "교우", color: "gold" },
+  other: { label: "기타", color: "neutral" },
 };
 
-const CATEGORY_COLOR: Record<StudentConsultationCategory, string> = {
-  general: "text-muted-foreground bg-muted border-border",
-  academic: "text-chart-2 bg-chart-2/10 border-chart-2/20",
-  emotional: "text-chart-4 bg-chart-4/10 border-chart-4/20",
-  career: "text-chart-1 bg-chart-1/10 border-chart-1/20",
-  social: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-  other: "text-muted-foreground bg-muted border-border",
-};
-
-const URGENCY_STYLE: Record<FollowUpUrgency, { label: string; class: string } | null> = {
-  done: { label: "완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  overdue: { label: "지연", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
-  today: { label: "오늘", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
-  soon: { label: "3일 내", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
-  later: { label: "예정", class: "text-chart-1 bg-chart-1/10 border-chart-1/20" },
+const URGENCY_META: Record<FollowUpUrgency, { label: string; color: PillColor } | null> = {
+  done: { label: "완료", color: "primary" },
+  overdue: { label: "지연", color: "danger" },
+  today: { label: "오늘", color: "danger" },
+  soon: { label: "3일 내", color: "amber" },
+  later: { label: "예정", color: "blue" },
   none: null,
 };
 
@@ -56,91 +48,101 @@ export default async function ConsultationsPage() {
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const cutoff = Date.now() - 7 * 86_400_000;
   const lastWeek = items.filter((i) => new Date(i.consultedAt).getTime() > cutoff).length;
-  const pendingFollowUps = items.filter(
-    (i) => !i.followUpDone && i.followUpDate,
+  const pendingFollowUps = items.filter((i) => !i.followUpDone && i.followUpDate).length;
+  const overdueFollowUps = items.filter(
+    (i) => followUpUrgency(i.followUpDate, i.followUpDone) === "overdue",
   ).length;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="학생상담"
-        description={`전체 ${items.length}건 · 최근 7일 ${lastWeek}건 · 진행 중 후속 ${pendingFollowUps}건`}
-        actions={
-          <Button render={<Link href="/consultations/new" />}>
-            <Plus className="size-4" />
-            상담 추가
-          </Button>
-        }
-      />
+    <div className="space-y-5">
+      {/* Stat strip */}
+      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        <Stat label="전체 상담" value={items.length} icon="wave" color="primary" />
+        <Stat label="최근 7일" value={lastWeek} icon="pulse" color="blue" />
+        <Stat label="진행 중 후속" value={pendingFollowUps} icon="sprout" color="gold" />
+        <Stat label="지연 후속" value={overdueFollowUps} icon="falling" color="danger" />
+      </section>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="micro">최근 상담</p>
+          <h2 className="text-foreground mt-0.5 text-[17px] font-bold">상담 기록</h2>
+        </div>
+        <Button render={<Link href="/consultations/new" />}>
+          <EyIcon name="plus" size={13} className="mr-1" />
+          상담 추가
+        </Button>
+      </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={MessagesSquare} title="기록된 상담이 없습니다" />
+        <EmptyState icon={() => <EyIcon name="wave" size={32} />} title="기록된 상담이 없습니다" />
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-2.5">
           {items.map((c) => {
-            const urgency = URGENCY_STYLE[followUpUrgency(c.followUpDate, c.followUpDone)];
-            const catColor = c.category ? CATEGORY_COLOR[c.category] : null;
-            const catLabel = c.category ? CATEGORY_LABEL[c.category] : null;
+            const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];
+            const cat = c.category ? CATEGORY_META[c.category] : null;
+            const isUrgent =
+              urgency &&
+              (urgency.color === "danger" || urgency.color === "amber");
             return (
-              <li key={c.id} className="bg-card border-border rounded-lg border p-5">
-                <header className="flex flex-wrap items-baseline justify-between gap-2">
-                  <div className="flex items-baseline gap-2">
-                    <Link
-                      href={`/students/${c.studentId}`}
-                      className="text-foreground text-base font-semibold hover:underline"
-                    >
-                      {c.studentName}
-                    </Link>
-                    {c.studentGrade ? (
-                      <span className="text-muted-foreground text-xs">{c.studentGrade}</span>
-                    ) : null}
-                    {catLabel && catColor ? (
-                      <span
-                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${catColor}`}
-                      >
-                        {catLabel}
-                      </span>
-                    ) : null}
-                    {c.subject ? (
-                      <span className="text-muted-foreground text-[10px]">· {c.subject}</span>
-                    ) : null}
+              <li
+                key={c.id}
+                className={`shadow-card overflow-hidden rounded-2xl border p-5 ${
+                  isUrgent ? "border-danger/30 bg-danger-soft" : "border-line bg-card"
+                }`}
+              >
+                <header className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <Initial
+                      name={c.studentName}
+                      color={isUrgent ? "danger" : "primary"}
+                      size="md"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/students/${c.studentId}`}
+                          className="text-foreground text-[15px] font-bold hover:underline"
+                        >
+                          {c.studentName}
+                        </Link>
+                        {c.studentGrade ? (
+                          <span className="text-text-dim text-xs">{c.studentGrade}</span>
+                        ) : null}
+                        {cat ? <Pill color={cat.color}>{cat.label}</Pill> : null}
+                        {urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}
+                      </div>
+                      <p className="text-text-dim mt-0.5 text-[11px]">
+                        {c.subject ? <span>{c.subject} · </span> : null}
+                        {c.counselorName ? <span>{c.counselorName} 상담</span> : null}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                    {c.counselorName ? <span>{c.counselorName} 상담</span> : null}
-                    <span className="text-muted-foreground/40">·</span>
+                  <div className="text-text-dim flex items-center gap-2 text-xs">
                     <span className="num">{relativeTime(c.consultedAt)}</span>
                     <Link
                       href={`/consultations/${c.id}/edit`}
-                      className="text-muted-foreground hover:text-foreground ml-1 inline-flex items-center gap-1"
+                      className="text-text-faint hover:text-foreground inline-flex items-center"
+                      aria-label="수정"
                     >
-                      <Pencil className="size-3" />
-                      <span className="sr-only">수정</span>
+                      <EyIcon name="check" size={12} className="rotate-45" />
                     </Link>
                   </div>
                 </header>
 
-                <p className="text-foreground mt-3 text-sm leading-relaxed">{c.summary}</p>
+                <p className="text-foreground mt-3 text-[13px] leading-relaxed">{c.summary}</p>
 
                 {c.followUpAction || c.followUpDate ? (
-                  <div className="border-border mt-3 flex items-center justify-between gap-2 border-t pt-3">
-                    <p className="text-muted-foreground text-xs">
-                      <span className="text-chart-3 mr-1.5 font-semibold tracking-wide uppercase">
+                  <div className="border-line mt-3 flex items-center justify-between gap-2 border-t pt-3">
+                    <p className="text-text-dim text-[11px]">
+                      <span className="text-gold font-mono mr-2 font-bold tracking-wider uppercase">
                         Follow-up
                       </span>
                       {c.followUpAction ?? "—"}
                       {c.followUpDate ? (
-                        <span className="num text-muted-foreground/80 ml-2">
-                          · 기한 {c.followUpDate}
-                        </span>
+                        <span className="num text-text-faint ml-2">· 기한 {c.followUpDate}</span>
                       ) : null}
                     </p>
-                    {urgency ? (
-                      <span
-                        className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${urgency.class}`}
-                      >
-                        {urgency.label}
-                      </span>
-                    ) : null}
                   </div>
                 ) : null}
               </li>
@@ -148,6 +150,36 @@ export default async function ConsultationsPage() {
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: Parameters<typeof EyIcon>[0]["name"];
+  color: "primary" | "blue" | "gold" | "danger";
+}) {
+  const ICON_BG = {
+    primary: "bg-primary-soft text-primary",
+    blue: "bg-blue-soft text-blue",
+    gold: "bg-gold-soft text-gold",
+    danger: "bg-danger-soft text-danger",
+  } as const;
+  return (
+    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
+      <header className="flex items-center justify-between">
+        <p className="micro">{label}</p>
+        <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[color]}`}>
+          <EyIcon name={icon} size={13} />
+        </span>
+      </header>
+      <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>
     </div>
   );
 }
