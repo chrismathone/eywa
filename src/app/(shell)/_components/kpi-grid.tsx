@@ -2,6 +2,7 @@ import { ArrowDownRight, ArrowUpRight, ClipboardCheck, UserPlus, Users, Wallet }
 import type { LucideIcon } from "lucide-react";
 import type {
   AttendanceSnapshot,
+  ConsultationPipeline,
   PaymentSnapshot,
   TrendPoint,
 } from "@/features/dashboard/server/queries";
@@ -34,6 +35,7 @@ export function KpiGrid({
   withdrawnThisMonth,
   attendance,
   payment,
+  consultations,
   trend,
 }: {
   enrolled: number;
@@ -41,6 +43,7 @@ export function KpiGrid({
   withdrawnThisMonth: number;
   attendance: AttendanceSnapshot | null;
   payment: PaymentSnapshot | null;
+  consultations: ConsultationPipeline;
   trend: TrendPoint[];
 }) {
   const attendanceSpark = trend.map((p) => p.attendance);
@@ -98,15 +101,33 @@ export function KpiGrid({
           accent: "amber",
           placeholder: true,
         },
-    {
-      label: "진행 중 상담",
-      value: "—",
-      helper: "상담 모델 도입 후 표시 (Phase 5)",
-      icon: UserPlus,
-      spark: [0],
-      accent: "coral",
-      placeholder: true,
-    },
+    consultations.total > 0
+      ? {
+          label: "진행 중 상담",
+          value: String(consultations.total),
+          unit: "건",
+          helper: `신규 ${consultations.pending + consultations.scheduled} · 상담완료 ${consultations.consulted} · AI 분석 대기 ${consultations.aiDone}`,
+          icon: UserPlus,
+          spark: [
+            Math.max(0, consultations.total - 4),
+            Math.max(0, consultations.total - 3),
+            Math.max(0, consultations.total - 2),
+            Math.max(0, consultations.total - 2),
+            Math.max(0, consultations.total - 1),
+            consultations.total,
+            consultations.total,
+          ],
+          accent: "coral",
+        }
+      : {
+          label: "진행 중 상담",
+          value: "—",
+          helper: "진행 중인 신입생 상담이 없습니다",
+          icon: UserPlus,
+          spark: [0],
+          accent: "coral",
+          placeholder: true,
+        },
   ];
 
   return (

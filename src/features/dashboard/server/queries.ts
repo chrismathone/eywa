@@ -177,6 +177,31 @@ export type TrendPoint = {
   payment: number; // placeholder until invoices land
 };
 
+export type ConsultationPipeline = {
+  total: number;
+  pending: number;
+  scheduled: number;
+  consulted: number;
+  aiDone: number;
+};
+
+export async function getActiveConsultationsCount(): Promise<ConsultationPipeline> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollment_consultations")
+    .select("outcome")
+    .in("outcome", ["pending", "scheduled", "consulted", "ai_done"]);
+
+  const rows = data ?? [];
+  return {
+    total: rows.length,
+    pending: rows.filter((r) => r.outcome === "pending").length,
+    scheduled: rows.filter((r) => r.outcome === "scheduled").length,
+    consulted: rows.filter((r) => r.outcome === "consulted").length,
+    aiDone: rows.filter((r) => r.outcome === "ai_done").length,
+  };
+}
+
 export type PaymentSnapshot = {
   period: string;
   totalCount: number;
