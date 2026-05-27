@@ -1,4 +1,5 @@
-import { ClipboardCheck } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, ClipboardCheck, Pencil } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -35,11 +36,14 @@ function formatKoreanDate(iso: string) {
 
 export default async function AttendanceByDatePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ date: string }>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
   await requireAccess("attendance");
   const { date } = await params;
+  const { saved } = await searchParams;
   const records = await getAttendanceForDate(date);
 
   const groups = new Map<string, { className: string; subject: string; rows: AttendanceRow[] }>();
@@ -62,6 +66,13 @@ export default async function AttendanceByDatePage({
         title="출석부"
         description={`${formatKoreanDate(date)} · 반별 출결 입력`}
       />
+
+      {saved ? (
+        <p className="border-chart-2/30 bg-chart-2/5 text-chart-2 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+          <CheckCircle2 className="size-4" />
+          <span className="num">{saved}</span>건 저장됨
+        </p>
+      ) : null}
 
       {records.length === 0 ? (
         <EmptyState
@@ -88,6 +99,13 @@ export default async function AttendanceByDatePage({
                       {group.subject} · {group.rows.length}명
                     </p>
                   </div>
+                  <Link
+                    href={`/attendance/${date}/${classId}`}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs"
+                  >
+                    <Pencil className="size-3" />
+                    출석 입력
+                  </Link>
                 </header>
                 <ul className="divide-border divide-y">
                   {group.rows.map((row) => (
