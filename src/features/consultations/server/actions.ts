@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 
 type CareFocus = {
@@ -158,6 +160,142 @@ export async function runStudentCareAnalysis(
   if (error) return { error: error.message };
 
   revalidatePath(`/students/${studentId}`);
+  revalidatePath("/consultations");
+  return undefined;
+}
+
+// ───────── 학생상담 CRUD ─────────
+export type ConsultationFormState =
+  | { error?: string; fieldErrors?: Record<string, string> }
+  | undefined;
+
+const CATEGORIES = ["general", "academic", "emotional", "career", "social", "other"] as const;
+const AUDIENCES = ["parent", "student", "both"] as const;
+
+function readConsultationForm(formData: FormData) {
+  const get = (k: string) => {
+    const v = formData.get(k);
+    return v == null ? "" : String(v).trim();
+  };
+  const category = get("category");
+  const audience = get("audience");
+  return {
+    studentId: get("studentId"),
+    counselorId: get("counselorId") || null,
+    consultedAt: get("consultedAt"),
+    category: CATEGORIES.includes(category as (typeof CATEGORIES)[number]) ? category : null,
+    subject: get("subject") || null,
+    audience: AUDIENCES.includes(audience as (typeof AUDIENCES)[number]) ? audience : null,
+    summary: get("summary"),
+    followUpAction: get("followUpAction") || null,
+    followUpDate: get("followUpDate") || null,
+    followUpDone: get("followUpDone") === "true",
+  };
+}
+
+function validateConsultation(input: ReturnType<typeof readConsultationForm>): Record<string, string> | null {
+  const errors: Record<string, string> = {};
+  if (!input.studentId) errors.studentId = "학생을 선택해주세요";
+  if (!input.summary || input.summary.length < 5) errors.summary = "요약을 5자 이상 작성해주세요";
+  if (!input.consultedAt) errors.consultedAt = "상담 일시를 입력해주세요";
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
+export async function createStudentConsultation(
+  _prev: ConsultationFormState,
+  formData: FormData,
+): Promise<ConsultationFormState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const input = readConsultationForm(formData);
+  const fieldErrors = validateConsultation(input);
+  if (fieldErrors) return { fieldErrors };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("student_consultations")
+    .insert({
+      tenant_id: user.tenantId,
+      student_id: input.studentId,
+      counselor_id: input.counselorId ?? user.id,
+      consulted_at: new Date(input.consultedAt).toISOString(),
+      category: input.category,
+      subject: input.subject,
+      audience: input.audience,
+      summary: input.summary,
+      follow_up_action: input.followUpAction,
+      follow_up_date: input.followUpDate,
+      follow_up_done: input.followUpDone,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "상담 저장 실패" };
+
+  revalidatePath("/consultations");
+  revalidatePath(`/students/${input.studentId}`);
+  redirect("/consultations");
+}
+
+export async function updateStudentConsultation(
+  _prev: ConsultationFormState,
+  formData: FormData,
+): Promise<ConsultationFormState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "상담 ID가 누락되었습니다" };
+
+  const input = readConsultationForm(formData);
+  const fieldErrors = validateConsultation(input);
+  if (fieldErrors) return { fieldErrors };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("student_consultations")
+    .update({
+      student_id: input.studentId,
+      counselor_id: input.counselorId ?? user.id,
+      consulted_at: new Date(input.consultedAt).toISOString(),
+      category: input.category,
+      subject: input.subject,
+      audience: input.audience,
+      summary: input.summary,
+      follow_up_action: input.followUpAction,
+      follow_up_date: input.followUpDate,
+      follow_up_done: input.followUpDone,
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/consultations");
+  revalidatePath(`/students/${input.studentId}`);
+  redirect("/consultations");
+}
+
+export type ToggleFollowUpState = { error?: string } | undefined;
+
+export async function toggleConsultationFollowUp(
+  _prev: ToggleFollowUpState,
+  formData: FormData,
+): Promise<ToggleFollowUpState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const done = String(formData.get("done") ?? "false") === "true";
+  if (!id) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("student_consultations")
+    .update({ follow_up_done: done })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
   revalidatePath("/consultations");
   return undefined;
 }

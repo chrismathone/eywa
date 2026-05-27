@@ -349,6 +349,8 @@ export const consultationAiAnalysis = pgTable(
 );
 
 // === student_consultations (재원생 상담 기록) ===
+// 카테고리: 일반(general), 학습/성적(academic), 정서/심리(emotional), 진로(career), 교우관계(social), 기타(other)
+// 대상: 학부모(parent) / 학생(student) / 학부모+학생(both)
 export const studentConsultations = pgTable(
   "student_consultations",
   {
@@ -361,14 +363,20 @@ export const studentConsultations = pgTable(
       .references(() => students.id, { onDelete: "cascade" }),
     counselorId: uuid("counselor_id").references(() => users.id, { onDelete: "set null" }),
     consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
+    category: text("category"), // general / academic / emotional / career / social / other
+    subject: text("subject"), // 과목(수학/영어/...) 또는 null
+    audience: text("audience"), // parent / student / both
     summary: text("summary").notNull(),
     followUpAction: text("follow_up_action"),
+    followUpDate: date("follow_up_date"),
+    followUpDone: boolean("follow_up_done").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("sc_tenant_student_idx").on(t.tenantId, t.studentId),
     index("sc_tenant_date_idx").on(t.tenantId, t.consultedAt),
+    index("sc_tenant_followup_idx").on(t.tenantId, t.followUpDate),
   ],
 );
 
