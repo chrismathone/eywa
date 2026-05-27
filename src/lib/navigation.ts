@@ -20,7 +20,7 @@ export type NavGroup = {
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "홈",
-    items: [{ href: "/", label: "대시보드", icon: "tree", menuKey: "dashboard" }],
+    items: [{ href: "/dashboard", label: "대시보드", icon: "tree", menuKey: "dashboard" }],
   },
   {
     label: "수업",
@@ -56,10 +56,6 @@ export const NAV_GROUPS: NavGroup[] = [
 export function findNavItem(pathname: string): NavItem | undefined {
   for (const group of NAV_GROUPS) {
     for (const item of group.items) {
-      if (item.href === "/") {
-        if (pathname === "/") return item;
-        continue;
-      }
       if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
         return item;
       }
@@ -71,10 +67,6 @@ export function findNavItem(pathname: string): NavItem | undefined {
 export function findNavGroup(pathname: string): NavGroup | undefined {
   for (const group of NAV_GROUPS) {
     for (const item of group.items) {
-      if (item.href === "/") {
-        if (pathname === "/") return group;
-        continue;
-      }
       if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
         return group;
       }

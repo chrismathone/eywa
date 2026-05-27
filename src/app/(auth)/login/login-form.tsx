@@ -45,7 +45,7 @@ export function LoginForm({ next }: { next?: string }) {
       return;
     }
 
-    const target = next && next.startsWith("/") ? next : "/";
+    const target = next && next.startsWith("/") ? next : "/dashboard";
     router.push(target);
     router.refresh();
   }

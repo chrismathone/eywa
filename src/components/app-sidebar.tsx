@@ -37,7 +37,7 @@ export function AppSidebar({
     <aside className="bg-sidebar border-line sticky top-0 flex h-screen w-[232px] shrink-0 flex-col border-r">
       {/* brand */}
       <div className="px-[22px] pt-[22px] pb-[18px]">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href="/dashboard" className="flex items-center gap-2.5">
           <span className="bg-ink flex size-7 items-center justify-center rounded-[7px]">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />

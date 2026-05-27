@@ -14,6 +14,10 @@ import { NextResponse, type NextRequest } from "next/server";
  * layout (where the cookies adapter is the same as data queries)
  * sidesteps the mismatch.
  */
+
+// Paths that the marketing landing serves — accessible without auth
+const PUBLIC_PATHS = new Set(["/"]);
+
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
@@ -30,6 +34,13 @@ export async function updateSession(request: NextRequest) {
   const hasAuthCookie = request.cookies
     .getAll()
     .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+
+  // Public routes (marketing landing) — let everyone through.
+  // Logged-in users on "/" still see the landing here; client-side redirect
+  // to /dashboard can be added later if desired.
+  if (PUBLIC_PATHS.has(pathname)) {
+    return NextResponse.next({ request });
+  }
 
   if (!hasAuthCookie) {
     const url = request.nextUrl.clone();
