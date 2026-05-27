@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Plus, UserPlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { Initial } from "@/components/atoms/initial";
+import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getConsultantOptions,
@@ -16,22 +17,23 @@ const COLUMNS: {
   key: string;
   label: string;
   outcomes: string[];
-  accent: string;
+  color: "amber" | "blue" | "primary" | "neutral";
+  icon: Parameters<typeof EyIcon>[0]["name"];
 }[] = [
-  { key: "queue", label: "대기 · 예약", outcomes: ["pending", "scheduled"], accent: "border-l-chart-3" },
-  { key: "consulted", label: "상담 완료", outcomes: ["consulted"], accent: "border-l-chart-1" },
-  { key: "ai_done", label: "AI 분석 완료", outcomes: ["ai_done"], accent: "border-l-chart-2" },
-  { key: "closed", label: "등록 · 종료", outcomes: ["enrolled", "declined", "no_show"], accent: "border-l-muted-foreground" },
+  { key: "queue", label: "대기 · 예약", outcomes: ["pending", "scheduled"], color: "amber", icon: "sprout" },
+  { key: "consulted", label: "상담 완료", outcomes: ["consulted"], color: "blue", icon: "wave" },
+  { key: "ai_done", label: "AI 분석 완료", outcomes: ["ai_done"], color: "primary", icon: "sparkle" },
+  { key: "closed", label: "등록 · 종료", outcomes: ["enrolled", "declined", "no_show"], color: "neutral", icon: "check" },
 ];
 
-const OUTCOME_BADGE: Record<string, { label: string; class: string }> = {
-  pending: { label: "대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
-  scheduled: { label: "예약", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
-  consulted: { label: "상담완료", class: "text-chart-1 bg-chart-1/10 border-chart-1/20" },
-  ai_done: { label: "AI 완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  enrolled: { label: "등록", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
-  declined: { label: "거절", class: "text-muted-foreground bg-muted border-border" },
-  no_show: { label: "노쇼", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
+const OUTCOME_PILL: Record<string, { label: string; color: PillColor }> = {
+  pending: { label: "대기", color: "amber" },
+  scheduled: { label: "예약", color: "amber" },
+  consulted: { label: "상담완료", color: "blue" },
+  ai_done: { label: "AI 완료", color: "primary" },
+  enrolled: { label: "등록", color: "primary" },
+  declined: { label: "거절", color: "neutral" },
+  no_show: { label: "노쇼", color: "rose" },
 };
 
 function daysSince(iso: string): number {
@@ -63,21 +65,49 @@ export default async function EnrollmentPage({
   const filterActive = !!selectedMonth || !!selectedConsultant;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="신입생 등록상담"
-        description={
-          filterActive
-            ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 전환율 ${conversionRate}%`
-            : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`
-        }
-        actions={
-          <Button render={<Link href="/enrollment/new" />}>
-            <Plus className="size-4" />
-            신규 등록
-          </Button>
-        }
-      />
+    <div className="space-y-5">
+      {/* AI 배너 — gradient + sparkle */}
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#2a7a52] p-6 shadow-primary-deep">
+        {/* 우상단 동심원 SVG 장식 */}
+        <svg
+          className="pointer-events-none absolute top-0 right-0 opacity-[0.18]"
+          width="200"
+          height="200"
+          viewBox="0 0 200 200"
+          aria-hidden="true"
+        >
+          {[90, 70, 50, 30].map((r) => (
+            <circle key={r} cx="100" cy="100" r={r} fill="none" stroke="#fff" strokeWidth="1" />
+          ))}
+        </svg>
+        <div className="relative flex items-start gap-4">
+          <span className="flex size-[52px] shrink-0 items-center justify-center rounded-[14px] bg-white/18 text-white">
+            <EyIcon name="sparkle" size={24} />
+          </span>
+          <div className="min-w-0 flex-1 text-white">
+            <p className="font-mono text-[11px] tracking-wider uppercase text-[#e9c876]">
+              POWERED BY CLAUDE
+            </p>
+            <h1 className="mt-1 text-[17px] font-extrabold leading-snug">
+              AI가 등록상담을 듣고, 학습 스타일을 정리합니다.
+            </h1>
+            <p className="mt-2 text-[13px] text-white/85">
+              {filterActive
+                ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 전환율 ${conversionRate}%`
+                : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-white/15 px-2.5 py-1 font-mono text-[11px] font-bold text-white">
+              이번달 {items.length}회
+            </span>
+            <Button render={<Link href="/enrollment/new" />}>
+              <EyIcon name="plus" size={13} className="mr-1" />
+              신규 등록
+            </Button>
+          </div>
+        </div>
+      </section>
 
       <KanbanFilters
         selectedMonth={selectedMonth}
@@ -86,56 +116,69 @@ export default async function EnrollmentPage({
       />
 
       {items.length === 0 ? (
-        <EmptyState icon={UserPlus} title="진행 중인 상담이 없습니다" />
+        <EmptyState
+          icon={() => <EyIcon name="sprout" size={32} />}
+          title="진행 중인 상담이 없습니다"
+        />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {COLUMNS.map((col) => {
             const cards = items.filter((i) => col.outcomes.includes(i.outcome));
+            const ICON_BG = {
+              primary: "bg-primary-soft text-primary",
+              blue: "bg-blue-soft text-blue",
+              amber: "bg-amber-soft text-amber",
+              neutral: "bg-bg-soft text-text-dim",
+            } as const;
             return (
               <div
                 key={col.key}
-                className="bg-card border-border flex min-h-[300px] flex-col rounded-lg border"
+                className="bg-card border-line shadow-card flex min-h-[300px] flex-col rounded-2xl border"
               >
-                <header className="border-border flex items-baseline justify-between border-b px-4 py-3">
-                  <h3 className="text-foreground text-sm font-semibold">{col.label}</h3>
-                  <span className="text-muted-foreground num text-xs">{cards.length}건</span>
+                <header className="border-line flex items-center justify-between border-b px-4 py-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[col.color]}`}>
+                      <EyIcon name={col.icon} size={13} />
+                    </span>
+                    <h3 className="text-foreground text-[13px] font-bold">{col.label}</h3>
+                  </div>
+                  <span className="text-text-faint num font-mono text-[11px]">{cards.length}건</span>
                 </header>
                 {cards.length === 0 ? (
-                  <div className="text-muted-foreground flex flex-1 items-center justify-center px-4 text-xs">
+                  <div className="text-text-faint flex flex-1 items-center justify-center px-4 text-xs">
                     없음
                   </div>
                 ) : (
                   <ul className="space-y-2 p-3">
                     {cards.map((c) => {
-                      const badge = OUTCOME_BADGE[c.outcome] ?? OUTCOME_BADGE.pending!;
+                      const pill = OUTCOME_PILL[c.outcome] ?? OUTCOME_PILL.pending!;
                       return (
                         <li key={c.id}>
                           <Link
                             href={`/enrollment/${c.id}`}
-                            className={`group bg-muted/30 hover:bg-muted/60 block rounded-md border-l-2 p-3 transition ${col.accent}`}
+                            className="bg-bg-soft/60 hover:bg-bg-soft block rounded-xl p-3 transition"
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-foreground text-sm font-semibold">
-                                  {c.prospectName}
-                                </p>
-                                <p className="text-muted-foreground text-xs">
-                                  {c.prospectGrade ?? "—"}
-                                  {c.prospectSchool ? <> · {c.prospectSchool}</> : null}
-                                </p>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Initial name={c.prospectName} color={col.color === "neutral" ? "primary" : col.color} size="sm" />
+                                <div className="min-w-0">
+                                  <p className="text-foreground text-[13px] font-bold">
+                                    {c.prospectName}
+                                  </p>
+                                  <p className="text-text-dim text-[11px]">
+                                    {c.prospectGrade ?? "—"}
+                                    {c.prospectSchool ? <> · {c.prospectSchool}</> : null}
+                                  </p>
+                                </div>
                               </div>
-                              <span
-                                className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${badge.class}`}
-                              >
-                                {badge.label}
-                              </span>
+                              <Pill color={pill.color}>{pill.label}</Pill>
                             </div>
                             {c.parentRequest ? (
-                              <p className="text-muted-foreground mt-2 line-clamp-2 text-xs leading-snug">
+                              <p className="text-text-dim mt-2 line-clamp-2 text-[11px] leading-snug">
                                 {c.parentRequest}
                               </p>
                             ) : null}
-                            <div className="text-muted-foreground/80 mt-2 flex items-center justify-between text-[10px]">
+                            <div className="text-text-faint mt-2 flex items-center justify-between text-[10px]">
                               <span>{c.consultantName ?? "—"}</span>
                               <span className="num">{daysSince(c.consultedAt)}일 전</span>
                             </div>
