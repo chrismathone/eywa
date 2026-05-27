@@ -5,10 +5,21 @@ export type ClassListRow = {
   id: string;
   className: string;
   subject: string;
+  teacherId: string | null;
   teacherName: string | null;
   classroomName: string | null;
   isActive: boolean;
   studentCount: number;
+  days: string[]; // 운영 요일 (mon, tue, ...)
+  notes: string | null;
+};
+
+export type ClassListFilters = {
+  subject?: string; // "all" | "math" | ...
+  teacherId?: string; // "all" | uuid
+  day?: string; // "all" | "mon" | ...
+  q?: string;
+  active?: "all" | "active" | "closed";
 };
 
 export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -55,20 +66,32 @@ export type ClassAttendanceStats = {
   rate: number;
 };
 
-export async function getClassesList(): Promise<ClassListRow[]> {
+export async function getClassesList(options?: ClassListFilters): Promise<ClassListRow[]> {
   const supabase = await createClient();
 
-  const { data: classes } = await supabase
+  let qb = supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active,
+      `id, class_name, subject, is_active, notes, teacher_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
     )
     .order("class_name");
 
+  if (options?.subject && options.subject !== "all") qb = qb.eq("subject", options.subject);
+  if (options?.teacherId && options.teacherId !== "all") qb = qb.eq("teacher_id", options.teacherId);
+  if (options?.active === "active") qb = qb.eq("is_active", true);
+  if (options?.active === "closed") qb = qb.eq("is_active", false);
+  if (options?.q) {
+    const term = options.q.trim();
+    if (term) qb = qb.ilike("class_name", `%${term}%`);
+  }
+
+  const { data: classes } = await qb;
   if (!classes) return [];
 
+  // 학생 수 카운트
+  const classIds = classes.map((c) => c.id);
   const { data: enrollments } = await supabase
     .from("enrollments")
     .select("class_id")
@@ -79,23 +102,63 @@ export async function getClassesList(): Promise<ClassListRow[]> {
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
 
-  return classes.map((c) => {
+  // 요일 unique
+  const daysByClass = new Map<string, Set<string>>();
+  if (classIds.length > 0) {
+    const { data: scheds } = await supabase
+      .from("class_schedules")
+      .select("class_id, day_of_week")
+      .in("class_id", classIds);
+    for (const s of scheds ?? []) {
+      const set = daysByClass.get(s.class_id) ?? new Set<string>();
+      set.add(s.day_of_week);
+      daysByClass.set(s.class_id, set);
+    }
+  }
+
+  const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+  let rows = classes.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
       | { display_name?: string }
       | undefined;
     const room = (Array.isArray(c.classroom) ? c.classroom[0] : c.classroom) as
       | { name?: string }
       | undefined;
+    const days = Array.from(daysByClass.get(c.id) ?? []).sort(
+      (a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b),
+    );
     return {
       id: c.id,
       className: c.class_name,
       subject: c.subject,
+      teacherId: c.teacher_id,
       teacherName: teacher?.display_name ?? null,
       classroomName: room?.name ?? null,
       isActive: c.is_active,
       studentCount: counts.get(c.id) ?? 0,
-    };
+      days,
+      notes: c.notes ?? null,
+    } satisfies ClassListRow;
   });
+
+  // 요일 필터 (in-memory)
+  if (options?.day && options.day !== "all") {
+    rows = rows.filter((r) => r.days.includes(options.day!));
+  }
+
+  return rows;
+}
+
+export async function getClassTeacherOptions(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name, system_role")
+    .in("system_role", ["teacher", "manager", "master"])
+    .eq("status", "active")
+    .order("display_name");
+  return (data ?? []).map((u) => ({ id: u.id, name: u.display_name }));
 }
 
 export async function getClassDetail(id: string): Promise<ClassDetail | null> {
