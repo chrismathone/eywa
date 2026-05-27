@@ -40,7 +40,64 @@ function won(n: number) {
   return `${KRW.format(n)}원`;
 }
 
-export function BillingTable({ rows }: { rows: InvoiceRow[] }) {
+type SortKey =
+  | "status"
+  | "name"
+  | "amount_total"
+  | "amount_paid"
+  | "amount_discount"
+  | "due_date";
+
+type Props = {
+  rows: InvoiceRow[];
+  sort?: SortKey;
+  desc?: boolean;
+  period?: string;
+  q?: string;
+};
+
+function buildSortHref(
+  col: SortKey,
+  current: { sort?: SortKey; desc?: boolean; period?: string; q?: string },
+): string {
+  const params = new URLSearchParams();
+  if (current.period) params.set("period", current.period);
+  if (current.q) params.set("q", current.q);
+  // 같은 col 두번 클릭하면 desc 토글
+  const nextDesc = current.sort === col ? !current.desc : false;
+  if (col !== "status") params.set("sort", col);
+  if (nextDesc) params.set("desc", "1");
+  const s = params.toString();
+  return s ? `/billing?${s}` : "/billing";
+}
+
+function SortHeader({
+  col,
+  label,
+  current,
+  className,
+}: {
+  col: SortKey;
+  label: string;
+  current: { sort?: SortKey; desc?: boolean; period?: string; q?: string };
+  className?: string;
+}) {
+  const active = current.sort === col;
+  return (
+    <Link
+      href={buildSortHref(col, current)}
+      className={`text-text-dim hover:text-foreground inline-flex items-center gap-0.5 transition ${
+        active ? "text-foreground font-bold" : ""
+      } ${className ?? ""}`}
+    >
+      {label}
+      <span className="font-mono text-[9px]">{active ? (current.desc ? "▼" : "▲") : "▼"}</span>
+    </Link>
+  );
+}
+
+export function BillingTable({ rows, sort, desc, period, q }: Props) {
+  const current = { sort, desc, period, q };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<InvoiceRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -123,12 +180,26 @@ export function BillingTable({ rows }: { rows: InvoiceRow[] }) {
                 />
               </th>
               <th className="eyebrow px-5 py-3 font-normal">학년</th>
-              <th className="eyebrow px-5 py-3 font-normal">이름</th>
+              <th className="eyebrow px-5 py-3 font-normal">
+                <SortHeader col="name" label="이름" current={current} />
+              </th>
               <th className="eyebrow px-5 py-3 font-normal">항목</th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">청구액</th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">수납액</th>
-              <th className="eyebrow px-5 py-3 font-normal">상태</th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">기한 · 결제일</th>
+              <th className="eyebrow num px-5 py-3 text-right font-normal">
+                <SortHeader col="amount_total" label="청구액" current={current} />
+              </th>
+              <th className="eyebrow num px-5 py-3 text-right font-normal">
+                <SortHeader col="amount_discount" label="할인" current={current} />
+              </th>
+              <th className="eyebrow num px-5 py-3 text-right font-normal">
+                <SortHeader col="amount_paid" label="수납액" current={current} />
+              </th>
+              <th className="eyebrow px-5 py-3 font-normal">
+                <SortHeader col="status" label="상태" current={current} />
+              </th>
+              <th className="eyebrow num px-5 py-3 text-right font-normal">
+                <SortHeader col="due_date" label="기한·결제" current={current} />
+              </th>
+              <th className="eyebrow px-5 py-3 font-normal">메모</th>
               <th className="w-10 px-3 py-3" />
             </tr>
           </thead>
@@ -167,12 +238,19 @@ export function BillingTable({ rows }: { rows: InvoiceRow[] }) {
                   </td>
                   <td className="text-muted-foreground px-5 py-3 text-xs">{description}</td>
                   <td className="text-foreground num px-5 py-3 text-right">{won(r.amountTotal)}</td>
+                  <td className="num px-5 py-3 text-right text-xs">
+                    {r.amountDiscount > 0 ? (
+                      <span className="text-amber">-{won(r.amountDiscount)}</span>
+                    ) : (
+                      <span className="text-text-faint">—</span>
+                    )}
+                  </td>
                   <td className="num px-5 py-3 text-right">
                     <span
                       className={
                         r.amountPaid === r.amountTotal
-                          ? "text-chart-2"
-                          : "text-muted-foreground"
+                          ? "text-primary"
+                          : "text-text-dim"
                       }
                     >
                       {won(r.amountPaid)}
@@ -194,6 +272,15 @@ export function BillingTable({ rows }: { rows: InvoiceRow[] }) {
                       <span className="text-muted-foreground">
                         기한 {r.dueDate ?? "—"}
                       </span>
+                    )}
+                  </td>
+                  <td className="text-text-dim px-5 py-3 text-xs">
+                    {r.notes ? (
+                      <span className="line-clamp-1" title={r.notes}>
+                        {r.notes}
+                      </span>
+                    ) : (
+                      <span className="text-text-faint">—</span>
                     )}
                   </td>
                   <td className="px-3 py-3 text-right">
