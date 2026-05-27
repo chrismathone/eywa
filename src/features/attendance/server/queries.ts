@@ -132,6 +132,212 @@ export async function getMostRecentAttendanceDate(): Promise<string | null> {
   return data?.[0]?.session_date ?? null;
 }
 
+// ─────────────────── ijw 스타일 월 매트릭스 ───────────────────
+
+export type MatrixDay = {
+  date: string; // "2026-05-01"
+  day: number; // 1~31
+  dow: number; // 0=일, 6=토
+  label: string; // "일/월/화/.../토"
+  isWeekend: boolean;
+  isToday: boolean;
+};
+
+export type MatrixStudent = {
+  id: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  enrolledAt: string | null;
+};
+
+export type AttendanceMatrix = {
+  classes: { id: string; className: string; subject: string; teacherName: string | null }[];
+  selectedClassId: string | null;
+  month: string; // "2026-05"
+  days: MatrixDay[];
+  students: MatrixStudent[];
+  // studentId → date → status
+  marks: Record<string, Record<string, AttendanceStatus>>;
+  stats: {
+    totalStudents: number;
+    presentRate: number;
+    presentCount: number;
+    absentCount: number;
+    lateCount: number;
+    makeupCount: number;
+    totalRecords: number;
+  };
+};
+
+const DOW_LABEL = ["일", "월", "화", "수", "목", "금", "토"];
+
+function buildMonthDays(month: string): MatrixDay[] {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return [];
+  const lastDay = new Date(y, m, 0).getDate();
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const days: MatrixDay[] = [];
+  for (let d = 1; d <= lastDay; d++) {
+    const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(y, m - 1, d).getDay();
+    days.push({
+      date: dateStr,
+      day: d,
+      dow,
+      label: DOW_LABEL[dow] ?? "?",
+      isWeekend: dow === 0 || dow === 6,
+      isToday: dateStr === todayIso,
+    });
+  }
+  return days;
+}
+
+/**
+ * 한 반의 한 달치 모든 학생 출석 — 매트릭스 형태로.
+ * classId 없으면 모든 반의 통계만 반환 (학생 없음).
+ */
+export async function getMonthlyAttendanceMatrix(
+  month: string,
+  classId: string | null,
+): Promise<AttendanceMatrix> {
+  const supabase = await createClient();
+
+  // 모든 반 (selector용)
+  const { data: classesData } = await supabase
+    .from("classes")
+    .select("id, class_name, subject, teacher:teacher_id ( display_name )")
+    .order("class_name");
+
+  const classes = (classesData ?? []).map((c) => {
+    const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: c.id,
+      className: c.class_name,
+      subject: c.subject,
+      teacherName: teacher?.display_name ?? null,
+    };
+  });
+
+  const days = buildMonthDays(month);
+  if (!classId || days.length === 0) {
+    return {
+      classes,
+      selectedClassId: classId,
+      month,
+      days,
+      students: [],
+      marks: {},
+      stats: {
+        totalStudents: 0,
+        presentRate: 0,
+        presentCount: 0,
+        absentCount: 0,
+        lateCount: 0,
+        makeupCount: 0,
+        totalRecords: 0,
+      },
+    };
+  }
+
+  const startIso = days[0]!.date;
+  const endIso = days[days.length - 1]!.date;
+
+  // 해당 반의 활성 학생 (해당 월 종료일 기준)
+  const { data: enrollments } = await supabase
+    .from("enrollments")
+    .select(
+      `id, start_date, end_date, on_hold,
+       student:student_id ( id, name, grade, school )`,
+    )
+    .eq("class_id", classId)
+    .lte("start_date", endIso);
+
+  const studentMap = new Map<string, MatrixStudent>();
+  for (const e of enrollments ?? []) {
+    if (e.on_hold) continue;
+    if (e.end_date && e.end_date < startIso) continue;
+    const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
+      | { id: string; name: string; grade: string | null; school: string | null }
+      | undefined;
+    if (!s) continue;
+    if (!studentMap.has(s.id)) {
+      studentMap.set(s.id, {
+        id: s.id,
+        name: s.name,
+        grade: s.grade,
+        school: s.school,
+        enrolledAt: e.start_date,
+      });
+    }
+  }
+  const students = Array.from(studentMap.values()).sort((a, b) => {
+    const ga = a.grade ?? "";
+    const gb = b.grade ?? "";
+    if (ga !== gb) return ga.localeCompare(gb, "ko");
+    return a.name.localeCompare(b.name, "ko");
+  });
+
+  // 해당 월의 모든 출결 기록 (반 + 학생 + 기간)
+  const studentIds = students.map((s) => s.id);
+  const marks: Record<string, Record<string, AttendanceStatus>> = {};
+  let presentCount = 0;
+  let absentCount = 0;
+  let lateCount = 0;
+  let makeupCount = 0;
+  let totalRecords = 0;
+
+  if (studentIds.length > 0) {
+    const { data: records } = await supabase
+      .from("attendance_records")
+      .select("student_id, session_date, status, recorded_at")
+      .eq("class_id", classId)
+      .in("student_id", studentIds)
+      .gte("session_date", startIso)
+      .lte("session_date", endIso)
+      .order("recorded_at", { ascending: false });
+
+    // 같은 (student, date) 중 최신 record만 채택
+    const seen = new Set<string>();
+    for (const r of records ?? []) {
+      const k = `${r.student_id}::${r.session_date}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const status = r.status as AttendanceStatus;
+      marks[r.student_id] ??= {};
+      marks[r.student_id]![r.session_date] = status;
+      totalRecords++;
+      if (status === "present") presentCount++;
+      else if (status === "absent") absentCount++;
+      else if (status === "late") lateCount++;
+      else if (status === "makeup") makeupCount++;
+    }
+  }
+
+  const presentRate =
+    totalRecords > 0 ? Math.round((presentCount / totalRecords) * 1000) / 10 : 0;
+
+  return {
+    classes,
+    selectedClassId: classId,
+    month,
+    days,
+    students,
+    marks,
+    stats: {
+      totalStudents: students.length,
+      presentRate,
+      presentCount,
+      absentCount,
+      lateCount,
+      makeupCount,
+      totalRecords,
+    },
+  };
+}
+
 export async function getAttendanceForDate(date: string): Promise<AttendanceRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
