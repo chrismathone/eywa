@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { SystemRole } from "@/lib/permissions";
 
@@ -10,7 +11,9 @@ export type CurrentUser = {
   systemRole: SystemRole;
 };
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+// React cache() dedupes within a single request — the layout, the page guard,
+// and any feature query all reuse the same Supabase round-trip.
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -31,4 +34,4 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     displayName: data.display_name,
     systemRole: data.system_role as SystemRole,
   };
-}
+});

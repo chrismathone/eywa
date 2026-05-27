@@ -11,37 +11,6 @@ function shortMd(d: Date) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-export type UserProfile = {
-  id: string;
-  tenantId: string;
-  email: string;
-  displayName: string;
-  systemRole: string;
-};
-
-export async function getCurrentUserProfile(): Promise<UserProfile | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data } = await supabase
-    .from("users")
-    .select("id, tenant_id, email, display_name, system_role")
-    .eq("id", user.id)
-    .single();
-
-  if (!data) return null;
-  return {
-    id: data.id,
-    tenantId: data.tenant_id,
-    email: data.email,
-    displayName: data.display_name,
-    systemRole: data.system_role,
-  };
-}
-
 export async function getEnrolledStudentCount(): Promise<number> {
   const supabase = await createClient();
   const { count } = await supabase

@@ -1,7 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getActiveConsultationsCount,
-  getCurrentUserProfile,
   getEnrolledStudentCount,
   getMostRecentAttendanceSnapshot,
   getNewStudentsThisMonth,
@@ -20,9 +19,8 @@ import { TrendCard } from "./_components/trend-card";
 export const metadata = { title: "대시보드 — eywa" };
 
 export default async function DashboardPage() {
-  await requireAccess("dashboard");
+  const user = await requireAccess("dashboard");
   const [
-    profile,
     enrolled,
     newThisMonth,
     withdrawnThisMonth,
@@ -33,7 +31,6 @@ export default async function DashboardPage() {
     payment,
     consultations,
   ] = await Promise.all([
-    getCurrentUserProfile(),
     getEnrolledStudentCount(),
     getNewStudentsThisMonth(),
     getWithdrawalsThisMonth(),
@@ -45,7 +42,7 @@ export default async function DashboardPage() {
     getActiveConsultationsCount(),
   ]);
 
-  const name = profile?.displayName ?? "원장";
+  const name = user.displayName ?? "원장";
 
   return (
     <div className="space-y-8">

@@ -1,7 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
-export async function createClient() {
+// React cache() dedupes per-request — every query in a single page render
+// reuses the same client instance (and the same parsed cookie store).
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -24,4 +27,4 @@ export async function createClient() {
       },
     },
   );
-}
+});
