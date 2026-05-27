@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -38,9 +39,10 @@ export default async function ClassesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {classes.map((c) => (
-            <article
+            <Link
               key={c.id}
-              className="bg-card border-border flex flex-col gap-4 rounded-lg border p-5"
+              href={`/classes/${c.id}`}
+              className="bg-card border-border hover:border-foreground/30 hover:bg-accent/30 flex flex-col gap-4 rounded-lg border p-5 transition"
             >
               <header className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -67,7 +69,7 @@ export default async function ClassesPage() {
                 <Row label="강의실" value={c.classroomName} />
                 <Row label="학생 수" value={`${c.studentCount}명`} mono />
               </dl>
-            </article>
+            </Link>
           ))}
         </div>
       )}

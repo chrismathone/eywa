@@ -160,6 +160,7 @@ export const classes = pgTable(
     teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }),
     classroomId: uuid("classroom_id").references(() => classrooms.id, { onDelete: "set null" }),
     isActive: boolean("is_active").notNull().default(true),
+    notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

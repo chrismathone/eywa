@@ -11,6 +11,50 @@ export type ClassListRow = {
   studentCount: number;
 };
 
+export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export type ClassScheduleSlot = {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string; // HH:MM
+  endTime: string;
+  validFrom: string | null;
+  validTo: string | null;
+};
+
+export type ClassDetail = {
+  id: string;
+  className: string;
+  subject: string;
+  teacherId: string | null;
+  teacherName: string | null;
+  classroomId: string | null;
+  classroomName: string | null;
+  isActive: boolean;
+  notes: string | null;
+  scheduleSlots: ClassScheduleSlot[];
+  studentCount: number;
+};
+
+export type ClassStudentRow = {
+  enrollmentId: string;
+  studentId: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  enrolledAt: string;
+  onHold: boolean;
+};
+
+export type ClassAttendanceStats = {
+  total: number;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  rate: number;
+};
+
 export async function getClassesList(): Promise<ClassListRow[]> {
   const supabase = await createClient();
 
@@ -52,4 +96,123 @@ export async function getClassesList(): Promise<ClassListRow[]> {
       studentCount: counts.get(c.id) ?? 0,
     };
   });
+}
+
+export async function getClassDetail(id: string): Promise<ClassDetail | null> {
+  const supabase = await createClient();
+  const { data: c } = await supabase
+    .from("classes")
+    .select(
+      `id, class_name, subject, is_active, notes,
+       teacher_id, classroom_id,
+       teacher:teacher_id ( display_name ),
+       classroom:classroom_id ( name )`,
+    )
+    .eq("id", id)
+    .single();
+
+  if (!c) return null;
+
+  const { data: schedules } = await supabase
+    .from("class_schedules")
+    .select("id, day_of_week, start_time, end_time, valid_from, valid_to")
+    .eq("class_id", id)
+    .order("day_of_week")
+    .order("start_time");
+
+  const { count: studentCount } = await supabase
+    .from("enrollments")
+    .select("*", { count: "exact", head: true })
+    .eq("class_id", id)
+    .is("end_date", null);
+
+  const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
+    | { display_name?: string }
+    | undefined;
+  const room = (Array.isArray(c.classroom) ? c.classroom[0] : c.classroom) as
+    | { name?: string }
+    | undefined;
+
+  return {
+    id: c.id,
+    className: c.class_name,
+    subject: c.subject,
+    teacherId: c.teacher_id,
+    teacherName: teacher?.display_name ?? null,
+    classroomId: c.classroom_id,
+    classroomName: room?.name ?? null,
+    isActive: c.is_active,
+    notes: c.notes,
+    scheduleSlots: (schedules ?? []).map((s) => ({
+      id: s.id,
+      dayOfWeek: s.day_of_week as DayOfWeek,
+      startTime: String(s.start_time).slice(0, 5),
+      endTime: String(s.end_time).slice(0, 5),
+      validFrom: s.valid_from,
+      validTo: s.valid_to,
+    })),
+    studentCount: studentCount ?? 0,
+  };
+}
+
+export async function getClassStudents(classId: string): Promise<ClassStudentRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollments")
+    .select(
+      `id, start_date, on_hold,
+       student:student_id ( id, name, grade, school )`,
+    )
+    .eq("class_id", classId)
+    .is("end_date", null)
+    .order("start_date", { ascending: false });
+
+  if (!data) return [];
+
+  return data
+    .map((e) => {
+      const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
+        | { id: string; name: string; grade: string | null; school: string | null }
+        | undefined;
+      if (!s) return null;
+      return {
+        enrollmentId: e.id,
+        studentId: s.id,
+        name: s.name,
+        grade: s.grade,
+        school: s.school,
+        enrolledAt: e.start_date,
+        onHold: e.on_hold,
+      } satisfies ClassStudentRow;
+    })
+    .filter((r): r is ClassStudentRow => r !== null);
+}
+
+export async function getClassAttendanceStats(
+  classId: string,
+  days = 30,
+): Promise<ClassAttendanceStats> {
+  const supabase = await createClient();
+  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+  const { data } = await supabase
+    .from("attendance_records")
+    .select("status")
+    .eq("class_id", classId)
+    .gte("session_date", since);
+
+  const rows = data ?? [];
+  const total = rows.length;
+  const present = rows.filter((r) => r.status === "present").length;
+  const absent = rows.filter((r) => r.status === "absent").length;
+  const late = rows.filter((r) => r.status === "late").length;
+  const excused = rows.filter((r) => r.status === "excused").length;
+  return {
+    total,
+    present,
+    absent,
+    late,
+    excused,
+    rate: total > 0 ? (present / total) * 100 : 0,
+  };
 }
