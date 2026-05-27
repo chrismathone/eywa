@@ -92,30 +92,157 @@ function MeetingItem({ m }: { m: MeetingRow }) {
   );
 }
 
-export default async function MeetingsPage() {
+type RangeKey = "all" | "7d" | "30d" | "month";
+type StatusKey = "all" | "completed" | "processing" | "failed" | "idle";
+
+const RANGE_FILTERS: { key: RangeKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "7d", label: "최근 7일" },
+  { key: "30d", label: "최근 30일" },
+  { key: "month", label: "이번 달" },
+];
+
+const STATUS_FILTERS: { key: StatusKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "completed", label: "완료" },
+  { key: "processing", label: "처리 중" },
+  { key: "failed", label: "실패" },
+  { key: "idle", label: "수동" },
+];
+
+function inRange(iso: string, key: RangeKey): boolean {
+  if (key === "all") return true;
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  if (key === "7d") return now - then <= 7 * 86_400_000;
+  if (key === "30d") return now - then <= 30 * 86_400_000;
+  if (key === "month") {
+    const d = new Date(iso);
+    const today = new Date();
+    return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+  }
+  return true;
+}
+
+function matchStatus(s: MeetingProcessingStatus, key: StatusKey): boolean {
+  if (key === "all") return true;
+  if (key === "completed") return s === "completed";
+  if (key === "processing")
+    return s === "transcribing" || s === "analyzing" || s === "uploaded";
+  if (key === "failed") return s === "failed";
+  if (key === "idle") return s === "idle";
+  return true;
+}
+
+function buildHref(params: { range: RangeKey; status: StatusKey; q: string }): string {
+  const sp = new URLSearchParams();
+  if (params.range !== "all") sp.set("range", params.range);
+  if (params.status !== "all") sp.set("status", params.status);
+  if (params.q) sp.set("q", params.q);
+  const s = sp.toString();
+  return s ? `/meetings?${s}` : "/meetings";
+}
+
+export default async function MeetingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: RangeKey; status?: StatusKey; q?: string }>;
+}) {
   await requireAccess("meetings");
-  const meetings = await getMeetings();
-  const completed = meetings.filter((m) => m.processingStatus === "completed").length;
-  const inProgress = meetings.filter(
+  const sp = await searchParams;
+  const range: RangeKey = (sp.range as RangeKey) ?? "all";
+  const status: StatusKey = (sp.status as StatusKey) ?? "all";
+  const q = sp.q ?? "";
+
+  const all = await getMeetings();
+  let meetings = all;
+  if (q) {
+    const term = q.toLowerCase();
+    meetings = meetings.filter(
+      (m) =>
+        m.title.toLowerCase().includes(term) ||
+        m.attendees.some((a) => a.toLowerCase().includes(term)),
+    );
+  }
+  meetings = meetings.filter((m) => inRange(m.heldAt, range));
+  meetings = meetings.filter((m) => matchStatus(m.processingStatus, status));
+
+  const completed = all.filter((m) => m.processingStatus === "completed").length;
+  const inProgress = all.filter(
     (m) => m.processingStatus === "transcribing" || m.processingStatus === "analyzing",
   ).length;
 
+  const current = { range, status, q };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
-        <Stat label="전체 회의" value={meetings.length} icon="rings" color="primary" />
+        <Stat label="전체 회의" value={all.length} icon="rings" color="primary" />
         <Stat label="AI 분석 완료" value={completed} icon="sparkle" color="gold" />
         <Stat label="처리 중" value={inProgress} icon="pulse" color="rose" />
       </section>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="micro">최근 회의록</p>
-          <h2 className="text-foreground mt-0.5 text-[17px] font-bold">
-            음성 녹음 → AI 분석
-          </h2>
+      {/* Filter bar */}
+      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">기간</span>
+            {RANGE_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildHref({ ...current, range: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  range === f.key
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">상태</span>
+            {STATUS_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildHref({ ...current, status: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  status === f.key
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <form action="/meetings" method="get" className="ml-auto flex items-center gap-2">
+            {range !== "all" ? <input type="hidden" name="range" value={range} /> : null}
+            {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
+            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+              <EyIcon name="search" size={13} />
+              <input
+                type="search"
+                name="q"
+                defaultValue={q}
+                placeholder="제목·참석자"
+                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
+              />
+            </div>
+            <Button type="submit" variant="outline" size="sm">
+              검색
+            </Button>
+          </form>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="micro">
+          결과 <span className="text-foreground font-bold">{meetings.length}</span>건
+        </p>
         <Button render={<Link href="/meetings/new" />}>
           <EyIcon name="plus" size={13} className="mr-1" />
           새 회의록

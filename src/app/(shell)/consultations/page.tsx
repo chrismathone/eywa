@@ -41,33 +41,173 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
 
-export default async function ConsultationsPage() {
+type RangeKey = "all" | "7d" | "30d";
+type CategoryKey = "all" | StudentConsultationCategory;
+type UrgencyKey = "all" | "overdue" | "today" | "soon" | "later" | "done";
+
+const RANGE_FILTERS: { key: RangeKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "7d", label: "최근 7일" },
+  { key: "30d", label: "최근 30일" },
+];
+
+const CATEGORY_FILTERS: { key: CategoryKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "academic", label: "학습" },
+  { key: "emotional", label: "정서" },
+  { key: "career", label: "진로" },
+  { key: "social", label: "교우" },
+  { key: "general", label: "일반" },
+  { key: "other", label: "기타" },
+];
+
+const URGENCY_FILTERS: { key: UrgencyKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "overdue", label: "지연" },
+  { key: "today", label: "오늘" },
+  { key: "soon", label: "3일 내" },
+  { key: "later", label: "예정" },
+  { key: "done", label: "완료" },
+];
+
+function buildHref(p: { range: RangeKey; cat: CategoryKey; urg: UrgencyKey; q: string }): string {
+  const sp = new URLSearchParams();
+  if (p.range !== "all") sp.set("range", p.range);
+  if (p.cat !== "all") sp.set("cat", p.cat);
+  if (p.urg !== "all") sp.set("urg", p.urg);
+  if (p.q) sp.set("q", p.q);
+  const s = sp.toString();
+  return s ? `/consultations?${s}` : "/consultations";
+}
+
+export default async function ConsultationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: RangeKey; cat?: CategoryKey; urg?: UrgencyKey; q?: string }>;
+}) {
   await requireAccess("consultations");
-  const items = await getStudentConsultations();
+  const sp = await searchParams;
+  const range: RangeKey = (sp.range as RangeKey) ?? "all";
+  const cat: CategoryKey = (sp.cat as CategoryKey) ?? "all";
+  const urg: UrgencyKey = (sp.urg as UrgencyKey) ?? "all";
+  const q = sp.q ?? "";
+
+  const all = await getStudentConsultations();
+  let items = all;
+  if (q) {
+    const term = q.toLowerCase();
+    items = items.filter(
+      (i) =>
+        i.studentName.toLowerCase().includes(term) ||
+        i.summary.toLowerCase().includes(term),
+    );
+  }
+  if (range !== "all") {
+    const cutoff = Date.now() - (range === "7d" ? 7 : 30) * 86_400_000;
+    items = items.filter((i) => new Date(i.consultedAt).getTime() > cutoff);
+  }
+  if (cat !== "all") items = items.filter((i) => i.category === cat);
+  if (urg !== "all") items = items.filter((i) => followUpUrgency(i.followUpDate, i.followUpDone) === urg);
 
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const cutoff = Date.now() - 7 * 86_400_000;
-  const lastWeek = items.filter((i) => new Date(i.consultedAt).getTime() > cutoff).length;
-  const pendingFollowUps = items.filter((i) => !i.followUpDone && i.followUpDate).length;
-  const overdueFollowUps = items.filter(
+  const lastWeek = all.filter((i) => new Date(i.consultedAt).getTime() > cutoff).length;
+  const pendingFollowUps = all.filter((i) => !i.followUpDone && i.followUpDate).length;
+  const overdueFollowUps = all.filter(
     (i) => followUpUrgency(i.followUpDate, i.followUpDone) === "overdue",
   ).length;
 
+  const current = { range, cat, urg, q };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 상담" value={items.length} icon="wave" color="primary" />
+        <Stat label="전체 상담" value={all.length} icon="wave" color="primary" />
         <Stat label="최근 7일" value={lastWeek} icon="pulse" color="blue" />
         <Stat label="진행 중 후속" value={pendingFollowUps} icon="sprout" color="gold" />
         <Stat label="지연 후속" value={overdueFollowUps} icon="falling" color="danger" />
       </section>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="micro">최근 상담</p>
-          <h2 className="text-foreground mt-0.5 text-[17px] font-bold">상담 기록</h2>
+      {/* Filter bar */}
+      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">기간</span>
+            {RANGE_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildHref({ ...current, range: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  range === f.key
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">카테고리</span>
+            {CATEGORY_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildHref({ ...current, cat: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  cat === f.key
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">후속</span>
+            {URGENCY_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildHref({ ...current, urg: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  urg === f.key
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <form action="/consultations" method="get" className="ml-auto flex items-center gap-2">
+            {range !== "all" ? <input type="hidden" name="range" value={range} /> : null}
+            {cat !== "all" ? <input type="hidden" name="cat" value={cat} /> : null}
+            {urg !== "all" ? <input type="hidden" name="urg" value={urg} /> : null}
+            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+              <EyIcon name="search" size={13} />
+              <input
+                type="search"
+                name="q"
+                defaultValue={q}
+                placeholder="학생명·요약"
+                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
+              />
+            </div>
+            <Button type="submit" variant="outline" size="sm">
+              검색
+            </Button>
+          </form>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="micro">
+          결과 <span className="text-foreground font-bold">{items.length}</span>건
+        </p>
         <Button render={<Link href="/consultations/new" />}>
           <EyIcon name="plus" size={13} className="mr-1" />
           상담 추가

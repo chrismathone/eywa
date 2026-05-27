@@ -27,37 +27,141 @@ const STATUS_META: Record<string, { label: string; color: PillColor }> = {
   pending: { label: "대기", color: "amber" },
 };
 
+type RoleKey =
+  | "all"
+  | "master"
+  | "admin"
+  | "manager"
+  | "teacher"
+  | "counselor"
+  | "accountant";
+type StatusKey = "all" | "active" | "inactive" | "pending";
+
+const ROLE_FILTERS: { key: RoleKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "master", label: "원장" },
+  { key: "admin", label: "관리자" },
+  { key: "manager", label: "매니저" },
+  { key: "teacher", label: "강사" },
+  { key: "counselor", label: "상담" },
+  { key: "accountant", label: "회계" },
+];
+
+const STATUS_FILTERS: { key: StatusKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "active", label: "재직" },
+  { key: "inactive", label: "퇴사" },
+  { key: "pending", label: "대기" },
+];
+
+function buildStaffHref(p: { role: RoleKey; status: StatusKey; q: string }): string {
+  const sp = new URLSearchParams();
+  if (p.role !== "all") sp.set("role", p.role);
+  if (p.status !== "all") sp.set("status", p.status);
+  if (p.q) sp.set("q", p.q);
+  const s = sp.toString();
+  return s ? `/staff?${s}` : "/staff";
+}
+
 export default async function StaffPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invited?: string }>;
+  searchParams: Promise<{ invited?: string; role?: RoleKey; status?: StatusKey; q?: string }>;
 }) {
   await requireAccess("staff");
   const user = await getCurrentUser();
   const canManage = !!user && canManageStaff(user.systemRole);
-  const { invited } = await searchParams;
-  const staff = await getStaffList();
+  const sp = await searchParams;
+  const invited = sp.invited;
+  const role: RoleKey = (sp.role as RoleKey) ?? "all";
+  const status: StatusKey = (sp.status as StatusKey) ?? "all";
+  const q = sp.q ?? "";
 
-  const roleCount = (key: string) => staff.filter((s) => s.systemRole === key).length;
+  const all = await getStaffList();
+  let staff = all;
+  if (q) {
+    const term = q.toLowerCase();
+    staff = staff.filter(
+      (s) => s.displayName.toLowerCase().includes(term) || s.email.toLowerCase().includes(term),
+    );
+  }
+  if (role !== "all") staff = staff.filter((s) => s.systemRole === role);
+  if (status !== "all") staff = staff.filter((s) => s.status === status);
+
+  const roleCount = (key: string) => all.filter((s) => s.systemRole === key).length;
+  const current = { role, status, q };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        <Stat label="전체" value={staff.length} icon="roots" color="primary" />
+        <Stat label="전체" value={all.length} icon="roots" color="primary" />
         <Stat label="원장·관리자" value={roleCount("master") + roleCount("admin")} icon="tree" color="danger" />
         <Stat label="강사" value={roleCount("teacher")} icon="seed" color="primary" />
         <Stat label="상담" value={roleCount("counselor")} icon="wave" color="rose" />
         <Stat label="회계" value={roleCount("accountant")} icon="pollen" color="purple" />
       </section>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="micro">직원 명단</p>
-          <h2 className="text-foreground mt-0.5 text-[17px] font-bold">
-            전체 직원 {staff.length}명
-          </h2>
+      {/* Filter bar */}
+      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">역할</span>
+            {ROLE_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildStaffHref({ ...current, role: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  role === f.key
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <span className="bg-line h-4 w-px" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">상태</span>
+            {STATUS_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildStaffHref({ ...current, status: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  status === f.key
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <form action="/staff" method="get" className="ml-auto flex items-center gap-2">
+            {role !== "all" ? <input type="hidden" name="role" value={role} /> : null}
+            {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
+            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+              <EyIcon name="search" size={13} />
+              <input
+                type="search"
+                name="q"
+                defaultValue={q}
+                placeholder="이름·이메일"
+                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
+              />
+            </div>
+            <Button type="submit" variant="outline" size="sm">
+              검색
+            </Button>
+          </form>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="micro">
+          결과 <span className="text-foreground font-bold">{staff.length}</span>명
+        </p>
         {canManage ? (
           <Button render={<Link href="/staff/new" />}>
             <EyIcon name="plus" size={13} className="mr-1" />
