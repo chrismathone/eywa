@@ -4,7 +4,11 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getEnrollmentConsultations } from "@/features/enrollment/server/queries";
+import {
+  getConsultantOptions,
+  getEnrollmentConsultations,
+} from "@/features/enrollment/server/queries";
+import { KanbanFilters } from "./_components/kanban-filters";
 
 export const metadata = { title: "신입생 등록상담 — eywa" };
 
@@ -34,24 +38,51 @@ function daysSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 }
 
-export default async function EnrollmentPage() {
+export default async function EnrollmentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string; consultant?: string }>;
+}) {
   await requireAccess("enrollment");
-  const items = await getEnrollmentConsultations();
+  const { month, consultant } = await searchParams;
+  const selectedMonth = month ?? null;
+  const selectedConsultant = consultant ?? null;
+
+  const [items, consultants] = await Promise.all([
+    getEnrollmentConsultations({
+      month: selectedMonth,
+      consultantId: selectedConsultant,
+    }),
+    getConsultantOptions(),
+  ]);
+
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
   const enrolled = items.filter((i) => i.outcome === "enrolled").length;
   const conversionRate = items.length > 0 ? ((enrolled / items.length) * 100).toFixed(0) : "0";
+
+  const filterActive = !!selectedMonth || !!selectedConsultant;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="신입생 등록상담"
-        description={`전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`}
+        description={
+          filterActive
+            ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 전환율 ${conversionRate}%`
+            : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`
+        }
         actions={
           <Button render={<Link href="/enrollment/new" />}>
             <Plus className="size-4" />
             신규 등록
           </Button>
         }
+      />
+
+      <KanbanFilters
+        selectedMonth={selectedMonth}
+        selectedConsultant={selectedConsultant}
+        consultants={consultants}
       />
 
       {items.length === 0 ? (
