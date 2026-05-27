@@ -37,6 +37,37 @@ export type PrintPayload = {
   recommendedClasses: string[];
 };
 
+export type ConsultationProcessingStatus =
+  | "idle"
+  | "uploaded"
+  | "transcribing"
+  | "analyzing"
+  | "completed"
+  | "failed";
+
+// ijw-calander 13-section consultation analysis (audio flow)
+export type ConsultationAudioReport = {
+  consultationType: string;
+  familyBackground: string;
+  parentConcerns: string;
+  parentQuestions: string;
+  parentRequests: string;
+  parentSatisfaction: string;
+  studentTraits: string;
+  teacherResponse: string;
+  salesPoints: string;
+  agreements: string;
+  followUps: string;
+  warnings: string;
+  extracted: {
+    prospectName: string | null;
+    grade: string | null;
+    school: string | null;
+    parentName: string | null;
+    parentPhone: string | null;
+  };
+};
+
 export type ConsultationListRow = {
   id: string;
   prospectName: string;
@@ -48,6 +79,8 @@ export type ConsultationListRow = {
   outcome: string;
   consultedAt: string;
   hasAiAnalysis: boolean;
+  processingStatus: ConsultationProcessingStatus;
+  hasAudio: boolean;
 };
 
 export async function getEnrollmentConsultations(): Promise<ConsultationListRow[]> {
@@ -57,6 +90,7 @@ export async function getEnrollmentConsultations(): Promise<ConsultationListRow[
     .select(
       `id, prospect_name, prospect_grade, prospect_school,
        parent_phone, parent_request, outcome, consulted_at,
+       processing_status, audio_path,
        consultant:consultant_id ( display_name )`,
     )
     .order("consulted_at", { ascending: false });
@@ -88,6 +122,8 @@ export async function getEnrollmentConsultations(): Promise<ConsultationListRow[
       outcome: c.outcome,
       consultedAt: c.consulted_at,
       hasAiAnalysis: hasAi.has(c.id),
+      processingStatus: c.processing_status as ConsultationProcessingStatus,
+      hasAudio: !!c.audio_path,
     };
   });
 }
@@ -106,6 +142,10 @@ export type ConsultationDetail = ConsultationListRow & {
   parentName: string | null;
   learningHistory: LearningHistory | null;
   aiAnalysis: AiAnalysisDetail | null;
+  audioReport: ConsultationAudioReport | null;
+  transcription: string | null;
+  processingError: string | null;
+  audioDurationSec: number | null;
   recommendedClasses: { id: string; className: string; subject: string }[];
 };
 
@@ -117,6 +157,8 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
       `id, prospect_name, prospect_grade, prospect_school,
        parent_name, parent_phone, parent_request, learning_history,
        outcome, consulted_at,
+       audio_path, audio_duration_sec, transcription,
+       processing_status, processing_error,
        consultant:consultant_id ( display_name )`,
     )
     .eq("id", id)
@@ -153,6 +195,12 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     | { display_name?: string }
     | undefined;
 
+  const printPayload = (ai?.print_payload as (PrintPayload & { audioReport?: ConsultationAudioReport }) | null) ?? null;
+  const audioReport =
+    printPayload && typeof printPayload === "object" && "audioReport" in printPayload
+      ? (printPayload.audioReport as ConsultationAudioReport | undefined) ?? null
+      : null;
+
   return {
     id: c.id,
     prospectName: c.prospect_name,
@@ -166,6 +214,12 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     outcome: c.outcome,
     consultedAt: c.consulted_at,
     hasAiAnalysis: ai !== null,
+    processingStatus: c.processing_status as ConsultationProcessingStatus,
+    hasAudio: !!c.audio_path,
+    transcription: c.transcription,
+    processingError: c.processing_error,
+    audioDurationSec: c.audio_duration_sec,
+    audioReport,
     aiAnalysis: ai
       ? {
           id: ai.id,

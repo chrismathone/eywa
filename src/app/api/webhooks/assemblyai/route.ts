@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // AssemblyAI may pause up to a few minutes between calls; give Claude plenty of room too.
 export const maxDuration = 300;
@@ -16,6 +17,29 @@ type MeetingReportSection = {
   speakerSummary: string;
   concerns: string;
   nextSteps: string;
+};
+
+// ijw-calander의 13섹션 등록상담 분석 스키마
+type ConsultationReport13 = {
+  consultationType: string; // 상담 성격
+  familyBackground: string; // 가정 배경
+  parentConcerns: string; // 학부모 걱정
+  parentQuestions: string; // 학부모 질문
+  parentRequests: string; // 학부모 요청
+  parentSatisfaction: string; // 학부모 만족도
+  studentTraits: string; // 학생 특이사항
+  teacherResponse: string; // 교사 대응
+  salesPoints: string; // 세일즈 포인트
+  agreements: string; // 합의 사항
+  followUps: string; // 후속 조치
+  warnings: string; // 주의 신호
+  extracted: {
+    prospectName: string | null;
+    grade: string | null;
+    school: string | null;
+    parentName: string | null;
+    parentPhone: string | null;
+  };
 };
 
 type WebhookBody = {
@@ -42,19 +66,45 @@ export async function POST(req: Request) {
   }
 
   const admin = createAdminClient();
+
+  // Dispatch: meeting first, then consultation. Each row carries the same transcript id.
   const { data: meeting } = await admin
     .from("meeting_minutes")
     .select("id, tenant_id, title, attendees, held_at")
     .eq("assemblyai_transcript_id", transcriptId)
-    .single();
+    .maybeSingle();
 
-  if (!meeting) {
-    // Unknown transcript — log and 200 so AssemblyAI doesn't keep retrying.
-    console.warn("[assemblyai webhook] no meeting for transcript", transcriptId);
-    return NextResponse.json({ ok: true, skipped: "no meeting" });
+  if (meeting) {
+    return handleMeeting(admin, transcriptId, meeting);
   }
 
-  // 1) Pull final transcript
+  const { data: consult } = await admin
+    .from("enrollment_consultations")
+    .select("id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone")
+    .eq("assemblyai_transcript_id", transcriptId)
+    .maybeSingle();
+
+  if (consult) {
+    return handleConsultation(admin, transcriptId, consult);
+  }
+
+  console.warn("[assemblyai webhook] no matching row for transcript", transcriptId);
+  return NextResponse.json({ ok: true, skipped: "no row" });
+}
+
+// ─────────────────────────── meeting flow ───────────────────────────
+
+async function handleMeeting(
+  admin: SupabaseClient,
+  transcriptId: string,
+  meeting: {
+    id: string;
+    tenant_id: string;
+    title: string;
+    attendees: unknown;
+    held_at: string;
+  },
+) {
   let transcript;
   try {
     transcript = await getTranscript(transcriptId);
@@ -78,7 +128,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // Validate transcript quality
   const cleanedText = transcript.text.replace(/\s/g, "");
   if (cleanedText.length < 30) {
     await admin
@@ -103,7 +152,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // 2) Save transcription + move to analyzing
   await admin
     .from("meeting_minutes")
     .update({
@@ -115,7 +163,6 @@ export async function POST(req: Request) {
     })
     .eq("id", meeting.id);
 
-  // 3) Claude analysis
   const formatted = (transcript.utterances ?? []).length > 0
     ? (transcript.utterances as SpeakerUtterance[])
         .map((s) => `[화자 ${s.speaker}] ${s.text}`)
@@ -200,7 +247,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // 4) Save report + finalize
   await admin
     .from("meeting_minutes")
     .update({
@@ -213,6 +259,206 @@ export async function POST(req: Request) {
       processing_error: null,
     })
     .eq("id", meeting.id);
+
+  return NextResponse.json({ ok: true });
+}
+
+// ─────────────────────────── consultation flow ───────────────────────────
+
+async function handleConsultation(
+  admin: SupabaseClient,
+  transcriptId: string,
+  consult: {
+    id: string;
+    tenant_id: string;
+    prospect_name: string;
+    prospect_grade: string | null;
+    prospect_school: string | null;
+    parent_name: string | null;
+    parent_phone: string | null;
+  },
+) {
+  let transcript;
+  try {
+    transcript = await getTranscript(transcriptId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await admin
+      .from("enrollment_consultations")
+      .update({ processing_status: "failed", processing_error: `전사 fetch 실패: ${msg}` })
+      .eq("id", consult.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (transcript.status === "error" || !transcript.text) {
+    await admin
+      .from("enrollment_consultations")
+      .update({
+        processing_status: "failed",
+        processing_error: transcript.error ?? "전사 결과가 비어있습니다",
+      })
+      .eq("id", consult.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  const cleanedText = transcript.text.replace(/\s/g, "");
+  if (cleanedText.length < 30 || (transcript.audio_duration ?? 0) < 5) {
+    await admin
+      .from("enrollment_consultations")
+      .update({
+        processing_status: "failed",
+        processing_error: "녹음이 너무 짧거나 음성이 인식되지 않았습니다",
+        transcription: transcript.text,
+      })
+      .eq("id", consult.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  await admin
+    .from("enrollment_consultations")
+    .update({
+      transcription: transcript.text,
+      speaker_labels: transcript.utterances ?? [],
+      audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+      processing_status: "analyzing",
+      processing_error: null,
+    })
+    .eq("id", consult.id);
+
+  const formatted = (transcript.utterances ?? []).length > 0
+    ? (transcript.utterances as SpeakerUtterance[])
+        .map((s) => `[화자 ${s.speaker}] ${s.text}`)
+        .join("\n")
+    : transcript.text;
+
+  let report: ConsultationReport13;
+
+  try {
+    const client = getAnthropic();
+    const response = await client.messages.create({
+      model: CLAUDE_MODELS.balanced,
+      max_tokens: 8192,
+      messages: [
+        {
+          role: "user",
+          content: [
+            "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
+            "",
+            `학생 이름(현재 입력값): ${consult.prospect_name}`,
+            `학년: ${consult.prospect_grade ?? "미상"}`,
+            `학교: ${consult.prospect_school ?? "미상"}`,
+            `학부모(현재 입력값): ${consult.parent_name ?? "미상"} / ${consult.parent_phone ?? "미상"}`,
+            "",
+            "분석 가이드:",
+            "1. consultationType: 상담 성격 (예: 초기 탐색, 입학 결심, 환불/이탈 우려 등)",
+            "2. familyBackground: 가정 배경 (형제자매, 경제 상황 등 발화에 나온 것만)",
+            "3. parentConcerns: 학부모가 표현한 걱정·고민",
+            "4. parentQuestions: 학부모가 던진 질문 목록",
+            "5. parentRequests: 학부모가 요청한 사항",
+            "6. parentSatisfaction: 상담 중 만족/불만족 신호",
+            "7. studentTraits: 학생 특이사항 (성격, 학습 스타일)",
+            "8. teacherResponse: 교사/상담사의 대응 방식 평가",
+            "9. salesPoints: 학원이 어필한 장점",
+            "10. agreements: 양측 합의 사항",
+            "11. followUps: 향후 후속 조치 (연락/방문/시범수업 등)",
+            "12. warnings: 등록 실패 가능성·주의 신호",
+            "13. extracted: 전사에서 자동 추출한 핵심 정보 (학생 이름/학년/학교/학부모/연락처). 발화에 명시되지 않으면 null.",
+            "",
+            "녹음 전사 (화자 라벨 포함):",
+            formatted,
+            "",
+            "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
+            "{",
+            '  "consultationType": string,',
+            '  "familyBackground": string,',
+            '  "parentConcerns": string,',
+            '  "parentQuestions": string,',
+            '  "parentRequests": string,',
+            '  "parentSatisfaction": string,',
+            '  "studentTraits": string,',
+            '  "teacherResponse": string,',
+            '  "salesPoints": string,',
+            '  "agreements": string,',
+            '  "followUps": string,',
+            '  "warnings": string,',
+            '  "extracted": {',
+            '    "prospectName": string | null,',
+            '    "grade": string | null,',
+            '    "school": string | null,',
+            '    "parentName": string | null,',
+            '    "parentPhone": string | null',
+            "  }",
+            "}",
+            "",
+            "추측 금지. 전사에 안 나온 정보는 빈 문자열 또는 null.",
+            "JSON만 출력. 마크다운 코드 블록 없이.",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    report = JSON.parse(match ? match[0] : cleaned) as ConsultationReport13;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await admin
+      .from("enrollment_consultations")
+      .update({ processing_status: "failed", processing_error: `AI 분석 실패: ${msg}` })
+      .eq("id", consult.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Build / upsert consultation_ai_analysis row. The 13-section report lives in
+  // print_payload.audioReport so existing diagnosis/learningPlan jsonb stays compatible.
+  const diagnosisStub = {
+    strengths: [],
+    weaknesses: [],
+    level: "—",
+    summary: report.consultationType + "\n" + report.parentConcerns,
+  };
+  const learningPlanStub = {
+    immediate: [report.followUps].filter(Boolean),
+    semester: [],
+    longTerm: [],
+  };
+  const printPayload = {
+    prospect: {
+      name: report.extracted.prospectName ?? consult.prospect_name,
+      grade: report.extracted.grade ?? consult.prospect_grade,
+      school: report.extracted.school ?? consult.prospect_school,
+      parentName: report.extracted.parentName ?? consult.parent_name,
+      parentPhone: report.extracted.parentPhone ?? consult.parent_phone,
+    },
+    audioReport: report,
+  };
+
+  const modelVersion = `${CLAUDE_MODELS.balanced}-${new Date().toISOString().slice(0, 10)}`;
+
+  await admin.from("consultation_ai_analysis").upsert(
+    {
+      consultation_id: consult.id,
+      model_version: modelVersion,
+      diagnosis: diagnosisStub,
+      learning_plan: learningPlanStub,
+      print_payload: printPayload,
+    },
+    { onConflict: "consultation_id,model_version" },
+  );
+
+  // Auto-fill prospect fields if Claude extracted them (and current values are placeholder-empty).
+  const patch: Record<string, unknown> = {
+    processing_status: "completed",
+    processing_error: null,
+    outcome: "ai_done",
+  };
+  if (!consult.prospect_grade && report.extracted.grade) patch.prospect_grade = report.extracted.grade;
+  if (!consult.prospect_school && report.extracted.school) patch.prospect_school = report.extracted.school;
+  if (!consult.parent_name && report.extracted.parentName) patch.parent_name = report.extracted.parentName;
+  if (!consult.parent_phone && report.extracted.parentPhone) patch.parent_phone = report.extracted.parentPhone;
+
+  await admin.from("enrollment_consultations").update(patch).eq("id", consult.id);
 
   return NextResponse.json({ ok: true });
 }

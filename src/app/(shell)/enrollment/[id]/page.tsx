@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer } from "lucide-react";
+import { AlertCircle, ArrowLeft, Loader2, Mic, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -8,8 +8,11 @@ import { formatCreatedAt } from "@/lib/utils";
 import {
   getEnrollmentConsultationById,
   type AiAnalysisDetail,
+  type ConsultationAudioReport,
+  type ConsultationProcessingStatus,
 } from "@/features/enrollment/server/queries";
 import { RunAiButton } from "./run-ai-button";
+import { ConsultationStatusWatcher } from "./status-watcher";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -23,6 +26,24 @@ const OUTCOME_BADGE: Record<string, { label: string; class: string }> = {
   no_show: { label: "노쇼", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
 };
 
+const PROCESSING_BADGE: Record<
+  ConsultationProcessingStatus,
+  { label: string; class: string; spin?: boolean } | null
+> = {
+  idle: null,
+  uploaded: { label: "분석 대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
+  transcribing: { label: "전사 중", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
+  analyzing: { label: "AI 분석 중", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
+  completed: { label: "완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
+  failed: { label: "실패", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
+};
+
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const r = sec % 60;
+  return `${m}분 ${r}초`;
+}
+
 export default async function EnrollmentDetailPage({
   params,
 }: {
@@ -34,9 +55,19 @@ export default async function EnrollmentDetailPage({
   if (!consult) notFound();
 
   const badge = OUTCOME_BADGE[consult.outcome] ?? OUTCOME_BADGE.pending!;
+  const procBadge = PROCESSING_BADGE[consult.processingStatus];
+  const isProcessing =
+    consult.processingStatus === "uploaded" ||
+    consult.processingStatus === "transcribing" ||
+    consult.processingStatus === "analyzing";
 
   return (
     <div className="space-y-6">
+      <ConsultationStatusWatcher
+        consultationId={consult.id}
+        initialStatus={consult.processingStatus}
+      />
+
       <Link
         href="/enrollment"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
@@ -55,10 +86,24 @@ export default async function EnrollmentDetailPage({
             >
               {badge.label}
             </span>
+            {procBadge ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${procBadge.class}`}
+              >
+                {procBadge.spin ? <Loader2 className="size-3 animate-spin" /> : null}
+                {procBadge.label}
+              </span>
+            ) : null}
           </div>
-          <p className="text-muted-foreground text-sm">
-            {consult.prospectGrade ?? "—"}
-            {consult.prospectSchool ? <> · {consult.prospectSchool}</> : null}
+          <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+            <span>{consult.prospectGrade ?? "—"}</span>
+            {consult.prospectSchool ? <span>· {consult.prospectSchool}</span> : null}
+            {consult.hasAudio && consult.audioDurationSec ? (
+              <span className="inline-flex items-center gap-1">
+                · <Mic className="size-3" />
+                <span className="num">{formatDuration(consult.audioDurationSec)}</span>
+              </span>
+            ) : null}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -67,11 +112,44 @@ export default async function EnrollmentDetailPage({
               <Printer className="size-4" />
               인쇄 양식
             </Button>
-          ) : (
+          ) : !consult.hasAudio ? (
             <RunAiButton consultationId={id} />
-          )}
+          ) : null}
         </div>
       </header>
+
+      {consult.processingStatus === "failed" ? (
+        <section className="border-chart-4/40 bg-chart-4/5 rounded-lg border p-4">
+          <div className="inline-flex items-center gap-2">
+            <AlertCircle className="text-chart-4 size-4" />
+            <h2 className="text-foreground text-sm font-semibold">처리 실패</h2>
+          </div>
+          <p className="text-muted-foreground mt-2 text-sm">
+            {consult.processingError ?? "알 수 없는 오류"}
+          </p>
+        </section>
+      ) : null}
+
+      {isProcessing ? (
+        <section className="bg-card border-border space-y-3 rounded-lg border p-5">
+          <div className="inline-flex items-center gap-2">
+            <Loader2 className="text-chart-3 size-4 animate-spin" />
+            <h2 className="text-foreground text-sm font-semibold">
+              {consult.processingStatus === "uploaded" || consult.processingStatus === "transcribing"
+                ? "녹음을 한국어로 전사 중입니다"
+                : "AI가 상담록을 13개 섹션으로 분석 중입니다"}
+            </h2>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            상담 1분당 5–10초 정도 소요됩니다. 페이지를 떠나도 백그라운드에서 계속 진행됩니다.
+          </p>
+          <div className="space-y-2">
+            <div className="bg-muted h-3 w-3/4 animate-pulse rounded" />
+            <div className="bg-muted h-3 w-1/2 animate-pulse rounded" />
+            <div className="bg-muted h-3 w-2/3 animate-pulse rounded" />
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">
@@ -106,13 +184,18 @@ export default async function EnrollmentDetailPage({
           </Card>
         </div>
 
-        <div className="lg:col-span-2">
-          {consult.aiAnalysis ? (
+        <div className="space-y-4 lg:col-span-2">
+          {consult.audioReport ? (
+            <ConsultationReportPanel
+              report={consult.audioReport}
+              generatedAt={consult.aiAnalysis?.generatedAt ?? null}
+            />
+          ) : consult.aiAnalysis ? (
             <AiAnalysisPanel
               analysis={consult.aiAnalysis}
               recommendedClasses={consult.recommendedClasses}
             />
-          ) : (
+          ) : !isProcessing ? (
             <Card title="AI 분석 결과">
               <p className="text-muted-foreground py-12 text-center text-sm">
                 아직 AI 분석이 실행되지 않았습니다.
@@ -120,10 +203,68 @@ export default async function EnrollmentDetailPage({
                 상담 완료 후 분석을 실행하면 학생 진단과 추천 반이 자동 생성됩니다.
               </p>
             </Card>
-          )}
+          ) : null}
+
+          {consult.transcription ? (
+            <Card title="전사 내용">
+              <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
+                {consult.transcription}
+              </p>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>
+  );
+}
+
+function ConsultationReportPanel({
+  report,
+  generatedAt,
+}: {
+  report: ConsultationAudioReport;
+  generatedAt: string | null;
+}) {
+  const sections: { key: keyof ConsultationAudioReport; label: string }[] = [
+    { key: "consultationType", label: "상담 성격" },
+    { key: "familyBackground", label: "가정 배경" },
+    { key: "parentConcerns", label: "학부모 걱정" },
+    { key: "parentQuestions", label: "학부모 질문" },
+    { key: "parentRequests", label: "학부모 요청" },
+    { key: "parentSatisfaction", label: "학부모 만족도" },
+    { key: "studentTraits", label: "학생 특이사항" },
+    { key: "teacherResponse", label: "교사 대응" },
+    { key: "salesPoints", label: "세일즈 포인트" },
+    { key: "agreements", label: "합의 사항" },
+    { key: "followUps", label: "후속 조치" },
+    { key: "warnings", label: "주의 신호" },
+  ];
+
+  return (
+    <section className="bg-card border-border space-y-5 rounded-lg border p-5">
+      <header className="flex items-baseline justify-between">
+        <div className="inline-flex items-center gap-2">
+          <Sparkles className="text-chart-4 size-4" />
+          <h2 className="text-foreground text-sm font-semibold">상담 AI 분석 (13 섹션)</h2>
+        </div>
+        {generatedAt ? (
+          <span className="text-muted-foreground num text-[11px]">
+            {formatCreatedAt(generatedAt)}
+          </span>
+        ) : null}
+      </header>
+
+      {sections.map(({ key, label }) => {
+        const body = report[key];
+        if (typeof body !== "string" || !body.trim()) return null;
+        return (
+          <div key={key} className="space-y-1.5">
+            <p className="eyebrow">{label}</p>
+            <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 

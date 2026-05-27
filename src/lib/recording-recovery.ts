@@ -4,6 +4,9 @@
  * Each MediaRecorder `ondataavailable` chunk is persisted to IDB. If the tab
  * crashes mid-recording, the next visit to the upload form can re-assemble the
  * chunks into a downloadable File. Ported from ijw-calander/utils/recordingRecovery.ts.
+ *
+ * Two kinds share one DB but use separate key prefixes ("meeting_*" vs "consultation_*")
+ * so the meeting form and the consultation form recover independently.
  */
 
 const DB_NAME = "recording-recovery";
@@ -11,11 +14,10 @@ const DB_VERSION = 1;
 const CHUNKS_STORE = "chunks";
 const META_STORE = "meta";
 
-const KIND = "meeting" as const;
-type Kind = typeof KIND;
+export type RecoveryKind = "meeting" | "consultation";
 
 export type RecordingMeta = {
-  id: Kind;
+  id: RecoveryKind;
   startedAt: number;
   mimeType: string;
   chunkCount: number;
@@ -35,7 +37,11 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function startRecoverySession(mimeType: string, title?: string): Promise<void> {
+export async function startRecoverySession(
+  kind: RecoveryKind,
+  mimeType: string,
+  title?: string,
+): Promise<void> {
   const db = await openDB();
   const tx = db.transaction([META_STORE, CHUNKS_STORE], "readwrite");
 
@@ -45,19 +51,19 @@ export async function startRecoverySession(mimeType: string, title?: string): Pr
   cursorReq.onsuccess = () => {
     const cursor = cursorReq.result;
     if (cursor) {
-      if ((cursor.key as string).startsWith(KIND + "_")) cursor.delete();
+      if ((cursor.key as string).startsWith(kind + "_")) cursor.delete();
       cursor.continue();
     }
   };
 
   const meta: RecordingMeta = {
-    id: KIND,
+    id: kind,
     startedAt: Date.now(),
     mimeType,
     chunkCount: 0,
     title,
   };
-  tx.objectStore(META_STORE).put(meta, KIND);
+  tx.objectStore(META_STORE).put(meta, kind);
 
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => {
@@ -71,19 +77,19 @@ export async function startRecoverySession(mimeType: string, title?: string): Pr
   });
 }
 
-export async function saveChunk(index: number, chunk: Blob): Promise<void> {
+export async function saveChunk(kind: RecoveryKind, index: number, chunk: Blob): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction([CHUNKS_STORE, META_STORE], "readwrite");
-    tx.objectStore(CHUNKS_STORE).put(chunk, `${KIND}_${index}`);
+    tx.objectStore(CHUNKS_STORE).put(chunk, `${kind}_${index}`);
 
     const metaStore = tx.objectStore(META_STORE);
-    const getReq = metaStore.get(KIND);
+    const getReq = metaStore.get(kind);
     getReq.onsuccess = () => {
       const meta = getReq.result as RecordingMeta | undefined;
       if (meta) {
         meta.chunkCount = index + 1;
-        metaStore.put(meta, KIND);
+        metaStore.put(meta, kind);
       }
     };
 
@@ -103,11 +109,11 @@ export async function saveChunk(index: number, chunk: Blob): Promise<void> {
   }
 }
 
-export async function checkRecovery(): Promise<RecordingMeta | null> {
+export async function checkRecovery(kind: RecoveryKind): Promise<RecordingMeta | null> {
   try {
     const db = await openDB();
     const tx = db.transaction(META_STORE, "readonly");
-    const req = tx.objectStore(META_STORE).get(KIND);
+    const req = tx.objectStore(META_STORE).get(kind);
     return new Promise((resolve) => {
       req.onsuccess = () => {
         db.close();
@@ -124,11 +130,11 @@ export async function checkRecovery(): Promise<RecordingMeta | null> {
   }
 }
 
-export async function recoverRecording(): Promise<File | null> {
+export async function recoverRecording(kind: RecoveryKind): Promise<File | null> {
   try {
     const db = await openDB();
     const tx = db.transaction([META_STORE, CHUNKS_STORE], "readonly");
-    const metaReq = tx.objectStore(META_STORE).get(KIND);
+    const metaReq = tx.objectStore(META_STORE).get(kind);
 
     return new Promise((resolve) => {
       metaReq.onsuccess = () => {
@@ -143,7 +149,7 @@ export async function recoverRecording(): Promise<File | null> {
         let loaded = 0;
 
         for (let i = 0; i < meta.chunkCount; i++) {
-          const chunkReq = tx.objectStore(CHUNKS_STORE).get(`${KIND}_${i}`);
+          const chunkReq = tx.objectStore(CHUNKS_STORE).get(`${kind}_${i}`);
           chunkReq.onsuccess = () => {
             if (chunkReq.result) chunks[i] = chunkReq.result as Blob;
             loaded++;
@@ -157,7 +163,7 @@ export async function recoverRecording(): Promise<File | null> {
               const blob = new Blob(valid, { type: meta.mimeType });
               const d = new Date(meta.startedAt);
               const pad = (n: number) => String(n).padStart(2, "0");
-              const name = `복구_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.webm`;
+              const name = `복구_${kind}_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.webm`;
               resolve(new File([blob], name, { type: meta.mimeType }));
             }
           };
@@ -173,18 +179,18 @@ export async function recoverRecording(): Promise<File | null> {
   }
 }
 
-export async function clearRecovery(): Promise<void> {
+export async function clearRecovery(kind: RecoveryKind): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction([META_STORE, CHUNKS_STORE], "readwrite");
-    tx.objectStore(META_STORE).delete(KIND);
+    tx.objectStore(META_STORE).delete(kind);
 
     const chunks = tx.objectStore(CHUNKS_STORE);
     const cursorReq = chunks.openCursor();
     cursorReq.onsuccess = () => {
       const cursor = cursorReq.result;
       if (cursor) {
-        if ((cursor.key as string).startsWith(KIND + "_")) cursor.delete();
+        if ((cursor.key as string).startsWith(kind + "_")) cursor.delete();
         cursor.continue();
       }
     };

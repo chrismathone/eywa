@@ -14,20 +14,30 @@ if (!url || !key) {
 
 const admin = createClient(url, key, { auth: { persistSession: false } });
 
+const AUDIO_MIME_TYPES = [
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/webm",
+  "audio/ogg",
+];
+
+const AUDIO_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB — Supabase free-tier per-file cap
+
 const BUCKETS = [
   {
     id: "meeting-recordings",
     public: false,
-    file_size_limit: 50 * 1024 * 1024, // 50 MB — Supabase free-tier per-file cap
-    allowed_mime_types: [
-      "audio/mpeg",
-      "audio/mp4",
-      "audio/x-m4a",
-      "audio/wav",
-      "audio/x-wav",
-      "audio/webm",
-      "audio/ogg",
-    ],
+    file_size_limit: AUDIO_SIZE_LIMIT,
+    allowed_mime_types: AUDIO_MIME_TYPES,
+  },
+  {
+    id: "consultation-recordings",
+    public: false,
+    file_size_limit: AUDIO_SIZE_LIMIT,
+    allowed_mime_types: AUDIO_MIME_TYPES,
   },
 ];
 

@@ -91,6 +91,17 @@ export const meetingProcessingStatusEnum = pgEnum("meeting_processing_status", [
   "failed",
 ]);
 
+// Same shape as meeting status, but separate enum so the two flows can diverge later
+// (e.g. different terminal states, different retry semantics).
+export const consultationProcessingStatusEnum = pgEnum("consultation_processing_status", [
+  "idle",
+  "uploaded",
+  "transcribing",
+  "analyzing",
+  "completed",
+  "failed",
+]);
+
 // === tenants ===
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -275,6 +286,10 @@ export const classSchedules = pgTable(
 );
 
 // === enrollment_consultations (신입생 상담) ===
+// Two flows:
+//   1. text-only: parent_request is filled manually, processing_status='idle'.
+//   2. audio: upload to consultation-recordings bucket → AssemblyAI → Claude 13-section analysis.
+//      Same pipeline shape as meetings, status flows uploaded→transcribing→analyzing→completed.
 export const enrollmentConsultations = pgTable(
   "enrollment_consultations",
   {
@@ -292,6 +307,17 @@ export const enrollmentConsultations = pgTable(
     consultantId: uuid("consultant_id").references(() => users.id, { onDelete: "set null" }),
     outcome: consultationOutcomeEnum("outcome").notNull().default("pending"),
     studentId: uuid("student_id").references(() => students.id, { onDelete: "set null" }),
+    // Audio + transcription pipeline (mirrors meeting_minutes columns)
+    audioPath: text("audio_path"),
+    audioDurationSec: integer("audio_duration_sec"),
+    audioSizeBytes: integer("audio_size_bytes"),
+    transcription: text("transcription"),
+    speakerLabels: jsonb("speaker_labels"),
+    processingStatus: consultationProcessingStatusEnum("processing_status")
+      .notNull()
+      .default("idle"),
+    processingError: text("processing_error"),
+    assemblyaiTranscriptId: text("assemblyai_transcript_id"),
     consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -299,6 +325,7 @@ export const enrollmentConsultations = pgTable(
   (t) => [
     index("ec_tenant_outcome_idx").on(t.tenantId, t.outcome),
     index("ec_tenant_consulted_idx").on(t.tenantId, t.consultedAt),
+    index("ec_assemblyai_transcript_idx").on(t.assemblyaiTranscriptId),
   ],
 );
 

@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getEnrollmentConsultationById } from "@/features/enrollment/server/queries";
+import {
+  getEnrollmentConsultationById,
+  type ConsultationAudioReport,
+} from "@/features/enrollment/server/queries";
 import { PrintActions } from "./print-actions";
 
 export const metadata = { title: "신입생 인수인계서 — eywa" };
@@ -82,35 +85,45 @@ export default async function EnrollmentPrintPage({
         </Section>
       ) : null}
 
-      <Section title="AI 진단 요약">
-        <p className="text-sm leading-relaxed">{p.diagnosis.summary}</p>
-        <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <div>
-            <p className="text-xs font-semibold tracking-wide uppercase">강점</p>
-            <ul className="mt-1 list-disc pl-5">
-              {p.diagnosis.strengths.map((s) => (
-                <li key={s}>{s}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold tracking-wide uppercase">약점</p>
-            <ul className="mt-1 list-disc pl-5">
-              {p.diagnosis.weaknesses.map((w) => (
-                <li key={w}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Section>
+      {(p as unknown as { audioReport?: ConsultationAudioReport }).audioReport ? (
+        <AudioReportSections
+          report={
+            (p as unknown as { audioReport: ConsultationAudioReport }).audioReport
+          }
+        />
+      ) : (
+        <>
+          <Section title="AI 진단 요약">
+            <p className="text-sm leading-relaxed">{p.diagnosis.summary}</p>
+            <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p className="text-xs font-semibold tracking-wide uppercase">강점</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {p.diagnosis.strengths.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-wide uppercase">약점</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {p.diagnosis.weaknesses.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </Section>
 
-      <Section title="학습 계획">
-        <div className="grid grid-cols-3 gap-x-6 text-sm">
-          <Plan label="즉시 (4주)" items={p.learningPlan.immediate} />
-          <Plan label="이번 학기" items={p.learningPlan.semester} />
-          <Plan label="장기" items={p.learningPlan.longTerm} />
-        </div>
-      </Section>
+          <Section title="학습 계획">
+            <div className="grid grid-cols-3 gap-x-6 text-sm">
+              <Plan label="즉시 (4주)" items={p.learningPlan.immediate} />
+              <Plan label="이번 학기" items={p.learningPlan.semester} />
+              <Plan label="장기" items={p.learningPlan.longTerm} />
+            </div>
+          </Section>
+        </>
+      )}
 
       {p.recommendedClasses.length > 0 ? (
         <Section title="추천 반">
@@ -171,6 +184,36 @@ function Detail({ label, value }: { label: string; value: string }) {
       <dt className="w-20 shrink-0 text-black/60">{label}</dt>
       <dd>{value}</dd>
     </div>
+  );
+}
+
+function AudioReportSections({ report }: { report: ConsultationAudioReport }) {
+  const sections: { key: keyof ConsultationAudioReport; label: string }[] = [
+    { key: "consultationType", label: "상담 성격" },
+    { key: "familyBackground", label: "가정 배경" },
+    { key: "parentConcerns", label: "학부모 걱정" },
+    { key: "parentQuestions", label: "학부모 질문" },
+    { key: "parentRequests", label: "학부모 요청" },
+    { key: "parentSatisfaction", label: "학부모 만족도" },
+    { key: "studentTraits", label: "학생 특이사항" },
+    { key: "teacherResponse", label: "교사 대응" },
+    { key: "salesPoints", label: "세일즈 포인트" },
+    { key: "agreements", label: "합의 사항" },
+    { key: "followUps", label: "후속 조치" },
+    { key: "warnings", label: "주의 신호" },
+  ];
+  return (
+    <>
+      {sections.map(({ key, label }) => {
+        const body = report[key];
+        if (typeof body !== "string" || !body.trim()) return null;
+        return (
+          <Section key={key} title={label}>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+          </Section>
+        );
+      })}
+    </>
   );
 }
 

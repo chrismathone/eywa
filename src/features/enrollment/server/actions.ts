@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { submitTranscript } from "@/lib/ai/assemblyai";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
 
@@ -219,4 +222,103 @@ export async function runAiAnalysis(
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
   return undefined;
+}
+
+/**
+ * Audio flow: client uploaded an audio file to the consultation-recordings bucket.
+ * Server creates a consultation row, generates a signed URL, submits to AssemblyAI
+ * with the shared webhook, and redirects to the detail page. The webhook handles
+ * the rest (transcript fetch → Claude 13-section analysis → DB update).
+ */
+export type StartConsultationFromAudioState = { error?: string } | undefined;
+
+export async function startConsultationFromAudio(
+  _prev: StartConsultationFromAudioState,
+  formData: FormData,
+): Promise<StartConsultationFromAudioState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const prospectName = String(formData.get("prospectName") ?? "").trim();
+  const prospectGrade = String(formData.get("prospectGrade") ?? "").trim() || null;
+  const prospectSchool = String(formData.get("prospectSchool") ?? "").trim() || null;
+  const parentName = String(formData.get("parentName") ?? "").trim() || null;
+  const parentPhone = String(formData.get("parentPhone") ?? "").trim() || null;
+  const audioPath = String(formData.get("audioPath") ?? "").trim();
+  const audioSizeBytes = Number(formData.get("audioSizeBytes") ?? 0);
+
+  if (!prospectName) return { error: "학생 이름을 입력해주세요" };
+  if (!audioPath) return { error: "음성 파일이 누락되었습니다" };
+
+  const admin = createAdminClient();
+
+  // Verify path belongs to this tenant
+  const expectedPrefix = `${user.tenantId}/`;
+  if (!audioPath.startsWith(expectedPrefix)) {
+    return { error: "파일 경로가 잘못되었습니다" };
+  }
+
+  // Signed URL for AssemblyAI to fetch
+  const { data: signed, error: signErr } = await admin.storage
+    .from("consultation-recordings")
+    .createSignedUrl(audioPath, 60 * 60);
+  if (signErr || !signed?.signedUrl) {
+    return { error: `signed URL 생성 실패: ${signErr?.message ?? "unknown"}` };
+  }
+
+  // Create consultation row in uploaded state
+  const { data: consult, error: insertErr } = await admin
+    .from("enrollment_consultations")
+    .insert({
+      tenant_id: user.tenantId,
+      prospect_name: prospectName,
+      prospect_grade: prospectGrade,
+      prospect_school: prospectSchool,
+      parent_name: parentName,
+      parent_phone: parentPhone,
+      consultant_id: user.id,
+      outcome: "consulted",
+      audio_path: audioPath,
+      audio_size_bytes: audioSizeBytes,
+      processing_status: "uploaded",
+    })
+    .select("id")
+    .single();
+
+  if (insertErr || !consult) {
+    return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
+  }
+
+  // Kick off AssemblyAI with webhook
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://eywa-alpha.vercel.app");
+  const webhookUrl = `${appUrl}/api/webhooks/assemblyai`;
+
+  try {
+    const result = await submitTranscript({
+      audioUrl: signed.signedUrl,
+      webhookUrl,
+      webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
+        ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
+        : undefined,
+    });
+    await admin
+      .from("enrollment_consultations")
+      .update({
+        assemblyai_transcript_id: result.id,
+        processing_status: "transcribing",
+      })
+      .eq("id", consult.id);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await admin
+      .from("enrollment_consultations")
+      .update({ processing_status: "failed", processing_error: `AssemblyAI 제출 실패: ${msg}` })
+      .eq("id", consult.id);
+    return { error: msg };
+  }
+
+  revalidatePath("/enrollment");
+  redirect(`/enrollment/${consult.id}`);
 }

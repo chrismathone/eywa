@@ -67,7 +67,7 @@ export function NewMeetingForm() {
   // On mount: look for an unfinished recording in IndexedDB (browser crash recovery).
   useEffect(() => {
     let cancelled = false;
-    checkRecovery().then((meta) => {
+    checkRecovery("meeting").then((meta) => {
       if (!cancelled) setRecoveryMeta(meta);
     });
     return () => {
@@ -85,16 +85,16 @@ export function NewMeetingForm() {
   }, []);
 
   async function handleRecover() {
-    const recovered = await recoverRecording();
+    const recovered = await recoverRecording("meeting");
     if (recovered) {
       setFile(recovered);
       setRecoveryMeta(null);
-      await clearRecovery();
+      await clearRecovery("meeting");
     }
   }
 
   async function handleDiscardRecovery() {
-    await clearRecovery();
+    await clearRecovery("meeting");
     setRecoveryMeta(null);
   }
 
@@ -126,7 +126,7 @@ export function NewMeetingForm() {
       recordingChunksRef.current = [];
 
       // Initialize the IDB recovery session — chunks will persist as they arrive.
-      await startRecoverySession(mime, title || undefined).catch(() => {
+      await startRecoverySession("meeting", mime, title || undefined).catch(() => {
         // recovery is best-effort; swallow and continue recording
       });
 
@@ -135,7 +135,7 @@ export function NewMeetingForm() {
           const idx = recordingChunksRef.current.length;
           recordingChunksRef.current.push(e.data);
           // Fire-and-forget — never block the recorder.
-          void saveChunk(idx, e.data);
+          void saveChunk("meeting", idx, e.data);
         }
       };
       recorder.onstop = () => {
@@ -236,7 +236,7 @@ export function NewMeetingForm() {
         return;
       }
       // success — clear IDB recovery chunks (analysis is now safely queued server-side)
-      await clearRecovery();
+      await clearRecovery("meeting");
       // server redirected, but if we got here it didn't; force navigation
       router.push("/meetings");
     } catch (e) {
