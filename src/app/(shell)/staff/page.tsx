@@ -1,7 +1,11 @@
-import { BadgeCheck } from "lucide-react";
+import Link from "next/link";
+import { BadgeCheck, CheckCircle2, Pencil, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
 
 export const metadata = { title: "직원관리 — eywa" };
@@ -32,8 +36,15 @@ const STATUS_LABEL: Record<string, string> = {
   pending: "대기",
 };
 
-export default async function StaffPage() {
+export default async function StaffPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invited?: string }>;
+}) {
   await requireAccess("staff");
+  const user = await getCurrentUser();
+  const canManage = !!user && canManageStaff(user.systemRole);
+  const { invited } = await searchParams;
   const staff = await getStaffList();
   const teachers = staff.filter((s) => s.systemRole === "teacher").length;
   const total = staff.length;
@@ -43,7 +54,22 @@ export default async function StaffPage() {
       <PageHeader
         title="직원관리"
         description={`전체 ${total}명 · 강사 ${teachers}명. 역할/담당 학생수가 함께 표시됩니다.`}
+        actions={
+          canManage ? (
+            <Button render={<Link href="/staff/new" />}>
+              <Plus className="size-4" />
+              직원 등록
+            </Button>
+          ) : null
+        }
       />
+
+      {invited ? (
+        <p className="border-chart-2/30 bg-chart-2/5 text-chart-2 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+          <CheckCircle2 className="size-4" />
+          <span>{invited} 계정이 생성되었습니다. 임시 비밀번호를 직원에게 안내해주세요.</span>
+        </p>
+      ) : null}
 
       {staff.length === 0 ? (
         <EmptyState icon={BadgeCheck} title="등록된 직원이 없습니다" />
@@ -58,6 +84,7 @@ export default async function StaffPage() {
                 <th className="eyebrow num px-5 py-3 text-right font-normal">담당 반</th>
                 <th className="eyebrow num px-5 py-3 text-right font-normal">담당 학생</th>
                 <th className="eyebrow px-5 py-3 font-normal">상태</th>
+                {canManage ? <th className="eyebrow px-5 py-3 font-normal" /> : null}
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -83,6 +110,17 @@ export default async function StaffPage() {
                   <td className="text-muted-foreground px-5 py-3 text-xs">
                     {STATUS_LABEL[s.status] ?? s.status}
                   </td>
+                  {canManage ? (
+                    <td className="px-5 py-3 text-right">
+                      <Link
+                        href={`/staff/${s.id}/edit`}
+                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                      >
+                        <Pencil className="size-3.5" />
+                        <span className="sr-only">수정</span>
+                      </Link>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

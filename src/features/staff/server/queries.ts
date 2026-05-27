@@ -1,11 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import type { SystemRole } from "@/lib/permissions";
 
 export type StaffRow = {
   id: string;
   displayName: string;
   email: string;
-  systemRole: string;
+  systemRole: SystemRole;
   status: string;
   classesCount: number;
   primaryStudentsCount: number;
@@ -23,13 +24,11 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   if (!users) return [];
 
-  // Classes per teacher
   const { data: teaching } = await supabase
     .from("classes")
     .select("id, teacher_id")
     .eq("is_active", true);
 
-  // Primary students per teacher
   const { data: primaryS } = await supabase
     .from("students")
     .select("id, primary_teacher_id")
@@ -50,9 +49,48 @@ export async function getStaffList(): Promise<StaffRow[]> {
     id: u.id,
     displayName: u.display_name,
     email: u.email,
-    systemRole: u.system_role,
+    systemRole: u.system_role as SystemRole,
     status: u.status,
     classesCount: classCount.get(u.id) ?? 0,
     primaryStudentsCount: studentCount.get(u.id) ?? 0,
   }));
+}
+
+export type StaffDetail = {
+  id: string;
+  displayName: string;
+  email: string;
+  systemRole: SystemRole;
+  status: "active" | "inactive" | "pending";
+  hireDate: string | null;
+  jobTitle: string | null;
+  subjects: string[];
+  defaultClassroom: string | null;
+  memo: string | null;
+};
+
+export async function getStaffById(id: string): Promise<StaffDetail | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select(
+      "id, display_name, email, system_role, status, hire_date, job_title, subjects, default_classroom, memo",
+    )
+    .eq("id", id)
+    .single();
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    displayName: data.display_name,
+    email: data.email,
+    systemRole: data.system_role as SystemRole,
+    status: data.status as "active" | "inactive" | "pending",
+    hireDate: data.hire_date,
+    jobTitle: data.job_title,
+    subjects: Array.isArray(data.subjects) ? (data.subjects as string[]) : [],
+    defaultClassroom: data.default_classroom,
+    memo: data.memo,
+  };
 }

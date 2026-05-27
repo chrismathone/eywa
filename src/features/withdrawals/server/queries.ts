@@ -1,10 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import {
-  REASON_LABEL,
-  type WithdrawalMetadata,
-  type WithdrawalReason,
-} from "../types";
+import { REASON_LABEL, type WithdrawalMetadata } from "../types";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {

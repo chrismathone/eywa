@@ -123,6 +123,12 @@ export const users = pgTable(
     displayName: text("display_name").notNull(),
     systemRole: systemRoleEnum("system_role").notNull().default("viewer"),
     status: userStatusEnum("status").notNull().default("active"),
+    // 노무 규제·금융 민감도가 낮은 직원 메타데이터만 (휴가/급여/계좌는 제외)
+    hireDate: date("hire_date"),
+    jobTitle: text("job_title"),
+    subjects: text("subjects").array(),
+    defaultClassroom: text("default_classroom"),
+    memo: text("memo"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
