@@ -57,6 +57,13 @@
       "when": 1779858202169,
       "tag": "0007_true_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779860456259,
+      "tag": "0008_omniscient_supreme_intelligence",
+      "breakpoints": true
     }
   ]
 }

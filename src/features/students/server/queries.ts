@@ -58,10 +58,13 @@ export type StudentDetail = {
   status: string;
   parentName: string | null;
   parentPhone: string | null;
+  primaryTeacherId: string | null;
   primaryTeacherName: string | null;
+  secondaryTeacherId: string | null;
   secondaryTeacherName: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
+  notes: string | null;
   createdAt: string;
   aiCareSummary: string | null;
   aiCareFocus: CareFocus[] | null;
@@ -69,14 +72,37 @@ export type StudentDetail = {
   aiCareGeneratedAt: string | null;
 };
 
+export type TeacherOption = {
+  id: string;
+  displayName: string;
+  systemRole: string;
+};
+
+export async function getTeacherOptions(): Promise<TeacherOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name, system_role")
+    .in("system_role", ["teacher", "counselor", "manager", "admin", "master"])
+    .eq("status", "active")
+    .order("display_name", { ascending: true });
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    displayName: r.display_name,
+    systemRole: r.system_role,
+  }));
+}
+
 export async function getStudentById(id: string): Promise<StudentDetail | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("students")
     .select(
       `id, name, school, grade, status, student_code,
-       enrolled_at, withdrawn_at, created_at,
+       enrolled_at, withdrawn_at, created_at, notes,
        parent_name, parent_phone,
+       primary_teacher_id, secondary_teacher_id,
        ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at,
        teacher:primary_teacher_id ( display_name ),
        secondary:secondary_teacher_id ( display_name )`,
@@ -100,10 +126,13 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     school: data.school,
     grade: data.grade,
     status: data.status,
+    primaryTeacherId: data.primary_teacher_id,
     primaryTeacherName: teacher?.display_name ?? null,
+    secondaryTeacherId: data.secondary_teacher_id,
     secondaryTeacherName: secondary?.display_name ?? null,
     enrolledAt: data.enrolled_at,
     withdrawnAt: data.withdrawn_at,
+    notes: data.notes,
     parentName: data.parent_name,
     parentPhone: data.parent_phone,
     createdAt: data.created_at,

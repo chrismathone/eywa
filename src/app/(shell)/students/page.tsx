@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentsList } from "@/features/students/server/queries";
 
@@ -33,6 +34,12 @@ export default async function StudentsPage() {
       <PageHeader
         title="학생목록"
         description={`전체 ${students.length}명 · 재원 ${enrolled}명. 클릭하면 상세를 봅니다.`}
+        actions={
+          <Button render={<Link href="/students/new" />}>
+            <Plus className="size-4" />
+            학생 등록
+          </Button>
+        }
       />
 
       {students.length === 0 ? (

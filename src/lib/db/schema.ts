@@ -182,6 +182,7 @@ export const students = pgTable(
     }),
     enrolledAt: date("enrolled_at"),
     withdrawnAt: date("withdrawn_at"),
+    notes: text("notes"),
     aiCareSummary: text("ai_care_summary"),
     aiCareFocus: jsonb("ai_care_focus"),
     aiCareModelVersion: text("ai_care_model_version"),

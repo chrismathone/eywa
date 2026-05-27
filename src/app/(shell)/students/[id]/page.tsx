@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Pencil, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { formatCreatedAt } from "@/lib/utils";
 import {
@@ -95,9 +96,15 @@ export default async function StudentDetailPage({
           >
             {STATUS_LABEL[student.status] ?? student.status}
           </span>
-          {student.status === "enrolled" ? (
-            <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />
-          ) : null}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" render={<Link href={`/students/${student.id}/edit`} />}>
+              <Pencil className="size-3.5" />
+              수정
+            </Button>
+            {student.status === "enrolled" ? (
+              <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />
+            ) : null}
+          </div>
         </div>
       </header>
 
