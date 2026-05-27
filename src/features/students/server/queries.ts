@@ -10,11 +10,20 @@ export type StudentListRow = {
   primaryTeacherName: string | null;
   enrolledAt: string | null;
   parentPhone: string | null;
+  subjects: string[]; // 수강 중인 과목 unique list
 };
 
-export async function getStudentsList(options?: { status?: string }): Promise<StudentListRow[]> {
+export type StudentListFilters = {
+  status?: string; // "all" | "enrolled" | "consulted" | "on_hold" | "withdrawn"
+  subject?: string; // "all" | "math" | "english" | ...
+  q?: string; // 검색어 (이름/학교)
+};
+
+export async function getStudentsList(
+  options?: StudentListFilters,
+): Promise<StudentListRow[]> {
   const supabase = await createClient();
-  let q = supabase
+  let qb = supabase
     .from("students")
     .select(
       `id, name, school, grade, status, enrolled_at, parent_phone,
@@ -22,11 +31,40 @@ export async function getStudentsList(options?: { status?: string }): Promise<St
     )
     .order("grade", { ascending: true })
     .order("name", { ascending: true });
-  if (options?.status) q = q.eq("status", options.status);
-  const { data } = await q;
+  if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
+
+  // 검색: 이름 또는 학교 부분 매치
+  if (options?.q) {
+    const term = options.q.trim();
+    if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
+  }
+
+  const { data } = await qb;
   if (!data) return [];
 
-  return data.map((r) => {
+  // 학생별 수강 과목 unique (active enrollments)
+  const studentIds = data.map((r) => r.id);
+  const subjectsByStudent = new Map<string, Set<string>>();
+  if (studentIds.length > 0) {
+    const { data: ens } = await supabase
+      .from("enrollments")
+      .select("student_id, on_hold, end_date, class:class_id ( subject )")
+      .in("student_id", studentIds)
+      .is("end_date", null);
+
+    for (const e of ens ?? []) {
+      if (e.on_hold) continue;
+      const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
+        | { subject?: string }
+        | undefined;
+      if (!klass?.subject) continue;
+      const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
+      set.add(klass.subject);
+      subjectsByStudent.set(e.student_id, set);
+    }
+  }
+
+  let rows = data.map((r) => {
     const teacher = (Array.isArray(r.teacher) ? r.teacher[0] : r.teacher) as
       | { display_name?: string }
       | undefined;
@@ -39,8 +77,16 @@ export async function getStudentsList(options?: { status?: string }): Promise<St
       primaryTeacherName: teacher?.display_name ?? null,
       enrolledAt: r.enrolled_at,
       parentPhone: r.parent_phone,
-    };
+      subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+    } satisfies StudentListRow;
   });
+
+  // 과목 필터 (in-memory — subjects가 enrollments에서 옴)
+  if (options?.subject && options.subject !== "all") {
+    rows = rows.filter((r) => r.subjects.includes(options.subject!));
+  }
+
+  return rows;
 }
 
 export type CareFocus = {
