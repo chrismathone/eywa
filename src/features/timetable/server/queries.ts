@@ -77,6 +77,40 @@ export async function getWeeklySchedule(): Promise<ScheduleSlot[]> {
   return fetchSlots();
 }
 
+export type StudentLine = { name: string; grade: string | null; school: string | null };
+export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
+
+/**
+ * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는
+ * 학생 리스트 (이름·학년·학교) 데이터.
+ */
+export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithStudents[]> {
+  const slots = await fetchSlots();
+  if (slots.length === 0) return [];
+
+  const classIds = Array.from(new Set(slots.map((s) => s.classId)));
+  const supabase = await createClient();
+
+  const { data: rows } = await supabase
+    .from("enrollments")
+    .select("class_id, student:student_id ( name, grade, school )")
+    .in("class_id", classIds)
+    .is("end_date", null);
+
+  const byClass = new Map<string, StudentLine[]>();
+  for (const r of rows ?? []) {
+    const s = (Array.isArray(r.student) ? r.student[0] : r.student) as
+      | { name?: string; grade?: string | null; school?: string | null }
+      | undefined;
+    if (!s?.name) continue;
+    const list = byClass.get(r.class_id) ?? [];
+    list.push({ name: s.name, grade: s.grade ?? null, school: s.school ?? null });
+    byClass.set(r.class_id, list);
+  }
+
+  return slots.map((s) => ({ ...s, students: byClass.get(s.classId) ?? [] }));
+}
+
 const DOW_INDEX: Record<string, number> = {
   sun: 0,
   mon: 1,
