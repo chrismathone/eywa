@@ -43,6 +43,12 @@ export async function getStudentsList(options?: { status?: string }): Promise<St
   });
 }
 
+export type CareFocus = {
+  priority: "high" | "medium" | "low";
+  area: string;
+  recommendation: string;
+};
+
 export type StudentDetail = {
   id: string;
   name: string;
@@ -57,6 +63,10 @@ export type StudentDetail = {
   enrolledAt: string | null;
   withdrawnAt: string | null;
   createdAt: string;
+  aiCareSummary: string | null;
+  aiCareFocus: CareFocus[] | null;
+  aiCareModelVersion: string | null;
+  aiCareGeneratedAt: string | null;
 };
 
 export async function getStudentById(id: string): Promise<StudentDetail | null> {
@@ -67,6 +77,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
       `id, name, school, grade, status, student_code,
        enrolled_at, withdrawn_at, created_at,
        parent_name, parent_phone,
+       ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at,
        teacher:primary_teacher_id ( display_name ),
        secondary:secondary_teacher_id ( display_name )`,
     )
@@ -96,6 +107,12 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     parentName: data.parent_name,
     parentPhone: data.parent_phone,
     createdAt: data.created_at,
+    aiCareSummary: data.ai_care_summary,
+    aiCareFocus: Array.isArray(data.ai_care_focus)
+      ? (data.ai_care_focus as CareFocus[])
+      : null,
+    aiCareModelVersion: data.ai_care_model_version,
+    aiCareGeneratedAt: data.ai_care_generated_at,
   };
 }
 

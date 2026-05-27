@@ -43,6 +43,13 @@
       "when": 1779855202334,
       "tag": "0005_elite_psynapse",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779855610153,
+      "tag": "0006_flashy_misty_knight",
+      "breakpoints": true
     }
   ]
 }

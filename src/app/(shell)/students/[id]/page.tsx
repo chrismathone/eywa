@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getStudentAttendanceStats,
   getStudentById,
   getStudentEnrollments,
+  type CareFocus,
 } from "@/features/students/server/queries";
+import { RunCareAiButton } from "./run-care-ai-button";
 
 export const metadata = { title: "학생 상세 — eywa" };
 
@@ -24,6 +26,18 @@ const STATUS_COLOR: Record<string, string> = {
   consulted: "text-chart-1 bg-chart-1/10 border-chart-1/20",
   on_hold: "text-chart-3 bg-chart-3/10 border-chart-3/20",
   withdrawn: "text-muted-foreground bg-muted border-border",
+};
+
+const PRIORITY_COLOR: Record<CareFocus["priority"], string> = {
+  high: "text-chart-4 bg-chart-4/10 border-chart-4/20",
+  medium: "text-chart-3 bg-chart-3/10 border-chart-3/20",
+  low: "text-chart-1 bg-chart-1/10 border-chart-1/20",
+};
+
+const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
+  high: "높음",
+  medium: "보통",
+  low: "낮음",
 };
 
 const SUBJECT_LABEL: Record<string, string> = {
@@ -48,6 +62,8 @@ export default async function StudentDetailPage({
 
   if (!student) notFound();
 
+  const hasCareAi = student.aiCareSummary !== null;
+
   return (
     <div className="space-y-6">
       <Link
@@ -70,17 +86,75 @@ export default async function StudentDetailPage({
             ) : null}
           </div>
         </div>
-        <span
-          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium ${
-            STATUS_COLOR[student.status] ?? "bg-muted text-muted-foreground border-border"
-          }`}
-        >
-          {STATUS_LABEL[student.status] ?? student.status}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span
+            className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium ${
+              STATUS_COLOR[student.status] ?? "bg-muted text-muted-foreground border-border"
+            }`}
+          >
+            {STATUS_LABEL[student.status] ?? student.status}
+          </span>
+          {student.status === "enrolled" ? (
+            <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />
+          ) : null}
+        </div>
       </header>
 
+      {hasCareAi ? (
+        <section className="bg-card border-border space-y-4 rounded-lg border p-5">
+          <header className="flex items-baseline justify-between">
+            <div className="inline-flex items-center gap-2">
+              <Sparkles className="text-chart-4 size-4" />
+              <h2 className="text-foreground text-sm font-semibold">AI 케어 인사이트</h2>
+            </div>
+            <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
+              {student.aiCareGeneratedAt ? (
+                <span className="num">
+                  {new Date(student.aiCareGeneratedAt).toLocaleDateString("ko-KR")} 생성
+                </span>
+              ) : null}
+              {student.aiCareModelVersion ? (
+                <span className="num font-mono">{student.aiCareModelVersion}</span>
+              ) : null}
+            </div>
+          </header>
+
+          <div className="space-y-2">
+            <p className="eyebrow">종합 요약</p>
+            <p className="text-foreground text-sm leading-relaxed">{student.aiCareSummary}</p>
+          </div>
+
+          {student.aiCareFocus && student.aiCareFocus.length > 0 ? (
+            <div className="space-y-2">
+              <p className="eyebrow">주의 영역</p>
+              <ul className="space-y-2">
+                {student.aiCareFocus.map((f, i) => (
+                  <li
+                    key={i}
+                    className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-3 py-2.5"
+                  >
+                    <span
+                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                        PRIORITY_COLOR[f.priority]
+                      }`}
+                    >
+                      {PRIORITY_LABEL[f.priority]}
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-foreground text-sm font-medium">{f.area}</p>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        {f.recommendation}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Profile card */}
         <div className="bg-card border-border space-y-4 rounded-lg border p-5 lg:col-span-1">
           <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
@@ -93,7 +167,6 @@ export default async function StudentDetailPage({
           </dl>
         </div>
 
-        {/* Stats + enrollments */}
         <div className="space-y-6 lg:col-span-2">
           <section className="bg-card border-border rounded-lg border p-5">
             <header className="mb-4 flex items-baseline justify-between">
