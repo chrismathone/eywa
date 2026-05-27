@@ -50,6 +50,13 @@
       "when": 1779855610153,
       "tag": "0006_flashy_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779858202169,
+      "tag": "0007_true_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }

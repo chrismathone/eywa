@@ -1,6 +1,14 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
+export type MeetingProcessingStatus =
+  | "idle"
+  | "uploaded"
+  | "transcribing"
+  | "analyzing"
+  | "completed"
+  | "failed";
+
 export type MeetingRow = {
   id: string;
   title: string;
@@ -8,6 +16,8 @@ export type MeetingRow = {
   attendees: string[];
   authorName: string | null;
   excerpt: string;
+  processingStatus: MeetingProcessingStatus;
+  hasAudio: boolean;
 };
 
 export type MeetingActionItem = {
@@ -16,11 +26,35 @@ export type MeetingActionItem = {
   due?: string;
 };
 
+export type SpeakerUtterance = {
+  speaker: string;
+  text: string;
+  start: number;
+  end: number;
+};
+
+export type MeetingReportSection = {
+  meetingType: string;
+  summary: string;
+  agendaDiscussion: string;
+  decisions: string;
+  actionItems: string;
+  speakerSummary: string;
+  concerns: string;
+  nextSteps: string;
+};
+
 export type MeetingDetail = MeetingRow & {
   content: string;
+  transcription: string | null;
+  speakerLabels: SpeakerUtterance[] | null;
+  processingError: string | null;
+  audioPath: string | null;
+  audioDurationSec: number | null;
   aiSummary: string | null;
   aiActionItems: MeetingActionItem[] | null;
-  aiModelVersion: string | null;
+  aiReport: MeetingReportSection | null;
+  aiSpeakerRoles: Record<string, string> | null;
   aiGeneratedAt: string | null;
 };
 
@@ -34,7 +68,8 @@ export async function getMeetings(): Promise<MeetingRow[]> {
   const { data } = await supabase
     .from("meeting_minutes")
     .select(
-      `id, title, content, attendees, held_at,
+      `id, title, content, transcription, attendees, held_at,
+       processing_status, audio_path,
        author:author_id ( display_name )`,
     )
     .order("held_at", { ascending: false });
@@ -45,13 +80,16 @@ export async function getMeetings(): Promise<MeetingRow[]> {
     const author = (Array.isArray(r.author) ? r.author[0] : r.author) as
       | { display_name?: string }
       | undefined;
+    const body = r.transcription ?? r.content ?? "";
     return {
       id: r.id,
       title: r.title,
       heldAt: r.held_at,
       attendees: Array.isArray(r.attendees) ? (r.attendees as string[]) : [],
       authorName: author?.display_name ?? null,
-      excerpt: excerpt(r.content),
+      excerpt: excerpt(body),
+      processingStatus: r.processing_status as MeetingProcessingStatus,
+      hasAudio: !!r.audio_path,
     };
   });
 }
@@ -62,7 +100,9 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     .from("meeting_minutes")
     .select(
       `id, title, content, attendees, held_at,
-       ai_summary, ai_action_items, ai_model_version, ai_generated_at,
+       audio_path, audio_duration_sec, transcription, speaker_labels,
+       processing_status, processing_error,
+       ai_summary, ai_action_items, ai_report, ai_speaker_roles, ai_generated_at,
        author:author_id ( display_name )`,
     )
     .eq("id", id)
@@ -74,19 +114,37 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     | { display_name?: string }
     | undefined;
 
+  const body = data.transcription ?? data.content ?? "";
+
   return {
     id: data.id,
     title: data.title,
     heldAt: data.held_at,
     attendees: Array.isArray(data.attendees) ? (data.attendees as string[]) : [],
     authorName: author?.display_name ?? null,
-    excerpt: excerpt(data.content),
+    excerpt: excerpt(body),
     content: data.content,
+    transcription: data.transcription,
+    speakerLabels: Array.isArray(data.speaker_labels)
+      ? (data.speaker_labels as SpeakerUtterance[])
+      : null,
+    processingStatus: data.processing_status as MeetingProcessingStatus,
+    processingError: data.processing_error,
+    audioPath: data.audio_path,
+    audioDurationSec: data.audio_duration_sec,
+    hasAudio: !!data.audio_path,
     aiSummary: data.ai_summary,
     aiActionItems: Array.isArray(data.ai_action_items)
       ? (data.ai_action_items as MeetingActionItem[])
       : null,
-    aiModelVersion: data.ai_model_version,
+    aiReport:
+      data.ai_report && typeof data.ai_report === "object"
+        ? (data.ai_report as MeetingReportSection)
+        : null,
+    aiSpeakerRoles:
+      data.ai_speaker_roles && typeof data.ai_speaker_roles === "object"
+        ? (data.ai_speaker_roles as Record<string, string>)
+        : null,
     aiGeneratedAt: data.ai_generated_at,
   };
 }

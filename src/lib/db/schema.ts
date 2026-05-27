@@ -79,6 +79,18 @@ export const consultationOutcomeEnum = pgEnum("consultation_outcome", [
   "no_show", // 노쇼
 ]);
 
+// === meeting_minutes processing pipeline status ===
+// idle: text-only meeting (no audio)
+// uploaded → transcribing → analyzing → completed | failed
+export const meetingProcessingStatusEnum = pgEnum("meeting_processing_status", [
+  "idle",
+  "uploaded",
+  "transcribing",
+  "analyzing",
+  "completed",
+  "failed",
+]);
+
 // === tenants ===
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -333,6 +345,10 @@ export const studentConsultations = pgTable(
 );
 
 // === meeting_minutes (회의록) ===
+// Two flows:
+//   1. text-only: `content` is the meeting body, status='idle'
+//   2. audio: upload to Supabase Storage → AssemblyAI transcription → Claude analysis.
+//      `audio_path` set, `transcription` filled by webhook, `ai_report` filled after Claude.
 export const meetingMinutes = pgTable(
   "meeting_minutes",
   {
@@ -341,18 +357,35 @@ export const meetingMinutes = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    content: text("content").notNull(),
+    // Manual text content (legacy). Audio flow leaves this empty.
+    content: text("content").notNull().default(""),
     attendees: jsonb("attendees"),
     heldAt: timestamp("held_at", { withTimezone: true }).notNull(),
     authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    // Audio + transcription pipeline
+    audioPath: text("audio_path"),
+    audioDurationSec: integer("audio_duration_sec"),
+    audioSizeBytes: integer("audio_size_bytes"),
+    transcription: text("transcription"),
+    speakerLabels: jsonb("speaker_labels"),
+    processingStatus: meetingProcessingStatusEnum("processing_status").notNull().default("idle"),
+    processingError: text("processing_error"),
+    assemblyaiTranscriptId: text("assemblyai_transcript_id"),
+    // AI analysis — `aiReport` is the 8-section structured output, `aiSummary` kept for
+    // backward compatibility with the legacy text-only flow.
     aiSummary: text("ai_summary"),
     aiActionItems: jsonb("ai_action_items"),
+    aiReport: jsonb("ai_report"),
+    aiSpeakerRoles: jsonb("ai_speaker_roles"),
     aiModelVersion: text("ai_model_version"),
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("mm_tenant_held_idx").on(t.tenantId, t.heldAt)],
+  (t) => [
+    index("mm_tenant_held_idx").on(t.tenantId, t.heldAt),
+    index("mm_assemblyai_transcript_idx").on(t.assemblyaiTranscriptId),
+  ],
 );
 
 // === invoices (월별 청구서) ===
