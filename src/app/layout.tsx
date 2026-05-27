@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
-import { Geist_Mono } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
 import { AppProviders } from "@/lib/providers/app-providers";
 import { pretendard } from "./fonts";
 import "./globals.css";
 
-const geistMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "eywa — 인재원 학원관리",
-  description: "ijw-calander의 경량 재작성 버전. 12개 메뉴, Next.js + Supabase.",
+  description: "원장님이 가장 먼저 켜는 학원관리 프로그램.",
 };
 
 export default function RootLayout({
@@ -22,8 +24,7 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${pretendard.variable} ${geistMono.variable} h-full antialiased`}
-      suppressHydrationWarning
+      className={`${pretendard.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground min-h-full font-sans">
         <AppProviders>{children}</AppProviders>

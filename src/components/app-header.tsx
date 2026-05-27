@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { findNavItem } from "@/lib/navigation";
 
@@ -18,7 +17,6 @@ export function AppHeader({ email }: { email: string }) {
       <Separator orientation="vertical" className="h-4" />
       <h1 className="text-sm font-medium tracking-tight">{title}</h1>
       <div className="ml-auto flex items-center gap-1">
-        <ThemeToggle />
         <UserMenu email={email} />
       </div>
     </header>

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EYWA — 12개 화면 디자인</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; background: #0a0d0c; color: #fff; font-family: "Pretendard Variable", Pretendard, sans-serif; }
+  body { overflow: hidden; }
+  *, *::before, *::after { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="eywa-shared.jsx"></script>
+<script type="text/babel" src="screens-shell.jsx"></script>
+<script type="text/babel" src="screens-a.jsx"></script>
+<script type="text/babel" src="screens-b.jsx"></script>
+<script type="text/babel" src="screens-c.jsx"></script>
+
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  const W = 1440;
+
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection
+          id="home"
+          title="홈 · 수업"
+          subtitle="대시보드 · 시간표 · 출석부 · 수업목록"
+        >
+          <DCArtboard id="dashboard"   label="대시보드"   width={W} height={920}>
+            <ScreenDashboard />
+          </DCArtboard>
+          <DCArtboard id="timetable"   label="시간표"     width={W} height={920}>
+            <ScreenTimetable />
+          </DCArtboard>
+          <DCArtboard id="attendance"  label="출석부"     width={W} height={920}>
+            <ScreenAttendance />
+          </DCArtboard>
+          <DCArtboard id="classes"     label="수업목록"   width={W} height={920}>
+            <ScreenClasses />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection
+          id="students"
+          title="학생"
+          subtitle="학생목록 · 등록상담 · 학생상담 · 퇴원관리"
+        >
+          <DCArtboard id="students-list" label="학생목록"     width={W} height={920}>
+            <ScreenStudents />
+          </DCArtboard>
+          <DCArtboard id="enrollment"    label="등록상담 · AI"  width={W} height={920}>
+            <ScreenEnrollment />
+          </DCArtboard>
+          <DCArtboard id="consultation"  label="학생상담"      width={W} height={920}>
+            <ScreenConsultations />
+          </DCArtboard>
+          <DCArtboard id="withdrawal"    label="퇴원관리"      width={W} height={920}>
+            <ScreenWithdrawal />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection
+          id="ops"
+          title="운영 · 지원"
+          subtitle="직원관리 · 수납관리 · 회의록 · 도움말"
+        >
+          <DCArtboard id="staff"     label="직원관리"        width={W} height={920}>
+            <ScreenStaff />
+          </DCArtboard>
+          <DCArtboard id="billing"   label="수납관리"        width={W} height={920}>
+            <ScreenBilling />
+          </DCArtboard>
+          <DCArtboard id="meetings"  label="회의록 · AI"     width={W} height={920}>
+            <ScreenMeetings />
+          </DCArtboard>
+          <DCArtboard id="help"      label="도움말"          width={W} height={920}>
+            <ScreenHelp />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>
