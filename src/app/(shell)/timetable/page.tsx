@@ -1,6 +1,7 @@
 import { Calendar, MapPin } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getWeeklySchedule, type ScheduleSlot } from "@/features/timetable/server/queries";
 
 export const metadata = { title: "시간표 — eywa" };
@@ -33,6 +34,7 @@ function shortTime(t: string) {
 }
 
 export default async function TimetablePage() {
+  await requireAccess("timetable");
   const slots = await getWeeklySchedule();
 
   if (slots.length === 0) {

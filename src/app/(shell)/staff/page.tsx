@@ -1,6 +1,7 @@
 import { BadgeCheck } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getStaffList } from "@/features/staff/server/queries";
 
 export const metadata = { title: "직원관리 — eywa" };
@@ -32,6 +33,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function StaffPage() {
+  await requireAccess("staff");
   const staff = await getStaffList();
   const teachers = staff.filter((s) => s.systemRole === "teacher").length;
   const total = staff.length;

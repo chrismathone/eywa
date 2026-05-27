@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentsList } from "@/features/students/server/queries";
 
 export const metadata = { title: "학생목록 — eywa" };
@@ -23,6 +24,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default async function StudentsPage() {
+  await requireAccess("students");
   const students = await getStudentsList();
   const enrolled = students.filter((s) => s.status === "enrolled").length;
 

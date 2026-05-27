@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { requireAccess } from "@/lib/auth/require-access";
 import {
   getEnrollmentConsultationById,
   type AiAnalysisDetail,
@@ -26,6 +27,7 @@ export default async function EnrollmentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAccess("enrollment");
   const { id } = await params;
   const consult = await getEnrollmentConsultationById(id);
   if (!consult) notFound();

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Users } from "lucide-react";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getMeetingById } from "@/features/meetings/server/queries";
 
 export const metadata = { title: "회의록 상세 — eywa" };
@@ -25,6 +26,7 @@ export default async function MeetingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAccess("meetings");
   const { id } = await params;
   const meeting = await getMeetingById(id);
   if (!meeting) notFound();

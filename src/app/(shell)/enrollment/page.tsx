@@ -3,6 +3,7 @@ import { Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getEnrollmentConsultations } from "@/features/enrollment/server/queries";
 
 export const metadata = { title: "신입생 등록상담 — eywa" };
@@ -34,6 +35,7 @@ function daysSince(iso: string): number {
 }
 
 export default async function EnrollmentPage() {
+  await requireAccess("enrollment");
   const items = await getEnrollmentConsultations();
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
   const enrolled = items.filter((i) => i.outcome === "enrolled").length;

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { NewConsultationForm } from "./form";
 
 export const metadata = { title: "신규 등록상담 — eywa" };
 
-export default function NewEnrollmentPage() {
+export default async function NewEnrollmentPage() {
+  await requireAccess("enrollment");
   return (
     <div className="space-y-6">
       <Link

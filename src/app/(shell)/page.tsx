@@ -1,3 +1,4 @@
+import { requireAccess } from "@/lib/auth/require-access";
 import {
   getActiveConsultationsCount,
   getCurrentUserProfile,
@@ -19,6 +20,7 @@ import { TrendCard } from "./_components/trend-card";
 export const metadata = { title: "대시보드 — eywa" };
 
 export default async function DashboardPage() {
+  await requireAccess("dashboard");
   const [
     profile,
     enrolled,

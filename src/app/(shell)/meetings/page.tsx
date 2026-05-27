@@ -2,6 +2,7 @@ import Link from "next/link";
 import { NotebookPen, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getMeetings } from "@/features/meetings/server/queries";
 
 export const metadata = { title: "회의록 — eywa" };
@@ -17,6 +18,7 @@ function formatHeldAt(iso: string): string {
 }
 
 export default async function MeetingsPage() {
+  await requireAccess("meetings");
   const meetings = await getMeetings();
 
   return (

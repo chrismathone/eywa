@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MessagesSquare } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentConsultations } from "@/features/consultations/server/queries";
 
 export const metadata = { title: "학생상담 — eywa" };
@@ -16,6 +17,7 @@ function relativeTime(iso: string): string {
 }
 
 export default async function ConsultationsPage() {
+  await requireAccess("consultations");
   const items = await getStudentConsultations();
 
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request

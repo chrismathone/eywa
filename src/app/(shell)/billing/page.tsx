@@ -2,6 +2,7 @@ import { Wallet } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import {
   getBillingSummary,
   getInvoicesForPeriod,
@@ -37,6 +38,7 @@ function formatPeriod(period: string): string {
 }
 
 export default async function BillingPage() {
+  await requireAccess("billing");
   const [summary, rows] = await Promise.all([
     getBillingSummary(),
     getInvoicesForPeriod(),

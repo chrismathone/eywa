@@ -1,6 +1,7 @@
 import { BookOpen } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getClassesList } from "@/features/classes/server/queries";
 
 export const metadata = { title: "수업목록 — eywa" };
@@ -20,6 +21,7 @@ const SUBJECT_ACCENT: Record<string, string> = {
 };
 
 export default async function ClassesPage() {
+  await requireAccess("classes");
   const classes = await getClassesList();
   const active = classes.filter((c) => c.isActive).length;
   const totalSeats = classes.reduce((s, c) => s + c.studentCount, 0);

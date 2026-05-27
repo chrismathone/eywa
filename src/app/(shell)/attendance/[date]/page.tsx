@@ -1,6 +1,7 @@
 import { ClipboardCheck } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getAttendanceForDate, type AttendanceRow } from "@/features/attendance/server/queries";
 
 export const metadata = { title: "출석부 — eywa" };
@@ -37,6 +38,7 @@ export default async function AttendanceByDatePage({
 }: {
   params: Promise<{ date: string }>;
 }) {
+  await requireAccess("attendance");
   const { date } = await params;
   const records = await getAttendanceForDate(date);
 

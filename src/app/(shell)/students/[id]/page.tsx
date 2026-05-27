@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { requireAccess } from "@/lib/auth/require-access";
 import {
   getStudentAttendanceStats,
   getStudentById,
@@ -37,6 +38,7 @@ export default async function StudentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAccess("students");
   const { id } = await params;
   const [student, enrollments, attendance] = await Promise.all([
     getStudentById(id),

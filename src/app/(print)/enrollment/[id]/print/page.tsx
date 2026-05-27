@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getEnrollmentConsultationById } from "@/features/enrollment/server/queries";
 import { PrintActions } from "./print-actions";
 
@@ -16,6 +17,7 @@ export default async function EnrollmentPrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAccess("enrollment");
   const { id } = await params;
   const consult = await getEnrollmentConsultationById(id);
   if (!consult || !consult.aiAnalysis) notFound();

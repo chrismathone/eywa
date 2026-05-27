@@ -1,6 +1,7 @@
 import { UserMinus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { requireAccess } from "@/lib/auth/require-access";
 import { getWithdrawnStudents } from "@/features/withdrawals/server/queries";
 
 export const metadata = { title: "퇴원관리 — eywa" };
@@ -20,6 +21,7 @@ function daysSince(iso: string | null): number | null {
 }
 
 export default async function WithdrawalsPage() {
+  await requireAccess("withdrawals");
   const rows = await getWithdrawnStudents();
 
   // 사유별 그룹 (간단한 통계)
