@@ -2,8 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleStop, Loader2, Mic, Upload, X } from "lucide-react";
+import { CircleStop, History, Loader2, Mic, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  checkRecovery,
+  clearRecovery,
+  recoverRecording,
+  saveChunk,
+  startRecoverySession,
+  type RecordingMeta,
+} from "@/lib/recording-recovery";
 import { createClient } from "@/lib/supabase/client";
 import { startMeetingFromAudio } from "@/features/meetings/server/actions";
 
@@ -54,6 +62,18 @@ export function NewMeetingForm() {
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [uploadPct, setUploadPct] = useState(0);
+  const [recoveryMeta, setRecoveryMeta] = useState<RecordingMeta | null>(null);
+
+  // On mount: look for an unfinished recording in IndexedDB (browser crash recovery).
+  useEffect(() => {
+    let cancelled = false;
+    checkRecovery().then((meta) => {
+      if (!cancelled) setRecoveryMeta(meta);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -63,6 +83,20 @@ export function NewMeetingForm() {
       }
     };
   }, []);
+
+  async function handleRecover() {
+    const recovered = await recoverRecording();
+    if (recovered) {
+      setFile(recovered);
+      setRecoveryMeta(null);
+      await clearRecovery();
+    }
+  }
+
+  async function handleDiscardRecovery() {
+    await clearRecovery();
+    setRecoveryMeta(null);
+  }
 
   function pickFile(f: File | null) {
     setError(null);
@@ -90,8 +124,19 @@ export function NewMeetingForm() {
         : "audio/webm";
       const recorder = new MediaRecorder(stream, { mimeType: mime });
       recordingChunksRef.current = [];
+
+      // Initialize the IDB recovery session — chunks will persist as they arrive.
+      await startRecoverySession(mime, title || undefined).catch(() => {
+        // recovery is best-effort; swallow and continue recording
+      });
+
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) recordingChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) {
+          const idx = recordingChunksRef.current.length;
+          recordingChunksRef.current.push(e.data);
+          // Fire-and-forget — never block the recorder.
+          void saveChunk(idx, e.data);
+        }
       };
       recorder.onstop = () => {
         const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
@@ -190,7 +235,9 @@ export function NewMeetingForm() {
         setPhase("idle");
         return;
       }
-      // success — server redirected, but if we got here it didn't; force navigation
+      // success — clear IDB recovery chunks (analysis is now safely queued server-side)
+      await clearRecovery();
+      // server redirected, but if we got here it didn't; force navigation
       router.push("/meetings");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -203,9 +250,41 @@ export function NewMeetingForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Recovery banner — IndexedDB crash recovery */}
+      {recoveryMeta ? (
+        <div className="border-chart-3/40 bg-chart-3/5 flex items-start gap-3 rounded-md border px-4 py-3">
+          <History className="text-chart-3 mt-0.5 size-4 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-foreground text-sm font-medium">복구 가능한 녹음이 있습니다</p>
+            <p className="text-muted-foreground text-xs">
+              {new Date(recoveryMeta.startedAt).toLocaleString("ko-KR")}에 시작 ·{" "}
+              <span className="num">{recoveryMeta.chunkCount}</span>개 청크
+              {recoveryMeta.title ? ` · "${recoveryMeta.title}"` : ""}
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleRecover}
+                className="text-foreground hover:text-chart-3 text-xs font-medium"
+              >
+                복구하기
+              </button>
+              <span className="text-muted-foreground/40 text-xs">·</span>
+              <button
+                type="button"
+                onClick={handleDiscardRecovery}
+                className="text-muted-foreground hover:text-foreground text-xs"
+              >
+                폐기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Title */}
       <div className="space-y-1.5">
-        <label htmlFor="title" className="text-foreground text-sm font-medium">
+        <label htmlFor="title" className="text-foreground block text-sm font-medium">
           회의 제목 *
         </label>
         <input
@@ -221,7 +300,7 @@ export function NewMeetingForm() {
 
       {/* Attendees */}
       <div className="space-y-1.5">
-        <label htmlFor="attendees" className="text-foreground text-sm font-medium">
+        <label htmlFor="attendees" className="text-foreground block text-sm font-medium">
           참석자
         </label>
         <input
@@ -237,7 +316,7 @@ export function NewMeetingForm() {
 
       {/* Held at */}
       <div className="space-y-1.5">
-        <label htmlFor="heldAt" className="text-foreground text-sm font-medium">
+        <label htmlFor="heldAt" className="text-foreground block text-sm font-medium">
           회의 일시
         </label>
         <input
@@ -246,13 +325,13 @@ export function NewMeetingForm() {
           value={heldAt}
           onChange={(e) => setHeldAt(e.target.value)}
           disabled={busy}
-          className="border-input bg-background w-fit rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          className="border-input bg-background w-72 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
 
       {/* Audio source */}
       <div className="space-y-2">
-        <label className="text-foreground text-sm font-medium">음성</label>
+        <label className="text-foreground block text-sm font-medium">음성</label>
 
         {file ? (
           <div className="border-border bg-muted/30 flex items-center justify-between rounded-md border px-3 py-2.5">
@@ -277,7 +356,7 @@ export function NewMeetingForm() {
                 <span className="bg-chart-4 absolute inset-0 animate-ping rounded-full opacity-60" />
                 <span className="bg-chart-4 relative inline-flex size-2.5 rounded-full" />
               </span>
-              <span className="text-foreground text-sm font-medium">녹음 중</span>
+              <span className="text-foreground block text-sm font-medium">녹음 중</span>
               <span className="text-muted-foreground num text-sm">{formatSeconds(recordSeconds)}</span>
             </div>
             <button
@@ -298,7 +377,7 @@ export function NewMeetingForm() {
               className="border-border hover:border-foreground/40 hover:bg-accent/30 flex flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition"
             >
               <Upload className="text-muted-foreground size-5" />
-              <span className="text-foreground text-sm font-medium">파일 업로드</span>
+              <span className="text-foreground block text-sm font-medium">파일 업로드</span>
               <span className="text-muted-foreground text-[11px]">MP3/M4A/WAV · 50MB</span>
             </button>
             <button
@@ -308,7 +387,7 @@ export function NewMeetingForm() {
               className="border-border hover:border-foreground/40 hover:bg-accent/30 flex flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition"
             >
               <Mic className="text-muted-foreground size-5" />
-              <span className="text-foreground text-sm font-medium">바로 녹음</span>
+              <span className="text-foreground block text-sm font-medium">바로 녹음</span>
               <span className="text-muted-foreground text-[11px]">브라우저 마이크 사용</span>
             </button>
           </div>
