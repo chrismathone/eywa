@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CheckSquare, Sparkles, Users } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
+import { formatCreatedAt } from "@/lib/utils";
 import {
   getMeetingById,
   type MeetingActionItem,
@@ -81,7 +82,7 @@ export default async function MeetingDetailPage({
             </div>
             {meeting.aiGeneratedAt ? (
               <span className="text-muted-foreground num text-[11px]">
-                {new Date(meeting.aiGeneratedAt).toLocaleDateString("ko-KR")} 생성 · 갱신 버튼 누르기 전까지 보존됨
+                {formatCreatedAt(meeting.aiGeneratedAt)}
               </span>
             ) : null}
           </header>

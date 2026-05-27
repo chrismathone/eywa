@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
+import { formatCreatedAt } from "@/lib/utils";
 import {
   getStudentAttendanceStats,
   getStudentById,
@@ -172,7 +173,7 @@ export default async function StudentDetailPage({
             </div>
             {student.aiCareGeneratedAt ? (
               <span className="text-muted-foreground num text-[11px]">
-                {new Date(student.aiCareGeneratedAt).toLocaleDateString("ko-KR")} 생성 · 갱신 버튼 누르기 전까지 보존됨
+                {formatCreatedAt(student.aiCareGeneratedAt)}
               </span>
             ) : null}
           </header>

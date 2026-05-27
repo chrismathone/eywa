@@ -4,6 +4,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { formatCreatedAt } from "@/lib/utils";
 import {
   getEnrollmentConsultationById,
   type AiAnalysisDetail,
@@ -161,7 +162,7 @@ function AiAnalysisPanel({
             <h3 className="text-foreground mt-1 text-base font-semibold">진단 요약</h3>
           </div>
           <span className="text-muted-foreground num text-[10px]">
-            {new Date(analysis.generatedAt).toLocaleDateString("ko-KR")} 생성 · 갱신 전까지 보존됨
+            {formatCreatedAt(analysis.generatedAt)}
           </span>
         </header>
         <p className="text-foreground mt-3 text-sm leading-relaxed">{diagnosis.summary}</p>
