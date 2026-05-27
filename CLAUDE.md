@@ -95,31 +95,101 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 ---
 
-## 진행 상황 (2026-05-27 기준)
+## 진행 상황
 
-**12개 메뉴 중 11개가 실데이터** — 도움말만 정적 placeholder.
+**12개 메뉴 모두 실데이터 + ijw 운영 패리티 + 랜딩 페이지 8섹션 완성.**
+디자인 시안 (Daylight 시안: forest green + 라이트 톤) 전면 적용.
 
-| 메뉴 | 데이터 소스 | 핵심 위젯 |
+### 라우트 구조
+- `/` = **랜딩 페이지 8섹션** (Hero·Flow·LogoWall·Manifesto·Testimonials·Pricing·CTA·Footer)
+- `/dashboard` = 대시보드 (예전 `/`에서 이동)
+- `/login` = 로그인. 성공 시 `/dashboard` redirect
+- `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
+- `(shell)/` = 인증된 12개 메뉴 (사이드바 232px + Topbar 64px)
+- `(print)/enrollment/[id]/print/` = A4 인쇄
+
+### 12개 메뉴 — 핵심 위젯 (ijw 패리티 적용 후)
+
+| 메뉴 | 데이터 | 핵심 위젯 |
 |---|---|---|
-| 대시보드 | `students` · `attendance_records` · `announcements` · `class_schedules` · `invoices` | KPI 4 (재원생 / 출석률 / 수납률 / 상담 placeholder) + 공지 3건 + 오늘의 일정 + 7일 추세 |
-| 시간표 | `class_schedules` × `classes` × `users` × `classrooms` | 월~토 6컬럼 그리드, 과목 색상 |
-| 출석부 | `attendance_records` | 날짜별 반 그룹 + status badge + 요약 카드 |
-| 수업목록 | `classes` + 활성 enrollment count | 8개 카드 |
-| 학생목록 | `students` + `enrollments` + `attendance_records` 30일 집계 | 30명 테이블 + 상세 (수강 반 + 출결 통계) |
-| 등록상담 | `enrollment_consultations` + `consultation_ai_analysis` | 4컬럼 칸반 + 신규 폼 + AI 실행 버튼 + A4 인쇄 |
-| 학생상담 | `student_consultations` | 카드 list + follow-up |
-| 퇴원관리 | `students.status='withdrawn'` + 직전 enrollment | 사유 통계 카드 + 테이블 |
-| 직원관리 | `users` + 활성 classes/students 카운트 | 역할 badge + 담당 반/학생 |
-| 수납관리 | `invoices` | 요약 4카드 + 청구서 테이블 (KRW) |
-| 회의록 | `meeting_minutes` | 카드 list + 상세 (whitespace-pre-wrap 본문) |
-| 도움말 | (정적 placeholder) | — |
+| 대시보드 (`/dashboard`) | dashboard 9개 쿼리 | 김수진 인사말 + KPI 4 + Timeline(1.55fr) + Announcements(1fr) + 7일 추세 |
+| 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **기본뷰(강사×교시) / 통합뷰(요일×교시) 토글** + 과목 chip + 학생 명단 |
+| 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
+| 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
+| 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill |
+| 등록상담 (`/enrollment`) | `enrollment_consultations` + AI | **AI 배너 (forest gradient + sparkle)** + 4열 칸반 + 월/상담사 chip + 대시보드 (recharts) |
+| 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
+| 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
+| 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + Initial 8px |
+| 수납관리 (`/billing`) | `invoices` | Stat 5 (할인 포함) + **월 ◀▶ + 검색 + 컬럼 정렬 ▼** + 할인/메모 컬럼 + 인라인 dialog + 일괄 처리 + 기한 경과 |
+| 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
+| 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 단축키 + 1:1 |
 
 ### 인증 / RLS
 
 - 두 master 계정 (`chrismathone@gmail.com`, `st2000423@gmail.com`)이 `ijw-demo` 테넌트에 sync됨
+- master `chrismathone`의 `display_name = "김수진"`, `job_title = "원장"`, `hire_date = 1998-03-15` (시안 페르소나)
 - `st2000423`은 teacher role로 변경되어 사이드바 권한 매트릭스 시뮬레이션 가능
 - 권한 매트릭스는 `lib/permissions.ts`의 `canAccess(role, menuKey)` 헬퍼. AppSidebar에서 필터링, 빈 그룹 자동 숨김
 - 실제 데이터 보안은 RLS (`auth_tenant_id()` 함수 + tenant_isolation 정책)에서 강제
+
+---
+
+## 디자인 시스템 (Daylight 시안 적용)
+
+`data/design_handoff_eywa/`의 픽셀 시안 → eywa 코드 매핑 완료. **라이트 전용**, 다크모드 제거.
+
+### 컬러 토큰 (`src/app/globals.css`)
+| 토큰 | hex | 용도 |
+|---|---|---|
+| `--background` | `#fbf9f3` | 페이지 배경 (따뜻한 아이보리) |
+| `--bg-soft` | `#f1ede2` | 섹션 구분 / 사이드바 배경 |
+| `--card` | `#ffffff` | 카드 표면 |
+| `--foreground` / `--ink` | `#1a1f1c` / `#0d1110` | 본문 / 다크 강조 |
+| `--text-dim` / `--text-faint` | `#5a635f` / `#9aa39d` | 보조 / 캡션 |
+| `--primary` | `#1a5f3c` | **포레스트 그린** — CTA, 활성 메뉴, 출석/완납 |
+| `--gold` | `#b8893a` | 강조 · 베타 배지 · AI 라벨 (POWERED BY CLAUDE) |
+| `--blue` | `#1f6ba8` | 정보 · 학생 안정 · 영어 과목 |
+| `--rose` | `#c44d6d` | 상담 · 학부모 · 국어 과목 |
+| `--amber` | `#d68f1a` | 지각 · 부분 납부 · 경고 |
+| `--danger` | `#d04848` | 결석 · 미수 · 긴급 |
+| `--purple` | `#7a4ba8` | 회계 · 과학 과목 |
+
+차트 슬롯 재매핑: chart-1(blue) · chart-2(primary) · chart-3(amber) · chart-4(danger) · chart-5(rose).
+
+### 라운드 (ijw 운영 톤에 맞춰 시안에서 대폭 축소)
+| 토큰 | 시안 | 적용값 |
+|---|---|---|
+| `--radius-xl` (카드) | 16px | **6px** |
+| `--radius-pill` | 999px | **4px** (사각 batch) |
+| `--radius-2xl` | 20px | 8px |
+| `--radius-3xl` | 24px | 10px |
+
+### 타이포
+- **Pretendard Variable** (self-host) + **JetBrains Mono** (메타·숫자·키칩)
+- 헬퍼 클래스: `.display-xl 96px / .display-md 56px / .h1-large 32px / .h2 24px / .h3 19px / .body / .body-sm / .caption / .micro (mono 11px 700 uppercase) / .tabular (숫자 강조)`
+
+### Atoms (`src/components/atoms/`)
+- **`Initial`** — 8px radius 정사각 (color 10% tint + 이니셜). **동그란 프사 절대 금지**.
+- **`Pill`** — mono 11px uppercase, soft/solid + color (primary/gold/blue/rose/amber/danger/purple/neutral)
+- **`SectionTitle`** — 14px 700 + action slot
+
+### Botanical 아이콘 (22개)
+- `src/components/icons/eywa-icons.tsx` — `<EyIcon name="tree" size={18} />` 단일 컴포넌트
+- 이름: tree/leaf/pulse/branch/seed/sprout/wave/falling/roots/pollen/rings/spore/search/bell/arrowUp/arrowDown/arrowRight/play/check/plus/dot/sparkle
+- 메뉴 매핑: `MENU_ICON[menuKey]` (대시보드=tree, 시간표=leaf, 출석부=pulse, 학생=seed, 등록상담=sprout, ...)
+- AI 강조는 모든 곳에서 `sparkle + gold-soft` 일관
+
+### AppShell
+- **Sidebar 232px 고정** (bgSoft 배경, shadcn collapsible 제거)
+- 5그룹: 홈 / 수업 / 학생 / 운영 / 지원 + 01~05 인덱스 (mono uppercase)
+- 활성 메뉴: primary bg + white text + shadow-primary-glow
+- 푸터: `김수진 / 원장 · chrismathone@gmail.com`
+- **Topbar 64px**: breadcrumb (mono 11px primary) + 19px 800 페이지 제목 + 검색바 280px + 알림 + 사용자
+
+### shadcn base-nova (Base UI) 유지 사항
+- `render` prop (asChild 아님), `TooltipProvider delay` (delayDuration 아님)
+- 일부 atom 함수형 컴포넌트 신규 작성, 나머지 shadcn 그대로 사용
 
 ---
 
@@ -237,6 +307,32 @@ Chrome MCP로 직접 production을 봐가며 조정한 것들. **자동 fix 후 
 ### 18. Server Component의 cookies() / RSC vs Server Action
 Next.js 16의 `cookies()`는 async (`await cookies()`). Server Action에서는 set 가능하지만 Server Component에서는 set 불가. 우리 `lib/supabase/server.ts`의 `setAll`은 try/catch로 swallow (Server Component에서는 무시, Server Action에서는 실제 적용). 이 패턴이 일반적이지만 위 (10) 버그처럼 일부 환경에서 round-trip 깨질 수 있음.
 
+### 19. 시안 디자인 vs 실 운영 도구 갭
+시안(Daylight)이 단순 주간 일정 그리드를 가정하는데, 실제 ijw 운영 화면은 강사 × 학생 × 월 매트릭스, 마스터-디테일, 다중 chip 필터 등 정보 밀도가 훨씬 높음.
+
+**해결**: 시안 디자인 토큰만 차용하고, 화면 구조는 ijw 운영 패턴 채택. 시간표 = 강사/요일/교시 + 학생 명단, 출석부 = 학생 × 30일 매트릭스, 학생목록 = 검색 + 과목/상태 chip, 수업관리 = 테이블 + 다중 필터, 수납 = 검색 + 월 selector + 컬럼 정렬 ▼.
+
+### 20. 라운드 디자인 톤 조정
+시안의 16px 카드 / 999px pill이 운영 도구로는 과해 보임. **globals.css 한 곳에서 토큰 일괄 축소** (`--radius-xl 16→6`, `--radius-pill 999→4`) + raw 픽셀 radius 7개 파일 (rounded-[7px] 등) 일괄 변경. ijw 직선 위주 톤에 가깝게.
+
+### 21. (marketing) 라우트 그룹과 `/` 경로 충돌
+랜딩을 `/`로 잡으려면 기존 `(shell)/page.tsx` (대시보드)와 충돌. Next.js 라우트 그룹은 URL에 영향 없으므로 같은 path 잡으면 conflict.
+
+**해결**: `(shell)/page.tsx` → `(shell)/dashboard/page.tsx`로 이동. `(marketing)/page.tsx`가 `/` 차지. proxy.ts에서 `PUBLIC_PATHS = new Set(["/"])`로 비로그인 통과. 로그인 후 navigation은 `/dashboard`로.
+
+### 22. invoices delete 순서 (시드 재실행)
+seed.ts wipe 단계에서 students를 invoices 삭제 전에 지우면 FK 위반. 순서: attendance → invoices → enrollments → student_consultations → enrollment_consultations → students → class_schedules → classes → classrooms → announcements → meeting_minutes → users.
+
+### 23. dev 서버 background 출력 stdout flush 안 됨
+PowerShell에서 `pnpm dev`를 background로 띄우고 turbopack의 컴파일 로그를 보려고 .output 파일 read 했을 때, 이미 ready 후 새 GET 요청 로그가 즉시 안 보임. Bash run_in_background는 자식 프로세스 stdout buffer가 line buffered되지 않을 수 있음.
+
+**우회**: 새 GET 직접 curl로 → 상태코드 확인. 또는 dev 서버 logical 통신 (Chrome MCP read_console_messages)으로.
+
+### 24. 시간표 컬럼 폭 (강사 × 다중 요일)
+ijw 스타일 기본뷰는 강사 컬럼 안에 가르치는 요일만 sub-column으로 표시. 강사 수 × 평균 2~3요일 → 가로 스크롤 필수.
+
+**해결**: 좌측 4개 컬럼 (교시/이름/학년/학교) sticky `left: 0/40px` 고정. 헤더도 sticky `top: 0`. 컬럼 폭 `min-width: 180px` 부여.
+
 ---
 
 ## 마이그레이션 & 시드 흐름
@@ -300,8 +396,11 @@ production 반응속도가 느림. 의심 가는 병목:
 
 ### 기능
 
-1. **Hero 한글 호칭** — `users.display_name`을 한글로 바꾸는 UI (지금은 email prefix `chrismathone`)
-2. **pgTAP RLS 테스트** — 두 테넌트 격리 자동 검증
-3. **AI 분석 history 보존** — 현재는 UPDATE라 마지막 분석만 남음. 별도 테이블에 INSERT-only로 누적 + history viewer (옵션)
-4. **Gemini Flash 통합** — fast-tier 작업이 생기면 비용 절감
-5. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
+1. ✅ **Hero 한글 호칭** — chrismathone → 김수진 원장 (seed에서 display_name 업데이트)
+2. ✅ **ijw 운영 패리티** — 시간표 매트릭스 / 출석부 30일 그리드 / 학생·수업·수납 검색·필터 / 4개 메뉴 chip 추가
+3. ✅ **랜딩 페이지 8섹션** — Hero/Flow/LogoWall/Manifesto/Testimonials/Pricing/CTA/Footer
+4. **pgTAP RLS 테스트** — 두 테넌트 격리 자동 검증
+5. **AI 분석 history 보존** — 현재는 UPDATE라 마지막 분석만 남음. 별도 테이블에 INSERT-only로 누적 + history viewer (옵션)
+6. **Gemini Flash 통합** — fast-tier 작업이 생기면 비용 절감
+7. **시드 확장** — 학생 30→90~248명 (페이지네이션·검색 가치 명확화). Phase 7에서 시드 구조만 잡고 데이터는 그대로 둠
+8. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
