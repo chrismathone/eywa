@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { CLAUDE_MODEL, getAnthropic } from "@/lib/ai/anthropic";
+import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
 import { createClient } from "@/lib/supabase/server";
 
 type CareFocus = {
@@ -99,7 +99,7 @@ export async function runStudentCareAnalysis(
   try {
     const client = getAnthropic("consultations");
     const response = await client.messages.create({
-      model: CLAUDE_MODEL,
+      model: CLAUDE_MODELS.balanced,
       max_tokens: 2048,
       messages: [
         {
@@ -143,7 +143,7 @@ export async function runStudentCareAnalysis(
     return { error: `AI 호출 실패: ${msg}` };
   }
 
-  const modelVersion = `${CLAUDE_MODEL}-${new Date().toISOString().slice(0, 10)}`;
+  const modelVersion = `${CLAUDE_MODELS.balanced}-${new Date().toISOString().slice(0, 10)}`;
 
   const { error } = await supabase
     .from("students")

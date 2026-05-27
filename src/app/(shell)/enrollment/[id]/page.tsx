@@ -160,7 +160,9 @@ function AiAnalysisPanel({
             <p className="eyebrow">AI 분석 결과</p>
             <h3 className="text-foreground mt-1 text-base font-semibold">진단 요약</h3>
           </div>
-          <span className="text-muted-foreground num text-[10px]">{analysis.modelVersion}</span>
+          <span className="text-muted-foreground num text-[10px]">
+            {new Date(analysis.generatedAt).toLocaleDateString("ko-KR")} 생성 · 갱신 전까지 보존됨
+          </span>
         </header>
         <p className="text-foreground mt-3 text-sm leading-relaxed">{diagnosis.summary}</p>
         <p className="text-muted-foreground mt-3 text-xs">

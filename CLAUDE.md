@@ -16,11 +16,31 @@
 
 ## 작업 원칙
 
+- **반응속도(UI/UX)가 1순위**. 학원장/강사는 매일 수십 번 이 화면을 본다. 느리면 끝. 무거운 작업(특히 AI 호출, 큰 쿼리)은 가시적 progressive 렌더링 또는 백그라운드로 빼고, 보이는 데이터는 가능한 한 캐시·streaming·partial 렌더링으로 즉시 보여줄 것.
 - **한 파일 200줄, 한 컴포넌트 props 10개 이하** — 기존 코드는 3,113줄 단일 컴포넌트, props 80개로 무너졌습니다.
 - **Server Component 우선**. 클라이언트 컴포넌트는 상호작용이 필요할 때만.
 - **모든 DB 테이블에 `tenant_id` + RLS**. 멀티테넌트 누수는 한 정책 빠지면 전사 노출 — pgTAP 테스트로 강제.
 - **출석/급여/수강료 등 계산 함수**는 순수 함수로 분리해서 Vitest 단위테스트 강제(coverage 게이트 70%+).
-- **AI 호출은 캐싱 + 명시적 트리거**: `consultation_ai_analysis(consultation_id, model_version)` UNIQUE. 재분석은 명시 버튼이 있을 때만.
+- **AI 호출은 캐싱 + 명시적 트리거**: 재분석은 명시 버튼이 있을 때만. 페이지 로드만으로 절대 새 호출 안 함. 마지막 결과는 DB에 보존되며, "갱신" 버튼을 다시 누르기 전까지 그대로 표시.
+- **UI에 model 이름 노출 금지**. "claude-opus-4-7-2026-05-27" 같은 문자열은 학원장 입장에서 노이즈. 생성 시점만 표시.
+
+## AI 모델 정책
+
+`src/lib/ai/anthropic.ts`의 `CLAUDE_MODELS` 객체에서 tier 선택:
+
+| Tier | 모델 | 용도 |
+|---|---|---|
+| `fast` | `claude-haiku-4-5` | 짧은 분류, 태깅, 간단 요약. 가장 빠르고 저렴 — 가능하면 이걸로. |
+| `balanced` | `claude-sonnet-4-6` | **현재 모든 AI 호출의 기본값**. 회의록 요약, 학생 케어, 등록상담 진단 등. |
+| `reasoning` | `claude-opus-4-7` | **금지** (사용자가 명시적으로 요청한 경우만). UX 비용이 큼. |
+
+대안:
+- **Gemini 2.5 Flash** (`GEMINI_API_KEY` 등록됨): Haiku와 같은 fast tier 후보. 더 저렴할 수 있어 분류·태깅성 작업에 평가 가치 있음. 코드 통합은 미구현.
+
+키 분리 (사용량 추적):
+- `ANTHROPIC_API_KEY` → 등록상담(/enrollment) + 회의록(/meetings)
+- `ANTHROPIC_API_KEY_CONSULTATIONS` → 학생 케어 인사이트(/students/[id])
+- `GEMINI_API_KEY` → 향후 fast-tier 작업용 (현재 미사용)
 
 ---
 
@@ -257,10 +277,31 @@ fetch(URL + '/auth/v1/admin/users/fcf735fa-edf7-4095-8fa6-724285a018ed', {
 
 ## 남은 작업
 
-1. **도움말** 정적 콘텐츠 — 12개 메뉴 가이드 + 단축키 + FAQ
-2. **ANTHROPIC_API_KEY 추가** — 신규 등록상담에서 stub 대신 실제 Claude 호출
-3. **Hero 한글 호칭** — `users.display_name`을 한글로 바꾸는 UI (지금은 email prefix `chrismathone`)
-4. **진행 중 상담 KPI 실데이터** — `enrollment_consultations.outcome IN ('pending','scheduled','consulted','ai_done')` 카운트하면 끝
-5. **권한 서버측 강제** — 사이드바는 숨기지만 URL 직접 입력은 통과. 페이지 server component에서 `canAccess()` 게이트 추가
-6. **pgTAP RLS 테스트** — 두 테넌트 격리 자동 검증
-7. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
+### 성능 (최우선)
+
+production 반응속도가 느림. 의심 가는 병목:
+
+1. **Vercel 함수 cold start** — Serverless 함수가 cold일 때 첫 응답이 1-3초. 미들웨어 + RSC가 매번 실행.
+   - 대응 후보: 일부 라우트를 `export const dynamic = 'force-dynamic'` 대신 ISR/static로 (가능한 곳)
+   - 또는 Vercel Edge runtime (단 `@supabase/ssr` cookies 이슈 재발 가능 — 확인 필요)
+
+2. **Supabase pooler latency** — 서울 region이지만 매 함수 호출마다 새 connection. `postgres-js` connection caching이 함수 인스턴스 안에서만 가능.
+   - 대응 후보: Drizzle을 쓰는 server actions은 connection 재사용. supabase JS도 cache.
+
+3. **대시보드 9개 Promise.all** — getCurrentUser + 9개 쿼리 = 10 round-trips.
+   - 대응 후보: 단일 RPC 함수로 합치기 (서버 측에서 한 번에) 또는 PostgREST의 cte 기능
+   - 또는 Suspense streaming — 위젯별로 비동기 렌더링하여 빠른 위젯 먼저 노출
+
+4. **(shell)/layout에서 getCurrentUser() 호출 + dashboard에서 또 호출** — N=2번 같은 쿼리. React `cache()`로 dedupe 가능.
+
+5. **Pretendard CDN 첫 로드** — variable font는 250KB. `next/font/local`로 self-host하면 layout shift 줄고 CDN round-trip 제거.
+
+6. **AI 호출 자체는 느림** (Claude 응답 2-10초). 단 명시적 버튼이라 사용자 기대치 OK. 개선이라면 Suspense + streaming response.
+
+### 기능
+
+1. **Hero 한글 호칭** — `users.display_name`을 한글로 바꾸는 UI (지금은 email prefix `chrismathone`)
+2. **pgTAP RLS 테스트** — 두 테넌트 격리 자동 검증
+3. **AI 분석 history 보존** — 현재는 UPDATE라 마지막 분석만 남음. 별도 테이블에 INSERT-only로 누적 + history viewer (옵션)
+4. **Gemini Flash 통합** — fast-tier 작업이 생기면 비용 절감
+5. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시

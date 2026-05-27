@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { CLAUDE_MODEL, getAnthropic } from "@/lib/ai/anthropic";
+import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
 
 const createSchema = z.object({
   prospectName: z.string().min(1, "학생 이름을 입력해주세요"),
@@ -137,7 +137,7 @@ export async function runAiAnalysis(
   try {
     const client = getAnthropic();
     const response = await client.messages.create({
-      model: CLAUDE_MODEL,
+      model: CLAUDE_MODELS.balanced,
       max_tokens: 2048,
       messages: [
         {
@@ -195,7 +195,7 @@ export async function runAiAnalysis(
     recommendedClasses: matchingClasses.slice(0, 2).map((cl) => cl.class_name),
   };
 
-  const modelVersion = `${CLAUDE_MODEL}-${new Date().toISOString().slice(0, 10)}`;
+  const modelVersion = `${CLAUDE_MODELS.balanced}-${new Date().toISOString().slice(0, 10)}`;
 
   const { error: aiError } = await supabase.from("consultation_ai_analysis").upsert(
     {

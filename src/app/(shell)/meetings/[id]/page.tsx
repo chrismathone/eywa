@@ -66,6 +66,12 @@ export default async function MeetingDetailPage({
         <RunMeetingAiButton meetingId={meeting.id} hasExisting={hasAi} />
       </header>
 
+      <article className="bg-card border-border rounded-lg border p-6">
+        <pre className="text-foreground font-sans text-sm whitespace-pre-wrap leading-relaxed">
+          {meeting.content}
+        </pre>
+      </article>
+
       {hasAi ? (
         <section className="bg-card border-border space-y-5 rounded-lg border p-5">
           <header className="flex items-baseline justify-between">
@@ -73,9 +79,9 @@ export default async function MeetingDetailPage({
               <Sparkles className="text-chart-4 size-4" />
               <h2 className="text-foreground text-sm font-semibold">AI 분석</h2>
             </div>
-            {meeting.aiModelVersion ? (
-              <span className="text-muted-foreground num font-mono text-[10px]">
-                {meeting.aiModelVersion}
+            {meeting.aiGeneratedAt ? (
+              <span className="text-muted-foreground num text-[11px]">
+                {new Date(meeting.aiGeneratedAt).toLocaleDateString("ko-KR")} 생성 · 갱신 버튼 누르기 전까지 보존됨
               </span>
             ) : null}
           </header>
@@ -116,12 +122,6 @@ export default async function MeetingDetailPage({
           ) : null}
         </section>
       ) : null}
-
-      <article className="bg-card border-border rounded-lg border p-6">
-        <pre className="text-foreground font-sans text-sm whitespace-pre-wrap leading-relaxed">
-          {meeting.content}
-        </pre>
-      </article>
     </div>
   );
 }

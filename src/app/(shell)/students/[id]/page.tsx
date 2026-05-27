@@ -100,60 +100,6 @@ export default async function StudentDetailPage({
         </div>
       </header>
 
-      {hasCareAi ? (
-        <section className="bg-card border-border space-y-4 rounded-lg border p-5">
-          <header className="flex items-baseline justify-between">
-            <div className="inline-flex items-center gap-2">
-              <Sparkles className="text-chart-4 size-4" />
-              <h2 className="text-foreground text-sm font-semibold">AI 케어 인사이트</h2>
-            </div>
-            <div className="text-muted-foreground flex items-center gap-3 text-[10px]">
-              {student.aiCareGeneratedAt ? (
-                <span className="num">
-                  {new Date(student.aiCareGeneratedAt).toLocaleDateString("ko-KR")} 생성
-                </span>
-              ) : null}
-              {student.aiCareModelVersion ? (
-                <span className="num font-mono">{student.aiCareModelVersion}</span>
-              ) : null}
-            </div>
-          </header>
-
-          <div className="space-y-2">
-            <p className="eyebrow">종합 요약</p>
-            <p className="text-foreground text-sm leading-relaxed">{student.aiCareSummary}</p>
-          </div>
-
-          {student.aiCareFocus && student.aiCareFocus.length > 0 ? (
-            <div className="space-y-2">
-              <p className="eyebrow">주의 영역</p>
-              <ul className="space-y-2">
-                {student.aiCareFocus.map((f, i) => (
-                  <li
-                    key={i}
-                    className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-3 py-2.5"
-                  >
-                    <span
-                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
-                        PRIORITY_COLOR[f.priority]
-                      }`}
-                    >
-                      {PRIORITY_LABEL[f.priority]}
-                    </span>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="text-foreground text-sm font-medium">{f.area}</p>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        {f.recommendation}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="bg-card border-border space-y-4 rounded-lg border p-5 lg:col-span-1">
           <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
@@ -216,6 +162,55 @@ export default async function StudentDetailPage({
           </section>
         </div>
       </div>
+
+      {hasCareAi ? (
+        <section className="bg-card border-border space-y-4 rounded-lg border p-5">
+          <header className="flex items-baseline justify-between">
+            <div className="inline-flex items-center gap-2">
+              <Sparkles className="text-chart-4 size-4" />
+              <h2 className="text-foreground text-sm font-semibold">AI 케어 인사이트</h2>
+            </div>
+            {student.aiCareGeneratedAt ? (
+              <span className="text-muted-foreground num text-[11px]">
+                {new Date(student.aiCareGeneratedAt).toLocaleDateString("ko-KR")} 생성 · 갱신 버튼 누르기 전까지 보존됨
+              </span>
+            ) : null}
+          </header>
+
+          <div className="space-y-2">
+            <p className="eyebrow">종합 요약</p>
+            <p className="text-foreground text-sm leading-relaxed">{student.aiCareSummary}</p>
+          </div>
+
+          {student.aiCareFocus && student.aiCareFocus.length > 0 ? (
+            <div className="space-y-2">
+              <p className="eyebrow">주의 영역</p>
+              <ul className="space-y-2">
+                {student.aiCareFocus.map((f, i) => (
+                  <li
+                    key={i}
+                    className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-3 py-2.5"
+                  >
+                    <span
+                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                        PRIORITY_COLOR[f.priority]
+                      }`}
+                    >
+                      {PRIORITY_LABEL[f.priority]}
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-foreground text-sm font-medium">{f.area}</p>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        {f.recommendation}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
