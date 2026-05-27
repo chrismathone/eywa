@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_WITHDRAWAL_METADATA } from "@/features/withdrawals/types";
 
 export type StudentFormState = { error?: string; fieldErrors?: Record<string, string> } | undefined;
 
@@ -78,6 +79,8 @@ export async function createStudent(
       secondary_teacher_id: input.secondaryTeacherId,
       enrolled_at: input.enrolledAt,
       withdrawn_at: input.withdrawnAt,
+      withdrawal_metadata:
+        input.status === "withdrawn" ? DEFAULT_WITHDRAWAL_METADATA : null,
       notes: input.notes,
     })
     .select("id")
@@ -106,6 +109,23 @@ export async function updateStudent(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+
+  // status 전환 시 withdrawal_metadata 처리 — 새로 퇴원으로 가면 기본 메타 채움,
+  // 다시 재원으로 돌리면 null로 비움. 이미 퇴원 상태였으면 손대지 않음.
+  const { data: cur } = await supabase
+    .from("students")
+    .select("status, withdrawal_metadata")
+    .eq("id", id)
+    .single();
+  const prevStatus = cur?.status as string | undefined;
+
+  let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
+  if (input.status === "withdrawn" && prevStatus !== "withdrawn") {
+    withdrawalMetadata = DEFAULT_WITHDRAWAL_METADATA;
+  } else if (input.status !== "withdrawn") {
+    withdrawalMetadata = null;
+  }
+
   const { error } = await supabase
     .from("students")
     .update({
@@ -120,6 +140,7 @@ export async function updateStudent(
       secondary_teacher_id: input.secondaryTeacherId,
       enrolled_at: input.enrolledAt,
       withdrawn_at: input.status === "withdrawn" ? input.withdrawnAt : null,
+      withdrawal_metadata: withdrawalMetadata,
       notes: input.notes,
     })
     .eq("id", id);

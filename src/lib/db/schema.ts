@@ -194,6 +194,9 @@ export const students = pgTable(
     }),
     enrolledAt: date("enrolled_at"),
     withdrawnAt: date("withdrawn_at"),
+    // Structured withdrawal record — reason category + memo + 3-step consultation tracking.
+    // Set to NULL when status reverts to 'enrolled' (재원 복구).
+    withdrawalMetadata: jsonb("withdrawal_metadata"),
     notes: text("notes"),
     aiCareSummary: text("ai_care_summary"),
     aiCareFocus: jsonb("ai_care_focus"),

@@ -1,8 +1,13 @@
+import Link from "next/link";
 import { UserMinus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getWithdrawnStudents } from "@/features/withdrawals/server/queries";
+import {
+  getWithdrawnStudents,
+  REASON_LABEL,
+  type WithdrawalReason,
+} from "@/features/withdrawals/server/queries";
 
 export const metadata = { title: "퇴원관리 — eywa" };
 
@@ -24,10 +29,12 @@ export default async function WithdrawalsPage() {
   await requireAccess("withdrawals");
   const rows = await getWithdrawnStudents();
 
-  // 사유별 그룹 (간단한 통계)
+  // metadata.reason 우선, 없으면 enrollment.withdrawal_reason 텍스트, 그것도 없으면 "미기재"
   const reasonCounts = new Map<string, number>();
   for (const r of rows) {
-    const key = r.withdrawalReason ?? "미기재";
+    const key = r.metadata?.reason
+      ? REASON_LABEL[r.metadata.reason as WithdrawalReason]
+      : (r.withdrawalReason ?? "미기재");
     reasonCounts.set(key, (reasonCounts.get(key) ?? 0) + 1);
   }
   const topReasons = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1]);
@@ -89,7 +96,11 @@ export default async function WithdrawalsPage() {
                   return (
                     <tr key={r.id} className="hover:bg-accent/40 transition-colors">
                       <td className="text-muted-foreground px-5 py-3">{r.grade ?? "—"}</td>
-                      <td className="text-foreground px-5 py-3 font-medium">{r.name}</td>
+                      <td className="text-foreground px-5 py-3 font-medium">
+                        <Link href={`/withdrawals/${r.id}`} className="hover:underline">
+                          {r.name}
+                        </Link>
+                      </td>
                       <td className="text-muted-foreground px-5 py-3">{r.school ?? "—"}</td>
                       <td className="text-muted-foreground px-5 py-3 text-xs">
                         {r.lastClassName ? (
