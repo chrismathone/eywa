@@ -10,8 +10,18 @@ export type MeetingRow = {
   excerpt: string;
 };
 
+export type MeetingActionItem = {
+  action: string;
+  assignee?: string;
+  due?: string;
+};
+
 export type MeetingDetail = MeetingRow & {
   content: string;
+  aiSummary: string | null;
+  aiActionItems: MeetingActionItem[] | null;
+  aiModelVersion: string | null;
+  aiGeneratedAt: string | null;
 };
 
 function excerpt(content: string, max = 140): string {
@@ -52,6 +62,7 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     .from("meeting_minutes")
     .select(
       `id, title, content, attendees, held_at,
+       ai_summary, ai_action_items, ai_model_version, ai_generated_at,
        author:author_id ( display_name )`,
     )
     .eq("id", id)
@@ -71,5 +82,11 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     authorName: author?.display_name ?? null,
     excerpt: excerpt(data.content),
     content: data.content,
+    aiSummary: data.ai_summary,
+    aiActionItems: Array.isArray(data.ai_action_items)
+      ? (data.ai_action_items as MeetingActionItem[])
+      : null,
+    aiModelVersion: data.ai_model_version,
+    aiGeneratedAt: data.ai_generated_at,
   };
 }
