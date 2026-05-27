@@ -342,18 +342,31 @@ async function main() {
   // --- 1. Wipe everything tenant-scoped except master users ---
   console.log("Wiping existing demo data…");
   await sql`delete from attendance_records where tenant_id = ${tenantId}`;
+  await sql`delete from invoices where tenant_id = ${tenantId}`;
   await sql`delete from enrollments where tenant_id = ${tenantId}`;
+  await sql`delete from student_consultations where tenant_id = ${tenantId}`;
+  // Cascade deletes consultation_ai_analysis through FK
+  await sql`delete from enrollment_consultations where tenant_id = ${tenantId}`;
   await sql`delete from students where tenant_id = ${tenantId}`;
+  await sql`delete from class_schedules where tenant_id = ${tenantId}`;
   await sql`delete from classes where tenant_id = ${tenantId}`;
   await sql`delete from classrooms where tenant_id = ${tenantId}`;
   await sql`delete from announcements where tenant_id = ${tenantId}`;
-  await sql`delete from class_schedules where tenant_id = ${tenantId}`;
-  // Cascade deletes consultation_ai_analysis through FK
-  await sql`delete from enrollment_consultations where tenant_id = ${tenantId}`;
-  await sql`delete from student_consultations where tenant_id = ${tenantId}`;
   await sql`delete from meeting_minutes where tenant_id = ${tenantId}`;
-  await sql`delete from invoices where tenant_id = ${tenantId}`;
   await sql`delete from users where tenant_id = ${tenantId} and system_role <> 'master'`;
+
+  // --- 1b. Master persona — set 김수진 원장 on the primary master account ---
+  // (시안 페르소나: 28년차 · 재원생 248명 목표. display_name + job_title + hire_date 업데이트)
+  console.log("Setting master persona (김수진 원장)…");
+  await sql`
+    update users
+    set display_name = '김수진',
+        job_title = '원장',
+        hire_date = '1998-03-15'
+    where tenant_id = ${tenantId}
+      and system_role = 'master'
+      and email = 'chrismathone@gmail.com'
+  `;
 
   // --- 2. Teachers (5) ---
   console.log("Inserting teachers…");
