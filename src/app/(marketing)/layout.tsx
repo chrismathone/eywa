@@ -22,7 +22,7 @@ function MarketingNav() {
     <header className="bg-background border-line sticky top-0 z-30 border-b">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-16 py-[18px]">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="bg-ink flex size-7 items-center justify-center rounded-[7px]">
+          <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
               <circle cx="8" cy="8" r="2" fill="#fff" />

@@ -38,7 +38,7 @@ export function AppSidebar({
       {/* brand */}
       <div className="px-[22px] pt-[22px] pb-[18px]">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span className="bg-ink flex size-7 items-center justify-center rounded-[7px]">
+          <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
               <circle cx="8" cy="8" r="2" fill="#fff" />
@@ -76,7 +76,7 @@ export function AppSidebar({
                       <Link
                         href={item.href}
                         aria-current={active ? "page" : undefined}
-                        className={`flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13px] transition ${
+                        className={`flex items-center gap-2.5 rounded-[4px] px-3 py-2 text-[13px] transition ${
                           active
                             ? "bg-primary text-primary-foreground font-semibold shadow-primary-glow"
                             : "text-foreground hover:bg-sidebar-accent font-medium"
@@ -103,7 +103,7 @@ export function AppSidebar({
       {/* user footer */}
       <div className="border-line bg-sidebar flex items-center gap-2.5 border-t px-4 py-3.5">
         <span
-          className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-[10px] text-[13px] font-bold tracking-tight"
+          className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-[4px] text-[13px] font-bold tracking-tight"
           aria-label={displayName}
         >
           {userInitial}

@@ -81,7 +81,7 @@ export default async function EnrollmentPage({
           ))}
         </svg>
         <div className="relative flex items-start gap-4">
-          <span className="flex size-[52px] shrink-0 items-center justify-center rounded-[14px] bg-white/18 text-white">
+          <span className="flex size-[52px] shrink-0 items-center justify-center rounded-[4px] bg-white/18 text-white">
             <EyIcon name="sparkle" size={24} />
           </span>
           <div className="min-w-0 flex-1 text-white">

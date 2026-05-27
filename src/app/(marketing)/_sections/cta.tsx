@@ -6,7 +6,7 @@ export function CtaSection() {
     <section id="cta" className="bg-background px-16 py-[120px]">
       <div className="mx-auto max-w-[1100px]">
         <article
-          className="bg-card border-line shadow-modal relative grid grid-cols-1 gap-14 overflow-hidden rounded-[28px] border px-14 py-16 lg:grid-cols-[1.3fr_1fr]"
+          className="bg-card border-line shadow-modal relative grid grid-cols-1 gap-14 overflow-hidden rounded-[10px] border px-14 py-16 lg:grid-cols-[1.3fr_1fr]"
         >
           {/* 배경 장식 */}
           <span

@@ -3,7 +3,7 @@ export function FooterSection() {
     <footer id="footer" className="bg-background border-line border-t px-16 py-8">
       <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
-          <span className="bg-ink flex size-[18px] items-center justify-center rounded-[5px]">
+          <span className="bg-ink flex size-[18px] items-center justify-center rounded-[2px]">
             <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
               <circle cx="8" cy="8" r="2" fill="#fff" />

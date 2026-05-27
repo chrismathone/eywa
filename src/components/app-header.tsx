@@ -33,7 +33,7 @@ export function AppHeader({ email }: { email: string }) {
         </div>
         <button
           type="button"
-          className="border-line bg-card text-foreground hover:bg-surface-hi relative flex size-9 items-center justify-center rounded-[10px] border transition"
+          className="border-line bg-card text-foreground hover:bg-surface-hi relative flex size-9 items-center justify-center rounded-[4px] border transition"
           aria-label="알림"
         >
           <EyIcon name="bell" size={15} />
