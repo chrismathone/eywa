@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import { AppProviders } from "@/lib/providers/app-providers";
+import { pretendard } from "./fonts";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -19,7 +20,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html
+      lang="ko"
+      className={`${pretendard.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <body className="bg-background text-foreground min-h-full font-sans">
         <AppProviders>{children}</AppProviders>
       </body>

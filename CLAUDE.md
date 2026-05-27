@@ -292,9 +292,9 @@ production 반응속도가 느림. 의심 가는 병목:
    - 대응 후보: 단일 RPC 함수로 합치기 (서버 측에서 한 번에) 또는 PostgREST의 cte 기능
    - 또는 Suspense streaming — 위젯별로 비동기 렌더링하여 빠른 위젯 먼저 노출
 
-4. **(shell)/layout에서 getCurrentUser() 호출 + dashboard에서 또 호출** — N=2번 같은 쿼리. React `cache()`로 dedupe 가능.
+4. ✅ **(shell)/layout 인증 호출 중복** — `getCurrentUser`/`createClient`를 React `cache()`로 래핑, `requireAccess` 반환값 재활용. (ef53e86 다음 커밋)
 
-5. **Pretendard CDN 첫 로드** — variable font는 250KB. `next/font/local`로 self-host하면 layout shift 줄고 CDN round-trip 제거.
+5. ✅ **Pretendard CDN 첫 로드** — variable font를 `next/font/local`로 self-host. CDN RTT 제거 + Next 자동 preload + font-display swap.
 
 6. **AI 호출 자체는 느림** (Claude 응답 2-10초). 단 명시적 버튼이라 사용자 기대치 OK. 개선이라면 Suspense + streaming response.
 
