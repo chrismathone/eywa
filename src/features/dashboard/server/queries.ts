@@ -213,14 +213,21 @@ export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
   const start = new Date(end);
   start.setDate(end.getDate() - 6);
 
-  const { data } = await supabase
-    .from("attendance_records")
-    .select("session_date, status")
-    .gte("session_date", toIsoDate(start))
-    .lte("session_date", toIsoDate(end));
+  const [{ data: attRows }, { data: invRows }] = await Promise.all([
+    supabase
+      .from("attendance_records")
+      .select("session_date, status")
+      .gte("session_date", toIsoDate(start))
+      .lte("session_date", toIsoDate(end)),
+    // 이번 달 invoices — 누적 수납률 계산용 (paid_at 일자별)
+    supabase
+      .from("invoices")
+      .select("amount_total, amount_paid, paid_at, status")
+      .eq("period", currentPeriod()),
+  ]);
 
   const byDate = new Map<string, { total: number; present: number }>();
-  for (const r of data ?? []) {
+  for (const r of attRows ?? []) {
     const d = r.session_date as string;
     if (!byDate.has(d)) byDate.set(d, { total: 0, present: 0 });
     const g = byDate.get(d)!;
@@ -228,9 +235,17 @@ export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
     if (r.status === "present") g.present += 1;
   }
 
+  // invoices 누적: 이번 달 청구 총액 + 각 날짜까지 paid_at 누적
+  const totalBilled = (invRows ?? []).reduce((s, r) => s + Number(r.amount_total), 0);
+  function paymentRateUpTo(isoDay: string): number {
+    if (totalBilled === 0) return 0;
+    const paidSoFar = (invRows ?? [])
+      .filter((r) => r.paid_at && String(r.paid_at).slice(0, 10) <= isoDay)
+      .reduce((s, r) => s + Number(r.amount_paid), 0);
+    return (paidSoFar / totalBilled) * 100;
+  }
+
   const result: TrendPoint[] = [];
-  // placeholder payment series: slowly trending up
-  const paymentBaseline = 78;
   for (let i = 6; i >= 0; i--) {
     const day = new Date(end);
     day.setDate(end.getDate() - i);
@@ -241,8 +256,13 @@ export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
       date: shortMd(day),
       day: KO_DAYS[day.getDay()],
       attendance: Number(rate.toFixed(1)),
-      payment: Number((paymentBaseline + (6 - i) * 1.4).toFixed(1)),
+      payment: Number(paymentRateUpTo(iso).toFixed(1)),
     });
   }
   return result;
+}
+
+function currentPeriod(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
