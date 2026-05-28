@@ -6,9 +6,11 @@ import {
   CheckSquare,
   Loader2,
   Mic,
+  Printer,
   Sparkles,
   Users,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { formatCreatedAt } from "@/lib/utils";
 import {
@@ -124,9 +126,17 @@ export default async function MeetingDetailPage({
             {meeting.authorName ? <span>· 작성 {meeting.authorName}</span> : null}
           </div>
         </div>
-        {!hasAudio && meeting.content ? (
-          <RunMeetingAiButton meetingId={meeting.id} hasExisting={hasAiReport} />
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {hasAiReport ? (
+            <Button variant="outline" render={<Link href={`/meetings/${id}/print`} target="_blank" />}>
+              <Printer className="size-4" />
+              인쇄
+            </Button>
+          ) : null}
+          {!hasAudio && meeting.content ? (
+            <RunMeetingAiButton meetingId={meeting.id} hasExisting={hasAiReport} />
+          ) : null}
+        </div>
       </header>
 
       {/* Failed state — show the error */}

@@ -6,7 +6,9 @@ import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
+  Copy,
   Loader2,
+  MessageSquare,
   Pencil,
   Save,
   X,
@@ -434,6 +436,11 @@ function EditInvoiceDialog({
             </p>
           ) : null}
 
+          {/* 결제 알림 메시지 (미수/부분일 때만 노출) */}
+          {remaining > 0 ? (
+            <ReminderMessage invoice={invoice} balance={remaining} />
+          ) : null}
+
           <div className="flex items-center justify-end gap-2 border-t pt-4">
             <Button type="button" variant="outline" onClick={() => onClose(false)}>
               취소
@@ -441,6 +448,80 @@ function EditInvoiceDialog({
             <SubmitEdit />
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function ReminderMessage({
+  invoice,
+  balance,
+}: {
+  invoice: InvoiceRow;
+  balance: number;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const message = [
+    `안녕하세요, ${invoice.studentName} 학부모님.`,
+    ``,
+    `${invoice.period} 수강료 안내 드립니다.`,
+    `청구금액: ${KRW.format(invoice.amountTotal)}원`,
+    invoice.amountDiscount > 0 ? `할인: ${KRW.format(invoice.amountDiscount)}원` : null,
+    invoice.amountPaid > 0 ? `입금 확인: ${KRW.format(invoice.amountPaid)}원` : null,
+    `미납 잔액: ${KRW.format(balance)}원`,
+    invoice.dueDate ? `기한: ${invoice.dueDate}` : null,
+    ``,
+    `편하신 시간에 입금 부탁드립니다. 감사합니다.`,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = message;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  return (
+    <div className="border-border bg-bg-soft/40 rounded-md border p-3">
+      <div className="text-foreground mb-2 inline-flex items-center gap-1.5 text-xs font-semibold">
+        <MessageSquare className="size-3.5" />
+        결제 알림 메시지 (학부모 발송용)
+      </div>
+      <pre className="text-foreground bg-card border-border whitespace-pre-wrap rounded-sm border p-2.5 text-[11px] leading-relaxed">
+        {message}
+      </pre>
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={copy}
+          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition"
+        >
+          {copied ? (
+            <>
+              <CheckCircle2 className="text-chart-2 size-3" />
+              복사됨
+            </>
+          ) : (
+            <>
+              <Copy className="size-3" />
+              메시지 복사
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
