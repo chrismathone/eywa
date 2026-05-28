@@ -526,6 +526,27 @@ export const invoices = pgTable(
   ],
 );
 
+// === user_integrations (테넌트별 외부 통합 — 현재 Google Sheets) ===
+export const userIntegrations = pgTable(
+  "user_integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("google_sheets"),
+    spreadsheetId: text("spreadsheet_id"),
+    spreadsheetUrl: text("spreadsheet_url"),
+    sharedWithEmail: text("shared_with_email"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    syncEnabled: boolean("sync_enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("user_integrations_tenant_provider_idx").on(t.tenantId, t.provider)],
+);
+
 // === student_grades (시험 점수 기록) ===
 // 학생별로 시험·과제 점수를 누적. 학생 상세 페이지의 "성적" 탭에서 시각화.
 export const studentGrades = pgTable(
@@ -629,3 +650,5 @@ export type PayrollRecord = typeof payrollRecords.$inferSelect;
 export type NewPayrollRecord = typeof payrollRecords.$inferInsert;
 export type StaffLeave = typeof staffLeaves.$inferSelect;
 export type NewStaffLeave = typeof staffLeaves.$inferInsert;
+export type UserIntegration = typeof userIntegrations.$inferSelect;
+export type NewUserIntegration = typeof userIntegrations.$inferInsert;
