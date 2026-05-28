@@ -9,6 +9,8 @@ import {
   getClassTeacherOptions,
   type ClassListRow,
 } from "@/features/classes/server/queries";
+import { getClassroomOptions } from "@/features/enrollments/server/queries";
+import { NewClassTrigger } from "./_components/new-class-trigger";
 
 export const metadata = { title: "수업목록 — eywa" };
 
@@ -93,10 +95,11 @@ export default async function ClassesPage({
   const q = sp.q ?? "";
   const view: ViewMode = sp.view === "cards" ? "cards" : "table";
 
-  const [classes, teachers, all] = await Promise.all([
+  const [classes, teachers, all, classrooms] = await Promise.all([
     getClassesList({ subject, teacherId, day, q }),
     getClassTeacherOptions(),
     getClassesList({}),
+    getClassroomOptions(),
   ]);
 
   const totalSeats = all.reduce((s, c) => s + c.studentCount, 0);
@@ -236,13 +239,7 @@ export default async function ClassesPage({
         <p className="micro">
           결과 <span className="text-foreground font-bold">{classes.length}</span>개
         </p>
-        <Link
-          href="/classes/new"
-          className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition"
-        >
-          <EyIcon name="plus" size={13} />
-          새 반
-        </Link>
+        <NewClassTrigger teacherOptions={teachers} classroomOptions={classrooms} />
       </div>
 
       {classes.length === 0 ? (
