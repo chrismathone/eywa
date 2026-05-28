@@ -28,6 +28,9 @@ export type AttendanceInputRow = {
   enrollmentId: string;
   existingRecordId: string | null;
   status: AttendanceStatus | null;
+  note: string | null;
+  homeworkRequired: boolean;
+  homeworkDone: boolean;
 };
 
 export async function getClassMeta(classId: string): Promise<ClassMeta | null> {
@@ -78,11 +81,20 @@ export async function getAttendanceInputRows(
     })
     .filter((id): id is string => !!id);
 
-  let recordMap = new Map<string, { id: string; status: AttendanceStatus }>();
+  let recordMap = new Map<
+    string,
+    {
+      id: string;
+      status: AttendanceStatus;
+      note: string | null;
+      homeworkRequired: boolean;
+      homeworkDone: boolean;
+    }
+  >();
   if (studentIds.length > 0) {
     const { data: records } = await supabase
       .from("attendance_records")
-      .select("id, student_id, status, recorded_at")
+      .select("id, student_id, status, note, homework_required, homework_done, recorded_at")
       .eq("class_id", classId)
       .eq("session_date", date)
       .in("student_id", studentIds)
@@ -92,7 +104,13 @@ export async function getAttendanceInputRows(
     recordMap = new Map();
     for (const r of records ?? []) {
       if (!recordMap.has(r.student_id)) {
-        recordMap.set(r.student_id, { id: r.id, status: r.status as AttendanceStatus });
+        recordMap.set(r.student_id, {
+          id: r.id,
+          status: r.status as AttendanceStatus,
+          note: r.note,
+          homeworkRequired: r.homework_required,
+          homeworkDone: r.homework_done,
+        });
       }
     }
   }
@@ -111,6 +129,9 @@ export async function getAttendanceInputRows(
         enrollmentId: e.id,
         existingRecordId: existing?.id ?? null,
         status: existing?.status ?? null,
+        note: existing?.note ?? null,
+        homeworkRequired: existing?.homeworkRequired ?? false,
+        homeworkDone: existing?.homeworkDone ?? false,
       } satisfies AttendanceInputRow;
     })
     .filter((r): r is AttendanceInputRow => r !== null)

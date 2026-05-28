@@ -2,7 +2,20 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Check, Clock, Loader2, Mail, RotateCcw, Save, X } from "lucide-react";
+import {
+  AlertCircle,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Loader2,
+  Mail,
+  Pencil,
+  RotateCcw,
+  Save,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   saveAttendance,
@@ -61,6 +74,14 @@ function SubmitButton() {
   );
 }
 
+type CellState = {
+  status: AttendanceStatus | null;
+  note: string;
+  homeworkRequired: boolean;
+  homeworkDone: boolean;
+  expanded: boolean;
+};
+
 export function AttendanceInputForm({
   classId,
   date,
@@ -71,20 +92,32 @@ export function AttendanceInputForm({
   rows: AttendanceInputRow[];
 }) {
   const [state, formAction] = useActionState<SaveAttendanceState, FormData>(saveAttendance, undefined);
-  const [pending, setPending] = useState<Record<string, AttendanceStatus | null>>(() => {
-    const init: Record<string, AttendanceStatus | null> = {};
-    for (const r of rows) init[r.studentId] = r.status;
+  const [pending, setPending] = useState<Record<string, CellState>>(() => {
+    const init: Record<string, CellState> = {};
+    for (const r of rows) {
+      init[r.studentId] = {
+        status: r.status,
+        note: r.note ?? "",
+        homeworkRequired: r.homeworkRequired,
+        homeworkDone: r.homeworkDone,
+        expanded: !!(r.note || r.homeworkRequired),
+      };
+    }
     return init;
   });
 
+  function patchOne(studentId: string, patch: Partial<CellState>) {
+    setPending((p) => ({ ...p, [studentId]: { ...p[studentId], ...patch } }));
+  }
+
   function setOne(studentId: string, status: AttendanceStatus | null) {
-    setPending((p) => ({ ...p, [studentId]: status }));
+    patchOne(studentId, { status });
   }
 
   function setAll(status: AttendanceStatus) {
     setPending((p) => {
       const next = { ...p };
-      for (const r of rows) next[r.studentId] = status;
+      for (const r of rows) next[r.studentId] = { ...next[r.studentId], status };
       return next;
     });
   }
@@ -92,13 +125,29 @@ export function AttendanceInputForm({
   function clearAll() {
     setPending((p) => {
       const next = { ...p };
-      for (const r of rows) next[r.studentId] = null;
+      for (const r of rows) {
+        next[r.studentId] = {
+          ...next[r.studentId],
+          status: null,
+          note: "",
+          homeworkRequired: false,
+          homeworkDone: false,
+        };
+      }
       return next;
     });
   }
 
-  const dirty = rows.some((r) => pending[r.studentId] !== r.status);
-  const filled = rows.filter((r) => pending[r.studentId] != null).length;
+  const dirty = rows.some((r) => {
+    const c = pending[r.studentId];
+    return (
+      c.status !== r.status ||
+      c.note !== (r.note ?? "") ||
+      c.homeworkRequired !== r.homeworkRequired ||
+      c.homeworkDone !== r.homeworkDone
+    );
+  });
+  const filled = rows.filter((r) => pending[r.studentId].status != null).length;
 
   return (
     <form action={formAction} className="space-y-4">
@@ -136,55 +185,131 @@ export function AttendanceInputForm({
       ) : (
         <ul className="bg-card border-border divide-border divide-y rounded-lg border">
           {rows.map((r) => {
-            const current = pending[r.studentId];
+            const cell = pending[r.studentId];
+            const hasExtra = !!(cell.note || cell.homeworkRequired);
             return (
-              <li
-                key={r.studentId}
-                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-foreground text-sm font-medium">{r.studentName}</span>
-                  {r.studentGrade ? (
-                    <span className="text-muted-foreground text-xs">{r.studentGrade}</span>
-                  ) : null}
-                  {r.existingRecordId ? (
-                    <span className="text-muted-foreground text-[10px]">· 이전 기록 있음</span>
-                  ) : null}
+              <li key={r.studentId} className="px-5 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-foreground text-sm font-medium">{r.studentName}</span>
+                    {r.studentGrade ? (
+                      <span className="text-muted-foreground text-xs">{r.studentGrade}</span>
+                    ) : null}
+                    {r.existingRecordId ? (
+                      <span className="text-muted-foreground text-[10px]">· 이전 기록 있음</span>
+                    ) : null}
+                    {hasExtra ? (
+                      <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                        {cell.note ? <Pencil className="size-2.5" /> : null}
+                        {cell.homeworkRequired ? <BookOpen className="size-2.5" /> : null}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <input
+                    type="hidden"
+                    name={`existing:${r.studentId}`}
+                    value={r.existingRecordId ?? ""}
+                  />
+                  <input
+                    type="hidden"
+                    name={`status:${r.studentId}`}
+                    value={cell.status ?? ""}
+                  />
+                  <input
+                    type="hidden"
+                    name={`note:${r.studentId}`}
+                    value={cell.note}
+                  />
+                  <input
+                    type="hidden"
+                    name={`homeworkRequired:${r.studentId}`}
+                    value={cell.homeworkRequired ? "true" : "false"}
+                  />
+                  <input
+                    type="hidden"
+                    name={`homeworkDone:${r.studentId}`}
+                    value={cell.homeworkDone ? "true" : "false"}
+                  />
+
+                  <div className="inline-flex items-center gap-1">
+                    {STATUS_DEFS.map((s) => {
+                      const Icon = s.icon;
+                      const active = cell.status === s.value;
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          onClick={() =>
+                            setOne(r.studentId, active ? null : s.value)
+                          }
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
+                            active
+                              ? s.activeClass
+                              : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                          }`}
+                          aria-pressed={active}
+                        >
+                          <Icon className="size-3" />
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => patchOne(r.studentId, { expanded: !cell.expanded })}
+                      className="text-muted-foreground hover:text-foreground ml-1 inline-flex size-6 items-center justify-center rounded-md"
+                      aria-label={cell.expanded ? "접기" : "메모/숙제 펼치기"}
+                    >
+                      {cell.expanded ? (
+                        <ChevronUp className="size-3" />
+                      ) : (
+                        <ChevronDown className="size-3" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                <input
-                  type="hidden"
-                  name={`existing:${r.studentId}`}
-                  value={r.existingRecordId ?? ""}
-                />
-                <input
-                  type="hidden"
-                  name={`status:${r.studentId}`}
-                  value={current ?? ""}
-                />
-
-                <div className="inline-flex items-center gap-1">
-                  {STATUS_DEFS.map((s) => {
-                    const Icon = s.icon;
-                    const active = current === s.value;
-                    return (
-                      <button
-                        key={s.value}
-                        type="button"
-                        onClick={() => setOne(r.studentId, active ? null : s.value)}
-                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
-                          active
-                            ? s.activeClass
-                            : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                        }`}
-                        aria-pressed={active}
+                {cell.expanded ? (
+                  <div className="bg-bg-soft/30 border-border mt-2 space-y-2 rounded-md border p-2.5">
+                    <div className="flex items-start gap-2">
+                      <Pencil className="text-muted-foreground mt-1.5 size-3" />
+                      <input
+                        type="text"
+                        value={cell.note}
+                        onChange={(e) => patchOne(r.studentId, { note: e.target.value })}
+                        placeholder="메모 (오늘의 특이사항 등)"
+                        className="border-border bg-card text-foreground flex-1 rounded-md border px-2 py-1.5 text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="text-foreground inline-flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={cell.homeworkRequired}
+                          onChange={(e) =>
+                            patchOne(r.studentId, { homeworkRequired: e.target.checked })
+                          }
+                        />
+                        <BookOpen className="text-muted-foreground size-3" />
+                        숙제 부여
+                      </label>
+                      <label
+                        className={`inline-flex items-center gap-1.5 text-xs ${cell.homeworkRequired ? "text-foreground" : "text-muted-foreground opacity-50"}`}
                       >
-                        <Icon className="size-3" />
-                        {s.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                        <input
+                          type="checkbox"
+                          checked={cell.homeworkDone}
+                          onChange={(e) =>
+                            patchOne(r.studentId, { homeworkDone: e.target.checked })
+                          }
+                          disabled={!cell.homeworkRequired}
+                        />
+                        숙제 완료
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
               </li>
             );
           })}

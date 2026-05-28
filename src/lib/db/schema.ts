@@ -259,6 +259,9 @@ export const attendanceRecords = pgTable(
       .references(() => students.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
     status: attendanceStatusEnum("status").notNull(),
+    note: text("note"),
+    homeworkRequired: boolean("homework_required").notNull().default(false),
+    homeworkDone: boolean("homework_done").notNull().default(false),
     recordedBy: uuid("recorded_by")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
