@@ -18,7 +18,7 @@ export default async function NewStaffPage() {
   const roleOptions = assignableRoles(user.systemRole);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <Link
         href="/staff"
         className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"

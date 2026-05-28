@@ -183,9 +183,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         stream.getTracks().forEach(function(t){t.stop()});
         var blob=new Blob(chunks,{type:mime});
         var ext=mime.indexOf('mp4')>-1?'mp4':'webm';
+        // KST(Asia/Seoul) 기준 시각 — 사용자 OS 시간대와 무관하게 일관된 파일명
         var d=new Date();
-        var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'_'+
-          String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0');
+        var parts=new Intl.DateTimeFormat('en-CA',{
+          timeZone:'Asia/Seoul',
+          year:'numeric',month:'2-digit',day:'2-digit',
+          hour:'2-digit',minute:'2-digit',second:'2-digit',
+          hour12:false,hourCycle:'h23'
+        }).formatToParts(d);
+        var g=function(t){var p=parts.find(function(x){return x.type===t});return p?p.value:'00'};
+        var ds=g('year')+'-'+g('month')+'-'+g('day')+'_'+g('hour')+'-'+g('minute')+'-'+g('second')+'_KST';
         var tok=${JSON.stringify(safeToken)};
         var fn='녹음_'+(tok?tok+'_':'')+ds+'.'+ext;
 
