@@ -133,8 +133,8 @@ export default async function MeetingDetailPage({
               인쇄
             </Button>
           ) : null}
-          {!hasAudio && meeting.content ? (
-            <RunMeetingAiButton meetingId={meeting.id} hasExisting={hasAiReport} />
+          {!hasAudio && meeting.content && !hasAiReport ? (
+            <RunMeetingAiButton meetingId={meeting.id} hasExisting={false} />
           ) : null}
         </div>
       </header>
@@ -174,9 +174,10 @@ export default async function MeetingDetailPage({
         </section>
       ) : null}
 
-      {/* Manual text content (legacy flow) */}
+      {/* Manual text content — raw notes input by the user. Not AI output. */}
       {!hasAudio && meeting.content ? (
         <article className="bg-card border-border rounded-lg border p-6">
+          <p className="eyebrow mb-3">원본 노트</p>
           <pre className="text-foreground font-sans text-sm whitespace-pre-wrap leading-relaxed">
             {meeting.content}
           </pre>
@@ -227,11 +228,16 @@ export default async function MeetingDetailPage({
                 <span className="text-muted-foreground text-xs">· {meeting.aiReport.meetingType}</span>
               ) : null}
             </div>
-            {meeting.aiGeneratedAt ? (
-              <span className="text-muted-foreground num text-[11px]">
-                {formatCreatedAt(meeting.aiGeneratedAt)}
-              </span>
-            ) : null}
+            <div className="inline-flex items-center gap-3">
+              {!hasAudio && meeting.content ? (
+                <RunMeetingAiButton meetingId={meeting.id} hasExisting variant="link" />
+              ) : null}
+              {meeting.aiGeneratedAt ? (
+                <span className="text-muted-foreground num text-[11px]">
+                  {formatCreatedAt(meeting.aiGeneratedAt)}
+                </span>
+              ) : null}
+            </div>
           </header>
 
           <ReportField label="요약" body={meeting.aiReport.summary} />

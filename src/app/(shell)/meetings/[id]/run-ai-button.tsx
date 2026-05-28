@@ -6,8 +6,22 @@ import { AlertCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { runMeetingAiAnalysis, type MeetingAiState } from "@/features/meetings/server/actions";
 
-function SubmitButton({ hasExisting }: { hasExisting: boolean }) {
+type Variant = "default" | "link";
+
+function SubmitButton({ hasExisting, variant }: { hasExisting: boolean; variant: Variant }) {
   const { pending } = useFormStatus();
+  if (variant === "link") {
+    return (
+      <button
+        type="submit"
+        disabled={pending}
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 disabled:opacity-50"
+      >
+        <Sparkles className="size-3" />
+        {pending ? "분석 중…" : "재분석"}
+      </button>
+    );
+  }
   return (
     <Button type="submit" variant={hasExisting ? "secondary" : "default"} disabled={pending}>
       <Sparkles className="size-4" />
@@ -19,9 +33,11 @@ function SubmitButton({ hasExisting }: { hasExisting: boolean }) {
 export function RunMeetingAiButton({
   meetingId,
   hasExisting,
+  variant = "default",
 }: {
   meetingId: string;
   hasExisting: boolean;
+  variant?: Variant;
 }) {
   const [state, formAction] = useActionState<MeetingAiState, FormData>(
     runMeetingAiAnalysis,
@@ -29,10 +45,10 @@ export function RunMeetingAiButton({
   );
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div className={variant === "link" ? "inline-flex items-center gap-2" : "flex flex-col items-end gap-1.5"}>
       <form action={formAction}>
         <input type="hidden" name="meetingId" value={meetingId} />
-        <SubmitButton hasExisting={hasExisting} />
+        <SubmitButton hasExisting={hasExisting} variant={variant} />
       </form>
       {state?.error ? (
         <p className="text-destructive inline-flex items-center gap-1 text-xs">
