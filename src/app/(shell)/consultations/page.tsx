@@ -8,9 +8,12 @@ import { requireAccess } from "@/lib/auth/require-access";
 import {
   followUpUrgency,
   getStudentConsultations,
+  getStudentOptionsForConsultation,
   type FollowUpUrgency,
   type StudentConsultationCategory,
 } from "@/features/consultations/server/queries";
+import { getTeacherOptions } from "@/features/students/server/queries";
+import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
 
 export const metadata = { title: "학생상담 — eywa" };
 
@@ -92,7 +95,11 @@ export default async function ConsultationsPage({
   const urg: UrgencyKey = (sp.urg as UrgencyKey) ?? "all";
   const q = sp.q ?? "";
 
-  const all = await getStudentConsultations();
+  const [all, students, counselors] = await Promise.all([
+    getStudentConsultations(),
+    getStudentOptionsForConsultation(),
+    getTeacherOptions(),
+  ]);
   let items = all;
   if (q) {
     const term = q.toLowerCase();
@@ -217,10 +224,7 @@ export default async function ConsultationsPage({
             <EyIcon name="rings" size={13} />
             통계 보기
           </Link>
-          <Button render={<Link href="/consultations/new" />}>
-            <EyIcon name="plus" size={13} className="mr-1" />
-            상담 추가
-          </Button>
+          <NewConsultationTrigger students={students} counselors={counselors} />
         </div>
       </div>
 
