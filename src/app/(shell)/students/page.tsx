@@ -3,6 +3,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { StudentQuickPopover } from "@/components/student-quick-popover";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentsList } from "@/features/students/server/queries";
@@ -199,12 +200,26 @@ export default async function StudentsPage({
                 return (
                   <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors">
                     <td className="px-5 py-3">
-                      <Link href={`/students/${s.id}`} className="flex items-center gap-2.5">
-                        <Initial name={s.name} color={colorForGrade(s.grade)} size="md" />
-                        <span className="text-foreground text-[13px] font-bold hover:underline">
-                          {s.name}
-                        </span>
-                      </Link>
+                      <StudentQuickPopover
+                        student={{
+                          id: s.id,
+                          name: s.name,
+                          grade: s.grade,
+                          school: s.school,
+                          status: s.status,
+                          subjects: s.subjects,
+                          primaryTeacherName: s.primaryTeacherName,
+                          parentPhone: s.parentPhone,
+                          enrolledAt: s.enrolledAt,
+                        }}
+                      >
+                        <Link href={`/students/${s.id}`} className="flex items-center gap-2.5">
+                          <Initial name={s.name} color={colorForGrade(s.grade)} size="md" />
+                          <span className="text-foreground text-[13px] font-bold hover:underline">
+                            {s.name}
+                          </span>
+                        </Link>
+                      </StudentQuickPopover>
                     </td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.grade ?? "—"}</td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.school ?? "—"}</td>

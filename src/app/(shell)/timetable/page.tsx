@@ -6,6 +6,7 @@ import {
   getWeeklyScheduleWithStudents,
   type ScheduleSlotWithStudents,
 } from "@/features/timetable/server/queries";
+import { ClassCell } from "./_components/class-cell";
 
 export const metadata = { title: "시간표 — eywa" };
 
@@ -234,7 +235,7 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
                       ) : (
                         <div className="space-y-2">
                           {list.map((s) => (
-                            <ClassBlock key={s.id} slot={s} compact />
+                            <ClassCell key={s.id} slot={s} compact />
                           ))}
                         </div>
                       )}
@@ -307,7 +308,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
                     ) : (
                       <div className="space-y-1.5">
                         {list.map((s) => (
-                          <ClassBlock key={s.id} slot={s} />
+                          <ClassCell key={s.id} slot={s} />
                         ))}
                       </div>
                     )}
@@ -318,50 +319,6 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-// ─────────────────── ClassBlock — 셀 안의 수업 블록 ───────────────────
-
-function ClassBlock({
-  slot,
-  compact = false,
-}: {
-  slot: ScheduleSlotWithStudents;
-  compact?: boolean;
-}) {
-  const color = SUBJECT_COLOR[slot.subject] ?? "bg-bg-soft text-text-dim";
-  return (
-    <div className={`rounded-md px-2 py-1.5 ${color}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate text-[11px] font-bold">{slot.className}</p>
-        <span className="num font-mono text-[10px] opacity-70">
-          {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
-        </span>
-      </div>
-      <div className="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-80">
-        {slot.classroomName ? <span className="font-mono">{slot.classroomName}</span> : <span />}
-        <span className="num font-bold">{slot.students.length}명</span>
-      </div>
-      {!compact && slot.students.length > 0 ? (
-        <p className="mt-1 line-clamp-2 text-[10px] opacity-70">
-          {slot.students.map((s) => `${s.name}/${s.grade ?? "—"}`).join(", ")}
-        </p>
-      ) : null}
-      {compact && slot.students.length > 0 ? (
-        <ul className="mt-1 space-y-0.5 text-[10px] opacity-75">
-          {slot.students.slice(0, 6).map((s) => (
-            <li key={s.name} className="truncate">
-              {s.name}
-              {s.grade ? <span className="opacity-60"> · {s.grade}</span> : null}
-            </li>
-          ))}
-          {slot.students.length > 6 ? (
-            <li className="opacity-60">외 {slot.students.length - 6}명</li>
-          ) : null}
-        </ul>
-      ) : null}
     </div>
   );
 }
