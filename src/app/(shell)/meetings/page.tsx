@@ -9,6 +9,7 @@ import {
   type MeetingProcessingStatus,
   type MeetingRow,
 } from "@/features/meetings/server/queries";
+import { NewMeetingTrigger } from "./_new-meeting-trigger";
 
 export const metadata = { title: "회의록 — eywa" };
 
@@ -243,10 +244,7 @@ export default async function MeetingsPage({
         <p className="micro">
           결과 <span className="text-foreground font-bold">{meetings.length}</span>건
         </p>
-        <Button render={<Link href="/meetings/new" />}>
-          <EyIcon name="plus" size={13} className="mr-1" />
-          새 회의록
-        </Button>
+        <NewMeetingTrigger />
       </div>
 
       {meetings.length === 0 ? (

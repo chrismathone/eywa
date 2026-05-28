@@ -46,7 +46,7 @@ function nowLocalIso(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function NewMeetingForm() {
+export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -262,8 +262,13 @@ export function NewMeetingForm() {
       }
       // success — clear IDB recovery chunks (analysis is now safely queued server-side)
       await clearRecovery("meeting");
-      // server redirected, but if we got here it didn't; force navigation
-      router.push("/meetings");
+      if (onSuccess) {
+        onSuccess();
+        router.refresh();
+      } else {
+        // standalone /meetings/new 라우트 — server redirect 대신 force navigation
+        router.push("/meetings");
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
