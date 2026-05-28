@@ -13,6 +13,7 @@ import {
   type RecordingMeta,
 } from "@/lib/recording-recovery";
 import { createClient } from "@/lib/supabase/client";
+import { openRecorderPopup } from "@/lib/recorder-popup";
 import { startMeetingFromAudio } from "@/features/meetings/server/actions";
 
 const ACCEPTED = [
@@ -115,8 +116,32 @@ export function NewMeetingForm() {
     setFile(f);
   }
 
-  async function startRecording() {
+  function startRecording() {
     setError(null);
+
+    // 1) 새 창 녹음 시도 — 메인 창 새로고침/이탈로부터 안전.
+    const popupOpened = openRecorderPopup(
+      title || "회의 녹음",
+      {
+        onComplete: (recorded) => {
+          setFile(recorded);
+        },
+        onError: (msg) => {
+          setError(msg);
+        },
+        onClose: () => {
+          // 사용자가 녹음 완료 없이 팝업을 닫음 — 별도 동작 없음 (state도 변경 안 됨)
+        },
+      },
+      { fileToken: "meeting" },
+    );
+    if (popupOpened) return;
+
+    // 2) 팝업 차단 시 인라인 fallback.
+    void startInlineRecording();
+  }
+
+  async function startInlineRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")

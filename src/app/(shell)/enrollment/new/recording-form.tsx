@@ -13,6 +13,7 @@ import {
   type RecordingMeta,
 } from "@/lib/recording-recovery";
 import { createClient } from "@/lib/supabase/client";
+import { openRecorderPopup } from "@/lib/recorder-popup";
 import { startConsultationFromAudio } from "@/features/enrollment/server/actions";
 
 const ACCEPTED = [
@@ -108,8 +109,32 @@ export function NewConsultationRecordingForm() {
     setFile(f);
   }
 
-  async function startRecording() {
+  function startRecording() {
     setError(null);
+
+    // 1) 새 창 녹음 시도 — 메인 창 새로고침/이탈로부터 안전.
+    const popupOpened = openRecorderPopup(
+      prospectName ? `${prospectName} 등록상담 녹음` : "등록상담 녹음",
+      {
+        onComplete: (recorded) => {
+          setFile(recorded);
+        },
+        onError: (msg) => {
+          setError(msg);
+        },
+        onClose: () => {
+          // 사용자가 녹음 완료 없이 팝업을 닫음
+        },
+      },
+      { fileToken: "enrollment" },
+    );
+    if (popupOpened) return;
+
+    // 2) 팝업 차단 시 인라인 fallback.
+    void startInlineRecording();
+  }
+
+  async function startInlineRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
