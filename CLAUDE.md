@@ -97,15 +97,30 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 ## 진행 상황
 
-**12개 메뉴 모두 실데이터 + ijw 운영 패리티 + 랜딩 페이지 8섹션 완성.**
-디자인 시안 (Daylight 시안: forest green + 라이트 톤) 전면 적용.
+**12개 메뉴 + ijw 패리티 9개 추가 commit + Admin 도구 + 랜딩 페이지 8섹션 완성.**
+디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용.
+
+### ijw-calander 패리티 (9개 commit, 2026-05-28)
+- 학생 상세 7탭 (Overview/Billing/Grades/Attendance/Consultations/Memos/Timeline)
+- 상태 전환 모달 (퇴원/휴원/재원 복구)
+- 수강 배정 모달 + 반 신규/수정 폼
+- 출석 셀 메모 + 숙제 체크박스
+- 시간표 드래그앤드롭 + PNG export + A4 인쇄
+- 강사 급여 정산 (자동 + 수동) + 휴가 관리
+- billing 카테고리 + 담임 자동 매칭
+- 상담 통계뷰 (전환율/사유/추세 차트)
+- 대시보드 위젯 (결제 예정 / 결석 위험)
+- 엑셀 export (시간표 색상 보존 / 학생 / 수납)
+- Google Sheets 동기화 (service account JWT)
+- Admin 도구 (중복 병합 / 데이터 정리 / 시나리오)
 
 ### 라우트 구조
 - `/` = **랜딩 페이지 8섹션** (Hero·Flow·LogoWall·Manifesto·Testimonials·Pricing·CTA·Footer)
 - `/dashboard` = 대시보드 (예전 `/`에서 이동)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
+- `/admin/*` = master 전용 (duplicates/cleanup/scenarios/integrations/sheets)
 - `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
-- `(shell)/` = 인증된 12개 메뉴 (사이드바 232px + Topbar 64px)
+- `(shell)/` = 인증된 12개 메뉴 + admin (사이드바 232px + Topbar 64px)
 - `(print)/enrollment/[id]/print/` = A4 인쇄
 
 ### 12개 메뉴 — 핵심 위젯 (ijw 패리티 적용 후)
