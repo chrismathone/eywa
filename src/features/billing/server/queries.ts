@@ -14,6 +14,7 @@ export type InvoiceRow = {
   studentName: string;
   studentGrade: string | null;
   period: string;
+  category: string;
   amountTotal: number;
   amountPaid: number;
   amountDiscount: number;
@@ -22,6 +23,7 @@ export type InvoiceRow = {
   paidAt: string | null;
   notes: string | null;
   lineItems: InvoiceLineItem[];
+  teacherName: string | null;
 };
 
 export type BillingSummary = {
@@ -50,6 +52,7 @@ export type InvoiceFilters = {
   q?: string;
   sort?: SortKey;
   desc?: boolean;
+  category?: string; // "all" | "tuition" | "material" | "exam" | "other"
 };
 
 function currentPeriod(): string {
@@ -62,19 +65,32 @@ export async function getInvoicesForPeriod(
 ): Promise<InvoiceRow[]> {
   const supabase = await createClient();
   const periodKey = options?.period ?? currentPeriod();
-  const { data } = await supabase
+  let qb = supabase
     .from("invoices")
     .select(
-      `id, period, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
-       student:student_id ( id, name, grade )`,
+      `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
+       student:student_id ( id, name, grade, teacher:primary_teacher_id ( display_name ) )`,
     )
     .eq("period", periodKey);
 
+  if (options?.category && options.category !== "all") {
+    qb = qb.eq("category", options.category);
+  }
+
+  const { data } = await qb;
   if (!data) return [];
 
   let rows: InvoiceRow[] = data.map((r) => {
     const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
-      | { id: string; name: string; grade: string | null }
+      | {
+          id: string;
+          name: string;
+          grade: string | null;
+          teacher?: { display_name?: string } | { display_name?: string }[];
+        }
+      | undefined;
+    const teacher = (Array.isArray(stu?.teacher) ? stu?.teacher[0] : stu?.teacher) as
+      | { display_name?: string }
       | undefined;
     return {
       id: r.id,
@@ -82,6 +98,7 @@ export async function getInvoicesForPeriod(
       studentName: stu?.name ?? "?",
       studentGrade: stu?.grade ?? null,
       period: r.period,
+      category: (r as { category?: string }).category ?? "tuition",
       amountTotal: Number(r.amount_total),
       amountPaid: Number(r.amount_paid),
       amountDiscount: Number(r.amount_discount ?? 0),
@@ -90,6 +107,7 @@ export async function getInvoicesForPeriod(
       paidAt: r.paid_at,
       notes: r.notes ?? null,
       lineItems: (r.line_items as InvoiceLineItem[]) ?? [],
+      teacherName: teacher?.display_name ?? null,
     };
   });
 

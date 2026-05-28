@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarDays, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
@@ -34,10 +35,24 @@ export default async function EditStaffPage({
         직원관리로
       </Link>
 
-      <header className="border-border space-y-1 border-b pb-5">
-        <p className="eyebrow">직원 수정</p>
-        <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>
-        <p className="text-muted-foreground text-sm">기본 정보 수정 (역할 변경은 별도)</p>
+      <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
+        <div className="space-y-1">
+          <p className="eyebrow">직원 수정</p>
+          <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>
+          <p className="text-muted-foreground text-sm">기본 정보 수정 (역할 변경은 별도)</p>
+        </div>
+        {(staff.systemRole === "teacher" || staff.systemRole === "master") ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" render={<Link href={`/staff/${staff.id}/payroll`} />}>
+              <Wallet className="size-4" />
+              급여 정산
+            </Button>
+            <Button variant="outline" render={<Link href={`/staff/${staff.id}/leaves`} />}>
+              <CalendarDays className="size-4" />
+              휴가 관리
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       <StaffForm

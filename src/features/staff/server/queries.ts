@@ -67,6 +67,8 @@ export type StaffDetail = {
   subjects: string[];
   defaultClassroom: string | null;
   memo: string | null;
+  hourlyRate: number;
+  monthlyBase: number;
 };
 
 export async function getStaffById(id: string): Promise<StaffDetail | null> {
@@ -74,7 +76,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
   const { data } = await supabase
     .from("users")
     .select(
-      "id, display_name, email, system_role, status, hire_date, job_title, subjects, default_classroom, memo",
+      "id, display_name, email, system_role, status, hire_date, job_title, subjects, default_classroom, memo, hourly_rate, monthly_base",
     )
     .eq("id", id)
     .single();
@@ -92,5 +94,10 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     subjects: Array.isArray(data.subjects) ? (data.subjects as string[]) : [],
     defaultClassroom: data.default_classroom,
     memo: data.memo,
+    hourlyRate: Number(data.hourly_rate ?? 0),
+    monthlyBase: Number(data.monthly_base ?? 0),
   };
 }
+
+// Alias for backward-compat (별칭 — payroll/leaves 페이지에서 사용)
+export const getStaffDetail = getStaffById;

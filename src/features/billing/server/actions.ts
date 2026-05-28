@@ -35,6 +35,10 @@ export async function updateInvoicePayment(
   }
 
   const statusInput = String(formData.get("status") ?? "");
+  const category = String(formData.get("category") ?? "").trim() || "tuition";
+  const amountDiscountRaw = String(formData.get("amountDiscount") ?? "0").replace(/[,\s]/g, "");
+  const amountDiscount = Number(amountDiscountRaw) || 0;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
 
   const supabase = await createClient();
   const { data: cur } = await supabase
@@ -59,7 +63,10 @@ export async function updateInvoicePayment(
     .from("invoices")
     .update({
       amount_paid: amountPaid,
+      amount_discount: amountDiscount,
       status: derived,
+      category,
+      notes,
       paid_at: paidAt,
     })
     .eq("id", id);

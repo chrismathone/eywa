@@ -123,18 +123,71 @@ export const users = pgTable(
     displayName: text("display_name").notNull(),
     systemRole: systemRoleEnum("system_role").notNull().default("viewer"),
     status: userStatusEnum("status").notNull().default("active"),
-    // 노무 규제·금융 민감도가 낮은 직원 메타데이터만 (휴가/급여/계좌는 제외)
     hireDate: date("hire_date"),
     jobTitle: text("job_title"),
     subjects: text("subjects").array(),
     defaultClassroom: text("default_classroom"),
     memo: text("memo"),
+    // 급여 정산용. 외부 노출은 master + 본인만 (RLS).
+    hourlyRate: numeric("hourly_rate", { precision: 10, scale: 0 }).notNull().default("0"),
+    monthlyBase: numeric("monthly_base", { precision: 10, scale: 0 }).notNull().default("0"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     uniqueIndex("users_tenant_email_idx").on(t.tenantId, t.email),
     index("users_tenant_role_idx").on(t.tenantId, t.systemRole),
+  ],
+);
+
+// === payroll_records (월별 강사 정산) ===
+export const payrollRecords = pgTable(
+  "payroll_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    period: text("period").notNull(), // 'YYYY-MM'
+    baseAmount: numeric("base_amount", { precision: 12, scale: 0 }).notNull().default("0"),
+    hoursWorked: numeric("hours_worked", { precision: 8, scale: 2 }).notNull().default("0"),
+    hourlyAmount: numeric("hourly_amount", { precision: 12, scale: 0 }).notNull().default("0"),
+    bonus: numeric("bonus", { precision: 12, scale: 0 }).notNull().default("0"),
+    deduction: numeric("deduction", { precision: 12, scale: 0 }).notNull().default("0"),
+    total: numeric("total", { precision: 12, scale: 0 }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("payroll_tenant_user_period_idx").on(t.tenantId, t.userId, t.period)],
+);
+
+// === staff_leaves (강사 휴가) ===
+export const staffLeaves = pgTable(
+  "staff_leaves",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    leaveType: text("leave_type").notNull(), // 연차/반차/병가/경조사/기타
+    startsOn: date("starts_on").notNull(),
+    endsOn: date("ends_on").notNull(),
+    reason: text("reason"),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("staff_leaves_tenant_user_idx").on(t.tenantId, t.userId),
+    index("staff_leaves_tenant_dates_idx").on(t.tenantId, t.startsOn, t.endsOn),
   ],
 );
 
@@ -449,6 +502,7 @@ export const invoices = pgTable(
       .notNull()
       .references(() => students.id, { onDelete: "restrict" }),
     period: text("period").notNull(),
+    category: text("category").notNull().default("tuition"), // tuition/material/exam/other
     amountTotal: numeric("amount_total", { precision: 12, scale: 0 }).notNull(),
     amountPaid: numeric("amount_paid", { precision: 12, scale: 0 }).notNull().default("0"),
     amountDiscount: numeric("amount_discount", { precision: 12, scale: 0 }).notNull().default("0"),
@@ -457,6 +511,10 @@ export const invoices = pgTable(
     notes: text("notes"),
     dueDate: date("due_date"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    // 청구 시점의 학생 담임강사 id (학생 담임 변경 시에도 invoice는 불변)
+    teacherSnapshotId: uuid("teacher_snapshot_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -464,6 +522,7 @@ export const invoices = pgTable(
     uniqueIndex("invoices_tenant_student_period_idx").on(t.tenantId, t.studentId, t.period),
     index("invoices_tenant_status_idx").on(t.tenantId, t.status),
     index("invoices_tenant_period_idx").on(t.tenantId, t.period),
+    index("invoices_tenant_category_idx").on(t.tenantId, t.category),
   ],
 );
 
@@ -566,3 +625,7 @@ export type StudentGrade = typeof studentGrades.$inferSelect;
 export type NewStudentGrade = typeof studentGrades.$inferInsert;
 export type StudentMemo = typeof studentMemos.$inferSelect;
 export type NewStudentMemo = typeof studentMemos.$inferInsert;
+export type PayrollRecord = typeof payrollRecords.$inferSelect;
+export type NewPayrollRecord = typeof payrollRecords.$inferInsert;
+export type StaffLeave = typeof staffLeaves.$inferSelect;
+export type NewStaffLeave = typeof staffLeaves.$inferInsert;

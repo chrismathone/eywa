@@ -397,6 +397,103 @@ export async function createStudentGrade(
   return undefined;
 }
 
+export type RecomputeTeacherState = { error?: string; updated?: number } | undefined;
+
+/**
+ * 학생의 활성 enrollment들 중 schedule 시간이 가장 많은 강사를 primary_teacher_id로 설정.
+ * formData가 비어 있으면 enrolled 전체 학생 일괄 재계산.
+ */
+export async function recomputePrimaryTeacher(
+  _prev: RecomputeTeacherState,
+  formData: FormData,
+): Promise<RecomputeTeacherState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const targetStudentId = String(formData.get("studentId") ?? "").trim();
+
+  const supabase = await createClient();
+
+  // 1) 처리할 학생 목록
+  let studentIds: string[] = [];
+  if (targetStudentId) {
+    studentIds = [targetStudentId];
+  } else {
+    const { data: stus } = await supabase
+      .from("students")
+      .select("id")
+      .eq("status", "enrolled");
+    studentIds = (stus ?? []).map((s) => s.id);
+  }
+  if (studentIds.length === 0) return { updated: 0 };
+
+  // 2) 학생별 활성 enrollment들의 schedule 시간 합산
+  const { data: enrollments } = await supabase
+    .from("enrollments")
+    .select(
+      `student_id, class_id,
+       class:class_id ( teacher_id ),
+       schedule:class_id ( class_schedules ( start_time, end_time ) )`,
+    )
+    .in("student_id", studentIds)
+    .is("end_date", null);
+
+  // 강사별로 시간 합산 (student_id → teacher_id → minutes)
+  type Acc = Map<string, number>; // teacher_id → minutes
+  const perStudent = new Map<string, Acc>();
+
+  // class_id → schedule minutes
+  const classMinutes = new Map<string, number>();
+  const classIds = Array.from(new Set((enrollments ?? []).map((e) => e.class_id)));
+  if (classIds.length > 0) {
+    const { data: scheds } = await supabase
+      .from("class_schedules")
+      .select("class_id, start_time, end_time")
+      .in("class_id", classIds);
+    for (const s of scheds ?? []) {
+      const [sh, sm] = String(s.start_time).split(":").map(Number);
+      const [eh, em] = String(s.end_time).split(":").map(Number);
+      const mins = eh * 60 + em - (sh * 60 + sm);
+      classMinutes.set(s.class_id, (classMinutes.get(s.class_id) ?? 0) + mins);
+    }
+  }
+
+  for (const e of enrollments ?? []) {
+    const cls = (Array.isArray(e.class) ? e.class[0] : e.class) as
+      | { teacher_id?: string | null }
+      | undefined;
+    if (!cls?.teacher_id) continue;
+    const acc = perStudent.get(e.student_id) ?? new Map();
+    const mins = classMinutes.get(e.class_id) ?? 0;
+    acc.set(cls.teacher_id, (acc.get(cls.teacher_id) ?? 0) + mins);
+    perStudent.set(e.student_id, acc);
+  }
+
+  // 3) 학생별로 시간 최대 강사 → UPDATE
+  let updated = 0;
+  for (const [sid, acc] of perStudent) {
+    if (acc.size === 0) continue;
+    let bestTeacher = "";
+    let bestMins = 0;
+    for (const [tid, mins] of acc) {
+      if (mins > bestMins) {
+        bestMins = mins;
+        bestTeacher = tid;
+      }
+    }
+    if (!bestTeacher) continue;
+    const { error } = await supabase
+      .from("students")
+      .update({ primary_teacher_id: bestTeacher })
+      .eq("id", sid);
+    if (!error) updated++;
+  }
+
+  revalidatePath("/students");
+  if (targetStudentId) revalidatePath(`/students/${targetStudentId}`);
+  return { updated };
+}
+
 export type DeleteGradeState = { error?: string } | undefined;
 
 export async function deleteStudentGrade(

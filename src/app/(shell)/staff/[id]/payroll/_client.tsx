@@ -1,0 +1,295 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
+import Link from "next/link";
+import { Calculator, Check, Loader2, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  autoComputePayroll,
+  markPayrollPaid,
+  upsertPayroll,
+  type MarkPaidState,
+  type SavePayrollState,
+} from "@/features/payroll/server/actions";
+import type {
+  PayrollCalcResult,
+  PayrollRecord,
+} from "@/features/payroll/server/queries";
+
+const KRW = new Intl.NumberFormat("ko-KR");
+
+function shiftMonth(period: string, delta: number): string {
+  const [y, m] = period.split("-").map(Number);
+  const date = new Date(y, m - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function SaveBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+      저장
+    </Button>
+  );
+}
+
+function AutoBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="outline" disabled={pending}>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
+      자동 계산값으로 저장
+    </Button>
+  );
+}
+
+export function PayrollClient({
+  userId,
+  period,
+  autoCalc,
+  history,
+}: {
+  userId: string;
+  period: string;
+  autoCalc: PayrollCalcResult;
+  history: PayrollRecord[];
+}) {
+  const existing = history.find((r) => r.period === period) ?? null;
+
+  const [state, formAction] = useActionState<SavePayrollState, FormData>(upsertPayroll, undefined);
+  const [, autoAction] = useActionState<SavePayrollState, FormData>(autoComputePayroll, undefined);
+
+  const [baseAmount, setBaseAmount] = useState(existing?.baseAmount ?? autoCalc.baseAmount);
+  const [hoursWorked, setHoursWorked] = useState(existing?.hoursWorked ?? autoCalc.hoursWorked);
+  const [hourlyAmount, setHourlyAmount] = useState(
+    existing?.hourlyAmount ?? autoCalc.hourlyAmount,
+  );
+  const [bonus, setBonus] = useState(existing?.bonus ?? 0);
+  const [deduction, setDeduction] = useState(existing?.deduction ?? 0);
+
+  const total = baseAmount + hourlyAmount + bonus - deduction;
+
+  return (
+    <div className="space-y-6">
+      {/* 월 selector */}
+      <div className="bg-card border-border flex items-center justify-between rounded-md border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Link
+            href={`?period=${shiftMonth(period, -1)}`}
+            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-md border"
+          >
+            ◀
+          </Link>
+          <h2 className="text-foreground num text-base font-semibold">{period}</h2>
+          <Link
+            href={`?period=${shiftMonth(period, 1)}`}
+            className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-md border"
+          >
+            ▶
+          </Link>
+        </div>
+        <div className="text-muted-foreground text-xs">
+          {existing
+            ? existing.paidAt
+              ? `${new Date(existing.paidAt).toLocaleDateString("ko-KR")} 지급 완료`
+              : "저장됨 (미지급)"
+            : "미정산"}
+        </div>
+      </div>
+
+      {/* 자동 계산 카드 */}
+      <section className="bg-card border-border rounded-md border p-5">
+        <header className="mb-3 flex items-baseline justify-between">
+          <div>
+            <p className="eyebrow">자동 계산 (출석 × 시급)</p>
+            <h3 className="text-foreground mt-1 text-sm font-semibold">
+              담당 반 {autoCalc.classCount}개 · {autoCalc.hoursWorked}시간
+            </h3>
+          </div>
+          <span className="text-foreground num text-xl font-bold">
+            {KRW.format(autoCalc.baseAmount + autoCalc.hourlyAmount)}원
+          </span>
+        </header>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <StatBox label="기본급" value={`${KRW.format(autoCalc.baseAmount)}원`} />
+          <StatBox label="시간 정산" value={`${KRW.format(autoCalc.hourlyAmount)}원`} />
+          <StatBox label="근무 시간" value={`${autoCalc.hoursWorked}h`} highlight="text-chart-2" />
+        </div>
+        <form action={autoAction} className="mt-4">
+          <input type="hidden" name="userId" value={userId} />
+          <input type="hidden" name="period" value={period} />
+          <AutoBtn />
+        </form>
+      </section>
+
+      {/* 수동 정산 폼 */}
+      <section className="bg-card border-border rounded-md border p-5">
+        <header className="mb-3">
+          <p className="eyebrow">수동 정산</p>
+          <h3 className="text-foreground mt-1 text-sm font-semibold">상세 항목 입력</h3>
+        </header>
+        <form action={formAction} className="space-y-3">
+          <input type="hidden" name="userId" value={userId} />
+          <input type="hidden" name="period" value={period} />
+
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+            <NumField
+              label="기본급"
+              name="baseAmount"
+              value={baseAmount}
+              onChange={setBaseAmount}
+            />
+            <NumField
+              label="근무 시간"
+              name="hoursWorked"
+              value={hoursWorked}
+              onChange={setHoursWorked}
+              step="0.5"
+            />
+            <NumField
+              label="시간 정산"
+              name="hourlyAmount"
+              value={hourlyAmount}
+              onChange={setHourlyAmount}
+            />
+            <NumField label="보너스" name="bonus" value={bonus} onChange={setBonus} />
+            <NumField
+              label="공제"
+              name="deduction"
+              value={deduction}
+              onChange={setDeduction}
+            />
+            <div className="space-y-1">
+              <label className="text-muted-foreground block text-[11px] font-medium">합계</label>
+              <p className="text-foreground num text-base font-bold">{KRW.format(total)}원</p>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-muted-foreground block text-[11px] font-medium">메모</label>
+            <textarea
+              name="notes"
+              rows={2}
+              defaultValue={existing?.notes ?? ""}
+              className="border-border bg-card text-foreground w-full rounded-md border px-2 py-1.5 text-sm"
+            />
+          </div>
+
+          {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <SaveBtn />
+            {existing && !existing.paidAt ? <MarkPaidButton recordId={existing.id} userId={userId} /> : null}
+          </div>
+        </form>
+      </section>
+
+      {/* 히스토리 */}
+      {history.length > 0 ? (
+        <section className="bg-card border-border rounded-md border">
+          <header className="border-border border-b px-5 py-3">
+            <h3 className="text-foreground text-sm font-semibold">정산 이력</h3>
+          </header>
+          <table className="w-full text-sm">
+            <thead className="bg-bg-soft/40">
+              <tr>
+                <th className="micro px-4 py-2 text-left">기간</th>
+                <th className="micro px-4 py-2 text-right">합계</th>
+                <th className="micro px-4 py-2 text-right">지급</th>
+                <th className="micro px-4 py-2 text-left">메모</th>
+              </tr>
+            </thead>
+            <tbody className="divide-border divide-y">
+              {history.map((r) => (
+                <tr key={r.id} className="hover:bg-bg-soft/30">
+                  <td className="num px-4 py-2 text-xs">{r.period}</td>
+                  <td className="num px-4 py-2 text-right text-xs font-medium">
+                    {KRW.format(r.total)}원
+                  </td>
+                  <td className="num px-4 py-2 text-right text-xs">
+                    {r.paidAt ? (
+                      <span className="text-chart-2">
+                        {new Date(r.paidAt).toLocaleDateString("ko-KR")}
+                      </span>
+                    ) : (
+                      <span className="text-chart-4">미지급</span>
+                    )}
+                  </td>
+                  <td className="text-muted-foreground px-4 py-2 text-xs">{r.notes ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function StatBox({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: string;
+}) {
+  return (
+    <div className="bg-bg-soft/30 border-border rounded-md border px-3 py-2">
+      <p className="text-muted-foreground text-[11px]">{label}</p>
+      <p className={`num text-foreground mt-0.5 font-semibold ${highlight ?? ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function NumField({
+  label,
+  name,
+  value,
+  onChange,
+  step,
+}: {
+  label: string;
+  name: string;
+  value: number;
+  onChange: (v: number) => void;
+  step?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-muted-foreground block text-[11px] font-medium">{label}</label>
+      <input
+        name={name}
+        type="number"
+        step={step ?? "1000"}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        className="border-border bg-card text-foreground num w-full rounded-md border px-2 py-1.5 text-sm"
+      />
+    </div>
+  );
+}
+
+function MarkPaidBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="outline" disabled={pending}>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+      지급 완료 표시
+    </Button>
+  );
+}
+
+function MarkPaidButton({ recordId, userId }: { recordId: string; userId: string }) {
+  const [, action] = useActionState<MarkPaidState, FormData>(markPayrollPaid, undefined);
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={recordId} />
+      <input type="hidden" name="userId" value={userId} />
+      <MarkPaidBtn />
+    </form>
+  );
+}

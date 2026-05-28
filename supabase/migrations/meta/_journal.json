@@ -120,6 +120,13 @@
       "when": 1779956236949,
       "tag": "0016_silky_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779956785666,
+      "tag": "0017_chilly_avengers",
+      "breakpoints": true
     }
   ]
 }
