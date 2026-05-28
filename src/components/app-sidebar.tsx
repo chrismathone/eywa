@@ -25,16 +25,20 @@ export function AppSidebar({
   systemRole,
   displayName,
   email,
+  className,
 }: {
   systemRole: SystemRole;
   displayName: string;
   email: string;
+  className?: string;
 }) {
   const pathname = usePathname();
   const userInitial = displayName.charAt(0).toUpperCase();
 
   return (
-    <aside className="bg-sidebar border-line sticky top-0 flex h-screen w-[232px] shrink-0 flex-col border-r">
+    <aside
+      className={`bg-sidebar border-line sticky top-0 flex h-screen w-[232px] shrink-0 flex-col border-r ${className ?? ""}`}
+    >
       {/* brand */}
       <div className="px-[22px] pt-[22px] pb-[18px]">
         <Link href="/dashboard" className="flex items-center gap-2.5">
