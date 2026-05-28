@@ -374,6 +374,17 @@ async function main() {
       and email = 'chrismathone@gmail.com'
   `;
 
+  // --- 1c. super_admin grant — chrismathone은 SaaS 운영자 겸 academy master ---
+  console.log("Granting super_admin to chrismathone@gmail.com…");
+  await sql`
+    insert into super_admins (id, email, display_name)
+    select id, email, display_name from users
+    where email = 'chrismathone@gmail.com'
+    on conflict (id) do update set
+      email = excluded.email,
+      display_name = excluded.display_name
+  `;
+
   // --- 2. Teachers (5) ---
   console.log("Inserting teachers…");
   const teacherIds: string[] = [];

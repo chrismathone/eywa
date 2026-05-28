@@ -34,7 +34,7 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
     admin.from("tenants").select("id, slug, name, plan, created_at").order("created_at", { ascending: false }),
     admin.from("users").select("tenant_id"),
     admin.from("students").select("tenant_id").neq("status", "withdrawn"),
-    admin.from("invoices").select("tenant_id, amount").eq("period", period),
+    admin.from("invoices").select("tenant_id, amount_total").eq("period", period),
   ]);
 
   const userCountByTenant = new Map<string, number>();
@@ -49,7 +49,7 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
 
   const billingByTenant = new Map<string, number>();
   (invoicesRes.data ?? []).forEach((i) => {
-    const amt = Number(i.amount ?? 0);
+    const amt = Number(i.amount_total ?? 0);
     billingByTenant.set(i.tenant_id, (billingByTenant.get(i.tenant_id) ?? 0) + amt);
   });
 
@@ -97,10 +97,10 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
       .order("created_at", { ascending: true }),
     admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
     admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
-    admin.from("invoices").select("amount").eq("tenant_id", id).eq("period", period),
+    admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period),
   ]);
 
-  const monthBilling = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount ?? 0), 0);
+  const monthBilling = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
   return {
     id: tenant.id,
@@ -130,10 +130,10 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
     admin.from("tenants").select("id", { count: "exact", head: true }),
     admin.from("users").select("id", { count: "exact", head: true }).eq("status", "active"),
     admin.from("students").select("id", { count: "exact", head: true }).neq("status", "withdrawn"),
-    admin.from("invoices").select("amount").eq("period", period),
+    admin.from("invoices").select("amount_total").eq("period", period),
   ]);
 
-  const monthBillingSum = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount ?? 0), 0);
+  const monthBillingSum = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
   return {
     tenantCount: tenantsRes.count ?? 0,
