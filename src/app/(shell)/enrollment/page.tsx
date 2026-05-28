@@ -10,6 +10,7 @@ import {
   getEnrollmentConsultations,
 } from "@/features/enrollment/server/queries";
 import { KanbanFilters } from "./_components/kanban-filters";
+import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 
 export const metadata = { title: "신입생 등록상담 — eywa" };
 
@@ -101,10 +102,7 @@ export default async function EnrollmentPage({
             <span className="rounded-full bg-white/15 px-2.5 py-1 font-mono text-[11px] font-bold text-white">
               이번달 {items.length}회
             </span>
-            <Button render={<Link href="/enrollment/new" />}>
-              <EyIcon name="plus" size={13} className="mr-1" />
-              신규 등록
-            </Button>
+            <NewEnrollmentTrigger />
           </div>
         </div>
       </section>
