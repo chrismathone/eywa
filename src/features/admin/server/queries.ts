@@ -105,36 +105,3 @@ export async function findOrphans(): Promise<OrphanReport> {
   };
 }
 
-export type ScenarioRow = {
-  id: string;
-  name: string;
-  basePeriod: string | null;
-  notes: string | null;
-  createdAt: string;
-  createdByName: string | null;
-};
-
-export async function getScenarios(): Promise<ScenarioRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("scenarios")
-    .select(
-      `id, name, base_period, notes, created_at,
-       creator:created_by ( display_name )`,
-    )
-    .order("created_at", { ascending: false });
-
-  return (data ?? []).map((r) => {
-    const c = (Array.isArray(r.creator) ? r.creator[0] : r.creator) as
-      | { display_name?: string }
-      | undefined;
-    return {
-      id: r.id,
-      name: r.name,
-      basePeriod: r.base_period,
-      notes: r.notes,
-      createdAt: r.created_at,
-      createdByName: c?.display_name ?? null,
-    };
-  });
-}

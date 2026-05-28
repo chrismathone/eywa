@@ -141,6 +141,13 @@
       "when": 1779958074907,
       "tag": "0019_rainy_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779962374084,
+      "tag": "0020_lonely_chat",
+      "breakpoints": true
     }
   ]
 }

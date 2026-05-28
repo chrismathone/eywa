@@ -112,13 +112,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - 대시보드 위젯 (결제 예정 / 결석 위험)
 - 엑셀 export (시간표 색상 보존 / 학생 / 수납)
 - Google Sheets 동기화 (service account JWT)
-- Admin 도구 (중복 병합 / 데이터 정리 / 시나리오)
+- Admin 도구 (중복 병합 / 데이터 정리) — 시나리오는 엑셀/스프레드시트로 대체
 
 ### 라우트 구조
 - `/` = **랜딩 페이지 8섹션** (Hero·Flow·LogoWall·Manifesto·Testimonials·Pricing·CTA·Footer)
 - `/dashboard` = 대시보드 (예전 `/`에서 이동)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
-- `/admin/*` = master 전용 (duplicates/cleanup/scenarios/integrations/sheets)
+- `/admin/*` = master 전용 (duplicates/cleanup/integrations/sheets)
 - `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
 - `(shell)/` = 인증된 12개 메뉴 + admin (사이드바 232px + Topbar 64px)
 - `(print)/enrollment/[id]/print/` = A4 인쇄

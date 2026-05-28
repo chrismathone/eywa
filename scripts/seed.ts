@@ -352,7 +352,6 @@ async function main() {
   await sql`delete from student_memos where tenant_id = ${tenantId}`;
   await sql`delete from payroll_records where tenant_id = ${tenantId}`;
   await sql`delete from staff_leaves where tenant_id = ${tenantId}`;
-  await sql`delete from scenarios where tenant_id = ${tenantId}`;
   await sql`delete from user_integrations where tenant_id = ${tenantId}`;
   await sql`delete from students where tenant_id = ${tenantId}`;
   await sql`delete from class_schedules where tenant_id = ${tenantId}`;
