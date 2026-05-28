@@ -1,5 +1,6 @@
 import { EyIcon, MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
+import { ShortcutsList, HeroSearchHint } from "./_shortcuts";
 
 export const metadata = { title: "도움말 — eywa" };
 
@@ -101,14 +102,6 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
-const SHORTCUTS: { keys: string; description: string }[] = [
-  { keys: "⌘ K", description: "전역 검색" },
-  { keys: "⌘ N", description: "새 학생" },
-  { keys: "G + D", description: "대시보드로 이동" },
-  { keys: "G + S", description: "학생목록으로 이동" },
-  { keys: "G + B", description: "수납관리로 이동" },
-];
-
 export default async function HelpPage() {
   await requireAccess("help");
 
@@ -145,7 +138,7 @@ export default async function HelpPage() {
               className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/60 focus:outline-none"
               disabled
             />
-            <span className="font-mono text-[10px] text-white/60">⌘K</span>
+            <HeroSearchHint />
           </div>
         </div>
       </section>
@@ -206,16 +199,7 @@ export default async function HelpPage() {
             <p className="micro">단축키</p>
             <h2 className="text-foreground mt-0.5 text-[15px] font-bold">키보드 한 번에</h2>
           </header>
-          <ul className="space-y-2">
-            {SHORTCUTS.map((s) => (
-              <li key={s.keys} className="flex items-center justify-between">
-                <span className="text-text-dim text-[12px]">{s.description}</span>
-                <kbd className="bg-bg-soft text-foreground border-line rounded-md border px-2 py-0.5 font-mono text-[11px] font-bold">
-                  {s.keys}
-                </kbd>
-              </li>
-            ))}
-          </ul>
+          <ShortcutsList />
         </section>
 
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#185533] p-5 text-white shadow-primary-glow">

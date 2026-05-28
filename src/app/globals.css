@@ -390,3 +390,31 @@
     print-color-adjust: exact !important;
   }
 }
+
+/* ───────────────────────────────────────────────
+ * 디자인 톤에 녹아드는 얇은 스크롤바.
+ * 기본 브라우저 회색 스크롤바를 가리고 싶은 곳에 .scrollbar-thin 적용.
+ * (X축/Y축 모두 동일 톤. line 컬러 사용.)
+ * ─────────────────────────────────────────────── */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(13, 17, 16, 0.18);
+  border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(13, 17, 16, 0.32);
+}
+.scrollbar-thin::-webkit-scrollbar-corner {
+  background: transparent;
+}
+

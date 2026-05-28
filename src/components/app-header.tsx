@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { UserMenu } from "@/components/user-menu";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
+import { useIsMac } from "@/lib/use-platform";
 
 export function AppHeader({ email }: { email: string }) {
   const pathname = usePathname();
@@ -11,6 +12,7 @@ export function AppHeader({ email }: { email: string }) {
   const group = findNavGroup(pathname);
   const title = current?.label ?? "eywa";
   const breadcrumb = group ? `EYWA · ${group.label}` : "EYWA";
+  const isMac = useIsMac();
 
   return (
     <header className="bg-background border-line sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-7">
@@ -28,7 +30,7 @@ export function AppHeader({ email }: { email: string }) {
           <EyIcon name="search" size={13} />
           <span className="flex-1 text-xs">검색</span>
           <span className="bg-bg-soft text-text-faint rounded-sm px-1.5 py-px font-mono text-[10px]">
-            ⌘K
+            {isMac ? "⌘K" : "Ctrl+K"}
           </span>
         </div>
         <button

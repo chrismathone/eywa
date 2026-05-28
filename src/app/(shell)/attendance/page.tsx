@@ -53,7 +53,7 @@ export default async function AttendancePage({
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
         {/* 반 chip */}
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
           <span className="micro mr-1">반</span>
           {matrix.classes.map((c) => (
             <Link

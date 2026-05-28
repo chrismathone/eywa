@@ -33,7 +33,7 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, consultants }
   return (
     <div className="border-border bg-card flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3">
       {/* Month chip group */}
-      <div className="flex items-center gap-1.5 overflow-x-auto">
+      <div className="scrollbar-thin flex items-center gap-1.5 overflow-x-auto">
         <span className="text-muted-foreground shrink-0 text-xs">월</span>
         <Chip active={!selectedMonth} href={`/enrollment${buildQuery(null, selectedConsultant)}`}>
           전체
@@ -51,7 +51,7 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, consultants }
 
       <span className="text-muted-foreground/40 hidden text-xs sm:inline">·</span>
 
-      <div className="flex items-center gap-1.5 overflow-x-auto">
+      <div className="scrollbar-thin flex items-center gap-1.5 overflow-x-auto">
         <span className="text-muted-foreground shrink-0 text-xs">상담사</span>
         <Chip active={!selectedConsultant} href={`/enrollment${buildQuery(selectedMonth, null)}`}>
           전체

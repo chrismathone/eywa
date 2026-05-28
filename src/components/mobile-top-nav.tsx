@@ -12,8 +12,8 @@ function isItemActive(href: string, pathname: string) {
 }
 
 /**
- * 좁은 폭(<lg, 1024px)에서 좌측 사이드바 대신 상단에 가로 스크롤되는 메뉴 바.
- * 그룹 간에는 vertical separator로 시각적 구분.
+ * 좁은 폭(<lg, 1024px)에서 좌측 사이드바 대신 상단에 펼쳐지는 메뉴 바.
+ * 상단: EYWA 브랜드 banner / 하단: 메뉴 grid (auto-fit으로 균등 분할, 그룹 구분선 없음).
  */
 export function MobileTopNav({
   systemRole,
@@ -23,55 +23,53 @@ export function MobileTopNav({
   className?: string;
 }) {
   const pathname = usePathname();
+  const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter((item) =>
+    canAccess(systemRole, item.menuKey),
+  );
 
   return (
     <nav
-      className={`bg-sidebar border-line sticky top-0 z-20 flex items-center gap-2 overflow-x-auto border-b px-3 py-2 ${className ?? ""}`}
+      className={`bg-sidebar border-line sticky top-0 z-20 border-b ${className ?? ""}`}
       aria-label="메뉴"
     >
-      {/* 브랜드 (좁아도 보임) */}
-      <Link href="/dashboard" className="flex shrink-0 items-center gap-2 pr-1">
-        <span className="bg-ink flex size-6 items-center justify-center rounded-[3px]">
-          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
-            <circle cx="8" cy="8" r="2" fill="#fff" />
-          </svg>
-        </span>
-        <span className="text-foreground text-[14px] font-extrabold tracking-tight">EYWA</span>
-      </Link>
-      <span className="bg-line h-5 w-px shrink-0" aria-hidden />
+      {/* 브랜드 banner */}
+      <div className="border-line/60 flex items-center justify-center gap-2 border-b px-3 py-1.5">
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <span className="bg-ink flex size-5 items-center justify-center rounded-[3px]">
+            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
+              <circle cx="8" cy="8" r="2" fill="#fff" />
+            </svg>
+          </span>
+          <span className="text-foreground text-[13px] font-extrabold tracking-tight">EYWA</span>
+        </Link>
+      </div>
 
-      {NAV_GROUPS.map((group, gi) => {
-        const visible: NavItem[] = group.items.filter((item) =>
-          canAccess(systemRole, item.menuKey),
-        );
-        if (visible.length === 0) return null;
-        return (
-          <div key={group.label} className="flex shrink-0 items-center gap-1">
-            {visible.map((item) => {
-              const active = isItemActive(item.href, pathname);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[12px] font-semibold transition ${
-                    active
-                      ? "bg-primary text-primary-foreground shadow-primary-glow"
-                      : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-                  }`}
-                >
-                  <EyIcon name={item.icon} size={13} />
-                  {item.label}
-                </Link>
-              );
-            })}
-            {gi < NAV_GROUPS.length - 1 ? (
-              <span className="bg-line ml-1 h-4 w-px shrink-0" aria-hidden />
-            ) : null}
-          </div>
-        );
-      })}
+      {/* 메뉴 grid (모든 cell 균등 너비) */}
+      <ul
+        className="grid gap-1 px-2 py-1.5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))" }}
+      >
+        {items.map((item) => {
+          const active = isItemActive(item.href, pathname);
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-sm px-2 text-[12px] font-semibold transition ${
+                  active
+                    ? "bg-primary text-primary-foreground shadow-primary-glow"
+                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                <EyIcon name={item.icon} size={13} />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </nav>
   );
 }

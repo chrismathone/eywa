@@ -108,7 +108,7 @@ export default async function BillingPage({
         </div>
 
         {/* 월 chip (최근 6개월) */}
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
           {periods.slice(0, 6).map((p) => (
             <Link
               key={p}

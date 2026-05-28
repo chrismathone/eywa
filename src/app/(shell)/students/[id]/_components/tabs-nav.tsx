@@ -26,7 +26,7 @@ export function StudentTabsNav({
   return (
     <nav
       role="tablist"
-      className="border-border bg-card overflow-x-auto rounded-md border"
+      className="scrollbar-thin border-border bg-card overflow-x-auto rounded-md border"
     >
       <ul className="flex gap-0.5 px-1.5 py-1.5">
         {STUDENT_TABS.map((t) => {
