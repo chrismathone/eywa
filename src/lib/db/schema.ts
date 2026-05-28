@@ -464,6 +464,53 @@ export const invoices = pgTable(
   ],
 );
 
+// === student_grades (시험 점수 기록) ===
+// 학생별로 시험·과제 점수를 누적. 학생 상세 페이지의 "성적" 탭에서 시각화.
+export const studentGrades = pgTable(
+  "student_grades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    examName: text("exam_name").notNull(),
+    subject: text("subject").notNull(),
+    score: numeric("score", { precision: 6, scale: 2 }),
+    maxScore: numeric("max_score", { precision: 6, scale: 2 }),
+    takenOn: date("taken_on").notNull(),
+    notes: text("notes"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("grades_tenant_student_idx").on(t.tenantId, t.studentId),
+    index("grades_tenant_taken_idx").on(t.tenantId, t.takenOn),
+  ],
+);
+
+// === student_memos (학생별 자유 메모) ===
+// 학생별 자유 메모. 학생 상세 페이지의 "메모" 탭에서 누적 표시.
+export const studentMemos = pgTable(
+  "student_memos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    category: text("category").notNull().default("general"),
+    content: text("content").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("memos_tenant_student_idx").on(t.tenantId, t.studentId)],
+);
+
 // === announcements ===
 export const announcements = pgTable(
   "announcements",
@@ -512,3 +559,7 @@ export type Invoice = typeof invoices.$inferSelect;
 export type NewInvoice = typeof invoices.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
+export type StudentGrade = typeof studentGrades.$inferSelect;
+export type NewStudentGrade = typeof studentGrades.$inferInsert;
+export type StudentMemo = typeof studentMemos.$inferSelect;
+export type NewStudentMemo = typeof studentMemos.$inferInsert;

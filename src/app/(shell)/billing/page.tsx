@@ -150,7 +150,7 @@ export default async function BillingPage({
         <span className="num text-foreground font-semibold">
           {summary.paymentRate.toFixed(1)}%
         </span>
-        {q ? <span className="ml-2">· "{q}" 검색 결과 {rows.length}건</span> : null}
+        {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색 결과 {rows.length}건</span> : null}
       </p>
 
       {rows.length === 0 ? (

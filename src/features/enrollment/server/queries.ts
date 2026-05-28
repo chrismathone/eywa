@@ -172,6 +172,7 @@ export type ConsultationDetail = ConsultationListRow & {
   processingError: string | null;
   audioDurationSec: number | null;
   recommendedClasses: { id: string; className: string; subject: string }[];
+  studentId: string | null;
 };
 
 export async function getEnrollmentConsultationById(id: string): Promise<ConsultationDetail | null> {
@@ -181,7 +182,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     .select(
       `id, prospect_name, prospect_grade, prospect_school,
        parent_name, parent_phone, parent_request, learning_history,
-       outcome, consulted_at,
+       outcome, consulted_at, student_id,
        audio_path, audio_duration_sec, transcription,
        processing_status, processing_error,
        consultant:consultant_id ( display_name )`,
@@ -257,6 +258,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
         }
       : null,
     recommendedClasses,
+    studentId: (c as { student_id?: string | null }).student_id ?? null,
   };
 }
 

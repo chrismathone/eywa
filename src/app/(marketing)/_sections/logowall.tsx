@@ -160,7 +160,7 @@ export function LogoWallSection() {
         {/* Status bar */}
         <div className="border-line bg-card mt-10 flex items-center justify-between rounded-xl border px-5 py-3.5">
           <p className="text-text-dim font-mono text-[12px]">
-            // 전국 47개 학원 · 12,800+ 학생 · 220+ 강사
+            {"// 전국 47개 학원 · 12,800+ 학생 · 220+ 강사"}
           </p>
           <p className="font-mono text-[12px]">
             <span className="text-primary font-bold">uptime 99.97%</span>

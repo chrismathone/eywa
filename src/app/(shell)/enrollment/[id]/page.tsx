@@ -11,8 +11,10 @@ import {
   type ConsultationAudioReport,
   type ConsultationProcessingStatus,
 } from "@/features/enrollment/server/queries";
+import { getClassesList } from "@/features/classes/server/queries";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationStatusWatcher } from "./status-watcher";
+import { ConvertToStudentDialog } from "./_components/convert-dialog";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -51,7 +53,10 @@ export default async function EnrollmentDetailPage({
 }) {
   await requireAccess("enrollment");
   const { id } = await params;
-  const consult = await getEnrollmentConsultationById(id);
+  const [consult, allClasses] = await Promise.all([
+    getEnrollmentConsultationById(id),
+    getClassesList({ active: "active" }),
+  ]);
   if (!consult) notFound();
 
   const badge = OUTCOME_BADGE[consult.outcome] ?? OUTCOME_BADGE.pending!;
@@ -106,15 +111,34 @@ export default async function EnrollmentDetailPage({
             ) : null}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {consult.aiAnalysis ? (
-            <Button render={<Link href={`/enrollment/${id}/print`} target="_blank" />}>
+            <Button variant="outline" render={<Link href={`/enrollment/${id}/print`} target="_blank" />}>
               <Printer className="size-4" />
               인쇄 양식
             </Button>
           ) : !consult.hasAudio ? (
             <RunAiButton consultationId={id} />
           ) : null}
+          <ConvertToStudentDialog
+            consultationId={consult.id}
+            defaults={{
+              name: consult.prospectName,
+              grade: consult.prospectGrade,
+              school: consult.prospectSchool,
+              parentName: consult.parentName,
+              parentPhone: consult.parentPhone,
+            }}
+            classes={allClasses.map((c) => ({
+              id: c.id,
+              className: c.className,
+              subject: c.subject,
+              teacherName: c.teacherName,
+            }))}
+            recommendedIds={consult.recommendedClasses.map((r) => r.id)}
+            alreadyConverted={!!consult.studentId}
+            linkedStudentId={consult.studentId}
+          />
         </div>
       </header>
 

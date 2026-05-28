@@ -265,3 +265,275 @@ export async function getStudentAttendanceStats(
     rate: total > 0 ? (present / total) * 100 : 0,
   };
 }
+
+// ────────────────────── 7탭 데이터 ──────────────────────
+
+export type StudentBillingRow = {
+  id: string;
+  period: string;
+  amountTotal: number;
+  amountPaid: number;
+  amountDiscount: number;
+  status: string;
+  dueDate: string | null;
+  paidAt: string | null;
+  notes: string | null;
+};
+
+export async function getStudentInvoices(studentId: string): Promise<StudentBillingRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("invoices")
+    .select(
+      "id, period, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes",
+    )
+    .eq("student_id", studentId)
+    .order("period", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    period: r.period,
+    amountTotal: Number(r.amount_total),
+    amountPaid: Number(r.amount_paid),
+    amountDiscount: Number(r.amount_discount),
+    status: r.status,
+    dueDate: r.due_date,
+    paidAt: r.paid_at,
+    notes: r.notes,
+  }));
+}
+
+export type StudentGradeRow = {
+  id: string;
+  examName: string;
+  subject: string;
+  score: number | null;
+  maxScore: number | null;
+  takenOn: string;
+  notes: string | null;
+};
+
+export async function getStudentGrades(studentId: string): Promise<StudentGradeRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("student_grades")
+    .select("id, exam_name, subject, score, max_score, taken_on, notes")
+    .eq("student_id", studentId)
+    .order("taken_on", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    examName: r.exam_name,
+    subject: r.subject,
+    score: r.score == null ? null : Number(r.score),
+    maxScore: r.max_score == null ? null : Number(r.max_score),
+    takenOn: r.taken_on,
+    notes: r.notes,
+  }));
+}
+
+export type StudentMemoRow = {
+  id: string;
+  category: string;
+  content: string;
+  createdAt: string;
+  createdBy: string | null;
+  createdByName: string | null;
+};
+
+export async function getStudentMemos(studentId: string): Promise<StudentMemoRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("student_memos")
+    .select(
+      `id, category, content, created_at, created_by,
+       author:created_by ( display_name )`,
+    )
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => {
+    const a = (Array.isArray(r.author) ? r.author[0] : r.author) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: r.id,
+      category: r.category,
+      content: r.content,
+      createdAt: r.created_at,
+      createdBy: r.created_by,
+      createdByName: a?.display_name ?? null,
+    };
+  });
+}
+
+export type StudentConsultationRow = {
+  id: string;
+  consultedAt: string;
+  category: string | null;
+  subject: string | null;
+  audience: string | null;
+  summary: string;
+  followUpAction: string | null;
+  followUpDate: string | null;
+  followUpDone: boolean;
+  counselorName: string | null;
+};
+
+export async function getStudentConsultationHistory(
+  studentId: string,
+): Promise<StudentConsultationRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("student_consultations")
+    .select(
+      `id, consulted_at, category, subject, audience, summary,
+       follow_up_action, follow_up_date, follow_up_done,
+       counselor:counselor_id ( display_name )`,
+    )
+    .eq("student_id", studentId)
+    .order("consulted_at", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => {
+    const c = (Array.isArray(r.counselor) ? r.counselor[0] : r.counselor) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: r.id,
+      consultedAt: r.consulted_at,
+      category: r.category,
+      subject: r.subject,
+      audience: r.audience,
+      summary: r.summary,
+      followUpAction: r.follow_up_action,
+      followUpDate: r.follow_up_date,
+      followUpDone: r.follow_up_done,
+      counselorName: c?.display_name ?? null,
+    };
+  });
+}
+
+export type StudentAttendanceDay = {
+  date: string;
+  status: string;
+  className: string;
+};
+
+export async function getStudentAttendanceCalendar(
+  studentId: string,
+  days = 60,
+): Promise<StudentAttendanceDay[]> {
+  const supabase = await createClient();
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  const { data } = await supabase
+    .from("attendance_records")
+    .select(`session_date, status, class:class_id ( class_name )`)
+    .eq("student_id", studentId)
+    .gte("session_date", start.toISOString().slice(0, 10))
+    .order("session_date", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => {
+    const c = (Array.isArray(r.class) ? r.class[0] : r.class) as
+      | { class_name?: string }
+      | undefined;
+    return {
+      date: r.session_date,
+      status: r.status,
+      className: c?.class_name ?? "?",
+    };
+  });
+}
+
+// 등록상담 → 학생 timeline ↔ 학생상담 + 메모 + enrollment 변경 통합
+export type TimelineEvent = {
+  date: string; // ISO date
+  kind: "enrollment_start" | "enrollment_end" | "consultation" | "memo" | "status_change" | "grade";
+  title: string;
+  description?: string | null;
+};
+
+export async function getStudentTimeline(studentId: string): Promise<TimelineEvent[]> {
+  const supabase = await createClient();
+
+  const [
+    { data: enrollments },
+    { data: consultations },
+    { data: memos },
+    { data: grades },
+  ] = await Promise.all([
+    supabase
+      .from("enrollments")
+      .select(`start_date, end_date, withdrawal_reason, class:class_id ( class_name )`)
+      .eq("student_id", studentId),
+    supabase
+      .from("student_consultations")
+      .select(`consulted_at, category, summary`)
+      .eq("student_id", studentId),
+    supabase
+      .from("student_memos")
+      .select(`created_at, category, content`)
+      .eq("student_id", studentId),
+    supabase
+      .from("student_grades")
+      .select(`taken_on, exam_name, subject, score, max_score`)
+      .eq("student_id", studentId),
+  ]);
+
+  const events: TimelineEvent[] = [];
+
+  for (const e of enrollments ?? []) {
+    const c = (Array.isArray(e.class) ? e.class[0] : e.class) as
+      | { class_name?: string }
+      | undefined;
+    events.push({
+      date: e.start_date,
+      kind: "enrollment_start",
+      title: `${c?.class_name ?? "—"} 수강 시작`,
+    });
+    if (e.end_date) {
+      events.push({
+        date: e.end_date,
+        kind: "enrollment_end",
+        title: `${c?.class_name ?? "—"} 수강 종료`,
+        description: e.withdrawal_reason,
+      });
+    }
+  }
+
+  for (const c of consultations ?? []) {
+    events.push({
+      date: String(c.consulted_at).slice(0, 10),
+      kind: "consultation",
+      title: `상담 — ${c.category ?? "일반"}`,
+      description: c.summary,
+    });
+  }
+
+  for (const m of memos ?? []) {
+    events.push({
+      date: String(m.created_at).slice(0, 10),
+      kind: "memo",
+      title: `메모 — ${m.category}`,
+      description: m.content,
+    });
+  }
+
+  for (const g of grades ?? []) {
+    events.push({
+      date: g.taken_on,
+      kind: "grade",
+      title: `${g.subject} — ${g.exam_name}`,
+      description:
+        g.score == null
+          ? null
+          : g.max_score
+            ? `${g.score} / ${g.max_score}점`
+            : `${g.score}점`,
+    });
+  }
+
+  // 최신 → 과거 정렬
+  events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return events;
+}

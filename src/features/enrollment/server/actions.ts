@@ -224,6 +224,103 @@ export async function runAiAnalysis(
   return undefined;
 }
 
+// ────────────────── 상담 → 학생 자동 전환 ──────────────────
+
+export type ConvertToStudentState = { error?: string; studentId?: string } | undefined;
+
+/**
+ * 등록상담 → 학생 자동 생성. 선택한 반들에 enrollments도 동시에 INSERT.
+ * 호출 후 enrollment_consultations.student_id 채우고 outcome='enrolled' 표시.
+ */
+export async function convertConsultationToStudent(
+  _prev: ConvertToStudentState,
+  formData: FormData,
+): Promise<ConvertToStudentState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const consultationId = String(formData.get("consultationId") ?? "").trim();
+  if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
+
+  // form에서 다중 class id 받음 (선택)
+  const classIds = formData
+    .getAll("classIds")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+
+  // 학생 정보 — 폼에서 받은 값 우선, 없으면 상담의 값
+  const overrideName = String(formData.get("name") ?? "").trim();
+  const overrideGrade = String(formData.get("grade") ?? "").trim() || null;
+  const overrideSchool = String(formData.get("school") ?? "").trim() || null;
+  const overrideParentName = String(formData.get("parentName") ?? "").trim() || null;
+  const overrideParentPhone = String(formData.get("parentPhone") ?? "").trim() || null;
+
+  const supabase = await createClient();
+
+  const { data: c, error: cErr } = await supabase
+    .from("enrollment_consultations")
+    .select(
+      "id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, student_id, outcome",
+    )
+    .eq("id", consultationId)
+    .single();
+
+  if (cErr || !c) return { error: cErr?.message ?? "상담을 찾을 수 없습니다" };
+
+  if (c.student_id) {
+    // 이미 연결된 학생이 있으면 그 학생으로 이동
+    return { studentId: c.student_id };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // students INSERT
+  const { data: stu, error: stuErr } = await supabase
+    .from("students")
+    .insert({
+      tenant_id: c.tenant_id,
+      name: overrideName || c.prospect_name,
+      grade: overrideGrade ?? c.prospect_grade,
+      school: overrideSchool ?? c.prospect_school,
+      parent_name: overrideParentName ?? c.parent_name,
+      parent_phone: overrideParentPhone ?? c.parent_phone,
+      status: "enrolled",
+      enrolled_at: today,
+    })
+    .select("id")
+    .single();
+
+  if (stuErr || !stu) {
+    return { error: stuErr?.message ?? "학생 생성 실패" };
+  }
+
+  // enrollments 다중 INSERT
+  if (classIds.length > 0) {
+    const rows = classIds.map((classId) => ({
+      tenant_id: c.tenant_id,
+      student_id: stu.id,
+      class_id: classId,
+      start_date: today,
+    }));
+    const { error: enrErr } = await supabase.from("enrollments").insert(rows);
+    if (enrErr) {
+      // 학생은 생성됐지만 enrollment 실패 — 사용자에게 알림 (학생 ID는 반환)
+      return { error: `학생은 생성됐으나 반 배정 실패: ${enrErr.message}`, studentId: stu.id };
+    }
+  }
+
+  // 상담에 학생 ID + outcome=enrolled 연결
+  await supabase
+    .from("enrollment_consultations")
+    .update({ student_id: stu.id, outcome: "enrolled" })
+    .eq("id", consultationId);
+
+  revalidatePath("/enrollment");
+  revalidatePath(`/enrollment/${consultationId}`);
+  revalidatePath("/students");
+  return { studentId: stu.id };
+}
+
 /**
  * Audio flow: client uploaded an audio file to the consultation-recordings bucket.
  * Server creates a consultation row, generates a signed URL, submits to AssemblyAI

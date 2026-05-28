@@ -167,7 +167,7 @@ export default async function StudentsPage({
       <div className="flex items-center justify-between">
         <p className="micro">
           결과 <span className="text-foreground font-bold">{students.length}</span>명
-          {q ? <span className="text-text-dim ml-2">"{q}" 검색</span> : null}
+          {q ? <span className="text-text-dim ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
         </p>
         <Button render={<Link href="/students/new" />}>
           <EyIcon name="plus" size={13} className="mr-1" />새 학생

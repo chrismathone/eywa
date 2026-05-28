@@ -103,6 +103,7 @@ export default async function ConsultationsPage({
     );
   }
   if (range !== "all") {
+    // eslint-disable-next-line react-hooks/purity -- server component renders once per request
     const cutoff = Date.now() - (range === "7d" ? 7 : 30) * 86_400_000;
     items = items.filter((i) => new Date(i.consultedAt).getTime() > cutoff);
   }
