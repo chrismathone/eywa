@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Loader2, Printer } from "lucide-react";
+import { Download, FileSpreadsheet, Loader2, Printer } from "lucide-react";
 
 export function TimetableToolbarActions() {
   const [exporting, setExporting] = useState(false);
@@ -38,6 +38,13 @@ export function TimetableToolbarActions() {
 
   return (
     <div className="print:hidden flex items-center gap-1">
+      <a
+        href="/api/exports/timetable"
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
+      >
+        <FileSpreadsheet className="size-3" />
+        엑셀
+      </a>
       <button
         type="button"
         onClick={exportPng}

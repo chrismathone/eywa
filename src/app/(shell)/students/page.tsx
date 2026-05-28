@@ -169,9 +169,22 @@ export default async function StudentsPage({
           결과 <span className="text-foreground font-bold">{students.length}</span>명
           {q ? <span className="text-text-dim ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
         </p>
-        <Button render={<Link href="/students/new" />}>
-          <EyIcon name="plus" size={13} className="mr-1" />새 학생
-        </Button>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/exports/students?${new URLSearchParams({
+              ...(status !== "all" ? { status } : {}),
+              ...(subject !== "all" ? { subject } : {}),
+              ...(q ? { q } : {}),
+            }).toString()}`}
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
+          >
+            <EyIcon name="arrowDown" size={13} />
+            엑셀 내보내기
+          </a>
+          <Button render={<Link href="/students/new" />}>
+            <EyIcon name="plus" size={13} className="mr-1" />새 학생
+          </Button>
+        </div>
       </div>
 
       {students.length === 0 ? (

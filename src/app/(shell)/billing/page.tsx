@@ -145,13 +145,25 @@ export default async function BillingPage({
         </form>
       </div>
 
-      <p className="text-text-dim text-xs">
-        {formatPeriod(period)} 청구 {summary.totalCount}건 · 수납률{" "}
-        <span className="num text-foreground font-semibold">
-          {summary.paymentRate.toFixed(1)}%
-        </span>
-        {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색 결과 {rows.length}건</span> : null}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-text-dim text-xs">
+          {formatPeriod(period)} 청구 {summary.totalCount}건 · 수납률{" "}
+          <span className="num text-foreground font-semibold">
+            {summary.paymentRate.toFixed(1)}%
+          </span>
+          {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색 결과 {rows.length}건</span> : null}
+        </p>
+        <a
+          href={`/api/exports/billing?${new URLSearchParams({
+            period,
+            ...(q ? { q } : {}),
+          }).toString()}`}
+          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+        >
+          <EyIcon name="arrowDown" size={13} />
+          엑셀 내보내기
+        </a>
+      </div>
 
       {rows.length === 0 ? (
         <EmptyState
