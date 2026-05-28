@@ -209,10 +209,19 @@ export default async function ConsultationsPage({
         <p className="micro">
           결과 <span className="text-foreground font-bold">{items.length}</span>건
         </p>
-        <Button render={<Link href="/consultations/new" />}>
-          <EyIcon name="plus" size={13} className="mr-1" />
-          상담 추가
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/consultations/stats"
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+          >
+            <EyIcon name="rings" size={13} />
+            통계 보기
+          </Link>
+          <Button render={<Link href="/consultations/new" />}>
+            <EyIcon name="plus" size={13} className="mr-1" />
+            상담 추가
+          </Button>
+        </div>
       </div>
 
       {items.length === 0 ? (

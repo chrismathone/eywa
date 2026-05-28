@@ -266,3 +266,94 @@ function currentPeriod(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
+
+// ─────────── 추가 대시보드 위젯 ───────────
+
+export type UpcomingPayment = {
+  studentId: string;
+  studentName: string;
+  amount: number;
+  dueDate: string;
+  daysUntilDue: number;
+};
+
+/** 이번 주 결제 예정 (due_date 이내 7일, unpaid/partial). */
+export async function getUpcomingPayments(daysAhead = 7): Promise<UpcomingPayment[]> {
+  const supabase = await createClient();
+  const today = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+  const limit = new Date(today);
+  limit.setDate(limit.getDate() + daysAhead);
+  const limitIso = limit.toISOString().slice(0, 10);
+
+  const { data } = await supabase
+    .from("invoices")
+    .select(
+      `id, amount_total, amount_paid, amount_discount, due_date,
+       student:student_id ( id, name )`,
+    )
+    .gte("due_date", todayIso)
+    .lte("due_date", limitIso)
+    .in("status", ["unpaid", "partial"])
+    .order("due_date");
+
+  return (data ?? [])
+    .map((r) => {
+      const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
+        | { id: string; name: string }
+        | undefined;
+      if (!stu) return null;
+      const balance =
+        Number(r.amount_total) - Number(r.amount_paid) - Number(r.amount_discount ?? 0);
+      const due = new Date(r.due_date as string);
+      const days = Math.max(0, Math.round((due.getTime() - today.getTime()) / 86_400_000));
+      return {
+        studentId: stu.id,
+        studentName: stu.name,
+        amount: balance,
+        dueDate: r.due_date as string,
+        daysUntilDue: days,
+      } satisfies UpcomingPayment;
+    })
+    .filter((r): r is UpcomingPayment => r !== null);
+}
+
+export type AbsenceRisk = {
+  studentId: string;
+  studentName: string;
+  absences: number;
+};
+
+/** 결석 위험 학생: 최근 14일 결석 ≥ 3건. */
+export async function getAbsenceRiskStudents(): Promise<AbsenceRisk[]> {
+  const supabase = await createClient();
+  const since = new Date();
+  since.setDate(since.getDate() - 14);
+  const sinceIso = since.toISOString().slice(0, 10);
+
+  const { data } = await supabase
+    .from("attendance_records")
+    .select("student_id, status, student:student_id ( id, name )")
+    .eq("status", "absent")
+    .gte("session_date", sinceIso);
+
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const r of data ?? []) {
+    const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
+      | { id: string; name: string }
+      | undefined;
+    if (!stu) continue;
+    const cur = counts.get(stu.id) ?? { name: stu.name, count: 0 };
+    cur.count++;
+    counts.set(stu.id, cur);
+  }
+
+  return Array.from(counts.entries())
+    .filter(([, v]) => v.count >= 3)
+    .map(([id, v]) => ({
+      studentId: id,
+      studentName: v.name,
+      absences: v.count,
+    }))
+    .sort((a, b) => b.absences - a.absences);
+}
