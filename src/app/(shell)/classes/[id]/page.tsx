@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarClock, ClipboardCheck, MapPin, User } from "lucide-react";
+import { ArrowLeft, CalendarClock, ClipboardCheck, MapPin, Pencil, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -10,6 +10,8 @@ import {
   getClassStudents,
   type DayOfWeek,
 } from "@/features/classes/server/queries";
+import { getStudentsList } from "@/features/students/server/queries";
+import { ClassAssignAction } from "./_components/class-assign-action";
 
 export const metadata = { title: "수업 상세 — eywa" };
 
@@ -52,12 +54,17 @@ export default async function ClassDetailPage({
 }) {
   await requireAccess("classes");
   const { id } = await params;
-  const [klass, students, stats] = await Promise.all([
+  const [klass, students, stats, allEnrolledStudents] = await Promise.all([
     getClassDetail(id),
     getClassStudents(id),
     getClassAttendanceStats(id, 30),
+    getStudentsList({ status: "enrolled" }),
   ]);
   if (!klass) notFound();
+
+  // 이 반에 이미 활성 등록된 학생 제외
+  const enrolledIds = new Set(students.map((s) => s.studentId));
+  const candidateStudents = allEnrolledStudents.filter((s) => !enrolledIds.has(s.id));
 
   const subjectLabel = SUBJECT_LABEL[klass.subject] ?? klass.subject;
   const subjectColor = SUBJECT_COLOR[klass.subject] ?? "text-muted-foreground bg-muted border-border";
@@ -108,7 +115,25 @@ export default async function ClassDetailPage({
             <span>· 재원생 <span className="num">{klass.studentCount}</span>명</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ClassAssignAction
+            klass={{
+              id: klass.id,
+              className: klass.className,
+              subject: klass.subject,
+              teacherName: klass.teacherName,
+              studentCount: klass.studentCount,
+            }}
+            studentOptions={candidateStudents.map((s) => ({
+              id: s.id,
+              name: s.name,
+              grade: s.grade,
+            }))}
+          />
+          <Button variant="outline" render={<Link href={`/classes/${klass.id}/edit`} />}>
+            <Pencil className="size-4" />
+            반 수정
+          </Button>
           <Button render={<Link href={`/attendance/${todayIso()}/${klass.id}`} />}>
             <ClipboardCheck className="size-4" />
             오늘 출석 입력

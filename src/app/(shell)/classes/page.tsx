@@ -232,9 +232,18 @@ export default async function ClassesPage({
         </div>
       </div>
 
-      <p className="micro">
-        결과 <span className="text-foreground font-bold">{classes.length}</span>개
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="micro">
+          결과 <span className="text-foreground font-bold">{classes.length}</span>개
+        </p>
+        <Link
+          href="/classes/new"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition"
+        >
+          <EyIcon name="plus" size={13} />
+          새 반
+        </Link>
+      </div>
 
       {classes.length === 0 ? (
         <EmptyState icon={() => <EyIcon name="branch" size={32} />} title="결과 없음" />

@@ -6,6 +6,8 @@ import {
   type CareFocus,
   type StudentDetail,
 } from "@/features/students/server/queries";
+import { getClassesList } from "@/features/classes/server/queries";
+import { StudentAssignAction } from "../_components/student-assign-action";
 
 const PRIORITY_COLOR: Record<CareFocus["priority"], string> = {
   high: "text-chart-4 bg-chart-4/10 border-chart-4/20",
@@ -28,10 +30,17 @@ const SUBJECT_LABEL: Record<string, string> = {
 };
 
 export async function OverviewTab({ student }: { student: StudentDetail }) {
-  const [enrollments, attendance] = await Promise.all([
+  const [enrollments, attendance, allActiveClasses] = await Promise.all([
     getStudentEnrollments(student.id),
     getStudentAttendanceStats(student.id, 30),
+    getClassesList({ active: "active" }),
   ]);
+
+  // 이미 활성 enrollment 인 반은 제외
+  const activeClassIds = new Set(
+    enrollments.filter((e) => !e.endDate).map((e) => e.classId),
+  );
+  const candidateClasses = allActiveClasses.filter((c) => !activeClassIds.has(c.id));
 
   const hasCareAi = student.aiCareSummary !== null;
 
@@ -86,6 +95,16 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
                 <h2 className="text-sm font-semibold tracking-tight">수강 중인 반</h2>
                 <p className="text-muted-foreground num text-xs">{enrollments.length}건</p>
               </div>
+              <StudentAssignAction
+                student={{ id: student.id, name: student.name, grade: student.grade }}
+                classes={candidateClasses.map((c) => ({
+                  id: c.id,
+                  className: c.className,
+                  subject: c.subject,
+                  teacherName: c.teacherName,
+                  studentCount: c.studentCount,
+                }))}
+              />
             </header>
             {enrollments.length === 0 ? (
               <div className="text-muted-foreground px-5 py-8 text-center text-sm">
