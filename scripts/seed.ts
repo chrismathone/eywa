@@ -347,6 +347,13 @@ async function main() {
   await sql`delete from student_consultations where tenant_id = ${tenantId}`;
   // Cascade deletes consultation_ai_analysis through FK
   await sql`delete from enrollment_consultations where tenant_id = ${tenantId}`;
+  // ijw 패리티 신규 테이블들
+  await sql`delete from student_grades where tenant_id = ${tenantId}`;
+  await sql`delete from student_memos where tenant_id = ${tenantId}`;
+  await sql`delete from payroll_records where tenant_id = ${tenantId}`;
+  await sql`delete from staff_leaves where tenant_id = ${tenantId}`;
+  await sql`delete from scenarios where tenant_id = ${tenantId}`;
+  await sql`delete from user_integrations where tenant_id = ${tenantId}`;
   await sql`delete from students where tenant_id = ${tenantId}`;
   await sql`delete from class_schedules where tenant_id = ${tenantId}`;
   await sql`delete from classes where tenant_id = ${tenantId}`;
@@ -691,6 +698,67 @@ async function main() {
     await sql`
       insert into announcements (tenant_id, title, content, audience, pinned, author_id)
       values (${tenantId}, ${a.title}, ${a.content}, ${a.audience}, ${a.pinned}, ${recordedBy})
+    `;
+  }
+
+  // --- ijw 패리티 신규 시드: 학생 성적 + 메모 + 강사 급여/휴가 ---
+  // 학생 성적 — 첫 5명에게 각 2건
+  console.log("Seeding student grades & memos…");
+  const studentRows = await sql<{ id: string; name: string }[]>`
+    select id, name from students where tenant_id = ${tenantId} order by created_at limit 8
+  `;
+  for (const [idx, stu] of studentRows.entries()) {
+    if (idx >= 5) break;
+    const subjects = ["math", "english"] as const;
+    for (const sub of subjects) {
+      const score = 70 + Math.floor(Math.random() * 25);
+      const takenOn = new Date();
+      takenOn.setDate(takenOn.getDate() - (idx + 1) * 14);
+      await sql`
+        insert into student_grades (tenant_id, student_id, exam_name, subject, score, max_score, taken_on, notes)
+        values (${tenantId}, ${stu.id}, '중간고사', ${sub}, ${score}, 100, ${takenOn.toISOString().slice(0, 10)}, '학년 평균 대비 ' || ${score > 80 ? "상위권" : "중위권"})
+      `;
+    }
+  }
+
+  const memoTemplates = [
+    { category: "general", content: "수업 시간에 집중도가 높고 질문을 자주 합니다." },
+    { category: "homework", content: "지난 주 숙제 100% 완료. 우수." },
+    { category: "behavior", content: "친구 관계가 좋고 교실 분위기에 긍정적 영향." },
+    { category: "parent", content: "학부모님께서 학습 진도 점검 요청하심." },
+  ];
+  for (const [idx, stu] of studentRows.entries()) {
+    if (idx >= 6) break;
+    const memo = memoTemplates[idx % memoTemplates.length];
+    await sql`
+      insert into student_memos (tenant_id, student_id, category, content, created_by)
+      values (${tenantId}, ${stu.id}, ${memo.category}, ${memo.content}, ${recordedBy})
+    `;
+  }
+
+  // 강사 시급 + 기본급 (teacher만)
+  const teacherRows = await sql<{ id: string }[]>`
+    select id from users where tenant_id = ${tenantId} and system_role = 'teacher'
+  `;
+  for (const t of teacherRows) {
+    const hourlyRate = 40000 + Math.floor(Math.random() * 20000);
+    const monthlyBase = 1500000 + Math.floor(Math.random() * 1000000);
+    await sql`
+      update users set hourly_rate = ${hourlyRate}, monthly_base = ${monthlyBase}
+      where id = ${t.id}
+    `;
+  }
+
+  // 강사 휴가 1건씩 (선택 2명)
+  console.log("Seeding staff leaves…");
+  for (const [idx, t] of teacherRows.slice(0, 2).entries()) {
+    const start = new Date();
+    start.setDate(start.getDate() + 14 + idx * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + (idx === 0 ? 0 : 2));
+    await sql`
+      insert into staff_leaves (tenant_id, user_id, leave_type, starts_on, ends_on, reason)
+      values (${tenantId}, ${t.id}, ${idx === 0 ? "반차" : "연차"}, ${start.toISOString().slice(0, 10)}, ${end.toISOString().slice(0, 10)}, '시드 데모')
     `;
   }
 
