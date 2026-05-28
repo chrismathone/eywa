@@ -24,10 +24,11 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute = pathname.startsWith("/login");
   const isPublicAsset =
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api/health") ||
     pathname === "/favicon.ico";
+  // /api/* 라우트 (webhook 포함)는 자체 인증 (시크릿 헤더 등) 사용 — middleware 통과
+  const isApiRoute = pathname.startsWith("/api/");
 
-  if (isAuthRoute || isPublicAsset) {
+  if (isAuthRoute || isPublicAsset || isApiRoute) {
     return NextResponse.next({ request });
   }
 
