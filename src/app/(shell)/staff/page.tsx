@@ -6,8 +6,9 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
+import { NewStaffTrigger } from "./_components/new-staff-trigger";
 
 export const metadata = { title: "직원관리 — eywa" };
 
@@ -162,11 +163,8 @@ export default async function StaffPage({
         <p className="micro">
           결과 <span className="text-foreground font-bold">{staff.length}</span>명
         </p>
-        {canManage ? (
-          <Button render={<Link href="/staff/new" />}>
-            <EyIcon name="plus" size={13} className="mr-1" />
-            직원 등록
-          </Button>
+        {canManage && user ? (
+          <NewStaffTrigger assignableRoleOptions={assignableRoles(user.systemRole)} />
         ) : null}
       </div>
 
