@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
@@ -9,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  ExternalLink,
   Loader2,
   Mail,
   Pencil,
@@ -191,7 +193,15 @@ export function AttendanceInputForm({
               <li key={r.studentId} className="px-5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-foreground text-sm font-medium">{r.studentName}</span>
+                    <Link
+                      href={`/students/${r.studentId}`}
+                      target="_blank"
+                      className="text-foreground text-sm font-medium hover:underline inline-flex items-center gap-1"
+                      title={`${r.studentName} 학생 상세로 이동 (새 탭)`}
+                    >
+                      {r.studentName}
+                      <ExternalLink className="text-muted-foreground size-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Link>
                     {r.studentGrade ? (
                       <span className="text-muted-foreground text-xs">{r.studentGrade}</span>
                     ) : null}
