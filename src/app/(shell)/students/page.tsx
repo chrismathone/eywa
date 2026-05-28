@@ -6,7 +6,8 @@ import { EmptyState } from "@/components/empty-state";
 import { StudentQuickPopover } from "@/components/student-quick-popover";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getStudentsList } from "@/features/students/server/queries";
+import { getStudentsList, getTeacherOptions } from "@/features/students/server/queries";
+import { NewStudentTrigger } from "./_components/new-student-trigger";
 
 export const metadata = { title: "학생목록 — eywa" };
 
@@ -80,7 +81,10 @@ export default async function StudentsPage({
   const subject = sp.subject ?? "all";
   const q = sp.q ?? "";
 
-  const students = await getStudentsList({ status, subject, q });
+  const [students, teachers] = await Promise.all([
+    getStudentsList({ status, subject, q }),
+    getTeacherOptions(),
+  ]);
 
   // 전체 카운트는 별도 unfiltered 쿼리로 (Stat 표시용)
   const all = await getStudentsList({});
@@ -181,9 +185,7 @@ export default async function StudentsPage({
             <EyIcon name="arrowDown" size={13} />
             엑셀 내보내기
           </a>
-          <Button render={<Link href="/students/new" />}>
-            <EyIcon name="plus" size={13} className="mr-1" />새 학생
-          </Button>
+          <NewStudentTrigger teachers={teachers} />
         </div>
       </div>
 
