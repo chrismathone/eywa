@@ -7,6 +7,8 @@ import {
   type ScheduleSlotWithStudents,
 } from "@/features/timetable/server/queries";
 import { ClassCell } from "./_components/class-cell";
+import { TimetableBoard } from "./_components/timetable-board";
+import { TimetableToolbarActions } from "./_components/toolbar-actions";
 
 export const metadata = { title: "시간표 — eywa" };
 
@@ -127,6 +129,8 @@ export default async function TimetablePage({
         <span className="text-text-faint ml-auto font-mono text-[11px]">
           총 {slots.length}슬롯 · {totalStudents}명 등록
         </span>
+
+        <TimetableToolbarActions />
       </div>
 
       {slots.length === 0 ? (
@@ -134,10 +138,16 @@ export default async function TimetablePage({
           icon={() => <EyIcon name="leaf" size={32} />}
           title="해당 과목의 시간표가 없습니다"
         />
-      ) : view === "basic" ? (
-        <BasicView slots={slots} />
       ) : (
-        <IntegratedView slots={slots} />
+        <TimetableBoard>
+          <div id="timetable-export-root">
+            {view === "basic" ? (
+              <BasicView slots={slots} />
+            ) : (
+              <IntegratedView slots={slots} />
+            )}
+          </div>
+        </TimetableBoard>
       )}
     </div>
   );

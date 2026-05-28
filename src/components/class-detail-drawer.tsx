@@ -23,7 +23,12 @@ export type ClassDetailQuick = {
   startTime: string;
   endTime: string;
   dayOfWeek: string;
-  students: { name: string; grade: string | null; school: string | null }[];
+  students: {
+    name: string;
+    grade: string | null;
+    school: string | null;
+    enrollmentId?: string;
+  }[];
 };
 
 const DAY_LABEL: Record<string, string> = {

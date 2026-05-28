@@ -77,7 +77,12 @@ export async function getWeeklySchedule(): Promise<ScheduleSlot[]> {
   return fetchSlots();
 }
 
-export type StudentLine = { name: string; grade: string | null; school: string | null };
+export type StudentLine = {
+  name: string;
+  grade: string | null;
+  school: string | null;
+  enrollmentId?: string;
+};
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 
 /**
@@ -93,7 +98,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
 
   const { data: rows } = await supabase
     .from("enrollments")
-    .select("class_id, student:student_id ( name, grade, school )")
+    .select("id, class_id, student:student_id ( name, grade, school )")
     .in("class_id", classIds)
     .is("end_date", null);
 
@@ -104,7 +109,12 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       | undefined;
     if (!s?.name) continue;
     const list = byClass.get(r.class_id) ?? [];
-    list.push({ name: s.name, grade: s.grade ?? null, school: s.school ?? null });
+    list.push({
+      name: s.name,
+      grade: s.grade ?? null,
+      school: s.school ?? null,
+      enrollmentId: r.id,
+    });
     byClass.set(r.class_id, list);
   }
 
