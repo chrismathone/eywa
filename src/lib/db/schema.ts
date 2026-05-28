@@ -526,6 +526,24 @@ export const invoices = pgTable(
   ],
 );
 
+// === scenarios (가설 시나리오 — 시간표 snapshot 저장) ===
+export const scenarios = pgTable(
+  "scenarios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    basePeriod: text("base_period"), // 'YYYY-MM' (선택)
+    snapshot: jsonb("snapshot").notNull(),
+    notes: text("notes"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("scenarios_tenant_idx").on(t.tenantId, t.createdAt)],
+);
+
 // === user_integrations (테넌트별 외부 통합 — 현재 Google Sheets) ===
 export const userIntegrations = pgTable(
   "user_integrations",
@@ -652,3 +670,5 @@ export type StaffLeave = typeof staffLeaves.$inferSelect;
 export type NewStaffLeave = typeof staffLeaves.$inferInsert;
 export type UserIntegration = typeof userIntegrations.$inferSelect;
 export type NewUserIntegration = typeof userIntegrations.$inferInsert;
+export type Scenario = typeof scenarios.$inferSelect;
+export type NewScenario = typeof scenarios.$inferInsert;
