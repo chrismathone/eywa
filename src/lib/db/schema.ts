@@ -613,9 +613,22 @@ export const announcements = pgTable(
   (t) => [index("announcements_tenant_pinned_created_idx").on(t.tenantId, t.pinned, t.createdAt)],
 );
 
+// === super_admins (SaaS owner layer — academy 권한과 직교) ===
+// PK = auth.users.id (1:1 sync). tenant 컬럼 없음 — 모든 tenant 위에 존재.
+// 한 사람이 academy master + super_admin 둘 다 가능 (chrismathone 케이스).
+export const superAdmins = pgTable("super_admins", {
+  id: uuid("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).defaultNow().notNull(),
+  grantedBy: uuid("granted_by"),
+});
+
 // === Type exports ===
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
+export type SuperAdmin = typeof superAdmins.$inferSelect;
+export type NewSuperAdmin = typeof superAdmins.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Classroom = typeof classrooms.$inferSelect;
