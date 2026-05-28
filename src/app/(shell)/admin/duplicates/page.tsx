@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getCurrentUser } from "@/lib/auth/current-user";
 import { findDuplicateStudents } from "@/features/admin/server/queries";
 import { DuplicatesClient } from "./_client";
 
 export const metadata = { title: "중복 학생 — eywa" };
 
 export default async function DuplicatesPage() {
-  await requireAccess("staff");
-  const user = await getCurrentUser();
-  if (!user || user.systemRole !== "master") redirect("/");
+  await requireAccess("admin");
 
   const groups = await findDuplicateStudents();
 

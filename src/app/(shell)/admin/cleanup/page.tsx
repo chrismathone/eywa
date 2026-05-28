@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getCurrentUser } from "@/lib/auth/current-user";
 import { findOrphans } from "@/features/admin/server/queries";
 import { CleanupClient } from "./_client";
 
 export const metadata = { title: "데이터 정리 — eywa" };
 
 export default async function CleanupPage() {
-  await requireAccess("staff");
-  const user = await getCurrentUser();
-  if (!user || user.systemRole !== "master") redirect("/");
+  await requireAccess("admin");
 
   const report = await findOrphans();
 

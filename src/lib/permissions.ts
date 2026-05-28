@@ -19,7 +19,8 @@ export type MenuKey =
   | "staff"
   | "billing"
   | "meetings"
-  | "help";
+  | "help"
+  | "admin";
 
 export type Access = "full" | "scoped" | "readonly" | "none";
 
@@ -36,6 +37,8 @@ export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
   billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none" },
   meetings: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "readonly" },
   help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full" },
+  // master 전용 — 중복 병합 / 데이터 정리 / 시나리오 / Google Sheets 통합 등 위험도 높은 도구
+  admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none" },
 };
 
 export function canAccess(role: SystemRole, menu: MenuKey): boolean {

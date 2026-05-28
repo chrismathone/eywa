@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getCurrentUser } from "@/lib/auth/current-user";
 import { getScenarios } from "@/features/admin/server/queries";
 import { ScenariosClient } from "./_client";
 
 export const metadata = { title: "시나리오 관리 — eywa" };
 
 export default async function ScenariosPage() {
-  await requireAccess("staff");
-  const user = await getCurrentUser();
-  if (!user || user.systemRole !== "master") redirect("/");
+  await requireAccess("admin");
 
   const scenarios = await getScenarios();
 

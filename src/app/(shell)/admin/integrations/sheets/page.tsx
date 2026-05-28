@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { redirect } from "next/navigation";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { SheetsClient } from "./_client";
 
 export const metadata = { title: "Google Sheets 동기화 — eywa" };
 
 export default async function SheetsIntegrationPage() {
-  await requireAccess("staff"); // master 권한 우선 → staff 권한이 가장 close
-  const user = await getCurrentUser();
-  if (!user || user.systemRole !== "master") redirect("/");
+  await requireAccess("admin");
 
   const status = await getGoogleSheetsStatus();
 

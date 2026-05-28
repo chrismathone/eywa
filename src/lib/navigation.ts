@@ -49,7 +49,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "지원",
-    items: [{ href: "/help", label: "도움말", icon: "spore", menuKey: "help" }],
+    items: [
+      { href: "/help", label: "도움말", icon: "spore", menuKey: "help" },
+      { href: "/admin", label: "관리자 도구", icon: "rings", menuKey: "admin" },
+    ],
   },
 ];
 

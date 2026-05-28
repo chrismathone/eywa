@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Copy, Database, FileText, FileSpreadsheet } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getCurrentUser } from "@/lib/auth/current-user";
 
 export const metadata = { title: "관리자 도구 — eywa" };
 
@@ -34,9 +32,7 @@ const TOOLS = [
 ];
 
 export default async function AdminHomePage() {
-  await requireAccess("staff");
-  const user = await getCurrentUser();
-  if (!user || user.systemRole !== "master") redirect("/");
+  await requireAccess("admin");
 
   return (
     <div className="space-y-6">
