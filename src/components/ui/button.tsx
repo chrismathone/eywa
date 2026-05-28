@@ -44,12 +44,19 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  nativeButton,
+  render,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  // render prop이 있으면 (Link/a 등 다른 element로 교체되는 경우) nativeButton false가 기본.
+  // 명시적으로 nativeButton을 받았으면 그대로 존중.
+  const resolvedNative = render ? (nativeButton ?? false) : nativeButton
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      render={render}
+      nativeButton={resolvedNative}
       {...props}
     />
   )

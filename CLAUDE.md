@@ -97,8 +97,23 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 ## 진행 상황
 
-**12개 메뉴 + ijw 패리티 9개 추가 commit + Admin 도구 + 랜딩 페이지 8섹션 완성.**
+**12개 메뉴 + ijw 패리티 + Admin 도구 + 랜딩 8섹션 + UI 폴리시 + super-admin Phase 1 완성.**
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용.
+
+### Super-admin Phase 1 (3개 commit, 2026-05-28)
+- `super_admins` 별도 테이블 (academy 권한과 직교 — chrismathone은 master + super_admin 둘 다)
+- RLS: 본인 row select만, write는 service_role 전용 + `is_super_admin(uid)` SQL helper
+- `(super-admin)/` 라우트 그룹 — academy `(shell)`과 시각적 완전 분리 (ink 다크 배경 + gold accent)
+- 4개 페이지: 대시보드 / 학원 목록 / 신규 발급 / 상세
+  - 학원 신규 발급 = tenants INSERT + auth.admin.createUser(app_metadata)로 master 동시 생성
+  - 트리거 `tg_sync_user_from_auth`가 public.users에 자동 mirror
+- 모든 query는 service_role 클라이언트로 RLS bypass (multi-tenant read가 본질)
+- impersonate / audit log / 라이선스 관리는 Phase 2로
+
+### UI 폴리시 (1개 commit, 2026-05-28)
+- OS별 단축키 자동 분기 — `useIsMac()` (useSyncExternalStore 기반) → Mac이면 ⌘, 아니면 Ctrl. Windows 기본.
+- 모바일 top nav 재구성 — 가로 스크롤 제거, 브랜드 banner 자체 행으로 분리, 메뉴 grid `auto-fit minmax(96px, 1fr)`로 균등 분할 (그룹 구분선 제거)
+- `.scrollbar-thin` 유틸 (globals.css) — 6px width, line-tinted thumb. 디자인 톤에 녹는 스크롤바
 
 ### ijw-calander 패리티 (9개 commit, 2026-05-28)
 - 학생 상세 7탭 (Overview/Billing/Grades/Attendance/Consultations/Memos/Timeline)
@@ -118,9 +133,11 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - `/` = **랜딩 페이지 8섹션** (Hero·Flow·LogoWall·Manifesto·Testimonials·Pricing·CTA·Footer)
 - `/dashboard` = 대시보드 (예전 `/`에서 이동)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
-- `/admin/*` = master 전용 (duplicates/cleanup/integrations/sheets)
+- `/admin/*` = academy master 전용 (duplicates/cleanup/integrations/sheets)
+- `/super-admin/*` = **SaaS owner 전용 super_admin 레이어** (academy 권한과 직교)
 - `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
 - `(shell)/` = 인증된 12개 메뉴 + admin (사이드바 232px + Topbar 64px)
+- `(super-admin)/` = super_admin 그룹 (다크 사이드바 + gold accent + "Super Admin" 라벨)
 - `(print)/enrollment/[id]/print/` = A4 인쇄
 
 ### 12개 메뉴 — 핵심 위젯 (ijw 패리티 적용 후)
@@ -144,9 +161,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 - 두 master 계정 (`chrismathone@gmail.com`, `st2000423@gmail.com`)이 `ijw-demo` 테넌트에 sync됨
 - master `chrismathone`의 `display_name = "김수진"`, `job_title = "원장"`, `hire_date = 1998-03-15` (시안 페르소나)
+- **`chrismathone`은 academy master 겸 super_admin** — `super_admins` 테이블에 별도 row. 두 권한은 직교.
 - `st2000423`은 teacher role로 변경되어 사이드바 권한 매트릭스 시뮬레이션 가능
 - 권한 매트릭스는 `lib/permissions.ts`의 `canAccess(role, menuKey)` 헬퍼. AppSidebar에서 필터링, 빈 그룹 자동 숨김
+- super_admin 권한은 `getCurrentSuperAdmin()` / `requireSuperAdmin()` (`src/lib/auth/super-admin.ts`)
 - 실제 데이터 보안은 RLS (`auth_tenant_id()` 함수 + tenant_isolation 정책)에서 강제
+- super-admin 영역은 `createAdminClient()` (service_role)로 RLS bypass — multi-tenant read가 본질이므로
 
 ---
 
@@ -347,6 +367,60 @@ PowerShell에서 `pnpm dev`를 background로 띄우고 turbopack의 컴파일 �
 ijw 스타일 기본뷰는 강사 컬럼 안에 가르치는 요일만 sub-column으로 표시. 강사 수 × 평균 2~3요일 → 가로 스크롤 필수.
 
 **해결**: 좌측 4개 컬럼 (교시/이름/학년/학교) sticky `left: 0/40px` 고정. 헤더도 sticky `top: 0`. 컬럼 폭 `min-width: 180px` 부여.
+
+### 25. React 19 `react-hooks/set-state-in-effect` 룰 — setState in useEffect 금지
+OS 감지 hook을 `useEffect(() => setIsMac(...))`로 짰더니 React 19 / Next 16의 새 lint 룰이 즉시 차단. setState 동기 호출이 cascading render를 일으킬 수 있어서 권장 안 됨.
+
+**해결**: `useSyncExternalStore`로 리팩토링. `getSnapshot` (client에서 navigator.userAgent 검사), `getServerSnapshot` (false 반환)으로 SSR/CSR mismatch 없이 안전하게 동기화.
+
+```ts
+export function useIsMac() {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+```
+
+### 26. 모바일 nav `overflow-x-auto` 가로 스크롤바 + 어색한 wrap
+좁은 폭에서 14개 메뉴를 `overflow-x-auto + shrink-0` 패턴으로 두면 회색 기본 스크롤바가 뜸. `flex-wrap`으로 바꾸면 wrap은 되지만 그룹 구분선 위치가 어색하고 마지막 줄 우측 공백이 큼.
+
+**해결 (2단계 진화)**:
+1. `flex-wrap`로 일단 가로 스크롤바 제거 + `.scrollbar-thin` 유틸로 디자인 톤 스크롤바
+2. 브랜드 banner를 자체 행으로 분리하고 메뉴는 CSS Grid `auto-fit minmax(96px, 1fr)` — 모든 cell 균등 너비 + 그룹 구분선 제거
+
+`.scrollbar-thin` 유틸은 globals.css에 한 번 정의:
+```css
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(13,17,16,0.18) transparent; }
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(13,17,16,0.18); border-radius: 999px; }
+```
+
+table.tsx / billing / attendance / kanban-filters / 학생 상세 탭 nav에 일괄 적용.
+
+### 27. super_admin layer를 만들 때 깨질 가정 4가지
+`users` 테이블은 강력하게 1:1 tenant 매핑 (NOT NULL, RLS도 `auth_tenant_id()`로 강제). SaaS owner 같은 multi-tenant viewer를 같은 테이블에 끼우면 schema가 무너짐.
+
+**결정**: `super_admins` 별도 테이블 신설 — academy 권한과 직교. `chrismathone`은 academy master + super_admin 둘 다 가짐. RLS도 super_admins 자체엔 본인 row select만, write는 service_role 전용.
+
+**multi-tenant read는 service_role 클라이언트로 처리** — `createAdminClient()` (`src/lib/supabase/admin.ts`). RLS bypass라 모든 tenant 데이터 한 번에 조회 가능. (이게 위험해 보이지만, 모든 사용처가 `requireSuperAdmin()` 가드를 거치므로 안전.)
+
+mathlab의 `viewing_tenant` 쿠키 + Zustand 패턴은 매력적이지만 eywa의 RLS 강제를 회피해야 해서 Phase 2로 미룸.
+
+### 28. `(super-admin)` 라우트 그룹 + `/super-admin/*` URL → 폴더가 두 번 중첩
+Next.js 라우트 그룹 `(super-admin)`은 URL에 영향 없음. 그래서 `/super-admin` URL을 잡으려면 폴더 구조가:
+```
+src/app/(super-admin)/super-admin/page.tsx
+src/app/(super-admin)/super-admin/tenants/page.tsx
+```
+바깥 `(super-admin)`은 layout 적용용, 안쪽 `super-admin`은 URL용. 처음에 `(super-admin)/page.tsx`로 짜면 `/` 충돌 (랜딩이 차지함).
+
+### 29. Server Component layout에서 active pathname 못 받음
+`(super-admin)/layout.tsx`가 server component인데 사이드바에 active 메뉴 highlight하려면 pathname이 필요. `headers().get('x-pathname')`는 기본 동작 안 함 (Next.js가 자동으로 set 안 함).
+
+**해결**: 사이드바를 client component로 만들어서 `usePathname()` 사용. 작은 인터랙티브 부품이라 client로 빼는 비용 작음.
+
+### 30. invoices 컬럼명 `amount` vs `amount_total`
+Super-admin 쿼리에서 `invoices.select("amount")`로 시작했더니 KPI가 "0원" 표시. 실제 schema는 `amount_total / amount_paid / amount_discount` 3개 컬럼. 다른 도메인 코드를 참고하지 않고 추측한 결과.
+
+**교훈**: 새 도메인 쿼리 작성 시 항상 `src/lib/db/schema.ts`에서 해당 테이블 컬럼명을 먼저 확인. typecheck로는 안 잡힘 (supabase 클라이언트는 string-typed).
 
 ---
 
