@@ -10,6 +10,7 @@ import {
   type ClassListRow,
 } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
+import { FilterSelect } from "@/components/filter-select";
 import { NewClassTrigger } from "./_components/new-class-trigger";
 
 export const metadata = { title: "수업목록 — eywa" };
@@ -165,32 +166,15 @@ export default async function ClassesPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* 강사 select */}
+          {/* 강사 dropdown */}
           <div className="flex items-center gap-1.5">
             <span className="micro mr-1">강사</span>
-            <Link
-              href={buildHref(current, { teacher: "all" })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                teacherId === "all"
-                  ? "border-foreground bg-foreground text-background font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              전체
-            </Link>
-            {teachers.map((t) => (
-              <Link
-                key={t.id}
-                href={buildHref(current, { teacher: t.id })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                  teacherId === t.id
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                {t.name}
-              </Link>
-            ))}
+            <FilterSelect
+              paramName="teacher"
+              value={teacherId === "all" ? null : teacherId}
+              options={teachers.map((t) => ({ value: t.id, label: t.name }))}
+              ariaLabel="강사 필터"
+            />
           </div>
 
           {/* 검색 + 뷰 토글 */}

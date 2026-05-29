@@ -2,6 +2,7 @@ import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { FilterSelect } from "@/components/filter-select";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getMonthlyAttendanceMatrix,
@@ -52,22 +53,15 @@ export default async function AttendancePage({
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
-        {/* 반 chip */}
-        <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
+        {/* 반 dropdown */}
+        <div className="flex items-center gap-1.5">
           <span className="micro mr-1">반</span>
-          {matrix.classes.map((c) => (
-            <Link
-              key={c.id}
-              href={`/attendance?class=${c.id}&month=${month}`}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                selectedClassId === c.id
-                  ? "border-foreground bg-foreground text-background font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {c.className}
-            </Link>
-          ))}
+          <FilterSelect
+            paramName="class"
+            value={selectedClassId}
+            options={matrix.classes.map((c) => ({ value: c.id, label: c.className }))}
+            ariaLabel="반 필터"
+          />
         </div>
 
         <span className="bg-line h-4 w-px" aria-hidden />

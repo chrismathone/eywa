@@ -3,6 +3,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { Initial } from "@/components/atoms/initial";
 import { EmptyState } from "@/components/empty-state";
+import { FilterSelect } from "@/components/filter-select";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getWithdrawnStudents,
@@ -147,21 +148,14 @@ export default async function WithdrawalsPage({
             </button>
           </form>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <span className="micro mr-1">사유</span>
-          {reasonChips.map((f) => (
-            <Link
-              key={f.key}
-              href={buildWdHref({ ...current, reason: f.key })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                reason === f.key
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {f.label}
-            </Link>
-          ))}
+          <FilterSelect
+            paramName="reason"
+            value={reason === "all" ? null : reason}
+            options={reasonChips.filter((f) => f.key !== "all").map((f) => ({ value: f.key, label: f.label }))}
+            ariaLabel="사유 필터"
+          />
         </div>
       </div>
 

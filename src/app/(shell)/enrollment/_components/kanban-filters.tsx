@@ -1,8 +1,6 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { BarChart3 } from "lucide-react";
+import { FilterSelect } from "@/components/filter-select";
 
 type Props = {
   selectedMonth: string | null;
@@ -80,13 +78,12 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, consultants }
 
       {/* 상담사 dropdown */}
       <div className="flex items-center gap-2">
-        <label htmlFor="consultant-filter" className="text-muted-foreground shrink-0 text-xs">
-          상담사
-        </label>
-        <ConsultantSelect
-          selected={selectedConsultant}
-          consultants={consultants}
-          selectedMonth={selectedMonth}
+        <span className="text-muted-foreground shrink-0 text-xs">상담사</span>
+        <FilterSelect
+          paramName="consultant"
+          value={selectedConsultant}
+          options={consultants.map((c) => ({ value: c.id, label: c.name }))}
+          ariaLabel="상담사 필터"
         />
       </div>
 
@@ -101,36 +98,3 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, consultants }
   );
 }
 
-function ConsultantSelect({
-  selected,
-  consultants,
-  selectedMonth,
-}: {
-  selected: string | null;
-  consultants: { id: string; name: string }[];
-  selectedMonth: string | null;
-}) {
-  const router = useRouter();
-  return (
-    <select
-      id="consultant-filter"
-      value={selected ?? ""}
-      className="border-border bg-background text-foreground rounded-md border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-      onChange={(e) => {
-        const v = e.target.value;
-        const params = new URLSearchParams();
-        if (selectedMonth) params.set("month", selectedMonth);
-        if (v) params.set("consultant", v);
-        const s = params.toString();
-        router.push(`/enrollment${s ? `?${s}` : ""}`);
-      }}
-    >
-      <option value="">전체</option>
-      {consultants.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.name}
-        </option>
-      ))}
-    </select>
-  );
-}
