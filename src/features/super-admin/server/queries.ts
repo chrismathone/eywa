@@ -142,3 +142,73 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
     monthBillingSum,
   };
 });
+
+export type TenantSnapshot = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  kpi: { students: number; teachers: number; activeClasses: number; monthBilling: number };
+  recentStudents: { id: string; name: string; grade: string | null; status: string }[];
+  recentMeetings: { id: string; title: string; heldAt: string | null }[];
+};
+
+// 지점장 보기(read-only 미러)용 — 그 학원의 현황을 service_role로 읽어 요약.
+export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapshot | null> => {
+  const admin = createAdminClient();
+  const period = currentPeriod();
+
+  const { data: tenant } = await admin
+    .from("tenants")
+    .select("id, name, slug, plan")
+    .eq("id", id)
+    .maybeSingle();
+  if (!tenant) return null;
+
+  const [studentsRes, teachersRes, classesRes, invoicesRes, recentStudentsRes, recentMeetingsRes] =
+    await Promise.all([
+      admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
+      admin.from("users").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("system_role", "teacher"),
+      admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
+      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period),
+      admin
+        .from("students")
+        .select("id, name, grade, status")
+        .eq("tenant_id", id)
+        .neq("status", "withdrawn")
+        .order("created_at", { ascending: false })
+        .limit(8),
+      admin
+        .from("meeting_minutes")
+        .select("id, title, held_at")
+        .eq("tenant_id", id)
+        .order("held_at", { ascending: false })
+        .limit(3),
+    ]);
+
+  const monthBilling = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
+
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    slug: tenant.slug,
+    plan: tenant.plan,
+    kpi: {
+      students: studentsRes.count ?? 0,
+      teachers: teachersRes.count ?? 0,
+      activeClasses: classesRes.count ?? 0,
+      monthBilling,
+    },
+    recentStudents: (recentStudentsRes.data ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      status: s.status,
+    })),
+    recentMeetings: (recentMeetingsRes.data ?? []).map((m) => ({
+      id: m.id,
+      title: m.title,
+      heldAt: m.held_at,
+    })),
+  };
+});

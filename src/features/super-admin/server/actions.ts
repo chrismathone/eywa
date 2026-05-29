@@ -129,3 +129,15 @@ export async function updateTenant(
   revalidatePath("/super-admin/tenants");
   return { ok: true };
 }
+
+/** 지점장 보기(read-only 미러) 진입 기록. view 페이지 진입 시 호출. */
+export async function logImpersonateView(tenantId: string, tenantName: string): Promise<void> {
+  const sa = await requireSuperAdmin();
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "impersonate_view",
+    targetTenantId: tenantId,
+    targetLabel: tenantName,
+  });
+}

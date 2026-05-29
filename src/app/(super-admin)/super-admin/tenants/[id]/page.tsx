@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -147,10 +148,20 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
           <UpdateTenantForm id={detail.id} name={detail.name} plan={detail.plan} />
         </section>
 
-        {/* Phase 2 placeholder */}
-        <section className="border-line text-text-faint rounded-2xl border border-dashed bg-transparent p-5">
-          <p className="text-[12px] font-bold">지점장 보기 (Impersonate)</p>
-          <p className="mt-1 text-[11px]">Phase 2에서 추가 예정 — super_admin이 해당 학원의 master 권한으로 잠시 진입.</p>
+        {/* 지점장 보기 (read-only 미러) */}
+        <section className="bg-card border-line shadow-card flex items-center justify-between rounded-2xl border p-5">
+          <div>
+            <p className="text-foreground text-[13px] font-bold">지점장 보기</p>
+            <p className="text-text-dim mt-1 text-[11px]">
+              해당 학원의 현황(학생·반·회의)을 읽기 전용으로 들여다봅니다. 진입 기록은 감사 로그에 남습니다.
+            </p>
+          </div>
+          <Link
+            href={`/super-admin/tenants/${detail.id}/view`}
+            className="bg-gold text-ink inline-flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-[12px] font-bold"
+          >
+            <EyIcon name="search" size={13} /> 들여다보기
+          </Link>
         </section>
       </div>
     </>
