@@ -498,6 +498,35 @@ Phase 4/5에서 새 server action(`toggleTenantLicense`, `setUserActive` 등)을
 
 4. **커밋은 작게·자주**. 한 기능 = 한 커밋. 여러 세션이 같은 파일을 건드릴 수 있으니 큰 덩어리는 충돌 위험이 큼.
 
+## 여러 세션 병렬 작업 — 언제 좋고, 어떻게 격리하나
+
+**핵심 원칙: 두 세션이 같은 것을 동시에 *쓰면* 충돌, 다른 것을 쓰면 안전.** 여기서 "같은 것" = 파일 · `.next` · 같은 포트의 dev 서버 · Supabase DB · main 브랜치.
+
+⚠️ **이 repo는 세션들이 단일 작업 트리(`D:/eywa_refactoring`)를 공유**한다 (`git worktree list` 하면 워크트리 1개뿐). 그래서 격리 없는 동시 *쓰기*는 위험:
+- **같은 파일 동시 편집** → 나중 쓴 쪽이 덮어씀, 상대 세션의 화면은 stale
+- **둘 다 `pnpm dev`** → `.next` 락 충돌·생성파일 손상 (#17/#23 — `routes.d.ts` 깨짐 → `.next` nuke 후 재빌드해야 복구)
+- **둘 다 `db:seed`/마이그레이션** → 같은 Supabase를 상호 wipe (seed가 idempotent-wipe라 더 위험)
+- **둘 다 push** → non-fast-forward 도돌이표 (위 Git 협업 규칙)
+
+### 병렬이 안전·유용한 경우
+- **파일이 안 겹치는 독립 작업** (예: `/billing` ∥ `/meetings`). 단 공유 파일(`globals.css`·`schema.ts`·`navigation.ts`·`permissions.ts`)은 한쪽만 건드릴 것.
+- **읽기·탐색 ∥ 코딩** — 한 세션은 쓰기를 안 함.
+- **긴 작업(빌드·마이그레이션·긴 AI 호출) 돌려두고** 다른 작업 진행.
+- **다른 repo/프로젝트** — 공유 상태 없으니 무조건 안전.
+
+### 진짜 병렬 코딩은 worktree로 격리
+```bash
+git worktree add ../eywa-billing -b feat/billing   # 별도 디렉터리 + 별도 브랜치
+PORT=3101 pnpm dev                                  # dev 서버는 포트 분리 (3100과 다르게)
+```
+세션마다 자기 worktree(= 자기 `.next`·자기 파일)를 열면 파일·빌드 충돌이 원천 차단되고, 끝나면 브랜치를 merge.
+⚠️ **단 Supabase DB·Vercel 프로젝트는 worktree로도 안 갈라진다** — DB 변경(seed/migrate)은 격리해도 동시 금지.
+
+### 오히려 한 세션 안에서가 나은 병렬
+"조사하면서 구현"류는 새 세션보다 **서브에이전트(Agent)**(여러 곳 동시 탐색, 결과가 한 맥락으로 복귀) + **백그라운드 실행**이 안전하고 맥락이 안 흩어진다.
+
+**한 줄 규칙: 읽기·탐색은 마음껏 병렬. 쓰기(편집·dev·DB·push)는 "격리됐는가?"를 먼저 확인 — 아니면 한 세션으로.**
+
 ## 검증 게이트 (commit 전)
 
 ```bash
