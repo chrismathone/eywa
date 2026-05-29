@@ -7,6 +7,14 @@ import { StatusDialog } from "./status-dialog";
 
 type Target = "withdrawn" | "on_hold" | "enrolled";
 
+const STATUS_LABEL: Record<string, string> = {
+  prospect: "예비",
+  consulted: "상담완료",
+  enrolled: "재원",
+  on_hold: "휴원",
+  withdrawn: "퇴원",
+};
+
 export function StatusAction({
   studentId,
   studentName,
@@ -66,7 +74,7 @@ export function StatusAction({
       <StatusDialog
         studentId={studentId}
         studentName={studentName}
-        currentStatus={currentStatus}
+        currentStatus={STATUS_LABEL[currentStatus] ?? currentStatus}
         open={open}
         initialTarget={target}
         onClose={(changed) => {

@@ -84,7 +84,7 @@ export default async function StudentDetailPage({
             <StatusAction
               studentId={student.id}
               studentName={student.name}
-              currentStatus={STATUS_LABEL[student.status] ?? student.status}
+              currentStatus={student.status}
             />
             <Button variant="outline" render={<Link href={`/students/${student.id}/edit`} />}>
               <Pencil className="size-3.5" />
