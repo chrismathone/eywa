@@ -374,34 +374,33 @@ async function main() {
       and email = 'chrismathone@gmail.com'
   `;
 
-  // --- 1c. super_admin grant — chrismathone은 SaaS 운영자 겸 academy master ---
-  console.log("Granting super_admin to chrismathone@gmail.com…");
-  await sql`
-    insert into super_admins (id, email, display_name)
-    select id, email, display_name from users
-    where email = 'chrismathone@gmail.com'
-    on conflict (id) do update set
-      email = excluded.email,
-      display_name = excluded.display_name
-  `;
-
-  // --- 1d. st2000423 — 권한 매트릭스 시뮬레이션용 teacher 계정 복구 ---
-  // 실제 auth 계정(gmail)이라 wipe 단계의 `system_role <> 'master'` delete에 걸려
-  // public.users에서 사라짐 → 로그인은 되지만 getCurrentUser() null → /login 튕김.
-  // wipe 이후 명시적으로 복구해 재발 방지. (auth.users에는 항상 존재.)
-  console.log("Restoring st2000423 teacher (권한 시뮬레이션)…");
+  // --- 1c. st2000423 — 총괄 마스터 계정 보강 ---
+  // 실제 gmail auth 계정이라, master로 두면 wipe(`system_role <> 'master'`)에서 보존되지만
+  // 방어적으로 명시 upsert해 둔다. (한때 teacher로 두면 wipe에 삭제돼 로그인 튕김이 발생했음.)
+  console.log("Restoring st2000423 (총괄 마스터)…");
   await sql`
     insert into users (id, tenant_id, email, display_name, system_role, status, job_title)
     values (
       'fcf735fa-edf7-4095-8fa6-724285a018ed', ${tenantId},
-      'st2000423@gmail.com', '석태선', 'teacher', 'active', '강사'
+      'st2000423@gmail.com', '석태선', 'master', 'active', '원장'
     )
     on conflict (id) do update set
       tenant_id = excluded.tenant_id,
       display_name = excluded.display_name,
-      system_role = 'teacher',
+      system_role = 'master',
       status = 'active',
-      job_title = '강사'
+      job_title = '원장'
+  `;
+
+  // --- 1d. super_admin grant — chrismathone + st2000423 둘 다 SaaS 운영자 ---
+  console.log("Granting super_admin to chrismathone + st2000423…");
+  await sql`
+    insert into super_admins (id, email, display_name)
+    select id, email, display_name from users
+    where email in ('chrismathone@gmail.com', 'st2000423@gmail.com')
+    on conflict (id) do update set
+      email = excluded.email,
+      display_name = excluded.display_name
   `;
 
   // --- 2. Teachers (5) ---
