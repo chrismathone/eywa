@@ -385,6 +385,25 @@ async function main() {
       display_name = excluded.display_name
   `;
 
+  // --- 1d. st2000423 — 권한 매트릭스 시뮬레이션용 teacher 계정 복구 ---
+  // 실제 auth 계정(gmail)이라 wipe 단계의 `system_role <> 'master'` delete에 걸려
+  // public.users에서 사라짐 → 로그인은 되지만 getCurrentUser() null → /login 튕김.
+  // wipe 이후 명시적으로 복구해 재발 방지. (auth.users에는 항상 존재.)
+  console.log("Restoring st2000423 teacher (권한 시뮬레이션)…");
+  await sql`
+    insert into users (id, tenant_id, email, display_name, system_role, status, job_title)
+    values (
+      'fcf735fa-edf7-4095-8fa6-724285a018ed', ${tenantId},
+      'st2000423@gmail.com', '석태선', 'teacher', 'active', '강사'
+    )
+    on conflict (id) do update set
+      tenant_id = excluded.tenant_id,
+      display_name = excluded.display_name,
+      system_role = 'teacher',
+      status = 'active',
+      job_title = '강사'
+  `;
+
   // --- 2. Teachers (5) ---
   console.log("Inserting teachers…");
   const teacherIds: string[] = [];
