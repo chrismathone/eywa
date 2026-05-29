@@ -64,6 +64,63 @@ const STUDENTS: { name: string; school: string; grade: string }[] = [
   { name: "박시현", school: "동덕여고", grade: "고3" },
 ];
 
+// Frozen AI 케어 인사이트 — 상단 5명(학생목록 순서)에 적용. 셀프투어에서 학생 상세
+// 개요탭의 "AI 케어 인사이트" 섹션이 라이브 호출 없이 바로 뜨도록. 마지막 항목(김도윤)은
+// 결석 누적 위험군(high priority)으로 AI가 실제 우려를 짚는 "와우" 케이스.
+type CareAiSeed = {
+  summary: string;
+  focus: { area: string; recommendation: string; priority: "high" | "medium" | "low" }[];
+};
+
+const CARE_AI: CareAiSeed[] = [
+  {
+    // 강민서 (중1)
+    summary:
+      "수업 참여도와 질문 빈도가 높아 학습 동기는 우수합니다. 다만 중학 연산 단계에서 실수가 반복되어, 기초 연산 정확도를 다지면 상위권 진입이 충분히 가능한 학생입니다.",
+    focus: [
+      { area: "연산 정확도", recommendation: "분수·방정식 기초 연산을 주 2회 반복 훈련해 계산 실수를 줄입니다.", priority: "medium" },
+      { area: "학습 습관 정착", recommendation: "오답 노트를 도입해 틀린 유형을 누적 관리합니다.", priority: "low" },
+    ],
+  },
+  {
+    // 윤지호 (중1)
+    summary:
+      "성실하게 과제를 수행하고 출석이 안정적입니다. 객관식 정답률은 높으나 서술형에서 풀이 과정을 정리하는 힘이 부족해, 서술형 첨삭을 병행하면 내신 변별 문항 대응력이 향상될 것으로 보입니다.",
+    focus: [
+      { area: "서술형 풀이", recommendation: "주 1회 서술형 답안 첨삭으로 풀이 논리 전개를 훈련합니다.", priority: "medium" },
+      { area: "개념 설명력", recommendation: "배운 개념을 말로 설명하는 활동으로 이해도를 점검합니다.", priority: "low" },
+    ],
+  },
+  {
+    // 이서연 (중1)
+    summary:
+      "전 과목 이해 속도가 빠르고 응용 문제 접근이 적극적인 상위권 학생입니다. 현재 정규 진도에 여유가 있어, 심화 문제와 선행을 병행하면 잠재력을 더 끌어올릴 수 있습니다.",
+    focus: [
+      { area: "심화 도전", recommendation: "정규 진도와 별도로 심화 문제 세트를 주 1회 제공합니다.", priority: "low" },
+      { area: "선행 학습", recommendation: "다음 단원 선행으로 학습 흥미를 유지합니다.", priority: "low" },
+    ],
+  },
+  {
+    // 김도윤 (중1) — 결석 누적 위험군
+    summary:
+      "최근 한 달 결석·지각이 누적되어 학습 연속성이 흔들리고 있습니다. 출결이 회복되지 않으면 진도 공백과 성적 하락으로 이어질 위험이 있어, 조기 개입과 학부모 면담이 필요합니다.",
+    focus: [
+      { area: "출결 관리", recommendation: "결석·지각 사유를 학부모와 공유하고 출결 회복 목표를 함께 설정합니다.", priority: "high" },
+      { area: "진도 보충", recommendation: "결석으로 누락된 단원을 보충 수업으로 메웁니다.", priority: "medium" },
+      { area: "학습 동기", recommendation: "단기 목표를 설정해 수업 참여 동기를 회복합니다.", priority: "medium" },
+    ],
+  },
+  {
+    // 한지우 (중1)
+    summary:
+      "평소 실력은 안정적이나 시험이 다가오면 긴장도가 높아져 실수가 늘어나는 패턴이 관찰됩니다. 시험 전 컨디션 관리와 시간 분배 훈련으로 실전 점수를 끌어올릴 수 있습니다.",
+    focus: [
+      { area: "시험 불안 관리", recommendation: "시험 형식의 모의 풀이를 반복해 실전 긴장도를 낮춥니다.", priority: "medium" },
+      { area: "시간 분배", recommendation: "문항별 시간 배분 전략을 연습합니다.", priority: "low" },
+    ],
+  },
+];
+
 const CLASSROOMS = ["301호", "302호", "205호", "206호", "401호"];
 
 const CLASSES: { className: string; subject: string; grade: string }[] = [
@@ -253,7 +310,26 @@ const STUDENT_CONSULTATION_TEMPLATES: { summary: string; followUp?: string }[] =
   },
 ];
 
-const MEETINGS: { title: string; daysAgo: number; attendees: string[]; content: string }[] = [
+// Frozen 8-section AI report (mirrors MeetingReportSection). Pre-baked so the
+// self-tour shows a completed analysis without triggering a live Claude call.
+type MeetingReportSeed = {
+  meetingType: string;
+  summary: string;
+  agendaDiscussion: string;
+  decisions: string;
+  actionItems: string;
+  speakerSummary: string;
+  concerns: string;
+  nextSteps: string;
+};
+
+const MEETINGS: {
+  title: string;
+  daysAgo: number;
+  attendees: string[];
+  content: string;
+  aiReport: MeetingReportSeed;
+}[] = [
   {
     title: "주간 강사 회의 (5월 4주차)",
     daysAgo: 2,
@@ -269,6 +345,30 @@ const MEETINGS: { title: string; daysAgo: number; attendees: string[]; content: 
 안건 3. 여름방학 시간표 사전 공지
   - 7/21부터 여름 특강 전환, 강사 일정 사전 확인 필요
   - 강사진 회의 6/25 19:30 예정`,
+    aiReport: {
+      meetingType: "주간 정기 회의",
+      summary:
+        "6월 정기시험 일정을 6/17~6/19로 확정하고, 5월 출석률 92% 유지 현황과 결석 누적 학생 관리, 여름방학 시간표 전환 일정을 점검한 주간 강사 회의입니다.",
+      agendaDiscussion: `· 6월 정기시험: 6/17(수)~6/19(금) 3일간 진행으로 합의. 시간표는 다음 주 화요일까지 배포하고, 시험 범위는 과목별 강사가 학생에게 개별 안내하기로 함.
+· 출석률 추이: 5월 평균 92%로 안정적이나, 결석 3회 이상 학생 5명을 별도 관리 대상으로 식별.
+· 여름방학 전환: 7/21부터 여름 특강 시간표로 전환 예정이며, 강사 개인 일정 사전 취합이 필요하다는 의견.`,
+      decisions: `· 6월 정기시험 6/17~6/19 확정.
+· 시험 시간표 배포 기한: 다음 주 화요일.
+· 결석 3회 이상 학생 5명을 학생상담 우선순위로 등록.
+· 여름 특강 전환일 7/21 확정, 강사 회의 6/25 19:30 진행.`,
+      actionItems: `· 시험 시간표 작성·배포 — 박지훈, 다음 주 화요일까지
+· 과목별 시험 범위 학생 안내 — 전 강사, 6월 첫째 주
+· 결석 누적 학생 5명 상담 배정 — 김민지, 금주 내
+· 여름 특강 강사 일정 취합 — 최서영, 6/20까지`,
+      speakerSummary: `· 박지훈: 시험 일정과 시간표 배포 기한을 주도적으로 정리.
+· 김민지: 출석률 데이터를 공유하고 결석 누적 학생 상담 필요성을 제기.
+· 최서영·이연우: 여름 특강 시간표 전환 시 강사 일정 충돌 우려 제기.
+· 강도현: 신규 강사로서 시험 운영 절차를 확인.`,
+      concerns:
+        "결석 3회 이상 학생 5명의 이탈 위험이 가장 큰 우려 사항입니다. 또한 여름 특강 전환 시 강사 일정 충돌 가능성이 있어 사전 조율이 필요합니다.",
+      nextSteps:
+        "다음 주 화요일까지 시험 시간표를 확정·배포하고, 6/25 19:30 강사 회의에서 여름 특강 시간표 초안을 검토합니다.",
+    },
   },
   {
     title: "수학 교과 분과 회의",
@@ -284,6 +384,28 @@ const MEETINGS: { title: string; daysAgo: number; attendees: string[]; content: 
 
 안건 3. 신입 강사 코칭
   - 강도현 강사 수업 참관 후 피드백 진행`,
+    aiReport: {
+      meetingType: "교과 분과 회의",
+      summary:
+        "중3 심화반의 도형 단원 진도를 2주 연장하고, 고2 모의고사 평균이 1.8등급으로 0.3등급 향상된 결과를 분석하며, 신입 강사 코칭 계획을 논의한 수학 교과 분과 회의입니다.",
+      agendaDiscussion: `· 중3 심화반: 도형 단원에서 시간이 부족하여 2주를 추가 배정하기로 함. 자사고 면접 대비 풀이 발표 훈련도 신규 도입.
+· 고2 모의고사: 평균 1.8등급으로 전월 대비 0.3등급 향상. 적분의 활용 단원이 공통 약점으로 확인되어 6월 보강 진행.
+· 신입 강사 코칭: 강도현 강사 수업 참관 후 피드백 체계 마련.`,
+      decisions: `· 중3 심화반 도형 단원 2주 추가 배정.
+· 자사고 면접 대비 풀이 발표 훈련 도입.
+· 고2 적분의 활용 단원 6월 보강 편성.
+· 강도현 강사 수업 참관 및 피드백 진행.`,
+      actionItems: `· 중3 심화반 도형 보강 진도표 재작성 — 박지훈, 금주
+· 고2 적분 보강 교재 선정 — 김민지, 6월 첫째 주
+· 강도현 강사 수업 참관 일정 확정 — 박지훈, 차주`,
+      speakerSummary: `· 박지훈: 중3 진도 지연 현황을 공유하고 보강 일정을 제안.
+· 김민지: 고2 모의고사 데이터를 분석하고 약점 단원을 지목.
+· 강도현: 참관 피드백을 적극 수용하겠다는 의사 표명.`,
+      concerns:
+        "중3 도형 단원 진도 지연이 누적되면 2학기 선행 일정에 영향을 줄 수 있습니다. 고2 적분 약점은 6월 보강으로 조기 보완이 필요합니다.",
+      nextSteps:
+        "보강 진도표와 적분 보강 교재를 6월 첫째 주까지 확정하고, 강도현 강사 참관 후 2차 피드백 회의를 진행합니다.",
+    },
   },
   {
     title: "원장-부장 운영 회의",
@@ -299,6 +421,27 @@ const MEETINGS: { title: string; daysAgo: number; attendees: string[]; content: 
 
 안건 3. 직원 워크숍 일정
   - 7월 첫째 주 1박 2일 예정`,
+    aiReport: {
+      meetingType: "운영 회의",
+      summary:
+        "6월 신규 등록 12명 목표와 등록상담 AI 활용 방안, 학부모 만족도 92% 결과와 개선 요청 사항, 7월 직원 워크숍 일정을 다룬 원장-부장 운영 회의입니다.",
+      agendaDiscussion: `· 신규 등록: 중1 +5, 중3 +3, 고1 +4로 총 12명 목표 설정. 등록상담 AI 분석을 적극 활용해 전환율을 높이기로 함.
+· 학부모 만족도: 92%로 전월 대비 1pt 상승. 다만 시간표 모바일 알림 추가 요청이 다수 접수됨.
+· 직원 워크숍: 7월 첫째 주 1박 2일 일정으로 추진.`,
+      decisions: `· 6월 신규 등록 목표 12명 확정.
+· 등록상담 AI 분석을 신규 상담에 기본 적용.
+· 시간표 모바일 알림 기능 검토 착수.
+· 직원 워크숍 7월 첫째 주 1박 2일 진행.`,
+      actionItems: `· 신규 등록 채널별 목표 배분 — 이부장, 6월 첫째 주
+· 시간표 모바일 알림 도입 검토 보고 — 이부장, 6월 중순
+· 워크숍 장소·일정 확정 — 박원장, 6월 말`,
+      speakerSummary: `· 박원장: 등록 목표와 워크숍 방향을 제시하고 의사결정을 주도.
+· 이부장: 만족도 조사 결과와 학부모 개선 요청을 보고하고 실행 과제를 정리.`,
+      concerns:
+        "신규 등록 12명 목표는 다소 공격적이어서 채널별 세부 전략이 필요합니다. 시간표 모바일 알림 요청은 빠르게 대응하지 않으면 만족도 하락 요인이 될 수 있습니다.",
+      nextSteps:
+        "6월 첫째 주까지 등록 목표를 채널별로 배분하고, 시간표 모바일 알림 도입 가능성을 중순까지 검토 보고합니다.",
+    },
   },
 ];
 
@@ -712,13 +855,18 @@ async function main() {
     const heldAt = new Date();
     heldAt.setDate(heldAt.getDate() - m.daysAgo);
     heldAt.setHours(19, 30, 0, 0);
+    // AI analysis "completed" ~95분 후 (회의 종료 직후 분석 마감 시점) — frozen snapshot.
+    const aiGeneratedAt = new Date(heldAt.getTime() + 95 * 60 * 1000);
     await sql`
       insert into meeting_minutes (
-        tenant_id, title, content, attendees, held_at, author_id
+        tenant_id, title, content, attendees, held_at, author_id,
+        processing_status, ai_report, ai_model_version, ai_generated_at
       ) values (
         ${tenantId}, ${m.title}, ${m.content},
         ${sql.json(m.attendees)},
-        ${heldAt.toISOString()}, ${recordedBy}
+        ${heldAt.toISOString()}, ${recordedBy},
+        'completed', ${sql.json(m.aiReport)},
+        'claude-sonnet-4-6-2026-01-seed', ${aiGeneratedAt.toISOString()}
       )
     `;
   }
@@ -764,6 +912,21 @@ async function main() {
     await sql`
       insert into student_memos (tenant_id, student_id, category, content, created_by)
       values (${tenantId}, ${stu.id}, ${memo.category}, ${memo.content}, ${recordedBy})
+    `;
+  }
+
+  // AI 케어 인사이트 (frozen) — 상단 학생들에 적용. 학생 상세 개요탭에서 바로 노출.
+  for (const [idx, stu] of studentRows.entries()) {
+    const care = CARE_AI[idx];
+    if (!care) break; // CARE_AI 길이만큼만 (상단 5명)
+    const careGeneratedAt = new Date(Date.now() - (idx + 2) * 86_400_000);
+    await sql`
+      update students set
+        ai_care_summary = ${care.summary},
+        ai_care_focus = ${sql.json(care.focus)},
+        ai_care_model_version = 'claude-sonnet-4-6-2026-01-seed',
+        ai_care_generated_at = ${careGeneratedAt.toISOString()}
+      where id = ${stu.id}
     `;
   }
 
