@@ -30,17 +30,9 @@ function relativeTime(iso: string): string {
 export function AnnouncementsCard({ announcements }: { announcements: AnnouncementRow[] }) {
   return (
     <section className="bg-card border-line shadow-card flex h-full flex-col overflow-hidden rounded-2xl border">
-      <header className="flex items-center justify-between px-6 pt-5 pb-3">
-        <div>
-          <p className="text-amber font-mono text-[11px] tracking-wider uppercase">공지</p>
-          <h2 className="text-foreground mt-1 text-[17px] font-bold">최근 알림</h2>
-        </div>
-        <a
-          href="#"
-          className="text-text-dim hover:text-foreground text-xs underline-offset-2 transition hover:underline"
-        >
-          전체 보기 →
-        </a>
+      <header className="px-6 pt-5 pb-3">
+        <p className="text-amber font-mono text-[11px] tracking-wider uppercase">공지</p>
+        <h2 className="text-foreground mt-1 text-[17px] font-bold">최근 알림</h2>
       </header>
 
       {announcements.length === 0 ? (
@@ -52,7 +44,7 @@ export function AnnouncementsCard({ announcements }: { announcements: Announceme
           {announcements.map((a) => {
             const meta = AUDIENCE_META[a.audience] ?? { label: a.audience, color: "neutral" as PillColor };
             return (
-              <li key={a.id} className="hover:bg-bg-soft/60 cursor-pointer px-6 py-3.5 transition">
+              <li key={a.id} className="px-6 py-3.5">
                 <div className="flex items-start gap-3">
                   <Pill color={meta.color}>{meta.label}</Pill>
                   <div className="min-w-0 flex-1">
