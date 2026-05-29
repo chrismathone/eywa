@@ -38,7 +38,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           </span>
         </header>
         <p className="text-muted-foreground text-xs">
-          status=enrolled인데 활성 enrollment가 없습니다. 학생 상세에서 반 배정하거나 상태를
+          상태가 재원인데 수강 중인 반이 없습니다. 학생 상세에서 반을 배정하거나 상태를
           변경하세요.
         </p>
         {report.studentsWithoutEnrollments.length > 0 ? (
@@ -71,7 +71,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           </span>
         </header>
         <p className="text-muted-foreground text-xs">
-          is_active=true인데 class_schedules가 없습니다. 시간표에 등장하지 않습니다.
+          운영 중인 반인데 주간 스케줄이 없습니다. 시간표에 표시되지 않습니다.
         </p>
         {report.classesWithoutSchedules.length > 0 ? (
           <ul className="mt-3 space-y-1">
@@ -105,7 +105,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           </span>
         </header>
         <p className="text-muted-foreground text-xs">
-          status=withdrawn인 학생의 enrollment 중 end_date=null인 row가 있습니다. 자동 종료 처리하세요.
+          퇴원한 학생인데 종료되지 않은 수강 기록이 남아 있습니다. 자동 종료 처리하세요.
         </p>
         {report.enrollmentsWithoutEndDate > 0 ? (
           <form action={action} className="mt-3">

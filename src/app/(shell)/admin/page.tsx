@@ -21,7 +21,7 @@ const TOOLS = [
     href: "/admin/integrations/sheets",
     icon: FileSpreadsheet,
     label: "Google Sheets 동기화",
-    description: "시간표를 Google Sheets로 push (service account JWT).",
+    description: "시간표를 Google Sheets로 내보내기 (서비스 계정 연동).",
   },
 ];
 

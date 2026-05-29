@@ -25,8 +25,8 @@ export default async function DuplicatesPage() {
         <p className="eyebrow">관리 · 중복 병합</p>
         <h1 className="display text-foreground text-2xl">중복 의심 학생</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          이름·학년·학교가 모두 같은 학생들. 통합하면 모든 수강·출석·수납·상담·메모가 keeper로
-          이전되고 mergee는 퇴원 처리됩니다.
+          이름·학년·학교가 모두 같은 학생들. 통합하면 모든 수강·출석·수납·상담·메모가 보존할 학생으로
+          이전되고 나머지 중복 학생은 퇴원 처리됩니다.
         </p>
       </header>
 

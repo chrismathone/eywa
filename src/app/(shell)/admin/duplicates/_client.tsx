@@ -7,6 +7,18 @@ import { Button } from "@/components/ui/button";
 import { mergeStudents, type MergeStudentsState } from "@/features/admin/server/actions";
 import type { DuplicateGroup } from "@/features/admin/server/queries";
 
+const STATUS_LABEL: Record<string, string> = {
+  prospect: "예비",
+  consulted: "상담완료",
+  enrolled: "재원",
+  on_hold: "휴원",
+  withdrawn: "퇴원",
+};
+
+function statusLabel(s: string): string {
+  return STATUS_LABEL[s] ?? s;
+}
+
 function MergeBtn() {
   const { pending } = useFormStatus();
   return (
@@ -56,7 +68,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
           >
             <span className="num text-muted-foreground">{s.id.slice(0, 8)}</span>
             <span className="text-foreground font-medium">{s.name}</span>
-            <span className="text-muted-foreground">{s.status}</span>
+            <span className="text-muted-foreground">{statusLabel(s.status)}</span>
             <span className="text-muted-foreground num ml-auto">
               {s.enrolledAt ?? "—"}
             </span>
@@ -67,7 +79,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
       <form action={action} className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
         <div className="space-y-1">
           <label className="text-muted-foreground block text-[11px] font-medium">
-            keeper (살아남을 학생)
+            보존할 학생 (통합 후 유지)
           </label>
           <select
             name="keeperId"
@@ -77,14 +89,14 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
           >
             {group.students.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.id.slice(0, 8)} · {s.status}
+                {s.id.slice(0, 8)} · {statusLabel(s.status)}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1">
           <label className="text-muted-foreground block text-[11px] font-medium">
-            mergee (병합 후 퇴원)
+            중복 학생 (통합 후 퇴원)
           </label>
           <select
             name="mergeeId"
@@ -96,7 +108,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
               .filter((s) => s.id !== keeperId)
               .map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.id.slice(0, 8)} · {s.status}
+                  {s.id.slice(0, 8)} · {statusLabel(s.status)}
                 </option>
               ))}
           </select>
@@ -107,7 +119,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
       {state?.error ? <p className="text-chart-4 mt-2 text-xs">{state.error}</p> : null}
       {state?.mergedRows !== undefined ? (
         <p className="text-chart-2 mt-2 text-xs">
-          {state.mergedRows}개 row 이전 완료. 페이지를 새로고침하세요.
+          {state.mergedRows}개 항목 이전 완료. 페이지를 새로고침하세요.
         </p>
       ) : null}
     </li>

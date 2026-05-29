@@ -21,6 +21,22 @@ const ROLE_COLOR: Record<string, PillColor> = {
   viewer: "neutral",
 };
 
+const ROLE_LABEL: Record<string, string> = {
+  master: "원장",
+  admin: "관리자",
+  manager: "매니저",
+  teacher: "강사",
+  counselor: "상담",
+  accountant: "회계",
+  viewer: "뷰어",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  active: "활성",
+  inactive: "비활성",
+  invited: "초대됨",
+};
+
 export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const detail = await getTenantDetail(id);
@@ -112,10 +128,10 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
                   <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{u.email}</td>
                   <td className="px-4 py-2.5">
                     <Pill color={ROLE_COLOR[u.systemRole] ?? "neutral"} soft>
-                      {u.systemRole}
+                      {ROLE_LABEL[u.systemRole] ?? u.systemRole}
                     </Pill>
                   </td>
-                  <td className="text-text-dim px-4 py-2.5">{u.status}</td>
+                  <td className="text-text-dim px-4 py-2.5">{STATUS_LABEL[u.status] ?? u.status}</td>
                 </tr>
               ))}
             </tbody>

@@ -10,8 +10,7 @@ export default function NewTenantPage() {
       <div className="px-7 py-6">
         <div className="bg-card border-line shadow-card mx-auto max-w-2xl rounded-2xl border p-6">
           <p className="text-text-dim text-[12px] leading-relaxed">
-            tenants 행 + master 계정(원장)을 한 번에 생성합니다. 트리거 <code className="font-mono">tg_sync_user_from_auth</code>가
-            public.users에 자동 mirror하므로 사용자는 즉시 로그인 가능합니다.
+            학원과 원장(master) 계정을 한 번에 생성합니다. 생성 즉시 해당 원장이 로그인할 수 있습니다.
           </p>
           <div className="mt-5">
             <NewTenantForm />

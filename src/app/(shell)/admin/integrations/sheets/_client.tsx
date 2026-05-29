@@ -60,7 +60,7 @@ export function SheetsClient({ status }: { status: IntegrationStatus }) {
       <section className="bg-card border-border rounded-md border p-6">
         <h2 className="text-foreground text-base font-semibold">Google Sheets 연결</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          eywa의 service account가 새 시트를 생성하고, 입력한 이메일에 writer 권한을 부여합니다.
+          eywa의 서비스 계정이 새 시트를 생성하고, 입력한 이메일에 편집 권한을 부여합니다.
         </p>
         <form action={connectAction} className="mt-4 flex flex-wrap items-end gap-2">
           <div className="flex-1 space-y-1">

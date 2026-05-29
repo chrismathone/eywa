@@ -163,7 +163,7 @@ export default async function WithdrawalsPage({
         <EmptyState
           icon={() => <EyIcon name="falling" size={32} />}
           title="퇴원 학생이 없습니다"
-          description="status='withdrawn' 학생이 생기면 이곳에 표시됩니다."
+          description="퇴원 처리된 학생이 생기면 이곳에 표시됩니다."
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
