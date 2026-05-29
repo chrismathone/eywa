@@ -142,6 +142,106 @@ export async function logImpersonateView(tenantId: string, tenantName: string): 
   });
 }
 
+export type UserMgmtState =
+  | { error?: string; ok?: boolean; tempPassword?: string }
+  | undefined;
+
+/** 사용자 academy role 변경 (app_metadata + public.users 동기화). */
+export async function changeUserRole(
+  _prev: UserMgmtState,
+  formData: FormData,
+): Promise<UserMgmtState> {
+  const sa = await requireSuperAdmin();
+  const userId = String(formData.get("userId") ?? "").trim();
+  const role = String(formData.get("role") ?? "").trim();
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const tenantName = String(formData.get("tenantName") ?? "").trim();
+  if (!userId || !role || !tenantId) return { error: "필수 값 누락" };
+
+  const admin = createAdminClient();
+  // app_metadata 갱신 (RLS auth_tenant_id는 tenant_id, academy 권한은 system_role)
+  const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
+    app_metadata: { system_role: role, tenant_id: tenantId },
+  });
+  if (authErr) return { error: authErr.message };
+  // public.users 즉시 반영 (트리거가 처리하지만 명시)
+  await admin.from("users").update({ system_role: role }).eq("id", userId);
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "change_user_role",
+    targetTenantId: tenantId,
+    targetLabel: tenantName || null,
+    metadata: { userId, role },
+  });
+  revalidatePath(`/super-admin/tenants/${tenantId}`);
+  return { ok: true };
+}
+
+/** 임시 비밀번호 발급 (1회 표시 후 사용자에게 직접 전달). */
+export async function resetUserPassword(
+  _prev: UserMgmtState,
+  formData: FormData,
+): Promise<UserMgmtState> {
+  const sa = await requireSuperAdmin();
+  const userId = String(formData.get("userId") ?? "").trim();
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const tenantName = String(formData.get("tenantName") ?? "").trim();
+  if (!userId) return { error: "userId 누락" };
+
+  // 임시 비번 생성 (영숫자 12자)
+  const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
+    .map((b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31])
+    .join("");
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword });
+  if (error) return { error: error.message };
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "reset_user_password",
+    targetTenantId: tenantId || null,
+    targetLabel: tenantName || null,
+    metadata: { userId },
+  });
+  return { ok: true, tempPassword };
+}
+
+/** 사용자 활성/비활성 (auth ban + public.users.status). */
+export async function setUserActive(
+  _prev: UserMgmtState,
+  formData: FormData,
+): Promise<UserMgmtState> {
+  const sa = await requireSuperAdmin();
+  const userId = String(formData.get("userId") ?? "").trim();
+  const active = String(formData.get("active") ?? "") === "true";
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const tenantName = String(formData.get("tenantName") ?? "").trim();
+  if (!userId) return { error: "userId 누락" };
+
+  const admin = createAdminClient();
+  // 비활성: 100년 ban / 활성: ban 해제(0)
+  const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
+    ban_duration: active ? "none" : "876000h",
+  });
+  if (authErr) return { error: authErr.message };
+  await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId);
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "set_user_active",
+    targetTenantId: tenantId || null,
+    targetLabel: tenantName || null,
+    metadata: { userId, active },
+  });
+  revalidatePath(`/super-admin/tenants/${tenantId}`);
+  return { ok: true };
+}
+
 export type LicenseState = { error?: string; ok?: boolean } | undefined;
 
 /** 좌석형 라이선스 upsert (max_seats 설정). */

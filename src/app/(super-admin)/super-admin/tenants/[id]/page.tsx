@@ -7,6 +7,7 @@ import { Initial } from "@/components/atoms/initial";
 import { getTenantDetail, getTenantLicenses } from "@/features/super-admin/server/queries";
 import { UpdateTenantForm } from "./_update-form";
 import { LicenseSection } from "./_license-section";
+import { UserActions } from "./_user-actions";
 
 export const metadata = { title: "Super Admin · 학원 상세 — eywa" };
 
@@ -122,12 +123,13 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
                 <th className="px-4 py-2 text-left font-semibold">이메일</th>
                 <th className="px-4 py-2 text-left font-semibold">역할</th>
                 <th className="px-4 py-2 text-left font-semibold">상태</th>
+                <th className="px-4 py-2 text-right font-semibold">관리</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
               {detail.users.map((u) => (
                 <tr key={u.id}>
-                  <td className="text-foreground px-4 py-2.5 font-bold">{u.displayName}</td>
+                  <td className="text-foreground px-4 py-2.5 font-bold whitespace-nowrap">{u.displayName}</td>
                   <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{u.email}</td>
                   <td className="px-4 py-2.5">
                     <Pill color={ROLE_COLOR[u.systemRole] ?? "neutral"} soft>
@@ -135,6 +137,15 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
                     </Pill>
                   </td>
                   <td className="text-text-dim px-4 py-2.5">{STATUS_LABEL[u.status] ?? u.status}</td>
+                  <td className="px-4 py-2.5">
+                    <UserActions
+                      userId={u.id}
+                      tenantId={detail.id}
+                      tenantName={detail.name}
+                      currentRole={u.systemRole}
+                      status={u.status}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

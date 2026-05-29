@@ -100,6 +100,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 **12개 메뉴 + ijw 패리티 + Admin 도구 + 랜딩 8섹션 + UI 폴리시 + super-admin Phase 1 완성.**
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용.
 
+### Super-admin Phase 2~5 (4개 commit, 2026-05-29)
+- **Phase 2 audit log**: `super_admin_audit_logs` 테이블 + `logSuperAdminAction` helper + `/super-admin/audit` viewer. 모든 super-admin mutation 추적.
+- **Phase 3 지점장 보기**: `/super-admin/tenants/[id]/view` read-only 미러 (KPI+학생+회의, service_role). 진입 시 `impersonate_view` audit. 실제 조작 진입(RLS 함수 분기)은 Phase 6으로 보류.
+- **Phase 4 라이선스**: `tenant_licenses` 테이블 (좌석형 student_seats + 토글형 ai_analysis/google_sheets/meeting_recording). tenants/[id] 라이선스 섹션.
+- **Phase 5 사용자 관리**: changeUserRole/resetUserPassword/setUserActive (auth admin API) — tenants/[id] 사용자 행 액션.
+- **⚠️ seed 가짜 강사 auth 부재**: seed의 teacher 5명은 `public.users`에만 INSERT (auth.users 없음). auth admin API(updateUserById)가 "User not found" 반환 → Phase 5 액션이 가짜 강사엔 실패. 실 운영 user(createTenantWithMaster/createStaff로 생성)는 auth 있어 정상. 데모 강사 관리하려면 seed를 auth.admin.createUser 기반으로 바꿔야 함 (후속).
+
 ### Super-admin Phase 1 (3개 commit, 2026-05-28)
 - `super_admins` 별도 테이블 (academy 권한과 직교 — chrismathone은 master + super_admin 둘 다)
 - RLS: 본인 row select만, write는 service_role 전용 + `is_super_admin(uid)` SQL helper
