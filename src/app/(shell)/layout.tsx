@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AppSidebar } from "@/components/app-sidebar";
+import { CommandPalette } from "@/components/command-palette";
 import { MobileTopNav } from "@/components/mobile-top-nav";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
@@ -26,6 +27,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <AppHeader email={user.email} />
         <main className="flex-1 overflow-auto px-4 py-5 lg:px-7 lg:py-6">{children}</main>
       </div>
+
+      {/* ⌘K 메뉴 점프 팰릿 — 포털 렌더라 위치 무관, 인증 영역 전역에서 동작 */}
+      <CommandPalette systemRole={user.systemRole} />
     </div>
   );
 }
