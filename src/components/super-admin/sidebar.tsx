@@ -9,6 +9,7 @@ type NavItem = { href: string; label: string; icon: EywaIconName };
 const NAV: NavItem[] = [
   { href: "/super-admin", label: "대시보드", icon: "tree" },
   { href: "/super-admin/tenants", label: "학원 목록", icon: "rings" },
+  { href: "/super-admin/audit", label: "감사 로그", icon: "pulse" },
 ];
 
 export function SuperAdminSidebar({

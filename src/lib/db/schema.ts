@@ -624,11 +624,33 @@ export const superAdmins = pgTable("super_admins", {
   grantedBy: uuid("granted_by"),
 });
 
+// === super_admin_audit_logs (SaaS owner 액션 추적) ===
+// 모든 super-admin mutation을 INSERT-only로 기록. service_role로만 write.
+export const superAdminAuditLogs = pgTable(
+  "super_admin_audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id").notNull(),
+    actorEmail: text("actor_email").notNull(),
+    action: text("action").notNull(), // create_tenant / update_tenant / impersonate_view / ...
+    targetTenantId: uuid("target_tenant_id"),
+    targetLabel: text("target_label"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("sa_audit_created_idx").on(t.createdAt),
+    index("sa_audit_target_idx").on(t.targetTenantId),
+  ],
+);
+
 // === Type exports ===
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type SuperAdmin = typeof superAdmins.$inferSelect;
 export type NewSuperAdmin = typeof superAdmins.$inferInsert;
+export type SuperAdminAuditLog = typeof superAdminAuditLogs.$inferSelect;
+export type NewSuperAdminAuditLog = typeof superAdminAuditLogs.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Classroom = typeof classrooms.$inferSelect;

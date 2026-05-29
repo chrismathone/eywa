@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logSuperAdminAction } from "./audit";
 
 export type CreateTenantState =
   | { error?: string; fieldErrors?: Record<string, string> }
@@ -24,7 +25,7 @@ export async function createTenantWithMaster(
   _prev: CreateTenantState,
   formData: FormData,
 ): Promise<CreateTenantState> {
-  await requireSuperAdmin();
+  const sa = await requireSuperAdmin();
 
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim();
@@ -82,6 +83,15 @@ export async function createTenantWithMaster(
     .eq("email", masterEmail)
     .eq("tenant_id", tenantId);
 
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "create_tenant",
+    targetTenantId: tenantId,
+    targetLabel: name,
+    metadata: { slug, masterEmail, plan },
+  });
+
   revalidatePath("/super-admin/tenants");
   revalidatePath("/super-admin");
   redirect(`/super-admin/tenants/${tenantId}`);
@@ -93,7 +103,7 @@ export async function updateTenant(
   _prev: UpdateTenantState,
   formData: FormData,
 ): Promise<UpdateTenantState> {
-  await requireSuperAdmin();
+  const sa = await requireSuperAdmin();
 
   const id = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -105,6 +115,15 @@ export async function updateTenant(
   const admin = createAdminClient();
   const { error } = await admin.from("tenants").update({ name, plan }).eq("id", id);
   if (error) return { error: error.message };
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "update_tenant",
+    targetTenantId: id,
+    targetLabel: name,
+    metadata: { plan },
+  });
 
   revalidatePath(`/super-admin/tenants/${id}`);
   revalidatePath("/super-admin/tenants");
