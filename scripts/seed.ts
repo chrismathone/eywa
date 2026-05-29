@@ -392,12 +392,15 @@ async function main() {
       job_title = '원장'
   `;
 
-  // --- 1d. super_admin grant — chrismathone + st2000423 둘 다 SaaS 운영자 ---
-  console.log("Granting super_admin to chrismathone + st2000423…");
+  // --- 1d. super_admin grant — st2000423만 SaaS 총괄. chrismathone은 지점장(master)으로 ---
+  // super_admin(SaaS 운영자)과 academy master(지점장)는 직교. chrismathone은 인재원
+  // 지점장(master)일 뿐 super_admin 아님. st2000423이 전체 지점을 총괄.
+  console.log("Granting super_admin to st2000423 only (chrismathone 강등)…");
+  await sql`delete from super_admins where email = 'chrismathone@gmail.com'`;
   await sql`
     insert into super_admins (id, email, display_name)
     select id, email, display_name from users
-    where email in ('chrismathone@gmail.com', 'st2000423@gmail.com')
+    where email = 'st2000423@gmail.com'
     on conflict (id) do update set
       email = excluded.email,
       display_name = excluded.display_name

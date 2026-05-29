@@ -161,7 +161,7 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 - 두 master 계정 (`chrismathone@gmail.com`, `st2000423@gmail.com`)이 `ijw-demo` 테넌트에 sync됨
 - master `chrismathone`의 `display_name = "김수진"`, `job_title = "원장"`, `hire_date = 1998-03-15` (시안 페르소나)
-- **`chrismathone` + `st2000423` 둘 다 academy master 겸 super_admin** — `super_admins` 테이블에 각각 row. 두 권한은 직교. (st2000423은 한때 teacher 시뮬레이션용이었으나 총괄 마스터로 승격됨.)
+- **`st2000423`만 super_admin (SaaS 총괄)**, **`chrismathone`은 인재원 지점장(academy master)일 뿐 super_admin 아님.** 둘 다 ijw-demo의 academy master지만 super_admins 테이블엔 st2000423만 있음. (super_admin ⊥ academy master — 직교.)
 - 권한 매트릭스는 `lib/permissions.ts`의 `canAccess(role, menuKey)` 헬퍼. AppSidebar에서 필터링, 빈 그룹 자동 숨김
 - super_admin 권한은 `getCurrentSuperAdmin()` / `requireSuperAdmin()` (`src/lib/auth/super-admin.ts`)
 - 실제 데이터 보안은 RLS (`auth_tenant_id()` 함수 + tenant_isolation 정책)에서 강제
@@ -447,10 +447,10 @@ pnpm build       # next build (Turbopack)
 
 | 이메일 | 비밀번호 | 역할 | 용도 |
 |---|---|---|---|
-| chrismathone@gmail.com | mbplaza2* | master + super_admin | 주 계정 (사용자 본인) |
-| st2000423@gmail.com | qkrthtjs1234@ | master + super_admin | 총괄 마스터 (둘 다 동급) |
+| chrismathone@gmail.com | mbplaza2* | master (지점장) | 인재원 지점장. super_admin 아님 |
+| st2000423@gmail.com | qkrthtjs1234@ | master + super_admin | SaaS 총괄 (전체 지점 관리) |
 
-두 계정 모두 academy master + super_admin. `display_name`은 김수진(원장) / 석태선(원장).
+둘 다 ijw-demo academy master지만 **super_admin은 st2000423만**. `display_name`은 김수진 / 석태선.
 `st2000423`을 teacher 등 다른 role로 되돌리려면 admin API 한 번:
 ```js
 fetch(URL + '/auth/v1/admin/users/fcf735fa-edf7-4095-8fa6-724285a018ed', {
