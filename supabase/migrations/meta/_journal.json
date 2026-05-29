@@ -162,6 +162,13 @@
       "when": 1780031014479,
       "tag": "0022_thankful_jack_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1780032458450,
+      "tag": "0023_amazing_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

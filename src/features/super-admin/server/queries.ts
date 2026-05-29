@@ -143,6 +143,39 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
   };
 });
 
+export type TenantLicenseRow = {
+  id: string;
+  feature: string;
+  maxSeats: number | null;
+  usedSeats: number;
+  isActive: boolean;
+  expiresAt: string | null;
+};
+
+// 좌석형 + 토글형 기능 정의 (UI 렌더 기준). DB에 없으면 "미설정"으로 표시.
+export const SEAT_FEATURES = [{ key: "student_seats", label: "재원생 좌석" }] as const;
+export const TOGGLE_FEATURES = [
+  { key: "ai_analysis", label: "AI 분석" },
+  { key: "google_sheets", label: "Google Sheets 연동" },
+  { key: "meeting_recording", label: "회의 녹음·전사" },
+] as const;
+
+export const getTenantLicenses = cache(async (tenantId: string): Promise<TenantLicenseRow[]> => {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("tenant_licenses")
+    .select("id, feature, max_seats, used_seats, is_active, expires_at")
+    .eq("tenant_id", tenantId);
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    feature: r.feature,
+    maxSeats: r.max_seats,
+    usedSeats: r.used_seats,
+    isActive: r.is_active,
+    expiresAt: r.expires_at,
+  }));
+});
+
 export type TenantSnapshot = {
   id: string;
   name: string;

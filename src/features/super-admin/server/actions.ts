@@ -141,3 +141,75 @@ export async function logImpersonateView(tenantId: string, tenantName: string): 
     targetLabel: tenantName,
   });
 }
+
+export type LicenseState = { error?: string; ok?: boolean } | undefined;
+
+/** 좌석형 라이선스 upsert (max_seats 설정). */
+export async function upsertTenantLicense(
+  _prev: LicenseState,
+  formData: FormData,
+): Promise<LicenseState> {
+  const sa = await requireSuperAdmin();
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const feature = String(formData.get("feature") ?? "").trim();
+  const maxSeatsRaw = String(formData.get("maxSeats") ?? "").trim();
+  const tenantName = String(formData.get("tenantName") ?? "").trim();
+  if (!tenantId || !feature) return { error: "필수 값 누락" };
+  const maxSeats = maxSeatsRaw === "" ? null : Number(maxSeatsRaw);
+  if (maxSeats !== null && (!Number.isFinite(maxSeats) || maxSeats < 0)) {
+    return { error: "좌석 수가 올바르지 않습니다" };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("tenant_licenses")
+    .upsert(
+      { tenant_id: tenantId, feature, max_seats: maxSeats, is_active: true },
+      { onConflict: "tenant_id,feature" },
+    );
+  if (error) return { error: error.message };
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "grant_license",
+    targetTenantId: tenantId,
+    targetLabel: tenantName || null,
+    metadata: { feature, maxSeats },
+  });
+  revalidatePath(`/super-admin/tenants/${tenantId}`);
+  return { ok: true };
+}
+
+/** 토글형 라이선스 On/Off (없으면 생성). */
+export async function toggleTenantLicense(
+  _prev: LicenseState,
+  formData: FormData,
+): Promise<LicenseState> {
+  const sa = await requireSuperAdmin();
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const feature = String(formData.get("feature") ?? "").trim();
+  const nextActive = String(formData.get("nextActive") ?? "") === "true";
+  const tenantName = String(formData.get("tenantName") ?? "").trim();
+  if (!tenantId || !feature) return { error: "필수 값 누락" };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("tenant_licenses")
+    .upsert(
+      { tenant_id: tenantId, feature, is_active: nextActive },
+      { onConflict: "tenant_id,feature" },
+    );
+  if (error) return { error: error.message };
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "toggle_license",
+    targetTenantId: tenantId,
+    targetLabel: tenantName || null,
+    metadata: { feature, active: nextActive },
+  });
+  revalidatePath(`/super-admin/tenants/${tenantId}`);
+  return { ok: true };
+}

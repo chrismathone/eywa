@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Initial } from "@/components/atoms/initial";
-import { getTenantDetail } from "@/features/super-admin/server/queries";
+import { getTenantDetail, getTenantLicenses } from "@/features/super-admin/server/queries";
 import { UpdateTenantForm } from "./_update-form";
+import { LicenseSection } from "./_license-section";
 
 export const metadata = { title: "Super Admin · 학원 상세 — eywa" };
 
@@ -42,6 +43,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const detail = await getTenantDetail(id);
   if (!detail) notFound();
+  const licenses = await getTenantLicenses(id);
 
   const roleCount = detail.users.reduce<Record<string, number>>((acc, u) => {
     acc[u.systemRole] = (acc[u.systemRole] ?? 0) + 1;
@@ -147,6 +149,9 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
           </header>
           <UpdateTenantForm id={detail.id} name={detail.name} plan={detail.plan} />
         </section>
+
+        {/* 라이선스·좌석 */}
+        <LicenseSection tenantId={detail.id} tenantName={detail.name} licenses={licenses} />
 
         {/* 지점장 보기 (read-only 미러) */}
         <section className="bg-card border-line shadow-card flex items-center justify-between rounded-2xl border p-5">

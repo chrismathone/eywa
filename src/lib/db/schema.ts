@@ -624,6 +624,26 @@ export const superAdmins = pgTable("super_admins", {
   grantedBy: uuid("granted_by"),
 });
 
+// === tenant_licenses (지점별 기능 라이선스 — mathlab TenantLicense 패턴) ===
+// feature별 좌석 제한(좌석형) 또는 On/Off(토글형). super_admin이 관리.
+export const tenantLicenses = pgTable(
+  "tenant_licenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    feature: text("feature").notNull(), // student_seats(좌석형) / ai_analysis·google_sheets·meeting_recording(토글형)
+    maxSeats: integer("max_seats"), // 좌석형만. null = 무제한/해당없음
+    usedSeats: integer("used_seats").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("tenant_licenses_tenant_feature_idx").on(t.tenantId, t.feature)],
+);
+
 // === super_admin_audit_logs (SaaS owner 액션 추적) ===
 // 모든 super-admin mutation을 INSERT-only로 기록. service_role로만 write.
 export const superAdminAuditLogs = pgTable(
@@ -651,6 +671,8 @@ export type SuperAdmin = typeof superAdmins.$inferSelect;
 export type NewSuperAdmin = typeof superAdmins.$inferInsert;
 export type SuperAdminAuditLog = typeof superAdminAuditLogs.$inferSelect;
 export type NewSuperAdminAuditLog = typeof superAdminAuditLogs.$inferInsert;
+export type TenantLicense = typeof tenantLicenses.$inferSelect;
+export type NewTenantLicense = typeof tenantLicenses.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Classroom = typeof classrooms.$inferSelect;
