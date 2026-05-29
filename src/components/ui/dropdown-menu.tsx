@@ -53,15 +53,21 @@ function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
 }
 
+// NOTE: canonical shadcn `DropdownMenuLabel` is a standalone label used as a
+// direct child of the content (e.g. an account heading). The base-nova port
+// originally mapped this to Base UI's `MenuPrimitive.GroupLabel`, which throws
+// "MenuGroupContext is missing" unless wrapped in a `Menu.Group`. We render a
+// plain element so the documented standalone usage works without a group.
+// For an actual grouped label, wrap items in `DropdownMenuGroup` instead.
 function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: MenuPrimitive.GroupLabel.Props & {
+}: React.ComponentProps<"div"> & {
   inset?: boolean
 }) {
   return (
-    <MenuPrimitive.GroupLabel
+    <div
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
