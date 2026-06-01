@@ -246,6 +246,17 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - `render` prop (asChild 아님), `TooltipProvider delay` (delayDuration 아님)
 - 일부 atom 함수형 컴포넌트 신규 작성, 나머지 shadcn 그대로 사용
 
+### 스크롤바 — 전역 하네스 (⚠️ 무조건 적용)
+**모든 스크롤 영역은 디자인 톤 스크롤바로 통일한다. 옵트인 아님.** `globals.css`의 전역 규칙
+(`*`, `*::-webkit-scrollbar*`)이 페이지·패널·드롭다운 팝업·textarea 등 **모든 스크롤 컨테이너에
+자동 적용** — 6px, line 컬러(`rgba(13,17,16,0.18)`, hover 0.32) thumb, 투명 track, 999px radius.
+- 새 스크롤 영역을 만들 때 **별도 클래스가 필요 없다** (이미 전역). `.scrollbar-thin`은 기존 사용처
+  호환용 별칭으로만 남김.
+- ⚠️ **네이티브 `<select>`의 옵션 팝업 스크롤바는 OS가 그려 CSS가 닿지 않는다.** 스크롤되는
+  드롭다운은 반드시 **Base UI `<Select>`** (`@/components/ui/select` — styleable 팝업 `div`)를 써서
+  전역 스크롤바 규칙이 적용되게 할 것. (예: 강사 원스크린 진도 차시 드롭다운.)
+- 회색 기본 스크롤바가 한 군데라도 보이면 위반. 새 화면 추가 시 점검.
+
 ---
 
 ## 구현 중 실제로 막혔던 점들 (시간순)
@@ -414,6 +425,10 @@ export function useIsMac() {
 ```
 
 table.tsx / billing / attendance / kanban-filters / 학생 상세 탭 nav에 일괄 적용.
+
+**진화(이후)**: 사용자 지시로 **전역 하네스화** — `.scrollbar-thin` 옵트인을 `globals.css`의 `*` 전역
+규칙으로 승격해 **앱 전체 스크롤바 무조건 통일**. 자세한 규칙은 위 "디자인 시스템 › 스크롤바 — 전역
+하네스" 참고. 네이티브 `<select>` 팝업은 CSS가 안 닿으니 스크롤 드롭다운은 Base UI `<Select>` 사용.
 
 ### 27. super_admin layer를 만들 때 깨질 가정 4가지
 `users` 테이블은 강력하게 1:1 tenant 매핑 (NOT NULL, RLS도 `auth_tenant_id()`로 강제). SaaS owner 같은 multi-tenant viewer를 같은 테이블에 끼우면 schema가 무너짐.
