@@ -1,7 +1,8 @@
 /**
  * 선생님 원스크린 — 순수 계산 함수.
  * 프로토타입(parts.jsx/report.jsx)의 pct / studentStatus / isStudentDone /
- * buildReport(템플릿 보고서)를 이식. 라이브 AI 호출 없음 — 전부 결정적 템플릿.
+ * buildReport(템플릿 보고서)를 이식 + 과목별 보고서(buildSubjectReport) 추가.
+ * 라이브 AI 호출 없음 — 전부 결정적 템플릿.
  * CLAUDE.md 원칙: 계산 함수는 순수 함수로 분리 + Vitest 단위테스트.
  */
 import type { CellState, OneScreenStudent, StudentStatus, TestScore } from "./types";
@@ -17,7 +18,7 @@ export function delta(score: number | null, prev: number | null): number | null 
   return score - prev;
 }
 
-/** 학생 행의 진/테/보 상태 셀 */
+/** 학생 행의 진/테/보 상태 셀 (보고서는 student-level reportSent 기준 — 클라이언트가 과목별로 재정의 가능) */
 export function studentStatus(st: OneScreenStudent): StudentStatus {
   const prog: CellState = st.progressConfirmed ? "ok" : "todo";
 
@@ -45,10 +46,9 @@ function testClause(label: string, t: TestScore): string | null {
   return `${label} ${t.score}/${t.max}${tail}`;
 }
 
-/** 오늘 진도·테스트·태도를 합친 학부모 보고서 초안 (템플릿) */
-export function buildReport(st: OneScreenStudent): string {
-  const subj = st.subjects.map((s) => `${s.name} ${s.today}`).join(", ");
-  const lines: string[] = [`${st.name} 학생, 오늘 ${subj} 진도를 진행했습니다.`];
+/** 진도 문장 뒤에 붙는 공통부 — 테스트 결과 + 태도·과제 + 평가 마무리. */
+function testAndClosingLines(st: OneScreenStudent): string[] {
+  const lines: string[] = [];
 
   const tparts: string[] = [];
   const dPart = testClause("일일테스트(이전 진도)", st.tests.daily);
@@ -70,5 +70,21 @@ export function buildReport(st: OneScreenStudent): string {
       lines.push("꾸준히 잘 따라오고 있습니다. 오늘 배운 내용 가볍게 점검해 주시면 좋겠습니다.");
     else lines.push("틀린 문항 위주로 복습이 필요해 보입니다. 가정에서도 관심 부탁드립니다.");
   }
-  return lines.join(" ");
+  return lines;
+}
+
+/** 오늘 진도·테스트·태도를 합친 학부모 보고서 초안 (전 과목 합본 — 학생 데일리 리포트용) */
+export function buildReport(st: OneScreenStudent): string {
+  const subj = st.subjects.map((s) => `${s.name} ${s.today}`).join(", ");
+  return [`${st.name} 학생, 오늘 ${subj} 진도를 진행했습니다.`, ...testAndClosingLines(st)].join(" ");
+}
+
+/** 과목별 학부모 보고서 초안 — 해당 과목 진도만 언급(과목별로 따로 발송용). */
+export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): string {
+  const su = st.subjects[subjectIndex];
+  if (!su) return buildReport(st);
+  return [
+    `${st.name} 학생, 오늘 ${su.name} ${su.today} 진도를 진행했습니다.`,
+    ...testAndClosingLines(st),
+  ].join(" ");
 }

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { pct, delta, studentStatus, isStudentDone, buildReport } from "./report";
+import {
+  pct,
+  delta,
+  studentStatus,
+  isStudentDone,
+  buildReport,
+  buildSubjectReport,
+} from "./report";
 import type { OneScreenStudent } from "./types";
 
 function makeStudent(overrides: Partial<OneScreenStudent> = {}): OneScreenStudent {
@@ -143,5 +150,39 @@ describe("buildReport", () => {
       }),
     );
     expect(same).toContain("지난 회차와 동일");
+  });
+});
+
+describe("buildSubjectReport (과목별)", () => {
+  const st = makeStudent({
+    name: "윤서아",
+    subjects: [
+      { name: "국어 문학", prev: "현대시 4강", today: "현대시 5강" },
+      { name: "영어 어법", prev: "분사구문", today: "가정법" },
+    ],
+    tests: {
+      daily: { score: 16, max: 20, prevScore: 16 },
+      check: { score: 18, max: 20, prevScore: 15 },
+    },
+  });
+
+  it("0번 과목(국어)만 언급 — 영어 안 섞임", () => {
+    const r = buildSubjectReport(st, 0);
+    expect(r).toContain("국어 문학 현대시 5강");
+    expect(r).not.toContain("영어 어법");
+    expect(r).not.toContain("가정법");
+  });
+
+  it("1번 과목(영어)만 언급 — 국어 안 섞임", () => {
+    const r = buildSubjectReport(st, 1);
+    expect(r).toContain("영어 어법 가정법");
+    expect(r).not.toContain("국어 문학");
+    expect(r).not.toContain("현대시");
+  });
+
+  it("범위 밖 인덱스는 합본으로 폴백", () => {
+    const r = buildSubjectReport(st, 9);
+    expect(r).toContain("국어 문학");
+    expect(r).toContain("영어 어법");
   });
 });

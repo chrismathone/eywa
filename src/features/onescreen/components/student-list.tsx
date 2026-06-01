@@ -18,13 +18,18 @@ const CELLS: { key: "prog" | "test" | "rep"; label: string }[] = [
 function StudentRow({
   st,
   active,
+  reportCell,
   onClick,
 }: {
   st: OneScreenStudent;
   active: boolean;
+  reportCell?: CellState;
   onClick: () => void;
 }) {
   const s = studentStatus(st);
+  // 보(보고서) 셀은 과목별 발송 상태로 재정의 가능 (클라이언트가 reportCellById로 전달).
+  const cellState = (key: "prog" | "test" | "rep"): CellState =>
+    key === "rep" ? (reportCell ?? s.rep) : s[key];
   return (
     <button
       type="button"
@@ -66,7 +71,7 @@ function StudentRow({
           <span
             key={c.key}
             title={c.label}
-            className={`flex size-5 items-center justify-center rounded-sm text-[10px] font-bold ${CELL_CLASS[s[c.key]]}`}
+            className={`flex size-5 items-center justify-center rounded-sm text-[10px] font-bold ${CELL_CLASS[cellState(c.key)]}`}
           >
             {c.label}
           </span>
@@ -80,10 +85,12 @@ export function StudentList({
   students,
   selId,
   onSelect,
+  reportCellById,
 }: {
   students: OneScreenStudent[];
   selId: string;
   onSelect: (id: string) => void;
+  reportCellById?: Record<string, CellState>;
 }) {
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -91,7 +98,7 @@ export function StudentList({
         <p className="micro text-text-faint">학생</p>
         <p className="text-text-dim font-mono text-[11px]">{students.length}명</p>
       </header>
-      <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-1 overflow-y-auto p-2">
+      <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-1 overflow-y-auto p-2 [scrollbar-gutter:stable]">
         {students.length === 0 ? (
           <p className="text-text-faint px-2 py-6 text-center text-xs">해당 반 학생이 없습니다</p>
         ) : (
@@ -100,6 +107,7 @@ export function StudentList({
               key={st.id}
               st={st}
               active={st.id === selId}
+              reportCell={reportCellById?.[st.id]}
               onClick={() => onSelect(st.id)}
             />
           ))
