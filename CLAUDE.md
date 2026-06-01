@@ -107,6 +107,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **강사 전용**: `permissions.ts`에 `teacher_onescreen: { teacher:"full", 나머지 none }` → 원장(master) 사이드바엔 미표시(12메뉴 정체성 유지), 직접 URL 진입 시 `requireAccess`가 `/`로 리다이렉트. 강사용 투어는 `teacher@ijw-demo.com` 계정.
 - 순수함수 `report.ts`(buildReport/studentStatus/pct/delta) + Vitest 15케이스. `src/features/onescreen/`로 도메인 격리.
 
+### 학생 원스크린 — 내 학습 현황 + 데일리 리포트 (학생 전용, 2026-06-01)
+- `data/원스크린_패키지/`의 학생/학부모용 2화면을 강사 원스크린과 **마찬가지 패턴**으로 이식.
+- **내 학습 현황** (`/my-learning`): KPI4(평균정답률·출석률·학습횟수·진도%) + 점수추이 차트(recharts, 과목 필터) + 과목별 진도 바 + 출결 달력 + 최근 기록(→데일리 리포트).
+- **데일리 리포트** (`/my-learning/report?date=M/D`): 그날 진도·일일/확인 테스트(점수·%·delta) + 선생님 한마디(`buildReport` 재사용).
+- **데모 충실 이식**: `src/features/my-learning/history.ts`가 프로토타입 `data.js`의 **결정적 9세션 이력**(LCG RNG)을 이식 — 정적·AI 0·네트워크 0. 강사 원스크린 9명(`DEMO_ONESCREEN`)·`buildReport`·`subjectTone` 재사용. Vitest 10케이스.
+- **학생 전용 접근**: `SystemRole`에 `student` 신설(enum + 망라 맵), `my_learning: { student:"full", 나머지 none }`. `(shell)/layout`이 teacher·student면 **사이드바 없는 미니멀 셸**. 로그인 시 student → `/my-learning` 리다이렉트. 데모 학생 `student@ijw-demo.com`.
+
 ### Super-admin Phase 2~5 (4개 commit, 2026-05-29)
 - **Phase 2 audit log**: `super_admin_audit_logs` 테이블 + `logSuperAdminAction` helper + `/super-admin/audit` viewer. 모든 super-admin mutation 추적.
 - **Phase 3 지점장 보기**: `/super-admin/tenants/[id]/view` read-only 미러 (KPI+학생+회의, service_role). 진입 시 `impersonate_view` audit. 실제 조작 진입(RLS 함수 분기)은 Phase 6으로 보류.
@@ -587,10 +594,12 @@ pnpm build       # next build (Turbopack)
 | chrismathone@gmail.com | mbplaza2* | master (지점장) | 인재원 지점장. super_admin 아님. **원장용 투어** (12메뉴) |
 | st2000423@gmail.com | qkrthtjs1234@ | master + super_admin | SaaS 총괄 (전체 지점 관리) |
 | teacher@ijw-demo.com | ijwteacher1! | teacher (박지훈) | **강사용 투어** — 선생님 원스크린. seed가 auth 생성 + wipe-safe 보존 |
+| student@ijw-demo.com | ijwstudent1! | student (김서연) | **학생용 투어** — 내 학습 현황 + 데일리 리포트. seed가 auth 생성 + wipe-safe 보존 |
 
 두 master 모두 ijw-demo academy master지만 **super_admin은 st2000423만**. `display_name`은 김수진 / 석태선.
-데모 강사 `teacher@ijw-demo.com`는 `scripts/seed.ts`의 `ensureDemoTeacherAuth`가 idempotent 생성하고,
-teachers 루프(박지훈=`TEACHERS[0]`)가 매 시드마다 `public.users` 행을 on-conflict로 재upsert(#31/#32 회피).
+데모 강사/학생은 `scripts/seed.ts`의 `ensureDemoAuth`가 idempotent 생성하고, wipe(#32) 직후 `public.users` 행을
+on-conflict로 재upsert한다(강사=박지훈 `TEACHERS[0]`, 학생=김서연). `student`는 `system_role` enum에 없어
+시드가 `ALTER TYPE … ADD VALUE IF NOT EXISTS 'student'`로 멱등 추가 후 사용(#31/#32 회피).
 `st2000423`을 teacher 등 다른 role로 되돌리려면 admin API 한 번:
 ```js
 fetch(URL + '/auth/v1/admin/users/fcf735fa-edf7-4095-8fa6-724285a018ed', {
