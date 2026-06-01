@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { subjectTone, toneSolidClass, toneTextClass } from "../data";
+import { MATH_G3 } from "../curriculum";
 import type { OneScreenStudent } from "../types";
 
-/** 진도 카드 — 과목별 이전→오늘(편집 가능) + "오늘 진도 확정" 토글 */
+/** 진도 카드 — 과목별 이전 진도 + 오늘 진도(초3 수학 커리큘럼에서 선택) + 확정 토글 */
 export function ProgressCard({
   student,
   onConfirm,
@@ -42,16 +43,27 @@ export function ProgressCard({
               <span className={`mt-1 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className={`text-[13px] font-bold ${toneTextClass(tone)}`}>{su.name}</p>
-                <div className="mt-1 flex items-center gap-1.5 text-[12px]">
-                  <span className="text-text-faint shrink-0">{su.prev}</span>
-                  <span className={`shrink-0 ${toneTextClass(tone)}`}>→</span>
-                  <input
-                    value={su.today}
-                    onChange={(e) => onProgress(i, e.target.value)}
-                    aria-label={`${su.name} 오늘 진도`}
-                    placeholder="오늘 진도 입력"
-                    className="border-line focus:border-primary text-foreground min-w-0 flex-1 rounded-sm border bg-background px-2 py-1 text-[12px] font-semibold outline-none"
-                  />
+                <div className="mt-1 space-y-1 text-[12px]">
+                  <p className="text-text-faint truncate">이전 · {su.prev}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`shrink-0 font-semibold ${toneTextClass(tone)}`}>오늘 →</span>
+                    <select
+                      value={su.today}
+                      onChange={(e) => onProgress(i, e.target.value)}
+                      aria-label={`${su.name} 오늘 진도 선택`}
+                      className="border-line focus:border-primary text-foreground min-w-0 flex-1 rounded-sm border bg-background px-2 py-1.5 text-[12px] font-semibold outline-none"
+                    >
+                      {MATH_G3.map((unit) => (
+                        <optgroup key={unit.unit} label={unit.unit}>
+                          {unit.lessons.map((l) => (
+                            <option key={l} value={l}>
+                              {l}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>

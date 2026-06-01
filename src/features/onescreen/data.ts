@@ -87,12 +87,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s1",
     name: "김서연",
-    grade: "중2",
+    grade: "초3",
     tag: "A반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "일차함수 §2", today: "일차함수 §3" },
-      { name: "수학 심화", prev: "연립방정식 활용", today: "일차부등식" },
+      {
+        name: "수학",
+        prev: "1-1-1~2 받아올림 있는 (세 자리)+(세 자리)",
+        today: "1-1-3~4 받아내림 있는 (세 자리)-(세 자리)",
+      },
     ],
     tests: {
       daily: { score: 18, max: 20, prevScore: 16 },
@@ -107,12 +110,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s2",
     name: "이준호",
-    grade: "중2",
+    grade: "초3",
     tag: "A반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "일차함수 §2", today: "일차함수 §3" },
-      { name: "수학 심화", prev: "연립방정식 활용", today: "일차부등식" },
+      {
+        name: "수학",
+        prev: "1-1-1~2 받아올림 있는 (세 자리)+(세 자리)",
+        today: "1-1-3~4 받아내림 있는 (세 자리)-(세 자리)",
+      },
     ],
     tests: {
       daily: { score: 14, max: 20, prevScore: 15 },
@@ -127,12 +133,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s3",
     name: "박지우",
-    grade: "중2",
+    grade: "초3",
     tag: "A반",
     attendance: "지각",
     subjects: [
-      { name: "수학 정규", prev: "일차함수 §2", today: "일차함수 §3" },
-      { name: "수학 심화", prev: "연립방정식 활용", today: "일차부등식" },
+      {
+        name: "수학",
+        prev: "1-1-1~2 받아올림 있는 (세 자리)+(세 자리)",
+        today: "1-1-3~4 받아내림 있는 (세 자리)-(세 자리)",
+      },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 19 },
@@ -147,12 +156,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s4",
     name: "최민준",
-    grade: "중3",
+    grade: "초3",
     tag: "B반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "이차함수 §3", today: "이차함수 §4" },
-      { name: "수학 심화", prev: "이차방정식", today: "근과 계수" },
+      {
+        name: "수학",
+        prev: "1-3-1~2 똑같이 나누기, 곱셈과 나눗셈 관계",
+        today: "1-3-3~4 나눗셈 몫을 곱셈으로 구하기",
+      },
     ],
     tests: {
       daily: { score: 20, max: 20, prevScore: 18 },
@@ -167,12 +179,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s5",
     name: "정하윤",
-    grade: "중3",
+    grade: "초3",
     tag: "B반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "이차함수 §3", today: "이차함수 §4" },
-      { name: "수학 심화", prev: "이차방정식", today: "근과 계수" },
+      {
+        name: "수학",
+        prev: "1-3-1~2 똑같이 나누기, 곱셈과 나눗셈 관계",
+        today: "1-3-3~4 나눗셈 몫을 곱셈으로 구하기",
+      },
     ],
     tests: {
       daily: { score: 11, max: 20, prevScore: 13 },
@@ -187,12 +202,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s6",
     name: "강도윤",
-    grade: "중3",
+    grade: "초3",
     tag: "B반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "이차함수 §3", today: "이차함수 §4" },
-      { name: "수학 심화", prev: "이차방정식", today: "근과 계수" },
+      {
+        name: "수학",
+        prev: "1-3-1~2 똑같이 나누기, 곱셈과 나눗셈 관계",
+        today: "1-3-3~4 나눗셈 몫을 곱셈으로 구하기",
+      },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 17 },
@@ -207,12 +225,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s7",
     name: "윤서아",
-    grade: "고1",
+    grade: "초3",
     tag: "C반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "다항식의 연산", today: "나머지정리" },
-      { name: "수학 심화", prev: "인수분해", today: "복소수" },
+      {
+        name: "수학",
+        prev: "1-4-1~2 (몇십)×(몇), 올림 없는 (몇십몇)×(몇)",
+        today: "1-4-3~5 올림 있는 (몇십몇)×(몇)",
+      },
     ],
     tests: {
       daily: { score: 16, max: 20, prevScore: 16 },
@@ -227,12 +248,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s8",
     name: "임채원",
-    grade: "고1",
+    grade: "초3",
     tag: "C반",
     attendance: "결석",
     subjects: [
-      { name: "수학 정규", prev: "다항식의 연산", today: "나머지정리" },
-      { name: "수학 심화", prev: "인수분해", today: "복소수" },
+      {
+        name: "수학",
+        prev: "1-4-1~2 (몇십)×(몇), 올림 없는 (몇십몇)×(몇)",
+        today: "1-4-3~5 올림 있는 (몇십몇)×(몇)",
+      },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 14 },
@@ -247,12 +271,15 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s9",
     name: "한지호",
-    grade: "고1",
+    grade: "초3",
     tag: "C반",
     attendance: "출석",
     subjects: [
-      { name: "수학 정규", prev: "다항식의 연산", today: "나머지정리" },
-      { name: "수학 심화", prev: "인수분해", today: "복소수" },
+      {
+        name: "수학",
+        prev: "1-4-1~2 (몇십)×(몇), 올림 없는 (몇십몇)×(몇)",
+        today: "1-4-3~5 올림 있는 (몇십몇)×(몇)",
+      },
     ],
     tests: {
       daily: { score: 13, max: 20, prevScore: 10 },

@@ -81,14 +81,17 @@ export function ReportCard({
       <header className="border-line border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="micro text-text-faint">today 보고서 · 과목별</p>
+            <p className="micro text-text-faint">
+              {student.subjects.length > 1 ? "today 보고서 · 과목별" : "today 보고서"}
+            </p>
             <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
           </div>
           {rep.sent ? <Pill color="primary">발송 완료</Pill> : null}
         </div>
-        {/* 과목 선택 — 발송한 과목엔 체크 */}
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {student.subjects.map((su, i) => {
+        {/* 과목 선택 (여러 과목일 때만) — 발송한 과목엔 체크 */}
+        {student.subjects.length > 1 ? (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {student.subjects.map((su, i) => {
             const on = i === idx;
             const sent = reports[su.name]?.sent;
             return (
@@ -107,8 +110,9 @@ export function ReportCard({
                 {sent ? <EyIcon name="check" size={11} /> : null}
               </button>
             );
-          })}
-        </div>
+            })}
+          </div>
+        ) : null}
       </header>
 
       <div className="flex flex-1 flex-col gap-3 px-4 py-3">
