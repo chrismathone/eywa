@@ -1,7 +1,8 @@
 /**
  * 선생님 원스크린 — 데모 데이터 + 과목 색.
- * 프로토타입(data/원스크린_전달/data.js)의 STUDENTS / SUBJECT_COLORS 이식.
- * 데모 충실 이식이므로 DB가 아닌 정적 스냅샷. 강사 투어용 9명(A/B/C반).
+ * 한 수학 강사가 보습식으로 초3~중3을 지도하는 설정. 학생 9명을 학년에 분산하고,
+ * 진도(prev/today)는 각 학생 학년의 커리큘럼(curriculum.ts) 차시 문자열을 그대로 쓴다.
+ * 데모 충실 이식이므로 정적 스냅샷(DB·AI 없음). tag=학년 → 반 필터가 학년 필터로 동작.
  */
 import type { OneScreenStudent, SubjectTone } from "./types";
 
@@ -11,11 +12,10 @@ export const TODAY = "2026년 6월 1일 (월)";
 /** 수업 태도 선택지 */
 export const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
 
-/** 반 필터 칩 */
-export const CLASS_TAGS = ["전체", "A반", "B반", "C반"] as const;
+/** 학년 필터 칩 (수학 강사가 맡는 학년) */
+export const CLASS_TAGS = ["전체", "초3", "초4", "초5", "초6", "중1", "중2", "중3"] as const;
 
 // ───────────────────────── 과목 색 (eywa 토큰 매핑) ─────────────────────────
-// 프로토타입 색(eng=자홍 등)을 eywa 시간표 컨벤션에 맞춤:
 //   수학=primary(forest) · 영어=blue · 국어=rose · 과학=purple · 사회=gold · 기타=neutral
 
 export function subjectTone(name: string): { key: string; tone: SubjectTone } {
@@ -81,20 +81,20 @@ export function toneTextClass(tone: SubjectTone): string {
   }
 }
 
-// ───────────────────────── 데모 학생 9명 ─────────────────────────
+// ───────── 데모 학생 9명 — 초3~중3 분산, 수학 단일 과목, 진도=커리큘럼 차시 ─────────
 
 export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s1",
     name: "김서연",
     grade: "초3",
-    tag: "A반",
+    tag: "초3",
     attendance: "출석",
     subjects: [
       {
         name: "수학",
-        prev: "1-1-1~2 받아올림 있는 (세 자리)+(세 자리)",
-        today: "1-1-3~4 받아내림 있는 (세 자리)-(세 자리)",
+        prev: "1-1-1 받아올림이 없는, 한 번 있는 (세 자리 수)+(세 자리 수)",
+        today: "1-1-2 받아올림이 두 번, 세 번 있는 (세 자리 수)+(세 자리 수)",
       },
     ],
     tests: {
@@ -110,14 +110,14 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s2",
     name: "이준호",
-    grade: "초3",
-    tag: "A반",
+    grade: "초4",
+    tag: "초4",
     attendance: "출석",
     subjects: [
       {
         name: "수학",
-        prev: "1-1-1~2 받아올림 있는 (세 자리)+(세 자리)",
-        today: "1-1-3~4 받아내림 있는 (세 자리)-(세 자리)",
+        prev: "1-1-1 1000이 10개인 수 알아보기",
+        today: "1-1-3 10000이 몇십 개, 몇백 개, 몇천 개인 수 알아보기",
       },
     ],
     tests: {
@@ -133,15 +133,11 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s3",
     name: "박지우",
-    grade: "초3",
-    tag: "A반",
+    grade: "초5",
+    tag: "초5",
     attendance: "지각",
     subjects: [
-      {
-        name: "수학",
-        prev: "1-1-1~2 받아올림 있는 (세 자리)+(세 자리)",
-        today: "1-1-3~4 받아내림 있는 (세 자리)-(세 자리)",
-      },
+      { name: "수학", prev: "1-2-1 약수와 배수", today: "1-2-2 약수와 배수의 관계" },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 19 },
@@ -156,16 +152,10 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s4",
     name: "최민준",
-    grade: "초3",
-    tag: "B반",
+    grade: "초6",
+    tag: "초6",
     attendance: "출석",
-    subjects: [
-      {
-        name: "수학",
-        prev: "1-3-1~2 똑같이 나누기, 곱셈과 나눗셈 관계",
-        today: "1-3-3~4 나눗셈 몫을 곱셈으로 구하기",
-      },
-    ],
+    subjects: [{ name: "수학", prev: "1-4-1 두 수 비교하기", today: "1-4-2 비" }],
     tests: {
       daily: { score: 20, max: 20, prevScore: 18 },
       check: { score: 17, max: 20, prevScore: 19 },
@@ -179,16 +169,10 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s5",
     name: "정하윤",
-    grade: "초3",
-    tag: "B반",
+    grade: "중1",
+    tag: "중1",
     attendance: "출석",
-    subjects: [
-      {
-        name: "수학",
-        prev: "1-3-1~2 똑같이 나누기, 곱셈과 나눗셈 관계",
-        today: "1-3-3~4 나눗셈 몫을 곱셈으로 구하기",
-      },
-    ],
+    subjects: [{ name: "수학", prev: "등식의 성질", today: "일차방정식의 풀이" }],
     tests: {
       daily: { score: 11, max: 20, prevScore: 13 },
       check: { score: null, max: 20, prevScore: 12 },
@@ -202,16 +186,10 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s6",
     name: "강도윤",
-    grade: "초3",
-    tag: "B반",
+    grade: "중1",
+    tag: "중1",
     attendance: "출석",
-    subjects: [
-      {
-        name: "수학",
-        prev: "1-3-1~2 똑같이 나누기, 곱셈과 나눗셈 관계",
-        today: "1-3-3~4 나눗셈 몫을 곱셈으로 구하기",
-      },
-    ],
+    subjects: [{ name: "수학", prev: "유리수의 덧셈과 뺄셈", today: "유리수의 곱셈" }],
     tests: {
       daily: { score: null, max: 20, prevScore: 17 },
       check: { score: null, max: 20, prevScore: 16 },
@@ -225,15 +203,11 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s7",
     name: "윤서아",
-    grade: "초3",
-    tag: "C반",
+    grade: "중2",
+    tag: "중2",
     attendance: "출석",
     subjects: [
-      {
-        name: "수학",
-        prev: "1-4-1~2 (몇십)×(몇), 올림 없는 (몇십몇)×(몇)",
-        today: "1-4-3~5 올림 있는 (몇십몇)×(몇)",
-      },
+      { name: "수학", prev: "일차함수의 그래프와 절편", today: "일차함수의 그래프와 기울기" },
     ],
     tests: {
       daily: { score: 16, max: 20, prevScore: 16 },
@@ -248,15 +222,11 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s8",
     name: "임채원",
-    grade: "초3",
-    tag: "C반",
+    grade: "중3",
+    tag: "중3",
     attendance: "결석",
     subjects: [
-      {
-        name: "수학",
-        prev: "1-4-1~2 (몇십)×(몇), 올림 없는 (몇십몇)×(몇)",
-        today: "1-4-3~5 올림 있는 (몇십몇)×(몇)",
-      },
+      { name: "수학", prev: "이차방정식의 풀이", today: "이차방정식의 근의 공식과 응용" },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 14 },
@@ -271,16 +241,10 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
   {
     id: "s9",
     name: "한지호",
-    grade: "초3",
-    tag: "C반",
+    grade: "중3",
+    tag: "중3",
     attendance: "출석",
-    subjects: [
-      {
-        name: "수학",
-        prev: "1-4-1~2 (몇십)×(몇), 올림 없는 (몇십몇)×(몇)",
-        today: "1-4-3~5 올림 있는 (몇십몇)×(몇)",
-      },
-    ],
+    subjects: [{ name: "수학", prev: "삼각비의 뜻", today: "삼각비의 값" }],
     tests: {
       daily: { score: 13, max: 20, prevScore: 10 },
       check: { score: null, max: 20, prevScore: 11 },

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { subjectTone, toneSolidClass, toneTextClass } from "../data";
-import { MATH_G3 } from "../curriculum";
+import { curriculumForGrade } from "../curriculum";
 import type { OneScreenStudent } from "../types";
 
 /** 진도 카드 — 과목별 이전 진도 + 오늘 진도(초3 수학 커리큘럼에서 선택) + 확정 토글 */
@@ -53,7 +53,7 @@ export function ProgressCard({
                       aria-label={`${su.name} 오늘 진도 선택`}
                       className="border-line focus:border-primary text-foreground min-w-0 flex-1 rounded-sm border bg-background px-2 py-1.5 text-[12px] font-semibold outline-none"
                     >
-                      {MATH_G3.map((unit) => (
+                      {curriculumForGrade(student.grade).map((unit) => (
                         <optgroup key={unit.unit} label={unit.unit}>
                           {unit.lessons.map((l) => (
                             <option key={l} value={l}>
