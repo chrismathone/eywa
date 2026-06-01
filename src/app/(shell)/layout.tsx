@@ -33,7 +33,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
           <UserMenu email={user.email} />
         </header>
-        <main className="flex-1 overflow-auto px-4 py-5 lg:px-7 lg:py-6">{children}</main>
+        <main className="flex-1 overflow-auto px-4 py-5 lg:px-7 lg:py-6 [scrollbar-gutter:stable]">{children}</main>
       </div>
     );
   }
@@ -53,7 +53,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AppHeader email={user.email} />
-        <main className="flex-1 overflow-auto px-4 py-5 lg:px-7 lg:py-6">{children}</main>
+        <main className="flex-1 overflow-auto px-4 py-5 lg:px-7 lg:py-6 [scrollbar-gutter:stable]">{children}</main>
       </div>
 
       {/* ⌘K 메뉴 점프 팰릿 — 포털 렌더라 위치 무관, 인증 영역 전역에서 동작 */}
