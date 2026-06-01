@@ -26,14 +26,11 @@ const TENANT_SLUG = "ijw-demo";
 
 const TEACHERS = ["박지훈", "이연우", "김민지", "최서영", "강도현"];
 
-// 로그인 가능한 데모 강사 — "강사용 셀프투어" 계정.
-// 시드 강사 5명은 public.users 전용이라 로그인 불가(#31). 이 1명(TEACHERS[0]=박지훈)만
-// auth.users를 보유한다. auth는 한 번 만들면 유지되고, public.users 행은 wipe(#32)에
-// 지워지므로 teachers 루프에서 이 고정 id로 매 시드마다 재upsert 한다(원장 메뉴엔 미표시).
-const DEMO_TEACHER = {
-  email: "teacher@ijw-demo.com",
-  password: "ijwteacher1!",
-};
+// 로그인 가능한 데모 계정 — "셀프투어"용. 시드 강사 5명/학생은 public.users 전용이라 로그인 불가(#31).
+// 데모 강사(박지훈=TEACHERS[0])와 데모 학생(김서연) 2명만 auth.users를 보유한다.
+// auth는 한 번 만들면 유지되고 public.users 행은 wipe(#32)에 지워지므로, 시드마다 고정 id로 재upsert.
+const DEMO_TEACHER = { email: "teacher@ijw-demo.com", password: "ijwteacher1!" };
+const DEMO_STUDENT = { email: "student@ijw-demo.com", password: "ijwstudent1!" };
 
 const supabaseAdmin =
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -45,31 +42,34 @@ const supabaseAdmin =
     : null;
 
 /**
- * 데모 강사 auth 계정을 idempotent하게 보장하고 그 UUID를 반환.
+ * 데모 로그인 계정(auth)을 idempotent하게 보장하고 그 UUID를 반환.
  * 이미 있으면 app_metadata만 보강. 서비스 롤 키가 없으면 null 반환(로그인 불가, 시드는 계속).
- * 신규 생성 시 트리거 tg_sync_user_from_auth가 public.users에 mirror하므로 루프 upsert는
- * on conflict(id)로 받는다.
+ * 신규 생성 시 트리거 tg_sync_user_from_auth가 public.users에 mirror하므로 upsert는 on conflict(id).
  */
-async function ensureDemoTeacherAuth(tenantId: string): Promise<string | null> {
+async function ensureDemoAuth(
+  account: { email: string; password: string },
+  role: string,
+  tenantId: string,
+): Promise<string | null> {
   if (!supabaseAdmin) {
-    console.warn("  ⚠ SUPABASE_SERVICE_ROLE_KEY 없음 — 데모 강사 auth 건너뜀 (로그인 불가)");
+    console.warn(`  ⚠ SUPABASE_SERVICE_ROLE_KEY 없음 — 데모 ${role} auth 건너뜀 (로그인 불가)`);
     return null;
   }
-  const meta = { app_metadata: { system_role: "teacher", tenant_id: tenantId } };
+  const meta = { app_metadata: { system_role: role, tenant_id: tenantId } };
   const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
-  const existing = list?.users.find((u) => u.email === DEMO_TEACHER.email);
+  const existing = list?.users.find((u) => u.email === account.email);
   if (existing) {
     await supabaseAdmin.auth.admin.updateUserById(existing.id, meta);
     return existing.id;
   }
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email: DEMO_TEACHER.email,
-    password: DEMO_TEACHER.password,
+    email: account.email,
+    password: account.password,
     email_confirm: true,
     ...meta,
   });
   if (error) {
-    console.warn(`  ⚠ 데모 강사 auth 생성 실패: ${error.message}`);
+    console.warn(`  ⚠ 데모 ${role} auth 생성 실패: ${error.message}`);
     return null;
   }
   return data.user?.id ?? null;
@@ -601,7 +601,7 @@ async function main() {
 
   // --- 2. Teachers (5) — 첫 번째(박지훈)는 로그인 가능한 데모 강사(auth 보유) ---
   console.log("Inserting teachers…");
-  const demoTeacherId = await ensureDemoTeacherAuth(tenantId);
+  const demoTeacherId = await ensureDemoAuth(DEMO_TEACHER, "teacher", tenantId);
   const teacherIds: string[] = [];
   for (let i = 0; i < TEACHERS.length; i++) {
     const name = TEACHERS[i]!;
@@ -620,6 +620,26 @@ async function main() {
         status = 'active'
     `;
     teacherIds.push(id);
+  }
+
+  // --- 2b. 데모 학생 — 로그인 가능한 student 계정 (사이드바 없는 '내 학습 현황'으로 진입) ---
+  // system_role enum에 'student'가 없을 수 있으니 멱등 ADD VALUE 후 사용.
+  // PG는 자동커밋이라(별도 트랜잭션 미사용) ADD VALUE 직후 INSERT/트리거 사용 안전.
+  console.log("Inserting demo student…");
+  await sql`ALTER TYPE system_role ADD VALUE IF NOT EXISTS 'student'`;
+  const demoStudentId = await ensureDemoAuth(DEMO_STUDENT, "student", tenantId);
+  if (demoStudentId) {
+    // 데모 학생 = 화면의 고정 학생(김서연). wipe(system_role<>master) 이후이므로 매 시드 재upsert.
+    await sql`
+      insert into users (id, tenant_id, email, display_name, system_role, status)
+      values (${demoStudentId}, ${tenantId}, ${DEMO_STUDENT.email}, '김서연', 'student', 'active')
+      on conflict (id) do update set
+        tenant_id = excluded.tenant_id,
+        email = excluded.email,
+        display_name = excluded.display_name,
+        system_role = 'student',
+        status = 'active'
+    `;
   }
 
   // --- 3. Classrooms (5) ---
