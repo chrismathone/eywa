@@ -11,6 +11,7 @@
 import { randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import postgres from "postgres";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 config({ path: ".env.local" });
 
@@ -24,6 +25,55 @@ const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 4 });
 const TENANT_SLUG = "ijw-demo";
 
 const TEACHERS = ["박지훈", "이연우", "김민지", "최서영", "강도현"];
+
+// 로그인 가능한 데모 강사 — "강사용 셀프투어" 계정.
+// 시드 강사 5명은 public.users 전용이라 로그인 불가(#31). 이 1명(TEACHERS[0]=박지훈)만
+// auth.users를 보유한다. auth는 한 번 만들면 유지되고, public.users 행은 wipe(#32)에
+// 지워지므로 teachers 루프에서 이 고정 id로 매 시드마다 재upsert 한다(원장 메뉴엔 미표시).
+const DEMO_TEACHER = {
+  email: "teacher@ijw-demo.com",
+  password: "ijwteacher1!",
+};
+
+const supabaseAdmin =
+  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } },
+      )
+    : null;
+
+/**
+ * 데모 강사 auth 계정을 idempotent하게 보장하고 그 UUID를 반환.
+ * 이미 있으면 app_metadata만 보강. 서비스 롤 키가 없으면 null 반환(로그인 불가, 시드는 계속).
+ * 신규 생성 시 트리거 tg_sync_user_from_auth가 public.users에 mirror하므로 루프 upsert는
+ * on conflict(id)로 받는다.
+ */
+async function ensureDemoTeacherAuth(tenantId: string): Promise<string | null> {
+  if (!supabaseAdmin) {
+    console.warn("  ⚠ SUPABASE_SERVICE_ROLE_KEY 없음 — 데모 강사 auth 건너뜀 (로그인 불가)");
+    return null;
+  }
+  const meta = { app_metadata: { system_role: "teacher", tenant_id: tenantId } };
+  const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const existing = list?.users.find((u) => u.email === DEMO_TEACHER.email);
+  if (existing) {
+    await supabaseAdmin.auth.admin.updateUserById(existing.id, meta);
+    return existing.id;
+  }
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email: DEMO_TEACHER.email,
+    password: DEMO_TEACHER.password,
+    email_confirm: true,
+    ...meta,
+  });
+  if (error) {
+    console.warn(`  ⚠ 데모 강사 auth 생성 실패: ${error.message}`);
+    return null;
+  }
+  return data.user?.id ?? null;
+}
 
 const STUDENTS: { name: string; school: string; grade: string }[] = [
   // 중1
@@ -549,14 +599,25 @@ async function main() {
       display_name = excluded.display_name
   `;
 
-  // --- 2. Teachers (5) ---
+  // --- 2. Teachers (5) — 첫 번째(박지훈)는 로그인 가능한 데모 강사(auth 보유) ---
   console.log("Inserting teachers…");
+  const demoTeacherId = await ensureDemoTeacherAuth(tenantId);
   const teacherIds: string[] = [];
-  for (const name of TEACHERS) {
-    const id = randomUUID();
+  for (let i = 0; i < TEACHERS.length; i++) {
+    const name = TEACHERS[i]!;
+    const isDemo = i === 0 && demoTeacherId != null;
+    const id = isDemo ? demoTeacherId! : randomUUID();
+    const email = isDemo ? DEMO_TEACHER.email : `teacher.${id.slice(0, 8)}@ijw-demo.local`;
+    // on conflict(id): 신규 auth 생성 시 트리거가 먼저 mirror한 행을 받아 갱신(#31/#32).
     await sql`
       insert into users (id, tenant_id, email, display_name, system_role, status)
-      values (${id}, ${tenantId}, ${`teacher.${id.slice(0, 8)}@ijw-demo.local`}, ${name}, 'teacher', 'active')
+      values (${id}, ${tenantId}, ${email}, ${name}, 'teacher', 'active')
+      on conflict (id) do update set
+        tenant_id = excluded.tenant_id,
+        email = excluded.email,
+        display_name = excluded.display_name,
+        system_role = 'teacher',
+        status = 'active'
     `;
     teacherIds.push(id);
   }
