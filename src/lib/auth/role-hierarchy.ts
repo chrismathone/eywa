@@ -1,6 +1,7 @@
 import type { SystemRole } from "@/lib/permissions";
 
 // 작을수록 권한이 강함.
+// 작을수록 권한이 강함. student는 직원 위계 밖(학생 본인 화면 전용) — 맨 끝.
 export const ROLE_HIERARCHY: Record<SystemRole, number> = {
   master: 0,
   admin: 1,
@@ -9,6 +10,7 @@ export const ROLE_HIERARCHY: Record<SystemRole, number> = {
   counselor: 4,
   teacher: 5,
   viewer: 6,
+  student: 7,
 };
 
 export const ROLE_LABEL: Record<SystemRole, string> = {
@@ -19,6 +21,7 @@ export const ROLE_LABEL: Record<SystemRole, string> = {
   counselor: "상담사",
   teacher: "강사",
   viewer: "참관",
+  student: "학생",
 };
 
 /**
@@ -37,11 +40,11 @@ export function canAssignRole(args: {
   return actorRank < newRank && actorRank < targetRank;
 }
 
-/** 자기보다 약한 역할만 가능한 옵션 리스트 */
+/** 자기보다 약한 역할만 가능한 옵션 리스트. student는 직원 역할이 아니므로 제외. */
 export function assignableRoles(actor: SystemRole): SystemRole[] {
   const actorRank = ROLE_HIERARCHY[actor];
   return (Object.keys(ROLE_HIERARCHY) as SystemRole[]).filter(
-    (r) => ROLE_HIERARCHY[r] > actorRank,
+    (r) => r !== "student" && ROLE_HIERARCHY[r] > actorRank,
   );
 }
 

@@ -23,6 +23,7 @@ export const systemRoleEnum = pgEnum("system_role", [
   "counselor",
   "accountant",
   "viewer",
+  "student", // 학생 본인 화면(내 학습 현황) 로그인용 — 직원 위계 밖
 ]);
 
 export const userStatusEnum = pgEnum("user_status", ["active", "inactive", "pending"]);

@@ -14,6 +14,7 @@ const ROLE_LABEL: Record<SystemRole, string> = {
   counselor: "상담",
   accountant: "회계",
   viewer: "참관",
+  student: "학생",
 };
 
 function isItemActive(href: string, pathname: string) {
