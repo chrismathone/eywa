@@ -91,8 +91,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "A반",
     attendance: "출석",
     subjects: [
-      { name: "영어 독해", prev: "Unit 7 · p.82", today: "Unit 8 · p.90" },
-      { name: "영어 문법", prev: "관계대명사", today: "관계부사" },
+      { name: "수학 정규", prev: "일차함수 §2", today: "일차함수 §3" },
+      { name: "수학 심화", prev: "연립방정식 활용", today: "일차부등식" },
     ],
     tests: {
       daily: { score: 18, max: 20, prevScore: 16 },
@@ -111,8 +111,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "A반",
     attendance: "출석",
     subjects: [
-      { name: "영어 독해", prev: "Unit 7 · p.82", today: "Unit 8 · p.90" },
-      { name: "영어 문법", prev: "관계대명사", today: "관계부사" },
+      { name: "수학 정규", prev: "일차함수 §2", today: "일차함수 §3" },
+      { name: "수학 심화", prev: "연립방정식 활용", today: "일차부등식" },
     ],
     tests: {
       daily: { score: 14, max: 20, prevScore: 15 },
@@ -131,8 +131,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "A반",
     attendance: "지각",
     subjects: [
-      { name: "영어 독해", prev: "Unit 7 · p.82", today: "Unit 8 · p.90" },
-      { name: "영어 문법", prev: "관계대명사", today: "관계부사" },
+      { name: "수학 정규", prev: "일차함수 §2", today: "일차함수 §3" },
+      { name: "수학 심화", prev: "연립방정식 활용", today: "일차부등식" },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 19 },
@@ -151,8 +151,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "B반",
     attendance: "출석",
     subjects: [
-      { name: "수학 (상)", prev: "이차함수 §3", today: "이차함수 §4" },
-      { name: "영어 독해", prev: "Unit 11", today: "Unit 12" },
+      { name: "수학 정규", prev: "이차함수 §3", today: "이차함수 §4" },
+      { name: "수학 심화", prev: "이차방정식", today: "근과 계수" },
     ],
     tests: {
       daily: { score: 20, max: 20, prevScore: 18 },
@@ -171,8 +171,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "B반",
     attendance: "출석",
     subjects: [
-      { name: "수학 (상)", prev: "이차함수 §3", today: "이차함수 §4" },
-      { name: "영어 독해", prev: "Unit 11", today: "Unit 12" },
+      { name: "수학 정규", prev: "이차함수 §3", today: "이차함수 §4" },
+      { name: "수학 심화", prev: "이차방정식", today: "근과 계수" },
     ],
     tests: {
       daily: { score: 11, max: 20, prevScore: 13 },
@@ -191,8 +191,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "B반",
     attendance: "출석",
     subjects: [
-      { name: "수학 (상)", prev: "이차함수 §3", today: "이차함수 §4" },
-      { name: "영어 독해", prev: "Unit 11", today: "Unit 12" },
+      { name: "수학 정규", prev: "이차함수 §3", today: "이차함수 §4" },
+      { name: "수학 심화", prev: "이차방정식", today: "근과 계수" },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 17 },
@@ -211,8 +211,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "C반",
     attendance: "출석",
     subjects: [
-      { name: "국어 문학", prev: "현대시 4강", today: "현대시 5강" },
-      { name: "영어 어법", prev: "분사구문", today: "가정법" },
+      { name: "수학 정규", prev: "다항식의 연산", today: "나머지정리" },
+      { name: "수학 심화", prev: "인수분해", today: "복소수" },
     ],
     tests: {
       daily: { score: 16, max: 20, prevScore: 16 },
@@ -231,8 +231,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "C반",
     attendance: "결석",
     subjects: [
-      { name: "국어 문학", prev: "현대시 4강", today: "현대시 5강" },
-      { name: "영어 어법", prev: "분사구문", today: "가정법" },
+      { name: "수학 정규", prev: "다항식의 연산", today: "나머지정리" },
+      { name: "수학 심화", prev: "인수분해", today: "복소수" },
     ],
     tests: {
       daily: { score: null, max: 20, prevScore: 14 },
@@ -251,8 +251,8 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     tag: "C반",
     attendance: "출석",
     subjects: [
-      { name: "국어 문학", prev: "현대시 4강", today: "현대시 5강" },
-      { name: "영어 어법", prev: "분사구문", today: "가정법" },
+      { name: "수학 정규", prev: "다항식의 연산", today: "나머지정리" },
+      { name: "수학 심화", prev: "인수분해", today: "복소수" },
     ],
     tests: {
       daily: { score: 13, max: 20, prevScore: 10 },
