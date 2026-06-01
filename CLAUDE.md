@@ -100,6 +100,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 **12개 메뉴 + ijw 패리티 + Admin 도구 + 랜딩 8섹션 + UI 폴리시 + super-admin Phase 1 완성.**
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용.
 
+### 선생님 원스크린 (강사 전용, 2026-06-01)
+- 강사용 **수업 마감 원스크린** (`/onescreen`) — `data/원스크린_전달/` 디자인 핸드오프(React/JSX 프로토타입)를 eywa 톤으로 충실 이식.
+- 한 화면: ① 진도 확인 ② 일일/확인 테스트 점수 ③ today 보고서 작성·발송. 좌(학생 9명 + 진/테/보 셀) · 중(진도+테스트) · 우(보고서).
+- **데모 충실 이식**: 입력은 클라이언트 state(새로고침 리셋), 보고서는 **템플릿 자동생성**(`buildReport`, 라이브 AI 0), 발송은 **sonner 토스트 목업**(실제 전송 없음 — 알림센터 제외 원칙 유지). 새 DB 테이블·마이그레이션 없음.
+- **강사 전용**: `permissions.ts`에 `teacher_onescreen: { teacher:"full", 나머지 none }` → 원장(master) 사이드바엔 미표시(12메뉴 정체성 유지), 직접 URL 진입 시 `requireAccess`가 `/`로 리다이렉트. 강사용 투어는 `teacher@ijw-demo.com` 계정.
+- 순수함수 `report.ts`(buildReport/studentStatus/pct/delta) + Vitest 15케이스. `src/features/onescreen/`로 도메인 격리.
+
 ### Super-admin Phase 2~5 (4개 commit, 2026-05-29)
 - **Phase 2 audit log**: `super_admin_audit_logs` 테이블 + `logSuperAdminAction` helper + `/super-admin/audit` viewer. 모든 super-admin mutation 추적.
 - **Phase 3 지점장 보기**: `/super-admin/tenants/[id]/view` read-only 미러 (KPI+학생+회의, service_role). 진입 시 `impersonate_view` audit. 실제 조작 진입(RLS 함수 분기)은 Phase 6으로 보류.
@@ -490,6 +497,16 @@ billing 수납 "수정"이 여는 건 `[role=dialog]`/`[data-slot*=dialog]`가 �
 
 **해결**: page는 **raw enum** 그대로 전달(`currentStatus={student.status}`), `status-action`은 분기는 enum으로 하고 다이얼로그 표시용으로만 자체 `STATUS_LABEL`로 라벨화. **교훈**: enum 분기 컴포넌트엔 절대 표시용 라벨을 넘기지 말 것 — 표시 변환은 컴포넌트 안에서. 셀프투어에선 이런 "옵션이 틀린 메뉴"가 전형적 깨진 창문.
 
+### 43. Chrome MCP 로그인 — form_input이 React 상태 미동기 + 합성 submit 미발화 (#33/#34/#39 합본)
+강사 계정 로그인 검증에서 `form_input`으로 이메일·비번을 채우고 `computer left_click(submit)`을 눌렀는데 **/login 그대로**(제출 안 됨). 두 원인 겹침: (1) `form_input`은 DOM value만 바꾸고 React controlled state의 onChange를 안 태워 제출 시 빈 값일 수 있음; (2) 합성 클릭이 submit을 항상 띄우진 않음(#33/#39).
+
+**우회**: `javascript_tool`로 **native setter + input/change 이벤트 dispatch** 후 `form.requestSubmit()` — React 폼 값 주입의 정석.
+```js
+const set=(el,v)=>{const d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;d.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));};
+set(email,'…'); set(pw,'…'); email.closest('form').requestSubmit();
+```
+autofill(#34)도 이 방식이면 덮어쓰니 무관. 버튼·드롭다운 클릭도 native `element.click()`이 안정적(예: 사용자 메뉴 → 로그아웃).
+
 ---
 
 ## 마이그레이션 & 시드 흐름
@@ -563,14 +580,17 @@ pnpm build       # next build (Turbopack)
 
 네 단계 모두 그린이어야 push. Vercel은 push 후 자동 빌드.
 
-## 두 master 계정 (현재 상태)
+## 데모 로그인 계정 (현재 상태)
 
 | 이메일 | 비밀번호 | 역할 | 용도 |
 |---|---|---|---|
-| chrismathone@gmail.com | mbplaza2* | master (지점장) | 인재원 지점장. super_admin 아님 |
+| chrismathone@gmail.com | mbplaza2* | master (지점장) | 인재원 지점장. super_admin 아님. **원장용 투어** (12메뉴) |
 | st2000423@gmail.com | qkrthtjs1234@ | master + super_admin | SaaS 총괄 (전체 지점 관리) |
+| teacher@ijw-demo.com | ijwteacher1! | teacher (박지훈) | **강사용 투어** — 선생님 원스크린. seed가 auth 생성 + wipe-safe 보존 |
 
-둘 다 ijw-demo academy master지만 **super_admin은 st2000423만**. `display_name`은 김수진 / 석태선.
+두 master 모두 ijw-demo academy master지만 **super_admin은 st2000423만**. `display_name`은 김수진 / 석태선.
+데모 강사 `teacher@ijw-demo.com`는 `scripts/seed.ts`의 `ensureDemoTeacherAuth`가 idempotent 생성하고,
+teachers 루프(박지훈=`TEACHERS[0]`)가 매 시드마다 `public.users` 행을 on-conflict로 재upsert(#31/#32 회피).
 `st2000423`을 teacher 등 다른 role로 되돌리려면 admin API 한 번:
 ```js
 fetch(URL + '/auth/v1/admin/users/fcf735fa-edf7-4095-8fa6-724285a018ed', {
