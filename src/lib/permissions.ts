@@ -20,7 +20,8 @@ export type MenuKey =
   | "billing"
   | "meetings"
   | "help"
-  | "admin";
+  | "admin"
+  | "teacher_onescreen";
 
 export type Access = "full" | "scoped" | "readonly" | "none";
 
@@ -39,6 +40,9 @@ export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
   help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full" },
   // master 전용 — 중복 병합 / 데이터 정리 / Google Sheets 통합 등 위험도 높은 도구
   admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none" },
+  // 강사 전용 — 수업 마감 원스크린(진도·테스트·보고서). 원장(master) 사이드바엔 미표시.
+  // (오버사이트가 필요하면 master를 "full"로만 바꾸면 됨.)
+  teacher_onescreen: { master: "none", admin: "none", manager: "none", teacher: "full", counselor: "none", accountant: "none", viewer: "none" },
 };
 
 export function canAccess(role: SystemRole, menu: MenuKey): boolean {

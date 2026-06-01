@@ -1,0 +1,147 @@
+import { describe, it, expect } from "vitest";
+import { pct, delta, studentStatus, isStudentDone, buildReport } from "./report";
+import type { OneScreenStudent } from "./types";
+
+function makeStudent(overrides: Partial<OneScreenStudent> = {}): OneScreenStudent {
+  return {
+    id: "t1",
+    name: "테스트",
+    grade: "중2",
+    tag: "A반",
+    attendance: "출석",
+    subjects: [{ name: "영어 독해", prev: "Unit 1", today: "Unit 2" }],
+    tests: {
+      daily: { score: null, max: 20, prevScore: null },
+      check: { score: null, max: 20, prevScore: null },
+    },
+    attitude: null,
+    homework: "완료",
+    progressConfirmed: false,
+    reportDraft: "",
+    reportSent: false,
+    ...overrides,
+  };
+}
+
+describe("pct", () => {
+  it("정답/만점을 백분율로 반올림", () => {
+    expect(pct(18, 20)).toBe(90);
+    expect(pct(0, 20)).toBe(0);
+    expect(pct(1, 3)).toBe(33);
+  });
+  it("만점이 0이면 0", () => {
+    expect(pct(5, 0)).toBe(0);
+  });
+});
+
+describe("delta", () => {
+  it("이번 − 직전 점수", () => {
+    expect(delta(18, 16)).toBe(2);
+    expect(delta(14, 15)).toBe(-1);
+    expect(delta(16, 16)).toBe(0);
+  });
+  it("하나라도 null이면 비교 불가(null)", () => {
+    expect(delta(null, 5)).toBeNull();
+    expect(delta(5, null)).toBeNull();
+    expect(delta(null, null)).toBeNull();
+  });
+});
+
+describe("studentStatus", () => {
+  it("진도: 확정 여부", () => {
+    expect(studentStatus(makeStudent()).prog).toBe("todo");
+    expect(studentStatus(makeStudent({ progressConfirmed: true })).prog).toBe("ok");
+  });
+  it("테스트: 둘 다=ok, 하나=warn, 없음=todo", () => {
+    const both = makeStudent({
+      tests: { daily: { score: 10, max: 20, prevScore: null }, check: { score: 10, max: 20, prevScore: null } },
+    });
+    const one = makeStudent({
+      tests: { daily: { score: 10, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
+    });
+    expect(studentStatus(both).test).toBe("ok");
+    expect(studentStatus(one).test).toBe("warn");
+    expect(studentStatus(makeStudent()).test).toBe("todo");
+  });
+  it("보고서: 발송=ok, 초안=warn, 공백=todo", () => {
+    expect(studentStatus(makeStudent({ reportSent: true })).rep).toBe("ok");
+    expect(studentStatus(makeStudent({ reportDraft: "내용" })).rep).toBe("warn");
+    expect(studentStatus(makeStudent({ reportDraft: "   " })).rep).toBe("todo");
+  });
+});
+
+describe("isStudentDone", () => {
+  it("진·테·보 모두 ok여야 완료", () => {
+    const done = makeStudent({
+      progressConfirmed: true,
+      reportSent: true,
+      tests: { daily: { score: 10, max: 20, prevScore: null }, check: { score: 10, max: 20, prevScore: null } },
+    });
+    expect(isStudentDone(done)).toBe(true);
+    expect(isStudentDone(makeStudent({ progressConfirmed: true }))).toBe(false);
+  });
+});
+
+describe("buildReport", () => {
+  it("이름과 오늘 진도를 포함", () => {
+    const r = buildReport(makeStudent({ name: "김서연" }));
+    expect(r).toContain("김서연 학생");
+    expect(r).toContain("영어 독해 Unit 2");
+  });
+
+  it("평균 90 이상 → 안정적 성취 마무리", () => {
+    const r = buildReport(
+      makeStudent({
+        tests: { daily: { score: 18, max: 20, prevScore: 16 }, check: { score: 19, max: 20, prevScore: 17 } },
+      }),
+    );
+    expect(r).toContain("안정적인 성취");
+  });
+
+  it("평균 70~89 → 꾸준히 마무리", () => {
+    const r = buildReport(
+      makeStudent({
+        tests: { daily: { score: 16, max: 20, prevScore: null }, check: { score: 15, max: 20, prevScore: null } },
+      }),
+    );
+    expect(r).toContain("꾸준히 잘 따라오고");
+  });
+
+  it("평균 70 미만 → 복습 필요 마무리", () => {
+    const r = buildReport(
+      makeStudent({
+        tests: { daily: { score: 11, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
+      }),
+    );
+    expect(r).toContain("복습이 필요");
+  });
+
+  it("점수 미입력이면 테스트 문장·마무리 없음", () => {
+    const r = buildReport(makeStudent());
+    expect(r).not.toContain("결과를 받았습니다");
+    expect(r).not.toContain("성취");
+    expect(r).not.toContain("복습");
+  });
+
+  it("태도가 있으면 태도·과제 문장 포함", () => {
+    const r = buildReport(makeStudent({ attitude: "아주 좋음", homework: "완료" }));
+    expect(r).toContain("수업 태도는 '아주 좋음'");
+    expect(r).toContain("과제는 완료");
+  });
+
+  it("직전 회차 대비 증감 꼬리표", () => {
+    const up = buildReport(
+      makeStudent({
+        tests: { daily: { score: 18, max: 20, prevScore: 16 }, check: { score: null, max: 20, prevScore: null } },
+      }),
+    );
+    expect(up).toContain("지난 회차 대비 ▲2점");
+
+    const same = buildReport(
+      makeStudent({
+        tests: { daily: { score: 16, max: 20, prevScore: 16 }, check: { score: null, max: 20, prevScore: null } },
+      }),
+    );
+    expect(same).toContain("지난 회차와 동일");
+  });
+});

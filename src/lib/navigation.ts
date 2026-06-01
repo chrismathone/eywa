@@ -25,6 +25,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "수업",
     items: [
+      { href: "/onescreen", label: "선생님 원스크린", icon: "check", menuKey: "teacher_onescreen" },
       { href: "/timetable", label: "시간표", icon: "leaf", menuKey: "timetable" },
       { href: "/attendance", label: "출석부", icon: "pulse", menuKey: "attendance" },
       { href: "/classes", label: "수업목록", icon: "branch", menuKey: "classes" },
