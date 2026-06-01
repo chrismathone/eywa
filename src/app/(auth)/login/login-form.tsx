@@ -34,7 +34,7 @@ export function LoginForm({ next }: { next?: string }) {
     }
 
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
       const message = /invalid login credentials/i.test(signInError.message)
@@ -45,7 +45,10 @@ export function LoginForm({ next }: { next?: string }) {
       return;
     }
 
-    const target = next && next.startsWith("/") ? next : "/dashboard";
+    // 강사는 사이드바 없는 원스크린 전용 → 기본 착지 지점이 다름. 원장 등은 대시보드.
+    const role = data.user?.app_metadata?.system_role as string | undefined;
+    const home = role === "teacher" ? "/onescreen" : "/dashboard";
+    const target = next && next.startsWith("/") ? next : home;
     router.push(target);
     router.refresh();
   }
