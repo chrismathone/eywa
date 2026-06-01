@@ -1,0 +1,129 @@
+/* student.css — 학생용 리포트 화면 (읽기 전용, 모바일 우선) */
+
+/* cool base (teacher 앱과 동일 톤) — styles.css :root 이후 로드되어 덮어씀 */
+:root {
+  --paper: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #eceff3;
+  --ink: #1d2128;
+  --ink-soft: #525a66;
+  --ink-faint: #8b929e;
+  --line: #e3e7ed;
+  --line-strong: #d2d8e1;
+  --accent: #2f8a55;
+  --accent-ink: #1f6b40;
+  --accent-soft: #e1f0e7;
+  --ok: #2f8a55;
+  --ok-soft: #e1f0e7;
+}
+
+body { background: var(--paper); }
+
+.sv-wrap {
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 22px 16px 56px;
+  background:
+    radial-gradient(140% 80% at 50% -10%, color-mix(in srgb, var(--surface) 55%, transparent), transparent 60%),
+    var(--paper);
+}
+.sv {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* preview switcher (데모용) */
+.sv-switch {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  font-size: 12px; color: var(--ink-faint);
+}
+.sv-switch select {
+  font-family: var(--font); font-size: 12.5px; color: var(--ink);
+  border: 1px solid var(--line-strong); background: var(--surface);
+  border-radius: 8px; padding: 5px 9px;
+}
+
+/* top nav (back to dashboard) */
+.sv-topnav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sv-back {
+  font-size: 12.5px; font-weight: 650; color: var(--ink-soft); text-decoration: none;
+  padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  transition: border-color .12s;
+}
+.sv-back:hover { border-color: var(--ink-faint); }
+
+/* header */
+.sv-head {
+  background: var(--ink); color: var(--surface);
+  border-radius: 16px; padding: 20px 20px 18px;
+  position: relative; overflow: hidden;
+}
+.sv-head .ey { font-size: 12px; font-weight: 600; opacity: .7; }
+.sv-head .ttl { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; margin-top: 5px; }
+.sv-head .who { font-size: 13.5px; opacity: .82; margin-top: 9px; }
+.sv-head .att {
+  position: absolute; top: 18px; right: 18px;
+  font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 85%, white); color: #fff;
+}
+.sv-head .att.late { background: #c9962f; }
+.sv-head .att.absent { background: #c25540; }
+
+/* section card */
+.sv-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 17px;
+}
+.sv-card .sec-ttl {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-faint); margin-bottom: 12px;
+}
+
+/* progress rows */
+.sv-subj { display: flex; gap: 11px; padding: 11px 0; border-top: 1px solid var(--line); }
+.sv-subj:first-of-type { border-top: none; padding-top: 2px; }
+.sv-subj .bar { width: 4px; border-radius: 999px; flex: 0 0 auto; min-height: 32px; }
+.sv-subj .nm { font-size: 14px; font-weight: 750; }
+.sv-subj .flow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-top: 4px; flex-wrap: wrap; }
+.sv-subj .prev { color: var(--ink-faint); }
+.sv-subj .arr { font-weight: 700; }
+.sv-subj .now { color: var(--ink); font-weight: 600; }
+
+/* test blocks */
+.sv-test { display: flex; flex-direction: column; gap: 12px; }
+.sv-tb {
+  border: 1px solid var(--line); border-radius: 13px; padding: 13px 14px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+.sv-tb .lab { display: flex; align-items: baseline; gap: 8px; }
+.sv-tb .kick { font-size: 13.5px; font-weight: 750; }
+.sv-tb .sub { font-size: 11.5px; color: var(--ink-faint); }
+.sv-tb .row { display: flex; align-items: center; gap: 10px; }
+.sv-tb .score { font-size: 26px; font-weight: 850; letter-spacing: -0.02em; }
+.sv-tb .max { font-size: 16px; font-weight: 700; color: var(--ink-faint); }
+.sv-tb .pct { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.sv-tb .track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.sv-tb .fill { height: 100%; border-radius: 999px; transition: width .5s cubic-bezier(.2,.7,.2,1); }
+.sv-tb.pending { opacity: .6; }
+.sv-tb .pendtxt { font-size: 12.5px; color: var(--ink-faint); }
+
+/* teacher note */
+.sv-note .body {
+  font-size: 14px; line-height: 1.75; color: var(--ink);
+  white-space: pre-wrap;
+}
+.sv-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 13px; }
+.sv-tag {
+  font-size: 12px; font-weight: 650; padding: 5px 11px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--line);
+}
+.sv-tag b { color: var(--ink); font-weight: 750; }
+.sv-empty { font-size: 13px; color: var(--ink-faint); padding: 6px 0; }
+
+.sv-foot { text-align: center; font-size: 11.5px; color: var(--ink-faint); margin-top: 4px; }
