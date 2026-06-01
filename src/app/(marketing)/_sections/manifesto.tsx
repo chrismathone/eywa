@@ -59,7 +59,7 @@ export function ManifestoSection() {
             return (
               <article
                 key={p.no}
-                className="bg-card border-line relative overflow-hidden rounded-2xl border p-8"
+                className="bg-card border-line relative overflow-hidden rounded-xl border p-8"
                 style={{ gridColumn: `span ${p.span}` }}
               >
                 <span

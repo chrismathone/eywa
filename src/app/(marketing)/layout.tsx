@@ -50,7 +50,7 @@ function MarketingNav() {
           </Link>
           <Link
             href="/login"
-            className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center rounded-full px-[18px] py-2.5 text-[14px] font-semibold transition"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center rounded-xl px-[18px] py-2.5 text-[14px] font-semibold transition"
           >
             무료로 시작하기
           </Link>

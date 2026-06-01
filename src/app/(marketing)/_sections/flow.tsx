@@ -29,7 +29,7 @@ export function FlowSection() {
         {/* 우측 — Trigger + Outcomes */}
         <div className="space-y-7">
           {/* Trigger 카드 */}
-          <article className="bg-card border-line relative overflow-hidden rounded-2xl border px-7 py-5"
+          <article className="bg-card border-line relative overflow-hidden rounded-xl border px-7 py-5"
             style={{ boxShadow: "0 16px 36px rgba(26, 95, 60, 0.08)" }}
           >
             <span className="bg-primary absolute top-0 bottom-0 left-0 w-1" aria-hidden="true" />

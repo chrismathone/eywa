@@ -63,7 +63,7 @@ export function HeroSection() {
 
         {/* 우측 — Hero 카드 (forest gradient) */}
         <div
-          className="relative overflow-hidden rounded-3xl p-6"
+          className="relative overflow-hidden rounded-xl p-6"
           style={{
             background: "linear-gradient(135deg, #1a5f3c 0%, #2d9461 100%)",
             boxShadow: "0 20px 60px rgba(31, 122, 77, 0.25)",
@@ -85,7 +85,7 @@ export function HeroSection() {
           <div className="space-y-3.5">
             {/* 카드 1: KPI */}
             <article
-              className="bg-card rounded-2xl p-4"
+              className="bg-card rounded-xl p-4"
               style={{ transform: "rotate(-1.5deg)", boxShadow: "0 10px 30px rgba(0,0,0,0.12)" }}
             >
               <div className="mb-2 flex items-center gap-2">
@@ -101,7 +101,7 @@ export function HeroSection() {
 
             {/* 카드 2: 진행중 수업 */}
             <article
-              className="bg-card flex items-center gap-3 rounded-2xl p-4"
+              className="bg-card flex items-center gap-3 rounded-xl p-4"
               style={{ transform: "rotate(1deg)", boxShadow: "0 10px 30px rgba(0,0,0,0.12)" }}
             >
               <span className="bg-primary-soft text-primary flex size-10 shrink-0 items-center justify-center rounded-xl">
@@ -118,7 +118,7 @@ export function HeroSection() {
 
             {/* 카드 3: 학부모 상담 완료 */}
             <article
-              className="bg-card flex items-center gap-3 rounded-2xl p-4"
+              className="bg-card flex items-center gap-3 rounded-xl p-4"
               style={{ transform: "rotate(-0.5deg)", boxShadow: "0 10px 30px rgba(0,0,0,0.12)" }}
             >
               <span className="bg-rose-soft text-rose flex size-9 shrink-0 items-center justify-center rounded-lg font-bold">

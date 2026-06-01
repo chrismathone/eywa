@@ -6,7 +6,7 @@ export function CtaSection() {
     <section id="cta" className="bg-background px-16 py-[120px]">
       <div className="mx-auto max-w-[1100px]">
         <article
-          className="bg-card border-line shadow-modal relative grid grid-cols-1 gap-14 overflow-hidden rounded-[10px] border px-14 py-16 lg:grid-cols-[1.3fr_1fr]"
+          className="bg-card border-line shadow-modal relative grid grid-cols-1 gap-14 overflow-hidden rounded-xl border px-14 py-16 lg:grid-cols-[1.3fr_1fr]"
         >
           {/* 배경 장식 */}
           <span
@@ -84,7 +84,7 @@ export function CtaSection() {
           <div className="relative space-y-3">
             <Link
               href="/login"
-              className="flex items-center gap-3 rounded-2xl px-6 py-5 text-white transition"
+              className="flex items-center gap-3 rounded-xl px-6 py-5 text-white transition"
               style={{
                 background: "linear-gradient(135deg, #1a5f3c 0%, #2a7a52 100%)",
                 boxShadow: "0 14px 32px rgba(26, 95, 60, 0.28)",
@@ -103,7 +103,7 @@ export function CtaSection() {
 
             <Link
               href="tel:1670-0000"
-              className="bg-bg-soft border-line flex items-center gap-3 rounded-2xl border px-6 py-[18px] transition hover:bg-bg-soft/80"
+              className="bg-bg-soft border-line flex items-center gap-3 rounded-xl border px-6 py-[18px] transition hover:bg-bg-soft/80"
             >
               <div className="flex-1">
                 <p className="text-text-dim text-[11px]">편하게 물어보세요</p>

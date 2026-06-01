@@ -17,7 +17,7 @@ export function TestimonialsSection() {
         </div>
 
         {/* Featured */}
-        <article className="bg-card border-line shadow-card relative mt-12 grid grid-cols-1 gap-14 overflow-hidden rounded-3xl border px-14 py-12 lg:grid-cols-[1fr_320px]">
+        <article className="bg-card border-line shadow-card relative mt-12 grid grid-cols-1 gap-14 overflow-hidden rounded-xl border px-14 py-12 lg:grid-cols-[1fr_320px]">
           <span className="bg-primary absolute top-0 bottom-0 left-0 w-1" aria-hidden="true" />
 
           <div className="pl-3">
@@ -61,7 +61,7 @@ export function TestimonialsSection() {
           </div>
 
           {/* 메트릭 패널 */}
-          <aside className="bg-bg-soft border-line rounded-2xl border p-7">
+          <aside className="bg-bg-soft border-line rounded-xl border p-7">
             <p className="text-primary font-mono text-[11px] font-bold tracking-wider uppercase">
               {TESTIMONIAL_FEATURED.metric.label}
             </p>
@@ -93,7 +93,7 @@ export function TestimonialsSection() {
           {TESTIMONIAL_OTHERS.map((t) => (
             <article
               key={t.name}
-              className="bg-card border-line shadow-card flex flex-col gap-4 rounded-2xl border p-7"
+              className="bg-card border-line shadow-card flex flex-col gap-4 rounded-xl border p-7"
             >
               <span className="text-gold text-[15px]">★★★★★</span>
               <p

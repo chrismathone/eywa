@@ -71,7 +71,7 @@ export function LogoWallSection() {
             return (
               <article
                 key={c.label}
-                className="bg-card border-line shadow-card-hover relative overflow-hidden rounded-2xl border p-6"
+                className="bg-card border-line shadow-card-hover relative overflow-hidden rounded-xl border p-6"
               >
                 <span
                   className={`pointer-events-none absolute -top-8 -right-8 size-[110px] rounded-full blur-xl ${COLOR_GLOW[c.color]}`}
@@ -108,7 +108,7 @@ export function LogoWallSection() {
             {ACADEMY_TILES.map((tile) => (
               <article
                 key={tile.name}
-                className={`flex h-[116px] flex-col justify-between rounded-2xl p-[18px] ${
+                className={`flex h-[116px] flex-col justify-between rounded-xl p-[18px] ${
                   tile.accent
                     ? "border-0 text-white"
                     : "bg-card border-line border"

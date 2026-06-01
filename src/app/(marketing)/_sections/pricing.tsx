@@ -40,7 +40,7 @@ export function PricingSection() {
           {PRICING_PLANS.map((plan) => (
             <article
               key={plan.name}
-              className={`bg-card relative overflow-hidden rounded-2xl px-7 py-8 ${
+              className={`bg-card relative overflow-hidden rounded-xl px-7 py-8 ${
                 plan.highlight
                   ? "border-2 border-primary shadow-primary-deep"
                   : "border-line shadow-card border"
