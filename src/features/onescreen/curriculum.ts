@@ -666,3 +666,51 @@ export const CURRICULUM_GRADES = Object.keys(MATH_CURRICULUM);
 export function curriculumForGrade(grade: string): CurriculumUnit[] {
   return MATH_CURRICULUM[grade] ?? [];
 }
+
+// ───────────────────────────── 학기 스코프 ─────────────────────────────
+//   진도 피커: 학년 → 학기 → 차시 순으로 좁혀 드롭다운을 작게 만든다.
+
+export type Semester = 1 | 2;
+
+/**
+ * 중등 1학기 마지막 단원(= 함수 단원). 이 단원까지 1학기, 그 다음부터 2학기.
+ * 사용자 지정 경계: 중1=좌표평면과 그래프 / 중2=일차함수 / 중3=이차함수.
+ * (초등은 단원 코드 prefix 1-/2-로 학기가 이미 구분됨.)
+ */
+const MIDDLE_SEM1_LAST_UNIT: Record<string, string> = {
+  중1: "4. 그래프와 비례",
+  중2: "4. 함수",
+  중3: "4. 이차함수",
+};
+
+/** 단원이 속한 학기(1|2). 초등=코드 prefix, 중등=함수 단원 경계. */
+export function unitSemester(grade: string, unit: string, index: number): Semester {
+  if (unit.startsWith("1-")) return 1; // 초등 1학기
+  if (unit.startsWith("2-")) return 2; // 초등 2학기
+  const lastSem1 = MIDDLE_SEM1_LAST_UNIT[grade];
+  if (!lastSem1) return 1;
+  const boundary = (MATH_CURRICULUM[grade] ?? []).findIndex((u) => u.unit === lastSem1);
+  return boundary >= 0 && index > boundary ? 2 : 1;
+}
+
+/** 그 학년에 존재하는 학기 목록(보통 [1, 2]). */
+export function semestersForGrade(grade: string): Semester[] {
+  const set = new Set<Semester>();
+  curriculumForGrade(grade).forEach((u, i) => set.add(unitSemester(grade, u.unit, i)));
+  return [...set].sort((a, b) => a - b);
+}
+
+/** 학년 + 학기로 스코프된 단원 목록(차시 드롭다운용). */
+export function curriculumForGradeSemester(grade: string, semester: Semester): CurriculumUnit[] {
+  return curriculumForGrade(grade).filter((u, i) => unitSemester(grade, u.unit, i) === semester);
+}
+
+/** 차시 문자열이 속한 학기. 못 찾으면 1학기로 간주(자동 입력 fallback). */
+export function semesterOfLesson(grade: string, lesson: string): Semester {
+  const units = curriculumForGrade(grade);
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (u && u.lessons.includes(lesson)) return unitSemester(grade, u.unit, i);
+  }
+  return 1;
+}

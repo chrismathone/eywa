@@ -112,12 +112,13 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     name: "이준호",
     grade: "초4",
     tag: "초4",
+    studyGrade: "초5", // 선행 — 실제 초4, 진도 초5
     attendance: "출석",
     subjects: [
       {
         name: "수학",
-        prev: "1-1-1 1000이 10개인 수 알아보기",
-        today: "1-1-3 10000이 몇십 개, 몇백 개, 몇천 개인 수 알아보기",
+        prev: "1-1-2 덧셈, 뺄셈, 곱셈(나눗셈)이 섞여 있는 식",
+        today: "1-1-3 덧셈, 뺄셈, 곱셈, 나눗셈이 섞여 있는 식",
       },
     ],
     tests: {
@@ -154,8 +155,9 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     name: "최민준",
     grade: "초6",
     tag: "초6",
+    studyGrade: "중1", // 선행 — 실제 초6, 진도 중1
     attendance: "출석",
-    subjects: [{ name: "수학", prev: "1-4-1 두 수 비교하기", today: "1-4-2 비" }],
+    subjects: [{ name: "수학", prev: "소인수분해", today: "공약수와 최대공약수" }],
     tests: {
       daily: { score: 20, max: 20, prevScore: 18 },
       check: { score: 17, max: 20, prevScore: 19 },
@@ -188,8 +190,9 @@ export const DEMO_ONESCREEN: OneScreenStudent[] = [
     name: "강도윤",
     grade: "중1",
     tag: "중1",
+    studyGrade: "초6", // 후행/복습 — 실제 중1, 진도 초6
     attendance: "출석",
-    subjects: [{ name: "수학", prev: "유리수의 덧셈과 뺄셈", today: "유리수의 곱셈" }],
+    subjects: [{ name: "수학", prev: "1-4-1 두 수 비교하기", today: "1-4-2 비" }],
     tests: {
       daily: { score: null, max: 20, prevScore: 17 },
       check: { score: null, max: 20, prevScore: 16 },

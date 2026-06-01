@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { ATTITUDE, CLASS_TAGS, TODAY } from "../data";
+import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
@@ -84,6 +85,26 @@ export function OneScreenClient({ initial }: { initial: OneScreenStudent[] }) {
       subjects: s.subjects.map((su, i) => (i === subjectIndex ? { ...su, today } : su)),
     }));
   }
+  function setStudyGrade(grade: string) {
+    if (!selected) return;
+    // 진도 학년 변경(선행/후행) → 진도(prev/today)를 그 학년 1학기 첫 차시로 초기화(유효값 보장).
+    const first = curriculumForGrade(grade)[0]?.lessons[0] ?? "";
+    patch(selected.id, (s) => ({
+      ...s,
+      studyGrade: grade,
+      subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })),
+    }));
+  }
+  function setSemester(semester: Semester) {
+    if (!selected) return;
+    // 학기 변경 → 진도를 그 학기 첫 차시로 초기화(차시 드롭다운 스코프와 일치 보장).
+    const grade = selected.studyGrade ?? selected.grade;
+    const first = curriculumForGradeSemester(grade, semester)[0]?.lessons[0] ?? "";
+    patch(selected.id, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })),
+    }));
+  }
   function setScore(which: "daily" | "check", v: number | null) {
     if (!selected) return;
     patch(selected.id, (s) => ({
@@ -143,7 +164,13 @@ export function OneScreenClient({ initial }: { initial: OneScreenStudent[] }) {
         {selected ? (
           <>
             <div className="flex flex-col gap-4">
-              <ProgressCard student={selected} onConfirm={confirmProgress} onProgress={setProgress} />
+              <ProgressCard
+                student={selected}
+                onConfirm={confirmProgress}
+                onProgress={setProgress}
+                onStudyGrade={setStudyGrade}
+                onSemester={setSemester}
+              />
               <TestCard student={selected} onScore={setScore} />
             </div>
             <ReportCard

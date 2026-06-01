@@ -30,8 +30,10 @@ export type AttendanceMark = "출석" | "지각" | "결석";
 export type OneScreenStudent = {
   id: string;
   name: string;
-  grade: string; // "중2" | "중3" | "고1"
-  tag: string; // 반 — "A반" | "B반" | "C반"
+  grade: string; // 실제 학년 — "초3" ~ "중3"
+  tag: string; // 필터용 학년 태그 (= grade)
+  // 진도(수업) 학년 — 실제 학년과 다를 수 있음(선행/후행). 없으면 grade로 간주.
+  studyGrade?: string;
   attendance: AttendanceMark;
   subjects: Subject[];
   tests: Tests;
