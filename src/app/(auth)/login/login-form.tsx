@@ -45,9 +45,10 @@ export function LoginForm({ next }: { next?: string }) {
       return;
     }
 
-    // 강사는 사이드바 없는 원스크린 전용 → 기본 착지 지점이 다름. 원장 등은 대시보드.
+    // 역할별 기본 착지 지점: 강사=원스크린, 학생=내 학습 현황, 그 외(원장 등)=대시보드.
     const role = data.user?.app_metadata?.system_role as string | undefined;
-    const home = role === "teacher" ? "/onescreen" : "/dashboard";
+    const home =
+      role === "teacher" ? "/onescreen" : role === "student" ? "/my-learning" : "/dashboard";
     const target = next && next.startsWith("/") ? next : home;
     router.push(target);
     router.refresh();

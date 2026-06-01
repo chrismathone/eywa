@@ -11,9 +11,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // 강사: 사이드바·네비 없는 단일 화면 셸 — 원스크린만. 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
-  // (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
-  if (user.systemRole === "teacher") {
+  // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
+  // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
+  if (user.systemRole === "teacher" || user.systemRole === "student") {
     return (
       <div className="bg-background text-foreground flex h-screen flex-col overflow-hidden">
         <header className="bg-background border-line sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-5 lg:px-7">
