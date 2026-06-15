@@ -6,7 +6,9 @@ import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
-import { canAccess, type SystemRole } from "@/lib/permissions";
+import { canAccess, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowStore } from "@/components/workspace/window-store";
 
 /** 헤더 검색 버튼 등 외부 요소가 팰릿을 여는 데 쓰는 커스텀 이벤트 이름. */
 export const COMMAND_PALETTE_OPEN_EVENT = "eywa:open-command-palette";
@@ -16,6 +18,7 @@ type Command = {
   label: string;
   group: string;
   icon: LucideIcon;
+  menuKey: MenuKey;
   keywords: string;
 };
 
@@ -26,6 +29,8 @@ type Command = {
  */
 export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
   const router = useRouter();
+  const isDesktop = useIsDesktop();
+  const openWindow = useWindowStore((s) => s.open);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -42,6 +47,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
           label: item.label,
           group: group.label,
           icon: item.icon,
+          menuKey: item.menuKey,
           // menuKey 포함 → 영문 입력("billing")으로도 검색됨
           keywords: `${item.label} ${group.label} ${item.menuKey}`.toLowerCase(),
         });
@@ -77,9 +83,14 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  function navigate(href: string) {
+  function navigate(cmd: Command) {
     closePalette();
-    router.push(href);
+    // 데스크톱: 메뉴를 플로팅 창(크롬리스 iframe)으로. 그 외: 기존 풀페이지 이동.
+    if (isDesktop) {
+      openWindow("route", { id: cmd.menuKey, title: cmd.label, href: cmd.href });
+      return;
+    }
+    router.push(cmd.href);
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -92,7 +103,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const target = results[active];
-      if (target) navigate(target.href);
+      if (target) navigate(target);
     }
   }
 
@@ -140,7 +151,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
                     <button
                       ref={isActive ? activeRef : null}
                       type="button"
-                      onClick={() => navigate(c.href)}
+                      onClick={() => navigate(c)}
                       onMouseMove={() => setActive(i)}
                       className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] transition ${
                         isActive ? "bg-primary text-primary-foreground" : "text-foreground"

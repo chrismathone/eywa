@@ -13,6 +13,8 @@ function subscribe(cb: () => void) {
 }
 function getSnapshot() {
   if (typeof window === "undefined") return false;
+  // 임베드 iframe 안에서는 Stage Manager 캔버스가 없으므로 false(창 열기 트리거는 Sheet 폴백).
+  if (window.self !== window.top) return false;
   return window.matchMedia(QUERY).matches;
 }
 function getServerSnapshot() {

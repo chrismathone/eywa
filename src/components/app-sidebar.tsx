@@ -9,8 +9,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UserMenu } from "@/components/user-menu";
-import { NAV_GROUPS } from "@/lib/navigation";
+import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 import { canAccess, type SystemRole } from "@/lib/permissions";
+import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowStore } from "@/components/workspace/window-store";
 
 function isItemActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
@@ -33,6 +35,15 @@ export function AppSidebar({
   className?: string;
 }) {
   const pathname = usePathname();
+  const isDesktop = useIsDesktop();
+  const openWindow = useWindowStore((s) => s.open);
+
+  // 데스크톱: 메뉴를 플로팅 창(크롬리스 iframe)으로. 모디파이어(새 탭 등)는 기본 Link 보존.
+  function handleNav(e: React.MouseEvent, item: NavItem) {
+    if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    openWindow("route", { id: item.menuKey, title: item.label, href: item.href });
+  }
 
   // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
   const groups = NAV_GROUPS.map((g) => ({
@@ -75,6 +86,7 @@ export function AppSidebar({
                       render={
                         <Link
                           href={item.href}
+                          onClick={(e) => handleNav(e, item)}
                           aria-current={active ? "page" : undefined}
                           aria-label={item.label}
                           className={`flex size-9 items-center justify-center rounded-[6px] transition ${

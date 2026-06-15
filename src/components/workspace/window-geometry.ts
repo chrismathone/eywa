@@ -5,7 +5,8 @@
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Bounds = { width: number; height: number };
 export type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
-export type SnapZone = "left" | "right" | "max" | null;
+// 절반(left/right)·최대화(max)·1/4 모서리(tl/tr/bl/br)
+export type SnapZone = "left" | "right" | "max" | "tl" | "tr" | "bl" | "br" | null;
 
 export const MIN_W = 360;
 export const MIN_H = 280;
@@ -29,22 +30,51 @@ export function cascadeNext(count: number, bounds: Bounds): Rect {
   return clampRect({ x: 24 + offset, y: 24 + offset, w, h }, bounds);
 }
 
-/** 스냅 존 → 목표 사각형(좌/우 절반·전체 최대화). */
+/** 스냅 존 → 목표 사각형(좌/우 절반·전체 최대화·1/4 모서리). */
 export function snapTarget(zone: SnapZone, bounds: Bounds): Rect | null {
-  if (zone === "left") return { x: 0, y: 0, w: Math.round(bounds.width / 2), h: bounds.height };
-  if (zone === "right") {
-    const w = Math.round(bounds.width / 2);
-    return { x: bounds.width - w, y: 0, w, h: bounds.height };
+  const hw = Math.round(bounds.width / 2);
+  const hh = Math.round(bounds.height / 2);
+  switch (zone) {
+    case "left":
+      return { x: 0, y: 0, w: hw, h: bounds.height };
+    case "right":
+      return { x: bounds.width - hw, y: 0, w: hw, h: bounds.height };
+    case "max":
+      return { x: 0, y: 0, w: bounds.width, h: bounds.height };
+    case "tl":
+      return { x: 0, y: 0, w: hw, h: hh };
+    case "tr":
+      return { x: bounds.width - hw, y: 0, w: hw, h: hh };
+    case "bl":
+      return { x: 0, y: bounds.height - hh, w: hw, h: hh };
+    case "br":
+      return { x: bounds.width - hw, y: bounds.height - hh, w: hw, h: hh };
+    default:
+      return null;
   }
-  if (zone === "max") return { x: 0, y: 0, w: bounds.width, h: bounds.height };
-  return null;
 }
 
-/** 드래그 포인터가 캔버스 가장자리 근처면 스냅 존 반환(상단 우선). */
-export function snapZoneForPoint(px: number, py: number, bounds: Bounds, edge = 24): SnapZone {
+/**
+ * 드래그 포인터가 캔버스 가장자리 근처면 스냅 존 반환.
+ * 우선순위: 모서리(1/4) > 상단(최대화) > 좌/우(절반). 좌/우 가장자리에 닿은 채
+ * 상·하 corner 밴드 안이면 1/4, 가운데면 절반.
+ */
+export function snapZoneForPoint(
+  px: number,
+  py: number,
+  bounds: Bounds,
+  edge = 24,
+  corner = 80,
+): SnapZone {
+  const nearLeft = px <= edge;
+  const nearRight = px >= bounds.width - edge;
+  if (nearLeft && py <= corner) return "tl";
+  if (nearRight && py <= corner) return "tr";
+  if (nearLeft && py >= bounds.height - corner) return "bl";
+  if (nearRight && py >= bounds.height - corner) return "br";
   if (py <= edge) return "max";
-  if (px <= edge) return "left";
-  if (px >= bounds.width - edge) return "right";
+  if (nearLeft) return "left";
+  if (nearRight) return "right";
   return null;
 }
 

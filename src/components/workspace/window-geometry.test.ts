@@ -52,14 +52,24 @@ describe("snapTarget", () => {
   it("좌 절반", () => expect(snapTarget("left", B)).toEqual({ x: 0, y: 0, w: 600, h: 800 }));
   it("우 절반", () => expect(snapTarget("right", B)).toEqual({ x: 600, y: 0, w: 600, h: 800 }));
   it("최대화", () => expect(snapTarget("max", B)).toEqual({ x: 0, y: 0, w: 1200, h: 800 }));
+  it("좌상 1/4", () => expect(snapTarget("tl", B)).toEqual({ x: 0, y: 0, w: 600, h: 400 }));
+  it("우상 1/4", () => expect(snapTarget("tr", B)).toEqual({ x: 600, y: 0, w: 600, h: 400 }));
+  it("좌하 1/4", () => expect(snapTarget("bl", B)).toEqual({ x: 0, y: 400, w: 600, h: 400 }));
+  it("우하 1/4", () => expect(snapTarget("br", B)).toEqual({ x: 600, y: 400, w: 600, h: 400 }));
   it("null", () => expect(snapTarget(null, B)).toBeNull());
 });
 
 describe("snapZoneForPoint", () => {
-  it("상단=max", () => expect(snapZoneForPoint(600, 5, B)).toBe("max"));
-  it("좌=left", () => expect(snapZoneForPoint(5, 400, B)).toBe("left"));
-  it("우=right", () => expect(snapZoneForPoint(1195, 400, B)).toBe("right"));
+  it("상단 중앙=max", () => expect(snapZoneForPoint(600, 5, B)).toBe("max"));
+  it("좌 중앙=left", () => expect(snapZoneForPoint(5, 400, B)).toBe("left"));
+  it("우 중앙=right", () => expect(snapZoneForPoint(1195, 400, B)).toBe("right"));
   it("중앙=null", () => expect(snapZoneForPoint(600, 400, B)).toBeNull());
+  it("좌상 모서리=tl", () => expect(snapZoneForPoint(5, 5, B)).toBe("tl"));
+  it("우상 모서리=tr", () => expect(snapZoneForPoint(1195, 5, B)).toBe("tr"));
+  it("좌하 모서리=bl", () => expect(snapZoneForPoint(5, 795, B)).toBe("bl"));
+  it("우하 모서리=br", () => expect(snapZoneForPoint(1195, 795, B)).toBe("br"));
+  it("모서리가 절반보다 우선(좌 가장자리 + corner 밴드)", () =>
+    expect(snapZoneForPoint(5, 60, B)).toBe("tl"));
 });
 
 describe("resizeRect", () => {

@@ -14,8 +14,10 @@ import {
   type SnapZone,
 } from "./window-geometry";
 
-export type WindowKind = "student"; // Phase 1: 학생 요약만
-export type WindowParams = { id: string; title: string; subtitle?: string };
+export type WindowKind = "student" | "route"; // student=요약 peek, route=메뉴 풀화면(iframe)
+export type WindowParams = { id: string; title: string; subtitle?: string; href?: string };
+/** 절반 스냅 직후 반대편 half를 채울 창을 고르게 하는 Snap Assist 상태(런타임). */
+export type SnapAssist = { half: "left" | "right"; originId: string };
 export type Win = {
   id: string;
   kind: WindowKind;
@@ -36,11 +38,13 @@ type State = {
   windows: Record<string, Win>;
   order: string[]; // back→front, 마지막 = 최상단
   focusedId: string | null;
-  bounds: Bounds; // 런타임(미영속) 캔버스 크기
+  bounds: Bounds; // 런타임(미영속) 스테이지(콘텐츠 영역) 크기
+  origin: { left: number; top: number }; // 스테이지 좌상단의 뷰포트 오프셋(레일/헤더 제외)
   snapPreview: SnapZone; // 드래그 중 스냅 미리보기(미영속)
+  snapAssist: SnapAssist | null; // 절반 스냅 후 반대편 채우기 제안(미영속)
 };
 type Actions = {
-  setBounds: (b: Bounds) => void;
+  setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
   setSnapPreview: (z: SnapZone) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
   close: (id: string) => void;
@@ -51,6 +55,8 @@ type Actions = {
   snap: (id: string, zone: Exclude<SnapZone, null>) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
+  assistPick: (id: string) => void; // Snap Assist 카드 선택 → 반대편 half로 스냅
+  dismissAssist: () => void;
   adoptOwner: (owner: string) => void;
 };
 
@@ -62,9 +68,12 @@ export const useWindowStore = create<State & Actions>()(
       order: [],
       focusedId: null,
       bounds: { width: 1280, height: 720 },
+      origin: { left: 0, top: 0 },
       snapPreview: null,
+      snapAssist: null,
 
-      setBounds: (b) => set({ bounds: b }),
+      setStage: ({ left, top, width, height }) =>
+        set({ origin: { left, top }, bounds: { width, height } }),
       setSnapPreview: (z) => set({ snapPreview: z }),
 
       open: (kind, params) => {
@@ -89,7 +98,7 @@ export const useWindowStore = create<State & Actions>()(
           minimized: false,
           maximized: false,
         };
-        set({ windows, order: [...order, id], focusedId: id });
+        set({ windows, order: [...order, id], focusedId: id, snapAssist: null });
       },
 
       close: (id) =>
@@ -101,11 +110,14 @@ export const useWindowStore = create<State & Actions>()(
             windows,
             order,
             focusedId: s.focusedId === id ? (order[order.length - 1] ?? null) : s.focusedId,
+            snapAssist: null,
           };
         }),
 
       focus: (id) =>
-        set((s) => (s.windows[id] ? { order: bringToFront(s.order, id), focusedId: id } : s)),
+        set((s) =>
+          s.windows[id] ? { order: bringToFront(s.order, id), focusedId: id, snapAssist: null } : s,
+        ),
 
       setRect: (id, rect) =>
         set((s) => {
@@ -152,17 +164,22 @@ export const useWindowStore = create<State & Actions>()(
         set((s) => {
           const w = s.windows[id];
           if (!w) return s;
-          return {
-            windows: {
-              ...s.windows,
-              [id]: {
-                ...w,
-                prevRect: w.maximized ? w.prevRect : w.rect,
-                rect: snapTarget(zone, s.bounds)!,
-                maximized: zone === "max",
-              },
+          const windows = {
+            ...s.windows,
+            [id]: {
+              ...w,
+              prevRect: w.maximized ? w.prevRect : w.rect,
+              rect: snapTarget(zone, s.bounds)!,
+              maximized: zone === "max",
             },
           };
+          // 절반 스냅 + 다른 열린(비최소화) 창 있으면 반대편 채우기 제안(Snap Assist)
+          let snapAssist: SnapAssist | null = null;
+          if (zone === "left" || zone === "right") {
+            const hasOther = s.order.some((wid) => wid !== id && !s.windows[wid]?.minimized);
+            if (hasOther) snapAssist = { half: zone === "left" ? "right" : "left", originId: id };
+          }
+          return { windows, snapAssist };
         }),
 
       minimize: (id) =>
@@ -173,6 +190,7 @@ export const useWindowStore = create<State & Actions>()(
           return {
             windows: { ...s.windows, [id]: { ...w, minimized: true } },
             focusedId: rest[rest.length - 1] ?? null,
+            snapAssist: null,
           };
         }),
 
@@ -184,8 +202,33 @@ export const useWindowStore = create<State & Actions>()(
             windows: { ...s.windows, [id]: { ...w, minimized: false } },
             order: bringToFront(s.order, id),
             focusedId: id,
+            snapAssist: null,
           };
         }),
+
+      assistPick: (id) =>
+        set((s) => {
+          const assist = s.snapAssist;
+          const w = s.windows[id];
+          if (!assist || !w) return { snapAssist: null };
+          return {
+            windows: {
+              ...s.windows,
+              [id]: {
+                ...w,
+                prevRect: w.maximized ? w.prevRect : w.rect,
+                rect: snapTarget(assist.half, s.bounds)!,
+                maximized: false,
+                minimized: false,
+              },
+            },
+            order: bringToFront(s.order, id),
+            focusedId: id,
+            snapAssist: null,
+          };
+        }),
+
+      dismissAssist: () => set({ snapAssist: null }),
 
       // 복원 직후 호출: 다른 계정/테넌트 레이아웃이면 초기화(메타 누수 방지), 같으면 viewport clamp.
       adoptOwner: (owner) =>

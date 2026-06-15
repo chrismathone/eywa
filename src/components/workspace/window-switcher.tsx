@@ -17,7 +17,7 @@ export function WindowSwitcher() {
   return (
     <div
       data-slot="window-switcher"
-      className="border-line bg-card/95 shadow-modal pointer-events-auto fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-2 py-1.5 backdrop-blur"
+      className="border-line bg-card/95 shadow-modal pointer-events-auto absolute bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-2 py-1.5 backdrop-blur"
     >
       {list.map((w) => {
         const active = w.id === focusedId && !w.minimized;

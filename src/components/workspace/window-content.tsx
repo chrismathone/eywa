@@ -3,11 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import type { StudentSummary } from "@/features/students/server/queries";
 import { StudentSummaryView } from "@/features/students/components/student-summary-view";
+import { RouteWindow } from "./route-window";
 import type { Win } from "./window-store";
 
-/** kind → 창 본문. Phase 1은 student(요약)만. 무거운 화면은 요약+풀페이지 링크. */
+/** kind → 창 본문. student=요약 peek, route=메뉴 풀화면(크롬리스 iframe). */
 export function WindowContent({ win }: { win: Win }) {
   if (win.kind === "student") return <StudentWindow win={win} />;
+  if (win.kind === "route") return <RouteWindow win={win} />;
   return null;
 }
 

@@ -35,7 +35,9 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     posRef.current = { x, y };
     const el = elRef.current;
     if (el) el.style.transform = `translate(${x}px, ${y}px)`;
-    const zone = snapZoneForPoint(e.clientX, e.clientY, useWindowStore.getState().bounds);
+    // 스냅 감지는 스테이지 로컬 좌표로(뷰포트 포인터 − 스테이지 오프셋)
+    const { bounds, origin } = useWindowStore.getState();
+    const zone = snapZoneForPoint(e.clientX - origin.left, e.clientY - origin.top, bounds);
     if (zone !== zoneRef.current) {
       zoneRef.current = zone;
       useWindowStore.getState().setSnapPreview(zone);

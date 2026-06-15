@@ -18,6 +18,20 @@ import { NextResponse, type NextRequest } from "next/server";
 // Paths that the marketing landing serves — accessible without auth
 const PUBLIC_PATHS = new Set(["/"]);
 
+/**
+ * Stage Manager가 메뉴를 임베드할 때 붙이는 ?embed=1을 x-embed 요청 헤더로 승격.
+ * (shell)/layout이 await headers()로 읽어 사이드바/헤더 없는 크롬리스로 렌더한다.
+ * 레이아웃은 searchParams를 못 받으므로 헤더가 정답(Next16 문서 권장).
+ */
+function nextWithEmbed(request: NextRequest) {
+  if (request.nextUrl.searchParams.get("embed") === "1") {
+    const headers = new Headers(request.headers);
+    headers.set("x-embed", "1");
+    return NextResponse.next({ request: { headers } });
+  }
+  return NextResponse.next({ request });
+}
+
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
@@ -50,5 +64,5 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next({ request });
+  return nextWithEmbed(request);
 }
