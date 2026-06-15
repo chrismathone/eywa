@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { Minus, Square, Copy, X } from "lucide-react";
 import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
@@ -55,15 +56,43 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
           onPointerMove={drag.onPointerMove}
           onPointerUp={drag.onPointerUp}
           onDoubleClick={() => toggleMax(win.id)}
-          className="bg-bg-soft border-line flex h-9 shrink-0 cursor-grab touch-none items-center gap-2 border-b px-3 select-none active:cursor-grabbing"
+          className="bg-bg-soft border-line flex h-9 shrink-0 cursor-grab touch-none items-center gap-2 border-b pr-1 pl-3 select-none active:cursor-grabbing"
         >
-          <span className="flex shrink-0 gap-1.5">
-            <button type="button" aria-label="닫기" onPointerDown={(e) => e.stopPropagation()} onClick={() => close(win.id)} className="bg-danger/80 hover:bg-danger size-3 rounded-full transition" />
-            <button type="button" aria-label="최소화" onPointerDown={(e) => e.stopPropagation()} onClick={() => minimize(win.id)} className="bg-amber/80 hover:bg-amber size-3 rounded-full transition" />
-            <button type="button" aria-label={win.maximized ? "창 복원" : "최대화"} onPointerDown={(e) => e.stopPropagation()} onClick={() => toggleMax(win.id)} className="bg-primary/80 hover:bg-primary size-3 rounded-full transition" />
-          </span>
           <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{win.params.title}</span>
           {win.params.subtitle ? <span className="text-text-faint min-w-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
+          <span className="flex-1" />
+
+          {/* Windows식 창 컨트롤(우상단): 최소화 _ / 최대화·복원 □ / 닫기 ✕ */}
+          <span
+            className="flex shrink-0 items-center"
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="최소화"
+              onClick={() => minimize(win.id)}
+              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
+            >
+              <Minus size={15} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              aria-label={win.maximized ? "이전 크기로" : "최대화"}
+              onClick={() => toggleMax(win.id)}
+              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
+            >
+              {win.maximized ? <Copy size={13} strokeWidth={2} /> : <Square size={13} strokeWidth={2} />}
+            </button>
+            <button
+              type="button"
+              aria-label="닫기"
+              onClick={() => close(win.id)}
+              className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[3px] transition hover:text-white"
+            >
+              <X size={16} strokeWidth={2} />
+            </button>
+          </span>
         </div>
 
         {/* 본문 */}
