@@ -35,6 +35,30 @@ export function windowId(kind: WindowKind, paramId: string) {
   return `${kind}:${paramId}`;
 }
 
+/** 두 사각형이 (반올림 오차 내) 거의 같은지 — 스마트 코너 스냅의 "절반 차지 창" 판정용. */
+function rectsClose(a: Rect, b: Rect, tol = 6) {
+  return (
+    Math.abs(a.x - b.x) <= tol &&
+    Math.abs(a.y - b.y) <= tol &&
+    Math.abs(a.w - b.w) <= tol &&
+    Math.abs(a.h - b.h) <= tol
+  );
+}
+
+// 코너 → 같은 쪽(left/right)과 같은 쪽 반대 1/4(complement)
+const CORNER_SIDE: Record<"tl" | "tr" | "bl" | "br", "left" | "right"> = {
+  tl: "left",
+  bl: "left",
+  tr: "right",
+  br: "right",
+};
+const CORNER_COMPLEMENT: Record<"tl" | "tr" | "bl" | "br", "tl" | "tr" | "bl" | "br"> = {
+  tl: "bl",
+  bl: "tl",
+  tr: "br",
+  br: "tr",
+};
+
 type State = {
   owner: string | null;
   windows: Record<string, Win>;
@@ -44,10 +68,12 @@ type State = {
   origin: { left: number; top: number }; // 스테이지 좌상단의 뷰포트 오프셋(레일/헤더 제외)
   snapPreview: SnapZone; // 드래그 중 스냅 미리보기(미영속)
   snapAssist: SnapAssist | null; // 절반 스냅 후 반대편 채우기 제안(미영속)
+  draggingId: string | null; // 드래그/리사이즈 중인 창(iframe 숨겨 부드럽게, 미영속)
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
   setSnapPreview: (z: SnapZone) => void;
+  setDragging: (id: string | null) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
   close: (id: string) => void;
   focus: (id: string) => void;
@@ -74,10 +100,12 @@ export const useWindowStore = create<State & Actions>()(
       origin: { left: 0, top: 0 },
       snapPreview: null,
       snapAssist: null,
+      draggingId: null,
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
       setSnapPreview: (z) => set({ snapPreview: z }),
+      setDragging: (id) => set({ draggingId: id }),
 
       open: (kind, params) => {
         const id = windowId(kind, params.id);
@@ -189,6 +217,20 @@ export const useWindowStore = create<State & Actions>()(
               maximized: zone === "max",
             },
           };
+          // 스마트 코너 스냅(Windows식): 모서리로 스냅 시, 같은 쪽 절반을 통째 차지한 창이
+          // 있으면 반대 1/4로 강등 → 1:1 분할 상태에서 새 창을 우상/우하로 끌면 왼1·오른2 완성.
+          if (zone === "tl" || zone === "tr" || zone === "bl" || zone === "br") {
+            const side = CORNER_SIDE[zone];
+            const halfRect = snapTarget(side, s.bounds)!;
+            const compRect = snapTarget(CORNER_COMPLEMENT[zone], s.bounds)!;
+            const victim = s.order.find(
+              (wid) => wid !== id && !s.windows[wid]?.minimized && rectsClose(s.windows[wid].rect, halfRect),
+            );
+            if (victim) {
+              const vw = s.windows[victim];
+              windows[victim] = { ...vw, prevRect: vw.rect, rect: compRect, maximized: false };
+            }
+          }
           // 절반 스냅 + 다른 열린(비최소화) 창 있으면 반대편 채우기 제안(Snap Assist)
           let snapAssist: SnapAssist | null = null;
           if (zone === "left" || zone === "right") {

@@ -21,6 +21,7 @@ export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | n
       s.focus(id);
       startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect, handle };
       rectRef.current = w.rect;
+      s.setDragging(id); // 리사이즈 중 iframe 숨김
       e.currentTarget.setPointerCapture(e.pointerId);
       e.stopPropagation();
       e.preventDefault();
@@ -51,6 +52,7 @@ export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | n
       el.style.width = `${fr.w}px`;
       el.style.height = `${fr.h}px`;
     }
+    useWindowStore.getState().setDragging(null);
     startRef.current = null;
     rectRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);

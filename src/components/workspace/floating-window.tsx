@@ -28,12 +28,13 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
   const minimize = useWindowStore((s) => s.minimize);
   const toggleMax = useWindowStore((s) => s.toggleMax);
   const focus = useWindowStore((s) => s.focus);
+  const dragging = useWindowStore((s) => s.draggingId === win.id);
 
   // 최소화는 언마운트하지 않고 숨김(display:none) — iframe 문서/스크롤 상태 보존(진짜 멀티태스킹).
   return (
     <div
       ref={outerRef}
-      className={`pointer-events-auto absolute top-0 left-0 will-change-transform ${win.minimized ? "hidden" : ""}`}
+      className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized ? "hidden" : ""}`}
       style={{ transform: `translate(${win.rect.x}px, ${win.rect.y}px)`, width: win.rect.w, height: win.rect.h, zIndex: z }}
       onPointerDown={() => focus(win.id)}
     >

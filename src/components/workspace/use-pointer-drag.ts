@@ -28,6 +28,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect };
     posRef.current = { x: w.rect.x, y: w.rect.y };
     zoneRef.current = null;
+    s.setDragging(id); // 드래그 중 iframe 숨김 → 부드러운 이동
     e.currentTarget.setPointerCapture(e.pointerId);
     e.preventDefault();
   }
@@ -66,6 +67,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
       el.style.width = `${fr.w}px`;
       el.style.height = `${fr.h}px`;
     }
+    store.setDragging(null);
     startRef.current = null;
     zoneRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
