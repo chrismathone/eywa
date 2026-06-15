@@ -550,6 +550,43 @@ set(email,'…'); set(pw,'…'); email.closest('form').requestSubmit();
 ```
 autofill(#34)도 이 방식이면 덮어쓰니 무관. 버튼·드롭다운 클릭도 native `element.click()`이 안정적(예: 사용자 메뉴 → 로그아웃).
 
+### 44. Stage Manager 배경 교체 — `router.push` 직후 pathname 비동기 레이스
+플로팅 창 ⇄ 배경(메인 프레임 라우트) 1:1 맞교환 버튼(`SendToBack`). 처음엔 옛 배경 라우트를
+`usePathname()`로 읽었는데, `router.push`가 비동기라 전환 완료 전 **연타하면 pathname이 옛 값** →
+엉뚱한 배경 탭(유령 `route:admin` 등) 생성.
+
+**해결**: 배경 라우트를 store에 명시 필드(`background`)로 두고 캔버스가 pathname과 동기,
+`swapToBackground`는 그 값을 결정적으로 읽고 갱신. + 전환(퇴장 애니메이션) 중 버튼 `disabled`.
+**교훈**: 비동기 네비 직후 `usePathname()`에 의존하지 말 것 — 필요한 상태는 store에 명시적으로 들고 동기화.
+
+### 45. 스냅/타일 "해제 시 원래 크기 복원" — applyLayout이 prevRect를 지웠음
+Snap Layouts 바·Snap Assist 타일링(`applyLayout`/`applyDragLayout`)이 `prevRect: undefined`로
+자유(레이아웃 전) 크기를 **지워버려**, 드래그로 빼도 원래 작은 크기로 못 돌아갔다(최대화만 복원됐음).
+
+**해결**: `Win`에 `snapped` 플래그 추가 → 레이아웃/스냅 진입 시 원본 rect를 `prevRect`에 보존
+(이미 snapped/maximized면 최초 원본 유지), 드래그 시작 시 `restoreUnderPointer`(기존
+`unmaximizeUnderPointer`를 snapped까지 일반화)로 커서 아래 복원. 수동 이동/리사이즈는 snapped 해제.
+
+### 46. 드래그가 드롭 때만 clamp → 타이틀 가림 + 스냅 바 과민
+- 타이틀바 드래그는 이동 중 clamp 없이 **drop에서만** clamp → 타이틀바를 헤더 위로 끌어올려 가릴 수
+  있었다. `onPointerMove`에서 `y = Math.max(0, …)`로 상단 클램프(포인터 sy는 계속 위로 갈 수 있어 스냅 바 소환엔 무영향).
+- 스냅 레이아웃 바가 `TOP_BAND=150`으로 너무 빨리 떠 "선택만 해도 뜨는" 느낌 → **히스테리시스**
+  (소환 ≤44px, 유지 ≤160px)로 "상단에 올렸을 때만" 노출.
+
+### 47. 창 애니메이션 — 지연 언마운트 + 모션 토글 + TS 클로저 narrowing 소실
+- 닫기/최소화/배경교체는 React가 **즉시 언마운트**라 퇴장 애니메이션이 없었다 → `exiting` 상태 set →
+  150ms 후 실제 동작 실행(`runExit`). tw-animate `animate-out fade-out-0 zoom-out-95`.
+- **모션 토글**: `usePrefs`(zustand persist "eywa-prefs") + `motionDisabled()`=OS reduce-motion **OR**
+  설정 OFF. 훅(비-React)은 `usePrefs.getState()` 임의 읽기로 게이트, 컴포넌트는 구독으로 반응.
+  설정 UI는 UserMenu의 `DropdownMenuCheckboxItem`(`closeOnClick={false}`로 토글 시 메뉴 유지).
+- 가드로 좁힌 타입(`win.params.href`)이 `runExit(() => …)` **클로저 안에서 `string|undefined`로 풀림**
+  → 상수로 캡처(`const href = win.params.href`) 후 사용.
+
+### 48. 커밋 분할 — 결합된 변경은 같은 커밋, 파일 단위로만 쪼갬
+여러 기능이 같은 파일을 건드리면(`window-store`·`floating-window` 등) **파일 단위로만 분할 가능**
+(비대화형 환경은 `git add -p` 불가). 또 강결합 변경(예: `avatar.tsx` 삭제 ↔ `user-menu`의 avatar
+import 제거)은 **반드시 같은 커밋**에 — 안 그러면 중간 커밋이 빌드 깨짐.
+
 ---
 
 ## 마이그레이션 & 시드 흐름
@@ -679,3 +716,5 @@ production 반응속도가 느림. 의심 가는 병목:
 6. **Gemini Flash 통합** — fast-tier 작업이 생기면 비용 절감
 7. **시드 확장** — 학생 30→90~248명 (페이지네이션·검색 가치 명확화). Phase 7에서 시드 구조만 잡고 데이터는 그대로 둠
 8. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
+9. **검색 데이터 색인** — 커맨드 팰릿은 현재 정적 메뉴(NAV_GROUPS)만 클라 필터(입력 시 매칭). 학생·수업·상담·수납 등 **데이터 검색**은 **Postgres FTS(tsvector+GIN, RLS 통과 RPC) 방향 확정** — 미구현(마이그레이션 포함 별도 워크스트림, 첫 대상 학생·수업·상담).
+10. **배경 탭 스택(다중 배경)** — 현재 1:1 맞교환만(`background` 단일). 다중 탭은 배경 전환 UI(하단 스트립 등) 필요해 보류 — 1:1로 충분한지 실사용 보고 결정.
