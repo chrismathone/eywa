@@ -5,8 +5,18 @@
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Bounds = { width: number; height: number };
 export type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
-// 절반(left/right)·최대화(max)·1/4 모서리(tl/tr/bl/br)
-export type SnapZone = "left" | "right" | "max" | "tl" | "tr" | "bl" | "br" | null;
+// 절반(left/right/top/bottom)·최대화(max)·1/4 모서리(tl/tr/bl/br)
+export type SnapZone =
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "max"
+  | "tl"
+  | "tr"
+  | "bl"
+  | "br"
+  | null;
 
 export const MIN_W = 360;
 export const MIN_H = 280;
@@ -39,6 +49,10 @@ export function snapTarget(zone: SnapZone, bounds: Bounds): Rect | null {
       return { x: 0, y: 0, w: hw, h: bounds.height };
     case "right":
       return { x: bounds.width - hw, y: 0, w: hw, h: bounds.height };
+    case "top":
+      return { x: 0, y: 0, w: bounds.width, h: hh };
+    case "bottom":
+      return { x: 0, y: bounds.height - hh, w: bounds.width, h: hh };
     case "max":
       return { x: 0, y: 0, w: bounds.width, h: bounds.height };
     case "tl":
@@ -56,8 +70,8 @@ export function snapTarget(zone: SnapZone, bounds: Bounds): Rect | null {
 
 /**
  * 드래그 포인터가 캔버스 가장자리 근처면 스냅 존 반환.
- * 우선순위: 모서리(1/4) > 상단(최대화) > 좌/우(절반). 좌/우 가장자리에 닿은 채
- * 상·하 corner 밴드 안이면 1/4, 가운데면 절반.
+ * 우선순위: 모서리(1/4) > 상/하/좌/우 가장자리(절반). 좌/우 가장자리에 닿은 채
+ * 상·하 corner 밴드 안이면 1/4, 가운데면 절반. (최대화는 드래그 아닌 버튼/더블클릭)
  */
 export function snapZoneForPoint(
   px: number,
@@ -72,7 +86,8 @@ export function snapZoneForPoint(
   if (nearRight && py <= corner) return "tr";
   if (nearLeft && py >= bounds.height - corner) return "bl";
   if (nearRight && py >= bounds.height - corner) return "br";
-  if (py <= edge) return "max";
+  if (py <= edge) return "top";
+  if (py >= bounds.height - edge) return "bottom";
   if (nearLeft) return "left";
   if (nearRight) return "right";
   return null;

@@ -53,6 +53,8 @@ describe("snapTarget", () => {
   it("좌 절반", () => expect(snapTarget("left", B)).toEqual({ x: 0, y: 0, w: 600, h: 800 }));
   it("우 절반", () => expect(snapTarget("right", B)).toEqual({ x: 600, y: 0, w: 600, h: 800 }));
   it("최대화", () => expect(snapTarget("max", B)).toEqual({ x: 0, y: 0, w: 1200, h: 800 }));
+  it("상 절반", () => expect(snapTarget("top", B)).toEqual({ x: 0, y: 0, w: 1200, h: 400 }));
+  it("하 절반", () => expect(snapTarget("bottom", B)).toEqual({ x: 0, y: 400, w: 1200, h: 400 }));
   it("좌상 1/4", () => expect(snapTarget("tl", B)).toEqual({ x: 0, y: 0, w: 600, h: 400 }));
   it("우상 1/4", () => expect(snapTarget("tr", B)).toEqual({ x: 600, y: 0, w: 600, h: 400 }));
   it("좌하 1/4", () => expect(snapTarget("bl", B)).toEqual({ x: 0, y: 400, w: 600, h: 400 }));
@@ -61,7 +63,8 @@ describe("snapTarget", () => {
 });
 
 describe("snapZoneForPoint", () => {
-  it("상단 중앙=max", () => expect(snapZoneForPoint(600, 5, B)).toBe("max"));
+  it("상단 중앙=top(절반)", () => expect(snapZoneForPoint(600, 5, B)).toBe("top"));
+  it("하단 중앙=bottom(절반)", () => expect(snapZoneForPoint(600, 795, B)).toBe("bottom"));
   it("좌 중앙=left", () => expect(snapZoneForPoint(5, 400, B)).toBe("left"));
   it("우 중앙=right", () => expect(snapZoneForPoint(1195, 400, B)).toBe("right"));
   it("중앙=null", () => expect(snapZoneForPoint(600, 400, B)).toBeNull());
