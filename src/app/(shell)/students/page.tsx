@@ -3,11 +3,11 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { StudentQuickPopover } from "@/components/student-quick-popover";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentsList, getTeacherOptions } from "@/features/students/server/queries";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
+import { StudentQuickPanel } from "./_components/student-quick-panel";
 
 export const metadata = { title: "학생목록 — eywa" };
 
@@ -215,7 +215,7 @@ export default async function StudentsPage({
                 return (
                   <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors">
                     <td className="px-5 py-3">
-                      <StudentQuickPopover
+                      <StudentQuickPanel
                         student={{
                           id: s.id,
                           name: s.name,
@@ -228,13 +228,11 @@ export default async function StudentsPage({
                           enrolledAt: s.enrolledAt,
                         }}
                       >
-                        <Link href={`/students/${s.id}`} className="flex items-center gap-2.5">
-                          <Initial name={s.name} color={colorForGrade(s.grade)} size="md" />
-                          <span className="text-foreground text-[13px] font-bold hover:underline">
-                            {s.name}
-                          </span>
-                        </Link>
-                      </StudentQuickPopover>
+                        <Initial name={s.name} color={colorForGrade(s.grade)} size="md" />
+                        <span className="text-foreground text-[13px] font-bold hover:underline">
+                          {s.name}
+                        </span>
+                      </StudentQuickPanel>
                     </td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.grade ?? "—"}</td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.school ?? "—"}</td>

@@ -537,3 +537,73 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return events;
 }
+
+// ────────────────────── QuickPanel 경량 요약 ──────────────────────
+
+export type StudentSummary = {
+  id: string;
+  name: string;
+  school: string | null;
+  grade: string | null;
+  status: string;
+  primaryTeacherName: string | null;
+  attendance: {
+    rate: number;
+    total: number;
+    present: number;
+    absent: number;
+    late: number;
+  };
+  enrollments: { className: string; subject: string; onHold: boolean }[];
+  billing: {
+    unpaidCount: number;
+    overdueCount: number;
+    latestPeriod: string | null;
+    latestStatus: string | null;
+  };
+};
+
+/**
+ * 학생 QuickPanel(우측 오버레이)용 경량 요약. 기존 server-only 쿼리들을
+ * Promise.all로 합쳐 한 번에 반환. 리스트 로드엔 영향 없고(클릭 시 on-demand),
+ * route handler(/api/students/[id]/summary)에서 호출된다.
+ */
+export async function getStudentSummary(studentId: string): Promise<StudentSummary | null> {
+  const [detail, attendance, enrollments, invoices] = await Promise.all([
+    getStudentById(studentId),
+    getStudentAttendanceStats(studentId, 30),
+    getStudentEnrollments(studentId),
+    getStudentInvoices(studentId),
+  ]);
+  if (!detail) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const unpaid = invoices.filter((i) => i.status !== "paid");
+  const overdue = unpaid.filter((i) => i.dueDate != null && i.dueDate < today);
+  const latest = invoices[0] ?? null; // period desc 정렬이라 [0]이 최신
+
+  return {
+    id: detail.id,
+    name: detail.name,
+    school: detail.school,
+    grade: detail.grade,
+    status: detail.status,
+    primaryTeacherName: detail.primaryTeacherName,
+    attendance: {
+      rate: attendance.rate,
+      total: attendance.total,
+      present: attendance.present,
+      absent: attendance.absent,
+      late: attendance.late,
+    },
+    enrollments: enrollments
+      .filter((e) => e.endDate == null)
+      .map((e) => ({ className: e.className, subject: e.subject, onHold: e.onHold })),
+    billing: {
+      unpaidCount: unpaid.length,
+      overdueCount: overdue.length,
+      latestPeriod: latest?.period ?? null,
+      latestStatus: latest?.status ?? null,
+    },
+  };
+}
