@@ -2,7 +2,17 @@
 
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useWindowStore } from "./window-store";
-import { snapZoneForPoint, type Rect, type SnapZone } from "./window-geometry";
+import { snapBarHitTest, snapZoneForPoint, type LayoutTemplate, type Rect, type SnapZone } from "./window-geometry";
+import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
+
+type DragLayout = { template: LayoutTemplate; slot: number };
+function openCount() {
+  const s = useWindowStore.getState();
+  return s.order.filter((id) => !s.windows[id]?.minimized).length;
+}
+function sameLayout(a: DragLayout | null, b: DragLayout | null) {
+  return a?.template === b?.template && a?.slot === b?.slot;
+}
 
 /**
  * 타이틀바 드래그 — 이동 중에는 store를 안 건드리고 ref 엘리먼트의 transform만
@@ -13,6 +23,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
   const startRef = useRef<{ px: number; py: number; rect: Rect } | null>(null);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const zoneRef = useRef<SnapZone>(null);
+  const layoutRef = useRef<DragLayout | null>(null);
 
   function onPointerDown(e: RPointerEvent<HTMLElement>) {
     if (e.button !== 0) return;
@@ -41,12 +52,32 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     posRef.current = { x, y };
     const el = elRef.current;
     if (el) el.style.transform = `translate(${x}px, ${y}px)`;
-    // 스냅 감지는 스테이지 로컬 좌표로(뷰포트 포인터 − 스테이지 오프셋)
-    const { bounds, origin } = useWindowStore.getState();
-    const zone = snapZoneForPoint(e.clientX - origin.left, e.clientY - origin.top, bounds);
-    if (zone !== zoneRef.current) {
-      zoneRef.current = zone;
-      useWindowStore.getState().setSnapPreview(zone);
+    // 스테이지 로컬 좌표(뷰포트 포인터 − 스테이지 오프셋)
+    const store = useWindowStore.getState();
+    const { bounds, origin } = store;
+    const sx = e.clientX - origin.left;
+    const sy = e.clientY - origin.top;
+    // 스냅 레이아웃 바 우선 → 있으면 바 슬롯, 없으면 가장자리/모서리 존
+    const hit = snapBarHitTest(sx, sy, bounds, openCount());
+    if (hit) {
+      if (!sameLayout(layoutRef.current, hit)) {
+        layoutRef.current = hit;
+        store.setDragLayout(hit);
+      }
+      if (zoneRef.current !== null) {
+        zoneRef.current = null;
+        store.setSnapPreview(null);
+      }
+    } else {
+      if (layoutRef.current) {
+        layoutRef.current = null;
+        store.setDragLayout(null);
+      }
+      const zone = snapZoneForPoint(sx, sy, bounds);
+      if (zone !== zoneRef.current) {
+        zoneRef.current = zone;
+        store.setSnapPreview(zone);
+      }
     }
   }
 
@@ -54,15 +85,19 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     const start = startRef.current;
     if (!start) return;
     const store = useWindowStore.getState();
+    const layout = layoutRef.current;
     const zone = zoneRef.current;
-    if (zone) store.snap(id, zone);
+    if (layout) store.applyDragLayout(id, layout.template, layout.slot);
+    else if (zone) store.snap(id, zone);
     else store.setRect(id, { ...start.rect, x: posRef.current.x, y: posRef.current.y });
     store.setSnapPreview(null);
-    // 커밋된 rect로 transform/size 강제 동기화. clamp 결과가 직전 rect와 같으면 React가
-    // inline style을 다시 안 써서 드래그 중 imperative transform이 남는 desync를 차단.
+    store.setDragLayout(null);
+    // 글라이드 레시피: 커밋된 rect로 transition 켠 채 imperative 적용 → 드롭→최종 애니메이트,
+    // 항상 finalRect를 써서 desync(불변 rect 시 잔존) 없음. 제자리 드롭은 동일값이라 무애니.
     const el = elRef.current;
     const fr = useWindowStore.getState().windows[id]?.rect;
     if (el && fr) {
+      el.style.transition = prefersReducedMotion() ? "none" : WINDOW_TRANSITION;
       el.style.transform = `translate(${fr.x}px, ${fr.y}px)`;
       el.style.width = `${fr.w}px`;
       el.style.height = `${fr.h}px`;
@@ -70,6 +105,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     store.setDragging(null);
     startRef.current = null;
     zoneRef.current = null;
+    layoutRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
   }
 

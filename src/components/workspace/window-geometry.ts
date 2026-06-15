@@ -131,6 +131,101 @@ export function layoutSlots(
   return slots.map((r) => clampRect(r, bounds));
 }
 
+// ── Snap Layouts 바 (Windows 11식, 드래그 중 상단 레이아웃 선택) ──────────────
+type Frac = { x: number; y: number; w: number; h: number };
+
+/** 템플릿 → 고정방향 분수 슬롯(0~1). 좌=좌, 1+2=좌1·우2. clamp 없음(바·미리보기 공용). */
+export function templateFractions(t: LayoutTemplate): Frac[] {
+  if (t === "split") {
+    return [
+      { x: 0, y: 0, w: 0.5, h: 1 },
+      { x: 0.5, y: 0, w: 0.5, h: 1 },
+    ];
+  }
+  if (t === "stack") {
+    return [
+      { x: 0, y: 0, w: 0.5, h: 1 },
+      { x: 0.5, y: 0, w: 0.5, h: 0.5 },
+      { x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
+    ];
+  }
+  return [
+    { x: 0, y: 0, w: 1 / 3, h: 1 },
+    { x: 1 / 3, y: 0, w: 1 / 3, h: 1 },
+    { x: 2 / 3, y: 0, w: 1 / 3, h: 1 },
+  ];
+}
+
+/** 분수 슬롯 × bounds → 실제 rect(clamp). */
+export function templateSlots(t: LayoutTemplate, bounds: Bounds): Rect[] {
+  return templateFractions(t).map((f) =>
+    clampRect({ x: f.x * bounds.width, y: f.y * bounds.height, w: f.w * bounds.width, h: f.h * bounds.height }, bounds),
+  );
+}
+
+/** 열린 창 수에 맞는 바 템플릿 목록. */
+export function snapBarTemplates(count: number): LayoutTemplate[] {
+  if (count >= 3) return ["split", "stack", "thirds"];
+  if (count === 2) return ["split"];
+  return [];
+}
+
+const BAR = { cell: 92, diagH: 52, gap: 10, padX: 10, padY: 8, labelH: 16, top: 14 };
+
+export type SnapBar = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  items: { template: LayoutTemplate; box: Rect; cells: Frac[] }[];
+};
+
+/** 상단 중앙 스냅 레이아웃 바의 기하(스테이지 좌표). 렌더·히트테스트 단일 소스. count<2면 null. */
+export function snapBar(bounds: Bounds, count: number): SnapBar | null {
+  const templates = snapBarTemplates(count);
+  const n = templates.length;
+  if (n === 0) return null;
+  const { cell, diagH, gap, padX, padY, labelH, top } = BAR;
+  const w = n * cell + (n - 1) * gap + padX * 2;
+  const h = diagH + labelH + padY * 2 + 4;
+  const x = Math.round((bounds.width - w) / 2);
+  const y = top;
+  const items = templates.map((t, i) => {
+    const bx = x + padX + i * (cell + gap);
+    const by = y + padY;
+    const box = { x: bx, y: by, w: cell, h: diagH };
+    const cells = templateFractions(t).map((f) => ({
+      x: bx + f.x * cell,
+      y: by + f.y * diagH,
+      w: f.w * cell,
+      h: f.h * diagH,
+    }));
+    return { template: t, box, cells };
+  });
+  return { x, y, w, h, items };
+}
+
+/** 스테이지 로컬 포인터가 바의 어느 템플릿·슬롯 위인지(없으면 null). */
+export function snapBarHitTest(
+  px: number,
+  py: number,
+  bounds: Bounds,
+  count: number,
+): { template: LayoutTemplate; slot: number } | null {
+  const bar = snapBar(bounds, count);
+  if (!bar) return null;
+  if (px < bar.x || px > bar.x + bar.w || py < bar.y || py > bar.y + bar.h) return null;
+  for (const item of bar.items) {
+    for (let s = 0; s < item.cells.length; s++) {
+      const c = item.cells[s];
+      if (px >= c.x && px <= c.x + c.w && py >= c.y && py <= c.y + c.h) {
+        return { template: item.template, slot: s };
+      }
+    }
+  }
+  return null;
+}
+
 /** 8방향 핸들 리사이즈 — 델타 적용 + 최소크기(이동변 보정) + 캔버스 clamp. */
 export function resizeRect(
   rect: Rect,

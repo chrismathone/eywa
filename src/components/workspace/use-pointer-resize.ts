@@ -3,6 +3,7 @@
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useWindowStore } from "./window-store";
 import { resizeRect, type Rect, type ResizeHandle } from "./window-geometry";
+import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
 
 /**
  * 8방향 리사이즈 — 드래그와 동일하게 이동 중엔 ref transform/width/height만 직접
@@ -44,10 +45,11 @@ export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | n
   function onPointerUp(e: RPointerEvent<HTMLElement>) {
     if (!startRef.current || !rectRef.current) return;
     useWindowStore.getState().setRect(id, rectRef.current);
-    // 커밋된 rect로 강제 동기화(드래그와 동일한 desync 차단).
+    // 글라이드 레시피: 커밋된 rect로 transition 켠 채 적용(desync 차단 + 부드러운 마무리).
     const el = elRef.current;
     const fr = useWindowStore.getState().windows[id]?.rect;
     if (el && fr) {
+      el.style.transition = prefersReducedMotion() ? "none" : WINDOW_TRANSITION;
       el.style.transform = `translate(${fr.x}px, ${fr.y}px)`;
       el.style.width = `${fr.w}px`;
       el.style.height = `${fr.h}px`;

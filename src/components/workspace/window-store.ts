@@ -9,6 +9,7 @@ import {
   layoutSlots,
   resizeRect,
   snapTarget,
+  templateSlots,
   type Bounds,
   type LayoutTemplate,
   type Rect,
@@ -69,11 +70,14 @@ type State = {
   snapPreview: SnapZone; // 드래그 중 스냅 미리보기(미영속)
   snapAssist: SnapAssist | null; // 절반 스냅 후 반대편 채우기 제안(미영속)
   draggingId: string | null; // 드래그/리사이즈 중인 창(iframe 숨겨 부드럽게, 미영속)
+  dragLayout: { template: LayoutTemplate; slot: number } | null; // 드래그 중 스냅 레이아웃 바 호버 슬롯
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
   setSnapPreview: (z: SnapZone) => void;
   setDragging: (id: string | null) => void;
+  setDragLayout: (v: { template: LayoutTemplate; slot: number } | null) => void;
+  applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
   close: (id: string) => void;
   focus: (id: string) => void;
@@ -101,11 +105,40 @@ export const useWindowStore = create<State & Actions>()(
       snapPreview: null,
       snapAssist: null,
       draggingId: null,
+      dragLayout: null,
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
       setSnapPreview: (z) => set({ snapPreview: z }),
       setDragging: (id) => set({ draggingId: id }),
+      setDragLayout: (v) => set({ dragLayout: v }),
+
+      // 스냅 레이아웃 바 드롭: 지정 슬롯=드래그 창, 나머지 슬롯=다른 열린 창(order순), 초과=최소화.
+      applyDragLayout: (id, template, slot) =>
+        set((s) => {
+          if (!s.windows[id]) return { dragLayout: null };
+          const slots = templateSlots(template, s.bounds);
+          const others = s.order.filter((wid) => wid !== id && !s.windows[wid]?.minimized);
+          const windows = { ...s.windows };
+          let oi = 0;
+          slots.forEach((rect, si) => {
+            const wid = si === slot ? id : others[oi++];
+            if (!wid || !windows[wid]) return;
+            windows[wid] = { ...windows[wid], rect, maximized: false, minimized: false, prevRect: undefined };
+          });
+          for (; oi < others.length; oi++) {
+            const wid = others[oi];
+            if (windows[wid]) windows[wid] = { ...windows[wid], minimized: true };
+          }
+          return {
+            windows,
+            order: bringToFront(s.order, id),
+            focusedId: id,
+            dragLayout: null,
+            snapPreview: null,
+            snapAssist: null,
+          };
+        }),
 
       open: (kind, params) => {
         const id = windowId(kind, params.id);

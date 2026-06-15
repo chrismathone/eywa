@@ -6,6 +6,7 @@ import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
+import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
 import type { ResizeHandle } from "./window-geometry";
 
 const HANDLES: { h: ResizeHandle; cls: string }[] = [
@@ -35,7 +36,14 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
     <div
       ref={outerRef}
       className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized ? "hidden" : ""}`}
-      style={{ transform: `translate(${win.rect.x}px, ${win.rect.y}px)`, width: win.rect.w, height: win.rect.h, zIndex: z }}
+      style={{
+        transform: `translate(${win.rect.x}px, ${win.rect.y}px)`,
+        width: win.rect.w,
+        height: win.rect.h,
+        zIndex: z,
+        // 드래그 중엔 transition 0(1:1 추종), 그 외 store rect 변경(스냅/배치/최대화)은 글라이드
+        transition: dragging || prefersReducedMotion() ? "none" : WINDOW_TRANSITION,
+      }}
       onPointerDown={() => focus(win.id)}
     >
       <div

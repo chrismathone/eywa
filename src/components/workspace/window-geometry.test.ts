@@ -7,6 +7,11 @@ import {
   resizeRect,
   bringToFront,
   layoutSlots,
+  templateFractions,
+  templateSlots,
+  snapBar,
+  snapBarTemplates,
+  snapBarHitTest,
   MIN_W,
   MIN_H,
 } from "./window-geometry";
@@ -138,6 +143,52 @@ describe("layoutSlots", () => {
     const s = layoutSlots("thirds", B, "left");
     expect(s[0].w + s[1].w + s[2].w).toBe(B.width);
   });
+});
+
+describe("templateFractions / templateSlots", () => {
+  it("split=2칸, stack/thirds=3칸", () => {
+    expect(templateFractions("split")).toHaveLength(2);
+    expect(templateFractions("stack")).toHaveLength(3);
+    expect(templateFractions("thirds")).toHaveLength(3);
+  });
+  it("templateSlots split → 좌/우 절반", () =>
+    expect(templateSlots("split", B)).toEqual([
+      { x: 0, y: 0, w: 600, h: 800 },
+      { x: 600, y: 0, w: 600, h: 800 },
+    ]));
+  it("templateSlots stack(1+2) → 좌full·우상¼·우하¼", () =>
+    expect(templateSlots("stack", B)).toEqual([
+      { x: 0, y: 0, w: 600, h: 800 },
+      { x: 600, y: 0, w: 600, h: 400 },
+      { x: 600, y: 400, w: 600, h: 400 },
+    ]));
+  it("templateSlots thirds → 3컬럼", () =>
+    expect(templateSlots("thirds", B)).toEqual([
+      { x: 0, y: 0, w: 400, h: 800 },
+      { x: 400, y: 0, w: 400, h: 800 },
+      { x: 800, y: 0, w: 400, h: 800 },
+    ]));
+});
+
+describe("snapBar / snapBarHitTest", () => {
+  it("창 수에 맞는 템플릿: 2개=split만, 3개=셋", () => {
+    expect(snapBarTemplates(1)).toEqual([]);
+    expect(snapBarTemplates(2)).toEqual(["split"]);
+    expect(snapBarTemplates(3)).toEqual(["split", "stack", "thirds"]);
+  });
+  it("count<2면 바 없음", () => expect(snapBar(B, 1)).toBeNull());
+  it("바는 상단 중앙(가로 중앙 정렬)", () => {
+    const bar = snapBar(B, 3)!;
+    expect(bar.items).toHaveLength(3);
+    expect(Math.abs(bar.x + bar.w / 2 - B.width / 2)).toBeLessThanOrEqual(1);
+  });
+  it("히트테스트: 칸 중앙 → 해당 템플릿·슬롯", () => {
+    const bar = snapBar(B, 3)!;
+    const cell = bar.items[1].cells[1]; // stack, 우상 슬롯
+    const hit = snapBarHitTest(cell.x + cell.w / 2, cell.y + cell.h / 2, B, 3);
+    expect(hit).toEqual({ template: "stack", slot: 1 });
+  });
+  it("히트테스트: 바 밖 → null", () => expect(snapBarHitTest(5, 700, B, 3)).toBeNull());
 });
 
 describe("bringToFront", () => {

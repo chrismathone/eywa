@@ -6,7 +6,8 @@ import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
 import { WindowSwitcher } from "./window-switcher";
 import { SnapAssist } from "./snap-assist";
-import { snapTarget } from "./window-geometry";
+import { SnapLayoutsBar } from "./snap-layouts-bar";
+import { snapTarget, templateSlots } from "./window-geometry";
 
 // 콘텐츠 스테이지 오프셋 — 좌측 아이콘 레일(52) / 상단 헤더(48) 제외해 창이 크롬을 안 덮음.
 const RAIL = 52;
@@ -24,6 +25,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const windows = useWindowStore((s) => s.windows);
   const focusedId = useWindowStore((s) => s.focusedId);
   const snapPreview = useWindowStore((s) => s.snapPreview);
+  const dragLayout = useWindowStore((s) => s.dragLayout);
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
@@ -45,7 +47,9 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
 
   if (!isDesktop) return null;
 
-  const preview = snapPreview ? snapTarget(snapPreview, bounds) : null;
+  // 드래그 중 레이아웃 바 호버 시 전체 배치 고스트(선택 슬롯 강조), 아니면 단일 스냅 프리뷰.
+  const layoutGhosts = dragLayout ? templateSlots(dragLayout.template, bounds) : null;
+  const preview = !dragLayout && snapPreview ? snapTarget(snapPreview, bounds) : null;
   const wins = order.map((id) => windows[id]).filter(Boolean);
 
   return (
@@ -53,9 +57,21 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       className="pointer-events-none fixed z-40"
       style={{ left: RAIL, top: HEADER, right: 0, bottom: 0 }}
     >
+      {layoutGhosts
+        ? layoutGhosts.map((r, i) => (
+            <div
+              key={i}
+              className={`pointer-events-none absolute top-0 left-0 rounded-xl border-2 transition-all duration-100 ${
+                i === dragLayout!.slot ? "border-primary/70 bg-primary/15" : "border-primary/25 bg-primary/5"
+              }`}
+              style={{ transform: `translate(${r.x}px, ${r.y}px)`, width: r.w, height: r.h }}
+              aria-hidden="true"
+            />
+          ))
+        : null}
       {preview ? (
         <div
-          className="border-primary/60 bg-primary/5 pointer-events-none absolute top-0 left-0 rounded-xl border-2"
+          className="border-primary/60 bg-primary/5 pointer-events-none absolute top-0 left-0 rounded-xl border-2 transition-all duration-100"
           style={{ transform: `translate(${preview.x}px, ${preview.y}px)`, width: preview.w, height: preview.h }}
           aria-hidden="true"
         />
@@ -64,6 +80,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         <FloatingWindow key={w.id} win={w} focused={w.id === focusedId} z={i + 1} />
       ))}
       <SnapAssist />
+      <SnapLayoutsBar />
       <WindowSwitcher />
     </div>
   );
