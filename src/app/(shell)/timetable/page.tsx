@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -189,11 +190,11 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
   }
 
   return (
-    <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r p-3 text-left">
+            <th className="bg-bg-soft border-line sticky left-0 z-10 w-[100px] border-b border-r p-3 text-left">
               <span className="micro">교시</span>
             </th>
             {teachers.map((t) => {
@@ -226,7 +227,7 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
         <tbody>
           {periods.map((p) => (
             <tr key={p}>
-              <td className="bg-bg-soft/40 border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold">
+              <td className="bg-bg-soft border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold whitespace-nowrap">
                 {p}
                 <div className="text-text-faint mt-1 font-mono text-[10px]">
                   {periodTimeRange(p)}
@@ -257,7 +258,7 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }
 
@@ -278,7 +279,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
   }
 
   return (
-    <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
@@ -298,7 +299,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
         <tbody>
           {periods.map((p) => (
             <tr key={p}>
-              <td className="bg-bg-soft/40 border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold">
+              <td className="bg-bg-soft border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold whitespace-nowrap">
                 {p}
                 <div className="text-text-faint mt-1 font-mono text-[10px]">
                   {periodTimeRange(p)}
@@ -329,7 +330,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }
 

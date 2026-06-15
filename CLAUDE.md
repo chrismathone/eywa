@@ -257,6 +257,27 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   전역 스크롤바 규칙이 적용되게 할 것. (예: 강사 원스크린 진도 차시 드롭다운.)
 - 회색 기본 스크롤바가 한 군데라도 보이면 위반. 새 화면 추가 시 점검.
 
+### 드래그-팬 (잡고 끌기) — 넘치는 영역의 기본 인터랙션 (⚠️ 새 화면 기본값)
+**가로/세로로 넘치는 영역은 막대 스크롤바에만 의존하지 말고, 마우스로 빈 곳을 끌어 내용을
+움직일 수 있게 한다** — 태블릿/지도 앱 느낌(놓으면 관성 글라이드 + 넘치는 가장자리 페이드).
+구현체: [`src/components/ui/drag-scroll-area.tsx`](src/components/ui/drag-scroll-area.tsx)의 `<DragScrollArea>`.
+- **적용**: 기존 `<div className="… overflow-auto …">{내용}</div>` →
+  `<DragScrollArea className="… (overflow-auto 빼고)">{내용}</DragScrollArea>`.
+  안쪽 컨테이너가 overflow를 담당하므로 바깥 className에서 `overflow-auto`는 뺀다.
+- **양축 자동**: 넘치는 축만 팬. 안 넘치면 grab 커서·페이드 자동 off.
+- **충돌 안전**: 터치는 네이티브 스크롤에 위임, dnd-kit draggable(`[aria-roledescription="draggable"]`)·
+  폼 컨트롤 위에선 팬을 시작하지 않는다. 5px 임계값으로 "탭=클릭 / 끌기=팬"을 구분하고, 실제로
+  끌었으면 뒤따르는 click 1회를 차단(카드·링크 오작동 방지). 팬을 막을 자식엔 `data-no-drag-scroll`.
+- 전역 스크롤바 하네스와 **병행** — 스크롤바는 그대로 보이고 드래그가 더해질 뿐. 새 화면에서
+  넓은 표·캔버스·가로 목록을 만들 땐 처음부터 `DragScrollArea`로 감쌀 것.
+
+### 플로팅 창 기본 크기 — 넓은 메뉴는 크게 연다
+메뉴는 플로팅 창(크롬리스 iframe)으로 열리고 기본 480×560인데, 넓은 표는 거기 안 들어가 가로
+스크롤이 과해진다(#24). **넓은 메뉴는 크게 연다** —
+[`src/components/workspace/window-geometry.ts`](src/components/workspace/window-geometry.ts)의
+`ROUTE_WINDOW_SIZE: Record<menuKey, {w,h}>`에 등록(없으면 `DEFAULT_WINDOW`). 캔버스보다 크면
+`cascadeNext`가 자동 clamp(작은 화면 안전). 예: `timetable: { w: 1040, h: 680 }`.
+
 ---
 
 ## 구현 중 실제로 막혔던 점들 (시간순)

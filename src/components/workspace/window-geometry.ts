@@ -30,10 +30,21 @@ export function clampRect(rect: Rect, bounds: Bounds): Rect {
   return { x, y, w, h };
 }
 
+/** 기본 창 크기(폼·목록 등 일반 메뉴). */
+export const DEFAULT_WINDOW = { w: 480, h: 560 };
+
+/**
+ * 라우트(메뉴)별 기본 창 크기 — 넓은 표는 크게 열어 가로 스크롤을 최소화한다.
+ * 없는 메뉴는 DEFAULT_WINDOW. 캔버스보다 크면 cascadeNext에서 clamp됨.
+ */
+export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
+  timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
+};
+
 /** 새 창 기본 위치 — 인덱스만큼 cascade 오프셋(겹쳐 쌓이지 않게), 화면 넘으면 wrap. */
-export function cascadeNext(count: number, bounds: Bounds): Rect {
-  const w = Math.min(480, Math.max(MIN_W, bounds.width - 40));
-  const h = Math.min(560, Math.max(MIN_H, bounds.height - 40));
+export function cascadeNext(count: number, bounds: Bounds, size = DEFAULT_WINDOW): Rect {
+  const w = Math.min(size.w, Math.max(MIN_W, bounds.width - 40));
+  const h = Math.min(size.h, Math.max(MIN_H, bounds.height - 40));
   const step = 28;
   const span = Math.max(0, Math.min(bounds.width - w, bounds.height - h) - 24);
   const offset = span > 0 ? (count * step) % (span + 1) : 0;

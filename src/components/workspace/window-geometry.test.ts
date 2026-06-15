@@ -52,6 +52,23 @@ describe("cascadeNext", () => {
       expect(r.y + r.h).toBeLessThanOrEqual(B.height);
     }
   });
+  it("size 지정 시 그 크기로 연다(넓은 메뉴=시간표)", () => {
+    const r = cascadeNext(0, B, { w: 1040, h: 680 });
+    expect(r.w).toBe(1040);
+    expect(r.h).toBe(680);
+  });
+  it("size가 캔버스보다 크면 안으로 clamp", () => {
+    const r = cascadeNext(0, { width: 700, height: 500 }, { w: 1040, h: 680 });
+    expect(r.w).toBeLessThanOrEqual(700);
+    expect(r.h).toBeLessThanOrEqual(500);
+    expect(r.x + r.w).toBeLessThanOrEqual(700);
+    expect(r.y + r.h).toBeLessThanOrEqual(500);
+  });
+  it("size 미지정이면 기본 480×560", () => {
+    const r = cascadeNext(0, B);
+    expect(r.w).toBe(480);
+    expect(r.h).toBe(560);
+  });
 });
 
 describe("snapTarget", () => {
