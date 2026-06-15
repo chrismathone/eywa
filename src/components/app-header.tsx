@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { UserMenu } from "@/components/user-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +13,7 @@ import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
 import { useIsMac } from "@/lib/use-platform";
 
-export function AppHeader({ email }: { email: string }) {
+export function AppHeader() {
   const pathname = usePathname();
   const current = findNavItem(pathname);
   const group = findNavGroup(pathname);
@@ -72,8 +71,6 @@ export function AppHeader({ email }: { email: string }) {
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <UserMenu email={email} />
       </div>
     </header>
   );

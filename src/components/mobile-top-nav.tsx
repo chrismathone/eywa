@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { UserMenu } from "@/components/user-menu";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 import { canAccess, type SystemRole } from "@/lib/permissions";
 
@@ -17,9 +18,11 @@ function isItemActive(href: string, pathname: string) {
  */
 export function MobileTopNav({
   systemRole,
+  email,
   className,
 }: {
   systemRole: SystemRole;
+  email: string;
   className?: string;
 }) {
   const pathname = usePathname();
@@ -32,8 +35,8 @@ export function MobileTopNav({
       className={`bg-sidebar border-line sticky top-0 z-20 border-b ${className ?? ""}`}
       aria-label="메뉴"
     >
-      {/* 브랜드 banner */}
-      <div className="border-line/60 flex items-center justify-center gap-2 border-b px-3 py-1.5">
+      {/* 브랜드 banner + 계정 메뉴 */}
+      <div className="border-line/60 flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <Link href="/dashboard" className="flex items-center gap-2">
           <span className="bg-ink flex size-5 items-center justify-center rounded-[3px]">
             <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
@@ -43,6 +46,7 @@ export function MobileTopNav({
           </span>
           <span className="text-foreground text-[13px] font-extrabold tracking-tight">EYWA</span>
         </Link>
+        <UserMenu email={email} />
       </div>
 
       {/* 메뉴 grid (모든 cell 균등 너비) */}

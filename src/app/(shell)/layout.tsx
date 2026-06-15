@@ -43,16 +43,15 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* lg≥: 좌측 사이드바 232px (고정) / lg<: 숨김 */}
       <AppSidebar
         systemRole={user.systemRole}
-        displayName={user.displayName}
         email={user.email}
         className="hidden lg:flex"
       />
 
       {/* lg<: 상단 horizontal nav / lg≥: 숨김 */}
-      <MobileTopNav systemRole={user.systemRole} className="lg:hidden" />
+      <MobileTopNav systemRole={user.systemRole} email={user.email} className="lg:hidden" />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <AppHeader email={user.email} />
+        <AppHeader />
         <main className="flex-1 overflow-auto px-4 py-5 lg:px-7 lg:py-6 [scrollbar-gutter:stable]">{children}</main>
       </div>
 
