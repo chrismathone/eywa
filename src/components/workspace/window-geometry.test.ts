@@ -6,6 +6,7 @@ import {
   snapZoneForPoint,
   resizeRect,
   bringToFront,
+  layoutSlots,
   MIN_W,
   MIN_H,
 } from "./window-geometry";
@@ -92,6 +93,47 @@ describe("resizeRect", () => {
     const r = resizeRect({ x: 100, y: 100, w: 480, h: 560 }, "se", 40, 30, B);
     expect(r.w).toBe(520);
     expect(r.h).toBe(590);
+  });
+});
+
+describe("layoutSlots", () => {
+  it("split: 앵커 좌 → 좌/우 절반", () =>
+    expect(layoutSlots("split", B, "left")).toEqual([
+      { x: 0, y: 0, w: 600, h: 800 },
+      { x: 600, y: 0, w: 600, h: 800 },
+    ]));
+  it("split: 앵커 우 → 슬롯0이 우측", () =>
+    expect(layoutSlots("split", B, "right")).toEqual([
+      { x: 600, y: 0, w: 600, h: 800 },
+      { x: 0, y: 0, w: 600, h: 800 },
+    ]));
+  it("stack(1+2): 앵커 좌 full + 우 상/하 ¼", () =>
+    expect(layoutSlots("stack", B, "left")).toEqual([
+      { x: 0, y: 0, w: 600, h: 800 },
+      { x: 600, y: 0, w: 600, h: 400 },
+      { x: 600, y: 400, w: 600, h: 400 },
+    ]));
+  it("stack(1+2): 앵커 우 → 좌측 스택", () =>
+    expect(layoutSlots("stack", B, "right")).toEqual([
+      { x: 600, y: 0, w: 600, h: 800 },
+      { x: 0, y: 0, w: 600, h: 400 },
+      { x: 0, y: 400, w: 600, h: 400 },
+    ]));
+  it("thirds: 앵커 좌 → 좌·중·우 컬럼", () =>
+    expect(layoutSlots("thirds", B, "left")).toEqual([
+      { x: 0, y: 0, w: 400, h: 800 },
+      { x: 400, y: 0, w: 400, h: 800 },
+      { x: 800, y: 0, w: 400, h: 800 },
+    ]));
+  it("thirds: 앵커 우 → 슬롯0이 우측 컬럼", () =>
+    expect(layoutSlots("thirds", B, "right")).toEqual([
+      { x: 800, y: 0, w: 400, h: 800 },
+      { x: 400, y: 0, w: 400, h: 800 },
+      { x: 0, y: 0, w: 400, h: 800 },
+    ]));
+  it("thirds 컬럼 합 = 전체 폭(틈 없음)", () => {
+    const s = layoutSlots("thirds", B, "left");
+    expect(s[0].w + s[1].w + s[2].w).toBe(B.width);
   });
 });
 

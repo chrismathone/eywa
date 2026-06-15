@@ -6,9 +6,11 @@ import {
   bringToFront,
   cascadeNext,
   clampRect,
+  layoutSlots,
   resizeRect,
   snapTarget,
   type Bounds,
+  type LayoutTemplate,
   type Rect,
   type ResizeHandle,
   type SnapZone,
@@ -56,7 +58,7 @@ type Actions = {
   snap: (id: string, zone: Exclude<SnapZone, null>) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
-  assistPick: (id: string) => void; // Snap Assist 카드 선택 → 반대편 half로 스냅
+  applyLayout: (template: LayoutTemplate) => void; // Snap Assist 레이아웃 선택 → 자동 타일링
   dismissAssist: () => void;
   adoptOwner: (owner: string) => void;
 };
@@ -220,24 +222,31 @@ export const useWindowStore = create<State & Actions>()(
           };
         }),
 
-      assistPick: (id) =>
+      // Snap Assist 레이아웃 클릭 → 열린 창들을 슬롯에 자동 배치(앵커=슬롯0, 앵커측에).
+      // 슬롯보다 많은 창은 최소화(스위처로 보내 화면 정리).
+      applyLayout: (template) =>
         set((s) => {
           const assist = s.snapAssist;
-          const w = s.windows[id];
-          if (!assist || !w) return { snapAssist: null };
+          if (!assist) return { snapAssist: null };
+          const anchorSide = assist.half === "right" ? "left" : "right";
+          const slots = layoutSlots(template, s.bounds, anchorSide);
+          const others = s.order.filter(
+            (id) => id !== assist.originId && !s.windows[id]?.minimized,
+          );
+          const ordered = [assist.originId, ...others].filter((id) => s.windows[id]);
+          const windows = { ...s.windows };
+          ordered.forEach((id, i) => {
+            const w = windows[id];
+            if (!w) return;
+            windows[id] =
+              i < slots.length
+                ? { ...w, rect: slots[i], maximized: false, minimized: false, prevRect: undefined }
+                : { ...w, minimized: true };
+          });
           return {
-            windows: {
-              ...s.windows,
-              [id]: {
-                ...w,
-                prevRect: w.maximized ? w.prevRect : w.rect,
-                rect: snapTarget(assist.half, s.bounds)!,
-                maximized: false,
-                minimized: false,
-              },
-            },
-            order: bringToFront(s.order, id),
-            focusedId: id,
+            windows,
+            order: bringToFront(s.order, assist.originId),
+            focusedId: assist.originId,
             snapAssist: null,
           };
         }),

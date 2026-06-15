@@ -78,6 +78,44 @@ export function snapZoneForPoint(
   return null;
 }
 
+export type LayoutTemplate = "split" | "stack" | "thirds";
+
+/**
+ * 레이아웃 템플릿 → 슬롯 사각형 배열(슬롯0 = 앵커 위치). Snap Assist 자동 타일링용.
+ * anchorSide = 앵커가 놓인 쪽. split=좌우 절반, stack=앵커 full-half + 반대 상/하 ¼(1+2),
+ * thirds=세로 3컬럼(앵커가 자기 쪽 끝 컬럼). 각 슬롯 clampRect.
+ */
+export function layoutSlots(
+  template: LayoutTemplate,
+  bounds: Bounds,
+  anchorSide: "left" | "right",
+): Rect[] {
+  const W = bounds.width;
+  const H = bounds.height;
+  const hw = Math.round(W / 2);
+  const hh = Math.round(H / 2);
+  const left = anchorSide === "left";
+  let slots: Rect[];
+  if (template === "split") {
+    const a = left ? { x: 0, y: 0, w: hw, h: H } : { x: W - hw, y: 0, w: hw, h: H };
+    const b = left ? { x: W - hw, y: 0, w: hw, h: H } : { x: 0, y: 0, w: hw, h: H };
+    slots = [a, b];
+  } else if (template === "stack") {
+    const a = left ? { x: 0, y: 0, w: hw, h: H } : { x: W - hw, y: 0, w: hw, h: H };
+    const sx = left ? W - hw : 0;
+    slots = [a, { x: sx, y: 0, w: hw, h: hh }, { x: sx, y: H - hh, w: hw, h: hh }];
+  } else {
+    const t = Math.round(W / 3);
+    const cols = [
+      { x: 0, y: 0, w: t, h: H },
+      { x: t, y: 0, w: W - 2 * t, h: H },
+      { x: W - t, y: 0, w: t, h: H },
+    ];
+    slots = left ? [cols[0], cols[1], cols[2]] : [cols[2], cols[1], cols[0]];
+  }
+  return slots.map((r) => clampRect(r, bounds));
+}
+
 /** 8방향 핸들 리사이즈 — 델타 적용 + 최소크기(이동변 보정) + 캔버스 clamp. */
 export function resizeRect(
   rect: Rect,
