@@ -132,7 +132,7 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - impersonate / audit log / 라이선스 관리는 Phase 2로
 
 ### UI 폴리시 (1개 commit, 2026-05-28)
-- OS별 단축키 자동 분기 — `useIsMac()` (useSyncExternalStore 기반) → Mac이면 ⌘, 아니면 Ctrl. Windows 기본.
+- ~~OS별 단축키 자동 분기 (`useIsMac()`)~~ → **2026-06-15 단축키 기능 전부 제거.** 가짜 단축키(⌘N·G+D/S/B, 미구현)·키캡 칩·전역 키바인딩·`useIsMac()`/`_shortcuts.tsx` 삭제. 검색 팰릿은 헤더 검색 **클릭**으로만 열림(메뉴 점프 그대로).
 - 모바일 top nav 재구성 — 가로 스크롤 제거, 브랜드 banner 자체 행으로 분리, 메뉴 grid `auto-fit minmax(96px, 1fr)`로 균등 분할 (그룹 구분선 제거)
 - `.scrollbar-thin` 유틸 (globals.css) — 6px width, line-tinted thumb. 디자인 톤에 녹는 스크롤바
 
@@ -176,7 +176,7 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 | 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + Initial 8px |
 | 수납관리 (`/billing`) | `invoices` | Stat 5 (할인 포함) + **월 ◀▶ + 검색 + 컬럼 정렬 ▼** + 할인/메모 컬럼 + 인라인 dialog + 일괄 처리 + 기한 경과 |
 | 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
-| 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 단축키 + 1:1 |
+| 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
 
 ### 인증 / RLS
 
