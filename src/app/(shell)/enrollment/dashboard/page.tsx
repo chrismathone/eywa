@@ -118,8 +118,9 @@ export default async function EnrollmentDashboardPage({
         {consultants.length === 0 ? (
           <div className="text-muted-foreground px-5 py-8 text-center text-sm">데이터 없음</div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-border text-muted-foreground border-b text-left text-xs">
+            <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
               <tr>
                 <th className="eyebrow px-5 py-3 font-normal">상담사</th>
                 <th className="eyebrow num px-5 py-3 text-right font-normal">총 상담</th>
@@ -142,6 +143,7 @@ export default async function EnrollmentDashboardPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
     </div>

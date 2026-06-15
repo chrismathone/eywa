@@ -192,8 +192,9 @@ export function PayrollClient({
           <header className="border-border border-b px-5 py-3">
             <h3 className="text-foreground text-sm font-semibold">정산 이력</h3>
           </header>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-bg-soft/40">
+            <thead className="bg-bg-soft/40 [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-4 py-2 text-left">기간</th>
                 <th className="micro px-4 py-2 text-right">합계</th>
@@ -222,6 +223,7 @@ export function PayrollClient({
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       ) : null}
     </div>

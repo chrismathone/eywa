@@ -44,9 +44,9 @@ export async function BillingTab({ studentId }: { studentId: string }) {
       {invoices.length === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">청구 내역이 없습니다</p>
       ) : (
-        <div className="bg-card border-border overflow-hidden rounded-md border">
+        <div className="bg-card border-border overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="border-border bg-bg-soft/40 border-b">
+            <thead className="border-border bg-bg-soft/40 border-b [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-4 py-2 text-left">기간</th>
                 <th className="micro px-4 py-2 text-right">청구</th>

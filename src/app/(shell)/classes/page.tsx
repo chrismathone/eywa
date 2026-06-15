@@ -240,8 +240,8 @@ export default async function ClassesPage({
 function TableView({ classes }: { classes: ClassListRow[] }) {
   return (
     <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="border-line border-b">
+      <table className="w-full text-sm [&_td]:whitespace-nowrap">
+        <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
             <th className="micro px-4 py-3 text-left">과목</th>
             <th className="micro px-4 py-3 text-left">반 이름</th>

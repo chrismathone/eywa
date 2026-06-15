@@ -196,9 +196,9 @@ export default async function StudentsPage({
           description="검색어/필터를 조정해보세요."
         />
       ) : (
-        <div className="bg-card border-line shadow-card overflow-hidden rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="border-line border-b">
+        <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+          <table className="w-full text-sm [&_td]:whitespace-nowrap">
+            <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-5 py-3 text-left">학생</th>
                 <th className="micro px-5 py-3 text-left">학년</th>

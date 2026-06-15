@@ -167,9 +167,9 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
         </Button>
       </div>
 
-      <div className="bg-card border-border overflow-hidden rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="border-border text-muted-foreground border-b text-left text-xs">
+      <div className="bg-card border-border overflow-x-auto rounded-lg border">
+        <table className="w-full text-sm [&_td]:whitespace-nowrap">
+          <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
             <tr>
               <th className="w-10 px-3 py-3">
                 <input
