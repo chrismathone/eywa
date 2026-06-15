@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAccess } from "@/lib/auth/require-access";
+import { apiAccess } from "@/lib/auth/api-access";
 import { getStudentSummary } from "@/features/students/server/queries";
 
 /**
@@ -12,7 +12,10 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await requireAccess("students");
+  const access = await apiAccess("students");
+  if (!access.ok) {
+    return NextResponse.json({ error: "forbidden" }, { status: access.status });
+  }
   const { id } = await params;
   const summary = await getStudentSummary(id);
   if (!summary) {

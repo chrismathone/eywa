@@ -1,0 +1,59 @@
+"use client";
+
+import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
+import { useWindowStore } from "./window-store";
+import { snapZoneForPoint, type Rect, type SnapZone } from "./window-geometry";
+
+/**
+ * 타이틀바 드래그 — 이동 중에는 store를 안 건드리고 ref 엘리먼트의 transform만
+ * 직접 갱신(60fps, 리렌더 0), pointerup에 한 번 store에 commit. 가장자리 근처면
+ * 스냅 존을 store.snapPreview로 알려 캔버스가 고스트를 그린다.
+ */
+export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | null>) {
+  const startRef = useRef<{ px: number; py: number; rect: Rect } | null>(null);
+  const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const zoneRef = useRef<SnapZone>(null);
+
+  function onPointerDown(e: RPointerEvent<HTMLElement>) {
+    if (e.button !== 0) return;
+    const s = useWindowStore.getState();
+    const w = s.windows[id];
+    if (!w) return;
+    s.focus(id);
+    startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect };
+    posRef.current = { x: w.rect.x, y: w.rect.y };
+    zoneRef.current = null;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+
+  function onPointerMove(e: RPointerEvent<HTMLElement>) {
+    const start = startRef.current;
+    if (!start) return;
+    const x = start.rect.x + (e.clientX - start.px);
+    const y = start.rect.y + (e.clientY - start.py);
+    posRef.current = { x, y };
+    const el = elRef.current;
+    if (el) el.style.transform = `translate(${x}px, ${y}px)`;
+    const zone = snapZoneForPoint(e.clientX, e.clientY, useWindowStore.getState().bounds);
+    if (zone !== zoneRef.current) {
+      zoneRef.current = zone;
+      useWindowStore.getState().setSnapPreview(zone);
+    }
+  }
+
+  function onPointerUp(e: RPointerEvent<HTMLElement>) {
+    const start = startRef.current;
+    if (!start) return;
+    const store = useWindowStore.getState();
+    const zone = zoneRef.current;
+    if (zone) store.snap(id, zone);
+    else store.setRect(id, { ...start.rect, x: posRef.current.x, y: posRef.current.y });
+    store.setSnapPreview(null);
+    startRef.current = null;
+    zoneRef.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  }
+
+  return { onPointerDown, onPointerMove, onPointerUp };
+}
