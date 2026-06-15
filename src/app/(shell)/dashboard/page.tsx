@@ -55,7 +55,7 @@ export default async function DashboardPage() {
     attendance && attendance.total > 0 ? `${attendance.rate.toFixed(1)}%` : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <DashboardHero
         name={name}
         enrolledStudents={enrolled}

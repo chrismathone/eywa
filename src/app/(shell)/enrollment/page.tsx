@@ -66,7 +66,7 @@ export default async function EnrollmentPage({
   const filterActive = !!selectedMonth || !!selectedConsultant;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* AI 배너 — gradient + sparkle */}
       <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#2a7a52] p-6 shadow-primary-deep">
         {/* 우상단 동심원 SVG 장식 */}
