@@ -71,12 +71,14 @@ type State = {
   snapAssist: SnapAssist | null; // 절반 스냅 후 반대편 채우기 제안(미영속)
   draggingId: string | null; // 드래그/리사이즈 중인 창(iframe 숨겨 부드럽게, 미영속)
   dragLayout: { template: LayoutTemplate; slot: number } | null; // 드래그 중 스냅 레이아웃 바 호버 슬롯
+  dragNearTop: boolean; // 드래그 중 포인터가 상단 밴드 → 스냅 레이아웃 바 reveal
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
   setSnapPreview: (z: SnapZone) => void;
   setDragging: (id: string | null) => void;
   setDragLayout: (v: { template: LayoutTemplate; slot: number } | null) => void;
+  setDragNearTop: (v: boolean) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
   close: (id: string) => void;
@@ -106,12 +108,14 @@ export const useWindowStore = create<State & Actions>()(
       snapAssist: null,
       draggingId: null,
       dragLayout: null,
+      dragNearTop: false,
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
       setSnapPreview: (z) => set({ snapPreview: z }),
       setDragging: (id) => set({ draggingId: id }),
       setDragLayout: (v) => set({ dragLayout: v }),
+      setDragNearTop: (v) => set({ dragNearTop: v }),
 
       // 스냅 레이아웃 바 드롭: 지정 슬롯=드래그 창, 나머지 슬롯=다른 열린 창(order순), 초과=최소화.
       applyDragLayout: (id, template, slot) =>

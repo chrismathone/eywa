@@ -257,7 +257,7 @@ function MatrixTable({
         <tfoot>
           <tr>
             <td colSpan={4} className="bg-bg-soft border-line border-t px-3 py-2">
-              <div className="flex items-center gap-3 text-[11px]">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 <span className="micro">범례</span>
                 {(["present", "absent", "late", "excused", "makeup"] as AttendanceStatus[]).map(
                   (s) => (

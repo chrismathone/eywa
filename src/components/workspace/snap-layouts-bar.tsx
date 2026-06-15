@@ -16,12 +16,14 @@ const LABEL: Record<LayoutTemplate, string> = {
  */
 export function SnapLayoutsBar() {
   const draggingId = useWindowStore((s) => s.draggingId);
+  const dragNearTop = useWindowStore((s) => s.dragNearTop);
   const bounds = useWindowStore((s) => s.bounds);
   const dragLayout = useWindowStore((s) => s.dragLayout);
   const order = useWindowStore((s) => s.order);
   const windows = useWindowStore((s) => s.windows);
 
-  if (!draggingId) return null;
+  // 드래그 중 + 포인터가 상단 밴드에 있을 때만 reveal(Win11식). 단순 클릭/중앙 드래그엔 안 뜸.
+  if (!draggingId || !dragNearTop) return null;
   const count = order.filter((id) => !windows[id]?.minimized).length;
   const bar = snapBar(bounds, count);
   if (!bar) return null;

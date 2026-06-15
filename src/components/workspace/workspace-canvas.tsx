@@ -50,7 +50,8 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   // 드래그 중 레이아웃 바 호버 시 전체 배치 고스트(선택 슬롯 강조), 아니면 단일 스냅 프리뷰.
   const layoutGhosts = dragLayout ? templateSlots(dragLayout.template, bounds) : null;
   const preview = !dragLayout && snapPreview ? snapTarget(snapPreview, bounds) : null;
-  const wins = order.map((id) => windows[id]).filter(Boolean);
+  // DOM 순서는 삽입순(안정) 유지, 쌓임순서는 z-index로만 → 포커스/스냅 시 DOM 이동 0 → iframe 리로드 0.
+  const wins = Object.values(windows);
 
   return (
     <div
@@ -76,8 +77,8 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
           aria-hidden="true"
         />
       ) : null}
-      {wins.map((w, i) => (
-        <FloatingWindow key={w.id} win={w} focused={w.id === focusedId} z={i + 1} />
+      {wins.map((w) => (
+        <FloatingWindow key={w.id} win={w} focused={w.id === focusedId} z={order.indexOf(w.id) + 1} />
       ))}
       <SnapAssist />
       <SnapLayoutsBar />

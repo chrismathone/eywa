@@ -14,32 +14,35 @@ function sameLayout(a: DragLayout | null, b: DragLayout | null) {
   return a?.template === b?.template && a?.slot === b?.slot;
 }
 
+const DRAG_THRESHOLD = 4; // 이만큼 움직여야 드래그 시작(미만은 클릭 → 바 플래시/iframe 리로드 방지)
+const TOP_BAND = 150; // 드래그 중 포인터가 상단 이 px 안이면 스냅 레이아웃 바 reveal
+
 /**
- * 타이틀바 드래그 — 이동 중에는 store를 안 건드리고 ref 엘리먼트의 transform만
- * 직접 갱신(60fps, 리렌더 0), pointerup에 한 번 store에 commit. 가장자리 근처면
- * 스냅 존을 store.snapPreview로 알려 캔버스가 고스트를 그린다.
+ * 타이틀바 드래그 — 이동 중에는 store를 안 건드리고 ref 엘리먼트의 transform만 직접 갱신
+ * (60fps, 리렌더 0), pointerup에 한 번 commit. threshold 미만 이동은 "클릭"으로 보고
+ * draggingId를 세팅하지 않음(클릭 시 바 깜빡임·iframe 리로드 없음). 상단 밴드에선 스냅
+ * 레이아웃 바, 그 외엔 가장자리/모서리 존을 store에 알려 캔버스가 미리보기를 그린다.
  */
 export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | null>) {
   const startRef = useRef<{ px: number; py: number; rect: Rect } | null>(null);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const zoneRef = useRef<SnapZone>(null);
   const layoutRef = useRef<DragLayout | null>(null);
+  const startedRef = useRef(false);
+  const nearTopRef = useRef(false);
 
   function onPointerDown(e: RPointerEvent<HTMLElement>) {
     if (e.button !== 0) return;
     const s = useWindowStore.getState();
-    let w = s.windows[id];
+    const w = s.windows[id];
     if (!w) return;
     s.focus(id);
-    // 최대화 창을 잡고 끌면 Windows처럼 이전 크기로 복원되어 커서를 따라온다.
-    if (w.maximized) {
-      s.unmaximizeUnderPointer(id, e.clientX - s.origin.left, e.clientY - s.origin.top);
-      w = useWindowStore.getState().windows[id]!;
-    }
     startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect };
     posRef.current = { x: w.rect.x, y: w.rect.y };
     zoneRef.current = null;
-    s.setDragging(id); // 드래그 중 iframe 숨김 → 부드러운 이동
+    layoutRef.current = null;
+    startedRef.current = false;
+    nearTopRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     e.preventDefault();
   }
@@ -47,8 +50,25 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
   function onPointerMove(e: RPointerEvent<HTMLElement>) {
     const start = startRef.current;
     if (!start) return;
-    const x = start.rect.x + (e.clientX - start.px);
-    const y = start.rect.y + (e.clientY - start.py);
+    // threshold 전 = 클릭 후보. 미세 이동은 무시(드래그 시작 안 함).
+    if (!startedRef.current) {
+      if (Math.abs(e.clientX - start.px) < DRAG_THRESHOLD && Math.abs(e.clientY - start.py) < DRAG_THRESHOLD) {
+        return;
+      }
+      startedRef.current = true;
+      const s = useWindowStore.getState();
+      // 최대화 창을 끌면 Windows처럼 이전 크기로 복원되어 커서를 따라온다(드래그 시작 시점에).
+      if (s.windows[id]?.maximized) {
+        s.unmaximizeUnderPointer(id, e.clientX - s.origin.left, e.clientY - s.origin.top);
+        const w = useWindowStore.getState().windows[id];
+        if (w) startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect };
+      }
+      useWindowStore.getState().setDragging(id); // iframe 숨김 → 부드러운 이동
+    }
+    const cur = startRef.current;
+    if (!cur) return;
+    const x = cur.rect.x + (e.clientX - cur.px);
+    const y = cur.rect.y + (e.clientY - cur.py);
     posRef.current = { x, y };
     const el = elRef.current;
     if (el) el.style.transform = `translate(${x}px, ${y}px)`;
@@ -57,8 +77,13 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     const { bounds, origin } = store;
     const sx = e.clientX - origin.left;
     const sy = e.clientY - origin.top;
-    // 스냅 레이아웃 바 우선 → 있으면 바 슬롯, 없으면 가장자리/모서리 존
-    const hit = snapBarHitTest(sx, sy, bounds, openCount());
+    const nearTop = sy <= TOP_BAND;
+    if (nearTop !== nearTopRef.current) {
+      nearTopRef.current = nearTop;
+      store.setDragNearTop(nearTop);
+    }
+    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존
+    const hit = nearTop ? snapBarHitTest(sx, sy, bounds, openCount()) : null;
     if (hit) {
       if (!sameLayout(layoutRef.current, hit)) {
         layoutRef.current = hit;
@@ -83,7 +108,15 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
 
   function onPointerUp(e: RPointerEvent<HTMLElement>) {
     const start = startRef.current;
-    if (!start) return;
+    startRef.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    // 단순 클릭(threshold 미달): 포커스만(이미 down에서) — 바/iframe 리로드 없음.
+    if (!start || !startedRef.current) {
+      startedRef.current = false;
+      zoneRef.current = null;
+      layoutRef.current = null;
+      return;
+    }
     const store = useWindowStore.getState();
     const layout = layoutRef.current;
     const zone = zoneRef.current;
@@ -92,6 +125,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     else store.setRect(id, { ...start.rect, x: posRef.current.x, y: posRef.current.y });
     store.setSnapPreview(null);
     store.setDragLayout(null);
+    store.setDragNearTop(false);
     // 글라이드 레시피: 커밋된 rect로 transition 켠 채 imperative 적용 → 드롭→최종 애니메이트,
     // 항상 finalRect를 써서 desync(불변 rect 시 잔존) 없음. 제자리 드롭은 동일값이라 무애니.
     const el = elRef.current;
@@ -103,10 +137,10 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
       el.style.height = `${fr.h}px`;
     }
     store.setDragging(null);
-    startRef.current = null;
+    startedRef.current = false;
     zoneRef.current = null;
     layoutRef.current = null;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    nearTopRef.current = false;
   }
 
   return { onPointerDown, onPointerMove, onPointerUp };
