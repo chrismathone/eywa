@@ -43,6 +43,14 @@ export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | n
   function onPointerUp(e: RPointerEvent<HTMLElement>) {
     if (!startRef.current || !rectRef.current) return;
     useWindowStore.getState().setRect(id, rectRef.current);
+    // 커밋된 rect로 강제 동기화(드래그와 동일한 desync 차단).
+    const el = elRef.current;
+    const fr = useWindowStore.getState().windows[id]?.rect;
+    if (el && fr) {
+      el.style.transform = `translate(${fr.x}px, ${fr.y}px)`;
+      el.style.width = `${fr.w}px`;
+      el.style.height = `${fr.h}px`;
+    }
     startRef.current = null;
     rectRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);

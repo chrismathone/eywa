@@ -17,9 +17,14 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
   function onPointerDown(e: RPointerEvent<HTMLElement>) {
     if (e.button !== 0) return;
     const s = useWindowStore.getState();
-    const w = s.windows[id];
+    let w = s.windows[id];
     if (!w) return;
     s.focus(id);
+    // 최대화 창을 잡고 끌면 Windows처럼 이전 크기로 복원되어 커서를 따라온다.
+    if (w.maximized) {
+      s.unmaximizeUnderPointer(id, e.clientX - s.origin.left, e.clientY - s.origin.top);
+      w = useWindowStore.getState().windows[id]!;
+    }
     startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect };
     posRef.current = { x: w.rect.x, y: w.rect.y };
     zoneRef.current = null;
@@ -52,6 +57,15 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     if (zone) store.snap(id, zone);
     else store.setRect(id, { ...start.rect, x: posRef.current.x, y: posRef.current.y });
     store.setSnapPreview(null);
+    // 커밋된 rect로 transform/size 강제 동기화. clamp 결과가 직전 rect와 같으면 React가
+    // inline style을 다시 안 써서 드래그 중 imperative transform이 남는 desync를 차단.
+    const el = elRef.current;
+    const fr = useWindowStore.getState().windows[id]?.rect;
+    if (el && fr) {
+      el.style.transform = `translate(${fr.x}px, ${fr.y}px)`;
+      el.style.width = `${fr.w}px`;
+      el.style.height = `${fr.h}px`;
+    }
     startRef.current = null;
     zoneRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);

@@ -52,6 +52,7 @@ type Actions = {
   setRect: (id: string, rect: Rect) => void;
   resizeBy: (id: string, base: Rect, handle: ResizeHandle, dx: number, dy: number) => void;
   toggleMax: (id: string) => void;
+  unmaximizeUnderPointer: (id: string, sx: number, sy: number) => void; // 최대화 창 드래그 시작 = 복원
   snap: (id: string, zone: Exclude<SnapZone, null>) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
@@ -157,6 +158,19 @@ export const useWindowStore = create<State & Actions>()(
               ...s.windows,
               [id]: { ...w, prevRect: w.rect, rect: snapTarget("max", s.bounds)!, maximized: true },
             },
+          };
+        }),
+
+      // 최대화 창 드래그 시작 → Windows식 복원: 이전 크기로 줄이며 커서(스테이지 로컬 sx,sy)
+      // 아래 타이틀바에 오도록 재배치. 이후 드래그가 이 rect에서 이어진다.
+      unmaximizeUnderPointer: (id, sx, sy) =>
+        set((s) => {
+          const w = s.windows[id];
+          if (!w || !w.maximized) return s;
+          const base = w.prevRect ?? cascadeNext(0, s.bounds);
+          const rect = clampRect({ x: sx - base.w / 2, y: sy - 18, w: base.w, h: base.h }, s.bounds);
+          return {
+            windows: { ...s.windows, [id]: { ...w, rect, maximized: false, prevRect: undefined } },
           };
         }),
 
