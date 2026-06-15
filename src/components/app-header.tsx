@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
-import { useIsMac } from "@/lib/use-platform";
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -19,7 +18,6 @@ export function AppHeader() {
   const group = findNavGroup(pathname);
   const title = current?.label ?? "eywa";
   const breadcrumb = group ? `EYWA · ${group.label}` : "EYWA";
-  const isMac = useIsMac();
 
   function openCommandPalette() {
     window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT));
@@ -36,20 +34,16 @@ export function AppHeader() {
         </h1>
       </div>
 
-      {/* ⌘K 팰릿 트리거 — 주 내비. 전역 단축키와 동일한 검색을 연다 */}
+      {/* 검색 팰릿 트리거 — 클릭으로 메뉴·검색 팰릿을 연다 */}
       <div className="flex flex-1 justify-center">
         <button
           type="button"
           onClick={openCommandPalette}
           aria-label="메뉴 검색 열기"
-          aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"}
           className="border-line bg-card text-text-dim hover:bg-bg-soft hover:text-foreground hidden w-full max-w-[420px] items-center gap-2.5 rounded-full border px-4 py-1.5 transition md:flex"
         >
           <EyIcon name="search" size={14} />
           <span className="flex-1 text-left text-[13px]">메뉴 · 학생 · 수업 어디로든 점프</span>
-          <span className="bg-bg-soft text-text-faint rounded-sm px-1.5 py-px font-mono text-[10px]">
-            {isMac ? "⌘K" : "Ctrl+K"}
-          </span>
         </button>
       </div>
 

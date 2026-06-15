@@ -55,7 +55,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">{children}</main>
       </div>
 
-      {/* ⌘K 메뉴 점프 팰릿 — 포털 렌더라 위치 무관, 인증 영역 전역에서 동작 */}
+      {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}
       <CommandPalette systemRole={user.systemRole} />
     </div>
   );

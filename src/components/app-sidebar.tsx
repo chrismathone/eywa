@@ -21,7 +21,7 @@ function isItemActive(href: string, pathname: string) {
 /**
  * 컴팩트 아이콘 레일 (52px) — 기존 232px 사이드바를 대체.
  * 아이콘만 노출, hover 시 Tooltip 라벨(우측). 그룹은 얇은 구분선으로 분리.
- * 텍스트로 메뉴를 찾고 싶으면 ⌘K 팰릿(command-palette)이 주 내비 역할.
+ * 텍스트로 메뉴를 찾고 싶으면 검색 팰릿(command-palette, 헤더 검색 클릭)을 사용.
  * UserMenu(로그아웃 포함)는 레일 하단에 고정.
  */
 export function AppSidebar({

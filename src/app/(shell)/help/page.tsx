@@ -1,6 +1,5 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
-import { ShortcutsList } from "./_shortcuts";
 import { HelpBrowser } from "./_help-browser";
 
 export const metadata = { title: "도움말 — eywa" };
@@ -110,16 +109,8 @@ export default async function HelpPage() {
     <div className="space-y-6">
       <HelpBrowser menus={MENUS} faq={FAQ} />
 
-      {/* 단축키 + 문의 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-          <header className="mb-3">
-            <p className="micro">단축키</p>
-            <h2 className="text-foreground mt-0.5 text-[15px] font-bold">키보드 한 번에</h2>
-          </header>
-          <ShortcutsList />
-        </section>
-
+      {/* 1:1 문의 */}
+      <div className="lg:max-w-md">
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#185533] p-5 text-white shadow-primary-glow">
           <p className="font-mono text-[10px] tracking-wider uppercase text-[#e9c876]">
             1:1 문의

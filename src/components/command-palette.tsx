@@ -19,8 +19,8 @@ type Command = {
 };
 
 /**
- * ⌘K / Ctrl+K 메뉴 점프 팰릿. 사이드바와 동일한 canAccess 게이트로 접근 가능한
- * 메뉴만 노출한다. 전역 단축키 + 헤더 검색 버튼(커스텀 이벤트) 두 경로로 열린다.
+ * 메뉴 점프 검색 팰릿. 사이드바와 동일한 canAccess 게이트로 접근 가능한
+ * 메뉴만 노출한다. 헤더 검색 버튼(커스텀 이벤트) 클릭으로 열린다 (키보드 단축키 없음).
  * 전부 클라이언트 사이드 — 네트워크 왕복 없이 즉시 이동 (반응속도 1순위).
  */
 export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
@@ -63,22 +63,13 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
   }, []);
   const closePalette = useCallback(() => setOpen(false), []);
 
-  // 전역 ⌘K / Ctrl+K 토글 + 외부 트리거(헤더 검색) 이벤트
+  // 헤더 검색 버튼(클릭) → 커스텀 이벤트로 팰릿 열기. (전역 키보드 단축키 없음)
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
-        e.preventDefault();
-        if (open) closePalette();
-        else openPalette();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
     window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, openPalette);
     };
-  }, [open, openPalette, closePalette]);
+  }, [openPalette]);
 
   // 키보드 이동 시 활성 항목이 항상 보이도록 (긴 목록·짧은 뷰포트 대비)
   useEffect(() => {
@@ -132,9 +123,6 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
               autoComplete="off"
               className="text-foreground placeholder:text-text-faint flex-1 bg-transparent text-sm focus:outline-none"
             />
-            <kbd className="bg-bg-soft text-text-faint rounded-sm px-1.5 py-px font-mono text-[10px]">
-              ESC
-            </kbd>
           </div>
 
           <ul className="scrollbar-thin max-h-[52vh] overflow-y-auto p-1.5">

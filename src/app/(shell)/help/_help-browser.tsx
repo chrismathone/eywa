@@ -39,7 +39,7 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
           </p>
           <h1 className="mt-2 text-[28px] font-extrabold leading-tight">무엇을 도와드릴까요?</h1>
           <p className="mt-2 text-[13px] text-white/85">
-            12개 메뉴 가이드와 자주 묻는 질문, 단축키를 한 곳에 모았어요.
+            12개 메뉴 가이드와 자주 묻는 질문을 한 곳에 모았어요.
           </p>
           <div className="mt-5 flex items-center gap-2 rounded-full bg-white/15 px-4 py-2.5 backdrop-blur-sm">
             <EyIcon name="search" size={15} />
