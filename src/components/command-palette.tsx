@@ -57,8 +57,9 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
   }, [systemRole]);
 
   const q = query.trim().toLowerCase();
+  // 입력 전엔 결과를 펼치지 않는다(검색창만 센터에). 타이핑해야 일치 항목이 나타남.
   const results = useMemo(
-    () => (q ? commands.filter((c) => c.keywords.includes(q)) : commands),
+    () => (q ? commands.filter((c) => c.keywords.includes(q)) : []),
     [commands, q],
   );
 
@@ -113,11 +114,11 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/20 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
         <Dialog.Popup
           initialFocus={() => inputRef.current}
-          className="border-line bg-card shadow-modal fixed top-[14vh] left-1/2 z-50 w-full max-w-[min(560px,calc(100%-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          className="border-line bg-card shadow-modal fixed top-[26vh] left-1/2 z-50 w-full max-w-[min(560px,calc(100%-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
         >
           <Dialog.Title className="sr-only">메뉴 검색</Dialog.Title>
 
-          <div className="border-line flex items-center gap-2.5 border-b px-4 py-3">
+          <div className={`flex items-center gap-2.5 px-4 py-3 ${q ? "border-line border-b" : ""}`}>
             <span className="text-text-dim">
               <EyIcon name="search" size={15} />
             </span>
@@ -137,6 +138,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
             />
           </div>
 
+          {q ? (
           <ul className="scrollbar-thin max-h-[52vh] overflow-y-auto p-1.5">
             {results.length === 0 ? (
               <li className="text-text-dim px-3 py-8 text-center text-xs">
@@ -178,6 +180,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
               })
             )}
           </ul>
+          ) : null}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
