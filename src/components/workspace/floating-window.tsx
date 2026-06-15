@@ -7,7 +7,7 @@ import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
-import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
+import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
 import type { ResizeHandle } from "./window-geometry";
 
@@ -36,7 +36,7 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
   const router = useRouter();
 
   const animationsOn = usePrefs((s) => s.animations);
-  const animOff = !animationsOn || prefersReducedMotion();
+  const animOff = !animationsOn;
 
   // 퇴장 애니메이션: 닫기/최소화/배경교체는 zoom-out 후(150ms) 실제 동작 실행. 모션 OFF면 즉시.
   const [exiting, setExiting] = useState(false);

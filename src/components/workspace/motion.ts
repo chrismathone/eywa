@@ -11,7 +11,7 @@ export function prefersReducedMotion() {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** 모션 비활성 — OS 접근성 선호 OR 사용자 설정(애니메이션 끄기). 전환·등장·퇴장 공통 게이트. */
+/** 모션 비활성 — 사용자 설정(창 애니메이션)이 단일 기준. 기본값만 OS '동작 줄이기'를 따름(use-prefs). */
 export function motionDisabled() {
-  return prefersReducedMotion() || !usePrefs.getState().animations;
+  return !usePrefs.getState().animations;
 }

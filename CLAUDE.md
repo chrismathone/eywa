@@ -576,9 +576,10 @@ Snap Layouts 바·Snap Assist 타일링(`applyLayout`/`applyDragLayout`)이 `pre
 ### 47. 창 애니메이션 — 지연 언마운트 + 모션 토글 + TS 클로저 narrowing 소실
 - 닫기/최소화/배경교체는 React가 **즉시 언마운트**라 퇴장 애니메이션이 없었다 → `exiting` 상태 set →
   150ms 후 실제 동작 실행(`runExit`). tw-animate `animate-out fade-out-0 zoom-out-95`.
-- **모션 토글**: `usePrefs`(zustand persist "eywa-prefs") + `motionDisabled()`=OS reduce-motion **OR**
-  설정 OFF. 훅(비-React)은 `usePrefs.getState()` 임의 읽기로 게이트, 컴포넌트는 구독으로 반응.
-  설정 UI는 UserMenu의 `DropdownMenuCheckboxItem`(`closeOnClick={false}`로 토글 시 메뉴 유지).
+- **모션 토글**: `usePrefs`(zustand persist "eywa-prefs"). `motionDisabled()`=설정 **단일 기준**(`!animations`).
+  설정 **기본값만** OS '동작 줄이기'를 따르고(`animations: !osReducedMotion()`), 한 번 토글하면 그 값이
+  OS를 **덮어씀**(ON이면 reduce-motion이어도 애니메이션 보임). 훅(비-React)은 `usePrefs.getState()` 임의
+  읽기로 게이트, 컴포넌트는 구독으로 반응. UI는 UserMenu의 `DropdownMenuCheckboxItem`(`closeOnClick={false}`).
 - 가드로 좁힌 타입(`win.params.href`)이 `runExit(() => …)` **클로저 안에서 `string|undefined`로 풀림**
   → 상수로 캡처(`const href = win.params.href`) 후 사용.
 
