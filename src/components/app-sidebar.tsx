@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import {
   Tooltip,
   TooltipContent,
@@ -69,6 +68,7 @@ export function AppSidebar({
               {gi > 0 ? <div className="bg-line my-1.5 h-px w-6" aria-hidden="true" /> : null}
               {group.items.map((item) => {
                 const active = isItemActive(item.href, pathname);
+                const Icon = item.icon;
                 return (
                   <Tooltip key={item.href}>
                     <TooltipTrigger
@@ -85,7 +85,7 @@ export function AppSidebar({
                         />
                       }
                     >
-                      <EyIcon name={item.icon} size={18} />
+                      <Icon size={18} strokeWidth={1.85} />
                     </TooltipTrigger>
                     <TooltipContent side="right">{item.label}</TooltipContent>
                   </Tooltip>

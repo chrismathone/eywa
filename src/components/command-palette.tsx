@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import type { LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { canAccess, type SystemRole } from "@/lib/permissions";
 
@@ -14,7 +15,7 @@ type Command = {
   href: string;
   label: string;
   group: string;
-  icon: EywaIconName;
+  icon: LucideIcon;
   keywords: string;
 };
 
@@ -133,6 +134,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
             ) : (
               results.map((c, i) => {
                 const isActive = i === active;
+                const Icon = c.icon;
                 return (
                   <li key={c.href}>
                     <button
@@ -149,7 +151,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
                           isActive ? "bg-white/15 text-white" : "bg-bg-soft text-text-dim"
                         }`}
                       >
-                        <EyIcon name={c.icon} size={14} />
+                        <Icon size={14} />
                       </span>
                       <span className="flex-1 truncate font-medium">{c.label}</span>
                       <span

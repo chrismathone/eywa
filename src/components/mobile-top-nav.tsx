@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { UserMenu } from "@/components/user-menu";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 import { canAccess, type SystemRole } from "@/lib/permissions";
@@ -56,6 +55,7 @@ export function MobileTopNav({
       >
         {items.map((item) => {
           const active = isItemActive(item.href, pathname);
+          const Icon = item.icon;
           return (
             <li key={item.href}>
               <Link
@@ -67,7 +67,7 @@ export function MobileTopNav({
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
-                <EyIcon name={item.icon} size={13} />
+                <Icon size={14} strokeWidth={1.85} />
                 <span className="truncate">{item.label}</span>
               </Link>
             </li>
