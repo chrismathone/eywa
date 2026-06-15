@@ -48,6 +48,12 @@ const MENUS: { id: string; label: string; href: string; description: string }[] 
     description: "재원생 면담 기록. 요약 + 후속 액션 (긴급도 자동 분류).",
   },
   {
+    id: "retention",
+    label: "이탈 방어",
+    href: "/retention",
+    description: "위험도 기반 이탈 방어. 출결·성적·상담·수납에서 위험 학생을 자동 산출 → '오늘 누구부터' 액션 큐 + 리텐션 보드 + 학부모 메시지 초안.",
+  },
+  {
     id: "withdrawals",
     label: "퇴원관리",
     href: "/withdrawals",

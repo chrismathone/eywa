@@ -249,6 +249,7 @@ export const MENU_ICON: Record<string, EywaIconName> = {
   consultations: "wave",
   withdrawals: "falling",
   withdrawal: "falling",
+  retention: "bell",
   staff: "roots",
   billing: "pollen",
   meetings: "rings",

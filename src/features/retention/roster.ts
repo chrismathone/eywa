@@ -1,0 +1,218 @@
+// 명단 집계 — 순수(서버 전용 아님). eywa 원시 행 → 학생별 신호 → 위험 점수.
+// queries.ts(서버)가 Supabase에서 받은 행을 이 함수에 넘긴다. fixtures/테스트도 동일 함수 사용.
+import {
+  scoreStudent,
+  ownerFor,
+  primaryAction,
+  type RetentionSignals,
+  type RiskResult,
+} from "./risk";
+
+export const ATTEND_WINDOW_DAYS = 30;
+
+export function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+export function addDays(d: Date, days: number): Date {
+  const n = new Date(d);
+  n.setDate(n.getDate() + days);
+  return n;
+}
+function pct(score: number | null, max: number | null): number | null {
+  if (score == null || max == null || Number(max) <= 0) return null;
+  return (Number(score) / Number(max)) * 100;
+}
+/** 수강료 미기재 시 학년 기준 추정(부원장 estimateFee 포팅). */
+function estimateFee(grade: string | null): number {
+  const g = grade ?? "";
+  if (g.includes("고")) return 640000;
+  if (g.includes("중")) return 540000;
+  if (g.includes("초")) return 380000;
+  return 500000;
+}
+function rel<T>(field: T | T[] | null | undefined): T | undefined {
+  return (Array.isArray(field) ? field[0] : field) ?? undefined;
+}
+
+// === eywa 원시 행 형태(Supabase select 결과와 동일, snake_case) ===
+export type RawStudentRow = {
+  id: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  notes: string | null;
+  ai_care_summary: string | null;
+  primary_teacher_id: string | null;
+  teacher: { display_name?: string } | { display_name?: string }[] | null;
+};
+export type RawAttendanceRow = {
+  student_id: string;
+  status: string;
+  session_date: string;
+  homework_required: boolean;
+  homework_done: boolean;
+};
+export type RawGradeRow = {
+  student_id: string;
+  score: number | null;
+  max_score: number | null;
+  taken_on: string;
+};
+export type RawConsultRow = {
+  student_id: string;
+  consulted_at: string;
+  summary: string | null;
+  follow_up_date: string | null;
+  follow_up_done: boolean;
+};
+export type RawInvoiceRow = { student_id: string; amount_total: number | string; period: string };
+export type RawEnrollmentRow = { student_id: string; end_date: string | null; on_hold: boolean };
+
+export type RetentionRawData = {
+  students: RawStudentRow[];
+  attendance: RawAttendanceRow[];
+  grades: RawGradeRow[];
+  consultations: RawConsultRow[];
+  invoices: RawInvoiceRow[];
+  enrollments: RawEnrollmentRow[];
+};
+
+export type RosterStudent = {
+  id: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  teacherName: string | null;
+  monthlyFee: number;
+  nextContactDate: string | null;
+  aiCareSummary: string | null;
+  memo: string;
+  signals: RetentionSignals;
+  risk: RiskResult;
+  owner: string;
+  primaryAction: string;
+};
+
+/** 원시 행 → 위험 명단(위험도 내림차순). today를 인자로 받아 결정적·테스트 가능. */
+export function buildRoster(raw: RetentionRawData, today: Date): RosterStudent[] {
+  const attMid = toIsoDate(addDays(today, -Math.floor(ATTEND_WINDOW_DAYS / 2)));
+  const todayIso = toIsoDate(today);
+
+  type Att = { recReq: number; recDone: number; oldReq: number; oldDone: number; absent: number; late: number };
+  const att = new Map<string, Att>();
+  for (const r of raw.attendance) {
+    const a = att.get(r.student_id) ?? { recReq: 0, recDone: 0, oldReq: 0, oldDone: 0, absent: 0, late: 0 };
+    if (r.status === "absent") a.absent++;
+    if (r.status === "late") a.late++;
+    if (r.homework_required) {
+      const recent = r.session_date >= attMid;
+      if (recent) { a.recReq++; if (r.homework_done) a.recDone++; }
+      else { a.oldReq++; if (r.homework_done) a.oldDone++; }
+    }
+    att.set(r.student_id, a);
+  }
+
+  const grades = new Map<string, { last: number | null; prev: number | null }>();
+  for (const r of [...raw.grades].sort((a, b) => (a.taken_on < b.taken_on ? 1 : -1))) {
+    const g = grades.get(r.student_id) ?? { last: null, prev: null };
+    const value = pct(r.score, r.max_score);
+    if (value == null) continue;
+    if (g.last == null) g.last = value;
+    else if (g.prev == null) g.prev = value;
+    grades.set(r.student_id, g);
+  }
+
+  const consult = new Map<string, { last: string | null; texts: string[]; nextContact: string | null }>();
+  for (const r of [...raw.consultations].sort((a, b) => (a.consulted_at < b.consulted_at ? 1 : -1))) {
+    const c = consult.get(r.student_id) ?? { last: null, texts: [], nextContact: null };
+    if (c.last == null) c.last = r.consulted_at;
+    if (r.summary && c.texts.length < 3) c.texts.push(r.summary);
+    if (!r.follow_up_done && r.follow_up_date) {
+      if (c.nextContact == null || r.follow_up_date < c.nextContact) c.nextContact = r.follow_up_date;
+    }
+    consult.set(r.student_id, c);
+  }
+
+  const fee = new Map<string, number>();
+  for (const r of [...raw.invoices].sort((a, b) => (a.period < b.period ? 1 : -1))) {
+    if (!fee.has(r.student_id)) fee.set(r.student_id, Number(r.amount_total) || 0);
+  }
+
+  const endsIn = new Map<string, number>();
+  for (const r of raw.enrollments) {
+    if (r.on_hold || !r.end_date || r.end_date < todayIso) continue;
+    const days = Math.round((new Date(r.end_date).getTime() - today.getTime()) / 86_400_000);
+    const cur = endsIn.get(r.student_id);
+    if (cur == null || days < cur) endsIn.set(r.student_id, days);
+  }
+
+  const roster = raw.students.map((s) => {
+    const a = att.get(s.id);
+    const g = grades.get(s.id);
+    const c = consult.get(s.id);
+    const homeworkRate =
+      a && a.recReq > 0 ? (a.recDone / a.recReq) * 100 : a && a.oldReq > 0 ? (a.oldDone / a.oldReq) * 100 : null;
+    const previousHomeworkRate = a && a.recReq > 0 && a.oldReq > 0 ? (a.oldDone / a.oldReq) * 100 : null;
+    const daysSinceCounsel = c?.last
+      ? Math.max(0, Math.round((today.getTime() - new Date(c.last).getTime()) / 86_400_000))
+      : null;
+    const memo = [s.notes ?? "", ...(c?.texts ?? [])].filter(Boolean).join(" ");
+
+    const signals: RetentionSignals = {
+      lastScore: g?.last ?? null,
+      previousScore: g?.prev ?? null,
+      homeworkRate,
+      previousHomeworkRate,
+      absences: a?.absent ?? 0,
+      lateCount: a?.late ?? 0,
+      daysSinceCounsel,
+      parentSignalText: memo,
+      monthlyFee: fee.get(s.id) || estimateFee(s.grade),
+      enrollmentEndsInDays: endsIn.get(s.id) ?? null,
+    };
+    const risk = scoreStudent(signals);
+    const teacherName = rel<{ display_name?: string }>(s.teacher)?.display_name ?? null;
+
+    return {
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      school: s.school,
+      teacherName,
+      monthlyFee: signals.monthlyFee,
+      nextContactDate: c?.nextContact ?? null,
+      aiCareSummary: s.ai_care_summary,
+      memo,
+      signals,
+      risk,
+      owner: ownerFor(risk.level, teacherName),
+      primaryAction: primaryAction(risk, homeworkRate),
+    } satisfies RosterStudent;
+  });
+
+  return roster.sort((x, y) => y.risk.score - x.risk.score || y.monthlyFee - x.monthlyFee);
+}
+
+export type RetentionStats = {
+  total: number;
+  risk: number;
+  warn: number;
+  ok: number;
+  revenueRisk: number;
+  scheduled: number;
+  renewalRisk: number;
+};
+
+/** 명단 → 대시보드 KPI 집계(파생, 순수). */
+export function summarizeRoster(roster: RosterStudent[]): RetentionStats {
+  let risk = 0, warn = 0, ok = 0, revenueRisk = 0, scheduled = 0, renewalRisk = 0;
+  for (const r of roster) {
+    if (r.risk.level === "risk") risk++;
+    else if (r.risk.level === "warn") warn++;
+    else ok++;
+    if (r.risk.level !== "ok") revenueRisk += r.monthlyFee;
+    if (r.nextContactDate) scheduled++;
+    if (r.risk.renewal.tone === "risk") renewalRisk++;
+  }
+  return { total: roster.length, risk, warn, ok, revenueRisk, scheduled, renewalRisk };
+}
