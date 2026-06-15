@@ -3,7 +3,7 @@
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useWindowStore } from "./window-store";
 import { snapBarHitTest, snapZoneForPoint, type LayoutTemplate, type Rect, type SnapZone } from "./window-geometry";
-import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
+import { WINDOW_TRANSITION, motionDisabled } from "./motion";
 
 type DragLayout = { template: LayoutTemplate; slot: number };
 function openCount() {
@@ -15,7 +15,8 @@ function sameLayout(a: DragLayout | null, b: DragLayout | null) {
 }
 
 const DRAG_THRESHOLD = 4; // 이만큼 움직여야 드래그 시작(미만은 클릭 → 바 플래시/iframe 리로드 방지)
-const TOP_BAND = 150; // 드래그 중 포인터가 상단 이 px 안이면 스냅 레이아웃 바 reveal
+const REVEAL_TOP = 44; // 스냅 바 소환: 드래그로 포인터를 상단 이 px 안까지 "올려야" 뜸(그랩/선택만으론 안 뜸)
+const KEEP_TOP = 160; // 히스테리시스: 소환 후엔 이 아래로 내려가야 닫힘(바 칸 호버 여유 확보)
 
 /**
  * 타이틀바 드래그 — 이동 중에는 store를 안 건드리고 ref 엘리먼트의 transform만 직접 갱신
@@ -57,9 +58,9 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
       }
       startedRef.current = true;
       const s = useWindowStore.getState();
-      // 최대화 창을 끌면 Windows처럼 이전 크기로 복원되어 커서를 따라온다(드래그 시작 시점에).
-      if (s.windows[id]?.maximized) {
-        s.unmaximizeUnderPointer(id, e.clientX - s.origin.left, e.clientY - s.origin.top);
+      // 최대화/스냅/타일 창을 끌면 Windows처럼 자유(이전) 크기로 복원되어 커서를 따라온다.
+      if (s.windows[id]?.maximized || s.windows[id]?.snapped) {
+        s.restoreUnderPointer(id, e.clientX - s.origin.left, e.clientY - s.origin.top);
         const w = useWindowStore.getState().windows[id];
         if (w) startRef.current = { px: e.clientX, py: e.clientY, rect: w.rect };
       }
@@ -68,7 +69,9 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     const cur = startRef.current;
     if (!cur) return;
     const x = cur.rect.x + (e.clientX - cur.px);
-    const y = cur.rect.y + (e.clientY - cur.py);
+    // 상단 클램프: 타이틀바(드래그 핸들)가 헤더/스냅바 위로 사라지지 않도록 스테이지 top(0) 아래 유지.
+    // 포인터(sy)는 계속 위로 갈 수 있어 스냅 바 소환엔 영향 없음.
+    const y = Math.max(0, cur.rect.y + (e.clientY - cur.py));
     posRef.current = { x, y };
     const el = elRef.current;
     if (el) el.style.transform = `translate(${x}px, ${y}px)`;
@@ -77,7 +80,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     const { bounds, origin } = store;
     const sx = e.clientX - origin.left;
     const sy = e.clientY - origin.top;
-    const nearTop = sy <= TOP_BAND;
+    const nearTop = nearTopRef.current ? sy <= KEEP_TOP : sy <= REVEAL_TOP;
     if (nearTop !== nearTopRef.current) {
       nearTopRef.current = nearTop;
       store.setDragNearTop(nearTop);
@@ -131,7 +134,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     const el = elRef.current;
     const fr = useWindowStore.getState().windows[id]?.rect;
     if (el && fr) {
-      el.style.transition = prefersReducedMotion() ? "none" : WINDOW_TRANSITION;
+      el.style.transition = motionDisabled() ? "none" : WINDOW_TRANSITION;
       el.style.transform = `translate(${fr.x}px, ${fr.y}px)`;
       el.style.width = `${fr.w}px`;
       el.style.height = `${fr.h}px`;

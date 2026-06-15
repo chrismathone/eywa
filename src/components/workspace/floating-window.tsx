@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef } from "react";
-import { Minus, Square, Copy, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { SendToBack, Minus, Square, Copy, X } from "lucide-react";
 import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
 import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
+import { usePrefs } from "./use-prefs";
 import type { ResizeHandle } from "./window-geometry";
 
 const HANDLES: { h: ResizeHandle; cls: string }[] = [
@@ -29,7 +31,39 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
   const minimize = useWindowStore((s) => s.minimize);
   const toggleMax = useWindowStore((s) => s.toggleMax);
   const focus = useWindowStore((s) => s.focus);
+  const swapToBackground = useWindowStore((s) => s.swapToBackground);
   const dragging = useWindowStore((s) => s.draggingId === win.id);
+  const router = useRouter();
+
+  const animationsOn = usePrefs((s) => s.animations);
+  const animOff = !animationsOn || prefersReducedMotion();
+
+  // 퇴장 애니메이션: 닫기/최소화/배경교체는 zoom-out 후(150ms) 실제 동작 실행. 모션 OFF면 즉시.
+  const [exiting, setExiting] = useState(false);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (exitTimer.current) clearTimeout(exitTimer.current); }, []);
+  function runExit(commit: () => void, keepMounted = false) {
+    if (animOff) {
+      commit();
+      return;
+    }
+    setExiting(true);
+    exitTimer.current = setTimeout(() => {
+      commit();
+      if (keepMounted) setExiting(false); // 최소화는 마운트 유지 → 복원 위해 상태 리셋
+    }, 150);
+  }
+
+  // 배경 교체: 이 창 라우트를 배경(메인 프레임)으로 띄우고, 지금 배경 라우트를 이 자리 창으로.
+  // 옛 배경은 store.background(캔버스가 pathname과 동기)에서 읽음 — pathname 지연 무관(연타 안전).
+  function handleSwapToBackground() {
+    if (win.kind !== "route" || !win.params.href) return;
+    const href = win.params.href;
+    runExit(() => {
+      router.push(href);
+      swapToBackground(win.id);
+    });
+  }
 
   // 최소화는 언마운트하지 않고 숨김(display:none) — iframe 문서/스크롤 상태 보존(진짜 멀티태스킹).
   return (
@@ -42,7 +76,7 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
         height: win.rect.h,
         zIndex: z,
         // 드래그 중엔 transition 0(1:1 추종), 그 외 store rect 변경(스냅/배치/최대화)은 글라이드
-        transition: dragging || prefersReducedMotion() ? "none" : WINDOW_TRANSITION,
+        transition: dragging || animOff ? "none" : WINDOW_TRANSITION,
       }}
       onPointerDown={() => focus(win.id)}
     >
@@ -52,11 +86,11 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
         aria-label={win.params.title}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === "Escape") close(win.id);
+          if (e.key === "Escape") runExit(() => close(win.id));
         }}
-        className={`bg-card animate-in fade-in-0 zoom-in-95 relative flex h-full w-full flex-col overflow-hidden rounded-xl border duration-150 ${
-          focused ? "border-primary/30 shadow-modal ring-primary/15 ring-2" : "border-line shadow-card"
-        }`}
+        className={`bg-card relative flex h-full w-full flex-col overflow-hidden rounded-xl border ${
+          animOff ? "" : `duration-150 ${exiting ? "animate-out fade-out-0 zoom-out-95" : "animate-in fade-in-0 zoom-in-95"}`
+        } ${focused ? "border-primary/30 shadow-modal ring-primary/15 ring-2" : "border-line shadow-card"}`}
       >
         {/* 타이틀바 (드래그 핸들) */}
         <div
@@ -76,10 +110,23 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
             onPointerDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
           >
+            {win.kind === "route" ? (
+              <button
+                type="button"
+                aria-label="배경 교체"
+                title="배경 교체"
+                onClick={handleSwapToBackground}
+                disabled={exiting}
+                className="text-text-dim hover:bg-primary/15 hover:text-primary mr-0.5 flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"
+              >
+                <SendToBack size={14} strokeWidth={2} />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="최소화"
-              onClick={() => minimize(win.id)}
+              title="최소화"
+              onClick={() => runExit(() => minimize(win.id), true)}
               className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
             >
               <Minus size={15} strokeWidth={2} />
@@ -87,6 +134,7 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
             <button
               type="button"
               aria-label={win.maximized ? "이전 크기로" : "최대화"}
+              title={win.maximized ? "이전 크기로" : "최대화"}
               onClick={() => toggleMax(win.id)}
               className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
             >
@@ -95,7 +143,8 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
             <button
               type="button"
               aria-label="닫기"
-              onClick={() => close(win.id)}
+              title="닫기"
+              onClick={() => runExit(() => close(win.id))}
               className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[3px] transition hover:text-white"
             >
               <X size={16} strokeWidth={2} />

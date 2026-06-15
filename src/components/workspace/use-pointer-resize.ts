@@ -3,7 +3,7 @@
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useWindowStore } from "./window-store";
 import { resizeRect, type Rect, type ResizeHandle } from "./window-geometry";
-import { WINDOW_TRANSITION, prefersReducedMotion } from "./motion";
+import { WINDOW_TRANSITION, motionDisabled } from "./motion";
 
 /**
  * 8방향 리사이즈 — 드래그와 동일하게 이동 중엔 ref transform/width/height만 직접
@@ -49,7 +49,7 @@ export function usePointerResize(id: string, elRef: RefObject<HTMLDivElement | n
     const el = elRef.current;
     const fr = useWindowStore.getState().windows[id]?.rect;
     if (el && fr) {
-      el.style.transition = prefersReducedMotion() ? "none" : WINDOW_TRANSITION;
+      el.style.transition = motionDisabled() ? "none" : WINDOW_TRANSITION;
       el.style.transform = `translate(${fr.x}px, ${fr.y}px)`;
       el.style.width = `${fr.w}px`;
       el.style.height = `${fr.h}px`;

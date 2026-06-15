@@ -12,7 +12,7 @@ import { UserMenu } from "@/components/user-menu";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 import { canAccess, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
-import { useWindowStore } from "@/components/workspace/window-store";
+import { useWindowStore, windowId } from "@/components/workspace/window-store";
 
 function isItemActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
@@ -24,6 +24,13 @@ function isItemActive(href: string, pathname: string) {
  * 아이콘만 노출, hover 시 Tooltip 라벨(우측). 그룹은 얇은 구분선으로 분리.
  * 텍스트로 메뉴를 찾고 싶으면 검색 팰릿(command-palette, 헤더 검색 클릭)을 사용.
  * UserMenu(로그아웃 포함)는 레일 하단에 고정.
+ *
+ * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 usePathname은
+ * 항상 /dashboard에 머문다. 그래서 active는 윈도우 스토어로 구동한다 —
+ *  · 포커스된 창의 메뉴 = 풀 하이라이트
+ *  · 열려 있지만 비포커스 = 점(dot)
+ *  · 포커스된 창이 없음 = 바탕(배경) 라우트가 활성 (기본 대시보드, 배경 교체 시 그 라우트)
+ * 모바일(라우트 이동)에서는 기존 pathname 기준을 유지.
  */
 export function AppSidebar({
   systemRole,
@@ -37,6 +44,17 @@ export function AppSidebar({
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
   const openWindow = useWindowStore((s) => s.open);
+  const focusedId = useWindowStore((s) => s.focusedId);
+  // 열린(비최소화) 창 id 집합을 primitive 문자열로 구독 → 드래그/리사이즈 시엔 리렌더 안 함.
+  const openKey = useWindowStore((s) =>
+    Object.entries(s.windows)
+      .filter(([, w]) => !w.minimized)
+      .map(([id]) => id)
+      .sort()
+      .join("|"),
+  );
+  const openIds = new Set(openKey ? openKey.split("|") : []);
+  const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
 
   // 데스크톱: 메뉴를 플로팅 창(크롬리스 iframe)으로. 모디파이어(새 탭 등)는 기본 Link 보존.
   function handleNav(e: React.MouseEvent, item: NavItem) {
@@ -78,7 +96,13 @@ export function AppSidebar({
             <div key={group.label} className="flex w-full flex-col items-center gap-1">
               {gi > 0 ? <div className="bg-line my-1.5 h-px w-6" aria-hidden="true" /> : null}
               {group.items.map((item) => {
-                const active = isItemActive(item.href, pathname);
+                const winId = windowId("route", item.menuKey);
+                const isOpen = isDesktop && openIds.has(winId);
+                const active = isDesktop
+                  ? (hasFocus && focusedId === winId) ||
+                    (!hasFocus && isItemActive(item.href, pathname))
+                  : isItemActive(item.href, pathname);
+                const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
                 const Icon = item.icon;
                 return (
                   <Tooltip key={item.href}>
@@ -89,15 +113,20 @@ export function AppSidebar({
                           onClick={(e) => handleNav(e, item)}
                           aria-current={active ? "page" : undefined}
                           aria-label={item.label}
-                          className={`flex size-9 items-center justify-center rounded-[6px] transition ${
+                          className={`relative flex size-9 items-center justify-center rounded-[6px] transition ${
                             active
                               ? "bg-primary text-primary-foreground shadow-primary-glow"
-                              : "text-text-dim hover:bg-sidebar-accent hover:text-foreground"
+                              : openOnly
+                                ? "bg-sidebar-accent text-foreground"
+                                : "text-text-dim hover:bg-sidebar-accent hover:text-foreground"
                           }`}
                         />
                       }
                     >
                       <Icon size={18} strokeWidth={1.85} />
+                      {openOnly ? (
+                        <span className="bg-primary absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full" />
+                      ) : null}
                     </TooltipTrigger>
                     <TooltipContent side="right">{item.label}</TooltipContent>
                   </Tooltip>

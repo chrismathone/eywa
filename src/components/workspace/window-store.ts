@@ -8,6 +8,7 @@ import {
   clampRect,
   layoutSlots,
   resizeRect,
+  ROUTE_WINDOW_SIZE,
   snapTarget,
   templateSlots,
   type Bounds,
@@ -28,6 +29,9 @@ export type Win = {
   rect: Rect;
   minimized: boolean;
   maximized: boolean;
+  /** 스냅/타일 레이아웃 슬롯에 들어가 있음(자유 위치/최대화와 구분). 드래그로 빼면 prevRect로 복원. */
+  snapped?: boolean;
+  /** 자유(레이아웃 전) 크기 — 스냅/타일/최대화 진입 시 저장, 해제 시 이 크기로 복원. */
   prevRect?: Rect;
 };
 
@@ -72,6 +76,7 @@ type State = {
   draggingId: string | null; // 드래그/리사이즈 중인 창(iframe 숨겨 부드럽게, 미영속)
   dragLayout: { template: LayoutTemplate; slot: number } | null; // 드래그 중 스냅 레이아웃 바 호버 슬롯
   dragNearTop: boolean; // 드래그 중 포인터가 상단 밴드 → 스냅 레이아웃 바 reveal
+  background: WindowParams; // 현재 배경(메인 프레임) 라우트 — 배경 교체 기준(미영속, pathname과 동기)
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -81,12 +86,16 @@ type Actions = {
   setDragNearTop: (v: boolean) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
+  /** 현재 배경 라우트 설정(메인 프레임 이동 시 캔버스가 pathname에서 동기). */
+  setBackground: (params: WindowParams) => void;
+  /** 창 ⇄ 배경 1:1 맞교환 — 이 창 라우트를 배경으로, 옛 배경(store.background)을 같은 자리 창으로. */
+  swapToBackground: (winId: string) => void;
   close: (id: string) => void;
   focus: (id: string) => void;
   setRect: (id: string, rect: Rect) => void;
   resizeBy: (id: string, base: Rect, handle: ResizeHandle, dx: number, dy: number) => void;
   toggleMax: (id: string) => void;
-  unmaximizeUnderPointer: (id: string, sx: number, sy: number) => void; // 최대화 창 드래그 시작 = 복원
+  restoreUnderPointer: (id: string, sx: number, sy: number) => void; // 최대화/스냅 창 드래그 시작 = 복원
   snap: (id: string, zone: Exclude<SnapZone, null>) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
@@ -109,6 +118,7 @@ export const useWindowStore = create<State & Actions>()(
       draggingId: null,
       dragLayout: null,
       dragNearTop: false,
+      background: { id: "dashboard", title: "대시보드", href: "/dashboard" },
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
@@ -116,6 +126,7 @@ export const useWindowStore = create<State & Actions>()(
       setDragging: (id) => set({ draggingId: id }),
       setDragLayout: (v) => set({ dragLayout: v }),
       setDragNearTop: (v) => set({ dragNearTop: v }),
+      setBackground: (params) => set({ background: params }),
 
       // 스냅 레이아웃 바 드롭: 지정 슬롯=드래그 창, 나머지 슬롯=다른 열린 창(order순), 초과=최소화.
       applyDragLayout: (id, template, slot) =>
@@ -128,7 +139,9 @@ export const useWindowStore = create<State & Actions>()(
           slots.forEach((rect, si) => {
             const wid = si === slot ? id : others[oi++];
             if (!wid || !windows[wid]) return;
-            windows[wid] = { ...windows[wid], rect, maximized: false, minimized: false, prevRect: undefined };
+            const exd = windows[wid];
+            const origd = (exd.maximized || exd.snapped) && exd.prevRect ? exd.prevRect : exd.rect;
+            windows[wid] = { ...exd, rect, maximized: false, minimized: false, snapped: true, prevRect: origd };
           });
           for (; oi < others.length; oi++) {
             const wid = others[oi];
@@ -162,12 +175,58 @@ export const useWindowStore = create<State & Actions>()(
           id,
           kind,
           params,
-          rect: cascadeNext(order.length, s.bounds),
+          rect: cascadeNext(
+            order.length,
+            s.bounds,
+            kind === "route" ? ROUTE_WINDOW_SIZE[params.id] : undefined,
+          ),
           minimized: false,
           maximized: false,
         };
         set({ windows, order: [...order, id], focusedId: id, snapAssist: null });
       },
+
+      // 창 ⇄ 배경 1:1 맞교환. 이 창 라우트는 호출부가 router.push로 배경(메인 프레임)에 띄우고,
+      // 옛 배경(store.background)은 이 창 자리에 새 창이 된다. background를 새 라우트로 갱신해
+      // pathname 비동기 지연과 무관하게 결정적(연타 레이스 제거). focusedId=null → 새 배경이 메인 뷰.
+      swapToBackground: (winId) =>
+        set((s) => {
+          const w = s.windows[winId];
+          if (!w) return s;
+          const bgParams = s.background; // 현재 배경 → 이 자리 창으로
+          const rect = w.maximized && w.prevRect ? w.prevRect : w.rect;
+          const windows = { ...s.windows };
+          delete windows[winId];
+          let order = s.order.filter((id) => id !== winId);
+          const bgId = windowId("route", bgParams.id);
+          if (windows[bgId]) {
+            // 옛 배경과 같은 창이 이미 열려 있으면 그 창을 이 자리로 옮긴다.
+            windows[bgId] = {
+              ...windows[bgId],
+              rect: clampRect(rect, s.bounds),
+              minimized: false,
+              maximized: false,
+              prevRect: undefined,
+            };
+            order = bringToFront(order, bgId);
+          } else {
+            while (order.length >= MAX_WINDOWS) {
+              const victim = order.find((wid) => wid !== bgId) ?? order[0];
+              delete windows[victim];
+              order = order.filter((wid) => wid !== victim);
+            }
+            windows[bgId] = {
+              id: bgId,
+              kind: "route",
+              params: bgParams,
+              rect: clampRect(rect, s.bounds),
+              minimized: false,
+              maximized: false,
+            };
+            order = [...order, bgId];
+          }
+          return { windows, order, focusedId: null, snapAssist: null, background: w.params };
+        }),
 
       close: (id) =>
         set((s) => {
@@ -192,7 +251,7 @@ export const useWindowStore = create<State & Actions>()(
           const w = s.windows[id];
           if (!w) return s;
           return {
-            windows: { ...s.windows, [id]: { ...w, rect: clampRect(rect, s.bounds), maximized: false } },
+            windows: { ...s.windows, [id]: { ...w, rect: clampRect(rect, s.bounds), maximized: false, snapped: false, prevRect: undefined } },
           };
         }),
 
@@ -203,7 +262,7 @@ export const useWindowStore = create<State & Actions>()(
           return {
             windows: {
               ...s.windows,
-              [id]: { ...w, rect: resizeRect(base, handle, dx, dy, s.bounds), maximized: false },
+              [id]: { ...w, rect: resizeRect(base, handle, dx, dy, s.bounds), maximized: false, snapped: false },
             },
           };
         }),
@@ -216,28 +275,28 @@ export const useWindowStore = create<State & Actions>()(
             return {
               windows: {
                 ...s.windows,
-                [id]: { ...w, rect: clampRect(w.prevRect, s.bounds), maximized: false, prevRect: undefined },
+                [id]: { ...w, rect: clampRect(w.prevRect, s.bounds), maximized: false, snapped: false, prevRect: undefined },
               },
             };
           }
           return {
             windows: {
               ...s.windows,
-              [id]: { ...w, prevRect: w.rect, rect: snapTarget("max", s.bounds)!, maximized: true },
+              [id]: { ...w, prevRect: w.snapped && w.prevRect ? w.prevRect : w.rect, rect: snapTarget("max", s.bounds)!, maximized: true, snapped: false },
             },
           };
         }),
 
-      // 최대화 창 드래그 시작 → Windows식 복원: 이전 크기로 줄이며 커서(스테이지 로컬 sx,sy)
-      // 아래 타이틀바에 오도록 재배치. 이후 드래그가 이 rect에서 이어진다.
-      unmaximizeUnderPointer: (id, sx, sy) =>
+      // 최대화/스냅/타일 창 드래그 시작 → Windows식 복원: 자유(이전) 크기로 줄이며 커서(스테이지
+      // 로컬 sx,sy) 아래 타이틀바에 오도록 재배치. 이후 드래그가 이 rect에서 이어진다.
+      restoreUnderPointer: (id, sx, sy) =>
         set((s) => {
           const w = s.windows[id];
-          if (!w || !w.maximized) return s;
+          if (!w || (!w.maximized && !w.snapped)) return s;
           const base = w.prevRect ?? cascadeNext(0, s.bounds);
           const rect = clampRect({ x: sx - base.w / 2, y: sy - 18, w: base.w, h: base.h }, s.bounds);
           return {
-            windows: { ...s.windows, [id]: { ...w, rect, maximized: false, prevRect: undefined } },
+            windows: { ...s.windows, [id]: { ...w, rect, maximized: false, snapped: false, prevRect: undefined } },
           };
         }),
 
@@ -249,9 +308,10 @@ export const useWindowStore = create<State & Actions>()(
             ...s.windows,
             [id]: {
               ...w,
-              prevRect: w.maximized ? w.prevRect : w.rect,
+              prevRect: (w.maximized || w.snapped) && w.prevRect ? w.prevRect : w.rect,
               rect: snapTarget(zone, s.bounds)!,
               maximized: zone === "max",
+              snapped: zone !== "max",
             },
           };
           // 스마트 코너 스냅(Windows식): 모서리로 스냅 시, 같은 쪽 절반을 통째 차지한 창이
@@ -265,7 +325,7 @@ export const useWindowStore = create<State & Actions>()(
             );
             if (victim) {
               const vw = s.windows[victim];
-              windows[victim] = { ...vw, prevRect: vw.rect, rect: compRect, maximized: false };
+              windows[victim] = { ...vw, prevRect: (vw.maximized || vw.snapped) && vw.prevRect ? vw.prevRect : vw.rect, rect: compRect, maximized: false, snapped: true };
             }
           }
           // 절반 스냅 + 다른 열린(비최소화) 창 있으면 반대편 채우기 제안(Snap Assist)
@@ -317,9 +377,10 @@ export const useWindowStore = create<State & Actions>()(
           ordered.forEach((id, i) => {
             const w = windows[id];
             if (!w) return;
+            const origl = (w.maximized || w.snapped) && w.prevRect ? w.prevRect : w.rect;
             windows[id] =
               i < slots.length
-                ? { ...w, rect: slots[i], maximized: false, minimized: false, prevRect: undefined }
+                ? { ...w, rect: slots[i], maximized: false, minimized: false, snapped: true, prevRect: origl }
                 : { ...w, minimized: true };
           });
           return {

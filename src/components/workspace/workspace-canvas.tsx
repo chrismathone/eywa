@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { findNavItem } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
@@ -29,6 +31,15 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
+  const setBackground = useWindowStore((s) => s.setBackground);
+  const pathname = usePathname();
+
+  // 메인 프레임 라우트 = 배경. pathname이 바뀔 때마다 store.background 동기 → 배경 교체가
+  // pathname 비동기 지연과 무관하게 결정적으로 동작(연타 레이스 방지).
+  useEffect(() => {
+    const item = findNavItem(pathname);
+    if (item) setBackground({ id: item.menuKey, title: item.label, href: item.href });
+  }, [pathname, setBackground]);
 
   useEffect(() => {
     const setVp = () =>
