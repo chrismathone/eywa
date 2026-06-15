@@ -16,7 +16,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (user.systemRole === "teacher" || user.systemRole === "student") {
     return (
       <div className="bg-background text-foreground flex h-screen flex-col overflow-hidden">
-        <header className="bg-background border-line sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-5 lg:px-7">
+        <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
           <div className="flex items-center gap-2.5">
             <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
               <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
