@@ -8,6 +8,7 @@ import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
+import { EmbedProvider } from "@/components/workspace/embed-context";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -18,9 +19,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
     return (
-      <main className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
-        {children}
-      </main>
+      <EmbedProvider embed>
+        <main className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+          {children}
+        </main>
+      </EmbedProvider>
     );
   }
 

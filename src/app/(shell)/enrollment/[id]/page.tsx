@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ArrowLeft, Loader2, Mic, Printer, Sparkles } from "lucide-react";
+import { AlertCircle, Loader2, Mic, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getEnrollmentConsultationById,
@@ -73,13 +74,7 @@ export default async function EnrollmentDetailPage({
         initialStatus={consult.processingStatus}
       />
 
-      <Link
-        href="/enrollment"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        등록상담으로
-      </Link>
+      <BackLink href="/enrollment" label="등록상담으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

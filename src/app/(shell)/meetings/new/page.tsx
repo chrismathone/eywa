@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { NewMeetingForm } from "./new-meeting-form";
 
@@ -10,13 +9,7 @@ export default async function NewMeetingPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href="/meetings"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        회의록으로
-      </Link>
+      <BackLink href="/meetings" label="회의록으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">새 회의록</p>

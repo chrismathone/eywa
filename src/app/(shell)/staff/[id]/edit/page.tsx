@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CalendarDays, Wallet } from "lucide-react";
+import { CalendarDays, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffById } from "@/features/staff/server/queries";
@@ -28,13 +28,7 @@ export default async function EditStaffPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href="/staff"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        직원관리로
-      </Link>
+      <BackLink href="/staff" label="직원관리로" />
 
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">

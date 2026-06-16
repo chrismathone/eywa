@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStaffDetail } from "@/features/staff/server/queries";
 import {
@@ -36,13 +35,7 @@ export default async function StaffPayrollPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/staff/${id}/edit`}
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        강사 정보로
-      </Link>
+      <BackLink href={`/staff/${id}/edit`} label="강사 정보로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">강사 급여 정산</p>

@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getClassDetail,
@@ -29,13 +28,7 @@ export default async function EditClassPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/classes/${id}`}
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        반 상세로
-      </Link>
+      <BackLink href={`/classes/${id}`} label="반 상세로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">반 수정</p>

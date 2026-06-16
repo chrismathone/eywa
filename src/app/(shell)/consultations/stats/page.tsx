@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getConsultationByCategory,
@@ -21,13 +20,7 @@ export default async function ConsultationStatsPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/consultations"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        학생상담으로
-      </Link>
+      <BackLink href="/consultations" label="학생상담으로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">상담 통계</p>

@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { findDuplicateStudents } from "@/features/admin/server/queries";
 import { DuplicatesClient } from "./_client";
@@ -13,20 +12,14 @@ export default async function DuplicatesPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/admin"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        관리자 도구로
-      </Link>
+      <BackLink href="/admin" label="관리자 도구로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">관리 · 중복 병합</p>
         <h1 className="display text-foreground text-2xl">중복 의심 학생</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          이름·학년·학교가 모두 같은 학생들. 통합하면 모든 수강·출석·수납·상담·메모가 보존할 학생으로
-          이전되고 나머지 중복 학생은 퇴원 처리됩니다.
+          이름·학년·학교가 같거나, 이름·학년이 같고 학부모 연락처가 동일한 학생들. 통합하면 모든
+          수강·출석·수납·상담·메모가 보존할 학생으로 이전되고 나머지 중복 학생은 퇴원 처리됩니다.
         </p>
       </header>
 

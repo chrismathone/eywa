@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
@@ -17,13 +16,7 @@ export default async function NewClassPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/classes"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        수업목록으로
-      </Link>
+      <BackLink href="/classes" label="수업목록으로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">새 반 생성</p>

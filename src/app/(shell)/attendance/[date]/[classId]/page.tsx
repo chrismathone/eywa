@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getAttendanceInputRows,
@@ -36,13 +35,7 @@ export default async function AttendanceInputPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <Link
-        href={`/attendance/${date}`}
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        {formatKoreanDate(date)}로
-      </Link>
+      <BackLink href={`/attendance/${date}`} label={`${formatKoreanDate(date)}로`} />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">{formatKoreanDate(date)}</p>

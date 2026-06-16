@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   AlertCircle,
-  ArrowLeft,
   CheckSquare,
   Loader2,
   Mic,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getMeetingById,
@@ -86,13 +86,7 @@ export default async function MeetingDetailPage({
     <div className="space-y-6">
       <MeetingStatusWatcher meetingId={meeting.id} initialStatus={meeting.processingStatus} />
 
-      <Link
-        href="/meetings"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        회의록으로
-      </Link>
+      <BackLink href="/meetings" label="회의록으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">

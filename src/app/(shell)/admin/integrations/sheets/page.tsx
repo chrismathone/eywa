@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { SheetsClient } from "./_client";
@@ -13,13 +12,7 @@ export default async function SheetsIntegrationPage() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/dashboard"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        대시보드로
-      </Link>
+      <BackLink href="/dashboard" label="대시보드로" />
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">관리 · 외부 통합</p>

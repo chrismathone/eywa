@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentById, getTeacherOptions } from "@/features/students/server/queries";
 import { StudentForm } from "../../_components/student-form";
@@ -22,13 +21,7 @@ export default async function EditStudentPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href={`/students/${id}`}
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        학생 상세로
-      </Link>
+      <BackLink href={`/students/${id}`} label="학생 상세로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">학생 수정</p>

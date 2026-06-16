@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
+import { BackLink } from "@/components/back-link";
 import {
   getStudentConsultationById,
   getStudentOptionsForConsultation,
@@ -27,13 +26,7 @@ export default async function EditConsultationPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href="/consultations"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        학생상담으로
-      </Link>
+      <BackLink href="/consultations" label="학생상담으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">상담 수정</p>

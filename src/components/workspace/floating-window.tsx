@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SendToBack, Minus, Square, Copy, X } from "lucide-react";
+import { SendToBack, Minus, Square, Copy, X, ArrowLeft } from "lucide-react";
 import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
+import { iframeRegistry } from "./route-window";
 import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
 import { spotlightTop, type ResizeHandle } from "./window-geometry";
@@ -45,6 +46,9 @@ export function FloatingWindow({
   const swapToBackground = useWindowStore((s) => s.swapToBackground);
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const bounds = useWindowStore((s) => s.bounds);
+  // 라이브 제목/뒤로가능(RouteWindow가 iframe 관찰로 갱신). 라우트 창은 현재 서브뷰 제목을 표시하고,
+  // 드릴인했으면(canBack) 크롬 뒤로(←) 버튼을 띄운다 — 인페이지 "← …로" 백을 대체(Idea A).
+  const live = useWindowStore((s) => s.live[win.id]);
   const router = useRouter();
 
   // 스포트라이트: 포커스 창은 상단 큰 영역(spotlightTop, store rect 불변→해제 시 글라이드 복원),
@@ -85,6 +89,13 @@ export function FloatingWindow({
     });
   }
 
+  // 창을 닫을 때 부모(배경) 라우트를 새로고침 — 창(iframe)에서 한 저장/삭제가 별도 문서인 배경
+  // 목록에 즉시 반영되게 한다(예: 직원 이름 수정 후 닫으면 배경 카드도 바로 갱신).
+  function closeAndRefresh() {
+    close(win.id);
+    if (win.kind === "route") router.refresh();
+  }
+
   // 최소화는 언마운트하지 않고 숨김(display:none) — iframe 문서/스크롤 상태 보존(진짜 멀티태스킹).
   return (
     <div
@@ -109,7 +120,7 @@ export function FloatingWindow({
         aria-label={win.params.title}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === "Escape") runExit(() => close(win.id));
+          if (e.key === "Escape") runExit(closeAndRefresh);
         }}
         className={`bg-card relative flex h-full w-full flex-col overflow-hidden rounded-xl border ${
           animOff ? "" : `duration-150 ${exiting ? "animate-out fade-out-0 zoom-out-95" : "animate-in fade-in-0 zoom-in-95"}`
@@ -120,10 +131,28 @@ export function FloatingWindow({
           onPointerDown={spot ? undefined : drag.onPointerDown}
           onPointerMove={spot ? undefined : drag.onPointerMove}
           onPointerUp={spot ? undefined : drag.onPointerUp}
+          // pointercancel(OS 제스처·캡처 detach 등) 시에도 onPointerUp으로 정리 — 안 하면 draggingId가
+          // 남아 iframe이 visibility:hidden인 채 영구 stuck(#8).
+          onPointerCancel={spot ? undefined : drag.onPointerUp}
           onDoubleClick={spot ? undefined : () => toggleMax(win.id)}
           className={`bg-bg-soft border-line flex h-9 shrink-0 touch-none items-center gap-2 border-b pr-1 pl-3 select-none ${spot ? "" : "cursor-grab active:cursor-grabbing"}`}
         >
-          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{win.params.title}</span>
+          {win.kind === "route" && live?.canBack ? (
+            // 드릴인 상태에서만 뒤로(←) 표시 — iframe 한 단계 뒤로. 루트(첫 화면)에선 표시 안 함
+            // (닫기는 우상단 X가 담당, ← 닫기는 중복).
+            <button
+              type="button"
+              aria-label="뒤로"
+              title="뒤로"
+              onPointerDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              onClick={() => iframeRegistry.get(win.id)?.contentWindow?.history.back()}
+              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground -ml-1 flex size-6 shrink-0 items-center justify-center rounded-[3px] transition"
+            >
+              <ArrowLeft size={14} strokeWidth={2} />
+            </button>
+          ) : null}
+          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{live?.canBack ? live.title : win.params.title}</span>
           {win.params.subtitle ? <span className="text-text-faint min-w-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
           <span className="flex-1" />
 
@@ -169,7 +198,7 @@ export function FloatingWindow({
               type="button"
               aria-label="닫기"
               title="닫기"
-              onClick={() => runExit(() => close(win.id))}
+              onClick={() => runExit(closeAndRefresh)}
               className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[3px] transition hover:text-white"
             >
               <X size={16} strokeWidth={2} />
@@ -191,6 +220,7 @@ export function FloatingWindow({
                 onPointerDown={resize.start(h)}
                 onPointerMove={resize.onPointerMove}
                 onPointerUp={resize.onPointerUp}
+                onPointerCancel={resize.onPointerUp}
                 className={`absolute z-10 touch-none ${cls}`}
               />
             ))}

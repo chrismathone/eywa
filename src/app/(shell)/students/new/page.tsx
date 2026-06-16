@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { StudentForm } from "../_components/student-form";
@@ -12,13 +11,7 @@ export default async function NewStudentPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href="/students"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        학생목록으로
-      </Link>
+      <BackLink href="/students" label="학생목록으로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">학생 등록</p>

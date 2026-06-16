@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
@@ -19,13 +18,7 @@ export default async function NewStaffPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Link
-        href="/staff"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        직원관리로
-      </Link>
+      <BackLink href="/staff" label="직원관리로" />
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">직원 등록</p>

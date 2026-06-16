@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MessagesSquare, ScrollText } from "lucide-react";
+import { MessagesSquare, ScrollText } from "lucide-react";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
+import { BackLink } from "@/components/back-link";
 import {
   enrollmentDuration,
   getWithdrawalDetail,
@@ -36,13 +36,7 @@ export default async function WithdrawalDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/withdrawals"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
-      >
-        <ArrowLeft className="size-3.5" />
-        퇴원관리로
-      </Link>
+      <BackLink href="/withdrawals" label="퇴원관리로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

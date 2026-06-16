@@ -80,6 +80,9 @@ type State = {
   background: WindowParams[]; // 배경 스택(첫=대시보드 기본). 삽입 순서 고정. 미영속, pathname 동기
   activeBackgroundId: string; // 현재 메인 프레임에 보이는 배경 id(=하이라이트). 선택해도 스택 순서는 불변.
   spotlight: boolean; // 스포트라이트 모드(포커스 창 상단 크게, 나머지는 하단 커버 스트립). 런타임.
+  // 라우트 창의 iframe 현재 문서 제목/뒤로가능 여부(런타임, 미영속). RouteWindow가 iframe title·path를
+  // 관찰해 갱신 → 타이틀바가 서브뷰 드릴인을 반영하고 크롬 뒤로(←) 버튼을 띄운다(인페이지 백 대체).
+  live: Record<string, { title: string; canBack: boolean }>;
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -88,6 +91,8 @@ type Actions = {
   setDragLayout: (v: { template: LayoutTemplate; slot: number } | null) => void;
   setDragNearTop: (v: boolean) => void;
   setDragBackground: (v: boolean) => void;
+  /** RouteWindow가 iframe 제목/뒤로가능 변화를 보고 → 타이틀바 라이브 갱신(동일하면 no-op). */
+  setLive: (id: string, v: { title: string; canBack: boolean }) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
   /** 라우트를 배경 스택 맨 위(보이는 배경)로 — 이미 있으면 이동, 없으면 추가. 캔버스가 pathname서 동기. */
@@ -132,6 +137,7 @@ export const useWindowStore = create<State & Actions>()(
       background: [{ id: "dashboard", title: "대시보드", href: "/dashboard" }],
       activeBackgroundId: "dashboard",
       spotlight: false,
+      live: {},
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
@@ -140,10 +146,20 @@ export const useWindowStore = create<State & Actions>()(
       setDragLayout: (v) => set({ dragLayout: v }),
       setDragNearTop: (v) => set({ dragNearTop: v }),
       setDragBackground: (v) => set({ dragBackground: v }),
+      setLive: (id, v) =>
+        set((s) => {
+          const cur = s.live[id];
+          if (cur && cur.title === v.title && cur.canBack === v.canBack) return s;
+          return { live: { ...s.live, [id]: v } };
+        }),
       // 라우트를 "보이는 배경"으로 표시 — 삽입 순서는 고정(재정렬 안 함). 스택에 없으면 끝에 추가.
       // activeBackgroundId만 바뀌므로 탭을 클릭(=pathname 변경)해도 스트립 순서가 흔들리지 않는다.
       setBackground: (params) =>
         set((s) => {
+          // 같은 라우트가 이미 창으로 떠 있으면(비최소화) 배경 탭으로 중복 추가하지 않는다(#9).
+          // "라우트는 창이거나 배경이거나" 불변 — open()이 창 생성 시 배경에서 제거하는 것과 대칭.
+          const asWindow = s.windows[windowId("route", params.id)];
+          if (asWindow && !asWindow.minimized) return s;
           if (s.activeBackgroundId === params.id && s.background.some((b) => b.id === params.id)) {
             return s;
           }
@@ -339,9 +355,12 @@ export const useWindowStore = create<State & Actions>()(
           const windows = { ...s.windows };
           delete windows[id];
           const order = s.order.filter((w) => w !== id);
+          const live = { ...s.live };
+          delete live[id];
           return {
             windows,
             order,
+            live,
             focusedId: s.focusedId === id ? (order[order.length - 1] ?? null) : s.focusedId,
             snapAssist: null,
           };
