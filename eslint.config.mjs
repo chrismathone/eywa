@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     // Claude tooling: nested git worktrees ship their own .next build artifacts +
     // duplicated source — linting them produces false errors/OOM (see CLAUDE.md trap).
     ".claude/**",
+    // 일회용 마이그레이션 POC(수동 실행, 앱 빌드 비포함). Firestore 무타입 입력 특성상 any 다수 → 린트 제외.
+    "scripts/_poc_migration/**",
   ]),
 ]);
 
