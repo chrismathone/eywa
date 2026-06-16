@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarClock, ClipboardCheck, MapPin, Pencil, User } from "lucide-react";
 import type { ReactNode } from "react";
@@ -130,11 +131,11 @@ export default async function ClassDetailPage({
               grade: s.grade,
             }))}
           />
-          <Button variant="outline" render={<Link href={`/classes/${klass.id}/edit`} />}>
+          <Button variant="outline" render={<WindowLink href={`/classes/${klass.id}/edit`} title="반 수정" />}>
             <Pencil className="size-4" />
             반 수정
           </Button>
-          <Button render={<Link href={`/attendance/${todayIso()}/${klass.id}`} />}>
+          <Button render={<WindowLink href={`/attendance/${todayIso()}/${klass.id}`} title="출석 입력" />}>
             <ClipboardCheck className="size-4" />
             오늘 출석 입력
           </Button>
@@ -199,8 +200,9 @@ export default async function ClassDetailPage({
               <ul className="divide-border divide-y">
                 {students.map((s) => (
                   <li key={s.enrollmentId} className="flex items-center justify-between px-5 py-3">
-                    <Link
+                    <WindowLink
                       href={`/students/${s.studentId}`}
+                      title={s.name}
                       className="hover:underline"
                     >
                       <p className="text-foreground text-sm font-medium">{s.name}</p>
@@ -208,7 +210,7 @@ export default async function ClassDetailPage({
                         {s.grade ?? "—"}
                         {s.school ? ` · ${s.school}` : ""}
                       </p>
-                    </Link>
+                    </WindowLink>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground num text-xs">
                         {s.enrolledAt} ~ 현재

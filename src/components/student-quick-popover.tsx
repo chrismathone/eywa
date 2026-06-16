@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
@@ -142,13 +142,14 @@ export function StudentQuickPopover({
           </div>
 
           {/* 액션 */}
-          <Link
+          <WindowLink
             href={detailHref}
+            title={student.name}
             className="bg-primary text-primary-foreground hover:bg-primary-hover mt-3 flex items-center justify-center gap-1.5 rounded-sm py-2 text-[12px] font-bold transition"
           >
             상세 보기
             <EyIcon name="arrowRight" size={12} />
-          </Link>
+          </WindowLink>
         </div>
       ) : null}
     </span>

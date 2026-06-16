@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import {
   AlertCircle,
   CheckCircle2,
@@ -231,12 +232,13 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                   </td>
                   <td className="text-muted-foreground px-5 py-3">{r.studentGrade ?? "—"}</td>
                   <td className="px-5 py-3">
-                    <Link
+                    <WindowLink
                       href={`/students/${r.studentId}`}
+                      title={r.studentName}
                       className="text-foreground font-medium hover:underline"
                     >
                       {r.studentName}
-                    </Link>
+                    </WindowLink>
                   </td>
                   <td className="text-muted-foreground px-5 py-3 text-xs">{description}</td>
                   <td className="text-foreground num px-5 py-3 text-right">{won(r.amountTotal)}</td>

@@ -5,6 +5,8 @@ import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowStore } from "@/components/workspace/window-store";
 import {
   convertConsultationToStudent,
   type ConvertToStudentState,
@@ -57,6 +59,7 @@ export function ConvertToStudentDialog({
   linkedStudentId: string | null;
 }) {
   const router = useRouter();
+  const isDesktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState<ConvertToStudentState, FormData>(
     convertConsultationToStudent,
@@ -82,7 +85,18 @@ export function ConvertToStudentDialog({
     return (
       <Button
         variant="outline"
-        onClick={() => router.push(`/students/${linkedStudentId}`)}
+        onClick={() => {
+          const href = `/students/${linkedStudentId}`;
+          if (isDesktop) {
+            useWindowStore.getState().open("route", {
+              id: `students/${linkedStudentId}`,
+              title: defaults.name ?? "학생",
+              href,
+            });
+          } else {
+            router.push(href);
+          }
+        }}
       >
         <UserPlus className="size-4" />
         학생 정보 보기

@@ -40,7 +40,10 @@ export function WindowSwitcher() {
       ) : null}
       {list.map((w) => {
         const active = w.id === focusedId && !w.minimized;
-        const Icon = w.kind === "route" ? ICON_BY_MENU[w.params.id] : null;
+        const Icon =
+          w.kind === "route"
+            ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]])
+            : null;
         return (
           <button
             key={w.id}

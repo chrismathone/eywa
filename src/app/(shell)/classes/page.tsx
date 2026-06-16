@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Initial } from "@/components/atoms/initial";
@@ -262,12 +263,13 @@ function TableView({ classes }: { classes: ClassListRow[] }) {
                   <Pill color={meta.color}>{meta.label}</Pill>
                 </td>
                 <td className="px-4 py-2.5">
-                  <Link
+                  <WindowLink
                     href={`/classes/${c.id}`}
+                    title={c.className}
                     className="text-foreground text-[13px] font-bold hover:underline"
                   >
                     {c.className}
-                  </Link>
+                  </WindowLink>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
@@ -338,9 +340,10 @@ function CardsView({ classes }: { classes: ClassListRow[] }) {
         const capacity = 8;
         const pct = Math.min(100, (c.studentCount / capacity) * 100);
         return (
-          <Link
+          <WindowLink
             key={c.id}
             href={`/classes/${c.id}`}
+            title={c.className}
             className="bg-card border-line shadow-card hover:shadow-card-hover flex flex-col gap-4 rounded-md border p-5 transition"
           >
             <header className="flex items-start justify-between gap-2">
@@ -387,7 +390,7 @@ function CardsView({ classes }: { classes: ClassListRow[] }) {
                 />
               </div>
             </div>
-          </Link>
+          </WindowLink>
         );
       })}
     </div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarDays, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,11 +44,11 @@ export default async function EditStaffPage({
         </div>
         {(staff.systemRole === "teacher" || staff.systemRole === "master") ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" render={<Link href={`/staff/${staff.id}/payroll`} />}>
+            <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}>
               <Wallet className="size-4" />
               급여 정산
             </Button>
-            <Button variant="outline" render={<Link href={`/staff/${staff.id}/leaves`} />}>
+            <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
               <CalendarDays className="size-4" />
               휴가 관리
             </Button>

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { useEffect, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
@@ -167,13 +167,14 @@ export function ClassDetailDrawer({
         </div>
 
         <footer className="border-line bg-bg-soft border-t px-5 py-3">
-          <Link
+          <WindowLink
             href={`/classes/${slot.id}`}
+            title={slot.className ?? "반 상세"}
             className="bg-primary text-primary-foreground hover:bg-primary-hover flex items-center justify-center gap-1.5 rounded-sm py-2 text-[12px] font-bold transition"
           >
             반 상세로 이동
             <EyIcon name="arrowRight" size={12} />
-          </Link>
+          </WindowLink>
         </footer>
       </aside>
     </>

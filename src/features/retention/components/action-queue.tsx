@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { RiskBadge } from "./risk-badge";
 import type { RosterStudent } from "../server/queries";
 
@@ -15,7 +15,7 @@ export function ActionQueue({ rows }: { rows: RosterStudent[] }) {
     <ul className="divide-line divide-y">
       {rows.map((r, i) => (
         <li key={r.id} className="hover:bg-bg-soft/50 transition">
-          <Link href={`/students/${r.id}`} className="flex items-center gap-3 px-5 py-3">
+          <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-center gap-3 px-5 py-3">
             <span className="text-text-faint num w-4 shrink-0 text-center text-[12px] font-bold">{i + 1}</span>
             <div className="min-w-0 flex-1">
               <p className="text-foreground text-[13px] font-bold">
@@ -34,7 +34,7 @@ export function ActionQueue({ rows }: { rows: RosterStudent[] }) {
                 {r.risk.reasons.slice(0, 2).join(" · ")}
               </span>
             </div>
-          </Link>
+          </WindowLink>
         </li>
       ))}
     </ul>

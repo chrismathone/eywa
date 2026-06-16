@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { Initial } from "@/components/atoms/initial";
@@ -178,7 +179,7 @@ export default async function WithdrawalsPage({
                 const ago = daysSince(r.withdrawnAt);
                 return (
                   <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
-                    <Link href={`/withdrawals/${r.id}`} className="flex items-center gap-3">
+                    <WindowLink href={`/withdrawals/${r.id}`} title={r.name} className="flex items-center gap-3">
                       <Initial name={r.name} color="rose" size="md" />
                       <div className="min-w-0 flex-1">
                         <p className="text-foreground text-[13px] font-bold hover:underline">
@@ -200,7 +201,7 @@ export default async function WithdrawalsPage({
                           <p className="text-text-faint num text-[10px]">{ago}일 전</p>
                         ) : null}
                       </div>
-                    </Link>
+                    </WindowLink>
                   </li>
                 );
               })}

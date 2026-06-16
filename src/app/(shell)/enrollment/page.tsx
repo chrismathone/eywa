@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -152,8 +152,9 @@ export default async function EnrollmentPage({
                       const pill = OUTCOME_PILL[c.outcome] ?? OUTCOME_PILL.pending!;
                       return (
                         <li key={c.id}>
-                          <Link
+                          <WindowLink
                             href={`/enrollment/${c.id}`}
+                            title={c.prospectName}
                             className="bg-bg-soft/60 hover:bg-bg-soft block rounded-xl p-3 transition"
                           >
                             <div className="flex items-start justify-between gap-2">
@@ -180,7 +181,7 @@ export default async function EnrollmentPage({
                               <span>{c.consultantName ?? "—"}</span>
                               <span className="num">{daysSince(c.consultedAt)}일 전</span>
                             </div>
-                          </Link>
+                          </WindowLink>
                         </li>
                       );
                     })}

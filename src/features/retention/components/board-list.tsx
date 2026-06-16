@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { RiskBadge } from "./risk-badge";
 import { formatWonShort } from "../format";
 import type { RosterStudent } from "../server/queries";
@@ -12,7 +12,7 @@ export function BoardList({ rows }: { rows: RosterStudent[] }) {
     <ul className="divide-line divide-y">
       {rows.map((r) => (
         <li key={r.id} className="hover:bg-bg-soft/50 transition">
-          <Link href={`/students/${r.id}`} className="flex items-center gap-3 px-5 py-3">
+          <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-center gap-3 px-5 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-foreground text-[13px] font-bold">
                 {r.name}{" "}
@@ -29,7 +29,7 @@ export function BoardList({ rows }: { rows: RosterStudent[] }) {
               {formatWonShort(r.monthlyFee)}
             </span>
             <RiskBadge level={r.risk.level} score={r.risk.score} />
-          </Link>
+          </WindowLink>
         </li>
       ))}
     </ul>

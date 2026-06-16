@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { BarChart3 } from "lucide-react";
 import { FilterSelect } from "@/components/filter-select";
 
@@ -87,13 +88,14 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, consultants }
         />
       </div>
 
-      <Link
+      <WindowLink
         href="/enrollment/dashboard"
+        title="등록상담 대시보드"
         className="text-muted-foreground hover:text-foreground ml-auto inline-flex items-center gap-1.5 text-xs"
       >
         <BarChart3 className="size-3.5" />
         대시보드 보기
-      </Link>
+      </WindowLink>
     </div>
   );
 }

@@ -194,14 +194,17 @@ export function SpotlightStrip() {
       key: w.id,
       title: w.params.title,
       subtitle: w.params.subtitle,
-      Icon: w.kind === "route" ? (ICON_BY_MENU[w.params.id] ?? null) : null,
+      Icon:
+        w.kind === "route"
+          ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]] ?? null)
+          : null,
       isBackground: false,
       onClick: () => focus(w.id),
     }));
   const bgItems: StripItem[] = background.map((b) => ({
     key: `bg:${b.id}`,
     title: b.title,
-    Icon: ICON_BY_MENU[b.id] ?? null,
+    Icon: ICON_BY_MENU[b.id] ?? ICON_BY_MENU[b.id.split("/")[0]] ?? null,
     isBackground: true,
     onClick: () => swapBg(b.id),
   }));

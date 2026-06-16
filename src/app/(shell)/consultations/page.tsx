@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -217,13 +218,14 @@ export default async function ConsultationsPage({
           결과 <span className="text-foreground font-bold">{items.length}</span>건
         </p>
         <div className="flex items-center gap-2">
-          <Link
+          <WindowLink
             href="/consultations/stats"
+            title="상담 통계"
             className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
           >
             <EyIcon name="rings" size={13} />
             통계 보기
-          </Link>
+          </WindowLink>
           <NewConsultationTrigger students={students} counselors={counselors} />
         </div>
       </div>
@@ -254,12 +256,13 @@ export default async function ConsultationsPage({
                     />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Link
+                        <WindowLink
                           href={`/students/${c.studentId}`}
+                          title={c.studentName}
                           className="text-foreground text-[15px] font-bold hover:underline"
                         >
                           {c.studentName}
-                        </Link>
+                        </WindowLink>
                         {c.studentGrade ? (
                           <span className="text-text-dim text-xs">{c.studentGrade}</span>
                         ) : null}
@@ -274,13 +277,14 @@ export default async function ConsultationsPage({
                   </div>
                   <div className="text-text-dim flex items-center gap-2 text-xs">
                     <span className="num">{relativeTime(c.consultedAt)}</span>
-                    <Link
+                    <WindowLink
                       href={`/consultations/${c.id}/edit`}
+                      title="상담 수정"
+                      ariaLabel="수정"
                       className="text-text-faint hover:text-foreground inline-flex items-center"
-                      aria-label="수정"
                     >
                       <EyIcon name="check" size={12} className="rotate-45" />
-                    </Link>
+                    </WindowLink>
                   </div>
                 </header>
 

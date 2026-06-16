@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import type { StudentSummary } from "@/features/students/server/queries";
@@ -90,13 +90,14 @@ export function StudentSummaryView({
           <EyIcon name="arrowRight" size={13} />
         </button>
       ) : (
-        <Link
+        <WindowLink
           href={`/students/${info.id}`}
+          title={name}
           className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-[13px] font-bold transition"
         >
           상세 전체보기
           <EyIcon name="arrowRight" size={13} />
-        </Link>
+        </WindowLink>
       )}
     </div>
   );

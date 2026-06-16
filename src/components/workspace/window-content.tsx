@@ -29,7 +29,7 @@ function StudentWindow({ win }: { win: Win }) {
   // "상세 전체보기": 상세를 라우트 창(크롬리스 iframe)으로 열어 스포트라이트 상단에 크게,
   // 요약 창은 닫음(중복 제거) → 배경이 가려지던 문제 해소.
   function openDetail() {
-    const routeId = `student/${id}`;
+    const routeId = `students/${id}`;
     open("route", {
       id: routeId,
       title: data?.name ?? win.params.title,

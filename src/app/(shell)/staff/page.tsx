@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -212,12 +213,13 @@ export default async function StaffPage({
                 )}
 
                 {canManage ? (
-                  <Link
+                  <WindowLink
                     href={`/staff/${s.id}/edit`}
+                    title={`${s.displayName} 수정`}
                     className="text-text-dim hover:text-foreground mt-3 inline-flex items-center gap-1 self-end text-[11px] transition"
                   >
                     수정 →
-                  </Link>
+                  </WindowLink>
                 ) : null}
               </article>
             );

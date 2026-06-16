@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 export type SignalRow = {
@@ -42,7 +42,7 @@ export function SignalSection({
         <ul className="divide-line divide-y">
           {rows.map((r) => (
             <li key={r.id} className="hover:bg-bg-soft/50 transition">
-              <Link href={`/students/${r.id}`} className="flex items-center gap-3 px-4 py-2.5">
+              <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-foreground text-[12px] font-semibold">
                     {r.name} <span className="text-text-faint text-[10px] font-normal">{r.sub}</span>
@@ -51,7 +51,7 @@ export function SignalSection({
                 <span className={`shrink-0 text-[11px] font-medium ${NOTE_CLASS[r.noteTone ?? "dim"]}`}>
                   {r.note}
                 </span>
-              </Link>
+              </WindowLink>
             </li>
           ))}
         </ul>

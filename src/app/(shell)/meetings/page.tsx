@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
@@ -44,7 +45,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
         isLive ? "border-danger/30 bg-danger-soft" : "border-line bg-card hover:bg-bg-soft/50"
       }`}
     >
-      <Link href={`/meetings/${m.id}`} className="block p-5">
+      <WindowLink href={`/meetings/${m.id}`} title={m.title} className="block p-5">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span
@@ -88,7 +89,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
             <span className="truncate">{m.attendees.join(", ")}</span>
           </div>
         ) : null}
-      </Link>
+      </WindowLink>
     </li>
   );
 }

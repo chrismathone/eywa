@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -86,7 +87,7 @@ export default async function StudentDetailPage({
               studentName={student.name}
               currentStatus={student.status}
             />
-            <Button variant="outline" render={<Link href={`/students/${student.id}/edit`} />}>
+            <Button variant="outline" render={<WindowLink href={`/students/${student.id}/edit`} title="학생 수정" />}>
               <Pencil className="size-3.5" />
               수정
             </Button>
