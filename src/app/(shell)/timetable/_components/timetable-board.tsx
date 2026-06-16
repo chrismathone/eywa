@@ -59,7 +59,7 @@ export function TimetableBoard({ children }: { children: ReactNode }) {
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+    <DndContext id="timetable-dnd" sensors={sensors} onDragEnd={onDragEnd}>
       {pending ? (
         <div className="bg-card border-line shadow-card fixed top-20 right-6 z-50 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
           <Loader2 className="text-primary size-3 animate-spin" />
