@@ -115,32 +115,9 @@ export function ClassCell({
             ) : null}
           </div>
         ) : null}
-        {compact && slot.students.length > 0 ? (
-          <ul className={`mt-1 space-y-0.5 px-2 pb-1 text-[10px] opacity-75 ${color}`}>
-            {slot.students.slice(0, 6).map((s) =>
-              s.enrollmentId ? (
-                <DraggableStudent
-                  key={s.enrollmentId}
-                  enrollmentId={s.enrollmentId}
-                  classId={slot.id}
-                >
-                  <li className="truncate">
-                    {s.name}
-                    {s.grade ? <span className="opacity-60"> · {s.grade}</span> : null}
-                  </li>
-                </DraggableStudent>
-              ) : (
-                <li key={s.name} className="truncate">
-                  {s.name}
-                  {s.grade ? <span className="opacity-60"> · {s.grade}</span> : null}
-                </li>
-              ),
-            )}
-            {slot.students.length > 6 ? (
-              <li className="opacity-60">외 {slot.students.length - 6}명</li>
-            ) : null}
-          </ul>
-        ) : null}
+        {/* 기본뷰(강사×요일 매트릭스, 40+ 컬럼)는 셀당 명단을 렌더하지 않는다 —
+            16.9k DOM/2.5s의 주범. 인원수 Pill만 표시하고 명단은 셀 클릭 → drawer로.
+            (통합뷰 6컬럼에선 inline 명단 유지 — 가독성·드래그 가능.) */}
       </div>
 
       <ClassDetailDrawer
