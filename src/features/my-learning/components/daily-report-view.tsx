@@ -50,8 +50,10 @@ function TestBlock({ kicker, sub, test }: { kicker: string; sub: string; test: T
 export function DailyReportView({ base, session }: { base: OneScreenStudent; session: Session }) {
   const view = sessionToStudent(base, session);
   const isLatest = session.date === "6/1";
+  const isAbsent = view.attendance === "결석";
   const headDate = isLatest ? TODAY : `2026년 ${dateKo(session.date)}`;
-  const note = view.reportSent ? buildReport(view) : "";
+  // 결석일은 정상 출석 보고서(buildReport: "테스트 결과를 받았습니다"…)를 만들면 배지(결석)와 모순.
+  const note = isAbsent ? "" : view.reportSent ? buildReport(view) : "";
 
   return (
     <div className="space-y-4">
@@ -95,16 +97,24 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
       {/* 오늘의 테스트 */}
       <section className="bg-card border-line shadow-card rounded-xl border p-5">
         <h2 className="text-foreground text-[15px] font-bold">오늘의 테스트</h2>
-        <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <TestBlock kicker="일일테스트" sub="이전 진도 복습" test={view.tests.daily} />
-          <TestBlock kicker="확인테스트" sub="오늘 진도" test={view.tests.check} />
-        </div>
+        {isAbsent ? (
+          <p className="text-text-faint mt-2 text-[13px]">결석한 날이라 테스트를 진행하지 않았어요.</p>
+        ) : (
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <TestBlock kicker="일일테스트" sub="이전 진도 복습" test={view.tests.daily} />
+            <TestBlock kicker="확인테스트" sub="오늘 진도" test={view.tests.check} />
+          </div>
+        )}
       </section>
 
       {/* 선생님 한마디 */}
       <section className="bg-card border-line shadow-card rounded-xl border p-5">
         <h2 className="text-foreground text-[15px] font-bold">선생님 한마디</h2>
-        {note ? (
+        {isAbsent ? (
+          <p className="text-text-faint mt-2 text-[13px]">
+            이 날은 결석했어요. 다음 수업에서 만나요!
+          </p>
+        ) : note ? (
           <p className="text-foreground mt-2 text-[14px] leading-relaxed whitespace-pre-wrap">{note}</p>
         ) : (
           <p className="text-text-faint mt-2 text-[13px]">

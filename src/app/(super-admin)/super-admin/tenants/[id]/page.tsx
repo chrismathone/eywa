@@ -37,7 +37,7 @@ const ROLE_LABEL: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   active: "활성",
   inactive: "비활성",
-  invited: "초대됨",
+  pending: "대기",
 };
 
 export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {

@@ -20,13 +20,19 @@ const STATUS_META: Record<string, { label: string; color: PillColor }> = {
   withdrawn: { label: "퇴원", color: "neutral" },
 };
 
+// ⚠️ Pill은 .micro CSS(text-transform: uppercase)를 써서, 매핑에 없는 코드를 그대로 흘리면
+// "highmath" → "HIGHMATH"처럼 원시 영문 코드가 노출된다(F3). 모든 코드를 한글 라벨로 매핑하고,
+// 미지의 코드는 fallback("기타")으로 받아 영문 코드가 절대 보이지 않게 한다.
 const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
   math: { label: "수학", color: "primary" },
+  highmath: { label: "수학(심화)", color: "primary" },
   english: { label: "영어", color: "blue" },
   korean: { label: "국어", color: "rose" },
   science: { label: "과학", color: "purple" },
   arts: { label: "예술", color: "amber" },
+  other: { label: "기타", color: "neutral" },
 };
+const SUBJECT_FALLBACK = { label: "기타", color: "neutral" as PillColor };
 
 const STATUS_FILTERS: { key: string; label: string }[] = [
   { key: "all", label: "전체" },
@@ -39,6 +45,7 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
 const SUBJECT_FILTERS: { key: string; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "math", label: "수학" },
+  { key: "highmath", label: "수학(심화)" },
   { key: "english", label: "영어" },
   { key: "korean", label: "국어" },
   { key: "science", label: "과학" },
@@ -257,7 +264,7 @@ export default async function StudentsPage({
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {s.subjects.map((sub) => {
-                            const sm = SUBJECT_META[sub] ?? { label: sub, color: "neutral" as PillColor };
+                            const sm = SUBJECT_META[sub] ?? SUBJECT_FALLBACK;
                             return (
                               <Pill key={sub} color={sm.color}>
                                 {sm.label}

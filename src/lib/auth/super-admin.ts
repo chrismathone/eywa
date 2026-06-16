@@ -2,6 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "./current-user";
+import { canAccess } from "@/lib/permissions";
 
 export type CurrentSuperAdmin = {
   id: string;
@@ -34,6 +36,11 @@ export const getCurrentSuperAdmin = cache(async (): Promise<CurrentSuperAdmin | 
 
 export async function requireSuperAdmin(): Promise<CurrentSuperAdmin> {
   const sa = await getCurrentSuperAdmin();
-  if (!sa) redirect("/login");
-  return sa;
+  if (sa) return sa;
+
+  // 세션 유무에 따라 분기 (F10): 비로그인 → /login, 로그인했으나 super_admin 아님 → 대시보드
+  // (대시보드 미접근 role은 공개 랜딩으로 — 루프 방지). require-access와 동일 정책.
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  redirect(canAccess(user.systemRole, "dashboard") ? "/dashboard" : "/");
 }

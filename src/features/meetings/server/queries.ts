@@ -1,6 +1,23 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * attendees(jsonb) 정규화 (F2). 라이브 앱은 string[]로, ijw 임포터는 [{name}] 객체로 저장해
+ * 모양이 갈린다. 두 모양(문자열 · {name})을 모두 string[]로 흡수해 "[object Object]" 렌더를 막는다.
+ */
+function normalizeAttendees(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((a) =>
+      typeof a === "string"
+        ? a
+        : a && typeof a === "object" && "name" in a
+          ? String((a as { name: unknown }).name ?? "")
+          : "",
+    )
+    .filter((s) => s.trim().length > 0);
+}
+
 export type MeetingProcessingStatus =
   | "idle"
   | "uploaded"
@@ -85,7 +102,7 @@ export async function getMeetings(): Promise<MeetingRow[]> {
       id: r.id,
       title: r.title,
       heldAt: r.held_at,
-      attendees: Array.isArray(r.attendees) ? (r.attendees as string[]) : [],
+      attendees: normalizeAttendees(r.attendees),
       authorName: author?.display_name ?? null,
       excerpt: excerpt(body),
       processingStatus: r.processing_status as MeetingProcessingStatus,
@@ -120,7 +137,7 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     id: data.id,
     title: data.title,
     heldAt: data.held_at,
-    attendees: Array.isArray(data.attendees) ? (data.attendees as string[]) : [],
+    attendees: normalizeAttendees(data.attendees),
     authorName: author?.display_name ?? null,
     excerpt: excerpt(body),
     content: data.content,

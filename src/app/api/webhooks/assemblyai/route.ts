@@ -425,6 +425,8 @@ async function handleConsultation(
       diagnosis: diagnosisStub,
       learning_plan: learningPlanStub,
       print_payload: printPayload,
+      // onConflict DO UPDATE 시 DEFAULT now()가 안 먹으므로 명시 갱신(재분석 '생성일' 정확).
+      generated_at: new Date().toISOString(),
     },
     { onConflict: "consultation_id,model_version" },
   );

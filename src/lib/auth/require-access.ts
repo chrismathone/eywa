@@ -6,7 +6,8 @@ import { getCurrentUser, type CurrentUser } from "./current-user";
 /**
  * Server-side permissions guard. Drop into the top of any page server
  * component that should be gated. Sends users without a session to
- * /login and users without the right role to the dashboard.
+ * /login, and users without the right role to their dashboard (or the
+ * public landing if their role can't access the dashboard either).
  *
  * The sidebar already hides the link, but typing the URL directly
  * should also be blocked. RLS protects the data either way; this is
@@ -15,6 +16,10 @@ import { getCurrentUser, type CurrentUser } from "./current-user";
 export async function requireAccess(menu: MenuKey): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canAccess(user.systemRole, menu)) redirect("/");
+  // 권한 없음: 대시보드 접근 가능하면 대시보드로, 아니면(예: student) 공개 랜딩으로.
+  // 대시보드 미접근 role을 /dashboard로 보내면 그 페이지가 또 막혀 리다이렉트 루프가 난다.
+  if (!canAccess(user.systemRole, menu)) {
+    redirect(canAccess(user.systemRole, "dashboard") ? "/dashboard" : "/");
+  }
   return user;
 }

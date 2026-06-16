@@ -242,7 +242,7 @@ export default async function BillingPage({
               value={won(summary.outstanding)}
               icon="falling"
               color="danger"
-              hint={`${summary.unpaidCount + summary.partialCount}건`}
+              hint={`부분 ${summary.partialCount} · 미수 ${summary.unpaidCount}건`}
             />
             <KpiCard
               label="수납률"

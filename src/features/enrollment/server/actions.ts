@@ -201,6 +201,8 @@ export async function runAiAnalysis(
       diagnosis: analysis.diagnosis,
       learning_plan: analysis.learningPlan,
       print_payload: printPayload,
+      // 같은 날·같은 모델 재분석은 onConflict DO UPDATE라 DEFAULT가 안 먹는다 → 명시 갱신(인쇄물 '생성일' 정확).
+      generated_at: new Date().toISOString(),
     },
     { onConflict: "consultation_id,model_version" },
   );

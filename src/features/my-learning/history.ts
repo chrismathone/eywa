@@ -161,8 +161,10 @@ export function dateKo(label: string): string {
   return `${m}월 ${d}일`;
 }
 
-/** 세션 → 데일리 리포트용 학생 형태(buildReport 입력 + 화면 표시 공용) */
+/** 세션 → 데일리 리포트용 학생 형태(buildReport 입력 + 화면 표시 공용).
+ *  결석일은 테스트를 안 봤으므로 점수를 null로 둔다(RecentRecords가 결석 점수를 가리는 규칙과 일치). */
 export function sessionToStudent(base: OneScreenStudent, session: Session): OneScreenStudent {
+  const absent = session.attendance === "결석";
   return {
     ...base,
     attendance: session.attendance,
@@ -170,8 +172,8 @@ export function sessionToStudent(base: OneScreenStudent, session: Session): OneS
     homework: session.homework,
     subjects: session.subjects.map((s) => ({ name: s.name, prev: s.prev, today: s.today })),
     tests: {
-      daily: { score: session.daily, max: 20, prevScore: session.prevDaily },
-      check: { score: session.check, max: 20, prevScore: session.prevCheck },
+      daily: { score: absent ? null : session.daily, max: 20, prevScore: session.prevDaily },
+      check: { score: absent ? null : session.check, max: 20, prevScore: session.prevCheck },
     },
     reportSent: session.reportSent,
   };

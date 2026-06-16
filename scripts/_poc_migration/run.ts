@@ -217,7 +217,7 @@ async function main() {
   for (const m of C.meeting_reports ?? []) {
     const hasReport = !!m.report;
     await ins("meeting", () => sql`insert into meeting_minutes (id,tenant_id,title,content,attendees,held_at,transcription,ai_report,ai_speaker_roles,ai_summary,ai_model_version,ai_generated_at,processing_status,audio_path)
-      values (${randomUUID()},${tenantId},${m.title ?? "회의"},'',${m.attendees ? sql.json((m.attendees as any[]).map((n: any) => ({ name: n }))) : null},${normDate(m.meetingDate) || new Date().toISOString()},${m.transcription ?? null},${m.report ? sql.json(m.report) : null},${m.speakerRoles ? sql.json(m.speakerRoles) : null},${m.report?.summary ?? null},${hasReport ? "ijw-import" : null},${hasReport ? new Date().toISOString() : null},${hasReport ? "completed" : "idle"},${m.storagePath ?? null})`);
+      values (${randomUUID()},${tenantId},${m.title ?? "회의"},'',${m.attendees ? sql.json((m.attendees as any[]).map((n: any) => (typeof n === "string" ? n : String(n?.name ?? n)))) : null},${normDate(m.meetingDate) || new Date().toISOString()},${m.transcription ?? null},${m.report ? sql.json(m.report) : null},${m.speakerRoles ? sql.json(m.speakerRoles) : null},${m.report?.summary ?? null},${hasReport ? "ijw-import" : null},${hasReport ? new Date().toISOString() : null},${hasReport ? "completed" : "idle"},${m.storagePath ?? null})`);
   }
 
   // ── 검증 ──
