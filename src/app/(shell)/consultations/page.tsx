@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   followUpUrgency,
-  getStudentConsultations,
+  getStudentConsultationCounts,
+  getStudentConsultationsPage,
   getStudentOptionsForConsultation,
   type FollowUpUrgency,
   type StudentConsultationCategory,
 } from "@/features/consultations/server/queries";
 import { getTeacherOptions } from "@/features/students/server/queries";
+import { Pagination } from "@/components/pagination";
 import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
 
 export const metadata = { title: "학생상담 — eywa" };
@@ -87,7 +89,13 @@ function buildHref(p: { range: RangeKey; cat: CategoryKey; urg: UrgencyKey; q: s
 export default async function ConsultationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: RangeKey; cat?: CategoryKey; urg?: UrgencyKey; q?: string }>;
+  searchParams: Promise<{
+    range?: RangeKey;
+    cat?: CategoryKey;
+    urg?: UrgencyKey;
+    q?: string;
+    page?: string;
+  }>;
 }) {
   await requireAccess("consultations");
   const sp = await searchParams;
@@ -95,44 +103,37 @@ export default async function ConsultationsPage({
   const cat: CategoryKey = (sp.cat as CategoryKey) ?? "all";
   const urg: UrgencyKey = (sp.urg as UrgencyKey) ?? "all";
   const q = sp.q ?? "";
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  const [all, students, counselors] = await Promise.all([
-    getStudentConsultations(),
+  const [{ rows: items, total }, counts, students, counselors] = await Promise.all([
+    getStudentConsultationsPage({ q, range, cat, urg }, page, PAGE_SIZE),
+    getStudentConsultationCounts(),
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
   ]);
-  let items = all;
-  if (q) {
-    const term = q.toLowerCase();
-    items = items.filter(
-      (i) =>
-        i.studentName.toLowerCase().includes(term) ||
-        i.summary.toLowerCase().includes(term),
-    );
-  }
-  if (range !== "all") {
-    // eslint-disable-next-line react-hooks/purity -- server component renders once per request
-    const cutoff = Date.now() - (range === "7d" ? 7 : 30) * 86_400_000;
-    items = items.filter((i) => new Date(i.consultedAt).getTime() > cutoff);
-  }
-  if (cat !== "all") items = items.filter((i) => i.category === cat);
-  if (urg !== "all") items = items.filter((i) => followUpUrgency(i.followUpDate, i.followUpDone) === urg);
-
-  // eslint-disable-next-line react-hooks/purity -- server component renders once per request
-  const cutoff = Date.now() - 7 * 86_400_000;
-  const lastWeek = all.filter((i) => new Date(i.consultedAt).getTime() > cutoff).length;
-  const pendingFollowUps = all.filter((i) => !i.followUpDone && i.followUpDate).length;
-  const overdueFollowUps = all.filter(
-    (i) => followUpUrgency(i.followUpDate, i.followUpDone) === "overdue",
-  ).length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const { total: totalAll, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
 
   const current = { range, cat, urg, q };
+
+  // 현재 필터 보존 + page만 변경 (필터 chip은 buildHref라 page 자동 리셋)
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (range !== "all") params.set("range", range);
+    if (cat !== "all") params.set("cat", cat);
+    if (urg !== "all") params.set("urg", urg);
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/consultations?${s}` : "/consultations";
+  };
 
   return (
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 상담" value={all.length} icon="wave" color="primary" />
+        <Stat label="전체 상담" value={totalAll} icon="wave" color="primary" />
         <Stat label="최근 7일" value={lastWeek} icon="pulse" color="blue" />
         <Stat label="진행 중 후속" value={pendingFollowUps} icon="sprout" color="gold" />
         <Stat label="지연 후속" value={overdueFollowUps} icon="falling" color="danger" />
@@ -215,7 +216,12 @@ export default async function ConsultationsPage({
 
       <div className="flex items-center justify-between">
         <p className="micro">
-          결과 <span className="text-foreground font-bold">{items.length}</span>건
+          결과 <span className="text-foreground font-bold">{total}</span>건
+          {totalPages > 1 ? (
+            <span className="text-text-dim ml-2">
+              {page}/{totalPages} 페이지
+            </span>
+          ) : null}
         </p>
         <div className="flex items-center gap-2">
           <WindowLink
@@ -230,9 +236,10 @@ export default async function ConsultationsPage({
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {total === 0 ? (
         <EmptyState icon={() => <EyIcon name="wave" size={32} />} title="기록된 상담이 없습니다" />
       ) : (
+        <>
         <ul className="space-y-2.5">
           {items.map((c) => {
             const urgency = URGENCY_META[followUpUrgency(c.followUpDate, c.followUpDone)];
@@ -307,6 +314,8 @@ export default async function ConsultationsPage({
             );
           })}
         </ul>
+        <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+        </>
       )}
     </div>
   );

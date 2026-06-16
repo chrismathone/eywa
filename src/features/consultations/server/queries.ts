@@ -98,6 +98,134 @@ export async function getStudentConsultationById(
   return mapRow(data);
 }
 
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+/** 로컬 기준 YYYY-MM-DD (offset일 가산). follow_up_date(date) 비교용. */
+function localDateStr(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+export type StudentConsultationCounts = {
+  total: number;
+  lastWeek: number;
+  pendingFollowUps: number;
+  overdueFollowUps: number;
+};
+
+/** Stat 카드용 경량 집계 (head:true count — 행 fetch 0). */
+export async function getStudentConsultationCounts(): Promise<StudentConsultationCounts> {
+  const supabase = await createClient();
+  const today = localDateStr(0);
+  const [{ count: total }, { count: lastWeek }, { count: pending }, { count: overdue }] =
+    await Promise.all([
+      supabase.from("student_consultations").select("*", { count: "exact", head: true }),
+      supabase
+        .from("student_consultations")
+        .select("*", { count: "exact", head: true })
+        .gte("consulted_at", isoDaysAgo(7)),
+      supabase
+        .from("student_consultations")
+        .select("*", { count: "exact", head: true })
+        .eq("follow_up_done", false)
+        .not("follow_up_date", "is", null),
+      supabase
+        .from("student_consultations")
+        .select("*", { count: "exact", head: true })
+        .eq("follow_up_done", false)
+        .not("follow_up_date", "is", null)
+        .lt("follow_up_date", today),
+    ]);
+  return {
+    total: total ?? 0,
+    lastWeek: lastWeek ?? 0,
+    pendingFollowUps: pending ?? 0,
+    overdueFollowUps: overdue ?? 0,
+  };
+}
+
+export type ConsultationListFilters = {
+  q?: string;
+  range?: "all" | "7d" | "30d";
+  cat?: "all" | StudentConsultationCategory;
+  urg?: "all" | "overdue" | "today" | "soon" | "later" | "done";
+};
+
+/**
+ * 필터 적용 + 서버 페이지네이션. urgency는 followUpUrgency() 로직을 SQL로 표현,
+ * 검색은 요약(base) OR 학생명(조인 id 해석)으로 처리. {rows,total} 반환.
+ */
+export async function getStudentConsultationsPage(
+  filters: ConsultationListFilters,
+  page = 1,
+  pageSize = 50,
+): Promise<{ rows: StudentConsultationRow[]; total: number }> {
+  const supabase = await createClient();
+  let qb = supabase.from("student_consultations").select(SELECT_COLUMNS, { count: "exact" });
+
+  // 기간
+  if (filters.range === "7d") qb = qb.gte("consulted_at", isoDaysAgo(7));
+  else if (filters.range === "30d") qb = qb.gte("consulted_at", isoDaysAgo(30));
+
+  // 카테고리
+  if (filters.cat && filters.cat !== "all") qb = qb.eq("category", filters.cat);
+
+  // 후속 긴급도 — followUpUrgency()와 동일 의미를 SQL로
+  const today = localDateStr(0);
+  const in3 = localDateStr(3);
+  switch (filters.urg) {
+    case "done":
+      qb = qb.eq("follow_up_done", true);
+      break;
+    case "overdue":
+      qb = qb
+        .eq("follow_up_done", false)
+        .not("follow_up_date", "is", null)
+        .lt("follow_up_date", today);
+      break;
+    case "today":
+      qb = qb.eq("follow_up_done", false).eq("follow_up_date", today);
+      break;
+    case "soon":
+      qb = qb
+        .eq("follow_up_done", false)
+        .gt("follow_up_date", today)
+        .lte("follow_up_date", in3);
+      break;
+    case "later":
+      qb = qb.eq("follow_up_done", false).gt("follow_up_date", in3);
+      break;
+    default:
+      break;
+  }
+
+  // 검색 — 요약(base) OR 학생명(조인). 학생명은 id 해석 후 in.(...)으로 OR.
+  const term = filters.q?.trim();
+  if (term) {
+    const { data: stu } = await supabase
+      .from("students")
+      .select("id")
+      .ilike("name", `%${term}%`);
+    const ids = (stu ?? []).map((s) => s.id);
+    const safe = term.replace(/[(),]/g, " "); // PostgREST .or 파서 보호
+    const orParts = [`summary.ilike.%${safe}%`];
+    if (ids.length) orParts.push(`student_id.in.(${ids.join(",")})`);
+    qb = qb.or(orParts.join(","));
+  }
+
+  const from = (page - 1) * pageSize;
+  const { data, count } = await qb
+    .order("consulted_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+
+  return { rows: (data ?? []).map(mapRow), total: count ?? 0 };
+}
+
 /** follow-up 긴급도: ijw의 getFollowUpUrgency() 포팅 */
 export type FollowUpUrgency = "done" | "overdue" | "today" | "soon" | "later" | "none";
 
