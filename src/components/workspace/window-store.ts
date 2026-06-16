@@ -35,7 +35,7 @@ export type Win = {
   prevRect?: Rect;
 };
 
-export const MAX_WINDOWS = 3;
+export const MAX_WINDOWS = 6;
 export function windowId(kind: WindowKind, paramId: string) {
   return `${kind}:${paramId}`;
 }
@@ -79,6 +79,7 @@ type State = {
   dragBackground: boolean; // 드래그 중 포인터가 배경 드롭 칩 위 → "배경으로 보내기" 하이라이트
   background: WindowParams[]; // 배경 스택(첫=대시보드 기본). 삽입 순서 고정. 미영속, pathname 동기
   activeBackgroundId: string; // 현재 메인 프레임에 보이는 배경 id(=하이라이트). 선택해도 스택 순서는 불변.
+  spotlight: boolean; // 스포트라이트 모드(포커스 창 상단 크게, 나머지는 하단 커버 스트립). 런타임.
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -106,6 +107,8 @@ type Actions = {
   restore: (id: string) => void;
   applyLayout: (template: LayoutTemplate) => void; // Snap Assist 레이아웃 선택 → 자동 타일링
   dismissAssist: () => void;
+  enterSpotlight: (id?: string) => void; // 스포트라이트 진입(포커스 창 = 상단 큰 창)
+  exitSpotlight: () => void;
   adoptOwner: (owner: string) => void;
 };
 
@@ -126,6 +129,7 @@ export const useWindowStore = create<State & Actions>()(
       dragBackground: false,
       background: [{ id: "dashboard", title: "대시보드", href: "/dashboard" }],
       activeBackgroundId: "dashboard",
+      spotlight: false,
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
@@ -436,6 +440,29 @@ export const useWindowStore = create<State & Actions>()(
         }),
 
       dismissAssist: () => set({ snapAssist: null }),
+
+      // 스포트라이트 진입: 포커스 창(인자 또는 현재 포커스, 없으면 최상단)을 상단 큰 창으로.
+      // rect는 변경 안 함(캔버스가 spotlightTop으로 표시) → 해제 시 원위치 복원 불필요.
+      enterSpotlight: (id) =>
+        set((s) => {
+          const open = s.order.filter((wid) => !s.windows[wid]?.minimized);
+          if (open.length === 0) return s;
+          const focusId =
+            id && s.windows[id] && !s.windows[id].minimized
+              ? id
+              : s.focusedId && open.includes(s.focusedId)
+                ? s.focusedId
+                : open[open.length - 1];
+          return {
+            spotlight: true,
+            focusedId: focusId,
+            order: bringToFront(s.order, focusId),
+            snapAssist: null,
+            snapPreview: null,
+            dragLayout: null,
+          };
+        }),
+      exitSpotlight: () => set({ spotlight: false }),
 
       // 복원 직후 호출: 다른 계정/테넌트 레이아웃이면 초기화(메타 누수 방지), 같으면 viewport clamp.
       adoptOwner: (owner) =>

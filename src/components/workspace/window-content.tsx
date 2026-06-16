@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { StudentSummary } from "@/features/students/server/queries";
 import { StudentSummaryView } from "@/features/students/components/student-summary-view";
 import { RouteWindow } from "./route-window";
-import type { Win } from "./window-store";
+import { useWindowStore, windowId, type Win } from "./window-store";
 
 /** kind → 창 본문. student=요약 peek, route=메뉴 풀화면(크롬리스 iframe). */
 export function WindowContent({ win }: { win: Win }) {
@@ -15,6 +15,9 @@ export function WindowContent({ win }: { win: Win }) {
 
 function StudentWindow({ win }: { win: Win }) {
   const id = win.params.id;
+  const open = useWindowStore((s) => s.open);
+  const close = useWindowStore((s) => s.close);
+  const enterSpotlight = useWindowStore((s) => s.enterSpotlight);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["student-summary", id],
     queryFn: () =>
@@ -23,6 +26,20 @@ function StudentWindow({ win }: { win: Win }) {
       ),
   });
 
+  // "상세 전체보기": 상세를 라우트 창(크롬리스 iframe)으로 열어 스포트라이트 상단에 크게,
+  // 요약 창은 닫음(중복 제거) → 배경이 가려지던 문제 해소.
+  function openDetail() {
+    const routeId = `student/${id}`;
+    open("route", {
+      id: routeId,
+      title: data?.name ?? win.params.title,
+      subtitle: win.params.subtitle,
+      href: `/students/${id}`,
+    });
+    close(win.id);
+    enterSpotlight(windowId("route", routeId));
+  }
+
   return (
     <div className="h-full overflow-y-auto p-5">
       <StudentSummaryView
@@ -30,6 +47,7 @@ function StudentWindow({ win }: { win: Win }) {
         summary={data ?? null}
         loading={isLoading}
         error={isError}
+        onOpenDetail={openDetail}
       />
     </div>
   );

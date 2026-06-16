@@ -12,6 +12,7 @@ import {
   snapBar,
   snapBarTemplates,
   snapBarHitTest,
+  spotlightTop,
   MIN_W,
   MIN_H,
 } from "./window-geometry";
@@ -206,6 +207,20 @@ describe("snapBar / snapBarHitTest", () => {
     expect(hit).toEqual({ template: "stack", slot: 1 });
   });
   it("히트테스트: 바 밖 → null", () => expect(snapBarHitTest(5, 700, B, 3)).toBeNull());
+});
+
+describe("spotlightTop", () => {
+  it("상단 큰 박스(폭 cap 1100, 높이 60%, top 16)", () =>
+    expect(spotlightTop(B)).toEqual({ x: 50, y: 16, w: 1100, h: 480 }));
+  it("좌우 중앙 정렬", () => {
+    const r = spotlightTop(B);
+    expect(r.x + r.w / 2).toBe(B.width / 2);
+  });
+  it("좁은 스테이지는 폭이 줄고 여전히 중앙", () => {
+    const r = spotlightTop({ width: 800, height: 600 });
+    expect(r.w).toBe(768);
+    expect(r.x + r.w / 2).toBe(400);
+  });
 });
 
 describe("bringToFront", () => {

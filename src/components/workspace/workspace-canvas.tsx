@@ -11,6 +11,7 @@ import { BackgroundTabs } from "./background-tabs";
 import { BackgroundDropZone } from "./background-drop-zone";
 import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
+import { SpotlightStrip } from "./spotlight-strip";
 import { snapTarget, templateSlots } from "./window-geometry";
 
 // 콘텐츠 스테이지 오프셋 — 좌측 아이콘 레일(52) / 상단 헤더(48) 제외해 창이 크롬을 안 덮음.
@@ -30,6 +31,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const focusedId = useWindowStore((s) => s.focusedId);
   const snapPreview = useWindowStore((s) => s.snapPreview);
   const dragLayout = useWindowStore((s) => s.dragLayout);
+  const spotlight = useWindowStore((s) => s.spotlight);
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
@@ -61,8 +63,9 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   if (!isDesktop) return null;
 
   // 드래그 중 레이아웃 바 호버 시 전체 배치 고스트(선택 슬롯 강조), 아니면 단일 스냅 프리뷰.
-  const layoutGhosts = dragLayout ? templateSlots(dragLayout.template, bounds) : null;
-  const preview = !dragLayout && snapPreview ? snapTarget(snapPreview, bounds) : null;
+  // (스포트라이트 중엔 드래그/스냅 비활성이라 고스트 없음.)
+  const layoutGhosts = !spotlight && dragLayout ? templateSlots(dragLayout.template, bounds) : null;
+  const preview = !spotlight && !dragLayout && snapPreview ? snapTarget(snapPreview, bounds) : null;
   // DOM 순서는 삽입순(안정) 유지, 쌓임순서는 z-index로만 → 포커스/스냅 시 DOM 이동 0 → iframe 리로드 0.
   const wins = Object.values(windows);
 
@@ -91,13 +94,25 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         />
       ) : null}
       {wins.map((w) => (
-        <FloatingWindow key={w.id} win={w} focused={w.id === focusedId} z={order.indexOf(w.id) + 1} />
+        <FloatingWindow
+          key={w.id}
+          win={w}
+          focused={w.id === focusedId}
+          z={order.indexOf(w.id) + 1}
+          spotlight={spotlight}
+        />
       ))}
-      <SnapAssist />
-      <SnapLayoutsBar />
-      <BackgroundDropZone />
-      <BackgroundTabs />
-      <WindowSwitcher />
+      {spotlight ? (
+        <SpotlightStrip />
+      ) : (
+        <>
+          <SnapAssist />
+          <SnapLayoutsBar />
+          <BackgroundDropZone />
+          <BackgroundTabs />
+          <WindowSwitcher />
+        </>
+      )}
     </div>
   );
 }

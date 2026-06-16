@@ -39,11 +39,14 @@ export function StudentSummaryView({
   summary,
   loading,
   error,
+  onOpenDetail,
 }: {
   info: StudentHeaderInfo;
   summary: StudentSummary | null;
   loading: boolean;
   error: boolean;
+  /** 데스크톱 창에서 "상세 전체보기"를 스포트라이트 창으로 열 때(없으면 일반 Link 이동 = 모바일). */
+  onOpenDetail?: () => void;
 }) {
   const name = summary?.name ?? info.name;
   const grade = summary?.grade ?? info.grade;
@@ -77,13 +80,24 @@ export function StudentSummaryView({
         )}
       </div>
 
-      <Link
-        href={`/students/${info.id}`}
-        className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-[13px] font-bold transition"
-      >
-        상세 전체보기
-        <EyIcon name="arrowRight" size={13} />
-      </Link>
+      {onOpenDetail ? (
+        <button
+          type="button"
+          onClick={onOpenDetail}
+          className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-[13px] font-bold transition"
+        >
+          상세 전체보기
+          <EyIcon name="arrowRight" size={13} />
+        </button>
+      ) : (
+        <Link
+          href={`/students/${info.id}`}
+          className="bg-primary text-primary-foreground hover:bg-primary-hover mt-6 flex items-center justify-center gap-1.5 rounded-sm py-2.5 text-[13px] font-bold transition"
+        >
+          상세 전체보기
+          <EyIcon name="arrowRight" size={13} />
+        </Link>
+      )}
     </div>
   );
 }

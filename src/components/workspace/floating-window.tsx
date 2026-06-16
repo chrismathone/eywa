@@ -9,7 +9,7 @@ import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
 import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
-import type { ResizeHandle } from "./window-geometry";
+import { spotlightTop, type ResizeHandle } from "./window-geometry";
 
 const HANDLES: { h: ResizeHandle; cls: string }[] = [
   { h: "n", cls: "top-0 inset-x-3 h-1.5 cursor-n-resize" },
@@ -22,7 +22,17 @@ const HANDLES: { h: ResizeHandle; cls: string }[] = [
   { h: "sw", cls: "bottom-0 left-0 size-3 cursor-sw-resize" },
 ];
 
-export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean; z: number }) {
+export function FloatingWindow({
+  win,
+  focused,
+  z,
+  spotlight = false,
+}: {
+  win: Win;
+  focused: boolean;
+  z: number;
+  spotlight?: boolean;
+}) {
   // outerRef: 위치/크기(transform·width·height)를 드래그/리사이즈가 직접 갱신(리렌더 0)
   const outerRef = useRef<HTMLDivElement>(null);
   // 배경 드롭 칩에 놓으면 타이틀바 "배경으로 보내기" 버튼과 동일 동작(라우트 창 한정, 함수 호이스팅).
@@ -34,7 +44,14 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
   const focus = useWindowStore((s) => s.focus);
   const swapToBackground = useWindowStore((s) => s.swapToBackground);
   const dragging = useWindowStore((s) => s.draggingId === win.id);
+  const bounds = useWindowStore((s) => s.bounds);
   const router = useRouter();
+
+  // 스포트라이트: 포커스 창은 상단 큰 영역(spotlightTop, store rect 불변→해제 시 글라이드 복원),
+  // 비포커스 창은 숨김(마운트 유지=iframe 보존, 카드 클릭 swap 시 리로드 없음). 드래그/리사이즈 잠금.
+  const spot = spotlight && focused;
+  const spotHidden = spotlight && !focused;
+  const rect = spot ? spotlightTop(bounds) : win.rect;
 
   const animationsOn = usePrefs((s) => s.animations);
   const animOff = !animationsOn;
@@ -70,13 +87,13 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
   return (
     <div
       ref={outerRef}
-      className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized ? "hidden" : ""}`}
+      className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized || spotHidden ? "hidden" : ""}`}
       style={{
-        transform: `translate(${win.rect.x}px, ${win.rect.y}px)`,
-        width: win.rect.w,
-        height: win.rect.h,
+        transform: `translate(${rect.x}px, ${rect.y}px)`,
+        width: rect.w,
+        height: rect.h,
         zIndex: z,
-        // 드래그 중엔 transition 0(1:1 추종), 그 외 store rect 변경(스냅/배치/최대화)은 글라이드
+        // 드래그 중엔 transition 0(1:1 추종), 그 외 store rect 변경(스냅/배치/스포트라이트)은 글라이드
         transition: dragging || animOff ? "none" : WINDOW_TRANSITION,
       }}
       onPointerDown={() => focus(win.id)}
@@ -93,13 +110,13 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
           animOff ? "" : `duration-150 ${exiting ? "animate-out fade-out-0 zoom-out-95" : "animate-in fade-in-0 zoom-in-95"}`
         } ${focused ? "border-primary/30 shadow-modal ring-primary/15 ring-2" : "border-line shadow-card"}`}
       >
-        {/* 타이틀바 (드래그 핸들) */}
+        {/* 타이틀바 (드래그 핸들 — 스포트라이트 상단 창은 드래그/더블클릭 잠금) */}
         <div
-          onPointerDown={drag.onPointerDown}
-          onPointerMove={drag.onPointerMove}
-          onPointerUp={drag.onPointerUp}
-          onDoubleClick={() => toggleMax(win.id)}
-          className="bg-bg-soft border-line flex h-9 shrink-0 cursor-grab touch-none items-center gap-2 border-b pr-1 pl-3 select-none active:cursor-grabbing"
+          onPointerDown={spot ? undefined : drag.onPointerDown}
+          onPointerMove={spot ? undefined : drag.onPointerMove}
+          onPointerUp={spot ? undefined : drag.onPointerUp}
+          onDoubleClick={spot ? undefined : () => toggleMax(win.id)}
+          className={`bg-bg-soft border-line flex h-9 shrink-0 touch-none items-center gap-2 border-b pr-1 pl-3 select-none ${spot ? "" : "cursor-grab active:cursor-grabbing"}`}
         >
           <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{win.params.title}</span>
           {win.params.subtitle ? <span className="text-text-faint min-w-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
@@ -111,7 +128,7 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
             onPointerDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
           >
-            {win.kind === "route" ? (
+            {win.kind === "route" && !spot ? (
               <button
                 type="button"
                 aria-label="배경으로 보내기"
@@ -132,15 +149,17 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
             >
               <Minus size={15} strokeWidth={2} />
             </button>
-            <button
-              type="button"
-              aria-label={win.maximized ? "이전 크기로" : "최대화"}
-              title={win.maximized ? "이전 크기로" : "최대화"}
-              onClick={() => toggleMax(win.id)}
-              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
-            >
-              {win.maximized ? <Copy size={13} strokeWidth={2} /> : <Square size={13} strokeWidth={2} />}
-            </button>
+            {!spot ? (
+              <button
+                type="button"
+                aria-label={win.maximized ? "이전 크기로" : "최대화"}
+                title={win.maximized ? "이전 크기로" : "최대화"}
+                onClick={() => toggleMax(win.id)}
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
+              >
+                {win.maximized ? <Copy size={13} strokeWidth={2} /> : <Square size={13} strokeWidth={2} />}
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="닫기"
@@ -158,16 +177,18 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
           <WindowContent win={win} />
         </div>
 
-        {/* 8방향 리사이즈 핸들 */}
-        {HANDLES.map(({ h, cls }) => (
-          <div
-            key={h}
-            onPointerDown={resize.start(h)}
-            onPointerMove={resize.onPointerMove}
-            onPointerUp={resize.onPointerUp}
-            className={`absolute z-10 touch-none ${cls}`}
-          />
-        ))}
+        {/* 8방향 리사이즈 핸들 (스포트라이트 상단 창은 잠금) */}
+        {spot
+          ? null
+          : HANDLES.map(({ h, cls }) => (
+              <div
+                key={h}
+                onPointerDown={resize.start(h)}
+                onPointerMove={resize.onPointerMove}
+                onPointerUp={resize.onPointerUp}
+                className={`absolute z-10 touch-none ${cls}`}
+              />
+            ))}
       </div>
     </div>
   );

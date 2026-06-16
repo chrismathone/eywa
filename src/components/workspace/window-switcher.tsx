@@ -1,24 +1,38 @@
 "use client";
 
+import { LayoutPanelTop } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { useWindowStore } from "./window-store";
 
-/** 하단 중앙 독/스위처 — 열린·최소화 창 칩. 클릭=focus/복원, 가운데클릭=닫기. */
+/** 하단 중앙 독/스위처 — 열린·최소화 창 칩. 클릭=focus/복원, 가운데클릭=닫기. 좌측=스포트라이트 토글. */
 export function WindowSwitcher() {
   const windows = useWindowStore((s) => s.windows);
   const order = useWindowStore((s) => s.order);
   const focusedId = useWindowStore((s) => s.focusedId);
   const restore = useWindowStore((s) => s.restore);
   const close = useWindowStore((s) => s.close);
+  const enterSpotlight = useWindowStore((s) => s.enterSpotlight);
 
   const list = order.map((id) => windows[id]).filter(Boolean);
   if (list.length === 0) return null;
+  const openCount = list.filter((w) => !w.minimized).length;
 
   return (
     <div
       data-slot="window-switcher"
       className="border-line bg-card/95 shadow-modal pointer-events-auto absolute bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-2 py-1.5 backdrop-blur"
     >
+      {openCount >= 2 ? (
+        <button
+          type="button"
+          onClick={() => enterSpotlight()}
+          title="스포트라이트 (포커스 크게 + 나머지 커버)"
+          aria-label="스포트라이트"
+          className="text-text-dim hover:bg-bg-soft hover:text-foreground mr-0.5 flex size-7 items-center justify-center rounded-full transition"
+        >
+          <LayoutPanelTop size={15} strokeWidth={2} />
+        </button>
+      ) : null}
       {list.map((w) => {
         const active = w.id === focusedId && !w.minimized;
         return (

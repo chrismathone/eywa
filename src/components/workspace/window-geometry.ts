@@ -51,6 +51,17 @@ export function cascadeNext(count: number, bounds: Bounds, size = DEFAULT_WINDOW
   return clampRect({ x: 24 + offset, y: 24 + offset, w, h }, bounds);
 }
 
+/**
+ * 스포트라이트 포커스 창 영역 — 상단 중앙 큰 박스(하단 ~40%는 커버 스트립 몫).
+ * 폭 min(스테이지-32, 1100), 높이 ≈ 60%, 좌우 중앙, top 16. clampRect로 최소크기 보정.
+ */
+export function spotlightTop(bounds: Bounds): Rect {
+  const w = Math.min(bounds.width - 32, 1100);
+  const h = Math.round(bounds.height * 0.6);
+  const x = Math.round((bounds.width - w) / 2);
+  return clampRect({ x, y: 16, w, h }, bounds);
+}
+
 /** 스냅 존 → 목표 사각형(좌/우 절반·전체 최대화·1/4 모서리). */
 export function snapTarget(zone: SnapZone, bounds: Bounds): Rect | null {
   const hw = Math.round(bounds.width / 2);
