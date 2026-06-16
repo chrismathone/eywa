@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
+import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -174,59 +174,50 @@ async function handleMeeting(
 
   let report: MeetingReportSection;
   let speakerRoles: Record<string, string> = {};
+  let modelVersion = "";
 
   try {
-    const client = getAnthropic();
-    const response = await client.messages.create({
-      model: CLAUDE_MODELS.balanced,
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "user",
-          content: [
-            "다음은 학원 회의 녹음 전사입니다. 회의록 형태로 분석해 JSON으로만 답해주세요.",
-            "",
-            `제목: ${meeting.title}`,
-            `일시: ${heldAt}`,
-            `참석자: ${attendees.length > 0 ? attendees.join(", ") : "미상"}`,
-            "",
-            "분석 시 반드시 주의할 점:",
-            "1. 회의의 유형을 정확히 파악하세요 (예: 정기 운영회의, 강사 회의, 학부모 간담회).",
-            "2. 안건별로 논의 내용을 분리하세요.",
-            "3. 결정 사항은 '누가 제안했고, 반대 의견은, 최종 결정' 형식으로 정리.",
-            "4. 액션 아이템은 담당자와 기한을 가능한 명시.",
-            "5. 참석자별 발언을 중립적으로 기록하세요.",
-            "6. 미해결 이슈, 갈등, 위험 요소를 별도로 기록하세요.",
-            "7. 향후 계획을 반드시 포함하세요.",
-            "",
-            "녹음 전사 (화자 라벨 포함):",
-            formatted,
-            "",
-            "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
-            "{",
-            '  "speakerRoles": { "A": "역할/이름", "B": "역할/이름" },',
-            '  "meetingType": string,',
-            '  "summary": string (2-4문장),',
-            '  "agendaDiscussion": string,',
-            '  "decisions": string,',
-            '  "actionItems": string,',
-            '  "speakerSummary": string,',
-            '  "concerns": string,',
-            '  "nextSteps": string',
-            "}",
-            "",
-            "JSON만 출력. 마크다운 코드 블록 없이.",
-          ].join("\n"),
-        },
-      ],
+    const { data: parsed, model } = await generateJSON<
+      MeetingReportSection & { speakerRoles?: Record<string, string> }
+    >({
+      maxTokens: 8192,
+      prompt: [
+        "다음은 학원 회의 녹음 전사입니다. 회의록 형태로 분석해 JSON으로만 답해주세요.",
+        "",
+        `제목: ${meeting.title}`,
+        `일시: ${heldAt}`,
+        `참석자: ${attendees.length > 0 ? attendees.join(", ") : "미상"}`,
+        "",
+        "분석 시 반드시 주의할 점:",
+        "1. 회의의 유형을 정확히 파악하세요 (예: 정기 운영회의, 강사 회의, 학부모 간담회).",
+        "2. 안건별로 논의 내용을 분리하세요.",
+        "3. 결정 사항은 '누가 제안했고, 반대 의견은, 최종 결정' 형식으로 정리.",
+        "4. 액션 아이템은 담당자와 기한을 가능한 명시.",
+        "5. 참석자별 발언을 중립적으로 기록하세요.",
+        "6. 미해결 이슈, 갈등, 위험 요소를 별도로 기록하세요.",
+        "7. 향후 계획을 반드시 포함하세요.",
+        "",
+        "녹음 전사 (화자 라벨 포함):",
+        formatted,
+        "",
+        "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
+        "{",
+        '  "speakerRoles": { "A": "역할/이름", "B": "역할/이름" },',
+        '  "meetingType": string,',
+        '  "summary": string (2-4문장),',
+        '  "agendaDiscussion": string,',
+        '  "decisions": string,',
+        '  "actionItems": string,',
+        '  "speakerSummary": string,',
+        '  "concerns": string,',
+        '  "nextSteps": string',
+        "}",
+        "",
+        "JSON만 출력. 마크다운 코드 블록 없이.",
+      ].join("\n"),
     });
 
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-    const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(match ? match[0] : cleaned) as
-      MeetingReportSection & { speakerRoles?: Record<string, string> };
-
+    modelVersion = model;
     speakerRoles = parsed.speakerRoles ?? {};
     report = {
       meetingType: parsed.meetingType ?? "",
@@ -253,7 +244,7 @@ async function handleMeeting(
       ai_report: report,
       ai_speaker_roles: speakerRoles,
       ai_summary: report.summary,
-      ai_model_version: CLAUDE_MODELS.balanced,
+      ai_model_version: modelVersion,
       ai_generated_at: new Date().toISOString(),
       processing_status: "completed",
       processing_error: null,
@@ -332,18 +323,14 @@ async function handleConsultation(
     : transcript.text;
 
   let report: ConsultationReport13;
+  let modelId = "stub";
 
   try {
-    const client = getAnthropic();
-    const response = await client.messages.create({
-      model: CLAUDE_MODELS.balanced,
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "user",
-          content: [
-            "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
-            "",
+    const { data, model } = await generateJSON<ConsultationReport13>({
+      maxTokens: 8192,
+      prompt: [
+        "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
+        "",
             `학생 이름(현재 입력값): ${consult.prospect_name}`,
             `학년: ${consult.prospect_grade ?? "미상"}`,
             `학교: ${consult.prospect_school ?? "미상"}`,
@@ -392,15 +379,10 @@ async function handleConsultation(
             "",
             "추측 금지. 전사에 안 나온 정보는 빈 문자열 또는 null.",
             "JSON만 출력. 마크다운 코드 블록 없이.",
-          ].join("\n"),
-        },
-      ],
+      ].join("\n"),
     });
-
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-    const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    report = JSON.parse(match ? match[0] : cleaned) as ConsultationReport13;
+    report = data;
+    modelId = model;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await admin
@@ -434,7 +416,7 @@ async function handleConsultation(
     audioReport: report,
   };
 
-  const modelVersion = `${CLAUDE_MODELS.balanced}-${new Date().toISOString().slice(0, 10)}`;
+  const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
 
   await admin.from("consultation_ai_analysis").upsert(
     {

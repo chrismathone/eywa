@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
+import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 
@@ -98,54 +98,44 @@ export async function runStudentCareAnalysis(
     .join(", ");
 
   let analysis: CareAnalysisShape;
+  let modelId: string;
   try {
-    const client = getAnthropic("consultations");
-    const response = await client.messages.create({
-      model: CLAUDE_MODELS.balanced,
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: [
-            "재원생 한 명의 케어 종합 분석을 JSON으로만 답해주세요.",
-            "",
-            `학생: ${student.name} (${student.grade ?? "—"}, ${student.school ?? "—"})`,
-            `담임: ${teacher?.display_name ?? "—"}`,
-            `등록일: ${student.enrolled_at ?? "—"}`,
-            `수강 중인 반: ${enrolledClasses || "없음"}`,
-            "",
-            "최근 30일 출결:",
-            `  전체 ${total}건 · 출석 ${present} · 결석 ${absent} · 지각 ${late} · 출석률 ${rate}%`,
-            "",
-            "최근 상담 기록 (최대 10건):",
-            consultationsBlock || "  없음",
-            "",
-            "JSON schema:",
-            "{",
-            '  "summary": string (한국어 3-4문장 — 학생 현재 상태 + 주요 케어 포인트),',
-            '  "focus": [{ "priority": "high" | "medium" | "low", "area": string (영역, 예: 학습/태도/출결), "recommendation": string (구체적 액션) }]',
-            "}",
-            "",
-            "focus는 2~4개. 이미 잘하고 있는 영역은 제외, 개선이 필요하거나 주의가 필요한 영역만.",
-            "추측이 아닌 위 데이터에 근거한 분석을 할 것.",
-            "JSON만 출력, 마크다운 코드 블록 없이.",
-          ].join("\n"),
-        },
-      ],
+    const { data, model } = await generateJSON<CareAnalysisShape>({
+      keyName: "consultations",
+      maxTokens: 2048,
+      prompt: [
+        "재원생 한 명의 케어 종합 분석을 JSON으로만 답해주세요.",
+        "",
+        `학생: ${student.name} (${student.grade ?? "—"}, ${student.school ?? "—"})`,
+        `담임: ${teacher?.display_name ?? "—"}`,
+        `등록일: ${student.enrolled_at ?? "—"}`,
+        `수강 중인 반: ${enrolledClasses || "없음"}`,
+        "",
+        "최근 30일 출결:",
+        `  전체 ${total}건 · 출석 ${present} · 결석 ${absent} · 지각 ${late} · 출석률 ${rate}%`,
+        "",
+        "최근 상담 기록 (최대 10건):",
+        consultationsBlock || "  없음",
+        "",
+        "JSON schema:",
+        "{",
+        '  "summary": string (한국어 3-4문장 — 학생 현재 상태 + 주요 케어 포인트),',
+        '  "focus": [{ "priority": "high" | "medium" | "low", "area": string (영역, 예: 학습/태도/출결), "recommendation": string (구체적 액션) }]',
+        "}",
+        "",
+        "focus는 2~4개. 이미 잘하고 있는 영역은 제외, 개선이 필요하거나 주의가 필요한 영역만.",
+        "추측이 아닌 위 데이터에 근거한 분석을 할 것.",
+        "JSON만 출력, 마크다운 코드 블록 없이.",
+      ].join("\n"),
     });
-
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-    const cleaned = text
-      .replace(/^```json\s*/i, "")
-      .replace(/```\s*$/, "")
-      .trim();
-    analysis = JSON.parse(cleaned) as CareAnalysisShape;
+    analysis = data;
+    modelId = model;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { error: `AI 호출 실패: ${msg}` };
   }
 
-  const modelVersion = `${CLAUDE_MODELS.balanced}-${new Date().toISOString().slice(0, 10)}`;
+  const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
 
   const { error } = await supabase
     .from("students")

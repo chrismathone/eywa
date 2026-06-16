@@ -26,20 +26,29 @@
 
 ## AI 모델 정책
 
-`src/lib/ai/anthropic.ts`의 `CLAUDE_MODELS` 객체에서 tier 선택:
+**모든 AI(JSON) 호출은 단일 진입점 `src/lib/ai/generate.ts`의 `generateJSON()`을 거친다.**
+직접 `getAnthropic`/`getUpstage`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
 
-| Tier | 모델 | 용도 |
-|---|---|---|
-| `fast` | `claude-haiku-4-5` | 짧은 분류, 태깅, 간단 요약. 가장 빠르고 저렴 — 가능하면 이걸로. |
-| `balanced` | `claude-sonnet-4-6` | **현재 모든 AI 호출의 기본값**. 회의록 요약, 학생 케어, 등록상담 진단 등. |
-| `reasoning` | `claude-opus-4-7` | **금지** (사용자가 명시적으로 요청한 경우만). UX 비용이 큼. |
+provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 
-대안:
-- **Gemini 2.5 Flash** (`GEMINI_API_KEY` 등록됨): Haiku와 같은 fast tier 후보. 더 저렴할 수 있어 분류·태깅성 작업에 평가 가치 있음. 코드 통합은 미구현.
+| Tier | Upstage (기본) | Anthropic (폴백/롤백) | 용도 |
+|---|---|---|---|
+| `fast` | `solar-pro3` | `claude-haiku-4-5` | 짧은 분류, 태깅, 간단 요약 (현재 미사용) |
+| `balanced` | **`solar-pro3`** | `claude-sonnet-4-6` | **현재 모든 AI 호출의 기본값**. 회의록·학생 케어·등록상담. |
+| `reasoning` | — (없음) | `claude-opus-4-7` | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
+
+- **기본 provider = `AI_PROVIDER` env (미설정 시 `upstage` = Solar Pro 3).** 한국어 강점 + Sonnet 대비
+  ~20–25배 저렴($0.15/$0.60 per 1M, 128K). `AI_PROVIDER=anthropic` 한 줄로 즉시 Claude 롤백.
+- Upstage는 OpenAI 호환 → `openai` SDK + baseURL `https://api.upstage.ai/v1`. JSON mode
+  (`response_format: json_object`) 사용 — 프롬프트에 "JSON" 단어 필수(현 프롬프트 충족).
+- **자동 폴백**: 기본 provider 키가 없으면 다른 provider(키 있는 쪽)로 1회 폴백 → 둘 다 없으면
+  호출부의 기존 stub/error로 떨어짐(무중단). `model_version`엔 실제 사용 모델 id 저장(UI 미노출).
+- 대안: **Gemini 2.5 Flash**(`GEMINI_API_KEY` 등록됨) — fast-tier 후보, 코드 통합 미구현.
 
 키 분리 (사용량 추적):
-- `ANTHROPIC_API_KEY` → 등록상담(/enrollment) + 회의록(/meetings)
-- `ANTHROPIC_API_KEY_CONSULTATIONS` → 학생 케어 인사이트(/students/[id])
+- `UPSTAGE_API_KEY` / `ANTHROPIC_API_KEY` → 등록상담(/enrollment) + 회의록(/meetings)
+- `UPSTAGE_API_KEY_CONSULTATIONS` / `ANTHROPIC_API_KEY_CONSULTATIONS` → 학생 케어 인사이트(/students/[id])
+  (Upstage는 consultations 전용 키 없으면 `UPSTAGE_API_KEY`로 폴백)
 - `GEMINI_API_KEY` → 향후 fast-tier 작업용 (현재 미사용)
 
 ---

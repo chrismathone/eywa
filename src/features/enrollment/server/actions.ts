@@ -7,7 +7,7 @@ import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { CLAUDE_MODELS, getAnthropic } from "@/lib/ai/anthropic";
+import { generateJSON } from "@/lib/ai/generate";
 
 const createSchema = z.object({
   prospectName: z.string().min(1, "학생 이름을 입력해주세요"),
@@ -137,46 +137,39 @@ export async function runAiAnalysis(
   );
 
   let analysis: AnalysisShape;
+  let modelId = "stub";
   try {
-    const client = getAnthropic();
-    const response = await client.messages.create({
-      model: CLAUDE_MODELS.balanced,
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: [
-            `다음 신입생 상담 정보를 분석해 JSON으로만 답해주세요.`,
-            ``,
-            `학생: ${c.prospect_name}`,
-            `학년: ${c.prospect_grade ?? "미상"}`,
-            `학교: ${c.prospect_school ?? "미상"}`,
-            `학부모 요구사항: ${c.parent_request ?? "없음"}`,
-            `학습 이력: ${JSON.stringify(c.learning_history ?? {})}`,
-            ``,
-            `JSON schema:`,
-            `{`,
-            `  "diagnosis": {`,
-            `    "strengths": string[3],`,
-            `    "weaknesses": string[2],`,
-            `    "level": "최상위권" | "상위권" | "중상위권" | "중위권" | "기초",`,
-            `    "summary": string (2-3문장)`,
-            `  },`,
-            `  "learningPlan": {`,
-            `    "immediate": string[2-3] (4주 안 할 일),`,
-            `    "semester": string[2-3] (이번 학기),`,
-            `    "longTerm": string[2-3] (장기 목표)`,
-            `  }`,
-            `}`,
-            ``,
-            `JSON만 출력하고 다른 설명은 일체 붙이지 마세요.`,
-          ].join("\n"),
-        },
-      ],
+    const { data, model } = await generateJSON<AnalysisShape>({
+      maxTokens: 2048,
+      prompt: [
+        `다음 신입생 상담 정보를 분석해 JSON으로만 답해주세요.`,
+        ``,
+        `학생: ${c.prospect_name}`,
+        `학년: ${c.prospect_grade ?? "미상"}`,
+        `학교: ${c.prospect_school ?? "미상"}`,
+        `학부모 요구사항: ${c.parent_request ?? "없음"}`,
+        `학습 이력: ${JSON.stringify(c.learning_history ?? {})}`,
+        ``,
+        `JSON schema:`,
+        `{`,
+        `  "diagnosis": {`,
+        `    "strengths": string[3],`,
+        `    "weaknesses": string[2],`,
+        `    "level": "최상위권" | "상위권" | "중상위권" | "중위권" | "기초",`,
+        `    "summary": string (2-3문장)`,
+        `  },`,
+        `  "learningPlan": {`,
+        `    "immediate": string[2-3] (4주 안 할 일),`,
+        `    "semester": string[2-3] (이번 학기),`,
+        `    "longTerm": string[2-3] (장기 목표)`,
+        `  }`,
+        `}`,
+        ``,
+        `JSON만 출력하고 다른 설명은 일체 붙이지 마세요.`,
+      ].join("\n"),
     });
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-    const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    analysis = JSON.parse(cleaned) as AnalysisShape;
+    analysis = data;
+    modelId = model;
   } catch {
     analysis = stubAnalysis(c.prospect_name, "중상위권");
   }
@@ -198,7 +191,7 @@ export async function runAiAnalysis(
     recommendedClasses: matchingClasses.slice(0, 2).map((cl) => cl.class_name),
   };
 
-  const modelVersion = `${CLAUDE_MODELS.balanced}-${new Date().toISOString().slice(0, 10)}`;
+  const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
 
   const { error: aiError } = await supabase.from("consultation_ai_analysis").upsert(
     {
