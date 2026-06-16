@@ -3,6 +3,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { Pagination } from "@/components/pagination";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentsPage, getStudentStatusCounts, getTeacherOptions } from "@/features/students/server/queries";
@@ -278,37 +279,7 @@ export default async function StudentsPage({
             </tbody>
           </table>
         </div>
-        {totalPages > 1 ? (
-          <nav className="flex items-center justify-center gap-1.5 pt-1">
-            {page > 1 ? (
-              <Link
-                href={pageHref(page - 1)}
-                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs transition"
-              >
-                ← 이전
-              </Link>
-            ) : (
-              <span className="border-line text-text-faint cursor-default rounded-md border px-3 py-1.5 text-xs opacity-50">
-                ← 이전
-              </span>
-            )}
-            <span className="text-text-dim px-2 text-xs">
-              {page} / {totalPages}
-            </span>
-            {page < totalPages ? (
-              <Link
-                href={pageHref(page + 1)}
-                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs transition"
-              >
-                다음 →
-              </Link>
-            ) : (
-              <span className="border-line text-text-faint cursor-default rounded-md border px-3 py-1.5 text-xs opacity-50">
-                다음 →
-              </span>
-            )}
-          </nav>
-        ) : null}
+        <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
     </div>

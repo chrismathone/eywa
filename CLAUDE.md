@@ -287,6 +287,38 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 `ROUTE_WINDOW_SIZE: Record<menuKey, {w,h}>`에 등록(없으면 `DEFAULT_WINDOW`). 캔버스보다 크면
 `cascadeNext`가 자동 clamp(작은 화면 안전). 예: `timetable: { w: 1040, h: 680 }`.
 
+### 목록 페이지네이션 표준 — 큰 목록은 전부 이 패턴으로 통일 (⚠️ 새 목록 기본값)
+실데이터 이전 후 목록이 수백~천 행이 되며 페이지가 22s까지 느려졌다(전 행 fetch + 전 행 렌더).
+**행이 수십을 넘을 수 있는 모든 목록은 서버 페이지네이션으로 통일한다.** 스타일·구조를 한 곳에
+맞춰 학생·수납·상담이 동일하게 보이고 동작하도록:
+
+- **공용 컴포넌트** [`src/components/pagination.tsx`](src/components/pagination.tsx)의 `<Pagination>` —
+  `이전/다음` + `현재/전체` 칩. **인라인으로 nav를 다시 짜지 말 것.** props: `page`, `totalPages`,
+  `hrefForPage(p)=>string`. `totalPages<=1`이면 자동으로 null. (서버 컴포넌트끼리 함수 prop 안전.)
+- **쿼리 헬퍼 2종** (feature `server/queries.ts`):
+  - `getXPage(filters, page=1, pageSize=50): Promise<{ rows, total }>` — Supabase `.range(from,from+size-1)`
+    + `.select(cols, { count: "exact" })`. **필터는 가능한 한 SQL로** (eq/gte/ilike/or). 조인 컬럼
+    검색은 별도 id 해석 후 `.or("base.ilike.%q%,fk.in.(ids)")` (상담 학생명 검색 참고).
+  - **Stat 카드용 경량 집계** — 행을 fetch하지 말고 `.select("*", { count:"exact", head:true })`로 count만
+    (학생 `getStudentStatusCounts`, 상담 `getStudentConsultationCounts`). 카드는 페이지가 아니라 **전체**
+    기준이어야 하므로 페이지 rows에서 도출 금지.
+  - 월 단위처럼 모집단이 이미 작으면(수납 ~400행/월) **한 번만 fetch 후 메모리에서 검색·슬라이스**해도
+    됨(수납 `summarizeInvoices` + `filtered.slice`). 이중 fetch만 피하면 됨.
+- **페이지 컴포넌트 표준 코드**:
+  ```ts
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const [{ rows, total }, counts] = await Promise.all([ getXPage(filters, page, PAGE_SIZE), getXCounts() ]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageHref = (p) => { /* 현재 필터 보존 + p>1일 때만 page= 세팅 */ };
+  // 빈 상태 판정은 rows.length이 아니라 total === 0
+  // …목록… <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+  ```
+- **page 리셋 규칙**: 필터 chip·검색·정렬·월이동 href(`buildHref`/`buildSortHref`)는 **page 파라미터를
+  넣지 않는다** → 자동으로 1페이지로. `pageHref`만 `p>1`일 때 `page=`를 세팅. "결과 N건"은 `total`
+  (페이지 rows.length 아님), 옆에 `{page}/{totalPages} 페이지` 표기.
+- **PAGE_SIZE = 50** 고정(표·카드 공통). 변경 시 전 목록 동시 변경.
+
 ---
 
 ## 구현 중 실제로 막혔던 점들 (시간순)
