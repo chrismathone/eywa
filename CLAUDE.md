@@ -625,6 +625,11 @@ inner dialog `getBoundingClientRect`는 글라이드 트랜지션 중 mistimed(�
 
 ## 마이그레이션 & 시드 흐름
 
+> 적용 방식·순서·alpha 파일 목록·**현재 적용 상태(검증 2026-06-16: 번호본 0000~0024 + alpha 전부 적용,
+> trgm 색인 11개·RLS 미적용 테이블 0개 확인)**는 [`supabase/migrations/README.md`](supabase/migrations/README.md).
+> drizzle 번호본은 `db:migrate`가 자동, RLS/트리거/확장/GIN trigram 색인 등 `000Na_*` **alpha는 손수** 적용
+> (신규 DB 셋업 시 누락 주의).
+
 1. **스키마 수정** — `src/lib/db/schema.ts`
 2. **`pnpm db:generate`** — drizzle이 SQL diff 생성 (`supabase/migrations/000N_*.sql`)
 3. **손수 RLS/제약/트리거 작성** — `0001a_*.sql` 같은 alpha suffix 파일로
