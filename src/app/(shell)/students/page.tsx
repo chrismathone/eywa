@@ -5,7 +5,7 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getStudentsList, getTeacherOptions } from "@/features/students/server/queries";
+import { getStudentsPage, getStudentStatusCounts, getTeacherOptions } from "@/features/students/server/queries";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentQuickPanel } from "./_components/student-quick-panel";
 
@@ -73,32 +73,41 @@ function buildHref(
 export default async function StudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; subject?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; subject?: string; q?: string; page?: string }>;
 }) {
   await requireAccess("students");
   const sp = await searchParams;
   const status = sp.status ?? "all";
   const subject = sp.subject ?? "all";
   const q = sp.q ?? "";
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  const [students, teachers] = await Promise.all([
-    getStudentsList({ status, subject, q }),
+  const [{ rows, total }, teachers, counts] = await Promise.all([
+    getStudentsPage({ status, subject, q }, page, PAGE_SIZE),
     getTeacherOptions(),
+    getStudentStatusCounts(),
   ]);
-
-  // 전체 카운트는 별도 unfiltered 쿼리로 (Stat 표시용)
-  const all = await getStudentsList({});
-  const enrolled = all.filter((s) => s.status === "enrolled").length;
-  const prospect = all.filter((s) => s.status === "prospect" || s.status === "consulted").length;
-  const withdrawn = all.filter((s) => s.status === "withdrawn").length;
+  const { all, enrolled, prospect, withdrawn } = counts;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const current = { status, subject, q };
+  // 페이지 이동 링크 — 현재 필터 유지 + page 지정 (필터 chip은 buildHref라 page 자동 리셋)
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (status !== "all") params.set("status", status);
+    if (subject !== "all") params.set("subject", subject);
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/students?${s}` : "/students";
+  };
 
   return (
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체" value={all.length} unit="명" color="primary" icon="seed" />
+        <Stat label="전체" value={all} unit="명" color="primary" icon="seed" />
         <Stat label="재원" value={enrolled} unit="명" color="primary" icon="check" />
         <Stat label="예비·상담" value={prospect} unit="명" color="gold" icon="sprout" />
         <Stat label="퇴원" value={withdrawn} unit="명" color="neutral" icon="falling" />
@@ -170,7 +179,8 @@ export default async function StudentsPage({
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <p className="micro">
-          결과 <span className="text-foreground font-bold">{students.length}</span>명
+          결과 <span className="text-foreground font-bold">{total}</span>명
+          {totalPages > 1 ? <span className="text-text-dim ml-2">{page}/{totalPages} 페이지</span> : null}
           {q ? <span className="text-text-dim ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
         </p>
         <div className="flex items-center gap-2">
@@ -189,13 +199,14 @@ export default async function StudentsPage({
         </div>
       </div>
 
-      {students.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={() => <EyIcon name="seed" size={32} />}
           title="결과 없음"
           description="검색어/필터를 조정해보세요."
         />
       ) : (
+        <>
         <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
@@ -210,7 +221,7 @@ export default async function StudentsPage({
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
-              {students.map((s) => {
+              {rows.map((s) => {
                 const meta = STATUS_META[s.status] ?? { label: s.status, color: "neutral" as PillColor };
                 return (
                   <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors">
@@ -267,6 +278,38 @@ export default async function StudentsPage({
             </tbody>
           </table>
         </div>
+        {totalPages > 1 ? (
+          <nav className="flex items-center justify-center gap-1.5 pt-1">
+            {page > 1 ? (
+              <Link
+                href={pageHref(page - 1)}
+                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs transition"
+              >
+                ← 이전
+              </Link>
+            ) : (
+              <span className="border-line text-text-faint cursor-default rounded-md border px-3 py-1.5 text-xs opacity-50">
+                ← 이전
+              </span>
+            )}
+            <span className="text-text-dim px-2 text-xs">
+              {page} / {totalPages}
+            </span>
+            {page < totalPages ? (
+              <Link
+                href={pageHref(page + 1)}
+                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs transition"
+              >
+                다음 →
+              </Link>
+            ) : (
+              <span className="border-line text-text-faint cursor-default rounded-md border px-3 py-1.5 text-xs opacity-50">
+                다음 →
+              </span>
+            )}
+          </nav>
+        ) : null}
+        </>
       )}
     </div>
   );

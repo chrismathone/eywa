@@ -89,6 +89,108 @@ export async function getStudentsList(
   return rows;
 }
 
+/** Stat 표시용 상태별 카운트 — status 한 컬럼만 읽어 enrollments 조인 없이 가볍게(전체 fetch 회피). */
+export async function getStudentStatusCounts(): Promise<{
+  all: number;
+  enrolled: number;
+  prospect: number;
+  withdrawn: number;
+}> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("students").select("status");
+  const rows = data ?? [];
+  return {
+    all: rows.length,
+    enrolled: rows.filter((r) => r.status === "enrolled").length,
+    prospect: rows.filter((r) => r.status === "prospect" || r.status === "consulted").length,
+    withdrawn: rows.filter((r) => r.status === "withdrawn").length,
+  };
+}
+
+/**
+ * 학생목록 페이지용 서버 페이지네이션. 전체 564명을 통째로 가져와 렌더하던 병목 해소
+ * (페이지 50행 + 그 페이지 학생의 enrollments만 조회). 과목 필터는 해당 과목 active 수강 학생
+ * id를 먼저 풀어 `.in()`으로 좁힌다(in-memory 전체 필터 회피).
+ */
+export async function getStudentsPage(
+  options: StudentListFilters,
+  page = 1,
+  pageSize = 50,
+): Promise<{ rows: StudentListRow[]; total: number }> {
+  const supabase = await createClient();
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let subjectIds: string[] | null = null;
+  if (options?.subject && options.subject !== "all") {
+    const { data: ens } = await supabase
+      .from("enrollments")
+      .select("student_id, class:class_id!inner ( subject )")
+      .eq("class.subject", options.subject)
+      .is("end_date", null)
+      .eq("on_hold", false);
+    subjectIds = [...new Set((ens ?? []).map((e) => e.student_id))];
+    if (subjectIds.length === 0) return { rows: [], total: 0 };
+  }
+
+  let qb = supabase
+    .from("students")
+    .select(
+      `id, name, school, grade, status, enrolled_at, parent_phone,
+       teacher:primary_teacher_id ( display_name )`,
+      { count: "exact" },
+    )
+    .order("grade", { ascending: true })
+    .order("name", { ascending: true });
+  if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
+  if (options?.q) {
+    const term = options.q.trim();
+    if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
+  }
+  if (subjectIds) qb = qb.in("id", subjectIds);
+  qb = qb.range(from, to);
+
+  const { data, count } = await qb;
+  const pageData = data ?? [];
+
+  const ids = pageData.map((r) => r.id);
+  const subjectsByStudent = new Map<string, Set<string>>();
+  if (ids.length > 0) {
+    const { data: ens } = await supabase
+      .from("enrollments")
+      .select("student_id, on_hold, end_date, class:class_id ( subject )")
+      .in("student_id", ids)
+      .is("end_date", null);
+    for (const e of ens ?? []) {
+      if (e.on_hold) continue;
+      const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as { subject?: string } | undefined;
+      if (!klass?.subject) continue;
+      const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
+      set.add(klass.subject);
+      subjectsByStudent.set(e.student_id, set);
+    }
+  }
+
+  const rows = pageData.map((r) => {
+    const teacher = (Array.isArray(r.teacher) ? r.teacher[0] : r.teacher) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: r.id,
+      name: r.name,
+      school: r.school,
+      grade: r.grade,
+      status: r.status,
+      primaryTeacherName: teacher?.display_name ?? null,
+      enrolledAt: r.enrolled_at,
+      parentPhone: r.parent_phone,
+      subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+    } satisfies StudentListRow;
+  });
+
+  return { rows, total: count ?? rows.length };
+}
+
 export type CareFocus = {
   priority: "high" | "medium" | "low";
   area: string;
