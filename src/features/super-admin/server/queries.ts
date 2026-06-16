@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 
 export type TenantRow = {
   id: string;
@@ -30,25 +31,33 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
   const admin = createAdminClient();
   const period = currentPeriod();
 
-  const [tenantsRes, usersRes, studentsRes, invoicesRes] = await Promise.all([
+  // users/students/invoices는 전 테넌트 전건을 가져와 JS로 집계 → PostgREST 1000행 한도에
+  // silent 절단되면 카운트·청구가 과소된다. 페이지네이션으로 전건 확보(테넌트 증가 대비).
+  const [tenantsRes, users, students, invoices] = await Promise.all([
     admin.from("tenants").select("id, slug, name, plan, created_at").order("created_at", { ascending: false }),
-    admin.from("users").select("tenant_id"),
-    admin.from("students").select("tenant_id").neq("status", "withdrawn"),
-    admin.from("invoices").select("tenant_id, amount_total").eq("period", period),
+    fetchAllPaged<{ tenant_id: string }>((from, to) =>
+      admin.from("users").select("tenant_id").range(from, to),
+    ),
+    fetchAllPaged<{ tenant_id: string }>((from, to) =>
+      admin.from("students").select("tenant_id").neq("status", "withdrawn").range(from, to),
+    ),
+    fetchAllPaged<{ tenant_id: string; amount_total: number | string | null }>((from, to) =>
+      admin.from("invoices").select("tenant_id, amount_total").eq("period", period).range(from, to),
+    ),
   ]);
 
   const userCountByTenant = new Map<string, number>();
-  (usersRes.data ?? []).forEach((u) => {
+  users.forEach((u) => {
     userCountByTenant.set(u.tenant_id, (userCountByTenant.get(u.tenant_id) ?? 0) + 1);
   });
 
   const studentCountByTenant = new Map<string, number>();
-  (studentsRes.data ?? []).forEach((s) => {
+  students.forEach((s) => {
     studentCountByTenant.set(s.tenant_id, (studentCountByTenant.get(s.tenant_id) ?? 0) + 1);
   });
 
   const billingByTenant = new Map<string, number>();
-  (invoicesRes.data ?? []).forEach((i) => {
+  invoices.forEach((i) => {
     const amt = Number(i.amount_total ?? 0);
     billingByTenant.set(i.tenant_id, (billingByTenant.get(i.tenant_id) ?? 0) + amt);
   });
@@ -89,7 +98,7 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
     .maybeSingle();
   if (!tenant) return null;
 
-  const [usersRes, studentsRes, classesRes, invoicesRes] = await Promise.all([
+  const [usersRes, studentsRes, classesRes, invoices] = await Promise.all([
     admin
       .from("users")
       .select("id, email, display_name, system_role, status")
@@ -97,10 +106,12 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
       .order("created_at", { ascending: true }),
     admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
     admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
-    admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period),
+    fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
+      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).range(from, to),
+    ),
   ]);
 
-  const monthBilling = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
+  const monthBilling = invoices.reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
   return {
     id: tenant.id,
@@ -118,7 +129,7 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
     studentCount: studentsRes.count ?? 0,
     classCount: classesRes.count ?? 0,
     monthBilling,
-    monthInvoiceCount: invoicesRes.data?.length ?? 0,
+    monthInvoiceCount: invoices.length,
   };
 });
 
@@ -126,14 +137,16 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
   const admin = createAdminClient();
   const period = currentPeriod();
 
-  const [tenantsRes, usersRes, studentsRes, invoicesRes] = await Promise.all([
+  const [tenantsRes, usersRes, studentsRes, invoices] = await Promise.all([
     admin.from("tenants").select("id", { count: "exact", head: true }),
     admin.from("users").select("id", { count: "exact", head: true }).eq("status", "active"),
     admin.from("students").select("id", { count: "exact", head: true }).neq("status", "withdrawn"),
-    admin.from("invoices").select("amount_total").eq("period", period),
+    fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
+      admin.from("invoices").select("amount_total").eq("period", period).range(from, to),
+    ),
   ]);
 
-  const monthBillingSum = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
+  const monthBillingSum = invoices.reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
   return {
     tenantCount: tenantsRes.count ?? 0,
@@ -198,12 +211,14 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
     .maybeSingle();
   if (!tenant) return null;
 
-  const [studentsRes, teachersRes, classesRes, invoicesRes, recentStudentsRes, recentMeetingsRes] =
+  const [studentsRes, teachersRes, classesRes, invoices, recentStudentsRes, recentMeetingsRes] =
     await Promise.all([
       admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
       admin.from("users").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("system_role", "teacher"),
       admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
-      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period),
+      fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
+        admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).range(from, to),
+      ),
       admin
         .from("students")
         .select("id, name, grade, status")
@@ -219,7 +234,7 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
         .limit(3),
     ]);
 
-  const monthBilling = (invoicesRes.data ?? []).reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
+  const monthBilling = invoices.reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
   return {
     id: tenant.id,

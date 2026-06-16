@@ -14,34 +14,71 @@ export type DuplicateGroup = {
 };
 
 /**
- * 중복 의심 학생 그룹.
- * 키: lower(이름) + grade + school. 같은 키에 2명 이상.
+ * 중복 의심 학생 그룹. 두 신호를 union-find로 병합 (F6):
+ *  (a) 이름+학년+학교가 모두 같음 (기존 자연키)
+ *  (b) 이름+학년이 같고 학부모 연락처(숫자만)가 동일 — 학교칸만 다르거나 비어도 잡음
+ * 같은 컴포넌트에 2명 이상이면 중복 후보.
  */
 export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("students")
-    .select("id, name, grade, school, status, enrolled_at")
+    .select("id, name, grade, school, status, enrolled_at, parent_phone")
     .order("name");
 
+  if (error) throw new Error(`findDuplicateStudents: ${error.message}`);
   if (!data) return [];
 
-  const groups = new Map<string, DuplicateGroup>();
+  // 같은 키를 공유하는 학생들을 엮을 버킷 구성
+  const buckets = new Map<string, string[]>();
+  const addToBucket = (key: string, id: string) => {
+    const arr = buckets.get(key) ?? [];
+    arr.push(id);
+    buckets.set(key, arr);
+  };
   for (const r of data) {
-    const key = `${r.name.toLowerCase().trim()}::${r.grade ?? ""}::${r.school ?? ""}`;
-    const g = groups.get(key) ?? { key, students: [] };
-    g.students.push({
-      id: r.id,
-      name: r.name,
-      grade: r.grade,
-      school: r.school,
-      status: r.status,
-      enrolledAt: r.enrolled_at,
-    });
-    groups.set(key, g);
+    const base = `${r.name.toLowerCase().trim()}::${r.grade ?? ""}`;
+    addToBucket(`nat::${base}::${r.school ?? ""}`, r.id);
+    const phone = (r.parent_phone ?? "").replace(/\D/g, "");
+    if (phone) addToBucket(`ph::${base}::${phone}`, r.id);
   }
 
-  return Array.from(groups.values()).filter((g) => g.students.length >= 2);
+  // union-find: 버킷 내 학생들을 같은 컴포넌트로 합침
+  const parent = new Map<string, string>(data.map((r) => [r.id, r.id]));
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    while (parent.get(x) !== root) {
+      const next = parent.get(x)!;
+      parent.set(x, root);
+      x = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string) => parent.set(find(a), find(b));
+  for (const ids of buckets.values()) {
+    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+
+  // 컴포넌트별로 학생 모으기 → 2명 이상만
+  const byId = new Map(data.map((r) => [r.id, r]));
+  const comps = new Map<string, DuplicateGroup>();
+  for (const r of data) {
+    const root = find(r.id);
+    const g = comps.get(root) ?? { key: root, students: [] };
+    const s = byId.get(r.id)!;
+    g.students.push({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      school: s.school,
+      status: s.status,
+      enrolledAt: s.enrolled_at,
+    });
+    comps.set(root, g);
+  }
+
+  return Array.from(comps.values()).filter((g) => g.students.length >= 2);
 }
 
 export type OrphanReport = {
@@ -53,20 +90,23 @@ export type OrphanReport = {
 export async function findOrphans(): Promise<OrphanReport> {
   const supabase = await createClient();
 
-  // 1) status='enrolled'인데 enrollment 0개
-  const { data: enrolled } = await supabase
+  // 1) status='enrolled'인데 활성 enrollment 0개.
+  //    ⚠️ 과거엔 enrolledIds(수백 개)를 .in()에 넣어 URL이 HTTP 414로 실패→error를 삼켜
+  //    전원 오탐했음(F8/F1). 쿼리를 뒤집어 활성 enrollment의 student_id 집합을 먼저 받고
+  //    (RLS가 테넌트로 한정), 대량 .in() 없이 메모리에서 차집합을 구한다.
+  const { data: enrolled, error: enrolledErr } = await supabase
     .from("students")
     .select("id, name, status")
     .eq("status", "enrolled");
-  const enrolledIds = (enrolled ?? []).map((s) => s.id);
+  if (enrolledErr) throw new Error(`findOrphans enrolled: ${enrolledErr.message}`);
 
-  const { data: enrollments } = await supabase
+  const { data: activeEnrollments, error: enrErr } = await supabase
     .from("enrollments")
     .select("student_id")
-    .in("student_id", enrolledIds)
     .is("end_date", null);
+  if (enrErr) throw new Error(`findOrphans enrollments: ${enrErr.message}`);
 
-  const withEnrollment = new Set((enrollments ?? []).map((e) => e.student_id));
+  const withEnrollment = new Set((activeEnrollments ?? []).map((e) => e.student_id));
   const studentsWithoutEnrollments = (enrolled ?? [])
     .filter((s) => !withEnrollment.has(s.id))
     .map((s) => ({ id: s.id, name: s.name, status: s.status }));
@@ -86,22 +126,19 @@ export async function findOrphans(): Promise<OrphanReport> {
     .filter((c) => !withSchedule.has(c.id))
     .map((c) => ({ id: c.id, className: c.class_name, isActive: c.is_active }));
 
-  // 3) withdrawn 학생인데 active enrollment 남음
-  const { data: withdrawnStudents } = await supabase
+  // 3) withdrawn 학생인데 active enrollment 남음.
+  //    위에서 받은 활성 enrollment 집합(withEnrollment)을 재사용 — 대량 .in() 불필요(F1과 동일 위험 제거).
+  const { data: withdrawnStudents, error: wErr } = await supabase
     .from("students")
     .select("id")
     .eq("status", "withdrawn");
-  const withdrawnIds = (withdrawnStudents ?? []).map((s) => s.id);
-  const { count: orphanEnrollments } = await supabase
-    .from("enrollments")
-    .select("*", { count: "exact", head: true })
-    .in("student_id", withdrawnIds)
-    .is("end_date", null);
+  if (wErr) throw new Error(`findOrphans withdrawn: ${wErr.message}`);
+  const orphanEnrollments = (withdrawnStudents ?? []).filter((s) => withEnrollment.has(s.id)).length;
 
   return {
     studentsWithoutEnrollments,
     classesWithoutSchedules,
-    enrollmentsWithoutEndDate: orphanEnrollments ?? 0,
+    enrollmentsWithoutEndDate: orphanEnrollments,
   };
 }
 

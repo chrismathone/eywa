@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
   type WithdrawalMetadata,
@@ -14,6 +15,23 @@ export type StudentFormState = { error?: string; fieldErrors?: Record<string, st
 
 const STATUSES = ["prospect", "consulted", "enrolled", "on_hold", "withdrawn"] as const;
 type StudentStatus = (typeof STATUSES)[number];
+
+/**
+ * 한국 전화번호 정규화 (F5). 숫자만 추출 후 휴대폰/지역번호 규칙으로 하이픈 삽입,
+ * 앞자리 0 누락(예: "1065317203")도 보정. 인식 못 하는 길이는 원본 유지(과도한 변형 방지).
+ */
+function normalizePhone(raw: string | null): string | null {
+  if (!raw) return null;
+  let d = raw.replace(/\D/g, "");
+  if (!d) return null;
+  if (d.length === 10 && d.startsWith("10")) d = "0" + d; // 1065317203 → 01065317203
+  if (d.length === 11 && d.startsWith("010")) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+  if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  return raw;
+}
 
 function readForm(formData: FormData) {
   const get = (k: string) => {
@@ -27,7 +45,7 @@ function readForm(formData: FormData) {
     school: get("school") || null,
     studentCode: get("studentCode") || null,
     parentName: get("parentName") || null,
-    parentPhone: get("parentPhone") || null,
+    parentPhone: normalizePhone(get("parentPhone") || null),
     status: (STATUSES.includes(status as StudentStatus) ? status : "prospect") as StudentStatus,
     primaryTeacherId: get("primaryTeacherId") || null,
     secondaryTeacherId: get("secondaryTeacherId") || null,
@@ -150,6 +168,31 @@ export async function updateStudent(
     .eq("id", id);
 
   if (error) return { error: translateDbError(error.message) };
+
+  // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
+  // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
+  if (input.status === "withdrawn" && prevStatus !== "withdrawn") {
+    const { error: enrErr } = await supabase
+      .from("enrollments")
+      .update({ end_date: input.withdrawnAt })
+      .eq("student_id", id)
+      .is("end_date", null);
+    if (enrErr) return { error: enrErr.message };
+  } else if (input.status === "enrolled" && prevStatus !== "enrolled") {
+    const { error: enrErr } = await supabase
+      .from("enrollments")
+      .update({ on_hold: false })
+      .eq("student_id", id)
+      .is("end_date", null);
+    if (enrErr) return { error: enrErr.message };
+  } else if (input.status === "on_hold" && prevStatus !== "on_hold") {
+    const { error: enrErr } = await supabase
+      .from("enrollments")
+      .update({ on_hold: true })
+      .eq("student_id", id)
+      .is("end_date", null);
+    if (enrErr) return { error: enrErr.message };
+  }
 
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
@@ -419,24 +462,30 @@ export async function recomputePrimaryTeacher(
   if (targetStudentId) {
     studentIds = [targetStudentId];
   } else {
-    const { data: stus } = await supabase
-      .from("students")
-      .select("id")
-      .eq("status", "enrolled");
-    studentIds = (stus ?? []).map((s) => s.id);
+    // 일괄 모드: enrolled 전원 — .range() 페이지네이션으로 1000행 절단 방지.
+    const stus = await fetchAllPaged<{ id: string }>((from, to) =>
+      supabase.from("students").select("id").eq("status", "enrolled").range(from, to),
+    );
+    studentIds = stus.map((s) => s.id);
   }
   if (studentIds.length === 0) return { updated: 0 };
 
-  // 2) 학생별 활성 enrollment들의 schedule 시간 합산
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select(
-      `student_id, class_id,
+  // 2) 학생별 활성 enrollment들의 schedule 시간 합산. id 청크로 .in()(414 + error삼킴 방지).
+  const enrollments = await fetchInChunks<{
+    student_id: string;
+    class_id: string;
+    class: { teacher_id?: string | null } | { teacher_id?: string | null }[] | null;
+  }>(studentIds, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select(
+        `student_id, class_id,
        class:class_id ( teacher_id ),
        schedule:class_id ( class_schedules ( start_time, end_time ) )`,
-    )
-    .in("student_id", studentIds)
-    .is("end_date", null);
+      )
+      .in("student_id", chunk)
+      .is("end_date", null),
+  );
 
   // 강사별로 시간 합산 (student_id → teacher_id → minutes)
   type Acc = Map<string, number>; // teacher_id → minutes
@@ -444,13 +493,14 @@ export async function recomputePrimaryTeacher(
 
   // class_id → schedule minutes
   const classMinutes = new Map<string, number>();
-  const classIds = Array.from(new Set((enrollments ?? []).map((e) => e.class_id)));
+  const classIds = Array.from(new Set(enrollments.map((e) => e.class_id)));
   if (classIds.length > 0) {
-    const { data: scheds } = await supabase
-      .from("class_schedules")
-      .select("class_id, start_time, end_time")
-      .in("class_id", classIds);
-    for (const s of scheds ?? []) {
+    const scheds = await fetchInChunks<{ class_id: string; start_time: string; end_time: string }>(
+      classIds,
+      (chunk) =>
+        supabase.from("class_schedules").select("class_id, start_time, end_time").in("class_id", chunk),
+    );
+    for (const s of scheds) {
       const [sh, sm] = String(s.start_time).split(":").map(Number);
       const [eh, em] = String(s.end_time).split(":").map(Number);
       const mins = eh * 60 + em - (sh * 60 + sm);
@@ -458,7 +508,7 @@ export async function recomputePrimaryTeacher(
     }
   }
 
-  for (const e of enrollments ?? []) {
+  for (const e of enrollments) {
     const cls = (Array.isArray(e.class) ? e.class[0] : e.class) as
       | { teacher_id?: string | null }
       | undefined;

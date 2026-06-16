@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 
 // Re-export common types so existing callers don't need to switch import paths
@@ -42,34 +43,46 @@ function parseMetadata(raw: unknown): WithdrawalMetadata | null {
 
 export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
   const supabase = await createClient();
-  const { data: students } = await supabase
-    .from("students")
-    .select(
-      `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
-       teacher:primary_teacher_id ( display_name )`,
-    )
-    .eq("status", "withdrawn")
-    .order("withdrawn_at", { ascending: false });
+  // 퇴원생은 누적 집합 — .range() 페이지네이션으로 1000행 절단 방지.
+  const students = await fetchAllPaged((from, to) =>
+    supabase
+      .from("students")
+      .select(
+        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
+         teacher:primary_teacher_id ( display_name )`,
+      )
+      .eq("status", "withdrawn")
+      .order("withdrawn_at", { ascending: false })
+      .range(from, to),
+  );
 
-  if (!students || students.length === 0) return [];
+  if (students.length === 0) return [];
 
   const ids = students.map((s) => s.id);
 
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select(
-      `student_id, withdrawal_reason, end_date,
-       class:class_id ( class_name, subject )`,
-    )
-    .in("student_id", ids)
-    .not("end_date", "is", null)
-    .order("end_date", { ascending: false });
+  // id를 청크로 .in()(414 + error삼킴 방지). 한 학생 enrollment는 같은 청크에 모여 end_date desc 보존.
+  const enrollments = await fetchInChunks<{
+    student_id: string;
+    withdrawal_reason: string | null;
+    end_date: string | null;
+    class: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[] | null;
+  }>(ids, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select(
+        `student_id, withdrawal_reason, end_date,
+         class:class_id ( class_name, subject )`,
+      )
+      .in("student_id", chunk)
+      .not("end_date", "is", null)
+      .order("end_date", { ascending: false }),
+  );
 
   const lastByStudent = new Map<
     string,
     { reason: string | null; className: string | null; subject: string | null }
   >();
-  for (const e of enrollments ?? []) {
+  for (const e of enrollments) {
     if (lastByStudent.has(e.student_id)) continue;
     const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
       | { class_name?: string; subject?: string }

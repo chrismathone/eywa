@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 
 export type StudentListRow = {
   id: string;
@@ -23,36 +24,44 @@ export async function getStudentsList(
   options?: StudentListFilters,
 ): Promise<StudentListRow[]> {
   const supabase = await createClient();
-  let qb = supabase
-    .from("students")
-    .select(
-      `id, name, school, grade, status, enrolled_at, parent_phone,
-       teacher:primary_teacher_id ( display_name )`,
-    )
-    .order("grade", { ascending: true })
-    .order("name", { ascending: true });
-  if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
+  // 학생 전건을 .range()로 페이지네이션 — export·반 상세가 전 학생을 받으므로 1000행 절단 방지.
+  const data = await fetchAllPaged((from, to) => {
+    let qb = supabase
+      .from("students")
+      .select(
+        `id, name, school, grade, status, enrolled_at, parent_phone,
+         teacher:primary_teacher_id ( display_name )`,
+      )
+      .order("grade", { ascending: true })
+      .order("name", { ascending: true });
+    if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
+    // 검색: 이름 또는 학교 부분 매치
+    if (options?.q) {
+      const term = options.q.trim();
+      if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
+    }
+    return qb.range(from, to);
+  });
+  if (data.length === 0) return [];
 
-  // 검색: 이름 또는 학교 부분 매치
-  if (options?.q) {
-    const term = options.q.trim();
-    if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
-  }
-
-  const { data } = await qb;
-  if (!data) return [];
-
-  // 학생별 수강 과목 unique (active enrollments)
+  // 학생별 수강 과목 unique (active enrollments). id를 청크로 .in()(414 + error삼킴 방지).
   const studentIds = data.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
-  if (studentIds.length > 0) {
-    const { data: ens } = await supabase
-      .from("enrollments")
-      .select("student_id, on_hold, end_date, class:class_id ( subject )")
-      .in("student_id", studentIds)
-      .is("end_date", null);
+  {
+    const ens = await fetchInChunks<{
+      student_id: string;
+      on_hold: boolean;
+      end_date: string | null;
+      class: { subject?: string } | { subject?: string }[] | null;
+    }>(studentIds, (chunk) =>
+      supabase
+        .from("enrollments")
+        .select("student_id, on_hold, end_date, class:class_id ( subject )")
+        .in("student_id", chunk)
+        .is("end_date", null),
+    );
 
-    for (const e of ens ?? []) {
+    for (const e of ens) {
       if (e.on_hold) continue;
       const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
         | { subject?: string }
