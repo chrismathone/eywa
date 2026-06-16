@@ -74,9 +74,10 @@ export default async function WithdrawalsPage({
   // 사유 통계 (필터 후 결과 기준)
   const reasonCounts = new Map<string, number>();
   for (const r of rows) {
-    const key = r.metadata?.reason
-      ? REASON_LABEL[r.metadata.reason as WithdrawalReason]
-      : (r.withdrawalReason ?? "미기재");
+    const key =
+      (r.metadata?.reason
+        ? REASON_LABEL[r.metadata.reason as WithdrawalReason]
+        : r.withdrawalReason) ?? "미기재";
     reasonCounts.set(key, (reasonCounts.get(key) ?? 0) + 1);
   }
   const topReasons = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1]);

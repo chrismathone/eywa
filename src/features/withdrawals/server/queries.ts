@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { REASON_LABEL, type WithdrawalMetadata } from "../types";
+import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {
@@ -27,9 +27,10 @@ export type WithdrawalRow = {
 function parseMetadata(raw: unknown): WithdrawalMetadata | null {
   if (!raw || typeof raw !== "object") return null;
   const m = raw as Partial<WithdrawalMetadata>;
-  if (!m.reason) return null;
+  const reason = normalizeReason(m.reason); // 마이그레이션 표기 흔들림 흡수 (dissatisfied→dissatisfaction 등)
+  if (!reason) return null;
   return {
-    reason: m.reason,
+    reason,
     memo: m.memo ?? null,
     consultation: {
       adminCalledParent: !!m.consultation?.adminCalledParent,
