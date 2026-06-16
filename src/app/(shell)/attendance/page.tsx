@@ -256,9 +256,16 @@ function MatrixTable({
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={4} className="bg-bg-soft border-line border-t px-3 py-2">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
-                <span className="micro">범례</span>
+            {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 Pill 가로 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
+            <td
+              colSpan={matrix.days.length + 5}
+              className="bg-bg-soft border-line border-t px-3 py-2"
+            >
+              <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
+                <span className="text-text-faint font-mono text-[11px]">
+                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 해당 날짜 입력 화면
+                </span>
+                <span className="micro ml-auto">범례</span>
                 {(["present", "absent", "late", "excused", "makeup"] as AttendanceStatus[]).map(
                   (s) => (
                     <Pill key={s} color={pillColorFor(s)}>
@@ -267,12 +274,6 @@ function MatrixTable({
                   ),
                 )}
               </div>
-            </td>
-            <td
-              colSpan={matrix.days.length + 1}
-              className="bg-bg-soft border-line border-t px-3 py-2 text-right font-mono text-[11px]"
-            >
-              총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 해당 날짜 입력 화면
             </td>
           </tr>
         </tfoot>
