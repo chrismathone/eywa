@@ -1,7 +1,7 @@
 "use client";
 
 import { useWindowStore } from "./window-store";
-import { snapBar, type LayoutTemplate } from "./window-geometry";
+import { snapBar, SNAP_BAR_BG_OFFSET, type LayoutTemplate } from "./window-geometry";
 
 const LABEL: Record<LayoutTemplate, string> = {
   split: "2분할",
@@ -27,11 +27,13 @@ export function SnapLayoutsBar() {
   const count = order.filter((id) => !windows[id]?.minimized).length;
   const bar = snapBar(bounds, count);
   if (!bar) return null;
+  // 배경 드롭 칩(라우트 창)이 상단을 차지하면 바를 그만큼 아래로 밀어 겹침 회피(드래그 훅 히트테스트와 동일 오프셋).
+  const offsetY = windows[draggingId]?.kind === "route" ? SNAP_BAR_BG_OFFSET : 0;
 
   return (
     <div
       className="animate-in fade-in-0 slide-in-from-top-1 pointer-events-none absolute top-0 left-0 z-[60] duration-150"
-      style={{ transform: `translate(${bar.x}px, ${bar.y}px)`, width: bar.w, height: bar.h }}
+      style={{ transform: `translate(${bar.x}px, ${bar.y + offsetY}px)`, width: bar.w, height: bar.h }}
       aria-hidden="true"
     >
       <div className="bg-card/90 border-line shadow-modal absolute inset-0 rounded-xl border supports-backdrop-filter:backdrop-blur-sm" />

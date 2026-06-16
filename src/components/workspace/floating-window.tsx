@@ -25,7 +25,8 @@ const HANDLES: { h: ResizeHandle; cls: string }[] = [
 export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean; z: number }) {
   // outerRef: 위치/크기(transform·width·height)를 드래그/리사이즈가 직접 갱신(리렌더 0)
   const outerRef = useRef<HTMLDivElement>(null);
-  const drag = usePointerDrag(win.id, outerRef);
+  // 배경 드롭 칩에 놓으면 타이틀바 "배경으로 보내기" 버튼과 동일 동작(라우트 창 한정, 함수 호이스팅).
+  const drag = usePointerDrag(win.id, outerRef, () => handleSwapToBackground());
   const resize = usePointerResize(win.id, outerRef);
   const close = useWindowStore((s) => s.close);
   const minimize = useWindowStore((s) => s.minimize);

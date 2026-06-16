@@ -2,7 +2,16 @@
 
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useWindowStore } from "./window-store";
-import { snapBarHitTest, snapZoneForPoint, type LayoutTemplate, type Rect, type SnapZone } from "./window-geometry";
+import {
+  backgroundDropZone,
+  pointInRect,
+  snapBarHitTest,
+  snapZoneForPoint,
+  SNAP_BAR_BG_OFFSET,
+  type LayoutTemplate,
+  type Rect,
+  type SnapZone,
+} from "./window-geometry";
 import { WINDOW_TRANSITION, motionDisabled } from "./motion";
 
 type DragLayout = { template: LayoutTemplate; slot: number };
@@ -24,13 +33,18 @@ const KEEP_TOP = 160; // 히스테리시스: 소환 후엔 이 아래로 내려�
  * draggingId를 세팅하지 않음(클릭 시 바 깜빡임·iframe 리로드 없음). 상단 밴드에선 스냅
  * 레이아웃 바, 그 외엔 가장자리/모서리 존을 store에 알려 캔버스가 미리보기를 그린다.
  */
-export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | null>) {
+export function usePointerDrag(
+  id: string,
+  elRef: RefObject<HTMLDivElement | null>,
+  onDropBackground?: () => void,
+) {
   const startRef = useRef<{ px: number; py: number; rect: Rect } | null>(null);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const zoneRef = useRef<SnapZone>(null);
   const layoutRef = useRef<DragLayout | null>(null);
   const startedRef = useRef(false);
   const nearTopRef = useRef(false);
+  const bgRef = useRef(false); // 포인터가 배경 드롭 칩 위(드롭 시 swapToBackground)
 
   function onPointerDown(e: RPointerEvent<HTMLElement>) {
     if (e.button !== 0) return;
@@ -44,6 +58,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     layoutRef.current = null;
     startedRef.current = false;
     nearTopRef.current = false;
+    bgRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     e.preventDefault();
   }
@@ -85,8 +100,31 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
       nearTopRef.current = nearTop;
       store.setDragNearTop(nearTop);
     }
-    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존
-    const hit = nearTop ? snapBarHitTest(sx, sy, bounds, openCount()) : null;
+    // 배경 드롭 칩(라우트 창 한정) 위면 최우선 — "배경으로 보내기"(스냅보다 우선).
+    const isRoute = store.windows[id]?.kind === "route";
+    if (isRoute && nearTop && pointInRect(sx, sy, backgroundDropZone(bounds))) {
+      if (!bgRef.current) {
+        bgRef.current = true;
+        store.setDragBackground(true);
+      }
+      if (layoutRef.current) {
+        layoutRef.current = null;
+        store.setDragLayout(null);
+      }
+      if (zoneRef.current !== null) {
+        zoneRef.current = null;
+        store.setSnapPreview(null);
+      }
+      return;
+    }
+    if (bgRef.current) {
+      bgRef.current = false;
+      store.setDragBackground(false);
+    }
+    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존. 배경 칩이 떠 있으면(라우트)
+    // 스냅 바는 SNAP_BAR_BG_OFFSET만큼 아래로 밀리므로 히트테스트 py도 동일 보정.
+    const barOffset = isRoute ? SNAP_BAR_BG_OFFSET : 0;
+    const hit = nearTop ? snapBarHitTest(sx, sy - barOffset, bounds, openCount()) : null;
     if (hit) {
       if (!sameLayout(layoutRef.current, hit)) {
         layoutRef.current = hit;
@@ -121,6 +159,21 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
       return;
     }
     const store = useWindowStore.getState();
+    // 배경 드롭: 라우트 창을 배경 칩에 놓음 → 호출부(handleSwapToBackground)가 router.push + swapToBackground.
+    if (bgRef.current && onDropBackground) {
+      onDropBackground();
+      store.setSnapPreview(null);
+      store.setDragLayout(null);
+      store.setDragNearTop(false);
+      store.setDragBackground(false);
+      store.setDragging(null);
+      startedRef.current = false;
+      zoneRef.current = null;
+      layoutRef.current = null;
+      nearTopRef.current = false;
+      bgRef.current = false;
+      return;
+    }
     const layout = layoutRef.current;
     const zone = zoneRef.current;
     if (layout) store.applyDragLayout(id, layout.template, layout.slot);
@@ -144,6 +197,7 @@ export function usePointerDrag(id: string, elRef: RefObject<HTMLDivElement | nul
     zoneRef.current = null;
     layoutRef.current = null;
     nearTopRef.current = false;
+    bgRef.current = false;
   }
 
   return { onPointerDown, onPointerMove, onPointerUp };

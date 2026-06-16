@@ -8,6 +8,7 @@ import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
 import { WindowSwitcher } from "./window-switcher";
 import { BackgroundTabs } from "./background-tabs";
+import { BackgroundDropZone } from "./background-drop-zone";
 import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
 import { snapTarget, templateSlots } from "./window-geometry";
@@ -94,6 +95,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       ))}
       <SnapAssist />
       <SnapLayoutsBar />
+      <BackgroundDropZone />
       <BackgroundTabs />
       <WindowSwitcher />
     </div>
