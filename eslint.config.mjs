@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Design handoff reference files (HTML/JSX prototypes, not source code)
     "data/**",
+    // Claude tooling: nested git worktrees ship their own .next build artifacts +
+    // duplicated source — linting them produces false errors/OOM (see CLAUDE.md trap).
+    ".claude/**",
   ]),
 ]);
 

@@ -44,6 +44,8 @@ export function EyIcon({
   className,
   ...rest
 }: Props) {
+  // 장식 아이콘은 기본 aria-hidden(텍스트가 의미를 전달). aria-label을 주면 노출.
+  const labelled = rest["aria-label"] != null;
   const common: SVGProps<SVGSVGElement> = {
     width: size,
     height: size,
@@ -55,6 +57,7 @@ export function EyIcon({
     strokeLinejoin: "round",
     className,
     ...rest,
+    "aria-hidden": labelled ? undefined : (rest["aria-hidden"] ?? true),
   };
 
   switch (name) {
