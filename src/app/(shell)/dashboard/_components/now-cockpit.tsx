@@ -3,6 +3,7 @@
  * 색/시간 로직은 subject-meta(구 today-timeline에서 추출) 재사용.
  */
 import { Pill } from "@/components/atoms/pill";
+import { WindowLink } from "@/components/workspace/window-link";
 import type { TodaySlot } from "@/features/timetable/server/queries";
 import {
   SUBJECT_META,
@@ -31,9 +32,9 @@ export function NowCockpit({ slots }: { slots: TodaySlot[] }) {
         {ongoing.length > 0 ? (
           <Pill color="primary">● 진행 중 {ongoing.length}건</Pill>
         ) : (
-          <a href="/timetable" className="text-text-dim hover:text-foreground text-xs">
+          <WindowLink href="/timetable" className="text-text-dim hover:text-foreground text-xs">
             시간표 →
-          </a>
+          </WindowLink>
         )}
       </header>
 

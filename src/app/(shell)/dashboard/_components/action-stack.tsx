@@ -2,7 +2,7 @@
  * ③ 처리 필요 — 미수·결석위험·AI상담대기·신규 카운트 + 바로가기(count>0만).
  * 상세 리스트는 각 feature 페이지(글랜스+액션 철학). 전부 0이면 긍정 빈 상태.
  */
-import Link from "next/link";
+import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { ActionItem } from "@/features/dashboard/metrics";
 
@@ -38,7 +38,7 @@ export function ActionStack({ items }: { items: ActionItem[] }) {
           {items.map((item) => {
             const tone = TONE[item.color] ?? TONE.blue;
             return (
-              <Link
+              <WindowLink
                 key={item.key}
                 href={item.href}
                 className={`flex items-center gap-3 rounded-lg border ${tone.border} ${tone.bg} px-3 py-2.5 transition hover:brightness-[0.97]`}
@@ -54,7 +54,7 @@ export function ActionStack({ items }: { items: ActionItem[] }) {
                   <p className="text-text-dim text-[11px]">{SUB[item.key] ?? "바로가기"}</p>
                 </div>
                 <EyIcon name="arrowRight" size={14} className={tone.text} />
-              </Link>
+              </WindowLink>
             );
           })}
         </div>
