@@ -717,5 +717,5 @@ production 반응속도가 느림. 의심 가는 병목:
 6. **Gemini Flash 통합** — fast-tier 작업이 생기면 비용 절감
 7. **시드 확장** — 학생 30→90~248명 (페이지네이션·검색 가치 명확화). Phase 7에서 시드 구조만 잡고 데이터는 그대로 둠
 8. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
-9. **검색 데이터 색인** — 커맨드 팰릿은 현재 정적 메뉴(NAV_GROUPS)만 클라 필터(입력 시 매칭). 학생·수업·상담·수납 등 **데이터 검색**은 **Postgres FTS(tsvector+GIN, RLS 통과 RPC) 방향 확정** — 미구현(마이그레이션 포함 별도 워크스트림, 첫 대상 학생·수업·상담).
+9. ✅ **검색 데이터 색인** — 완료: **pg_trgm 트라이그램 GIN 색인**(`0024a_search_trgm.sql`, 적용됨 — tsvector 아님: 한국어 부분일치 때문). 커맨드 팰릿이 메뉴(클라) + 학생·수업·상담·등록상담(서버 `/api/search/palette`, `src/features/search/server/queries.ts`, RLS 테넌트 격리, RPC 없이 `.ilike`)을 함께 검색. 한국어 1~2글자는 trgm 효율 낮음(후속 pg_bigm 평가 가능).
 10. ✅ **배경 탭 스택(다중 배경)** — 완료: `background`를 스택 배열로(맨 뒤 대시보드). 창 '배경으로 보내기'로 push, 상단 스트립(`background-tabs.tsx`)에서 클릭=전환/우클릭=창으로 꺼내기. 라우트는 창이거나 배경 탭이거나(중복 방지).

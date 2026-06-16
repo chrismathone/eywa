@@ -1,0 +1,106 @@
+import "server-only";
+import { createClient } from "@/lib/supabase/server";
+import { canAccess, type SystemRole } from "@/lib/permissions";
+
+export type PaletteHit = {
+  kind: "student" | "class" | "consultation" | "enrollment";
+  id: string;
+  title: string;
+  subtitle: string | null;
+};
+
+/** PostgREST .or()/ilike 안전화 — 구분자·와일드카드 문자 제거(한글/공백은 보존). */
+function sanitize(q: string): string {
+  return q.replace(/[%,()*\\]/g, " ").trim();
+}
+
+const LIMIT = 8;
+
+async function searchStudents(term: string): Promise<PaletteHit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("students")
+    .select("id, name, school, grade")
+    .or(
+      `name.ilike.%${term}%,school.ilike.%${term}%,parent_name.ilike.%${term}%,parent_phone.ilike.%${term}%`,
+    )
+    .order("name", { ascending: true })
+    .limit(LIMIT);
+  return (data ?? []).map(
+    (r): PaletteHit => ({
+      kind: "student",
+      id: r.id,
+      title: r.name,
+      subtitle: [r.school, r.grade].filter(Boolean).join(" · ") || null,
+    }),
+  );
+}
+
+async function searchClasses(term: string): Promise<PaletteHit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("classes")
+    .select("id, class_name, subject")
+    .or(`class_name.ilike.%${term}%,subject.ilike.%${term}%`)
+    .limit(LIMIT);
+  return (data ?? []).map(
+    (r): PaletteHit => ({
+      kind: "class",
+      id: r.id,
+      title: r.class_name,
+      subtitle: r.subject ?? null,
+    }),
+  );
+}
+
+async function searchConsultations(term: string): Promise<PaletteHit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("student_consultations")
+    .select("id, summary, consulted_at, student:student_id ( name )")
+    .ilike("summary", `%${term}%`)
+    .order("consulted_at", { ascending: false })
+    .limit(LIMIT);
+  return (data ?? []).map((r): PaletteHit => {
+    const s = (Array.isArray(r.student) ? r.student[0] : r.student) as { name?: string } | undefined;
+    return {
+      kind: "consultation",
+      id: r.id,
+      title: s?.name ? `${s.name} 상담` : "상담",
+      subtitle: r.summary ? String(r.summary).slice(0, 40) : null,
+    };
+  });
+}
+
+async function searchEnrollment(term: string): Promise<PaletteHit[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollment_consultations")
+    .select("id, prospect_name, prospect_school")
+    .or(`prospect_name.ilike.%${term}%,parent_name.ilike.%${term}%,parent_request.ilike.%${term}%`)
+    .limit(LIMIT);
+  return (data ?? []).map(
+    (r): PaletteHit => ({
+      kind: "enrollment",
+      id: r.id,
+      title: r.prospect_name ?? "등록상담",
+      subtitle: r.prospect_school ?? "등록상담",
+    }),
+  );
+}
+
+/**
+ * 커맨드 팰릿 데이터 검색 — 접근 권한 있는 메뉴만 병렬 검색. 결과는 학생→수업→상담→등록상담 순.
+ * RLS(auth_tenant_id())가 테넌트 자동 격리, pg_trgm GIN이 ILIKE 가속(0024a 마이그레이션).
+ */
+export async function searchPalette(q: string, role: SystemRole): Promise<PaletteHit[]> {
+  const term = sanitize(q);
+  if (term.length < 2) return [];
+  const tasks: Promise<PaletteHit[]>[] = [];
+  if (canAccess(role, "students")) tasks.push(searchStudents(term));
+  if (canAccess(role, "classes")) tasks.push(searchClasses(term));
+  if (canAccess(role, "consultations")) tasks.push(searchConsultations(term));
+  if (canAccess(role, "enrollment")) tasks.push(searchEnrollment(term));
+  const groups = await Promise.all(tasks);
+  return groups.flat();
+}
