@@ -6,19 +6,15 @@ import {
   getMostRecentAttendanceSnapshot,
   getNewStudentsThisMonth,
   getPaymentRateThisMonth,
-  getRecentAnnouncements,
   getTrendDataLast7Days,
-  getUpcomingPayments,
   getWithdrawalsThisMonth,
 } from "@/features/dashboard/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
-import { AnnouncementsCard } from "./_components/announcements-card";
-import { DashboardHero } from "./_components/dashboard-hero";
-import { KpiGrid } from "./_components/kpi-grid";
-import { TodayTimeline } from "./_components/today-timeline";
-import { TrendCard } from "./_components/trend-card";
-import { UpcomingPaymentsCard } from "./_components/upcoming-payments-card";
-import { AbsenceRiskCard } from "./_components/absence-risk-card";
+import { buildActionItems, enrollmentDelta } from "@/features/dashboard/metrics";
+import { CommandBand } from "./_components/command-band";
+import { NowCockpit } from "./_components/now-cockpit";
+import { ActionStack } from "./_components/action-stack";
+import { SlimTrend } from "./_components/slim-trend";
 
 export const metadata = { title: "대시보드 — eywa" };
 
@@ -29,57 +25,55 @@ export default async function DashboardPage() {
     newThisMonth,
     withdrawnThisMonth,
     attendance,
-    announcements,
     trend,
     todaySchedule,
     payment,
     consultations,
-    upcomingPayments,
     absenceRisks,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getNewStudentsThisMonth(),
     getWithdrawalsThisMonth(),
     getMostRecentAttendanceSnapshot(),
-    getRecentAnnouncements(),
     getTrendDataLast7Days(),
     getTodaySchedule(),
     getPaymentRateThisMonth(),
     getActiveConsultationsCount(),
-    getUpcomingPayments(7),
     getAbsenceRiskStudents(),
   ]);
 
   const name = user.displayName ?? "원장";
-  const attendanceDelta =
-    attendance && attendance.total > 0 ? `${attendance.rate.toFixed(1)}%` : null;
+  const attendanceRate = attendance && attendance.total > 0 ? attendance.rate : null;
+  const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
+  const unpaidCount = payment?.unpaidCount ?? 0;
+
+  const actions = buildActionItems({
+    unpaidCount,
+    absenceRisk: absenceRisks.length,
+    aiWaiting: consultations.aiDone,
+    newConsults: consultations.pending + consultations.scheduled,
+  });
 
   return (
     <div className="space-y-4">
-      <DashboardHero
+      {/* ① 커맨드 밴드 */}
+      <CommandBand
         name={name}
-        enrolledStudents={enrolled}
-        attendanceDelta={attendanceDelta}
-        unpaidCount={payment?.unpaidCount}
-      />
-      <KpiGrid
         enrolled={enrolled}
-        newThisMonth={newThisMonth}
-        withdrawnThisMonth={withdrawnThisMonth}
-        attendance={attendance}
-        payment={payment}
-        consultations={consultations}
-        trend={trend}
+        enrolledDelta={enrollmentDelta(newThisMonth, withdrawnThisMonth)}
+        attendanceRate={attendanceRate}
+        paymentRate={paymentRate}
+        unpaidCount={unpaidCount}
       />
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.55fr_1fr]">
-        <TodayTimeline slots={todaySchedule} />
-        <AnnouncementsCard announcements={announcements} />
+
+      {/* ② 지금 콕핏 + ③ 처리 필요 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.7fr_1fr]">
+        <NowCockpit slots={todaySchedule} />
+        <ActionStack items={actions} />
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <UpcomingPaymentsCard items={upcomingPayments} />
-        <AbsenceRiskCard items={absenceRisks} />
-      </div>
-      <TrendCard data={trend} />
+
+      {/* ④ 슬림 7일 추세 */}
+      <SlimTrend data={trend} />
     </div>
   );
 }
