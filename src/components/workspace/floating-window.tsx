@@ -54,8 +54,8 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
     }, 150);
   }
 
-  // 배경 교체: 이 창 라우트를 배경(메인 프레임)으로 띄우고, 지금 배경 라우트를 이 자리 창으로.
-  // 옛 배경은 store.background(캔버스가 pathname과 동기)에서 읽음 — pathname 지연 무관(연타 안전).
+  // 배경으로 보내기: 이 창을 닫고 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남아
+  // 하단/상단 배경 탭 스트립에서 다시 꺼낼 수 있다. (router.push로 메인 프레임 이동.)
   function handleSwapToBackground() {
     if (win.kind !== "route" || !win.params.href) return;
     const href = win.params.href;
@@ -113,8 +113,8 @@ export function FloatingWindow({ win, focused, z }: { win: Win; focused: boolean
             {win.kind === "route" ? (
               <button
                 type="button"
-                aria-label="배경 교체"
-                title="배경 교체"
+                aria-label="배경으로 보내기"
+                title="배경으로 보내기"
                 onClick={handleSwapToBackground}
                 disabled={exiting}
                 className="text-text-dim hover:bg-primary/15 hover:text-primary mr-0.5 flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"

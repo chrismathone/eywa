@@ -76,7 +76,7 @@ type State = {
   draggingId: string | null; // 드래그/리사이즈 중인 창(iframe 숨겨 부드럽게, 미영속)
   dragLayout: { template: LayoutTemplate; slot: number } | null; // 드래그 중 스냅 레이아웃 바 호버 슬롯
   dragNearTop: boolean; // 드래그 중 포인터가 상단 밴드 → 스냅 레이아웃 바 reveal
-  background: WindowParams; // 현재 배경(메인 프레임) 라우트 — 배경 교체 기준(미영속, pathname과 동기)
+  background: WindowParams[]; // 배경 스택(첫=대시보드 기본, 마지막=보이는 배경). 미영속, pathname 동기
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -86,10 +86,12 @@ type Actions = {
   setDragNearTop: (v: boolean) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   open: (kind: WindowKind, params: WindowParams) => void;
-  /** 현재 배경 라우트 설정(메인 프레임 이동 시 캔버스가 pathname에서 동기). */
+  /** 라우트를 배경 스택 맨 위(보이는 배경)로 — 이미 있으면 이동, 없으면 추가. 캔버스가 pathname서 동기. */
   setBackground: (params: WindowParams) => void;
-  /** 창 ⇄ 배경 1:1 맞교환 — 이 창 라우트를 배경으로, 옛 배경(store.background)을 같은 자리 창으로. */
+  /** 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위로(옛 배경은 스택에 남음). */
   swapToBackground: (winId: string) => void;
+  /** 배경 탭을 창으로 꺼냄 — 스택서 제거 + 그 라우트 창 열기(스택 항상 ≥1 유지). */
+  backgroundToWindow: (id: string) => void;
   close: (id: string) => void;
   focus: (id: string) => void;
   setRect: (id: string, rect: Rect) => void;
@@ -118,7 +120,7 @@ export const useWindowStore = create<State & Actions>()(
       draggingId: null,
       dragLayout: null,
       dragNearTop: false,
-      background: { id: "dashboard", title: "대시보드", href: "/dashboard" },
+      background: [{ id: "dashboard", title: "대시보드", href: "/dashboard" }],
 
       setStage: ({ left, top, width, height }) =>
         set({ origin: { left, top }, bounds: { width, height } }),
@@ -126,7 +128,13 @@ export const useWindowStore = create<State & Actions>()(
       setDragging: (id) => set({ draggingId: id }),
       setDragLayout: (v) => set({ dragLayout: v }),
       setDragNearTop: (v) => set({ dragNearTop: v }),
-      setBackground: (params) => set({ background: params }),
+      // 라우트를 배경 스택 맨 위(보이는 배경)로. 이미 있으면 이동, 없으면 추가.
+      setBackground: (params) =>
+        set((s) => {
+          const top = s.background[s.background.length - 1];
+          if (top && top.id === params.id) return s;
+          return { background: [...s.background.filter((b) => b.id !== params.id), params] };
+        }),
 
       // 스냅 레이아웃 바 드롭: 지정 슬롯=드래그 창, 나머지 슬롯=다른 열린 창(order순), 초과=최소화.
       applyDragLayout: (id, template, slot) =>
@@ -183,49 +191,56 @@ export const useWindowStore = create<State & Actions>()(
           minimized: false,
           maximized: false,
         };
-        set({ windows, order: [...order, id], focusedId: id, snapAssist: null });
+        // 라우트가 배경 스택에 있으면 제거(이제 창이므로) — 스택 최소 1개 유지.
+        const bg =
+          kind === "route" && s.background.length > 1
+            ? s.background.filter((b) => b.id !== params.id)
+            : s.background;
+        set({ windows, order: [...order, id], focusedId: id, snapAssist: null, background: bg });
       },
 
-      // 창 ⇄ 배경 1:1 맞교환. 이 창 라우트는 호출부가 router.push로 배경(메인 프레임)에 띄우고,
-      // 옛 배경(store.background)은 이 창 자리에 새 창이 된다. background를 새 라우트로 갱신해
-      // pathname 비동기 지연과 무관하게 결정적(연타 레이스 제거). focusedId=null → 새 배경이 메인 뷰.
+      // 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남음.
+      // (호출부가 router.push로 메인 프레임을 이 라우트로 이동.) focusedId=null → 배경이 메인 뷰.
       swapToBackground: (winId) =>
         set((s) => {
           const w = s.windows[winId];
           if (!w) return s;
-          const bgParams = s.background; // 현재 배경 → 이 자리 창으로
-          const rect = w.maximized && w.prevRect ? w.prevRect : w.rect;
           const windows = { ...s.windows };
           delete windows[winId];
-          let order = s.order.filter((id) => id !== winId);
-          const bgId = windowId("route", bgParams.id);
-          if (windows[bgId]) {
-            // 옛 배경과 같은 창이 이미 열려 있으면 그 창을 이 자리로 옮긴다.
-            windows[bgId] = {
-              ...windows[bgId],
-              rect: clampRect(rect, s.bounds),
-              minimized: false,
-              maximized: false,
-              prevRect: undefined,
-            };
-            order = bringToFront(order, bgId);
-          } else {
-            while (order.length >= MAX_WINDOWS) {
-              const victim = order.find((wid) => wid !== bgId) ?? order[0];
-              delete windows[victim];
-              order = order.filter((wid) => wid !== victim);
-            }
-            windows[bgId] = {
-              id: bgId,
-              kind: "route",
-              params: bgParams,
-              rect: clampRect(rect, s.bounds),
-              minimized: false,
-              maximized: false,
-            };
-            order = [...order, bgId];
+          const order = s.order.filter((id) => id !== winId);
+          const route = w.params;
+          const background = [...s.background.filter((b) => b.id !== route.id), route];
+          return { windows, order, focusedId: null, snapAssist: null, background };
+        }),
+
+      // 배경 탭을 창으로 꺼냄 — 스택서 제거 + 그 라우트 창 열기. 스택은 항상 ≥1 유지.
+      backgroundToWindow: (id) =>
+        set((s) => {
+          if (s.background.length <= 1) return s;
+          const params = s.background.find((b) => b.id === id);
+          if (!params) return s;
+          const background = s.background.filter((b) => b.id !== id);
+          const winId = windowId("route", params.id);
+          let order = s.order;
+          const windows = { ...s.windows };
+          if (windows[winId]) {
+            windows[winId] = { ...windows[winId], minimized: false };
+            return { background, windows, order: bringToFront(order, winId), focusedId: winId, snapAssist: null };
           }
-          return { windows, order, focusedId: null, snapAssist: null, background: w.params };
+          while (order.length >= MAX_WINDOWS) {
+            const victim = order.find((wid) => wid !== winId) ?? order[0];
+            delete windows[victim];
+            order = order.filter((wid) => wid !== victim);
+          }
+          windows[winId] = {
+            id: winId,
+            kind: "route",
+            params,
+            rect: cascadeNext(order.length, s.bounds, ROUTE_WINDOW_SIZE[params.id]),
+            minimized: false,
+            maximized: false,
+          };
+          return { background, windows, order: [...order, winId], focusedId: winId, snapAssist: null };
         }),
 
       close: (id) =>

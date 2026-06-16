@@ -7,6 +7,7 @@ import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
 import { WindowSwitcher } from "./window-switcher";
+import { BackgroundTabs } from "./background-tabs";
 import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
 import { snapTarget, templateSlots } from "./window-geometry";
@@ -93,6 +94,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       ))}
       <SnapAssist />
       <SnapLayoutsBar />
+      <BackgroundTabs />
       <WindowSwitcher />
     </div>
   );
