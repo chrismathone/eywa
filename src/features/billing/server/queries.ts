@@ -152,27 +152,30 @@ export async function getInvoicesForPeriod(
   return rows;
 }
 
-export async function getBillingSummary(period?: string): Promise<BillingSummary> {
-  const rows = await getInvoicesForPeriod({ period });
-  const totalCount = rows.length;
-  const paidCount = rows.filter((r) => r.status === "paid").length;
-  const partialCount = rows.filter((r) => r.status === "partial").length;
-  const unpaidCount = rows.filter((r) => r.status === "unpaid").length;
+/**
+ * 청구서 배열 → 요약 KPI (순수 함수, 네트워크 0).
+ * 페이지가 월 전체를 한 번만 fetch한 뒤 이 함수로 요약을 도출해 이중 fetch를 없앤다.
+ */
+export function summarizeInvoices(rows: InvoiceRow[], period?: string): BillingSummary {
   const totalBilled = rows.reduce((s, r) => s + r.amountTotal, 0);
   const totalCollected = rows.reduce((s, r) => s + r.amountPaid, 0);
-  const totalDiscount = rows.reduce((s, r) => s + r.amountDiscount, 0);
   return {
     period: period ?? currentPeriod(),
-    totalCount,
-    paidCount,
-    partialCount,
-    unpaidCount,
+    totalCount: rows.length,
+    paidCount: rows.filter((r) => r.status === "paid").length,
+    partialCount: rows.filter((r) => r.status === "partial").length,
+    unpaidCount: rows.filter((r) => r.status === "unpaid").length,
     totalBilled,
     totalCollected,
-    totalDiscount,
+    totalDiscount: rows.reduce((s, r) => s + r.amountDiscount, 0),
     outstanding: totalBilled - totalCollected,
     paymentRate: totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 0,
   };
+}
+
+export async function getBillingSummary(period?: string): Promise<BillingSummary> {
+  const rows = await getInvoicesForPeriod({ period });
+  return summarizeInvoices(rows, period);
 }
 
 /** 가용 청구 월 목록 (descending) */

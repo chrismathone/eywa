@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getAvailablePeriods,
-  getBillingSummary,
   getInvoicesForPeriod,
+  summarizeInvoices,
   type SortKey,
 } from "@/features/billing/server/queries";
 import { BillingTable } from "./_components/billing-table";
+import { Pagination } from "@/components/pagination";
 
 export const metadata = { title: "수납관리 — eywa" };
 
@@ -42,7 +43,13 @@ function currentPeriod(): string {
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; q?: string; sort?: SortKey; desc?: string }>;
+  searchParams: Promise<{
+    period?: string;
+    q?: string;
+    sort?: SortKey;
+    desc?: string;
+    page?: string;
+  }>;
 }) {
   await requireAccess("billing");
   const sp = await searchParams;
@@ -50,15 +57,33 @@ export default async function BillingPage({
   const q = sp.q ?? "";
   const sort: SortKey = (sp.sort as SortKey) ?? "status";
   const desc = sp.desc === "1";
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  const [summary, rows, periods] = await Promise.all([
-    getBillingSummary(period),
-    getInvoicesForPeriod({ period, q, sort, desc }),
+  // 월 전체를 한 번만 fetch(정렬은 쿼리에서). 요약·진행률·기한경과는 월 전체 기준,
+  // 검색·페이지네이션은 메모리에서 처리 — getBillingSummary 이중 fetch 제거.
+  const [monthRows, periods] = await Promise.all([
+    getInvoicesForPeriod({ period, sort, desc }),
     getAvailablePeriods(),
   ]);
 
+  const summary = summarizeInvoices(monthRows, period);
+
+  const term = q.trim().toLowerCase();
+  const filtered = term
+    ? monthRows.filter(
+        (r) =>
+          r.studentName.toLowerCase().includes(term) ||
+          r.lineItems.some((li) => li.description.toLowerCase().includes(term)),
+      )
+    : monthRows;
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const today = todayIso();
-  const overdue = rows.filter(
+  const overdue = filtered.filter(
     (r) =>
       (r.status === "unpaid" || r.status === "partial") &&
       r.dueDate !== null &&
@@ -69,18 +94,30 @@ export default async function BillingPage({
   const prevPeriod = shiftPeriod(period, -1);
   const nextPeriod = shiftPeriod(period, 1);
 
-  // 진행률 스트립 비율
-  const total = summary.totalBilled || 1;
-  const paidPct = (summary.totalCollected / total) * 100;
+  // 진행률 스트립 비율 (월 전체 기준)
+  const billedBase = summary.totalBilled || 1;
+  const paidPct = (summary.totalCollected / billedBase) * 100;
   const partialPct = Math.max(
     0,
-    (rows
+    (monthRows
       .filter((r) => r.status === "partial")
       .reduce((s, r) => s + (r.amountTotal - r.amountPaid), 0) /
-      total) *
+      billedBase) *
       100,
   );
   const unpaidPct = Math.max(0, 100 - paidPct - partialPct);
+
+  // 현재 필터를 보존하고 page만 바꾸는 href (필터/검색/정렬 변경은 buildHref·buildSortHref라 page 자동 리셋)
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (period !== currentPeriod()) params.set("period", period);
+    if (q) params.set("q", q);
+    if (sort !== "status") params.set("sort", sort);
+    if (desc) params.set("desc", "1");
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/billing?${s}` : "/billing";
+  };
 
   return (
     <div className="space-y-4">
@@ -151,7 +188,12 @@ export default async function BillingPage({
           <span className="num text-foreground font-semibold">
             {summary.paymentRate.toFixed(1)}%
           </span>
-          {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색 결과 {rows.length}건</span> : null}
+          {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색 결과 {total}건</span> : null}
+          {totalPages > 1 ? (
+            <span className="ml-2">
+              · {page}/{totalPages} 페이지
+            </span>
+          ) : null}
         </p>
         <a
           href={`/api/exports/billing?${new URLSearchParams({
@@ -165,7 +207,7 @@ export default async function BillingPage({
         </a>
       </div>
 
-      {rows.length === 0 ? (
+      {total === 0 ? (
         <EmptyState
           icon={() => <EyIcon name="pollen" size={32} />}
           title={q ? "검색 결과 없음" : "이 달 청구 내역이 없습니다"}
@@ -248,6 +290,7 @@ export default async function BillingPage({
           ) : null}
 
           <BillingTable rows={rows} sort={sort} desc={desc} period={period} q={q} />
+          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
     </div>
