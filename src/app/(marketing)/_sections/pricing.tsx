@@ -1,112 +1,84 @@
-import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { PRICING_PLANS } from "@/data/marketing";
+import { Reveal } from "../_motion/reveal";
+import { CtaButton } from "../_ui/cta-button";
+import { DrawUnderline } from "../_ui/draw-underline";
+import { SectionShell } from "../_ui/section-shell";
 
 export function PricingSection() {
   return (
-    <section id="pricing" className="bg-bg-soft border-line border-y px-16 py-[120px]">
-      <div className="mx-auto max-w-[1280px]">
-        {/* Header */}
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="max-w-xl">
-            <p className="text-primary font-mono text-[11px] font-bold tracking-wider uppercase">
-              04 — 요금
-            </p>
-            <h2
-              className="text-foreground mt-4"
-              style={{ fontSize: 48, fontWeight: 800, letterSpacing: "-1.6px", lineHeight: 1.05 }}
-            >
-              정식 출시까지,
-              <br />
-              모든 플랜은 <span className="text-gold">베타</span>.
-            </h2>
-          </div>
-          {/* Beta Notice */}
-          <aside className="bg-gold-soft max-w-[320px] rounded-xl border border-gold/30 p-[18px]">
-            <p className="text-gold flex items-center gap-1.5 font-mono text-[11px] font-extrabold tracking-wider uppercase">
-              <span className="bg-gold size-2 rounded-full" />
-              Beta Notice
-            </p>
-            <p className="text-foreground mt-2 text-[13px] font-medium leading-relaxed">
-              현재 EYWA는 베타 운영 중입니다.
-              <br />
-              정식 출시 후 가격이 변동될 수 있습니다.
-            </p>
-          </aside>
-        </div>
+    <SectionShell id="pricing" tone="soft" bordered pad="lg" containerClassName="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+      {/* 좌 — 선언 */}
+      <div className="lg:pt-2">
+        <Reveal variant="up">
+          <p className="text-text-faint font-mono text-[11px] font-bold tracking-[0.16em] uppercase">요금</p>
+        </Reveal>
+        <Reveal variant="clip" delay={60}>
+          <h2 className="text-foreground mt-5 text-[clamp(2.1rem,4.6vw,3.6rem)] leading-[1.15] font-extrabold tracking-[-0.025em]">
+            지금은, 베타.
+            <br />
+            그래서 <DrawUnderline tone="gold">무료</DrawUnderline>입니다.
+            <span className="ey-cursor" aria-hidden="true" />
+          </h2>
+        </Reveal>
+        <Reveal variant="up" delay={140}>
+          <p className="text-text-dim mt-6 max-w-[26rem] text-[16px] leading-[1.8]">
+            스타터·프로·엔터프라이즈 세 가지 요금을 준비하고 있지만, 베타 기간 동안은 모든 기능을 비용 없이.
+            정식 출시 후에도, 베타 기간에 합류한 학원에는 그때의 요금을 그대로 지켜드립니다.
+          </p>
+        </Reveal>
+        <Reveal variant="up" delay={220}>
+          <CtaButton href="/login" size="md" className="mt-8">
+            베타 신청하기
+          </CtaButton>
+        </Reveal>
+      </div>
 
-        {/* 3 플랜 */}
-        <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-3">
+      {/* 우 — 플랜 세로 스택 (가격이 압박 안 되게) */}
+      <Reveal variant="up" delay={120}>
+        <div className="space-y-3">
           {PRICING_PLANS.map((plan) => (
             <article
               key={plan.name}
-              className={`bg-card relative overflow-hidden rounded-xl px-7 py-8 ${
-                plan.highlight
-                  ? "border-2 border-primary shadow-primary-deep"
-                  : "border-line shadow-card border"
+              className={`ey-lift bg-card relative rounded-2xl border p-6 ${
+                plan.highlight ? "border-primary shadow-[0_16px_40px_-20px_rgba(26,95,60,0.3)]" : "border-line"
               }`}
             >
-              {plan.highlight ? (
-                <span
-                  className="bg-primary/10 pointer-events-none absolute -top-10 -right-10 size-[160px] rounded-full blur-xl"
-                  aria-hidden="true"
-                />
-              ) : null}
-
-              <header className="relative flex items-center justify-between">
-                <h3 className="text-foreground text-[18px] font-extrabold">{plan.name}</h3>
-                {plan.highlight ? (
-                  <span className="bg-primary text-primary-foreground rounded-full px-2.5 py-0.5 text-[10px] font-extrabold">
-                    가장 인기
-                  </span>
-                ) : null}
-              </header>
-              <p className="text-text-dim relative mt-1 text-[13px]">{plan.sub}</p>
-
-              {/* 베타 가격 */}
-              <div className="relative mt-7">
-                <span className="bg-gold-soft text-gold inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-extrabold uppercase">
-                  <span className="bg-gold size-1.5 rounded-full" />
-                  Beta
-                </span>
-                <p className="mt-2 flex items-baseline gap-2">
-                  <span className="tabular text-foreground text-[40px] font-extrabold leading-none">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-foreground text-[17px] font-extrabold">{plan.name}</h3>
+                    {plan.highlight ? (
+                      <span className="bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-[10px] font-extrabold">
+                        추천
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-text-dim mt-1 text-[13px]">{plan.sub}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-foreground text-[22px] font-extrabold">
                     무료
-                  </span>
-                  <span className="text-text-dim text-[13px]">· 베타 기간</span>
-                </p>
-                <p className="text-text-faint mt-1.5 text-[11px]">
-                  정식 출시 후 가격이 변동될 수 있습니다.
-                </p>
+                    <span className="bg-gold-soft text-gold ml-1.5 rounded px-1.5 py-0.5 align-middle font-mono text-[9px] font-bold tracking-[0.08em]">
+                      BETA
+                    </span>
+                  </p>
+                  <p className="text-text-faint mt-0.5 font-mono text-[10px]">되찾는 {plan.roi}</p>
+                </div>
               </div>
 
-              {/* CTA 버튼 */}
-              <Link
-                href="/login"
-                className={`relative mt-6 block w-full rounded-xl px-5 py-3 text-center text-[13px] font-bold transition ${
-                  plan.highlight
-                    ? "bg-primary text-primary-foreground hover:bg-primary-hover shadow-primary-glow"
-                    : "border-line-strong bg-card text-foreground hover:bg-bg-soft border"
-                }`}
-              >
-                베타 신청하기
-              </Link>
-
-              {/* 기능 리스트 */}
-              <ul className="border-line relative mt-6 space-y-2.5 border-t pt-5">
-                {plan.features.map((feat) => (
-                  <li key={feat} className="text-foreground flex items-center gap-2 text-[13px]">
-                    <span className="text-primary inline-flex size-4 shrink-0 items-center justify-center">
-                      <EyIcon name="check" size={14} />
-                    </span>
-                    {feat}
+              <ul className="border-line mt-5 flex flex-wrap gap-x-4 gap-y-1.5 border-t pt-4">
+                {plan.features.map((f) => (
+                  <li key={f} className="text-text-dim flex items-center gap-1.5 text-[13px]">
+                    <EyIcon name="check" size={13} className="text-primary" />
+                    {f}
                   </li>
                 ))}
               </ul>
             </article>
           ))}
         </div>
-      </div>
-    </section>
+      </Reveal>
+    </SectionShell>
   );
 }

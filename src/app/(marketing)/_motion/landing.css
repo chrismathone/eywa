@@ -1,0 +1,358 @@
+/* ──────────────────────────────────────────────────────────────
+ * 랜딩 전용 모션 — (marketing) layout에서만 import (전역 globals.css 비오염).
+ * 무거운 라이브러리 없이 CSS 전이 + IntersectionObserver(data-in)로만 구동.
+ * 모션 단일 기준은 motionDisabled()(JS) + prefers-reduced-motion(CSS 폴백).
+ * ────────────────────────────────────────────────────────────── */
+
+/* 등장 reveal — data-in이 박히면 완성 상태로 전이 */
+[data-reveal] {
+  opacity: 0;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.72s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.72s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.72s cubic-bezier(0.16, 1, 0.3, 1),
+    clip-path 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-reveal="up"] {
+  transform: translateY(20px);
+}
+[data-reveal="blur"] {
+  filter: blur(9px);
+  transform: translateY(8px);
+}
+/* clip = 헤드라인용 마스크업 (clip-path는 IntersectionObserver 교차를 깨므로 transform으로 구현) */
+[data-reveal="clip"] {
+  transform: translateY(28px);
+}
+[data-reveal][data-in="true"] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* gold/primary 언더라인 드로잉 — 부모 reveal이 data-in일 때 좌→우로 그어짐 */
+.ey-uline {
+  position: relative;
+  white-space: nowrap;
+}
+.ey-uline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.04em;
+  height: 0.13em;
+  border-radius: 999px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.25s;
+}
+.ey-uline[data-tone="primary"]::after {
+  background: var(--primary);
+}
+[data-in="true"] .ey-uline::after,
+.ey-uline[data-in="true"]::after {
+  transform: scaleX(1);
+}
+
+/* 깜빡이는 mono 커서 ('무료입니다.|') */
+.ey-cursor {
+  display: inline-block;
+  width: 0.06em;
+  height: 1em;
+  margin-left: 0.08em;
+  vertical-align: -0.08em;
+  background: var(--primary);
+  animation: ey-blink 1.05s steps(1) infinite;
+}
+@keyframes ey-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* leaf 호흡 (마감/푸터 미풍) */
+.ey-breathe {
+  transform-origin: bottom center;
+  animation: ey-breathe 6s ease-in-out infinite;
+}
+@keyframes ey-breathe {
+  0%,
+  100% {
+    transform: rotate(-1.6deg);
+  }
+  50% {
+    transform: rotate(1.6deg);
+  }
+}
+
+/* 낙엽 한 장 (13:30 통증 섹션 ambient — 과하지 않게 opacity 낮춤) */
+.ey-fall {
+  animation: ey-fall 22s linear infinite;
+}
+@keyframes ey-fall {
+  0% {
+    transform: translate(0, -8%) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.5;
+  }
+  92% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(36px, 460px) rotate(48deg);
+    opacity: 0;
+  }
+}
+
+/* 시그니처 16:02 — pollen 입자가 라인을 따라 흐름 (offset-path는 컴포넌트에서 지정) */
+.ey-pollen {
+  animation: ey-pollen-fade 0.5s ease-out forwards;
+}
+@keyframes ey-pollen-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 시그니처 라인 stroke 드로잉 — data-in 시 dashoffset 0 */
+/* path는 pathLength=100으로 정규화 → dasharray/offset 100이면 정확히 전체 드로잉 */
+.ey-draw {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 0.62s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-in="true"] .ey-draw {
+  stroke-dashoffset: 0;
+}
+
+/* 시그니처 도착 카드 settle (라인 도달 후 살짝 가라앉음) */
+.ey-arrive {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+  transition:
+    opacity 0.4s ease-out,
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-in="true"] .ey-arrive {
+  opacity: 1;
+  transform: none;
+}
+
+/* 호버 리프트 (카드/링크 공통) */
+.ey-lift {
+  transition:
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ey-lift:hover {
+  transform: translateY(-4px);
+}
+
+/* CTA 버튼 화살표 슬라이드 */
+.ey-cta .ey-arrow {
+  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ey-cta:hover .ey-arrow {
+  transform: translateX(4px);
+}
+
+/* sparkle 느린 반짝 (AI 라벨) */
+.ey-sparkle {
+  animation: ey-sparkle 4s ease-in-out infinite;
+}
+@keyframes ey-sparkle {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+/* 행 hover wipe (메뉴 인덱스) */
+.ey-row {
+  position: relative;
+  isolation: isolate;
+}
+.ey-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg-soft);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ey-row:hover::before {
+  transform: scaleX(1);
+}
+
+/* 랜딩 스코프 — caption/meta로 쓰이는 text-faint의 대비를 AA까지 끌어올림(앱 전역 토큰은 불변).
+ * #9aa39d(2.2~2.6:1) → #6f7a74(≈4.5:1 on bg-soft). 장식용 점선/구분선은 border-line이라 무관. */
+.ey-landing {
+  --text-faint: #6f7a74;
+}
+
+/* Latin serif 악센트 (Fraunces) — 영문 단어/대형 숫자에만. 한글 미적용. */
+.ey-serif {
+  font-family: var(--font-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-feature-settings: "ss01";
+  letter-spacing: -0.01em;
+}
+
+/* 올라이트 깊이 — 아주 옅은 radial mesh (마감 등 한두 곳에만, 색이 아닌 '온도') */
+.ey-mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(26, 95, 60, 0.06), transparent 70%),
+    radial-gradient(40% 40% at 85% 100%, rgba(184, 137, 58, 0.05), transparent 70%);
+}
+
+/* botanical 워터마크 — 평면 ivory에 질감 (opacity 매우 낮게) */
+.ey-watermark {
+  position: absolute;
+  pointer-events: none;
+  color: var(--primary);
+  opacity: 0.04;
+}
+
+/* 떠 있는 카드 미세 부유 (hero 플로팅 알림 등 — 정적이지 않게) */
+@keyframes ey-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.ey-float {
+  animation: ey-float 4.6s ease-in-out infinite;
+}
+.ey-float-b {
+  animation: ey-float 4.6s ease-in-out -2.3s infinite;
+}
+
+/* 차트 현재 막대 라이브 펄스 */
+@keyframes ey-bar-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.ey-bar-live {
+  animation: ey-bar-live 2.4s ease-in-out infinite;
+}
+
+/* ── 워크스페이스 자동재생 — 실제 앱처럼 "정지 → 빠른 스냅 글라이드 → 정지 → 복귀" ──
+ * 실제 창 스냅 이징(motion.ts WINDOW_TRANSITION)과 동일한 cubic-bezier(0.22,0.61,0.36,1)을
+ * 스냅 구간(30→35%, 64→69%)에만 적용. 나머지 구간은 linear(=정지, 위치 불변). */
+.ey-ws-win {
+  position: absolute;
+  will-change: left, top;
+}
+@keyframes ey-wsa {
+  0% { left: 6%; top: 14%; }
+  30% { left: 6%; top: 14%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  35% { left: 2%; top: 12%; }
+  64% { left: 2%; top: 12%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  69% { left: 6%; top: 14%; }
+  100% { left: 6%; top: 14%; }
+}
+@keyframes ey-wsb {
+  0% { left: 30%; top: 36%; }
+  30% { left: 30%; top: 36%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  35% { left: 53%; top: 8%; }
+  64% { left: 53%; top: 8%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  69% { left: 30%; top: 36%; }
+  100% { left: 30%; top: 36%; }
+}
+@keyframes ey-wsc {
+  0% { left: 50%; top: 22%; }
+  30% { left: 50%; top: 22%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  35% { left: 53%; top: 53%; }
+  64% { left: 53%; top: 53%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  69% { left: 50%; top: 22%; }
+  100% { left: 50%; top: 22%; }
+}
+.ey-wsa { animation: ey-wsa 15s linear infinite; }
+.ey-wsb { animation: ey-wsb 15s linear infinite; }
+.ey-wsc { animation: ey-wsc 15s linear infinite; }
+/* 스냅 고스트 — 스냅 직전 떠서 타일 구간 유지 */
+@keyframes ey-ws-ghost {
+  0%, 27% { opacity: 0; }
+  32% { opacity: 1; }
+  63% { opacity: 1; }
+  68%, 100% { opacity: 0; }
+}
+.ey-ws-ghost { animation: ey-ws-ghost 15s ease-in-out infinite; }
+/* 커서 — 스냅 직전 창을 끌어 타일 위치로(빠르게) */
+@keyframes ey-ws-cursor {
+  0%, 24% { opacity: 0; left: 42%; top: 40%; }
+  28% { opacity: 0.9; left: 42%; top: 40%; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  35% { opacity: 0.9; left: 62%; top: 12%; }
+  40%, 100% { opacity: 0; left: 62%; top: 12%; }
+}
+.ey-ws-cursor {
+  position: absolute;
+  animation: ey-ws-cursor 15s ease-in-out infinite;
+}
+
+/* 접근성 — 모션 최소화 시 모든 랜딩 모션 정지/완성 */
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+    transition: none !important;
+  }
+  .ey-uline::after {
+    transform: scaleX(1) !important;
+    transition: none !important;
+  }
+  .ey-draw {
+    stroke-dashoffset: 0 !important;
+    transition: none !important;
+  }
+  .ey-arrive {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .ey-cursor,
+  .ey-breathe,
+  .ey-fall,
+  .ey-sparkle,
+  .ey-float,
+  .ey-float-b,
+  .ey-bar-live,
+  .ey-wsa,
+  .ey-wsb,
+  .ey-wsc,
+  .ey-ws-ghost,
+  .ey-ws-cursor {
+    animation: none !important;
+  }
+}

@@ -1,22 +1,30 @@
-import { CtaSection } from "./_sections/cta";
-import { FlowSection } from "./_sections/flow";
+import { AiEveningSection } from "./_sections/ai-evening";
+import { ClosingSection } from "./_sections/closing";
+import { DayNumbersSection } from "./_sections/day-numbers";
+import { FeaturesSection } from "./_sections/features";
 import { FooterSection } from "./_sections/footer";
 import { HeroSection } from "./_sections/hero";
-import { LogoWallSection } from "./_sections/logowall";
-import { ManifestoSection } from "./_sections/manifesto";
+import { MenuIndexSection } from "./_sections/menu-index";
 import { PricingSection } from "./_sections/pricing";
-import { TestimonialsSection } from "./_sections/testimonials";
+import { RoiSection } from "./_sections/roi";
+import { SignatureSection } from "./_sections/signature";
+import { VoiceSection } from "./_sections/voice";
+import { WorkspaceSection } from "./_sections/workspace";
 
 export default function LandingPage() {
   return (
     <>
       <HeroSection />
-      <FlowSection />
-      <LogoWallSection />
-      <ManifestoSection />
-      <TestimonialsSection />
+      <SignatureSection />
+      <FeaturesSection />
+      <WorkspaceSection />
+      <AiEveningSection />
+      <DayNumbersSection />
+      <RoiSection />
+      <MenuIndexSection />
+      <VoiceSection />
       <PricingSection />
-      <CtaSection />
+      <ClosingSection />
       <FooterSection />
     </>
   );
