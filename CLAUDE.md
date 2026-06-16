@@ -107,7 +107,21 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 ## 진행 상황
 
 **12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1 완성.**
-디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용.
+디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (메뉴는 retention 추가로 실제 13개 — "12메뉴 정체성"은 사이드바 기준 표현.)
+
+### 로그인 후 전수 QA + 창 내비게이션·쿼리 견고화 (2026-06-17)
+- **전수 QA + 멀티에이전트 적대검증**: 로그인 후 전 화면을 브라우저로 훑어 증상 수집 → Workflow 서브에이전트가 코드를
+  직접 읽어 코드버그/시드데이터/정상으로 판별(파일:줄 근거). 발견 코드버그 다수 수정(아래), 시드/데이터 결함은 Firebase 재이식 과제로 분리.
+- **창 내비게이션(Idea A)**: 라우트 창 타이틀바가 iframe 제목/경로 라이브 동기화 + 뒤로(←)는 드릴인 때만(루트=X로 닫기) +
+  인페이지 백은 임베드에서 숨김(`EmbedProvider`+`back-link.tsx`) + 닫을 때 부모 `router.refresh()`로 배경 즉시 반영. (#55·#56)
+- **카드 전체 클릭**: 직원·학생상담 카드 어디나 클릭 → 상세/수정(수정 버튼·힌트 제거).
+- **쿼리 견고화**: 공용 `src/lib/supabase/batch.ts`(`fetchInChunks`/`fetchAllPaged`)로 대량 `.in()` 414·1000행 절단·error
+  삼킴을 retention(CRITICAL)·super-admin·students(export/recompute)·withdrawals·admin 전반에서 해소. (#53·#54)
+- **표시/로직**: 회의 참석자 `[object Object]`, 과목 `HIGHMATH`→"수학(심화)", 수납 미수금 라벨, 퇴원 enrollment 종료,
+  전화 정규화, AI 재분석 generated_at, 내학습 결석 리포트 모순, 권한 리다이렉트(루프 방지), super-admin 상태라벨.
+- **AI provider = Upstage Solar 기본** 적용(`openai` 패키지 설치 + `UPSTAGE_API_KEY`; 없으면 Anthropic 폴백). "AI 모델 정책" 참고.
+- ⚠️ **데모 데이터는 seed가 아니라 ijw POC 임포트본**(564명). 쓰레기 레코드·접미사·빈 성적·담임공란은 데이터 결함(코드 아님).
+  최종 목표는 Firebase 전체 이식(serviceAccount `F:\ijw-calander\serviceAccount.json`, 명명DB `restore260202`) — 별도 과제.
 
 ### 선생님 원스크린 (강사 전용, 2026-06-01)
 - 강사용 **수업 마감 원스크린** (`/onescreen`) — `data/원스크린_전달/` 디자인 핸드오프(React/JSX 프로토타입)를 eywa 톤으로 충실 이식.
@@ -661,6 +675,37 @@ SSR(0)↔CSR(1) 카운터가 어긋나 hydration 경고("attributes … didn't m
 **둘 다** no-op stub해야 정확 재현. 또 드래그 결과 측정은 **outer div의 `.style.width`/rect**로 —
 inner dialog `getBoundingClientRect`는 글라이드 트랜지션 중 mistimed(스냅 후 456으로 보였다가 outer는 934).
 배경 칩/스냅 셀 위로 가려면 포인터를 먼저 상단(stage sy≤44)으로 올려 reveal 후 셀로 내려야 함.
+
+### 53. 대량 `.in("…id", ids)` = HTTP 414 + error 삼킴 (반복 안티패턴)
+수백~수천 개 id를 단일 `.in()`에 넣으면 supabase-js가 GET 쿼리스트링에 전부 직렬화 → URL이 ~16KB+ 한도를
+넘겨 **HTTP 414(URI Too Long)** 로 실패한다. 그런데 `const { data } = await …; data ?? []`로 받으면 **error를
+조용히 삼켜** 결과가 통째로 비고, 화면은 에러 없이 "정상"처럼 오작동한다(고아탐지가 전 재원생을 오탐, 이탈관리
+위험점수가 거짓, export 과목 누락 등). 발견처: admin findOrphans, retention 로스터(5쿼리), students export·
+recomputePrimaryTeacher, withdrawals 로스터.
+**처방(공용)**: [`src/lib/supabase/batch.ts`](src/lib/supabase/batch.ts) — `fetchInChunks`(id를 100개 청크로 나눠
+병렬 `.in()` 후 합침: URL 안전 + 청크당 행이 1000 미만), `fetchAllPaged`(`.range(from,to)` 페이지네이션으로 1000행
+한도 초과 전건 확보). **둘 다 `error`를 throw**(절대 `?? []`로 삼키지 말 것). 새 대량 조회는 처음부터 이 헬퍼로.
+
+### 54. PostgREST 기본 max-rows ≈ 1000 — 전건 fetch는 silent 절단
+`.in()`/필터 없이 전건을 가져와 JS로 집계(카운트·SUM)하면 PostgREST 기본 1000행에서 **에러 없이 잘린다**
+(`config.toml`·max-rows 오버라이드 없음). super-admin `getAllTenants`/`getSaaSStats`가 멀티테넌트 users·students·
+invoices를 전건 받아 JS Map으로 세다가 테넌트 증가 시 과소집계. **단순 카운트는 `count:"exact", head:true`,
+합계·그룹은 RPC group-by 또는 `fetchAllPaged`로.** "세기만 하려고 수백 행을 JS로 끌어오기"는 신호.
+
+### 55. 창(iframe) ⇄ 배경(메인 프레임)은 **별도 문서** — 저장이 자동 반영 안 됨
+플로팅 창은 크롬리스 same-origin iframe(별도 Next 인스턴스). 창에서 server action으로 저장하면 그 **iframe 안**은
+revalidate되지만, 이미 렌더된 **부모(배경) 라우트는 stale**(다른 문서라 모름). → 라우트 창을 **닫을 때 부모를
+`router.refresh()`**(`floating-window.tsx`의 `closeAndRefresh`)해 배경 목록이 즉시 갱신되게 한다. iframe 제목/경로도
+부모가 자동으로 모르므로 `route-window.tsx`가 `contentDocument.title`/`location`을 MutationObserver+popstate로 관찰해
+타이틀바에 동기화(`window-store`의 `live`).
+
+### 56. 창 내비게이션 모델 — 루트에선 ← 숨김(닫기=X), 권한 리다이렉트는 루프 주의
+- **뒤로(←)는 드릴인했을 때만**(iframe path ≠ 창 루트). 루트(첫 화면)에선 ← 가 "닫기"와 중복이라 숨기고 우상단 X로
+  닫는다. 인페이지 "← …로" 백은 임베드(창)에서 숨김(`EmbedProvider`+`<BackLink>`), 배경 풀페이지에선 표시. 닫으면
+  부모 새로고침(#55)으로 배경 메뉴가 그대로 드러난다(= 사용자가 기대하는 "창 닫힘").
+- **권한없음 리다이렉트는 `/dashboard`로 무조건 보내면 안 됨** — `student`는 dashboard 접근이 `none`이라 `/dashboard`가
+  또 막혀 **무한 리다이렉트 루프**. `requireAccess`/`requireSuperAdmin`은 "대시보드 접근 가능하면 `/dashboard`, 아니면
+  공개 랜딩 `/`"로 분기(`canAccess(role,"dashboard")`).
 
 ---
 
