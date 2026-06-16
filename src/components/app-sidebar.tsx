@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -14,9 +15,24 @@ import { canAccess, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
 
+const RAIL_DRAG = 16; // 레일 아이콘을 오른쪽(캔버스)으로 이만큼 끌면 그 자리에 창 꺼내기
+
 function isItemActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** 메뉴 창을 열고(이미 열렸으면 복원) 드롭 지점(스테이지 로컬, 타이틀바가 커서 아래)으로 배치. */
+function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
+  const st = useWindowStore.getState();
+  st.open("route", { id: item.menuKey, title: item.label, href: item.href });
+  const winId = windowId("route", item.menuKey);
+  const s2 = useWindowStore.getState();
+  const win = s2.windows[winId];
+  if (!win) return;
+  const sx = clientX - s2.origin.left;
+  const sy = clientY - s2.origin.top;
+  s2.setRect(winId, { x: sx - win.rect.w / 2, y: sy - 18, w: win.rect.w, h: win.rect.h });
 }
 
 /**
@@ -31,6 +47,8 @@ function isItemActive(href: string, pathname: string) {
  *  · 열려 있지만 비포커스 = 점(dot)
  *  · 포커스된 창이 없음 = 바탕(배경) 라우트가 활성 (기본 대시보드, 배경 교체 시 그 라우트)
  * 모바일(라우트 이동)에서는 기존 pathname 기준을 유지.
+ *
+ * 데스크톱 제스처: 클릭=창 열기(cascade 위치) / 오른쪽으로 드래그=드롭 지점에 창 꺼내기.
  */
 export function AppSidebar({
   systemRole,
@@ -43,7 +61,6 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
-  const openWindow = useWindowStore((s) => s.open);
   const focusedId = useWindowStore((s) => s.focusedId);
   // 열린(비최소화) 창 id 집합을 primitive 문자열로 구독 → 드래그/리사이즈 시엔 리렌더 안 함.
   const openKey = useWindowStore((s) =>
@@ -55,13 +72,6 @@ export function AppSidebar({
   );
   const openIds = new Set(openKey ? openKey.split("|") : []);
   const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
-
-  // 데스크톱: 메뉴를 플로팅 창(크롬리스 iframe)으로. 모디파이어(새 탭 등)는 기본 Link 보존.
-  function handleNav(e: React.MouseEvent, item: NavItem) {
-    if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    openWindow("route", { id: item.menuKey, title: item.label, href: item.href });
-  }
 
   // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
   const groups = NAV_GROUPS.map((g) => ({
@@ -103,33 +113,14 @@ export function AppSidebar({
                     (!hasFocus && isItemActive(item.href, pathname))
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
-                const Icon = item.icon;
                 return (
-                  <Tooltip key={item.href}>
-                    <TooltipTrigger
-                      render={
-                        <Link
-                          href={item.href}
-                          onClick={(e) => handleNav(e, item)}
-                          aria-current={active ? "page" : undefined}
-                          aria-label={item.label}
-                          className={`relative flex size-9 items-center justify-center rounded-[6px] transition ${
-                            active
-                              ? "bg-primary text-primary-foreground shadow-primary-glow"
-                              : openOnly
-                                ? "bg-sidebar-accent text-foreground"
-                                : "text-text-dim hover:bg-sidebar-accent hover:text-foreground"
-                          }`}
-                        />
-                      }
-                    >
-                      <Icon size={18} strokeWidth={1.85} />
-                      {openOnly ? (
-                        <span className="bg-primary absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full" />
-                      ) : null}
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{item.label}</TooltipContent>
-                  </Tooltip>
+                  <RailItem
+                    key={item.href}
+                    item={item}
+                    active={active}
+                    openOnly={openOnly}
+                    isDesktop={isDesktop}
+                  />
                 );
               })}
             </div>
@@ -142,5 +133,89 @@ export function AppSidebar({
         </div>
       </aside>
     </TooltipProvider>
+  );
+}
+
+/**
+ * 레일 아이콘 1개. 데스크톱: 클릭=창 열기(cascade) / 오른쪽 드래그=드롭 지점에 창 꺼내기.
+ * 드래그(>RAIL_DRAG, 수평 우세)면 뒤따르는 click을 억제하고 pointerup 지점에 창을 연다.
+ * 모디파이어(새 탭 등)·모바일은 기본 Link 동작 보존. draggable=false로 네이티브 링크 드래그 차단.
+ */
+function RailItem({
+  item,
+  active,
+  openOnly,
+  isDesktop,
+}: {
+  item: NavItem;
+  active: boolean;
+  openOnly: boolean;
+  isDesktop: boolean;
+}) {
+  const Icon = item.icon;
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const dragged = useRef(false);
+
+  function handleNav(e: React.MouseEvent) {
+    if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (dragged.current) {
+      dragged.current = false; // 드래그로 이미 열었으면 클릭 무시
+      return;
+    }
+    useWindowStore
+      .getState()
+      .open("route", { id: item.menuKey, title: item.label, href: item.href });
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link
+            href={item.href}
+            draggable={false}
+            onClick={handleNav}
+            onPointerDown={(e) => {
+              if (!isDesktop || e.button !== 0) return;
+              start.current = { x: e.clientX, y: e.clientY };
+              dragged.current = false;
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              const s = start.current;
+              if (!s || dragged.current) return;
+              const dx = e.clientX - s.x;
+              const dy = e.clientY - s.y;
+              // 오른쪽(캔버스)으로 충분히 끌면 드래그로 판정(수평 우세). 실제 열기는 pointerup에서.
+              if (dx > RAIL_DRAG && Math.abs(dx) >= Math.abs(dy)) {
+                dragged.current = true;
+              }
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.releasePointerCapture?.(e.pointerId);
+              const s = start.current;
+              start.current = null;
+              if (dragged.current && s) openWindowAtPoint(item, e.clientX, e.clientY);
+            }}
+            aria-current={active ? "page" : undefined}
+            aria-label={item.label}
+            className={`relative flex size-9 items-center justify-center rounded-[6px] transition ${
+              active
+                ? "bg-primary text-primary-foreground shadow-primary-glow"
+                : openOnly
+                  ? "bg-sidebar-accent text-foreground"
+                  : "text-text-dim hover:bg-sidebar-accent hover:text-foreground"
+            }`}
+          />
+        }
+      >
+        <Icon size={18} strokeWidth={1.85} />
+        {openOnly ? (
+          <span className="bg-primary absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full" />
+        ) : null}
+      </TooltipTrigger>
+      <TooltipContent side="right">{item.label}</TooltipContent>
+    </Tooltip>
   );
 }
