@@ -106,7 +106,7 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 ## 진행 상황
 
-**12개 메뉴 + ijw 패리티 + Admin 도구 + 랜딩 8섹션 + UI 폴리시 + super-admin Phase 1 완성.**
+**12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1 완성.**
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용.
 
 ### 선생님 원스크린 (강사 전용, 2026-06-01)
@@ -160,7 +160,7 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - Admin 도구 (중복 병합 / 데이터 정리) — 시나리오는 엑셀/스프레드시트로 대체
 
 ### 라우트 구조
-- `/` = **랜딩 페이지 8섹션** (Hero·Flow·LogoWall·Manifesto·Testimonials·Pricing·CTA·Footer)
+- `/` = **제품 중심 랜딩** (Hero 제품 쇼케이스 → 자동연동(0.4s) → 기능 목업 시간표/출석부/수납 → **워크스페이스 멀티윈도우** → AI → 데이터 → ROI → 12메뉴 점선목차 → 단일 인터뷰 → 베타 요금 → CTA). 구 8섹션(Flow/LogoWall/Manifesto 등) 폐기. 컴포넌트: `(marketing)/_sections/*` + `_ui/*`(BrowserFrame·product-showcase·mock-{timetable,attendance,billing,workspace}·feature-block·cta-button) + `_motion/*`(Reveal·CountUp·landing.css). 워크스페이스 목업 레일은 실제 `app-sidebar`와 동일한 Lucide 아이콘.
 - `/dashboard` = 대시보드 (예전 `/`에서 이동)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
 - `/admin/*` = academy master 전용 (duplicates/cleanup/integrations/sheets)
@@ -790,7 +790,10 @@ production 반응속도가 느림. 의심 가는 병목:
 
 1. ✅ **Hero 한글 호칭** — chrismathone → 김수진 원장 (seed에서 display_name 업데이트)
 2. ✅ **ijw 운영 패리티** — 시간표 매트릭스 / 출석부 30일 그리드 / 학생·수업·수납 검색·필터 / 4개 메뉴 chip 추가
-3. ✅ **랜딩 페이지 8섹션** — Hero/Flow/LogoWall/Manifesto/Testimonials/Pricing/CTA/Footer
+3. ✅ **제품 중심 랜딩 전면 재설계** (경쟁사 학원조아·makeedu 벤치마크) — "코더 느낌" 탈피, 제품 전면화:
+   제품 쇼케이스 Hero(브라우저 프레임 + 플로팅 카드 부유) · 기능 인앱 목업(시간표·출석부·수납) ·
+   **워크스페이스 멀티윈도우 차별점(cascade↔1+2 타일 자동재생, 실제 스냅 이징 cubic-bezier(0.22,0.61,0.36,1))** ·
+   카피 탈감성화(날짜 서사 제거) · 목업 이름 마스킹(강OO, 개인정보 오해 차단) · 전 모션 reduced-motion 폴백.
 4. **pgTAP RLS 테스트** — 두 테넌트 격리 자동 검증
 5. **AI 분석 history 보존** — 현재는 UPDATE라 마지막 분석만 남음. 별도 테이블에 INSERT-only로 누적 + history viewer (옵션)
 6. **Gemini Flash 통합** — fast-tier 작업이 생기면 비용 절감

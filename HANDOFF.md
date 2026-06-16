@@ -1,4 +1,4 @@
-# eywa 이어가기 핸드오프 — 2026-06-16 (검증·머지 완료본)
+# eywa 이어가기 핸드오프 — 2026-06-16 (제품 중심 랜딩 재설계 완료)
 
 다른 컴퓨터에서 **이 시점부터 바로** 이어가기 위한 문서. 상세 규약·함정은 [`CLAUDE.md`](CLAUDE.md),
 이 문서는 **현재 상태 + 셋업 + 다음 할 일**만 담는다.
@@ -14,7 +14,8 @@
 > **워크스페이스 드래그 어휘 통일**(최신): ①배경 탭을 아래로 끌면 창으로 꺼내기 ②창을 상단 '배경으로' 칩에
 > 끌면 배경으로(스냅바와 공존) ③좌측 레일 아이콘을 오른쪽으로 끌면 드롭 지점에 창 — 모두 클릭·버튼 경로와 공존.
 > 배경 탭은 **삽입 순서 고정**(선택해도 재정렬 X, 하이라이트만 이동). 출석부 범례 1행 우측. 시간표 dnd hydration 수정.
-> **계획 작업(#6·#12~#21) + 후속 UI 다듬기 전부 완료·검증·main 머지**(HEAD `816a1ec`).
+> **최신(본 세션): 랜딩 `/`을 제품 중심으로 전면 재설계 완료** — 제품 쇼케이스 Hero·기능 인앱 목업(시간표/출석부/수납)·
+> **워크스페이스 멀티윈도우 자동재생**·카피 탈감성화·목업 이름 마스킹. 그 외 계획 작업(#6·#12~#21)+다른 세션 성능 커밋 모두 main.
 > 남은 큰 작업은 **성능 최적화**(CLAUDE.md "남은 작업"). 시작 전 `HANDOFF.md` + `CLAUDE.md`
 > (특히 "막혔던 점들 **#44~52**")를 읽어라. `.env.local` 필요(아래 §2). 개발은 NVMe에서(USB/F: 금지), `pnpm dev`는 포트 3100.
 
@@ -42,9 +43,14 @@ pnpm dev                      # http://localhost:3100  (포트 3100 고정)
 
 ## 1. 저장소 / 브랜치 상태
 
-- **`main` = `feat/retention` = `816a1ec`** — 모든 작업이 **main에 머지·push 완료**. 새 클론은 그대로 사용.
+- **`main` 최신** — 모든 작업 main에 머지·push 완료. 새 클론 그대로 사용.
+  (`816a1ec` 이후: 다른 세션 목록 페이지네이션·성능 6커밋 + 본 세션 **랜딩 제품중심 재설계** 2커밋이 그 위에.)
 - 최근 커밋(위=최신):
   ```
+  feat(landing): 제품 중심 랜딩 전면 재설계 — 쇼케이스·기능 목업·워크스페이스   ← 본 세션
+  chore(a11y,tooling): EyIcon 기본 aria-hidden + eslint .claude 무시            ← 본 세션
+  docs: 랜딩 재설계 반영 + 핸드오프 최신화                                      ← 본 세션
+  c867f7a … perf(students/billing/consultations/timetable)·Pagination          ← 다른 세션 6커밋
   816a1ec feat(workspace): 좌측 레일 드래그-아웃 — 드롭 지점에 창 열기
   d33093c fix(timetable): DndContext에 id 지정 — hydration 불일치 해소
   0fc1e03 fix(attendance): 출석부 범례 1행 우측 정렬
@@ -94,6 +100,14 @@ pnpm dev                      # http://localhost:3100  (포트 3100 고정)
    ③좌측 레일 아이콘 → 오른쪽 드래그 → 드롭 지점에 창(`open`+`setRect`). 전부 클릭/버튼 경로와 공존.
 10. **출석부 범례 1행 우측 정렬** — 좁은 셀에서 5행 접힘 → 전체 폭 nowrap, 우측(`ml-auto`).
 11. **시간표 dnd hydration 수정** — `<DndContext id="timetable-dnd">`로 `aria-describedby` SSR/CSR 불일치 해소.
+
+**랜딩 제품 중심 재설계 세션 (2026-06-16, 본 세션):**
+12. **랜딩 `/` 전면 재설계** — 경쟁사(학원조아·makeedu·통통통·클래스업) 벤치마크 후 "코더 느낌" 탈피, 제품 전면화.
+    - Hero: 실제 대시보드를 **브라우저 프레임 + 플로팅 알림 카드(부유)** 로 크게 / 기능 섹션: **시간표·출석부·수납 인앱 목업**.
+    - **워크스페이스 섹션(우리만의 차별점)**: 메뉴를 플로팅 창으로 띄우는 멀티윈도우. 레일은 **실제 `app-sidebar`와 동일 Lucide 아이콘**,
+      창은 **cascade↔1+2 타일 자동재생**(실제 스냅 이징 `cubic-bezier(0.22,0.61,0.36,1)` — `motion.ts` WINDOW_TRANSITION과 동일).
+    - 카피 **탈감성화**(날짜 서사 09:14→22:10·수미상관 제거), 목업 **이름 마스킹(강OO)** — 개인정보 오해 차단. 전 모션 **reduced-motion 폴백**.
+    - 공용 프리미티브: Reveal/CountUp/CtaButton/SectionShell/BrowserFrame + `landing.css` 키프레임. EyIcon 기본 aria-hidden, eslint `.claude/**` 무시.
 
 ---
 
@@ -145,5 +159,8 @@ pnpm dev                      # http://localhost:3100  (포트 3100 고정)
   `app-sidebar.tsx`(아이콘 레일 + 레일 드래그-아웃 `RailItem`).
 - 리텐션: `src/features/retention/**` · `src/app/(shell)/retention/**`.
 - 시간표 dnd: `src/app/(shell)/timetable/_components/timetable-board.tsx`(`<DndContext id>`)·`class-cell.tsx`.
+- **랜딩(`/`)**: `src/app/(marketing)/` — `_sections/*`(hero·signature·features·**workspace**·ai-evening·day-numbers·roi·menu-index·voice·pricing·closing·footer),
+  `_ui/*`(browser-frame·product-showcase·**mock-{timetable,attendance,billing,workspace}**·feature-block·cta-button·section-shell·draw-underline),
+  `_motion/*`(reveal·count-up·landing.css). 카피 데이터 `src/data/marketing.ts`. 워크스페이스 목업은 `navigation.ts`/`app-sidebar`의 Lucide 아이콘과 통일.
 - ⚠️ 함정·결정은 CLAUDE.md "막혔던 점들 **#44~52**"(배경교체 레이스·스냅 복원·드래그 클램프·애니메이션·커밋 분할·
   배경 탭 순서·칩↔스냅바 공존·dnd hydration·합성 포인터 테스트).
