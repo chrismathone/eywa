@@ -169,6 +169,13 @@
       "when": 1780032458450,
       "tag": "0023_amazing_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781580775601,
+      "tag": "0024_slimy_zombie",
+      "breakpoints": true
     }
   ]
 }

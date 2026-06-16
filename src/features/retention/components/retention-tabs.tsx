@@ -7,6 +7,7 @@ const TABS = [
   { href: "/retention", label: "브리핑" },
   { href: "/retention/board", label: "리텐션 보드" },
   { href: "/retention/messages", label: "학부모 메시지" },
+  { href: "/retention/campaign", label: "재등록 캠페인" },
 ];
 
 /** 이탈 방어 기능 내부 서브탭. /retention 는 정확 일치, 나머지는 prefix 매칭. */

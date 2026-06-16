@@ -1,0 +1,186 @@
+"use client";
+
+import { useTransition } from "react";
+import { toast } from "sonner";
+import { Pill, type PillColor } from "@/components/atoms/pill";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { campaignAdd, campaignSetStatus, campaignRemove, type CampaignResult } from "../server/actions";
+import type { CampaignBoard as Board, CampaignStatus } from "../server/campaign-queries";
+
+const COLUMNS: { key: CampaignStatus; label: string; color: PillColor }[] = [
+  { key: "pending", label: "대상", color: "amber" },
+  { key: "contacted", label: "연락함", color: "blue" },
+  { key: "enrolled", label: "재등록 완료", color: "primary" },
+  { key: "declined", label: "이탈", color: "rose" },
+];
+
+/** 재등록 캠페인 보드 — KPI + 후보 스트립 + 4열 퍼널 칸반. 상태 전환은 서버 액션(transition). */
+export function CampaignBoard({ board }: { board: Board }) {
+  const [pending, start] = useTransition();
+  function run(fn: () => Promise<CampaignResult>, okMsg: string) {
+    start(async () => {
+      const r = await fn();
+      if (r.ok) toast.success(okMsg);
+      else toast.error(r.error ?? "오류가 발생했습니다");
+    });
+  }
+  const { stats, candidates, columns } = board;
+
+  return (
+    <div className="space-y-4">
+      {/* KPI */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+        {[
+          { label: "대상", v: stats.pending, c: "text-amber" },
+          { label: "연락함", v: stats.contacted, c: "text-blue" },
+          { label: "재등록", v: stats.enrolled, c: "text-primary" },
+          { label: "이탈", v: stats.declined, c: "text-rose" },
+          {
+            label: "재등록률",
+            v: stats.reenrollRate == null ? "—" : `${stats.reenrollRate}%`,
+            c: "text-foreground",
+          },
+        ].map((k) => (
+          <div key={k.label} className="bg-card border-line shadow-card rounded-2xl border p-4">
+            <p className="micro truncate">{k.label}</p>
+            <p className={`tabular mt-2 text-[24px] leading-none font-bold ${k.c}`}>{k.v}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* 후보 */}
+      {candidates.length > 0 ? (
+        <div className="bg-card border-line shadow-card rounded-2xl border p-3">
+          <div className="mb-2.5 flex items-center gap-2">
+            <span className="micro">재등록 위험 후보</span>
+            <span className="text-text-faint text-[11px]">{candidates.length}명 — 캠페인에 추가하세요</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {candidates.map((c) => (
+              <div
+                key={c.studentId}
+                className="border-line flex items-center gap-2.5 rounded-lg border px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="text-foreground text-[12px] leading-tight font-semibold">{c.name}</div>
+                  <div className="text-text-faint text-[10px]">
+                    {[c.grade, c.school].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <Pill color={c.renewalTone === "risk" ? "danger" : "amber"}>재등록 {c.renewalLabel}</Pill>
+                <span className="text-text-dim num text-[10px]">{c.feeLabel}</span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run(() => campaignAdd(c.studentId), `${c.name} — 캠페인 추가`)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-50"
+                >
+                  추가
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* 퍼널 칸반 */}
+      <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+        <div className="flex min-w-[780px] gap-3 p-3">
+          {COLUMNS.map((col) => (
+            <div key={col.key} className="min-w-[185px] flex-1">
+              <div className="mb-2 flex items-center gap-1.5">
+                <Pill color={col.color}>{col.label}</Pill>
+                <span className="text-text-faint num text-[11px]">{columns[col.key].length}</span>
+              </div>
+              <div className="space-y-2">
+                {columns[col.key].length === 0 ? (
+                  <div className="border-line text-text-faint rounded-lg border border-dashed px-3 py-6 text-center text-[11px]">
+                    비어 있음
+                  </div>
+                ) : (
+                  columns[col.key].map((card) => (
+                    <div key={card.targetId} className="bg-bg-soft/40 border-line rounded-lg border p-2.5">
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-foreground truncate text-[12px] font-semibold">{card.name}</div>
+                          <div className="text-text-faint truncate text-[10px]">
+                            {[card.grade, card.school, card.teacherName].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        <span className="text-text-dim num shrink-0 text-[10px]">{card.feeLabel}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {card.status === "pending" ? (
+                          <Btn
+                            label="연락함"
+                            disabled={pending}
+                            onClick={() => run(() => campaignSetStatus(card.targetId, "contacted"), `${card.name} — 연락함`)}
+                          />
+                        ) : null}
+                        {card.status === "contacted" ? (
+                          <>
+                            <Btn
+                              label="재등록"
+                              primary
+                              disabled={pending}
+                              onClick={() => run(() => campaignSetStatus(card.targetId, "enrolled"), `${card.name} — 재등록 완료`)}
+                            />
+                            <Btn
+                              label="이탈"
+                              disabled={pending}
+                              onClick={() => run(() => campaignSetStatus(card.targetId, "declined"), `${card.name} — 이탈 처리`)}
+                            />
+                          </>
+                        ) : null}
+                        {card.status === "enrolled" || card.status === "declined" ? (
+                          <Btn
+                            label="되돌리기"
+                            disabled={pending}
+                            onClick={() => run(() => campaignSetStatus(card.targetId, "contacted"), "되돌렸습니다")}
+                          />
+                        ) : null}
+                        <Btn
+                          label="제거"
+                          disabled={pending}
+                          onClick={() => run(() => campaignRemove(card.targetId), `${card.name} — 캠페인에서 제거`)}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DragScrollArea>
+    </div>
+  );
+}
+
+function Btn({
+  label,
+  onClick,
+  disabled,
+  primary,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      data-no-drag-scroll
+      className={`rounded-md px-2 py-0.5 text-[11px] transition disabled:opacity-50 ${
+        primary
+          ? "bg-primary text-primary-foreground hover:bg-primary/90"
+          : "border-line text-text-dim hover:bg-bg-soft border"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}

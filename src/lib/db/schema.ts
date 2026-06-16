@@ -103,6 +103,15 @@ export const consultationProcessingStatusEnum = pgEnum("consultation_processing_
   "failed",
 ]);
 
+// === 재등록 캠페인 퍼널 상태 ===
+// pending(대상) → contacted(연락함) → enrolled(재등록 완료) | declined(이탈)
+export const reenrollmentStatusEnum = pgEnum("reenrollment_status", [
+  "pending",
+  "contacted",
+  "enrolled",
+  "declined",
+]);
+
 // === tenants ===
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -447,6 +456,33 @@ export const studentConsultations = pgTable(
   ],
 );
 
+// === reenrollment_campaign_targets (재등록 캠페인 대상 추적) ===
+// 재등록 위험(risk.renewal) 학생을 퍼널로 추적. status로 진행, 학생당 1트랙(unique).
+export const reenrollmentCampaignTargets = pgTable(
+  "reenrollment_campaign_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    status: reenrollmentStatusEnum("status").notNull().default("pending"),
+    counselorId: uuid("counselor_id").references(() => users.id, { onDelete: "set null" }),
+    triggerReason: text("trigger_reason"), // 대상 편입 사유 (예: renewal_risk)
+    note: text("note"),
+    contactedAt: timestamp("contacted_at", { withTimezone: true }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("rct_tenant_student_uq").on(t.tenantId, t.studentId),
+    index("rct_tenant_status_idx").on(t.tenantId, t.status),
+  ],
+);
+
 // === meeting_minutes (회의록) ===
 // Two flows:
 //   1. text-only: `content` is the meeting body, status='idle'
@@ -710,3 +746,5 @@ export type StaffLeave = typeof staffLeaves.$inferSelect;
 export type NewStaffLeave = typeof staffLeaves.$inferInsert;
 export type UserIntegration = typeof userIntegrations.$inferSelect;
 export type NewUserIntegration = typeof userIntegrations.$inferInsert;
+export type ReenrollmentCampaignTarget = typeof reenrollmentCampaignTargets.$inferSelect;
+export type NewReenrollmentCampaignTarget = typeof reenrollmentCampaignTargets.$inferInsert;

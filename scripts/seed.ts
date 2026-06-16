@@ -546,6 +546,7 @@ async function main() {
   await sql`delete from payroll_records where tenant_id = ${tenantId}`;
   await sql`delete from staff_leaves where tenant_id = ${tenantId}`;
   await sql`delete from user_integrations where tenant_id = ${tenantId}`;
+  await sql`delete from reenrollment_campaign_targets where tenant_id = ${tenantId}`;
   await sql`delete from students where tenant_id = ${tenantId}`;
   await sql`delete from class_schedules where tenant_id = ${tenantId}`;
   await sql`delete from classes where tenant_id = ${tenantId}`;
@@ -926,6 +927,35 @@ async function main() {
       ) values (
         ${tenantId}, ${stu.id}, ${counselorId}, ${consultedAt.toISOString()},
         ${template.summary}, ${template.followUp ?? null}
+      )
+    `;
+  }
+
+  // --- 8b-2. Reenrollment campaign targets (재등록 캠페인 데모 — 8명, 퍼널 상태 다양화) ---
+  console.log("Inserting reenrollment campaign targets…");
+  const campaignTargets = activeStudents.slice(0, 8);
+  const campaignStatuses = ["pending", "contacted", "enrolled", "declined"] as const;
+  for (let i = 0; i < campaignTargets.length; i++) {
+    const stu = campaignTargets[i]!;
+    const status = campaignStatuses[i % campaignStatuses.length]!;
+    let contactedAt: string | null = null;
+    let decidedAt: string | null = null;
+    if (status !== "pending") {
+      const c = new Date();
+      c.setDate(c.getDate() - (i + 2));
+      contactedAt = c.toISOString();
+    }
+    if (status === "enrolled" || status === "declined") {
+      const d = new Date();
+      d.setDate(d.getDate() - (i + 1));
+      decidedAt = d.toISOString();
+    }
+    await sql`
+      insert into reenrollment_campaign_targets (
+        tenant_id, student_id, status, counselor_id, trigger_reason, contacted_at, decided_at
+      ) values (
+        ${tenantId}, ${stu.id}, ${status}, ${pick(teacherIds, i)}, 'renewal_risk',
+        ${contactedAt}, ${decidedAt}
       )
     `;
   }
