@@ -250,11 +250,20 @@ export default async function ConsultationsPage({
             return (
               <li
                 key={c.id}
-                className={`shadow-card overflow-hidden rounded-2xl border p-5 ${
-                  isUrgent ? "border-danger/30 bg-danger-soft" : "border-line bg-card"
+                className={`group shadow-card relative overflow-hidden rounded-2xl border p-5 transition hover:shadow-modal ${
+                  isUrgent
+                    ? "border-danger/30 bg-danger-soft hover:border-danger/50"
+                    : "border-line bg-card hover:border-primary/40"
                 }`}
               >
-                <header className="flex flex-wrap items-start justify-between gap-3">
+                {/* 카드 전체 클릭 → 상담 수정(stretched link). 내부 학생 이름 링크는 z-10로 위에 둠. */}
+                <WindowLink
+                  href={`/consultations/${c.id}/edit`}
+                  title="상담 수정"
+                  ariaLabel={`${c.studentName} 상담 수정`}
+                  className="absolute inset-0 z-0"
+                />
+                <header className="relative flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <Initial
                       name={c.studentName}
@@ -266,7 +275,7 @@ export default async function ConsultationsPage({
                         <WindowLink
                           href={`/students/${c.studentId}`}
                           title={c.studentName}
-                          className="text-foreground text-[15px] font-bold hover:underline"
+                          className="text-foreground relative z-10 text-[15px] font-bold hover:underline"
                         >
                           {c.studentName}
                         </WindowLink>
@@ -284,14 +293,6 @@ export default async function ConsultationsPage({
                   </div>
                   <div className="text-text-dim flex items-center gap-2 text-xs">
                     <span className="num">{relativeTime(c.consultedAt)}</span>
-                    <WindowLink
-                      href={`/consultations/${c.id}/edit`}
-                      title="상담 수정"
-                      ariaLabel="수정"
-                      className="text-text-faint hover:text-foreground inline-flex items-center"
-                    >
-                      <EyIcon name="check" size={12} className="rotate-45" />
-                    </WindowLink>
                   </div>
                 </header>
 

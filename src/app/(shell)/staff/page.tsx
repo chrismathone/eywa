@@ -184,11 +184,9 @@ export default async function StaffPage({
             const role = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
             const status = STATUS_META[s.status] ?? STATUS_META.active!;
             const isTeacher = s.systemRole === "teacher";
-            return (
-              <article
-                key={s.id}
-                className="bg-card border-line shadow-card flex flex-col rounded-2xl border p-5"
-              >
+            const cardClass = "bg-card border-line shadow-card flex flex-col rounded-2xl border p-5";
+            const body = (
+              <>
                 <header className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Initial name={s.displayName} color={role.init} size="lg" />
@@ -211,16 +209,22 @@ export default async function StaffPage({
                     {status.label} · {s.classesCount > 0 ? `반 ${s.classesCount}개` : "반 없음"}
                   </div>
                 )}
-
-                {canManage ? (
-                  <WindowLink
-                    href={`/staff/${s.id}/edit`}
-                    title={`${s.displayName} 수정`}
-                    className="text-text-dim hover:text-foreground mt-3 inline-flex items-center gap-1 self-end text-[11px] transition"
-                  >
-                    수정 →
-                  </WindowLink>
-                ) : null}
+              </>
+            );
+            // 카드 전체 클릭 → 수정(관리 권한 있을 때). 권한 없으면 비클릭 카드.
+            return canManage ? (
+              <WindowLink
+                key={s.id}
+                href={`/staff/${s.id}/edit`}
+                title={`${s.displayName} 수정`}
+                ariaLabel={`${s.displayName} 수정`}
+                className={`${cardClass} group hover:border-primary/40 hover:shadow-modal cursor-pointer transition`}
+              >
+                {body}
+              </WindowLink>
+            ) : (
+              <article key={s.id} className={cardClass}>
+                {body}
               </article>
             );
           })}
