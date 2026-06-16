@@ -1,8 +1,13 @@
 "use client";
 
-import { LayoutPanelTop } from "lucide-react";
+import { LayoutPanelTop, type LucideIcon } from "lucide-react";
+import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { useWindowStore } from "./window-store";
+
+// 라우트 창 칩 아이콘 — 레일과 동일(NAV_GROUPS의 lucide). 학생 요약창은 EyIcon seed.
+const ICON_BY_MENU: Record<string, LucideIcon> = {};
+for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] = it.icon;
 
 /** 하단 중앙 독/스위처 — 열린·최소화 창 칩. 클릭=focus/복원, 가운데클릭=닫기. 좌측=스포트라이트 토글. */
 export function WindowSwitcher() {
@@ -35,6 +40,7 @@ export function WindowSwitcher() {
       ) : null}
       {list.map((w) => {
         const active = w.id === focusedId && !w.minimized;
+        const Icon = w.kind === "route" ? ICON_BY_MENU[w.params.id] : null;
         return (
           <button
             key={w.id}
@@ -49,7 +55,7 @@ export function WindowSwitcher() {
               active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             } ${w.minimized ? "opacity-60" : ""}`}
           >
-            <EyIcon name="seed" size={12} />
+            {Icon ? <Icon size={13} strokeWidth={1.85} /> : <EyIcon name="seed" size={12} />}
             <span className="max-w-[120px] truncate">{w.params.title}</span>
           </button>
         );

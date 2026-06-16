@@ -50,7 +50,9 @@ export function FloatingWindow({
   // 스포트라이트: 포커스 창은 상단 큰 영역(spotlightTop, store rect 불변→해제 시 글라이드 복원),
   // 비포커스 창은 숨김(마운트 유지=iframe 보존, 카드 클릭 swap 시 리로드 없음). 드래그/리사이즈 잠금.
   const spot = spotlight && focused;
-  const spotHidden = spotlight && !focused;
+  // 비포커스 스포트라이트 창: display:none(hidden) 대신 opacity로 가림 — 해제(X) 시 숨어있던
+  // iframe 여러 개가 동시에 재레이아웃되며 생기던 렉 제거(레이아웃은 유지, 합성만 토글).
+  const veiled = spotlight && !focused && !win.minimized;
   const rect = spot ? spotlightTop(bounds) : win.rect;
 
   const animationsOn = usePrefs((s) => s.animations);
@@ -87,14 +89,17 @@ export function FloatingWindow({
   return (
     <div
       ref={outerRef}
-      className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized || spotHidden ? "hidden" : ""}`}
+      className={`pointer-events-auto absolute top-0 left-0 ${dragging ? "will-change-transform" : ""} ${win.minimized ? "hidden" : ""}`}
       style={{
         transform: `translate(${rect.x}px, ${rect.y}px)`,
         width: rect.w,
         height: rect.h,
         zIndex: z,
-        // 드래그 중엔 transition 0(1:1 추종), 그 외 store rect 변경(스냅/배치/스포트라이트)은 글라이드
-        transition: dragging || animOff ? "none" : WINDOW_TRANSITION,
+        opacity: veiled ? 0 : 1,
+        pointerEvents: veiled ? "none" : undefined,
+        // 드래그 중엔 transition 0(1:1 추종), 그 외 store rect 변경(스냅/배치/스포트라이트)은 글라이드.
+        // opacity는 스포트라이트 가림/복귀 페이드(재레이아웃 없이 합성만 → 렉 없음).
+        transition: dragging || animOff ? "none" : `${WINDOW_TRANSITION}, opacity 220ms ease`,
       }}
       onPointerDown={() => focus(win.id)}
     >

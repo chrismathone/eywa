@@ -96,6 +96,8 @@ type Actions = {
   swapToBackground: (winId: string) => void;
   /** 배경 탭을 창으로 꺼냄 — 스택서 제거 + 그 라우트 창 열기(스택 항상 ≥1 유지). */
   backgroundToWindow: (id: string) => void;
+  /** 스포트라이트: 포커스(top) 창 ⇄ 배경 교체 — 포커스 라우트를 배경으로 보내고 선택 배경을 top 창으로. */
+  swapFocusedWithBackground: (bgId: string) => void;
   close: (id: string) => void;
   focus: (id: string) => void;
   setRect: (id: string, rect: Rect) => void;
@@ -274,6 +276,62 @@ export const useWindowStore = create<State & Actions>()(
             maximized: false,
           };
           return { background, activeBackgroundId, windows, order: [...order, winId], focusedId: winId, snapAssist: null };
+        }),
+
+      // 스포트라이트 교체: 현재 포커스(top) 라우트 창을 배경으로 보내고, 선택한 배경을 top 창으로 꺼낸다.
+      // 포커스가 라우트가 아니면(학생 요약 등) 배경으로 못 보내므로, 배경이 2개 이상일 때만 꺼냄
+      // (마지막 배경은 메인 프레임 빈 화면 방지로 유지). 호출부가 새 활성 배경으로 router.push.
+      swapFocusedWithBackground: (bgId) =>
+        set((s) => {
+          const bg = s.background.find((b) => b.id === bgId);
+          if (!bg) return s;
+          const focused = s.focusedId ? s.windows[s.focusedId] : null;
+          const sendFocused = !!(focused && focused.kind === "route" && focused.params.href);
+          if (!sendFocused && s.background.length <= 1) return s; // 꺼낼 수 없음(배경 1개뿐)
+
+          const windows = { ...s.windows };
+          let order = s.order;
+          let background = s.background;
+          let activeBackgroundId = s.activeBackgroundId;
+
+          // 1) 포커스 라우트 창 → 배경(메인 프레임이 그 라우트가 됨)
+          if (sendFocused && focused) {
+            delete windows[focused.id];
+            order = order.filter((id) => id !== focused.id);
+            if (!background.some((b) => b.id === focused.params.id)) {
+              background = [...background, focused.params];
+            }
+            activeBackgroundId = focused.params.id;
+          }
+
+          // 2) 선택 배경 → top 창(포커스)
+          background = background.filter((b) => b.id !== bgId);
+          const winId = windowId("route", bg.id);
+          if (windows[winId]) {
+            windows[winId] = { ...windows[winId], minimized: false };
+            order = bringToFront(order, winId);
+          } else {
+            while (order.length >= MAX_WINDOWS) {
+              const victim = order.find((wid) => wid !== winId) ?? order[0];
+              delete windows[victim];
+              order = order.filter((wid) => wid !== victim);
+            }
+            windows[winId] = {
+              id: winId,
+              kind: "route",
+              params: bg,
+              rect: cascadeNext(order.length, s.bounds, ROUTE_WINDOW_SIZE[bg.id]),
+              minimized: false,
+              maximized: false,
+            };
+            order = [...order, winId];
+          }
+
+          if (!background.some((b) => b.id === activeBackgroundId)) {
+            activeBackgroundId = background[background.length - 1]?.id ?? "dashboard";
+          }
+
+          return { windows, order, background, activeBackgroundId, focusedId: winId, spotlight: true, snapAssist: null, snapPreview: null };
         }),
 
       close: (id) =>
