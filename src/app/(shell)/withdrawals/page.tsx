@@ -1,7 +1,15 @@
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import {
+  UserMinus,
+  CalendarClock,
+  ListChecks,
+  Filter,
+  AlertCircle,
+  UserX,
+} from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Pill } from "@/components/atoms/pill";
 import { Initial } from "@/components/atoms/initial";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -122,10 +130,10 @@ export default async function WithdrawalsPage({
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 퇴원" value={all.length} icon="falling" color="rose" />
-        <Stat label="최근 30일" value={recent} icon="pulse" color="danger" />
-        <Stat label="주요 사유" value={topReasons.length} unit="가지" icon="branch" color="amber" />
-        <Stat label="필터 결과" value={rows.length} unit="명" icon="rings" color="blue" />
+        <Stat label="전체 퇴원" value={all.length} icon={UserMinus} color="rose" />
+        <Stat label="최근 30일" value={recent} icon={CalendarClock} color="danger" />
+        <Stat label="주요 사유" value={topReasons.length} unit="가지" icon={ListChecks} color="amber" />
+        <Stat label="필터 결과" value={rows.length} unit="명" icon={Filter} color="blue" />
       </section>
 
       {/* Filter bar */}
@@ -181,7 +189,7 @@ export default async function WithdrawalsPage({
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="falling" size={32} />}
+          icon={() => <UserX size={32} strokeWidth={1.5} />}
           title="퇴원 학생이 없습니다"
           description="퇴원 처리된 학생이 생기면 이곳에 표시됩니다."
         />
@@ -269,7 +277,7 @@ export default async function WithdrawalsPage({
             <div className="border-line bg-amber-soft border-t px-5 py-4">
               <div className="flex items-start gap-2.5">
                 <span className="bg-amber/15 text-amber flex size-7 shrink-0 items-center justify-center rounded-md">
-                  <EyIcon name="pulse" size={13} />
+                  <AlertCircle size={13} strokeWidth={2} />
                 </span>
                 <div>
                   <p className="text-amber font-mono text-[10px] font-bold tracking-wider uppercase">
@@ -294,13 +302,13 @@ function Stat({
   label,
   value,
   unit,
-  icon,
+  icon: Icon,
   color,
 }: {
   label: string;
   value: number | string;
   unit?: string;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
   color: "primary" | "rose" | "amber" | "danger" | "blue";
 }) {
   const ICON_BG = {
@@ -315,7 +323,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro truncate">{label}</p>
         <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="mt-2 flex items-baseline gap-1">

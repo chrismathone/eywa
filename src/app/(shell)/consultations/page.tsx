@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import {
+  MessagesSquare,
+  CalendarClock,
+  BellRing,
+  AlarmClock,
+} from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial } from "@/components/atoms/initial";
@@ -133,10 +140,10 @@ export default async function ConsultationsPage({
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 상담" value={totalAll} icon="wave" color="primary" />
-        <Stat label="최근 7일" value={lastWeek} icon="pulse" color="blue" />
-        <Stat label="진행 중 후속" value={pendingFollowUps} icon="sprout" color="gold" />
-        <Stat label="지연 후속" value={overdueFollowUps} icon="falling" color="danger" />
+        <Stat label="전체 상담" value={totalAll} icon={MessagesSquare} color="primary" />
+        <Stat label="최근 7일" value={lastWeek} icon={CalendarClock} color="blue" />
+        <Stat label="진행 중 후속" value={pendingFollowUps} icon={BellRing} color="gold" />
+        <Stat label="지연 후속" value={overdueFollowUps} icon={AlarmClock} color="danger" />
       </section>
 
       {/* Filter bar */}
@@ -229,7 +236,7 @@ export default async function ConsultationsPage({
             title="상담 통계"
             className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
           >
-            <EyIcon name="rings" size={13} />
+            <MessagesSquare size={13} strokeWidth={2} />
             통계 보기
           </WindowLink>
           <NewConsultationTrigger students={students} counselors={counselors} />
@@ -237,7 +244,7 @@ export default async function ConsultationsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState icon={() => <EyIcon name="wave" size={32} />} title="기록된 상담이 없습니다" />
+        <EmptyState icon={() => <MessagesSquare size={32} strokeWidth={1.5} />} title="기록된 상담이 없습니다" />
       ) : (
         <>
         <ul className="space-y-2.5">
@@ -325,12 +332,12 @@ export default async function ConsultationsPage({
 function Stat({
   label,
   value,
-  icon,
+  icon: Icon,
   color,
 }: {
   label: string;
   value: number;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
   color: "primary" | "blue" | "gold" | "danger";
 }) {
   const ICON_BG = {
@@ -344,7 +351,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>

@@ -1,5 +1,5 @@
+import { MessageSquareOff } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getRetentionRoster, getTenantName } from "@/features/retention/server/queries";
 import { RetentionTabs } from "@/features/retention/components/retention-tabs";
@@ -29,7 +29,7 @@ export default async function RetentionMessagesPage() {
 
       {queue.length === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="wave" size={32} />}
+          icon={() => <MessageSquareOff size={32} strokeWidth={1.5} />}
           title="메시지 대상이 없습니다"
           description="위험·관심 학생이나 상담 공백 학생이 생기면 이곳에서 학부모 메시지 초안을 만들 수 있습니다."
         />

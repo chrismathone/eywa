@@ -1,3 +1,4 @@
+import { CalendarClock, Bell, MessageCircle } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getRetentionRoster,
@@ -100,9 +101,9 @@ export default async function RetentionPage() {
         </section>
 
         <div className="space-y-4">
-          <SignalSection title="오늘·지난 예정 연락" icon="wave" rows={overdue} empty="예정된 연락이 없습니다." />
-          <SignalSection title="재등록 위험" icon="bell" rows={renewalRisk} empty="재등록 위험 학생이 없습니다." />
-          <SignalSection title="상담 공백" icon="pulse" rows={counselGaps} empty="상담 공백 학생이 없습니다." />
+          <SignalSection title="오늘·지난 예정 연락" icon={CalendarClock} rows={overdue} empty="예정된 연락이 없습니다." />
+          <SignalSection title="재등록 위험" icon={Bell} rows={renewalRisk} empty="재등록 위험 학생이 없습니다." />
+          <SignalSection title="상담 공백" icon={MessageCircle} rows={counselGaps} empty="상담 공백 학생이 없습니다." />
         </div>
       </div>
     </div>

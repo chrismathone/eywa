@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { Mic, RefreshCw } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -56,7 +58,11 @@ function MeetingItem({ m }: { m: MeetingRow }) {
                 isLive ? "bg-danger/15 text-danger" : "bg-primary-soft text-primary"
               }`}
             >
-              <EyIcon name={isLive ? "pulse" : "rings"} size={16} />
+              {isLive ? (
+                <RefreshCw size={16} strokeWidth={2} />
+              ) : (
+                <Mic size={16} strokeWidth={2} />
+              )}
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -200,9 +206,14 @@ export default async function MeetingsPage({
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
-        <Stat label="전체 회의" value={all.length} icon="rings" color="primary" />
-        <Stat label="AI 분석 완료" value={completed} icon="sparkle" color="gold" />
-        <Stat label="처리 중" value={inProgress} icon="pulse" color="rose" />
+        <Stat label="전체 회의" value={all.length} icon={Mic} color="primary" />
+        <Stat
+          label="AI 분석 완료"
+          value={completed}
+          renderIcon={<EyIcon name="sparkle" size={13} />}
+          color="gold"
+        />
+        <Stat label="처리 중" value={inProgress} icon={RefreshCw} color="rose" />
       </section>
 
       {/* Filter bar */}
@@ -275,7 +286,7 @@ export default async function MeetingsPage({
 
       {total === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="rings" size={32} />}
+          icon={() => <Mic size={32} strokeWidth={1.5} />}
           title="기록된 회의가 없습니다"
         />
       ) : (
@@ -295,12 +306,14 @@ export default async function MeetingsPage({
 function Stat({
   label,
   value,
-  icon,
+  icon: Icon,
+  renderIcon,
   color,
 }: {
   label: string;
   value: number;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon?: LucideIcon;
+  renderIcon?: React.ReactNode;
   color: "primary" | "gold" | "rose";
 }) {
   const ICON_BG = {
@@ -313,7 +326,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          {renderIcon ?? (Icon ? <Icon size={13} strokeWidth={2} /> : null)}
         </span>
       </header>
       <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>

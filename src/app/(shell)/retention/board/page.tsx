@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { AlertTriangle, AlertCircle, ShieldCheck, TrendingDown } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { FilterSelect } from "@/components/filter-select";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -102,10 +104,10 @@ export default async function RetentionBoardPage({
       <RetentionTabs />
 
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="위험" value={stats.risk} icon="falling" color="danger" />
-        <Stat label="관심" value={stats.warn} icon="pulse" color="amber" />
-        <Stat label="안정" value={stats.ok} icon="roots" color="primary" />
-        <Stat label="매출 위험" value={formatWonShort(stats.revenueRisk)} icon="pollen" color="rose" />
+        <Stat label="위험" value={stats.risk} icon={AlertTriangle} color="danger" />
+        <Stat label="관심" value={stats.warn} icon={AlertCircle} color="amber" />
+        <Stat label="안정" value={stats.ok} icon={ShieldCheck} color="primary" />
+        <Stat label="매출 위험" value={formatWonShort(stats.revenueRisk)} icon={TrendingDown} color="rose" />
       </section>
 
       <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
@@ -185,12 +187,12 @@ export default async function RetentionBoardPage({
 function Stat({
   label,
   value,
-  icon,
+  icon: Icon,
   color,
 }: {
   label: string;
   value: number | string;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
   color: "primary" | "rose" | "amber" | "danger";
 }) {
   const ICON_BG = {
@@ -204,7 +206,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro truncate">{label}</p>
         <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="tabular text-foreground mt-2 text-[26px] leading-none">{value}</p>

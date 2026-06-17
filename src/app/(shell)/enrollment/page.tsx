@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { UserPlus, MessagesSquare, CalendarClock } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -16,12 +18,36 @@ const COLUMNS: {
   label: string;
   outcomes: string[];
   color: "amber" | "blue" | "primary" | "neutral";
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: () => ReactNode;
 }[] = [
-  { key: "queue", label: "대기 · 예약", outcomes: ["pending", "scheduled"], color: "amber", icon: "sprout" },
-  { key: "consulted", label: "상담 완료", outcomes: ["consulted"], color: "blue", icon: "wave" },
-  { key: "ai_done", label: "AI 분석 완료", outcomes: ["ai_done"], color: "primary", icon: "sparkle" },
-  { key: "closed", label: "등록 · 종료", outcomes: ["enrolled", "declined", "no_show"], color: "neutral", icon: "check" },
+  {
+    key: "queue",
+    label: "대기 · 예약",
+    outcomes: ["pending", "scheduled"],
+    color: "amber",
+    icon: () => <CalendarClock size={13} strokeWidth={2} />,
+  },
+  {
+    key: "consulted",
+    label: "상담 완료",
+    outcomes: ["consulted"],
+    color: "blue",
+    icon: () => <MessagesSquare size={13} strokeWidth={2} />,
+  },
+  {
+    key: "ai_done",
+    label: "AI 분석 완료",
+    outcomes: ["ai_done"],
+    color: "primary",
+    icon: () => <EyIcon name="sparkle" size={13} />,
+  },
+  {
+    key: "closed",
+    label: "등록 · 종료",
+    outcomes: ["enrolled", "declined", "no_show"],
+    color: "neutral",
+    icon: () => <EyIcon name="check" size={13} />,
+  },
 ];
 
 export default async function EnrollmentPage({
@@ -98,7 +124,7 @@ export default async function EnrollmentPage({
 
       {items.length === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="sprout" size={32} />}
+          icon={() => <UserPlus size={32} strokeWidth={1.5} />}
           title="진행 중인 상담이 없습니다"
         />
       ) : (
@@ -119,7 +145,7 @@ export default async function EnrollmentPage({
                 <header className="border-line flex items-center justify-between border-b px-4 py-3.5">
                   <div className="flex items-center gap-2.5">
                     <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[col.color]}`}>
-                      <EyIcon name={col.icon} size={13} />
+                      {col.icon()}
                     </span>
                     <h3 className="text-foreground text-[13px] font-bold">{col.label}</h3>
                   </div>

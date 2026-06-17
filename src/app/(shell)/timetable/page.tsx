@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import type { LucideIcon } from "lucide-react";
+import { Columns3, LayoutGrid, CalendarOff } from "lucide-react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -110,22 +111,25 @@ export default async function TimetablePage({
         <div className="flex items-center gap-1">
           <span className="micro mr-1">뷰</span>
           {([
-            { key: "basic", label: "기본뷰", icon: "leaf" },
-            { key: "integrated", label: "통합뷰", icon: "rings" },
-          ] as { key: ViewMode; label: string; icon: Parameters<typeof EyIcon>[0]["name"] }[]).map((v) => (
-            <Link
-              key={v.key}
-              href={buildHref(v.key, subject)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
-                view === v.key
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              <EyIcon name={v.icon} size={11} />
-              {v.label}
-            </Link>
-          ))}
+            { key: "basic", label: "기본뷰", icon: Columns3 },
+            { key: "integrated", label: "통합뷰", icon: LayoutGrid },
+          ] as { key: ViewMode; label: string; icon: LucideIcon }[]).map((v) => {
+            const Icon = v.icon;
+            return (
+              <Link
+                key={v.key}
+                href={buildHref(v.key, subject)}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+                  view === v.key
+                    ? "border-primary bg-primary text-primary-foreground font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                <Icon size={11} strokeWidth={2} />
+                {v.label}
+              </Link>
+            );
+          })}
         </div>
 
         <span className="text-text-faint ml-auto font-mono text-[11px]">
@@ -137,7 +141,7 @@ export default async function TimetablePage({
 
       {slots.length === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="leaf" size={32} />}
+          icon={() => <CalendarOff size={32} strokeWidth={1.5} />}
           title="해당 과목의 시간표가 없습니다"
         />
       ) : (

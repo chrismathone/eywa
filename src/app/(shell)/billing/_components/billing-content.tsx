@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
@@ -186,18 +188,18 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
       {total === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="pollen" size={32} />}
+          icon={() => <ReceiptText size={32} strokeWidth={1.5} />}
           title={q ? "검색 결과 없음" : "이 달 청구 내역이 없습니다"}
           description={q ? "검색어를 조정해보세요." : "월을 이동하거나 신규 청구서를 생성하세요."}
         />
       ) : (
         <>
           <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-            <KpiCard label="총 청구액" value={won(summary.totalBilled)} icon="pollen" color="primary" hint={`${summary.totalCount}건`} />
-            <KpiCard label="할인 합계" value={won(summary.totalDiscount)} icon="leaf" color="amber" />
+            <KpiCard label="총 청구액" value={won(summary.totalBilled)} icon={Receipt} color="primary" hint={`${summary.totalCount}건`} />
+            <KpiCard label="할인 합계" value={won(summary.totalDiscount)} icon={BadgePercent} color="amber" />
             <KpiCard label="수납 완료" value={won(summary.totalCollected)} icon="check" color="primary" hint={`${summary.paidCount}건`} />
-            <KpiCard label="미수금" value={won(summary.outstanding)} icon="falling" color="danger" hint={`부분 ${summary.partialCount} · 미수 ${summary.unpaidCount}건`} />
-            <KpiCard label="수납률" value={`${summary.paymentRate.toFixed(1)}%`} icon="rings" color="gold" />
+            <KpiCard label="미수금" value={won(summary.outstanding)} icon={CircleDollarSign} color="danger" hint={`부분 ${summary.partialCount} · 미수 ${summary.unpaidCount}건`} />
+            <KpiCard label="수납률" value={`${summary.paymentRate.toFixed(1)}%`} icon={Percent} color="gold" />
           </section>
 
           <section className="bg-card border-line shadow-card rounded-md border p-5">
@@ -217,7 +219,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           {overdue.length > 0 ? (
             <section className="bg-danger-soft border-danger/30 flex items-start gap-3 rounded-md border p-4">
               <span className="bg-danger/15 text-danger flex size-9 shrink-0 items-center justify-center rounded-sm">
-                <EyIcon name="falling" size={18} />
+                <CircleDollarSign size={18} strokeWidth={2} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -244,13 +246,13 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 function KpiCard({
   label,
   value,
-  icon,
+  icon: Icon,
   color,
   hint,
 }: {
   label: string;
   value: string;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon | "check";
   color: "primary" | "gold" | "danger" | "amber";
   hint?: string;
 }) {
@@ -272,7 +274,7 @@ function KpiCard({
       <header className="relative flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={14} />
+          {Icon === "check" ? <EyIcon name="check" size={14} /> : <Icon size={14} strokeWidth={2} />}
         </span>
       </header>
       <p className="tabular text-foreground num relative mt-3 text-[18px] leading-tight">{value}</p>

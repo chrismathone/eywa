@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Users, UserCog, GraduationCap, MessageCircle, Calculator, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
@@ -121,11 +122,11 @@ export default async function StaffPage({
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        <Stat label="전체" value={all.length} icon="roots" color="primary" />
-        <Stat label="원장·관리자" value={roleCount("master") + roleCount("admin")} icon="tree" color="danger" />
-        <Stat label="강사" value={roleCount("teacher")} icon="seed" color="primary" />
-        <Stat label="상담" value={roleCount("counselor")} icon="wave" color="rose" />
-        <Stat label="회계" value={roleCount("accountant")} icon="pollen" color="purple" />
+        <Stat label="전체" value={all.length} icon={Users} color="primary" />
+        <Stat label="원장·관리자" value={roleCount("master") + roleCount("admin")} icon={UserCog} color="danger" />
+        <Stat label="강사" value={roleCount("teacher")} icon={GraduationCap} color="primary" />
+        <Stat label="상담" value={roleCount("counselor")} icon={MessageCircle} color="rose" />
+        <Stat label="회계" value={roleCount("accountant")} icon={Calculator} color="purple" />
       </section>
 
       {/* Filter bar */}
@@ -206,7 +207,7 @@ export default async function StaffPage({
       ) : null}
 
       {total === 0 ? (
-        <EmptyState icon={() => <EyIcon name="roots" size={32} />} title="등록된 직원이 없습니다" />
+        <EmptyState icon={() => <Users size={32} strokeWidth={1.5} />} title="등록된 직원이 없습니다" />
       ) : (
         <>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
@@ -269,12 +270,12 @@ export default async function StaffPage({
 function Stat({
   label,
   value,
-  icon,
+  icon: Icon,
   color,
 }: {
   label: string;
   value: number;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
   color: "primary" | "blue" | "rose" | "danger" | "purple";
 }) {
   const ICON_BG = {
@@ -289,7 +290,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro truncate">{label}</p>
         <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>

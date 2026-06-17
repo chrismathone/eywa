@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { CalendarX, Clock, UserCheck, Users, UserX, type LucideIcon } from "lucide-react";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -134,7 +134,7 @@ export default async function AttendancePage({
 
       {/* Stat 4 */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="등록 학생" value={matrix.stats.totalStudents} unit="명" color="primary" icon="seed" />
+        <Stat label="등록 학생" value={matrix.stats.totalStudents} unit="명" color="primary" icon={Users} />
         <Stat
           label="출석률"
           value={matrix.stats.presentRate}
@@ -146,20 +146,20 @@ export default async function AttendancePage({
                 ? "amber"
                 : "danger"
           }
-          icon="pulse"
+          icon={UserCheck}
         />
-        <Stat label="결석" value={matrix.stats.absentCount} unit="회" color="danger" icon="falling" />
-        <Stat label="지각" value={matrix.stats.lateCount} unit="회" color="amber" icon="rings" />
+        <Stat label="결석" value={matrix.stats.absentCount} unit="회" color="danger" icon={UserX} />
+        <Stat label="지각" value={matrix.stats.lateCount} unit="회" color="amber" icon={Clock} />
       </section>
 
       {!selectedClassId ? (
         <EmptyState
-          icon={() => <EyIcon name="pulse" size={32} />}
+          icon={() => <CalendarX size={32} strokeWidth={1.5} />}
           title="등록된 반이 없습니다"
         />
       ) : matrix.students.length === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="seed" size={32} />}
+          icon={() => <Users size={32} strokeWidth={1.5} />}
           title="이 반에 등록된 학생이 없습니다"
           description="학생목록에서 등록 후 다시 확인하세요."
         />
@@ -343,13 +343,13 @@ function Stat({
   value,
   unit,
   color,
-  icon,
+  icon: Icon,
 }: {
   label: string;
   value: number;
   unit: string;
   color: "primary" | "amber" | "danger";
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
 }) {
   const ICON_BG = {
     primary: "bg-primary-soft text-primary",
@@ -361,7 +361,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="mt-2 flex items-baseline gap-1">

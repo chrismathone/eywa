@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UserCheck, UserMinus, UserPlus, Users, type LucideIcon } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -115,10 +116,10 @@ export default async function StudentsPage({
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체" value={all} unit="명" color="primary" icon="seed" />
-        <Stat label="재원" value={enrolled} unit="명" color="primary" icon="check" />
-        <Stat label="예비·상담" value={prospect} unit="명" color="gold" icon="sprout" />
-        <Stat label="퇴원" value={withdrawn} unit="명" color="neutral" icon="falling" />
+        <Stat label="전체" value={all} unit="명" color="primary" icon={Users} />
+        <Stat label="재원" value={enrolled} unit="명" color="primary" icon={UserCheck} />
+        <Stat label="예비·상담" value={prospect} unit="명" color="gold" icon={UserPlus} />
+        <Stat label="퇴원" value={withdrawn} unit="명" color="neutral" icon={UserMinus} />
       </section>
 
       {/* Filter bar */}
@@ -209,7 +210,7 @@ export default async function StudentsPage({
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={() => <EyIcon name="seed" size={32} />}
+          icon={() => <Users size={32} strokeWidth={1.5} />}
           title="결과 없음"
           description="검색어/필터를 조정해보세요."
         />
@@ -298,13 +299,13 @@ function Stat({
   value,
   unit,
   color,
-  icon,
+  icon: Icon,
 }: {
   label: string;
   value: number;
   unit: string;
   color: "primary" | "gold" | "blue" | "neutral";
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
 }) {
   const ICON_BG: Record<typeof color, string> = {
     primary: "bg-primary-soft text-primary",
@@ -317,7 +318,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="mt-2 flex items-baseline gap-1">

@@ -1,5 +1,5 @@
+import type { LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 export type SignalRow = {
   id: string;
@@ -18,12 +18,12 @@ const NOTE_CLASS = {
 /** 브리핑 신호 패널 — 제목 + 학생 행 리스트(우측 note). 행 클릭 → 학생 상세. */
 export function SignalSection({
   title,
-  icon,
+  icon: Icon,
   rows,
   empty,
 }: {
   title: string;
-  icon: EywaIconName;
+  icon: LucideIcon;
   rows: SignalRow[];
   empty: string;
 }) {
@@ -31,7 +31,7 @@ export function SignalSection({
     <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
       <header className="border-line flex items-center gap-2 border-b px-4 py-3">
         <span className="text-text-dim flex size-6 items-center justify-center">
-          <EyIcon name={icon} size={14} />
+          <Icon size={14} strokeWidth={2} />
         </span>
         <h3 className="text-foreground text-[13px] font-bold">{title}</h3>
         <span className="text-text-faint num ml-auto text-[11px]">{rows.length}</span>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -19,6 +20,11 @@ import { NewClassTrigger } from "./_components/new-class-trigger";
 export const metadata = { title: "수업목록 — eywa" };
 
 const PAGE_SIZE = 50;
+
+// "운영 중" Stat은 보존 대상 EyIcon `check`를 유지 — Lucide 시그니처(size·strokeWidth) 어댑터로 감싸 Stat에 전달.
+const CheckIcon: LucideIcon = ((props: { size?: number | string }) => (
+  <EyIcon name="check" size={typeof props.size === "number" ? props.size : undefined} />
+)) as unknown as LucideIcon;
 
 type ViewMode = "cards" | "table";
 
@@ -130,14 +136,14 @@ export default async function ClassesPage({
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 반" value={stats.total} unit="개" icon="branch" color="primary" />
-        <Stat label="운영 중" value={active} unit="개" icon="check" color="primary" />
-        <Stat label="등록 학생" value={totalSeats} unit="명" icon="seed" color="blue" />
+        <Stat label="전체 반" value={stats.total} unit="개" icon={BookOpen} color="primary" />
+        <Stat label="운영 중" value={active} unit="개" icon={CheckIcon} color="primary" />
+        <Stat label="등록 학생" value={totalSeats} unit="명" icon={Users} color="blue" />
         <Stat
           label="반당 평균"
           value={stats.total > 0 ? Math.round(totalSeats / stats.total) : 0}
           unit="명"
-          icon="rings"
+          icon={UserCheck}
           color="gold"
         />
       </section>
@@ -251,7 +257,7 @@ export default async function ClassesPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState icon={() => <EyIcon name="branch" size={32} />} title="결과 없음" />
+        <EmptyState icon={() => <SearchX size={32} strokeWidth={1.5} />} title="결과 없음" />
       ) : (
         <>
           {view === "table" ? <TableView classes={classes} /> : <CardsView classes={classes} />}
@@ -425,13 +431,13 @@ function Stat({
   label,
   value,
   unit,
-  icon,
+  icon: Icon,
   color,
 }: {
   label: string;
   value: number;
   unit: string;
-  icon: Parameters<typeof EyIcon>[0]["name"];
+  icon: LucideIcon;
   color: "primary" | "blue" | "gold";
 }) {
   const ICON_BG = {
@@ -444,7 +450,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <EyIcon name={icon} size={13} />
+          <Icon size={13} strokeWidth={2} />
         </span>
       </header>
       <p className="mt-2 flex items-baseline gap-1">
