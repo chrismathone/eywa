@@ -176,6 +176,13 @@
       "when": 1781580775601,
       "tag": "0024_slimy_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781697420111,
+      "tag": "0025_lucky_toxin",
+      "breakpoints": true
     }
   ]
 }

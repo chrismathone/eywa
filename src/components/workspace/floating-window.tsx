@@ -152,7 +152,7 @@ export function FloatingWindow({
               <ArrowLeft size={14} strokeWidth={2} />
             </button>
           ) : null}
-          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{live?.canBack ? live.title : win.params.title}</span>
+          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{live?.title ?? win.params.title}</span>
           {win.params.subtitle ? <span className="text-text-faint min-w-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
           <span className="flex-1" />
 

@@ -39,6 +39,7 @@ export const DEFAULT_WINDOW = { w: 480, h: 560 };
  */
 export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
+  billing: { w: 760, h: 620 }, // 수납/교재/지출 책갈피 + 다열 표라 폭이 넓음
 };
 
 /**

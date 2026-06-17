@@ -563,6 +563,67 @@ export const invoices = pgTable(
   ],
 );
 
+// === textbook_orders (교재신청) ===
+// 학생 교재 신청 → 주문 → 배부 → 청구 → 납부 라이프사이클. 수납관리 창의 '교재' 책갈피 면.
+export const textbookOrders = pgTable(
+  "textbook_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id").references(() => students.id, { onDelete: "set null" }),
+    studentName: text("student_name"), // denormalized (학생 매칭 실패/퇴원 대비 표시용)
+    teacherName: text("teacher_name"),
+    bookName: text("book_name").notNull(),
+    bookDetail: text("book_detail"),
+    price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"),
+    status: text("status").notNull().default("requested"), // requested/ordered/delivered/billed/paid
+    requestDate: date("request_date"),
+    orderedAt: timestamp("ordered_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    billedAt: timestamp("billed_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("textbook_orders_tenant_status_idx").on(t.tenantId, t.status),
+    index("textbook_orders_tenant_student_idx").on(t.tenantId, t.studentId),
+    index("textbook_orders_tenant_request_idx").on(t.tenantId, t.requestDate),
+  ],
+);
+
+// === expenses (지출관리) ===
+// 학원 지출 기록(인건비/운영비/매입/기타) + 품목 라인아이템. 수납관리 창의 '지출' 책갈피 면.
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    category: text("category").notNull().default("기타"), // 인건비/운영비/매입/기타
+    amount: numeric("amount", { precision: 12, scale: 0 }).notNull().default("0"),
+    expenseDate: date("expense_date").notNull(),
+    vendor: text("vendor"),
+    department: text("department"),
+    author: text("author"),
+    paymentMethod: text("payment_method"),
+    approvalStatus: text("approval_status").notNull().default("pending"), // pending/approved
+    lineItems: jsonb("line_items"),
+    memo: text("memo"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("expenses_tenant_date_idx").on(t.tenantId, t.expenseDate),
+    index("expenses_tenant_category_idx").on(t.tenantId, t.category),
+  ],
+);
+
 // === user_integrations (테넌트별 외부 통합 — 현재 Google Sheets) ===
 export const userIntegrations = pgTable(
   "user_integrations",
