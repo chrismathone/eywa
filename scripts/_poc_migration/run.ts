@@ -13,6 +13,16 @@ import {
 
 const BILLING_SINCE = "2026-03"; // 수납: 이 월(YYYY-MM) 이후만
 
+// 상담 과목 코드(소스 english/math…) → eywa 한글 라벨
+const CONSULT_SUBJECT: Record<string, string> = { english: "영어", math: "수학", korean: "국어", science: "과학" };
+const mapConsultSubject = (s?: string): string | null =>
+  s && String(s).trim() ? (CONSULT_SUBJECT[String(s).trim().toLowerCase()] ?? String(s).trim()) : null;
+const addDays = (iso: string, n: number): string => {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 let dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
   const env = readFileSync("D:/eywa_refactoring/.env.local", "utf8");
@@ -165,12 +175,25 @@ async function main() {
   }
 
   // student_consultations
+  // ⚠️ 소스 필드명 주의: 내용=content, 카테고리=category(general/academic…), 대상=type(parent/student),
+  // 후속메모=followUpNotes, 후속여부=followUpNeeded/followUpDone, 과목=subject(english/math).
+  // (구버전은 notes/type→category/followUpContent로 잘못 매핑해 summary 전부 "(내용 없음)"·category 전부 "parent"였음)
   for (const k of C.student_consultations ?? []) {
     const sid = k.studentId && insertedStudent.has(k.studentId) ? studentIds.get(k.studentId) : null;
     if (!sid) { note("sconsult.skip(student)"); continue; }
     const counselor = resolveUser(k.consultantId) ?? (k.consultantName ? nameToTeacher.get(k.consultantName) ?? null : null);
-    await ins("sconsult", () => sql`insert into student_consultations (id,tenant_id,student_id,counselor_id,consulted_at,category,summary,follow_up_action)
-      values (${randomUUID()},${tenantId},${sid},${counselor},${normDate(k.date) || new Date().toISOString()},${k.type ?? "general"},${k.notes && String(k.notes).trim() ? k.notes : "(내용 없음)"},${k.followUpContent ?? null})`);
+    const consultedAt = normDate(k.date) || new Date().toISOString();
+    const summary = k.content && String(k.content).trim() ? String(k.content).trim() : "(내용 없음)";
+    const category = k.category && String(k.category).trim() ? String(k.category).trim() : "general";
+    const audience = k.type && String(k.type).trim() ? String(k.type).trim() : null;
+    const subject = mapConsultSubject(k.subject);
+    const followAction = k.followUpNotes && String(k.followUpNotes).trim() ? String(k.followUpNotes).trim() : null;
+    const followDone = !!k.followUpDone;
+    // 소스에 후속 '날짜' 필드가 없어, 후속 필요(미완)면 상담일+7일로 합성해 후속 필터를 의미있게 만든다.
+    const followDate = k.followUpNeeded && !followDone ? addDays(consultedAt.slice(0, 10), 7) : null;
+    await ins("sconsult", () => sql`insert into student_consultations
+      (id,tenant_id,student_id,counselor_id,consulted_at,category,subject,audience,summary,follow_up_action,follow_up_done,follow_up_date)
+      values (${randomUUID()},${tenantId},${sid},${counselor},${consultedAt},${category},${subject},${audience},${summary},${followAction},${followDone},${followDate})`);
   }
 
   // billing(2026-03+) → invoices. billing엔 학생 id/학교/전화가 없고 이름+학년만 → 이름+학년 매칭,

@@ -51,8 +51,12 @@ export function RouteWindow({ win }: { win: Win }) {
         const doc = el.contentDocument;
         const cw = el.contentWindow;
         if (!doc || !cw) return;
-        const title = cleanTitle(doc.title || "") || fallbackTitle;
+        // iframe이 아직 라우트를 로드하기 전엔 about:blank(pathname="blank")라 rootPath와 달라
+        // canBack이 거짓 true가 되어 로딩 스켈레톤 타이틀바에 뒤로(←)가 떴다. 실제 라우트(절대경로)가
+        // 들어오기 전까지는 live를 건드리지 않는다 → 루트/로딩 상태엔 ← 미표시(닫기는 X가 담당).
         const path = cw.location.pathname;
+        if (cw.location.href === "about:blank" || !path.startsWith("/")) return;
+        const title = cleanTitle(doc.title || "") || fallbackTitle;
         setLive(win.id, { title, canBack: !!rootPath && path !== rootPath });
       } catch {
         /* same-origin이라 정상 도달; 만약 막히면 무시(타이틀=params 유지) */

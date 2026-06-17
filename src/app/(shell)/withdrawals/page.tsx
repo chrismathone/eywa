@@ -265,15 +265,15 @@ export default async function WithdrawalsPage({
                 );
               })}
             </div>
-            {/* AI 인사이트 박스 */}
+            {/* 규칙 기반 자동 요약 (LLM 아님) — sparkle(AI 마커) 대신 pulse로 라이브 AI와 구분 */}
             <div className="border-line bg-amber-soft border-t px-5 py-4">
               <div className="flex items-start gap-2.5">
                 <span className="bg-amber/15 text-amber flex size-7 shrink-0 items-center justify-center rounded-md">
-                  <EyIcon name="sparkle" size={13} />
+                  <EyIcon name="pulse" size={13} />
                 </span>
                 <div>
                   <p className="text-amber font-mono text-[10px] font-bold tracking-wider uppercase">
-                    인사이트
+                    자동 요약
                   </p>
                   <p className="text-foreground mt-0.5 text-[12px] leading-relaxed">
                     {topReasons[0]

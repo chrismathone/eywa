@@ -12,6 +12,7 @@ import { BackgroundDropZone } from "./background-drop-zone";
 import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
 import { SpotlightStrip } from "./spotlight-strip";
+import { WorkspaceOnboarding } from "./workspace-onboarding";
 import { snapTarget, templateSlots } from "./window-geometry";
 
 // 콘텐츠 스테이지 오프셋 — 좌측 아이콘 레일(52) / 상단 헤더(48) 제외해 창이 크롬을 안 덮음.
@@ -70,6 +71,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const wins = Object.values(windows);
 
   return (
+    <>
     <div
       className="pointer-events-none fixed z-40"
       style={{ left: RAIL, top: HEADER, right: 0, bottom: 0 }}
@@ -114,5 +116,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         </>
       )}
     </div>
+    <WorkspaceOnboarding />
+    </>
   );
 }
