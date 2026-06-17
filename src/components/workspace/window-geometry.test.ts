@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clampRect,
   cascadeNext,
+  rectAtPoint,
   snapTarget,
   snapZoneForPoint,
   resizeRect,
@@ -35,6 +36,23 @@ describe("clampRect", () => {
     const r = clampRect({ x: 0, y: 0, w: 100, h: 100 }, B);
     expect(r.w).toBe(MIN_W);
     expect(r.h).toBe(MIN_H);
+  });
+});
+
+describe("rectAtPoint", () => {
+  it("여유 있으면 커서 좌상 약간 위에서 연다", () => {
+    const r = rectAtPoint(500, 200, B, { w: 360, h: 280 });
+    expect(r.x).toBe(500 - 20);
+    expect(r.y).toBe(200 - 14);
+  });
+  it("가장자리에선 안으로 clamp", () => {
+    const r = rectAtPoint(1190, 790, B, { w: 480, h: 560 });
+    expect(r.x + r.w).toBeLessThanOrEqual(B.width);
+    expect(r.y + r.h).toBeLessThanOrEqual(B.height);
+  });
+  it("음수 커서(원점 밖)도 0으로 보정", () => {
+    const r = rectAtPoint(-100, -100, B);
+    expect(r).toMatchObject({ x: 0, y: 0 });
   });
 });
 

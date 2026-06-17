@@ -49,9 +49,11 @@ export function WindowLink({
     const resolved = windowIdForHref(href);
     if (!resolved) return; // 메뉴 라우트가 아니면 기본 이동
     e.preventDefault();
+    // 마우스 클릭(detail>0)이면 커서 위치에서 팝업, 키보드 활성(detail=0, clientX/Y 0)이면 cascade.
+    const anchor = e.detail > 0 ? { x: e.clientX, y: e.clientY } : undefined;
     useWindowStore
       .getState()
-      .open("route", { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href });
+      .open("route", { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href }, anchor);
   }
   return (
     <Link href={href} className={className} aria-label={ariaLabel} onClick={onClick}>

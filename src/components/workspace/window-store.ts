@@ -7,6 +7,7 @@ import {
   cascadeNext,
   clampRect,
   layoutSlots,
+  rectAtPoint,
   resizeRect,
   ROUTE_WINDOW_SIZE,
   snapTarget,
@@ -94,7 +95,8 @@ type Actions = {
   /** RouteWindow가 iframe 제목/뒤로가능 변화를 보고 → 타이틀바 라이브 갱신(동일하면 no-op). */
   setLive: (id: string, v: { title: string; canBack: boolean }) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
-  open: (kind: WindowKind, params: WindowParams) => void;
+  /** anchor(뷰포트 좌표)를 주면 그 커서 위치에서 창이 뜬다(없으면 cascade). 링크 클릭이 전달. */
+  open: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
   /** 라우트를 배경 스택 맨 위(보이는 배경)로 — 이미 있으면 이동, 없으면 추가. 캔버스가 pathname서 동기. */
   setBackground: (params: WindowParams) => void;
   /** 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위로(옛 배경은 스택에 남음). */
@@ -199,11 +201,33 @@ export const useWindowStore = create<State & Actions>()(
           };
         }),
 
-      open: (kind, params) => {
+      open: (kind, params, anchor) => {
         const id = windowId(kind, params.id);
         const s = get();
         if (s.windows[id]) {
-          get().restore(id);
+          // 이미 열린 창: 복원+포커스. 단 컨텍스트 링크가 다른 href(같은 라우트의 다른 탭/서브뷰)면
+          // 그 경로로 이동(href 갱신 → RouteWindow가 iframe src를 바꿔 네비게이트). #56 연장.
+          set((st) => {
+            const w = st.windows[id];
+            if (!w) return st;
+            const nextHref = params.href ?? w.params.href;
+            const hrefChanged = nextHref !== w.params.href;
+            return {
+              windows: {
+                ...st.windows,
+                [id]: {
+                  ...w,
+                  minimized: false,
+                  params: hrefChanged
+                    ? { ...w.params, href: nextHref, title: params.title ?? w.params.title }
+                    : w.params,
+                },
+              },
+              order: bringToFront(st.order, id),
+              focusedId: id,
+              snapAssist: null,
+            };
+          });
           return;
         }
         let order = s.order;
@@ -213,15 +237,16 @@ export const useWindowStore = create<State & Actions>()(
           delete windows[victim];
           order = order.filter((wid) => wid !== victim);
         }
+        const size = kind === "route" ? ROUTE_WINDOW_SIZE[params.id] : undefined;
+        // anchor(클릭 지점) 있으면 커서 위치에서, 없으면 cascade. 스테이지 로컬 = 뷰포트 − origin.
+        const rect = anchor
+          ? rectAtPoint(anchor.x - s.origin.left, anchor.y - s.origin.top, s.bounds, size)
+          : cascadeNext(order.length, s.bounds, size);
         windows[id] = {
           id,
           kind,
           params,
-          rect: cascadeNext(
-            order.length,
-            s.bounds,
-            kind === "route" ? ROUTE_WINDOW_SIZE[params.id] : undefined,
-          ),
+          rect,
           minimized: false,
           maximized: false,
         };

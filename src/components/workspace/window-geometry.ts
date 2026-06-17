@@ -41,6 +41,17 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
 };
 
+/**
+ * 커서(스테이지 로컬 sx,sy) 위치에서 새 창이 뜨도록 배치 — 타이틀바가 커서 바로 아래(약간 좌상)에
+ * 오게 해 "클릭한 자리에서 팝업" 느낌. 화면 밖이면 clampRect로 안으로 보정. 링크 클릭 등 포인터가
+ * 있는 열기에 사용(없으면 cascadeNext). restoreUnderPointer와 같은 "커서 아래" 컨벤션.
+ */
+export function rectAtPoint(sx: number, sy: number, bounds: Bounds, size = DEFAULT_WINDOW): Rect {
+  const w = Math.min(size.w, Math.max(MIN_W, bounds.width - 40));
+  const h = Math.min(size.h, Math.max(MIN_H, bounds.height - 40));
+  return clampRect({ x: sx - 20, y: sy - 14, w, h }, bounds);
+}
+
 /** 새 창 기본 위치 — 인덱스만큼 cascade 오프셋(겹쳐 쌓이지 않게), 화면 넘으면 wrap. */
 export function cascadeNext(count: number, bounds: Bounds, size = DEFAULT_WINDOW): Rect {
   const w = Math.min(size.w, Math.max(MIN_W, bounds.width - 40));
