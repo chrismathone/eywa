@@ -38,6 +38,8 @@ const STATUS_COLOR: Record<string, string> = {
   void: "text-muted-foreground bg-muted border-border",
 };
 
+const STATUS_ORDER = ["unpaid", "partial", "paid", "refunded", "void"] as const;
+
 const KRW = new Intl.NumberFormat("ko-KR");
 function won(n: number) {
   return `${KRW.format(n)}원`;
@@ -110,6 +112,16 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
   const allSelectable = unpaidRows.length;
   const allSelected = allSelectable > 0 && unpaidRows.every((r) => selected.has(r.id));
 
+  // 이 페이지(rows) 기준 합계·상태 분포 — 표 위 칩 바(BILL-3)와 합계행(BILL-2)에 쓴다.
+  const pageBilled = rows.reduce((s, r) => s + r.amountTotal, 0);
+  const pageDiscount = rows.reduce((s, r) => s + r.amountDiscount, 0);
+  const pagePaid = rows.reduce((s, r) => s + r.amountPaid, 0);
+  const pageOutstanding = pageBilled - pagePaid;
+  const statusCounts = rows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1;
+    return acc;
+  }, {});
+
   function toggle(id: string) {
     setSelected((s) => {
       const next = new Set(s);
@@ -168,6 +180,21 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
         </Button>
       </div>
 
+      {/* 상태 분포 칩 — 이 페이지에 무엇이 있는지 한눈에 (표는 상태순 정렬) */}
+      <div className="text-muted-foreground mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="eyebrow mr-1">이 페이지</span>
+        {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => (
+          <span
+            key={s}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-medium ${
+              STATUS_COLOR[s] ?? "bg-muted text-muted-foreground border-border"
+            }`}
+          >
+            {STATUS_LABEL[s]} <span className="num">{statusCounts[s]}</span>
+          </span>
+        ))}
+      </div>
+
       <div className="bg-card border-border overflow-x-auto rounded-lg border">
         <table className="w-full text-sm [&_td]:whitespace-nowrap">
           <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
@@ -186,7 +213,6 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
               <th className="eyebrow px-5 py-3 font-normal">
                 <SortHeader col="name" label="이름" current={current} />
               </th>
-              <th className="eyebrow px-5 py-3 font-normal">항목</th>
               <th className="eyebrow num px-5 py-3 text-right font-normal">
                 <SortHeader col="amount_total" label="청구액" current={current} />
               </th>
@@ -239,8 +265,15 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                     >
                       {r.studentName}
                     </WindowLink>
+                    {description !== "—" ? (
+                      <span
+                        className="text-text-faint block max-w-[220px] truncate text-[11px]"
+                        title={description}
+                      >
+                        {description}
+                      </span>
+                    ) : null}
                   </td>
-                  <td className="text-muted-foreground px-5 py-3 text-xs">{description}</td>
                   <td className="text-foreground num px-5 py-3 text-right">{won(r.amountTotal)}</td>
                   <td className="num px-5 py-3 text-right text-xs">
                     {r.amountDiscount > 0 ? (
@@ -301,6 +334,25 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-border bg-bg-soft border-t font-semibold">
+              <td className="text-muted-foreground px-5 py-3 text-xs" colSpan={3}>
+                이 페이지 합계 · <span className="num">{rows.length}</span>건
+              </td>
+              <td className="text-foreground num px-5 py-3 text-right">{won(pageBilled)}</td>
+              <td className="num px-5 py-3 text-right text-xs">
+                {pageDiscount > 0 ? (
+                  <span className="text-amber">-{won(pageDiscount)}</span>
+                ) : (
+                  <span className="text-text-faint">—</span>
+                )}
+              </td>
+              <td className="text-foreground num px-5 py-3 text-right">{won(pagePaid)}</td>
+              <td className="px-5 py-3 text-xs" colSpan={4}>
+                미수 <span className="text-danger num">{won(pageOutstanding)}</span>
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
