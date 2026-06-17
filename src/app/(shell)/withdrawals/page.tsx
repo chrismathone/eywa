@@ -11,8 +11,11 @@ import {
   REASON_LABEL,
   type WithdrawalReason,
 } from "@/features/withdrawals/server/queries";
+import { Pagination } from "@/components/pagination";
 
 export const metadata = { title: "퇴원관리 — eywa" };
+
+const PAGE_SIZE = 50;
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;
@@ -43,13 +46,14 @@ function buildWdHref(p: { range: RangeKey; reason: ReasonKey; q: string }): stri
 export default async function WithdrawalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: RangeKey; reason?: ReasonKey; q?: string }>;
+  searchParams: Promise<{ range?: RangeKey; reason?: ReasonKey; q?: string; page?: string }>;
 }) {
   await requireAccess("withdrawals");
   const sp = await searchParams;
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const reason: ReasonKey = (sp.reason as ReasonKey) ?? "all";
   const q = sp.q ?? "";
+  const page = Math.max(1, Number(sp.page) || 1);
 
   const all = await getWithdrawnStudents();
   let rows = all;
@@ -99,6 +103,20 @@ export default async function WithdrawalsPage({
   ];
 
   const current = { range, reason, q };
+
+  // 사유 분석·통계는 전체 필터 결과(rows) 기준 — 목록만 50행으로 슬라이스(billing 메모리 페이지네이션).
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (range !== "all") params.set("range", range);
+    if (reason !== "all") params.set("reason", reason);
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/withdrawals?${s}` : "/withdrawals";
+  };
 
   return (
     <div className="space-y-4">
@@ -171,12 +189,17 @@ export default async function WithdrawalsPage({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
           {/* 최근 퇴원 리스트 */}
           <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
-            <header className="border-line border-b px-5 py-4">
-              <p className="micro">최근 퇴원</p>
-              <h2 className="text-foreground mt-1 text-[15px] font-bold">학생 명단</h2>
+            <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
+              <div>
+                <p className="micro">최근 퇴원</p>
+                <h2 className="text-foreground mt-1 text-[15px] font-bold">학생 명단</h2>
+              </div>
+              <p className="text-text-faint num text-[11px]">
+                {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
+              </p>
             </header>
             <ul className="divide-line divide-y">
-              {rows.map((r) => {
+              {pageRows.map((r) => {
                 const ago = daysSince(r.withdrawnAt);
                 return (
                   <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
@@ -207,6 +230,11 @@ export default async function WithdrawalsPage({
                 );
               })}
             </ul>
+            {totalPages > 1 ? (
+              <div className="border-line border-t px-5 py-3">
+                <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+              </div>
+            ) : null}
           </section>
 
           {/* 사유 분석 */}
