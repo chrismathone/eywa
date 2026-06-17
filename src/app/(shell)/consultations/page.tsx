@@ -296,7 +296,7 @@ export default async function ConsultationsPage({
                   </div>
                 </header>
 
-                <p className="text-foreground mt-3 text-[13px] leading-relaxed">{c.summary}</p>
+                <p className="text-foreground mt-3 line-clamp-2 text-[13px] leading-relaxed">{c.summary}</p>
 
                 {c.followUpAction || c.followUpDate ? (
                   <div className="border-line mt-3 flex items-center justify-between gap-2 border-t pt-3">

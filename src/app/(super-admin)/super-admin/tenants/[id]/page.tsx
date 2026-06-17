@@ -5,11 +5,14 @@ import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Initial } from "@/components/atoms/initial";
 import { getTenantDetail, getTenantLicenses } from "@/features/super-admin/server/queries";
+import { Pagination } from "@/components/pagination";
 import { UpdateTenantForm } from "./_update-form";
 import { LicenseSection } from "./_license-section";
 import { UserActions } from "./_user-actions";
 
 export const metadata = { title: "Super Admin · 학원 상세 — eywa" };
+
+const USERS_PAGE_SIZE = 50;
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR");
@@ -40,8 +43,15 @@ const STATUS_LABEL: Record<string, string> = {
   pending: "대기",
 };
 
-export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TenantDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ upage?: string }>;
+}) {
   const { id } = await params;
+  const { upage } = await searchParams;
   const detail = await getTenantDetail(id);
   if (!detail) notFound();
   const licenses = await getTenantLicenses(id);
@@ -50,6 +60,13 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
     acc[u.systemRole] = (acc[u.systemRole] ?? 0) + 1;
     return acc;
   }, {});
+
+  // 사용자(직원)는 보통 소수지만 대형 테넌트 대비 50명씩 페이지네이션(<=50이면 Pagination 자동 숨김).
+  const userPage = Math.max(1, Number(upage) || 1);
+  const userTotalPages = Math.max(1, Math.ceil(detail.users.length / USERS_PAGE_SIZE));
+  const pageUsers = detail.users.slice((userPage - 1) * USERS_PAGE_SIZE, userPage * USERS_PAGE_SIZE);
+  const userPageHref = (p: number) =>
+    p > 1 ? `/super-admin/tenants/${id}?upage=${p}` : `/super-admin/tenants/${id}`;
 
   return (
     <>
@@ -127,7 +144,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
-              {detail.users.map((u) => (
+              {pageUsers.map((u) => (
                 <tr key={u.id}>
                   <td className="text-foreground px-4 py-2.5 font-bold whitespace-nowrap">{u.displayName}</td>
                   <td className="text-text-dim px-4 py-2.5 font-mono text-[11px]">{u.email}</td>
@@ -150,6 +167,11 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
               ))}
             </tbody>
           </table>
+          {userTotalPages > 1 ? (
+            <div className="border-line border-t px-4 py-3">
+              <Pagination page={userPage} totalPages={userTotalPages} hrefForPage={userPageHref} />
+            </div>
+          ) : null}
         </section>
 
         {/* 학원 정보 수정 */}
