@@ -8,6 +8,7 @@ import {
   type ScheduleSlotWithStudents,
 } from "@/features/timetable/server/queries";
 import { ClassCell } from "./_components/class-cell";
+import { IntegratedCell } from "./_components/integrated-cell";
 import { TimetableBoard } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
 
@@ -314,15 +315,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
                     key={`${d.key}-${p}`}
                     className="border-line border-b border-r p-2 align-top"
                   >
-                    {list.length === 0 ? (
-                      <span className="text-text-faint text-[11px]">—</span>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {list.map((s) => (
-                          <ClassCell key={s.id} slot={s} />
-                        ))}
-                      </div>
-                    )}
+                    <IntegratedCell slots={list} />
                   </td>
                 );
               })}
