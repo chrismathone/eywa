@@ -126,6 +126,13 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   쿼리도 안 가벼워짐. 둘 다 컴팩트 이슈 아님.
 - ⚠️ **병렬 세션 함정 재확인**: 다른 세션이 staged한 파일을 `git add 특정경로` 후 `git commit`이 쓸어담음
   (랜딩 day-numbers/roi 삭제가 섞임 → reset --soft로 분리). 이후 **`git commit -m "msg" -- <명시경로>`** 사용.
+- **재검수(멀티에이전트 18 agent) — 1차에서 놓친 11건 발견·수정**: 핵심은 **수백 옵션 native `<select>`**
+  (학생 ~547·반 ~129 — 벽 + 전역 스크롤바 미적용 + 페이로드). 새 **`SearchableSelect`**
+  ([src/components/ui/searchable-select.tsx](src/components/ui/searchable-select.tsx)) — 타이핑 필터 + 렌더 캡(50) +
+  디자인 스크롤바 div 팝업. 폼 모드(`name`→hidden input, 필수성은 서버 액션 검증) / 네비 모드(`value`+`onValueChange`).
+  적용: 수강배정 다이얼로그(학생·반)·상담 폼(학생). **`FilterSelect`에 `searchable` prop** 추가(네비 콤보박스) → 출석부 반 스위처.
+  또 **리텐션 보드**(기본 진입 524명 평면 — 최대 누락 벽)·admin/cleanup 고아목록·상담→학생 전환 반 체크박스도 캡/페이지네이션.
+  **새 대량 옵션 드롭다운은 native `<select>` 금지 → `SearchableSelect`** (수십 옵션 넘으면).
 
 ### 로그인 후 전수 QA + 창 내비게이션·쿼리 견고화 (2026-06-17)
 - **전수 QA + 멀티에이전트 적대검증**: 로그인 후 전 화면을 브라우저로 훑어 증상 수집 → Workflow 서브에이전트가 코드를
