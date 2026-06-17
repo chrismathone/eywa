@@ -20,7 +20,8 @@ import {
 } from "@/features/meetings/server/queries";
 import { RunMeetingAiButton } from "./run-ai-button";
 import { MeetingStatusWatcher } from "./status-watcher";
-import { TranscriptList } from "./transcript-list";
+import { TranscriptSection } from "./transcript-section";
+import { MeetingReportAccordion } from "./ai-report";
 
 export const metadata = { title: "회의록 상세 — eywa" };
 
@@ -179,72 +180,49 @@ export default async function MeetingDetailPage({
         </article>
       ) : null}
 
-      {/* Transcription (collapsible-like; just show full when available) */}
-      {meeting.transcription && (meeting.speakerLabels?.length ?? 0) > 0 ? (
-        <section className="bg-card border-border rounded-lg border">
-          <header className="border-border flex items-center justify-between border-b px-5 py-3">
-            <h2 className="text-foreground text-sm font-semibold">전사 내용</h2>
-            <span className="text-muted-foreground text-xs">
-              {meeting.speakerLabels?.length}개 발화
-            </span>
-          </header>
-          <TranscriptList
-            utterances={meeting.speakerLabels!}
-            speakerRoles={meeting.aiSpeakerRoles}
-          />
-        </section>
-      ) : meeting.transcription ? (
-        <section className="bg-card border-border rounded-lg border p-5">
-          <h2 className="text-foreground mb-3 text-sm font-semibold">전사 내용</h2>
-          <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
-            {meeting.transcription}
-          </p>
-        </section>
-      ) : null}
-
       {/* 8-section AI report */}
       {meeting.aiReport ? (
         <section className="bg-card border-border space-y-5 rounded-lg border p-5">
-          <header className="flex items-baseline justify-between">
-            <div className="inline-flex items-center gap-2">
-              <Sparkles className="text-chart-4 size-4" />
-              <h2 className="text-foreground text-sm font-semibold">AI 분석</h2>
-              {meeting.aiReport.meetingType ? (
-                <span className="text-muted-foreground text-xs">· {meeting.aiReport.meetingType}</span>
-              ) : null}
+          <header className="space-y-1.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <Sparkles className="text-gold size-4 shrink-0" />
+                <h2 className="text-foreground shrink-0 text-sm font-semibold whitespace-nowrap">
+                  AI 분석
+                </h2>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {!hasAudio && meeting.content ? (
+                  <RunMeetingAiButton meetingId={meeting.id} hasExisting variant="link" />
+                ) : null}
+                {meeting.aiGeneratedAt ? (
+                  <span className="text-muted-foreground num text-[11px] whitespace-nowrap">
+                    {formatCreatedAt(meeting.aiGeneratedAt)}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <div className="inline-flex items-center gap-3">
-              {!hasAudio && meeting.content ? (
-                <RunMeetingAiButton meetingId={meeting.id} hasExisting variant="link" />
-              ) : null}
-              {meeting.aiGeneratedAt ? (
-                <span className="text-muted-foreground num text-[11px]">
-                  {formatCreatedAt(meeting.aiGeneratedAt)}
-                </span>
-              ) : null}
-            </div>
+            {meeting.aiReport.meetingType ? (
+              <p className="text-text-dim text-xs">{meeting.aiReport.meetingType}</p>
+            ) : null}
           </header>
 
-          <ReportField label="요약" body={meeting.aiReport.summary} />
-          <ReportField label="안건별 논의" body={meeting.aiReport.agendaDiscussion} />
-          <ReportField label="결정 사항" body={meeting.aiReport.decisions} />
-          <ReportField label="액션 아이템" body={meeting.aiReport.actionItems} />
-          <ReportField label="참석자별 발언" body={meeting.aiReport.speakerSummary} />
-          <ReportField label="우려 / 위험 요소" body={meeting.aiReport.concerns} />
-          <ReportField label="다음 단계" body={meeting.aiReport.nextSteps} />
+          <MeetingReportAccordion report={meeting.aiReport} />
         </section>
       ) : null}
 
       {/* Legacy text-only AI summary */}
       {!meeting.aiReport && meeting.aiSummary ? (
         <section className="bg-card border-border space-y-5 rounded-lg border p-5">
-          <header className="flex items-baseline justify-between">
-            <div className="inline-flex items-center gap-2">
-              <Sparkles className="text-chart-4 size-4" />
-              <h2 className="text-foreground text-sm font-semibold">AI 분석</h2>
+          <header className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Sparkles className="text-gold size-4 shrink-0" />
+              <h2 className="text-foreground shrink-0 text-sm font-semibold whitespace-nowrap">
+                AI 분석
+              </h2>
             </div>
             {meeting.aiGeneratedAt ? (
-              <span className="text-muted-foreground num text-[11px]">
+              <span className="text-muted-foreground num text-[11px] whitespace-nowrap">
                 {formatCreatedAt(meeting.aiGeneratedAt)}
               </span>
             ) : null}
@@ -286,16 +264,15 @@ export default async function MeetingDetailPage({
           ) : null}
         </section>
       ) : null}
-    </div>
-  );
-}
 
-function ReportField({ label, body }: { label: string; body: string }) {
-  if (!body || !body.trim()) return null;
-  return (
-    <div className="space-y-1.5">
-      <p className="eyebrow">{label}</p>
-      <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+      {/* 전사(원본 음성인식) — 최하단 보조자료, 기본 접힘. 화자별로 끊어 렌더(ijw 패리티). */}
+      {meeting.transcription ? (
+        <TranscriptSection
+          utterances={meeting.speakerLabels}
+          speakerRoles={meeting.aiSpeakerRoles}
+          plainText={meeting.transcription}
+        />
+      ) : null}
     </div>
   );
 }

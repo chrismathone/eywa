@@ -47,7 +47,7 @@ export function Pill({ color = "neutral", soft = true, children, className }: Pr
   const cls = soft ? SOFT_CLASS[color] : SOLID_CLASS[color];
   return (
     <span
-      className={`micro inline-flex items-center justify-center rounded-pill px-2 py-[3px] ${cls} ${className ?? ""}`}
+      className={`micro inline-flex items-center justify-center whitespace-nowrap rounded-pill px-2 py-[3px] ${cls} ${className ?? ""}`}
     >
       {children}
     </span>
