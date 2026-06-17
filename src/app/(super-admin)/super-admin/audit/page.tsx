@@ -1,9 +1,12 @@
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { FilterSelect } from "@/components/filter-select";
-import { getAuditLogs } from "@/features/super-admin/server/audit";
+import { Pagination } from "@/components/pagination";
+import { getAuditLogsPage } from "@/features/super-admin/server/audit";
 
 export const metadata = { title: "Super Admin · 감사 로그 — eywa" };
+
+const PAGE_SIZE = 50;
 
 const ACTION_META: Record<string, { label: string; color: PillColor }> = {
   create_tenant: { label: "학원 발급", color: "primary" },
@@ -40,10 +43,19 @@ function fmtTime(iso: string): string {
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ action?: string }>;
+  searchParams: Promise<{ action?: string; page?: string }>;
 }) {
-  const { action } = await searchParams;
-  const logs = await getAuditLogs({ action, limit: 200 });
+  const { action, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const { rows: logs, total } = await getAuditLogsPage({ action }, page, PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageHref = (p: number) => {
+    const sp = new URLSearchParams();
+    if (action && action !== "all") sp.set("action", action);
+    if (p > 1) sp.set("page", String(p));
+    const s = sp.toString();
+    return s ? `/super-admin/audit?${s}` : "/super-admin/audit";
+  };
 
   return (
     <>
@@ -53,7 +65,7 @@ export default async function AuditPage({
           <span className="text-text-dim text-xs">액션</span>
           <FilterSelect paramName="action" value={action ?? null} options={ACTION_FILTERS} ariaLabel="액션 필터" />
           <span className="text-text-faint ml-auto font-mono text-[11px]">
-            최근 {logs.length}건
+            {total}건{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
           </span>
         </div>
 
@@ -100,6 +112,8 @@ export default async function AuditPage({
             </tbody>
           </table>
         </section>
+
+        <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
       </div>
     </>
   );

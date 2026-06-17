@@ -73,3 +73,34 @@ export async function getAuditLogs(filter?: {
     createdAt: r.created_at,
   }));
 }
+
+/**
+ * 감사 로그 서버 페이지네이션 — limit:200 하드캡 평면 렌더(초과분 무경고 소실)를 해소.
+ * action 필터는 SQL eq, 전체는 .range + count:exact로 50행씩.
+ */
+export async function getAuditLogsPage(
+  filter: { action?: string },
+  page = 1,
+  pageSize = 50,
+): Promise<{ rows: AuditLogRow[]; total: number }> {
+  const admin = createAdminClient();
+  const from = (page - 1) * pageSize;
+  let q = admin
+    .from("super_admin_audit_logs")
+    .select("id, actor_email, action, target_label, metadata, created_at", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+  if (filter.action && filter.action !== "all") {
+    q = q.eq("action", filter.action);
+  }
+  const { data, count } = await q;
+  const rows = (data ?? []).map((r) => ({
+    id: r.id,
+    actorEmail: r.actor_email,
+    action: r.action,
+    targetLabel: r.target_label,
+    metadata: r.metadata as Record<string, unknown> | null,
+    createdAt: r.created_at,
+  }));
+  return { rows, total: count ?? rows.length };
+}

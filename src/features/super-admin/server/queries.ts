@@ -74,6 +74,92 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
   }));
 });
 
+export type TenantPlanStats = { total: number; free: number; paid: number; thisMonthNew: number };
+
+/**
+ * 학원 목록 Stat 카드용 경량 집계 — 테넌트 plan·created_at만(무거운 user/student/invoice 조인 없이).
+ * 테넌트 모집단은 작지만 1000행 한도 대비 fetchAllPaged.
+ */
+export async function getTenantPlanStats(): Promise<TenantPlanStats> {
+  const admin = createAdminClient();
+  const rows = await fetchAllPaged<{ plan: string; created_at: string }>((from, to) =>
+    admin.from("tenants").select("plan, created_at").range(from, to),
+  );
+  const now = new Date();
+  let free = 0;
+  let thisMonthNew = 0;
+  for (const t of rows) {
+    if (t.plan === "free") free += 1;
+    const d = new Date(t.created_at);
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) thisMonthNew += 1;
+  }
+  return { total: rows.length, free, paid: rows.length - free, thisMonthNew };
+}
+
+/**
+ * 학원 목록 서버 페이지네이션 — q(name·slug ilike)·plan(eq)을 SQL로, .range + count:exact로 50행씩.
+ * 카운트(사용자·학생·청구)는 그 페이지 테넌트 id로만 .in() 스코프 + fetchAllPaged(전건 aggregate·1000행 절단 회피).
+ */
+export async function getTenantsPage(
+  filter: { q?: string; plan?: string },
+  page = 1,
+  pageSize = 50,
+): Promise<{ rows: TenantRow[]; total: number }> {
+  const admin = createAdminClient();
+  const period = currentPeriod();
+  const from = (page - 1) * pageSize;
+
+  let tq = admin
+    .from("tenants")
+    .select("id, slug, name, plan, created_at", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+  if (filter.plan && filter.plan !== "all") tq = tq.eq("plan", filter.plan);
+  const term = filter.q?.trim();
+  if (term) tq = tq.or(`name.ilike.%${term}%,slug.ilike.%${term}%`);
+
+  const { data, count } = await tq;
+  const tenants = data ?? [];
+  const ids = tenants.map((t) => t.id);
+
+  const [users, students, invoices] =
+    ids.length === 0
+      ? [[], [], []]
+      : await Promise.all([
+          fetchAllPaged<{ tenant_id: string }>((f, t) =>
+            admin.from("users").select("tenant_id").in("tenant_id", ids).range(f, t),
+          ),
+          fetchAllPaged<{ tenant_id: string }>((f, t) =>
+            admin.from("students").select("tenant_id").neq("status", "withdrawn").in("tenant_id", ids).range(f, t),
+          ),
+          fetchAllPaged<{ tenant_id: string; amount_total: number | string | null }>((f, t) =>
+            admin.from("invoices").select("tenant_id, amount_total").eq("period", period).in("tenant_id", ids).range(f, t),
+          ),
+        ]);
+
+  const userCountByTenant = new Map<string, number>();
+  users.forEach((u) => userCountByTenant.set(u.tenant_id, (userCountByTenant.get(u.tenant_id) ?? 0) + 1));
+  const studentCountByTenant = new Map<string, number>();
+  students.forEach((s) => studentCountByTenant.set(s.tenant_id, (studentCountByTenant.get(s.tenant_id) ?? 0) + 1));
+  const billingByTenant = new Map<string, number>();
+  invoices.forEach((i) =>
+    billingByTenant.set(i.tenant_id, (billingByTenant.get(i.tenant_id) ?? 0) + Number(i.amount_total ?? 0)),
+  );
+
+  const rows = tenants.map((t) => ({
+    id: t.id,
+    slug: t.slug,
+    name: t.name,
+    plan: t.plan,
+    createdAt: t.created_at,
+    userCount: userCountByTenant.get(t.id) ?? 0,
+    studentCount: studentCountByTenant.get(t.id) ?? 0,
+    monthBilling: billingByTenant.get(t.id) ?? 0,
+  }));
+
+  return { rows, total: count ?? rows.length };
+}
+
 export type TenantDetail = {
   id: string;
   slug: string;

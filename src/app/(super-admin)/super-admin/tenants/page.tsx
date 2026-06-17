@@ -2,31 +2,38 @@ import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill } from "@/components/atoms/pill";
-import { getAllTenants } from "@/features/super-admin/server/queries";
+import { Pagination } from "@/components/pagination";
+import { getTenantsPage, getTenantPlanStats } from "@/features/super-admin/server/queries";
 
 export const metadata = { title: "Super Admin · 학원 목록 — eywa" };
 
+const PAGE_SIZE = 50;
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR");
 
 export default async function TenantsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; plan?: string }>;
+  searchParams: Promise<{ q?: string; plan?: string; page?: string }>;
 }) {
   const params = await searchParams;
-  const q = (params.q ?? "").trim().toLowerCase();
+  const q = (params.q ?? "").trim();
   const planFilter = params.plan ?? "all";
+  const page = Math.max(1, Number(params.page) || 1);
 
-  const all = await getAllTenants();
-  const filtered = all.filter((t) => {
-    if (planFilter !== "all" && t.plan !== planFilter) return false;
-    if (q && !t.name.toLowerCase().includes(q) && !t.slug.toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  const freeCount = all.filter((t) => t.plan === "free").length;
-  const paidCount = all.length - freeCount;
+  const [{ rows: filtered, total }, stats] = await Promise.all([
+    getTenantsPage({ q, plan: planFilter }, page, PAGE_SIZE),
+    getTenantPlanStats(),
+  ]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageHref = (p: number) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (planFilter !== "all") sp.set("plan", planFilter);
+    if (p > 1) sp.set("page", String(p));
+    const s = sp.toString();
+    return s ? `/super-admin/tenants?${s}` : "/super-admin/tenants";
+  };
 
   return (
     <>
@@ -45,10 +52,10 @@ export default async function TenantsListPage({
       <div className="space-y-4 px-7 py-6">
         {/* Stat strip */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="전체" value={fmt(all.length)} />
-          <Stat label="Free" value={fmt(freeCount)} />
-          <Stat label="유료" value={fmt(paidCount)} />
-          <Stat label="이번 달 신규" value={fmt(thisMonthNew(all))} />
+          <Stat label="전체" value={fmt(stats.total)} />
+          <Stat label="Free" value={fmt(stats.free)} />
+          <Stat label="유료" value={fmt(stats.paid)} />
+          <Stat label="이번 달 신규" value={fmt(stats.thisMonthNew)} />
         </div>
 
         {/* Filter bar */}
@@ -131,6 +138,8 @@ export default async function TenantsListPage({
             </tbody>
           </table>
         </section>
+
+        <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
       </div>
     </>
   );
@@ -170,14 +179,4 @@ function PlanChip({
       {label}
     </Link>
   );
-}
-
-function thisMonthNew(tenants: { createdAt: string }[]) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  return tenants.filter((t) => {
-    const d = new Date(t.createdAt);
-    return d.getFullYear() === year && d.getMonth() === month;
-  }).length;
 }
