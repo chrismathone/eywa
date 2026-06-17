@@ -42,18 +42,11 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           변경하세요.
         </p>
         {report.studentsWithoutEnrollments.length > 0 ? (
-          <ul className="mt-3 space-y-1">
-            {report.studentsWithoutEnrollments.map((s) => (
-              <li key={s.id}>
-                <Link
-                  href={`/students/${s.id}`}
-                  className="text-chart-1 hover:underline text-xs"
-                >
-                  {s.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <OrphanList
+            items={report.studentsWithoutEnrollments}
+            href={(s) => `/students/${s.id}`}
+            label={(s) => s.name}
+          />
         ) : (
           <p className="text-chart-2 mt-2 inline-flex items-center gap-1 text-xs">
             <CheckCircle2 className="size-3" />
@@ -74,18 +67,11 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           운영 중인 반인데 주간 스케줄이 없습니다. 시간표에 표시되지 않습니다.
         </p>
         {report.classesWithoutSchedules.length > 0 ? (
-          <ul className="mt-3 space-y-1">
-            {report.classesWithoutSchedules.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/classes/${c.id}/edit`}
-                  className="text-chart-1 hover:underline text-xs"
-                >
-                  {c.className}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <OrphanList
+            items={report.classesWithoutSchedules}
+            href={(c) => `/classes/${c.id}/edit`}
+            label={(c) => c.className}
+          />
         ) : (
           <p className="text-chart-2 mt-2 inline-flex items-center gap-1 text-xs">
             <CheckCircle2 className="size-3" />
@@ -127,5 +113,43 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
         )}
       </section>
     </div>
+  );
+}
+
+const ORPHAN_CAP = 50;
+
+/** 고아 목록 — 50개까지만 렌더하고 나머지는 <details>로 접는다(카운트는 섹션 헤더에 이미 표시). */
+function OrphanList<T extends { id: string }>({
+  items,
+  href,
+  label,
+}: {
+  items: T[];
+  href: (item: T) => string;
+  label: (item: T) => string;
+}) {
+  const shown = items.slice(0, ORPHAN_CAP);
+  const rest = items.slice(ORPHAN_CAP);
+  const Row = (item: T) => (
+    <li key={item.id}>
+      <Link href={href(item)} className="text-chart-1 text-xs hover:underline">
+        {label(item)}
+      </Link>
+    </li>
+  );
+  return (
+    <ul className="mt-3 space-y-1">
+      {shown.map((item) => Row(item))}
+      {rest.length > 0 ? (
+        <li>
+          <details>
+            <summary className="text-muted-foreground hover:text-foreground cursor-pointer list-none text-xs">
+              + {rest.length}개 더보기
+            </summary>
+            <ul className="mt-1 space-y-1">{rest.map((item) => Row(item))}</ul>
+          </details>
+        </li>
+      ) : null}
+    </ul>
   );
 }

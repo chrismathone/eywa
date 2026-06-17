@@ -9,9 +9,12 @@ import {
 } from "@/features/retention/server/queries";
 import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { BoardList } from "@/features/retention/components/board-list";
+import { Pagination } from "@/components/pagination";
 import { formatWonShort } from "@/features/retention/format";
 
 export const metadata = { title: "리텐션 보드 — eywa" };
+
+const PAGE_SIZE = 50;
 
 type LevelKey = "all" | "risk" | "warn" | "ok";
 type SortKey = "risk" | "fee" | "name";
@@ -43,7 +46,13 @@ function buildHref(p: SearchState): string {
 export default async function RetentionBoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ level?: LevelKey; teacher?: string; sort?: SortKey; q?: string }>;
+  searchParams: Promise<{
+    level?: LevelKey;
+    teacher?: string;
+    sort?: SortKey;
+    q?: string;
+    page?: string;
+  }>;
 }) {
   const user = await requireAccess("retention");
   const sp = await searchParams;
@@ -53,6 +62,7 @@ export default async function RetentionBoardPage({
     sort: sp.sort ?? "risk",
     q: sp.q ?? "",
   };
+  const page = Math.max(1, Number(sp.page) || 1);
 
   const roster = await getRetentionRoster(
     user.systemRole === "teacher" ? { teacherId: user.id } : undefined,
@@ -71,6 +81,21 @@ export default async function RetentionBoardPage({
   }
   if (state.sort === "fee") rows = [...rows].sort((a, b) => b.monthlyFee - a.monthlyFee);
   else if (state.sort === "name") rows = [...rows].sort((a, b) => a.name.localeCompare(b.name, "ko"));
+
+  // 통계·필터는 전체(rows) 기준, 목록만 50행으로 슬라이스(billing 메모리 페이지네이션 패턴).
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (state.level !== "all") params.set("level", state.level);
+    if (state.teacher) params.set("teacher", state.teacher);
+    if (state.sort !== "risk") params.set("sort", state.sort);
+    if (state.q) params.set("q", state.q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/retention/board?${s}` : "/retention/board";
+  };
 
   return (
     <div className="space-y-4">
@@ -143,13 +168,16 @@ export default async function RetentionBoardPage({
               ariaLabel="정렬"
             />
           </div>
-          <span className="text-text-dim num ml-auto text-[11px]">{rows.length}명</span>
+          <span className="text-text-dim num ml-auto text-[11px]">
+            {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
+          </span>
         </div>
       </div>
 
       <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
-        <BoardList rows={rows} />
+        <BoardList rows={pageRows} />
       </section>
+      <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
     </div>
   );
 }

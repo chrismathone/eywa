@@ -66,6 +66,17 @@ export function ConvertToStudentDialog({
     undefined,
   );
   const [selected, setSelected] = useState<Set<string>>(new Set(recommendedIds));
+  const [classFilter, setClassFilter] = useState("");
+
+  const ql = classFilter.trim().toLowerCase();
+  const filteredClasses = ql
+    ? classes.filter(
+        (c) =>
+          c.className.toLowerCase().includes(ql) ||
+          (c.teacherName ?? "").toLowerCase().includes(ql) ||
+          (SUBJECT_LABEL[c.subject] ?? c.subject).toLowerCase().includes(ql),
+      )
+    : classes;
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -159,12 +170,23 @@ export function ConvertToStudentDialog({
                 <label className="text-foreground block text-sm font-medium">
                   배정할 반 (다중 선택)
                 </label>
+                {classes.length > 12 ? (
+                  <input
+                    type="search"
+                    value={classFilter}
+                    onChange={(e) => setClassFilter(e.target.value)}
+                    placeholder="반 이름·강사·과목 검색..."
+                    className="border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-xs focus:outline-none"
+                  />
+                ) : null}
                 <div className="border-border bg-bg-soft/30 max-h-48 overflow-auto rounded-md border p-2">
                   {classes.length === 0 ? (
                     <p className="text-muted-foreground text-xs">활성 반이 없습니다</p>
+                  ) : filteredClasses.length === 0 ? (
+                    <p className="text-muted-foreground text-xs">검색 결과 없음</p>
                   ) : (
                     <ul className="space-y-1">
-                      {classes.map((c) => {
+                      {filteredClasses.map((c) => {
                         const isSelected = selected.has(c.id);
                         const isRecommended = recommendedIds.includes(c.id);
                         return (
