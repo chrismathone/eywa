@@ -1,7 +1,9 @@
 import { FLOW_NODES } from "@/data/marketing";
 import { CountUp } from "../_motion/count-up";
 import { Reveal } from "../_motion/reveal";
+import { EditorialPhoto } from "../_ui/photo";
 import { SectionShell } from "../_ui/section-shell";
+import attendanceImg from "../_img/attendance-checkin.webp";
 
 const ENDPOINT_X = [100, 300, 500, 700];
 const STROKE: Record<string, string> = {
@@ -25,9 +27,9 @@ const CARD_BAR: Record<string, string> = {
 
 export function SignatureSection() {
   return (
-    <SectionShell id="signature" tone="soft" bordered pad="lg">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-[42rem]">
+    <SectionShell id="signature" pad="lg">
+      <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+        <div>
           <Reveal variant="up">
             <p className="text-primary font-mono text-[11px] font-bold tracking-[0.16em] uppercase">자동 연동</p>
           </Reveal>
@@ -38,12 +40,21 @@ export function SignatureSection() {
               <span className="text-primary">네 곳이 자동으로.</span>
             </h2>
           </Reveal>
+          <Reveal variant="up" delay={120}>
+            <p className="text-text-dim mt-6 max-w-[32rem] text-[16px] leading-[1.75]">
+              학생이 등원해 체크되는 순간 — 학부모 알림, 강사 출석부, 원장 대시보드, 수강료 차감이{" "}
+              <span className="text-foreground font-semibold">0.4초</span> 만에 동시에. 원장님이 따로 입력할 일이 없습니다.
+            </p>
+          </Reveal>
         </div>
-        <Reveal variant="up" delay={120}>
-          <p className="text-text-dim max-w-[24rem] text-[16px] leading-[1.75]">
-            학생이 등원해 체크되는 순간 — 학부모 알림, 강사 출석부, 원장 대시보드, 수강료 차감이{" "}
-            <span className="text-foreground font-semibold">0.4초</span> 만에 동시에. 원장님이 따로 입력할 일이 없습니다.
-          </p>
+        <Reveal variant="up" delay={140}>
+          <EditorialPhoto
+            src={attendanceImg}
+            alt="학원 리셉션 데스크에서 태블릿으로 출석을 체크하는 학생의 손"
+            aspect="aspect-[4/3]"
+            caption="등원 체크 · 16:02"
+            sizes="(min-width: 1024px) 460px, 90vw"
+          />
         </Reveal>
       </div>
 

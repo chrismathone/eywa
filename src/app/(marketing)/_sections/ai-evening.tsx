@@ -1,6 +1,8 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Reveal } from "../_motion/reveal";
+import { EditorialPhoto } from "../_ui/photo";
 import { SectionShell } from "../_ui/section-shell";
+import aiEveningImg from "../_img/ai-evening.webp";
 
 const SUMMARY = [
   "재원 학부모 3건 상담 — 진도 문의·결제일 조정",
@@ -12,6 +14,8 @@ export function AiEveningSection() {
   return (
     <SectionShell
       id="ai"
+      tone="soft"
+      bordered
       pad="lg"
       containerClassName="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16"
     >
@@ -42,37 +46,45 @@ export function AiEveningSection() {
         </Reveal>
       </div>
 
-      {/* 우 — AI 분석 카드 글림프 */}
+      {/* 우 — 저녁 책상 사진 위로 AI 카드가 떠 있는 글림프 */}
       <Reveal variant="up" delay={160}>
-        <div className="bg-card border-line relative overflow-hidden rounded-2xl border p-6 shadow-[0_24px_60px_-28px_rgba(13,17,16,0.2)]">
-          <div
-            className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full"
-            style={{ background: "radial-gradient(circle, rgba(184,137,58,0.10), transparent 70%)" }}
-            aria-hidden="true"
+        <div className="relative">
+          <EditorialPhoto
+            src={aiEveningImg}
+            alt="저녁 시간 학원 사무실 책상 위의 노트북·메모·녹음기"
+            aspect="aspect-[3/2]"
+            sizes="(min-width: 1024px) 480px, 90vw"
           />
-          <div className="relative flex items-center justify-between">
-            <p className="text-gold flex items-center gap-2 font-mono text-[11px] font-bold tracking-[0.1em] uppercase">
-              <EyIcon name="sparkle" size={14} className="ey-sparkle" />
-              AI 회의록 요약
-            </p>
-            <span className="text-text-faint font-mono text-[11px]">분석 06.16 19:41</span>
-          </div>
+          <div className="bg-card border-line relative z-10 mx-auto -mt-16 w-[92%] overflow-hidden rounded-2xl border p-6 shadow-[0_28px_64px_-26px_rgba(13,17,16,0.4)] sm:-mt-20">
+            <div
+              className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(184,137,58,0.10), transparent 70%)" }}
+              aria-hidden="true"
+            />
+            <div className="relative flex items-center justify-between">
+              <p className="text-gold flex items-center gap-2 font-mono text-[11px] font-bold tracking-[0.1em] uppercase">
+                <EyIcon name="sparkle" size={14} className="ey-sparkle" />
+                AI 회의록 요약
+              </p>
+              <span className="text-text-faint font-mono text-[11px]">분석 06.16 19:41</span>
+            </div>
 
-          <ul className="relative mt-5 space-y-3">
-            {SUMMARY.map((line, i) => (
-              <Reveal key={line} variant="up" delay={260 + i * 90} className="flex gap-2.5">
-                <span className="bg-primary mt-2 size-1.5 shrink-0 rounded-full" aria-hidden="true" />
-                <p className="text-foreground text-[14px] leading-relaxed">{line}</p>
-              </Reveal>
-            ))}
-          </ul>
+            <ul className="relative mt-5 space-y-3">
+              {SUMMARY.map((line, i) => (
+                <Reveal key={line} variant="up" delay={260 + i * 90} className="flex gap-2.5">
+                  <span className="bg-primary mt-2 size-1.5 shrink-0 rounded-full" aria-hidden="true" />
+                  <p className="text-foreground text-[14px] leading-relaxed">{line}</p>
+                </Reveal>
+              ))}
+            </ul>
 
-          <div className="border-line relative mt-6 flex items-center justify-between border-t pt-4">
-            <span className="text-text-faint text-[12px]">마지막 분석 · 06.16 19:41</span>
-            <span className="border-line text-text-dim inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold">
-              <EyIcon name="rings" size={13} />
-              갱신
-            </span>
+            <div className="border-line relative mt-6 flex items-center justify-between border-t pt-4">
+              <span className="text-text-faint text-[12px]">마지막 분석 · 06.16 19:41</span>
+              <span className="border-line text-text-dim inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold">
+                <EyIcon name="rings" size={13} />
+                갱신
+              </span>
+            </div>
           </div>
         </div>
       </Reveal>

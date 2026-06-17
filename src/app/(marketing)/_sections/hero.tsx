@@ -8,6 +8,7 @@ export function HeroSection() {
   return (
     <SectionShell
       id="hero"
+      tone="soft"
       pad="hero"
       containerClassName="grid items-center gap-14 lg:grid-cols-[0.94fr_1.06fr] lg:gap-16"
     >

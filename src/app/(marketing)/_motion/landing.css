@@ -320,6 +320,24 @@
   animation: ey-ws-cursor 15s ease-in-out infinite;
 }
 
+/* 기능 탭 전환 — mathlab식 Y축 3D 플립(페이지 넘김). 탭 클릭 시 패널이 제자리에서 넘어감.
+ * key 변경으로 remount → 재생. 모션 게이트는 JS(view.anim)에서 클래스 토글로 처리, 여기선 reduce 폴백만. */
+.ey-flip-in {
+  transform-origin: center;
+  backface-visibility: hidden;
+  animation: ey-flip-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ey-flip-in {
+  from {
+    transform: perspective(1400px) rotateY(-90deg);
+    opacity: 0;
+  }
+  to {
+    transform: perspective(1400px) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
 /* 접근성 — 모션 최소화 시 모든 랜딩 모션 정지/완성 */
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] {
@@ -341,6 +359,7 @@
     opacity: 1 !important;
     transform: none !important;
   }
+  .ey-flip-in,
   .ey-cursor,
   .ey-breathe,
   .ey-fall,
