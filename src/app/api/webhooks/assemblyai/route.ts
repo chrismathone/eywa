@@ -81,21 +81,30 @@ export async function POST(req: Request) {
   // Dispatch: meeting first, then consultation. Each row carries the same transcript id.
   const { data: meeting } = await admin
     .from("meeting_minutes")
-    .select("id, tenant_id, title, attendees, held_at")
+    .select("id, tenant_id, title, attendees, held_at, processing_status")
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
 
   if (meeting) {
+    // 멱등성 — 이미 완료된 건의 재전송이면 재분석(유료 AI) 중복을 막고 skip(#S3 replay).
+    if (meeting.processing_status === "completed") {
+      return NextResponse.json({ ok: true, skipped: "already completed" });
+    }
     return handleMeeting(admin, transcriptId, meeting);
   }
 
   const { data: consult } = await admin
     .from("enrollment_consultations")
-    .select("id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone")
+    .select(
+      "id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, processing_status",
+    )
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
 
   if (consult) {
+    if (consult.processing_status === "completed") {
+      return NextResponse.json({ ok: true, skipped: "already completed" });
+    }
     return handleConsultation(admin, transcriptId, consult);
   }
 
