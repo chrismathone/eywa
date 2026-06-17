@@ -6,12 +6,15 @@ export type TextbookOrderRow = {
   id: string;
   bookName: string;
   bookDetail: string | null;
+  studentId: string | null;
   studentName: string | null;
   teacherName: string | null;
   price: number;
   status: string; // requested/ordered/delivered/billed/paid
   requestDate: string | null;
 };
+
+export type StudentOption = { id: string; name: string; grade: string | null };
 
 export type TextbookStats = {
   total: number;
@@ -35,9 +38,10 @@ export async function getTextbookOrdersPage(
   const from = (page - 1) * pageSize;
   let qb = supabase
     .from("textbook_orders")
-    .select("id, book_name, book_detail, student_name, teacher_name, price, status, request_date", {
-      count: "exact",
-    });
+    .select(
+      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date",
+      { count: "exact" },
+    );
   if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
   const term = opts.q ? sanitize(opts.q) : "";
   if (term) qb = qb.or(`book_name.ilike.%${term}%,student_name.ilike.%${term}%`);
@@ -47,6 +51,7 @@ export async function getTextbookOrdersPage(
     id: r.id,
     bookName: r.book_name,
     bookDetail: r.book_detail,
+    studentId: r.student_id,
     studentName: r.student_name,
     teacherName: r.teacher_name,
     price: Number(r.price),
@@ -54,6 +59,18 @@ export async function getTextbookOrdersPage(
     requestDate: r.request_date,
   }));
   return { rows, total: count ?? rows.length };
+}
+
+// 교재 신청 모달의 학생 SearchableSelect 옵션 — 재원·휴원 학생만(퇴원 제외), 이름순.
+export async function getStudentOptions(): Promise<StudentOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("students")
+    .select("id, name, grade")
+    .neq("status", "withdrawn")
+    .order("name", { ascending: true })
+    .limit(2000);
+  return (data ?? []).map((s) => ({ id: s.id, name: s.name, grade: s.grade }));
 }
 
 // 카드용 경량 집계 — ~350행이라 status·price만 전건 fetch 후 메모리 집계(1000행 미만).

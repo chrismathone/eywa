@@ -2,16 +2,27 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
 // 지출관리(expenses) — 수납관리 창의 '지출' 책갈피 면. 월 단위(수납과 동일 톤). RLS가 tenant 강제.
+export type ExpenseLineItem = {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vat: boolean;
+  total: number;
+};
+
 export type ExpenseRow = {
   id: string;
   title: string;
-  category: string; // 인건비/운영비/매입/기타
+  category: string; // 인건비/운영비/매입/마케팅/기타
   amount: number;
   expenseDate: string;
   vendor: string | null;
   department: string | null;
   author: string | null;
   approvalStatus: string;
+  paymentMethod: string | null;
+  memo: string | null;
+  lineItems: ExpenseLineItem[] | null;
 };
 
 export type ExpenseSummary = {
@@ -36,7 +47,9 @@ export async function getExpensesForMonth(period: string): Promise<ExpenseRow[]>
   const { start, end } = monthRange(period);
   const { data } = await supabase
     .from("expenses")
-    .select("id, title, category, amount, expense_date, vendor, department, author, approval_status")
+    .select(
+      "id, title, category, amount, expense_date, vendor, department, author, approval_status, payment_method, memo, line_items",
+    )
     .gte("expense_date", start)
     .lt("expense_date", end)
     .order("expense_date", { ascending: false });
@@ -50,6 +63,9 @@ export async function getExpensesForMonth(period: string): Promise<ExpenseRow[]>
     department: r.department,
     author: r.author,
     approvalStatus: r.approval_status,
+    paymentMethod: r.payment_method,
+    memo: r.memo,
+    lineItems: Array.isArray(r.line_items) ? (r.line_items as ExpenseLineItem[]) : null,
   }));
 }
 
