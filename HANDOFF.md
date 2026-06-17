@@ -52,6 +52,8 @@ pnpm dev                      # http://localhost:3100  (포트 3100 고정)
   feat(workspace): 카드 전체 클릭 → 상세/수정 이동
   cb08003 docs(db): 마이그레이션 README                                ← 이전 세션 베이스
   ```
+- 📌 **직전 다른 세션(랜딩)**: `/`을 제품 중심으로 전면 재설계 — 제품 쇼케이스 Hero·기능 인앱 목업(시간표/출석부/수납)·
+  **워크스페이스 멀티윈도우 자동재생**·카피 탈감성화·목업 이름 마스킹(강OO). 커밋 `afee3ab`·`44031d2`·`95d8d4b`. 상세는 **CLAUDE.md "제품 중심 랜딩"**.
 - ⚠️ **여러 세션이 병렬로 작업하는 repo** — push 전 `git fetch` + `git pull --rebase`, **force push 금지**. CLAUDE.md "Git 협업 규칙".
 
 ---
