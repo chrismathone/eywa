@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccess } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 
 type CareFocus = {
@@ -24,6 +25,13 @@ export async function runStudentCareAnalysis(
   _prev: StudentCareState,
   formData: FormData,
 ): Promise<StudentCareState> {
+  // 역할 게이트 — 유료 AI 호출은 학생 접근권이 있는 역할만(비용통제, #S5 형제).
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!canAccess(user.systemRole, "students")) {
+    return { error: "학생 권한이 없습니다" };
+  }
+
   const studentId = String(formData.get("studentId") ?? "");
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
 

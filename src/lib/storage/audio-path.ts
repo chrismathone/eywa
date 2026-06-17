@@ -9,5 +9,7 @@ export function isTenantAudioPath(path: string, tenantId: string): boolean {
   const prefix = `${tenantId}/`;
   if (!path.startsWith(prefix)) return false;
   const rest = path.slice(prefix.length);
-  return rest.length > 0 && /^[A-Za-z0-9._-]+$/.test(rest);
+  // 영숫자로 시작 + 확장자 필수. 선행 점(.env·..wav 등 dotfile/이상 파일)·슬래시·상위경로 차단.
+  // 실제 업로드는 `{uuid}.{ext}` 꼴이라 이 패턴을 만족한다.
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(rest);
 }

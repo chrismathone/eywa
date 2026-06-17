@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { generateJSON } from "@/lib/ai/generate";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccess } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
@@ -30,6 +31,13 @@ export async function runMeetingAiAnalysis(
   _prev: MeetingAiState,
   formData: FormData,
 ): Promise<MeetingAiState> {
+  // 역할 게이트 — 유료 AI 호출은 회의록 접근권이 있는 역할만(비용통제, #S5 형제). RLS는 데이터만 막는다.
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!canAccess(user.systemRole, "meetings")) {
+    return { error: "회의록 권한이 없습니다" };
+  }
+
   const meetingId = String(formData.get("meetingId") ?? "");
   if (!meetingId) return { error: "회의록 ID가 누락되었습니다" };
 
