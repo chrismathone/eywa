@@ -612,11 +612,21 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     }
   }
 
+  // category 코드 → 한글. 임포트 데이터엔 audience 값("parent")이 섞여 있어, 매핑 안 되는 코드는 접미사 생략.
+  const CONSULT_CATEGORY_LABEL: Record<string, string> = {
+    general: "일반",
+    academic: "학습/성적",
+    emotional: "정서/심리",
+    career: "진로",
+    social: "교우관계",
+    other: "기타",
+  };
   for (const c of consultations ?? []) {
+    const catLabel = c.category ? CONSULT_CATEGORY_LABEL[c.category] : null;
     events.push({
       date: String(c.consulted_at).slice(0, 10),
       kind: "consultation",
-      title: `상담 — ${c.category ?? "일반"}`,
+      title: catLabel ? `상담 — ${catLabel}` : "상담",
       description: c.summary,
     });
   }

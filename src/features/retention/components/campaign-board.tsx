@@ -8,6 +8,7 @@ import { campaignAdd, campaignSetStatus, campaignRemove, type CampaignResult } f
 import type { CampaignBoard as Board, CampaignStatus } from "../server/campaign-queries";
 
 const COLUMN_CAP = 10;
+const CANDIDATE_CAP = 24;
 
 const COLUMNS: { key: CampaignStatus; label: string; color: PillColor }[] = [
   { key: "pending", label: "대상", color: "amber" },
@@ -20,6 +21,7 @@ const COLUMNS: { key: CampaignStatus; label: string; color: PillColor }[] = [
 export function CampaignBoard({ board }: { board: Board }) {
   const [pending, start] = useTransition();
   const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
+  const [showAllCandidates, setShowAllCandidates] = useState(false);
   function run(fn: () => Promise<CampaignResult>, okMsg: string) {
     start(async () => {
       const r = await fn();
@@ -59,7 +61,7 @@ export function CampaignBoard({ board }: { board: Board }) {
             <span className="text-text-faint text-[11px]">{candidates.length}명 — 캠페인에 추가하세요</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {candidates.map((c) => (
+            {(showAllCandidates ? candidates : candidates.slice(0, CANDIDATE_CAP)).map((c) => (
               <div
                 key={c.studentId}
                 className="border-line flex items-center gap-2.5 rounded-lg border px-3 py-2"
@@ -82,6 +84,15 @@ export function CampaignBoard({ board }: { board: Board }) {
                 </button>
               </div>
             ))}
+            {!showAllCandidates && candidates.length > CANDIDATE_CAP ? (
+              <button
+                type="button"
+                onClick={() => setShowAllCandidates(true)}
+                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-lg border border-dashed px-3 py-2 text-[11px] transition"
+              >
+                +{candidates.length - CANDIDATE_CAP}명 더 보기
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

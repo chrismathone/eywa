@@ -70,7 +70,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
             <div className="grid grid-cols-4 gap-4">
               <Stat
                 label="출석률"
-                value={`${attendance.rate.toFixed(1)}%`}
+                value={attendance.total > 0 ? `${attendance.rate.toFixed(1)}%` : "—"}
                 highlight="text-chart-2"
               />
               <Stat label="출석" value={String(attendance.present)} unit="건" />

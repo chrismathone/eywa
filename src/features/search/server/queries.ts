@@ -14,6 +14,18 @@ function sanitize(q: string): string {
   return q.replace(/[%,()*\\]/g, " ").trim();
 }
 
+// 과목 코드 → 한글 라벨. 원시 영문 코드("highmath")가 팰릿에 노출되지 않게.
+const SUBJECT_LABEL: Record<string, string> = {
+  math: "수학",
+  highmath: "수학(심화)",
+  english: "영어",
+  korean: "국어",
+  science: "과학",
+  arts: "예술",
+  other: "기타",
+};
+const subjectLabel = (s: string | null) => (s ? (SUBJECT_LABEL[s] ?? s) : null);
+
 const LIMIT = 8;
 
 async function searchStudents(term: string): Promise<PaletteHit[]> {
@@ -48,7 +60,7 @@ async function searchClasses(term: string): Promise<PaletteHit[]> {
       kind: "class",
       id: r.id,
       title: r.class_name,
-      subtitle: r.subject ?? null,
+      subtitle: subjectLabel(r.subject),
     }),
   );
 }
