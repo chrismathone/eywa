@@ -38,6 +38,19 @@ export const COLOR_ICON_BG: Record<SubjectColor, string> = {
   purple: "bg-purple-soft text-purple",
 };
 
+/** 밀도 막대용 솔리드 컬러 */
+export const COLOR_SOLID: Record<SubjectColor, string> = {
+  primary: "bg-primary",
+  blue: "bg-blue",
+  rose: "bg-rose",
+  amber: "bg-amber",
+  purple: "bg-purple",
+};
+
+export function subjectMeta(subject: string) {
+  return SUBJECT_META[subject] ?? FALLBACK_META;
+}
+
 export function shortTime(t: string) {
   return t.slice(0, 5);
 }
