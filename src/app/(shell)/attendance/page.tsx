@@ -3,6 +3,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getMonthlyAttendanceMatrix,
@@ -11,6 +12,16 @@ import {
 } from "@/features/attendance/server/queries";
 
 export const metadata = { title: "출석부 — eywa" };
+
+type RangeKey = "month" | "2w";
+
+function attHref(p: { classId: string | null; month: string; range: RangeKey }): string {
+  const sp = new URLSearchParams();
+  if (p.classId) sp.set("class", p.classId);
+  sp.set("month", p.month);
+  if (p.range === "2w") sp.set("range", "2w");
+  return `/attendance?${sp.toString()}`;
+}
 
 function currentMonthKey(): string {
   const d = new Date();
@@ -31,11 +42,12 @@ function formatMonth(month: string): string {
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ class?: string; month?: string }>;
+  searchParams: Promise<{ class?: string; month?: string; range?: string }>;
 }) {
   await requireAccess("attendance");
-  const { class: classParam, month: monthParam } = await searchParams;
+  const { class: classParam, month: monthParam, range: rangeParam } = await searchParams;
   const month = monthParam ?? currentMonthKey();
+  const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
 
   // 첫 진입(반 선택 없음): 가용 반 중 첫 번째 자동 선택
   const initial = await getMonthlyAttendanceMatrix(month, classParam ?? null);
@@ -48,6 +60,8 @@ export default async function AttendancePage({
   const selectedClass = matrix.classes.find((c) => c.id === selectedClassId) ?? null;
   const prevMonth = shiftMonth(month, -1);
   const nextMonth = shiftMonth(month, 1);
+  // 2주 보기는 가로 컬럼을 줄이려 마지막 14일만 노출(출석률은 전체 기록 기준 유지).
+  const visibleDays = range === "2w" ? matrix.days.slice(-14) : matrix.days;
 
   return (
     <div className="space-y-4">
@@ -69,7 +83,7 @@ export default async function AttendancePage({
         {/* 월 navigator */}
         <div className="flex items-center gap-1.5">
           <Link
-            href={`/attendance?class=${selectedClassId ?? ""}&month=${prevMonth}`}
+            href={attHref({ classId: selectedClassId, month: prevMonth, range })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="이전 달"
           >
@@ -79,12 +93,35 @@ export default async function AttendancePage({
             {formatMonth(month)}
           </span>
           <Link
-            href={`/attendance?class=${selectedClassId ?? ""}&month=${nextMonth}`}
+            href={attHref({ classId: selectedClassId, month: nextMonth, range })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="다음 달"
           >
             ▶
           </Link>
+        </div>
+
+        <span className="bg-line h-4 w-px" aria-hidden />
+
+        {/* 범위 토글 — 가로 컬럼 수 축소 */}
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">범위</span>
+          {([
+            ["month", "한 달"],
+            ["2w", "2주"],
+          ] as const).map(([key, label]) => (
+            <Link
+              key={key}
+              href={attHref({ classId: selectedClassId, month, range: key })}
+              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                range === key
+                  ? "border-foreground bg-foreground text-background font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
         </div>
 
         <span className="text-text-faint ml-auto font-mono text-[11px]">
@@ -126,7 +163,7 @@ export default async function AttendancePage({
           description="학생목록에서 등록 후 다시 확인하세요."
         />
       ) : (
-        <MatrixTable matrix={matrix} selectedClassId={selectedClassId} />
+        <MatrixTable matrix={matrix} days={visibleDays} selectedClassId={selectedClassId} />
       )}
     </div>
   );
@@ -152,13 +189,15 @@ const STATUS_CLASS: Record<AttendanceStatus, string> = {
 
 function MatrixTable({
   matrix,
+  days,
   selectedClassId,
 }: {
   matrix: AttendanceMatrix;
+  days: AttendanceMatrix["days"];
   selectedClassId: string;
 }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
@@ -174,7 +213,7 @@ function MatrixTable({
             <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left">
               <span className="micro">학교</span>
             </th>
-            {matrix.days.map((d) => (
+            {days.map((d) => (
               <th
                 key={d.date}
                 className={`border-line border-b border-r px-1 py-2 text-center font-mono text-[10px] ${
@@ -189,7 +228,7 @@ function MatrixTable({
                 <div className="opacity-70">{d.label}</div>
               </th>
             ))}
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-right">
+            <th className="bg-bg-soft border-line sticky right-0 z-10 border-b border-l px-2 py-2 text-right">
               <span className="micro">출석률</span>
             </th>
           </tr>
@@ -223,7 +262,7 @@ function MatrixTable({
                 <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px]">
                   {s.school ?? "—"}
                 </td>
-                {matrix.days.map((d) => {
+                {days.map((d) => {
                   const mark = studentMarks[d.date] as AttendanceStatus | undefined;
                   const cls = mark ? STATUS_CLASS[mark] : "";
                   const label = mark ? STATUS_LABEL[mark] : "·";
@@ -246,7 +285,7 @@ function MatrixTable({
                   );
                 })}
                 <td
-                  className={`border-line border-b border-r px-2 py-2 text-right font-mono text-[12px] font-bold ${rateColor}`}
+                  className={`border-line sticky right-0 z-10 border-b border-l bg-card px-2 py-2 text-right font-mono text-[12px] font-bold ${rateColor}`}
                 >
                   {rate === null ? "—" : `${rate}%`}
                 </td>
@@ -258,7 +297,7 @@ function MatrixTable({
           <tr>
             {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 Pill 가로 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
             <td
-              colSpan={matrix.days.length + 5}
+              colSpan={days.length + 5}
               className="bg-bg-soft border-line border-t px-3 py-2"
             >
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
@@ -278,7 +317,7 @@ function MatrixTable({
           </tr>
         </tfoot>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }
 
