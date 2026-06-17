@@ -98,7 +98,10 @@ export async function getStudentsList(
   return rows;
 }
 
-/** Stat 표시용 상태별 카운트 — status 한 컬럼만 읽어 enrollments 조인 없이 가볍게(전체 fetch 회피). */
+/**
+ * Stat 표시용 상태별 카운트 — SQL `count(exact, head)` 4개 병렬. 전건 row를 끌어와 JS로 세던 것을
+ * 교체(#P2: docstring은 "전체 fetch 회피"였지만 구현은 정반대였고, 1000행 초과 시 무음 과소집계).
+ */
 export async function getStudentStatusCounts(): Promise<{
   all: number;
   enrolled: number;
@@ -106,13 +109,18 @@ export async function getStudentStatusCounts(): Promise<{
   withdrawn: number;
 }> {
   const supabase = await createClient();
-  const { data } = await supabase.from("students").select("status");
-  const rows = data ?? [];
+  const base = () => supabase.from("students").select("*", { count: "exact", head: true });
+  const [all, enrolled, prospect, withdrawn] = await Promise.all([
+    base(),
+    base().eq("status", "enrolled"),
+    base().in("status", ["prospect", "consulted"]),
+    base().eq("status", "withdrawn"),
+  ]);
   return {
-    all: rows.length,
-    enrolled: rows.filter((r) => r.status === "enrolled").length,
-    prospect: rows.filter((r) => r.status === "prospect" || r.status === "consulted").length,
-    withdrawn: rows.filter((r) => r.status === "withdrawn").length,
+    all: all.count ?? 0,
+    enrolled: enrolled.count ?? 0,
+    prospect: prospect.count ?? 0,
+    withdrawn: withdrawn.count ?? 0,
   };
 }
 

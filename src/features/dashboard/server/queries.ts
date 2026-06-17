@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 
 const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
@@ -156,19 +157,20 @@ export type ConsultationPipeline = {
 
 export async function getActiveConsultationsCount(): Promise<ConsultationPipeline> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("enrollment_consultations")
-    .select("outcome")
-    .in("outcome", ["pending", "scheduled", "consulted", "ai_done"]);
-
-  const rows = data ?? [];
-  return {
-    total: rows.length,
-    pending: rows.filter((r) => r.outcome === "pending").length,
-    scheduled: rows.filter((r) => r.outcome === "scheduled").length,
-    consulted: rows.filter((r) => r.outcome === "consulted").length,
-    aiDone: rows.filter((r) => r.outcome === "ai_done").length,
-  };
+  // SQL count(exact, head) 4개 병렬 — 활성 상담 전건을 끌어와 JS로 세던 것 교체(#P1: 1000행 절단 위험).
+  const base = () =>
+    supabase.from("enrollment_consultations").select("*", { count: "exact", head: true });
+  const [pending, scheduled, consulted, aiDone] = await Promise.all([
+    base().eq("outcome", "pending"),
+    base().eq("outcome", "scheduled"),
+    base().eq("outcome", "consulted"),
+    base().eq("outcome", "ai_done"),
+  ]);
+  const p = pending.count ?? 0;
+  const s = scheduled.count ?? 0;
+  const c = consulted.count ?? 0;
+  const a = aiDone.count ?? 0;
+  return { total: p + s + c + a, pending: p, scheduled: s, consulted: c, aiDone: a };
 }
 
 export type PaymentSnapshot = {
@@ -331,14 +333,25 @@ export type OutstandingItem = {
  */
 export async function getTopOutstanding(limit = 8): Promise<OutstandingItem[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("invoices")
-    .select(`amount_total, amount_paid, amount_discount, status, student:student_id ( id, name )`)
-    .in("status", ["unpaid", "partial"]);
+  // 전건 미납을 1000행 한도 없이 안전하게 페이지네이션(#P1: 절단 시 'top'이 틀어짐).
+  type OutRow = {
+    amount_total: number | string;
+    amount_paid: number | string;
+    amount_discount: number | string | null;
+    status: string;
+    student: { id: string; name: string } | { id: string; name: string }[] | null;
+  };
+  const data = await fetchAllPaged<OutRow>((from, to) =>
+    supabase
+      .from("invoices")
+      .select(`amount_total, amount_paid, amount_discount, status, student:student_id ( id, name )`)
+      .in("status", ["unpaid", "partial"])
+      .range(from, to),
+  );
 
   // 학생당 잔액 합산(한 학생의 여러 미납 인보이스가 같은 명단에 중복으로 뜨지 않도록).
   const byStudent = new Map<string, OutstandingItem>();
-  for (const r of data ?? []) {
+  for (const r of data) {
     const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
       | { id: string; name: string }
       | undefined;
