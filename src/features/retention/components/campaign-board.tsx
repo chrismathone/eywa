@@ -1,11 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { campaignAdd, campaignSetStatus, campaignRemove, type CampaignResult } from "../server/actions";
 import type { CampaignBoard as Board, CampaignStatus } from "../server/campaign-queries";
+
+const COLUMN_CAP = 10;
 
 const COLUMNS: { key: CampaignStatus; label: string; color: PillColor }[] = [
   { key: "pending", label: "대상", color: "amber" },
@@ -17,6 +19,7 @@ const COLUMNS: { key: CampaignStatus; label: string; color: PillColor }[] = [
 /** 재등록 캠페인 보드 — KPI + 후보 스트립 + 4열 퍼널 칸반. 상태 전환은 서버 액션(transition). */
 export function CampaignBoard({ board }: { board: Board }) {
   const [pending, start] = useTransition();
+  const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   function run(fn: () => Promise<CampaignResult>, okMsg: string) {
     start(async () => {
       const r = await fn();
@@ -86,19 +89,25 @@ export function CampaignBoard({ board }: { board: Board }) {
       {/* 퍼널 칸반 */}
       <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
         <div className="flex min-w-[780px] gap-3 p-3">
-          {COLUMNS.map((col) => (
+          {COLUMNS.map((col) => {
+            const list = columns[col.key];
+            const expanded = expandedCols.has(col.key);
+            const visible = expanded ? list : list.slice(0, COLUMN_CAP);
+            const rest = list.length - visible.length;
+            return (
             <div key={col.key} className="min-w-[185px] flex-1">
               <div className="mb-2 flex items-center gap-1.5">
                 <Pill color={col.color}>{col.label}</Pill>
-                <span className="text-text-faint num text-[11px]">{columns[col.key].length}</span>
+                <span className="text-text-faint num text-[11px]">{list.length}</span>
               </div>
               <div className="space-y-2">
-                {columns[col.key].length === 0 ? (
+                {list.length === 0 ? (
                   <div className="border-line text-text-faint rounded-lg border border-dashed px-3 py-6 text-center text-[11px]">
                     비어 있음
                   </div>
                 ) : (
-                  columns[col.key].map((card) => (
+                  <>
+                  {visible.map((card) => (
                     <div key={card.targetId} className="bg-bg-soft/40 border-line rounded-lg border p-2.5">
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
@@ -146,11 +155,23 @@ export function CampaignBoard({ board }: { board: Board }) {
                         />
                       </div>
                     </div>
-                  ))
+                  ))}
+                  {rest > 0 ? (
+                    <button
+                      type="button"
+                      data-no-drag-scroll
+                      onClick={() => setExpandedCols((s) => new Set(s).add(col.key))}
+                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft w-full rounded-lg border border-dashed py-2 text-[11px] transition"
+                    >
+                      +{rest}개 더 보기
+                    </button>
+                  ) : null}
+                  </>
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </DragScrollArea>
     </div>

@@ -1,9 +1,5 @@
-import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Initial } from "@/components/atoms/initial";
-import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getConsultantOptions,
@@ -11,6 +7,7 @@ import {
 } from "@/features/enrollment/server/queries";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
+import { ColumnCards } from "./_components/column-cards";
 
 export const metadata = { title: "신입생 등록상담 — eywa" };
 
@@ -26,20 +23,6 @@ const COLUMNS: {
   { key: "ai_done", label: "AI 분석 완료", outcomes: ["ai_done"], color: "primary", icon: "sparkle" },
   { key: "closed", label: "등록 · 종료", outcomes: ["enrolled", "declined", "no_show"], color: "neutral", icon: "check" },
 ];
-
-const OUTCOME_PILL: Record<string, { label: string; color: PillColor }> = {
-  pending: { label: "대기", color: "amber" },
-  scheduled: { label: "예약", color: "amber" },
-  consulted: { label: "상담완료", color: "blue" },
-  ai_done: { label: "AI 완료", color: "primary" },
-  enrolled: { label: "등록", color: "primary" },
-  declined: { label: "거절", color: "neutral" },
-  no_show: { label: "노쇼", color: "rose" },
-};
-
-function daysSince(iso: string): number {
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
-}
 
 export default async function EnrollmentPage({
   searchParams,
@@ -147,45 +130,7 @@ export default async function EnrollmentPage({
                     없음
                   </div>
                 ) : (
-                  <ul className="space-y-2 p-3">
-                    {cards.map((c) => {
-                      const pill = OUTCOME_PILL[c.outcome] ?? OUTCOME_PILL.pending!;
-                      return (
-                        <li key={c.id}>
-                          <WindowLink
-                            href={`/enrollment/${c.id}`}
-                            title={c.prospectName}
-                            className="bg-bg-soft/60 hover:bg-bg-soft block rounded-xl p-3 transition"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <Initial name={c.prospectName} color={col.color === "neutral" ? "primary" : col.color} size="sm" />
-                                <div className="min-w-0">
-                                  <p className="text-foreground text-[13px] font-bold">
-                                    {c.prospectName}
-                                  </p>
-                                  <p className="text-text-dim text-[11px]">
-                                    {c.prospectGrade ?? "—"}
-                                    {c.prospectSchool ? <> · {c.prospectSchool}</> : null}
-                                  </p>
-                                </div>
-                              </div>
-                              <Pill color={pill.color}>{pill.label}</Pill>
-                            </div>
-                            {c.parentRequest ? (
-                              <p className="text-text-dim mt-2 line-clamp-2 text-[11px] leading-snug">
-                                {c.parentRequest}
-                              </p>
-                            ) : null}
-                            <div className="text-text-faint mt-2 flex items-center justify-between text-[10px]">
-                              <span>{c.consultantName ?? "—"}</span>
-                              <span className="num">{daysSince(c.consultedAt)}일 전</span>
-                            </div>
-                          </WindowLink>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <ColumnCards cards={cards} color={col.color} />
                 )}
               </div>
             );
