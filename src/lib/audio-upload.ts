@@ -1,0 +1,37 @@
+// 오디오 업로드 공용 — 등록상담(recording-form)·회의(new-meeting-form) 녹음 폼이 공유.
+// 두 폼에 중복돼 있던 형식/크기 검증·포맷 헬퍼를 한 곳으로(#Q4 부분 — 순수 로직만, MediaRecorder 결합은 폼에 유지).
+
+export const ACCEPTED_AUDIO_TYPES = [
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/webm",
+  "audio/ogg",
+];
+export const MAX_AUDIO_SIZE = 50 * 1024 * 1024; // 50 MB — Supabase free-tier cap
+const EXT_RE = /\.(mp3|m4a|wav|webm|ogg)$/i;
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function formatSeconds(s: number): string {
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+/** 업로드 오디오 검증 — 통과하면 null, 아니면 폼이 그대로 표시할 에러 메시지. */
+export function validateAudioFile(f: { type: string; name: string; size: number }): string | null {
+  if (!ACCEPTED_AUDIO_TYPES.includes(f.type) && !EXT_RE.test(f.name)) {
+    return `지원하지 않는 형식입니다: ${f.type || f.name}`;
+  }
+  if (f.size > MAX_AUDIO_SIZE) {
+    return `파일이 너무 큽니다 (${formatBytes(f.size)} > ${formatBytes(MAX_AUDIO_SIZE)})`;
+  }
+  return null;
+}

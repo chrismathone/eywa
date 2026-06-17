@@ -15,29 +15,12 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { openRecorderPopup } from "@/lib/recorder-popup";
 import { startMeetingFromAudio } from "@/features/meetings/server/actions";
-
-const ACCEPTED = [
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/x-m4a",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/webm",
-  "audio/ogg",
-];
-const MAX_SIZE = 50 * 1024 * 1024; // 50 MB — Supabase free-tier cap
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatSeconds(s: number): string {
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
-}
+import {
+  ACCEPTED_AUDIO_TYPES,
+  formatBytes,
+  formatSeconds,
+  validateAudioFile,
+} from "@/lib/audio-upload";
 
 function nowLocalIso(): string {
   // datetime-local input needs `YYYY-MM-DDTHH:mm`
@@ -105,12 +88,9 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       setFile(null);
       return;
     }
-    if (!ACCEPTED.includes(f.type) && !/\.(mp3|m4a|wav|webm|ogg)$/i.test(f.name)) {
-      setError(`지원하지 않는 형식입니다: ${f.type || f.name}`);
-      return;
-    }
-    if (f.size > MAX_SIZE) {
-      setError(`파일이 너무 큽니다 (${formatBytes(f.size)} > ${formatBytes(MAX_SIZE)})`);
+    const err = validateAudioFile(f);
+    if (err) {
+      setError(err);
       return;
     }
     setFile(f);
@@ -426,7 +406,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         <input
           ref={fileInputRef}
           type="file"
-          accept={ACCEPTED.join(",")}
+          accept={ACCEPTED_AUDIO_TYPES.join(",")}
           onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
           className="hidden"
         />
