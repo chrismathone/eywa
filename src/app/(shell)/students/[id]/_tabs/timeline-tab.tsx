@@ -12,14 +12,20 @@ const KIND_META: Record<
   grade: { label: "성적", color: "bg-chart-2 text-chart-2" },
 };
 
+const CAP = 50;
+
 export async function TimelineTab({ studentId }: { studentId: string }) {
   const events = await getStudentTimeline(studentId);
+  // 최신순 정렬(쿼리에서 desc) → 최근 50건만 렌더(오래된 이벤트는 가치 낮음).
+  const visible = events.slice(0, CAP);
 
   return (
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
         <h2 className="text-foreground text-base font-semibold">타임라인</h2>
-        <p className="text-muted-foreground num text-xs">{events.length}건의 이벤트</p>
+        <p className="text-muted-foreground num text-xs">
+          {events.length}건의 이벤트{events.length > CAP ? ` · 최근 ${CAP}건 표시` : ""}
+        </p>
       </header>
 
       {events.length === 0 ? (
@@ -31,7 +37,7 @@ export async function TimelineTab({ studentId }: { studentId: string }) {
             aria-hidden
             className="bg-border absolute top-4 bottom-4 left-[18px] w-px"
           />
-          {events.map((e, i) => {
+          {visible.map((e, i) => {
             const meta = KIND_META[e.kind];
             return (
               <li key={i} className="relative">

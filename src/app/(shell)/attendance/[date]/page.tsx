@@ -89,45 +89,71 @@ export default async function AttendanceByDatePage({
             <Summary label="지각" value={late} unit="건" highlight="text-chart-3" />
           </div>
 
-          <div className="space-y-4">
-            {Array.from(groups.entries()).map(([classId, group]) => (
-              <div key={classId} className="bg-card border-border overflow-hidden rounded-lg border">
-                <header className="border-border flex items-center justify-between border-b px-5 py-3">
-                  <div>
-                    <h3 className="text-sm font-semibold">{group.className}</h3>
-                    <p className="text-muted-foreground num text-xs">
-                      {group.subject} · {group.rows.length}명
-                    </p>
-                  </div>
-                  <Link
-                    href={`/attendance/${date}/${classId}`}
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs"
-                  >
-                    <Pencil className="size-3" />
-                    출석 입력
-                  </Link>
-                </header>
-                <ul className="divide-border divide-y">
-                  {group.rows.map((row) => (
-                    <li key={row.id} className="flex items-center justify-between px-5 py-2.5">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium">{row.studentName}</span>
-                        {row.studentGrade ? (
-                          <span className="text-muted-foreground text-xs">{row.studentGrade}</span>
-                        ) : null}
-                      </div>
-                      <span
-                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
-                          STATUS_COLOR[row.status] ?? "bg-muted text-muted-foreground border-border"
-                        }`}
+          {/* 반별로 접어 둔다(기본 접힘) — 117반/하루가 평면으로 쏟아지지 않게. 접힌 채로도
+              결석·지각 칩으로 어느 반에 이상이 있는지 한눈에. 네이티브 <details>라 JS 0. */}
+          <div className="space-y-3">
+            {Array.from(groups.entries()).map(([classId, group]) => {
+              const gAbsent = group.rows.filter((r) => r.status === "absent").length;
+              const gLate = group.rows.filter((r) => r.status === "late").length;
+              return (
+                <details key={classId} className="bg-card border-border group overflow-hidden rounded-lg border">
+                  <summary className="hover:bg-bg-soft/40 flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">{group.className}</h3>
+                      <p className="text-muted-foreground num text-xs">
+                        {group.subject} · {group.rows.length}명
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {gAbsent > 0 ? (
+                        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.absent}`}>
+                          결석 {gAbsent}
+                        </span>
+                      ) : null}
+                      {gLate > 0 ? (
+                        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR.late}`}>
+                          지각 {gLate}
+                        </span>
+                      ) : null}
+                      {gAbsent === 0 && gLate === 0 ? (
+                        <span className="text-chart-2 text-[11px]">전원 출석</span>
+                      ) : null}
+                      <span className="text-text-faint font-mono text-[10px] transition group-open:rotate-90">▶</span>
+                    </div>
+                  </summary>
+                  <div className="border-border border-t">
+                    <div className="border-border flex justify-end border-b px-5 py-2">
+                      <Link
+                        href={`/attendance/${date}/${classId}`}
+                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs"
                       >
-                        {STATUS_LABEL[row.status] ?? row.status}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+                        <Pencil className="size-3" />
+                        출석 입력
+                      </Link>
+                    </div>
+                    <ul className="divide-border divide-y">
+                      {group.rows.map((row) => (
+                        <li key={row.id} className="flex items-center justify-between px-5 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium">{row.studentName}</span>
+                            {row.studentGrade ? (
+                              <span className="text-muted-foreground text-xs">{row.studentGrade}</span>
+                            ) : null}
+                          </div>
+                          <span
+                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+                              STATUS_COLOR[row.status] ?? "bg-muted text-muted-foreground border-border"
+                            }`}
+                          >
+                            {STATUS_LABEL[row.status] ?? row.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </details>
+              );
+            })}
           </div>
         </>
       )}
