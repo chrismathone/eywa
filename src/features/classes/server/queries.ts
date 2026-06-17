@@ -150,6 +150,109 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   return rows;
 }
 
+/**
+ * 수업목록 Stat 카드용 경량 집계 — head:true 카운트만(행 fetch 없이, 전건 enrollment 절단도 회피).
+ * totalSeats = end_date null 활성 수강 총합.
+ */
+export async function getClassesStats(): Promise<{ total: number; active: number; totalSeats: number }> {
+  const supabase = await createClient();
+  const [total, active, seats] = await Promise.all([
+    supabase.from("classes").select("*", { count: "exact", head: true }),
+    supabase.from("classes").select("*", { count: "exact", head: true }).eq("is_active", true),
+    supabase.from("enrollments").select("*", { count: "exact", head: true }).is("end_date", null),
+  ]);
+  return { total: total.count ?? 0, active: active.count ?? 0, totalSeats: seats.count ?? 0 };
+}
+
+/**
+ * 수업목록 서버 페이지네이션. subject/teacher/active/q는 SQL, day는 class_schedules에서 해당 요일 수업 id를
+ * 먼저 풀어 .in()으로 좁힌다(총계 정확 — C2 한계 해소). 학생수·요일은 그 페이지 수업 id로만 스코프 집계.
+ */
+export async function getClassesPage(
+  options: ClassListFilters,
+  page = 1,
+  pageSize = 50,
+): Promise<{ rows: ClassListRow[]; total: number }> {
+  const supabase = await createClient();
+  const from = (page - 1) * pageSize;
+
+  let dayClassIds: string[] | null = null;
+  if (options?.day && options.day !== "all") {
+    const { data: scheds } = await supabase
+      .from("class_schedules")
+      .select("class_id")
+      .eq("day_of_week", options.day);
+    dayClassIds = [...new Set((scheds ?? []).map((s) => s.class_id))];
+    if (dayClassIds.length === 0) return { rows: [], total: 0 };
+  }
+
+  let qb = supabase
+    .from("classes")
+    .select(
+      `id, class_name, subject, is_active, notes, teacher_id,
+       teacher:teacher_id ( display_name ),
+       classroom:classroom_id ( name )`,
+      { count: "exact" },
+    )
+    .order("class_name");
+  if (options?.subject && options.subject !== "all") qb = qb.eq("subject", options.subject);
+  if (options?.teacherId && options.teacherId !== "all") qb = qb.eq("teacher_id", options.teacherId);
+  if (options?.active === "active") qb = qb.eq("is_active", true);
+  if (options?.active === "closed") qb = qb.eq("is_active", false);
+  if (options?.q) {
+    const term = options.q.trim();
+    if (term) qb = qb.ilike("class_name", `%${term}%`);
+  }
+  if (dayClassIds) qb = qb.in("id", dayClassIds);
+  qb = qb.range(from, from + pageSize - 1);
+
+  const { data: classes, count } = await qb;
+  const pageClasses = classes ?? [];
+  const classIds = pageClasses.map((c) => c.id);
+
+  const counts = new Map<string, number>();
+  const daysByClass = new Map<string, Set<string>>();
+  if (classIds.length > 0) {
+    const [{ data: enrollments }, { data: scheds }] = await Promise.all([
+      supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", classIds),
+      supabase.from("class_schedules").select("class_id, day_of_week").in("class_id", classIds),
+    ]);
+    for (const e of enrollments ?? []) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    for (const s of scheds ?? []) {
+      const set = daysByClass.get(s.class_id) ?? new Set<string>();
+      set.add(s.day_of_week);
+      daysByClass.set(s.class_id, set);
+    }
+  }
+
+  const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+  const rows = pageClasses.map((c) => {
+    const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
+      | { display_name?: string }
+      | undefined;
+    const room = (Array.isArray(c.classroom) ? c.classroom[0] : c.classroom) as
+      | { name?: string }
+      | undefined;
+    const days = Array.from(daysByClass.get(c.id) ?? []).sort(
+      (a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b),
+    );
+    return {
+      id: c.id,
+      className: c.class_name,
+      subject: c.subject,
+      teacherId: c.teacher_id,
+      teacherName: teacher?.display_name ?? null,
+      classroomName: room?.name ?? null,
+      isActive: c.is_active,
+      studentCount: counts.get(c.id) ?? 0,
+      days,
+      notes: c.notes ?? null,
+    } satisfies ClassListRow;
+  });
+
+  return { rows, total: count ?? rows.length };
+}
+
 export async function getClassTeacherOptions(): Promise<{ id: string; name: string }[]> {
   const supabase = await createClient();
   const { data } = await supabase

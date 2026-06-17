@@ -6,15 +6,19 @@ import { Initial } from "@/components/atoms/initial";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
-  getClassesList,
+  getClassesPage,
+  getClassesStats,
   getClassTeacherOptions,
   type ClassListRow,
 } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
 import { FilterSelect } from "@/components/filter-select";
+import { Pagination } from "@/components/pagination";
 import { NewClassTrigger } from "./_components/new-class-trigger";
 
 export const metadata = { title: "수업목록 — eywa" };
+
+const PAGE_SIZE = 50;
 
 type ViewMode = "cards" | "table";
 
@@ -87,6 +91,7 @@ export default async function ClassesPage({
     day?: string;
     q?: string;
     view?: ViewMode;
+    page?: string;
   }>;
 }) {
   await requireAccess("classes");
@@ -96,28 +101,41 @@ export default async function ClassesPage({
   const day = sp.day ?? "all";
   const q = sp.q ?? "";
   const view: ViewMode = sp.view === "cards" ? "cards" : "table";
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  const [classes, teachers, all, classrooms] = await Promise.all([
-    getClassesList({ subject, teacherId, day, q }),
+  const [{ rows: classes, total }, teachers, stats, classrooms] = await Promise.all([
+    getClassesPage({ subject, teacherId, day, q }, page, PAGE_SIZE),
     getClassTeacherOptions(),
-    getClassesList({}),
+    getClassesStats(),
     getClassroomOptions(),
   ]);
 
-  const totalSeats = all.reduce((s, c) => s + c.studentCount, 0);
-  const active = all.filter((c) => c.isActive).length;
+  const totalSeats = stats.totalSeats;
+  const active = stats.active;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = { subject, teacher: teacherId, day, q, view };
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (subject !== "all") params.set("subject", subject);
+    if (teacherId !== "all") params.set("teacher", teacherId);
+    if (day !== "all") params.set("day", day);
+    if (q) params.set("q", q);
+    if (view !== "table") params.set("view", view);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/classes?${s}` : "/classes";
+  };
 
   return (
     <div className="space-y-4">
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 반" value={all.length} unit="개" icon="branch" color="primary" />
+        <Stat label="전체 반" value={stats.total} unit="개" icon="branch" color="primary" />
         <Stat label="운영 중" value={active} unit="개" icon="check" color="primary" />
         <Stat label="등록 학생" value={totalSeats} unit="명" icon="seed" color="blue" />
         <Stat
           label="반당 평균"
-          value={all.length > 0 ? Math.round(totalSeats / all.length) : 0}
+          value={stats.total > 0 ? Math.round(totalSeats / stats.total) : 0}
           unit="명"
           icon="rings"
           color="gold"
@@ -222,17 +240,23 @@ export default async function ClassesPage({
 
       <div className="flex items-center justify-between">
         <p className="micro">
-          결과 <span className="text-foreground font-bold">{classes.length}</span>개
+          결과 <span className="text-foreground font-bold">{total}</span>개
+          {totalPages > 1 ? (
+            <span className="text-text-faint ml-2 normal-case">
+              · {page}/{totalPages} 페이지
+            </span>
+          ) : null}
         </p>
         <NewClassTrigger teacherOptions={teachers} classroomOptions={classrooms} />
       </div>
 
-      {classes.length === 0 ? (
+      {total === 0 ? (
         <EmptyState icon={() => <EyIcon name="branch" size={32} />} title="결과 없음" />
-      ) : view === "table" ? (
-        <TableView classes={classes} />
       ) : (
-        <CardsView classes={classes} />
+        <>
+          {view === "table" ? <TableView classes={classes} /> : <CardsView classes={classes} />}
+          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+        </>
       )}
     </div>
   );

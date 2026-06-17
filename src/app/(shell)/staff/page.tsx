@@ -9,9 +9,12 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
 import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
+import { Pagination } from "@/components/pagination";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 
 export const metadata = { title: "직원관리 — eywa" };
+
+const PAGE_SIZE = 50;
 
 const ROLE_META: Record<string, { label: string; color: PillColor; init: InitialColor }> = {
   master: { label: "원장", color: "danger", init: "danger" },
@@ -68,7 +71,13 @@ function buildStaffHref(p: { role: RoleKey; status: StatusKey; q: string }): str
 export default async function StaffPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invited?: string; role?: RoleKey; status?: StatusKey; q?: string }>;
+  searchParams: Promise<{
+    invited?: string;
+    role?: RoleKey;
+    status?: StatusKey;
+    q?: string;
+    page?: string;
+  }>;
 }) {
   await requireAccess("staff");
   const user = await getCurrentUser();
@@ -78,6 +87,7 @@ export default async function StaffPage({
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
   const q = sp.q ?? "";
+  const page = Math.max(1, Number(sp.page) || 1);
 
   const all = await getStaffList();
   let staff = all;
@@ -92,6 +102,20 @@ export default async function StaffPage({
 
   const roleCount = (key: string) => all.filter((s) => s.systemRole === key).length;
   const current = { role, status, q };
+
+  // 역할 분포 Stat은 전체(all) 기준 — 목록만 50명으로 슬라이스(billing 메모리 페이지네이션).
+  const total = staff.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageStaff = staff.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (role !== "all") params.set("role", role);
+    if (status !== "all") params.set("status", status);
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/staff?${s}` : "/staff";
+  };
 
   return (
     <div className="space-y-4">
@@ -162,7 +186,12 @@ export default async function StaffPage({
 
       <div className="flex items-center justify-between">
         <p className="micro">
-          결과 <span className="text-foreground font-bold">{staff.length}</span>명
+          결과 <span className="text-foreground font-bold">{total}</span>명
+          {totalPages > 1 ? (
+            <span className="text-text-faint ml-2 normal-case">
+              · {page}/{totalPages} 페이지
+            </span>
+          ) : null}
         </p>
         {canManage && user ? (
           <NewStaffTrigger assignableRoleOptions={assignableRoles(user.systemRole)} />
@@ -176,11 +205,12 @@ export default async function StaffPage({
         </p>
       ) : null}
 
-      {staff.length === 0 ? (
+      {total === 0 ? (
         <EmptyState icon={() => <EyIcon name="roots" size={32} />} title="등록된 직원이 없습니다" />
       ) : (
+        <>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {staff.map((s) => {
+          {pageStaff.map((s) => {
             const role = ROLE_META[s.systemRole] ?? ROLE_META.viewer!;
             const status = STATUS_META[s.status] ?? STATUS_META.active!;
             const isTeacher = s.systemRole === "teacher";
@@ -229,6 +259,8 @@ export default async function StaffPage({
             );
           })}
         </div>
+          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+        </>
       )}
     </div>
   );
