@@ -109,6 +109,23 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 **12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1 완성.**
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (메뉴는 retention 추가로 실제 13개 — "12메뉴 정체성"은 사이드바 기준 표현.)
 
+### 데모 데이터 정합·온보딩·브랜드 + 수납관리 책갈피(교재/지출) (2026-06-17)
+3제품 비교(makeedu·ijw·eywa) 후 데모 완성 백로그를 우선순위로 처리 + 수납관리 확장.
+- **상담 데이터 버그**(데모 직격): import(`scripts/_poc_migration/run.ts`)가 소스 필드를 다중 오매핑
+  (summary←notes·category←type·follow←followUpContent)해 1340 상담이 전부 "(내용 없음)"·category="parent"였음.
+  run.ts 재매핑 수정 + 기존 행 `fix-consultations.cjs`로 1338행 패치(소스 students로 재조인).
+- **데모 데이터 보강**: 담임 263명 실수강 데이터로 유도(`fix-primary-teacher.cjs`, 261은 반 teacher_id 공란), 성적
+  3290행 **합성**(`fabricate-grades.cjs`, 전 enrolled — ⚠️가짜).
+- **멀티윈도우 온보딩**: 첫 진입 코치마크(`workspace-onboarding.tsx`, prefs.onboarded) + 닫을 때 사이드바 펼침(발견성).
+- **브랜드 로고**: 검은 동심원 → 포레스트그린 사각 + 흰 sprout(botanical) 마크(app-sidebar). (대시보드 차트는 병렬
+  세션의 "운영 콕핏 개편"으로 대체되어 미적용.)
+- **AI 목업 라벨링**: 퇴원관리 "인사이트"(sparkle) → "자동 요약"(pulse) — 라이브 AI(등록/케어/회의록)와 구분.
+- **창 로딩 ← 버그**: route-window가 about:blank 단계 pathname("blank")으로 canBack 오판 → 스켈레톤에 ← 떴음. 가드 추가.
+- **수납관리 책갈피 3면**: 창 오른쪽 세로 책갈피(수납/교재/지출, 파스텔, 앨범 인덱스)로 `?tab=` 면 전환(드릴인 아님 →
+  ← 안 뜸). 신규 `textbook_orders`·`expenses` 테이블(`0025`+`0025a` RLS) + ijw 소스 **실데이터 이식**(교재 350·지출 95,
+  `import-textbooks-expenses.cjs`). 창 폭 760×620. floating-window 타이틀바=live 문서제목 항상 표시.
+- ⚠️ **시연 계정**: 데모는 POC 임포트본이라 `db:seed` 금지(전체 wipe). super-admin 사용자관리는 실-auth(박지훈 등)만.
+
 ### 전수 컴팩트화 — 대량 데이터에서 폭발하던 목록·매트릭스·칸반 정비 (2026-06-17)
 멀티에이전트 감사로 "전건 평면 `.map`" 안티패턴 20여 건을 우선순위 순 정비. 모두 기존 표준(`<Pagination>`·
 slice+토글·`DragScrollArea`·네이티브 `<details>`) 재사용. 브라우저 검증 완료(classes 129→3p 페이지 nav,
@@ -284,7 +301,15 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - AI 강조는 모든 곳에서 `sparkle + gold-soft` 일관
 
 ### AppShell
-- **Sidebar 232px 고정** (bgSoft 배경, shadcn collapsible 제거)
+- **Sidebar = 너비 조절형 레일** (bgSoft 배경). 오른쪽 경계선을 잡고 끌면 너비가 따라오고,
+  충분히 줄이면 **접힘(52px 아이콘만)**, 늘이면 **펼침(150~360px 아이콘+라벨)**으로 스냅. 더블클릭=빠른
+  토글, ←/→ 키도 지원(`role=separator`). 너비/펼침 여부는 `usePrefs`(localStorage `eywa-prefs`)에 영속.
+  구현: [`use-sidebar-resize.ts`](src/components/workspace/use-sidebar-resize.ts) 훅 + [`app-sidebar.tsx`](src/components/app-sidebar.tsx).
+  접힘 시 hover Tooltip 라벨, 펼침 시 그룹 헤더(01~05) 노출.
+- **접힘↔펼침 모핑 애니메이션**(200ms `cubic-bezier(0.22,0.61,0.36,1)`): 아이콘은 left 26px(접힘 레일
+  중앙)에 **고정**해 안 튀고, 활성/hover 하이라이트는 절대배치 bg의 `left/right`(8↔4)로 **사각형↔행 모핑**,
+  라벨은 `max-width+opacity` 페이드, 그룹 슬롯은 `height`(접힘 6/13 ↔ 펼침 22)로 "패널이 열리듯" 성장.
+  **모션 OFF(`usePrefs.animations`)면 트랜지션 전부 0s**(즉시). 드래그 중엔 1:1 추종이라 트랜지션 off.
 - 5그룹: 홈 / 수업 / 학생 / 운영 / 지원 + 01~05 인덱스 (mono uppercase)
 - 활성 메뉴: primary bg + white text + shadow-primary-glow
 - 푸터: `김수진 / 원장 · chrismathone@gmail.com`
@@ -731,6 +756,18 @@ revalidate되지만, 이미 렌더된 **부모(배경) 라우트는 stale**(다�
 - **권한없음 리다이렉트는 `/dashboard`로 무조건 보내면 안 됨** — `student`는 dashboard 접근이 `none`이라 `/dashboard`가
   또 막혀 **무한 리다이렉트 루프**. `requireAccess`/`requireSuperAdmin`은 "대시보드 접근 가능하면 `/dashboard`, 아니면
   공개 랜딩 `/`"로 분기(`canAccess(role,"dashboard")`).
+
+### 57. 너비 조절 사이드바 — 드래그 핸들 + 프리뷰 트랜지션 얼음 함정
+사용자 요청으로 사이드바에 "접기/펼치기 버튼"을 넣었다가(하단 토글이 계정 줄과 겹쳐 어색) **버튼 대신
+오른쪽 경계선 드래그-리사이즈**로 전환(`use-sidebar-resize.ts`). THRESHOLD(120px) 미만으로 끌면 접힘(52px)
+스냅, 이상이면 펼침(150~360 클램프). 드래그 중엔 `dragging` 플래그로 `transition-[width]`를 끈다(커서 1:1 추종).
+더블클릭=토글, ←/→ 키 + `role=separator`로 접근성. 너비/펼침은 `usePrefs`에 영속.
+- ⚠️ **검증 중 "inline `width:240px`인데 computed/getBoundingClientRect는 52px" 미스터리** — 원인은
+  **프리뷰 백그라운드 탭의 멈춘 document 타임라인**. 하이드레이션 점프(52→240)가 띄운 width transition이
+  `currentTime:0`에 얼어 **inline `!important`까지 덮어쓴다**(러닝 트랜지션이 캐스케이드 최상위). 제품 버그 아님.
+  구분법: `MutationObserver`로 style 속성 mutation을 1초 카운트 → 0이면 렌더루프 아님(트랜지션 얼음).
+  `el.getAnimations().forEach(a=>a.finish())` 후 측정하거나, 렌더 박스 말고 **inline style + 영속 store**(진실값)를
+  읽어 검증. 자세한 환경 함정은 메모리 `reference_browser-verification-env`.
 
 ---
 

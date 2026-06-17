@@ -13,9 +13,12 @@
 | `consultations/` | 학생상담 | `/consultations` |
 | `withdrawals/` | 퇴원관리 | `/withdrawals` |
 | `staff/` | 직원관리 (급여 서브탭) | `/staff/[id]` |
-| `billing/` | 수납관리 | `/billing` |
+| `billing/` | 수납관리 (책갈피 3면: 수납·교재신청·지출, `?tab=`) | `/billing` |
 | `meetings/` | 회의록 | `/meetings/[id]` |
 | `help/` | 도움말 | `/help` |
+| `retention/` | 이탈관리 (재등록 위험 보드) | `/retention` |
+
+> `billing/server/`에 `textbook-queries.ts`·`expense-queries.ts`(교재신청·지출 면). 테이블 `textbook_orders`·`expenses`(마이그레이션 `0025`).
 
 각 폴더는 다음 하위 구조를 가집니다 (생성 시):
 

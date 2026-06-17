@@ -11,16 +11,19 @@
 - **TanStack Query** (client mutations) + **Zustand** (UI state only)
 - **Zod** (런타임 가드)
 - **Vitest** + **Testing Library** (단위), **Playwright** (E2E)
-- **Anthropic Claude API** (신입생 상담 AI 분석)
+- **AI**: Upstage Solar Pro 3 (기본) / Anthropic Claude (폴백) — 단일 진입점 `generateJSON()` (등록상담·학생케어·회의록)
 - 배포: **Vercel**
 
 ## 메뉴
 
 ```
-대시보드 (공지) · 수업 [시간표/출석부/수업목록] · 학생 [학생목록/등록상담/학생상담/퇴원관리] · 운영 [직원관리/수납관리/회의록] · 도움말
+대시보드 (공지) · 수업 [시간표/출석부/수업목록] · 학생 [학생목록/등록상담/학생상담/이탈관리/퇴원관리] · 운영 [직원관리/수납관리/회의록] · 도움말
 ```
 
-자세한 구조는 [src/features/README.md](src/features/README.md), 최초 설계 결정은 [`C:\Users\user\.claude\plans\curried-popping-finch.md`](C:\Users\user\.claude\plans\curried-popping-finch.md) 참고.
+- **수납관리**는 창 오른쪽 세로 책갈피로 **수납 · 교재신청 · 지출** 3면 전환(`?tab=`).
+- 메뉴는 사이드바 기준 "12개"지만 이탈관리(retention) 추가로 실제 13개. 메뉴는 크롬리스 플로팅 창(멀티윈도우 워크스페이스)으로 열린다.
+
+진행 상황·셋업·다음 할 일은 [`HANDOFF.md`](HANDOFF.md), 상세 규약·함정은 [`CLAUDE.md`](CLAUDE.md), 구조는 [src/features/README.md](src/features/README.md) 참고.
 
 ## 시작하기
 
@@ -36,7 +39,7 @@ pnpm install
 pnpm dev
 ```
 
-http://localhost:3000 접속.
+http://localhost:3100 접속. (포트 3100 고정)
 
 ## 주요 스크립트
 
@@ -77,8 +80,8 @@ tests/
 └─ e2e/                # Playwright
 ```
 
-## 다음 단계 (Phase 1)
+## 현재 상태
 
-1. `(shell)` 레이아웃과 사이드바 IA 구현
-2. Supabase Auth 로그인/로그아웃
-3. 12개 라우트 스텁 + 권한 가드
+12개 메뉴 + ijw 패리티 + Admin/super-admin + 멀티윈도우 워크스페이스 + 수납관리 책갈피(교재/지출)까지 구현 완료.
+현재 작업 상태·다음 할 일은 [`HANDOFF.md`](HANDOFF.md), 진행 이력은 [`CLAUDE.md`](CLAUDE.md) "진행 상황" 참고.
+(⚠️ 데모 테넌트는 ijw POC 임포트본이라 `pnpm db:seed` 실행 금지 — HANDOFF.md 참고.)

@@ -37,13 +37,15 @@ node --env-file=.env.local -e "const fs=require('fs');const sql=require('postgre
 pnpm db:seed
 ```
 
-## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-16)
+## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-17)
 
-공유 Supabase(데모 테넌트)에는 **번호본 0000~0024 + alpha 전부 적용 완료**. 직접 조회로 확인:
+공유 Supabase(데모 테넌트)에는 **번호본 0000~0025 + alpha 전부 적용 완료**. 직접 조회로 확인:
 
 - `pg_trgm` 확장 **설치됨**, `0024a`의 trigram GIN 인덱스 **11개 전부 존재**
   (students 5 · classes 2 · student_consultations 1 · enrollment_consultations 3).
 - `reenrollment_campaign_targets` 테이블 + RLS **활성**(`0024`/`0024b`).
+- **`0025` `textbook_orders`·`expenses` 테이블 + `0025a` RLS 활성**(수납관리 책갈피 교재/지출 면).
+  `relrowsecurity=true` 확인, 데모 데이터 적재(교재 350·지출 95, `scripts/_poc_migration/import-textbooks-expenses.cjs`).
 - public 스키마의 테넌트 테이블 중 **RLS 미적용 = 0개** → alpha RLS 누락 없음.
 
 > 검증 쿼리(읽기 전용): `select extname from pg_extension where extname='pg_trgm';` /
@@ -70,6 +72,7 @@ pnpm db:seed
 | `0023a_rls_for_tenant_licenses` | 테넌트 라이선스 RLS |
 | `0024a_search_trgm` | **pg_trgm + GIN trigram 인덱스 11개**(커맨드 팰릿 데이터 검색 #18) |
 | `0024b_rls_for_reenrollment` | `reenrollment_campaign_targets` RLS + updated_at 트리거(재등록 캠페인 #6) |
+| `0025a_rls_for_textbook_orders_expenses` | `textbook_orders`·`expenses` RLS(수납관리 책갈피 교재/지출 면) |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
