@@ -7,6 +7,7 @@ import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isTenantAudioPath } from "@/lib/storage/audio-path";
 
 type ActionItem = {
   action: string;
@@ -134,9 +135,8 @@ export async function startMeetingFromAudio(
 
   const admin = createAdminClient();
 
-  // 1) Verify the storage object exists and belongs to this tenant.
-  const expectedPrefix = `${user.tenantId}/`;
-  if (!audioPath.startsWith(expectedPrefix)) {
+  // 1) Verify the path is a single object key under this tenant (#S4 — prefix만 보던 것 강화).
+  if (!isTenantAudioPath(audioPath, user.tenantId)) {
     return { error: "파일 경로가 잘못되었습니다" };
   }
 

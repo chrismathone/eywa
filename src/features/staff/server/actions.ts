@@ -160,34 +160,44 @@ export async function changeStaffRole(
 ): Promise<ChangeRoleState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
+  // 권한 게이트 — 형제 액션과 동일(누락 시 누구나 POST해 역할 상승·크로스테넌트 탈취 가능, #S1).
+  if (!canManageStaff(actor.systemRole)) {
+    return { error: "역할 변경 권한이 없습니다 (master / admin / manager)" };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   const newRole = String(formData.get("newRole") ?? "") as SystemRole;
-  const currentRole = String(formData.get("currentRole") ?? "") as SystemRole;
-
   if (!id) return { error: "직원 ID가 누락되었습니다" };
-  if (!ROLES.includes(newRole) || !ROLES.includes(currentRole)) {
-    return { error: "유효한 역할이 아닙니다" };
-  }
-
-  if (
-    !canAssignRole({ actor: actor.systemRole, targetCurrent: currentRole, newRole })
-  ) {
-    return { error: "이 역할 변경은 본인 권한으로 허용되지 않습니다" };
-  }
+  if (!ROLES.includes(newRole)) return { error: "유효한 역할이 아닙니다" };
 
   const admin = createAdminClient();
 
-  // 1) public.users 업데이트
+  // 대상의 실제 tenant_id·system_role을 DB에서 읽는다(클라이언트가 보낸 currentRole 신뢰 금지, #S1).
+  const { data: target, error: targetErr } = await admin
+    .from("users")
+    .select("tenant_id, system_role")
+    .eq("id", id)
+    .single();
+  if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
+  // 크로스테넌트 차단 — 다른 지점 계정은 건드릴 수 없다.
+  if (target.tenant_id !== actor.tenantId) {
+    return { error: "다른 지점의 계정은 변경할 수 없습니다" };
+  }
+  const currentRole = target.system_role as SystemRole;
+  if (!canAssignRole({ actor: actor.systemRole, targetCurrent: currentRole, newRole })) {
+    return { error: "이 역할 변경은 본인 권한으로 허용되지 않습니다" };
+  }
+
+  // 1) public.users 업데이트(같은 테넌트 확인됨)
   const { error: dbErr } = await admin
     .from("users")
     .update({ system_role: newRole })
     .eq("id", id);
   if (dbErr) return { error: dbErr.message };
 
-  // 2) auth.users app_metadata sync (RLS의 auth_tenant_id() / role-based 정책에서 사용)
+  // 2) auth.users app_metadata sync — tenant_id는 대상의 기존 값 유지(세션값으로 재기록해 이동시키지 않음).
   const { error: authErr } = await admin.auth.admin.updateUserById(id, {
-    app_metadata: { tenant_id: actor.tenantId, system_role: newRole },
+    app_metadata: { tenant_id: target.tenant_id, system_role: newRole },
   });
   if (authErr) {
     // 롤백: public.users 원래 역할로 복귀

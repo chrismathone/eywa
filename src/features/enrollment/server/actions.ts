@@ -5,9 +5,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccess } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
+import { isTenantAudioPath } from "@/lib/storage/audio-path";
 
 const createSchema = z.object({
   prospectName: z.string().min(1, "학생 이름을 입력해주세요"),
@@ -111,6 +113,14 @@ export async function runAiAnalysis(
   _prev: RunAiState,
   formData: FormData,
 ): Promise<RunAiState> {
+  // 역할 게이트 — 유료 AI 호출은 등록상담 접근권이 있는 역할만(비용통제, #S5). 데이터 누수는 RLS가 막지만
+  // enrollment:none 역할도 호출 자체는 트리거할 수 있어 막는다.
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!canAccess(user.systemRole, "enrollment")) {
+    return { error: "등록상담 권한이 없습니다" };
+  }
+
   const consultationId = String(formData.get("consultationId") ?? "");
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
 
@@ -344,9 +354,8 @@ export async function startConsultationFromAudio(
 
   const admin = createAdminClient();
 
-  // Verify path belongs to this tenant
-  const expectedPrefix = `${user.tenantId}/`;
-  if (!audioPath.startsWith(expectedPrefix)) {
+  // Verify the path is a single object key under this tenant (#S4).
+  if (!isTenantAudioPath(audioPath, user.tenantId)) {
     return { error: "파일 경로가 잘못되었습니다" };
   }
 

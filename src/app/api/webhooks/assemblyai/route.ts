@@ -1,8 +1,16 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** 상수시간 문자열 비교 — 타이밍 공격 방지. 길이 다르면 즉시 false. */
+function secretMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 // AssemblyAI may pause up to a few minutes between calls; give Claude plenty of room too.
 export const maxDuration = 300;
@@ -48,8 +56,11 @@ type WebhookBody = {
 };
 
 export async function POST(req: Request) {
+  // Fail-closed: 시크릿 미설정이면 엔드포인트를 닫는다(이전 `if (expected && …)`는 미설정 시
+  // 검사를 통째로 건너뛰어 누구나 임의 transcript_id로 AI 분석·PII 쓰기를 트리거할 수 있었다, #S3).
   const expected = process.env.ASSEMBLYAI_WEBHOOK_SECRET;
-  if (expected && req.headers.get("x-eywa-webhook-secret") !== expected) {
+  const provided = req.headers.get("x-eywa-webhook-secret") ?? "";
+  if (!expected || !secretMatches(provided, expected)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
