@@ -35,6 +35,9 @@ function TrendRow({
   values: number[];
   colorVar: string;
 }) {
+  // 창에 실데이터가 없으면(전부 0) 가짜 "0% 평탄선" 대신 정직하게 '기록 없음'.
+  // (밴드의 최근 스냅샷과 모순되어 보이던 0% 문제 해소 — 추세는 0%라고 단정하지 않는다.)
+  const hasData = values.some((v) => v > 0);
   const last = values[values.length - 1] ?? 0;
   const delta = trendDelta(values);
   const deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pt`;
@@ -47,17 +50,31 @@ function TrendRow({
         >
           {label}
         </div>
-        <div className="num text-foreground text-[18px] font-extrabold leading-none">
-          {Math.round(last)}
-          <span className="text-text-dim text-[11px] font-medium">%</span>
+        {hasData ? (
+          <div className="num text-foreground text-[18px] font-extrabold leading-none">
+            {Math.round(last)}
+            <span className="text-text-dim text-[11px] font-medium">%</span>
+          </div>
+        ) : (
+          <div className="text-text-faint text-[11px] leading-none">기록 없음</div>
+        )}
+      </div>
+      {hasData ? (
+        <>
+          <div className="h-9 flex-1">
+            <Sparkline data={values} colorVar={colorVar} height={36} strokeWidth={2} />
+          </div>
+          <span
+            className={`shrink-0 font-mono text-[10px] ${delta >= 0 ? "text-primary" : "text-danger"}`}
+          >
+            {deltaText}
+          </span>
+        </>
+      ) : (
+        <div className="text-text-faint flex h-9 flex-1 items-center text-[11px]">
+          최근 7일 데이터가 아직 없습니다
         </div>
-      </div>
-      <div className="h-9 flex-1">
-        <Sparkline data={values} colorVar={colorVar} height={36} strokeWidth={2} />
-      </div>
-      <span className={`shrink-0 font-mono text-[10px] ${delta >= 0 ? "text-primary" : "text-danger"}`}>
-        {deltaText}
-      </span>
+      )}
     </div>
   );
 }

@@ -318,24 +318,80 @@ export async function getUpcomingPayments(daysAhead = 7): Promise<UpcomingPaymen
     .filter((r): r is UpcomingPayment => r !== null);
 }
 
+export type OutstandingItem = {
+  studentId: string;
+  studentName: string;
+  amount: number; // 잔액(미납)
+  status: string; // unpaid | partial
+};
+
+/**
+ * 미수 상위 — unpaid/partial 인보이스의 잔액 큰 순(이름 명단). 밴드의 '미수 N건'(카운트)에
+ * '누구'를 붙이는 명단. due_date 창에 의존하지 않아 항상 채워진다(데모 미납 187건).
+ */
+export async function getTopOutstanding(limit = 8): Promise<OutstandingItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("invoices")
+    .select(`amount_total, amount_paid, amount_discount, status, student:student_id ( id, name )`)
+    .in("status", ["unpaid", "partial"]);
+
+  // 학생당 잔액 합산(한 학생의 여러 미납 인보이스가 같은 명단에 중복으로 뜨지 않도록).
+  const byStudent = new Map<string, OutstandingItem>();
+  for (const r of data ?? []) {
+    const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
+      | { id: string; name: string }
+      | undefined;
+    if (!stu) continue;
+    const balance =
+      Number(r.amount_total) - Number(r.amount_paid) - Number(r.amount_discount ?? 0);
+    if (balance <= 0) continue;
+    const cur = byStudent.get(stu.id);
+    if (cur) {
+      cur.amount += balance;
+      if (r.status === "unpaid") cur.status = "unpaid"; // 하나라도 완전 미납이면 '미납'
+    } else {
+      byStudent.set(stu.id, {
+        studentId: stu.id,
+        studentName: stu.name,
+        amount: balance,
+        status: r.status as string,
+      });
+    }
+  }
+
+  return [...byStudent.values()].sort((a, b) => b.amount - a.amount).slice(0, limit);
+}
+
 export type AbsenceRisk = {
   studentId: string;
   studentName: string;
   absences: number;
 };
 
-/** 결석 위험 학생: 최근 14일 결석 ≥ 3건. */
+/**
+ * 결석 위험 학생: 최근 14일 결석 ≥ 3건. 단 데모 출결이 과거에 몰려 있어 'today-14d'로는 0건이 되므로
+ * 가장 최근 기록일을 앵커로 그 직전 14일 창을 본다(실데이터가 최신이면 today와 동일하게 동작).
+ */
 export async function getAbsenceRiskStudents(): Promise<AbsenceRisk[]> {
   const supabase = await createClient();
-  const since = new Date();
-  since.setDate(since.getDate() - 14);
+  const { data: recent } = await supabase
+    .from("attendance_records")
+    .select("session_date")
+    .order("session_date", { ascending: false })
+    .limit(1);
+  const anchorIso = recent?.[0]?.session_date as string | undefined;
+  if (!anchorIso) return [];
+  const since = new Date(anchorIso);
+  since.setDate(since.getDate() - 13);
   const sinceIso = since.toISOString().slice(0, 10);
 
   const { data } = await supabase
     .from("attendance_records")
     .select("student_id, status, student:student_id ( id, name )")
     .eq("status", "absent")
-    .gte("session_date", sinceIso);
+    .gte("session_date", sinceIso)
+    .lte("session_date", anchorIso);
 
   const counts = new Map<string, { name: string; count: number }>();
   for (const r of data ?? []) {

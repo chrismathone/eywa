@@ -166,14 +166,21 @@ function NextSlot({ time, classes }: { time: string; classes: TodaySlot[] }) {
         {classes.slice(0, 12).map((s) => {
           const mt = subjectMeta(s.subject);
           return (
-            <span
+            <WindowLink
               key={s.id}
-              className={`${COLOR_ICON_BG[mt.color]} inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold`}
-              title={`${s.className}${s.teacherName ? ` · ${s.teacherName}` : ""}${s.classroomName ? ` · ${s.classroomName}` : ""} · ${s.studentCount}명`}
+              href={`/classes/${s.classId}`}
+              title={s.className}
+              ariaLabel={`${s.className} 수업 상세 열기`}
+              className={`${COLOR_ICON_BG[mt.color]} inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow hover:shadow-sm`}
             >
-              <span className="max-w-[8rem] truncate">{s.className}</span>
+              <span
+                className="max-w-[8rem] truncate"
+                title={`${s.className}${s.teacherName ? ` · ${s.teacherName}` : ""}${s.classroomName ? ` · ${s.classroomName}` : ""} · ${s.studentCount}명`}
+              >
+                {s.className}
+              </span>
               <span className="num font-mono text-[9px] opacity-60">{s.studentCount}</span>
-            </span>
+            </WindowLink>
           );
         })}
         {classes.length > 12 ? <span className="text-text-faint self-center text-[11px]">+{classes.length - 12}</span> : null}
@@ -193,7 +200,16 @@ function OngoingCard({ slot }: { slot: TodaySlot }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-foreground truncate text-[15px] font-extrabold">{slot.className}</h3>
+          <h3 className="min-w-0 truncate text-[15px] font-extrabold">
+            <WindowLink
+              href={`/classes/${slot.classId}`}
+              title={slot.className}
+              className="text-foreground hover:text-primary hover:underline"
+              ariaLabel={`${slot.className} 수업 상세 열기`}
+            >
+              {slot.className}
+            </WindowLink>
+          </h3>
           <Pill color="primary">진행 중</Pill>
         </div>
         <p className="text-text-dim mt-1 truncate text-[12px]">
