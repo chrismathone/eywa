@@ -5,6 +5,8 @@ import type { MouseEvent, ReactNode } from "react";
 import { findNavItem } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
+import { useInFrame } from "./use-in-frame";
+import { withEmbed } from "./embed-context";
 
 /**
  * href(쿼리/해시 제외)를 창 id로 해석.
@@ -44,6 +46,7 @@ export function WindowLink({
   ariaLabel?: string;
 }) {
   const isDesktop = useIsDesktop();
+  const inFrame = useInFrame();
   function onClick(e: MouseEvent<HTMLAnchorElement>) {
     if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const resolved = windowIdForHref(href);
@@ -55,8 +58,12 @@ export function WindowLink({
       .getState()
       .open("route", { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href }, anchor);
   }
+  // 임베드 iframe 내부에선 onClick이 창을 안 열고 일반 네비게이션으로 떨어진다(isDesktop=false).
+  // 그 드릴인이 embed=1을 잃으면 하위 페이지가 풀 셸로 떠 사이드바가 이중 노출되므로, iframe 안의
+  // 링크 href엔 embed=1을 유지한다(크롬리스 embed 분기로 self-heal). 최상위/모바일은 원본 href.
+  const linkHref = inFrame ? withEmbed(href) : href;
   return (
-    <Link href={href} className={className} aria-label={ariaLabel} onClick={onClick}>
+    <Link href={linkHref} className={className} aria-label={ariaLabel} onClick={onClick}>
       {children}
     </Link>
   );

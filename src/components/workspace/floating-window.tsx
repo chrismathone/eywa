@@ -7,6 +7,7 @@ import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
+import { WindowBookmarks } from "./window-bookmarks";
 import { iframeRegistry } from "./route-window";
 import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
@@ -146,7 +147,13 @@ export function FloatingWindow({
               title="뒤로"
               onPointerDown={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
-              onClick={() => iframeRegistry.get(win.id)?.contentWindow?.history.back()}
+              // 창별 nav 스택을 한 단계 pop → 그 창의 iframe만 직접 이전 URL로 이동(location.replace).
+              // history.back()은 모든 iframe이 공유하는 joint session history를 되감아 엉뚱한 창이
+              // 되감기던 버그가 있어 사용하지 않는다.
+              onClick={() => {
+                const target = useWindowStore.getState().backNav(win.id);
+                if (target) iframeRegistry.get(win.id)?.contentWindow?.location.replace(target);
+              }}
               className="text-text-dim hover:bg-line-strong/30 hover:text-foreground -ml-1 flex size-6 shrink-0 items-center justify-center rounded-[3px] transition"
             >
               <ArrowLeft size={14} strokeWidth={2} />
@@ -225,6 +232,11 @@ export function FloatingWindow({
               />
             ))}
       </div>
+
+      {/* 수납관리 창의 "진짜 책갈피" — 창 프레임 바깥(오른쪽)으로 삐져나온 종이 탭. 스포트라이트 중엔 숨김. */}
+      {win.kind === "route" && win.params.id === "billing" && !spotlight ? (
+        <WindowBookmarks winId={win.id} />
+      ) : null}
     </div>
   );
 }

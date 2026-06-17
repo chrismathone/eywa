@@ -51,6 +51,33 @@ function rectsClose(a: Rect, b: Rect, tol = 6) {
   );
 }
 
+/**
+ * 스테이지(bounds) 변경 시 창들을 새 영역에 재배치 — 사이드바 펼침/접힘·리사이즈나 브라우저
+ * 리사이즈로 콘텐츠 영역이 바뀌면 호출. 최대화=새 전체, 스냅/타일=분수 비율 유지하도록 비례
+ * 재배치, 자유 창=크기 유지하고 안으로 clamp. (origin/bounds만 갱신하던 setStage가 "최대치"를
+ * 사이드바 너비에 못 맞추던 문제 해소.)
+ */
+function reflowWindows(
+  windows: Record<string, Win>,
+  oldB: Bounds,
+  newB: Bounds,
+): Record<string, Win> {
+  const sx = oldB.width > 0 ? newB.width / oldB.width : 1;
+  const sy = oldB.height > 0 ? newB.height / oldB.height : 1;
+  const out: Record<string, Win> = {};
+  for (const [id, w] of Object.entries(windows)) {
+    if (w.maximized) {
+      out[id] = { ...w, rect: snapTarget("max", newB)! };
+    } else if (w.snapped) {
+      const scaled = { x: w.rect.x * sx, y: w.rect.y * sy, w: w.rect.w * sx, h: w.rect.h * sy };
+      out[id] = { ...w, rect: clampRect(scaled, newB) };
+    } else {
+      out[id] = { ...w, rect: clampRect(w.rect, newB) };
+    }
+  }
+  return out;
+}
+
 // 코너 → 같은 쪽(left/right)과 같은 쪽 반대 1/4(complement)
 const CORNER_SIDE: Record<"tl" | "tr" | "bl" | "br", "left" | "right"> = {
   tl: "left",
@@ -84,6 +111,9 @@ type State = {
   // 라우트 창의 iframe 현재 문서 제목/뒤로가능 여부(런타임, 미영속). RouteWindow가 iframe title·path를
   // 관찰해 갱신 → 타이틀바가 서브뷰 드릴인을 반영하고 크롬 뒤로(←) 버튼을 띄운다(인페이지 백 대체).
   live: Record<string, { title: string; canBack: boolean }>;
+  // 창별 URL 스택(미영속) — same-origin iframe들이 공유하는 joint session history 대신 창마다 독립
+  // 스택을 들고 뒤로(←)를 그 창의 iframe만 직접 이동시킨다(다른 창이 되감기는 #버그 방지).
+  nav: Record<string, string[]>;
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -92,8 +122,10 @@ type Actions = {
   setDragLayout: (v: { template: LayoutTemplate; slot: number } | null) => void;
   setDragNearTop: (v: boolean) => void;
   setDragBackground: (v: boolean) => void;
-  /** RouteWindow가 iframe 제목/뒤로가능 변화를 보고 → 타이틀바 라이브 갱신(동일하면 no-op). */
-  setLive: (id: string, v: { title: string; canBack: boolean }) => void;
+  /** RouteWindow가 iframe 제목·현재 URL 변화를 보고 → 타이틀바 제목 + 창별 nav 스택/canBack 갱신. */
+  observeIframe: (id: string, v: { title: string; url: string }) => void;
+  /** 그 창의 nav 스택을 한 단계 pop하고 이동할 이전 URL을 반환(없으면 null). 뒤로(←) 버튼이 호출. */
+  backNav: (id: string) => string | null;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   /** anchor(뷰포트 좌표)를 주면 그 커서 위치에서 창이 뜬다(없으면 cascade). 링크 클릭이 전달. */
   open: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
@@ -140,20 +172,66 @@ export const useWindowStore = create<State & Actions>()(
       activeBackgroundId: "dashboard",
       spotlight: false,
       live: {},
+      nav: {},
 
       setStage: ({ left, top, width, height }) =>
-        set({ origin: { left, top }, bounds: { width, height } }),
+        set((s) => {
+          if (
+            s.bounds.width === width &&
+            s.bounds.height === height &&
+            s.origin.left === left &&
+            s.origin.top === top
+          ) {
+            return s; // 변화 없음 — 불필요한 재배치/리렌더 방지
+          }
+          const newBounds = { width, height };
+          return {
+            origin: { left, top },
+            bounds: newBounds,
+            windows: reflowWindows(s.windows, s.bounds, newBounds),
+          };
+        }),
       setSnapPreview: (z) => set({ snapPreview: z }),
       setDragging: (id) => set({ draggingId: id }),
       setDragLayout: (v) => set({ dragLayout: v }),
       setDragNearTop: (v) => set({ dragNearTop: v }),
       setDragBackground: (v) => set({ dragBackground: v }),
-      setLive: (id, v) =>
+      // iframe 관찰값(제목·URL)을 받아 제목 + 창별 URL 스택을 갱신. pathname이 바뀌면(드릴인) push,
+      // query만 바뀌면(예: billing ?tab=) top을 replace해 뒤로 단계로 안 센다. canBack = 스택 깊이>1.
+      observeIframe: (id, { title, url }) =>
         set((s) => {
+          const stack = s.nav[id] ?? [];
+          const top = stack[stack.length - 1];
+          let nextStack = stack;
+          if (top !== url) {
+            if (top === undefined) nextStack = [url];
+            else if (top.split("?")[0] === url.split("?")[0]) nextStack = [...stack.slice(0, -1), url];
+            else nextStack = [...stack, url];
+          }
+          const canBack = nextStack.length > 1;
           const cur = s.live[id];
-          if (cur && cur.title === v.title && cur.canBack === v.canBack) return s;
-          return { live: { ...s.live, [id]: v } };
+          if (cur && cur.title === title && cur.canBack === canBack && nextStack === stack) return s;
+          return {
+            nav: nextStack === stack ? s.nav : { ...s.nav, [id]: nextStack },
+            live: { ...s.live, [id]: { title, canBack } },
+          };
         }),
+
+      backNav: (id) => {
+        const s = get();
+        const stack = s.nav[id] ?? [];
+        if (stack.length <= 1) return null;
+        const nextStack = stack.slice(0, -1);
+        const target = nextStack[nextStack.length - 1];
+        set({
+          nav: { ...s.nav, [id]: nextStack },
+          live: {
+            ...s.live,
+            [id]: { title: s.live[id]?.title ?? "", canBack: nextStack.length > 1 },
+          },
+        });
+        return target;
+      },
       // 라우트를 "보이는 배경"으로 표시 — 삽입 순서는 고정(재정렬 안 함). 스택에 없으면 끝에 추가.
       // activeBackgroundId만 바뀌므로 탭을 클릭(=pathname 변경)해도 스트립 순서가 흔들리지 않는다.
       setBackground: (params) =>
@@ -382,10 +460,13 @@ export const useWindowStore = create<State & Actions>()(
           const order = s.order.filter((w) => w !== id);
           const live = { ...s.live };
           delete live[id];
+          const nav = { ...s.nav };
+          delete nav[id];
           return {
             windows,
             order,
             live,
+            nav,
             focusedId: s.focusedId === id ? (order[order.length - 1] ?? null) : s.focusedId,
             snapAssist: null,
           };

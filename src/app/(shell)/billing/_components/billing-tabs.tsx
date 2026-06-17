@@ -1,7 +1,10 @@
-import Link from "next/link";
+"use client";
 
-// 수납관리 창 오른쪽 가장자리 책갈피(앨범 인덱스 탭) — 누르면 같은 창에서 면 전환(?tab=).
-// 세로쓰기 라벨 + 책갈피별 파스텔색. pathname은 /billing 그대로라 창 ←(뒤로)는 뜨지 않는다.
+import Link from "next/link";
+import { useEmbed } from "@/components/workspace/embed-context";
+
+// 수납관리 책갈피(앨범 인덱스 탭) — 배경 풀페이지에서만 표시한다. 플로팅 창(임베드)에선 창 프레임
+// 바깥의 진짜 책갈피(WindowBookmarks)가 대체하므로 여기선 숨긴다. 세로쓰기 + 면별 파스텔색.
 export type BillingTab = "billing" | "textbooks" | "expenses";
 
 const TABS: { key: BillingTab; label: string; soft: string; ring: string }[] = [
@@ -15,6 +18,8 @@ function hrefFor(k: BillingTab): string {
 }
 
 export function BillingTabs({ active }: { active: BillingTab }) {
+  const embed = useEmbed();
+  if (embed) return null; // 창에선 외부 책갈피(WindowBookmarks)가 대체
   return (
     <nav
       aria-label="수납관리 면 전환"

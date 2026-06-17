@@ -16,3 +16,11 @@ export function EmbedProvider({ embed, children }: { embed: boolean; children: R
 export function useEmbed() {
   return useContext(EmbedContext);
 }
+
+/** href에 embed=1을 안전 병합(기존 쿼리 보존). 라우트 창 iframe `src`·임베드 내부 드릴인이 공유. */
+export function withEmbed(href: string): string {
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("embed", "1");
+  return `${path}?${params.toString()}`;
+}

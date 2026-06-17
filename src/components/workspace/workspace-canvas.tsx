@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { findNavItem } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
+import { usePrefs } from "./use-prefs";
+import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
 import { WindowSwitcher } from "./window-switcher";
@@ -15,8 +17,8 @@ import { SpotlightStrip } from "./spotlight-strip";
 import { WorkspaceOnboarding } from "./workspace-onboarding";
 import { snapTarget, templateSlots } from "./window-geometry";
 
-// 콘텐츠 스테이지 오프셋 — 좌측 아이콘 레일(52) / 상단 헤더(48) 제외해 창이 크롬을 안 덮음.
-const RAIL = 52;
+// 콘텐츠 스테이지 상단 오프셋 — 헤더(48) 제외. 좌측 레일은 사이드바 실제 너비(펼침/접힘·드래그)
+// 를 따라가도록 런타임에 계산(아래 rail). 하드코딩하면 창 최대치가 접힘 기준에 고정됨.
 const HEADER = 48;
 
 /**
@@ -39,6 +41,12 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const setBackground = useWindowStore((s) => s.setBackground);
   const pathname = usePathname();
 
+  // 사이드바 실제 너비 = 펼침이면 저장 너비, 접힘이면 레일(52). 펼침/접힘·드래그 드롭으로 바뀌면
+  // 스테이지가 따라가 창 최대치(최대화·스냅)가 사이드바 오른쪽에 정확히 맞는다.
+  const sidebarExpanded = usePrefs((s) => s.sidebarExpanded);
+  const sidebarWidth = usePrefs((s) => s.sidebarWidth);
+  const rail = sidebarExpanded ? sidebarWidth : SIDEBAR_COLLAPSED_W;
+
   // 메인 프레임 라우트 = 배경. pathname이 바뀔 때마다 store.background 동기 → 배경 교체가
   // pathname 비동기 지연과 무관하게 결정적으로 동작(연타 레이스 방지).
   useEffect(() => {
@@ -46,20 +54,26 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
     if (item) setBackground({ id: item.menuKey, title: item.label, href: item.href });
   }, [pathname, setBackground]);
 
+  // 스테이지 = 뷰포트 − 사이드바(rail) − 헤더. rail(사이드바 너비)이나 브라우저 크기가 바뀌면
+  // 재계산 → setStage가 최대화·스냅 창을 새 영역에 재배치(reflow).
   useEffect(() => {
     const setVp = () =>
       setStage({
-        left: RAIL,
+        left: rail,
         top: HEADER,
-        width: Math.max(360, window.innerWidth - RAIL),
+        width: Math.max(360, window.innerWidth - rail),
         height: Math.max(280, window.innerHeight - HEADER),
       });
     setVp();
-    const done = useWindowStore.persist.rehydrate();
-    Promise.resolve(done).then(() => adoptOwner(owner));
     window.addEventListener("resize", setVp);
     return () => window.removeEventListener("resize", setVp);
-  }, [owner, setStage, adoptOwner]);
+  }, [rail, setStage]);
+
+  // 마운트 1회: 영속 레이아웃 복원 후 owner 채택(다른 계정이면 초기화).
+  useEffect(() => {
+    const done = useWindowStore.persist.rehydrate();
+    Promise.resolve(done).then(() => adoptOwner(owner));
+  }, [owner, adoptOwner]);
 
   if (!isDesktop) return null;
 
@@ -74,7 +88,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
     <>
     <div
       className="pointer-events-none fixed z-40"
-      style={{ left: RAIL, top: HEADER, right: 0, bottom: 0 }}
+      style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
       {layoutGhosts
         ? layoutGhosts.map((r, i) => (

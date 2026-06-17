@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWindowStore, type Win } from "./window-store";
+import { withEmbed } from "./embed-context";
 
 /**
  * 라우트 창의 iframe 엘리먼트 레지스트리(런타임·모듈 전역). 타이틀바 뒤로(←) 버튼이
@@ -14,14 +15,6 @@ function cleanTitle(raw: string) {
   return raw.replace(/\s*[—–-]\s*eywa\s*$/i, "").trim();
 }
 
-/** href에 embed=1을 안전 병합(기존 쿼리 보존). */
-function withEmbed(href: string) {
-  const [path, query = ""] = href.split("?");
-  const params = new URLSearchParams(query);
-  params.set("embed", "1");
-  return `${path}?${params.toString()}`;
-}
-
 /**
  * 메뉴 풀화면 창 — 크롬리스 라우트를 same-origin iframe으로 임베드.
  * 별도 문서/정상 네비게이션이라 "RSC 트리 명령형 마운트"(Next16 부재) 제약을 우회하고,
@@ -32,15 +25,14 @@ export function RouteWindow({ win }: { win: Win }) {
   const [loaded, setLoaded] = useState(false);
   // 드래그/리사이즈 중에는 iframe을 숨겨 매 프레임 재페인트를 막아 부드럽게 이동.
   const dragging = useWindowStore((s) => s.draggingId === win.id);
-  const setLive = useWindowStore((s) => s.setLive);
+  const observeIframe = useWindowStore((s) => s.observeIframe);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const href = win.params.href;
-  const rootPath = (href ?? "").split("?")[0].split("#")[0];
   const fallbackTitle = win.params.title;
 
-  // iframe 등록 + 제목/경로 관찰 → 타이틀바 라이브 갱신(Idea A: 창 크롬이 제목·뒤로 소유).
-  // 같은 창 안에서 서브라우트로 드릴인하면 document.title이 바뀌고(Next 메타) MutationObserver가
-  // 잡아 제목·canBack을 갱신한다. same-origin이라 contentDocument/contentWindow 접근 가능.
+  // iframe 등록 + 제목/URL 관찰 → 타이틀바 제목 + 창별 nav 스택 갱신(Idea A: 창 크롬이 제목·뒤로 소유).
+  // 같은 창 안에서 서브라우트로 드릴인하면 document.title·location이 바뀌고 MutationObserver/popstate가
+  // 잡아 갱신한다. same-origin이라 contentDocument/contentWindow 접근 가능. canBack은 스택 깊이로 판정.
   useEffect(() => {
     const el = iframeRef.current;
     if (!el) return;
@@ -51,13 +43,13 @@ export function RouteWindow({ win }: { win: Win }) {
         const doc = el.contentDocument;
         const cw = el.contentWindow;
         if (!doc || !cw) return;
-        // iframe이 아직 라우트를 로드하기 전엔 about:blank(pathname="blank")라 rootPath와 달라
-        // canBack이 거짓 true가 되어 로딩 스켈레톤 타이틀바에 뒤로(←)가 떴다. 실제 라우트(절대경로)가
-        // 들어오기 전까지는 live를 건드리지 않는다 → 루트/로딩 상태엔 ← 미표시(닫기는 X가 담당).
+        // iframe이 아직 라우트를 로드하기 전엔 about:blank(pathname="blank") — 실제 라우트(절대경로)가
+        // 들어오기 전까지는 스택을 건드리지 않는다(로딩 스켈레톤엔 ← 미표시, 닫기는 X가 담당).
         const path = cw.location.pathname;
         if (cw.location.href === "about:blank" || !path.startsWith("/")) return;
+        const url = path + cw.location.search;
         const title = cleanTitle(doc.title || "") || fallbackTitle;
-        setLive(win.id, { title, canBack: !!rootPath && path !== rootPath });
+        observeIframe(win.id, { title, url });
       } catch {
         /* same-origin이라 정상 도달; 만약 막히면 무시(타이틀=params 유지) */
       }
@@ -85,7 +77,7 @@ export function RouteWindow({ win }: { win: Win }) {
       obs?.disconnect();
       iframeRegistry.delete(win.id);
     };
-  }, [win.id, rootPath, fallbackTitle, setLive]);
+  }, [win.id, fallbackTitle, observeIframe]);
 
   if (!href) return null;
 

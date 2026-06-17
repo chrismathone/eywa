@@ -1,8 +1,10 @@
+import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BillingContent } from "./_components/billing-content";
 import { TextbooksPanel } from "./_components/textbooks-panel";
 import { ExpensesPanel } from "./_components/expenses-panel";
 import { BillingTabs, type BillingTab } from "./_components/billing-tabs";
+import { BillingTabSync } from "./_components/billing-tab-sync";
 
 type Sp = Record<string, string | undefined>;
 
@@ -21,11 +23,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   await requireAccess("billing");
   const sp = await searchParams;
   const tab = resolveTab(sp);
+  // 창(임베드)에선 외부 책갈피가 프레임 밖에 있어 우측 여백 불필요. 배경 풀페이지에선 in-page 책갈피 레일 너비 확보.
+  const embed = (await headers()).get("x-embed") === "1";
 
   return (
     <div className="relative">
-      {/* 책갈피 레일 너비만큼 우측 여백 확보 */}
-      <div className="pr-11">
+      <div className={embed ? "" : "pr-11"}>
         {tab === "textbooks" ? (
           <TextbooksPanel sp={sp} />
         ) : tab === "expenses" ? (
@@ -35,6 +38,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         )}
       </div>
       <BillingTabs active={tab} />
+      <BillingTabSync />
     </div>
   );
 }
