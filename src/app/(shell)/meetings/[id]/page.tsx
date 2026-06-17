@@ -20,6 +20,7 @@ import {
 } from "@/features/meetings/server/queries";
 import { RunMeetingAiButton } from "./run-ai-button";
 import { MeetingStatusWatcher } from "./status-watcher";
+import { TranscriptList } from "./transcript-list";
 
 export const metadata = { title: "회의록 상세 — eywa" };
 
@@ -187,20 +188,10 @@ export default async function MeetingDetailPage({
               {meeting.speakerLabels?.length}개 발화
             </span>
           </header>
-          <div className="max-h-[420px] space-y-3 overflow-y-auto p-5">
-            {meeting.speakerLabels!.map((u, i) => {
-              const role = meeting.aiSpeakerRoles?.[u.speaker];
-              return (
-                <div key={i} className="space-y-1">
-                  <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-                    화자 {u.speaker}
-                    {role ? <span className="text-foreground/70 ml-1.5 normal-case">· {role}</span> : null}
-                  </p>
-                  <p className="text-foreground text-sm leading-relaxed">{u.text}</p>
-                </div>
-              );
-            })}
-          </div>
+          <TranscriptList
+            utterances={meeting.speakerLabels!}
+            speakerRoles={meeting.aiSpeakerRoles}
+          />
         </section>
       ) : meeting.transcription ? (
         <section className="bg-card border-border rounded-lg border p-5">

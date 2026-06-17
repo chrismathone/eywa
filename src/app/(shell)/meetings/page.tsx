@@ -11,8 +11,11 @@ import {
   type MeetingRow,
 } from "@/features/meetings/server/queries";
 import { NewMeetingTrigger } from "./_new-meeting-trigger";
+import { Pagination } from "@/components/pagination";
 
 export const metadata = { title: "회의록 — eywa" };
+
+const PAGE_SIZE = 50;
 
 const STATUS_META: Record<
   MeetingProcessingStatus,
@@ -148,14 +151,17 @@ function buildHref(params: { range: RangeKey; status: StatusKey; q: string }): s
 export default async function MeetingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: RangeKey; status?: StatusKey; q?: string }>;
+  searchParams: Promise<{ range?: RangeKey; status?: StatusKey; q?: string; page?: string }>;
 }) {
   await requireAccess("meetings");
   const sp = await searchParams;
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
   const q = sp.q ?? "";
+  const page = Math.max(1, Number(sp.page) || 1);
 
+  // 회의는 모집단이 모더릿(수백)하고 필터(다중 상태·참석자 jsonb·상대기간)가 SQL로 옮기기 까다로워,
+  // 수납 페이지와 같은 메모리 페이지네이션을 쓴다(전건 fetch는 기존과 동일 — 렌더만 50행으로 캡).
   const all = await getMeetings();
   let meetings = all;
   if (q) {
@@ -169,12 +175,26 @@ export default async function MeetingsPage({
   meetings = meetings.filter((m) => inRange(m.heldAt, range));
   meetings = meetings.filter((m) => matchStatus(m.processingStatus, status));
 
+  const total = meetings.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = meetings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const completed = all.filter((m) => m.processingStatus === "completed").length;
   const inProgress = all.filter(
     (m) => m.processingStatus === "transcribing" || m.processingStatus === "analyzing",
   ).length;
 
   const current = { range, status, q };
+  // 필터(buildHref)는 page를 안 실어 자동 1페이지 리셋. pageHref만 p>1에서 page= 세팅.
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (range !== "all") params.set("range", range);
+    if (status !== "all") params.set("status", status);
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    const s = params.toString();
+    return s ? `/meetings?${s}` : "/meetings";
+  };
 
   return (
     <div className="space-y-4">
@@ -243,22 +263,30 @@ export default async function MeetingsPage({
 
       <div className="flex items-center justify-between">
         <p className="micro">
-          결과 <span className="text-foreground font-bold">{meetings.length}</span>건
+          결과 <span className="text-foreground font-bold">{total}</span>건
+          {totalPages > 1 ? (
+            <span className="text-text-faint ml-2 normal-case">
+              · {page}/{totalPages} 페이지
+            </span>
+          ) : null}
         </p>
         <NewMeetingTrigger />
       </div>
 
-      {meetings.length === 0 ? (
+      {total === 0 ? (
         <EmptyState
           icon={() => <EyIcon name="rings" size={32} />}
           title="기록된 회의가 없습니다"
         />
       ) : (
-        <ul className="space-y-2.5">
-          {meetings.map((m) => (
-            <MeetingItem key={m.id} m={m} />
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-2.5">
+            {rows.map((m) => (
+              <MeetingItem key={m.id} m={m} />
+            ))}
+          </ul>
+          <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
+        </>
       )}
     </div>
   );
