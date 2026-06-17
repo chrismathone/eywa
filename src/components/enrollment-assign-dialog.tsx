@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   createEnrollment,
   type CreateEnrollmentState,
@@ -71,8 +72,6 @@ export function EnrollmentAssignDialog({
     createEnrollment,
     undefined,
   );
-  const [selectedClassId, setSelectedClassId] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState("");
 
   if (state?.enrollmentId && !state?.error) {
     queueMicrotask(() => {
@@ -133,43 +132,32 @@ export function EnrollmentAssignDialog({
           {isStudentMode && classes ? (
             <div className="space-y-1.5">
               <label className="text-foreground block text-sm font-medium">반 선택</label>
-              <select
+              <SearchableSelect
                 name="classId"
-                required
-                value={selectedClassId}
-                onChange={(e) => setSelectedClassId(e.target.value)}
-                className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
-              >
-                <option value="">선택...</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.className} · {SUBJECT_LABEL[c.subject] ?? c.subject}
-                    {c.teacherName ? ` · ${c.teacherName}` : ""}
-                    {` · ${c.studentCount}명`}
-                  </option>
-                ))}
-              </select>
+                placeholder="반 선택..."
+                searchPlaceholder="반 이름·강사 검색..."
+                options={classes.map((c) => ({
+                  value: c.id,
+                  label: c.className,
+                  hint: `${SUBJECT_LABEL[c.subject] ?? c.subject}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
+                }))}
+              />
             </div>
           ) : null}
 
           {!isStudentMode && studentOptions ? (
             <div className="space-y-1.5">
               <label className="text-foreground block text-sm font-medium">학생 선택</label>
-              <select
+              <SearchableSelect
                 name="studentId"
-                required
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
-              >
-                <option value="">선택...</option>
-                {studentOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                    {s.grade ? ` · ${s.grade}` : ""}
-                  </option>
-                ))}
-              </select>
+                placeholder="학생 선택..."
+                searchPlaceholder="학생 이름 검색..."
+                options={studentOptions.map((s) => ({
+                  value: s.id,
+                  label: s.name,
+                  hint: s.grade ?? undefined,
+                }))}
+              />
             </div>
           ) : null}
 

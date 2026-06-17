@@ -75,6 +75,7 @@ export default async function AttendancePage({
             value={selectedClassId}
             options={matrix.classes.map((c) => ({ value: c.id, label: c.className }))}
             ariaLabel="반 필터"
+            searchable
           />
         </div>
 

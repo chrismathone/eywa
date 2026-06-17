@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   createStudentConsultation,
   updateStudentConsultation,
@@ -106,20 +107,17 @@ export function ConsultationForm({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="학생 *" htmlFor="studentId" error={errors.studentId}>
-          <select
-            id="studentId"
+          <SearchableSelect
             name="studentId"
             defaultValue={v.studentId}
-            required
-            className={inputClass}
-          >
-            <option value="">선택</option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} {s.grade ? `(${s.grade})` : ""}
-              </option>
-            ))}
-          </select>
+            placeholder="학생 선택..."
+            searchPlaceholder="학생 이름 검색..."
+            options={students.map((s) => ({
+              value: s.id,
+              label: s.name,
+              hint: s.grade ? `(${s.grade})` : undefined,
+            }))}
+          />
         </Field>
         <Field label="상담사" htmlFor="counselorId">
           <select
