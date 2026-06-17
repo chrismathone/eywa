@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { attendanceRate } from "@/lib/calc/attendance";
 
 export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "makeup";
 
@@ -338,7 +339,7 @@ export async function getMonthlyAttendanceMatrix(
   }
 
   const presentRate =
-    totalRecords > 0 ? Math.round((presentCount / totalRecords) * 1000) / 10 : 0;
+    totalRecords > 0 ? Math.round(attendanceRate(presentCount, totalRecords) * 10) / 10 : 0;
 
   return {
     classes,

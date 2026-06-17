@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { attendanceRate } from "@/lib/calc/attendance";
 
 export type StudentListRow = {
   id: string;
@@ -381,7 +382,7 @@ export async function getStudentAttendanceStats(
     absent: rows.filter((r) => r.status === "absent").length,
     late: rows.filter((r) => r.status === "late").length,
     excused: rows.filter((r) => r.status === "excused").length,
-    rate: total > 0 ? (present / total) * 100 : 0,
+    rate: attendanceRate(present, total),
   };
 }
 

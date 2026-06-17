@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll } from "./queries";
 
 export type SavePayrollState = { error?: string; recordId?: string } | undefined;
@@ -25,7 +26,7 @@ export async function upsertPayroll(
 
   if (!userId || !period) return { error: "강사·정산 기간이 필요합니다" };
 
-  const total = baseAmount + hourlyAmount + bonus - deduction;
+  const total = payrollTotal({ baseAmount, hourlyAmount, bonus, deduction });
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -94,7 +95,7 @@ export async function autoComputePayroll(
   const calc = await calculateMonthlyPayroll(userId, period);
 
   const supabase = await createClient();
-  const total = calc.baseAmount + calc.hourlyAmount;
+  const total = payrollTotal({ baseAmount: calc.baseAmount, hourlyAmount: calc.hourlyAmount });
 
   const { data, error } = await supabase
     .from("payroll_records")

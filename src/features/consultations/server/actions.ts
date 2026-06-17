@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { attendanceRate } from "@/lib/calc/attendance";
 import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
@@ -86,7 +87,7 @@ export async function runStudentCareAnalysis(
   const present = attRows.filter((r) => r.status === "present").length;
   const absent = attRows.filter((r) => r.status === "absent").length;
   const late = attRows.filter((r) => r.status === "late").length;
-  const rate = total > 0 ? ((present / total) * 100).toFixed(1) : "—";
+  const rate = total > 0 ? attendanceRate(present, total).toFixed(1) : "—";
 
   const enrolledClasses = (enrollments ?? [])
     .map((e) => {

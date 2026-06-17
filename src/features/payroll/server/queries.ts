@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { aggregateClassHours, computePayrollAmounts, sumSessionHours } from "../calc";
 
 export type PayrollRecord = {
   id: string;
@@ -72,52 +73,30 @@ export async function calculateMonthlyPayroll(
     .lt("session_date", nextMonth)
     .in("status", ["present", "late"]);
 
-  // 출석 1건 = 1세션 = class_schedule 의 (end - start) 시간
-  // 다중 schedule이 있으면 모두 합산 (단순 평균 — 정밀 매칭은 추후)
-  let totalHours = 0;
-  // 반 ID별로 평균 세션 시간 캐싱
-  const classHourMap = new Map<string, number>();
+  // schedule 시간 → 반별 평균 세션 시간 → 고유 출석 세션 합 → 금액. 계산은 전부 순수 calc(#Q1).
   const { data: schedules } = await supabase
     .from("class_schedules")
     .select("class_id, start_time, end_time")
     .in("class_id", classIds);
-  for (const s of schedules ?? []) {
-    const [sh, sm] = String(s.start_time).split(":").map(Number);
-    const [eh, em] = String(s.end_time).split(":").map(Number);
-    const hours = eh + em / 60 - (sh + sm / 60);
-    const cur = classHourMap.get(s.class_id) ?? 0;
-    classHourMap.set(s.class_id, cur + hours);
-  }
-  // 한 반의 schedule을 평균으로 (다중 요일이면 / count)
-  const scheduleCountMap = new Map<string, number>();
-  for (const s of schedules ?? []) {
-    scheduleCountMap.set(s.class_id, (scheduleCountMap.get(s.class_id) ?? 0) + 1);
-  }
-  for (const [cid, total] of classHourMap) {
-    const cnt = scheduleCountMap.get(cid) ?? 1;
-    classHourMap.set(cid, total / cnt);
-  }
 
-  // 학생별·날짜별 출석 row → 반의 평균 시간 합산
-  // attendance row 1건당 한 반의 1세션 → class 시간 추가
-  // 학생 N명이 같은 세션 = N건 출석 → 학생별로 카운트하지 말고 (날짜, 반) 별 unique 처리
-  const sessions = new Set<string>();
-  for (const a of attendances ?? []) {
-    const cls = (Array.isArray(a.class) ? a.class[0] : a.class) as { id?: string } | undefined;
-    if (!cls?.id) continue;
-    sessions.add(`${cls.id}::${a.session_date}`);
-  }
-  for (const key of sessions) {
-    const [cid] = key.split("::");
-    const hours = classHourMap.get(cid) ?? 1;
-    totalHours += hours;
-  }
+  const classHours = aggregateClassHours(
+    (schedules ?? []).map((s) => ({
+      class_id: s.class_id,
+      start_time: String(s.start_time),
+      end_time: String(s.end_time),
+    })),
+  );
+  const sessions = (attendances ?? [])
+    .map((a) => {
+      const cls = (Array.isArray(a.class) ? a.class[0] : a.class) as { id?: string } | undefined;
+      return cls?.id ? { classId: cls.id, date: a.session_date as string } : null;
+    })
+    .filter((x): x is { classId: string; date: string } => x !== null);
+  const totalHours = sumSessionHours(sessions, classHours);
 
   return {
     period,
-    baseAmount: monthlyBase,
-    hoursWorked: Math.round(totalHours * 100) / 100,
-    hourlyAmount: Math.round(totalHours * hourlyRate),
+    ...computePayrollAmounts({ monthlyBase, hourlyRate, totalHours }),
     classCount: classIds.length,
   };
 }

@@ -1,5 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { summarizeInvoices, currentPeriod, type BillingSummary } from "../calc";
+
+// 순수 요약 로직은 calc.ts(서버 전용 아님 → Vitest)로 분리. 기존 importer 호환 위해 re-export(#Q2).
+export { summarizeInvoices };
+export type { BillingSummary };
 
 export type InvoiceLineItem = {
   kind: string;
@@ -26,19 +31,6 @@ export type InvoiceRow = {
   teacherName: string | null;
 };
 
-export type BillingSummary = {
-  period: string;
-  totalCount: number;
-  paidCount: number;
-  partialCount: number;
-  unpaidCount: number;
-  totalBilled: number;
-  totalCollected: number;
-  totalDiscount: number;
-  outstanding: number;
-  paymentRate: number;
-};
-
 export type SortKey =
   | "status"
   | "name"
@@ -55,10 +47,6 @@ export type InvoiceFilters = {
   category?: string; // "all" | "tuition" | "material" | "exam" | "other"
 };
 
-function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 export async function getInvoicesForPeriod(
   options?: InvoiceFilters,
@@ -150,27 +138,6 @@ export async function getInvoicesForPeriod(
   });
 
   return rows;
-}
-
-/**
- * 청구서 배열 → 요약 KPI (순수 함수, 네트워크 0).
- * 페이지가 월 전체를 한 번만 fetch한 뒤 이 함수로 요약을 도출해 이중 fetch를 없앤다.
- */
-export function summarizeInvoices(rows: InvoiceRow[], period?: string): BillingSummary {
-  const totalBilled = rows.reduce((s, r) => s + r.amountTotal, 0);
-  const totalCollected = rows.reduce((s, r) => s + r.amountPaid, 0);
-  return {
-    period: period ?? currentPeriod(),
-    totalCount: rows.length,
-    paidCount: rows.filter((r) => r.status === "paid").length,
-    partialCount: rows.filter((r) => r.status === "partial").length,
-    unpaidCount: rows.filter((r) => r.status === "unpaid").length,
-    totalBilled,
-    totalCollected,
-    totalDiscount: rows.reduce((s, r) => s + r.amountDiscount, 0),
-    outstanding: totalBilled - totalCollected,
-    paymentRate: totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 0,
-  };
 }
 
 export async function getBillingSummary(period?: string): Promise<BillingSummary> {

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { attendanceRate } from "@/lib/calc/attendance";
 
 export type ClassListRow = {
   id: string;
@@ -379,6 +380,6 @@ export async function getClassAttendanceStats(
     absent,
     late,
     excused,
-    rate: total > 0 ? (present / total) * 100 : 0,
+    rate: attendanceRate(present, total),
   };
 }

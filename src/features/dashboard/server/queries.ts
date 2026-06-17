@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { attendanceRate } from "@/lib/calc/attendance";
 
 const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
@@ -76,7 +77,7 @@ async function snapshotForDate(date: string): Promise<AttendanceSnapshot | null>
     absent,
     late,
     excused,
-    rate: total > 0 ? (present / total) * 100 : 0,
+    rate: attendanceRate(present, total),
   };
 }
 
