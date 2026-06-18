@@ -86,6 +86,8 @@ export type StudentLine = {
   grade: string | null;
   school: string | null;
   enrollmentId?: string;
+  /** 학생 id — 셀에서 클릭 시 학생 상세 창 링크(/students/[id])용. */
+  studentId: string;
   /** 셀 섹션 구분: active=재원, hold=대기(enrollment.on_hold), withdrawn=퇴원(end_date 있음). ijw 셀 패턴. */
   status: "active" | "hold" | "withdrawn";
   /** 퇴원일(status=withdrawn). 최신순 정렬·표시용. */
@@ -186,6 +188,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       grade: s.grade ?? null,
       school: s.school ?? null,
       enrollmentId: r.id,
+      studentId: r.student_id,
       status: r.on_hold ? "hold" : "active",
       // 날짜 문자열(YYYY-MM-DD) 사전식 비교 — start_date >= cutoff면 30일 이내.
       isNew: r.start_date != null && r.start_date >= newCutoff,
@@ -204,16 +207,22 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       grade: s.grade ?? null,
       school: s.school ?? null,
       enrollmentId: r.id,
+      studentId: r.student_id,
       status: "withdrawn",
       endDate: r.end_date,
     });
   }
 
-  // 셀 표시 순서: 재원(가나다) → 대기(가나다) → 퇴원(최신순).
+  // 셀 표시 순서: 재원 → 대기 → 퇴원. 재원 안에서는 신입 > 반이동(전입) > 기존(그룹 내 가나다),
+  // 퇴원은 최신순, 대기는 가나다.
   const rank = (l: StudentLine) => (l.status === "active" ? 0 : l.status === "hold" ? 1 : 2);
+  const activeSubRank = (l: StudentLine) => (l.isNew ? 0 : l.isTransferredIn ? 1 : 2);
   for (const list of byClass.values()) {
     list.sort((a, b) => {
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      if (a.status === "active" && activeSubRank(a) !== activeSubRank(b)) {
+        return activeSubRank(a) - activeSubRank(b);
+      }
       if (a.status === "withdrawn") return (b.endDate ?? "").localeCompare(a.endDate ?? "");
       return a.name.localeCompare(b.name, "ko");
     });

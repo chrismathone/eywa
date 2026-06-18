@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { ClassDetailDrawer, type ClassDetailQuick } from "@/components/class-detail-drawer";
+import { WindowLink } from "@/components/workspace/window-link";
+import { type ClassDetailQuick } from "@/components/class-detail-drawer";
 import { useTimetableEdit } from "./edit-context";
 
 // 반이름 헤더 바 색(과목별). 학생 행은 흰 배경 + 상태색이라 헤더만 과목색.
@@ -75,14 +75,37 @@ function DraggableStudentRow({
   );
 }
 
-/** 학생 한 줄(비편집) — 드래그 훅 없이 평범한 div. 대량 셀 DOM/렌더 보호. */
-function StudentRow({ name, meta, tone }: { name: string; meta: string; tone: string }) {
-  return (
-    <div className={`${ROW_CLASS} ${tone}`}>
+/** 학생 한 줄(비편집) — 클릭 시 학생 상세 창 팝업(WindowLink). studentId 없으면 평범한 div. */
+function StudentRow({
+  studentId,
+  name,
+  meta,
+  tone,
+}: {
+  studentId?: string;
+  name: string;
+  meta: string;
+  tone: string;
+}) {
+  const inner = (
+    <>
       <span className="truncate">{name}</span>
       {meta ? <span className="shrink-0 font-mono text-[9px] opacity-70">{meta}</span> : null}
-    </div>
+    </>
   );
+  if (studentId) {
+    return (
+      <WindowLink
+        href={`/students/${studentId}`}
+        title={name}
+        ariaLabel={`${name} 학생 정보`}
+        className={`${ROW_CLASS} hover:bg-bg-soft ${tone}`}
+      >
+        {inner}
+      </WindowLink>
+    );
+  }
+  return <div className={`${ROW_CLASS} ${tone}`}>{inner}</div>;
 }
 
 /**
@@ -134,6 +157,7 @@ function StudentSection({
         ) : (
           <StudentRow
             key={s.enrollmentId ?? `s-${i}`}
+            studentId={s.studentId}
             name={s.name}
             meta={metaLabel(s.school, s.grade)}
             tone={tone(s)}
@@ -149,7 +173,8 @@ function StudentSection({
 
 /**
  * 시간표 셀 — 반이름 헤더 바 + 그 아래 학생 세로 나열(엑셀식 칸 안 행). ijw 시간표 패턴.
- * 헤더 클릭 → ClassDetailDrawer로 전체 명단/레벨변경. 편집 모드면 학생 행 드래그로 반 이동.
+ * 헤더 클릭 → 반 정보 창 팝업(/classes/[id]), 학생 행 클릭 → 학생 정보 창 팝업(/students/[id]).
+ * 편집 모드면 학생 행 드래그로 반 이동(클릭 팝업 대신).
  */
 export function ClassCell({
   slot,
@@ -159,7 +184,6 @@ export function ClassCell({
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
   roster?: "full" | "names" | "none";
 }) {
-  const [open, setOpen] = useState(false);
   const { editing } = useTimetableEdit();
   const color = SUBJECT_COLOR[slot.subject] ?? "bg-bg-soft text-text-dim";
 
@@ -180,19 +204,18 @@ export function ClassCell({
   });
 
   return (
-    <>
-      <div
-        ref={setDroppableRef}
-        className={`border-line overflow-hidden rounded-[3px] border transition ${
-          hasSecondary ? "flex min-h-0 flex-1 flex-col" : ""
-        } ${isOver ? "ring-primary ring-2" : ""}`}
-      >
-        {/* 반이름 헤더 바 — 클릭 시 상세 drawer */}
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
+    <div
+      ref={setDroppableRef}
+      className={`border-line overflow-hidden rounded-[3px] border transition ${
+        hasSecondary ? "flex min-h-0 flex-1 flex-col" : ""
+      } ${isOver ? "ring-primary ring-2" : ""}`}
+    >
+        {/* 반이름 헤더 바 — 클릭 시 반 정보 창 팝업(/classes/[classId]) */}
+        <WindowLink
+          href={`/classes/${slot.classId ?? slot.id}`}
+          title={slot.className}
+          ariaLabel={`${slot.className} 반 정보`}
           className={`block w-full shrink-0 px-2 py-1 text-left transition hover:brightness-95 ${color}`}
-          aria-label={`${slot.className} 상세 보기`}
         >
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[11px] font-bold">{slot.className}</span>
@@ -204,7 +227,7 @@ export function ClassCell({
             </span>
             {slot.classroomName ? <span className="truncate font-mono">{slot.classroomName}</span> : null}
           </div>
-        </button>
+        </WindowLink>
 
         {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
@@ -252,8 +275,5 @@ export function ClassCell({
           </div>
         ) : null}
       </div>
-
-      <ClassDetailDrawer open={open} onClose={() => setOpen(false)} slot={slot} trigger={null} />
-    </>
   );
 }

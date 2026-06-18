@@ -20,6 +20,8 @@ const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
 
 export type ClassDetailQuick = {
   id: string;
+  /** 실제 반 id(/classes/[id] 링크용). 시간표 slot.id는 스케줄 id라 별도 필요. 없으면 id 폴백. */
+  classId?: string;
   className: string;
   subject: string;
   classroomName?: string | null;
@@ -32,6 +34,7 @@ export type ClassDetailQuick = {
     grade: string | null;
     school: string | null;
     enrollmentId?: string;
+    studentId?: string;
     /** active=재원, hold=대기, withdrawn=퇴원. (없으면 active로 간주 — 구버전 호출 호환) */
     status?: "active" | "hold" | "withdrawn";
     endDate?: string | null;
