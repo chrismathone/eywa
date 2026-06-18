@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ClassDetailDrawer, type ClassDetailQuick } from "@/components/class-detail-drawer";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { useTimetableEdit } from "./edit-context";
 
 const SUBJECT_COLOR: Record<string, string> = {
   math: "bg-primary-soft text-primary",
@@ -17,28 +18,36 @@ function shortTime(t: string) {
   return t.slice(0, 5);
 }
 
-/** 학생 한 명 — draggable. */
+/** 학생 한 명 — 편집 모드에서만 draggable. 이동 예정이면 취소선 + 대상 반 마커. */
 function DraggableStudent({
   enrollmentId,
   classId,
+  name,
   children,
 }: {
   enrollmentId: string;
   classId: string;
+  name: string;
   children: React.ReactNode;
 }) {
+  const { editing, pending } = useTimetableEdit();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `student:${enrollmentId}`,
-    data: { classId },
+    data: { classId, name },
+    disabled: !editing,
   });
+  const target = pending.get(enrollmentId);
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      className={`cursor-grab active:cursor-grabbing print:cursor-default ${isDragging ? "opacity-40" : ""}`}
+      {...(editing ? attributes : {})}
+      {...(editing ? listeners : {})}
+      className={`print:cursor-default ${editing ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
     >
-      {children}
+      <span className={target ? "line-through" : ""}>{children}</span>
+      {target ? (
+        <span className="text-primary ml-0.5 font-mono text-[9px]">→{target.toClassName}</span>
+      ) : null}
     </div>
   );
 }
@@ -60,6 +69,7 @@ export function ClassCell({
 
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `class:${slot.id}`,
+    data: { className: slot.className },
   });
 
   return (
@@ -101,6 +111,7 @@ export function ClassCell({
                   key={s.enrollmentId}
                   enrollmentId={s.enrollmentId}
                   classId={slot.id}
+                  name={s.name}
                 >
                   <span className="rounded-sm px-1 hover:brightness-110">
                     {s.name}/{s.grade ?? "—"}

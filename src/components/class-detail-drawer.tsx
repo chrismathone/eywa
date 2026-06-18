@@ -1,10 +1,14 @@
 "use client";
 
 import { WindowLink } from "@/components/workspace/window-link";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { isLevelClassName, type LevelChange } from "@/features/timetable/lib/level";
+import { changeClassLevel } from "@/features/timetable/server/actions";
 
 const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
   math: { label: "수학", color: "primary" },
@@ -71,6 +75,10 @@ export function ClassDetailDrawer({
   slot: ClassDetailQuick | null;
   trigger?: ReactNode;
 }) {
+  const router = useRouter();
+  const [leveling, startLevel] = useTransition();
+  const [levelError, setLevelError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -81,6 +89,17 @@ export function ClassDetailDrawer({
   }, [open, onClose]);
 
   if (!open || !slot) return <>{trigger}</>;
+
+  const canLevel = slot.subject === "english" && isLevelClassName(slot.className);
+  function doLevel(change: LevelChange) {
+    if (!slot) return;
+    setLevelError(null);
+    startLevel(async () => {
+      const res = await changeClassLevel(slot.id, change);
+      if (res?.error) setLevelError(res.error);
+      else router.refresh();
+    });
+  }
 
   const subjectMeta = SUBJECT_META[slot.subject] ?? {
     label: slot.subject,
@@ -167,6 +186,51 @@ export function ClassDetailDrawer({
         </div>
 
         <footer className="border-line bg-bg-soft border-t px-5 py-3">
+          {canLevel ? (
+            <div className="mb-3">
+              <div className="flex items-center justify-between">
+                <p className="micro">레벨 변경</p>
+                {leveling ? <Loader2 className="text-primary size-3 animate-spin" /> : null}
+              </div>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => doLevel("number-up")}
+                  disabled={leveling}
+                  className="border-line hover:bg-card text-text-dim hover:text-foreground inline-flex items-center justify-center gap-1 rounded-sm border py-1.5 text-[11px] transition disabled:opacity-50"
+                >
+                  <ChevronUp className="size-3" /> 숫자 ↑ (예 DP3→DP4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => doLevel("number-down")}
+                  disabled={leveling}
+                  className="border-line hover:bg-card text-text-dim hover:text-foreground inline-flex items-center justify-center gap-1 rounded-sm border py-1.5 text-[11px] transition disabled:opacity-50"
+                >
+                  <ChevronDown className="size-3" /> 숫자 ↓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => doLevel("class-up")}
+                  disabled={leveling}
+                  className="border-blue/40 bg-blue-soft text-blue hover:brightness-95 inline-flex items-center justify-center gap-1 rounded-sm border py-1.5 text-[11px] transition disabled:opacity-50"
+                >
+                  <ChevronUp className="size-3" /> 레벨 ↑ (예 DP3→PL1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => doLevel("class-down")}
+                  disabled={leveling}
+                  className="border-line hover:bg-card text-text-dim hover:text-foreground inline-flex items-center justify-center gap-1 rounded-sm border py-1.5 text-[11px] transition disabled:opacity-50"
+                >
+                  <ChevronDown className="size-3" /> 레벨 ↓
+                </button>
+              </div>
+              {levelError ? (
+                <p className="text-chart-4 mt-1.5 text-[11px]">{levelError}</p>
+              ) : null}
+            </div>
+          ) : null}
           <WindowLink
             href={`/classes/${slot.id}`}
             title={slot.className ?? "반 상세"}

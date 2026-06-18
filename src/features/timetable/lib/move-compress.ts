@@ -5,9 +5,9 @@
 
 export interface PendingMove {
   enrollmentId: string;
-  studentId: string;
   fromClassId: string;
   toClassId: string;
+  studentId?: string; // 표시용(서버 RPC가 enrollment에서 직접 도출하므로 로직엔 불필요)
 }
 
 /**
