@@ -1,11 +1,18 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getAttendanceCodeStats,
+  getKakaoChannelStatus,
   getKioskDevices,
   getRecentCheckins,
   getRecentNotifications,
 } from "@/features/attendance/kiosk/server/queries";
-import { AssignCodesForm, RegisterDeviceForm, RevokeDeviceButton } from "./_components/forms";
+import {
+  AssignCodesForm,
+  KakaoChannelForm,
+  RegisterDeviceForm,
+  RevokeDeviceButton,
+  TestAlimtalkForm,
+} from "./_components/forms";
 
 // 원장(master) 전용 키오스크 설정. 사이드바 미노출 — 직접 URL + requireAccess 가드.
 export const dynamic = "force-dynamic";
@@ -24,11 +31,12 @@ function fmt(iso: string | null): string {
 
 export default async function KioskSettingsPage() {
   await requireAccess("kiosk_settings");
-  const [stats, devices, checkins, notifications] = await Promise.all([
+  const [stats, devices, checkins, notifications, kakao] = await Promise.all([
     getAttendanceCodeStats(),
     getKioskDevices(),
     getRecentCheckins(20),
     getRecentNotifications(20),
+    getKakaoChannelStatus(),
   ]);
 
   return (
@@ -118,6 +126,38 @@ export default async function KioskSettingsPage() {
         ) : (
           <p className="text-text-faint mt-3 text-[12px]">아직 발송 내역이 없습니다.</p>
         )}
+      </section>
+
+      {/* 3.5 카카오 알림톡 연동 */}
+      <section className="border-border bg-card rounded-lg border p-5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-foreground text-sm font-bold">카카오 알림톡 연동</h2>
+          {kakao.live ? (
+            <span className="text-primary shrink-0 text-[12px] font-medium">활성 · 실발송</span>
+          ) : kakao.configured && !kakao.licenseActive ? (
+            <span className="text-amber shrink-0 text-[12px] font-medium">라이선스 대기</span>
+          ) : (
+            <span className="text-text-faint shrink-0 text-[12px] font-medium">미설정 · 시뮬레이션</span>
+          )}
+        </div>
+        <p className="text-text-dim mt-1 text-[13px] leading-relaxed">
+          학원 명의 카카오 비즈채널 인증 → 발신프로필 키(pfId) 발급 → 등하원 정보성 템플릿 2종 사전심사(1~3
+          영업일)를 마친 뒤, 아래에 pfId와 승인된 템플릿 ID를 입력하세요. 라이선스(<span className="font-mono">kakao_messaging</span>)가
+          켜지고 정보가 모두 채워지면 <span className="text-foreground">코드 변경 없이 실발송으로 전환</span>됩니다.
+          그 전까지는 발송 시뮬레이션으로 동작합니다(실제 전송 없음).
+        </p>
+        <div className="mt-4">
+          <KakaoChannelForm status={kakao} />
+        </div>
+        {kakao.lastError ? (
+          <p className="text-danger mt-3 text-[12px]">최근 발송 오류: {kakao.lastError}</p>
+        ) : null}
+        <div className="border-border mt-4 border-t pt-4">
+          <p className="text-text-dim mb-2 text-[12px]">
+            연동이 활성화되면 원장 본인 번호로 등원 알림톡을 한 건 보내 도달을 확인할 수 있습니다.
+          </p>
+          <TestAlimtalkForm />
+        </div>
       </section>
 
       {/* 4. 등하원 현황 */}
