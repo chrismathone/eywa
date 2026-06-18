@@ -163,7 +163,13 @@ export async function getStudentsPage(
   if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
   if (options?.q) {
     const term = options.q.trim();
-    if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
+    // 이름·학교 외 전화(학생/보호자)·보호자명까지 — 데스크 응대 시 전화로 학생 찾기 빈번.
+    if (term) {
+      const esc = term.replace(/[,()]/g, " ");
+      qb = qb.or(
+        `name.ilike.%${esc}%,school.ilike.%${esc}%,student_phone.ilike.%${esc}%,parent_phone.ilike.%${esc}%,parent_name.ilike.%${esc}%`,
+      );
+    }
   }
   if (subjectIds) qb = qb.in("id", subjectIds);
   qb = qb.range(from, to);

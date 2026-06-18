@@ -174,7 +174,7 @@ export default async function StudentsPage({
                 type="search"
                 name="q"
                 defaultValue={q}
-                placeholder="이름·학교"
+                placeholder="이름·학교·연락처"
                 className="text-foreground placeholder:text-text-faint w-40 bg-transparent text-xs focus:outline-none"
               />
             </div>
