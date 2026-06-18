@@ -5,12 +5,13 @@ import { useEmbed } from "@/components/workspace/embed-context";
 
 // 수납관리 책갈피(앨범 인덱스 탭) — 배경 풀페이지에서만 표시한다. 플로팅 창(임베드)에선 창 프레임
 // 바깥의 진짜 책갈피(WindowBookmarks)가 대체하므로 여기선 숨긴다. 세로쓰기 + 면별 파스텔색.
-export type BillingTab = "billing" | "textbooks" | "expenses";
+export type BillingTab = "billing" | "textbooks" | "expenses" | "calculator";
 
 const TABS: { key: BillingTab; label: string; soft: string; ring: string }[] = [
   { key: "billing", label: "수납", soft: "bg-primary-soft text-primary", ring: "ring-primary/40" },
   { key: "textbooks", label: "교재", soft: "bg-blue-soft text-blue", ring: "ring-blue/40" },
   { key: "expenses", label: "지출", soft: "bg-purple-soft text-purple", ring: "ring-purple/40" },
+  { key: "calculator", label: "계산기", soft: "bg-amber-soft text-amber", ring: "ring-amber/40" },
 ];
 
 function hrefFor(k: BillingTab): string {

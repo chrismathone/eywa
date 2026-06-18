@@ -11,11 +11,12 @@ const TABS: { key: string; label: string; cls: string; ring: string }[] = [
   { key: "billing", label: "수납", cls: "bg-primary-soft text-primary border-primary/25", ring: "ring-primary/40" },
   { key: "textbooks", label: "교재", cls: "bg-blue-soft text-blue border-blue/25", ring: "ring-blue/40" },
   { key: "expenses", label: "지출", cls: "bg-purple-soft text-purple border-purple/25", ring: "ring-purple/40" },
+  { key: "calculator", label: "계산기", cls: "bg-amber-soft text-amber border-amber/25", ring: "ring-amber/40" },
 ];
 
 function tabFromUrl(url: string | undefined): string {
   const t = new URLSearchParams(url?.split("?")[1] ?? "").get("tab");
-  return t === "textbooks" || t === "expenses" ? t : "billing";
+  return t === "textbooks" || t === "expenses" || t === "calculator" ? t : "billing";
 }
 
 export function WindowBookmarks({ winId }: { winId: string }) {
