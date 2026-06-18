@@ -11,7 +11,9 @@ import {
   summarizeInvoices,
   type SortKey,
 } from "@/features/billing/server/queries";
+import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { BillingTable } from "./billing-table";
+import { CreateInvoiceTrigger } from "./create-invoice-dialog";
 import { Pagination } from "@/components/pagination";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -45,9 +47,10 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [monthRows, periods] = await Promise.all([
+  const [monthRows, periods, students] = await Promise.all([
     getInvoicesForPeriod({ period, sort, desc }),
     getAvailablePeriods(),
+    getStudentOptions(),
   ]);
 
   const summary = summarizeInvoices(monthRows, period);
@@ -177,13 +180,16 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             </span>
           ) : null}
         </p>
-        <a
-          href={`/api/exports/billing?${new URLSearchParams({ period, ...(q ? { q } : {}) }).toString()}`}
-          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
-        >
-          <EyIcon name="arrowDown" size={13} />
-          엑셀 내보내기
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <CreateInvoiceTrigger students={students} defaultPeriod={period} variant="outline" />
+          <a
+            href={`/api/exports/billing?${new URLSearchParams({ period, ...(q ? { q } : {}) }).toString()}`}
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+          >
+            <EyIcon name="arrowDown" size={13} />
+            엑셀 내보내기
+          </a>
+        </div>
       </div>
 
       {total === 0 ? (
