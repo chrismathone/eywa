@@ -31,6 +31,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # next-env.d.ts는 gitignore + build 산출물(.next/types/routes.d.ts 참조)이라 CI 체크아웃엔 없다.
+      # build 없이 typecheck하려면 Next 이미지/모듈 ambient 선언(*.webp 등)이 필요 → 최소본을 생성.
+      # (routes.d.ts는 typed-routes용 build 산출물이라 생략 — 타입드 라우트 엄격검사는 Vercel build가 담당.)
+      - name: Next ambient 타입 생성 (build 없이 typecheck용)
+        run: printf '/// <reference types="next" />\n/// <reference types="next/image-types/global" />\n' > next-env.d.ts
+
       - name: Typecheck
         run: pnpm typecheck
 
