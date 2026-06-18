@@ -172,10 +172,14 @@ export default async function AttendancePage({
           ))}
         </div>
 
+        {/* 우측 요약 — 반/강사는 좌측 드롭다운과 중복이라 제거. 강사 필터가 '전체'일 때만
+            선택 반의 담당 강사를 보조 표기(그땐 좌측에 강사명이 없어 유용). */}
         <span className="text-text-faint ml-auto font-mono text-[11px]">
-          {selectedClass
-            ? `${selectedClass.className} · ${selectedClass.teacherName ?? "—"} 강사`
-            : "반을 선택하세요"}
+          {!selectedClass
+            ? "반을 선택하세요"
+            : !teacherParam && selectedClass.teacherName
+              ? `${selectedClass.teacherName} 강사`
+              : null}
         </span>
       </div>
 
