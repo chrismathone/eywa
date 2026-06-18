@@ -1,4 +1,4 @@
--- 0027b — 키오스크 기기 메타(IP·User-Agent) 컬럼 추가. 멱등 additive.
+-- 0027c — 키오스크 기기 메타(IP·User-Agent) 컬럼 추가. 멱등 additive.
 -- 손수 alpha(drizzle migrate 미경유). 0027a 다음.
 
 begin;
