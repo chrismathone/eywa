@@ -169,8 +169,12 @@ export async function deleteStaff(
   }
 
   // ② auth.users 먼저 — 실패해도 public.users가 남아 직원 정보·로그인이 보존된다.
+  //    단, 임포트/시드된 "데이터 전용" 직원은 auth.users가 없어 "User not found"(404)가 난다(#31).
+  //    이건 정상 케이스(지울 로그인 계정이 애초에 없음)이므로 건너뛰고 ③ public 삭제로 진행한다.
   const { error: authErr } = await admin.auth.admin.deleteUser(id);
-  if (authErr) return { error: `로그인 계정 삭제 실패: ${authErr.message}` };
+  if (authErr && authErr.status !== 404 && !/user not found/i.test(authErr.message)) {
+    return { error: `로그인 계정 삭제 실패: ${authErr.message}` };
+  }
 
   // ③ public.users — payroll/leaves cascade, classes/students 담임은 set null로 자동 처리.
   const { error: dbErr } = await admin

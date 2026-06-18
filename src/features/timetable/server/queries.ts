@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 
 export type ScheduleSlot = {
   id: string;
@@ -16,6 +17,8 @@ export type ScheduleSlot = {
 
 async function fetchSlots(): Promise<ScheduleSlot[]> {
   const supabase = await createClient();
+  // 만료된 스케줄(valid_to < 오늘)은 제외. valid_to is null = 무기한 유효.
+  const today = new Date().toISOString().slice(0, 10);
   const { data } = await supabase
     .from("class_schedules")
     .select(
@@ -26,17 +29,18 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
          classroom:classroom_id ( name )
        )`,
     )
+    .or(`valid_to.is.null,valid_to.gte.${today}`)
     .order("start_time");
 
   if (!data) return [];
 
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select("class_id")
-    .is("end_date", null);
+  // 활성 enrollment 전건 카운트 — PostgREST 1000행 한도 회피(#54).
+  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
+    supabase.from("enrollments").select("class_id").is("end_date", null).range(from, to),
+  );
 
   const counts = new Map<string, number>();
-  for (const e of enrollments ?? []) {
+  for (const e of enrollments) {
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
 
@@ -82,6 +86,10 @@ export type StudentLine = {
   grade: string | null;
   school: string | null;
   enrollmentId?: string;
+  /** 등록 30일 이내 = 신입(셀에서 빨강 강조). ijw의 신입 윈도우 단순 근사(과목별 첫등록 아님). */
+  isNew?: boolean;
+  /** 타 반에서 이동해 들어온 학생(셀에서 초록 강조). */
+  isTransferredIn?: boolean;
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 
@@ -96,14 +104,30 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
   const classIds = Array.from(new Set(slots.map((s) => s.classId)));
   const supabase = await createClient();
 
-  const { data: rows } = await supabase
-    .from("enrollments")
-    .select("id, class_id, student:student_id ( name, grade, school )")
-    .in("class_id", classIds)
-    .is("end_date", null);
+  // 신입 판정 컷오프 — 등록 30일 이내. server-only 모듈이라 new Date() OK(fetchSlots와 동일 패턴).
+  const NEW_WINDOW_DAYS = 30;
+  const newCutoff = new Date(Date.now() - NEW_WINDOW_DAYS * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  // class_id를 청크로 나눠 조회 — 대량 .in()의 HTTP 414 + 1000행 절단 회피(#53).
+  type EnrollRow = {
+    id: string;
+    class_id: string;
+    start_date: string | null;
+    is_transferred_in: boolean | null;
+    student: { name?: string; grade?: string | null; school?: string | null } | { name?: string }[];
+  };
+  const rows = await fetchInChunks<EnrollRow>(classIds, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select("id, class_id, start_date, is_transferred_in, student:student_id ( name, grade, school )")
+      .in("class_id", chunk)
+      .is("end_date", null),
+  );
 
   const byClass = new Map<string, StudentLine[]>();
-  for (const r of rows ?? []) {
+  for (const r of rows) {
     const s = (Array.isArray(r.student) ? r.student[0] : r.student) as
       | { name?: string; grade?: string | null; school?: string | null }
       | undefined;
@@ -114,6 +138,9 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       grade: s.grade ?? null,
       school: s.school ?? null,
       enrollmentId: r.id,
+      // 날짜 문자열(YYYY-MM-DD) 사전식 비교 — start_date >= cutoff면 30일 이내.
+      isNew: r.start_date != null && r.start_date >= newCutoff,
+      isTransferredIn: r.is_transferred_in === true,
     });
     byClass.set(r.class_id, list);
   }

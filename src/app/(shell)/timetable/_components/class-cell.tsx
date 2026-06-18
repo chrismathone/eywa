@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ClassDetailDrawer, type ClassDetailQuick } from "@/components/class-detail-drawer";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { useTimetableEdit } from "./edit-context";
 
+// 반이름 헤더 바 색(과목별). 학생 행은 흰 배경 + 상태색이라 헤더만 과목색.
 const SUBJECT_COLOR: Record<string, string> = {
   math: "bg-primary-soft text-primary",
   english: "bg-blue-soft text-blue",
@@ -17,124 +18,147 @@ function shortTime(t: string) {
   return t.slice(0, 5);
 }
 
-/** 학생 한 명 — draggable. */
-function DraggableStudent({
+/** 학생 행 배경 — 신입(빨강)·전입(초록)·그 외(기본). ijw 시간표의 신입/전학 색 근사. */
+function studentRowTone(s: { isNew?: boolean; isTransferredIn?: boolean }): string {
+  if (s.isNew) return "bg-danger-soft text-danger";
+  if (s.isTransferredIn) return "bg-primary-soft text-primary";
+  return "text-text-dim";
+}
+
+const ROW_CLASS =
+  "flex items-baseline justify-between gap-1.5 px-2 py-[3px] leading-tight whitespace-nowrap";
+
+/**
+ * 학생 한 줄(세로 나열) — 편집 모드에서만 마운트되어 draggable.
+ * 이동 예정이면 취소선 + 대상 반 마커. (비편집 시엔 StudentRow가 훅 없이 렌더.)
+ */
+function DraggableStudentRow({
   enrollmentId,
   classId,
-  children,
+  name,
+  grade,
+  tone,
 }: {
   enrollmentId: string;
   classId: string;
-  children: React.ReactNode;
+  name: string;
+  grade: string | null;
+  tone: string;
 }) {
+  const { pending } = useTimetableEdit();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `student:${enrollmentId}`,
-    data: { classId },
+    data: { classId, name },
   });
+  const target = pending.get(enrollmentId);
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={`cursor-grab active:cursor-grabbing print:cursor-default ${isDragging ? "opacity-40" : ""}`}
+      className={`${ROW_CLASS} cursor-grab active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
     >
-      {children}
+      <span className={`truncate ${target ? "line-through" : ""}`}>{name}</span>
+      {target ? (
+        <span className="text-primary shrink-0 font-mono text-[9px]">→{target.toClassName}</span>
+      ) : grade ? (
+        <span className="shrink-0 font-mono text-[9px] opacity-60">{grade}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** 학생 한 줄(비편집) — 드래그 훅 없이 평범한 div. 대량 셀 DOM/렌더 보호. */
+function StudentRow({ name, grade, tone }: { name: string; grade: string | null; tone: string }) {
+  return (
+    <div className={`${ROW_CLASS} ${tone}`}>
+      <span className="truncate">{name}</span>
+      {grade ? <span className="shrink-0 font-mono text-[9px] opacity-60">{grade}</span> : null}
     </div>
   );
 }
 
 /**
- * 시간표 셀 — 클릭 시 ClassDetailDrawer를 자체적으로 열어 학생 명단을 즉시 표시.
- * 페이지가 server component이므로 셀만 client로 분리.
- * Drag-and-drop: 학생 항목은 draggable, 셀 전체는 droppable.
+ * 시간표 셀 — 반이름 헤더 바 + 그 아래 학생 세로 나열(엑셀식 칸 안 행). ijw 시간표 패턴.
+ * 헤더 클릭 → ClassDetailDrawer로 전체 명단/레벨변경. 편집 모드면 학생 행 드래그로 반 이동.
  */
 export function ClassCell({
   slot,
-  compact = false,
+  roster = "full",
 }: {
   slot: ClassDetailQuick;
-  compact?: boolean;
+  /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
+  roster?: "full" | "names" | "none";
 }) {
   const [open, setOpen] = useState(false);
+  const { editing } = useTimetableEdit();
   const color = SUBJECT_COLOR[slot.subject] ?? "bg-bg-soft text-text-dim";
+
+  const cap = roster === "names" ? 15 : 8;
+  const showRoster = roster !== "none" && slot.students.length > 0;
+  const visibleStudents = slot.students.slice(0, cap);
+  const hiddenCount = slot.students.length - visibleStudents.length;
 
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `class:${slot.id}`,
+    data: { className: slot.className },
   });
 
   return (
     <>
       <div
         ref={setDroppableRef}
-        className={`rounded-sm transition ${isOver ? "ring-primary ring-2" : ""}`}
+        className={`border-line overflow-hidden rounded-[3px] border transition ${isOver ? "ring-primary ring-2" : ""}`}
       >
+        {/* 반이름 헤더 바 — 클릭 시 상세 drawer */}
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className={`w-full rounded-sm px-2 py-1.5 text-left transition hover:brightness-95 ${color}`}
+          className={`block w-full px-2 py-1 text-left transition hover:brightness-95 ${color}`}
           aria-label={`${slot.className} 상세 보기`}
         >
           <div className="flex items-baseline justify-between gap-2">
-            <p className="truncate text-[11px] font-bold">{slot.className}</p>
-            <span className="num font-mono text-[10px] opacity-70">
+            <span className="truncate text-[11px] font-bold">{slot.className}</span>
+            <span className="num shrink-0 font-mono text-[9px] opacity-70">{slot.students.length}</span>
+          </div>
+          <div className="flex items-center justify-between gap-1 text-[9px] opacity-75">
+            <span className="num font-mono">
               {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
             </span>
-          </div>
-          <div className="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-80">
-            {slot.classroomName ? (
-              <span className="font-mono">{slot.classroomName}</span>
-            ) : (
-              <span />
-            )}
-            <Pill color={pillColor(slot.subject)} className="!text-[9px]">
-              {slot.students.length}명
-            </Pill>
+            {slot.classroomName ? <span className="truncate font-mono">{slot.classroomName}</span> : null}
           </div>
         </button>
 
-        {/* 학생 명단 — 셀 외부에서 별도 클릭 영역 (드래그용) */}
-        {!compact && slot.students.length > 0 ? (
-          <div className={`mt-1 flex flex-wrap gap-0.5 px-2 pb-1 text-[10px] opacity-70 ${color}`}>
-            {slot.students.slice(0, 8).map((s, i) =>
-              s.enrollmentId ? (
-                <DraggableStudent
+        {/* 학생 세로 나열 — 흰 칸에 행마다 구분선(엑셀식). 신입=빨강행·전입=초록행. */}
+        {showRoster ? (
+          <div className="bg-card divide-line/40 divide-y text-[10px]">
+            {visibleStudents.map((s, i) =>
+              editing && s.enrollmentId ? (
+                <DraggableStudentRow
                   key={s.enrollmentId}
                   enrollmentId={s.enrollmentId}
                   classId={slot.id}
-                >
-                  <span className="rounded-sm px-1 hover:brightness-110">
-                    {s.name}/{s.grade ?? "—"}
-                  </span>
-                </DraggableStudent>
+                  name={s.name}
+                  grade={s.grade}
+                  tone={studentRowTone(s)}
+                />
               ) : (
-                <span key={`s-${i}`}>{s.name}/{s.grade ?? "—"}</span>
+                <StudentRow
+                  key={s.enrollmentId ?? `s-${i}`}
+                  name={s.name}
+                  grade={s.grade}
+                  tone={studentRowTone(s)}
+                />
               ),
             )}
-            {slot.students.length > 8 ? (
-              <span className="opacity-60">외 {slot.students.length - 8}명</span>
+            {hiddenCount > 0 ? (
+              <div className="text-text-faint px-2 py-[3px] text-[9px]">외 {hiddenCount}명</div>
             ) : null}
           </div>
         ) : null}
-        {/* 기본뷰(강사×요일 매트릭스, 40+ 컬럼)는 셀당 명단을 렌더하지 않는다 —
-            16.9k DOM/2.5s의 주범. 인원수 Pill만 표시하고 명단은 셀 클릭 → drawer로.
-            (통합뷰 6컬럼에선 inline 명단 유지 — 가독성·드래그 가능.) */}
       </div>
 
-      <ClassDetailDrawer
-        open={open}
-        onClose={() => setOpen(false)}
-        slot={slot}
-        trigger={null}
-      />
+      <ClassDetailDrawer open={open} onClose={() => setOpen(false)} slot={slot} trigger={null} />
     </>
   );
-}
-
-function pillColor(subject: string): PillColor {
-  if (subject === "math") return "primary";
-  if (subject === "english") return "blue";
-  if (subject === "korean") return "rose";
-  if (subject === "science") return "purple";
-  if (subject === "arts") return "amber";
-  return "neutral";
 }

@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
+import { getEndedSubjects } from "../subject-ended";
 
 // Re-export common types so existing callers don't need to switch import paths
 export type {
@@ -184,6 +185,91 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
     metadata: md,
     enrollmentHistory: history,
   };
+}
+
+// === 수강종료(과목 이탈) — 재원 중이지만 특정 과목을 전부 끊은 학생(조기 이탈 신호) ===
+export type SubjectEndedRow = {
+  id: string;
+  name: string;
+  school: string | null;
+  grade: string | null;
+  status: string; // enrolled | on_hold
+  primaryTeacherName: string | null;
+  endedSubjects: string[]; // 종료된 과목 코드
+  activeSubjects: string[]; // 아직 수강 중인 과목 코드
+  lastEndedAt: string | null; // 종료 과목 중 가장 최근 end_date
+};
+
+export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
+  const supabase = await createClient();
+  // 재원/휴원 학생 전수 — .range() 페이지네이션으로 1000행 절단 방지(#54).
+  const students = await fetchAllPaged<{
+    id: string;
+    name: string;
+    school: string | null;
+    grade: string | null;
+    status: string;
+    teacher: { display_name?: string } | { display_name?: string }[] | null;
+  }>((from, to) =>
+    supabase
+      .from("students")
+      .select("id, name, school, grade, status, teacher:primary_teacher_id ( display_name )")
+      .in("status", ["enrolled", "on_hold"])
+      .range(from, to),
+  );
+  if (students.length === 0) return [];
+
+  const ids = students.map((s) => s.id);
+  // 학생 enrollment + 반 과목 — id 청크로 .in()(414/error삼킴 방지, #53).
+  const enrollments = await fetchInChunks<{
+    student_id: string;
+    end_date: string | null;
+    class: { subject?: string } | { subject?: string }[] | null;
+  }>(ids, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select("student_id, end_date, class:class_id ( subject )")
+      .in("student_id", chunk),
+  );
+
+  const bySt = new Map<string, { subject: string; endDate: string | null }[]>();
+  for (const e of enrollments) {
+    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as { subject?: string } | undefined;
+    const subject = klass?.subject;
+    if (!subject) continue;
+    const arr = bySt.get(e.student_id) ?? [];
+    arr.push({ subject, endDate: e.end_date });
+    bySt.set(e.student_id, arr);
+  }
+
+  const rows: SubjectEndedRow[] = [];
+  for (const s of students) {
+    const enr = bySt.get(s.id) ?? [];
+    const { ended, active } = getEndedSubjects(enr);
+    if (ended.length === 0) continue; // 수강종료 과목이 없으면 제외
+    let lastEndedAt: string | null = null;
+    for (const e of enr) {
+      if (ended.includes(e.subject) && e.endDate && (!lastEndedAt || e.endDate > lastEndedAt)) {
+        lastEndedAt = e.endDate;
+      }
+    }
+    const teacher = (Array.isArray(s.teacher) ? s.teacher[0] : s.teacher) as
+      | { display_name?: string }
+      | undefined;
+    rows.push({
+      id: s.id,
+      name: s.name,
+      school: s.school,
+      grade: s.grade,
+      status: s.status,
+      primaryTeacherName: teacher?.display_name ?? null,
+      endedSubjects: ended,
+      activeSubjects: active,
+      lastEndedAt,
+    });
+  }
+  rows.sort((a, b) => (b.lastEndedAt ?? "").localeCompare(a.lastEndedAt ?? "")); // 최근 종료순
+  return rows;
 }
 
 export function enrollmentDuration(startIso: string | null, endIso: string | null): string {

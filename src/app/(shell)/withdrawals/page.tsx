@@ -11,13 +11,16 @@ import {
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial } from "@/components/atoms/initial";
+import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getWithdrawnStudents,
+  getSubjectEndedStudents,
   REASON_LABEL,
   type WithdrawalReason,
+  type SubjectEndedRow,
 } from "@/features/withdrawals/server/queries";
 import { Pagination } from "@/components/pagination";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
@@ -98,16 +101,26 @@ function buildWdHref(p: { range: RangeKey; reason: ReasonKey; q: string }): stri
 export default async function WithdrawalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: RangeKey; reason?: ReasonKey; q?: string; page?: string }>;
+  searchParams: Promise<{
+    type?: string;
+    range?: RangeKey;
+    reason?: ReasonKey;
+    q?: string;
+    page?: string;
+  }>;
 }) {
   await requireAccess("withdrawals");
   const sp = await searchParams;
+  const viewType: "withdrawn" | "subject-ended" =
+    sp.type === "subject-ended" ? "subject-ended" : "withdrawn";
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const reason: ReasonKey = (sp.reason as ReasonKey) ?? "all";
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
 
   const all = await getWithdrawnStudents();
+  // 수강종료 집계는 재원 전수 + enrollment 조회라 무거워, 해당 탭일 때만 계산.
+  const subjectEnded = viewType === "subject-ended" ? await getSubjectEndedStudents() : [];
   let rows = all;
   if (q) {
     const term = q.toLowerCase();
@@ -177,6 +190,35 @@ export default async function WithdrawalsPage({
 
   return (
     <div className="space-y-4">
+      {/* 유형 토글 — 퇴원(완전) / 수강종료(과목 이탈) */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="micro mr-1">유형</span>
+        <Link
+          href="/withdrawals"
+          className={`shrink-0 rounded-sm border px-2.5 py-0.5 text-xs transition ${
+            viewType === "withdrawn"
+              ? "border-foreground bg-foreground text-background font-medium"
+              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+          }`}
+        >
+          퇴원 <span className="num">({all.length})</span>
+        </Link>
+        <Link
+          href="/withdrawals?type=subject-ended"
+          className={`shrink-0 rounded-sm border px-2.5 py-0.5 text-xs transition ${
+            viewType === "subject-ended"
+              ? "border-amber bg-amber text-white font-medium"
+              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+          }`}
+        >
+          수강종료{viewType === "subject-ended" ? <span className="num"> ({subjectEnded.length})</span> : null}
+        </Link>
+      </div>
+
+      {viewType === "subject-ended" ? (
+        <SubjectEndedView rows={subjectEnded} />
+      ) : (
+        <>
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Stat label="전체 퇴원" value={all.length} icon={UserMinus} color="rose" />
@@ -377,7 +419,78 @@ export default async function WithdrawalsPage({
           </section>
         </div>
       )}
+        </>
+      )}
     </div>
+  );
+}
+
+function SubjectEndedView({ rows }: { rows: SubjectEndedRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={() => <UserX size={32} strokeWidth={1.5} />}
+        title="수강종료 학생이 없습니다"
+        description="재원 중이지만 특정 과목을 모두 끊은 학생이 생기면 여기에 표시됩니다."
+      />
+    );
+  }
+  return (
+    <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
+      <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
+        <div>
+          <p className="micro text-amber">과목 이탈 신호</p>
+          <h2 className="text-foreground mt-1 text-[15px] font-bold">수강종료 학생</h2>
+        </div>
+        <p className="text-text-faint num text-[11px]">{rows.length}명</p>
+      </header>
+      <ul className="divide-line divide-y">
+        {rows.map((r) => (
+          <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
+            <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-start gap-3">
+              <Initial name={r.name} color="amber" size="md" />
+              <div className="min-w-0 flex-1">
+                <p className="text-foreground text-[13px] font-bold hover:underline">
+                  {r.name}{" "}
+                  <span className="text-text-dim text-[11px] font-normal">
+                    {r.grade ?? "—"} · {r.school ?? "—"}
+                  </span>
+                  {r.status === "on_hold" ? (
+                    <span className="text-text-faint ml-1 text-[11px]">(휴원)</span>
+                  ) : null}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="text-text-faint mr-0.5 text-[10px]">종료</span>
+                  {r.endedSubjects.map((s) => (
+                    <Pill key={s} color="amber">
+                      {SUBJECT_LABEL[s] ?? s}
+                    </Pill>
+                  ))}
+                  {r.activeSubjects.length > 0 ? (
+                    <>
+                      <span className="text-text-faint ml-1.5 mr-0.5 text-[10px]">수강중</span>
+                      {r.activeSubjects.map((s) => (
+                        <Pill key={s} color="primary" soft>
+                          {SUBJECT_LABEL[s] ?? s}
+                        </Pill>
+                      ))}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                {r.primaryTeacherName ? (
+                  <p className="text-text-dim text-[11px]">{r.primaryTeacherName} 강사</p>
+                ) : null}
+                {r.lastEndedAt ? (
+                  <p className="text-text-faint num text-[10px]">{r.lastEndedAt} 종료</p>
+                ) : null}
+              </div>
+            </WindowLink>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

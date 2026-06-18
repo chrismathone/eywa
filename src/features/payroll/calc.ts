@@ -61,3 +61,32 @@ export function payrollTotal(args: {
 }): number {
   return args.baseAmount + args.hourlyAmount + (args.bonus ?? 0) - (args.deduction ?? 0);
 }
+
+// 월별 전직원 급여표 합계 — paid(지급완료)/saved(작성됨)/draft(미작성·자동추정) 상태별 집계.
+export type PayrollStatus = "paid" | "saved" | "draft";
+export type PayrollRowLite = { baseAmount: number; total: number; status: PayrollStatus };
+export type PayrollSummary = {
+  totalBase: number;
+  totalNet: number;
+  paidCount: number;
+  savedCount: number;
+  draftCount: number;
+};
+
+export function summarizePayrollRows(rows: PayrollRowLite[]): PayrollSummary {
+  const s: PayrollSummary = {
+    totalBase: 0,
+    totalNet: 0,
+    paidCount: 0,
+    savedCount: 0,
+    draftCount: 0,
+  };
+  for (const r of rows) {
+    s.totalBase += r.baseAmount;
+    s.totalNet += r.total;
+    if (r.status === "paid") s.paidCount++;
+    else if (r.status === "saved") s.savedCount++;
+    else s.draftCount++;
+  }
+  return s;
+}

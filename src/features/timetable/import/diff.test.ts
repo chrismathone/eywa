@@ -1,0 +1,111 @@
+import { describe, expect, it } from "vitest";
+import { matchClass, matchStudent } from "./match";
+import { computeImportDiff, totalChanges } from "./diff";
+import type { ClassRef, EnrollmentSnapshotRow, ParsedEditRow, StudentRef } from "./types";
+
+const CLASSES: ClassRef[] = [
+  { classId: "cA", className: "DP3", subject: "english" },
+  { classId: "cB", className: "DP4", subject: "english" },
+  { classId: "cM1", className: "수학기초", subject: "math" },
+  { classId: "cM2", className: "수학기초", subject: "highmath" }, // 동명이반
+];
+
+const STUDENTS: StudentRef[] = [
+  { studentId: "s1", name: "김민준", school: "선린중", grade: "중1" },
+  { studentId: "s2", name: "이서연", school: "한빛중", grade: "중2" },
+  { studentId: "s3", name: "김민준", school: "다른중", grade: "중3" }, // 동명이인
+];
+
+describe("matchClass", () => {
+  it("유일 반이름 → classId", () => {
+    expect(matchClass("DP3", CLASSES)).toEqual({ status: "ok", value: "cA" });
+  });
+  it("공백 무시 매칭", () => {
+    expect(matchClass(" DP4 ", CLASSES)).toEqual({ status: "ok", value: "cB" });
+  });
+  it("없으면 none, 동명이반이면 ambiguous", () => {
+    expect(matchClass("없는반", CLASSES).status).toBe("none");
+    expect(matchClass("수학기초", CLASSES).status).toBe("ambiguous");
+  });
+});
+
+describe("matchStudent", () => {
+  it("유일 이름 → id", () => {
+    expect(matchStudent("이서연", null, null, STUDENTS)).toEqual({ status: "ok", value: "s2" });
+  });
+  it("동명이인은 학교+학년으로 좁힘", () => {
+    expect(matchStudent("김민준", "선린중", "중1", STUDENTS)).toEqual({ status: "ok", value: "s1" });
+    expect(matchStudent("김민준", "다른중", "중3", STUDENTS)).toEqual({ status: "ok", value: "s3" });
+  });
+  it("동명이인인데 구분정보 없으면 ambiguous", () => {
+    expect(matchStudent("김민준", null, null, STUDENTS).status).toBe("ambiguous");
+  });
+  it("미존재는 none", () => {
+    expect(matchStudent("없는학생", null, null, STUDENTS).status).toBe("none");
+  });
+});
+
+const CURRENT: EnrollmentSnapshotRow[] = [
+  { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3" },
+  { enrollmentId: "e2", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3" },
+];
+
+describe("computeImportDiff", () => {
+  it("반이름 변경 → move", () => {
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP4" },
+      { enrollmentId: "e2", studentName: "이서연", school: "한빛중", grade: "중2", className: "DP3" },
+    ];
+    const d = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS);
+    expect(d.moves).toEqual([
+      { enrollmentId: "e1", studentName: "김민준", fromClassName: "DP3", toClassName: "DP4", toClassId: "cB" },
+    ]);
+    expect(d.unchanged).toBe(1);
+    expect(totalChanges(d)).toBe(1);
+  });
+
+  it("시트에서 사라진 행 → remove", () => {
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP3" },
+    ];
+    const d = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS);
+    expect(d.removes).toEqual([{ enrollmentId: "e2", studentName: "이서연", className: "DP3" }]);
+    expect(d.unchanged).toBe(1);
+  });
+
+  it("enrollmentId 없는 신규 행 → add(학생·반 매칭)", () => {
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP3" },
+      { enrollmentId: "e2", studentName: "이서연", school: "한빛중", grade: "중2", className: "DP3" },
+      { enrollmentId: null, studentName: "이서연", school: "한빛중", grade: "중2", className: "DP4" },
+    ];
+    const d = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS);
+    expect(d.adds).toEqual([
+      { studentName: "이서연", school: "한빛중", grade: "중2", className: "DP4", classId: "cB", studentId: "s2" },
+    ]);
+  });
+
+  it("미매칭/모호/스테일 ID는 warnings로 (변경 아님)", () => {
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "없는반" },
+      { enrollmentId: "e2", studentName: "이서연", school: "한빛중", grade: "중2", className: "DP3" },
+      { enrollmentId: "ghost", studentName: "유령", school: null, grade: null, className: "DP3" },
+      { enrollmentId: null, studentName: "신규생", school: null, grade: null, className: "DP3" },
+    ];
+    const d = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS);
+    expect(d.moves).toHaveLength(0);
+    expect(d.adds).toHaveLength(0);
+    expect(d.warnings.length).toBeGreaterThanOrEqual(3); // 없는반, ghost, 미매칭 신규생
+  });
+
+  it("빈 신규 행은 무시", () => {
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP3" },
+      { enrollmentId: "e2", studentName: "이서연", school: "한빛중", grade: "중2", className: "DP3" },
+      { enrollmentId: null, studentName: "", school: null, grade: null, className: "" },
+    ];
+    const d = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS);
+    expect(totalChanges(d)).toBe(0);
+    expect(d.warnings).toHaveLength(0);
+  });
+});
