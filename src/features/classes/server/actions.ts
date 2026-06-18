@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 export type ClassFormState =
   | { error?: string; fieldErrors?: Record<string, string> }
@@ -16,14 +17,25 @@ type ScheduleInput = {
 };
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-const SUBJECTS = ["math", "english", "korean", "science", "arts", "etc"] as const;
+// 레거시 기본 과목 — owner 설정의 과목 key와 합쳐 허용 집합을 만든다(설정에 추가한 과목도 저장 허용).
+const LEGACY_SUBJECTS = ["math", "english", "korean", "science", "arts", "etc"] as const;
 
-function readForm(formData: FormData) {
+/** 저장 허용 과목 key 집합 = owner 설정 과목 ∪ 레거시 기본. (설정에 추가한 과목도 반에 저장 가능.) */
+async function allowedSubjectSet(): Promise<ReadonlySet<string>> {
+  const settings = await getTenantSettings();
+  return new Set<string>([
+    ...LEGACY_SUBJECTS,
+    ...settings.operations.subjects.map((s) => s.key),
+  ]);
+}
+
+function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
   const subject = get("subject") || "math";
   return {
     className: get("className"),
-    subject: SUBJECTS.includes(subject as (typeof SUBJECTS)[number]) ? subject : "etc",
+    // 허용 집합(설정 과목 ∪ 레거시)에 없는 값만 'etc'로 강등(쓰레기 입력 가드).
+    subject: allowedSubjects.has(subject) ? subject : "etc",
     teacherId: get("teacherId") || null,
     classroomId: get("classroomId") || null,
     notes: get("notes") || null,
@@ -66,7 +78,8 @@ export async function createClass(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
-  const input = readForm(formData);
+  const allowed = await allowedSubjectSet();
+  const input = readForm(formData, allowed);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
 
@@ -131,7 +144,8 @@ export async function updateClass(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
-  const input = readForm(formData);
+  const allowed = await allowedSubjectSet();
+  const input = readForm(formData, allowed);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
 

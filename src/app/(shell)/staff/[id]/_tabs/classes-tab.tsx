@@ -4,14 +4,8 @@ import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { GraduationCap } from "lucide-react";
 import { getStaffClasses, type WorkDay } from "@/features/staff/server/queries";
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  highmath: "수학(심화)",
-  english: "영어",
-  science: "과학",
-  korean: "국어",
-};
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 const DAY_LABEL: Record<WorkDay, string> = {
   mon: "월",
@@ -24,7 +18,8 @@ const DAY_LABEL: Record<WorkDay, string> = {
 };
 
 export async function ClassesTab({ staffId }: { staffId: string }) {
-  const classes = await getStaffClasses(staffId);
+  const [classes, settings] = await Promise.all([getStaffClasses(staffId), getTenantSettings()]);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   if (classes.length === 0) {
     return <EmptyState icon={() => <GraduationCap size={32} strokeWidth={1.5} />} title="담당 수업이 없습니다" />;
@@ -54,7 +49,7 @@ export async function ClassesTab({ staffId }: { staffId: string }) {
                   {c.className}
                 </WindowLink>
               </td>
-              <td className="text-text-dim px-3 py-2.5">{SUBJECT_LABEL[c.subject] ?? c.subject}</td>
+              <td className="text-text-dim px-3 py-2.5">{subjects.labelOf(c.subject)}</td>
               <td className="px-3 py-2.5">
                 {c.schedules.length === 0 ? (
                   <span className="text-text-faint text-xs">—</span>

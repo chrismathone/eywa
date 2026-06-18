@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentById, getTeacherOptions } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../../_components/student-form";
 
 export const metadata = { title: "학생 수정 — eywa" };
@@ -13,9 +14,10 @@ export default async function EditStudentPage({
 }) {
   await requireAccess("students");
   const { id } = await params;
-  const [student, teachers] = await Promise.all([
+  const [student, teachers, { operations }] = await Promise.all([
     getStudentById(id),
     getTeacherOptions(),
+    getTenantSettings(),
   ]);
   if (!student) notFound();
 
@@ -31,6 +33,7 @@ export default async function EditStudentPage({
       <StudentForm
         mode="edit"
         teachers={teachers}
+        gradeLevels={operations.gradeLevels}
         initialValue={{
           id: student.id,
           name: student.name,

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   getEnrollmentConsultationById,
   type ConsultationAudioReport,
@@ -22,8 +23,12 @@ export default async function EnrollmentPrintPage({
 }) {
   await requireAccess("enrollment");
   const { id } = await params;
-  const consult = await getEnrollmentConsultationById(id);
+  const [consult, settings] = await Promise.all([
+    getEnrollmentConsultationById(id),
+    getTenantSettings(),
+  ]);
   if (!consult || !consult.aiAnalysis) notFound();
+  const printHeader = settings.notifications.printHeader || "eywa · 인재원 학원관리";
 
   const p = consult.aiAnalysis.printPayload;
   const consultedDate = new Date(p.consultedAt).toLocaleDateString("ko-KR", {
@@ -39,7 +44,7 @@ export default async function EnrollmentPrintPage({
       <header className="border-b-2 border-black/80 pb-4">
         <div className="flex items-center justify-between">
           <p className="font-mono text-[11px] tracking-[0.25em] uppercase">
-            eywa · 인재원 학원관리
+            {printHeader}
           </p>
           <p className="font-mono text-[10px] text-black/60">
             #{consult.id.slice(0, 8).toUpperCase()}
@@ -148,7 +153,7 @@ export default async function EnrollmentPrintPage({
       </Section>
 
       <footer className="mt-10 flex items-end justify-between border-t border-black/20 pt-4 text-[10px] text-black/60">
-        <p>EYWA · 인재원 학원관리 시스템</p>
+        <p>EYWA · {settings.profile.name || "인재원"} 학원관리 시스템</p>
         <p className="font-mono">
           MODEL {consult.aiAnalysis.modelVersion} · GENERATED{" "}
           {new Date(consult.aiAnalysis.generatedAt).toLocaleDateString("ko-KR")}

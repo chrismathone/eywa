@@ -1068,9 +1068,22 @@ export const auditLogs = pgTable(
   ],
 );
 
+// === tenant_settings (테넌트 단위 학원 설정 — owner 콘솔) ===
+// 단일 행/테넌트. data jsonb에 전체 설정 문서(앱단 Zod + DEFAULT_SETTINGS merge). master가 관리.
+export const tenantSettings = pgTable("tenant_settings", {
+  tenantId: uuid("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  data: jsonb("data").notNull().default({}),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // === Type exports ===
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
+export type TenantSettingsRow = typeof tenantSettings.$inferSelect;
+export type NewTenantSettingsRow = typeof tenantSettings.$inferInsert;
 export type SuperAdmin = typeof superAdmins.$inferSelect;
 export type NewSuperAdmin = typeof superAdmins.$inferInsert;
 export type SuperAdminAuditLog = typeof superAdminAuditLogs.$inferSelect;

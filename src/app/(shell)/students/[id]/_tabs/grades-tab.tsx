@@ -1,16 +1,10 @@
 import { getStudentGrades, getStudentLevelTests } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
 import { gradeSeries, gradeStats } from "@/lib/calc/grades";
 import { GradeForm } from "../_components/grade-form";
 import { GradesChart } from "../_components/grades-chart";
 import { LevelTests } from "../_components/level-tests";
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -22,10 +16,13 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: stri
 }
 
 export async function GradesTab({ studentId }: { studentId: string }) {
-  const [grades, levelTests] = await Promise.all([
+  const [grades, levelTests, settings] = await Promise.all([
     getStudentGrades(studentId),
     getStudentLevelTests(studentId),
+    getTenantSettings(),
   ]);
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const subjectLabels = subjectLabelRecord(settings.operations.subjects);
   const stats = gradeStats(grades);
   const series = gradeSeries(grades);
   const deltaTone =
@@ -51,13 +48,13 @@ export async function GradesTab({ studentId }: { studentId: string }) {
           {series.length >= 2 ? (
             <div className="bg-card border-border rounded-md border p-4">
               <p className="micro mb-2">점수 추이 (기준선 70%)</p>
-              <GradesChart series={series} />
+              <GradesChart series={series} subjectLabels={subjectLabels} />
             </div>
           ) : null}
         </>
       ) : null}
 
-      <GradeForm studentId={studentId} />
+      <GradeForm studentId={studentId} subjectOptions={subjectMaps.options} />
 
       {grades.length === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">기록된 성적이 없습니다</p>
@@ -78,7 +75,7 @@ export async function GradesTab({ studentId }: { studentId: string }) {
                 <tr key={g.id} className="hover:bg-bg-soft/30">
                   <td className="num text-muted-foreground px-4 py-2 text-xs">{g.takenOn}</td>
                   <td className="text-foreground px-4 py-2 text-xs font-medium">
-                    {SUBJECT_LABEL[g.subject] ?? g.subject}
+                    {subjectMaps.labelOf(g.subject)}
                   </td>
                   <td className="text-foreground px-4 py-2 text-xs">{g.examName}</td>
                   <td className="num px-4 py-2 text-right text-xs">

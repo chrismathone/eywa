@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
@@ -28,6 +29,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     );
   }
 
+  // 학원 브랜드·이름 — owner 설정(없으면 기본값). 셸 크롬(사이드바·헤더·미니셸)에 테넌트별 적용.
+  const settings = await getTenantSettings();
+  const brand = settings.profile.logoText || "EYWA";
+  const academyLine =
+    [settings.profile.name, settings.profile.branchLabel].filter(Boolean).join(" · ") || brand;
+
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
   if (user.systemRole === "teacher" || user.systemRole === "student") {
@@ -42,9 +49,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               </svg>
             </span>
             <div className="leading-none">
-              <div className="text-foreground text-[17px] font-extrabold tracking-tight">EYWA</div>
+              <div className="text-foreground text-[17px] font-extrabold tracking-tight">{brand}</div>
               <div className="text-text-dim mt-[3px] font-mono text-[10px] tracking-wider">
-                인재원 · 강남
+                {academyLine}
               </div>
             </div>
           </div>
@@ -66,18 +73,19 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <AppSidebar
           systemRole={user.systemRole}
           email={user.email}
+          logoText={brand}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} className="lg:pointer-fine:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <HideInFrame>
-          <AppHeader />
+          <AppHeader brand={brand} />
         </HideInFrame>
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">{children}</main>
       </div>

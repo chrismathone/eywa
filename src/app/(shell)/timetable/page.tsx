@@ -10,10 +10,14 @@ import {
 } from "@/features/timetable/server/queries";
 import {
   slotPeriodRow,
+  settingsToPeriodsConfig,
   type DayOfWeek,
   type PeriodRow,
+  type PeriodsConfig,
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { IntegratedCell } from "./_components/integrated-cell";
 import {
   TimetableEditProvider,
@@ -30,14 +34,7 @@ type ViewMode = "basic" | "integrated";
 // 무조건 한 과목 선택(기본 수학). 실제 데이터에 존재하는 과목만 칩으로 노출.
 type SubjectKey = "math" | "english" | "highmath" | "korean" | "science" | "arts";
 
-const SUBJECT_LABEL: Record<SubjectKey, string> = {
-  math: "수학",
-  english: "영어",
-  highmath: "고등수학",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
+// 과목 라벨은 owner 설정(operations.subjects)에서 — 다른 화면과 동일 라벨 유지(highmath='수학(심화)' 등).
 const SUBJECT_ORDER: SubjectKey[] = ["math", "english", "highmath", "korean", "science", "arts"];
 const DEFAULT_SUBJECT: SubjectKey = "math";
 
@@ -60,7 +57,13 @@ export default async function TimetablePage({
   const { view: viewParam, subject: subjectParam } = await searchParams;
   const view: ViewMode = viewParam === "integrated" ? "integrated" : "basic";
 
-  const allSlots = await getWeeklyScheduleWithStudents();
+  const [allSlots, settings] = await Promise.all([
+    getWeeklyScheduleWithStudents(),
+    getTenantSettings(),
+  ]);
+  // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
+  const periodsConfig = settingsToPeriodsConfig(settings.operations);
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   // 데이터에 실제 존재하는 과목만 칩으로(빈 과목칩 방지). 무조건 한 과목 — 기본 수학, 없으면 첫 과목.
   const available = SUBJECT_ORDER.filter((k) => allSlots.some((s) => s.subject === k));
   const subject: SubjectKey =
@@ -96,7 +99,7 @@ export default async function TimetablePage({
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              {SUBJECT_LABEL[k]}
+              {subjectMaps.labelOf(k)}
             </Link>
           ))}
         </div>
@@ -151,9 +154,9 @@ export default async function TimetablePage({
         <TimetableDndArea>
           <div id="timetable-export-root" className="flex min-h-0 flex-1 flex-col">
             {view === "basic" ? (
-              <WeekdayGroupTables slots={slots} />
+              <WeekdayGroupTables slots={slots} config={periodsConfig} />
             ) : (
-              <IntegratedView slots={slots} days={DAYS} />
+              <IntegratedView slots={slots} days={DAYS} config={periodsConfig} />
             )}
           </div>
         </TimetableDndArea>
@@ -176,13 +179,15 @@ function buildHref(view: ViewMode, subject: SubjectKey): string {
 function IntegratedView({
   slots,
   days,
+  config,
 }: {
   slots: ScheduleSlotWithStudents[];
   days: { key: string; label: string }[];
+  config: PeriodsConfig;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const rowOf = (s: ScheduleSlotWithStudents) =>
-    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek);
+    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek, config);
 
   const rowMap = new Map<string, PeriodRow>();
   for (const s of slots) {

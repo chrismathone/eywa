@@ -1,8 +1,8 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   buildRoster,
   toIsoDate,
@@ -141,9 +141,8 @@ export async function getRetentionRoster(opts?: { teacherId?: string }): Promise
   return cached();
 }
 
-/** 학부모 메시지 서명용 학원명(RLS가 본인 테넌트로 스코프). */
+/** 학부모 메시지 서명용 학원명 — owner 설정(profile.name) 우선, 미설정 시 테넌트명/폴백. */
 export async function getTenantName(): Promise<string> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("tenants").select("name").limit(1).maybeSingle();
-  return data?.name ?? "우리 학원";
+  const { profile } = await getTenantSettings();
+  return profile.name || "우리 학원";
 }

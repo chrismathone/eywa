@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { countSessions, estimateTuition, fixedHolidaysForYear } from "./tuition-calc";
+import {
+  countSessions,
+  estimateTuition,
+  fixedHolidaysForYear,
+  mergeHolidays,
+  resolveDueDate,
+} from "./tuition-calc";
+
+describe("resolveDueDate", () => {
+  it("기간 + 마감일(N) → 그 달 N일", () => {
+    expect(resolveDueDate("2026-03", 10)).toBe("2026-03-10");
+  });
+  it("말일 초과 dueDay는 그 달 말일로 clamp (2월 31 → 28)", () => {
+    expect(resolveDueDate("2026-02", 31)).toBe("2026-02-28");
+  });
+  it("잘못된 기간이면 빈 문자열", () => {
+    expect(resolveDueDate("bad", 10)).toBe("");
+  });
+});
+
+describe("mergeHolidays", () => {
+  it("설정 휴일 + 고정 공휴일 합치고 중복 제거", () => {
+    const r = mergeHolidays(2026, ["2026-05-05", "2026-12-30"], true);
+    expect(r).toContain("2026-12-30"); // 테넌트 추가 휴일
+    expect(r.filter((d) => d === "2026-05-05")).toHaveLength(1); // 어린이날 중복 제거
+  });
+  it("includeFixed=false면 설정 휴일만", () => {
+    expect(mergeHolidays(2026, ["2026-12-30"], false)).toEqual(["2026-12-30"]);
+  });
+  it("설정 빈 배열 + 고정 포함이면 fixedHolidaysForYear와 동일(동등성)", () => {
+    expect(mergeHolidays(2026, [], true).sort()).toEqual(fixedHolidaysForYear(2026).sort());
+  });
+});
 
 describe("countSessions", () => {
   it("월·수·금 한 주(2026-03-02 월 ~ 03-08 일) = 3차시", () => {

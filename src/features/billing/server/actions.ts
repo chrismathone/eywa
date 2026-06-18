@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { resolveDueDate } from "@/features/billing/tuition-calc";
 
 type InvoiceStatus = "unpaid" | "partial" | "paid" | "refunded" | "void";
 
@@ -147,7 +149,7 @@ export async function createInvoice(
   const categoryRaw = String(formData.get("category") ?? "tuition").trim();
   const amountTotal = won(formData.get("amountTotal"));
   const amountDiscount = won(formData.get("amountDiscount"));
-  const dueDate = String(formData.get("dueDate") ?? "").trim() || null;
+  let dueDate = String(formData.get("dueDate") ?? "").trim() || null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
   const fieldErrors: Record<string, string> = {};
@@ -156,6 +158,12 @@ export async function createInvoice(
   if (amountTotal <= 0) fieldErrors.amountTotal = "청구액을 입력해주세요";
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
   const category = INVOICE_CATEGORIES[categoryRaw] ? categoryRaw : "tuition";
+
+  // 마감일 미입력 시 학원 설정의 기본 납부 마감일(billing.dueDay)로 산출(period의 N일, 말일 clamp).
+  if (!dueDate) {
+    const { billing } = await getTenantSettings();
+    dueDate = resolveDueDate(period, billing.dueDay) || null;
+  }
 
   const supabase = await createClient();
   const lineItems = [{ kind: category, description: INVOICE_CATEGORIES[category], amount: amountTotal }];

@@ -6,6 +6,8 @@ import {
   getClassTeacherOptions,
 } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ClassForm } from "../../_components/class-form";
 
 export const metadata = { title: "반 수정 — eywa" };
@@ -18,13 +20,15 @@ export default async function EditClassPage({
   await requireAccess("classes");
   const { id } = await params;
 
-  const [klass, teachers, classrooms] = await Promise.all([
+  const [klass, teachers, classrooms, settings] = await Promise.all([
     getClassDetail(id),
     getClassTeacherOptions(),
     getClassroomOptions(),
+    getTenantSettings(),
   ]);
 
   if (!klass) notFound();
+  const subjectOptions = buildSubjectMaps(settings.operations.subjects).options;
 
   return (
     <div className="space-y-6">
@@ -53,6 +57,7 @@ export default async function EditClassPage({
         }}
         teacherOptions={teachers}
         classroomOptions={classrooms}
+        subjectOptions={subjectOptions}
       />
     </div>
   );

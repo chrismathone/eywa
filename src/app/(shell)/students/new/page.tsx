@@ -1,13 +1,14 @@
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherOptions } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../_components/student-form";
 
 export const metadata = { title: "학생 등록 — eywa" };
 
 export default async function NewStudentPage() {
   await requireAccess("students");
-  const teachers = await getTeacherOptions();
+  const [teachers, { operations }] = await Promise.all([getTeacherOptions(), getTenantSettings()]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -21,7 +22,7 @@ export default async function NewStudentPage() {
         </p>
       </header>
 
-      <StudentForm mode="create" teachers={teachers} />
+      <StudentForm mode="create" teachers={teachers} gradeLevels={operations.gradeLevels} />
     </div>
   );
 }

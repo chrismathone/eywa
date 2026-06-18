@@ -2,6 +2,8 @@ import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ClassForm } from "../_components/class-form";
 
 export const metadata = { title: "새 반 — eywa" };
@@ -9,10 +11,12 @@ export const metadata = { title: "새 반 — eywa" };
 export default async function NewClassPage() {
   await requireAccess("classes");
 
-  const [teachers, classrooms] = await Promise.all([
+  const [teachers, classrooms, settings] = await Promise.all([
     getClassTeacherOptions(),
     getClassroomOptions(),
+    getTenantSettings(),
   ]);
+  const subjectOptions = buildSubjectMaps(settings.operations.subjects).options;
 
   return (
     <div className="space-y-6">
@@ -26,7 +30,12 @@ export default async function NewClassPage() {
         </p>
       </header>
 
-      <ClassForm mode="create" teacherOptions={teachers} classroomOptions={classrooms} />
+      <ClassForm
+        mode="create"
+        teacherOptions={teachers}
+        classroomOptions={classrooms}
+        subjectOptions={subjectOptions}
+      />
     </div>
   );
 }

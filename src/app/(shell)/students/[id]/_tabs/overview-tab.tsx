@@ -7,6 +7,8 @@ import {
   type StudentDetail,
 } from "@/features/students/server/queries";
 import { getClassesList } from "@/features/classes/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { StudentAssignAction } from "../_components/student-assign-action";
 
 const PRIORITY_COLOR: Record<CareFocus["priority"], string> = {
@@ -21,20 +23,14 @@ const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
   low: "낮음",
 };
 
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
-
 export async function OverviewTab({ student }: { student: StudentDetail }) {
-  const [enrollments, attendance, allActiveClasses] = await Promise.all([
+  const [enrollments, attendance, allActiveClasses, settings] = await Promise.all([
     getStudentEnrollments(student.id),
     getStudentAttendanceStats(student.id, 30),
     getClassesList({ active: "active" }),
+    getTenantSettings(),
   ]);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   // 이미 활성 enrollment 인 반은 제외
   const activeClassIds = new Set(
@@ -127,7 +123,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
                     <div>
                       <p className="text-sm font-medium">{e.className}</p>
                       <p className="text-muted-foreground text-xs">
-                        {SUBJECT_LABEL[e.subject] ?? e.subject} ·{" "}
+                        {subjects.labelOf(e.subject)} ·{" "}
                         <span className="num">{e.startDate}</span>
                         {e.endDate ? (
                           <>

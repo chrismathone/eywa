@@ -10,7 +10,7 @@ import type { StudentOption } from "@/features/billing/server/textbook-queries";
 import {
   countSessions,
   estimateTuition,
-  fixedHolidaysForYear,
+  mergeHolidays,
 } from "@/features/billing/tuition-calc";
 
 const inputCls =
@@ -39,9 +39,11 @@ function SaveBtn({ disabled }: { disabled: boolean }) {
 export function TuitionCalculator({
   students,
   defaultPeriod,
+  holidays = [],
 }: {
   students: StudentOption[];
   defaultPeriod: string;
+  holidays?: string[];
 }) {
   const [startDate, setStartDate] = useState(`${defaultPeriod}-01`);
   const [endDate, setEndDate] = useState(monthLastDay(defaultPeriod));
@@ -54,10 +56,11 @@ export function TuitionCalculator({
 
   const est = useMemo(() => {
     const year = Number(startDate.slice(0, 4)) || 2026;
-    const holidays = excludeHolidays ? fixedHolidaysForYear(year) : [];
-    const sessions = countSessions(startDate, endDate, weekdays, holidays);
+    // 학원 설정 휴원일은 항상 제외 + 양력 고정 공휴일은 토글. (mergeHolidays로 중복 제거.)
+    const hol = mergeHolidays(year, holidays, excludeHolidays);
+    const sessions = countSessions(startDate, endDate, weekdays, hol);
     return estimateTuition({ sessions, perSession, discount });
-  }, [startDate, endDate, weekdays, perSession, discount, excludeHolidays]);
+  }, [startDate, endDate, weekdays, perSession, discount, excludeHolidays, holidays]);
 
   const period = startDate.slice(0, 7);
   const notes = `수강료 견적 · ${est.sessions}차시 × ${won(perSession)} (${startDate}~${endDate})`;

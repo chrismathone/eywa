@@ -12,12 +12,12 @@ import {
 import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
 
-export function AppHeader() {
+export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
   const pathname = usePathname();
   const current = findNavItem(pathname);
   const group = findNavGroup(pathname);
   const title = current?.label ?? "eywa";
-  const breadcrumb = group ? `EYWA · ${group.label}` : "EYWA";
+  const breadcrumb = group ? `${brand} · ${group.label}` : brand;
 
   function openCommandPalette() {
     window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT));

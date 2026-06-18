@@ -3,6 +3,7 @@ import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { StaffForm } from "../_components/staff-form";
 
 export const metadata = { title: "직원 등록 — eywa" };
@@ -15,6 +16,7 @@ export default async function NewStaffPage() {
   }
 
   const roleOptions = assignableRoles(user.systemRole);
+  const { operations } = await getTenantSettings();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -28,7 +30,11 @@ export default async function NewStaffPage() {
         </p>
       </header>
 
-      <StaffForm mode="create" assignableRoleOptions={roleOptions} />
+      <StaffForm
+        mode="create"
+        assignableRoleOptions={roleOptions}
+        jobTitleOptions={operations.jobTitles}
+      />
     </div>
   );
 }

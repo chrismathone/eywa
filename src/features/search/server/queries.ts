@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { canAccess, type SystemRole } from "@/lib/permissions";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 export type PaletteHit = {
   kind: "student" | "class" | "consultation" | "enrollment";
@@ -13,18 +15,6 @@ export type PaletteHit = {
 function sanitize(q: string): string {
   return q.replace(/[%,()*\\]/g, " ").trim();
 }
-
-// 과목 코드 → 한글 라벨. 원시 영문 코드("highmath")가 팰릿에 노출되지 않게.
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  highmath: "수학(심화)",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-  other: "기타",
-};
-const subjectLabel = (s: string | null) => (s ? (SUBJECT_LABEL[s] ?? s) : null);
 
 const LIMIT = 8;
 
@@ -50,17 +40,22 @@ async function searchStudents(term: string): Promise<PaletteHit[]> {
 
 async function searchClasses(term: string): Promise<PaletteHit[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("classes")
-    .select("id, class_name, subject")
-    .or(`class_name.ilike.%${term}%,subject.ilike.%${term}%`)
-    .limit(LIMIT);
+  const [{ data }, settings] = await Promise.all([
+    supabase
+      .from("classes")
+      .select("id, class_name, subject")
+      .or(`class_name.ilike.%${term}%,subject.ilike.%${term}%`)
+      .limit(LIMIT),
+    getTenantSettings(),
+  ]);
+  // 과목 코드 → 한글 라벨(설정 기반). 원시 영문 코드("highmath")가 팰릿에 노출되지 않게.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
   return (data ?? []).map(
     (r): PaletteHit => ({
       kind: "class",
       id: r.id,
       title: r.class_name,
-      subtitle: subjectLabel(r.subject),
+      subtitle: r.subject ? subjects.labelOf(r.subject) : null,
     }),
   );
 }

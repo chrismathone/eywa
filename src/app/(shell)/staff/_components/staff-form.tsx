@@ -41,10 +41,12 @@ export function StaffForm({
   mode,
   initialValue,
   assignableRoleOptions,
+  jobTitleOptions = [],
 }: {
   mode: Mode;
   initialValue?: StaffFormValue;
   assignableRoleOptions: SystemRole[];
+  jobTitleOptions?: string[];
 }) {
   const action = mode === "create" ? createStaff : updateStaff;
   const [state, formAction] = useActionState<StaffFormState, FormData>(action, undefined);
@@ -126,14 +128,22 @@ export function StaffForm({
             <p className="text-muted-foreground mt-1 text-xs">본인보다 약한 역할만 부여 가능</p>
           </Field>
         ) : null}
-        <Field label="직책" htmlFor="jobTitle">
+        <Field label="직급" htmlFor="jobTitle">
           <input
             id="jobTitle"
             name="jobTitle"
+            list="jobTitleOptions"
             defaultValue={v.jobTitle ?? ""}
-            placeholder="예: 수학팀장 / 강사"
+            placeholder="예: 강사 / 실장 (학원 설정의 직급 또는 직접 입력)"
             className={inputClass}
           />
+          {jobTitleOptions.length > 0 ? (
+            <datalist id="jobTitleOptions">
+              {jobTitleOptions.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          ) : null}
         </Field>
       </div>
 

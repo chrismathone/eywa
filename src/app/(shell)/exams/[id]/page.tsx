@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { BookOpen } from "lucide-react";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
   getExamClassOptions,
   getExamDetail,
@@ -13,13 +15,6 @@ import { BatchScoreGrid } from "../_components/batch-score-grid";
 import { EditExamTrigger, type ExamFormValue } from "../_components/exam-form-dialog";
 import { ExamDeleteButton } from "../_components/exam-delete-button";
 
-const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
-  math: { label: "수학", color: "primary" },
-  english: { label: "영어", color: "blue" },
-  korean: { label: "국어", color: "rose" },
-  science: { label: "과학", color: "purple" },
-  arts: { label: "예술", color: "amber" },
-};
 const TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
 
 export default async function ExamDetailPage({
@@ -40,7 +35,9 @@ export default async function ExamDetailPage({
   const selectedClassId = sp.class ?? classOptions[0]?.id ?? null;
   const rows = selectedClassId ? await getExamScoreRows(id, selectedClassId) : [];
 
-  const meta = SUBJECT_META[exam.subject] ?? { label: exam.subject, color: "neutral" as PillColor };
+  const settings = await getTenantSettings();
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const meta = { label: subjects.labelOf(exam.subject), color: subjects.colorOf(exam.subject) };
   const editValue: ExamFormValue = {
     id: exam.id,
     name: exam.name,

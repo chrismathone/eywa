@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
 import {
   classesInWindow,
@@ -162,13 +163,8 @@ export async function processKioskCheckin(opts: {
   if (students.length > 1) return { ok: false, reason: "ambiguous" };
   const student = students[0];
 
-  // 2. 학원명(메시지용)
-  const { data: tenant } = await admin
-    .from("tenants")
-    .select("name")
-    .eq("id", opts.tenantId)
-    .maybeSingle();
-  const academyName = tenant?.name ?? "학원";
+  // 2. 학원명(메시지용) — owner 설정(profile.name) 우선, 미설정 시 테넌트명/폴백.
+  const academyName = (await getTenantSettingsByTenantId(opts.tenantId)).profile.name || "학원";
 
   // 3. 오늘 등하원 레코드 → 등/하원 자동판단
   const { data: existing } = await admin

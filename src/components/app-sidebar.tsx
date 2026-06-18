@@ -63,10 +63,12 @@ export function AppSidebar({
   systemRole,
   email,
   className,
+  logoText = "EYWA",
 }: {
   systemRole: SystemRole;
   email: string;
   className?: string;
+  logoText?: string;
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
@@ -111,7 +113,7 @@ export function AppSidebar({
                 expanded ? "max-w-[120px] opacity-100" : "max-w-0 opacity-0"
               } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
             >
-              EYWA
+              {logoText}
             </span>
           </Link>
         </div>

@@ -7,6 +7,7 @@ import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffById } from "@/features/staff/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { StaffForm } from "../../_components/staff-form";
 
 export const metadata = { title: "직원 수정 — eywa" };
@@ -23,7 +24,7 @@ export default async function EditStaffPage({
   }
 
   const { id } = await params;
-  const staff = await getStaffById(id);
+  const [staff, { operations }] = await Promise.all([getStaffById(id), getTenantSettings()]);
   if (!staff) notFound();
 
   return (
@@ -53,6 +54,7 @@ export default async function EditStaffPage({
       <StaffForm
         mode="edit"
         assignableRoleOptions={[]}
+        jobTitleOptions={operations.jobTitles}
         initialValue={{
           id: staff.id,
           displayName: staff.displayName,

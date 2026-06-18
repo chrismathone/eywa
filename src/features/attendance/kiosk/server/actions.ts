@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccess } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
 import { assignAttendanceCode } from "../codes";
 import { KIOSK_COOKIE } from "../constants";
@@ -180,19 +181,14 @@ export async function sendTestAlimtalk(
     };
   }
 
-  const supabase = await createClient();
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("name")
-    .eq("id", user.tenantId)
-    .maybeSingle();
+  const academyName = (await getTenantSettings()).profile.name || "학원";
 
   const result = await sendAttendanceNotification({
     channel,
     recipientPhone: phone,
     studentName: "홍길동",
     time: "16:00",
-    academyName: tenant?.name ?? "학원",
+    academyName,
     kind: "checkin",
   });
   if (!result.ok) return { error: `발송 실패: ${result.error}` };

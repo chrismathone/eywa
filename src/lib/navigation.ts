@@ -15,6 +15,7 @@ import {
   FileText,
   HelpCircle,
   Settings,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import type { MenuKey } from "@/lib/permissions";
@@ -53,7 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "학생",
     items: [
       { href: "/students", label: "학생목록", icon: Users, menuKey: "students" },
-      { href: "/exams", label: "시험관리", icon: ClipboardList, menuKey: "exams" },
+      { href: "/exams", label: "성적관리", icon: ClipboardList, menuKey: "exams" },
       { href: "/enrollment", label: "등록상담", icon: UserPlus, menuKey: "enrollment" },
       { href: "/consultations", label: "학생상담", icon: MessageSquare, menuKey: "consultations" },
       { href: "/retention", label: "이탈 방어", icon: ShieldAlert, menuKey: "retention" },
@@ -72,6 +73,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "지원",
     items: [
       { href: "/help", label: "도움말", icon: HelpCircle, menuKey: "help" },
+      { href: "/owner", label: "학원 설정", icon: Building2, menuKey: "owner" },
       { href: "/admin", label: "관리자 도구", icon: Settings, menuKey: "admin" },
     ],
   },

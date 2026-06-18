@@ -7,7 +7,40 @@ import {
   periodLabel,
   periodToTimes,
   slotPeriodRow,
+  subjectPeriodRows,
+  settingsToPeriodsConfig,
 } from "./periods";
+
+describe("PeriodsConfig 주입 (owner 설정 교시 반영)", () => {
+  const cfg = settingsToPeriodsConfig({
+    weekdayPeriods: [
+      { startTime: "10:00", endTime: "10:50" },
+      { startTime: "11:00", endTime: "11:50" },
+    ],
+    weekendPeriods: [{ startTime: "08:00", endTime: "09:00" }],
+  });
+
+  it("periodToTimes가 설정 교시 시각을 반영", () => {
+    expect(periodToTimes("1", "math", undefined, cfg)).toEqual({ startTime: "10:00", endTime: "10:50" });
+    expect(periodToTimes("1", "math", { weekend: true }, cfg)).toEqual({ startTime: "08:00", endTime: "09:00" });
+  });
+
+  it("slotPeriodRow가 설정 시각 → 그룹 행으로 매핑(2교시=1그룹)", () => {
+    const r = slotPeriodRow("math", "10:00", "mon", cfg);
+    expect(r.key).toBe("m-1");
+    expect(r.time).toBe("10:00~11:50"); // 2개 교시가 1그룹으로 묶임
+  });
+
+  it("subjectPeriodRows 행 수가 설정 교시 수에서 파생(2교시→1그룹, 주말 1교시)", () => {
+    expect(subjectPeriodRows("math", false, cfg)).toHaveLength(1);
+    expect(subjectPeriodRows("math", true, cfg)).toHaveLength(1);
+  });
+
+  it("빈 설정 배열이면 기본 상수로 폴백(동등성)", () => {
+    const empty = settingsToPeriodsConfig({ weekdayPeriods: [], weekendPeriods: [] });
+    expect(periodToTimes("1", "math", undefined, empty)).toEqual(periodToTimes("1", "math"));
+  });
+});
 
 describe("요일 변환", () => {
   it("한글→enum 7요일 매핑", () => {

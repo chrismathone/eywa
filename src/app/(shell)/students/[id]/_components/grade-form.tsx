@@ -6,14 +6,6 @@ import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createStudentGrade, type CreateGradeState } from "@/features/students/server/actions";
 
-const SUBJECTS = [
-  { value: "math", label: "수학" },
-  { value: "english", label: "영어" },
-  { value: "korean", label: "국어" },
-  { value: "science", label: "과학" },
-  { value: "arts", label: "예술" },
-];
-
 function Submit() {
   const { pending } = useFormStatus();
   return (
@@ -24,7 +16,13 @@ function Submit() {
   );
 }
 
-export function GradeForm({ studentId }: { studentId: string }) {
+export function GradeForm({
+  studentId,
+  subjectOptions,
+}: {
+  studentId: string;
+  subjectOptions: { value: string; label: string }[];
+}) {
   const [state, formAction] = useActionState<CreateGradeState, FormData>(
     createStudentGrade,
     undefined,
@@ -56,7 +54,7 @@ export function GradeForm({ studentId }: { studentId: string }) {
           required
           className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-xs sm:col-span-1"
         >
-          {SUBJECTS.map((s) => (
+          {subjectOptions.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
             </option>

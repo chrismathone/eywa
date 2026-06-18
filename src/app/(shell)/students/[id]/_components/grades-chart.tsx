@@ -12,15 +12,13 @@ import {
 } from "recharts";
 import type { GradeSeriesPoint } from "@/lib/calc/grades";
 
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
-
-export function GradesChart({ series }: { series: GradeSeriesPoint[] }) {
+export function GradesChart({
+  series,
+  subjectLabels = {},
+}: {
+  series: GradeSeriesPoint[];
+  subjectLabels?: Record<string, string>;
+}) {
   if (series.length < 2) return null; // 점 1개는 추이 의미 없음
   const data = series.map((p, i) => ({ ...p, idx: i }));
   return (
@@ -43,7 +41,7 @@ export function GradesChart({ series }: { series: GradeSeriesPoint[] }) {
           labelFormatter={(_, payload) => {
             const p = payload?.[0]?.payload as GradeSeriesPoint | undefined;
             if (!p) return "";
-            return `${SUBJECT_LABEL[p.subject] ?? p.subject} · ${p.label}`;
+            return `${subjectLabels[p.subject] ?? p.subject} · ${p.label}`;
           }}
           contentStyle={{
             background: "var(--color-card)",

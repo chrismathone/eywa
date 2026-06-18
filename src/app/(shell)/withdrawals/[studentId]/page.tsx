@@ -8,18 +8,13 @@ import {
   getWithdrawalDetail,
   REASON_LABEL,
 } from "@/features/withdrawals/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ConsultationTracker } from "../_components/consultation-tracker";
 import { ReactivateButton } from "../_components/reactivate-button";
 import { WithdrawalReasonCard } from "../_components/reason-card";
 
 export const metadata = { title: "퇴원 상세 — eywa" };
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-};
 
 export default async function WithdrawalDetailPage({
   params,
@@ -28,8 +23,12 @@ export default async function WithdrawalDetailPage({
 }) {
   await requireAccess("withdrawals");
   const { studentId } = await params;
-  const detail = await getWithdrawalDetail(studentId);
+  const [detail, settings] = await Promise.all([
+    getWithdrawalDetail(studentId),
+    getTenantSettings(),
+  ]);
   if (!detail) notFound();
+  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const md = detail.metadata;
   const duration = enrollmentDuration(detail.enrolledAt, detail.withdrawnAt);
@@ -98,7 +97,7 @@ export default async function WithdrawalDetailPage({
                 <div>
                   <p className="text-sm font-medium">{e.className}</p>
                   <p className="text-muted-foreground text-xs">
-                    {SUBJECT_LABEL[e.subject] ?? e.subject} ·{" "}
+                    {subjects.labelOf(e.subject)} ·{" "}
                     <span className="num">{e.startDate}</span>
                     {e.endDate ? <> ~ <span className="num">{e.endDate}</span></> : <> ~ 현재</>}
                   </p>

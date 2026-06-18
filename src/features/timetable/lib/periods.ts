@@ -95,21 +95,53 @@ const WEEKEND_PERIODS: Record<string, PeriodTime> = {
   "8": { startTime: "16:00", endTime: "17:00" },
 };
 
-function weekdayTable(subject: TimetableSubject): Record<string, PeriodTime> {
-  return subject === "english" ? ENGLISH_PERIODS : MATH_PERIODS;
+// ── 설정 주입(config) — 평일/주말 교시표를 테넌트 설정(owner)으로 대체 가능. ──
+// 미지정 시 DEFAULT_PERIODS_CONFIG(=현 상수)로 폴백 → 설정 없으면 오늘과 동일 동작.
+// 영어 교시표(10교시·40분)는 설정 스키마(평일 1개 표)로 표현 불가하므로 ENGLISH_PERIODS 상수 유지.
+export interface PeriodsConfig {
+  weekday: Record<string, PeriodTime>; // periodId "1".."N" → 시각 (수학계열 공용)
+  weekend: Record<string, PeriodTime>;
+}
+
+export const DEFAULT_PERIODS_CONFIG: PeriodsConfig = {
+  weekday: MATH_PERIODS,
+  weekend: WEEKEND_PERIODS,
+};
+
+/** 설정(operations)의 교시 배열 → PeriodsConfig. 배열 index+1 = periodId 규약. 빈 배열이면 기본 상수. */
+export function settingsToPeriodsConfig(operations: {
+  weekdayPeriods: { startTime: string; endTime: string }[];
+  weekendPeriods: { startTime: string; endTime: string }[];
+}): PeriodsConfig {
+  const toTable = (rows: { startTime: string; endTime: string }[]): Record<string, PeriodTime> => {
+    const t: Record<string, PeriodTime> = {};
+    rows.forEach((r, i) => {
+      t[String(i + 1)] = { startTime: hm(r.startTime), endTime: hm(r.endTime) };
+    });
+    return t;
+  };
+  return {
+    weekday: operations.weekdayPeriods.length ? toTable(operations.weekdayPeriods) : MATH_PERIODS,
+    weekend: operations.weekendPeriods.length ? toTable(operations.weekendPeriods) : WEEKEND_PERIODS,
+  };
+}
+
+function weekdayTable(subject: TimetableSubject, config: PeriodsConfig): Record<string, PeriodTime> {
+  return subject === "english" ? ENGLISH_PERIODS : config.weekday;
 }
 
 /**
  * periodId(통일 또는 레거시) + 과목 + 주말여부 → {startTime, endTime}. 알 수 없으면 null.
- * 주말이면 과목 무관 WEEKEND_PERIODS, 평일이면 과목별 표.
+ * 주말이면 과목 무관 config.weekend, 평일이면 과목별 표(영어=상수, 그 외=config.weekday).
  */
 export function periodToTimes(
   periodId: string,
   subject: TimetableSubject,
   opts?: { weekend?: boolean },
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
 ): PeriodTime | null {
   const id = normalizePeriodId(periodId);
-  const table = opts?.weekend ? WEEKEND_PERIODS : weekdayTable(subject);
+  const table = opts?.weekend ? config.weekend : weekdayTable(subject, config);
   return table[id] ?? null;
 }
 
@@ -125,18 +157,6 @@ export function periodLabel(periodId: string): string {
 // 영어(평일)는 10교시 개별 행, 주말은 8교시(시간단위) 개별 행.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// 수학 교시 → 그룹(1,2→1 / 3,4→2 / 5,6→3 / 7,8→4). ijw MATH_PERIOD_GROUPS.
-const MATH_PERIOD_GROUP: Record<string, number> = {
-  "1": 1, "2": 1, "3": 2, "4": 2, "5": 3, "6": 3, "7": 4, "8": 4,
-};
-// 그룹별 표시(라벨·통합 시간대). ijw MATH_GROUP_DISPLAY.
-const MATH_GROUP_DISPLAY: Record<number, { label: string; time: string }> = {
-  1: { label: "1교시", time: "14:30~16:20" },
-  2: { label: "2교시", time: "16:20~18:10" },
-  3: { label: "3교시", time: "18:20~20:10" },
-  4: { label: "4교시", time: "20:10~22:00" },
-};
-
 /** 그리드 행 1개(교시 또는 그룹). order로 정렬, key로 셀 그룹핑. */
 export type PeriodRow = {
   key: string; // 행 고유키 (m-1 / e-4 / w-3 / x-HH:MM)
@@ -144,16 +164,6 @@ export type PeriodRow = {
   time: string; // "14:30~16:20"
   order: number; // 정렬 순서
 };
-
-// 시작시각("HH:MM") → periodId 역인덱스(테이블별, 1회 생성).
-function reverseStart(table: Record<string, PeriodTime>): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const [id, t] of Object.entries(table)) if (!m.has(t.startTime)) m.set(t.startTime, id);
-  return m;
-}
-const MATH_REV = reverseStart(MATH_PERIODS);
-const ENGLISH_REV = reverseStart(ENGLISH_PERIODS);
-const WEEKEND_REV = reverseStart(WEEKEND_PERIODS);
 
 /** "16:20:00" / "16:20" → "16:20". */
 function hm(t: string): string {
@@ -166,6 +176,41 @@ function toMin(t: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
+// 시작시각("HH:MM") → periodId 역인덱스.
+function reverseStart(table: Record<string, PeriodTime>): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const [id, t] of Object.entries(table)) if (!m.has(hm(t.startTime))) m.set(hm(t.startTime), id);
+  return m;
+}
+
+const ENGLISH_REV = reverseStart(ENGLISH_PERIODS);
+
+/**
+ * 평일 수학계열 교시표 → 2개씩 묶은 그룹(라벨·통합시간대). config.weekday에서 파생.
+ * 기본 MATH_PERIODS(8교시)면 4그룹(1교시=14:30~16:20 …)으로 ijw MATH_GROUP_DISPLAY와 동일.
+ */
+function mathGroups(table: Record<string, PeriodTime>): {
+  groupOf: Map<string, number>;
+  display: Map<number, { label: string; time: string; order: number }>;
+} {
+  const ids = Object.keys(table).sort((a, b) => Number(a) - Number(b));
+  const groupOf = new Map<string, number>();
+  ids.forEach((id, idx) => groupOf.set(id, Math.floor(idx / 2) + 1));
+  const display = new Map<number, { label: string; time: string; order: number }>();
+  const maxG = Math.ceil(ids.length / 2);
+  for (let g = 1; g <= maxG; g++) {
+    const first = table[ids[(g - 1) * 2]!]!;
+    const secondId = ids[(g - 1) * 2 + 1];
+    const second = secondId ? table[secondId]! : first;
+    display.set(g, {
+      label: `${g}교시`,
+      time: `${hm(first.startTime)}~${hm(second.endTime)}`,
+      order: toMin(first.startTime),
+    });
+  }
+  return { groupOf, display };
+}
+
 /**
  * 한 슬롯(과목·시작시각·요일)을 그리드 행으로 매핑.
  * 매칭 실패 시 그 시각 자체를 '기타' 행으로(절대 throw 금지 — 데모 데이터 시각 불일치 안전).
@@ -174,26 +219,28 @@ export function slotPeriodRow(
   subject: TimetableSubject,
   startTime: string,
   day: DayOfWeek,
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
 ): PeriodRow {
   const start = hm(startTime);
   if (isWeekendDay(day)) {
-    const p = WEEKEND_REV.get(start);
+    const p = reverseStart(config.weekend).get(start);
     if (p) {
-      const t = WEEKEND_PERIODS[p]!;
-      return { key: `w-${p}`, label: `${p}교시`, time: `${t.startTime}~${t.endTime}`, order: toMin(t.startTime) };
+      const t = config.weekend[p]!;
+      return { key: `w-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
     }
   } else if (subject === "english") {
     const p = ENGLISH_REV.get(start);
     if (p) {
       const t = ENGLISH_PERIODS[p]!;
-      return { key: `e-${p}`, label: `${p}교시`, time: `${t.startTime}~${t.endTime}`, order: toMin(t.startTime) };
+      return { key: `e-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
     }
   } else {
-    const p = MATH_REV.get(start);
+    const p = reverseStart(config.weekday).get(start);
     if (p) {
-      const g = MATH_PERIOD_GROUP[p]!;
-      const d = MATH_GROUP_DISPLAY[g]!;
-      return { key: `m-${g}`, label: d.label, time: d.time, order: toMin(d.time) };
+      const { groupOf, display } = mathGroups(config.weekday);
+      const g = groupOf.get(p)!;
+      const d = display.get(g)!;
+      return { key: `m-${g}`, label: d.label, time: d.time, order: d.order };
     }
   }
   // 폴백: 매칭 안 되는 시각 = 자체 행. 시각 그대로 라벨, 시각순 정렬.
@@ -204,28 +251,32 @@ export function slotPeriodRow(
  * 그 과목/평일·주말의 **표준 교시 행 전체**(수업 없어도 표시 — 빈 교시도 균일 높이 유지).
  * 평일 수학계열 = 4그룹(1교시 14:30~16:20 …), 영어 = 10교시, 주말 = 8교시(시간단위).
  */
-export function subjectPeriodRows(subject: TimetableSubject, weekend: boolean): PeriodRow[] {
+export function subjectPeriodRows(
+  subject: TimetableSubject,
+  weekend: boolean,
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+): PeriodRow[] {
   let out: PeriodRow[];
   if (weekend) {
-    out = Object.entries(WEEKEND_PERIODS).map(([p, t]) => ({
+    out = Object.entries(config.weekend).map(([p, t]) => ({
       key: `w-${p}`,
       label: `${p}교시`,
-      time: `${t.startTime}~${t.endTime}`,
+      time: `${hm(t.startTime)}~${hm(t.endTime)}`,
       order: toMin(t.startTime),
     }));
   } else if (subject === "english") {
     out = Object.entries(ENGLISH_PERIODS).map(([p, t]) => ({
       key: `e-${p}`,
       label: `${p}교시`,
-      time: `${t.startTime}~${t.endTime}`,
+      time: `${hm(t.startTime)}~${hm(t.endTime)}`,
       order: toMin(t.startTime),
     }));
   } else {
-    out = [1, 2, 3, 4].map((g) => ({
+    out = Array.from(mathGroups(config.weekday).display.entries()).map(([g, d]) => ({
       key: `m-${g}`,
-      label: MATH_GROUP_DISPLAY[g]!.label,
-      time: MATH_GROUP_DISPLAY[g]!.time,
-      order: toMin(MATH_GROUP_DISPLAY[g]!.time),
+      label: d.label,
+      time: d.time,
+      order: d.order,
     }));
   }
   return out.sort((a, b) => a.order - b.order);

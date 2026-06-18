@@ -12,6 +12,7 @@ export const AUDIT_ACTIONS = {
   exam_scores: "성적 일괄입력",
   payroll_upsert: "급여 정산",
   withdrawal_update: "퇴원 사유",
+  owner_settings_update: "학원 설정 변경",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

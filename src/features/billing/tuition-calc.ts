@@ -52,3 +52,28 @@ export function fixedHolidaysForYear(year: number): string[] {
     (md) => `${year}-${md}`,
   );
 }
+
+/**
+ * 학원 설정 공휴일(테넌트) + (옵션) 그 해 양력 고정 공휴일을 합쳐 중복 제거.
+ * 설정 미지정(tenantHolidays=[]) + includeFixed=true면 기존 fixedHolidaysForYear만 적용 → 동등성.
+ */
+export function mergeHolidays(
+  year: number,
+  tenantHolidays: string[],
+  includeFixed: boolean,
+): string[] {
+  const fixed = includeFixed ? fixedHolidaysForYear(year) : [];
+  return Array.from(new Set([...fixed, ...tenantHolidays]));
+}
+
+/**
+ * 청구 기간("YYYY-MM") + 납부 마감일(N일) → 마감일("YYYY-MM-DD"). 그 달 말일로 clamp(2월 31일 방어).
+ * 서버(createInvoice)·클라(폼 기본값) 동일 결과 보장 위해 UTC 결정적 계산.
+ */
+export function resolveDueDate(period: string, dueDay: number): string {
+  const [y, m] = period.split("-").map(Number);
+  if (!y || !m) return "";
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const day = Math.min(Math.max(1, Math.floor(dueDay)), lastDay);
+  return `${period}-${String(day).padStart(2, "0")}`;
+}

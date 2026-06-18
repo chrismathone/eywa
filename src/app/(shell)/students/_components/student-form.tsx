@@ -73,10 +73,12 @@ export function StudentForm({
   mode,
   initialValue,
   teachers,
+  gradeLevels,
 }: {
   mode: Mode;
   initialValue?: StudentFormValue;
   teachers: TeacherOption[];
+  gradeLevels?: string[];
 }) {
   const action = mode === "create" ? createStudent : updateStudent;
   const [state, formAction] = useActionState<StudentFormState, FormData>(action, undefined);
@@ -103,6 +105,12 @@ export function StudentForm({
   };
 
   const errors = state?.fieldErrors ?? {};
+
+  // 학년 옵션 = 설정(operations.gradeLevels) 또는 기본. '기타'는 설정과 무관하게 항상 노출(미분류 catch-all).
+  // 현재값(v.grade)은 설정 목록에 없어도 합쳐 편집 시 유실 방지.
+  const grades = Array.from(
+    new Set([...(gradeLevels ?? GRADES), ...(v.grade ? [v.grade] : []), "기타"]),
+  );
 
   return (
     <form action={formAction} className="space-y-5">
@@ -133,7 +141,7 @@ export function StudentForm({
         <Field label="학년" htmlFor="grade">
           <select id="grade" name="grade" defaultValue={v.grade ?? ""} className={inputClass}>
             <option value="">선택</option>
-            {GRADES.map((g) => (
+            {grades.map((g) => (
               <option key={g} value={g}>
                 {g}
               </option>

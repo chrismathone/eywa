@@ -10,13 +10,14 @@ import {
   type ClassFormState,
 } from "@/features/classes/server/actions";
 
-const SUBJECTS = [
+// 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
+// (드리프트 방지). 서버 부모가 subjectOptions를 주면 그 값(=테넌트 설정)이 우선한다.
+const DEFAULT_SUBJECT_OPTIONS = [
   { value: "math", label: "수학" },
+  { value: "highmath", label: "수학(심화)" },
   { value: "english", label: "영어" },
-  { value: "korean", label: "국어" },
   { value: "science", label: "과학" },
-  { value: "arts", label: "예술" },
-  { value: "etc", label: "기타" },
+  { value: "korean", label: "국어" },
 ];
 
 const DAYS = [
@@ -57,12 +58,15 @@ export function ClassForm({
   defaults,
   teacherOptions,
   classroomOptions,
+  subjectOptions,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
   teacherOptions: { id: string; name: string }[];
   classroomOptions: { id: string; name: string; capacity: number | null }[];
+  subjectOptions?: { value: string; label: string }[];
 }) {
+  const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
   const action = mode === "create" ? createClass : updateClass;
   const [state, formAction] = useActionState<ClassFormState, FormData>(action, undefined);
 
@@ -109,10 +113,10 @@ export function ClassForm({
         <Field label="과목" error={fieldErrs.subject}>
           <select
             name="subject"
-            defaultValue={defaults?.subject ?? "math"}
+            defaultValue={defaults?.subject ?? subjects[0]?.value ?? "math"}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           >
-            {SUBJECTS.map((s) => (
+            {subjects.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>

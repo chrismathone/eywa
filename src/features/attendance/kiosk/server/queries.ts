@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { KIOSK_COOKIE } from "../constants";
 import { summarizeUserAgent } from "../device-info";
 
@@ -171,15 +172,12 @@ export async function resolveKioskDevice(): Promise<{ tenantId: string; academyN
     .maybeSingle();
   if (!device || !device.is_active) return null;
 
-  const { data: tenant } = await admin
-    .from("tenants")
-    .select("name")
-    .eq("id", device.tenant_id)
-    .maybeSingle();
+  const academyName =
+    (await getTenantSettingsByTenantId(device.tenant_id)).profile.name || "학원";
 
   return {
     tenantId: device.tenant_id,
-    academyName: tenant?.name ?? "학원",
+    academyName,
     deviceName: device.name,
   };
 }

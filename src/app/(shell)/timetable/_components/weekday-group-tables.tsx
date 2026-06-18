@@ -3,8 +3,10 @@ import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queri
 import {
   slotPeriodRow,
   subjectPeriodRows,
+  DEFAULT_PERIODS_CONFIG,
   type DayOfWeek,
   type PeriodRow,
+  type PeriodsConfig,
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
 import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
@@ -97,6 +99,7 @@ function GroupTable({
   weekend,
   rowHeight,
   stickyPeriod = true,
+  config,
 }: {
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
@@ -104,16 +107,17 @@ function GroupTable({
   weekend: boolean;
   rowHeight: number;
   stickyPeriod?: boolean;
+  config: PeriodsConfig;
 }) {
   // 평일 표만 교시열 sticky(좌측 고정). 우측 주말 표는 자기 교시열이라 non-sticky(겹침 방지).
   const periodHeadSticky = stickyPeriod ? "sticky left-0 z-20" : "";
   const periodCellSticky = stickyPeriod ? "sticky left-0 z-10" : "";
   const rowOf = (s: ScheduleSlotWithStudents) =>
-    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek);
+    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek, config);
 
   // 표준 교시 전체(수업 없어도 표시 — 빈 교시도 균일 높이) + 데이터에만 있는 비표준 시각(폴백) 합집합.
   const rowMap = new Map<string, PeriodRow>();
-  for (const r of subjectPeriodRows(subject, weekend)) rowMap.set(r.key, r);
+  for (const r of subjectPeriodRows(subject, weekend, config)) rowMap.set(r.key, r);
   for (const s of slots) {
     const r = rowOf(s);
     if (!rowMap.has(r.key)) rowMap.set(r.key, r);
@@ -262,7 +266,13 @@ function GroupTable({
  * 시간표 기본뷰 — ijw식 요일그룹(월목/화금/수) 한 판 + 주말 한 판(시작시각이 달라 분리).
  * 두 판을 세로로 스택(각자 교시열·교시 행 — 평일 14:30~ / 주말 09:00~). 과목 단일 선택.
  */
-export function WeekdayGroupTables({ slots }: { slots: ScheduleSlotWithStudents[] }) {
+export function WeekdayGroupTables({
+  slots,
+  config = DEFAULT_PERIODS_CONFIG,
+}: {
+  slots: ScheduleSlotWithStudents[];
+  config?: PeriodsConfig;
+}) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
@@ -282,6 +292,7 @@ export function WeekdayGroupTables({ slots }: { slots: ScheduleSlotWithStudents[
             groups={weekdayGroups}
             weekend={false}
             rowHeight={ROW_H}
+            config={config}
           />
         ) : null}
         {weekendGroups.length > 0 ? (
@@ -292,6 +303,7 @@ export function WeekdayGroupTables({ slots }: { slots: ScheduleSlotWithStudents[
             weekend
             rowHeight={ROW_H / 2}
             stickyPeriod={false}
+            config={config}
           />
         ) : null}
       </div>

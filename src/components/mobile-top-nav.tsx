@@ -19,10 +19,12 @@ export function MobileTopNav({
   systemRole,
   email,
   className,
+  brand = "EYWA",
 }: {
   systemRole: SystemRole;
   email: string;
   className?: string;
+  brand?: string;
 }) {
   const pathname = usePathname();
   const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter((item) =>
@@ -43,7 +45,7 @@ export function MobileTopNav({
               <circle cx="8" cy="8" r="2" fill="#fff" />
             </svg>
           </span>
-          <span className="text-foreground text-[13px] font-extrabold tracking-tight">EYWA</span>
+          <span className="text-foreground text-[13px] font-extrabold tracking-tight">{brand}</span>
         </Link>
         <UserMenu email={email} />
       </div>
