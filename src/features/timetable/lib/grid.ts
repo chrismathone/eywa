@@ -29,6 +29,65 @@ export function cellClassKey(classIds: string[]): string {
   return [...new Set(classIds)].sort().join("|");
 }
 
+export type CellBlock = { rowSpan: number; colSpan: number };
+
+/**
+ * 2D 셀 병합 — 같은 key가 연속한 행/열을 직사각형 블록으로 묶는다(ijw getConsecutiveSpan/shouldSkipCell).
+ * 반환 Map: `${r}:${c}` → 블록(anchor 셀만). 맵에 없는 (r,c)는 위/왼쪽 블록에 피복됨(렌더 스킵).
+ * - key ""(빈 셀)은 병합 안 함(각자 단일 1×1).
+ * - allowColMerge=false면 가로 병합 끔(주말: 토/일 요일 병합 안 함, 세로 시간 병합만).
+ * 같은 반이 연속 교시(세로)·인접 요일(가로)에 걸치면 한 칸으로.
+ */
+export function computeBlocks(
+  numRows: number,
+  numCols: number,
+  keyAt: (r: number, c: number) => string,
+  allowColMerge = true,
+): Map<string, CellBlock> {
+  const covered: boolean[][] = Array.from({ length: numRows }, () => new Array<boolean>(numCols).fill(false));
+  const blocks = new Map<string, CellBlock>();
+  for (let r = 0; r < numRows; r++) {
+    for (let c = 0; c < numCols; c++) {
+      if (covered[r]![c]) continue;
+      const key = keyAt(r, c);
+      if (key === "") {
+        blocks.set(`${r}:${c}`, { rowSpan: 1, colSpan: 1 }); // 빈 셀 — 병합 안 함
+        continue;
+      }
+      // 가로 확장(같은 key 인접 열)
+      let colSpan = 1;
+      if (allowColMerge) {
+        while (
+          c + colSpan < numCols &&
+          !covered[r]![c + colSpan] &&
+          keyAt(r, c + colSpan) === key
+        ) {
+          colSpan++;
+        }
+      }
+      // 세로 확장(아래 행이 colSpan 폭 전체에서 같은 key일 때만)
+      let rowSpan = 1;
+      while (r + rowSpan < numRows) {
+        let rowMatches = true;
+        for (let cc = c; cc < c + colSpan; cc++) {
+          if (covered[r + rowSpan]![cc] || keyAt(r + rowSpan, cc) !== key) {
+            rowMatches = false;
+            break;
+          }
+        }
+        if (!rowMatches) break;
+        rowSpan++;
+      }
+      // 블록 피복 표시
+      for (let rr = r; rr < r + rowSpan; rr++) {
+        for (let cc = c; cc < c + colSpan; cc++) covered[rr]![cc] = true;
+      }
+      blocks.set(`${r}:${c}`, { rowSpan, colSpan });
+    }
+  }
+  return blocks;
+}
+
 export type MergeRun = { index: number; span: number };
 
 /**

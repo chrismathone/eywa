@@ -65,9 +65,9 @@ export default async function TimetablePage({
       : available.includes(DEFAULT_SUBJECT)
         ? DEFAULT_SUBJECT
         : (available[0] ?? DEFAULT_SUBJECT);
+  // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
 
-  // counters
   const totalStudents = slots.reduce((s, x) => s + x.students.length, 0);
 
   return (
@@ -137,7 +137,7 @@ export default async function TimetablePage({
             {view === "basic" ? (
               <WeekdayGroupTables slots={slots} />
             ) : (
-              <IntegratedView slots={slots} />
+              <IntegratedView slots={slots} days={DAYS} />
             )}
           </div>
         </TimetableBoard>
@@ -156,7 +156,13 @@ function buildHref(view: ViewMode, subject: SubjectKey): string {
 
 // ─────────────────── 통합뷰 — 요일 × 교시(과목 교시표) + 다중 수업 ───────────────────
 
-function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
+function IntegratedView({
+  slots,
+  days,
+}: {
+  slots: ScheduleSlotWithStudents[];
+  days: { key: string; label: string }[];
+}) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const rowOf = (s: ScheduleSlotWithStudents) =>
     slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek);
@@ -167,6 +173,10 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
     if (!rowMap.has(r.key)) rowMap.set(r.key, r);
   }
   const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
+
+  // 표시할 요일 = 데이터에 실제 있는 요일만(빈 컬럼 방지)
+  const present = new Set(slots.map((s) => s.dayOfWeek));
+  const cols = days.filter((d) => present.has(d.key));
 
   // (day, period) → slots
   const cell = new Map<string, ScheduleSlotWithStudents[]>();
@@ -185,7 +195,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
             <th className="bg-bg-soft border-line sticky left-0 z-10 w-[100px] border-b border-r p-3 text-left">
               <span className="micro">교시</span>
             </th>
-            {DAYS.map((d) => (
+            {cols.map((d) => (
               <th
                 key={d.key}
                 className={`${weekdayTint(d.key)} border-line min-w-[200px] border-b border-r px-3 py-2.5 text-center`}
@@ -202,7 +212,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
                 {row.label}
                 <div className="text-text-faint mt-1 font-mono text-[10px]">{row.time}</div>
               </td>
-              {DAYS.map((d) => {
+              {cols.map((d) => {
                 const list = (cell.get(`${d.key}::${row.key}`) ?? [])
                   .slice()
                   .sort((a, b) => a.startTime.localeCompare(b.startTime));

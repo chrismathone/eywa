@@ -199,3 +199,34 @@ export function slotPeriodRow(
   // 폴백: 매칭 안 되는 시각 = 자체 행. 시각 그대로 라벨, 시각순 정렬.
   return { key: `x-${start}`, label: start, time: start, order: toMin(start) };
 }
+
+/**
+ * 그 과목/평일·주말의 **표준 교시 행 전체**(수업 없어도 표시 — 빈 교시도 균일 높이 유지).
+ * 평일 수학계열 = 4그룹(1교시 14:30~16:20 …), 영어 = 10교시, 주말 = 8교시(시간단위).
+ */
+export function subjectPeriodRows(subject: TimetableSubject, weekend: boolean): PeriodRow[] {
+  let out: PeriodRow[];
+  if (weekend) {
+    out = Object.entries(WEEKEND_PERIODS).map(([p, t]) => ({
+      key: `w-${p}`,
+      label: `${p}교시`,
+      time: `${t.startTime}~${t.endTime}`,
+      order: toMin(t.startTime),
+    }));
+  } else if (subject === "english") {
+    out = Object.entries(ENGLISH_PERIODS).map(([p, t]) => ({
+      key: `e-${p}`,
+      label: `${p}교시`,
+      time: `${t.startTime}~${t.endTime}`,
+      order: toMin(t.startTime),
+    }));
+  } else {
+    out = [1, 2, 3, 4].map((g) => ({
+      key: `m-${g}`,
+      label: MATH_GROUP_DISPLAY[g]!.label,
+      time: MATH_GROUP_DISPLAY[g]!.time,
+      order: toMin(MATH_GROUP_DISPLAY[g]!.time),
+    }));
+  }
+  return out.sort((a, b) => a.order - b.order);
+}
