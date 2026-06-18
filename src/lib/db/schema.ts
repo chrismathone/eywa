@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -232,6 +233,9 @@ export const classes = pgTable(
     classroomId: uuid("classroom_id").references(() => classrooms.id, { onDelete: "set null" }),
     isActive: boolean("is_active").notNull().default(true),
     notes: text("notes"),
+    // Cell color (ijw bgColor/textColor). Stored as #RRGGBB; ARGB normalized on import.
+    bgColor: text("bg_color"),
+    textColor: text("text_color"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -300,6 +304,16 @@ export const enrollments = pgTable(
     endDate: date("end_date"),
     onHold: boolean("on_hold").notNull().default(false),
     withdrawalReason: text("withdrawal_reason"),
+    // 분리등원: [] = 수업의 모든 요일 등원, ['mon'] = 월요일만. day_of_week 문자열.
+    // ijw가 같은 (학생,반)에 attendanceDays만 다른 enrollment를 복수 공존시키던 것을
+    // 단일 enrollment + 배열로 정규화 → GiST enrollments_no_overlap 충돌 회피.
+    attendanceDays: text("attendance_days")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    // 반이동 흔적: is_transferred = 이동으로 종료(퇴원 집계 제외), is_transferred_in = 이동으로 들어옴.
+    isTransferred: boolean("is_transferred").notNull().default(false),
+    isTransferredIn: boolean("is_transferred_in").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -355,12 +369,75 @@ export const classSchedules = pgTable(
     endTime: time("end_time").notNull(),
     validFrom: date("valid_from").notNull(),
     validTo: date("valid_to"),
+    // Cell-level overrides (ijw slotTeachers/slotRooms). NULL = inherit classes.teacher_id/classroom_id.
+    teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }),
+    classroomId: uuid("classroom_id").references(() => classrooms.id, { onDelete: "set null" }),
+    // Display-only period label ('3교시'). Absolute time (start/end) is the source of truth.
+    periodLabel: text("period_label"),
+    // 합반(merged): schedules sharing one cell carry the same merge_group. Partial index in alpha SQL.
+    mergeGroup: uuid("merge_group"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("schedules_tenant_class_idx").on(t.tenantId, t.classId),
     index("schedules_tenant_day_idx").on(t.tenantId, t.dayOfWeek),
   ],
+);
+
+// === english_levels (영어 레벨 정의: DP=Dr.Phonics … MEC. 반이름 약어로 레벨업/다운) ===
+export const englishLevels = pgTable(
+  "english_levels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    abbreviation: text("abbreviation").notNull(),
+    fullName: text("full_name"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    color: text("color"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("english_levels_tenant_abbr_idx").on(t.tenantId, t.abbreviation)],
+);
+
+// === timetable_snapshots (엑셀 import 적용 직전 before-state 백업 → 1클릭 복원) ===
+export const timetableSnapshots = pgTable(
+  "timetable_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    label: text("label"),
+    referenceDate: date("reference_date"),
+    summary: jsonb("summary"),
+    payload: jsonb("payload").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("timetable_snapshots_tenant_idx").on(t.tenantId, t.createdAt)],
+);
+
+// === timetable_import_logs (엑셀 import 이력: 누가·언제·무엇을, snapshot 참조로 되돌리기 추적) ===
+export const timetableImportLogs = pgTable(
+  "timetable_import_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    weekLabel: text("week_label"),
+    snapshotId: uuid("snapshot_id").references(() => timetableSnapshots.id, {
+      onDelete: "set null",
+    }),
+    result: jsonb("result").notNull(),
+    details: jsonb("details"),
+    restoredAt: timestamp("restored_at", { withTimezone: true }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("timetable_import_logs_tenant_idx").on(t.tenantId, t.createdAt)],
 );
 
 // === enrollment_consultations (신입생 상담) ===
@@ -787,6 +864,12 @@ export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type NewAttendanceRecord = typeof attendanceRecords.$inferInsert;
 export type ClassSchedule = typeof classSchedules.$inferSelect;
 export type NewClassSchedule = typeof classSchedules.$inferInsert;
+export type EnglishLevel = typeof englishLevels.$inferSelect;
+export type NewEnglishLevel = typeof englishLevels.$inferInsert;
+export type TimetableSnapshot = typeof timetableSnapshots.$inferSelect;
+export type NewTimetableSnapshot = typeof timetableSnapshots.$inferInsert;
+export type TimetableImportLog = typeof timetableImportLogs.$inferSelect;
+export type NewTimetableImportLog = typeof timetableImportLogs.$inferInsert;
 export type EnrollmentConsultation = typeof enrollmentConsultations.$inferSelect;
 export type NewEnrollmentConsultation = typeof enrollmentConsultations.$inferInsert;
 export type ConsultationAiAnalysis = typeof consultationAiAnalysis.$inferSelect;

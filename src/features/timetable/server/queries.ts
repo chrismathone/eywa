@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 
 export type ScheduleSlot = {
   id: string;
@@ -16,6 +17,8 @@ export type ScheduleSlot = {
 
 async function fetchSlots(): Promise<ScheduleSlot[]> {
   const supabase = await createClient();
+  // 만료된 스케줄(valid_to < 오늘)은 제외. valid_to is null = 무기한 유효.
+  const today = new Date().toISOString().slice(0, 10);
   const { data } = await supabase
     .from("class_schedules")
     .select(
@@ -26,17 +29,18 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
          classroom:classroom_id ( name )
        )`,
     )
+    .or(`valid_to.is.null,valid_to.gte.${today}`)
     .order("start_time");
 
   if (!data) return [];
 
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select("class_id")
-    .is("end_date", null);
+  // 활성 enrollment 전건 카운트 — PostgREST 1000행 한도 회피(#54).
+  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
+    supabase.from("enrollments").select("class_id").is("end_date", null).range(from, to),
+  );
 
   const counts = new Map<string, number>();
-  for (const e of enrollments ?? []) {
+  for (const e of enrollments) {
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
 
@@ -96,14 +100,22 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
   const classIds = Array.from(new Set(slots.map((s) => s.classId)));
   const supabase = await createClient();
 
-  const { data: rows } = await supabase
-    .from("enrollments")
-    .select("id, class_id, student:student_id ( name, grade, school )")
-    .in("class_id", classIds)
-    .is("end_date", null);
+  // class_id를 청크로 나눠 조회 — 대량 .in()의 HTTP 414 + 1000행 절단 회피(#53).
+  type EnrollRow = {
+    id: string;
+    class_id: string;
+    student: { name?: string; grade?: string | null; school?: string | null } | { name?: string }[];
+  };
+  const rows = await fetchInChunks<EnrollRow>(classIds, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select("id, class_id, student:student_id ( name, grade, school )")
+      .in("class_id", chunk)
+      .is("end_date", null),
+  );
 
   const byClass = new Map<string, StudentLine[]>();
-  for (const r of rows ?? []) {
+  for (const r of rows) {
     const s = (Array.isArray(r.student) ? r.student[0] : r.student) as
       | { name?: string; grade?: string | null; school?: string | null }
       | undefined;

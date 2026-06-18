@@ -12,7 +12,7 @@ const DAY_LABEL: Record<string, string> = {
   sun: "일",
 };
 
-const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat"];
+const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 const SUBJECT_COLOR: Record<string, string> = {
   math: "FFCDE9D9", // primary soft

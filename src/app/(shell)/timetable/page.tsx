@@ -42,6 +42,7 @@ const DAYS: { key: string; label: string }[] = [
   { key: "thu", label: "목" },
   { key: "fri", label: "금" },
   { key: "sat", label: "토" },
+  { key: "sun", label: "일" },
 ];
 
 function shortTime(t: string) {
