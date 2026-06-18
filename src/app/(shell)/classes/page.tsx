@@ -11,6 +11,7 @@ import {
   getClassesStats,
   getClassTeacherOptions,
   type ClassListRow,
+  type ClassDaySlot,
 } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
 import { FilterSelect } from "@/components/filter-select";
@@ -71,6 +72,7 @@ const DAY_FILTERS = [
   { key: "thu", label: "목" },
   { key: "fri", label: "금" },
   { key: "sat", label: "토" },
+  { key: "sun", label: "일" },
 ];
 
 function buildHref(
@@ -214,7 +216,7 @@ export default async function ClassesPage({
                 type="search"
                 name="q"
                 defaultValue={q}
-                placeholder="반 이름"
+                placeholder="반·강사명"
                 className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
               />
             </div>
@@ -268,6 +270,40 @@ export default async function ClassesPage({
   );
 }
 
+/**
+ * 운영 요일 칩 + 시작시각. 모든 요일이 같은 시각이면 시각 1개만(월·수·금 14:30),
+ * 요일마다 다르면 요일별로(월14:30 목16:20). 시각 정보가 목록에서 사라지던 격차 보강.
+ */
+function DayChips({ days, subject }: { days: ClassDaySlot[]; subject: string }) {
+  if (days.length === 0) return <span className="text-text-faint text-xs">—</span>;
+  const starts = days.map((d) => d.start).filter((s): s is string => !!s);
+  const uniform = starts.length === days.length && new Set(starts).size === 1;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="flex gap-0.5 font-mono text-[11px]">
+        {days.map((d) => (
+          <span
+            key={d.day}
+            className={`inline-flex size-5 items-center justify-center rounded-sm ${SUBJECT_BAR[subject] ?? "bg-bg-soft"} text-white`}
+          >
+            {DAY_LABEL[d.day] ?? d.day}
+          </span>
+        ))}
+      </div>
+      {uniform ? (
+        <span className="text-text-dim tabular text-[11px]">{starts[0]}</span>
+      ) : starts.length > 0 ? (
+        <span className="text-text-faint tabular text-[10px]">
+          {days
+            .filter((d) => d.start)
+            .map((d) => `${DAY_LABEL[d.day] ?? d.day}${d.start}`)
+            .join(" ")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function TableView({ classes }: { classes: ClassListRow[] }) {
   return (
     <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
@@ -317,20 +353,7 @@ function TableView({ classes }: { classes: ClassListRow[] }) {
                   {c.classroomName ?? "—"}
                 </td>
                 <td className="px-4 py-2.5">
-                  {c.days.length === 0 ? (
-                    <span className="text-text-faint text-xs">—</span>
-                  ) : (
-                    <div className="flex gap-0.5 font-mono text-[11px]">
-                      {c.days.map((d) => (
-                        <span
-                          key={d}
-                          className={`text-text-dim inline-flex size-5 items-center justify-center rounded-sm ${SUBJECT_BAR[c.subject] ?? "bg-bg-soft"} text-white`}
-                        >
-                          {DAY_LABEL[d] ?? d}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <DayChips days={c.days} subject={c.subject} />
                 </td>
                 <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
                   {c.studentCount}명
@@ -367,8 +390,6 @@ function CardsView({ classes }: { classes: ClassListRow[] }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {classes.map((c) => {
         const meta = SUBJECT_META[c.subject] ?? { label: c.subject, color: "neutral" as PillColor };
-        const capacity = 8;
-        const pct = Math.min(100, (c.studentCount / capacity) * 100);
         return (
           <WindowLink
             key={c.id}
@@ -406,19 +427,11 @@ function CardsView({ classes }: { classes: ClassListRow[] }) {
                 ) : null}
               </div>
             </div>
-            <div className="border-line border-t pt-3">
-              <div className="mb-1.5 flex items-baseline justify-between text-[11px]">
-                <span className="text-text-dim">정원 현황</span>
-                <span className="text-foreground num font-bold">
-                  {c.studentCount} / {capacity}명
-                </span>
-              </div>
-              <div className="bg-bg-soft h-1.5 overflow-hidden rounded-sm">
-                <span
-                  className={`block h-full ${SUBJECT_BAR[c.subject] ?? "bg-primary"}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
+            <div className="border-line flex items-center justify-between gap-2 border-t pt-3">
+              <DayChips days={c.days} subject={c.subject} />
+              <span className="text-foreground num shrink-0 text-[12px] font-bold">
+                재원 {c.studentCount}명
+              </span>
             </div>
           </WindowLink>
         );

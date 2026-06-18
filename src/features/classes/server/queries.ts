@@ -2,6 +2,9 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { attendanceRate } from "@/lib/calc/attendance";
 
+/** 운영 요일 + 그 요일의 최초 시작시각(HH:MM). 같은 요일 여러 교시면 가장 이른 시각. */
+export type ClassDaySlot = { day: string; start: string | null };
+
 export type ClassListRow = {
   id: string;
   className: string;
@@ -11,7 +14,7 @@ export type ClassListRow = {
   classroomName: string | null;
   isActive: boolean;
   studentCount: number;
-  days: string[]; // 운영 요일 (mon, tue, ...)
+  days: ClassDaySlot[]; // 운영 요일(+시작시각), 요일순 정렬
   notes: string | null;
 };
 
@@ -67,6 +70,36 @@ export type ClassAttendanceStats = {
   rate: number;
 };
 
+const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** PostgREST .or()/ilike 안전화 — 구분자·와일드카드 제거(한글/공백 보존). search/queries.ts와 동일. */
+function sanitizeTerm(q: string): string {
+  return q.replace(/[%,()*\\]/g, " ").trim();
+}
+
+/** class_schedules 행들 → classId별 (요일→최초 시작시각) 맵. */
+function buildDaySlots(
+  scheds: { class_id: string; day_of_week: string; start_time?: string | null }[] | null,
+): Map<string, Map<string, string | null>> {
+  const byClass = new Map<string, Map<string, string | null>>();
+  for (const s of scheds ?? []) {
+    const m = byClass.get(s.class_id) ?? new Map<string, string | null>();
+    const start = s.start_time ? String(s.start_time).slice(0, 5) : null;
+    const prev = m.get(s.day_of_week);
+    if (prev === undefined) m.set(s.day_of_week, start);
+    else if (start !== null && (prev === null || start < prev)) m.set(s.day_of_week, start);
+    byClass.set(s.class_id, m);
+  }
+  return byClass;
+}
+
+/** (요일→시작시각) 맵 → 요일순 정렬된 ClassDaySlot[]. */
+function sortedDaySlots(m: Map<string, string | null> | undefined): ClassDaySlot[] {
+  return [...(m?.entries() ?? [])]
+    .sort((a, b) => DOW_ORDER.indexOf(a[0]) - DOW_ORDER.indexOf(b[0]))
+    .map(([day, start]) => ({ day, start }));
+}
+
 export async function getClassesList(options?: ClassListFilters): Promise<ClassListRow[]> {
   const supabase = await createClient();
 
@@ -103,21 +136,15 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
 
-  // 요일 unique
-  const daysByClass = new Map<string, Set<string>>();
+  // 요일 + 시작시각
+  let daysByClass = new Map<string, Map<string, string | null>>();
   if (classIds.length > 0) {
     const { data: scheds } = await supabase
       .from("class_schedules")
-      .select("class_id, day_of_week")
+      .select("class_id, day_of_week, start_time")
       .in("class_id", classIds);
-    for (const s of scheds ?? []) {
-      const set = daysByClass.get(s.class_id) ?? new Set<string>();
-      set.add(s.day_of_week);
-      daysByClass.set(s.class_id, set);
-    }
+    daysByClass = buildDaySlots(scheds);
   }
-
-  const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
   let rows = classes.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
@@ -126,9 +153,6 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
     const room = (Array.isArray(c.classroom) ? c.classroom[0] : c.classroom) as
       | { name?: string }
       | undefined;
-    const days = Array.from(daysByClass.get(c.id) ?? []).sort(
-      (a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b),
-    );
     return {
       id: c.id,
       className: c.class_name,
@@ -138,14 +162,14 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
       classroomName: room?.name ?? null,
       isActive: c.is_active,
       studentCount: counts.get(c.id) ?? 0,
-      days,
+      days: sortedDaySlots(daysByClass.get(c.id)),
       notes: c.notes ?? null,
     } satisfies ClassListRow;
   });
 
   // 요일 필터 (in-memory)
   if (options?.day && options.day !== "all") {
-    rows = rows.filter((r) => r.days.includes(options.day!));
+    rows = rows.filter((r) => r.days.some((d) => d.day === options.day));
   }
 
   return rows;
@@ -201,8 +225,18 @@ export async function getClassesPage(
   if (options?.active === "active") qb = qb.eq("is_active", true);
   if (options?.active === "closed") qb = qb.eq("is_active", false);
   if (options?.q) {
-    const term = options.q.trim();
-    if (term) qb = qb.ilike("class_name", `%${term}%`);
+    const term = sanitizeTerm(options.q);
+    if (term) {
+      // 반이름 OR 강사명: 강사명에 매칭되는 강사 id를 먼저 풀어 teacher_id로 좁힌다(null 강사 안전).
+      const { data: matchTeachers } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("display_name", `%${term}%`);
+      const teacherIds = (matchTeachers ?? []).map((u) => u.id);
+      const orParts = [`class_name.ilike.%${term}%`];
+      if (teacherIds.length) orParts.push(`teacher_id.in.(${teacherIds.join(",")})`);
+      qb = qb.or(orParts.join(","));
+    }
   }
   if (dayClassIds) qb = qb.in("id", dayClassIds);
   qb = qb.range(from, from + pageSize - 1);
@@ -212,21 +246,19 @@ export async function getClassesPage(
   const classIds = pageClasses.map((c) => c.id);
 
   const counts = new Map<string, number>();
-  const daysByClass = new Map<string, Set<string>>();
+  let daysByClass = new Map<string, Map<string, string | null>>();
   if (classIds.length > 0) {
     const [{ data: enrollments }, { data: scheds }] = await Promise.all([
       supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", classIds),
-      supabase.from("class_schedules").select("class_id, day_of_week").in("class_id", classIds),
+      supabase
+        .from("class_schedules")
+        .select("class_id, day_of_week, start_time")
+        .in("class_id", classIds),
     ]);
     for (const e of enrollments ?? []) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
-    for (const s of scheds ?? []) {
-      const set = daysByClass.get(s.class_id) ?? new Set<string>();
-      set.add(s.day_of_week);
-      daysByClass.set(s.class_id, set);
-    }
+    daysByClass = buildDaySlots(scheds);
   }
 
-  const DOW_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const rows = pageClasses.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
       | { display_name?: string }
@@ -234,9 +266,6 @@ export async function getClassesPage(
     const room = (Array.isArray(c.classroom) ? c.classroom[0] : c.classroom) as
       | { name?: string }
       | undefined;
-    const days = Array.from(daysByClass.get(c.id) ?? []).sort(
-      (a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b),
-    );
     return {
       id: c.id,
       className: c.class_name,
@@ -246,7 +275,7 @@ export async function getClassesPage(
       classroomName: room?.name ?? null,
       isActive: c.is_active,
       studentCount: counts.get(c.id) ?? 0,
-      days,
+      days: sortedDaySlots(daysByClass.get(c.id)),
       notes: c.notes ?? null,
     } satisfies ClassListRow;
   });
