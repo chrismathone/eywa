@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Download, FileSpreadsheet, Loader2, Printer } from "lucide-react";
+import { TimetableImportDialog } from "./import-dialog";
 
 export function TimetableToolbarActions() {
   const [exporting, setExporting] = useState(false);
@@ -47,6 +48,7 @@ export function TimetableToolbarActions() {
         <FileSpreadsheet className="size-3" />
         엑셀
       </a>
+      <TimetableImportDialog />
       <button
         type="button"
         onClick={exportPng}
