@@ -1,4 +1,5 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import type { SystemRole } from "@/lib/permissions";
 import { Pill } from "@/components/atoms/pill";
 import type { StaffDetail } from "@/features/staff/server/queries";
 import { AccountActions } from "../_components/account-actions";
@@ -24,10 +25,12 @@ export function BasicInfoTab({
   staff,
   canManageThis,
   showSalary,
+  roleOptions,
 }: {
   staff: StaffDetail;
   canManageThis: boolean;
   showSalary: boolean;
+  roleOptions: SystemRole[];
 }) {
   const isTeacherLike = staff.systemRole === "teacher" || staff.systemRole === "master";
   const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
@@ -79,6 +82,8 @@ export function BasicInfoTab({
           staffId={staff.id}
           displayName={staff.displayName}
           currentEmail={staff.email}
+          currentRole={staff.systemRole}
+          roleOptions={roleOptions}
         />
       ) : null}
     </div>

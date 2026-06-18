@@ -8,6 +8,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import {
+  assignableRoles,
   canManageStaff,
   canManageStaffMember,
   ROLE_LABEL,
@@ -54,6 +55,8 @@ export default async function StaffDetailPage({
 
   const canManage = !!viewer && canManageStaff(viewer.systemRole);
   const canManageThis = !!viewer && canManageStaffMember(viewer.systemRole, staff.systemRole);
+  // 역할 변경 옵션 — actor가 부여할 수 있는(본인보다 약한) 역할만. 패널 자체가 canManageThis로 게이트됨.
+  const roleOptions = canManageThis && viewer ? assignableRoles(viewer.systemRole) : [];
   // 급여 노출은 원장(master) + 본인만 (schema.ts 주석). admin/manager에게도 보이면 안 됨.
   const canSeeSalary = !!viewer && (viewer.systemRole === "master" || viewer.id === staff.id);
   const role = ROLE_COLOR[staff.systemRole] ?? ROLE_COLOR.viewer!;
@@ -119,7 +122,12 @@ export default async function StaffDetailPage({
 
       <section>
         {tab === "info" ? (
-          <BasicInfoTab staff={staff} canManageThis={canManageThis} showSalary={canSeeSalary} />
+          <BasicInfoTab
+            staff={staff}
+            canManageThis={canManageThis}
+            showSalary={canSeeSalary}
+            roleOptions={roleOptions}
+          />
         ) : tab === "schedule" ? (
           <ScheduleTab staffId={staff.id} canManage={canManage} />
         ) : tab === "classes" ? (

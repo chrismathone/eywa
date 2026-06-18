@@ -152,7 +152,7 @@ export async function updateStaff(
   redirect(`/staff`);
 }
 
-export type ChangeRoleState = { error?: string } | undefined;
+export type ChangeRoleState = { error?: string; ok?: boolean } | undefined;
 
 export async function changeStaffRole(
   _prev: ChangeRoleState,
@@ -206,7 +206,8 @@ export async function changeStaffRole(
   }
 
   revalidatePath("/staff");
-  return undefined;
+  revalidatePath(`/staff/${id}`);
+  return { ok: true };
 }
 
 export type DeactivateState = { error?: string } | undefined;

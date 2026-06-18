@@ -2,8 +2,11 @@
 
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { KeyRound, Loader2, Mail, Trash2, X } from "lucide-react";
+import { KeyRound, Loader2, Mail, ShieldCheck, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import type { SystemRole } from "@/lib/permissions";
+import { changeStaffRole } from "@/features/staff/server/actions";
 import {
   changeStaffEmail,
   deleteStaff,
@@ -171,6 +174,46 @@ function PasswordDialog({
   );
 }
 
+function RoleDialog({
+  staffId,
+  displayName,
+  currentRole,
+  roleOptions,
+  onClose,
+}: {
+  staffId: string;
+  displayName: string;
+  currentRole: SystemRole;
+  roleOptions: SystemRole[];
+  onClose: () => void;
+}) {
+  const [state, action] = useActionState(changeStaffRole, undefined);
+  if (state?.ok) queueMicrotask(onClose); // 부모는 revalidatePath로 갱신됨
+  return (
+    <Modal
+      title="역할 변경"
+      desc={`${displayName} · 현재: ${ROLE_LABEL[currentRole] ?? currentRole}`}
+      onClose={onClose}
+    >
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="id" value={staffId} />
+        <select name="newRole" defaultValue={currentRole} className={INPUT}>
+          {roleOptions.map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABEL[r] ?? r}
+            </option>
+          ))}
+        </select>
+        <p className="text-text-dim text-xs">본인보다 낮은 역할만 부여할 수 있습니다.</p>
+        {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
+        <Footer onClose={onClose}>
+          <SubmitBtn label="변경" />
+        </Footer>
+      </form>
+    </Modal>
+  );
+}
+
 function DeleteDialog({
   staffId,
   displayName,
@@ -203,19 +246,30 @@ export function AccountActions({
   staffId,
   displayName,
   currentEmail,
+  currentRole,
+  roleOptions,
 }: {
   staffId: string;
   displayName: string;
   currentEmail: string;
+  currentRole: SystemRole;
+  roleOptions: SystemRole[];
 }) {
-  const [open, setOpen] = useState<"email" | "password" | "delete" | null>(null);
+  const [open, setOpen] = useState<"email" | "password" | "role" | "delete" | null>(null);
   const close = () => setOpen(null);
+  const canChangeRole = roleOptions.length > 0;
 
   return (
     <div className="bg-card border-line shadow-card rounded-md border p-5">
       <p className="micro mb-1">계정 관리</p>
-      <p className="text-text-dim mb-3 text-xs">로그인 계정의 이메일·비밀번호 변경, 완전 삭제.</p>
+      <p className="text-text-dim mb-3 text-xs">로그인 계정의 역할·이메일·비밀번호 변경, 완전 삭제.</p>
       <div className="flex flex-wrap gap-2">
+        {canChangeRole ? (
+          <Button variant="outline" size="sm" onClick={() => setOpen("role")}>
+            <ShieldCheck className="size-3.5" />
+            역할 변경
+          </Button>
+        ) : null}
         <Button variant="outline" size="sm" onClick={() => setOpen("email")}>
           <Mail className="size-3.5" />
           이메일 변경
@@ -230,6 +284,15 @@ export function AccountActions({
         </Button>
       </div>
 
+      {open === "role" ? (
+        <RoleDialog
+          staffId={staffId}
+          displayName={displayName}
+          currentRole={currentRole}
+          roleOptions={roleOptions}
+          onClose={close}
+        />
+      ) : null}
       {open === "email" ? (
         <EmailDialog staffId={staffId} currentEmail={currentEmail} onClose={close} />
       ) : null}
