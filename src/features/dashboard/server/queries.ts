@@ -141,6 +141,33 @@ export async function getRecentAnnouncements(limit = 3): Promise<AnnouncementRow
   });
 }
 
+export type ManageAnnouncementRow = {
+  id: string;
+  title: string;
+  content: string;
+  audience: string;
+  pinned: boolean;
+};
+
+/** 공지 관리 모달용 — 최근 공지(고정 우선) 목록. 카드(getRecentAnnouncements)보다 길게. */
+export async function getAnnouncementsForManage(limit = 30): Promise<ManageAnnouncementRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("announcements")
+    .select("id, title, content, audience, pinned, created_at")
+    .order("pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (!data) return [];
+  return data.map((row) => ({
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    audience: row.audience,
+    pinned: row.pinned,
+  }));
+}
+
 export type TrendPoint = {
   date: string; // "5/26"
   day: string; // "월"

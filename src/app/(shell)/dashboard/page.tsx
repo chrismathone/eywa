@@ -1,7 +1,9 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import {
   getAbsenceRiskStudents,
   getActiveConsultationsCount,
+  getAnnouncementsForManage,
   getEnrolledStudentCount,
   getMostRecentAttendanceSnapshot,
   getNewStudentsThisMonth,
@@ -25,6 +27,7 @@ export const metadata = { title: "대시보드 — eywa" };
 
 export default async function DashboardPage() {
   const user = await requireAccess("dashboard");
+  const canManageAnnouncements = canManageStaff(user.systemRole);
   const [
     enrolled,
     newThisMonth,
@@ -37,6 +40,7 @@ export default async function DashboardPage() {
     absenceRisks,
     outstanding,
     announcements,
+    manageAnnouncements,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getNewStudentsThisMonth(),
@@ -49,6 +53,7 @@ export default async function DashboardPage() {
     getAbsenceRiskStudents(),
     getTopOutstanding(),
     getRecentAnnouncements(4),
+    canManageAnnouncements ? getAnnouncementsForManage() : Promise.resolve([]),
   ]);
 
   const name = user.displayName ?? "원장";
@@ -77,7 +82,11 @@ export default async function DashboardPage() {
         </div>
         <div className="flex flex-col gap-4">
           <ConsultationFunnel pipeline={consultations} />
-          <AnnouncementsCard items={announcements} />
+          <AnnouncementsCard
+            items={announcements}
+            canManage={canManageAnnouncements}
+            manageItems={manageAnnouncements}
+          />
         </div>
       </div>
 

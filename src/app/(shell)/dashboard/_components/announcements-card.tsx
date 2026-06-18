@@ -3,7 +3,11 @@
  */
 import { Pill } from "@/components/atoms/pill";
 import { DashCard, DashEmpty } from "./dash-card";
-import type { AnnouncementRow } from "@/features/dashboard/server/queries";
+import { AnnouncementsManager } from "./announcements-manager";
+import type {
+  AnnouncementRow,
+  ManageAnnouncementRow,
+} from "@/features/dashboard/server/queries";
 
 /** 모듈 함수라 RSC 본문이 아님 → react-hooks/purity 무관(new Date 허용). */
 function relDay(iso: string): string {
@@ -15,9 +19,20 @@ function relDay(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-export function AnnouncementsCard({ items }: { items: AnnouncementRow[] }) {
+export function AnnouncementsCard({
+  items,
+  canManage = false,
+  manageItems = [],
+}: {
+  items: AnnouncementRow[];
+  canManage?: boolean;
+  manageItems?: ManageAnnouncementRow[];
+}) {
   return (
-    <DashCard title="공지">
+    <DashCard
+      title="공지"
+      action={canManage ? <AnnouncementsManager items={manageItems} /> : undefined}
+    >
       {items.length === 0 ? (
         <DashEmpty>등록된 공지가 없습니다</DashEmpty>
       ) : (
