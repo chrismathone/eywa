@@ -1,9 +1,12 @@
 import { BackLink } from "@/components/back-link";
+import { WindowLink } from "@/components/workspace/window-link";
+import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getConsultationByCategory,
   getConsultationFunnel,
   getConsultationTrend,
+  getStudentsNeedingConsultation,
 } from "@/features/consultations/server/queries";
 import { StatsCharts } from "./_charts";
 
@@ -12,10 +15,11 @@ export const metadata = { title: "상담 통계 — eywa" };
 export default async function ConsultationStatsPage() {
   await requireAccess("consultations");
 
-  const [funnel, byCategory, trend] = await Promise.all([
+  const [funnel, byCategory, trend, needed] = await Promise.all([
     getConsultationFunnel(6),
     getConsultationByCategory(6),
     getConsultationTrend(6),
+    getStudentsNeedingConsultation(30),
   ]);
 
   return (
@@ -46,6 +50,54 @@ export default async function ConsultationStatsPage() {
       </section>
 
       <StatsCharts byCategory={byCategory} trend={trend} />
+
+      {/* 상담 필요 학생 — 30일 이상 미상담(또는 미상담 이력) 재원생 워크리스트 */}
+      <section className="bg-card border-border rounded-md border p-5">
+        <header className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-foreground text-sm font-semibold">
+            상담 필요 학생
+            <span className="text-muted-foreground num ml-2 text-xs font-normal">
+              30일+ 미상담 {needed.total}명
+            </span>
+          </h2>
+        </header>
+        {needed.rows.length === 0 ? (
+          <p className="text-muted-foreground py-6 text-center text-sm">
+            최근 30일 내 모든 재원생을 상담했습니다 👍
+          </p>
+        ) : (
+          <ul className="divide-border divide-y">
+            {needed.rows.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-3 py-2">
+                <div className="flex items-center gap-2">
+                  <WindowLink
+                    href={`/students/${s.id}`}
+                    title={s.name}
+                    className="text-foreground text-sm font-medium hover:underline"
+                  >
+                    {s.name}
+                  </WindowLink>
+                  {s.grade ? <span className="text-text-dim text-xs">{s.grade}</span> : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  {s.lastConsultedAt === null ? (
+                    <Pill color="danger">상담 이력 없음</Pill>
+                  ) : (
+                    <span className="text-text-dim num text-xs">{s.daysSince}일 전 상담</span>
+                  )}
+                  <WindowLink
+                    href={`/consultations/new?studentId=${s.id}`}
+                    title="새 상담"
+                    className="text-chart-1 text-[11px] hover:underline"
+                  >
+                    상담 기록 +
+                  </WindowLink>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
