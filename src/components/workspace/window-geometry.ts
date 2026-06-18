@@ -40,6 +40,9 @@ export const DEFAULT_WINDOW = { w: 480, h: 560 };
 export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
   billing: { w: 760, h: 620 }, // 수납/교재/지출 책갈피 + 다열 표라 폭이 넓음
+  // 학생×30~31일 매트릭스. 폭이 좁으면 이름 칼럼이 글자당 줄바꿈돼 행이 2배로 커지고(세로 스크롤
+  // 유발), 1280이면 30·31일 달 모두 이름이 한 줄로 펴져 콘텐츠가 ~488px로 줄어든다(세로 스크롤 제거).
+  attendance: { w: 1280, h: 620 },
 };
 
 /**

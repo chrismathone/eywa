@@ -202,16 +202,16 @@ function MatrixTable({
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r px-3 py-2 text-left">
+            <th className="bg-bg-soft border-line sticky left-0 z-10 min-w-[40px] border-b border-r px-3 py-2 text-left whitespace-nowrap">
               <span className="micro">#</span>
             </th>
-            <th className="bg-bg-soft border-line sticky left-[40px] z-10 border-b border-r px-3 py-2 text-left">
+            <th className="bg-bg-soft border-line sticky left-[40px] z-10 border-b border-r px-3 py-2 text-left whitespace-nowrap">
               <span className="micro">이름</span>
             </th>
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left">
+            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
               <span className="micro">학년</span>
             </th>
-            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left">
+            <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
               <span className="micro">학교</span>
             </th>
             {days.map((d) => (
@@ -229,7 +229,7 @@ function MatrixTable({
                 <div className="opacity-70">{d.label}</div>
               </th>
             ))}
-            <th className="bg-bg-soft border-line sticky right-0 z-10 border-b border-l px-2 py-2 text-right">
+            <th className="bg-bg-soft border-line sticky right-0 z-10 border-b border-l px-2 py-2 text-right whitespace-nowrap">
               <span className="micro">출석률</span>
             </th>
           </tr>
@@ -251,16 +251,16 @@ function MatrixTable({
                     : "text-danger";
             return (
               <tr key={s.id} className="hover:bg-bg-soft/40">
-                <td className="border-line text-text-dim sticky left-0 z-10 border-b border-r bg-card px-3 py-2 text-[11px]">
+                <td className="border-line text-text-dim sticky left-0 z-10 min-w-[40px] border-b border-r bg-card px-3 py-2 text-[11px] whitespace-nowrap">
                   {i + 1}
                 </td>
-                <td className="border-line text-foreground sticky left-[40px] z-10 border-b border-r bg-card px-3 py-2 text-[12px] font-bold">
+                <td className="border-line text-foreground sticky left-[40px] z-10 border-b border-r bg-card px-3 py-2 text-[12px] font-bold whitespace-nowrap">
                   {s.name}
                 </td>
-                <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px]">
+                <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
                   {s.grade ?? "—"}
                 </td>
-                <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px]">
+                <td className="border-line text-text-dim border-b border-r px-2 py-2 text-[11px] whitespace-nowrap">
                   {s.school ?? "—"}
                 </td>
                 {days.map((d) => {
@@ -286,7 +286,7 @@ function MatrixTable({
                   );
                 })}
                 <td
-                  className={`border-line sticky right-0 z-10 border-b border-l bg-card px-2 py-2 text-right font-mono text-[12px] font-bold ${rateColor}`}
+                  className={`border-line sticky right-0 z-10 border-b border-l bg-card px-2 py-2 text-right font-mono text-[12px] font-bold whitespace-nowrap ${rateColor}`}
                 >
                   {rate === null ? "—" : `${rate}%`}
                 </td>
