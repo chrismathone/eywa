@@ -141,6 +141,8 @@ export const users = pgTable(
     // 급여 정산용. 외부 노출은 master + 본인만 (RLS).
     hourlyRate: numeric("hourly_rate", { precision: 10, scale: 0 }).notNull().default("0"),
     monthlyBase: numeric("monthly_base", { precision: 10, scale: 0 }).notNull().default("0"),
+    // 주간 근무 시간표 — { mon: ["09:00-12:00", …], … } 요일별 시간대 배열. null = 미설정.
+    workSchedule: jsonb("work_schedule"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

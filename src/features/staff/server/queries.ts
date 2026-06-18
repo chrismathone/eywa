@@ -1,6 +1,18 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
+import {
+  WORK_DAYS,
+  WORK_TIME_RANGE,
+  sanitizeWorkSchedule,
+  type WorkDay,
+  type WorkSchedule,
+} from "@/features/staff/work-schedule";
+
+// 근무 일정 순수 로직 재노출(기존 import 경로 호환 — classes-tab·schedule-editor가 여기서 가져감).
+export { WORK_DAYS, WORK_TIME_RANGE, sanitizeWorkSchedule };
+export type { WorkDay, WorkSchedule };
 
 export type StaffRow = {
   id: string;
@@ -101,3 +113,86 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
 
 // Alias for backward-compat (별칭 — payroll/leaves 페이지에서 사용)
 export const getStaffDetail = getStaffById;
+
+// === 근무 일정 (work_schedule jsonb) — 순수 로직은 ../work-schedule.ts ===
+export async function getStaffWorkSchedule(id: string): Promise<WorkSchedule> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("work_schedule")
+    .eq("id", id)
+    .single();
+  // 오류 시 빈 일정으로 폴백(상세 페이지 보호) — 단 조용히 삼키지 않고 로깅해 누락을 진단 가능하게.
+  if (error || !data) {
+    if (error) console.warn(`[getStaffWorkSchedule] ${id} 조회 실패 — 빈 일정으로 폴백:`, error.message);
+    return {};
+  }
+  return sanitizeWorkSchedule((data as { work_schedule?: unknown }).work_schedule);
+}
+
+// === 강사 담당 수업 이력 ===
+export type StaffClassRow = {
+  id: string;
+  className: string;
+  subject: string;
+  isActive: boolean;
+  studentCount: number;
+  schedules: { day: WorkDay; startTime: string; endTime: string }[];
+};
+
+export async function getStaffClasses(teacherId: string): Promise<StaffClassRow[]> {
+  const supabase = await createClient();
+  // RLS가 테넌트를 강제하지만(인증 클라이언트), 방어적으로 명시 tenant_id 필터도 건다(#S1 정신).
+  const actor = await getCurrentUser();
+  if (!actor) return [];
+
+  const { data: classes } = await supabase
+    .from("classes")
+    .select("id, class_name, subject, is_active")
+    .eq("tenant_id", actor.tenantId)
+    .eq("teacher_id", teacherId)
+    .order("is_active", { ascending: false })
+    .order("class_name", { ascending: true });
+
+  if (!classes || classes.length === 0) return [];
+
+  const ids = classes.map((c) => c.id);
+
+  // 강사 1인의 반은 소수(수십)라 단일 .in()로 안전.
+  const [{ data: schedules }, { data: enrolls }] = await Promise.all([
+    supabase
+      .from("class_schedules")
+      .select("class_id, day_of_week, start_time, end_time")
+      .in("class_id", ids),
+    supabase.from("enrollments").select("class_id, end_date").in("class_id", ids),
+  ]);
+
+  const schedByClass = new Map<string, StaffClassRow["schedules"]>();
+  for (const s of schedules ?? []) {
+    const list = schedByClass.get(s.class_id) ?? [];
+    list.push({
+      day: s.day_of_week as WorkDay,
+      startTime: String(s.start_time).slice(0, 5),
+      endTime: String(s.end_time).slice(0, 5),
+    });
+    schedByClass.set(s.class_id, list);
+  }
+
+  const countByClass = new Map<string, number>();
+  for (const e of enrolls ?? []) {
+    if (e.end_date) continue; // 진행 중 등록만 카운트
+    countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1);
+  }
+
+  const dayOrder: Record<WorkDay, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+  return classes.map((c) => ({
+    id: c.id,
+    className: c.class_name,
+    subject: c.subject,
+    isActive: c.is_active,
+    studentCount: countByClass.get(c.id) ?? 0,
+    schedules: (schedByClass.get(c.id) ?? []).sort(
+      (a, b) => dayOrder[a.day] - dayOrder[b.day] || a.startTime.localeCompare(b.startTime),
+    ),
+  }));
+}

@@ -242,21 +242,17 @@ export default async function StaffPage({
                 )}
               </>
             );
-            // 카드 전체 클릭 → 수정(관리 권한 있을 때). 권한 없으면 비클릭 카드.
-            return canManage ? (
+            // 카드 전체 클릭 → 직원 상세(읽기전용 뷰 + 탭). 관리 권한은 상세 안에서 분기.
+            return (
               <WindowLink
                 key={s.id}
-                href={`/staff/${s.id}/edit`}
-                title={`${s.displayName} 수정`}
-                ariaLabel={`${s.displayName} 수정`}
+                href={`/staff/${s.id}`}
+                title={s.displayName}
+                ariaLabel={`${s.displayName} 상세`}
                 className={`${cardClass} group hover:border-primary/40 hover:shadow-modal cursor-pointer transition`}
               >
                 {body}
               </WindowLink>
-            ) : (
-              <article key={s.id} className={cardClass}>
-                {body}
-              </article>
             );
           })}
         </div>

@@ -51,3 +51,11 @@ export function assignableRoles(actor: SystemRole): SystemRole[] {
 export function canManageStaff(actor: SystemRole): boolean {
   return actor === "master" || actor === "admin" || actor === "manager";
 }
+
+/**
+ * actor가 특정 직원(target)의 민감 계정 작업(비번 재설정·이메일 변경·삭제)을 할 수 있는지.
+ * 직원 관리 권한 + actor가 target보다 엄격히 강해야 함(동급·상위 계정은 못 건드림).
+ */
+export function canManageStaffMember(actor: SystemRole, target: SystemRole): boolean {
+  return canManageStaff(actor) && ROLE_HIERARCHY[actor] < ROLE_HIERARCHY[target];
+}
