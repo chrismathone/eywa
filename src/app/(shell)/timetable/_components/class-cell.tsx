@@ -85,6 +85,68 @@ function StudentRow({ name, meta, tone }: { name: string; meta: string; tone: st
 }
 
 /**
+ * 학생 섹션(재원/대기/퇴원) — label 있으면 구분 헤더 + 행들. cap 초과는 '외 N명'.
+ * 재원만 편집 모드에서 드래그(반이동), 대기·퇴원은 평범한 행.
+ */
+function StudentSection({
+  students,
+  classId,
+  editing,
+  cap,
+  draggable,
+  tone,
+  label,
+  labelTone,
+}: {
+  students: ClassDetailQuick["students"];
+  classId: string;
+  editing: boolean;
+  cap: number;
+  draggable: boolean;
+  tone: (s: { isNew?: boolean; isTransferredIn?: boolean }) => string;
+  label?: string;
+  labelTone?: string;
+}) {
+  if (students.length === 0) return null;
+  const visible = students.slice(0, cap);
+  const hidden = students.length - visible.length;
+  return (
+    <>
+      {label ? (
+        <div
+          className={`flex items-center justify-between px-2 py-px text-[8px] font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
+        >
+          <span>{label}</span>
+          <span className="num">{students.length}</span>
+        </div>
+      ) : null}
+      {visible.map((s, i) =>
+        draggable && editing && s.enrollmentId ? (
+          <DraggableStudentRow
+            key={s.enrollmentId}
+            enrollmentId={s.enrollmentId}
+            classId={classId}
+            name={s.name}
+            meta={metaLabel(s.school, s.grade)}
+            tone={tone(s)}
+          />
+        ) : (
+          <StudentRow
+            key={s.enrollmentId ?? `s-${i}`}
+            name={s.name}
+            meta={metaLabel(s.school, s.grade)}
+            tone={tone(s)}
+          />
+        ),
+      )}
+      {hidden > 0 ? (
+        <div className="text-text-faint px-2 py-[3px] text-[9px]">외 {hidden}명</div>
+      ) : null}
+    </>
+  );
+}
+
+/**
  * 시간표 셀 — 반이름 헤더 바 + 그 아래 학생 세로 나열(엑셀식 칸 안 행). ijw 시간표 패턴.
  * 헤더 클릭 → ClassDetailDrawer로 전체 명단/레벨변경. 편집 모드면 학생 행 드래그로 반 이동.
  */
@@ -100,10 +162,13 @@ export function ClassCell({
   const { editing } = useTimetableEdit();
   const color = SUBJECT_COLOR[slot.subject] ?? "bg-bg-soft text-text-dim";
 
-  const cap = roster === "names" ? 15 : 8;
+  // 재원/대기/퇴원 분리 — ijw 셀처럼 섹션별 표시. status 없으면(구버전) 재원으로 간주.
+  const active = slot.students.filter((s) => (s.status ?? "active") === "active");
+  const hold = slot.students.filter((s) => s.status === "hold");
+  const withdrawn = slot.students.filter((s) => s.status === "withdrawn");
+  const activeCap = roster === "names" ? 15 : 8;
+  const SECTION_CAP = 6;
   const showRoster = roster !== "none" && slot.students.length > 0;
-  const visibleStudents = slot.students.slice(0, cap);
-  const hiddenCount = slot.students.length - visibleStudents.length;
 
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `class:${slot.id}`,
@@ -125,7 +190,7 @@ export function ClassCell({
         >
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[11px] font-bold">{slot.className}</span>
-            <span className="num shrink-0 font-mono text-[9px] opacity-70">{slot.students.length}</span>
+            <span className="num shrink-0 font-mono text-[9px] opacity-70">{active.length}</span>
           </div>
           <div className="flex items-center justify-between gap-1 text-[9px] opacity-75">
             <span className="num font-mono">
@@ -135,31 +200,37 @@ export function ClassCell({
           </div>
         </button>
 
-        {/* 학생 세로 나열 — 흰 칸에 행마다 구분선(엑셀식). 신입=빨강행·전입=초록행. */}
+        {/* 학생 세로 나열 — 재원→대기→퇴원 섹션(엑셀식 구분선). 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
           <div className="bg-card divide-line/40 divide-y text-[10px]">
-            {visibleStudents.map((s, i) =>
-              editing && s.enrollmentId ? (
-                <DraggableStudentRow
-                  key={s.enrollmentId}
-                  enrollmentId={s.enrollmentId}
-                  classId={slot.id}
-                  name={s.name}
-                  meta={metaLabel(s.school, s.grade)}
-                  tone={studentRowTone(s)}
-                />
-              ) : (
-                <StudentRow
-                  key={s.enrollmentId ?? `s-${i}`}
-                  name={s.name}
-                  meta={metaLabel(s.school, s.grade)}
-                  tone={studentRowTone(s)}
-                />
-              ),
-            )}
-            {hiddenCount > 0 ? (
-              <div className="text-text-faint px-2 py-[3px] text-[9px]">외 {hiddenCount}명</div>
-            ) : null}
+            <StudentSection
+              students={active}
+              classId={slot.id}
+              editing={editing}
+              cap={activeCap}
+              draggable
+              tone={studentRowTone}
+            />
+            <StudentSection
+              students={hold}
+              classId={slot.id}
+              editing={editing}
+              cap={SECTION_CAP}
+              draggable={false}
+              tone={() => "text-text-dim"}
+              label="대기"
+              labelTone="bg-amber-soft/40 text-amber"
+            />
+            <StudentSection
+              students={withdrawn}
+              classId={slot.id}
+              editing={editing}
+              cap={SECTION_CAP}
+              draggable={false}
+              tone={() => "text-text-faint line-through"}
+              label="퇴원"
+              labelTone="bg-bg-soft text-text-faint"
+            />
           </div>
         ) : null}
       </div>

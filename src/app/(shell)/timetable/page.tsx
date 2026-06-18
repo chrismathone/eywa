@@ -68,7 +68,11 @@ export default async function TimetablePage({
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
 
-  const totalStudents = slots.reduce((s, x) => s + x.students.length, 0);
+  // "N명 등록" = 재원만 합산(대기·퇴원은 셀 섹션으로만 표시 — 등록 인원 부풀림 방지).
+  const totalStudents = slots.reduce(
+    (sum, x) => sum + x.students.filter((st) => (st.status ?? "active") === "active").length,
+    0,
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">

@@ -86,6 +86,10 @@ export type StudentLine = {
   grade: string | null;
   school: string | null;
   enrollmentId?: string;
+  /** 셀 섹션 구분: active=재원, hold=대기(enrollment.on_hold), withdrawn=퇴원(end_date 있음). ijw 셀 패턴. */
+  status: "active" | "hold" | "withdrawn";
+  /** 퇴원일(status=withdrawn). 최신순 정렬·표시용. */
+  endDate?: string | null;
   /** 등록 30일 이내 = 신입(셀에서 빨강 강조). ijw의 신입 윈도우 단순 근사(과목별 첫등록 아님). */
   isNew?: boolean;
   /** 타 반에서 이동해 들어온 학생(셀에서 초록 강조). */
@@ -99,6 +103,18 @@ export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] 
  * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는
  * 학생 리스트 (이름·학년·학교) 데이터.
  */
+type StudentRef = { name?: string; grade?: string | null; school?: string | null };
+const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefined =>
+  Array.isArray(r.student) ? r.student[0] : r.student;
+/** server-only 모듈이라 new Date() OK(fetchSlots와 동일 패턴). YYYY-MM-DD. */
+const dateBefore = (days: number): string =>
+  new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는 학생 리스트.
+ * 재원(active)뿐 아니라 **대기(on_hold)·최근 퇴원(end_date)** 도 포함 — ijw 셀이 보여주던
+ * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1년·반이동 제외(셀에서 status로 분리 렌더).
+ */
 export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithStudents[]> {
   const slots = await fetchSlots();
   if (slots.length === 0) return [];
@@ -106,49 +122,101 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
   const classIds = Array.from(new Set(slots.map((s) => s.classId)));
   const supabase = await createClient();
 
-  // 신입 판정 컷오프 — 등록 30일 이내. server-only 모듈이라 new Date() OK(fetchSlots와 동일 패턴).
-  const NEW_WINDOW_DAYS = 30;
-  const newCutoff = new Date(Date.now() - NEW_WINDOW_DAYS * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
+  const newCutoff = dateBefore(30); // 신입 판정 — 등록 30일 이내
+  // 퇴원 표시 윈도우 — 최근 1년. ijw도 셀당 표시 캡으로 최근 몇 명만 보였고, fetchInChunks
+  // 1000행/청크 한도(#53)도 보호(전체 이력은 반 상세에서). 반이동(is_transferred)은 새 반 전입으로 보이므로 제외.
+  const withdrawnCutoff = dateBefore(365);
 
   // class_id를 청크로 나눠 조회 — 대량 .in()의 HTTP 414 + 1000행 절단 회피(#53).
-  type EnrollRow = {
+  type ActiveRow = {
     id: string;
     class_id: string;
+    student_id: string;
     start_date: string | null;
+    on_hold: boolean | null;
     is_transferred_in: boolean | null;
     attendance_days: string[] | null;
-    student: { name?: string; grade?: string | null; school?: string | null } | { name?: string }[];
+    student: StudentRef | StudentRef[];
   };
-  const rows = await fetchInChunks<EnrollRow>(classIds, (chunk) =>
-    supabase
-      .from("enrollments")
-      .select(
-        "id, class_id, start_date, is_transferred_in, attendance_days, student:student_id ( name, grade, school )",
-      )
-      .in("class_id", chunk)
-      .is("end_date", null),
-  );
+  type WithdrawnRow = {
+    id: string;
+    class_id: string;
+    student_id: string;
+    end_date: string | null;
+    student: StudentRef | StudentRef[];
+  };
+
+  // 재원+대기(end_date null) · 최근 퇴원(end_date 있음, 반이동 아님)을 병렬로.
+  const [activeRows, withdrawnRows] = await Promise.all([
+    fetchInChunks<ActiveRow>(classIds, (chunk) =>
+      supabase
+        .from("enrollments")
+        .select(
+          "id, class_id, student_id, start_date, on_hold, is_transferred_in, attendance_days, student:student_id ( name, grade, school )",
+        )
+        .in("class_id", chunk)
+        .is("end_date", null),
+    ),
+    fetchInChunks<WithdrawnRow>(classIds, (chunk) =>
+      supabase
+        .from("enrollments")
+        .select("id, class_id, student_id, end_date, student:student_id ( name, grade, school )")
+        .in("class_id", chunk)
+        .not("end_date", "is", null)
+        .eq("is_transferred", false)
+        .gte("end_date", withdrawnCutoff)
+        .order("end_date", { ascending: false }),
+    ),
+  ]);
 
   const byClass = new Map<string, StudentLine[]>();
-  for (const r of rows) {
-    const s = (Array.isArray(r.student) ? r.student[0] : r.student) as
-      | { name?: string; grade?: string | null; school?: string | null }
-      | undefined;
+  const seen = new Set<string>(); // `${class_id}:${student_id}` — 재원/대기 우선, 같은 반 재등록 시 퇴원 중복 제외
+  const push = (classId: string, line: StudentLine) => {
+    const list = byClass.get(classId) ?? [];
+    list.push(line);
+    byClass.set(classId, list);
+  };
+
+  for (const r of activeRows) {
+    const s = refOf(r);
     if (!s?.name) continue;
-    const list = byClass.get(r.class_id) ?? [];
-    list.push({
+    seen.add(`${r.class_id}:${r.student_id}`);
+    push(r.class_id, {
       name: s.name,
       grade: s.grade ?? null,
       school: s.school ?? null,
       enrollmentId: r.id,
+      status: r.on_hold ? "hold" : "active",
       // 날짜 문자열(YYYY-MM-DD) 사전식 비교 — start_date >= cutoff면 30일 이내.
       isNew: r.start_date != null && r.start_date >= newCutoff,
       isTransferredIn: r.is_transferred_in === true,
       attendanceDays: r.attendance_days ?? [],
     });
-    byClass.set(r.class_id, list);
+  }
+  for (const r of withdrawnRows) {
+    const key = `${r.class_id}:${r.student_id}`;
+    if (seen.has(key)) continue; // 같은 반에 재등록(재원/대기)이 있으면 퇴원으로 보지 않음
+    seen.add(key);
+    const s = refOf(r);
+    if (!s?.name) continue;
+    push(r.class_id, {
+      name: s.name,
+      grade: s.grade ?? null,
+      school: s.school ?? null,
+      enrollmentId: r.id,
+      status: "withdrawn",
+      endDate: r.end_date,
+    });
+  }
+
+  // 셀 표시 순서: 재원(가나다) → 대기(가나다) → 퇴원(최신순).
+  const rank = (l: StudentLine) => (l.status === "active" ? 0 : l.status === "hold" ? 1 : 2);
+  for (const list of byClass.values()) {
+    list.sort((a, b) => {
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      if (a.status === "withdrawn") return (b.endDate ?? "").localeCompare(a.endDate ?? "");
+      return a.name.localeCompare(b.name, "ko");
+    });
   }
 
   return slots.map((s) => ({ ...s, students: byClass.get(s.classId) ?? [] }));

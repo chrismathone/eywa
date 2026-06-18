@@ -32,6 +32,9 @@ export type ClassDetailQuick = {
     grade: string | null;
     school: string | null;
     enrollmentId?: string;
+    /** active=재원, hold=대기, withdrawn=퇴원. (없으면 active로 간주 — 구버전 호출 호환) */
+    status?: "active" | "hold" | "withdrawn";
+    endDate?: string | null;
     isNew?: boolean;
     isTransferredIn?: boolean;
   }[];
@@ -108,6 +111,11 @@ export function ClassDetailDrawer({
     color: "neutral" as PillColor,
   };
 
+  // 재원/대기/퇴원 카운트 (셀과 동일 분류). status 없으면 재원으로 간주.
+  const activeCount = slot.students.filter((s) => (s.status ?? "active") === "active").length;
+  const holdCount = slot.students.filter((s) => s.status === "hold").length;
+  const withdrawnCount = slot.students.filter((s) => s.status === "withdrawn").length;
+
   return (
     <>
       {trigger}
@@ -160,7 +168,9 @@ export function ClassDetailDrawer({
           <header className="flex items-baseline justify-between">
             <p className="micro">학생 명단</p>
             <span className="text-text-faint num font-mono text-[11px]">
-              {slot.students.length}명
+              재원 {activeCount}
+              {holdCount ? <span className="text-amber"> · 대기 {holdCount}</span> : null}
+              {withdrawnCount ? <span> · 퇴원 {withdrawnCount}</span> : null}
             </span>
           </header>
 
@@ -171,13 +181,37 @@ export function ClassDetailDrawer({
               {slot.students.map((s, i) => (
                 <li
                   key={`${s.name}-${i}`}
-                  className="bg-bg-soft/40 flex items-center gap-2.5 rounded-sm px-3 py-2"
+                  className={`flex items-center gap-2.5 rounded-sm px-3 py-2 ${
+                    s.status === "withdrawn" ? "bg-bg-soft/20 opacity-70" : "bg-bg-soft/40"
+                  }`}
                 >
-                  <Initial name={s.name} color={colorForGrade(s.grade)} size="sm" />
+                  <Initial
+                    name={s.name}
+                    color={s.status === "withdrawn" ? "neutral" : colorForGrade(s.grade)}
+                    size="sm"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="text-foreground flex items-center gap-1.5 text-[12px] font-bold">
-                      <span className="truncate">{s.name}</span>
-                      {s.isNew ? (
+                      <span
+                        className={`truncate ${
+                          s.status === "withdrawn"
+                            ? "text-text-faint line-through"
+                            : s.status === "hold"
+                              ? "text-text-dim"
+                              : ""
+                        }`}
+                      >
+                        {s.name}
+                      </span>
+                      {s.status === "withdrawn" ? (
+                        <span className="bg-bg-soft text-text-faint shrink-0 rounded-sm px-1 py-px text-[9px] font-bold">
+                          퇴원
+                        </span>
+                      ) : s.status === "hold" ? (
+                        <span className="bg-amber-soft text-amber shrink-0 rounded-sm px-1 py-px text-[9px] font-bold">
+                          대기
+                        </span>
+                      ) : s.isNew ? (
                         <span className="bg-danger-soft text-danger shrink-0 rounded-sm px-1 py-px text-[9px] font-bold">
                           신입
                         </span>
@@ -190,6 +224,9 @@ export function ClassDetailDrawer({
                     <p className="text-text-dim text-[10px]">
                       {s.grade ?? "—"}
                       {s.school ? <> · {s.school}</> : null}
+                      {s.status === "withdrawn" && s.endDate ? (
+                        <span className="text-text-faint"> · 퇴원 {s.endDate.slice(0, 7)}</span>
+                      ) : null}
                     </p>
                   </div>
                 </li>
