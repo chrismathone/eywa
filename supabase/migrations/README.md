@@ -37,15 +37,19 @@ node --env-file=.env.local -e "const fs=require('fs');const sql=require('postgre
 pnpm db:seed
 ```
 
-## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-17)
+## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-18)
 
-공유 Supabase(데모 테넌트)에는 **번호본 0000~0025 + alpha 전부 적용 완료**. 직접 조회로 확인:
+공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha 전부 적용 완료**. 직접 조회로 확인:
 
 - `pg_trgm` 확장 **설치됨**, `0024a`의 trigram GIN 인덱스 **11개 전부 존재**
   (students 5 · classes 2 · student_consultations 1 · enrollment_consultations 3).
 - `reenrollment_campaign_targets` 테이블 + RLS **활성**(`0024`/`0024b`).
 - **`0025` `textbook_orders`·`expenses` 테이블 + `0025a` RLS 활성**(수납관리 책갈피 교재/지출 면).
   `relrowsecurity=true` 확인, 데모 데이터 적재(교재 350·지출 95, `scripts/_poc_migration/import-textbooks-expenses.cjs`).
+- **ijw 갭 P2 신규 테이블 적용·RLS 격리**(2026-06-18): `exams`(`0028a`) · `textbook_catalog`(`0030a`, 카탈로그 146종 이식) ·
+  `audit_logs`(`0031a`) · `level_tests`(`0032a`) + 카카오 메시징(`0029a`) + P1 컬럼들(`0027b~f`). DB smoke 통과.
+- ⚠️ **drizzle 스냅샷은 `0027_big_swordsman`에 멈춤** — `0027b` 이후 전부 손수 alpha. `db:generate` 금지(드리프트 #P0-6),
+  스냅샷 정식 재산출은 별도 reconciliation 과제.
 - public 스키마의 테넌트 테이블 중 **RLS 미적용 = 0개** → alpha RLS 누락 없음.
 
 > 검증 쿼리(읽기 전용): `select extname from pg_extension where extname='pg_trgm';` /
@@ -74,6 +78,19 @@ pnpm db:seed
 | `0024b_rls_for_reenrollment` | `reenrollment_campaign_targets` RLS + updated_at 트리거(재등록 캠페인 #6) |
 | `0025a_rls_for_textbook_orders_expenses` | `textbook_orders`·`expenses` RLS(수납관리 책갈피 교재/지출 면) |
 | `0026a_users_privilege_guard` | `users.system_role`/`tenant_id` 직접 변경 차단 트리거(self-escalation 방어 #S2 — service_role admin 경로는 통과) |
+| `0027a_kiosk_attendance` | 키오스크 출결 테이블 + RLS(병렬 kiosk 세션) |
+| `0027b_student_memo_pin` | 학생 메모 `pinned`·`updated_at` 컬럼(P0-6 메모 수정·고정) |
+| `0027c_kiosk_device_info` | 키오스크 디바이스 정보(병렬 kiosk 세션) |
+| `0027d_staff_phone` | 직원 전화번호 컬럼(P1) |
+| `0027e_attendance_early_leave` | 출석 `early_leave` enum 값(P1 조퇴) |
+| `0027f_student_profile` | 학생 프로필 확장(english_name·gender·birth_date·address·email, P1) |
+| `0027g_rls_for_timetable_port` | 시간표 포트 RLS(병렬 timetable 세션) |
+| `0027h_move_enrollments_batch` | enrollments 일괄 이동(병렬 timetable 세션) |
+| `0028a_exams` | **`exams` 테이블 + RLS + `student_grades.exam_id` 부분유니크**(P2-1 시험 모듈) |
+| `0029a_kakao_messaging` | 카카오 알림톡 메시징 스키마 + RLS(PR#1, 0027d 충돌로 0029a로 이동) |
+| `0030a_textbook_catalog` | **`textbook_catalog` 단가표 테이블 + RLS**(P2-5, ijw 146종 이식) |
+| `0031a_audit_logs` | **`audit_logs` 운영 감사로그 + RLS 격리 + index**(P2-6, 테넌트 스코프) |
+| `0032a_level_tests` | **`level_tests` 레벨테스트 + RLS**(P2-7, subscores jsonb) |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

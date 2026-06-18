@@ -106,8 +106,39 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 ## 진행 상황
 
-**12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1 완성.**
-디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (메뉴는 retention 추가로 실제 13개 — "12메뉴 정체성"은 사이드바 기준 표현.)
+**12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1
++ ijw 갭 P0·P1·P2 메우기 완성.**
+디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·시험관리 추가로
+실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
+
+### ijw 기능 갭 P2 — 운영 깊이 7건 + 카카오 알림톡 머지 (2026-06-18)
+ijw-calander ↔ eywa 전수 갭검수(143건)에서 P0(막다른 길 9건)·P1(일상운영 9건)에 이어 **P2(운영 깊이 7건)
+전부 완료**. 신규 테이블이 필요한 무거운 기능 — 데모를 '진짜 운영툴'로 보이게 하는 깊이. 계획서
+[`C:\Users\user\.claude\plans\sunny-coalescing-diffie.md`]. 항목별 커밋·검증 그린(typecheck0/lint0/test332/build✓).
+- **P2-1 시험(Exam) 모듈 = 신규 최상위 메뉴 `/exams`**: `exams` 테이블(`0028a` alpha) + `student_grades.exam_id`
+  (부분유니크 `ux_grades_exam_student WHERE exam_id is not null`). 순수 `features/exams/calc.ts`(examStats/rankByScore).
+  목록(통계 on-the-fly, denormalize 안 함) + 상세(반선택→**일괄 점수 그리드**, `batchSaveScores`=제출분 delete→insert 멱등).
+  학생그룹 메뉴(teacher scoped·accountant none), 창 960×680.
+- **P2-2 수강종료(과목 이탈) 추적**(마이그레이션 無): 재원이지만 특정 과목 enrollment 전부 종료된 학생.
+  순수 `withdrawals/subject-ended.ts`(getEndedSubjects) + `withdrawals/page.tsx` 퇴원/수강종료 유형 토글.
+- **P2-3 급여 월별 전직원표** `/staff/payroll`(master): 월 ◀▶ + 상태칩 + tfoot 합계. ⚠️ 미작성 직원은
+  월기본만(전원 동시 calculateMonthlyPayroll 지양 — 반응속도 #1). ⚠️ 데모: 39명 중 급여설정 1명뿐 → 거의 0원.
+- **P2-4 수강료 계산기** `/billing?tab=calculator`(책갈피 4면): 순수 `billing/tuition-calc.ts`(countSessions 공휴일제외)
+  → 라이브 견적 → 청구서 저장(createInvoice 재사용) + 인쇄.
+- **P2-5 교재 카탈로그(단가표)** `textbook_catalog`(`0030a`) + `/billing` 책갈피 5면 '단가표' CRUD + textbook-dialog
+  '교재 검색' picker. **ijw `data/textbookCatalog.ts` 146종 이식**(`import-catalog.cjs`, 초/중/고 수학142+영어4).
+- **P2-6 운영 감사로그** `audit_logs`(`0031a`, RLS 격리) + `/admin/audit` 뷰어(master). **8개 mutation 계측**
+  (역할변경·직원삭제·청구서생성·시험생성/삭제/일괄성적·급여정산·퇴원사유).
+- **P2-7 레벨테스트** `level_tests`(`0032a`) + 학생 상세 성적탭 섹션(배치/승급/진단·과목별 세부점수 jsonb).
+- **카카오 알림톡 PR#1 머지**(`8e27419`) + **main CI 복구**(`43ff624` verify 잡 `NODE_OPTIONS=4096`로 tsc OOM 방지 /
+  `150e490` typecheck 전 최소 `next-env.d.ts` 생성 — gitignore라 CI에 없음). 마이그 `0027d_kakao→0029a`(충돌 해소).
+- ⚠️ **버그픽스 2건**: `18649ba` deleteStaff가 auth 404("User not found")에 멈추던 것 건너뛰고 public 삭제(#31).
+  `8dd7d30` 인페이지 `BackLink`를 `useInFrame`으로도 숨김 — 탭 Link 드릴인이 `?embed=1` 떨궈 ← 이중 + /classes 오이동.
+- ⚠️ **미구현/후속**: ① 데모 갭 — `audit_logs`·`level_tests` 비어있음(필요 시 시드), 급여설정 38명 무설정.
+  ② **브라우저 실검증 보류**(이 세션 Chrome MCP 미연결 — 로직 레벨만). ③ **drizzle 스냅샷 reconciliation 별도 과제**
+  (P2 신규 테이블은 전부 손수 alpha — `db:generate` 금지, #P0-6 드리프트). ④ **P3 미착수**(상담녹음AI / QR공개접수 /
+  시간표시뮬 / 엑셀라운드트립 / 지출결재) + 급여 정책엔진(과정별 단가). ⑤ 시간표 P1 2건(인라인검색·강사색상)은
+  병렬 timetable 세션 소관(이 세션 검토 시 미반영 상태였음 — 그 세션 병합 후 재확인).
 
 ### 데모 데이터 정합·온보딩·브랜드 + 수납관리 책갈피(교재/지출) (2026-06-17)
 3제품 비교(makeedu·ijw·eywa) 후 데모 완성 백로그를 우선순위로 처리 + 수납관리 확장.
@@ -218,8 +249,10 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 ### 라우트 구조
 - `/` = **제품 중심 랜딩** (Hero 제품 쇼케이스 → 자동연동(0.4s) → 기능 목업 시간표/출석부/수납 → **워크스페이스 멀티윈도우** → AI → 데이터 → ROI → 12메뉴 점선목차 → 단일 인터뷰 → 베타 요금 → CTA). 구 8섹션(Flow/LogoWall/Manifesto 등) 폐기. 컴포넌트: `(marketing)/_sections/*` + `_ui/*`(BrowserFrame·product-showcase·mock-{timetable,attendance,billing,workspace}·feature-block·cta-button) + `_motion/*`(Reveal·CountUp·landing.css). 워크스페이스 목업 레일은 실제 `app-sidebar`와 동일한 Lucide 아이콘.
 - `/dashboard` = 대시보드 (예전 `/`에서 이동)
+- `/exams`, `/exams/[id]` = **시험관리** (신규 최상위 메뉴, 학생 그룹) — 일괄 성적입력
+- `/staff/payroll` = 급여 월별 전직원표 (master 전용, /staff 드릴인)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
-- `/admin/*` = academy master 전용 (duplicates/cleanup/integrations/sheets)
+- `/admin/*` = academy master 전용 (duplicates/cleanup/integrations/sheets/**audit** 감사로그)
 - `/super-admin/*` = **SaaS owner 전용 super_admin 레이어** (academy 권한과 직교)
 - `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
 - `(shell)/` = 인증된 12개 메뉴 + admin (사이드바 232px + Topbar 64px)
@@ -234,12 +267,13 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **기본뷰(강사×교시) / 통합뷰(요일×교시) 토글** + 과목 chip + 학생 명단 |
 | 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
 | 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
-| 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill |
+| 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill (상세 성적탭에 **레벨테스트** 섹션) |
+| 시험관리 (`/exams`) | `exams` + `student_grades` | 시험 목록(응시/평균/최고/최저 통계) + 등록 + 상세 **반선택 → 일괄 점수 그리드** + 석차 |
 | 등록상담 (`/enrollment`) | `enrollment_consultations` + AI | **AI 배너 (forest gradient + sparkle)** + 4열 칸반 + 월/상담사 chip + 대시보드 (recharts) |
 | 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
 | 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
-| 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + Initial 8px |
-| 수납관리 (`/billing`) | `invoices` | Stat 5 (할인 포함) + **월 ◀▶ + 검색 + 컬럼 정렬 ▼** + 할인/메모 컬럼 + 인라인 dialog + 일괄 처리 + 기한 경과 |
+| 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + Initial 8px + **급여 월별표 진입(`/staff/payroll`)** |
+| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **세로 책갈피 5면**(수납/교재/지출/**계산기**(수강료 견적)/**단가표**(교재 카탈로그)) |
 | 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
 | 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
 
@@ -790,6 +824,9 @@ revalidate되지만, 이미 렌더된 **부모(배경) 라우트는 stale**(다�
 
 > 적용 방식·순서·alpha 파일 목록·**현재 적용 상태(검증 2026-06-16: 번호본 0000~0024 + alpha 전부 적용,
 > trgm 색인 11개·RLS 미적용 테이블 0개 확인)**는 [`supabase/migrations/README.md`](supabase/migrations/README.md).
+> ⚠️ **2026-06-18 이후 alpha 추가**(드리즐 스냅샷은 `0027_big_swordsman`에 멈춤 — 신규는 전부 손수 alpha, `db:generate` 금지):
+> `0027b` 학생메모핀 · `0027d~f` 직원phone/조퇴/학생프로필 · `0027g/h` 시간표포트 RLS·이전 · **`0028a` 시험(exams) ·
+> `0029a` 카카오메시징 · `0030a` 교재카탈로그 · `0031a` 운영감사로그 · `0032a` 레벨테스트**(전부 dev DB 적용·RLS 격리).
 > drizzle 번호본은 `db:migrate`가 자동, RLS/트리거/확장/GIN trigram 색인 등 `000Na_*` **alpha는 손수** 적용
 > (신규 DB 셋업 시 누락 주의).
 
@@ -923,3 +960,16 @@ production 반응속도가 느림. 의심 가는 병목:
 8. **(장기) Firestore → Supabase 마이그레이션 스크립트** — 실제 운영 데이터 전환 시
 9. ✅ **검색 데이터 색인** — 완료: **pg_trgm 트라이그램 GIN 색인**(`0024a_search_trgm.sql`, 적용됨 — tsvector 아님: 한국어 부분일치 때문). 커맨드 팰릿이 메뉴(클라) + 학생·수업·상담·등록상담(서버 `/api/search/palette`, `src/features/search/server/queries.ts`, RLS 테넌트 격리, RPC 없이 `.ilike`)을 함께 검색. 한국어 1~2글자는 trgm 효율 낮음(후속 pg_bigm 평가 가능).
 10. ✅ **배경 탭 스택(다중 배경)** — 완료: `background`를 스택 배열로(맨 뒤 대시보드). 창 '배경으로 보내기'로 push, 상단 스트립(`background-tabs.tsx`)에서 클릭=전환/우클릭=창으로 꺼내기. 라우트는 창이거나 배경 탭이거나(중복 방지).
+11. ✅ **ijw 기능 갭 메우기 P0·P1·P2** — 전수검수 143건 중 P0(막다른 길 9)·P1(일상운영 9)·P2(운영 깊이 7) 완료.
+    P2 = 시험모듈(`/exams`)·수강종료추적·급여월별표·수강료계산기·교재카탈로그·운영감사로그·레벨테스트 + 카카오 알림톡 머지.
+    상세: 위 "진행 상황 › ijw 기능 갭 P2"(2026-06-18). (남은 P3는 #14.)
+12. **데모 시드 갭(P2 신규 테이블)** — `audit_logs`는 mutation 사용 시 자동 채워짐(현재 비어있음). `level_tests`는 비어있음
+    (필요 시 시드). 급여 월별표는 활성직원 39명 중 급여설정 1명뿐이라 거의 0원 — 데모용 급여설정 시드 필요. (⚠️ `db:seed`는 POC 데모 wipe — 금지.)
+13. **P2 브라우저 실검증** — 시험 일괄입력·계산기·단가표·감사로그·레벨테스트는 **로직 레벨만 검증**(타입/테스트/빌드 그린).
+    Chrome MCP 재연결 후 웨일에서 실거동 일괄 검증 필요(역할별 메뉴 노출 포함). [[reference_browser-verification-env]]
+14. **ijw 갭 P3(미착수)** — 상담 녹음 AI / QR 공개접수 / 시간표 시뮬레이션 / 엑셀 라운드트립(import) / 지출 결재 +
+    급여 정책엔진(과정별 단가·강사 override). 무겁고 데모 임팩트는 P2 < — 우선순위 재점검 후 진행.
+15. **drizzle 스냅샷 reconciliation** — P0~P2 신규 테이블(0027b~0032a)은 전부 **손수 alpha**(`db:generate` 금지, #P0-6 드리프트).
+    0027 시리즈(kiosk·timetable·messaging) 전부 main 안착 후 드리즐 스냅샷 정식 재산출을 **별도 과제**로.
+16. **시간표 P1(인라인 검색·강사 시간표 색상)** — 병렬 timetable 세션 소관. 이 세션 검토 시점엔 미반영(시간표가 과목×교시
+    그리드로 재설계되어 방향이 다름). 그 세션 병합 후 실제 구현 여부 재확인.
