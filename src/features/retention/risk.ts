@@ -53,6 +53,9 @@ const WARN_THRESHOLD = 35;
 
 const clampPercent = (n: number) => Math.max(0, Math.min(100, n));
 const clampCount = (n: number) => Math.max(0, n);
+// 소수 점수끼리 빼면 9.000000000000007 같은 부동소수점 표시 오차가 생긴다. 표시용 차이값은 반올림한다.
+const roundTo = (n: number, digits = 2) =>
+  Number.isFinite(n) ? Math.round(n * 10 ** digits) / 10 ** digits : 0;
 
 /** 텍스트에 키워드 중 하나라도 포함되는지(대소문자 무시). */
 export function includesAny(text: string, words: string[]): boolean {
@@ -80,9 +83,9 @@ export function scoreStudent(signals: RetentionSignals): RiskResult {
 
   const scoreDrop =
     signals.lastScore != null && signals.previousScore != null
-      ? Math.max(0, previousScore - lastScore)
+      ? roundTo(Math.max(0, previousScore - lastScore))
       : 0;
-  const homeworkDrop = homeworkMissing ? 0 : Math.max(0, previousHomeworkRate - homeworkRate);
+  const homeworkDrop = homeworkMissing ? 0 : roundTo(Math.max(0, previousHomeworkRate - homeworkRate));
 
   const reasons: string[] = [];
   const factors: RiskFactor[] = [];
