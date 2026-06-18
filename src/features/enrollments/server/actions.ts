@@ -144,3 +144,46 @@ export async function moveEnrollment(
   revalidatePath("/timetable");
   return undefined;
 }
+
+export type BatchMoveInput = {
+  enrollmentId: string;
+  newClassId: string;
+  startDate?: string;
+};
+export type BatchMoveResult = {
+  enrollmentId: string;
+  ok: boolean;
+  error?: string;
+};
+export type MoveEnrollmentsBatchState = {
+  error?: string;
+  results?: BatchMoveResult[];
+};
+
+/**
+ * 편집 모드 '저장' — 보류 이동들을 한 번에 커밋. 압축은 클라(compressMoves)에서 끝낸 결과를 받는다.
+ * move_enrollments_batch RPC(SECURITY INVOKER + per-move 서브트랜잭션)로 RLS 유지 + 원자성 확보.
+ * 1건이 GiST 시간겹침 등으로 실패해도 나머지는 커밋되고, 실패 목록을 results로 돌려준다.
+ */
+export async function moveEnrollmentsBatch(
+  moves: BatchMoveInput[],
+): Promise<MoveEnrollmentsBatchState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!Array.isArray(moves) || moves.length === 0) return { results: [] };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("move_enrollments_batch", {
+    p_moves: moves.map((m) => ({
+      enrollmentId: m.enrollmentId,
+      newClassId: m.newClassId,
+      startDate: m.startDate ?? null,
+    })),
+  });
+
+  if (error) return { error: error.message };
+
+  const results = (data ?? []) as BatchMoveResult[];
+  revalidatePath("/timetable");
+  return { results };
+}
