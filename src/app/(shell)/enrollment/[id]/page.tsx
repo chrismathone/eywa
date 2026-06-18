@@ -16,6 +16,7 @@ import { getClassesList } from "@/features/classes/server/queries";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
+import { ConsultationManageButtons } from "./_components/consultation-manage";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -107,6 +108,20 @@ export default async function EnrollmentDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ConsultationManageButtons
+            values={{
+              id: consult.id,
+              prospectName: consult.prospectName,
+              prospectGrade: consult.prospectGrade,
+              prospectSchool: consult.prospectSchool,
+              parentName: consult.parentName,
+              parentPhone: consult.parentPhone,
+              parentRequest: consult.parentRequest,
+              prevAcademy: consult.learningHistory?.prevAcademy ?? null,
+              lastScore: consult.learningHistory?.lastScore ?? null,
+              outcome: consult.outcome,
+            }}
+          />
           {consult.aiAnalysis ? (
             <Button variant="outline" render={<Link href={`/enrollment/${id}/print`} target="_blank" />}>
               <Printer className="size-4" />

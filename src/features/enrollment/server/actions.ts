@@ -75,6 +75,107 @@ export async function createEnrollmentConsultation(
   redirect(`/enrollment/${data.id}`);
 }
 
+export type UpdateConsultationState = { error?: string; ok?: boolean } | undefined;
+
+/** 등록상담 레코드 수정 — 생성과 동일 필드. learning_history는 기존 키(weakSubjects 등) 보존하며 병합. */
+export async function updateEnrollmentConsultation(
+  _prev: UpdateConsultationState,
+  formData: FormData,
+): Promise<UpdateConsultationState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!canAccess(user.systemRole, "enrollment")) return { error: "등록상담 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "상담 ID가 누락되었습니다" };
+
+  const parsed = createSchema.safeParse({
+    prospectName: formData.get("prospectName"),
+    prospectGrade: formData.get("prospectGrade"),
+    prospectSchool: formData.get("prospectSchool"),
+    parentName: formData.get("parentName"),
+    parentPhone: formData.get("parentPhone"),
+    parentRequest: formData.get("parentRequest"),
+    prevAcademy: formData.get("prevAcademy"),
+    lastScore: formData.get("lastScore"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요" };
+  }
+
+  const supabase = await createClient();
+  // 기존 learning_history를 읽어 prevAcademy/lastScore만 갱신(AI 파생 weakSubjects 등 보존).
+  const { data: existing } = await supabase
+    .from("enrollment_consultations")
+    .select("learning_history")
+    .eq("id", id)
+    .single();
+  const lh: Record<string, unknown> = { ...((existing?.learning_history as Record<string, unknown>) ?? {}) };
+  if (parsed.data.prevAcademy) lh.prevAcademy = parsed.data.prevAcademy;
+  else delete lh.prevAcademy;
+  if (parsed.data.lastScore) lh.lastScore = parsed.data.lastScore;
+  else delete lh.lastScore;
+
+  const { error } = await supabase
+    .from("enrollment_consultations")
+    .update({
+      prospect_name: parsed.data.prospectName,
+      prospect_grade: parsed.data.prospectGrade || null,
+      prospect_school: parsed.data.prospectSchool || null,
+      parent_name: parsed.data.parentName || null,
+      parent_phone: parsed.data.parentPhone || null,
+      parent_request: parsed.data.parentRequest || null,
+      learning_history: Object.keys(lh).length > 0 ? lh : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/enrollment");
+  revalidatePath(`/enrollment/${id}`);
+  return { ok: true };
+}
+
+const OUTCOMES = [
+  "pending",
+  "scheduled",
+  "consulted",
+  "ai_done",
+  "enrolled",
+  "declined",
+  "no_show",
+] as const;
+type Outcome = (typeof OUTCOMES)[number];
+
+export type SetOutcomeState = { error?: string; ok?: boolean } | undefined;
+
+/** 상담 상태(outcome) 수동 변경 — 칸반 컬럼(대기·예약/거절·노쇼) 활성화. */
+export async function setEnrollmentOutcome(
+  _prev: SetOutcomeState,
+  formData: FormData,
+): Promise<SetOutcomeState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!canAccess(user.systemRole, "enrollment")) return { error: "등록상담 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const outcome = String(formData.get("outcome") ?? "") as Outcome;
+  if (!id) return { error: "상담 ID가 누락되었습니다" };
+  if (!(OUTCOMES as readonly string[]).includes(outcome)) return { error: "유효한 상태가 아닙니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("enrollment_consultations")
+    .update({ outcome, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/enrollment");
+  revalidatePath(`/enrollment/${id}`);
+  return { ok: true };
+}
+
 type AnalysisShape = {
   diagnosis: {
     strengths: string[];
