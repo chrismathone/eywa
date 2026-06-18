@@ -6,6 +6,7 @@ import {
   normalizePeriodId,
   periodLabel,
   periodToTimes,
+  slotPeriodRow,
 } from "./periods";
 
 describe("요일 변환", () => {
@@ -91,5 +92,54 @@ describe("교시 라벨", () => {
   it("표시용 라벨", () => {
     expect(periodLabel("3")).toBe("3교시");
     expect(periodLabel("1-2")).toBe("2교시"); // 정규화 후
+  });
+});
+
+describe("시각→그리드 행(slotPeriodRow)", () => {
+  it("수학 평일: 8교시를 4그룹으로 — 1·2교시 시작은 같은 1교시 그룹", () => {
+    const a = slotPeriodRow("math", "14:30", "mon"); // 교시1
+    const b = slotPeriodRow("math", "15:25", "mon"); // 교시2
+    expect(a.key).toBe("m-1");
+    expect(b.key).toBe("m-1"); // 같은 그룹 셀
+    expect(a.label).toBe("1교시");
+    expect(a.time).toBe("14:30~16:20");
+  });
+  it("수학 평일: 3교시 시작(16:20)은 2그룹, 8교시(21:05)는 4그룹", () => {
+    expect(slotPeriodRow("math", "16:20", "tue").key).toBe("m-2");
+    expect(slotPeriodRow("math", "21:05:00", "tue").key).toBe("m-4"); // HH:MM:SS도 처리
+    expect(slotPeriodRow("math", "18:20", "tue").key).toBe("m-3"); // 5교시→3그룹(18:10→18:20 gap)
+  });
+  it("고등수학은 수학 그룹 체계 공용", () => {
+    expect(slotPeriodRow("highmath", "14:30", "mon").key).toBe("m-1");
+  });
+  it("영어 평일: 10교시 개별 행", () => {
+    expect(slotPeriodRow("english", "14:20", "mon")).toMatchObject({ key: "e-1", label: "1교시" });
+    expect(slotPeriodRow("english", "16:20", "mon")).toMatchObject({ key: "e-4", time: "16:20~17:00" });
+    expect(slotPeriodRow("english", "21:05", "mon").key).toBe("e-10");
+  });
+  it("같은 16:20이라도 과목 따라 다른 행(수학 2그룹 vs 영어 4교시)", () => {
+    expect(slotPeriodRow("math", "16:20", "mon").key).toBe("m-2");
+    expect(slotPeriodRow("english", "16:20", "mon").key).toBe("e-4");
+  });
+  it("주말은 과목 무관 시간단위 8교시", () => {
+    expect(slotPeriodRow("math", "09:00", "sat")).toMatchObject({ key: "w-1", time: "09:00~10:00" });
+    expect(slotPeriodRow("english", "09:00", "sun").key).toBe("w-1"); // 주말은 영어도 동일
+    expect(slotPeriodRow("math", "16:00", "sat").key).toBe("w-8");
+  });
+  it("매칭 안 되는 시각은 '기타' 행으로 폴백(throw 없음) — 시각 그대로 라벨", () => {
+    const r = slotPeriodRow("math", "13:13", "mon");
+    expect(r.key).toBe("x-13:13");
+    expect(r.label).toBe("13:13");
+    expect(r.order).toBe(13 * 60 + 13); // 시각(분) 기준
+  });
+  it("order는 시각(분) 기준 — 행이 시각순 정렬됨", () => {
+    expect(slotPeriodRow("math", "08:00", "mon").order).toBeLessThan(
+      slotPeriodRow("math", "13:13", "mon").order,
+    );
+    // 수학 1교시(14:30=870) < 2교시그룹(16:20=980)
+    expect(slotPeriodRow("math", "14:30", "mon").order).toBe(14 * 60 + 30);
+    expect(slotPeriodRow("math", "16:20", "mon").order).toBeGreaterThan(
+      slotPeriodRow("math", "14:30", "mon").order,
+    );
   });
 });

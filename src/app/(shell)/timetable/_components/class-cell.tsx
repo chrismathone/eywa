@@ -8,6 +8,7 @@ import { useTimetableEdit } from "./edit-context";
 // 반이름 헤더 바 색(과목별). 학생 행은 흰 배경 + 상태색이라 헤더만 과목색.
 const SUBJECT_COLOR: Record<string, string> = {
   math: "bg-primary-soft text-primary",
+  highmath: "bg-primary-soft text-primary",
   english: "bg-blue-soft text-blue",
   korean: "bg-rose-soft text-rose",
   science: "bg-purple-soft text-purple",
@@ -16,6 +17,11 @@ const SUBJECT_COLOR: Record<string, string> = {
 
 function shortTime(t: string) {
   return t.slice(0, 5);
+}
+
+/** 학생 행 우측 메타 — 학교 + 학년(있는 것만). ijw식 [이름] … [학교 학년]. */
+function metaLabel(school: string | null | undefined, grade: string | null | undefined): string {
+  return [school, grade].filter(Boolean).join(" ");
 }
 
 /** 학생 행 배경 — 신입(빨강)·전입(초록)·그 외(기본). ijw 시간표의 신입/전학 색 근사. */
@@ -36,13 +42,13 @@ function DraggableStudentRow({
   enrollmentId,
   classId,
   name,
-  grade,
+  meta,
   tone,
 }: {
   enrollmentId: string;
   classId: string;
   name: string;
-  grade: string | null;
+  meta: string;
   tone: string;
 }) {
   const { pending } = useTimetableEdit();
@@ -61,19 +67,19 @@ function DraggableStudentRow({
       <span className={`truncate ${target ? "line-through" : ""}`}>{name}</span>
       {target ? (
         <span className="text-primary shrink-0 font-mono text-[9px]">→{target.toClassName}</span>
-      ) : grade ? (
-        <span className="shrink-0 font-mono text-[9px] opacity-60">{grade}</span>
+      ) : meta ? (
+        <span className="shrink-0 font-mono text-[9px] opacity-60">{meta}</span>
       ) : null}
     </div>
   );
 }
 
 /** 학생 한 줄(비편집) — 드래그 훅 없이 평범한 div. 대량 셀 DOM/렌더 보호. */
-function StudentRow({ name, grade, tone }: { name: string; grade: string | null; tone: string }) {
+function StudentRow({ name, meta, tone }: { name: string; meta: string; tone: string }) {
   return (
     <div className={`${ROW_CLASS} ${tone}`}>
       <span className="truncate">{name}</span>
-      {grade ? <span className="shrink-0 font-mono text-[9px] opacity-60">{grade}</span> : null}
+      {meta ? <span className="shrink-0 font-mono text-[9px] opacity-60">{meta}</span> : null}
     </div>
   );
 }
@@ -139,14 +145,14 @@ export function ClassCell({
                   enrollmentId={s.enrollmentId}
                   classId={slot.id}
                   name={s.name}
-                  grade={s.grade}
+                  meta={metaLabel(s.school, s.grade)}
                   tone={studentRowTone(s)}
                 />
               ) : (
                 <StudentRow
                   key={s.enrollmentId ?? `s-${i}`}
                   name={s.name}
-                  grade={s.grade}
+                  meta={metaLabel(s.school, s.grade)}
                   tone={studentRowTone(s)}
                 />
               ),

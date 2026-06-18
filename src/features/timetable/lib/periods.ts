@@ -117,3 +117,85 @@ export function periodToTimes(
 export function periodLabel(periodId: string): string {
   return `${normalizePeriodId(periodId)}교시`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 절대시각 → 그리드 행(교시/그룹) 역매핑 — 시간표 기본뷰의 행 축.
+// ijw `constants.ts` 이식: 수학/과학/국어/고등수학(평일)은 8교시를 2개씩 4그룹으로 묶어
+// 한 행(1교시=14:30~16:20 …)으로 표시(MATH_PERIOD_GROUPS·MATH_GROUP_DISPLAY).
+// 영어(평일)는 10교시 개별 행, 주말은 8교시(시간단위) 개별 행.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 수학 교시 → 그룹(1,2→1 / 3,4→2 / 5,6→3 / 7,8→4). ijw MATH_PERIOD_GROUPS.
+const MATH_PERIOD_GROUP: Record<string, number> = {
+  "1": 1, "2": 1, "3": 2, "4": 2, "5": 3, "6": 3, "7": 4, "8": 4,
+};
+// 그룹별 표시(라벨·통합 시간대). ijw MATH_GROUP_DISPLAY.
+const MATH_GROUP_DISPLAY: Record<number, { label: string; time: string }> = {
+  1: { label: "1교시", time: "14:30~16:20" },
+  2: { label: "2교시", time: "16:20~18:10" },
+  3: { label: "3교시", time: "18:20~20:10" },
+  4: { label: "4교시", time: "20:10~22:00" },
+};
+
+/** 그리드 행 1개(교시 또는 그룹). order로 정렬, key로 셀 그룹핑. */
+export type PeriodRow = {
+  key: string; // 행 고유키 (m-1 / e-4 / w-3 / x-HH:MM)
+  label: string; // "1교시"
+  time: string; // "14:30~16:20"
+  order: number; // 정렬 순서
+};
+
+// 시작시각("HH:MM") → periodId 역인덱스(테이블별, 1회 생성).
+function reverseStart(table: Record<string, PeriodTime>): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const [id, t] of Object.entries(table)) if (!m.has(t.startTime)) m.set(t.startTime, id);
+  return m;
+}
+const MATH_REV = reverseStart(MATH_PERIODS);
+const ENGLISH_REV = reverseStart(ENGLISH_PERIODS);
+const WEEKEND_REV = reverseStart(WEEKEND_PERIODS);
+
+/** "16:20:00" / "16:20" → "16:20". */
+function hm(t: string): string {
+  return String(t).slice(0, 5);
+}
+
+/** "HH:MM…" → 자정 기준 분. 행 정렬용(시각순). */
+function toMin(t: string): number {
+  const [h, m] = hm(t).split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/**
+ * 한 슬롯(과목·시작시각·요일)을 그리드 행으로 매핑.
+ * 매칭 실패 시 그 시각 자체를 '기타' 행으로(절대 throw 금지 — 데모 데이터 시각 불일치 안전).
+ */
+export function slotPeriodRow(
+  subject: TimetableSubject,
+  startTime: string,
+  day: DayOfWeek,
+): PeriodRow {
+  const start = hm(startTime);
+  if (isWeekendDay(day)) {
+    const p = WEEKEND_REV.get(start);
+    if (p) {
+      const t = WEEKEND_PERIODS[p]!;
+      return { key: `w-${p}`, label: `${p}교시`, time: `${t.startTime}~${t.endTime}`, order: toMin(t.startTime) };
+    }
+  } else if (subject === "english") {
+    const p = ENGLISH_REV.get(start);
+    if (p) {
+      const t = ENGLISH_PERIODS[p]!;
+      return { key: `e-${p}`, label: `${p}교시`, time: `${t.startTime}~${t.endTime}`, order: toMin(t.startTime) };
+    }
+  } else {
+    const p = MATH_REV.get(start);
+    if (p) {
+      const g = MATH_PERIOD_GROUP[p]!;
+      const d = MATH_GROUP_DISPLAY[g]!;
+      return { key: `m-${g}`, label: d.label, time: d.time, order: toMin(d.time) };
+    }
+  }
+  // 폴백: 매칭 안 되는 시각 = 자체 행. 시각 그대로 라벨, 시각순 정렬.
+  return { key: `x-${start}`, label: start, time: start, order: toMin(start) };
+}

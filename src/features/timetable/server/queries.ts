@@ -90,6 +90,8 @@ export type StudentLine = {
   isNew?: boolean;
   /** 타 반에서 이동해 들어온 학생(셀에서 초록 강조). */
   isTransferredIn?: boolean;
+  /** 분리등원 요일 — []=전 요일, ['mon','thu']=월목만. 비어있지 않으면 셀에 배지로 표시. */
+  attendanceDays?: string[];
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 
@@ -116,12 +118,15 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
     class_id: string;
     start_date: string | null;
     is_transferred_in: boolean | null;
+    attendance_days: string[] | null;
     student: { name?: string; grade?: string | null; school?: string | null } | { name?: string }[];
   };
   const rows = await fetchInChunks<EnrollRow>(classIds, (chunk) =>
     supabase
       .from("enrollments")
-      .select("id, class_id, start_date, is_transferred_in, student:student_id ( name, grade, school )")
+      .select(
+        "id, class_id, start_date, is_transferred_in, attendance_days, student:student_id ( name, grade, school )",
+      )
       .in("class_id", chunk)
       .is("end_date", null),
   );
@@ -141,6 +146,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       // 날짜 문자열(YYYY-MM-DD) 사전식 비교 — start_date >= cutoff면 30일 이내.
       isNew: r.start_date != null && r.start_date >= newCutoff,
       isTransferredIn: r.is_transferred_in === true,
+      attendanceDays: r.attendance_days ?? [],
     });
     byClass.set(r.class_id, list);
   }

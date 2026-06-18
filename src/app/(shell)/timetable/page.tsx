@@ -8,24 +8,34 @@ import {
   getWeeklyScheduleWithStudents,
   type ScheduleSlotWithStudents,
 } from "@/features/timetable/server/queries";
-import { ClassCell } from "./_components/class-cell";
+import {
+  slotPeriodRow,
+  type DayOfWeek,
+  type PeriodRow,
+  type TimetableSubject,
+} from "@/features/timetable/lib/periods";
 import { IntegratedCell } from "./_components/integrated-cell";
 import { TimetableBoard } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
+import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 
 export const metadata = { title: "시간표 — eywa" };
 
 type ViewMode = "basic" | "integrated";
-type SubjectKey = "all" | "math" | "english" | "korean" | "science" | "arts";
+// 과목별 교시 체계가 달라(수학 8교시·영어 10교시·주말 시간단위) "전체"는 없다 —
+// 무조건 한 과목 선택(기본 수학). 실제 데이터에 존재하는 과목만 칩으로 노출.
+type SubjectKey = "math" | "english" | "highmath" | "korean" | "science" | "arts";
 
 const SUBJECT_LABEL: Record<SubjectKey, string> = {
-  all: "전체",
   math: "수학",
   english: "영어",
+  highmath: "고등수학",
   korean: "국어",
   science: "과학",
   arts: "예술",
 };
+const SUBJECT_ORDER: SubjectKey[] = ["math", "english", "highmath", "korean", "science", "arts"];
+const DEFAULT_SUBJECT: SubjectKey = "math";
 
 const DAYS: { key: string; label: string }[] = [
   { key: "mon", label: "월" },
@@ -37,19 +47,6 @@ const DAYS: { key: string; label: string }[] = [
   { key: "sun", label: "일" },
 ];
 
-/**
- * 교시 그룹화 — 시작 시간 기준 16:00→1교시 / 17:30→2교시 / 19:00→3교시 식으로.
- * 시안 데이터에는 정확한 "교시" 필드가 없으므로 시작 시간 hour로 묶음.
- */
-function periodKey(startTime: string): string {
-  const h = Number(startTime.slice(0, 2));
-  if (h < 16) return "방과전";
-  if (h < 17) return "1교시";
-  if (h < 19) return "2교시";
-  if (h < 20) return "3교시";
-  return "4교시";
-}
-
 export default async function TimetablePage({
   searchParams,
 }: {
@@ -58,11 +55,17 @@ export default async function TimetablePage({
   await requireAccess("timetable");
   const { view: viewParam, subject: subjectParam } = await searchParams;
   const view: ViewMode = viewParam === "integrated" ? "integrated" : "basic";
-  const subject: SubjectKey =
-    subjectParam && subjectParam in SUBJECT_LABEL ? subjectParam : "all";
 
   const allSlots = await getWeeklyScheduleWithStudents();
-  const slots = subject === "all" ? allSlots : allSlots.filter((s) => s.subject === subject);
+  // 데이터에 실제 존재하는 과목만 칩으로(빈 과목칩 방지). 무조건 한 과목 — 기본 수학, 없으면 첫 과목.
+  const available = SUBJECT_ORDER.filter((k) => allSlots.some((s) => s.subject === k));
+  const subject: SubjectKey =
+    subjectParam && available.includes(subjectParam)
+      ? subjectParam
+      : available.includes(DEFAULT_SUBJECT)
+        ? DEFAULT_SUBJECT
+        : (available[0] ?? DEFAULT_SUBJECT);
+  const slots = allSlots.filter((s) => s.subject === subject);
 
   // counters
   const totalStudents = slots.reduce((s, x) => s + x.students.length, 0);
@@ -74,7 +77,7 @@ export default async function TimetablePage({
         {/* 과목 chip */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">과목</span>
-          {(Object.keys(SUBJECT_LABEL) as SubjectKey[]).map((k) => (
+          {available.map((k) => (
             <Link
               key={k}
               href={buildHref(view, k)}
@@ -132,7 +135,7 @@ export default async function TimetablePage({
         <TimetableBoard>
           <div id="timetable-export-root" className="flex min-h-0 flex-1 flex-col">
             {view === "basic" ? (
-              <BasicView slots={slots} />
+              <WeekdayGroupTables slots={slots} />
             ) : (
               <IntegratedView slots={slots} />
             )}
@@ -146,122 +149,29 @@ export default async function TimetablePage({
 function buildHref(view: ViewMode, subject: SubjectKey): string {
   const params = new URLSearchParams();
   if (view !== "basic") params.set("view", view);
-  if (subject !== "all") params.set("subject", subject);
+  if (subject !== DEFAULT_SUBJECT) params.set("subject", subject);
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }
 
-// ─────────────────── 기본뷰 — 강사 × 요일 × 교시 ───────────────────
-
-function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
-  // 강사 + 요일 그룹화. 같은 강사가 여러 요일에 가르치면 column 안에 요일별 sub-column
-  const teachers = Array.from(new Set(slots.map((s) => s.teacherName ?? "—"))).sort();
-  const periods = Array.from(new Set(slots.map((s) => periodKey(s.startTime)))).sort(
-    (a, b) => periodOrder(a) - periodOrder(b),
-  );
-
-  // 각 (teacher, day) 쌍의 슬롯 — 강사가 가르치는 요일만 컬럼 표시
-  const teacherDays = new Map<string, string[]>();
-  for (const t of teachers) {
-    const days = Array.from(
-      new Set(slots.filter((s) => (s.teacherName ?? "—") === t).map((s) => s.dayOfWeek)),
-    ).sort((a, b) => DAYS.findIndex((d) => d.key === a) - DAYS.findIndex((d) => d.key === b));
-    teacherDays.set(t, days);
-  }
-
-  // (teacher, day, period) → slots
-  const cell = new Map<string, ScheduleSlotWithStudents[]>();
-  for (const s of slots) {
-    const k = `${s.teacherName ?? "—"}::${s.dayOfWeek}::${periodKey(s.startTime)}`;
-    const list = cell.get(k) ?? [];
-    list.push(s);
-    cell.set(k, list);
-  }
-
-  return (
-    <DragScrollArea className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border">
-      <table className="min-w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 w-[100px] border-b border-r p-3 text-left">
-              <span className="micro">교시</span>
-            </th>
-            {teachers.map((t) => {
-              const days = teacherDays.get(t) ?? [];
-              return (
-                <th
-                  key={t}
-                  colSpan={days.length}
-                  className="bg-bg-soft border-line border-b border-r px-3 py-2.5 text-center"
-                >
-                  <p className="text-foreground text-[13px] font-bold">{t}</p>
-                </th>
-              );
-            })}
-          </tr>
-          <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 border-b border-r p-2" />
-            {teachers.flatMap((t) =>
-              (teacherDays.get(t) ?? []).map((d) => (
-                <th
-                  key={`${t}-${d}`}
-                  className={`${weekdayTint(d)} border-line text-text-dim min-w-[180px] border-b border-r px-2 py-1.5 text-center font-mono text-[10px] font-bold`}
-                >
-                  {DAYS.find((x) => x.key === d)?.label ?? d}
-                </th>
-              )),
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {periods.map((p) => (
-            <tr key={p}>
-              <td className="bg-bg-soft border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold whitespace-nowrap">
-                {p}
-                <div className="text-text-faint mt-1 font-mono text-[10px]">
-                  {periodTimeRange(p)}
-                </div>
-              </td>
-              {teachers.flatMap((t) =>
-                (teacherDays.get(t) ?? []).map((d) => {
-                  const list = cell.get(`${t}::${d}::${p}`) ?? [];
-                  return (
-                    <td
-                      key={`${t}-${d}-${p}`}
-                      className="border-line border-b border-r p-2 align-top"
-                    >
-                      {list.length === 0 ? (
-                        <span className="text-text-faint text-[11px]">—</span>
-                      ) : (
-                        <div className="space-y-2">
-                          {list.map((s) => (
-                            <ClassCell key={s.id} slot={s} roster="names" />
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                  );
-                }),
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </DragScrollArea>
-  );
-}
-
-// ─────────────────── 통합뷰 — 요일 × 교시 + 다중 수업 ───────────────────
+// ─────────────────── 통합뷰 — 요일 × 교시(과목 교시표) + 다중 수업 ───────────────────
 
 function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
-  const periods = Array.from(new Set(slots.map((s) => periodKey(s.startTime)))).sort(
-    (a, b) => periodOrder(a) - periodOrder(b),
-  );
+  const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
+  const rowOf = (s: ScheduleSlotWithStudents) =>
+    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek);
+
+  const rowMap = new Map<string, PeriodRow>();
+  for (const s of slots) {
+    const r = rowOf(s);
+    if (!rowMap.has(r.key)) rowMap.set(r.key, r);
+  }
+  const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
 
   // (day, period) → slots
   const cell = new Map<string, ScheduleSlotWithStudents[]>();
   for (const s of slots) {
-    const k = `${s.dayOfWeek}::${periodKey(s.startTime)}`;
+    const k = `${s.dayOfWeek}::${rowOf(s).key}`;
     const list = cell.get(k) ?? [];
     list.push(s);
     cell.set(k, list);
@@ -286,23 +196,18 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
           </tr>
         </thead>
         <tbody>
-          {periods.map((p) => (
-            <tr key={p}>
+          {rows.map((row) => (
+            <tr key={row.key}>
               <td className="bg-bg-soft border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold whitespace-nowrap">
-                {p}
-                <div className="text-text-faint mt-1 font-mono text-[10px]">
-                  {periodTimeRange(p)}
-                </div>
+                {row.label}
+                <div className="text-text-faint mt-1 font-mono text-[10px]">{row.time}</div>
               </td>
               {DAYS.map((d) => {
-                const list = (cell.get(`${d.key}::${p}`) ?? []).sort((a, b) =>
-                  a.startTime.localeCompare(b.startTime),
-                );
+                const list = (cell.get(`${d.key}::${row.key}`) ?? [])
+                  .slice()
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime));
                 return (
-                  <td
-                    key={`${d.key}-${p}`}
-                    className="border-line border-b border-r p-2 align-top"
-                  >
+                  <td key={`${d.key}-${row.key}`} className="border-line border-b border-r p-2 align-top">
                     <IntegratedCell slots={list} />
                   </td>
                 );
@@ -331,28 +236,5 @@ function weekdayTint(dayKey: string): string {
       return "bg-amber-soft";
     default:
       return "bg-bg-soft";
-  }
-}
-
-function periodOrder(p: string): number {
-  if (p === "방과전") return 0;
-  const n = Number(p.replace(/[^0-9]/g, ""));
-  return Number.isFinite(n) ? n : 99;
-}
-
-function periodTimeRange(p: string): string {
-  switch (p) {
-    case "방과전":
-      return "~ 15:59";
-    case "1교시":
-      return "16:00 ~ 16:59";
-    case "2교시":
-      return "17:00 ~ 18:59";
-    case "3교시":
-      return "19:00 ~ 19:59";
-    case "4교시":
-      return "20:00 ~";
-    default:
-      return "";
   }
 }
