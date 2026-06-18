@@ -134,6 +134,7 @@ export const users = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     displayName: text("display_name").notNull(),
+    phone: text("phone"),
     systemRole: systemRoleEnum("system_role").notNull().default("viewer"),
     status: userStatusEnum("status").notNull().default("active"),
     hireDate: date("hire_date"),

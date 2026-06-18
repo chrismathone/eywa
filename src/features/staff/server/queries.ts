@@ -18,6 +18,7 @@ export type StaffRow = {
   id: string;
   displayName: string;
   email: string;
+  phone: string | null;
   systemRole: SystemRole;
   status: string;
   classesCount: number;
@@ -29,7 +30,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   const { data: users } = await supabase
     .from("users")
-    .select("id, display_name, email, system_role, status")
+    .select("id, display_name, email, phone, system_role, status")
     .neq("status", "inactive")
     .order("system_role", { ascending: true })
     .order("display_name", { ascending: true });
@@ -61,6 +62,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     id: u.id,
     displayName: u.display_name,
     email: u.email,
+    phone: u.phone ?? null,
     systemRole: u.system_role as SystemRole,
     status: u.status,
     classesCount: classCount.get(u.id) ?? 0,
@@ -72,6 +74,7 @@ export type StaffDetail = {
   id: string;
   displayName: string;
   email: string;
+  phone: string | null;
   systemRole: SystemRole;
   status: "active" | "inactive" | "pending";
   hireDate: string | null;
@@ -88,7 +91,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
   const { data } = await supabase
     .from("users")
     .select(
-      "id, display_name, email, system_role, status, hire_date, job_title, subjects, default_classroom, memo, hourly_rate, monthly_base",
+      "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, default_classroom, memo, hourly_rate, monthly_base",
     )
     .eq("id", id)
     .single();
@@ -99,6 +102,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     id: data.id,
     displayName: data.display_name,
     email: data.email,
+    phone: data.phone ?? null,
     systemRole: data.system_role as SystemRole,
     status: data.status as "active" | "inactive" | "pending",
     hireDate: data.hire_date,

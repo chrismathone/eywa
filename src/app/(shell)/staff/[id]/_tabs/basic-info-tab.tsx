@@ -40,6 +40,7 @@ export function BasicInfoTab({
       <div className="bg-card border-line shadow-card rounded-md border p-5">
         <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
           <Field label="이메일" value={<span className="num">{staff.email}</span>} />
+          <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
           <Field label="시스템 역할" value={ROLE_LABEL[staff.systemRole] ?? staff.systemRole} />
           <Field label="직책" value={staff.jobTitle} />
           <Field label="입사일" value={staff.hireDate ? <span className="num">{staff.hireDate}</span> : null} />
