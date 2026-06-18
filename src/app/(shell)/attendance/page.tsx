@@ -10,6 +10,7 @@ import {
   type AttendanceMatrix,
   type AttendanceStatus,
 } from "@/features/attendance/server/queries";
+import { AttendanceCell } from "./_components/attendance-cell";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -180,14 +181,6 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   makeup: "보",
 };
 
-const STATUS_CLASS: Record<AttendanceStatus, string> = {
-  present: "bg-primary-soft text-primary",
-  absent: "bg-danger-soft text-danger",
-  late: "bg-amber-soft text-amber",
-  excused: "bg-blue-soft text-blue",
-  makeup: "bg-purple-soft text-purple",
-};
-
 function MatrixTable({
   matrix,
   days,
@@ -264,24 +257,16 @@ function MatrixTable({
                   {s.school ?? "—"}
                 </td>
                 {days.map((d) => {
-                  const mark = studentMarks[d.date] as AttendanceStatus | undefined;
-                  const cls = mark ? STATUS_CLASS[mark] : "";
-                  const label = mark ? STATUS_LABEL[mark] : "·";
+                  const mark = (studentMarks[d.date] as AttendanceStatus | undefined) ?? null;
                   return (
-                    <td
-                      key={d.date}
-                      className={`border-line border-b border-r p-0 text-center ${
-                        d.isWeekend && !mark ? "bg-bg-soft/40" : ""
-                      }`}
-                    >
-                      <Link
-                        href={`/attendance/${d.date}/${selectedClassId}`}
-                        className={`block size-7 leading-7 font-mono text-[11px] font-bold ${cls} ${
-                          mark ? "" : "text-text-faint hover:bg-bg-soft"
-                        }`}
-                      >
-                        {label}
-                      </Link>
+                    <td key={d.date} className="border-line border-b border-r p-0 text-center">
+                      <AttendanceCell
+                        studentId={s.id}
+                        classId={selectedClassId}
+                        sessionDate={d.date}
+                        initialStatus={mark}
+                        isWeekend={d.isWeekend}
+                      />
                     </td>
                   );
                 })}
@@ -303,7 +288,7 @@ function MatrixTable({
             >
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 <span className="text-text-faint font-mono text-[11px]">
-                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 해당 날짜 입력 화면
+                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결 즉시 변경
                 </span>
                 <span className="micro ml-auto">범례</span>
                 {(["present", "absent", "late", "excused", "makeup"] as AttendanceStatus[]).map(
