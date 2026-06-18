@@ -22,6 +22,7 @@ export function DragScrollArea({
   className = "",
   fade = true,
   momentum = true,
+  barX = false,
 }: {
   children: ReactNode;
   className?: string;
@@ -29,6 +30,8 @@ export function DragScrollArea({
   fade?: boolean;
   /** 놓을 때 관성 글라이드(기본 true) */
   momentum?: boolean;
+  /** 가로 스크롤바를 항상·또렷하게 노출(overflow-x:scroll + 굵은 thumb). 항상 넓은 표(시간표)용. */
+  barX?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false, top: false, bottom: false });
@@ -186,9 +189,9 @@ export function DragScrollArea({
     <div className={`relative overflow-hidden ${className}`}>
       <div
         ref={ref}
-        className={`h-full w-full overflow-auto overscroll-contain rounded-[inherit] ${
-          grabbable ? "cursor-grab" : ""
-        }`}
+        className={`h-full w-full overscroll-contain rounded-[inherit] ${
+          barX ? "scroll-x-always overflow-y-auto" : "overflow-auto"
+        } ${grabbable ? "cursor-grab" : ""}`}
       >
         {children}
       </div>

@@ -437,3 +437,25 @@ body {
   scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
 }
 
+/* .scroll-x-always — 가로 스크롤바를 항상·또렷하게 노출(시간표 등 항상 넓은 표).
+   overflow-x:scroll로 트랙을 늘 예약하고, 전역(연한 0.18)보다 진한 thumb로 또렷이.
+   현대 Chrome은 scrollbar-width/color(표준)를 쓰면 ::-webkit-scrollbar를 무시하므로
+   color로 진하게 하고, webkit 규칙은 표준 미지원 브라우저용 폴백(굵게)로 둔다. */
+.scroll-x-always {
+  overflow-x: scroll;
+  scrollbar-color: rgba(13, 17, 16, 0.4) transparent;
+}
+.scroll-x-always::-webkit-scrollbar {
+  height: 12px;
+}
+.scroll-x-always::-webkit-scrollbar-thumb {
+  background: rgba(13, 17, 16, 0.34);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-x-always::-webkit-scrollbar-thumb:hover {
+  background: rgba(13, 17, 16, 0.5);
+  background-clip: padding-box;
+}
+

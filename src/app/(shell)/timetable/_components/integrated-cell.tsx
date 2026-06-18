@@ -12,7 +12,8 @@ const CELL_CAP = 5;
  */
 export function IntegratedCell({ slots }: { slots: ClassDetailQuick[] }) {
   const [showAll, setShowAll] = useState(false);
-  if (slots.length === 0) return <span className="text-text-faint text-[11px]">—</span>;
+  // 빈 셀은 td가 틴트로 표시(텍스트 없음) — 호출측에서 빈 list는 렌더 안 함. 안전 가드로 null.
+  if (slots.length === 0) return null;
   const visible = showAll ? slots : slots.slice(0, CELL_CAP);
   const rest = slots.length - visible.length;
 

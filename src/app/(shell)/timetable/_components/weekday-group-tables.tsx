@@ -227,11 +227,11 @@ function GroupTable({
                       key={`${g.title}-${t.name}-${d}-${row.key}`}
                       rowSpan={block.rowSpan}
                       colSpan={block.colSpan}
-                      className="border-line border-b border-r p-1.5 align-top"
+                      className={`border-line border-b border-r p-1.5 align-top ${
+                        merged.length === 0 ? "bg-bg-soft/60" : ""
+                      }`}
                     >
-                      {merged.length === 0 ? (
-                        <span className="text-text-faint text-[11px]">—</span>
-                      ) : (
+                      {merged.length === 0 ? null : (
                         // 고정높이 flex-col — 대기·퇴원 있는 셀(ClassCell이 flex-1)이 칸을 채워
                         // 그 그룹을 셀 하단에 정렬. 재원만 있는 셀은 content 높이로 상단 정렬(기존과 동일).
                         <div
@@ -268,7 +268,7 @@ export function WeekdayGroupTables({ slots }: { slots: ScheduleSlotWithStudents[
   const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP]);
 
   return (
-    <DragScrollArea className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
+    <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
       {/* ijw식 가로 배치 — 평일 그룹(월목/화금/수) 한 판 + 주말 한 판을 우측에 나란히
           (주말은 시작시각이 달라 자체 교시열). 세로 스택 대신 가로로 공간 효율. */}
       <div className="flex items-start gap-3">

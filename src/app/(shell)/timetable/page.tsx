@@ -205,7 +205,7 @@ function IntegratedView({
   }
 
   return (
-    <DragScrollArea className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border">
+    <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
@@ -234,8 +234,13 @@ function IntegratedView({
                   .slice()
                   .sort((a, b) => a.startTime.localeCompare(b.startTime));
                 return (
-                  <td key={`${d.key}-${row.key}`} className="border-line border-b border-r p-2 align-top">
-                    <IntegratedCell slots={list} />
+                  <td
+                    key={`${d.key}-${row.key}`}
+                    className={`border-line border-b border-r p-2 align-top ${
+                      list.length === 0 ? "bg-bg-soft/60" : ""
+                    }`}
+                  >
+                    {list.length === 0 ? null : <IntegratedCell slots={list} />}
                   </td>
                 );
               })}
