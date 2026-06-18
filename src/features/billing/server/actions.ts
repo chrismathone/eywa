@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/features/audit/server/log";
 
 type InvoiceStatus = "unpaid" | "partial" | "paid" | "refunded" | "void";
 
@@ -178,6 +179,12 @@ export async function createInvoice(
     return { error: error.message };
   }
 
+  await logAction({
+    action: "invoice_create",
+    targetType: "invoice",
+    targetLabel: `${period} · ${INVOICE_CATEGORIES[category]}`,
+    metadata: { studentId, amountTotal },
+  });
   revalidatePath("/billing");
   return { ok: true };
 }

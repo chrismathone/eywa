@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Copy, Database, FileSpreadsheet } from "lucide-react";
+import { Copy, Database, FileSpreadsheet, ScrollText } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
 
 export const metadata = { title: "관리자 도구 — eywa" };
@@ -22,6 +22,12 @@ const TOOLS = [
     icon: FileSpreadsheet,
     label: "Google Sheets 동기화",
     description: "시간표를 Google Sheets로 내보내기 (서비스 계정 연동).",
+  },
+  {
+    href: "/admin/audit",
+    icon: ScrollText,
+    label: "운영 감사로그",
+    description: "역할 변경·직원 삭제·청구서·시험·급여 등 주요 작업 이력을 추적합니다.",
   },
 ];
 

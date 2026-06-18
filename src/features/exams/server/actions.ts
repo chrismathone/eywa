@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevel } from "@/lib/permissions";
 import type { SystemRole } from "@/lib/permissions";
+import { logAction } from "@/features/audit/server/log";
 
 export type ExamActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -63,6 +64,12 @@ export async function createExam(_prev: ExamActionState, formData: FormData): Pr
   });
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "exam_create",
+    targetType: "exam",
+    targetLabel: f.name,
+    metadata: { subject: f.subject, examType: f.examType },
+  });
   revalidatePath("/exams");
   return { ok: true };
 }
@@ -109,6 +116,7 @@ export async function deleteExam(_prev: ExamActionState, formData: FormData): Pr
   const { error } = await supabase.from("exams").delete().eq("id", id);
   if (error) return { error: error.message };
 
+  await logAction({ action: "exam_delete", targetType: "exam", metadata: { examId: id } });
   revalidatePath("/exams");
   return { ok: true };
 }
@@ -191,6 +199,12 @@ export async function batchSaveScores(
     if (insErr) return { error: insErr.message };
   }
 
+  await logAction({
+    action: "exam_scores",
+    targetType: "exam",
+    targetLabel: exam.name,
+    metadata: { saved: rows.length, students: studentIds.length },
+  });
   revalidatePath("/exams");
   revalidatePath(`/exams/${examId}`);
   for (const id of studentIds) revalidatePath(`/students/${id}`);

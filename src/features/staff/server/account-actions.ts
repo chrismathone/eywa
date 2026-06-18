@@ -7,6 +7,7 @@ import { canManageStaff, canManageStaffMember } from "@/lib/auth/role-hierarchy"
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
+import { logAction } from "@/features/audit/server/log";
 
 export type AccountActionState =
   | { error?: string; ok?: boolean; tempPassword?: string }
@@ -191,6 +192,12 @@ export async function deleteStaff(
     return { error: dbErr.message };
   }
 
+  await logAction({
+    action: "staff_delete",
+    targetType: "staff",
+    targetLabel: target.email,
+    metadata: { role: target.role },
+  });
   revalidatePath("/staff");
   redirect("/staff");
 }

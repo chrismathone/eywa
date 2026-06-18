@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
@@ -178,7 +179,7 @@ export async function changeStaffRole(
   // 대상의 실제 tenant_id·system_role을 DB에서 읽는다(클라이언트가 보낸 currentRole 신뢰 금지, #S1).
   const { data: target, error: targetErr } = await admin
     .from("users")
-    .select("tenant_id, system_role")
+    .select("tenant_id, system_role, display_name")
     .eq("id", id)
     .single();
   if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
@@ -208,6 +209,12 @@ export async function changeStaffRole(
     return { error: `Auth metadata 동기화 실패: ${authErr.message}` };
   }
 
+  await logAction({
+    action: "staff_role_change",
+    targetType: "staff",
+    targetLabel: target.display_name ?? null,
+    metadata: { from: currentRole, to: newRole },
+  });
   revalidatePath("/staff");
   revalidatePath(`/staff/${id}`);
   return { ok: true };

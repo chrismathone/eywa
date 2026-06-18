@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/features/audit/server/log";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
   type WithdrawalConsultation,
@@ -75,6 +76,11 @@ export async function updateWithdrawalReason(
 
   if (error) return { error: error.message };
 
+  await logAction({
+    action: "withdrawal_update",
+    targetType: "student",
+    metadata: { studentId, reason: reasonStr },
+  });
   revalidatePath(`/withdrawals/${studentId}`);
   revalidatePath("/withdrawals");
   return undefined;

@@ -1017,6 +1017,30 @@ export const kakaoChannels = pgTable(
   (t) => [uniqueIndex("kakao_channels_tenant_idx").on(t.tenantId)],
 );
 
+// === audit_logs (운영 감사로그 — 테넌트 스코프) ===
+// super_admin_audit_logs의 academy 버전. 역할변경·삭제·청구·시험·급여 등 고가치 mutation 추적.
+// /admin/audit(master)에서 열람. RLS = 테넌트 격리.
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name"),
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetLabel: text("target_label"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("audit_logs_tenant_created_idx").on(t.tenantId, t.createdAt),
+    index("audit_logs_tenant_action_idx").on(t.tenantId, t.action),
+  ],
+);
+
 // === Type exports ===
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;

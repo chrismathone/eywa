@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll } from "./queries";
+import { logAction } from "@/features/audit/server/log";
 
 export type SavePayrollState = { error?: string; recordId?: string } | undefined;
 
@@ -51,6 +52,12 @@ export async function upsertPayroll(
 
   if (error || !data) return { error: error?.message ?? "저장 실패" };
 
+  await logAction({
+    action: "payroll_upsert",
+    targetType: "payroll",
+    targetLabel: period,
+    metadata: { userId, total },
+  });
   revalidatePath(`/staff/${userId}/payroll`);
   return { recordId: data.id };
 }
