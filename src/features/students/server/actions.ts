@@ -399,6 +399,58 @@ export async function deleteStudentMemo(
   return undefined;
 }
 
+export type UpdateMemoState = { error?: string; ok?: boolean } | undefined;
+
+export async function updateStudentMemo(
+  _prev: UpdateMemoState,
+  formData: FormData,
+): Promise<UpdateMemoState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim() || "general";
+  const content = String(formData.get("content") ?? "").trim();
+  if (!id) return { error: "메모 ID가 누락되었습니다" };
+  if (!content) return { error: "메모 내용을 입력해주세요" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("student_memos")
+    .update({ category, content, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return { ok: true };
+}
+
+export type ToggleMemoPinState = { error?: string } | undefined;
+
+export async function toggleStudentMemoPin(
+  _prev: ToggleMemoPinState,
+  formData: FormData,
+): Promise<ToggleMemoPinState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const pinned = String(formData.get("pinned") ?? "false") === "true";
+  if (!id) return { error: "메모 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("student_memos")
+    .update({ pinned, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return undefined;
+}
+
 export type CreateGradeState = { error?: string } | undefined;
 
 export async function createStudentGrade(

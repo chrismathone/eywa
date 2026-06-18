@@ -456,6 +456,7 @@ export type StudentMemoRow = {
   id: string;
   category: string;
   content: string;
+  pinned: boolean;
   createdAt: string;
   createdBy: string | null;
   createdByName: string | null;
@@ -466,10 +467,11 @@ export async function getStudentMemos(studentId: string): Promise<StudentMemoRow
   const { data } = await supabase
     .from("student_memos")
     .select(
-      `id, category, content, created_at, created_by,
+      `id, category, content, pinned, created_at, created_by,
        author:created_by ( display_name )`,
     )
     .eq("student_id", studentId)
+    .order("pinned", { ascending: false })
     .order("created_at", { ascending: false });
   if (!data) return [];
   return data.map((r) => {
@@ -480,6 +482,7 @@ export async function getStudentMemos(studentId: string): Promise<StudentMemoRow
       id: r.id,
       category: r.category,
       content: r.content,
+      pinned: r.pinned ?? false,
       createdAt: r.created_at,
       createdBy: r.created_by,
       createdByName: a?.display_name ?? null,

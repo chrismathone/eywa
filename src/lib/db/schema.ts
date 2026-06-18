@@ -697,8 +697,10 @@ export const studentMemos = pgTable(
       .references(() => students.id, { onDelete: "cascade" }),
     category: text("category").notNull().default("general"),
     content: text("content").notNull(),
+    pinned: boolean("pinned").notNull().default(false),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("memos_tenant_student_idx").on(t.tenantId, t.studentId)],
 );
