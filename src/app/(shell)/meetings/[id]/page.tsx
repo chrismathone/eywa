@@ -19,6 +19,7 @@ import {
   type MeetingProcessingStatus,
 } from "@/features/meetings/server/queries";
 import { RunMeetingAiButton } from "./run-ai-button";
+import { MeetingDeleteButton, MeetingRetryButton } from "./meeting-actions";
 import { MeetingStatusWatcher } from "./status-watcher";
 import { TranscriptSection } from "./transcript-section";
 import { MeetingReportAccordion } from "./ai-report";
@@ -132,6 +133,7 @@ export default async function MeetingDetailPage({
           {!hasAudio && meeting.content && !hasAiReport ? (
             <RunMeetingAiButton meetingId={meeting.id} hasExisting={false} />
           ) : null}
+          <MeetingDeleteButton meetingId={meeting.id} />
         </div>
       </header>
 
@@ -145,6 +147,7 @@ export default async function MeetingDetailPage({
           <p className="text-muted-foreground mt-2 text-sm">
             {meeting.processingError ?? "알 수 없는 오류"}
           </p>
+          {hasAudio ? <MeetingRetryButton meetingId={meeting.id} /> : null}
         </section>
       ) : null}
 
