@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccess } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
+import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
 import { assignAttendanceCode } from "../codes";
 import { KIOSK_COOKIE } from "../constants";
 import { parseForwardedFor } from "../device-info";
@@ -133,4 +134,67 @@ export async function assignAttendanceCodesAction(
 
   revalidatePath("/kiosk-settings");
   return { ok: `출석번호 ${assigned}명 발급${skipped ? `, ${skipped}명 스킵(전화번호 없음)` : ""}.` };
+}
+
+/** 카카오 알림톡 연동 정보(pfId·등하원 템플릿·SMS대체) 저장 — 테넌트당 1행 upsert. 비밀 아님(식별자). */
+export async function saveKakaoChannel(
+  _prev: KioskActionState,
+  formData: FormData,
+): Promise<KioskActionState> {
+  const user = await requireMaster();
+  const pfId = String(formData.get("pfId") ?? "").trim();
+  const checkinTemplateId = String(formData.get("checkinTemplateId") ?? "").trim();
+  const checkoutTemplateId = String(formData.get("checkoutTemplateId") ?? "").trim();
+  const smsFallback = formData.get("smsFallback") === "on";
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("kakao_channels").upsert(
+    {
+      tenant_id: user.tenantId,
+      pf_id: pfId || null,
+      checkin_template_id: checkinTemplateId || null,
+      checkout_template_id: checkoutTemplateId || null,
+      sms_fallback: smsFallback,
+    },
+    { onConflict: "tenant_id" },
+  );
+  if (error) return { error: error.message };
+
+  revalidatePath("/kiosk-settings");
+  return { ok: "카카오 알림톡 연동 정보를 저장했습니다." };
+}
+
+/** 연동 테스트 발송 — 원장 본인 번호로 등원 알림톡 1건. 라이선스 ON + 채널 설정이 모두 갖춰져야 함. */
+export async function sendTestAlimtalk(
+  _prev: KioskActionState,
+  formData: FormData,
+): Promise<KioskActionState> {
+  const user = await requireMaster();
+  const phone = String(formData.get("phone") ?? "").replace(/\D/g, "");
+  if (phone.length < 10) return { error: "받는 번호를 정확히 입력하세요." };
+
+  const channel = await resolveKakaoChannel(user.tenantId);
+  if (!channel) {
+    return {
+      error: "연동이 활성화되지 않았습니다. 라이선스(kakao_messaging)와 채널 정보(pfId·등하원 템플릿)를 확인하세요.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("name")
+    .eq("id", user.tenantId)
+    .maybeSingle();
+
+  const result = await sendAttendanceNotification({
+    channel,
+    recipientPhone: phone,
+    studentName: "홍길동",
+    time: "16:00",
+    academyName: tenant?.name ?? "학원",
+    kind: "checkin",
+  });
+  if (!result.ok) return { error: `발송 실패: ${result.error}` };
+  return { ok: "테스트 알림톡을 발송했습니다. 카카오톡(또는 SMS)을 확인하세요." };
 }

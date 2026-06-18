@@ -1,6 +1,8 @@
 import "server-only";
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
 import {
   classesInWindow,
   decideCheckinAction,
@@ -222,21 +224,69 @@ export async function processKioskCheckin(opts: {
     if (error) return { ok: false, reason: "error", detail: error.message };
   }
 
-  // 5. 발송 시뮬레이션 로그 (실제 전송 없음). 카카오 승인 후 provider 실발송으로 교체.
+  // 5. 발송 — 카카오 연동(라이선스 ON + pfId·템플릿 설정)이면 실발송, 아니면 현행 시뮬레이션 로그.
+  //    어느 쪽이든 체크인 응답을 블로킹하지 않는다(반응속도 1순위): 실발송은 행을 queued로 먼저
+  //    기록하고 응답을 즉시 반환한 뒤 after()로 발송→status 갱신(키오스크 UI는 낙관적 표시).
   const kind = action === "check_in" ? "checkin" : "checkout";
   const recipient = student.student_phone ?? student.parent_phone ?? null;
   const recipientMasked = maskPhone(recipient) || null;
   const message = buildAttendanceMessage({ studentName: student.name, kind, time, academyName });
-  await admin.from("attendance_notifications").insert({
-    tenant_id: opts.tenantId,
-    student_id: student.id,
-    checkin_id: checkinId,
-    kind,
-    recipient_masked: recipientMasked,
-    message,
-    channel: "simulated",
-    status: "simulated",
-  });
+
+  const channel = recipient ? await resolveKakaoChannel(opts.tenantId) : null;
+  if (!channel) {
+    // 미설정/OFF(기본) 또는 수신번호 없음 → 시뮬레이션(회귀 0).
+    await admin.from("attendance_notifications").insert({
+      tenant_id: opts.tenantId,
+      student_id: student.id,
+      checkin_id: checkinId,
+      kind,
+      recipient_masked: recipientMasked,
+      message,
+      channel: "simulated",
+      status: "simulated",
+    });
+  } else {
+    const { data: notif } = await admin
+      .from("attendance_notifications")
+      .insert({
+        tenant_id: opts.tenantId,
+        student_id: student.id,
+        checkin_id: checkinId,
+        kind,
+        recipient_masked: recipientMasked,
+        message,
+        channel: "kakao",
+        status: "queued",
+      })
+      .select("id")
+      .single();
+    const notifId = notif?.id as string | undefined;
+    if (notifId) {
+      const recipientPhone = recipient;
+      const studentName = student.name;
+      after(async () => {
+        const result = await sendAttendanceNotification({
+          channel,
+          recipientPhone,
+          studentName,
+          time,
+          academyName,
+          kind,
+        });
+        if (result.ok) {
+          await admin
+            .from("attendance_notifications")
+            .update({ status: "sent", provider_message_id: result.providerMessageId, sent_at: new Date().toISOString() })
+            .eq("id", notifId);
+        } else {
+          await admin
+            .from("attendance_notifications")
+            .update({ status: "failed", error: result.error })
+            .eq("id", notifId);
+        }
+      });
+    }
+  }
 
   return { ok: true, action, studentName: student.name, time, message, recipientMasked, reflectedClassName };
 }

@@ -1,29 +1,73 @@
 import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendAlimtalk } from "./solapi";
+import { buildAlimtalkVariables, pickTemplateId } from "./templates";
 
-// 등하원 알림 실발송 단일 진입점(향후). 현재는 미구현 스텁 — 데모는 attendance_notifications에
-// status="simulated" 로그만 남긴다(실제 전송 없음). AI generate.ts의 단일 진입점 패턴을 미러링.
-//
-// 실발송 활성화 시(카카오 비즈채널 인증·발신프로필·템플릿 심사 완료 후):
-//   1) tenant_licenses 'kakao_messaging' 토글 확인
-//   2) tenant별 sender_key/channel_id(암호화 저장)를 resolve
-//   3) Solapi 등 중계사 REST 호출(알림톡 → 실패 시 SMS 대체발송)
-//   4) 결과를 attendance_notifications.status = "sent" | "failed" 로 갱신
-//   5) 발송 결과 콜백은 /api/webhooks/kakao 에서 수신(assemblyai 웹훅의 secretMatches 패턴 재사용)
+// 등하원 알림 실발송 단일 진입점. 라이선스(kakao_messaging) ON + 학원 채널(pfId·템플릿) 설정이
+// 모두 갖춰졌을 때만 발송한다. 미설정/OFF면 resolveKakaoChannel이 null → 호출부(checkin.ts)는
+// 현행 시뮬레이션(status="simulated")을 유지한다(회귀 0). operator 키는 전역 env(solapi.ts).
+
+export type KakaoSendConfig = {
+  pfId: string;
+  checkinTemplateId: string;
+  checkoutTemplateId: string;
+  smsFallback: boolean;
+};
+
+/**
+ * 이 테넌트가 실발송 가능한 상태인지 resolve. service_role로 조회(키오스크 체크인은 비로그인 컨텍스트).
+ * 라이선스 비활성 / 채널 미설정(pfId·템플릿 누락) / 채널 비활성이면 null(=시뮬 유지).
+ */
+export async function resolveKakaoChannel(tenantId: string): Promise<KakaoSendConfig | null> {
+  const admin = createAdminClient();
+  const [lic, ch] = await Promise.all([
+    admin
+      .from("tenant_licenses")
+      .select("is_active")
+      .eq("tenant_id", tenantId)
+      .eq("feature", "kakao_messaging")
+      .maybeSingle(),
+    admin
+      .from("kakao_channels")
+      .select("pf_id, checkin_template_id, checkout_template_id, sms_fallback, is_active")
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+  ]);
+  if (!lic.data?.is_active) return null;
+  const c = ch.data;
+  if (!c || !c.is_active || !c.pf_id || !c.checkin_template_id || !c.checkout_template_id) return null;
+  return {
+    pfId: c.pf_id,
+    checkinTemplateId: c.checkin_template_id,
+    checkoutTemplateId: c.checkout_template_id,
+    smsFallback: c.sms_fallback ?? true,
+  };
+}
 
 export type AttendanceNotificationPayload = {
-  tenantId: string;
-  recipientPhone: string;
-  message: string;
+  channel: KakaoSendConfig;
+  recipientPhone: string; // unmasked
+  studentName: string;
+  time: string; // "HH:MM"
+  academyName: string;
   kind: "checkin" | "checkout";
 };
 
 export type SendResult = { ok: true; providerMessageId: string } | { ok: false; error: string };
 
-export function sendAttendanceNotification(
-  _payload: AttendanceNotificationPayload,
-): Promise<SendResult> {
-  return Promise.resolve({
-    ok: false,
-    error: "messaging provider not configured (demo: simulated only)",
+/** 등하원 알림톡 실발송 — 변수 빌드 + 템플릿 선택 후 solapi 위임. */
+export function sendAttendanceNotification(p: AttendanceNotificationPayload): Promise<SendResult> {
+  const templateId = pickTemplateId(p.kind, p.channel);
+  const variables = buildAlimtalkVariables({
+    studentName: p.studentName,
+    time: p.time,
+    academyName: p.academyName,
+  });
+  return sendAlimtalk({
+    pfId: p.channel.pfId,
+    templateId,
+    to: p.recipientPhone,
+    variables,
+    disableSms: !p.channel.smsFallback,
   });
 }

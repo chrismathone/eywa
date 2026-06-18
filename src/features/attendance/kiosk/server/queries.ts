@@ -93,6 +93,51 @@ export async function getRecentNotifications(limit = 20): Promise<NotificationRo
   }));
 }
 
+export type KakaoChannelStatus = {
+  configured: boolean; // pfId + 등하원 템플릿 모두 있음
+  isActive: boolean; // 채널 행 활성
+  licenseActive: boolean; // tenant_licenses 'kakao_messaging' ON
+  live: boolean; // 실제 실발송 조건 충족(=configured && isActive && licenseActive)
+  pfId: string | null;
+  checkinTemplateId: string | null;
+  checkoutTemplateId: string | null;
+  smsFallback: boolean;
+  lastError: string | null;
+};
+
+/** 카카오 연동 상태(설정 페이지 표시용). RLS로 이 테넌트 행만 보임. */
+export async function getKakaoChannelStatus(): Promise<KakaoChannelStatus> {
+  const supabase = await createClient();
+  const [{ data: ch }, { data: lic }] = await Promise.all([
+    supabase
+      .from("kakao_channels")
+      .select("pf_id, checkin_template_id, checkout_template_id, sms_fallback, is_active, last_error")
+      .maybeSingle(),
+    supabase
+      .from("tenant_licenses")
+      .select("is_active")
+      .eq("feature", "kakao_messaging")
+      .maybeSingle(),
+  ]);
+  const pfId = ch?.pf_id ?? null;
+  const checkinTemplateId = ch?.checkin_template_id ?? null;
+  const checkoutTemplateId = ch?.checkout_template_id ?? null;
+  const configured = Boolean(pfId && checkinTemplateId && checkoutTemplateId);
+  const isActive = ch?.is_active ?? false;
+  const licenseActive = lic?.is_active ?? false;
+  return {
+    configured,
+    isActive,
+    licenseActive,
+    live: configured && isActive && licenseActive,
+    pfId,
+    checkinTemplateId,
+    checkoutTemplateId,
+    smsFallback: ch?.sms_fallback ?? true,
+    lastError: ch?.last_error ?? null,
+  };
+}
+
 /** 출석번호 발급 현황(전체 기준 count — 페이지 rows 아님). */
 export async function getAttendanceCodeStats(): Promise<{ withCode: number; total: number }> {
   const supabase = await createClient();

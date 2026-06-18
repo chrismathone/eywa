@@ -957,11 +957,38 @@ export const attendanceNotifications = pgTable(
     kind: text("kind").notNull(), // "checkin" | "checkout"
     recipientMasked: text("recipient_masked"),
     message: text("message").notNull(),
-    channel: text("channel").notNull().default("simulated"),
-    status: text("status").notNull().default("simulated"),
+    channel: text("channel").notNull().default("simulated"), // simulated | kakao
+    status: text("status").notNull().default("simulated"), // simulated | queued | sent | failed
+    // 실발송 결과(카카오 연동 ON일 때만). 시뮬레이션 행은 모두 null.
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    retryCount: integer("retry_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("attendance_notifications_tenant_created_idx").on(t.tenantId, t.createdAt)],
+);
+
+// === kakao_channels (학원별 카카오 발신프로필 + 승인 템플릿 — 실발송 식별자) ===
+// operator(EYWA) 단일 계정의 전역 키(solapi.ts)로 발송하되, 학원 식별은 여기 저장한 pfId(발신프로필
+// 키)+승인 템플릿 ID로 한다. 이들은 비밀키가 아닌 식별자라 평문 저장(암호화 불필요). 테넌트당 1행.
+export const kakaoChannels = pgTable(
+  "kakao_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    pfId: text("pf_id"), // 발신프로필 키(채널 비즈인증 후 발급)
+    checkinTemplateId: text("checkin_template_id"),
+    checkoutTemplateId: text("checkout_template_id"),
+    smsFallback: boolean("sms_fallback").notNull().default(true), // 알림톡 실패 시 SMS 대체발송
+    isActive: boolean("is_active").notNull().default(true),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("kakao_channels_tenant_idx").on(t.tenantId)],
 );
 
 // === Type exports ===
@@ -1023,3 +1050,5 @@ export type KioskDevice = typeof kioskDevices.$inferSelect;
 export type NewKioskDevice = typeof kioskDevices.$inferInsert;
 export type AttendanceNotification = typeof attendanceNotifications.$inferSelect;
 export type NewAttendanceNotification = typeof attendanceNotifications.$inferInsert;
+export type KakaoChannel = typeof kakaoChannels.$inferSelect;
+export type NewKakaoChannel = typeof kakaoChannels.$inferInsert;
