@@ -88,7 +88,7 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
                 없음
               </div>
             ) : (
-              <ColumnCards cards={col.cards} color={col.color} />
+              <ColumnCards cards={col.cards} />
             )}
           </div>
         ))}

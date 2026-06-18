@@ -108,8 +108,22 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 
 **12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1
 + ijw 갭 P0·P1·P2 메우기 완성.**
-디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·시험관리 추가로
+디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
+
+### UX 정돈 — 이름앞 아바타 제거 · 성적관리 리네임 · 생성폼 창화 · 드롭다운 규약 (2026-06-19)
+세션 단위 UX 정돈 묶음.
+- **이름 앞 아바타(Initial) 전면 제거**: 12개 화면의 `<Initial>` 14곳 + `atoms/initial.tsx` 컴포넌트 삭제.
+  사람 표시는 **이름 텍스트만**(영구 규칙 — "디자인 시스템 › Atoms" + `design_handoff_eywa` 문서 갱신). 죽은
+  헬퍼(colorForGrade 등)·ROLE 맵 `init` 필드·빈 아바타 placeholder도 정리.
+- **메뉴 리네임 시험관리 → 성적관리**(`/exams` 라우트·테이블 유지, 라벨만): navigation·메타·권한 주석·docs 갱신.
+- **"새 X" 생성 폼 = 우측 Sheet 패널 → 플로팅 창**(반·직원·학생·등록상담·상담·회의록 6개). 기존 `/X/new` 라우트를
+  `useOpenFormWindow`로 창 오픈 + `WindowParams.autoClose` → 제출 성공(=/X/new 경로 이탈) 시 RouteWindow가
+  창 닫기+배경 새로고침(서버액션·폼 무수정). `ROUTE_WINDOW_SIZE`에 `X/new` 크기 등록. 자세히는 "디자인 시스템 ›
+  생성 폼은 우측 패널이 아니라 창으로" 참고.
+- **수업목록 강사 필터**: 과목 선택 시 해당 과목 담당(`users.subjects`) 강사만 노출 + 과목 전환 시 비해당 강사 초기화.
+- **드롭다운/셀렉트 규약 문서화**: `SearchableSelect` 단일 통일(native `<select>` 신규 금지) + 옛 Base UI `<Select>` 권고 정리.
+- 검증: typecheck 0 / lint 0. ⚠️ 브라우저 실검증은 auth-gate로 보류. student-quick-panel Sheet는 모바일 peek 폴백으로 잔존.
 
 ### 시간표 ijw 충실 이식 — 그룹밴드·평일/주말 분리·2D 병합·엑셀 격자 (2026-06-18)
 "기능 자체를 완전히 이식해 자연스러운 이전 느낌"이 목표(디자인 복제 아님). ijw 수학 시간표 코드(`TimetableGrid.tsx`)+
@@ -262,7 +276,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 ### 라우트 구조
 - `/` = **제품 중심 랜딩** (Hero 제품 쇼케이스 → 자동연동(0.4s) → 기능 목업 시간표/출석부/수납 → **워크스페이스 멀티윈도우** → AI → 데이터 → ROI → 12메뉴 점선목차 → 단일 인터뷰 → 베타 요금 → CTA). 구 8섹션(Flow/LogoWall/Manifesto 등) 폐기. 컴포넌트: `(marketing)/_sections/*` + `_ui/*`(BrowserFrame·product-showcase·mock-{timetable,attendance,billing,workspace}·feature-block·cta-button) + `_motion/*`(Reveal·CountUp·landing.css). 워크스페이스 목업 레일은 실제 `app-sidebar`와 동일한 Lucide 아이콘.
 - `/dashboard` = 대시보드 (예전 `/`에서 이동)
-- `/exams`, `/exams/[id]` = **시험관리** (신규 최상위 메뉴, 학생 그룹) — 일괄 성적입력
+- `/exams`, `/exams/[id]` = **성적관리** (신규 최상위 메뉴, 학생 그룹) — 일괄 성적입력
 - `/staff/payroll` = 급여 월별 전직원표 (master 전용, /staff 드릴인)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
 - `/admin/*` = academy master 전용 (duplicates/cleanup/integrations/sheets/**audit** 감사로그)
@@ -281,11 +295,11 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
 | 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
 | 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill (상세 성적탭에 **레벨테스트** 섹션) |
-| 시험관리 (`/exams`) | `exams` + `student_grades` | 시험 목록(응시/평균/최고/최저 통계) + 등록 + 상세 **반선택 → 일괄 점수 그리드** + 석차 |
+| 성적관리 (`/exams`) | `exams` + `student_grades` | 시험 목록(응시/평균/최고/최저 통계) + 등록 + 상세 **반선택 → 일괄 점수 그리드** + 석차 |
 | 등록상담 (`/enrollment`) | `enrollment_consultations` + AI | **AI 배너 (forest gradient + sparkle)** + 4열 칸반 + 월/상담사 chip + 대시보드 (recharts) |
 | 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
 | 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
-| 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + Initial 8px + **급여 월별표 진입(`/staff/payroll`)** |
+| 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + **급여 월별표 진입(`/staff/payroll`)** |
 | 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **세로 책갈피 5면**(수납/교재/지출/**계산기**(수강료 견적)/**단가표**(교재 카탈로그)) |
 | 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
 | 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
@@ -337,7 +351,10 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - 헬퍼 클래스: `.display-xl 96px / .display-md 56px / .h1-large 32px / .h2 24px / .h3 19px / .body / .body-sm / .caption / .micro (mono 11px 700 uppercase) / .tabular (숫자 강조)`
 
 ### Atoms (`src/components/atoms/`)
-- **`Initial`** — 8px radius 정사각 (color 10% tint + 이니셜). **동그란 프사 절대 금지**.
+- ~~**`Initial`** — 이니셜 사각 배지~~ → **제거됨 (2026-06-19, `initial.tsx` 삭제).** 이름 앞에 붙던
+  프로필사진/이니셜 배지는 전 화면에서 전부 떼어냈다. **이름 앞 아바타 금지 (⚠️ 영구 규칙)**: 사람
+  표시는 **이름 텍스트만** — 이니셜 사각 배지·동그란 프사·이미지 아바타 어느 것도 이름 앞/옆에 새로
+  붙이지 말 것 (앞으로도 불필요). 자리 채우기용 빈 아바타 placeholder(`size-N rounded` 회색 칸)도 금지.
 - **`Pill`** — mono 11px uppercase, soft/solid + color (primary/gold/blue/rose/amber/danger/purple/neutral)
 - **`SectionTitle`** — 14px 700 + action slot
 
@@ -372,10 +389,18 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 자동 적용** — 6px, line 컬러(`rgba(13,17,16,0.18)`, hover 0.32) thumb, 투명 track, 999px radius.
 - 새 스크롤 영역을 만들 때 **별도 클래스가 필요 없다** (이미 전역). `.scrollbar-thin`은 기존 사용처
   호환용 별칭으로만 남김.
-- ⚠️ **네이티브 `<select>`의 옵션 팝업 스크롤바는 OS가 그려 CSS가 닿지 않는다.** 스크롤되는
-  드롭다운은 반드시 **Base UI `<Select>`** (`@/components/ui/select` — styleable 팝업 `div`)를 써서
-  전역 스크롤바 규칙이 적용되게 할 것. (예: 강사 원스크린 진도 차시 드롭다운.)
+- ⚠️ **네이티브 `<select>`의 옵션 팝업 스크롤바는 OS가 그려 CSS가 닿지 않는다.** 그래서 드롭다운은
+  아래 "드롭다운/셀렉트 규약"대로 [`SearchableSelect`](src/components/ui/searchable-select.tsx)로 통일한다
+  (styleable 팝오버 `div` → 전역 스크롤바 자동 적용).
 - 회색 기본 스크롤바가 한 군데라도 보이면 위반. 새 화면 추가 시 점검.
+
+### 드롭다운/셀렉트 규약 (⚠️ 새 드롭다운 기본값)
+- 모든 드롭다운은 [`SearchableSelect`](src/components/ui/searchable-select.tsx)로 통일.
+  테두리·padding·ChevronDown·검색 팝오버 일관 + 전역 디자인 스크롤바 적용.
+- URL 필터는 [`FilterSelect`](src/components/filter-select.tsx)를 쓴다 — 내부에서 SearchableSelect 렌더
+  (`searchable`/`ariaLabel` prop은 호환용, 무시).
+- 폼 필드는 `SearchableSelect`에 `name`을 주면 hidden input으로 값 제출.
+- **native `<select>` 신규 금지** — OS 팝업은 디자인 스크롤바 미적용·스타일 불일치.
 
 ### 줄바꿈 / 워드브레이크 — 한글 어절 단위 (⚠️ 전역, 좁은 창에서 특히 중요)
 **텍스트가 "발표·세미 / 나" 식으로 단어 한가운데서 깨지지 않게 한다.** 플로팅 창은 폭이 좁아
@@ -432,6 +457,18 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   - ❌ **상세 본문+사이드 분할**(`lg:grid-cols-3`의 1.5+1 류)은 그냥 세로로 쌓이면 됨.
   - △ 약한 후보: `/retention`(이탈 방어) 2열 대시보드(`lg:grid-cols-[1.5fr_1fr]`) — 필요해지면 적용.
 - 2번째 칸반이 생기면 그때 제네릭 컴포넌트로 추출(지금은 단일 사용처라 등록상담에 인라인).
+
+### 생성 폼은 우측 패널이 아니라 창으로 — autoClose 창 (⚠️ "새 X" 진입점 기본값, 2026-06-19)
+"새 반/직원/학생/등록상담/상담/회의록" 같은 생성 폼은 우측 슬라이드 `<Sheet>`를 **쓰지 않는다**. 이미 있는
+`/X/new` 라우트를 **플로팅 창**으로 연다(윈도우 패러다임 일관). 트리거는 기존 버튼 마크업을 그대로 두고
+[`useOpenFormWindow()`](src/components/workspace/open-window-button.tsx)로 `openFormWindow("/X/new", "제목", e)`만
+호출(데스크톱=창, 모바일=풀페이지 네비). 창은 `WindowParams.autoClose`로 열려, iframe이 `/X/new` 경로를
+**벗어나면**(=제출 성공 후 서버 `redirect` 또는 `router.push`) RouteWindow가 **창을 닫고 배경을 새로고침**한다
+(옛 패널의 "닫고 목록 갱신"과 동일 — 서버액션·폼 로직 수정 0). `ROUTE_WINDOW_SIZE`에 `"X/new"` 폭 등록(옛 패널 폭 계승).
+- ⚠️ 콘텐츠용 우측 슬라이드 `<Sheet side="right">`는 **신규 추가 금지** — 창으로 연다. (`Sheet`는 모바일 내비
+  드로어 등에 한정. `students/_components/student-quick-panel`의 Sheet는 모바일 peek 폴백으로만 잔존.)
+- 한계: 배경(메인 프레임) 목록은 `router.refresh()`로 갱신되지만, 목록이 **별도 창**이면 그 창은 즉시
+  갱신되지 않음(창 X 버튼 `closeAndRefresh`와 동일한 앱 전반 한계).
 
 ### 목록 페이지네이션 표준 — 큰 목록은 전부 이 패턴으로 통일 (⚠️ 새 목록 기본값)
 실데이터 이전 후 목록이 수백~천 행이 되며 페이지가 22s까지 느려졌다(전 행 fetch + 전 행 렌더).
@@ -636,7 +673,7 @@ table.tsx / billing / attendance / kanban-filters / 학생 상세 탭 nav에 일
 
 **진화(이후)**: 사용자 지시로 **전역 하네스화** — `.scrollbar-thin` 옵트인을 `globals.css`의 `*` 전역
 규칙으로 승격해 **앱 전체 스크롤바 무조건 통일**. 자세한 규칙은 위 "디자인 시스템 › 스크롤바 — 전역
-하네스" 참고. 네이티브 `<select>` 팝업은 CSS가 안 닿으니 스크롤 드롭다운은 Base UI `<Select>` 사용.
+하네스" 참고. 네이티브 `<select>` 팝업은 CSS가 안 닿으니 드롭다운은 `SearchableSelect`로 통일(드롭다운/셀렉트 규약).
 
 ### 27. super_admin layer를 만들 때 깨질 가정 4가지
 `users` 테이블은 강력하게 1:1 tenant 매핑 (NOT NULL, RLS도 `auth_tenant_id()`로 강제). SaaS owner 같은 multi-tenant viewer를 같은 테이블에 끼우면 schema가 무너짐.

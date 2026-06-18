@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Initial } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -17,11 +16,9 @@ import {
   followUpUrgency,
   getStudentConsultationCounts,
   getStudentConsultationsPage,
-  getStudentOptionsForConsultation,
   type FollowUpUrgency,
   type StudentConsultationCategory,
 } from "@/features/consultations/server/queries";
-import { getTeacherOptions } from "@/features/students/server/queries";
 import { Pagination } from "@/components/pagination";
 import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
 import { ConsultationDeleteButton } from "./_components/consultation-delete-button";
@@ -114,11 +111,9 @@ export default async function ConsultationsPage({
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows: items, total }, counts, students, counselors] = await Promise.all([
+  const [{ rows: items, total }, counts] = await Promise.all([
     getStudentConsultationsPage({ q, range, cat, urg }, page, PAGE_SIZE),
     getStudentConsultationCounts(),
-    getStudentOptionsForConsultation(),
-    getTeacherOptions(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const { total: totalAll, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
@@ -240,7 +235,7 @@ export default async function ConsultationsPage({
             <MessagesSquare size={13} strokeWidth={2} />
             통계 보기
           </WindowLink>
-          <NewConsultationTrigger students={students} counselors={counselors} />
+          <NewConsultationTrigger />
         </div>
       </div>
 
@@ -273,11 +268,6 @@ export default async function ConsultationsPage({
                 />
                 <header className="relative flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <Initial
-                      name={c.studentName}
-                      color={isUrgent ? "danger" : "primary"}
-                      size="md"
-                    />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <WindowLink

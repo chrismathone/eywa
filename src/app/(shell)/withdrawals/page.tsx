@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Initial } from "@/components/atoms/initial";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -337,7 +336,6 @@ export default async function WithdrawalsPage({
                 return (
                   <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
                     <WindowLink href={`/withdrawals/${r.id}`} title={r.name} className="flex items-center gap-3">
-                      <Initial name={r.name} color="rose" size="md" />
                       <div className="min-w-0 flex-1">
                         <p className="text-foreground text-[13px] font-bold hover:underline">
                           {r.name}{" "}
@@ -448,7 +446,6 @@ function SubjectEndedView({ rows }: { rows: SubjectEndedRow[] }) {
         {rows.map((r) => (
           <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
             <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-start gap-3">
-              <Initial name={r.name} color="amber" size="md" />
               <div className="min-w-0 flex-1">
                 <p className="text-foreground text-[13px] font-bold hover:underline">
                   {r.name}{" "}

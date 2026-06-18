@@ -90,7 +90,7 @@
    - 좌측 leaf 아이콘 박스 (primarySoft) + 우측 LIVE pill
 
 3. **윤소율 학부모 상담 완료**:
-   - Initial 32 (rose) + 본문 + `방금` (primary 11 600)
+   - 본문 + `방금` (primary 11 600)
 
 ---
 
@@ -290,7 +290,7 @@ const items = [
 - 푸터 (border-top 1px line padding-top 24):
   - 좌: 이름 `김수진 원장` 15 700 + 학원/지역 `새봄가우스 수학학원 · 경기 남양주`
   - 우: ★★★★★ (gold)
-  - **Initial 아이콘은 사용하지 않음** — 텍스트만 (사용자 요청)
+  - **아바타/아이콘 사용하지 않음** — 텍스트만 (사용자 요청)
 
 우측 메트릭 패널:
 - bgSoft bg, line 보더, radius 16, padding 28
@@ -320,7 +320,7 @@ const others = [
 - surface bg, line 보더, radius 16, padding `28px 28px 24px`
 - 상단: ★★★★★ (gold)
 - 본문 14.5 weight 500, text-wrap pretty
-- 푸터 (border-top line padding-top 16): 이름 13 700 + 학원/지역 12 textDim (Initial 없음)
+- 푸터 (border-top line padding-top 16): 이름 13 700 + 학원/지역 12 textDim (아바타 없음)
 
 ---
 

@@ -3,7 +3,6 @@ import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "lucide-rea
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
-import { Initial } from "@/components/atoms/initial";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -13,7 +12,6 @@ import {
   type ClassListRow,
   type ClassDaySlot,
 } from "@/features/classes/server/queries";
-import { getClassroomOptions } from "@/features/enrollments/server/queries";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { NewClassTrigger } from "./_components/new-class-trigger";
@@ -111,17 +109,29 @@ export default async function ClassesPage({
   const view: ViewMode = sp.view === "cards" ? "cards" : "table";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows: classes, total }, teachers, stats, classrooms] = await Promise.all([
+  const [{ rows: classes, total }, teachers, stats] = await Promise.all([
     getClassesPage({ subject, teacherId, day, q }, page, PAGE_SIZE),
     getClassTeacherOptions(),
     getClassesStats(),
-    getClassroomOptions(),
   ]);
 
   const totalSeats = stats.totalSeats;
   const active = stats.active;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = { subject, teacher: teacherId, day, q, view };
+
+  // 과목이 선택되면 해당 과목 담당 강사만 드롭다운에 노출.
+  const teacherFilterOptions =
+    subject === "all" ? teachers : teachers.filter((t) => t.subjects.includes(subject));
+  // 선택된 강사가 새 과목을 담당하지 않으면 과목 전환 시 강사 필터를 초기화한다.
+  const selectedTeacher = teacherId === "all" ? null : teachers.find((t) => t.id === teacherId);
+  const subjectHref = (key: string) =>
+    buildHref(current, {
+      subject: key,
+      ...(key !== "all" && selectedTeacher && !selectedTeacher.subjects.includes(key)
+        ? { teacher: "all" }
+        : {}),
+    });
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
     if (subject !== "all") params.set("subject", subject);
@@ -159,7 +169,7 @@ export default async function ClassesPage({
             {SUBJECT_FILTERS.map((f) => (
               <Link
                 key={f.key}
-                href={buildHref(current, { subject: f.key })}
+                href={subjectHref(f.key)}
                 className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
                   subject === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
@@ -199,7 +209,7 @@ export default async function ClassesPage({
             <FilterSelect
               paramName="teacher"
               value={teacherId === "all" ? null : teacherId}
-              options={teachers.map((t) => ({ value: t.id, label: t.name }))}
+              options={teacherFilterOptions.map((t) => ({ value: t.id, label: t.name }))}
               ariaLabel="강사 필터"
             />
           </div>
@@ -255,7 +265,7 @@ export default async function ClassesPage({
             </span>
           ) : null}
         </p>
-        <NewClassTrigger teacherOptions={teachers} classroomOptions={classrooms} />
+        <NewClassTrigger />
       </div>
 
       {total === 0 ? (
@@ -340,10 +350,7 @@ function TableView({ classes }: { classes: ClassListRow[] }) {
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     {c.teacherName ? (
-                      <>
-                        <Initial name={c.teacherName} color="gold" size="sm" />
-                        <span className="text-text-dim text-[12px]">{c.teacherName}</span>
-                      </>
+                      <span className="text-text-dim text-[12px]">{c.teacherName}</span>
                     ) : (
                       <span className="text-text-faint text-xs">미정</span>
                     )}
@@ -414,11 +421,6 @@ function CardsView({ classes }: { classes: ClassListRow[] }) {
             </h3>
             <div className="text-[12px]">
               <div className="flex items-center gap-2">
-                {c.teacherName ? (
-                  <Initial name={c.teacherName} color="gold" size="sm" />
-                ) : (
-                  <span className="bg-bg-soft size-6 rounded-sm" />
-                )}
                 <span className="text-text-dim flex-1 truncate">
                   {c.teacherName ?? "담임 미정"} 강사
                 </span>

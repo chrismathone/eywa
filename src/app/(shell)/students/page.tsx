@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { UserCheck, UserMinus, UserPlus, Users, type LucideIcon } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getStudentsPage, getStudentStatusCounts, getTeacherOptions } from "@/features/students/server/queries";
+import { getStudentsPage, getStudentStatusCounts } from "@/features/students/server/queries";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentQuickPanel } from "./_components/student-quick-panel";
 
@@ -53,17 +52,6 @@ const SUBJECT_FILTERS: { key: string; label: string }[] = [
   { key: "arts", label: "예술" },
 ];
 
-function colorForGrade(grade: string | null | undefined): InitialColor {
-  if (!grade) return "neutral";
-  if (grade.startsWith("중1")) return "blue";
-  if (grade.startsWith("중2")) return "primary";
-  if (grade.startsWith("중3")) return "gold";
-  if (grade.startsWith("고1")) return "purple";
-  if (grade.startsWith("고2")) return "rose";
-  if (grade.startsWith("고3")) return "amber";
-  return "neutral";
-}
-
 function buildHref(
   current: { status?: string; subject?: string; q?: string },
   patch: Partial<{ status: string; subject: string; q: string }>,
@@ -92,9 +80,8 @@ export default async function StudentsPage({
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, teachers, counts] = await Promise.all([
+  const [{ rows, total }, counts] = await Promise.all([
     getStudentsPage({ status, subject, q }, page, PAGE_SIZE),
-    getTeacherOptions(),
     getStudentStatusCounts(),
   ]);
   const { all, enrolled, prospect, withdrawn } = counts;
@@ -204,7 +191,7 @@ export default async function StudentsPage({
             <EyIcon name="arrowDown" size={13} />
             엑셀 내보내기
           </a>
-          <NewStudentTrigger teachers={teachers} />
+          <NewStudentTrigger />
         </div>
       </div>
 
@@ -248,7 +235,6 @@ export default async function StudentsPage({
                           enrolledAt: s.enrolledAt,
                         }}
                       >
-                        <Initial name={s.name} color={colorForGrade(s.grade)} size="md" />
                         <span className="text-foreground text-[13px] font-bold hover:underline">
                           {s.name}
                         </span>

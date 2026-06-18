@@ -283,15 +283,21 @@ export async function getClassesPage(
   return { rows, total: count ?? rows.length };
 }
 
-export async function getClassTeacherOptions(): Promise<{ id: string; name: string }[]> {
+export async function getClassTeacherOptions(): Promise<
+  { id: string; name: string; subjects: string[] }[]
+> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("users")
-    .select("id, display_name, system_role")
+    .select("id, display_name, system_role, subjects")
     .in("system_role", ["teacher", "manager", "master"])
     .eq("status", "active")
     .order("display_name");
-  return (data ?? []).map((u) => ({ id: u.id, name: u.display_name }));
+  return (data ?? []).map((u) => ({
+    id: u.id,
+    name: u.display_name,
+    subjects: u.subjects ?? [],
+  }));
 }
 
 export async function getClassDetail(id: string): Promise<ClassDetail | null> {

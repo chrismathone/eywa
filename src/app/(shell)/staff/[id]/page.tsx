@@ -2,7 +2,6 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { CalendarDays, Pencil, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
@@ -21,15 +20,15 @@ import { ClassesTab } from "./_tabs/classes-tab";
 
 export const metadata = { title: "직원 상세 — eywa" };
 
-const ROLE_COLOR: Record<string, { pill: PillColor; init: InitialColor }> = {
-  master: { pill: "danger", init: "danger" },
-  admin: { pill: "blue", init: "blue" },
-  manager: { pill: "blue", init: "blue" },
-  teacher: { pill: "primary", init: "primary" },
-  counselor: { pill: "rose", init: "rose" },
-  accountant: { pill: "purple", init: "purple" },
-  viewer: { pill: "neutral", init: "neutral" },
-  student: { pill: "neutral", init: "neutral" },
+const ROLE_COLOR: Record<string, { pill: PillColor }> = {
+  master: { pill: "danger" },
+  admin: { pill: "blue" },
+  manager: { pill: "blue" },
+  teacher: { pill: "primary" },
+  counselor: { pill: "rose" },
+  accountant: { pill: "purple" },
+  viewer: { pill: "neutral" },
+  student: { pill: "neutral" },
 };
 
 const STATUS_META: Record<string, { label: string; color: PillColor }> = {
@@ -69,7 +68,6 @@ export default async function StaffDetailPage({
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-3">
-          <Initial name={staff.displayName} color={role.init} size="lg" />
           <div className="space-y-1">
             <p className="eyebrow">직원</p>
             <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>

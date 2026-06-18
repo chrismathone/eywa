@@ -179,7 +179,7 @@
   - 우: Pill `● ${status}` (진행중 primary / 모집중 amber)
   - 큰 제목 17px 800 (반 이름)
 - 중단 (12px textDim):
-  - 강사 라인: Initial(22px, gold) + 강사명 + 우측 `room` (11px mono)
+  - 강사 라인: 강사명 + 우측 `room` (11px mono)
   - 시간 라인: `${days} · ${time}` (11px mono)
 - 정원 진행바:
   - 라벨: `정원 현황` + `12 / 14명` (700 mono)
@@ -219,9 +219,8 @@
 - 활성: `border-bottom: 2px solid primary`, color primary, weight 700
 
 ### 3) 학생 테이블 (`Card padding={0}`)
-- 헤더 grid: `32px [학생 1.5fr] [학년 80px] [반 1.3fr] [등록 100px] [학부모 연락처 1.8fr] [수납 100px] [AI 케어 100px] [60px]`
+- 헤더 grid: `[학생 1.5fr] [학년 80px] [반 1.3fr] [등록 100px] [학부모 연락처 1.8fr] [수납 100px] [AI 케어 100px] [60px]`
 - 각 행:
-  - Initial (26px, 학생별 색)
   - 학생명: 13px 600
   - 학년: 12px textDim
   - 반: 12px
@@ -263,14 +262,14 @@
 #### 세션 리스트 카드
 - 헤더: 제목 `최근 상담 세션` + 우측 `이번 주 7건`
 - 4개 세션 행 (시드: `screens-b.jsx`)
-- 각 행: Initial 32 + 학부모명 + grade Pill + 추천 텍스트 + 메타(날짜·시간·상담자) + 상태 Pill + `보기 →`
+- 각 행: 학부모명 + grade Pill + 추천 텍스트 + 메타(날짜·시간·상담자) + 상태 Pill + `보기 →`
 - 상태 종류:
   - `ai-done` (primary · AI 분석 완료)
   - `ai-pending` (amber · AI 분석 대기)
   - `enrolled` (gold · 등록 완료)
 
 #### AI 분석 패널
-- 상단: Initial 36 + 윤소율 학부모 + grade 메타 + 우측 "AI 완료" pill
+- 상단: 윤소율 학부모 + grade 메타 + 우측 "AI 완료" pill
 - 메타 박스 (bgSoft, mono 11px):
   ```
   // powered by Claude · 2026.05.27 14:55
@@ -314,7 +313,7 @@
   - padding 12, radius 10, background bgSoft
   - 긴급(`urgent`)이면 dangerSoft 배경 + 1px danger40 보더 + 우측 상단 "긴급" 솔리드 pill
   - `hot` (AI 분석)이면 우측 상단 "AI" primary pill
-  - 상단: Initial 24 + 학생명 13px 700
+  - 상단: 학생명 13px 700
   - 본문: 12px textDim
   - 푸터: 10px mono textFaint (`when`)
 
@@ -339,7 +338,7 @@
 ### 2) 최근 퇴원 리스트 (1.4fr)
 - 헤더: 제목 `최근 퇴원 (4건)` + 부제 `회복 가능 학생은 자동으로 리텐션 후보에 추가됩니다.`
 - 행 grid: `1.6fr [학년 70px] 1.6fr [날짜 100px] [기간 90px] [회복 60px]`
-- 각 행: Initial 28 + 이름 + 학년 + 사유 + 날짜 + 기간 + 회복 pill (또는 `—`)
+- 각 행: 이름 + 학년 + 사유 + 날짜 + 기간 + 회복 pill (또는 `—`)
 
 ### 3) 사유 분석 (1fr)
 - 카드 padding 20
@@ -375,7 +374,7 @@
 ### 2) 직원 카드 그리드 (3컬럼)
 - 시드 6명: 박지훈(부원장)·이연우·최보라·김상담·박지원(신입)·정유진(행정·휴가중)
 - 각 카드:
-  - 상단: Initial 44 (직원별 색) + 이름 15px 800 + 상태 pill (근무 중 primary · 휴가 amber) + 역할 12px textDim + 재직 11px mono textFaint
+  - 상단: 이름 15px 800 + 상태 pill (근무 중 primary · 휴가 amber) + 역할 12px textDim + 재직 11px mono textFaint
   - 강사이면 (classes > 0): 3컬럼 미니 그리드 (담당 반 · 학생 · 이번달 급여)
     - 각 컬럼: 라벨(10px mono uppercase) + 큰 숫자(18px 800 mono tabular)
     - 배경: bgSoft, padding 12, radius 10
@@ -414,9 +413,8 @@
 - 탭 4개: 전체 248 · **미납 9 (활성)** · 완납 216 · 대기 23
   - 활성: dangerSoft 배경, danger 색, 700
 - 우측: `2026.06 기준` (11px mono textFaint)
-- 헤더 grid: `40px [학생 1.3fr] [반 1.4fr] [기간 90px] [금액 110px] [납기 110px] [상태 110px] [액션 80px]`
+- 헤더 grid: `[학생 1.3fr] [반 1.4fr] [기간 90px] [금액 110px] [납기 110px] [상태 110px] [액션 80px]`
 - 각 행:
-  - Initial 26 (상태별 색)
   - 학생 13 600
   - 반 12 textDim
   - 기간 (2026.06) 11px mono textDim
@@ -460,7 +458,7 @@
   - 고1 영어 정규 B반 → C반 분반 검토
   - 신입 강사 박지원 → 중1 수학 보조 배정
 - 액션 아이템 4건 (gold 키커):
-  - 각 행: 16×16 체크박스 + Initial 20 + 담당자 11 600 + 작업 12 + 마감 (10 mono `~5/30`)
+  - 각 행: 16×16 체크박스 + 담당자 11 600 + 작업 12 + 마감 (10 mono `~5/30`)
   - 완료된 항목은 line-through + opacity 0.6
 
 ---

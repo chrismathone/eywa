@@ -1,5 +1,4 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { Initial } from "@/components/atoms/initial";
 import { Pill } from "@/components/atoms/pill";
 import { DEMO_STUDENT } from "@/features/my-learning/data";
 import { subjectTone } from "@/features/onescreen/data";
@@ -31,7 +30,6 @@ export default async function MyLearningPage() {
           <Pill color={attColor}>{att}</Pill>
         </div>
         <div className="mt-2.5 flex items-center gap-3">
-          <Initial name={student.name} size="lg" color="primary" />
           <div>
             <h1 className="text-foreground text-[22px] leading-tight font-extrabold">
               {student.name} 님, 환영해요

@@ -125,7 +125,7 @@ export function FloatingWindow({
         }}
         className={`bg-card relative flex h-full w-full flex-col overflow-hidden rounded-xl border ${
           animOff ? "" : `duration-150 ${exiting ? "animate-out fade-out-0 zoom-out-95" : "animate-in fade-in-0 zoom-in-95"}`
-        } ${focused ? "border-primary/30 shadow-modal ring-primary/15 ring-2" : "border-line shadow-card"}`}
+        } ${focused ? "border-primary/45 shadow-modal ring-primary/20 ring-2" : "border-line-strong shadow-card-hover"}`}
       >
         {/* 타이틀바 (드래그 핸들 — 스포트라이트 상단 창은 드래그/더블클릭 잠금) */}
         <div

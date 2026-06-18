@@ -101,7 +101,6 @@
 - 패딩: `14px 16px`
 - 상단 보더: `1px solid line`
 - 배경: `bgSoft`
-- 좌측: 32×32 Initial (`border-radius: 10px`, background primary, white text)
 - 이름: 13px / weight 700
 - 역할: 11px / textDim
 
@@ -206,21 +205,9 @@ CTA 버전 (랜딩):
 | shadow | `0 1px 3px rgba(13,17,16,0.02)` |
 | padding | prop (기본 20px) |
 
-### 4.5 `<Initial>` (프사 대체)
-```tsx
-<Initial name="김수진" color={S.primary} size={28} />
-```
+### 4.5 ~~`<Initial>`~~ (제거됨)
 
-**중요**: 동그란 원 절대 사용 금지. 무조건 8px radius의 정사각형.
-
-| 속성 | 값 |
-|---|---|
-| 크기 | `size` (기본 28px) |
-| border-radius | 8px |
-| 배경 | `${color}1a` (10% tint) |
-| 글자색 | color |
-| 폰트 | size ≤28 → 12px / size >28 → 14px / weight 700 / `letter-spacing: -0.3px` |
-| 내용 | `name.slice(0, 1)` (이름의 첫 글자) |
+이니셜 사각 배지 — **제거됨 (2026-06-19).** 사람 표시는 이름 텍스트만, 이름 앞 아바타 금지.
 
 ### 4.6 `<SectionTitle>`
 ```tsx
@@ -426,9 +413,6 @@ AI가 등장하는 곳 (등록상담 · 학생상담 · 회의록):
 
 ## 14. 동그란 프로필 사진 금지 ❗
 
-피드백: **"'김' 같은 동그란 프로필사진 필요없음"**
+피드백: **"'김' 같은 동그란 프로필사진 필요없음"** → 이후 이니셜 배지(`Initial`)도 제거(2026-06-19).
 
-대안:
-- `<Initial>` 컴포넌트 사용 (8px radius 정사각형)
-- 색깔로 사람/역할 구분 (primary/blue/gold/purple/rose)
-- 큰 사진이 필요한 경우에도 `border-radius: 12-14px` 정사각형 사용
+**규칙**: 사람 표시는 **이름 텍스트만**. 이니셜 사각 배지·동그란 프사·이미지 아바타 모두 금지(이름 앞/옆에 새로 붙이지 말 것). 색 구분이 필요하면 텍스트 색/Pill로.

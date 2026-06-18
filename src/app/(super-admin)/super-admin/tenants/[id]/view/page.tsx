@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
-import { Initial } from "@/components/atoms/initial";
 import { getTenantSnapshot } from "@/features/super-admin/server/queries";
 import { logImpersonateView } from "@/features/super-admin/server/actions";
 
@@ -71,7 +70,6 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
                   const meta = STATUS_META[s.status] ?? { label: s.status, color: "neutral" as PillColor };
                   return (
                     <li key={s.id} className="flex items-center gap-3 px-5 py-2.5">
-                      <Initial name={s.name} size="sm" />
                       <span className="text-foreground text-[13px] font-medium">{s.name}</span>
                       <span className="text-text-dim text-[12px]">{s.grade ?? "—"}</span>
                       <span className="ml-auto">

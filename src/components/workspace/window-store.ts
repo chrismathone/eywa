@@ -20,7 +20,15 @@ import {
 } from "./window-geometry";
 
 export type WindowKind = "student" | "route"; // student=요약 peek, route=메뉴 풀화면(iframe)
-export type WindowParams = { id: string; title: string; subtitle?: string; href?: string };
+export type WindowParams = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  href?: string;
+  /** /X/new 같은 "생성 폼" 창 — iframe이 초기 href 경로를 벗어나면(=제출 성공 후 redirect/push)
+   *  RouteWindow가 창을 자동으로 닫고 배경을 새로고침한다(우측 패널 닫기+목록 갱신 대체). */
+  autoClose?: boolean;
+};
 /** 절반 스냅 직후 반대편 half를 채울 창을 고르게 하는 Snap Assist 상태(런타임). */
 export type SnapAssist = { half: "left" | "right"; originId: string };
 export type Win = {

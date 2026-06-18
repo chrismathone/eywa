@@ -2,13 +2,12 @@ import Link from "next/link";
 import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
-import { assignableRoles, canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
 import { Pagination } from "@/components/pagination";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
@@ -17,14 +16,14 @@ export const metadata = { title: "직원관리 — eywa" };
 
 const PAGE_SIZE = 50;
 
-const ROLE_META: Record<string, { label: string; color: PillColor; init: InitialColor }> = {
-  master: { label: "원장", color: "danger", init: "danger" },
-  admin: { label: "관리자", color: "blue", init: "blue" },
-  manager: { label: "매니저", color: "blue", init: "blue" },
-  teacher: { label: "강사", color: "primary", init: "primary" },
-  counselor: { label: "상담", color: "rose", init: "rose" },
-  accountant: { label: "회계", color: "purple", init: "purple" },
-  viewer: { label: "참관", color: "neutral", init: "neutral" },
+const ROLE_META: Record<string, { label: string; color: PillColor }> = {
+  master: { label: "원장", color: "danger" },
+  admin: { label: "관리자", color: "blue" },
+  manager: { label: "매니저", color: "blue" },
+  teacher: { label: "강사", color: "primary" },
+  counselor: { label: "상담", color: "rose" },
+  accountant: { label: "회계", color: "purple" },
+  viewer: { label: "참관", color: "neutral" },
 };
 
 const STATUS_META: Record<string, { label: string; color: PillColor }> = {
@@ -209,7 +208,7 @@ export default async function StaffPage({
             </WindowLink>
           ) : null}
           {canManage && user ? (
-            <NewStaffTrigger assignableRoleOptions={assignableRoles(user.systemRole)} />
+            <NewStaffTrigger />
           ) : null}
         </div>
       </div>
@@ -235,7 +234,6 @@ export default async function StaffPage({
               <>
                 <header className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <Initial name={s.displayName} color={role.init} size="lg" />
                     <div className="min-w-0">
                       <p className="text-foreground text-[15px] font-bold">{s.displayName}</p>
                       <p className="text-text-dim num mt-0.5 truncate text-[11px]">{s.email}</p>

@@ -1,4 +1,3 @@
-import { Initial } from "@/components/atoms/initial";
 import { studentStatus } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
@@ -39,7 +38,6 @@ function StudentRow({
         active ? "border-primary bg-primary-soft/40" : "border-transparent hover:bg-bg-soft"
       }`}
     >
-      <Initial name={st.name} size="sm" color={active ? "primary" : "neutral"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="text-foreground truncate text-[13px] font-bold">{st.name}</span>

@@ -56,7 +56,7 @@ EYWA는 인재원 학원관리 시스템의 v2.0 경량 재작성판입니다. �
 |---|---|
 | `README.md` | (이 파일) 개요 + 시작 가이드 |
 | `docs/DESIGN_TOKENS.md` | 컬러 팔레트 · 타이포 · 간격 · 모서리 · 그림자 · 모션 |
-| `docs/COMPONENTS.md` | AppShell · Sidebar · Topbar · Atoms (Pill, Button, Card, Initial, Icons) |
+| `docs/COMPONENTS.md` | AppShell · Sidebar · Topbar · Atoms (Pill, Button, Card, Icons) |
 | `docs/SCREENS.md` | 12개 내부 화면 상세 (레이아웃 + 컴포넌트 + 데이터 + 동작) |
 | `docs/LANDING.md` | 랜딩 페이지 8개 섹션 상세 |
 | `docs/MENUS.md` | 12개 메뉴 + 5개 카테고리 매핑 + 라우트 |
@@ -100,7 +100,7 @@ open "EYWA Landing.html"     # 랜딩 페이지
 
 1. **자연 · 유기적이되 그라운디드** — 포레스트 그린(#1a5f3c) 중심, 골드(#b8893a) 액센트. 네온/사이안/판타지 색감 절대 금지.
 2. **에디토리얼 톤** — 큰 헤드라인 + 절제된 카피. 단, 이탤릭 세리프 폰트는 사용하지 않습니다 (Pretendard만).
-3. **동그란 프로필 사진 사용하지 않음** — 모든 사람 표시는 `Initial` (8px radius 정사각형, 컬러 배경 + 글자 색) 사용
+3. **이름 앞 아바타(프로필사진·이니셜 배지) 사용하지 않음** — 사람 표시는 이름 텍스트만 (Initial 컴포넌트 제거됨, 2026-06-19)
 4. **베타 출시 톤** — 가격은 "베타 무료" + "정식 출시 후 변동 예정" 명시
 5. **AI는 3곳에 적용** — 등록상담 · 학생상담(케어) · 회의록 요약 (Anthropic Claude API)
 6. **카피 톤** — 일반적인 학원 SaaS 톤. 추상적/시적 표현 피함 ("학원 운영을 한 곳에서", "원장님이 가장 먼저 켜는 학원관리 프로그램")

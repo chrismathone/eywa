@@ -7,7 +7,7 @@ import { Pagination } from "@/components/pagination";
 import { getExamsPage, type ExamRow } from "@/features/exams/server/queries";
 import { CreateExamTrigger } from "./_components/exam-form-dialog";
 
-export const metadata = { title: "시험관리 — eywa" };
+export const metadata = { title: "성적관리 — eywa" };
 
 const PAGE_SIZE = 50;
 

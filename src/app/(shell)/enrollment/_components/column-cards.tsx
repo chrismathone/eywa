@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { Initial } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 
@@ -28,10 +27,8 @@ function daysSince(iso: string): number {
  */
 export function ColumnCards({
   cards,
-  color,
 }: {
   cards: ConsultationListRow[];
-  color: "amber" | "blue" | "primary" | "neutral";
 }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? cards : cards.slice(0, COLUMN_CAP);
@@ -50,7 +47,6 @@ export function ColumnCards({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <Initial name={c.prospectName} color={color === "neutral" ? "primary" : color} size="sm" />
                   <div className="min-w-0">
                     <p className="text-foreground text-[13px] font-bold">{c.prospectName}</p>
                     <p className="text-text-dim text-[11px]">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWindowStore, type Win } from "./window-store";
 import { withEmbed } from "./embed-context";
 
@@ -26,7 +27,11 @@ export function RouteWindow({ win }: { win: Win }) {
   // 드래그/리사이즈 중에는 iframe을 숨겨 매 프레임 재페인트를 막아 부드럽게 이동.
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const observeIframe = useWindowStore((s) => s.observeIframe);
+  const close = useWindowStore((s) => s.close);
+  const router = useRouter();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // autoClose 창이 이미 닫힘을 1회만 트리거(navigate-away 관찰이 여러 번 들어와도 중복 close 방지).
+  const autoClosedRef = useRef(false);
   const href = win.params.href;
   const fallbackTitle = win.params.title;
 
@@ -47,6 +52,17 @@ export function RouteWindow({ win }: { win: Win }) {
         // 들어오기 전까지는 스택을 건드리지 않는다(로딩 스켈레톤엔 ← 미표시, 닫기는 X가 담당).
         const path = cw.location.pathname;
         if (cw.location.href === "about:blank" || !path.startsWith("/")) return;
+        // autoClose("새 X" 폼) 창: iframe이 초기 /X/new 경로를 벗어나면(제출 성공 → redirect/push)
+        // 창을 닫고 배경 라우트를 새로고침(우측 패널의 닫기+목록 갱신을 창 패러다임으로 대체).
+        if (win.params.autoClose && !autoClosedRef.current) {
+          const initialPath = (href ?? "").split("?")[0];
+          if (initialPath && path !== initialPath) {
+            autoClosedRef.current = true;
+            close(win.id);
+            router.refresh();
+            return;
+          }
+        }
         const url = path + cw.location.search;
         const title = cleanTitle(doc.title || "") || fallbackTitle;
         observeIframe(win.id, { title, url });
@@ -77,7 +93,7 @@ export function RouteWindow({ win }: { win: Win }) {
       obs?.disconnect();
       iframeRegistry.delete(win.id);
     };
-  }, [win.id, fallbackTitle, observeIframe]);
+  }, [win.id, fallbackTitle, observeIframe, href, win.params.autoClose, close, router]);
 
   if (!href) return null;
 

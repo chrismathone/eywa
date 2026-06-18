@@ -3,7 +3,6 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
-import { Initial } from "@/components/atoms/initial";
 import { getTenantDetail, getTenantLicenses } from "@/features/super-admin/server/queries";
 import { Pagination } from "@/components/pagination";
 import { UpdateTenantForm } from "./_update-form";
@@ -87,7 +86,6 @@ export default async function TenantDetailPage({
         <section className="bg-card border-line shadow-card rounded-2xl border p-5">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Initial name={detail.name} size="lg" color="gold" />
               <div>
                 <h2 className="text-foreground text-[18px] font-extrabold">{detail.name}</h2>
                 <p className="text-text-dim font-mono text-[11px]">

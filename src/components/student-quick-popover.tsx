@@ -3,7 +3,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Initial, type InitialColor } from "@/components/atoms/initial";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 
 const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
@@ -26,17 +25,6 @@ export type StudentQuickInfo = {
   // optional 추가 데이터 (학생목록 row에 이미 있는 것만 활용)
   enrolledAt?: string | null;
 };
-
-function colorForGrade(grade?: string | null): InitialColor {
-  if (!grade) return "neutral";
-  if (grade.startsWith("중1")) return "blue";
-  if (grade.startsWith("중2")) return "primary";
-  if (grade.startsWith("중3")) return "gold";
-  if (grade.startsWith("고1")) return "purple";
-  if (grade.startsWith("고2")) return "rose";
-  if (grade.startsWith("고3")) return "amber";
-  return "neutral";
-}
 
 /**
  * 학생명 hover/focus → 우측 아래에 미니 카드 (수강 과목 + 담임 + 학부모 연락처).
@@ -84,7 +72,6 @@ export function StudentQuickPopover({
         >
           {/* 헤더 */}
           <header className="flex items-start gap-2.5">
-            <Initial name={student.name} color={colorForGrade(student.grade)} size="md" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <p className="text-foreground text-[14px] font-bold">{student.name}</p>
