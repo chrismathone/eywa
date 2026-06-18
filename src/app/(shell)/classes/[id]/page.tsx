@@ -13,6 +13,7 @@ import {
 } from "@/features/classes/server/queries";
 import { getStudentsList } from "@/features/students/server/queries";
 import { ClassAssignAction } from "./_components/class-assign-action";
+import { ClassLevelAction } from "./_components/class-level-action";
 
 export const metadata = { title: "수업 상세 — eywa" };
 
@@ -133,6 +134,7 @@ export default async function ClassDetailPage({
             <ClipboardCheck className="size-4" />
             오늘 출석 입력
           </Button>
+          <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
         </div>
       </header>
 

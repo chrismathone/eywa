@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ClassCell } from "./class-cell";
-import type { ClassDetailQuick } from "@/components/class-detail-drawer";
+import type { ClassDetailQuick } from "./class-cell";
 
 const CELL_CAP = 5;
 

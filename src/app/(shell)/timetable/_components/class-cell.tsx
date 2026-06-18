@@ -2,8 +2,36 @@
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
-import { type ClassDetailQuick } from "@/components/class-detail-drawer";
 import { useTimetableEdit } from "./edit-context";
+
+/**
+ * 시간표 셀(ClassCell·IntegratedCell)에 넘기는 반+학생 명단 슬롯.
+ * 시간표 page query가 만들어 props로 전달 — 셀은 별도 fetch 없이 즉시 렌더.
+ */
+export type ClassDetailQuick = {
+  id: string;
+  /** 실제 반 id(/classes/[id] 링크용). 시간표 slot.id는 스케줄 id라 별도 필요. 없으면 id 폴백. */
+  classId?: string;
+  className: string;
+  subject: string;
+  classroomName?: string | null;
+  teacherName?: string | null;
+  startTime: string;
+  endTime: string;
+  dayOfWeek: string;
+  students: {
+    name: string;
+    grade: string | null;
+    school: string | null;
+    enrollmentId?: string;
+    studentId?: string;
+    /** active=재원, hold=대기, withdrawn=퇴원. (없으면 active로 간주 — 구버전 호출 호환) */
+    status?: "active" | "hold" | "withdrawn";
+    endDate?: string | null;
+    isNew?: boolean;
+    isTransferredIn?: boolean;
+  }[];
+};
 
 // 반이름 헤더 바 색(과목별). 학생 행은 흰 배경 + 상태색이라 헤더만 과목색.
 const SUBJECT_COLOR: Record<string, string> = {
