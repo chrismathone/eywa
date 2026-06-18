@@ -32,6 +32,8 @@ export type ClassDetailQuick = {
     grade: string | null;
     school: string | null;
     enrollmentId?: string;
+    isNew?: boolean;
+    isTransferredIn?: boolean;
   }[];
 };
 
@@ -173,7 +175,18 @@ export function ClassDetailDrawer({
                 >
                   <Initial name={s.name} color={colorForGrade(s.grade)} size="sm" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-foreground text-[12px] font-bold">{s.name}</p>
+                    <p className="text-foreground flex items-center gap-1.5 text-[12px] font-bold">
+                      <span className="truncate">{s.name}</span>
+                      {s.isNew ? (
+                        <span className="bg-danger-soft text-danger shrink-0 rounded-sm px-1 py-px text-[9px] font-bold">
+                          신입
+                        </span>
+                      ) : s.isTransferredIn ? (
+                        <span className="bg-primary-soft text-primary shrink-0 rounded-sm px-1 py-px text-[9px] font-bold">
+                          전입
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="text-text-dim text-[10px]">
                       {s.grade ?? "—"}
                       {s.school ? <> · {s.school}</> : null}

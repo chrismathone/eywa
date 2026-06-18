@@ -59,18 +59,20 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     <div className="bg-background text-foreground flex h-screen flex-col overflow-hidden lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
           떨어져도 메뉴탭이 이중으로 뜨지 않도록 사전 차단(HideInFrame). 최상위 프레임은 그대로 노출. */}
-      {/* lg≥: 좌측 사이드바 232px (고정) / lg<: 숨김 */}
+      {/* 데스크톱(≥lg + 마우스) = 좌측 사이드바 / 그 외(좁은 폭·터치) = 숨김.
+          크롬 전환 조건을 useIsDesktop(폭+pointer:fine)과 일치시켜, 창 시스템이 꺼지는
+          와이드 터치에서 "사이드바는 떠 있는데 메뉴가 창으로 안 열리는" 회색지대를 제거. */}
       <HideInFrame>
         <AppSidebar
           systemRole={user.systemRole}
           email={user.email}
-          className="hidden lg:flex"
+          className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
 
-      {/* lg<: 상단 horizontal nav / lg≥: 숨김 */}
+      {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} className="lg:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

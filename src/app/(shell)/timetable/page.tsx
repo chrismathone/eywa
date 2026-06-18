@@ -27,14 +27,6 @@ const SUBJECT_LABEL: Record<SubjectKey, string> = {
   arts: "예술",
 };
 
-const SUBJECT_COLOR: Record<string, string> = {
-  math: "bg-primary-soft text-primary",
-  english: "bg-blue-soft text-blue",
-  korean: "bg-rose-soft text-rose",
-  science: "bg-purple-soft text-purple",
-  arts: "bg-amber-soft text-amber",
-};
-
 const DAYS: { key: string; label: string }[] = [
   { key: "mon", label: "월" },
   { key: "tue", label: "화" },
@@ -44,15 +36,6 @@ const DAYS: { key: string; label: string }[] = [
   { key: "sat", label: "토" },
   { key: "sun", label: "일" },
 ];
-
-function shortTime(t: string) {
-  return t.slice(0, 5);
-}
-
-function toMins(hms: string): number {
-  const [h, m] = hms.split(":");
-  return Number(h) * 60 + Number(m);
-}
 
 /**
  * 교시 그룹화 — 시작 시간 기준 16:00→1교시 / 17:30→2교시 / 19:00→3교시 식으로.
@@ -222,7 +205,7 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
               (teacherDays.get(t) ?? []).map((d) => (
                 <th
                   key={`${t}-${d}`}
-                  className="bg-bg-soft/60 border-line text-text-dim min-w-[180px] border-b border-r px-2 py-1.5 text-center font-mono text-[10px] font-bold"
+                  className={`${weekdayTint(d)} border-line text-text-dim min-w-[180px] border-b border-r px-2 py-1.5 text-center font-mono text-[10px] font-bold`}
                 >
                   {DAYS.find((x) => x.key === d)?.label ?? d}
                 </th>
@@ -252,7 +235,7 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
                       ) : (
                         <div className="space-y-2">
                           {list.map((s) => (
-                            <ClassCell key={s.id} slot={s} compact />
+                            <ClassCell key={s.id} slot={s} roster="names" />
                           ))}
                         </div>
                       )}
@@ -295,7 +278,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
             {DAYS.map((d) => (
               <th
                 key={d.key}
-                className="bg-bg-soft border-line min-w-[200px] border-b border-r px-3 py-2.5 text-center"
+                className={`${weekdayTint(d.key)} border-line min-w-[200px] border-b border-r px-3 py-2.5 text-center`}
               >
                 <span className="text-foreground text-[13px] font-bold">{d.label}</span>
               </th>
@@ -330,6 +313,25 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
       </table>
     </DragScrollArea>
   );
+}
+
+/** 요일 컬러 밴드 — ijw식 요일 그룹(월목/화금/수/주말) 색 구분. 헤더 배경만 틴트(셀은 과목색 유지). */
+function weekdayTint(dayKey: string): string {
+  switch (dayKey) {
+    case "mon":
+    case "thu":
+      return "bg-blue-soft";
+    case "tue":
+    case "fri":
+      return "bg-purple-soft";
+    case "wed":
+      return "bg-primary-soft";
+    case "sat":
+    case "sun":
+      return "bg-amber-soft";
+    default:
+      return "bg-bg-soft";
+  }
 }
 
 function periodOrder(p: string): number {
