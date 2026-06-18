@@ -67,9 +67,9 @@ function DraggableStudentRow({
     >
       <span className={`truncate ${target ? "line-through" : ""}`}>{name}</span>
       {target ? (
-        <span className="text-primary shrink-0 font-mono text-[9px]">→{target.toClassName}</span>
+        <span className="text-primary shrink-0 font-mono text-[12px]">→{target.toClassName}</span>
       ) : meta ? (
-        <span className="shrink-0 font-mono text-[9px] opacity-70">{meta}</span>
+        <span className="shrink-0 font-mono text-[12px] opacity-70">{meta}</span>
       ) : null}
     </div>
   );
@@ -90,7 +90,7 @@ function StudentRow({
   const inner = (
     <>
       <span className="truncate">{name}</span>
-      {meta ? <span className="shrink-0 font-mono text-[9px] opacity-70">{meta}</span> : null}
+      {meta ? <span className="shrink-0 font-mono text-[12px] opacity-70">{meta}</span> : null}
     </>
   );
   if (studentId) {
@@ -138,7 +138,7 @@ function StudentSection({
     <>
       {label ? (
         <div
-          className={`flex items-center justify-between px-2 py-px text-[8px] font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
+          className={`flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide ${labelTone ?? "text-text-faint"}`}
         >
           <span>{label}</span>
           <span className="num">{students.length}</span>
@@ -165,7 +165,7 @@ function StudentSection({
         ),
       )}
       {hidden > 0 ? (
-        <div className="text-text-faint px-2 py-[3px] text-[9px]">외 {hidden}명</div>
+        <div className="text-text-faint px-2 py-[3px] text-[12px]">외 {hidden}명</div>
       ) : null}
     </>
   );
@@ -218,10 +218,10 @@ export function ClassCell({
           className={`block w-full shrink-0 px-2 py-1 text-left transition hover:brightness-95 ${color}`}
         >
           <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-[11px] font-bold">{slot.className}</span>
-            <span className="num shrink-0 font-mono text-[9px] opacity-70">{active.length}</span>
+            <span className="truncate text-[14px] font-bold">{slot.className}</span>
+            <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
           </div>
-          <div className="flex items-center justify-between gap-1 text-[9px] opacity-75">
+          <div className="flex items-center justify-between gap-1 text-[12px] opacity-75">
             <span className="num font-mono">
               {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
             </span>
@@ -232,7 +232,7 @@ export function ClassCell({
         {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
           <div
-            className={`bg-card text-[10px] ${
+            className={`bg-card text-[13px] ${
               hasSecondary ? "flex min-h-0 flex-1 flex-col overflow-y-auto" : ""
             }`}
           >
