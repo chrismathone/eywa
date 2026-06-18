@@ -16,9 +16,15 @@ type Mode = "create" | "edit";
 export type StudentFormValue = {
   id?: string;
   name: string;
+  englishName: string | null;
   grade: string | null;
   school: string | null;
   studentCode: string | null;
+  gender: string | null;
+  birthDate: string | null;
+  address: string | null;
+  email: string | null;
+  studentPhone: string | null;
   parentName: string | null;
   parentPhone: string | null;
   status: string;
@@ -77,9 +83,15 @@ export function StudentForm({
 
   const v = initialValue ?? {
     name: "",
+    englishName: null,
     grade: null,
     school: null,
     studentCode: null,
+    gender: null,
+    birthDate: null,
+    address: null,
+    email: null,
+    studentPhone: null,
     parentName: null,
     parentPhone: null,
     status: "prospect",
@@ -109,6 +121,15 @@ export function StudentForm({
             placeholder="예: 김민준"
           />
         </Field>
+        <Field label="영문 이름" htmlFor="englishName">
+          <input
+            id="englishName"
+            name="englishName"
+            defaultValue={v.englishName ?? ""}
+            className={inputClass}
+            placeholder="예: Minjun Kim"
+          />
+        </Field>
         <Field label="학년" htmlFor="grade">
           <select id="grade" name="grade" defaultValue={v.grade ?? ""} className={inputClass}>
             <option value="">선택</option>
@@ -133,6 +154,58 @@ export function StudentForm({
             id="studentCode"
             name="studentCode"
             defaultValue={v.studentCode ?? ""}
+            className={inputClass}
+            placeholder="(선택)"
+          />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field label="성별" htmlFor="gender">
+          <select id="gender" name="gender" defaultValue={v.gender ?? ""} className={inputClass}>
+            <option value="">선택</option>
+            <option value="male">남</option>
+            <option value="female">여</option>
+          </select>
+        </Field>
+        <Field label="생년월일" htmlFor="birthDate">
+          <input
+            id="birthDate"
+            name="birthDate"
+            type="date"
+            defaultValue={v.birthDate ?? ""}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="학생 연락처" htmlFor="studentPhone">
+          <input
+            id="studentPhone"
+            name="studentPhone"
+            type="tel"
+            inputMode="tel"
+            defaultValue={v.studentPhone ?? ""}
+            className={inputClass}
+            placeholder="010-0000-0000"
+          />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="이메일" htmlFor="email">
+          <input
+            id="email"
+            name="email"
+            type="email"
+            defaultValue={v.email ?? ""}
+            className={inputClass}
+            placeholder="(선택)"
+          />
+        </Field>
+        <Field label="주소" htmlFor="address">
+          <input
+            id="address"
+            name="address"
+            defaultValue={v.address ?? ""}
             className={inputClass}
             placeholder="(선택)"
           />

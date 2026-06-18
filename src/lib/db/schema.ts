@@ -257,8 +257,13 @@ export const students = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     studentCode: text("student_code"),
     name: text("name").notNull(),
+    englishName: text("english_name"),
     school: text("school"),
     grade: text("grade"),
+    gender: text("gender"), // "male" | "female" | null
+    birthDate: date("birth_date"),
+    address: text("address"),
+    email: text("email"),
     studentPhone: text("student_phone"),
     parentPhone: text("parent_phone"),
     parentName: text("parent_name"),

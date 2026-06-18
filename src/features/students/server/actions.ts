@@ -39,11 +39,18 @@ function readForm(formData: FormData) {
     return v == null ? "" : String(v).trim();
   };
   const status = get("status");
+  const gender = get("gender");
   return {
     name: get("name"),
+    englishName: get("englishName") || null,
     grade: get("grade") || null,
     school: get("school") || null,
     studentCode: get("studentCode") || null,
+    gender: gender === "male" || gender === "female" ? gender : null,
+    birthDate: get("birthDate") || null,
+    address: get("address") || null,
+    email: get("email") || null,
+    studentPhone: normalizePhone(get("studentPhone") || null),
     parentName: get("parentName") || null,
     parentPhone: normalizePhone(get("parentPhone") || null),
     status: (STATUSES.includes(status as StudentStatus) ? status : "prospect") as StudentStatus,
@@ -91,9 +98,15 @@ export async function createStudent(
     .insert({
       tenant_id: user.tenantId,
       name: input.name,
+      english_name: input.englishName,
       grade: input.grade,
       school: input.school,
       student_code: input.studentCode,
+      gender: input.gender,
+      birth_date: input.birthDate,
+      address: input.address,
+      email: input.email,
+      student_phone: input.studentPhone,
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       status: input.status,
@@ -152,9 +165,15 @@ export async function updateStudent(
     .from("students")
     .update({
       name: input.name,
+      english_name: input.englishName,
       grade: input.grade,
       school: input.school,
       student_code: input.studentCode,
+      gender: input.gender,
+      birth_date: input.birthDate,
+      address: input.address,
+      email: input.email,
+      student_phone: input.studentPhone,
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       status: input.status,

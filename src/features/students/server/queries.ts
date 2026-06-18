@@ -224,10 +224,16 @@ export type CareFocus = {
 export type StudentDetail = {
   id: string;
   name: string;
+  englishName: string | null;
   studentCode: string | null;
   school: string | null;
   grade: string | null;
   status: string;
+  gender: string | null;
+  birthDate: string | null;
+  address: string | null;
+  email: string | null;
+  studentPhone: string | null;
   parentName: string | null;
   parentPhone: string | null;
   primaryTeacherId: string | null;
@@ -271,7 +277,8 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
   const { data } = await supabase
     .from("students")
     .select(
-      `id, name, school, grade, status, student_code,
+      `id, name, english_name, school, grade, status, student_code,
+       gender, birth_date, address, email, student_phone,
        enrolled_at, withdrawn_at, created_at, notes,
        parent_name, parent_phone,
        primary_teacher_id, secondary_teacher_id,
@@ -294,10 +301,16 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
   return {
     id: data.id,
     name: data.name,
+    englishName: data.english_name,
     studentCode: data.student_code,
     school: data.school,
     grade: data.grade,
     status: data.status,
+    gender: data.gender,
+    birthDate: data.birth_date,
+    address: data.address,
+    email: data.email,
+    studentPhone: data.student_phone,
     primaryTeacherId: data.primary_teacher_id,
     primaryTeacherName: teacher?.display_name ?? null,
     secondaryTeacherId: data.secondary_teacher_id,
