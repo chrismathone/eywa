@@ -1,4 +1,5 @@
--- 0027d — 카카오 알림톡 실발송 배선. 손수 alpha 파일(0027a~c 키오스크 era 연속), 전부 멱등.
+-- 0029a — 카카오 알림톡 실발송 배선. 손수 alpha 파일(원래 0027d였으나 main의 0027d_staff_phone과
+--   번호 충돌해 0029a로 재명명 — 0028a_exams 다음). 전부 멱등.
 -- ⚠️ drizzle migrate 대신 raw 적용한다(_journal 충돌 회피). 0027a와 마찬가지로 IF NOT EXISTS/drop+create.
 -- 의존: 0001a public.auth_tenant_id(), public.tg_set_updated_at(); 0027a public.attendance_notifications.
 
