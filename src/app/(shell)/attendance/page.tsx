@@ -108,6 +108,7 @@ export default async function AttendancePage({
                 options={teacherOptions}
                 ariaLabel="강사 필터"
                 allLabel="전체 강사"
+                searchable
               />
             </div>
             <span className="bg-line h-4 w-px" aria-hidden />
