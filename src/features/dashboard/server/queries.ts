@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { attendanceRate } from "@/lib/calc/attendance";
+import { followUpUrgency, type FollowUpUrgency } from "@/features/consultations/server/queries";
 
 const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
@@ -139,6 +140,54 @@ export async function getRecentAnnouncements(limit = 3): Promise<AnnouncementRow
       authorName,
     };
   });
+}
+
+/** 오늘 출석을 1건이라도 기록한 반 id 집합 — '미기록' 추적용(시작한 수업 기준 판정은 호출부에서). */
+export async function getTodayRecordedClassIds(): Promise<string[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from("attendance_records")
+    .select("class_id")
+    .eq("session_date", today);
+  return [...new Set((data ?? []).map((r) => r.class_id as string))];
+}
+
+export type DashFollowUp = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  followUpAction: string | null;
+  followUpDate: string | null;
+  urgency: FollowUpUrgency;
+};
+
+/** 학생상담 후속조치 — 미완료 + 기한 임박/경과(긴급도 overdue/today/soon)만, 빠른 순. */
+export async function getFollowUpConsultations(limit = 8): Promise<DashFollowUp[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("student_consultations")
+    .select("id, student_id, follow_up_action, follow_up_date, student:student_id ( name )")
+    .eq("follow_up_done", false)
+    .not("follow_up_date", "is", null)
+    .order("follow_up_date", { ascending: true })
+    .limit(60);
+  const rows: DashFollowUp[] = [];
+  for (const r of data ?? []) {
+    const u = followUpUrgency(r.follow_up_date as string | null, false);
+    if (u !== "overdue" && u !== "today" && u !== "soon") continue;
+    const st = (Array.isArray(r.student) ? r.student[0] : r.student) as { name?: string } | undefined;
+    rows.push({
+      id: r.id,
+      studentId: r.student_id,
+      studentName: st?.name ?? "(학생)",
+      followUpAction: r.follow_up_action,
+      followUpDate: r.follow_up_date,
+      urgency: u,
+    });
+    if (rows.length >= limit) break;
+  }
+  return rows;
 }
 
 export type ManageAnnouncementRow = {

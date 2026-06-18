@@ -57,7 +57,13 @@ function buildDensity(slots: TodaySlot[]) {
   };
 }
 
-export function NowCockpit({ slots }: { slots: TodaySlot[] }) {
+export function NowCockpit({
+  slots,
+  unrecordedCount = 0,
+}: {
+  slots: TodaySlot[];
+  unrecordedCount?: number;
+}) {
   const ongoing = slots.filter((s) => s.status === "ongoing");
   const upcoming = slots.filter((s) => s.status !== "ongoing" && s.status !== "done");
   const todayLabel = KO_TODAY.format(new Date());
@@ -83,11 +89,18 @@ export function NowCockpit({ slots }: { slots: TodaySlot[] }) {
           <p className="text-primary font-mono text-[11px] tracking-wider uppercase">지금 · {todayLabel}</p>
           <h2 className="text-foreground mt-1 text-[15px] font-bold">오늘의 일정</h2>
         </div>
-        {ongoing.length > 0 ? (
-          <Pill color="primary">● 진행 중 {ongoing.length}건</Pill>
-        ) : (
-          <WindowLink href="/timetable" className="text-text-dim hover:text-foreground text-xs">시간표 →</WindowLink>
-        )}
+        <div className="flex items-center gap-1.5">
+          {unrecordedCount > 0 ? (
+            <WindowLink href="/attendance" title="출석부" ariaLabel="출석 미기록 수업 보기">
+              <Pill color="amber">출석 미기록 {unrecordedCount}</Pill>
+            </WindowLink>
+          ) : null}
+          {ongoing.length > 0 ? (
+            <Pill color="primary">● 진행 중 {ongoing.length}건</Pill>
+          ) : (
+            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground text-xs">시간표 →</WindowLink>
+          )}
+        </div>
       </header>
 
       {slots.length === 0 ? (

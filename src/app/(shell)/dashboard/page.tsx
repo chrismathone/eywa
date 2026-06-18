@@ -5,10 +5,12 @@ import {
   getActiveConsultationsCount,
   getAnnouncementsForManage,
   getEnrolledStudentCount,
+  getFollowUpConsultations,
   getMostRecentAttendanceSnapshot,
   getNewStudentsThisMonth,
   getPaymentRateThisMonth,
   getRecentAnnouncements,
+  getTodayRecordedClassIds,
   getTopOutstanding,
   getTrendDataLast7Days,
   getWithdrawalsThisMonth,
@@ -16,10 +18,12 @@ import {
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
+import { QuickActions } from "./_components/quick-actions";
 import { NowCockpit } from "./_components/now-cockpit";
 import { AbsenceRiskCard } from "./_components/absence-risk-card";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { ConsultationFunnel } from "./_components/consultation-funnel";
+import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { SlimTrend } from "./_components/slim-trend";
 
@@ -41,6 +45,8 @@ export default async function DashboardPage() {
     outstanding,
     announcements,
     manageAnnouncements,
+    followUps,
+    recordedClassIds,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getNewStudentsThisMonth(),
@@ -54,7 +60,15 @@ export default async function DashboardPage() {
     getTopOutstanding(),
     getRecentAnnouncements(4),
     canManageAnnouncements ? getAnnouncementsForManage() : Promise.resolve([]),
+    getFollowUpConsultations(8),
+    getTodayRecordedClassIds(),
   ]);
+
+  // 오늘 시작한(예정 제외) 수업 중 출석 미기록 수.
+  const recordedSet = new Set(recordedClassIds);
+  const unrecordedCount = todaySchedule.filter(
+    (s) => s.status !== "upcoming" && !recordedSet.has(s.classId),
+  ).length;
 
   const name = user.displayName ?? "원장";
   const attendanceRate = attendance && attendance.total > 0 ? attendance.rate : null;
@@ -73,12 +87,16 @@ export default async function DashboardPage() {
         unpaidCount={unpaidCount}
       />
 
+      {/* 빠른 작업 */}
+      <QuickActions />
+
       {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr_1fr] lg:items-stretch">
-        <NowCockpit slots={todaySchedule} />
+        <NowCockpit slots={todaySchedule} unrecordedCount={unrecordedCount} />
         <div className="flex flex-col gap-4">
           <AbsenceRiskCard items={absenceRisks} />
           <OutstandingCard items={outstanding} />
+          <FollowUpCard items={followUps} />
         </div>
         <div className="flex flex-col gap-4">
           <ConsultationFunnel pipeline={consultations} />
