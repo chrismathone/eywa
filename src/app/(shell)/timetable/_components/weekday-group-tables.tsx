@@ -27,9 +27,12 @@ const WEEKEND_GROUP: GroupDef = {
 };
 const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 
-// 엑셀식 격자 — table-layout:fixed + colgroup으로 모든 요일 컬럼을 동일 폭으로 못박는다(줄맞춤).
+// 엑셀식 격자 — table-layout:fixed + colgroup으로 요일 컬럼 폭을 못박는다(줄맞춤).
 const PERIOD_COL_W = 92;
 const DAY_COL_W = 150;
+// 수·토·일은 2배 폭(요청) — 수=단일 그룹, 주말(토/일)은 정보 여유.
+const WIDE_DAY_COLS = new Set<DayOfWeek>(["wed", "sat", "sun"]);
+const dayColW = (d: DayOfWeek) => (WIDE_DAY_COLS.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
 // 셀 명단이 최소 10명 보이도록 + 글자 30% 확대(가독성)에 맞춰 비례 상향(256→330).
 // 셀 스크롤 maxHeight = rowSpan*ROW_H - 16, 헤더(~48) + 학생행(~25)×10 ≈ 298. (주말은 ROW_H/2로 격자 정렬.)
@@ -140,16 +143,16 @@ function GroupTable({
     }),
   }));
 
-  // 평탄 요일 컬럼 목록 — colgroup으로 균일 폭 고정(엑셀 줄맞춤).
+  // 평탄 요일 컬럼 목록 — colgroup으로 폭 고정(엑셀 줄맞춤). 수·토·일은 2배 폭.
   const dayCols = groups.flatMap((g) => g.teachers.flatMap((t) => t.days));
-  const tableW = PERIOD_COL_W + dayCols.length * DAY_COL_W;
+  const tableW = PERIOD_COL_W + dayCols.reduce((sum, d) => sum + dayColW(d), 0);
 
   return (
     <table className="border-collapse text-sm" style={{ tableLayout: "fixed", width: tableW }}>
       <colgroup>
         <col style={{ width: PERIOD_COL_W }} />
-        {dayCols.map((_, i) => (
-          <col key={i} style={{ width: DAY_COL_W }} />
+        {dayCols.map((d, i) => (
+          <col key={i} style={{ width: dayColW(d) }} />
         ))}
       </colgroup>
       <thead>
