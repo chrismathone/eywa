@@ -635,3 +635,75 @@ export async function deleteStudentGrade(
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
 }
+
+// === 레벨테스트(배치/승급/진단) ===
+export type LevelTestState = { error?: string } | undefined;
+
+const LEVEL_TEST_TYPES = ["placement", "promotion", "diagnostic"];
+// 과목별 세부점수 키 — UI 폼 필드명(sub_<키>)과 일치(client level-tests.tsx와 동기 유지).
+const LEVEL_SUBSCORE_KEYS: Record<string, string[]> = {
+  math: ["계산", "이해", "추론", "문제해결"],
+  english: ["어휘", "문법", "청해", "독해"],
+};
+
+export async function createStudentLevelTest(
+  _prev: LevelTestState,
+  formData: FormData,
+): Promise<LevelTestState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const testTypeRaw = String(formData.get("testType") ?? "placement").trim();
+  const testType = LEVEL_TEST_TYPES.includes(testTypeRaw) ? testTypeRaw : "placement";
+  const subject = String(formData.get("subject") ?? "").trim();
+  const testedOn = String(formData.get("testedOn") ?? "").trim();
+  const level = String(formData.get("level") ?? "").trim() || null;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+
+  if (!studentId) return { error: "학생 ID가 누락되었습니다" };
+  if (!subject) return { error: "과목을 선택해주세요" };
+  if (!testedOn) return { error: "시험일을 입력해주세요" };
+
+  const subscores: Record<string, number> = {};
+  for (const k of LEVEL_SUBSCORE_KEYS[subject] ?? []) {
+    const v = String(formData.get(`sub_${k}`) ?? "").trim();
+    if (v !== "" && Number.isFinite(Number(v))) subscores[k] = Number(v);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("level_tests").insert({
+    tenant_id: user.tenantId,
+    student_id: studentId,
+    test_type: testType,
+    subject,
+    tested_on: testedOn,
+    level,
+    subscores: Object.keys(subscores).length ? subscores : null,
+    notes,
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/students/${studentId}`);
+  return undefined;
+}
+
+export async function deleteStudentLevelTest(
+  _prev: LevelTestState,
+  formData: FormData,
+): Promise<LevelTestState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  if (!id) return { error: "레벨테스트 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("level_tests").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return undefined;
+}

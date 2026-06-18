@@ -823,6 +823,33 @@ export const exams = pgTable(
   ],
 );
 
+// === level_tests (레벨테스트 — 배치/승급/진단) ===
+// 학생 상세 성적 탭의 레벨테스트 섹션. 과목별 세부점수는 subscores jsonb로 유연 수용.
+export const levelTests = pgTable(
+  "level_tests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    testType: text("test_type").notNull().default("placement"), // placement/promotion/diagnostic
+    subject: text("subject").notNull(),
+    testedOn: date("tested_on").notNull(),
+    level: text("level"), // 결과 레벨/반/등급
+    subscores: jsonb("subscores"), // {계산:.., 이해:..} 또는 {어휘:.., 문법:..}
+    notes: text("notes"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("level_tests_tenant_student_idx").on(t.tenantId, t.studentId),
+    index("level_tests_tenant_tested_idx").on(t.tenantId, t.testedOn),
+  ],
+);
+
 // === student_memos (학생별 자유 메모) ===
 // 학생별 자유 메모. 학생 상세 페이지의 "메모" 탭에서 누적 표시.
 export const studentMemos = pgTable(

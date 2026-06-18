@@ -1,7 +1,8 @@
-import { getStudentGrades } from "@/features/students/server/queries";
+import { getStudentGrades, getStudentLevelTests } from "@/features/students/server/queries";
 import { gradeSeries, gradeStats } from "@/lib/calc/grades";
 import { GradeForm } from "../_components/grade-form";
 import { GradesChart } from "../_components/grades-chart";
+import { LevelTests } from "../_components/level-tests";
 
 const SUBJECT_LABEL: Record<string, string> = {
   math: "수학",
@@ -21,7 +22,10 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: stri
 }
 
 export async function GradesTab({ studentId }: { studentId: string }) {
-  const grades = await getStudentGrades(studentId);
+  const [grades, levelTests] = await Promise.all([
+    getStudentGrades(studentId),
+    getStudentLevelTests(studentId),
+  ]);
   const stats = gradeStats(grades);
   const series = gradeSeries(grades);
   const deltaTone =
@@ -96,6 +100,10 @@ export async function GradesTab({ studentId }: { studentId: string }) {
           </table>
         </div>
       )}
+
+      <div className="border-border border-t pt-4">
+        <LevelTests studentId={studentId} tests={levelTests} />
+      </div>
     </div>
   );
 }

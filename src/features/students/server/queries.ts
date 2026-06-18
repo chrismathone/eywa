@@ -471,6 +471,35 @@ export async function getStudentGrades(studentId: string): Promise<StudentGradeR
   }));
 }
 
+export type LevelTestRow = {
+  id: string;
+  testType: string; // placement/promotion/diagnostic
+  subject: string;
+  testedOn: string;
+  level: string | null;
+  subscores: Record<string, number> | null;
+  notes: string | null;
+};
+
+export async function getStudentLevelTests(studentId: string): Promise<LevelTestRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("level_tests")
+    .select("id, test_type, subject, tested_on, level, subscores, notes")
+    .eq("student_id", studentId)
+    .order("tested_on", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    testType: r.test_type,
+    subject: r.subject,
+    testedOn: r.tested_on,
+    level: r.level,
+    subscores: (r.subscores as Record<string, number> | null) ?? null,
+    notes: r.notes,
+  }));
+}
+
 export type StudentMemoRow = {
   id: string;
   category: string;
