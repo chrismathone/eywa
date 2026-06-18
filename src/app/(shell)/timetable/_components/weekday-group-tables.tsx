@@ -31,7 +31,9 @@ const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 const PERIOD_COL_W = 92;
 const DAY_COL_W = 150;
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
-const ROW_H = 132;
+// 높이는 셀 명단이 최소 10명 보이도록 잡는다: 셀 스크롤 maxHeight = rowSpan*ROW_H - 16,
+// 헤더(~37) + 학생행(~19.3)×10 ≈ 230 → ROW_H ≥ ~248. 여유 포함 256. (주말은 ROW_H/2로 격자 정렬.)
+const ROW_H = 256;
 
 type TeacherCol = { name: string; days: DayOfWeek[] };
 type GroupCols = GroupDef & { teachers: TeacherCol[]; dayCount: number };
