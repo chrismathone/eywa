@@ -19,7 +19,7 @@ export function AbsenceRiskCard({ items }: { items: AbsenceRisk[] }) {
       {items.length === 0 ? (
         <DashEmpty>최근 14일 결석 위험 학생이 없습니다</DashEmpty>
       ) : (
-        <ul className="divide-border flex-1 divide-y">
+        <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
           {shown.map((s) => (
             <li key={s.studentId}>
               <WindowLink

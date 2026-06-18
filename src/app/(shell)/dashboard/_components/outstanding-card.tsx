@@ -6,14 +6,11 @@ import { Pill } from "@/components/atoms/pill";
 import { DashCard, DashEmpty } from "./dash-card";
 import type { OutstandingItem } from "@/features/dashboard/server/queries";
 
-const CAP = 6;
-
 function man(amount: number): string {
   return `${Math.round(amount / 10000).toLocaleString()}만`;
 }
 
 export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
-  const shown = items.slice(0, CAP);
   return (
     <DashCard
       title="미수 상위"
@@ -24,8 +21,8 @@ export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
       {items.length === 0 ? (
         <DashEmpty>미납 항목이 없습니다</DashEmpty>
       ) : (
-        <ul className="divide-border flex-1 divide-y">
-          {shown.map((p) => (
+        <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
+          {items.map((p) => (
             <li key={p.studentId} className="flex items-center justify-between gap-2 py-1.5">
               <WindowLink
                 href={`/students/${p.studentId}?tab=billing`}
@@ -44,9 +41,6 @@ export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
               </Pill>
             </li>
           ))}
-          {items.length > CAP ? (
-            <li className="text-text-faint pt-2 text-[11px]">외 {items.length - CAP}명</li>
-          ) : null}
         </ul>
       )}
     </DashCard>
