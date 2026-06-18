@@ -16,9 +16,15 @@ export const metadata = { title: "출석부 — eywa" };
 
 type RangeKey = "month" | "2w";
 
-function attHref(p: { classId: string | null; month: string; range: RangeKey }): string {
+function attHref(p: {
+  classId: string | null;
+  month: string;
+  range: RangeKey;
+  teacherId?: string | null;
+}): string {
   const sp = new URLSearchParams();
   if (p.classId) sp.set("class", p.classId);
+  if (p.teacherId) sp.set("teacher", p.teacherId);
   sp.set("month", p.month);
   if (p.range === "2w") sp.set("range", "2w");
   return `/attendance?${sp.toString()}`;
@@ -43,20 +49,43 @@ function formatMonth(month: string): string {
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ class?: string; month?: string; range?: string }>;
+  searchParams: Promise<{ class?: string; month?: string; range?: string; teacher?: string }>;
 }) {
   await requireAccess("attendance");
-  const { class: classParam, month: monthParam, range: rangeParam } = await searchParams;
+  const {
+    class: classParam,
+    month: monthParam,
+    range: rangeParam,
+    teacher: teacherParam,
+  } = await searchParams;
   const month = monthParam ?? currentMonthKey();
   const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
 
-  // 첫 진입(반 선택 없음): 가용 반 중 첫 번째 자동 선택
+  // 전체 반 목록은 어떤 classId로 불러도 동일 — 강사 필터로 좁힌다.
   const initial = await getMonthlyAttendanceMatrix(month, classParam ?? null);
-  const selectedClassId = classParam ?? initial.classes[0]?.id ?? null;
+  const allClasses = initial.classes;
+  // 강사 드롭다운(담임 배정된 반에서 distinct)
+  const teacherOptions = Array.from(
+    new Map(
+      allClasses
+        .filter((c) => c.teacherId && c.teacherName)
+        .map((c) => [c.teacherId as string, c.teacherName as string]),
+    ),
+  ).map(([value, label]) => ({ value, label }));
+  const filteredClasses = teacherParam
+    ? allClasses.filter((c) => c.teacherId === teacherParam)
+    : allClasses;
+  // 첫 진입/강사 변경 시: 필터된 반 중 첫 번째 자동 선택. 현재 class가 필터에 없으면 교체.
+  const selectedClassId =
+    classParam && filteredClasses.some((c) => c.id === classParam)
+      ? classParam
+      : filteredClasses[0]?.id ?? null;
   const matrix =
-    classParam || !initial.classes.length
+    classParam && selectedClassId === classParam
       ? initial
-      : await getMonthlyAttendanceMatrix(month, selectedClassId);
+      : selectedClassId
+        ? await getMonthlyAttendanceMatrix(month, selectedClassId)
+        : initial;
 
   const selectedClass = matrix.classes.find((c) => c.id === selectedClassId) ?? null;
   const prevMonth = shiftMonth(month, -1);
@@ -68,13 +97,30 @@ export default async function AttendancePage({
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+        {/* 강사 dropdown — 담임 기준으로 반 좁히기 */}
+        {teacherOptions.length > 0 ? (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="micro mr-1">강사</span>
+              <FilterSelect
+                paramName="teacher"
+                value={teacherParam ?? null}
+                options={teacherOptions}
+                ariaLabel="강사 필터"
+                allLabel="전체 강사"
+              />
+            </div>
+            <span className="bg-line h-4 w-px" aria-hidden />
+          </>
+        ) : null}
+
         {/* 반 dropdown */}
         <div className="flex items-center gap-1.5">
           <span className="micro mr-1">반</span>
           <FilterSelect
             paramName="class"
             value={selectedClassId}
-            options={matrix.classes.map((c) => ({ value: c.id, label: c.className }))}
+            options={filteredClasses.map((c) => ({ value: c.id, label: c.className }))}
             ariaLabel="반 필터"
             searchable
           />
@@ -85,7 +131,7 @@ export default async function AttendancePage({
         {/* 월 navigator */}
         <div className="flex items-center gap-1.5">
           <Link
-            href={attHref({ classId: selectedClassId, month: prevMonth, range })}
+            href={attHref({ classId: selectedClassId, month: prevMonth, range, teacherId: teacherParam })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="이전 달"
           >
@@ -95,7 +141,7 @@ export default async function AttendancePage({
             {formatMonth(month)}
           </span>
           <Link
-            href={attHref({ classId: selectedClassId, month: nextMonth, range })}
+            href={attHref({ classId: selectedClassId, month: nextMonth, range, teacherId: teacherParam })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="다음 달"
           >
@@ -114,7 +160,7 @@ export default async function AttendancePage({
           ] as const).map(([key, label]) => (
             <Link
               key={key}
-              href={attHref({ classId: selectedClassId, month, range: key })}
+              href={attHref({ classId: selectedClassId, month, range: key, teacherId: teacherParam })}
               className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
                 range === key
                   ? "border-foreground bg-foreground text-background font-medium"
@@ -267,6 +313,7 @@ function MatrixTable({
                         sessionDate={d.date}
                         initialStatus={mark}
                         isWeekend={d.isWeekend}
+                        note={matrix.notes[s.id]?.[d.date] ?? null}
                       />
                     </td>
                   );

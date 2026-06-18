@@ -39,12 +39,14 @@ export function AttendanceCell({
   sessionDate,
   initialStatus,
   isWeekend,
+  note,
 }: {
   studentId: string;
   classId: string;
   sessionDate: string;
   initialStatus: AttendanceStatus | null;
   isWeekend: boolean;
+  note?: string | null;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
   const [open, setOpen] = useState(false);
@@ -73,12 +75,19 @@ export function AttendanceCell({
           setPos({ x: r.left, y: r.bottom });
           setOpen(true);
         }}
-        className={`block size-7 leading-7 font-mono text-[11px] font-bold ${cls} ${
+        title={note ?? undefined}
+        className={`relative block size-7 leading-7 font-mono text-[11px] font-bold ${cls} ${
           status ? "" : `text-text-faint hover:bg-bg-soft ${isWeekend ? "bg-bg-soft/40" : ""}`
         }`}
-        aria-label="출결 상태 변경"
+        aria-label={note ? `출결 상태 변경 (메모: ${note})` : "출결 상태 변경"}
       >
         {label}
+        {note ? (
+          <span
+            className="border-t-danger absolute top-0 right-0 size-0 border-t-[5px] border-l-[5px] border-l-transparent"
+            aria-hidden
+          />
+        ) : null}
       </button>
 
       {open && pos ? (
