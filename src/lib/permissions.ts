@@ -14,6 +14,7 @@ export type MenuKey =
   | "attendance"
   | "classes"
   | "students"
+  | "exams"
   | "enrollment"
   | "consultations"
   | "withdrawals"
@@ -35,6 +36,8 @@ export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
   attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", student: "none" },
   classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   students: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 시험관리 — 시험 등록 + 반 일괄 성적입력. 강사는 담당 반 채점(scoped), 회계는 무관, 학생 미표시.
+  exams: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none", student: "none" },
   consultations: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   withdrawals: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },

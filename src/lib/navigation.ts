@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   BookOpen,
   Users,
+  ClipboardList,
   UserPlus,
   MessageSquare,
   UserMinus,
@@ -52,6 +53,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "학생",
     items: [
       { href: "/students", label: "학생목록", icon: Users, menuKey: "students" },
+      { href: "/exams", label: "시험관리", icon: ClipboardList, menuKey: "exams" },
       { href: "/enrollment", label: "등록상담", icon: UserPlus, menuKey: "enrollment" },
       { href: "/consultations", label: "학생상담", icon: MessageSquare, menuKey: "consultations" },
       { href: "/retention", label: "이탈 방어", icon: ShieldAlert, menuKey: "retention" },

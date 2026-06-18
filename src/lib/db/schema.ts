@@ -752,6 +752,8 @@ export const studentGrades = pgTable(
     studentId: uuid("student_id")
       .notNull()
       .references(() => students.id, { onDelete: "cascade" }),
+    // 시험(exams) 일괄입력으로 생성된 점수는 exam_id로 시험에 묶인다. NULL=학생 상세에서 직접 입력한 자유 성적.
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
     examName: text("exam_name").notNull(),
     subject: text("subject").notNull(),
     score: numeric("score", { precision: 6, scale: 2 }),
@@ -764,6 +766,34 @@ export const studentGrades = pgTable(
   (t) => [
     index("grades_tenant_student_idx").on(t.tenantId, t.studentId),
     index("grades_tenant_taken_idx").on(t.tenantId, t.takenOn),
+    index("grades_exam_idx").on(t.examId),
+    // 부분 유니크 ux_grades_exam_student (exam_id, student_id) WHERE exam_id is not null 는
+    // 손수 alpha SQL(0028a)에서 — 일괄 저장 upsert 키. (Drizzle은 부분 유니크 WHERE 미표현, #15)
+  ],
+);
+
+// === exams (시험 정의) ===
+// 반/학년/학원 단위 시험을 1급 엔티티로 관리(/exams). 시험 등록 → 일괄 성적입력의 기준.
+export const exams = pgTable(
+  "exams",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    subject: text("subject").notNull(),
+    examType: text("exam_type").notNull().default("weekly"), // weekly/mock/school (주간/모의/학교)
+    examDate: date("exam_date").notNull(),
+    maxScore: numeric("max_score", { precision: 6, scale: 2 }),
+    scope: jsonb("scope"), // {type:'class'|'grade'|'academy', classIds?:[], grades?:[]}
+    notes: text("notes"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("exams_tenant_date_idx").on(t.tenantId, t.examDate),
+    index("exams_tenant_subject_idx").on(t.tenantId, t.subject),
   ],
 );
 
