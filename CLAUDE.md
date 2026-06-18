@@ -111,6 +111,19 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·시험관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 ijw 충실 이식 — 그룹밴드·평일/주말 분리·2D 병합·엑셀 격자 (2026-06-18)
+"기능 자체를 완전히 이식해 자연스러운 이전 느낌"이 목표(디자인 복제 아님). ijw 수학 시간표 코드(`TimetableGrid.tsx`)+
+스크린샷 대조로 기본뷰 전면 재구축.
+- **교시 축 과목 인지**(`features/timetable/lib/periods.ts` `slotPeriodRow`/`subjectPeriodRows`) — 16시→1교시 휴리스틱
+  제거. 수학 8교시→4그룹, 영어 10교시, 주말 8교시(시간단위). 매칭 실패는 '기타' 폴백. 데모 데이터가 ijw 교시 시각 보존.
+- **요일그룹 밴드 + 평일/주말 분리**(`_components/weekday-group-tables.tsx`) — 월목/화금/수 그룹 컬럼 밴드(3단 헤더),
+  주말은 1교시 시작시각이 달라(09:00) 우측에 자체 교시열로. 행높이 2:1(2주말교시=1평일그룹) 격자 정렬.
+- **2D 병합**(`lib/grid.ts` `computeBlocks`) — 같은 반이 연속교시(rowSpan)·인접요일(colSpan)에 걸치면 한 칸 + 셀 내
+  같은 반 합치기. **엑셀 격자**(table-fixed+colgroup 균일 폭, 빈 교시도 균일 높이, 넘치면 셀 내부 스크롤).
+- 셀=학생 세로 명단(이름·학교·학년, 신입 빨강/전입 초록). 통합뷰도 실교시 축.
+- ⚠️ **분리등원(월-only/목-only 학생)·합반**은 데모 데이터(attendance_days 전건 빔, merge_group 희소)가 없어 보류.
+- **남은 기능 이식(학생/수업목록 빠른승리 · 죽은기능 배선 · import복원/강의실배정)은 [`docs/ijw-feature-port.md`](docs/ijw-feature-port.md)** 에 정리 — 다른 컴퓨터에서 이어가기.
+
 ### ijw 기능 갭 P2 — 운영 깊이 7건 + 카카오 알림톡 머지 (2026-06-18)
 ijw-calander ↔ eywa 전수 갭검수(143건)에서 P0(막다른 길 9건)·P1(일상운영 9건)에 이어 **P2(운영 깊이 7건)
 전부 완료**. 신규 테이블이 필요한 무거운 기능 — 데모를 '진짜 운영툴'로 보이게 하는 깊이. 계획서
@@ -264,7 +277,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 메뉴 | 데이터 | 핵심 위젯 |
 |---|---|---|
 | 대시보드 (`/dashboard`) | dashboard 9개 쿼리 | 김수진 인사말 + KPI 4 + Timeline(1.55fr) + Announcements(1fr) + 7일 추세 |
-| 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **기본뷰(강사×교시) / 통합뷰(요일×교시) 토글** + 과목 chip + 학생 명단 |
+| 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **과목 단일선택(기본 수학)** + 기본뷰(요일그룹밴드 월목/화금/수 + 주말 별도판, 과목별 실교시, 같은반 2D병합, 엑셀격자) / 통합뷰(요일×교시) + 셀 학생 세로명단(신입·전입색). [`docs/ijw-feature-port.md`] |
 | 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
 | 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
 | 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill (상세 성적탭에 **레벨테스트** 섹션) |
