@@ -4,6 +4,7 @@ import { BillingContent } from "./_components/billing-content";
 import { TextbooksPanel } from "./_components/textbooks-panel";
 import { ExpensesPanel } from "./_components/expenses-panel";
 import { CalculatorPanel } from "./_components/calculator-panel";
+import { CatalogPanel } from "./_components/catalog-panel";
 import { BillingTabs, type BillingTab } from "./_components/billing-tabs";
 import { BillingTabSync } from "./_components/billing-tab-sync";
 
@@ -16,7 +17,9 @@ function resolveTab(sp: Sp): BillingTab {
       ? "expenses"
       : sp.tab === "calculator"
         ? "calculator"
-        : "billing";
+        : sp.tab === "catalog"
+          ? "catalog"
+          : "billing";
 }
 
 // 면(책갈피)마다 문서 제목을 달리해 창 타이틀바가 "수납관리 · 교재신청"으로 라이브 갱신(route-window 관찰).
@@ -29,7 +32,9 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
         ? " · 지출관리"
         : tab === "calculator"
           ? " · 수강료 계산기"
-          : "";
+          : tab === "catalog"
+            ? " · 교재 단가표"
+            : "";
   return { title: `수납관리${suffix} — eywa` };
 }
 
@@ -49,6 +54,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <ExpensesPanel sp={sp} />
         ) : tab === "calculator" ? (
           <CalculatorPanel />
+        ) : tab === "catalog" ? (
+          <CatalogPanel sp={sp} />
         ) : (
           <BillingContent sp={sp} />
         )}

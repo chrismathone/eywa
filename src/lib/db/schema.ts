@@ -690,6 +690,32 @@ export const textbookOrders = pgTable(
   ],
 );
 
+// === textbook_catalog (교재 마스터 단가표) ===
+// 학원 표준 교재·단가를 한 번 등록해 교재 신청 시 자동 채움(textbook-dialog 교재검색 picker).
+// 수납관리 창의 '단가표' 책갈피 면에서 CRUD.
+export const textbookCatalog = pgTable(
+  "textbook_catalog",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    bookDetail: text("book_detail"), // 단원/상세 (예: "3. 함수")
+    gradeLevel: text("grade_level"), // 초/중/고
+    subject: text("subject"), // math/english/... (classes.subject 동일 코드)
+    publisher: text("publisher"),
+    price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("textbook_catalog_tenant_active_idx").on(t.tenantId, t.isActive),
+    index("textbook_catalog_tenant_title_idx").on(t.tenantId, t.title),
+  ],
+);
+
 // === expenses (지출관리) ===
 // 학원 지출 기록(인건비/운영비/매입/기타) + 품목 라인아이템. 수납관리 창의 '지출' 책갈피 면.
 export const expenses = pgTable(

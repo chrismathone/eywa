@@ -9,6 +9,7 @@ import {
   getTextbookOrdersPage,
   getTextbookStats,
 } from "@/features/billing/server/textbook-queries";
+import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { TextbooksTable } from "./textbooks-table";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -30,10 +31,11 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, stats, students] = await Promise.all([
+  const [{ rows, total }, stats, students, catalog] = await Promise.all([
     getTextbookOrdersPage({ status, q }, page, PAGE_SIZE),
     getTextbookStats(),
     getStudentOptions(),
+    getCatalogOptions(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -112,10 +114,10 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
       </div>
 
       {total === 0 ? (
-        <TextbooksTable rows={[]} students={students} />
+        <TextbooksTable rows={[]} students={students} catalog={catalog} />
       ) : (
         <>
-          <TextbooksTable rows={rows} students={students} />
+          <TextbooksTable rows={rows} students={students} catalog={catalog} />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Loader2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   type TextbookState,
 } from "@/features/billing/server/textbook-actions";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
+import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -25,10 +26,12 @@ function SubmitBtn() {
 export function TextbookDialog({
   order,
   students,
+  catalog,
   onClose,
 }: {
   order: TextbookOrderRow | null;
   students: StudentOption[];
+  catalog: CatalogOption[];
   onClose: (saved: boolean) => void;
 }) {
   const editing = !!order;
@@ -36,6 +39,10 @@ export function TextbookDialog({
     editing ? updateTextbookOrder : createTextbookOrder,
     undefined,
   );
+  // 교재명·상세·금액은 '교재 검색'(단가표) 선택으로 자동 채워지므로 controlled.
+  const [bookName, setBookName] = useState(order?.bookName ?? "");
+  const [bookDetail, setBookDetail] = useState(order?.bookDetail ?? "");
+  const [price, setPrice] = useState<number | string>(order?.price ?? 0);
 
   if (state?.ok) {
     queueMicrotask(() => onClose(true));
@@ -59,11 +66,45 @@ export function TextbookDialog({
         <form action={formAction} className="space-y-4">
           {editing ? <input type="hidden" name="id" value={order.id} /> : null}
 
+          {catalog.length > 0 ? (
+            <Field label="교재 검색 (단가표에서 불러오기)">
+              <SearchableSelect
+                options={catalog.map((c) => ({
+                  value: c.id,
+                  label: c.title,
+                  hint: c.bookDetail ?? undefined,
+                }))}
+                placeholder="단가표에서 선택..."
+                searchPlaceholder="교재명 검색..."
+                onValueChange={(id) => {
+                  const c = catalog.find((x) => x.id === id);
+                  if (c) {
+                    setBookName(c.title);
+                    setBookDetail(c.bookDetail ?? "");
+                    setPrice(c.price);
+                  }
+                }}
+              />
+            </Field>
+          ) : null}
+
           <Field label="교재명" error={state?.fieldErrors?.bookName}>
-            <input name="bookName" defaultValue={order?.bookName ?? ""} className={inputCls} placeholder="예: 가우스 중2-1 1권" />
+            <input
+              name="bookName"
+              value={bookName}
+              onChange={(e) => setBookName(e.target.value)}
+              className={inputCls}
+              placeholder="예: 가우스 중2-1 1권"
+            />
           </Field>
           <Field label="상세 (단원 등)">
-            <input name="bookDetail" defaultValue={order?.bookDetail ?? ""} className={inputCls} placeholder="선택" />
+            <input
+              name="bookDetail"
+              value={bookDetail}
+              onChange={(e) => setBookDetail(e.target.value)}
+              className={inputCls}
+              placeholder="선택"
+            />
           </Field>
 
           <Field label="학생">
@@ -91,7 +132,15 @@ export function TextbookDialog({
           </div>
 
           <Field label="금액">
-            <input name="price" type="number" min="0" step="500" defaultValue={order?.price ?? 0} className={`${inputCls} num text-right`} />
+            <input
+              name="price"
+              type="number"
+              min="0"
+              step="500"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className={`${inputCls} num text-right`}
+            />
           </Field>
 
           <Field label="메모">

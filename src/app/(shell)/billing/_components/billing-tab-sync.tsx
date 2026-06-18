@@ -22,7 +22,7 @@ export function BillingTabSync() {
       if (!data || data.type !== "eywa:billing-tab") return;
       const tab = data.tab;
       const path =
-        tab === "textbooks" || tab === "expenses" || tab === "calculator"
+        tab === "textbooks" || tab === "expenses" || tab === "calculator" || tab === "catalog"
           ? `/billing?tab=${tab}`
           : "/billing";
       router.replace(withEmbed(path));

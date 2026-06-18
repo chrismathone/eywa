@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TextbookDialog } from "./textbook-dialog";
 import { deleteTextbookOrder, setTextbookStatus } from "@/features/billing/server/textbook-actions";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
+import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -22,9 +23,11 @@ const STATUS: { key: string; label: string }[] = [
 export function TextbooksTable({
   rows,
   students,
+  catalog,
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
+  catalog: CatalogOption[];
 }) {
   const [dialog, setDialog] = useState<{ order: TextbookOrderRow | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -138,7 +141,12 @@ export function TextbooksTable({
       )}
 
       {dialog ? (
-        <TextbookDialog order={dialog.order} students={students} onClose={() => setDialog(null)} />
+        <TextbookDialog
+          order={dialog.order}
+          students={students}
+          catalog={catalog}
+          onClose={() => setDialog(null)}
+        />
       ) : null}
     </>
   );
