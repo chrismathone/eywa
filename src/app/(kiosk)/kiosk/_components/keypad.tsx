@@ -14,6 +14,7 @@ type CheckinResponse =
       time: string;
       message: string | null;
       recipientMasked: string | null;
+      reflectedClassName?: string | null;
     }
   | { ok: false; reason: string };
 
@@ -197,6 +198,9 @@ function ResultCard({ res, onDismiss }: { res: CheckinResponse; onDismiss: () =>
           <p className="text-text-dim mt-1 text-[12px] leading-relaxed">{res.message}</p>
           {res.recipientMasked ? (
             <p className="text-text-faint mt-1 text-[11px]">→ {res.recipientMasked}</p>
+          ) : null}
+          {isIn && res.reflectedClassName ? (
+            <p className="text-primary mt-2 text-[11px]">✓ {res.reflectedClassName} 출석부 기록</p>
           ) : null}
         </div>
       </button>

@@ -14,3 +14,25 @@ export function decideCheckinAction(existing: ExistingCheckin): CheckinAction {
   if (!existing.checkedOutAt) return "check_out";
   return "noop";
 }
+
+// ── 출석부 연동: 등원 시각이 어느 수업 시간에 해당하는지 ──────────────────────
+// "HH:MM" 또는 "HH:MM:SS" → 자정 기준 분. 파싱 불가 토막은 0 처리.
+export function timeToMinutes(t: string): number {
+  const [h, m] = String(t).split(":");
+  return (Number(h) || 0) * 60 + (Number(m) || 0);
+}
+
+/**
+ * 현재 시각(nowMin)이 들어가는 오늘 수업들의 classId. 등원은 수업 시작 전 도착도 인정하므로
+ * 시작 graceBeforeMin(기본 30분) 전부터 종료 시각까지를 창으로 본다.
+ * 호출부는 결과가 정확히 1개일 때만 출석부에 반영(0/다중은 모호 → 스킵).
+ */
+export function classesInWindow(
+  schedules: { classId: string; startMin: number; endMin: number }[],
+  nowMin: number,
+  graceBeforeMin = 30,
+): string[] {
+  return schedules
+    .filter((s) => nowMin >= s.startMin - graceBeforeMin && nowMin <= s.endMin)
+    .map((s) => s.classId);
+}

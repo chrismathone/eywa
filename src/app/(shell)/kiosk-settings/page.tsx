@@ -37,6 +37,8 @@ export default async function KioskSettingsPage() {
         <h1 className="text-foreground text-xl font-bold">출석 키오스크 설정</h1>
         <p className="text-text-dim mt-1 text-[13px] leading-relaxed">
           태블릿을 현관에 두면 학생이 출석번호를 입력해 스스로 등하원을 체크하고, 학부모에게 알림이 갑니다.
+          등원 시각이 수업 시간과 맞으면 <span className="text-foreground">출석부에도 자동 출석 처리</span>됩니다(현재
+          시각 수업이 하나로 특정될 때만, 강사가 이미 입력한 출결은 보존).
           <span className="text-gold"> 현재 알림은 발송 시뮬레이션</span>(실제 전송 없음)이며, 카카오 채널
           연동 후 실발송으로 전환됩니다.
         </p>
