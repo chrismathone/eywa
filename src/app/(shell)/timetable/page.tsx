@@ -15,7 +15,11 @@ import {
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
 import { IntegratedCell } from "./_components/integrated-cell";
-import { TimetableBoard } from "./_components/timetable-board";
+import {
+  TimetableEditProvider,
+  TimetableEditControls,
+  TimetableDndArea,
+} from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 
@@ -75,7 +79,8 @@ export default async function TimetablePage({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <TimetableEditProvider>
+      <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
         {/* 과목 chip */}
@@ -127,6 +132,13 @@ export default async function TimetablePage({
           총 {slots.length}슬롯 · {totalStudents}명 등록
         </span>
 
+        {slots.length > 0 ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <TimetableEditControls />
+          </>
+        ) : null}
+
         <TimetableToolbarActions />
       </div>
 
@@ -136,7 +148,7 @@ export default async function TimetablePage({
           title="해당 과목의 시간표가 없습니다"
         />
       ) : (
-        <TimetableBoard>
+        <TimetableDndArea>
           <div id="timetable-export-root" className="flex min-h-0 flex-1 flex-col">
             {view === "basic" ? (
               <WeekdayGroupTables slots={slots} />
@@ -144,9 +156,10 @@ export default async function TimetablePage({
               <IntegratedView slots={slots} days={DAYS} />
             )}
           </div>
-        </TimetableBoard>
+        </TimetableDndArea>
       )}
-    </div>
+      </div>
+    </TimetableEditProvider>
   );
 }
 

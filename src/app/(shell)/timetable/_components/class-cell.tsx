@@ -24,11 +24,12 @@ function metaLabel(school: string | null | undefined, grade: string | null | und
   return [school, grade].filter(Boolean).join(" ");
 }
 
-/** 학생 행 배경 — 신입(빨강)·전입(초록)·그 외(기본). ijw 시간표의 신입/전학 색 근사. */
+/** 학생 행 배경 — 신입(빨강)·전입(초록)·그 외(진한 기본). ijw 시간표의 신입/전학 색 근사.
+ * 재원생은 가독성을 위해 text-foreground(진함) — 대기/퇴원과 톤 위계를 둔다. */
 function studentRowTone(s: { isNew?: boolean; isTransferredIn?: boolean }): string {
   if (s.isNew) return "bg-danger-soft text-danger";
   if (s.isTransferredIn) return "bg-primary-soft text-primary";
-  return "text-text-dim";
+  return "text-foreground";
 }
 
 const ROW_CLASS =
@@ -68,7 +69,7 @@ function DraggableStudentRow({
       {target ? (
         <span className="text-primary shrink-0 font-mono text-[9px]">→{target.toClassName}</span>
       ) : meta ? (
-        <span className="shrink-0 font-mono text-[9px] opacity-60">{meta}</span>
+        <span className="shrink-0 font-mono text-[9px] opacity-70">{meta}</span>
       ) : null}
     </div>
   );
@@ -79,7 +80,7 @@ function StudentRow({ name, meta, tone }: { name: string; meta: string; tone: st
   return (
     <div className={`${ROW_CLASS} ${tone}`}>
       <span className="truncate">{name}</span>
-      {meta ? <span className="shrink-0 font-mono text-[9px] opacity-60">{meta}</span> : null}
+      {meta ? <span className="shrink-0 font-mono text-[9px] opacity-70">{meta}</span> : null}
     </div>
   );
 }
@@ -169,6 +170,9 @@ export function ClassCell({
   const activeCap = roster === "names" ? 15 : 8;
   const SECTION_CAP = 6;
   const showRoster = roster !== "none" && slot.students.length > 0;
+  // 대기·퇴원이 있으면 셀 높이를 채워 그 그룹을 셀 하단에 정렬(재원 바로 아래가 아니라). 고정높이
+  // flex 컨테이너(weekday-group) 안에서만 fill 효과 — 통합뷰(블록 부모)에선 flex-1이 무시돼 기존대로.
+  const hasSecondary = hold.length > 0 || withdrawn.length > 0;
 
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `class:${slot.id}`,
@@ -179,13 +183,15 @@ export function ClassCell({
     <>
       <div
         ref={setDroppableRef}
-        className={`border-line overflow-hidden rounded-[3px] border transition ${isOver ? "ring-primary ring-2" : ""}`}
+        className={`border-line overflow-hidden rounded-[3px] border transition ${
+          hasSecondary ? "flex min-h-0 flex-1 flex-col" : ""
+        } ${isOver ? "ring-primary ring-2" : ""}`}
       >
         {/* 반이름 헤더 바 — 클릭 시 상세 drawer */}
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className={`block w-full px-2 py-1 text-left transition hover:brightness-95 ${color}`}
+          className={`block w-full shrink-0 px-2 py-1 text-left transition hover:brightness-95 ${color}`}
           aria-label={`${slot.className} 상세 보기`}
         >
           <div className="flex items-baseline justify-between gap-2">
@@ -200,37 +206,49 @@ export function ClassCell({
           </div>
         </button>
 
-        {/* 학생 세로 나열 — 재원→대기→퇴원 섹션(엑셀식 구분선). 신입=빨강·전입=초록·퇴원=취소선. */}
+        {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
-          <div className="bg-card divide-line/40 divide-y text-[10px]">
-            <StudentSection
-              students={active}
-              classId={slot.id}
-              editing={editing}
-              cap={activeCap}
-              draggable
-              tone={studentRowTone}
-            />
-            <StudentSection
-              students={hold}
-              classId={slot.id}
-              editing={editing}
-              cap={SECTION_CAP}
-              draggable={false}
-              tone={() => "text-text-dim"}
-              label="대기"
-              labelTone="bg-amber-soft/40 text-amber"
-            />
-            <StudentSection
-              students={withdrawn}
-              classId={slot.id}
-              editing={editing}
-              cap={SECTION_CAP}
-              draggable={false}
-              tone={() => "text-text-faint line-through"}
-              label="퇴원"
-              labelTone="bg-bg-soft text-text-faint"
-            />
+          <div
+            className={`bg-card text-[10px] ${
+              hasSecondary ? "flex min-h-0 flex-1 flex-col overflow-y-auto" : ""
+            }`}
+          >
+            {/* 재원 — 상단 */}
+            <div className="divide-line/40 shrink-0 divide-y">
+              <StudentSection
+                students={active}
+                classId={slot.id}
+                editing={editing}
+                cap={activeCap}
+                draggable
+                tone={studentRowTone}
+              />
+            </div>
+            {/* 대기·퇴원 — 셀 하단 정렬 */}
+            {hasSecondary ? (
+              <div className="divide-line/40 mt-auto shrink-0 divide-y border-t">
+                <StudentSection
+                  students={hold}
+                  classId={slot.id}
+                  editing={editing}
+                  cap={SECTION_CAP}
+                  draggable={false}
+                  tone={() => "text-text-dim"}
+                  label="대기"
+                  labelTone="bg-amber-soft/40 text-amber"
+                />
+                <StudentSection
+                  students={withdrawn}
+                  classId={slot.id}
+                  editing={editing}
+                  cap={SECTION_CAP}
+                  draggable={false}
+                  tone={() => "text-text-faint line-through"}
+                  label="퇴원"
+                  labelTone="bg-bg-soft text-text-faint"
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

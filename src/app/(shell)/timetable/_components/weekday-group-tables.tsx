@@ -232,9 +232,11 @@ function GroupTable({
                       {merged.length === 0 ? (
                         <span className="text-text-faint text-[11px]">—</span>
                       ) : (
+                        // 고정높이 flex-col — 대기·퇴원 있는 셀(ClassCell이 flex-1)이 칸을 채워
+                        // 그 그룹을 셀 하단에 정렬. 재원만 있는 셀은 content 높이로 상단 정렬(기존과 동일).
                         <div
-                          className="space-y-1.5 overflow-y-auto"
-                          style={{ maxHeight: block.rowSpan * rowHeight - 16 }}
+                          className="flex flex-col gap-1.5 overflow-y-auto"
+                          style={{ height: block.rowSpan * rowHeight - 16 }}
                         >
                           {merged.map((s) => (
                             <ClassCell key={s.id} slot={s} roster="names" />
