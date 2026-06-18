@@ -298,3 +298,27 @@ export async function toggleConsultationFollowUp(
   revalidatePath("/consultations");
   return undefined;
 }
+
+export type DeleteConsultationState = { error?: string } | undefined;
+
+export async function deleteStudentConsultation(
+  _prev: DeleteConsultationState,
+  formData: FormData,
+): Promise<DeleteConsultationState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+  if (!id) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("student_consultations").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/consultations");
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  if (redirectTo) redirect(redirectTo);
+  return undefined;
+}

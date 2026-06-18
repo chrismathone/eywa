@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getStudentConsultationHistory } from "@/features/students/server/queries";
+import { ConsultationDeleteButton } from "../../../consultations/_components/consultation-delete-button";
 
 const CATEGORY_LABEL: Record<string, string> = {
   general: "일반",
@@ -48,7 +49,7 @@ export async function ConsultationsTab({ studentId }: { studentId: string }) {
         <>
           <ul className="space-y-3">
             {visible.map((c) => (
-              <ConsultItem key={c.id} c={c} />
+              <ConsultItem key={c.id} c={c} studentId={studentId} />
             ))}
           </ul>
           {rest.length > 0 ? (
@@ -58,7 +59,7 @@ export async function ConsultationsTab({ studentId }: { studentId: string }) {
               </summary>
               <ul className="mt-3 space-y-3">
                 {rest.map((c) => (
-                  <ConsultItem key={c.id} c={c} />
+                  <ConsultItem key={c.id} c={c} studentId={studentId} />
                 ))}
               </ul>
             </details>
@@ -69,7 +70,7 @@ export async function ConsultationsTab({ studentId }: { studentId: string }) {
   );
 }
 
-function ConsultItem({ c }: { c: Consult }) {
+function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
   return (
     <li className="bg-card border-border space-y-2 rounded-md border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-3">
@@ -89,12 +90,15 @@ function ConsultItem({ c }: { c: Consult }) {
         {c.counselorName ? (
           <span className="text-muted-foreground text-[10px]">· {c.counselorName}</span>
         ) : null}
-        <Link
-          href={`/consultations/${c.id}/edit`}
-          className="text-chart-1 ml-auto text-[11px] hover:underline"
-        >
-          수정
-        </Link>
+        <div className="ml-auto flex items-center gap-3">
+          <Link
+            href={`/consultations/${c.id}/edit`}
+            className="text-chart-1 text-[11px] hover:underline"
+          >
+            수정
+          </Link>
+          <ConsultationDeleteButton id={c.id} studentId={studentId} label="" />
+        </div>
       </header>
       <p className="text-foreground text-sm leading-relaxed">{c.summary}</p>
       {c.followUpAction ? (
