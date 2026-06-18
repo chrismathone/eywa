@@ -84,9 +84,9 @@ export default async function TimetablePage({
   const totalStudents = slots.reduce((s, x) => s + x.students.length, 0);
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Toolbar */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
         {/* 과목 chip */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">과목</span>
@@ -146,7 +146,7 @@ export default async function TimetablePage({
         />
       ) : (
         <TimetableBoard>
-          <div id="timetable-export-root">
+          <div id="timetable-export-root" className="flex min-h-0 flex-1 flex-col">
             {view === "basic" ? (
               <BasicView slots={slots} />
             ) : (
@@ -195,7 +195,7 @@ function BasicView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
   }
 
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+    <DragScrollArea className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
@@ -284,7 +284,7 @@ function IntegratedView({ slots }: { slots: ScheduleSlotWithStudents[] }) {
   }
 
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
+    <DragScrollArea className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>

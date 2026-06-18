@@ -9,7 +9,9 @@ export function TimetableToolbarActions() {
   async function exportPng() {
     setExporting(true);
     try {
-      const target = document.getElementById("timetable-export-root");
+      // 캡처 대상은 전체 크기의 표(스크롤 콘텐츠) — 보드는 높이 제한된 스크롤 뷰포트라
+      // 컨테이너를 캡처하면 보이는 만큼만 잘린다. 표를 직접 잡아 전 행·열을 담는다.
+      const target = document.querySelector<HTMLTableElement>("#timetable-export-root table");
       if (!target) {
         setExporting(false);
         return;
