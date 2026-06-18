@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 
 export type StudentConsultationCategory =
   | "general"
@@ -262,6 +263,69 @@ export async function getStudentOptionsForConsultation(): Promise<StudentOption[
     .order("name", { ascending: true });
   if (!data) return [];
   return data.map((r) => ({ id: r.id, name: r.name, grade: r.grade }));
+}
+
+export type ConsultationNeededRow = {
+  id: string;
+  name: string;
+  grade: string | null;
+  lastConsultedAt: string | null;
+  daysSince: number | null;
+};
+
+/**
+ * 상담 필요 학생 — 재원생 중 마지막 학생상담이 thresholdDays 초과(또는 한 번도 없음).
+ * 상담 1340건을 전건 안전 수집(fetchAllPaged, 1000행 절단 회피) 후 학생별 최신만 집계.
+ */
+export async function getStudentsNeedingConsultation(
+  thresholdDays = 30,
+  limit = 20,
+): Promise<{ rows: ConsultationNeededRow[]; total: number }> {
+  const supabase = await createClient();
+  const enrolled = await fetchAllPaged<{ id: string; name: string; grade: string | null }>((from, to) =>
+    supabase
+      .from("students")
+      .select("id, name, grade")
+      .eq("status", "enrolled")
+      .order("name", { ascending: true })
+      .range(from, to),
+  );
+  if (enrolled.length === 0) return { rows: [], total: 0 };
+
+  const consults = await fetchAllPaged<{ student_id: string; consulted_at: string }>((from, to) =>
+    supabase
+      .from("student_consultations")
+      .select("student_id, consulted_at")
+      .order("consulted_at", { ascending: false })
+      .range(from, to),
+  );
+  const last = new Map<string, string>();
+  for (const c of consults) {
+    if (!last.has(c.student_id)) last.set(c.student_id, c.consulted_at); // desc → 첫 등장이 최신
+  }
+
+  const now = Date.now();
+  const cutoff = now - thresholdDays * 86_400_000;
+  const all = enrolled
+    .map((s) => {
+      const lc = last.get(s.id) ?? null;
+      const t = lc ? new Date(lc).getTime() : null;
+      return {
+        id: s.id,
+        name: s.name,
+        grade: s.grade,
+        lastConsultedAt: lc,
+        daysSince: t ? Math.floor((now - t) / 86_400_000) : null,
+      };
+    })
+    .filter((r) => r.lastConsultedAt === null || new Date(r.lastConsultedAt).getTime() < cutoff)
+    .sort((a, b) => {
+      if (a.lastConsultedAt === null && b.lastConsultedAt !== null) return -1;
+      if (b.lastConsultedAt === null && a.lastConsultedAt !== null) return 1;
+      return (b.daysSince ?? 0) - (a.daysSince ?? 0);
+    });
+
+  return { rows: all.slice(0, limit), total: all.length };
 }
 
 // ────────────────────── 통계뷰 ──────────────────────

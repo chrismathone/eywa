@@ -18,6 +18,7 @@ export type StaffFormValue = {
   id?: string;
   displayName: string;
   email: string;
+  phone: string | null;
   systemRole: SystemRole;
   hireDate: string | null;
   jobTitle: string | null;
@@ -51,6 +52,7 @@ export function StaffForm({
   const v: StaffFormValue = initialValue ?? {
     displayName: "",
     email: "",
+    phone: null,
     systemRole: assignableRoleOptions[0] ?? "viewer",
     hireDate: null,
     jobTitle: null,
@@ -134,6 +136,17 @@ export function StaffForm({
           />
         </Field>
       </div>
+
+      <Field label="연락처" htmlFor="phone">
+        <input
+          id="phone"
+          name="phone"
+          type="tel"
+          defaultValue={v.phone ?? ""}
+          placeholder="예: 010-1234-5678"
+          className={`${inputClass} num`}
+        />
+      </Field>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="채용일" htmlFor="hireDate">

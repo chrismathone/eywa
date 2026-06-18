@@ -116,3 +116,68 @@ export async function batchMarkInvoicesPaid(
   revalidatePath("/billing");
   return { saved };
 }
+
+const INVOICE_CATEGORIES: Record<string, string> = {
+  tuition: "수강료",
+  material: "교재",
+  exam: "시험",
+  other: "기타",
+};
+const PERIOD_RE = /^\d{4}-\d{2}$/;
+
+function won(v: FormDataEntryValue | null): number {
+  return Number(String(v ?? "0").replace(/[,\s]/g, "")) || 0;
+}
+
+export type CreateInvoiceState =
+  | { error?: string; fieldErrors?: Record<string, string>; ok?: boolean }
+  | undefined;
+
+/** 청구서 신규 생성 — 학생·청구월(YYYY-MM)·항목·금액. (tenant,student,period) 유니크 위반은 친절히 안내. */
+export async function createInvoice(
+  _prev: CreateInvoiceState,
+  formData: FormData,
+): Promise<CreateInvoiceState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const period = String(formData.get("period") ?? "").trim();
+  const categoryRaw = String(formData.get("category") ?? "tuition").trim();
+  const amountTotal = won(formData.get("amountTotal"));
+  const amountDiscount = won(formData.get("amountDiscount"));
+  const dueDate = String(formData.get("dueDate") ?? "").trim() || null;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+
+  const fieldErrors: Record<string, string> = {};
+  if (!studentId) fieldErrors.studentId = "학생을 선택해주세요";
+  if (!PERIOD_RE.test(period)) fieldErrors.period = "청구월 형식은 YYYY-MM 입니다";
+  if (amountTotal <= 0) fieldErrors.amountTotal = "청구액을 입력해주세요";
+  if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
+  const category = INVOICE_CATEGORIES[categoryRaw] ? categoryRaw : "tuition";
+
+  const supabase = await createClient();
+  const lineItems = [{ kind: category, description: INVOICE_CATEGORIES[category], amount: amountTotal }];
+  const { error } = await supabase.from("invoices").insert({
+    tenant_id: user.tenantId,
+    student_id: studentId,
+    period,
+    category,
+    amount_total: amountTotal,
+    amount_paid: 0,
+    amount_discount: amountDiscount,
+    status: "unpaid",
+    line_items: lineItems,
+    due_date: dueDate,
+    notes,
+  });
+  if (error) {
+    if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
+      return { error: "이미 해당 학생의 이 달 청구서가 있습니다" };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/billing");
+  return { ok: true };
+}

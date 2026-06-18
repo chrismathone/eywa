@@ -24,7 +24,8 @@ export type MenuKey =
   | "help"
   | "admin"
   | "teacher_onescreen"
-  | "my_learning";
+  | "my_learning"
+  | "kiosk_settings";
 
 export type Access = "full" | "scoped" | "readonly" | "none";
 
@@ -50,6 +51,8 @@ export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
   teacher_onescreen: { master: "none", admin: "none", manager: "none", teacher: "full", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 학생 전용 — 내 학습 현황(누적 대시보드) + 데일리 리포트. 직원(원장·강사 등)에겐 미표시.
   my_learning: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "full" },
+  // master 전용 — 출석 키오스크 설정(출석번호 발급·기기 등록·발송 시뮬 피드). 사이드바 미표시(직접 URL).
+  kiosk_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
 };
 
 export function canAccess(role: SystemRole, menu: MenuKey): boolean {

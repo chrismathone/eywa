@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 
-const STATUSES = ["present", "absent", "late", "excused", "makeup"] as const;
+const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
 type Status = (typeof STATUSES)[number];
 
 export type SaveAttendanceState = { error?: string; saved?: number } | undefined;
@@ -109,4 +109,73 @@ export async function saveAttendance(
   revalidatePath(`/attendance/${date}`);
   revalidatePath(`/attendance/${date}/${classId}`);
   redirect(`/attendance/${date}?saved=${saved}`);
+}
+
+export type CellResult = { ok: true } | { error: string };
+
+/**
+ * 매트릭스 인라인 셀 1건 출결 토글 — 페이지 이동 없이 빠르게 찍는다(반응속도 1순위).
+ * status=null 이면 해당 셀 기록 삭제(지우기). 기존 record가 있으면 update, 없으면 insert.
+ * 상세 입력폼(메모·숙제)은 별도 유지 — 여기선 상태만 다룬다.
+ */
+export async function setAttendanceCell(input: {
+  studentId: string;
+  classId: string;
+  sessionDate: string;
+  status: Status | null;
+}): Promise<CellResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const { studentId, classId, sessionDate, status } = input;
+  if (!studentId || !classId || !sessionDate) return { error: "필수 값이 누락되었습니다" };
+  if (status !== null && !STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
+
+  const supabase = await createClient();
+
+  // 지우기 — 해당 (반·학생·날짜) 기록 전부 삭제.
+  if (status === null) {
+    const { error } = await supabase
+      .from("attendance_records")
+      .delete()
+      .eq("class_id", classId)
+      .eq("student_id", studentId)
+      .eq("session_date", sessionDate);
+    if (error) return { error: error.message };
+    revalidatePath("/attendance");
+    return { ok: true };
+  }
+
+  // 최신 기록 1건 조회 → 있으면 update, 없으면 insert (매트릭스는 최신본을 보여줌).
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("id")
+    .eq("class_id", classId)
+    .eq("student_id", studentId)
+    .eq("session_date", sessionDate)
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nowIso = new Date().toISOString();
+  if (existing?.id) {
+    const { error } = await supabase
+      .from("attendance_records")
+      .update({ status, recorded_by: user.id, recorded_at: nowIso })
+      .eq("id", existing.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from("attendance_records").insert({
+      tenant_id: user.tenantId,
+      class_id: classId,
+      student_id: studentId,
+      session_date: sessionDate,
+      status,
+      recorded_by: user.id,
+    });
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/attendance");
+  return { ok: true };
 }

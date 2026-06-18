@@ -43,7 +43,11 @@ export const attendanceStatusEnum = pgEnum("attendance_status", [
   "late",
   "excused",
   "makeup",
+  "early_leave",
 ]);
+
+// 출결/등하원 기록의 입력 경로. "manual"=직원 수동 입력, "kiosk"=무인 태블릿 셀프 체크인.
+export const attendanceAccessMethodEnum = pgEnum("attendance_access_method", ["manual", "kiosk"]);
 
 export const announcementAudienceEnum = pgEnum("announcement_audience", [
   "all",
@@ -132,6 +136,7 @@ export const users = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     displayName: text("display_name").notNull(),
+    phone: text("phone"),
     systemRole: systemRoleEnum("system_role").notNull().default("viewer"),
     status: userStatusEnum("status").notNull().default("active"),
     hireDate: date("hire_date"),
@@ -256,10 +261,19 @@ export const students = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     studentCode: text("student_code"),
     name: text("name").notNull(),
+    englishName: text("english_name"),
     school: text("school"),
     grade: text("grade"),
+    gender: text("gender"), // "male" | "female" | null
+    birthDate: date("birth_date"),
+    address: text("address"),
+    email: text("email"),
+    studentPhone: text("student_phone"),
     parentPhone: text("parent_phone"),
     parentName: text("parent_name"),
+    // 키오스크 셀프 체크인용 출석번호(학생 휴대폰 뒷4자리 우선, 충돌 시 5자리).
+    // 부분 유니크 (tenant_id, attendance_code) WHERE status<>'withdrawn' 는 손수 alpha SQL에서.
+    attendanceCode: text("attendance_code"),
     status: studentStatusEnum("status").notNull().default("prospect"),
     primaryTeacherId: uuid("primary_teacher_id").references(() => users.id, {
       onDelete: "set null",
@@ -283,6 +297,7 @@ export const students = pgTable(
   (t) => [
     index("students_tenant_status_idx").on(t.tenantId, t.status),
     index("students_tenant_primary_teacher_idx").on(t.tenantId, t.primaryTeacherId),
+    index("students_attendance_code_idx").on(t.tenantId, t.attendanceCode),
   ],
 );
 
@@ -341,9 +356,10 @@ export const attendanceRecords = pgTable(
     note: text("note"),
     homeworkRequired: boolean("homework_required").notNull().default(false),
     homeworkDone: boolean("homework_done").notNull().default(false),
-    recordedBy: uuid("recorded_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    // nullable: 키오스크 셀프 체크인이 'present'로 반영하는 행은 입력 직원이 없다(recorded_by=null).
+    recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "restrict" }),
+    // null/"manual"=직원 입력, "kiosk"=무인 태블릿 유래.
+    accessMethod: attendanceAccessMethodEnum("access_method"),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow().notNull(),
     supersedesId: uuid("supersedes_id"),
   },
@@ -765,8 +781,10 @@ export const studentMemos = pgTable(
       .references(() => students.id, { onDelete: "cascade" }),
     category: text("category").notNull().default("general"),
     content: text("content").notNull(),
+    pinned: boolean("pinned").notNull().default(false),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("memos_tenant_student_idx").on(t.tenantId, t.studentId)],
 );
@@ -841,6 +859,81 @@ export const superAdminAuditLogs = pgTable(
   ],
 );
 
+// === attendance_checkins (등하원 — 현관 출입, 시각 기록) ===
+// 반별 출석(attendance_records)과 별개. 키오스크 셀프 체크인의 1차 기록처(학생×당일).
+// 그날 첫 입력=등원(checked_in_at), 둘째 입력=하원(checked_out_at). recorded_by 없음(무인).
+export const attendanceCheckins = pgTable(
+  "attendance_checkins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    checkinDate: date("checkin_date").notNull(),
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+    checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
+    accessMethod: attendanceAccessMethodEnum("access_method").notNull().default("kiosk"),
+    deviceId: uuid("device_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("checkins_tenant_student_date_idx").on(t.tenantId, t.studentId, t.checkinDate),
+  ],
+);
+
+// === kiosk_devices (키오스크 기기 등록 — 디바이스 토큰 바인딩) ===
+// 원장이 1회 등록 → token_hash 저장 + 기기 쿠키에 평문 토큰. 체크인 API가 상수시간 검증.
+// 분실/도난 시 is_active=false로 폐기.
+export const kioskDevices = pgTable(
+  "kiosk_devices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    // 기기 메타 — 등록/최근 접속 IP + User-Agent(기기 종류 추정용). Vercel은 x-forwarded-for로 전달.
+    registeredIp: text("registered_ip"),
+    lastSeenIp: text("last_seen_ip"),
+    userAgent: text("user_agent"),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("kiosk_devices_tenant_idx").on(t.tenantId),
+    uniqueIndex("kiosk_devices_token_hash_idx").on(t.tokenHash),
+  ],
+);
+
+// === attendance_notifications (등하원 발송 로그 — 데모는 시뮬레이션) ===
+// channel/status="simulated"가 기본(실발송 없음). 카카오 승인 후 "sent"/"failed"로 확장.
+export const attendanceNotifications = pgTable(
+  "attendance_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    checkinId: uuid("checkin_id"),
+    kind: text("kind").notNull(), // "checkin" | "checkout"
+    recipientMasked: text("recipient_masked"),
+    message: text("message").notNull(),
+    channel: text("channel").notNull().default("simulated"),
+    status: text("status").notNull().default("simulated"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("attendance_notifications_tenant_created_idx").on(t.tenantId, t.createdAt)],
+);
+
 // === Type exports ===
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
@@ -894,3 +987,9 @@ export type UserIntegration = typeof userIntegrations.$inferSelect;
 export type NewUserIntegration = typeof userIntegrations.$inferInsert;
 export type ReenrollmentCampaignTarget = typeof reenrollmentCampaignTargets.$inferSelect;
 export type NewReenrollmentCampaignTarget = typeof reenrollmentCampaignTargets.$inferInsert;
+export type AttendanceCheckin = typeof attendanceCheckins.$inferSelect;
+export type NewAttendanceCheckin = typeof attendanceCheckins.$inferInsert;
+export type KioskDevice = typeof kioskDevices.$inferSelect;
+export type NewKioskDevice = typeof kioskDevices.$inferInsert;
+export type AttendanceNotification = typeof attendanceNotifications.$inferSelect;
+export type NewAttendanceNotification = typeof attendanceNotifications.$inferInsert;

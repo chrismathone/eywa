@@ -11,6 +11,7 @@ const STATUS_LABEL: Record<string, string> = {
   present: "출석",
   absent: "결석",
   late: "지각",
+  early_leave: "조퇴",
   excused: "공결",
   makeup: "보강",
 };
@@ -19,6 +20,7 @@ const STATUS_COLOR: Record<string, string> = {
   present: "text-chart-2 bg-chart-2/10 border-chart-2/20",
   absent: "text-chart-4 bg-chart-4/10 border-chart-4/20",
   late: "text-chart-3 bg-chart-3/10 border-chart-3/20",
+  early_leave: "text-chart-5 bg-chart-5/10 border-chart-5/20",
   excused: "text-muted-foreground bg-muted border-border",
   makeup: "text-chart-1 bg-chart-1/10 border-chart-1/20",
 };

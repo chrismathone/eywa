@@ -53,7 +53,12 @@ export async function updateSession(request: NextRequest) {
   // Public routes (marketing landing) — let everyone through.
   // Logged-in users on "/" still see the landing here; client-side redirect
   // to /dashboard can be added later if desired.
-  if (PUBLIC_PATHS.has(pathname)) {
+  //
+  // /kiosk* (무인 출석 키오스크)도 비로그인 통과 — 실제 보안은 디바이스 토큰(httpOnly 쿠키)으로
+  // 페이지·API가 직접 검증한다. ⚠️ "/kiosk"·"/kiosk/…"만 공개. "/kiosk-settings"(원장 전용,
+  // (shell))는 startsWith에 걸리지 않도록 정확/슬래시 매칭으로 제외한다.
+  const isKioskPublic = pathname === "/kiosk" || pathname.startsWith("/kiosk/");
+  if (PUBLIC_PATHS.has(pathname) || isKioskPublic) {
     return NextResponse.next({ request });
   }
 

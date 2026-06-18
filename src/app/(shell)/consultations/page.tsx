@@ -24,6 +24,7 @@ import {
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { Pagination } from "@/components/pagination";
 import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
+import { ConsultationDeleteButton } from "./_components/consultation-delete-button";
 
 export const metadata = { title: "학생상담 — eywa" };
 
@@ -298,8 +299,9 @@ export default async function ConsultationsPage({
                       </p>
                     </div>
                   </div>
-                  <div className="text-text-dim flex items-center gap-2 text-xs">
+                  <div className="text-text-dim relative z-10 flex items-center gap-3 text-xs">
                     <span className="num">{relativeTime(c.consultedAt)}</span>
+                    <ConsultationDeleteButton id={c.id} studentId={c.studentId} label="" />
                   </div>
                 </header>
 

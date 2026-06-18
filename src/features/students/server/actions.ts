@@ -39,11 +39,18 @@ function readForm(formData: FormData) {
     return v == null ? "" : String(v).trim();
   };
   const status = get("status");
+  const gender = get("gender");
   return {
     name: get("name"),
+    englishName: get("englishName") || null,
     grade: get("grade") || null,
     school: get("school") || null,
     studentCode: get("studentCode") || null,
+    gender: gender === "male" || gender === "female" ? gender : null,
+    birthDate: get("birthDate") || null,
+    address: get("address") || null,
+    email: get("email") || null,
+    studentPhone: normalizePhone(get("studentPhone") || null),
     parentName: get("parentName") || null,
     parentPhone: normalizePhone(get("parentPhone") || null),
     status: (STATUSES.includes(status as StudentStatus) ? status : "prospect") as StudentStatus,
@@ -91,9 +98,15 @@ export async function createStudent(
     .insert({
       tenant_id: user.tenantId,
       name: input.name,
+      english_name: input.englishName,
       grade: input.grade,
       school: input.school,
       student_code: input.studentCode,
+      gender: input.gender,
+      birth_date: input.birthDate,
+      address: input.address,
+      email: input.email,
+      student_phone: input.studentPhone,
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       status: input.status,
@@ -152,9 +165,15 @@ export async function updateStudent(
     .from("students")
     .update({
       name: input.name,
+      english_name: input.englishName,
       grade: input.grade,
       school: input.school,
       student_code: input.studentCode,
+      gender: input.gender,
+      birth_date: input.birthDate,
+      address: input.address,
+      email: input.email,
+      student_phone: input.studentPhone,
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       status: input.status,
@@ -393,6 +412,58 @@ export async function deleteStudentMemo(
 
   const supabase = await createClient();
   const { error } = await supabase.from("student_memos").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return undefined;
+}
+
+export type UpdateMemoState = { error?: string; ok?: boolean } | undefined;
+
+export async function updateStudentMemo(
+  _prev: UpdateMemoState,
+  formData: FormData,
+): Promise<UpdateMemoState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim() || "general";
+  const content = String(formData.get("content") ?? "").trim();
+  if (!id) return { error: "메모 ID가 누락되었습니다" };
+  if (!content) return { error: "메모 내용을 입력해주세요" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("student_memos")
+    .update({ category, content, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return { ok: true };
+}
+
+export type ToggleMemoPinState = { error?: string } | undefined;
+
+export async function toggleStudentMemoPin(
+  _prev: ToggleMemoPinState,
+  formData: FormData,
+): Promise<ToggleMemoPinState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const pinned = String(formData.get("pinned") ?? "false") === "true";
+  if (!id) return { error: "메모 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("student_memos")
+    .update({ pinned, updated_at: new Date().toISOString() })
+    .eq("id", id);
   if (error) return { error: error.message };
 
   if (studentId) revalidatePath(`/students/${studentId}`);

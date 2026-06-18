@@ -30,6 +30,7 @@ function readBaseForm(formData: FormData) {
   return {
     displayName: get("displayName"),
     email: get("email"),
+    phone: get("phone") || null,
     hireDate: get("hireDate") || null,
     jobTitle: get("jobTitle") || null,
     subjects,
@@ -96,6 +97,7 @@ export async function createStaff(
     tenant_id: actor.tenantId,
     email: input.email,
     display_name: input.displayName,
+    phone: input.phone,
     system_role: newRole,
     status: "active",
     hire_date: input.hireDate,
@@ -138,6 +140,7 @@ export async function updateStaff(
     .update({
       display_name: input.displayName,
       email: input.email,
+      phone: input.phone,
       hire_date: input.hireDate,
       job_title: input.jobTitle,
       subjects: input.subjects,
@@ -152,7 +155,7 @@ export async function updateStaff(
   redirect(`/staff`);
 }
 
-export type ChangeRoleState = { error?: string } | undefined;
+export type ChangeRoleState = { error?: string; ok?: boolean } | undefined;
 
 export async function changeStaffRole(
   _prev: ChangeRoleState,
@@ -206,7 +209,8 @@ export async function changeStaffRole(
   }
 
   revalidatePath("/staff");
-  return undefined;
+  revalidatePath(`/staff/${id}`);
+  return { ok: true };
 }
 
 export type DeactivateState = { error?: string } | undefined;

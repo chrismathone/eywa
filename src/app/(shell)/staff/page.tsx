@@ -95,7 +95,10 @@ export default async function StaffPage({
   if (q) {
     const term = q.toLowerCase();
     staff = staff.filter(
-      (s) => s.displayName.toLowerCase().includes(term) || s.email.toLowerCase().includes(term),
+      (s) =>
+        s.displayName.toLowerCase().includes(term) ||
+        s.email.toLowerCase().includes(term) ||
+        (s.phone ?? "").toLowerCase().includes(term),
     );
   }
   if (role !== "all") staff = staff.filter((s) => s.systemRole === role);
@@ -174,7 +177,7 @@ export default async function StaffPage({
                 type="search"
                 name="q"
                 defaultValue={q}
-                placeholder="이름·이메일"
+                placeholder="이름·이메일·연락처"
                 className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
               />
             </div>

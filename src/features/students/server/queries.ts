@@ -163,7 +163,13 @@ export async function getStudentsPage(
   if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
   if (options?.q) {
     const term = options.q.trim();
-    if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
+    // 이름·학교 외 전화(학생/보호자)·보호자명까지 — 데스크 응대 시 전화로 학생 찾기 빈번.
+    if (term) {
+      const esc = term.replace(/[,()]/g, " ");
+      qb = qb.or(
+        `name.ilike.%${esc}%,school.ilike.%${esc}%,student_phone.ilike.%${esc}%,parent_phone.ilike.%${esc}%,parent_name.ilike.%${esc}%`,
+      );
+    }
   }
   if (subjectIds) qb = qb.in("id", subjectIds);
   qb = qb.range(from, to);
@@ -218,10 +224,16 @@ export type CareFocus = {
 export type StudentDetail = {
   id: string;
   name: string;
+  englishName: string | null;
   studentCode: string | null;
   school: string | null;
   grade: string | null;
   status: string;
+  gender: string | null;
+  birthDate: string | null;
+  address: string | null;
+  email: string | null;
+  studentPhone: string | null;
   parentName: string | null;
   parentPhone: string | null;
   primaryTeacherId: string | null;
@@ -265,7 +277,8 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
   const { data } = await supabase
     .from("students")
     .select(
-      `id, name, school, grade, status, student_code,
+      `id, name, english_name, school, grade, status, student_code,
+       gender, birth_date, address, email, student_phone,
        enrolled_at, withdrawn_at, created_at, notes,
        parent_name, parent_phone,
        primary_teacher_id, secondary_teacher_id,
@@ -288,10 +301,16 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
   return {
     id: data.id,
     name: data.name,
+    englishName: data.english_name,
     studentCode: data.student_code,
     school: data.school,
     grade: data.grade,
     status: data.status,
+    gender: data.gender,
+    birthDate: data.birth_date,
+    address: data.address,
+    email: data.email,
+    studentPhone: data.student_phone,
     primaryTeacherId: data.primary_teacher_id,
     primaryTeacherName: teacher?.display_name ?? null,
     secondaryTeacherId: data.secondary_teacher_id,
@@ -456,6 +475,7 @@ export type StudentMemoRow = {
   id: string;
   category: string;
   content: string;
+  pinned: boolean;
   createdAt: string;
   createdBy: string | null;
   createdByName: string | null;
@@ -466,10 +486,11 @@ export async function getStudentMemos(studentId: string): Promise<StudentMemoRow
   const { data } = await supabase
     .from("student_memos")
     .select(
-      `id, category, content, created_at, created_by,
+      `id, category, content, pinned, created_at, created_by,
        author:created_by ( display_name )`,
     )
     .eq("student_id", studentId)
+    .order("pinned", { ascending: false })
     .order("created_at", { ascending: false });
   if (!data) return [];
   return data.map((r) => {
@@ -480,6 +501,7 @@ export async function getStudentMemos(studentId: string): Promise<StudentMemoRow
       id: r.id,
       category: r.category,
       content: r.content,
+      pinned: r.pinned ?? false,
       createdAt: r.created_at,
       createdBy: r.created_by,
       createdByName: a?.display_name ?? null,

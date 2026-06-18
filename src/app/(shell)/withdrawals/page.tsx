@@ -20,16 +20,60 @@ import {
   type WithdrawalReason,
 } from "@/features/withdrawals/server/queries";
 import { Pagination } from "@/components/pagination";
+import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
 
 export const metadata = { title: "퇴원관리 — eywa" };
 
 const PAGE_SIZE = 50;
+
+const SUBJECT_LABEL: Record<string, string> = {
+  math: "수학",
+  highmath: "수학(심화)",
+  english: "영어",
+  korean: "국어",
+  science: "과학",
+  arts: "예술",
+};
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;
   const then = new Date(iso).getTime();
   const now = Date.now();
   return Math.max(0, Math.floor((now - then) / 86_400_000));
+}
+
+/** 최근 12개월 퇴원 추이(전체 기준) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
+function monthlyWithdrawals(rows: { withdrawnAt: string | null }[]): WithdrawalMonthPoint[] {
+  const now = new Date();
+  const months: { key: string; point: WithdrawalMonthPoint }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    months.push({ key, point: { label: `${d.getMonth() + 1}월`, count: 0 } });
+  }
+  const idx = new Map(months.map((m, i) => [m.key, i]));
+  for (const r of rows) {
+    if (!r.withdrawnAt) continue;
+    const i = idx.get(r.withdrawnAt.slice(0, 7));
+    if (i != null) months[i]!.point.count++;
+  }
+  return months.map((m) => m.point);
+}
+
+/** 과목별 퇴원 분포(전체 기준) 상위 N. */
+function subjectBreakdown(
+  rows: { lastClassSubject: string | null }[],
+  topN = 6,
+): { label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const s = r.lastClassSubject ?? "미상";
+    counts.set(s, (counts.get(s) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([s, count]) => ({ label: SUBJECT_LABEL[s] ?? s, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topN);
 }
 
 type RangeKey = "all" | "30d" | "90d" | "year";
@@ -100,6 +144,11 @@ export default async function WithdrawalsPage({
     const d = daysSince(r.withdrawnAt);
     return d !== null && d <= 30;
   }).length;
+
+  // 통계(전체 기준) — 월별 추이 + 과목별 분포
+  const trend = monthlyWithdrawals(all);
+  const subjects = subjectBreakdown(all);
+  const subjMax = subjects[0]?.count ?? 1;
 
   const reasonChips: { key: ReasonKey; label: string }[] = [
     { key: "all" as ReasonKey, label: "전체" },
@@ -186,6 +235,40 @@ export default async function WithdrawalsPage({
           />
         </div>
       </div>
+
+      {/* 통계(전체 기준) — 월별 추이 + 과목별 분포 */}
+      {all.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <section className="bg-card border-line shadow-card rounded-2xl border p-5">
+            <header className="mb-2 flex items-baseline justify-between">
+              <h2 className="text-foreground text-[15px] font-bold">월별 퇴원 추이</h2>
+              <span className="text-text-faint text-[11px]">최근 12개월 · 전체 {all.length}명</span>
+            </header>
+            <WithdrawalTrendChart data={trend} />
+          </section>
+          <section className="bg-card border-line shadow-card rounded-2xl border p-5">
+            <header className="mb-3">
+              <h2 className="text-foreground text-[15px] font-bold">과목별 분포</h2>
+              <span className="text-text-faint text-[11px]">전체 기준</span>
+            </header>
+            <div className="space-y-3">
+              {subjects.map((s) => (
+                <div key={s.label}>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="text-foreground text-[12px] font-semibold">{s.label}</span>
+                    <span className="text-text-dim num text-[11px]">
+                      <span className="text-foreground font-bold">{s.count}</span>명
+                    </span>
+                  </div>
+                  <div className="bg-bg-soft h-2 overflow-hidden rounded-full">
+                    <span className="bg-rose block h-full" style={{ width: `${(s.count / subjMax) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {rows.length === 0 ? (
         <EmptyState

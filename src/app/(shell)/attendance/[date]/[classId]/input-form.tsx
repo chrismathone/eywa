@@ -53,6 +53,12 @@ const STATUS_DEFS: {
     activeClass: "text-chart-3 bg-chart-3/10 border-chart-3/30",
   },
   {
+    value: "early_leave",
+    label: "조퇴",
+    icon: Clock,
+    activeClass: "text-chart-5 bg-chart-5/10 border-chart-5/30",
+  },
+  {
     value: "excused",
     label: "공결",
     icon: Mail,

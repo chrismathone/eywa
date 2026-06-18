@@ -2,7 +2,13 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { attendanceRate } from "@/lib/calc/attendance";
 
-export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "makeup";
+export type AttendanceStatus =
+  | "present"
+  | "absent"
+  | "late"
+  | "excused"
+  | "makeup"
+  | "early_leave";
 
 export type AttendanceRow = {
   id: string;
@@ -174,13 +180,21 @@ export type MatrixStudent = {
 };
 
 export type AttendanceMatrix = {
-  classes: { id: string; className: string; subject: string; teacherName: string | null }[];
+  classes: {
+    id: string;
+    className: string;
+    subject: string;
+    teacherId: string | null;
+    teacherName: string | null;
+  }[];
   selectedClassId: string | null;
   month: string; // "2026-05"
   days: MatrixDay[];
   students: MatrixStudent[];
   // studentId → date → status
   marks: Record<string, Record<string, AttendanceStatus>>;
+  // studentId → date → note (사유) — 매트릭스 인디케이터/툴팁용
+  notes: Record<string, Record<string, string>>;
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -228,17 +242,18 @@ export async function getMonthlyAttendanceMatrix(
   // 모든 반 (selector용)
   const { data: classesData } = await supabase
     .from("classes")
-    .select("id, class_name, subject, teacher:teacher_id ( display_name )")
+    .select("id, class_name, subject, teacher:teacher_id ( id, display_name )")
     .order("class_name");
 
   const classes = (classesData ?? []).map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
-      | { display_name?: string }
+      | { id?: string; display_name?: string }
       | undefined;
     return {
       id: c.id,
       className: c.class_name,
       subject: c.subject,
+      teacherId: teacher?.id ?? null,
       teacherName: teacher?.display_name ?? null,
     };
   });
@@ -252,6 +267,7 @@ export async function getMonthlyAttendanceMatrix(
       days,
       students: [],
       marks: {},
+      notes: {},
       stats: {
         totalStudents: 0,
         presentRate: 0,
@@ -305,6 +321,7 @@ export async function getMonthlyAttendanceMatrix(
   // 해당 월의 모든 출결 기록 (반 + 학생 + 기간)
   const studentIds = students.map((s) => s.id);
   const marks: Record<string, Record<string, AttendanceStatus>> = {};
+  const notes: Record<string, Record<string, string>> = {};
   let presentCount = 0;
   let absentCount = 0;
   let lateCount = 0;
@@ -314,7 +331,7 @@ export async function getMonthlyAttendanceMatrix(
   if (studentIds.length > 0) {
     const { data: records } = await supabase
       .from("attendance_records")
-      .select("student_id, session_date, status, recorded_at")
+      .select("student_id, session_date, status, note, recorded_at")
       .eq("class_id", classId)
       .in("student_id", studentIds)
       .gte("session_date", startIso)
@@ -330,6 +347,10 @@ export async function getMonthlyAttendanceMatrix(
       const status = r.status as AttendanceStatus;
       marks[r.student_id] ??= {};
       marks[r.student_id]![r.session_date] = status;
+      if (r.note) {
+        notes[r.student_id] ??= {};
+        notes[r.student_id]![r.session_date] = r.note as string;
+      }
       totalRecords++;
       if (status === "present") presentCount++;
       else if (status === "absent") absentCount++;
@@ -348,6 +369,7 @@ export async function getMonthlyAttendanceMatrix(
     days,
     students,
     marks,
+    notes,
     stats: {
       totalStudents: students.length,
       presentRate,

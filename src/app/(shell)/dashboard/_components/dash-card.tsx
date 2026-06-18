@@ -10,12 +10,14 @@ export function DashCard({
   count,
   href,
   hrefLabel = "전체 →",
+  action,
   children,
 }: {
   title: string;
   count?: ReactNode;
   href?: string;
   hrefLabel?: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -27,7 +29,9 @@ export function DashCard({
             <span className="text-text-faint num font-mono text-[11px]">{count}</span>
           ) : null}
         </div>
-        {href ? (
+        {action ? (
+          action
+        ) : href ? (
           <WindowLink
             href={href}
             className="text-text-faint hover:text-foreground shrink-0 text-[11px]"

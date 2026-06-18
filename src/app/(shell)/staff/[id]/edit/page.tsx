@@ -57,6 +57,7 @@ export default async function EditStaffPage({
           id: staff.id,
           displayName: staff.displayName,
           email: staff.email,
+          phone: staff.phone,
           systemRole: staff.systemRole,
           hireDate: staff.hireDate,
           jobTitle: staff.jobTitle,

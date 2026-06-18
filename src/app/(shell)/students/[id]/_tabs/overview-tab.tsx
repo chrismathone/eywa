@@ -50,10 +50,20 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
         <div className="bg-card border-border space-y-4 rounded-md border p-5 lg:col-span-1">
           <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
+            {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
+            {student.gender ? (
+              <Field label="성별" value={student.gender === "male" ? "남" : "여"} />
+            ) : null}
+            {student.birthDate ? <Field label="생년월일" value={student.birthDate} mono /> : null}
             <Field label="담임" value={student.primaryTeacherName} />
             <Field label="부담임" value={student.secondaryTeacherName} />
+            {student.studentPhone ? (
+              <Field label="학생 연락처" value={student.studentPhone} mono />
+            ) : null}
             <Field label="학부모" value={student.parentName} />
             <Field label="연락처" value={student.parentPhone} mono />
+            {student.email ? <Field label="이메일" value={student.email} mono /> : null}
+            {student.address ? <Field label="주소" value={student.address} /> : null}
             <Field label="등록일" value={student.enrolledAt} mono />
             {student.withdrawnAt ? (
               <Field label="퇴원일" value={student.withdrawnAt} mono />

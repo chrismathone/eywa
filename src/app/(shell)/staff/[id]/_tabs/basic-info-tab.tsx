@@ -1,4 +1,5 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import type { SystemRole } from "@/lib/permissions";
 import { Pill } from "@/components/atoms/pill";
 import type { StaffDetail } from "@/features/staff/server/queries";
 import { AccountActions } from "../_components/account-actions";
@@ -24,10 +25,12 @@ export function BasicInfoTab({
   staff,
   canManageThis,
   showSalary,
+  roleOptions,
 }: {
   staff: StaffDetail;
   canManageThis: boolean;
   showSalary: boolean;
+  roleOptions: SystemRole[];
 }) {
   const isTeacherLike = staff.systemRole === "teacher" || staff.systemRole === "master";
   const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
@@ -37,6 +40,7 @@ export function BasicInfoTab({
       <div className="bg-card border-line shadow-card rounded-md border p-5">
         <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
           <Field label="이메일" value={<span className="num">{staff.email}</span>} />
+          <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
           <Field label="시스템 역할" value={ROLE_LABEL[staff.systemRole] ?? staff.systemRole} />
           <Field label="직책" value={staff.jobTitle} />
           <Field label="입사일" value={staff.hireDate ? <span className="num">{staff.hireDate}</span> : null} />
@@ -79,6 +83,8 @@ export function BasicInfoTab({
           staffId={staff.id}
           displayName={staff.displayName}
           currentEmail={staff.email}
+          currentRole={staff.systemRole}
+          roleOptions={roleOptions}
         />
       ) : null}
     </div>
