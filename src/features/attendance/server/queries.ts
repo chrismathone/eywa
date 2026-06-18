@@ -2,7 +2,13 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { attendanceRate } from "@/lib/calc/attendance";
 
-export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "makeup";
+export type AttendanceStatus =
+  | "present"
+  | "absent"
+  | "late"
+  | "excused"
+  | "makeup"
+  | "early_leave";
 
 export type AttendanceRow = {
   id: string;

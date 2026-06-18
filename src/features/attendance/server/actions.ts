@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 
-const STATUSES = ["present", "absent", "late", "excused", "makeup"] as const;
+const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
 type Status = (typeof STATUSES)[number];
 
 export type SaveAttendanceState = { error?: string; saved?: number } | undefined;

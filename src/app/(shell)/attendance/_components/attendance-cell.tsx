@@ -10,6 +10,7 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   late: "L",
   excused: "공",
   makeup: "보",
+  early_leave: "조",
 };
 const STATUS_CLASS: Record<AttendanceStatus, string> = {
   present: "bg-primary-soft text-primary",
@@ -17,11 +18,13 @@ const STATUS_CLASS: Record<AttendanceStatus, string> = {
   late: "bg-amber-soft text-amber",
   excused: "bg-blue-soft text-blue",
   makeup: "bg-purple-soft text-purple",
+  early_leave: "bg-rose-soft text-rose",
 };
 const OPTIONS: { value: AttendanceStatus; name: string }[] = [
   { value: "present", name: "출석" },
   { value: "absent", name: "결석" },
   { value: "late", name: "지각" },
+  { value: "early_leave", name: "조퇴" },
   { value: "excused", name: "공결" },
   { value: "makeup", name: "보강" },
 ];

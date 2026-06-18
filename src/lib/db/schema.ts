@@ -42,6 +42,7 @@ export const attendanceStatusEnum = pgEnum("attendance_status", [
   "late",
   "excused",
   "makeup",
+  "early_leave",
 ]);
 
 // 출결/등하원 기록의 입력 경로. "manual"=직원 수동 입력, "kiosk"=무인 태블릿 셀프 체크인.

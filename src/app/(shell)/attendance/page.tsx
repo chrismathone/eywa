@@ -179,6 +179,7 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   late: "L",
   excused: "공",
   makeup: "보",
+  early_leave: "조",
 };
 
 function MatrixTable({
@@ -291,7 +292,7 @@ function MatrixTable({
                   총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결 즉시 변경
                 </span>
                 <span className="micro ml-auto">범례</span>
-                {(["present", "absent", "late", "excused", "makeup"] as AttendanceStatus[]).map(
+                {(["present", "absent", "late", "early_leave", "excused", "makeup"] as AttendanceStatus[]).map(
                   (s) => (
                     <Pill key={s} color={pillColorFor(s)}>
                       {STATUS_LABEL[s]} {labelFor(s)}
@@ -307,10 +308,13 @@ function MatrixTable({
   );
 }
 
-function pillColorFor(s: AttendanceStatus): "primary" | "danger" | "amber" | "blue" | "purple" {
+function pillColorFor(
+  s: AttendanceStatus,
+): "primary" | "danger" | "amber" | "blue" | "purple" | "rose" {
   if (s === "present") return "primary";
   if (s === "absent") return "danger";
   if (s === "late") return "amber";
+  if (s === "early_leave") return "rose";
   if (s === "excused") return "blue";
   return "purple";
 }
@@ -319,6 +323,7 @@ function labelFor(s: AttendanceStatus): string {
   if (s === "present") return "출석";
   if (s === "absent") return "결석";
   if (s === "late") return "지각";
+  if (s === "early_leave") return "조퇴";
   if (s === "excused") return "공결";
   return "보강";
 }
