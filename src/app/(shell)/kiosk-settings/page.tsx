@@ -68,16 +68,24 @@ export default async function KioskSettingsPage() {
         {devices.length > 0 ? (
           <ul className="border-border mt-4 divide-y rounded-md border">
             {devices.map((d) => (
-              <li key={d.id} className="flex items-center justify-between px-3 py-2 text-[13px]">
-                <span className="flex items-center gap-2">
-                  <span className="text-foreground font-medium">{d.name}</span>
-                  {d.isActive ? (
-                    <span className="text-primary text-[11px]">활성</span>
-                  ) : (
-                    <span className="text-text-faint text-[11px]">폐기됨</span>
-                  )}
-                  <span className="text-text-faint text-[11px]">최근 사용 {fmt(d.lastSeenAt)}</span>
-                </span>
+              <li key={d.id} className="flex items-start justify-between gap-3 px-3 py-2.5 text-[13px]">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-text-faint micro shrink-0">기기 #{d.deviceNo}</span>
+                    <span className="text-foreground font-medium">{d.name}</span>
+                    <span className="text-text-dim shrink-0 text-[11px]">{d.deviceType}</span>
+                    {d.isActive ? (
+                      <span className="text-primary shrink-0 text-[11px]">활성</span>
+                    ) : (
+                      <span className="text-text-faint shrink-0 text-[11px]">폐기됨</span>
+                    )}
+                  </div>
+                  <div className="text-text-faint mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                    <span>등록 IP {d.registeredIp ?? "—"}</span>
+                    <span>최근 IP {d.lastSeenIp ?? "—"}</span>
+                    <span>최근 사용 {fmt(d.lastSeenAt)}</span>
+                  </div>
+                </div>
                 {d.isActive ? <RevokeDeviceButton deviceId={d.id} /> : null}
               </li>
             ))}

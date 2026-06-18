@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { isValidCodeInput } from "@/features/attendance/kiosk/codes";
 import { KIOSK_COOKIE } from "@/features/attendance/kiosk/constants";
+import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { processKioskCheckin } from "@/features/attendance/kiosk/server/checkin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -59,8 +60,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, reason: "invalid_code" }, { status: 400 });
   }
 
-  // 기기 last_seen 갱신(best-effort)
-  await admin.from("kiosk_devices").update({ last_seen_at: now.toISOString() }).eq("id", device.id);
+  // 기기 last_seen(시각/IP) 갱신(best-effort)
+  const ip = parseForwardedFor(req.headers.get("x-forwarded-for"), req.headers.get("x-real-ip"));
+  await admin
+    .from("kiosk_devices")
+    .update({ last_seen_at: now.toISOString(), ...(ip ? { last_seen_ip: ip } : {}) })
+    .eq("id", device.id);
 
   const result = await processKioskCheckin({
     tenantId: device.tenant_id,

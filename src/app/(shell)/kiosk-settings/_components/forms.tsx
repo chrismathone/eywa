@@ -45,7 +45,7 @@ export function RegisterDeviceForm() {
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input
         name="name"
-        placeholder="기기 이름 (예: 1층 현관)"
+        placeholder="기기 위치/이름 (예: 1층 현관)"
         className="border-border bg-card h-9 rounded-md border px-3 text-sm"
       />
       <button

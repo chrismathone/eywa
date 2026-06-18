@@ -1,13 +1,14 @@
 "use server";
 
 import { randomBytes, createHash } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccess } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { assignAttendanceCode } from "../codes";
 import { KIOSK_COOKIE } from "../constants";
+import { parseForwardedFor } from "../device-info";
 
 async function requireMaster() {
   const user = await getCurrentUser();
@@ -30,12 +31,20 @@ export async function registerKioskDevice(
   const token = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
+  // 등록 기기 메타 — 요청 헤더에서 IP/UA 캡처(Vercel은 x-forwarded-for). 로컬 dev는 보통 null.
+  const h = await headers();
+  const ip = parseForwardedFor(h.get("x-forwarded-for"), h.get("x-real-ip"));
+  const ua = h.get("user-agent");
+
   const supabase = await createClient();
   const { error } = await supabase.from("kiosk_devices").insert({
     tenant_id: user.tenantId,
     name,
     token_hash: tokenHash,
     is_active: true,
+    registered_ip: ip,
+    last_seen_ip: ip,
+    user_agent: ua,
   });
   if (error) return { error: error.message };
 

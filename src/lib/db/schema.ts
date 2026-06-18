@@ -814,6 +814,10 @@ export const kioskDevices = pgTable(
     name: text("name").notNull(),
     tokenHash: text("token_hash").notNull(),
     isActive: boolean("is_active").notNull().default(true),
+    // 기기 메타 — 등록/최근 접속 IP + User-Agent(기기 종류 추정용). Vercel은 x-forwarded-for로 전달.
+    registeredIp: text("registered_ip"),
+    lastSeenIp: text("last_seen_ip"),
+    userAgent: text("user_agent"),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -4,11 +4,16 @@ import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KIOSK_COOKIE } from "../constants";
+import { summarizeUserAgent } from "../device-info";
 
 export type KioskDeviceRow = {
   id: string;
+  deviceNo: number; // 등록 순번(기기 #N) — 폐기 기기 포함해 안정적
   name: string;
   isActive: boolean;
+  registeredIp: string | null;
+  lastSeenIp: string | null;
+  deviceType: string; // UA 요약(아이패드/안드로이드/…)
   lastSeenAt: string | null;
   createdAt: string;
 };
@@ -30,17 +35,21 @@ export type NotificationRow = {
   createdAt: string;
 };
 
-/** 이 테넌트의 키오스크 기기 목록(RLS 스코프). */
+/** 이 테넌트의 키오스크 기기 목록(RLS 스코프). 등록 순(오래된 것=기기 #1)으로 번호 부여. */
 export async function getKioskDevices(): Promise<KioskDeviceRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("kiosk_devices")
-    .select("id, name, is_active, last_seen_at, created_at")
-    .order("created_at", { ascending: false });
-  return (data ?? []).map((d) => ({
+    .select("id, name, is_active, registered_ip, last_seen_ip, user_agent, last_seen_at, created_at")
+    .order("created_at", { ascending: true });
+  return (data ?? []).map((d, i) => ({
     id: d.id,
+    deviceNo: i + 1,
     name: d.name,
     isActive: d.is_active,
+    registeredIp: d.registered_ip,
+    lastSeenIp: d.last_seen_ip,
+    deviceType: summarizeUserAgent(d.user_agent),
     lastSeenAt: d.last_seen_at,
     createdAt: d.created_at,
   }));
