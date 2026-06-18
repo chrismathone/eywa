@@ -1,6 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { aggregateClassHours, computePayrollAmounts, sumSessionHours } from "../calc";
+import {
+  aggregateClassHours,
+  computePayrollAmounts,
+  sumSessionHours,
+  summarizePayrollRows,
+  type PayrollStatus,
+} from "../calc";
 
 export type PayrollRecord = {
   id: string;
@@ -124,6 +130,91 @@ export async function getPayrollHistory(userId: string): Promise<PayrollRecord[]
     paidAt: r.paid_at,
     notes: r.notes,
   }));
+}
+
+// === 월별 전직원 급여표 (한 화면 요약 — 검색·상태필터·합계) ===
+export type PayrollOverviewRow = {
+  userId: string;
+  name: string;
+  systemRole: string;
+  baseAmount: number;
+  hoursWorked: number;
+  hourlyAmount: number;
+  bonus: number;
+  deduction: number;
+  total: number;
+  status: PayrollStatus; // paid 지급완료 / saved 작성됨 / draft 미작성(자동추정)
+  paidAt: string | null;
+};
+
+export type PayrollOverview = {
+  period: string;
+  rows: PayrollOverviewRow[];
+  totalBase: number;
+  totalNet: number;
+  paidCount: number;
+  savedCount: number;
+  draftCount: number;
+};
+
+/**
+ * 한 달 전 직원 급여를 한 표로. 저장된 payroll_records는 그대로, 미작성 직원만 calculateMonthlyPayroll로
+ * 자동 추정(병렬). 데모 규모(직원 ~수십)라 per-staff 계산 허용(최적화는 후속).
+ */
+export async function getMonthlyPayrollOverview(period: string): Promise<PayrollOverview> {
+  const supabase = await createClient();
+
+  const { data: staff } = await supabase
+    .from("users")
+    .select("id, display_name, system_role, monthly_base")
+    .neq("status", "inactive")
+    .order("system_role", { ascending: true })
+    .order("display_name", { ascending: true });
+  const staffList = staff ?? [];
+
+  const { data: records } = await supabase
+    .from("payroll_records")
+    .select("user_id, base_amount, hours_worked, hourly_amount, bonus, deduction, total, paid_at")
+    .eq("period", period);
+  const recByUser = new Map((records ?? []).map((r) => [r.user_id, r]));
+
+  // 저장된 정산은 record가 진실. 미작성은 월기본만 표기(정확한 시급분 attendance 계산은 무거워
+  // 개별 드릴인 /staff/[id]/payroll에서 — 전직원 동시 계산은 반응속도 원칙 위반이라 지양).
+  const rows: PayrollOverviewRow[] = staffList.map((s) => {
+    const rec = recByUser.get(s.id);
+    if (rec) {
+      return {
+        userId: s.id,
+        name: s.display_name,
+        systemRole: s.system_role,
+        baseAmount: Number(rec.base_amount),
+        hoursWorked: Number(rec.hours_worked),
+        hourlyAmount: Number(rec.hourly_amount),
+        bonus: Number(rec.bonus),
+        deduction: Number(rec.deduction),
+        total: Number(rec.total),
+        status: rec.paid_at ? "paid" : "saved",
+        paidAt: rec.paid_at,
+      };
+    }
+    const base = Number(s.monthly_base ?? 0);
+    return {
+      userId: s.id,
+      name: s.display_name,
+      systemRole: s.system_role,
+      baseAmount: base,
+      hoursWorked: 0,
+      hourlyAmount: 0,
+      bonus: 0,
+      deduction: 0,
+      total: base,
+      status: "draft",
+      paidAt: null,
+    };
+  });
+
+  const summary = summarizePayrollRows(rows);
+  return { period, rows, ...summary };
 }
 
 export type LeaveRow = {

@@ -44,6 +44,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 유발), 1280이면 30·31일 달 모두 이름이 한 줄로 펴져 콘텐츠가 ~488px로 줄어든다(세로 스크롤 제거).
   attendance: { w: 1280, h: 620 },
   exams: { w: 960, h: 680 }, // 시험 목록(통계 열) + 반 일괄 점수 그리드
+  "staff/payroll": { w: 920, h: 640 }, // 월별 전직원 급여표(8열) — 폭 넓음
 };
 
 /**

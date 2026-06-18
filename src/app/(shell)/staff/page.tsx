@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, UserCog, GraduationCap, MessageCircle, Calculator, type LucideIcon } from "lucide-react";
+import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Initial, type InitialColor } from "@/components/atoms/initial";
@@ -197,9 +197,21 @@ export default async function StaffPage({
             </span>
           ) : null}
         </p>
-        {canManage && user ? (
-          <NewStaffTrigger assignableRoleOptions={assignableRoles(user.systemRole)} />
-        ) : null}
+        <div className="flex items-center gap-2">
+          {user?.systemRole === "master" ? (
+            <WindowLink
+              href="/staff/payroll"
+              title="월별 급여"
+              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
+            >
+              <Wallet className="size-3.5" />
+              월별 급여
+            </WindowLink>
+          ) : null}
+          {canManage && user ? (
+            <NewStaffTrigger assignableRoleOptions={assignableRoles(user.systemRole)} />
+          ) : null}
+        </div>
       </div>
 
       {invited ? (

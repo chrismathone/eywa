@@ -5,6 +5,7 @@ import {
   sumSessionHours,
   computePayrollAmounts,
   payrollTotal,
+  summarizePayrollRows,
 } from "./calc";
 
 describe("scheduleHours", () => {
@@ -59,4 +60,28 @@ describe("payrollTotal", () => {
   it("기본 + 시급분", () => expect(payrollTotal({ baseAmount: 100, hourlyAmount: 50 })).toBe(150));
   it("보너스·공제 반영", () =>
     expect(payrollTotal({ baseAmount: 100, hourlyAmount: 50, bonus: 30, deduction: 20 })).toBe(160));
+});
+
+describe("summarizePayrollRows", () => {
+  it("빈 입력은 0", () =>
+    expect(summarizePayrollRows([])).toEqual({
+      totalBase: 0,
+      totalNet: 0,
+      paidCount: 0,
+      savedCount: 0,
+      draftCount: 0,
+    }));
+  it("상태별 카운트 + 합계", () => {
+    const s = summarizePayrollRows([
+      { baseAmount: 100, total: 130, status: "paid" },
+      { baseAmount: 200, total: 220, status: "saved" },
+      { baseAmount: 150, total: 150, status: "draft" },
+      { baseAmount: 50, total: 60, status: "paid" },
+    ]);
+    expect(s.totalBase).toBe(500);
+    expect(s.totalNet).toBe(560);
+    expect(s.paidCount).toBe(2);
+    expect(s.savedCount).toBe(1);
+    expect(s.draftCount).toBe(1);
+  });
 });
