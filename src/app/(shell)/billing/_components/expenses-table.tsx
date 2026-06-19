@@ -5,6 +5,7 @@ import { Check, Copy, Loader2, Paperclip, Pencil, Plus, Trash2 } from "lucide-re
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { WindowLink } from "@/components/workspace/window-link";
 import { ExpenseDialog } from "./expense-dialog";
 import { ExpenseReceiptsModal } from "./expense-receipts-modal";
@@ -38,6 +39,7 @@ const TOGGLE_ROLES: { role: Exclude<ApprovalRole, "author">; label: string }[] =
 export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
   const [dialog, setDialog] = useState<{ expense: ExpenseRow | null } | null>(null);
   const [receiptsFor, setReceiptsFor] = useState<ExpenseRow | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ExpenseRow | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -49,8 +51,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
     });
   }
 
-  function handleDelete(r: ExpenseRow) {
-    if (!confirm(`"${r.title}" 지출결의서를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  function doDelete(r: ExpenseRow) {
     const fd = new FormData();
     fd.append("id", r.id);
     run(r.id, fd, deleteExpense);
@@ -186,7 +187,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(r)}
+                          onClick={() => setConfirmDelete(r)}
                           disabled={isBusy}
                           className="text-text-faint hover:text-danger p-1"
                           aria-label="삭제"
@@ -210,6 +211,24 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
       {receiptsFor ? (
         <ExpenseReceiptsModal expense={receiptsFor} onClose={() => setReceiptsFor(null)} />
       ) : null}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="지출결의서 삭제"
+        message={
+          confirmDelete
+            ? `'${confirmDelete.title}' 지출결의서를 삭제합니다. 되돌릴 수 없습니다.`
+            : ""
+        }
+        confirmLabel="삭제"
+        danger
+        onConfirm={() => {
+          const r = confirmDelete;
+          setConfirmDelete(null);
+          if (r) doDelete(r);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </>
   );
 }

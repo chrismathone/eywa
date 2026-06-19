@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Loader2, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import {
   addExpenseReceipt,
@@ -32,6 +33,7 @@ export function ExpenseReceiptsModal({
   const [type, setType] = useState(expense.receiptType ?? "");
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<ExpenseReceipt | null>(null);
   const [, startTransition] = useTransition();
 
   function refresh() {
@@ -97,8 +99,7 @@ export function ExpenseReceiptsModal({
     }
   }
 
-  function handleRemove(r: ExpenseReceipt) {
-    if (!confirm(`"${r.name}" 첨부를 삭제할까요?`)) return;
+  function doRemove(r: ExpenseReceipt) {
     setReceipts((prev) => prev.filter((x) => x.path !== r.path));
     const fd = new FormData();
     fd.append("id", expense.id);
@@ -159,7 +160,7 @@ export function ExpenseReceiptsModal({
                     <button type="button" onClick={() => handleView(r)} className="text-text-faint hover:text-blue p-1" aria-label="열람">
                       <ExternalLink className="size-3.5" />
                     </button>
-                    <button type="button" onClick={() => handleRemove(r)} className="text-text-faint hover:text-danger p-1" aria-label="삭제">
+                    <button type="button" onClick={() => setConfirmRemove(r)} className="text-text-faint hover:text-danger p-1" aria-label="삭제">
                       <Trash2 className="size-3.5" />
                     </button>
                   </li>
@@ -194,6 +195,20 @@ export function ExpenseReceiptsModal({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmRemove}
+        title="첨부 삭제"
+        message={confirmRemove ? `'${confirmRemove.name}' 첨부를 삭제합니다.` : ""}
+        confirmLabel="삭제"
+        danger
+        onConfirm={() => {
+          const r = confirmRemove;
+          setConfirmRemove(null);
+          if (r) doRemove(r);
+        }}
+        onCancel={() => setConfirmRemove(null)}
+      />
     </div>
   );
 }
