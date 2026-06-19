@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { UserCheck, UserMinus, UserPlus, Users, type LucideIcon } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
-import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getStudentsPage,
@@ -15,7 +13,7 @@ import {
 } from "@/features/students/server/queries";
 import { WindowLink } from "@/components/workspace/window-link";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
-import { StudentAdvancedFilters } from "./_components/advanced-filters";
+import { StudentFilterBar } from "./_components/student-filter-bar";
 
 export const metadata = { title: "학생목록 — eywa" };
 
@@ -40,39 +38,6 @@ const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
   other: { label: "기타", color: "neutral" },
 };
 const SUBJECT_FALLBACK = { label: "기타", color: "neutral" as PillColor };
-
-const STATUS_FILTERS: { key: string; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "enrolled", label: "재원" },
-  { key: "consulted", label: "예비·상담" },
-  { key: "on_hold", label: "휴원" },
-  { key: "withdrawn", label: "퇴원" },
-];
-
-const SUBJECT_FILTERS: { key: string; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "math", label: "수학" },
-  { key: "highmath", label: "수학(심화)" },
-  { key: "english", label: "영어" },
-  { key: "korean", label: "국어" },
-  { key: "science", label: "과학" },
-  { key: "arts", label: "예술" },
-];
-
-function buildHref(
-  current: { status?: string; subject?: string; q?: string },
-  patch: Partial<{ status: string; subject: string; q: string }>,
-): string {
-  const params = new URLSearchParams();
-  const status = patch.status ?? current.status;
-  const subject = patch.subject ?? current.subject;
-  const q = patch.q !== undefined ? patch.q : current.q;
-  if (status && status !== "all") params.set("status", status);
-  if (subject && subject !== "all") params.set("subject", subject);
-  if (q) params.set("q", q);
-  const s = params.toString();
-  return s ? `/students?${s}` : "/students";
-}
 
 export default async function StudentsPage({
   searchParams,
@@ -124,8 +89,17 @@ export default async function StudentsPage({
     ...(excludeNoEnrollment ? { noenr: "1" } : {}),
   };
 
-  const current = { status, subject, q };
-  // 페이지 이동 링크 — 현재 필터(고급 포함) 유지 + page 지정 (필터 chip은 buildHref라 page 자동 리셋)
+  const filterState = {
+    status,
+    subject,
+    grade,
+    teacher: teacherId,
+    field,
+    sort,
+    noenr: excludeNoEnrollment,
+    q,
+  };
+  // 페이지 이동 링크 — 현재 필터(고급 포함) 유지 + page 지정 (필터 변경은 page 미포함이라 자동 1페이지)
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
     if (status !== "all") params.set("status", status);
@@ -147,77 +121,8 @@ export default async function StudentsPage({
         <Stat label="퇴원" value={withdrawn} unit="명" color="neutral" icon={UserMinus} />
       </section>
 
-      {/* Filter bar — 넓은 창: 한 줄(상태·과목·검색), 좁은 창: 그룹 단위로 자연 접힘(flex-wrap) */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-md border px-4 py-3">
-        {/* 상태 chip */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="micro mr-1">상태</span>
-          {STATUS_FILTERS.map((f) => (
-            <Link
-              key={f.key}
-              href={buildHref(current, { status: f.key })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                status === f.key
-                  ? "border-foreground bg-foreground text-background font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {f.label}
-            </Link>
-          ))}
-        </div>
-
-        {/* 과목 chip */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="micro mr-1">과목</span>
-          {SUBJECT_FILTERS.map((f) => (
-            <Link
-              key={f.key}
-              href={buildHref(current, { subject: f.key })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                subject === f.key
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {f.label}
-            </Link>
-          ))}
-        </div>
-
-        {/* 검색 — ml-auto로 넓을 땐 오른쪽 끝, 좁을 땐 자기 줄로 접힘 */}
-        <form action="/students" method="get" className="ml-auto flex items-center gap-2">
-          {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
-          {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
-          {/* 고급 필터(학년·담임·검색필드·정렬·미수강)도 검색 제출 시 보존 */}
-          {Object.entries(advParams).map(([k, v]) => (
-            <input key={k} type="hidden" name={k} value={v} />
-          ))}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder={field === "all" ? "이름·학교·연락처" : "검색어"}
-              className="text-foreground placeholder:text-text-faint w-40 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">
-            검색
-          </Button>
-        </form>
-      </div>
-
-      {/* 고급 필터 — 접이식(기본 닫힘, 활성값 있으면 열림) */}
-      <StudentAdvancedFilters
-        grade={grade}
-        teacherId={teacherId}
-        field={field}
-        sort={sort}
-        excludeNoEnrollment={excludeNoEnrollment}
-        teachers={teacherOptions}
-      />
+      {/* 필터바 — 전부 드롭다운(칩 나열 X) 한 줄, 좁은 창에선 2줄. 수업목록 ClassFilterBar와 동일 패러다임. */}
+      <StudentFilterBar current={filterState} teachers={teacherOptions} />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between">
