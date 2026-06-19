@@ -6,9 +6,16 @@ import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getStudentsPage, getStudentStatusCounts } from "@/features/students/server/queries";
+import {
+  getStudentsPage,
+  getStudentStatusCounts,
+  getTeacherOptions,
+  type StudentSort,
+  type SearchField,
+} from "@/features/students/server/queries";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentQuickPanel } from "./_components/student-quick-panel";
+import { StudentAdvancedFilters } from "./_components/advanced-filters";
 
 export const metadata = { title: "학생목록 — eywa" };
 
@@ -70,30 +77,61 @@ function buildHref(
 export default async function StudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; subject?: string; q?: string; page?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    subject?: string;
+    q?: string;
+    page?: string;
+    grade?: string;
+    teacher?: string;
+    field?: string;
+    sort?: string;
+    noenr?: string;
+  }>;
 }) {
   await requireAccess("students");
   const sp = await searchParams;
   const status = sp.status ?? "all";
   const subject = sp.subject ?? "all";
   const q = sp.q ?? "";
+  // 고급 필터
+  const grade = sp.grade ?? "all";
+  const teacherId = sp.teacher ?? "all";
+  const field = (sp.field ?? "all") as SearchField;
+  const sort = (sp.sort === "name" || sp.sort === "recent" ? sp.sort : "grade") as StudentSort;
+  const excludeNoEnrollment = sp.noenr === "1";
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, counts] = await Promise.all([
-    getStudentsPage({ status, subject, q }, page, PAGE_SIZE),
+  const [{ rows, total }, counts, teachers] = await Promise.all([
+    getStudentsPage(
+      { status, subject, q, grade, teacherId, searchField: field, sort, excludeNoEnrollment },
+      page,
+      PAGE_SIZE,
+    ),
     getStudentStatusCounts(),
+    getTeacherOptions(),
   ]);
   const { all, enrolled, prospect, withdrawn } = counts;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const teacherOptions = teachers.map((t) => ({ value: t.id, label: t.displayName }));
+  // 검색폼·페이지·export가 보존해야 할 고급 파라미터(기본값이 아닌 것만)
+  const advParams: Record<string, string> = {
+    ...(grade !== "all" ? { grade } : {}),
+    ...(teacherId !== "all" ? { teacher: teacherId } : {}),
+    ...(field !== "all" ? { field } : {}),
+    ...(sort !== "grade" ? { sort } : {}),
+    ...(excludeNoEnrollment ? { noenr: "1" } : {}),
+  };
 
   const current = { status, subject, q };
-  // 페이지 이동 링크 — 현재 필터 유지 + page 지정 (필터 chip은 buildHref라 page 자동 리셋)
+  // 페이지 이동 링크 — 현재 필터(고급 포함) 유지 + page 지정 (필터 chip은 buildHref라 page 자동 리셋)
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
     if (status !== "all") params.set("status", status);
     if (subject !== "all") params.set("subject", subject);
     if (q) params.set("q", q);
+    for (const [k, v] of Object.entries(advParams)) params.set(k, v);
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/students?${s}` : "/students";
@@ -109,8 +147,8 @@ export default async function StudentsPage({
         <Stat label="퇴원" value={withdrawn} unit="명" color="neutral" icon={UserMinus} />
       </section>
 
-      {/* Filter bar */}
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+      {/* Filter bar — 넓은 창: 한 줄(상태·과목·검색), 좁은 창: 그룹 단위로 자연 접힘(flex-wrap) */}
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-md border px-4 py-3">
         {/* 상태 chip */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="micro mr-1">상태</span>
@@ -129,48 +167,57 @@ export default async function StudentsPage({
           ))}
         </div>
 
-        {/* 과목 chip + 검색 */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">과목</span>
-            {SUBJECT_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildHref(current, { subject: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                  subject === f.key
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                {f.label}
-              </Link>
-            ))}
-          </div>
-
-          <form action="/students" method="get" className="ml-auto flex items-center gap-2">
-            {status !== "all" ? (
-              <input type="hidden" name="status" value={status} />
-            ) : null}
-            {subject !== "all" ? (
-              <input type="hidden" name="subject" value={subject} />
-            ) : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="이름·학교·연락처"
-                className="text-foreground placeholder:text-text-faint w-40 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <Button type="submit" variant="outline" size="sm">
-              검색
-            </Button>
-          </form>
+        {/* 과목 chip */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="micro mr-1">과목</span>
+          {SUBJECT_FILTERS.map((f) => (
+            <Link
+              key={f.key}
+              href={buildHref(current, { subject: f.key })}
+              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                subject === f.key
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              {f.label}
+            </Link>
+          ))}
         </div>
+
+        {/* 검색 — ml-auto로 넓을 땐 오른쪽 끝, 좁을 땐 자기 줄로 접힘 */}
+        <form action="/students" method="get" className="ml-auto flex items-center gap-2">
+          {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
+          {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
+          {/* 고급 필터(학년·담임·검색필드·정렬·미수강)도 검색 제출 시 보존 */}
+          {Object.entries(advParams).map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
+          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+            <EyIcon name="search" size={13} />
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder={field === "all" ? "이름·학교·연락처" : "검색어"}
+              className="text-foreground placeholder:text-text-faint w-40 bg-transparent text-xs focus:outline-none"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm">
+            검색
+          </Button>
+        </form>
       </div>
+
+      {/* 고급 필터 — 접이식(기본 닫힘, 활성값 있으면 열림) */}
+      <StudentAdvancedFilters
+        grade={grade}
+        teacherId={teacherId}
+        field={field}
+        sort={sort}
+        excludeNoEnrollment={excludeNoEnrollment}
+        teachers={teacherOptions}
+      />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between">
@@ -185,6 +232,7 @@ export default async function StudentsPage({
               ...(status !== "all" ? { status } : {}),
               ...(subject !== "all" ? { subject } : {}),
               ...(q ? { q } : {}),
+              ...advParams,
             }).toString()}`}
             className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
           >

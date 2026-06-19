@@ -15,11 +15,56 @@ export type StudentListRow = {
   subjects: string[]; // 수강 중인 과목 unique list
 };
 
+export type StudentSort = "grade" | "name" | "recent";
+export type SearchField = "all" | "name" | "school" | "phone" | "address" | "email" | "memo";
+
 export type StudentListFilters = {
   status?: string; // "all" | "enrolled" | "consulted" | "on_hold" | "withdrawn"
   subject?: string; // "all" | "math" | "english" | ...
-  q?: string; // 검색어 (이름/학교)
+  q?: string; // 검색어
+  grade?: string; // "all" | "초4" | "중2" | ... (고급)
+  teacherId?: string; // "all" | uuid (담임, 고급)
+  excludeNoEnrollment?: boolean; // 활성 수강 없는 학생 제외 (고급)
+  sort?: StudentSort; // 정렬 (고급) — 기본 grade
+  searchField?: SearchField; // 검색 범위 필드 (고급) — 기본 all
 };
+
+// 검색 필드 → 컬럼 매핑. all은 데스크 응대 빈도 높은 이름·학교·전화·보호자명 묶음.
+const SEARCH_FIELD_COLS: Record<SearchField, string[]> = {
+  all: ["name", "school", "student_phone", "parent_phone", "parent_name"],
+  name: ["name"],
+  school: ["school"],
+  phone: ["student_phone", "parent_phone"],
+  address: ["address"],
+  email: ["email"],
+  memo: ["notes"],
+};
+
+// 검색어를 선택된 필드(들)에 ilike OR로 적용. 쉼표·괄호는 PostgREST or() 구문 충돌이라 공백 치환.
+function applySearch<T extends { or: (f: string) => T }>(qb: T, q: string | undefined, field?: SearchField): T {
+  const term = (q ?? "").trim().replace(/[,()]/g, " ");
+  if (!term) return qb;
+  const cols = SEARCH_FIELD_COLS[field ?? "all"] ?? SEARCH_FIELD_COLS.all;
+  return qb.or(cols.map((c) => `${c}.ilike.%${term}%`).join(","));
+}
+
+// 수강 중인(end_date null, 휴원 포함) 반이 없는 학생 id — '미수강 제외'는 이 소수 집합을 .not in으로 뺀다
+// (학원 특성상 미수강은 소수 → URL 짧음, #53 414 회피. 전건 조회는 fetchAllPaged라 .in() 없이 안전).
+// 휴원(on_hold)은 반에 적은 상태라 '수강 중'으로 본다(미수강=반 자체가 없는 학생).
+async function getUnenrolledStudentIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string[]> {
+  const [enr, stu] = await Promise.all([
+    fetchAllPaged<{ student_id: string }>((from, to) =>
+      supabase.from("enrollments").select("student_id").is("end_date", null).range(from, to),
+    ),
+    fetchAllPaged<{ id: string }>((from, to) =>
+      supabase.from("students").select("id").range(from, to),
+    ),
+  ]);
+  const enrolled = new Set(enr.map((e) => e.student_id));
+  return stu.filter((s) => !enrolled.has(s.id)).map((s) => s.id);
+}
 
 export async function getStudentsList(
   options?: StudentListFilters,
@@ -32,22 +77,26 @@ export async function getStudentsList(
       .select(
         `id, name, school, grade, status, enrolled_at, parent_phone,
          teacher:primary_teacher_id ( display_name )`,
-      )
-      .order("grade", { ascending: true })
-      .order("name", { ascending: true });
+      );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
-    // 검색: 이름 또는 학교 부분 매치
-    if (options?.q) {
-      const term = options.q.trim();
-      if (term) qb = qb.or(`name.ilike.%${term}%,school.ilike.%${term}%`);
-    }
-    return qb.range(from, to);
+    if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
+    if (options?.teacherId && options.teacherId !== "all")
+      qb = qb.eq("primary_teacher_id", options.teacherId);
+    qb = applySearch(qb, options?.q, options?.searchField);
+    const sorted =
+      options?.sort === "name"
+        ? qb.order("name", { ascending: true })
+        : options?.sort === "recent"
+          ? qb.order("enrolled_at", { ascending: false, nullsFirst: false })
+          : qb.order("grade", { ascending: true }).order("name", { ascending: true });
+    return sorted.range(from, to);
   });
   if (data.length === 0) return [];
 
   // 학생별 수강 과목 unique (active enrollments). id를 청크로 .in()(414 + error삼킴 방지).
   const studentIds = data.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
+  const enrolledSet = new Set<string>(); // 수강 중(end_date null, 휴원 포함) 반이 있는 학생
   {
     const ens = await fetchInChunks<{
       student_id: string;
@@ -63,6 +112,7 @@ export async function getStudentsList(
     );
 
     for (const e of ens) {
+      enrolledSet.add(e.student_id); // 휴원 포함 — 반에 적힌 학생
       if (e.on_hold) continue;
       const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
         | { subject?: string }
@@ -94,6 +144,10 @@ export async function getStudentsList(
   // 과목 필터 (in-memory — subjects가 enrollments에서 옴)
   if (options?.subject && options.subject !== "all") {
     rows = rows.filter((r) => r.subjects.includes(options.subject!));
+  }
+  // 미수강 제외 (in-memory — 전건을 이미 받았으므로)
+  if (options?.excludeNoEnrollment) {
+    rows = rows.filter((r) => enrolledSet.has(r.id));
   }
 
   return rows;
@@ -151,30 +205,37 @@ export async function getStudentsPage(
     if (subjectIds.length === 0) return { rows: [], total: 0 };
   }
 
+  // 미수강 제외: 활성 수강 없는(소수) 학생 id를 미리 풀어 .not in으로 뺀다(.in() 414 회피).
+  let unenrolledIds: string[] | null = null;
+  if (options?.excludeNoEnrollment) {
+    unenrolledIds = await getUnenrolledStudentIds(supabase);
+  }
+
   let qb = supabase
     .from("students")
     .select(
       `id, name, school, grade, status, enrolled_at, parent_phone,
        teacher:primary_teacher_id ( display_name )`,
       { count: "exact" },
-    )
-    .order("grade", { ascending: true })
-    .order("name", { ascending: true });
+    );
   if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
-  if (options?.q) {
-    const term = options.q.trim();
-    // 이름·학교 외 전화(학생/보호자)·보호자명까지 — 데스크 응대 시 전화로 학생 찾기 빈번.
-    if (term) {
-      const esc = term.replace(/[,()]/g, " ");
-      qb = qb.or(
-        `name.ilike.%${esc}%,school.ilike.%${esc}%,student_phone.ilike.%${esc}%,parent_phone.ilike.%${esc}%,parent_name.ilike.%${esc}%`,
-      );
-    }
-  }
+  if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
+  if (options?.teacherId && options.teacherId !== "all")
+    qb = qb.eq("primary_teacher_id", options.teacherId);
+  qb = applySearch(qb, options?.q, options?.searchField);
   if (subjectIds) qb = qb.in("id", subjectIds);
-  qb = qb.range(from, to);
+  if (unenrolledIds && unenrolledIds.length > 0)
+    qb = qb.not("id", "in", `(${unenrolledIds.join(",")})`);
 
-  const { data, count } = await qb;
+  // 정렬 — 필터 적용(.eq/.or/.in/.not) 다음에 .order(이후엔 transform 빌더). 기본 grade.
+  const sorted =
+    options?.sort === "name"
+      ? qb.order("name", { ascending: true })
+      : options?.sort === "recent"
+        ? qb.order("enrolled_at", { ascending: false, nullsFirst: false })
+        : qb.order("grade", { ascending: true }).order("name", { ascending: true });
+
+  const { data, count } = await sorted.range(from, to);
   const pageData = data ?? [];
 
   const ids = pageData.map((r) => r.id);

@@ -40,6 +40,7 @@ export function FilterSelect({
     const params = new URLSearchParams(currentParams?.toString() ?? "");
     if (v === allValue || v === "") params.delete(paramName);
     else params.set(paramName, v);
+    params.delete("page"); // 필터 변경은 결과집합이 바뀌므로 1페이지로 리셋(stale page 방지).
     const s = params.toString();
     router.push(`${pathname}${s ? `?${s}` : ""}`);
   };
