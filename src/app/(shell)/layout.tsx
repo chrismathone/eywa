@@ -8,6 +8,7 @@ import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
@@ -16,21 +17,25 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  // 학원 브랜드·색 — owner 설정(없으면 기본값). 셸 크롬(사이드바·헤더·미니셸)에 테넌트별 적용.
+  // getTenantSettings는 React cache라 아래 분기들이 같은 라운드트립을 공유(임베드 포함).
+  const settings = await getTenantSettings();
+  // 브랜드 색을 --primary 등 CSS 변수로 주입(기본색이면 undefined → 주입 생략). 모든 셸 분기에 적용.
+  const brandStyle = brandColorVars(settings.profile.brandColor) ?? undefined;
+
   // Stage Manager 임베드(?embed=1 → proxy가 x-embed 주입): 사이드바·헤더·캔버스·팰릿 전부
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
     return (
       <EmbedProvider embed>
-        <main className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+        <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
           {children}
         </main>
       </EmbedProvider>
     );
   }
 
-  // 학원 브랜드·이름 — owner 설정(없으면 기본값). 셸 크롬(사이드바·헤더·미니셸)에 테넌트별 적용.
-  const settings = await getTenantSettings();
   const brand = settings.profile.logoText || "EYWA";
   const academyLine =
     [settings.profile.name, settings.profile.branchLabel].filter(Boolean).join(" · ") || brand;
@@ -39,7 +44,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
   if (user.systemRole === "teacher" || user.systemRole === "student") {
     return (
-      <div className="bg-background text-foreground flex h-screen flex-col overflow-hidden">
+      <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden">
         <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
           <div className="flex items-center gap-2.5">
             <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
@@ -63,7 +68,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div className="bg-background text-foreground flex h-screen flex-col overflow-hidden lg:flex-row">
+    <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
           떨어져도 메뉴탭이 이중으로 뜨지 않도록 사전 차단(HideInFrame). 최상위 프레임은 그대로 노출. */}
       {/* 데스크톱(≥lg + 마우스) = 좌측 사이드바 / 그 외(좁은 폭·터치) = 숨김.

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 export type IntegrationStatus = {
   connected: boolean;
@@ -18,23 +19,17 @@ export async function getGoogleSheetsStatus(): Promise<IntegrationStatus> {
     .eq("provider", "google_sheets")
     .maybeSingle();
 
-  if (!data) {
-    return {
-      connected: false,
-      spreadsheetId: null,
-      spreadsheetUrl: null,
-      sharedWithEmail: null,
-      lastSyncedAt: null,
-      lastError: null,
-    };
-  }
+  // 전용 연동이 없으면 학원 설정 콘솔의 googleSheetId로 폴백(연결됨으로 표시).
+  const settings = await getTenantSettings();
+  const fallbackId = settings.notifications.googleSheetId.trim() || null;
+  const spreadsheetId = data?.spreadsheet_id || fallbackId;
 
   return {
-    connected: !!data.spreadsheet_id,
-    spreadsheetId: data.spreadsheet_id,
-    spreadsheetUrl: data.spreadsheet_url,
-    sharedWithEmail: data.shared_with_email,
-    lastSyncedAt: data.last_synced_at,
-    lastError: data.last_error,
+    connected: !!spreadsheetId,
+    spreadsheetId,
+    spreadsheetUrl: data?.spreadsheet_url ?? null,
+    sharedWithEmail: data?.shared_with_email ?? null,
+    lastSyncedAt: data?.last_synced_at ?? null,
+    lastError: data?.last_error ?? null,
   };
 }

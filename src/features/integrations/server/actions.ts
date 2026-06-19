@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   createTenantSpreadsheet,
   pushTimetableToSheets,
@@ -62,10 +63,15 @@ export async function syncSheetsNow(
     .eq("provider", "google_sheets")
     .maybeSingle();
 
-  if (!data?.spreadsheet_id) return { error: "먼저 Google Sheets를 연결해주세요" };
+  // 전용 연동(connect 플로우)이 없으면 학원 설정 콘솔의 googleSheetId로 폴백.
+  // (수동 입력한 시트는 서비스계정과 공유돼 있어야 push 성공 — 실패 시 last_error로 노출.)
+  const settings = await getTenantSettings();
+  const spreadsheetId = data?.spreadsheet_id || settings.notifications.googleSheetId.trim();
+  if (!spreadsheetId)
+    return { error: "먼저 Google Sheets를 연결하거나 학원 설정에서 시트 ID를 입력해주세요" };
 
   try {
-    await pushTimetableToSheets(data.spreadsheet_id);
+    await pushTimetableToSheets(spreadsheetId);
     await supabase
       .from("user_integrations")
       .update({

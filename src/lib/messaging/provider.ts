@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { sendAlimtalk } from "./solapi";
 import { buildAlimtalkVariables, pickTemplateId } from "./templates";
 
@@ -35,9 +36,17 @@ export async function resolveKakaoChannel(tenantId: string): Promise<KakaoSendCo
   ]);
   if (!lic.data?.is_active) return null;
   const c = ch.data;
-  if (!c || !c.is_active || !c.pf_id || !c.checkin_template_id || !c.checkout_template_id) return null;
+  if (!c || !c.is_active || !c.checkin_template_id || !c.checkout_template_id) return null;
+  // 발신프로필 키(pfId)는 kakao_channels가 우선, 비어 있으면 학원 설정 콘솔의 alimtalkSenderKey로 폴백.
+  // 핫패스(체크인)라 pf_id가 있으면 설정 조회를 건너뛴다(지연 폴백).
+  let pfId = c.pf_id?.trim() ?? "";
+  if (!pfId) {
+    const settings = await getTenantSettingsByTenantId(tenantId);
+    pfId = settings.notifications.alimtalkSenderKey.trim();
+  }
+  if (!pfId) return null;
   return {
-    pfId: c.pf_id,
+    pfId,
     checkinTemplateId: c.checkin_template_id,
     checkoutTemplateId: c.checkout_template_id,
     smsFallback: c.sms_fallback ?? true,

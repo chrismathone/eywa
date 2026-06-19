@@ -92,17 +92,18 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 > **한 줄 규칙: 소비처(`getTenantSettings`로 읽어 동작이 바뀌는 코드)가 없는 설정은 만들지도, UI에 노출하지도 않는다.**
 
-### 현재 알려진 미배선 (거짓 약속 — "동작하는 예시"로 인용 금지, 고치거나 숨길 것)
-- **🟠 orphan(저장되나 소비처 0)**: profile `representativeName`·`phone`·`email`·`address`·`brandColor`,
-  operations `terms`, billing `taxMode`·`defaultMethod`·`latePolicy`, notifications
-  `alimtalkSenderKey`·`kakaoChannelId`·`googleSheetId`.
-  - ⚠️ 알림톡/시트는 실제로 `kakao_channels`(`src/lib/messaging/provider.ts`)·`user_integrations`
-    (`src/features/integrations/server/actions.ts`)에서 읽는다 → 콘솔 필드는 **이중 소스**. 폴백 소비를 추가하거나 제거.
-  - `brandColor`는 `globals.css`의 `--primary` 하드코딩 때문에 무반응 → `(shell)/layout`에서 CSS 변수 주입 필요.
-- **⚪ 미구현(표시 화면 자체가 없음)**: notifications `privacyTerms`·`serviceTerms`(약관 표시 페이지 부재).
-- **✅ 정상 배선(참고 예시)**: profile `name`·`branchLabel`·`logoText`, operations
-  `subjects`·`jobTitles`·`gradeLevels`·`weekdayPeriods`·`weekendPeriods`·`holidays`, billing `dueDay`,
-  notifications `printHeader`. ⚠️ 단 영어 교시는 `ENGLISH_PERIODS`(`periods.ts`) 하드코딩이라 `weekdayPeriods` 설정과 무관.
+### 배선 현황 (2026-06-19 Phase 1·2 픽스 후 — "동작 예시" 인용 시 ✅만)
+- **✅ 배선 완료**: profile `name`·`branchLabel`·`logoText`, operations `subjects`·`jobTitles`·`gradeLevels`·
+  `weekdayPeriods`·`weekendPeriods`·`holidays`, billing `dueDay`, notifications `printHeader` (기존) +
+  **Phase 1·2 신규**: profile `brandColor`(layout가 `--primary` 등 CSS 변수 주입, `src/lib/color-utils.ts`),
+  profile `representativeName`·`phone`·`email`·`address` + billing `latePolicy`(등록 인쇄물 푸터/안내,
+  `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
+  `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
+  - ⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS`(`periods.ts`) 하드코딩 → `weekdayPeriods` 설정과 무관(Phase 3 과목별 교시로 해소 예정).
+- **🚫 입력 숨김(소비처 없어 v1 비노출 — 상태·스키마·저장은 보존, 소비처 생기면 입력만 복원)**: operations `terms`,
+  billing `taxMode`·`defaultMethod`(invoices에 결제수단 컬럼 없음), notifications `kakaoChannelId`(발송 경로에 미사용·대응 컬럼 없음).
+- **⚪ 아직 orphan(표시 화면 부재 — 후속)**: notifications `privacyTerms`·`serviceTerms`(약관 표시 페이지 필요).
+  현재 콘솔에 입력은 떠 있으나 소비처 0 → 약관 페이지 구현 또는 숨김 결정 필요.
 
 ### DB가 필요한데 없는 것 (jsonb로 못 담는 것 포함)
 `tenant_settings.data`는 텍스트/숫자/배열만 담는다 — **이미지·파일은 Supabase Storage 버킷이 별도 필요**:

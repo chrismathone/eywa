@@ -30,6 +30,18 @@ export default async function EnrollmentPrintPage({
   if (!consult || !consult.aiAnalysis) notFound();
   const printHeader = settings.notifications.printHeader || "eywa · 인재원 학원관리";
 
+  // 학원 연락처·정책 — owner 설정에서(값 있을 때만 인쇄물에 노출). 인수인계서는 학부모 전달용 1부 포함.
+  const profile = settings.profile;
+  const academyName = profile.name || "인재원";
+  const contactLine = [
+    profile.representativeName ? `대표 ${profile.representativeName}` : "",
+    profile.phone,
+    profile.email,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const latePolicy = settings.billing.latePolicy?.trim();
+
   const p = consult.aiAnalysis.printPayload;
   const consultedDate = new Date(p.consultedAt).toLocaleDateString("ko-KR", {
     year: "numeric",
@@ -152,9 +164,22 @@ export default async function EnrollmentPrintPage({
         </div>
       </Section>
 
-      <footer className="mt-10 flex items-end justify-between border-t border-black/20 pt-4 text-[10px] text-black/60">
-        <p>EYWA · {settings.profile.name || "인재원"} 학원관리 시스템</p>
-        <p className="font-mono">
+      {latePolicy ? (
+        <Section title="수납 정책 안내">
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{latePolicy}</p>
+        </Section>
+      ) : null}
+
+      <footer className="mt-10 flex items-end justify-between gap-6 border-t border-black/20 pt-4 text-[10px] text-black/60">
+        <div className="space-y-0.5">
+          <p className="font-semibold text-black/80">
+            {academyName}
+            {profile.branchLabel ? ` · ${profile.branchLabel}` : ""}
+          </p>
+          {contactLine ? <p>{contactLine}</p> : null}
+          {profile.address ? <p>{profile.address}</p> : null}
+        </div>
+        <p className="shrink-0 text-right font-mono">
           MODEL {consult.aiAnalysis.modelVersion} · GENERATED{" "}
           {new Date(consult.aiAnalysis.generatedAt).toLocaleDateString("ko-KR")}
         </p>
