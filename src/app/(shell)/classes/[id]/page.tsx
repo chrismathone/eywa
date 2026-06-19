@@ -76,6 +76,14 @@ export default async function ClassDetailPage({
     if (!scheduleByDay.has(s.dayOfWeek)) scheduleByDay.set(s.dayOfWeek, []);
     scheduleByDay.get(s.dayOfWeek)!.push(s);
   }
+  // 반 운영 요일(분리등원 후보) — 배정 다이얼로그 + 학생별 등원요일 배지에 사용.
+  const classDays = DAY_ORDER.filter((d) => scheduleByDay.has(d));
+  const attendanceBadge = (days: string[]) =>
+    days.length > 0 && days.length < classDays.length
+      ? DAY_ORDER.filter((d) => days.includes(d))
+          .map((d) => DAY_LABEL[d])
+          .join("·") + "만"
+      : null;
 
   return (
     <div className="space-y-6">
@@ -119,6 +127,7 @@ export default async function ClassDetailPage({
               subject: klass.subject,
               teacherName: klass.teacherName,
               studentCount: klass.studentCount,
+              days: classDays,
             }}
             studentOptions={candidateStudents.map((s) => ({
               id: s.id,
@@ -208,6 +217,11 @@ export default async function ClassDetailPage({
                       </p>
                     </WindowLink>
                     <div className="flex items-center gap-2">
+                      {attendanceBadge(s.attendanceDays) ? (
+                        <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 rounded-md border px-2 py-0.5 text-xs font-medium">
+                          {attendanceBadge(s.attendanceDays)}
+                        </span>
+                      ) : null}
                       <span className="text-muted-foreground num text-xs">
                         {s.enrolledAt} ~ 현재
                       </span>

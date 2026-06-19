@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, UserPlus, X } from "lucide-react";
@@ -19,6 +19,17 @@ const SUBJECT_LABEL: Record<string, string> = {
   arts: "예술",
 };
 
+const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_LABEL: Record<string, string> = {
+  mon: "월",
+  tue: "화",
+  wed: "수",
+  thu: "목",
+  fri: "금",
+  sat: "토",
+  sun: "일",
+};
+
 export type AssignDialogStudent = {
   id: string;
   name: string;
@@ -31,6 +42,8 @@ export type AssignDialogClass = {
   subject: string;
   teacherName: string | null;
   studentCount: number;
+  /** 반 운영 요일(분리등원 후보). 없으면 등원 요일 선택 미표시. */
+  days?: string[];
 };
 
 function Submit() {
@@ -72,6 +85,28 @@ export function EnrollmentAssignDialog({
     createEnrollment,
     undefined,
   );
+  const isStudentMode = mode === "add-class-to-student";
+
+  // 분리등원: 대상 반의 운영 요일. student→class 모드는 드롭다운 선택 반, class→student 모드는 고정 반.
+  const [selectedClassId, setSelectedClassId] = useState("");
+  const targetClassDays = isStudentMode
+    ? (classes?.find((c) => c.id === selectedClassId)?.days ?? [])
+    : (fixedClass?.days ?? []);
+  const classDaysKey = DAY_ORDER.filter((d) => targetClassDays.includes(d)).join(",");
+  // 등원 요일(=학생이 실제 가는 요일). 기본 = 반 전 요일. 대상 반이 바뀌면 그 반 전 요일로 리셋.
+  // (effect 대신 "렌더 중 prev 비교 조정" 패턴 — set-state-in-effect 룰 회피, React 권장 #25.)
+  const [attendingDays, setAttendingDays] = useState<string[]>(classDaysKey ? classDaysKey.split(",") : []);
+  const [prevClassDaysKey, setPrevClassDaysKey] = useState(classDaysKey);
+  if (classDaysKey !== prevClassDaysKey) {
+    setPrevClassDaysKey(classDaysKey);
+    setAttendingDays(classDaysKey ? classDaysKey.split(",") : []);
+  }
+  const toggleDay = (d: string) =>
+    setAttendingDays((prev) => {
+      const next = prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d];
+      return DAY_ORDER.filter((x) => next.includes(x));
+    });
+  const orderedClassDays = classDaysKey ? classDaysKey.split(",") : [];
 
   if (state?.enrollmentId && !state?.error) {
     queueMicrotask(() => {
@@ -81,8 +116,6 @@ export function EnrollmentAssignDialog({
   }
 
   if (!open) return null;
-
-  const isStudentMode = mode === "add-class-to-student";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -134,6 +167,8 @@ export function EnrollmentAssignDialog({
               <label className="text-foreground block text-sm font-medium">반 선택</label>
               <SearchableSelect
                 name="classId"
+                value={selectedClassId}
+                onValueChange={setSelectedClassId}
                 placeholder="반 선택..."
                 searchPlaceholder="반 이름·강사 검색..."
                 options={classes.map((c) => ({
@@ -185,6 +220,45 @@ export function EnrollmentAssignDialog({
               />
             </div>
           </div>
+
+          {orderedClassDays.length > 0 ? (
+            <div className="space-y-1.5">
+              <label className="text-foreground block text-sm font-medium">
+                등원 요일
+                <span className="text-muted-foreground ml-1 text-xs font-normal">
+                  · 특정 요일만 등원하면 해제 (분리등원)
+                </span>
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {orderedClassDays.map((d) => {
+                  const on = attendingDays.includes(d);
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => toggleDay(d)}
+                      aria-pressed={on}
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                        on
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {DAY_LABEL[d] ?? d}
+                    </button>
+                  );
+                })}
+              </div>
+              <input type="hidden" name="attendanceDays" value={attendingDays.join(",")} />
+              <p className="text-muted-foreground text-[11px]">
+                {attendingDays.length === 0
+                  ? "요일을 선택하지 않으면 전 요일 등원으로 저장됩니다."
+                  : attendingDays.length >= orderedClassDays.length
+                    ? "전 요일 등원"
+                    : `${attendingDays.map((d) => DAY_LABEL[d] ?? d).join("·")}만 등원`}
+              </p>
+            </div>
+          ) : null}
 
           {conflicts && conflicts.length > 0 ? (
             <div className="border-chart-4/40 bg-chart-4/5 rounded-md border px-3 py-2 text-xs">

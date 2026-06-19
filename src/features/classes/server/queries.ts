@@ -65,6 +65,8 @@ export type ClassStudentRow = {
   school: string | null;
   enrolledAt: string;
   onHold: boolean;
+  /** 분리등원 요일 — []=수업 전 요일 등원, ['mon','thu']=월·목만. */
+  attendanceDays: string[];
 };
 
 export type ClassAttendanceStats = {
@@ -394,7 +396,7 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
   const { data } = await supabase
     .from("enrollments")
     .select(
-      `id, start_date, on_hold,
+      `id, start_date, on_hold, attendance_days,
        student:student_id ( id, name, grade, school )`,
     )
     .eq("class_id", classId)
@@ -417,6 +419,7 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
         school: s.school,
         enrolledAt: e.start_date,
         onHold: e.on_hold,
+        attendanceDays: (e.attendance_days as string[] | null) ?? [],
       } satisfies ClassStudentRow;
     })
     .filter((r): r is ClassStudentRow => r !== null);

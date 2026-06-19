@@ -8,6 +8,31 @@ export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
   | undefined;
 
+const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const VALID_DAYS = new Set<string>(DAY_ORDER);
+
+/**
+ * 분리등원 요일 정규화 — 선택 요일을 수업 운영 요일 교집합으로 좁히고 요일순 정렬한다.
+ * 비어있거나 수업의 전 요일을 다 고르면 [] 반환(= 전 요일 등원, 분리등원 아님 — GiST 충돌·표시 일관).
+ */
+async function normalizeAttendanceDays(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  classId: string,
+  picked: string[],
+): Promise<string[]> {
+  if (picked.length === 0) return [];
+  const { data: scheds } = await supabase
+    .from("class_schedules")
+    .select("day_of_week")
+    .eq("class_id", classId);
+  const classDays = new Set<string>((scheds ?? []).map((s) => s.day_of_week as string));
+  if (classDays.size === 0) return []; // 스케줄 없는 반 — 요일 제약 의미 없음
+  const within = picked.filter((d) => classDays.has(d));
+  // 전 요일을 다 골랐으면 제약 없음(=[]).
+  if (within.length === 0 || within.length >= classDays.size) return [];
+  return DAY_ORDER.filter((d) => within.includes(d));
+}
+
 /**
  * 학생을 반에 배정.
  * - GiST EXCLUDE 제약으로 학생의 다른 enrollment와 시간 겹침은 자동 차단됨.
@@ -25,11 +50,20 @@ export async function createEnrollment(
   const startDate =
     String(formData.get("startDate") ?? "").trim() || new Date().toISOString().slice(0, 10);
   const endDate = String(formData.get("endDate") ?? "").trim() || null;
+  // 분리등원: 콤마구분 요일(예 "mon,thu"). 비거나 수업의 전 요일이면 [] = 전 요일 등원.
+  const pickedDays = String(formData.get("attendanceDays") ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter((d) => VALID_DAYS.has(d));
 
   if (!studentId) return { error: "학생을 선택해주세요" };
   if (!classId) return { error: "반을 선택해주세요" };
 
   const supabase = await createClient();
+
+  // 수업의 운영 요일 — 선택값을 그 안으로 좁히고, "전 요일 선택"이면 []로 정규화(분리등원 아님).
+  const attendanceDays = await normalizeAttendanceDays(supabase, classId, pickedDays);
+
   const { data, error } = await supabase
     .from("enrollments")
     .insert({
@@ -38,6 +72,7 @@ export async function createEnrollment(
       class_id: classId,
       start_date: startDate,
       end_date: endDate,
+      attendance_days: attendanceDays,
     })
     .select("id")
     .single();
