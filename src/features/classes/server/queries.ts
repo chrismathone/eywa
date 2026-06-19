@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { attendanceRate } from "@/lib/calc/attendance";
 
 /** 운영 요일 + 그 요일의 최초 시작시각(HH:MM). 같은 요일 여러 교시면 가장 이른 시각. */
@@ -18,12 +19,17 @@ export type ClassListRow = {
   notes: string | null;
 };
 
+/** 수업목록 정렬 기준 — ijw 패리티(수업명/학생수/강사명). */
+export type ClassSort = "name" | "students" | "teacher";
+
 export type ClassListFilters = {
   subject?: string; // "all" | "math" | ...
   teacherId?: string; // "all" | uuid
-  day?: string; // "all" | "mon" | ...
+  day?: string; // "all" | "mon" | ... (getClassesList 단일 요일 — 레거시)
+  days?: string[]; // 다중 요일(getClassesPage) — 하나라도 포함하면 매칭(ijw 의미)
   q?: string;
   active?: "all" | "active" | "closed";
+  sort?: ClassSort; // 미지정 시 "name"
 };
 
 export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -189,9 +195,22 @@ export async function getClassesStats(): Promise<{ total: number; active: number
   return { total: total.count ?? 0, active: active.count ?? 0, totalSeats: seats.count ?? 0 };
 }
 
+/** 수업목록 정렬 — 수업명(기본)·학생수(많은순)·강사명(가나다, 미정은 끝). 동률은 수업명 보조정렬. */
+function sortClassRows(rows: ClassListRow[], sort: ClassSort): void {
+  const byName = (a: ClassListRow, b: ClassListRow) => a.className.localeCompare(b.className, "ko");
+  rows.sort((a, b) => {
+    if (sort === "students") return b.studentCount - a.studentCount || byName(a, b);
+    if (sort === "teacher")
+      return (a.teacherName ?? "힣").localeCompare(b.teacherName ?? "힣", "ko") || byName(a, b);
+    return byName(a, b);
+  });
+}
+
 /**
- * 수업목록 서버 페이지네이션. subject/teacher/active/q는 SQL, day는 class_schedules에서 해당 요일 수업 id를
- * 먼저 풀어 .in()으로 좁힌다(총계 정확 — C2 한계 해소). 학생수·요일은 그 페이지 수업 id로만 스코프 집계.
+ * 수업목록 — 모집단이 작아(학원 단위 수업 ~수백) 매칭 전건을 가져와 메모리에서 정렬·페이지네이션한다.
+ * 학생수·강사명 정렬은 파생/조인 필드라 PostgREST 부모행 order로 표현 불가 → 전건 후 메모리 정렬이 정답.
+ * subject/teacher/q는 SQL, 요일(다중)은 class_schedules에서 "선택 요일 중 하나라도" 가진 수업 id로 먼저 좁힌다.
+ * 학생수·요일 enrich는 매칭 수업 id를 청크로 조회(414/1000행 절단 회피, lib/supabase/batch).
  */
 export async function getClassesPage(
   options: ClassListFilters,
@@ -199,14 +218,17 @@ export async function getClassesPage(
   pageSize = 50,
 ): Promise<{ rows: ClassListRow[]; total: number }> {
   const supabase = await createClient();
-  const from = (page - 1) * pageSize;
+  const sort: ClassSort = options.sort ?? "name";
 
+  // 요일(다중) 필터 — 선택 요일 중 하나라도 운영하는 수업 id로 좁힘(ijw "하나라도 포함" 의미).
   let dayClassIds: string[] | null = null;
-  if (options?.day && options.day !== "all") {
-    const { data: scheds } = await supabase
+  const days = (options.days ?? []).filter(Boolean);
+  if (days.length > 0) {
+    const { data: scheds, error } = await supabase
       .from("class_schedules")
       .select("class_id")
-      .eq("day_of_week", options.day);
+      .in("day_of_week", days);
+    if (error) throw new Error(`getClassesPage(days): ${error.message}`);
     dayClassIds = [...new Set((scheds ?? []).map((s) => s.class_id))];
     if (dayClassIds.length === 0) return { rows: [], total: 0 };
   }
@@ -217,14 +239,13 @@ export async function getClassesPage(
       `id, class_name, subject, is_active, notes, teacher_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
-      { count: "exact" },
     )
     .order("class_name");
-  if (options?.subject && options.subject !== "all") qb = qb.eq("subject", options.subject);
-  if (options?.teacherId && options.teacherId !== "all") qb = qb.eq("teacher_id", options.teacherId);
-  if (options?.active === "active") qb = qb.eq("is_active", true);
-  if (options?.active === "closed") qb = qb.eq("is_active", false);
-  if (options?.q) {
+  if (options.subject && options.subject !== "all") qb = qb.eq("subject", options.subject);
+  if (options.teacherId && options.teacherId !== "all") qb = qb.eq("teacher_id", options.teacherId);
+  if (options.active === "active") qb = qb.eq("is_active", true);
+  if (options.active === "closed") qb = qb.eq("is_active", false);
+  if (options.q) {
     const term = sanitizeTerm(options.q);
     if (term) {
       // 반이름 OR 강사명: 강사명에 매칭되는 강사 id를 먼저 풀어 teacher_id로 좁힌다(null 강사 안전).
@@ -239,27 +260,34 @@ export async function getClassesPage(
     }
   }
   if (dayClassIds) qb = qb.in("id", dayClassIds);
-  qb = qb.range(from, from + pageSize - 1);
 
-  const { data: classes, count } = await qb;
-  const pageClasses = classes ?? [];
-  const classIds = pageClasses.map((c) => c.id);
+  const { data: classes, error } = await qb;
+  if (error) throw new Error(`getClassesPage: ${error.message}`);
+  const matched = classes ?? [];
+  const classIds = matched.map((c) => c.id);
 
+  // 학생수·요일 — 매칭 수업 id를 청크로 조회(전건 .in() 414/1000행 절단 회피).
   const counts = new Map<string, number>();
   let daysByClass = new Map<string, Map<string, string | null>>();
   if (classIds.length > 0) {
-    const [{ data: enrollments }, { data: scheds }] = await Promise.all([
-      supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", classIds),
-      supabase
-        .from("class_schedules")
-        .select("class_id, day_of_week, start_time")
-        .in("class_id", classIds),
+    const [enrollments, scheds] = await Promise.all([
+      fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
+        supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+      ),
+      fetchInChunks<{ class_id: string; day_of_week: string; start_time: string | null }>(
+        classIds,
+        (chunk) =>
+          supabase
+            .from("class_schedules")
+            .select("class_id, day_of_week, start_time")
+            .in("class_id", chunk),
+      ),
     ]);
-    for (const e of enrollments ?? []) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
     daysByClass = buildDaySlots(scheds);
   }
 
-  const rows = pageClasses.map((c) => {
+  const rows = matched.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
       | { display_name?: string }
       | undefined;
@@ -280,7 +308,11 @@ export async function getClassesPage(
     } satisfies ClassListRow;
   });
 
-  return { rows, total: count ?? rows.length };
+  sortClassRows(rows, sort);
+
+  const total = rows.length;
+  const from = (page - 1) * pageSize;
+  return { rows: rows.slice(from, from + pageSize), total };
 }
 
 export async function getClassTeacherOptions(): Promise<

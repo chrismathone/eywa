@@ -11,6 +11,7 @@ import {
   getClassTeacherOptions,
   type ClassListRow,
   type ClassDaySlot,
+  type ClassSort,
 } from "@/features/classes/server/queries";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
@@ -69,8 +70,8 @@ const SUBJECT_FILTERS = [
 const teacherTeaches = (subjects: string[], subjectKey: string) =>
   subjects.some((s) => s.toLowerCase() === subjectKey.toLowerCase());
 
+// 요일 칩 — ijw처럼 다중 선택(토글). "전체"는 선택 해제.
 const DAY_FILTERS = [
-  { key: "all", label: "전체" },
   { key: "mon", label: "월" },
   { key: "tue", label: "화" },
   { key: "wed", label: "수" },
@@ -79,18 +80,47 @@ const DAY_FILTERS = [
   { key: "sat", label: "토" },
   { key: "sun", label: "일" },
 ];
+const DAY_KEYS = new Set(DAY_FILTERS.map((d) => d.key));
 
-function buildHref(
-  current: { subject: string; teacher: string; day: string; q: string; view: ViewMode },
-  patch: Partial<{ subject: string; teacher: string; day: string; q: string; view: ViewMode }>,
-): string {
-  const params = new URLSearchParams();
+// 정렬 — ijw 패리티(수업명순/학생수순/강사명순). 기본 name은 URL에 안 실음.
+const SORT_OPTIONS: { value: Exclude<ClassSort, "name">; label: string }[] = [
+  { value: "students", label: "학생수순" },
+  { value: "teacher", label: "강사명순" },
+];
+
+// 필터 칩 공통 스타일(과목·요일). 활성 = ink 솔리드, 비활성 = 라인 + hover.
+const chipCls = (active: boolean) =>
+  `shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+    active
+      ? "border-foreground bg-foreground text-background font-medium"
+      : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+  }`;
+// 뷰 토글 칩(테이블/카드). 활성 = primary.
+const viewCls = (active: boolean) =>
+  `shrink-0 rounded-sm border px-2 py-1 text-xs transition ${
+    active
+      ? "border-primary bg-primary text-primary-foreground font-medium"
+      : "border-line text-text-dim hover:bg-bg-soft"
+  }`;
+
+type ClassFilterState = {
+  subject: string;
+  teacher: string;
+  days: string[];
+  q: string;
+  view: ViewMode;
+  sort: ClassSort;
+};
+
+function buildHref(current: ClassFilterState, patch: Partial<ClassFilterState>): string {
   const next = { ...current, ...patch };
+  const params = new URLSearchParams();
   if (next.subject !== "all") params.set("subject", next.subject);
   if (next.teacher !== "all") params.set("teacher", next.teacher);
-  if (next.day !== "all") params.set("day", next.day);
+  if (next.days.length) params.set("days", next.days.join(","));
   if (next.q) params.set("q", next.q);
   if (next.view !== "table") params.set("view", next.view);
+  if (next.sort !== "name") params.set("sort", next.sort);
   const s = params.toString();
   return s ? `/classes?${s}` : "/classes";
 }
@@ -101,9 +131,10 @@ export default async function ClassesPage({
   searchParams: Promise<{
     subject?: string;
     teacher?: string;
-    day?: string;
+    days?: string;
     q?: string;
     view?: ViewMode;
+    sort?: string;
     page?: string;
   }>;
 }) {
@@ -111,13 +142,19 @@ export default async function ClassesPage({
   const sp = await searchParams;
   const subject = sp.subject ?? "all";
   const teacherId = sp.teacher ?? "all";
-  const day = sp.day ?? "all";
+  // 다중 요일(콤마구분) — 알 수 없는 키는 버려 안전화.
+  const days = (sp.days ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter((d) => DAY_KEYS.has(d));
   const q = sp.q ?? "";
   const view: ViewMode = sp.view === "cards" ? "cards" : "table";
+  const sort: ClassSort =
+    sp.sort === "students" || sp.sort === "teacher" ? sp.sort : "name";
   const page = Math.max(1, Number(sp.page) || 1);
 
   const [{ rows: classes, total }, teachers, stats] = await Promise.all([
-    getClassesPage({ subject, teacherId, day, q }, page, PAGE_SIZE),
+    getClassesPage({ subject, teacherId, days, q, sort }, page, PAGE_SIZE),
     getClassTeacherOptions(),
     getClassesStats(),
   ]);
@@ -125,7 +162,7 @@ export default async function ClassesPage({
   const totalSeats = stats.totalSeats;
   const active = stats.active;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const current = { subject, teacher: teacherId, day, q, view };
+  const current: ClassFilterState = { subject, teacher: teacherId, days, q, view, sort };
 
   // 과목이 선택되면 해당 과목 담당 강사만 드롭다운에 노출.
   const teacherFilterOptions =
@@ -139,15 +176,15 @@ export default async function ClassesPage({
         ? { teacher: "all" }
         : {}),
     });
+  // 요일 토글 — 이미 선택돼 있으면 빼고, 아니면 더한다(다중).
+  const dayHref = (key: string) =>
+    buildHref(current, {
+      days: days.includes(key) ? days.filter((d) => d !== key) : [...days, key],
+    });
   const pageHref = (p: number) => {
-    const params = new URLSearchParams();
-    if (subject !== "all") params.set("subject", subject);
-    if (teacherId !== "all") params.set("teacher", teacherId);
-    if (day !== "all") params.set("day", day);
-    if (q) params.set("q", q);
-    if (view !== "table") params.set("view", view);
-    if (p > 1) params.set("page", String(p));
-    const s = params.toString();
+    const base = new URLSearchParams(buildHref(current, {}).split("?")[1] ?? "");
+    if (p > 1) base.set("page", String(p));
+    const s = base.toString();
     return s ? `/classes?${s}` : "/classes";
   };
 
@@ -167,50 +204,22 @@ export default async function ClassesPage({
         />
       </section>
 
-      {/* Filter bar */}
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Filter bar — ijw 패리티: 넓은 창에선 한 줄, 좁아지면 자연스럽게 줄바꿈(flex-wrap) */}
+      <div className="bg-card border-line shadow-card rounded-md border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
           {/* 과목 */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">과목</span>
             {SUBJECT_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={subjectHref(f.key)}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                  subject === f.key
-                    ? "border-foreground bg-foreground text-background font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
+              <Link key={f.key} href={subjectHref(f.key)} className={chipCls(subject === f.key)}>
                 {f.label}
               </Link>
             ))}
           </div>
 
-          <span className="bg-line h-4 w-px" aria-hidden />
+          <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
 
-          {/* 요일 */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">요일</span>
-            {DAY_FILTERS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildHref(current, { day: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                  day === f.key
-                    ? "border-foreground bg-foreground text-background font-medium"
-                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                {f.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {/* 강사 dropdown */}
+          {/* 강사 */}
           <div className="flex items-center gap-1.5">
             <span className="micro mr-1">강사</span>
             <FilterSelect
@@ -218,14 +227,47 @@ export default async function ClassesPage({
               value={teacherId === "all" ? null : teacherId}
               options={teacherFilterOptions.map((t) => ({ value: t.id, label: t.name }))}
               ariaLabel="강사 필터"
+              className="w-36"
             />
           </div>
 
-          {/* 검색 + 뷰 토글 */}
+          <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
+
+          {/* 요일 (다중 선택) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">요일</span>
+            <Link href={buildHref(current, { days: [] })} className={chipCls(days.length === 0)}>
+              전체
+            </Link>
+            {DAY_FILTERS.map((f) => (
+              <Link key={f.key} href={dayHref(f.key)} className={chipCls(days.includes(f.key))}>
+                {f.label}
+              </Link>
+            ))}
+          </div>
+
+          <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
+
+          {/* 정렬 */}
+          <div className="flex items-center gap-1.5">
+            <span className="micro mr-1">정렬</span>
+            <FilterSelect
+              paramName="sort"
+              value={sort === "name" ? null : sort}
+              options={SORT_OPTIONS}
+              allLabel="수업명순"
+              allValue="name"
+              ariaLabel="정렬 기준"
+              className="w-28"
+            />
+          </div>
+
+          {/* 검색 + 뷰 토글 (넓을 땐 우측 정렬) */}
           <form action="/classes" method="get" className="ml-auto flex items-center gap-2">
             {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
             {teacherId !== "all" ? <input type="hidden" name="teacher" value={teacherId} /> : null}
-            {day !== "all" ? <input type="hidden" name="day" value={day} /> : null}
+            {days.length ? <input type="hidden" name="days" value={days.join(",")} /> : null}
+            {sort !== "name" ? <input type="hidden" name="sort" value={sort} /> : null}
             {view !== "table" ? <input type="hidden" name="view" value={view} /> : null}
             <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
               <EyIcon name="search" size={13} />
@@ -233,29 +275,15 @@ export default async function ClassesPage({
                 type="search"
                 name="q"
                 defaultValue={q}
-                placeholder="반·강사명"
-                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
+                placeholder="수업명, 강사명 검색"
+                className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
               />
             </div>
             <div className="flex items-center gap-1">
-              <Link
-                href={buildHref(current, { view: "table" })}
-                className={`shrink-0 rounded-sm border px-2 py-1 text-xs transition ${
-                  view === "table"
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:bg-bg-soft"
-                }`}
-              >
+              <Link href={buildHref(current, { view: "table" })} className={viewCls(view === "table")}>
                 테이블
               </Link>
-              <Link
-                href={buildHref(current, { view: "cards" })}
-                className={`shrink-0 rounded-sm border px-2 py-1 text-xs transition ${
-                  view === "cards"
-                    ? "border-primary bg-primary text-primary-foreground font-medium"
-                    : "border-line text-text-dim hover:bg-bg-soft"
-                }`}
-              >
+              <Link href={buildHref(current, { view: "cards" })} className={viewCls(view === "cards")}>
                 카드
               </Link>
             </div>
