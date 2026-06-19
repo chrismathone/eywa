@@ -2,15 +2,9 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { Pill } from "@/components/atoms/pill";
 import type { StaffDetail } from "@/features/staff/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { AccountActions } from "../_components/account-actions";
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  highmath: "수학(심화)",
-  english: "영어",
-  science: "과학",
-  korean: "국어",
-};
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -21,7 +15,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function BasicInfoTab({
+export async function BasicInfoTab({
   staff,
   canManageThis,
   showSalary,
@@ -32,6 +26,9 @@ export function BasicInfoTab({
   showSalary: boolean;
   roleOptions: SystemRole[];
 }) {
+  const settings = await getTenantSettings();
+  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
   const isTeacherLike = staff.systemRole === "teacher" || staff.systemRole === "master";
   const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -51,8 +48,8 @@ export function BasicInfoTab({
               staff.subjects.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {staff.subjects.map((s) => (
-                    <Pill key={s} color="neutral" soft>
-                      {SUBJECT_LABEL[s] ?? s}
+                    <Pill key={s} color={subjects.colorOf(s)} soft>
+                      {subjects.labelOf(s)}
                     </Pill>
                   ))}
                 </div>

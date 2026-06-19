@@ -1,34 +1,19 @@
 import { SearchX } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { Pagination } from "@/components/pagination";
 import { getExamsPage, type ExamRow } from "@/features/exams/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { CreateExamTrigger } from "./_components/exam-form-dialog";
 
 export const metadata = { title: "성적관리 — eywa" };
 
 const PAGE_SIZE = 50;
 
-const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
-  math: { label: "수학", color: "primary" },
-  english: { label: "영어", color: "blue" },
-  korean: { label: "국어", color: "rose" },
-  science: { label: "과학", color: "purple" },
-  arts: { label: "예술", color: "amber" },
-};
-
 const TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
-
-const SUBJECT_FILTERS = [
-  { key: "all", label: "전체" },
-  { key: "math", label: "수학" },
-  { key: "english", label: "영어" },
-  { key: "korean", label: "국어" },
-  { key: "science", label: "과학" },
-  { key: "arts", label: "예술" },
-];
 
 export default async function ExamsPage({
   searchParams,
@@ -40,11 +25,12 @@ export default async function ExamsPage({
   const subject = sp.subject ?? "all";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const { rows, total } = await getExamsPage(
-    { subject: subject === "all" ? undefined : subject },
-    page,
-    PAGE_SIZE,
-  );
+  const [{ rows, total }, settings] = await Promise.all([
+    getExamsPage({ subject: subject === "all" ? undefined : subject }, page, PAGE_SIZE),
+    getTenantSettings(),
+  ]);
+  // 과목 라벨·색·필터 칩은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 칩에 안 뜸.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const chipHref = (key: string) => (key === "all" ? "/exams" : `/exams?subject=${key}`);
@@ -62,12 +48,12 @@ export default async function ExamsPage({
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="micro mr-1">과목</span>
-          {SUBJECT_FILTERS.map((f) => (
+          {subjects.filters.map((f) => (
             <a
-              key={f.key}
-              href={chipHref(f.key)}
+              key={f.value}
+              href={chipHref(f.value)}
               className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                subject === f.key
+                subject === f.value
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
@@ -98,7 +84,7 @@ export default async function ExamsPage({
         />
       ) : (
         <>
-          <ExamTable rows={rows} />
+          <ExamTable rows={rows} subjects={subjects} />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
@@ -106,7 +92,7 @@ export default async function ExamsPage({
   );
 }
 
-function ExamTable({ rows }: { rows: ExamRow[] }) {
+function ExamTable({ rows, subjects }: { rows: ExamRow[]; subjects: SubjectMaps }) {
   return (
     <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
@@ -124,7 +110,7 @@ function ExamTable({ rows }: { rows: ExamRow[] }) {
         </thead>
         <tbody className="divide-line divide-y">
           {rows.map((e) => {
-            const meta = SUBJECT_META[e.subject] ?? { label: e.subject, color: "neutral" as PillColor };
+            const meta = { label: subjects.labelOf(e.subject), color: subjects.colorOf(e.subject) };
             const s = e.stats;
             return (
               <tr key={e.id} className="hover:bg-bg-soft/50">

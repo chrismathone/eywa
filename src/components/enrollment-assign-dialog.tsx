@@ -6,18 +6,11 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   createEnrollment,
   type CreateEnrollmentState,
 } from "@/features/enrollments/server/actions";
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABEL: Record<string, string> = {
@@ -81,6 +74,7 @@ export function EnrollmentAssignDialog({
   conflicts?: { day: string; time: string; existingClass: string }[];
 }) {
   const router = useRouter();
+  const subjects = useSubjectMaps();
   const [state, formAction] = useActionState<CreateEnrollmentState, FormData>(
     createEnrollment,
     undefined,
@@ -135,7 +129,7 @@ export function EnrollmentAssignDialog({
                 <>
                   {fixedClass?.className}
                   <span className="text-muted-foreground ml-2 text-xs font-normal">
-                    {SUBJECT_LABEL[fixedClass?.subject ?? ""] ?? fixedClass?.subject}
+                    {fixedClass ? subjects.labelOf(fixedClass.subject) : ""}
                   </span>
                 </>
               )}
@@ -174,7 +168,7 @@ export function EnrollmentAssignDialog({
                 options={classes.map((c) => ({
                   value: c.id,
                   label: c.className,
-                  hint: `${SUBJECT_LABEL[c.subject] ?? c.subject}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
+                  hint: `${subjects.labelOf(c.subject)}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
                 }))}
               />
             </div>

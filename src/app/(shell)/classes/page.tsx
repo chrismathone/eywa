@@ -1,7 +1,7 @@
 import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -13,6 +13,8 @@ import {
   type ClassSort,
 } from "@/features/classes/server/queries";
 import { Pagination } from "@/components/pagination";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 import { NewClassTrigger } from "./_components/new-class-trigger";
 import { ClassFilterBar } from "./_components/class-filter-bar";
 import {
@@ -30,24 +32,6 @@ const PAGE_SIZE = 50;
 const CheckIcon: LucideIcon = ((props: { size?: number | string }) => (
   <EyIcon name="check" size={typeof props.size === "number" ? props.size : undefined} />
 )) as unknown as LucideIcon;
-
-const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
-  math: { label: "수학", color: "primary" },
-  highmath: { label: "수학(심화)", color: "primary" },
-  english: { label: "영어", color: "blue" },
-  korean: { label: "국어", color: "rose" },
-  science: { label: "과학", color: "purple" },
-  arts: { label: "예술", color: "amber" },
-};
-
-const SUBJECT_BAR: Record<string, string> = {
-  math: "bg-primary",
-  highmath: "bg-primary",
-  english: "bg-blue",
-  korean: "bg-rose",
-  science: "bg-purple",
-  arts: "bg-amber",
-};
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월",
@@ -87,12 +71,15 @@ export default async function ClassesPage({
     sp.sort === "students" || sp.sort === "teacher" ? sp.sort : "name";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows: classes, total }, teachers, stats] = await Promise.all([
+  const [{ rows: classes, total }, teachers, stats, settings] = await Promise.all([
     getClassesPage({ subject, teacherId, days, q, sort }, page, PAGE_SIZE),
     getClassTeacherOptions(),
     getClassesStats(),
+    getTenantSettings(),
   ]);
 
+  // 과목 라벨·색·필터 옵션은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 드롭다운에 안 뜸.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
   const totalSeats = stats.totalSeats;
   const active = stats.active;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -122,7 +109,7 @@ export default async function ClassesPage({
       </section>
 
       {/* 과목·요일·강사·정렬 드롭다운 + 검색/뷰 — 선택값 localStorage 영속(클라이언트) */}
-      <ClassFilterBar current={current} teachers={teachers} />
+      <ClassFilterBar current={current} teachers={teachers} subjectFilters={subjects.filters} />
 
       <div className="flex items-center justify-between">
         <p className="micro">
@@ -140,7 +127,11 @@ export default async function ClassesPage({
         <EmptyState icon={() => <SearchX size={32} strokeWidth={1.5} />} title="결과 없음" />
       ) : (
         <>
-          {view === "table" ? <TableView classes={classes} /> : <CardsView classes={classes} />}
+          {view === "table" ? (
+            <TableView classes={classes} subjects={subjects} />
+          ) : (
+            <CardsView classes={classes} subjects={subjects} />
+          )}
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
@@ -152,7 +143,7 @@ export default async function ClassesPage({
  * 운영 요일 칩 + 시작시각. 모든 요일이 같은 시각이면 시각 1개만(월·수·금 14:30),
  * 요일마다 다르면 요일별로(월14:30 목16:20). 시각 정보가 목록에서 사라지던 격차 보강.
  */
-function DayChips({ days, subject }: { days: ClassDaySlot[]; subject: string }) {
+function DayChips({ days, barClass }: { days: ClassDaySlot[]; barClass: string }) {
   if (days.length === 0) return <span className="text-text-faint text-xs">—</span>;
   const starts = days.map((d) => d.start).filter((s): s is string => !!s);
   const uniform = starts.length === days.length && new Set(starts).size === 1;
@@ -162,7 +153,7 @@ function DayChips({ days, subject }: { days: ClassDaySlot[]; subject: string }) 
         {days.map((d) => (
           <span
             key={d.day}
-            className={`inline-flex size-5 items-center justify-center rounded-sm ${SUBJECT_BAR[subject] ?? "bg-bg-soft"} text-white`}
+            className={`inline-flex size-5 items-center justify-center rounded-sm ${barClass} text-white`}
           >
             {DAY_LABEL[d.day] ?? d.day}
           </span>
@@ -182,7 +173,7 @@ function DayChips({ days, subject }: { days: ClassDaySlot[]; subject: string }) 
   );
 }
 
-function TableView({ classes }: { classes: ClassListRow[] }) {
+function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: SubjectMaps }) {
   return (
     <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
@@ -200,7 +191,7 @@ function TableView({ classes }: { classes: ClassListRow[] }) {
         </thead>
         <tbody className="divide-line divide-y">
           {classes.map((c) => {
-            const meta = SUBJECT_META[c.subject] ?? { label: c.subject, color: "neutral" as PillColor };
+            const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
             return (
               <tr key={c.id} className="hover:bg-bg-soft/50">
                 <td className="px-4 py-2.5">
@@ -228,7 +219,7 @@ function TableView({ classes }: { classes: ClassListRow[] }) {
                   {c.classroomName ?? "—"}
                 </td>
                 <td className="px-4 py-2.5">
-                  <DayChips days={c.days} subject={c.subject} />
+                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} />
                 </td>
                 <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
                   {c.studentCount}명
@@ -260,11 +251,11 @@ function TableView({ classes }: { classes: ClassListRow[] }) {
   );
 }
 
-function CardsView({ classes }: { classes: ClassListRow[] }) {
+function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: SubjectMaps }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {classes.map((c) => {
-        const meta = SUBJECT_META[c.subject] ?? { label: c.subject, color: "neutral" as PillColor };
+        const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
         return (
           <WindowLink
             key={c.id}
@@ -298,7 +289,7 @@ function CardsView({ classes }: { classes: ClassListRow[] }) {
               </div>
             </div>
             <div className="border-line flex items-center justify-between gap-2 border-t pt-3">
-              <DayChips days={c.days} subject={c.subject} />
+              <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} />
               <span className="text-foreground num shrink-0 text-[12px] font-bold">
                 재원 {c.studentCount}명
               </span>

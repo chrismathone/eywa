@@ -14,15 +14,8 @@ export type ClassFilterState = {
   sort: ClassSort;
 };
 
-export const SUBJECT_FILTERS = [
-  { key: "all", label: "전체" },
-  { key: "math", label: "수학" },
-  { key: "highmath", label: "수학(심화)" },
-  { key: "english", label: "영어" },
-  { key: "korean", label: "국어" },
-  { key: "science", label: "과학" },
-  { key: "arts", label: "예술" },
-];
+// 과목 필터 옵션은 학원설정(operations.subjects)에서 서버가 만들어 ClassFilterBar에 prop으로 주입한다.
+// (하드코딩 목록은 미등록 과목 누출 + 설정 드리프트의 원인이라 제거 — buildSubjectMaps 단일 소스.)
 
 export const DAY_FILTERS = [
   { key: "mon", label: "월" },

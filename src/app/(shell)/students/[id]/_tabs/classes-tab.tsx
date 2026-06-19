@@ -1,6 +1,6 @@
 import { CalendarDays } from "lucide-react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import {
   getStudentClassesDetail,
   type StudentClassRow,
@@ -8,18 +8,9 @@ import {
 } from "@/features/students/server/queries";
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
+import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
-
-const SUBJECT_COLOR: Record<string, PillColor> = {
-  math: "primary",
-  highmath: "primary",
-  english: "blue",
-  korean: "rose",
-  science: "purple",
-  arts: "amber",
-};
 
 // 요일 chip 색(ijw DAY_COLORS 대응 — eywa 토큰).
 const DAY_CHIP: Record<string, string> = {
@@ -92,7 +83,7 @@ function Section({
   rows: StudentClassRow[];
   kind: "current" | "scheduled" | "past";
   studentId: string;
-  subjects: { labelOf: (k: string) => string };
+  subjects: SubjectMaps;
   action?: React.ReactNode;
   note?: string;
 }) {
@@ -128,7 +119,7 @@ function Section({
               {rows.map((r) => (
                 <tr key={r.enrollmentId} className="hover:bg-bg-soft/40">
                   <td className="px-4 py-2.5">
-                    <Pill color={SUBJECT_COLOR[r.subject] ?? "neutral"}>{subjects.labelOf(r.subject)}</Pill>
+                    <Pill color={subjects.colorOf(r.subject)}>{subjects.labelOf(r.subject)}</Pill>
                   </td>
                   <td className="text-foreground px-4 py-2.5 font-medium">{r.className}</td>
                   <td className="text-text-dim px-4 py-2.5 text-xs">{r.teacherName ?? "—"}</td>

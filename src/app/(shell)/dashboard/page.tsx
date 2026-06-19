@@ -16,6 +16,8 @@ import {
   getWithdrawalsThisMonth,
 } from "@/features/dashboard/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
 import { QuickActions } from "./_components/quick-actions";
@@ -47,6 +49,7 @@ export default async function DashboardPage() {
     manageAnnouncements,
     followUps,
     recordedClassIds,
+    settings,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getNewStudentsThisMonth(),
@@ -62,7 +65,10 @@ export default async function DashboardPage() {
     canManageAnnouncements ? getAnnouncementsForManage() : Promise.resolve([]),
     getFollowUpConsultations(8),
     getTodayRecordedClassIds(),
+    getTenantSettings(),
   ]);
+  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
+  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   // 오늘 시작한(예정 제외) 수업 중 출석 미기록 수.
   const recordedSet = new Set(recordedClassIds);
@@ -92,7 +98,7 @@ export default async function DashboardPage() {
 
       {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr_1fr] lg:items-stretch">
-        <NowCockpit slots={todaySchedule} unrecordedCount={unrecordedCount} />
+        <NowCockpit slots={todaySchedule} subjects={subjects} unrecordedCount={unrecordedCount} />
         <div className="flex flex-col gap-4">
           <AbsenceRiskCard items={absenceRisks} />
           <OutstandingCard items={outstanding} />

@@ -3,15 +3,8 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { Pill, type PillColor } from "@/components/atoms/pill";
-
-const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
-  math: { label: "수학", color: "primary" },
-  english: { label: "영어", color: "blue" },
-  korean: { label: "국어", color: "rose" },
-  science: { label: "과학", color: "purple" },
-  arts: { label: "예술", color: "amber" },
-};
+import { Pill } from "@/components/atoms/pill";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 export type StudentQuickInfo = {
   id: string;
@@ -40,6 +33,7 @@ export function StudentQuickPopover({
   children: ReactNode;
   href?: string;
 }) {
+  const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,17 +83,11 @@ export function StudentQuickPopover({
             <div className="border-line mt-2.5 border-t pt-2.5">
               <p className="micro mb-1.5 text-[9px]">수강 과목</p>
               <div className="flex flex-wrap gap-1">
-                {student.subjects.map((sub) => {
-                  const meta = SUBJECT_META[sub] ?? {
-                    label: sub,
-                    color: "neutral" as PillColor,
-                  };
-                  return (
-                    <Pill key={sub} color={meta.color}>
-                      {meta.label}
-                    </Pill>
-                  );
-                })}
+                {student.subjects.map((sub) => (
+                  <Pill key={sub} color={subjects.colorOf(sub)}>
+                    {subjects.labelOf(sub)}
+                  </Pill>
+                ))}
               </div>
             </div>
           ) : null}

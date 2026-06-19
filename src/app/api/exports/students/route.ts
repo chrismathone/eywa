@@ -5,6 +5,8 @@ import {
   type StudentSort,
   type SearchField,
 } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { buildStudentsWorkbook } from "@/features/exports/students-excel";
 
 export async function GET(request: Request) {
@@ -24,17 +26,21 @@ export async function GET(request: Request) {
   const searchField = (fieldParam ?? undefined) as SearchField | undefined;
   const excludeNoEnrollment = url.searchParams.get("noenr") === "1";
 
-  const students = await getStudentsList({
-    status,
-    subject,
-    q,
-    grade,
-    teacherId,
-    sort,
-    searchField,
-    excludeNoEnrollment,
-  });
-  const wb = await buildStudentsWorkbook(students);
+  const [students, settings] = await Promise.all([
+    getStudentsList({
+      status,
+      subject,
+      q,
+      grade,
+      teacherId,
+      sort,
+      searchField,
+      excludeNoEnrollment,
+    }),
+    getTenantSettings(),
+  ]);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const wb = await buildStudentsWorkbook(students, subjects.labelOf);
   const buf = await wb.xlsx.writeBuffer();
   const date = new Date().toISOString().slice(0, 10);
   return new NextResponse(buf, {

@@ -22,20 +22,13 @@ import {
   type SubjectEndedRow,
 } from "@/features/withdrawals/server/queries";
 import { Pagination } from "@/components/pagination";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
 
 export const metadata = { title: "퇴원관리 — eywa" };
 
 const PAGE_SIZE = 50;
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  highmath: "수학(심화)",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;
@@ -62,9 +55,10 @@ function monthlyWithdrawals(rows: { withdrawnAt: string | null }[]): WithdrawalM
   return months.map((m) => m.point);
 }
 
-/** 과목별 퇴원 분포(전체 기준) 상위 N. */
+/** 과목별 퇴원 분포(전체 기준) 상위 N. 라벨은 학원설정(operations.subjects)에서 — labelOf 주입. */
 function subjectBreakdown(
   rows: { lastClassSubject: string | null }[],
+  labelOf: (key: string) => string,
   topN = 6,
 ): { label: string; count: number }[] {
   const counts = new Map<string, number>();
@@ -73,7 +67,7 @@ function subjectBreakdown(
     counts.set(s, (counts.get(s) ?? 0) + 1);
   }
   return Array.from(counts.entries())
-    .map(([s, count]) => ({ label: SUBJECT_LABEL[s] ?? s, count }))
+    .map(([s, count]) => ({ label: s === "미상" ? "미상" : labelOf(s), count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, topN);
 }
@@ -117,7 +111,9 @@ export default async function WithdrawalsPage({
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const all = await getWithdrawnStudents();
+  const [all, settings] = await Promise.all([getWithdrawnStudents(), getTenantSettings()]);
+  // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   // 수강종료 집계는 재원 전수 + enrollment 조회라 무거워, 해당 탭일 때만 계산.
   const subjectEnded = viewType === "subject-ended" ? await getSubjectEndedStudents() : [];
   let rows = all;
@@ -159,7 +155,7 @@ export default async function WithdrawalsPage({
 
   // 통계(전체 기준) — 월별 추이 + 과목별 분포
   const trend = monthlyWithdrawals(all);
-  const subjects = subjectBreakdown(all);
+  const subjects = subjectBreakdown(all, subjectMaps.labelOf);
   const subjMax = subjects[0]?.count ?? 1;
 
   const reasonChips: { key: ReasonKey; label: string }[] = [
@@ -215,7 +211,7 @@ export default async function WithdrawalsPage({
       </div>
 
       {viewType === "subject-ended" ? (
-        <SubjectEndedView rows={subjectEnded} />
+        <SubjectEndedView rows={subjectEnded} labelOf={subjectMaps.labelOf} />
       ) : (
         <>
       {/* Stat strip */}
@@ -423,7 +419,13 @@ export default async function WithdrawalsPage({
   );
 }
 
-function SubjectEndedView({ rows }: { rows: SubjectEndedRow[] }) {
+function SubjectEndedView({
+  rows,
+  labelOf,
+}: {
+  rows: SubjectEndedRow[];
+  labelOf: (key: string) => string;
+}) {
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -460,7 +462,7 @@ function SubjectEndedView({ rows }: { rows: SubjectEndedRow[] }) {
                   <span className="text-text-faint mr-0.5 text-[10px]">종료</span>
                   {r.endedSubjects.map((s) => (
                     <Pill key={s} color="amber">
-                      {SUBJECT_LABEL[s] ?? s}
+                      {labelOf(s)}
                     </Pill>
                   ))}
                   {r.activeSubjects.length > 0 ? (
@@ -468,7 +470,7 @@ function SubjectEndedView({ rows }: { rows: SubjectEndedRow[] }) {
                       <span className="text-text-faint ml-1.5 mr-0.5 text-[10px]">수강중</span>
                       {r.activeSubjects.map((s) => (
                         <Pill key={s} color="primary" soft>
-                          {SUBJECT_LABEL[s] ?? s}
+                          {labelOf(s)}
                         </Pill>
                       ))}
                     </>

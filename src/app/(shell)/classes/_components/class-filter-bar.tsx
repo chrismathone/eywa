@@ -6,7 +6,6 @@ import { ChevronDown } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
-  SUBJECT_FILTERS,
   DAY_FILTERS,
   DAY_KEYS,
   SORT_OPTIONS,
@@ -141,7 +140,15 @@ function DayMultiSelect({ days, onGo }: { days: string[]; onGo: (patch: Partial<
  * 수업목록 필터바(클라이언트). 과목·요일·강사·정렬을 드롭다운으로(나열 X), 선택값을 localStorage에 저장해
  * 다음 방문에 복원. 좌측=과목/요일, 우측(ml-auto)=강사·정렬·검색·뷰(한 단위로 줄바꿈 → 넓은창 1줄/좁은창 2줄).
  */
-export function ClassFilterBar({ current, teachers }: { current: ClassFilterState; teachers: Teacher[] }) {
+export function ClassFilterBar({
+  current,
+  teachers,
+  subjectFilters,
+}: {
+  current: ClassFilterState;
+  teachers: Teacher[];
+  subjectFilters: { value: string; label: string }[];
+}) {
   const router = useRouter();
   const didInit = useRef(false);
 
@@ -193,7 +200,7 @@ export function ClassFilterBar({ current, teachers }: { current: ClassFilterStat
             className="w-32"
             value={current.subject}
             onValueChange={onSubject}
-            options={SUBJECT_FILTERS.map((f) => ({ value: f.key, label: f.label }))}
+            options={subjectFilters}
             ariaLabel="과목 필터"
           />
         </div>

@@ -1,56 +1,8 @@
-import type { EywaIconName } from "@/components/icons/eywa-icons";
-
 /**
- * 과목별 색/아이콘 메타 + 시간 헬퍼. (구 today-timeline.tsx에서 추출 — 커맨드센터
- * now-cockpit이 재사용.) 순수 상수·함수만, 'use client'/'server-only' 무관.
+ * 시간 헬퍼(구 today-timeline.tsx에서 추출 — now-cockpit 재사용). 순수 함수만.
+ * ⚠️ 과목 라벨·색은 여기 두지 않는다 — 학원설정(operations.subjects) 단일 소스.
+ *   서버는 buildSubjectMaps(getTenantSettings), 클라는 useSubjectMaps()로 읽을 것.
  */
-export type SubjectColor = "primary" | "blue" | "rose" | "amber" | "purple";
-
-export const SUBJECT_META: Record<
-  string,
-  { color: SubjectColor; icon: EywaIconName; label: string }
-> = {
-  math: { color: "primary", icon: "leaf", label: "수학" },
-  english: { color: "blue", icon: "leaf", label: "영어" },
-  korean: { color: "rose", icon: "leaf", label: "국어" },
-  science: { color: "purple", icon: "leaf", label: "과학" },
-};
-
-export const FALLBACK_META = {
-  color: "primary" as SubjectColor,
-  icon: "leaf" as EywaIconName,
-  label: "수업",
-};
-
-export const COLOR_BORDER: Record<SubjectColor, string> = {
-  primary: "border-primary bg-primary-softer",
-  blue: "border-blue bg-blue-soft",
-  rose: "border-rose bg-rose-soft",
-  amber: "border-amber bg-amber-soft",
-  purple: "border-purple bg-purple-soft",
-};
-
-export const COLOR_ICON_BG: Record<SubjectColor, string> = {
-  primary: "bg-primary-soft text-primary",
-  blue: "bg-blue-soft text-blue",
-  rose: "bg-rose-soft text-rose",
-  amber: "bg-amber-soft text-amber",
-  purple: "bg-purple-soft text-purple",
-};
-
-/** 밀도 막대용 솔리드 컬러 */
-export const COLOR_SOLID: Record<SubjectColor, string> = {
-  primary: "bg-primary",
-  blue: "bg-blue",
-  rose: "bg-rose",
-  amber: "bg-amber",
-  purple: "bg-purple",
-};
-
-export function subjectMeta(subject: string) {
-  return SUBJECT_META[subject] ?? FALLBACK_META;
-}
-
 export function shortTime(t: string) {
   return t.slice(0, 5);
 }

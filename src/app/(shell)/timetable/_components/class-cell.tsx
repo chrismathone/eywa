@@ -2,6 +2,8 @@
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
+import { useSubjectMaps } from "@/features/owner/operations-context";
+import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { useTimetableEdit } from "./edit-context";
 
 /**
@@ -31,16 +33,6 @@ export type ClassDetailQuick = {
     isNew?: boolean;
     isTransferredIn?: boolean;
   }[];
-};
-
-// 반이름 헤더 바 색(과목별). 학생 행은 흰 배경 + 상태색이라 헤더만 과목색.
-const SUBJECT_COLOR: Record<string, string> = {
-  math: "bg-primary-soft text-primary",
-  highmath: "bg-primary-soft text-primary",
-  english: "bg-blue-soft text-blue",
-  korean: "bg-rose-soft text-rose",
-  science: "bg-purple-soft text-purple",
-  arts: "bg-amber-soft text-amber",
 };
 
 function shortTime(t: string) {
@@ -213,7 +205,9 @@ export function ClassCell({
   roster?: "full" | "names" | "none";
 }) {
   const { editing } = useTimetableEdit();
-  const color = SUBJECT_COLOR[slot.subject] ?? "bg-bg-soft text-text-dim";
+  const subjects = useSubjectMaps();
+  // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
+  const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
 
   // 재원/대기/퇴원 분리 — ijw 셀처럼 섹션별 표시. status 없으면(구버전) 재원으로 간주.
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");

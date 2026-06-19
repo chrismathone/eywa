@@ -8,6 +8,7 @@ import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { OperationsProvider } from "@/features/owner/operations-context";
 import { resolveMatrix } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
@@ -30,9 +31,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (embed) {
     return (
       <EmbedProvider embed>
-        <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
-          {children}
-        </main>
+        <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+          <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+            {children}
+          </main>
+        </OperationsProvider>
       </EmbedProvider>
     );
   }
@@ -63,7 +66,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
           <UserMenu email={user.email} />
         </header>
-        <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">{children}</main>
+        <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+          <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+            {children}
+          </OperationsProvider>
+        </main>
       </div>
     );
   }
@@ -97,7 +104,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <HideInFrame>
           <AppHeader brand={brand} />
         </HideInFrame>
-        <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">{children}</main>
+        <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+          <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+            {children}
+          </OperationsProvider>
+        </main>
       </div>
 
       {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}

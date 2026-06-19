@@ -9,12 +9,8 @@ import { PrintActions } from "./print-actions";
 
 export const metadata = { title: "신입생 인수인계서 — eywa" };
 
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-};
+// 과목 라벨은 print_payload 스냅샷에 이미 한글로 동결돼 있어 별도 맵이 필요 없다(과목 하드코딩 금지).
+// 향후 라벨이 필요하면 buildSubjectMaps(getTenantSettings).labelOf로 읽을 것.
 
 export default async function EnrollmentPrintPage({
   params,
@@ -270,7 +266,3 @@ function Plan({ label, items }: { label: string; items: string[] }) {
     </div>
   );
 }
-
-// We intentionally don't reference SUBJECT_LABEL on the print page — print_payload
-// already has Korean labels. Kept for future extension.
-void SUBJECT_LABEL;

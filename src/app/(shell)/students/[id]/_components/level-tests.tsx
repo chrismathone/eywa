@@ -11,8 +11,10 @@ import {
   type LevelTestState,
 } from "@/features/students/server/actions";
 import type { LevelTestRow } from "@/features/students/server/queries";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 // 과목별 세부점수 키 — 서버 액션(LEVEL_SUBSCORE_KEYS)과 동기 유지.
+// ⚠️ 알려진 예외: 세부점수 차원은 operations 스키마 밖 도메인 메타라 하드코딩 유지(과목 라벨/선택지는 설정 기반).
 const SUBSCORE_KEYS: Record<string, string[]> = {
   math: ["계산", "이해", "추론", "문제해결"],
   english: ["어휘", "문법", "청해", "독해"],
@@ -21,12 +23,6 @@ const TYPE_META: Record<string, { label: string; color: PillColor }> = {
   placement: { label: "배치", color: "blue" },
   promotion: { label: "승급", color: "primary" },
   diagnostic: { label: "진단", color: "amber" },
-};
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
 };
 const inputCls =
   "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
@@ -42,11 +38,12 @@ function SubmitBtn() {
 }
 
 function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void }) {
+  const subjects = useSubjectMaps();
   const [state, formAction] = useActionState<LevelTestState, FormData>(
     createStudentLevelTest,
     undefined,
   );
-  const [subject, setSubject] = useState("math");
+  const [subject, setSubject] = useState(subjects.options[0]?.value ?? "");
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -78,8 +75,11 @@ function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void
                 onChange={(e) => setSubject(e.target.value)}
                 className={inputCls}
               >
-                <option value="math">수학</option>
-                <option value="english">영어</option>
+                {subjects.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
@@ -95,7 +95,7 @@ function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void
           </div>
 
           <div className="border-border rounded-md border p-3">
-            <p className="micro mb-2">세부 점수 ({SUBJECT_LABEL[subject]})</p>
+            <p className="micro mb-2">세부 점수 ({subjects.labelOf(subject)})</p>
             <div className="grid grid-cols-2 gap-2">
               {(SUBSCORE_KEYS[subject] ?? []).map((k) => (
                 <label key={k} className="flex items-center gap-2">
@@ -149,6 +149,7 @@ function DeleteBtn({ id, studentId }: { id: string; studentId: string }) {
 }
 
 export function LevelTests({ studentId, tests }: { studentId: string; tests: LevelTestRow[] }) {
+  const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
   // 폼 닫힘은 제출 후 라우터 revalidate로 목록 갱신되며, 사용자가 닫기/취소로 닫는다.
 
@@ -179,7 +180,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                       {meta.label}
                     </Pill>
                     <span className="text-foreground text-[13px] font-semibold">
-                      {SUBJECT_LABEL[t.subject] ?? t.subject}
+                      {subjects.labelOf(t.subject)}
                     </span>
                     {t.level ? <span className="text-primary text-[12px] font-bold">{t.level}</span> : null}
                     <span className="text-muted-foreground num text-[11px]">{t.testedOn}</span>

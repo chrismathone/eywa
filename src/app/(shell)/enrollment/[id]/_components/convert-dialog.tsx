@@ -7,6 +7,7 @@ import { Loader2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   convertConsultationToStudent,
   type ConvertToStudentState,
@@ -17,14 +18,6 @@ type ClassOption = {
   className: string;
   subject: string;
   teacherName: string | null;
-};
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
 };
 
 function SubmitBtn() {
@@ -60,6 +53,7 @@ export function ConvertToStudentDialog({
 }) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
+  const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState<ConvertToStudentState, FormData>(
     convertConsultationToStudent,
@@ -74,7 +68,7 @@ export function ConvertToStudentDialog({
         (c) =>
           c.className.toLowerCase().includes(ql) ||
           (c.teacherName ?? "").toLowerCase().includes(ql) ||
-          (SUBJECT_LABEL[c.subject] ?? c.subject).toLowerCase().includes(ql),
+          subjects.labelOf(c.subject).toLowerCase().includes(ql),
       )
     : classes;
 
@@ -204,7 +198,7 @@ export function ConvertToStudentDialog({
                                 <div className="flex items-baseline gap-1.5">
                                   <span className="text-foreground font-medium">{c.className}</span>
                                   <span className="text-muted-foreground text-[11px]">
-                                    {SUBJECT_LABEL[c.subject] ?? c.subject}
+                                    {subjects.labelOf(c.subject)}
                                   </span>
                                   {isRecommended ? (
                                     <span className="bg-chart-4/10 text-chart-4 border-chart-4/20 rounded-md border px-1 py-0 text-[9px] font-medium">

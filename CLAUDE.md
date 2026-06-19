@@ -92,6 +92,32 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 > **한 줄 규칙: 소비처(`getTenantSettings`로 읽어 동작이 바뀌는 코드)가 없는 설정은 만들지도, UI에 노출하지도 않는다.**
 
+### ⚠️⚠️ 운영체계 enum 하드코딩 절대 금지 — "설정 무시"는 orphan보다 더 흔하고 심각하다 (2026-06-19)
+위 orphan(저장됐는데 안 읽음)의 **역방향**이 코드 전반에 더 만연했다: **과목·학년·직급·교시 같은 운영 enum을
+화면/필터/표시/선택지(consumer)에 코드로 하드코딩**해, **학원설정(`operations.*`)을 바꿔도 화면이 안 바뀌고
+설정에 없는 값이 새어나오는** "설정 무시(settings-ignored)" 버그. 2026-06-19 전수감사(멀티에이전트)에서 **48건 중
+20건 위반**(17개 파일) 적발 — 대표 증상: 학생목록·수업목록·성적관리 과목 드롭다운에 **설정에 없는 "예술(arts)"이
+하드코딩으로 노출**(`SUBJECT_FILTERS`/`SUBJECT_META`). 전부 설정 기반으로 배선 완료.
+
+**규칙(불변): 운영 enum의 라벨·색·옵션·선택지·엑셀출력 등 모든 소비처는 학원설정을 단일 소스로 읽는다. 하드코딩 금지.**
+- **과목** = `buildSubjectMaps(settings.operations.subjects)`([`src/features/owner/subjects.ts`](src/features/owner/subjects.ts))의
+  `.labelOf(key)`(한글 라벨)·`.colorOf(key)`(PillColor)·`.options`([{value,label}])·`.filters`([전체,...설정과목]).
+  색 클래스는 같은 모듈의 `SUBJECT_SOFT`/`SUBJECT_SOLID`/`SUBJECT_BORDER`/`SUBJECT_ICON_BG`[colorOf(key)].
+- **학년** = `settings.operations.gradeLevels`. **직급** = `settings.operations.jobTitles`. **교시** = `weekdayPeriods`/`weekendPeriods`.
+- **읽는 법(컴포넌트 종류별)**:
+  · **서버 컴포넌트/서버 모듈** = `getTenantSettings()` + `buildSubjectMaps(...)` **직접**.
+  · **클라이언트(`'use client'`)** = **부모 prop 배선 없이** [`useSubjectMaps()`/`useGradeLevels()`](src/features/owner/operations-context.tsx)
+    훅으로 읽는다. `(shell)/layout.tsx`가 3경로(embed창·미니셸·풀셸) children을 `OperationsProvider`로 감싸
+    `settings.operations`를 주입하므로, 창(iframe) 안 컴포넌트까지 전부 커버된다. 클라에서 `getTenantSettings` 직접호출 금지.
+- **금지 패턴(이름 불문)**: `SUBJECT_META`·`SUBJECT_LABEL`·`SUBJECT_COLOR`·`SUBJECT_OPTIONS`·`SUBJECT_FILTERS`·`GRADE_FILTERS`·
+  `GRADES` 등 **과목/학년 라벨·색·선택지를 코드에 박은 상수**. 새로 만들지도, 남기지도 말 것. (단 [`subjects.ts`](src/features/owner/subjects.ts)의
+  `LEGACY_LABELS`/`LEGACY_COLORS`는 **미등록 키 표시 폴백**이라 의도적 — 선택지(options/filters)엔 안 섞고 labelOf 폴백으로만.)
+- **알려진 예외(KNOWN_EXCEPTION, 스키마 한계)**: ① 영어 10교시 `ENGLISH_PERIODS`(`periods.ts`) — 과목별 교시 세트
+  스키마 미존재. ② 레벨테스트 `SUBSCORE_KEYS`(과목별 세부점수 차원) — operations 스키마 밖 도메인 메타. 둘 다 스키마 확장 시 전환.
+- **시스템 역할(`SystemRole`: master/teacher/accountant/student…)·요일·학생상태·시험유형은 운영 enum이 아니다**(코드 고정) — 이 규칙 대상 아님.
+
+> **한 줄 규칙: 과목/학년/직급/교시 라벨·색·선택지를 코드에 적지 말 것. 서버는 `buildSubjectMaps(getTenantSettings)`, 클라는 `useSubjectMaps()`/`useGradeLevels()`.**
+
 ### 배선 현황 (2026-06-19 Phase 1·2 픽스 후 — "동작 예시" 인용 시 ✅만)
 - **✅ 배선 완료**: profile `name`·`branchLabel`·`logoText`, operations `subjects`·`jobTitles`·`gradeLevels`·
   `weekdayPeriods`·`weekendPeriods`·`holidays`, billing `dueDay`, notifications `printHeader` (기존) +
@@ -100,11 +126,17 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
   - ⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS`(`periods.ts`) 하드코딩 → `weekdayPeriods` 설정과 무관(Phase 3 과목별 교시로 해소 예정).
-  - **(2026-06-19) operations `subjects` 필터/표시 소비처 누락분 배선 완료** — 학생목록·수업목록·성적관리의 과목
-    **필터 드롭다운/칩 + 과목 Pill 라벨·색**이 하드코딩 `SUBJECT_FILTERS`/`SUBJECT_META`(arts="예술" 포함)를
-    써서 **설정에 없는 과목(예: 예술)이 드롭다운에 누출**되던 "설정 무시(orphan의 역방향)" 버그. 이제 전부
-    `buildSubjectMaps(settings.operations.subjects)`의 `.filters`/`.labelOf`/`.colorOf`로 통일(서버 페이지가
-    prop 주입). 새 목록/필터에서 과목 라벨·색·옵션은 **반드시 `buildSubjectMaps`**로 — native 하드코딩 과목맵 금지.
+  - **(2026-06-19) operations `subjects`/`gradeLevels` 하드코딩 소비처 전수 배선 완료(20건/17파일)** — 멀티에이전트
+    전수감사로 "설정 무시" 위반 20건 적발·수정. 첫 발견은 학생목록·수업목록·성적관리 과목 드롭다운에 설정에 없는
+    "예술(arts)" 누출(`SUBJECT_FILTERS`/`SUBJECT_META`)이었고, 이어 과목 라벨/색/선택지/엑셀출력을 하드코딩한
+    14개 추가 파일을 전부 설정 기반으로 전환. **클라 단일 소스 신설**: `(shell)/layout`이 3경로(embed창·미니셸·풀셸)를
+    [`OperationsProvider`](src/features/owner/operations-context.tsx)로 감싸 `useSubjectMaps()`/`useGradeLevels()`
+    훅 제공(클라는 부모 prop 배선 불필요·창 안까지 커버). 서버는 `buildSubjectMaps(getTenantSettings)` 직접.
+    수정 파일: dashboard `now-cockpit`(+`subject-meta.ts`는 시간헬퍼만 남기고 과목 라벨/색 제거)·`student-summary-view`·
+    `student-quick-popover`·`classes/[id]`·`enrollment-assign-dialog`·`convert-dialog`·`withdrawals`·`timetable/page`(SUBJECT_ORDER
+    닫힌 enum→설정 도출)·`class-cell`·`level-tests`·`catalog-table`(과목만; 학년 초/중/고는 교재 coarse 버킷이라 유지)·
+    `exam-form-dialog`·`staff/[id] basic-info`·`exports/{timetable,students}-excel`·`students/_components/student-filter-bar`(학년필터).
+    **규칙은 위 "⚠️⚠️ 운영체계 enum 하드코딩 절대 금지" 섹션 참조.** 새 목록/필터/표시는 반드시 그 단일 소스로 — native 하드코딩 과목/학년 맵 금지.
 - **🚫 입력 숨김(소비처 없어 v1 비노출 — 상태·스키마·저장은 보존, 소비처 생기면 입력만 복원)**: operations `terms`,
   billing `taxMode`·`defaultMethod`(invoices에 결제수단 컬럼 없음), notifications `kakaoChannelId`(발송 경로에 미사용·대응 컬럼 없음).
 - **⚪ 아직 orphan(표시 화면 부재 — 후속)**: notifications `privacyTerms`·`serviceTerms`(약관 표시 페이지 필요).

@@ -9,17 +9,10 @@ import {
   updateExam,
   type ExamActionState,
 } from "@/features/exams/server/actions";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
-
-const SUBJECT_OPTIONS = [
-  { value: "math", label: "수학" },
-  { value: "english", label: "영어" },
-  { value: "korean", label: "국어" },
-  { value: "science", label: "과학" },
-  { value: "arts", label: "예술" },
-];
 
 const TYPE_OPTIONS = [
   { value: "weekly", label: "주간" },
@@ -58,6 +51,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Dialog({ exam, onClose }: { exam?: ExamFormValue; onClose: () => void }) {
   const isEdit = !!exam;
+  const subjects = useSubjectMaps();
   const [state, formAction] = useActionState<ExamActionState, FormData>(
     isEdit ? updateExam : createExam,
     undefined,
@@ -100,8 +94,8 @@ function Dialog({ exam, onClose }: { exam?: ExamFormValue; onClose: () => void }
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="과목 *">
-              <select name="subject" defaultValue={exam?.subject ?? "math"} className={inputCls}>
-                {SUBJECT_OPTIONS.map((o) => (
+              <select name="subject" defaultValue={exam?.subject ?? subjects.options[0]?.value ?? ""} className={inputCls}>
+                {subjects.options.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

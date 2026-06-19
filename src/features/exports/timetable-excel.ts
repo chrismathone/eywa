@@ -3,6 +3,9 @@ import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { EDIT_HEADERS, EDIT_SHEET_NAME } from "@/features/timetable/import/parse";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import type { PillColor } from "@/components/atoms/pill";
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월",
@@ -16,13 +19,17 @@ const DAY_LABEL: Record<string, string> = {
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-const SUBJECT_COLOR: Record<string, string> = {
-  math: "FFCDE9D9", // primary soft
-  english: "FFD2E4F2", // blue soft
-  korean: "FFF4D7DE", // rose soft
-  science: "FFE4D9F1", // purple soft
-  arts: "FFF5E3C6", // amber soft
-  etc: "FFEDE9DC", // bg soft
+// PillColor(과목 색, 학원설정 단일 소스) → 엑셀 셀 argb 소프트 톤. 과목별 하드코딩 맵 금지 —
+// 색은 buildSubjectMaps(operations.subjects).colorOf로 결정하고 여기선 PillColor→hex만 변환.
+const PILL_HEX: Record<PillColor, string> = {
+  primary: "FFCDE9D9",
+  blue: "FFD2E4F2",
+  rose: "FFF4D7DE",
+  purple: "FFE4D9F1",
+  amber: "FFF5E3C6",
+  gold: "FFF1E4C9",
+  danger: "FFF6D6D6",
+  neutral: "FFEDE9DC",
 };
 
 /**
@@ -33,6 +40,10 @@ const SUBJECT_COLOR: Record<string, string> = {
  */
 export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
   const supabase = await createClient();
+  // 과목 셀 색은 학원설정(operations.subjects) 단일 소스 — colorOf(PillColor) → PILL_HEX.
+  const settings = await getTenantSettings();
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const subjectHex = (subject: string) => PILL_HEX[subjectMaps.colorOf(subject)];
 
   // 데이터 수집: schedule + class + 학생
   const { data: schedules } = await supabase
@@ -138,7 +149,7 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
       const day = DAY_ORDER[i];
       const cellSlots = slots.filter((s) => s.dayOfWeek === day && s.startTime === period);
       if (cellSlots.length === 0) continue;
-      const color = SUBJECT_COLOR[cellSlots[0].subject] ?? SUBJECT_COLOR.etc;
+      const color = subjectHex(cellSlots[0].subject);
       const cell = r.getCell(i + 2);
       cell.fill = {
         type: "pattern",
@@ -183,7 +194,7 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
         const day = DAY_ORDER[i];
         const ts = teacherSlots.filter((s) => s.dayOfWeek === day && s.startTime === period);
         if (ts.length === 0) continue;
-        const color = SUBJECT_COLOR[ts[0].subject] ?? SUBJECT_COLOR.etc;
+        const color = subjectHex(ts[0].subject);
         const cell = r.getCell(i + 2);
         cell.fill = {
           type: "pattern",

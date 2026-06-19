@@ -31,12 +31,8 @@ export const metadata = { title: "시간표 — eywa" };
 
 type ViewMode = "basic" | "integrated";
 // 과목별 교시 체계가 달라(수학 8교시·영어 10교시·주말 시간단위) "전체"는 없다 —
-// 무조건 한 과목 선택(기본 수학). 실제 데이터에 존재하는 과목만 칩으로 노출.
-type SubjectKey = "math" | "english" | "highmath" | "korean" | "science" | "arts";
-
-// 과목 라벨은 owner 설정(operations.subjects)에서 — 다른 화면과 동일 라벨 유지(highmath='수학(심화)' 등).
-const SUBJECT_ORDER: SubjectKey[] = ["math", "english", "highmath", "korean", "science", "arts"];
-const DEFAULT_SUBJECT: SubjectKey = "math";
+// 무조건 한 과목 선택. 과목 키·순서·라벨은 전부 학원설정(operations.subjects) 단일 소스(하드코딩 금지) —
+// 데이터에 실제 존재하는 과목만 칩으로 노출.
 
 const DAYS: { key: string; label: string }[] = [
   { key: "mon", label: "월" },
@@ -51,7 +47,7 @@ const DAYS: { key: string; label: string }[] = [
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: SubjectKey }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string }>;
 }) {
   await requireAccess("timetable");
   const { view: viewParam, subject: subjectParam } = await searchParams;
@@ -64,14 +60,13 @@ export default async function TimetablePage({
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  // 데이터에 실제 존재하는 과목만 칩으로(빈 과목칩 방지). 무조건 한 과목 — 기본 수학, 없으면 첫 과목.
-  const available = SUBJECT_ORDER.filter((k) => allSlots.some((s) => s.subject === k));
-  const subject: SubjectKey =
-    subjectParam && available.includes(subjectParam)
-      ? subjectParam
-      : available.includes(DEFAULT_SUBJECT)
-        ? DEFAULT_SUBJECT
-        : (available[0] ?? DEFAULT_SUBJECT);
+  // 과목 칩 = 학원설정 과목 순서 ∩ 데이터에 실제 존재하는 과목(빈 과목칩 방지). 무조건 한 과목.
+  const available = subjectMaps.options
+    .map((o) => o.value)
+    .filter((k) => allSlots.some((s) => s.subject === k));
+  const defaultSubject = available[0] ?? "";
+  const subject =
+    subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
 
@@ -92,7 +87,7 @@ export default async function TimetablePage({
           {available.map((k) => (
             <Link
               key={k}
-              href={buildHref(view, k)}
+              href={buildHref(view, k, defaultSubject)}
               className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
                 subject === k
                   ? "border-foreground bg-foreground text-background font-medium"
@@ -117,7 +112,7 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref(v.key, subject)}
+                href={buildHref(v.key, subject, defaultSubject)}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
                   view === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -166,10 +161,10 @@ export default async function TimetablePage({
   );
 }
 
-function buildHref(view: ViewMode, subject: SubjectKey): string {
+function buildHref(view: ViewMode, subject: string, defaultSubject: string): string {
   const params = new URLSearchParams();
   if (view !== "basic") params.set("view", view);
-  if (subject !== DEFAULT_SUBJECT) params.set("subject", subject);
+  if (subject !== defaultSubject) params.set("subject", subject);
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

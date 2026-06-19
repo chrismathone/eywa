@@ -10,16 +10,10 @@ const STATUS_LABEL: Record<string, string> = {
   withdrawn: "퇴원",
 };
 
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  arts: "예술",
-};
-
 export async function buildStudentsWorkbook(
   students: StudentListRow[],
+  // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 호출부가 buildSubjectMaps().labelOf 주입(하드코딩 금지).
+  subjectLabelOf: (key: string) => string,
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "eywa";
@@ -49,7 +43,7 @@ export async function buildStudentsWorkbook(
       grade: s.grade ?? "—",
       school: s.school ?? "—",
       status: STATUS_LABEL[s.status] ?? s.status,
-      subjects: s.subjects.map((sub) => SUBJECT_LABEL[sub] ?? sub).join(", "),
+      subjects: s.subjects.map((sub) => subjectLabelOf(sub)).join(", "),
       teacher: s.primaryTeacherName ?? "—",
       parentPhone: s.parentPhone ?? "—",
       enrolledAt: s.enrolledAt ?? "—",

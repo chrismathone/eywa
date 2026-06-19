@@ -15,21 +15,14 @@ import {
   type CatalogActionState,
 } from "@/features/billing/server/catalog-actions";
 import type { CatalogRow } from "@/features/billing/server/catalog-queries";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
-const SUBJECTS = [
-  { value: "", label: "—" },
-  { value: "math", label: "수학" },
-  { value: "highmath", label: "수학(심화)" },
-  { value: "english", label: "영어" },
-  { value: "korean", label: "국어" },
-  { value: "science", label: "과학" },
-  { value: "arts", label: "예술" },
-];
-const SUBJECT_LABEL = Object.fromEntries(SUBJECTS.map((s) => [s.value, s.label]));
+// 교재 학년은 초/중/고 coarse 버킷(교재 분류 축) — operations.gradeLevels(초1~고3)와 별개 고정 분류.
+// catalog-panel 필터(초/중/고)와 동일 축이라 하드코딩 유지(운영 enum 아님).
 const GRADES = ["", "초", "중", "고"];
 
 function SubmitBtn({ label }: { label: string }) {
@@ -53,6 +46,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function CatalogDialog({ item, onClose }: { item?: CatalogRow; onClose: () => void }) {
   const isEdit = !!item;
+  const subjects = useSubjectMaps();
   const [state, formAction] = useActionState<CatalogActionState, FormData>(
     isEdit ? updateCatalogItem : createCatalogItem,
     undefined,
@@ -97,7 +91,8 @@ function CatalogDialog({ item, onClose }: { item?: CatalogRow; onClose: () => vo
             </Field>
             <Field label="과목">
               <select name="subject" defaultValue={item?.subject ?? ""} className={inputCls}>
-                {SUBJECTS.map((s) => (
+                <option value="">—</option>
+                {subjects.options.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
                   </option>
@@ -183,6 +178,7 @@ function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
 }
 
 export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
+  const subjects = useSubjectMaps();
   const [open, setOpen] = useState<CatalogRow | "new" | null>(null);
 
   return (
@@ -223,7 +219,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
                   </td>
                   <td className="text-text-dim px-4 py-2.5 text-[12px]">{r.gradeLevel ?? "—"}</td>
                   <td className="text-text-dim px-4 py-2.5 text-[12px]">
-                    {r.subject ? SUBJECT_LABEL[r.subject] ?? r.subject : "—"}
+                    {r.subject ? subjects.labelOf(r.subject) : "—"}
                   </td>
                   <td className="text-text-dim px-4 py-2.5 text-[12px]">{r.publisher ?? "—"}</td>
                   <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-semibold">

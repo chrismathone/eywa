@@ -25,22 +25,8 @@ const STATUS_FILTERS = [
   { value: "on_hold", label: "휴원" },
   { value: "withdrawn", label: "퇴원" },
 ];
-const SUBJECT_FILTERS = [
-  { value: "all", label: "전체" },
-  { value: "math", label: "수학" },
-  { value: "highmath", label: "수학(심화)" },
-  { value: "english", label: "영어" },
-  { value: "korean", label: "국어" },
-  { value: "science", label: "과학" },
-  { value: "arts", label: "예술" },
-];
-const GRADE_FILTERS = [
-  { value: "all", label: "전체" },
-  ...["초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"].map((g) => ({
-    value: g,
-    label: g,
-  })),
-];
+// 과목·학년 옵션은 학원설정(operations.subjects/gradeLevels)에서 서버가 만들어 prop으로 주입 —
+// 하드코딩 금지(설정에 없는 과목/학년 누출 + 설정 변경 미반영 방지).
 const FIELD_FILTERS = [
   { value: "all", label: "전체 필드" },
   { value: "name", label: "이름" },
@@ -95,9 +81,13 @@ function isDefault(c: StudentFilterState): boolean {
 export function StudentFilterBar({
   current,
   teachers,
+  subjectFilters,
+  gradeFilters,
 }: {
   current: StudentFilterState;
   teachers: Teacher[];
+  subjectFilters: { value: string; label: string }[];
+  gradeFilters: { value: string; label: string }[];
 }) {
   const router = useRouter();
   const didInit = useRef(false);
@@ -145,7 +135,7 @@ export function StudentFilterBar({
             className="w-32"
             value={current.subject}
             onValueChange={(v) => go({ subject: v })}
-            options={SUBJECT_FILTERS}
+            options={subjectFilters}
             ariaLabel="과목 필터"
           />
         </FilterGroup>
@@ -154,7 +144,7 @@ export function StudentFilterBar({
             className="w-24"
             value={current.grade}
             onValueChange={(v) => go({ grade: v })}
-            options={GRADE_FILTERS}
+            options={gradeFilters}
             ariaLabel="학년 필터"
           />
         </FilterGroup>

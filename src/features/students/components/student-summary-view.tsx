@@ -3,20 +3,14 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { StudentSummary } from "@/features/students/server/queries";
 
 /**
  * 학생 경량 요약 뷰 — 모바일 QuickPanel(Sheet)과 데스크톱 워크스페이스 창이
  * 동일하게 쓰는 presentational 컴포넌트(한 소스). 데이터 페칭은 호출부가 담당.
+ * 과목 라벨·색은 학원설정(operations.subjects) 단일 소스(useSubjectMaps) — 하드코딩 금지.
  */
-const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
-  math: { label: "수학", color: "primary" },
-  english: { label: "영어", color: "blue" },
-  korean: { label: "국어", color: "rose" },
-  science: { label: "과학", color: "purple" },
-  arts: { label: "예술", color: "amber" },
-};
-
 const STATUS_META: Record<string, { label: string; color: PillColor }> = {
   prospect: { label: "예비", color: "amber" },
   consulted: { label: "상담완료", color: "blue" },
@@ -106,6 +100,7 @@ export function StudentSummaryView({
 type MetricTone = "primary" | "amber" | "danger";
 
 function SummaryBody({ summary }: { summary: StudentSummary }) {
+  const subjects = useSubjectMaps();
   const a = summary.attendance;
   const b = summary.billing;
   const billingValue = b.unpaidCount === 0 ? "완납" : `${b.unpaidCount}건`;
@@ -138,7 +133,7 @@ function SummaryBody({ summary }: { summary: StudentSummary }) {
                 <span className="text-foreground font-medium">{e.className}</span>
                 <span className="flex items-center gap-1.5">
                   {e.onHold ? <Pill color="amber">휴원</Pill> : null}
-                  <span className="text-text-dim">{SUBJECT_META[e.subject]?.label ?? e.subject}</span>
+                  <span className="text-text-dim">{subjects.labelOf(e.subject)}</span>
                 </span>
               </li>
             ))}

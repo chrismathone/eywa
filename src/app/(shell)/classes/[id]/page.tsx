@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CalendarClock, ClipboardCheck, MapPin, Pencil, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import {
@@ -12,26 +13,12 @@ import {
   type DayOfWeek,
 } from "@/features/classes/server/queries";
 import { getStudentsList } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ClassAssignAction } from "./_components/class-assign-action";
 import { ClassLevelAction } from "./_components/class-level-action";
 
 export const metadata = { title: "수업 상세 — eywa" };
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "수학",
-  english: "영어",
-  korean: "국어",
-  science: "과학",
-  social: "사회",
-};
-
-const SUBJECT_COLOR: Record<string, string> = {
-  math: "text-chart-2 bg-chart-2/10 border-chart-2/20",
-  english: "text-chart-1 bg-chart-1/10 border-chart-1/20",
-  korean: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-  science: "text-chart-4 bg-chart-4/10 border-chart-4/20",
-  social: "text-muted-foreground bg-muted border-border",
-};
 
 const DAY_LABEL: Record<DayOfWeek, string> = {
   mon: "월",
@@ -56,11 +43,12 @@ export default async function ClassDetailPage({
 }) {
   await requireAccess("classes");
   const { id } = await params;
-  const [klass, students, stats, allEnrolledStudents] = await Promise.all([
+  const [klass, students, stats, allEnrolledStudents, settings] = await Promise.all([
     getClassDetail(id),
     getClassStudents(id),
     getClassAttendanceStats(id, 30),
     getStudentsList({ status: "enrolled" }),
+    getTenantSettings(),
   ]);
   if (!klass) notFound();
 
@@ -68,8 +56,8 @@ export default async function ClassDetailPage({
   const enrolledIds = new Set(students.map((s) => s.studentId));
   const candidateStudents = allEnrolledStudents.filter((s) => !enrolledIds.has(s.id));
 
-  const subjectLabel = SUBJECT_LABEL[klass.subject] ?? klass.subject;
-  const subjectColor = SUBJECT_COLOR[klass.subject] ?? "text-muted-foreground bg-muted border-border";
+  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const scheduleByDay = new Map<DayOfWeek, typeof klass.scheduleSlots>();
   for (const s of klass.scheduleSlots) {
@@ -94,11 +82,7 @@ export default async function ClassDetailPage({
           <p className="eyebrow">수업 · 반</p>
           <div className="flex flex-wrap items-baseline gap-2">
             <h1 className="display text-foreground text-3xl">{klass.className}</h1>
-            <span
-              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${subjectColor}`}
-            >
-              {subjectLabel}
-            </span>
+            <Pill color={subjects.colorOf(klass.subject)}>{subjects.labelOf(klass.subject)}</Pill>
             {!klass.isActive ? (
               <span className="text-muted-foreground bg-muted border-border inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
                 종료

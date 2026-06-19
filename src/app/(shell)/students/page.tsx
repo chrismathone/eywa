@@ -12,6 +12,8 @@ import {
   type SearchField,
 } from "@/features/students/server/queries";
 import { WindowLink } from "@/components/workspace/window-link";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentFilterBar } from "./_components/student-filter-bar";
 
@@ -24,20 +26,6 @@ const STATUS_META: Record<string, { label: string; color: PillColor }> = {
   on_hold: { label: "휴원", color: "amber" },
   withdrawn: { label: "퇴원", color: "neutral" },
 };
-
-// ⚠️ Pill은 .micro CSS(text-transform: uppercase)를 써서, 매핑에 없는 코드를 그대로 흘리면
-// "highmath" → "HIGHMATH"처럼 원시 영문 코드가 노출된다(F3). 모든 코드를 한글 라벨로 매핑하고,
-// 미지의 코드는 fallback("기타")으로 받아 영문 코드가 절대 보이지 않게 한다.
-const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
-  math: { label: "수학", color: "primary" },
-  highmath: { label: "수학(심화)", color: "primary" },
-  english: { label: "영어", color: "blue" },
-  korean: { label: "국어", color: "rose" },
-  science: { label: "과학", color: "purple" },
-  arts: { label: "예술", color: "amber" },
-  other: { label: "기타", color: "neutral" },
-};
-const SUBJECT_FALLBACK = { label: "기타", color: "neutral" as PillColor };
 
 export default async function StudentsPage({
   searchParams,
@@ -68,7 +56,7 @@ export default async function StudentsPage({
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, counts, teachers] = await Promise.all([
+  const [{ rows, total }, counts, teachers, settings] = await Promise.all([
     getStudentsPage(
       { status, subject, q, grade, teacherId, searchField: field, sort, excludeNoEnrollment },
       page,
@@ -76,8 +64,15 @@ export default async function StudentsPage({
     ),
     getStudentStatusCounts(),
     getTeacherOptions(),
+    getTenantSettings(),
   ]);
   const { all, enrolled, prospect, withdrawn } = counts;
+  // 과목·학년 필터·라벨·색은 학원설정(operations) 단일 소스 — 미등록 값은 드롭다운에 안 뜸.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const gradeFilters = [
+    { value: "all", label: "전체" },
+    ...settings.operations.gradeLevels.map((g) => ({ value: g, label: g })),
+  ];
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const teacherOptions = teachers.map((t) => ({ value: t.id, label: t.displayName }));
   // 검색폼·페이지·export가 보존해야 할 고급 파라미터(기본값이 아닌 것만)
@@ -122,7 +117,12 @@ export default async function StudentsPage({
       </section>
 
       {/* 필터바 — 전부 드롭다운(칩 나열 X) 한 줄, 좁은 창에선 2줄. 수업목록 ClassFilterBar와 동일 패러다임. */}
-      <StudentFilterBar current={filterState} teachers={teacherOptions} />
+      <StudentFilterBar
+        current={filterState}
+        teachers={teacherOptions}
+        subjectFilters={subjects.filters}
+        gradeFilters={gradeFilters}
+      />
 
       {/* Toolbar */}
       <div className="flex items-center justify-between">
@@ -194,14 +194,11 @@ export default async function StudentsPage({
                         <span className="text-text-faint text-xs">—</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {s.subjects.map((sub) => {
-                            const sm = SUBJECT_META[sub] ?? SUBJECT_FALLBACK;
-                            return (
-                              <Pill key={sub} color={sm.color}>
-                                {sm.label}
-                              </Pill>
-                            );
-                          })}
+                          {s.subjects.map((sub) => (
+                            <Pill key={sub} color={subjects.colorOf(sub)}>
+                              {subjects.labelOf(sub)}
+                            </Pill>
+                          ))}
                         </div>
                       )}
                     </td>

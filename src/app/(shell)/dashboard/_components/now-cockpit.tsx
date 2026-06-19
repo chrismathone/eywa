@@ -5,34 +5,27 @@
  *  · 다음 타임 — 곧 시작하는 수업만 과목색 칩으로
  *  · 과목 분포 요약 + 전체 시간표 링크
  */
-import { Pill } from "@/components/atoms/pill";
+import { Pill, type PillColor } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { TodaySlot } from "@/features/timetable/server/queries";
-import {
-  type SubjectColor,
-  COLOR_BORDER,
-  COLOR_ICON_BG,
-  COLOR_SOLID,
-  diffMinutes,
-  shortTime,
-  subjectMeta,
-} from "@/features/dashboard/subject-meta";
+import { diffMinutes, shortTime } from "@/features/dashboard/subject-meta";
+import { SUBJECT_BORDER, SUBJECT_ICON_BG, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 
 const KO_TODAY = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" });
 // 30분 단위 슬롯 인덱스 (h*2 + 0|1) — 막대를 더 정교하게.
 const slotIdx = (t: string) => Number(t.slice(0, 2)) * 2 + (Number(t.slice(3, 5)) >= 30 ? 1 : 0);
 
-type Bucket = { idx: number; total: number; segs: { color: SubjectColor; n: number }[]; past: boolean };
+type Bucket = { idx: number; total: number; segs: { color: PillColor; n: number }[]; past: boolean };
 
-function buildDensity(slots: TodaySlot[]) {
+function buildDensity(slots: TodaySlot[], subjects: SubjectMaps) {
   const startIdx = Math.min(...slots.map((s) => slotIdx(s.startTime)));
   const endIdx = Math.max(...slots.map((s) => slotIdx(s.endTime)));
   const buckets: Bucket[] = [];
   for (let i = startIdx; i <= endIdx; i++) {
     const inB = slots.filter((s) => slotIdx(s.startTime) === i);
-    const byColor = new Map<SubjectColor, number>();
+    const byColor = new Map<PillColor, number>();
     for (const s of inB) {
-      const c = subjectMeta(s.subject).color;
+      const c = subjects.colorOf(s.subject);
       byColor.set(c, (byColor.get(c) ?? 0) + 1);
     }
     buckets.push({
@@ -59,9 +52,11 @@ function buildDensity(slots: TodaySlot[]) {
 
 export function NowCockpit({
   slots,
+  subjects,
   unrecordedCount = 0,
 }: {
   slots: TodaySlot[];
+  subjects: SubjectMaps;
   unrecordedCount?: number;
 }) {
   const ongoing = slots.filter((s) => s.status === "ongoing");
@@ -72,12 +67,12 @@ export function NowCockpit({
   const nextClasses = nextStart ? slots.filter((s) => s.startTime === nextStart) : [];
 
   const dist = (() => {
-    const m = new Map<string, { label: string; color: SubjectColor; n: number }>();
+    const m = new Map<string, { label: string; color: PillColor; n: number }>();
     for (const s of slots) {
-      const mt = subjectMeta(s.subject);
-      const e = m.get(mt.label) ?? { label: mt.label, color: mt.color, n: 0 };
+      const label = subjects.labelOf(s.subject);
+      const e = m.get(label) ?? { label, color: subjects.colorOf(s.subject), n: 0 };
       e.n += 1;
-      m.set(mt.label, e);
+      m.set(label, e);
     }
     return [...m.values()].sort((a, b) => b.n - a.n);
   })();
@@ -107,18 +102,18 @@ export function NowCockpit({
         <div className="text-text-dim flex flex-1 items-center justify-center px-5 py-12 text-sm">오늘은 예정된 수업이 없습니다</div>
       ) : (
         <div className="flex flex-1 flex-col gap-4 px-5 pb-5">
-          {ongoing.slice(0, 3).map((slot) => <OngoingCard key={slot.id} slot={slot} />)}
+          {ongoing.slice(0, 3).map((slot) => <OngoingCard key={slot.id} slot={slot} subjects={subjects} />)}
           {ongoing.length > 3 ? <p className="text-text-faint px-1 text-[11px]">외 {ongoing.length - 3}개 진행 중</p> : null}
 
-          <DensityStrip slots={slots} />
+          <DensityStrip slots={slots} subjects={subjects} />
 
-          {nextClasses.length > 0 && nextStart ? <NextSlot time={nextStart} classes={nextClasses} /> : null}
+          {nextClasses.length > 0 && nextStart ? <NextSlot time={nextStart} classes={nextClasses} subjects={subjects} /> : null}
 
           <div className="border-line mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {dist.map((d) => (
                 <span key={d.label} className="text-text-dim inline-flex items-center gap-1 text-[11px]">
-                  <span className={`${COLOR_SOLID[d.color]} size-2 rounded-[2px]`} />
+                  <span className={`${SUBJECT_SOLID[d.color]} size-2 rounded-[2px]`} />
                   {d.label} <span className="num text-foreground font-semibold">{d.n}</span>
                 </span>
               ))}
@@ -131,8 +126,8 @@ export function NowCockpit({
   );
 }
 
-function DensityStrip({ slots }: { slots: TodaySlot[] }) {
-  const { buckets, max, minH, maxH, markerPct } = buildDensity(slots);
+function DensityStrip({ slots, subjects }: { slots: TodaySlot[]; subjects: SubjectMaps }) {
+  const { buckets, max, minH, maxH, markerPct } = buildDensity(slots, subjects);
 
   return (
     <div>
@@ -149,7 +144,7 @@ function DensityStrip({ slots }: { slots: TodaySlot[] }) {
             style={{ height: `${(b.total / max) * 100}%`, minHeight: b.total ? 2 : 0 }}
           >
             {b.segs.map((seg) => (
-              <span key={seg.color} className={`${COLOR_SOLID[seg.color]} ${b.past ? "opacity-30" : ""}`} style={{ height: `${(seg.n / b.total) * 100}%` }} />
+              <span key={seg.color} className={`${SUBJECT_SOLID[seg.color]} ${b.past ? "opacity-30" : ""}`} style={{ height: `${(seg.n / b.total) * 100}%` }} />
             ))}
           </div>
         ))}
@@ -167,7 +162,7 @@ function DensityStrip({ slots }: { slots: TodaySlot[] }) {
   );
 }
 
-function NextSlot({ time, classes }: { time: string; classes: TodaySlot[] }) {
+function NextSlot({ time, classes, subjects }: { time: string; classes: TodaySlot[]; subjects: SubjectMaps }) {
   return (
     <div>
       <div className="flex items-baseline gap-2">
@@ -177,14 +172,13 @@ function NextSlot({ time, classes }: { time: string; classes: TodaySlot[] }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {classes.slice(0, 12).map((s) => {
-          const mt = subjectMeta(s.subject);
           return (
             <WindowLink
               key={s.id}
               href={`/classes/${s.classId}`}
               title={s.className}
               ariaLabel={`${s.className} 수업 상세 열기`}
-              className={`${COLOR_ICON_BG[mt.color]} inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow hover:shadow-sm`}
+              className={`${SUBJECT_ICON_BG[subjects.colorOf(s.subject)]} inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow hover:shadow-sm`}
             >
               <span
                 className="max-w-[8rem] truncate"
@@ -202,11 +196,10 @@ function NextSlot({ time, classes }: { time: string; classes: TodaySlot[] }) {
   );
 }
 
-function OngoingCard({ slot }: { slot: TodaySlot }) {
-  const meta = subjectMeta(slot.subject);
+function OngoingCard({ slot, subjects }: { slot: TodaySlot; subjects: SubjectMaps }) {
   const duration = diffMinutes(slot.startTime, slot.endTime);
   return (
-    <div className={`flex items-center gap-3.5 rounded-xl border-[1.5px] px-4 py-3.5 ${COLOR_BORDER[meta.color]}`}>
+    <div className={`flex items-center gap-3.5 rounded-xl border-[1.5px] px-4 py-3.5 ${SUBJECT_BORDER[subjects.colorOf(slot.subject)]}`}>
       <div className="w-[52px] shrink-0 text-center">
         <p className="num text-primary text-[15px] font-extrabold leading-none">{shortTime(slot.startTime)}</p>
         <p className="text-text-faint mt-1 font-mono text-[10px]">{duration}분</p>
