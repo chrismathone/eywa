@@ -35,9 +35,12 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     phone: "",
     email: "",
     address: "",
+    bizRegNo: "",
     branchLabel: "",
     logoText: "EYWA",
     brandColor: "#1a5f3c", // --primary 포레스트 그린
+    logoUrl: "",
+    sealUrl: "",
   },
   operations: {
     // 과목 — 현재 SUBJECT_LABEL 중복 맵 이식(단일 소스). color=Pill 토큰.

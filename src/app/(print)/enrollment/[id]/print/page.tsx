@@ -54,6 +54,10 @@ export default async function EnrollmentPrintPage({
       <PrintActions />
 
       <header className="border-b-2 border-black/80 pb-4">
+        {profile.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
+          <img src={profile.logoUrl} alt={academyName} className="mb-3 h-12 w-auto object-contain" />
+        ) : null}
         <div className="flex items-center justify-between">
           <p className="font-mono text-[11px] tracking-[0.25em] uppercase">
             {printHeader}
@@ -171,13 +175,20 @@ export default async function EnrollmentPrintPage({
       ) : null}
 
       <footer className="mt-10 flex items-end justify-between gap-6 border-t border-black/20 pt-4 text-[10px] text-black/60">
-        <div className="space-y-0.5">
-          <p className="font-semibold text-black/80">
-            {academyName}
-            {profile.branchLabel ? ` · ${profile.branchLabel}` : ""}
-          </p>
-          {contactLine ? <p>{contactLine}</p> : null}
-          {profile.address ? <p>{profile.address}</p> : null}
+        <div className="flex items-end gap-4">
+          {profile.sealUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
+            <img src={profile.sealUrl} alt="직인" className="size-16 shrink-0 object-contain" />
+          ) : null}
+          <div className="space-y-0.5">
+            <p className="font-semibold text-black/80">
+              {academyName}
+              {profile.branchLabel ? ` · ${profile.branchLabel}` : ""}
+            </p>
+            {contactLine ? <p>{contactLine}</p> : null}
+            {profile.address ? <p>{profile.address}</p> : null}
+            {profile.bizRegNo ? <p>사업자등록번호 {profile.bizRegNo}</p> : null}
+          </div>
         </div>
         <p className="shrink-0 text-right font-mono">
           MODEL {consult.aiAnalysis.modelVersion} · GENERATED{" "}

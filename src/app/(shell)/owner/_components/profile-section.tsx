@@ -31,10 +31,17 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
           <TextField label="대표 전화" value={p.phone} onChange={(v) => set({ phone: v })} placeholder="02-000-0000" />
           <TextField label="대표 이메일" value={p.email} onChange={(v) => set({ email: v })} />
           <TextField label="주소" value={p.address} onChange={(v) => set({ address: v })} />
+          <TextField
+            label="사업자등록번호"
+            hint="인쇄물·청구 헤더"
+            value={p.bizRegNo}
+            onChange={(v) => set({ bizRegNo: v })}
+            placeholder="000-00-00000"
+          />
         </div>
       </SettingsCard>
 
-      <SettingsCard title="브랜드" description="사이드바 워드마크와 강조 색상.">
+      <SettingsCard title="브랜드" description="사이드바 워드마크·강조 색상과 인쇄물 로고·직인.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="워드마크"
@@ -49,6 +56,20 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             value={p.brandColor}
             onChange={(v) => set({ brandColor: v })}
             placeholder="#1a5f3c"
+          />
+          <TextField
+            label="로고 이미지 URL"
+            hint="인쇄물 머리글 · 파일 업로드는 추후"
+            value={p.logoUrl}
+            onChange={(v) => set({ logoUrl: v })}
+            placeholder="https://…/logo.png"
+          />
+          <TextField
+            label="직인 이미지 URL"
+            hint="인쇄물 하단 직인"
+            value={p.sealUrl}
+            onChange={(v) => set({ sealUrl: v })}
+            placeholder="https://…/seal.png"
           />
         </div>
       </SettingsCard>
