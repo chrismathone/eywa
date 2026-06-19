@@ -40,29 +40,24 @@
 
 ## ⬜ 남은 작업 (우선순위 B → C → D)
 
-### Phase B — 빠른 승리 (학생목록·수업목록, 대부분 S)
-ijw 매핑에서 나온 격차. 파일·방법:
-- **수업목록** `src/features/classes/server/queries.ts`(`getClassesPage`) + `src/app/(shell)/classes/page.tsx`
-  - 요일칩에 **시작시각/교시 표시**(현재 시각 정보가 목록에서 사라짐 — high). 이미 `class_schedules` 조회 중 → `start_time` 추가, `ClassListRow.days`를 `{day,start}[]`로.
-  - **정렬**(수업명/강사명) + `buildHref` sort param. **강사명 검색**(q를 class_name+teacher display_name OR로). **정원 하드코딩 `capacity=8` 제거**(page.tsx CardsView). `DAY_FILTERS`에 **일요일** 추가.
-- **학생목록** `src/features/students/server/queries.ts`(`getStudentsPage`) + `src/app/(shell)/students/page.tsx`
-  - **정렬**(이름/학년/등록일), **학년·담임 필터**(`getTeacherOptions` 재사용).
-  - ~~**highmath 라벨 버그**(영문코드 노출) — 과목 라벨 매핑을 공용 상수로 추출.~~ ✅ **해결(2026-06-19)**:
-    `src/lib/subjects.ts`가 아니라 **학원설정 단일 소스**로 — 서버는 `buildSubjectMaps(getTenantSettings().operations.subjects)`
-    ([`src/features/owner/subjects.ts`](../src/features/owner/subjects.ts)), 클라는 `useSubjectMaps()`/`useGradeLevels()`
-    ([`src/features/owner/operations-context.tsx`](../src/features/owner/operations-context.tsx), `(shell)/layout`이 주입).
-    하드코딩 `SUBJECT_META`/`SUBJECT_LABEL` 전부 제거(전수감사 20건/17파일). 규칙=CLAUDE.md "운영체계 enum 하드코딩 절대 금지".
-  - (선택) 상태 섹션 구분(재원/대기/퇴원).
+### Phase B — 빠른 승리 (학생목록·수업목록) — ✅ 전부 완료 (2026-06-19 확인)
+수업목록(요일칩 **시작시각 표시**·정렬(수업명/학생수/강사명)·강사명 검색·**capacity=8 하드코딩 제거**·일요일 필터)과
+학생목록(정렬(이름/학년/등록일)·학년/담임 필터)은 이미 `class-filter-bar.tsx`/`student-filter-bar.tsx` + 각 `queries.ts`에
+완전 배선됨. highmath 라벨 버그도 **학원설정 단일소스**(`buildSubjectMaps`/`useSubjectMaps`)로 해결 — 하드코딩
+`SUBJECT_META`/`SUBJECT_LABEL` 전수 제거(규칙=CLAUDE.md "운영체계 enum 하드코딩 절대 금지").
 
-### Phase C — 죽은 기능 배선 (정의됐는데 UI에 안 걸린 고아 서버액션 — 대부분 S)
-앱 전체 dead-feature 감사 결과. 백엔드는 이미 존재, 버튼만 연결:
-- **직원 퇴사/재직복구** `staff/[id]/_components/account-actions.tsx` → `deactivateStaff`(staff/server/actions.ts). ⚠️ `account-actions.ts`(서버)를 병렬세션이 만질 수 있어 착수 전 git status 확인. (출결기록 직원은 deleteStaff가 FK restrict로 막혀 퇴사 외 정리 불가 — high)
-- **수강 종료** 학생 상세 수강 리스트 → `endSingleEnrollment`.
-- **성적 삭제** 성적 탭 → `deleteStudentGrade`.
-- **상담 후속 완료** 학생상담 카드 인라인 토글 → `toggleConsultationFollowUp`.
-- **반 폐지** 수업 상세 → `archiveClass`(또는 미사용 시 제거).
-- **markPayrollPaid 권한 게이트 누락(보안)** — `canManageStaff` 체크 추가.
-- (그 외 감사 항목: 청구서 삭제·지급취소·휴가거절 등 역방향 CRUD — 신규 액션 필요, M)
+### Phase C — 죽은 기능 배선 — ✅ 핵심 6건 완료 (2026-06-19)
+백엔드만 있던 고아 액션을 UI에 연결 + 보안 게이트 보강(end-enrollment-button confirm 패턴 복제):
+- ✅ **직원 퇴사/재직복구** — `account-actions.tsx`의 `DeactivateButton`(`deactivateStaff`, confirm 인라인, 상세도 revalidate).
+- ✅ **수강 종료** — `end-enrollment-button.tsx`(`endSingleEnrollment`). (이전 완료)
+- ✅ **성적 삭제** — `grades-tab.tsx` 행 삭제 컬럼(`delete-grade-button.tsx` → `deleteStudentGrade`) + write 게이트.
+- ✅ **상담 후속 완료 토글** — `consultations-tab.tsx` 후속 블록(`follow-up-toggle.tsx` → `toggleConsultationFollowUp`) + write 게이트.
+- ✅ **반 폐지/재운영** — 수업 상세(`archive-class-button.tsx` → `archiveClass`) + write 게이트.
+- ✅ **급여/휴가 보안 게이트(6건)** — `src/features/payroll/server/actions.ts`(markPayrollPaid·upsertPayroll·autoComputePayroll·
+  requestLeave·approveLeave·deleteLeave)에 `canManageStaff` 추가(비-master POST 우회 차단). ⚠️ markPayrollPaid 실제 위치는
+  **payroll/server/actions.ts**(이전 문서의 staff/server/actions.ts는 오기재).
+- 신규 write 게이트 패턴 = `accessLevelTenant(role, menu) === "full" | "scoped"`(exams `canWrite` 미러, CLAUDE.md #58 tenant-aware).
+- (잔여: 청구서 삭제·지급취소·휴가거절 등 역방향 CRUD는 신규 액션 필요, M — 후속.)
 
 ### Phase D — 후속 (효과 크나 비용 L)
 - **시간표 엑셀 import 1클릭 복원 UI** — 스냅샷/로그는 이미 DB 적재(`timetable_snapshots`/`timetable_import_logs`), 뷰어+복원 버튼만.
