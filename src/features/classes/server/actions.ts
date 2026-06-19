@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 
 export type ClassFormState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
@@ -223,6 +224,8 @@ export async function archiveClass(
 ): Promise<ArchiveClassState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  const clsLvl = await accessLevelTenant(user.systemRole, "classes");
+  if (clsLvl !== "full" && clsLvl !== "scoped") return { error: "반 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const next = String(formData.get("isActive") ?? "false") === "true";

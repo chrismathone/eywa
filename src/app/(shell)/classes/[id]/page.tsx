@@ -17,6 +17,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ClassAssignAction } from "./_components/class-assign-action";
 import { ClassLevelAction } from "./_components/class-level-action";
+import { ArchiveClassButton } from "./_components/archive-class-button";
 
 export const metadata = { title: "수업 상세 — eywa" };
 
@@ -128,6 +129,7 @@ export default async function ClassDetailPage({
             오늘 출석 입력
           </Button>
           <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          <ArchiveClassButton classId={klass.id} isActive={klass.isActive} className={klass.className} />
         </div>
       </header>
 
