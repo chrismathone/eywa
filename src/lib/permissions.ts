@@ -84,9 +84,13 @@ export type PermissionOverride = { menu: MenuKey; role: SystemRole; access: Acce
 
 // 편집 금지 셀(가드레일) — 저장(superRefine)·적용(resolveMatrix) 양쪽에서 이중 방어.
 // 1) 역할 전용 특수 화면은 override 자체 무효. 2) master는 자기 콘솔(owner/admin/대시보드)을 잠글 수 없음.
+// 3) student는 '내 학습' 전용 역할이라 일반 메뉴 부여 자체를 막는다(아래).
 const ROLE_LOCKED_MENUS = new Set<MenuKey>(["teacher_onescreen", "my_learning"]);
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
+  // 'student'는 '내 학습' 전용 역할(미니멀 셸) — 일반 메뉴를 부여하면 requireAccess(menu)가 통과해
+  // 학생이 /billing 등에 직접 URL로 진입한다. 학생에게 줄 수 있는 일반 메뉴 자체가 없으므로 컬럼 전체를 잠근다.
+  if (role === "student") return true;
   if (role === "master" && (menu === "owner" || menu === "admin" || menu === "dashboard") && access === "none") {
     return true;
   }

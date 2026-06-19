@@ -96,6 +96,9 @@ export const permissionsSchema = z
       if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {
         ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 편집할 수 없습니다" });
       }
+      if (r.role === "student") {
+        ctx.addIssue({ code: "custom", message: "학생(student)은 '내 학습' 전용 역할이라 메뉴 권한을 부여할 수 없습니다" });
+      }
       if (r.role === "master" && (r.menu === "owner" || r.menu === "admin" || r.menu === "dashboard") && r.access === "none") {
         ctx.addIssue({ code: "custom", message: "원장(master)의 owner/admin/대시보드 접근은 잠글 수 없습니다" });
       }

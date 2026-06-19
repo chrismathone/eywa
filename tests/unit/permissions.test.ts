@@ -79,6 +79,17 @@ describe("resolveMatrix — 테넌트 권한 override (sparse)", () => {
     expect(m.teacher_onescreen.master).toBe(MENU_ACCESS.teacher_onescreen.master);
   });
 
+  it("가드레일 무시 — student 컬럼은 일반 메뉴 부여 불가('내 학습' 전용)", () => {
+    const m = resolveMatrix([
+      { menu: "billing", role: "student", access: "full" },
+      { menu: "dashboard", role: "student", access: "full" },
+    ]);
+    // student override는 전부 무시되어 코드 기본값(none) 유지 → 직접 URL 진입(requireAccess) 차단.
+    expect(canAccess("student", "billing", m)).toBe(false);
+    expect(m.billing.student).toBe(MENU_ACCESS.billing.student);
+    expect(m.dashboard.student).toBe(MENU_ACCESS.dashboard.student);
+  });
+
   it("MENU_ACCESS 원본을 변형하지 않음", () => {
     resolveMatrix([{ menu: "billing", role: "teacher", access: "full" }]);
     expect(MENU_ACCESS.billing.teacher).toBe("none");

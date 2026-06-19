@@ -20,6 +20,11 @@ export const getTenantSettings = cache(async (): Promise<TenantSettings> => {
     supabase.from("tenants").select("name").eq("id", user.tenantId).maybeSingle(),
   ]);
 
+  // 에러는 무음으로 삼키지 않는다(관측성) — DB/RLS 오류가 data=null로 둔갑해 기본값으로 떨어지면
+  // (특히 권한 override가 사라지는 fail-open) 운영 중 진단이 안 됨. 동작은 관대(기본값)하게 유지하되 로깅.
+  if (settingsRes.error) console.error("[owner/queries] tenant_settings 조회 오류", settingsRes.error);
+  if (tenantRes.error) console.error("[owner/queries] tenants 조회 오류", tenantRes.error);
+
   return resolveSettings(settingsRes.data?.data ?? null, {
     name: tenantRes.data?.name ?? "",
   });

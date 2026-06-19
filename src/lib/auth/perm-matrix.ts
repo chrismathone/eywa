@@ -21,7 +21,11 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
   try {
     const settings = await getTenantSettings();
     return resolveMatrix(settings.permissions.overrides);
-  } catch {
+  } catch (e) {
+    // ⚠️ 코드 기본값 복귀 = revoke(권한 박탈) override가 일시 무효화되는 fail-open 방향이다.
+    // 무음이면 운영 로그에 안 남아 진단 불가 → 최소한 로깅(관측성). 전면 fail-closed(차단)는 일시
+    // 조회 실패 시 락아웃 위험이 있어, tenant_settings RLS 자기상승 차단 후속(HANDOFF §5)과 함께 다룬다.
+    console.error("[perm-matrix] getTenantSettings 실패 — 코드 기본 권한으로 폴백(override 일시 미적용)", e);
     return resolveMatrix([]);
   }
 });
