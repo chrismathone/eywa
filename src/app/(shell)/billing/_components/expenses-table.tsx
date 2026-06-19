@@ -18,9 +18,8 @@ import type {
   ApprovalRole,
   ExpenseRow,
 } from "@/features/billing/server/expense-queries";
+import { formatMoney } from "@/features/billing/currencies";
 
-const KRW = new Intl.NumberFormat("ko-KR");
-const won = (n: number) => `${KRW.format(n)}원`;
 const CAT_COLOR: Record<string, PillColor> = {
   인건비: "purple",
   운영비: "blue",
@@ -125,7 +124,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
                     <td className="px-3 py-2">
                       <Pill color={CAT_COLOR[r.category] ?? "neutral"}>{r.category}</Pill>
                     </td>
-                    <td className="num text-danger px-3 py-2 text-right text-xs font-medium whitespace-nowrap">{won(r.amount)}</td>
+                    <td className="num text-danger px-3 py-2 text-right text-xs font-medium whitespace-nowrap">{formatMoney(r.amount, r.currency)}</td>
                     {/* 증빙 — 유형 + 첨부 모달 */}
                     <td className="px-2 py-2 text-center">
                       <button

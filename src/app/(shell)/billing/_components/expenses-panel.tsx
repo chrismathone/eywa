@@ -6,10 +6,8 @@ import {
   getExpenseMonths,
   summarizeExpenses,
 } from "@/features/billing/server/expense-queries";
+import { currencyMeta, formatMoney } from "@/features/billing/currencies";
 import { ExpensesTable } from "./expenses-table";
-
-const KRW = new Intl.NumberFormat("ko-KR");
-const won = (n: number) => `${KRW.format(n)}원`;
 
 const CATS = ["인건비", "운영비", "매입", "마케팅", "기타"];
 
@@ -40,6 +38,11 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
   const prevPeriod = shiftPeriod(period, -1);
   const nextPeriod = shiftPeriod(period, 1);
   const maxCat = Math.max(1, ...summary.byCategory.map((c) => c.amount));
+  // 통화별 합계 — primary(건수 최다)는 KPI 대표값, 나머지는 분리 표기. 분류별 바는 primary 통화 기준.
+  const primaryCurrency = summary.primaryCurrency;
+  const primaryTotal = summary.byCurrency[0];
+  const otherCurrencies = summary.byCurrency.slice(1);
+  const multiCurrency = summary.byCurrency.length > 1;
 
   const hrefFor = (opts: { period?: string; cat?: string }) => {
     const p = new URLSearchParams({ tab: "expenses" });
@@ -75,14 +78,32 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
       ) : (
         <>
           <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
-            <Kpi label="월 지출 합계" value={won(summary.total)} icon={Wallet} color="danger" hint={`${summary.count}건`} />
-            <Kpi label="최대 분류" value={summary.byCategory[0]?.category ?? "—"} icon={PieChart} color="purple" hint={summary.byCategory[0] ? won(summary.byCategory[0].amount) : undefined} />
-            <Kpi label="분류 수" value={`${summary.byCategory.length}개`} icon={Tags} color="blue" />
+            <Kpi
+              label="월 지출 합계"
+              value={primaryTotal ? formatMoney(primaryTotal.total, primaryTotal.currency) : "—"}
+              icon={Wallet}
+              color="danger"
+              hint={
+                `${summary.count}건` +
+                (otherCurrencies.length > 0
+                  ? ` · ${otherCurrencies.map((o) => formatMoney(o.total, o.currency)).join(" · ")}`
+                  : "")
+              }
+            />
+            <Kpi label="최대 분류" value={summary.byCategory[0]?.category ?? "—"} icon={PieChart} color="purple" hint={summary.byCategory[0] ? formatMoney(summary.byCategory[0].amount, primaryCurrency) : undefined} />
+            <Kpi label="분류 수" value={`${summary.categoryCount}개`} icon={Tags} color="blue" />
           </section>
 
-          {/* 카테고리 분포 */}
+          {/* 카테고리 분포 — primary 통화 기준(통화별 합계는 위 KPI 참조) */}
           <section className="bg-card border-line shadow-card rounded-md border p-5">
-            <h2 className="text-foreground mb-3 text-sm font-bold">분류별 지출</h2>
+            <div className="mb-3 flex items-baseline justify-between gap-2">
+              <h2 className="text-foreground text-sm font-bold">분류별 지출</h2>
+              {multiCurrency ? (
+                <span className="text-text-faint text-[11px]">
+                  통화 {currencyMeta(primaryCurrency).symbol} 기준 · 다른 통화는 상단 합계 참조
+                </span>
+              ) : null}
+            </div>
             <div className="space-y-2.5">
               {summary.byCategory.map((c) => (
                 <div key={c.category} className="flex items-center gap-3">
@@ -90,7 +111,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
                   <div className="bg-bg-soft h-2.5 flex-1 overflow-hidden rounded-pill">
                     <span className="bg-primary block h-full" style={{ width: `${(c.amount / maxCat) * 100}%` }} />
                   </div>
-                  <span className="num text-foreground w-24 shrink-0 text-right text-xs font-medium">{won(c.amount)}</span>
+                  <span className="num text-foreground w-24 shrink-0 text-right text-xs font-medium">{formatMoney(c.amount, primaryCurrency)}</span>
                 </div>
               ))}
             </div>

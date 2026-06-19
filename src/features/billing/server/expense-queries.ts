@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_CURRENCY } from "../currencies";
 
 // 지출관리(expenses) — 수납관리 창의 '지출' 책갈피 면. 월 단위(수납과 동일 톤). RLS가 tenant 강제.
 // line_items는 두 가지 형태가 섞여 있다: ① eywa 폼이 쓴 {description,quantity,unitPrice,vat,total}
@@ -29,6 +30,7 @@ export type ExpenseRow = {
   title: string;
   category: string; // 인건비/운영비/매입/마케팅/기타
   amount: number;
+  currency: string; // 통화 코드(KRW/USD/…) — 합계는 통화별 분리
   expenseDate: string;
   createdDate: string | null; // 작성일자(created_at의 날짜부) — 지출결의서 머리표
   vendor: string | null;
@@ -46,11 +48,14 @@ export type ExpenseRow = {
   receiptUrls: ExpenseReceipt[]; // 첨부 파일 목록
 };
 
+export type CurrencyTotal = { currency: string; total: number; count: number };
 export type ExpenseSummary = {
   period: string;
   count: number;
-  total: number;
-  byCategory: { category: string; amount: number; count: number }[];
+  byCurrency: CurrencyTotal[]; // 통화별 총액(많은 건수 순) — 합계 분리 표기
+  primaryCurrency: string; // 건수 최다 통화(분류별 바·최대분류는 이 통화 기준)
+  byCategory: { category: string; amount: number; count: number }[]; // primaryCurrency 한정
+  categoryCount: number;
 };
 
 // "YYYY-MM" → [start, endExclusive) 날짜 (Date 미사용 — RSC 순수성).
@@ -64,7 +69,7 @@ function monthRange(period: string): { start: string; end: string } {
 }
 
 const EXPENSE_COLS =
-  "id, title, category, amount, expense_date, created_at, vendor, department, author, position, bank_name, account_number, approval_status, approval_checks, payment_method, memo, line_items, receipt_type, receipt_urls";
+  "id, title, category, amount, currency, expense_date, created_at, vendor, department, author, position, bank_name, account_number, approval_status, approval_checks, payment_method, memo, line_items, receipt_type, receipt_urls";
 
 // receipt_urls jsonb → 정규화. 문자열 이중 인코딩 방어 + {path,name}만 보존.
 function normalizeReceiptUrls(raw: unknown): ExpenseReceipt[] {
@@ -158,6 +163,7 @@ function mapExpenseRow(r: any): ExpenseRow {
     title: r.title,
     category: r.category,
     amount: Number(r.amount),
+    currency: typeof r.currency === "string" && r.currency ? r.currency : DEFAULT_CURRENCY,
     expenseDate: r.expense_date,
     createdDate: typeof r.created_at === "string" ? r.created_at.slice(0, 10) : null,
     vendor: r.vendor,
@@ -200,10 +206,24 @@ export async function getExpenseById(id: string): Promise<ExpenseRow | null> {
 }
 
 export function summarizeExpenses(rows: ExpenseRow[], period: string): ExpenseSummary {
-  const byCat = new Map<string, { amount: number; count: number }>();
-  let total = 0;
+  // 1) 통화별 총액(₩와 $를 한 숫자로 더하지 않는다 — 사용자 요구 핵심).
+  const byCur = new Map<string, { total: number; count: number }>();
   for (const r of rows) {
-    total += r.amount;
+    const c = byCur.get(r.currency) ?? { total: 0, count: 0 };
+    c.total += r.amount;
+    c.count += 1;
+    byCur.set(r.currency, c);
+  }
+  const byCurrency = [...byCur.entries()]
+    .map(([currency, v]) => ({ currency, ...v }))
+    // 코드 알파벳을 3차 키로 — count·total 동률 시 primaryCurrency가 DB 순서에 흔들리지 않게 결정적 정렬.
+    .sort((a, b) => b.count - a.count || b.total - a.total || a.currency.localeCompare(b.currency));
+  const primaryCurrency = byCurrency[0]?.currency ?? DEFAULT_CURRENCY;
+
+  // 2) 분류별 지출은 단일 통화(바 길이가 의미 있으려면 동일 통화여야) → 주 통화 한정 집계.
+  const byCat = new Map<string, { amount: number; count: number }>();
+  for (const r of rows) {
+    if (r.currency !== primaryCurrency) continue;
     const c = byCat.get(r.category) ?? { amount: 0, count: 0 };
     c.amount += r.amount;
     c.count += 1;
@@ -212,7 +232,8 @@ export function summarizeExpenses(rows: ExpenseRow[], period: string): ExpenseSu
   const byCategory = [...byCat.entries()]
     .map(([category, v]) => ({ category, ...v }))
     .sort((a, b) => b.amount - a.amount);
-  return { period, count: rows.length, total, byCategory };
+
+  return { period, count: rows.length, byCurrency, primaryCurrency, byCategory, categoryCount: byCategory.length };
 }
 
 // 지출이 존재하는 월 목록(YYYY-MM, 최신순) — 월 칩용.

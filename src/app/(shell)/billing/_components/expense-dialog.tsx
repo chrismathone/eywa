@@ -10,11 +10,11 @@ import {
   type ExpenseState,
 } from "@/features/billing/server/expense-actions";
 import type { ExpenseRow } from "@/features/billing/server/expense-queries";
+import { DEFAULT_CURRENCY, formatMoney } from "@/features/billing/currencies";
 import { ExpenseLineItems, lineTotal, type ExpenseItemRow } from "./expense-line-items";
 
 const CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"];
 const PAYMENTS = ["카드결제", "현금", "계좌이체", "법인카드"];
-const KRW = new Intl.NumberFormat("ko-KR");
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -60,6 +60,8 @@ export function ExpenseDialog({
           },
         ],
   );
+  const [currency, setCurrency] = useState(expense?.currency ?? DEFAULT_CURRENCY);
+
   // amount와 line_items는 동일한 "유효 행" 집합에서 도출(불일치 방지).
   const filteredRows = rows.filter(
     (r) => r.purpose.trim() || r.vendor.trim() || r.description.trim() || r.unitPrice > 0,
@@ -92,6 +94,7 @@ export function ExpenseDialog({
           {editing ? <input type="hidden" name="id" value={expense.id} /> : null}
           <input type="hidden" name="lineItems" value={lineItemsJson} />
           <input type="hidden" name="amount" value={amount} />
+          <input type="hidden" name="currency" value={currency} />
 
           <Field label="제목" error={state?.fieldErrors?.title}>
             <input name="title" defaultValue={expense?.title ?? ""} className={inputCls} placeholder="예: [고등관]타운보드 광고" />
@@ -147,11 +150,11 @@ export function ExpenseDialog({
             </Field>
           </div>
 
-          <ExpenseLineItems rows={rows} onChange={setRows} />
+          <ExpenseLineItems rows={rows} onChange={setRows} currency={currency} onCurrencyChange={setCurrency} />
 
           <div className="border-line bg-bg-soft/40 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
             <span className="text-text-dim">합계</span>
-            <span className="text-foreground num font-semibold">{KRW.format(amount)}원</span>
+            <span className="text-foreground num font-semibold">{formatMoney(amount, currency)}</span>
           </div>
           {state?.fieldErrors?.amount ? <p className="text-danger text-xs">{state.fieldErrors.amount}</p> : null}
 

@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeApprovalChecks } from "./expense-queries";
+import { DEFAULT_CURRENCY, isValidCurrency } from "../currencies";
 
 const RECEIPTS_BUCKET = "expense-receipts";
 const RECEIPT_TYPES = new Set([
@@ -82,10 +83,12 @@ function parse(formData: FormData) {
   // 거래처(vendor)는 라인아이템별로 입력 → 목록/폴백용 top-level vendor는 첫 라인 거래처에서 유도.
   const firstVendor = lineItems?.find((l) => typeof l.vendor === "string" && l.vendor.trim())?.vendor;
   const formVendor = String(formData.get("vendor") ?? "").trim();
+  const curRaw = String(formData.get("currency") ?? "").trim();
   return {
     title: String(formData.get("title") ?? "").trim(),
     category: VALID_CATEGORIES.has(categoryRaw) ? categoryRaw : "기타",
     amount: won(formData.get("amount")),
+    currency: isValidCurrency(curRaw) ? curRaw : DEFAULT_CURRENCY,
     expenseDate: String(formData.get("expenseDate") ?? "").trim(),
     vendor: (typeof firstVendor === "string" ? firstVendor : formVendor) || null,
     department: String(formData.get("department") ?? "").trim() || null,
@@ -121,6 +124,7 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
     title: f.title,
     category: f.category,
     amount: f.amount,
+    currency: f.currency,
     expense_date: f.expenseDate,
     vendor: f.vendor,
     department: f.department,
@@ -158,6 +162,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
       ...(f.author ? { author: f.author } : {}),
       category: f.category,
       amount: f.amount,
+      currency: f.currency,
       expense_date: f.expenseDate,
       vendor: f.vendor,
       department: f.department,
@@ -250,7 +255,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
   const { data: src, error: readErr } = await supabase
     .from("expenses")
     .select(
-      "title, category, amount, vendor, department, payment_method, bank_name, account_number, memo, line_items",
+      "title, category, amount, currency, vendor, department, payment_method, bank_name, account_number, memo, line_items",
     )
     .eq("id", id)
     .maybeSingle();
@@ -262,6 +267,7 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     title: src.title,
     category: src.category,
     amount: src.amount,
+    currency: src.currency ?? DEFAULT_CURRENCY,
     expense_date: today(),
     vendor: src.vendor,
     department: src.department,

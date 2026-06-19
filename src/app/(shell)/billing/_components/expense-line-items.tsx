@@ -1,6 +1,7 @@
 "use client";
 
 import { Copy, Plus, Trash2 } from "lucide-react";
+import { CURRENCIES, formatMoney } from "@/features/billing/currencies";
 
 // 지출결의서 라인아이템 편집기 — ijw 패리티(용도/거래처/사용내역/수량/금액/부가세).
 // 상태는 부모(다이얼로그)가 소유; 이 컴포넌트는 렌더 + onChange만. 좁은 창에 맞춰 줄 단위로 접는다.
@@ -13,7 +14,6 @@ export type ExpenseItemRow = {
   vat: boolean;
 };
 
-const KRW = new Intl.NumberFormat("ko-KR");
 export const lineTotal = (r: ExpenseItemRow) =>
   Math.round(r.quantity * r.unitPrice * (r.vat ? 1.1 : 1));
 
@@ -23,9 +23,13 @@ const inputCls =
 export function ExpenseLineItems({
   rows,
   onChange,
+  currency,
+  onCurrencyChange,
 }: {
   rows: ExpenseItemRow[];
   onChange: (rows: ExpenseItemRow[]) => void;
+  currency: string;
+  onCurrencyChange: (code: string) => void;
 }) {
   const setRow = (i: number, patch: Partial<ExpenseItemRow>) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -39,7 +43,22 @@ export function ExpenseLineItems({
 
   return (
     <div className="space-y-2">
-      <span className="text-foreground block text-sm font-medium">지출 항목</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-foreground block text-sm font-medium">지출 항목</span>
+        {/* 통화 선택(지출결의서당 단일 통화) — ijw 패리티 */}
+        <select
+          value={currency}
+          onChange={(e) => onCurrencyChange(e.target.value)}
+          className="border-line bg-background text-foreground rounded-md border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40"
+          aria-label="통화"
+        >
+          {CURRENCIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.symbol} {c.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="space-y-2.5">
         {rows.map((r, i) => (
           <div key={i} className="border-line bg-bg-soft/40 space-y-1.5 rounded-md border p-2.5">
@@ -115,7 +134,7 @@ export function ExpenseLineItems({
               </button>
             </div>
             <p className="text-text-dim text-right text-[11px]">
-              총액 <span className="num text-foreground font-semibold">{KRW.format(lineTotal(r))}원</span>
+              총액 <span className="num text-foreground font-semibold">{formatMoney(lineTotal(r), currency)}</span>
               {r.vat ? <span className="text-text-faint"> (VAT포함)</span> : null}
             </p>
           </div>

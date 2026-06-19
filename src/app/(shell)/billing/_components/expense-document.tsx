@@ -1,11 +1,9 @@
 import { Check } from "lucide-react";
 import type { ExpenseLineItem, ExpenseRow } from "@/features/billing/server/expense-queries";
+import { formatMoney } from "@/features/billing/currencies";
 
 // 지출결의서 — ijw-calander 양식 충실 이식(상단 결재란 / 기본정보 / 항목표 / 합계 / 정산정보).
 // 읽기 전용 문서 뷰. 제목 클릭 시 창(또는 임베드 드릴인)으로 표시. 단일 읽기 흐름이라 중앙 정렬 폭 제한.
-
-const KRW = new Intl.NumberFormat("ko-KR");
-const won = (n: number) => `₩${KRW.format(n)}`;
 
 const cell = "border-foreground/70 border px-3 py-2";
 const headCell = `${cell} bg-bg-soft text-center font-bold whitespace-nowrap`;
@@ -27,6 +25,7 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
           },
         ];
   const total = items.reduce((s, l) => s + l.total, 0) || expense.amount;
+  const won = (n: number) => formatMoney(n, expense.currency); // 이 결의서의 통화로 표기
   const approved = expense.approvalStatus === "approved";
   const checks = expense.approvalChecks;
   const author = expense.author ?? "";
