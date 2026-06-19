@@ -23,6 +23,7 @@ export function SearchableSelect({
   searchPlaceholder = "검색...",
   cap = 50,
   className,
+  ariaLabel,
 }: {
   options: ComboOption[];
   value?: string;
@@ -33,6 +34,8 @@ export function SearchableSelect({
   searchPlaceholder?: string;
   cap?: number;
   className?: string;
+  /** 트리거 버튼의 접근성 이름 — 선택값만으론 무엇의 드롭다운인지 불명할 때(필터 등) 서술 라벨 제공. */
+  ariaLabel?: string;
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
@@ -73,6 +76,7 @@ export function SearchableSelect({
       {name ? <input type="hidden" name={name} value={current} /> : null}
       <button
         type="button"
+        aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
         className="border-border bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
       >

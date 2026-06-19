@@ -72,24 +72,33 @@ export async function syncSheetsNow(
 
   try {
     await pushTimetableToSheets(spreadsheetId);
-    await supabase
-      .from("user_integrations")
-      .update({
+    // upsert(.update 아님) — 학원 설정 googleSheetId 폴백 테넌트는 user_integrations 행이 없어
+    // .update가 0행 no-op 되어 동기 시각/오류가 화면에 안 떴다(#피드백 손실). connectGoogleSheets와 동일 패턴.
+    // spreadsheet_url/shared_with_email은 넣지 않아 폴백 의미(연결흐름 아님)를 보존.
+    await supabase.from("user_integrations").upsert(
+      {
+        tenant_id: user.tenantId,
+        provider: "google_sheets",
+        spreadsheet_id: spreadsheetId,
         last_synced_at: new Date().toISOString(),
         last_error: null,
-      })
-      .eq("tenant_id", user.tenantId)
-      .eq("provider", "google_sheets");
+      },
+      { onConflict: "tenant_id,provider" },
+    );
 
     revalidatePath("/admin/integrations/sheets");
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await supabase
-      .from("user_integrations")
-      .update({ last_error: msg })
-      .eq("tenant_id", user.tenantId)
-      .eq("provider", "google_sheets");
+    await supabase.from("user_integrations").upsert(
+      {
+        tenant_id: user.tenantId,
+        provider: "google_sheets",
+        spreadsheet_id: spreadsheetId,
+        last_error: msg,
+      },
+      { onConflict: "tenant_id,provider" },
+    );
     return { error: msg };
   }
 }

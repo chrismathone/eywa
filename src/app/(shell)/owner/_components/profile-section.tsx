@@ -11,7 +11,7 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
 
   return (
     <SectionForm section="profile" payload={p}>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-4 xl:grid-cols-2">
       <SettingsCard title="학원 정보" description="청구서·알림·인쇄물에 쓰이는 학원 기본 정보입니다.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField label="학원 이름" value={p.name} onChange={(v) => set({ name: v })} placeholder="인재원수학" />

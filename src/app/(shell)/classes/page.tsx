@@ -29,6 +29,7 @@ type ViewMode = "cards" | "table";
 
 const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
   math: { label: "수학", color: "primary" },
+  highmath: { label: "수학(심화)", color: "primary" },
   english: { label: "영어", color: "blue" },
   korean: { label: "국어", color: "rose" },
   science: { label: "과학", color: "purple" },
@@ -37,6 +38,7 @@ const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
 
 const SUBJECT_BAR: Record<string, string> = {
   math: "bg-primary",
+  highmath: "bg-primary",
   english: "bg-blue",
   korean: "bg-rose",
   science: "bg-purple",
@@ -56,11 +58,16 @@ const DAY_LABEL: Record<string, string> = {
 const SUBJECT_FILTERS = [
   { key: "all", label: "전체" },
   { key: "math", label: "수학" },
+  { key: "highmath", label: "수학(심화)" },
   { key: "english", label: "영어" },
   { key: "korean", label: "국어" },
   { key: "science", label: "과학" },
   { key: "arts", label: "예술" },
 ];
+
+// 강사가 해당 과목을 담당하는지 — users.subjects 대소문자 편차('MATH' vs 'math')에 견고하게(정확일치, 무시).
+const teacherTeaches = (subjects: string[], subjectKey: string) =>
+  subjects.some((s) => s.toLowerCase() === subjectKey.toLowerCase());
 
 const DAY_FILTERS = [
   { key: "all", label: "전체" },
@@ -122,13 +129,13 @@ export default async function ClassesPage({
 
   // 과목이 선택되면 해당 과목 담당 강사만 드롭다운에 노출.
   const teacherFilterOptions =
-    subject === "all" ? teachers : teachers.filter((t) => t.subjects.includes(subject));
+    subject === "all" ? teachers : teachers.filter((t) => teacherTeaches(t.subjects, subject));
   // 선택된 강사가 새 과목을 담당하지 않으면 과목 전환 시 강사 필터를 초기화한다.
   const selectedTeacher = teacherId === "all" ? null : teachers.find((t) => t.id === teacherId);
   const subjectHref = (key: string) =>
     buildHref(current, {
       subject: key,
-      ...(key !== "all" && selectedTeacher && !selectedTeacher.subjects.includes(key)
+      ...(key !== "all" && selectedTeacher && !teacherTeaches(selectedTeacher.subjects, key)
         ? { teacher: "all" }
         : {}),
     });

@@ -152,7 +152,7 @@ export default async function TimetablePage({
         />
       ) : (
         <TimetableDndArea>
-          <div id="timetable-export-root" className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             {view === "basic" ? (
               <WeekdayGroupTables slots={slots} config={periodsConfig} />
             ) : (

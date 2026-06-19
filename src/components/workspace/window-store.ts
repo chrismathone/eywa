@@ -674,12 +674,19 @@ export const useWindowStore = create<State & Actions>()(
     {
       name: "eywa-workspace",
       skipHydration: true, // 마운트 후 수동 rehydrate (SSR mismatch 회피)
-      partialize: (s) => ({
-        owner: s.owner,
-        windows: s.windows,
-        order: s.order,
-        focusedId: s.focusedId,
-      }),
+      // autoClose(생성폼 /X/new) 창은 영속 제외 — 미제출로 떠난 빈 생성폼 창이 다음 세션에 부활하던 잔존
+      // 방지(자동 닫힘은 초기경로에선 발화 안 함). 일반 라우트/학생 창의 영속은 그대로.
+      partialize: (s) => {
+        const persisted = Object.fromEntries(
+          Object.entries(s.windows).filter(([, w]) => !w.params.autoClose),
+        );
+        return {
+          owner: s.owner,
+          windows: persisted,
+          order: s.order.filter((id) => persisted[id]),
+          focusedId: s.focusedId && persisted[s.focusedId] ? s.focusedId : null,
+        };
+      },
     },
   ),
 );
