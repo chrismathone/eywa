@@ -11,6 +11,7 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
 
   return (
     <SectionForm section="notifications" payload={n}>
+      <div className="grid items-start gap-4 xl:grid-cols-2">
       <SettingsCard title="알림·연동" description="카카오 알림톡 발신 정보와 외부 연동 식별자.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
@@ -55,6 +56,7 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
           />
         </div>
       </SettingsCard>
+      </div>
     </SectionForm>
   );
 }

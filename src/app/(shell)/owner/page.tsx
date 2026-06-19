@@ -23,7 +23,7 @@ export default async function OwnerSettingsPage() {
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6">
       <header className="border-border border-b pb-5">
         <p className="eyebrow">학원 설정 · owner 전용</p>
         <h1 className="display text-foreground text-2xl">{settings.profile.name || "학원"} 설정</h1>

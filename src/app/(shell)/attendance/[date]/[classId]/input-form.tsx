@@ -248,7 +248,7 @@ export function AttendanceInputForm({
                     value={cell.homeworkDone ? "true" : "false"}
                   />
 
-                  <div className="inline-flex items-center gap-1">
+                  <div className="inline-flex flex-wrap items-center justify-end gap-1">
                     {STATUS_DEFS.map((s) => {
                       const Icon = s.icon;
                       const active = cell.status === s.value;

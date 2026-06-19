@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { batchSaveScores, type ExamActionState } from "@/features/exams/server/actions";
 import { examStats, rankByScore } from "@/features/exams/calc";
 import { pct } from "@/lib/calc/grades";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 export type GridRow = {
   studentId: string;
@@ -79,7 +80,7 @@ export function BatchScoreGrid({
         </span>
       </div>
 
-      <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+      <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
         <table className="w-full text-sm [&_td]:whitespace-nowrap">
           <thead className="border-line border-b [&_th]:whitespace-nowrap">
             <tr>
@@ -126,7 +127,7 @@ export function BatchScoreGrid({
             })}
           </tbody>
         </table>
-      </div>
+      </DragScrollArea>
 
       <div className="flex items-center justify-end gap-3">
         {state?.error ? (

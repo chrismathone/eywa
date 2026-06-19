@@ -16,6 +16,7 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
 
   return (
     <SectionForm section="operations" payload={o}>
+      <div className="grid gap-4 xl:grid-cols-2">
       <SettingsCard
         title="운영 과목"
         description="목록·시간표·청구의 과목 드롭다운과 라벨 색상에 쓰입니다. key는 내부 식별자(영문 소문자), 라벨은 화면 표시명."
@@ -64,6 +65,7 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
           type="date"
         />
       </SettingsCard>
+      </div>
     </SectionForm>
   );
 }

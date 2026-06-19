@@ -4,6 +4,7 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { EmptyState } from "@/components/empty-state";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getAuditLogsPage, AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
 
@@ -80,7 +81,7 @@ export default async function AdminAuditPage({
         />
       ) : (
         <>
-          <section className="bg-card border-line shadow-card overflow-auto rounded-md border">
+          <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
             <table className="w-full text-[12px] [&_td]:whitespace-nowrap">
               <thead>
                 <tr className="bg-bg-soft text-text-dim border-line border-b [&_th]:whitespace-nowrap">
@@ -114,7 +115,7 @@ export default async function AdminAuditPage({
                 ))}
               </tbody>
             </table>
-          </section>
+          </DragScrollArea>
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}

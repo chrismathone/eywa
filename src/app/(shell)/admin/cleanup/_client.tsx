@@ -28,7 +28,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
       {/* 1. 수강 없는 재원생 */}
       <section className="bg-card border-border rounded-md border p-5">
         <header className="mb-2 flex items-baseline justify-between">

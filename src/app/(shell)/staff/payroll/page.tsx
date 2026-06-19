@@ -6,6 +6,7 @@ import { BackLink } from "@/components/back-link";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
@@ -174,7 +175,7 @@ function PayrollTable({
   totalNet: number;
 }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
@@ -248,7 +249,7 @@ function PayrollTable({
           </tr>
         </tfoot>
       </table>
-    </div>
+    </DragScrollArea>
   );
 }
 

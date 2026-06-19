@@ -18,7 +18,7 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
   return (
     <SectionForm section="billing" payload={b}>
       <SettingsCard title="청구 기본값" description="청구서 생성·수강료 계산기의 기본값으로 쓰입니다.">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <NumberField
             label="기본 납부 마감일"
             hint="매월 N일"

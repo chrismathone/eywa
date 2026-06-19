@@ -11,7 +11,7 @@ export default async function SheetsIntegrationPage() {
   const status = await getGoogleSheetsStatus();
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl space-y-6">
       <BackLink href="/dashboard" label="대시보드로" />
 
       <header className="border-border border-b pb-5">

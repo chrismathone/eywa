@@ -61,6 +61,60 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 
 ---
 
+## 학원 설정(`/owner`) — 설정은 "소비처까지" 배선해야 끝 (⚠️ write-only-orphan 금지)
+
+**모든 학원(테넌트) 단위 설정은 단일 읽기/쓰기 경로를 거친다** — AI의 `generateJSON()`과 같은 단일 진입점
+원칙. 기능 코드에서 `tenant_settings`를 직접 SELECT/UPDATE하지 말 것.
+
+- **저장(쓰기)**: `saveOwnerSection`([`src/features/owner/server/actions.ts`](src/features/owner/server/actions.ts)) —
+  master 게이트 → `SECTION_SCHEMAS`([`settings-types.ts`](src/features/owner/settings-types.ts)) Zod 검증 →
+  `tenant_settings.data` jsonb에 **섹션 단위 머지 upsert**(다른 섹션 보존) → `audit_logs`(`owner_settings_update`)
+  → `revalidatePath("/", "layout")` + `/owner`.
+- **조회(읽기)**: `getTenantSettings()`([`src/features/owner/server/queries.ts`](src/features/owner/server/queries.ts),
+  React `cache`) → `resolveSettings()`([`resolve.ts`](src/features/owner/resolve.ts))가 저장된 부분값을
+  `DEFAULT_SETTINGS`([`defaults.ts`](src/features/owner/defaults.ts))에 deep-merge해 **항상 완전한 `TenantSettings`**
+  반환(배열·원시는 교체, 객체는 재귀 병합). 비로그인/키오스크(service_role)는 `getTenantSettingsByTenantId(tenantId)`.
+- **스키마 = 단일 소스**: `settings-types.ts`의 Zod에서 타입 추론. 섹션 4개(profile/operations/billing/notifications).
+
+### ⚠️ 이 영역의 유일한 버그 패턴 = "저장은 되는데 아무도 안 읽음(write-only-orphan)"
+쓰기·검증·머지·감사로그 인프라가 견고해 **저장 실패(broken-write)는 거의 안 난다.** 대신 스키마+폼에 필드만
+추가하고 **소비처(consumer)를 안 만들어**, "저장됨 토스트는 뜨는데 화면/문서/메시지는 그대로"인 **거짓 약속**이
+생긴다. 2026-06-19 전수 배선 감사: 편집 가능한 25개 필드 중 **11개만 정상 배선, 12개 orphan, 2개 미구현.**
+
+**설정 필드 1개를 추가/변경할 때 5단계를 전부 끝내야 "완료"다:**
+1. **스키마** — `settings-types.ts` 섹션 Zod에 필드 추가.
+2. **기본값** — `defaults.ts`의 `DEFAULT_SETTINGS`에 같은 키 추가(없으면 deep-merge 폴백이 깨져 `undefined` 누출).
+3. **폼** — 해당 `*-section.tsx`에 입력 추가(섹션 폼은 이미 `saveOwnerSection`에 배선됨).
+4. **소비처(필수)** — 실제 기능 코드가 `getTenantSettings()`로 값을 읽어 **동작이 바뀌게** 한다.
+   하드코딩 상수(`globals.css`의 `--primary`, `periods.ts`의 교시 enum 등)를 **설정값으로 대체**하는 게 핵심.
+5. **검증** — 값을 바꿔 저장한 뒤 그 기능에서 실제로 반영되는지 확인. `grep "settings\.<section>\.<field>"`(또는
+   해당 필드명)로 소비처가 **≥1곳** 나와야 한다. **안 나오면 그 필드는 UI에 노출하지 말 것**(거짓 약속 방지).
+
+> **한 줄 규칙: 소비처(`getTenantSettings`로 읽어 동작이 바뀌는 코드)가 없는 설정은 만들지도, UI에 노출하지도 않는다.**
+
+### 현재 알려진 미배선 (거짓 약속 — "동작하는 예시"로 인용 금지, 고치거나 숨길 것)
+- **🟠 orphan(저장되나 소비처 0)**: profile `representativeName`·`phone`·`email`·`address`·`brandColor`,
+  operations `terms`, billing `taxMode`·`defaultMethod`·`latePolicy`, notifications
+  `alimtalkSenderKey`·`kakaoChannelId`·`googleSheetId`.
+  - ⚠️ 알림톡/시트는 실제로 `kakao_channels`(`src/lib/messaging/provider.ts`)·`user_integrations`
+    (`src/features/integrations/server/actions.ts`)에서 읽는다 → 콘솔 필드는 **이중 소스**. 폴백 소비를 추가하거나 제거.
+  - `brandColor`는 `globals.css`의 `--primary` 하드코딩 때문에 무반응 → `(shell)/layout`에서 CSS 변수 주입 필요.
+- **⚪ 미구현(표시 화면 자체가 없음)**: notifications `privacyTerms`·`serviceTerms`(약관 표시 페이지 부재).
+- **✅ 정상 배선(참고 예시)**: profile `name`·`branchLabel`·`logoText`, operations
+  `subjects`·`jobTitles`·`gradeLevels`·`weekdayPeriods`·`weekendPeriods`·`holidays`, billing `dueDay`,
+  notifications `printHeader`. ⚠️ 단 영어 교시는 `ENGLISH_PERIODS`(`periods.ts`) 하드코딩이라 `weekdayPeriods` 설정과 무관.
+
+### DB가 필요한데 없는 것 (jsonb로 못 담는 것 포함)
+`tenant_settings.data`는 텍스트/숫자/배열만 담는다 — **이미지·파일은 Supabase Storage 버킷이 별도 필요**:
+- 로고 **이미지**(현재 `logoText` 텍스트 워드마크뿐)·직인/도장 이미지 → Storage 버킷 + `…profile.logoUrl`/`sealUrl` 경로.
+- 사업자등록번호·운영시간(영업시간, 교시와 별개) → jsonb 필드 추가만으로 가능(스키마 확장).
+- **과목별 교시 세트**(영어 1교시≠수학 1교시 시각 — 위 `ENGLISH_PERIODS` 하드코딩의 근본 원인) →
+  `weekdayPeriods: PeriodTime[]` → `Record<subjectKey, PeriodTime[]>`로 확장 + 기존 데이터 마이그레이션.
+- **역할/권한 편집**(현재 `permissions.ts` 코드 하드코딩 — ijw 패리티 갭) → `tenant_role_permissions` 테이블 또는
+  `…data.permissions` jsonb + 편집 UI(RLS와의 경계 설계 필요).
+
+---
+
 ## 기술 스택 (실제 적용된 것)
 
 | 영역 | 선택 |
@@ -457,6 +511,39 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   - ❌ **상세 본문+사이드 분할**(`lg:grid-cols-3`의 1.5+1 류)은 그냥 세로로 쌓이면 됨.
   - △ 약한 후보: `/retention`(이탈 방어) 2열 대시보드(`lg:grid-cols-[1.5fr_1fr]`) — 필요해지면 적용.
 - 2번째 칸반이 생기면 그때 제네릭 컴포넌트로 추출(지금은 단일 사용처라 등록상담에 인라인).
+
+### 반응형 창 폭 — 넓은창 공간활용 + 좁은창 접힘 (⚠️ 새 페이지 기본값, 2026-06-19)
+모든 (shell) 페이지는 크롬리스 iframe(플로팅 창)에서 렌더되고, 창은 **360px(MIN_W) ~ 최대화 시
+전체폭(~2300px)** 까지 자유 리사이즈/스냅된다. **창=iframe이라 Tailwind 브레이크포인트
+(sm 640 / md 768 / lg 1024 / xl 1280)가 창 폭에 그대로 반응** → 같은 창을 리사이즈하면 레이아웃이
+라이브로 바뀐다(미디어쿼리·JS 불필요). 그래서:
+- ⚠️ **고정 좁은 `mx-auto max-w-4xl` 중앙정렬은 안티패턴** — 창을 최대화하면 콘텐츠가 그 폭에 갇혀
+  좌우 여백이 수백 px씩 비고, 그 안에서도 열이 안 늘어 단일 입력칸만 비대해진다(owner 학원설정이 주범이었음).
+- **원칙: 넓은 창은 여백 대신 "열/콘텐츠"로 채우고, 좁은 창(sm 미만)은 단일 컬럼으로 접는다.** max-w를
+  막연히 키워 단일 입력이 가로로 폭주하게 두지 말 것.
+
+**pageType별 처방:**
+- **설정(탭형 다카드)** = 좌측 세로탭 + 우측 본문 **마스터-디테일**: 바깥 `lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8`,
+  nav는 좁으면 상단 가로탭(`flex flex-wrap … lg:flex-col`), 섹션 카드는 `grid gap-4 xl:grid-cols-2`로 펼침.
+  **레퍼런스: [owner-console.tsx](<src/app/(shell)/owner/_components/owner-console.tsx>)** (페이지 캡 `max-w-7xl`).
+- **설정(비탭 다카드, 예 kiosk-settings)** = `grid gap-6 lg:grid-cols-2 lg:items-start` + `max-w-5xl`(헤더는 그리드 밖 full-width).
+- **단일 입력만 있는 폼**(meetings/new, sheets 연결) = 오히려 **`max-w-xl~2xl`로 좁혀 가둔다**(열 늘릴 콘텐츠가
+  없어 안 좁히면 한 줄 입력이 폭주). admin/cleanup처럼 짧은 카드 스택은 `grid md:grid-cols-2 xl:grid-cols-3`.
+- **데이터 입력 폼**(학생/직원/반/상담) = 필드로 꽉 찬 중앙 `max-w-4xl`는 **OK**(희박한 낭비 아님 — 그대로 둠).
+  더 채우려면 필드 grid를 `sm:grid-cols-2 xl:grid-cols-3` / `sm:grid-cols-3 xl:grid-cols-4`로(cap는 유지).
+- **list / detail / dashboard** = full-width + `grid lg:grid-cols-[…]` 마스터-디테일(**이미 정석, 손대지 말 것**).
+  넘치는 표는 막대스크롤만 두지 말고 **[`DragScrollArea`](src/components/ui/drag-scroll-area.tsx)** 로 감싼다
+  (`<div className="… overflow-auto">표</div>` → `<DragScrollArea className="…(overflow-auto 뺀)">표</DragScrollArea>`).
+- **student-screen / print / 단일 키패드** = 의도적 `mx-auto max-w-[680~768px]` 유지(읽기 흐름·단일 입력). 넓은창 여백 정당.
+
+**좁은 창(360~480px) 체크리스트** (새 페이지 추가 시 필수):
+- 모든 다열 grid가 sm 미만에서 `grid-cols-1`로 접히는가(기본 `grid-cols-1` 명시).
+- 편집 헤더(타이틀 + 삭제/이동 버튼)는 `flex flex-wrap items-end justify-between gap-3`(안 그러면 360px서 한 줄에 낌).
+- 버튼 그룹(상태칩 등)도 `flex-wrap`(출석 입력폼 6버튼 케이스).
+- 가로 오버플로는 BREAKS가 아니라 `DragScrollArea`/`overflow-x`로 흡수(전역 스크롤바 하네스와 병행).
+
+⚠️ **새 설정·폼 페이지를 만들 때 이 규약을 점검** — 특히 `mx-auto max-w-Nxl` 중앙정렬을 기본으로 박지 말 것.
+같은 "큰창=펼침 / 작은창=접힘" 패러다임의 칸반 버전은 위 "다열 보드" 섹션 참고.
 
 ### 생성 폼은 우측 패널이 아니라 창으로 — autoClose 창 (⚠️ "새 X" 진입점 기본값, 2026-06-19)
 "새 반/직원/학생/등록상담/상담/회의록" 같은 생성 폼은 우측 슬라이드 `<Sheet>`를 **쓰지 않는다**. 이미 있는

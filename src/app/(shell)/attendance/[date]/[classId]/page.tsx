@@ -34,7 +34,7 @@ export default async function AttendanceInputPage({
   if (!klass) notFound();
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <BackLink href={`/attendance/${date}`} label={`${formatKoreanDate(date)}로`} />
 
       <header className="border-border space-y-1 border-b pb-5">

@@ -8,7 +8,7 @@ export default async function NewMeetingPage() {
   await requireAccess("meetings");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-xl space-y-6">
       <BackLink href="/meetings" label="회의록으로" />
 
       <header className="border-border space-y-1 border-b pb-5">

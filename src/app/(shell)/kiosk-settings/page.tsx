@@ -40,7 +40,7 @@ export default async function KioskSettingsPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-5 py-6">
+    <div className="mx-auto max-w-5xl space-y-6 px-5 py-6">
       <header>
         <h1 className="text-foreground text-xl font-bold">출석 키오스크 설정</h1>
         <p className="text-text-dim mt-1 text-[13px] leading-relaxed">
@@ -52,6 +52,8 @@ export default async function KioskSettingsPage() {
         </p>
       </header>
 
+      {/* 넓은 창은 2열, 좁은 창(lg 미만)은 1열로 접힘 — 디자인 시스템 § 반응형 폭 규약 */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       {/* 1. 출석번호 발급 */}
       <section className="border-border bg-card rounded-lg border p-5">
         <h2 className="text-foreground text-sm font-bold">출석번호</h2>
@@ -178,6 +180,7 @@ export default async function KioskSettingsPage() {
           <p className="text-text-faint mt-3 text-[12px]">아직 등하원 기록이 없습니다.</p>
         )}
       </section>
+      </div>
     </div>
   );
 }

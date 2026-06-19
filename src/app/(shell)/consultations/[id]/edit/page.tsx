@@ -29,7 +29,7 @@ export default async function EditConsultationPage({
     <div className="mx-auto max-w-4xl space-y-6">
       <BackLink href="/consultations" label="학생상담으로" />
 
-      <header className="border-border flex items-end justify-between gap-3 border-b pb-5">
+      <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">
           <p className="eyebrow">상담 수정</p>
           <h1 className="display text-foreground text-2xl">{item.studentName}</h1>
