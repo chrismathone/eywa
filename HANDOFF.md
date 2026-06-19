@@ -117,9 +117,10 @@ kiosk-settings·admin/cleanup은 다열 카드, 표는 `DragScrollArea`. 규약=
 
 ## 5. 다음 작업
 
-- ▶ **관리자 도구(/admin) → owner 콘솔 병합** (이번 대화 원래 목표, **보류 중**). 이제 FaceTabs 위에 "데이터 관리·감사로그"
-  면을 얹으면 됨(사용자 결정 = 상단 가로탭 + 설정/관리 구분선). 감사로그·cleanup·duplicates 콘텐츠를 컴포넌트로 추출 →
-  owner `?tab=audit`/`?tab=data`로 면 렌더 + navigation.ts에서 /admin 사이드바 제거. 무거운 면이라 지연 fetch 유지.
+- ✅ **관리자 도구(/admin) → owner 콘솔 병합 완료(2026-06-20)**. owner FaceTabs = 설정 5면 ┃ 관리 4면(데이터 정리·
+  중복 학생·감사로그·연동, group 구분선). admin 페이지 본문을 `owner/_components/{data,duplicates,audit,sheets}-face.tsx`로
+  추출(`_client.tsx` 재사용·BackLink 제거), /admin 사이드바 hidden + 구 /admin/* 5라우트는 `/owner?tab=` redirect stub.
+  sheets도 "연동" 면으로 편입. 무거운 면(duplicates 전건 fetch)은 FaceTabs 조건부 렌더로 면 진입 시에만. 검증 그린(typecheck0/lint0/test392/build✓ + 브라우저).
 - ▶ **Phase 4 보안 후속(권장)**: `tenant_settings` RLS가 `tenant_isolation` 한 줄뿐이라 같은 테넌트 인증자가 PostgREST로
   `data.permissions` 직접 UPDATE = 자기 권한상승 여지(앱 경로는 master 게이트라 안전, **직접 API만** 노출). 데이터 격리는
   안 깨짐. 후속 alpha(0034a류) 트리거로 "`auth.uid()` not null이면서 data.permissions 변경 시 raise" 차단(0026a 패턴).

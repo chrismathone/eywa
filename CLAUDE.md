@@ -478,7 +478,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - `/exams`, `/exams/[id]` = **성적관리** (신규 최상위 메뉴, 학생 그룹) — 일괄 성적입력
 - `/staff/payroll` = 급여 월별 전직원표 (master 전용, /staff 드릴인)
 - `/login` = 로그인. 성공 시 `/dashboard` redirect
-- `/admin/*` = academy master 전용 (duplicates/cleanup/integrations/sheets/**audit** 감사로그)
+- `/admin/*` = **학원 설정(/owner) "관리" 면으로 병합됨(2026-06-20)** — 구 라우트는 `/owner?tab=data|dup|audit|sheets` redirect stub(북마크 보존), 본문은 `owner/_components/{data,duplicates,audit,sheets}-face.tsx`(admin `_client.tsx` 재사용). admin menuKey는 hidden 보존(리다이렉트·창 해석용). owner = 설정 5면 ┃ 관리 4면(FaceTabs group 구분선)
 - `/super-admin/*` = **SaaS owner 전용 super_admin 레이어** (academy 권한과 직교)
 - `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
 - `(shell)/` = 인증된 12개 메뉴 + admin (사이드바 232px + Topbar 64px)
