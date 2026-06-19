@@ -41,6 +41,9 @@ export type ClassScheduleSlot = {
   endTime: string;
   validFrom: string | null;
   validTo: string | null;
+  // 교시별 오버라이드 — null이면 반의 담임/기본 강의실 상속.
+  teacherId: string | null;
+  classroomId: string | null;
 };
 
 export type ClassDetail = {
@@ -351,7 +354,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
 
   const { data: schedules } = await supabase
     .from("class_schedules")
-    .select("id, day_of_week, start_time, end_time, valid_from, valid_to")
+    .select("id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id")
     .eq("class_id", id)
     .order("day_of_week")
     .order("start_time");
@@ -386,6 +389,8 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       endTime: String(s.end_time).slice(0, 5),
       validFrom: s.valid_from,
       validTo: s.valid_to,
+      teacherId: (s.teacher_id as string | null) ?? null,
+      classroomId: (s.classroom_id as string | null) ?? null,
     })),
     studentCount: studentCount ?? 0,
   };

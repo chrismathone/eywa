@@ -22,7 +22,13 @@ const DEFAULT_SUBJECT_OPTIONS = [
   { value: "korean", label: "국어" },
 ];
 
-type Schedule = { dayOfWeek: string; startTime: string; endTime: string };
+type Schedule = {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  teacherId?: string | null;
+  classroomId?: string | null;
+};
 
 export type ClassFormDefaults = {
   id?: string;
@@ -68,6 +74,8 @@ export function ClassForm({
   // 과목은 교시표(8↔10교시)를 좌우하므로 상태로 들어 그리드와 동기. select는 name=subject로 그대로 제출.
   const [subject, setSubject] = useState(defaults?.subject ?? subjects[0]?.value ?? "math");
   const periods = subjectWeekdayPeriods(subject, periodsConfig);
+  // 담임도 상태로 — 그리드 셀이 담임 이름을 표시하고, 교시별 부담임 드롭다운의 "담임" 기본값으로 쓴다.
+  const [teacherId, setTeacherId] = useState(defaults?.teacherId ?? "");
 
   const fieldErrs = state?.fieldErrors ?? {};
 
@@ -104,7 +112,8 @@ export function ClassForm({
         <Field label="강사">
           <select
             name="teacherId"
-            defaultValue={defaults?.teacherId ?? ""}
+            value={teacherId}
+            onChange={(e) => setTeacherId(e.target.value)}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           >
             <option value="">미정</option>
@@ -167,7 +176,13 @@ export function ClassForm({
           <p className="text-chart-4 text-xs">{fieldErrs.schedules}</p>
         ) : null}
 
-        <ScheduleGrid periods={periods} initial={defaults?.schedules ?? []} />
+        <ScheduleGrid
+          periods={periods}
+          initial={defaults?.schedules ?? []}
+          teacherId={teacherId || null}
+          teacherOptions={teacherOptions}
+          classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
+        />
       </section>
 
       {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}

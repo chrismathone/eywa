@@ -14,6 +14,9 @@ type ScheduleInput = {
   dayOfWeek: string;
   startTime: string;
   endTime: string;
+  // 교시별 오버라이드 — null이면 반 담임/기본 강의실 상속.
+  teacherId: string | null;
+  classroomId: string | null;
 };
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -45,15 +48,17 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
 }
 
 function parseSchedules(formData: FormData): ScheduleInput[] {
-  // schedules are submitted as `schedule_day_${i}`, `schedule_start_${i}`, `schedule_end_${i}`
+  // 클릭그리드 제출: schedule_{day,start,end,teacher,classroom}_${i}. 요일×교시라 슬롯이 많을 수 있어 상한 80.
   const result: ScheduleInput[] = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 80; i++) {
     const dayOfWeek = String(formData.get(`schedule_day_${i}`) ?? "").trim();
     const startTime = String(formData.get(`schedule_start_${i}`) ?? "").trim();
     const endTime = String(formData.get(`schedule_end_${i}`) ?? "").trim();
     if (!dayOfWeek || !startTime || !endTime) continue;
     if (!DAYS.includes(dayOfWeek as (typeof DAYS)[number])) continue;
-    result.push({ dayOfWeek, startTime, endTime });
+    const teacherId = String(formData.get(`schedule_teacher_${i}`) ?? "").trim() || null;
+    const classroomId = String(formData.get(`schedule_classroom_${i}`) ?? "").trim() || null;
+    result.push({ dayOfWeek, startTime, endTime, teacherId, classroomId });
   }
   return result;
 }
@@ -120,6 +125,8 @@ export async function createClass(
       day_of_week: s.dayOfWeek,
       start_time: s.startTime,
       end_time: s.endTime,
+      teacher_id: s.teacherId,
+      classroom_id: s.classroomId,
     }));
     const { error: schedErr } = await supabase.from("class_schedules").insert(rows);
     if (schedErr) {
@@ -188,6 +195,8 @@ export async function updateClass(
       day_of_week: s.dayOfWeek,
       start_time: s.startTime,
       end_time: s.endTime,
+      teacher_id: s.teacherId,
+      classroom_id: s.classroomId,
     }));
     const { error: schedErr } = await supabase.from("class_schedules").insert(rows);
     if (schedErr) return { error: `스케줄 저장 실패: ${schedErr.message}` };

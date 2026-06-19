@@ -55,6 +55,8 @@ export default async function EditClassPage({
             dayOfWeek: s.dayOfWeek,
             startTime: s.startTime,
             endTime: s.endTime,
+            teacherId: s.teacherId,
+            classroomId: s.classroomId,
           })),
         }}
         teacherOptions={teachers}
