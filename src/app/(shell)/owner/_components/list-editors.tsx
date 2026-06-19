@@ -1,8 +1,10 @@
 "use client";
 
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
+import { useRef } from "react";
 import { Plus, X } from "lucide-react";
 import { SUBJECT_COLORS, type HolidaySetting, type PeriodTimeRow, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
+import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
 
 const cellCls =
   "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
@@ -67,6 +69,17 @@ export function StringListEditor({
   );
 }
 
+// 내부 ID(key) 정책 — 학원장은 key를 직접 관리하지 않는다(불편·실수 방지).
+// key는 DB가 과목을 가리키는 불변 식별자라 한 번 정해지면 바꾸지 않는다(바꾸면 기존 데이터 연결이 끊김).
+//  · 추가 시 임시 opaque key(subject_N) 부여 → 과목명 입력을 마치고 칸을 벗어나면(blur) 1회 확정.
+//  · 확정 규칙: 흔한 과목명이면 표준 키(KNOWN_SUBJECT_KEYS: 수학→math·영어→english…)로, 없으면 subject_N 유지.
+//    표준 키를 받으면 코드 특수동작(영어 10교시 등)을 상속. 확정 후엔 라벨을 바꿔도 key 불변(orphan 방지).
+function nextSubjectKey(taken: Set<string>): string {
+  let n = 1;
+  while (taken.has(`subject_${n}`)) n += 1;
+  return `subject_${n}`;
+}
+
 export function SubjectListEditor({
   value,
   onChange,
@@ -74,40 +87,89 @@ export function SubjectListEditor({
   value: SubjectSetting[];
   onChange: (v: SubjectSetting[]) => void;
 }) {
+  // 확정된 key 집합 — 최초 로드된(저장된) key + 이번 세션에서 blur로 확정된 key. 여기 든 key는 다신 안 바뀐다.
+  const frozen = useRef<Set<string>>(new Set(value.map((s) => s.key).filter(Boolean)));
   const set = (i: number, patch: Partial<SubjectSetting>) =>
     onChange(value.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
+  // 과목명 입력 종료(blur) 시 key 1회 확정. 이미 확정(frozen)된 행은 건드리지 않는다.
+  const finalizeKey = (i: number) => {
+    const row = value[i];
+    if (frozen.current.has(row.key)) return;
+    const label = row.label.trim();
+    if (!label) return; // 이름 입력 전 — 다음 입력까지 보류
+    const taken = new Set(value.filter((_, j) => j !== i).map((s) => s.key));
+    const canon = KNOWN_SUBJECT_KEYS[label];
+    const key = canon && !taken.has(canon) ? canon : taken.has(row.key) ? nextSubjectKey(taken) : row.key;
+    frozen.current.add(key);
+    if (key !== row.key) set(i, { key });
+  };
+
+  // 동일 과목명(라벨) 중복 — 다른 행과 같은 이름이면 경고. 저장은 스키마 superRefine가 거부(이중 방어).
+  const isDuplicate = (i: number) => {
+    const l = value[i].label.trim().toLowerCase();
+    return !!l && value.some((o, j) => j !== i && o.label.trim().toLowerCase() === l);
+  };
+
   return (
     <div className="space-y-2">
-      {value.map((s, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <input
-            className={`${cellCls} w-[120px] font-mono`}
-            value={s.key}
-            placeholder="key (math)"
-            onChange={(e) => set(i, { key: e.target.value })}
-          />
-          <input
-            className={`${cellCls} w-[140px]`}
-            value={s.label}
-            placeholder="라벨 (수학)"
-            onChange={(e) => set(i, { label: e.target.value })}
-          />
-          <select
-            className={`${cellCls} w-[110px]`}
-            value={s.color}
-            onChange={(e) => set(i, { color: e.target.value as SubjectSetting["color"] })}
-          >
-            {SUBJECT_COLORS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
+      {/* 행 제목(열 헤더) */}
+      {value.length > 0 ? (
+        <div className="text-text-faint micro flex flex-wrap items-center gap-2 px-0.5">
+          <span className="w-[150px]">과목명</span>
+          <span className="w-[122px]">색</span>
+          <span className="w-[100px]">내부 ID</span>
         </div>
-      ))}
+      ) : null}
+      {value.map((s, i) => {
+        const dup = isDuplicate(i);
+        return (
+          <div key={i} className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* 과목명(한글) — 학원장이 자유롭게 편집(바꿔도 데이터 안 깨짐). blur 시 key 확정. */}
+              <input
+                className={`${cellCls} w-[150px] ${dup ? "border-danger focus:border-danger" : ""}`}
+                value={s.label}
+                placeholder="과목명 (예: 수학)"
+                onChange={(e) => set(i, { label: e.target.value })}
+                onBlur={() => finalizeKey(i)}
+                aria-invalid={dup}
+              />
+              {/* 색 — 미리보기 칩 + 선택 */}
+              <span className="flex items-center gap-1.5">
+                <span className={`size-4 shrink-0 rounded-sm ${SUBJECT_SOLID[s.color]}`} aria-hidden />
+                <select
+                  className={`${cellCls} w-[100px]`}
+                  value={s.color}
+                  onChange={(e) => set(i, { color: e.target.value as SubjectSetting["color"] })}
+                  aria-label="과목 색"
+                >
+                  {SUBJECT_COLORS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </span>
+              {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
+              <span
+                className="text-text-faint w-[100px] shrink-0 truncate font-mono text-[11px]"
+                title={`내부 ID: ${s.key} (자동·변경 불가)`}
+              >
+                {s.key}
+              </span>
+              <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
+            </div>
+            {dup ? (
+              <p className="text-danger pl-0.5 text-[11px]">이미 있는 과목명입니다 — 다른 이름을 쓰거나 한 행을 삭제하세요.</p>
+            ) : null}
+          </div>
+        );
+      })}
       <AddButton
-        onClick={() => onChange([...value, { key: "", label: "", color: "neutral" }])}
+        onClick={() =>
+          onChange([...value, { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral" }])
+        }
         label="과목 추가"
       />
     </div>

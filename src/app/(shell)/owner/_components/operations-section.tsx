@@ -19,7 +19,7 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
       <div className="grid items-start gap-4 xl:grid-cols-2">
       <SettingsCard
         title="운영 과목"
-        description="목록·시간표·청구의 과목 드롭다운과 라벨 색상에 쓰입니다. key는 내부 식별자(영문 소문자), 라벨은 화면 표시명."
+        description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가)."
       >
         <SubjectListEditor value={o.subjects} onChange={(v) => set({ subjects: v })} />
       </SettingsCard>

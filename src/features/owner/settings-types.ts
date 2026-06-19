@@ -56,15 +56,33 @@ export const profileSchema = z.object({
 });
 export type ProfileSettings = z.infer<typeof profileSchema>;
 
-export const operationsSchema = z.object({
-  subjects: z.array(subjectSchema).max(40),
-  jobTitles: z.array(z.string().min(1).max(24)).max(40),
-  gradeLevels: z.array(z.string().min(1).max(24)).max(60),
-  weekdayPeriods: z.array(periodTimeSchema).max(20),
-  weekendPeriods: z.array(periodTimeSchema).max(20),
-  terms: z.array(termSchema).max(20),
-  holidays: z.array(holidaySchema).max(200),
-});
+export const operationsSchema = z
+  .object({
+    subjects: z.array(subjectSchema).max(40),
+    jobTitles: z.array(z.string().min(1).max(24)).max(40),
+    gradeLevels: z.array(z.string().min(1).max(24)).max(60),
+    weekdayPeriods: z.array(periodTimeSchema).max(20),
+    weekendPeriods: z.array(periodTimeSchema).max(20),
+    terms: z.array(termSchema).max(20),
+    holidays: z.array(holidaySchema).max(200),
+  })
+  .superRefine((v, ctx) => {
+    // 과목 중복 방지(저장 거부) — 내부 키·과목명(라벨) 모두 유일해야 한다. 클라 편집기 경고와 이중 방어.
+    const keys = new Set<string>();
+    const labels = new Set<string>();
+    v.subjects.forEach((s, i) => {
+      const k = s.key.trim();
+      if (k && keys.has(k)) {
+        ctx.addIssue({ code: "custom", message: `과목 내부 ID가 중복됩니다: ${k}`, path: ["subjects", i, "key"] });
+      }
+      keys.add(k);
+      const l = s.label.trim();
+      if (l && labels.has(l)) {
+        ctx.addIssue({ code: "custom", message: `과목명이 중복됩니다: ${l}`, path: ["subjects", i, "label"] });
+      }
+      labels.add(l);
+    });
+  });
 export type OperationsSettings = z.infer<typeof operationsSchema>;
 
 export const billingSchema = z.object({

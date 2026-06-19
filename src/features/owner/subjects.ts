@@ -19,6 +19,30 @@ const LEGACY_COLORS: Record<string, PillColor> = {
   etc: "neutral",
 };
 
+// 흔한 한글 과목명 → 표준 내부 키. 운영 과목 추가 시 이 이름을 입력하면 표준 키를 부여해
+// 코드 특수동작(영어 10교시·수학/영어 세부점수 등)을 상속한다. 사전에 없으면 subject_N 폴백.
+// ⚠️ 키는 화면에 안 보이는 내부 식별자라 값 자체는 무의미 — 특수동작이 붙는 math/english만 정확하면 된다.
+export const KNOWN_SUBJECT_KEYS: Record<string, string> = {
+  "수학": "math",
+  "영어": "english",
+  "국어": "korean",
+  "과학": "science",
+  "사회": "social",
+  "역사": "history",
+  "한국사": "history",
+  "미술": "art",
+  "음악": "music",
+  "체육": "pe",
+  "논술": "essay",
+  "독서": "reading",
+  "물리": "physics",
+  "화학": "chemistry",
+  "생물": "biology",
+  "지구과학": "earth",
+  "코딩": "coding",
+  "컴퓨터": "coding",
+};
+
 export type SubjectMaps = {
   /** key→한글 라벨. 설정 → 레거시 폴백 → raw key. */
   labelOf: (key: string) => string;

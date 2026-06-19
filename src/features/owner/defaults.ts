@@ -46,7 +46,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     // 과목 — 현재 SUBJECT_LABEL 중복 맵 이식(단일 소스). color=Pill 토큰.
     subjects: [
       { key: "math", label: "수학", color: "primary" },
-      { key: "highmath", label: "수학(심화)", color: "primary" },
+      // 수학(심화)는 학원 고유 과목이라 표준키 대신 subject_N 계열로 통일(2026-06-19, highmath→subject_1 마이그레이션).
+      { key: "subject_1", label: "수학(심화)", color: "primary" },
       { key: "english", label: "영어", color: "blue" },
       { key: "science", label: "과학", color: "purple" },
       { key: "korean", label: "국어", color: "rose" },
