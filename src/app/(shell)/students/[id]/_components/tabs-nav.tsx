@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { FaceTabs, type Face } from "@/components/face-tabs";
 
 export const STUDENT_TABS = [
   { key: "overview", label: "개요" },
@@ -16,6 +16,7 @@ export function isStudentTabKey(v: string | undefined): v is StudentTabKey {
   return STUDENT_TABS.some((t) => t.key === v);
 }
 
+// 공용 FaceTabs(상단 가로 탭바)로 통일 — 수납관리·학원설정과 동일한 면 전환 UI.
 export function StudentTabsNav({
   studentId,
   active,
@@ -23,35 +24,10 @@ export function StudentTabsNav({
   studentId: string;
   active: StudentTabKey;
 }) {
-  return (
-    <nav
-      role="tablist"
-      className="scrollbar-thin border-border bg-card overflow-x-auto rounded-md border"
-    >
-      <ul className="flex gap-0.5 px-1.5 py-1.5">
-        {STUDENT_TABS.map((t) => {
-          const isActive = t.key === active;
-          const href =
-            t.key === "overview"
-              ? `/students/${studentId}`
-              : `/students/${studentId}?tab=${t.key}`;
-          return (
-            <li key={t.key}>
-              <Link
-                href={href}
-                aria-current={isActive ? "page" : undefined}
-                className={`shrink-0 rounded-sm px-3 py-1.5 text-xs font-medium transition ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                {t.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
+  const faces: Face[] = STUDENT_TABS.map((t) => ({
+    key: t.key,
+    label: t.label,
+    href: t.key === "overview" ? `/students/${studentId}` : `/students/${studentId}?tab=${t.key}`,
+  }));
+  return <FaceTabs faces={faces} active={active} ariaLabel="학생 상세 면 전환" />;
 }

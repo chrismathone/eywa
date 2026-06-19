@@ -7,7 +7,6 @@ import {
   PeriodListEditor,
   StringListEditor,
   SubjectListEditor,
-  TermListEditor,
 } from "./list-editors";
 
 export function OperationsSection({ initial }: { initial: OperationsSettings }) {
@@ -53,9 +52,8 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
         <PeriodListEditor value={o.weekendPeriods} onChange={(v) => set({ weekendPeriods: v })} />
       </SettingsCard>
 
-      <SettingsCard title="학기" description="학기 구간(상담·성적 기간 표기에 활용).">
-        <TermListEditor value={o.terms} onChange={(v) => set({ terms: v })} />
-      </SettingsCard>
+      {/* ⚠️ 학기(terms)는 소비처가 없어 v1에서 입력 숨김(상태·스키마·저장은 보존).
+          성적/상담 학기 셀렉트 등 소비처가 생기면 SettingsCard만 복원. */}
 
       <SettingsCard title="공휴일·휴원일" description="수강료 계산 시 수업일에서 제외됩니다.">
         <StringListEditor

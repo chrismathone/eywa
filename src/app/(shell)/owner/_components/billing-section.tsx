@@ -3,14 +3,10 @@
 import { useState } from "react";
 import type { BillingSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
-import { NumberField, SelectField, TextAreaField, TextField } from "./fields";
+import { NumberField, TextAreaField } from "./fields";
 
-const TAX_OPTIONS = [
-  { value: "none", label: "비과세 (학원교습비)" },
-  { value: "include", label: "부가세 포함" },
-  { value: "exclude", label: "부가세 별도" },
-];
-
+// ⚠️ taxMode·defaultMethod는 소비처가 없어(세액 계산 미구현·invoices에 결제수단 컬럼 없음) v1에서 입력 숨김.
+// 상태·스키마·저장은 보존 — 소비처가 생기면 입력만 복원하면 됨. (CLAUDE.md "학원 설정" orphan 인벤토리 참고)
 export function BillingSection({ initial }: { initial: BillingSettings }) {
   const [b, setB] = useState<BillingSettings>(initial);
   const set = (patch: Partial<BillingSettings>) => setB((prev) => ({ ...prev, ...patch }));
@@ -18,7 +14,7 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
   return (
     <SectionForm section="billing" payload={b}>
       <SettingsCard title="청구 기본값" description="청구서 생성·수강료 계산기의 기본값으로 쓰입니다.">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <NumberField
             label="기본 납부 마감일"
             hint="매월 N일"
@@ -26,18 +22,6 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
             onChange={(v) => set({ dueDay: v })}
             min={1}
             max={31}
-          />
-          <SelectField
-            label="세금 처리"
-            value={b.taxMode}
-            onChange={(v) => set({ taxMode: v as BillingSettings["taxMode"] })}
-            options={TAX_OPTIONS}
-          />
-          <TextField
-            label="기본 결제수단"
-            value={b.defaultMethod}
-            onChange={(v) => set({ defaultMethod: v })}
-            placeholder="계좌이체"
           />
         </div>
         <div className="mt-4">

@@ -7,7 +7,6 @@ import { useWindowStore, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
-import { WindowBookmarks } from "./window-bookmarks";
 import { iframeRegistry } from "./route-window";
 import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
@@ -232,11 +231,6 @@ export function FloatingWindow({
               />
             ))}
       </div>
-
-      {/* 수납관리 창의 "진짜 책갈피" — 창 프레임 바깥(오른쪽)으로 삐져나온 종이 탭. 스포트라이트 중엔 숨김. */}
-      {win.kind === "route" && win.params.id === "billing" && !spotlight ? (
-        <WindowBookmarks winId={win.id} />
-      ) : null}
     </div>
   );
 }
