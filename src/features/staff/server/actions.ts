@@ -49,7 +49,7 @@ function validateBase(input: ReturnType<typeof readBaseForm>): Record<string, st
 }
 
 export type StaffFormState =
-  | { error?: string; fieldErrors?: Record<string, string>; tempPassword?: string }
+  | { error?: string; fieldErrors?: Record<string, string>; tempPassword?: string; ok?: true; redirectTo?: string; nonce?: number }
   | undefined;
 
 export async function createStaff(
@@ -153,7 +153,8 @@ export async function updateStaff(
   if (error) return { error: error.message };
 
   revalidatePath("/staff");
-  redirect(`/staff`);
+  // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2).
+  return { ok: true, redirectTo: "/staff", nonce: Date.now() };
 }
 
 export type ChangeRoleState = { error?: string; ok?: boolean } | undefined;

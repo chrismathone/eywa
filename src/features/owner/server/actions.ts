@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { SECTION_SCHEMAS, type SectionKey } from "../settings-types";
 
-export type OwnerSaveState = { ok?: boolean; error?: string } | undefined;
+export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   profile: "학원 프로필·브랜드",
@@ -80,5 +80,6 @@ export async function saveOwnerSection(
   // 브랜드·과목·직급 등은 셸 전역에 쓰이므로 루트 레이아웃까지 갱신.
   revalidatePath("/", "layout");
   revalidatePath("/owner");
-  return { ok: true };
+  // nonce — in-window 저장이라 연속 저장마다 폼 effect가 동시편집 신호를 1회씩 발화하도록(B-2).
+  return { ok: true, nonce: Date.now() };
 }

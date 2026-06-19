@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Layers, X, type LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { useWindowStore } from "./window-store";
+import { useWindowStore, instanceLabel } from "./window-store";
 
 const MAX_VISIBLE = 4; // 이보다 많으면 앞 3장 부채 + "+N" 페이지 스택(책 뒤장 …처리)
 
@@ -192,7 +192,7 @@ export function SpotlightStrip() {
     .reverse()
     .map((w) => ({
       key: w.id,
-      title: w.params.title,
+      title: instanceLabel(w.id, w.params.title),
       subtitle: w.params.subtitle,
       Icon:
         w.kind === "route"

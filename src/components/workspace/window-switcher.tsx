@@ -3,7 +3,7 @@
 import { LayoutPanelTop, type LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { useWindowStore } from "./window-store";
+import { useWindowStore, instanceLabel } from "./window-store";
 
 // 라우트 창 칩 아이콘 — 레일과 동일(NAV_GROUPS의 lucide). 학생 요약창은 EyIcon seed.
 const ICON_BY_MENU: Record<string, LucideIcon> = {};
@@ -44,6 +44,7 @@ export function WindowSwitcher() {
           w.kind === "route"
             ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]])
             : null;
+        const label = instanceLabel(w.id, w.params.title);
         return (
           <button
             key={w.id}
@@ -53,13 +54,13 @@ export function WindowSwitcher() {
               e.preventDefault();
               close(w.id);
             }}
-            title={`${w.params.title}${w.minimized ? " (최소화됨)" : ""}`}
+            title={`${label}${w.minimized ? " (최소화됨)" : ""}`}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] transition ${
               active ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
             } ${w.minimized ? "opacity-60" : ""}`}
           >
             {Icon ? <Icon size={13} strokeWidth={1.85} /> : <EyIcon name="seed" size={12} />}
-            <span className="max-w-[120px] truncate">{w.params.title}</span>
+            <span className="max-w-[120px] truncate">{label}</span>
           </button>
         );
       })}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
-import { useWindowStore } from "./window-store";
+import { useWindowStore, isDuplicate } from "./window-store";
 import {
   backgroundDropZone,
   pointInRect,
@@ -100,9 +100,10 @@ export function usePointerDrag(
       nearTopRef.current = nearTop;
       store.setDragNearTop(nearTop);
     }
-    // 배경 드롭 칩(라우트 창 한정) 위면 최우선 — "배경으로 보내기"(스냅보다 우선).
-    const isRoute = store.windows[id]?.kind === "route";
-    if (isRoute && nearTop && pointInRect(sx, sy, backgroundDropZone(bounds))) {
+    // 배경 드롭 칩(라우트 창 한정, 복제본 제외) 위면 최우선 — "배경으로 보내기"(스냅보다 우선).
+    // 복제본(#n)은 배경 시스템에 안 들어가므로 드래그-투-배경 비활성(window-only).
+    const allowBgDrop = store.windows[id]?.kind === "route" && !isDuplicate(id);
+    if (allowBgDrop && nearTop && pointInRect(sx, sy, backgroundDropZone(bounds))) {
       if (!bgRef.current) {
         bgRef.current = true;
         store.setDragBackground(true);
@@ -121,9 +122,9 @@ export function usePointerDrag(
       bgRef.current = false;
       store.setDragBackground(false);
     }
-    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존. 배경 칩이 떠 있으면(라우트)
+    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존. 배경 칩이 떠 있으면(라우트·비복제)
     // 스냅 바는 SNAP_BAR_BG_OFFSET만큼 아래로 밀리므로 히트테스트 py도 동일 보정.
-    const barOffset = isRoute ? SNAP_BAR_BG_OFFSET : 0;
+    const barOffset = allowBgDrop ? SNAP_BAR_BG_OFFSET : 0;
     const hit = nearTop ? snapBarHitTest(sx, sy - barOffset, bounds, openCount()) : null;
     if (hit) {
       if (!sameLayout(layoutRef.current, hit)) {

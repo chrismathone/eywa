@@ -43,6 +43,7 @@ export default async function EditClassPage({
 
       <ClassForm
         mode="edit"
+        scope={`class:${id}`}
         defaults={{
           id: klass.id,
           className: klass.className,

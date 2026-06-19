@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 
 export type ClassFormState =
-  | { error?: string; fieldErrors?: Record<string, string> }
+  | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
   | undefined;
 
 type ScheduleInput = {
@@ -211,7 +211,8 @@ export async function updateClass(
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
-  redirect(`/classes/${id}`);
+  // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2).
+  return { ok: true, redirectTo: `/classes/${id}`, nonce: Date.now() };
 }
 
 export type ArchiveClassState = { error?: string } | undefined;

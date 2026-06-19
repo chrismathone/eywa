@@ -188,6 +188,16 @@ export function AppSidebar({
               })}
             </div>
           ))}
+
+          {/* shift+클릭 안내 — 메뉴(관리자 도구 포함) 목록 아래. 펼침 데스크톱에서만(접힘 레일엔 공간 없음). */}
+          {isDesktop && expanded ? (
+            <p className="text-text-faint mt-1.5 px-4 pt-2 text-[10px] leading-snug">
+              <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-[9px]">
+                Shift
+              </kbd>
+              +클릭하면 같은 화면을 새 창으로 하나 더 열 수 있어요.
+            </p>
+          ) : null}
         </nav>
 
         {/* user — 계정/로그아웃. 아이콘은 접힘 중앙 고정, 이메일만 페이드 */}
@@ -248,9 +258,12 @@ function SubTab({
     <Link
       href={href}
       onClick={(e) => {
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
         e.preventDefault();
-        useWindowStore.getState().open("route", { id: menuKey, title: label, href });
+        const store = useWindowStore.getState();
+        // shift+클릭 = 그 면을 새 창으로(듀얼), 일반 클릭 = 부모 메뉴 창에서 면 전환.
+        if (e.shiftKey) store.openNewInstance("route", { id: menuKey, title: label, href });
+        else store.open("route", { id: menuKey, title: label, href });
       }}
       className={`block truncate rounded py-0.5 pr-2 pl-9 text-[11px] transition ${
         active ? "text-primary font-medium" : "text-text-faint hover:text-foreground hover:bg-bg-soft"
@@ -290,15 +303,18 @@ function RailItem({
   const dragged = useRef(false);
 
   function handleNav(e: React.MouseEvent) {
-    if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지. shift는 아래에서 "새 인스턴스(듀얼)"로 전용.
+    if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
     e.preventDefault();
     if (dragged.current) {
       dragged.current = false; // 드래그로 이미 열었으면 클릭 무시
       return;
     }
-    useWindowStore
-      .getState()
-      .open("route", { id: item.menuKey, title: item.label, href: item.href });
+    const params = { id: item.menuKey, title: item.label, href: item.href };
+    const store = useWindowStore.getState();
+    // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
+    if (e.shiftKey) store.openNewInstance("route", params);
+    else store.open("route", params);
   }
 
   const fg = active

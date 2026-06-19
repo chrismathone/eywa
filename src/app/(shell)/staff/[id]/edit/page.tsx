@@ -53,6 +53,7 @@ export default async function EditStaffPage({
 
       <StaffForm
         mode="edit"
+        scope={`staff:${id}`}
         assignableRoleOptions={[]}
         jobTitleOptions={operations.jobTitles}
         initialValue={{

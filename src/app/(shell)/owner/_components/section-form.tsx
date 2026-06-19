@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, type ReactNode } from "react";
 import { saveOwnerSection, type OwnerSaveState } from "@/features/owner/server/actions";
 import type { SectionKey } from "@/features/owner/settings-types";
+import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 
 /**
  * 섹션 폼 공통 래퍼 — 편집 상태(payload)를 hidden JSON으로 직렬화해 saveOwnerSection 호출.
@@ -21,9 +22,20 @@ export function SectionForm({
     saveOwnerSection,
     undefined,
   );
+  const formRef = useRef<HTMLFormElement>(null);
+  const { notifySaved } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
+
+  // 저장 성공 확정(nonce) 후 동시편집 신호 발화(in-window — 이동 없음). 연속 저장마다 1회씩.
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      notifySaved();
+    }
+  }, [state, notifySaved]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} ref={formRef} className="space-y-5">
       <input type="hidden" name="section" value={section} />
       <input type="hidden" name="data" value={JSON.stringify(payload)} />
       {children}

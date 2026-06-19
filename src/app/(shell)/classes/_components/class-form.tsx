@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
   type ClassFormState,
 } from "@/features/classes/server/actions";
 import { subjectWeekdayPeriods, type PeriodsConfig } from "@/features/timetable/lib/periods";
+import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { ScheduleGrid } from "./schedule-grid";
 
 // 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
@@ -58,6 +60,7 @@ export function ClassForm({
   classroomOptions,
   subjectOptions,
   periodsConfig,
+  scope,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
@@ -66,10 +69,25 @@ export function ClassForm({
   subjectOptions?: { value: string; label: string }[];
   /** 테넌트 교시설정 → 클릭그리드의 교시→시각. 미전달 시 기본 교시표. */
   periodsConfig?: PeriodsConfig;
+  /** 동시 편집 가드 스코프(예: `class:123`). 수정 모드에서만 — 다른 창 저장 시 경고. */
+  scope?: string;
 }) {
   const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
   const action = mode === "create" ? createClass : updateClass;
   const [state, formAction] = useActionState<ClassFormState, FormData>(action, undefined);
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
+
+  // 저장 성공 확정(nonce) 후: 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      notifySaved();
+      if (state.redirectTo) router.push(state.redirectTo);
+    }
+  }, [state, notifySaved, router]);
 
   // 과목은 교시표(8↔10교시)를 좌우하므로 상태로 들어 그리드와 동기. select는 name=subject로 그대로 제출.
   const [subject, setSubject] = useState(defaults?.subject ?? subjects[0]?.value ?? "math");
@@ -80,7 +98,7 @@ export function ClassForm({
   const fieldErrs = state?.fieldErrors ?? {};
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} ref={formRef} className="space-y-5">
       {defaults?.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
   type StudentFormState,
 } from "@/features/students/server/actions";
 import type { TeacherOption } from "@/features/students/server/queries";
+import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 
 type Mode = "create" | "edit";
 
@@ -82,14 +84,30 @@ export function StudentForm({
   initialValue,
   teachers,
   gradeLevels,
+  scope,
 }: {
   mode: Mode;
   initialValue?: StudentFormValue;
   teachers: TeacherOption[];
   gradeLevels?: string[];
+  /** 동시 편집 가드 스코프(예: `student:123`). 수정 모드에서만 전달 — 다른 창 저장 시 경고. */
+  scope?: string;
 }) {
   const action = mode === "create" ? createStudent : updateStudent;
   const [state, formAction] = useActionState<StudentFormState, FormData>(action, undefined);
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
+
+  // 저장 성공 확정(nonce) 후: 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      notifySaved();
+      if (state.redirectTo) router.push(state.redirectTo);
+    }
+  }, [state, notifySaved, router]);
 
   const v = initialValue ?? {
     name: "",
@@ -129,7 +147,7 @@ export function StudentForm({
   );
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} ref={formRef} className="space-y-5">
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SendToBack, Minus, Square, Copy, X, ArrowLeft } from "lucide-react";
-import { useWindowStore, type Win } from "./window-store";
+import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft } from "lucide-react";
+import { useWindowStore, isDuplicate, instanceLabel, type Win } from "./window-store";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
@@ -43,6 +43,7 @@ export function FloatingWindow({
   const minimize = useWindowStore((s) => s.minimize);
   const toggleMax = useWindowStore((s) => s.toggleMax);
   const focus = useWindowStore((s) => s.focus);
+  const duplicate = useWindowStore((s) => s.duplicate);
   const swapToBackground = useWindowStore((s) => s.swapToBackground);
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const bounds = useWindowStore((s) => s.bounds);
@@ -81,7 +82,8 @@ export function FloatingWindow({
   // 배경으로 보내기: 이 창을 닫고 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남아
   // 하단/상단 배경 탭 스트립에서 다시 꺼낼 수 있다. (router.push로 메인 프레임 이동.)
   function handleSwapToBackground() {
-    if (win.kind !== "route" || !win.params.href) return;
+    // 복제본(#n)은 배경 시스템(라우트↔배경 1:1)에 안 들어간다 — window-only.
+    if (win.kind !== "route" || !win.params.href || isDuplicate(win.id)) return;
     const href = win.params.href;
     runExit(() => {
       router.push(href);
@@ -158,7 +160,7 @@ export function FloatingWindow({
               <ArrowLeft size={14} strokeWidth={2} />
             </button>
           ) : null}
-          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{live?.title ?? win.params.title}</span>
+          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
           {win.params.subtitle ? <span className="text-text-faint min-w-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
           <span className="flex-1" />
 
@@ -169,6 +171,17 @@ export function FloatingWindow({
             onDoubleClick={(e) => e.stopPropagation()}
           >
             {win.kind === "route" && !spot ? (
+              <button
+                type="button"
+                aria-label="창 복제"
+                title="이 창 복제 (같은 화면 새 창)"
+                onClick={() => duplicate(win.id)}
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
+              >
+                <CopyPlus size={14} strokeWidth={2} />
+              </button>
+            ) : null}
+            {win.kind === "route" && !spot && !isDuplicate(win.id) ? (
               <button
                 type="button"
                 aria-label="배경으로 보내기"

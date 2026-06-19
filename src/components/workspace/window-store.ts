@@ -45,8 +45,28 @@ export type Win = {
 };
 
 export const MAX_WINDOWS = 6;
-export function windowId(kind: WindowKind, paramId: string) {
-  return `${kind}:${paramId}`;
+/**
+ * 창 식별 키. primary 인스턴스(instance 없음/0)는 `kind:paramId`(오늘과 동일 — 영속 레이아웃·배경 매핑 보존).
+ * 복제본(instance≥1)만 `kind:paramId#n` 접미사를 단다. 기존 호출부는 전부 무인자라 영향 0.
+ */
+export function windowId(kind: WindowKind, paramId: string, instance?: number) {
+  return instance ? `${kind}:${paramId}#${instance}` : `${kind}:${paramId}`;
+}
+/** 복제본 창인지 — id에 #n 접미사가 있으면 복제(2번째+ 인스턴스). */
+export function isDuplicate(winId: string) {
+  return winId.includes("#");
+}
+/**
+ * 복제 인스턴스 그룹핑용 base 창 id(= `kind:paramId`, # 앞). **instance 번호 스캔에만** 쓰고
+ * params.id로는 절대 쓰지 말 것(params.id는 `students` 류 base 라우트 id라 kind 접두가 없다).
+ */
+export function baseWindowId(winId: string) {
+  return winId.split("#")[0];
+}
+/** 복제본이면 제목에 (2)·(3) 등 인스턴스 번호를 붙여 창 선택 UI(타이틀바·스위처·스포트라이트)에서 구분. */
+export function instanceLabel(winId: string, title: string) {
+  const i = winId.indexOf("#");
+  return i === -1 ? title : `${title} (${Number(winId.slice(i + 1)) + 1})`;
 }
 
 /** 두 사각형이 (반올림 오차 내) 거의 같은지 — 스마트 코너 스냅의 "절반 차지 창" 판정용. */
@@ -137,6 +157,10 @@ type Actions = {
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   /** anchor(뷰포트 좌표)를 주면 그 커서 위치에서 창이 뜬다(없으면 cascade). 링크 클릭이 전달. */
   open: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
+  /** 탭/링크 shift+클릭 — 기존 창을 포커스하지 않고 **새 인스턴스**로 연다(primary 비었으면 primary, 아니면 #n). */
+  openNewInstance: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
+  /** 라우트 창을 같은 화면(현재 URL/제목)으로 한 벌 더 띄운다 — 복제본(#n, window-only). */
+  duplicate: (winId: string) => void;
   /** 라우트를 배경 스택 맨 위(보이는 배경)로 — 이미 있으면 이동, 없으면 추가. 캔버스가 pathname서 동기. */
   setBackground: (params: WindowParams) => void;
   /** 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위로(옛 배경은 스택에 남음). */
@@ -356,10 +380,90 @@ export const useWindowStore = create<State & Actions>()(
         });
       },
 
+      // 탭/링크 shift+클릭 — 기존 창을 포커스(open)하지 않고 항상 새 인스턴스를 연다. primary가 비었으면
+      // primary, 이미 있으면 다음 빈 #n. 반복 shift+클릭 = 듀얼/멀티 창. primary 생성 시에만 배경에서 제거(open과 대칭).
+      openNewInstance: (kind, params, anchor) =>
+        set((s) => {
+          const primary = windowId(kind, params.id);
+          let targetId = primary;
+          if (s.windows[primary]) {
+            let n = 1;
+            while (s.windows[`${primary}#${n}`]) n += 1;
+            targetId = `${primary}#${n}`;
+          }
+          let order = s.order;
+          const windows = { ...s.windows };
+          while (order.length >= MAX_WINDOWS) {
+            const victim = order.find((id) => id !== s.focusedId && id !== targetId) ?? order[0];
+            delete windows[victim];
+            order = order.filter((id) => id !== victim);
+          }
+          const size = kind === "route" ? routeWindowSize(params.id) : undefined;
+          const rect = anchor
+            ? rectAtPoint(anchor.x - s.origin.left, anchor.y - s.origin.top, s.bounds, size)
+            : cascadeNext(order.length, s.bounds, size);
+          windows[targetId] = { id: targetId, kind, params, rect, minimized: false, maximized: false };
+          // primary(첫 인스턴스)를 새로 만들 때만 배경 스택에서 제거(open과 대칭). #n 복제본은 배경과 무관.
+          const isPrimary = targetId === primary;
+          const removedActive =
+            isPrimary && kind === "route" && s.background.length > 1 && s.activeBackgroundId === params.id;
+          const bg =
+            isPrimary && kind === "route" && s.background.length > 1
+              ? s.background.filter((b) => b.id !== params.id)
+              : s.background;
+          const activeBackgroundId = removedActive ? (bg[bg.length - 1]?.id ?? "dashboard") : s.activeBackgroundId;
+          return {
+            windows,
+            order: [...order, targetId],
+            focusedId: targetId,
+            snapAssist: null,
+            background: bg,
+            activeBackgroundId,
+          };
+        }),
+
+      // 라우트 창 복제 — 같은 화면(현재 URL·제목)으로 한 벌 더. primary id는 손대지 않고 #n 접미사 복제본 생성.
+      // params.id(base 라우트)는 원본 보존(크기·아이콘 매핑), 화면은 nav 현재 URL·live 제목을 따라간다
+      // (win.params.href는 최초 URL이라 상세→수정 드릴인 후 복제 시 최초 상세가 열리는 버그 회피).
+      duplicate: (winId) =>
+        set((s) => {
+          const w = s.windows[winId];
+          if (!w || w.kind !== "route") return s;
+          const base = baseWindowId(winId); // "route:students" — instance 스캔 전용(params.id 아님)
+          let n = 1;
+          while (s.windows[`${base}#${n}`]) n += 1; // 닫힌 번호 재사용
+          const newId = `${base}#${n}`;
+          const stack = s.nav[winId] ?? [];
+          const currentHref = stack[stack.length - 1] ?? w.params.href;
+          const currentTitle = s.live[winId]?.title ?? w.params.title;
+          let order = s.order;
+          const windows = { ...s.windows };
+          // 자리 확보 시 원본(winId)·포커스·새 창은 축출 대상에서 제외(원본 보호).
+          while (order.length >= MAX_WINDOWS) {
+            const victim =
+              order.find((id) => id !== winId && id !== s.focusedId && id !== newId) ??
+              order.find((id) => id !== winId) ??
+              order[0];
+            delete windows[victim];
+            order = order.filter((id) => id !== victim);
+          }
+          windows[newId] = {
+            id: newId,
+            kind: "route",
+            params: { ...w.params, href: currentHref, title: currentTitle },
+            rect: cascadeNext(order.length, s.bounds, routeWindowSize(w.params.id)),
+            minimized: false,
+            maximized: false,
+          };
+          return { windows, order: [...order, newId], focusedId: newId, snapAssist: null };
+        }),
+
       // 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남음.
       // (호출부가 router.push로 메인 프레임을 이 라우트로 이동.) focusedId=null → 배경이 메인 뷰.
+      // ⚠️ 복제본(#n)은 배경 시스템(라우트↔배경 1:1)에 안 들어간다 — window-only.
       swapToBackground: (winId) =>
         set((s) => {
+          if (isDuplicate(winId)) return s;
           const w = s.windows[winId];
           if (!w) return s;
           const windows = { ...s.windows };
@@ -413,7 +517,13 @@ export const useWindowStore = create<State & Actions>()(
           const bg = s.background.find((b) => b.id === bgId);
           if (!bg) return s;
           const focused = s.focusedId ? s.windows[s.focusedId] : null;
-          const sendFocused = !!(focused && focused.kind === "route" && focused.params.href);
+          // 복제본(#n)은 배경으로 못 보냄(window-only) → sendFocused 제외(선택 배경만 창으로 꺼냄).
+          const sendFocused = !!(
+            focused &&
+            focused.kind === "route" &&
+            focused.params.href &&
+            !isDuplicate(focused.id)
+          );
           if (!sendFocused && s.background.length <= 1) return s; // 꺼낼 수 없음(배경 1개뿐)
 
           const windows = { ...s.windows };

@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/features/staff/server/actions";
 import type { SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 
 type Mode = "create" | "edit";
 
@@ -42,14 +44,30 @@ export function StaffForm({
   initialValue,
   assignableRoleOptions,
   jobTitleOptions = [],
+  scope,
 }: {
   mode: Mode;
   initialValue?: StaffFormValue;
   assignableRoleOptions: SystemRole[];
   jobTitleOptions?: string[];
+  /** 동시 편집 가드 스코프(예: `staff:123`). 수정 모드에서만 — 다른 창 저장 시 경고. */
+  scope?: string;
 }) {
   const action = mode === "create" ? createStaff : updateStaff;
   const [state, formAction] = useActionState<StaffFormState, FormData>(action, undefined);
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
+
+  // 저장 성공 확정(nonce) 후: 동시편집 신호 발화 → 직원관리로 이동(서버 redirect 대체, B-2).
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      notifySaved();
+      if (state.redirectTo) router.push(state.redirectTo);
+    }
+  }, [state, notifySaved, router]);
 
   const v: StaffFormValue = initialValue ?? {
     displayName: "",
@@ -66,7 +84,7 @@ export function StaffForm({
   const errors = state?.fieldErrors ?? {};
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} ref={formRef} className="space-y-5">
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}

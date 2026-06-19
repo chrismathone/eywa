@@ -1,7 +1,7 @@
 "use client";
 
 import { Layers } from "lucide-react";
-import { useWindowStore } from "./window-store";
+import { useWindowStore, isDuplicate } from "./window-store";
 import { backgroundDropZone } from "./window-geometry";
 
 /**
@@ -14,8 +14,9 @@ export function BackgroundDropZone() {
   const dragNearTop = useWindowStore((s) => s.dragNearTop);
   const dragBackground = useWindowStore((s) => s.dragBackground);
   const bounds = useWindowStore((s) => s.bounds);
+  // 복제본(#n)은 배경 시스템 비참여 → 드래그 중에도 배경 칩 미노출(window-only).
   const isRoute = useWindowStore((s) =>
-    s.draggingId ? s.windows[s.draggingId]?.kind === "route" : false,
+    s.draggingId ? s.windows[s.draggingId]?.kind === "route" && !isDuplicate(s.draggingId) : false,
   );
 
   if (!draggingId || !isRoute || !dragNearTop) return null;

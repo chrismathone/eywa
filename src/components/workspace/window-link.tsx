@@ -48,15 +48,18 @@ export function WindowLink({
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
   function onClick(e: MouseEvent<HTMLAnchorElement>) {
-    if (!isDesktop || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지. shift는 아래에서 "새 인스턴스(듀얼)"로 전용.
+    if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
     const resolved = windowIdForHref(href);
     if (!resolved) return; // 메뉴 라우트가 아니면 기본 이동
     e.preventDefault();
     // 마우스 클릭(detail>0)이면 커서 위치에서 팝업, 키보드 활성(detail=0, clientX/Y 0)이면 cascade.
     const anchor = e.detail > 0 ? { x: e.clientX, y: e.clientY } : undefined;
-    useWindowStore
-      .getState()
-      .open("route", { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href }, anchor);
+    const params = { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href };
+    const store = useWindowStore.getState();
+    // shift+클릭 = 같은 화면을 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
+    if (e.shiftKey) store.openNewInstance("route", params, anchor);
+    else store.open("route", params, anchor);
   }
   // 임베드 iframe 내부에선 onClick이 창을 안 열고 일반 네비게이션으로 떨어진다(isDesktop=false).
   // 그 드릴인이 embed=1을 잃으면 하위 페이지가 풀 셸로 떠 사이드바가 이중 노출되므로, iframe 안의

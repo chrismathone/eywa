@@ -32,6 +32,7 @@ export default async function EditStudentPage({
 
       <StudentForm
         mode="edit"
+        scope={`student:${id}`}
         teachers={teachers}
         gradeLevels={operations.gradeLevels}
         initialValue={{

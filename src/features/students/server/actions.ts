@@ -11,7 +11,9 @@ import {
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
 
-export type StudentFormState = { error?: string; fieldErrors?: Record<string, string> } | undefined;
+export type StudentFormState =
+  | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
+  | undefined;
 
 const STATUSES = ["prospect", "consulted", "enrolled", "on_hold", "withdrawn"] as const;
 type StudentStatus = (typeof STATUSES)[number];
@@ -239,7 +241,8 @@ export async function updateStudent(
 
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
-  redirect(`/students/${id}`);
+  // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2). nonce로 연속 저장 구분.
+  return { ok: true, redirectTo: `/students/${id}`, nonce: Date.now() };
 }
 
 // ────────────────────── 상태 전환 모달 (퇴원/휴원/수강종료/복구) ──────────────────────
