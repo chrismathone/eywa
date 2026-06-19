@@ -9,7 +9,7 @@ import {
   layoutSlots,
   rectAtPoint,
   resizeRect,
-  ROUTE_WINDOW_SIZE,
+  routeWindowSize,
   snapTarget,
   templateSlots,
   type Bounds,
@@ -323,7 +323,7 @@ export const useWindowStore = create<State & Actions>()(
           delete windows[victim];
           order = order.filter((wid) => wid !== victim);
         }
-        const size = kind === "route" ? ROUTE_WINDOW_SIZE[params.id] : undefined;
+        const size = kind === "route" ? routeWindowSize(params.id) : undefined;
         // anchor(클릭 지점) 있으면 커서 위치에서, 없으면 cascade. 스테이지 로컬 = 뷰포트 − origin.
         const rect = anchor
           ? rectAtPoint(anchor.x - s.origin.left, anchor.y - s.origin.top, s.bounds, size)
@@ -398,7 +398,7 @@ export const useWindowStore = create<State & Actions>()(
             id: winId,
             kind: "route",
             params,
-            rect: cascadeNext(order.length, s.bounds, ROUTE_WINDOW_SIZE[params.id]),
+            rect: cascadeNext(order.length, s.bounds, routeWindowSize(params.id)),
             minimized: false,
             maximized: false,
           };
@@ -447,7 +447,7 @@ export const useWindowStore = create<State & Actions>()(
               id: winId,
               kind: "route",
               params: bg,
-              rect: cascadeNext(order.length, s.bounds, ROUTE_WINDOW_SIZE[bg.id]),
+              rect: cascadeNext(order.length, s.bounds, routeWindowSize(bg.id)),
               minimized: false,
               maximized: false,
             };

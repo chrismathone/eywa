@@ -39,6 +39,7 @@ export const DEFAULT_WINDOW = { w: 480, h: 560 };
  */
 export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   timetable: { w: 1040, h: 680 }, // 강사×요일 표라 폭이 넓음
+  classes: { w: 1100, h: 700 }, // 8열 표 + 필터바(과목·강사·요일·정렬·검색) — 넓으면 한 줄
   billing: { w: 760, h: 620 }, // 수납/교재/지출 책갈피 + 다열 표라 폭이 넓음
   // 학생×30~31일 매트릭스. 폭이 좁으면 이름 칼럼이 글자당 줄바꿈돼 행이 2배로 커지고(세로 스크롤
   // 유발), 1280이면 30·31일 달 모두 이름이 한 줄로 펴져 콘텐츠가 ~488px로 줄어든다(세로 스크롤 제거).
@@ -53,7 +54,24 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "enrollment/new": { w: 820, h: 700 },
   "consultations/new": { w: 700, h: 660 },
   "meetings/new": { w: 600, h: 640 },
+  "billing/expenses": { w: 720, h: 860 }, // 지출결의서 A4 문서(세로형) — 폭보다 높이가 필요
 };
+
+/**
+ * 라우트 창 id → 기본 크기. 정확 매칭 후 **세그먼트 경로 longest-prefix**로 폴백 →
+ * 상세 라우트(예: "billing/expenses/<uuid>", "exams/123")가 부모 등록 크기를 상속한다.
+ * 등록된 다중 세그먼트 키(staff/payroll·…/new)는 마지막 세그먼트가 정적이라 상세 id가 오인 매칭하지 않음.
+ * 없으면 undefined(→ 호출부가 DEFAULT_WINDOW).
+ */
+export function routeWindowSize(id: string): { w: number; h: number } | undefined {
+  if (ROUTE_WINDOW_SIZE[id]) return ROUTE_WINDOW_SIZE[id];
+  const seg = id.split("/");
+  for (let i = seg.length - 1; i >= 1; i--) {
+    const prefix = seg.slice(0, i).join("/");
+    if (ROUTE_WINDOW_SIZE[prefix]) return ROUTE_WINDOW_SIZE[prefix];
+  }
+  return undefined;
+}
 
 /**
  * 커서(스테이지 로컬 sx,sy) 위치에서 새 창이 뜨도록 배치 — 타이틀바가 커서 바로 아래(약간 좌상)에

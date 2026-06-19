@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Loader2, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, Loader2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createExpense,
@@ -10,13 +10,11 @@ import {
   type ExpenseState,
 } from "@/features/billing/server/expense-actions";
 import type { ExpenseRow } from "@/features/billing/server/expense-queries";
+import { ExpenseLineItems, lineTotal, type ExpenseItemRow } from "./expense-line-items";
 
 const CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"];
-const PAYMENTS = ["카드", "현금", "계좌이체", "법인카드"];
+const PAYMENTS = ["카드결제", "현금", "계좌이체", "법인카드"];
 const KRW = new Intl.NumberFormat("ko-KR");
-
-type Row = { description: string; quantity: number; unitPrice: number; vat: boolean };
-const lineTotal = (r: Row) => Math.round(r.quantity * r.unitPrice * (r.vat ? 1.1 : 1));
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -41,31 +39,39 @@ export function ExpenseDialog({
     undefined,
   );
 
-  const [rows, setRows] = useState<Row[]>(() =>
+  const [rows, setRows] = useState<ExpenseItemRow[]>(() =>
     expense?.lineItems?.length
       ? expense.lineItems.map((l) => ({
+          purpose: l.purpose ?? "",
+          vendor: l.vendor ?? "",
           description: l.description,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
           vat: l.vat,
         }))
-      : [{ description: expense?.title ?? "", quantity: 1, unitPrice: expense?.amount ?? 0, vat: false }],
+      : [
+          {
+            purpose: "",
+            vendor: expense?.vendor ?? "",
+            description: expense?.title ?? "",
+            quantity: 1,
+            unitPrice: expense?.amount ?? 0,
+            vat: false,
+          },
+        ],
   );
-  const amount = rows.reduce((s, r) => s + lineTotal(r), 0);
+  // amount와 line_items는 동일한 "유효 행" 집합에서 도출(불일치 방지).
+  const filteredRows = rows.filter(
+    (r) => r.purpose.trim() || r.vendor.trim() || r.description.trim() || r.unitPrice > 0,
+  );
+  const amount = filteredRows.reduce((s, r) => s + lineTotal(r), 0);
 
   // 성공(ok:true) 시 닫기
   if (state?.ok) {
     queueMicrotask(() => onClose(true));
   }
 
-  const setRow = (i: number, patch: Partial<Row>) =>
-    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-
-  const lineItemsJson = JSON.stringify(
-    rows
-      .filter((r) => r.description.trim() || r.unitPrice > 0)
-      .map((r) => ({ ...r, total: lineTotal(r) })),
-  );
+  const lineItemsJson = JSON.stringify(filteredRows.map((r) => ({ ...r, total: lineTotal(r) })));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -74,7 +80,7 @@ export function ExpenseDialog({
           <div>
             <p className="eyebrow">{editing ? "지출 수정" : "지출 등록"}</p>
             <h2 className="text-foreground mt-1 text-lg font-semibold">
-              {editing ? expense.title : "새 지출"}
+              {editing ? expense.title : "새 지출결의서"}
             </h2>
           </div>
           <button type="button" onClick={() => onClose(false)} className="text-text-dim hover:text-foreground" aria-label="닫기">
@@ -87,19 +93,24 @@ export function ExpenseDialog({
           <input type="hidden" name="lineItems" value={lineItemsJson} />
           <input type="hidden" name="amount" value={amount} />
 
-          <Field label="항목명" error={state?.fieldErrors?.title}>
-            <input name="title" defaultValue={expense?.title ?? ""} className={inputCls} placeholder="예: 6월 운영비 정산" />
+          <Field label="제목" error={state?.fieldErrors?.title}>
+            <input name="title" defaultValue={expense?.title ?? ""} className={inputCls} placeholder="예: [고등관]타운보드 광고" />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="분류">
-              <select name="category" defaultValue={expense?.category ?? "운영비"} className={inputCls}>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+            <Field label="작성자">
+              <input name="author" defaultValue={expense?.author ?? ""} className={inputCls} placeholder="성명" />
             </Field>
-            <Field label="지출일" error={state?.fieldErrors?.expenseDate}>
+            <Field label="직위">
+              <input name="position" defaultValue={expense?.position ?? ""} className={inputCls} placeholder="예: 실장" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="부서명">
+              <input name="department" defaultValue={expense?.department ?? ""} className={inputCls} placeholder="예: 운영팀" />
+            </Field>
+            <Field label="지출일자" error={state?.fieldErrors?.expenseDate}>
               <input
                 name="expenseDate"
                 type="date"
@@ -110,10 +121,14 @@ export function ExpenseDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="거래처">
-              <input name="vendor" defaultValue={expense?.vendor ?? ""} className={inputCls} placeholder="선택" />
+            <Field label="분류">
+              <select name="category" defaultValue={expense?.category ?? "운영비"} className={inputCls}>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </Field>
-            <Field label="결제수단">
+            <Field label="정산방법">
               <select name="paymentMethod" defaultValue={expense?.paymentMethod ?? ""} className={inputCls}>
                 <option value="">선택</option>
                 {PAYMENTS.map((p) => (
@@ -123,64 +138,16 @@ export function ExpenseDialog({
             </Field>
           </div>
 
-          {/* 항목(line items) */}
-          <div className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">항목</span>
-            <div className="space-y-1.5">
-              {rows.map((r, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <input
-                    value={r.description}
-                    onChange={(e) => setRow(i, { description: e.target.value })}
-                    placeholder="내역"
-                    className={`${inputCls} flex-1`}
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    value={r.quantity}
-                    onChange={(e) => setRow(i, { quantity: Number(e.target.value) || 0 })}
-                    className={`${inputCls} num w-14 text-right`}
-                    aria-label="수량"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="1000"
-                    value={r.unitPrice}
-                    onChange={(e) => setRow(i, { unitPrice: Number(e.target.value) || 0 })}
-                    className={`${inputCls} num w-24 text-right`}
-                    aria-label="단가"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setRow(i, { vat: !r.vat })}
-                    className={`shrink-0 rounded-sm border px-1.5 py-1 text-[11px] transition ${
-                      r.vat ? "border-primary bg-primary-soft text-primary" : "border-line text-text-faint"
-                    }`}
-                    title="부가세 10%"
-                  >
-                    VAT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((_, idx) => idx !== i) : rs))}
-                    className="text-text-faint hover:text-danger shrink-0"
-                    aria-label="행 삭제"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setRows((rs) => [...rs, { description: "", quantity: 1, unitPrice: 0, vat: false }])}
-              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-xs transition"
-            >
-              <Plus className="size-3" /> 항목 추가
-            </button>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="은행명 / 카드명">
+              <input name="bankName" defaultValue={expense?.bankName ?? ""} className={inputCls} placeholder="예: 대구은행" />
+            </Field>
+            <Field label="계좌번호 / 카드번호">
+              <input name="accountNumber" defaultValue={expense?.accountNumber ?? ""} className={inputCls} placeholder="예: 504-10-196074-7" />
+            </Field>
           </div>
+
+          <ExpenseLineItems rows={rows} onChange={setRows} />
 
           <div className="border-line bg-bg-soft/40 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
             <span className="text-text-dim">합계</span>
@@ -188,8 +155,8 @@ export function ExpenseDialog({
           </div>
           {state?.fieldErrors?.amount ? <p className="text-danger text-xs">{state.fieldErrors.amount}</p> : null}
 
-          <Field label="메모">
-            <textarea name="memo" defaultValue={expense?.memo ?? ""} rows={2} className={`${inputCls} resize-y`} placeholder="선택" />
+          <Field label="비고">
+            <textarea name="memo" defaultValue={expense?.memo ?? ""} rows={2} className={`${inputCls} resize-y`} placeholder="예: 예금주 ㈜유엔아이미디어벤처" />
           </Field>
 
           {state?.error ? (
