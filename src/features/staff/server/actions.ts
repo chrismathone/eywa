@@ -244,5 +244,6 @@ export async function deactivateStaff(
   if (error) return { error: error.message };
 
   revalidatePath("/staff");
+  revalidatePath(`/staff/${id}`);
   return undefined;
 }

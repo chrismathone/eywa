@@ -2,11 +2,11 @@
 
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { KeyRound, Loader2, Mail, ShieldCheck, Trash2, X } from "lucide-react";
+import { KeyRound, Loader2, Mail, ShieldCheck, Trash2, UserCheck, UserMinus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
-import { changeStaffRole } from "@/features/staff/server/actions";
+import { changeStaffRole, deactivateStaff } from "@/features/staff/server/actions";
 import {
   changeStaffEmail,
   deleteStaff,
@@ -214,6 +214,39 @@ function RoleDialog({
   );
 }
 
+/** 퇴사/재직복구 — 입력 없는 상태 토글이라 모달 대신 confirm 인라인(end-enrollment 패턴). 성공 시 revalidatePath로 갱신. */
+function DeactivateButton({
+  staffId,
+  displayName,
+  currentStatus,
+}: {
+  staffId: string;
+  displayName: string;
+  currentStatus: "active" | "inactive" | "pending";
+}) {
+  const [state, action] = useActionState(deactivateStaff, undefined);
+  const isInactive = currentStatus === "inactive";
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        const msg = isInactive
+          ? `${displayName} 직원을 재직 복구할까요?`
+          : `${displayName} 직원을 퇴사 처리할까요? 로그인·목록에서 비활성됩니다 (기록은 보존).`;
+        if (!confirm(msg)) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="id" value={staffId} />
+      <input type="hidden" name="next" value={isInactive ? "active" : "inactive"} />
+      <Button type="submit" variant="outline" size="sm">
+        {isInactive ? <UserCheck className="size-3.5" /> : <UserMinus className="size-3.5" />}
+        {isInactive ? "재직 복구" : "퇴사 처리"}
+      </Button>
+      {state?.error ? <span className="text-chart-4 ml-2 text-xs">{state.error}</span> : null}
+    </form>
+  );
+}
+
 function DeleteDialog({
   staffId,
   displayName,
@@ -247,12 +280,14 @@ export function AccountActions({
   displayName,
   currentEmail,
   currentRole,
+  currentStatus,
   roleOptions,
 }: {
   staffId: string;
   displayName: string;
   currentEmail: string;
   currentRole: SystemRole;
+  currentStatus: "active" | "inactive" | "pending";
   roleOptions: SystemRole[];
 }) {
   const [open, setOpen] = useState<"email" | "password" | "role" | "delete" | null>(null);
@@ -278,6 +313,7 @@ export function AccountActions({
           <KeyRound className="size-3.5" />
           비밀번호 재설정
         </Button>
+        <DeactivateButton staffId={staffId} displayName={displayName} currentStatus={currentStatus} />
         <Button variant="destructive" size="sm" onClick={() => setOpen("delete")}>
           <Trash2 className="size-3.5" />
           직원 삭제

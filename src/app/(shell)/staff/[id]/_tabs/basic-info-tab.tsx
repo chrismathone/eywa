@@ -81,6 +81,7 @@ export async function BasicInfoTab({
           displayName={staff.displayName}
           currentEmail={staff.email}
           currentRole={staff.systemRole}
+          currentStatus={staff.status}
           roleOptions={roleOptions}
         />
       ) : null}
