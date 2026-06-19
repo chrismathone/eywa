@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll } from "./queries";
 import { logAction } from "@/features/audit/server/log";
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
 
 export type SavePayrollState = { error?: string; recordId?: string } | undefined;
 
@@ -15,6 +16,7 @@ export async function upsertPayroll(
 ): Promise<SavePayrollState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -70,6 +72,7 @@ export async function markPayrollPaid(
 ): Promise<MarkPaidState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
@@ -94,6 +97,7 @@ export async function autoComputePayroll(
 ): Promise<SavePayrollState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -139,6 +143,7 @@ export async function requestLeave(
 ): Promise<LeaveActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!canManageStaff(user.systemRole)) return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const leaveType = String(formData.get("leaveType") ?? "").trim();
@@ -174,6 +179,8 @@ export async function approveLeave(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
+  if (!canManageStaff(user.systemRole)) return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
   if (!id) return { error: "휴가 ID가 누락되었습니다" };
@@ -196,6 +203,8 @@ export async function deleteLeave(
 ): Promise<LeaveActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+
+  if (!canManageStaff(user.systemRole)) return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
