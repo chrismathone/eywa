@@ -804,6 +804,44 @@ export async function getStudentAttendanceCalendar(
   });
 }
 
+// ───────── 출결 탭(ijw AttendanceTab 이식) — 월 달력/리스트 두 뷰용 전건 ─────────
+export type StudentAttendanceFull = {
+  date: string; // YYYY-MM-DD
+  status: string; // present|absent|late|excused|makeup|early_leave
+  className: string;
+  classId: string;
+  note: string | null;
+};
+
+/** 학생 전 출결 기록(월 네비·달력/리스트 뷰·반 필터를 클라에서 처리하도록 전건 반환). */
+export async function getStudentAttendanceFull(studentId: string): Promise<StudentAttendanceFull[]> {
+  const supabase = await createClient();
+  const data = await fetchAllPaged<{
+    session_date: string;
+    status: string;
+    note: string | null;
+    class_id: string;
+    class: { class_name?: string } | { class_name?: string }[] | null;
+  }>((from, to) =>
+    supabase
+      .from("attendance_records")
+      .select(`session_date, status, note, class_id, class:class_id ( class_name )`)
+      .eq("student_id", studentId)
+      .order("session_date", { ascending: false })
+      .range(from, to),
+  );
+  return data.map((r) => {
+    const c = (Array.isArray(r.class) ? r.class[0] : r.class) as { class_name?: string } | undefined;
+    return {
+      date: r.session_date,
+      status: r.status,
+      className: c?.class_name ?? "?",
+      classId: r.class_id,
+      note: r.note,
+    } satisfies StudentAttendanceFull;
+  });
+}
+
 // 등록상담 → 학생 timeline ↔ 학생상담 + 메모 + enrollment 변경 통합
 export type TimelineEvent = {
   date: string; // ISO date
