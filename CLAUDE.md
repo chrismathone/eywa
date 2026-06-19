@@ -166,6 +166,30 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 역할/권한 override 배선 전수 감사 (2026-06-19) — ✅ 배선 완전, 보안 갭 2건
+사용자 요청으로 owner "역할·권한"(Phase 4) override가 **실제 접근제어에 연결됐는지(write-only-orphan 아닌지)** 전수 검수
+(다중 에이전트 + 직접 grep). **결론: 배선 완전 — 권한을 바꾸면 모든 소비처에서 동작이 실제로 바뀐다. orphan 0건.**
+- **단일 진입점**: 하드코딩 `MENU_ACCESS`(기본) + `tenant_settings.data.permissions.overrides`(sparse) → `resolveMatrix()` →
+  서버는 `getPermMatrix()`(React cache, [perm-matrix.ts](src/lib/auth/perm-matrix.ts)), 클라는 layout이 `resolveMatrix`로 prop 주입.
+- **소비처 전수(전부 tenant-aware, 매트릭스 없는 bare `canAccess`/`accessLevel` 직접호출 = 0건)**:
+  · 페이지 ~60개 = `requireAccess`(메뉴) · export/api 라우트 = `apiAccess`/`canAccessTenant`
+  · 기능 액션(billing/exams/meetings/consultations/enrollment/kiosk/search) = `accessLevelTenant`/`canAccessTenant`
+  · UI(사이드바·커맨드팰릿·모바일내비) = layout `permMatrix` prop → `canAccess(role,menu,permMatrix)`
+  · (bare `canAccess`는 `super-admin.ts`(권한 직교)와 테스트뿐 — 정상)
+- **쓰기·가드레일**: `saveOwnerSection` master 전용 게이트 + Zod `permissionsSchema.superRefine` ↔ 적용단 `isPermissionLocked`
+  **이중 방어**(role-locked 메뉴·student 컬럼·master 자기잠금 금지). `resolveSettings` deep-merge가 sparse 배열 보존.
+- **⚠️ 보안 갭 2건(후속 — 현재 데모 무방하나 기록)**:
+  1. **자기상승(DB레벨 미가드)**: `tenant_settings` RLS가 `for all to authenticated using(tenant_id=auth_tenant_id())`라
+     **테넌트 내 임의 인증 사용자가 직접 API로 UPDATE 가능** — permission 쓰기 제한이 **앱(master 게이트)에만** 있고 DB
+     트리거 없음(0026a users-guard의 tenant_settings 판 부재). 비-master가 직접 API로 `owner:full` 등 자기부여 가능.
+     **후속: tenant_settings 쓰기를 master로 제한하는 RLS 트리거/정책**(HANDOFF §5).
+  2. **fail-open**: `getPermMatrix`가 `getTenantSettings` 실패 시 하드코딩 기본으로 폴백 → revoke override 일시 무효(로깅만,
+     차단 안 함). 의도적 트레이드오프(fail-closed=락아웃 위험)지만 약점. 갭 #1 트리거와 함께 다룰 것.
+
+> ⚠️ **권한/접근제어를 건드리는 새 코드는 반드시 `requireAccess`/`apiAccess`/`accessLevelTenant`/`canAccessTenant`(tenant-aware)로
+> 게이트**할 것 — 매트릭스 인자 없는 `canAccess(role,menu)`/`accessLevel`은 override를 무시한다(위 orphan 0건을 깨지 말 것).
+> 그리고 이런 중요한 배선은 **구현할 때마다 이 CLAUDE.md에 소비처·갭을 기록**한다(사용자 지침).
+
 ### 수강료 계산기 전면 재구현 — 신입생 상담 견적 도구 + 환불규정 + 공휴일 정밀화 (2026-06-19)
 사용자 지적: 계산기의 "청구서로 저장"이 **재원생 + invoices 테이블**에 묶여 엉뚱했고(신입생 상담 견적 도구여야 함),
 공휴일 이름이 전부 "공휴일"로 떴으며, 청구서에 환불규정이 없었다. ijw 계산기를 충실 재구현.
