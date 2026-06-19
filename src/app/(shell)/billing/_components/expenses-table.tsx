@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Copy, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { ExpenseDialog } from "./expense-dialog";
+import { ExpenseReceiptsModal } from "./expense-receipts-modal";
 import {
   deleteExpense,
   duplicateExpense,
@@ -36,6 +37,7 @@ const TOGGLE_ROLES: { role: Exclude<ApprovalRole, "author">; label: string }[] =
 
 export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
   const [dialog, setDialog] = useState<{ expense: ExpenseRow | null } | null>(null);
+  const [receiptsFor, setReceiptsFor] = useState<ExpenseRow | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -83,7 +85,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
         </div>
       ) : (
         <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
-          <table className="w-full min-w-[920px] text-sm">
+          <table className="w-full min-w-[1000px] text-sm">
             <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-3 py-2 text-left">일자</th>
@@ -92,6 +94,7 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
                 <th className="micro px-3 py-2 text-left">제목</th>
                 <th className="micro px-3 py-2 text-left">분류</th>
                 <th className="micro px-3 py-2 text-right">총액</th>
+                <th className="micro px-2 py-2 text-center">증빙</th>
                 <th className="micro px-2 py-2 text-center">작성</th>
                 <th className="micro px-2 py-2 text-center">원장</th>
                 <th className="micro px-2 py-2 text-center">대표</th>
@@ -122,6 +125,22 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
                       <Pill color={CAT_COLOR[r.category] ?? "neutral"}>{r.category}</Pill>
                     </td>
                     <td className="num text-danger px-3 py-2 text-right text-xs font-medium whitespace-nowrap">{won(r.amount)}</td>
+                    {/* 증빙 — 유형 + 첨부 모달 */}
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setReceiptsFor(r)}
+                        className="text-text-faint hover:text-foreground focus-visible:ring-primary/50 inline-flex max-w-[88px] items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] focus:outline-none focus-visible:ring-1"
+                        title={`증빙자료${r.receiptType ? ` · ${r.receiptType}` : ""}`}
+                        aria-label={`${r.title} 증빙자료 ${r.receiptUrls.length > 0 ? `${r.receiptUrls.length}건` : "없음"}`}
+                      >
+                        <Paperclip className={`size-3.5 shrink-0 ${r.receiptUrls.length > 0 ? "text-blue" : ""}`} />
+                        {r.receiptUrls.length > 0 ? (
+                          <span className="text-blue num shrink-0">{r.receiptUrls.length}</span>
+                        ) : null}
+                        {r.receiptType ? <span className="text-text-dim line-clamp-1">{r.receiptType}</span> : null}
+                      </button>
+                    </td>
                     {/* 작성 — 정적 표시 */}
                     <td className="px-2 py-2 text-center">
                       <StageMark checked={r.approvalChecks.author?.checked ?? false} />
@@ -186,6 +205,10 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
 
       {dialog ? (
         <ExpenseDialog expense={dialog.expense} onClose={() => setDialog(null)} />
+      ) : null}
+
+      {receiptsFor ? (
+        <ExpenseReceiptsModal expense={receiptsFor} onClose={() => setReceiptsFor(null)} />
       ) : null}
     </>
   );

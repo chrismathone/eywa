@@ -179,6 +179,16 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
                 <td className={`${cell} num`}>{expense.accountNumber ?? "—"}</td>
               </tr>
             ) : null}
+            {expense.receiptType || expense.receiptUrls.length > 0 ? (
+              <tr>
+                <td className={headCell}>증빙자료</td>
+                <td className={cell}>{expense.receiptType ?? "—"}</td>
+                <td className={headCell}>첨부</td>
+                <td className={`${cell} num`}>
+                  {expense.receiptUrls.length > 0 ? `${expense.receiptUrls.length}건` : "—"}
+                </td>
+              </tr>
+            ) : null}
             {expense.memo ? (
               <tr>
                 <td className={headCell}>비고</td>

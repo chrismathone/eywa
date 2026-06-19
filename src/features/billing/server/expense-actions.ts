@@ -2,8 +2,54 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeApprovalChecks } from "./expense-queries";
+
+const RECEIPTS_BUCKET = "expense-receipts";
+const RECEIPT_TYPES = new Set([
+  "영수증",
+  "세금계산서",
+  "견적서",
+  "계산서",
+  "카드전표",
+  "현금영수증",
+  "기타",
+]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SAFE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/;
+
+// 증빙 파일 경로가 "이 테넌트 + (선택)이 지출"의 단일 객체키인지 검증 — {tenant}/{expenseId}/{file} 3세그먼트만.
+// admin(서비스롤)으로 signed URL을 발급/삭제하므로 prefix만 보면 다른 테넌트 객체를 노출할 수 있어 엄격히 검사.
+function isTenantReceiptPath(path: string, tenantId: string, expenseId?: string): boolean {
+  const parts = path.split("/");
+  if (parts.length !== 3) return false;
+  const [t, eid, file] = parts;
+  if (t !== tenantId || !UUID_RE.test(eid) || !SAFE_FILE_RE.test(file)) return false;
+  return expenseId ? eid === expenseId : true;
+}
+
+type Receipt = { path: string; name: string };
+function parseReceipts(raw: unknown): Receipt[] {
+  let arr: unknown = raw;
+  if (typeof arr === "string") {
+    try {
+      arr = JSON.parse(arr);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((r) => {
+      const o = (r ?? {}) as Record<string, unknown>;
+      return {
+        path: typeof o.path === "string" ? o.path : "",
+        name: typeof o.name === "string" ? o.name : "",
+      };
+    })
+    .filter((r) => r.path);
+}
 
 // 지출(expenses) CRUD — invoices의 updateInvoicePayment 골격을 그대로 본뜸
 // (getCurrentUser 가드 → FormData 파싱·검증 → supabase(RLS) → revalidatePath). tenant_id는
@@ -137,6 +183,15 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
   if (!id) return { error: "지출 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 첨부 증빙 파일도 함께 정리(고아 객체 방지) — RLS로 같은 테넌트 행만 읽힌다.
+  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
+  const paths = parseReceipts(row?.receipt_urls)
+    .map((r) => r.path)
+    .filter((p) => isTenantReceiptPath(p, user.tenantId, id));
+  if (paths.length > 0) {
+    await createAdminClient().storage.from(RECEIPTS_BUCKET).remove(paths);
+  }
+
   const { error } = await supabase.from("expenses").delete().eq("id", id);
   if (error) return { error: error.message };
 
@@ -224,4 +279,118 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
 
   revalidatePath("/billing");
   return { ok: true };
+}
+
+// ── 증빙(증빙유형 + 첨부파일) ──────────────────────────────────────────────
+// 증빙 유형 설정(영수증/세금계산서 등). 빈 값이면 해제(null).
+export async function setExpenseReceiptType(
+  _prev: ExpenseState,
+  formData: FormData,
+): Promise<ExpenseState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "지출 ID가 누락되었습니다" };
+  const type = String(formData.get("receiptType") ?? "").trim();
+  if (type && !RECEIPT_TYPES.has(type)) return { error: "잘못된 증빙 유형입니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("expenses")
+    .update({ receipt_type: type || null, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
+// 첨부 추가 — 클라이언트가 이미 expense-receipts 버킷({tenant}/{expenseId}/{file})에 업로드한 뒤 경로를 등록.
+export async function addExpenseReceipt(
+  _prev: ExpenseState,
+  formData: FormData,
+): Promise<ExpenseState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "지출 ID가 누락되었습니다" };
+  const path = String(formData.get("path") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
+
+  const supabase = await createClient();
+  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
+  if (!row) return { error: "지출을 찾을 수 없습니다" };
+  const list = parseReceipts(row.receipt_urls);
+  if (!list.some((r) => r.path === path)) {
+    list.push({ path, name: name || path.split("/").pop() || path });
+  }
+  const { error } = await supabase
+    .from("expenses")
+    .update({ receipt_urls: list, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
+// 첨부 삭제 — DB 목록에서 제거 + Storage 객체 삭제(admin).
+export async function removeExpenseReceipt(
+  _prev: ExpenseState,
+  formData: FormData,
+): Promise<ExpenseState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "지출 ID가 누락되었습니다" };
+  const path = String(formData.get("path") ?? "").trim();
+  if (!isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
+
+  const supabase = await createClient();
+  const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
+  if (!row) return { error: "지출을 찾을 수 없습니다" };
+  const list = parseReceipts(row.receipt_urls).filter((r) => r.path !== path);
+  const { error } = await supabase
+    .from("expenses")
+    .update({ receipt_urls: list, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  await createAdminClient().storage.from(RECEIPTS_BUCKET).remove([path]);
+
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
+// 비공개 버킷 — 열람용 단기 signed URL 발급(5분). 경로 테넌트 검증 후 admin으로 서명.
+export type SignReceiptState = { url?: string; error?: string } | undefined;
+export async function signExpenseReceipt(
+  _prev: SignReceiptState,
+  formData: FormData,
+): Promise<SignReceiptState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const path = String(formData.get("path") ?? "").trim();
+  if (!isTenantReceiptPath(path, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
+
+  // 방어심층: admin(서비스롤)이 RLS를 우회해 서명하므로, 경로 형식만 믿지 말고 그 expense에 **실제 등록된**
+  // 첨부인지 RLS 스코프 조회로 확인(임의/열거 경로 서명 차단). 경로의 2번째 세그먼트 = expense id.
+  const expenseId = path.split("/")[1];
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("expenses")
+    .select("receipt_urls")
+    .eq("id", expenseId)
+    .maybeSingle();
+  if (!row) return { error: "지출을 찾을 수 없습니다" };
+  if (!parseReceipts(row.receipt_urls).some((r) => r.path === path)) {
+    return { error: "등록되지 않은 파일입니다" };
+  }
+
+  const { data, error } = await createAdminClient()
+    .storage.from(RECEIPTS_BUCKET)
+    .createSignedUrl(path, 300);
+  if (error || !data?.signedUrl) return { error: error?.message ?? "signed URL 생성 실패" };
+  return { url: data.signedUrl };
 }

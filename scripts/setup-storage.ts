@@ -26,6 +26,16 @@ const AUDIO_MIME_TYPES = [
 
 const AUDIO_SIZE_LIMIT = 50 * 1024 * 1024; // 50 MB — Supabase free-tier per-file cap
 
+// 지출결의서 증빙(영수증/세금계산서 등) — 이미지·PDF. 사적·재무 문서이므로 비공개 버킷 + signed URL로만 열람.
+const RECEIPT_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
+const RECEIPT_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB — 영수증 1장에 충분
+
 const BUCKETS = [
   {
     id: "meeting-recordings",
@@ -38,6 +48,12 @@ const BUCKETS = [
     public: false,
     file_size_limit: AUDIO_SIZE_LIMIT,
     allowed_mime_types: AUDIO_MIME_TYPES,
+  },
+  {
+    id: "expense-receipts",
+    public: false,
+    file_size_limit: RECEIPT_SIZE_LIMIT,
+    allowed_mime_types: RECEIPT_MIME_TYPES,
   },
 ];
 

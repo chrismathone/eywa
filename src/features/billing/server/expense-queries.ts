@@ -21,6 +21,9 @@ export type ApprovalRole = "author" | "director" | "ceo" | "executor";
 export type ApprovalChecks = Partial<Record<ApprovalRole, ApprovalStage>>;
 export const APPROVAL_ROLES: ApprovalRole[] = ["author", "director", "ceo", "executor"];
 
+// 첨부 증빙 파일 — expense-receipts 버킷 경로 + 원본 파일명. 열람은 서버가 발급한 signed URL로만.
+export type ExpenseReceipt = { path: string; name: string };
+
 export type ExpenseRow = {
   id: string;
   title: string;
@@ -39,6 +42,8 @@ export type ExpenseRow = {
   paymentMethod: string | null;
   memo: string | null;
   lineItems: ExpenseLineItem[] | null;
+  receiptType: string | null; // 증빙 유형(영수증/세금계산서 등)
+  receiptUrls: ExpenseReceipt[]; // 첨부 파일 목록
 };
 
 export type ExpenseSummary = {
@@ -59,7 +64,28 @@ function monthRange(period: string): { start: string; end: string } {
 }
 
 const EXPENSE_COLS =
-  "id, title, category, amount, expense_date, created_at, vendor, department, author, position, bank_name, account_number, approval_status, approval_checks, payment_method, memo, line_items";
+  "id, title, category, amount, expense_date, created_at, vendor, department, author, position, bank_name, account_number, approval_status, approval_checks, payment_method, memo, line_items, receipt_type, receipt_urls";
+
+// receipt_urls jsonb → 정규화. 문자열 이중 인코딩 방어 + {path,name}만 보존.
+function normalizeReceiptUrls(raw: unknown): ExpenseReceipt[] {
+  let arr: unknown = raw;
+  if (typeof arr === "string") {
+    try {
+      arr = JSON.parse(arr);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((r) => {
+      const o = (r ?? {}) as Record<string, unknown>;
+      const path = typeof o.path === "string" ? o.path : "";
+      const name = typeof o.name === "string" && o.name ? o.name : path.split("/").pop() || path;
+      return { path, name };
+    })
+    .filter((r) => r.path);
+}
 
 // approval_checks jsonb → 정규화. 문자열로 들어와도(이중 인코딩 방지) 1회 파싱 + 유효 역할만 보존.
 // 액션(toggleExpenseApproval)도 merge 전에 이걸 거쳐 문자열·잡키 오염을 막는다.
@@ -145,6 +171,8 @@ function mapExpenseRow(r: any): ExpenseRow {
     paymentMethod: r.payment_method,
     memo: r.memo,
     lineItems: normalizeLineItems(r.line_items),
+    receiptType: r.receipt_type ?? null,
+    receiptUrls: normalizeReceiptUrls(r.receipt_urls),
   };
 }
 
