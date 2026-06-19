@@ -100,6 +100,11 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
   - ⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS`(`periods.ts`) 하드코딩 → `weekdayPeriods` 설정과 무관(Phase 3 과목별 교시로 해소 예정).
+  - **(2026-06-19) operations `subjects` 필터/표시 소비처 누락분 배선 완료** — 학생목록·수업목록·성적관리의 과목
+    **필터 드롭다운/칩 + 과목 Pill 라벨·색**이 하드코딩 `SUBJECT_FILTERS`/`SUBJECT_META`(arts="예술" 포함)를
+    써서 **설정에 없는 과목(예: 예술)이 드롭다운에 누출**되던 "설정 무시(orphan의 역방향)" 버그. 이제 전부
+    `buildSubjectMaps(settings.operations.subjects)`의 `.filters`/`.labelOf`/`.colorOf`로 통일(서버 페이지가
+    prop 주입). 새 목록/필터에서 과목 라벨·색·옵션은 **반드시 `buildSubjectMaps`**로 — native 하드코딩 과목맵 금지.
 - **🚫 입력 숨김(소비처 없어 v1 비노출 — 상태·스키마·저장은 보존, 소비처 생기면 입력만 복원)**: operations `terms`,
   billing `taxMode`·`defaultMethod`(invoices에 결제수단 컬럼 없음), notifications `kakaoChannelId`(발송 경로에 미사용·대응 컬럼 없음).
 - **⚪ 아직 orphan(표시 화면 부재 — 후속)**: notifications `privacyTerms`·`serviceTerms`(약관 표시 페이지 필요).
@@ -1053,6 +1058,47 @@ revalidate되지만, 이미 렌더된 **부모(배경) 라우트는 stale**(다�
   구분법: `MutationObserver`로 style 속성 mutation을 1초 카운트 → 0이면 렌더루프 아님(트랜지션 얼음).
   `el.getAnimations().forEach(a=>a.finish())` 후 측정하거나, 렌더 박스 말고 **inline style + 영속 store**(진실값)를
   읽어 검증. 자세한 환경 함정은 메모리 `reference_browser-verification-env`.
+
+### 58. 권한 게이트는 tenant-aware 헬퍼만 — bare `canAccess`/`accessLevel` 직접호출 금지 (⚠️ 하면 안 됨)
+역할/권한 override(owner "역할·권한")는 `getPermMatrix()`(=하드코딩 MENU_ACCESS + tenant override) 매트릭스로만
+반영된다. **새 게이트는 반드시** 페이지=`requireAccess`, 라우트=`apiAccess`, 액션=`accessLevelTenant`/`canAccessTenant`,
+UI=layout의 `permMatrix` prop을 쓴다. **`canAccess(role,menu)`/`accessLevel(role,menu)`을 매트릭스 인자 없이 직접
+부르면 하드코딩 기본만 봐서 owner override를 무시**(write-only-orphan) — 금지. (2026-06-19 전수 감사: orphan 0건 — 깨지 말 것.
+bare `canAccess`는 super-admin(권한 직교)·테스트에서만 정상.)
+
+### 59. tenant_settings 직접 쓰기 금지 — owner 단일 진입점 + DB 트리거가 비-master를 막는다
+`tenant_settings`(학원 설정·권한 override)는 `saveOwnerSection`(master 게이트)이 유일한 쓰기 경로다. 기능 코드에서
+`tenant_settings`를 직접 INSERT/UPDATE하지 말 것 — **0038a 트리거가 `auth.uid()`가 비-master면 raise**(self-escalation
+차단). service_role(admin)·직접 DB연결(`auth.uid()` null)만 통과한다. 즉 일반 RLS 클라이언트로 비-master가 쓰면 막힌다.
+(읽기는 `getTenantSettings()`→`resolveSettings()` 단일 경로.)
+
+### 60. 권한 폴백은 fail-open 고정 — fail-closed로 바꾸지 말 것 (⚠️ 복구불능 락아웃)
+`getPermMatrix`가 `getTenantSettings` 실패 시 코드 기본(master=full)으로 폴백한다. **fail-closed(차단)로 바꾸면
+설정 조회 장애 시 master까지 /owner에 못 들어가 override를 고칠 길이 없어진다**(복구불능). #59 트리거로 override가
+항상 정당(master 설정)해져 일시 무효의 잔여 위험은 낮다. fail-open은 의도적·최종 결정(perm-matrix.ts 주석에 근거).
+
+### 61. 클라가 import하는 공유 모듈에 `import "server-only"` 금지 — 런타임 상수 누출 빌드깨짐
+순수 계산·공유 상수 모듈(`features/billing/{tuition-catalog,quote-calc,holidays-data}.ts`)은 **클라이언트 컴포넌트도
+import**하므로 `server-only`를 넣으면 빌드가 깨진다. 특히 **런타임 값(상수/함수)을 server-only 모듈에서 클라로 import
+하면** `'server-only' cannot be imported from a Client Component`로 폭발(예: `DISCOUNT_CATEGORY`를 server-only
+`*-queries.ts`에서 클라 계산기로 import → 실패). **규약: 타입+런타임 상수+순수함수는 server-only 없는 공유 모듈에,
+DB 쿼리만 `server/*-queries.ts`(server-only)에.** 클라는 서버 모듈에서 `import type`(타입만, 빌드시 소거)만 허용.
+
+### 62. 병렬 세션 schema.ts/공유파일 충돌 — 통째 `git add` 금지, 내 hunk만 인덱스에 적용
+여러 세션이 `schema.ts`(+ CLAUDE.md·README 등 공유파일)를 **동시에 편집**한다. 통째 `git add <file>`로 커밋하면
+**남의 미커밋 변경을 내 커밋이 휩쓸어** 간다. 비대화형이라 `git add -p` 불가 → 충돌 시:
+`git diff -- file | awk '내 hunk만 추출' | git apply --cached --recount`로 **내 hunk만 인덱스에 적용**(작업파일 불변 →
+상대 WIP 보존). 커밋 후 반드시 `git diff <parent> <commit> -- file`로 **삭제(남의 코드 clobber) 0줄** 확인.
+충돌이 없으면(diff가 내 변경만) 통째 add OK. 항상 `git commit -- <명시경로>`로 파일 단위 분리. (이번 세션 schema.ts에
+tuition_catalog·tuition_quotes 추가 시 students 0036a와 같은 파일에서 충돌 → 이 방식으로 분리 커밋.)
+
+### 63. 내 커밋 단독 검증 = 격리 워크트리 typecheck (작업트리 전체는 남의 WIP로 깨질 수 있음)
+작업 트리 전체 `tsc`가 **다른 세션의 미커밋 WIP**(예: classes `page.tsx` prop 불일치)로 실패할 수 있다 — 내 변경과
+무관. **내 커밋만 단독 검증**: `git worktree add --detach /d/tmp/x <commit>` → node_modules 정션 + `next-env.d.ts`
+복사 → `./node_modules/.bin/tsc --noEmit`. ⚠️ **정리 순서 함정(Windows)**: 워크트리 제거 전 **정션을 먼저 `rmdir`로
+끊어라**(`cmd //c "rmdir D:\tmp\x\node_modules"`) — 안 그러면 `git worktree remove`가 정션을 타고 들어가 **실제
+node_modules를 지울 위험** + permission-denied. 또: 다른 세션이 내 커밋 위에 쌓아 push하면 **내 ff push가 "behind"로
+거부돼도 이미 내 커밋이 origin에 올라간 정상 상태**일 수 있다(merge-base로 확인 후 종료).
 
 ---
 
