@@ -716,6 +716,31 @@ export const textbookCatalog = pgTable(
   ],
 );
 
+// === tuition_catalog (수강료 단가표 — 과목·기타·할인 통합 레지스트리) ===
+// ijw 수강료 계산기 "설정"의 수강료 단가표(과목별 회당/월 단가)·기타항목·할인 프리셋을 한 테이블로 통합.
+// category로 구분: 과목 분류(수학/EIE/영어/국어) → 단가 picker, "기타" → 부가항목, "할인" → 할인 프리셋.
+// 수강료 계산기 면의 '수강료 단가' 서브탭에서 CRUD, 계산기 탭이 소비(picker로 회당단가·할인 자동입력).
+export const tuitionCatalog = pgTable(
+  "tuition_catalog",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    category: text("category").notNull().default("기타"), // 분류 라벨(수학/EIE/영어/국어/기타/할인) — ijw 충실 이식
+    name: text("name").notNull(),
+    price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"), // 회당/월 단가 또는 할인액
+    note: text("note"), // 비고(예: "(3T2H)" 시수 표기, 적용 조건)
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("tuition_catalog_tenant_active_idx").on(t.tenantId, t.isActive),
+    index("tuition_catalog_tenant_category_idx").on(t.tenantId, t.category),
+  ],
+);
+
 // === expenses (지출관리) ===
 // 학원 지출 기록(인건비/운영비/매입/기타) + 품목 라인아이템. 수납관리 창의 '지출' 책갈피 면.
 export const expenses = pgTable(

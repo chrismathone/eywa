@@ -166,6 +166,29 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수강료 계산기 "설정" 이식 — 단가표·할인·세션·공휴일 (2026-06-19)
+ijw 수강료 계산기는 "설정"에 5탭(수강료 단가표 43과목·교재/기타·할인·공휴일·세션)이 붙어 있었는데, eywa는
+회당 단가를 매번 손으로 치는 단순 폼뿐이었다(사용자 제보). ijw 5탭을 eywa 컨벤션으로 충실 이식.
+- **신규 테이블 `tuition_catalog`**(`0034a` alpha, RLS 격리 — schema.ts + 교재 단가표 `textbook_catalog` 패턴 미러).
+  ijw의 분리 컬렉션 3개(`tuition_courses`·`tuition_extras`·`tuition_discounts`)를 **한 테이블에 `category`로 통합**:
+  과목 분류(수학/EIE/영어/국어) → 단가 picker, `기타` → 부가항목, `할인` → 할인 프리셋. 권한도 billing-full 일관.
+  공유 상수·타입은 `features/billing/tuition-catalog.ts`(클라/서버 공용, ⚠️ server-only 금지), DB 쿼리는
+  `server/tuition-catalog-queries.ts`(server-only), CRUD는 `server/tuition-catalog-actions.ts`.
+- **계산기 면에 서브탭(FaceTabs)**: `계산기 · 수강료 단가 · 공휴일` (ijw "계산기 모드 ↔ 설정" 재현, `?csub=`/필터는
+  `cat`/`cactive`/`cpage`로 네임스페이스해 상위 `?tab=`와 충돌 회피). `calculator-panel.tsx`가 서브탭 디스패치.
+- **계산기 강화(소비처 배선)**: `tuition-calculator.tsx`에 **수강료 과목 picker**(선택→회당 단가 자동입력 + 청구서
+  notes에 과목명) + **할인 프리셋 picker**(선택→할인액). 수기 입력도 그대로 가능(오버라이드).
+- **공휴일 면**: 학원 휴원일은 테넌트 설정(master 전용)이라 계산기에선 **읽기전용 표시 + 학원설정(/owner?tab=operations)
+  링크**, 양력 고정 공휴일은 그 해 목록을 이름과 함께 표시(계산기 "양력 공휴일 제외" 토글로 반영). 소비처는
+  기존 `tuition-calc.ts`의 `mergeHolidays`/`countSessions`.
+- **세션(드래그 다중기간 manager)는 의도적 미복제** — eywa는 `countSessions(시작~종료 + 요일 + 공휴일)`로 차시를
+  이미 도출(ijw "default mode"와 동일 계산). ijw의 월별 드래그 다중 range는 데모 임팩트 대비 과중 → 보류.
+- **데이터 이식**: ijw `constants/tuitionCourses.ts` 43과목 + `tuitionExtras.ts` 기타 4·할인 3 = 50행을
+  `scripts/_poc_migration/import-tuition-catalog.cjs`(멱등, ijw-demo 테넌트)로 적재.
+- 검증: typecheck 0 / lint 0(기존 경고 9 외 신규 0) / test 368 / build ✓. **브라우저 실검증**: 3개 서브탭
+  200 + 단가표에 임포트 데이터(Dr.Phonics·중등M·형제 할인·시스템 사용료)·계산기 picker 마크업 확인.
+  ⚠️ 검증 중 만난 `/billing` 500은 **병렬 expenses 세션의 stale HMR**(setExpenseApproval)이지 이 작업 무관(#35).
+
 ### UX 정돈 — 이름앞 아바타 제거 · 성적관리 리네임 · 생성폼 창화 · 드롭다운 규약 (2026-06-19)
 세션 단위 UX 정돈 묶음.
 - **이름 앞 아바타(Initial) 전면 제거**: 12개 화면의 `<Initial>` 14곳 + `atoms/initial.tsx` 컴포넌트 삭제.
@@ -355,7 +378,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
 | 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
 | 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + **급여 월별표 진입(`/staff/payroll`)** |
-| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **세로 책갈피 5면**(수납/교재/지출/**계산기**(수강료 견적)/**단가표**(교재 카탈로그)) |
+| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` + `tuition_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **FaceTabs 5면**(수납/교재/지출/**계산기**/**교재 단가표**). 계산기 면은 다시 서브탭(계산기/**수강료 단가**(과목·기타·할인 단가표)/공휴일) — 단가표에서 고른 과목·할인이 계산기에 자동입력 |
 | 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
 | 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
 

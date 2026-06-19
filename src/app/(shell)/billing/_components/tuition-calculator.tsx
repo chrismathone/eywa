@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createInvoice, type CreateInvoiceState } from "@/features/billing/server/actions";
 import type { StudentOption } from "@/features/billing/server/textbook-queries";
+import { DISCOUNT_CATEGORY, type TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 import {
   countSessions,
   estimateTuition,
@@ -40,10 +41,12 @@ export function TuitionCalculator({
   students,
   defaultPeriod,
   holidays = [],
+  catalog = [],
 }: {
   students: StudentOption[];
   defaultPeriod: string;
   holidays?: string[];
+  catalog?: TuitionCatalogOption[];
 }) {
   const [startDate, setStartDate] = useState(`${defaultPeriod}-01`);
   const [endDate, setEndDate] = useState(monthLastDay(defaultPeriod));
@@ -51,6 +54,35 @@ export function TuitionCalculator({
   const [perSession, setPerSession] = useState(30000);
   const [discount, setDiscount] = useState(0);
   const [excludeHolidays, setExcludeHolidays] = useState(true);
+  const [courseName, setCourseName] = useState(""); // 단가표에서 고른 과목명(견적·청구서 표시용)
+
+  // 단가표(활성)를 과목 단가 picker / 할인 프리셋 picker로 분리.
+  const priceItems = useMemo(() => catalog.filter((c) => c.category !== DISCOUNT_CATEGORY), [catalog]);
+  const discountItems = useMemo(() => catalog.filter((c) => c.category === DISCOUNT_CATEGORY), [catalog]);
+  const priceOptions = useMemo(
+    () =>
+      priceItems.map((c) => ({
+        value: c.id,
+        label: c.note ? `${c.name} ${c.note}` : c.name,
+        hint: `${c.category} · ${won(c.price)}`,
+      })),
+    [priceItems],
+  );
+  const discountOptions = useMemo(
+    () => discountItems.map((c) => ({ value: c.id, label: c.name, hint: `−${won(c.price)}` })),
+    [discountItems],
+  );
+
+  const pickCourse = (id: string) => {
+    const c = priceItems.find((x) => x.id === id);
+    if (!c) return;
+    setPerSession(c.price);
+    setCourseName(c.name);
+  };
+  const pickDiscount = (id: string) => {
+    const c = discountItems.find((x) => x.id === id);
+    if (c) setDiscount(c.price);
+  };
 
   const [state, formAction] = useActionState<CreateInvoiceState, FormData>(createInvoice, undefined);
 
@@ -63,7 +95,7 @@ export function TuitionCalculator({
   }, [startDate, endDate, weekdays, perSession, discount, excludeHolidays, holidays]);
 
   const period = startDate.slice(0, 7);
-  const notes = `수강료 견적 · ${est.sessions}차시 × ${won(perSession)} (${startDate}~${endDate})`;
+  const notes = `${courseName ? `${courseName} · ` : ""}수강료 견적 · ${est.sessions}차시 × ${won(perSession)} (${startDate}~${endDate})`;
   const toggleDay = (d: number) =>
     setWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort()));
 
@@ -107,6 +139,21 @@ export function TuitionCalculator({
           </div>
         </div>
 
+        {priceOptions.length > 0 ? (
+          <div className="space-y-1.5">
+            <span className="text-foreground block text-sm font-medium">수강료 과목 (단가표)</span>
+            <SearchableSelect
+              value=""
+              onValueChange={pickCourse}
+              options={priceOptions}
+              placeholder="과목을 고르면 회당 단가가 채워집니다"
+              searchPlaceholder="과목명·분류 검색..."
+              ariaLabel="수강료 과목 선택"
+            />
+            {courseName ? <p className="text-primary text-[11px]">선택: {courseName}</p> : null}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1.5">
             <span className="text-foreground block text-sm font-medium">회당 단가</span>
@@ -115,7 +162,10 @@ export function TuitionCalculator({
               min="0"
               step="1000"
               value={perSession}
-              onChange={(e) => setPerSession(Math.max(0, Number(e.target.value)))}
+              onChange={(e) => {
+                setPerSession(Math.max(0, Number(e.target.value)));
+                setCourseName("");
+              }}
               className={`${inputCls} num text-right`}
             />
           </label>
@@ -131,6 +181,20 @@ export function TuitionCalculator({
             />
           </label>
         </div>
+
+        {discountOptions.length > 0 ? (
+          <div className="space-y-1.5">
+            <span className="text-foreground block text-sm font-medium">할인 프리셋</span>
+            <SearchableSelect
+              value=""
+              onValueChange={pickDiscount}
+              options={discountOptions}
+              placeholder="할인 항목을 고르면 할인액이 채워집니다"
+              searchPlaceholder="할인명 검색..."
+              ariaLabel="할인 프리셋 선택"
+            />
+          </div>
+        ) : null}
 
         <label className="flex items-center gap-2 text-sm">
           <input

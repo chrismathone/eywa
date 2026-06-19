@@ -58,7 +58,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       ) : tab === "expenses" ? (
         <ExpensesPanel sp={sp} />
       ) : tab === "calculator" ? (
-        <CalculatorPanel />
+        <CalculatorPanel sp={sp} />
       ) : tab === "catalog" ? (
         <CatalogPanel sp={sp} />
       ) : (
