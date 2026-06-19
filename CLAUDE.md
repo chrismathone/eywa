@@ -214,6 +214,24 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 같은 탭 다중 창(복제) + 크로스 창/탭 저장 경고 (2026-06-19) — ⏳ 구현·검증 그린, A 데스크톱 UI 수동확인만 남음
+브랜치 **`feat/multi-window-and-save-warning`**(아직 main 미머지 — 다른 컴퓨터 이어작업용). 상세 함정·규칙은
+위 "구현 중 막혔던 점 #64", 설계는 [`C:\Users\user\.claude\plans\steady-questing-music.md`](로컬, 미동기).
+- **A. 같은 탭 다중 창**: 타이틀바 **복제 버튼**(현재 화면 그대로) + 탭/링크 **Shift+클릭**(`openNewInstance`, 새 인스턴스)
+  — 둘 다. primary 창 id 보존(`route:students`), 복제본만 `#n`(window-only, 배경 가드 store레벨+드래그훅+스포트라이트).
+  스위처·스포트라이트 `(2)` 라벨. 사이드바 관리자도구 아래 Shift 안내 문구. ([window-store.ts](src/components/workspace/window-store.ts)
+  `windowId(...,instance?)`/`isDuplicate`/`baseWindowId`/`instanceLabel`/`duplicate`/`openNewInstance` + floating-window·app-sidebar·window-link·use-pointer-drag·background-drop-zone·window-switcher·spotlight-strip.)
+- **B. 크로스 창/탭 저장 경고**: 레코드 스코프(`student:123`)+`BroadcastChannel`로 다중 창·다중 탭 동시 보호.
+  publish는 **성공 확정 후**(update 액션 `redirect`→`{ok,redirectTo,nonce}` 반환, nonce로 연속 저장 구분),
+  dirty는 **FormData 스냅샷**(버튼 변경 포착). 신규 [`record-channel.ts`](src/lib/realtime/record-channel.ts)·
+  [`form-snapshot.ts`](src/lib/realtime/form-snapshot.ts)·[`use-concurrent-edit-guard.ts`](src/components/workspace/use-concurrent-edit-guard.ts).
+  배선: 학생·반·직원 수정 폼 + 학원설정 section-form(scope·formRef·nonce effect).
+- **검증**: typecheck0/lint0(신규0)/build✓/**test 392**(신규 19: window-store 12·form-snapshot 4·record-channel 3).
+  **B 실브라우저 검증 완료** — 학생 수정 폼 clean=무경고/ dirty=경고 토스트(+새로고침), BroadcastChannel 배달·Toaster 마운트·콘솔에러0 확인.
+- **⏳ 남은 일(다른 컴퓨터)**: A **데스크톱(≥1024px+마우스) UI 수동 확인**(preview 뷰포트 750px 고정이라 창 시스템 미검증):
+  ① 메뉴 Shift+클릭=새 창·반복 `(2)(3)` ② 타이틀바 복제 버튼(드릴인 화면 포함) ③ 복제본 배경 차단(드래그/스포트라이트)
+  ④ 사이드바 Shift 안내 문구. 확인되면 main 머지.
+
 ### 역할/권한 override 배선 전수 감사 + 보안 갭 수정 (2026-06-19) — ✅ 배선 완전, 갭 2건 처리
 사용자 요청으로 owner "역할·권한"(Phase 4) override가 **실제 접근제어에 연결됐는지(write-only-orphan 아닌지)** 전수 검수
 (다중 에이전트 + 직접 grep). **결론: 배선 완전 — 권한을 바꾸면 모든 소비처에서 동작이 실제로 바뀐다. orphan 0건.**
@@ -1142,6 +1160,34 @@ tuition_catalog·tuition_quotes 추가 시 students 0036a와 같은 파일에서
 끊어라**(`cmd //c "rmdir D:\tmp\x\node_modules"`) — 안 그러면 `git worktree remove`가 정션을 타고 들어가 **실제
 node_modules를 지울 위험** + permission-denied. 또: 다른 세션이 내 커밋 위에 쌓아 push하면 **내 ff push가 "behind"로
 거부돼도 이미 내 커밋이 origin에 올라간 정상 상태**일 수 있다(merge-base로 확인 후 종료).
+
+### 64. 같은 탭 다중 창(복제) + 크로스 창/탭 저장 경고 — 창 id 인스턴스 모델·BroadcastChannel·publish 타이밍
+사용자 요청으로 (A) **같은 탭을 여러 창으로**(듀얼) + (B) 같은 레코드를 다른 창/탭에서 저장하면 **경고 토스트**를 구현.
+핵심 함정·규칙:
+- **창 id 인스턴스 모델 (A)**: primary 창 id는 오늘과 동일(`route:students`)로 두고 **복제본만 `#n` 접미사**
+  ([`windowId(kind,paramId,instance?)`](src/components/workspace/window-store.ts) + `isDuplicate`/`baseWindowId`/`instanceLabel`).
+  영속 레이아웃·배경 매핑이 primary id에 묶여 있어 **primary를 절대 바꾸지 말 것**. `params.id`는 base 라우트(`students`,
+  크기·아이콘 매핑)라 **`baseWindowId`(=`route:students`, kind 접두 포함)와 혼동 금지** — `duplicate()`는 `params`를
+  통째 복제(`params.id` 보존)하고 화면은 **nav 현재 URL·live 제목**을 따른다(`win.params.href`는 최초 URL이라 드릴인 후
+  복제 시 엉뚱한 화면). 진입점 2개: 타이틀바 "복제" 버튼(`duplicate`) + 탭/링크 **shift+클릭**(`openNewInstance`,
+  사이드바·SubTab·WindowLink. ctrl/cmd/alt는 브라우저 기본 유지). 사이드바 관리자도구 아래 shift 안내 문구.
+- **복제본은 window-only — 배경 가드는 store 레벨에서 (A)**: 타이틀바 버튼 숨김만으론 부족(드래그 훅·스포트라이트 스왑은
+  FloatingWindow를 안 거침). `swapToBackground`는 `isDuplicate`면 no-op, `swapFocusedWithBackground`는 복제본이면
+  `sendFocused=false`, `use-pointer-drag`/`background-drop-zone`은 `!isDuplicate(id)`로 칩 비활성. "라우트↔배경 1:1" 불변식 보존.
+- **저장 경고는 레코드 스코프 + BroadcastChannel (B)**: 키를 라우트/탭이 아니라 **레코드**(`student:123`·`tenant-settings:profile`)로
+  잡아 같은 레코드 편집창만 경고하고 무관한 "새 X" 폼끼린 오경고 안 함. [`record-channel.ts`](src/lib/realtime/record-channel.ts)가
+  same-origin 모든 iframe·탭을 한 채널로 묶어 **다중 창 + 다중 브라우저 탭 동시 보호**. 토스트는 메시지 받은 그 문서가
+  자기 Toaster(루트 레이아웃이 모든 iframe에 마운트)로 띄움 → "그 창 안에" 뜬다.
+- **dirty는 onInput 아니라 FormData 스냅샷 (B)**: 반 시간표 토글·학원설정 add/remove는 **버튼→state→hidden input**이라
+  `onInput` 미발생. 값 단일 출처인 `new FormData(form)`을 [`serializeForm`](src/lib/realtime/form-snapshot.ts)(정렬 tuple
+  JSON, `$ACTION_*` 제외)으로 스냅샷해 비교. 마운트 시 baseline, 저장 후 재스냅샷.
+- **⚠️ publish는 "성공 확정 후" — onSubmit(제출 전) 금지 (B)**: `onSubmit`은 서버 액션 실행 전이라 실패 저장도 경고하고
+  상대가 저장 전 데이터를 다시 읽을 수 있다. 그래서 `updateStudent/Class/Staff`를 **`redirect()` 대신 `{ ok, redirectTo, nonce }`
+  반환**으로 바꿨다(클라가 성공 확정 후 publish→`router.push`). `saveOwnerSection`도 `nonce` 추가(in-window). **effect는
+  `state.ok`만 보면 안 됨** — 첫 성공 후 ok가 계속 true라 owner 2번째 저장이 누락 → **`state.nonce` 관찰 + 처리한 nonce를
+  ref로 비교**해 매 성공 1회 발화.
+- **server-only 금지 (B)**: `record-channel.ts`·`form-snapshot.ts`는 클라 컴포넌트/훅이 import → `server-only` 넣으면
+  빌드 폭발([[#61]] 규칙). 둘 다 client 전용 순수 모듈로 유지.
 
 ---
 
