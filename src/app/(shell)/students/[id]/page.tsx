@@ -9,10 +9,10 @@ import { RunCareAiButton } from "./run-care-ai-button";
 import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";
 import { StatusAction } from "./_components/status-action";
 import { OverviewTab } from "./_tabs/overview-tab";
+import { ClassesTab } from "./_tabs/classes-tab";
 import { BillingTab } from "./_tabs/billing-tab";
 import { GradesTab } from "./_tabs/grades-tab";
 import { AttendanceTab } from "./_tabs/attendance-tab";
-import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 
@@ -97,16 +97,16 @@ export default async function StudentDetailPage({
       <section>
         {tab === "overview" ? (
           <OverviewTab student={student} />
-        ) : tab === "billing" ? (
-          <BillingTab studentId={student.id} />
+        ) : tab === "classes" ? (
+          <ClassesTab student={student} />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
-        ) : tab === "consultations" ? (
-          <ConsultationsTab studentId={student.id} />
         ) : tab === "memos" ? (
           <MemosTab studentId={student.id} />
+        ) : tab === "billing" ? (
+          <BillingTab studentId={student.id} />
         ) : tab === "timeline" ? (
           <TimelineTab studentId={student.id} />
         ) : null}

@@ -20,6 +20,7 @@ export type StudentFormValue = {
   grade: string | null;
   school: string | null;
   studentCode: string | null;
+  attendanceCode: string | null;
   gender: string | null;
   birthDate: string | null;
   address: string | null;
@@ -89,6 +90,7 @@ export function StudentForm({
     grade: null,
     school: null,
     studentCode: null,
+    attendanceCode: null,
     gender: null,
     birthDate: null,
     address: null,
@@ -164,6 +166,16 @@ export function StudentForm({
             defaultValue={v.studentCode ?? ""}
             className={inputClass}
             placeholder="(선택)"
+          />
+        </Field>
+        <Field label="출결번호" htmlFor="attendanceCode">
+          <input
+            id="attendanceCode"
+            name="attendanceCode"
+            inputMode="numeric"
+            defaultValue={v.attendanceCode ?? ""}
+            className={inputClass}
+            placeholder="키오스크 체크인 번호"
           />
         </Field>
       </div>

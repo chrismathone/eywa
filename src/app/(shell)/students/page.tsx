@@ -13,8 +13,8 @@ import {
   type StudentSort,
   type SearchField,
 } from "@/features/students/server/queries";
+import { WindowLink } from "@/components/workspace/window-link";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
-import { StudentQuickPanel } from "./_components/student-quick-panel";
 import { StudentAdvancedFilters } from "./_components/advanced-filters";
 
 export const metadata = { title: "학생목록 — eywa" };
@@ -270,23 +270,14 @@ export default async function StudentsPage({
                 return (
                   <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors">
                     <td className="px-5 py-3">
-                      <StudentQuickPanel
-                        student={{
-                          id: s.id,
-                          name: s.name,
-                          grade: s.grade,
-                          school: s.school,
-                          status: s.status,
-                          subjects: s.subjects,
-                          primaryTeacherName: s.primaryTeacherName,
-                          parentPhone: s.parentPhone,
-                          enrolledAt: s.enrolledAt,
-                        }}
+                      <WindowLink
+                        href={`/students/${s.id}`}
+                        title={s.name}
+                        ariaLabel={`${s.name} 학생 정보`}
+                        className="text-foreground text-[13px] font-bold hover:underline"
                       >
-                        <span className="text-foreground text-[13px] font-bold hover:underline">
-                          {s.name}
-                        </span>
-                      </StudentQuickPanel>
+                        {s.name}
+                      </WindowLink>
                     </td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.grade ?? "—"}</td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.school ?? "—"}</td>

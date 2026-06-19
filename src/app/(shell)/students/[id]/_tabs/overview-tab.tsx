@@ -2,14 +2,9 @@ import { Sparkles } from "lucide-react";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getStudentAttendanceStats,
-  getStudentEnrollments,
   type CareFocus,
   type StudentDetail,
 } from "@/features/students/server/queries";
-import { getClassesList } from "@/features/classes/server/queries";
-import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
-import { StudentAssignAction } from "../_components/student-assign-action";
 
 const PRIORITY_COLOR: Record<CareFocus["priority"], string> = {
   high: "text-chart-4 bg-chart-4/10 border-chart-4/20",
@@ -24,20 +19,7 @@ const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
 };
 
 export async function OverviewTab({ student }: { student: StudentDetail }) {
-  const [enrollments, attendance, allActiveClasses, settings] = await Promise.all([
-    getStudentEnrollments(student.id),
-    getStudentAttendanceStats(student.id, 30),
-    getClassesList({ active: "active" }),
-    getTenantSettings(),
-  ]);
-  const subjects = buildSubjectMaps(settings.operations.subjects);
-
-  // 이미 활성 enrollment 인 반은 제외
-  const activeClassIds = new Set(
-    enrollments.filter((e) => !e.endDate).map((e) => e.classId),
-  );
-  const candidateClasses = allActiveClasses.filter((c) => !activeClassIds.has(c.id));
-
+  const attendance = await getStudentAttendanceStats(student.id, 30);
   const hasCareAi = student.aiCareSummary !== null;
 
   return (
@@ -47,6 +29,9 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
           <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
+            {student.attendanceCode ? (
+              <Field label="출결번호" value={student.attendanceCode} mono />
+            ) : null}
             {student.gender ? (
               <Field label="성별" value={student.gender === "male" ? "남" : "여"} />
             ) : null}
@@ -93,57 +78,6 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
                 highlight="text-chart-3"
               />
             </div>
-          </section>
-
-          <section className="bg-card border-border rounded-md border">
-            <header className="border-border flex items-center justify-between border-b px-5 py-3">
-              <div>
-                <h2 className="text-sm font-semibold tracking-tight">수강 중인 반</h2>
-                <p className="text-muted-foreground num text-xs">{enrollments.length}건</p>
-              </div>
-              <StudentAssignAction
-                student={{ id: student.id, name: student.name, grade: student.grade }}
-                classes={candidateClasses.map((c) => ({
-                  id: c.id,
-                  className: c.className,
-                  subject: c.subject,
-                  teacherName: c.teacherName,
-                  studentCount: c.studentCount,
-                }))}
-              />
-            </header>
-            {enrollments.length === 0 ? (
-              <div className="text-muted-foreground px-5 py-8 text-center text-sm">
-                등록된 반이 없습니다
-              </div>
-            ) : (
-              <ul className="divide-border divide-y">
-                {enrollments.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between px-5 py-3">
-                    <div>
-                      <p className="text-sm font-medium">{e.className}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {subjects.labelOf(e.subject)} ·{" "}
-                        <span className="num">{e.startDate}</span>
-                        {e.endDate ? (
-                          <>
-                            {" "}
-                            ~ <span className="num">{e.endDate}</span>
-                          </>
-                        ) : (
-                          <> ~ 현재</>
-                        )}
-                      </p>
-                    </div>
-                    {e.onHold ? (
-                      <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 rounded-md border px-2 py-0.5 text-xs font-medium">
-                        휴원
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
           </section>
         </div>
       </div>

@@ -41,6 +41,7 @@ export default async function EditStudentPage({
           grade: student.grade,
           school: student.school,
           studentCode: student.studentCode,
+          attendanceCode: student.attendanceCode,
           gender: student.gender,
           birthDate: student.birthDate,
           address: student.address,
