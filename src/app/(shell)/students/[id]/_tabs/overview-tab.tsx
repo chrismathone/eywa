@@ -2,9 +2,19 @@ import { Sparkles } from "lucide-react";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getStudentAttendanceStats,
+  getStudentEnrollments,
+  getStudentGrades,
+  getStudentInvoices,
+  getStudentConsultationHistory,
+  getStudentMemos,
   type CareFocus,
   type StudentDetail,
 } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { TabLink } from "../_components/tab-link";
+
+const won = (n: number) => n.toLocaleString();
 
 const PRIORITY_COLOR: Record<CareFocus["priority"], string> = {
   high: "text-chart-4 bg-chart-4/10 border-chart-4/20",
@@ -19,8 +29,24 @@ const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
 };
 
 export async function OverviewTab({ student }: { student: StudentDetail }) {
-  const attendance = await getStudentAttendanceStats(student.id, 30);
+  const sid = student.id;
+  const [attendance, enrollments, grades, invoices, consultations, memos, settings] = await Promise.all([
+    getStudentAttendanceStats(sid, 30),
+    getStudentEnrollments(sid),
+    getStudentGrades(sid),
+    getStudentInvoices(sid),
+    getStudentConsultationHistory(sid),
+    getStudentMemos(sid),
+    getTenantSettings(),
+  ]);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
   const hasCareAi = student.aiCareSummary !== null;
+
+  const activeClasses = enrollments.filter((e) => !e.endDate);
+  const unpaid = invoices.filter((i) => i.status !== "paid");
+  const unpaidTotal = unpaid.reduce((s, i) => s + Math.max(0, i.amountTotal - i.amountDiscount - i.amountPaid), 0);
+  const pinnedMemos = [...memos].sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  const base = `/students/${sid}`;
 
   return (
     <div className="space-y-6">
@@ -108,6 +134,70 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
         </div>
       </div>
 
+      {/* 다이제스트 — 각 탭 핵심 정보를 개요에서 한눈에 (전체는 해당 탭으로) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <DigestCard title="수강 중인 반" more={<TabLink href={`${base}?tab=classes`}>수업</TabLink>}>
+          {activeClasses.length === 0 ? (
+            <Empty>수강 중인 반 없음</Empty>
+          ) : (
+            activeClasses.slice(0, 4).map((e) => (
+              <DigestRow key={e.id} left={e.className} right={subjects.labelOf(e.subject)} />
+            ))
+          )}
+        </DigestCard>
+
+        <DigestCard title="최근 성적" more={<TabLink href={`${base}?tab=grades`}>성적</TabLink>}>
+          {grades.length === 0 ? (
+            <Empty>성적 기록 없음</Empty>
+          ) : (
+            grades.slice(0, 4).map((g) => (
+              <DigestRow
+                key={g.id}
+                left={`${subjects.labelOf(g.subject)} ${g.examName}`}
+                right={g.score == null ? "—" : g.maxScore ? `${g.score}/${g.maxScore}` : String(g.score)}
+                mono
+              />
+            ))
+          )}
+        </DigestCard>
+
+        <DigestCard title="수납 현황" more={<TabLink href={`${base}?tab=billing`}>수납</TabLink>}>
+          {invoices.length === 0 ? (
+            <Empty>청구 내역 없음</Empty>
+          ) : (
+            <>
+              <DigestRow left="총 청구" right={`${invoices.length}건`} />
+              <DigestRow
+                left="미납"
+                right={unpaid.length === 0 ? "없음" : `${unpaid.length}건 · ${won(unpaidTotal)}원`}
+                highlight={unpaid.length > 0 ? "text-amber" : "text-chart-2"}
+              />
+              {invoices[0] ? <DigestRow left="최근" right={invoices[0].period} mono /> : null}
+            </>
+          )}
+        </DigestCard>
+
+        <DigestCard title="최근 상담" more={<TabLink href={`${base}?tab=consultations`}>상담</TabLink>}>
+          {consultations.length === 0 ? (
+            <Empty>상담 기록 없음</Empty>
+          ) : (
+            consultations.slice(0, 3).map((c) => (
+              <DigestRow key={c.id} left={String(c.consultedAt).slice(0, 10)} right={c.summary} truncate mono />
+            ))
+          )}
+        </DigestCard>
+
+        <DigestCard title="최근 메모" more={<TabLink href={`${base}?tab=memos`}>메모</TabLink>}>
+          {pinnedMemos.length === 0 ? (
+            <Empty>메모 없음</Empty>
+          ) : (
+            pinnedMemos.slice(0, 3).map((m) => (
+              <DigestRow key={m.id} left={m.pinned ? "📌" : m.category} right={m.content} truncate />
+            ))
+          )}
+        </DigestCard>
+      </div>
+
       {hasCareAi ? (
         <section className="bg-card border-border space-y-4 rounded-md border p-5">
           <header className="flex items-baseline justify-between">
@@ -165,6 +255,55 @@ function Field({ label, value, mono }: { label: string; value: string | null; mo
       <dd className={`text-foreground text-sm ${mono ? "num" : ""}`}>{value ?? "—"}</dd>
     </div>
   );
+}
+
+function DigestCard({
+  title,
+  more,
+  children,
+}: {
+  title: string;
+  more?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-card border-border flex flex-col rounded-md border p-4">
+      <header className="mb-2 flex items-center justify-between">
+        <h3 className="text-foreground text-sm font-semibold">{title}</h3>
+        {more}
+      </header>
+      <div className="divide-border/60 flex-1 divide-y">{children}</div>
+    </section>
+  );
+}
+
+function DigestRow({
+  left,
+  right,
+  mono,
+  truncate,
+  highlight,
+}: {
+  left: string;
+  right: string;
+  mono?: boolean;
+  truncate?: boolean;
+  highlight?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
+      <span className="text-text-dim shrink-0">{left}</span>
+      <span
+        className={`text-foreground ${truncate ? "min-w-0 truncate text-right" : "shrink-0"} ${mono ? "num" : ""} ${highlight ?? ""}`}
+      >
+        {right}
+      </span>
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="text-text-faint py-3 text-center text-xs">{children}</p>;
 }
 
 function Stat({
