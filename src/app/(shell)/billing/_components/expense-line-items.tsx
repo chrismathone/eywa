@@ -123,7 +123,7 @@ export function ExpenseLineItems({
                 <input
                   type="number"
                   min="0"
-                  step="1000"
+                  step="1"
                   value={r.unitPrice || ""}
                   onChange={(e) => setRow(i, { unitPrice: Number(e.target.value) || 0 })}
                   placeholder="0"
