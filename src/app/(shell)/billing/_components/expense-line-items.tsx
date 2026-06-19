@@ -17,8 +17,9 @@ export type ExpenseItemRow = {
 export const lineTotal = (r: ExpenseItemRow) =>
   Math.round(r.quantity * r.unitPrice * (r.vat ? 1.1 : 1));
 
+// ⚠️ 폭(w-*)은 여기 넣지 않는다 — 사용처에서 w-full/flex-1 등을 붙일 때 Tailwind width 충돌이 나기 때문.
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 export function ExpenseLineItems({
   rows,
@@ -89,39 +90,47 @@ export function ExpenseLineItems({
                 value={r.purpose}
                 onChange={(e) => setRow(i, { purpose: e.target.value })}
                 placeholder="용도"
-                className={inputCls}
+                className={`${inputCls} w-full`}
               />
               <input
                 value={r.vendor}
                 onChange={(e) => setRow(i, { vendor: e.target.value })}
                 placeholder="거래처"
-                className={inputCls}
+                className={`${inputCls} w-full`}
               />
             </div>
             <input
               value={r.description}
               onChange={(e) => setRow(i, { description: e.target.value })}
               placeholder="사용내역"
-              className={inputCls}
+              className={`${inputCls} w-full`}
             />
             <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min="1"
-                value={r.quantity}
-                onChange={(e) => setRow(i, { quantity: Number(e.target.value) || 0 })}
-                className={`${inputCls} num w-16 text-right`}
-                aria-label="수량"
-              />
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                value={r.unitPrice}
-                onChange={(e) => setRow(i, { unitPrice: Number(e.target.value) || 0 })}
-                className={`${inputCls} num flex-1 text-right`}
-                aria-label="금액"
-              />
+              <label className="text-text-faint flex shrink-0 items-center gap-1 text-[11px]">
+                수량
+                <input
+                  type="number"
+                  min="1"
+                  value={r.quantity || ""}
+                  onChange={(e) => setRow(i, { quantity: Number(e.target.value) || 0 })}
+                  placeholder="1"
+                  className={`${inputCls} num w-14 text-right`}
+                  aria-label="수량"
+                />
+              </label>
+              <label className="text-text-faint flex min-w-0 flex-1 items-center gap-1 text-[11px]">
+                금액
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={r.unitPrice || ""}
+                  onChange={(e) => setRow(i, { unitPrice: Number(e.target.value) || 0 })}
+                  placeholder="0"
+                  className={`${inputCls} num w-full min-w-0 flex-1 text-right`}
+                  aria-label="금액"
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => setRow(i, { vat: !r.vat })}
