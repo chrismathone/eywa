@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef } from "react";
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -159,7 +159,7 @@ export function AppSidebar({
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
                 const subs = SUBTABS_BY_MENU[item.menuKey];
                 return (
-                  <Fragment key={item.href}>
+                  <div key={item.href} className="group/menu">
                     <RailItem
                       item={item}
                       active={active}
@@ -168,9 +168,9 @@ export function AppSidebar({
                       expanded={expanded}
                       motion={motion}
                     />
-                    {/* 하부탭(면) — 펼친 사이드바 + 활성 메뉴일 때만 작게 들여쓰기 노출 */}
-                    {isDesktop && expanded && active && subs ? (
-                      <ul className="mt-0.5 mb-1 space-y-px">
+                    {/* 하부탭(면) — 펼친 사이드바에서, 활성 메뉴는 항상 / 그 외엔 마우스오버 시 노출(들여쓰기) */}
+                    {isDesktop && expanded && subs ? (
+                      <ul className={`mt-0.5 mb-1 space-y-px ${active ? "" : "hidden group-hover/menu:block"}`}>
                         {subs.map((sub) => (
                           <li key={sub.href}>
                             <SubTab
@@ -183,7 +183,7 @@ export function AppSidebar({
                         ))}
                       </ul>
                     ) : null}
-                  </Fragment>
+                  </div>
                 );
               })}
             </div>
