@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { OperationsSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
 import {
+  HolidayListEditor,
   PeriodListEditor,
   StringListEditor,
   SubjectListEditor,
@@ -55,13 +56,8 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
       {/* ⚠️ 학기(terms)는 소비처가 없어 v1에서 입력 숨김(상태·스키마·저장은 보존).
           성적/상담 학기 셀렉트 등 소비처가 생기면 SettingsCard만 복원. */}
 
-      <SettingsCard title="공휴일·휴원일" description="수강료 계산 시 수업일에서 제외됩니다.">
-        <StringListEditor
-          value={o.holidays}
-          onChange={(v) => set({ holidays: v })}
-          addLabel="휴일 추가"
-          type="date"
-        />
+      <SettingsCard title="공휴일·휴원일" description="수강료 계산 시 수업일에서 제외됩니다. 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다.">
+        <HolidayListEditor value={o.holidays} onChange={(v) => set({ holidays: v })} />
       </SettingsCard>
       </div>
     </SectionForm>

@@ -24,11 +24,28 @@ function deepMerge<T>(base: T, stored: unknown): T {
   return out as T;
 }
 
+// 공휴일 역호환 — 옛 저장형식 string[]("YYYY-MM-DD")를 {date,name}로 승격. 신형식 객체는 그대로.
+// (deepMerge는 배열을 통째 교체하므로 옛 데이터가 그대로 흘러옴 → 여기서 형태 보장.)
+function normalizeHolidays(arr: unknown): { date: string; name: string }[] {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((h) => {
+      if (typeof h === "string") return { date: h, name: "" };
+      if (h && typeof h === "object" && typeof (h as { date?: unknown }).date === "string") {
+        const o = h as { date: string; name?: unknown };
+        return { date: o.date, name: typeof o.name === "string" ? o.name : "" };
+      }
+      return null;
+    })
+    .filter((h): h is { date: string; name: string } => h !== null);
+}
+
 /** 저장값(부분) + 테넌트 메타 → 완전한 설정. name 미입력 시 테넌트 학원명으로 폴백. */
 export function resolveSettings(stored: unknown, tenant: { name: string }): TenantSettings {
   const merged = deepMerge(DEFAULT_SETTINGS, stored);
   return {
     ...merged,
     profile: { ...merged.profile, name: merged.profile.name || tenant.name },
+    operations: { ...merged.operations, holidays: normalizeHolidays(merged.operations.holidays) },
   };
 }

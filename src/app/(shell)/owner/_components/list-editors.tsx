@@ -2,7 +2,7 @@
 
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
 import { Plus, X } from "lucide-react";
-import { SUBJECT_COLORS, type PeriodTimeRow, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
+import { SUBJECT_COLORS, type HolidaySetting, type PeriodTimeRow, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 
 const cellCls =
   "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
@@ -153,6 +153,39 @@ export function PeriodListEditor({
         onClick={() => onChange([...value, { label: `${value.length + 1}교시`, startTime: "", endTime: "" }])}
         label="교시 추가"
       />
+    </div>
+  );
+}
+
+export function HolidayListEditor({
+  value,
+  onChange,
+}: {
+  value: HolidaySetting[];
+  onChange: (v: HolidaySetting[]) => void;
+}) {
+  const set = (i: number, patch: Partial<HolidaySetting>) =>
+    onChange(value.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <div className="space-y-2">
+      {value.map((h, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            type="date"
+            className={`${cellCls} w-[150px]`}
+            value={h.date}
+            onChange={(e) => set(i, { date: e.target.value })}
+          />
+          <input
+            className={`${cellCls} flex-1`}
+            value={h.name}
+            placeholder="공휴일명 (예: 개교기념일, 설날)"
+            onChange={(e) => set(i, { name: e.target.value })}
+          />
+          <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
+        </div>
+      ))}
+      <AddButton onClick={() => onChange([...value, { date: "", name: "" }])} label="휴일 추가" />
     </div>
   );
 }

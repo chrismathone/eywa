@@ -33,6 +33,13 @@ export const termSchema = z.object({
 });
 export type TermSetting = z.infer<typeof termSchema>;
 
+// 공휴일·휴원일 — 날짜 + 이름(공휴일명). 옛 데이터(string[])는 resolve.ts에서 {date,name:""}로 정규화.
+export const holidaySchema = z.object({
+  date: z.string().regex(YMD, "YYYY-MM-DD"),
+  name: z.string().max(40),
+});
+export type HolidaySetting = z.infer<typeof holidaySchema>;
+
 // === 섹션 스키마 ===
 export const profileSchema = z.object({
   name: z.string().max(60),
@@ -56,7 +63,7 @@ export const operationsSchema = z.object({
   weekdayPeriods: z.array(periodTimeSchema).max(20),
   weekendPeriods: z.array(periodTimeSchema).max(20),
   terms: z.array(termSchema).max(20),
-  holidays: z.array(z.string().regex(YMD)).max(200),
+  holidays: z.array(holidaySchema).max(200),
 });
 export type OperationsSettings = z.infer<typeof operationsSchema>;
 

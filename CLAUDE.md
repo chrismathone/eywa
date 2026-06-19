@@ -184,6 +184,10 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   대체공휴일/어린이날…) 부여(기존 8개만 이름 → 전부). 공휴일 면에 **연도 ◀▶ + 월 선택**(`?hy=&hm=`). 계산기는
   `koreanHolidayDatesForRange`로 차시 제외.
 - 검증: typecheck0 / lint0(신규0) / test378 / build✓ + 브라우저 4서브탭 200(계산기=신입생도구·환불규정 포함, 견적목록, 공휴일 이름·연도이동).
+- **후속(사용자 "학원 공휴일에 공휴일명도")**: 학원설정 `operations.holidays`를 `string[]` → **`{date,name}[]`**(`holidaySchema`)로.
+  운영 폼에 `HolidayListEditor`(날짜+공휴일명 입력), 공휴일 면 "학원 지정 휴원일"이 이름과 함께 표시. **옛 string[] 저장데이터는
+  `resolve.ts`의 `normalizeHolidays`가 `{date,name:""}`로 승격**(읽기 정규화 — DB 마이그 불요, 다음 저장 시 신형식). 계산기엔
+  `holidays.map(h=>h.date)`로 날짜만 전달. ⚠️ `operations.holidays`를 읽는 새 코드는 객체 배열임에 유의.
 
 ### 수강료 계산기 "설정" 이식 — 단가표·할인·세션·공휴일 (2026-06-19)
 ijw 수강료 계산기는 "설정"에 5탭(수강료 단가표 43과목·교재/기타·할인·공휴일·세션)이 붙어 있었는데, eywa는

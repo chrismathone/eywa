@@ -67,7 +67,7 @@ async function CalculatorTab({ qid }: { qid?: string }) {
     <TuitionCalculator
       academyName={settings.profile.name || "인재원"}
       defaultPeriod={currentPeriod()}
-      holidays={settings.operations.holidays}
+      holidays={settings.operations.holidays.map((h) => h.date)}
       catalog={catalog}
       initial={initial ?? undefined}
     />
@@ -92,7 +92,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
   const yearRaw = Number(sp.hy) || thisYear;
   const year = Math.min(HOLIDAY_MAX_YEAR, Math.max(HOLIDAY_MIN_YEAR, yearRaw));
   const month = Math.min(12, Math.max(0, Number(sp.hm) || 0));
-  const tenantHolidays = [...settings.operations.holidays].sort();
+  const tenantHolidays = [...settings.operations.holidays].sort((a, b) => a.date.localeCompare(b.date));
   const all = koreanHolidaysForYear(year);
   const national = month >= 1 ? all.filter((h) => Number(h.date.slice(5, 7)) === month) : all;
 
@@ -129,9 +129,10 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
           </p>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
-            {tenantHolidays.map((d) => (
-              <li key={d} className="border-line bg-bg-soft num rounded-sm border px-2 py-1 text-xs">
-                {d} <span className="text-text-faint">({dowOf(d)})</span>
+            {tenantHolidays.map((h) => (
+              <li key={h.date} className="border-line bg-bg-soft rounded-sm border px-2 py-1 text-xs">
+                {h.name ? <span className="text-foreground font-medium">{h.name} </span> : null}
+                <span className="num text-text-dim">{h.date} ({dowOf(h.date)})</span>
               </li>
             ))}
           </ul>
