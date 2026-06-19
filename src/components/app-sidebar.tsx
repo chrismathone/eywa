@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Tooltip,
   TooltipContent,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
+import { NAV_GROUPS, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
@@ -73,6 +73,7 @@ export function AppSidebar({
   permMatrix?: AccessMatrix;
 }) {
   const pathname = usePathname();
+  const currentTab = useSearchParams().get("tab"); // 활성 하부탭 표시용(배경 프레임 기준)
   const isDesktop = useIsDesktop();
   const { expanded, width, dragging, handleProps } = useSidebarResize();
   const animations = usePrefs((s) => s.animations);
@@ -156,16 +157,33 @@ export function AppSidebar({
                     (!hasFocus && isItemActive(item.href, pathname))
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
+                const subs = SUBTABS_BY_MENU[item.menuKey];
                 return (
-                  <RailItem
-                    key={item.href}
-                    item={item}
-                    active={active}
-                    openOnly={openOnly}
-                    isDesktop={isDesktop}
-                    expanded={expanded}
-                    motion={motion}
-                  />
+                  <Fragment key={item.href}>
+                    <RailItem
+                      item={item}
+                      active={active}
+                      openOnly={openOnly}
+                      isDesktop={isDesktop}
+                      expanded={expanded}
+                      motion={motion}
+                    />
+                    {/* 하부탭(면) — 펼친 사이드바 + 활성 메뉴일 때만 작게 들여쓰기 노출 */}
+                    {isDesktop && expanded && active && subs ? (
+                      <ul className="mt-0.5 mb-1 space-y-px">
+                        {subs.map((sub) => (
+                          <li key={sub.href}>
+                            <SubTab
+                              menuKey={item.menuKey}
+                              label={sub.label}
+                              href={sub.href}
+                              active={isSubActive(sub.href, pathname, currentTab)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </Fragment>
                 );
               })}
             </div>
@@ -203,6 +221,43 @@ export function AppSidebar({
         </div>
       </aside>
     </TooltipProvider>
+  );
+}
+
+// 하부탭 활성 판정 — 배경 프레임의 pathname + ?tab과 비교(창 안 면은 미하이라이트, best-effort).
+function isSubActive(href: string, pathname: string, currentTab: string | null): boolean {
+  const [path, query] = href.split("?");
+  if (path !== pathname) return false;
+  const tab = query ? new URLSearchParams(query).get("tab") : null;
+  return (tab ?? null) === (currentTab ?? null);
+}
+
+/** 하부탭(면) 링크 — 클릭 시 부모 menuKey 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비). */
+function SubTab({
+  menuKey,
+  label,
+  href,
+  active,
+}: {
+  menuKey: string;
+  label: string;
+  href: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        useWindowStore.getState().open("route", { id: menuKey, title: label, href });
+      }}
+      className={`block truncate rounded py-0.5 pr-2 pl-9 text-[11px] transition ${
+        active ? "text-primary font-medium" : "text-text-faint hover:text-foreground hover:bg-bg-soft"
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
 

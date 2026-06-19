@@ -35,6 +35,29 @@ export type NavGroup = {
   items: NavItem[];
 };
 
+// 메뉴 하부탭(면) — 펼친 사이드바에서 현재 메뉴 아래 작게 노출. 클릭 시 같은 menuKey 창에서 면 전환.
+// 면 정의는 각 페이지 FaceTabs와 동기 유지(여기 라벨/href는 표시·이동용 미러).
+export type SubTab = { label: string; href: string };
+export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
+  consultations: [
+    { label: "학생상담", href: "/consultations" },
+    { label: "등록상담", href: "/enrollment" },
+  ],
+  billing: [
+    { label: "수납", href: "/billing" },
+    { label: "교재", href: "/billing?tab=textbooks" },
+    { label: "지출", href: "/billing?tab=expenses" },
+    { label: "수강료 계산기", href: "/billing?tab=calculator" },
+  ],
+  owner: [
+    { label: "프로필·브랜드", href: "/owner" },
+    { label: "운영 체계", href: "/owner?tab=operations" },
+    { label: "수납·청구", href: "/owner?tab=billing" },
+    { label: "알림·연동·약관", href: "/owner?tab=notifications" },
+    { label: "역할·권한", href: "/owner?tab=permissions" },
+  ],
+};
+
 /**
  * NAV: 5그룹 (홈 / 수업 / 학생 / 운영 / 지원). 아이콘은 기능이 직관적으로 읽히는
  * lucide 표준 아이콘(레일·모바일nav·검색팰릿 공용). 그룹 번호는 사이드바에서 자동 인덱스.
