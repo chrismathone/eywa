@@ -130,25 +130,27 @@ export type WithdrawalDetail = WithdrawalRow & {
 
 export async function getWithdrawalDetail(studentId: string): Promise<WithdrawalDetail | null> {
   const supabase = await createClient();
-  const { data: s } = await supabase
-    .from("students")
-    .select(
-      `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
-       teacher:primary_teacher_id ( display_name )`,
-    )
-    .eq("id", studentId)
-    .single();
+  // 두 쿼리는 독립(enrollments는 studentId만 의존) → 병렬(2 round-trip → 1).
+  const [{ data: s }, { data: enrollments }] = await Promise.all([
+    supabase
+      .from("students")
+      .select(
+        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
+         teacher:primary_teacher_id ( display_name )`,
+      )
+      .eq("id", studentId)
+      .single(),
+    supabase
+      .from("enrollments")
+      .select(
+        `id, start_date, end_date, withdrawal_reason,
+         class:class_id ( id, class_name, subject )`,
+      )
+      .eq("student_id", studentId)
+      .order("start_date", { ascending: false }),
+  ]);
 
   if (!s) return null;
-
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select(
-      `id, start_date, end_date, withdrawal_reason,
-       class:class_id ( id, class_name, subject )`,
-    )
-    .eq("student_id", studentId)
-    .order("start_date", { ascending: false });
 
   const history =
     (enrollments ?? []).map((e) => {

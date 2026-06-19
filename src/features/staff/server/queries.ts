@@ -28,24 +28,20 @@ export type StaffRow = {
 export async function getStaffList(): Promise<StaffRow[]> {
   const supabase = await createClient();
 
-  const { data: users } = await supabase
-    .from("users")
-    .select("id, display_name, email, phone, system_role, status")
-    .neq("status", "inactive")
-    .order("system_role", { ascending: true })
-    .order("display_name", { ascending: true });
+  // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
+  // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
+  const [{ data: users }, { data: teaching }, { data: primaryS }] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id, display_name, email, phone, system_role, status")
+      .neq("status", "inactive")
+      .order("system_role", { ascending: true })
+      .order("display_name", { ascending: true }),
+    supabase.from("classes").select("id, teacher_id").eq("is_active", true),
+    supabase.from("students").select("id, primary_teacher_id").eq("status", "enrolled"),
+  ]);
 
   if (!users) return [];
-
-  const { data: teaching } = await supabase
-    .from("classes")
-    .select("id, teacher_id")
-    .eq("is_active", true);
-
-  const { data: primaryS } = await supabase
-    .from("students")
-    .select("id, primary_teacher_id")
-    .eq("status", "enrolled");
 
   const classCount = new Map<string, number>();
   for (const c of teaching ?? []) {

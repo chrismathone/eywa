@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   aggregateClassHours,
   computePayrollAmounts,
@@ -68,16 +69,25 @@ export async function calculateMonthlyPayroll(
     };
   }
 
-  // 해당 월 attendance_records 중 강사 담당 반 + present/late만 시간 합산
-  const { data: attendances } = await supabase
-    .from("attendance_records")
-    .select(
-      `session_date, status, class:class_id ( id ), schedule:class_id ( class_schedules ( start_time, end_time ) )`,
-    )
-    .in("class_id", classIds)
-    .gte("session_date", start)
-    .lt("session_date", nextMonth)
-    .in("status", ["present", "late"]);
+  // 해당 월 attendance_records 중 강사 담당 반 + present/late만 시간 합산.
+  // fetchAllPaged — 활동 많은 강사(반 5+개)는 월 출석이 1000행을 넘을 수 있어 전건 fetch면 잘리고(#54),
+  // 잘린 채 시간 합산하면 급여가 과소 지급된다(돈 정확성). range 페이지네이션으로 전건 확보.
+  const attendances = await fetchAllPaged<{
+    session_date: string;
+    status: string;
+    class: { id?: string } | { id?: string }[] | null;
+  }>((from, to) =>
+    supabase
+      .from("attendance_records")
+      .select(
+        `session_date, status, class:class_id ( id ), schedule:class_id ( class_schedules ( start_time, end_time ) )`,
+      )
+      .in("class_id", classIds)
+      .gte("session_date", start)
+      .lt("session_date", nextMonth)
+      .in("status", ["present", "late"])
+      .range(from, to),
+  );
 
   // schedule 시간 → 반별 평균 세션 시간 → 고유 출석 세션 합 → 금액. 계산은 전부 순수 calc(#Q1).
   const { data: schedules } = await supabase

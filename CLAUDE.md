@@ -214,6 +214,32 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 쿼리 성능/정합 2차 — 멀티에이전트 전수 감사 + 측정 기반 픽스 6건 (2026-06-20)
+대시보드 경량화에 이어 **전 feature 쿼리/페이지를 멀티에이전트로 전수 감사**(16 feature, 42 agent — 각 finding을
+적대 검증) → "전건 fetch + JS 집계(PostgREST ~1000행 silent 절단, #54)"·"대량 `.in()`(414, #53)"·"직렬 await"를
+21건 confirmed. **핵심 원칙(사용자 지침): 측정부터.** 감사가 "high"로 라벨한 다수는 **가설상 >1000행 미래 멀티테넌트**
+기준이었다. 데모 DB 실측(1회성 count)으로 **지금 실제로 잘리는 것만** 골라냈다: student_consultations **1340**·
+invoices 1606(단 월버킷 max 400=안전)·enrollments 1057/active 794·enrollment_consultations **204**(안전)·
+attendance/date 9·max class 15. → 결론: **상담 통계만 현재 데이터로 실제 오출력**, 나머지는 방어/지연.
+- **✅ 픽스(6건, 측정으로 선별)**:
+  1. **상담 통계 2함수 → DB group-by RPC**(`0040a_consultation_stats_rpc.sql`, dev적용): `getConsultationByCategory`·
+     `getConsultationTrend`([consultations/server/queries.ts](src/features/consultations/server/queries.ts))가 6개월
+     student_consultations(1340행)를 전건 fetch→JS 집계해 **1000행에서 잘려 카테고리·추세 student 라인이 340행 과소집계**
+     되고 있었다. `consultation_category_counts`/`consultation_monthly_trend`(security invoker + `auth_tenant_id()` 이중격리,
+     0039a 패턴)로 무절단. 브라우저 검증: 차트 렌더·콘솔에러0·trend 바 높이 월별 실분포 반영(4월 343=최고).
+  2. **classes `getClassesList` → `fetchInChunks`**: 활성 enrollment 전건 fetch(현 794, Firebase 이식시 >1000)를
+     표시 반 id로 청크 조회(getClassesPage 패턴). 같은 함수 schedules `.in(classIds)`도 청크화. 브라우저: "등록 학생 794명"·반당 6명·129반 정상.
+  3. **payroll 월 출석 → `fetchAllPaged`**: 활동 많은 강사(반 5+)는 월 출석 1000행 초과 가능 → 전건 fetch면 잘려
+     **시간 과소합산=급여 과소지급**(돈 정확성). range 페이지네이션으로 전건.
+  4·5·6. **직렬 await → `Promise.all`**: `getStaffList`(3쿼리 독립)·`getWithdrawalDetail`(2쿼리)·`getClassDetail`(2쿼리).
+     출력 동일, round-trip 절감. 전 페이지 브라우저 렌더 검증(staff 39·classes·withdrawals·payroll, 에러0).
+- **⚪ 의도적 지연(현재 데이터로 안 잘림 — 방어 백로그, Firebase 전체 이식 후 재점검)**: enrollment 대시보드 3함수
+  (outcomeDistribution·conversionTrend·consultantPerformance — enrollment_consultations 204행이라 안전)·exams
+  `getExamDetail`(시험당 소량)·attendance `getAttendanceForDate`(일자당 9)·매트릭스 `.in()`(반 최대 15명)·admin
+  findDuplicateStudents(564<1000)·findOrphans `.in(129반)`·retention campaign-targets(소량)·billing(월버킷 400=안전)·
+  students 반별 카운트 N+1(3~5쿼리, RPC 필요)·search 직렬 canAccessTenant(캐시됨, 이득~0). **새 코드는 #53/#54 헬퍼로 처음부터.**
+- 검증: typecheck0 / lint0(신규0) / test392 / 브라우저 5페이지 렌더·에러0. 마이그 `0040a`(dev DB 적용, 손수 alpha).
+
 ### 같은 탭 다중 창(복제) + 크로스 창/탭 저장 경고 (2026-06-19) — ⏳ 구현·검증 그린, A 데스크톱 UI 수동확인만 남음
 브랜치 **`feat/multi-window-and-save-warning`**(아직 main 미머지 — 다른 컴퓨터 이어작업용). 상세 함정·규칙은
 위 "구현 중 막혔던 점 #64", 설계는 [`C:\Users\user\.claude\plans\steady-questing-music.md`](로컬, 미동기).
@@ -1197,7 +1223,8 @@ node_modules를 지울 위험** + permission-denied. 또: 다른 세션이 내 �
 > trgm 색인 11개·RLS 미적용 테이블 0개 확인)**는 [`supabase/migrations/README.md`](supabase/migrations/README.md).
 > ⚠️ **2026-06-18 이후 alpha 추가**(드리즐 스냅샷은 `0027_big_swordsman`에 멈춤 — 신규는 전부 손수 alpha, `db:generate` 금지):
 > `0027b` 학생메모핀 · `0027d~f` 직원phone/조퇴/학생프로필 · `0027g/h` 시간표포트 RLS·이전 · **`0028a` 시험(exams) ·
-> `0029a` 카카오메시징 · `0030a` 교재카탈로그 · `0031a` 운영감사로그 · `0032a` 레벨테스트**(전부 dev DB 적용·RLS 격리).
+> `0029a` 카카오메시징 · `0030a` 교재카탈로그 · `0031a` 운영감사로그 · `0032a` 레벨테스트 · **`0039a` 대시보드 집계 RPC ·
+> `0040a` 상담통계 집계 RPC**(전부 dev DB 적용·RLS 격리·security invoker + `auth_tenant_id()` 이중격리).
 > drizzle 번호본은 `db:migrate`가 자동, RLS/트리거/확장/GIN trigram 색인 등 `000Na_*` **alpha는 손수** 적용
 > (신규 DB 셋업 시 누락 주의).
 

@@ -384,19 +384,16 @@ export async function getConsultationByCategory(
   const supabase = await createClient();
   const since = new Date();
   since.setMonth(since.getMonth() - monthCount);
-  const sinceIso = since.toISOString();
 
-  const { data } = await supabase
-    .from("student_consultations")
-    .select("category")
-    .gte("consulted_at", sinceIso);
-
-  const counts = new Map<string, number>();
-  for (const r of data ?? []) {
-    const key = (r.category as string) ?? "other";
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return Array.from(counts.entries()).map(([category, count]) => ({ category, count }));
+  // DB group-by RPC(0040a) — 전건 fetch + JS Map 집계는 PostgREST ~1000행에서 잘려(#54) 데모 상담 1340행 중
+  // 340행을 잃고 카테고리 분포가 과소집계됐다. 집계를 DB로 내려 1쿼리·무절단.
+  const { data } = await supabase.rpc("consultation_category_counts", {
+    p_since: since.toISOString(),
+  });
+  return (data ?? []).map((r: { category: string; count: number }) => ({
+    category: r.category ?? "other",
+    count: Number(r.count),
+  }));
 }
 
 export type MonthlyBucket = { month: string; enrollment: number; student: number };
@@ -406,36 +403,23 @@ export async function getConsultationTrend(monthCount = 6): Promise<MonthlyBucke
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - monthCount + 1, 1);
 
-  const [{ data: ec }, { data: sc }] = await Promise.all([
-    supabase
-      .from("enrollment_consultations")
-      .select("consulted_at")
-      .gte("consulted_at", start.toISOString()),
-    supabase
-      .from("student_consultations")
-      .select("consulted_at")
-      .gte("consulted_at", start.toISOString()),
-  ]);
+  // DB group-by RPC(0040a) — 양 테이블 전건 fetch + JS 버킷팅은 ~1000행에서 잘려(#54) 추세 student 라인이
+  // 과소집계됐다(데모 student_consultations 1340행/6개월). 월별 집계를 DB로 내려 무절단.
+  const { data } = await supabase.rpc("consultation_monthly_trend", {
+    p_start: start.toISOString(),
+  });
+  const byMonth = new Map<string, { enrollment: number; student: number }>();
+  for (const r of (data ?? []) as { month: string; enrollment: number; student: number }[]) {
+    byMonth.set(r.month, { enrollment: Number(r.enrollment), student: Number(r.student) });
+  }
 
-  const buckets = new Map<string, MonthlyBucket>();
+  // 데이터 없는 달도 0으로 채워 monthCount개 버킷 유지(기존 출력 형태 보존).
+  const buckets: MonthlyBucket[] = [];
   for (let i = 0; i < monthCount; i++) {
     const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
     const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    buckets.set(k, { month: k, enrollment: 0, student: 0 });
+    const hit = byMonth.get(k);
+    buckets.push({ month: k, enrollment: hit?.enrollment ?? 0, student: hit?.student ?? 0 });
   }
-
-  for (const r of ec ?? []) {
-    const d = new Date(r.consulted_at);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const b = buckets.get(k);
-    if (b) b.enrollment++;
-  }
-  for (const r of sc ?? []) {
-    const d = new Date(r.consulted_at);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const b = buckets.get(k);
-    if (b) b.student++;
-  }
-
-  return Array.from(buckets.values());
+  return buckets;
 }

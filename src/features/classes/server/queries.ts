@@ -135,25 +135,32 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   const { data: classes } = await qb;
   if (!classes) return [];
 
-  // 학생 수 카운트
+  // 학생 수 카운트 — 표시 중인 반 id로 청크 조회. 전건 fetch는 ~1000행에서 잘려(#54) 학생 수가 과소집계되고,
+  // 표시 안 하는 반 enrollment까지 끌어와 낭비된다. getClassesPage와 동일 패턴(fetchInChunks).
   const classIds = classes.map((c) => c.id);
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select("class_id")
-    .is("end_date", null);
-
   const counts = new Map<string, number>();
-  for (const e of enrollments ?? []) {
-    counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+  if (classIds.length > 0) {
+    const enrollments = await fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
+      supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+    );
+    for (const e of enrollments) {
+      counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    }
   }
 
-  // 요일 + 시작시각
+  // 요일 + 시작시각 — 동일하게 청크 조회(반 많아지면 단일 .in()이 414, 스케줄 1000행 절단).
   let daysByClass = new Map<string, Map<string, string | null>>();
   if (classIds.length > 0) {
-    const { data: scheds } = await supabase
-      .from("class_schedules")
-      .select("class_id, day_of_week, start_time")
-      .in("class_id", classIds);
+    const scheds = await fetchInChunks<{
+      class_id: string;
+      day_of_week: string;
+      start_time: string | null;
+    }>(classIds, (chunk) =>
+      supabase
+        .from("class_schedules")
+        .select("class_id, day_of_week, start_time")
+        .in("class_id", chunk),
+    );
     daysByClass = buildDaySlots(scheds);
   }
 
@@ -352,18 +359,20 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
 
   if (!c) return null;
 
-  const { data: schedules } = await supabase
-    .from("class_schedules")
-    .select("id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id")
-    .eq("class_id", id)
-    .order("day_of_week")
-    .order("start_time");
-
-  const { count: studentCount } = await supabase
-    .from("enrollments")
-    .select("*", { count: "exact", head: true })
-    .eq("class_id", id)
-    .is("end_date", null);
+  // 독립 두 쿼리 병렬(2 round-trip → 1). count는 head:true라 행 미전송.
+  const [{ data: schedules }, { count: studentCount }] = await Promise.all([
+    supabase
+      .from("class_schedules")
+      .select("id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id")
+      .eq("class_id", id)
+      .order("day_of_week")
+      .order("start_time"),
+    supabase
+      .from("enrollments")
+      .select("*", { count: "exact", head: true })
+      .eq("class_id", id)
+      .is("end_date", null),
+  ]);
 
   const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
     | { display_name?: string }
