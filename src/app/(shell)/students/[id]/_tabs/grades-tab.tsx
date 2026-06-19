@@ -5,6 +5,7 @@ import { gradeSeries, gradeStats } from "@/lib/calc/grades";
 import { GradeForm } from "../_components/grade-form";
 import { GradesChart } from "../_components/grades-chart";
 import { LevelTests } from "../_components/level-tests";
+import { DeleteGradeButton } from "../_components/delete-grade-button";
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -68,6 +69,7 @@ export async function GradesTab({ studentId }: { studentId: string }) {
                 <th className="micro px-4 py-2 text-left">시험명</th>
                 <th className="micro px-4 py-2 text-right">점수</th>
                 <th className="micro px-4 py-2 text-left">메모</th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -91,6 +93,13 @@ export async function GradesTab({ studentId }: { studentId: string }) {
                     )}
                   </td>
                   <td className="text-muted-foreground px-4 py-2 text-xs">{g.notes ?? "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    <DeleteGradeButton
+                      gradeId={g.id}
+                      studentId={studentId}
+                      label={g.examName || subjectMaps.labelOf(g.subject)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
