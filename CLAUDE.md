@@ -185,6 +185,13 @@ ijw 수강료 계산기는 "설정"에 5탭(수강료 단가표 43과목·교재
   이미 도출(ijw "default mode"와 동일 계산). ijw의 월별 드래그 다중 range는 데모 임팩트 대비 과중 → 보류.
 - **데이터 이식**: ijw `constants/tuitionCourses.ts` 43과목 + `tuitionExtras.ts` 기타 4·할인 3 = 50행을
   `scripts/_poc_migration/import-tuition-catalog.cjs`(멱등, ijw-demo 테넌트)로 적재.
+- **후속(같은 날, 사용자 요청 "ijw 공휴일·단가 그대로 + 교재단가표 두 곳에")**: ① **ijw 공휴일 전체 이식** —
+  `features/billing/holidays-data.ts`에 ijw `KOREAN_HOLIDAYS`(2024–2030, 음력·대체·부처님오신날 포함) **그대로**
+  포팅. 계산기 토글이 양력 고정 8개 대신 **그 해 전체 공휴일**을 제외(`koreanHolidaysForRange`), 공휴일 면도 전체
+  목록(`holidayName`과 함께) 표시. (`tuition-calc.ts`의 `mergeHolidays`/`fixedHolidaysForYear`는 테스트만 유지·UI 미사용.)
+  ② **교재 단가표를 "내부탭"으로 두 곳에 배치** — 최상위 `교재 단가표` 면 **제거** → 교재 면(내부탭 `목록`/`교재 단가표`,
+  `tsub=`, `textbooks-face.tsx` 신설) + 계산기 서브탭에 `교재 단가표` 추가(공휴일 왼쪽: 계산기/수강료 단가/교재 단가표/공휴일).
+  **같은 `CatalogPanel` 재사용**(`base` prop으로 위치별 필터/검색/페이지 링크를 해당 면 안에 보존). 검증 그린 + 4면 200.
 - 검증: typecheck 0 / lint 0(기존 경고 9 외 신규 0) / test 368 / build ✓. **브라우저 실검증**: 3개 서브탭
   200 + 단가표에 임포트 데이터(Dr.Phonics·중등M·형제 할인·시스템 사용료)·계산기 picker 마크업 확인.
   ⚠️ 검증 중 만난 `/billing` 500은 **병렬 expenses 세션의 stale HMR**(setExpenseApproval)이지 이 작업 무관(#35).
@@ -378,7 +385,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
 | 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
 | 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + **급여 월별표 진입(`/staff/payroll`)** |
-| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` + `tuition_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **FaceTabs 5면**(수납/교재/지출/**계산기**/**교재 단가표**). 계산기 면은 다시 서브탭(계산기/**수강료 단가**(과목·기타·할인 단가표)/공휴일) — 단가표에서 고른 과목·할인이 계산기에 자동입력 |
+| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` + `tuition_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **FaceTabs 4면**(수납/교재/지출/**계산기**). 교재 면=내부탭(목록/교재 단가표), 계산기 면=서브탭(계산기/**수강료 단가**/교재 단가표/공휴일) — 교재 단가표는 두 면이 같은 `CatalogPanel` 재사용. 단가표에서 고른 과목·할인이 계산기에 자동입력, 공휴일은 ijw 전체(음력·대체 포함) |
 | 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
 | 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
 

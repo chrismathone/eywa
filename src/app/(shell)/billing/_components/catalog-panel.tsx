@@ -21,7 +21,10 @@ const ACTIVE_FILTERS = [
 type Sp = { q?: string; grade?: string; active?: string; page?: string };
 const PAGE_SIZE = 50;
 
-export async function CatalogPanel({ sp }: { sp: Sp }) {
+// 교재 단가표 — 교재 면(목록/교재단가표)과 수강료 계산기 면(…/교재 단가표) 두 곳에서 같은 컴포넌트로 쓴다.
+// base = 현재 마운트 위치 파라미터(예: {tab:"textbooks",tsub:"catalog"} 또는 {tab:"calculator",csub:"catalog"}).
+// 필터/검색/페이지 링크가 base를 보존해 해당 면 안에 머문다.
+export async function CatalogPanel({ sp, base }: { sp: Sp; base: Record<string, string> }) {
   const q = sp.q ?? "";
   const grade = sp.grade ?? "all";
   const active = sp.active ?? "all";
@@ -35,7 +38,7 @@ export async function CatalogPanel({ sp }: { sp: Sp }) {
 
   const build = (patch: Partial<Sp>) => {
     const next = { q, grade, active, ...patch };
-    const p = new URLSearchParams({ tab: "catalog" });
+    const p = new URLSearchParams(base);
     if (next.grade && next.grade !== "all") p.set("grade", next.grade);
     if (next.active && next.active !== "all") p.set("active", next.active);
     if (next.q) p.set("q", next.q);
@@ -70,7 +73,9 @@ export async function CatalogPanel({ sp }: { sp: Sp }) {
           ))}
         </div>
         <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
-          <input type="hidden" name="tab" value="catalog" />
+          {Object.entries(base).map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
           {grade !== "all" ? <input type="hidden" name="grade" value={grade} /> : null}
           {active !== "all" ? <input type="hidden" name="active" value={active} /> : null}
           <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">

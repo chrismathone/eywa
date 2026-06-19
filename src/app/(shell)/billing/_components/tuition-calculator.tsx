@@ -8,11 +8,8 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createInvoice, type CreateInvoiceState } from "@/features/billing/server/actions";
 import type { StudentOption } from "@/features/billing/server/textbook-queries";
 import { DISCOUNT_CATEGORY, type TuitionCatalogOption } from "@/features/billing/tuition-catalog";
-import {
-  countSessions,
-  estimateTuition,
-  mergeHolidays,
-} from "@/features/billing/tuition-calc";
+import { koreanHolidaysForRange } from "@/features/billing/holidays-data";
+import { countSessions, estimateTuition } from "@/features/billing/tuition-calc";
 
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
@@ -87,9 +84,10 @@ export function TuitionCalculator({
   const [state, formAction] = useActionState<CreateInvoiceState, FormData>(createInvoice, undefined);
 
   const est = useMemo(() => {
-    const year = Number(startDate.slice(0, 4)) || 2026;
-    // 학원 설정 휴원일은 항상 제외 + 양력 고정 공휴일은 토글. (mergeHolidays로 중복 제거.)
-    const hol = mergeHolidays(year, holidays, excludeHolidays);
+    // 학원 설정 휴원일은 항상 제외 + 대한민국 공휴일(ijw 이식, 음력·대체 포함)은 토글. 중복은 Set으로 제거.
+    const hol = excludeHolidays
+      ? Array.from(new Set([...koreanHolidaysForRange(startDate, endDate), ...holidays]))
+      : holidays;
     const sessions = countSessions(startDate, endDate, weekdays, hol);
     return estimateTuition({ sessions, perSession, discount });
   }, [startDate, endDate, weekdays, perSession, discount, excludeHolidays, holidays]);
@@ -203,7 +201,7 @@ export function TuitionCalculator({
             onChange={(e) => setExcludeHolidays(e.target.checked)}
             className="accent-primary size-4"
           />
-          <span className="text-text-dim">양력 공휴일 제외 (음력·대체공휴일은 종료일 조정으로 반영)</span>
+          <span className="text-text-dim">대한민국 공휴일 제외 (음력·대체공휴일 포함 · 학원 휴원일은 항상 제외)</span>
         </label>
       </div>
 
