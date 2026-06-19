@@ -119,12 +119,15 @@ export async function createClass(
   if (error || !data) return { error: error?.message ?? "반 생성 실패" };
 
   if (input.schedules.length > 0) {
+    // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 전 스케줄 저장이 조용히 실패).
+    const validFrom = new Date().toISOString().slice(0, 10);
     const rows = input.schedules.map((s) => ({
       tenant_id: user.tenantId,
       class_id: data.id,
       day_of_week: s.dayOfWeek,
       start_time: s.startTime,
       end_time: s.endTime,
+      valid_from: validFrom,
       teacher_id: s.teacherId,
       classroom_id: s.classroomId,
     }));
@@ -189,12 +192,15 @@ export async function updateClass(
   await supabase.from("class_schedules").delete().eq("class_id", id);
 
   if (input.schedules.length > 0) {
+    // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 delete만 되고 재삽입이 실패).
+    const validFrom = new Date().toISOString().slice(0, 10);
     const rows = input.schedules.map((s) => ({
       tenant_id: user.tenantId,
       class_id: id,
       day_of_week: s.dayOfWeek,
       start_time: s.startTime,
       end_time: s.endTime,
+      valid_from: validFrom,
       teacher_id: s.teacherId,
       classroom_id: s.classroomId,
     }));
