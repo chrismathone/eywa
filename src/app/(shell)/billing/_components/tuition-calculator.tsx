@@ -1,27 +1,33 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Check, Loader2, Printer, Save } from "lucide-react";
+import { AlertCircle, Check, Loader2, Plus, Printer, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createInvoice, type CreateInvoiceState } from "@/features/billing/server/actions";
-import type { StudentOption } from "@/features/billing/server/textbook-queries";
+import { saveTuitionQuote, type SaveQuoteState } from "@/features/billing/server/tuition-quote-actions";
 import { DISCOUNT_CATEGORY, type TuitionCatalogOption } from "@/features/billing/tuition-catalog";
-import { koreanHolidaysForRange } from "@/features/billing/holidays-data";
-import { countSessions, estimateTuition } from "@/features/billing/tuition-calc";
+import { koreanHolidayDatesForRange } from "@/features/billing/holidays-data";
+import { autoSessions, quoteTotal } from "@/features/billing/quote-calc";
+import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
+import type { QuoteDetail } from "@/features/billing/server/tuition-quote-queries";
+import { CatalogPicker, CourseEditor, ExtraEditor, DiscountEditor } from "./quote-editors";
+import { QuoteDocument } from "./quote-document";
 
+const won = (n: number) => `${new Intl.NumberFormat("ko-KR").format(Math.round(n))}원`;
 const inputCls =
   "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+const EXTRA_CATEGORY = "기타";
 
-const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
-
-/** "YYYY-MM" → 그 달 말일 "YYYY-MM-DD" (결정적 — 서버/클라 동일). */
 function monthLastDay(period: string): string {
   const [y, m] = period.split("-").map(Number);
   const day = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return `${period}-${String(day).padStart(2, "0")}`;
+}
+function todayLabel(iso?: string | null): string {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  const w = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, "0")}. ${String(d.getDate()).padStart(2, "0")}. (${w})`;
 }
 
 function SaveBtn({ disabled }: { disabled: boolean }) {
@@ -29,254 +35,233 @@ function SaveBtn({ disabled }: { disabled: boolean }) {
   return (
     <Button type="submit" size="sm" disabled={pending || disabled}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-      청구서로 저장
+      견적 저장
     </Button>
   );
 }
 
 export function TuitionCalculator({
-  students,
+  academyName,
   defaultPeriod,
   holidays = [],
   catalog = [],
+  initial,
 }: {
-  students: StudentOption[];
+  academyName: string;
   defaultPeriod: string;
   holidays?: string[];
   catalog?: TuitionCatalogOption[];
+  initial?: QuoteDetail;
 }) {
-  const [startDate, setStartDate] = useState(`${defaultPeriod}-01`);
-  const [endDate, setEndDate] = useState(monthLastDay(defaultPeriod));
-  const [weekdays, setWeekdays] = useState<number[]>([1, 3, 5]); // 월·수·금 기본
-  const [perSession, setPerSession] = useState(30000);
-  const [discount, setDiscount] = useState(0);
-  const [excludeHolidays, setExcludeHolidays] = useState(true);
-  const [courseName, setCourseName] = useState(""); // 단가표에서 고른 과목명(견적·청구서 표시용)
+  const uidRef = useRef(0);
+  const nextUid = () => `q${++uidRef.current}`;
 
-  // 단가표(활성)를 과목 단가 picker / 할인 프리셋 picker로 분리.
-  const priceItems = useMemo(() => catalog.filter((c) => c.category !== DISCOUNT_CATEGORY), [catalog]);
-  const discountItems = useMemo(() => catalog.filter((c) => c.category === DISCOUNT_CATEGORY), [catalog]);
-  const priceOptions = useMemo(
-    () =>
-      priceItems.map((c) => ({
-        value: c.id,
-        label: c.note ? `${c.name} ${c.note}` : c.name,
-        hint: `${c.category} · ${won(c.price)}`,
-      })),
-    [priceItems],
-  );
-  const discountOptions = useMemo(
-    () => discountItems.map((c) => ({ value: c.id, label: c.name, hint: `−${won(c.price)}` })),
-    [discountItems],
-  );
+  const [student, setStudent] = useState<QuoteStudent>({
+    name: initial?.studentName ?? "",
+    school: initial?.school ?? "",
+    grade: initial?.grade ?? "",
+    consultant: initial?.consultant ?? "",
+    startDate: initial?.startDate ?? `${defaultPeriod}-01`,
+    endDate: initial?.endDate ?? monthLastDay(defaultPeriod),
+  });
+  const [courses, setCourses] = useState<QuoteCourse[]>(initial?.courses ?? []);
+  const [extras, setExtras] = useState<QuoteExtra[]>(initial?.extras ?? []);
+  const [discounts, setDiscounts] = useState<QuoteDiscount[]>(initial?.discounts ?? []);
+  const [createdLabel] = useState(() => todayLabel(initial?.createdAt));
+  const [state, formAction] = useActionState<SaveQuoteState, FormData>(saveTuitionQuote, undefined);
 
-  const pickCourse = (id: string) => {
-    const c = priceItems.find((x) => x.id === id);
-    if (!c) return;
-    setPerSession(c.price);
-    setCourseName(c.name);
-  };
-  const pickDiscount = (id: string) => {
-    const c = discountItems.find((x) => x.id === id);
-    if (c) setDiscount(c.price);
+  const courseOpts = useMemo(
+    () => catalog.filter((c) => c.category !== DISCOUNT_CATEGORY && c.category !== EXTRA_CATEGORY),
+    [catalog],
+  );
+  const extraOpts = useMemo(() => catalog.filter((c) => c.category === EXTRA_CATEGORY), [catalog]);
+  const discountOpts = useMemo(() => catalog.filter((c) => c.category === DISCOUNT_CATEGORY), [catalog]);
+
+  const unionHol = (s: QuoteStudent) =>
+    Array.from(new Set([...holidays, ...koreanHolidayDatesForRange(s.startDate, s.endDate)]));
+  const recompute = (c: QuoteCourse, s: QuoteStudent): QuoteCourse => {
+    if (c.fixedMonthly) return c;
+    const sessions = autoSessions(c.days, s.startDate, s.endDate, c.excludeHolidays ? unionHol(s) : []);
+    return { ...c, sessions, price: Math.round(c.perSession * sessions) };
   };
 
-  const [state, formAction] = useActionState<CreateInvoiceState, FormData>(createInvoice, undefined);
+  const setPeriod = (key: "startDate" | "endDate", value: string) => {
+    const s = { ...student, [key]: value };
+    setStudent(s);
+    setCourses((cs) => cs.map((c) => recompute(c, s)));
+  };
 
-  const est = useMemo(() => {
-    // 학원 설정 휴원일은 항상 제외 + 대한민국 공휴일(ijw 이식, 음력·대체 포함)은 토글. 중복은 Set으로 제거.
-    const hol = excludeHolidays
-      ? Array.from(new Set([...koreanHolidaysForRange(startDate, endDate), ...holidays]))
-      : holidays;
-    const sessions = countSessions(startDate, endDate, weekdays, hol);
-    return estimateTuition({ sessions, perSession, discount });
-  }, [startDate, endDate, weekdays, perSession, discount, excludeHolidays, holidays]);
+  const addCourse = (o: TuitionCatalogOption) =>
+    setCourses((cs) => [
+      ...cs,
+      recompute(
+        {
+          uid: nextUid(),
+          category: o.category,
+          name: o.name,
+          days: "",
+          perSession: o.price,
+          sessions: 0,
+          price: 0,
+          note: o.note ?? "",
+          excludeHolidays: true,
+          fixedMonthly: false,
+        },
+        student,
+      ),
+    ]);
 
-  const period = startDate.slice(0, 7);
-  const notes = `${courseName ? `${courseName} · ` : ""}수강료 견적 · ${est.sessions}차시 × ${won(perSession)} (${startDate}~${endDate})`;
-  const toggleDay = (d: number) =>
-    setWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort()));
+  const patchCourse = (uid: string, patch: Partial<QuoteCourse>) =>
+    setCourses((cs) =>
+      cs.map((c) => {
+        if (c.uid !== uid) return c;
+        const next = { ...c, ...patch };
+        if (!next.fixedMonthly && ("days" in patch || "excludeHolidays" in patch || "fixedMonthly" in patch)) {
+          return recompute(next, student);
+        }
+        if (!next.fixedMonthly && "sessions" in patch) {
+          return { ...next, price: Math.round(next.perSession * next.sessions) };
+        }
+        return next;
+      }),
+    );
+
+  const totals = quoteTotal(courses, extras, discounts);
+  const docHolidays = unionHol(student);
+
+  const payload = (k: "courses" | "extras" | "discounts") =>
+    JSON.stringify(k === "courses" ? courses : k === "extras" ? extras : discounts);
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {/* 입력 */}
-      <div className="bg-card border-line shadow-card space-y-4 rounded-md border p-5">
-        <h2 className="text-foreground text-[15px] font-bold">조건 입력</h2>
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">시작일</span>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">종료일</span>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
-          </label>
-        </div>
-
-        <div className="space-y-1.5">
-          <span className="text-foreground block text-sm font-medium">수업 요일</span>
-          <div className="flex flex-wrap gap-1">
-            {DOW.map((label, d) => {
-              const on = weekdays.includes(d);
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => toggleDay(d)}
-                  className={`size-8 rounded-md border text-xs font-medium transition ${
-                    on
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-line text-text-dim hover:bg-bg-soft"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+      {/* 입력 (인쇄 시 숨김) */}
+      <div className="space-y-4 print:hidden">
+        {/* 학생 정보 */}
+        <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
+          <h2 className="text-foreground text-[15px] font-bold">상담 정보 (신입생)</h2>
+          <div className="grid grid-cols-2 gap-2">
+            <input className={inputCls} placeholder="학생 이름" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className={inputCls} placeholder="학교" value={student.school} onChange={(e) => setStudent({ ...student, school: e.target.value })} />
+              <input className={inputCls} placeholder="학년" value={student.grade} onChange={(e) => setStudent({ ...student, grade: e.target.value })} />
+            </div>
           </div>
-        </div>
-
-        {priceOptions.length > 0 ? (
-          <div className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">수강료 과목 (단가표)</span>
-            <SearchableSelect
-              value=""
-              onValueChange={pickCourse}
-              options={priceOptions}
-              placeholder="과목을 고르면 회당 단가가 채워집니다"
-              searchPlaceholder="과목명·분류 검색..."
-              ariaLabel="수강료 과목 선택"
-            />
-            {courseName ? <p className="text-primary text-[11px]">선택: {courseName}</p> : null}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1">
+              <span className="text-text-faint text-[11px]">시작일</span>
+              <input type="date" className={inputCls} value={student.startDate} onChange={(e) => setPeriod("startDate", e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-text-faint text-[11px]">종료일</span>
+              <input type="date" className={inputCls} value={student.endDate} onChange={(e) => setPeriod("endDate", e.target.value)} />
+            </label>
           </div>
-        ) : null}
+          <input className={inputCls} placeholder="상담자" value={student.consultant} onChange={(e) => setStudent({ ...student, consultant: e.target.value })} />
+        </section>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">회당 단가</span>
-            <input
-              type="number"
-              min="0"
-              step="1000"
-              value={perSession}
-              onChange={(e) => {
-                setPerSession(Math.max(0, Number(e.target.value)));
-                setCourseName("");
-              }}
-              className={`${inputCls} num text-right`}
-            />
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">할인</span>
-            <input
-              type="number"
-              min="0"
-              step="1000"
-              value={discount}
-              onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
-              className={`${inputCls} num text-right`}
-            />
-          </label>
-        </div>
+        {/* 수강 과목 */}
+        <Group title="수강 과목" hint="단가표에서 고르면 회당 단가가 채워집니다. 요일을 입력하면 시수·금액 자동 계산.">
+          <CatalogPicker options={courseOpts} placeholder="+ 과목 추가 (단가표)" onPick={addCourse} />
+          {courses.map((c) => (
+            <CourseEditor key={c.uid} course={c} onPatch={(p) => patchCourse(c.uid, p)} onRemove={() => setCourses((cs) => cs.filter((x) => x.uid !== c.uid))} />
+          ))}
+        </Group>
 
-        {discountOptions.length > 0 ? (
-          <div className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">할인 프리셋</span>
-            <SearchableSelect
-              value=""
-              onValueChange={pickDiscount}
-              options={discountOptions}
-              placeholder="할인 항목을 고르면 할인액이 채워집니다"
-              searchPlaceholder="할인명 검색..."
-              ariaLabel="할인 프리셋 선택"
-            />
-          </div>
-        ) : null}
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={excludeHolidays}
-            onChange={(e) => setExcludeHolidays(e.target.checked)}
-            className="accent-primary size-4"
+        {/* 교재 및 기타 */}
+        <Group title="교재 및 기타">
+          <CatalogPicker
+            options={extraOpts}
+            placeholder="+ 항목 추가 (단가표)"
+            onPick={(o) => setExtras((es) => [...es, { uid: nextUid(), name: o.note ? `${o.name} ${o.note}` : o.name, price: o.price, note: "" }])}
           />
-          <span className="text-text-dim">대한민국 공휴일 제외 (음력·대체공휴일 포함 · 학원 휴원일은 항상 제외)</span>
-        </label>
-      </div>
+          {extras.map((e) => (
+            <ExtraEditor key={e.uid} extra={e} onPatch={(p) => setExtras((es) => es.map((x) => (x.uid === e.uid ? { ...x, ...p } : x)))} onRemove={() => setExtras((es) => es.filter((x) => x.uid !== e.uid))} />
+          ))}
+          <AddManual label="직접 입력 항목 추가" onAdd={() => setExtras((es) => [...es, { uid: nextUid(), name: "", price: 0, note: "" }])} />
+        </Group>
 
-      {/* 견적 + 저장 */}
-      <div className="space-y-4">
-        <div className="bg-card border-line shadow-card rounded-md border p-5">
-          <h2 className="text-foreground text-[15px] font-bold">견적</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <Row label="차시" value={`${est.sessions}회`} />
-            <Row label="수업료" value={won(est.gross)} />
-            <Row label="할인" value={est.discount > 0 ? `-${won(est.discount)}` : "—"} />
-            <div className="border-line mt-2 flex items-baseline justify-between border-t pt-3">
-              <span className="text-foreground text-sm font-bold">월 수강료</span>
-              <span className="text-primary num text-2xl font-extrabold">{won(est.total)}</span>
-            </div>
-          </dl>
-        </div>
+        {/* 할인 */}
+        <Group title="할인 적용">
+          <CatalogPicker options={discountOpts} placeholder="+ 할인 추가 (프리셋)" onPick={(o) => setDiscounts((ds) => [...ds, { uid: nextUid(), name: o.name, amount: o.price }])} />
+          {discounts.map((d) => (
+            <DiscountEditor key={d.uid} discount={d} onPatch={(p) => setDiscounts((ds) => ds.map((x) => (x.uid === d.uid ? { ...x, ...p } : x)))} onRemove={() => setDiscounts((ds) => ds.filter((x) => x.uid !== d.uid))} />
+          ))}
+          <AddManual label="직접 입력 할인 추가" onAdd={() => setDiscounts((ds) => [...ds, { uid: nextUid(), name: "", amount: 0 }])} />
+        </Group>
 
-        <div className="bg-card border-line shadow-card space-y-3 rounded-md border p-5">
-          <h2 className="text-foreground text-[15px] font-bold">청구서로 저장</h2>
-          <form action={formAction} className="space-y-3">
-            <input type="hidden" name="period" value={period} />
-            <input type="hidden" name="category" value="tuition" />
-            <input type="hidden" name="amountTotal" value={est.gross} />
-            <input type="hidden" name="amountDiscount" value={est.discount} />
-            <input type="hidden" name="notes" value={notes} />
-            <div className="space-y-1.5">
-              <span className="text-foreground block text-sm font-medium">학생 *</span>
-              <SearchableSelect
-                name="studentId"
-                defaultValue=""
-                options={students.map((s) => ({
-                  value: s.id,
-                  label: s.name,
-                  hint: s.grade ?? undefined,
-                }))}
-                placeholder="학생 선택..."
-                searchPlaceholder="학생 이름 검색..."
-              />
-            </div>
-            <p className="text-text-faint text-[11px]">
-              청구월 {period} · {est.sessions}차시 기준. 동일 학생·월 청구서가 있으면 생성되지 않습니다.
-            </p>
-
+        {/* 저장 */}
+        <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-foreground text-[15px] font-bold">견적 저장</h2>
+            <span className="text-primary num text-lg font-extrabold">{won(totals.total)}</span>
+          </div>
+          <p className="text-text-faint text-[11px]">신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다.</p>
+          <form action={formAction} className="flex items-center justify-end gap-2">
+            <input type="hidden" name="studentName" value={student.name} />
+            <input type="hidden" name="school" value={student.school} />
+            <input type="hidden" name="grade" value={student.grade} />
+            <input type="hidden" name="consultant" value={student.consultant} />
+            <input type="hidden" name="startDate" value={student.startDate} />
+            <input type="hidden" name="endDate" value={student.endDate} />
+            <input type="hidden" name="courses" value={payload("courses")} />
+            <input type="hidden" name="extras" value={payload("extras")} />
+            <input type="hidden" name="discounts" value={payload("discounts")} />
+            <input type="hidden" name="totalAmount" value={totals.total} />
             {state?.error ? (
-              <p className="text-danger bg-danger-soft border-danger/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
-                <AlertCircle className="size-4" />
+              <p className="text-danger mr-auto inline-flex items-center gap-1 text-xs">
+                <AlertCircle className="size-3.5" />
                 {state.error}
               </p>
             ) : state?.ok ? (
-              <p className="text-primary inline-flex items-center gap-1.5 text-sm">
-                <Check className="size-4" />
-                {period} 청구서가 생성되었습니다.
+              <p className="text-primary mr-auto inline-flex items-center gap-1 text-xs">
+                <Check className="size-3.5" />
+                견적이 저장되었습니다.
               </p>
             ) : null}
-
-            <div className="flex items-center justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
-                <Printer className="size-4" />
-                인쇄
-              </Button>
-              <SaveBtn disabled={est.total <= 0} />
-            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
+              <Printer className="size-4" />
+              인쇄
+            </Button>
+            <SaveBtn disabled={!student.name.trim() || courses.length === 0} />
           </form>
-        </div>
+        </section>
+      </div>
+
+      {/* 라이브 안내문 */}
+      <div className="border-line bg-card overflow-hidden rounded-md border print:border-0">
+        <QuoteDocument
+          academyName={academyName}
+          student={student}
+          courses={courses}
+          extras={extras}
+          discounts={discounts}
+          holidays={docHolidays}
+          createdLabel={createdLabel}
+        />
       </div>
     </div>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between">
-      <dt className="text-text-dim">{label}</dt>
-      <dd className="text-foreground num font-semibold">{value}</dd>
-    </div>
+    <section className="bg-card border-line shadow-card space-y-2.5 rounded-md border p-4">
+      <h2 className="text-foreground text-[15px] font-bold">{title}</h2>
+      {hint ? <p className="text-text-faint text-[11px]">{hint}</p> : null}
+      {children}
+    </section>
+  );
+}
+
+function AddManual({ label, onAdd }: { label: string; onAdd: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex w-full items-center justify-center gap-1 rounded-md border border-dashed py-1.5 text-xs transition"
+    >
+      <Plus className="size-3.5" />
+      {label}
+    </button>
   );
 }

@@ -741,6 +741,35 @@ export const tuitionCatalog = pgTable(
   ],
 );
 
+// === tuition_quotes (수강료 견적 — 신입생 상담용 저장 청구서) ===
+// 수강료 계산기의 "청구서로 저장"은 재원생 invoices가 아니라 신입생 상담 견적이다(ijw tuition_invoices 이식).
+// 학생정보는 자유 입력(미등록 신입생), 과목·기타·할인은 jsonb 스냅샷. invoices와 완전 분리.
+export const tuitionQuotes = pgTable(
+  "tuition_quotes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentName: text("student_name").notNull(),
+    school: text("school"),
+    grade: text("grade"),
+    consultant: text("consultant"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    courses: jsonb("courses"), // QuoteCourse[] 스냅샷
+    extras: jsonb("extras"), // QuoteExtra[]
+    discounts: jsonb("discounts"), // QuoteDiscount[]
+    totalAmount: numeric("total_amount", { precision: 12, scale: 0 }).notNull().default("0"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("tuition_quotes_tenant_created_idx").on(t.tenantId, t.createdAt),
+    index("tuition_quotes_tenant_name_idx").on(t.tenantId, t.studentName),
+  ],
+);
+
 // === expenses (지출관리) ===
 // 학원 지출 기록(인건비/운영비/매입/기타) + 품목 라인아이템. 수납관리 창의 '지출' 책갈피 면.
 export const expenses = pgTable(

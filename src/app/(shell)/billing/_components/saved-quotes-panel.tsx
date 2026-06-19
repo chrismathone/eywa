@@ -1,0 +1,64 @@
+import { FileText } from "lucide-react";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
+import { Pagination } from "@/components/pagination";
+import { getQuotesPage } from "@/features/billing/server/tuition-quote-queries";
+import { SavedQuotesList } from "./saved-quotes-list";
+
+type Sp = { q?: string; qpage?: string };
+const PAGE_SIZE = 50;
+
+// 저장된 청구서(견적) 목록 — 신입생 상담 견적(tuition_quotes). 클릭 시 계산기로 다시 열기(?qid=).
+export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
+  const q = sp.q ?? "";
+  const page = Math.max(1, Number(sp.qpage) || 1);
+  const { rows, total } = await getQuotesPage({ q }, page, PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const pageHref = (n: number) => {
+    const p = new URLSearchParams({ tab: "calculator", csub: "quotes" });
+    if (q) p.set("q", q);
+    if (n > 1) p.set("qpage", String(n));
+    return `/billing?${p.toString()}`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+        <p className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">
+          <FileText className="text-primary size-4" />
+          저장된 청구서 <span className="num text-text-dim font-normal">{total}건</span>
+        </p>
+        <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
+          <input type="hidden" name="tab" value="calculator" />
+          <input type="hidden" name="csub" value="quotes" />
+          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+            <EyIcon name="search" size={13} />
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="학생 이름·학교"
+              className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm">검색</Button>
+        </form>
+      </div>
+
+      {total === 0 ? (
+        <EmptyState
+          icon={() => <FileText size={32} strokeWidth={1.5} />}
+          title={q ? "검색 결과 없음" : "저장된 견적이 없습니다"}
+          description={q ? "검색어를 조정해보세요." : "계산기 탭에서 신입생 상담 견적을 만들어 저장하세요."}
+        />
+      ) : (
+        <>
+          <SavedQuotesList rows={rows} />
+          {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} /> : null}
+        </>
+      )}
+    </div>
+  );
+}

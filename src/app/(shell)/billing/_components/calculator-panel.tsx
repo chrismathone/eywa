@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { CalendarOff, Settings2 } from "lucide-react";
 import { FaceTabs, type Face } from "@/components/face-tabs";
-import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { getTuitionCatalogActive } from "@/features/billing/server/tuition-catalog-queries";
+import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
-import { koreanHolidaysForYear, holidayName } from "@/features/billing/holidays-data";
+import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { TuitionCalculator } from "./tuition-calculator";
 import { TuitionPricesPanel } from "./tuition-prices-panel";
 import { CatalogPanel } from "./catalog-panel";
+import { SavedQuotesPanel } from "./saved-quotes-panel";
 
 type Sp = Record<string, string | undefined>;
-type CalcSub = "calculator" | "prices" | "catalog" | "holidays";
+type CalcSub = "calculator" | "prices" | "catalog" | "holidays" | "quotes";
 
 function resolveSub(sp: Sp): CalcSub {
   return sp.csub === "prices"
@@ -20,7 +21,9 @@ function resolveSub(sp: Sp): CalcSub {
       ? "catalog"
       : sp.csub === "holidays"
         ? "holidays"
-        : "calculator";
+        : sp.csub === "quotes"
+          ? "quotes"
+          : "calculator";
 }
 
 const SUB_FACES: Face[] = [
@@ -28,10 +31,11 @@ const SUB_FACES: Face[] = [
   { key: "prices", label: "수강료 단가", href: "/billing?tab=calculator&csub=prices" },
   { key: "catalog", label: "교재 단가표", href: "/billing?tab=calculator&csub=catalog" },
   { key: "holidays", label: "공휴일", href: "/billing?tab=calculator&csub=holidays" },
+  { key: "quotes", label: "저장된 청구서", href: "/billing?tab=calculator&csub=quotes" },
 ];
 
-// 수강료 계산기 면 — ijw "계산기 모드 ↔ 설정"을 서브탭(계산기/수강료 단가/교재 단가표/공휴일)으로 이식.
-// 교재 단가표는 교재 면과 같은 CatalogPanel을 재사용(두 곳에서 동일 탭).
+// 수강료 계산기 면 — ijw "계산기 모드 ↔ 설정"을 서브탭으로 이식. 계산기는 신입생 상담 견적 도구(다과목·
+// 교재/할인·환불규정 안내문). 교재 단가표는 교재 면과 같은 CatalogPanel 재사용. 저장은 tuition_quotes(견적).
 export async function CalculatorPanel({ sp }: { sp: Sp }) {
   const sub = resolveSub(sp);
 
@@ -43,26 +47,29 @@ export async function CalculatorPanel({ sp }: { sp: Sp }) {
       ) : sub === "catalog" ? (
         <CatalogPanel sp={sp} base={{ tab: "calculator", csub: "catalog" }} />
       ) : sub === "holidays" ? (
-        <HolidayPanel />
+        <HolidayPanel sp={sp} />
+      ) : sub === "quotes" ? (
+        <SavedQuotesPanel sp={sp} />
       ) : (
-        <CalculatorTab />
+        <CalculatorTab qid={sp.qid} />
       )}
     </div>
   );
 }
 
-async function CalculatorTab() {
-  const [students, settings, catalog] = await Promise.all([
-    getStudentOptions(),
+async function CalculatorTab({ qid }: { qid?: string }) {
+  const [settings, catalog, initial] = await Promise.all([
     getTenantSettings(),
     getTuitionCatalogActive(),
+    qid ? getQuoteById(qid) : Promise.resolve(null),
   ]);
   return (
     <TuitionCalculator
-      students={students}
+      academyName={settings.profile.name || "인재원"}
       defaultPeriod={currentPeriod()}
       holidays={settings.operations.holidays}
       catalog={catalog}
+      initial={initial ?? undefined}
     />
   );
 }
@@ -72,14 +79,29 @@ function dowOf(iso: string): string {
   const t = Date.parse(`${iso}T00:00:00Z`);
   return Number.isNaN(t) ? "" : DOW[new Date(t).getUTCDay()];
 }
+const HOLIDAY_MIN_YEAR = 2024;
+const HOLIDAY_MAX_YEAR = 2030;
+const MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // 0 = 전체
 
 // 공휴일 면 — 학원 휴원일은 학원설정(/owner)에서 편집(테넌트 설정=master 전용). 여기선 계산에 반영되는
 // 휴원일 + 대한민국 공휴일(ijw 이식, 음력·대체 포함)을 읽기 전용으로 보여준다(소비처는 계산기의 countSessions).
-async function HolidayPanel() {
+// 연도 ◀▶ 이동 + 월 선택(URL ?hy=연도&hm=월).
+async function HolidayPanel({ sp }: { sp: Sp }) {
   const settings = await getTenantSettings();
-  const year = Number(currentPeriod().slice(0, 4)) || 2026;
+  const thisYear = Number(currentPeriod().slice(0, 4)) || 2026;
+  const yearRaw = Number(sp.hy) || thisYear;
+  const year = Math.min(HOLIDAY_MAX_YEAR, Math.max(HOLIDAY_MIN_YEAR, yearRaw));
+  const month = Math.min(12, Math.max(0, Number(sp.hm) || 0));
   const tenantHolidays = [...settings.operations.holidays].sort();
-  const national = koreanHolidaysForYear(year);
+  const all = koreanHolidaysForYear(year);
+  const national = month >= 1 ? all.filter((h) => Number(h.date.slice(5, 7)) === month) : all;
+
+  const hrefFor = (y: number, m: number) => {
+    const p = new URLSearchParams({ tab: "calculator", csub: "holidays" });
+    if (y !== thisYear) p.set("hy", String(y));
+    if (m >= 1) p.set("hm", String(m));
+    return `/billing?${p.toString()}`;
+  };
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -117,23 +139,62 @@ async function HolidayPanel() {
       </section>
 
       <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-5">
-        <h2 className="text-foreground text-[15px] font-bold">
-          {year}년 대한민국 공휴일 <span className="text-text-faint text-xs font-normal">({national.length}일)</span>
-        </h2>
+        {/* 연도 이동 */}
+        <header className="flex items-center justify-between">
+          <h2 className="text-foreground text-[15px] font-bold">대한민국 공휴일</h2>
+          <div className="flex items-center gap-1.5">
+            {year > HOLIDAY_MIN_YEAR ? (
+              <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="이전 연도">◀</Link>
+            ) : (
+              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40">◀</span>
+            )}
+            <span className="text-foreground num min-w-[64px] text-center text-[13px] font-bold">{year}년</span>
+            {year < HOLIDAY_MAX_YEAR ? (
+              <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="다음 연도">▶</Link>
+            ) : (
+              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40">▶</span>
+            )}
+          </div>
+        </header>
+
+        {/* 월 선택 */}
+        <div className="scrollbar-thin flex flex-wrap items-center gap-1 overflow-x-auto">
+          {MONTHS.map((m) => (
+            <Link
+              key={m}
+              href={hrefFor(year, m)}
+              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                m === month
+                  ? "border-foreground bg-foreground text-background font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              {m === 0 ? "전체" : `${m}월`}
+            </Link>
+          ))}
+        </div>
+
         <p className="text-text-faint text-[11px]">
           계산기의 <b>“대한민국 공휴일 제외”</b> 체크 시 차시에서 빠집니다. 음력(설·추석)·대체공휴일·
-          부처님오신날까지 포함됩니다(ijw 공휴일 데이터 이식, 2024–2030).
+          부처님오신날 포함(ijw 공휴일 데이터 이식, 2024–2030). {month >= 1 ? `${month}월` : "연간"} {national.length}일.
         </p>
-        <ul className="divide-line divide-y">
-          {national.map((d) => (
-            <li key={d} className="flex items-center justify-between py-1.5 text-sm">
-              <span className="text-foreground">{holidayName(d)}</span>
-              <span className="text-text-dim num text-xs">
-                {d} ({dowOf(d)})
-              </span>
-            </li>
-          ))}
-        </ul>
+
+        {national.length === 0 ? (
+          <p className="text-text-dim border-line rounded-md border border-dashed px-3 py-6 text-center text-xs">
+            {month >= 1 ? `${month}월 공휴일이 없습니다.` : "공휴일 데이터가 없습니다."}
+          </p>
+        ) : (
+          <ul className="divide-line divide-y">
+            {national.map((h) => (
+              <li key={h.date} className="flex items-center justify-between py-1.5 text-sm">
+                <span className="text-foreground">{h.name}</span>
+                <span className="text-text-dim num text-xs">
+                  {h.date} ({dowOf(h.date)})
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

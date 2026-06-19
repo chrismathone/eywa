@@ -166,6 +166,25 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수강료 계산기 전면 재구현 — 신입생 상담 견적 도구 + 환불규정 + 공휴일 정밀화 (2026-06-19)
+사용자 지적: 계산기의 "청구서로 저장"이 **재원생 + invoices 테이블**에 묶여 엉뚱했고(신입생 상담 견적 도구여야 함),
+공휴일 이름이 전부 "공휴일"로 떴으며, 청구서에 환불규정이 없었다. ijw 계산기를 충실 재구현.
+- **신입생 견적 도구로 재설계**: 학생 정보 **자유 입력**(이름/학교/학년/상담자/기간 — 재원생 선택 아님) + **다과목**
+  (단가표에서 추가, 반/요일/시수/금액/비고 편집 + 공휴일 제외·월N회 고정 per-course) + 교재/기타 + 할인. 라이브
+  **수강료 안내문**(우측, 인쇄용) — 월별 분할·소계, 최종 납부 금액. `tuition-calculator.tsx`(오케스트레이터) +
+  `quote-editors.tsx`(행 편집) + `quote-document.tsx`(안내문) + 순수계산 `quote-calc.ts`(splitCoursesByMonth/quoteTotal,
+  Vitest 10케이스).
+- **별도 저장소 `tuition_quotes`**(`0037a` alpha, RLS — invoices와 완전 분리): 학생정보 + courses/extras/discounts jsonb
+  스냅샷 + 총액. `server/tuition-quote-{queries,actions}.ts`(saveQuote/list/get/delete, billing-full). 계산기 서브탭에
+  **저장된 청구서** 추가(`?csub=quotes`, `saved-quotes-{panel,list}.tsx`) — 목록/검색/삭제 + 클릭 시 `?qid=`로 계산기 재열람.
+  ⚠️ 기존 `createInvoice`(재원생 청구)는 **수납 면 신규청구**에 그대로 — 계산기만 분리.
+- **환불 규정 verbatim 이식**(`refund-policy.tsx`, ijw `TuitionInvoicePreview` 그대로): 학원 수칙 3항 + 환불 규정 표
+  (제18조 제2항 1·2호/3호, 1개월 이내/초과 × 경과시점, rowspan/colspan) + 각주 2 + 소득공제 disclaimer. 안내문 하단 고정·인쇄 포함.
+- **공휴일 정밀화**(`holidays-data.ts` → `{date,name}[]`): ijw KOREAN_HOLIDAYS 날짜에 **정확한 이름**(설날/추석/부처님오신날/
+  대체공휴일/어린이날…) 부여(기존 8개만 이름 → 전부). 공휴일 면에 **연도 ◀▶ + 월 선택**(`?hy=&hm=`). 계산기는
+  `koreanHolidayDatesForRange`로 차시 제외.
+- 검증: typecheck0 / lint0(신규0) / test378 / build✓ + 브라우저 4서브탭 200(계산기=신입생도구·환불규정 포함, 견적목록, 공휴일 이름·연도이동).
+
 ### 수강료 계산기 "설정" 이식 — 단가표·할인·세션·공휴일 (2026-06-19)
 ijw 수강료 계산기는 "설정"에 5탭(수강료 단가표 43과목·교재/기타·할인·공휴일·세션)이 붙어 있었는데, eywa는
 회당 단가를 매번 손으로 치는 단순 폼뿐이었다(사용자 제보). ijw 5탭을 eywa 컨벤션으로 충실 이식.
@@ -385,7 +404,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
 | 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
 | 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + **급여 월별표 진입(`/staff/payroll`)** |
-| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` + `tuition_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **FaceTabs 4면**(수납/교재/지출/**계산기**). 교재 면=내부탭(목록/교재 단가표), 계산기 면=서브탭(계산기/**수강료 단가**/교재 단가표/공휴일) — 교재 단가표는 두 면이 같은 `CatalogPanel` 재사용. 단가표에서 고른 과목·할인이 계산기에 자동입력, 공휴일은 ijw 전체(음력·대체 포함) |
+| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` + `tuition_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **FaceTabs 4면**(수납/교재/지출/**계산기**). 교재 면=내부탭(목록/교재 단가표), 계산기 면=서브탭(계산기/**수강료 단가**/교재 단가표/공휴일/**저장된 청구서**). 계산기=**신입생 상담 견적 도구**(자유입력 학생정보 + 다과목 + 교재/할인 + 환불규정 포함 인쇄 안내문 → `tuition_quotes` 저장, invoices와 분리). 교재 단가표는 두 면이 같은 `CatalogPanel` 재사용, 공휴일은 ijw 전체(음력·대체·이름·연도이동) |
 | 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
 | 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
 
