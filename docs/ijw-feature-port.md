@@ -47,7 +47,11 @@ ijw 매핑에서 나온 격차. 파일·방법:
   - **정렬**(수업명/강사명) + `buildHref` sort param. **강사명 검색**(q를 class_name+teacher display_name OR로). **정원 하드코딩 `capacity=8` 제거**(page.tsx CardsView). `DAY_FILTERS`에 **일요일** 추가.
 - **학생목록** `src/features/students/server/queries.ts`(`getStudentsPage`) + `src/app/(shell)/students/page.tsx`
   - **정렬**(이름/학년/등록일), **학년·담임 필터**(`getTeacherOptions` 재사용).
-  - **highmath 라벨 버그**(원칙위반: 영문코드 노출) — `students/_components/student-summary-view.tsx` `SUBJECT_META`에 `highmath:"수학(심화)"` + fallback. 과목 라벨 매핑을 **공용 상수**(`src/lib/subjects.ts` 신설)로 추출(여러 곳 중복).
+  - ~~**highmath 라벨 버그**(영문코드 노출) — 과목 라벨 매핑을 공용 상수로 추출.~~ ✅ **해결(2026-06-19)**:
+    `src/lib/subjects.ts`가 아니라 **학원설정 단일 소스**로 — 서버는 `buildSubjectMaps(getTenantSettings().operations.subjects)`
+    ([`src/features/owner/subjects.ts`](../src/features/owner/subjects.ts)), 클라는 `useSubjectMaps()`/`useGradeLevels()`
+    ([`src/features/owner/operations-context.tsx`](../src/features/owner/operations-context.tsx), `(shell)/layout`이 주입).
+    하드코딩 `SUBJECT_META`/`SUBJECT_LABEL` 전부 제거(전수감사 20건/17파일). 규칙=CLAUDE.md "운영체계 enum 하드코딩 절대 금지".
   - (선택) 상태 섹션 구분(재원/대기/퇴원).
 
 ### Phase C — 죽은 기능 배선 (정의됐는데 UI에 안 걸린 고아 서버액션 — 대부분 S)
