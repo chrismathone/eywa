@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Loader2, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,10 +35,7 @@ export function ExpenseReceiptsModal({
   const [uploading, setUploading] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<ExpenseReceipt | null>(null);
   const [, startTransition] = useTransition();
-
-  function refresh() {
-    startTransition(() => router.refresh());
-  }
+  const uploadingRef = useRef(false); // 동시 업로드(연속 붙여넣기 등) 재진입 방지
 
   function changeType(next: string) {
     setType(next);
@@ -51,53 +48,85 @@ export function ExpenseReceiptsModal({
     });
   }
 
-  async function handleUpload(file: File) {
-    setError(null);
-    if (file.size > MAX_BYTES) {
-      setError("파일이 너무 큽니다 (최대 10MB)");
-      return;
+  const handleUpload = useCallback(
+    async (file: File) => {
+      if (uploadingRef.current) return;
+      setError(null);
+      if (file.size > MAX_BYTES) {
+        setError("파일이 너무 큽니다 (최대 10MB)");
+        return;
+      }
+      uploadingRef.current = true;
+      setUploading(true);
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const tenantId = (user?.app_metadata as { tenant_id?: string } | undefined)?.tenant_id;
+        if (!tenantId) {
+          setError("로그인이 만료되었습니다");
+          return;
+        }
+        const ext = file.name.includes(".")
+          ? file.name.split(".").pop()!.toLowerCase()
+          : file.type.split("/")[1] || "bin";
+        const path = `${tenantId}/${expense.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("expense-receipts")
+          .upload(path, file, { contentType: file.type || undefined, upsert: false });
+        if (upErr) {
+          setError(`업로드 실패: ${upErr.message}`);
+          return;
+        }
+        const fd = new FormData();
+        fd.append("id", expense.id);
+        fd.append("path", path);
+        fd.append("name", file.name);
+        const res = await addExpenseReceipt(undefined, fd);
+        if (res?.error) {
+          // 등록 실패 → 방금 올린 객체 정리(고아 파일 방지). 본인 테넌트 경로라 RLS delete 허용.
+          await supabase.storage.from("expense-receipts").remove([path]).catch(() => {});
+          setError(res.error);
+          return;
+        }
+        setReceipts((prev) =>
+          prev.some((r) => r.path === path) ? prev : [...prev, { path, name: file.name }],
+        );
+        startTransition(() => router.refresh());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        uploadingRef.current = false;
+        setUploading(false);
+      }
+    },
+    [expense.id, router, startTransition],
+  );
+
+  // Ctrl+V — 클립보드의 이미지/PDF를 붙여넣어 바로 첨부(영수증 스크린샷 캡처 후 붙여넣기 등). 모달 열린 동안만.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.kind !== "file") continue;
+        const f = it.getAsFile();
+        if (f && (f.type.startsWith("image/") || f.type === "application/pdf")) {
+          e.preventDefault();
+          const ext = f.type.split("/")[1] || "png";
+          // 클립보드 이미지는 이름이 비거나 "image.png"라 보기 좋은 이름 부여(저장 경로는 별도 uuid).
+          const named =
+            !f.name || f.name === "image.png" ? new File([f], `붙여넣기.${ext}`, { type: f.type }) : f;
+          void handleUpload(named);
+          return;
+        }
+      }
     }
-    setUploading(true);
-    try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const tenantId = (user?.app_metadata as { tenant_id?: string } | undefined)?.tenant_id;
-      if (!tenantId) {
-        setError("로그인이 만료되었습니다");
-        return;
-      }
-      const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-      const path = `${tenantId}/${expense.id}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("expense-receipts")
-        .upload(path, file, { contentType: file.type || undefined, upsert: false });
-      if (upErr) {
-        setError(`업로드 실패: ${upErr.message}`);
-        return;
-      }
-      const fd = new FormData();
-      fd.append("id", expense.id);
-      fd.append("path", path);
-      fd.append("name", file.name);
-      const res = await addExpenseReceipt(undefined, fd);
-      if (res?.error) {
-        // 등록 실패 → 방금 올린 객체 정리(고아 파일 방지). 본인 테넌트 경로라 RLS delete 허용.
-        await supabase.storage.from("expense-receipts").remove([path]).catch(() => {});
-        setError(res.error);
-        return;
-      }
-      setReceipts((prev) =>
-        prev.some((r) => r.path === path) ? prev : [...prev, { path, name: file.name }],
-      );
-      refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUploading(false);
-    }
-  }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [handleUpload]);
 
   function doRemove(r: ExpenseReceipt) {
     setReceipts((prev) => prev.filter((x) => x.path !== r.path));
@@ -171,7 +200,9 @@ export function ExpenseReceiptsModal({
 
           <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed px-3 py-5 transition">
             {uploading ? <Loader2 className="size-5 animate-spin" /> : <Upload className="size-5" />}
-            <span className="text-foreground text-sm font-medium">{uploading ? "업로드 중…" : "파일 추가"}</span>
+            <span className="text-foreground text-sm font-medium">
+              {uploading ? "업로드 중…" : "파일 추가 또는 Ctrl+V 붙여넣기"}
+            </span>
             <span className="text-text-faint text-[11px]">이미지 · PDF · 최대 10MB</span>
             <input
               type="file"

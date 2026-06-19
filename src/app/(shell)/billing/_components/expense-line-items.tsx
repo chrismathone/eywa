@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 
 // 지출결의서 라인아이템 편집기 — ijw 패리티(용도/거래처/사용내역/수량/금액/부가세).
 // 상태는 부모(다이얼로그)가 소유; 이 컴포넌트는 렌더 + onChange만. 좁은 창에 맞춰 줄 단위로 접는다.
@@ -33,6 +33,9 @@ export function ExpenseLineItems({
     onChange([...rows, { purpose: "", vendor: "", description: "", quantity: 1, unitPrice: 0, vat: false }]);
   const removeRow = (i: number) =>
     onChange(rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows);
+  // 개별 항목 복사 — 바로 아래에 동일 내용 행 삽입(반복 입력 편의).
+  const duplicateRow = (i: number) =>
+    onChange([...rows.slice(0, i + 1), { ...rows[i] }, ...rows.slice(i + 1)]);
 
   return (
     <div className="space-y-2">
@@ -42,14 +45,25 @@ export function ExpenseLineItems({
           <div key={i} className="border-line bg-bg-soft/40 space-y-1.5 rounded-md border p-2.5">
             <div className="flex items-center justify-between">
               <span className="micro">No.{i + 1}</span>
-              <button
-                type="button"
-                onClick={() => removeRow(i)}
-                className="text-text-faint hover:text-danger shrink-0"
-                aria-label="항목 삭제"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => duplicateRow(i)}
+                  className="text-text-faint hover:text-blue shrink-0"
+                  aria-label="항목 복사"
+                  title="이 항목을 복사"
+                >
+                  <Copy className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  className="text-text-faint hover:text-danger shrink-0"
+                  aria-label="항목 삭제"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               <input
