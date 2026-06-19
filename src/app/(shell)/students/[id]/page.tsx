@@ -13,6 +13,7 @@ import { ClassesTab } from "./_tabs/classes-tab";
 import { BillingTab } from "./_tabs/billing-tab";
 import { GradesTab } from "./_tabs/grades-tab";
 import { AttendanceTab } from "./_tabs/attendance-tab";
+import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 
@@ -103,6 +104,8 @@ export default async function StudentDetailPage({
           <GradesTab studentId={student.id} />
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
+        ) : tab === "consultations" ? (
+          <ConsultationsTab studentId={student.id} />
         ) : tab === "memos" ? (
           <MemosTab studentId={student.id} />
         ) : tab === "billing" ? (

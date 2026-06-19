@@ -2,6 +2,12 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { attendanceRate } from "@/lib/calc/attendance";
+import {
+  slotPeriodRow,
+  enumDayToKo,
+  type DayOfWeek,
+  type TimetableSubject,
+} from "@/features/timetable/lib/periods";
 
 export type StudentListRow = {
   id: string;
@@ -444,6 +450,110 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
       endDate: r.end_date,
       onHold: r.on_hold,
     };
+  });
+}
+
+// ───────── 수업 탭(ijw CoursesTab 이식) — 스케줄(요일+교시)·강사·인원 포함 ─────────
+const TIMETABLE_SUBJECTS = new Set(["math", "highmath", "english", "science", "korean"]);
+const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
+
+export type ScheduleGroup = { days: string[]; label: string }; // {days:["월","목"], label:"1~3교시"}
+export type StudentClassRow = {
+  enrollmentId: string;
+  classId: string;
+  className: string;
+  subject: string;
+  teacherName: string | null;
+  startDate: string;
+  endDate: string | null;
+  onHold: boolean;
+  studentCount: number; // 반 현재 인원(활성 enrollment)
+  schedule: ScheduleGroup[];
+};
+
+// 같은 교시라벨 요일 묶기 → "월목 1~3교시 / 화금 1~4교시" (ijw ScheduleBadge). attendanceDays 있으면 그 요일만.
+function groupSchedule(
+  slots: { day: DayOfWeek; startTime: string }[],
+  subj: TimetableSubject,
+  attendanceDaysKo: string[],
+): ScheduleGroup[] {
+  let entries = slots.map((s) => ({ dayKo: enumDayToKo(s.day), label: slotPeriodRow(subj, s.startTime, s.day).label }));
+  if (attendanceDaysKo.length > 0) entries = entries.filter((e) => attendanceDaysKo.includes(e.dayKo));
+  const byLabel = new Map<string, Set<string>>();
+  for (const e of entries) {
+    const set = byLabel.get(e.label) ?? new Set<string>();
+    set.add(e.dayKo);
+    byLabel.set(e.label, set);
+  }
+  const groups = [...byLabel.entries()].map(([label, days]) => ({
+    label,
+    days: [...days].sort((a, b) => KO_DAY_ORDER.indexOf(a) - KO_DAY_ORDER.indexOf(b)),
+  }));
+  groups.sort((a, b) => KO_DAY_ORDER.indexOf(a.days[0] ?? "") - KO_DAY_ORDER.indexOf(b.days[0] ?? ""));
+  return groups;
+}
+
+export async function getStudentClassesDetail(studentId: string): Promise<StudentClassRow[]> {
+  const supabase = await createClient();
+  const { data: ens } = await supabase
+    .from("enrollments")
+    .select(
+      `id, class_id, start_date, end_date, on_hold, attendance_days,
+       class:class_id ( class_name, subject, teacher:teacher_id ( display_name ) )`,
+    )
+    .eq("student_id", studentId)
+    .order("start_date", { ascending: false });
+  if (!ens || ens.length === 0) return [];
+
+  const classIds = [...new Set(ens.map((e) => e.class_id))];
+
+  // 반별 스케줄(요일·시작시각)
+  const { data: scheds } = await supabase
+    .from("class_schedules")
+    .select("class_id, day_of_week, start_time")
+    .in("class_id", classIds);
+  const schedByClass = new Map<string, { day: DayOfWeek; startTime: string }[]>();
+  for (const s of scheds ?? []) {
+    const arr = schedByClass.get(s.class_id) ?? [];
+    arr.push({ day: s.day_of_week as DayOfWeek, startTime: String(s.start_time).slice(0, 5) });
+    schedByClass.set(s.class_id, arr);
+  }
+
+  // 반별 현재 인원(활성)
+  const countByClass = new Map<string, number>();
+  await Promise.all(
+    classIds.map(async (cid) => {
+      const { count } = await supabase
+        .from("enrollments")
+        .select("*", { count: "exact", head: true })
+        .eq("class_id", cid)
+        .is("end_date", null);
+      countByClass.set(cid, count ?? 0);
+    }),
+  );
+
+  return ens.map((e) => {
+    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
+      | { class_name?: string; subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] }
+      | undefined;
+    const teacher = klass
+      ? ((Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as { display_name?: string } | undefined)
+      : undefined;
+    const subject = klass?.subject ?? "other";
+    const subj = (TIMETABLE_SUBJECTS.has(subject) ? subject : "math") as TimetableSubject;
+    const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
+    return {
+      enrollmentId: e.id,
+      classId: e.class_id,
+      className: klass?.class_name ?? "?",
+      subject,
+      teacherName: teacher?.display_name ?? null,
+      startDate: e.start_date,
+      endDate: e.end_date,
+      onHold: e.on_hold,
+      studentCount: countByClass.get(e.class_id) ?? 0,
+      schedule: groupSchedule(schedByClass.get(e.class_id) ?? [], subj, attDays.map((d) => enumDayToKo(d as DayOfWeek))),
+    } satisfies StudentClassRow;
   });
 }
 
