@@ -471,19 +471,59 @@ export type StudentClassRow = {
   schedule: ScheduleGroup[];
 };
 
-// 같은 교시라벨 요일 묶기 → "월목 1~3교시 / 화금 1~4교시" (ijw ScheduleBadge). attendanceDays 있으면 그 요일만.
+// 연속 교시 번호를 범위로 병합: [3,4,5,6]→"3-6교시", [2,3,5]→"2-3, 5교시", [2]→"2교시".
+function mergePeriodRanges(nums: number[]): string {
+  const sorted = [...new Set(nums)].sort((a, b) => a - b);
+  if (sorted.length === 0) return "";
+  const out: string[] = [];
+  let start = sorted[0]!;
+  let prev = sorted[0]!;
+  for (let i = 1; i <= sorted.length; i++) {
+    const n = sorted[i];
+    if (n === prev + 1) {
+      prev = n;
+      continue;
+    }
+    out.push(start === prev ? `${start}` : `${start}-${prev}`);
+    if (n !== undefined) {
+      start = n;
+      prev = n;
+    }
+  }
+  return `${out.join(", ")}교시`;
+}
+
+// 요일별로 교시 묶기(같은 요일 연속 교시는 N-M으로 병합) → 같은 라벨 요일끼리 합침("월목 1-3교시 / 화금 1-4교시").
+// attendanceDays 있으면 그 요일만(분리등원). 교시 매칭 실패 시각은 원라벨 그대로(병합 대상 아님).
 function groupSchedule(
   slots: { day: DayOfWeek; startTime: string }[],
   subj: TimetableSubject,
   attendanceDaysKo: string[],
 ): ScheduleGroup[] {
-  let entries = slots.map((s) => ({ dayKo: enumDayToKo(s.day), label: slotPeriodRow(subj, s.startTime, s.day).label }));
-  if (attendanceDaysKo.length > 0) entries = entries.filter((e) => attendanceDaysKo.includes(e.dayKo));
+  // 1) 요일 → 교시번호[] + 매칭 안 된 원라벨[]
+  const byDay = new Map<string, { nums: number[]; other: string[] }>();
+  for (const s of slots) {
+    const dayKo = enumDayToKo(s.day);
+    if (attendanceDaysKo.length > 0 && !attendanceDaysKo.includes(dayKo)) continue;
+    const label = slotPeriodRow(subj, s.startTime, s.day).label;
+    const entry = byDay.get(dayKo) ?? { nums: [], other: [] };
+    const m = label.match(/^(\d+)교시$/);
+    if (m) entry.nums.push(Number(m[1]));
+    else entry.other.push(label);
+    byDay.set(dayKo, entry);
+  }
+  // 2) 요일별 교시 라벨(연속 병합)
+  const dayLabel = new Map<string, string>();
+  for (const [day, { nums, other }] of byDay) {
+    const parts = [mergePeriodRanges(nums), ...[...new Set(other)]].filter(Boolean);
+    dayLabel.set(day, parts.join(", "));
+  }
+  // 3) 같은 라벨 요일끼리 묶기
   const byLabel = new Map<string, Set<string>>();
-  for (const e of entries) {
-    const set = byLabel.get(e.label) ?? new Set<string>();
-    set.add(e.dayKo);
-    byLabel.set(e.label, set);
+  for (const [day, label] of dayLabel) {
+    const set = byLabel.get(label) ?? new Set<string>();
+    set.add(day);
+    byLabel.set(label, set);
   }
   const groups = [...byLabel.entries()].map(([label, days]) => ({
     label,

@@ -73,12 +73,8 @@ export async function ClassesTab({ student }: { student: StudentDetail }) {
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
       />
-      {scheduled.length > 0 ? (
-        <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} />
-      ) : null}
-      {past.length > 0 ? (
-        <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} />
-      ) : null}
+      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} />
+      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} />
     </div>
   );
 }
