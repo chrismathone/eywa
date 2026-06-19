@@ -131,6 +131,20 @@ function weekdayTable(subject: TimetableSubject, config: PeriodsConfig): Record<
 }
 
 /**
+ * 과목의 평일 개별 교시 목록(그룹 X) — 반 편집 클릭그리드용. english=10교시, 그 외=config.weekday(보통 8).
+ * subject 문자열은 느슨히 받아 "english"만 특수처리(arts·etc·highmath 등은 수학계열 평일표).
+ */
+export function subjectWeekdayPeriods(
+  subject: string,
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+): { id: string; startTime: string; endTime: string }[] {
+  const table = subject === "english" ? ENGLISH_PERIODS : config.weekday;
+  return Object.entries(table)
+    .map(([id, t]) => ({ id, startTime: hm(t.startTime), endTime: hm(t.endTime) }))
+    .sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+/**
  * periodId(통일 또는 레거시) + 과목 + 주말여부 → {startTime, endTime}. 알 수 없으면 null.
  * 주말이면 과목 무관 config.weekend, 평일이면 과목별 표(영어=상수, 그 외=config.weekday).
  */

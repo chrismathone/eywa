@@ -2,13 +2,15 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createClass,
   updateClass,
   type ClassFormState,
 } from "@/features/classes/server/actions";
+import { subjectWeekdayPeriods, type PeriodsConfig } from "@/features/timetable/lib/periods";
+import { ScheduleGrid } from "./schedule-grid";
 
 // 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
 // (드리프트 방지). 서버 부모가 subjectOptions를 주면 그 값(=테넌트 설정)이 우선한다.
@@ -18,16 +20,6 @@ const DEFAULT_SUBJECT_OPTIONS = [
   { value: "english", label: "영어" },
   { value: "science", label: "과학" },
   { value: "korean", label: "국어" },
-];
-
-const DAYS = [
-  { value: "mon", label: "월" },
-  { value: "tue", label: "화" },
-  { value: "wed", label: "수" },
-  { value: "thu", label: "목" },
-  { value: "fri", label: "금" },
-  { value: "sat", label: "토" },
-  { value: "sun", label: "일" },
 ];
 
 type Schedule = { dayOfWeek: string; startTime: string; endTime: string };
@@ -59,39 +51,23 @@ export function ClassForm({
   teacherOptions,
   classroomOptions,
   subjectOptions,
+  periodsConfig,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
   teacherOptions: { id: string; name: string }[];
   classroomOptions: { id: string; name: string; capacity: number | null }[];
   subjectOptions?: { value: string; label: string }[];
+  /** 테넌트 교시설정 → 클릭그리드의 교시→시각. 미전달 시 기본 교시표. */
+  periodsConfig?: PeriodsConfig;
 }) {
   const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
   const action = mode === "create" ? createClass : updateClass;
   const [state, formAction] = useActionState<ClassFormState, FormData>(action, undefined);
 
-  const [schedules, setSchedules] = useState<Schedule[]>(
-    defaults?.schedules?.length
-      ? defaults.schedules
-      : [{ dayOfWeek: "mon", startTime: "16:00", endTime: "17:30" }],
-  );
-
-  function addSchedule() {
-    setSchedules((s) => [
-      ...s,
-      { dayOfWeek: "mon", startTime: "16:00", endTime: "17:30" },
-    ]);
-  }
-
-  function removeSchedule(i: number) {
-    setSchedules((s) => s.filter((_, idx) => idx !== i));
-  }
-
-  function updateSchedule(i: number, patch: Partial<Schedule>) {
-    setSchedules((s) =>
-      s.map((row, idx) => (idx === i ? { ...row, ...patch } : row)),
-    );
-  }
+  // 과목은 교시표(8↔10교시)를 좌우하므로 상태로 들어 그리드와 동기. select는 name=subject로 그대로 제출.
+  const [subject, setSubject] = useState(defaults?.subject ?? subjects[0]?.value ?? "math");
+  const periods = subjectWeekdayPeriods(subject, periodsConfig);
 
   const fieldErrs = state?.fieldErrors ?? {};
 
@@ -113,7 +89,8 @@ export function ClassForm({
         <Field label="과목" error={fieldErrs.subject}>
           <select
             name="subject"
-            defaultValue={defaults?.subject ?? subjects[0]?.value ?? "math"}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           >
             {subjects.map((s) => (
@@ -179,72 +156,18 @@ export function ClassForm({
       </div>
 
       <section className="space-y-3 border-t pt-4">
-        <header className="flex items-center justify-between">
-          <div>
-            <h3 className="text-foreground text-sm font-semibold">주간 스케줄</h3>
-            <p className="text-muted-foreground text-xs">
-              요일별 시작·종료 시간. 강의실 시간 겹침 자동 감지.
-            </p>
-          </div>
-          <Button type="button" variant="outline" onClick={addSchedule}>
-            <Plus className="size-3.5" />
-            시간대 추가
-          </Button>
+        <header>
+          <h3 className="text-foreground text-sm font-semibold">주간 스케줄</h3>
+          <p className="text-muted-foreground text-xs">
+            요일 × 교시 칸을 눌러 수업 교시를 지정하세요. 강의실 시간 겹침은 저장 시 자동 감지.
+          </p>
         </header>
 
         {fieldErrs.schedules ? (
           <p className="text-chart-4 text-xs">{fieldErrs.schedules}</p>
         ) : null}
 
-        <ul className="space-y-2">
-          {schedules.map((s, i) => (
-            <li
-              key={i}
-              className="border-border bg-card/50 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2"
-            >
-              <select
-                name={`schedule_day_${i}`}
-                value={s.dayOfWeek}
-                onChange={(e) => updateSchedule(i, { dayOfWeek: e.target.value })}
-                className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-xs"
-              >
-                {DAYS.map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}요일
-                  </option>
-                ))}
-              </select>
-              <input
-                name={`schedule_start_${i}`}
-                type="time"
-                value={s.startTime}
-                onChange={(e) => updateSchedule(i, { startTime: e.target.value })}
-                className="border-border bg-card text-foreground num rounded-md border px-2 py-1 text-xs"
-              />
-              <span className="text-muted-foreground text-xs">~</span>
-              <input
-                name={`schedule_end_${i}`}
-                type="time"
-                value={s.endTime}
-                onChange={(e) => updateSchedule(i, { endTime: e.target.value })}
-                className="border-border bg-card text-foreground num rounded-md border px-2 py-1 text-xs"
-              />
-              <button
-                type="button"
-                onClick={() => removeSchedule(i)}
-                className="text-muted-foreground hover:text-chart-4 ml-auto"
-                aria-label="삭제"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </li>
-          ))}
-          {schedules.length === 0 ? (
-            <p className="text-muted-foreground text-xs">
-              스케줄 없이도 반을 생성할 수 있습니다. 나중에 추가 가능합니다.
-            </p>
-          ) : null}
-        </ul>
+        <ScheduleGrid periods={periods} initial={defaults?.schedules ?? []} />
       </section>
 
       {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
