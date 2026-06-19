@@ -1,6 +1,5 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged } from "@/lib/supabase/batch";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { followUpUrgency, type FollowUpUrgency } from "@/features/consultations/server/queries";
 
@@ -410,47 +409,17 @@ export type OutstandingItem = {
  */
 export async function getTopOutstanding(limit = 8): Promise<OutstandingItem[]> {
   const supabase = await createClient();
-  // 전건 미납을 1000행 한도 없이 안전하게 페이지네이션(#P1: 절단 시 'top'이 틀어짐).
-  type OutRow = {
-    amount_total: number | string;
-    amount_paid: number | string;
-    amount_discount: number | string | null;
-    status: string;
-    student: { id: string; name: string } | { id: string; name: string }[] | null;
-  };
-  const data = await fetchAllPaged<OutRow>((from, to) =>
-    supabase
-      .from("invoices")
-      .select(`amount_total, amount_paid, amount_discount, status, student:student_id ( id, name )`)
-      .in("status", ["unpaid", "partial"])
-      .range(from, to),
-  );
-
-  // 학생당 잔액 합산(한 학생의 여러 미납 인보이스가 같은 명단에 중복으로 뜨지 않도록).
-  const byStudent = new Map<string, OutstandingItem>();
-  for (const r of data) {
-    const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
-      | { id: string; name: string }
-      | undefined;
-    if (!stu) continue;
-    const balance =
-      Number(r.amount_total) - Number(r.amount_paid) - Number(r.amount_discount ?? 0);
-    if (balance <= 0) continue;
-    const cur = byStudent.get(stu.id);
-    if (cur) {
-      cur.amount += balance;
-      if (r.status === "unpaid") cur.status = "unpaid"; // 하나라도 완전 미납이면 '미납'
-    } else {
-      byStudent.set(stu.id, {
-        studentId: stu.id,
-        studentName: stu.name,
-        amount: balance,
-        status: r.status as string,
-      });
-    }
-  }
-
-  return [...byStudent.values()].sort((a, b) => b.amount - a.amount).slice(0, limit);
+  // 학생별 미납 잔액 합산 top N — DB group-by RPC 1쿼리(구: 전건 fetch + JS 집계, 0039a).
+  const { data, error } = await supabase.rpc("dashboard_top_outstanding", { p_limit: limit });
+  if (error) throw new Error(`getTopOutstanding: ${error.message}`);
+  return (
+    (data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string; status: string }>
+  ).map((r) => ({
+    studentId: r.student_id,
+    studentName: r.student_name,
+    amount: Number(r.amount),
+    status: r.status,
+  }));
 }
 
 export type AbsenceRisk = {
@@ -465,41 +434,12 @@ export type AbsenceRisk = {
  */
 export async function getAbsenceRiskStudents(): Promise<AbsenceRisk[]> {
   const supabase = await createClient();
-  const { data: recent } = await supabase
-    .from("attendance_records")
-    .select("session_date")
-    .order("session_date", { ascending: false })
-    .limit(1);
-  const anchorIso = recent?.[0]?.session_date as string | undefined;
-  if (!anchorIso) return [];
-  const since = new Date(anchorIso);
-  since.setDate(since.getDate() - 13);
-  const sinceIso = since.toISOString().slice(0, 10);
-
-  const { data } = await supabase
-    .from("attendance_records")
-    .select("student_id, status, student:student_id ( id, name )")
-    .eq("status", "absent")
-    .gte("session_date", sinceIso)
-    .lte("session_date", anchorIso);
-
-  const counts = new Map<string, { name: string; count: number }>();
-  for (const r of data ?? []) {
-    const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
-      | { id: string; name: string }
-      | undefined;
-    if (!stu) continue;
-    const cur = counts.get(stu.id) ?? { name: stu.name, count: 0 };
-    cur.count++;
-    counts.set(stu.id, cur);
-  }
-
-  return Array.from(counts.entries())
-    .filter(([, v]) => v.count >= 3)
-    .map(([id, v]) => ({
-      studentId: id,
-      studentName: v.name,
-      absences: v.count,
-    }))
-    .sort((a, b) => b.absences - a.absences);
+  // 최근 기록일 기준 14일 결석 ≥3 — DB group-by/having RPC 1쿼리(구: anchor + 전건 조인 + JS, 0039a).
+  const { data, error } = await supabase.rpc("dashboard_absence_risk", { p_min: 3 });
+  if (error) throw new Error(`getAbsenceRiskStudents: ${error.message}`);
+  return ((data ?? []) as Array<{ student_id: string; student_name: string; absences: number | string }>).map((r) => ({
+    studentId: r.student_id,
+    studentName: r.student_name,
+    absences: Number(r.absences),
+  }));
 }
