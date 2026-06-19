@@ -598,6 +598,7 @@ export async function getStudentAttendanceStats(
 export type StudentBillingRow = {
   id: string;
   period: string;
+  category: string; // tuition/material/exam/other
   amountTotal: number;
   amountPaid: number;
   amountDiscount: number;
@@ -612,7 +613,7 @@ export async function getStudentInvoices(studentId: string): Promise<StudentBill
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, period, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes",
+      "id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes",
     )
     .eq("student_id", studentId)
     .order("period", { ascending: false });
@@ -620,6 +621,7 @@ export async function getStudentInvoices(studentId: string): Promise<StudentBill
   return data.map((r) => ({
     id: r.id,
     period: r.period,
+    category: r.category,
     amountTotal: Number(r.amount_total),
     amountPaid: Number(r.amount_paid),
     amountDiscount: Number(r.amount_discount),
