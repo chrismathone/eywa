@@ -1367,7 +1367,8 @@ production 반응속도가 느림. 의심 가는 병목:
     Chrome MCP 재연결 후 웨일에서 실거동 일괄 검증 필요(역할별 메뉴 노출 포함). [[reference_browser-verification-env]]
 14. **ijw 갭 P3(미착수)** — 상담 녹음 AI / QR 공개접수 / 시간표 시뮬레이션 / 엑셀 라운드트립(import) / 지출 결재 +
     급여 정책엔진(과정별 단가·강사 override). 무겁고 데모 임팩트는 P2 < — 우선순위 재점검 후 진행.
-15. **drizzle 스냅샷 reconciliation** — P0~P2 신규 테이블(0027b~0032a)은 전부 **손수 alpha**(`db:generate` 금지, #P0-6 드리프트).
-    0027 시리즈(kiosk·timetable·messaging) 전부 main 안착 후 드리즐 스냅샷 정식 재산출을 **별도 과제**로.
+15. **drizzle 스냅샷 reconciliation** — `0027b`~`0040a`(P2 테이블 + 설정/계산기/권한 + 집계 RPC)는 전부 **손수 alpha**
+    (`db:generate` 금지, #P0-6 드리프트). 0027 시리즈(kiosk·timetable·messaging) 전부 main 안착 후 드리즐 스냅샷
+    정식 재산출을 **별도 과제**로. 현재 적용 상태·alpha 전체 목록은 [`supabase/migrations/README.md`](supabase/migrations/README.md) §4·§5(검증 2026-06-20).
 16. **시간표 P1(인라인 검색·강사 시간표 색상)** — 병렬 timetable 세션 소관. 이 세션 검토 시점엔 미반영(시간표가 과목×교시
     그리드로 재설계되어 방향이 다름). 그 세션 병합 후 실제 구현 여부 재확인.
