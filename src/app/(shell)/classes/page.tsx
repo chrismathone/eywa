@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -13,9 +12,15 @@ import {
   type ClassDaySlot,
   type ClassSort,
 } from "@/features/classes/server/queries";
-import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { NewClassTrigger } from "./_components/new-class-trigger";
+import { ClassFilterBar } from "./_components/class-filter-bar";
+import {
+  buildClassHref,
+  DAY_KEYS,
+  type ClassFilterState,
+  type ViewMode,
+} from "./_components/filter-shared";
 
 export const metadata = { title: "수업목록 — eywa" };
 
@@ -25,8 +30,6 @@ const PAGE_SIZE = 50;
 const CheckIcon: LucideIcon = ((props: { size?: number | string }) => (
   <EyIcon name="check" size={typeof props.size === "number" ? props.size : undefined} />
 )) as unknown as LucideIcon;
-
-type ViewMode = "cards" | "table";
 
 const SUBJECT_META: Record<string, { label: string; color: PillColor }> = {
   math: { label: "수학", color: "primary" },
@@ -55,75 +58,6 @@ const DAY_LABEL: Record<string, string> = {
   sat: "토",
   sun: "일",
 };
-
-const SUBJECT_FILTERS = [
-  { key: "all", label: "전체" },
-  { key: "math", label: "수학" },
-  { key: "highmath", label: "수학(심화)" },
-  { key: "english", label: "영어" },
-  { key: "korean", label: "국어" },
-  { key: "science", label: "과학" },
-  { key: "arts", label: "예술" },
-];
-
-// 강사가 해당 과목을 담당하는지 — users.subjects 대소문자 편차('MATH' vs 'math')에 견고하게(정확일치, 무시).
-const teacherTeaches = (subjects: string[], subjectKey: string) =>
-  subjects.some((s) => s.toLowerCase() === subjectKey.toLowerCase());
-
-// 요일 칩 — ijw처럼 다중 선택(토글). "전체"는 선택 해제.
-const DAY_FILTERS = [
-  { key: "mon", label: "월" },
-  { key: "tue", label: "화" },
-  { key: "wed", label: "수" },
-  { key: "thu", label: "목" },
-  { key: "fri", label: "금" },
-  { key: "sat", label: "토" },
-  { key: "sun", label: "일" },
-];
-const DAY_KEYS = new Set(DAY_FILTERS.map((d) => d.key));
-
-// 정렬 — ijw 패리티(수업명순/학생수순/강사명순). 기본 name은 URL에 안 실음.
-const SORT_OPTIONS: { value: Exclude<ClassSort, "name">; label: string }[] = [
-  { value: "students", label: "학생수순" },
-  { value: "teacher", label: "강사명순" },
-];
-
-// 필터 칩 공통 스타일(과목·요일). 활성 = ink 솔리드, 비활성 = 라인 + hover.
-const chipCls = (active: boolean) =>
-  `shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-    active
-      ? "border-foreground bg-foreground text-background font-medium"
-      : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-  }`;
-// 뷰 토글 칩(테이블/카드). 활성 = primary.
-const viewCls = (active: boolean) =>
-  `shrink-0 rounded-sm border px-2 py-1 text-xs transition ${
-    active
-      ? "border-primary bg-primary text-primary-foreground font-medium"
-      : "border-line text-text-dim hover:bg-bg-soft"
-  }`;
-
-type ClassFilterState = {
-  subject: string;
-  teacher: string;
-  days: string[];
-  q: string;
-  view: ViewMode;
-  sort: ClassSort;
-};
-
-function buildHref(current: ClassFilterState, patch: Partial<ClassFilterState>): string {
-  const next = { ...current, ...patch };
-  const params = new URLSearchParams();
-  if (next.subject !== "all") params.set("subject", next.subject);
-  if (next.teacher !== "all") params.set("teacher", next.teacher);
-  if (next.days.length) params.set("days", next.days.join(","));
-  if (next.q) params.set("q", next.q);
-  if (next.view !== "table") params.set("view", next.view);
-  if (next.sort !== "name") params.set("sort", next.sort);
-  const s = params.toString();
-  return s ? `/classes?${s}` : "/classes";
-}
 
 export default async function ClassesPage({
   searchParams,
@@ -164,25 +98,8 @@ export default async function ClassesPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current: ClassFilterState = { subject, teacher: teacherId, days, q, view, sort };
 
-  // 과목이 선택되면 해당 과목 담당 강사만 드롭다운에 노출.
-  const teacherFilterOptions =
-    subject === "all" ? teachers : teachers.filter((t) => teacherTeaches(t.subjects, subject));
-  // 선택된 강사가 새 과목을 담당하지 않으면 과목 전환 시 강사 필터를 초기화한다.
-  const selectedTeacher = teacherId === "all" ? null : teachers.find((t) => t.id === teacherId);
-  const subjectHref = (key: string) =>
-    buildHref(current, {
-      subject: key,
-      ...(key !== "all" && selectedTeacher && !teacherTeaches(selectedTeacher.subjects, key)
-        ? { teacher: "all" }
-        : {}),
-    });
-  // 요일 토글 — 이미 선택돼 있으면 빼고, 아니면 더한다(다중).
-  const dayHref = (key: string) =>
-    buildHref(current, {
-      days: days.includes(key) ? days.filter((d) => d !== key) : [...days, key],
-    });
   const pageHref = (p: number) => {
-    const base = new URLSearchParams(buildHref(current, {}).split("?")[1] ?? "");
+    const base = new URLSearchParams(buildClassHref(current, {}).split("?")[1] ?? "");
     if (p > 1) base.set("page", String(p));
     const s = base.toString();
     return s ? `/classes?${s}` : "/classes";
@@ -204,92 +121,8 @@ export default async function ClassesPage({
         />
       </section>
 
-      {/* Filter bar — ijw 패리티: 넓은 창에선 한 줄, 좁아지면 자연스럽게 줄바꿈(flex-wrap) */}
-      <div className="bg-card border-line shadow-card rounded-md border px-4 py-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
-          {/* 과목 */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">과목</span>
-            {SUBJECT_FILTERS.map((f) => (
-              <Link key={f.key} href={subjectHref(f.key)} className={chipCls(subject === f.key)}>
-                {f.label}
-              </Link>
-            ))}
-          </div>
-
-          <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
-
-          {/* 강사 */}
-          <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">강사</span>
-            <FilterSelect
-              paramName="teacher"
-              value={teacherId === "all" ? null : teacherId}
-              options={teacherFilterOptions.map((t) => ({ value: t.id, label: t.name }))}
-              ariaLabel="강사 필터"
-              className="w-36"
-            />
-          </div>
-
-          <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
-
-          {/* 요일 (다중 선택) */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">요일</span>
-            <Link href={buildHref(current, { days: [] })} className={chipCls(days.length === 0)}>
-              전체
-            </Link>
-            {DAY_FILTERS.map((f) => (
-              <Link key={f.key} href={dayHref(f.key)} className={chipCls(days.includes(f.key))}>
-                {f.label}
-              </Link>
-            ))}
-          </div>
-
-          <span className="bg-line hidden h-4 w-px shrink-0 sm:block" aria-hidden />
-
-          {/* 정렬 */}
-          <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">정렬</span>
-            <FilterSelect
-              paramName="sort"
-              value={sort === "name" ? null : sort}
-              options={SORT_OPTIONS}
-              allLabel="수업명순"
-              allValue="name"
-              ariaLabel="정렬 기준"
-              className="w-28"
-            />
-          </div>
-
-          {/* 검색 + 뷰 토글 (넓을 땐 우측 정렬) */}
-          <form action="/classes" method="get" className="ml-auto flex items-center gap-2">
-            {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
-            {teacherId !== "all" ? <input type="hidden" name="teacher" value={teacherId} /> : null}
-            {days.length ? <input type="hidden" name="days" value={days.join(",")} /> : null}
-            {sort !== "name" ? <input type="hidden" name="sort" value={sort} /> : null}
-            {view !== "table" ? <input type="hidden" name="view" value={view} /> : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="수업명, 강사명 검색"
-                className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <Link href={buildHref(current, { view: "table" })} className={viewCls(view === "table")}>
-                테이블
-              </Link>
-              <Link href={buildHref(current, { view: "cards" })} className={viewCls(view === "cards")}>
-                카드
-              </Link>
-            </div>
-          </form>
-        </div>
-      </div>
+      {/* 과목·요일·강사·정렬 드롭다운 + 검색/뷰 — 선택값 localStorage 영속(클라이언트) */}
+      <ClassFilterBar current={current} teachers={teachers} />
 
       <div className="flex items-center justify-between">
         <p className="micro">
