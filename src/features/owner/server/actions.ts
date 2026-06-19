@@ -13,6 +13,7 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   operations: "운영 체계",
   billing: "수납·청구 기본값",
   notifications: "알림·연동·약관",
+  permissions: "역할별 메뉴 권한",
 };
 
 /**

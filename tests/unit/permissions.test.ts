@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccess, accessLevel } from "@/lib/permissions";
+import { canAccess, accessLevel, resolveMatrix, MENU_ACCESS } from "@/lib/permissions";
 
 describe("permissions matrix", () => {
   it("master can access every menu", () => {
@@ -37,5 +37,50 @@ describe("permissions matrix", () => {
   it("counselor leads enrollment pipeline", () => {
     expect(accessLevel("counselor", "enrollment")).toBe("full");
     expect(accessLevel("counselor", "consultations")).toBe("full");
+  });
+});
+
+describe("resolveMatrix — 테넌트 권한 override (sparse)", () => {
+  it("빈 override = 하드코딩 MENU_ACCESS", () => {
+    const m = resolveMatrix([]);
+    expect(m).toEqual(MENU_ACCESS);
+    expect(canAccess("teacher", "enrollment", m)).toBe(false);
+  });
+
+  it("셀 단위 sparse override 적용 — 다른 셀은 기본값 유지", () => {
+    const m = resolveMatrix([{ menu: "enrollment", role: "teacher", access: "full" }]);
+    expect(canAccess("teacher", "enrollment", m)).toBe(true);
+    expect(accessLevel("teacher", "enrollment", m)).toBe("full");
+    expect(accessLevel("teacher", "billing", m)).toBe(MENU_ACCESS.billing.teacher);
+  });
+
+  it("readonly 다운그레이드가 accessLevel에 반영(쓰기 차단용)", () => {
+    const m = resolveMatrix([{ menu: "exams", role: "manager", access: "readonly" }]);
+    expect(accessLevel("manager", "exams", m)).toBe("readonly");
+  });
+
+  it("가드레일 무시 — master는 owner/admin/대시보드 자기잠금 불가", () => {
+    const m = resolveMatrix([
+      { menu: "owner", role: "master", access: "none" },
+      { menu: "admin", role: "master", access: "none" },
+      { menu: "dashboard", role: "master", access: "none" },
+    ]);
+    expect(canAccess("master", "owner", m)).toBe(true);
+    expect(canAccess("master", "admin", m)).toBe(true);
+    expect(canAccess("master", "dashboard", m)).toBe(true);
+  });
+
+  it("가드레일 무시 — 역할 전용 화면(원스크린/내 학습)은 override 무효", () => {
+    const m = resolveMatrix([
+      { menu: "my_learning", role: "teacher", access: "full" },
+      { menu: "teacher_onescreen", role: "master", access: "full" },
+    ]);
+    expect(m.my_learning.teacher).toBe(MENU_ACCESS.my_learning.teacher);
+    expect(m.teacher_onescreen.master).toBe(MENU_ACCESS.teacher_onescreen.master);
+  });
+
+  it("MENU_ACCESS 원본을 변형하지 않음", () => {
+    resolveMatrix([{ menu: "billing", role: "teacher", access: "full" }]);
+    expect(MENU_ACCESS.billing.teacher).toBe("none");
   });
 });

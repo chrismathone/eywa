@@ -3,14 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevel } from "@/lib/permissions";
 import type { SystemRole } from "@/lib/permissions";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 
 export type CatalogActionState = { error?: string; ok?: boolean } | undefined;
 
 // 수납 쓰기 권한 = billing "full" (master/admin/accountant). readonly(manager)·none 제외.
-function canWrite(role: SystemRole): boolean {
-  return accessLevel(role, "billing") === "full";
+async function canWrite(role: SystemRole): Promise<boolean> {
+  return (await accessLevelTenant(role, "billing")) === "full";
 }
 
 type Fields = {
@@ -39,7 +39,7 @@ export async function createCatalogItem(
 ): Promise<CatalogActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "단가표 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "단가표 관리 권한이 없습니다" };
 
   const f = readForm(formData);
   if (f.error) return { error: f.error };
@@ -66,7 +66,7 @@ export async function updateCatalogItem(
 ): Promise<CatalogActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "단가표 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "단가표 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "교재 ID가 누락되었습니다" };
@@ -97,7 +97,7 @@ export async function deleteCatalogItem(
 ): Promise<CatalogActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "단가표 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "단가표 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "교재 ID가 누락되었습니다" };
@@ -116,7 +116,7 @@ export async function toggleCatalogActive(
 ): Promise<CatalogActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "단가표 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "단가표 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const next = String(formData.get("next") ?? "") === "true";

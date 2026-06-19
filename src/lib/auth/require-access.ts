@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { canAccess, type MenuKey } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "./current-user";
+import { getPermMatrix } from "./perm-matrix";
 
 /**
  * Server-side permissions guard. Drop into the top of any page server
@@ -16,10 +17,11 @@ import { getCurrentUser, type CurrentUser } from "./current-user";
 export async function requireAccess(menu: MenuKey): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const matrix = await getPermMatrix(); // 테넌트 override 반영 매트릭스(요청당 1회 cache)
   // 권한 없음: 대시보드 접근 가능하면 대시보드로, 아니면(예: student) 공개 랜딩으로.
   // 대시보드 미접근 role을 /dashboard로 보내면 그 페이지가 또 막혀 리다이렉트 루프가 난다.
-  if (!canAccess(user.systemRole, menu)) {
-    redirect(canAccess(user.systemRole, "dashboard") ? "/dashboard" : "/");
+  if (!canAccess(user.systemRole, menu, matrix)) {
+    redirect(canAccess(user.systemRole, "dashboard", matrix) ? "/dashboard" : "/");
   }
   return user;
 }

@@ -7,7 +7,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import type { LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
-import { canAccess, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
 import type { PaletteHit } from "@/features/search/server/queries";
@@ -46,7 +46,13 @@ const sectionOf = (item: Item): string => (item.kind === "menu" ? "menu" : item.
  * 검색 팰릿. 정적 메뉴(canAccess 게이트, 클라 즉시 필터) + 데이터 검색(학생/수업/상담/등록상담,
  * /api/search/palette 서버 fetch, 디바운스). 헤더 검색 버튼 클릭으로 열림. 입력 전엔 안 펼침.
  */
-export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
+export function CommandPalette({
+  systemRole,
+  permMatrix,
+}: {
+  systemRole: SystemRole;
+  permMatrix?: AccessMatrix;
+}) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
   const openWindow = useWindowStore((s) => s.open);
@@ -61,7 +67,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
     const list: Command[] = [];
     for (const group of NAV_GROUPS) {
       for (const item of group.items) {
-        if (!canAccess(systemRole, item.menuKey)) continue;
+        if (!canAccess(systemRole, item.menuKey, permMatrix)) continue;
         list.push({
           href: item.href,
           label: item.label,
@@ -74,7 +80,7 @@ export function CommandPalette({ systemRole }: { systemRole: SystemRole }) {
       }
     }
     return list;
-  }, [systemRole]);
+  }, [systemRole, permMatrix]);
 
   const q = query.trim().toLowerCase();
   const menuResults = useMemo(

@@ -12,7 +12,7 @@ import {
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
-import { canAccess, type SystemRole } from "@/lib/permissions";
+import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
@@ -64,11 +64,13 @@ export function AppSidebar({
   email,
   className,
   logoText = "EYWA",
+  permMatrix,
 }: {
   systemRole: SystemRole;
   email: string;
   className?: string;
   logoText?: string;
+  permMatrix?: AccessMatrix;
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
@@ -91,7 +93,7 @@ export function AppSidebar({
   // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
   const groups = NAV_GROUPS.map((g) => ({
     label: g.label,
-    items: g.items.filter((item) => canAccess(systemRole, item.menuKey)),
+    items: g.items.filter((item) => canAccess(systemRole, item.menuKey, permMatrix)),
   })).filter((g) => g.items.length > 0);
 
   return (

@@ -1,6 +1,7 @@
 import "server-only";
 import { canAccess, type MenuKey } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "./current-user";
+import { getPermMatrix } from "./perm-matrix";
 
 export type ApiAccessResult =
   | { ok: true; user: CurrentUser }
@@ -15,6 +16,7 @@ export type ApiAccessResult =
 export async function apiAccess(menu: MenuKey): Promise<ApiAccessResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, status: 401 };
-  if (!canAccess(user.systemRole, menu)) return { ok: false, status: 403 };
+  const matrix = await getPermMatrix();
+  if (!canAccess(user.systemRole, menu, matrix)) return { ok: false, status: 403 };
   return { ok: true, user };
 }

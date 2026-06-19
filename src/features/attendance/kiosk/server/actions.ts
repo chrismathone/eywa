@@ -4,7 +4,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccess } from "@/lib/permissions";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
@@ -14,7 +14,7 @@ import { parseForwardedFor } from "../device-info";
 
 async function requireMaster() {
   const user = await getCurrentUser();
-  if (!user || !canAccess(user.systemRole, "kiosk_settings")) {
+  if (!user || !(await canAccessTenant(user.systemRole, "kiosk_settings"))) {
     throw new Error("권한이 없습니다");
   }
   return user;

@@ -1,37 +1,47 @@
-export type SystemRole =
-  | "master"
-  | "admin"
-  | "manager"
-  | "teacher"
-  | "counselor"
-  | "accountant"
-  | "viewer"
-  | "student";
+// 역할×메뉴 접근 매트릭스. 하드코딩 MENU_ACCESS가 "기본값"이고, 테넌트는 owner 설정의
+// permissions 섹션(jsonb sparse override)으로 셀 단위로 덮어쓴다(resolveMatrix). canAccess/
+// accessLevel은 optional 3번째 인자 matrix를 받아 — 생략 시 하드코딩 default(기존 콜사이트 불변).
+// MenuKey/SystemRole은 튜플에서 추론(단일 소스 → Zod z.enum과 공유).
 
-export type MenuKey =
-  | "dashboard"
-  | "timetable"
-  | "attendance"
-  | "classes"
-  | "students"
-  | "exams"
-  | "enrollment"
-  | "consultations"
-  | "withdrawals"
-  | "retention"
-  | "staff"
-  | "billing"
-  | "meetings"
-  | "help"
-  | "admin"
-  | "owner"
-  | "teacher_onescreen"
-  | "my_learning"
-  | "kiosk_settings";
+export const SYSTEM_ROLES = [
+  "master",
+  "admin",
+  "manager",
+  "teacher",
+  "counselor",
+  "accountant",
+  "viewer",
+  "student",
+] as const;
+export type SystemRole = (typeof SYSTEM_ROLES)[number];
+
+export const MENU_KEYS = [
+  "dashboard",
+  "timetable",
+  "attendance",
+  "classes",
+  "students",
+  "exams",
+  "enrollment",
+  "consultations",
+  "withdrawals",
+  "retention",
+  "staff",
+  "billing",
+  "meetings",
+  "help",
+  "admin",
+  "owner",
+  "teacher_onescreen",
+  "my_learning",
+  "kiosk_settings",
+] as const;
+export type MenuKey = (typeof MENU_KEYS)[number];
 
 export type Access = "full" | "scoped" | "readonly" | "none";
+export type AccessMatrix = Record<MenuKey, Record<SystemRole, Access>>;
 
-export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
+export const MENU_ACCESS: AccessMatrix = {
   dashboard: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "scoped", accountant: "scoped", viewer: "readonly", student: "none" },
   timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", student: "none" },
@@ -61,10 +71,39 @@ export const MENU_ACCESS: Record<MenuKey, Record<SystemRole, Access>> = {
   kiosk_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
 };
 
-export function canAccess(role: SystemRole, menu: MenuKey): boolean {
-  return MENU_ACCESS[menu][role] !== "none";
+export function canAccess(role: SystemRole, menu: MenuKey, matrix: AccessMatrix = MENU_ACCESS): boolean {
+  return matrix[menu][role] !== "none";
 }
 
-export function accessLevel(role: SystemRole, menu: MenuKey): Access {
-  return MENU_ACCESS[menu][role];
+export function accessLevel(role: SystemRole, menu: MenuKey, matrix: AccessMatrix = MENU_ACCESS): Access {
+  return matrix[menu][role];
+}
+
+// === 테넌트 권한 override (owner 설정 permissions 섹션) ===
+export type PermissionOverride = { menu: MenuKey; role: SystemRole; access: Access };
+
+// 편집 금지 셀(가드레일) — 저장(superRefine)·적용(resolveMatrix) 양쪽에서 이중 방어.
+// 1) 역할 전용 특수 화면은 override 자체 무효. 2) master는 자기 콘솔(owner/admin/대시보드)을 잠글 수 없음.
+const ROLE_LOCKED_MENUS = new Set<MenuKey>(["teacher_onescreen", "my_learning"]);
+export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
+  if (ROLE_LOCKED_MENUS.has(menu)) return true;
+  if (role === "master" && (menu === "owner" || menu === "admin" || menu === "dashboard") && access === "none") {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 하드코딩 MENU_ACCESS(기본값) 위에 저장된 sparse override를 셀 단위로 덮어쓴 "유효 매트릭스".
+ * 순수 함수(Vitest 대상). 가드레일에 걸리는 셀(잠긴 메뉴·master 자기잠금)은 무시한다(DB 직접 변조 대비).
+ */
+export function resolveMatrix(overrides: readonly PermissionOverride[]): AccessMatrix {
+  const matrix = Object.fromEntries(
+    MENU_KEYS.map((k) => [k, { ...MENU_ACCESS[k] }]),
+  ) as AccessMatrix;
+  for (const o of overrides) {
+    if (!matrix[o.menu] || isPermissionLocked(o.menu, o.role, o.access)) continue;
+    matrix[o.menu][o.role] = o.access;
+  }
+  return matrix;
 }

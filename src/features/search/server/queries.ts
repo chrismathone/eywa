@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { canAccess, type SystemRole } from "@/lib/permissions";
+import { type SystemRole } from "@/lib/permissions";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
@@ -104,10 +105,10 @@ export async function searchPalette(q: string, role: SystemRole): Promise<Palett
   const term = sanitize(q);
   if (term.length < 2) return [];
   const tasks: Promise<PaletteHit[]>[] = [];
-  if (canAccess(role, "students")) tasks.push(searchStudents(term));
-  if (canAccess(role, "classes")) tasks.push(searchClasses(term));
-  if (canAccess(role, "consultations")) tasks.push(searchConsultations(term));
-  if (canAccess(role, "enrollment")) tasks.push(searchEnrollment(term));
+  if (await canAccessTenant(role, "students")) tasks.push(searchStudents(term));
+  if (await canAccessTenant(role, "classes")) tasks.push(searchClasses(term));
+  if (await canAccessTenant(role, "consultations")) tasks.push(searchConsultations(term));
+  if (await canAccessTenant(role, "enrollment")) tasks.push(searchEnrollment(term));
   const groups = await Promise.all(tasks);
   return groups.flat();
 }

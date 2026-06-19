@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
-import { canAccess, type SystemRole } from "@/lib/permissions";
+import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 
 function isItemActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
@@ -20,15 +20,17 @@ export function MobileTopNav({
   email,
   className,
   brand = "EYWA",
+  permMatrix,
 }: {
   systemRole: SystemRole;
   email: string;
   className?: string;
   brand?: string;
+  permMatrix?: AccessMatrix;
 }) {
   const pathname = usePathname();
   const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter((item) =>
-    canAccess(systemRole, item.menuKey),
+    canAccess(systemRole, item.menuKey, permMatrix),
   );
 
   return (

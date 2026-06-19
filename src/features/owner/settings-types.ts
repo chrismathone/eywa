@@ -2,6 +2,7 @@
 // 저장은 tenant_settings.data jsonb. 빈 키는 DEFAULT_SETTINGS로 폴백(resolve.ts).
 // 섹션별 부분 저장(saveOwnerSection)이라 SECTION_SCHEMAS로 섹션 단위 검증.
 import { z } from "zod";
+import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,12 +78,38 @@ export const notificationsSchema = z.object({
 });
 export type NotificationsSettings = z.infer<typeof notificationsSchema>;
 
+// === 역할/권한 — 테넌트별 메뉴 접근 override (sparse) ===
+// 진짜 기본값은 코드의 하드코딩 MENU_ACCESS(permissions.ts). 여기엔 원장이 바꾼 (menu,role) 셀만
+// 담는다. ⚠️ 배열 모델인 이유: resolve.ts deepMerge가 base 키만 순회 → 빈 {} 기본값 아래 객체 record는
+// 새 키가 탈락. 배열은 "있으면 통째 교체"라 sparse override가 resolve 무수정으로 보존된다.
+export const accessEnum = z.enum(["full", "scoped", "readonly", "none"]);
+export const permissionOverrideSchema = z.object({
+  menu: z.enum(MENU_KEYS as unknown as [MenuKey, ...MenuKey[]]),
+  role: z.enum(SYSTEM_ROLES as unknown as [SystemRole, ...SystemRole[]]),
+  access: accessEnum,
+});
+export const permissionsSchema = z
+  .object({ overrides: z.array(permissionOverrideSchema).max(160) })
+  .superRefine((v, ctx) => {
+    // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
+    for (const r of v.overrides) {
+      if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {
+        ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 편집할 수 없습니다" });
+      }
+      if (r.role === "master" && (r.menu === "owner" || r.menu === "admin" || r.menu === "dashboard") && r.access === "none") {
+        ctx.addIssue({ code: "custom", message: "원장(master)의 owner/admin/대시보드 접근은 잠글 수 없습니다" });
+      }
+    }
+  });
+export type PermissionsSettings = z.infer<typeof permissionsSchema>;
+
 export const tenantSettingsSchema = z.object({
   version: z.literal(1),
   profile: profileSchema,
   operations: operationsSchema,
   billing: billingSchema,
   notifications: notificationsSchema,
+  permissions: permissionsSchema,
 });
 export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
 
@@ -92,5 +119,6 @@ export const SECTION_SCHEMAS = {
   operations: operationsSchema,
   billing: billingSchema,
   notifications: notificationsSchema,
+  permissions: permissionsSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccess } from "@/lib/permissions";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
@@ -84,7 +84,7 @@ export async function updateEnrollmentConsultation(
 ): Promise<UpdateConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canAccess(user.systemRole, "enrollment")) return { error: "등록상담 권한이 없습니다" };
+  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
@@ -157,7 +157,7 @@ export async function setEnrollmentOutcome(
 ): Promise<SetOutcomeState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canAccess(user.systemRole, "enrollment")) return { error: "등록상담 권한이 없습니다" };
+  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const outcome = String(formData.get("outcome") ?? "") as Outcome;
@@ -218,7 +218,7 @@ export async function runAiAnalysis(
   // enrollment:none 역할도 호출 자체는 트리거할 수 있어 막는다.
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canAccess(user.systemRole, "enrollment")) {
+  if (!(await canAccessTenant(user.systemRole, "enrollment"))) {
     return { error: "등록상담 권한이 없습니다" };
   }
 

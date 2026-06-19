@@ -72,4 +72,6 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     privacyTerms: "",
     serviceTerms: "",
   },
+  // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
+  permissions: { overrides: [] },
 };

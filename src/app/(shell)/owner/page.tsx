@@ -5,17 +5,19 @@ import { ProfileSection } from "./_components/profile-section";
 import { OperationsSection } from "./_components/operations-section";
 import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
+import { PermissionsSection } from "./_components/permissions-section";
 
 export const dynamic = "force-dynamic";
 
 type Sp = Record<string, string | undefined>;
-type OwnerTab = "profile" | "operations" | "billing" | "notifications";
+type OwnerTab = "profile" | "operations" | "billing" | "notifications" | "permissions";
 
 const TAB_LABEL: Record<OwnerTab, string> = {
   profile: "프로필·브랜드",
   operations: "운영 체계",
   billing: "수납·청구",
   notifications: "알림·연동·약관",
+  permissions: "역할·권한",
 };
 
 function resolveTab(sp: Sp): OwnerTab {
@@ -25,7 +27,9 @@ function resolveTab(sp: Sp): OwnerTab {
       ? "billing"
       : sp.tab === "notifications"
         ? "notifications"
-        : "profile";
+        : sp.tab === "permissions"
+          ? "permissions"
+          : "profile";
 }
 
 const FACES: Face[] = [
@@ -33,6 +37,7 @@ const FACES: Face[] = [
   { key: "operations", label: TAB_LABEL.operations, href: "/owner?tab=operations" },
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications" },
+  { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions" },
 ];
 
 function fmt(iso: string | null): string {
@@ -77,6 +82,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "operations" ? <OperationsSection initial={settings.operations} /> : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
+      {tab === "permissions" ? <PermissionsSection initial={settings.permissions} /> : null}
     </div>
   );
 }

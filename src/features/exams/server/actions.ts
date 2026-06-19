@@ -3,16 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevel } from "@/lib/permissions";
 import type { SystemRole } from "@/lib/permissions";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 
 export type ExamActionState = { error?: string; ok?: boolean } | undefined;
 
 const EXAM_TYPES = ["weekly", "mock", "school"] as const;
 
-function canWrite(role: SystemRole): boolean {
-  const lvl = accessLevel(role, "exams");
+async function canWrite(role: SystemRole): Promise<boolean> {
+  const lvl = await accessLevelTenant(role, "exams"); // 테넌트 override 반영
   return lvl === "full" || lvl === "scoped"; // readonly/none은 쓰기 불가
 }
 
@@ -46,7 +46,7 @@ function readExamForm(formData: FormData): ExamFields {
 export async function createExam(_prev: ExamActionState, formData: FormData): Promise<ExamActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "시험 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "시험 관리 권한이 없습니다" };
 
   const f = readExamForm(formData);
   if (f.error) return { error: f.error };
@@ -77,7 +77,7 @@ export async function createExam(_prev: ExamActionState, formData: FormData): Pr
 export async function updateExam(_prev: ExamActionState, formData: FormData): Promise<ExamActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "시험 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "시험 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "시험 ID가 누락되었습니다" };
@@ -106,7 +106,7 @@ export async function updateExam(_prev: ExamActionState, formData: FormData): Pr
 export async function deleteExam(_prev: ExamActionState, formData: FormData): Promise<ExamActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "시험 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "시험 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "시험 ID가 누락되었습니다" };
@@ -155,7 +155,7 @@ export async function batchSaveScores(
 ): Promise<ExamActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canWrite(user.systemRole)) return { error: "시험 관리 권한이 없습니다" };
+  if (!(await canWrite(user.systemRole))) return { error: "시험 관리 권한이 없습니다" };
 
   const examId = String(formData.get("examId") ?? "").trim();
   if (!examId) return { error: "시험 ID가 누락되었습니다" };

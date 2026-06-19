@@ -8,6 +8,7 @@ import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { resolveMatrix } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { EmbedProvider } from "@/components/workspace/embed-context";
@@ -67,6 +68,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     );
   }
 
+  // 테넌트 권한 override 반영 매트릭스 — 사이드바·팰릿·모바일내비 메뉴 필터에 주입(클라 소비처).
+  // settings는 위에서 이미 fetch(cache) → 추가 쿼리 0. 빈 override면 하드코딩 MENU_ACCESS 그대로.
+  const permMatrix = resolveMatrix(settings.permissions.overrides);
   return (
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
@@ -79,13 +83,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           systemRole={user.systemRole}
           email={user.email}
           logoText={brand}
+          permMatrix={permMatrix}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} className="lg:pointer-fine:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} permMatrix={permMatrix} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -96,7 +101,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </div>
 
       {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}
-      <CommandPalette systemRole={user.systemRole} />
+      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} />
