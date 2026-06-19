@@ -244,23 +244,74 @@ const DOW_INDEX: Record<string, number> = {
 export type TodaySlot = ScheduleSlot & { status: "done" | "ongoing" | "upcoming" };
 
 export async function getTodaySchedule(): Promise<TodaySlot[]> {
-  const all = await fetchSlots();
+  const supabase = await createClient();
   const now = new Date();
   const todayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][now.getDay()];
-  const todaysSlots = all.filter((s) => s.dayOfWeek === todayKey);
-  if (todaysSlots.length === 0) return [];
+  const today = now.toISOString().slice(0, 10);
 
-  const hh = now.getHours();
-  const mm = now.getMinutes();
-  const nowMins = hh * 60 + mm;
+  // 오늘 요일 스케줄만 — fetchSlots(전 요일 fetch 후 JS 필터)를 SQL 필터로 좁힘(데이터 ~1/7).
+  const { data } = await supabase
+    .from("class_schedules")
+    .select(
+      `id, day_of_week, start_time, end_time, class_id,
+       class:class_id (
+         class_name, subject,
+         teacher:teacher_id ( display_name ),
+         classroom:classroom_id ( name )
+       )`,
+    )
+    .eq("day_of_week", todayKey)
+    .or(`valid_to.is.null,valid_to.gte.${today}`)
+    .order("start_time");
+  if (!data || data.length === 0) return [];
 
-  function toMins(hms: string): number {
+  // 오늘 반의 활성 enrollment만 카운트 — 전체 enrollment 전건 페이지네이션 대신 오늘 반(classIds)으로 좁힘.
+  // classIds는 수십 개라 .in() URL 안전 + range로 1000행 방어(#53/#54).
+  const classIds = [...new Set(data.map((r) => r.class_id as string))];
+  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
+    supabase
+      .from("enrollments")
+      .select("class_id")
+      .is("end_date", null)
+      .in("class_id", classIds)
+      .range(from, to),
+  );
+  const counts = new Map<string, number>();
+  for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const toMins = (hms: string): number => {
     const [h, m] = hms.split(":");
     return Number(h) * 60 + Number(m);
-  }
+  };
 
-  return todaysSlots
-    .slice()
+  return data
+    .map((r): ScheduleSlot => {
+      const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
+        | {
+            class_name?: string;
+            subject?: string;
+            teacher?: { display_name?: string } | { display_name?: string }[];
+            classroom?: { name?: string } | { name?: string }[];
+          }
+        | undefined;
+      const tf = klass?.teacher;
+      const teacher = (Array.isArray(tf) ? tf[0] : tf) as { display_name?: string } | undefined;
+      const rf = klass?.classroom;
+      const room = (Array.isArray(rf) ? rf[0] : rf) as { name?: string } | undefined;
+      return {
+        id: r.id,
+        classId: r.class_id,
+        className: klass?.class_name ?? "?",
+        subject: klass?.subject ?? "?",
+        dayOfWeek: r.day_of_week,
+        startTime: r.start_time,
+        endTime: r.end_time,
+        teacherName: teacher?.display_name ?? null,
+        classroomName: room?.name ?? null,
+        studentCount: counts.get(r.class_id) ?? 0,
+      };
+    })
     .sort((a, b) => toMins(a.startTime) - toMins(b.startTime))
     .map((s) => {
       const start = toMins(s.startTime);
