@@ -23,11 +23,18 @@ export type StudentFormValue = {
   attendanceCode: string | null;
   gender: string | null;
   birthDate: string | null;
+  nickname: string | null;
+  graduationYear: string | null;
   address: string | null;
+  zipCode: string | null;
+  addressDetail: string | null;
   email: string | null;
   studentPhone: string | null;
+  homePhone: string | null;
+  otherPhone: string | null;
   parentName: string | null;
   parentPhone: string | null;
+  parentRelation: string | null;
   status: string;
   primaryTeacherId: string | null;
   secondaryTeacherId: string | null;
@@ -93,11 +100,18 @@ export function StudentForm({
     attendanceCode: null,
     gender: null,
     birthDate: null,
+    nickname: null,
+    graduationYear: null,
     address: null,
+    zipCode: null,
+    addressDetail: null,
     email: null,
     studentPhone: null,
+    homePhone: null,
+    otherPhone: null,
     parentName: null,
     parentPhone: null,
+    parentRelation: null,
     status: "prospect",
     primaryTeacherId: null,
     secondaryTeacherId: null,
@@ -210,7 +224,41 @@ export function StudentForm({
         </Field>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field label="원생 집전화" htmlFor="homePhone">
+          <input
+            id="homePhone"
+            name="homePhone"
+            type="tel"
+            inputMode="tel"
+            defaultValue={v.homePhone ?? ""}
+            className={inputClass}
+            placeholder="053-000-0000"
+          />
+        </Field>
+        <Field label="기타 알림 연락처" htmlFor="otherPhone">
+          <input
+            id="otherPhone"
+            name="otherPhone"
+            type="tel"
+            inputMode="tel"
+            defaultValue={v.otherPhone ?? ""}
+            className={inputClass}
+            placeholder="(선택)"
+          />
+        </Field>
+        <Field label="닉네임" htmlFor="nickname">
+          <input
+            id="nickname"
+            name="nickname"
+            defaultValue={v.nickname ?? ""}
+            className={inputClass}
+            placeholder="(선택)"
+          />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Field label="이메일" htmlFor="email">
           <input
             id="email"
@@ -221,6 +269,29 @@ export function StudentForm({
             placeholder="(선택)"
           />
         </Field>
+        <Field label="졸업연도" htmlFor="graduationYear">
+          <input
+            id="graduationYear"
+            name="graduationYear"
+            inputMode="numeric"
+            defaultValue={v.graduationYear ?? ""}
+            className={inputClass}
+            placeholder="예: 2027"
+          />
+        </Field>
+        <Field label="우편번호" htmlFor="zipCode">
+          <input
+            id="zipCode"
+            name="zipCode"
+            inputMode="numeric"
+            defaultValue={v.zipCode ?? ""}
+            className={inputClass}
+            placeholder="(선택)"
+          />
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="주소" htmlFor="address">
           <input
             id="address"
@@ -230,9 +301,18 @@ export function StudentForm({
             placeholder="(선택)"
           />
         </Field>
+        <Field label="상세주소" htmlFor="addressDetail">
+          <input
+            id="addressDetail"
+            name="addressDetail"
+            defaultValue={v.addressDetail ?? ""}
+            className={inputClass}
+            placeholder="(선택)"
+          />
+        </Field>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Field label="학부모 이름" htmlFor="parentName">
           <input
             id="parentName"
@@ -252,6 +332,21 @@ export function StudentForm({
             placeholder="010-1234-5678"
             inputMode="tel"
           />
+        </Field>
+        <Field label="보호자 관계" htmlFor="parentRelation">
+          <select
+            id="parentRelation"
+            name="parentRelation"
+            defaultValue={v.parentRelation ?? ""}
+            className={inputClass}
+          >
+            <option value="">선택</option>
+            <option value="부">부</option>
+            <option value="모">모</option>
+            <option value="조부">조부</option>
+            <option value="조모">조모</option>
+            <option value="기타">기타</option>
+          </select>
         </Field>
       </div>
 

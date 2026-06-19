@@ -293,11 +293,18 @@ export type StudentDetail = {
   status: string;
   gender: string | null;
   birthDate: string | null;
+  nickname: string | null;
+  graduationYear: string | null;
   address: string | null;
+  zipCode: string | null;
+  addressDetail: string | null;
   email: string | null;
   studentPhone: string | null;
+  homePhone: string | null;
+  otherPhone: string | null;
   parentName: string | null;
   parentPhone: string | null;
+  parentRelation: string | null;
   primaryTeacherId: string | null;
   primaryTeacherName: string | null;
   secondaryTeacherId: string | null;
@@ -340,9 +347,10 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     .from("students")
     .select(
       `id, name, english_name, school, grade, status, student_code, attendance_code,
-       gender, birth_date, address, email, student_phone,
+       gender, birth_date, nickname, graduation_year,
+       address, zip_code, address_detail, email, student_phone, home_phone, other_phone,
        enrolled_at, withdrawn_at, created_at, notes,
-       parent_name, parent_phone,
+       parent_name, parent_phone, parent_relation,
        primary_teacher_id, secondary_teacher_id,
        ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at,
        teacher:primary_teacher_id ( display_name ),
@@ -371,9 +379,15 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     status: data.status,
     gender: data.gender,
     birthDate: data.birth_date,
+    nickname: data.nickname,
+    graduationYear: data.graduation_year,
     address: data.address,
+    zipCode: data.zip_code,
+    addressDetail: data.address_detail,
     email: data.email,
     studentPhone: data.student_phone,
+    homePhone: data.home_phone,
+    otherPhone: data.other_phone,
     primaryTeacherId: data.primary_teacher_id,
     primaryTeacherName: teacher?.display_name ?? null,
     secondaryTeacherId: data.secondary_teacher_id,
@@ -383,6 +397,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     notes: data.notes,
     parentName: data.parent_name,
     parentPhone: data.parent_phone,
+    parentRelation: data.parent_relation,
     createdAt: data.created_at,
     aiCareSummary: data.ai_care_summary,
     aiCareFocus: Array.isArray(data.ai_care_focus)

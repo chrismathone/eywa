@@ -29,6 +29,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
           <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
+            {student.nickname ? <Field label="닉네임" value={student.nickname} /> : null}
             {student.attendanceCode ? (
               <Field label="출결번호" value={student.attendanceCode} mono />
             ) : null}
@@ -36,15 +37,40 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
               <Field label="성별" value={student.gender === "male" ? "남" : "여"} />
             ) : null}
             {student.birthDate ? <Field label="생년월일" value={student.birthDate} mono /> : null}
+            {student.graduationYear ? (
+              <Field label="졸업연도" value={student.graduationYear} mono />
+            ) : null}
             <Field label="담임" value={student.primaryTeacherName} />
             <Field label="부담임" value={student.secondaryTeacherName} />
             {student.studentPhone ? (
               <Field label="학생 연락처" value={student.studentPhone} mono />
             ) : null}
-            <Field label="학부모" value={student.parentName} />
+            {student.homePhone ? <Field label="집전화" value={student.homePhone} mono /> : null}
+            {student.otherPhone ? (
+              <Field label="기타 연락처" value={student.otherPhone} mono />
+            ) : null}
+            <Field
+              label="학부모"
+              value={
+                student.parentName
+                  ? student.parentRelation
+                    ? `${student.parentName} (${student.parentRelation})`
+                    : student.parentName
+                  : null
+              }
+            />
             <Field label="연락처" value={student.parentPhone} mono />
             {student.email ? <Field label="이메일" value={student.email} mono /> : null}
-            {student.address ? <Field label="주소" value={student.address} /> : null}
+            {student.address ? (
+              <Field
+                label="주소"
+                value={
+                  [student.zipCode ? `(${student.zipCode})` : null, student.address, student.addressDetail]
+                    .filter(Boolean)
+                    .join(" ")
+                }
+              />
+            ) : null}
             <Field label="등록일" value={student.enrolledAt} mono />
             {student.withdrawnAt ? (
               <Field label="퇴원일" value={student.withdrawnAt} mono />
