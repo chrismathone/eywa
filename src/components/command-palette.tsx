@@ -67,7 +67,7 @@ export function CommandPalette({
     const list: Command[] = [];
     for (const group of NAV_GROUPS) {
       for (const item of group.items) {
-        if (!canAccess(systemRole, item.menuKey, permMatrix)) continue;
+        if (item.hidden || !canAccess(systemRole, item.menuKey, permMatrix)) continue;
         list.push({
           href: item.href,
           label: item.label,

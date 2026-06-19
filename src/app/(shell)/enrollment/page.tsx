@@ -1,6 +1,7 @@
 import { UserPlus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
+import { ConsultationTabs } from "../consultations/_components/consultation-tabs";
 import {
   getConsultantOptions,
   getEnrollmentConsultations,
@@ -61,6 +62,7 @@ export default async function EnrollmentPage({
 
   return (
     <div className="space-y-4">
+      <ConsultationTabs active="enrollment" />
       {/* 상단 헤더 — 통계 + 신규등록 (기존 AI 그래픽 배너 제거, 통계만 유지) */}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-text-dim text-[13px]">

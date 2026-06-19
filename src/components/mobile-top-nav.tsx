@@ -29,8 +29,8 @@ export function MobileTopNav({
   permMatrix?: AccessMatrix;
 }) {
   const pathname = usePathname();
-  const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter((item) =>
-    canAccess(systemRole, item.menuKey, permMatrix),
+  const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter(
+    (item) => !item.hidden && canAccess(systemRole, item.menuKey, permMatrix),
   );
 
   return (

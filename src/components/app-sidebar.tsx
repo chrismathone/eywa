@@ -93,7 +93,7 @@ export function AppSidebar({
   // 접근 가능한 항목만 남기고 빈 그룹 제거 (그룹 구분선 위치 계산용)
   const groups = NAV_GROUPS.map((g) => ({
     label: g.label,
-    items: g.items.filter((item) => canAccess(systemRole, item.menuKey, permMatrix)),
+    items: g.items.filter((item) => !item.hidden && canAccess(systemRole, item.menuKey, permMatrix)),
   })).filter((g) => g.items.length > 0);
 
   return (

@@ -12,6 +12,7 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { ConsultationTabs } from "./_components/consultation-tabs";
 import {
   followUpUrgency,
   getStudentConsultationCounts,
@@ -134,6 +135,7 @@ export default async function ConsultationsPage({
 
   return (
     <div className="space-y-4">
+      <ConsultationTabs active="student" />
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Stat label="전체 상담" value={totalAll} icon={MessagesSquare} color="primary" />

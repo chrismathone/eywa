@@ -25,6 +25,9 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   menuKey: MenuKey;
+  // 사이드바·모바일내비·팰릿에선 숨기되 findNavItem(창 해석)·아이콘맵엔 남긴다.
+  // 예: 등록상담은 "상담" 메뉴의 FaceTabs 면이라 사이드바엔 안 뜨지만 창/링크 해석은 필요.
+  hidden?: boolean;
 };
 
 export type NavGroup = {
@@ -55,8 +58,10 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/students", label: "학생목록", icon: Users, menuKey: "students" },
       { href: "/exams", label: "성적관리", icon: ClipboardList, menuKey: "exams" },
-      { href: "/enrollment", label: "등록상담", icon: UserPlus, menuKey: "enrollment" },
-      { href: "/consultations", label: "학생상담", icon: MessageSquare, menuKey: "consultations" },
+      // 상담 = 학생상담(/consultations) + 등록상담(/enrollment) 2면(상단 FaceTabs로 교차). 사이드바엔 "상담" 한 항목.
+      { href: "/consultations", label: "상담", icon: MessageSquare, menuKey: "consultations" },
+      // 등록상담은 "상담"의 FaceTabs 면 → 사이드바 숨김(hidden), 단 창 해석·아이콘맵엔 유지.
+      { href: "/enrollment", label: "등록상담", icon: UserPlus, menuKey: "enrollment", hidden: true },
       { href: "/retention", label: "이탈 방어", icon: ShieldAlert, menuKey: "retention" },
       { href: "/withdrawals", label: "퇴원관리", icon: UserMinus, menuKey: "withdrawals" },
     ],
