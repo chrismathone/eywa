@@ -55,6 +55,11 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "수납·청구", href: "/owner?tab=billing" },
     { label: "알림·연동·약관", href: "/owner?tab=notifications" },
     { label: "역할·권한", href: "/owner?tab=permissions" },
+    // 관리 그룹(구 /admin 흡수) — 데이터 정리·중복·감사·연동.
+    { label: "데이터 정리", href: "/owner?tab=data" },
+    { label: "중복 학생", href: "/owner?tab=dup" },
+    { label: "감사로그", href: "/owner?tab=audit" },
+    { label: "연동", href: "/owner?tab=sheets" },
   ],
 };
 
@@ -102,7 +107,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/help", label: "도움말", icon: HelpCircle, menuKey: "help" },
       { href: "/owner", label: "학원 설정", icon: Building2, menuKey: "owner" },
-      { href: "/admin", label: "관리자 도구", icon: Settings, menuKey: "admin" },
+      // 관리자 도구는 학원 설정(/owner) "관리" 면들로 흡수 → 사이드바 숨김. menuKey는 /admin 리다이렉트 stub·창 해석용 유지.
+      { href: "/admin", label: "관리자 도구", icon: Settings, menuKey: "admin", hidden: true },
     ],
   },
 ];

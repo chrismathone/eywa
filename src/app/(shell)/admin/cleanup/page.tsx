@@ -1,25 +1,7 @@
-import { BackLink } from "@/components/back-link";
-import { requireAccess } from "@/lib/auth/require-access";
-import { findOrphans } from "@/features/admin/server/queries";
-import { CleanupClient } from "./_client";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "데이터 정리 — eywa" };
-
-export default async function CleanupPage() {
-  await requireAccess("admin");
-
-  const report = await findOrphans();
-
-  return (
-    <div className="space-y-6">
-      <BackLink href="/admin" label="관리자 도구로" />
-
-      <header className="border-border border-b pb-5">
-        <p className="eyebrow">관리 · 데이터 정리</p>
-        <h1 className="display text-foreground text-2xl">고아 데이터 점검</h1>
-      </header>
-
-      <CleanupClient report={report} />
-    </div>
-  );
+// 구 /admin/cleanup → 학원 설정 "데이터 정리" 면으로 이전(2026-06-20 admin→owner 병합).
+// 본문은 owner/_components/data-face.tsx로 흡수. CleanupClient(_client.tsx)는 그 면이 재사용하므로 유지.
+export default function CleanupRedirect() {
+  redirect("/owner?tab=data");
 }
