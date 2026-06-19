@@ -49,9 +49,28 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
   const base = `/students/${sid}`;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="bg-card border-border space-y-4 rounded-md border p-5 lg:col-span-1">
+    <div className="space-y-4">
+      {/* 최근 30일 출결 — 전체 폭 KPI */}
+      <section className="bg-card border-border rounded-md border p-5">
+        <header className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold tracking-tight">최근 30일 출결</h2>
+          <p className="text-muted-foreground num text-xs">총 {attendance.total}건</p>
+        </header>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Stat
+            label="출석률"
+            value={attendance.total > 0 ? `${attendance.rate.toFixed(1)}%` : "—"}
+            highlight="text-chart-2"
+          />
+          <Stat label="출석" value={String(attendance.present)} unit="건" />
+          <Stat label="결석" value={String(attendance.absent)} unit="건" highlight="text-chart-4" />
+          <Stat label="지각" value={String(attendance.late)} unit="건" highlight="text-chart-3" />
+        </div>
+      </section>
+
+      {/* 프로필 + 다이제스트 — CSS columns 마조너리(창 폭 따라 1/2/3열 자동 패킹, 빈칸 최소화) */}
+      <div className="gap-4 sm:columns-2 xl:columns-3 [&>section]:mb-4 [&>section]:break-inside-avoid">
+        <section className="bg-card border-border space-y-3 rounded-md border p-5">
           <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
@@ -102,40 +121,8 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
               <Field label="퇴원일" value={student.withdrawnAt} mono />
             ) : null}
           </dl>
-        </div>
+        </section>
 
-        <div className="space-y-6 lg:col-span-2">
-          <section className="bg-card border-border rounded-md border p-5">
-            <header className="mb-4 flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold tracking-tight">최근 30일 출결</h2>
-              <p className="text-muted-foreground num text-xs">총 {attendance.total}건</p>
-            </header>
-            <div className="grid grid-cols-4 gap-4">
-              <Stat
-                label="출석률"
-                value={attendance.total > 0 ? `${attendance.rate.toFixed(1)}%` : "—"}
-                highlight="text-chart-2"
-              />
-              <Stat label="출석" value={String(attendance.present)} unit="건" />
-              <Stat
-                label="결석"
-                value={String(attendance.absent)}
-                unit="건"
-                highlight="text-chart-4"
-              />
-              <Stat
-                label="지각"
-                value={String(attendance.late)}
-                unit="건"
-                highlight="text-chart-3"
-              />
-            </div>
-          </section>
-        </div>
-      </div>
-
-      {/* 다이제스트 — 각 탭 핵심 정보를 개요에서 한눈에 (전체는 해당 탭으로) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <DigestCard title="수강 중인 반" more={<TabLink href={`${base}?tab=classes`}>수업</TabLink>}>
           {activeClasses.length === 0 ? (
             <Empty>수강 중인 반 없음</Empty>
