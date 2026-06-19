@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 
 type CareFocus = {
@@ -283,6 +283,8 @@ export async function toggleConsultationFollowUp(
 ): Promise<ToggleFollowUpState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  const cLvl = await accessLevelTenant(user.systemRole, "consultations");
+  if (cLvl !== "full" && cLvl !== "scoped") return { error: "상담 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const done = String(formData.get("done") ?? "false") === "true";

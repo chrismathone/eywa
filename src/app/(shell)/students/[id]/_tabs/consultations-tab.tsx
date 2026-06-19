@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getStudentConsultationHistory } from "@/features/students/server/queries";
 import { ConsultationDeleteButton } from "../../../consultations/_components/consultation-delete-button";
+import { FollowUpToggle } from "../../../consultations/_components/follow-up-toggle";
 
 const CATEGORY_LABEL: Record<string, string> = {
   general: "일반",
@@ -103,13 +104,13 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
       <p className="text-foreground text-sm leading-relaxed">{c.summary}</p>
       {c.followUpAction ? (
         <div className="border-border bg-bg-soft/40 rounded-sm border-l-2 border-l-chart-3 px-3 py-2 text-xs">
-          <p className="text-muted-foreground">후속 조치</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-muted-foreground">후속 조치</p>
+            <FollowUpToggle id={c.id} done={!!c.followUpDone} />
+          </div>
           <p className="text-foreground mt-0.5">{c.followUpAction}</p>
           {c.followUpDate ? (
-            <p className="text-muted-foreground num mt-0.5">
-              예정일: {c.followUpDate}
-              {c.followUpDone ? <span className="text-chart-2 ml-1">· 완료</span> : null}
-            </p>
+            <p className="text-muted-foreground num mt-0.5">예정일: {c.followUpDate}</p>
           ) : null}
         </div>
       ) : null}
