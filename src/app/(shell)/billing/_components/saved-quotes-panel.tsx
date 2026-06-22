@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import { getQuotesPage } from "@/features/billing/server/tuition-quote-queries";
+import { getStudentOptions } from "@/features/billing/server/textbook-queries";
+import { currentPeriod } from "@/features/billing/calc";
 import { SavedQuotesList } from "./saved-quotes-list";
 
 type Sp = { q?: string; qpage?: string };
@@ -13,7 +15,10 @@ const PAGE_SIZE = 50;
 export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.qpage) || 1);
-  const { rows, total } = await getQuotesPage({ q }, page, PAGE_SIZE);
+  const [{ rows, total }, students] = await Promise.all([
+    getQuotesPage({ q }, page, PAGE_SIZE),
+    getStudentOptions(),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const pageHref = (n: number) => {
@@ -55,7 +60,7 @@ export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
         />
       ) : (
         <>
-          <SavedQuotesList rows={rows} />
+          <SavedQuotesList rows={rows} students={students} defaultPeriod={currentPeriod()} />
           {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} /> : null}
         </>
       )}

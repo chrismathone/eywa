@@ -38,13 +38,17 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
+export type InvoicePrefill = { amountTotal?: number; notes?: string };
+
 function Dialog({
   students,
   defaultPeriod,
+  prefill,
   onClose,
 }: {
   students: StudentOption[];
   defaultPeriod: string;
+  prefill?: InvoicePrefill;
   onClose: () => void;
 }) {
   const [state, formAction] = useActionState<CreateInvoiceState, FormData>(createInvoice, undefined);
@@ -91,7 +95,7 @@ function Dialog({
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="청구액 *" error={state?.fieldErrors?.amountTotal}>
-              <input name="amountTotal" type="number" min="0" step="1000" defaultValue={0} className={`${inputCls} num text-right`} />
+              <input name="amountTotal" type="number" min="0" step="1000" defaultValue={prefill?.amountTotal ?? 0} className={`${inputCls} num text-right`} />
             </Field>
             <Field label="할인">
               <input name="amountDiscount" type="number" min="0" step="1000" defaultValue={0} className={`${inputCls} num text-right`} />
@@ -112,7 +116,7 @@ function Dialog({
           </Field>
 
           <Field label="메모">
-            <textarea name="notes" rows={2} className={`${inputCls} resize-y`} placeholder="선택" />
+            <textarea name="notes" rows={2} defaultValue={prefill?.notes ?? ""} className={`${inputCls} resize-y`} placeholder="선택" />
           </Field>
 
           {state?.error ? (
@@ -138,10 +142,15 @@ export function CreateInvoiceTrigger({
   students,
   defaultPeriod,
   variant = "button",
+  label = "청구서 생성",
+  prefill,
 }: {
   students: StudentOption[];
   defaultPeriod: string;
   variant?: "button" | "outline";
+  label?: string;
+  /** 견적→청구 전환 등에서 청구액·메모를 미리 채워 연다(학생은 다이얼로그에서 선택). */
+  prefill?: InvoicePrefill;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -153,15 +162,22 @@ export function CreateInvoiceTrigger({
           className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
         >
           <Plus className="size-3.5" />
-          청구서 생성
+          {label}
         </button>
       ) : (
         <Button size="sm" onClick={() => setOpen(true)}>
           <Plus className="size-4" />
-          청구서 생성
+          {label}
         </Button>
       )}
-      {open ? <Dialog students={students} defaultPeriod={defaultPeriod} onClose={() => setOpen(false)} /> : null}
+      {open ? (
+        <Dialog
+          students={students}
+          defaultPeriod={defaultPeriod}
+          prefill={prefill}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

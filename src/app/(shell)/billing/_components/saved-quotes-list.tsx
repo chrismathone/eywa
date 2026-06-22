@@ -10,6 +10,8 @@ import {
   type SaveQuoteState,
 } from "@/features/billing/server/tuition-quote-actions";
 import type { QuoteListItem } from "@/features/billing/server/tuition-quote-queries";
+import type { StudentOption } from "@/features/billing/server/textbook-queries";
+import { CreateInvoiceTrigger } from "./create-invoice-dialog";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 function fmtDate(iso: string): string {
@@ -33,7 +35,15 @@ function DeleteBtn() {
   );
 }
 
-export function SavedQuotesList({ rows }: { rows: QuoteListItem[] }) {
+export function SavedQuotesList({
+  rows,
+  students,
+  defaultPeriod,
+}: {
+  rows: QuoteListItem[];
+  students: StudentOption[];
+  defaultPeriod: string;
+}) {
   const embed = useEmbed();
   const [, delAction] = useActionState<SaveQuoteState, FormData>(deleteTuitionQuote, undefined);
   const href = (id: string) => {
@@ -62,6 +72,16 @@ export function SavedQuotesList({ rows }: { rows: QuoteListItem[] }) {
           <span className="text-foreground num shrink-0 text-sm font-bold">
             {KRW.format(r.totalAmount)}원
           </span>
+          <CreateInvoiceTrigger
+            students={students}
+            defaultPeriod={defaultPeriod}
+            variant="outline"
+            label="청구서로 전환"
+            prefill={{
+              amountTotal: r.totalAmount,
+              notes: `견적 전환 · ${r.studentName} · 수강 ${r.courseCount}개, 교재/기타 ${r.extraCount}개`,
+            }}
+          />
           <form action={delAction} className="shrink-0">
             <input type="hidden" name="id" value={r.id} />
             <DeleteBtn />
