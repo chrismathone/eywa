@@ -11,6 +11,7 @@ import {
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
+import { currentPeriod, isCommentCategory } from "../grades-meta";
 
 export type StudentFormState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
@@ -733,6 +734,161 @@ export async function deleteStudentLevelTest(
   const supabase = await createClient();
   const { error } = await supabase.from("level_tests").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return undefined;
+}
+
+// === 성적 목표설정(grade_goals) / 성적 코멘트(grade_comments) ===
+// 쓰기 권한: 성적(=students) full/scoped. deleteStudentGrade 게이트와 동일.
+async function requireGradeWrite() {
+  const user = await getCurrentUser();
+  if (!user) return { user: null, error: "로그인이 필요합니다" };
+  const lvl = await accessLevelTenant(user.systemRole, "students");
+  if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "성적 관리 권한이 없습니다" };
+  return { user, error: undefined as string | undefined };
+}
+
+export type GoalState = { error?: string; ok?: boolean } | undefined;
+
+export async function createStudentGoal(_prev: GoalState, formData: FormData): Promise<GoalState> {
+  const { user, error } = await requireGradeWrite();
+  if (error || !user) return { error };
+
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const examName = String(formData.get("examName") ?? "").trim();
+  const subject = String(formData.get("subject") ?? "").trim();
+  const examId = String(formData.get("examId") ?? "").trim() || null;
+  const targetStr = String(formData.get("targetScore") ?? "").trim();
+  const maxStr = String(formData.get("maxScore") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+
+  if (!studentId) return { error: "학생 ID가 누락되었습니다" };
+  if (!examName) return { error: "시험명을 입력해주세요" };
+  if (!subject) return { error: "과목을 선택해주세요" };
+  if (!targetStr || !Number.isFinite(Number(targetStr))) return { error: "목표 점수를 입력해주세요" };
+
+  const supabase = await createClient();
+  const { error: insErr } = await supabase.from("grade_goals").insert({
+    tenant_id: user.tenantId,
+    student_id: studentId,
+    exam_id: examId,
+    exam_name: examName,
+    subject,
+    target_score: Number(targetStr),
+    max_score: maxStr && Number.isFinite(Number(maxStr)) ? Number(maxStr) : null,
+    reason,
+    created_by: user.id,
+  });
+  if (insErr) return { error: insErr.message };
+
+  revalidatePath(`/students/${studentId}`);
+  return { ok: true };
+}
+
+export async function deleteStudentGoal(_prev: GoalState, formData: FormData): Promise<GoalState> {
+  const { user, error } = await requireGradeWrite();
+  if (error || !user) return { error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  if (!id) return { error: "목표 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error: delErr } = await supabase.from("grade_goals").delete().eq("id", id);
+  if (delErr) return { error: delErr.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return undefined;
+}
+
+export type GradeCommentState = { error?: string; ok?: boolean } | undefined;
+
+function readCommentForm(formData: FormData) {
+  const category = String(formData.get("category") ?? "general").trim();
+  const subjectRaw = String(formData.get("subject") ?? "").trim();
+  const subject = subjectRaw && subjectRaw !== "all" ? subjectRaw : null;
+  const content = String(formData.get("content") ?? "").trim();
+  const period = String(formData.get("period") ?? "").trim() || currentPeriod();
+  const sharedWithParent = formData.get("sharedWithParent") != null;
+  return { category, subject, content, period, sharedWithParent };
+}
+
+export async function createStudentGradeComment(
+  _prev: GradeCommentState,
+  formData: FormData,
+): Promise<GradeCommentState> {
+  const { user, error } = await requireGradeWrite();
+  if (error || !user) return { error };
+
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const f = readCommentForm(formData);
+  if (!studentId) return { error: "학생 ID가 누락되었습니다" };
+  if (!isCommentCategory(f.category)) return { error: "유효한 카테고리가 아닙니다" };
+  if (!f.content) return { error: "코멘트 내용을 입력해주세요" };
+
+  const supabase = await createClient();
+  const { error: insErr } = await supabase.from("grade_comments").insert({
+    tenant_id: user.tenantId,
+    student_id: studentId,
+    category: f.category,
+    subject: f.subject,
+    content: f.content,
+    period: f.period,
+    shared_with_parent: f.sharedWithParent,
+    author_id: user.id,
+  });
+  if (insErr) return { error: insErr.message };
+
+  revalidatePath(`/students/${studentId}`);
+  return { ok: true };
+}
+
+export async function updateStudentGradeComment(
+  _prev: GradeCommentState,
+  formData: FormData,
+): Promise<GradeCommentState> {
+  const { user, error } = await requireGradeWrite();
+  if (error || !user) return { error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  const f = readCommentForm(formData);
+  if (!id) return { error: "코멘트 ID가 누락되었습니다" };
+  if (!isCommentCategory(f.category)) return { error: "유효한 카테고리가 아닙니다" };
+  if (!f.content) return { error: "코멘트 내용을 입력해주세요" };
+
+  const supabase = await createClient();
+  const { error: updErr } = await supabase
+    .from("grade_comments")
+    .update({
+      category: f.category,
+      subject: f.subject,
+      content: f.content,
+      period: f.period,
+      shared_with_parent: f.sharedWithParent,
+    })
+    .eq("id", id);
+  if (updErr) return { error: updErr.message };
+
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return { ok: true };
+}
+
+export async function deleteStudentGradeComment(
+  _prev: GradeCommentState,
+  formData: FormData,
+): Promise<GradeCommentState> {
+  const { user, error } = await requireGradeWrite();
+  if (error || !user) return { error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const studentId = String(formData.get("studentId") ?? "").trim();
+  if (!id) return { error: "코멘트 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error: delErr } = await supabase.from("grade_comments").delete().eq("id", id);
+  if (delErr) return { error: delErr.message };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;

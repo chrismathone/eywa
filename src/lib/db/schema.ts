@@ -916,6 +916,62 @@ export const levelTests = pgTable(
   ],
 );
 
+// === grade_goals (성적 목표설정) ===
+// 학생별 목표 점수(과목·시험명 단위). 실제 점수(student_grades)와 examName+subject(또는 examId)로
+// 매칭해 달성 여부를 읽기 시점에 산출(denormalize 안 함). ijw GoalSetting 이식.
+export const gradeGoals = pgTable(
+  "grade_goals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "set null" }),
+    examName: text("exam_name").notNull(),
+    subject: text("subject").notNull(),
+    targetScore: numeric("target_score", { precision: 6, scale: 2 }).notNull(),
+    maxScore: numeric("max_score", { precision: 6, scale: 2 }),
+    reason: text("reason"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("grade_goals_tenant_student_idx").on(t.tenantId, t.studentId),
+    index("grade_goals_exam_idx").on(t.examId),
+  ],
+);
+
+// === grade_comments (성적 코멘트 — 학습 피드백) ===
+// 학생별 학습 코멘트(카테고리/월/공유여부). 강사 피드백. ijw GradeComment 이식.
+export const gradeComments = pgTable(
+  "grade_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    category: text("category").notNull(), // strength/improvement/effort/potential/general
+    subject: text("subject"), // NULL=전체, 또는 과목 키
+    content: text("content").notNull(),
+    period: text("period").notNull(), // 'YYYY-MM'
+    sharedWithParent: boolean("shared_with_parent").notNull().default(false),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("grade_comments_tenant_student_idx").on(t.tenantId, t.studentId),
+    index("grade_comments_student_period_idx").on(t.tenantId, t.studentId, t.period),
+  ],
+);
+
 // === student_memos (학생별 자유 메모) ===
 // 학생별 자유 메모. 학생 상세 페이지의 "메모" 탭에서 누적 표시.
 export const studentMemos = pgTable(

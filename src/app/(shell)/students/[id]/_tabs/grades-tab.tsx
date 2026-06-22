@@ -1,9 +1,16 @@
-import { getStudentGrades, getStudentLevelTests } from "@/features/students/server/queries";
+import {
+  getStudentGrades,
+  getStudentGradeComments,
+  getStudentGradeGoals,
+  getStudentLevelTests,
+} from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
 import { gradeSeries, gradeStats } from "@/lib/calc/grades";
 import { GradeForm } from "../_components/grade-form";
 import { GradesChart } from "../_components/grades-chart";
+import { GoalsSection } from "../_components/goals-section";
+import { GradeCommentsSection } from "../_components/grade-comments-section";
 import { LevelTests } from "../_components/level-tests";
 import { DeleteGradeButton } from "../_components/delete-grade-button";
 
@@ -17,10 +24,12 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: stri
 }
 
 export async function GradesTab({ studentId }: { studentId: string }) {
-  const [grades, levelTests, settings] = await Promise.all([
+  const [grades, levelTests, settings, goals, comments] = await Promise.all([
     getStudentGrades(studentId),
     getStudentLevelTests(studentId),
     getTenantSettings(),
+    getStudentGradeGoals(studentId),
+    getStudentGradeComments(studentId),
   ]);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const subjectLabels = subjectLabelRecord(settings.operations.subjects);
@@ -54,6 +63,10 @@ export async function GradesTab({ studentId }: { studentId: string }) {
           ) : null}
         </>
       ) : null}
+
+      <div className="border-border border-t pt-4">
+        <GoalsSection studentId={studentId} goals={goals} />
+      </div>
 
       <GradeForm studentId={studentId} subjectOptions={subjectMaps.options} />
 
@@ -106,6 +119,10 @@ export async function GradesTab({ studentId }: { studentId: string }) {
           </table>
         </div>
       )}
+
+      <div className="border-border border-t pt-4">
+        <GradeCommentsSection studentId={studentId} comments={comments} />
+      </div>
 
       <div className="border-border border-t pt-4">
         <LevelTests studentId={studentId} tests={levelTests} />

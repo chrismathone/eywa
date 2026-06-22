@@ -8,6 +8,7 @@ import {
   type DayOfWeek,
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
+import { goalAchieved } from "../grades-meta";
 
 export type StudentListRow = {
   id: string;
@@ -699,6 +700,108 @@ export async function getStudentGrades(studentId: string): Promise<StudentGradeR
     takenOn: r.taken_on,
     notes: r.notes,
   }));
+}
+
+// === 성적 목표설정(grade_goals) — 실제 점수와 매칭해 달성 여부 산출 ===
+export type GradeGoalRow = {
+  id: string;
+  examId: string | null;
+  examName: string;
+  subject: string;
+  targetScore: number;
+  maxScore: number | null;
+  reason: string | null;
+  createdAt: string;
+  // 읽기 시점 산출(denormalize 안 함)
+  actualScore: number | null;
+  actualMaxScore: number | null;
+  achieved: boolean | null;
+};
+
+export async function getStudentGradeGoals(studentId: string): Promise<GradeGoalRow[]> {
+  const supabase = await createClient();
+  const [{ data: goalsData }, { data: gradesData }] = await Promise.all([
+    supabase
+      .from("grade_goals")
+      .select("id, exam_id, exam_name, subject, target_score, max_score, reason, created_at")
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("student_grades")
+      .select("exam_id, exam_name, subject, score, max_score")
+      .eq("student_id", studentId),
+  ]);
+
+  // 실제 점수 매칭: exam_id 우선, 없으면 시험명+과목.
+  const byExamId = new Map<string, { score: number | null; max: number | null }>();
+  const byNameSubject = new Map<string, { score: number | null; max: number | null }>();
+  for (const g of gradesData ?? []) {
+    const score = g.score == null ? null : Number(g.score);
+    const max = g.max_score == null ? null : Number(g.max_score);
+    if (g.exam_id) byExamId.set(g.exam_id, { score, max });
+    byNameSubject.set(`${g.exam_name}__${g.subject}`, { score, max });
+  }
+
+  return (goalsData ?? []).map((r) => {
+    const target = Number(r.target_score);
+    const matched =
+      (r.exam_id ? byExamId.get(r.exam_id) : undefined) ??
+      byNameSubject.get(`${r.exam_name}__${r.subject}`);
+    const actualScore = matched?.score ?? null;
+    return {
+      id: r.id,
+      examId: r.exam_id,
+      examName: r.exam_name,
+      subject: r.subject,
+      targetScore: target,
+      maxScore: r.max_score == null ? null : Number(r.max_score),
+      reason: r.reason,
+      createdAt: r.created_at,
+      actualScore,
+      actualMaxScore: matched?.max ?? null,
+      achieved: goalAchieved(target, actualScore),
+    };
+  });
+}
+
+// === 성적 코멘트(grade_comments) — 학습 피드백 ===
+export type GradeCommentRow = {
+  id: string;
+  category: string;
+  subject: string | null;
+  content: string;
+  period: string;
+  sharedWithParent: boolean;
+  authorName: string | null;
+  createdAt: string;
+};
+
+export async function getStudentGradeComments(studentId: string): Promise<GradeCommentRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("grade_comments")
+    .select(
+      `id, category, subject, content, period, shared_with_parent, created_at,
+       author:author_id ( display_name )`,
+    )
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => {
+    const author = (Array.isArray(r.author) ? r.author[0] : r.author) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: r.id,
+      category: r.category,
+      subject: r.subject,
+      content: r.content,
+      period: r.period,
+      sharedWithParent: r.shared_with_parent,
+      authorName: author?.display_name ?? null,
+      createdAt: r.created_at,
+    };
+  });
 }
 
 export type LevelTestRow = {
