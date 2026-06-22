@@ -123,11 +123,14 @@ export async function setAttendanceCell(input: {
   classId: string;
   sessionDate: string;
   status: Status | null;
+  note?: string | null; // 전달 시 메모도 갱신(undefined면 기존 메모 유지)
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
   const { studentId, classId, sessionDate, status } = input;
+  const noteProvided = input.note !== undefined;
+  const noteVal = (input.note ?? "").trim() || null;
   if (!studentId || !classId || !sessionDate) return { error: "필수 값이 누락되었습니다" };
   if (status !== null && !STATUSES.includes(status)) return { error: "잘못된 상태입니다" };
 
@@ -159,10 +162,9 @@ export async function setAttendanceCell(input: {
 
   const nowIso = new Date().toISOString();
   if (existing?.id) {
-    const { error } = await supabase
-      .from("attendance_records")
-      .update({ status, recorded_by: user.id, recorded_at: nowIso })
-      .eq("id", existing.id);
+    const patch: Record<string, unknown> = { status, recorded_by: user.id, recorded_at: nowIso };
+    if (noteProvided) patch.note = noteVal;
+    const { error } = await supabase.from("attendance_records").update(patch).eq("id", existing.id);
     if (error) return { error: error.message };
   } else {
     const { error } = await supabase.from("attendance_records").insert({
@@ -171,6 +173,7 @@ export async function setAttendanceCell(input: {
       student_id: studentId,
       session_date: sessionDate,
       status,
+      note: noteProvided ? noteVal : null,
       recorded_by: user.id,
     });
     if (error) return { error: error.message };

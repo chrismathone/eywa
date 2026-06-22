@@ -49,17 +49,25 @@ export function AttendanceCell({
   note?: string | null;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
+  const [noteVal, setNoteVal] = useState(note ?? "");
+  const [draft, setDraft] = useState(note ?? "");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [, startTransition] = useTransition();
 
-  const apply = (next: AttendanceStatus | null) => {
-    const prev = status;
-    setStatus(next); // 낙관적
+  // noteArg 전달 시 메모도 갱신(undefined면 기존 메모 유지). 상태/메모 모두 낙관적.
+  const apply = (next: AttendanceStatus | null, noteArg?: string) => {
+    const prevStatus = status;
+    const prevNote = noteVal;
+    setStatus(next);
+    if (noteArg !== undefined) setNoteVal(noteArg.trim());
     setOpen(false);
     startTransition(async () => {
-      const res = await setAttendanceCell({ studentId, classId, sessionDate, status: next });
-      if ("error" in res) setStatus(prev); // 실패 시 롤백
+      const res = await setAttendanceCell({ studentId, classId, sessionDate, status: next, note: noteArg });
+      if ("error" in res) {
+        setStatus(prevStatus);
+        setNoteVal(prevNote);
+      }
     });
   };
 
@@ -73,16 +81,17 @@ export function AttendanceCell({
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           setPos({ x: r.left, y: r.bottom });
+          setDraft(noteVal);
           setOpen(true);
         }}
-        title={note ?? undefined}
+        title={noteVal || undefined}
         className={`relative block size-7 leading-7 font-mono text-[11px] font-bold ${cls} ${
           status ? "" : `text-text-faint hover:bg-bg-soft ${isWeekend ? "bg-bg-soft/40" : ""}`
         }`}
-        aria-label={note ? `출결 상태 변경 (메모: ${note})` : "출결 상태 변경"}
+        aria-label={noteVal ? `출결 상태 변경 (메모: ${noteVal})` : "출결 상태 변경"}
       >
         {label}
-        {note ? (
+        {noteVal ? (
           <span
             className="border-t-danger absolute top-0 right-0 size-0 border-t-[5px] border-l-[5px] border-l-transparent"
             aria-hidden
@@ -115,11 +124,30 @@ export function AttendanceCell({
                 {o.name}
               </button>
             ))}
+            {/* 메모(사유) — 현재 상태와 함께 저장. 상태 없으면 비활성(메모만 단독 저장 불가). */}
+            <div className="border-line mt-0.5 flex flex-col gap-1 border-t pt-1">
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="메모(사유)"
+                className="border-line bg-bg-soft text-foreground placeholder:text-text-faint w-40 rounded-sm border px-2 py-1 text-xs focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => apply(status, draft)}
+                disabled={!status}
+                className="bg-foreground text-background rounded-sm px-2 py-1 text-xs font-medium transition disabled:opacity-40"
+                title={status ? undefined : "상태를 먼저 선택하세요"}
+              >
+                메모 저장
+              </button>
+            </div>
             {status ? (
               <button
                 type="button"
                 onClick={() => apply(null)}
-                className="text-text-dim hover:bg-bg-soft mt-0.5 rounded-sm border-t px-2 py-1 text-left text-xs"
+                className="text-text-dim hover:bg-bg-soft rounded-sm border-t px-2 py-1 text-left text-xs"
               >
                 지우기
               </button>
