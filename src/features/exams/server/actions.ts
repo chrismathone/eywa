@@ -16,6 +16,8 @@ async function canWrite(role: SystemRole): Promise<boolean> {
   return lvl === "full" || lvl === "scoped"; // readonly/none은 쓰기 불가
 }
 
+type ExamScopeValue = { type: "class" | "grade" | "academy"; classIds?: string[]; grades?: string[] };
+
 type ExamFields = {
   name: string;
   subject: string;
@@ -23,8 +25,28 @@ type ExamFields = {
   examDate: string;
   maxScore: string | null;
   notes: string | null;
+  scope: ExamScopeValue;
   error?: string;
 };
+
+/** 폼의 scopeType + scopeClassIds/scopeGrades(콤마) → ExamScope jsonb. 대상 없으면 academy로 폴백. */
+function buildScope(formData: FormData): ExamScopeValue {
+  const type = String(formData.get("scopeType") ?? "academy").trim();
+  const csv = (k: string) =>
+    String(formData.get(k) ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  if (type === "class") {
+    const classIds = csv("scopeClassIds");
+    return classIds.length ? { type: "class", classIds } : { type: "academy" };
+  }
+  if (type === "grade") {
+    const grades = csv("scopeGrades");
+    return grades.length ? { type: "grade", grades } : { type: "academy" };
+  }
+  return { type: "academy" };
+}
 
 function readExamForm(formData: FormData): ExamFields {
   const name = String(formData.get("name") ?? "").trim();
@@ -34,13 +56,14 @@ function readExamForm(formData: FormData): ExamFields {
   const examDate = String(formData.get("examDate") ?? "").trim();
   const maxScore = String(formData.get("maxScore") ?? "").trim() || null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
+  const scope = buildScope(formData);
 
   let error: string | undefined;
   if (!name) error = "시험명을 입력해주세요";
   else if (!subject) error = "과목을 선택해주세요";
   else if (!examDate) error = "시험일을 입력해주세요";
 
-  return { name, subject, examType, examDate, maxScore, notes, error };
+  return { name, subject, examType, examDate, maxScore, notes, scope, error };
 }
 
 export async function createExam(_prev: ExamActionState, formData: FormData): Promise<ExamActionState> {
@@ -60,6 +83,7 @@ export async function createExam(_prev: ExamActionState, formData: FormData): Pr
     exam_date: f.examDate,
     max_score: f.maxScore,
     notes: f.notes,
+    scope: f.scope,
     created_by: user.id,
   });
   if (error) return { error: error.message };
@@ -94,6 +118,7 @@ export async function updateExam(_prev: ExamActionState, formData: FormData): Pr
       exam_date: f.examDate,
       max_score: f.maxScore,
       notes: f.notes,
+      scope: f.scope,
     })
     .eq("id", id);
   if (error) return { error: error.message };

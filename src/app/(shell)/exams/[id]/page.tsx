@@ -11,8 +11,9 @@ import {
   getExamDetail,
   getExamScoreRows,
 } from "@/features/exams/server/queries";
+import { getClassesList } from "@/features/classes/server/queries";
 import { BatchScoreGrid } from "../_components/batch-score-grid";
-import { EditExamTrigger, type ExamFormValue } from "../_components/exam-form-dialog";
+import { EditExamTrigger, type ExamFormValue, type ExamClassOption } from "../_components/exam-form-dialog";
 import { ExamDeleteButton } from "../_components/exam-delete-button";
 
 const TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
@@ -35,9 +36,15 @@ export default async function ExamDetailPage({
   const selectedClassId = sp.class ?? classOptions[0]?.id ?? null;
   const rows = selectedClassId ? await getExamScoreRows(id, selectedClassId) : [];
 
-  const settings = await getTenantSettings();
+  const [settings, allClasses] = await Promise.all([getTenantSettings(), getClassesList({ active: "active" })]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const meta = { label: subjects.labelOf(exam.subject), color: subjects.colorOf(exam.subject) };
+  // 수정 다이얼로그의 시험범위(반별) 선택용 — 전체 활성 반(폼이 과목으로 필터).
+  const allClassOptions: ExamClassOption[] = allClasses.map((c) => ({
+    id: c.id,
+    className: c.className,
+    subject: c.subject,
+  }));
   const editValue: ExamFormValue = {
     id: exam.id,
     name: exam.name,
@@ -46,6 +53,7 @@ export default async function ExamDetailPage({
     examDate: exam.examDate,
     maxScore: exam.maxScore,
     notes: exam.notes,
+    scope: exam.scope,
   };
 
   return (
@@ -66,7 +74,7 @@ export default async function ExamDetailPage({
             {exam.notes ? <p className="text-text-dim text-sm">{exam.notes}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <EditExamTrigger exam={editValue} />
+            <EditExamTrigger exam={editValue} classOptions={allClassOptions} />
             <ExamDeleteButton examId={exam.id} />
           </div>
         </div>

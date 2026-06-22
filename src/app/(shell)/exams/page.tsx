@@ -1,67 +1,149 @@
 import { SearchX } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { Pagination } from "@/components/pagination";
 import { getExamsPage, type ExamRow } from "@/features/exams/server/queries";
+import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
-import { CreateExamTrigger } from "./_components/exam-form-dialog";
+import { CreateExamTrigger, type ExamClassOption } from "./_components/exam-form-dialog";
 
 export const metadata = { title: "성적관리 — eywa" };
 
 const PAGE_SIZE = 50;
 
 const TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
+const TYPE_FILTERS = [
+  { value: "all", label: "전체" },
+  { value: "weekly", label: "주간" },
+  { value: "mock", label: "모의" },
+  { value: "school", label: "학교" },
+];
 
 export default async function ExamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ subject?: string; page?: string }>;
+  searchParams: Promise<{ subject?: string; page?: string; q?: string; type?: string; from?: string; to?: string }>;
 }) {
   await requireAccess("exams");
   const sp = await searchParams;
   const subject = sp.subject ?? "all";
+  const examType = sp.type ?? "all";
+  const q = sp.q?.trim() || "";
+  const from = sp.from || "";
+  const to = sp.to || "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, settings] = await Promise.all([
-    getExamsPage({ subject: subject === "all" ? undefined : subject }, page, PAGE_SIZE),
+  const [{ rows, total }, settings, classList] = await Promise.all([
+    getExamsPage(
+      {
+        subject: subject === "all" ? undefined : subject,
+        examType: examType === "all" ? undefined : examType,
+        q: q || undefined,
+        from: from || undefined,
+        to: to || undefined,
+      },
+      page,
+      PAGE_SIZE,
+    ),
     getTenantSettings(),
+    getClassesList({ active: "active" }),
   ]);
   // 과목 라벨·색·필터 칩은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 칩에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const classOptions: ExamClassOption[] = classList.map((c) => ({
+    id: c.id,
+    className: c.className,
+    subject: c.subject,
+  }));
 
-  const chipHref = (key: string) => (key === "all" ? "/exams" : `/exams?subject=${key}`);
-  const pageHref = (p: number) => {
+  // 필터/검색 href — 칩·검색은 page 리셋(page 미세팅).
+  const buildHref = (patch: Partial<{ subject: string; type: string; q: string; from: string; to: string }>) => {
+    const cur = { subject, type: examType, q, from, to, ...patch };
     const params = new URLSearchParams();
-    if (subject !== "all") params.set("subject", subject);
-    if (p > 1) params.set("page", String(p));
+    if (cur.subject !== "all") params.set("subject", cur.subject);
+    if (cur.type !== "all") params.set("type", cur.type);
+    if (cur.q) params.set("q", cur.q);
+    if (cur.from) params.set("from", cur.from);
+    if (cur.to) params.set("to", cur.to);
     const s = params.toString();
     return s ? `/exams?${s}` : "/exams";
+  };
+  const pageHref = (p: number) => {
+    const base = buildHref({});
+    if (p <= 1) return base;
+    return base === "/exams" ? `/exams?page=${p}` : `${base}&page=${p}`;
   };
 
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="micro mr-1">과목</span>
-          {subjects.filters.map((f) => (
-            <a
-              key={f.value}
-              href={chipHref(f.value)}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
-                subject === f.value
-                  ? "border-foreground bg-foreground text-background font-medium"
-                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-              }`}
-            >
-              {f.label}
-            </a>
-          ))}
+      <div className="bg-card border-line shadow-card flex flex-col gap-3 rounded-md border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">과목</span>
+            {subjects.filters.map((f) => (
+              <a
+                key={f.value}
+                href={buildHref({ subject: f.value })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  subject === f.value
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </a>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">유형</span>
+            {TYPE_FILTERS.map((f) => (
+              <a
+                key={f.value}
+                href={buildHref({ type: f.value })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  examType === f.value
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </a>
+            ))}
+          </div>
         </div>
+        <form action="/exams" method="get" className="flex flex-wrap items-center gap-2">
+          {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
+          {examType !== "all" ? <input type="hidden" name="type" value={examType} /> : null}
+          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+            <EyIcon name="search" size={13} />
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="시험명"
+              className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
+            />
+          </div>
+          <label className="text-text-dim flex items-center gap-1 text-xs">
+            기간
+            <input type="date" name="from" defaultValue={from} className="border-line bg-bg-soft rounded-sm border px-1.5 py-1 text-xs" />
+            <span>~</span>
+            <input type="date" name="to" defaultValue={to} className="border-line bg-bg-soft rounded-sm border px-1.5 py-1 text-xs" />
+          </label>
+          <Button type="submit" variant="outline" size="sm">검색</Button>
+          {q || from || to ? (
+            <a href={buildHref({ q: "", from: "", to: "" })} className="text-text-faint hover:text-foreground text-xs underline">
+              초기화
+            </a>
+          ) : null}
+        </form>
       </div>
 
       <div className="flex items-center justify-between">
@@ -73,7 +155,7 @@ export default async function ExamsPage({
             </span>
           ) : null}
         </p>
-        <CreateExamTrigger />
+        <CreateExamTrigger classOptions={classOptions} />
       </div>
 
       {total === 0 ? (

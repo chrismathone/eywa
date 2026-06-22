@@ -21,7 +21,7 @@ export type ExamRow = {
   stats: ExamStats;
 };
 
-export type ExamFilters = { subject?: string; from?: string; to?: string };
+export type ExamFilters = { subject?: string; from?: string; to?: string; q?: string; examType?: string };
 
 const PAGE_SIZE = 50;
 
@@ -41,8 +41,13 @@ export async function getExamsPage(
     .order("exam_date", { ascending: false })
     .range(from, from + pageSize - 1);
   if (filters.subject) q = q.eq("subject", filters.subject);
+  if (filters.examType) q = q.eq("exam_type", filters.examType);
   if (filters.from) q = q.gte("exam_date", filters.from);
   if (filters.to) q = q.lte("exam_date", filters.to);
+  if (filters.q) {
+    const safe = filters.q.trim().replace(/[(),%]/g, " ");
+    if (safe) q = q.ilike("name", `%${safe}%`);
+  }
 
   const { data, count, error } = await q;
   if (error) throw new Error(`getExamsPage: ${error.message}`);
