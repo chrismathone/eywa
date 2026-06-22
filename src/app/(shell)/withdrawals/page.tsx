@@ -37,6 +37,12 @@ function daysSince(iso: string | null): number | null {
   return Math.max(0, Math.floor((now - then) / 86_400_000));
 }
 
+/** 퇴원 후 상담 시도 여부 — 3개 추적 플래그 중 하나라도 true면 "상담함"(재등록 평가용). */
+function isConsulted(r: { metadata: { consultation?: { adminCalledParent: boolean; teacherCalledParent: boolean; talkedWithStudent: boolean } } | null }): boolean {
+  const c = r.metadata?.consultation;
+  return !!c && (c.adminCalledParent || c.teacherCalledParent || c.talkedWithStudent);
+}
+
 /** 최근 12개월 퇴원 추이(전체 기준) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
 function monthlyWithdrawals(rows: { withdrawnAt: string | null }[]): WithdrawalMonthPoint[] {
   const now = new Date();
@@ -74,6 +80,7 @@ function subjectBreakdown(
 
 type RangeKey = "all" | "30d" | "90d" | "year";
 type ReasonKey = "all" | WithdrawalReason | "unspecified";
+type ConsultKey = "all" | "pending" | "done";
 
 const RANGE_FILTERS: { key: RangeKey; label: string }[] = [
   { key: "all", label: "전체" },
@@ -82,10 +89,20 @@ const RANGE_FILTERS: { key: RangeKey; label: string }[] = [
   { key: "year", label: "올해" },
 ];
 
-function buildWdHref(p: { range: RangeKey; reason: ReasonKey; q: string }): string {
+const CONSULT_FILTERS: { key: ConsultKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "pending", label: "상담 미완료" },
+  { key: "done", label: "상담 완료" },
+];
+
+type WdHrefParams = { range: RangeKey; reason: ReasonKey; q: string; subject: string; consult: ConsultKey };
+
+function buildWdHref(p: WdHrefParams): string {
   const sp = new URLSearchParams();
   if (p.range !== "all") sp.set("range", p.range);
   if (p.reason !== "all") sp.set("reason", p.reason);
+  if (p.subject !== "all") sp.set("subject", p.subject);
+  if (p.consult !== "all") sp.set("consult", p.consult);
   if (p.q) sp.set("q", p.q);
   const s = sp.toString();
   return s ? `/withdrawals?${s}` : "/withdrawals";
@@ -99,6 +116,8 @@ export default async function WithdrawalsPage({
     range?: RangeKey;
     reason?: ReasonKey;
     q?: string;
+    subject?: string;
+    consult?: ConsultKey;
     page?: string;
   }>;
 }) {
@@ -108,6 +127,8 @@ export default async function WithdrawalsPage({
     sp.type === "subject-ended" ? "subject-ended" : "withdrawn";
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const reason: ReasonKey = (sp.reason as ReasonKey) ?? "all";
+  const subject = sp.subject ?? "all";
+  const consult: ConsultKey = (sp.consult as ConsultKey) ?? "all";
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
 
@@ -134,6 +155,16 @@ export default async function WithdrawalsPage({
       return k === reason;
     });
   }
+  if (subject !== "all") {
+    rows = rows.filter((r) => r.lastClassSubject === subject);
+  }
+  if (consult !== "all") {
+    rows = rows.filter((r) => (consult === "done" ? isConsulted(r) : !isConsulted(r)));
+  }
+
+  // 상담 미완료 worklist 집계(전체 기준) — 재등록 평가용 사후상담 추적.
+  const consultPending = all.filter((r) => !isConsulted(r)).length;
+  const consultRate = all.length ? Math.round(((all.length - consultPending) / all.length) * 100) : 0;
 
   // 사유 통계 (필터 후 결과 기준)
   const reasonCounts = new Map<string, number>();
@@ -167,20 +198,17 @@ export default async function WithdrawalsPage({
     { key: "unspecified" as ReasonKey, label: "미기재" },
   ];
 
-  const current = { range, reason, q };
+  const current: WdHrefParams = { range, reason, q, subject, consult };
+  const filterActive = range !== "all" || reason !== "all" || subject !== "all" || consult !== "all" || !!q;
 
   // 사유 분석·통계는 전체 필터 결과(rows) 기준 — 목록만 50행으로 슬라이스(billing 메모리 페이지네이션).
   const total = rows.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageHref = (p: number) => {
-    const params = new URLSearchParams();
-    if (range !== "all") params.set("range", range);
-    if (reason !== "all") params.set("reason", reason);
-    if (q) params.set("q", q);
-    if (p > 1) params.set("page", String(p));
-    const s = params.toString();
-    return s ? `/withdrawals?${s}` : "/withdrawals";
+    const base = buildWdHref(current);
+    if (p <= 1) return base;
+    return base === "/withdrawals" ? `/withdrawals?page=${p}` : `${base}&page=${p}`;
   };
 
   return (
@@ -218,7 +246,7 @@ export default async function WithdrawalsPage({
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Stat label="전체 퇴원" value={all.length} icon={UserMinus} color="rose" />
         <Stat label="최근 30일" value={recent} icon={CalendarClock} color="danger" />
-        <Stat label="주요 사유" value={topReasons.length} unit="가지" icon={ListChecks} color="amber" />
+        <Stat label="상담 미완료" value={consultPending} unit={`· ${consultRate}% 완료`} icon={ListChecks} color="amber" />
         <Stat label="필터 결과" value={rows.length} unit="명" icon={Filter} color="blue" />
       </section>
 
@@ -244,6 +272,8 @@ export default async function WithdrawalsPage({
           <form action="/withdrawals" method="get" className="ml-auto flex items-center gap-2">
             {range !== "all" ? <input type="hidden" name="range" value={range} /> : null}
             {reason !== "all" ? <input type="hidden" name="reason" value={reason} /> : null}
+            {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
+            {consult !== "all" ? <input type="hidden" name="consult" value={consult} /> : null}
             <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
               <EyIcon name="search" size={13} />
               <input
@@ -262,14 +292,53 @@ export default async function WithdrawalsPage({
             </button>
           </form>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="micro mr-1">사유</span>
-          <FilterSelect
-            paramName="reason"
-            value={reason === "all" ? null : reason}
-            options={reasonChips.filter((f) => f.key !== "all").map((f) => ({ value: f.key, label: f.label }))}
-            ariaLabel="사유 필터"
-          />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-1.5">
+            <span className="micro mr-1">사유</span>
+            <FilterSelect
+              paramName="reason"
+              value={reason === "all" ? null : reason}
+              options={reasonChips.filter((f) => f.key !== "all").map((f) => ({ value: f.key, label: f.label }))}
+              ariaLabel="사유 필터"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">과목</span>
+            {subjectMaps.filters.map((f) => (
+              <Link
+                key={f.value}
+                href={buildWdHref({ ...current, subject: f.value })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  subject === f.value
+                    ? "border-foreground bg-foreground text-background font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro mr-1">상담</span>
+            {CONSULT_FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={buildWdHref({ ...current, consult: f.key })}
+                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                  consult === f.key
+                    ? "border-amber bg-amber text-white font-medium"
+                    : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+          {filterActive ? (
+            <Link href="/withdrawals" className="text-text-faint hover:text-foreground text-xs underline">
+              필터 초기화
+            </Link>
+          ) : null}
         </div>
       </div>
 
