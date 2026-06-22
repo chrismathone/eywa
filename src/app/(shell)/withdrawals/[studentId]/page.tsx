@@ -46,6 +46,27 @@ export default async function WithdrawalDetailPage({
             {detail.school ? <span>· {detail.school}</span> : null}
             {detail.primaryTeacherName ? <span>· 담임 {detail.primaryTeacherName}</span> : null}
           </p>
+          {/* 연락처 — 사후 상담(전화) 시 학생관리로 우회하지 않게 상세에 노출(클릭 통화). */}
+          {detail.studentPhone || detail.parentPhone ? (
+            <p className="text-muted-foreground flex flex-wrap items-center gap-3 text-xs">
+              {detail.studentPhone ? (
+                <span>
+                  학생{" "}
+                  <a href={`tel:${detail.studentPhone}`} className="text-foreground num hover:underline">
+                    {detail.studentPhone}
+                  </a>
+                </span>
+              ) : null}
+              {detail.parentPhone ? (
+                <span>
+                  · 학부모{detail.parentName ? `(${detail.parentName})` : ""}{" "}
+                  <a href={`tel:${detail.parentPhone}`} className="text-foreground num hover:underline">
+                    {detail.parentPhone}
+                  </a>
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
             <span className="num">{detail.enrolledAt ?? "—"}</span>
             <span>~</span>

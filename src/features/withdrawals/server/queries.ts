@@ -118,6 +118,9 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
 }
 
 export type WithdrawalDetail = WithdrawalRow & {
+  studentPhone: string | null;
+  parentPhone: string | null;
+  parentName: string | null;
   enrollmentHistory: {
     id: string;
     className: string;
@@ -136,6 +139,7 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
       .from("students")
       .select(
         `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
+         student_phone, parent_phone, parent_name,
          teacher:primary_teacher_id ( display_name )`,
       )
       .eq("id", studentId)
@@ -185,6 +189,9 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
     lastClassSubject: lastEnded?.subject ?? null,
     withdrawalReason: md?.reason ? REASON_LABEL[md.reason] : lastEnded?.reason ?? null,
     metadata: md,
+    studentPhone: (s as { student_phone?: string | null }).student_phone ?? null,
+    parentPhone: (s as { parent_phone?: string | null }).parent_phone ?? null,
+    parentName: (s as { parent_name?: string | null }).parent_name ?? null,
     enrollmentHistory: history,
   };
 }
