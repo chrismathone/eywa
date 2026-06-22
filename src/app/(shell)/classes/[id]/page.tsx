@@ -10,6 +10,7 @@ import {
   getClassAttendanceStats,
   getClassDetail,
   getClassStudents,
+  getClassTeacherOptions,
   type DayOfWeek,
 } from "@/features/classes/server/queries";
 import { getStudentsList } from "@/features/students/server/queries";
@@ -18,6 +19,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ClassAssignAction } from "./_components/class-assign-action";
 import { ClassLevelAction } from "./_components/class-level-action";
 import { ArchiveClassButton } from "./_components/archive-class-button";
+import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
 
 export const metadata = { title: "수업 상세 — eywa" };
 
@@ -44,14 +46,22 @@ export default async function ClassDetailPage({
 }) {
   await requireAccess("classes");
   const { id } = await params;
-  const [klass, students, stats, allEnrolledStudents, settings] = await Promise.all([
+  const [klass, students, stats, allEnrolledStudents, settings, teacherOptions] = await Promise.all([
     getClassDetail(id),
     getClassStudents(id),
     getClassAttendanceStats(id, 30),
     getStudentsList({ status: "enrolled" }),
     getTenantSettings(),
+    getClassTeacherOptions(),
   ]);
   if (!klass) notFound();
+
+  // 인수인계 대상 강사 풀 — 과목 담당 우선(없으면 전체), 현재 담임 제외.
+  const subjectTeachers = teacherOptions.filter((t) => t.subjects.includes(klass.subject));
+  const handoverPool = (subjectTeachers.length ? subjectTeachers : teacherOptions)
+    .filter((t) => t.id !== klass.teacherId)
+    .map((t) => ({ id: t.id, name: t.name }));
+  const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= todayIso();
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
@@ -129,9 +139,27 @@ export default async function ClassDetailPage({
             오늘 출석 입력
           </Button>
           <ClassLevelAction classId={klass.id} className={klass.className} subject={klass.subject} />
+          {!klass.pendingTeacherId ? (
+            <HandoverAction
+              classId={klass.id}
+              currentTeacherName={klass.teacherName}
+              teacherOptions={handoverPool}
+            />
+          ) : null}
           <ArchiveClassButton classId={klass.id} isActive={klass.isActive} className={klass.className} />
         </div>
       </header>
+
+      {klass.pendingTeacherId ? (
+        <HandoverBanner
+          classId={klass.id}
+          currentTeacherName={klass.teacherName}
+          pendingTeacherName={klass.pendingTeacherName}
+          pendingDate={klass.pendingTeacherDate}
+          reason={klass.pendingTeacherReason}
+          due={handoverDue}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">

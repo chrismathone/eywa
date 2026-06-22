@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
+import { logAction } from "@/features/audit/server/log";
 
 export type ClassFormState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
@@ -253,6 +254,125 @@ export async function archiveClass(
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
   return undefined;
+}
+
+// ────────────────────── 강사 인수인계(담임 교체 예약) ──────────────────────
+// ijw TeacherHandover 경량 이식: 예약(scheduleHandover) → 배너 → 적용(applyHandover)/취소(cancelHandover).
+// ⚠️ ijw의 enrollment eager-split·배치 롤백·적용일 자동적용은 미이식(데모 과중). 적용은 수동(배너 버튼).
+export type HandoverState = { error?: string; ok?: boolean } | undefined;
+
+async function requireClassWrite() {
+  const user = await getCurrentUser();
+  if (!user) return { user: null, error: "로그인이 필요합니다" };
+  const lvl = await accessLevelTenant(user.systemRole, "classes");
+  if (lvl !== "full" && lvl !== "scoped") return { user: null, error: "반 관리 권한이 없습니다" };
+  return { user, error: undefined as string | undefined };
+}
+
+/** 강사 인수인계 예약 — 예정 강사·적용일·사유를 classes에 저장(아직 teacher_id 미변경). */
+export async function scheduleHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+
+  const classId = String(formData.get("classId") ?? "").trim();
+  const newTeacherId = String(formData.get("newTeacherId") ?? "").trim();
+  const effectiveDate = String(formData.get("effectiveDate") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+  if (!classId) return { error: "반 ID가 누락되었습니다" };
+  if (!newTeacherId) return { error: "인계받을 강사를 선택해주세요" };
+  if (!effectiveDate) return { error: "적용일을 입력해주세요" };
+
+  const supabase = await createClient();
+  const { data: klass } = await supabase
+    .from("classes")
+    .select("class_name, teacher_id")
+    .eq("id", classId)
+    .single();
+  if (!klass) return { error: "반을 찾을 수 없습니다" };
+  if (klass.teacher_id === newTeacherId) return { error: "현재 담임과 동일한 강사입니다" };
+
+  const { error: updErr } = await supabase
+    .from("classes")
+    .update({
+      pending_teacher_id: newTeacherId,
+      pending_teacher_date: effectiveDate,
+      pending_teacher_reason: reason,
+    })
+    .eq("id", classId);
+  if (updErr) return { error: updErr.message };
+
+  await logAction({
+    action: "class_handover_schedule",
+    targetType: "class",
+    targetLabel: klass.class_name,
+    metadata: { newTeacherId, effectiveDate },
+  });
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/classes");
+  revalidatePath("/timetable");
+  return { ok: true };
+}
+
+/** 인수인계 예약 취소 — 예정 필드 비움(teacher_id 불변). */
+export async function cancelHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+
+  const classId = String(formData.get("classId") ?? "").trim();
+  if (!classId) return { error: "반 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error: updErr } = await supabase
+    .from("classes")
+    .update({ pending_teacher_id: null, pending_teacher_date: null, pending_teacher_reason: null })
+    .eq("id", classId);
+  if (updErr) return { error: updErr.message };
+
+  await logAction({ action: "class_handover_cancel", targetType: "class", metadata: { classId } });
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/classes");
+  revalidatePath("/timetable");
+  return { ok: true };
+}
+
+/** 인수인계 적용 — teacher_id ← pending_teacher_id로 교체하고 예정 필드 비움. */
+export async function applyHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+
+  const classId = String(formData.get("classId") ?? "").trim();
+  if (!classId) return { error: "반 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: klass } = await supabase
+    .from("classes")
+    .select("class_name, pending_teacher_id")
+    .eq("id", classId)
+    .single();
+  if (!klass) return { error: "반을 찾을 수 없습니다" };
+  if (!klass.pending_teacher_id) return { error: "예약된 인수인계가 없습니다" };
+
+  const { error: updErr } = await supabase
+    .from("classes")
+    .update({
+      teacher_id: klass.pending_teacher_id,
+      pending_teacher_id: null,
+      pending_teacher_date: null,
+      pending_teacher_reason: null,
+    })
+    .eq("id", classId);
+  if (updErr) return { error: updErr.message };
+
+  await logAction({
+    action: "class_handover_apply",
+    targetType: "class",
+    targetLabel: klass.class_name,
+    metadata: { newTeacherId: klass.pending_teacher_id },
+  });
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/classes");
+  revalidatePath("/timetable");
+  return { ok: true };
 }
 
 /**

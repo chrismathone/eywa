@@ -57,6 +57,11 @@ export type ClassDetail = {
   isActive: boolean;
   notes: string | null;
   bgColor: string | null;
+  // 강사 인수인계 예약(0044a) — pendingTeacherId 있으면 예약 존재.
+  pendingTeacherId: string | null;
+  pendingTeacherName: string | null;
+  pendingTeacherDate: string | null;
+  pendingTeacherReason: string | null;
   scheduleSlots: ClassScheduleSlot[];
   studentCount: number;
 };
@@ -352,7 +357,9 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     .select(
       `id, class_name, subject, is_active, notes, bg_color,
        teacher_id, classroom_id,
+       pending_teacher_id, pending_teacher_date, pending_teacher_reason,
        teacher:teacher_id ( display_name ),
+       pending_teacher:pending_teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
     )
     .eq("id", id)
@@ -378,6 +385,9 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
     | { display_name?: string }
     | undefined;
+  const pendingTeacher = (Array.isArray(c.pending_teacher) ? c.pending_teacher[0] : c.pending_teacher) as
+    | { display_name?: string }
+    | undefined;
   const room = (Array.isArray(c.classroom) ? c.classroom[0] : c.classroom) as
     | { name?: string }
     | undefined;
@@ -393,6 +403,11 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     isActive: c.is_active,
     notes: c.notes,
     bgColor: (c as { bg_color?: string | null }).bg_color ?? null,
+    pendingTeacherId: (c as { pending_teacher_id?: string | null }).pending_teacher_id ?? null,
+    pendingTeacherName: pendingTeacher?.display_name ?? null,
+    pendingTeacherDate: (c as { pending_teacher_date?: string | null }).pending_teacher_date ?? null,
+    pendingTeacherReason:
+      (c as { pending_teacher_reason?: string | null }).pending_teacher_reason ?? null,
     scheduleSlots: (schedules ?? []).map((s) => ({
       id: s.id,
       dayOfWeek: s.day_of_week as DayOfWeek,

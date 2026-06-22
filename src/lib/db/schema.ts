@@ -241,6 +241,10 @@ export const classes = pgTable(
     // Cell color (ijw bgColor/textColor). Stored as #RRGGBB; ARGB normalized on import.
     bgColor: text("bg_color"),
     textColor: text("text_color"),
+    // 강사 인수인계(담임 교체) 예약 — ijw TeacherHandover 경량 이식(0044a). NULL=예약 없음.
+    pendingTeacherId: uuid("pending_teacher_id").references(() => users.id, { onDelete: "set null" }),
+    pendingTeacherDate: date("pending_teacher_date"),
+    pendingTeacherReason: text("pending_teacher_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
