@@ -7,7 +7,7 @@ import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queri
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { ClassColumnView } from "./_components/class-column-view";
+import { RichGridView } from "./_components/rich-grid-view";
 import {
   TimetableEditProvider,
   TimetableEditControls,
@@ -124,7 +124,7 @@ export default async function TimetablePage({
           title="해당 과목의 시간표가 없습니다"
         />
       ) : isIntegrated ? (
-        <ClassColumnView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} />
+        <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} />
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">

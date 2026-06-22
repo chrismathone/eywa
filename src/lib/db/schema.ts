@@ -388,6 +388,11 @@ export const classSchedules = pgTable(
     // Cell-level overrides (ijw slotTeachers/slotRooms). NULL = inherit classes.teacher_id/classroom_id.
     teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }),
     classroomId: uuid("classroom_id").references(() => classrooms.id, { onDelete: "set null" }),
+    // 셀 단위 표시 라벨 (ijw slotTeachers/slotRooms 그대로). 영문 닉네임("Hannah"/"Zoe")·"LAB"·요일별
+    // 강의실("LAB실")은 users.display_name(한글)·classrooms FK로 못 풀어 문자열로 보존 — 통합뷰 미니그리드용.
+    // NULL = 반 기본(classes.teacher_id/classroom_id) 상속.
+    slotTeacherLabel: text("slot_teacher_label"),
+    slotRoomLabel: text("slot_room_label"),
     // Display-only period label ('3교시'). Absolute time (start/end) is the source of truth.
     periodLabel: text("period_label"),
     // 합반(merged): schedules sharing one cell carry the same merge_group. Partial index in alpha SQL.

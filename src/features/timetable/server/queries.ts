@@ -13,6 +13,12 @@ export type ScheduleSlot = {
   teacherName: string | null;
   classroomName: string | null;
   studentCount: number;
+  // 셀 단위 라벨(ijw slotTeachers/slotRooms) — 통합뷰 미니그리드. null=반 기본 상속.
+  slotTeacherLabel: string | null;
+  slotRoomLabel: string | null;
+  // 반 헤더색(ijw bgColor/textColor) — 통합뷰 수업명 헤더. null=과목색 폴백.
+  classBgColor: string | null;
+  classTextColor: string | null;
 };
 
 async function fetchSlots(): Promise<ScheduleSlot[]> {
@@ -22,9 +28,9 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
   const { data } = await supabase
     .from("class_schedules")
     .select(
-      `id, day_of_week, start_time, end_time, class_id,
+      `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
        class:class_id (
-         id, class_name, subject,
+         id, class_name, subject, bg_color, text_color,
          teacher:teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
@@ -50,6 +56,8 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
           id?: string;
           class_name?: string;
           subject?: string;
+          bg_color?: string | null;
+          text_color?: string | null;
           teacher?: { display_name?: string } | { display_name?: string }[];
           classroom?: { name?: string } | { name?: string }[];
         }
@@ -73,6 +81,10 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
       teacherName: teacher?.display_name ?? null,
       classroomName: room?.name ?? null,
       studentCount: counts.get(r.class_id) ?? 0,
+      slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
+      slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+      classBgColor: klass?.bg_color ?? null,
+      classTextColor: klass?.text_color ?? null,
     };
   });
 }
@@ -98,6 +110,8 @@ export type StudentLine = {
   isTransferredIn?: boolean;
   /** 분리등원 요일 — []=전 요일, ['mon','thu']=월목만. 비어있지 않으면 셀에 배지로 표시. */
   attendanceDays?: string[];
+  /** 영문 이름(ijw englishName) — 통합뷰 명단에 "이름 (English)"로 표시. 없으면 미표시. */
+  englishName?: string | null;
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 
@@ -105,7 +119,7 @@ export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] 
  * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는
  * 학생 리스트 (이름·학년·학교) 데이터.
  */
-type StudentRef = { name?: string; grade?: string | null; school?: string | null };
+type StudentRef = { name?: string; grade?: string | null; school?: string | null; english_name?: string | null };
 const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefined =>
   Array.isArray(r.student) ? r.student[0] : r.student;
 /** server-only 모듈이라 new Date() OK(fetchSlots와 동일 패턴). YYYY-MM-DD. */
@@ -154,7 +168,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       supabase
         .from("enrollments")
         .select(
-          "id, class_id, student_id, start_date, on_hold, is_transferred_in, attendance_days, student:student_id ( name, grade, school )",
+          "id, class_id, student_id, start_date, on_hold, is_transferred_in, attendance_days, student:student_id ( name, grade, school, english_name )",
         )
         .in("class_id", chunk)
         .is("end_date", null),
@@ -162,7 +176,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
     fetchInChunks<WithdrawnRow>(classIds, (chunk) =>
       supabase
         .from("enrollments")
-        .select("id, class_id, student_id, end_date, student:student_id ( name, grade, school )")
+        .select("id, class_id, student_id, end_date, student:student_id ( name, grade, school, english_name )")
         .in("class_id", chunk)
         .not("end_date", "is", null)
         .eq("is_transferred", false)
@@ -194,6 +208,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       isNew: r.start_date != null && r.start_date >= newCutoff,
       isTransferredIn: r.is_transferred_in === true,
       attendanceDays: r.attendance_days ?? [],
+      englishName: s.english_name ?? null,
     });
   }
   for (const r of withdrawnRows) {
@@ -210,6 +225,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       studentId: r.student_id,
       status: "withdrawn",
       endDate: r.end_date,
+      englishName: s.english_name ?? null,
     });
   }
 
@@ -310,6 +326,11 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         teacherName: teacher?.display_name ?? null,
         classroomName: room?.name ?? null,
         studentCount: counts.get(r.class_id) ?? 0,
+        // 대시보드 오늘 일정은 셀 라벨·색 미사용 — 타입 충족용 null.
+        slotTeacherLabel: null,
+        slotRoomLabel: null,
+        classBgColor: null,
+        classTextColor: null,
       };
     })
     .sort((a, b) => toMins(a.startTime) - toMins(b.startTime))

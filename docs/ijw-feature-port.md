@@ -28,13 +28,14 @@
   - `mergeSlotsByClass` — 한 칸 안 같은 반 슬롯 합쳐 시간범위(min~max) 한 카드.
 - **엑셀 격자** — `table-layout:fixed` + `colgroup` 균일 폭(요일 150px), 교시열 92px, 모든 행 고정 높이, 넘치면 셀 내부 스크롤.
 - **셀(ClassCell, `_components/class-cell.tsx`)** — 학생 **세로 명단**(이름·학교·학년), 신입(30일)=빨강·전입=초록 행. 헤더 클릭→상세 드로어. 편집모드 학생 드래그(`student:enrollmentId`→`class:classId` 계약).
-- **통합뷰**(`_components/class-column-view.tsx`) — ✅ **반(class) 단위 반응형 카드 그리드(2026-06-22 최종)**.
-  한 과목의 반을 **반 카드**로: 과목색 헤더(반명·스케줄·강사·강의실, 클릭=반 창) + 학생 명단(신입 빨강·전입 초록, 클릭=학생 창) +
-  정원. `grid-template-columns: repeat(auto-fill,minmax(240px,1fr))`(좁으면 1열·넓으면 N열). 시작시각순→반명순, 읽기전용.
-  순수함수 `lib/class-columns.ts`의 `buildClassCards`(+test 4). ⚠️ **설계 3번 폐기**: 1차 전과목 색 오버뷰
-  (`AllSubjectsTimetable`/excel) → 의도 아님 / 2차 ijw `EnglishClassTab`식 반=열 리치뷰(시작교시 그룹 박스 + 카드별
-  요일×교시 미니그리드) → **보기 나빠 폐기**(박스 9개 분절·중복 라벨·미니그리드 절반 빈칸·박스별 가로스크롤) / **3차 = 카드 그리드(현재)**.
-  영어 레벨배너·영문이름은 eywa 데이터 부재로 미표시(후속). (옛 단일과목 `IntegratedView`·미니그리드·`teacherColor`도 제거.)
+- **통합뷰**(`_components/rich-grid-view.tsx` + `rich-card-group.tsx`) — ✅ **ijw EnglishClassTab "반=열 리치 그리드" 충실 이식(2026-06-22 최종)**.
+  시작 교시별 섹션(평일 기준, 주말 전용=별도 섹션, 섹션마다 visiblePeriods) → 좌측 sticky 라벨열(수업명/담임/강의실/교시/재원/대기/퇴원) +
+  반=열 카드: ijw 헤더색(`bg_color`) 수업명 + 담임 + **요일별 강의실**(`월수 본원304 / 목 LAB실`) + **요일×교시 미니그리드**(셀마다
+  강사약칭·강사해시색 / LAB=파란배지) + **재원/대기/퇴원**(신입 빨강·전입 초록, 영문이름 `이름 (English)`). 읽기전용. 순수함수 `lib/class-grid.ts`
+  의 `buildRichCardGroups`/`teacherColor`(+test 6). ⚠️ **데이터 백필 필수**: eywa 데모가 평면(슬롯별 강사/강의실/영문이름 0)이라
+  `scripts/_poc_migration/backfill-english-slots.cjs`(멱등)로 ijw 익스포트의 slotTeachers·slotRooms·bgColor·englishName을 적재
+  (slot강사 183·강의실 84·LAB 65셀·반색 52·영문 29). 스키마 0041a(`class_schedules.slot_teacher_label/slot_room_label`).
+  설계 변천(폐기): 전과목색오버뷰 → 단순카드그리드(영어 데이터 못 살림) → **리치 그리드(현재)**. 합반(classGroupId)·영어 레벨배너 미이식(후속).
 - **순수함수 Vitest**: periods(slotPeriodRow 등), grid(computeBlocks/mergeRuns). `pnpm test` 그린(338).
 - 사이드바: 와이드 터치 회색지대 보정(`layout.tsx` `lg:pointer-fine:` — 크롬 전환을 `useIsDesktop`과 일치).
 

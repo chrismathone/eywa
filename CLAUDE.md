@@ -214,27 +214,37 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
-### 시간표 통합뷰 = 반(class) 단위 반응형 카드 그리드로 최종 재구현 (2026-06-22) — ✅ 검증 완료
-사용자 지적: eywa "통합뷰"가 단일 과목 요일×교시(기본뷰와 중복)였다. **설계가 3번 바뀌었다(전부 폐기 후 최종형):**
-① 전과목 색 오버뷰(ijw `AllSubjectsTimetable`/excel) → 의도 아님. ② ijw `EnglishClassTab`식 **반=열 리치뷰**(시작교시
-그룹 박스 + 카드별 요일×교시 미니그리드) → **보기 나빴음**. ③ **최종 = 반 단위 반응형 카드 그리드**.
-- **②를 폐기한 이유(측정 진단)**: ⓐ 시작교시 그룹화가 화면을 박스 9개로 분절(외톨이 "1개 수업" 박스 5개 + 평일
-  교시군 m-와 주말 w-가 같은 "N교시" 라벨을 공유해 `1교시 시작` 박스가 **중복**), ⓑ 카드마다 반복되는 요일×교시
-  미니그리드가 **절반이 빈 칸**(892칸 중 449칸만 채워짐 — 정보는 이미 스케줄 라벨에 있는데 노이즈), ⓒ 좁은 188px 카드 +
-  박스별 가로스크롤(최대 그룹 4390px, 28%만 노출)로 한눈에 안 들어옴. = 기본뷰의 강점(단일격자·고정교시축·넉넉한 셀)을 다 잃음.
-- **③ 최종 = 반응형 카드 그리드**: 한 과목의 반을 **반 카드**로(`grid-template-columns: repeat(auto-fill,minmax(240px,1fr))`
-  → 좁으면 1열·넓으면 N열, 창=iframe이라 창 폭에 라이브 반응). 카드 = 과목색 헤더(반명·스케줄 `월·수·목 14:30~16:20`·강사·강의실,
-  클릭=반 창) + 학생 명단(신입 빨강·전입 초록, 클릭=학생 창) + 정원. **시작시각순→반명순 정렬, 그룹 분절 없음.**
-  교시 축·미니그리드 폐기(②의 노이즈 제거). 읽기전용(편집은 기본뷰). 색은 과목색 하나로 통일(②의 과목색↔강사색 충돌 제거).
-- **과목칩은 양쪽 뷰에 노출·클릭=과목 전환**(통합뷰도 과목별).
-- 신규/변경: 순수함수 [`class-columns.ts`](src/features/timetable/lib/class-columns.ts)(`buildClassCards`, +test 4) +
-  서버 컴포넌트 [`class-column-view.tsx`](<src/app/(shell)/timetable/_components/class-column-view.tsx>)(반응형 카드 그리드).
-  page.tsx: 통합=ClassColumnView(과목별 slots)·과목칩 양쪽·편집은 기본뷰만. 제거: ②의 시작교시 그룹/미니그리드/`teacherColor`
-  + 그 전 1차물(`integrated.ts`·`all-subjects-grid.tsx`)·단일과목 `IntegratedView`·`integrated-cell.tsx`.
-- 검증: typecheck0/lint0/test(class-columns 4)/build✓. **데스크톱 실브라우저**: 통합뷰 수학 **67개 반 카드·4열 자동배치**
-  (카드 303px)·학생링크 422·반링크 67·미니그리드 0칸·그룹박스 0개·박스별 가로스크롤 0·에러 0 / 기본뷰 현행 그대로(요일그룹밴드·학생명단 618).
-- ⚠️ 후속(미세): 카드 스케줄 라벨이 요일마다 시간이 다르면 전체 min~max로 넓게 표시됨(예 영어 `10:00~22:00`).
-  영어 레벨 배너(Phonics→…)·영문 이름은 eywa 데이터에 없어 미표시(데이터 생기면 추가).
+### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
+사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
+다른 **여러 케이스**가 있어 요일×교시 미니그리드가 본질. (설계 변천: 전과목색오버뷰→단순카드그리드→**리치 그리드(최종)**.
+앞 둘은 영어 데이터를 못 살려 폐기.) **결정적 발견: eywa 데모 데이터가 평면**이라(슬롯별 강사/강의실/영문이름 0건)
+ijw 익스포트에서 **백필**해야 사진처럼 살아난다 → 백필 + 리치뷰 둘 다 구현.
+- **A. 데이터 백필** ([`scripts/_poc_migration/backfill-english-slots.cjs`](scripts/_poc_migration/backfill-english-slots.cjs),
+  멱등·`--apply`): ijw 익스포트(`D:\tmp\ijw-export-*.json`)의 `slotTeachers`(요일·교시별 강사·"LAB")·`slotRooms`·
+  `bgColor`/`textColor`·학생 `englishName`을 자연키 매칭(반=class_name+subject 유니크 / 슬롯=day+start_time, 교시표는
+  transform.ts와 동일 상수 / 학생=name+학교+학년)으로 eywa에 적재. **적용: slotTeacher 183·slotRoom 84·LAB 65셀·
+  반색 52·영문이름 29, 매칭누락 0**(highmath→subject_1 별칭). ⚠️ POC IdMap 미영속이라 ijw id 직접매칭 불가 → 자연키.
+- **B. 스키마(0041a)**: `class_schedules.slot_teacher_label`·`slot_room_label` 추가(dev적용). 영문닉네임("Hannah"/"Zoe")·
+  "LAB"·"LAB실"은 `users.display_name`(한글)·classrooms FK로 못 풀어 **문자열 라벨로 보존**(셀 표시·해시색). NULL=반 기본 상속.
+  (`classes.bg_color`/`text_color`·`students.english_name`은 기존 컬럼 — 백필만.)
+- **C. 쿼리 확장** ([timetable/server/queries.ts](src/features/timetable/server/queries.ts)): `fetchSlots`가 슬롯 라벨 +
+  반 색을, `getWeeklyScheduleWithStudents`가 학생 영문이름을 읽는다. `ScheduleSlot`에 `slotTeacherLabel/slotRoomLabel/classBgColor/classTextColor`,
+  `StudentLine`에 `englishName` 추가(기본뷰도 더 정확해짐 — 폴백 동일이라 무해).
+- **D. 리치 그리드 뷰**: 순수함수 [`class-grid.ts`](src/features/timetable/lib/class-grid.ts)(`buildRichCardGroups`/`teacherColor`,
+  +test 6) → 서버 [`rich-grid-view.tsx`](<src/app/(shell)/timetable/_components/rich-grid-view.tsx>)(그룹 빌드·섹션헤더) +
+  클라 [`rich-card-group.tsx`](<src/app/(shell)/timetable/_components/rich-card-group.tsx>)(DragScrollArea·좌측 sticky 라벨열·반=열·미니그리드).
+  **시작 교시별 섹션**(평일 기준, 주말 전용은 "주말" 섹션 — 각 섹션은 그 섹션이 쓰는 교시만=visiblePeriods). 카드 = ijw 헤더색(`bg_color`)
+  수업명 + 담임(반기본 ?? 최빈 슬롯강사) + **요일별 강의실**(`월수 본원304 / 목 LAB실·본원304`) + **요일×교시 미니그리드**(셀마다
+  강사약칭(`slice(0,4)`)·강사해시색 / LAB=파란배지) + **재원/대기/퇴원** 3섹션(신입 빨강·전입 초록, 영문이름 `이름 (English)`).
+  대기/퇴원 행높이는 그룹 내 max로 동기화(라벨열·전 카드 baseline 정렬). 읽기전용. 과목칩 양쪽 노출.
+  - **server-only 금지**([[#61]]): class-grid.ts·rich-card-group.tsx(클라)는 server-only 미import. SubjectMaps(메서드 보유)는
+    클라로 못 넘겨 → 서버가 `SUBJECT_SOFT[colorOf]` **plain 클래스 문자열**만 전달. teacherColor는 순수라 클라 import OK.
+- **갭(가짜 없이 폴백)**: 담임 ijw "Hannah"(영문닉네임 FK미해결)→최빈 슬롯강사로 폴백. 합반(classGroupId)·영어 레벨배너 미이식(후속).
+  강사 고정색 없어 이름해시. 슬롯 없는 반(고등E_고2 TOP 등)은 반기본강사 단색(수학과 동일).
+- 제거: 직전 카드섹션 뷰(`class-columns.ts`·`class-column-view.tsx`).
+- 검증: typecheck0/lint0/**test398**(class-grid 6)/build✓. **실브라우저**: 영어 통합뷰 46반·7섹션·LAB 65배지·강사셀(Kristine/Zoe)·
+  영문이름(Willy)·요일별강의실(본원302·LAB실)·PJ2 헤더색#93c47d·콘솔0 / 수학 67반·5섹션·반강사 단색(슬롯데이터 없음).
+- ⚠️ 후속: 슬롯 강사/강의실·영문이름은 **ijw 익스포트가 진실** — Firebase 전체 재이식 시 이 백필 스크립트 재실행(멱등). 합반·영어레벨 미이식.
 
 ### 쿼리 성능/정합 2차 — 멀티에이전트 전수 감사 + 측정 기반 픽스 6건 (2026-06-20)
 대시보드 경량화에 이어 **전 feature 쿼리/페이지를 멀티에이전트로 전수 감사**(16 feature, 42 agent — 각 finding을
@@ -539,7 +549,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 메뉴 | 데이터 | 핵심 위젯 |
 |---|---|---|
 | 대시보드 (`/dashboard`) | dashboard 9개 쿼리 | 김수진 인사말 + KPI 4 + Timeline(1.55fr) + Announcements(1fr) + 7일 추세 |
-| 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **과목 단일선택(기본 수학)** + 기본뷰(요일그룹밴드 월목/화금/수 + 주말 별도판, 과목별 실교시, 같은반 2D병합, 엑셀격자) / 통합뷰(반 단위 반응형 카드 그리드 — 반 카드: 헤더·학생명단·정원, 읽기전용) + 셀 학생 세로명단(신입·전입색). [`docs/ijw-feature-port.md`] |
+| 시간표 (`/timetable`) | `class_schedules`(+슬롯 라벨) + `enrollments` + `students` | **과목 단일선택(기본 수학)** + 기본뷰(요일그룹밴드 월목/화금/수 + 주말 별도판, 과목별 실교시, 같은반 2D병합, 엑셀격자) / 통합뷰(ijw 반=열 리치 그리드 — 시작교시 섹션 + 좌측 고정 라벨열 + 반=열: 수업명(반색)·담임·요일별강의실·**요일×교시 미니그리드(셀마다 강사/LAB)**·재원/대기/퇴원, 읽기전용). [`docs/ijw-feature-port.md`] |
 | 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
 | 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
 | 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill (상세 성적탭에 **레벨테스트** 섹션) |
@@ -1247,7 +1257,8 @@ node_modules를 지울 위험** + permission-denied. 또: 다른 세션이 내 �
 > ⚠️ **2026-06-18 이후 alpha 추가**(드리즐 스냅샷은 `0027_big_swordsman`에 멈춤 — 신규는 전부 손수 alpha, `db:generate` 금지):
 > `0027b` 학생메모핀 · `0027d~f` 직원phone/조퇴/학생프로필 · `0027g/h` 시간표포트 RLS·이전 · **`0028a` 시험(exams) ·
 > `0029a` 카카오메시징 · `0030a` 교재카탈로그 · `0031a` 운영감사로그 · `0032a` 레벨테스트 · **`0039a` 대시보드 집계 RPC ·
-> `0040a` 상담통계 집계 RPC**(전부 dev DB 적용·RLS 격리·security invoker + `auth_tenant_id()` 이중격리).
+> `0040a` 상담통계 집계 RPC · **`0041a` 시간표 슬롯 라벨**(`class_schedules.slot_teacher_label/slot_room_label` — 영어 통합뷰
+> 미니그리드용, ijw slotTeachers/slotRooms 백필)**(전부 dev DB 적용·RLS 격리·security invoker + `auth_tenant_id()` 이중격리).
 > drizzle 번호본은 `db:migrate`가 자동, RLS/트리거/확장/GIN trigram 색인 등 `000Na_*` **alpha는 손수** 적용
 > (신규 DB 셋업 시 누락 주의).
 
