@@ -310,21 +310,15 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                     </span>
                   </td>
                   <td className="num px-5 py-3 text-right text-xs">
-                    {settledAt ? (
-                      <span className="text-muted-foreground">
-                        {settledAt}
-                        {r.paymentMethod ? (
-                          <span className="text-text-faint">
-                            {" "}
-                            · {PAYMENT_METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        기한 {r.dueDate ?? "—"}
-                      </span>
-                    )}
+                    <span className="text-muted-foreground">
+                      {settledAt ? settledAt : `기한 ${r.dueDate ?? "—"}`}
+                      {r.paymentMethod ? (
+                        <span className="text-text-faint">
+                          {" "}
+                          · {PAYMENT_METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod}
+                        </span>
+                      ) : null}
+                    </span>
                   </td>
                   <td className="text-text-dim px-5 py-3 text-xs">
                     {r.notes ? (
