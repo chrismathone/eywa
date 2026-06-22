@@ -110,6 +110,31 @@ export async function runMeetingAiAnalysis(
  * then redirects to the detail page. The webhook does the rest (transcript fetch
  * + Claude analysis).
  */
+export type UpdateMeetingTitleState = { error?: string; ok?: true } | undefined;
+
+/** 회의록 제목 인라인 수정. */
+export async function updateMeetingTitle(
+  _prev: UpdateMeetingTitleState,
+  formData: FormData,
+): Promise<UpdateMeetingTitleState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  if (!id) return { error: "회의록 ID가 누락되었습니다" };
+  if (!title) return { error: "제목을 입력해주세요" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("meeting_minutes").update({ title }).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/meetings/${id}`);
+  revalidatePath("/meetings");
+  return { ok: true };
+}
+
 export type StartMeetingFromAudioInput = {
   title: string;
   attendees: string[];

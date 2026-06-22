@@ -48,26 +48,40 @@ export function MeetingDeleteButton({ meetingId }: { meetingId: string }) {
   );
 }
 
-function RetrySubmit() {
+function RetrySubmit({ label, variant }: { label: string; variant: "default" | "outline" }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" size="sm" disabled={pending}>
+    <Button type="submit" size="sm" variant={variant} disabled={pending}>
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-      재시도
+      {label}
     </Button>
   );
 }
 
-/** 멈춘/실패한 음성 회의록 재처리(AssemblyAI 재제출). */
-export function MeetingRetryButton({ meetingId }: { meetingId: string }) {
+/**
+ * 음성 회의록 AssemblyAI 재제출 — 실패 복구(failed) + 완료 건 "다시 분석" 공용.
+ * 재제출 시 status를 transcribing으로 리셋하므로 webhook의 'already completed' 가드를 자연 통과,
+ * 8섹션 리포트가 새로 생성된다.
+ */
+export function MeetingRetryButton({
+  meetingId,
+  label = "재시도",
+  variant = "default",
+  outerClassName = "mt-3",
+}: {
+  meetingId: string;
+  label?: string;
+  variant?: "default" | "outline";
+  outerClassName?: string;
+}) {
   const [state, action] = useActionState<RetryMeetingState, FormData>(
     retryMeetingProcessing,
     undefined,
   );
   return (
-    <form action={action} className="mt-3 flex items-center gap-2">
+    <form action={action} className={`flex items-center gap-2 ${outerClassName}`}>
       <input type="hidden" name="id" value={meetingId} />
-      <RetrySubmit />
+      <RetrySubmit label={label} variant={variant} />
       {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
     </form>
   );

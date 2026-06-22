@@ -23,6 +23,8 @@ import { MeetingDeleteButton, MeetingRetryButton } from "./meeting-actions";
 import { MeetingStatusWatcher } from "./status-watcher";
 import { TranscriptSection } from "./transcript-section";
 import { MeetingReportAccordion } from "./ai-report";
+import { MeetingTitleEditor } from "./meeting-title-editor";
+import { MeetingTxtButton } from "./meeting-txt-button";
 
 export const metadata = { title: "회의록 상세 — eywa" };
 
@@ -104,7 +106,7 @@ export default async function MeetingDetailPage({
               </span>
             ) : null}
           </div>
-          <h1 className="display text-foreground text-3xl">{meeting.title}</h1>
+          <MeetingTitleEditor meetingId={meeting.id} title={meeting.title} />
           <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             <span className="num">{formatTime(meeting.heldAt)}</span>
             {meeting.attendees.length > 0 ? (
@@ -130,8 +132,29 @@ export default async function MeetingDetailPage({
               인쇄
             </Button>
           ) : null}
+          {hasAiReport || meeting.content || meeting.transcription ? (
+            <MeetingTxtButton
+              title={meeting.title}
+              heldAt={meeting.heldAt}
+              attendees={meeting.attendees}
+              content={meeting.content}
+              transcription={meeting.transcription}
+              aiReport={meeting.aiReport}
+              aiSummary={meeting.aiSummary}
+              aiActionItems={meeting.aiActionItems}
+            />
+          ) : null}
           {!hasAudio && meeting.content && !hasAiReport ? (
             <RunMeetingAiButton meetingId={meeting.id} hasExisting={false} />
+          ) : null}
+          {/* 음성 회의록 다시 분석 — 재제출(status 리셋)로 8섹션 리포트 재생성 */}
+          {hasAudio && hasAiReport && !isProcessing ? (
+            <MeetingRetryButton
+              meetingId={meeting.id}
+              label="다시 분석"
+              variant="outline"
+              outerClassName=""
+            />
           ) : null}
           <MeetingDeleteButton meetingId={meeting.id} />
         </div>

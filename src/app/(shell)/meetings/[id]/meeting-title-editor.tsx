@@ -1,0 +1,81 @@
+"use client";
+
+import { useActionState, useEffect, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
+import { Check, Loader2, Pencil, X } from "lucide-react";
+import {
+  updateMeetingTitle,
+  type UpdateMeetingTitleState,
+} from "@/features/meetings/server/actions";
+
+function SaveBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="text-primary hover:bg-bg-soft rounded-sm p-1 transition disabled:opacity-50"
+      aria-label="제목 저장"
+    >
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+    </button>
+  );
+}
+
+/** 회의록 제목 인라인 편집 — 연필 토글 → input → 저장(updateMeetingTitle). 성공 시 닫힘+revalidate. */
+export function MeetingTitleEditor({ meetingId, title }: { meetingId: string; title: string }) {
+  const [editing, setEditing] = useState(false);
+  const [state, action] = useActionState<UpdateMeetingTitleState, FormData>(
+    updateMeetingTitle,
+    undefined,
+  );
+  const handled = useRef(false);
+
+  useEffect(() => {
+    if (state?.ok && !handled.current) {
+      handled.current = true;
+      setEditing(false);
+    }
+  }, [state]);
+
+  if (!editing) {
+    return (
+      <h1 className="display text-foreground group flex items-center gap-2 text-3xl">
+        {title}
+        <button
+          type="button"
+          onClick={() => {
+            handled.current = false;
+            setEditing(true);
+          }}
+          className="text-text-faint hover:text-foreground opacity-0 transition group-hover:opacity-100"
+          aria-label="제목 수정"
+        >
+          <Pencil className="size-4" />
+        </button>
+      </h1>
+    );
+  }
+
+  return (
+    <form action={action} className="flex items-center gap-2">
+      <input type="hidden" name="id" value={meetingId} />
+      <input
+        name="title"
+        defaultValue={title}
+        autoFocus
+        className="border-border bg-card text-foreground rounded-md border px-2 py-1 text-2xl font-bold"
+      />
+      <SaveBtn />
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="text-text-faint hover:text-foreground rounded-sm p-1 transition"
+        aria-label="취소"
+      >
+        <X className="size-4" />
+      </button>
+      {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
+    </form>
+  );
+}
