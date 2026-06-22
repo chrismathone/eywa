@@ -46,6 +46,56 @@ export async function getWithdrawalsThisMonth(): Promise<number> {
   return count ?? 0;
 }
 
+export type EnrollmentChangeStudent = {
+  id: string;
+  name: string;
+  grade: string | null;
+  school: string | null;
+  date: string | null;
+};
+export type EnrollmentChanges = {
+  newStudents: EnrollmentChangeStudent[];
+  withdrawn: EnrollmentChangeStudent[];
+};
+
+/** 이번 달 신규 등록 + 퇴원 학생 명단(드릴다운용). 카운트는 getNew/WithdrawalsThisMonth와 동일 기준. */
+export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
+  const supabase = await createClient();
+  const start = new Date();
+  start.setDate(1);
+  const startIso = toIsoDate(start);
+  const [{ data: nw }, { data: wd }] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, name, grade, school, enrolled_at")
+      .eq("status", "enrolled")
+      .gte("enrolled_at", startIso)
+      .order("enrolled_at", { ascending: false }),
+    supabase
+      .from("students")
+      .select("id, name, grade, school, withdrawn_at")
+      .eq("status", "withdrawn")
+      .gte("withdrawn_at", startIso)
+      .order("withdrawn_at", { ascending: false }),
+  ]);
+  return {
+    newStudents: (nw ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      school: s.school,
+      date: s.enrolled_at,
+    })),
+    withdrawn: (wd ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      grade: s.grade,
+      school: s.school,
+      date: s.withdrawn_at,
+    })),
+  };
+}
+
 export type AttendanceSnapshot = {
   date: string;
   total: number;

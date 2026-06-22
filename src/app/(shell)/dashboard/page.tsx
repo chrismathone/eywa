@@ -6,6 +6,7 @@ import {
   getAnnouncementsForManage,
   getEnrolledStudentCount,
   getFollowUpConsultations,
+  getMonthlyEnrollmentChanges,
   getMostRecentAttendanceSnapshot,
   getNewStudentsThisMonth,
   getPaymentRateThisMonth,
@@ -50,6 +51,7 @@ export default async function DashboardPage() {
     followUps,
     recordedClassIds,
     settings,
+    enrollmentChanges,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getNewStudentsThisMonth(),
@@ -66,6 +68,7 @@ export default async function DashboardPage() {
     getFollowUpConsultations(8),
     getTodayRecordedClassIds(),
     getTenantSettings(),
+    getMonthlyEnrollmentChanges(),
   ]);
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -91,6 +94,8 @@ export default async function DashboardPage() {
         attendanceRate={attendanceRate}
         paymentRate={paymentRate}
         unpaidCount={unpaidCount}
+        newStudents={enrollmentChanges.newStudents}
+        withdrawn={enrollmentChanges.withdrawn}
       />
 
       {/* 빠른 작업 */}

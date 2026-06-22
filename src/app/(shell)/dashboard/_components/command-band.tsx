@@ -10,6 +10,10 @@ const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
   weekday: "short",
 });
 
+import type { ReactNode } from "react";
+import { EnrollmentChangeModal } from "./enrollment-change-modal";
+import type { EnrollmentChangeStudent } from "@/features/dashboard/server/queries";
+
 const ACCENT_GREEN = "#5dcaa5"; // 다크 위 출석 강조 (forest green은 대비 부족)
 const ACCENT_DANGER = "#f09595"; // 다크 위 미수 경고
 
@@ -20,6 +24,8 @@ export function CommandBand({
   attendanceRate,
   paymentRate,
   unpaidCount,
+  newStudents,
+  withdrawn,
 }: {
   name: string;
   enrolled: number;
@@ -27,6 +33,8 @@ export function CommandBand({
   attendanceRate: number | null;
   paymentRate: number | null;
   unpaidCount: number;
+  newStudents: EnrollmentChangeStudent[];
+  withdrawn: EnrollmentChangeStudent[];
 }) {
   const parts = KO_DATE_FULL.formatToParts(new Date());
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
@@ -58,7 +66,18 @@ export function CommandBand({
         </div>
 
         <div className="grid grid-cols-2 gap-x-7 gap-y-4 sm:grid-cols-4 lg:gap-x-8">
-          <BandMetric label="재원" value={String(enrolled)} unit="명" sub={`이번 달 ${deltaText}`} />
+          <BandMetric
+            label="재원"
+            value={String(enrolled)}
+            unit="명"
+            sub={
+              <EnrollmentChangeModal
+                deltaText={deltaText}
+                newStudents={newStudents}
+                withdrawn={withdrawn}
+              />
+            }
+          />
           <BandMetric
             label="출석"
             value={attendanceRate == null ? "—" : String(Math.round(attendanceRate))}
@@ -92,7 +111,7 @@ function BandMetric({
   label: string;
   value: string;
   unit?: string;
-  sub?: string;
+  sub?: ReactNode;
   valueColor?: string;
 }) {
   return (
@@ -105,7 +124,7 @@ function BandMetric({
         {value}
         {unit ? <span className="text-[12px] font-medium text-white/45">{unit}</span> : null}
       </div>
-      {sub ? <div className="mt-1 text-[10px] text-white/40">{sub}</div> : null}
+      {sub ?? null}
     </div>
   );
 }
