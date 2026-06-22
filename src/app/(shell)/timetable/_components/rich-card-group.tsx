@@ -168,7 +168,10 @@ function ClassColumn({
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
           card.withdrawn.map((s, i) => (
-            <div key={s.studentId ?? `w-${i}`} className="bg-ink truncate rounded-[3px] px-1 py-0.5 text-[10px] text-background">
+            <div
+              key={s.studentId ?? `w-${i}`}
+              className="bg-card border-line text-text-dim truncate rounded-[3px] border px-1 text-[10px] leading-[18px] line-through"
+            >
               {s.name}
             </div>
           ))
@@ -193,7 +196,7 @@ function DayHead({ day }: { day: DayOfWeek }) {
 
 function Cell({ card, order, day }: { card: RichClassCard; order: number; day: DayOfWeek }) {
   const c = card.cells[`${order}:${day}`];
-  const base = "border-line flex items-center justify-center border-r text-[9px] font-bold last:border-r-0";
+  const base = "border-line flex items-center justify-center border-r text-[10px] font-bold last:border-r-0";
   if (!c) return <div className={base} />;
   if (c.isLab) return <div className={`${base} bg-blue-soft text-blue`}>LAB</div>;
   if (!c.label) return <div className={base} />;
@@ -208,7 +211,7 @@ function RosterRow({ s }: { s: GridStudent }) {
   const inner = (
     <>
       <span className="truncate">{name}</span>
-      {meta ? <span className="text-text-faint shrink-0 font-mono text-[8px]">{meta}</span> : null}
+      {meta ? <span className="text-text-faint shrink-0 font-mono text-[9px]">{meta}</span> : null}
     </>
   );
   const cls = `flex items-baseline justify-between gap-1 rounded-[3px] px-1 text-[10px] leading-[18px] ${tone}`;

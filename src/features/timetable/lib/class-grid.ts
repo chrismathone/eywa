@@ -74,15 +74,21 @@ const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 const WEEKEND = new Set<string>(["sat", "sun"]);
 const WEEKEND_ORDER = 100000;
 
+/** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
+function shortRoom(room: string): string {
+  return room.replace(/^본원/, "") || room;
+}
+
 /**
- * 요일별 강의실 → "월수 본원304 / 목 LAB실·본원304". 한 요일에 교시마다 강의실이 다르면(LAB 교시 등)
+ * 요일별 강의실 → "월수 304 / 목 LAB실·304". 한 요일에 교시마다 강의실이 다르면(LAB 교시 등)
  * 그 요일의 강의실을 "·"로 모아 보여주고(ijw "목 LAB실-본원304" 패턴), 같은 강의실 집합인 요일끼리 묶는다.
- * 전부 같으면 단일, 비면 "-".
+ * 전부 같으면 단일, 비면 "-". 방 이름은 shortRoom으로 공통 "본원" 접두사를 떼 압축.
  */
 function classroomLabel(perDayRooms: Map<DayOfWeek, Set<string>>): string {
   if (perDayRooms.size === 0) return "-";
   const dayStr = new Map<DayOfWeek, string>();
-  for (const [d, set] of perDayRooms) dayStr.set(d, [...set].sort((a, b) => a.localeCompare(b, "ko")).join("·"));
+  for (const [d, set] of perDayRooms)
+    dayStr.set(d, [...set].map(shortRoom).sort((a, b) => a.localeCompare(b, "ko")).join("·"));
   const distinct = [...new Set(dayStr.values())];
   if (distinct.length === 1) return distinct[0];
   const byRooms = new Map<string, DayOfWeek[]>();
@@ -175,7 +181,8 @@ export function buildRichCardGroups(slots: GridSlot[], config: PeriodsConfig): R
     .sort((a, b) => a.order - b.order);
 }
 
-const TEACHER_PALETTE = ["blue", "purple", "amber", "rose", "primary", "gold", "danger"] as const;
+// 솔리드 배경 + 흰 글자라 대비가 충분한 색만(amber·gold 제외 — 흰 글자 대비 미달로 셀 강사명이 안 읽힘).
+const TEACHER_PALETTE = ["blue", "purple", "rose", "primary", "danger"] as const;
 /** 강사명(라벨) → 결정적 색 키(이름 해시). eywa엔 강사 색 설정이 없어 라벨 해시로 안정 배정. */
 export function teacherColor(name: string | null): (typeof TEACHER_PALETTE)[number] {
   if (!name) return "blue";

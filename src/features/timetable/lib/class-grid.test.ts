@@ -39,9 +39,10 @@ describe("buildRichCardGroups", () => {
     expect(card.cells["860:mon"]).toEqual({ label: "LAB", isLab: true });
     expect(card.cells["900:mon"]).toEqual({ label: "Kristine", isLab: false });
     expect(card.cells["900:thu"]).toEqual({ label: "Zoe", isLab: false });
-    // 강의실: 월 LAB실 / 나머지 반기본(본원604) → "월 LAB실 / 목 본원604" 형태(요일 묶음)
+    // 강의실: 월 LAB실 / 나머지 반기본(본원604→604) → "월 LAB실 / 목 604" 형태(요일 묶음, 본원 접두사 압축)
     expect(card.classroomLabel).toContain("LAB실");
-    expect(card.classroomLabel).toContain("본원604");
+    expect(card.classroomLabel).toContain("604");
+    expect(card.classroomLabel).not.toContain("본원");
   });
 
   it("슬롯 강사 없으면 반 기본 강사로 셀 채움(수학식 단색)", () => {
