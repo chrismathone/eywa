@@ -1,6 +1,102 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { attendanceRate } from "@/lib/calc/attendance";
+
+const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+/** 일별 출결 처리 현황 — 그 요일 수업 반별 예정 학생수 vs 기록수(미처리 추적·완료율). ijw DailyAttendance 이식. */
+export type ClassProcessing = {
+  classId: string;
+  className: string;
+  subject: string;
+  teacherName: string | null;
+  expected: number; // 활성 enrollment 학생 수(예정)
+  recorded: number; // 기록된 학생 수
+  unprocessed: number; // 미처리
+  rate: number; // 완료율 0~100
+};
+
+export async function getDailyProcessingStatus(date: string): Promise<ClassProcessing[]> {
+  const supabase = await createClient();
+  const dow = new Date(`${date}T00:00:00`).getDay();
+  const dayEnum = DOW_ENUM[dow];
+
+  // 그 요일에 수업이 있는 반(중복 제거)
+  const { data: sched } = await supabase
+    .from("class_schedules")
+    .select("class_id")
+    .eq("day_of_week", dayEnum);
+  const classIds = [...new Set((sched ?? []).map((s) => s.class_id as string))];
+  if (classIds.length === 0) return [];
+
+  // 반 메타(활성만) — id 청크로(414 방지)
+  const classes = await fetchInChunks<{
+    id: string;
+    class_name: string;
+    subject: string;
+    is_active: boolean;
+    teacher: { display_name?: string } | { display_name?: string }[] | null;
+  }>(classIds, (chunk) =>
+    supabase
+      .from("classes")
+      .select("id, class_name, subject, is_active, teacher:teacher_id ( display_name )")
+      .in("id", chunk)
+      .eq("is_active", true),
+  );
+  const activeClassIds = classes.map((c) => c.id);
+  if (activeClassIds.length === 0) return [];
+
+  // 활성 enrollment(예정) + 그 날짜 기록(처리) — 둘 다 id 청크
+  const [enrollments, records] = await Promise.all([
+    fetchInChunks<{ class_id: string; student_id: string; start_date: string; end_date: string | null; on_hold: boolean }>(
+      activeClassIds,
+      (chunk) =>
+        supabase
+          .from("enrollments")
+          .select("class_id, student_id, start_date, end_date, on_hold")
+          .in("class_id", chunk)
+          .lte("start_date", date),
+    ),
+    fetchInChunks<{ class_id: string; student_id: string }>(activeClassIds, (chunk) =>
+      supabase
+        .from("attendance_records")
+        .select("class_id, student_id")
+        .eq("session_date", date)
+        .in("class_id", chunk),
+    ),
+  ]);
+
+  const expectedByClass = new Map<string, Set<string>>();
+  for (const e of enrollments) {
+    if (e.on_hold) continue;
+    if (e.end_date && e.end_date < date) continue;
+    (expectedByClass.get(e.class_id) ?? expectedByClass.set(e.class_id, new Set()).get(e.class_id)!).add(e.student_id);
+  }
+  const recordedByClass = new Map<string, Set<string>>();
+  for (const r of records) {
+    (recordedByClass.get(r.class_id) ?? recordedByClass.set(r.class_id, new Set()).get(r.class_id)!).add(r.student_id);
+  }
+
+  const rows: ClassProcessing[] = classes.map((c) => {
+    const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as { display_name?: string } | undefined;
+    const expected = expectedByClass.get(c.id)?.size ?? 0;
+    const recorded = recordedByClass.get(c.id)?.size ?? 0;
+    return {
+      classId: c.id,
+      className: c.class_name,
+      subject: c.subject,
+      teacherName: teacher?.display_name ?? null,
+      expected,
+      recorded,
+      unprocessed: Math.max(0, expected - recorded),
+      rate: expected > 0 ? Math.round((Math.min(recorded, expected) / expected) * 100) : 100,
+    };
+  });
+  // 미처리 많은 반 먼저(운영 우선순위), 동률이면 반명.
+  rows.sort((a, b) => b.unprocessed - a.unprocessed || a.className.localeCompare(b.className, "ko"));
+  return rows;
+}
 
 export type AttendanceStatus =
   | "present"

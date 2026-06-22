@@ -3,7 +3,11 @@ import { CheckCircle2, ClipboardCheck, Pencil } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getAttendanceForDate, type AttendanceRow } from "@/features/attendance/server/queries";
+import {
+  getAttendanceForDate,
+  getDailyProcessingStatus,
+  type AttendanceRow,
+} from "@/features/attendance/server/queries";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -46,7 +50,16 @@ export default async function AttendanceByDatePage({
   await requireAccess("attendance");
   const { date } = await params;
   const { saved } = await searchParams;
-  const records = await getAttendanceForDate(date);
+  const [records, processing] = await Promise.all([
+    getAttendanceForDate(date),
+    getDailyProcessingStatus(date),
+  ]);
+
+  // 처리 현황 집계 — 미처리 반·완료율(오늘 출결 누락 추적).
+  const pendingClasses = processing.filter((p) => p.unprocessed > 0);
+  const totalExpected = processing.reduce((s, p) => s + p.expected, 0);
+  const totalRecorded = processing.reduce((s, p) => s + Math.min(p.recorded, p.expected), 0);
+  const overallRate = totalExpected > 0 ? Math.round((totalRecorded / totalExpected) * 100) : 100;
 
   const groups = new Map<string, { className: string; subject: string; rows: AttendanceRow[] }>();
   for (const r of records) {
@@ -76,13 +89,81 @@ export default async function AttendanceByDatePage({
         </p>
       ) : null}
 
-      {records.length === 0 ? (
+      {/* 처리 현황 — 오늘 어느 반이 출결 미입력인지 추적(예정 학생 vs 기록). ijw DailyAttendance 이식. */}
+      {processing.length > 0 ? (
+        <section className="bg-card border-border space-y-4 rounded-lg border p-5">
+          <header className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="eyebrow">처리 현황</p>
+              <h2 className="text-foreground mt-0.5 text-[15px] font-bold">오늘 출결 입력 추적</h2>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground">
+                완료율{" "}
+                <span className={`num font-bold ${overallRate >= 100 ? "text-chart-2" : "text-foreground"}`}>
+                  {overallRate}%
+                </span>
+              </span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground">
+                미처리 반{" "}
+                <span className={`num font-bold ${pendingClasses.length > 0 ? "text-chart-4" : "text-chart-2"}`}>
+                  {pendingClasses.length}
+                </span>
+                /{processing.length}
+              </span>
+            </div>
+          </header>
+          <ul className="divide-border divide-y">
+            {processing.map((p) => (
+              <li key={p.classId} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {p.className}
+                    <span className="text-muted-foreground ml-1.5 text-xs font-normal">
+                      {p.subject}
+                      {p.teacherName ? ` · ${p.teacherName}` : ""}
+                    </span>
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="bg-bg-soft h-1.5 w-32 overflow-hidden rounded-full">
+                      <span
+                        className={`block h-full ${p.unprocessed === 0 ? "bg-chart-2" : "bg-chart-3"}`}
+                        style={{ width: `${p.rate}%` }}
+                      />
+                    </div>
+                    <span className="text-text-faint num text-[11px]">
+                      {p.recorded}/{p.expected}
+                    </span>
+                  </div>
+                </div>
+                {p.unprocessed > 0 ? (
+                  <span className="text-chart-4 bg-chart-4/10 border-chart-4/20 shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium">
+                    미처리 {p.unprocessed}
+                  </span>
+                ) : (
+                  <span className="text-chart-2 shrink-0 text-[11px]">완료</span>
+                )}
+                <Link
+                  href={`/attendance/${date}/${p.classId}`}
+                  className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs"
+                >
+                  <Pencil className="size-3" />
+                  입력
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {records.length === 0 && processing.length === 0 ? (
         <EmptyState
           icon={ClipboardCheck}
           title="이 날짜의 출석 기록이 없습니다"
           description="다른 날짜를 선택하거나 시드를 확인하세요."
         />
-      ) : (
+      ) : records.length === 0 ? null : (
         <>
           <div className="bg-card border-border grid grid-cols-2 gap-4 rounded-lg border p-5 sm:grid-cols-4">
             <Summary label="전체" value={total} unit="건" />
