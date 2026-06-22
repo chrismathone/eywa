@@ -648,6 +648,13 @@ export const invoices = pgTable(
     notes: text("notes"),
     dueDate: date("due_date"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    // 결제 상세(회계/세무 투명성, 0042a) — 결제수단·카드사·현금영수증·적립금·할인사유·청구일.
+    paymentMethod: text("payment_method"), // card/transfer/cash/other
+    cardCompany: text("card_company"),
+    cashReceiptNumber: text("cash_receipt_number"),
+    pointsUsed: numeric("points_used", { precision: 12, scale: 0 }).notNull().default("0"),
+    discountReason: text("discount_reason"),
+    billedAt: date("billed_at"),
     // 청구 시점의 학생 담임강사 id (학생 담임 변경 시에도 invoice는 불변)
     teacherSnapshotId: uuid("teacher_snapshot_id").references(() => users.id, {
       onDelete: "set null",

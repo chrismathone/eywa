@@ -29,6 +29,13 @@ export type InvoiceRow = {
   notes: string | null;
   lineItems: InvoiceLineItem[];
   teacherName: string | null;
+  // 결제 상세(0042a)
+  paymentMethod: string | null;
+  cardCompany: string | null;
+  cashReceiptNumber: string | null;
+  pointsUsed: number;
+  discountReason: string | null;
+  billedAt: string | null;
 };
 
 export type SortKey =
@@ -57,6 +64,7 @@ export async function getInvoicesForPeriod(
     .from("invoices")
     .select(
       `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
+       payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at,
        student:student_id ( id, name, grade, teacher:primary_teacher_id ( display_name ) )`,
     )
     .eq("period", periodKey);
@@ -96,6 +104,12 @@ export async function getInvoicesForPeriod(
       notes: r.notes ?? null,
       lineItems: (r.line_items as InvoiceLineItem[]) ?? [],
       teacherName: teacher?.display_name ?? null,
+      paymentMethod: (r as { payment_method?: string | null }).payment_method ?? null,
+      cardCompany: (r as { card_company?: string | null }).card_company ?? null,
+      cashReceiptNumber: (r as { cash_receipt_number?: string | null }).cash_receipt_number ?? null,
+      pointsUsed: Number((r as { points_used?: number }).points_used ?? 0),
+      discountReason: (r as { discount_reason?: string | null }).discount_reason ?? null,
+      billedAt: (r as { billed_at?: string | null }).billed_at ?? null,
     };
   });
 

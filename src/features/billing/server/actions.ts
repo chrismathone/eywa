@@ -42,6 +42,12 @@ export async function updateInvoicePayment(
   const amountDiscountRaw = String(formData.get("amountDiscount") ?? "0").replace(/[,\s]/g, "");
   const amountDiscount = Number(amountDiscountRaw) || 0;
   const notes = String(formData.get("notes") ?? "").trim() || null;
+  // 결제 상세(0042a). 결제수단=card일 때만 카드사 의미. 적립금은 숫자.
+  const paymentMethod = String(formData.get("paymentMethod") ?? "").trim() || null;
+  const cardCompany = String(formData.get("cardCompany") ?? "").trim() || null;
+  const cashReceiptNumber = String(formData.get("cashReceiptNumber") ?? "").trim() || null;
+  const pointsUsed = Number(String(formData.get("pointsUsed") ?? "0").replace(/[,\s]/g, "")) || 0;
+  const discountReason = String(formData.get("discountReason") ?? "").trim() || null;
 
   const supabase = await createClient();
   const { data: cur } = await supabase
@@ -71,6 +77,11 @@ export async function updateInvoicePayment(
       category,
       notes,
       paid_at: paidAt,
+      payment_method: paymentMethod,
+      card_company: cardCompany,
+      cash_receipt_number: cashReceiptNumber,
+      points_used: pointsUsed,
+      discount_reason: discountReason,
     })
     .eq("id", id);
 
@@ -151,6 +162,8 @@ export async function createInvoice(
   const amountDiscount = won(formData.get("amountDiscount"));
   let dueDate = String(formData.get("dueDate") ?? "").trim() || null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
+  const billedAt = String(formData.get("billedAt") ?? "").trim() || null;
+  const discountReason = String(formData.get("discountReason") ?? "").trim() || null;
 
   const fieldErrors: Record<string, string> = {};
   if (!studentId) fieldErrors.studentId = "학생을 선택해주세요";
@@ -178,6 +191,8 @@ export async function createInvoice(
     status: "unpaid",
     line_items: lineItems,
     due_date: dueDate,
+    billed_at: billedAt,
+    discount_reason: discountReason,
     notes,
   });
   if (error) {

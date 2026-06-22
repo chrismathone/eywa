@@ -40,6 +40,13 @@ const STATUS_COLOR: Record<string, string> = {
 
 const STATUS_ORDER = ["unpaid", "partial", "paid", "refunded", "void"] as const;
 
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  card: "카드",
+  transfer: "계좌이체",
+  cash: "현금",
+  other: "기타",
+};
+
 const KRW = new Intl.NumberFormat("ko-KR");
 function won(n: number) {
   return `${KRW.format(n)}원`;
@@ -304,7 +311,15 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                   </td>
                   <td className="num px-5 py-3 text-right text-xs">
                     {settledAt ? (
-                      <span className="text-muted-foreground">{settledAt}</span>
+                      <span className="text-muted-foreground">
+                        {settledAt}
+                        {r.paymentMethod ? (
+                          <span className="text-text-faint">
+                            {" "}
+                            · {PAYMENT_METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod}
+                          </span>
+                        ) : null}
+                      </span>
                     ) : (
                       <span className="text-muted-foreground">
                         기한 {r.dueDate ?? "—"}
@@ -394,6 +409,7 @@ function EditInvoiceDialog({
   );
   const [amountPaid, setAmountPaid] = useState(invoice.amountPaid);
   const [status, setStatus] = useState(invoice.status);
+  const [paymentMethod, setPaymentMethod] = useState(invoice.paymentMethod ?? "");
 
   const remaining = invoice.amountTotal - amountPaid;
 
@@ -481,6 +497,69 @@ function EditInvoiceDialog({
             <p className="text-muted-foreground text-xs">
               비워두면 수납액에 따라 미수/부분/완납 자동 설정
             </p>
+          </div>
+
+          {/* 결제 상세 (0042a) — 회계/세무 투명성 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-foreground block text-sm font-medium">결제수단</label>
+              <select
+                name="paymentMethod"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">미지정</option>
+                <option value="card">카드</option>
+                <option value="transfer">계좌이체</option>
+                <option value="cash">현금</option>
+                <option value="other">기타</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-foreground block text-sm font-medium">적립금 사용</label>
+              <input
+                name="pointsUsed"
+                type="number"
+                min="0"
+                step="1000"
+                defaultValue={invoice.pointsUsed}
+                className="border-input bg-background num w-full rounded-md border px-3 py-2 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          {paymentMethod === "card" ? (
+            <div className="space-y-1.5">
+              <label className="text-foreground block text-sm font-medium">카드사</label>
+              <input
+                name="cardCompany"
+                type="text"
+                defaultValue={invoice.cardCompany ?? ""}
+                placeholder="예: 신한"
+                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          ) : null}
+          {paymentMethod === "cash" ? (
+            <div className="space-y-1.5">
+              <label className="text-foreground block text-sm font-medium">현금영수증 번호</label>
+              <input
+                name="cashReceiptNumber"
+                type="text"
+                defaultValue={invoice.cashReceiptNumber ?? ""}
+                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          ) : null}
+          <div className="space-y-1.5">
+            <label className="text-foreground block text-sm font-medium">할인 사유</label>
+            <input
+              name="discountReason"
+              type="text"
+              defaultValue={invoice.discountReason ?? ""}
+              placeholder="선택"
+              className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
           </div>
 
           {state?.error ? (

@@ -98,8 +98,17 @@ function Dialog({
             </Field>
           </div>
 
-          <Field label="납부 기한">
-            <input name="dueDate" type="date" className={inputCls} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="청구일">
+              <input name="billedAt" type="date" className={inputCls} />
+            </Field>
+            <Field label="납부 기한">
+              <input name="dueDate" type="date" className={inputCls} />
+            </Field>
+          </div>
+
+          <Field label="할인 사유">
+            <input name="discountReason" type="text" className={inputCls} placeholder="예: 형제 할인 (선택)" />
           </Field>
 
           <Field label="메모">
