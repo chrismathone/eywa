@@ -86,6 +86,7 @@ export type ConsultationListRow = {
 export type ConsultationFilter = {
   month?: string | null; // "YYYY-MM" or null/undefined for all
   consultantId?: string | null; // UUID or null/undefined for all
+  q?: string | null; // 이름·전화·학교 텍스트 검색
 };
 
 function monthBounds(month: string): { startIso: string; endIso: string } {
@@ -117,6 +118,14 @@ export async function getEnrollmentConsultations(
   }
   if (filter?.consultantId) {
     q = q.eq("consultant_id", filter.consultantId);
+  }
+  if (filter?.q) {
+    // 이름·전화·학교는 enrollment_consultations에 직접 있어 학생 id 조인 불필요(학생상담보다 단순).
+    const safe = filter.q.trim().replace(/[(),]/g, " ");
+    if (safe)
+      q = q.or(
+        `prospect_name.ilike.%${safe}%,parent_phone.ilike.%${safe}%,prospect_school.ilike.%${safe}%`,
+      );
   }
 
   const { data } = await q;

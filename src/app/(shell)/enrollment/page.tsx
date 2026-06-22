@@ -32,17 +32,19 @@ const COLUMNS: {
 export default async function EnrollmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; consultant?: string }>;
+  searchParams: Promise<{ month?: string; consultant?: string; q?: string }>;
 }) {
   await requireAccess("enrollment");
-  const { month, consultant } = await searchParams;
+  const { month, consultant, q } = await searchParams;
   const selectedMonth = month ?? null;
   const selectedConsultant = consultant ?? null;
+  const searchQuery = q?.trim() || null;
 
   const [items, consultants] = await Promise.all([
     getEnrollmentConsultations({
       month: selectedMonth,
       consultantId: selectedConsultant,
+      q: searchQuery,
     }),
     getConsultantOptions(),
   ]);
@@ -51,7 +53,7 @@ export default async function EnrollmentPage({
   const enrolled = items.filter((i) => i.outcome === "enrolled").length;
   const conversionRate = items.length > 0 ? ((enrolled / items.length) * 100).toFixed(0) : "0";
 
-  const filterActive = !!selectedMonth || !!selectedConsultant;
+  const filterActive = !!selectedMonth || !!selectedConsultant || !!searchQuery;
 
   const columns: KanbanColumn[] = COLUMNS.map((col) => ({
     key: col.key,
@@ -76,6 +78,7 @@ export default async function EnrollmentPage({
       <KanbanFilters
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
+        searchQuery={searchQuery}
         consultants={consultants}
       />
 
