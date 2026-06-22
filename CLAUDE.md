@@ -214,6 +214,19 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### ijw→eywa 갭 전수 재비교 + Tier 1 이식 6건 (2026-06-22) — ✅ 게이트 그린 + 실검증
+ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 비교+검증, 거짓양성 제거) → confirmed 107건을 우선순위
+재분류(`docs/ijw-eywa-gap-2026-06-22.md`). "이미 구현(overstated 16)·의도적 제외 다수"를 빼면 진짜 이식 가치 ≈20건.
+그 중 **Tier 1(작고 임팩트 큼) 6건 구현**(항목별 1커밋, 미push):
+1. **등록상담 텍스트 검색**(이름/전화/학교) — 칸반만이던 enrollment에 `.or(ilike)` 검색(학생상담 패턴 이식, 학생id 조인 불요). 실검증 204→62.
+2. **출석 매트릭스 셀 메모 입력** — 저장·표시는 기존, 팝오버에 메모 input + `setAttendanceCell` note 파라미터(상태와 함께 저장).
+3. **반 색상 폼 배선** — `classes.bg_color/text_color`·시간표 통합뷰 소비처는 기존, 폼·createClass/updateClass 미배선이라 항상 과목색 폴백이던 것 연결. native color picker + text_color 휘도 자동(`color-utils.readableTextColor`).
+4. **회의록 제목 인라인수정 / TXT 다운로드 / 음성회의록 다시분석** — `updateMeetingTitle` + 제목 편집기 / 8섹션·전사 평문 Blob(`MeetingTxtButton`) / 완료 음성건도 재제출 버튼(status 리셋→webhook 'completed' 가드 자연통과, 8섹션 재생성).
+5. **수납 결제 상세 6필드**(결제수단·카드사·현금영수증·적립금·할인사유·청구일) — `0042a` alpha(invoices +6컬럼, dev적용, RLS 0004a 유지) + schema + createInvoice/updateInvoicePayment + 생성/수정 다이얼로그 + 표 결제수단 라벨. 실검증: card/신한 DB영속 + 부분납부 행에도 라벨.
+6. **견적→청구 전환** — 계산기 견적(`tuition_quotes`, student_id 없음)에서 `create-invoice-dialog`를 청구액·메모로 prefill해 열고 학생은 picker로 선택(Option B 저위험, createInvoice 재사용·신규액션/마이그 無).
+- 검증: typecheck0/lint0/test399/build✓ + 실브라우저(로그인, 항목1·5 E2E·항목3·4 렌더·콘솔0). 커밋 `0b4c1b7`~`1df1702`.
+- ⚠️ 남은 갭: Tier 2(등록상담 테이블뷰·성적 목표설정/코멘트·출석 일별 미처리추적·퇴원 연락처/worklist·강사 인수인계·휴가 관리자대시보드·대시보드 30일추이)·Tier 3(학생상담 AI녹음·강의실 자동배정·엑셀 import마법사·시간표 시나리오). 의도적 제외(Calendar/Gantt/Chatbot/MakeEdu/Contracts)는 비이식. ⚠️ 공통UX 비교는 워크플로우 실패(플레이스홀더)·픽셀 시각비교 미수행 — 후속.
+
 ### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
 사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
 다른 **여러 케이스**가 있어 요일×교시 미니그리드가 본질. (설계 변천: 전과목색오버뷰→단순카드그리드→**리치 그리드(최종)**.
