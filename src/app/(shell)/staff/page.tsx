@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, type LucideIcon } from "lucide-react";
+import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, CalendarClock, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -205,6 +205,16 @@ export default async function StaffPage({
             >
               <Wallet className="size-3.5" />
               월별 급여
+            </WindowLink>
+          ) : null}
+          {canManage ? (
+            <WindowLink
+              href="/staff/leaves"
+              title="휴가 관리"
+              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
+            >
+              <CalendarClock className="size-3.5" />
+              휴가 관리
             </WindowLink>
           ) : null}
           {canManage && user ? (

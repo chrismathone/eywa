@@ -239,6 +239,45 @@ export type LeaveRow = {
   approvedAt: string | null;
 };
 
+export type StaffLeaveRow = LeaveRow & { staffName: string; staffRole: string | null };
+
+/** 전 직원 휴가 — 관리자 일괄 검토용. 대기(미승인) 먼저, 그다음 최근 시작일순. */
+export async function getAllStaffLeaves(): Promise<StaffLeaveRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("staff_leaves")
+    .select(
+      `id, user_id, leave_type, starts_on, ends_on, reason,
+       approved_by, approved_at,
+       approver:approved_by ( display_name ),
+       staff:user_id ( display_name, job_title )`,
+    )
+    .order("approved_at", { ascending: true, nullsFirst: true })
+    .order("starts_on", { ascending: false });
+
+  return (data ?? []).map((r) => {
+    const approver = (Array.isArray(r.approver) ? r.approver[0] : r.approver) as
+      | { display_name?: string }
+      | undefined;
+    const staff = (Array.isArray(r.staff) ? r.staff[0] : r.staff) as
+      | { display_name?: string; job_title?: string | null }
+      | undefined;
+    return {
+      id: r.id,
+      userId: r.user_id,
+      leaveType: r.leave_type,
+      startsOn: r.starts_on,
+      endsOn: r.ends_on,
+      reason: r.reason,
+      approvedBy: r.approved_by,
+      approvedByName: approver?.display_name ?? null,
+      approvedAt: r.approved_at,
+      staffName: staff?.display_name ?? "?",
+      staffRole: staff?.job_title ?? null,
+    };
+  });
+}
+
 export async function getStaffLeaves(userId: string): Promise<LeaveRow[]> {
   const supabase = await createClient();
   const { data } = await supabase

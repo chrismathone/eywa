@@ -194,6 +194,7 @@ export async function approveLeave(
   if (error) return { error: error.message };
 
   if (userId) revalidatePath(`/staff/${userId}/leaves`);
+  revalidatePath("/staff/leaves");
   return undefined;
 }
 
