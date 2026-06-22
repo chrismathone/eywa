@@ -20,6 +20,14 @@ function hexToRgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+/** 배경 hex에 대비되는 글자색(#1a1f1c 또는 #ffffff) — sRGB 휘도 기준. 유효하지 않으면 빈 문자열. */
+export function readableTextColor(bgHex: string): string {
+  const rgb = hexToRgb(bgHex);
+  if (!rgb) return "";
+  const lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+  return lum > 0.6 ? "#1a1f1c" : "#ffffff";
+}
+
 /** hex + alpha → "rgba(r, g, b, a)". 유효하지 않으면 빈 문자열. */
 export function hexToRgba(hex: string, alpha: number): string {
   const rgb = hexToRgb(hex);

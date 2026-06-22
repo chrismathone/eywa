@@ -40,6 +40,7 @@ export type ClassFormDefaults = {
   classroomId: string | null;
   isActive: boolean;
   notes: string | null;
+  bgColor?: string | null;
   schedules: Schedule[];
 };
 
@@ -94,6 +95,8 @@ export function ClassForm({
   const periods = subjectWeekdayPeriods(subject, periodsConfig);
   // 담임도 상태로 — 그리드 셀이 담임 이름을 표시하고, 교시별 부담임 드롭다운의 "담임" 기본값으로 쓴다.
   const [teacherId, setTeacherId] = useState(defaults?.teacherId ?? "");
+  // 반 색상(시간표 통합뷰 헤더색) — 빈 문자열=미지정(과목색 폴백). 글자색은 서버가 휘도로 자동.
+  const [bgColor, setBgColor] = useState(defaults?.bgColor ?? "");
 
   const fieldErrs = state?.fieldErrors ?? {};
 
@@ -157,6 +160,33 @@ export function ClassForm({
               </option>
             ))}
           </select>
+        </Field>
+
+        <Field label="반 색상 (시간표 통합뷰)" className="sm:col-span-2">
+          <div className="flex items-center gap-3">
+            <input type="hidden" name="bgColor" value={bgColor} />
+            <input
+              type="color"
+              value={bgColor || "#1a5f3c"}
+              onChange={(e) => setBgColor(e.target.value)}
+              className="border-border bg-card size-9 cursor-pointer rounded-md border"
+              aria-label="반 배경색"
+            />
+            {bgColor ? (
+              <>
+                <span className="text-text-dim font-mono text-xs">{bgColor}</span>
+                <button
+                  type="button"
+                  onClick={() => setBgColor("")}
+                  className="text-text-dim hover:text-foreground text-xs underline"
+                >
+                  색 없음(과목색)
+                </button>
+              </>
+            ) : (
+              <span className="text-text-faint text-xs">미지정 — 과목 기본색 사용</span>
+            )}
+          </div>
         </Field>
 
         <Field label="활성 상태" className="sm:col-span-2">

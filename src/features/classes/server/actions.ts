@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { isHexColor, readableTextColor } from "@/lib/color-utils";
 
 export type ClassFormState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
@@ -36,6 +37,9 @@ async function allowedSubjectSet(): Promise<ReadonlySet<string>> {
 function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
   const subject = get("subject") || "math";
+  const bgRaw = get("bgColor");
+  // 반 헤더색(시간표 통합뷰 소비) — 유효 hex만, 없으면 null=과목색 폴백. 글자색은 휘도로 자동.
+  const bgColor = isHexColor(bgRaw) ? bgRaw : null;
   return {
     className: get("className"),
     // 허용 집합(설정 과목 ∪ 레거시)에 없는 값만 'etc'로 강등(쓰레기 입력 가드).
@@ -44,6 +48,8 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     classroomId: get("classroomId") || null,
     notes: get("notes") || null,
     isActive: get("isActive") !== "false",
+    bgColor,
+    textColor: bgColor ? readableTextColor(bgColor) || null : null,
     schedules: parseSchedules(formData),
   };
 }
@@ -113,6 +119,8 @@ export async function createClass(
       classroom_id: input.classroomId,
       is_active: input.isActive,
       notes: input.notes,
+      bg_color: input.bgColor,
+      text_color: input.textColor,
     })
     .select("id")
     .single();
@@ -184,6 +192,8 @@ export async function updateClass(
       classroom_id: input.classroomId,
       is_active: input.isActive,
       notes: input.notes,
+      bg_color: input.bgColor,
+      text_color: input.textColor,
     })
     .eq("id", id);
 

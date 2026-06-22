@@ -56,6 +56,7 @@ export type ClassDetail = {
   classroomName: string | null;
   isActive: boolean;
   notes: string | null;
+  bgColor: string | null;
   scheduleSlots: ClassScheduleSlot[];
   studentCount: number;
 };
@@ -349,7 +350,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const { data: c } = await supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, notes,
+      `id, class_name, subject, is_active, notes, bg_color,
        teacher_id, classroom_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
@@ -391,6 +392,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     classroomName: room?.name ?? null,
     isActive: c.is_active,
     notes: c.notes,
+    bgColor: (c as { bg_color?: string | null }).bg_color ?? null,
     scheduleSlots: (schedules ?? []).map((s) => ({
       id: s.id,
       dayOfWeek: s.day_of_week as DayOfWeek,
