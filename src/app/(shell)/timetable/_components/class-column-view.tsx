@@ -55,8 +55,8 @@ export function ClassColumnView({
               </div>
             </WindowLink>
 
-            {/* 학생 명단 */}
-            <div className="bg-card flex-1 overflow-y-auto p-1.5" style={{ maxHeight: 240 }}>
+            {/* 학생 명단 — 카드별 내부 스크롤 없이 학생 수만큼 자란다(페이지 세로 스크롤이 전체를 담당). */}
+            <div className="bg-card flex-1 p-1.5">
               {c.activeCount === 0 ? (
                 <div className="text-text-faint px-1 py-3 text-center text-[11px]">재원생 없음</div>
               ) : (
