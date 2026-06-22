@@ -124,7 +124,7 @@ export default async function TimetablePage({
           title="해당 과목의 시간표가 없습니다"
         />
       ) : isIntegrated ? (
-        <ClassColumnView slots={slots} subjectMaps={subjectMaps} />
+        <ClassColumnView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} />
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">

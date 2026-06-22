@@ -1,10 +1,11 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
 import {
-  buildClassCards,
+  buildClassCardGroups,
   type ClassColumnSlot,
   type ClassColumnStudent,
 } from "@/features/timetable/lib/class-columns";
+import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 
 /** 학생 행 색 — 신입=빨강·전입=초록·그 외 기본(ClassCell 톤과 동일). */
 function rosterTone(s: ClassColumnStudent): string {
@@ -14,65 +15,77 @@ function rosterTone(s: ClassColumnStudent): string {
 }
 
 /**
- * 통합뷰 = 반(class)을 단위로 본다. 한 과목의 반을 **반응형 카드 그리드**로(좁으면 1열·넓으면 N열, auto-fill).
- * 각 카드: 과목색 헤더(반명·스케줄·강사·강의실, 클릭=반 정보 창) + 학생 명단(신입 빨강·전입 초록, 클릭=학생 창) + 정원.
- * 읽기전용(편집은 기본뷰). 과목 전환은 상위 툴바의 과목 칩으로(통합뷰도 과목별).
- * ⚠️ 옛 시작교시 그룹 + 미니그리드는 폐기 — 분절·빈 노이즈·가로스크롤로 가독성이 나빴다(class-columns.ts 주석 참고).
+ * 통합뷰 = 반(class)을 단위로, **시작 교시별 섹션**으로 정리. 각 섹션은 **반응형 카드 그리드**(좁으면 1열·넓으면 N열).
+ * 교시 정렬은 평일 기준, 주말 전용 수업은 "주말" 섹션으로 따로. 카드 = 과목색 헤더(반명·스케줄·강사·강의실,
+ * 클릭=반 창) + 학생 명단(신입 빨강·전입 초록, 클릭=학생 창) + 정원. 읽기전용(편집은 기본뷰). 과목칩=과목 전환.
+ * ⚠️ 옛 카드별 미니그리드·박스별 가로스크롤·중복 교시 라벨은 폐기(class-columns.ts 주석 참고).
  */
 export function ClassColumnView({
   slots,
   subjectMaps,
+  config,
 }: {
   slots: ClassColumnSlot[];
   subjectMaps: SubjectMaps;
+  config: PeriodsConfig;
 }) {
-  const cards = buildClassCards(slots);
+  const groups = buildClassCardGroups(slots, config);
+  const total = groups.reduce((n, g) => n + g.cards.length, 0);
   const soft = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="text-text-faint mb-2 text-right font-mono text-[11px]">
-        읽기 전용 · {cards.length}개 수업 · 편집은 기본뷰
+    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto">
+      <div className="text-text-faint text-right font-mono text-[11px]">
+        읽기 전용 · {total}개 수업 · 편집은 기본뷰
       </div>
-      <div className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
-        {cards.map((c) => (
-          <div
-            key={c.classId}
-            className="border-line bg-card shadow-card flex flex-col overflow-hidden rounded-xl border"
-          >
-            {/* 헤더 — 반명·스케줄·강사·강의실 (클릭=반 정보 창), 과목색 틴트 */}
-            <WindowLink
-              href={`/classes/${c.classId}`}
-              title={c.className}
-              ariaLabel={`${c.className} 반 정보`}
-              className={`block border-line border-b px-3 py-2 transition hover:brightness-95 ${soft}`}
-            >
-              <div className="truncate text-[14px] font-bold">{c.className}</div>
-              <div className="mt-0.5 text-[11px] opacity-80">{c.scheduleLabel}</div>
-              <div className="truncate text-[11px] opacity-70">
-                {c.teacherName ?? "—"}
-                {c.classroomName ? ` · ${c.classroomName}` : ""}
-              </div>
-            </WindowLink>
-
-            {/* 학생 명단 — 카드별 내부 스크롤 없이 학생 수만큼 자란다(페이지 세로 스크롤이 전체를 담당). */}
-            <div className="bg-card flex-1 p-1.5">
-              {c.activeCount === 0 ? (
-                <div className="text-text-faint px-1 py-3 text-center text-[11px]">재원생 없음</div>
-              ) : (
-                c.students
-                  .filter((s) => s.status === "active")
-                  .map((s, i) => <RosterRow key={s.studentId ?? `s-${i}`} s={s} />)
-              )}
-            </div>
-
-            {/* 정원 */}
-            <div className="text-text-faint border-line border-t px-3 py-1 text-right font-mono text-[11px]">
-              {c.activeCount}명
-            </div>
+      {groups.map((g) => (
+        <section key={g.key}>
+          {/* 섹션 헤더 — 시작 교시(평일 기준) / 주말 */}
+          <div className="border-line mb-2 flex items-center gap-2 border-b pb-1">
+            <span className="text-foreground text-[13px] font-bold">{g.label}</span>
+            <span className="text-text-faint font-mono text-[11px]">{g.cards.length}개 수업</span>
           </div>
-        ))}
-      </div>
+          <div className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
+            {g.cards.map((c) => (
+              <div
+                key={c.classId}
+                className="border-line bg-card shadow-card flex flex-col overflow-hidden rounded-xl border"
+              >
+                {/* 헤더 — 반명·스케줄·강사·강의실 (클릭=반 정보 창), 과목색 틴트 */}
+                <WindowLink
+                  href={`/classes/${c.classId}`}
+                  title={c.className}
+                  ariaLabel={`${c.className} 반 정보`}
+                  className={`block border-line border-b px-3 py-2 transition hover:brightness-95 ${soft}`}
+                >
+                  <div className="truncate text-[14px] font-bold">{c.className}</div>
+                  <div className="mt-0.5 text-[11px] opacity-80">{c.scheduleLabel}</div>
+                  <div className="truncate text-[11px] opacity-70">
+                    {c.teacherName ?? "—"}
+                    {c.classroomName ? ` · ${c.classroomName}` : ""}
+                  </div>
+                </WindowLink>
+
+                {/* 학생 명단 — 카드별 내부 스크롤 없이 학생 수만큼 자란다(페이지 세로 스크롤이 전체를 담당). */}
+                <div className="bg-card flex-1 p-1.5">
+                  {c.activeCount === 0 ? (
+                    <div className="text-text-faint px-1 py-3 text-center text-[11px]">재원생 없음</div>
+                  ) : (
+                    c.students
+                      .filter((s) => s.status === "active")
+                      .map((s, i) => <RosterRow key={s.studentId ?? `s-${i}`} s={s} />)
+                  )}
+                </div>
+
+                {/* 정원 */}
+                <div className="text-text-faint border-line border-t px-3 py-1 text-right font-mono text-[11px]">
+                  {c.activeCount}명
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
