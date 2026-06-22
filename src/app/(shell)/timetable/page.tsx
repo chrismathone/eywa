@@ -1,24 +1,13 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { Columns3, LayoutGrid, CalendarOff } from "lucide-react";
-import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
-import {
-  getWeeklyScheduleWithStudents,
-  type ScheduleSlotWithStudents,
-} from "@/features/timetable/server/queries";
-import {
-  slotPeriodRow,
-  settingsToPeriodsConfig,
-  type DayOfWeek,
-  type PeriodRow,
-  type PeriodsConfig,
-  type TimetableSubject,
-} from "@/features/timetable/lib/periods";
+import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
+import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { IntegratedCell } from "./_components/integrated-cell";
+import { ClassColumnView } from "./_components/class-column-view";
 import {
   TimetableEditProvider,
   TimetableEditControls,
@@ -30,19 +19,9 @@ import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 export const metadata = { title: "시간표 — eywa" };
 
 type ViewMode = "basic" | "integrated";
-// 과목별 교시 체계가 달라(수학 8교시·영어 10교시·주말 시간단위) "전체"는 없다 —
-// 무조건 한 과목 선택. 과목 키·순서·라벨은 전부 학원설정(operations.subjects) 단일 소스(하드코딩 금지) —
-// 데이터에 실제 존재하는 과목만 칩으로 노출.
-
-const DAYS: { key: string; label: string }[] = [
-  { key: "mon", label: "월" },
-  { key: "tue", label: "화" },
-  { key: "wed", label: "수" },
-  { key: "thu", label: "목" },
-  { key: "fri", label: "금" },
-  { key: "sat", label: "토" },
-  { key: "sun", label: "일" },
-];
+// 둘 다 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).
+// 통합뷰 = 반=단위 반응형 카드 그리드(반 카드: 헤더·학생명단·정원, 읽기전용 — 한눈에 반 단위로 본다).
+// 과목 키·순서·라벨·색은 전부 학원설정(operations.subjects) 단일 소스(하드코딩 금지).
 
 export default async function TimetablePage({
   searchParams,
@@ -70,18 +49,17 @@ export default async function TimetablePage({
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
 
-  // "N명 등록" = 재원만 합산(대기·퇴원은 셀 섹션으로만 표시 — 등록 인원 부풀림 방지).
-  const totalStudents = slots.reduce(
-    (sum, x) => sum + x.students.filter((st) => (st.status ?? "active") === "active").length,
-    0,
-  );
+  // "N명 등록" = 재원만 합산(대기·퇴원은 셀 섹션으로만 표시 — 등록 인원 부풀림 방지). 두 뷰 다 과목별.
+  const isActive = (st: { status?: string }) => (st.status ?? "active") === "active";
+  const isIntegrated = view === "integrated";
+  const totalStudents = slots.reduce((sum, x) => sum + x.students.filter(isActive).length, 0);
 
   return (
     <TimetableEditProvider>
       <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
-        {/* 과목 chip */}
+        {/* 과목 chip — 두 뷰 다 과목별(클릭 = 과목 전환) */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">과목</span>
           {available.map((k) => (
@@ -98,7 +76,6 @@ export default async function TimetablePage({
             </Link>
           ))}
         </div>
-
         <span className="bg-line h-4 w-px" aria-hidden />
 
         {/* 뷰 토글 */}
@@ -130,7 +107,8 @@ export default async function TimetablePage({
           총 {slots.length}슬롯 · {totalStudents}명 등록
         </span>
 
-        {slots.length > 0 ? (
+        {/* 편집 컨트롤 — 기본뷰만(통합뷰는 읽기전용) */}
+        {!isIntegrated && slots.length > 0 ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <TimetableEditControls />
@@ -145,14 +123,12 @@ export default async function TimetablePage({
           icon={() => <CalendarOff size={32} strokeWidth={1.5} />}
           title="해당 과목의 시간표가 없습니다"
         />
+      ) : isIntegrated ? (
+        <ClassColumnView slots={slots} subjectMaps={subjectMaps} />
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">
-            {view === "basic" ? (
-              <WeekdayGroupTables slots={slots} config={periodsConfig} />
-            ) : (
-              <IntegratedView slots={slots} days={DAYS} config={periodsConfig} />
-            )}
+            <WeekdayGroupTables slots={slots} config={periodsConfig} />
           </div>
         </TimetableDndArea>
       )}
@@ -169,104 +145,3 @@ function buildHref(view: ViewMode, subject: string, defaultSubject: string): str
   return q ? `/timetable?${q}` : "/timetable";
 }
 
-// ─────────────────── 통합뷰 — 요일 × 교시(과목 교시표) + 다중 수업 ───────────────────
-
-function IntegratedView({
-  slots,
-  days,
-  config,
-}: {
-  slots: ScheduleSlotWithStudents[];
-  days: { key: string; label: string }[];
-  config: PeriodsConfig;
-}) {
-  const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
-  const rowOf = (s: ScheduleSlotWithStudents) =>
-    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek, config);
-
-  const rowMap = new Map<string, PeriodRow>();
-  for (const s of slots) {
-    const r = rowOf(s);
-    if (!rowMap.has(r.key)) rowMap.set(r.key, r);
-  }
-  const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
-
-  // 표시할 요일 = 데이터에 실제 있는 요일만(빈 컬럼 방지)
-  const present = new Set(slots.map((s) => s.dayOfWeek));
-  const cols = days.filter((d) => present.has(d.key));
-
-  // (day, period) → slots
-  const cell = new Map<string, ScheduleSlotWithStudents[]>();
-  for (const s of slots) {
-    const k = `${s.dayOfWeek}::${rowOf(s).key}`;
-    const list = cell.get(k) ?? [];
-    list.push(s);
-    cell.set(k, list);
-  }
-
-  return (
-    <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border">
-      <table className="min-w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="bg-bg-soft border-line sticky left-0 z-10 w-[100px] border-b border-r p-3 text-left">
-              <span className="micro">교시</span>
-            </th>
-            {cols.map((d) => (
-              <th
-                key={d.key}
-                className={`${weekdayTint(d.key)} border-line min-w-[200px] border-b border-r px-3 py-2.5 text-center`}
-              >
-                <span className="text-foreground text-[13px] font-bold">{d.label}</span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key}>
-              <td className="bg-bg-soft border-line text-foreground sticky left-0 z-10 border-b border-r px-3 py-3 align-top text-[12px] font-bold whitespace-nowrap">
-                {row.label}
-                <div className="text-text-faint mt-1 font-mono text-[10px]">{row.time}</div>
-              </td>
-              {cols.map((d) => {
-                const list = (cell.get(`${d.key}::${row.key}`) ?? [])
-                  .slice()
-                  .sort((a, b) => a.startTime.localeCompare(b.startTime));
-                return (
-                  <td
-                    key={`${d.key}-${row.key}`}
-                    className={`border-line border-b border-r p-2 align-top ${
-                      list.length === 0 ? "bg-bg-soft/60" : ""
-                    }`}
-                  >
-                    {list.length === 0 ? null : <IntegratedCell slots={list} />}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </DragScrollArea>
-  );
-}
-
-/** 요일 컬러 밴드 — ijw식 요일 그룹(월목/화금/수/주말) 색 구분. 헤더 배경만 틴트(셀은 과목색 유지). */
-function weekdayTint(dayKey: string): string {
-  switch (dayKey) {
-    case "mon":
-    case "thu":
-      return "bg-blue-soft";
-    case "tue":
-    case "fri":
-      return "bg-purple-soft";
-    case "wed":
-      return "bg-primary-soft";
-    case "sat":
-    case "sun":
-      return "bg-amber-soft";
-    default:
-      return "bg-bg-soft";
-  }
-}

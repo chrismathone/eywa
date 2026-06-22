@@ -214,6 +214,28 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 통합뷰 = 반(class) 단위 반응형 카드 그리드로 최종 재구현 (2026-06-22) — ✅ 검증 완료
+사용자 지적: eywa "통합뷰"가 단일 과목 요일×교시(기본뷰와 중복)였다. **설계가 3번 바뀌었다(전부 폐기 후 최종형):**
+① 전과목 색 오버뷰(ijw `AllSubjectsTimetable`/excel) → 의도 아님. ② ijw `EnglishClassTab`식 **반=열 리치뷰**(시작교시
+그룹 박스 + 카드별 요일×교시 미니그리드) → **보기 나빴음**. ③ **최종 = 반 단위 반응형 카드 그리드**.
+- **②를 폐기한 이유(측정 진단)**: ⓐ 시작교시 그룹화가 화면을 박스 9개로 분절(외톨이 "1개 수업" 박스 5개 + 평일
+  교시군 m-와 주말 w-가 같은 "N교시" 라벨을 공유해 `1교시 시작` 박스가 **중복**), ⓑ 카드마다 반복되는 요일×교시
+  미니그리드가 **절반이 빈 칸**(892칸 중 449칸만 채워짐 — 정보는 이미 스케줄 라벨에 있는데 노이즈), ⓒ 좁은 188px 카드 +
+  박스별 가로스크롤(최대 그룹 4390px, 28%만 노출)로 한눈에 안 들어옴. = 기본뷰의 강점(단일격자·고정교시축·넉넉한 셀)을 다 잃음.
+- **③ 최종 = 반응형 카드 그리드**: 한 과목의 반을 **반 카드**로(`grid-template-columns: repeat(auto-fill,minmax(240px,1fr))`
+  → 좁으면 1열·넓으면 N열, 창=iframe이라 창 폭에 라이브 반응). 카드 = 과목색 헤더(반명·스케줄 `월·수·목 14:30~16:20`·강사·강의실,
+  클릭=반 창) + 학생 명단(신입 빨강·전입 초록, 클릭=학생 창) + 정원. **시작시각순→반명순 정렬, 그룹 분절 없음.**
+  교시 축·미니그리드 폐기(②의 노이즈 제거). 읽기전용(편집은 기본뷰). 색은 과목색 하나로 통일(②의 과목색↔강사색 충돌 제거).
+- **과목칩은 양쪽 뷰에 노출·클릭=과목 전환**(통합뷰도 과목별).
+- 신규/변경: 순수함수 [`class-columns.ts`](src/features/timetable/lib/class-columns.ts)(`buildClassCards`, +test 4) +
+  서버 컴포넌트 [`class-column-view.tsx`](<src/app/(shell)/timetable/_components/class-column-view.tsx>)(반응형 카드 그리드).
+  page.tsx: 통합=ClassColumnView(과목별 slots)·과목칩 양쪽·편집은 기본뷰만. 제거: ②의 시작교시 그룹/미니그리드/`teacherColor`
+  + 그 전 1차물(`integrated.ts`·`all-subjects-grid.tsx`)·단일과목 `IntegratedView`·`integrated-cell.tsx`.
+- 검증: typecheck0/lint0/test(class-columns 4)/build✓. **데스크톱 실브라우저**: 통합뷰 수학 **67개 반 카드·4열 자동배치**
+  (카드 303px)·학생링크 422·반링크 67·미니그리드 0칸·그룹박스 0개·박스별 가로스크롤 0·에러 0 / 기본뷰 현행 그대로(요일그룹밴드·학생명단 618).
+- ⚠️ 후속(미세): 카드 스케줄 라벨이 요일마다 시간이 다르면 전체 min~max로 넓게 표시됨(예 영어 `10:00~22:00`).
+  영어 레벨 배너(Phonics→…)·영문 이름은 eywa 데이터에 없어 미표시(데이터 생기면 추가).
+
 ### 쿼리 성능/정합 2차 — 멀티에이전트 전수 감사 + 측정 기반 픽스 6건 (2026-06-20)
 대시보드 경량화에 이어 **전 feature 쿼리/페이지를 멀티에이전트로 전수 감사**(16 feature, 42 agent — 각 finding을
 적대 검증) → "전건 fetch + JS 집계(PostgREST ~1000행 silent 절단, #54)"·"대량 `.in()`(414, #53)"·"직렬 await"를
@@ -517,7 +539,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 | 메뉴 | 데이터 | 핵심 위젯 |
 |---|---|---|
 | 대시보드 (`/dashboard`) | dashboard 9개 쿼리 | 김수진 인사말 + KPI 4 + Timeline(1.55fr) + Announcements(1fr) + 7일 추세 |
-| 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **과목 단일선택(기본 수학)** + 기본뷰(요일그룹밴드 월목/화금/수 + 주말 별도판, 과목별 실교시, 같은반 2D병합, 엑셀격자) / 통합뷰(요일×교시) + 셀 학생 세로명단(신입·전입색). [`docs/ijw-feature-port.md`] |
+| 시간표 (`/timetable`) | `class_schedules` + `enrollments` + `students` | **과목 단일선택(기본 수학)** + 기본뷰(요일그룹밴드 월목/화금/수 + 주말 별도판, 과목별 실교시, 같은반 2D병합, 엑셀격자) / 통합뷰(반 단위 반응형 카드 그리드 — 반 카드: 헤더·학생명단·정원, 읽기전용) + 셀 학생 세로명단(신입·전입색). [`docs/ijw-feature-port.md`] |
 | 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
 | 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
 | 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill (상세 성적탭에 **레벨테스트** 섹션) |
