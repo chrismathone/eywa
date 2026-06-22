@@ -9,6 +9,7 @@ import {
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 import { EnrollmentKanban, type KanbanColumn } from "./_components/enrollment-kanban";
+import { EnrollmentTable } from "./_components/enrollment-table";
 
 export const metadata = { title: "등록상담 — eywa" };
 
@@ -32,18 +33,27 @@ const COLUMNS: {
 export default async function EnrollmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; consultant?: string; q?: string }>;
+  searchParams: Promise<{
+    month?: string;
+    consultant?: string;
+    q?: string;
+    outcome?: string;
+    view?: string;
+  }>;
 }) {
   await requireAccess("enrollment");
-  const { month, consultant, q } = await searchParams;
+  const { month, consultant, q, outcome, view: viewParam } = await searchParams;
   const selectedMonth = month ?? null;
   const selectedConsultant = consultant ?? null;
+  const selectedOutcome = outcome ?? null;
   const searchQuery = q?.trim() || null;
+  const view: "kanban" | "table" = viewParam === "table" ? "table" : "kanban";
 
   const [items, consultants] = await Promise.all([
     getEnrollmentConsultations({
       month: selectedMonth,
       consultantId: selectedConsultant,
+      outcome: selectedOutcome,
       q: searchQuery,
     }),
     getConsultantOptions(),
@@ -53,7 +63,7 @@ export default async function EnrollmentPage({
   const enrolled = items.filter((i) => i.outcome === "enrolled").length;
   const conversionRate = items.length > 0 ? ((enrolled / items.length) * 100).toFixed(0) : "0";
 
-  const filterActive = !!selectedMonth || !!selectedConsultant || !!searchQuery;
+  const filterActive = !!selectedMonth || !!selectedConsultant || !!selectedOutcome || !!searchQuery;
 
   const columns: KanbanColumn[] = COLUMNS.map((col) => ({
     key: col.key,
@@ -78,7 +88,9 @@ export default async function EnrollmentPage({
       <KanbanFilters
         selectedMonth={selectedMonth}
         selectedConsultant={selectedConsultant}
+        selectedOutcome={selectedOutcome}
         searchQuery={searchQuery}
+        view={view}
         consultants={consultants}
       />
 
@@ -87,6 +99,8 @@ export default async function EnrollmentPage({
           icon={() => <UserPlus size={32} strokeWidth={1.5} />}
           title="진행 중인 상담이 없습니다"
         />
+      ) : view === "table" ? (
+        <EnrollmentTable rows={items} />
       ) : (
         <EnrollmentKanban columns={columns} />
       )}

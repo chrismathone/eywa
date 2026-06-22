@@ -2,20 +2,11 @@
 
 import { useState } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
+import { OUTCOME_PILL } from "./outcome-meta";
 
 const COLUMN_CAP = 8;
-
-const OUTCOME_PILL: Record<string, { label: string; color: PillColor }> = {
-  pending: { label: "대기", color: "amber" },
-  scheduled: { label: "예약", color: "amber" },
-  consulted: { label: "상담완료", color: "blue" },
-  ai_done: { label: "AI 완료", color: "primary" },
-  enrolled: { label: "등록", color: "primary" },
-  declined: { label: "거절", color: "neutral" },
-  no_show: { label: "노쇼", color: "rose" },
-};
 
 function daysSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));

@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, LayoutGrid, List } from "lucide-react";
 import { FilterSelect } from "@/components/filter-select";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
+import { OUTCOME_OPTIONS } from "./outcome-meta";
 
 type Props = {
   selectedMonth: string | null;
   selectedConsultant: string | null;
+  selectedOutcome: string | null;
   searchQuery: string | null;
+  view: "kanban" | "table";
   consultants: { id: string; name: string }[];
 };
 
@@ -31,17 +34,38 @@ function currentMonthKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function buildQuery(month: string | null, consultant: string | null, q: string | null): string {
+function buildQuery(p: {
+  month: string | null;
+  consultant: string | null;
+  outcome: string | null;
+  q: string | null;
+  view: "kanban" | "table";
+}): string {
   const params = new URLSearchParams();
-  if (month) params.set("month", month);
-  if (consultant) params.set("consultant", consultant);
-  if (q) params.set("q", q);
+  if (p.month) params.set("month", p.month);
+  if (p.consultant) params.set("consultant", p.consultant);
+  if (p.outcome) params.set("outcome", p.outcome);
+  if (p.q) params.set("q", p.q);
+  if (p.view === "table") params.set("view", "table");
   const s = params.toString();
   return s ? `?${s}` : "";
 }
 
-export function KanbanFilters({ selectedMonth, selectedConsultant, searchQuery, consultants }: Props) {
+export function KanbanFilters({
+  selectedMonth,
+  selectedConsultant,
+  selectedOutcome,
+  searchQuery,
+  view,
+  consultants,
+}: Props) {
   const displayMonth = selectedMonth ?? currentMonthKey();
+  const base = {
+    consultant: selectedConsultant,
+    outcome: selectedOutcome,
+    q: searchQuery,
+    view,
+  };
   const prevMonth = shiftMonth(displayMonth, -1);
   const nextMonth = shiftMonth(displayMonth, 1);
 
@@ -51,7 +75,7 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, searchQuery, 
       <div className="flex items-center gap-1.5">
         <span className="text-muted-foreground shrink-0 text-xs">월</span>
         <Link
-          href={`/enrollment${buildQuery(prevMonth, selectedConsultant, searchQuery)}`}
+          href={`/enrollment${buildQuery({ ...base, month: prevMonth })}`}
           className="border-border hover:bg-accent/30 inline-flex size-7 items-center justify-center rounded-sm border text-xs"
           aria-label="이전 달"
         >
@@ -61,14 +85,14 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, searchQuery, 
           {formatMonth(displayMonth)}
         </span>
         <Link
-          href={`/enrollment${buildQuery(nextMonth, selectedConsultant, searchQuery)}`}
+          href={`/enrollment${buildQuery({ ...base, month: nextMonth })}`}
           className="border-border hover:bg-accent/30 inline-flex size-7 items-center justify-center rounded-sm border text-xs"
           aria-label="다음 달"
         >
           ▶
         </Link>
         <Link
-          href={`/enrollment${buildQuery(null, selectedConsultant, searchQuery)}`}
+          href={`/enrollment${buildQuery({ ...base, month: null })}`}
           className={`ml-1 rounded-md border px-2 py-0.5 text-xs transition ${
             !selectedMonth
               ? "border-foreground bg-foreground text-background font-medium"
@@ -92,10 +116,54 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, searchQuery, 
         />
       </div>
 
-      {/* 이름·전화·학교 검색 (월/상담사 hidden 보존, page 리셋) */}
+      {/* 진행 상태 dropdown (고급 필터) */}
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground shrink-0 text-xs">상태</span>
+        <FilterSelect
+          paramName="outcome"
+          value={selectedOutcome}
+          options={OUTCOME_OPTIONS}
+          ariaLabel="진행 상태 필터"
+          className="w-32"
+        />
+      </div>
+
+      {/* 뷰 토글 — 칸반 ↔ 목록 */}
+      <div className="border-border inline-flex items-center gap-0.5 rounded-md border p-0.5">
+        <Link
+          href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "kanban" })}`}
+          aria-label="칸반 보기"
+          className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition ${
+            view === "kanban"
+              ? "bg-foreground text-background font-medium"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <LayoutGrid className="size-3.5" />
+          칸반
+        </Link>
+        <Link
+          href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "table" })}`}
+          aria-label="목록 보기"
+          className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition ${
+            view === "table"
+              ? "bg-foreground text-background font-medium"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <List className="size-3.5" />
+          목록
+        </Link>
+      </div>
+
+      {/* 이름·전화·학교 검색 (월/상담사/상태/뷰 hidden 보존, page 리셋) */}
       <form action="/enrollment" method="get" className="ml-auto flex items-center gap-2">
         {selectedMonth ? <input type="hidden" name="month" value={selectedMonth} /> : null}
-        {selectedConsultant ? <input type="hidden" name="consultant" value={selectedConsultant} /> : null}
+        {selectedConsultant ? (
+          <input type="hidden" name="consultant" value={selectedConsultant} />
+        ) : null}
+        {selectedOutcome ? <input type="hidden" name="outcome" value={selectedOutcome} /> : null}
+        {view === "table" ? <input type="hidden" name="view" value="table" /> : null}
         <div className="border-border bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
           <EyIcon name="search" size={13} />
           <input
@@ -122,4 +190,3 @@ export function KanbanFilters({ selectedMonth, selectedConsultant, searchQuery, 
     </div>
   );
 }
-
