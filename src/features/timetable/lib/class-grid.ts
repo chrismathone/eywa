@@ -5,6 +5,7 @@
 // ⚠️ server-only 금지 — 클라(rich-card-group)도 import. 순수·plain만.
 import {
   slotPeriodRow,
+  subjectPeriodRows,
   enumDayToKo,
   type DayOfWeek,
   type PeriodsConfig,
@@ -71,8 +72,10 @@ export type RichCardGroup = {
 };
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const WEEKDAY_DAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
 const WEEKEND_ORDER = 100000;
+const GRID_MIN = 5; // 미니그리드 기본 크기 — 평일 섹션은 항상 5요일(월~금) × 5교시(섹션 시작부터).
 
 /** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
 function shortRoom(room: string): string {
@@ -160,20 +163,49 @@ export function buildRichCardGroups(slots: GridSlot[], config: PeriodsConfig): R
 
   return [...groupMap.values()]
     .map((cs) => {
-      const rowByOrder = new Map<number, GridPeriodRow>();
-      const daySet = new Set<DayOfWeek>();
-      for (const c of cs) {
-        for (const r of c.periodRows) if (!rowByOrder.has(r.order)) rowByOrder.set(r.order, r);
-        for (const k of Object.keys(c.cells)) daySet.add(k.split(":")[1] as DayOfWeek);
-      }
       cs.sort((a, b) => a.className.localeCompare(b.className, "ko"));
+      const weekend = cs[0].groupOrder === WEEKEND_ORDER;
+      // 셀(order:day)에서 "이 섹션 체계(평일/주말)의 요일"에 실제 있는 교시 order만 수집.
+      // order=자정기준 분이라 평일 영어 2교시(15:00)와 주말 7교시(토 15:00)가 충돌 → 요일로 체계를 가른다.
+      const daySet = new Set<DayOfWeek>();
+      const presentOrders = new Set<number>();
+      for (const c of cs) {
+        for (const k of Object.keys(c.cells)) {
+          const [ordPart, dayPart] = k.split(":");
+          const day = dayPart as DayOfWeek;
+          daySet.add(day);
+          if (WEEKEND.has(day) === weekend) presentOrders.add(Number(ordPart));
+        }
+      }
+      // 교시축 = 표준 교시표에서 섹션 시작 교시부터 5칸 윈도우(5×5 기본). 끝 가까운 섹션은
+      // 윈도우를 당겨 항상 5칸 확보(표준 교시가 5개 미만인 수학계열은 전부).
+      const standard = subjectPeriodRows(subject, weekend, config);
+      const standardByOrder = new Map(standard.map((r) => [r.order, r]));
+      // 앵커 = 섹션에 실제 등장하는 표준 교시 중 가장 이른 것(폴백 시각·다른 체계는 제외됨).
+      const presentStd = [...presentOrders].filter((o) => standardByOrder.has(o));
+      const anchorOrder = presentStd.length ? Math.min(...presentStd) : standard[0]?.order ?? 0;
+      let startIdx = standard.findIndex((r) => r.order === anchorOrder);
+      if (startIdx < 0) startIdx = 0;
+      startIdx = Math.min(startIdx, Math.max(0, standard.length - GRID_MIN));
+      const winRows = new Map<number, GridPeriodRow>();
+      for (const r of standard.slice(startIdx, startIdx + GRID_MIN))
+        winRows.set(r.order, { order: r.order, label: r.label, time: r.time });
+      // 윈도우 밖이어도 실제 등장하는 표준 교시는 포함(긴 수업 클립 방지). 다른 체계(주말)·폴백 시각은
+      // 제외 — 한 카드가 두 교시체계를 섞어도 그리드가 폭발하지 않게.
+      for (const o of presentStd) {
+        if (winRows.has(o)) continue;
+        const r = standardByOrder.get(o)!;
+        winRows.set(o, { order: r.order, label: r.label, time: r.time });
+      }
+      // 요일축 = 평일 섹션은 항상 월~금(5열), 주말 섹션은 실제 주말요일.
+      const days = weekend ? DAY_ORDER.filter((d) => WEEKEND.has(d) && daySet.has(d)) : WEEKDAY_DAYS;
       return {
         key: `${cs[0].groupOrder}::${cs[0].groupLabel}`,
         label: cs[0].groupLabel,
         order: cs[0].groupOrder,
         cards: cs,
-        periodRows: [...rowByOrder.values()].sort((a, b) => a.order - b.order),
-        days: DAY_ORDER.filter((d) => daySet.has(d)),
+        periodRows: [...winRows.values()].sort((a, b) => a.order - b.order),
+        days,
         holdRows: Math.max(1, ...cs.map((c) => c.hold.length)),
         withdrawnRows: Math.max(1, ...cs.map((c) => c.withdrawn.length)),
       };

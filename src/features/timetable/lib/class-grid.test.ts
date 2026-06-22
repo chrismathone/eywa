@@ -70,7 +70,7 @@ describe("buildRichCardGroups", () => {
     expect(weekday.map((g) => g.label)).toEqual(["1교시 시작", "2교시 시작"]);
   });
 
-  it("그룹 공통 교시·요일 축 union + 대기/퇴원 높이 동기화(max)", () => {
+  it("평일 섹션은 항상 5요일(월~금)·5교시 그리드(5×5 기본) + 대기/퇴원 높이 동기화(max)", () => {
     const groups = buildRichCardGroups(
       [
         slot({
@@ -88,8 +88,18 @@ describe("buildRichCardGroups", () => {
       C,
     );
     const g = groups[0];
-    expect(g.days).toEqual(["mon", "tue"]); // union, DAY_ORDER 정렬
+    expect(g.days).toEqual(["mon", "tue", "wed", "thu", "fri"]); // 실제 월·화뿐이어도 항상 월~금 5열
+    expect(g.periodRows).toHaveLength(5); // 영어 1교시 시작 → 1~5교시 5행
+    expect(g.periodRows.map((p) => p.label)).toEqual(["1교시", "2교시", "3교시", "4교시", "5교시"]);
     expect(g.holdRows).toBe(1); // max(1,0)=1 → 빈 칸도 한 줄 높이
+  });
+
+  it("끝 가까운 섹션도 5교시 확보(윈도우 당김) — 8교시 시작 → 6~10교시", () => {
+    const groups = buildRichCardGroups(
+      [slot({ classId: "x", className: "X", dayOfWeek: "mon", startTime: "19:15" })], // 영어 8교시
+      C,
+    );
+    expect(groups[0].periodRows.map((p) => p.label)).toEqual(["6교시", "7교시", "8교시", "9교시", "10교시"]);
   });
 
   it("영문이름·신입/전입은 학생에 보존", () => {

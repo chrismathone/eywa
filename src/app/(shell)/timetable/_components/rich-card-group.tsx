@@ -162,19 +162,12 @@ function ClassColumn({
           card.hold.map((s, i) => <RosterRow key={s.studentId ?? `h-${i}`} s={s} />)
         )}
       </div>
-      {/* 퇴원 */}
+      {/* 퇴원 — 재원/대기와 동일 서식(이름·영문·학교/학년), 취소선·dim 톤으로 구분 */}
       <div className="bg-bg-soft p-1" style={{ height: wdH }}>
         {card.withdrawn.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
-          card.withdrawn.map((s, i) => (
-            <div
-              key={s.studentId ?? `w-${i}`}
-              className="bg-card border-line text-text-dim truncate rounded-[3px] border px-1 text-[10px] leading-[18px] line-through"
-            >
-              {s.name}
-            </div>
-          ))
+          card.withdrawn.map((s, i) => <RosterRow key={s.studentId ?? `w-${i}`} s={s} />)
         )}
       </div>
     </div>
@@ -203,14 +196,21 @@ function Cell({ card, order, day }: { card: RichClassCard; order: number; day: D
   return <div className={`${base} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`}>{abbrev(c.label)}</div>;
 }
 
-/** 학생 행 — 신입=빨강·전입=초록, 이름(영문), 학교/학년. 클릭=학생 창. */
+/** 학생 행 — 신입=빨강·전입=초록·퇴원=취소선/dim, 이름(영문), 학교/학년. 클릭=학생 창. */
 function RosterRow({ s }: { s: GridStudent }) {
-  const tone = s.isNew ? "bg-danger-soft text-danger" : s.isTransferredIn ? "bg-primary-soft text-primary" : "text-foreground";
+  const withdrawn = s.status === "withdrawn";
+  const tone = withdrawn
+    ? "bg-card border-line text-text-dim border"
+    : s.isNew
+      ? "bg-danger-soft text-danger"
+      : s.isTransferredIn
+        ? "bg-primary-soft text-primary"
+        : "text-foreground";
   const meta = [s.school, s.grade].filter(Boolean).join(" ");
   const name = s.englishName ? `${s.name} (${s.englishName})` : s.name;
   const inner = (
     <>
-      <span className="truncate">{name}</span>
+      <span className={`truncate ${withdrawn ? "line-through" : ""}`}>{name}</span>
       {meta ? <span className="text-text-faint shrink-0 font-mono text-[9px]">{meta}</span> : null}
     </>
   );
