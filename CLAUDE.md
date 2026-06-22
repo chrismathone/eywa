@@ -240,8 +240,8 @@ attendance/date 9·max class 15. → 결론: **상담 통계만 현재 데이터
   students 반별 카운트 N+1(3~5쿼리, RPC 필요)·search 직렬 canAccessTenant(캐시됨, 이득~0). **새 코드는 #53/#54 헬퍼로 처음부터.**
 - 검증: typecheck0 / lint0(신규0) / test392 / 브라우저 5페이지 렌더·에러0. 마이그 `0040a`(dev DB 적용, 손수 alpha).
 
-### 같은 탭 다중 창(복제) + 크로스 창/탭 저장 경고 (2026-06-19) — ⏳ 구현·검증 그린, A 데스크톱 UI 수동확인만 남음
-브랜치 **`feat/multi-window-and-save-warning`**(아직 main 미머지 — 다른 컴퓨터 이어작업용). 상세 함정·규칙은
+### 같은 탭 다중 창(복제) + 크로스 창/탭 저장 경고 (2026-06-19) — ✅ 구현·검증·데스크톱 UI 확인 완료(main 머지)
+**main 머지 완료**(브랜치 `feat/multi-window-and-save-warning` 삭제됨). 상세 함정·규칙은
 위 "구현 중 막혔던 점 #64", 설계는 [`C:\Users\user\.claude\plans\steady-questing-music.md`](로컬, 미동기).
 - **A. 같은 탭 다중 창**: 타이틀바 **복제 버튼**(현재 화면 그대로) + 탭/링크 **Shift+클릭**(`openNewInstance`, 새 인스턴스)
   — 둘 다. primary 창 id 보존(`route:students`), 복제본만 `#n`(window-only, 배경 가드 store레벨+드래그훅+스포트라이트).
@@ -254,9 +254,10 @@ attendance/date 9·max class 15. → 결론: **상담 통계만 현재 데이터
   배선: 학생·반·직원 수정 폼 + 학원설정 section-form(scope·formRef·nonce effect).
 - **검증**: typecheck0/lint0(신규0)/build✓/**test 392**(신규 19: window-store 12·form-snapshot 4·record-channel 3).
   **B 실브라우저 검증 완료** — 학생 수정 폼 clean=무경고/ dirty=경고 토스트(+새로고침), BroadcastChannel 배달·Toaster 마운트·콘솔에러0 확인.
-- **⏳ 남은 일(다른 컴퓨터)**: A **데스크톱(≥1024px+마우스) UI 수동 확인**(preview 뷰포트 750px 고정이라 창 시스템 미검증):
-  ① 메뉴 Shift+클릭=새 창·반복 `(2)(3)` ② 타이틀바 복제 버튼(드릴인 화면 포함) ③ 복제본 배경 차단(드래그/스포트라이트)
-  ④ 사이드바 Shift 안내 문구. 확인되면 main 머지.
+- **✅ A 데스크톱 UI 실브라우저 검증 완료**(2026-06-22, preview 1280×900 + 로그인): ① 학생목록 일반클릭=단일 →
+  Shift+클릭 2회 = `학생목록`/`(2)`/`(3)` 3창 ② primary를 **학생 상세로 드릴인 후 복제 버튼** → `학생 상세 (4)`가
+  드릴인된 상세 URL로 열림(최초 목록 아님 — 검토① 확정) ③ 복제본 `(2)(3)(4)`는 "배경으로 보내기" 버튼 없음(window-only)
+  ④ 사이드바 펼침 시 Shift 안내 문구(`<kbd>` 포함) 렌더. 콘솔에러0. (드래그-투-배경·스포트라이트 store 가드는 단위테스트.)
 
 ### 역할/권한 override 배선 전수 감사 + 보안 갭 수정 (2026-06-19) — ✅ 배선 완전, 갭 2건 처리
 사용자 요청으로 owner "역할·권한"(Phase 4) override가 **실제 접근제어에 연결됐는지(write-only-orphan 아닌지)** 전수 검수
