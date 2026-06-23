@@ -58,13 +58,16 @@ export function SettingsCard({
   title,
   description,
   children,
+  span2,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
+  // 내용이 큰 카드(약관·셔틀 등)는 2열 그리드에서 한 줄 전체를 차지해 빈 열·ragged를 방지.
+  span2?: boolean;
 }) {
   return (
-    <section className="border-border bg-card rounded-lg border p-5">
+    <section className={`border-border bg-card rounded-lg border p-5 ${span2 ? "xl:col-span-2" : ""}`}>
       <h3 className="text-foreground text-sm font-bold">{title}</h3>
       {description ? <p className="text-text-dim mt-1 text-[12px]">{description}</p> : null}
       <div className="mt-4">{children}</div>

@@ -47,6 +47,7 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
       <SettingsCard
         title="공개 접수 약관"
         description="학부모 QR 접수 폼에 표시되는 동의 문구. 개인정보 동의는 필수 체크, 환불·학칙 안내는 선택 체크로 노출됩니다."
+        span2
       >
         <div className="space-y-4">
           <TextAreaField

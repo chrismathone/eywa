@@ -116,8 +116,8 @@ export function PublicIntakeForm({
       <input type="hidden" name="siblings" value={siblings} />
       <input type="hidden" name="shuttleBusRequest" value={applyShuttle ? "true" : ""} />
 
-      {/* 헤더 (네이비/ink) */}
-      <header className="bg-foreground px-6 pt-8 pb-6 text-center">
+      {/* 헤더 (네이비/ink) — 섹션 카드와 동일하게 mx-3 인셋(좌우 폭 일치). */}
+      <header className="bg-foreground mx-3 mt-3 px-6 pt-8 pb-6 text-center">
         <p className="text-gold text-sm font-semibold">{academyName}</p>
         <h1 className="text-background mt-1 text-[26px] font-extrabold">입학상담카드</h1>
         <p className="text-background/60 mt-1.5 text-sm">상담 전 아래 정보를 입력해 주세요</p>
@@ -344,7 +344,7 @@ export function PublicIntakeForm({
         ) : null}
       </Section>
 
-      <div className="mx-3 mt-6 px-2">
+      <div className="mx-3 mt-6">
         {state?.error ? <p className="text-danger mb-3 text-sm">{state.error}</p> : null}
         <SubmitBtn />
         <p className="text-text-faint mt-3 text-center text-xs">제출하신 정보는 상담 목적으로만 사용됩니다.</p>
