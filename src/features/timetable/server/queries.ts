@@ -112,6 +112,8 @@ export type StudentLine = {
   attendanceDays?: string[];
   /** 영문 이름(ijw englishName) — 통합뷰 명단에 "이름 (English)"로 표시. 없으면 미표시. */
   englishName?: string | null;
+  /** 학생별 최근 교재(ijw 학생 hover의 교재 줄) — textbook_orders 최신 1건. hover 표시용. */
+  latestTextbook?: { name: string; date: string | null } | null;
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 
@@ -242,6 +244,31 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       if (a.status === "withdrawn") return (b.endDate ?? "").localeCompare(a.endDate ?? "");
       return a.name.localeCompare(b.name, "ko");
     });
+  }
+
+  // 학생별 최근 교재 — ijw 학생 hover의 "교재" 줄. textbook_orders는 학생별이며 delivered_at(없으면 request_date) 최신 1건.
+  const studentIds = Array.from(new Set([...byClass.values()].flat().map((l) => l.studentId)));
+  if (studentIds.length > 0) {
+    type TbRow = { student_id: string; book_name: string | null; delivered_at: string | null; request_date: string | null };
+    const tbRows = await fetchInChunks<TbRow>(studentIds, (chunk) =>
+      supabase
+        .from("textbook_orders")
+        .select("student_id, book_name, delivered_at, request_date")
+        .in("student_id", chunk),
+    );
+    const latestTb = new Map<string, { name: string; date: string | null }>();
+    for (const r of tbRows) {
+      if (!r.book_name) continue;
+      const d = (r.delivered_at ?? r.request_date ?? "").slice(0, 10);
+      const cur = latestTb.get(r.student_id);
+      if (!cur || (cur.date ?? "") < d) latestTb.set(r.student_id, { name: r.book_name, date: d || null });
+    }
+    for (const list of byClass.values()) {
+      for (const l of list) {
+        const tb = latestTb.get(l.studentId);
+        if (tb) l.latestTextbook = tb;
+      }
+    }
   }
 
   return slots.map((s) => ({ ...s, students: byClass.get(s.classId) ?? [] }));

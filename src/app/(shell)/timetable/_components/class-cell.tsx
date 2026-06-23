@@ -39,6 +39,7 @@ export type StudentQuick = {
   isTransferredIn?: boolean;
   englishName?: string | null;
   attendanceDays?: string[];
+  latestTextbook?: { name: string; date: string | null } | null;
 };
 
 function shortTime(t: string) {
@@ -145,6 +146,7 @@ function StudentRow({
           isTransferredIn={student.isTransferredIn}
           attendanceDays={student.attendanceDays}
           endDate={student.endDate}
+          textbook={student.latestTextbook}
         />
       }
     >

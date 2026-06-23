@@ -130,6 +130,7 @@ export function StudentInfoCard({
   isTransferredIn,
   attendanceDays,
   endDate,
+  textbook,
   pendingClassName,
   pendingTransferDate,
 }: {
@@ -142,6 +143,7 @@ export function StudentInfoCard({
   isTransferredIn?: boolean;
   attendanceDays?: string[];
   endDate?: string | null;
+  textbook?: { name: string; date: string | null } | null;
   pendingClassName?: string | null;
   pendingTransferDate?: string | null;
 }) {
@@ -150,7 +152,7 @@ export function StudentInfoCard({
       ? attendanceDays.map((d) => DAY_KO[d] ?? d).join("·") + "만 등원"
       : null;
   const hasDetail =
-    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName;
+    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName || textbook;
   return (
     <div className="space-y-2 text-[11px]">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -175,6 +177,9 @@ export function StudentInfoCard({
             </div>
           ) : null}
           {partial ? <Row label="등원" value={partial} /> : null}
+          {textbook ? (
+            <Row label="교재" value={`${textbook.name}${textbook.date ? ` (${textbook.date})` : ""}`} />
+          ) : null}
           {pendingClassName ? (
             <Row
               label="이동 예정"

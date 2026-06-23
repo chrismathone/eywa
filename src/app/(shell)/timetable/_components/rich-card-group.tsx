@@ -254,6 +254,7 @@ function RosterRow({ s }: { s: GridStudent }) {
           isTransferredIn={s.isTransferredIn}
           attendanceDays={s.attendanceDays}
           endDate={s.endDate}
+          textbook={s.latestTextbook}
         />
       }
     >
