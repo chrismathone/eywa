@@ -15,6 +15,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
+import { StudentImportDialog } from "./_components/student-import-dialog";
 import { StudentFilterBar } from "./_components/student-filter-bar";
 
 export const metadata = { title: "학생목록 — eywa" };
@@ -144,6 +145,7 @@ export default async function StudentsPage({
             <EyIcon name="arrowDown" size={13} />
             엑셀 내보내기
           </a>
+          <StudentImportDialog />
           <NewStudentTrigger />
         </div>
       </div>
