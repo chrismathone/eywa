@@ -243,6 +243,21 @@ ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 �
 - 검증: 항목별 typecheck0/lint0 + 신규 Vitest(classroom-assign 11·student-import 12, 전체 428) + Chrome(웨일) 실브라우저
   E2E(자동배정 적용→DB·재실행 수렴 / 학생 import 6행→신규3·DB영속 / 학생상담 AI 7섹션 실 generateJSON(solar-pro3)→DB영속).
 
+### 등록 상담 폼 전체 + 학부모 QR 공개접수 (2026-06-23) — ✅ 실브라우저 E2E
+사용자 요청: ijw 등록 상담 폼 전체 이식 + 학부모 QR → 공개 등록 프로세스. 둘 다 enrollment에 구현·검증.
+- **등록 상담 폼 전체**(`9bead94`, 0046a): 6필드 → ijw 전체(메인 ~32 + 과목별 점수 탭). 메인은 enrollment_consultations
+  컬럼, 과목 점수(수학 영역점수·영어 AI/NELT/EiE 레벨차트·국어/과학/기타)는 `subject_details jsonb`.
+  데이터주도 [`form-config.ts`](src/features/enrollment/form-config.ts) + 공용 `consultation-full-form`(생성/수정, 섹션+과목탭,
+  useSubjectMaps/useGradeLevels 단일소스) + `/enrollment/[id]/edit` + 상세 '학생 상세 정보'·'과목별 점수' 카드.
+  ⚠️ create insert에 tenant_id 누락으로 RLS 거부되던 기존 버그 동시 수정(getCurrentUser().tenantId 명시).
+- **학부모 QR 공개접수**(`f9d42f2`, 0047a): `intake_tokens`(테넌트별 공개 토큰, RLS) + enrollment_consultations
+  from_public_intake/intake_token_id. 공개 라우트 `(intake)/intake/[token]`(proxy PUBLIC_PATHS, admin client로 토큰→테넌트
+  해석) → 학부모 폼 → `submitPublicIntake`(비인증 admin client: 토큰검증·레이트리밋1h20·허니팟·정화·privacy필수) →
+  enrollment_consultations(pending+from_public_intake). 관리 QR패널(/enrollment, 서버 qrcode SVG+공개URL) + 칸반 'QR' 배지.
+  의존성 `qrcode` 추가. ⚠️ 공개 쓰기는 admin client + 검증된 토큰의 tenant_id만 사용(조작 불가).
+- 검증(Chrome): 전체폼 생성→상세(과목점수95)→DB subject_details·tenant 영속→수정 round-trip / QR 토큰생성→/intake/{token}
+  학부모폼→제출→성공→DB(pending·from_public_intake·tenant·token링크)+submission_count→칸반 QR배지. typecheck0/lint0/test428/콘솔0.
+
 ### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
 사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
 다른 **여러 케이스**가 있어 요일×교시 미니그리드가 본질. (설계 변천: 전과목색오버뷰→단순카드그리드→**리치 그리드(최종)**.
