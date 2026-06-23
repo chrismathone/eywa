@@ -265,8 +265,16 @@ ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 �
   관계/상담경로/학년) 누락 시 거부 + 운영 enum(성별·혈액형·관계·상담경로=`form-config` 상수 / **과목·학년=토큰 테넌트의
   `getTenantSettingsByTenantId`+`buildSubjectMaps`**, 단일소스 대조)으로 대조해 설정 밖 값 거부, 선택값은 null. 실검증: 정상제출✓·
   변조 gender 거부(미저장)·무효 subject→null. + **카운터 정합**: `usage_count`를 제출 시가 아니라 공개 페이지 노출에서 +1해
-  조회(usage)≠제출(submission) 분리(패널 "조회·제출" 정확). ⚠️ **남은 운영 하드닝(백로그, A)**: per-IP/전역 레이트리밋·캡차
-  부재(현재 토큰당 1h20+허니팟뿐)·토큰 expires_at 영구 가능 — 운영 전환 시 보강. (테넌트 격리·RLS·토큰 위변조는 감사서 정상 확인.)
+  조회(usage)≠제출(submission) 분리(패널 "조회·제출" 정확). (테넌트 격리·RLS·토큰 위변조는 감사서 정상 확인.)
+- **공개접수 운영 하드닝 A(2026-06-23, `0048a`)**: 신규 `intake_attempts`(ip_hash·ok·시각, RLS, 0048a) = **시도 기반
+  다층 레이트리밋** 단일소스 → `submitPublicIntake`에 ① **time-trap**(폼 렌더 후 `MIN_FILL_MS`=3s 미만 제출 거부, no-DB
+  선차단) ② **per-IP/per-tenant/per-token 슬라이딩 1h 한도**(상수 `IP_LIMIT`15·`TENANT_LIMIT`200·`TOKEN_LIMIT`60 —
+  합법 오픈하우스 버스트 우선, 거부건도 시도로 기록해 자원소모 abuse 카운트, 기존 "consultations 행 카운트"는 제거) ③
+  **env-gated Cloudflare Turnstile**(`TURNSTILE_SECRET_KEY`/`NEXT_PUBLIC_TURNSTILE_SITE_KEY` — 미설정=캡차 off=데모 무중단,
+  설정 시 siteverify fail-closed; `turnstile-widget.tsx`). IP는 `parseForwardedFor`(키오스크 재사용) → **sha256(ip:tenant)
+  해시만 저장(원본 IP 미보존)**. + `createIntakeToken` **기본 90일 만료**(미입력 시 영구 → +90d). 실검증(라이브 E2E):
+  정상제출✓·time-trap 거부✓·per-IP 16번째 차단✓·기본만료 90일✓·캡차 스킵(키 없음)✓. ⚠️ Turnstile 실키 발급은 운영 몫
+  (데모는 off 경로만 검증). 분산(다수 IP) 공격은 캡차가 주방어, 레이트리밋은 단일/소수 IP 백스톱.
 
 ### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
 사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가

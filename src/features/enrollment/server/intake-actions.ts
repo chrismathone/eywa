@@ -1,7 +1,8 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -9,11 +10,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import {
   GENDER_OPTIONS,
   BLOOD_OPTIONS,
   RELATION_OPTIONS,
-  SIBLINGS_OPTIONS,
   CONSULTATION_PATHS,
 } from "@/features/enrollment/form-config";
 
@@ -44,7 +45,10 @@ export async function createIntakeToken(
     tenant_id: user.tenantId,
     token: randomBytes(16).toString("hex"),
     name: name.slice(0, 80),
-    expires_at: expiresRaw ? new Date(expiresRaw).toISOString() : null,
+    // 미입력 시 영구 유효 대신 기본 90일 만료(방치된 공개 링크 방지). 학원장이 폼에서 직접 지정 가능.
+    expires_at: expiresRaw
+      ? new Date(expiresRaw).toISOString()
+      : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
     created_by: user.id,
   });
   if (insErr) return { error: insErr.message };
@@ -90,6 +94,33 @@ export type PublicIntakeState =
 const clip = (v: FormDataEntryValue | null, max: number): string =>
   String(v ?? "").trim().slice(0, max);
 
+// 봇/스팸 방어 상수 — 합법 버스트(오픈하우스: 한 QR로 다수 학부모, 같은 NAT) 우선.
+// 실제 봇 방어는 캡차가 담당하고 레이트리밋은 단일/소수 IP 백스톱. 튜닝 용이하게 한곳에.
+const MIN_FILL_MS = 3000; // 폼 로드 후 최소 작성 시간(미만=봇)
+const IP_LIMIT = 15; // 동일 IP 시간당 시도
+const TENANT_LIMIT = 200; // 테넌트 전역 시간당 시도
+const TOKEN_LIMIT = 60; // 단일 토큰 시간당 시도
+
+/** Cloudflare Turnstile 검증. 키(env) 없으면 스킵(데모). 활성 시 검증 실패는 fail-closed. */
+async function verifyTurnstile(responseToken: string, ip: string | null): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true; // 캡차 미설정 = 통과(데모 무중단)
+  if (!responseToken) return false;
+  try {
+    const body = new URLSearchParams({ secret, response: responseToken });
+    if (ip) body.set("remoteip", ip);
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = (await res.json()) as { success?: boolean };
+    return data.success === true;
+  } catch {
+    return false; // 네트워크 등 실패 시 거부(캡차 활성 시 fail-closed)
+  }
+}
+
 /**
  * 학부모 공개 접수 제출 — 비인증. 토큰으로 테넌트 해석 → 검증 → 레이트리밋 → enrollment_consultations(pending).
  * admin client(service_role)로 RLS 우회하되, tenant_id는 검증된 토큰에서만 취한다(조작 불가).
@@ -101,6 +132,12 @@ export async function submitPublicIntake(
   const token = clip(formData.get("token"), 64);
   // 봇 허니팟 — 사람은 비워두는 숨김 필드. 채워졌으면 성공인 척 조용히 무시.
   if (clip(formData.get("company"), 100)) return { ok: true };
+
+  // time-trap — 폼 렌더 후 너무 빨리 제출되면 봇(클라가 보낸 mount 시각). DB·토큰 조회 전 차단.
+  const renderedAt = Number(formData.get("renderedAt") ?? 0);
+  if (!renderedAt || Date.now() - renderedAt < MIN_FILL_MS) {
+    return { error: "잠시 후 다시 시도해주세요" };
+  }
 
   const prospectName = clip(formData.get("prospectName"), 60);
   const privacy = String(formData.get("privacyAgreement") ?? "") === "true";
@@ -119,14 +156,38 @@ export async function submitPublicIntake(
     return { error: "만료된 접수 링크입니다" };
   }
 
-  // 레이트리밋 — 이 토큰으로 최근 1시간 20건 초과 차단.
+  // ── 봇/스팸 방어 (A) ── IP 해시(원본 미저장, 테넌트별 salt) → 캡차 → 시도 기반 다층 레이트리밋.
+  const hdrs = await headers();
+  const ipRaw = parseForwardedFor(hdrs.get("x-forwarded-for"), hdrs.get("x-real-ip"));
+  const ipHash = createHash("sha256").update(`${ipRaw ?? "unknown"}:${tok.tenant_id}`).digest("hex");
+
+  if (!(await verifyTurnstile(clip(formData.get("cf-turnstile-response"), 4000), ipRaw))) {
+    return { error: "사람인지 확인에 실패했습니다. 잠시 후 다시 시도해주세요" };
+  }
+
+  // 시도 1건 기록(거부건 포함) 후 슬라이딩 1시간 윈도우로 per-IP/per-tenant/per-token 카운트.
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { count } = await admin
-    .from("enrollment_consultations")
-    .select("id", { count: "exact", head: true })
-    .eq("intake_token_id", tok.id)
-    .gte("created_at", hourAgo);
-  if ((count ?? 0) >= 20) return { error: "접수가 많아 잠시 후 다시 시도해주세요" };
+  const { data: attempt } = await admin
+    .from("intake_attempts")
+    .insert({ tenant_id: tok.tenant_id, intake_token_id: tok.id, ip_hash: ipHash, ok: false })
+    .select("id")
+    .single();
+  const [ipC, tenantC, tokenC] = await Promise.all([
+    admin.from("intake_attempts").select("id", { count: "exact", head: true })
+      .eq("ip_hash", ipHash).gte("created_at", hourAgo),
+    admin.from("intake_attempts").select("id", { count: "exact", head: true })
+      .eq("tenant_id", tok.tenant_id).gte("created_at", hourAgo),
+    admin.from("intake_attempts").select("id", { count: "exact", head: true })
+      .eq("intake_token_id", tok.id).gte("created_at", hourAgo),
+  ]);
+  if ((ipC.count ?? 0) > IP_LIMIT || (tenantC.count ?? 0) > TENANT_LIMIT || (tokenC.count ?? 0) > TOKEN_LIMIT) {
+    return { error: "접수가 많아 잠시 후 다시 시도해주세요" };
+  }
+  // 오래된 시도 기회적 정리(cron 불요).
+  await admin
+    .from("intake_attempts")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
   // 필수·화이트리스트 검증 — 비인증 직접 POST가 설정 밖 값/빈 필수필드를 넣지 못하게 막는다.
   // 과목·학년은 운영 enum 단일소스(토큰 테넌트의 학원설정)와 대조. <select>는 클라 가드일 뿐이라 서버에서 재검증.
@@ -156,8 +217,8 @@ export async function submitPublicIntake(
   // 선택 입력 — 화이트리스트 밖이면 조용히 버린다(null).
   const bloodRaw = clip(formData.get("bloodType"), 4);
   const bloodType = has(BLOOD_OPTIONS, bloodRaw) ? bloodRaw : null;
-  const siblingsRaw = clip(formData.get("siblings"), 40);
-  const siblings = has(SIBLINGS_OPTIONS, siblingsRaw) ? siblingsRaw : null;
+  // siblings는 운영 enum이 아니라 자유 라벨(폼 "있음"/"없음(외동)") — 화이트리스트 없이 clip만.
+  const siblings = clip(formData.get("siblings"), 40) || null;
   const subjects = formData.getAll("subjects").map((s) => String(s)).filter(Boolean);
   const subject = subjects.find((s) => allowedSubjects.has(s)) ?? null;
 
@@ -187,6 +248,9 @@ export async function submitPublicIntake(
     consultant_id: null,
   });
   if (insErr) return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
+
+  // 시도 로그를 성공으로 마킹(모니터링: 차단/실패 vs 성공 구분).
+  if (attempt) await admin.from("intake_attempts").update({ ok: true }).eq("id", attempt.id);
 
   // 제출수 증가(현재값 읽어 +1 — 동시성은 데모 규모 무시). 조회수(usage_count)는 공개 폼 노출에서 집계.
   const { data: cur } = await admin

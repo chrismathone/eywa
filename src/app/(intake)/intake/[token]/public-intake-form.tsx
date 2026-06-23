@@ -13,6 +13,7 @@ import {
   RELATION_OPTIONS,
 } from "@/features/enrollment/form-config";
 import type { ShuttleSetting } from "@/features/owner/settings-types";
+import { TurnstileWidget } from "./turnstile-widget";
 
 // ijw 입학상담카드 충실 이식 — 컬러 구획(학생=gold·학부모=amber·셔틀=danger·동의서=ink) + 전체 필드/섹션.
 // 셔틀(요금·노선)·동의서 문구는 학원설정에서 주입(operations.shuttle / notifications.privacyTerms·serviceTerms).
@@ -57,6 +58,8 @@ export function PublicIntakeForm({
   shuttle,
   privacyTerms,
   serviceTerms,
+  serverNow,
+  turnstileSiteKey,
 }: {
   token: string;
   academyName: string;
@@ -65,6 +68,8 @@ export function PublicIntakeForm({
   shuttle: ShuttleSetting;
   privacyTerms: string;
   serviceTerms: string;
+  serverNow: number;
+  turnstileSiteKey: string | null;
 }) {
   const [state, formAction] = useActionState<PublicIntakeState, FormData>(submitPublicIntake, undefined);
 
@@ -101,6 +106,8 @@ export function PublicIntakeForm({
   return (
     <form action={formAction} className="mx-auto max-w-[460px] pb-12">
       <input type="hidden" name="token" value={token} />
+      {/* time-trap — 서버 렌더 시각. 제출 시 경과시간으로 봇(즉시 제출) 차단. */}
+      <input type="hidden" name="renderedAt" value={serverNow} />
       <input
         type="text"
         name="company"
@@ -343,6 +350,8 @@ export function PublicIntakeForm({
           </div>
         ) : null}
       </Section>
+
+      {turnstileSiteKey ? <TurnstileWidget siteKey={turnstileSiteKey} /> : null}
 
       <div className="mx-3 mt-6">
         {state?.error ? <p className="text-danger mb-3 text-sm">{state.error}</p> : null}

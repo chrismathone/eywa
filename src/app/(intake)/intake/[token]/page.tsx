@@ -44,6 +44,11 @@ export default async function PublicIntakePage({
   const academyName = settings.profile.name || "학원";
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
+  // 봇 time-trap 기준 시각(서버, 제출 시 경과시간 측정) + 캡차 사이트키(env 없으면 캡차 미노출).
+  // eslint-disable-next-line react-hooks/purity -- 동적 페이지, 요청당 1회 렌더
+  const serverNow = Date.now();
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? null;
+
   return (
     <PublicIntakeForm
       token={token}
@@ -53,6 +58,8 @@ export default async function PublicIntakePage({
       shuttle={settings.operations.shuttle}
       privacyTerms={settings.notifications.privacyTerms}
       serviceTerms={settings.notifications.serviceTerms}
+      serverNow={serverNow}
+      turnstileSiteKey={turnstileSiteKey}
     />
   );
 }

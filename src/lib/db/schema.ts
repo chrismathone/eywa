@@ -560,6 +560,27 @@ export const intakeTokens = pgTable(
   (t) => [index("intake_tokens_tenant_idx").on(t.tenantId)],
 );
 
+// === intake_attempts (공개접수 시도 로그 — 다층 레이트리밋 단일 소스, 0048a) ===
+// 거부건 포함 기록 → 시도 기반 per-IP/per-tenant/per-token 제한. 원본 IP 미저장(sha256 해시만).
+export const intakeAttempts = pgTable(
+  "intake_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "cascade" }),
+    ipHash: text("ip_hash").notNull(),
+    ok: boolean("ok").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("intake_attempts_ip_idx").on(t.ipHash, t.createdAt),
+    index("intake_attempts_tenant_idx").on(t.tenantId, t.createdAt),
+    index("intake_attempts_token_idx").on(t.intakeTokenId, t.createdAt),
+  ],
+);
+
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
 export const consultationAiAnalysis = pgTable(
   "consultation_ai_analysis",
