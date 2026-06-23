@@ -205,6 +205,7 @@ export function OneScreenClient({
           selId={effectiveId}
           onSelect={setSelId}
           reportCellById={reportCellById}
+          classOrder={classTags.filter((t) => t !== "전체")}
         />
 
         {selected ? (

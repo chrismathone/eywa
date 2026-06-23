@@ -35,7 +35,9 @@ export type OneScreenStudent = {
   id: string;
   name: string;
   grade: string; // 실제 학년 — "초3" ~ "중3"
-  tag: string; // 필터용 학년 태그 (= grade)
+  tag: string; // 필터용 태그 (실데이터=반 이름, 데모=학년)
+  className?: string; // 강사 담당 반 이름 — 원스크린 좌측 반별 그룹/필터
+  classId?: string;
   // 진도(수업) 학년 — 실제 학년과 다를 수 있음(선행/후행). 없으면 grade로 간주.
   studyGrade?: string;
   attendance: AttendanceMark;

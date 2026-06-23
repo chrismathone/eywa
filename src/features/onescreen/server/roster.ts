@@ -110,7 +110,9 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         id: stu.id,
         name: stu.name,
         grade,
-        tag: grade,
+        tag: cls.class_name, // 반별 필터(반 이름 기준)
+        className: cls.class_name,
+        classId: cls.id,
         attendance: "출석",
         subjects: [],
         tests: {
@@ -134,14 +136,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     const i = gradeOrder.indexOf(g);
     return i === -1 ? 999 : i;
   };
-  const students = [...byStudent.values()].sort(
-    (a, b) => gradeRank(a.grade) - gradeRank(b.grade) || a.name.localeCompare(b.name, "ko"),
-  );
-  const grades = [...new Set(students.map((s) => s.grade).filter(Boolean))].sort(
-    (a, b) => gradeRank(a) - gradeRank(b),
-  );
-
-  // 오늘 수업(반) 위젯 — 반별 학생수 + 시작시각, 시각순.
+  // 오늘 수업(반) 위젯 + 반별 필터/그룹 — 반별 학생수 + 시작시각, 시각순.
   const countByClass = new Map<string, number>();
   for (const e of enrollments) countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1);
   const todayClasses: TodayClass[] = activeClasses
@@ -152,7 +147,20 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       startTime: startByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
     }))
+    .filter((c) => c.studentCount > 0)
     .sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));
 
-  return { today, classTags: ["전체", ...grades], teacherName, students, todayClasses };
+  // 학생 정렬: 반(시각순) → 그 안에서 학년 → 이름. 좌측 목록이 반별로 묶이도록.
+  const classRank = new Map(todayClasses.map((c, i) => [c.name, i]));
+  const students = [...byStudent.values()].sort(
+    (a, b) =>
+      (classRank.get(a.className ?? "") ?? 999) - (classRank.get(b.className ?? "") ?? 999) ||
+      gradeRank(a.grade) - gradeRank(b.grade) ||
+      a.name.localeCompare(b.name, "ko"),
+  );
+
+  // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).
+  const classTags = ["전체", ...todayClasses.map((c) => c.name)];
+
+  return { today, classTags, teacherName, students, todayClasses };
 }

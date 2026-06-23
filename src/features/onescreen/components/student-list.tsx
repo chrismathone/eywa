@@ -84,31 +84,59 @@ export function StudentList({
   selId,
   onSelect,
   reportCellById,
+  classOrder,
 }: {
   students: OneScreenStudent[];
   selId: string;
   onSelect: (id: string) => void;
   reportCellById?: Record<string, CellState>;
+  /** 반 그룹 표시 순서(보통 시각순). 없으면 등장 순서. */
+  classOrder?: readonly string[];
 }) {
+  // 반별 그룹 — className 없으면 "기타"로.
+  const groups = new Map<string, OneScreenStudent[]>();
+  for (const st of students) {
+    const key = st.className ?? "기타";
+    const arr = groups.get(key);
+    if (arr) arr.push(st);
+    else groups.set(key, [st]);
+  }
+  const orderedKeys = [
+    ...(classOrder ?? []).filter((k) => groups.has(k)),
+    ...[...groups.keys()].filter((k) => !(classOrder ?? []).includes(k)),
+  ];
+
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
       <header className="border-line flex items-baseline justify-between border-b px-3 py-2.5">
-        <p className="micro text-text-faint">학생</p>
+        <p className="micro text-text-faint">학생 · 반별</p>
         <p className="text-text-dim font-mono text-[11px]">{students.length}명</p>
       </header>
-      <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-1 overflow-y-auto p-2 [scrollbar-gutter:stable]">
+      <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-2 overflow-y-auto p-2 [scrollbar-gutter:stable]">
         {students.length === 0 ? (
           <p className="text-text-faint px-2 py-6 text-center text-xs">해당 반 학생이 없습니다</p>
         ) : (
-          students.map((st) => (
-            <StudentRow
-              key={st.id}
-              st={st}
-              active={st.id === selId}
-              reportCell={reportCellById?.[st.id]}
-              onClick={() => onSelect(st.id)}
-            />
-          ))
+          orderedKeys.map((key) => {
+            const rows = groups.get(key)!;
+            return (
+              <div key={key} className="flex flex-col gap-1">
+                {/* 반 헤더 — sticky로 스크롤 중에도 어느 반인지 보이게 */}
+                <div className="bg-card/95 sticky top-0 z-10 flex items-center justify-between px-1.5 py-0.5 backdrop-blur">
+                  <span className="text-text-dim truncate text-[11px] font-bold">{key}</span>
+                  <span className="text-text-faint shrink-0 font-mono text-[10px]">{rows.length}명</span>
+                </div>
+                {rows.map((st) => (
+                  <StudentRow
+                    key={st.id}
+                    st={st}
+                    active={st.id === selId}
+                    reportCell={reportCellById?.[st.id]}
+                    onClick={() => onSelect(st.id)}
+                  />
+                ))}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
