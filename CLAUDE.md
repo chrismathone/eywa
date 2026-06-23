@@ -276,6 +276,24 @@ ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 �
   정상제출✓·time-trap 거부✓·per-IP 16번째 차단✓·기본만료 90일✓·캡차 스킵(키 없음)✓. ⚠️ Turnstile 실키 발급은 운영 몫
   (데모는 off 경로만 검증). 분산(다수 IP) 공격은 캡차가 주방어, 레이트리밋은 단일/소수 IP 백스톱.
 
+### 시간표 셀 hover 정보 카드 — ijw 시간표 hover 이식 (2026-06-23) — ✅ 실브라우저(ijw 라이브 대조)
+사용자 요청: ijw 시간표 마우스오버 정보를 "ijw와 동일한 정도까지" 이식. **ijw를 dev(3001)로 띄워 실제 hover를 관찰**
+(학생 행 title = HTML title이라 DOM에서 직접 확인) → ijw 학생 hover 4줄 확정: **이름/학년·학교 · (반이동 날짜) ·
+교재(학생별) · [진도] 날짜+내용**. (수업카드 헤더 툴팁은 ijw도 master 권한이라 억제 — 학생 title이 본체.)
+- **hover 인프라**: [`hover-cards.tsx`](<src/app/(shell)/timetable/_components/hover-cards.tsx>) — `HoverCard`(커서 위치
+  포털 fixed·z9999·pointer-events-none, overflow 컨테이너에 안 잘림, cloneElement로 트리거에 핸들러 주입) + `ClassInfoCard`
+  + `StudentInfoCard`. 양 뷰(`class-cell.tsx` 기본 / `rich-card-group.tsx` 통합, 둘 다 client) 배선. WindowLink에
+  onMouseEnter/Leave forward 추가.
+- **데이터(추가 fetch 최소)**: 학생 식별·학년/학교·상태·신입/전입·분리등원·퇴원일·영문명은 이미 props(런타임 StudentLine 전체 도착).
+  · **교재** = `textbook_orders`(이미 학생별, 실데이터 350행) 최신 1건을 시간표 쿼리가 배치 조인 → `StudentLine.latestTextbook`.
+  · **진도** = 신규 `lesson_reports`(`0049a`, RLS) — **ijw Edutrix Supabase의 reports(별도 프로젝트, anon read 15,716건)를
+    학생 이름 매칭으로 이식**([`scripts/_poc_migration/import-lesson-reports.cjs`](scripts/_poc_migration/import-lesson-reports.cjs),
+    멱등 source='edutrix_import', 진도 있는 최신 1건/학생 → 289명 매칭·296행). 시간표 쿼리가 최신 1건 배치 조인 → `StudentLine.latestReport`.
+- 수업 hover(ClassInfoCard)=수업명·과목(설정색)·담임·강의실(통합뷰 요일별)·시간·인원 / 미니그리드셀·강의실라벨=native title(풀 강사/강의실).
+- 검증: typecheck0/lint0/test428 + 실브라우저(eywa 학생 hover에 "교재 초4-2 발전 2권(2026-06-15)" + "진도 2026-03-19·김민주 / 1.9까지의 수의 순서…" 렌더, ijw와 동일 형식).
+- ⚠️ 남은 1줄 = **반이동 '날짜'**(eywa는 전입 배지만, enrollments에 전입일 추가하면 됨 — 소). 클래스 헤더 hover는 ijw(억제)보다 약간 더 보여줌(담임·강의실·인원, 무해).
+- ⚠️ 진도 데이터는 **Edutrix가 진실** — Firebase/Edutrix 재이식 시 import-lesson-reports.cjs 재실행(멱등). ijw .env.local의 VITE_SUPABASE_URL/ANON_KEY 사용.
+
 ### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
 사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
 다른 **여러 케이스**가 있어 요일×교시 미니그리드가 본질. (설계 변천: 전과목색오버뷰→단순카드그리드→**리치 그리드(최종)**.
