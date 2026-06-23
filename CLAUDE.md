@@ -232,8 +232,16 @@ ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 �
 - **Tier 2 완료**: 출석 일별 미처리추적(`89ecec1`)·대시보드 재원변동 드릴다운(`8f0383e`)·휴가 관리자대시보드 `/staff/leaves`(`a884749`)·성적 목표설정+학습코멘트(`03d7860`, 0043a)·등록상담 테이블뷰(`e0bf1d8`)·강사 인수인계(`9e8bb84`, 0044a). (+성적관리 시험범위·퇴원 연락처/worklist는 직전 배치.)
 - **Tier 3**: ✅ **강의실 자동배정**(`9b6c3c0`, 순수 그리디 — 시간충돌회피+정원+균등분산, 마이그無). ✅ **엑셀 import**=학생 일괄등록(`1db514c`, ExcelJS 기설치 재사용)+시간표 enrollment import 기존.
 - **⚠️ 스코프 결정(사용자 2026-06-23)**: **시간표 시뮬레이션(시나리오) = 영구 배제**(Calendar/Gantt/Chatbot/MakeEdu/Contracts와 동급 비이식). **Excel/스프레드시트는 내보내기·가져오기만 있으면 충분**(마법사·임의 컬럼매핑 불요). 현 커버리지: 학생(export+import)·시간표(export+import)·수납(export). 재무 import는 위험·ijw 미존재라 비이식.
-- **남은 Tier 3**: 학생상담 AI 녹음(meetings AssemblyAI 파이프라인 재사용 가능, ⚠️ 실제 오디오는 헤드리스 검증 난해)이 사실상 마지막.
-- 검증: 항목별 typecheck0/lint0 + 신규 Vitest(classroom-assign 11·student-import 12) + Chrome(웨일) 실브라우저 E2E(자동배정 적용→DB·재실행 수렴 / 학생 import 6행→신규3·DB영속). ⚠️ 미push(10커밋 도달 시 push).
+- ✅ **학생상담 AI 녹음**(`4872931`, 0045a): eywa는 음성→전사→AI가 meetings·신입생 등록상담엔 이미 있었고
+  재원생 student_consultations만 텍스트 전용이던 갭을 메움. enrollment 오디오 파이프라인(AssemblyAI·generateJSON·
+  공용 웹훅·consultation-recordings 버킷·processing_status enum) 재사용 + student_consultations에 오디오/AI 컬럼 13개.
+  공유 `consultations/server/ai.ts`(케어 7섹션) → 웹훅 handleStudentConsultation + 텍스트 액션 runStudentConsultationAnalysis
+  단일 프롬프트. UI: 상세 녹음 패널(상태폴링·전사·7섹션·AI분석버튼) + 새상담 녹음/업로드 폼 + 목록 🎙️/AI 배지.
+  ⚠️ 실제 오디오 전사 E2E는 로컬 미검(AssemblyAI가 localhost 웹훅 미도달, 사용자 사전 인지) — 텍스트 AI 경로는 완전 검증.
+- **⚠️ 스코프 결정(사용자)**: 시간표 시뮬레이션(시나리오) 영구 배제 / Excel은 export·import만(마법사 불요).
+- **→ ijw 탭별 이식 Tier 1·2·3 사실상 완료**(의도적 제외 = Calendar/Gantt/Chatbot/MakeEdu/Contracts/시간표시나리오).
+- 검증: 항목별 typecheck0/lint0 + 신규 Vitest(classroom-assign 11·student-import 12, 전체 428) + Chrome(웨일) 실브라우저
+  E2E(자동배정 적용→DB·재실행 수렴 / 학생 import 6행→신규3·DB영속 / 학생상담 AI 7섹션 실 generateJSON(solar-pro3)→DB영속).
 
 ### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
 사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
