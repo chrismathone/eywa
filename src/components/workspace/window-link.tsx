@@ -38,12 +38,19 @@ export function WindowLink({
   className,
   children,
   ariaLabel,
+  onMouseEnter,
+  onMouseLeave,
+  onMouseMove,
 }: {
   href: string;
   title?: string;
   className?: string;
   children?: ReactNode;
   ariaLabel?: string;
+  // hover 정보 툴팁 등에서 트리거에 핸들러를 주입할 수 있게 forward(시간표 hover). 선택.
+  onMouseEnter?: (e: MouseEvent<HTMLAnchorElement>) => void;
+  onMouseLeave?: (e: MouseEvent<HTMLAnchorElement>) => void;
+  onMouseMove?: (e: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
@@ -66,7 +73,15 @@ export function WindowLink({
   // 링크 href엔 embed=1을 유지한다(크롬리스 embed 분기로 self-heal). 최상위/모바일은 원본 href.
   const linkHref = inFrame ? withEmbed(href) : href;
   return (
-    <Link href={linkHref} className={className} aria-label={ariaLabel} onClick={onClick}>
+    <Link
+      href={linkHref}
+      className={className}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onMouseMove={onMouseMove}
+    >
       {children}
     </Link>
   );

@@ -21,6 +21,9 @@ export type GridStudent = {
   isNew?: boolean;
   isTransferredIn?: boolean;
   englishName?: string | null;
+  // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일.
+  attendanceDays?: string[];
+  endDate?: string | null;
 };
 
 /** 빌더 입력 — ScheduleSlotWithStudents와 구조 호환(서버 타입 직접 import 회피, [[#61]]). */
@@ -46,6 +49,7 @@ export type GridPeriodRow = { order: number; label: string; time: string };
 export type RichClassCard = {
   classId: string;
   className: string;
+  subject: string; // 과목 키(hover 과목 pill용)
   teacherName: string | null; // 담임
   classroomLabel: string; // "월수 304 / 목 LAB실"
   bgColor: string | null; // ijw 반 헤더색(#RRGGBB) — null이면 과목색 폴백
@@ -139,6 +143,7 @@ export function buildRichCardGroups(slots: GridSlot[], config: PeriodsConfig): R
     cards.push({
       classId: first.classId,
       className: first.className,
+      subject: first.subject,
       teacherName: first.teacherName ?? topSlotTeacher,
       classroomLabel: classroomLabel(perDayRooms),
       bgColor: first.classBgColor,

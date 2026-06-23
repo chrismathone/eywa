@@ -9,6 +9,7 @@ import {
   type RichCardGroup,
   type RichClassCard,
 } from "@/features/timetable/lib/class-grid";
+import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
 const NAME_H = 40;
@@ -115,14 +116,27 @@ function ClassColumn({
         className={`border-line border-b ${card.bgColor ? "" : subjectSoftClass}`}
         style={{ height: NAME_H, ...headerStyle }}
       >
-        <WindowLink
-          href={`/classes/${card.classId}`}
-          title={card.className}
-          ariaLabel={`${card.className} 반 정보`}
-          className="flex h-full w-full items-center justify-center px-1 text-center text-[13px] font-bold transition hover:brightness-95"
+        <HoverCard
+          width={230}
+          card={
+            <ClassInfoCard
+              className={card.className}
+              subject={card.subject}
+              teacherName={card.teacherName}
+              room={card.classroomLabel}
+              counts={{ active: card.activeCount, hold: card.hold.length, withdrawn: card.withdrawn.length }}
+            />
+          }
         >
-          <span className="truncate">{card.className}</span>
-        </WindowLink>
+          <WindowLink
+            href={`/classes/${card.classId}`}
+            title={card.className}
+            ariaLabel={`${card.className} 반 정보`}
+            className="flex h-full w-full items-center justify-center px-1 text-center text-[13px] font-bold transition hover:brightness-95"
+          >
+            <span className="truncate">{card.className}</span>
+          </WindowLink>
+        </HoverCard>
       </div>
       {/* 담임 */}
       <div className="border-line text-foreground flex items-center justify-center border-b text-[11px] font-semibold" style={{ height: TEACHER_H }}>
@@ -130,7 +144,7 @@ function ClassColumn({
       </div>
       {/* 강의실(요일별) */}
       <div className="border-line text-text-dim flex items-center justify-center border-b px-1 text-center text-[10px] leading-tight" style={{ height: ROOM_H }}>
-        <span className="line-clamp-2">{card.classroomLabel}</span>
+        <span className="line-clamp-2" title={card.classroomLabel}>{card.classroomLabel}</span>
       </div>
       {/* 요일 헤더 */}
       <div className="border-line grid border-b" style={{ ...gridCols, height: DAYHEAD_H }}>
@@ -191,9 +205,13 @@ function Cell({ card, order, day }: { card: RichClassCard; order: number; day: D
   const c = card.cells[`${order}:${day}`];
   const base = "border-line flex items-center justify-center border-r text-[10px] font-bold last:border-r-0";
   if (!c) return <div className={base} />;
-  if (c.isLab) return <div className={`${base} bg-blue-soft text-blue`}>LAB</div>;
+  if (c.isLab) return <div className={`${base} bg-blue-soft text-blue`} title="LAB">LAB</div>;
   if (!c.label) return <div className={base} />;
-  return <div className={`${base} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`}>{abbrev(c.label)}</div>;
+  return (
+    <div className={`${base} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={c.label}>
+      {abbrev(c.label)}
+    </div>
+  );
 }
 
 /** 학생 행 — 신입=빨강·전입=초록·퇴원=취소선/dim, 이름(영문), 학교/학년. 클릭=학생 창. */
@@ -215,12 +233,31 @@ function RosterRow({ s }: { s: GridStudent }) {
     </>
   );
   const cls = `flex items-baseline justify-between gap-1 rounded-[3px] px-1 text-[10px] leading-[18px] ${tone}`;
-  if (s.studentId) {
-    return (
-      <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:brightness-95`}>
-        {inner}
-      </WindowLink>
-    );
-  }
-  return <div className={cls}>{inner}</div>;
+  const trigger = s.studentId ? (
+    <WindowLink href={`/students/${s.studentId}`} title={s.name} ariaLabel={`${s.name} 학생 정보`} className={`${cls} hover:brightness-95`}>
+      {inner}
+    </WindowLink>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+  return (
+    <HoverCard
+      width={220}
+      card={
+        <StudentInfoCard
+          name={s.name}
+          englishName={s.englishName}
+          grade={s.grade}
+          school={s.school}
+          status={s.status}
+          isNew={s.isNew}
+          isTransferredIn={s.isTransferredIn}
+          attendanceDays={s.attendanceDays}
+          endDate={s.endDate}
+        />
+      }
+    >
+      {trigger}
+    </HoverCard>
+  );
 }
