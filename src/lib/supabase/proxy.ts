@@ -58,7 +58,10 @@ export async function updateSession(request: NextRequest) {
   // 페이지·API가 직접 검증한다. ⚠️ "/kiosk"·"/kiosk/…"만 공개. "/kiosk-settings"(원장 전용,
   // (shell))는 startsWith에 걸리지 않도록 정확/슬래시 매칭으로 제외한다.
   const isKioskPublic = pathname === "/kiosk" || pathname.startsWith("/kiosk/");
-  if (PUBLIC_PATHS.has(pathname) || isKioskPublic) {
+  // /intake/* (학부모 QR 공개 접수)도 비로그인 통과 — 실제 보안은 접수 토큰을 페이지·서버액션이
+  // admin client로 직접 검증한다(토큰이 테넌트를 해석). "/intake"·"/intake/…"만 공개.
+  const isIntakePublic = pathname === "/intake" || pathname.startsWith("/intake/");
+  if (PUBLIC_PATHS.has(pathname) || isKioskPublic || isIntakePublic) {
     return NextResponse.next({ request });
   }
 

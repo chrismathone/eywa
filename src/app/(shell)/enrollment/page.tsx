@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import QRCode from "qrcode";
 import { UserPlus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -5,11 +7,13 @@ import { ConsultationTabs } from "../consultations/_components/consultation-tabs
 import {
   getConsultantOptions,
   getEnrollmentConsultations,
+  getIntakeTokens,
 } from "@/features/enrollment/server/queries";
 import { KanbanFilters } from "./_components/kanban-filters";
 import { NewEnrollmentTrigger } from "./_components/new-enrollment-trigger";
 import { EnrollmentKanban, type KanbanColumn } from "./_components/enrollment-kanban";
 import { EnrollmentTable } from "./_components/enrollment-table";
+import { IntakeQrButton, type IntakeTokenView } from "./_components/intake-qr-panel";
 
 export const metadata = { title: "등록상담 — eywa" };
 
@@ -49,7 +53,7 @@ export default async function EnrollmentPage({
   const searchQuery = q?.trim() || null;
   const view: "kanban" | "table" = viewParam === "table" ? "table" : "kanban";
 
-  const [items, consultants] = await Promise.all([
+  const [items, consultants, tokens] = await Promise.all([
     getEnrollmentConsultations({
       month: selectedMonth,
       consultantId: selectedConsultant,
@@ -57,7 +61,29 @@ export default async function EnrollmentPage({
       q: searchQuery,
     }),
     getConsultantOptions(),
+    getIntakeTokens(),
   ]);
+
+  // 공개 접수 토큰 → 현재 origin 기준 공개 URL + QR SVG(서버 생성, 클라 canvas 불요).
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https";
+  const origin = `${proto}://${host}`;
+  const tokenViews: IntakeTokenView[] = await Promise.all(
+    tokens.map(async (t) => {
+      const url = `${origin}/intake/${t.token}`;
+      return {
+        id: t.id,
+        name: t.name,
+        url,
+        qrSvg: await QRCode.toString(url, { type: "svg", margin: 1 }),
+        isActive: t.isActive,
+        usageCount: t.usageCount,
+        submissionCount: t.submissionCount,
+        expiresAt: t.expiresAt,
+      };
+    }),
+  );
 
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
   const enrolled = items.filter((i) => i.outcome === "enrolled").length;
@@ -82,7 +108,10 @@ export default async function EnrollmentPage({
             ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 전환율 ${conversionRate}%`
             : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`}
         </p>
-        <NewEnrollmentTrigger />
+        <div className="flex items-center gap-2">
+          <IntakeQrButton tokens={tokenViews} />
+          <NewEnrollmentTrigger />
+        </div>
       </header>
 
       <KanbanFilters

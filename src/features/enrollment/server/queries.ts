@@ -81,6 +81,7 @@ export type ConsultationListRow = {
   hasAiAnalysis: boolean;
   processingStatus: ConsultationProcessingStatus;
   hasAudio: boolean;
+  fromPublicIntake: boolean;
 };
 
 export type ConsultationFilter = {
@@ -108,7 +109,7 @@ export async function getEnrollmentConsultations(
     .select(
       `id, prospect_name, prospect_grade, prospect_school,
        parent_phone, parent_request, outcome, consulted_at,
-       processing_status, audio_path,
+       processing_status, audio_path, from_public_intake,
        consultant:consultant_id ( display_name )`,
     )
     .order("consulted_at", { ascending: false });
@@ -162,8 +163,39 @@ export async function getEnrollmentConsultations(
       hasAiAnalysis: hasAi.has(c.id),
       processingStatus: c.processing_status as ConsultationProcessingStatus,
       hasAudio: !!c.audio_path,
+      fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
     };
   });
+}
+
+export type IntakeTokenRow = {
+  id: string;
+  name: string;
+  token: string;
+  isActive: boolean;
+  expiresAt: string | null;
+  usageCount: number;
+  submissionCount: number;
+  createdAt: string;
+};
+
+/** 공개 접수 토큰 목록(직원용, 최신순). RLS로 테넌트 격리. */
+export async function getIntakeTokens(): Promise<IntakeTokenRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("intake_tokens")
+    .select("id, name, token, is_active, expires_at, usage_count, submission_count, created_at")
+    .order("created_at", { ascending: false });
+  return (data ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    token: t.token,
+    isActive: t.is_active,
+    expiresAt: t.expires_at,
+    usageCount: t.usage_count ?? 0,
+    submissionCount: t.submission_count ?? 0,
+    createdAt: t.created_at,
+  }));
 }
 
 export type AiAnalysisDetail = {
@@ -195,7 +227,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     .select(
       `id, prospect_name, prospect_grade, prospect_school,
        parent_name, parent_phone, parent_request, learning_history,
-       outcome, consulted_at, student_id,
+       outcome, consulted_at, student_id, from_public_intake,
        audio_path, audio_duration_sec, transcription,
        processing_status, processing_error,
        consultant:consultant_id ( display_name )`,
@@ -255,6 +287,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     hasAiAnalysis: ai !== null,
     processingStatus: c.processing_status as ConsultationProcessingStatus,
     hasAudio: !!c.audio_path,
+    fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
     transcription: c.transcription,
     processingError: c.processing_error,
     audioDurationSec: c.audio_duration_sec,

@@ -498,6 +498,36 @@ export const enrollmentConsultations = pgTable(
       .default("idle"),
     processingError: text("processing_error"),
     assemblyaiTranscriptId: text("assemblyai_transcript_id"),
+    // 등록 상담 폼 전체(0046a) — ijw ConsultationForm 이식. 과목별 점수 탭은 subjectDetails jsonb에.
+    englishName: text("english_name"),
+    gender: text("gender"),
+    bloodType: text("blood_type"),
+    birthDate: date("birth_date"),
+    studentPhone: text("student_phone"),
+    homePhone: text("home_phone"),
+    parentRelation: text("parent_relation"),
+    address: text("address"),
+    zipCode: text("zip_code"),
+    addressDetail: text("address_detail"),
+    consultationPath: text("consultation_path"),
+    subject: text("subject"),
+    careerGoal: text("career_goal"),
+    siblings: text("siblings"),
+    safetyNotes: text("safety_notes"),
+    shuttleBusRequest: boolean("shuttle_bus_request").notNull().default(false),
+    registrationStatus: text("registration_status"),
+    paymentAmount: numeric("payment_amount"),
+    paymentDate: date("payment_date"),
+    registrar: text("registrar"),
+    privacyAgreement: boolean("privacy_agreement").notNull().default(false),
+    installmentAgreement: boolean("installment_agreement").notNull().default(false),
+    followUpDate: date("follow_up_date"),
+    followUpContent: text("follow_up_content"),
+    nonRegistrationReason: text("non_registration_reason"),
+    subjectDetails: jsonb("subject_details"),
+    // QR 공개접수 출처(0047a)
+    fromPublicIntake: boolean("from_public_intake").notNull().default(false),
+    intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),
     consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -507,6 +537,27 @@ export const enrollmentConsultations = pgTable(
     index("ec_tenant_consulted_idx").on(t.tenantId, t.consultedAt),
     index("ec_assemblyai_transcript_idx").on(t.assemblyaiTranscriptId),
   ],
+);
+
+// === intake_tokens (학부모 QR 공개접수 토큰, 0047a) ===
+// 테넌트별 공개 접수 링크. token=공유 시크릿(URL에 노출). 공개 제출은 admin client가 이 토큰으로 테넌트 해석.
+export const intakeTokens = pgTable(
+  "intake_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    name: text("name").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    usageCount: integer("usage_count").notNull().default(0),
+    submissionCount: integer("submission_count").notNull().default(0),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("intake_tokens_tenant_idx").on(t.tenantId)],
 );
 
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
