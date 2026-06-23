@@ -126,6 +126,8 @@ export async function submitPublicIntake(
     prospect_grade: clip(formData.get("prospectGrade"), 20) || null,
     prospect_school: clip(formData.get("prospectSchool"), 40) || null,
     gender: clip(formData.get("gender"), 10) || null,
+    blood_type: clip(formData.get("bloodType"), 4) || null,
+    student_phone: clip(formData.get("studentPhone"), 20) || null,
     parent_name: clip(formData.get("parentName"), 40) || null,
     parent_phone: clip(formData.get("parentPhone"), 20) || null,
     parent_relation: clip(formData.get("parentRelation"), 10) || null,
