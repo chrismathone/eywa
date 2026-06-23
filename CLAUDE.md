@@ -217,6 +217,26 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 강사 경험 대규모 보강 — onescreen 데모 → 실데이터 (W1, 2026-06-24) — ✅ 브라우저 E2E
+owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/onescreen` 한 화면뿐이고 그마저 **하드코딩 데모**였다.
+멀티에이전트 강사경험 갭 감사(8영역 60건) → **제품결정: B(원스크린 전문화 허브)** 선택(사이드바 복원 A·하이브리드 C 대신,
+"강사=원스크린 전용" 기존 정체성 유지). 그 첫 단계 W1으로 onescreen을 **데모 → 실데이터 작동 도구**로 전환.
+- **데모 강사 실데이터화**: `teacher@ijw-demo.com`(박지훈)은 seed 계정이라 POC 564명 데이터의 반에 담당이 0개였다 →
+  `scripts/_poc_migration/assign-demo-teacher.cjs`(멱등)가 **teacher 없는 english 반 6개(학생 61명, mon~fri 분산)** 배정.
+  ⚠️ **비파괴**: null-teacher 반만 대상 → 기존 POC 강사·병렬 owner 세션 무영향(남의 반 안 뺏음).
+- **실데이터 로더**([onescreen/server/roster.ts](src/features/onescreen/server/roster.ts)): `getCurrentUser` → 강사 본인의
+  **오늘 요일 담당 반 → 활성 수강생** 조회(강사 스코프=누수 없음, fetchInChunks). 오늘 수업 없으면(주말) 전체 담당 반 폴백.
+  `DEMO_ONESCREEN` 하드코딩 제거([page.tsx](<src/app/(shell)/onescreen/page.tsx>)). 날짜·학년필터칩도 실데이터 도출.
+- **과목 인지 진도 입력**: onescreen UI가 math 커리큘럼(757줄 `curriculum.ts`) 전용이었다 → 박지훈은 영어라 빈 드롭다운.
+  `Subject.subjectKey` 추가 → `progress-card`가 **math=커리큘럼 드롭다운 / 그 외=freeform 텍스트**로 분기(미지정=데모=math 보존).
+- **보고서 DB 저장**(D3): 발송이 토스트 목업이었다 → [server/actions.ts](src/features/onescreen/server/actions.ts) `saveLessonReport`가
+  `lesson_reports`(0049a)에 INSERT(진도·시험·과제·강사·본문, source='onescreen') + **강사 스코프 가드**(담당 반 학생 아니면 거부).
+  메시징/PDF 발송 연동은 후속(토스트도 정직하게 "저장됨, 발송 연동 준비 중"). ⭐ lesson_reports는 시간표 hover "[진도]" 소비처와 동일 → 통합.
+- **검증**: typecheck0/lint0(신규0)/test441 + **브라우저 E2E**(박지훈 로그인 → 실학생 51명/오늘 수요일/영어 freeform →
+  보고서 저장 → DB row 확인 "권나연·영어 Unit 8·박지훈"·발송완료 pill·콘솔에러0).
+- **다음(미착수)**: W2 = 헤더 '내 메뉴' 드롭다운(F2, scoped 메뉴 진입) + students/consultations 등 **강사 per-query 스코핑**(E2 보안 —
+  현재 강사가 URL로 그 페이지 가면 테넌트 전체가 보임). W3 = onescreen 통계4·내 반/일정 위젯(B2)·과목별 보고서·셀프 급여.
+
 ### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
 사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로
 폼 내용까지 자동입력**되는지. ijw Firebase Storage의 **실제 등록상담 녹음**(이윤건 19분/17.7MB,

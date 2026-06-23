@@ -47,6 +47,10 @@ export function ProgressCard({
   const semester = semesterOfLesson(studyGrade, firstToday);
   const semesters = semestersForGrade(studyGrade);
   const units = curriculumForGradeSemester(studyGrade, semester);
+  // 과목별 진도 입력 방식: math 과목은 커리큘럼 드롭다운, 그 외(영어 등)는 freeform 텍스트.
+  // subjectKey 미지정(데모)은 math로 간주 → 기존 동작 보존. 진도 학년/학기 행도 math 과목이 있을 때만.
+  const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
+  const hasMath = student.subjects.some((su) => isMathSubject(su.subjectKey));
 
   return (
     <div className="bg-card border-line shadow-card rounded-md border">
@@ -71,7 +75,8 @@ export function ProgressCard({
       </header>
 
       <div className="flex flex-col gap-3 px-4 py-3">
-        {/* 진도 학년 + 학기 — 실제 학년과 분리 (선행/후행) */}
+        {/* 진도 학년 + 학기 — 실제 학년과 분리 (선행/후행). 커리큘럼이 있는 과목(math)이 있을 때만. */}
+        {hasMath ? (
         <div className="bg-bg-soft flex flex-wrap items-center gap-2 rounded-sm px-3 py-2">
           <span className="micro text-text-faint">진도</span>
           <Select
@@ -115,44 +120,57 @@ export function ProgressCard({
             </span>
           ) : null}
         </div>
+        ) : null}
 
         {student.subjects.map((su, i) => {
           const { tone } = subjectTone(su.name);
+          const isMath = isMathSubject(su.subjectKey);
           return (
             <div key={i} className="flex items-start gap-3">
               <span className={`mt-1 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className={`text-[13px] font-bold ${toneTextClass(tone)}`}>{su.name}</p>
                 <div className="mt-1 space-y-1 text-[12px]">
-                  <p className="text-text-faint truncate">이전 · {su.prev}</p>
+                  <p className="text-text-faint truncate">이전 · {su.prev || "기록 없음"}</p>
                   <div className="flex items-center gap-1.5">
                     <span className={`shrink-0 font-semibold ${toneTextClass(tone)}`}>오늘 →</span>
-                    <Select
-                      value={su.today}
-                      onValueChange={(v) => {
-                        if (v) onProgress(i, v as string);
-                      }}
-                    >
-                      <SelectTrigger
-                        size="sm"
-                        className="w-full min-w-0 flex-1"
-                        aria-label={`${su.name} 오늘 진도 선택`}
+                    {isMath ? (
+                      <Select
+                        value={su.today}
+                        onValueChange={(v) => {
+                          if (v) onProgress(i, v as string);
+                        }}
                       >
-                        <SelectValue placeholder="차시 선택">{(v) => v as string}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false} className="max-h-80">
-                        {units.map((unit) => (
-                          <SelectGroup key={unit.unit}>
-                            <SelectLabel>{unit.unit}</SelectLabel>
-                            {unit.lessons.map((l) => (
-                              <SelectItem key={l} value={l}>
-                                {l}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        <SelectTrigger
+                          size="sm"
+                          className="w-full min-w-0 flex-1"
+                          aria-label={`${su.name} 오늘 진도 선택`}
+                        >
+                          <SelectValue placeholder="차시 선택">{(v) => v as string}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false} className="max-h-80">
+                          {units.map((unit) => (
+                            <SelectGroup key={unit.unit}>
+                              <SelectLabel>{unit.unit}</SelectLabel>
+                              {unit.lessons.map((l) => (
+                                <SelectItem key={l} value={l}>
+                                  {l}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={su.today}
+                        onChange={(e) => onProgress(i, e.target.value)}
+                        placeholder="오늘 진도 입력 (예: Unit 8 · p.90)"
+                        aria-label={`${su.name} 오늘 진도 입력`}
+                        className="border-line bg-card focus:border-primary h-8 w-full min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none transition-colors"
+                      />
+                    )}
                   </div>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ATTITUDE, CLASS_TAGS, TODAY } from "../data";
 import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
+import { saveLessonReport } from "../server/actions";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { StudentList } from "./student-list";
@@ -38,7 +39,15 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
  * 데모 충실 이식: DB 영속화/네트워크 없음. 보고서는 **과목별** 템플릿(buildSubjectReport),
  * 발송은 sonner 토스트 목업. 진도(today)는 과목별로 직접 입력.
  */
-export function OneScreenClient({ initial }: { initial: OneScreenStudent[] }) {
+export function OneScreenClient({
+  initial,
+  today = TODAY,
+  classTags = CLASS_TAGS,
+}: {
+  initial: OneScreenStudent[];
+  today?: string;
+  classTags?: readonly string[];
+}) {
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
@@ -125,28 +134,51 @@ export function OneScreenClient({ initial }: { initial: OneScreenStudent[] }) {
     const idx = selected.subjects.findIndex((su) => su.name === subjectName);
     patchReport(selected.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(selected, idx) }));
   }
-  function sendSubject(subjectName: string, channel: string) {
+  async function sendSubject(subjectName: string, channel: string) {
     if (!selected) return;
     const idx = selected.subjects.findIndex((su) => su.name === subjectName);
-    // 초안이 비어 있으면 그 과목 초안을 자동 작성 후 발송
-    patchReport(selected.id, subjectName, (r) => ({
-      draft: r.draft.trim() ? r.draft : buildSubjectReport(selected, idx),
-      sent: true,
-    }));
+    const su = selected.subjects[idx];
+    // 초안이 비어 있으면 그 과목 초안을 자동 작성해 본문으로 사용
+    const existing = reports[selected.id]?.[subjectName];
+    const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(selected, idx);
+    const examInfo = [
+      selected.tests.daily.score != null
+        ? `일일 ${selected.tests.daily.score}/${selected.tests.daily.max}`
+        : null,
+      selected.tests.check.score != null
+        ? `확인 ${selected.tests.check.score}/${selected.tests.check.max}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const res = await saveLessonReport({
+      studentId: selected.id,
+      progress: su ? `${su.name} ${su.today}`.trim() : "",
+      examInfo,
+      homeworkScore: selected.homework,
+      notes: draft,
+    });
+    if (!res.ok) {
+      toast.error(res.error ?? "보고서 저장에 실패했습니다");
+      return;
+    }
+    patchReport(selected.id, subjectName, () => ({ draft, sent: true }));
+    // D3: 저장은 실제(lesson_reports). 카톡/문자/PDF 발송 연동은 후속 — 토스트는 정직하게.
     const msg =
       channel === "pdf"
-        ? `${subjectName} 보고서를 PDF로 내보냈습니다`
+        ? `${subjectName} 보고서를 저장했습니다 (PDF 내보내기는 준비 중)`
         : channel === "save"
-          ? `${subjectName} 보고서를 내부 기록에 저장했습니다`
-          : `${selected.name} 학부모님께 ${subjectName} 보고서를 ${channel} 발송했습니다`;
+          ? `${subjectName} 보고서를 기록에 저장했습니다`
+          : `${subjectName} 보고서를 저장했습니다 (${channel} 발송 연동은 준비 중)`;
     toast.success(msg);
   }
 
   return (
     <div className="space-y-4">
       <OneScreenTopBar
-        today={TODAY}
-        classTags={CLASS_TAGS}
+        today={today}
+        classTags={classTags}
         classFilter={classFilter}
         onFilter={setClassFilter}
         doneCount={doneCount}

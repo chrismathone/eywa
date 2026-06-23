@@ -11,6 +11,10 @@ export type Subject = {
   name: string; // "영어 독해", "수학 (상)", "국어 문학"
   prev: string; // 이전 진도 — "Unit 7 · p.82"
   today: string; // 오늘 진도 — "Unit 8 · p.90"
+  // 운영 과목 키(operations.subjects) — 진도 입력 방식 분기에 사용.
+  // "math"면 커리큘럼 드롭다운(curriculum.ts), 그 외(영어 등)면 freeform 텍스트.
+  // 미지정(데모)이면 "math"로 간주 → 기존 커리큘럼 동작 보존.
+  subjectKey?: string;
 };
 
 /** 한 테스트(일일/확인)의 점수 + 만점 + 직전 회차 점수 */
