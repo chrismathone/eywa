@@ -26,18 +26,19 @@ export function OneScreenHubBar({
   todayClasses: TodayClass[];
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(0,400px)]">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      {/* 통계 — 컴팩트 단일 카드(4셀, 내용폭). stretch 안 함 → 빈 공간 없음. */}
+      <div className="bg-card border-line shadow-card grid grid-cols-4 divide-x divide-line/70 rounded-md border lg:shrink-0">
         {STAT_DEFS.map((d) => {
           const v = stats[d.key];
           const denom = d.key === "students" ? null : stats.students;
           return (
-            <div key={d.key} className="bg-card border-line shadow-card rounded-md border px-3 py-2.5">
-              <p className="micro text-text-faint">{d.label}</p>
-              <p className={`tabular mt-0.5 text-[22px] font-extrabold ${d.tone}`}>
+            <div key={d.key} className="px-3.5 py-2 text-center sm:px-5">
+              <p className="micro text-text-faint whitespace-nowrap">{d.label}</p>
+              <p className={`tabular mt-0.5 text-[19px] font-extrabold leading-tight ${d.tone}`}>
                 {v}
                 {denom != null ? (
-                  <span className="text-text-faint text-[13px] font-semibold">/{denom}</span>
+                  <span className="text-text-faint text-[12px] font-semibold">/{denom}</span>
                 ) : null}
               </p>
             </div>
@@ -45,23 +46,26 @@ export function OneScreenHubBar({
         })}
       </div>
 
-      <div className="bg-card border-line shadow-card rounded-md border px-4 py-3">
-        <p className="micro text-text-faint mb-2">오늘 수업 {todayClasses.length}개</p>
+      {/* 오늘 수업 — 남는 폭을 채우는 시각순 그리드(시각 강조). */}
+      <div className="bg-card border-line shadow-card min-w-0 flex-1 rounded-md border px-4 py-2.5">
+        <p className="micro text-text-faint mb-1.5">오늘 수업 {todayClasses.length}개</p>
         {todayClasses.length === 0 ? (
-          <p className="text-text-faint text-[13px]">오늘 예정된 수업이 없습니다.</p>
+          <p className="text-text-faint py-1 text-[13px]">오늘 예정된 수업이 없습니다.</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
             {todayClasses.map((c) => (
-              <span
+              <div
                 key={c.id}
-                className="border-line inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[12px] whitespace-nowrap"
+                className="border-line/60 flex items-center gap-2 border-b py-1 last:border-b-0"
               >
-                {c.startTime ? (
-                  <span className="text-primary font-mono font-semibold">{c.startTime}</span>
-                ) : null}
-                <span className="text-foreground font-semibold">{c.name}</span>
-                <span className="text-text-faint">{c.studentCount}명</span>
-              </span>
+                <span className="text-primary bg-primary-soft shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[11px] font-semibold">
+                  {c.startTime ?? "—"}
+                </span>
+                <span className="text-foreground min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+                  {c.name}
+                </span>
+                <span className="text-text-faint shrink-0 text-[11px]">{c.studentCount}명</span>
+              </div>
             ))}
           </div>
         )}
