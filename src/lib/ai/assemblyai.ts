@@ -91,7 +91,9 @@ export async function submitTranscript(args: {
     audio_url: args.audioUrl,
     language_code: "ko",
     speaker_labels: true,
-    speech_model: "universal",
+    // AssemblyAI가 단수 `speech_model`을 폐기(400 거부) → 신형 다중모델 폴백 배열로.
+    // pro 우선, 미지원/실패 시 universal-2로 폴백(ijw functions/index.js와 동일).
+    speech_models: ["universal-3-pro", "universal-2"],
     word_boost: MEETING_WORD_BOOST,
     boost_param: "high",
   };
