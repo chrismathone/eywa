@@ -160,9 +160,9 @@ export function StudentInfoCard({
       ? attendanceDays.map((d) => DAY_KO[d] ?? d).join("·") + "만 등원"
       : null;
   const hasDetail =
-    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName || textbook;
+    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName;
   return (
-    <div className="space-y-2 text-[11px]">
+    <div className="space-y-2 break-keep text-[11px]">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-foreground text-[13px] font-bold">{name}</span>
         {englishName ? <span className="text-text-dim">({englishName})</span> : null}
@@ -185,9 +185,6 @@ export function StudentInfoCard({
             </div>
           ) : null}
           {partial ? <Row label="등원" value={partial} /> : null}
-          {textbook ? (
-            <Row label="교재" value={`${textbook.name}${textbook.date ? ` (${textbook.date})` : ""}`} />
-          ) : null}
           {pendingClassName ? (
             <Row
               label="이동 예정"
@@ -197,6 +194,12 @@ export function StudentInfoCard({
           {status === "withdrawn" && endDate ? <Row label="퇴원일" value={endDate} mono /> : null}
         </div>
       ) : null}
+      {textbook ? (
+        <p className="border-line border-t pt-1.5">
+          <span className="text-text-dim">교재 </span>
+          <span className="text-foreground">{textbook.name}</span>
+        </p>
+      ) : null}
       {report?.progress ? (
         <div className="border-line space-y-0.5 border-t pt-1.5">
           <div className="text-text-dim flex flex-wrap items-center gap-1.5">
@@ -204,7 +207,7 @@ export function StudentInfoCard({
             <span className="num font-mono">{report.date}</span>
             {report.teacherName ? <span>· {report.teacherName}</span> : null}
           </div>
-          <p className="text-foreground">{report.progress}</p>
+          <p className="text-foreground line-clamp-2">{report.progress}</p>
           {report.examInfo || report.homeworkScore ? (
             <div className="text-text-dim flex flex-wrap gap-x-2.5 font-mono text-[10px]">
               {report.examInfo ? <span>시험 {report.examInfo}</span> : null}

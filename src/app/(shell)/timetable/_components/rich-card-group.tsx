@@ -242,7 +242,7 @@ function RosterRow({ s }: { s: GridStudent }) {
   );
   return (
     <HoverCard
-      width={220}
+      width={240}
       card={
         <StudentInfoCard
           name={s.name}

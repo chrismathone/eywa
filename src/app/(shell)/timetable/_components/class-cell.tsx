@@ -141,7 +141,7 @@ function StudentRow({
   );
   return (
     <HoverCard
-      width={220}
+      width={240}
       card={
         <StudentInfoCard
           name={student.name}
