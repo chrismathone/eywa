@@ -1,11 +1,12 @@
 import { FaceTabs, type Face } from "@/components/face-tabs";
 
-// ijw 학생 상세 탭을 이식 — eywa에 데이터 없는 탭(교재·진도)은 제외.
-// 순서(ijw): 개요·수업·성적·출결·상담·메모·수납·타임라인.
+// ijw 학생 상세 탭을 이식. '진도'는 Edutrix 보고서 이식(lesson_reports, 0049a) 후 추가.
+// 순서(ijw): 개요·수업·성적·진도·출결·상담·메모·수납·타임라인. (교재 탭은 미이식.)
 export const STUDENT_TABS = [
   { key: "overview", label: "개요" },
   { key: "classes", label: "수업" },
   { key: "grades", label: "성적" },
+  { key: "progress", label: "진도" },
   { key: "attendance", label: "출결" },
   { key: "consultations", label: "상담" },
   { key: "memos", label: "메모" },

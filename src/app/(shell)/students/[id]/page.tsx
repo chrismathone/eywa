@@ -12,6 +12,7 @@ import { OverviewTab } from "./_tabs/overview-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { BillingTab } from "./_tabs/billing-tab";
 import { GradesTab } from "./_tabs/grades-tab";
+import { ProgressTab } from "./_tabs/progress-tab";
 import { AttendanceTab } from "./_tabs/attendance-tab";
 import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
@@ -102,6 +103,8 @@ export default async function StudentDetailPage({
           <ClassesTab student={student} />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
+        ) : tab === "progress" ? (
+          <ProgressTab studentId={student.id} />
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (

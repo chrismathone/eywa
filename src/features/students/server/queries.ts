@@ -702,6 +702,36 @@ export async function getStudentGrades(studentId: string): Promise<StudentGradeR
   }));
 }
 
+// === 수업 진도/보고서(lesson_reports) — 학생 상세 '진도' 탭(ijw StudentDetail ProgressTab 이식) ===
+export type LessonReportRow = {
+  id: string;
+  reportDate: string;
+  progress: string | null;
+  examInfo: string | null;
+  homeworkScore: string | null;
+  teacherName: string | null;
+};
+
+/** 학생 최근 수업보고서 N건(최신순). 데이터는 Edutrix 이식(import-lesson-reports.cjs). */
+export async function getStudentLessonReports(studentId: string, limit = 12): Promise<LessonReportRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lesson_reports")
+    .select("id, report_date, progress, exam_info, homework_score, teacher_name")
+    .eq("student_id", studentId)
+    .order("report_date", { ascending: false })
+    .limit(limit);
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    reportDate: r.report_date,
+    progress: r.progress,
+    examInfo: r.exam_info,
+    homeworkScore: r.homework_score,
+    teacherName: r.teacher_name,
+  }));
+}
+
 // === 성적 목표설정(grade_goals) — 실제 점수와 매칭해 달성 여부 산출 ===
 export type GradeGoalRow = {
   id: string;

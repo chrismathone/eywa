@@ -292,6 +292,7 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
         .from("lesson_reports")
         .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
         .in("student_id", chunk)
+        .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
         .order("report_date", { ascending: false }),
     );
     const latestRep = new Map<string, StudentLine["latestReport"]>();
