@@ -8,7 +8,9 @@ import { buildSubjectReport, studentStatus } from "../report";
 import { saveLessonReport } from "../server/actions";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
+import { OneScreenHubBar } from "./hub-bar";
 import { StudentList } from "./student-list";
+import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
@@ -43,10 +45,12 @@ export function OneScreenClient({
   initial,
   today = TODAY,
   classTags = CLASS_TAGS,
+  todayClasses = [],
 }: {
   initial: OneScreenStudent[];
   today?: string;
   classTags?: readonly string[];
+  todayClasses?: TodayClass[];
 }) {
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
@@ -65,6 +69,14 @@ export function OneScreenClient({
     const st = studentStatus(s);
     return st.prog === "ok" && st.test === "ok" && reportCellById[s.id] === "ok";
   }).length;
+
+  // 허브 통계(B2) — 오늘 마감 진행 현황.
+  const hubStats = {
+    students: students.length,
+    progressDone: students.filter((s) => s.progressConfirmed).length,
+    testDone: students.filter((s) => studentStatus(s).test === "ok").length,
+    reportDone: students.filter((s) => reportCellById[s.id] === "ok").length,
+  };
 
   function patch(id: string, fn: (s: OneScreenStudent) => OneScreenStudent) {
     setStudents((prev) => prev.map((s) => (s.id === id ? fn(s) : s)));
@@ -184,6 +196,8 @@ export function OneScreenClient({
         doneCount={doneCount}
         total={students.length}
       />
+
+      <OneScreenHubBar stats={hubStats} todayClasses={todayClasses} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)]">
         <StudentList

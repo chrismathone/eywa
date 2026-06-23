@@ -17,15 +17,25 @@ import type { OneScreenStudent } from "../types";
 const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const; // Date.getDay()
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
+/** 오늘 수업(반) 한 줄 — 원스크린 '오늘 일정' 위젯용 */
+export type TodayClass = {
+  id: string;
+  name: string;
+  subject: string;
+  startTime: string | null; // "16:20"
+  studentCount: number;
+};
+
 export type TeacherRoster = {
   today: string; // "2026년 6월 20일 (금)"
   classTags: string[]; // ["전체", ...현재 로스터에 있는 학년]
   teacherName: string;
   students: OneScreenStudent[];
+  todayClasses: TodayClass[]; // 오늘(또는 폴백 전체) 담당 반 — 시작시각순
 };
 
 function emptyRoster(today: string, teacherName: string): TeacherRoster {
-  return { today, classTags: ["전체"], teacherName, students: [] };
+  return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [] };
 }
 
 export async function getTeacherRoster(): Promise<TeacherRoster> {
@@ -53,14 +63,22 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
 
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
-  const scheds = await fetchInChunks<{ class_id: string }>(allIds, (chunk) =>
+  const scheds = await fetchInChunks<{ class_id: string; start_time: string | null }>(allIds, (chunk) =>
     supabase
       .from("class_schedules")
-      .select("class_id")
+      .select("class_id, start_time")
       .eq("day_of_week", dow)
       .in("class_id", chunk),
   );
   const todayIds = new Set(scheds.map((s) => s.class_id));
+  // 반별 오늘 최초 시작시각(HH:MM)
+  const startByClass = new Map<string, string | null>();
+  for (const s of scheds) {
+    const t = s.start_time ? String(s.start_time).slice(0, 5) : null;
+    const prev = startByClass.get(s.class_id);
+    if (prev === undefined) startByClass.set(s.class_id, t);
+    else if (t && (prev === null || t < prev)) startByClass.set(s.class_id, t);
+  }
   const activeClasses = todayIds.size > 0 ? allClasses.filter((c) => todayIds.has(c.id)) : allClasses;
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
@@ -123,5 +141,18 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     (a, b) => gradeRank(a) - gradeRank(b),
   );
 
-  return { today, classTags: ["전체", ...grades], teacherName, students };
+  // 오늘 수업(반) 위젯 — 반별 학생수 + 시작시각, 시각순.
+  const countByClass = new Map<string, number>();
+  for (const e of enrollments) countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1);
+  const todayClasses: TodayClass[] = activeClasses
+    .map((c) => ({
+      id: c.id,
+      name: c.class_name,
+      subject: subjects.labelOf(c.subject),
+      startTime: startByClass.get(c.id) ?? null,
+      studentCount: countByClass.get(c.id) ?? 0,
+    }))
+    .sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));
+
+  return { today, classTags: ["전체", ...grades], teacherName, students, todayClasses };
 }

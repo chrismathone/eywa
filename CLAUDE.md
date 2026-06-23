@@ -217,10 +217,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
-### 강사 경험 대규모 보강 — onescreen 데모 → 실데이터 (W1, 2026-06-24) — ✅ 브라우저 E2E
+### 강사 경험 대규모 보강 — onescreen 데모 → 실작동 + 강사 스코핑 + 허브 (W1~W3, 2026-06-24) — ✅ 브라우저 E2E
 owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/onescreen` 한 화면뿐이고 그마저 **하드코딩 데모**였다.
 멀티에이전트 강사경험 갭 감사(8영역 60건) → **제품결정: B(원스크린 전문화 허브)** 선택(사이드바 복원 A·하이브리드 C 대신,
-"강사=원스크린 전용" 기존 정체성 유지). 그 첫 단계 W1으로 onescreen을 **데모 → 실데이터 작동 도구**로 전환.
+"강사=원스크린 전용" 기존 정체성 유지). W1(데모→실데이터)·W2(스코핑+내비)·W3(허브 깊이) 완료.
+
+**W1 — onescreen 데모 → 실데이터 작동 도구:**
 - **데모 강사 실데이터화**: `teacher@ijw-demo.com`(박지훈)은 seed 계정이라 POC 564명 데이터의 반에 담당이 0개였다 →
   `scripts/_poc_migration/assign-demo-teacher.cjs`(멱등)가 **teacher 없는 english 반 6개(학생 61명, mon~fri 분산)** 배정.
   ⚠️ **비파괴**: null-teacher 반만 대상 → 기존 POC 강사·병렬 owner 세션 무영향(남의 반 안 뺏음).
@@ -232,10 +234,24 @@ owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/on
 - **보고서 DB 저장**(D3): 발송이 토스트 목업이었다 → [server/actions.ts](src/features/onescreen/server/actions.ts) `saveLessonReport`가
   `lesson_reports`(0049a)에 INSERT(진도·시험·과제·강사·본문, source='onescreen') + **강사 스코프 가드**(담당 반 학생 아니면 거부).
   메시징/PDF 발송 연동은 후속(토스트도 정직하게 "저장됨, 발송 연동 준비 중"). ⭐ lesson_reports는 시간표 hover "[진도]" 소비처와 동일 → 통합.
-- **검증**: typecheck0/lint0(신규0)/test441 + **브라우저 E2E**(박지훈 로그인 → 실학생 51명/오늘 수요일/영어 freeform →
-  보고서 저장 → DB row 확인 "권나연·영어 Unit 8·박지훈"·발송완료 pill·콘솔에러0).
-- **다음(미착수)**: W2 = 헤더 '내 메뉴' 드롭다운(F2, scoped 메뉴 진입) + students/consultations 등 **강사 per-query 스코핑**(E2 보안 —
-  현재 강사가 URL로 그 페이지 가면 테넌트 전체가 보임). W3 = onescreen 통계4·내 반/일정 위젯(B2)·과목별 보고서·셀프 급여.
+**W2 — 강사 데이터 스코핑(E2 보안) + 미니멀 셸 '내 메뉴' 드롭다운(F2):**
+- ⚠️ 갭: 강사는 메뉴에 scoped 권한이 있으나 (1) 쿼리에 강사 필터가 없어 URL로 가면 **테넌트 전체가 보임**(intra-tenant 누수)
+  (2) 미니멀 셸에 내비가 없어 도달 불가. 둘 다 해소.
+- **공유 헬퍼** [`src/lib/auth/teacher-scope.ts`](src/lib/auth/teacher-scope.ts)(React cache): 강사 담당(`classes.teacher_id`) →
+  `classIds`·`studentIds`·`subjects`. **각 목록 쿼리가 자체 스코프**(호출부가 빠뜨려도 `systemRole==='teacher'`면 좁힘=fail-safe).
+- **스코핑 적용 5 feature**: students(목록+Stat) · classes(목록+Stat) · attendance(반selector + URL classId 가드) ·
+  consultations(목록+Stat+학생드롭다운) · exams(담당 **과목** 기준 — exams엔 teacher_id 없음). 검증: 박지훈 학생 524→**61**.
+- **`TeacherMenu`** 드롭다운([teacher-menu.tsx](src/components/teacher-menu.tsx), layout 강사 헤더): **스코핑 완료 페이지만** 노출
+  (원스크린·내 학생·출석부·내 수업·성적관리·학생상담 6링크). ⚠️ 미스코프(시간표·대시보드·retention)는 누수 방지로 **제외**.
+
+**W3 — onescreen 허브 깊이(B2):**
+- [`hub-bar.tsx`](src/features/onescreen/components/hub-bar.tsx): **통계 4카드**(오늘 학생·진도확정·테스트입력·보고서발송, 클라 state 도출)
+  + **오늘 수업 위젯**(roster가 오늘 담당 반·시작시각·인원 반환 → 시각순 칩). 강사가 "오늘 누구·몇 반·언제"를 한눈에.
+
+- **검증**: typecheck0/lint0(신규0)/test441 + **브라우저 E2E**: W1(실학생 51명/오늘 수요일/영어 freeform → 보고서 DB저장
+  "권나연·영어 Unit8·박지훈"·발송완료 pill) · W2(학생 61 스코프·내메뉴 6링크) · W3(통계4·오늘 수업 5개 14:20~18:20 시각순)·콘솔에러0.
+- **남은 후속(저우선)**: 시간표 스코핑(복잡 — onescreen 오늘일정 위젯이 대체) + exams 디테일 스코핑 + 강사 셀프 급여(/my-payroll,
+  데모 급여설정 부재로 임팩트 작음) + 과목별 보고서 스키마(`lesson_reports.subject`) + 카톡/문자/PDF 실발송 연동.
 
 ### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
 사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로

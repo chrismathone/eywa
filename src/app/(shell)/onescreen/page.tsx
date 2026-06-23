@@ -17,6 +17,7 @@ export default async function OneScreenPage() {
       initial={roster.students}
       today={roster.today}
       classTags={roster.classTags}
+      todayClasses={roster.todayClasses}
     />
   );
 }
