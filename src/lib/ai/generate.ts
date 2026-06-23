@@ -41,6 +41,29 @@ export type GenerateJSONOptions = {
  *
  * @returns `data`(파싱된 T) + `model`(실제 사용 모델 id — model_version 문자열 재료).
  */
+/**
+ * provider 호출 에러를 분류 — 인증/키 오류(401·403)는 관리자가 알아볼 수 있는 한글 메시지로 바꿔
+ * 다시 throw한다. 그래야 processing_error에 영문 원문 대신 "키를 고쳐라"가 떠 관리자가 조치할 수 있다.
+ * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
+ */
+function rethrowAi(provider: "upstage" | "anthropic", err: unknown): never {
+  const label = provider === "upstage" ? "Upstage(Solar)" : "Anthropic(Claude)";
+  const status =
+    typeof err === "object" && err !== null && "status" in err
+      ? Number((err as { status?: unknown }).status)
+      : undefined;
+  const raw = err instanceof Error ? err.message : String(err);
+  if (status === 401 || status === 403 || /invalid.*api key|unauthorized|api key/i.test(raw)) {
+    throw new Error(
+      `AI 키 오류: ${label} API 키가 유효하지 않습니다(${status ?? "인증 거부"}). 관리자가 환경변수의 AI API 키를 확인·갱신해야 합니다.`,
+    );
+  }
+  if (status === 429) {
+    throw new Error(`AI 사용량 한도 초과: ${label} 요청이 일시적으로 제한되었습니다(429). 잠시 후 다시 시도하세요.`);
+  }
+  throw err instanceof Error ? err : new Error(raw);
+}
+
 export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
@@ -49,26 +72,34 @@ export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data
   let text = "";
   if (provider === "upstage") {
     const client = getUpstage(keyName);
-    const res = await client.chat.completions.create({
-      model,
-      max_tokens: opts.maxTokens,
-      // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
-      response_format: { type: "json_object" },
-      messages: [
-        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-        { role: "user" as const, content: opts.prompt },
-      ],
-    });
-    text = res.choices[0]?.message?.content ?? "";
+    try {
+      const res = await client.chat.completions.create({
+        model,
+        max_tokens: opts.maxTokens,
+        // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
+        response_format: { type: "json_object" },
+        messages: [
+          ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+          { role: "user" as const, content: opts.prompt },
+        ],
+      });
+      text = res.choices[0]?.message?.content ?? "";
+    } catch (e) {
+      rethrowAi("upstage", e);
+    }
   } else {
     const client = getAnthropic(keyName);
-    const res = await client.messages.create({
-      model,
-      max_tokens: opts.maxTokens,
-      ...(opts.system ? { system: opts.system } : {}),
-      messages: [{ role: "user", content: opts.prompt }],
-    });
-    text = res.content[0]?.type === "text" ? res.content[0].text : "";
+    try {
+      const res = await client.messages.create({
+        model,
+        max_tokens: opts.maxTokens,
+        ...(opts.system ? { system: opts.system } : {}),
+        messages: [{ role: "user", content: opts.prompt }],
+      });
+      text = res.content[0]?.type === "text" ? res.content[0].text : "";
+    } catch (e) {
+      rethrowAi("anthropic", e);
+    }
   }
 
   return { data: parseJsonLoose<T>(text), model };

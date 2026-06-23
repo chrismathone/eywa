@@ -4,6 +4,12 @@ import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
+import { extractConsultationForm } from "@/features/enrollment/server/form-extract";
+import {
+  buildFormPatch,
+  type CurrentConsultationValues,
+  type ExtractedConsultationForm,
+} from "@/features/enrollment/form-fill";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** 상수시간 문자열 비교 — 타이밍 공격 방지. 길이 다르면 즉시 false. */
@@ -359,11 +365,12 @@ async function handleConsultation(
         .join("\n")
     : transcript.text;
 
-  let report: ConsultationReport13;
-  let modelId = "stub";
+  let extracted: ExtractedConsultationForm | null = null;
 
-  try {
-    const { data, model } = await generateJSON<ConsultationReport13>({
+  // 13섹션 심층분석 + 폼 필드 추출을 병렬 실행(ijw processRegistrationRecording 패턴).
+  // 분석은 필수(실패 시 failed), 폼 추출은 best-effort(실패해도 분석은 살린다).
+  const [analysisRes, extractRes] = await Promise.allSettled([
+    generateJSON<ConsultationReport13>({
       maxTokens: 8192,
       prompt: [
         "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
@@ -417,16 +424,29 @@ async function handleConsultation(
             "추측 금지. 전사에 안 나온 정보는 빈 문자열 또는 null.",
             "JSON만 출력. 마크다운 코드 블록 없이.",
       ].join("\n"),
-    });
-    report = data;
-    modelId = model;
-  } catch (e) {
+    }),
+    extractConsultationForm(formatted, {
+      studentName: consult.prospect_name,
+      grade: consult.prospect_grade,
+      school: consult.prospect_school,
+    }),
+  ]);
+
+  if (analysisRes.status === "rejected") {
+    const e = analysisRes.reason;
     const msg = e instanceof Error ? e.message : String(e);
     await admin
       .from("enrollment_consultations")
       .update({ processing_status: "failed", processing_error: `AI 분석 실패: ${msg}` })
       .eq("id", consult.id);
     return NextResponse.json({ ok: true });
+  }
+  const report = analysisRes.value.data;
+  const modelId = analysisRes.value.model;
+  if (extractRes.status === "fulfilled") {
+    extracted = extractRes.value.form;
+  } else {
+    console.warn("[assemblyai webhook] 폼 추출 실패(분석은 유지)", extractRes.reason);
   }
 
   // Build / upsert consultation_ai_analysis row. The 13-section report lives in
@@ -468,16 +488,51 @@ async function handleConsultation(
     { onConflict: "consultation_id,model_version" },
   );
 
-  // Auto-fill prospect fields if Claude extracted them (and current values are placeholder-empty).
+  // Auto-fill — 빈 필드만 채운다(상담사 수기 입력 절대 안 덮어씀).
   const patch: Record<string, unknown> = {
     processing_status: "completed",
     processing_error: null,
     outcome: "ai_done",
   };
+  // (1) 13섹션 분석의 extracted 4필드 — 기본 baseline(폼 추출 실패 시에도 동작).
   if (!consult.prospect_grade && report.extracted.grade) patch.prospect_grade = report.extracted.grade;
   if (!consult.prospect_school && report.extracted.school) patch.prospect_school = report.extracted.school;
   if (!consult.parent_name && report.extracted.parentName) patch.parent_name = report.extracted.parentName;
   if (!consult.parent_phone && report.extracted.parentPhone) patch.parent_phone = report.extracted.parentPhone;
+
+  // (2) 전용 폼 추출(ijw 패리티) — 전체 폼의 빈 필드를 채운다. 현재 값을 읽어 빈 곳만.
+  if (extracted) {
+    const { data: cur } = await admin
+      .from("enrollment_consultations")
+      .select(
+        "prospect_grade, prospect_school, parent_name, parent_phone, parent_relation, gender, birth_date, address, consultation_path, career_goal, siblings, safety_notes, shuttle_bus_request, registration_status, subject, parent_request, learning_history, follow_up_content, non_registration_reason, subject_details",
+      )
+      .eq("id", consult.id)
+      .single();
+    const current: CurrentConsultationValues = {
+      prospectGrade: cur?.prospect_grade,
+      prospectSchool: cur?.prospect_school,
+      parentName: cur?.parent_name,
+      parentPhone: cur?.parent_phone,
+      parentRelation: cur?.parent_relation,
+      gender: cur?.gender,
+      birthDate: cur?.birth_date,
+      address: cur?.address,
+      consultationPath: cur?.consultation_path,
+      careerGoal: cur?.career_goal,
+      siblings: cur?.siblings,
+      safetyNotes: cur?.safety_notes,
+      shuttleBusRequest: cur?.shuttle_bus_request,
+      registrationStatus: cur?.registration_status,
+      subject: cur?.subject,
+      parentRequest: cur?.parent_request,
+      learningHistory: cur?.learning_history,
+      followUpContent: cur?.follow_up_content,
+      nonRegistrationReason: cur?.non_registration_reason,
+      subjectDetails: cur?.subject_details,
+    };
+    Object.assign(patch, buildFormPatch(extracted, current));
+  }
 
   await admin.from("enrollment_consultations").update(patch).eq("id", consult.id);
 

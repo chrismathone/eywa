@@ -217,6 +217,35 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
+사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로
+폼 내용까지 자동입력**되는지. ijw Firebase Storage의 **실제 등록상담 녹음**(이윤건 19분/17.7MB,
+`registration-recordings/`, serviceAccount `D:\ijw-calander\serviceAccount.json`, 버킷 `ijw-calander.firebasestorage.app`)을
+eywa 파이프라인에 그대로 흘려 E2E 검증.
+- **🐛 전사 전면 차단 버그 발견·수정**(`4c42531`): [assemblyai.ts](src/lib/ai/assemblyai.ts) `submitTranscript`가
+  **폐기된 `speech_model: "universal"`** 사용 → AssemblyAI가 이제 **HTTP 400 거부** → eywa의 **모든 전사
+  (회의·등록상담·학생상담, submitTranscript 공유)가 깨져 있었음**. `speech_models: ["universal-3-pro","universal-2"]`로
+  교체(ijw functions/index.js와 동일). 실 19분 녹음 → **7,866자 한국어 전사 복구 확인**.
+- **⚠️ 웹훅은 프로덕션에서 실행됨**(`NEXT_PUBLIC_APP_URL` 미설정 → 폴백 `eywa-alpha.vercel.app`). 즉 로컬에서
+  녹음해도 AssemblyAI 콜백은 **프로덕션 웹훅**으로 가고 같은 Supabase DB에 결과를 쓴다(시크릿 일치 확인). 그래서
+  위 "학생상담 AI 녹음"의 "localhost 웹훅 미도달" 메모는 **부정확**. **단 프로덕션 Vercel의 `UPSTAGE_API_KEY`가
+  무효(401)** → 분석이 프로덕션에서 401로 실패(전사는 성공). **운영 조치 필요: Vercel env UPSTAGE_API_KEY 갱신.**
+  (로컬 키는 유효 → 로컬 dev 웹훅으로 분석 완주 검증.)
+- **등록상담 폼 자동입력(ijw `processRegistrationRecording` 패리티)**: 기존엔 13섹션 분석을 읽기 패널로만 보여주고
+  기본 4필드만 자동입력. 이제 **전용 폼 추출 콜**([form-extract.ts](src/features/enrollment/server/form-extract.ts),
+  13섹션과 `Promise.allSettled` 병렬)이 학교·학년·보호자·관계·성별·생일·주소·상담경로·진로·형제·셔틀·등록상태·과목·
+  학부모요구·이전학원/최근성적/약점(learning_history)·후속조치·**과목별 점수(subject_details)**를 추출 →
+  순수 [form-fill.ts](src/features/enrollment/form-fill.ts) `buildFormPatch`가 **빈 필드만** DB 패치로 매핑(수기 입력
+  보존, 정적 enum 검증, Vitest 13). 웹훅 [handleConsultation](<src/app/api/webhooks/assemblyai/route.ts>) 배선.
+  실검증(이윤건 녹음): `subject=english`·`parent_request`·`learning_history{prevAcademy,lastScore,weakSubjects}`·
+  `siblings`·`gender`·`follow_up_content`·`subject_details{math,english}` 자동입력 → 상세 폼 카드에 렌더.
+- **AI 키/인증 오류 한글화**([generate.ts](src/lib/ai/generate.ts) `rethrowAi`): generateJSON이 401·403·429를
+  관리자가 알아볼 한글 메시지로 throw("AI 키 오류: … 관리자가 키를 확인·갱신")→ processing_error에 영문 원문 대신
+  조치 가능한 메시지. (silent provider 폴백은 의도적 미추가 — 키 무효는 표면화돼야 관리자가 고친다.)
+- 검증: typecheck0/lint0(신규)/**test441**(form-fill 13) + 실 ijw 녹음 E2E(전사 7866자·13섹션·폼 자동입력 DB영속).
+  ⚠️ 브라우저 시각검증은 dev 재시작 후 웨일 확장 연결 끊김으로 미캡처(데이터 레이어·서버 200으로 검증). 테스트 행
+  `7149e772`(이윤건)는 데모 DB에 잔존(실 PII — 정리 대상).
+
 ### ijw→eywa 갭 전수 재비교 + Tier 1 이식 6건 (2026-06-22) — ✅ 게이트 그린 + 실검증
 ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 비교+검증, 거짓양성 제거) → confirmed 107건을 우선순위
 재분류(`docs/ijw-eywa-gap-2026-06-22.md`). "이미 구현(overstated 16)·의도적 제외 다수"를 빼면 진짜 이식 가치 ≈20건.
@@ -240,7 +269,8 @@ ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 �
   공용 웹훅·consultation-recordings 버킷·processing_status enum) 재사용 + student_consultations에 오디오/AI 컬럼 13개.
   공유 `consultations/server/ai.ts`(케어 7섹션) → 웹훅 handleStudentConsultation + 텍스트 액션 runStudentConsultationAnalysis
   단일 프롬프트. UI: 상세 녹음 패널(상태폴링·전사·7섹션·AI분석버튼) + 새상담 녹음/업로드 폼 + 목록 🎙️/AI 배지.
-  ⚠️ 실제 오디오 전사 E2E는 로컬 미검(AssemblyAI가 localhost 웹훅 미도달, 사용자 사전 인지) — 텍스트 AI 경로는 완전 검증.
+  ⚠️ (정정 2026-06-23) "localhost 웹훅 미도달"은 부정확 — 실제론 웹훅이 프로덕션으로 라우팅돼 작동하며, 당시 미검의
+  진짜 원인은 `speech_model` 폐기 버그(전 전사 차단)였음. 위 "음성 파이프라인 복구" 섹션 참조(실 ijw 녹음으로 E2E 복구·검증).
 - **⚠️ 스코프 결정(사용자)**: 시간표 시뮬레이션(시나리오) 영구 배제 / Excel은 export·import만(마법사 불요).
 - **→ ijw 탭별 이식 Tier 1·2·3 사실상 완료**(의도적 제외 = Calendar/Gantt/Chatbot/MakeEdu/Contracts/시간표시나리오).
 - 검증: 항목별 typecheck0/lint0 + 신규 Vitest(classroom-assign 11·student-import 12, 전체 428) + Chrome(웨일) 실브라우저
