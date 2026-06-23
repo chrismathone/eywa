@@ -16,6 +16,7 @@ import { Pagination } from "@/components/pagination";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 import { NewClassTrigger } from "./_components/new-class-trigger";
+import { ClassroomAssignButton } from "./_components/classroom-assign-dialog";
 import { ClassFilterBar } from "./_components/class-filter-bar";
 import {
   buildClassHref,
@@ -120,7 +121,10 @@ export default async function ClassesPage({
             </span>
           ) : null}
         </p>
-        <NewClassTrigger />
+        <div className="flex items-center gap-2">
+          <ClassroomAssignButton />
+          <NewClassTrigger />
+        </div>
       </div>
 
       {total === 0 ? (

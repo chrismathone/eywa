@@ -8,6 +8,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { logAction } from "@/features/audit/server/log";
+import { getClassroomAssignmentData } from "./queries";
+import type { ClassroomAssignData } from "../lib/classroom-assign";
 
 export type ClassFormState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
@@ -373,6 +375,69 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
   revalidatePath("/classes");
   revalidatePath("/timetable");
   return { ok: true };
+}
+
+// ────────────────────── 강의실 자동배정 ──────────────────────
+// ijw ClassroomAssignment 경량 이식: 미리보기(loadClassroomAssignmentData + 순수 알고리즘) → 적용.
+// ⚠️ 데이터는 클라가 미리보기 열 때만 지연 로드(페이지 로드 비용 0). 적용은 반 기본 강의실(classes.classroom_id)만.
+
+/** 자동배정 미리보기 데이터 지연 로드 — 반 쓰기 권한자만(읽기 전용엔 도구 비노출). */
+export async function loadClassroomAssignmentData(): Promise<{
+  data?: ClassroomAssignData;
+  error?: string;
+}> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+  return { data: await getClassroomAssignmentData() };
+}
+
+export type ApplyAssignState = { error?: string; ok?: boolean; applied?: number } | undefined;
+
+/** 자동배정 적용 — 변경분만 classes.classroom_id 업데이트(강의실별 묶어 한 번씩). */
+export async function applyClassroomAssignments(
+  _prev: ApplyAssignState,
+  formData: FormData,
+): Promise<ApplyAssignState> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+
+  let parsed: { classId: string; roomId: string }[];
+  try {
+    parsed = JSON.parse(String(formData.get("assignments") ?? "[]"));
+  } catch {
+    return { error: "배정 데이터 파싱 실패" };
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return { error: "적용할 변경이 없습니다" };
+
+  // 강의실별로 묶어 update 횟수 최소화(데모 규모 ≤5 강의실 → ≤5 update).
+  const byRoom = new Map<string, string[]>();
+  for (const a of parsed) {
+    if (!a?.classId || !a?.roomId) continue;
+    const arr = byRoom.get(a.roomId) ?? [];
+    arr.push(a.classId);
+    byRoom.set(a.roomId, arr);
+  }
+  if (byRoom.size === 0) return { error: "적용할 변경이 없습니다" };
+
+  const supabase = await createClient();
+  let applied = 0;
+  for (const [roomId, ids] of byRoom) {
+    const { error: updErr } = await supabase
+      .from("classes")
+      .update({ classroom_id: roomId })
+      .in("id", ids);
+    if (updErr) return { error: updErr.message };
+    applied += ids.length;
+  }
+
+  await logAction({
+    action: "classroom_auto_assign",
+    targetType: "class",
+    metadata: { applied, rooms: byRoom.size },
+  });
+  revalidatePath("/classes");
+  revalidatePath("/timetable");
+  return { ok: true, applied };
 }
 
 /**

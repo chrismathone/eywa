@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { attendanceRate } from "@/lib/calc/attendance";
+import type { ClassroomAssignData } from "../lib/classroom-assign";
 
 /** 운영 요일 + 그 요일의 최초 시작시각(HH:MM). 같은 요일 여러 교시면 가장 이른 시각. */
 export type ClassDaySlot = { day: string; start: string | null };
@@ -454,6 +455,69 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
       } satisfies ClassStudentRow;
     })
     .filter((r): r is ClassStudentRow => r !== null);
+}
+
+/**
+ * 강의실 자동배정 입력 — 활성 반(슬롯·학생수·현재 강의실) + 전체 강의실.
+ * 학생수·슬롯은 매칭 반 id를 청크 조회(전건 .in() 414 / 1000행 절단 회피, #53·#54).
+ * 순수 배정 알고리즘([../lib/classroom-assign])이 이 데이터로 미리보기를 만든다.
+ */
+export async function getClassroomAssignmentData(): Promise<ClassroomAssignData> {
+  const supabase = await createClient();
+  const [{ data: cls }, { data: rooms }] = await Promise.all([
+    supabase
+      .from("classes")
+      .select("id, class_name, subject, classroom_id")
+      .eq("is_active", true)
+      .order("class_name"),
+    supabase.from("classrooms").select("id, name, capacity").order("name"),
+  ]);
+
+  const classes = cls ?? [];
+  const classIds = classes.map((c) => c.id);
+  const counts = new Map<string, number>();
+  const slotsByClass = new Map<string, { day: string; start: string; end: string }[]>();
+
+  if (classIds.length > 0) {
+    const [enrollments, scheds] = await Promise.all([
+      fetchInChunks<{ class_id: string }>(classIds, (chunk) =>
+        supabase.from("enrollments").select("class_id").is("end_date", null).in("class_id", chunk),
+      ),
+      fetchInChunks<{
+        class_id: string;
+        day_of_week: string;
+        start_time: string;
+        end_time: string;
+      }>(classIds, (chunk) =>
+        supabase
+          .from("class_schedules")
+          .select("class_id, day_of_week, start_time, end_time")
+          .in("class_id", chunk),
+      ),
+    ]);
+    for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+    for (const s of scheds) {
+      const arr = slotsByClass.get(s.class_id) ?? [];
+      arr.push({
+        day: s.day_of_week,
+        start: String(s.start_time).slice(0, 5),
+        end: String(s.end_time).slice(0, 5),
+      });
+      slotsByClass.set(s.class_id, arr);
+    }
+  }
+
+  return {
+    classes: classes.map((c) => ({
+      id: c.id,
+      className: c.class_name,
+      subject: c.subject,
+      studentCount: counts.get(c.id) ?? 0,
+      currentRoomId: c.classroom_id ?? null,
+      slots: slotsByClass.get(c.id) ?? [],
+    })),
+    rooms: (rooms ?? []).map((r) => ({ id: r.id, name: r.name, capacity: r.capacity })),
+  };
 }
 
 export async function getClassAttendanceStats(
