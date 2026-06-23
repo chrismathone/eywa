@@ -114,6 +114,14 @@ export type StudentLine = {
   englishName?: string | null;
   /** 학생별 최근 교재(ijw 학생 hover의 교재 줄) — textbook_orders 최신 1건. hover 표시용. */
   latestTextbook?: { name: string; date: string | null } | null;
+  /** 학생별 최근 진도(ijw 학생 hover의 "[진도]" 줄) — lesson_reports 최신 1건. */
+  latestReport?: {
+    date: string;
+    progress: string | null;
+    examInfo: string | null;
+    homeworkScore: string | null;
+    teacherName: string | null;
+  } | null;
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] };
 
@@ -267,6 +275,40 @@ export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithS
       for (const l of list) {
         const tb = latestTb.get(l.studentId);
         if (tb) l.latestTextbook = tb;
+      }
+    }
+
+    // 학생별 최근 진도 — ijw 학생 hover의 "[진도]" 줄. lesson_reports 최신(report_date desc) 1건.
+    type RepRow = {
+      student_id: string;
+      report_date: string;
+      progress: string | null;
+      exam_info: string | null;
+      homework_score: string | null;
+      teacher_name: string | null;
+    };
+    const repRows = await fetchInChunks<RepRow>(studentIds, (chunk) =>
+      supabase
+        .from("lesson_reports")
+        .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
+        .in("student_id", chunk)
+        .order("report_date", { ascending: false }),
+    );
+    const latestRep = new Map<string, StudentLine["latestReport"]>();
+    for (const r of repRows) {
+      if (latestRep.has(r.student_id)) continue; // 이미 최신(정렬 desc) 저장됨
+      latestRep.set(r.student_id, {
+        date: r.report_date,
+        progress: r.progress,
+        examInfo: r.exam_info,
+        homeworkScore: r.homework_score,
+        teacherName: r.teacher_name,
+      });
+    }
+    for (const list of byClass.values()) {
+      for (const l of list) {
+        const rep = latestRep.get(l.studentId);
+        if (rep) l.latestReport = rep;
       }
     }
   }

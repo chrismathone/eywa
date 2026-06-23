@@ -131,6 +131,7 @@ export function StudentInfoCard({
   attendanceDays,
   endDate,
   textbook,
+  report,
   pendingClassName,
   pendingTransferDate,
 }: {
@@ -144,6 +145,13 @@ export function StudentInfoCard({
   attendanceDays?: string[];
   endDate?: string | null;
   textbook?: { name: string; date: string | null } | null;
+  report?: {
+    date: string;
+    progress: string | null;
+    examInfo: string | null;
+    homeworkScore: string | null;
+    teacherName: string | null;
+  } | null;
   pendingClassName?: string | null;
   pendingTransferDate?: string | null;
 }) {
@@ -187,6 +195,22 @@ export function StudentInfoCard({
             />
           ) : null}
           {status === "withdrawn" && endDate ? <Row label="퇴원일" value={endDate} mono /> : null}
+        </div>
+      ) : null}
+      {report?.progress ? (
+        <div className="border-line space-y-0.5 border-t pt-1.5">
+          <div className="text-text-dim flex flex-wrap items-center gap-1.5">
+            <span className="text-primary font-semibold">진도</span>
+            <span className="num font-mono">{report.date}</span>
+            {report.teacherName ? <span>· {report.teacherName}</span> : null}
+          </div>
+          <p className="text-foreground">{report.progress}</p>
+          {report.examInfo || report.homeworkScore ? (
+            <div className="text-text-dim flex flex-wrap gap-x-2.5 font-mono text-[10px]">
+              {report.examInfo ? <span>시험 {report.examInfo}</span> : null}
+              {report.homeworkScore ? <span>숙제 {report.homeworkScore}</span> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

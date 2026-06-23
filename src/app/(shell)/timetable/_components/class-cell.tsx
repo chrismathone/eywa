@@ -40,6 +40,13 @@ export type StudentQuick = {
   englishName?: string | null;
   attendanceDays?: string[];
   latestTextbook?: { name: string; date: string | null } | null;
+  latestReport?: {
+    date: string;
+    progress: string | null;
+    examInfo: string | null;
+    homeworkScore: string | null;
+    teacherName: string | null;
+  } | null;
 };
 
 function shortTime(t: string) {
@@ -147,6 +154,7 @@ function StudentRow({
           attendanceDays={student.attendanceDays}
           endDate={student.endDate}
           textbook={student.latestTextbook}
+          report={student.latestReport}
         />
       }
     >

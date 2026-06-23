@@ -581,6 +581,33 @@ export const intakeAttempts = pgTable(
   ],
 );
 
+// === lesson_reports (수업 진도/보고서 — ijw 시간표 학생 hover의 "[진도]" 줄, Edutrix 이식, 0049a) ===
+// 학생별 최신 1건이 hover에 표시. 진도/시험/숙제/담당강사.
+export const lessonReports = pgTable(
+  "lesson_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    reportDate: date("report_date").notNull(),
+    progress: text("progress"),
+    examInfo: text("exam_info"),
+    homeworkScore: text("homework_score"),
+    teacherName: text("teacher_name"),
+    notes: text("notes"),
+    source: text("source"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("lesson_reports_student_idx").on(t.studentId, t.reportDate),
+    index("lesson_reports_tenant_idx").on(t.tenantId),
+  ],
+);
+
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
 export const consultationAiAnalysis = pgTable(
   "consultation_ai_analysis",

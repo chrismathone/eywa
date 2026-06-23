@@ -21,10 +21,17 @@ export type GridStudent = {
   isNew?: boolean;
   isTransferredIn?: boolean;
   englishName?: string | null;
-  // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재.
+  // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도.
   attendanceDays?: string[];
   endDate?: string | null;
   latestTextbook?: { name: string; date: string | null } | null;
+  latestReport?: {
+    date: string;
+    progress: string | null;
+    examInfo: string | null;
+    homeworkScore: string | null;
+    teacherName: string | null;
+  } | null;
 };
 
 /** 빌더 입력 — ScheduleSlotWithStudents와 구조 호환(서버 타입 직접 import 회피, [[#61]]). */

@@ -255,6 +255,7 @@ function RosterRow({ s }: { s: GridStudent }) {
           attendanceDays={s.attendanceDays}
           endDate={s.endDate}
           textbook={s.latestTextbook}
+          report={s.latestReport}
         />
       }
     >
