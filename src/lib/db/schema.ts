@@ -550,6 +550,23 @@ export const studentConsultations = pgTable(
     followUpAction: text("follow_up_action"),
     followUpDate: date("follow_up_date"),
     followUpDone: boolean("follow_up_done").notNull().default(false),
+    // 음성→전사→AI 파이프라인(0045a) — enrollment_consultations/meeting_minutes 미러.
+    // 텍스트 상담은 processing_status='idle'. 오디오는 uploaded→transcribing→analyzing→completed.
+    audioPath: text("audio_path"),
+    audioDurationSec: integer("audio_duration_sec"),
+    audioSizeBytes: integer("audio_size_bytes"),
+    transcription: text("transcription"),
+    speakerLabels: jsonb("speaker_labels"),
+    processingStatus: consultationProcessingStatusEnum("processing_status")
+      .notNull()
+      .default("idle"),
+    processingError: text("processing_error"),
+    assemblyaiTranscriptId: text("assemblyai_transcript_id"),
+    // AI 분석 결과 — 행에 직접 저장(재원생은 enrollment 같은 동결 스냅샷 테이블 불요).
+    aiReport: jsonb("ai_report"),
+    aiSummary: text("ai_summary"),
+    aiModelVersion: text("ai_model_version"),
+    aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -557,6 +574,7 @@ export const studentConsultations = pgTable(
     index("sc_tenant_student_idx").on(t.tenantId, t.studentId),
     index("sc_tenant_date_idx").on(t.tenantId, t.consultedAt),
     index("sc_tenant_followup_idx").on(t.tenantId, t.followUpDate),
+    index("sc_assemblyai_transcript_idx").on(t.assemblyaiTranscriptId),
   ],
 );
 

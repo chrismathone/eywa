@@ -12,6 +12,26 @@ export type StudentConsultationCategory =
 
 export type StudentConsultationAudience = "parent" | "student" | "both";
 
+/** 음성→전사→AI 처리 상태(0045a) — student_consultations.processing_status. */
+export type ConsultationProcessingStatus =
+  | "idle"
+  | "uploaded"
+  | "transcribing"
+  | "analyzing"
+  | "completed"
+  | "failed";
+
+/** AI 분석 7섹션(features/consultations/server/ai.ts StudentConsultationReport와 동일). */
+export type StudentConsultationAiReport = {
+  summary: string;
+  mainTopics: string;
+  studentState: string;
+  parentConcerns: string;
+  actionItems: string;
+  followUps: string;
+  warnings: string;
+};
+
 export type StudentConsultationRow = {
   id: string;
   studentId: string;
@@ -26,16 +46,33 @@ export type StudentConsultationRow = {
   followUpAction: string | null;
   followUpDate: string | null;
   followUpDone: boolean;
+  // 녹음/AI 인디케이터(목록 배지)
+  processingStatus: ConsultationProcessingStatus;
+  hasAudio: boolean;
+  hasAi: boolean;
 };
 
 export type StudentConsultationDetail = StudentConsultationRow & {
   counselorId: string | null;
+  transcription: string | null;
+  audioDurationSec: number | null;
+  processingError: string | null;
+  aiReport: StudentConsultationAiReport | null;
+  aiSummary: string | null;
+  aiModelVersion: string | null;
+  aiGeneratedAt: string | null;
 };
 
 const SELECT_COLUMNS = `id, consulted_at, summary, follow_up_action,
   follow_up_date, follow_up_done, category, subject, audience, counselor_id,
+  processing_status, audio_path, ai_summary,
   student:student_id ( id, name, grade ),
   counselor:counselor_id ( display_name )`;
+
+// 상세는 무거운 컬럼(전사·ai_report)까지 — 목록 SELECT_COLUMNS에는 미포함(낭비 회피).
+const DETAIL_SELECT = `${SELECT_COLUMNS},
+  transcription, audio_duration_sec, processing_error,
+  ai_report, ai_model_version, ai_generated_at`;
 
 function mapRow(r: {
   id: string;
@@ -48,9 +85,12 @@ function mapRow(r: {
   subject: string | null;
   audience: string | null;
   counselor_id: string | null;
+  processing_status?: string | null;
+  audio_path?: string | null;
+  ai_summary?: string | null;
   student: unknown;
   counselor: unknown;
-}): StudentConsultationDetail {
+}): StudentConsultationRow {
   const student = (Array.isArray(r.student) ? r.student[0] : r.student) as
     | { id: string; name: string; grade: string | null }
     | undefined;
@@ -62,7 +102,6 @@ function mapRow(r: {
     studentId: student?.id ?? "",
     studentName: student?.name ?? "?",
     studentGrade: student?.grade ?? null,
-    counselorId: r.counselor_id,
     counselorName: counselor?.display_name ?? null,
     consultedAt: r.consulted_at,
     category: r.category as StudentConsultationCategory | null,
@@ -72,6 +111,9 @@ function mapRow(r: {
     followUpAction: r.follow_up_action,
     followUpDate: r.follow_up_date,
     followUpDone: r.follow_up_done,
+    processingStatus: (r.processing_status as ConsultationProcessingStatus | null) ?? "idle",
+    hasAudio: !!r.audio_path,
+    hasAi: !!r.ai_summary,
   };
 }
 
@@ -92,11 +134,22 @@ export async function getStudentConsultationById(
   const supabase = await createClient();
   const { data } = await supabase
     .from("student_consultations")
-    .select(SELECT_COLUMNS)
+    .select(DETAIL_SELECT)
     .eq("id", id)
     .single();
   if (!data) return null;
-  return mapRow(data);
+  const d = data as Record<string, unknown>;
+  return {
+    ...mapRow(data),
+    counselorId: (d.counselor_id as string | null) ?? null,
+    transcription: (d.transcription as string | null) ?? null,
+    audioDurationSec: (d.audio_duration_sec as number | null) ?? null,
+    processingError: (d.processing_error as string | null) ?? null,
+    aiReport: (d.ai_report as StudentConsultationAiReport | null) ?? null,
+    aiSummary: (d.ai_summary as string | null) ?? null,
+    aiModelVersion: (d.ai_model_version as string | null) ?? null,
+    aiGeneratedAt: (d.ai_generated_at as string | null) ?? null,
+  };
 }
 
 function isoDaysAgo(days: number): string {

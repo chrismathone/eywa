@@ -8,6 +8,7 @@ import {
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { ConsultationForm } from "../../_components/consultation-form";
 import { ConsultationDeleteButton } from "../../_components/consultation-delete-button";
+import { RecordingPanel } from "../../_components/recording-panel";
 
 export const metadata = { title: "상담 수정 — eywa" };
 
@@ -40,6 +41,16 @@ export default async function EditConsultationPage({
           redirectTo="/consultations"
         />
       </header>
+
+      <RecordingPanel
+        id={item.id}
+        processingStatus={item.processingStatus}
+        transcription={item.transcription}
+        audioDurationSec={item.audioDurationSec}
+        processingError={item.processingError}
+        aiReport={item.aiReport}
+        aiGeneratedAt={item.aiGeneratedAt}
+      />
 
       <ConsultationForm
         mode="edit"

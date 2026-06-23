@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** 상수시간 문자열 비교 — 타이밍 공격 방지. 길이 다르면 즉시 false. */
@@ -106,6 +107,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, skipped: "already completed" });
     }
     return handleConsultation(admin, transcriptId, consult);
+  }
+
+  // 재원생 학생상담(student_consultations) — 학생 컨텍스트는 student_id 조인.
+  const { data: sc } = await admin
+    .from("student_consultations")
+    .select(
+      "id, processing_status, consulted_at, audience, category, student:student_id ( name, grade, school )",
+    )
+    .eq("assemblyai_transcript_id", transcriptId)
+    .maybeSingle();
+
+  if (sc) {
+    if (sc.processing_status === "completed") {
+      return NextResponse.json({ ok: true, skipped: "already completed" });
+    }
+    return handleStudentConsultation(admin, transcriptId, sc);
   }
 
   console.warn("[assemblyai webhook] no matching row for transcript", transcriptId);
@@ -463,6 +480,106 @@ async function handleConsultation(
   if (!consult.parent_phone && report.extracted.parentPhone) patch.parent_phone = report.extracted.parentPhone;
 
   await admin.from("enrollment_consultations").update(patch).eq("id", consult.id);
+
+  return NextResponse.json({ ok: true });
+}
+
+// ─────────────────────── student consultation flow ───────────────────────
+// 재원생 학생상담 — handleConsultation 클론. 결과 7섹션 ai_report는 행에 직접 저장(동결 테이블 불요).
+
+async function handleStudentConsultation(
+  admin: SupabaseClient,
+  transcriptId: string,
+  sc: {
+    id: string;
+    consulted_at: string | null;
+    audience: string | null;
+    category: string | null;
+    student: unknown;
+  },
+) {
+  let transcript;
+  try {
+    transcript = await getTranscript(transcriptId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await admin
+      .from("student_consultations")
+      .update({ processing_status: "failed", processing_error: `전사 fetch 실패: ${msg}` })
+      .eq("id", sc.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (transcript.status === "error" || !transcript.text) {
+    await admin
+      .from("student_consultations")
+      .update({
+        processing_status: "failed",
+        processing_error: transcript.error ?? "전사 결과가 비어있습니다",
+      })
+      .eq("id", sc.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  const cleanedText = transcript.text.replace(/\s/g, "");
+  if (cleanedText.length < 30 || (transcript.audio_duration ?? 0) < 5) {
+    await admin
+      .from("student_consultations")
+      .update({
+        processing_status: "failed",
+        processing_error: "녹음이 너무 짧거나 음성이 인식되지 않았습니다",
+        transcription: transcript.text,
+      })
+      .eq("id", sc.id);
+    return NextResponse.json({ ok: true });
+  }
+
+  await admin
+    .from("student_consultations")
+    .update({
+      transcription: transcript.text,
+      speaker_labels: transcript.utterances ?? [],
+      audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+      processing_status: "analyzing",
+      processing_error: null,
+    })
+    .eq("id", sc.id);
+
+  const formatted = (transcript.utterances ?? []).length > 0
+    ? (transcript.utterances as SpeakerUtterance[]).map((s) => `[화자 ${s.speaker}] ${s.text}`).join("\n")
+    : transcript.text;
+
+  const student = (Array.isArray(sc.student) ? sc.student[0] : sc.student) as
+    | { name?: string; grade?: string | null; school?: string | null }
+    | undefined;
+
+  try {
+    const { report, model } = await analyzeStudentConsultation(formatted, {
+      studentName: student?.name ?? "학생",
+      grade: student?.grade ?? null,
+      school: student?.school ?? null,
+      consultedAt: sc.consulted_at,
+      audience: sc.audience,
+      category: sc.category,
+    });
+    await admin
+      .from("student_consultations")
+      .update({
+        ai_report: report,
+        ai_summary: report.summary,
+        ai_model_version: `${model}-${new Date().toISOString().slice(0, 10)}`,
+        ai_generated_at: new Date().toISOString(),
+        processing_status: "completed",
+        processing_error: null,
+      })
+      .eq("id", sc.id);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await admin
+      .from("student_consultations")
+      .update({ processing_status: "failed", processing_error: `AI 분석 실패: ${msg}` })
+      .eq("id", sc.id);
+  }
 
   return NextResponse.json({ ok: true });
 }

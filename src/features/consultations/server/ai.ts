@@ -1,0 +1,89 @@
+import "server-only";
+import { generateJSON } from "@/lib/ai/generate";
+
+/**
+ * 재원생 학생상담 AI 분석 — 단일 프롬프트 소스.
+ * 웹훅(오디오 전사 후)·텍스트 분석 액션이 함께 사용한다.
+ * enrollment(신입생)의 13섹션은 영업/등록 맥락이라, 재원생은 **지속 케어 맥락**의 7섹션으로 새로 정의.
+ * keyName "consultations" — 학생 케어 인사이트와 같은 과금 버킷.
+ */
+export type StudentConsultationReport = {
+  summary: string; // 2~4문장 요약
+  mainTopics: string; // 주요 논의 주제
+  studentState: string; // 학생 상태(학습/정서/태도)
+  parentConcerns: string; // 학부모 걱정·요청(학부모 상담일 때)
+  actionItems: string; // 합의/조치 사항
+  followUps: string; // 후속 조치(연락/보강 등)
+  warnings: string; // 주의 신호(이탈·정서 위험 등). 없으면 "특이사항 없음".
+};
+
+export type StudentConsultationContext = {
+  studentName: string;
+  grade: string | null;
+  school: string | null;
+  consultedAt: string | null;
+  audience: string | null; // parent / student / both
+  category: string | null;
+};
+
+const AUDIENCE_LABEL: Record<string, string> = {
+  parent: "학부모",
+  student: "학생",
+  both: "학부모+학생",
+};
+
+/** 전사/메모 텍스트 + 학생 컨텍스트로 7섹션 분석 생성. {report, model} 반환. 호출부가 try/catch. */
+export async function analyzeStudentConsultation(
+  text: string,
+  ctx: StudentConsultationContext,
+): Promise<{ report: StudentConsultationReport; model: string }> {
+  const heldAt = ctx.consultedAt ? new Date(ctx.consultedAt).toLocaleDateString("ko-KR") : "미상";
+  const { data, model } = await generateJSON<StudentConsultationReport>({
+    keyName: "consultations",
+    maxTokens: 4096,
+    prompt: [
+      "다음은 학원 재원생 상담 내용(녹음 전사 또는 상담 메모)입니다. 재원생 케어 관점에서 분석해 JSON으로만 답해주세요.",
+      "",
+      `학생: ${ctx.studentName} (${ctx.grade ?? "—"}, ${ctx.school ?? "—"})`,
+      `상담일: ${heldAt}`,
+      `상담 대상: ${ctx.audience ? (AUDIENCE_LABEL[ctx.audience] ?? ctx.audience) : "미상"}`,
+      `분류: ${ctx.category ?? "미상"}`,
+      "",
+      "분석 가이드:",
+      "1. summary: 상담 핵심을 2~4문장으로.",
+      "2. mainTopics: 다뤄진 주제를 항목으로(- 글머리).",
+      "3. studentState: 학생의 학습/정서/태도 상태를 발화 근거로.",
+      "4. parentConcerns: 학부모가 표현한 걱정·요청(학부모 상담이 아니면 '해당 없음').",
+      "5. actionItems: 상담 중 합의되거나 정해진 조치.",
+      "6. followUps: 향후 후속 조치(연락·보강·재상담 등).",
+      "7. warnings: 이탈·정서·가정 등 주의 신호. 없으면 '특이사항 없음'.",
+      "",
+      "상담 내용:",
+      text,
+      "",
+      "JSON schema (모든 필드 한국어 문자열, 줄바꿈은 \\n):",
+      "{",
+      '  "summary": string,',
+      '  "mainTopics": string,',
+      '  "studentState": string,',
+      '  "parentConcerns": string,',
+      '  "actionItems": string,',
+      '  "followUps": string,',
+      '  "warnings": string',
+      "}",
+      "",
+      "추측 금지 — 내용에 없는 정보는 빈 문자열 또는 '해당 없음'. JSON만 출력, 마크다운 코드 블록 없이.",
+    ].join("\n"),
+  });
+
+  const report: StudentConsultationReport = {
+    summary: data.summary ?? "",
+    mainTopics: data.mainTopics ?? "",
+    studentState: data.studentState ?? "",
+    parentConcerns: data.parentConcerns ?? "",
+    actionItems: data.actionItems ?? "",
+    followUps: data.followUps ?? "",
+    warnings: data.warnings ?? "",
+  };
+  return { report, model };
+}

@@ -5,6 +5,8 @@ import {
   CalendarClock,
   BellRing,
   AlarmClock,
+  Mic,
+  Sparkles,
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -284,6 +286,17 @@ export default async function ConsultationsPage({
                         ) : null}
                         {cat ? <Pill color={cat.color}>{cat.label}</Pill> : null}
                         {urgency ? <Pill color={urgency.color}>{urgency.label}</Pill> : null}
+                        {c.hasAudio ? (
+                          <span className="text-primary relative z-10" title="녹음 있음">
+                            <Mic className="size-3.5" />
+                          </span>
+                        ) : null}
+                        {c.hasAi ? (
+                          <span className="text-gold relative z-10 inline-flex items-center gap-0.5 text-[10px] font-bold" title="AI 분석됨">
+                            <Sparkles className="size-3" />
+                            AI
+                          </span>
+                        ) : null}
                       </div>
                       <p className="text-text-dim mt-0.5 text-[11px]">
                         {c.subject ? <span>{c.subject} · </span> : null}

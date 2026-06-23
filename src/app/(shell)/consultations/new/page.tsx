@@ -3,6 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentOptionsForConsultation } from "@/features/consultations/server/queries";
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { ConsultationForm } from "../_components/consultation-form";
+import { AudioConsultationForm } from "../_components/audio-consultation-form";
 
 export const metadata = { title: "새 학생상담 — eywa" };
 
@@ -29,6 +30,8 @@ export default async function NewConsultationPage({
           학생/학부모 면담을 기록합니다. 후속 조치 날짜를 지정하면 기한이 다가올수록 색상으로 알려드립니다.
         </p>
       </header>
+
+      <AudioConsultationForm students={students} />
 
       <ConsultationForm
         mode="create"
