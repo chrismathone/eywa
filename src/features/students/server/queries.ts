@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
   slotPeriodRow,
@@ -196,7 +198,16 @@ export async function getStudentStatusCounts(): Promise<{
   withdrawn: number;
 }> {
   const supabase = await createClient();
-  const base = () => supabase.from("students").select("*", { count: "exact", head: true });
+  // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치).
+  const user = await getCurrentUser();
+  const teacherStudentIds =
+    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  if (teacherStudentIds && teacherStudentIds.length === 0)
+    return { all: 0, enrolled: 0, prospect: 0, withdrawn: 0 };
+  const base = () => {
+    const q = supabase.from("students").select("*", { count: "exact", head: true });
+    return teacherStudentIds ? q.in("id", teacherStudentIds) : q;
+  };
   const [all, enrolled, prospect, withdrawn] = await Promise.all([
     base(),
     base().eq("status", "enrolled"),
@@ -224,6 +235,12 @@ export async function getStudentsPage(
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
+
+  // 강사 스코프: teacher면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
+  const user = await getCurrentUser();
+  const teacherStudentIds =
+    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
 
   let subjectIds: string[] | null = null;
   if (options?.subject && options.subject !== "all") {
@@ -255,7 +272,14 @@ export async function getStudentsPage(
   if (options?.teacherId && options.teacherId !== "all")
     qb = qb.eq("primary_teacher_id", options.teacherId);
   qb = applySearch(qb, options?.q, options?.searchField);
-  if (subjectIds) qb = qb.in("id", subjectIds);
+  // 과목 필터(subjectIds) ∩ 강사 스코프(teacherStudentIds) → 단일 id 화이트리스트.
+  let idWhitelist: string[] | null = subjectIds;
+  if (teacherStudentIds) {
+    const t = new Set(teacherStudentIds);
+    idWhitelist = idWhitelist ? idWhitelist.filter((id) => t.has(id)) : teacherStudentIds;
+    if (idWhitelist.length === 0) return { rows: [], total: 0 };
+  }
+  if (idWhitelist) qb = qb.in("id", idWhitelist);
   if (unenrolledIds && unenrolledIds.length > 0)
     qb = qb.not("id", "in", `(${unenrolledIds.join(",")})`);
 

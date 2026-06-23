@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
+import { TeacherMenu } from "@/components/teacher-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { OperationsProvider } from "@/features/owner/operations-context";
@@ -64,7 +65,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               </div>
             </div>
           </div>
-          <UserMenu email={user.email} />
+          <div className="flex items-center gap-1.5">
+            {user.systemRole === "teacher" ? <TeacherMenu /> : null}
+            <UserMenu email={user.email} />
+          </div>
         </header>
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
           <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>

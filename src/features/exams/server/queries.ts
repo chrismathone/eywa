@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { getClassesList, getClassStudents } from "@/features/classes/server/queries";
 import { examStats, rankByScore, type ExamStats } from "../calc";
 
@@ -35,11 +37,19 @@ export async function getExamsPage(
 ): Promise<{ rows: ExamRow[]; total: number }> {
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
+
+  // 강사 스코프: teacher면 본인 담당 과목의 시험만(영어 강사→영어 시험). exams엔 teacher_id가 없어 과목 기준.
+  const user = await getCurrentUser();
+  const teacherSubjects =
+    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).subjects : null;
+  if (teacherSubjects && teacherSubjects.length === 0) return { rows: [], total: 0 };
+
   let q = supabase
     .from("exams")
     .select("id, name, subject, exam_type, exam_date, max_score, scope", { count: "exact" })
     .order("exam_date", { ascending: false })
     .range(from, from + pageSize - 1);
+  if (teacherSubjects) q = q.in("subject", teacherSubjects);
   if (filters.subject) q = q.eq("subject", filters.subject);
   if (filters.examType) q = q.eq("exam_type", filters.examType);
   if (filters.from) q = q.gte("exam_date", filters.from);

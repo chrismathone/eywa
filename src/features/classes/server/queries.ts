@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 
@@ -206,10 +208,23 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
  */
 export async function getClassesStats(): Promise<{ total: number; active: number; totalSeats: number }> {
   const supabase = await createClient();
+  // 강사 스코프: teacher면 본인 담당 반·그 반 수강만 카운트(목록과 일치).
+  const user = await getCurrentUser();
+  const tId = user?.systemRole === "teacher" ? user.id : null;
+  const classBase = () => {
+    const q = supabase.from("classes").select("*", { count: "exact", head: true });
+    return tId ? q.eq("teacher_id", tId) : q;
+  };
+  let seatsQuery = supabase.from("enrollments").select("*", { count: "exact", head: true }).is("end_date", null);
+  if (tId) {
+    const { classIds } = await getTeacherScope(tId);
+    if (classIds.length === 0) return { total: 0, active: 0, totalSeats: 0 };
+    seatsQuery = seatsQuery.in("class_id", classIds);
+  }
   const [total, active, seats] = await Promise.all([
-    supabase.from("classes").select("*", { count: "exact", head: true }),
-    supabase.from("classes").select("*", { count: "exact", head: true }).eq("is_active", true),
-    supabase.from("enrollments").select("*", { count: "exact", head: true }).is("end_date", null),
+    classBase(),
+    classBase().eq("is_active", true),
+    seatsQuery,
   ]);
   return { total: total.count ?? 0, active: active.count ?? 0, totalSeats: seats.count ?? 0 };
 }
@@ -239,6 +254,10 @@ export async function getClassesPage(
   const supabase = await createClient();
   const sort: ClassSort = options.sort ?? "name";
 
+  // 강사 스코프: teacher면 본인 담당 반만(옵션 teacherId 무시하고 강제).
+  const user = await getCurrentUser();
+  const forcedTeacherId = user?.systemRole === "teacher" ? user.id : null;
+
   // 요일(다중) 필터 — 선택 요일 중 하나라도 운영하는 수업 id로 좁힘(ijw "하나라도 포함" 의미).
   let dayClassIds: string[] | null = null;
   const days = (options.days ?? []).filter(Boolean);
@@ -261,7 +280,9 @@ export async function getClassesPage(
     )
     .order("class_name");
   if (options.subject && options.subject !== "all") qb = qb.eq("subject", options.subject);
-  if (options.teacherId && options.teacherId !== "all") qb = qb.eq("teacher_id", options.teacherId);
+  const teacherFilter =
+    forcedTeacherId ?? (options.teacherId && options.teacherId !== "all" ? options.teacherId : null);
+  if (teacherFilter) qb = qb.eq("teacher_id", teacherFilter);
   if (options.active === "active") qb = qb.eq("is_active", true);
   if (options.active === "closed") qb = qb.eq("is_active", false);
   if (options.q) {

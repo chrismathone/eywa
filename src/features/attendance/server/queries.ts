@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { attendanceRate } from "@/lib/calc/attendance";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -331,15 +332,21 @@ function buildMonthDays(month: string): MatrixDay[] {
  */
 export async function getMonthlyAttendanceMatrix(
   month: string,
-  classId: string | null,
+  requestedClassId: string | null,
 ): Promise<AttendanceMatrix> {
   const supabase = await createClient();
 
-  // 모든 반 (selector용)
-  const { data: classesData } = await supabase
+  // 강사 스코프: teacher면 selector·데이터를 본인 담당 반만(URL로 남의 classId 넘겨도 무시).
+  const user = await getCurrentUser();
+  const tId = user?.systemRole === "teacher" ? user.id : null;
+
+  // 모든 반 (selector용) — 강사면 본인 담당 반만.
+  let classesQuery = supabase
     .from("classes")
     .select("id, class_name, subject, teacher:teacher_id ( id, display_name )")
     .order("class_name");
+  if (tId) classesQuery = classesQuery.eq("teacher_id", tId);
+  const { data: classesData } = await classesQuery;
 
   const classes = (classesData ?? []).map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
@@ -353,6 +360,11 @@ export async function getMonthlyAttendanceMatrix(
       teacherName: teacher?.display_name ?? null,
     };
   });
+
+  // 강사가 본인 반이 아닌 classId를 URL로 넘기면 선택 무시(스코프 위반 차단).
+  const classId = tId && requestedClassId && !classes.some((c) => c.id === requestedClassId)
+    ? null
+    : requestedClassId;
 
   const days = buildMonthDays(month);
   if (!classId || days.length === 0) {

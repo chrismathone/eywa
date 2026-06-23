@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 
 export type StudentConsultationCategory =
   | "general"
@@ -176,21 +178,22 @@ export type StudentConsultationCounts = {
 export async function getStudentConsultationCounts(): Promise<StudentConsultationCounts> {
   const supabase = await createClient();
   const today = localDateStr(0);
+  // 강사 스코프: Stat 카드도 본인 담당 학생 상담 기준(목록과 일치).
+  const user = await getCurrentUser();
+  const teacherStudentIds =
+    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  if (teacherStudentIds && teacherStudentIds.length === 0)
+    return { total: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 };
+  const base = () => {
+    const q = supabase.from("student_consultations").select("*", { count: "exact", head: true });
+    return teacherStudentIds ? q.in("student_id", teacherStudentIds) : q;
+  };
   const [{ count: total }, { count: lastWeek }, { count: pending }, { count: overdue }] =
     await Promise.all([
-      supabase.from("student_consultations").select("*", { count: "exact", head: true }),
-      supabase
-        .from("student_consultations")
-        .select("*", { count: "exact", head: true })
-        .gte("consulted_at", isoDaysAgo(7)),
-      supabase
-        .from("student_consultations")
-        .select("*", { count: "exact", head: true })
-        .eq("follow_up_done", false)
-        .not("follow_up_date", "is", null),
-      supabase
-        .from("student_consultations")
-        .select("*", { count: "exact", head: true })
+      base(),
+      base().gte("consulted_at", isoDaysAgo(7)),
+      base().eq("follow_up_done", false).not("follow_up_date", "is", null),
+      base()
         .eq("follow_up_done", false)
         .not("follow_up_date", "is", null)
         .lt("follow_up_date", today),
@@ -220,7 +223,15 @@ export async function getStudentConsultationsPage(
   pageSize = 50,
 ): Promise<{ rows: StudentConsultationRow[]; total: number }> {
   const supabase = await createClient();
+
+  // 강사 스코프: teacher면 본인 담당 반 학생의 상담만.
+  const user = await getCurrentUser();
+  const teacherStudentIds =
+    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
+
   let qb = supabase.from("student_consultations").select(SELECT_COLUMNS, { count: "exact" });
+  if (teacherStudentIds) qb = qb.in("student_id", teacherStudentIds);
 
   // 기간
   if (filters.range === "7d") qb = qb.gte("consulted_at", isoDaysAgo(7));
@@ -308,10 +319,17 @@ export type StudentOption = {
 
 export async function getStudentOptionsForConsultation(): Promise<StudentOption[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  // 강사 스코프: teacher면 본인 담당 학생만 상담 대상 드롭다운에.
+  const user = await getCurrentUser();
+  const teacherStudentIds =
+    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  if (teacherStudentIds && teacherStudentIds.length === 0) return [];
+  let qb = supabase
     .from("students")
     .select("id, name, grade, status")
-    .neq("status", "withdrawn")
+    .neq("status", "withdrawn");
+  if (teacherStudentIds) qb = qb.in("id", teacherStudentIds);
+  const { data } = await qb
     .order("grade", { ascending: true })
     .order("name", { ascending: true });
   if (!data) return [];
