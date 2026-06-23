@@ -9,6 +9,31 @@ import {
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
 import { goalAchieved } from "../grades-meta";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+
+/** 임포트된 상담/메모 텍스트("[제목]\n본문\n[등록자: 이름]")를 제목·본문·등록자로 분리. */
+function parseImportedNote(raw: string | null | undefined): {
+  title: string | null;
+  body: string | null;
+  registrant: string | null;
+} {
+  if (!raw) return { title: null, body: null, registrant: null };
+  let text = raw.trim();
+  let registrant: string | null = null;
+  const reg = text.match(/\[등록자:\s*([^\]]+)\]\s*$/);
+  if (reg) {
+    registrant = reg[1].trim();
+    text = text.slice(0, reg.index).trim();
+  }
+  let title: string | null = null;
+  const t = text.match(/^\[([^\]]+)\]/);
+  if (t) {
+    title = t[1].trim();
+    text = text.slice(t[0].length).trim();
+  }
+  return { title, body: text || null, registrant };
+}
 
 export type StudentListRow = {
   id: string;
@@ -1023,6 +1048,7 @@ export type TimelineEvent = {
   kind: "enrollment_start" | "enrollment_end" | "consultation" | "memo" | "status_change" | "grade";
   title: string;
   description?: string | null;
+  registrant?: string | null; // 등록자(상담/메모, 임포트 텍스트에서 분리)
 };
 
 export async function getStudentTimeline(studentId: string): Promise<TimelineEvent[]> {
@@ -1084,28 +1110,33 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   };
   for (const c of consultations ?? []) {
     const catLabel = c.category ? CONSULT_CATEGORY_LABEL[c.category] : null;
+    const p = parseImportedNote(c.summary);
     events.push({
       date: String(c.consulted_at).slice(0, 10),
       kind: "consultation",
-      title: catLabel ? `상담 — ${catLabel}` : "상담",
-      description: c.summary,
+      title: p.title ?? (catLabel ? `상담 — ${catLabel}` : "상담 기록"),
+      description: p.body,
+      registrant: p.registrant,
     });
   }
 
   for (const m of memos ?? []) {
+    const p = parseImportedNote(m.content);
     events.push({
       date: String(m.created_at).slice(0, 10),
       kind: "memo",
-      title: `메모 — ${m.category}`,
-      description: m.content,
+      title: p.title ?? (m.category ? `메모 — ${m.category}` : "메모"),
+      description: p.body,
+      registrant: p.registrant,
     });
   }
 
+  const subjectMaps = buildSubjectMaps((await getTenantSettings()).operations.subjects);
   for (const g of grades ?? []) {
     events.push({
       date: g.taken_on,
       kind: "grade",
-      title: `${g.subject} — ${g.exam_name}`,
+      title: `${subjectMaps.labelOf(g.subject)} — ${g.exam_name}`,
       description:
         g.score == null
           ? null

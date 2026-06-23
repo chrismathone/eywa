@@ -1,0 +1,135 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { TimelineEvent } from "@/features/students/server/queries";
+
+const KIND_META: Record<
+  TimelineEvent["kind"],
+  { label: string; color: string }
+> = {
+  enrollment_start: { label: "수강 시작", color: "bg-chart-2 text-chart-2" },
+  enrollment_end: { label: "수강 종료", color: "bg-chart-4 text-chart-4" },
+  consultation: { label: "상담", color: "bg-chart-1 text-chart-1" },
+  memo: { label: "메모", color: "bg-chart-3 text-chart-3" },
+  status_change: { label: "상태 변경", color: "bg-chart-5 text-chart-5" },
+  grade: { label: "성적", color: "bg-chart-2 text-chart-2" },
+};
+
+function ymOf(date: string): string {
+  return date.slice(0, 7); // YYYY-MM
+}
+function ymLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${y}년 ${Number(m)}월`;
+}
+
+/**
+ * 타임라인을 월별로 페이지네이션. 한 학생의 전 이벤트는 이미 서버가 한 번에 가져오므로
+ * 서버 라운드트립 없이 클라에서 월(이벤트 있는 달만, 최신순)을 ◀▶로 넘긴다 — 1열로 길게
+ * 늘어지던 문제 해소. 정렬은 쿼리에서 date desc.
+ */
+export function TimelineView({ events }: { events: TimelineEvent[] }) {
+  // 이벤트가 있는 달만 그룹화(최신순). 빈 달은 건너뛰어 매 페이지에 내용이 있게.
+  const months = useMemo(() => {
+    const map = new Map<string, TimelineEvent[]>();
+    for (const e of events) {
+      const ym = ymOf(e.date);
+      const arr = map.get(ym) ?? [];
+      arr.push(e);
+      map.set(ym, arr);
+    }
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  }, [events]);
+
+  const [idx, setIdx] = useState(0);
+  const safeIdx = Math.min(idx, Math.max(0, months.length - 1));
+
+  if (events.length === 0) {
+    return (
+      <div className="space-y-4">
+        <header className="border-border flex items-baseline justify-between border-b pb-3">
+          <h2 className="text-foreground text-base font-semibold">타임라인</h2>
+        </header>
+        <p className="text-muted-foreground py-8 text-center text-sm">이벤트가 없습니다</p>
+      </div>
+    );
+  }
+
+  const [ym, monthEvents] = months[safeIdx]!;
+
+  return (
+    <div className="space-y-4">
+      <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-foreground text-base font-semibold">타임라인</h2>
+          <span className="text-muted-foreground num text-xs">
+            {safeIdx + 1}/{months.length}개월 · 총 {events.length}건
+          </span>
+        </div>
+        {/* 월 네비 — idx 0 = 최신. ◀ 이전(과거)=idx+1, ▶ 다음(최신)=idx-1 */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setIdx(safeIdx + 1)}
+            disabled={safeIdx >= months.length - 1}
+            className="hover:bg-bg-soft rounded p-1 disabled:pointer-events-none disabled:opacity-30"
+            aria-label="이전 달"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          <span className="num text-foreground min-w-[7.5rem] text-center text-sm font-medium">
+            {ymLabel(ym)} · {monthEvents.length}건
+          </span>
+          <button
+            type="button"
+            onClick={() => setIdx(safeIdx - 1)}
+            disabled={safeIdx <= 0}
+            className="hover:bg-bg-soft rounded p-1 disabled:pointer-events-none disabled:opacity-30"
+            aria-label="다음 달"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+      </header>
+
+      <ol className="border-border bg-card relative space-y-3 rounded-md border p-4 pl-8">
+        {/* 타임라인 세로선 */}
+        <span aria-hidden className="bg-border absolute top-4 bottom-4 left-[18px] w-px" />
+        {monthEvents.map((e, i) => {
+          const meta = KIND_META[e.kind];
+          return (
+            <li key={`${ym}-${i}`} className="relative">
+              <span
+                aria-hidden
+                className={`absolute top-[6px] left-[-22px] inline-block size-2 rounded-full ${meta.color.split(" ")[0]}`}
+              />
+              {/* 메타 — 날짜 · 종류 배지 · 등록자(상담/메모) */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="num text-muted-foreground text-xs">{e.date}</span>
+                <span
+                  className={`bg-bg-soft/40 border-border inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                    meta.color.split(" ")[1]
+                  }`}
+                >
+                  {meta.label}
+                </span>
+                {e.registrant ? (
+                  <span className="text-text-faint text-[11px]">· {e.registrant}</span>
+                ) : null}
+              </div>
+              {/* 제목(굵게) — 본문과 위계 분리 */}
+              <p className="text-foreground mt-1 text-sm font-semibold break-keep">{e.title}</p>
+              {/* 본문(흐리게) — 줄바꿈 보존 + 한글 어절 단위 */}
+              {e.description ? (
+                <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed break-keep whitespace-pre-line">
+                  {e.description}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
