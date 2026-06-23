@@ -7,6 +7,15 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import {
+  GENDER_OPTIONS,
+  BLOOD_OPTIONS,
+  RELATION_OPTIONS,
+  SIBLINGS_OPTIONS,
+  CONSULTATION_PATHS,
+} from "@/features/enrollment/form-config";
 
 // ───────────────────────── 토큰 관리 (직원, 인증) ─────────────────────────
 
@@ -119,23 +128,55 @@ export async function submitPublicIntake(
     .gte("created_at", hourAgo);
   if ((count ?? 0) >= 20) return { error: "접수가 많아 잠시 후 다시 시도해주세요" };
 
+  // 필수·화이트리스트 검증 — 비인증 직접 POST가 설정 밖 값/빈 필수필드를 넣지 못하게 막는다.
+  // 과목·학년은 운영 enum 단일소스(토큰 테넌트의 학원설정)와 대조. <select>는 클라 가드일 뿐이라 서버에서 재검증.
+  const settings = await getTenantSettingsByTenantId(tok.tenant_id as string);
+  const allowedSubjects = new Set(
+    buildSubjectMaps(settings.operations.subjects).options.map((o) => o.value),
+  );
+  const allowedGrades = new Set(settings.operations.gradeLevels);
+  const has = (arr: readonly string[], v: string) => arr.includes(v);
+
+  const prospectGrade = clip(formData.get("prospectGrade"), 20);
+  const prospectSchool = clip(formData.get("prospectSchool"), 40);
+  const gender = clip(formData.get("gender"), 10);
+  const parentName = clip(formData.get("parentName"), 40);
+  const parentPhone = clip(formData.get("parentPhone"), 20);
+  const parentRelation = clip(formData.get("parentRelation"), 10);
+  const consultationPath = clip(formData.get("consultationPath"), 40);
+
+  if (!prospectSchool) return { error: "학교를 입력해주세요" };
+  if (!parentName) return { error: "보호자 이름을 입력해주세요" };
+  if (!parentPhone) return { error: "보호자 연락처를 입력해주세요" };
+  if (!has(GENDER_OPTIONS.map((o) => o.value), gender)) return { error: "성별을 선택해주세요" };
+  if (!has(RELATION_OPTIONS, parentRelation)) return { error: "보호자와의 관계를 선택해주세요" };
+  if (!has(CONSULTATION_PATHS, consultationPath)) return { error: "상담 경로를 선택해주세요" };
+  if (!allowedGrades.has(prospectGrade)) return { error: "학년을 선택해주세요" };
+
+  // 선택 입력 — 화이트리스트 밖이면 조용히 버린다(null).
+  const bloodRaw = clip(formData.get("bloodType"), 4);
+  const bloodType = has(BLOOD_OPTIONS, bloodRaw) ? bloodRaw : null;
+  const siblingsRaw = clip(formData.get("siblings"), 40);
+  const siblings = has(SIBLINGS_OPTIONS, siblingsRaw) ? siblingsRaw : null;
   const subjects = formData.getAll("subjects").map((s) => String(s)).filter(Boolean);
+  const subject = subjects.find((s) => allowedSubjects.has(s)) ?? null;
+
   const { error: insErr } = await admin.from("enrollment_consultations").insert({
     tenant_id: tok.tenant_id,
     prospect_name: prospectName,
-    prospect_grade: clip(formData.get("prospectGrade"), 20) || null,
-    prospect_school: clip(formData.get("prospectSchool"), 40) || null,
-    gender: clip(formData.get("gender"), 10) || null,
-    blood_type: clip(formData.get("bloodType"), 4) || null,
+    prospect_grade: prospectGrade,
+    prospect_school: prospectSchool,
+    gender,
+    blood_type: bloodType,
     student_phone: clip(formData.get("studentPhone"), 20) || null,
-    parent_name: clip(formData.get("parentName"), 40) || null,
-    parent_phone: clip(formData.get("parentPhone"), 20) || null,
-    parent_relation: clip(formData.get("parentRelation"), 10) || null,
+    parent_name: parentName,
+    parent_phone: parentPhone,
+    parent_relation: parentRelation,
     address: clip(formData.get("address"), 120) || null,
-    consultation_path: clip(formData.get("consultationPath"), 40) || null,
+    consultation_path: consultationPath,
     career_goal: clip(formData.get("careerGoal"), 60) || null,
-    siblings: clip(formData.get("siblings"), 40) || null,
-    subject: subjects[0] ?? null,
+    siblings,
+    subject,
     parent_request: clip(formData.get("parentRequest"), 2000) || null,
     shuttle_bus_request: String(formData.get("shuttleBusRequest") ?? "") === "true",
     privacy_agreement: true,
@@ -147,18 +188,15 @@ export async function submitPublicIntake(
   });
   if (insErr) return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
 
-  // 토큰 카운터 증가(현재값 읽어 +1 — 동시성은 데모 규모 무시).
+  // 제출수 증가(현재값 읽어 +1 — 동시성은 데모 규모 무시). 조회수(usage_count)는 공개 폼 노출에서 집계.
   const { data: cur } = await admin
     .from("intake_tokens")
-    .select("usage_count, submission_count")
+    .select("submission_count")
     .eq("id", tok.id)
     .maybeSingle();
   await admin
     .from("intake_tokens")
-    .update({
-      usage_count: ((cur?.usage_count as number) ?? 0) + 1,
-      submission_count: ((cur?.submission_count as number) ?? 0) + 1,
-    })
+    .update({ submission_count: ((cur?.submission_count as number) ?? 0) + 1 })
     .eq("id", tok.id);
 
   return { ok: true };

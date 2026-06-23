@@ -23,7 +23,7 @@ export default async function PublicIntakePage({
   const admin = createAdminClient();
   const { data: tok } = await admin
     .from("intake_tokens")
-    .select("id, tenant_id, is_active, expires_at")
+    .select("id, tenant_id, is_active, expires_at, usage_count")
     .eq("token", token)
     .maybeSingle();
 
@@ -33,6 +33,12 @@ export default async function PublicIntakePage({
   if (tok.expires_at && new Date(tok.expires_at as string) < new Date()) {
     return <ClosedScreen message="접수 기간이 만료되었습니다." />;
   }
+
+  // 조회수 집계 — 유효한 공개 폼 노출 1회 = usage_count +1(제출수와 분리해 전환율 파악).
+  await admin
+    .from("intake_tokens")
+    .update({ usage_count: ((tok.usage_count as number) ?? 0) + 1 })
+    .eq("id", tok.id);
 
   const settings = await getTenantSettingsByTenantId(tok.tenant_id as string);
   const academyName = settings.profile.name || "학원";

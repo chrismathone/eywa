@@ -260,6 +260,13 @@ ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 �
   의존성 `qrcode` 추가. ⚠️ 공개 쓰기는 admin client + 검증된 토큰의 tenant_id만 사용(조작 불가).
 - 검증(Chrome): 전체폼 생성→상세(과목점수95)→DB subject_details·tenant 영속→수정 round-trip / QR 토큰생성→/intake/{token}
   학부모폼→제출→성공→DB(pending·from_public_intake·tenant·token링크)+submission_count→칸반 QR배지. typecheck0/lint0/test428/콘솔0.
+- **공개접수 서버검증 하드닝(2026-06-23, 멀티에이전트 보안감사 후속)**: `submitPublicIntake`가 비인증·admin client라
+  `<select>`(클라 가드)를 우회한 직접 POST에 무방비였음 → **필수·화이트리스트 서버검증 추가**: 필수(보호자명/연락처/학교/성별/
+  관계/상담경로/학년) 누락 시 거부 + 운영 enum(성별·혈액형·관계·상담경로=`form-config` 상수 / **과목·학년=토큰 테넌트의
+  `getTenantSettingsByTenantId`+`buildSubjectMaps`**, 단일소스 대조)으로 대조해 설정 밖 값 거부, 선택값은 null. 실검증: 정상제출✓·
+  변조 gender 거부(미저장)·무효 subject→null. + **카운터 정합**: `usage_count`를 제출 시가 아니라 공개 페이지 노출에서 +1해
+  조회(usage)≠제출(submission) 분리(패널 "조회·제출" 정확). ⚠️ **남은 운영 하드닝(백로그, A)**: per-IP/전역 레이트리밋·캡차
+  부재(현재 토큰당 1h20+허니팟뿐)·토큰 expires_at 영구 가능 — 운영 전환 시 보강. (테넌트 격리·RLS·토큰 위변조는 감사서 정상 확인.)
 
 ### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
 사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
