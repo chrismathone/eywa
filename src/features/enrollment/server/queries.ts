@@ -208,6 +208,36 @@ export type AiAnalysisDetail = {
   generatedAt: string;
 };
 
+/** 등록 상담 폼 전체 필드(0046a) — 상세 표시·수정 초기값. */
+export type FullConsultationFields = {
+  englishName: string | null;
+  gender: string | null;
+  bloodType: string | null;
+  birthDate: string | null;
+  studentPhone: string | null;
+  homePhone: string | null;
+  parentRelation: string | null;
+  address: string | null;
+  zipCode: string | null;
+  addressDetail: string | null;
+  consultationPath: string | null;
+  subject: string | null;
+  careerGoal: string | null;
+  siblings: string | null;
+  safetyNotes: string | null;
+  registrationStatus: string | null;
+  paymentAmount: string | null;
+  paymentDate: string | null;
+  registrar: string | null;
+  followUpDate: string | null;
+  followUpContent: string | null;
+  nonRegistrationReason: string | null;
+  shuttleBusRequest: boolean;
+  privacyAgreement: boolean;
+  installmentAgreement: boolean;
+  subjectDetails: Record<string, Record<string, string>> | null;
+};
+
 export type ConsultationDetail = ConsultationListRow & {
   parentName: string | null;
   learningHistory: LearningHistory | null;
@@ -218,6 +248,7 @@ export type ConsultationDetail = ConsultationListRow & {
   audioDurationSec: number | null;
   recommendedClasses: { id: string; className: string; subject: string }[];
   studentId: string | null;
+  fields: FullConsultationFields;
 };
 
 export async function getEnrollmentConsultationById(id: string): Promise<ConsultationDetail | null> {
@@ -230,6 +261,12 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        outcome, consulted_at, student_id, from_public_intake,
        audio_path, audio_duration_sec, transcription,
        processing_status, processing_error,
+       english_name, gender, blood_type, birth_date, student_phone, home_phone,
+       parent_relation, address, zip_code, address_detail, consultation_path,
+       subject, career_goal, siblings, safety_notes, registration_status,
+       payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
+       non_registration_reason, shuttle_bus_request, privacy_agreement,
+       installment_agreement, subject_details,
        consultant:consultant_id ( display_name )`,
     )
     .eq("id", id)
@@ -305,6 +342,40 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
       : null,
     recommendedClasses,
     studentId: (c as { student_id?: string | null }).student_id ?? null,
+    fields: mapFullFields(c as Record<string, unknown>),
+  };
+}
+
+const s = (v: unknown): string | null => (v == null ? null : String(v));
+
+function mapFullFields(c: Record<string, unknown>): FullConsultationFields {
+  return {
+    englishName: s(c.english_name),
+    gender: s(c.gender),
+    bloodType: s(c.blood_type),
+    birthDate: s(c.birth_date),
+    studentPhone: s(c.student_phone),
+    homePhone: s(c.home_phone),
+    parentRelation: s(c.parent_relation),
+    address: s(c.address),
+    zipCode: s(c.zip_code),
+    addressDetail: s(c.address_detail),
+    consultationPath: s(c.consultation_path),
+    subject: s(c.subject),
+    careerGoal: s(c.career_goal),
+    siblings: s(c.siblings),
+    safetyNotes: s(c.safety_notes),
+    registrationStatus: s(c.registration_status),
+    paymentAmount: s(c.payment_amount),
+    paymentDate: s(c.payment_date),
+    registrar: s(c.registrar),
+    followUpDate: s(c.follow_up_date),
+    followUpContent: s(c.follow_up_content),
+    nonRegistrationReason: s(c.non_registration_reason),
+    shuttleBusRequest: !!c.shuttle_bus_request,
+    privacyAgreement: !!c.privacy_agreement,
+    installmentAgreement: !!c.installment_agreement,
+    subjectDetails: (c.subject_details as Record<string, Record<string, string>> | null) ?? null,
   };
 }
 

@@ -11,16 +11,99 @@ import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 
+const opt = z.string().optional().nullable();
 const createSchema = z.object({
   prospectName: z.string().min(1, "학생 이름을 입력해주세요"),
-  prospectGrade: z.string().optional().nullable(),
-  prospectSchool: z.string().optional().nullable(),
-  parentName: z.string().optional().nullable(),
-  parentPhone: z.string().optional().nullable(),
-  parentRequest: z.string().optional().nullable(),
-  prevAcademy: z.string().optional().nullable(),
-  lastScore: z.string().optional().nullable(),
+  prospectGrade: opt,
+  prospectSchool: opt,
+  parentName: opt,
+  parentPhone: opt,
+  parentRequest: opt, // 상담 내용
+  prevAcademy: opt,
+  lastScore: opt,
+  // 등록 상담 폼 전체(0046a)
+  englishName: opt,
+  gender: opt,
+  bloodType: opt,
+  birthDate: opt,
+  studentPhone: opt,
+  homePhone: opt,
+  parentRelation: opt,
+  address: opt,
+  zipCode: opt,
+  addressDetail: opt,
+  consultationPath: opt,
+  subject: opt,
+  careerGoal: opt,
+  siblings: opt,
+  safetyNotes: opt,
+  registrationStatus: opt,
+  paymentAmount: opt,
+  paymentDate: opt,
+  registrar: opt,
+  followUpDate: opt,
+  followUpContent: opt,
+  nonRegistrationReason: opt,
+  shuttleBusRequest: opt,
+  privacyAgreement: opt,
+  installmentAgreement: opt,
+  subjectDetails: opt, // 과목 탭 JSON 문자열
 });
+
+type FullForm = z.infer<typeof createSchema>;
+
+const asBool = (v?: string | null) => v === "true" || v === "on";
+const asNum = (v?: string | null) => {
+  if (!v) return null;
+  const n = Number(String(v).replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+
+/** 폼 → DB 컬럼(공통). learning_history·tenant_id·consultant_id·outcome는 호출부에서 별도 처리. */
+function buildConsultationRow(d: FullForm) {
+  let subjectDetails: unknown = null;
+  if (d.subjectDetails) {
+    try {
+      subjectDetails = JSON.parse(d.subjectDetails);
+    } catch {
+      subjectDetails = null;
+    }
+  }
+  return {
+    prospect_name: d.prospectName,
+    prospect_grade: d.prospectGrade || null,
+    prospect_school: d.prospectSchool || null,
+    english_name: d.englishName || null,
+    gender: d.gender || null,
+    blood_type: d.bloodType || null,
+    birth_date: d.birthDate || null,
+    student_phone: d.studentPhone || null,
+    home_phone: d.homePhone || null,
+    parent_name: d.parentName || null,
+    parent_phone: d.parentPhone || null,
+    parent_relation: d.parentRelation || null,
+    address: d.address || null,
+    zip_code: d.zipCode || null,
+    address_detail: d.addressDetail || null,
+    consultation_path: d.consultationPath || null,
+    subject: d.subject || null,
+    career_goal: d.careerGoal || null,
+    siblings: d.siblings || null,
+    safety_notes: d.safetyNotes || null,
+    registration_status: d.registrationStatus || null,
+    payment_amount: asNum(d.paymentAmount),
+    payment_date: d.paymentDate || null,
+    registrar: d.registrar || null,
+    follow_up_date: d.followUpDate || null,
+    follow_up_content: d.followUpContent || null,
+    non_registration_reason: d.nonRegistrationReason || null,
+    parent_request: d.parentRequest || null,
+    shuttle_bus_request: asBool(d.shuttleBusRequest),
+    privacy_agreement: asBool(d.privacyAgreement),
+    installment_agreement: asBool(d.installmentAgreement),
+    subject_details: subjectDetails,
+  };
+}
 
 export type CreateConsultationState = { error?: string } | undefined;
 
@@ -28,26 +111,15 @@ export async function createEnrollmentConsultation(
   _prev: CreateConsultationState,
   formData: FormData,
 ): Promise<CreateConsultationState> {
-  const parsed = createSchema.safeParse({
-    prospectName: formData.get("prospectName"),
-    prospectGrade: formData.get("prospectGrade"),
-    prospectSchool: formData.get("prospectSchool"),
-    parentName: formData.get("parentName"),
-    parentPhone: formData.get("parentPhone"),
-    parentRequest: formData.get("parentRequest"),
-    prevAcademy: formData.get("prevAcademy"),
-    lastScore: formData.get("lastScore"),
-  });
+  const parsed = createSchema.safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요" };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  const supabase = await createClient();
 
   const learningHistory: Record<string, unknown> = {};
   if (parsed.data.prevAcademy) learningHistory.prevAcademy = parsed.data.prevAcademy;
@@ -56,12 +128,8 @@ export async function createEnrollmentConsultation(
   const { data, error } = await supabase
     .from("enrollment_consultations")
     .insert({
-      prospect_name: parsed.data.prospectName,
-      prospect_grade: parsed.data.prospectGrade || null,
-      prospect_school: parsed.data.prospectSchool || null,
-      parent_name: parsed.data.parentName || null,
-      parent_phone: parsed.data.parentPhone || null,
-      parent_request: parsed.data.parentRequest || null,
+      tenant_id: user.tenantId,
+      ...buildConsultationRow(parsed.data),
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: "consulted",
@@ -89,16 +157,7 @@ export async function updateEnrollmentConsultation(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
 
-  const parsed = createSchema.safeParse({
-    prospectName: formData.get("prospectName"),
-    prospectGrade: formData.get("prospectGrade"),
-    prospectSchool: formData.get("prospectSchool"),
-    parentName: formData.get("parentName"),
-    parentPhone: formData.get("parentPhone"),
-    parentRequest: formData.get("parentRequest"),
-    prevAcademy: formData.get("prevAcademy"),
-    lastScore: formData.get("lastScore"),
-  });
+  const parsed = createSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요" };
   }
@@ -119,12 +178,7 @@ export async function updateEnrollmentConsultation(
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
-      prospect_name: parsed.data.prospectName,
-      prospect_grade: parsed.data.prospectGrade || null,
-      prospect_school: parsed.data.prospectSchool || null,
-      parent_name: parsed.data.parentName || null,
-      parent_phone: parsed.data.parentPhone || null,
-      parent_request: parsed.data.parentRequest || null,
+      ...buildConsultationRow(parsed.data),
       learning_history: Object.keys(lh).length > 0 ? lh : null,
       updated_at: new Date().toISOString(),
     })

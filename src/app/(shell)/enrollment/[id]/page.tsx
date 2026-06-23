@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, Loader2, Mic, Printer, Sparkles } from "lucide-react";
+import { AlertCircle, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -11,7 +11,9 @@ import {
   type AiAnalysisDetail,
   type ConsultationAudioReport,
   type ConsultationProcessingStatus,
+  type FullConsultationFields,
 } from "@/features/enrollment/server/queries";
+import { ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { getClassesList } from "@/features/classes/server/queries";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationStatusWatcher } from "./status-watcher";
@@ -108,6 +110,10 @@ export default async function EnrollmentDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" render={<Link href={`/enrollment/${id}/edit`} />}>
+            <Pencil className="size-4" />
+            수정
+          </Button>
           <ConsultationManageButtons
             values={{
               id: consult.id,
@@ -216,6 +222,8 @@ export default async function EnrollmentDetailPage({
               <Field label="상담일" value={new Date(consult.consultedAt).toLocaleDateString("ko-KR")} mono />
             </dl>
           </Card>
+
+          <ExtraInfoCard f={consult.fields} />
         </div>
 
         <div className="space-y-4 lg:col-span-2">
@@ -238,6 +246,8 @@ export default async function EnrollmentDetailPage({
               </p>
             </Card>
           ) : null}
+
+          <SubjectScoresCard details={consult.fields.subjectDetails} />
 
           {consult.transcription ? (
             <Card title="전사 내용">
@@ -412,5 +422,105 @@ function Plan({ label, items }: { label: string; items: string[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+function ExtraInfoCard({ f }: { f: FullConsultationFields }) {
+  const genderLabel = f.gender ? (GENDER_OPTIONS.find((g) => g.value === f.gender)?.label ?? f.gender) : null;
+  const rows: [string, string | null][] = [
+    ["성별", genderLabel],
+    ["생년월일", f.birthDate],
+    ["학생 연락처", f.studentPhone],
+    ["집 전화", f.homePhone],
+    ["보호자 관계", f.parentRelation],
+    ["주소", [f.address, f.addressDetail].filter(Boolean).join(" ") || null],
+    ["유입 경로", f.consultationPath],
+    ["희망 진로", f.careerGoal],
+    ["형제관계", f.siblings],
+    ["안전사항", f.safetyNotes],
+    ["등록 상태", f.registrationStatus],
+    ["결제 금액", f.paymentAmount ? `${Number(f.paymentAmount).toLocaleString()}원` : null],
+    ["결제일", f.paymentDate],
+    ["등록자", f.registrar],
+    ["후속 조치일", f.followUpDate],
+    ["조치 내용", f.followUpContent],
+    ["미등록 사유", f.nonRegistrationReason],
+  ];
+  const flags = [
+    f.shuttleBusRequest ? "셔틀버스" : null,
+    f.privacyAgreement ? "개인정보 동의" : null,
+    f.installmentAgreement ? "할부 동의" : null,
+  ].filter(Boolean) as string[];
+  const visible = rows.filter(([, v]) => v);
+  if (visible.length === 0 && flags.length === 0) return null;
+  return (
+    <Card title="학생 상세 정보">
+      <dl className="space-y-2.5 text-sm">
+        {visible.map(([label, val]) => (
+          <Field key={label} label={label} value={val} />
+        ))}
+      </dl>
+      {flags.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {flags.map((t) => (
+            <span key={t} className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[11px]">
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function subjectLabelMap(subjectKey: string): Record<string, string> {
+  const map: Record<string, string> = { testType: "테스트 유형" };
+  const tab = SUBJECT_TABS.find((t) => t.key === subjectKey);
+  if (!tab) return map;
+  if (tab.english) {
+    Object.values(ENGLISH_GROUPS)
+      .flat()
+      .forEach((g) => g.fields.forEach((fd) => (map[fd.key] = fd.label)));
+  } else {
+    (tab.groups ?? []).forEach((g) => g.fields.forEach((fd) => (map[fd.key] = fd.label)));
+  }
+  return map;
+}
+
+function SubjectScoresCard({ details }: { details: Record<string, Record<string, string>> | null }) {
+  if (!details) return null;
+  const entries = Object.entries(details).filter(
+    ([, vals]) => vals && Object.values(vals).some((v) => String(v).trim()),
+  );
+  if (entries.length === 0) return null;
+  const ENG_TYPE: Record<string, string> = { ai: "AI 레벨테스트", nelt: "NELT", eie: "EiE" };
+  return (
+    <Card title="과목별 점수">
+      <div className="space-y-4">
+        {entries.map(([subj, vals]) => {
+          const tab = SUBJECT_TABS.find((t) => t.key === subj);
+          const labels = subjectLabelMap(subj);
+          const items = Object.entries(vals).filter(([k, v]) => String(v).trim() && k !== "testType");
+          return (
+            <div key={subj}>
+              <p className="text-primary text-xs font-semibold">
+                {tab?.label ?? subj}
+                {subj === "english" && vals.testType
+                  ? ` · ${ENG_TYPE[vals.testType] ?? vals.testType}`
+                  : ""}
+              </p>
+              <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+                {items.map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground text-xs">{labels[k] ?? k}</dt>
+                    <dd className="text-foreground text-right text-xs">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
