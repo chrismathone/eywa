@@ -199,7 +199,7 @@ export function OneScreenClient({
 
       <OneScreenHubBar stats={hubStats} todayClasses={todayClasses} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
         <StudentList
           students={visible}
           selId={effectiveId}

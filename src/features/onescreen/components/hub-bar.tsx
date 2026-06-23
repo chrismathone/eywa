@@ -26,16 +26,17 @@ export function OneScreenHubBar({
   todayClasses: TodayClass[];
 }) {
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-      {/* 통계 — 컴팩트 단일 카드(4셀, 내용폭). stretch 안 함 → 빈 공간 없음. */}
-      <div className="bg-card border-line shadow-card grid grid-cols-4 divide-x divide-line/70 rounded-md border lg:shrink-0">
+    // 단일 full-width 바: [통계 4셀] | 구분선 | 오늘 수업 칩(남는 폭 채움). 위 상단바와 폭 일치 → 떠 있는 빈공간 없음.
+    <div className="bg-card border-line shadow-card flex flex-col rounded-md border px-2 py-1.5 lg:flex-row lg:items-stretch lg:gap-0">
+      {/* 통계 — 4셀(내용폭) */}
+      <div className="divide-line/70 grid grid-cols-4 divide-x lg:shrink-0">
         {STAT_DEFS.map((d) => {
           const v = stats[d.key];
           const denom = d.key === "students" ? null : stats.students;
           return (
-            <div key={d.key} className="px-3.5 py-2 text-center sm:px-5">
+            <div key={d.key} className="px-3 py-1 text-center sm:px-5">
               <p className="micro text-text-faint whitespace-nowrap">{d.label}</p>
-              <p className={`tabular mt-0.5 text-[19px] font-extrabold leading-tight ${d.tone}`}>
+              <p className={`tabular text-[19px] font-extrabold leading-tight ${d.tone}`}>
                 {v}
                 {denom != null ? (
                   <span className="text-text-faint text-[12px] font-semibold">/{denom}</span>
@@ -46,28 +47,26 @@ export function OneScreenHubBar({
         })}
       </div>
 
-      {/* 오늘 수업 — 남는 폭을 채우는 시각순 그리드(시각 강조). */}
-      <div className="bg-card border-line shadow-card min-w-0 flex-1 rounded-md border px-4 py-2.5">
-        <p className="micro text-text-faint mb-1.5">오늘 수업 {todayClasses.length}개</p>
+      <div className="bg-line/70 mx-3 my-1 hidden w-px lg:block" />
+
+      {/* 오늘 수업 — 칩이 남는 폭을 채움(좌측 패킹). stretch/grid 안 함 → 셀 사이 듬성한 공간 없음. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 px-2 py-1 lg:px-0">
+        <span className="micro text-text-faint mr-1 shrink-0">오늘 수업 {todayClasses.length}</span>
         {todayClasses.length === 0 ? (
-          <p className="text-text-faint py-1 text-[13px]">오늘 예정된 수업이 없습니다.</p>
+          <span className="text-text-faint text-[13px]">예정된 수업 없음</span>
         ) : (
-          <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
-            {todayClasses.map((c) => (
-              <div
-                key={c.id}
-                className="border-line/60 flex items-center gap-2 border-b py-1 last:border-b-0"
-              >
-                <span className="text-primary bg-primary-soft shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[11px] font-semibold">
-                  {c.startTime ?? "—"}
-                </span>
-                <span className="text-foreground min-w-0 flex-1 truncate text-[12.5px] font-semibold">
-                  {c.name}
-                </span>
-                <span className="text-text-faint shrink-0 text-[11px]">{c.studentCount}명</span>
-              </div>
-            ))}
-          </div>
+          todayClasses.map((c) => (
+            <span
+              key={c.id}
+              className="border-line inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[12.5px]"
+            >
+              <span className="text-primary font-mono text-[11px] font-semibold">
+                {c.startTime ?? "—"}
+              </span>
+              <span className="text-foreground font-semibold">{c.name}</span>
+              <span className="text-text-faint">{c.studentCount}명</span>
+            </span>
+          ))
         )}
       </div>
     </div>
