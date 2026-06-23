@@ -12,9 +12,10 @@ import {
   CONSULTATION_PATHS,
   RELATION_OPTIONS,
 } from "@/features/enrollment/form-config";
+import type { ShuttleSetting } from "@/features/owner/settings-types";
 
 // ijw 입학상담카드 충실 이식 — 컬러 구획(학생=gold·학부모=amber·셔틀=danger·동의서=ink) + 전체 필드/섹션.
-// ⚠️ 셔틀 노선·동의서 전문은 데모(인재원) 정적 콘텐츠(실서비스는 테넌트 설정화 대상).
+// 셔틀(요금·노선)·동의서 문구는 학원설정에서 주입(operations.shuttle / notifications.privacyTerms·serviceTerms).
 
 const input =
   "border-border bg-card text-foreground placeholder:text-text-faint h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30";
@@ -25,51 +26,6 @@ const SCHOOL_TYPES = [
   { type: "중학교", prefix: "중" },
   { type: "고등학교", prefix: "고" },
 ] as const;
-
-const PRIVACY_TEXT = `1. 수집하는 개인정보의 항목 : 성명, 학년, 학교, 학생 연락처, 학부모 연락처, 제출한 과제의 동영상 및 음원
-
-2. 원생들의 동기부여를 위해 원내 게시물, 가정통신문, 블로그 등 SNS에 학습성과를 홍보할 때 이용합니다.
-
-3. 단, 온라인이나 배포용 홍보물에는 전체 이름을 노출하지 않고 '*'기호 등을 사용해서 개인정보 유출을 막습니다.
-
-4. 동의를 거부할 권리 : 귀하는 위와 같이 개인정보를 수집·이용하는 데 대한 동의를 거부할 권리가 있습니다. 다만, 동의하지 않으실 경우 상담 제공 및 셔틀버스 운영 등 일부 서비스에 제한이 있을 수 있습니다.`;
-
-const REFUND_BLOCKS: { title: string; body: string }[] = [
-  {
-    title: "수강 등록 및 환불 안내",
-    body: `1. 매월 25일~28일까지 수강료 납부기간이며, 25일에 등록안내 및 학사일정이 모바일로 발송됩니다.
-
-2. 수강료는 선불이며, 매월 1일부터 말일까지 수업횟수 기준으로 산정됩니다.
-
-3. 원활한 학습관리를 위해 월 12회, 월 8회 수업이 최소 단위입니다. (단, 특강반·단과반 제외)
-
-4. 등록기간 내 미등록 시, 대기생으로 자동 편성되어 기존 수강반 등록이 어려울 수 있습니다.`,
-  },
-  {
-    title: "환불 규정 (공정거래위원회 표준약관 기준)",
-    body: `교습 시작 전 → 전액 환불
-총 수업의 1/3 경과 전 → 2/3 환불
-총 수업의 1/2 경과 전 → 1/2 환불
-총 수업의 1/2 경과 후 → 환불 불가`,
-  },
-  {
-    title: "보강 및 퇴원 규정",
-    body: `1. 규칙적인 학습을 위해 지각·결석에 대한 별도 보강이 없습니다. (단, 건강상의 문제나 증명 가능한 공식 사유는 1회 이내 예외 인정)
-
-2. 규정·예의를 지키지 않거나 수업 분위기를 해칠 경우 경고를 받으며, 2회 경고 시 퇴원 조치됩니다.`,
-  },
-];
-
-const SHUTTLE_ROUTES = [
-  {
-    title: "1호차 주요 노선",
-    stops: ["서대구 센트럴자이", "고성동 오페라 아파트", "대구역 앞 북편네거리", "옥산초·경명여중 입구"],
-  },
-  {
-    title: "2호차 주요 노선",
-    stops: ["침산 푸르지오 1차", "달성초 앞", "달성파크 푸르지오 힐스테이트", "대구역 센트럴자이", "서희스타힐스 앞"],
-  },
-];
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -98,20 +54,28 @@ export function PublicIntakeForm({
   academyName,
   subjectOptions,
   gradeLevels,
+  shuttle,
+  privacyTerms,
+  serviceTerms,
 }: {
   token: string;
   academyName: string;
   subjectOptions: { value: string; label: string }[];
   gradeLevels: string[];
+  shuttle: ShuttleSetting;
+  privacyTerms: string;
+  serviceTerms: string;
 }) {
   const [state, formAction] = useActionState<PublicIntakeState, FormData>(submitPublicIntake, undefined);
 
   // 버튼/다중선택은 상태로 보유 → hidden input으로 제출.
   const [subjects, setSubjects] = useState<string[]>([]);
   const [siblings, setSiblings] = useState("");
-  const [shuttle, setShuttle] = useState<boolean | null>(null);
+  const [applyShuttle, setApplyShuttle] = useState<boolean | null>(null);
   const [schoolType, setSchoolType] = useState("");
   const [grade, setGrade] = useState("");
+  const showPrivacy = privacyTerms.trim().length > 0;
+  const showService = serviceTerms.trim().length > 0;
 
   const gradeOptions = useMemo(() => {
     const st = SCHOOL_TYPES.find((s) => s.type === schoolType);
@@ -150,7 +114,7 @@ export function PublicIntakeForm({
         <input key={s} type="hidden" name="subjects" value={s} />
       ))}
       <input type="hidden" name="siblings" value={siblings} />
-      <input type="hidden" name="shuttleBusRequest" value={shuttle ? "true" : ""} />
+      <input type="hidden" name="shuttleBusRequest" value={applyShuttle ? "true" : ""} />
 
       {/* 헤더 (네이비/ink) */}
       <header className="bg-foreground px-6 pt-8 pb-6 text-center">
@@ -304,76 +268,80 @@ export function PublicIntakeForm({
         </Field>
       </Section>
 
-      {/* 셔틀버스 (danger) */}
-      <Section title="셔틀버스 신청" tone="danger">
-        <p className="text-foreground text-sm font-semibold">셔틀버스를 신청하시겠습니까? (월 20,000원)</p>
-        <div className="flex gap-2">
-          {[
-            { v: true, label: "신청" },
-            { v: false, label: "미신청" },
-          ].map((opt) => {
-            const on = shuttle === opt.v;
-            return (
-              <button
-                key={String(opt.v)}
-                type="button"
-                onClick={() => setShuttle(opt.v)}
-                className={`h-11 flex-1 rounded-md border text-sm font-medium transition-colors ${
-                  on ? "border-danger bg-danger text-white" : "border-border bg-card text-text-dim"
-                }`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="space-y-2">
-          {SHUTTLE_ROUTES.map((r) => (
-            <div key={r.title} className="bg-danger/5 rounded-md p-3">
-              <p className="text-danger text-[13px] font-bold">{r.title}</p>
-              <div className="text-text-dim mt-0.5 text-xs leading-relaxed">
-                {r.stops.map((stop, i) => (
-                  <p key={i}>
-                    {i + 1}. {stop}
-                  </p>
-                ))}
-              </div>
+      {/* 셔틀버스 (danger) — 학원설정 operations.shuttle. 표시 OFF면 섹션 자체를 숨김. */}
+      {shuttle.enabled ? (
+        <Section title="셔틀버스 신청" tone="danger">
+          <p className="text-foreground text-sm font-semibold">
+            셔틀버스를 신청하시겠습니까?{shuttle.fee ? ` (${shuttle.fee})` : ""}
+          </p>
+          <div className="flex gap-2">
+            {[
+              { v: true, label: "신청" },
+              { v: false, label: "미신청" },
+            ].map((opt) => {
+              const on = applyShuttle === opt.v;
+              return (
+                <button
+                  key={String(opt.v)}
+                  type="button"
+                  onClick={() => setApplyShuttle(opt.v)}
+                  className={`h-11 flex-1 rounded-md border text-sm font-medium transition-colors ${
+                    on ? "border-danger bg-danger text-white" : "border-border bg-card text-text-dim"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {shuttle.routes.length > 0 ? (
+            <div className="space-y-2">
+              {shuttle.routes.map((r, ri) => (
+                <div key={ri} className="bg-danger/5 rounded-md p-3">
+                  <p className="text-danger text-[13px] font-bold">{r.label}</p>
+                  <div className="text-text-dim mt-0.5 text-xs leading-relaxed">
+                    {r.stops.map((stop, i) => (
+                      <p key={i}>
+                        {i + 1}. {stop}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </Section>
+          ) : null}
+        </Section>
+      ) : null}
 
-      {/* 동의서 (ink) */}
+      {/* 동의서 (ink) — 문구는 학원설정 notifications.privacyTerms / serviceTerms. */}
       <Section title="동의서 & 학칙 안내" tone="ink">
         <div className="space-y-3">
           <h4 className="text-foreground text-sm font-bold">
             개인정보 활용 동의서 <span className="text-danger">*</span>
           </h4>
-          <div className="bg-bg-soft rounded-md p-4 text-[13px] leading-relaxed">
-            <p className="text-foreground mb-2 font-bold">개인정보 수집 및 이용 동의서</p>
-            <p className="text-text-dim whitespace-pre-line">{PRIVACY_TEXT}</p>
-          </div>
+          {showPrivacy ? (
+            <div className="bg-bg-soft rounded-md p-4 text-[13px] leading-relaxed">
+              <p className="text-text-dim whitespace-pre-line">{privacyTerms}</p>
+            </div>
+          ) : null}
           <label className="flex cursor-pointer items-center gap-2.5">
             <input type="checkbox" name="privacyAgreement" value="true" required className="accent-danger size-5 shrink-0" />
-            <span className="text-foreground text-sm">위 내용을 확인하였으며, 이에 동의합니다.</span>
+            <span className="text-foreground text-sm">개인정보 수집·이용에 동의합니다.</span>
           </label>
         </div>
 
-        <div className="space-y-3 pt-2">
-          <h4 className="text-foreground text-sm font-bold">환불 규정 안내 동의서</h4>
-          <div className="bg-bg-soft space-y-3 rounded-md p-4 text-[13px] leading-relaxed">
-            {REFUND_BLOCKS.map((b) => (
-              <div key={b.title}>
-                <p className="text-foreground mb-1 font-bold">{b.title}</p>
-                <p className="text-text-dim whitespace-pre-line">{b.body}</p>
-              </div>
-            ))}
+        {showService ? (
+          <div className="space-y-3 pt-2">
+            <h4 className="text-foreground text-sm font-bold">환불·학칙 안내 동의서</h4>
+            <div className="bg-bg-soft rounded-md p-4 text-[13px] leading-relaxed">
+              <p className="text-text-dim whitespace-pre-line">{serviceTerms}</p>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2.5">
+              <input type="checkbox" name="installmentAgreement" value="true" className="accent-danger size-5 shrink-0" />
+              <span className="text-foreground text-sm">위 내용을 확인하였으며, 이에 동의합니다.</span>
+            </label>
           </div>
-          <label className="flex cursor-pointer items-center gap-2.5">
-            <input type="checkbox" name="installmentAgreement" value="true" className="accent-danger size-5 shrink-0" />
-            <span className="text-foreground text-sm">위 내용을 확인하였으며, 이에 동의합니다.</span>
-          </label>
-        </div>
+        ) : null}
       </Section>
 
       <div className="mx-3 mt-6 px-2">

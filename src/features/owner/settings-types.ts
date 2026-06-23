@@ -56,6 +56,19 @@ export const profileSchema = z.object({
 });
 export type ProfileSettings = z.infer<typeof profileSchema>;
 
+// 셔틀버스 — 공개 접수 폼·운영에 노출. 노선(라벨 + 정류장 목록).
+export const shuttleRouteSchema = z.object({
+  label: z.string().max(40),
+  stops: z.array(z.string().max(80)).max(30),
+});
+export type ShuttleRoute = z.infer<typeof shuttleRouteSchema>;
+export const shuttleSchema = z.object({
+  enabled: z.boolean(),
+  fee: z.string().max(40), // 표시용 문구(예: "월 20,000원")
+  routes: z.array(shuttleRouteSchema).max(10),
+});
+export type ShuttleSetting = z.infer<typeof shuttleSchema>;
+
 export const operationsSchema = z
   .object({
     subjects: z.array(subjectSchema).max(40),
@@ -65,6 +78,7 @@ export const operationsSchema = z
     weekendPeriods: z.array(periodTimeSchema).max(20),
     terms: z.array(termSchema).max(20),
     holidays: z.array(holidaySchema).max(200),
+    shuttle: shuttleSchema,
   })
   .superRefine((v, ctx) => {
     // 과목 중복 방지(저장 거부) — 내부 키·과목명(라벨) 모두 유일해야 한다. 클라 편집기 경고와 이중 방어.

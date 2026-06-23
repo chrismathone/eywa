@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { NotificationsSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
-import { TextField } from "./fields";
+import { TextAreaField, TextField } from "./fields";
 
 export function NotificationsSection({ initial }: { initial: NotificationsSettings }) {
   const [n, setN] = useState<NotificationsSettings>(initial);
@@ -34,8 +34,6 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
         </div>
       </SettingsCard>
 
-      {/* ⚠️ privacyTerms·serviceTerms는 약관 표시 페이지(등록/가입/푸터)가 없어 v1에서 입력 숨김
-          (상태·스키마·저장은 보존). 약관 표시 페이지 구현 시 TextAreaField 입력 복원. */}
       <SettingsCard title="인쇄물" description="청구서·성적표 등 인쇄물 상단 머리글.">
         <TextField
           label="인쇄물 머리글"
@@ -43,6 +41,29 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
           value={n.printHeader}
           onChange={(v) => set({ printHeader: v })}
         />
+      </SettingsCard>
+
+      {/* 공개 접수(학부모 QR) 폼의 동의서 문구 — 비우면 해당 동의 블록이 폼에서 숨겨집니다. */}
+      <SettingsCard
+        title="공개 접수 약관"
+        description="학부모 QR 접수 폼에 표시되는 동의 문구. 개인정보 동의는 필수 체크, 환불·학칙 안내는 선택 체크로 노출됩니다."
+      >
+        <div className="space-y-4">
+          <TextAreaField
+            label="개인정보 수집·이용 동의 문구"
+            hint="비우면 개인정보 동의 블록 숨김"
+            rows={6}
+            value={n.privacyTerms}
+            onChange={(v) => set({ privacyTerms: v })}
+          />
+          <TextAreaField
+            label="환불·학칙 안내 문구"
+            hint="비우면 환불·학칙 동의 블록 숨김"
+            rows={8}
+            value={n.serviceTerms}
+            onChange={(v) => set({ serviceTerms: v })}
+          />
+        </div>
       </SettingsCard>
       </div>
     </SectionForm>

@@ -3,7 +3,7 @@
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
 import { useRef } from "react";
 import { Plus, X } from "lucide-react";
-import { SUBJECT_COLORS, type HolidaySetting, type PeriodTimeRow, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
+import { SUBJECT_COLORS, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
 
 const cellCls =
@@ -248,6 +248,66 @@ export function HolidayListEditor({
         </div>
       ))}
       <AddButton onClick={() => onChange([...value, { date: "", name: "" }])} label="휴일 추가" />
+    </div>
+  );
+}
+
+// 셔틀버스 — 노출여부 + 요금 문구 + 노선(라벨 + 정류장 목록). 공개 접수 폼이 이 값을 표시.
+export function ShuttleEditor({
+  value,
+  onChange,
+}: {
+  value: ShuttleSetting;
+  onChange: (v: ShuttleSetting) => void;
+}) {
+  const setRoute = (i: number, patch: Partial<ShuttleSetting["routes"][number]>) =>
+    onChange({ ...value, routes: value.routes.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  return (
+    <div className="space-y-3">
+      <label className="text-foreground flex items-center gap-2 text-[13px]">
+        <input
+          type="checkbox"
+          checked={value.enabled}
+          onChange={(e) => onChange({ ...value, enabled: e.target.checked })}
+          className="size-4"
+        />
+        공개 접수 폼에 셔틀버스 신청 표시
+      </label>
+      <label className="block">
+        <span className="text-text-dim text-[12px]">요금 문구</span>
+        <input
+          className={`${cellCls} ml-2 w-[160px]`}
+          value={value.fee}
+          placeholder="월 20,000원"
+          onChange={(e) => onChange({ ...value, fee: e.target.value })}
+        />
+      </label>
+
+      <div className="space-y-3">
+        {value.routes.map((r, i) => (
+          <div key={i} className="border-line space-y-2 rounded-md border p-3">
+            <div className="flex items-center gap-2">
+              <input
+                className={`${cellCls} flex-1`}
+                value={r.label}
+                placeholder="노선 이름 (예: 1호차 주요 노선)"
+                onChange={(e) => setRoute(i, { label: e.target.value })}
+              />
+              <RemoveButton onClick={() => onChange({ ...value, routes: value.routes.filter((_, j) => j !== i) })} />
+            </div>
+            <StringListEditor
+              value={r.stops}
+              onChange={(stops) => setRoute(i, { stops })}
+              placeholder="정류장"
+              addLabel="정류장 추가"
+            />
+          </div>
+        ))}
+        <AddButton
+          onClick={() => onChange({ ...value, routes: [...value.routes, { label: "", stops: [] }] })}
+          label="노선 추가"
+        />
+      </div>
     </div>
   );
 }

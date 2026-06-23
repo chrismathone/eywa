@@ -150,8 +150,11 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
     **규칙은 위 "⚠️⚠️ 운영체계 enum 하드코딩 절대 금지" 섹션 참조.** 새 목록/필터/표시는 반드시 그 단일 소스로 — native 하드코딩 과목/학년 맵 금지.
 - **🚫 입력 숨김(소비처 없어 v1 비노출 — 상태·스키마·저장은 보존, 소비처 생기면 입력만 복원)**: operations `terms`,
   billing `taxMode`·`defaultMethod`(invoices에 결제수단 컬럼 없음), notifications `kakaoChannelId`(발송 경로에 미사용·대응 컬럼 없음).
-- **⚪ 아직 orphan(표시 화면 부재 — 후속)**: notifications `privacyTerms`·`serviceTerms`(약관 표시 페이지 필요).
-  현재 콘솔에 입력은 떠 있으나 소비처 0 → 약관 페이지 구현 또는 숨김 결정 필요.
+- **✅ 배선 완료(2026-06-23)**: notifications `privacyTerms`·`serviceTerms` → **학부모 QR 공개접수 폼**(`(intake)/intake/[token]`)의
+  개인정보/환불·학칙 동의 블록으로 소비(notifications-section에 TextAreaField 입력 복원). + operations `shuttle`
+  (enabled/fee/routes 신규) → 공개접수 폼 셔틀 섹션으로 소비(operations-section `ShuttleEditor`). 둘 다 owner 폼 저장 →
+  공개 폼 즉시 반영(실검증: fee "월 35,000원" 저장→공개폼 반영). ⚠️ 공개 폼은 인재원 데모 정적 텍스트를 더 이상
+  하드코딩하지 않고 전부 학원설정에서 읽음(소비처 0 orphan 해소).
 
 ### DB가 필요한데 없는 것 (jsonb로 못 담는 것 포함)
 `tenant_settings.data`는 텍스트/숫자/배열만 담는다 — **이미지·파일은 Supabase Storage 버킷이 별도 필요**:

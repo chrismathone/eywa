@@ -6,6 +6,7 @@ import { SectionForm, SettingsCard } from "./section-form";
 import {
   HolidayListEditor,
   PeriodListEditor,
+  ShuttleEditor,
   StringListEditor,
   SubjectListEditor,
 } from "./list-editors";
@@ -58,6 +59,10 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
 
       <SettingsCard title="공휴일·휴원일" description="수강료 계산 시 수업일에서 제외됩니다. 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다.">
         <HolidayListEditor value={o.holidays} onChange={(v) => set({ holidays: v })} />
+      </SettingsCard>
+
+      <SettingsCard title="셔틀버스" description="공개 접수(학부모 QR) 폼에 표시되는 셔틀 신청·요금·노선. 표시를 끄면 폼에서 숨겨집니다.">
+        <ShuttleEditor value={o.shuttle} onChange={(v) => set({ shuttle: v })} />
       </SettingsCard>
       </div>
     </SectionForm>

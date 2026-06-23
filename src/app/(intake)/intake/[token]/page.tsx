@@ -44,6 +44,9 @@ export default async function PublicIntakePage({
       academyName={academyName}
       subjectOptions={subjects.options}
       gradeLevels={settings.operations.gradeLevels}
+      shuttle={settings.operations.shuttle}
+      privacyTerms={settings.notifications.privacyTerms}
+      serviceTerms={settings.notifications.serviceTerms}
     />
   );
 }
