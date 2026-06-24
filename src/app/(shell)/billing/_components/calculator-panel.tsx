@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarOff, Settings2 } from "lucide-react";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getTuitionCatalogActive } from "@/features/billing/server/tuition-catalog-queries";
+import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
 import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
@@ -60,9 +61,10 @@ export async function CalculatorPanel({ sp }: { sp: Sp }) {
 }
 
 async function CalculatorTab({ qid }: { qid?: string }) {
-  const [settings, catalog, initial] = await Promise.all([
+  const [settings, catalog, textbooks, initial] = await Promise.all([
     getTenantSettings(),
     getTuitionCatalogActive(),
+    getCatalogOptions(), // 교재 단가표(146권) — 교재/기타 picker에 합쳐 교재명 검색 가능
     qid ? getQuoteById(qid) : Promise.resolve(null),
   ]);
   return (
@@ -71,6 +73,7 @@ async function CalculatorTab({ qid }: { qid?: string }) {
       defaultPeriod={currentPeriod()}
       holidays={settings.operations.holidays.map((h) => h.date)}
       catalog={catalog}
+      textbooks={textbooks}
       initial={initial ?? undefined}
     />
   );

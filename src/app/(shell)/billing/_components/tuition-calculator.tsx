@@ -10,6 +10,7 @@ import { koreanHolidayDatesForRange } from "@/features/billing/holidays-data";
 import { autoSessions, quoteTotal } from "@/features/billing/quote-calc";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
 import type { QuoteDetail } from "@/features/billing/server/tuition-quote-queries";
+import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import { CatalogPicker, CourseEditor, ExtraEditor, DiscountEditor } from "./quote-editors";
 import { QuoteDocument } from "./quote-document";
 
@@ -45,12 +46,14 @@ export function TuitionCalculator({
   defaultPeriod,
   holidays = [],
   catalog = [],
+  textbooks = [],
   initial,
 }: {
   academyName: string;
   defaultPeriod: string;
   holidays?: string[];
   catalog?: TuitionCatalogOption[];
+  textbooks?: CatalogOption[]; // 교재 단가표(146권) — 교재/기타 picker에 합침
   initial?: QuoteDetail;
 }) {
   const uidRef = useRef(0);
@@ -74,7 +77,20 @@ export function TuitionCalculator({
     () => catalog.filter((c) => c.category !== DISCOUNT_CATEGORY && c.category !== EXTRA_CATEGORY),
     [catalog],
   );
-  const extraOpts = useMemo(() => catalog.filter((c) => c.category === EXTRA_CATEGORY), [catalog]);
+  // 교재/기타 picker = tuition_catalog "기타" + 교재 단가표(146권). 교재명 검색으로 바로 추가.
+  const extraOpts = useMemo<TuitionCatalogOption[]>(
+    () => [
+      ...catalog.filter((c) => c.category === EXTRA_CATEGORY),
+      ...textbooks.map((b) => ({
+        id: b.id,
+        category: "교재",
+        name: b.title,
+        price: b.price,
+        note: b.bookDetail,
+      })),
+    ],
+    [catalog, textbooks],
+  );
   const discountOpts = useMemo(() => catalog.filter((c) => c.category === DISCOUNT_CATEGORY), [catalog]);
 
   const unionHol = (s: QuoteStudent) =>
@@ -139,8 +155,13 @@ export function TuitionCalculator({
         {/* 학생 정보 */}
         <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
           <h2 className="text-foreground text-[15px] font-bold">상담 정보 (신입생)</h2>
-          <div className="grid grid-cols-2 gap-2">
-            <input className={inputCls} placeholder="학생 이름" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
+          <div className="grid grid-cols-2 items-end gap-2">
+            <label className="space-y-1">
+              <span className="text-text-faint text-[11px]">
+                학생 이름 <span className="text-danger">*</span>
+              </span>
+              <input className={inputCls} placeholder="학생 이름" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
+            </label>
             <div className="grid grid-cols-2 gap-2">
               <input className={inputCls} placeholder="학교" value={student.school} onChange={(e) => setStudent({ ...student, school: e.target.value })} />
               <input className={inputCls} placeholder="학년" value={student.grade} onChange={(e) => setStudent({ ...student, grade: e.target.value })} />
@@ -160,7 +181,7 @@ export function TuitionCalculator({
         </section>
 
         {/* 수강 과목 */}
-        <Group title="수강 과목" hint="단가표에서 고르면 회당 단가가 채워집니다. 요일을 입력하면 시수·금액 자동 계산.">
+        <Group required title="수강 과목" hint="단가표에서 고르면 회당 단가가 채워집니다. 요일을 입력하면 시수·금액 자동 계산.">
           <CatalogPicker options={courseOpts} placeholder="+ 과목 추가 (단가표)" onPick={addCourse} />
           {courses.map((c) => (
             <CourseEditor key={c.uid} course={c} onPatch={(p) => patchCourse(c.uid, p)} onRemove={() => setCourses((cs) => cs.filter((x) => x.uid !== c.uid))} />
@@ -171,7 +192,7 @@ export function TuitionCalculator({
         <Group title="교재 및 기타">
           <CatalogPicker
             options={extraOpts}
-            placeholder="+ 항목 추가 (단가표)"
+            placeholder="+ 교재·항목 추가 (단가표 검색)"
             onPick={(o) => setExtras((es) => [...es, { uid: nextUid(), name: o.note ? `${o.name} ${o.note}` : o.name, price: o.price, note: "" }])}
           />
           {extras.map((e) => (
@@ -217,6 +238,10 @@ export function TuitionCalculator({
                 <Check className="size-3.5" />
                 견적이 저장되었습니다.
               </p>
+            ) : !student.name.trim() || courses.length === 0 ? (
+              <p className="text-text-faint mr-auto text-xs">
+                <span className="text-danger">*</span> 학생 이름과 수강 과목을 입력하면 저장됩니다
+              </p>
             ) : null}
             <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
               <Printer className="size-4" />
@@ -243,10 +268,23 @@ export function TuitionCalculator({
   );
 }
 
-function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Group({
+  title,
+  hint,
+  required,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <section className="bg-card border-line shadow-card space-y-2.5 rounded-md border p-4">
-      <h2 className="text-foreground text-[15px] font-bold">{title}</h2>
+      <h2 className="text-foreground text-[15px] font-bold">
+        {title}
+        {required ? <span className="text-danger"> *</span> : null}
+      </h2>
       {hint ? <p className="text-text-faint text-[11px]">{hint}</p> : null}
       {children}
     </section>
