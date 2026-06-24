@@ -92,7 +92,10 @@ export function TimetableImportDialog() {
               내보낸 엑셀의 <b>수강편집</b> 시트에서 학생의 <b>반</b>만 바꿔 다시 올리세요. (enrollmentId 열은 수정 금지)
             </p>
 
-            <div className="mt-3 flex items-center gap-2">
+            <label className="text-foreground mt-3 block text-[12px] font-medium">
+              엑셀 파일 <span className="text-danger">*</span>
+            </label>
+            <div className="mt-1.5 flex items-center gap-2">
               <input
                 type="file"
                 accept=".xlsx"
@@ -113,6 +116,9 @@ export function TimetableImportDialog() {
                 미리보기
               </button>
             </div>
+            {!file ? (
+              <p className="text-text-faint mt-1.5 text-[11px]">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
+            ) : null}
 
             {error ? <p className="text-chart-4 mt-3 text-[12px]">{error}</p> : null}
 
