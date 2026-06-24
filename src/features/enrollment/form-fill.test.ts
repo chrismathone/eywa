@@ -103,6 +103,82 @@ describe("buildFormPatch — subject_details jsonb 병합", () => {
   });
 });
 
+describe("buildFormPatch — 후보정 하네스(약한 모델 오류 차단)", () => {
+  // 실측(Solar/이윤건 녹음)에서 나온 오류 패턴들을 그대로 케이스화.
+  const ctx = (transcript: string, studentName = "이윤건") => ({ studentName, transcript });
+
+  it("학생 이름을 학교명에 복사하면 거부(echo)", () => {
+    const p = buildFormPatch({ schoolName: "이윤건" }, {}, ctx("이윤건 학생, 신암초 다닙니다"));
+    expect(p).not.toHaveProperty("prospect_school");
+  });
+
+  it("일반 호칭(어머니 등)은 보호자 '이름'이 아니다 → 거부", () => {
+    const p = buildFormPatch({ parentName: "어머니" }, {}, ctx("어머니와 함께 상담했습니다"));
+    expect(p).not.toHaveProperty("parent_name");
+  });
+
+  it("전사에 없는 학원명은 환각으로 보고 거부, 있으면 통과(grounding)", () => {
+    expect(
+      buildFormPatch({ prevAcademy: "수중학교" }, {}, ctx("외대어학원 다니다 그만뒀어요")),
+    ).not.toHaveProperty("learning_history");
+    const ok = buildFormPatch({ prevAcademy: "외대어학원" }, {}, ctx("외대어학원 다니다 그만뒀어요"));
+    expect((ok.learning_history as { prevAcademy?: string }).prevAcademy).toBe("외대어학원");
+  });
+
+  it("학교명도 전사에 등장해야 통과(약어 prefix 허용)", () => {
+    expect(buildFormPatch({ schoolName: "유령중" }, {}, ctx("신암초 6학년이에요")).prospect_school).toBeUndefined();
+    expect(buildFormPatch({ schoolName: "신암초등학교" }, {}, ctx("신암초 6학년이에요")).prospect_school).toBe("신암초등학교");
+  });
+
+  it("한 글자/잡음 점수는 거부", () => {
+    expect(buildFormPatch({ lastScore: "6" }, {}, ctx("점수 언급 없음"))).not.toHaveProperty("learning_history");
+    expect(
+      (buildFormPatch({ lastScore: "70%" }, {}, ctx("독해 70% 정도")).learning_history as { lastScore?: string }).lastScore,
+    ).toBe("70%");
+  });
+
+  it("등록완료(확정)는 자동입력 금지, 그 외 상태는 통과", () => {
+    expect(buildFormPatch({ registrationStatus: "등록완료" }, {}).registration_status).toBeUndefined();
+    expect(buildFormPatch({ registrationStatus: "미등록" }, {}).registration_status).toBe("미등록");
+  });
+
+  it("전화번호 형태(9~11자리)가 아니면 거부", () => {
+    expect(buildFormPatch({ parentPhone: "있음" }, {}).parent_phone).toBeUndefined();
+    expect(buildFormPatch({ parentPhone: "010-1234-5678" }, {}).parent_phone).toBe("010-1234-5678");
+  });
+
+  it("학교명 꼴이 아니면 거부 — 전사에 있어도(ASR 잡음 '호표학')", () => {
+    // "호표학"이 전사에 섞여 grounding은 통과하지만, 학교명 꼴(초/중/고/교)이 아니라 거부.
+    expect(buildFormPatch({ schoolName: "호표학" }, {}, ctx("어쩌고 호표학 저쩌고")).prospect_school).toBeUndefined();
+    expect(buildFormPatch({ schoolName: "신암초" }, {}, ctx("신암초 다녀요")).prospect_school).toBe("신암초");
+  });
+
+  it("학년은 초1~고3 형식만(예: '중학교'·오학년 거부)", () => {
+    expect(buildFormPatch({ grade: "중학교" }, {}).prospect_grade).toBeUndefined();
+    expect(buildFormPatch({ grade: "초6" }, {}).prospect_grade).toBe("초6");
+  });
+
+  it("모델 불확실 마커(미확인·확인 필요·XXXX·?)가 든 값 거부", () => {
+    const t = ctx("수학 학원 다녔어요");
+    expect(buildFormPatch({ prevAcademy: "수학 학원 (학원명 미확인)" }, {}, t)).not.toHaveProperty("learning_history");
+    expect(buildFormPatch({ schoolName: "서울시? (확인 필요)" }, {}, t).prospect_school).toBeUndefined();
+    expect(buildFormPatch({ parentPhone: "010-XXXX-XXXX" }, {}).parent_phone).toBeUndefined();
+  });
+
+  it("빈값 마커(미언급·없음·모름)를 값으로 적은 경우 거부", () => {
+    expect(buildFormPatch({ lastScore: "미언급" }, {}, ctx("점수 얘기 없음"))).not.toHaveProperty("learning_history");
+    expect(buildFormPatch({ careerGoal: "없음" }, {}).career_goal).toBeUndefined();
+    // 단, 부분 포함은 보존(예: weakSubjects 문장)
+    expect(
+      (buildFormPatch({ lastScore: "특이사항 없음 70점" }, {}, ctx("70점 특이사항 없음")).learning_history as { lastScore?: string }).lastScore,
+    ).toBe("특이사항 없음 70점");
+  });
+
+  it("전사 미제공 시 grounding 비활성(후방호환 — 기존 호출부 무영향)", () => {
+    expect(buildFormPatch({ schoolName: "서일중", prevAcademy: "어딘가학원" }, {}).prospect_school).toBe("서일중");
+  });
+});
+
 describe("buildFormPatch — 빈 추출", () => {
   it("아무것도 없으면 빈 패치", () => {
     expect(buildFormPatch({}, {})).toEqual({});

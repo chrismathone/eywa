@@ -223,8 +223,6 @@ async function handleMeeting(
     const { data: parsed, model } = await generateJSON<
       MeetingReportSection & { speakerRoles?: Record<string, string> }
     >({
-      // 녹음 분석은 Claude로 — Solar는 구조화/귀속 품질이 낮음(2026-06-24 ijw 실녹음 대조). 키 없으면 폴백.
-      provider: "anthropic",
       maxTokens: 8192,
       prompt: [
         "다음은 학원 회의 녹음 전사입니다. 회의록 형태로 분석해 JSON으로만 답해주세요.",
@@ -373,8 +371,6 @@ async function handleConsultation(
   // 분석은 필수(실패 시 failed), 폼 추출은 best-effort(실패해도 분석은 살린다).
   const [analysisRes, extractRes] = await Promise.allSettled([
     generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
-      // 녹음 분석은 Claude 우선(구조화 추출 품질). 키 없으면 평소 폴백.
-      provider: "anthropic",
       maxTokens: 8192,
       prompt: [
         "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
@@ -436,16 +432,11 @@ async function handleConsultation(
             "JSON만 출력. 마크다운 코드 블록 없이.",
       ].join("\n"),
     }),
-    extractConsultationForm(
-      formatted,
-      {
-        studentName: consult.prospect_name,
-        grade: consult.prospect_grade,
-        school: consult.prospect_school,
-      },
-      "default",
-      "anthropic", // 녹음 폼추출은 Claude 우선(Solar는 전 필드 빈값/환각, 2026-06-24 대조)
-    ),
+    extractConsultationForm(formatted, {
+      studentName: consult.prospect_name,
+      grade: consult.prospect_grade,
+      school: consult.prospect_school,
+    }),
   ]);
 
   if (analysisRes.status === "rejected") {
@@ -551,7 +542,11 @@ async function handleConsultation(
       nonRegistrationReason: cur?.non_registration_reason,
       subjectDetails: cur?.subject_details,
     };
-    Object.assign(patch, buildFormPatch(extracted, current));
+    // 후보정 하네스에 전사·학생명 전달 → 환각 고유명사·학생이름 echo 차단(약한 모델 방어).
+    Object.assign(
+      patch,
+      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted }),
+    );
   }
 
   await admin.from("enrollment_consultations").update(patch).eq("id", consult.id);
@@ -629,18 +624,14 @@ async function handleStudentConsultation(
     | undefined;
 
   try {
-    const { report, model } = await analyzeStudentConsultation(
-      formatted,
-      {
-        studentName: student?.name ?? "학생",
-        grade: student?.grade ?? null,
-        school: student?.school ?? null,
-        consultedAt: sc.consulted_at,
-        audience: sc.audience,
-        category: sc.category,
-      },
-      "anthropic", // 녹음 분석은 Claude 우선
-    );
+    const { report, model } = await analyzeStudentConsultation(formatted, {
+      studentName: student?.name ?? "학생",
+      grade: student?.grade ?? null,
+      school: student?.school ?? null,
+      consultedAt: sc.consulted_at,
+      audience: sc.audience,
+      category: sc.category,
+    });
     await admin
       .from("student_consultations")
       .update({

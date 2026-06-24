@@ -40,15 +40,19 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 - **기본 provider = `AI_PROVIDER` env (미설정 시 `upstage` = Solar Pro 3).** 한국어 강점 + Sonnet 대비
   ~20–25배 저렴($0.15/$0.60 per 1M, 128K). `AI_PROVIDER=anthropic` 한 줄로 즉시 Claude 롤백.
 
-### ⚠️ 녹음 분석은 Claude 우선 — `generateJSON({ provider: "anthropic" })` (2026-06-24)
-**녹음(오디오)→AI 분석 3흐름(회의록·등록상담·재원생 학생상담)은 Solar가 아니라 Claude로 라우팅한다.**
-실 ijw 녹음 대조 검증에서 **Solar(solar-pro3)는 구조화 추출이 불안정**했다: 등록상담 폼 추출 시 스키마 보기값을
-그대로 베끼고(`parentRelation=부/모/조부/조모/기타`), 환각(`prevAcademy` 오답), 오값(`registrationStatus=등록`↔정답 보류),
-실행마다 결과가 달라짐. 같은 전사로 **Claude는 10/17필드 정확**(같은 이윤건 녹음, eywa 실코드 `generateJSON`로 검증).
-- **배선**: `resolveModel(tier, keyName, prefer?)`에 provider **선호** 인자 추가 → `generateJSON({ provider: "anthropic", ... })`.
-  강제 아님(키 없으면 평소 폴백=무중단). 소비처 4곳: 웹훅 [route.ts](<src/app/api/webhooks/assemblyai/route.ts>) handleMeeting·handleConsultation(13섹션)·handleStudentConsultation, [form-extract.ts](src/features/enrollment/server/form-extract.ts)·[consultations/server/ai.ts](src/features/consultations/server/ai.ts)는 `provider` 파라미터 전달.
-- **텍스트(비녹음) 분석은 Solar 유지**(상담 메모 텍스트 액션 등 — 경량·저빈도라 비용 우선). 즉 "녹음=Claude, 텍스트=Solar".
-- 전사(AssemblyAI `universal-3-pro`)는 ijw와 동일 엔진이라 품질 차이 없음(검증: 12분 회의 재전사 4,880자 vs ijw 4,869자).
+### 녹음 분석 = Solar 유지 + 폼 자동입력은 후보정 하네스로 방어 (2026-06-24)
+실 ijw 녹음 3건을 eywa 파이프라인에 흘려 ijw(Claude) 저장 결과와 대조한 결론: **전사(AssemblyAI `universal-3-pro`)는
+ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 vs ijw 4,869자), **회의록 8섹션·학생상담 7섹션·등록상담 분석문
+(서술형)도 Solar로 충분**. 유일한 약점은 **등록상담 "폼 자동입력"(구조화 추출)** — Solar(solar-pro3)가 ① 스키마 보기값을
+그대로 베끼고(`parentRelation=부/모/조부/조모/기타`, 이미 `pickEnum`이 폐기) ② 학생이름을 학교명에 복사(`schoolName=이윤건`)
+③ 학원명 환각(`prevAcademy=수중학교`) ④ 일반호칭을 이름으로(`parentName=어머니`) ⑤ 한글자 잡음(`lastScore=6`).
+- **결정: 비용(Solar ~20–25배 저렴 + 무료크레딧) 위해 Solar 기본 유지.** 대신 **단일 후처리 함수 [`buildFormPatch`](src/features/enrollment/form-fill.ts)에
+  후보정 하네스**를 넣어 위 오류를 DB 진입 전 차단(순수함수 + Vitest). 가드: `grounded`(고유명사는 전사에 실제 등장해야 통과
+  =환각 차단)·`notEcho`(학생이름 복사 거부)·`realName`(호칭≠이름)·`meaningful`(한글자 잡음)·`phoneOk`(전화 형식)·`등록완료` 자동입력 금지(상담사 확인 영역).
+  웹훅이 `buildFormPatch(extracted, current, { studentName, transcript })`로 전사·학생명을 넘겨 grounding 동작.
+- **provider 스위치는 인프라로 보존**: `resolveModel(tier, keyName, prefer?)` + `generateJSON({ provider })`. 평소 미사용(기본 Solar)이나
+  품질이 더 필요하면 호출부에서 `provider: "anthropic"` 한 줄로 Claude 라우팅 가능(키 없으면 무중단 폴백). `AI_PROVIDER=anthropic`은 전역 전환.
+- ⚠️ 향후 새 "AI 추출→폼/DB 자동기입"을 만들 땐 **반드시 이런 후보정(enum/grounding/echo/잡음) 가드를 통과시킨 값만** 기입할 것(약한 모델 전제 방어).
 - Upstage는 OpenAI 호환 → `openai` SDK + baseURL `https://api.upstage.ai/v1`. JSON mode
   (`response_format: json_object`) 사용 — 프롬프트에 "JSON" 단어 필수(현 프롬프트 충족).
 - **자동 폴백**: 기본 provider 키가 없으면 다른 provider(키 있는 쪽)로 1회 폴백 → 둘 다 없으면

@@ -95,25 +95,75 @@ function asBoolTrue(v: string | boolean | undefined): boolean {
 export function buildFormPatch(
   ex: ExtractedConsultationForm,
   cur: CurrentConsultationValues,
+  opts?: { studentName?: string | null; transcript?: string | null },
 ): Record<string, unknown> {
   const p: Record<string, unknown> = {};
   const fill = (col: string, curVal: string | null | undefined, val: string | undefined) => {
     if (isEmpty(curVal) && val) p[col] = val;
   };
 
-  fill("prospect_grade", cur.prospectGrade, clean(ex.grade));
-  fill("prospect_school", cur.prospectSchool, clean(ex.schoolName));
-  fill("parent_name", cur.parentName, clean(ex.parentName));
-  fill("parent_phone", cur.parentPhone, clean(ex.parentPhone));
+  // ── 후보정 하네스: 약한 모델(Solar)의 실측 오류 패턴 차단 (2026-06-24) ──
+  // 스키마힌트 누출/무효 enum은 기존 pickEnum이 이미 차단. 여기선 그 외 4종을 막는다:
+  // (1) 환각 고유명사  (2) 학생이름 echo  (3) 일반호칭=이름 오인  (4) 한글자 잡음.
+  // transcript 미제공 시 grounding 비활성(후방호환 — 기존 테스트/호출부 무영향).
+  const tnorm = (opts?.transcript ?? "").replace(/\s/g, "");
+  const studentN = (opts?.studentName ?? "").replace(/\s/g, "");
+  const inTranscript = (token: string) =>
+    !tnorm || tnorm.includes(token) || (token.length >= 3 && tnorm.includes(token.slice(0, 3)));
+  // 고유명사(학교·학원·주소·이름)는 전사에 실제 등장해야 통과 → 환각("수중학교" 등) 차단.
+  const grounded = (v: string | undefined) => {
+    if (!v) return undefined;
+    const token = v.split(/[(),/·\s]/)[0].replace(/\s/g, "");
+    return token.length >= 2 && inTranscript(token) ? v : undefined;
+  };
+  // 학생 본인 이름을 엉뚱한 필드에 복사한 경우(schoolName=학생명 등) 거부.
+  const notEcho = (v: string | undefined) =>
+    v && studentN && v.replace(/\s/g, "") === studentN ? undefined : v;
+  // 일반 호칭은 이름이 아니다(parentName="어머니" 등).
+  const realName = (v: string | undefined) =>
+    v && /^(어머니|아버지|엄마|아빠|모친|부친|보호자|학부모|부모|아들|딸|학생|모|부)$/.test(v.trim())
+      ? undefined
+      : v;
+  // 한 글자/잡음 거부(lastScore="6" 등).
+  const meaningful = (v: string | undefined) => (v && v.trim().length >= 2 ? v : undefined);
+  // 전화번호 형태(9~11자리)만.
+  const phoneOk = (v: string | undefined) => {
+    if (!v) return undefined;
+    const d = v.replace(/\D/g, "");
+    return d.length >= 9 && d.length <= 11 ? v : undefined;
+  };
+  // 학년은 초1~고3 형식만(예: "중학교" 같은 비형식·오학년 거부).
+  const gradeOk = (v: string | undefined) => (v && /^(초[1-6]|중[1-3]|고[1-3])$/.test(v.trim()) ? v : undefined);
+  // 모델이 불확실/빈값을 값처럼 적은 경우 거부.
+  const notUncertain = (v: string | undefined) => {
+    if (!v) return undefined;
+    if (/(미확인|확인\s*필요|미상|불명|추정|미정|\?|X{2,})/i.test(v)) return undefined; // 불확실 마커(부분일치)
+    // 빈값 마커가 값 전체인 경우(미언급/없음/모름 등) — "특이사항 없음" 같은 부분 포함은 보존.
+    if (/^\s*(미언급|언급\s*없음|없음|해당\s*없음|해당\s*사항\s*없음|정보\s*없음|N\/?A|모름)\s*$/i.test(v))
+      return undefined;
+    return v;
+  };
+  // 학교명 꼴(초·중·고·교·원 끝 또는 '학교' 포함)만 — ASR 잡음 "호표학" 같은 비학교명 거부.
+  const schoolShape = (v: string | undefined) =>
+    v && (/(초|중|고|교|원)$/.test(v.trim()) || /(학교|초등|중등|고등)/.test(v)) ? v : undefined;
+
+  fill("prospect_grade", cur.prospectGrade, gradeOk(clean(ex.grade)));
+  fill("prospect_school", cur.prospectSchool, grounded(schoolShape(notUncertain(notEcho(clean(ex.schoolName))))));
+  fill("parent_name", cur.parentName, grounded(realName(notUncertain(notEcho(clean(ex.parentName))))));
+  fill("parent_phone", cur.parentPhone, phoneOk(clean(ex.parentPhone)));
   fill("parent_relation", cur.parentRelation, pickEnum(clean(ex.parentRelation), RELATION_OPTIONS));
   fill("gender", cur.gender, normGender(clean(ex.gender)));
   fill("birth_date", cur.birthDate, isoDate(clean(ex.birthDate)));
-  fill("address", cur.address, clean(ex.address));
+  fill("address", cur.address, grounded(notUncertain(clean(ex.address))));
   fill("consultation_path", cur.consultationPath, pickEnum(clean(ex.consultationPath), CONSULTATION_PATHS));
-  fill("career_goal", cur.careerGoal, clean(ex.careerGoal));
-  fill("siblings", cur.siblings, clean(ex.siblings));
+  fill("career_goal", cur.careerGoal, notUncertain(meaningful(clean(ex.careerGoal))));
+  fill("siblings", cur.siblings, notUncertain(notEcho(meaningful(clean(ex.siblings)))));
   fill("safety_notes", cur.safetyNotes, clean(ex.safetyNotes));
-  fill("registration_status", cur.registrationStatus, pickEnum(clean(ex.registrationStatus), REGISTRATION_STATUSES));
+  // 등록완료(확정)는 AI 자동입력 금지 — 상담사 확인 영역(약한 모델이 오판 시 학생을 잘못 '등록완료'로 표기).
+  {
+    const reg = pickEnum(clean(ex.registrationStatus), REGISTRATION_STATUSES);
+    fill("registration_status", cur.registrationStatus, reg === "등록완료" ? undefined : reg);
+  }
   fill("subject", cur.subject, subjectKey(clean(ex.subject)));
   fill("parent_request", cur.parentRequest, clean(ex.parentRequest));
   fill("follow_up_content", cur.followUpContent, clean(ex.followUpContent));
@@ -128,12 +178,14 @@ export function buildFormPatch(
   const lh = cur.learningHistory ?? {};
   const mergedLh: { prevAcademy?: string; lastScore?: string; weakSubjects?: string[] } = { ...lh };
   let lhChanged = false;
-  if (isEmpty(lh.prevAcademy) && clean(ex.prevAcademy)) {
-    mergedLh.prevAcademy = clean(ex.prevAcademy);
+  const exPrevAcademy = grounded(notUncertain(notEcho(meaningful(clean(ex.prevAcademy))))); // 환각·불확실 학원명 차단
+  if (isEmpty(lh.prevAcademy) && exPrevAcademy) {
+    mergedLh.prevAcademy = exPrevAcademy;
     lhChanged = true;
   }
-  if (isEmpty(lh.lastScore) && clean(ex.lastScore)) {
-    mergedLh.lastScore = clean(ex.lastScore);
+  const exLastScore = notUncertain(meaningful(clean(ex.lastScore))); // "6" 잡음·불확실 차단
+  if (isEmpty(lh.lastScore) && exLastScore) {
+    mergedLh.lastScore = exLastScore;
     lhChanged = true;
   }
   if ((!lh.weakSubjects || lh.weakSubjects.length === 0) && clean(ex.weakSubjects)) {
