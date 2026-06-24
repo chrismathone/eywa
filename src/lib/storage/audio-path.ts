@@ -1,15 +1,3 @@
-import "server-only";
-
-/**
- * 업로드 오디오 경로가 "이 테넌트의 단일 객체키"인지 검증 — `{tenantId}/{파일명}` 한 세그먼트만 허용.
- * prefix만 보던 검사(`startsWith(tenantId+"/")`)는 하위 경로·".." 등 임의 키를 통과시켜 같은 테넌트의
- * 다른 녹음 객체에 signed URL을 발급할 여지가 있었다(#S4). 슬래시·상위경로·이상문자를 차단한다.
- */
-export function isTenantAudioPath(path: string, tenantId: string): boolean {
-  const prefix = `${tenantId}/`;
-  if (!path.startsWith(prefix)) return false;
-  const rest = path.slice(prefix.length);
-  // 영숫자로 시작 + 확장자 필수. 선행 점(.env·..wav 등 dotfile/이상 파일)·슬래시·상위경로 차단.
-  // 실제 업로드는 `{uuid}.{ext}` 꼴이라 이 패턴을 만족한다.
-  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(rest);
-}
+// tenant audio-path 검증은 순수 모듈(legacy-audio-path.ts)로 이동(Vitest 가능, server-only 회피).
+// 기존 import 경로 호환을 위한 re-export shim — 4개 server action이 여기서 import 중.
+export { isTenantAudioPath } from "./legacy-audio-path";

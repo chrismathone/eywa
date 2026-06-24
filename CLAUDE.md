@@ -53,6 +53,22 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
 - **provider 스위치는 인프라로 보존**: `resolveModel(tier, keyName, prefer?)` + `generateJSON({ provider })`. 평소 미사용(기본 Solar)이나
   품질이 더 필요하면 호출부에서 `provider: "anthropic"` 한 줄로 Claude 라우팅 가능(키 없으면 무중단 폴백). `AI_PROVIDER=anthropic`은 전역 전환.
 - ⚠️ 향후 새 "AI 추출→폼/DB 자동기입"을 만들 땐 **반드시 이런 후보정(enum/grounding/echo/잡음) 가드를 통과시킨 값만** 기입할 것(약한 모델 전제 방어).
+
+### 녹음 재처리 2종 분리 + 레거시 오디오 Firebase 콜드 백엔드 (2026-06-24)
+회의록 "다시 분석"이 사실 **AssemblyAI 재제출**이라 옛 ijw 녹음(오디오가 Firebase Storage에 있고 Supabase 미이전)에선 실패했다. 재처리를 **2종으로 분리**:
+- **기둥 A — "AI 분석 다시 생성"**(텍스트 기반, 신규 [`regenerateMeetingAnalysis`](src/features/meetings/server/actions.ts)): 저장된
+  `transcription`으로 8섹션 재생성. **오디오·AssemblyAI·웹훅 불필요 → 로컬에서도 즉시 완주, 녹음 삭제 후에도 가능.** 회의 8섹션 분석은
+  [`features/meetings/server/ai.ts`](src/features/meetings/server/ai.ts) `analyzeMeeting`/`formatMeetingTranscript` **단일 소스**로 추출(웹훅·재분석 공유).
+- **기둥 B — "전사부터 다시"**([`retryMeetingProcessing`](src/features/meetings/server/actions.ts)): 원본 오디오 재제출. 옛 ijw 오디오(~2GB)는
+  Supabase 미이전(무료 1GB 초과)이라 **eywa가 Firebase에서 직접 읽는다**. [`resolveAudioUrl(path, kind, tenantId)`](src/lib/storage/legacy-audio.ts):
+  tenant 경로→Supabase signed URL / 레거시 Firebase 경로(`{kind}-recordings/…`)→**Firebase v4 signed URL(2h, `exists()` 선확인)**.
+  순수 판별([`legacy-audio-path.ts`](src/lib/storage/legacy-audio-path.ts), Vitest)은 **kind별 prefix allowlist**(교차접근 차단)+한글 파일명 허용.
+  `@google-cloud/storage` + `FIREBASE_SERVICE_ACCOUNT_KEY`(base64). server-only 회피 위해 순수/IO 분리, `audio-path.ts`는 re-export shim(기존 import 무변경).
+  throw는 호출부가 `{error}`로 catch(보존만료 삭제 시 "AI 분석 다시 생성 쓰라" 명확 메시지).
+- 검증: typecheck0/lint0/**test464**(legacy-audio-path 5) + 실 E2E(레거시 회의→Firebase signed URL→AssemblyAI 전사 4,880자 / "AI 분석 다시 생성"→Solar→DB `completed`·`solar-pro3`).
+- ⚠️ **트레이드오프**: 기둥 B는 eywa↔Firebase 의존 → ijw **앱**은 닫아도 **Firebase Storage는 콜드 백엔드로 유지**(완전 삭제 불가). 기둥 A(텍스트
+  재분석)는 Firebase·오디오 무관이라 오디오를 나중에 지워도 분석 재생성 가능. ⚠️ 프로덕션 "전사부터 다시"는 Vercel에 `FIREBASE_SERVICE_ACCOUNT_KEY` +
+  유효 `UPSTAGE_API_KEY` 필요(웹훅이 프로덕션서 돔). 텍스트 기반 기둥 A는 로컬·프로덕션 모두 키 추가 없이 동작.
 - Upstage는 OpenAI 호환 → `openai` SDK + baseURL `https://api.upstage.ai/v1`. JSON mode
   (`response_format: json_object`) 사용 — 프롬프트에 "JSON" 단어 필수(현 프롬프트 충족).
 - **자동 폴백**: 기본 provider 키가 없으면 다른 provider(키 있는 쪽)로 1회 폴백 → 둘 다 없으면

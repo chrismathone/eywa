@@ -20,7 +20,11 @@ import {
   type MeetingProcessingStatus,
 } from "@/features/meetings/server/queries";
 import { RunMeetingAiButton } from "./run-ai-button";
-import { MeetingDeleteButton, MeetingRetryButton } from "./meeting-actions";
+import {
+  MeetingDeleteButton,
+  MeetingRegenerateButton,
+  MeetingRetryButton,
+} from "./meeting-actions";
 import { MeetingStatusWatcher } from "./status-watcher";
 import { TranscriptSection } from "@/components/transcript-section";
 import { MeetingReportAccordion } from "./ai-report";
@@ -87,6 +91,7 @@ export default async function MeetingDetailPage({
     meeting.processingStatus === "transcribing" ||
     meeting.processingStatus === "analyzing";
   const hasAiReport = !!meeting.aiReport || !!meeting.aiSummary;
+  const hasTranscription = !!meeting.transcription;
 
   return (
     <div className="space-y-6">
@@ -148,11 +153,15 @@ export default async function MeetingDetailPage({
           {!hasAudio && meeting.content && !hasAiReport ? (
             <RunMeetingAiButton meetingId={meeting.id} hasExisting={false} />
           ) : null}
-          {/* 음성 회의록 다시 분석 — 재제출(status 리셋)로 8섹션 리포트 재생성 */}
+          {/* AI 분석 다시 생성 — 저장된 전사 텍스트로 8섹션 재생성(오디오·웹훅 불필요, 즉시 완료). */}
+          {hasTranscription && !isProcessing ? (
+            <MeetingRegenerateButton meetingId={meeting.id} />
+          ) : null}
+          {/* 전사부터 다시 — 원본 오디오 재제출로 전사+분석 재생성. 옛 ijw 녹음은 Firebase에서 읽음. */}
           {hasAudio && hasAiReport && !isProcessing ? (
             <MeetingRetryButton
               meetingId={meeting.id}
-              label="다시 분석"
+              label="전사부터 다시"
               variant="outline"
               outerClassName=""
             />

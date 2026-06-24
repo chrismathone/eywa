@@ -2,12 +2,14 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   deleteMeeting,
+  regenerateMeetingAnalysis,
   retryMeetingProcessing,
   type DeleteMeetingState,
+  type RegenerateMeetingState,
   type RetryMeetingState,
 } from "@/features/meetings/server/actions";
 
@@ -55,6 +57,34 @@ function RetrySubmit({ label, variant }: { label: string; variant: "default" | "
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
       {label}
     </Button>
+  );
+}
+
+function RegenerateSubmit() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" size="sm" variant="outline" disabled={pending}>
+      {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+      AI 분석 다시 생성
+    </Button>
+  );
+}
+
+/**
+ * 텍스트 기반 "AI 분석 다시 생성" — 저장된 전사로 8섹션을 즉시 재생성한다.
+ * 오디오·AssemblyAI·웹훅 불필요(원본 녹음이 없어도 동작). "전사부터 다시"(MeetingRetryButton)와 의미 분리.
+ */
+export function MeetingRegenerateButton({ meetingId }: { meetingId: string }) {
+  const [state, action] = useActionState<RegenerateMeetingState, FormData>(
+    regenerateMeetingAnalysis,
+    undefined,
+  );
+  return (
+    <form action={action} className="flex items-center gap-2">
+      <input type="hidden" name="id" value={meetingId} />
+      <RegenerateSubmit />
+      {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
+    </form>
   );
 }
 

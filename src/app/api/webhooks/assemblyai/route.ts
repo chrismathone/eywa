@@ -2,6 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
+import {
+  analyzeMeeting,
+  formatMeetingTranscript,
+  type MeetingReport,
+} from "@/features/meetings/server/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
 import { extractConsultationForm } from "@/features/enrollment/server/form-extract";
@@ -22,17 +27,6 @@ function secretMatches(provided: string, expected: string): boolean {
 // AssemblyAI may pause up to a few minutes between calls; give Claude plenty of room too.
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
-
-type MeetingReportSection = {
-  meetingType: string;
-  summary: string;
-  agendaDiscussion: string;
-  decisions: string;
-  actionItems: string;
-  speakerSummary: string;
-  concerns: string;
-  nextSteps: string;
-};
 
 // ijw-calander의 13섹션 등록상담 분석 스키마
 type ConsultationReport13 = {
@@ -206,72 +200,20 @@ async function handleMeeting(
     })
     .eq("id", meeting.id);
 
-  const formatted = (transcript.utterances ?? []).length > 0
-    ? (transcript.utterances as SpeakerUtterance[])
-        .map((s) => `[화자 ${s.speaker}] ${s.text}`)
-        .join("\n")
-    : transcript.text;
-
+  // 전사 포맷·8섹션 분석은 공유 단일 소스(features/meetings/server/ai.ts) — 재분석 액션과 동일.
+  const formatted = formatMeetingTranscript(transcript.text, transcript.utterances);
   const attendees = Array.isArray(meeting.attendees) ? (meeting.attendees as string[]) : [];
   const heldAt = new Date(meeting.held_at).toLocaleDateString("ko-KR");
 
-  let report: MeetingReportSection;
+  let report: MeetingReport;
   let speakerRoles: Record<string, string> = {};
   let modelVersion = "";
 
   try {
-    const { data: parsed, model } = await generateJSON<
-      MeetingReportSection & { speakerRoles?: Record<string, string> }
-    >({
-      maxTokens: 8192,
-      prompt: [
-        "다음은 학원 회의 녹음 전사입니다. 회의록 형태로 분석해 JSON으로만 답해주세요.",
-        "",
-        `제목: ${meeting.title}`,
-        `일시: ${heldAt}`,
-        `참석자: ${attendees.length > 0 ? attendees.join(", ") : "미상"}`,
-        "",
-        "분석 시 반드시 주의할 점:",
-        "1. 회의의 유형을 정확히 파악하세요 (예: 정기 운영회의, 강사 회의, 학부모 간담회).",
-        "2. 안건별로 논의 내용을 분리하세요.",
-        "3. 결정 사항은 '누가 제안했고, 반대 의견은, 최종 결정' 형식으로 정리.",
-        "4. 액션 아이템은 담당자와 기한을 가능한 명시.",
-        "5. 참석자별 발언을 중립적으로 기록하세요.",
-        "6. 미해결 이슈, 갈등, 위험 요소를 별도로 기록하세요.",
-        "7. 향후 계획을 반드시 포함하세요.",
-        "",
-        "녹음 전사 (화자 라벨 포함):",
-        formatted,
-        "",
-        "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
-        "{",
-        '  "speakerRoles": { "A": "역할/이름", "B": "역할/이름" },',
-        '  "meetingType": string,',
-        '  "summary": string (2-4문장),',
-        '  "agendaDiscussion": string,',
-        '  "decisions": string,',
-        '  "actionItems": string,',
-        '  "speakerSummary": string,',
-        '  "concerns": string,',
-        '  "nextSteps": string',
-        "}",
-        "",
-        "JSON만 출력. 마크다운 코드 블록 없이.",
-      ].join("\n"),
-    });
-
-    modelVersion = model;
-    speakerRoles = parsed.speakerRoles ?? {};
-    report = {
-      meetingType: parsed.meetingType ?? "",
-      summary: parsed.summary ?? "",
-      agendaDiscussion: parsed.agendaDiscussion ?? "",
-      decisions: parsed.decisions ?? "",
-      actionItems: parsed.actionItems ?? "",
-      speakerSummary: parsed.speakerSummary ?? "",
-      concerns: parsed.concerns ?? "",
-      nextSteps: parsed.nextSteps ?? "",
-    };
+    const result = await analyzeMeeting(formatted, { title: meeting.title, heldAt, attendees });
+    report = result.report;
+    speakerRoles = result.speakerRoles;
+    modelVersion = result.model;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await admin

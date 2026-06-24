@@ -9,6 +9,8 @@ import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
+import { resolveAudioUrl } from "@/lib/storage/legacy-audio";
+import { analyzeMeeting, formatMeetingTranscript } from "./ai";
 
 type ActionItem = {
   action: string;
@@ -300,18 +302,20 @@ export async function retryMeetingProcessing(
     .eq("id", id)
     .single();
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
-  if (!m.audio_path || !isTenantAudioPath(m.audio_path, user.tenantId)) {
-    return { error: "재처리할 음성 파일이 없습니다" };
+  if (!m.audio_path) {
+    return { error: "재처리할 음성 파일이 없습니다 ('AI 분석 다시 생성'은 전사 텍스트만으로 가능)" };
+  }
+
+  // 신규(Supabase) 경로면 Supabase, 옛 ijw(Firebase Storage) 경로면 Firebase signed URL을 만든다.
+  // throw는 반드시 {error}로 — 보존만료로 파일 삭제 시 명확한 한글 메시지가 UI에 뜬다.
+  let audioUrl: string;
+  try {
+    audioUrl = await resolveAudioUrl(m.audio_path, "meeting", user.tenantId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "오디오 URL 생성 실패" };
   }
 
   const admin = createAdminClient();
-  const { data: signed, error: signErr } = await admin.storage
-    .from("meeting-recordings")
-    .createSignedUrl(m.audio_path, 60 * 60);
-  if (signErr || !signed?.signedUrl) {
-    return { error: `signed URL 생성 실패: ${signErr?.message ?? "unknown"}` };
-  }
-
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://eywa-alpha.vercel.app");
@@ -319,7 +323,7 @@ export async function retryMeetingProcessing(
 
   try {
     const result = await submitTranscript({
-      audioUrl: signed.signedUrl,
+      audioUrl,
       webhookUrl,
       webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
         ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
@@ -336,6 +340,68 @@ export async function retryMeetingProcessing(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { error: `재제출 실패: ${msg}` };
+  }
+
+  revalidatePath(`/meetings/${id}`);
+  revalidatePath("/meetings");
+  return undefined;
+}
+
+export type RegenerateMeetingState = { error?: string } | undefined;
+
+/**
+ * 텍스트 기반 "AI 분석 다시 생성" — 저장된 transcription으로 8섹션을 재생성한다.
+ * ⭐ 오디오·AssemblyAI·웹훅 불필요(in-process generateJSON) → 원본 녹음이 삭제돼도 동작하고,
+ * 로컬에서도 즉시 완주한다. ("전사부터 다시"=retryMeetingProcessing 과 의미 분리.)
+ */
+export async function regenerateMeetingAnalysis(
+  _prev: RegenerateMeetingState,
+  formData: FormData,
+): Promise<RegenerateMeetingState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "회의록 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: m } = await supabase
+    .from("meeting_minutes")
+    .select("id, title, attendees, held_at, transcription, speaker_labels")
+    .eq("id", id)
+    .single();
+  if (!m) return { error: "회의록을 찾을 수 없습니다" };
+  if (!m.transcription || String(m.transcription).trim().length === 0) {
+    return { error: "전사 내용이 없어 AI 분석을 생성할 수 없습니다" };
+  }
+
+  const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]) : [];
+  const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR");
+  const formatted = formatMeetingTranscript(m.transcription, m.speaker_labels);
+
+  try {
+    const { report, speakerRoles, model } = await analyzeMeeting(formatted, {
+      title: m.title,
+      heldAt,
+      attendees,
+    });
+    // 갱신 필드는 웹훅의 회의 완료 저장과 동일하게 맞춘다(상태/UI 일관).
+    const admin = createAdminClient();
+    await admin
+      .from("meeting_minutes")
+      .update({
+        ai_report: report,
+        ai_summary: report.summary,
+        ai_speaker_roles: speakerRoles,
+        ai_model_version: model,
+        ai_generated_at: new Date().toISOString(),
+        processing_status: "completed",
+        processing_error: null,
+      })
+      .eq("id", id);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "AI 분석 생성에 실패했습니다" };
   }
 
   revalidatePath(`/meetings/${id}`);
