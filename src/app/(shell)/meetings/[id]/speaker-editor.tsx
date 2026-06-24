@@ -148,13 +148,14 @@ export function SpeakerEditor({
                 />
               </div>
               {!usingStaff ? (
+                // 입력란 크기를 SearchableSelect 트리거와 동일하게(rounded-md border px-3 py-2 text-sm + bg-card + min-w-[180px]).
                 <input
                   value={r.label}
                   onChange={(e) =>
                     setRows((prev) => ({ ...prev, [sp]: { staffId: "", label: e.target.value } }))
                   }
                   placeholder="이름/역할 직접 입력"
-                  className="border-border bg-background text-foreground min-w-[140px] flex-1 rounded-md border px-2 py-1 text-[13px]"
+                  className="border-border bg-card text-foreground min-w-[180px] flex-1 rounded-md border px-3 py-2 text-sm"
                 />
               ) : null}
             </div>
