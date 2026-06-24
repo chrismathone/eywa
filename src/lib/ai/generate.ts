@@ -1,6 +1,6 @@
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
-import { resolveModel, type AiKeyName, type AiTier } from "./models";
+import { resolveModel, type AiKeyName, type AiProvider, type AiTier } from "./models";
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
@@ -32,6 +32,11 @@ export type GenerateJSONOptions = {
   tier?: AiTier;
   /** 빌링 버킷. 기본 default(등록상담+회의록), 학생 케어는 "consultations". */
   keyName?: AiKeyName;
+  /**
+   * provider 선호(강제 아님 — 키 없으면 평소 폴백). 녹음 분석은 구조화 추출 품질을 위해
+   * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(보통 Upstage Solar).
+   */
+  provider?: AiProvider;
 };
 
 /**
@@ -67,7 +72,7 @@ function rethrowAi(provider: "upstage" | "anthropic", err: unknown): never {
 export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
-  const { provider, model } = resolveModel(tier, keyName);
+  const { provider, model } = resolveModel(tier, keyName, opts.provider);
 
   let text = "";
   if (provider === "upstage") {

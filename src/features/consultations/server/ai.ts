@@ -1,5 +1,6 @@
 import "server-only";
 import { generateJSON } from "@/lib/ai/generate";
+import type { AiProvider } from "@/lib/ai/models";
 
 /**
  * 재원생 학생상담 AI 분석 — 단일 프롬프트 소스.
@@ -32,14 +33,20 @@ const AUDIENCE_LABEL: Record<string, string> = {
   both: "학부모+학생",
 };
 
-/** 전사/메모 텍스트 + 학생 컨텍스트로 7섹션 분석 생성. {report, model} 반환. 호출부가 try/catch. */
+/**
+ * 전사/메모 텍스트 + 학생 컨텍스트로 7섹션 분석 생성. {report, model} 반환. 호출부가 try/catch.
+ * `provider`: 녹음(오디오) 경로는 `"anthropic"`(Claude)로 호출해 품질을 올린다. 텍스트 메모 분석은
+ * 미지정(=Solar 기본) — 경량·저빈도라 비용 우선.
+ */
 export async function analyzeStudentConsultation(
   text: string,
   ctx: StudentConsultationContext,
+  provider?: AiProvider,
 ): Promise<{ report: StudentConsultationReport; model: string }> {
   const heldAt = ctx.consultedAt ? new Date(ctx.consultedAt).toLocaleDateString("ko-KR") : "미상";
   const { data, model } = await generateJSON<StudentConsultationReport>({
     keyName: "consultations",
+    provider,
     maxTokens: 4096,
     prompt: [
       "다음은 학원 재원생 상담 내용(녹음 전사 또는 상담 메모)입니다. 재원생 케어 관점에서 분석해 JSON으로만 답해주세요.",

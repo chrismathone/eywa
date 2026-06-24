@@ -34,11 +34,21 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | Tier | Upstage (기본) | Anthropic (폴백/롤백) | 용도 |
 |---|---|---|---|
 | `fast` | `solar-pro3` | `claude-haiku-4-5` | 짧은 분류, 태깅, 간단 요약 (현재 미사용) |
-| `balanced` | **`solar-pro3`** | `claude-sonnet-4-6` | **현재 모든 AI 호출의 기본값**. 회의록·학생 케어·등록상담. |
+| `balanced` | **`solar-pro3`** | `claude-sonnet-4-6` | **경량 호출 기본값**(텍스트 상담 메모 분석 등). |
 | `reasoning` | — (없음) | `claude-opus-4-7` | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
 - **기본 provider = `AI_PROVIDER` env (미설정 시 `upstage` = Solar Pro 3).** 한국어 강점 + Sonnet 대비
   ~20–25배 저렴($0.15/$0.60 per 1M, 128K). `AI_PROVIDER=anthropic` 한 줄로 즉시 Claude 롤백.
+
+### ⚠️ 녹음 분석은 Claude 우선 — `generateJSON({ provider: "anthropic" })` (2026-06-24)
+**녹음(오디오)→AI 분석 3흐름(회의록·등록상담·재원생 학생상담)은 Solar가 아니라 Claude로 라우팅한다.**
+실 ijw 녹음 대조 검증에서 **Solar(solar-pro3)는 구조화 추출이 불안정**했다: 등록상담 폼 추출 시 스키마 보기값을
+그대로 베끼고(`parentRelation=부/모/조부/조모/기타`), 환각(`prevAcademy` 오답), 오값(`registrationStatus=등록`↔정답 보류),
+실행마다 결과가 달라짐. 같은 전사로 **Claude는 10/17필드 정확**(같은 이윤건 녹음, eywa 실코드 `generateJSON`로 검증).
+- **배선**: `resolveModel(tier, keyName, prefer?)`에 provider **선호** 인자 추가 → `generateJSON({ provider: "anthropic", ... })`.
+  강제 아님(키 없으면 평소 폴백=무중단). 소비처 4곳: 웹훅 [route.ts](<src/app/api/webhooks/assemblyai/route.ts>) handleMeeting·handleConsultation(13섹션)·handleStudentConsultation, [form-extract.ts](src/features/enrollment/server/form-extract.ts)·[consultations/server/ai.ts](src/features/consultations/server/ai.ts)는 `provider` 파라미터 전달.
+- **텍스트(비녹음) 분석은 Solar 유지**(상담 메모 텍스트 액션 등 — 경량·저빈도라 비용 우선). 즉 "녹음=Claude, 텍스트=Solar".
+- 전사(AssemblyAI `universal-3-pro`)는 ijw와 동일 엔진이라 품질 차이 없음(검증: 12분 회의 재전사 4,880자 vs ijw 4,869자).
 - Upstage는 OpenAI 호환 → `openai` SDK + baseURL `https://api.upstage.ai/v1`. JSON mode
   (`response_format: json_object`) 사용 — 프롬프트에 "JSON" 단어 필수(현 프롬프트 충족).
 - **자동 폴백**: 기본 provider 키가 없으면 다른 provider(키 있는 쪽)로 1회 폴백 → 둘 다 없으면

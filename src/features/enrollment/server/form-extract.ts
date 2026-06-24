@@ -1,6 +1,6 @@
 import "server-only";
 import { generateJSON } from "@/lib/ai/generate";
-import type { AiKeyName } from "@/lib/ai/models";
+import type { AiKeyName, AiProvider } from "@/lib/ai/models";
 import type { ExtractedConsultationForm } from "../form-fill";
 import {
   RELATION_OPTIONS,
@@ -23,9 +23,11 @@ export async function extractConsultationForm(
   formattedTranscript: string,
   ctx: ExtractContext,
   keyName: AiKeyName = "default",
+  provider?: AiProvider,
 ): Promise<{ form: ExtractedConsultationForm; model: string }> {
   const { data, model } = await generateJSON<ExtractedConsultationForm>({
     keyName,
+    provider,
     maxTokens: 4096,
     prompt: [
       "당신은 학원 신입생 등록상담 녹음을 분석해 상담 기록 양식에 맞게 구조화하는 전문가입니다.",

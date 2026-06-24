@@ -41,17 +41,23 @@ export function defaultProvider(): AiProvider {
  * 티어+키이름 → 실제 (provider, model). 기본 provider 키가 없으면 다른 provider로 1회 폴백(키
  * 있는 쪽) → 둘 다 없으면 모델이 있는 첫 candidate를 반환(이후 클라 생성에서 throw → 호출부 stub).
  * reasoning은 Anthropic 고정.
+ *
+ * `prefer`: 호출부가 특정 provider를 **선호**(강제 아님)하도록 지정. 그 provider를 후보 맨 앞으로
+ * 올린다 — 키가 있으면 그걸 쓰고, 없으면 평소 폴백 순서로 떨어진다(무중단). 녹음 분석(회의·등록상담·
+ * 학생상담)이 구조화 추출 품질 위해 `prefer:"anthropic"`로 Claude를 우선하는 데 쓴다.
  */
 export function resolveModel(
   tier: AiTier,
   keyName: AiKeyName = "default",
+  prefer?: AiProvider,
 ): { provider: AiProvider; model: string; keyName: AiKeyName } {
-  const order: AiProvider[] =
+  const base: AiProvider[] =
     tier === "reasoning"
       ? ["anthropic"]
       : defaultProvider() === "upstage"
         ? ["upstage", "anthropic"]
         : ["anthropic", "upstage"];
+  const order = prefer ? [prefer, ...base.filter((p) => p !== prefer)] : base;
 
   for (const provider of order) {
     const model = AI_MODELS[tier][provider];

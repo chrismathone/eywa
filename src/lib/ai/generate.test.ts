@@ -80,6 +80,19 @@ describe("resolveModel", () => {
     expect(resolveModel("balanced", "consultations").provider).toBe("upstage");
   });
 
+  it("prefer:anthropic → 기본 Upstage여도 Claude 우선(녹음 분석 라우팅)", () => {
+    process.env.UPSTAGE_API_KEY = "up";
+    process.env.ANTHROPIC_API_KEY = "an";
+    const r = resolveModel("balanced", "default", "anthropic");
+    expect(r.provider).toBe("anthropic");
+    expect(r.model).toBe("claude-sonnet-4-6");
+  });
+
+  it("prefer:anthropic이라도 Anthropic 키 없으면 Upstage로 폴백(무중단)", () => {
+    process.env.UPSTAGE_API_KEY = "up";
+    expect(resolveModel("balanced", "default", "anthropic").provider).toBe("upstage");
+  });
+
   it("키가 하나도 없으면 기본 provider 모델 반환(이후 클라 생성서 throw → stub)", () => {
     expect(resolveModel("balanced").provider).toBe("upstage");
     expect(resolveModel("balanced").model).toBe("solar-pro3");
