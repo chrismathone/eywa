@@ -61,6 +61,47 @@ export async function getTextbookOrdersPage(
   return { rows, total: count ?? rows.length };
 }
 
+// 교재요청서(인쇄·PNG)용 단건 조회. RLS가 테넌트 격리. 학생 학년·학교는 카드 부제로 노출.
+export type TextbookOrderDetail = {
+  id: string;
+  bookName: string;
+  bookDetail: string | null;
+  studentName: string | null;
+  studentGrade: string | null;
+  studentSchool: string | null;
+  teacherName: string | null;
+  price: number;
+  status: string;
+  requestDate: string | null;
+};
+
+export async function getTextbookOrderById(id: string): Promise<TextbookOrderDetail | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("textbook_orders")
+    .select(
+      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, student:student_id ( grade, school )",
+    )
+    .eq("id", id)
+    .single();
+  if (!data) return null;
+  const student = (Array.isArray(data.student) ? data.student[0] : data.student) as
+    | { grade?: string | null; school?: string | null }
+    | undefined;
+  return {
+    id: data.id,
+    bookName: data.book_name,
+    bookDetail: data.book_detail,
+    studentName: data.student_name,
+    studentGrade: student?.grade ?? null,
+    studentSchool: student?.school ?? null,
+    teacherName: data.teacher_name,
+    price: Number(data.price),
+    status: data.status,
+    requestDate: data.request_date,
+  };
+}
+
 // 교재 신청 모달의 학생 SearchableSelect 옵션 — 재원·휴원 학생만(퇴원 제외), 이름순.
 export async function getStudentOptions(): Promise<StudentOption[]> {
   const supabase = await createClient();

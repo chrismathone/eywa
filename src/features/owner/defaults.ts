@@ -99,6 +99,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     taxMode: "none",
     defaultMethod: "계좌이체",
     latePolicy: "",
+    account: { bank: "", holder: "", number: "" },
   },
   notifications: {
     alimtalkSenderKey: "",

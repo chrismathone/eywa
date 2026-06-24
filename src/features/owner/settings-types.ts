@@ -99,11 +99,20 @@ export const operationsSchema = z
   });
 export type OperationsSettings = z.infer<typeof operationsSchema>;
 
+// 입금 계좌 — 교재요청서·청구 안내문에 표시되는 학원 계좌(은행/예금주/계좌번호).
+export const accountSchema = z.object({
+  bank: z.string().max(40),
+  holder: z.string().max(40),
+  number: z.string().max(40),
+});
+export type AccountSetting = z.infer<typeof accountSchema>;
+
 export const billingSchema = z.object({
   dueDay: z.number().int().min(1).max(31),
   taxMode: z.enum(["none", "include", "exclude"]),
   defaultMethod: z.string().max(24),
   latePolicy: z.string().max(300),
+  account: accountSchema,
 });
 export type BillingSettings = z.infer<typeof billingSchema>;
 

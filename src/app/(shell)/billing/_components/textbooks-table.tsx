@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TextbookDialog } from "./textbook-dialog";
@@ -112,6 +112,16 @@ export function TextbooksTable({
                   <td className="num text-foreground px-4 py-2 text-right text-xs font-medium">{won(r.price)}</td>
                   <td className="px-2 py-2">
                     <div className="flex items-center justify-end gap-1">
+                      <a
+                        href={`/textbook/${r.id}/print`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-text-faint hover:text-primary p-1"
+                        aria-label="교재 요청서"
+                        title="교재 요청서 (인쇄·이미지 저장)"
+                      >
+                        <FileText className="size-3.5" />
+                      </a>
                       <button
                         type="button"
                         onClick={() => setDialog({ order: r })}
