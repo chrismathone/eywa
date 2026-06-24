@@ -3,23 +3,26 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { MeetingReportSection } from "@/features/meetings/server/queries";
+import { RichText } from "@/components/rich-text";
 
 /**
  * 회의별 AI 보고서 — ijw-calander의 "섹션 아코디언" 스타일을 eywa 토큰으로 이식.
  * 이모지 라벨 + 섹션별 접기/펼치기 + 모두 펼치기/접기. (MeetingReportViewer 패리티)
  * 서버에서 받은 aiReport(MeetingReportSection)만 렌더 — 라이브 AI 호출 없음.
+ * 본문은 RichText로 렌더 — Solar가 줄바꿈을 안 줘도 나열형(list) 섹션은 쉼표/번호 인식으로 불릿화.
  */
 
 type SectionKey = Exclude<keyof MeetingReportSection, "meetingType">;
 
-const SECTIONS: { key: SectionKey; label: string; emoji: string }[] = [
+// list=나열형(불릿). 나머지는 산문 문단. (등록상담 AI 분석과 동일 패턴.)
+const SECTIONS: { key: SectionKey; label: string; emoji: string; list?: boolean }[] = [
   { key: "summary", label: "요약", emoji: "📋" },
-  { key: "agendaDiscussion", label: "안건별 논의", emoji: "📝" },
-  { key: "decisions", label: "결정 사항", emoji: "✅" },
-  { key: "actionItems", label: "액션 아이템", emoji: "🎯" },
-  { key: "speakerSummary", label: "참석자별 발언", emoji: "🗣️" },
-  { key: "concerns", label: "우려 / 위험 요소", emoji: "⚠️" },
-  { key: "nextSteps", label: "다음 단계", emoji: "🔮" },
+  { key: "agendaDiscussion", label: "안건별 논의", emoji: "📝", list: true },
+  { key: "decisions", label: "결정 사항", emoji: "✅", list: true },
+  { key: "actionItems", label: "액션 아이템", emoji: "🎯", list: true },
+  { key: "speakerSummary", label: "참석자별 발언", emoji: "🗣️", list: true },
+  { key: "concerns", label: "우려 / 위험 요소", emoji: "⚠️", list: true },
+  { key: "nextSteps", label: "다음 단계", emoji: "🔮", list: true },
 ];
 
 export function MeetingReportAccordion({ report }: { report: MeetingReportSection }) {
@@ -59,6 +62,7 @@ export function MeetingReportAccordion({ report }: { report: MeetingReportSectio
       {available.map((section) => {
         const body = report[section.key].trim();
         const isOpen = open.has(section.key);
+        const list = section.list;
         return (
           <div key={section.key} className="border-line overflow-hidden rounded-md border">
             <button
@@ -79,9 +83,11 @@ export function MeetingReportAccordion({ report }: { report: MeetingReportSectio
             </button>
             {isOpen ? (
               <div className="border-line border-t px-4 py-3">
-                <p className="text-foreground text-[13px] leading-relaxed whitespace-pre-wrap">
-                  {body}
-                </p>
+                <RichText
+                  text={body}
+                  bulletize={list}
+                  className="text-foreground space-y-1.5 text-[13px] leading-relaxed"
+                />
               </div>
             ) : null}
           </div>

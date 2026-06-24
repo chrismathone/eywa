@@ -1,30 +1,21 @@
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getMeetingById } from "@/features/meetings/server/queries";
+import { getMeetingById, type MeetingReportSection } from "@/features/meetings/server/queries";
+import { RichText } from "@/components/rich-text";
 import { PrintActions } from "../../../enrollment/[id]/print/print-actions";
 
 export const metadata = { title: "회의록 인쇄 — eywa" };
 
-const REPORT_SECTIONS: { key: keyof NonNullable<ReturnType<typeof keyOf>>; label: string }[] = [
+// list=나열형(불릿). 화면 분석탭(ai-report.tsx)과 동일 — Solar가 줄바꿈 안 줘도 RichText가 불릿화.
+const REPORT_SECTIONS: { key: keyof MeetingReportSection; label: string; list?: boolean }[] = [
   { key: "summary", label: "회의 요약" },
-  { key: "decisions", label: "결정 사항" },
-  { key: "actionItems", label: "액션 아이템" },
-  { key: "speakerSummary", label: "발언자별 요약" },
-  { key: "concerns", label: "우려사항" },
-  { key: "nextSteps", label: "다음 단계" },
+  { key: "agendaDiscussion", label: "안건별 논의", list: true },
+  { key: "decisions", label: "결정 사항", list: true },
+  { key: "actionItems", label: "액션 아이템", list: true },
+  { key: "speakerSummary", label: "발언자별 요약", list: true },
+  { key: "concerns", label: "우려사항", list: true },
+  { key: "nextSteps", label: "다음 단계", list: true },
 ];
-
-function keyOf() {
-  return {
-    agenda: "",
-    summary: "",
-    decisions: "",
-    actionItems: "",
-    speakerSummary: "",
-    concerns: "",
-    nextSteps: "",
-  };
-}
 
 export default async function MeetingPrintPage({
   params,
@@ -53,13 +44,13 @@ export default async function MeetingPrintPage({
       {meeting.aiReport ? (
         <section className="mt-6 space-y-5">
           <p className="text-xs uppercase tracking-wider text-gray-500">AI 분석 (8 섹션)</p>
-          {REPORT_SECTIONS.map(({ key, label }) => {
-            const body = meeting.aiReport?.[key as keyof typeof meeting.aiReport];
+          {REPORT_SECTIONS.map(({ key, label, list }) => {
+            const body = meeting.aiReport?.[key];
             if (typeof body !== "string" || !body.trim()) return null;
             return (
               <div key={key} className="space-y-1">
                 <h2 className="text-sm font-semibold text-gray-700">{label}</h2>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{body}</p>
+                <RichText text={body} bulletize={list} className="space-y-1 text-sm leading-relaxed" />
               </div>
             );
           })}

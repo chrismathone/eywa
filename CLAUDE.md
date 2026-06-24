@@ -68,6 +68,13 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
   `@google-cloud/storage` + `FIREBASE_SERVICE_ACCOUNT_KEY`(base64). server-only 회피 위해 순수/IO 분리, `audio-path.ts`는 re-export shim(기존 import 무변경).
   throw는 호출부가 `{error}`로 catch(보존만료 삭제 시 "AI 분석 다시 생성 쓰라" 명확 메시지).
 - 검증: typecheck0/lint0/**test464**(legacy-audio-path 5) + 실 E2E(레거시 회의→Firebase signed URL→AssemblyAI 전사 4,880자 / "AI 분석 다시 생성"→Solar→DB `completed`·`solar-pro3`).
+- **가독성 후속(2026-06-24)**: 회의 분석 8섹션이 화면·인쇄 모두 `<p whitespace-pre-wrap>`라 Solar의 쉼표/번호 run-on이 한 줄로 쏟아짐 →
+  등록상담과 동일하게 **[RichText](src/components/rich-text.tsx) `bulletize`로 전환**(나열형: 안건/결정/액션/발언/우려/다음단계 = list, 요약만 산문).
+  화면 [ai-report.tsx](<src/app/(shell)/meetings/[id]/ai-report.tsx>) + 인쇄 [(print)/meetings/[id]/print](<src/app/(print)/meetings/[id]/print/page.tsx>) 통일.
+  `analyzeMeeting` 프롬프트에도 줄바꿈·`**강조**` 규칙 추가(모델 협조 시 더 나음, RichText라 미협조도 안전). 실데이터 검증: 번호 run-on → 7~8불릿 정확 분리.
+- **전사 가독성(화자 라벨 없는 녹음)**: 옛 ijw 임포트 회의는 **speaker_labels 거의 0개**(40건 중 39건)라 통짜 전사였음 → 순수
+  [`breakIntoSentences`](src/lib/text/split-sentences.ts)(종결부호+공백 경계 분리, 소수점·% 안 쪼갬, Vitest 6)로 **문장마다 줄바꿈**.
+  [TranscriptSection](src/components/transcript-section.tsx)이 화자 발화·plainText 폴백 둘 다 적용(`whitespace-pre-line`).
 - ⚠️ **트레이드오프**: 기둥 B는 eywa↔Firebase 의존 → ijw **앱**은 닫아도 **Firebase Storage는 콜드 백엔드로 유지**(완전 삭제 불가). 기둥 A(텍스트
   재분석)는 Firebase·오디오 무관이라 오디오를 나중에 지워도 분석 재생성 가능. ⚠️ 프로덕션 "전사부터 다시"는 Vercel에 `FIREBASE_SERVICE_ACCOUNT_KEY` +
   유효 `UPSTAGE_API_KEY` 필요(웹훅이 프로덕션서 돔). 텍스트 기반 기둥 A는 로컬·프로덕션 모두 키 추가 없이 동작.

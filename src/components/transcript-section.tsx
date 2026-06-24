@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { breakIntoSentences } from "@/lib/text/split-sentences";
 
 /** 화자 발화 — 구조적 최소 타입(meetings SpeakerUtterance·enrollment speaker_labels 둘 다 만족). */
 export type TranscriptUtterance = { speaker: string; text: string };
@@ -60,11 +61,11 @@ export function TranscriptSection({
               {rows.map((u, i) => {
                 const role = speakerRoles?.[u.speaker];
                 return (
-                  <p key={i} className="text-[13px] leading-relaxed">
+                  <p key={i} className="text-[13px] leading-relaxed whitespace-pre-line">
                     <span className="text-primary font-semibold whitespace-nowrap">
                       [{role ?? `화자 ${u.speaker}`}]
                     </span>{" "}
-                    <span className="text-foreground">{u.text}</span>
+                    <span className="text-foreground">{breakIntoSentences(u.text)}</span>
                   </p>
                 );
               })}
@@ -79,8 +80,8 @@ export function TranscriptSection({
               ) : null}
             </>
           ) : (
-            <p className="text-foreground text-[13px] leading-relaxed whitespace-pre-wrap">
-              {plainText}
+            <p className="text-foreground text-[13px] leading-relaxed whitespace-pre-line">
+              {plainText ? breakIntoSentences(plainText) : ""}
             </p>
           )}
         </div>
