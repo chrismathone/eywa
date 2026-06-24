@@ -30,7 +30,7 @@ export default async function MeetingPrintPage({
   if (!meeting) notFound();
 
   return (
-    <main className="print-portrait mx-auto max-w-[800px] px-12 py-10 print:px-0 print:py-0">
+    <main className="meeting-doc print-portrait mx-auto max-w-[800px] px-12 py-10 print:px-0 print:py-0">
       <MeetingPrintActions embedded={embedded} hasTranscript={!!meeting.transcription} />
 
       <header className="border-b border-gray-300 pb-4">
