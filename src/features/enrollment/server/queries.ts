@@ -244,6 +244,8 @@ export type ConsultationDetail = ConsultationListRow & {
   aiAnalysis: AiAnalysisDetail | null;
   audioReport: ConsultationAudioReport | null;
   transcription: string | null;
+  speakerLabels: { speaker: string; text: string }[] | null;
+  speakerRoles: Record<string, string> | null;
   processingError: string | null;
   audioDurationSec: number | null;
   recommendedClasses: { id: string; className: string; subject: string }[];
@@ -259,7 +261,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
       `id, prospect_name, prospect_grade, prospect_school,
        parent_name, parent_phone, parent_request, learning_history,
        outcome, consulted_at, student_id, from_public_intake,
-       audio_path, audio_duration_sec, transcription,
+       audio_path, audio_duration_sec, transcription, speaker_labels,
        processing_status, processing_error,
        english_name, gender, blood_type, birth_date, student_phone, home_phone,
        parent_relation, address, zip_code, address_detail, consultation_path,
@@ -303,10 +305,17 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     | { display_name?: string }
     | undefined;
 
-  const printPayload = (ai?.print_payload as (PrintPayload & { audioReport?: ConsultationAudioReport }) | null) ?? null;
+  const printPayload =
+    (ai?.print_payload as
+      | (PrintPayload & { audioReport?: ConsultationAudioReport; speakerRoles?: Record<string, string> })
+      | null) ?? null;
   const audioReport =
     printPayload && typeof printPayload === "object" && "audioReport" in printPayload
       ? (printPayload.audioReport as ConsultationAudioReport | undefined) ?? null
+      : null;
+  const speakerRoles =
+    printPayload && typeof printPayload === "object" && printPayload.speakerRoles
+      ? printPayload.speakerRoles
       : null;
 
   return {
@@ -326,6 +335,11 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     hasAudio: !!c.audio_path,
     fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
     transcription: c.transcription,
+    // 비배열/null이면 null로(잘못된 jsonb가 TranscriptSection.slice 크래시 안 나게) — meetings 쿼리와 동일 방어.
+    speakerLabels: Array.isArray(c.speaker_labels)
+      ? (c.speaker_labels as { speaker: string; text: string }[])
+      : null,
+    speakerRoles,
     processingError: c.processing_error,
     audioDurationSec: c.audio_duration_sec,
     audioReport,

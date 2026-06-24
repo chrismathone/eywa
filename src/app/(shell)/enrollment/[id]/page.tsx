@@ -15,6 +15,8 @@ import {
 } from "@/features/enrollment/server/queries";
 import { ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { getClassesList } from "@/features/classes/server/queries";
+import { TranscriptSection } from "@/components/transcript-section";
+import { RichText } from "@/components/rich-text";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
@@ -249,12 +251,12 @@ export default async function EnrollmentDetailPage({
 
           <SubjectScoresCard details={consult.fields.subjectDetails} />
 
-          {consult.transcription ? (
-            <Card title="전사 내용">
-              <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">
-                {consult.transcription}
-              </p>
-            </Card>
+          {consult.transcription || (consult.speakerLabels?.length ?? 0) > 0 ? (
+            <TranscriptSection
+              utterances={consult.speakerLabels}
+              speakerRoles={consult.speakerRoles}
+              plainText={consult.transcription}
+            />
           ) : null}
         </div>
       </div>
@@ -269,19 +271,20 @@ function ConsultationReportPanel({
   report: ConsultationAudioReport;
   generatedAt: string | null;
 }) {
-  const sections: { key: keyof ConsultationAudioReport; label: string }[] = [
+  // list=리스트형 섹션(나열) → 불릿 렌더. 나머지는 산문 문단. (모델이 줄바꿈을 안 줘도 RichText가 쉼표 분할)
+  const sections: { key: keyof ConsultationAudioReport; label: string; list?: boolean }[] = [
     { key: "consultationType", label: "상담 성격" },
     { key: "familyBackground", label: "가정 배경" },
-    { key: "parentConcerns", label: "학부모 걱정" },
-    { key: "parentQuestions", label: "학부모 질문" },
-    { key: "parentRequests", label: "학부모 요청" },
+    { key: "parentConcerns", label: "학부모 걱정", list: true },
+    { key: "parentQuestions", label: "학부모 질문", list: true },
+    { key: "parentRequests", label: "학부모 요청", list: true },
     { key: "parentSatisfaction", label: "학부모 만족도" },
-    { key: "studentTraits", label: "학생 특이사항" },
-    { key: "teacherResponse", label: "교사 대응" },
-    { key: "salesPoints", label: "세일즈 포인트" },
-    { key: "agreements", label: "합의 사항" },
-    { key: "followUps", label: "후속 조치" },
-    { key: "warnings", label: "주의 신호" },
+    { key: "studentTraits", label: "학생 특이사항", list: true },
+    { key: "teacherResponse", label: "교사 대응", list: true },
+    { key: "salesPoints", label: "세일즈 포인트", list: true },
+    { key: "agreements", label: "합의 사항", list: true },
+    { key: "followUps", label: "후속 조치", list: true },
+    { key: "warnings", label: "주의 신호", list: true },
   ];
 
   return (
@@ -298,13 +301,17 @@ function ConsultationReportPanel({
         ) : null}
       </header>
 
-      {sections.map(({ key, label }) => {
+      {sections.map(({ key, label, list }) => {
         const body = report[key];
         if (typeof body !== "string" || !body.trim()) return null;
         return (
           <div key={key} className="space-y-1.5">
             <p className="eyebrow">{label}</p>
-            <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+            <RichText
+              text={body}
+              bulletize={list}
+              className="text-foreground space-y-1.5 text-sm leading-relaxed"
+            />
           </div>
         );
       })}

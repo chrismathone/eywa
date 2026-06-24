@@ -370,10 +370,16 @@ async function handleConsultation(
   // 13섹션 심층분석 + 폼 필드 추출을 병렬 실행(ijw processRegistrationRecording 패턴).
   // 분석은 필수(실패 시 failed), 폼 추출은 best-effort(실패해도 분석은 살린다).
   const [analysisRes, extractRes] = await Promise.allSettled([
-    generateJSON<ConsultationReport13>({
+    generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
       maxTokens: 8192,
       prompt: [
         "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
+        "",
+        "출력 형식 규칙(중요):",
+        "- 리스트형 섹션(parentQuestions/parentRequests/agreements/followUps/warnings 등 여러 항목)은 각 항목을 줄바꿈(\\n)으로 구분하고 항목 앞에 '- '를 붙이세요.",
+        "- 산문형 섹션(consultationType/familyBackground 등)도 2~3문장마다 줄바꿈(\\n)을 넣어 가독성을 높이세요.",
+        "- 핵심어(금액·과목·반·날짜·합의 키워드 등)는 **굵게**로 강조하세요(예: **형제 할인**, **커피왕 6레벨**).",
+        "- speakerRoles: 전사의 화자 라벨(A,B,…)을 상담 맥락으로 추론해 '상담자'/'학부모'/'학생'/'기타' 중 하나로 매핑하세요.",
         "",
             `학생 이름(현재 입력값): ${consult.prospect_name}`,
             `학년: ${consult.prospect_grade ?? "미상"}`,
@@ -400,6 +406,7 @@ async function handleConsultation(
             "",
             "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
             "{",
+            '  "speakerRoles": { "A": "상담자|학부모|학생|기타", "B": "상담자|학부모|학생|기타" },',
             '  "consultationType": string,',
             '  "familyBackground": string,',
             '  "parentConcerns": string,',
@@ -462,6 +469,8 @@ async function handleConsultation(
     semester: [],
     longTerm: [],
   };
+  // speakerRoles는 audioReport(13섹션)와 분리 저장 — audioReport를 ConsultationReport13 타입으로 깨끗하게 유지.
+  const { speakerRoles: inferredSpeakerRoles, ...reportSections } = report;
   const printPayload = {
     prospect: {
       name: report.extracted.prospectName ?? consult.prospect_name,
@@ -470,7 +479,9 @@ async function handleConsultation(
       parentName: report.extracted.parentName ?? consult.parent_name,
       parentPhone: report.extracted.parentPhone ?? consult.parent_phone,
     },
-    audioReport: report,
+    audioReport: reportSections,
+    // 전사 화자→역할(상담자/학부모/학생) 매핑 — 상세 전사 패널이 화자별 역할 라벨로 렌더.
+    speakerRoles: inferredSpeakerRoles ?? {},
   };
 
   const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;

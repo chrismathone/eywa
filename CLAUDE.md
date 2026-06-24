@@ -253,6 +253,26 @@ owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/on
 - **남은 후속(저우선)**: 시간표 스코핑(복잡 — onescreen 오늘일정 위젯이 대체) + exams 디테일 스코핑 + 강사 셀프 급여(/my-payroll,
   데모 급여설정 부재로 임팩트 작음) + 과목별 보고서 스키마(`lesson_reports.subject`) + 카톡/문자/PDF 실발송 연동.
 
+### 등록상담 상세/타임라인 가독성 — 화자구분·전사접힘·AI불릿·월픽커 (2026-06-24) — ✅ 실브라우저 + 멀티에이전트 리뷰
+사용자 요청 4건(타임라인 월 점프 / 전사 기본접힘 / 전사 화자 상담자·학부모·학생 구분 / AI 분석 줄바꿈·강조).
+- **타임라인 월 픽커**: [timeline-view.tsx](<src/app/(shell)/students/[id]/_tabs/timeline-view.tsx>) 가운데 월 라벨을
+  `SearchableSelect`(드롭다운 규약)로 교체 → 아무 달이나 바로 점프(◀▶는 유지). 실검증: 7개월 목록·4월 클릭→점프.
+- **전사 화자구분 + 기본접힘**: 회의록 전용이던 `TranscriptSection`을 **공유 컴포넌트**로 추출
+  ([src/components/transcript-section.tsx](src/components/transcript-section.tsx), 구조적 utterance 타입 `{speaker,text}` —
+  meetings·enrollment 둘 다 만족). 기본 접힘(🎤 클릭 펼침)·발화 60개 캡·"+N개 더보기". **화자→역할**은 웹훅 13섹션
+  콜에 `speakerRoles` 추론 추가([route.ts](<src/app/api/webhooks/assemblyai/route.ts>) handleConsultation, A/B→상담자/학부모/학생,
+  `print_payload.speakerRoles` 별도 저장 — audioReport는 13섹션만, destructure로 분리). 쿼리가 `speakerLabels`(Array.isArray
+  가드)·`speakerRoles` 노출. 역할맵 없으면 "화자 A/B" 폴백. 실검증: [상담자]/[학부모] 라벨 렌더.
+- **AI 분석 가독성**: 신규 [RichText](src/components/rich-text.tsx)(서버컴포넌트 가능·hook無·dangerouslySetInnerHTML無=XSS안전)가
+  `\n`·불릿마커·`**강조**`를 안전 렌더. ⚠️ **solar-pro3가 줄바꿈/불릿 프롬프트 지시를 무시**(쉼표 run-on 반환)하므로
+  프롬프트에만 의존 안 함 — 리스트형 섹션(걱정/질문/요청/특이/대응/세일즈/합의/후속/주의)에 `bulletize` 주면 RichText가
+  **괄호 인식 쉼표 분할**(`splitTopLevelCommas`, "(숙제 부담, 문법)" 같은 괄호 안 쉼표 보존, Vitest 4)로 불릿화 → 모델
+  비협조와 무관하게 동작. 산문 섹션(상담성격/가정배경/만족도)은 문단. 웹 상세 + **인쇄 페이지**(`(print)/enrollment/[id]/print`) 동일 적용.
+- **멀티에이전트 리뷰 적용**: 적대 리뷰 워크플로(차원별 find→검증, 29 에이전트) → 실결함 6건 픽스(강조 정규식 non-greedy·
+  RichText 빈입력 가드·speaker_labels Array.isArray·studentTraits/teacherResponse 불릿추가·audioReport에서 speakerRoles 분리·
+  인쇄 RichText 통일). 나머지 findings는 "정상 확인".
+- 검증: typecheck0/lint0/**test445**(rich-text 4 추가) + 실브라우저(월픽커 점프·전사접힘+[상담자]/[학부모]·AI 52불릿/산문 분류·콘솔0).
+
 ### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
 사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로
 폼 내용까지 자동입력**되는지. ijw Firebase Storage의 **실제 등록상담 녹음**(이윤건 19분/17.7MB,

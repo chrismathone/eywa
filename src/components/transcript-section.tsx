@@ -2,22 +2,24 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import type { SpeakerUtterance } from "@/features/meetings/server/queries";
+
+/** 화자 발화 — 구조적 최소 타입(meetings SpeakerUtterance·enrollment speaker_labels 둘 다 만족). */
+export type TranscriptUtterance = { speaker: string; text: string };
 
 const THRESHOLD = 60;
 
 /**
- * 전사(원본 음성인식) — 최하단 보조자료라 기본 접힘(🎤 클릭해 펼침). ijw-calander 패리티:
- * 발화를 화자 단위로 끊어(화자별 블록) "[화자/역할] 발언"으로 렌더 → 한 덩어리로 쏟아지지 않고
- * 화자가 바뀔 때마다 줄이 나뉜다. 본문 줄바꿈은 전역 keep-all(어절 단위)이 알아서 처리.
- * 발화가 많으면 60개만 보이고 "+N개 더 보기"로 펼친다.
+ * 전사(원본 음성인식) — 보조자료라 **기본 접힘**(🎤 클릭해 펼침). ijw-calander 패리티:
+ * 발화를 화자 단위로 끊어 "[역할/화자] 발언"으로 렌더 → 한 덩어리로 쏟아지지 않고 화자가 바뀔 때마다 줄이 나뉜다.
+ * speakerRoles(화자→상담자/학부모/학생 등 AI 추론)가 있으면 역할 라벨, 없으면 "화자 A/B" 폴백.
+ * 발화가 많으면 60개만 보이고 "+N개 더 보기"로 펼친다. 회의록·등록상담 공용(원래 meetings 전용 → 추출).
  */
 export function TranscriptSection({
   utterances,
   speakerRoles,
   plainText,
 }: {
-  utterances: SpeakerUtterance[] | null;
+  utterances: TranscriptUtterance[] | null;
   speakerRoles: Record<string, string> | null;
   plainText: string | null;
 }) {

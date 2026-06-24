@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { TimelineEvent } from "@/features/students/server/queries";
 
 const KIND_META: Record<
@@ -67,7 +68,8 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
             {safeIdx + 1}/{months.length}개월 · 총 {events.length}건
           </span>
         </div>
-        {/* 월 네비 — idx 0 = 최신. ◀ 이전(과거)=idx+1, ▶ 다음(최신)=idx-1 */}
+        {/* 월 네비 — idx 0 = 최신. ◀ 이전(과거)=idx+1, ▶ 다음(최신)=idx-1.
+            가운데 라벨은 SearchableSelect로 어느 달이든 바로 점프(전역 드롭다운 규약). */}
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -78,9 +80,16 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="num text-foreground min-w-[7.5rem] text-center text-sm font-medium">
-            {ymLabel(ym)} · {monthEvents.length}건
-          </span>
+          <SearchableSelect
+            className="w-40"
+            ariaLabel="월 선택"
+            value={String(safeIdx)}
+            onValueChange={(v) => setIdx(Number(v))}
+            options={months.map(([m, evs], i) => ({
+              value: String(i),
+              label: `${ymLabel(m)} · ${evs.length}건`,
+            }))}
+          />
           <button
             type="button"
             onClick={() => setIdx(safeIdx - 1)}

@@ -21,7 +21,7 @@ import {
 import { RunMeetingAiButton } from "./run-ai-button";
 import { MeetingDeleteButton, MeetingRetryButton } from "./meeting-actions";
 import { MeetingStatusWatcher } from "./status-watcher";
-import { TranscriptSection } from "./transcript-section";
+import { TranscriptSection } from "@/components/transcript-section";
 import { MeetingReportAccordion } from "./ai-report";
 import { MeetingTitleEditor } from "./meeting-title-editor";
 import { MeetingTxtButton } from "./meeting-txt-button";

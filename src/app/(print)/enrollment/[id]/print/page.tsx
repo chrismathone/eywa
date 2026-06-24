@@ -5,6 +5,7 @@ import {
   getEnrollmentConsultationById,
   type ConsultationAudioReport,
 } from "@/features/enrollment/server/queries";
+import { RichText } from "@/components/rich-text";
 import { PrintActions } from "./print-actions";
 
 export const metadata = { title: "신입생 인수인계서 — eywa" };
@@ -225,28 +226,29 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function AudioReportSections({ report }: { report: ConsultationAudioReport }) {
-  const sections: { key: keyof ConsultationAudioReport; label: string }[] = [
+  // list=나열형 섹션 → 불릿. 웹 상세(enrollment/[id]/page.tsx)와 동일 분류로 인쇄도 같은 형식.
+  const sections: { key: keyof ConsultationAudioReport; label: string; list?: boolean }[] = [
     { key: "consultationType", label: "상담 성격" },
     { key: "familyBackground", label: "가정 배경" },
-    { key: "parentConcerns", label: "학부모 걱정" },
-    { key: "parentQuestions", label: "학부모 질문" },
-    { key: "parentRequests", label: "학부모 요청" },
+    { key: "parentConcerns", label: "학부모 걱정", list: true },
+    { key: "parentQuestions", label: "학부모 질문", list: true },
+    { key: "parentRequests", label: "학부모 요청", list: true },
     { key: "parentSatisfaction", label: "학부모 만족도" },
-    { key: "studentTraits", label: "학생 특이사항" },
-    { key: "teacherResponse", label: "교사 대응" },
-    { key: "salesPoints", label: "세일즈 포인트" },
-    { key: "agreements", label: "합의 사항" },
-    { key: "followUps", label: "후속 조치" },
-    { key: "warnings", label: "주의 신호" },
+    { key: "studentTraits", label: "학생 특이사항", list: true },
+    { key: "teacherResponse", label: "교사 대응", list: true },
+    { key: "salesPoints", label: "세일즈 포인트", list: true },
+    { key: "agreements", label: "합의 사항", list: true },
+    { key: "followUps", label: "후속 조치", list: true },
+    { key: "warnings", label: "주의 신호", list: true },
   ];
   return (
     <>
-      {sections.map(({ key, label }) => {
+      {sections.map(({ key, label, list }) => {
         const body = report[key];
         if (typeof body !== "string" || !body.trim()) return null;
         return (
           <Section key={key} title={label}>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{body}</p>
+            <RichText text={body} bulletize={list} className="space-y-1 text-sm leading-relaxed" />
           </Section>
         );
       })}
