@@ -371,6 +371,43 @@ export async function removeExpenseReceipt(
 
 // 비공개 버킷 — 열람용 단기 signed URL 발급(5분). 경로 테넌트 검증 후 admin으로 서명.
 export type SignReceiptState = { url?: string; error?: string } | undefined;
+// 첨부 썸네일용 — 한 지출의 등록된 모든 첨부를 한 번에 서명(round-trip 1회). RLS로 그 지출이 내
+// 테넌트인지 확인 후 admin이 일괄 서명(createSignedUrls). path→url 맵 반환(이미지 미리보기에 사용).
+export type SignReceiptsState = { urls?: Record<string, string>; error?: string } | undefined;
+export async function signExpenseReceipts(
+  _prev: SignReceiptsState,
+  formData: FormData,
+): Promise<SignReceiptsState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const expenseId = String(formData.get("id") ?? "").trim();
+  if (!expenseId) return { error: "지출 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("expenses")
+    .select("receipt_urls")
+    .eq("id", expenseId)
+    .maybeSingle();
+  if (!row) return { error: "지출을 찾을 수 없습니다" };
+
+  // 경로 검증(임의 객체 서명 차단) 후 일괄 서명. 깨진 경로는 조용히 제외.
+  const paths = parseReceipts(row.receipt_urls)
+    .map((r) => r.path)
+    .filter((p) => isTenantReceiptPath(p, user.tenantId, expenseId));
+  if (paths.length === 0) return { urls: {} };
+
+  const { data, error } = await createAdminClient()
+    .storage.from(RECEIPTS_BUCKET)
+    .createSignedUrls(paths, 600);
+  if (error) return { error: error.message };
+  const urls: Record<string, string> = {};
+  for (const d of data ?? []) {
+    if (d.path && d.signedUrl) urls[d.path] = d.signedUrl;
+  }
+  return { urls };
+}
+
 export async function signExpenseReceipt(
   _prev: SignReceiptState,
   formData: FormData,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Loader2, Paperclip, Trash2, Upload, X } from "lucide-react";
+import { ExternalLink, FileText, Loader2, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
@@ -11,8 +11,17 @@ import {
   removeExpenseReceipt,
   setExpenseReceiptType,
   signExpenseReceipt,
+  signExpenseReceipts,
 } from "@/features/billing/server/expense-actions";
 import type { ExpenseReceipt, ExpenseRow } from "@/features/billing/server/expense-queries";
+
+// 사진류(브라우저가 <img>로 그릴 수 있는 형식)면 항상 썸네일 미리보기. PDF 등은 파일 카드.
+const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "bmp", "avif", "heic", "heif"]);
+function isImageReceipt(name: string, path: string): boolean {
+  const src = name || path;
+  const ext = src.includes(".") ? src.split(".").pop()!.toLowerCase() : "";
+  return IMAGE_EXT.has(ext);
+}
 
 const RECEIPT_TYPES = ["영수증", "세금계산서", "견적서", "계산서", "카드전표", "현금영수증", "기타"];
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -34,8 +43,32 @@ export function ExpenseReceiptsModal({
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<ExpenseReceipt | null>(null);
+  const [urls, setUrls] = useState<Record<string, string>>({}); // path → 서명 URL(썸네일/확대용)
+  const [lightbox, setLightbox] = useState<string | null>(null); // 확대 중인 이미지 URL
   const [, startTransition] = useTransition();
   const uploadingRef = useRef(false); // 동시 업로드(연속 붙여넣기 등) 재진입 방지
+
+  // 등록된 첨부 전체를 한 번에 서명해 썸네일을 그린다(업로드 후 갱신용). 만료 600s.
+  const refreshUrls = useCallback(async () => {
+    const fd = new FormData();
+    fd.append("id", expense.id);
+    const res = await signExpenseReceipts(undefined, fd);
+    if (res?.urls) setUrls(res.urls);
+  }, [expense.id]);
+
+  // 마운트 시 첨부 일괄 서명(비동기 fetch → setState는 await 이후라 동기 아님).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const fd = new FormData();
+      fd.append("id", expense.id);
+      const res = await signExpenseReceipts(undefined, fd);
+      if (!cancelled && res?.urls) setUrls(res.urls);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [expense.id]);
 
   function changeType(next: string) {
     setType(next);
@@ -93,6 +126,7 @@ export function ExpenseReceiptsModal({
         setReceipts((prev) =>
           prev.some((r) => r.path === path) ? prev : [...prev, { path, name: file.name }],
         );
+        void refreshUrls();
         startTransition(() => router.refresh());
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -101,7 +135,7 @@ export function ExpenseReceiptsModal({
         setUploading(false);
       }
     },
-    [expense.id, router, startTransition],
+    [expense.id, router, startTransition, refreshUrls],
   );
 
   // Ctrl+V — 클립보드의 이미지/PDF를 붙여넣어 바로 첨부(영수증 스크린샷 캡처 후 붙여넣기 등). 모달 열린 동안만.
@@ -127,6 +161,16 @@ export function ExpenseReceiptsModal({
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, [handleUpload]);
+
+  // 라이트박스 Esc 닫기
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightbox(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
 
   function doRemove(r: ExpenseReceipt) {
     setReceipts((prev) => prev.filter((x) => x.path !== r.path));
@@ -181,19 +225,73 @@ export function ExpenseReceiptsModal({
                 첨부된 증빙이 없습니다.
               </p>
             ) : (
-              <ul className="space-y-1.5">
-                {receipts.map((r) => (
-                  <li key={r.path} className="border-line bg-bg-soft/40 flex items-center gap-2 rounded-md border px-3 py-2">
-                    <Paperclip className="text-text-faint size-3.5 shrink-0" />
-                    <span className="text-foreground min-w-0 flex-1 truncate text-xs">{r.name}</span>
-                    <button type="button" onClick={() => handleView(r)} className="text-text-faint hover:text-blue p-1" aria-label="열람">
-                      <ExternalLink className="size-3.5" />
-                    </button>
-                    <button type="button" onClick={() => setConfirmRemove(r)} className="text-text-faint hover:text-danger p-1" aria-label="삭제">
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
+              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {receipts.map((r) => {
+                  const url = urls[r.path];
+                  const isImg = isImageReceipt(r.name, r.path);
+                  return (
+                    <li
+                      key={r.path}
+                      className="border-line bg-bg-soft/40 group relative overflow-hidden rounded-md border"
+                    >
+                      {isImg && url ? (
+                        <button
+                          type="button"
+                          onClick={() => setLightbox(url)}
+                          className="block w-full"
+                          aria-label={`${r.name} 확대`}
+                          title="클릭하여 확대"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element -- Supabase 서명 URL 미리보기 */}
+                          <img
+                            src={url}
+                            alt={r.name}
+                            className="bg-card h-24 w-full object-cover transition group-hover:opacity-90"
+                          />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleView(r)}
+                          className="bg-card text-text-faint hover:text-blue flex h-24 w-full flex-col items-center justify-center gap-1.5"
+                          aria-label={`${r.name} 열람`}
+                          title="클릭하여 열람"
+                        >
+                          {isImg ? (
+                            <Loader2 className="size-5 animate-spin" />
+                          ) : (
+                            <FileText className="size-6" />
+                          )}
+                          <span className="text-[10px] font-medium uppercase">
+                            {isImg ? "불러오는 중" : "파일"}
+                          </span>
+                        </button>
+                      )}
+                      <div className="flex items-center gap-1 px-1.5 py-1">
+                        <span className="text-text-dim min-w-0 flex-1 truncate text-[10px]" title={r.name}>
+                          {r.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleView(r)}
+                          className="text-text-faint hover:text-blue shrink-0 p-0.5"
+                          aria-label="새 탭으로 열람"
+                          title="새 탭으로 열기"
+                        >
+                          <ExternalLink className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemove(r)}
+                          className="text-text-faint hover:text-danger shrink-0 p-0.5"
+                          aria-label="삭제"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -240,6 +338,32 @@ export function ExpenseReceiptsModal({
         }}
         onCancel={() => setConfirmRemove(null)}
       />
+
+      {/* 이미지 확대 라이트박스 — 클릭/Esc로 닫기 */}
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-label="이미지 확대"
+        >
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            aria-label="닫기"
+          >
+            <X className="size-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Supabase 서명 URL 확대 미리보기 */}
+          <img
+            src={lightbox}
+            alt="증빙 확대"
+            className="max-h-[90vh] max-w-[90vw] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
