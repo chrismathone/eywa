@@ -275,6 +275,10 @@ owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/on
 - **후속(사용자 피드백)**: ① AI 분석이 "너무 나열형·영역구분 안 됨" → 12섹션을 각각 **이모지 헤더(🧭🏠😟❓🙋😊🎒🧑‍🏫💡🤝📞⚠️) + 테두리 카드**로
   분리(회의록 패턴, `ConsultationReportPanel`). ② 과목별 점수 **영어 라벨이 raw 키**(academyHistory·learningProgress 등)로
   뜨던 것 → `subjectLabelMap`이 `COMMON_FIELDS`(form-config export) 라벨을 항상 포함해 한글화(영어는 ENGLISH_GROUPS에 공통필드가 없어 폴백됐던 것).
+- **후속2(사용자 피드백)**: ① 헤더 **수정 버튼 2개**(전체 편집 `/edit` 링크 + ConsultationManageButtons 모달) → 모달 quick-edit
+  제거하고 **전체 편집 페이지 하나로 통일**. ② 헤더 **배지 2개**(outcome "AI 완료" + processing "완료") → `PROCESSING_BADGE.completed=null`로
+  중복 배지 숨김(진행 중·실패만 표시). ③ **좌우 카드 스타일 통일** — 공용 `Card`를 단일 박스(이모지+굵은 라벨 헤더, 별도 음영 바
+  제거 → "이중 박스"감 해소)로 바꾸고 좌측 정보 카드(🙋📚📇🧑‍🎓📊)·우측 AI 섹션 모두 동일 스타일 사용(17개 카드 동일 클래스 확인).
 
 ### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
 사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로

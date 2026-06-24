@@ -2,16 +2,9 @@
 
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Pencil, Tag, X } from "lucide-react";
+import { Loader2, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  setEnrollmentOutcome,
-  updateEnrollmentConsultation,
-  type SetOutcomeState,
-  type UpdateConsultationState,
-} from "@/features/enrollment/server/actions";
-
-const INPUT = "border-border bg-card text-foreground w-full rounded-md border px-2.5 py-1.5 text-sm";
+import { setEnrollmentOutcome, type SetOutcomeState } from "@/features/enrollment/server/actions";
 
 const OUTCOME_OPTIONS = [
   { value: "pending", label: "대기" },
@@ -23,18 +16,8 @@ const OUTCOME_OPTIONS = [
   { value: "no_show", label: "노쇼" },
 ];
 
-export type ConsultValues = {
-  id: string;
-  prospectName: string;
-  prospectGrade: string | null;
-  prospectSchool: string | null;
-  parentName: string | null;
-  parentPhone: string | null;
-  parentRequest: string | null;
-  prevAcademy: string | null;
-  lastScore: string | null;
-  outcome: string;
-};
+// 상세 상단 '상태 변경' 버튼. (수정은 전체 편집 페이지 /enrollment/[id]/edit 하나로 통일 — 모달 quick-edit 제거.)
+export type ConsultValues = { id: string; outcome: string };
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
@@ -68,75 +51,6 @@ function SubmitBtn({ label }: { label: string }) {
   );
 }
 
-function Footer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  return (
-    <footer className="flex items-center justify-end gap-2 pt-1">
-      <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-        취소
-      </Button>
-      {children}
-    </footer>
-  );
-}
-
-function Labeled({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-text-dim text-xs">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function EditDialog({ v, onClose }: { v: ConsultValues; onClose: () => void }) {
-  const [state, action] = useActionState<UpdateConsultationState, FormData>(
-    updateEnrollmentConsultation,
-    undefined,
-  );
-  if (state?.ok) queueMicrotask(onClose);
-  return (
-    <Modal title="상담 수정" onClose={onClose}>
-      <form action={action} className="space-y-3">
-        <input type="hidden" name="id" value={v.id} />
-        <Labeled label="학생 이름 *">
-          <input name="prospectName" required defaultValue={v.prospectName} className={INPUT} />
-        </Labeled>
-        <div className="grid grid-cols-2 gap-2">
-          <Labeled label="학년">
-            <input name="prospectGrade" defaultValue={v.prospectGrade ?? ""} className={INPUT} />
-          </Labeled>
-          <Labeled label="학교">
-            <input name="prospectSchool" defaultValue={v.prospectSchool ?? ""} className={INPUT} />
-          </Labeled>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Labeled label="학부모 성함">
-            <input name="parentName" defaultValue={v.parentName ?? ""} className={INPUT} />
-          </Labeled>
-          <Labeled label="연락처">
-            <input name="parentPhone" defaultValue={v.parentPhone ?? ""} className={`num ${INPUT}`} />
-          </Labeled>
-        </div>
-        <Labeled label="학부모 요구사항">
-          <textarea name="parentRequest" rows={3} defaultValue={v.parentRequest ?? ""} className={INPUT} />
-        </Labeled>
-        <div className="grid grid-cols-2 gap-2">
-          <Labeled label="이전 학원">
-            <input name="prevAcademy" defaultValue={v.prevAcademy ?? ""} className={INPUT} />
-          </Labeled>
-          <Labeled label="최근 성적">
-            <input name="lastScore" defaultValue={v.lastScore ?? ""} className={INPUT} />
-          </Labeled>
-        </div>
-        {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
-        <Footer onClose={onClose}>
-          <SubmitBtn label="저장" />
-        </Footer>
-      </form>
-    </Modal>
-  );
-}
-
 function OutcomeDialog({ id, current, onClose }: { id: string; current: string; onClose: () => void }) {
   const [selected, setSelected] = useState(current);
   const [state, action] = useActionState<SetOutcomeState, FormData>(setEnrollmentOutcome, undefined);
@@ -163,29 +77,26 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
           ))}
         </div>
         {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
-        <Footer onClose={onClose}>
+        <footer className="flex items-center justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            취소
+          </Button>
           <SubmitBtn label="변경" />
-        </Footer>
+        </footer>
       </form>
     </Modal>
   );
 }
 
 export function ConsultationManageButtons({ values }: { values: ConsultValues }) {
-  const [open, setOpen] = useState<"edit" | "outcome" | null>(null);
-  const close = () => setOpen(null);
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen("edit")}>
-        <Pencil className="size-3.5" />
-        수정
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => setOpen("outcome")}>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         <Tag className="size-3.5" />
         상태 변경
       </Button>
-      {open === "edit" ? <EditDialog v={values} onClose={close} /> : null}
-      {open === "outcome" ? <OutcomeDialog id={values.id} current={values.outcome} onClose={close} /> : null}
+      {open ? <OutcomeDialog id={values.id} current={values.outcome} onClose={() => setOpen(false)} /> : null}
     </>
   );
 }

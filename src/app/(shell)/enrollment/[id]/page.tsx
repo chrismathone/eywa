@@ -42,7 +42,8 @@ const PROCESSING_BADGE: Record<
   uploaded: { label: "분석 대기", class: "text-chart-3 bg-chart-3/10 border-chart-3/20" },
   transcribing: { label: "전사 중", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
   analyzing: { label: "AI 분석 중", class: "text-chart-3 bg-chart-3/10 border-chart-3/20", spin: true },
-  completed: { label: "완료", class: "text-chart-2 bg-chart-2/10 border-chart-2/20" },
+  // 완료는 outcome 배지(AI 완료/등록 등)가 이미 알려주므로 중복 배지 숨김(진행 중·실패만 표시).
+  completed: null,
   failed: { label: "실패", class: "text-chart-4 bg-chart-4/10 border-chart-4/20" },
 };
 
@@ -116,20 +117,7 @@ export default async function EnrollmentDetailPage({
             <Pencil className="size-4" />
             수정
           </Button>
-          <ConsultationManageButtons
-            values={{
-              id: consult.id,
-              prospectName: consult.prospectName,
-              prospectGrade: consult.prospectGrade,
-              prospectSchool: consult.prospectSchool,
-              parentName: consult.parentName,
-              parentPhone: consult.parentPhone,
-              parentRequest: consult.parentRequest,
-              prevAcademy: consult.learningHistory?.prevAcademy ?? null,
-              lastScore: consult.learningHistory?.lastScore ?? null,
-              outcome: consult.outcome,
-            }}
-          />
+          <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome }} />
           {consult.aiAnalysis ? (
             <Button variant="outline" render={<Link href={`/enrollment/${id}/print`} target="_blank" />}>
               <Printer className="size-4" />
@@ -195,13 +183,13 @@ export default async function EnrollmentDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">
-          <Card title="학부모 요구사항">
+          <Card emoji="🙋" title="학부모 요구사항">
             <p className="text-foreground text-sm leading-relaxed">
               {consult.parentRequest ?? "기재된 요구사항이 없습니다."}
             </p>
           </Card>
 
-          <Card title="학습 이력">
+          <Card emoji="📚" title="학습 이력">
             <dl className="space-y-2.5 text-sm">
               <Field label="이전 학원" value={consult.learningHistory?.prevAcademy ?? null} />
               <Field label="최근 성적" value={consult.learningHistory?.lastScore ?? null} />
@@ -216,7 +204,7 @@ export default async function EnrollmentDetailPage({
             </dl>
           </Card>
 
-          <Card title="연락처">
+          <Card emoji="📇" title="연락처">
             <dl className="space-y-2.5 text-sm">
               <Field label="학부모" value={consult.parentName} />
               <Field label="연락처" value={consult.parentPhone} mono />
@@ -301,34 +289,33 @@ function ConsultationReportPanel({
         ) : null}
       </header>
 
-      {/* 섹션마다 이모지 헤더 + 테두리 카드로 또렷이 구분(나열형으로 뭉치지 않게). */}
+      {/* 섹션마다 이모지 + 라벨 헤더의 단일 카드 — 좌측 정보 카드와 동일 스타일(좌우 통일). */}
       {sections.map(({ key, label, emoji, list }) => {
         const body = report[key];
         if (typeof body !== "string" || !body.trim()) return null;
         return (
-          <div key={key} className="border-line bg-card overflow-hidden rounded-md border">
-            <div className="bg-bg-soft border-line flex items-center gap-2 border-b px-4 py-2">
-              <span className="text-[15px] leading-none">{emoji}</span>
-              <h3 className="text-foreground text-[13px] font-semibold">{label}</h3>
-            </div>
-            <div className="px-4 py-3">
-              <RichText
-                text={body}
-                bulletize={list}
-                className="text-foreground space-y-1.5 text-sm leading-relaxed"
-              />
-            </div>
-          </div>
+          <Card key={key} emoji={emoji} title={label}>
+            <RichText
+              text={body}
+              bulletize={list}
+              className="text-foreground space-y-1.5 text-sm leading-relaxed"
+            />
+          </Card>
         );
       })}
     </section>
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+// 공용 카드 — 좌측 정보·우측 AI 분석 섹션이 모두 이 단일 박스 스타일을 쓴다(좌우 통일).
+// 이모지 + 굵은 라벨 헤더(이중 박스 느낌의 별도 음영 바 없이) → 섹션 구분은 또렷하되 중복돼 보이지 않게.
+function Card({ title, emoji, children }: { title: string; emoji?: string; children: ReactNode }) {
   return (
-    <section className="bg-card border-border rounded-lg border p-5">
-      <h3 className="eyebrow mb-3">{title}</h3>
+    <section className="bg-card border-line rounded-md border p-4">
+      <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold">
+        {emoji ? <span className="text-[15px] leading-none">{emoji}</span> : null}
+        {title}
+      </h3>
       {children}
     </section>
   );
@@ -467,7 +454,7 @@ function ExtraInfoCard({ f }: { f: FullConsultationFields }) {
   const visible = rows.filter(([, v]) => v);
   if (visible.length === 0 && flags.length === 0) return null;
   return (
-    <Card title="학생 상세 정보">
+    <Card emoji="🧑‍🎓" title="학생 상세 정보">
       <dl className="space-y-2.5 text-sm">
         {visible.map(([label, val]) => (
           <Field key={label} label={label} value={val} />
@@ -511,7 +498,7 @@ function SubjectScoresCard({ details }: { details: Record<string, Record<string,
   if (entries.length === 0) return null;
   const ENG_TYPE: Record<string, string> = { ai: "AI 레벨테스트", nelt: "NELT", eie: "EiE" };
   return (
-    <Card title="과목별 점수">
+    <Card emoji="📊" title="과목별 점수">
       <div className="space-y-4">
         {entries.map(([subj, vals]) => {
           const tab = SUBJECT_TABS.find((t) => t.key === subj);
