@@ -794,7 +794,7 @@ export const invoices = pgTable(
 );
 
 // === textbook_orders (교재신청) ===
-// 학생 교재 신청 → 주문 → 배부 → 청구 → 납부 라이프사이클. 수납관리 창의 '교재' 책갈피 면.
+// ijw식 3개 독립 체크(등록/주문/납부) + 마지막 변경자·시각. 수납관리 창의 '교재' 책갈피 면.
 export const textbookOrders = pgTable(
   "textbook_orders",
   {
@@ -808,12 +808,16 @@ export const textbookOrders = pgTable(
     bookName: text("book_name").notNull(),
     bookDetail: text("book_detail"),
     price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"),
-    status: text("status").notNull().default("requested"), // requested/ordered/delivered/billed/paid
+    status: text("status").notNull().default("requested"), // 파생: paid>ordered>requested (체크에서 도출)
     requestDate: date("request_date"),
-    orderedAt: timestamp("ordered_at", { withTimezone: true }),
-    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
-    billedAt: timestamp("billed_at", { withTimezone: true }),
-    paidAt: timestamp("paid_at", { withTimezone: true }),
+    // ijw식 3개 독립 체크 — 각자 타임스탬프(체크=시각, 해제=null).
+    registeredAt: timestamp("registered_at", { withTimezone: true }), // 등록
+    orderedAt: timestamp("ordered_at", { withTimezone: true }), // 주문
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }), // (폐기)
+    billedAt: timestamp("billed_at", { withTimezone: true }), // (폐기)
+    paidAt: timestamp("paid_at", { withTimezone: true }), // 납부
+    statusByName: text("status_by_name"), // 마지막 변경자(이름 denormalize)
+    statusAt: timestamp("status_at", { withTimezone: true }), // 마지막 변경 시각
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

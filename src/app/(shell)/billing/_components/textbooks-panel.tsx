@@ -18,8 +18,6 @@ const won = (n: number) => `${KRW.format(n)}원`;
 const STATUS: { key: string; label: string }[] = [
   { key: "requested", label: "신청" },
   { key: "ordered", label: "주문" },
-  { key: "delivered", label: "배부" },
-  { key: "billed", label: "청구" },
   { key: "paid", label: "납부" },
 ];
 

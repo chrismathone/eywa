@@ -10,8 +10,17 @@ export type TextbookOrderRow = {
   studentName: string | null;
   teacherName: string | null;
   price: number;
-  status: string; // requested/ordered/delivered/billed/paid
+  status: string; // 파생: paid>ordered>requested
   requestDate: string | null;
+  // ijw식 3개 독립 체크 + 도달 시각(체크 hover에 표시).
+  registered: boolean;
+  ordered: boolean;
+  paid: boolean;
+  registeredAt: string | null;
+  orderedAt: string | null;
+  paidAt: string | null;
+  statusByName: string | null; // 마지막 변경자
+  statusAt: string | null; // 마지막 변경 시각
 };
 
 export type StudentOption = { id: string; name: string; grade: string | null };
@@ -39,7 +48,7 @@ export async function getTextbookOrdersPage(
   let qb = supabase
     .from("textbook_orders")
     .select(
-      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date",
+      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, registered_at, ordered_at, paid_at, status_by_name, status_at",
       { count: "exact" },
     );
   if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
@@ -57,6 +66,14 @@ export async function getTextbookOrdersPage(
     price: Number(r.price),
     status: r.status,
     requestDate: r.request_date,
+    registered: !!r.registered_at,
+    ordered: !!r.ordered_at,
+    paid: !!r.paid_at,
+    registeredAt: r.registered_at,
+    orderedAt: r.ordered_at,
+    paidAt: r.paid_at,
+    statusByName: r.status_by_name,
+    statusAt: r.status_at,
   }));
   return { rows, total: count ?? rows.length };
 }
@@ -128,7 +145,7 @@ export async function getTextbookStats(): Promise<TextbookStats> {
     const p = Number(r.price);
     totalAmount += p;
     if (r.status !== "paid") unpaidAmount += p;
-    if (r.status === "requested" || r.status === "ordered" || r.status === "delivered") pending++;
+    if (r.status === "requested" || r.status === "ordered") pending++;
   }
   return { total: rows.length, byStatus, totalAmount, unpaidAmount, pending };
 }

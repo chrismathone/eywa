@@ -10,11 +10,10 @@ export type TextbookState =
   | { error?: string; fieldErrors?: Record<string, string>; ok?: boolean }
   | undefined;
 
-const STATUSES = new Set(["requested", "ordered", "delivered", "billed", "paid"]);
-const STATUS_TS: Record<string, string | undefined> = {
+// ijw식 3개 독립 체크(등록/주문/납부) → 각자 타임스탬프 컬럼. status는 체크에서 파생.
+const CHECK_COLS: Record<string, string> = {
+  registered: "registered_at",
   ordered: "ordered_at",
-  delivered: "delivered_at",
-  billed: "billed_at",
   paid: "paid_at",
 };
 
@@ -61,6 +60,8 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
     price: f.price,
     status: "requested",
     request_date: f.requestDate ?? new Date().toISOString().slice(0, 10),
+    status_at: new Date().toISOString(),
+    status_by_name: user.displayName,
     notes: f.notes,
   });
   if (error) return { error: error.message };
@@ -99,20 +100,46 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
   return { ok: true };
 }
 
-export async function setTextbookStatus(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
+// 체크 토글(등록/주문/납부) — 해당 타임스탬프를 켜고(now)/끄고(null), 마지막 변경자·시각 기록.
+// status는 체크에서 파생: 납부>주문>신청 (등록은 status 무관 = 독립 운영 플래그, ijw와 동일).
+export async function toggleTextbookCheck(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   const id = String(formData.get("id") ?? "").trim();
-  const status = String(formData.get("status") ?? "").trim();
+  const field = String(formData.get("field") ?? "").trim();
+  const checked = String(formData.get("checked") ?? "") === "true";
   if (!id) return { error: "교재신청 ID가 누락되었습니다" };
-  if (!STATUSES.has(status)) return { error: "잘못된 상태입니다" };
-
-  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
-  const tsCol = STATUS_TS[status];
-  if (tsCol) patch[tsCol] = new Date().toISOString();
+  const col = CHECK_COLS[field];
+  if (!col) return { error: "잘못된 체크 항목입니다" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("textbook_orders").update(patch).eq("id", id);
+  // 다른 체크 상태가 있어야 status를 재도출 → 현재 행 조회(RLS 격리).
+  const { data: row } = await supabase
+    .from("textbook_orders")
+    .select("registered_at, ordered_at, paid_at")
+    .eq("id", id)
+    .single();
+  if (!row) return { error: "교재신청을 찾을 수 없습니다" };
+
+  const now = new Date().toISOString();
+  const next: Record<string, string | null> = {
+    registered_at: row.registered_at,
+    ordered_at: row.ordered_at,
+    paid_at: row.paid_at,
+  };
+  next[col] = checked ? now : null;
+  const status = next.paid_at ? "paid" : next.ordered_at ? "ordered" : "requested";
+
+  const { error } = await supabase
+    .from("textbook_orders")
+    .update({
+      [col]: next[col],
+      status,
+      status_at: now,
+      status_by_name: user.displayName,
+      updated_at: now,
+    })
+    .eq("id", id);
   if (error) return { error: error.message };
 
   revalidatePath("/billing");

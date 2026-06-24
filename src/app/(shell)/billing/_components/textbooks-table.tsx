@@ -1,24 +1,34 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TextbookDialog } from "./textbook-dialog";
-import { deleteTextbookOrder, setTextbookStatus } from "@/features/billing/server/textbook-actions";
+import { deleteTextbookOrder, toggleTextbookCheck } from "@/features/billing/server/textbook-actions";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 
-const STATUS: { key: string; label: string }[] = [
-  { key: "requested", label: "신청" },
-  { key: "ordered", label: "주문" },
-  { key: "delivered", label: "배부" },
-  { key: "billed", label: "청구" },
-  { key: "paid", label: "납부" },
+// ijw식 3개 독립 체크(등록/주문/납부). 체크 시 솔리드 색(Pill SOLID와 동일 토큰).
+type CheckField = "registered" | "ordered" | "paid";
+const CHECKS: { field: CheckField; dateKey: "registeredAt" | "orderedAt" | "paidAt"; label: string; active: string }[] = [
+  { field: "registered", dateKey: "registeredAt", label: "등록", active: "bg-primary text-primary-foreground border-primary" },
+  { field: "ordered", dateKey: "orderedAt", label: "주문", active: "bg-amber text-white border-amber" },
+  { field: "paid", dateKey: "paidAt", label: "납부", active: "bg-blue text-white border-blue" },
 ];
+
+function fmtShort(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+function fmtFull(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 export function TextbooksTable({
   rows,
@@ -33,14 +43,14 @@ export function TextbooksTable({
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  function changeStatus(r: TextbookOrderRow, status: string) {
-    if (status === r.status) return;
+  function toggleCheck(r: TextbookOrderRow, field: CheckField, checked: boolean) {
     const fd = new FormData();
     fd.append("id", r.id);
-    fd.append("status", status);
+    fd.append("field", field);
+    fd.append("checked", String(checked));
     setBusy(r.id);
     startTransition(async () => {
-      await setTextbookStatus(undefined, fd);
+      await toggleTextbookCheck(undefined, fd);
       setBusy(null);
     });
   }
@@ -78,7 +88,7 @@ export function TextbooksTable({
               <th className="micro px-4 py-2 text-left">교재</th>
               <th className="micro px-4 py-2 text-left">학생</th>
               <th className="micro px-4 py-2 text-left">강사</th>
-              <th className="micro px-4 py-2 text-left">상태</th>
+              <th className="micro px-4 py-2 text-left">진행 (등록·주문·납부)</th>
               <th className="micro px-4 py-2 text-right">금액</th>
               <th className="px-2 py-2" />
             </tr>
@@ -96,18 +106,35 @@ export function TextbooksTable({
                   <td className="text-foreground px-4 py-2 text-xs">{r.studentName ?? "—"}</td>
                   <td className="text-text-dim px-4 py-2 text-xs">{r.teacherName ?? "—"}</td>
                   <td className="px-4 py-2">
-                    <Select value={r.status} onValueChange={(v) => changeStatus(r, v as string)}>
-                      <SelectTrigger size="sm" className="w-[84px]" disabled={isBusy}>
-                        <SelectValue>
-                          {(v) => STATUS.find((s) => s.key === v)?.label ?? (v as string)}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUS.map((s) => (
-                          <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {CHECKS.map((c) => {
+                        const checked = r[c.field];
+                        const date = r[c.dateKey];
+                        return (
+                          <button
+                            key={c.field}
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => toggleCheck(r, c.field, !checked)}
+                            title={checked ? `${c.label} 완료 · ${fmtFull(date)}` : `${c.label} (미완료) — 클릭하여 체크`}
+                            className={`inline-flex shrink-0 items-center gap-0.5 rounded-sm border px-1.5 py-0.5 text-[11px] font-medium transition ${
+                              checked
+                                ? c.active
+                                : "border-line text-text-faint hover:text-foreground hover:bg-bg-soft"
+                            }`}
+                          >
+                            {checked ? <Check className="size-3" strokeWidth={2.5} /> : null}
+                            {c.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {r.statusAt || r.statusByName ? (
+                      <p className="text-text-faint mt-1 text-[10px]" title={fmtFull(r.statusAt)}>
+                        {r.statusAt ? fmtShort(r.statusAt) : ""}
+                        {r.statusByName ? ` · ${r.statusByName}` : ""}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="num text-foreground px-4 py-2 text-right text-xs font-medium">{won(r.price)}</td>
                   <td className="px-2 py-2">
