@@ -78,6 +78,25 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
 - ⚠️ **트레이드오프**: 기둥 B는 eywa↔Firebase 의존 → ijw **앱**은 닫아도 **Firebase Storage는 콜드 백엔드로 유지**(완전 삭제 불가). 기둥 A(텍스트
   재분석)는 Firebase·오디오 무관이라 오디오를 나중에 지워도 분석 재생성 가능. ⚠️ 프로덕션 "전사부터 다시"는 Vercel에 `FIREBASE_SERVICE_ACCOUNT_KEY` +
   유효 `UPSTAGE_API_KEY` 필요(웹훅이 프로덕션서 돔). 텍스트 기반 기둥 A는 로컬·프로덕션 모두 키 추가 없이 동작.
+
+### 회의 화자 정확도 — ijw 화자 임포트 + 직원 연결 편집 + 목록 AI요약 (2026-06-24)
+"전사 화자가 실제와 안 맞는다" 제보. **진짜 원인은 AssemblyAI가 아니라 임포트 누락** — ijw `meeting_reports`는 화자 구분
+(`speakerLabels` 44/47건, 37건 2명+)·역할(`speakerRoles` 32건 명확)을 잘 해뒀는데 eywa POC 임포트가 **transcription 텍스트만**
+가져와 eywa 40건 중 38건이 `speaker_labels` 0개(통짜). 3종 처리:
+- **임포트(즉효)**: [`import-meeting-speakers.cjs`](scripts/_poc_migration/import-meeting-speakers.cjs)(멱등·--apply) — ijw firebase
+  `meeting_reports` → eywa `meeting_minutes`. 매칭키 `storagePath`=`audio_path`(39/41). `speakerLabels`→`speaker_labels`(구조
+  `{speaker,text,start,end}` 일치), `speakerRoles`→`ai_speaker_roles`. **speaker_labels 빈 행만**(멱등) + **roles는 함께 동기화**
+  (통짜로 추론된 옛 `{A:전체}`는 새 A/B/C 집합과 안 맞아 교체). 적용: 37행 → 화자 2명+ 32건 복원. ⚠️ firebase-admin은 ijw node_modules
+  (`NODE_PATH=D:/ijw-calander/node_modules`), postgres는 eywa 로컬.
+- **직원 연결 화자 편집(0050a)**: 화자 A/B를 **직원관리(users) 드롭다운으로 매핑** — 표시 라벨 `ai_speaker_roles`(`{A:"원장"}`) +
+  연계 기반 `speaker_staff`(`{A:userId}`, 신규 jsonb 컬럼) **분리 저장**. UI [speaker-editor.tsx](<src/app/(shell)/meetings/[id]/speaker-editor.tsx>)
+  (전사 위, SearchableSelect 직원+자유입력) → 액션 [`updateMeetingSpeakers`](src/features/meetings/server/actions.ts). 직원옵션 경량
+  쿼리 `getStaffOptions`. AssemblyAI/AI가 틀려도 사람이 교정 = "실제 화자 일치" 확실 보장 + **미래 업무연계 기반**.
+- **목록 미리보기 AI요약**: [getMeetings](src/features/meetings/server/queries.ts) 카드 body가 전사 raw → `ai_summary ?? transcription ?? content`.
+- **업무연계 비전 문서**: [`docs/meeting-to-workflow.md`](docs/meeting-to-workflow.md) — speaker_staff 기반으로 액션아이템→업무배정/캘린더/알림
+  자동연계 로드맵(1단계 화자=직원만 구현, 2~4단계 미구현. 캘린더·직원 알림 인프라 선행 필요).
+- 검증: typecheck0/lint0/**test470**/build✓ + DB(화자 2명+ 32건·`speaker_staff` PATCH 노출·목록 ai_summary 39/39) + 회의상세 서버 200.
+  ⚠️ Chrome MCP 미연결로 시각검증은 DB+서버렌더로 대체. ⚠️ 이 임포트는 ijw가 진실 — Firebase 재이식 시 재실행(멱등).
 - Upstage는 OpenAI 호환 → `openai` SDK + baseURL `https://api.upstage.ai/v1`. JSON mode
   (`response_format: json_object`) 사용 — 프롬프트에 "JSON" 단어 필수(현 프롬프트 충족).
 - **자동 폴백**: 기본 provider 키가 없으면 다른 provider(키 있는 쪽)로 1회 폴백 → 둘 다 없으면

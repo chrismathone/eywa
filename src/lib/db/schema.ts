@@ -737,6 +737,8 @@ export const meetingMinutes = pgTable(
     aiActionItems: jsonb("ai_action_items"),
     aiReport: jsonb("ai_report"),
     aiSpeakerRoles: jsonb("ai_speaker_roles"),
+    // 화자(A/B/C) → 직원(users.id) 연결 맵. ai_speaker_roles는 표시 라벨, 이건 연계 기반(staffId). (0050a)
+    speakerStaff: jsonb("speaker_staff"),
     aiModelVersion: text("ai_model_version"),
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

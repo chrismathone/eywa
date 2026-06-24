@@ -138,6 +138,53 @@ export async function updateMeetingTitle(
   return { ok: true };
 }
 
+export type UpdateMeetingSpeakersState = { error?: string; ok?: true } | undefined;
+
+/**
+ * 화자(A/B/C) → 표시 라벨 + 직원(staffId) 수동 매핑. 화자 편집 UI에서 직원 드롭다운 선택 시 저장.
+ * `ai_speaker_roles`(표시 라벨 맵) + `speaker_staff`(연계용 staffId 맵)를 함께 갱신한다.
+ * payload(JSON): `{ "A": { "label": "김원장", "staffId": "<uuid>"|null }, ... }`
+ */
+export async function updateMeetingSpeakers(
+  _prev: UpdateMeetingSpeakersState,
+  formData: FormData,
+): Promise<UpdateMeetingSpeakersState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "회의록 ID가 누락되었습니다" };
+
+  let mapping: Record<string, { label?: string; staffId?: string | null }>;
+  try {
+    mapping = JSON.parse(String(formData.get("mapping") ?? "{}"));
+  } catch {
+    return { error: "화자 정보 형식이 올바르지 않습니다" };
+  }
+
+  const roles: Record<string, string> = {};
+  const staff: Record<string, string> = {};
+  for (const [speaker, v] of Object.entries(mapping)) {
+    const label = (v?.label ?? "").trim();
+    if (label) roles[speaker] = label;
+    if (v?.staffId) staff[speaker] = v.staffId;
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("meeting_minutes")
+    .update({
+      ai_speaker_roles: Object.keys(roles).length ? roles : null,
+      speaker_staff: Object.keys(staff).length ? staff : null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/meetings/${id}`);
+  return { ok: true };
+}
+
 export type StartMeetingFromAudioInput = {
   title: string;
   attendees: string[];

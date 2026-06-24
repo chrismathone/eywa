@@ -72,6 +72,7 @@ export type MeetingDetail = MeetingRow & {
   aiActionItems: MeetingActionItem[] | null;
   aiReport: MeetingReportSection | null;
   aiSpeakerRoles: Record<string, string> | null;
+  speakerStaff: Record<string, string> | null;
   aiGeneratedAt: string | null;
 };
 
@@ -85,7 +86,7 @@ export async function getMeetings(): Promise<MeetingRow[]> {
   const { data } = await supabase
     .from("meeting_minutes")
     .select(
-      `id, title, content, transcription, attendees, held_at,
+      `id, title, content, transcription, ai_summary, attendees, held_at,
        processing_status, audio_path,
        author:author_id ( display_name )`,
     )
@@ -97,7 +98,8 @@ export async function getMeetings(): Promise<MeetingRow[]> {
     const author = (Array.isArray(r.author) ? r.author[0] : r.author) as
       | { display_name?: string }
       | undefined;
-    const body = r.transcription ?? r.content ?? "";
+    // 미리보기는 AI 요약 우선 — 전사 raw가 아니라 회의 핵심이 카드에 보이게(요약 없으면 전사/노트 폴백).
+    const body = r.ai_summary ?? r.transcription ?? r.content ?? "";
     return {
       id: r.id,
       title: r.title,
@@ -111,6 +113,23 @@ export async function getMeetings(): Promise<MeetingRow[]> {
   });
 }
 
+export type StaffOption = { id: string; name: string; jobTitle: string | null };
+
+/** 화자→직원 매핑 드롭다운용 경량 직원 목록(활성). 단일 테넌트 ≤1000행이라 절단 위험 없음. */
+export async function getStaffOptions(): Promise<StaffOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("id, display_name, job_title")
+    .neq("status", "inactive")
+    .order("display_name", { ascending: true });
+  return (data ?? []).map((u) => ({
+    id: u.id,
+    name: u.display_name ?? "(이름 없음)",
+    jobTitle: u.job_title ?? null,
+  }));
+}
+
 export async function getMeetingById(id: string): Promise<MeetingDetail | null> {
   const supabase = await createClient();
   const { data } = await supabase
@@ -119,7 +138,7 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
       `id, title, content, attendees, held_at,
        audio_path, audio_duration_sec, transcription, speaker_labels,
        processing_status, processing_error,
-       ai_summary, ai_action_items, ai_report, ai_speaker_roles, ai_generated_at,
+       ai_summary, ai_action_items, ai_report, ai_speaker_roles, speaker_staff, ai_generated_at,
        author:author_id ( display_name )`,
     )
     .eq("id", id)
@@ -161,6 +180,10 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     aiSpeakerRoles:
       data.ai_speaker_roles && typeof data.ai_speaker_roles === "object"
         ? (data.ai_speaker_roles as Record<string, string>)
+        : null,
+    speakerStaff:
+      data.speaker_staff && typeof data.speaker_staff === "object"
+        ? (data.speaker_staff as Record<string, string>)
         : null,
     aiGeneratedAt: data.ai_generated_at,
   };

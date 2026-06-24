@@ -16,10 +16,12 @@ import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getMeetingById,
+  getStaffOptions,
   type MeetingActionItem,
   type MeetingProcessingStatus,
 } from "@/features/meetings/server/queries";
 import { RunMeetingAiButton } from "./run-ai-button";
+import { SpeakerEditor } from "./speaker-editor";
 import {
   MeetingDeleteButton,
   MeetingRegenerateButton,
@@ -83,6 +85,9 @@ export default async function MeetingDetailPage({
   const { id } = await params;
   const meeting = await getMeetingById(id);
   if (!meeting) notFound();
+
+  // 화자 지정용 직원 옵션 — 전사가 있을 때만 의미 있지만 쿼리가 가벼워 무조건 로드.
+  const staffOptions = meeting.transcription ? await getStaffOptions() : [];
 
   const badge = STATUS_BADGE[meeting.processingStatus];
   const hasAudio = !!meeting.audioPath;
@@ -306,11 +311,23 @@ export default async function MeetingDetailPage({
 
       {/* 전사(원본 음성인식) — 최하단 보조자료, 기본 접힘. 화자별로 끊어 렌더(ijw 패리티). */}
       {meeting.transcription ? (
-        <TranscriptSection
-          utterances={meeting.speakerLabels}
-          speakerRoles={meeting.aiSpeakerRoles}
-          plainText={meeting.transcription}
-        />
+        <div className="space-y-3">
+          {/* 화자 지정 — 화자 라벨이 있을 때만(diarization 된 회의). 직원 연결로 교정. */}
+          {meeting.speakerLabels && meeting.speakerLabels.length > 0 ? (
+            <SpeakerEditor
+              meetingId={meeting.id}
+              utterances={meeting.speakerLabels}
+              speakerRoles={meeting.aiSpeakerRoles}
+              speakerStaff={meeting.speakerStaff}
+              staffOptions={staffOptions}
+            />
+          ) : null}
+          <TranscriptSection
+            utterances={meeting.speakerLabels}
+            speakerRoles={meeting.aiSpeakerRoles}
+            plainText={meeting.transcription}
+          />
+        </div>
       ) : null}
     </div>
   );
