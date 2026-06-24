@@ -139,7 +139,7 @@ export default async function MeetingDetailPage({
           {hasAiReport ? (
             <PrintWindowButton id={`print/meetings/${id}`} href={`/meetings/${id}/print`} title="회의록">
               <Printer className="size-4" />
-              인쇄
+              인쇄 미리보기
             </PrintWindowButton>
           ) : null}
           {hasAiReport || meeting.content || meeting.transcription ? (

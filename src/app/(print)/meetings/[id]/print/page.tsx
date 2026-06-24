@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getMeetingById, type MeetingReportSection } from "@/features/meetings/server/queries";
 import { RichText } from "@/components/rich-text";
-import { PrintActions } from "../../../enrollment/[id]/print/print-actions";
+import { MeetingPrintActions } from "./meeting-print-actions";
 
 export const metadata = { title: "회의록 인쇄 — eywa" };
 
@@ -31,7 +31,7 @@ export default async function MeetingPrintPage({
 
   return (
     <main className="print-portrait mx-auto max-w-[800px] px-12 py-10 print:px-0 print:py-0">
-      <PrintActions embedded={embedded} />
+      <MeetingPrintActions embedded={embedded} hasTranscript={!!meeting.transcription} />
 
       <header className="border-b border-gray-300 pb-4">
         <p className="text-xs uppercase tracking-wider text-gray-500">회의록</p>
@@ -85,7 +85,7 @@ export default async function MeetingPrintPage({
       ) : null}
 
       {meeting.transcription ? (
-        <section className="mt-6 space-y-2 border-t border-gray-300 pt-5">
+        <section id="meeting-transcript" className="mt-6 space-y-2 border-t border-gray-300 pt-5">
           <h2 className="text-sm font-semibold text-gray-700">전사 내용</h2>
           <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">
             {meeting.transcription}

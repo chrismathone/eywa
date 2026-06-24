@@ -126,7 +126,7 @@ export default async function EnrollmentDetailPage({
               title="신입생 인수인계서"
             >
               <Printer className="size-4" />
-              인쇄 양식
+              인쇄 미리보기
             </PrintWindowButton>
           ) : !consult.hasAudio ? (
             <RunAiButton consultationId={id} />
