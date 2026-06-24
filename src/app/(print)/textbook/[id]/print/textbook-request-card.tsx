@@ -16,12 +16,16 @@ function formatRequestDate(ymd: string | null): string {
   return `${m[1]}. ${Number(m[2])}. ${Number(m[3])}`;
 }
 
-// html2canvas 1.4.1은 oklch 색을 못 읽어 크래시 → 카드는 전부 inline hex 스타일로 그린다.
-// (Tailwind v4 색 유틸은 oklch로 컴파일되므로 카드 내부엔 색 유틸을 쓰지 않음.)
-const INK = "#111111";
-const LABEL_BG = "#f7f7f5";
-const SUB = "#6b7280";
-const BORDER = "2px solid #111111";
+// ijw TextbookPreviewCard 충실 이식: serif 폰트 + 셀 값 가운데정렬 + 외곽 2px/내부 1px 테두리.
+// ⚠️ html2canvas 1.4.1은 oklch(Tailwind v4 색)를 못 읽어 크래시 → 카드 내부는 전부 inline hex.
+const BLACK = "#000000";
+const GRAY_50 = "#f9fafb";
+const GRAY_300 = "#d1d5db";
+const GRAY_500 = "#6b7280";
+const OUTER = `2px solid ${BLACK}`;
+const INNER = `1px solid ${BLACK}`;
+// ijw는 font-serif → 한글은 OS 기본 명조(Windows 바탕)로 떨어진다. 동일 톤을 위해 명조 계열 우선.
+const SERIF = '"Batang", "Nanum Myeongjo", Georgia, "Times New Roman", serif';
 
 export function TextbookRequestCard({
   order,
@@ -37,7 +41,6 @@ export function TextbookRequestCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
 
-  const studentSub = [order.studentGrade, order.studentSchool].filter(Boolean).join(" · ");
   const dateText = formatRequestDate(order.requestDate);
   const hasAccount = !!(account.bank || account.holder || account.number);
 
@@ -65,7 +68,7 @@ export function TextbookRequestCard({
   }
 
   return (
-    <div className="mx-auto max-w-[760px] px-4 py-6 print:p-0">
+    <div className="mx-auto max-w-[800px] px-4 py-6 print:p-0">
       <div className="mb-6 flex justify-end gap-2 print:hidden">
         <Button onClick={savePng} disabled={saving}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : <ImageDown className="size-4" />}
@@ -79,140 +82,188 @@ export function TextbookRequestCard({
         </Button>
       </div>
 
-      {/* 카드 본체 — 720px, 모든 색/테두리 inline hex(html2canvas oklch 회피) */}
+      {/* 카드 본체 — 720px, ijw와 동일 비율·serif·가운데정렬. 색/테두리 inline hex */}
       <div
         ref={cardRef}
         style={{
           width: 720,
           margin: "0 auto",
           background: "#ffffff",
-          color: INK,
+          color: BLACK,
           padding: 48,
-          fontFamily: '"Pretendard Variable", Pretendard, system-ui, sans-serif',
+          fontFamily: SERIF,
           boxSizing: "border-box",
         }}
       >
-        {/* 헤더 */}
+        {/* 헤더 — 좌: 로고 박스 / 우: 교재 요청서 */}
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-end",
             justifyContent: "space-between",
-            marginBottom: 56,
+            gap: 32,
+            marginBottom: 64,
+            paddingBottom: 16,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
-              <img src={logoUrl} alt={academyName} style={{ height: 48, width: "auto", objectFit: "contain" }} />
-            ) : (
-              <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: "0.02em" }}>{academyName}</span>
-            )}
-          </div>
-          <h1 style={{ fontSize: 38, fontWeight: 800, letterSpacing: "0.22em", margin: 0 }}>교재 요청서</h1>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
+            <img src={logoUrl} alt={academyName} style={{ height: 56, width: "auto", objectFit: "contain", flexShrink: 0 }} />
+          ) : (
+            <div
+              style={{
+                flexShrink: 0,
+                height: 56,
+                padding: "0 16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: `1px solid ${GRAY_300}`,
+                borderRadius: 6,
+                fontSize: 15,
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {academyName}
+            </div>
+          )}
+          <h1
+            style={{
+              fontSize: 48,
+              fontWeight: 700,
+              letterSpacing: "0.18em",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              margin: 0,
+              marginBottom: 8,
+            }}
+          >
+            교재 요청서
+          </h1>
         </div>
 
         {/* 학생정보 */}
-        <InfoBlock title="학생정보">
-          <InfoRow label="이 름" last={false}>
-            <span style={{ fontSize: 18, fontWeight: 600 }}>{order.studentName ?? "—"}</span>
-            {studentSub ? (
-              <span style={{ marginLeft: 8, fontSize: 13, color: SUB }}>{studentSub}</span>
-            ) : null}
-          </InfoRow>
-          <InfoRow label="담임선생님" last={false}>
-            <span style={{ fontSize: 18, fontWeight: 600 }}>{order.teacherName ?? "—"}</span>
-            <span style={{ marginLeft: 8, color: SUB }}>(인)</span>
-          </InfoRow>
-          <InfoRow label="요청일자" last>
-            <span style={{ fontSize: 18, fontWeight: 600 }}>{dateText || "—"}</span>
-          </InfoRow>
-        </InfoBlock>
+        <Block title="학생정보">
+          <Row label="이 름" height={48} last={false}>
+            <span style={{ fontSize: 18, fontWeight: 500 }}>{order.studentName ?? "—"}</span>
+          </Row>
+          <Row label="담임선생님" height={48} last={false}>
+            <span style={{ fontSize: 18, fontWeight: 500 }}>{order.teacherName ?? "—"}</span>
+            <span style={{ marginLeft: 12, fontSize: 14, color: GRAY_500 }}>(인)</span>
+          </Row>
+          <Row label="요청일자" height={48} last>
+            <span style={{ fontSize: 18, fontWeight: 500, letterSpacing: "0.04em" }}>{dateText || "—"}</span>
+          </Row>
+        </Block>
 
         {/* 요청내용 */}
-        <div style={{ marginTop: 16 }}>
-          <InfoBlock title="요청내용">
-            <InfoRow label="교재명" last={false}>
-              <span style={{ fontSize: 18, fontWeight: 600 }}>{order.bookName}</span>
+        <div style={{ marginTop: 40 }}>
+          <Block title="요청내용">
+            <Row label="교재명" minHeight={48} last={false} column>
+              <div style={{ fontSize: 18, fontWeight: 500 }}>{order.bookName}</div>
               {order.bookDetail ? (
-                <div style={{ marginTop: 2, fontSize: 15 }}>{order.bookDetail}</div>
+                <div style={{ marginTop: 4, fontSize: 16, fontWeight: 400 }}>{order.bookDetail}</div>
               ) : null}
-            </InfoRow>
-            <InfoRow label="금액" last={!hasAccount}>
-              <span style={{ fontSize: 20, fontWeight: 600 }}>{KRW.format(order.price)}원</span>
-            </InfoRow>
+            </Row>
+            <Row label="금액" height={48} last={!hasAccount}>
+              <span style={{ fontSize: 20, fontWeight: 500, letterSpacing: "0.02em" }}>
+                {KRW.format(order.price)}원
+              </span>
+            </Row>
             {hasAccount ? (
-              <InfoRow label="입금 계좌" last>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>
+              <Row label="계좌" height={64} last column>
+                <div style={{ fontSize: 16, fontWeight: 500 }}>
                   {account.bank}
-                  {account.holder ? (
-                    <span style={{ fontWeight: 400, color: SUB }}> (예금주: {account.holder})</span>
-                  ) : null}
+                  {account.holder ? ` (예금주: ${account.holder})` : ""}
                 </div>
                 {account.number ? (
-                  <div style={{ marginTop: 2, fontSize: 16, fontWeight: 600 }}>{account.number}</div>
+                  <div style={{ marginTop: 4, fontSize: 16, fontWeight: 500 }}>{account.number}</div>
                 ) : null}
-              </InfoRow>
+              </Row>
             ) : null}
-          </InfoBlock>
+          </Block>
         </div>
       </div>
     </div>
   );
 }
 
-function InfoBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", border: BORDER }}>
+    <div style={{ display: "flex", border: OUTER }}>
       <div
         style={{
           width: 80,
           flexShrink: 0,
-          background: LABEL_BG,
-          borderRight: BORDER,
+          background: GRAY_50,
+          borderRight: INNER,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 16,
-          fontWeight: 700,
+          fontSize: 18,
           textAlign: "center",
-          padding: "0 6px",
+          whiteSpace: "nowrap",
         }}
       >
         {title}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>{children}</div>
     </div>
   );
 }
 
-function InfoRow({
+function Row({
   label,
+  height,
+  minHeight,
   last,
+  column,
   children,
 }: {
   label: string;
+  height?: number;
+  minHeight?: number;
   last: boolean;
+  column?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", borderBottom: last ? "none" : BORDER, minHeight: 52 }}>
+    <div
+      style={{
+        display: "flex",
+        borderBottom: last ? "none" : INNER,
+        height,
+        minHeight,
+        alignItems: "stretch",
+      }}
+    >
       <div
         style={{
-          width: 104,
+          width: 96,
           flexShrink: 0,
-          background: LABEL_BG,
-          borderRight: BORDER,
+          borderRight: INNER,
           display: "flex",
           alignItems: "center",
-          padding: "10px 12px",
-          fontSize: 14,
-          fontWeight: 600,
+          justifyContent: "center",
+          fontSize: 16,
         }}
       >
         {label}
       </div>
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", padding: "10px 16px" }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: column ? "column" : "row",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          padding: column ? "8px" : "0 8px",
+        }}
+      >
         {children}
       </div>
     </div>
