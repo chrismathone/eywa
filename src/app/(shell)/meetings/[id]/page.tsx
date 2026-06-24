@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   AlertCircle,
@@ -10,7 +9,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
@@ -138,10 +137,10 @@ export default async function MeetingDetailPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {hasAiReport ? (
-            <Button variant="outline" render={<Link href={`/meetings/${id}/print`} target="_blank" />}>
+            <PrintWindowButton id={`print/meetings/${id}`} href={`/meetings/${id}/print`} title="회의록">
               <Printer className="size-4" />
               인쇄
-            </Button>
+            </PrintWindowButton>
           ) : null}
           {hasAiReport || meeting.content || meeting.transcription ? (
             <MeetingTxtButton

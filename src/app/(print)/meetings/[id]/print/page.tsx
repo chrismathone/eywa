@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getMeetingById, type MeetingReportSection } from "@/features/meetings/server/queries";
 import { RichText } from "@/components/rich-text";
@@ -24,12 +25,13 @@ export default async function MeetingPrintPage({
 }) {
   await requireAccess("meetings");
   const { id } = await params;
+  const embedded = (await headers()).get("x-embed") === "1";
   const meeting = await getMeetingById(id);
   if (!meeting) notFound();
 
   return (
     <main className="print-portrait mx-auto max-w-[800px] px-12 py-10 print:px-0 print:py-0">
-      <PrintActions />
+      <PrintActions embedded={embedded} />
 
       <header className="border-b border-gray-300 pb-4">
         <p className="text-xs uppercase tracking-wider text-gray-500">회의록</p>

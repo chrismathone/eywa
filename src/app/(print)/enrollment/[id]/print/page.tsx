@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import {
@@ -20,6 +21,8 @@ export default async function EnrollmentPrintPage({
 }) {
   await requireAccess("enrollment");
   const { id } = await params;
+  // 플로팅 창(iframe)이면 proxy가 x-embed 주입 → 닫기 버튼 숨김(창 X로 닫음).
+  const embedded = (await headers()).get("x-embed") === "1";
   const [consult, settings] = await Promise.all([
     getEnrollmentConsultationById(id),
     getTenantSettings(),
@@ -48,7 +51,7 @@ export default async function EnrollmentPrintPage({
 
   return (
     <div className="print-portrait mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
-      <PrintActions />
+      <PrintActions embedded={embedded} />
 
       <header className="border-b-2 border-black/80 pb-4">
         {profile.logoUrl ? (

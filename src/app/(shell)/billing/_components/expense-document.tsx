@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import type { ExpenseLineItem, ExpenseRow } from "@/features/billing/server/expense-queries";
 import { formatMoney } from "@/features/billing/currencies";
+import { ExpensePrintBar } from "./expense-print-bar";
 
 // 지출결의서 — ijw-calander 양식 충실 이식(상단 결재란 / 기본정보 / 항목표 / 합계 / 정산정보).
 // 읽기 전용 문서 뷰. 제목 클릭 시 창(또는 임베드 드릴인)으로 표시. 단일 읽기 흐름이라 중앙 정렬 폭 제한.
@@ -33,8 +34,10 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
   const hasBankInfo = !!(expense.bankName || expense.accountNumber);
 
   return (
-    <div className="mx-auto max-w-[760px]">
-      <article className="bg-card border-line shadow-card text-foreground rounded-md border p-8 sm:p-10">
+    <>
+      <ExpensePrintBar />
+      <div className="print-portrait mx-auto max-w-[760px] print:max-w-none">
+        <article className="bg-card border-line shadow-card text-foreground rounded-md border p-8 sm:p-10 print:rounded-none print:border-0 print:p-0 print:shadow-none">
         {/* 상단: 제목 + 결재란 */}
         <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1.5">
@@ -199,6 +202,7 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
           </tbody>
         </table>
       </article>
-    </div>
+      </div>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Check, FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextbookDialog } from "./textbook-dialog";
+import { usePrintWindow } from "@/components/workspace/print-window";
 import { deleteTextbookOrder, toggleTextbookCheck } from "@/features/billing/server/textbook-actions";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
@@ -42,6 +43,7 @@ export function TextbooksTable({
   const [dialog, setDialog] = useState<{ order: TextbookOrderRow | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const openPrint = usePrintWindow();
 
   function toggleCheck(r: TextbookOrderRow, field: CheckField, checked: boolean) {
     const fd = new FormData();
@@ -139,16 +141,24 @@ export function TextbooksTable({
                   <td className="num text-foreground px-4 py-2 text-right text-xs font-medium">{won(r.price)}</td>
                   <td className="px-2 py-2">
                     <div className="flex items-center justify-end gap-1">
-                      <a
-                        href={`/textbook/${r.id}/print`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={(e) =>
+                          openPrint(
+                            {
+                              id: `print/textbook/${r.id}`,
+                              href: `/textbook/${r.id}/print`,
+                              title: "교재 요청서",
+                            },
+                            e,
+                          )
+                        }
                         className="text-text-faint hover:text-primary p-1"
                         aria-label="교재 요청서"
                         title="교재 요청서 (인쇄·이미지 저장)"
                       >
                         <FileText className="size-3.5" />
-                      </a>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setDialog({ order: r })}

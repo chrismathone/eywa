@@ -1041,6 +1041,30 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - 한계: 배경(메인 프레임) 목록은 `router.refresh()`로 갱신되지만, 목록이 **별도 창**이면 그 창은 즉시
   갱신되지 않음(창 X 버튼 `closeAndRefresh`와 동일한 앱 전반 한계).
 
+### 인쇄(Print) — 인쇄 버튼이 있는 모든 곳은 플로팅 창 + A4 (⚠️ 새 인쇄 표면 기본값, 2026-06-24)
+**인쇄 버튼이 달린 모든 곳은 새 브라우저 탭이 아니라 eywa 플로팅 창으로 열고, 결과는 항상 A4로 깔끔히 인쇄된다**
+(멀티윈도우 정체성 일관 + 여러 학생 요청서 동시 비교). 플로팅 창=same-origin iframe이고 `window.print()`는 **그 iframe
+문서만** 인쇄하며 **창 타이틀바는 부모 프레임에 있어 인쇄에 안 섞인다**(계산기 안내문으로 검증). 인쇄 표면 = 등록상담
+인수인계서·회의록·교재요청서(전용 `(print)` 라우트) + 수강료 안내문·지출결의서(이미 창인 in-place `window.print()`).
+
+- **진입점 = [`PrintWindowButton`/`usePrintWindow`](src/components/workspace/print-window.tsx)** (데스크톱=플로팅 창, 모바일=풀페이지).
+  **raw `<a target="_blank">` 새 탭 금지.** ⚠️ 창 id는 **명시 `print/<type>/<recordId>`** 로 준다 — `windowIdForHref`가 만드는
+  `enrollment/123/print`는 [`routeWindowSize`](src/components/workspace/window-geometry.ts) longest-prefix가 못 잡아 DEFAULT(480×560)로 떨어진다.
+  `print/<type>` prefix면 [ROUTE_WINDOW_SIZE](src/components/workspace/window-geometry.ts)에 등록한 A4 세로 크기(`print/enrollment`·`print/meetings`·`print/textbook`)로 매칭.
+- **세로 문서 = 루트에 `print-portrait` 클래스.** globals.css의 전역 `@page { size: A4 landscape }`(시간표용)를 `@page portrait-doc`로
+  덮어쓴다(opt-in). 시간표는 기본 landscape(인쇄 버튼 현재 없음 — 범위 밖). 비문서 크롬(액션바·FaceTabs·뒤로가기)은 `print:hidden`.
+- **전역 인쇄 하네스(globals.css `@media print`)**: 셸/임베드 `<main>`이 `h-screen + overflow-auto`라 인쇄 시 문서를 **한 화면
+  높이로 잘라** 2페이지째(예: 환불 규정)가 통째로 사라진다 → `html/body/main`에 `height:auto`·`overflow:visible`·`max-height:none`
+  리셋으로 자연 페이지 흐름. (이 리셋 없으면 긴 문서 2페이지째 클리핑.)
+- ⚠️ **통짜 `break-inside-avoid` 금지** — 한 페이지보다 높은 섹션에 걸면 통째로 다음 장으로 밀려 1페이지 하단 공백/잘림. 표는
+  전역 `tr/td/th { page-break-inside: avoid }`가 **행 단위**로 보호 → 섹션 통짜 회피는 불필요·역효과. 제목 고아만 `break-after-avoid`.
+- **닫기 버튼**: 인쇄 라우트의 `window.close()`는 iframe(창) 안에서 무효 → 인쇄 페이지(서버)가 `headers().get("x-embed")`로
+  `embedded`를 판별해 prop으로 내려 **embedded면 닫기 숨김**(창 X로 닫음). 인쇄/이미지저장은 유지.
+- **새 인쇄 표면 5체크**: ① `(print)` 라우트 또는 이미 창인 문서 ② 루트에 `print-portrait` ③ 비문서 `print:hidden`
+  ④ `PrintWindowButton`(id `print/<type>/<id>`) + `ROUTE_WINDOW_SIZE`에 `print/<type>` A4 등록 ⑤ 통짜 `break-inside-avoid` 금지.
+
+> **한 줄 규칙: 인쇄 버튼은 `PrintWindowButton`(id `print/<type>/<id>`)로 플로팅 창을 열고, 문서 루트엔 `print-portrait`, 통짜 break-inside-avoid 금지.**
+
 ### 목록 페이지네이션 표준 — 큰 목록은 전부 이 패턴으로 통일 (⚠️ 새 목록 기본값)
 실데이터 이전 후 목록이 수백~천 행이 되며 페이지가 22s까지 느려졌다(전 행 fetch + 전 행 렌더).
 **행이 수십을 넘을 수 있는 모든 목록은 서버 페이지네이션으로 통일한다.** 스타일·구조를 한 곳에

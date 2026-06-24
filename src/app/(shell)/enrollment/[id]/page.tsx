@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
@@ -119,10 +120,14 @@ export default async function EnrollmentDetailPage({
           </Button>
           <ConsultationManageButtons values={{ id: consult.id, outcome: consult.outcome }} />
           {consult.aiAnalysis ? (
-            <Button variant="outline" render={<Link href={`/enrollment/${id}/print`} target="_blank" />}>
+            <PrintWindowButton
+              id={`print/enrollment/${id}`}
+              href={`/enrollment/${id}/print`}
+              title="신입생 인수인계서"
+            >
               <Printer className="size-4" />
               인쇄 양식
-            </Button>
+            </PrintWindowButton>
           ) : !consult.hasAudio ? (
             <RunAiButton consultationId={id} />
           ) : null}

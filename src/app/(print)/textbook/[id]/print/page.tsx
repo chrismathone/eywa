@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getTextbookOrderById } from "@/features/billing/server/textbook-queries";
@@ -15,6 +16,7 @@ export default async function TextbookPrintPage({
 }) {
   await requireAccess("billing");
   const { id } = await params;
+  const embedded = (await headers()).get("x-embed") === "1";
   const [order, settings] = await Promise.all([
     getTextbookOrderById(id),
     getTenantSettings(),
@@ -27,6 +29,7 @@ export default async function TextbookPrintPage({
       academyName={settings.profile.name || "인재원"}
       logoUrl={settings.profile.logoUrl || null}
       account={settings.billing.account}
+      embedded={embedded}
     />
   );
 }

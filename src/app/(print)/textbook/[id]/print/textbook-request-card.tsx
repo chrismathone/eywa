@@ -32,11 +32,14 @@ export function TextbookRequestCard({
   academyName,
   logoUrl,
   account,
+  embedded,
 }: {
   order: TextbookOrderDetail;
   academyName: string;
   logoUrl: string | null;
   account: AccountSetting;
+  // 플로팅 창 안이면 window.close() 무효 → 닫기 숨김(창 X로 닫음).
+  embedded?: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
@@ -77,9 +80,11 @@ export function TextbookRequestCard({
         <Button variant="outline" onClick={() => window.print()}>
           <Printer className="size-4" /> 인쇄
         </Button>
-        <Button variant="secondary" onClick={() => window.close()}>
-          <X className="size-4" /> 닫기
-        </Button>
+        {embedded ? null : (
+          <Button variant="secondary" onClick={() => window.close()}>
+            <X className="size-4" /> 닫기
+          </Button>
+        )}
       </div>
 
       {/* 카드 본체 — ijw 비율·serif·가운데정렬. 색/테두리 inline hex. 인쇄 시 A4 세로 전폭(print-portrait). */}

@@ -55,6 +55,11 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "consultations/new": { w: 700, h: 660 },
   "meetings/new": { w: 600, h: 640 },
   "billing/expenses": { w: 720, h: 860 }, // 지출결의서 A4 문서(세로형) — 폭보다 높이가 필요
+  // 인쇄 문서 창(세로 A4). 창 id 규약 `print/<type>/<recordId>` → longest-prefix가 `print/<type>` 매칭.
+  // (windowIdForHref가 만드는 `enrollment/123/print`는 매칭 못 해 DEFAULT로 떨어지므로 명시 id 사용.)
+  "print/enrollment": { w: 840, h: 1120 }, // 신입생 인수인계서
+  "print/meetings": { w: 840, h: 1120 }, // 회의록
+  "print/textbook": { w: 800, h: 1040 }, // 교재요청서 카드(짧음)
 };
 
 /**

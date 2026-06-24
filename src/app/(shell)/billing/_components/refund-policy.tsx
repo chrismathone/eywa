@@ -20,9 +20,11 @@ const TD = "border-line border px-2.5 py-2 align-top";
 const TH = "border-line bg-bg-soft text-foreground border px-2.5 py-2 text-center font-bold";
 
 export function RefundPolicy() {
+  // ⚠️ 통짜 break-inside-avoid 금지: 이 섹션은 한 페이지보다 높아 통째로 다음 장으로 밀리면 1페이지
+  // 하단 공백/잘림 유발. 표 행은 전역 tr/td/th page-break-inside:avoid가 보호 → 행 단위로 끊긴다. 제목만 고아 방지.
   return (
-    <section className="mt-6 break-inside-avoid">
-      <h3 className="text-foreground mb-3 text-center text-[15px] font-bold">학원 수칙 및 환불 규정</h3>
+    <section className="mt-6">
+      <h3 className="text-foreground mb-3 text-center text-[15px] font-bold break-after-avoid">학원 수칙 및 환불 규정</h3>
 
       <div className="border-line bg-card rounded-md border p-4">
         {/* 학원 수칙 */}
