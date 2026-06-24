@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { MessagesSquare, ScrollText } from "lucide-react";
+import { BookOpen, MessagesSquare, ScrollText } from "lucide-react";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
@@ -104,11 +104,16 @@ export default async function WithdrawalDetailPage({
         </Card>
       </div>
 
-      <section className="bg-card border-border rounded-lg border">
-        <header className="border-border flex items-center justify-between border-b px-5 py-3">
-          <h2 className="text-sm font-semibold tracking-tight">수강 이력</h2>
+      {/* 수강 이력 — 그룹 제목(아이콘+라벨+건수) + 리스트 카드. 내부 헤더바 제거해 다른 섹션과 스타일 통일. */}
+      <div className="space-y-4">
+        <header className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BookOpen className="text-primary size-4" />
+            <h2 className="text-foreground text-sm font-semibold">수강 이력</h2>
+          </div>
           <p className="text-muted-foreground num text-xs">{detail.enrollmentHistory.length}건</p>
         </header>
+        <section className="bg-card border-border rounded-lg border">
         {detail.enrollmentHistory.length === 0 ? (
           <div className="text-muted-foreground px-5 py-8 text-center text-sm">수강 기록이 없습니다</div>
         ) : (
@@ -130,7 +135,8 @@ export default async function WithdrawalDetailPage({
             ))}
           </ul>
         )}
-      </section>
+        </section>
+      </div>
 
       {/* Reason badge legend for UI hint */}
       <p className="text-muted-foreground text-xs">

@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { CalendarClock, ClipboardCheck, MapPin, Pencil, User } from "lucide-react";
+import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
@@ -163,6 +163,11 @@ export default async function ClassDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">
+          {/* 좌 그룹 제목 — 우측 '수강 중인 학생'과 대칭(영역 구분 규약). */}
+          <header className="flex items-center gap-2">
+            <Info className="text-primary size-4" />
+            <h2 className="text-foreground text-sm font-semibold">반 정보</h2>
+          </header>
           <Card title="시간표" icon={<CalendarClock className="size-3.5" />}>
             {klass.scheduleSlots.length === 0 ? (
               <p className="text-muted-foreground py-2 text-sm">등록된 시간표가 없습니다</p>
@@ -205,12 +210,16 @@ export default async function ClassDetailPage({
           ) : null}
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="space-y-4 lg:col-span-2">
+          {/* 우 그룹 제목 — 좌측 '반 정보'와 대칭. 내부 헤더바 제거하고 컬럼 제목으로 올림. */}
+          <header className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="text-primary size-4" />
+              <h2 className="text-foreground text-sm font-semibold">수강 중인 학생</h2>
+            </div>
+            <p className="text-muted-foreground num text-xs">{students.length}명</p>
+          </header>
           <section className="bg-card border-border rounded-lg border">
-            <header className="border-border flex items-center justify-between border-b px-5 py-3">
-              <h2 className="text-sm font-semibold tracking-tight">수강 중인 학생</h2>
-              <p className="text-muted-foreground num text-xs">{students.length}명</p>
-            </header>
             {students.length === 0 ? (
               <div className="text-muted-foreground px-5 py-8 text-center text-sm">
                 활성 재원생이 없습니다

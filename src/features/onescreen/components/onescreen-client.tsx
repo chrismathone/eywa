@@ -210,7 +210,12 @@ export function OneScreenClient({
 
         {selected ? (
           <>
-            <div className="flex flex-col gap-4">
+            {/* 중앙 그룹 — 좌측 학생목록·우측 보고서와 함께 3열 워크플로 영역을 그룹 제목으로 구분. */}
+            <div className="flex flex-col gap-3">
+              <header className="flex items-center gap-1.5">
+                <span className="text-[14px] leading-none">📈</span>
+                <h2 className="text-foreground text-sm font-semibold">오늘 진도 · 테스트</h2>
+              </header>
               <ProgressCard
                 student={selected}
                 onConfirm={confirmProgress}
@@ -220,16 +225,22 @@ export function OneScreenClient({
               />
               <TestCard student={selected} onScore={setScore} />
             </div>
-            <ReportCard
-              key={selected.id}
-              student={selected}
-              reports={reports[selected.id] ?? {}}
-              attitudes={ATTITUDE}
-              onAttitude={setAttitude}
-              onSubjectDraft={setSubjectDraft}
-              onAutoWrite={autoWriteSubject}
-              onSend={sendSubject}
-            />
+            <div className="flex flex-col gap-3">
+              <header className="flex items-center gap-1.5">
+                <span className="text-[14px] leading-none">📋</span>
+                <h2 className="text-foreground text-sm font-semibold">보고서</h2>
+              </header>
+              <ReportCard
+                key={selected.id}
+                student={selected}
+                reports={reports[selected.id] ?? {}}
+                attitudes={ATTITUDE}
+                onAttitude={setAttitude}
+                onSubjectDraft={setSubjectDraft}
+                onAutoWrite={autoWriteSubject}
+                onSend={sendSubject}
+              />
+            </div>
           </>
         ) : (
           <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm lg:col-span-2">

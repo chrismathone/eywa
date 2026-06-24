@@ -82,23 +82,26 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
             <p className="micro">{menus.length}개 메뉴 가이드</p>
             <h2 className="text-foreground mt-0.5 text-[17px] font-bold">기능 한눈에 보기</h2>
           </header>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* 동질 목록(메뉴)은 개별 카드로 과박싱하지 않고 한 컨테이너 안 리스트로(영역 구분 규약: 과적용 금지, FAQ와 동일 톤). */}
+          <div className="bg-card border-line shadow-card grid grid-cols-1 gap-1 rounded-2xl border p-2 sm:grid-cols-2">
             {filteredMenus.map((m) => {
               const iconName: EywaIconName = MENU_ICON[m.id] ?? "spore";
               return (
-                <article
+                <div
                   key={m.href}
-                  className="bg-card border-line shadow-card rounded-2xl border p-4"
+                  className="hover:bg-bg-soft/60 flex items-start gap-2.5 rounded-lg px-3 py-2.5 transition"
                 >
-                  <header className="flex items-center gap-2">
-                    <span className="bg-primary-soft text-primary inline-flex size-7 items-center justify-center rounded-md">
-                      <EyIcon name={iconName} size={14} />
-                    </span>
-                    <h3 className="text-foreground text-[13px] font-bold">{m.label}</h3>
-                    <span className="text-text-faint ml-auto font-mono text-[10px]">{m.href}</span>
-                  </header>
-                  <p className="text-text-dim mt-2 text-[12px] leading-relaxed">{m.description}</p>
-                </article>
+                  <span className="bg-primary-soft text-primary inline-flex size-7 shrink-0 items-center justify-center rounded-md">
+                    <EyIcon name={iconName} size={14} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-foreground text-[13px] font-bold break-keep">{m.label}</h3>
+                      <span className="text-text-faint ml-auto shrink-0 font-mono text-[10px]">{m.href}</span>
+                    </div>
+                    <p className="text-text-dim mt-1 text-[12px] leading-relaxed break-keep">{m.description}</p>
+                  </div>
+                </div>
               );
             })}
           </div>

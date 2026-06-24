@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   AlertCircle,
   CheckSquare,
+  FileText,
   Loader2,
   Mic,
   Printer,
@@ -196,14 +197,17 @@ export default async function MeetingDetailPage({
         </section>
       ) : null}
 
-      {/* Manual text content — raw notes input by the user. Not AI output. */}
+      {/* Manual text content — raw notes input by the user. Not AI output. AI 분석 섹션과 헤더 스타일 통일. */}
       {!hasAudio && meeting.content ? (
-        <article className="bg-card border-border rounded-lg border p-6">
-          <p className="eyebrow mb-3">원본 노트</p>
+        <section className="bg-card border-border space-y-3 rounded-lg border p-5">
+          <header className="inline-flex items-center gap-2">
+            <FileText className="text-text-dim size-4 shrink-0" />
+            <h2 className="text-foreground text-sm font-semibold">원본 노트</h2>
+          </header>
           <pre className="text-foreground font-sans text-sm whitespace-pre-wrap leading-relaxed">
             {meeting.content}
           </pre>
-        </article>
+        </section>
       ) : null}
 
       {/* 8-section AI report */}
