@@ -130,17 +130,23 @@ export function ExtraEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="border-line bg-card flex items-center gap-2 rounded-md border p-2.5">
-      <input className={`${input} flex-1`} value={extra.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="교재·기타 항목명" />
-      <input
-        type="number"
-        min="0"
-        step="1000"
-        className={`${input} num w-28 text-right`}
-        value={extra.price}
-        onChange={(e) => onPatch({ price: num(e.target.value) })}
-      />
-      <button type="button" onClick={onRemove} className="text-text-dim hover:text-danger shrink-0" aria-label="항목 삭제">
+    <div className="border-line bg-card flex items-end gap-2 rounded-md border p-2.5">
+      <label className="flex-1 space-y-0.5">
+        <span className="text-text-faint text-[11px]">항목명 (교재·기타)</span>
+        <input className={input} value={extra.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="예: 교재비, 입학금, 모의고사비" />
+      </label>
+      <label className="w-28 shrink-0 space-y-0.5">
+        <span className="text-text-faint text-[11px]">금액</span>
+        <input
+          type="number"
+          min="0"
+          step="1000"
+          className={`${input} num text-right`}
+          value={extra.price}
+          onChange={(e) => onPatch({ price: num(e.target.value) })}
+        />
+      </label>
+      <button type="button" onClick={onRemove} className="text-text-dim hover:text-danger mb-1.5 shrink-0" aria-label="항목 삭제">
         <Trash2 className="size-4" />
       </button>
     </div>
@@ -157,20 +163,26 @@ export function DiscountEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="border-line bg-card flex items-center gap-2 rounded-md border p-2.5">
-      <input className={`${input} flex-1`} value={discount.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="할인명" />
-      <div className="relative w-28 shrink-0">
-        <span className="text-text-faint pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-sm">−</span>
-        <input
-          type="number"
-          min="0"
-          step="1000"
-          className={`${input} num pl-5 text-right`}
-          value={discount.amount}
-          onChange={(e) => onPatch({ amount: num(e.target.value) })}
-        />
-      </div>
-      <button type="button" onClick={onRemove} className="text-text-dim hover:text-danger shrink-0" aria-label="할인 삭제">
+    <div className="border-line bg-card flex items-end gap-2 rounded-md border p-2.5">
+      <label className="flex-1 space-y-0.5">
+        <span className="text-text-faint text-[11px]">할인명</span>
+        <input className={input} value={discount.name} onChange={(e) => onPatch({ name: e.target.value })} placeholder="예: 형제 할인, 조기등록" />
+      </label>
+      <label className="w-28 shrink-0 space-y-0.5">
+        <span className="text-text-faint text-[11px]">할인액</span>
+        <div className="relative">
+          <span className="text-text-faint pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-sm">−</span>
+          <input
+            type="number"
+            min="0"
+            step="1000"
+            className={`${input} num pl-5 text-right`}
+            value={discount.amount}
+            onChange={(e) => onPatch({ amount: num(e.target.value) })}
+          />
+        </div>
+      </label>
+      <button type="button" onClick={onRemove} className="text-text-dim hover:text-danger mb-1.5 shrink-0" aria-label="할인 삭제">
         <Trash2 className="size-4" />
       </button>
     </div>

@@ -420,6 +420,53 @@
 }
 
 /* ───────────────────────────────────────────────
+ * 수강료 안내문(.quote-doc) 인쇄 압축 — 환불 규정(긴 표·각주)이 길어 빈 견적도 2페이지를 넘긴다.
+ * 인쇄 시에만 글씨·셀 패딩·줄간격·여백을 대폭 줄여 다과목+교재+할인까지 들어가도 페이지를 절약한다.
+ * (.quote-doc 스코프라 다른 print-portrait 문서엔 무영향.) 화면은 그대로(가독성 유지).
+ * ─────────────────────────────────────────────── */
+@media print {
+  .quote-doc {
+    font-size: 10px;
+    line-height: 1.3;
+  }
+  .quote-doc h2 {
+    font-size: 17px;
+  }
+  .quote-doc h3 {
+    font-size: 12px;
+    margin-top: 6px;
+    margin-bottom: 3px;
+  }
+  .quote-doc h4 {
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+  .quote-doc table {
+    font-size: 8.5px;
+    line-height: 1.18;
+  }
+  /* 환불 규정·과목표 셀 패딩 대폭 축소(가장 큰 공간 절약) */
+  .quote-doc th,
+  .quote-doc td {
+    padding: 1px 4px !important;
+  }
+  .quote-doc ol {
+    margin-bottom: 3px;
+    line-height: 1.25;
+  }
+  .quote-doc ol > li {
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
+  }
+  .quote-doc ol br {
+    display: none;
+  } /* 학원 수칙: 본문/괄호 줄바꿈 제거해 한 줄로 */
+  .quote-doc ol > li > span {
+    margin-left: 4px;
+  }
+}
+
+/* ───────────────────────────────────────────────
  * 한글 어절 단위 줄바꿈 (한 단어 중간이 깨지지 않도록).
  * overflow-wrap: anywhere — URL 같은 긴 토큰은 컨테이너 안에서 강제 줄바꿈.
  * ─────────────────────────────────────────────── */

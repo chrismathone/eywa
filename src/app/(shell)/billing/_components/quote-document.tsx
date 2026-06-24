@@ -32,7 +32,7 @@ export function QuoteDocument({
   const hasExtras = extras.length > 0 || discounts.length > 0;
 
   return (
-    <div className="print-portrait bg-card text-foreground mx-auto w-full max-w-[760px] space-y-5 p-6 print:max-w-none print:space-y-4 print:p-0">
+    <div className="quote-doc print-portrait bg-card text-foreground mx-auto w-full max-w-[760px] space-y-5 p-6 print:max-w-none print:space-y-2 print:p-0">
       {/* 헤더 */}
       <header className="flex flex-col items-center gap-2">
         <div className="text-primary inline-flex items-center gap-2 text-xl font-extrabold tracking-tight">
