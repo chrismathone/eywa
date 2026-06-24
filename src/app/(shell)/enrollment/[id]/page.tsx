@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
+import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -183,6 +183,16 @@ export default async function EnrollmentDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">
+          {/* 좌측 = 상담 기록(입력 정보) — 학부모 QR 제출/상담사 입력/AI 자동입력이 함께 채우는 한 기록. 우측 'AI 분석'과 대칭. */}
+          <header className="flex flex-wrap items-center gap-2">
+            <ClipboardList className="text-primary size-4 shrink-0" />
+            <h2 className="text-foreground text-sm font-semibold">상담 기록</h2>
+            {consult.fromPublicIntake ? (
+              <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap">
+                학부모 직접 제출
+              </span>
+            ) : null}
+          </header>
           <Card emoji="🙋" title="학부모 요구사항">
             <p className="text-foreground text-sm leading-relaxed">
               {consult.parentRequest ?? "기재된 요구사항이 없습니다."}
@@ -214,6 +224,8 @@ export default async function EnrollmentDetailPage({
           </Card>
 
           <ExtraInfoCard f={consult.fields} />
+          {/* 과목별 점수는 입력 데이터(폼)이므로 분석(우측)이 아니라 상담 기록(좌측)에 둔다. */}
+          <SubjectScoresCard details={consult.fields.subjectDetails} />
         </div>
 
         <div className="space-y-4 lg:col-span-2">
@@ -236,8 +248,6 @@ export default async function EnrollmentDetailPage({
               </p>
             </Card>
           ) : null}
-
-          <SubjectScoresCard details={consult.fields.subjectDetails} />
 
           {consult.transcription || (consult.speakerLabels?.length ?? 0) > 0 ? (
             <TranscriptSection
@@ -512,11 +522,12 @@ function SubjectScoresCard({ details }: { details: Record<string, Record<string,
                   ? ` · ${ENG_TYPE[vals.testType] ?? vals.testType}`
                   : ""}
               </p>
-              <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+              {/* 좁은 '상담 기록' 컬럼에 맞춰 단일 컬럼(라벨↔값) — 긴 값도 안 잘리게. */}
+              <dl className="mt-1 space-y-1">
                 {items.map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground text-xs">{labels[k] ?? k}</dt>
-                    <dd className="text-foreground text-right text-xs">{v}</dd>
+                    <dt className="text-muted-foreground shrink-0 text-xs">{labels[k] ?? k}</dt>
+                    <dd className="text-foreground text-right text-xs break-keep">{v}</dd>
                   </div>
                 ))}
               </dl>
