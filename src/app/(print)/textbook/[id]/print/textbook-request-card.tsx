@@ -82,11 +82,13 @@ export function TextbookRequestCard({
         </Button>
       </div>
 
-      {/* 카드 본체 — 720px, ijw와 동일 비율·serif·가운데정렬. 색/테두리 inline hex */}
+      {/* 카드 본체 — ijw 비율·serif·가운데정렬. 색/테두리 inline hex. 인쇄 시 A4 세로 전폭(print-portrait). */}
       <div
         ref={cardRef}
+        className="print-portrait"
         style={{
-          width: 720,
+          width: "100%",
+          maxWidth: 720,
           margin: "0 auto",
           background: "#ffffff",
           color: BLACK,

@@ -404,9 +404,18 @@
   .print-portrait {
     page: portrait-doc;
   }
+  /* ⚠️ 셸/임베드는 h-screen + overflow로 화면을 잡는다 → 인쇄 시 그대로면 문서가 "한 화면 높이"로
+     잘려 2페이지째(예: 환불 규정)가 통째로 사라진다. 인쇄에선 높이/overflow 제약을 풀어 자연 흐름. */
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
   main {
     padding: 0 !important;
     overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
   }
 }
 
