@@ -89,7 +89,14 @@ function MeetingItem({ m }: { m: MeetingRow }) {
           ) : null}
         </header>
 
-        <p className="text-text-dim mt-3 line-clamp-2 text-[13px] leading-relaxed">{m.excerpt}</p>
+        <p
+          title={m.summaryFull ?? undefined}
+          className={`text-text-dim mt-3 line-clamp-2 text-[13px] leading-relaxed ${
+            m.summaryFull ? "cursor-help" : ""
+          }`}
+        >
+          {m.excerpt}
+        </p>
 
         {m.attendees.length > 0 ? (
           <div className="text-text-faint mt-3 flex items-center gap-2 text-[11px]">

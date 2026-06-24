@@ -33,6 +33,9 @@ export type MeetingRow = {
   attendees: string[];
   authorName: string | null;
   excerpt: string;
+  // 카드 미리보기는 excerpt(140자 컷)를 line-clamp-2로 보여주고, 요약 전문은 hover title로 노출.
+  // AI 요약이 있을 때만(전사/노트 폴백은 길어 벽이 됨 → title 미부여).
+  summaryFull: string | null;
   processingStatus: MeetingProcessingStatus;
   hasAudio: boolean;
 };
@@ -100,6 +103,8 @@ export async function getMeetings(): Promise<MeetingRow[]> {
       | undefined;
     // 미리보기는 AI 요약 우선 — 전사 raw가 아니라 회의 핵심이 카드에 보이게(요약 없으면 전사/노트 폴백).
     const body = r.ai_summary ?? r.transcription ?? r.content ?? "";
+    // hover 전문은 AI 요약일 때만(공백 정규화). 잘린 excerpt보다 길 때만 의미 있음.
+    const summaryNorm = r.ai_summary ? r.ai_summary.trim().replace(/\s+/g, " ") : null;
     return {
       id: r.id,
       title: r.title,
@@ -107,6 +112,7 @@ export async function getMeetings(): Promise<MeetingRow[]> {
       attendees: normalizeAttendees(r.attendees),
       authorName: author?.display_name ?? null,
       excerpt: excerpt(body),
+      summaryFull: summaryNorm && summaryNorm.length > 140 ? summaryNorm : null,
       processingStatus: r.processing_status as MeetingProcessingStatus,
       hasAudio: !!r.audio_path,
     };
@@ -159,6 +165,7 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
     attendees: normalizeAttendees(data.attendees),
     authorName: author?.display_name ?? null,
     excerpt: excerpt(body),
+    summaryFull: null, // 상세에선 미사용(목록 카드 hover 전용)
     content: data.content,
     transcription: data.transcription,
     speakerLabels: Array.isArray(data.speaker_labels)
