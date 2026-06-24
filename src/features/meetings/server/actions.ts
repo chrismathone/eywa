@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -379,32 +380,44 @@ export async function regenerateMeetingAnalysis(
   const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]) : [];
   const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR");
   const formatted = formatMeetingTranscript(m.transcription, m.speaker_labels);
+  const admin = createAdminClient();
 
-  try {
-    const { report, speakerRoles, model } = await analyzeMeeting(formatted, {
-      title: m.title,
-      heldAt,
-      attendees,
-    });
-    // 갱신 필드는 웹훅의 회의 완료 저장과 동일하게 맞춘다(상태/UI 일관).
-    const admin = createAdminClient();
-    await admin
-      .from("meeting_minutes")
-      .update({
-        ai_report: report,
-        ai_summary: report.summary,
-        ai_speaker_roles: speakerRoles,
-        ai_model_version: model,
-        ai_generated_at: new Date().toISOString(),
-        processing_status: "completed",
-        processing_error: null,
-      })
-      .eq("id", id);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "AI 분석 생성에 실패했습니다" };
-  }
-
+  // 즉시 analyzing으로 표시 → 페이지가 음성 분석과 동일한 '분석 중' 스켈레톤 + StatusWatcher 폴링을 띄운다.
+  await admin
+    .from("meeting_minutes")
+    .update({ processing_status: "analyzing", processing_error: null })
+    .eq("id", id);
   revalidatePath(`/meetings/${id}`);
-  revalidatePath("/meetings");
+
+  // 분석은 백그라운드(after)로 — 응답을 즉시 반환해 진행 UI가 바로 뜨고, 완료/실패 시 watcher가 자동 새로고침.
+  // 갱신 필드는 웹훅의 회의 완료 저장과 동일(상태/UI 일관).
+  after(async () => {
+    try {
+      const { report, speakerRoles, model } = await analyzeMeeting(formatted, {
+        title: m.title,
+        heldAt,
+        attendees,
+      });
+      await admin
+        .from("meeting_minutes")
+        .update({
+          ai_report: report,
+          ai_summary: report.summary,
+          ai_speaker_roles: speakerRoles,
+          ai_model_version: model,
+          ai_generated_at: new Date().toISOString(),
+          processing_status: "completed",
+          processing_error: null,
+        })
+        .eq("id", id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "AI 분석 생성 실패";
+      await admin
+        .from("meeting_minutes")
+        .update({ processing_status: "failed", processing_error: `AI 분석 실패: ${msg}` })
+        .eq("id", id);
+    }
+  });
+
   return undefined;
 }

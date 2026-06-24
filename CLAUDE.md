@@ -59,6 +59,8 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
 - **기둥 A — "AI 분석 다시 생성"**(텍스트 기반, 신규 [`regenerateMeetingAnalysis`](src/features/meetings/server/actions.ts)): 저장된
   `transcription`으로 8섹션 재생성. **오디오·AssemblyAI·웹훅 불필요 → 로컬에서도 즉시 완주, 녹음 삭제 후에도 가능.** 회의 8섹션 분석은
   [`features/meetings/server/ai.ts`](src/features/meetings/server/ai.ts) `analyzeMeeting`/`formatMeetingTranscript` **단일 소스**로 추출(웹훅·재분석 공유).
+  진행 표시: 액션이 `analyzing`으로 즉시 표시 후 **`after()`로 백그라운드 분석** → 음성 분석과 **동일한 '분석 중' 스켈레톤 + StatusWatcher
+  자동 새로고침** 재사용(별도 진행바 UI 신설 없이 일관). 완료 시 페이지가 스스로 새 리포트로 갱신.
 - **기둥 B — "전사부터 다시"**([`retryMeetingProcessing`](src/features/meetings/server/actions.ts)): 원본 오디오 재제출. 옛 ijw 오디오(~2GB)는
   Supabase 미이전(무료 1GB 초과)이라 **eywa가 Firebase에서 직접 읽는다**. [`resolveAudioUrl(path, kind, tenantId)`](src/lib/storage/legacy-audio.ts):
   tenant 경로→Supabase signed URL / 레거시 Firebase 경로(`{kind}-recordings/…`)→**Firebase v4 signed URL(2h, `exists()` 선확인)**.
