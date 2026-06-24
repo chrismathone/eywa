@@ -275,6 +275,31 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 인쇄 플로팅 창+A4 표준 / 교재요청서 / 교재 3체크 / 지출 미리보기 / 계산기 / 배선 감사 (2026-06-24) — ✅ 게이트 그린(시각검증 사용자 몫)
+사용자 연속 요청 묶음. 전부 typecheck0/lint0/라우트307. ⚠️ Chrome MCP 미연결 → **시각 인쇄/렌더 검증은 사용자 확인 필요**.
+- **인쇄 = 플로팅 창 + A4 표준**(핵심): 인쇄 버튼 있는 모든 곳을 새 탭이 아니라 **플로팅 창**으로 연다. 신규
+  [`usePrintWindow`/`PrintWindowButton`](src/components/workspace/print-window.tsx)(창 id `print/<type>/<id>` + ROUTE_WINDOW_SIZE `print/<type>` A4 등록 —
+  windowIdForHref 파생 id는 longest-prefix 미스로 DEFAULT 480×560로 떨어지므로 명시 id 필수). 진입점 라벨="인쇄 미리보기"(창 띄움),
+  창 안 window.print()="인쇄". 닫기는 embedded(x-embed 헤더)면 숨김(창 X). **세부 규약·5체크는 디자인 시스템 "인쇄(Print)" 섹션 참조.**
+  - A4 클리핑 근본픽스(globals.css `@media print`): 셸/임베드 `<main h-screen overflow>`가 인쇄 시 문서를 한 화면 높이로 잘라
+    2페이지째(환불 규정 등)가 사라지던 것 → html/body/main `height:auto`·`overflow:visible` 리셋. 전역 landscape @page(시간표용)는
+    유지하되 세로 문서는 `print-portrait` 클래스로 opt-in(@page portrait-doc). **통짜 break-inside-avoid 금지**(섹션 통째 밀림→행 단위).
+  - 인쇄 공간 압축: `.quote-doc`(수강료 안내문)·`.meeting-doc`(회의록) 스코프 CSS로 글씨·패딩·여백 대폭 축소(빈 견적/적은 회의도
+    2페이지 넘던 것 1페이지화). 회의록 인쇄에 **전사 생략 토글**. 화면은 무영향.
+- **교재요청서**(ijw `TextbookPreviewCard` 이식, `(print)/textbook/[id]/print`): serif·가운데정렬·외곽2px/내부1px 카드 + PNG(html2canvas, oklch
+  회피로 inline hex)·인쇄. **학원설정 billing.account(은행/예금주/계좌) 5단계 배선** → 카드 계좌 자동표시(데모 계좌 세팅됨).
+- **교재 상태 = ijw식 3개 독립 체크(등록/주문/납부)**(5단계 드롭다운 폐기, 0051a `registered_at`+`status_by_name/status_at`): 각자
+  타임스탬프 + 마지막 변경자·날짜. flex-wrap으로 좁은 창 자동 2행. [toggleTextbookCheck](src/features/billing/server/textbook-actions.ts).
+- **지출 증빙 첨부 썸네일 미리보기 + 라이트박스 확대**(signExpenseReceipts 일괄 서명). 회의 목록 카드 요약 길면 hover 전문.
+- **수강료 계산기**: 교재/기타 picker에 **교재 단가표(146권) 연동**(교재명 검색)·필수항목 빨간 `*`·교재/기타 에디터 라벨.
+- **비활성 버튼 필수 `*` 전수 sweep**: 실게이팅 3곳(계산기·학생/시간표 엑셀 import)만 적용, 6곳 skip(사유 기록).
+- **배선 orphan 전수 감사**(멀티에이전트 + 수동 적대검증): **나가리되는 user-facing 기능 0건**. dead code(미사용 shadcn 5·죽은
+  컴포넌트 StudentQuickPanel/Popover·죽은 액션 endEnrollment/recomputePrimaryTeacher·write-only `textbook_orders.notes`)만 발견.
+  ⚠️ **CLAUDE.md "student-quick-panel 모바일 peek 폴백 잔존" 메모는 stale**(실제 미연결). 정리는 백로그.
+- **신규 [`docs/audit-log.md`](docs/audit-log.md)**: 검토 항목 체크오프(이중검토 방지). 필수* sweep 8폼 판정 + 배선 감사 결과 기록.
+- ⚠️ **남은 후속**: ① 시각 인쇄 검증(방향·크롬제외·페이지수) ② `pnpm build`(dev 서버와 .next 충돌 우려로 보류 — typecheck/lint/307은 그린)
+  ③ dead code 정리(선택) ④ 교재요청서 새탭→창 통일했으나 등록상담/회의록도 같은 PrintWindowButton 적용 완료.
+
 ### 강사 경험 대규모 보강 — onescreen 데모 → 실작동 + 강사 스코핑 + 허브 (W1~W3, 2026-06-24) — ✅ 브라우저 E2E
 owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/onescreen` 한 화면뿐이고 그마저 **하드코딩 데모**였다.
 멀티에이전트 강사경험 갭 감사(8영역 60건) → **제품결정: B(원스크린 전문화 허브)** 선택(사이드바 복원 A·하이브리드 C 대신,

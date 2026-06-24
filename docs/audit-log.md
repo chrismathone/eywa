@@ -26,9 +26,30 @@
 
 ---
 
-## 2. 배선 orphan / dead-end 전수 감사 (2026-06-24, 진행 중)
+## 2. 배선 orphan / dead-end 전수 감사 (2026-06-24, 멀티에이전트 발굴 + 수동 적대 검증)
 
 **범위**: write-only-orphan(설정 저장됐는데 소비처 0) · settings-ignored(enum 하드코딩) · DB 컬럼/테이블 orphan ·
-dead action/route/component · form→persist→display 단절. 멀티에이전트 발굴 + 적대 검증(소비처 반증).
+dead action/route/component · form→persist→display 단절. 6개 도메인 발굴(26 후보).
+⚠️ 워크플로 Verify 단계가 서버 일시 rate-limit으로 실패 → **수동 grep으로 26 후보 전수 적대 검증**(소비처/호출처/import 카운트).
 
-> ⏳ 결과 종합 후 이 섹션에 confirmed orphan / refuted(소비처 있었음) 채워넣을 예정. (CLAUDE.md "배선 현황"·2026-06-19 owner 감사와 대조.)
+> **결론: 배선이 끊겨 나가리되는 user-facing 기능은 0건.** 학원설정→소비처 배선은 견고(2026-06-19 감사 + 이번 billing.account 배선).
+> 발견은 전부 ① 이미 문서화된 의도적 orphan ② 저영향 dead code(미사용 shadcn·죽은 컴포넌트/액션). 아래는 다음 재감사 시 건너뛰도록 기록.
+
+### ✅ refuted (소비처 있음 — orphan 아님)
+moveEnrollment · subjectTone(14곳) · SectionTitle · FeatureBlock · english_levels(3) · lesson_reports(7) ·
+attendance_notifications(3) · SUBJECT_TABS(등록상담 과목탭, 4) · class merge_group은 schema뿐이나 합반=의도적 미구현.
+
+### 🟡 dead code (저영향 — 제거는 선택, 동작엔 무해)
+| 항목 | 근거 | 비고 |
+|---|---|---|
+| 미사용 shadcn ui: `tabs.tsx`·`checkbox.tsx`·`badge.tsx`·`card.tsx`·`table.tsx` | importers=0 | eywa는 FaceTabs·Pill·커스텀 사용. shadcn 보일러플레이트(무해) |
+| dead 컴포넌트: `StudentQuickPanel`·`StudentQuickPopover` (`students/_components/student-quick-panel.tsx`, `components/student-quick-popover.tsx`) | import 0 | ⚠️ CLAUDE.md "모바일 peek 폴백 잔존" 메모는 **stale**(실제 미연결). 제거 또는 재연결 결정 필요 |
+| dead 액션: `endEnrollment`(`enrollments/server/actions.ts:95`)·`recomputePrimaryTeacher`(`students/server/actions.ts:549`) | 호출처 0 | 정의만 있고 트리거 없음. 제거 또는 배선 필요(수강종료 UI는 다른 경로 사용) |
+| write-only 컬럼: `textbook_orders.notes` | createTextbookOrder가 INSERT하나 어떤 쿼리도 SELECT 안 함 | 표시 추가 또는 무시 |
+
+### ⏭️ 의도적 orphan (이미 문서화 — 재검토 불필요)
+- 설정 hidden orphan: `operations.terms` · `notifications.kakaoChannelId` · `billing.defaultMethod` · `billing.taxMode` → CLAUDE.md "🚫 입력 숨김"(소비처 없어 v1 비노출, 상태·스키마·저장은 보존).
+- `class_schedules.merge_group` → 합반(merged class) 미구현(의도적).
+- `textbook_orders.billed_at` · `delivered_at` → 교재 상태를 3체크(등록/주문/납부)로 단순화하며 폐기(컬럼만 잔존, 2026-06-24).
+
+> **재감사 시**: 위 ⏭️ 의도적·🟡 dead code는 사유 유효 시 건너뜀. 🟡 dead code를 정리하기로 하면 별도 cleanup 작업으로.
