@@ -133,7 +133,7 @@ export function TuitionCalculator({
     JSON.stringify(k === "courses" ? courses : k === "extras" ? extras : discounts);
 
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-5 print:block xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
       {/* 입력 (인쇄 시 숨김) */}
       <div className="space-y-4 print:hidden">
         {/* 학생 정보 */}
@@ -227,8 +227,8 @@ export function TuitionCalculator({
         </section>
       </div>
 
-      {/* 라이브 안내문 */}
-      <div className="border-line bg-card overflow-hidden rounded-md border print:border-0">
+      {/* 라이브 안내문 (인쇄 시 카드 크롬 제거 → A4 전폭 세로 문서) */}
+      <div className="border-line bg-card overflow-hidden rounded-md border print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
         <QuoteDocument
           academyName={academyName}
           student={student}

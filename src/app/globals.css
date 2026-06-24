@@ -392,6 +392,25 @@
 }
 
 /* ───────────────────────────────────────────────
+ * 세로 A4 문서(수강료 안내문 등) — 위 전역 landscape @page(시간표용)를 명시 portrait로 덮어쓴다(opt-in).
+ * 인쇄할 문서 루트에 `print-portrait` 클래스를 달면 이 페이지 박스를 쓴다.
+ * + 셸 <main>의 화면용 패딩·overflow를 인쇄 시 제거(문서가 A4 전폭을 쓰게).
+ * ─────────────────────────────────────────────── */
+@media print {
+  @page portrait-doc {
+    size: A4 portrait;
+    margin: 12mm 14mm;
+  }
+  .print-portrait {
+    page: portrait-doc;
+  }
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+}
+
+/* ───────────────────────────────────────────────
  * 한글 어절 단위 줄바꿈 (한 단어 중간이 깨지지 않도록).
  * overflow-wrap: anywhere — URL 같은 긴 토큰은 컨테이너 안에서 강제 줄바꿈.
  * ─────────────────────────────────────────────── */

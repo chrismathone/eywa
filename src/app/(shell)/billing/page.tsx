@@ -46,8 +46,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const tab = resolveTab(sp);
 
   return (
-    <div className="space-y-4">
-      <FaceTabs faces={FACES} active={tab} ariaLabel="수납관리 면 전환" />
+    <div className="space-y-4 print:space-y-0">
+      <div className="print:hidden">
+        <FaceTabs faces={FACES} active={tab} ariaLabel="수납관리 면 전환" />
+      </div>
       {tab === "textbooks" ? (
         <TextbooksFace sp={sp} />
       ) : tab === "expenses" ? (

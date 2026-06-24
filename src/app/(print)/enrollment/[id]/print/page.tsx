@@ -47,7 +47,7 @@ export default async function EnrollmentPrintPage({
   });
 
   return (
-    <div className="mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
+    <div className="print-portrait mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
       <PrintActions />
 
       <header className="border-b-2 border-black/80 pb-4">
