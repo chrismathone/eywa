@@ -272,6 +272,9 @@ owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/on
   RichText 빈입력 가드·speaker_labels Array.isArray·studentTraits/teacherResponse 불릿추가·audioReport에서 speakerRoles 분리·
   인쇄 RichText 통일). 나머지 findings는 "정상 확인".
 - 검증: typecheck0/lint0/**test445**(rich-text 4 추가) + 실브라우저(월픽커 점프·전사접힘+[상담자]/[학부모]·AI 52불릿/산문 분류·콘솔0).
+- **후속(사용자 피드백)**: ① AI 분석이 "너무 나열형·영역구분 안 됨" → 12섹션을 각각 **이모지 헤더(🧭🏠😟❓🙋😊🎒🧑‍🏫💡🤝📞⚠️) + 테두리 카드**로
+  분리(회의록 패턴, `ConsultationReportPanel`). ② 과목별 점수 **영어 라벨이 raw 키**(academyHistory·learningProgress 등)로
+  뜨던 것 → `subjectLabelMap`이 `COMMON_FIELDS`(form-config export) 라벨을 항상 포함해 한글화(영어는 ENGLISH_GROUPS에 공통필드가 없어 폴백됐던 것).
 
 ### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
 사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로

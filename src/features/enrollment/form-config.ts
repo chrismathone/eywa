@@ -32,7 +32,9 @@ export const REGISTRATION_STATUSES = [
 export type FieldDef = { key: string; label: string; type?: "text" | "date" };
 export type FieldGroup = { title?: string; cols?: number; fields: FieldDef[] };
 
-const COMMON_FIELDS: FieldGroup = {
+// 과목 공통 필드(학원히스토리·진도·시험성적·추천반·담임·기타 등). math/국어/과학 탭에 포함되며,
+// 라벨 매핑(상세 '과목별 점수' 카드)에서 영어 포함 모든 과목에 공통 라벨로도 쓰인다(export).
+export const COMMON_FIELDS: FieldGroup = {
   title: "공통",
   cols: 2,
   fields: [

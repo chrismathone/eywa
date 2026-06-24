@@ -13,7 +13,7 @@ import {
   type ConsultationProcessingStatus,
   type FullConsultationFields,
 } from "@/features/enrollment/server/queries";
-import { ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
+import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
 import { RichText } from "@/components/rich-text";
@@ -271,28 +271,28 @@ function ConsultationReportPanel({
   report: ConsultationAudioReport;
   generatedAt: string | null;
 }) {
-  // list=리스트형 섹션(나열) → 불릿 렌더. 나머지는 산문 문단. (모델이 줄바꿈을 안 줘도 RichText가 쉼표 분할)
-  const sections: { key: keyof ConsultationAudioReport; label: string; list?: boolean }[] = [
-    { key: "consultationType", label: "상담 성격" },
-    { key: "familyBackground", label: "가정 배경" },
-    { key: "parentConcerns", label: "학부모 걱정", list: true },
-    { key: "parentQuestions", label: "학부모 질문", list: true },
-    { key: "parentRequests", label: "학부모 요청", list: true },
-    { key: "parentSatisfaction", label: "학부모 만족도" },
-    { key: "studentTraits", label: "학생 특이사항", list: true },
-    { key: "teacherResponse", label: "교사 대응", list: true },
-    { key: "salesPoints", label: "세일즈 포인트", list: true },
-    { key: "agreements", label: "합의 사항", list: true },
-    { key: "followUps", label: "후속 조치", list: true },
-    { key: "warnings", label: "주의 신호", list: true },
+  // emoji=섹션 시각 앵커. list=나열형(불릿). 나머지는 산문 문단(RichText가 쉼표/줄바꿈 처리).
+  const sections: { key: keyof ConsultationAudioReport; label: string; emoji: string; list?: boolean }[] = [
+    { key: "consultationType", label: "상담 성격", emoji: "🧭" },
+    { key: "familyBackground", label: "가정 배경", emoji: "🏠" },
+    { key: "parentConcerns", label: "학부모 걱정", emoji: "😟", list: true },
+    { key: "parentQuestions", label: "학부모 질문", emoji: "❓", list: true },
+    { key: "parentRequests", label: "학부모 요청", emoji: "🙋", list: true },
+    { key: "parentSatisfaction", label: "학부모 만족도", emoji: "😊" },
+    { key: "studentTraits", label: "학생 특이사항", emoji: "🎒", list: true },
+    { key: "teacherResponse", label: "교사 대응", emoji: "🧑‍🏫", list: true },
+    { key: "salesPoints", label: "세일즈 포인트", emoji: "💡", list: true },
+    { key: "agreements", label: "합의 사항", emoji: "🤝", list: true },
+    { key: "followUps", label: "후속 조치", emoji: "📞", list: true },
+    { key: "warnings", label: "주의 신호", emoji: "⚠️", list: true },
   ];
 
   return (
-    <section className="bg-card border-border space-y-5 rounded-lg border p-5">
+    <section className="space-y-3">
       <header className="flex items-baseline justify-between">
         <div className="inline-flex items-center gap-2">
           <Sparkles className="text-chart-4 size-4" />
-          <h2 className="text-foreground text-sm font-semibold">상담 AI 분석 (13 섹션)</h2>
+          <h2 className="text-foreground text-sm font-semibold">상담 AI 분석</h2>
         </div>
         {generatedAt ? (
           <span className="text-muted-foreground num text-[11px]">
@@ -301,17 +301,23 @@ function ConsultationReportPanel({
         ) : null}
       </header>
 
-      {sections.map(({ key, label, list }) => {
+      {/* 섹션마다 이모지 헤더 + 테두리 카드로 또렷이 구분(나열형으로 뭉치지 않게). */}
+      {sections.map(({ key, label, emoji, list }) => {
         const body = report[key];
         if (typeof body !== "string" || !body.trim()) return null;
         return (
-          <div key={key} className="space-y-1.5">
-            <p className="eyebrow">{label}</p>
-            <RichText
-              text={body}
-              bulletize={list}
-              className="text-foreground space-y-1.5 text-sm leading-relaxed"
-            />
+          <div key={key} className="border-line bg-card overflow-hidden rounded-md border">
+            <div className="bg-bg-soft border-line flex items-center gap-2 border-b px-4 py-2">
+              <span className="text-[15px] leading-none">{emoji}</span>
+              <h3 className="text-foreground text-[13px] font-semibold">{label}</h3>
+            </div>
+            <div className="px-4 py-3">
+              <RichText
+                text={body}
+                bulletize={list}
+                className="text-foreground space-y-1.5 text-sm leading-relaxed"
+              />
+            </div>
           </div>
         );
       })}
@@ -482,6 +488,9 @@ function ExtraInfoCard({ f }: { f: FullConsultationFields }) {
 
 function subjectLabelMap(subjectKey: string): Record<string, string> {
   const map: Record<string, string> = { testType: "테스트 유형" };
+  // 공통 필드(학원히스토리·진도·추천반·기타 등)는 모든 과목에서 추출될 수 있어 항상 한글 라벨 포함
+  // (영어는 ENGLISH_GROUPS에 공통필드가 없어 raw 키로 떨어지던 것 해소).
+  COMMON_FIELDS.fields.forEach((fd) => (map[fd.key] = fd.label));
   const tab = SUBJECT_TABS.find((t) => t.key === subjectKey);
   if (!tab) return map;
   if (tab.english) {
