@@ -198,24 +198,16 @@ export default async function StaffPage({
         </p>
         <div className="flex items-center gap-2">
           {user?.systemRole === "master" ? (
-            <WindowLink
-              href="/staff/payroll"
-              title="월별 급여"
-              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
-            >
-              <Wallet className="size-3.5" />
+            <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
+              <Wallet className="size-4" />
               월별 급여
-            </WindowLink>
+            </Button>
           ) : null}
           {canManage ? (
-            <WindowLink
-              href="/staff/leaves"
-              title="휴가 관리"
-              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
-            >
-              <CalendarClock className="size-3.5" />
+            <Button variant="outline" render={<WindowLink href="/staff/leaves" title="휴가 관리" />}>
+              <CalendarClock className="size-4" />
               휴가 관리
-            </WindowLink>
+            </Button>
           ) : null}
           {canManage && user ? (
             <NewStaffTrigger />

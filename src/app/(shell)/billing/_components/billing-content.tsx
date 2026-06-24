@@ -182,13 +182,17 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         </p>
         <div className="flex shrink-0 items-center gap-2">
           <CreateInvoiceTrigger students={students} defaultPeriod={period} variant="outline" />
-          <a
-            href={`/api/exports/billing?${new URLSearchParams({ period, ...(q ? { q } : {}) }).toString()}`}
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+          <Button
+            variant="outline"
+            render={
+              <a
+                href={`/api/exports/billing?${new URLSearchParams({ period, ...(q ? { q } : {}) }).toString()}`}
+              />
+            }
           >
             <EyIcon name="arrowDown" size={13} />
             엑셀 내보내기
-          </a>
+          </Button>
         </div>
       </div>
 

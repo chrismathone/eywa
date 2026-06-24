@@ -231,14 +231,13 @@ export default async function ConsultationsPage({
           ) : null}
         </p>
         <div className="flex items-center gap-2">
-          <WindowLink
-            href="/consultations/stats"
-            title="상담 통계"
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+          <Button
+            variant="outline"
+            render={<WindowLink href="/consultations/stats" title="상담 통계" />}
           >
-            <MessagesSquare size={13} strokeWidth={2} />
+            <MessagesSquare className="size-4" strokeWidth={2} />
             통계 보기
-          </WindowLink>
+          </Button>
           <NewConsultationTrigger />
         </div>
       </div>

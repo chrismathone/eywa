@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Upload, X } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { Button } from "@/components/ui/button";
 import {
   applyStudentImport,
   previewStudentImport,
@@ -94,14 +95,10 @@ export function StudentImportDialog() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
-      >
+      <Button variant="outline" onClick={() => setOpen(true)}>
         <EyIcon name="arrowUp" size={13} />
         엑셀 가져오기
-      </button>
+      </Button>
 
       {open ? (
         <>

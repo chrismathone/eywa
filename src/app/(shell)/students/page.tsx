@@ -3,6 +3,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
+import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getStudentsPage,
@@ -133,18 +134,22 @@ export default async function StudentsPage({
           {q ? <span className="text-text-dim ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
         </p>
         <div className="flex items-center gap-2">
-          <a
-            href={`/api/exports/students?${new URLSearchParams({
-              ...(status !== "all" ? { status } : {}),
-              ...(subject !== "all" ? { subject } : {}),
-              ...(q ? { q } : {}),
-              ...advParams,
-            }).toString()}`}
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition"
+          <Button
+            variant="outline"
+            render={
+              <a
+                href={`/api/exports/students?${new URLSearchParams({
+                  ...(status !== "all" ? { status } : {}),
+                  ...(subject !== "all" ? { subject } : {}),
+                  ...(q ? { q } : {}),
+                  ...advParams,
+                }).toString()}`}
+              />
+            }
           >
             <EyIcon name="arrowDown" size={13} />
             엑셀 내보내기
-          </a>
+          </Button>
           <StudentImportDialog />
           <NewStudentTrigger />
         </div>

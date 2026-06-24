@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { deleteExam, type ExamActionState } from "@/features/exams/server/actions";
 
 export function ExamDeleteButton({ examId }: { examId: string }) {
@@ -16,14 +17,14 @@ export function ExamDeleteButton({ examId }: { examId: string }) {
 
   if (!confirming) {
     return (
-      <button
-        type="button"
+      <Button
+        variant="outline"
         onClick={() => setConfirming(true)}
-        className="border-line text-text-dim hover:text-danger hover:border-danger/40 inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
+        className="hover:text-danger hover:border-danger/40"
       >
-        <Trash2 className="size-3.5" />
+        <Trash2 className="size-4" />
         삭제
-      </button>
+      </Button>
     );
   }
 

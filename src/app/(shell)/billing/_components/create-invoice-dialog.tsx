@@ -155,21 +155,10 @@ export function CreateInvoiceTrigger({
   const [open, setOpen] = useState(false);
   return (
     <>
-      {variant === "outline" ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
-        >
-          <Plus className="size-3.5" />
-          {label}
-        </button>
-      ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="size-4" />
-          {label}
-        </Button>
-      )}
+      <Button variant={variant === "outline" ? "outline" : "default"} onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        {label}
+      </Button>
       {open ? (
         <Dialog
           students={students}

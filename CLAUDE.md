@@ -836,6 +836,27 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - 폼 필드는 `SearchableSelect`에 `name`을 주면 hidden input으로 값 제출.
 - **native `<select>` 신규 금지** — OS 팝업은 디자인 스크롤바 미적용·스타일 불일치.
 
+### 버튼 크기 — 헤더 액션은 공용 `<Button>` 기본 크기로 통일 (⚠️ 새 버튼 기본값, 2026-06-24)
+한 줄(페이지/상세 헤더의 액션 클러스터, 다이얼로그 푸터)에 들어가는 액션 버튼은 **크기가 제각각이면 안 된다**.
+증상: 1차 액션은 공용 `<Button>`(기본 `h-8 text-sm`)인데 옆의 2차 액션("통계 보기"·"엑셀 내보내기"·"월별 급여"
+등)은 손으로 깎은 `inline-flex … border px-2.5 py-1 text-xs` 작은 링크라 **나란히 두면 높이·글자크기가 따로 논다**
+(사용자 제보: 학생상담 헤더 "통계 보기"(작음) ↔ "상담 추가"(큼)).
+
+**규칙(불변): 같은 액션 행의 모든 버튼은 공용 [`Button`](src/components/ui/button.tsx)을 쓰고 크기는 기본값
+(`size="default"` = `h-8 text-sm`)으로 통일한다 — "오른쪽(1차) 버튼 크기"가 표준이다.**
+- **1차 액션** = `<Button>`(기본 variant=default). **2차 액션** = `<Button variant="outline">`(또는 ghost/secondary).
+  variant(색)만 다르고 **size는 전부 같다**.
+- **링크/네비/다운로드 버튼**도 손으로 깎지 말고 `render`로 감싼다:
+  `<Button variant="outline" render={<WindowLink href=… title=… />}>` / `render={<a href=… />}`(엑셀 export). [[#2]](base-ui는 `asChild` 아닌 `render`)
+- **size 변형 금지(헤더/푸터 액션)**: `size="sm"`·`text-xs`·손깎은 `px-2.5 py-1` 버튼을 1차 `<Button>` 옆에 두지 말 것
+  (`CreateInvoiceTrigger`의 `size="sm"`·outline 손깎기도 기본 크기로 정규화함). 아이콘은 `className="size-4"`(또는 미지정→Button이 size-4).
+- **이 규칙 밖(작은 크기 허용)**: ① **표/리스트 행 안의 인라인 액션**(행 높이에 맞춤) ② **transient 인라인 확인 플로우**
+  (삭제 "예/취소" 같은 순간 폼) ③ Pill·배지처럼 버튼이 아닌 칩. 헤더 액션 클러스터에는 적용, 이 셋엔 미적용.
+- 전수 적용(2026-06-24): 학생상담·학생목록(엑셀 내보내기/가져오기)·직원(월별급여/휴가관리)·수납(엑셀 내보내기/청구서 생성)·
+  성적 상세(수정/삭제) 헤더를 전부 `Button` 기본 크기로 통일.
+
+> **한 줄 규칙: 한 액션 행의 버튼은 공용 `<Button>` 기본 크기로 통일(색=variant만 차이). 손깎은 text-xs 링크·`size="sm"`를 1차 버튼 옆에 두지 말 것.**
+
 ### 줄바꿈 / 워드브레이크 — 한글 어절 단위 (⚠️ 전역, 좁은 창에서 특히 중요)
 **텍스트가 "발표·세미 / 나" 식으로 단어 한가운데서 깨지지 않게 한다.** 플로팅 창은 폭이 좁아
 (기본 480px) 이런 "얼토당토 않은 곳에서의 줄바꿈"이 흉한 뷰를 만든다. 전역 규칙이 기본을 잡는다:

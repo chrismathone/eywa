@@ -293,14 +293,10 @@ export function EditExamTrigger({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition"
-      >
-        <Pencil className="size-3.5" />
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <Pencil className="size-4" />
         수정
-      </button>
+      </Button>
       {open ? <Dialog exam={exam} classOptions={classOptions} onClose={() => setOpen(false)} /> : null}
     </>
   );
