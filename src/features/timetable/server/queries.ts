@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 
 export type ScheduleSlot = {
   id: string;
@@ -141,8 +142,18 @@ const dateBefore = (days: number): string =>
  * 재원(active)뿐 아니라 **대기(on_hold)·최근 퇴원(end_date)** 도 포함 — ijw 셀이 보여주던
  * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1년·반이동 제외(셀에서 status로 분리 렌더).
  */
-export async function getWeeklyScheduleWithStudents(): Promise<ScheduleSlotWithStudents[]> {
-  const slots = await fetchSlots();
+export async function getWeeklyScheduleWithStudents(
+  teacherId?: string,
+): Promise<ScheduleSlotWithStudents[]> {
+  let slots = await fetchSlots();
+  // 강사 스코핑(intra-tenant PII) — teacher면 본인 담당 반만. 안 하면 강사가 /timetable 직타 시
+  // 전 학생 명단(이름·학교·학년·진도)이 노출된다. RLS는 테넌트만 격리하므로 앱레벨에서 좁힌다.
+  if (teacherId) {
+    const { classIds: scoped } = await getTeacherScope(teacherId);
+    if (scoped.length === 0) return [];
+    const allow = new Set(scoped);
+    slots = slots.filter((s) => allow.has(s.classId));
+  }
   if (slots.length === 0) return [];
 
   const classIds = Array.from(new Set(slots.map((s) => s.classId)));

@@ -28,12 +28,14 @@ export default async function TimetablePage({
 }: {
   searchParams: Promise<{ view?: ViewMode; subject?: string }>;
 }) {
-  await requireAccess("timetable");
+  const user = await requireAccess("timetable");
   const { view: viewParam, subject: subjectParam } = await searchParams;
   const view: ViewMode = viewParam === "integrated" ? "integrated" : "basic";
 
+  // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
+  const teacherId = user.systemRole === "teacher" ? user.id : undefined;
   const [allSlots, settings] = await Promise.all([
-    getWeeklyScheduleWithStudents(),
+    getWeeklyScheduleWithStudents(teacherId),
     getTenantSettings(),
   ]);
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
