@@ -74,6 +74,8 @@ export type MeetingDetail = MeetingRow & {
   aiSummary: string | null;
   aiActionItems: MeetingActionItem[] | null;
   aiReport: MeetingReportSection | null;
+  aiReportEditedBy: string | null; // AI 보고서 섹션 마지막 수정자
+  aiReportEditedAt: string | null;
   aiSpeakerRoles: Record<string, string> | null;
   speakerStaff: Record<string, string> | null;
   aiGeneratedAt: string | null;
@@ -144,7 +146,8 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
       `id, title, content, attendees, held_at,
        audio_path, audio_duration_sec, transcription, speaker_labels,
        processing_status, processing_error,
-       ai_summary, ai_action_items, ai_report, ai_speaker_roles, speaker_staff, ai_generated_at,
+       ai_summary, ai_action_items, ai_report, ai_report_edited_by, ai_report_edited_at,
+       ai_speaker_roles, speaker_staff, ai_generated_at,
        author:author_id ( display_name )`,
     )
     .eq("id", id)
@@ -184,6 +187,8 @@ export async function getMeetingById(id: string): Promise<MeetingDetail | null> 
       data.ai_report && typeof data.ai_report === "object"
         ? (data.ai_report as MeetingReportSection)
         : null,
+    aiReportEditedBy: data.ai_report_edited_by ?? null,
+    aiReportEditedAt: data.ai_report_edited_at ?? null,
     aiSpeakerRoles:
       data.ai_speaker_roles && typeof data.ai_speaker_roles === "object"
         ? (data.ai_speaker_roles as Record<string, string>)

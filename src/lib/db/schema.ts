@@ -736,6 +736,9 @@ export const meetingMinutes = pgTable(
     aiSummary: text("ai_summary"),
     aiActionItems: jsonb("ai_action_items"),
     aiReport: jsonb("ai_report"),
+    // AI 보고서 섹션 인라인 수정 — 마지막 수정자(이름)·시각. (0052a)
+    aiReportEditedBy: text("ai_report_edited_by"),
+    aiReportEditedAt: timestamp("ai_report_edited_at", { withTimezone: true }),
     aiSpeakerRoles: jsonb("ai_speaker_roles"),
     // 화자(A/B/C) → 직원(users.id) 연결 맵. ai_speaker_roles는 표시 라벨, 이건 연계 기반(staffId). (0050a)
     speakerStaff: jsonb("speaker_staff"),

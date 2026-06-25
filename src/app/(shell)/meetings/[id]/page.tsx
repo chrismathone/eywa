@@ -250,7 +250,12 @@ export default async function MeetingDetailPage({
             ) : null}
           </header>
 
-          <MeetingReportAccordion report={meeting.aiReport} />
+          <MeetingReportAccordion
+            report={meeting.aiReport}
+            meetingId={meeting.id}
+            editedBy={meeting.aiReportEditedBy}
+            editedAt={meeting.aiReportEditedAt}
+          />
         </section>
       ) : null}
 

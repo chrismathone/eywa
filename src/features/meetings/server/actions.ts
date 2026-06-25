@@ -138,6 +138,64 @@ export async function updateMeetingTitle(
   return { ok: true };
 }
 
+export type UpdateReportSectionState =
+  | { error?: string; ok?: true; editedBy?: string; editedAt?: string }
+  | undefined;
+
+// 인라인 수정 가능한 8섹션(meetingType 제외) — staff가 인쇄/공유 전 AI 오류를 교정.
+const EDITABLE_REPORT_KEYS = new Set([
+  "summary",
+  "agendaDiscussion",
+  "decisions",
+  "actionItems",
+  "speakerSummary",
+  "concerns",
+  "nextSteps",
+]);
+
+/** 회의 AI 보고서 섹션 본문 인라인 수정 — 해당 섹션만 ai_report jsonb에 머지 + 마지막 수정자·시각 기록. */
+export async function updateMeetingReportSection(
+  _prev: UpdateReportSectionState,
+  formData: FormData,
+): Promise<UpdateReportSectionState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const key = String(formData.get("key") ?? "").trim();
+  const content = String(formData.get("content") ?? "");
+  if (!id) return { error: "회의록 ID가 누락되었습니다" };
+  if (!EDITABLE_REPORT_KEYS.has(key)) return { error: "잘못된 섹션입니다" };
+
+  const supabase = await createClient();
+  // 현재 ai_report를 읽어 해당 섹션만 머지(다른 섹션 보존).
+  const { data: row } = await supabase
+    .from("meeting_minutes")
+    .select("ai_report")
+    .eq("id", id)
+    .single();
+  if (!row) return { error: "회의록을 찾을 수 없습니다" };
+  const report =
+    row.ai_report && typeof row.ai_report === "object"
+      ? (row.ai_report as Record<string, unknown>)
+      : {};
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("meeting_minutes")
+    .update({
+      ai_report: { ...report, [key]: content.trim() },
+      ai_report_edited_by: user.displayName,
+      ai_report_edited_at: now,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/meetings/${id}`);
+  revalidatePath("/meetings");
+  return { ok: true, editedBy: user.displayName, editedAt: now };
+}
+
 export type UpdateMeetingSpeakersState = { error?: string; ok?: true } | undefined;
 
 /**
