@@ -297,8 +297,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   컴포넌트 StudentQuickPanel/Popover·죽은 액션 endEnrollment/recomputePrimaryTeacher·write-only `textbook_orders.notes`)만 발견.
   ⚠️ **CLAUDE.md "student-quick-panel 모바일 peek 폴백 잔존" 메모는 stale**(실제 미연결). 정리는 백로그.
 - **신규 [`docs/audit-log.md`](docs/audit-log.md)**: 검토 항목 체크오프(이중검토 방지). 필수* sweep 8폼 판정 + 배선 감사 결과 기록.
-- ⚠️ **남은 후속**: ① 시각 인쇄 검증(방향·크롬제외·페이지수) ② `pnpm build`(dev 서버와 .next 충돌 우려로 보류 — typecheck/lint/307은 그린)
-  ③ dead code 정리(선택) ④ 교재요청서 새탭→창 통일했으나 등록상담/회의록도 같은 PrintWindowButton 적용 완료.
+- **후속 1 — 교재 메모 orphan 복구**: `textbook_orders.notes`가 입력만 받고 어디서도 표시 안 되던 write-only 갭 → 목록 행 "메모:" 표시 + 수정 prefill(round-trip).
+- **후속 2 — dead code 정리**(audit 백로그): 미사용 shadcn 5(tabs·checkbox·badge·card·table)·죽은 컴포넌트 2(StudentQuickPanel/Popover)·중복
+  액션 1(`endEnrollment`, `endSingleEnrollment`가 실사용) 제거. `recomputePrimaryTeacher`는 유용한 미배선 유틸이라 유지.
+- **후속 3 — AI 보고서 섹션 인라인 수정(회의록)**: staff가 인쇄/공유 전 AI 오류를 직접 교정. `ai-report.tsx` 섹션 hover→수정→textarea→저장,
+  해당 섹션만 `ai_report` jsonb 머지 + 마지막 수정자·시각(`updateMeetingReportSection`, 0052a `ai_report_edited_by/at`). 상단에 "OOO님 수정·시각".
+  ⚠️ **등록상담 AI는 미적용** — `consultation_ai_analysis.print_payload`가 model_version별 **동결 스냅샷**(불변 설계)이라, 인라인 수정은 그 불변
+  계약을 바꾸는 설계 결정이 필요(후속 분리). pnpm build 게이트도 통과 확인(4게이트 그린).
+- ⚠️ **남은 후속**: ① 시각 인쇄 검증(방향·크롬제외·페이지수, Chrome MCP 미연결) ② 등록상담 AI 인라인 수정(동결 스냅샷 설계 결정).
 
 ### 강사 경험 대규모 보강 — onescreen 데모 → 실작동 + 강사 스코핑 + 허브 (W1~W3, 2026-06-24) — ✅ 브라우저 E2E
 owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/onescreen` 한 화면뿐이고 그마저 **하드코딩 데모**였다.
