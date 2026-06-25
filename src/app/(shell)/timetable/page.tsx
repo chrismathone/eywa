@@ -117,7 +117,7 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <TimetableToolbarActions />
+        <TimetableToolbarActions subject={subject} />
       </div>
 
       {slots.length === 0 ? (

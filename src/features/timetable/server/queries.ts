@@ -107,6 +107,8 @@ export type StudentLine = {
   endDate?: string | null;
   /** 등록 30일 이내 = 신입(셀에서 빨강 강조). ijw의 신입 윈도우 단순 근사(과목별 첫등록 아님). */
   isNew?: boolean;
+  /** 수강 시작일(YYYY-MM-DD). ijw 익스포터의 30/60일 신입색·정렬 가중치 계산용(재원/대기만). */
+  enrollmentDate?: string | null;
   /** 타 반에서 이동해 들어온 학생(셀에서 초록 강조). */
   isTransferredIn?: boolean;
   /** 분리등원 요일 — []=전 요일, ['mon','thu']=월목만. 비어있지 않으면 셀에 배지로 표시. */
@@ -227,6 +229,7 @@ export async function getWeeklyScheduleWithStudents(
       status: r.on_hold ? "hold" : "active",
       // 날짜 문자열(YYYY-MM-DD) 사전식 비교 — start_date >= cutoff면 30일 이내.
       isNew: r.start_date != null && r.start_date >= newCutoff,
+      enrollmentDate: r.start_date,
       isTransferredIn: r.is_transferred_in === true,
       attendanceDays: r.attendance_days ?? [],
       englishName: s.english_name ?? null,

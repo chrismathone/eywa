@@ -5,9 +5,10 @@ import { FileSpreadsheet, Loader2, Sheet } from "lucide-react";
 import { TimetableImportDialog } from "./import-dialog";
 import { syncSheetsNow } from "@/features/integrations/server/actions";
 
-export function TimetableToolbarActions() {
+export function TimetableToolbarActions({ subject }: { subject?: string }) {
   const [syncing, startSync] = useTransition();
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subject ?? "math")}`;
 
   function pushToSheet() {
     setSyncMsg(null);
@@ -21,7 +22,7 @@ export function TimetableToolbarActions() {
   return (
     <div className="print:hidden flex items-center gap-1">
       <a
-        href="/api/exports/timetable"
+        href={exportHref}
         className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
       >
         <FileSpreadsheet className="size-3" />
