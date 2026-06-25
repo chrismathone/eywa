@@ -13,8 +13,9 @@ export async function SheetsFace() {
         <p className="eyebrow">관리 · 외부 연동</p>
         <h2 className="text-foreground text-lg font-semibold">Google Sheets 동기화</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          시간표를 Google Sheets로 내보냅니다. eywa 서비스 계정이 시트를 소유하고, 입력한 이메일에
-          편집 권한을 부여합니다.
+          수학 시간표를 Google Sheets로 내보냅니다. 새로 연결하면 eywa 서비스 계정이 시트를 생성해
+          입력한 이메일에 편집 권한을 부여하고, ‘지금 동기화’는 대상 시트에 <strong>eywa·</strong> 접두
+          탭으로 추가합니다(기존 탭은 보존 — ijw 등과 한 시트를 공유 가능).
         </p>
       </header>
       <SheetsClient status={status} />

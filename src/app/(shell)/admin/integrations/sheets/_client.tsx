@@ -136,6 +136,14 @@ export function SheetsClient({ status }: { status: IntegrationStatus }) {
           <DisconnectBtn />
         </form>
       </div>
+      <p className="text-muted-foreground text-[11px]">
+        ‘지금 동기화’는 수학 시간표를 <strong>eywa·</strong> 접두 탭으로 추가합니다(기존 탭 보존 —
+        공유 시트 안전). 서비스 계정이 대상 시트에 편집 권한을 가져야 합니다.
+      </p>
+      <p className="text-chart-4 text-[11px]">
+        ⚠️ 전환기에 ijw가 같은 시트를 <strong>전체 덮어쓰기</strong>로 자동 동기화하면 eywa 탭이
+        지워집니다 — 한 시트를 공유하는 동안에는 ijw의 자동 내보내기를 일시중지하세요.
+      </p>
 
       {syncState?.error ? (
         <p className="text-chart-4 text-sm">{syncState.error}</p>

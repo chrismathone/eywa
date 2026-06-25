@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   createTenantSpreadsheet,
-  pushTimetableToSheets,
+  pushMathTimetableTabs,
 } from "@/features/integrations/google-sheets";
+import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
 
 export type ConnectState = { error?: string; url?: string } | undefined;
 
@@ -55,6 +56,13 @@ export async function syncSheetsNow(
 ): Promise<SyncState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // ⚠️ 게이트는 페이지가 아니라 액션에서(CLAUDE.md #58). 이 동기화는 **테넌트 전체 수학 시간표**(전
+  // 강사·전 학생 명단)를 외부 공유 시트로 내보내므로 master 전용이다. 액션이 owner 콘솔(master 게이트)
+  // 외에 /timetable 툴바에서도 호출돼, 게이트가 없으면 강사·readonly가 전체 로스터를 외부로 push할 수
+  // 있었다(intra-tenant PII 누수 + 권한 위반). UI 버튼 숨김(toolbar-actions canSync)과 이중 방어.
+  if (user.systemRole !== "master") {
+    return { error: "구글 시트 동기화는 원장(master)만 할 수 있습니다" };
+  }
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -71,7 +79,10 @@ export async function syncSheetsNow(
     return { error: "먼저 Google Sheets를 연결하거나 학원 설정에서 시트 ID를 입력해주세요" };
 
   try {
-    await pushTimetableToSheets(spreadsheetId);
+    // 수학 시간표 = ijw 충실 익스포터 → 공유 시트에 eywa·{tenant}· 접두 탭으로 비파괴 추가(기존 탭
+    // 보존). master 전용이라 전체(unscoped) 내보내기가 정당(전 강사·전 학생). 토큰=테넌트별 탭 격리.
+    const buffer = await buildMathTimetableBuffer();
+    await pushMathTimetableTabs(spreadsheetId, buffer, user.tenantId.slice(0, 8));
     // upsert(.update 아님) — 학원 설정 googleSheetId 폴백 테넌트는 user_integrations 행이 없어
     // .update가 0행 no-op 되어 동기 시각/오류가 화면에 안 떴다(#피드백 손실). connectGoogleSheets와 동일 패턴.
     // spreadsheet_url/shared_with_email은 넣지 않아 폴백 의미(연결흐름 아님)를 보존.
@@ -90,6 +101,8 @@ export async function syncSheetsNow(
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    // best-effort: 즉시 토스트(return)가 1차 피드백 채널이고, 이 upsert는 다음 로드 때 보일 durable
+    // last_error 보존용. 이 쓰기 자체가 실패해도(RLS 엣지·일시) 토스트는 떠 사용자에게 오류가 전달된다.
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,

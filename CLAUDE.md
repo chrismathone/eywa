@@ -275,6 +275,26 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수학 시간표 = ijw 익스포터 완전이식 + 구글시트 공유-탭 push (2026-06-25) — ✅ 게이트 그린 + 13에이전트 적대리뷰
+계획 [`giggly-orbiting-sunset.md`]. eywa가 ijw `exportMathTimetableToExcel`과 **동일 xlsx**를 생성(verbatim 이식
+[`exporter.ts`](src/features/exports/math-timetable/exporter.ts) + 얇은 어댑터 [`assemble.ts`](src/features/exports/math-timetable/assemble.ts))하고,
+전환기에 **한 구글 스프레드시트를 두 앱(ijw+eywa)이 공유**하도록 eywa는 **자기 탭만 비파괴 추가**한다. (수학만 먼저 — 영어=10교시·LAB 별도, 후속.)
+- **단일 빌더**: [`buildMathTimetableBuffer({teacherId?})`](src/features/exports/math-timetable/build-buffer.ts) = 다운로드 라우트
+  ([route.ts](<src/app/api/exports/timetable/route.ts>) `?subject=math`)와 시트 동기화가 공유(중복 제거). 강사 헤더색은 `users.bg_color/text_color`→없으면 익스포터 해시색.
+- **구글시트 비파괴 공유 push** [`pushMathTimetableTabs(spreadsheetId, buffer, tenantToken)`](src/features/integrations/google-sheets.ts):
+  xlsx→임시 Google Sheets import → 각 탭 `copyTo`(색·병합·서식 보존) → 한 batchUpdate에서 **직전 탭 삭제→신규 탭 rename**(순서 보장: ≥1시트 + 제목충돌 회피) → 임시파일 삭제.
+  소비처=`syncSheetsNow`([integrations/server/actions.ts](src/features/integrations/server/actions.ts)). spreadsheetId=`user_integrations` 또는 `settings.notifications.googleSheetId` 폴백.
+  (옛 `pushTimetableToSheets` 전체 덮어쓰기는 제거 — 공유 시트에서 남의 탭을 지웠음.)
+- **⚠️ 적대리뷰(13에이전트) 확정 6건 전부 수정** — 이 영역의 함정 = "공유 시트 + 액션 중복 노출":
+  1. **(HIGH) 무스코프 PII 누수**: 동기화가 테넌트 **전체** 시간표(전 강사·전 학생)를 외부 시트로 내보내 강사 스코핑(B5) 우회 → **`syncSheetsNow` master 게이트**로 해소(전체 내보내기가 master 권한과 일치).
+  2. **(MED) 액션 게이트 부재**: `/timetable` 툴바 `시트` 버튼이 전 역할 노출 → 서버 master 게이트 + 툴바 `canSync`(master) 숨김 **이중 방어**(CLAUDE.md #58 "페이지 아닌 액션을 게이트").
+  3. **(MED) 멀티테넌트 탭 교차삭제**: 두 테넌트가 같은 시트를 가리키면 `eywa·` 접두만 보고 서로 탭 삭제 → 탭 접두를 **`eywa·{tenant}·`**([sheet-tabs.ts](src/features/exports/math-timetable/sheet-tabs.ts), `tenantId.slice(0,8)`)로 네임스페이스 → 교체 대상이 자기 테넌트로 국한.
+  4. **(LOW) 쓰기 한도/429**: copyTo·batchUpdate에 **429/503 지수백오프 재시도** + 부분 실패 시 방금 복사한 미rename 탭 정리(orphan 누적 차단=사실상 원자적).
+  5. **(LOW) ops 전제 미노출**: ijw 전체 덮어쓰기 경고를 연동 UI([_client.tsx](<src/app/(shell)/admin/integrations/sheets/_client.tsx>))에 한 줄 추가.  6. **(LOW)** 실패 `last_error` upsert best-effort 주석.
+  (기각 4건: batchUpdate 순차적용 의미·copyTo가 hidden 보존·죽은 가드분기·변환 충실도 — 근거 타당.)
+- ⚠️ **ops 전제(코드 불가)**: ① eywa 서비스계정이 공유 시트에 **편집(writer) 권한** ② 공유 기간 동안 **ijw 자동 push 일시중지**(ijw `drive.files.update` 전체 덮어쓰기가 eywa 탭을 지움).
+- 검증: typecheck0/lint0(신규0)/**test495**(sheet-tabs 7, 교차테넌트 격리 포함)/build✓. ⚠️ 구글시트 E2E는 라이브 서비스계정+공유시트 필요 → 순수 단위테스트+게이트+적대리뷰로 대체(로컬 미검).
+
 ### 운영 적합성 하드닝 — 블로커 B1~B6 + 강사 시간표 스코핑 (2026-06-25) — ✅ 게이트 그린 + 라이브 검증
 ijw↔eywa 크로스검증(둘 다 Chrome MCP) + 15에이전트 운영적합성 감사([[project_operational-readiness-verdict]]) 결과,
 코어(RLS 격리·접근제어·돈 계산·스케일)는 프로덕션급이나 실학원 end-to-end를 막는 **블로커 6 + 멀티스태프 PII 1**을 수정.

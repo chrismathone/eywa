@@ -117,7 +117,7 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <TimetableToolbarActions subject={subject} />
+        <TimetableToolbarActions subject={subject} canSync={user.systemRole === "master"} />
       </div>
 
       {slots.length === 0 ? (
