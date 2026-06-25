@@ -206,6 +206,8 @@ export type AiAnalysisDetail = {
   printPayload: PrintPayload;
   recommendedClassIds: string[] | null;
   generatedAt: string;
+  reportEditedBy: string | null; // AI 분석 섹션 마지막 수정자
+  reportEditedAt: string | null;
 };
 
 /** 등록 상담 폼 전체 필드(0046a) — 상세 표시·수정 초기값. */
@@ -279,7 +281,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
   const { data: aiList } = await supabase
     .from("consultation_ai_analysis")
     .select(
-      `id, model_version, diagnosis, learning_plan, print_payload, recommended_class_ids, generated_at`,
+      `id, model_version, diagnosis, learning_plan, print_payload, recommended_class_ids, generated_at, report_edited_by, report_edited_at`,
     )
     .eq("consultation_id", id)
     .order("generated_at", { ascending: false })
@@ -352,6 +354,8 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
           printPayload: ai.print_payload as PrintPayload,
           recommendedClassIds: ai.recommended_class_ids as string[] | null,
           generatedAt: ai.generated_at,
+          reportEditedBy: ai.report_edited_by ?? null,
+          reportEditedAt: ai.report_edited_at ?? null,
         }
       : null,
     recommendedClasses,

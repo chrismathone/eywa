@@ -623,6 +623,9 @@ export const consultationAiAnalysis = pgTable(
     printPayload: jsonb("print_payload").notNull(),
     generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow().notNull(),
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    // AI 분석 섹션 인라인 수정 — 마지막 수정자(이름)·시각. (0053a)
+    reportEditedBy: text("report_edited_by"),
+    reportEditedAt: timestamp("report_edited_at", { withTimezone: true }),
   },
   (t) => [uniqueIndex("ai_consultation_model_idx").on(t.consultationId, t.modelVersion)],
 );

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
+import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
@@ -10,15 +10,14 @@ import { formatCreatedAt } from "@/lib/utils";
 import {
   getEnrollmentConsultationById,
   type AiAnalysisDetail,
-  type ConsultationAudioReport,
   type ConsultationProcessingStatus,
   type FullConsultationFields,
 } from "@/features/enrollment/server/queries";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
-import { RichText } from "@/components/rich-text";
 import { RunAiButton } from "./run-ai-button";
+import { ConsultationReportEditor } from "./consultation-report-editor";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons } from "./_components/consultation-manage";
@@ -234,10 +233,14 @@ export default async function EnrollmentDetailPage({
         </div>
 
         <div className="space-y-4 lg:col-span-2">
-          {consult.audioReport ? (
-            <ConsultationReportPanel
+          {consult.audioReport && consult.aiAnalysis ? (
+            <ConsultationReportEditor
               report={consult.audioReport}
-              generatedAt={consult.aiAnalysis?.generatedAt ?? null}
+              analysisId={consult.aiAnalysis.id}
+              consultationId={consult.id}
+              generatedAt={consult.aiAnalysis.generatedAt}
+              editedBy={consult.aiAnalysis.reportEditedBy}
+              editedAt={consult.aiAnalysis.reportEditedAt}
             />
           ) : consult.aiAnalysis ? (
             <AiAnalysisPanel
@@ -264,61 +267,6 @@ export default async function EnrollmentDetailPage({
         </div>
       </div>
     </div>
-  );
-}
-
-function ConsultationReportPanel({
-  report,
-  generatedAt,
-}: {
-  report: ConsultationAudioReport;
-  generatedAt: string | null;
-}) {
-  // emoji=섹션 시각 앵커. list=나열형(불릿). 나머지는 산문 문단(RichText가 쉼표/줄바꿈 처리).
-  const sections: { key: keyof ConsultationAudioReport; label: string; emoji: string; list?: boolean }[] = [
-    { key: "consultationType", label: "상담 성격", emoji: "🧭" },
-    { key: "familyBackground", label: "가정 배경", emoji: "🏠" },
-    { key: "parentConcerns", label: "학부모 걱정", emoji: "😟", list: true },
-    { key: "parentQuestions", label: "학부모 질문", emoji: "❓", list: true },
-    { key: "parentRequests", label: "학부모 요청", emoji: "🙋", list: true },
-    { key: "parentSatisfaction", label: "학부모 만족도", emoji: "😊" },
-    { key: "studentTraits", label: "학생 특이사항", emoji: "🎒", list: true },
-    { key: "teacherResponse", label: "교사 대응", emoji: "🧑‍🏫", list: true },
-    { key: "salesPoints", label: "세일즈 포인트", emoji: "💡", list: true },
-    { key: "agreements", label: "합의 사항", emoji: "🤝", list: true },
-    { key: "followUps", label: "후속 조치", emoji: "📞", list: true },
-    { key: "warnings", label: "주의 신호", emoji: "⚠️", list: true },
-  ];
-
-  return (
-    <section className="space-y-3">
-      <header className="flex items-baseline justify-between">
-        <div className="inline-flex items-center gap-2">
-          <Sparkles className="text-chart-4 size-4" />
-          <h2 className="text-foreground text-sm font-semibold">상담 AI 분석</h2>
-        </div>
-        {generatedAt ? (
-          <span className="text-muted-foreground num text-[11px]">
-            {formatCreatedAt(generatedAt)}
-          </span>
-        ) : null}
-      </header>
-
-      {/* 섹션마다 이모지 + 라벨 헤더의 단일 카드 — 좌측 정보 카드와 동일 스타일(좌우 통일). */}
-      {sections.map(({ key, label, emoji, list }) => {
-        const body = report[key];
-        if (typeof body !== "string" || !body.trim()) return null;
-        return (
-          <Card key={key} emoji={emoji} title={label}>
-            <RichText
-              text={body}
-              bulletize={list}
-              className="text-foreground space-y-1.5 text-sm leading-relaxed"
-            />
-          </Card>
-        );
-      })}
-    </section>
   );
 }
 

@@ -578,3 +578,73 @@ export async function startConsultationFromAudio(
   revalidatePath("/enrollment");
   redirect(`/enrollment/${consult.id}`);
 }
+
+export type UpdateConsultationReportState =
+  | { error?: string; ok?: true; editedBy?: string; editedAt?: string }
+  | undefined;
+
+// 인라인 수정 가능한 12개 audioReport 섹션(extracted는 구조화 데이터라 제외).
+const EDITABLE_AUDIO_KEYS = new Set([
+  "consultationType",
+  "familyBackground",
+  "parentConcerns",
+  "parentQuestions",
+  "parentRequests",
+  "parentSatisfaction",
+  "studentTraits",
+  "teacherResponse",
+  "salesPoints",
+  "agreements",
+  "followUps",
+  "warnings",
+]);
+
+/**
+ * 등록상담 AI 분석 섹션 인라인 수정 — print_payload.audioReport의 해당 섹션만 머지(다른 섹션·구조화 데이터 보존)
+ * + 마지막 수정자·시각 기록. ⚠️ 동결 스냅샷이지만 명시적 교정은 허용(재분석 누르면 덮어쓸 수 있음 — 명시 버튼).
+ */
+export async function updateConsultationReportSection(
+  _prev: UpdateConsultationReportState,
+  formData: FormData,
+): Promise<UpdateConsultationReportState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+
+  const analysisId = String(formData.get("analysisId") ?? "").trim();
+  const consultationId = String(formData.get("consultationId") ?? "").trim();
+  const key = String(formData.get("key") ?? "").trim();
+  const content = String(formData.get("content") ?? "");
+  if (!analysisId) return { error: "분석 ID가 누락되었습니다" };
+  if (!EDITABLE_AUDIO_KEYS.has(key)) return { error: "잘못된 섹션입니다" };
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("consultation_ai_analysis")
+    .select("print_payload")
+    .eq("id", analysisId)
+    .single();
+  if (!row) return { error: "AI 분석을 찾을 수 없습니다" };
+  const pp =
+    row.print_payload && typeof row.print_payload === "object"
+      ? (row.print_payload as Record<string, unknown>)
+      : {};
+  const audioReport =
+    pp.audioReport && typeof pp.audioReport === "object"
+      ? (pp.audioReport as Record<string, unknown>)
+      : {};
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("consultation_ai_analysis")
+    .update({
+      print_payload: { ...pp, audioReport: { ...audioReport, [key]: content.trim() } },
+      report_edited_by: user.displayName,
+      report_edited_at: now,
+    })
+    .eq("id", analysisId);
+  if (error) return { error: error.message };
+
+  if (consultationId) revalidatePath(`/enrollment/${consultationId}`);
+  revalidatePath("/enrollment");
+  return { ok: true, editedBy: user.displayName, editedAt: now };
+}
