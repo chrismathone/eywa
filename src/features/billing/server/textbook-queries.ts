@@ -12,6 +12,7 @@ export type TextbookOrderRow = {
   price: number;
   status: string; // 파생: paid>ordered>requested
   requestDate: string | null;
+  notes: string | null; // 내부 메모(다이얼로그 입력) — 목록에 표시
   // ijw식 3개 독립 체크 + 도달 시각(체크 hover에 표시).
   registered: boolean;
   ordered: boolean;
@@ -48,7 +49,7 @@ export async function getTextbookOrdersPage(
   let qb = supabase
     .from("textbook_orders")
     .select(
-      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, registered_at, ordered_at, paid_at, status_by_name, status_at",
+      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at",
       { count: "exact" },
     );
   if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
@@ -66,6 +67,7 @@ export async function getTextbookOrdersPage(
     price: Number(r.price),
     status: r.status,
     requestDate: r.request_date,
+    notes: r.notes,
     registered: !!r.registered_at,
     ordered: !!r.ordered_at,
     paid: !!r.paid_at,

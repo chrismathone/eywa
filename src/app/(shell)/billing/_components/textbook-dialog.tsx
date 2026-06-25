@@ -144,7 +144,7 @@ export function TextbookDialog({
           </Field>
 
           <Field label="메모">
-            <textarea name="notes" rows={2} className={`${inputCls} resize-y`} placeholder="선택" />
+            <textarea name="notes" rows={2} defaultValue={order?.notes ?? ""} className={`${inputCls} resize-y`} placeholder="선택" />
           </Field>
 
           {state?.error ? (

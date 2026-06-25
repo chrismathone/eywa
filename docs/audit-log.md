@@ -44,8 +44,9 @@ attendance_notifications(3) · SUBJECT_TABS(등록상담 과목탭, 4) · class 
 |---|---|---|
 | 미사용 shadcn ui: `tabs.tsx`·`checkbox.tsx`·`badge.tsx`·`card.tsx`·`table.tsx` | importers=0 | eywa는 FaceTabs·Pill·커스텀 사용. shadcn 보일러플레이트(무해) |
 | dead 컴포넌트: `StudentQuickPanel`·`StudentQuickPopover` (`students/_components/student-quick-panel.tsx`, `components/student-quick-popover.tsx`) | import 0 | ⚠️ CLAUDE.md "모바일 peek 폴백 잔존" 메모는 **stale**(실제 미연결). 제거 또는 재연결 결정 필요 |
-| dead 액션: `endEnrollment`(`enrollments/server/actions.ts:95`)·`recomputePrimaryTeacher`(`students/server/actions.ts:549`) | 호출처 0 | 정의만 있고 트리거 없음. 제거 또는 배선 필요(수강종료 UI는 다른 경로 사용) |
-| write-only 컬럼: `textbook_orders.notes` | createTextbookOrder가 INSERT하나 어떤 쿼리도 SELECT 안 함 | 표시 추가 또는 무시 |
+| dead 액션 `endEnrollment`(`enrollments/server/actions.ts:95`) | 호출처 0 | **중복** — 수강종료 UI(`EndEnrollmentButton`)는 `endSingleEnrollment`(`students/server/actions.ts:366`)를 씀. **기능 정상**, endEnrollment는 leftover. 제거 안전 |
+| dead 액션 `recomputePrimaryTeacher`(`students/server/actions.ts:549`) | 호출처 0 | 담임 재계산 유틸인데 데모는 `scripts/_poc_migration/fix-primary-teacher.cjs`로 대체. 미배선(향후 /admin 배선 또는 제거) |
+| ~~write-only 컬럼 `textbook_orders.notes`~~ | — | ✅ **해결(2026-06-24)**: 쿼리 select + 교재 목록 행에 "메모:" 표시 복구(다이얼로그 입력이 유실되던 것) |
 
 ### ⏭️ 의도적 orphan (이미 문서화 — 재검토 불필요)
 - 설정 hidden orphan: `operations.terms` · `notifications.kakaoChannelId` · `billing.defaultMethod` · `billing.taxMode` → CLAUDE.md "🚫 입력 숨김"(소비처 없어 v1 비노출, 상태·스키마·저장은 보존).

@@ -104,6 +104,9 @@ export function TextbooksTable({
                   <td className="text-foreground px-4 py-2 text-xs">
                     {r.bookName}
                     {r.bookDetail ? <span className="text-text-faint"> · {r.bookDetail}</span> : null}
+                    {r.notes ? (
+                      <div className="text-text-faint mt-0.5 text-[11px] whitespace-pre-wrap">메모: {r.notes}</div>
+                    ) : null}
                   </td>
                   <td className="text-foreground px-4 py-2 text-xs">{r.studentName ?? "—"}</td>
                   <td className="text-text-dim px-4 py-2 text-xs">{r.teacherName ?? "—"}</td>

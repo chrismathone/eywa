@@ -1062,7 +1062,8 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 **벗어나면**(=제출 성공 후 서버 `redirect` 또는 `router.push`) RouteWindow가 **창을 닫고 배경을 새로고침**한다
 (옛 패널의 "닫고 목록 갱신"과 동일 — 서버액션·폼 로직 수정 0). `ROUTE_WINDOW_SIZE`에 `"X/new"` 폭 등록(옛 패널 폭 계승).
 - ⚠️ 콘텐츠용 우측 슬라이드 `<Sheet side="right">`는 **신규 추가 금지** — 창으로 연다. (`Sheet`는 모바일 내비
-  드로어 등에 한정. `students/_components/student-quick-panel`의 Sheet는 모바일 peek 폴백으로만 잔존.)
+  드로어 등에 한정.) ⚠️ **정정(2026-06-24 배선 감사)**: `students/_components/student-quick-panel`(+`components/student-quick-popover`)은
+  "모바일 peek 폴백 잔존"이라 적혀 있었으나 **실제로는 어디서도 import 안 되는 dead 컴포넌트**(미연결). 제거/재연결은 백로그([`docs/audit-log.md`](docs/audit-log.md)).
 - 한계: 배경(메인 프레임) 목록은 `router.refresh()`로 갱신되지만, 목록이 **별도 창**이면 그 창은 즉시
   갱신되지 않음(창 X 버튼 `closeAndRefresh`와 동일한 앱 전반 한계).
 
