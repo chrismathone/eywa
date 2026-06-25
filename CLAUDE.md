@@ -275,6 +275,29 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 운영 적합성 하드닝 — 블로커 B1~B6 + 강사 시간표 스코핑 (2026-06-25) — ✅ 게이트 그린 + 라이브 검증
+ijw↔eywa 크로스검증(둘 다 Chrome MCP) + 15에이전트 운영적합성 감사([[project_operational-readiness-verdict]]) 결과,
+코어(RLS 격리·접근제어·돈 계산·스케일)는 프로덕션급이나 실학원 end-to-end를 막는 **블로커 6 + 멀티스태프 PII 1**을 수정.
+항목별 게이트(typecheck0/lint0). **test 470→480**(generate 폴백 10), **test:rls 4**(신규), build✓.
+- **관측성 단일 진입점**(B3): 신규 [`reportError`/`reportWarning`](src/lib/observability/report-error.ts)(외부 서비스 0, 구조화 JSON→Vercel 로그 grep) +
+  [`src/instrumentation.ts`](src/instrumentation.ts)(Next16 `register`=zod env 검증[코어4 hard-fail·권장 WARN] + `onRequestError`=서버에러 중앙 캡처).
+  **소비처**: 웹훅 background write ~7곳(`route.ts` `runWrite`로 래핑→`{error}` 검사·로깅), generateJSON 폴백 로그, cron 회수 로그.
+- **AI provider 폴백**(B1): [models.ts](src/lib/ai/models.ts) `resolveModelChain`(키 있는 provider 정렬) + [generate.ts](src/lib/ai/generate.ts) `generateJSON`이
+  **체인 루프**로 호출 → 401/403/429면 다른 provider 자동 재시도(무효·만료 키도 회복; 기존엔 무효 키가 첫 provider에 고정). 그 외 오류는 즉시 한글화 throw.
+- **웹훅 URL 중앙화**(B6): [`getAppUrl`/`getAssemblyaiWebhookUrl`](src/lib/config/app-url.ts) — `eywa-alpha.vercel.app` 조용한 하드코딩 폴백 제거,
+  미설정 시 명확 throw. 3흐름(meetings/enrollment/consultations) 4곳이 이 헬퍼 사용. `.env.local.example`에 `NEXT_PUBLIC_APP_URL` 명시.
+- **멈춘 전사 복구 cron**(B2): [`/api/cron/reconcile-transcriptions`](<src/app/api/cron/reconcile-transcriptions/route.ts>)(`CRON_SECRET` Bearer 게이트) +
+  [vercel.json](vercel.json) `*/15`. 3테이블 `processing_status IN (uploaded/transcribing/analyzing) AND updated_at<now-30m` → `failed`+안내(명시 실패→사용자 retry 유도).
+  **라이브 E2E**: no-auth 401 / secret 200 `reconciled.meeting_minutes:1` / 멈춘 행→failed.
+- **강사 `/timetable` 스코핑**(intra-tenant PII): [queries.ts](src/features/timetable/server/queries.ts) `getWeeklyScheduleWithStudents(teacherId?)` — teacher면
+  `getTeacherScope().classIds`로 슬롯 필터. [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `requireAccess` 반환 user로 teacherId 전달. [teacher-menu](src/components/teacher-menu.tsx) 시간표 링크 복원.
+  **라이브 E2E**: 박지훈 영어뷰 48슬롯/489 (영어 칩만, 본인만) vs master 371슬롯/2470(3과목·전강사) — 누수 차단 확인.
+- **DB 프로비저닝 일원화**(B4): [`scripts/apply-all-alphas.ts`](scripts/apply-all-alphas.ts)(`pnpm db:alphas`, 멱등·사전순 54파일) — 신규 DB는
+  `db:migrate && db:alphas`. `0019a`(dropped `scenarios`)는 존재 가드로 no-op화. README §3/§4/§5 갱신(0050a~0053a 추가).
+- **RLS 격리 회귀테스트**(B5): [`tests/integration/rls-isolation.test.ts`](tests/integration/rls-isolation.test.ts)(`pnpm test:rls`, [vitest.integration.config.ts](vitest.integration.config.ts)) —
+  2-테넌트 throwaway + `set local role authenticated`+JWT claim으로 실제 RLS 발동. 본인 테넌트 1·타 테넌트 0 검증. 기본 `pnpm test` 미포함(DB 없는 CI 안전).
+- ⚠️ **사용자 ops(코드 불가)**: Vercel `UPSTAGE_API_KEY` 교체, 카카오 비즈채널·SOLAPI(알림톡), `CRON_SECRET` 프로덕션 설정. 학부모 메시징 실발송·대시보드 강사 스코핑은 후속.
+
 ### 인쇄 플로팅 창+A4 표준 / 교재요청서 / 교재 3체크 / 지출 미리보기 / 계산기 / 배선 감사 (2026-06-24) — ✅ 게이트 그린(시각검증 사용자 몫)
 사용자 연속 요청 묶음. 전부 typecheck0/lint0/라우트307. ⚠️ Chrome MCP 미연결 → **시각 인쇄/렌더 검증은 사용자 확인 필요**.
 - **인쇄 = 플로팅 창 + A4 표준**(핵심): 인쇄 버튼 있는 모든 곳을 새 탭이 아니라 **플로팅 창**으로 연다. 신규
