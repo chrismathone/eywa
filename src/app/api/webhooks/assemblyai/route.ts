@@ -8,6 +8,7 @@ import {
   type MeetingReport,
 } from "@/features/meetings/server/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { reportError } from "@/lib/observability/report-error";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
 import { extractConsultationForm } from "@/features/enrollment/server/form-extract";
 import {
@@ -22,6 +23,20 @@ function secretMatches(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * 파이프라인 전진 write(analyzing/completed/upsert)의 반환 {error}를 검사·로깅(B3).
+ * 배경: 이 background write들이 조용히 실패하면 분석이 끝난 행이 결과를 못 보이고 멈춘 것처럼 남았다.
+ * 상태 전이 자체는 불변 — 실패 시 reportError로 표면화만(B2 cron이 멈춘 행을 따로 회수).
+ */
+async function runWrite(
+  scope: string,
+  recordId: string,
+  query: PromiseLike<{ error: unknown }>,
+): Promise<void> {
+  const { error } = await query;
+  if (error) reportError(error, { scope: `webhook.${scope}`, recordId });
 }
 
 // AssemblyAI may pause up to a few minutes between calls; give Claude plenty of room too.
@@ -189,16 +204,20 @@ async function handleMeeting(
     return NextResponse.json({ ok: true });
   }
 
-  await admin
-    .from("meeting_minutes")
-    .update({
-      transcription: transcript.text,
-      speaker_labels: transcript.utterances ?? [],
-      audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
-      processing_status: "analyzing",
-      processing_error: null,
-    })
-    .eq("id", meeting.id);
+  await runWrite(
+    "meeting.analyzing",
+    meeting.id,
+    admin
+      .from("meeting_minutes")
+      .update({
+        transcription: transcript.text,
+        speaker_labels: transcript.utterances ?? [],
+        audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+        processing_status: "analyzing",
+        processing_error: null,
+      })
+      .eq("id", meeting.id),
+  );
 
   // 전사 포맷·8섹션 분석은 공유 단일 소스(features/meetings/server/ai.ts) — 재분석 액션과 동일.
   const formatted = formatMeetingTranscript(transcript.text, transcript.utterances);
@@ -223,18 +242,22 @@ async function handleMeeting(
     return NextResponse.json({ ok: true });
   }
 
-  await admin
-    .from("meeting_minutes")
-    .update({
-      ai_report: report,
-      ai_speaker_roles: speakerRoles,
-      ai_summary: report.summary,
-      ai_model_version: modelVersion,
-      ai_generated_at: new Date().toISOString(),
-      processing_status: "completed",
-      processing_error: null,
-    })
-    .eq("id", meeting.id);
+  await runWrite(
+    "meeting.completed",
+    meeting.id,
+    admin
+      .from("meeting_minutes")
+      .update({
+        ai_report: report,
+        ai_speaker_roles: speakerRoles,
+        ai_summary: report.summary,
+        ai_model_version: modelVersion,
+        ai_generated_at: new Date().toISOString(),
+        processing_status: "completed",
+        processing_error: null,
+      })
+      .eq("id", meeting.id),
+  );
 
   return NextResponse.json({ ok: true });
 }
@@ -290,16 +313,20 @@ async function handleConsultation(
     return NextResponse.json({ ok: true });
   }
 
-  await admin
-    .from("enrollment_consultations")
-    .update({
-      transcription: transcript.text,
-      speaker_labels: transcript.utterances ?? [],
-      audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
-      processing_status: "analyzing",
-      processing_error: null,
-    })
-    .eq("id", consult.id);
+  await runWrite(
+    "consultation.analyzing",
+    consult.id,
+    admin
+      .from("enrollment_consultations")
+      .update({
+        transcription: transcript.text,
+        speaker_labels: transcript.utterances ?? [],
+        audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+        processing_status: "analyzing",
+        processing_error: null,
+      })
+      .eq("id", consult.id),
+  );
 
   const formatted = (transcript.utterances ?? []).length > 0
     ? (transcript.utterances as SpeakerUtterance[])
@@ -428,17 +455,21 @@ async function handleConsultation(
 
   const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
 
-  await admin.from("consultation_ai_analysis").upsert(
-    {
-      consultation_id: consult.id,
-      model_version: modelVersion,
-      diagnosis: diagnosisStub,
-      learning_plan: learningPlanStub,
-      print_payload: printPayload,
-      // onConflict DO UPDATE 시 DEFAULT now()가 안 먹으므로 명시 갱신(재분석 '생성일' 정확).
-      generated_at: new Date().toISOString(),
-    },
-    { onConflict: "consultation_id,model_version" },
+  await runWrite(
+    "consultation.analysis",
+    consult.id,
+    admin.from("consultation_ai_analysis").upsert(
+      {
+        consultation_id: consult.id,
+        model_version: modelVersion,
+        diagnosis: diagnosisStub,
+        learning_plan: learningPlanStub,
+        print_payload: printPayload,
+        // onConflict DO UPDATE 시 DEFAULT now()가 안 먹으므로 명시 갱신(재분석 '생성일' 정확).
+        generated_at: new Date().toISOString(),
+      },
+      { onConflict: "consultation_id,model_version" },
+    ),
   );
 
   // Auto-fill — 빈 필드만 채운다(상담사 수기 입력 절대 안 덮어씀).
@@ -491,7 +522,11 @@ async function handleConsultation(
     );
   }
 
-  await admin.from("enrollment_consultations").update(patch).eq("id", consult.id);
+  await runWrite(
+    "consultation.completed",
+    consult.id,
+    admin.from("enrollment_consultations").update(patch).eq("id", consult.id),
+  );
 
   return NextResponse.json({ ok: true });
 }
@@ -546,16 +581,20 @@ async function handleStudentConsultation(
     return NextResponse.json({ ok: true });
   }
 
-  await admin
-    .from("student_consultations")
-    .update({
-      transcription: transcript.text,
-      speaker_labels: transcript.utterances ?? [],
-      audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
-      processing_status: "analyzing",
-      processing_error: null,
-    })
-    .eq("id", sc.id);
+  await runWrite(
+    "studentConsultation.analyzing",
+    sc.id,
+    admin
+      .from("student_consultations")
+      .update({
+        transcription: transcript.text,
+        speaker_labels: transcript.utterances ?? [],
+        audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+        processing_status: "analyzing",
+        processing_error: null,
+      })
+      .eq("id", sc.id),
+  );
 
   const formatted = (transcript.utterances ?? []).length > 0
     ? (transcript.utterances as SpeakerUtterance[]).map((s) => `[화자 ${s.speaker}] ${s.text}`).join("\n")
@@ -574,17 +613,21 @@ async function handleStudentConsultation(
       audience: sc.audience,
       category: sc.category,
     });
-    await admin
-      .from("student_consultations")
-      .update({
-        ai_report: report,
-        ai_summary: report.summary,
-        ai_model_version: `${model}-${new Date().toISOString().slice(0, 10)}`,
-        ai_generated_at: new Date().toISOString(),
-        processing_status: "completed",
-        processing_error: null,
-      })
-      .eq("id", sc.id);
+    await runWrite(
+      "studentConsultation.completed",
+      sc.id,
+      admin
+        .from("student_consultations")
+        .update({
+          ai_report: report,
+          ai_summary: report.summary,
+          ai_model_version: `${model}-${new Date().toISOString().slice(0, 10)}`,
+          ai_generated_at: new Date().toISOString(),
+          processing_status: "completed",
+          processing_error: null,
+        })
+        .eq("id", sc.id),
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await admin
