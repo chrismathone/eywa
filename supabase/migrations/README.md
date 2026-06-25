@@ -28,18 +28,18 @@ alpha는 건드리지 않는다 → alpha는 사람이 직접 돌려야 한다.
 # 1) drizzle 번호본 전부 (0000 … 0024)
 pnpm db:migrate
 
-# 2) alpha 파일을 번호 순서대로 raw 실행 (아래 §5 목록 순서). 둘 중 하나:
-#    (a) Supabase 대시보드 → SQL Editor에 파일 내용 붙여넣기, 또는
-#    (b) node로 raw 실행 (파일 1개씩):
-node --env-file=.env.local -e "const fs=require('fs');const sql=require('postgres')(process.env.DATABASE_URL,{ssl:'require',max:1});sql.unsafe(fs.readFileSync('supabase/migrations/0001a_rls_constraints_triggers.sql','utf8')).then(()=>{console.log('ok');return sql.end();}).catch(e=>{console.error(e.message);process.exit(1);});"
+# 2) alpha 파일(000Na_*) 전부를 사전순으로 멱등 적용 — 한 방. (재실행 안전: 이미 적용=skip)
+pnpm db:alphas
+#    (대안) 개별 파일만: Supabase 대시보드 → SQL Editor에 파일 내용 붙여넣기.
 
 # 3) 시드(데모 테넌트)
 pnpm db:seed
 ```
 
-## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-20)
+## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-25)
 
-공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha `0001a`~`0040a` 전부 적용 완료**. 직접 조회로 확인:
+공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha `0001a`~`0053a` 전부 적용 완료**. `pnpm db:alphas`로
+전 alpha를 멱등 일괄 적용·재실행 수렴 확인(54개 ✓, 0 실패; `0019a`는 dropped `scenarios` 가드로 no-op). 직접 조회로도 확인:
 
 - `pg_trgm` 확장 **설치됨**, `0024a`의 trigram GIN 인덱스 **11개 전부 존재**
   (students 5 · classes 2 · student_consultations 1 · enrollment_consultations 3).
@@ -106,6 +106,10 @@ pnpm db:seed
 | `0043a`~`0047a` | (표 미세분 — CLAUDE.md 진행상황 참조) 성적 목표/코멘트(`0043a`) · 강사 인수인계(`0044a`) · 학생상담 오디오/AI(`0045a`) · 등록상담 전체폼 컬럼+`subject_details`(`0046a`) · `intake_tokens` 학부모 QR 공개접수(`0047a`) |
 | `0048a_intake_rate_limit` | **`intake_attempts`(ip_hash·ok·시각, RLS) — 공개접수 시도 기반 다층 레이트리밋 단일소스**(per-IP/per-tenant/per-token 슬라이딩 1h + time-trap + env-gated Turnstile 백스톱). 원본 IP 미저장(sha256 해시). 봇/스팸 하드닝 |
 | `0049a_lesson_reports` | **`lesson_reports`(student_id·report_date·progress·exam_info·homework_score·teacher_name, RLS) — 수업 진도/보고서**. ijw 시간표 학생 hover의 "[진도]" 줄. ijw Edutrix Supabase reports를 학생 이름 매칭으로 이식(`scripts/_poc_migration/import-lesson-reports.cjs`). |
+| `0050a_meeting_speaker_staff` | **`meeting_minutes.speaker_staff`(jsonb) — 회의 화자(A/B)↔직원(users) 연결**. 화자 편집기가 직원 드롭다운으로 매핑(`ai_speaker_roles` 표시라벨과 분리 저장). 업무연계 기반. |
+| `0051a_textbook_status_audit` | **`textbook_orders.registered_at`·`status_by_name`·`status_at` — 교재 3체크(등록/주문/납부) 타임스탬프 + 마지막 변경자**(ijw식 독립 체크). |
+| `0052a_meeting_report_edit` | **`meeting_minutes.ai_report_edited_by`·`ai_report_edited_at` — 회의 AI 보고서 섹션 인라인 수정자·시각**(인쇄/공유 전 staff 교정). |
+| `0053a_consultation_report_edit` | **`consultation_ai_analysis.report_edited_by`·`report_edited_at` — 등록상담 AI 분석 인라인 수정자·시각**(동결 print_payload.audioReport를 명시 교정 허용). |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
