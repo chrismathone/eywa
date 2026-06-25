@@ -39,14 +39,14 @@ dead action/route/component · form→persist→display 단절. 6개 도메인 �
 moveEnrollment · subjectTone(14곳) · SectionTitle · FeatureBlock · english_levels(3) · lesson_reports(7) ·
 attendance_notifications(3) · SUBJECT_TABS(등록상담 과목탭, 4) · class merge_group은 schema뿐이나 합반=의도적 미구현.
 
-### 🟡 dead code (저영향 — 제거는 선택, 동작엔 무해)
-| 항목 | 근거 | 비고 |
+### dead code (2026-06-24 — 대부분 제거 완료)
+| 항목 | 근거 | 처리 |
 |---|---|---|
-| 미사용 shadcn ui: `tabs.tsx`·`checkbox.tsx`·`badge.tsx`·`card.tsx`·`table.tsx` | importers=0 | eywa는 FaceTabs·Pill·커스텀 사용. shadcn 보일러플레이트(무해) |
-| dead 컴포넌트: `StudentQuickPanel`·`StudentQuickPopover` (`students/_components/student-quick-panel.tsx`, `components/student-quick-popover.tsx`) | import 0 | ⚠️ CLAUDE.md "모바일 peek 폴백 잔존" 메모는 **stale**(실제 미연결). 제거 또는 재연결 결정 필요 |
-| dead 액션 `endEnrollment`(`enrollments/server/actions.ts:95`) | 호출처 0 | **중복** — 수강종료 UI(`EndEnrollmentButton`)는 `endSingleEnrollment`(`students/server/actions.ts:366`)를 씀. **기능 정상**, endEnrollment는 leftover. 제거 안전 |
-| dead 액션 `recomputePrimaryTeacher`(`students/server/actions.ts:549`) | 호출처 0 | 담임 재계산 유틸인데 데모는 `scripts/_poc_migration/fix-primary-teacher.cjs`로 대체. 미배선(향후 /admin 배선 또는 제거) |
-| ~~write-only 컬럼 `textbook_orders.notes`~~ | — | ✅ **해결(2026-06-24)**: 쿼리 select + 교재 목록 행에 "메모:" 표시 복구(다이얼로그 입력이 유실되던 것) |
+| ~~미사용 shadcn ui: `tabs`·`checkbox`·`badge`·`card`·`table`~~ | importers=0 | ✅ **제거**(5파일 삭제, eywa는 FaceTabs·Pill·커스텀 사용) |
+| ~~dead 컴포넌트 `StudentQuickPanel`·`StudentQuickPopover`~~ | import 0 | ✅ **제거**(2파일 삭제). CLAUDE.md stale 메모도 정정 |
+| ~~dead 액션 `endEnrollment`(`enrollments/server/actions.ts`)~~ | 호출처 0 | ✅ **제거** — `endSingleEnrollment`의 중복 leftover(수강종료 기능은 정상) |
+| `recomputePrimaryTeacher`(`students/server/actions.ts:543`) | 호출처 0 | ⏳ **유지** — 담임 재계산 유틸(유용·미배선). 데모는 `fix-primary-teacher.cjs`로 대체. 향후 /admin 배선 후보(삭제 아님) |
+| ~~write-only 컬럼 `textbook_orders.notes`~~ | — | ✅ **해결**: 쿼리 select + 교재 목록 행 "메모:" 표시 + 수정 prefill(round-trip 완성) |
 
 ### ⏭️ 의도적 orphan (이미 문서화 — 재검토 불필요)
 - 설정 hidden orphan: `operations.terms` · `notifications.kakaoChannelId` · `billing.defaultMethod` · `billing.taxMode` → CLAUDE.md "🚫 입력 숨김"(소비처 없어 v1 비노출, 상태·스키마·저장은 보존).

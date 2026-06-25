@@ -90,35 +90,6 @@ export async function createEnrollment(
   return { enrollmentId: data.id };
 }
 
-export type EndEnrollmentState = { error?: string } | undefined;
-
-export async function endEnrollment(
-  _prev: EndEnrollmentState,
-  formData: FormData,
-): Promise<EndEnrollmentState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-
-  const id = String(formData.get("id") ?? "").trim();
-  const reason = String(formData.get("reason") ?? "").trim() || "수강 종료";
-  const endDate =
-    String(formData.get("endDate") ?? "").trim() || new Date().toISOString().slice(0, 10);
-
-  if (!id) return { error: "수강 ID가 누락되었습니다" };
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("enrollments")
-    .update({ end_date: endDate, withdrawal_reason: reason })
-    .eq("id", id);
-
-  if (error) return { error: error.message };
-
-  revalidatePath("/timetable");
-  revalidatePath("/students");
-  return undefined;
-}
-
 export type MoveEnrollmentState = { error?: string } | undefined;
 
 /**
