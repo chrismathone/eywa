@@ -287,8 +287,8 @@ ijw↔eywa 크로스검증(둘 다 Chrome MCP) + 15에이전트 운영적합성 
 - **웹훅 URL 중앙화**(B6): [`getAppUrl`/`getAssemblyaiWebhookUrl`](src/lib/config/app-url.ts) — `eywa-alpha.vercel.app` 조용한 하드코딩 폴백 제거,
   미설정 시 명확 throw. 3흐름(meetings/enrollment/consultations) 4곳이 이 헬퍼 사용. `.env.local.example`에 `NEXT_PUBLIC_APP_URL` 명시.
 - **멈춘 전사 복구 cron**(B2): [`/api/cron/reconcile-transcriptions`](<src/app/api/cron/reconcile-transcriptions/route.ts>)(`CRON_SECRET` Bearer 게이트) +
-  [vercel.json](vercel.json) `*/15`. 3테이블 `processing_status IN (uploaded/transcribing/analyzing) AND updated_at<now-30m` → `failed`+안내(명시 실패→사용자 retry 유도).
-  **라이브 E2E**: no-auth 401 / secret 200 `reconciled.meeting_minutes:1` / 멈춘 행→failed.
+  [vercel.json](vercel.json) `0 18 * * *`(매일 1회 — ⚠️Vercel **Hobby는 cron 일 1회 제한**이라 `*/15`은 배포 거부됨; 더 빠른 회수는 Pro 업그레이드나 외부 스케줄러로 라우트 호출).
+  3테이블 `processing_status IN (uploaded/transcribing/analyzing) AND updated_at<now-30m` → `failed`+안내(명시 실패→사용자 retry 유도). **라이브 E2E**: no-auth 401 / secret 200 `reconciled.meeting_minutes:1` / 멈춘 행→failed.
 - **강사 `/timetable` 스코핑**(intra-tenant PII): [queries.ts](src/features/timetable/server/queries.ts) `getWeeklyScheduleWithStudents(teacherId?)` — teacher면
   `getTeacherScope().classIds`로 슬롯 필터. [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `requireAccess` 반환 user로 teacherId 전달. [teacher-menu](src/components/teacher-menu.tsx) 시간표 링크 복원.
   **라이브 E2E**: 박지훈 영어뷰 48슬롯/489 (영어 칩만, 본인만) vs master 371슬롯/2470(3과목·전강사) — 누수 차단 확인.

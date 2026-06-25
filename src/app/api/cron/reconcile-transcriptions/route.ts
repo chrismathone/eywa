@@ -3,7 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError, reportWarning } from "@/lib/observability/report-error";
 
 /**
- * 멈춘 전사 회수 cron (B2) — Vercel cron이 주기적으로 호출(vercel.json `*​/15 * * * *`).
+ * 멈춘 전사 회수 cron (B2) — Vercel cron이 호출(vercel.json `0 18 * * *` = 매일 1회).
+ * ⚠️ Vercel Hobby 플랜은 cron이 **하루 1회**로 제한 → 일일 스케줄. 더 빠른 회수(~30분)가 필요하면
+ * Pro 업그레이드 후 `*/15 * * * *`로 바꾸거나, 외부 스케줄러(cron-job.org 등)가 `Authorization: Bearer $CRON_SECRET`로 이 라우트를 주기 호출.
  *
  * 배경: AssemblyAI 웹훅이 유실/지연되면 행이 'transcribing'/'analyzing'에 영구 정지하고 알림도 없었다
  * (웹훅이 유일한 'completed'/'failed' 기록자). 30분 넘게 in-progress인 행을 **명시 실패**로 전환한다.
