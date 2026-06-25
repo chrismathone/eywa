@@ -1,6 +1,7 @@
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
-import { resolveModel, type AiKeyName, type AiProvider, type AiTier } from "./models";
+import { resolveModel, resolveModelChain, type AiKeyName, type AiProvider, type AiTier } from "./models";
+import { reportWarning } from "@/lib/observability/report-error";
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
@@ -69,43 +70,81 @@ function rethrowAi(provider: "upstage" | "anthropic", err: unknown): never {
   throw err instanceof Error ? err : new Error(raw);
 }
 
+/** provider 호출 에러의 HTTP 상태코드(SDK가 status를 안 주면 undefined). */
+function providerErrorStatus(err: unknown): number | undefined {
+  return typeof err === "object" && err !== null && "status" in err
+    ? Number((err as { status?: unknown }).status)
+    : undefined;
+}
+
+/** 다른 provider로 폴백할 가치가 있는 오류인가 — 인증(401/403)·한도(429), 또는 키 무효 메시지. */
+export function isRetryableProviderError(err: unknown): boolean {
+  const status = providerErrorStatus(err);
+  if (status === 401 || status === 403 || status === 429) return true;
+  const raw = err instanceof Error ? err.message : String(err);
+  return /invalid.*api key|unauthorized|api key/i.test(raw);
+}
+
+/** provider별 1회 호출 — 응답 텍스트만 반환(throw는 generateJSON 루프가 처리). */
+async function callProvider(
+  provider: AiProvider,
+  model: string,
+  keyName: AiKeyName,
+  opts: GenerateJSONOptions,
+): Promise<string> {
+  if (provider === "upstage") {
+    const client = getUpstage(keyName);
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: opts.maxTokens,
+      // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
+      response_format: { type: "json_object" },
+      messages: [
+        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+        { role: "user" as const, content: opts.prompt },
+      ],
+    });
+    return res.choices[0]?.message?.content ?? "";
+  }
+  const client = getAnthropic(keyName);
+  const res = await client.messages.create({
+    model,
+    max_tokens: opts.maxTokens,
+    ...(opts.system ? { system: opts.system } : {}),
+    messages: [{ role: "user", content: opts.prompt }],
+  });
+  return res.content[0]?.type === "text" ? res.content[0].text : "";
+}
+
 export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
-  const { provider, model } = resolveModel(tier, keyName, opts.provider);
+  const chain = resolveModelChain(tier, keyName, opts.provider);
+  // 키가 하나도 없으면 기존 동작 보존: 모델 있는 첫 candidate로 시도(클라 생성 시 키 없음 throw → rethrowAi).
+  const candidates = chain.length > 0 ? chain : [resolveModel(tier, keyName, opts.provider)];
 
-  let text = "";
-  if (provider === "upstage") {
-    const client = getUpstage(keyName);
+  let lastErr: unknown;
+  for (let i = 0; i < candidates.length; i++) {
+    const { provider, model } = candidates[i];
     try {
-      const res = await client.chat.completions.create({
-        model,
-        max_tokens: opts.maxTokens,
-        // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
-        response_format: { type: "json_object" },
-        messages: [
-          ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-          { role: "user" as const, content: opts.prompt },
-        ],
-      });
-      text = res.choices[0]?.message?.content ?? "";
+      const text = await callProvider(provider, model, keyName, opts);
+      return { data: parseJsonLoose<T>(text), model };
     } catch (e) {
-      rethrowAi("upstage", e);
-    }
-  } else {
-    const client = getAnthropic(keyName);
-    try {
-      const res = await client.messages.create({
-        model,
-        max_tokens: opts.maxTokens,
-        ...(opts.system ? { system: opts.system } : {}),
-        messages: [{ role: "user", content: opts.prompt }],
-      });
-      text = res.content[0]?.type === "text" ? res.content[0].text : "";
-    } catch (e) {
-      rethrowAi("anthropic", e);
+      lastErr = e;
+      // 인증/한도 오류 + 다음 후보가 있으면 다른 provider로 폴백(B1: 무효·만료 키도 자동 회복).
+      // 그 외(파싱·400·5xx) 또는 마지막 후보면 즉시 한글화해 표면화.
+      if (i < candidates.length - 1 && isRetryableProviderError(e)) {
+        reportWarning(`AI ${provider} 호출 실패 → 다른 provider로 폴백`, {
+          scope: "generateJSON.fallback",
+          provider,
+          model,
+          status: providerErrorStatus(e),
+        });
+        continue;
+      }
+      rethrowAi(provider, e);
     }
   }
-
-  return { data: parseJsonLoose<T>(text), model };
+  // 도달 불가(루프가 항상 return 또는 throw) — 타입 종결용 terminator.
+  rethrowAi(candidates[candidates.length - 1].provider, lastErr);
 }

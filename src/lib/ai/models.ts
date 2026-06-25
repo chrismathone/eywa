@@ -37,32 +37,45 @@ export function defaultProvider(): AiProvider {
   return process.env.AI_PROVIDER === "anthropic" ? "anthropic" : "upstage";
 }
 
-/**
- * 티어+키이름 → 실제 (provider, model). 기본 provider 키가 없으면 다른 provider로 1회 폴백(키
- * 있는 쪽) → 둘 다 없으면 모델이 있는 첫 candidate를 반환(이후 클라 생성에서 throw → 호출부 stub).
- * reasoning은 Anthropic 고정.
- *
- * `prefer`: 호출부가 특정 provider를 **선호**(강제 아님)하도록 지정. 그 provider를 후보 맨 앞으로
- * 올린다 — 키가 있으면 그걸 쓰고, 없으면 평소 폴백 순서로 떨어진다(무중단). 녹음 분석(회의·등록상담·
- * 학생상담)이 구조화 추출 품질 위해 `prefer:"anthropic"`로 Claude를 우선하는 데 쓴다.
- */
-export function resolveModel(
-  tier: AiTier,
-  keyName: AiKeyName = "default",
-  prefer?: AiProvider,
-): { provider: AiProvider; model: string; keyName: AiKeyName } {
+export type ResolvedModel = { provider: AiProvider; model: string; keyName: AiKeyName };
+
+/** 후보 provider 순서(reasoning=Anthropic 고정, 그 외 AI_PROVIDER 기본, prefer를 맨 앞으로). */
+function providerOrder(tier: AiTier, prefer?: AiProvider): AiProvider[] {
   const base: AiProvider[] =
     tier === "reasoning"
       ? ["anthropic"]
       : defaultProvider() === "upstage"
         ? ["upstage", "anthropic"]
         : ["anthropic", "upstage"];
-  const order = prefer ? [prefer, ...base.filter((p) => p !== prefer)] : base;
+  return prefer ? [prefer, ...base.filter((p) => p !== prefer)] : base;
+}
 
-  for (const provider of order) {
-    const model = AI_MODELS[tier][provider];
-    if (model && resolveKey(provider, keyName)) return { provider, model, keyName };
-  }
+/**
+ * 시도 순서대로 **키가 실제 있는** (provider, model) 체인. generateJSON이 이 체인을 돌며 한 provider가
+ * 인증/한도 오류를 내면 다음 provider로 폴백한다(B1: 무효 키도 회복 — resolveModel은 단일이라
+ * 무효 키여도 첫 provider에 고정됐었다). 키 있는 후보가 없으면 빈 배열.
+ */
+export function resolveModelChain(
+  tier: AiTier,
+  keyName: AiKeyName = "default",
+  prefer?: AiProvider,
+): ResolvedModel[] {
+  return providerOrder(tier, prefer)
+    .filter((provider) => AI_MODELS[tier][provider] && resolveKey(provider, keyName))
+    .map((provider) => ({ provider, model: AI_MODELS[tier][provider] as string, keyName }));
+}
+
+/**
+ * 티어+키이름 → 실제 (provider, model). 기본 provider 키가 없으면 다른 provider로 폴백(키 있는 쪽) →
+ * 둘 다 없으면 모델이 있는 첫 candidate를 반환(이후 클라 생성에서 throw → 호출부 stub). reasoning은 Anthropic 고정.
+ *
+ * `prefer`: 호출부가 특정 provider를 **선호**(강제 아님)하도록 지정. 키가 있으면 그걸, 없으면 평소 폴백 순서로(무중단).
+ */
+export function resolveModel(tier: AiTier, keyName: AiKeyName = "default", prefer?: AiProvider): ResolvedModel {
+  const chain = resolveModelChain(tier, keyName, prefer);
+  if (chain.length > 0) return chain[0];
+  // 키 없음 — 모델 있는 첫 candidate(이후 클라 생성에서 throw → 호출부 stub). 기존 동작 보존.
+  const order = providerOrder(tier, prefer);
   const provider = order.find((p) => AI_MODELS[tier][p]) ?? "anthropic";
   return { provider, model: AI_MODELS[tier][provider] ?? "claude-sonnet-4-6", keyName };
 }

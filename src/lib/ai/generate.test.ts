@@ -1,6 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseJsonLoose } from "./generate";
-import { resolveModel } from "./models";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// SDK 클라이언트 모킹 — 실제 네트워크 없이 generateJSON 폴백 경로를 결정적으로 검증.
+const { upstageCreate, anthropicCreate } = vi.hoisted(() => ({
+  upstageCreate: vi.fn(),
+  anthropicCreate: vi.fn(),
+}));
+vi.mock("./upstage", () => ({
+  getUpstage: () => ({ chat: { completions: { create: upstageCreate } } }),
+}));
+vi.mock("./anthropic", () => ({
+  getAnthropic: () => ({ messages: { create: anthropicCreate } }),
+}));
+
+import { generateJSON, isRetryableProviderError, parseJsonLoose } from "./generate";
+import { resolveModel, resolveModelChain } from "./models";
+
+const upstageOk = (json: string) => ({ choices: [{ message: { content: json } }] });
+const anthropicOk = (json: string) => ({ content: [{ type: "text", text: json }] });
 
 describe("parseJsonLoose", () => {
   it("plain JSON", () => {
@@ -96,5 +112,91 @@ describe("resolveModel", () => {
   it("키가 하나도 없으면 기본 provider 모델 반환(이후 클라 생성서 throw → stub)", () => {
     expect(resolveModel("balanced").provider).toBe("upstage");
     expect(resolveModel("balanced").model).toBe("solar-pro3");
+  });
+});
+
+describe("isRetryableProviderError", () => {
+  it("401/403/429 상태코드는 폴백 대상", () => {
+    expect(isRetryableProviderError({ status: 401 })).toBe(true);
+    expect(isRetryableProviderError({ status: 403 })).toBe(true);
+    expect(isRetryableProviderError({ status: 429 })).toBe(true);
+  });
+  it("키 무효 메시지(상태 없음)도 폴백 대상", () => {
+    expect(isRetryableProviderError(new Error("invalid API key"))).toBe(true);
+    expect(isRetryableProviderError(new Error("Unauthorized"))).toBe(true);
+  });
+  it("파싱·400·5xx 등 그 외는 폴백 안 함", () => {
+    expect(isRetryableProviderError({ status: 400 })).toBe(false);
+    expect(isRetryableProviderError({ status: 500 })).toBe(false);
+    expect(isRetryableProviderError(new Error("JSON parse error"))).toBe(false);
+  });
+});
+
+describe("resolveModelChain", () => {
+  const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_CONSULTATIONS", "UPSTAGE_API_KEY", "UPSTAGE_API_KEY_CONSULTATIONS"];
+  let saved: Record<string, string | undefined>;
+  beforeEach(() => {
+    saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    KEYS.forEach((k) => delete process.env[k]);
+  });
+  afterEach(() => {
+    KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
+  });
+
+  it("기본(upstage) + 양쪽 키 → [upstage, anthropic] 순", () => {
+    process.env.UPSTAGE_API_KEY = "u";
+    process.env.ANTHROPIC_API_KEY = "a";
+    expect(resolveModelChain("balanced", "default").map((c) => c.provider)).toEqual(["upstage", "anthropic"]);
+  });
+  it("upstage 키 없으면 키 있는 anthropic만(키 없는 후보 제외)", () => {
+    process.env.ANTHROPIC_API_KEY = "a";
+    expect(resolveModelChain("balanced", "default").map((c) => c.provider)).toEqual(["anthropic"]);
+  });
+  it("키가 하나도 없으면 빈 체인", () => {
+    expect(resolveModelChain("balanced", "default")).toEqual([]);
+  });
+  it("reasoning 티어는 anthropic 고정", () => {
+    process.env.UPSTAGE_API_KEY = "u";
+    process.env.ANTHROPIC_API_KEY = "a";
+    expect(resolveModelChain("reasoning", "default").map((c) => c.provider)).toEqual(["anthropic"]);
+  });
+});
+
+describe("generateJSON 폴백", () => {
+  const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "UPSTAGE_API_KEY"];
+  let saved: Record<string, string | undefined>;
+  beforeEach(() => {
+    upstageCreate.mockReset();
+    anthropicCreate.mockReset();
+    saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    process.env.AI_PROVIDER = "upstage";
+    process.env.UPSTAGE_API_KEY = "u";
+    process.env.ANTHROPIC_API_KEY = "a";
+  });
+  afterEach(() => {
+    KEYS.forEach((k) => (saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k])));
+  });
+
+  it("upstage 401 → anthropic로 자동 폴백해 성공", async () => {
+    upstageCreate.mockRejectedValueOnce({ status: 401 });
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { data, model } = await generateJSON<{ ok: boolean }>({ prompt: "JSON 주세요", maxTokens: 100 });
+    expect(data).toEqual({ ok: true });
+    expect(model).toBe("claude-sonnet-4-6");
+    expect(upstageCreate).toHaveBeenCalledOnce();
+    expect(anthropicCreate).toHaveBeenCalledOnce();
+  });
+
+  it("upstage 성공 시 anthropic 호출 안 함", async () => {
+    upstageCreate.mockResolvedValueOnce(upstageOk('{"x":1}'));
+    const { data } = await generateJSON<{ x: number }>({ prompt: "JSON 주세요", maxTokens: 100 });
+    expect(data).toEqual({ x: 1 });
+    expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("폴백 불가 오류(400)는 즉시 throw, 다음 provider 시도 안 함", async () => {
+    upstageCreate.mockRejectedValueOnce({ status: 400, message: "bad request" });
+    await expect(generateJSON({ prompt: "JSON 주세요", maxTokens: 100 })).rejects.toThrow();
+    expect(anthropicCreate).not.toHaveBeenCalled();
   });
 });
