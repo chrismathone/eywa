@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { submitTranscript } from "@/lib/ai/assemblyai";
+import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -546,10 +547,7 @@ export async function startConsultationFromAudio(
   }
 
   // Kick off AssemblyAI with webhook
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://eywa-alpha.vercel.app");
-  const webhookUrl = `${appUrl}/api/webhooks/assemblyai`;
+  const webhookUrl = getAssemblyaiWebhookUrl();
 
   try {
     const result = await submitTranscript({

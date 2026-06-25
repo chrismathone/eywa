@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { submitTranscript } from "@/lib/ai/assemblyai";
+import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -70,10 +71,7 @@ export async function startStudentConsultationFromAudio(
     .single();
   if (insertErr || !row) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://eywa-alpha.vercel.app");
-  const webhookUrl = `${appUrl}/api/webhooks/assemblyai`;
+  const webhookUrl = getAssemblyaiWebhookUrl();
 
   try {
     const result = await submitTranscript({
