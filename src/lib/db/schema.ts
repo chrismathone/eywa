@@ -144,6 +144,9 @@ export const users = pgTable(
     subjects: text("subjects").array(),
     defaultClassroom: text("default_classroom"),
     memo: text("memo"),
+    // 강사 퍼스널 색 — 시간표 강사 헤더 밴드(ijw Teacher.bgColor/textColor 패리티). 0054a.
+    bgColor: text("bg_color"),
+    textColor: text("text_color"),
     // 급여 정산용. 외부 노출은 master + 본인만 (RLS).
     hourlyRate: numeric("hourly_rate", { precision: 10, scale: 0 }).notNull().default("0"),
     monthlyBase: numeric("monthly_base", { precision: 10, scale: 0 }).notNull().default("0"),

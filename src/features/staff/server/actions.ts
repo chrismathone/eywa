@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SystemRole } from "@/lib/permissions";
+import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import {
   canAssignRole,
   canManageStaff,
@@ -28,6 +29,10 @@ function readBaseForm(formData: FormData) {
         .map((s) => s.trim())
         .filter(Boolean)
     : [];
+  // 시간표 강사색: 유효 hex만, 글자색은 가독성 기준 자동 도출(반 색 패턴과 동일).
+  const bgRaw = get("bgColor");
+  const bgColor = bgRaw && isHexColor(bgRaw) ? bgRaw : null;
+  const textColor = bgColor ? readableTextColor(bgColor) : null;
   return {
     displayName: get("displayName"),
     email: get("email"),
@@ -37,6 +42,8 @@ function readBaseForm(formData: FormData) {
     subjects,
     defaultClassroom: get("defaultClassroom") || null,
     memo: get("memo") || null,
+    bgColor,
+    textColor,
   };
 }
 
@@ -106,6 +113,8 @@ export async function createStaff(
     subjects: input.subjects,
     default_classroom: input.defaultClassroom,
     memo: input.memo,
+    bg_color: input.bgColor,
+    text_color: input.textColor,
   });
 
   if (dbErr) {
@@ -147,6 +156,8 @@ export async function updateStaff(
       subjects: input.subjects,
       default_classroom: input.defaultClassroom,
       memo: input.memo,
+      bg_color: input.bgColor,
+      text_color: input.textColor,
     })
     .eq("id", id);
 

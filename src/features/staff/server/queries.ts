@@ -78,6 +78,7 @@ export type StaffDetail = {
   subjects: string[];
   defaultClassroom: string | null;
   memo: string | null;
+  bgColor: string | null;
   hourlyRate: number;
   monthlyBase: number;
 };
@@ -87,7 +88,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
   const { data } = await supabase
     .from("users")
     .select(
-      "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, default_classroom, memo, hourly_rate, monthly_base",
+      "id, display_name, email, phone, system_role, status, hire_date, job_title, subjects, default_classroom, memo, bg_color, hourly_rate, monthly_base",
     )
     .eq("id", id)
     .single();
@@ -106,6 +107,7 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     subjects: Array.isArray(data.subjects) ? (data.subjects as string[]) : [],
     defaultClassroom: data.default_classroom,
     memo: data.memo,
+    bgColor: data.bg_color ?? null,
     hourlyRate: Number(data.hourly_rate ?? 0),
     monthlyBase: Number(data.monthly_base ?? 0),
   };

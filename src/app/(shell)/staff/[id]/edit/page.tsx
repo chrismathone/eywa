@@ -67,6 +67,7 @@ export default async function EditStaffPage({
           subjects: staff.subjects,
           defaultClassroom: staff.defaultClassroom,
           memo: staff.memo,
+          bgColor: staff.bgColor,
         }}
       />
     </div>

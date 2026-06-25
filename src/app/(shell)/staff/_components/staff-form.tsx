@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "lucide-react";
@@ -27,6 +27,8 @@ export type StaffFormValue = {
   subjects: string[];
   defaultClassroom: string | null;
   memo: string | null;
+  /** 시간표 강사 헤더 색(ijw Teacher.bgColor 패리티). 글자색은 저장 시 자동 도출. */
+  bgColor: string | null;
 };
 
 function SubmitButton({ mode }: { mode: Mode }) {
@@ -79,8 +81,10 @@ export function StaffForm({
     subjects: [],
     defaultClassroom: null,
     memo: null,
+    bgColor: null,
   };
 
+  const [bgColor, setBgColor] = useState(v.bgColor ?? "");
   const errors = state?.fieldErrors ?? {};
 
   return (
@@ -206,6 +210,36 @@ export function StaffForm({
           className={inputClass}
         />
         <p className="text-muted-foreground mt-1 text-xs">쉼표로 구분</p>
+      </Field>
+
+      <Field label="시간표 색" htmlFor="bgColor">
+        <input type="hidden" name="bgColor" value={bgColor} />
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={bgColor || "#1a5f3c"}
+            onChange={(e) => setBgColor(e.target.value)}
+            aria-label="강사 색"
+            className="border-input h-8 w-12 cursor-pointer rounded border"
+          />
+          {bgColor ? (
+            <>
+              <span className="text-text-dim font-mono text-xs">{bgColor}</span>
+              <button
+                type="button"
+                onClick={() => setBgColor("")}
+                className="text-text-faint hover:text-foreground text-xs underline"
+              >
+                지우기
+              </button>
+            </>
+          ) : (
+            <span className="text-text-faint text-xs">미설정(기본 해시색)</span>
+          )}
+        </div>
+        <p className="text-muted-foreground mt-1 text-xs">
+          시간표 강사 헤더 밴드 색(ijw 패리티). 글자색은 자동.
+        </p>
       </Field>
 
       <Field label="메모" htmlFor="memo">
