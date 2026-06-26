@@ -6,6 +6,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isGoogleSheetsExportEnabled } from "@/features/integrations/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { RichGridView } from "./_components/rich-grid-view";
 import {
@@ -34,10 +35,13 @@ export default async function TimetablePage({
 
   // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = user.systemRole === "teacher" ? user.id : undefined;
-  const [allSlots, settings] = await Promise.all([
+  // '시트' 버튼 = master + 구글 시트 내보내기 연동 ON일 때만(비-master는 조회도 생략).
+  const [allSlots, settings, sheetsEnabled] = await Promise.all([
     getWeeklyScheduleWithStudents(teacherId),
     getTenantSettings(),
+    user.systemRole === "master" ? isGoogleSheetsExportEnabled() : Promise.resolve(false),
   ]);
+  const canSync = user.systemRole === "master" && sheetsEnabled;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -117,7 +121,7 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <TimetableToolbarActions subject={subject} canSync={user.systemRole === "master"} />
+        <TimetableToolbarActions subject={subject} canSync={canSync} />
       </div>
 
       {slots.length === 0 ? (

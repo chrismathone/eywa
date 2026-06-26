@@ -1,165 +1,67 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { CheckCircle2, ExternalLink, Loader2, Plug, RefreshCw, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  connectGoogleSheets,
-  disconnectSheets,
-  syncSheetsNow,
-  type ConnectState,
-  type DisconnectState,
-  type SyncState,
-} from "@/features/integrations/server/actions";
+import { useState, useTransition } from "react";
+import { Loader2 } from "lucide-react";
+import { setSheetsExportEnabled } from "@/features/integrations/server/actions";
 import type { IntegrationStatus } from "@/features/integrations/server/queries";
 
-function ConnectBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
-      시트 생성 & 연결
-    </Button>
-  );
-}
-
-function SyncBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-      지금 동기화
-    </Button>
-  );
-}
-
-function DisconnectBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" variant="outline" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-      연결 해제
-    </Button>
-  );
-}
-
 export function SheetsClient({ status }: { status: IntegrationStatus }) {
-  const [connectState, connectAction] = useActionState<ConnectState, FormData>(
-    connectGoogleSheets,
-    undefined,
-  );
-  const [syncState, syncAction] = useActionState<SyncState, FormData>(syncSheetsNow, undefined);
-  const [, disconnectAction] = useActionState<DisconnectState, FormData>(
-    disconnectSheets,
-    undefined,
-  );
+  const [enabled, setEnabled] = useState(status.enabled);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
-  if (!status.connected) {
-    return (
-      <section className="bg-card border-border rounded-md border p-6">
-        <h2 className="text-foreground text-base font-semibold">Google Sheets 연결</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          eywa의 서비스 계정이 새 시트를 생성하고, 입력한 이메일에 편집 권한을 부여합니다.
-        </p>
-        <form action={connectAction} className="mt-4 flex flex-wrap items-end gap-2">
-          <div className="flex-1 space-y-1">
-            <label className="text-muted-foreground block text-[11px] font-medium">
-              공유 받을 Google 이메일
-            </label>
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="chrismathone@gmail.com"
-              className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <ConnectBtn />
-        </form>
-        {connectState?.error ? (
-          <p className="text-chart-4 mt-2 text-sm">{connectState.error}</p>
-        ) : null}
-        <div className="text-muted-foreground mt-4 text-[11px] space-y-1 border-t pt-3">
-          <p>
-            <strong>필요 환경변수:</strong> GOOGLE_SERVICE_ACCOUNT_KEY (JSON 키 또는 base64)
-          </p>
-          <p>scope: drive, spreadsheets</p>
-        </div>
-      </section>
-    );
+  function toggle() {
+    if (pending) return;
+    const next = !enabled;
+    setError(null);
+    start(async () => {
+      const res = await setSheetsExportEnabled(next);
+      if (res?.error) setError(res.error);
+      else setEnabled(next);
+    });
   }
 
   return (
     <section className="bg-card border-border space-y-4 rounded-md border p-6">
-      <div className="inline-flex items-center gap-2">
-        <CheckCircle2 className="text-chart-2 size-4" />
-        <h2 className="text-foreground text-base font-semibold">연결됨</h2>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-foreground text-base font-semibold">구글 시트 내보내기 연동</h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            켜면 <strong>시간표</strong> 화면에 <strong>구글 시트</strong> 내보내기 버튼이 나타납니다(원장 전용).
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="구글 시트 내보내기 연동"
+          onClick={toggle}
+          disabled={pending}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+            enabled ? "bg-primary" : "bg-line-strong"
+          }`}
+        >
+          <span
+            className={`flex size-5 items-center justify-center rounded-full bg-white shadow-sm transition-transform ${
+              enabled ? "translate-x-[22px]" : "translate-x-0.5"
+            }`}
+          >
+            {pending ? <Loader2 className="text-text-dim size-3 animate-spin" /> : null}
+          </span>
+        </button>
       </div>
 
-      <dl className="space-y-2 text-sm">
-        <Row label="공유 이메일" value={status.sharedWithEmail ?? "—"} />
-        <Row
-          label="시트 URL"
-          value={
-            status.spreadsheetUrl ? (
-              <a
-                href={status.spreadsheetUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-chart-1 inline-flex items-center gap-1 hover:underline"
-              >
-                Google Sheets 열기
-                <ExternalLink className="size-3" />
-              </a>
-            ) : (
-              "—"
-            )
-          }
-        />
-        <Row
-          label="마지막 동기화"
-          value={
-            status.lastSyncedAt
-              ? new Date(status.lastSyncedAt).toLocaleString("ko-KR")
-              : "아직 없음"
-          }
-        />
-        {status.lastError ? <Row label="마지막 오류" value={<span className="text-chart-4">{status.lastError}</span>} /> : null}
-      </dl>
+      {error ? <p className="text-chart-4 text-sm">{error}</p> : null}
 
-      <div className="flex items-center gap-2 border-t pt-4">
-        <form action={syncAction}>
-          <SyncBtn />
-        </form>
-        <form action={disconnectAction}>
-          <DisconnectBtn />
-        </form>
-      </div>
-      <p className="text-muted-foreground text-[11px]">
-        ‘지금 동기화’는 수학 시간표를 <strong>eywa·</strong> 접두 탭으로 추가합니다(기존 탭 보존 —
-        공유 시트 안전). 서비스 계정이 대상 시트에 편집 권한을 가져야 합니다.
+      <p className="text-muted-foreground border-t pt-3 text-[11px]">
+        대상 스프레드시트·서비스 계정 설정은 <strong>관리자에게 문의</strong>하세요.
+        {status.lastSyncedAt
+          ? ` · 마지막 동기화 ${new Date(status.lastSyncedAt).toLocaleString("ko-KR")}`
+          : null}
+        {status.lastError ? (
+          <span className="text-chart-4"> · 마지막 오류: {status.lastError}</span>
+        ) : null}
       </p>
-      <p className="text-chart-4 text-[11px]">
-        ⚠️ 전환기에 ijw가 같은 시트를 <strong>전체 덮어쓰기</strong>로 자동 동기화하면 eywa 탭이
-        지워집니다 — 한 시트를 공유하는 동안에는 ijw의 자동 내보내기를 일시중지하세요.
-      </p>
-
-      {syncState?.error ? (
-        <p className="text-chart-4 text-sm">{syncState.error}</p>
-      ) : null}
-      {syncState?.ok ? (
-        <p className="text-chart-2 text-sm">동기화 완료</p>
-      ) : null}
     </section>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="text-foreground text-sm">{value}</dd>
-    </div>
   );
 }

@@ -57,46 +57,6 @@ function getServiceAccountAuth() {
 }
 
 /**
- * 테넌트용 새 스프레드시트 생성 + 사용자 이메일에 writer 권한 부여.
- * 결과: spreadsheetId, url.
- */
-export async function createTenantSpreadsheet(
-  tenantName: string,
-  shareWithEmail: string,
-  parentFolderId?: string,
-): Promise<{ spreadsheetId: string; url: string }> {
-  const auth = getServiceAccountAuth();
-  await auth.authorize();
-
-  const drive = google.drive({ version: "v3", auth });
-
-  // 1) 새 시트 생성 (Drive API)
-  const file = await drive.files.create({
-    requestBody: {
-      name: `eywa — ${tenantName} 시간표`,
-      mimeType: "application/vnd.google-apps.spreadsheet",
-      ...(parentFolderId ? { parents: [parentFolderId] } : {}),
-    },
-    fields: "id, webViewLink",
-  });
-  const spreadsheetId = file.data.id!;
-  const url = file.data.webViewLink ?? `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
-
-  // 2) 사용자에게 writer 권한
-  await drive.permissions.create({
-    fileId: spreadsheetId,
-    requestBody: {
-      role: "writer",
-      type: "user",
-      emailAddress: shareWithEmail,
-    },
-    sendNotificationEmail: false,
-  });
-
-  return { spreadsheetId, url };
-}
-
-/**
  * 수학 시간표 xlsx 버퍼를 **공유 스프레드시트에 (이 테넌트의) eywa 전용 탭으로 비파괴 추가**.
  *
  * ijw(또는 다른 앱)·다른 테넌트의 탭은 그대로 보존하고, 직전 `eywa·{tenant}·` 탭만 교체한다.

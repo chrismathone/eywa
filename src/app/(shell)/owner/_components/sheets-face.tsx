@@ -2,8 +2,8 @@ import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { SheetsClient } from "@/app/(shell)/admin/integrations/sheets/_client";
 
 /**
- * 연동 면 (owner ?tab=sheets) — Google Sheets 동기화(서비스 계정). 시간표를 시트로 내보낸다.
- * 구 /admin/integrations/sheets 본문을 owner FaceTabs 면으로 흡수. SheetsClient(클라)는 그대로 재사용.
+ * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 ON/OFF 토글. 켜면 시간표 화면에 '시트' 버튼이 뜬다.
+ * 대상 시트·서비스 계정(GOOGLE_SERVICE_ACCOUNT_KEY)은 운영자가 설정(관리자 문의) — 학원장은 ON/OFF만.
  */
 export async function SheetsFace() {
   const status = await getGoogleSheetsStatus();
@@ -11,11 +11,10 @@ export async function SheetsFace() {
     <div className="max-w-2xl space-y-4">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 외부 연동</p>
-        <h2 className="text-foreground text-lg font-semibold">Google Sheets 동기화</h2>
+        <h2 className="text-foreground text-lg font-semibold">구글 시트 내보내기</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          수학 시간표를 Google Sheets로 내보냅니다. 새로 연결하면 eywa 서비스 계정이 시트를 생성해
-          입력한 이메일에 편집 권한을 부여하고, ‘지금 동기화’는 대상 시트에 <strong>eywa·</strong> 접두
-          탭으로 추가합니다(기존 탭은 보존 — ijw 등과 한 시트를 공유 가능).
+          연동을 켜면 수학 시간표 화면에 ‘구글 시트’ 내보내기 버튼이 생깁니다(원장 전용). 누르면 대상
+          시트에 <strong>eywa·</strong> 접두 탭으로 비파괴 추가됩니다(기존 탭 보존 — 공유 시트 안전).
         </p>
       </header>
       <SheetsClient status={status} />
