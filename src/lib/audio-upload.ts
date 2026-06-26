@@ -26,6 +26,26 @@ export function formatSeconds(s: number): string {
 }
 
 /**
+ * 녹음 파일명용 KST(Asia/Seoul) 타임스탬프 — `2026-06-26_20-34-41_KST`.
+ * 사용자 OS 시간대와 무관하게 한국시간으로 일관(옛 팝업 동작과 동일). `toISOString()`은 UTC라 금지.
+ */
+export function kstTimestamp(d: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  return `${g("year")}-${g("month")}-${g("day")}_${g("hour")}-${g("minute")}-${g("second")}_KST`;
+}
+
+/**
  * 녹음 파일을 사용자의 다운로드 폴더로 저장(불상사=파일증발 대비 디스크 백스톱).
  * 녹음 정지 직후 호출 — IndexedDB 복구(브라우저 내부)와 별개로 OS 파일을 남긴다(옛 팝업 동작 복원).
  * best-effort: 차단/실패해도 throw하지 않음(업로드 흐름을 막지 않게).

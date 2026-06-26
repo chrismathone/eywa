@@ -20,6 +20,7 @@ import {
   downloadFile,
   formatBytes,
   formatSeconds,
+  kstTimestamp,
   validateAudioFile,
 } from "@/lib/audio-upload";
 
@@ -120,8 +121,7 @@ export function NewConsultationRecordingForm() {
       };
       recorder.onstop = () => {
         const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
-        const ts = new Date().toISOString().replace(/[:.]/g, "-");
-        const recorded = new File([blob], `등록상담녹음_${ts}.webm`, { type: "audio/webm" });
+        const recorded = new File([blob], `등록상담녹음_${kstTimestamp()}.webm`, { type: "audio/webm" });
         setFile(recorded);
         // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
         downloadFile(recorded);
