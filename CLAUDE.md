@@ -303,7 +303,9 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   ⑦ **복원 창 스톰 →route-window iframe `src` stagger 마운트**([route-window.tsx](src/components/workspace/route-window.tsx)): 포커스 창만 즉시,
   나머지는 z순서×250ms 후 활성화(`activated` state, 동기 setState 없이 setTimeout). 복원 시 6창이 동시에 풀 라우트 렌더+하이드레이션하던 폭발 제거.
   검증: typecheck0/lint0/test499/build✓ + dev(3001) 라이브 200(설정 캐시 런타임·unstable_cache+admin client 에러 0). 창 stagger는 빌드+로직(드래그 E2E 비실용).
-  ⚠️ **미적용**: getCurrentUser 인증 네트워크(GoTrue getUser, 보안 민감 → 보류)·시간표 Suspense·#11 출석 matrix 2회·#9 학생목록 과목필터 .in()(P1).
+  ⑧ **시간표 초기로드 스트리밍 →route [`loading.tsx`](<src/app/(shell)/timetable/loading.tsx>)**(무거운 getWeeklyScheduleWithStudents 동안 Next가 스켈레톤을 즉시 스트리밍 — 창=iframe 첫 페인트가 빈 화면 아님).
+  툴바가 데이터(과목칩·인원)에 의존해 부분 페인트가 안 되므로 셸 전체 스켈레톤. ⚠️ **트레이드오프**: 과목/뷰 전환(searchParam 네비)에도 스켈레톤이 잠깐 뜸 — 무플래시로 하려면 과목 필터를 클라(fetch-once)로 옮기는 별도 리팩터 필요.
+  ⚠️ **미적용(별도·근거)**: getCurrentUser 인증 네트워크(GoTrue getUser, 보안 민감 → 보류)·**#9 학생목록 과목필터 `.in()`**(P1 — subject 필터를 resolved id `.in()`으로 좁히는데 distinct+exact count를 PostgREST로 못 풀어 **RPC 필요**, math~400<1000으로 현재 미발현 → Firebase 전체이식 전 전용 작업으로)·**#11 출석 matrix 2회**(null 콜은 early-return으로 **classes 목록만**=경량이라 중복은 light 1쿼리뿐 → 리팩터 가치 낮아 스킵).
 
 ### 수학 시간표 = ijw 익스포터 완전이식 + 구글시트 공유-탭 push (2026-06-25) — ✅ 게이트 그린 + 13에이전트 적대리뷰
 계획 [`giggly-orbiting-sunset.md`]. eywa가 ijw `exportMathTimetableToExcel`과 **동일 xlsx**를 생성(verbatim 이식
