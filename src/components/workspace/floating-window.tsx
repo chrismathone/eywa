@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft } from "lucide-react";
 import { useWindowStore, isDuplicate, instanceLabel, type Win } from "./window-store";
+import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
 import { WindowContent } from "./window-content";
@@ -52,6 +53,14 @@ export function FloatingWindow({
   const live = useWindowStore((s) => s.live[win.id]);
   const router = useRouter();
 
+  // 녹음 등 "끊기면 유실" 작업이 이 창 안에서 진행 중이면 잠금 — 닫기(X)·배경보내기·Esc를 막아
+  // 우발적 종료로 녹음을 날리지 않게 한다(use-recording-lock이 창 본문 iframe에서 신호 발행).
+  const [locked, setLocked] = useState(false);
+  useEffect(
+    () => subscribeWindowBusy((m) => { if (m.winId === win.id) setLocked(m.active); }),
+    [win.id],
+  );
+
   // 스포트라이트: 포커스 창은 상단 큰 영역(spotlightTop, store rect 불변→해제 시 글라이드 복원),
   // 비포커스 창은 숨김(마운트 유지=iframe 보존, 카드 클릭 swap 시 리로드 없음). 드래그/리사이즈 잠금.
   const spot = spotlight && focused;
@@ -82,6 +91,7 @@ export function FloatingWindow({
   // 배경으로 보내기: 이 창을 닫고 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남아
   // 하단/상단 배경 탭 스트립에서 다시 꺼낼 수 있다. (router.push로 메인 프레임 이동.)
   function handleSwapToBackground() {
+    if (locked) return; // 녹음 중 — 배경으로 보내면 창(iframe)이 사라져 녹음 유실.
     // 복제본(#n)은 배경 시스템(라우트↔배경 1:1)에 안 들어간다 — window-only.
     if (win.kind !== "route" || !win.params.href || isDuplicate(win.id)) return;
     const href = win.params.href;
@@ -122,7 +132,7 @@ export function FloatingWindow({
         aria-label={win.params.title}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === "Escape") runExit(closeAndRefresh);
+          if (e.key === "Escape" && !locked) runExit(closeAndRefresh);
         }}
         className={`bg-card relative flex h-full w-full flex-col overflow-hidden rounded-xl border ${
           animOff ? "" : `duration-150 ${exiting ? "animate-out fade-out-0 zoom-out-95" : "animate-in fade-in-0 zoom-in-95"}`
@@ -185,9 +195,9 @@ export function FloatingWindow({
               <button
                 type="button"
                 aria-label="배경으로 보내기"
-                title="배경으로 보내기"
+                title={locked ? "녹음 중 — 정지 후 가능" : "배경으로 보내기"}
                 onClick={handleSwapToBackground}
-                disabled={exiting}
+                disabled={exiting || locked}
                 className="text-text-dim hover:bg-primary/15 hover:text-primary mr-0.5 flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"
               >
                 <SendToBack size={14} strokeWidth={2} />
@@ -216,9 +226,10 @@ export function FloatingWindow({
             <button
               type="button"
               aria-label="닫기"
-              title="닫기"
-              onClick={() => runExit(closeAndRefresh)}
-              className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[3px] transition hover:text-white"
+              title={locked ? "녹음 중 — 정지 후 닫기 가능" : "닫기"}
+              onClick={() => { if (!locked) runExit(closeAndRefresh); }}
+              disabled={locked}
+              className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[3px] transition hover:text-white disabled:pointer-events-none disabled:opacity-40"
             >
               <X size={16} strokeWidth={2} />
             </button>

@@ -116,6 +116,9 @@ export function RouteWindow({ win }: { win: Win }) {
         ref={iframeRef}
         src={activated ? withEmbed(href) : undefined}
         title={win.params.title}
+        // 창 안 폼이 브라우저 마이크로 바로 녹음(회의록·등록상담·학생상담)할 수 있게 권한 위임.
+        // same-origin이라도 일부 브라우저는 getUserMedia에 iframe allow를 요구 → 명시.
+        allow="microphone"
         className="h-full w-full border-0"
         style={{ visibility: dragging ? "hidden" : "visible" }}
         // 활성화 전(src 미설정) about:blank load는 무시 — 활성화 후 실제 콘텐츠 로드만 스켈레톤 해제.

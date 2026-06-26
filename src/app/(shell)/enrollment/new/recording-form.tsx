@@ -13,7 +13,7 @@ import {
   type RecordingMeta,
 } from "@/lib/recording-recovery";
 import { createClient } from "@/lib/supabase/client";
-import { openRecorderPopup } from "@/lib/recorder-popup";
+import { useRecordingLock } from "@/components/workspace/use-recording-lock";
 import { startConsultationFromAudio } from "@/features/enrollment/server/actions";
 import {
   ACCEPTED_AUDIO_TYPES,
@@ -41,6 +41,9 @@ export function NewConsultationRecordingForm() {
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [recoveryMeta, setRecoveryMeta] = useState<RecordingMeta | null>(null);
+
+  // 녹음 중이면 이 폼이 든 플로팅 창의 닫기(X)·배경보내기와 탭 새로고침을 잠근다(우발적 유실 방지).
+  useRecordingLock(isRecording);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,26 +94,8 @@ export function NewConsultationRecordingForm() {
 
   function startRecording() {
     setError(null);
-
-    // 1) 새 창 녹음 시도 — 메인 창 새로고침/이탈로부터 안전.
-    const popupOpened = openRecorderPopup(
-      prospectName ? `${prospectName} 등록상담 녹음` : "등록상담 녹음",
-      {
-        onComplete: (recorded) => {
-          setFile(recorded);
-        },
-        onError: (msg) => {
-          setError(msg);
-        },
-        onClose: () => {
-          // 사용자가 녹음 완료 없이 팝업을 닫음
-        },
-      },
-      { fileToken: "enrollment" },
-    );
-    if (popupOpened) return;
-
-    // 2) 팝업 차단 시 인라인 fallback.
+    // 폼이 든 플로팅 창 안에서 바로 녹음(별도 브라우저 창 없음). 녹음 중엔 useRecordingLock이
+    // 창 닫기/탭 새로고침을 막는다.
     void startInlineRecording();
   }
 

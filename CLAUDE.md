@@ -329,6 +329,22 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 녹음 = 네이티브 팝업 창 → 내부 플로팅 창 + 녹음 중 창 잠금 (2026-06-26) — ✅ 4게이트 그린
+사용자 제보: 회의록 등에서 "바로 녹음"을 누르면 **별도 브라우저 창**(`window.open` about:blank)이 떠 앱처럼 안 보였다. eywa는 이미 자체
+플로팅 창 시스템이 있고 생성 폼(`meetings/new`·`enrollment/new`·`consultations/new`)도 **이미 플로팅 창**이라 녹음 전용 네이티브 팝업은 불필요·이질적.
+- **결정/근거**: 네이티브 팝업의 유일한 가치는 "별도 OS 창이라 부모 탭 하드 새로고침에도 녹음 생존"이었으나, ① 일상 케이스(녹음하며 배경
+  자유 사용)는 폼 창이 배경 소프트네비를 견뎌 그대로 보존 ② 부모 탭 하드 새로고침 생존은 **IndexedDB 청크 복구**([recording-recovery.ts](src/lib/recording-recovery.ts), 매 1초 저장)로 메움.
+  → **네이티브 팝업 제거**([`recorder-popup.ts`](src/lib/recorder-popup.ts) 삭제), 녹음은 폼 창 안 **인라인**(기존 폴백 경로를 정식 경로로 승격).
+- **녹음 중 창 잠금**(사용자 요청 "X 비활성화로 혹시 모를 일 차단"): same-origin **BroadcastChannel**([`window-busy.ts`](src/lib/realtime/window-busy.ts), record-channel 패턴)로
+  iframe 폼 ↔ 부모 워크스페이스를 묶음. 폼이 [`useRecordingLock(isRecording)`](src/components/workspace/use-recording-lock.ts)로 자기 창 id(`route:meetings/new` 등,
+  pathname에서 도출)로 busy 발행 → 부모 [FloatingWindow](src/components/workspace/floating-window.tsx)가 그 창의 **X(닫기)·배경보내기·Esc·드래그-투-배경 비활성화**
+  (툴팁 "녹음 중 — 정지 후 닫기 가능"). **최소화는 허용**(iframe 마운트 유지=녹음 지속). 부모 탭 하드 새로고침은 [WorkspaceCanvas](src/components/workspace/workspace-canvas.tsx)가
+  busy 동안 `beforeunload` 가드(iframe의 beforeunload는 탭 전체를 못 막으므로 최상위 프레임에서 별도). iframe 자체 이탈은 useRecordingLock이 beforeunload로 막음.
+- **마이크 권한**: [route-window.tsx](src/components/workspace/route-window.tsx) iframe에 `allow="microphone"` 추가(일부 브라우저는 same-origin이어도 getUserMedia에 iframe allow 요구).
+- **3곳 통일**: 회의록·등록상담은 인라인+복구가 이미 있어 팝업만 제거. **학생상담**([audio-consultation-form.tsx](<src/app/(shell)/consultations/_components/audio-consultation-form.tsx>))은 인라인만 있고 복구 없었음 →
+  IDB 복구(`rec.start(1000)`+saveChunk, `RecoveryKind`에 `student-consultation` 추가)·복구 배너·녹음 잠금 추가해 동일 동작.
+- 검증: typecheck0/lint0(신규0)/**test511**/build✓. ⚠️ 실제 마이크 녹음·창 잠금 라이브 검증은 마이크+로그인 세션 필요(게이트로 대체).
+
 ### 시간표 주간 이동(타임머신) ijw 충실 이식 + 편집 드래그 UX + 헤더 재배치 (2026-06-26) — ✅ 4게이트 그린 + 라이브 검증
 사용자 제보: ijw 시간표엔 "날짜 표시 + 주간 이동"이 있어 **반 이동·퇴원이 날짜로 기록**돼 주를 앞뒤로 옮기면 그 시점의 반 구성
 (과거 퇴원·미래 이동 예정까지)을 볼 수 있었는데 eywa엔 미이식(오늘 스냅샷만). ijw 양쪽 소스(`useSubjectClassStudents.ts`·

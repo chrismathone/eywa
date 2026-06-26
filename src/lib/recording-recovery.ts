@@ -5,8 +5,8 @@
  * crashes mid-recording, the next visit to the upload form can re-assemble the
  * chunks into a downloadable File. Ported from ijw-calander/utils/recordingRecovery.ts.
  *
- * Two kinds share one DB but use separate key prefixes ("meeting_*" vs "consultation_*")
- * so the meeting form and the consultation form recover independently.
+ * Kinds share one DB but use separate key prefixes ("meeting_*" / "consultation_*" /
+ * "student-consultation_*") so each form recovers independently.
  */
 
 const DB_NAME = "recording-recovery";
@@ -14,7 +14,7 @@ const DB_VERSION = 1;
 const CHUNKS_STORE = "chunks";
 const META_STORE = "meta";
 
-export type RecoveryKind = "meeting" | "consultation";
+export type RecoveryKind = "meeting" | "consultation" | "student-consultation";
 
 export type RecordingMeta = {
   id: RecoveryKind;

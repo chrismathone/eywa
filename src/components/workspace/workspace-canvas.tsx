@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { findNavItem } from "@/lib/navigation";
+import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { useWindowStore } from "./window-store";
 import { usePrefs } from "./use-prefs";
 import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
@@ -73,6 +74,33 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
     const done = useWindowStore.persist.rehydrate();
     Promise.resolve(done).then(() => adoptOwner(owner));
   }, [owner, adoptOwner]);
+
+  // 창 안에서 녹음 등 끊기면 안 되는 작업이 진행 중이면 탭 전체 새로고침/이탈을 막는다(부모 탭은
+  // iframe의 beforeunload가 못 막으므로 최상위 프레임에서 별도 가드). 마지막 busy 해제 시 제거.
+  useEffect(() => {
+    const busy = new Set<string>();
+    let installed = false;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const unsub = subscribeWindowBusy((m) => {
+      if (m.active) busy.add(m.winId);
+      else busy.delete(m.winId);
+      const need = busy.size > 0;
+      if (need && !installed) {
+        window.addEventListener("beforeunload", guard);
+        installed = true;
+      } else if (!need && installed) {
+        window.removeEventListener("beforeunload", guard);
+        installed = false;
+      }
+    });
+    return () => {
+      unsub();
+      if (installed) window.removeEventListener("beforeunload", guard);
+    };
+  }, []);
 
   if (!isDesktop) return null;
 

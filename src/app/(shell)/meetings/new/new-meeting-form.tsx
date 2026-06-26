@@ -13,7 +13,7 @@ import {
   type RecordingMeta,
 } from "@/lib/recording-recovery";
 import { createClient } from "@/lib/supabase/client";
-import { openRecorderPopup } from "@/lib/recorder-popup";
+import { useRecordingLock } from "@/components/workspace/use-recording-lock";
 import { startMeetingFromAudio } from "@/features/meetings/server/actions";
 import {
   ACCEPTED_AUDIO_TYPES,
@@ -47,6 +47,9 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [uploadPct, setUploadPct] = useState(0);
   const [recoveryMeta, setRecoveryMeta] = useState<RecordingMeta | null>(null);
+
+  // 녹음 중이면 이 폼이 든 플로팅 창의 닫기(X)·배경보내기와 탭 새로고침을 잠근다(우발적 유실 방지).
+  useRecordingLock(isRecording);
 
   // On mount: look for an unfinished recording in IndexedDB (browser crash recovery).
   useEffect(() => {
@@ -98,26 +101,8 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
 
   function startRecording() {
     setError(null);
-
-    // 1) 새 창 녹음 시도 — 메인 창 새로고침/이탈로부터 안전.
-    const popupOpened = openRecorderPopup(
-      title || "회의 녹음",
-      {
-        onComplete: (recorded) => {
-          setFile(recorded);
-        },
-        onError: (msg) => {
-          setError(msg);
-        },
-        onClose: () => {
-          // 사용자가 녹음 완료 없이 팝업을 닫음 — 별도 동작 없음 (state도 변경 안 됨)
-        },
-      },
-      { fileToken: "meeting" },
-    );
-    if (popupOpened) return;
-
-    // 2) 팝업 차단 시 인라인 fallback.
+    // 폼이 든 플로팅 창 안에서 바로 녹음(별도 브라우저 창 없음). 창 자체가 떠 있어 배경을
+    // 자유롭게 쓸 수 있고, 녹음 중엔 useRecordingLock이 창 닫기/탭 새로고침을 막는다.
     void startInlineRecording();
   }
 
