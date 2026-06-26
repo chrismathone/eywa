@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAccess } from "@/lib/auth/require-access";
+import { attachmentFilename } from "@/lib/http/content-disposition";
 import {
   getStudentsList,
   type StudentSort,
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="학생목록_${date}.xlsx"`,
+      "Content-Disposition": attachmentFilename(`학생목록_${date}.xlsx`),
     },
   });
 }

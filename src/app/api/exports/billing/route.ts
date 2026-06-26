@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAccess } from "@/lib/auth/require-access";
+import { attachmentFilename } from "@/lib/http/content-disposition";
 import { getInvoicesForPeriod } from "@/features/billing/server/queries";
 import { buildInvoicesWorkbook } from "@/features/exports/invoices-excel";
 
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="수납_${periodLabel}.xlsx"`,
+      "Content-Disposition": attachmentFilename(`수납_${periodLabel}.xlsx`),
     },
   });
 }

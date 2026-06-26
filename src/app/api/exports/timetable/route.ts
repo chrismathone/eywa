@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAccess } from "@/lib/auth/require-access";
+import { attachmentFilename } from "@/lib/http/content-disposition";
 import { buildTimetableWorkbook } from "@/features/exports/timetable-excel";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
 
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
     return new NextResponse(Buffer.from(buf), {
       headers: {
         "Content-Type": XLSX_MIME,
-        "Content-Disposition": `attachment; filename="수학_시간표_${date}.xlsx"`,
+        "Content-Disposition": attachmentFilename(`수학_시간표_${date}.xlsx`),
       },
     });
   }
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
   return new NextResponse(buf, {
     headers: {
       "Content-Type": XLSX_MIME,
-      "Content-Disposition": `attachment; filename="시간표_${date}.xlsx"`,
+      "Content-Disposition": attachmentFilename(`시간표_${date}.xlsx`),
     },
   });
 }
