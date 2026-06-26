@@ -31,10 +31,13 @@
 - **통합뷰**(`_components/rich-grid-view.tsx` + `rich-card-group.tsx`) — ✅ **ijw EnglishClassTab "반=열 리치 그리드" 충실 이식(2026-06-22 최종)**.
   시작 교시별 섹션(평일 기준, 주말 전용=별도 섹션, 섹션마다 visiblePeriods) → 좌측 sticky 라벨열(수업명/담임/강의실/교시/재원/대기/퇴원) +
   반=열 카드: ijw 헤더색(`bg_color`) 수업명 + 담임 + **요일별 강의실**(`월수 본원304 / 목 LAB실`) + **요일×교시 미니그리드**(셀마다
-  강사약칭·강사해시색 / LAB=파란배지) + **재원/대기/퇴원**(신입 빨강·전입 초록, 영문이름 `이름 (English)`). 읽기전용. 순수함수 `lib/class-grid.ts`
+  강사약칭·**강사 저장색**(ijw `users.bg_color`; 영문닉네임은 `users.english_name`으로 해결, 미해결만 `teacherColor` 해시 폴백) / LAB=파란배지) +
+  **재원/대기/퇴원**(신입 빨강·전입 초록, 영문이름 `이름 (English)`). 읽기전용. 순수함수 `lib/class-grid.ts`
   의 `buildRichCardGroups`/`teacherColor`(+test 6). ⚠️ **데이터 백필 필수**: eywa 데모가 평면(슬롯별 강사/강의실/영문이름 0)이라
   `scripts/_poc_migration/backfill-english-slots.cjs`(멱등)로 ijw 익스포트의 slotTeachers·slotRooms·bgColor·englishName을 적재
   (slot강사 183·강의실 84·LAB 65셀·반색 52·영문 29). 스키마 0041a(`class_schedules.slot_teacher_label/slot_room_label`).
+  **(2026-06-26) 강사 퍼스널 색 이식**: ijw `staff`(42명 전원 bgColor/textColor)를 `backfill-teacher-colors.cjs`(멱등)로 `users.bg_color`/
+  `text_color`/`english_name`에 적재(0054a·0055a, staff.name↔users.display_name 42/42) → 통합뷰 셀·담임이 저장색(인라인 hex), 익스포터도 ijw색 일치.
   설계 변천(폐기): 전과목색오버뷰 → 단순카드그리드(영어 데이터 못 살림) → **리치 그리드(현재)**. 합반(classGroupId)·영어 레벨배너 미이식(후속).
 - **순수함수 Vitest**: periods(slotPeriodRow 등), grid(computeBlocks/mergeRuns). `pnpm test` 그린(338).
 - 사이드바: 와이드 터치 회색지대 보정(`layout.tsx` `lg:pointer-fine:` — 크롬 전환을 `useIsDesktop`과 일치).
