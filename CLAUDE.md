@@ -345,6 +345,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   IDB 복구(`rec.start(1000)`+saveChunk, `RecoveryKind`에 `student-consultation` 추가)·복구 배너·녹음 잠금 추가해 동일 동작.
 - **디스크 백스톱 복원**(사용자 "파일증발 대비"): 팝업이 정지 시 하던 **자동 다운로드**가 인라인 전환에서 빠졌었음 → [`downloadFile`](src/lib/audio-upload.ts)(best-effort,
   throw 안 함)를 3곳 onstop에 추가 — 정지 즉시 .webm을 다운로드 폴더로 저장(브라우저 내부 IDB 복구와 **별개**의 OS 파일 백업). 보호 3겹: 녹음중 IDB 청크 + 정지시 디스크 + 폼 state.
+- **파일명 KST 통일**: 인라인 전환 때 `toISOString()`(UTC, `Z`접미 = 한국시간과 9시간 오차)로 떨어졌던 것을 공용 [`kstTimestamp()`](src/lib/audio-upload.ts)
+  (`Intl.DateTimeFormat({timeZone:'Asia/Seoul'})`, 옛 팝업과 동일)로 교체. 다운로드 3곳 + IDB 복구 파일명(`복구_*`)까지 전부 `…_KST.webm`(OS 시간대 무관 한국시간).
+- ⚠️ **백업 저장 위치 = 현재 "로컬 디스크 다운로드"(임시 방편), 추후 클라우드 스토리지로 이전 검토**: 정지 시 .webm을 사용자 **다운로드 폴더**로
+  내려받는 건 "파일증발 대비"의 최소 백스톱일 뿐, 다운로드 폴더가 흩어지고 다른 기기에선 못 본다는 한계가 있다. **향후 Supabase Storage(현 업로드
+  버킷 재사용) 또는 Firebase Storage(레거시 오디오 콜드 백엔드 기존 사용)에 정지 즉시 백업 업로드**로 옮기는 것을 검토한다(자동 분석 업로드와 별개로,
+  분석 시작 전·실패해도 원본이 클라우드에 남게). 옮길 때 [`downloadFile`](src/lib/audio-upload.ts) 호출부(3곳 onstop)를 백업 업로드로 대체하거나 병행.
 - 검증: typecheck0/lint0(신규0)/**test511**/build✓. ⚠️ 실제 마이크 녹음·창 잠금·다운로드 라이브 검증은 마이크+로그인 세션 필요(게이트로 대체).
 
 ### 시간표 주간 이동(타임머신) ijw 충실 이식 + 편집 드래그 UX + 헤더 재배치 (2026-06-26) — ✅ 4게이트 그린 + 라이브 검증
