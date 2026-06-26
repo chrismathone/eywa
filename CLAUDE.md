@@ -329,6 +329,32 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 주간 이동(타임머신) ijw 충실 이식 + 편집 드래그 UX + 헤더 재배치 (2026-06-26) — ✅ 4게이트 그린 + 라이브 검증
+사용자 제보: ijw 시간표엔 "날짜 표시 + 주간 이동"이 있어 **반 이동·퇴원이 날짜로 기록**돼 주를 앞뒤로 옮기면 그 시점의 반 구성
+(과거 퇴원·미래 이동 예정까지)을 볼 수 있었는데 eywa엔 미이식(오늘 스냅샷만). ijw 양쪽 소스(`useSubjectClassStudents.ts`·
+`dateUtils.ts`·`TimetableManager.tsx`·`useStudentDragDrop.ts`)를 읽어 **그대로** 이식. 계획 [`expressive-weaving-glacier.md`].
+- **데이터 모델 재확인(DB 실측)**: eywa `enrollments`는 이미 `start_date`+`end_date`+GiST daterange = **시간 구간 테이블**(ijw와 동형).
+  데모 종료 enrollment 263건·시작일 2019~2026 분포 → **과거 재구성이 실제로 다르게 보임**(마이그 0). 미래는 거의 빔(미래시작 2건) → Phase B 필요.
+- **A. 주간 이동 조회**: 순수 유틸 [`week.ts`](src/features/timetable/lib/week.ts)(`getWeekReferenceDate` 미래→월/현재→오늘/과거→일,
+  `weekLabel` "2026년 6월 4주차 (22일~28일)", Vitest 12) + [queries.ts](src/features/timetable/server/queries.ts)
+  `getWeeklyScheduleWithStudents({ referenceDate })`가 그 시점 명단 재구성(재원/대기[미래시작·on_hold]/퇴원/전입/신입을 기준일 기준 분류).
+  **퇴원이 enrollment.end_date 없이 `students.withdrawn_at`로만 기록된 경우까지** 잡도록 student status/withdrawn_at 조인(=기존 "퇴원-개방 학생을 재원 오표시" 버그도 교정).
+  [page.tsx](<src/app/(shell)/timetable/page.tsx>) `?week=` 파라미터 + [week-nav.tsx](<src/app/(shell)/timetable/_components/week-nav.tsx>)
+  ◀ 이번주 ▶ + 주차 라벨 + "과거/미래 조회" 배지. 과거 주는 편집 비활성(소급 금지).
+- **B. 미래 예약 이동**(`0056a` alpha, dev적용): [move_enrollments_batch](supabase/migrations/0056a_move_enrollments_effective_date.sql)에
+  `p_effective_date` 추가(옛 end_date=적용일 / 새 start_date=적용일). [actions.ts](src/features/enrollments/server/actions.ts)
+  `moveEnrollmentsBatch(moves, effectiveDate)` + [timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>)가
+  **보고 있는 미래 주**를 적용일로 전달 → 미래 주에서 드래그하면 그 주에 이동 예약(현재 주엔 옛 반 유지). ijw `scheduledDate` 패턴.
+- **편집 드래그 UX(별건, 같은 세션)**: ① **DragOverlay** — 잡으면 학생 이름 칩이 커서 따라옴(끄는 느낌). ② **도착 셀 "전입 예정"** —
+  옮긴 학생이 도착 반에 초록 "+이름 ←원래반" 미리보기(`incoming` 맵, edit-context/timetable-board/class-cell). ③ **드래그 URL 고스트 픽스** —
+  [WindowLink](src/components/workspace/window-link.tsx) anchor에 `draggable={false}`(끌 때 링크 URL 딸려오던 것 차단) + 편집 행 `select-none touch-none`.
+- **헤더 재배치(사용자 제안)**: [app-header.tsx](src/components/app-header.tsx) 검색을 중앙 → **우측**, [BackgroundTabs](src/components/workspace/background-tabs.tsx)를
+  부유 오버레이 → **헤더 인라인(검색 왼쪽)**으로 이동(workspace-canvas에서 제거). 배경 2개+일 때만 노출·드래그 꺼내기 동작 유지.
+- 검증: typecheck0/lint0/**test511**(week 12)/build✓ + 라이브(PSS 웨일, localhost:3001): 과거주 2026-03 등록 1424→1124·BS1B as-of 재구성 **DB와 1:1 일치**·
+  과거/미래 배지·과거 편집 비활성 / **Phase B E2E**: 미래(2026-07-13) 예약 → DB split 정확(BS1B end=07-13·tr / CR1C start=07-13·trIn) → 미래 주엔 CR1C·현재 주엔 BS1B → 검증 후 원복.
+  ⚠️ MCP 합성 드래그는 dnd-kit 발화가 까다로워(2단계 PointerEvent) Phase B 데이터·양 주 효과는 RPC 직접+DB+양 주 DOM으로 결정적 검증.
+- ⚠️ 후속: 미래 퇴원 예약은 ijw도 즉시라 범위 밖. 데모 미래 데이터 희소 → 미래 주 검증은 Phase B로 생성 후.
+
 ### ijw 강사 색상 이식 + 통합뷰 셀·담임색 배선 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
 계획서 "분기점"(강사 헤더색: ijw 저장색 vs eywa 해시) 해소. ijw `staff`(42명 전원 bgColor/textColor 보유)를 eywa `users`로 이식하고
 시간표 통합뷰가 저장색을 실제로 쓰게 배선(익스포터는 기존부터 `users.bg_color` 소비, 화면은 해시였음).

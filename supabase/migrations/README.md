@@ -38,7 +38,7 @@ pnpm db:seed
 
 ## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-25)
 
-공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha `0001a`~`0055a` 전부 적용 완료**. `pnpm db:alphas`로
+공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha `0001a`~`0056a` 전부 적용 완료**. `pnpm db:alphas`로
 전 alpha를 멱등 일괄 적용·재실행 수렴 확인(56개 ✓, 0 실패; `0019a`는 dropped `scenarios` 가드로 no-op). 직접 조회로도 확인:
 
 - `pg_trgm` 확장 **설치됨**, `0024a`의 trigram GIN 인덱스 **11개 전부 존재**
@@ -112,6 +112,7 @@ pnpm db:seed
 | `0053a_consultation_report_edit` | **`consultation_ai_analysis.report_edited_by`·`report_edited_at` — 등록상담 AI 분석 인라인 수정자·시각**(동결 print_payload.audioReport를 명시 교정 허용). |
 | `0054a_user_colors` | **`users.bg_color`·`text_color` — 강사 퍼스널 색**(ijw `staff.bgColor/textColor` 패리티). 시간표 익스포터(엑셀/시트) + 통합뷰 셀·담임 강사색 소비. |
 | `0055a_users_english_name` | **`users.english_name` — 강사 영문닉네임**(ijw `staff.englishName`). 영어 시간표 슬롯 라벨이 영문닉네임이라 한글 `display_name`로 매칭 불가 → 통합뷰 셀에서 라벨→강사색 해결용. |
+| `0056a_move_enrollments_effective_date` | **`move_enrollments_batch`에 `p_effective_date` 추가**(옛 1-인자판 drop). 시간표 주간 이동 Phase B — 미래 주에서 드래그 시 그 주에 반이동 예약(옛 enrollment end_date=적용일 / 새 enrollment start_date=적용일). SECURITY INVOKER·per-move 서브트랜잭션은 0027h 동일. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
