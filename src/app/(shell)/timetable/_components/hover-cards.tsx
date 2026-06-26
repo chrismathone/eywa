@@ -163,18 +163,22 @@ export function StudentInfoCard({
     isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName;
   return (
     <div className="space-y-2 break-keep text-[11px]">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-foreground text-[13px] font-bold">{name}</span>
-        {englishName ? <span className="text-text-dim">({englishName})</span> : null}
-        {status === "withdrawn" ? (
-          <Pill color="neutral">퇴원</Pill>
-        ) : status === "hold" ? (
-          <Pill color="amber">대기</Pill>
+      {/* 헤더 한 줄: 이름(좌) + 학년·학교(우상단). 별도 줄을 없애 세로 공간 절약. */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="text-foreground text-[13px] font-bold">{name}</span>
+          {englishName ? <span className="text-text-dim">({englishName})</span> : null}
+          {status === "withdrawn" ? (
+            <Pill color="neutral">퇴원</Pill>
+          ) : status === "hold" ? (
+            <Pill color="amber">대기</Pill>
+          ) : null}
+        </div>
+        {grade || school ? (
+          <span className="text-text-dim shrink-0 text-right text-[10px] leading-tight">
+            {[grade, school].filter(Boolean).join(" · ")}
+          </span>
         ) : null}
-      </div>
-      <div className="text-text-dim">
-        {grade ?? "—"}
-        {school ? <> · {school}</> : null}
       </div>
       {hasDetail ? (
         <div className="border-line space-y-1 border-t pt-1.5">
