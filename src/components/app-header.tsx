@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
+import { BackgroundTabs } from "@/components/workspace/background-tabs";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
 
 export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
@@ -34,20 +35,22 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
         </h1>
       </div>
 
-      {/* 검색 팰릿 트리거 — 클릭으로 메뉴·검색 팰릿을 연다 */}
-      <div className="flex flex-1 justify-center">
+      {/* 우측 클러스터 — 배경 탭(있을 때) · 검색 · 알림. 검색은 우측, 배경 탭은 그 왼쪽. */}
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2.5">
+        {/* 배경 탭 스트립 — 배경 2개 이상일 때만. 검색 왼쪽에 인라인 배치. */}
+        <BackgroundTabs />
+
+        {/* 검색 팰릿 트리거 — 클릭으로 메뉴·검색 팰릿을 연다 */}
         <button
           type="button"
           onClick={openCommandPalette}
           aria-label="메뉴 검색 열기"
-          className="border-line bg-card text-text-dim hover:bg-bg-soft hover:text-foreground hidden w-full max-w-[420px] items-center gap-2.5 rounded-full border px-4 py-1.5 transition md:flex"
+          className="border-line bg-card text-text-dim hover:bg-bg-soft hover:text-foreground hidden w-[320px] shrink items-center gap-2.5 rounded-full border px-4 py-1.5 transition md:flex"
         >
           <EyIcon name="search" size={14} />
-          <span className="flex-1 text-left text-[13px]">메뉴 · 학생 · 수업 어디로든 점프</span>
+          <span className="flex-1 truncate text-left text-[13px]">메뉴 · 학생 · 수업 어디로든 점프</span>
         </button>
-      </div>
 
-      <div className="flex shrink-0 items-center gap-2.5">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

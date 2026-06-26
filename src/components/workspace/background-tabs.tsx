@@ -8,10 +8,9 @@ import { useWindowStore, type WindowParams } from "./window-store";
 const POP_DRAG = 22; // 탭을 아래로(캔버스 쪽) 이만큼 끌면 창으로 꺼냄
 
 /**
- * 배경 탭 스트립 — 상단 중앙. 배경 스택이 2개 이상일 때만 노출(기본 1개=대시보드면 숨김).
+ * 배경 탭 스트립 — 헤더 우측(검색 왼쪽)에 인라인. 배경 스택이 2개 이상일 때만 노출(기본 1개=대시보드면 숨김).
  * 탭 순서 = 들어온 순서(삽입순) 고정 — 선택해도 재정렬되지 않고 하이라이트만 이동.
  * 좌클릭 = 그 배경으로 전환, 아래로 드래그/우클릭 = 창으로 꺼내기(backgroundToWindow).
- * 드래그(창 이동) 중엔 숨김(상단 스냅 바·배경 드롭 칩과 충돌 회피).
  */
 export function BackgroundTabs() {
   const router = useRouter();
@@ -19,9 +18,8 @@ export function BackgroundTabs() {
   const activeId = useWindowStore((s) => s.activeBackgroundId);
   const setBackground = useWindowStore((s) => s.setBackground);
   const backgroundToWindow = useWindowStore((s) => s.backgroundToWindow);
-  const dragging = useWindowStore((s) => s.draggingId !== null);
 
-  if (background.length <= 1 || dragging) return null;
+  if (background.length <= 1) return null;
 
   function popToWindow(id: string) {
     backgroundToWindow(id);
@@ -40,7 +38,7 @@ export function BackgroundTabs() {
   return (
     <div
       data-slot="background-tabs"
-      className="border-line bg-card/95 shadow-card pointer-events-auto absolute top-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border py-1 pr-2 pl-1.5 backdrop-blur"
+      className="border-line bg-card hidden min-w-0 items-center gap-1 rounded-full border py-1 pr-2 pl-1.5 md:flex"
     >
       <span className="text-text-faint mr-0.5 flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase">
         <Layers size={11} /> 배경
