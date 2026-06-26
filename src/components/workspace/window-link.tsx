@@ -78,6 +78,9 @@ export function WindowLink({
       className={className}
       aria-label={ariaLabel}
       onClick={onClick}
+      // 네이티브 anchor 드래그(URL 고스트) 차단 — 시간표 편집에서 학생 행을 끌 때 링크 URL이
+      // 딸려오던 것 방지. nav 링크는 클릭 전용이라 HTML5 drag가 필요 없다.
+      draggable={false}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}
