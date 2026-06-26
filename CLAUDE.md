@@ -341,7 +341,16 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   미니그리드 **셀**(슬롯 강사)·**담임 칩**이 저장색(인라인 hex) 우선, 미해결 라벨만 [`teacherColor`](src/features/timetable/lib/class-grid.ts) 해시 폴백.
   `TeacherColorMap`은 plain 객체라 클라 전달 안전([[#61]]). LAB은 파란 배지 유지.
 - 검증: typecheck0/lint0/**test499**/build✓ + dev(3001) 통합뷰(영어) HTML에 저장색 인라인 렌더 확인(#ffa8d2·#3b82f6·#93c47d·#674ea7 등).
-- ⚠️ 기본뷰(요일그룹밴드)는 범위 밖(통합뷰만). ⚠️ ijw가 진실 — Firebase 재이식 시 backfill-teacher-colors.cjs 재실행(멱등).
+- ⚠️ 강사색 기본뷰(요일그룹밴드)는 범위 밖(통합뷰만 — **강사**색 한정). ⚠️ ijw가 진실 — Firebase 재이식 시 backfill-teacher-colors.cjs 재실행(멱등).
+
+### 반 색상(classes.bg_color)을 기본뷰·편집 폼 스케줄까지 반영 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
+사용자 제보: 반 색을 설정해도 시간표에 안 보임. 원인 = **반 색이 통합뷰에만 배선**돼 있고 **기본뷰는 과목색, 편집 폼 스케줄은 고정 초록**(선택 표시)을 써서
+반 색이 새지 않았다(로그인/계정 무관). 통합뷰 외 두 소비처에 배선(커밋 `a9943c3`).
+- **기본뷰 ClassCell 헤더**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>)): `slot.classBgColor`가 있으면 헤더 인라인 hex(글자색=`readableTextColor` 휘도 자동),
+  없으면 기존 과목색 폴백. ⚠️ **WindowLink는 `style` prop 미지원**([[#61]] 계열) → 색은 **감싸는 styled `<div>`** 에 주고 WindowLink는 그 안에(클래스는 폴백일 때만).
+- **편집 폼 스케줄 그리드**([schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>)): 선택 셀이 **반색 미리보기**(폼 라이브 `bgColor`, 없으면 기본 초록 `bg-primary`).
+  부담임 오버라이드 셀은 **보라 링**(`ring-purple-700`)으로 구분(반색 위에서도 식별). [class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>)가 `bgColor` 전달 + 라벨 "(시간표 통합뷰)"→**"(시간표·스케줄)"**.
+- 검증: typecheck0/lint0/**test499**/build✓ + Chrome MCP 라이브(기본뷰 MS2A 헤더 `rgb(250,180,180)`=#fab4b4 / 편집 폼 선택 셀 4개 동일). 이제 통합뷰·기본뷰·편집 폼 3곳 모두 반색 반영.
 
 ### 엑셀 다운로드 버그픽스 + 구글시트 연동 단순화(ON/OFF) + 사이드바 경계 + 병목 빠른승리 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
 사용자 연속 요청 묶음. 게이트: typecheck0/lint0(신규0)/**test499**(content-disposition 4)/build✓. dev(3001) 라이브 검증.
