@@ -99,9 +99,14 @@ export function AppSidebar({
 
   return (
     <TooltipProvider delay={200}>
+      {/* z-[45] = 플로팅 창 캔버스(fixed z-40)보다 위, 커맨드 팰릿(z-50)보다 아래. 이유: 창이 경계선에
+          딱 붙어 있으면(스냅/드래그) 창의 좌측 리사이즈 핸들이 사이드바 너비조절 핸들을 덮어 "경계선을
+          끌면 창만 리사이즈"됐다 → 사이드바를 캔버스 위로 올려 **경계선 드래그=사이드바 너비조절**이
+          되게 한다(사이드바 폭이 바뀌면 캔버스 left=rail도 따라가 창들이 함께 reflow). 창은 x≥0로
+          클램프(use-pointer-drag)돼 사이드바 영역으로 안 들어오므로, 올려도 창을 가리지 않는다. */}
       <aside
         style={{ width }}
-        className={`bg-sidebar border-line sticky top-0 flex h-screen shrink-0 flex-col border-r ${
+        className={`bg-sidebar border-line sticky top-0 z-[45] flex h-screen shrink-0 flex-col border-r ${
           motion ? `transition-[width] duration-200 ${EASE}` : ""
         } relative ${className ?? ""}`}
       >

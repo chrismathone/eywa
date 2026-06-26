@@ -83,7 +83,10 @@ export function usePointerDrag(
     }
     const cur = startRef.current;
     if (!cur) return;
-    const x = cur.rect.x + (e.clientX - cur.px);
+    // 좌측 클램프: 창이 스테이지 left(0=사이드바 오른쪽 경계) 왼쪽으로 못 가게 — 사이드바(z-[45])가
+    // 캔버스 위라, 안 막으면 왼쪽으로 끈 창이 사이드바 뒤로 가려진다. 또 경계선이 사이드바 너비조절
+    // 전용이 되도록(창 좌측 핸들이 경계에 겹쳐 다투지 않게) 한다. 스냅 감지는 포인터(sx) 기준이라 무관.
+    const x = Math.max(0, cur.rect.x + (e.clientX - cur.px));
     // 상단 클램프: 타이틀바(드래그 핸들)가 헤더/스냅바 위로 사라지지 않도록 스테이지 top(0) 아래 유지.
     // 포인터(sy)는 계속 위로 갈 수 있어 스냅 바 소환엔 영향 없음.
     const y = Math.max(0, cur.rect.y + (e.clientY - cur.py));
