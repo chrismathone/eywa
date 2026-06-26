@@ -80,12 +80,14 @@ const ROW_CLASS =
 function DraggableStudentRow({
   enrollmentId,
   classId,
+  className,
   name,
   meta,
   tone,
 }: {
   enrollmentId: string;
   classId: string;
+  className: string;
   name: string;
   meta: string;
   tone: string;
@@ -93,7 +95,7 @@ function DraggableStudentRow({
   const { pending } = useTimetableEdit();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `student:${enrollmentId}`,
-    data: { classId, name },
+    data: { classId, name, fromClassName: className },
   });
   const target = pending.get(enrollmentId);
   return (
@@ -101,7 +103,7 @@ function DraggableStudentRow({
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={`${ROW_CLASS} cursor-grab active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
+      className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
     >
       <span className={`truncate ${target ? "line-through" : ""}`}>{name}</span>
       {target ? (
@@ -174,6 +176,7 @@ function StudentRow({
 function StudentSection({
   students,
   classId,
+  className,
   editing,
   cap,
   draggable,
@@ -183,6 +186,7 @@ function StudentSection({
 }: {
   students: ClassDetailQuick["students"];
   classId: string;
+  className: string;
   editing: boolean;
   cap: number;
   draggable: boolean;
@@ -209,6 +213,7 @@ function StudentSection({
             key={s.enrollmentId}
             enrollmentId={s.enrollmentId}
             classId={classId}
+            className={className}
             name={s.name}
             meta={metaLabel(s.school, s.grade)}
             tone={tone(s)}
@@ -243,7 +248,7 @@ export function ClassCell({
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
   roster?: "full" | "names" | "none";
 }) {
-  const { editing } = useTimetableEdit();
+  const { editing, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
   // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
@@ -259,7 +264,9 @@ export function ClassCell({
   const withdrawn = slot.students.filter((s) => s.status === "withdrawn");
   const activeCap = roster === "names" ? 15 : 8;
   const SECTION_CAP = 6;
-  const showRoster = roster !== "none" && slot.students.length > 0;
+  // 이 셀로 전입 예정인 학생(편집 모드에서 다른 반에서 끌어온 학생) — 도착 셀에 초록 미리보기로 표시.
+  const incomingHere = incoming.get(slot.id) ?? [];
+  const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0);
   // 대기·퇴원이 있으면 셀 높이를 채워 그 그룹을 셀 하단에 정렬(재원 바로 아래가 아니라). 고정높이
   // flex 컨테이너(weekday-group) 안에서만 fill 효과 — 통합뷰(블록 부모)에선 flex-1이 무시돼 기존대로.
   const hasSecondary = hold.length > 0 || withdrawn.length > 0;
@@ -327,18 +334,35 @@ export function ClassCell({
               <StudentSection
                 students={active}
                 classId={slot.id}
+                className={slot.className}
                 editing={editing}
                 cap={activeCap}
                 draggable
                 tone={studentRowTone}
               />
             </div>
+            {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로. */}
+            {incomingHere.length > 0 ? (
+              <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
+                <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
+                  <span>전입 예정</span>
+                  <span className="num">{incomingHere.length}</span>
+                </div>
+                {incomingHere.map((s) => (
+                  <div key={s.enrollmentId} className={`${ROW_CLASS} bg-primary-soft/30 text-primary`}>
+                    <span className="truncate">+ {s.name}</span>
+                    <span className="text-primary/70 shrink-0 font-mono text-[12px]">←{s.fromClassName}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {/* 대기·퇴원 — 셀 하단 정렬 */}
             {hasSecondary ? (
               <div className="divide-line/40 mt-auto shrink-0 divide-y border-t">
                 <StudentSection
                   students={hold}
                   classId={slot.id}
+                  className={slot.className}
                   editing={editing}
                   cap={SECTION_CAP}
                   draggable={false}
@@ -349,6 +373,7 @@ export function ClassCell({
                 <StudentSection
                   students={withdrawn}
                   classId={slot.id}
+                  className={slot.className}
                   editing={editing}
                   cap={SECTION_CAP}
                   draggable={false}

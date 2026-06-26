@@ -27,7 +27,7 @@ export async function buildMathTimetableBuffer(opts?: {
   referenceMonday?: Date;
 }): Promise<ArrayBuffer> {
   const [slots, supabase] = await Promise.all([
-    getWeeklyScheduleWithStudents(opts?.teacherId),
+    getWeeklyScheduleWithStudents({ teacherId: opts?.teacherId }),
     createClient(),
   ]);
 

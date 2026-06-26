@@ -173,11 +173,15 @@ export type MoveEnrollmentsBatchState = {
  */
 export async function moveEnrollmentsBatch(
   moves: BatchMoveInput[],
+  /** 적용일(YYYY-MM-DD) — 미래 주 편집 시 그 주 월요일. 미지정/오늘이면 즉시 이동. (Phase B 주간 이동) */
+  effectiveDate?: string,
 ): Promise<MoveEnrollmentsBatchState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!Array.isArray(moves) || moves.length === 0) return { results: [] };
 
+  const eff =
+    effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ? effectiveDate : null;
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("move_enrollments_batch", {
     p_moves: moves.map((m) => ({
@@ -185,6 +189,7 @@ export async function moveEnrollmentsBatch(
       newClassId: m.newClassId,
       startDate: m.startDate ?? null,
     })),
+    p_effective_date: eff,
   });
 
   if (error) return { error: error.message };

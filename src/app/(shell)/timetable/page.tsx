@@ -9,6 +9,7 @@ import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isGoogleSheetsExportEnabled } from "@/features/integrations/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { RichGridView } from "./_components/rich-grid-view";
 import {
   TimetableEditProvider,
@@ -16,6 +17,7 @@ import {
   TimetableDndArea,
 } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
+import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 
 export const metadata = { title: "시간표 — eywa" };
@@ -28,17 +30,30 @@ type ViewMode = "basic" | "integrated";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam } = await searchParams;
+  const { view: viewParam, subject: subjectParam, week: weekRaw } = await searchParams;
   const view: ViewMode = viewParam === "integrated" ? "integrated" : "basic";
+
+  // 주간 이동(타임머신) — week 파라미터(그 주 아무 날)를 월요일로 정규화. 미지정=이번 주.
+  const today = new Date().toISOString().slice(0, 10);
+  const thisWk = thisMonday(today);
+  const week = weekRaw && /^\d{4}-\d{2}-\d{2}$/.test(weekRaw) ? mondayOf(weekRaw) : thisWk;
+  // 그 시점 명단 재구성 기준일 = ijw getWeekReferenceDate(미래주→월/이번주→오늘/과거주→일).
+  const referenceDate = getWeekReferenceDate(week, today);
+  const rel = weekRelation(week, today);
+  const isFutureWeek = rel === "future";
+  // 편집 = 이번 주(즉시 이동) 또는 미래 주(그 주에 예약). 과거 주는 조회 전용(소급 금지).
+  const canEdit = rel !== "past";
+  // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
+  const effectiveDate = isFutureWeek ? week : undefined;
 
   // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = user.systemRole === "teacher" ? user.id : undefined;
   // '시트' 버튼 = master + 구글 시트 내보내기 연동 ON일 때만(비-master는 조회도 생략).
   const [allSlots, settings, sheetsEnabled, teacherColors] = await Promise.all([
-    getWeeklyScheduleWithStudents(teacherId),
+    getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
     user.systemRole === "master" ? isGoogleSheetsExportEnabled() : Promise.resolve(false),
     // 강사색 맵은 통합뷰에서만 필요(셀·담임색). 기본뷰는 생략.
@@ -64,17 +79,25 @@ export default async function TimetablePage({
   const totalStudents = slots.reduce((sum, x) => sum + x.students.filter(isActive).length, 0);
 
   return (
-    <TimetableEditProvider>
+    <TimetableEditProvider effectiveDate={effectiveDate}>
       <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
+        {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
+        <WeekNav
+          currentWeek={week}
+          today={today}
+          hrefForWeek={(monday) => buildHref({ view, subject, defaultSubject, week: monday, thisWk })}
+        />
+        <span className="bg-line h-4 w-px" aria-hidden />
+
         {/* 과목 chip — 두 뷰 다 과목별(클릭 = 과목 전환) */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">과목</span>
           {available.map((k) => (
             <Link
               key={k}
-              href={buildHref(view, k, defaultSubject)}
+              href={buildHref({ view, subject: k, defaultSubject, week, thisWk })}
               className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
                 subject === k
                   ? "border-foreground bg-foreground text-background font-medium"
@@ -98,7 +121,7 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref(v.key, subject, defaultSubject)}
+                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
                   view === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -116,11 +139,15 @@ export default async function TimetablePage({
           총 {slots.length}슬롯 · {totalStudents}명 등록
         </span>
 
-        {/* 편집 컨트롤 — 기본뷰만(통합뷰는 읽기전용) */}
-        {!isIntegrated && slots.length > 0 ? (
+        {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰=읽기전용, 과거=조회 전용).
+            미래 주 편집은 그 주에 이동 예약(Phase B). */}
+        {!isIntegrated && slots.length > 0 && canEdit ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <TimetableEditControls />
+            {isFutureWeek ? (
+              <span className="text-blue text-[11px] whitespace-nowrap">· 이 주에 이동 예약</span>
+            ) : null}
           </>
         ) : null}
 
@@ -146,10 +173,17 @@ export default async function TimetablePage({
   );
 }
 
-function buildHref(view: ViewMode, subject: string, defaultSubject: string): string {
+function buildHref(opts: {
+  view: ViewMode;
+  subject: string;
+  defaultSubject: string;
+  week: string; // 월요일 YYYY-MM-DD
+  thisWk: string; // 이번 주 월요일(기본값이면 생략)
+}): string {
   const params = new URLSearchParams();
-  if (view !== "basic") params.set("view", view);
-  if (subject !== defaultSubject) params.set("subject", subject);
+  if (opts.view !== "basic") params.set("view", opts.view);
+  if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
+  if (opts.week !== opts.thisWk) params.set("week", opts.week);
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

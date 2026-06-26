@@ -2,7 +2,11 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { weekEndOf, shiftDays } from "../lib/week";
 import type { TeacherColorMap } from "../lib/class-grid";
+
+/** server-only 모듈이라 new Date() OK. 오늘(YYYY-MM-DD, 기준일 기본값). */
+const todayStr = (): string => new Date().toISOString().slice(0, 10);
 
 /**
  * 강사 라벨 → 저장된 색 맵(통합뷰 셀·담임색). display_name·english_name(영문닉네임 슬롯 라벨) 둘 다 키.
@@ -43,10 +47,10 @@ export type ScheduleSlot = {
   classTextColor: string | null;
 };
 
-async function fetchSlots(): Promise<ScheduleSlot[]> {
+async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
   const supabase = await createClient();
-  // 만료된 스케줄(valid_to < 오늘)은 제외. valid_to is null = 무기한 유효.
-  const today = new Date().toISOString().slice(0, 10);
+  const weekEnd = weekEndOf(referenceDate);
+  // 그 주 시점에 유효한 스케줄만(valid_to < 기준일 = 만료 제외). valid_to is null = 무기한 유효.
   const { data } = await supabase
     .from("class_schedules")
     .select(
@@ -57,14 +61,20 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
          classroom:classroom_id ( name )
        )`,
     )
-    .or(`valid_to.is.null,valid_to.gte.${today}`)
+    .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
     .order("start_time");
 
   if (!data) return [];
 
-  // 활성 enrollment 전건 카운트 — PostgREST 1000행 한도 회피(#54).
+  // as-of-week 재원 카운트 — 그 주 끝(weekEnd)까지 시작했고 그 주 끝에 아직 안 끝난 enrollment.
+  // (정확한 재원/대기/퇴원 분류는 getWeeklyScheduleWithStudents. 여기선 셀 헤더 카운트용 근사.) #54 페이지네이션.
   const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
-    supabase.from("enrollments").select("class_id").is("end_date", null).range(from, to),
+    supabase
+      .from("enrollments")
+      .select("class_id")
+      .lte("start_date", weekEnd)
+      .or(`end_date.is.null,end_date.gt.${weekEnd}`)
+      .range(from, to),
   );
 
   const counts = new Map<string, number>();
@@ -112,7 +122,7 @@ async function fetchSlots(): Promise<ScheduleSlot[]> {
 }
 
 export async function getWeeklySchedule(): Promise<ScheduleSlot[]> {
-  return fetchSlots();
+  return fetchSlots(todayStr());
 }
 
 export type StudentLine = {
@@ -153,12 +163,17 @@ export type ScheduleSlotWithStudents = ScheduleSlot & { students: StudentLine[] 
  * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는
  * 학생 리스트 (이름·학년·학교) 데이터.
  */
-type StudentRef = { name?: string; grade?: string | null; school?: string | null; english_name?: string | null };
+type StudentRef = {
+  name?: string;
+  grade?: string | null;
+  school?: string | null;
+  english_name?: string | null;
+  /** 퇴원이 enrollment.end_date 없이 students.withdrawn_at로만 기록된 경우의 시점 재구성용. */
+  status?: string | null;
+  withdrawn_at?: string | null;
+};
 const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefined =>
   Array.isArray(r.student) ? r.student[0] : r.student;
-/** server-only 모듈이라 new Date() OK(fetchSlots와 동일 패턴). YYYY-MM-DD. */
-const dateBefore = (days: number): string =>
-  new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
 /**
  * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는 학생 리스트.
@@ -166,9 +181,16 @@ const dateBefore = (days: number): string =>
  * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1년·반이동 제외(셀에서 status로 분리 렌더).
  */
 export async function getWeeklyScheduleWithStudents(
-  teacherId?: string,
+  opts?: { referenceDate?: string; teacherId?: string },
 ): Promise<ScheduleSlotWithStudents[]> {
-  let slots = await fetchSlots();
+  // 주차 기준일(미지정=오늘) 기준으로 그 시점의 반 명단을 재구성 — ijw 시간표 주간 이동(타임머신).
+  const referenceDate = opts?.referenceDate ?? todayStr();
+  const teacherId = opts?.teacherId;
+  const weekEnd = weekEndOf(referenceDate); // 재구성 윈도우 끝(ref+6, ijw useSubjectClassStudents)
+  const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
+  const withdrawnFloor = shiftDays(referenceDate, -365); // 퇴원 표시 윈도우: 기준일 1년 전까지(클러터 캡)
+
+  let slots = await fetchSlots(referenceDate);
   // 강사 스코핑(intra-tenant PII) — teacher면 본인 담당 반만. 안 하면 강사가 /timetable 직타 시
   // 전 학생 명단(이름·학교·학년·진도)이 노출된다. RLS는 테넌트만 격리하므로 앱레벨에서 좁힌다.
   if (teacherId) {
@@ -182,96 +204,91 @@ export async function getWeeklyScheduleWithStudents(
   const classIds = Array.from(new Set(slots.map((s) => s.classId)));
   const supabase = await createClient();
 
-  const newCutoff = dateBefore(30); // 신입 판정 — 등록 30일 이내
-  // 퇴원 표시 윈도우 — 최근 1년. ijw도 셀당 표시 캡으로 최근 몇 명만 보였고, fetchInChunks
-  // 1000행/청크 한도(#53)도 보호(전체 이력은 반 상세에서). 반이동(is_transferred)은 새 반 전입으로 보이므로 제외.
-  const withdrawnCutoff = dateBefore(365);
-
-  // class_id를 청크로 나눠 조회 — 대량 .in()의 HTTP 414 + 1000행 절단 회피(#53).
-  type ActiveRow = {
+  // 그 주 시점(referenceDate/weekEnd) 명단 재구성 — ijw useSubjectClassStudents 이식.
+  // 반별 enrollment를 청크로 한 번에(대량 .in() 414·1000행 절단 회피 #53): 현재 열린(end_date null) +
+  // 최근 종료(end_date>=withdrawnFloor), 그 주 끝까지 시작한 것(start<=weekEnd)만.
+  // 학생 status/withdrawn_at도 조인 — 퇴원이 enrollment.end_date 없이 students.withdrawn_at로만 기록된 경우까지 잡기 위함.
+  type Row = {
     id: string;
     class_id: string;
     student_id: string;
-    start_date: string | null;
+    start_date: string;
+    end_date: string | null;
     on_hold: boolean | null;
+    is_transferred: boolean | null;
     is_transferred_in: boolean | null;
     attendance_days: string[] | null;
     student: StudentRef | StudentRef[];
   };
-  type WithdrawnRow = {
-    id: string;
-    class_id: string;
-    student_id: string;
-    end_date: string | null;
-    student: StudentRef | StudentRef[];
-  };
+  const rows = await fetchInChunks<Row>(classIds, (chunk) =>
+    supabase
+      .from("enrollments")
+      .select(
+        "id, class_id, student_id, start_date, end_date, on_hold, is_transferred, is_transferred_in, attendance_days, student:student_id ( name, grade, school, english_name, status, withdrawn_at )",
+      )
+      .in("class_id", chunk)
+      .lte("start_date", weekEnd)
+      .or(`end_date.is.null,end_date.gte.${withdrawnFloor}`),
+  );
 
-  // 재원+대기(end_date null) · 최근 퇴원(end_date 있음, 반이동 아님)을 병렬로.
-  const [activeRows, withdrawnRows] = await Promise.all([
-    fetchInChunks<ActiveRow>(classIds, (chunk) =>
-      supabase
-        .from("enrollments")
-        .select(
-          "id, class_id, student_id, start_date, on_hold, is_transferred_in, attendance_days, student:student_id ( name, grade, school, english_name )",
-        )
-        .in("class_id", chunk)
-        .is("end_date", null),
-    ),
-    fetchInChunks<WithdrawnRow>(classIds, (chunk) =>
-      supabase
-        .from("enrollments")
-        .select("id, class_id, student_id, end_date, student:student_id ( name, grade, school, english_name )")
-        .in("class_id", chunk)
-        .not("end_date", "is", null)
-        .eq("is_transferred", false)
-        .gte("end_date", withdrawnCutoff)
-        .order("end_date", { ascending: false }),
-    ),
-  ]);
+  // (class_id:student_id) → 표시할 한 줄. 같은 반 다중 수강기록(재등록 등)은 재원>대기>퇴원 우선, 같으면 최신 시작.
+  const statusRank = (st: StudentLine["status"]) => (st === "active" ? 0 : st === "hold" ? 1 : 2);
+  const chosen = new Map<string, StudentLine>();
+  for (const r of rows) {
+    const s = refOf(r);
+    if (!s?.name) continue;
+    const start = r.start_date;
+    const stuWithdraw = s.status === "withdrawn" ? (s.withdrawn_at ?? null) : null;
+    // 이 반 실효 종료일 = enrollment.end_date(반 이탈)와 학생 퇴원일 중 이른 것.
+    const effectiveEnd =
+      [r.end_date, stuWithdraw].filter((x): x is string => !!x).sort()[0] ?? null;
+    const hasEnded = effectiveEnd != null && effectiveEnd <= weekEnd;
+
+    // 반이동 전출(이 반 종료 + is_transferred): 새 반에서 보이므로 옛 반엔 표시 안 함.
+    if (hasEnded && r.is_transferred) continue;
+    // 윈도우 밖(오래된) 퇴원은 표시 안 함(클러터 캡).
+    if (hasEnded && effectiveEnd! < withdrawnFloor) continue;
+
+    const isScheduled = start > referenceDate; // 미래 시작 = 아직 안 들어옴(배정 예정)
+    const status: StudentLine["status"] = hasEnded
+      ? "withdrawn"
+      : isScheduled || r.on_hold
+        ? "hold"
+        : "active";
+
+    const line: StudentLine = {
+      name: s.name,
+      grade: s.grade ?? null,
+      school: s.school ?? null,
+      enrollmentId: r.id,
+      studentId: r.student_id,
+      status,
+      endDate: status === "withdrawn" ? effectiveEnd : undefined,
+      isNew: status !== "withdrawn" && start >= newCutoff,
+      enrollmentDate: start,
+      isTransferredIn: status !== "withdrawn" && r.is_transferred_in === true,
+      attendanceDays: r.attendance_days ?? [],
+      englishName: s.english_name ?? null,
+    };
+
+    const key = `${r.class_id}:${r.student_id}`;
+    const prev = chosen.get(key);
+    if (
+      !prev ||
+      statusRank(status) < statusRank(prev.status) ||
+      (statusRank(status) === statusRank(prev.status) &&
+        (line.enrollmentDate ?? "") > (prev.enrollmentDate ?? ""))
+    ) {
+      chosen.set(key, line);
+    }
+  }
 
   const byClass = new Map<string, StudentLine[]>();
-  const seen = new Set<string>(); // `${class_id}:${student_id}` — 재원/대기 우선, 같은 반 재등록 시 퇴원 중복 제외
-  const push = (classId: string, line: StudentLine) => {
+  for (const [key, line] of chosen) {
+    const classId = key.slice(0, key.indexOf(":")); // uuid엔 ':' 없음 → 안전
     const list = byClass.get(classId) ?? [];
     list.push(line);
     byClass.set(classId, list);
-  };
-
-  for (const r of activeRows) {
-    const s = refOf(r);
-    if (!s?.name) continue;
-    seen.add(`${r.class_id}:${r.student_id}`);
-    push(r.class_id, {
-      name: s.name,
-      grade: s.grade ?? null,
-      school: s.school ?? null,
-      enrollmentId: r.id,
-      studentId: r.student_id,
-      status: r.on_hold ? "hold" : "active",
-      // 날짜 문자열(YYYY-MM-DD) 사전식 비교 — start_date >= cutoff면 30일 이내.
-      isNew: r.start_date != null && r.start_date >= newCutoff,
-      enrollmentDate: r.start_date,
-      isTransferredIn: r.is_transferred_in === true,
-      attendanceDays: r.attendance_days ?? [],
-      englishName: s.english_name ?? null,
-    });
-  }
-  for (const r of withdrawnRows) {
-    const key = `${r.class_id}:${r.student_id}`;
-    if (seen.has(key)) continue; // 같은 반에 재등록(재원/대기)이 있으면 퇴원으로 보지 않음
-    seen.add(key);
-    const s = refOf(r);
-    if (!s?.name) continue;
-    push(r.class_id, {
-      name: s.name,
-      grade: s.grade ?? null,
-      school: s.school ?? null,
-      enrollmentId: r.id,
-      studentId: r.student_id,
-      status: "withdrawn",
-      endDate: r.end_date,
-      englishName: s.english_name ?? null,
-    });
   }
 
   // 셀 표시 순서: 재원 → 대기 → 퇴원. 재원 안에서는 신입 > 반이동(전입) > 기존(그룹 내 가나다),
