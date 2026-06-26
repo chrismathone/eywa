@@ -4,6 +4,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
+import { readableTextColor } from "@/lib/color-utils";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 
@@ -22,6 +23,9 @@ export type ClassDetailQuick = {
   startTime: string;
   endTime: string;
   dayOfWeek: string;
+  /** 반 색(ijw bg_color) — 있으면 헤더 배경. 없으면 과목색 폴백. (ScheduleSlotWithStudents가 런타임에 채움.) */
+  classBgColor?: string | null;
+  classTextColor?: string | null;
   students: StudentQuick[];
 };
 
@@ -243,6 +247,11 @@ export function ClassCell({
   const subjects = useSubjectMaps();
   // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
+  // 반 색(bg_color) 우선 — 통합뷰와 동일하게 헤더에 반영. 없으면 과목색 클래스 폴백.
+  // (WindowLink는 style 미지원이라 래퍼 div에 인라인 색.)
+  const headerStyle = slot.classBgColor
+    ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
+    : undefined;
 
   // 재원/대기/퇴원 분리 — ijw 셀처럼 섹션별 표시. status 없으면(구버전) 재원으로 간주.
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
@@ -267,38 +276,44 @@ export function ClassCell({
         hasSecondary ? "flex min-h-0 flex-1 flex-col" : ""
       } ${isOver ? "ring-primary ring-2" : ""}`}
     >
-        {/* 반이름 헤더 바 — hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]) */}
-        <HoverCard
-          width={230}
-          card={
-            <ClassInfoCard
-              className={slot.className}
-              subject={slot.subject}
-              teacherName={slot.teacherName}
-              room={slot.classroomName}
-              schedule={`${shortTime(slot.startTime)}~${shortTime(slot.endTime)}`}
-              counts={{ active: active.length, hold: hold.length, withdrawn: withdrawn.length }}
-            />
-          }
+        {/* 반이름 헤더 바 — 반 색 우선(인라인), 없으면 과목색 클래스. WindowLink는 style 미지원이라 래퍼 div에 색.
+            hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]). */}
+        <div
+          className={`shrink-0 transition hover:brightness-95 ${slot.classBgColor ? "" : color}`}
+          style={headerStyle}
         >
-          <WindowLink
-            href={`/classes/${slot.classId ?? slot.id}`}
-            title={slot.className}
-            ariaLabel={`${slot.className} 반 정보`}
-            className={`block w-full shrink-0 px-2 py-1 text-left transition hover:brightness-95 ${color}`}
+          <HoverCard
+            width={230}
+            card={
+              <ClassInfoCard
+                className={slot.className}
+                subject={slot.subject}
+                teacherName={slot.teacherName}
+                room={slot.classroomName}
+                schedule={`${shortTime(slot.startTime)}~${shortTime(slot.endTime)}`}
+                counts={{ active: active.length, hold: hold.length, withdrawn: withdrawn.length }}
+              />
+            }
           >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate text-[14px] font-bold">{slot.className}</span>
-              <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
-            </div>
-            <div className="flex items-center justify-between gap-1 text-[12px] opacity-75">
-              <span className="num font-mono">
-                {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
-              </span>
-              {slot.classroomName ? <span className="truncate font-mono">{slot.classroomName}</span> : null}
-            </div>
-          </WindowLink>
-        </HoverCard>
+            <WindowLink
+              href={`/classes/${slot.classId ?? slot.id}`}
+              title={slot.className}
+              ariaLabel={`${slot.className} 반 정보`}
+              className="block w-full px-2 py-1 text-left"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-[14px] font-bold">{slot.className}</span>
+                <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
+              </div>
+              <div className="flex items-center justify-between gap-1 text-[12px] opacity-75">
+                <span className="num font-mono">
+                  {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
+                </span>
+                {slot.classroomName ? <span className="truncate font-mono">{slot.classroomName}</span> : null}
+              </div>
+            </WindowLink>
+          </HoverCard>
+        </div>
 
         {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (

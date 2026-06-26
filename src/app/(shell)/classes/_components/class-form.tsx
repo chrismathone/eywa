@@ -162,7 +162,7 @@ export function ClassForm({
           </select>
         </Field>
 
-        <Field label="반 색상 (시간표 통합뷰)" className="sm:col-span-2">
+        <Field label="반 색상 (시간표·스케줄)" className="sm:col-span-2">
           <div className="flex items-center gap-3">
             <input type="hidden" name="bgColor" value={bgColor} />
             <input
@@ -230,6 +230,7 @@ export function ClassForm({
           teacherId={teacherId || null}
           teacherOptions={teacherOptions}
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
+          bgColor={bgColor || null}
         />
       </section>
 

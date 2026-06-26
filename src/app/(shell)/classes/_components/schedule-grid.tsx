@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { readableTextColor } from "@/lib/color-utils";
 
 type Period = { id: string; startTime: string; endTime: string };
 type InitialSlot = {
@@ -41,6 +42,7 @@ export function ScheduleGrid({
   teacherId,
   teacherOptions,
   classroomOptions,
+  bgColor,
 }: {
   periods: Period[];
   initial: InitialSlot[];
@@ -48,6 +50,8 @@ export function ScheduleGrid({
   teacherId: string | null;
   teacherOptions: Opt[];
   classroomOptions: Opt[];
+  /** 반 색(폼 라이브 값) — 선택 셀을 이 색으로 미리보기(시간표와 동일). 없으면 기본 초록. */
+  bgColor?: string | null;
 }) {
   // 초기: 기존 스케줄의 (요일,시작시각)을 교시로 역매핑 + 교시별 오버라이드 복원(마운트 1회).
   const initState = useMemo(() => {
@@ -191,6 +195,8 @@ export function ScheduleGrid({
                   const on = activeSet.has(k);
                   const override = slotTeacher[k];
                   const eff = override ? teacherNameOf(override) : homeTeacherName;
+                  // 선택 셀 미리보기: 반 색이 있으면 그 색(시간표와 동일), 없으면 기본 초록. 부담임은 보라 링으로 구분.
+                  const preview = on && bgColor;
                   return (
                     <td key={d.key} className="border-border border-b border-r p-0 last:border-r-0">
                       <button
@@ -198,9 +204,12 @@ export function ScheduleGrid({
                         aria-pressed={on}
                         aria-label={`${d.label} ${p.id}교시`}
                         onClick={() => toggle(d.key, p.id)}
+                        style={preview ? { background: bgColor, color: readableTextColor(bgColor) } : undefined}
                         className={`block h-9 w-full px-0.5 transition ${
                           on
-                            ? `${override ? "bg-purple/85 hover:bg-purple" : "bg-primary/85 hover:bg-primary"} text-primary-foreground`
+                            ? preview
+                              ? `hover:brightness-95 ${override ? "ring-2 ring-inset ring-purple-700" : ""}`
+                              : `${override ? "bg-purple/85 hover:bg-purple" : "bg-primary/85 hover:bg-primary"} text-primary-foreground`
                             : "hover:bg-muted text-transparent"
                         }`}
                         title={on && override ? `부담임 · ${eff}` : undefined}
