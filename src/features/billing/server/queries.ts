@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import { summarizeInvoices, currentPeriod, type BillingSummary } from "../calc";
 
 // 순수 요약 로직은 calc.ts(서버 전용 아님 → Vitest)로 분리. 기존 importer 호환 위해 re-export(#Q2).
@@ -162,12 +163,13 @@ export async function getBillingSummary(period?: string): Promise<BillingSummary
 /** 가용 청구 월 목록 (descending) */
 export async function getAvailablePeriods(): Promise<string[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("invoices")
-    .select("period")
-    .order("period", { ascending: false });
+  // period 한 컬럼이라 전건이라도 가볍다. 단일 select면 invoices 1000행 초과 시 desc 정렬상 가장
+  // 오래된 월이 silent 절단됨(데모 1606행 → 2026-03 칩 누락) → fetchAllPaged로 전건 distinct.
+  const rows = await fetchAllPaged<{ period: string }>((from, to) =>
+    supabase.from("invoices").select("period").order("period", { ascending: false }).range(from, to),
+  );
   const set = new Set<string>();
-  for (const r of data ?? []) set.add(r.period);
+  for (const r of rows) set.add(r.period);
   const arr = Array.from(set).sort((a, b) => b.localeCompare(a));
   // 현재 월이 비어 있어도 selector에는 노출
   const now = currentPeriod();

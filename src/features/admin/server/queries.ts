@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 
 export type DuplicateGroup = {
   key: string;
@@ -90,24 +91,25 @@ export type OrphanReport = {
 export async function findOrphans(): Promise<OrphanReport> {
   const supabase = await createClient();
 
-  // 1) status='enrolled'인데 활성 enrollment 0개.
-  //    ⚠️ 과거엔 enrolledIds(수백 개)를 .in()에 넣어 URL이 HTTP 414로 실패→error를 삼켜
-  //    전원 오탐했음(F8/F1). 쿼리를 뒤집어 활성 enrollment의 student_id 집합을 먼저 받고
-  //    (RLS가 테넌트로 한정), 대량 .in() 없이 메모리에서 차집합을 구한다.
-  const { data: enrolled, error: enrolledErr } = await supabase
-    .from("students")
-    .select("id, name, status")
-    .eq("status", "enrolled");
-  if (enrolledErr) throw new Error(`findOrphans enrolled: ${enrolledErr.message}`);
+  // status='enrolled'인데 활성 enrollment 0개 / withdrawn인데 활성 enrollment 남음.
+  //   ⚠️ 과거엔 enrolledIds(수백 개)를 .in()에 넣어 URL이 HTTP 414로 실패→error를 삼켜 전원
+  //   오탐했음(F8/F1). 쿼리를 뒤집어 활성 enrollment의 student_id 집합을 먼저 받아 메모리 차집합을
+  //   구한다. ⚠️ 그 집합/학생 목록이 무페이징이면 1000행 silent 절단으로 정합성 깨짐 → fetchAllPaged
+  //   로 전건(셋 다 독립이라 병렬).
+  const [enrolled, activeEnrollments, withdrawnStudents] = await Promise.all([
+    fetchAllPaged<{ id: string; name: string; status: string }>((from, to) =>
+      supabase.from("students").select("id, name, status").eq("status", "enrolled").range(from, to),
+    ),
+    fetchAllPaged<{ student_id: string }>((from, to) =>
+      supabase.from("enrollments").select("student_id").is("end_date", null).range(from, to),
+    ),
+    fetchAllPaged<{ id: string }>((from, to) =>
+      supabase.from("students").select("id").eq("status", "withdrawn").range(from, to),
+    ),
+  ]);
 
-  const { data: activeEnrollments, error: enrErr } = await supabase
-    .from("enrollments")
-    .select("student_id")
-    .is("end_date", null);
-  if (enrErr) throw new Error(`findOrphans enrollments: ${enrErr.message}`);
-
-  const withEnrollment = new Set((activeEnrollments ?? []).map((e) => e.student_id));
-  const studentsWithoutEnrollments = (enrolled ?? [])
+  const withEnrollment = new Set(activeEnrollments.map((e) => e.student_id));
+  const studentsWithoutEnrollments = enrolled
     .filter((s) => !withEnrollment.has(s.id))
     .map((s) => ({ id: s.id, name: s.name, status: s.status }));
 
@@ -126,14 +128,8 @@ export async function findOrphans(): Promise<OrphanReport> {
     .filter((c) => !withSchedule.has(c.id))
     .map((c) => ({ id: c.id, className: c.class_name, isActive: c.is_active }));
 
-  // 3) withdrawn 학생인데 active enrollment 남음.
-  //    위에서 받은 활성 enrollment 집합(withEnrollment)을 재사용 — 대량 .in() 불필요(F1과 동일 위험 제거).
-  const { data: withdrawnStudents, error: wErr } = await supabase
-    .from("students")
-    .select("id")
-    .eq("status", "withdrawn");
-  if (wErr) throw new Error(`findOrphans withdrawn: ${wErr.message}`);
-  const orphanEnrollments = (withdrawnStudents ?? []).filter((s) => withEnrollment.has(s.id)).length;
+  // withdrawn 학생인데 active enrollment 남음 — 위 withEnrollment 집합 재사용(대량 .in() 불필요).
+  const orphanEnrollments = withdrawnStudents.filter((s) => withEnrollment.has(s.id)).length;
 
   return {
     studentsWithoutEnrollments,

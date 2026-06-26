@@ -272,12 +272,32 @@ export async function getWeeklyScheduleWithStudents(
   const studentIds = Array.from(new Set([...byClass.values()].flat().map((l) => l.studentId)));
   if (studentIds.length > 0) {
     type TbRow = { student_id: string; book_name: string | null; delivered_at: string | null; request_date: string | null };
-    const tbRows = await fetchInChunks<TbRow>(studentIds, (chunk) =>
-      supabase
-        .from("textbook_orders")
-        .select("student_id, book_name, delivered_at, request_date")
-        .in("student_id", chunk),
-    );
+    // 학생별 최근 진도 — ijw 학생 hover의 "[진도]" 줄. lesson_reports 최신(report_date desc) 1건.
+    type RepRow = {
+      student_id: string;
+      report_date: string;
+      progress: string | null;
+      exam_info: string | null;
+      homework_score: string | null;
+      teacher_name: string | null;
+    };
+    // 교재·진도는 둘 다 studentIds에만 의존하는 독립 조회 → 병렬(직렬이면 두 청크 wave가 합산됨).
+    const [tbRows, repRows] = await Promise.all([
+      fetchInChunks<TbRow>(studentIds, (chunk) =>
+        supabase
+          .from("textbook_orders")
+          .select("student_id, book_name, delivered_at, request_date")
+          .in("student_id", chunk),
+      ),
+      fetchInChunks<RepRow>(studentIds, (chunk) =>
+        supabase
+          .from("lesson_reports")
+          .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
+          .in("student_id", chunk)
+          .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
+          .order("report_date", { ascending: false }),
+      ),
+    ]);
     const latestTb = new Map<string, { name: string; date: string | null }>();
     for (const r of tbRows) {
       if (!r.book_name) continue;
@@ -291,24 +311,6 @@ export async function getWeeklyScheduleWithStudents(
         if (tb) l.latestTextbook = tb;
       }
     }
-
-    // 학생별 최근 진도 — ijw 학생 hover의 "[진도]" 줄. lesson_reports 최신(report_date desc) 1건.
-    type RepRow = {
-      student_id: string;
-      report_date: string;
-      progress: string | null;
-      exam_info: string | null;
-      homework_score: string | null;
-      teacher_name: string | null;
-    };
-    const repRows = await fetchInChunks<RepRow>(studentIds, (chunk) =>
-      supabase
-        .from("lesson_reports")
-        .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
-        .in("student_id", chunk)
-        .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
-        .order("report_date", { ascending: false }),
-    );
     const latestRep = new Map<string, StudentLine["latestReport"]>();
     for (const r of repRows) {
       if (latestRep.has(r.student_id)) continue; // 이미 최신(정렬 desc) 저장됨

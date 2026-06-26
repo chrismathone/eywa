@@ -1,7 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { EDIT_HEADERS, EDIT_SHEET_NAME } from "@/features/timetable/import/parse";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -93,13 +93,20 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
     { name: string; grade: string | null }[]
   >();
   if (classIds.length > 0) {
-    const { data: enr } = await supabase
-      .from("enrollments")
-      .select(`class_id, student:student_id ( name, grade )`)
-      .in("class_id", classIds)
-      .is("end_date", null);
+    // 전체 반×학생이 1000행 초과 시 단일 .in()이 silent 절단(엑셀에 명단 누락) → fetchInChunks(반
+    // 50개씩, 청크당 행<1000)로 414·절단 방어. 메인 시간표 쿼리와 동일 헬퍼.
+    const enr = await fetchInChunks<{ class_id: string; student: unknown }>(
+      classIds,
+      (chunk) =>
+        supabase
+          .from("enrollments")
+          .select(`class_id, student:student_id ( name, grade )`)
+          .in("class_id", chunk)
+          .is("end_date", null),
+      50,
+    );
     studentsByClass = new Map();
-    for (const e of enr ?? []) {
+    for (const e of enr) {
       const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
         | { name?: string; grade?: string | null }
         | undefined;

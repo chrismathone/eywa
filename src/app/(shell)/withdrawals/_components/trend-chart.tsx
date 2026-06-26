@@ -1,38 +1,16 @@
 "use client";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+import type { WithdrawalMonthPoint } from "./trend-chart-impl";
 
-export type WithdrawalMonthPoint = { label: string; count: number };
+export type { WithdrawalMonthPoint };
 
-export function WithdrawalTrendChart({ data }: { data: WithdrawalMonthPoint[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} />
-        <YAxis
-          allowDecimals={false}
-          tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-        />
-        <Tooltip
-          formatter={(value) => [`${Number(value)}명`, "퇴원"]}
-          contentStyle={{
-            background: "var(--color-card)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            fontSize: "12px",
-          }}
-        />
-        <Bar dataKey="count" fill="var(--color-rose)" radius={[3, 3, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
+// recharts(~수백KB)는 차트가 보일 때만 클라에서 로드(ssr:false).
+const Impl = dynamic(() => import("./trend-chart-impl").then((m) => m.WithdrawalTrendChart), {
+  ssr: false,
+  loading: () => <div className="bg-bg-soft/40 h-[200px] animate-pulse rounded-lg" />,
+});
+
+export function WithdrawalTrendChart(props: { data: WithdrawalMonthPoint[] }) {
+  return <Impl {...props} />;
 }

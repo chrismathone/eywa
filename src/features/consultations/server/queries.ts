@@ -119,17 +119,6 @@ function mapRow(r: {
   };
 }
 
-export async function getStudentConsultations(): Promise<StudentConsultationRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("student_consultations")
-    .select(SELECT_COLUMNS)
-    .order("consulted_at", { ascending: false });
-
-  if (!data) return [];
-  return data.map(mapRow);
-}
-
 export async function getStudentConsultationById(
   id: string,
 ): Promise<StudentConsultationDetail | null> {

@@ -275,6 +275,26 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 엑셀 다운로드 버그픽스 + 구글시트 연동 단순화(ON/OFF) + 사이드바 경계 + 병목 빠른승리 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
+사용자 연속 요청 묶음. 게이트: typecheck0/lint0(신규0)/**test499**(content-disposition 4)/build✓. dev(3001) 라이브 검증.
+- **🐛 엑셀 다운로드 전면 깨짐 픽스(핵심)**: 시간표·학생·수납 엑셀 4라우트가 `Content-Disposition: filename="수학_시간표_…"`에
+  **한글**을 넣어 응답 생성 시 `TypeError: Cannot convert argument to a ByteString`(한글 코드포인트>255)로 **500** → "엑셀 버튼
+  무반응"(iframe이 빈 500으로 이동). 익스포터/버퍼는 정상, 파일명 헤더만 문제. **RFC 5987 헬퍼 [`attachmentFilename`](src/lib/http/content-disposition.ts)**(ASCII
+  폴백 `filename` + UTF-8 `filename*`, Vitest 4)로 4라우트 교체. **curl 실측 재검증**: 시간표 200·165KB·유효 xlsx(PK) / 학생 200 / 수납 200.
+- **구글시트 연동 = 단순 ON/OFF 토글로 전환**(사용자 "싹 빼고 ON 버튼만"): 연결 패널(이메일·시트생성·서비스계정 안내·지금동기화)
+  **전면 제거** → owner 연동 면은 **토글 1개**([_client.tsx](<src/app/(shell)/admin/integrations/sheets/_client.tsx>) `setSheetsExportEnabled`,
+  **`user_integrations.sync_enabled` 재활용=마이그 0**). **시간표 '시트' 버튼 = master + 연동 ON일 때만** 노출([timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)
+  `isGoogleSheetsExportEnabled`, `syncSheetsNow`도 enabled 게이트 이중방어). 대상 시트·서비스계정은 운영자 설정(연동 화면에 "관리자에게 문의").
+  죽은 `connectGoogleSheets`/`disconnectSheets`/`createTenantSpreadsheet` 제거. 라이브 검증: DB off→버튼 숨김 / on→노출(디버그로그로 canSync 확인).
+- **사이드바 오른쪽 경계선 = 사이드바 너비조절로**(사용자 "탭크기와 같이 움직이게"): 창이 경계에 붙으면 창 좌측 리사이즈 핸들이
+  사이드바 핸들을 덮어 "창만 리사이즈"됐음 → 사이드바를 **`z-[45]`**(캔버스 z-40 위·팰릿 z-50 아래)로 올려 경계 드래그=사이드바
+  너비조절(폭 바뀌면 캔버스 left=rail 따라가 창 reflow) + 창 드래그 **x≥0 클램프**([use-pointer-drag.ts](src/components/workspace/use-pointer-drag.ts))로 창이 사이드바 뒤로 안 감.
+- **병목 감사(40에이전트, 확정22/기각10) → 빠른승리 적용**([[project_operational-readiness-verdict]] 계열 후속): ① **시간표 교재→진도
+  직렬→`Promise.all`**(queries.ts) ② **recharts(~367KB) `next/dynamic`(ssr:false) 6곳**(차트 리프 `*-impl.tsx` 분리 + 스켈레톤
+  로딩 — 차트 보일 때만 로드) ③ **`getAvailablePeriods` 무페이징→`fetchAllPaged`**(invoices 1606행 1000절단으로 수납 월칩에서
+  2026-03 누락 **실측 버그** 해소) ④ **findOrphans·시간표엑셀 enrollments→`fetchAllPaged`/`fetchInChunks`**(이식 직전 잠복 절단 봉쇄)
+  ⑤ **dead export `getStudentConsultations` 삭제**(호출 0·footgun). ⚠️ **미적용(별도)**: M-노력 구조(멀티윈도우 셸 재실행·복원 창 스톰·시간표 Suspense)·#11 출석 matrix 2회·#9 학생목록 과목필터 .in()(P1).
+
 ### 수학 시간표 = ijw 익스포터 완전이식 + 구글시트 공유-탭 push (2026-06-25) — ✅ 게이트 그린 + 13에이전트 적대리뷰
 계획 [`giggly-orbiting-sunset.md`]. eywa가 ijw `exportMathTimetableToExcel`과 **동일 xlsx**를 생성(verbatim 이식
 [`exporter.ts`](src/features/exports/math-timetable/exporter.ts) + 얇은 어댑터 [`assemble.ts`](src/features/exports/math-timetable/assemble.ts))하고,

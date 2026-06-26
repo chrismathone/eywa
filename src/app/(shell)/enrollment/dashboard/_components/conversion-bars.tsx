@@ -1,40 +1,14 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import dynamic from "next/dynamic";
 import type { ConversionTrendPoint } from "@/features/enrollment/server/queries";
 
-export function ConversionBars({ data }: { data: ConversionTrendPoint[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-        <XAxis dataKey="month" tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }} />
-        <YAxis
-          tick={{ fontSize: 12, fill: "var(--color-muted-foreground)" }}
-          tickFormatter={(v) => `${v}%`}
-          domain={[0, 100]}
-        />
-        <Tooltip
-          formatter={(value, name) => [`${Number(value)}%`, String(name)]}
-          contentStyle={{
-            background: "var(--color-card)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            fontSize: "12px",
-          }}
-        />
-        <Legend
-          verticalAlign="top"
-          height={28}
-          iconType="square"
-          iconSize={10}
-          formatter={(value) => (
-            <span style={{ fontSize: "12px", color: "var(--color-muted-foreground)" }}>{value}</span>
-          )}
-        />
-        <Bar dataKey="consultedRate" name="상담 완료율" fill="var(--color-chart-1)" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="enrolledRate" name="등록 완료율" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
+// recharts(~수백KB)는 차트가 보일 때만 클라에서 로드(ssr:false) — 페이지 첫 페인트 블로킹 제거.
+const Impl = dynamic(() => import("./conversion-bars-impl").then((m) => m.ConversionBars), {
+  ssr: false,
+  loading: () => <div className="bg-bg-soft/40 h-[280px] animate-pulse rounded-lg" />,
+});
+
+export function ConversionBars(props: { data: ConversionTrendPoint[] }) {
+  return <Impl {...props} />;
 }
