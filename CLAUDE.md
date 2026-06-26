@@ -343,7 +343,9 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **마이크 권한**: [route-window.tsx](src/components/workspace/route-window.tsx) iframe에 `allow="microphone"` 추가(일부 브라우저는 same-origin이어도 getUserMedia에 iframe allow 요구).
 - **3곳 통일**: 회의록·등록상담은 인라인+복구가 이미 있어 팝업만 제거. **학생상담**([audio-consultation-form.tsx](<src/app/(shell)/consultations/_components/audio-consultation-form.tsx>))은 인라인만 있고 복구 없었음 →
   IDB 복구(`rec.start(1000)`+saveChunk, `RecoveryKind`에 `student-consultation` 추가)·복구 배너·녹음 잠금 추가해 동일 동작.
-- 검증: typecheck0/lint0(신규0)/**test511**/build✓. ⚠️ 실제 마이크 녹음·창 잠금 라이브 검증은 마이크+로그인 세션 필요(게이트로 대체).
+- **디스크 백스톱 복원**(사용자 "파일증발 대비"): 팝업이 정지 시 하던 **자동 다운로드**가 인라인 전환에서 빠졌었음 → [`downloadFile`](src/lib/audio-upload.ts)(best-effort,
+  throw 안 함)를 3곳 onstop에 추가 — 정지 즉시 .webm을 다운로드 폴더로 저장(브라우저 내부 IDB 복구와 **별개**의 OS 파일 백업). 보호 3겹: 녹음중 IDB 청크 + 정지시 디스크 + 폼 state.
+- 검증: typecheck0/lint0(신규0)/**test511**/build✓. ⚠️ 실제 마이크 녹음·창 잠금·다운로드 라이브 검증은 마이크+로그인 세션 필요(게이트로 대체).
 
 ### 시간표 주간 이동(타임머신) ijw 충실 이식 + 편집 드래그 UX + 헤더 재배치 (2026-06-26) — ✅ 4게이트 그린 + 라이브 검증
 사용자 제보: ijw 시간표엔 "날짜 표시 + 주간 이동"이 있어 **반 이동·퇴원이 날짜로 기록**돼 주를 앞뒤로 옮기면 그 시점의 반 구성

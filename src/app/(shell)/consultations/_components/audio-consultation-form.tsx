@@ -5,6 +5,7 @@ import { History, Loader2, Mic, Square, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createClient } from "@/lib/supabase/client";
+import { downloadFile } from "@/lib/audio-upload";
 import {
   checkRecovery,
   clearRecovery,
@@ -86,7 +87,10 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
       rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: mime });
-        setFile(new File([blob], `상담녹음_${Date.now()}.webm`, { type: mime }));
+        const recorded = new File([blob], `상담녹음_${Date.now()}.webm`, { type: mime });
+        setFile(recorded);
+        // 불상사 대비 디스크 백스톱 — 정지 즉시 다운로드 폴더로 저장(IDB 복구와 별개).
+        downloadFile(recorded);
         setRecording(false);
       };
       recRef.current = rec;

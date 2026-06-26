@@ -25,6 +25,28 @@ export function formatSeconds(s: number): string {
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
 
+/**
+ * 녹음 파일을 사용자의 다운로드 폴더로 저장(불상사=파일증발 대비 디스크 백스톱).
+ * 녹음 정지 직후 호출 — IndexedDB 복구(브라우저 내부)와 별개로 OS 파일을 남긴다(옛 팝업 동작 복원).
+ * best-effort: 차단/실패해도 throw하지 않음(업로드 흐름을 막지 않게).
+ */
+export function downloadFile(file: File): void {
+  try {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 1000);
+  } catch {
+    /* 다운로드 실패해도 무시 — 파일은 폼 state + IDB에 보존 */
+  }
+}
+
 /** 업로드 오디오 검증 — 통과하면 null, 아니면 폼이 그대로 표시할 에러 메시지. */
 export function validateAudioFile(f: { type: string; name: string; size: number }): string | null {
   if (!ACCEPTED_AUDIO_TYPES.includes(f.type) && !EXT_RE.test(f.name)) {
