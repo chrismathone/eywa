@@ -9,6 +9,8 @@
  * "student-consultation_*") so each form recovers independently.
  */
 
+import { kstTimestamp } from "./audio-upload";
+
 const DB_NAME = "recording-recovery";
 const DB_VERSION = 1;
 const CHUNKS_STORE = "chunks";
@@ -161,9 +163,8 @@ export async function recoverRecording(kind: RecoveryKind): Promise<File | null>
                 return;
               }
               const blob = new Blob(valid, { type: meta.mimeType });
-              const d = new Date(meta.startedAt);
-              const pad = (n: number) => String(n).padStart(2, "0");
-              const name = `복구_${kind}_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.webm`;
+              // 파일명은 KST 기준(녹음 다운로드와 통일) — OS 로컬시간 대신 Asia/Seoul.
+              const name = `복구_${kind}_${kstTimestamp(new Date(meta.startedAt))}.webm`;
               resolve(new File([blob], name, { type: meta.mimeType }));
             }
           };
