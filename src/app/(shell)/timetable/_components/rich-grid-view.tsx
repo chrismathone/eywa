@@ -1,6 +1,6 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
-import { buildRichCardGroups, type GridSlot } from "@/features/timetable/lib/class-grid";
+import { buildRichCardGroups, type GridSlot, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import type { PeriodsConfig } from "@/features/timetable/lib/periods";
 import { RichCardGroupBoard } from "./rich-card-group";
 
@@ -14,10 +14,12 @@ export function RichGridView({
   slots,
   subjectMaps,
   config,
+  teacherColors,
 }: {
   slots: GridSlot[];
   subjectMaps: SubjectMaps;
   config: PeriodsConfig;
+  teacherColors: TeacherColorMap;
 }) {
   const groups = buildRichCardGroups(slots, config);
   const total = groups.reduce((n, g) => n + g.cards.length, 0);
@@ -37,7 +39,7 @@ export function RichGridView({
               {g.cards.length}개 수업
             </span>
           </div>
-          <RichCardGroupBoard group={g} subjectSoftClass={subjectSoftClass} />
+          <RichCardGroupBoard group={g} subjectSoftClass={subjectSoftClass} teacherColors={teacherColors} />
         </section>
       ))}
     </div>

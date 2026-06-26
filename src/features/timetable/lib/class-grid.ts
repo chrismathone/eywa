@@ -54,6 +54,13 @@ export type GridSlot = {
 export type GridCell = { label: string; isLab: boolean };
 export type GridPeriodRow = { order: number; label: string; time: string };
 
+/**
+ * 강사 라벨(display_name·영문닉네임) → 저장된 색(#RRGGBB). 통합뷰 셀·담임색 배선용.
+ * 서버가 users.bg_color/text_color + english_name으로 빌드해 클라 렌더에 plain 객체로 전달
+ * (메서드 없는 순수 데이터라 [[#61]] server-only 무관). 미해결 라벨은 teacherColor 해시 폴백.
+ */
+export type TeacherColorMap = Record<string, { bg: string; text: string }>;
+
 export type RichClassCard = {
   classId: string;
   className: string;

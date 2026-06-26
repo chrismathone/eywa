@@ -329,6 +329,20 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### ijw 강사 색상 이식 + 통합뷰 셀·담임색 배선 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
+계획서 "분기점"(강사 헤더색: ijw 저장색 vs eywa 해시) 해소. ijw `staff`(42명 전원 bgColor/textColor 보유)를 eywa `users`로 이식하고
+시간표 통합뷰가 저장색을 실제로 쓰게 배선(익스포터는 기존부터 `users.bg_color` 소비, 화면은 해시였음).
+- **데이터 이식**: [`backfill-teacher-colors.cjs`](scripts/_poc_migration/backfill-teacher-colors.cjs)(멱등·--apply) — ijw `staff.name`↔eywa `users.display_name`
+  **42/42 매칭(불일치 0)** → `bg_color`/`text_color` + **`english_name`**(영문닉네임). 색 분포 ijw와 완전 일치(24색 히스토그램). 반색은 기존 백필(52).
+- **`users.english_name` 추가**(`0055a`, dev적용): 영어 시간표 슬롯 라벨이 **영문닉네임**("Kristine"·"Hannah")이라 한글 `display_name`로는
+  매칭 불가 → english_name도 키로. 백필 후 distinct 슬롯 라벨 14개 **전부 색 해결(미해결 0)**.
+- **통합뷰 배선**: [`getTeacherColorMap()`](src/features/timetable/server/queries.ts)(users → `display_name`·`english_name` → hex, 테넌트 RLS)
+  → page(통합뷰만 fetch) → [rich-grid-view](<src/app/(shell)/timetable/_components/rich-grid-view.tsx>) → [rich-card-group](<src/app/(shell)/timetable/_components/rich-card-group.tsx>):
+  미니그리드 **셀**(슬롯 강사)·**담임 칩**이 저장색(인라인 hex) 우선, 미해결 라벨만 [`teacherColor`](src/features/timetable/lib/class-grid.ts) 해시 폴백.
+  `TeacherColorMap`은 plain 객체라 클라 전달 안전([[#61]]). LAB은 파란 배지 유지.
+- 검증: typecheck0/lint0/**test499**/build✓ + dev(3001) 통합뷰(영어) HTML에 저장색 인라인 렌더 확인(#ffa8d2·#3b82f6·#93c47d·#674ea7 등).
+- ⚠️ 기본뷰(요일그룹밴드)는 범위 밖(통합뷰만). ⚠️ ijw가 진실 — Firebase 재이식 시 backfill-teacher-colors.cjs 재실행(멱등).
+
 ### 엑셀 다운로드 버그픽스 + 구글시트 연동 단순화(ON/OFF) + 사이드바 경계 + 병목 빠른승리 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
 사용자 연속 요청 묶음. 게이트: typecheck0/lint0(신규0)/**test499**(content-disposition 4)/build✓. dev(3001) 라이브 검증.
 - **🐛 엑셀 다운로드 전면 깨짐 픽스(핵심)**: 시간표·학생·수납 엑셀 4라우트가 `Content-Disposition: filename="수학_시간표_…"`에

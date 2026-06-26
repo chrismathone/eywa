@@ -3,8 +3,9 @@ import type { LucideIcon } from "lucide-react";
 import { Columns3, LayoutGrid, CalendarOff } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
+import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
+import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isGoogleSheetsExportEnabled } from "@/features/integrations/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -36,10 +37,12 @@ export default async function TimetablePage({
   // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = user.systemRole === "teacher" ? user.id : undefined;
   // '시트' 버튼 = master + 구글 시트 내보내기 연동 ON일 때만(비-master는 조회도 생략).
-  const [allSlots, settings, sheetsEnabled] = await Promise.all([
+  const [allSlots, settings, sheetsEnabled, teacherColors] = await Promise.all([
     getWeeklyScheduleWithStudents(teacherId),
     getTenantSettings(),
     user.systemRole === "master" ? isGoogleSheetsExportEnabled() : Promise.resolve(false),
+    // 강사색 맵은 통합뷰에서만 필요(셀·담임색). 기본뷰는 생략.
+    view === "integrated" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
   ]);
   const canSync = user.systemRole === "master" && sheetsEnabled;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
@@ -130,7 +133,7 @@ export default async function TimetablePage({
           title="해당 과목의 시간표가 없습니다"
         />
       ) : isIntegrated ? (
-        <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} />
+        <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} />
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">

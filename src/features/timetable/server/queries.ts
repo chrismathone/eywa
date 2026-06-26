@@ -2,6 +2,27 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import type { TeacherColorMap } from "../lib/class-grid";
+
+/**
+ * 강사 라벨 → 저장된 색 맵(통합뷰 셀·담임색). display_name·english_name(영문닉네임 슬롯 라벨) 둘 다 키.
+ * users(소수·테넌트 RLS)에서 색 있는 행만. 미해결 라벨은 렌더에서 teacherColor 해시 폴백.
+ */
+export async function getTeacherColorMap(): Promise<TeacherColorMap> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("display_name, english_name, bg_color, text_color")
+    .not("bg_color", "is", null);
+  const map: TeacherColorMap = {};
+  for (const u of data ?? []) {
+    if (!u.bg_color) continue;
+    const c = { bg: u.bg_color as string, text: (u.text_color as string | null) ?? "#1a1f1c" };
+    if (u.display_name) map[u.display_name as string] = c;
+    if (u.english_name) map[u.english_name as string] = c;
+  }
+  return map;
+}
 
 export type ScheduleSlot = {
   id: string;

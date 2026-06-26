@@ -147,6 +147,9 @@ export const users = pgTable(
     // 강사 퍼스널 색 — 시간표 강사 헤더 밴드(ijw Teacher.bgColor/textColor 패리티). 0054a.
     bgColor: text("bg_color"),
     textColor: text("text_color"),
+    // 강사 영문 닉네임(ijw staff.englishName) — 영어 시간표 슬롯 라벨이 영문닉네임이라, 라벨→강사색
+    // 해결에 필요(통합뷰 셀 색 배선). 0055a.
+    englishName: text("english_name"),
     // 급여 정산용. 외부 노출은 master + 본인만 (RLS).
     hourlyRate: numeric("hourly_rate", { precision: 10, scale: 0 }).notNull().default("0"),
     monthlyBase: numeric("monthly_base", { precision: 10, scale: 0 }).notNull().default("0"),

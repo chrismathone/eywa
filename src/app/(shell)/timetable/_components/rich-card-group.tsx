@@ -8,6 +8,7 @@ import {
   type GridStudent,
   type RichCardGroup,
   type RichClassCard,
+  type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
 
@@ -29,9 +30,11 @@ function abbrev(label: string): string {
 export function RichCardGroupBoard({
   group,
   subjectSoftClass,
+  teacherColors,
 }: {
   group: RichCardGroup;
   subjectSoftClass: string;
+  teacherColors: TeacherColorMap;
 }) {
   const holdH = group.holdRows * STU_H + 6;
   const wdH = group.withdrawnRows * STU_H + 6;
@@ -46,6 +49,7 @@ export function RichCardGroupBoard({
             card={c}
             group={group}
             subjectSoftClass={subjectSoftClass}
+            teacherColors={teacherColors}
             holdH={holdH}
             wdH={wdH}
           />
@@ -93,12 +97,14 @@ function ClassColumn({
   card,
   group,
   subjectSoftClass,
+  teacherColors,
   holdH,
   wdH,
 }: {
   card: RichClassCard;
   group: RichCardGroup;
   subjectSoftClass: string;
+  teacherColors: TeacherColorMap;
   holdH: number;
   wdH: number;
 }) {
@@ -108,6 +114,8 @@ function ClassColumn({
   const headerStyle = card.bgColor
     ? { background: card.bgColor, color: card.textColor ?? "#1a1f1c" }
     : undefined;
+  // 담임색 — ijw 강사 저장색(users.bg_color, display_name·영문닉네임으로 해결). 없으면 plain.
+  const damimColor = card.teacherName ? teacherColors[card.teacherName] : undefined;
 
   return (
     <div className="border-line flex shrink-0 flex-col border-r" style={{ width: CARD_W }}>
@@ -138,9 +146,20 @@ function ClassColumn({
           </WindowLink>
         </HoverCard>
       </div>
-      {/* 담임 */}
-      <div className="border-line text-foreground flex items-center justify-center border-b text-[11px] font-semibold" style={{ height: TEACHER_H }}>
-        {card.teacherName ?? "-"}
+      {/* 담임 — 저장된 강사색이 있으면 색칩, 없으면 plain */}
+      <div className="border-line flex items-center justify-center border-b" style={{ height: TEACHER_H }}>
+        {!card.teacherName ? (
+          <span className="text-text-faint text-[11px]">-</span>
+        ) : damimColor ? (
+          <span
+            className="rounded px-1.5 py-0.5 text-[11px] font-semibold"
+            style={{ background: damimColor.bg, color: damimColor.text }}
+          >
+            {card.teacherName}
+          </span>
+        ) : (
+          <span className="text-foreground text-[11px] font-semibold">{card.teacherName}</span>
+        )}
       </div>
       {/* 강의실(요일별) */}
       <div className="border-line text-text-dim flex items-center justify-center border-b px-1 text-center text-[10px] leading-tight" style={{ height: ROOM_H }}>
@@ -156,7 +175,7 @@ function ClassColumn({
       {group.periodRows.map((p) => (
         <div key={p.order} className="border-line grid border-b" style={{ ...gridCols, height: PERIOD_H }}>
           {days.map((d) => (
-            <Cell key={d} card={card} order={p.order} day={d} />
+            <Cell key={d} card={card} order={p.order} day={d} teacherColors={teacherColors} />
           ))}
         </div>
       ))}
@@ -201,12 +220,30 @@ function DayHead({ day }: { day: DayOfWeek }) {
   );
 }
 
-function Cell({ card, order, day }: { card: RichClassCard; order: number; day: DayOfWeek }) {
+function Cell({
+  card,
+  order,
+  day,
+  teacherColors,
+}: {
+  card: RichClassCard;
+  order: number;
+  day: DayOfWeek;
+  teacherColors: TeacherColorMap;
+}) {
   const c = card.cells[`${order}:${day}`];
   const base = "border-line flex items-center justify-center border-r text-[10px] font-bold last:border-r-0";
   if (!c) return <div className={base} />;
   if (c.isLab) return <div className={`${base} bg-blue-soft text-blue`} title="LAB">LAB</div>;
   if (!c.label) return <div className={base} />;
+  // 저장된 강사색(ijw) 우선 — 라벨(한글명·영문닉네임)이 users 맵에 있으면 그 hex. 없으면 라벨 해시색.
+  const tc = teacherColors[c.label];
+  if (tc)
+    return (
+      <div className={base} style={{ background: tc.bg, color: tc.text }} title={c.label}>
+        {abbrev(c.label)}
+      </div>
+    );
   return (
     <div className={`${base} ${SUBJECT_SOLID[teacherColor(c.label)]} text-white`} title={c.label}>
       {abbrev(c.label)}
