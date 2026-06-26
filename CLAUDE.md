@@ -293,7 +293,17 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   직렬→`Promise.all`**(queries.ts) ② **recharts(~367KB) `next/dynamic`(ssr:false) 6곳**(차트 리프 `*-impl.tsx` 분리 + 스켈레톤
   로딩 — 차트 보일 때만 로드) ③ **`getAvailablePeriods` 무페이징→`fetchAllPaged`**(invoices 1606행 1000절단으로 수납 월칩에서
   2026-03 누락 **실측 버그** 해소) ④ **findOrphans·시간표엑셀 enrollments→`fetchAllPaged`/`fetchInChunks`**(이식 직전 잠복 절단 봉쇄)
-  ⑤ **dead export `getStudentConsultations` 삭제**(호출 0·footgun). ⚠️ **미적용(별도)**: M-노력 구조(멀티윈도우 셸 재실행·복원 창 스톰·시간표 Suspense)·#11 출석 matrix 2회·#9 학생목록 과목필터 .in()(P1).
+  ⑤ **dead export `getStudentConsultations` 삭제**(호출 0·footgun).
+- **병목 M-노력 2차(멀티윈도우 비용)**: ⑥ **멀티윈도우 셸 재실행 →`getTenantSettings` tenantId별 `unstable_cache`**
+  ([owner/server/queries.ts](src/features/owner/server/queries.ts) `loadTenantSettingsRaw`: admin client + 신뢰 tenantId 키 = 쿠키 없이 캐시 안전,
+  getTenantSettingsByTenantId와 동일 service_role 패턴·`.eq(tenant_id)` 격리). 창=iframe마다 셸 레이아웃이 재실행돼도 DB 2쿼리를 공유.
+  resolveSettings(DEFAULT merge)는 캐시 밖이라 코드 변경 즉시 반영. 무효화 = `saveOwnerSection`이 **`updateTag`**(server action read-your-writes,
+  즉시) + 기존 `revalidatePath("/","layout")`(unstable_cache 태그 무효화 폴백) + `revalidate:300` TTL 백스톱. ⚠️ Next16 `revalidateTag`는 2-arg
+  (`tag,profile`)로 시그니처 변경 → read-your-writes엔 `updateTag(tag)` 사용([[reference: node_modules/next/dist/docs … version-16.md]]).
+  ⑦ **복원 창 스톰 →route-window iframe `src` stagger 마운트**([route-window.tsx](src/components/workspace/route-window.tsx)): 포커스 창만 즉시,
+  나머지는 z순서×250ms 후 활성화(`activated` state, 동기 setState 없이 setTimeout). 복원 시 6창이 동시에 풀 라우트 렌더+하이드레이션하던 폭발 제거.
+  검증: typecheck0/lint0/test499/build✓ + dev(3001) 라이브 200(설정 캐시 런타임·unstable_cache+admin client 에러 0). 창 stagger는 빌드+로직(드래그 E2E 비실용).
+  ⚠️ **미적용**: getCurrentUser 인증 네트워크(GoTrue getUser, 보안 민감 → 보류)·시간표 Suspense·#11 출석 matrix 2회·#9 학생목록 과목필터 .in()(P1).
 
 ### 수학 시간표 = ijw 익스포터 완전이식 + 구글시트 공유-탭 push (2026-06-25) — ✅ 게이트 그린 + 13에이전트 적대리뷰
 계획 [`giggly-orbiting-sunset.md`]. eywa가 ijw `exportMathTimetableToExcel`과 **동일 xlsx**를 생성(verbatim 이식

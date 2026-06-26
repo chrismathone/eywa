@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
+import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, type SectionKey } from "../settings-types";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
@@ -77,6 +78,10 @@ export async function saveOwnerSection(
     metadata: { section },
   });
 
+  // 설정 캐시(unstable_cache, tenantId별) 무효화 — updateTag는 server action 전용 read-your-writes
+  //   (같은 요청 내 즉시 만료·갱신)라 저장 직후 master가 새 값을 바로 본다. 아래 revalidatePath("/",
+  //   "layout")은 문서상 unstable_cache 태그 무효화 폴백 겸 셸 재렌더(브랜드·과목 반영) 역할.
+  updateTag(tenantSettingsTag(actor.tenantId));
   // 브랜드·과목·직급 등은 셸 전역에 쓰이므로 루트 레이아웃까지 갱신.
   revalidatePath("/", "layout");
   revalidatePath("/owner");

@@ -28,12 +28,25 @@ export function RouteWindow({ win }: { win: Win }) {
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const observeIframe = useWindowStore((s) => s.observeIframe);
   const close = useWindowStore((s) => s.close);
+  const isFocused = useWindowStore((s) => s.focusedId === win.id);
+  const order = useWindowStore((s) => s.order);
   const router = useRouter();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // autoClose 창이 이미 닫힘을 1회만 트리거(navigate-away 관찰이 여러 번 들어와도 중복 close 방지).
   const autoClosedRef = useRef(false);
   const href = win.params.href;
   const fallbackTitle = win.params.title;
+
+  // 복원 시 창 최대 6개가 iframe src를 동시에 로드하면 셸+페이지가 6× 동시 렌더(인증·DB 라운드트립
+  // 폭발)된다. 포커스 창만 즉시 로드하고 나머지는 z순서대로 stagger 마운트 → 동시 부하 분산.
+  // 한 번 활성화되면 유지(activated). 포커스되면 즉시(0ms) 활성화.
+  const [activated, setActivated] = useState(isFocused);
+  useEffect(() => {
+    if (activated) return;
+    const delay = isFocused ? 0 : 250 + Math.max(0, order.indexOf(win.id)) * 250;
+    const t = setTimeout(() => setActivated(true), delay);
+    return () => clearTimeout(t);
+  }, [activated, isFocused, order, win.id]);
 
   // iframe 등록 + 제목/URL 관찰 → 타이틀바 제목 + 창별 nav 스택 갱신(Idea A: 창 크롬이 제목·뒤로 소유).
   // 같은 창 안에서 서브라우트로 드릴인하면 document.title·location이 바뀌고 MutationObserver/popstate가
@@ -101,13 +114,14 @@ export function RouteWindow({ win }: { win: Win }) {
     <div className="bg-card relative h-full w-full">
       <iframe
         ref={iframeRef}
-        src={withEmbed(href)}
+        src={activated ? withEmbed(href) : undefined}
         title={win.params.title}
         className="h-full w-full border-0"
         style={{ visibility: dragging ? "hidden" : "visible" }}
-        onLoad={() => setLoaded(true)}
+        // 활성화 전(src 미설정) about:blank load는 무시 — 활성화 후 실제 콘텐츠 로드만 스켈레톤 해제.
+        onLoad={() => { if (activated) setLoaded(true); }}
       />
-      {!loaded && !dragging ? (
+      {(!activated || !loaded) && !dragging ? (
         <div className="bg-card absolute inset-0 p-5" aria-hidden="true">
           <div className="animate-pulse space-y-3">
             <div className="bg-bg-soft h-6 w-40 rounded" />
