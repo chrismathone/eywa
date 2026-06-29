@@ -368,6 +368,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **🐛 창 복원 버그픽스**(별건, 같은 세션 — [[#65]]): 새로고침마다 플로팅 창 전멸 + localStorage 영속본 파괴. window-store rehydrate를
   effect에서 호출하던 게 화근(다른 effect set이 먼저 빈 상태를 persist에 써서 클로버). **rehydrate를 모듈 로드 시점(클라)으로 이동**해 해결. 검증: 창 복원·테스트12.
 
+### 시간표 폴리시 — 시트 열기 + 엑셀/가져오기 그룹화 + 교시 코너 비우기 + 폐지 반 제외 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
+사용자 시간표 UX·버그 4건. typecheck0/lint0/test518 + Chrome MCP 라이브(PSS, localhost:3001).
+- **A. '시트 열기' 버튼**([toolbar-actions.tsx](<src/app/(shell)/timetable/_components/toolbar-actions.tsx>)): 기존 '시트'(push)만 있고 연결 시트를 여는 길이 없었음 → [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `getGoogleSheetsStatus()`의 spreadsheetId로 `https://docs.google.com/spreadsheets/d/{id}/edit` URL을 toolbar에 전달, **새 탭(`target=_blank`)** 으로 연다. 대상 시트가 설정돼 있을 때만 노출(조회를 master만 수행 → master 한정). '시트'→**'시트 반영'** 으로 개칭(반영↔열기 한 쌍 명확).
+- **B. 엑셀+가져오기 그룹화**(사용자 "시트에서 가져오기로 오해될 수 있음"): 엑셀(export)·가져오기(엑셀 import)를 한 묶음으로 붙이고, 시트 그룹(반영·열기)과는 **구분선(border-l)** 으로 분리 → '가져오기'가 시트 import로 오해되지 않게.
+- **C. 교시 코너 비우기**([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)): 기본뷰 좌상단 `rowSpan=3` 코너 th의 '교시' 라벨 제거(빈 칸). 세로축=교시·가로축=요일/강사의 **교차점**이라 어느 축의 라벨도 아님(사용자 지적). ⚠️ 통합뷰 좌측 라벨열의 '교시'는 진짜 행 라벨이라 유지.
+- **D. 🐛 폐지(is_active=false=종료) 반이 시간표에 잔존**(사용자 제보): '반 폐지' 버튼([archive-class-button.tsx](<src/app/(shell)/classes/[id]/_components/archive-class-button.tsx>))은 is_active=false로 바꾸며 주석상 "시간표에서 종료 처리"를 약속하나, 시간표 쿼리들이 class를 조인하며 **is_active를 안 걸렀음** → 폐지 반이 계속 노출. **`class:class_id!inner` + `.eq("class.is_active", true)`** 로 [queries.ts](src/features/timetable/server/queries.ts)(`fetchSlots`=기본·통합뷰·수학엑셀 / `getTodaySchedule`=대시보드 오늘일정) + [timetable-excel.ts](src/features/exports/timetable-excel.ts)(일반 엑셀) 3곳 수정. 라이브: 폐지 '테스트' 반이 기본·통합뷰서 사라짐·활성 반 정상. ⚠️ **트레이드오프**: 폐지 반은 과거 주(타임머신)에서도 안 보임(폐지 의도와 일치 — 반 목록엔 '종료' 배지로 데이터 보존).
+
 ### 학원설정 3건 — 브랜드 컬러피커 + 수강없는 재원생 일괄 퇴원/삭제 + 데이터정리·중복학생 탭 통합 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
 사용자 UX 요청 3건. typecheck0/lint0(신규0)/test518 + Chrome MCP 라이브(PSS, localhost:3001) 검증.
 - **A. 브랜드 색상 = 네이티브 컬러피커**: profile 브랜드 색상이 hex 텍스트뿐이라 색 선택 불편 → 공용 [`ColorField`](<src/app/(shell)/owner/_components/fields.tsx>)(네이티브 `<input type=color>` 스와치 + hex 텍스트 동기, 반 색상 폼과 동일 패턴) 신설 → [profile-section.tsx](<src/app/(shell)/owner/_components/profile-section.tsx>)에서 brandColor에 사용. 스와치는 유효 hex일 때만 반영(3/6자리 정규식, 무효면 #000 폴백). ⚠️ 컬러피커는 네이티브 OK(드롭다운/셀렉트 규약의 native `<select>` 금지 대상 아님 — 색 선택은 라이브러리 없이는 대안 없음).

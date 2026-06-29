@@ -45,14 +45,15 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const subjectHex = (subject: string) => PILL_HEX[subjectMaps.colorOf(subject)];
 
-  // 데이터 수집: schedule + class + 학생
+  // 데이터 수집: schedule + class + 학생. 폐지(is_active=false)된 반은 제외(시간표 화면과 일관) — `!inner` + 필터.
   const { data: schedules } = await supabase
     .from("class_schedules")
     .select(
       `id, class_id, day_of_week, start_time, end_time,
-       class:class_id ( id, class_name, subject, teacher_id, classroom:classroom_id ( name ),
+       class:class_id!inner ( id, class_name, subject, is_active, teacher_id, classroom:classroom_id ( name ),
                         teacher:teacher_id ( id, display_name ) )`,
     )
+    .eq("class.is_active", true)
     .order("start_time");
 
   const slots = (schedules ?? []).map((s) => {
