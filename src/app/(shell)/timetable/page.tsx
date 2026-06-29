@@ -73,10 +73,32 @@ export default async function TimetablePage({
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
 
-  // "N명 등록" = 재원만 합산(대기·퇴원은 셀 섹션으로만 표시 — 등록 인원 부풀림 방지). 두 뷰 다 과목별.
-  const isActive = (st: { status?: string }) => (st.status ?? "active") === "active";
   const isIntegrated = view === "integrated";
-  const totalStudents = slots.reduce((sum, x) => sum + x.students.filter(isActive).length, 0);
+  // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
+  // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
+  const statusOf = new Map<string, "active" | "hold" | "withdrawn">();
+  const newIds = new Set<string>();
+  const transferIds = new Set<string>();
+  const sRank = (s: "active" | "hold" | "withdrawn") => (s === "active" ? 0 : s === "hold" ? 1 : 2);
+  for (const sl of slots) {
+    for (const st of sl.students) {
+      const prev = statusOf.get(st.studentId);
+      if (prev === undefined || sRank(st.status) < sRank(prev)) statusOf.set(st.studentId, st.status);
+      if (st.isNew) newIds.add(st.studentId);
+      if (st.isTransferredIn) transferIds.add(st.studentId);
+    }
+  }
+  let enrolledCount = 0;
+  let holdCount = 0;
+  let withdrawnCount = 0;
+  for (const s of statusOf.values()) {
+    if (s === "active") enrolledCount++;
+    else if (s === "hold") holdCount++;
+    else withdrawnCount++;
+  }
+  // 신입·전입은 재원(active) 학생만 카운트(퇴원자의 옛 플래그 제외).
+  const newCount = [...newIds].filter((id) => statusOf.get(id) === "active").length;
+  const transferCount = [...transferIds].filter((id) => statusOf.get(id) === "active").length;
 
   return (
     <TimetableEditProvider effectiveDate={effectiveDate}>
@@ -135,9 +157,14 @@ export default async function TimetablePage({
           })}
         </div>
 
-        <span className="text-text-faint ml-auto font-mono text-[11px]">
-          총 {slots.length}슬롯 · {totalStudents}명 등록
-        </span>
+        <div className="ml-auto flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
+          <span className="text-[color:var(--primary)]">재원 {enrolledCount}</span>
+          {newCount > 0 ? <span className="text-[color:var(--danger)]">신입 {newCount}</span> : null}
+          {transferCount > 0 ? <span className="text-[color:var(--blue)]">전입 {transferCount}</span> : null}
+          {holdCount > 0 ? <span className="text-[color:var(--amber)]">대기 {holdCount}</span> : null}
+          {withdrawnCount > 0 ? <span className="text-[color:var(--text-faint)]">퇴원 {withdrawnCount}</span> : null}
+          <span className="text-[color:var(--text-faint)]">· {slots.length}슬롯</span>
+        </div>
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
