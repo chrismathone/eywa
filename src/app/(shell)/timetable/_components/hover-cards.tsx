@@ -10,6 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 
 const DAY_KO: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -174,11 +175,13 @@ export function StudentInfoCard({
             <Pill color="amber">대기</Pill>
           ) : null}
         </div>
-        {grade || school ? (
-          <span className="text-text-dim shrink-0 text-right text-[10px] leading-tight">
-            {[grade, school].filter(Boolean).join(" · ")}
-          </span>
-        ) : null}
+        {(() => {
+          // 학교+학년을 ijw식 압축("달산초"+"초6"→"달산초6") — 셀 학생행과 동일 라벨.
+          const sg = formatSchoolGrade(school, grade, { numberLast: true });
+          return sg && sg !== "-" ? (
+            <span className="text-text-dim shrink-0 text-right text-[10px] leading-tight">{sg}</span>
+          ) : null;
+        })()}
       </div>
       {hasDetail ? (
         <div className="border-line space-y-1 border-t pt-1.5">

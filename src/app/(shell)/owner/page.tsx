@@ -29,7 +29,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   profile: "프로필·브랜드",
   operations: "운영 체계",
   billing: "수납·청구",
-  notifications: "알림·연동·약관",
+  notifications: "알림·약관",
   permissions: "역할·권한",
   data: "데이터 정리",
   dup: "중복 학생",
@@ -116,7 +116,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "data" ? <DataFace /> : null}
       {tab === "dup" ? <DuplicatesFace page={page} isEmbed={isEmbed} /> : null}
       {tab === "audit" ? <AuditFace action={sp.action} page={page} isEmbed={isEmbed} /> : null}
-      {tab === "sheets" ? <SheetsFace /> : null}
+      {tab === "sheets" ? <SheetsFace notifications={settings.notifications} /> : null}
     </div>
   );
 }

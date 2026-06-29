@@ -30,15 +30,56 @@ const WEEKEND_GROUP: GroupDef = {
 const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 
 // 엑셀식 격자 — table-layout:fixed + colgroup으로 요일 컬럼 폭을 못박는다(줄맞춤).
-const PERIOD_COL_W = 92;
-const DAY_COL_W = 150;
-// 수·토·일은 2배 폭(요청) — 수=단일 그룹, 주말(토/일)은 정보 여유.
+// 폭은 스프레드시트/엑셀 기준(실측 교시 79·요일 51px)에서 **가독성 위해 요일열만 살짝 +**(52→60px). 수/주말 2배(120px).
+// (좁은 셀 본문은 이름 우선 truncate, 전체 정보는 hover 카드 — 스프레드시트식 고밀도.)
+const PERIOD_COL_W = 80;
+const DAY_COL_W = 60;
+// 수·토·일은 2배 폭 — 수=단일 그룹, 주말(토/일)은 정보 여유.
 const WIDE_DAY_COLS = new Set<DayOfWeek>(["wed", "sat", "sun"]);
 const dayColW = (d: DayOfWeek) => (WIDE_DAY_COLS.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
 // 셀 명단이 최소 10명 보이도록 + 글자 30% 확대(가독성)에 맞춰 비례 상향(256→330).
 // 셀 스크롤 maxHeight = rowSpan*ROW_H - 16, 헤더(~48) + 학생행(~25)×10 ≈ 298. (주말은 ROW_H/2로 격자 정렬.)
 const ROW_H = 330;
+
+// 요일 → 월요일로부터의 오프셋(일수). 요일 헤더 날짜 라벨 계산용.
+const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+
+/**
+ * 주 월요일("YYYY-MM-DD") → 요일별 "M/D" 라벨(스프레드시트처럼 요일 헤더에 날짜 표시).
+ * 모듈 레벨 순수 함수(입력만으로 결정 — RSC purity 안전). UTC 기준으로 월말 롤오버 안전.
+ */
+function dayDateLabels(weekMonday: string): Partial<Record<DayOfWeek, string>> {
+  const [y, m, d] = weekMonday.split("-").map(Number);
+  if (!y || !m || !d) return {};
+  const out: Partial<Record<DayOfWeek, string>> = {};
+  for (const day of Object.keys(DAY_OFFSET) as DayOfWeek[]) {
+    const dt = new Date(Date.UTC(y, m - 1, d + DAY_OFFSET[day]));
+    out[day] = `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
+  }
+  return out;
+}
+
+/**
+ * 카드가 그룹 셀(m-g)의 어느 서브슬롯에 있는지 — top(1-1만)/bottom(1-2만)/full(둘 다).
+ * ijw식 헤더 분할용. 그룹 행(m-1..m-4)만 판정; 주말(w-)·영어(e-)·폴백(x-)은 full(분할 없음).
+ * 그룹 g의 첫 서브슬롯 periodId=2g-1, 둘째=2g. 카드 시작시각이 둘째 시작=bottom, 끝시각이 첫째 끝=top, 그 외 full.
+ */
+function subSlotOf(
+  card: ScheduleSlotWithStudents,
+  config: PeriodsConfig,
+  rowKey: string,
+): "top" | "bottom" | "full" {
+  const m = /^m-(\d+)$/.exec(rowKey);
+  if (!m) return "full";
+  const g = Number(m[1]);
+  const firstEnd = config.weekday[String(2 * g - 1)]?.endTime;
+  const secondStart = config.weekday[String(2 * g)]?.startTime;
+  const hm5 = (t: string) => t.slice(0, 5);
+  if (secondStart && hm5(card.startTime) === hm5(secondStart)) return "bottom";
+  if (firstEnd && hm5(card.endTime) === hm5(firstEnd)) return "top";
+  return "full";
+}
 
 type TeacherCol = { name: string; days: DayOfWeek[] };
 type GroupCols = GroupDef & { teachers: TeacherCol[]; dayCount: number };
@@ -100,6 +141,7 @@ function GroupTable({
   rowHeight,
   stickyPeriod = true,
   config,
+  dateOf,
 }: {
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
@@ -108,10 +150,14 @@ function GroupTable({
   rowHeight: number;
   stickyPeriod?: boolean;
   config: PeriodsConfig;
+  /** 요일 → "M/D" 라벨(스프레드시트처럼 요일 헤더에 날짜 표시). 없으면 요일만. */
+  dateOf?: (d: DayOfWeek) => string | undefined;
 }) {
   // 평일 표만 교시열 sticky(좌측 고정). 우측 주말 표는 자기 교시열이라 non-sticky(겹침 방지).
   const periodHeadSticky = stickyPeriod ? "sticky left-0 z-20" : "";
   const periodCellSticky = stickyPeriod ? "sticky left-0 z-10" : "";
+  // 평일 수학계열은 4그룹 행(1교시=1-1+1-2). 셀은 풀높이(학생 공간 확보) — 1시간 수업도 풀높이 셀에
+  // 카드로 표시되고 서브슬롯은 헤더 시각("15:25~16:20")으로 구분(ijw 방식). 1-1/1-2가 다른 반이면 셀 안 2카드 적층.
   const rowOf = (s: ScheduleSlotWithStudents) =>
     slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek, config);
 
@@ -164,7 +210,7 @@ function GroupTable({
         <tr>
           <th
             rowSpan={3}
-            className={`bg-bg-soft border-line ${periodHeadSticky} w-[92px] border-b border-r p-2 text-left align-bottom`}
+            className={`bg-bg-soft border-line ${periodHeadSticky} w-[80px] border-b border-r p-2 text-left align-bottom`}
           >
             <span className="micro">교시</span>
           </th>
@@ -196,14 +242,20 @@ function GroupTable({
         <tr>
           {groups.flatMap((g) =>
             g.teachers.flatMap((t) =>
-              t.days.map((d) => (
-                <th
-                  key={`${g.title}-${t.name}-${d}`}
-                  className={`${g.tint} border-line text-text-dim border-b border-r px-2 py-1 text-center font-mono text-[10px] font-bold`}
-                >
-                  {DAY_LABEL[d] ?? d}
-                </th>
-              )),
+              t.days.map((d) => {
+                const date = dateOf?.(d);
+                return (
+                  <th
+                    key={`${g.title}-${t.name}-${d}`}
+                    className={`${g.tint} border-line text-text-dim border-b border-r px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}
+                  >
+                    {DAY_LABEL[d] ?? d}
+                    {date ? (
+                      <span className="text-text-faint block text-[9px] font-normal">{date}</span>
+                    ) : null}
+                  </th>
+                );
+              }),
             ),
           )}
         </tr>
@@ -246,7 +298,12 @@ function GroupTable({
                           style={{ height: block.rowSpan * rowHeight - 16 }}
                         >
                           {merged.map((s) => (
-                            <ClassCell key={s.id} slot={s} roster="names" />
+                            <ClassCell
+                              key={s.id}
+                              slot={s}
+                              roster="names"
+                              subSlot={subSlotOf(s, config, row.key)}
+                            />
                           ))}
                         </div>
                       )}
@@ -269,11 +326,19 @@ function GroupTable({
 export function WeekdayGroupTables({
   slots,
   config = DEFAULT_PERIODS_CONFIG,
+  weekMonday,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
+  /** 조회 중인 주의 월요일("YYYY-MM-DD") — 요일 헤더에 날짜(M/D) 표시(스프레드시트 패리티). */
+  weekMonday?: string;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
+  // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
+  const dayDates = weekMonday ? dayDateLabels(weekMonday) : {};
+  const dateOf = (d: DayOfWeek) => dayDates[d];
+  // 평일 행 높이 — 영어는 10개 개별 교시(행당 ROW_H), 그 외 수학계열은 4그룹(행당 ROW_H). 둘 다 풀높이.
+  const weekdayRowH = ROW_H;
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
@@ -291,8 +356,9 @@ export function WeekdayGroupTables({
             subject={subject}
             groups={weekdayGroups}
             weekend={false}
-            rowHeight={ROW_H}
+            rowHeight={weekdayRowH}
             config={config}
+            dateOf={dateOf}
           />
         ) : null}
         {weekendGroups.length > 0 ? (
@@ -304,6 +370,7 @@ export function WeekdayGroupTables({
             rowHeight={ROW_H / 2}
             stickyPeriod={false}
             config={config}
+            dateOf={dateOf}
           />
         ) : null}
       </div>

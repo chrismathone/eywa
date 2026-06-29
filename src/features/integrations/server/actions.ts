@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { pushMathTimetableTabs } from "@/features/integrations/google-sheets";
+import { overwriteMathTimetableSheet } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
 
 export type ToggleState = { error?: string; enabled?: boolean } | undefined;
@@ -71,10 +71,11 @@ export async function syncSheetsNow(
     return { error: "내보낼 구글 시트가 설정되지 않았습니다(관리자에게 문의)" };
 
   try {
-    // 수학 시간표 = ijw 충실 익스포터 → 공유 시트에 eywa·{tenant}· 접두 탭으로 비파괴 추가(기존 탭
-    // 보존). master 전용이라 전체(unscoped) 내보내기가 정당(전 강사·전 학생). 토큰=테넌트별 탭 격리.
+    // 수학 시간표 = ijw 충실 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에
+    // 통째 덮어쓰기(ijw updateSheetContent 방식). 서비스계정 용량 0이라 '생성'은 불가 → '갱신'만.
+    // master 전용이라 전체(unscoped) 내보내기가 정당(전 강사·전 학생). 대상 시트=테넌트 전용 1개 가정.
     const buffer = await buildMathTimetableBuffer();
-    await pushMathTimetableTabs(spreadsheetId, buffer, user.tenantId.slice(0, 8));
+    await overwriteMathTimetableSheet(spreadsheetId, buffer);
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,

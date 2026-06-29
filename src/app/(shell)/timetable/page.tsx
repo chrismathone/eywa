@@ -164,7 +164,7 @@ export default async function TimetablePage({
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">
-            <WeekdayGroupTables slots={slots} config={periodsConfig} />
+            <WeekdayGroupTables slots={slots} config={periodsConfig} weekMonday={week} />
           </div>
         </TimetableDndArea>
       )}

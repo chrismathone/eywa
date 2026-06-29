@@ -4,6 +4,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
+import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { readableTextColor } from "@/lib/color-utils";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
@@ -57,9 +58,10 @@ function shortTime(t: string) {
   return t.slice(0, 5);
 }
 
-/** 학생 행 우측 메타 — 학교 + 학년(있는 것만). ijw식 [이름] … [학교 학년]. */
+/** 학생 행 메타 — 학교+학년을 ijw식으로 압축("경명중"+"중1" → "경명중1"). 좁은 셀에서 이름 공간 확보. */
 function metaLabel(school: string | null | undefined, grade: string | null | undefined): string {
-  return [school, grade].filter(Boolean).join(" ");
+  const sg = formatSchoolGrade(school, grade, { numberLast: true });
+  return sg === "-" ? "" : sg;
 }
 
 /** 학생 행 배경 — 신입(빨강)·전입(초록)·그 외(진한 기본). ijw 시간표의 신입/전학 색 근사.
@@ -105,11 +107,12 @@ function DraggableStudentRow({
       {...listeners}
       className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
     >
-      <span className={`truncate ${target ? "line-through" : ""}`}>{name}</span>
+      <span className={`truncate ${target ? "line-through" : ""}`}>
+        {name}
+        {!target && meta ? <span className="opacity-60">/{meta}</span> : null}
+      </span>
       {target ? (
         <span className="text-primary shrink-0 font-mono text-[12px]">→{target.toClassName}</span>
-      ) : meta ? (
-        <span className="shrink-0 font-mono text-[12px] opacity-70">{meta}</span>
       ) : null}
     </div>
   );
@@ -127,23 +130,25 @@ function StudentRow({
   meta: string;
   tone: string;
 }) {
+  // ijw식: "이름/학교학년"을 한 줄로 truncate(이름 우선 — 좁아도 이름이 먼저 보이고 메타가 잘림).
   const inner = (
     <>
-      <span className="truncate">{name}</span>
-      {meta ? <span className="shrink-0 font-mono text-[12px] opacity-70">{meta}</span> : null}
+      {name}
+      {meta ? <span className="opacity-60">/{meta}</span> : null}
     </>
   );
+  const rowCls = "block truncate px-2 py-[3px] leading-tight";
   const trigger = student.studentId ? (
     <WindowLink
       href={`/students/${student.studentId}`}
       title={name}
       ariaLabel={`${name} 학생 정보`}
-      className={`${ROW_CLASS} hover:bg-bg-soft ${tone}`}
+      className={`${rowCls} hover:bg-bg-soft ${tone}`}
     >
       {inner}
     </WindowLink>
   ) : (
-    <div className={`${ROW_CLASS} ${tone}`}>{inner}</div>
+    <div className={`${rowCls} ${tone}`}>{inner}</div>
   );
   return (
     <HoverCard
@@ -243,10 +248,16 @@ function StudentSection({
 export function ClassCell({
   slot,
   roster = "full",
+  subSlot = "full",
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
   roster?: "full" | "names" | "none";
+  /**
+   * 기본뷰 평일 그룹 셀의 서브슬롯 위치(ijw식 헤더 분할) — top=1-1만, bottom=1-2만, full=둘 다(또는 분할 무관).
+   * top/bottom이면 반대 서브슬롯 자리에 **빈 밴드**를 그려 1-1/1-2를 한눈에 구분(학생 영역은 풀 유지).
+   */
+  subSlot?: "top" | "bottom" | "full";
 }) {
   const { editing, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
@@ -283,6 +294,10 @@ export function ClassCell({
         hasSecondary ? "flex min-h-0 flex-1 flex-col" : ""
       } ${isOver ? "ring-primary ring-2" : ""}`}
     >
+        {/* ijw식 헤더 분할 — 1-2 수업이면 위에 빈 1-1 밴드를 둬 "이건 2번째 칸 수업"임을 한눈에. 학생 영역은 풀 유지. */}
+        {subSlot === "bottom" ? (
+          <div className="border-line bg-bg-soft/70 shrink-0 border-b" style={{ height: 26 }} aria-hidden />
+        ) : null}
         {/* 반이름 헤더 바 — 반 색 우선(인라인), 없으면 과목색 클래스. WindowLink는 style 미지원이라 래퍼 div에 색.
             hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]). */}
         <div
@@ -312,15 +327,19 @@ export function ClassCell({
                 <span className="truncate text-[14px] font-bold">{slot.className}</span>
                 <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
               </div>
-              <div className="flex items-center justify-between gap-1 text-[12px] opacity-75">
-                <span className="num font-mono">
-                  {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
-                </span>
-                {slot.classroomName ? <span className="truncate font-mono">{slot.classroomName}</span> : null}
-              </div>
+              {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시. */}
+              {slot.classroomName ? (
+                <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
+                  <span className="truncate font-mono">{slot.classroomName}</span>
+                </div>
+              ) : null}
             </WindowLink>
           </HoverCard>
         </div>
+        {/* 1-1 수업이면 헤더 아래 빈 1-2 밴드 — "이건 첫째 칸 수업"임을 표시. */}
+        {subSlot === "top" ? (
+          <div className="border-line bg-bg-soft/70 shrink-0 border-b" style={{ height: 26 }} aria-hidden />
+        ) : null}
 
         {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
