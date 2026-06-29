@@ -46,37 +46,64 @@ function coarseGrade(v) {
   }
   console.log("file: catalog.json  교재:", books.length, "기타:", extras.length);
   console.log("기타 종류:", [...new Set(extras.map((e) => e.kind))]);
-  console.log("sample 교재:", JSON.stringify(books[0]));
 
-  if (!APPLY) {
-    console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
-    return;
-  }
+  // additive: textbook_catalog는 (제목+출판사)로 ijw 행에 매칭→makeedu_id 백필(값 보존)/없으면 신규.
+  //           tuition_catalog 기타는 makeedu_id 컬럼이 없으므로 이름 기준 — 기존 이름이면 스킵, 새 이름만 추가.
+  const normTitle = (s) => (L.txt(s) || "").replace(/\s+/g, "").toLowerCase();
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
-    let b = 0, e = 0;
+    const existBooks = await sql`select id, makeedu_id, title, publisher from textbook_catalog where tenant_id = ${tenantId}`;
+    const byMakeedu = new Map(existBooks.filter((b) => b.makeedu_id).map((b) => [b.makeedu_id, b.id]));
+    const matchBook = L.tieredMatcher(existBooks, [
+      (b) => `${normTitle(b.title)}|${(L.txt(b.publisher) || "")}`,
+      (b) => normTitle(b.title),
+    ]);
+    const bookLink = [], bookInsert = [];
+    let bookAlready = 0;
     for (const r of books) {
+      if (byMakeedu.has(r.makeedu_id)) { bookAlready++; continue; }
+      const id = matchBook({ title: r.name, publisher: r.publisher });
+      if (id) bookLink.push({ id, makeedu_id: r.makeedu_id });
+      else bookInsert.push(r);
+    }
+    const existExtra = new Set(
+      (await sql`select name from tuition_catalog where tenant_id = ${tenantId} and category = ${"기타"}`).map((x) => x.name),
+    );
+    const extraSeen = new Set(), extraInsert = [];
+    for (const r of extras) {
+      if (existExtra.has(r.name) || extraSeen.has(r.name)) continue;
+      extraSeen.add(r.name);
+      extraInsert.push(r);
+    }
+    console.log(`\n[additive] 교재(textbook_catalog) ijw ${existBooks.length} | makeedu ${books.length}`);
+    console.log(`  이미 연결됨: ${bookAlready} | 매칭→백필: ${bookLink.length} | 신규 추가: ${bookInsert.length}`);
+    console.log(`[additive] 기타(tuition_catalog) 기존 ${existExtra.size} → 신규 추가: ${extraInsert.length}`);
+
+    if (!APPLY) {
+      console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
+      return;
+    }
+    let bl = 0, bi = 0, e = 0;
+    for (const t of bookLink) {
+      const res = await sql`update textbook_catalog set makeedu_id = ${t.makeedu_id}, updated_at = now() where id = ${t.id} and makeedu_id is null`;
+      bl += res.count;
+    }
+    for (const r of bookInsert) {
       await sql`
         insert into textbook_catalog (tenant_id, makeedu_id, title, grade_level, publisher, price, is_active)
         values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.grade}, ${r.publisher}, ${r.price}, ${r.is_active})
-        on conflict (tenant_id, makeedu_id) where makeedu_id is not null
-        do update set title = excluded.title, grade_level = excluded.grade_level,
-          publisher = excluded.publisher, price = excluded.price, is_active = excluded.is_active, updated_at = now()`;
-      b++;
+        on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
+      bi++;
     }
-    // tuition_catalog는 makeedu_id 컬럼 없음 → fresh wipe 후 insert(이름 중복만 스킵).
-    const seen = new Set();
-    for (const r of extras) {
-      if (seen.has(r.name)) continue;
-      seen.add(r.name);
+    for (const r of extraInsert) {
       await sql`
         insert into tuition_catalog (tenant_id, category, name, price, is_active)
         values (${tenantId}, ${"기타"}, ${r.name}, ${r.price}, ${r.is_active})`;
       e++;
     }
-    await L.recordSync(sql, tenantId, "catalog", b + e);
-    console.log("upserted 교재:", b, "기타:", e);
+    await L.recordSync(sql, tenantId, "catalog", bl + bi + e);
+    console.log(`\n교재 백필 ${bl} 신규 ${bi} | 기타 신규 ${e}`);
   } finally {
     await sql.end();
   }

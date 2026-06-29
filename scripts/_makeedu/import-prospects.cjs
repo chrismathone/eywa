@@ -45,30 +45,52 @@ function outcome(v) {
   console.log("file: prospects.json  parsed:", rows.length);
   console.log("outcome dist:", rows.reduce((a, r) => ((a[r.outcome] = (a[r.outcome] || 0) + 1), a), {}));
   console.log("dup makeedu_id:", rows.length - new Set(rows.map((r) => r.makeedu_id)).size, "| missing name:", rows.filter((r) => !r.prospect_name).length);
-  console.log("sample:", JSON.stringify(rows[0]));
 
-  if (!APPLY) {
-    console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
-    return;
-  }
+  // additive: ijw 기존 예비상담에 (이름+학교+학년)로 매칭 → makeedu_id 백필(ijw 값 보존) / 없으면 신규 추가.
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
-    let up = 0;
+    const existing = await sql`
+      select id, makeedu_id, prospect_name, prospect_school, prospect_grade
+      from enrollment_consultations where tenant_id = ${tenantId}`;
+    const byMakeedu = new Map(existing.filter((e) => e.makeedu_id).map((e) => [e.makeedu_id, e.id]));
+    const match = L.tieredMatcher(existing, [
+      (r) => `${L.normalizeName(r.prospect_name)}|${r.prospect_school || ""}|${r.prospect_grade || ""}`,
+      (r) => `${L.normalizeName(r.prospect_name)}|${r.prospect_grade || ""}`,
+    ]);
+    const toLink = [], toInsert = [];
+    let alreadyLinked = 0;
     for (const r of rows) {
+      if (byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; }
+      const id = match(r);
+      if (id) toLink.push({ id, makeedu_id: r.makeedu_id });
+      else toInsert.push(r);
+    }
+    console.log(`\n[additive] ijw 기존 예비상담 ${existing.length} | makeedu ${rows.length}`);
+    console.log(`  이미 연결됨: ${alreadyLinked} | ijw 매칭→백필: ${toLink.length} | 신규 추가: ${toInsert.length}`);
+
+    if (!APPLY) {
+      console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
+      return;
+    }
+    let linked = 0, inserted = 0;
+    for (const t of toLink) {
+      const res = await sql`
+        update enrollment_consultations set makeedu_id = ${t.makeedu_id}, updated_at = now()
+        where id = ${t.id} and makeedu_id is null`;
+      linked += res.count;
+    }
+    for (const r of toInsert) {
       await sql`
         insert into enrollment_consultations
           (tenant_id, makeedu_id, prospect_name, prospect_school, prospect_grade, parent_phone, student_phone, outcome, consulted_at)
         values (${tenantId}, ${r.makeedu_id}, ${r.prospect_name}, ${r.prospect_school}, ${r.prospect_grade},
                 ${r.parent_phone}, ${r.student_phone}, ${r.outcome}, ${r.consulted_at ?? null})
-        on conflict (tenant_id, makeedu_id) where makeedu_id is not null
-        do update set prospect_name = excluded.prospect_name, prospect_school = excluded.prospect_school,
-          prospect_grade = excluded.prospect_grade, parent_phone = excluded.parent_phone,
-          student_phone = excluded.student_phone, outcome = excluded.outcome, updated_at = now()`;
-      up++;
+        on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
+      inserted++;
     }
-    await L.recordSync(sql, tenantId, "prospects", up);
-    console.log("upserted prospects:", up);
+    await L.recordSync(sql, tenantId, "prospects", linked + inserted);
+    console.log(`\nbackfilled: ${linked} | inserted new: ${inserted}`);
   } finally {
     await sql.end();
   }

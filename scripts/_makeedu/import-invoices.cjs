@@ -37,16 +37,19 @@ const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
-    const studs = await sql`select id, name, grade from students where tenant_id = ${tenantId} and makeedu_id is not null`;
-    const m2 = new Map(), m1 = new Map();
-    for (const s of studs) { const n = L.normalizeName(s.name); m2.set(`${n}|${s.grade || ""}`, s.id); if (!m1.has(n)) m1.set(n, s.id); else m1.set(n, null); }
+    // additive: makeedu 청구 라인의 학생을 이름(+학년)으로 ijw 전체 학생에 매칭(makeedu_id 백필 순서와 무관).
+    // 동명+동학년이 2명 이상이면 모호 → tieredMatcher가 null 반환(오매칭 방지). 인라인 last-wins 금지.
+    const studs = await sql`select id, name, grade from students where tenant_id = ${tenantId}`;
+    const matchStudent = L.tieredMatcher(studs, [
+      (s) => `${L.normalizeName(s.name)}|${s.grade || ""}`,
+      (s) => L.normalizeName(s.name),
+    ]);
 
     // (student_id, period)로 집계
     const inv = new Map();
     let unmatched = 0;
     for (const l of lines) {
-      const n = L.normalizeName(l.name);
-      const sid = m2.get(`${n}|${l.grade || ""}`) || m1.get(n) || null;
+      const sid = matchStudent({ name: l.name, grade: l.grade });
       if (!sid) { unmatched++; continue; }
       const key = `${sid}|${l.period}`;
       let a = inv.get(key);
@@ -63,25 +66,28 @@ const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(
     });
     console.log(`lines→invoices(학생×월): ${invoices.length} | unmatched lines: ${unmatched}`);
     console.log("status dist:", invoices.reduce((x, i) => ((x[i.status] = (x[i.status] || 0) + 1), x), {}));
-    console.log("sample:", JSON.stringify({ ...invoices[0], items: invoices[0]?.items?.slice(0, 2) }));
 
-    if (!APPLY) { console.log("[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
+    // additive: ijw 기존 (학생,청구월) 인보이스는 보존(절대 덮어쓰지 않음). makeedu의 새 청구월만 추가.
+    const existPer = new Set(
+      (await sql`select student_id, period from invoices where tenant_id = ${tenantId}`).map((r) => `${r.student_id}|${r.period}`),
+    );
+    const fresh = invoices.filter((i) => !existPer.has(`${i.student_id}|${i.period}`));
+    console.log(`[additive] ijw 기존 인보이스 ${existPer.size} | makeedu 집계 ${invoices.length} → 새 청구월만 추가: ${fresh.length} (기존 보존 ${invoices.length - fresh.length})`);
+    console.log("새 청구월 표본:", [...new Set(fresh.map((i) => i.period))].sort().slice(-6));
+
+    if (!APPLY) { console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
     let up = 0;
-    for (const i of invoices) {
+    for (const i of fresh) {
       await sql`
         insert into invoices (tenant_id, student_id, period, category, amount_total, amount_paid, amount_discount,
           points_used, status, line_items, payment_method, billed_at, due_date, paid_at)
         values (${tenantId}, ${i.student_id}, ${i.period}, ${"tuition"}, ${i.total}, ${i.paid}, ${i.discount},
           ${i.point}, ${i.status}, ${JSON.stringify(i.items)}, ${i.method}, ${i.billed}, ${i.billed}, ${i.pdate})
-        on conflict (tenant_id, student_id, period)
-        do update set amount_total = excluded.amount_total, amount_paid = excluded.amount_paid,
-          amount_discount = excluded.amount_discount, points_used = excluded.points_used, status = excluded.status,
-          line_items = excluded.line_items, payment_method = excluded.payment_method,
-          billed_at = excluded.billed_at, paid_at = excluded.paid_at, updated_at = now()`;
+        on conflict (tenant_id, student_id, period) do nothing`;
       up++;
     }
     await L.recordSync(sql, tenantId, "invoices", up);
-    console.log("upserted invoices:", up);
+    console.log("inserted new invoices:", up);
   } finally {
     await sql.end();
   }

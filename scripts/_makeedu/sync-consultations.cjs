@@ -23,6 +23,17 @@ const BASE = "https://school.makeedu.co.kr";
 const APPLY = process.argv.includes("--apply");
 const CONC = Number(process.env.MAKEEDU_CONC || 8);
 
+// ⚠️ additive 동기화 결정(2026-06-29): 재원생 상담은 **건너뜀** — ijw 상담 1340건이 정본이고, makeedu 상담
+// (~2686, counselSeq 키)은 ijw와 공유 키가 없어 그냥 더하면 같은 상담이 대량 중복된다. 이 스크립트는 makeedu
+// 상담을 전부 추가(=중복)하므로 additive 부트스트랩에서 제외. 의도적으로 실행하려면 --force 필요.
+if (!process.argv.includes("--force")) {
+  console.log(
+    "[skip] 재원생 상담은 additive 부트스트랩에서 제외(ijw 1340건 정본, 중복 방지 결정 2026-06-29).\n" +
+      "       의도적으로 makeedu 상담을 추가하려면 --force 플래그로 실행.",
+  );
+  process.exit(0);
+}
+
 async function login(page) {
   const id = process.env.MAKEEDU_ID, pw = process.env.MAKEEDU_PW;
   if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 누락(.env.local)");

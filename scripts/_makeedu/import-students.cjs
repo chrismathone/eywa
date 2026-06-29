@@ -1,15 +1,15 @@
 /**
  * scripts/_makeedu/import-students.cjs
  *
- * makeedu 원생목록 엑셀(47컬럼) → eywa `students` 멱등 upsert (makeedu_id 키, 0057a).
- * makeedu가 진실(source of truth) — 운영 필드만 덮어쓰고 eywa 고유(aiCare*)는 SET에서 제외.
+ * makeedu 원생목록 엑셀(47컬럼) → eywa `students` **additive 동기화**(makeedu_id 외부키, 0057a).
+ * ⚠️ ijw 베이스가 정본. makeedu 학생을 (이름+학교+학년)로 ijw 학생에 매칭 → 매칭되면 makeedu_id만
+ *    백필(ijw 값 절대 덮어쓰지 않음), ijw에 없는 학생만 신규 추가. dry-run도 DB를 읽어 매칭 건수를 측정.
  *
  * 사용:
- *   node --env-file=.env.local scripts/_makeedu/import-students.cjs          # dry-run(매핑 검증, DB write 0)
- *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --apply  # 실제 upsert
+ *   node --env-file=.env.local scripts/_makeedu/import-students.cjs          # dry-run(매칭 측정, DB write 0)
+ *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --apply  # 백필 + 신규 추가
  *
  * 입력: Downloads(또는 $MAKEEDU_DL)의 최신 '원생목록_*.xlsx'.
- * ⚠️ --apply는 Phase 1 wipe(데모 비우기) 이후에만 — wipe 전엔 기존 ijw 564명과 별개로 412명이 추가됨(중복).
  */
 const fs = require("fs");
 const path = require("path");
@@ -106,23 +106,52 @@ function mapRows(ws) {
     "status dist:",
     rows.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {}),
   );
-  const dup = rows.length - new Set(rows.map((r) => r.makeedu_id)).size;
-  console.log("dup makeedu_id:", dup);
+  console.log("dup makeedu_id:", rows.length - new Set(rows.map((r) => r.makeedu_id)).size);
   console.log("missing name:", rows.filter((r) => !r.name).length);
-  console.log("sample:", JSON.stringify(rows[0], null, 1));
 
-  if (!APPLY) {
-    console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
-    return;
-  }
-
+  // ── additive: ijw 베이스가 정본. makeedu 학생을 (이름+학교+학년)로 ijw 학생에 매칭 →
+  //    매칭되면 makeedu_id만 백필(ijw 값 보존), 매칭 안 되면 신규 추가. ijw 값은 절대 덮어쓰지 않음.
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
-    const ten = await sql`select id from tenants order by created_at limit 1`;
-    const tenantId = ten[0].id;
+    const tenantId = await L.resolveTenantId(sql);
     console.log("target tenant:", tenantId);
-    let up = 0;
+    const existing = await sql`
+      select id, makeedu_id, name, school, grade from students where tenant_id = ${tenantId}`;
+    const byMakeedu = new Map(existing.filter((e) => e.makeedu_id).map((e) => [e.makeedu_id, e.id]));
+    const match = L.tieredMatcher(existing, [
+      (r) => `${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`,
+      (r) => `${L.normalizeName(r.name)}|${r.grade || ""}`,
+      (r) => L.normalizeName(r.name),
+    ]);
+
+    const toLink = []; // 기존 ijw 행에 makeedu_id 백필
+    const toInsert = []; // ijw에 없는 신규 makeedu 학생
+    let alreadyLinked = 0;
     for (const r of rows) {
+      if (byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; } // 재실행 멱등
+      const id = match(r);
+      if (id) toLink.push({ id, makeedu_id: r.makeedu_id });
+      else toInsert.push(r);
+    }
+    console.log(`\n[additive] ijw 기존 학생 ${existing.length} | makeedu ${rows.length}`);
+    console.log(`  이미 연결됨(재실행): ${alreadyLinked}`);
+    console.log(`  ijw 매칭 → makeedu_id 백필: ${toLink.length}`);
+    console.log(`  ijw에 없음 → 신규 추가: ${toInsert.length}`);
+    if (toInsert.length) console.log("  신규 표본:", toInsert.slice(0, 5).map((r) => `${r.name}/${r.school || "?"}/${r.grade || "?"}`).join(", "));
+
+    if (!APPLY) {
+      console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
+      return;
+    }
+    let linked = 0, inserted = 0;
+    for (const t of toLink) {
+      // makeedu_id가 비어있는 경우에만 백필(ijw 다른 필드는 손대지 않음).
+      const res = await sql`
+        update students set makeedu_id = ${t.makeedu_id}, updated_at = now()
+        where id = ${t.id} and makeedu_id is null`;
+      linked += res.count;
+    }
+    for (const r of toInsert) {
       await sql`
         insert into students
           (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
@@ -133,18 +162,11 @@ function mapRows(ws) {
            ${r.school}, ${r.grade}, ${r.student_phone}, ${r.parent_phone}, ${r.parent_name},
            ${r.birth_date}, ${r.enrolled_at}, ${r.address}, ${r.email}, ${r.status},
            ${r.withdrawn_at}, ${r.notes})
-        on conflict (tenant_id, makeedu_id) where makeedu_id is not null
-        do update set
-          name = excluded.name, gender = excluded.gender, attendance_code = excluded.attendance_code,
-          school = excluded.school, grade = excluded.grade, student_phone = excluded.student_phone,
-          parent_phone = excluded.parent_phone, parent_name = excluded.parent_name,
-          birth_date = excluded.birth_date, enrolled_at = excluded.enrolled_at,
-          address = excluded.address, email = excluded.email, status = excluded.status,
-          withdrawn_at = excluded.withdrawn_at, notes = excluded.notes, updated_at = now()`;
-      up++;
+        on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
+      inserted++;
     }
-    await L.recordSync(sql, tenantId, "students", up);
-    console.log("upserted:", up);
+    await L.recordSync(sql, tenantId, "students", linked + inserted);
+    console.log(`\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}`);
   } finally {
     await sql.end();
   }

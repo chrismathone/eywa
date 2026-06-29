@@ -100,6 +100,30 @@ function paymentMethod(v) {
   return "other"; // 카카오페이·지역화폐 등
 }
 
+// makeedu→ijw additive 매칭용 티어드 맵. ijwRows=[{id, ...}], keyFns=정밀→느슨 순 키 함수 배열.
+// 한 티어에서 같은 키가 2건 이상이면 그 키는 모호(null)로 표시 → 그 티어는 매칭 실패 처리(오매칭 방지).
+// match(rec): 가장 정밀한 티어부터 유일 일치를 찾으면 그 id, 끝까지 없으면 null(=신규로 추가).
+function tieredMatcher(ijwRows, keyFns) {
+  const maps = keyFns.map(() => new Map());
+  for (const r of ijwRows) {
+    keyFns.forEach((kf, i) => {
+      const k = kf(r);
+      if (!k) return;
+      maps[i].set(k, maps[i].has(k) ? null : r.id); // 첫 등장=id, 재등장=null(모호)
+    });
+  }
+  return (rec) => {
+    for (let i = 0; i < keyFns.length; i++) {
+      const k = keyFns[i](rec);
+      if (k) {
+        const v = maps[i].get(k);
+        if (v) return v; // 유일 일치(모호 null·미존재 undefined는 다음 티어로)
+      }
+    }
+    return null;
+  };
+}
+
 // 단일 테넌트 해석(현재 인재원 1개). 멀티테넌트면 env MAKEEDU_TENANT_ID로 고정 주입.
 async function resolveTenantId(sql) {
   if (process.env.MAKEEDU_TENANT_ID) return process.env.MAKEEDU_TENANT_ID;
@@ -119,6 +143,7 @@ async function recordSync(sql, tenantId, domain, rowCount, status = "ok", error 
 
 module.exports = {
   recordSync,
+  tieredMatcher,
   isNonClass,
   NONCLASS_RE,
   txt,

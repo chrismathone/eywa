@@ -350,9 +350,16 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   evaluate, listSize max+페이지순회 → `D:/tmp/makeedu/*.json`), `import-*.cjs`(dry/--apply), `sync-consultations.cjs`(상담 본문은
   **목록 아닌 상세페이지** `counselList_detail.do?counselSeq=N` — stable PK=히든 `counselSeqTmp`, 표시 No 아님), `wipe-tenant-data.cjs`(auth 보존),
   공유 `lib.cjs`(`isNonClass`=교재/사용료/행사/설명회 가짜 수업 차단). ⚠️ Chrome MCP는 대량추출 불가(결과 잘림·블롭 차단)라 Playwright 필수.
-- ⚠️ **남은 작업(additive 재작업)**: 현 `import-*.cjs`는 overwrite upsert라 **additive로 고쳐야** 함(ijw행과 자연키/makeedu_id
-  매칭 → 없으면 추가, 있으면 ijw값 보존). `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브). Phase 2(도메인 on/off
-  토글·GitHub Actions Playwright cron 증분)는 미착수. 비-수업 차단문구 학원설정 외부화도 검토 대상.
+- **✅ additive 재작업 완료(2026-06-29)**: 임포터를 overwrite upsert → **additive**로 전환. 공유 [`tieredMatcher`](scripts/_makeedu/lib.cjs)
+  (정밀→느슨 키, 같은 키 2건+이면 모호=null로 오매칭 차단)로 makeedu→ijw 매칭 → **매칭되면 makeedu_id/makeedu_lesson_id만 백필
+  (ijw 값 절대 미변경), 없으면 신규 추가**. 도메인별: `students`(이름+학교+학년)·`prospects`(이름+학교+학년)·`catalog`(제목+출판사)는
+  백필/신규, `invoices`는 `on conflict do nothing`(ijw 보존, 새 청구월만)·`classes`는 **ijw 정본=신규반 생성 0**(이름 정확일치 시 makeedu_lesson_id만 백필,
+  ijw 코드명 vs makeedu 풀네임이라 대부분 미연결=정상)·`enrollments`는 기존부터 additive(반이름 불일치로 +0)·`consultations`는 **건너뜀**(사용자 결정:
+  ijw 1340 정본, makeedu 2686은 공유키 없어 더하면 대량중복 → [sync-consultations.cjs](scripts/_makeedu/sync-consultations.cjs)에 `--force` 가드).
+  **dry-run 실측(ijw 베이스 위)**: students +2신규/410백필 · classes +0/5백필 · invoices **+393(전부 2026-07=스냅샷 이후 신규 청구월)** · catalog +86교재+6기타/78백필 · prospects +237/8백필.
+  ijw 한 건도 덮어쓰지 않음. **적대리뷰(워크플로 6스크립트 find→검증) 확정 1건 수정**: invoices 인라인 m2(이름|학년) 맵이 모호성 가드 없어
+  동명동학년 오매칭 가능 → `tieredMatcher`로 일원화(모호=null→스킵, 393으로 3건 안전 제외). `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브).
+- ⚠️ **남은 작업**: Phase 2(도메인 on/off 토글·GitHub Actions Playwright cron 증분)는 미착수. 비-수업 차단문구 학원설정 외부화도 검토 대상.
 - **시간표 상단 명단 요약**(ijw 패리티, [timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)): 툴바 우측에 **재원·신입·전입·대기·퇴원
   + N슬롯**(색상 토큰). 그 주 시점(타임머신) 기준, `studentId`로 유일 집계(한 학생이 여러 반 → 상태 우선순위 재원>대기>퇴원). 신입·전입은 재원 학생만.
 - **🐛 창 복원 버그픽스**(별건, 같은 세션 — [[#65]]): 새로고침마다 플로팅 창 전멸 + localStorage 영속본 파괴. window-store rehydrate를

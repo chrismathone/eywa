@@ -1,8 +1,8 @@
 /**
- * scripts/_makeedu/import-classes.cjs — makeedu 수업목록 → eywa `classes` (makeedu_lesson_id 멱등, 0057a).
- * 담임강사는 eywa `users`(보존됨)에 이름/영문명으로 매칭. 과목은 수업명에서 도출(operations.subjects).
+ * scripts/_makeedu/import-classes.cjs — makeedu 수업목록 → eywa `classes` **additive(ijw 정본)**.
+ * ⚠️ ijw 반이 정본(반 색상·스케줄·담임 보유). makeedu-only 반은 생성하지 않고, 이름이 정확히 일치하는
+ *    ijw 반에만 `makeedu_lesson_id`를 백필(미설정인 경우만). ijw 코드명 vs makeedu 풀네임이라 대부분 미일치(정상).
  * 입력: $MAKEEDU_OUT(기본 D:/tmp/makeedu)/classes.json (scrape.cjs 산출, rows=[헤더→셀]).
- * ⚠️ class_schedules(요일·교시 시각)은 시간표(timeTable.do) 별도 — 여기선 미생성(후속). bg/text_color=eywa 고유 보존(미설정).
  *   node --env-file=.env.local scripts/_makeedu/import-classes.cjs [--apply]
  */
 const fs = require("fs");
@@ -66,46 +66,44 @@ function splitTeacher(s) {
     rows.push(r);
   }
   console.log(`file: classes.json  parsed ${raw.length} → dedup(이름+과목) ${rows.length}`);
-  const subjDist = rows.reduce((a, r) => ((a[r.subject] = (a[r.subject] || 0) + 1), a), {});
-  console.log("subject dist:", subjDist);
+  console.log("subject dist:", rows.reduce((a, r) => ((a[r.subject] = (a[r.subject] || 0) + 1), a), {}));
 
+  // additive: ijw 반이 정본(색상·스케줄·담임). makeedu-only 반은 **만들지 않는다**(색 없는 중복 방지).
+  // 이름이 정확히 일치하는 ijw 반에만 makeedu_lesson_id를 백필(미설정인 경우만). ijw는 코드명('PJ2'),
+  // makeedu는 풀네임('[EiE] Pre Junior')이라 대부분 미일치 = 정상(미연결로 남김, 색/스케줄 그대로 보존).
+  const norm = (s) => (s || "").replace(/[\s[\]()（）]/g, "").toLowerCase();
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
-    // 담임 매칭 맵 (display_name / english_name → user id)
-    const users = await sql`select id, display_name, english_name from users where tenant_id = ${tenantId}`;
-    const byKo = new Map(), byEn = new Map();
-    for (const u of users) {
-      if (u.display_name) byKo.set(u.display_name.trim(), u.id);
-      if (u.english_name) byEn.set(u.english_name.trim().toLowerCase(), u.id);
-    }
-    let matched = 0, unmatched = [];
+    const existing = await sql`select id, makeedu_lesson_id, class_name, subject from classes where tenant_id = ${tenantId}`;
+    const byLesson = new Map(existing.filter((c) => c.makeedu_lesson_id).map((c) => [c.makeedu_lesson_id, c.id]));
+    const match = L.tieredMatcher(existing, [
+      (c) => `${c.subject}|${norm(c.class_name)}`,
+      (c) => norm(c.class_name),
+    ]);
+    const toLink = [], unmatched = [];
+    let already = 0;
     for (const r of rows) {
-      r.teacher_id = (r.teacher.ko && byKo.get(r.teacher.ko)) || (r.teacher.en && byEn.get(r.teacher.en.toLowerCase())) || null;
-      if (r.teacher_id) matched++;
-      else if (r.teacher.ko || r.teacher.en) unmatched.push(`${r.teacher.ko || ""}(${r.teacher.en || ""})`);
+      if (byLesson.has(r.makeedu_lesson_id)) { already++; continue; }
+      const id = match({ subject: r.subject, class_name: r.class_name });
+      if (id) toLink.push({ id, makeedu_lesson_id: r.makeedu_lesson_id });
+      else unmatched.push(r.class_name);
     }
-    console.log(`teacher match: ${matched}/${rows.length}`);
-    if (unmatched.length) console.log("unmatched teachers (sample):", [...new Set(unmatched)].slice(0, 12));
-    console.log("dup makeedu_lesson_id:", rows.length - new Set(rows.map((r) => r.makeedu_lesson_id)).size);
-    console.log("sample:", JSON.stringify({ ...rows[0], teacher: undefined }));
+    console.log(`\n[additive] ijw 반 ${existing.length} | makeedu 반 ${rows.length}`);
+    console.log(`  이미 연결됨: ${already} | 이름 일치→makeedu_lesson_id 백필: ${toLink.length} | 미일치(미연결, 신규 생성 안 함): ${unmatched.length}`);
+    if (unmatched.length) console.log("  미일치 표본:", unmatched.slice(0, 10).join(", "));
 
     if (!APPLY) {
       console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
       return;
     }
-    let up = 0;
-    for (const r of rows) {
-      await sql`
-        insert into classes (tenant_id, makeedu_lesson_id, class_name, subject, teacher_id, is_active)
-        values (${tenantId}, ${r.makeedu_lesson_id}, ${r.class_name}, ${r.subject}, ${r.teacher_id}, ${r.is_active})
-        on conflict (tenant_id, makeedu_lesson_id) where makeedu_lesson_id is not null
-        do update set class_name = excluded.class_name, subject = excluded.subject,
-          teacher_id = excluded.teacher_id, is_active = excluded.is_active`;
-      up++;
+    let linked = 0;
+    for (const t of toLink) {
+      const res = await sql`update classes set makeedu_lesson_id = ${t.makeedu_lesson_id} where id = ${t.id} and makeedu_lesson_id is null`;
+      linked += res.count;
     }
-    await L.recordSync(sql, tenantId, "classes", up);
-    console.log("upserted classes:", up);
+    await L.recordSync(sql, tenantId, "classes", linked);
+    console.log(`\nbackfilled makeedu_lesson_id: ${linked} (신규 반 생성: 0 — ijw 정본)`);
   } finally {
     await sql.end();
   }
