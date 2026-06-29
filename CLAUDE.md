@@ -362,6 +362,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   모호성 가드 없어 동명동학년 오매칭 가능 → `tieredMatcher`로 일원화(모호=null→스킵). **+ 적용 중 발견**: students 신규 insert가 활성 동일 자연키
   (`ux_students_active_natural_key`, status<>'withdrawn') 충돌 → **사전 스킵(활성 자연키 집합 대조) + try/catch 안전망**(모호 미연결 학생 중복 생성 방지).
   `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브).
+- **✅ 예비원생(신입생) 상담 본문 동기화([sync-prospects.cjs](scripts/_makeedu/sync-prospects.cjs), 2026-06-29)**: import-prospects는 목록의 기본 정보만 가져와
+  상세 화면이 비어 보였음(사용자 제보). 상담 **본문**(상담경로·주소·셔틀·남매·혈액형·과목·동의 + 보호자명/성별/관계)은 **상세 페이지**에 있다(재원생 상담과 동일 함정).
+  상세 URL은 재원생과 같은 `counselList_detail.do?counselSeq=N`이고 **eywa enrollment_consultations.makeedu_id 가 곧 counselSeq**라 1:1 매칭(import-prospects가 r[0]=seq 저장).
+  → Playwright로 242건 상세 fetch → ① **구조화(노션자동화 템플릿 ~18건)** = key:value를 필드로(consultation_path/address/blood_type/subject/shuttle/동의…)
+  ② **자유텍스트 상담 노트(대다수)** = 본문 전체를 `parent_request`(학부모 요구사항 카드)에. 백필은 **텍스트 COALESCE(빈 값만)·boolean OR(켜기만)** = ijw 값 보존.
+  검증: 242 중 parent_request 228·구조화필드 18·보호자명 20 채움(천용훈=인터넷검색·대구역유림노르웨이숲·남매있음·혈액형B·과목 영어). 상세 페이지
+  ([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>))가 학부모 요구사항·학생 상세 정보 카드로 실제 렌더(write-only-orphan 아님).
+  ⚠️ 상담 본문 비ASCII clean은 U+200B/U+FEFF/U+00A0를 \u 명시 escape로(리터럴 invisible char를 소스에 넣지 말 것 — Edit 매칭이 깨진다).
 - ⚠️ **남은 작업**: Phase 2(도메인 on/off 토글·GitHub Actions Playwright cron 증분)는 미착수. 비-수업 차단문구 학원설정 외부화도 검토 대상.
 - **시간표 상단 명단 요약**(ijw 패리티, [timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)): 툴바 우측에 **재원·신입·전입·대기·퇴원
   + N슬롯**(색상 토큰). 그 주 시점(타임머신) 기준, `studentId`로 유일 집계(한 학생이 여러 반 → 상태 우선순위 재원>대기>퇴원). 신입·전입은 재원 학생만.
