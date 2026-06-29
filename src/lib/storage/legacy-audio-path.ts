@@ -68,3 +68,27 @@ export function classifyAudioPath(
   if (isLegacyFirebasePath(path, kind)) return "legacy";
   return "invalid";
 }
+
+// ── 이미지/파일 tenant 경로(스토리지 추상화 공용) — 오디오와 동일하게 server-only 없는 순수함수 ──
+
+/**
+ * 영수증 경로 `{tenantId}/{expenseId}/{파일명}` (정확히 2세그먼트). expenseId는 ASCII 식별자.
+ * (expense-actions의 동명 함수를 단일 소스화 — Phase B에서 그쪽이 이 함수로 통일.)
+ */
+export function isTenantReceiptPath(path: string, tenantId: string): boolean {
+  const prefix = `${tenantId}/`;
+  if (!path.startsWith(prefix)) return false;
+  const parts = path.slice(prefix.length).split("/");
+  if (parts.length !== 2) return false;
+  return (
+    /^[A-Za-z0-9._-]+$/.test(parts[0]) &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(parts[1])
+  );
+}
+
+/** 브랜딩(로고/직인) 경로 `{tenantId}/branding/{파일명}`. */
+export function isTenantBrandingPath(path: string, tenantId: string): boolean {
+  const prefix = `${tenantId}/branding/`;
+  if (!path.startsWith(prefix)) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(path.slice(prefix.length));
+}

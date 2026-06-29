@@ -3,6 +3,8 @@ import {
   classifyAudioPath,
   isLegacyFirebasePath,
   isTenantAudioPath,
+  isTenantBrandingPath,
+  isTenantReceiptPath,
 } from "./legacy-audio-path";
 
 const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
@@ -45,5 +47,26 @@ describe("classifyAudioPath", () => {
     // legacy지만 kind 불일치 → invalid
     expect(classifyAudioPath("registration-recordings/x.webm", "meeting", TENANT)).toBe("invalid");
     expect(classifyAudioPath("garbage", "meeting", TENANT)).toBe("invalid");
+  });
+});
+
+describe("isTenantReceiptPath — {tenant}/{expenseId}/{file} 2세그먼트", () => {
+  it("통과/거부", () => {
+    expect(isTenantReceiptPath(`${TENANT}/exp123/abc.png`, TENANT)).toBe(true);
+    expect(isTenantReceiptPath(`${TENANT}/exp123/scan.pdf`, TENANT)).toBe(true);
+    expect(isTenantReceiptPath(`${TENANT}/abc.png`, TENANT)).toBe(false); // 1세그먼트(오디오 꼴)
+    expect(isTenantReceiptPath(`${TENANT}/exp/sub/abc.png`, TENANT)).toBe(false); // 3세그먼트
+    expect(isTenantReceiptPath(`other/exp/abc.png`, TENANT)).toBe(false);
+    expect(isTenantReceiptPath(`${TENANT}/exp/noext`, TENANT)).toBe(false);
+  });
+});
+
+describe("isTenantBrandingPath — {tenant}/branding/{file}", () => {
+  it("통과/거부", () => {
+    expect(isTenantBrandingPath(`${TENANT}/branding/logo.png`, TENANT)).toBe(true);
+    expect(isTenantBrandingPath(`${TENANT}/branding/seal.svg`, TENANT)).toBe(true);
+    expect(isTenantBrandingPath(`${TENANT}/logo.png`, TENANT)).toBe(false); // branding 폴더 없음
+    expect(isTenantBrandingPath(`${TENANT}/branding/../x.png`, TENANT)).toBe(false);
+    expect(isTenantBrandingPath(`other/branding/logo.png`, TENANT)).toBe(false);
   });
 });
