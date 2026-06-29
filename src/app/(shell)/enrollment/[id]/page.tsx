@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer } from "lucide-react";
+import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
@@ -238,6 +238,11 @@ export default async function EnrollmentDetailPage({
         </div>
 
         <div className="space-y-4 lg:col-span-2">
+          {/* 우측 제목행 — 좌측 '상담 기록' 헤더와 같은 높이로 두어 카드 상단을 맞춘다(좌우 줄맞춤). */}
+          <header className="flex flex-wrap items-center gap-2">
+            <Sparkles className="text-gold size-4 shrink-0" />
+            <h2 className="text-foreground text-sm font-semibold">AI 분석</h2>
+          </header>
           {consult.audioReport && consult.aiAnalysis ? (
             <ConsultationReportEditor
               report={consult.audioReport}
