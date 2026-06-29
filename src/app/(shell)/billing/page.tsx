@@ -4,6 +4,7 @@ import { TextbooksFace } from "./_components/textbooks-face";
 import { ExpensesPanel } from "./_components/expenses-panel";
 import { CalculatorPanel } from "./_components/calculator-panel";
 import { FaceTabs, type Face } from "@/components/face-tabs";
+import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 
 type Sp = Record<string, string | undefined>;
 type BillingTab = "billing" | "textbooks" | "expenses" | "calculator";
@@ -47,6 +48,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-4 print:space-y-0">
+      {(tab === "billing" || tab === "textbooks") && (
+        <div className="print:hidden">
+          <MakeeduSyncBadge domain={tab === "billing" ? "invoices" : "catalog"} />
+        </div>
+      )}
       <div className="print:hidden">
         <FaceTabs faces={FACES} active={tab} ariaLabel="수납관리 면 전환" />
       </div>

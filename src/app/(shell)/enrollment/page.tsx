@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { UserPlus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ConsultationTabs } from "../consultations/_components/consultation-tabs";
 import {
@@ -100,6 +101,7 @@ export default async function EnrollmentPage({
 
   return (
     <div className="space-y-4">
+      <MakeeduSyncBadge domain="prospects" />
       <ConsultationTabs active="enrollment" />
       {/* 상단 헤더 — 통계 + 신규등록 (기존 AI 그래픽 배너 제거, 통계만 유지) */}
       <header className="flex flex-wrap items-center justify-between gap-3">

@@ -1,0 +1,176 @@
+/**
+ * scripts/_makeedu/sync-consultations.cjs — 재원생 상담을 **내용까지** 동기화 (Playwright).
+ *
+ * makeedu 상담은 목록에 제목만 있고 **상세 페이지(counselList_detail.do?counselSeq=N)에 본문**(상담내용·조치사항·
+ * 건의사항·비고)이 있다. 또 목록 'No'는 표시용이고 **stable PK는 행 히든 input `counselSeqTmp`**(=counselSeq).
+ * 따라서: 목록 스크랩(counselSeq+학생식별) → 학생 매칭 → 매칭분만 상세 fetch(내용) → student_consultations upsert
+ * (makeedu_id=counselSeq, summary=내용). 동기화 시각 기록. Phase 2 상담 동기화도 이 스크립트 재사용.
+ *
+ *   node --env-file=.env.local scripts/_makeedu/sync-consultations.cjs          # dry(매칭/표본만)
+ *   node --env-file=.env.local scripts/_makeedu/sync-consultations.cjs --apply  # 상세 fetch + upsert
+ */
+const postgres = require("postgres");
+const L = require("./lib.cjs");
+
+let chromium;
+try {
+  ({ chromium } = require("playwright"));
+} catch {
+  ({ chromium } = require("@playwright/test"));
+}
+
+const BASE = "https://school.makeedu.co.kr";
+const APPLY = process.argv.includes("--apply");
+const CONC = Number(process.env.MAKEEDU_CONC || 8);
+
+async function login(page) {
+  const id = process.env.MAKEEDU_ID, pw = process.env.MAKEEDU_PW;
+  if (!id || !pw) throw new Error("MAKEEDU_ID / MAKEEDU_PW 누락(.env.local)");
+  await page.goto(`${BASE}/login.do`, { waitUntil: "domcontentloaded" });
+  const pwIn = page.locator('input[type="password"]').first();
+  await pwIn.waitFor({ timeout: 15000 });
+  await page.locator('input[type="text"], input:not([type])').first().fill(id);
+  await pwIn.fill(pw);
+  await Promise.all([page.waitForLoadState("networkidle").catch(() => {}), pwIn.press("Enter")]);
+  await page.waitForTimeout(1200);
+  if (/\/login\.do/i.test(page.url())) throw new Error("로그인 실패");
+}
+
+// 목록 행 추출: counselSeq(히든 counselSeqTmp) + 이름/학교/학년/제목/등록자/상담일.
+function EXTRACT_LIST() {
+  const tables = Array.from(document.querySelectorAll("table"));
+  let best = null, br = 0;
+  for (const t of tables) { const r = t.querySelectorAll("tbody tr").length; if (r > br) { br = r; best = t; } }
+  if (!best) return [];
+  const H = Array.from(best.querySelectorAll("thead th, thead td")).map((h) => (h.textContent || "").replace(/\s+/g, " ").trim());
+  const ix = (s) => H.findIndex((h) => (h || "").includes(s));
+  const I = { name: ix("이름"), school: ix("학교"), grade: ix("학년"), title: ix("제목"), reg: ix("등록자"), cdate: ix("상담일") };
+  const out = [];
+  for (const tr of best.querySelectorAll("tbody tr")) {
+    const c = Array.from(tr.children);
+    const seqEl = tr.querySelector('input[name="counselSeqTmp"]');
+    const seq = seqEl ? seqEl.value : "";
+    const cell = (i) => (i >= 0 && c[i] ? (c[i].innerText || "").replace(/\s+/g, " ").trim() : "");
+    const name = cell(I.name);
+    if (!seq || !name) continue;
+    out.push({ seq, name, school: cell(I.school), grade: cell(I.grade), title: cell(I.title), reg: cell(I.reg), cdate: cell(I.cdate) });
+  }
+  return out;
+}
+
+// 상세 본문(내용 셀) 추출.
+function EXTRACT_DETAIL() {
+  for (const tr of document.querySelectorAll("table tr")) {
+    const c = Array.from(tr.children);
+    for (let i = 0; i + 1 < c.length; i++) {
+      if ((c[i].textContent || "").replace(/\s+/g, "").trim() === "내용") {
+        return (c[i + 1].innerText || "").replace(/ /g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]*\n+/g, "\n").trim();
+      }
+    }
+  }
+  return "";
+}
+
+(async () => {
+  const sql = postgres(process.env.DATABASE_URL, { prepare: false });
+  const tenantId = await L.resolveTenantId(sql);
+  // 학생/직원 매칭 맵
+  const studs = await sql`select id, name, grade, school from students where tenant_id = ${tenantId} and makeedu_id is not null`;
+  const m3 = new Map(), m2 = new Map(), m1 = new Map();
+  for (const s of studs) {
+    const n = L.normalizeName(s.name);
+    m3.set(`${n}|${s.grade || ""}|${s.school || ""}`, s.id);
+    m2.set(`${n}|${s.grade || ""}`, s.id);
+    m1.set(n, m1.has(n) ? null : s.id);
+  }
+  const users = await sql`select id, display_name, english_name from users where tenant_id = ${tenantId}`;
+  const uKo = new Map(), uEn = new Map();
+  for (const u of users) { if (u.display_name) uKo.set(u.display_name.trim(), u.id); if (u.english_name) uEn.set(u.english_name.trim().toLowerCase(), u.id); }
+
+  const browser = await chromium.launch({ headless: !process.env.HEADED });
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  try {
+    await login(page);
+    console.log("login ok");
+    await page.goto(`${BASE}/counsel/counselList.do`, { waitUntil: "networkidle" });
+    const ls = page.locator('select[name="listSize"]');
+    if (await ls.count()) {
+      const vals = await page.$$eval('select[name="listSize"] option', (os) => os.map((o) => o.value).filter((v) => /^\d+$/.test(v)).map(Number));
+      await ls.selectOption(String(Math.max(...vals))).catch(() => {});
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(700);
+    }
+    const all = [], seen = new Set();
+    for (let p = 1; p <= 30; p++) {
+      const rows = await page.evaluate(EXTRACT_LIST);
+      let added = 0;
+      for (const r of rows) { if (!seen.has(r.seq)) { seen.add(r.seq); all.push(r); added++; } }
+      const next = page.locator('.paging a, .pagination a, [class*="pag"] a, .page a').filter({ hasText: new RegExp(`^\\s*${p + 1}\\s*$`) });
+      if (added === 0 || (await next.count()) === 0) break;
+      await next.first().click().catch(() => {});
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(600);
+    }
+    console.log("list rows (counselSeq):", all.length);
+
+    // 학생 매칭
+    const matched = [];
+    for (const r of all) {
+      const n = L.normalizeName(r.name);
+      const sid = m3.get(`${n}|${r.grade || ""}|${r.school || ""}`) || m2.get(`${n}|${r.grade || ""}`) || m1.get(n) || null;
+      if (!sid) continue;
+      const rk = (r.reg || "").match(/^(.*?)\s*[(（]([^)）]+)[)）]?\s*$/);
+      const ko = rk ? rk[1].trim() : r.reg, en = rk ? rk[2].trim().toLowerCase() : null;
+      r.student_id = sid;
+      r.counselor_id = (ko && uKo.get(ko)) || (en && uEn.get(en)) || null;
+      matched.push(r);
+    }
+    console.log(`matched(active students): ${matched.length} / ${all.length}`);
+
+    if (!APPLY) {
+      console.log("[DRY] sample:", JSON.stringify({ ...matched[0], student_id: "…" }));
+      return;
+    }
+
+    // 상세 내용 fetch (동시 CONC)
+    let idx = 0, failed = 0;
+    async function worker() {
+      const pg = await ctx.newPage();
+      while (true) {
+        const my = idx++;
+        if (my >= matched.length) break;
+        const r = matched[my];
+        try {
+          await pg.goto(`${BASE}/counsel/counselList_detail.do?counselSeq=${r.seq}`, { waitUntil: "domcontentloaded", timeout: 20000 });
+          r.content = await pg.evaluate(EXTRACT_DETAIL);
+        } catch { failed++; r.content = ""; }
+        if (my % 400 === 0) console.log(`  detail ${my}/${matched.length}`);
+      }
+      await pg.close();
+    }
+    await Promise.all(Array.from({ length: CONC }, () => worker()));
+    console.log("detail fetched, failed:", failed);
+
+    // upsert (makeedu_id=counselSeq, summary=내용 || 제목)
+    let up = 0;
+    for (const r of matched) {
+      const summary = r.content && r.content.length > 10 ? r.content : r.title || "상담";
+      await sql`
+        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, summary, consulted_at)
+        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`})
+        on conflict (tenant_id, makeedu_id) where makeedu_id is not null
+        do update set student_id = excluded.student_id, counselor_id = excluded.counselor_id,
+          summary = excluded.summary, consulted_at = excluded.consulted_at, updated_at = now()`;
+      up++;
+    }
+    await L.recordSync(sql, tenantId, "consultations", up);
+    console.log("upserted consultations (with content):", up);
+  } finally {
+    await browser.close();
+    await sql.end();
+  }
+})().catch((e) => {
+  console.error("ERR", e.message);
+  process.exit(1);
+});

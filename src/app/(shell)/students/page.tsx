@@ -3,6 +3,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
+import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -110,6 +111,7 @@ export default async function StudentsPage({
 
   return (
     <div className="space-y-4">
+      <MakeeduSyncBadge domain="students" />
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Stat label="전체" value={all} unit="명" color="primary" icon={Users} />

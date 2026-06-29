@@ -251,6 +251,8 @@ export const classes = pgTable(
     pendingTeacherId: uuid("pending_teacher_id").references(() => users.id, { onDelete: "set null" }),
     pendingTeacherDate: date("pending_teacher_date"),
     pendingTeacherReason: text("pending_teacher_reason"),
+    // makeedu 동기화 외부키 — makeedu 수업 No(예 147). 부분 유니크는 손수 alpha SQL(0057a).
+    makeeduLessonId: text("makeedu_lesson_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -270,6 +272,9 @@ export const students = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     studentCode: text("student_code"),
+    // makeedu 동기화 외부키 — makeedu 원생고유번호(예 09327). ⚠️ student_code와 분리(ijw studentCode 충돌 방지).
+    // 부분 유니크 (tenant_id, makeedu_id) WHERE makeedu_id IS NOT NULL 는 손수 alpha SQL(0057a).
+    makeeduId: text("makeedu_id"),
     name: text("name").notNull(),
     englishName: text("english_name"),
     school: text("school"),
@@ -534,6 +539,8 @@ export const enrollmentConsultations = pgTable(
     // QR 공개접수 출처(0047a)
     fromPublicIntake: boolean("from_public_intake").notNull().default(false),
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),
+    // makeedu 동기화 외부키 — makeedu 예비원생 No(예 725). 부분 유니크는 손수 alpha SQL(0057a).
+    makeeduId: text("makeedu_id"),
     consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -675,6 +682,8 @@ export const studentConsultations = pgTable(
     aiSummary: text("ai_summary"),
     aiModelVersion: text("ai_model_version"),
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
+    // makeedu 동기화 외부키 — makeedu 상담 No(예 5046). 부분 유니크는 손수 alpha SQL(0057a).
+    makeeduId: text("makeedu_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -858,6 +867,8 @@ export const textbookCatalog = pgTable(
     publisher: text("publisher"),
     price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"),
     isActive: boolean("is_active").notNull().default(true),
+    // makeedu 동기화 외부키 — makeedu 단가표 No(예 170). 부분 유니크는 손수 alpha SQL(0057a).
+    makeeduId: text("makeedu_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

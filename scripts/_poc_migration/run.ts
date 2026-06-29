@@ -67,6 +67,15 @@ async function main() {
   const uidToUser = new Map<string, string>();
   let fallbackUser: string | null = null;
 
+  // 보존된 기존 users(이전 import의 ijw 스태프)를 담임 이름맵에 선로드. 재실행 시 staff insert가 email
+  // 유니크 충돌로 실패해도(users는 wipe 보존) 반 teacher_id·상담사가 전부 null이 되는 것을 막는다.
+  for (const u of await sql<{ id: string; display_name: string | null; english_name: string | null }[]>`
+    select id, display_name, english_name from users where tenant_id = ${tenantId}`) {
+    if (u.display_name) nameToTeacher.set(u.display_name, u.id);
+    if (u.english_name) nameToTeacher.set(u.english_name, u.id);
+    fallbackUser ??= u.id;
+  }
+
   // classrooms
   for (const r of new Set((C.classes ?? []).map((c) => String(c.room ?? "").trim()).filter(Boolean))) {
     const id = randomUUID();

@@ -329,6 +329,43 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### makeedu→eywa 동기화 = ijw 베이스 복원 + makeedu additive 오버레이 (진행중) + 시간표 명단 요약 + 창 복원 버그픽스 (2026-06-29)
+인재원은 실운영을 **makeedu**(school.makeedu.co.kr)에서 한다. eywa를 실데이터로 돌리기 위한 단방향 동기화. 설계·진행은
+[[project_makeedu-eywa-sync]] + 계획 [`expressive-weaving-glacier.md`]. 범위 7개(학생·예비/등록상담·재원상담·반/수업·수강·수납인보이스·교재단가표).
+- **⚠️⚠️ 방향(사용자 확정 2026-06-29, 이전 "makeedu에서 재구축" 반전)**: **베이스 = ijw-calander 실데이터**(eywa 2.0가 실제
+  대체하던 것 — 색상·스케줄 완비), **makeedu = 그 위 additive 동기화(ijw에 없는 것만 추가, 덮어쓰기 X)**. 이유: makeedu 입력이
+  대강(요일·시각 부정확), ijw가 정확. **특히 수업은 ijw**(반 색상 때문). **합성 성적·Edutrix lesson_reports 제외 = 실 ijw firebase 데이터만.**
+  복원 = `MIG_TARGET=demo npx tsx scripts/_poc_migration/run.ts`(코어; ⚠️run.ts에 **"기존 users 선로드"** 추가 = 재실행 시 staff
+  email 충돌로도 담임 링크 안 깨짐) + backfill-english-slots(색상/슬롯)·backfill-teacher-colors + import-catalog/tuition-catalog/
+  textbooks-expenses + fix-primary-teacher. 복원 검증: 학생564·반129(색상52·담임128)·스케줄628·수강1056·출결6021·수납1606·
+  상담1340·회의42·교재146·지출95, makeedu_id 전부 null. ⚠️ wipe는 auth 4계정+super_admins+tenant_settings 보존.
+- **외부키(`0057a`)**: `students.makeedu_id`·`classes.makeedu_lesson_id`·`enrollment_consultations.makeedu_id`·
+  `student_consultations.makeedu_id`·`textbook_catalog.makeedu_id`(nullable + 부분유니크 `(tenant_id,col) WHERE col IS NOT NULL`).
+  makeedu 고유No↔eywa 행 매칭키. invoices·enrollments는 자연키 재사용. ⚠️ `students.makeedu_id`는 ijw `student_code`와 분리.
+  **자체생성 레코드=NULL**이라 upsert가 안 건드림(구분) — eywa 자체 생성 액션은 makeedu_id를 안 씀.
+- **동기화 시각 배지(`0058a`)**: `makeedu_sync_state`(테넌트×도메인→synced_at·row_count·status, RLS) + 임포터 `recordSync`(lib.cjs) +
+  [MakeeduSyncBadge](src/components/makeedu-sync-badge.tsx)("↻ 동기화 N분 전") + [makeedu-sync.ts](src/features/integrations/server/makeedu-sync.ts)
+  쿼리 → 5화면 헤더(학생/수업/상담/등록상담/수납[탭별 invoices↔catalog]). 도메인별 cadence가 달라 화면별 표시.
+- **makeedu 데이터 확보 = Playwright**([scripts/_makeedu/](scripts/_makeedu)): `scrape.cjs`(`.env.local`의 MAKEEDU_ID/PW 로그인→
+  evaluate, listSize max+페이지순회 → `D:/tmp/makeedu/*.json`), `import-*.cjs`(dry/--apply), `sync-consultations.cjs`(상담 본문은
+  **목록 아닌 상세페이지** `counselList_detail.do?counselSeq=N` — stable PK=히든 `counselSeqTmp`, 표시 No 아님), `wipe-tenant-data.cjs`(auth 보존),
+  공유 `lib.cjs`(`isNonClass`=교재/사용료/행사/설명회 가짜 수업 차단). ⚠️ Chrome MCP는 대량추출 불가(결과 잘림·블롭 차단)라 Playwright 필수.
+- ⚠️ **남은 작업(additive 재작업)**: 현 `import-*.cjs`는 overwrite upsert라 **additive로 고쳐야** 함(ijw행과 자연키/makeedu_id
+  매칭 → 없으면 추가, 있으면 ijw값 보존). `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브). Phase 2(도메인 on/off
+  토글·GitHub Actions Playwright cron 증분)는 미착수. 비-수업 차단문구 학원설정 외부화도 검토 대상.
+- **시간표 상단 명단 요약**(ijw 패리티, [timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)): 툴바 우측에 **재원·신입·전입·대기·퇴원
+  + N슬롯**(색상 토큰). 그 주 시점(타임머신) 기준, `studentId`로 유일 집계(한 학생이 여러 반 → 상태 우선순위 재원>대기>퇴원). 신입·전입은 재원 학생만.
+- **🐛 창 복원 버그픽스**(별건, 같은 세션 — [[#65]]): 새로고침마다 플로팅 창 전멸 + localStorage 영속본 파괴. window-store rehydrate를
+  effect에서 호출하던 게 화근(다른 effect set이 먼저 빈 상태를 persist에 써서 클로버). **rehydrate를 모듈 로드 시점(클라)으로 이동**해 해결. 검증: 창 복원·테스트12.
+
+### 학원설정 3건 — 브랜드 컬러피커 + 수강없는 재원생 일괄 퇴원/삭제 + 데이터정리·중복학생 탭 통합 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
+사용자 UX 요청 3건. typecheck0/lint0(신규0)/test518 + Chrome MCP 라이브(PSS, localhost:3001) 검증.
+- **A. 브랜드 색상 = 네이티브 컬러피커**: profile 브랜드 색상이 hex 텍스트뿐이라 색 선택 불편 → 공용 [`ColorField`](<src/app/(shell)/owner/_components/fields.tsx>)(네이티브 `<input type=color>` 스와치 + hex 텍스트 동기, 반 색상 폼과 동일 패턴) 신설 → [profile-section.tsx](<src/app/(shell)/owner/_components/profile-section.tsx>)에서 brandColor에 사용. 스와치는 유효 hex일 때만 반영(3/6자리 정규식, 무효면 #000 폴백). ⚠️ 컬러피커는 네이티브 OK(드롭다운/셀렉트 규약의 native `<select>` 금지 대상 아님 — 색 선택은 라이브러리 없이는 대안 없음).
+- **B. "수강 없는 재원생" 전체/개별 선택 → 일괄 퇴원/삭제** ([admin/cleanup/_client.tsx](<src/app/(shell)/admin/cleanup/_client.tsx>) `OrphanStudentManager`): 읽기전용 링크목록이던 것에 체크박스+전체선택+액션바 추가. 신규 액션 [`bulkWithdrawStudents`/`bulkDeleteStudents`](src/features/admin/server/actions.ts)(**master 게이트**, ids는 100청크 `.in()` B3, getCurrentUser+systemRole 검증).
+  · **퇴원**=가역(status=withdrawn + withdrawn_at + 활성 enrollment 종료, withdrawal_metadata.reason="other"). · **삭제**=영구지만 **invoices FK가 onDelete:restrict**(schema.ts:784, 유일하게 restrict — 나머지 student FK는 cascade/set null)라 **청구 기록 있는 학생은 사전조회로 제외하고 건너뜀 보고**("N명은 청구 기록이 있어 건너뜀(퇴원 권장)"). 단일 `.delete().in()`은 한 행이라도 FK 위반이면 전체 실패하므로 pre-filter 필수.
+  · 선택상태는 **현재 렌더 항목으로 라이브 필터**(`live = selected ∩ itemIds`) — 액션 성공 후 목록이 줄면 사라진 id 자동 해제(setState-in-effect 회피 #25). 삭제는 인라인 확인 플로우(삭제 → "N명 영구 삭제?" → 삭제 확정/취소). 라이브 검증: 전체선택 86명 → 퇴원 1명(허은진) E2E(86→85·목록서 제거, 검증 후 복구) + 삭제 확인바 표시→취소.
+- **C. 데이터 정리 + 중복 학생 탭 통합**(사용자 "같이 있어야하지 않나?"): 중복 학생은 데이터 정리의 일종이라 owner FaceTabs에서 **`dup` 탭 제거 → `data` 면 하단에 DuplicatesFace를 DataFace와 함께 렌더**([owner/page.tsx](<src/app/(shell)/owner/page.tsx>)). `resolveTab`이 옛 `?tab=dup`→`data` 흡수(북마크 보존), [duplicates-face](<src/app/(shell)/owner/_components/duplicates-face.tsx>) pageHref·navigation.ts·admin/duplicates redirect도 `data`로. ⚠️ DuplicatesFace는 students 전건 fetch라 무겁지만 data 면 진입 시에만 실행(조건부). 관리 면 4→3(데이터정리·감사·연동).
+
 ### 신규 미디어 업로드 = 단일 스토리지 추상화 + ijw Firebase(GCS) 라우팅 (2026-06-29) — ✅ 4게이트 그린 + GCS/CORS 실검증
 사용자 비용 전략: **ijw가 쓰던 그 Firebase(버킷 `ijw-calander.firebasestorage.app`, 레거시 ~2GB가 이미 거기)를 그대로** 신규 미디어
 저장소로. 무료 5GB로 Supabase $25를 늦추고, 결제 구간 오면 Supabase로 스왑 → **백엔드는 `MEDIA_STORAGE_BACKEND` 한 줄로 교체**. 계획 [`expressive-weaving-glacier.md`]. [[project_storage-cost-strategy]].
@@ -1833,6 +1870,18 @@ node_modules를 지울 위험** + permission-denied. 또: 다른 세션이 내 �
   ref로 비교**해 매 성공 1회 발화.
 - **server-only 금지 (B)**: `record-channel.ts`·`form-snapshot.ts`는 클라 컴포넌트/훅이 import → `server-only` 넣으면
   빌드 폭발([[#61]] 규칙). 둘 다 client 전용 순수 모듈로 유지.
+
+### 65. 워크스페이스 창 rehydrate는 모듈 로드 시점 — effect에서 부르면 영속본이 파괴됨(새로고침 시 창 전멸)
+사용자 제보: 플로팅 창을 열고 **새로고침하면 전부 사라지고 배경탭(헤더)만 남음**. localStorage의 `eywa-workspace` `windows`가 `{}`로
+비워져 영속본까지 파괴됐다. 원인: [window-store.ts](src/components/workspace/window-store.ts)는 `persist({skipHydration:true})`라
+수동 rehydrate가 필요한데, 이를 [workspace-canvas.tsx](src/components/workspace/workspace-canvas.tsx) **effect에서** 호출했다.
+그런데 같은 컴포넌트의 **다른 effect**(`setBackground`/`setStage`)가 rehydrate effect보다 **먼저 `set`을 호출** → persist
+미들웨어가 **빈 초기상태(`windows={}`)를 localStorage에 써서 영속 창을 파괴** → 그 뒤 rehydrate가 빈 걸 읽음(복원할 게 없음).
+**해결**: rehydrate를 **모듈 로드 시점(클라이언트, 어떤 effect의 set보다 먼저)**으로 이동 — `if (typeof window !== "undefined")
+void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHydrated()`면 즉시 `adoptOwner`, 아니면
+`onFinishHydration(() => adoptOwner)`. SSR mismatch 없음(서버=window 없음→미실행, 캔버스도 isDesktop=false로 SSR null).
+⚠️ **rehydrate를 다시 effect 안으로 옮기지 말 것**(재발). autoClose(새 X 폼) 창은 partialize에서 의도적 영속 제외(부활 방지).
+검증: 창 심고 새로고침 → iframe 복원·localStorage 보존, window-store 테스트 12 passed. [[reference_window-store-rehydrate-module-level]].
 
 ---
 

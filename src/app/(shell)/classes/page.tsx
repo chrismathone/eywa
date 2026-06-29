@@ -3,6 +3,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
+import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getClassesPage,
@@ -95,6 +96,7 @@ export default async function ClassesPage({
 
   return (
     <div className="space-y-4">
+      <MakeeduSyncBadge domain="classes" />
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Stat label="전체 반" value={stats.total} unit="개" icon={BookOpen} color="primary" />

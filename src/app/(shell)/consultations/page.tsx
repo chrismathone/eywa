@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -137,6 +138,7 @@ export default async function ConsultationsPage({
 
   return (
     <div className="space-y-4">
+      <MakeeduSyncBadge domain="consultations" />
       <ConsultationTabs active="student" />
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
