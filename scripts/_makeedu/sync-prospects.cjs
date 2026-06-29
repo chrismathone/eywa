@@ -72,19 +72,15 @@ function parseContent(content) {
 
 const parenTail = (s, re) => { const m = (s || "").match(re); return m ? m[1] : null; };
 
-// 구조화(노션자동화 템플릿)를 구분하는 키들 — 하나라도 있으면 구조화 콘텐츠로 본다.
-const STRUCT_KEYS = ["알게된경로", "자택주소", "혈액형", "상담과목(주)", "상담과목", "남매", "희망진로", "셔틀버스신청"];
-
 // 파싱된 META+본문 → enrollment_consultations 필드(빈 값 null).
-// ⚠️ 구조화 콘텐츠(~소수)는 key:value를 필드로, **자유텍스트 상담 노트(대다수, 실제 상담 기록)는 본문 전체를
-//    parent_request(학부모 요구사항 카드)에** 담아 화면에 보이게 한다. 둘 다 makeedu 상담 '내용'을 노출.
+// ⚠️ makeedu 내용은 텍스트 블록 → 본문 전체를 parent_request(상담 내용/학부모 요구사항 카드)에 그대로 담고,
+//    인식 가능한 구조화 항목(경로·주소·혈액형·과목·셔틀·동의)은 추가로 전용 필드(학생 상세 정보)에도 파싱한다.
 function toFields(meta, content) {
   const kv = parseContent(content);
   const cleaned = (content || "").replace(/[\u200B\uFEFF\u00A0]/g, "").trim();
-  const structured = STRUCT_KEYS.some((k) => kv[k]);
   const subjRaw = kv["상담과목(주)"] || kv["상담과목"] || null;
-  // parent_request: 구조화면 '상담 기록 요약'(보통 비어 null), 자유텍스트면 상담 노트 본문 전체.
-  const parentRequest = structured ? kv["상담기록요약"] || null : cleaned.length > 5 ? cleaned : null;
+  // parent_request = makeedu 상담 내용 본문 전체(텍스트). 화면 상담 내용/학부모 요구사항 카드에 그대로 노출.
+  const parentRequest = cleaned.length > 5 ? cleaned : null;
   return {
     parentName: meta["보호자명"] || null,
     gender: L.gender(parenTail(meta["원생명"], /[(（]\s*([남여])\s*[)）]/)),
