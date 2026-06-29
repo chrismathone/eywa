@@ -7,7 +7,7 @@ import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/ti
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { isGoogleSheetsExportEnabled } from "@/features/integrations/server/queries";
+import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { RichGridView } from "./_components/rich-grid-view";
@@ -52,14 +52,19 @@ export default async function TimetablePage({
   // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = user.systemRole === "teacher" ? user.id : undefined;
   // '시트' 버튼 = master + 구글 시트 내보내기 연동 ON일 때만(비-master는 조회도 생략).
-  const [allSlots, settings, sheetsEnabled, teacherColors] = await Promise.all([
+  // '시트 열기'는 대상 시트(spreadsheetId)가 설정돼 있으면 노출 → 상태(enabled+spreadsheetId)를 함께 받는다.
+  const [allSlots, settings, sheetsStatus, teacherColors] = await Promise.all([
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
-    user.systemRole === "master" ? isGoogleSheetsExportEnabled() : Promise.resolve(false),
+    user.systemRole === "master" ? getGoogleSheetsStatus() : Promise.resolve(null),
     // 강사색 맵은 통합뷰에서만 필요(셀·담임색). 기본뷰는 생략.
     view === "integrated" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
   ]);
-  const canSync = user.systemRole === "master" && sheetsEnabled;
+  const canSync = user.systemRole === "master" && sheetsStatus?.enabled === true;
+  // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(master 한정, 위 조회가 master만 수행).
+  const sheetUrl = sheetsStatus?.spreadsheetId
+    ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
+    : null;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -178,7 +183,7 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <TimetableToolbarActions subject={subject} canSync={canSync} />
+        <TimetableToolbarActions subject={subject} canSync={canSync} sheetUrl={sheetUrl} />
       </div>
 
       {slots.length === 0 ? (
