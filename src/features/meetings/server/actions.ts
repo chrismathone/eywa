@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { submitTranscript } from "@/lib/ai/assemblyai";
+import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
@@ -343,11 +344,12 @@ export async function startMeetingFromAudio(
       .eq("id", meeting.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const ko = localizeTranscriptionError(msg);
     await admin
       .from("meeting_minutes")
-      .update({ processing_status: "failed", processing_error: `AssemblyAI 제출 실패: ${msg}` })
+      .update({ processing_status: "failed", processing_error: ko })
       .eq("id", meeting.id);
-    return { error: msg };
+    return { error: ko };
   }
 
   revalidatePath("/meetings");

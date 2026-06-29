@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
+import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import {
   analyzeMeeting,
   formatMeetingTranscript,
@@ -164,7 +165,7 @@ async function handleMeeting(
     const msg = e instanceof Error ? e.message : String(e);
     await admin
       .from("meeting_minutes")
-      .update({ processing_status: "failed", processing_error: `전사 fetch 실패: ${msg}` })
+      .update({ processing_status: "failed", processing_error: localizeTranscriptionError(msg) })
       .eq("id", meeting.id);
     return NextResponse.json({ ok: true });
   }
@@ -174,7 +175,7 @@ async function handleMeeting(
       .from("meeting_minutes")
       .update({
         processing_status: "failed",
-        processing_error: transcript.error ?? "전사 결과가 비어있습니다",
+        processing_error: localizeTranscriptionError(transcript.error ?? "전사 결과가 비어있습니다"),
       })
       .eq("id", meeting.id);
     return NextResponse.json({ ok: true });
@@ -284,7 +285,7 @@ async function handleConsultation(
     const msg = e instanceof Error ? e.message : String(e);
     await admin
       .from("enrollment_consultations")
-      .update({ processing_status: "failed", processing_error: `전사 fetch 실패: ${msg}` })
+      .update({ processing_status: "failed", processing_error: localizeTranscriptionError(msg) })
       .eq("id", consult.id);
     return NextResponse.json({ ok: true });
   }
@@ -294,7 +295,7 @@ async function handleConsultation(
       .from("enrollment_consultations")
       .update({
         processing_status: "failed",
-        processing_error: transcript.error ?? "전사 결과가 비어있습니다",
+        processing_error: localizeTranscriptionError(transcript.error ?? "전사 결과가 비어있습니다"),
       })
       .eq("id", consult.id);
     return NextResponse.json({ ok: true });
@@ -552,7 +553,7 @@ async function handleStudentConsultation(
     const msg = e instanceof Error ? e.message : String(e);
     await admin
       .from("student_consultations")
-      .update({ processing_status: "failed", processing_error: `전사 fetch 실패: ${msg}` })
+      .update({ processing_status: "failed", processing_error: localizeTranscriptionError(msg) })
       .eq("id", sc.id);
     return NextResponse.json({ ok: true });
   }
@@ -562,7 +563,7 @@ async function handleStudentConsultation(
       .from("student_consultations")
       .update({
         processing_status: "failed",
-        processing_error: transcript.error ?? "전사 결과가 비어있습니다",
+        processing_error: localizeTranscriptionError(transcript.error ?? "전사 결과가 비어있습니다"),
       })
       .eq("id", sc.id);
     return NextResponse.json({ ok: true });

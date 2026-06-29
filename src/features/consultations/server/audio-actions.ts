@@ -15,6 +15,7 @@ import {
   resolveAudioReadUrl,
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
+import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { analyzeStudentConsultation } from "./ai";
 
 async function requireConsultationWrite() {
@@ -97,11 +98,12 @@ export async function startStudentConsultationFromAudio(
       .eq("id", row.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const ko = localizeTranscriptionError(msg);
     await admin
       .from("student_consultations")
-      .update({ processing_status: "failed", processing_error: `전사 요청 실패: ${msg}` })
+      .update({ processing_status: "failed", processing_error: ko })
       .eq("id", row.id);
-    return { error: `전사 요청 실패: ${msg}` };
+    return { error: ko };
   }
 
   revalidatePath("/consultations");

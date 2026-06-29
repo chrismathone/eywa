@@ -17,6 +17,7 @@ import {
   resolveAudioReadUrl,
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
+import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -576,11 +577,12 @@ export async function startConsultationFromAudio(
       .eq("id", consult.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const ko = localizeTranscriptionError(msg);
     await admin
       .from("enrollment_consultations")
-      .update({ processing_status: "failed", processing_error: `AssemblyAI 제출 실패: ${msg}` })
+      .update({ processing_status: "failed", processing_error: ko })
       .eq("id", consult.id);
-    return { error: msg };
+    return { error: ko };
   }
 
   revalidatePath("/enrollment");
