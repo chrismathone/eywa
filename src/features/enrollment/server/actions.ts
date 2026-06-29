@@ -127,12 +127,25 @@ export async function createEnrollmentConsultation(
 
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  const supabase = await createClient();
 
   const learningHistory: Record<string, unknown> = {};
   if (parsed.data.prevAcademy) learningHistory.prevAcademy = parsed.data.prevAcademy;
   if (parsed.data.lastScore) learningHistory.lastScore = parsed.data.lastScore;
 
+  // 녹음 동반 생성(통합 폼): 구조화 필드 + 음성 첨부 + 전사·13섹션 AI 분석을 한 번에.
+  // 웹훅(handleConsultation)의 buildFormPatch가 **빈 필드만** 보강하므로 수기 입력값은 보존된다.
+  const audioPath = String(formData.get("audioPath") ?? "").trim();
+  if (audioPath) {
+    return createConsultationWithAudio(
+      user,
+      parsed.data,
+      learningHistory,
+      audioPath,
+      Number(formData.get("audioSizeBytes") ?? 0),
+    );
+  }
+
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("enrollment_consultations")
     .insert({
@@ -149,6 +162,74 @@ export async function createEnrollmentConsultation(
 
   revalidatePath("/enrollment");
   redirect(`/enrollment/${data.id}`);
+}
+
+/**
+ * 녹음 동반 등록상담 생성 — 구조화 필드(buildConsultationRow)로 행을 만들고 음성을 첨부한 뒤
+ * AssemblyAI 전사를 시작한다(startConsultationFromAudio와 동일 파이프라인, 단 풀 폼 필드 포함).
+ * 웹훅이 전사 완료 후 13섹션 분석 + buildFormPatch(빈 필드만 보강)를 수행 → 수기 입력 보존.
+ */
+async function createConsultationWithAudio(
+  user: { id: string; tenantId: string },
+  data: FullForm,
+  learningHistory: Record<string, unknown>,
+  audioPath: string,
+  audioSizeBytes: number,
+): Promise<CreateConsultationState> {
+  const admin = createAdminClient();
+  if (!isTenantAudioPath(audioPath, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
+
+  let audioUrl: string;
+  let verifiedSize = audioSizeBytes;
+  try {
+    const meta = await verifyUploadedObject("registration", audioPath);
+    if (meta.size > 0) verifiedSize = meta.size;
+    audioUrl = await resolveAudioReadUrl(audioPath, "registration", user.tenantId);
+  } catch (e) {
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
+  }
+
+  const { data: consult, error: insertErr } = await admin
+    .from("enrollment_consultations")
+    .insert({
+      tenant_id: user.tenantId,
+      ...buildConsultationRow(data),
+      learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
+      consultant_id: user.id,
+      outcome: "consulted",
+      audio_path: audioPath,
+      audio_size_bytes: verifiedSize,
+      processing_status: "uploaded",
+    })
+    .select("id")
+    .single();
+  if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
+
+  const webhookUrl = getAssemblyaiWebhookUrl();
+  try {
+    const result = await submitTranscript({
+      audioUrl,
+      webhookUrl,
+      webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
+        ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
+        : undefined,
+    });
+    await admin
+      .from("enrollment_consultations")
+      .update({ assemblyai_transcript_id: result.id, processing_status: "transcribing" })
+      .eq("id", consult.id);
+  } catch (e) {
+    const ko = localizeTranscriptionError(e instanceof Error ? e.message : String(e));
+    await admin
+      .from("enrollment_consultations")
+      .update({ processing_status: "failed", processing_error: ko })
+      .eq("id", consult.id);
+    return { error: ko };
+  }
+
+  revalidatePath("/enrollment");
+  redirect(`/enrollment/${consult.id}`);
 }
 
 export type UpdateConsultationState = { error?: string; ok?: boolean } | undefined;

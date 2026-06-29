@@ -6,10 +6,12 @@ import { useFormStatus } from "react-dom";
 import { AlertCircle, ArrowRight, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
+import { AudioRecorderField } from "./audio-recorder-field";
+import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   createEnrollmentConsultation,
   updateEnrollmentConsultation,
-  type CreateConsultationState,
   type UpdateConsultationState,
 } from "@/features/enrollment/server/actions";
 import {
@@ -87,19 +89,24 @@ export function ConsultationFullForm({
   const v = initial ?? {};
 
   const router = useRouter();
-  const action = mode === "create" ? createEnrollmentConsultation : updateEnrollmentConsultation;
-  const [state, formAction] = useActionState<
-    CreateConsultationState | UpdateConsultationState,
-    FormData
-  >(action, undefined);
+  const isCreate = mode === "create";
+  // 수정 = 서버액션 useActionState. 생성 = 클라 오케스트레이션(녹음 있으면 업로드 후 createEnrollmentConsultation).
+  const [editState, editFormAction] = useActionState<UpdateConsultationState, FormData>(
+    updateEnrollmentConsultation,
+    undefined,
+  );
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const busy = phase !== "idle";
 
   // 수정 성공 시 상세로 복귀(생성은 서버 redirect가 처리).
   useEffect(() => {
-    if (mode === "edit" && (state as UpdateConsultationState)?.ok && v.id) {
+    if (!isCreate && editState?.ok && v.id) {
       router.push(`/enrollment/${v.id}`);
       router.refresh();
     }
-  }, [state, mode, v.id, router]);
+  }, [editState, isCreate, v.id, router]);
 
   // 과목 점수 탭 — 클라 상태로 보유, 제출 시 hidden input(JSON)으로 직렬화.
   const [details, setDetails] = useState<SubjectDetails>(() => v.subjectDetails ?? {});
@@ -108,8 +115,62 @@ export function ConsultationFullForm({
     setDetails((d) => ({ ...d, [subj]: { ...(d[subj] ?? {}), [key]: val } }));
   const englishType = details.english?.testType ?? "ai";
 
+  // 생성 제출: 녹음/업로드 음성이 있으면 먼저 업로드(signed PUT) → audioPath 동봉 → createEnrollmentConsultation.
+  // 음성이 있으면 서버가 전사·13섹션 AI까지 자동 실행(입력값은 웹훅 buildFormPatch가 보존). 성공 시 서버 redirect.
+  async function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setCreateError(null);
+    const fd = new FormData(e.currentTarget);
+    fd.set("subjectDetails", JSON.stringify(details));
+    try {
+      if (audioFile) {
+        setPhase("uploading");
+        const ext = audioFile.name.split(".").pop()?.toLowerCase() || "webm";
+        const ct = audioFile.type.startsWith("audio/") ? audioFile.type : `audio/${ext}`;
+        const fdT = new FormData();
+        fdT.set("kind", "registration");
+        fdT.set("ext", ext);
+        fdT.set("contentType", ct);
+        fdT.set("size", String(audioFile.size));
+        const tk = await issueAudioUploadTicket(undefined, fdT);
+        if (tk?.error || !tk?.ticket) {
+          setCreateError(tk?.error ?? "업로드 준비 실패");
+          setPhase("idle");
+          return;
+        }
+        try {
+          await uploadToTicket(tk.ticket, audioFile);
+        } catch (err) {
+          setCreateError(err instanceof Error ? err.message : "업로드 실패");
+          setPhase("idle");
+          return;
+        }
+        fd.set("audioPath", tk.ticket.path);
+        fd.set("audioSizeBytes", String(audioFile.size));
+      }
+      setPhase("submitting");
+      const result = await createEnrollmentConsultation(undefined, fd);
+      // 성공 시 서버가 상세로 redirect(여기 도달 안 함). 에러만 처리.
+      if (result?.error) {
+        setCreateError(result.error);
+        setPhase("idle");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/NEXT_REDIRECT/.test(msg)) {
+        setCreateError(msg);
+        setPhase("idle");
+      }
+    }
+  }
+
+  const errorMsg = isCreate ? createError : editState?.error;
+
   return (
-    <form action={formAction} className="space-y-5">
+    <form
+      {...(isCreate ? { onSubmit: handleCreateSubmit } : { action: editFormAction })}
+      className="space-y-5"
+    >
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
 
@@ -241,6 +302,15 @@ export function ConsultationFullForm({
         />
       </Section>
 
+      {isCreate ? (
+        <Section title="상담 녹음 (선택)">
+          <p className="text-text-dim text-xs">
+            입력하면서 바로 녹음하거나 음성 파일을 올리면, 저장 시 자동으로 전사·13섹션 AI 분석을 실행합니다. 입력하신 내용은 그대로 보존됩니다.
+          </p>
+          <AudioRecorderField file={audioFile} onChange={setAudioFile} disabled={busy} />
+        </Section>
+      ) : null}
+
       {/* 과목별 점수 탭 */}
       <Section title="과목별 점수">
         <div className="border-border mb-3 flex flex-wrap gap-1 border-b">
@@ -349,15 +419,22 @@ export function ConsultationFullForm({
         </div>
       </Section>
 
-      {state?.error ? (
+      {errorMsg ? (
         <p className="text-danger bg-danger/5 border-danger/20 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <AlertCircle className="size-4" />
-          {state.error}
+          {errorMsg}
         </p>
       ) : null}
 
       <div className="flex justify-end">
-        <SubmitBtn mode={mode} />
+        {isCreate ? (
+          <Button type="submit" disabled={busy}>
+            {phase === "uploading" ? "음성 업로드 중…" : phase === "submitting" ? "저장 중…" : "저장하고 상세로"}
+            <ArrowRight className="size-4" />
+          </Button>
+        ) : (
+          <SubmitBtn mode="edit" />
+        )}
       </div>
     </form>
   );

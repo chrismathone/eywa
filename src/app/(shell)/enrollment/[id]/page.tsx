@@ -197,10 +197,15 @@ export default async function EnrollmentDetailPage({
               </span>
             ) : null}
           </header>
-          <Card emoji="🙋" title="학부모 요구사항">
-            <p className="text-foreground text-sm leading-relaxed">
-              {consult.parentRequest ?? "기재된 요구사항이 없습니다."}
-            </p>
+          <Card emoji="📝" title="상담 내용">
+            {consult.parentRequest ? (
+              // 줄바꿈 보존(whitespace-pre-wrap) + 길면 스크롤(max-h + overflow). 전역 스크롤바 하네스 적용.
+              <p className="text-foreground max-h-72 overflow-y-auto text-sm leading-relaxed break-words whitespace-pre-wrap">
+                {consult.parentRequest}
+              </p>
+            ) : (
+              <p className="text-text-faint text-sm">기재된 상담 내용이 없습니다.</p>
+            )}
           </Card>
 
           <Card emoji="📚" title="학습 이력">
