@@ -329,6 +329,20 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 신규 미디어 업로드 = 단일 스토리지 추상화 + ijw Firebase(GCS) 라우팅 (2026-06-29) — ✅ 4게이트 그린 + GCS/CORS 실검증
+사용자 비용 전략: **ijw가 쓰던 그 Firebase(버킷 `ijw-calander.firebasestorage.app`, 레거시 ~2GB가 이미 거기)를 그대로** 신규 미디어
+저장소로. 무료 5GB로 Supabase $25를 늦추고, 결제 구간 오면 Supabase로 스왑 → **백엔드는 `MEDIA_STORAGE_BACKEND` 한 줄로 교체**. 계획 [`expressive-weaving-glacier.md`]. [[project_storage-cost-strategy]].
+- **단일 추상화** [`src/lib/storage/`](src/lib/storage/media-storage.ts): `types.ts`(클라/서버 공용 `UploadTicket`)·`backend.ts`(`getMediaBackend`, 순수)·`gcs-client.ts`(GCS 클라 추출)·
+  `media-storage.ts`(본체: `createUploadTicket`/`verifyUploadedObject`/`resolveAudioReadUrl`/`resolveTenantReadUrl(s)`/`resolveBrandingSrc`/`removeObject`, **kind 메타테이블**로 오디오/영수증/브랜딩 분리)·
+  `upload-to-ticket.ts`(클라 XHR PUT, 진행률)·`legacy-audio.ts`→얇은 wrapper(호출부 무변경). ⚠️ **업로드 패턴 전환**: 브라우저 직접 Supabase upload → **서버 signed PUT URL 발급 → 브라우저 PUT**(GCS는 클라 RLS 불가).
+- **권한·검증 하드닝(리뷰 반영)**: 티켓 발급 액션마다 ① **kind별 권한 게이트**(오디오=메뉴 write / 영수증=expense 테넌트 실존 / 브랜딩=master) ② **경로 서버 빌드**(클라 입력 불신)
+  ③ size·contentType max. + **업로드 후 `verifyUploadedObject`(getMetadata: exists·size·CT)** 통과해야 DB 등록, 실패 시 **서버 `removeObject` cleanup**(GCS는 클라 삭제 불가). ⚠️ sign contentType ≠ PUT Content-Type = **403**(ticket.headers로 강제).
+- **Phase A(오디오 3흐름)**: `issueAudioUploadTicket`([features/media/server/upload-actions.ts](src/features/media/server/upload-actions.ts)) → 3폼(회의·학생상담·등록상담 녹음) → 3 start 액션(`verifyUploadedObject`+`resolveAudioReadUrl`로 AssemblyAI 제출) → 회의 삭제 `removeObject`.
+- **Phase B(이미지)**: 영수증([billing/server/expense-actions.ts](src/features/billing/server/expense-actions.ts)) 업/검증/cleanup/읽기(`resolveTenantReadUrls`)/삭제 GCS 전환 + **로고/직인 업로드 신규**(`issueBrandingUploadTicket` master, [profile-section.tsx](<src/app/(shell)/owner/_components/profile-section.tsx>) `BrandingField`, 인쇄 3곳 `resolveBrandingSrc`로 path→signed URL, http 하위호환).
+- **CORS**: [scripts/setup-gcs-cors.cjs](scripts/setup-gcs-cors.cjs)가 SA로 `setCorsConfiguration` — ⚠️ **ijw 기존 규칙 보존 머지**(setCors는 전체 교체라). exact origin(`localhost:3001`·`eywa-alpha.vercel.app`). `*.vercel.app`(부분 와일드카드) 무효 → preview는 origin 추가 또는 `*` opt-in.
+- 검증: typecheck0/lint0/**test516**(backend env분기·receipt/branding validator)/build✓ + **GCS 실라운드트립**(오디오 audio/webm·이미지 image/png: PUT200·메타·READ200·**wrong-CT 403**·delete) + **CORS preflight**(localhost·eywa-alpha 허용/evil 차단/ijw 보존) + /meetings/new 200.
+- ⚠️ **ops 전제**: ① GCS 업로드 쓰면 `FIREBASE_SERVICE_ACCOUNT_KEY` 선택→**필수**(프로덕션 Vercel 주입). ② 새 프로덕션 도메인/preview는 CORS origin 추가. ③ `MEDIA_STORAGE_BACKEND`는 **전역 플래그**(객체별 아님) — supabase 스왑 전 GCS tenant 객체 일괄 이전 + 프로덕션 Supabase 0 확인. ④ branding Supabase 버킷 RLS는 미작성(GCS 기본이라 불요, 스왑 시 추가). ⑤ 실 마이크/파일 업로드 UI E2E는 입력 한계로 GCS 메커니즘+CORS+렌더로 대체.
+
 ### 녹음 = 네이티브 팝업 창 → 내부 플로팅 창 + 녹음 중 창 잠금 (2026-06-26) — ✅ 4게이트 그린
 사용자 제보: 회의록 등에서 "바로 녹음"을 누르면 **별도 브라우저 창**(`window.open` about:blank)이 떠 앱처럼 안 보였다. eywa는 이미 자체
 플로팅 창 시스템이 있고 생성 폼(`meetings/new`·`enrollment/new`·`consultations/new`)도 **이미 플로팅 창**이라 녹음 전용 네이티브 팝업은 불필요·이질적.
