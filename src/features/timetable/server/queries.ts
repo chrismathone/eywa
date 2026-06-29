@@ -51,16 +51,19 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
   const supabase = await createClient();
   const weekEnd = weekEndOf(referenceDate);
   // 그 주 시점에 유효한 스케줄만(valid_to < 기준일 = 만료 제외). valid_to is null = 무기한 유효.
+  // 폐지(is_active=false=종료)된 반은 제외 — `!inner` 조인 + class.is_active 필터로 부모(스케줄) 행을 거른다
+  // (반 폐지 버튼이 약속한 "시간표에서 종료 처리"). 미적용 시 폐지 반이 계속 시간표에 남았었다.
   const { data } = await supabase
     .from("class_schedules")
     .select(
       `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
-       class:class_id (
-         id, class_name, subject, bg_color, text_color,
+       class:class_id!inner (
+         id, class_name, subject, bg_color, text_color, is_active,
          teacher:teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
     )
+    .eq("class.is_active", true)
     .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
     .order("start_time");
 
@@ -390,17 +393,19 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const today = now.toISOString().slice(0, 10);
 
   // 오늘 요일 스케줄만 — fetchSlots(전 요일 fetch 후 JS 필터)를 SQL 필터로 좁힘(데이터 ~1/7).
+  // 폐지(is_active=false)된 반은 제외(시간표·대시보드 일관) — `!inner` + class.is_active 필터.
   const { data } = await supabase
     .from("class_schedules")
     .select(
       `id, day_of_week, start_time, end_time, class_id,
-       class:class_id (
-         class_name, subject,
+       class:class_id!inner (
+         class_name, subject, is_active,
          teacher:teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
     )
     .eq("day_of_week", todayKey)
+    .eq("class.is_active", true)
     .or(`valid_to.is.null,valid_to.gte.${today}`)
     .order("start_time");
   if (!data || data.length === 0) return [];

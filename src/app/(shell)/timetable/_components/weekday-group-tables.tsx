@@ -208,12 +208,12 @@ function GroupTable({
       <thead>
         {/* 그룹타이틀 밴드 */}
         <tr>
+          {/* 좌상단 코너 = 교시(세로축)와 요일·강사(가로축)의 교차점 → 어느 축 라벨도 아니므로 비워둔다. */}
           <th
             rowSpan={3}
-            className={`bg-bg-soft border-line ${periodHeadSticky} w-[80px] border-b border-r p-2 text-left align-bottom`}
-          >
-            <span className="micro">교시</span>
-          </th>
+            aria-hidden
+            className={`bg-bg-soft border-line ${periodHeadSticky} w-[80px] border-b border-r p-2`}
+          />
           {groups.map((g) => (
             <th
               key={g.title}
