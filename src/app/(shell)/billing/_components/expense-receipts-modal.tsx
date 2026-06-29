@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { ExternalLink, FileText, Loader2, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { createClient } from "@/lib/supabase/client";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   addExpenseReceipt,
+  issueReceiptUploadTicket,
   removeExpenseReceipt,
   setExpenseReceiptType,
   signExpenseReceipt,
@@ -92,24 +93,25 @@ export function ExpenseReceiptsModal({
       uploadingRef.current = true;
       setUploading(true);
       try {
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const tenantId = (user?.app_metadata as { tenant_id?: string } | undefined)?.tenant_id;
-        if (!tenantId) {
-          setError("로그인이 만료되었습니다");
-          return;
-        }
+        // 1) 업로드 티켓 발급(서버가 권한·소유·형식·크기 검증, 경로 빌드) → 2) PUT → 3) 등록.
         const ext = file.name.includes(".")
           ? file.name.split(".").pop()!.toLowerCase()
           : file.type.split("/")[1] || "bin";
-        const path = `${tenantId}/${expense.id}/${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("expense-receipts")
-          .upload(path, file, { contentType: file.type || undefined, upsert: false });
-        if (upErr) {
-          setError(`업로드 실패: ${upErr.message}`);
+        const fdT = new FormData();
+        fdT.set("expenseId", expense.id);
+        fdT.set("ext", ext);
+        fdT.set("contentType", file.type || "application/octet-stream");
+        fdT.set("size", String(file.size));
+        const tk = await issueReceiptUploadTicket(undefined, fdT);
+        if (tk?.error || !tk?.ticket) {
+          setError(tk?.error ?? "업로드 준비 실패");
+          return;
+        }
+        const path = tk.ticket.path;
+        try {
+          await uploadToTicket(tk.ticket, file);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "업로드 실패");
           return;
         }
         const fd = new FormData();
@@ -118,8 +120,7 @@ export function ExpenseReceiptsModal({
         fd.append("name", file.name);
         const res = await addExpenseReceipt(undefined, fd);
         if (res?.error) {
-          // 등록 실패 → 방금 올린 객체 정리(고아 파일 방지). 본인 테넌트 경로라 RLS delete 허용.
-          await supabase.storage.from("expense-receipts").remove([path]).catch(() => {});
+          // 등록 실패 시 객체 cleanup은 서버(addExpenseReceipt)가 처리 — GCS는 클라 삭제 권한 없음.
           setError(res.error);
           return;
         }

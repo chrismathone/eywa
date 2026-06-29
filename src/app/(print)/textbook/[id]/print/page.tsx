@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getTextbookOrderById } from "@/features/billing/server/textbook-queries";
 import { TextbookRequestCard } from "./textbook-request-card";
@@ -14,7 +15,7 @@ export default async function TextbookPrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("billing");
+  const user = await requireAccess("billing");
   const { id } = await params;
   const embedded = (await headers()).get("x-embed") === "1";
   const [order, settings] = await Promise.all([
@@ -22,12 +23,14 @@ export default async function TextbookPrintPage({
     getTenantSettings(),
   ]);
   if (!order) notFound();
+  // 로고 — GCS 비공개 path면 signed URL로 resolve(외부 URL은 그대로).
+  const logoUrl = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
   return (
     <TextbookRequestCard
       order={order}
       academyName={settings.profile.name || "인재원"}
-      logoUrl={settings.profile.logoUrl || null}
+      logoUrl={logoUrl}
       account={settings.billing.account}
       embedded={embedded}
     />

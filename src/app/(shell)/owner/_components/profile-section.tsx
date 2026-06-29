@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { ProfileSettings } from "@/features/owner/settings-types";
+import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField } from "./fields";
 
@@ -57,23 +59,120 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             onChange={(v) => set({ brandColor: v })}
             placeholder="#1a5f3c"
           />
-          <TextField
-            label="로고 이미지 URL"
-            hint="인쇄물 머리글 · 파일 업로드는 추후"
+          <BrandingField
+            label="로고 이미지"
+            hint="인쇄물 머리글"
+            slot="logo"
             value={p.logoUrl}
             onChange={(v) => set({ logoUrl: v })}
-            placeholder="https://…/logo.png"
           />
-          <TextField
-            label="직인 이미지 URL"
+          <BrandingField
+            label="직인 이미지"
             hint="인쇄물 하단 직인"
+            slot="seal"
             value={p.sealUrl}
             onChange={(v) => set({ sealUrl: v })}
-            placeholder="https://…/seal.png"
           />
         </div>
       </SettingsCard>
       </div>
     </SectionForm>
+  );
+}
+
+/**
+ * 로고/직인 업로드 필드 — 파일 선택 → GCS 업로드(서버 티켓) → 값을 저장 경로로 set(SectionForm이 저장).
+ * 미리보기는 방금 고른 File의 로컬 objectURL(GCS path는 비공개라 직접 <img> 불가 — 인쇄물은 서버가 resolve).
+ * 외부 URL 직접 입력도 허용(하위호환). 업로드는 master만(서버 게이트).
+ */
+function BrandingField({
+  label,
+  hint,
+  slot,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  slot: "logo" | "seal";
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 재선택 허용
+    if (!file) return;
+    setErr(null);
+    if (!file.type.startsWith("image/")) return setErr("이미지 파일만 업로드할 수 있습니다");
+    if (file.size > 5 * 1024 * 1024) return setErr("파일이 너무 큽니다 (최대 5MB)");
+    setBusy(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const fd = new FormData();
+      fd.set("slot", slot);
+      fd.set("ext", ext);
+      fd.set("contentType", file.type);
+      fd.set("size", String(file.size));
+      const tk = await issueBrandingUploadTicket(undefined, fd);
+      if (tk?.error || !tk?.ticket) return setErr(tk?.error ?? "업로드 준비 실패");
+      await uploadToTicket(tk.ticket, file);
+      onChange(tk.ticket.path);
+      setLocalPreview(URL.createObjectURL(file));
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "업로드 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const previewSrc = localPreview || (value.startsWith("http") ? value : null);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-text-dim text-xs font-medium">
+        {label} <span className="text-text-faint">· {hint}</span>
+      </span>
+      <div className="flex items-center gap-3">
+        <div className="border-line bg-bg-soft flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded border">
+          {previewSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 외부/objectURL 미리보기
+            <img src={previewSrc} alt={label} className="h-full w-full object-contain" />
+          ) : value ? (
+            <span className="text-text-faint text-[10px]">업로드됨</span>
+          ) : (
+            <span className="text-text-faint text-[10px]">없음</span>
+          )}
+        </div>
+        <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition">
+          <input type="file" accept="image/*" hidden onChange={onFile} disabled={busy} />
+          {busy ? "업로드 중…" : "이미지 업로드"}
+        </label>
+        {value ? (
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setLocalPreview(null);
+            }}
+            className="text-text-faint hover:text-danger text-xs"
+          >
+            제거
+          </button>
+        ) : null}
+      </div>
+      {err ? <p className="text-danger text-xs">{err}</p> : null}
+      <details className="text-text-faint text-xs">
+        <summary className="cursor-pointer">URL 직접 입력</summary>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://…/logo.png"
+          className="border-line bg-card mt-1 w-full rounded-md border px-2 py-1 text-xs"
+        />
+      </details>
+    </div>
   );
 }

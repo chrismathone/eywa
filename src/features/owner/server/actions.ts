@@ -3,6 +3,9 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
+import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
+import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
 import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, type SectionKey } from "../settings-types";
@@ -21,6 +24,36 @@ const SECTION_LABELS: Record<SectionKey, string> = {
  * 학원 설정 섹션 1개 저장. master 전용. data(JSON)를 섹션 Zod로 검증 후 기존 jsonb에 머지(섹션 단위
  * 덮어쓰기 — 다른 섹션 보존). best-effort 감사로그 + 셸 전역 revalidate(브랜드·과목 등 반영).
  */
+// 로고/직인 이미지 업로드 티켓 — master 전용(saveOwnerSection과 동일 게이트). 반환 path를 logoUrl/sealUrl에 저장.
+export type IssueBrandingTicketState = { ticket?: UploadTicket; error?: string } | undefined;
+const BRANDING_SLOTS = new Set(["logo", "seal"]);
+export async function issueBrandingUploadTicket(
+  _prev: IssueBrandingTicketState,
+  formData: FormData,
+): Promise<IssueBrandingTicketState> {
+  const actor = await getCurrentUser();
+  if (!actor) return { error: "로그인이 필요합니다" };
+  if (actor.systemRole !== "master") return { error: "원장(master)만 업로드할 수 있습니다" };
+
+  const slot = String(formData.get("slot") ?? "");
+  if (!BRANDING_SLOTS.has(slot)) return { error: "잘못된 슬롯입니다" };
+  const contentType = String(formData.get("contentType") ?? "");
+  if (!MEDIA_KIND.branding.allowCT(contentType)) return { error: "이미지 파일만 업로드할 수 있습니다" };
+  const size = Number(formData.get("size") ?? 0);
+  if (!Number.isFinite(size) || size <= 0 || size > MEDIA_KIND.branding.maxBytes) {
+    return { error: "파일이 너무 큽니다 (최대 5MB)" };
+  }
+  const ext = String(formData.get("ext") ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+  const path = `${actor.tenantId}/branding/${crypto.randomUUID()}.${ext}`;
+  if (!isTenantBrandingPath(path, actor.tenantId)) return { error: "경로 생성 실패" };
+
+  try {
+    return { ticket: await createUploadTicket({ kind: "branding", path, contentType }) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "업로드 티켓 발급 실패" };
+  }
+}
+
 export async function saveOwnerSection(
   _prev: OwnerSaveState,
   formData: FormData,

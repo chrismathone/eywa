@@ -2,8 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import {
+  createUploadTicket,
+  getMediaBackend,
+  MEDIA_KIND,
+  removeObject,
+  resolveTenantReadUrl,
+  resolveTenantReadUrls,
+  verifyUploadedObject,
+} from "@/lib/storage/media-storage";
+import type { UploadTicket } from "@/lib/storage/types";
 import { normalizeApprovalChecks } from "./expense-queries";
 import { DEFAULT_CURRENCY, isValidCurrency } from "../currencies";
 
@@ -193,8 +203,9 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
   const paths = parseReceipts(row?.receipt_urls)
     .map((r) => r.path)
     .filter((p) => isTenantReceiptPath(p, user.tenantId, id));
-  if (paths.length > 0) {
-    await createAdminClient().storage.from(RECEIPTS_BUCKET).remove(paths);
+  const backend = getMediaBackend();
+  for (const p of paths) {
+    await removeObject(p, { backend, bucket: RECEIPTS_BUCKET }).catch(() => {});
   }
 
   const { error } = await supabase.from("expenses").delete().eq("id", id);
@@ -311,7 +322,42 @@ export async function setExpenseReceiptType(
   return { ok: true };
 }
 
-// 첨부 추가 — 클라이언트가 이미 expense-receipts 버킷({tenant}/{expenseId}/{file})에 업로드한 뒤 경로를 등록.
+// 증빙 업로드 티켓 발급 — billing 권한 + expense 소유(내 테넌트) + 형식·크기 검증 후 signed 업로드 URL.
+export type IssueReceiptTicketState = { ticket?: UploadTicket; error?: string } | undefined;
+export async function issueReceiptUploadTicket(
+  _prev: IssueReceiptTicketState,
+  formData: FormData,
+): Promise<IssueReceiptTicketState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  const lvl = await accessLevelTenant(user.systemRole, "billing");
+  if (lvl !== "full" && lvl !== "scoped") return { error: "지출 관리 권한이 없습니다" };
+
+  const expenseId = String(formData.get("expenseId") ?? "").trim();
+  if (!UUID_RE.test(expenseId)) return { error: "잘못된 지출 ID입니다" };
+  // 소유 확인 — RLS 스코프로 내 테넌트의 expense인지.
+  const supabase = await createClient();
+  const { data: exp } = await supabase.from("expenses").select("id").eq("id", expenseId).maybeSingle();
+  if (!exp) return { error: "지출을 찾을 수 없습니다" };
+
+  const contentType = String(formData.get("contentType") ?? "");
+  if (!MEDIA_KIND.receipt.allowCT(contentType)) return { error: "이미지 또는 PDF만 첨부할 수 있습니다" };
+  const size = Number(formData.get("size") ?? 0);
+  if (!Number.isFinite(size) || size <= 0 || size > MEDIA_KIND.receipt.maxBytes) {
+    return { error: "파일이 너무 큽니다 (최대 10MB)" };
+  }
+  const ext = String(formData.get("ext") ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+  const path = `${user.tenantId}/${expenseId}/${crypto.randomUUID()}.${ext}`;
+  if (!isTenantReceiptPath(path, user.tenantId, expenseId)) return { error: "경로 생성 실패" };
+
+  try {
+    return { ticket: await createUploadTicket({ kind: "receipt", path, contentType }) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "업로드 티켓 발급 실패" };
+  }
+}
+
+// 첨부 등록 — 클라가 ticket으로 업로드한 객체를 검증(exists·size·CT)한 뒤 DB에 경로 등록.
 export async function addExpenseReceipt(
   _prev: ExpenseState,
   formData: FormData,
@@ -324,9 +370,20 @@ export async function addExpenseReceipt(
   const name = String(formData.get("name") ?? "").trim();
   if (!isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
 
+  // 업로드 객체 검증 — 위반/부재면 객체 cleanup(서버측, GCS는 클라가 못 지움) 후 에러.
+  try {
+    await verifyUploadedObject("receipt", path);
+  } catch (e) {
+    await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+    return { error: e instanceof Error ? e.message : "첨부 검증 실패" };
+  }
+
   const supabase = await createClient();
   const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
-  if (!row) return { error: "지출을 찾을 수 없습니다" };
+  if (!row) {
+    await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+    return { error: "지출을 찾을 수 없습니다" };
+  }
   const list = parseReceipts(row.receipt_urls);
   if (!list.some((r) => r.path === path)) {
     list.push({ path, name: name || path.split("/").pop() || path });
@@ -335,7 +392,10 @@ export async function addExpenseReceipt(
     .from("expenses")
     .update({ receipt_urls: list, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) {
+    await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+    return { error: error.message };
+  }
 
   revalidatePath("/billing");
   return { ok: true };
@@ -363,7 +423,7 @@ export async function removeExpenseReceipt(
     .eq("id", id);
   if (error) return { error: error.message };
 
-  await createAdminClient().storage.from(RECEIPTS_BUCKET).remove([path]);
+  await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
 
   revalidatePath("/billing");
   return { ok: true };
@@ -397,14 +457,8 @@ export async function signExpenseReceipts(
     .filter((p) => isTenantReceiptPath(p, user.tenantId, expenseId));
   if (paths.length === 0) return { urls: {} };
 
-  const { data, error } = await createAdminClient()
-    .storage.from(RECEIPTS_BUCKET)
-    .createSignedUrls(paths, 600);
-  if (error) return { error: error.message };
-  const urls: Record<string, string> = {};
-  for (const d of data ?? []) {
-    if (d.path && d.signedUrl) urls[d.path] = d.signedUrl;
-  }
+  // 현 백엔드(GCS/Supabase)로 일괄 서명(10분). 깨진 경로는 조용히 제외.
+  const urls = await resolveTenantReadUrls(paths, "receipt", user.tenantId, 10 * 60 * 1000);
   return { urls };
 }
 
@@ -431,9 +485,9 @@ export async function signExpenseReceipt(
     return { error: "등록되지 않은 파일입니다" };
   }
 
-  const { data, error } = await createAdminClient()
-    .storage.from(RECEIPTS_BUCKET)
-    .createSignedUrl(path, 300);
-  if (error || !data?.signedUrl) return { error: error?.message ?? "signed URL 생성 실패" };
-  return { url: data.signedUrl };
+  try {
+    return { url: await resolveTenantReadUrl(path, "receipt", user.tenantId, 5 * 60 * 1000) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "signed URL 생성 실패" };
+  }
 }

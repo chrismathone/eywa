@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import {
   getEnrollmentConsultationById,
@@ -19,7 +20,7 @@ export default async function EnrollmentPrintPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("enrollment");
+  const user = await requireAccess("enrollment");
   const { id } = await params;
   // 플로팅 창(iframe)이면 proxy가 x-embed 주입 → 닫기 버튼 숨김(창 X로 닫음).
   const embedded = (await headers()).get("x-embed") === "1";
@@ -33,6 +34,11 @@ export default async function EnrollmentPrintPage({
   // 학원 연락처·정책 — owner 설정에서(값 있을 때만 인쇄물에 노출). 인수인계서는 학부모 전달용 1부 포함.
   const profile = settings.profile;
   const academyName = profile.name || "인재원";
+  // 로고/직인 — GCS 비공개 path면 signed URL로 resolve(외부 URL은 그대로).
+  const [logoSrc, sealSrc] = await Promise.all([
+    resolveBrandingSrc(profile.logoUrl, user.tenantId),
+    resolveBrandingSrc(profile.sealUrl, user.tenantId),
+  ]);
   const contactLine = [
     profile.representativeName ? `대표 ${profile.representativeName}` : "",
     profile.phone,
@@ -54,9 +60,9 @@ export default async function EnrollmentPrintPage({
       <PrintActions embedded={embedded} />
 
       <header className="border-b-2 border-black/80 pb-4">
-        {profile.logoUrl ? (
+        {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
-          <img src={profile.logoUrl} alt={academyName} className="mb-3 h-12 w-auto object-contain" />
+          <img src={logoSrc} alt={academyName} className="mb-3 h-12 w-auto object-contain" />
         ) : null}
         <div className="flex items-center justify-between">
           <p className="font-mono text-[11px] tracking-[0.25em] uppercase">
@@ -176,9 +182,9 @@ export default async function EnrollmentPrintPage({
 
       <footer className="mt-10 flex items-end justify-between gap-6 border-t border-black/20 pt-4 text-[10px] text-black/60">
         <div className="flex items-end gap-4">
-          {profile.sealUrl ? (
+          {sealSrc ? (
             // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
-            <img src={profile.sealUrl} alt="직인" className="size-16 shrink-0 object-contain" />
+            <img src={sealSrc} alt="직인" className="size-16 shrink-0 object-contain" />
           ) : null}
           <div className="space-y-0.5">
             <p className="font-semibold text-black/80">
