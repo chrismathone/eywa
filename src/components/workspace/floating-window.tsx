@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft } from "lucide-react";
+import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw } from "lucide-react";
 import { useWindowStore, isDuplicate, instanceLabel, type Win } from "./window-store";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { usePointerDrag } from "./use-pointer-drag";
@@ -45,6 +45,7 @@ export function FloatingWindow({
   const toggleMax = useWindowStore((s) => s.toggleMax);
   const focus = useWindowStore((s) => s.focus);
   const duplicate = useWindowStore((s) => s.duplicate);
+  const reloadWindow = useWindowStore((s) => s.reloadWindow);
   const swapToBackground = useWindowStore((s) => s.swapToBackground);
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const bounds = useWindowStore((s) => s.bounds);
@@ -147,39 +148,43 @@ export function FloatingWindow({
           // 남아 iframe이 visibility:hidden인 채 영구 stuck(#8).
           onPointerCancel={spot ? undefined : drag.onPointerUp}
           onDoubleClick={spot ? undefined : () => toggleMax(win.id)}
-          className={`bg-bg-soft border-line flex h-9 shrink-0 touch-none items-center gap-2 border-b pr-1 pl-3 select-none ${spot ? "" : "cursor-grab active:cursor-grabbing"}`}
+          className={`bg-bg-soft border-line relative flex h-9 shrink-0 touch-none items-center border-b px-1 select-none ${spot ? "" : "cursor-grab active:cursor-grabbing"}`}
         >
-          {win.kind === "route" && live?.canBack ? (
-            // 드릴인 상태에서만 뒤로(←) 표시 — iframe 한 단계 뒤로. 루트(첫 화면)에선 표시 안 함
-            // (닫기는 우상단 X가 담당, ← 닫기는 중복).
-            <button
-              type="button"
-              aria-label="뒤로"
-              title="뒤로"
-              onPointerDown={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-              // 창별 nav 스택을 한 단계 pop → 그 창의 iframe만 직접 이전 URL로 이동(location.replace).
-              // history.back()은 모든 iframe이 공유하는 joint session history를 되감아 엉뚱한 창이
-              // 되감기던 버그가 있어 사용하지 않는다.
-              onClick={() => {
-                const target = useWindowStore.getState().backNav(win.id);
-                if (target) iframeRegistry.get(win.id)?.contentWindow?.location.replace(target);
-              }}
-              className="text-text-dim hover:bg-line-strong/30 hover:text-foreground -ml-1 flex size-6 shrink-0 items-center justify-center rounded-[3px] transition"
-            >
-              <ArrowLeft size={14} strokeWidth={2} />
-            </button>
-          ) : null}
-          <span className="text-foreground min-w-0 truncate text-[12px] font-semibold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
-          {win.params.subtitle ? <span className="text-text-faint min-w-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
-          <span className="flex-1" />
-
-          {/* Windows식 창 컨트롤(우상단): 최소화 _ / 최대화·복원 □ / 닫기 ✕ */}
+          {/* 좌측 그룹: 새로고침 · 복제 · 배경으로 (+ 드릴인 시 뒤로) — 콘텐츠/창 조작.
+              그룹 span에서 stopPropagation → 버튼 클릭이 드래그/최대화로 안 샌다. */}
           <span
             className="flex shrink-0 items-center"
             onPointerDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
           >
+            {win.kind === "route" && live?.canBack ? (
+              // 드릴인 상태에서만 뒤로(←) — 그 창 iframe만 한 단계 이전 URL로(location.replace, joint history 회피).
+              <button
+                type="button"
+                aria-label="뒤로"
+                title="뒤로"
+                onClick={() => {
+                  const target = useWindowStore.getState().backNav(win.id);
+                  if (target) iframeRegistry.get(win.id)?.contentWindow?.location.replace(target);
+                }}
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
+              >
+                <ArrowLeft size={14} strokeWidth={2} />
+              </button>
+            ) : null}
+            {win.kind === "route" ? (
+              // 이 창 iframe만 새로고침(전체 F5보다 빠름). 녹음 중엔 잠금(reload=녹음 유실).
+              <button
+                type="button"
+                aria-label="새로고침"
+                title={locked ? "녹음 중 — 정지 후 가능" : "이 창만 새로고침"}
+                onClick={() => { if (!locked) reloadWindow(win.id); }}
+                disabled={locked}
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"
+              >
+                <RotateCw size={13} strokeWidth={2} />
+              </button>
+            ) : null}
             {win.kind === "route" && !spot ? (
               <button
                 type="button"
@@ -198,11 +203,25 @@ export function FloatingWindow({
                 title={locked ? "녹음 중 — 정지 후 가능" : "배경으로 보내기"}
                 onClick={handleSwapToBackground}
                 disabled={exiting || locked}
-                className="text-text-dim hover:bg-primary/15 hover:text-primary mr-0.5 flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"
+                className="text-text-dim hover:bg-primary/15 hover:text-primary flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"
               >
                 <SendToBack size={14} strokeWidth={2} />
               </button>
             ) : null}
+          </span>
+
+          {/* 정중앙: 창 이름 — 좌우 그룹 너비와 무관하게 바 한가운데 고정(absolute). 드래그 통과(pointer-events-none). */}
+          <span className="pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[46%] -translate-x-1/2 items-center justify-center gap-1.5">
+            <span className="text-foreground truncate text-[12px] font-semibold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
+            {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
+          </span>
+
+          {/* 우측 그룹: 최소화 · 최대화 · 닫기 (Windows식 창 컨트롤) */}
+          <span
+            className="ml-auto flex shrink-0 items-center"
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               aria-label="최소화"

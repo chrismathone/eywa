@@ -12,8 +12,23 @@ function reset() {
     activeBackgroundId: "dashboard",
     live: {},
     nav: {},
+    reloadNonce: {},
   });
 }
+
+describe("window-store reloadWindow()", () => {
+  beforeEach(reset);
+
+  it("호출할 때마다 그 창의 nonce를 1씩 올린다(다른 창 불변)", () => {
+    expect(useWindowStore.getState().reloadNonce[SID] ?? 0).toBe(0);
+    useWindowStore.getState().reloadWindow(SID);
+    expect(useWindowStore.getState().reloadNonce[SID]).toBe(1);
+    useWindowStore.getState().reloadWindow(SID);
+    expect(useWindowStore.getState().reloadNonce[SID]).toBe(2);
+    // 다른 창은 영향 없음
+    expect(useWindowStore.getState().reloadNonce["route:classes"] ?? 0).toBe(0);
+  });
+});
 
 describe("window-store open()", () => {
   beforeEach(reset);

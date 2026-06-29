@@ -142,6 +142,9 @@ type State = {
   // 창별 URL 스택(미영속) — same-origin iframe들이 공유하는 joint session history 대신 창마다 독립
   // 스택을 들고 뒤로(←)를 그 창의 iframe만 직접 이동시킨다(다른 창이 되감기는 #버그 방지).
   nav: Record<string, string[]>;
+  // 창별 새로고침 nonce(런타임, 미영속) — 타이틀바 새로고침 버튼이 bump하면 RouteWindow가 그 창 iframe만
+  // 현재 URL로 reload(전체 F5 대신 = 셸·다른 창 재실행 없이 그 창 콘텐츠만 빠르게 갱신).
+  reloadNonce: Record<string, number>;
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -154,6 +157,8 @@ type Actions = {
   observeIframe: (id: string, v: { title: string; url: string }) => void;
   /** 그 창의 nav 스택을 한 단계 pop하고 이동할 이전 URL을 반환(없으면 null). 뒤로(←) 버튼이 호출. */
   backNav: (id: string) => string | null;
+  /** 그 창의 iframe만 새로고침(전체 F5 대신) — nonce를 bump하면 RouteWindow가 현재 URL을 reload. */
+  reloadWindow: (id: string) => void;
   applyDragLayout: (id: string, template: LayoutTemplate, slot: number) => void;
   /** anchor(뷰포트 좌표)를 주면 그 커서 위치에서 창이 뜬다(없으면 cascade). 링크 클릭이 전달. */
   open: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
@@ -205,6 +210,7 @@ export const useWindowStore = create<State & Actions>()(
       spotlight: false,
       live: {},
       nav: {},
+      reloadNonce: {},
 
       setStage: ({ left, top, width, height }) =>
         set((s) => {
@@ -264,6 +270,8 @@ export const useWindowStore = create<State & Actions>()(
         });
         return target;
       },
+      reloadWindow: (id) =>
+        set((s) => ({ reloadNonce: { ...s.reloadNonce, [id]: (s.reloadNonce[id] ?? 0) + 1 } })),
       // 라우트를 "보이는 배경"으로 표시 — 삽입 순서는 고정(재정렬 안 함). 스택에 없으면 끝에 추가.
       // activeBackgroundId만 바뀌므로 탭을 클릭(=pathname 변경)해도 스트립 순서가 흔들리지 않는다.
       setBackground: (params) =>

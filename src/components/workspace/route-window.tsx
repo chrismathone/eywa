@@ -48,6 +48,23 @@ export function RouteWindow({ win }: { win: Win }) {
     return () => clearTimeout(t);
   }, [activated, isFocused, order, win.id]);
 
+  // 타이틀바 새로고침 버튼 → 이 창 iframe만 현재 URL로 reload(전체 F5 대신 = 셸·다른 창 재실행 없음).
+  // nonce가 bump되면 스켈레톤을 다시 띄우고(리로드 중 빈 깜빡임 방지) 현재 문서를 reload(드릴인 URL 보존).
+  const reloadNonce = useWindowStore((s) => s.reloadNonce[win.id] ?? 0);
+  const prevReload = useRef(reloadNonce);
+  useEffect(() => {
+    if (reloadNonce === prevReload.current) return; // 초기 마운트/무변경
+    prevReload.current = reloadNonce;
+    const el = iframeRef.current;
+    if (!el || !activated) return;
+    setLoaded(false);
+    try {
+      el.contentWindow?.location.reload();
+    } catch {
+      if (href) el.src = withEmbed(href); // same-origin 접근 막히면 src 재설정 폴백
+    }
+  }, [reloadNonce, activated, href]);
+
   // iframe 등록 + 제목/URL 관찰 → 타이틀바 제목 + 창별 nav 스택 갱신(Idea A: 창 크롬이 제목·뒤로 소유).
   // 같은 창 안에서 서브라우트로 드릴인하면 document.title·location이 바뀌고 MutationObserver/popstate가
   // 잡아 갱신한다. same-origin이라 contentDocument/contentWindow 접근 가능. canBack은 스택 깊이로 판정.
