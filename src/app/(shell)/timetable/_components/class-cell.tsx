@@ -111,9 +111,8 @@ function DraggableStudentRow({
         {name}
         {!target && meta ? <span className="opacity-60">/{meta}</span> : null}
       </span>
-      {target ? (
-        <span className="text-primary shrink-0 font-mono text-[12px]">→{target.toClassName}</span>
-      ) : null}
+      {/* 이동 중: 좁은 칸에서 반이름이 학생이름을 밀어내므로 반이름은 빼고 작은 "→"만(학생이름 우선). */}
+      {target ? <span className="text-primary shrink-0 font-mono text-[12px]">→</span> : null}
     </div>
   );
 }
@@ -369,8 +368,8 @@ export function ClassCell({
                 </div>
                 {incomingHere.map((s) => (
                   <div key={s.enrollmentId} className={`${ROW_CLASS} bg-primary-soft/30 text-primary`}>
+                    {/* 전입 예정: 좁은 칸에선 출발 반이름 대신 **학생이름**을 보여준다(누가 들어오는지 우선). */}
                     <span className="truncate">+ {s.name}</span>
-                    <span className="text-primary/70 shrink-0 font-mono text-[12px]">←{s.fromClassName}</span>
                   </div>
                 ))}
               </div>
