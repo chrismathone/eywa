@@ -492,6 +492,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **편집 드래그 = 학생이름 우선(2026-06-29 후속)**: 좁은 칸(60px)에서 학생 드래그 이동 시 반이름(이동 행의 `→대상반`, 전입예정의 `←출발반`)이 shrink-0라 **학생이름을 밀어내 안 보임**. → [class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `DraggableStudentRow`는 `→대상반` 제거하고 학생이름+작은 "→"만, "전입 예정" 미리보기도 `←출발반` 제거하고 "+학생이름"만. 드래그 데이터(`fromClassName`)는 유지(이동 동작 무영향), 표시만 학생이름 우선.
 - ⚠️ **트레이드오프**: 60px라도 평일 칸은 학생 메타(학교)가 잘림(이름 우선) — 수/주말 120px 칸은 "이름/경명중1" 다 보임. 통합뷰는 의도적으로 4그룹 유지(subSlot 미전달=헤더 분할 없음). + owner 연동 탭(`?tab=sheets`)도 전체폭 2열로 넓힘. ⚠️ 한 강사 셀에 1-1·1-2 서로 다른 반이면 2카드 적층(ijw 동일, genuine 2반 케이스).
 
+### 직원 등록 createStaff 전면 복구 + 창 스위처 독 자동 숨김 (2026-06-29) — ✅ 게이트 + 실 DB 재현·검증
+**A. 직원 등록 "Database error creating new user" — 버그 2개 수정** ([staff/server/actions.ts](src/features/staff/server/actions.ts)):
+- **① 이메일 중복(사용자 제보 에러)**: `public.users`엔 유니크 `(tenant_id,email)`이 있고, **POC 임포트 직원 41명**(auth 없는 `public.users`-only 행)이 이메일을 점유. 그 이메일로 `createUser`하면 `auth.users`→`public.users` 미러 트리거(`tg_sync_user_from_auth`, 0001a)의 insert가 그 유니크를 위반 → 트리거 raise → createUser가 **"Database error creating new user"(500)** 로 롤백. → **createUser 전 이메일 사전검사**(`.ilike`)로 잡아 명확한 메시지("이미 이 이메일로 등록된 직원이 있습니다").
+- **② 이중 insert(잠복, 신규도 실패)**: createUser가 미러 트리거로 `public.users` 최소행(6컬럼)을 만드는데, createStaff가 **또 같은 id로 `insert`** → `users_pkey` 충돌(23505) → 신규 직원도 항상 "직원 row 생성 실패". → **2단계 insert→update**(트리거가 만든 행을 풀데이터로 보강). 롤백도 auth+`public.users` 둘 다 정리(`deleteUser`는 `public.users`를 안 지워 고아 남던 것 차단).
+- 실 DB 재현/검증: 고아 41명 확인 → 기존 이메일로 createUser 500 재현 → 수정 후 **신선 이메일 정상 등록(풀데이터)·중복 사전검사 잡힘**. super-admin `createTenantWithMaster`는 이중 insert 없어(트리거 위임) 무관. ⚠️ **임포트 직원에게 로그인 계정 부여(활성화)는 여전히 불가**(id 불일치, [[#31]] — 기존 직원→계정 활성화 별도 기능 필요).
+**B. 창 스위처 독 자동 숨김** ([window-switcher.tsx](src/components/workspace/window-switcher.tsx)): 최대화/큰 창의 본문 하단 중앙(페이지네이션 ←이전/다음→·버튼)을 **하단 중앙 고정 독이 덮어 클릭 차단**. → 맥 독식 **자동 숨김**: 평소 얇은 핸들(좁아서 본문 거의 안 가림), 핸들/하단 호버 시 독이 떠오름(슬라이드업), 숨김 시 `pointer-events` 차단으로 **본문 클릭이 그대로 통과**. **창 1개만 열림(최소화 아님)이면 독 자체 숨김**(전환 대상 없음 = 중복·겹침 제거). 라이브 4단계 검증(독 사라짐 → 2창 핸들 → 호버 시 독 → 떼면 숨음).
+
 ### 운영 적합성 하드닝 — 블로커 B1~B6 + 강사 시간표 스코핑 (2026-06-25) — ✅ 게이트 그린 + 라이브 검증
 ijw↔eywa 크로스검증(둘 다 Chrome MCP) + 15에이전트 운영적합성 감사([[project_operational-readiness-verdict]]) 결과,
 코어(RLS 격리·접근제어·돈 계산·스케일)는 프로덕션급이나 실학원 end-to-end를 막는 **블로커 6 + 멀티스태프 PII 1**을 수정.

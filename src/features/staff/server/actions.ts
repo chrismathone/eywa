@@ -88,7 +88,21 @@ export async function createStaff(
 
   const admin = createAdminClient();
 
+  // 0) 이메일 중복 사전검사 — 같은 테넌트에 이미 그 이메일 직원이 있으면(예: 임포트된 강사 = public.users만
+  //    있고 auth 없음) auth.users→public.users 미러 트리거(tg_sync_user_from_auth)가 (tenant_id,email)
+  //    유니크를 위반해 createUser가 "Database error creating new user"로 실패한다. 미리 잡아 명확히 안내.
+  const { data: dup } = await admin
+    .from("users")
+    .select("id")
+    .eq("tenant_id", actor.tenantId)
+    .ilike("email", input.email)
+    .maybeSingle();
+  if (dup) {
+    return { fieldErrors: { email: "이미 이 이메일로 등록된 직원이 있습니다 (기존 직원을 수정하세요)" } };
+  }
+
   // 1) Create auth user with tenant_id baked into app_metadata so the RLS function picks it up.
+  //    ⚠️ 이 createUser가 tg_sync_user_from_auth 트리거를 발동해 **public.users 최소 행(6컬럼)을 자동 생성**한다.
   const { data: authData, error: authErr } = await admin.auth.admin.createUser({
     email: input.email,
     password,
@@ -99,28 +113,30 @@ export async function createStaff(
     return { error: `Auth 계정 생성 실패: ${authErr?.message ?? "unknown"}` };
   }
 
-  // 2) Insert into public.users
-  const { error: dbErr } = await admin.from("users").insert({
-    id: authData.user.id,
-    tenant_id: actor.tenantId,
-    email: input.email,
-    display_name: input.displayName,
-    phone: input.phone,
-    system_role: newRole,
-    status: "active",
-    hire_date: input.hireDate,
-    job_title: input.jobTitle,
-    subjects: input.subjects,
-    default_classroom: input.defaultClassroom,
-    memo: input.memo,
-    bg_color: input.bgColor,
-    text_color: input.textColor,
-  });
+  // 2) 미러 트리거가 만든 최소 행을 **UPDATE로 보강**한다. (insert면 트리거가 이미 같은 id로 넣은 행과
+  //    users_pkey 충돌 → "직원 row 생성 실패"가 신규 직원에서도 항상 발생.)
+  const { error: dbErr } = await admin
+    .from("users")
+    .update({
+      display_name: input.displayName,
+      phone: input.phone,
+      system_role: newRole,
+      status: "active",
+      hire_date: input.hireDate,
+      job_title: input.jobTitle,
+      subjects: input.subjects,
+      default_classroom: input.defaultClassroom,
+      memo: input.memo,
+      bg_color: input.bgColor,
+      text_color: input.textColor,
+    })
+    .eq("id", authData.user.id);
 
   if (dbErr) {
-    // rollback auth user
+    // 롤백 — auth user + 트리거가 만든 public.users 행 둘 다 정리(deleteUser는 public.users를 안 지움 = 고아 방지).
     await admin.auth.admin.deleteUser(authData.user.id);
-    return { error: `직원 row 생성 실패: ${dbErr.message}` };
+    await admin.from("users").delete().eq("id", authData.user.id);
+    return { error: `직원 정보 저장 실패: ${dbErr.message}` };
   }
 
   revalidatePath("/staff");
