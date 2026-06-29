@@ -12,6 +12,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import { resolveAudioUrl } from "@/lib/storage/legacy-audio";
+import {
+  getMediaBackend,
+  removeObject,
+  resolveAudioReadUrl,
+  verifyUploadedObject,
+} from "@/lib/storage/media-storage";
 import { analyzeMeeting, formatMeetingTranscript } from "./ai";
 
 type ActionItem = {
@@ -282,12 +288,17 @@ export async function startMeetingFromAudio(
     return { error: "파일 경로가 잘못되었습니다" };
   }
 
-  // 2) Generate a signed URL AssemblyAI can fetch (long enough for queue + DL).
-  const { data: signed, error: signErr } = await admin.storage
-    .from("meeting-recordings")
-    .createSignedUrl(audioPath, 60 * 60); // 1 hour
-  if (signErr || !signed?.signedUrl) {
-    return { error: `signed URL 생성 실패: ${signErr?.message ?? "unknown"}` };
+  // 2) 업로드 객체 검증(exists·size·contentType) 후 AssemblyAI가 fetch할 signed URL 생성.
+  //    위반/부재면 객체 cleanup(GCS는 클라가 못 지움) 후 에러.
+  let audioUrl: string;
+  let verifiedSize = audioSizeBytes;
+  try {
+    const meta = await verifyUploadedObject("meeting", audioPath);
+    if (meta.size > 0) verifiedSize = meta.size;
+    audioUrl = await resolveAudioReadUrl(audioPath, "meeting", user.tenantId);
+  } catch (e) {
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "meeting-recordings" }).catch(() => {});
+    return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
   }
 
   // 3) Create meeting row in uploaded state.
@@ -301,7 +312,7 @@ export async function startMeetingFromAudio(
       held_at: heldAt,
       author_id: user.id,
       audio_path: audioPath,
-      audio_size_bytes: audioSizeBytes,
+      audio_size_bytes: verifiedSize,
       processing_status: "uploaded",
     })
     .select("id")
@@ -316,7 +327,7 @@ export async function startMeetingFromAudio(
 
   try {
     const result = await submitTranscript({
-      audioUrl: signed.signedUrl,
+      audioUrl,
       webhookUrl,
       webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
         ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
@@ -367,10 +378,9 @@ export async function deleteMeeting(
     .single();
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
 
-  // 1) Storage 음성파일 제거(있으면) — admin 클라이언트로(스토리지는 RLS 밖).
+  // 1) Storage 음성파일 제거(있으면) — 현 백엔드(GCS/Supabase)로. 레거시(옛 ijw) 경로는 공유라 미삭제.
   if (m.audio_path && isTenantAudioPath(m.audio_path, user.tenantId)) {
-    const admin = createAdminClient();
-    await admin.storage.from("meeting-recordings").remove([m.audio_path]);
+    await removeObject(m.audio_path, { backend: getMediaBackend(), bucket: "meeting-recordings" }).catch(() => {});
   }
 
   // 2) row 삭제 (RLS 스코프).

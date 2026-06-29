@@ -12,9 +12,10 @@ import {
   startRecoverySession,
   type RecordingMeta,
 } from "@/lib/recording-recovery";
-import { createClient } from "@/lib/supabase/client";
 import { useRecordingLock } from "@/components/workspace/use-recording-lock";
 import { startMeetingFromAudio } from "@/features/meetings/server/actions";
+import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   ACCEPTED_AUDIO_TYPES,
   downloadFile,
@@ -179,37 +180,27 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
     setUploadPct(0);
 
     try {
-      // 1) Get current user's tenant via Supabase session (path prefix).
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError("로그인이 만료되었습니다");
-        setPhase("idle");
-        return;
-      }
-      const tenantId = (user.app_metadata as { tenant_id?: string })?.tenant_id;
-      if (!tenantId) {
-        setError("테넌트 정보가 없습니다");
-        setPhase("idle");
-        return;
-      }
-
-      // 2) Upload to storage at {tenant_id}/{uuid}.{ext}
+      // 1) 업로드 티켓 발급(서버가 tenant·권한·경로·크기 검증) → 2) 스토리지에 PUT(진행률 보존).
       const ext = file.name.split(".").pop()?.toLowerCase() || "webm";
-      const objectName = `${tenantId}/${crypto.randomUUID()}.${ext}`;
-
-      const { error: upErr } = await supabase.storage
-        .from("meeting-recordings")
-        .upload(objectName, file, {
-          contentType: file.type || `audio/${ext}`,
-          upsert: false,
-        });
-      if (upErr) {
-        setError(`업로드 실패: ${upErr.message}`);
+      const fdT = new FormData();
+      fdT.set("kind", "meeting");
+      fdT.set("ext", ext);
+      fdT.set("contentType", file.type || `audio/${ext}`);
+      fdT.set("size", String(file.size));
+      const tk = await issueAudioUploadTicket(undefined, fdT);
+      if (tk?.error || !tk?.ticket) {
+        setError(tk?.error ?? "업로드 준비 실패");
         setPhase("idle");
         return;
       }
-      setUploadPct(100);
+      const objectName = tk.ticket.path;
+      try {
+        await uploadToTicket(tk.ticket, file, setUploadPct);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "업로드 실패");
+        setPhase("idle");
+        return;
+      }
 
       // 3) Kick off analysis on the server.
       setPhase("submitting");

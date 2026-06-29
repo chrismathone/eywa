@@ -4,8 +4,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { History, Loader2, Mic, Square, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { createClient } from "@/lib/supabase/client";
 import { downloadFile, kstTimestamp } from "@/lib/audio-upload";
+import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   checkRecovery,
   clearRecovery,
@@ -109,19 +110,20 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
     if (!file) return setError("음성 파일을 선택하거나 녹음하세요");
     setError(null);
     startBusy(async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const tenantId = (user?.app_metadata as { tenant_id?: string } | undefined)?.tenant_id;
-      if (!tenantId) return setError("세션 정보를 확인할 수 없습니다");
-
       const ext = (file.name.split(".").pop() || "webm").toLowerCase();
-      const objectName = `${tenantId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("consultation-recordings")
-        .upload(objectName, file, { contentType: file.type || `audio/${ext}`, upsert: false });
-      if (upErr) return setError(`업로드 실패: ${upErr.message}`);
+      const fdT = new FormData();
+      fdT.set("kind", "consultation");
+      fdT.set("ext", ext);
+      fdT.set("contentType", file.type || `audio/${ext}`);
+      fdT.set("size", String(file.size));
+      const tk = await issueAudioUploadTicket(undefined, fdT);
+      if (tk?.error || !tk?.ticket) return setError(tk?.error ?? "업로드 준비 실패");
+      const objectName = tk.ticket.path;
+      try {
+        await uploadToTicket(tk.ticket, file);
+      } catch (e) {
+        return setError(e instanceof Error ? e.message : "업로드 실패");
+      }
 
       const fd = new FormData();
       fd.set("studentId", studentId);

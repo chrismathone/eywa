@@ -9,6 +9,12 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
+import {
+  getMediaBackend,
+  removeObject,
+  resolveAudioReadUrl,
+  verifyUploadedObject,
+} from "@/lib/storage/media-storage";
 import { analyzeStudentConsultation } from "./ai";
 
 async function requireConsultationWrite() {
@@ -46,11 +52,15 @@ export async function startStudentConsultationFromAudio(
 
   const admin = createAdminClient();
 
-  const { data: signed, error: signErr } = await admin.storage
-    .from("consultation-recordings")
-    .createSignedUrl(audioPath, 60 * 60);
-  if (signErr || !signed?.signedUrl) {
-    return { error: `signed URL 생성 실패: ${signErr?.message ?? "unknown"}` };
+  let audioUrl: string;
+  let verifiedSize = audioSizeBytes;
+  try {
+    const meta = await verifyUploadedObject("consultation", audioPath);
+    if (meta.size > 0) verifiedSize = meta.size;
+    audioUrl = await resolveAudioReadUrl(audioPath, "consultation", user.tenantId);
+  } catch (e) {
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
   }
 
   const { data: row, error: insertErr } = await admin
@@ -64,7 +74,7 @@ export async function startStudentConsultationFromAudio(
       category,
       summary: "(녹음 분석 중)",
       audio_path: audioPath,
-      audio_size_bytes: audioSizeBytes,
+      audio_size_bytes: verifiedSize,
       processing_status: "uploaded",
     })
     .select("id")
@@ -75,7 +85,7 @@ export async function startStudentConsultationFromAudio(
 
   try {
     const result = await submitTranscript({
-      audioUrl: signed.signedUrl,
+      audioUrl,
       webhookUrl,
       webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
         ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }

@@ -11,6 +11,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
+import {
+  getMediaBackend,
+  removeObject,
+  resolveAudioReadUrl,
+  verifyUploadedObject,
+} from "@/lib/storage/media-storage";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -515,12 +521,16 @@ export async function startConsultationFromAudio(
     return { error: "파일 경로가 잘못되었습니다" };
   }
 
-  // Signed URL for AssemblyAI to fetch
-  const { data: signed, error: signErr } = await admin.storage
-    .from("consultation-recordings")
-    .createSignedUrl(audioPath, 60 * 60);
-  if (signErr || !signed?.signedUrl) {
-    return { error: `signed URL 생성 실패: ${signErr?.message ?? "unknown"}` };
+  // 업로드 객체 검증(exists·size·contentType) 후 AssemblyAI가 fetch할 signed URL.
+  let audioUrl: string;
+  let verifiedSize = audioSizeBytes;
+  try {
+    const meta = await verifyUploadedObject("registration", audioPath);
+    if (meta.size > 0) verifiedSize = meta.size;
+    audioUrl = await resolveAudioReadUrl(audioPath, "registration", user.tenantId);
+  } catch (e) {
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
   }
 
   // Create consultation row in uploaded state
@@ -536,7 +546,7 @@ export async function startConsultationFromAudio(
       consultant_id: user.id,
       outcome: "consulted",
       audio_path: audioPath,
-      audio_size_bytes: audioSizeBytes,
+      audio_size_bytes: verifiedSize,
       processing_status: "uploaded",
     })
     .select("id")
@@ -551,7 +561,7 @@ export async function startConsultationFromAudio(
 
   try {
     const result = await submitTranscript({
-      audioUrl: signed.signedUrl,
+      audioUrl,
       webhookUrl,
       webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
         ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
