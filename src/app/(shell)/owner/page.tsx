@@ -21,7 +21,6 @@ type OwnerTab =
   | "notifications"
   | "permissions"
   | "data"
-  | "dup"
   | "audit"
   | "sheets";
 
@@ -32,7 +31,6 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   notifications: "알림·약관",
   permissions: "역할·권한",
   data: "데이터 정리",
-  dup: "중복 학생",
   audit: "감사로그",
   sheets: "연동",
 };
@@ -44,17 +42,17 @@ const VALID_TABS: OwnerTab[] = [
   "notifications",
   "permissions",
   "data",
-  "dup",
   "audit",
   "sheets",
 ];
 
 function resolveTab(sp: Sp): OwnerTab {
-  const t = sp.tab;
+  // 중복 학생(dup)은 데이터 정리(data) 면으로 통합 — 옛 ?tab=dup 북마크는 data로 흡수.
+  const t = sp.tab === "dup" ? "data" : sp.tab;
   return t && (VALID_TABS as string[]).includes(t) ? (t as OwnerTab) : "profile";
 }
 
-// 설정 5면 ┃ 관리 4면(데이터 정리·중복·감사·연동, 구 /admin 흡수) — group 경계에 FaceTabs 세로 구분선.
+// 설정 5면 ┃ 관리 3면(데이터 정리[고아+중복 통합]·감사·연동, 구 /admin 흡수) — group 경계에 FaceTabs 세로 구분선.
 const FACES: Face[] = [
   { key: "profile", label: TAB_LABEL.profile, href: "/owner", group: "설정" },
   { key: "operations", label: TAB_LABEL.operations, href: "/owner?tab=operations", group: "설정" },
@@ -62,7 +60,6 @@ const FACES: Face[] = [
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
-  { key: "dup", label: TAB_LABEL.dup, href: "/owner?tab=dup", group: "관리" },
   { key: "audit", label: TAB_LABEL.audit, href: "/owner?tab=audit", group: "관리" },
   { key: "sheets", label: TAB_LABEL.sheets, href: "/owner?tab=sheets", group: "관리" },
 ];
@@ -113,8 +110,12 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "permissions" ? <PermissionsSection initial={settings.permissions} /> : null}
-      {tab === "data" ? <DataFace /> : null}
-      {tab === "dup" ? <DuplicatesFace page={page} isEmbed={isEmbed} /> : null}
+      {tab === "data" ? (
+        <div className="space-y-10">
+          <DataFace />
+          <DuplicatesFace page={page} isEmbed={isEmbed} />
+        </div>
+      ) : null}
       {tab === "audit" ? <AuditFace action={sp.action} page={page} isEmbed={isEmbed} /> : null}
       {tab === "sheets" ? <SheetsFace notifications={settings.notifications} /> : null}
     </div>

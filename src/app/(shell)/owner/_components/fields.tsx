@@ -48,6 +48,42 @@ export function TextField({
   );
 }
 
+/** 색상 필드 — 네이티브 스와치(색 선택) + hex 텍스트 입력 동기. 반 색상 폼과 동일 패턴. */
+export function ColorField({
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const valid = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(value.trim());
+  return (
+    <Field label={label} hint={hint}>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          aria-label={`${label} 색상 선택`}
+          value={valid ? value.trim() : "#000000"}
+          onChange={(e) => onChange(e.target.value)}
+          className="border-line h-9 w-11 shrink-0 cursor-pointer rounded-md border bg-transparent p-0.5"
+        />
+        <input
+          className={inputCls}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+    </Field>
+  );
+}
+
 export function TextAreaField({
   label,
   hint,

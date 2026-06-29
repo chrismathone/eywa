@@ -5,8 +5,8 @@ import { DuplicatesClient } from "@/app/(shell)/admin/duplicates/_client";
 const PAGE_SIZE = 20;
 
 /**
- * 중복 학생 면 (owner ?tab=dup) — 중복 의심 학생 그룹 검출·병합. 구 /admin/duplicates 본문 흡수.
- * ⚠️ findDuplicateStudents는 students 전건 fetch라 무거움 → FaceTabs 조건부 렌더로 이 면 진입 시에만 실행.
+ * 중복 의심 학생 섹션 — 데이터 정리(owner ?tab=data) 면 하단에 DataFace와 함께 렌더(2026-06-29 통합).
+ * ⚠️ findDuplicateStudents는 students 전건 fetch라 무거움 → data 면 진입 시에만 실행(조건부 렌더).
  * Pagination은 서버 컴포넌트라 embed를 모르므로, 창(embed) 컨텍스트를 pageHref가 직접 유지한다.
  */
 export async function DuplicatesFace({ page, isEmbed }: { page: number; isEmbed: boolean }) {
@@ -15,7 +15,7 @@ export async function DuplicatesFace({ page, isEmbed }: { page: number; isEmbed:
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const groups = allGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageHref = (p: number) => {
-    const sp = new URLSearchParams({ tab: "dup" });
+    const sp = new URLSearchParams({ tab: "data" });
     if (p > 1) sp.set("page", String(p));
     if (isEmbed) sp.set("embed", "1");
     return `/owner?${sp.toString()}`;

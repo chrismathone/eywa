@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, Loader2, Wrench } from "lucide-react";
+import { CheckCircle2, Loader2, Trash2, UserMinus, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   closeOrphanEnrollments,
+  bulkWithdrawStudents,
+  bulkDeleteStudents,
   type CleanupState,
 } from "@/features/admin/server/actions";
 import type { OrphanReport } from "@/features/admin/server/queries";
@@ -38,15 +40,11 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           </span>
         </header>
         <p className="text-muted-foreground text-xs">
-          상태가 재원인데 수강 중인 반이 없습니다. 학생 상세에서 반을 배정하거나 상태를
-          변경하세요.
+          상태가 재원인데 수강 중인 반이 없습니다. 반을 배정하거나, 선택해서 퇴원·삭제
+          처리하세요.
         </p>
         {report.studentsWithoutEnrollments.length > 0 ? (
-          <OrphanList
-            items={report.studentsWithoutEnrollments}
-            href={(s) => `/students/${s.id}`}
-            label={(s) => s.name}
-          />
+          <OrphanStudentManager items={report.studentsWithoutEnrollments} />
         ) : (
           <p className="text-chart-2 mt-2 inline-flex items-center gap-1 text-xs">
             <CheckCircle2 className="size-3" />
@@ -112,6 +110,114 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           </p>
         )}
       </section>
+    </div>
+  );
+}
+
+/**
+ * 수강 없는 재원생 — 전체/개별 선택 후 일괄 퇴원(가역) 또는 삭제(영구, 청구기록 있으면 제외).
+ * 선택 상태는 현재 렌더된 항목으로 라이브 필터(액션 성공 시 목록이 줄면 사라진 id는 자동 해제 — setState-in-effect 회피).
+ */
+function OrphanStudentManager({
+  items,
+}: {
+  items: { id: string; name: string; status: string }[];
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [wState, withdrawAction, wPending] = useActionState(bulkWithdrawStudents, undefined);
+  const [dState, deleteAction, dPending] = useActionState(bulkDeleteStudents, undefined);
+
+  const itemIds = new Set(items.map((i) => i.id));
+  const live = [...selected].filter((id) => itemIds.has(id));
+  const ids = live.join(",");
+  const count = live.length;
+  const allSelected = items.length > 0 && count === items.length;
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(items.map((i) => i.id)));
+
+  return (
+    <div className="mt-3">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs">
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} className="size-3.5" />
+          전체 선택
+        </label>
+        {count > 0 ? <span className="num text-primary text-xs">{count}명 선택</span> : null}
+      </div>
+
+      <ul className="max-h-72 space-y-1 overflow-auto pr-1">
+        {items.map((s) => (
+          <li key={s.id} className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={selected.has(s.id)}
+              onChange={() => toggle(s.id)}
+              className="size-3.5 shrink-0"
+            />
+            <Link href={`/students/${s.id}`} className="text-chart-1 truncate text-xs hover:underline">
+              {s.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {count > 0 ? (
+        <div className="border-border mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+          {confirmDelete ? (
+            <form action={deleteAction} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="ids" value={ids} />
+              <span className="text-muted-foreground text-xs">
+                {count}명 영구 삭제? (청구 기록 있으면 제외)
+              </span>
+              <Button type="submit" variant="destructive" size="sm" disabled={dPending}>
+                {dPending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                삭제 확정
+              </Button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="text-text-faint hover:text-foreground text-xs"
+              >
+                취소
+              </button>
+            </form>
+          ) : (
+            <>
+              <form action={withdrawAction}>
+                <input type="hidden" name="ids" value={ids} />
+                <Button type="submit" variant="outline" size="sm" disabled={wPending || dPending}>
+                  {wPending ? <Loader2 className="size-3.5 animate-spin" /> : <UserMinus className="size-3.5" />}
+                  퇴원 처리
+                </Button>
+              </form>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={wPending || dPending}
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="size-3.5" />
+                삭제
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {wState?.error ? <p className="text-danger mt-2 text-xs">{wState.error}</p> : null}
+      {wState?.message ? <p className="text-chart-2 mt-2 text-xs">{wState.message}</p> : null}
+      {dState?.error ? <p className="text-danger mt-2 text-xs">{dState.error}</p> : null}
+      {dState?.message ? <p className="text-chart-2 mt-2 text-xs">{dState.message}</p> : null}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import type { ProfileSettings } from "@/features/owner/settings-types";
 import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { SectionForm, SettingsCard } from "./section-form";
-import { TextField } from "./fields";
+import { TextField, ColorField } from "./fields";
 
 export function ProfileSection({ initial }: { initial: ProfileSettings }) {
   const [p, setP] = useState<ProfileSettings>(initial);
@@ -52,9 +52,9 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             onChange={(v) => set({ logoText: v })}
             placeholder="EYWA"
           />
-          <TextField
+          <ColorField
             label="브랜드 색상"
-            hint="hex"
+            hint="강조색 · hex"
             value={p.brandColor}
             onChange={(v) => set({ brandColor: v })}
             placeholder="#1a5f3c"
