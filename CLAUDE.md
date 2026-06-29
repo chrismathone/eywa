@@ -356,9 +356,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   백필/신규, `invoices`는 `on conflict do nothing`(ijw 보존, 새 청구월만)·`classes`는 **ijw 정본=신규반 생성 0**(이름 정확일치 시 makeedu_lesson_id만 백필,
   ijw 코드명 vs makeedu 풀네임이라 대부분 미연결=정상)·`enrollments`는 기존부터 additive(반이름 불일치로 +0)·`consultations`는 **건너뜀**(사용자 결정:
   ijw 1340 정본, makeedu 2686은 공유키 없어 더하면 대량중복 → [sync-consultations.cjs](scripts/_makeedu/sync-consultations.cjs)에 `--force` 가드).
-  **dry-run 실측(ijw 베이스 위)**: students +2신규/410백필 · classes +0/5백필 · invoices **+393(전부 2026-07=스냅샷 이후 신규 청구월)** · catalog +86교재+6기타/78백필 · prospects +237/8백필.
-  ijw 한 건도 덮어쓰지 않음. **적대리뷰(워크플로 6스크립트 find→검증) 확정 1건 수정**: invoices 인라인 m2(이름|학년) 맵이 모호성 가드 없어
-  동명동학년 오매칭 가능 → `tieredMatcher`로 일원화(모호=null→스킵, 393으로 3건 안전 제외). `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브).
+  **✅ 적용 완료(2026-06-29, ijw 베이스 위 실행·DB 검증)**: students +1신규/410백필/1스킵(활성 동일자연키 모호) · classes +0/**5백필(bg_color 52 보존)** ·
+  invoices **+394(전부 2026-07, 합계 1.55억=스냅샷 이후 신규 청구월)** · catalog +86교재+6기타/78백필 · prospects +237/5백필. DB 검증: 학생565·반129(색상52)·수강1056·
+  재원상담1340(그대로)·인보이스2000. **ijw 한 건도 덮어쓰지 않음.** **적대리뷰(워크플로 6스크립트 find→검증) 확정 1건 수정**: invoices 인라인 m2(이름|학년) 맵이
+  모호성 가드 없어 동명동학년 오매칭 가능 → `tieredMatcher`로 일원화(모호=null→스킵). **+ 적용 중 발견**: students 신규 insert가 활성 동일 자연키
+  (`ux_students_active_natural_key`, status<>'withdrawn') 충돌 → **사전 스킵(활성 자연키 집합 대조) + try/catch 안전망**(모호 미연결 학생 중복 생성 방지).
+  `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브).
 - ⚠️ **남은 작업**: Phase 2(도메인 on/off 토글·GitHub Actions Playwright cron 증분)는 미착수. 비-수업 차단문구 학원설정 외부화도 검토 대상.
 - **시간표 상단 명단 요약**(ijw 패리티, [timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)): 툴바 우측에 **재원·신입·전입·대기·퇴원
   + N슬롯**(색상 토큰). 그 주 시점(타임머신) 기준, `studentId`로 유일 집계(한 학생이 여러 반 → 상태 우선순위 재원>대기>퇴원). 신입·전입은 재원 학생만.

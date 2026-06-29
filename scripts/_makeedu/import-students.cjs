@@ -116,8 +116,13 @@ function mapRows(ws) {
     const tenantId = await L.resolveTenantId(sql);
     console.log("target tenant:", tenantId);
     const existing = await sql`
-      select id, makeedu_id, name, school, grade from students where tenant_id = ${tenantId}`;
+      select id, makeedu_id, name, school, grade, status from students where tenant_id = ${tenantId}`;
     const byMakeedu = new Map(existing.filter((e) => e.makeedu_id).map((e) => [e.makeedu_id, e.id]));
+    // 활성 학생 자연키(이름+학교+학년) 집합 — 부분유니크 ux_students_active_natural_key(status<>'withdrawn')와 동일.
+    // 매칭이 모호(동일 자연키 2건+)로 미연결된 makeedu 학생을 그냥 insert하면 이 제약에 걸리므로, 사전에 스킵.
+    const activeNatural = new Set(
+      existing.filter((e) => e.status !== "withdrawn").map((e) => `${L.normalizeName(e.name)}|${e.school || ""}|${e.grade || ""}`),
+    );
     const match = L.tieredMatcher(existing, [
       (r) => `${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`,
       (r) => `${L.normalizeName(r.name)}|${r.grade || ""}`,
@@ -126,17 +131,20 @@ function mapRows(ws) {
 
     const toLink = []; // 기존 ijw 행에 makeedu_id 백필
     const toInsert = []; // ijw에 없는 신규 makeedu 학생
-    let alreadyLinked = 0;
+    let alreadyLinked = 0, skippedDup = 0;
     for (const r of rows) {
       if (byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; } // 재실행 멱등
       const id = match(r);
-      if (id) toLink.push({ id, makeedu_id: r.makeedu_id });
-      else toInsert.push(r);
+      if (id) { toLink.push({ id, makeedu_id: r.makeedu_id }); continue; }
+      // 미매칭: 활성 동일 자연키가 이미 있으면(모호 미연결 케이스) 신규 생성 시 제약 위반 → 스킵(중복 방지).
+      if (activeNatural.has(`${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`)) { skippedDup++; continue; }
+      toInsert.push(r);
     }
     console.log(`\n[additive] ijw 기존 학생 ${existing.length} | makeedu ${rows.length}`);
     console.log(`  이미 연결됨(재실행): ${alreadyLinked}`);
     console.log(`  ijw 매칭 → makeedu_id 백필: ${toLink.length}`);
     console.log(`  ijw에 없음 → 신규 추가: ${toInsert.length}`);
+    if (skippedDup) console.log(`  활성 동일 자연키 존재(모호 미연결) → 스킵: ${skippedDup}`);
     if (toInsert.length) console.log("  신규 표본:", toInsert.slice(0, 5).map((r) => `${r.name}/${r.school || "?"}/${r.grade || "?"}`).join(", "));
 
     if (!APPLY) {
@@ -152,21 +160,27 @@ function mapRows(ws) {
       linked += res.count;
     }
     for (const r of toInsert) {
-      await sql`
-        insert into students
-          (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
-           student_phone, parent_phone, parent_name, birth_date, enrolled_at,
-           address, email, status, withdrawn_at, notes)
-        values
-          (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.gender}, ${r.attendance_code},
-           ${r.school}, ${r.grade}, ${r.student_phone}, ${r.parent_phone}, ${r.parent_name},
-           ${r.birth_date}, ${r.enrolled_at}, ${r.address}, ${r.email}, ${r.status},
-           ${r.withdrawn_at}, ${r.notes})
-        on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
-      inserted++;
+      try {
+        await sql`
+          insert into students
+            (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
+             student_phone, parent_phone, parent_name, birth_date, enrolled_at,
+             address, email, status, withdrawn_at, notes)
+          values
+            (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.gender}, ${r.attendance_code},
+             ${r.school}, ${r.grade}, ${r.student_phone}, ${r.parent_phone}, ${r.parent_name},
+             ${r.birth_date}, ${r.enrolled_at}, ${r.address}, ${r.email}, ${r.status},
+             ${r.withdrawn_at}, ${r.notes})
+          on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
+        inserted++;
+      } catch (e) {
+        // 안전망: 활성 동일 자연키(이름+학교+학년) 제약 위반이면 중복 생성 안 함(스킵). 그 외는 throw.
+        if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) { skippedDup++; continue; }
+        throw e;
+      }
     }
     await L.recordSync(sql, tenantId, "students", linked + inserted);
-    console.log(`\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}`);
+    console.log(`\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}` + (skippedDup ? ` | skipped(자연키 중복): ${skippedDup}` : ""));
   } finally {
     await sql.end();
   }
