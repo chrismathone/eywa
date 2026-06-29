@@ -71,8 +71,15 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
 
   // 마운트 1회: 영속 레이아웃 복원 후 owner 채택(다른 계정이면 초기화).
   useEffect(() => {
-    const done = useWindowStore.persist.rehydrate();
-    Promise.resolve(done).then(() => adoptOwner(owner));
+    // 영속 레이아웃 복원(rehydrate)은 window-store 모듈 로드 시점에서 처리한다(다른 effect의 set보다
+    // 먼저 도록 — 안 그러면 빈 상태가 persist에 써져 영속 창이 파괴됨). 여기선 하이드레이션 완료 후
+    // owner 채택(다른 계정/테넌트면 초기화). 이미 하이드레이션됐으면 즉시, 아니면 완료 시점에.
+    if (useWindowStore.persist.hasHydrated()) {
+      adoptOwner(owner);
+      return;
+    }
+    const unsub = useWindowStore.persist.onFinishHydration(() => adoptOwner(owner));
+    return unsub;
   }, [owner, adoptOwner]);
 
   // 창 안에서 녹음 등 끊기면 안 되는 작업이 진행 중이면 탭 전체 새로고침/이탈을 막는다(부모 탭은

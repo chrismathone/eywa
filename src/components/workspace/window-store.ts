@@ -800,3 +800,11 @@ export const useWindowStore = create<State & Actions>()(
     },
   ),
 );
+
+// ⚠️ skipHydration이라 수동 rehydrate 필요. 컴포넌트 effect에서 호출하면 그보다 먼저 도는 다른 effect
+// (setBackground/setStage)의 set이 **빈 초기상태를 persist에 써버려 영속된 창을 파괴**한다(새로고침 시 창 전멸).
+// 그래서 모듈 로드 시점(클라이언트, 어떤 set·effect보다 먼저)에 rehydrate해 영속본을 가장 먼저 적재한다.
+// (서버에선 window 없음 → 미실행 → SSR은 빈 상태로 렌더, 클라 첫 렌더도 빈 상태라 hydration mismatch 없음.)
+if (typeof window !== "undefined") {
+  void useWindowStore.persist.rehydrate();
+}
