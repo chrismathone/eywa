@@ -182,10 +182,12 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
     try {
       // 1) 업로드 티켓 발급(서버가 tenant·권한·경로·크기 검증) → 2) 스토리지에 PUT(진행률 보존).
       const ext = file.name.split(".").pop()?.toLowerCase() || "webm";
+      // .webm 파일은 브라우저 MIME이 video/webm이라 서버 allowCT(audio/*)에 막힘 → audio 폼이라 audio/*로 정규화.
+      const ct = file.type.startsWith("audio/") ? file.type : `audio/${ext}`;
       const fdT = new FormData();
       fdT.set("kind", "meeting");
       fdT.set("ext", ext);
-      fdT.set("contentType", file.type || `audio/${ext}`);
+      fdT.set("contentType", ct);
       fdT.set("size", String(file.size));
       const tk = await issueAudioUploadTicket(undefined, fdT);
       if (tk?.error || !tk?.ticket) {
