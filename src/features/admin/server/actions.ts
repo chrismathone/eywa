@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
 import type { WithdrawalMetadata } from "@/features/withdrawals/types";
 
 export type MergeStudentsState =
@@ -21,6 +23,7 @@ export async function mergeStudents(
 ): Promise<MergeStudentsState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") return { error: "원장만 가능합니다" };
 
   const keeperId = String(formData.get("keeperId") ?? "").trim();
   const mergeeId = String(formData.get("mergeeId") ?? "").trim();
@@ -55,7 +58,7 @@ export async function mergeStudents(
     .eq("student_id", mergeeId);
 
   // mergee soft delete
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   await supabase
     .from("students")
     .update({
@@ -81,30 +84,35 @@ export async function closeOrphanEnrollments(
 ): Promise<CleanupState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") return { error: "원장만 가능합니다" };
 
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
-  const { data: withdrawnStudents } = await supabase
-    .from("students")
-    .select("id")
-    .eq("status", "withdrawn");
-  const ids = (withdrawnStudents ?? []).map((s) => s.id);
+  // 퇴원 학생은 누적 증가(>1000 가능) → 무페이징 select는 silent 절단 → fetchAllPaged(B2).
+  const withdrawnStudents = await fetchAllPaged<{ id: string }>((from, to) =>
+    supabase.from("students").select("id").eq("status", "withdrawn").range(from, to),
+  );
+  const ids = withdrawnStudents.map((s) => s.id);
   if (ids.length === 0) return { closedCount: 0 };
 
-  const { error, count } = await supabase
-    .from("enrollments")
-    .update(
-      { end_date: today, withdrawal_reason: "퇴원에 따른 자동 종료" },
-      { count: "exact" },
-    )
-    .in("student_id", ids)
-    .is("end_date", null);
-
-  if (error) return { error: error.message };
+  // 대량 .in()은 100개 청크로 분할(URL 414 방지, B3). 청크별 count 합산.
+  let closedCount = 0;
+  for (const part of chunkIds(ids)) {
+    const { error, count } = await supabase
+      .from("enrollments")
+      .update(
+        { end_date: today, withdrawal_reason: "퇴원에 따른 자동 종료" },
+        { count: "exact" },
+      )
+      .in("student_id", part)
+      .is("end_date", null);
+    if (error) return { error: error.message };
+    closedCount += count ?? 0;
+  }
 
   revalidatePath("/admin/cleanup");
-  return { closedCount: count ?? 0 };
+  return { closedCount };
 }
 
 // === 데이터 정리: 수강 없는 재원생 일괄 처리 (퇴원/삭제) ===
@@ -141,7 +149,7 @@ export async function bulkWithdrawStudents(
   if (ids.length === 0) return { error: "학생을 선택해주세요" };
 
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const metadata: WithdrawalMetadata = {
     reason: "other",
     memo: "데이터 정리 일괄 퇴원",

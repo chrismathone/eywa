@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { CalendarCheck, RotateCcw } from "lucide-react";
+import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { endClassTerm, reopenClassTerm } from "@/features/classes/server/actions";
 
@@ -21,7 +22,7 @@ export function ClassTermButton({
   const [endState, endAction, endPending] = useActionState(endClassTerm, undefined);
   const [reopenState, reopenAction, reopenPending] = useActionState(reopenClassTerm, undefined);
   const [open, setOpen] = useState(false);
-  const [today] = useState(() => new Date().toISOString().slice(0, 10));
+  const [today] = useState(() => kstToday());
 
   // 이미 종강 → 재개강
   if (closedAt) {

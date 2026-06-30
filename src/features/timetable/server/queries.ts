@@ -1,12 +1,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, shiftDays } from "../lib/week";
 import type { TeacherColorMap } from "../lib/class-grid";
 
-/** server-only 모듈이라 new Date() OK. 오늘(YYYY-MM-DD, 기준일 기본값). */
-const todayStr = (): string => new Date().toISOString().slice(0, 10);
+/** 오늘(YYYY-MM-DD, 기준일 기본값) — KST 기준(서버 UTC라 새벽 시간대 하루 밀림 방지). */
+const todayStr = (): string => kstToday();
 
 /**
  * 강사 라벨 → 저장된 색 맵(통합뷰 셀·담임색). display_name·english_name(영문닉네임 슬롯 라벨) 둘 다 키.
@@ -396,9 +397,11 @@ export type TodaySlot = ScheduleSlot & { status: "done" | "ongoing" | "upcoming"
 
 export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const supabase = await createClient();
-  const now = new Date();
-  const todayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][now.getDay()];
-  const today = now.toISOString().slice(0, 10);
+  const today = kstToday();
+  // KST 날짜를 UTC 자정으로 파싱해 요일 도출 — 서버 UTC에서 now.getDay()는 새벽 시간대에 어제 요일이 된다.
+  const todayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
+    new Date(`${today}T00:00:00Z`).getUTCDay()
+  ];
 
   // 오늘 요일 스케줄만 — fetchSlots(전 요일 fetch 후 JS 필터)를 SQL 필터로 좁힘(데이터 ~1/7).
   // 폐지(is_active=false)·미래 시작·만료 스케줄 제외 + 종강(closed_at<오늘)은 JS에서 제외(시간표와 일관).
@@ -441,7 +444,7 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const counts = new Map<string, number>();
   for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
 
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const nowMins = kstMinutesOfDay();
   const toMins = (hms: string): number => {
     const [h, m] = hms.split(":");
     return Number(h) * 60 + Number(m);

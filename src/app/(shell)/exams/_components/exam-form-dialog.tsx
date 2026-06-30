@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { AlertCircle, Loader2, Pencil, Plus, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,7 +72,7 @@ function Dialog({
   );
   if (state?.ok) queueMicrotask(onClose);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   // 과목은 시험범위(반) 필터에 쓰여 상태로 — select는 name=subject로 그대로 제출.
   const [subject, setSubject] = useState(exam?.subject ?? subjects.options[0]?.value ?? "");
   const [scopeType, setScopeType] = useState<"academy" | "grade" | "class">(

@@ -11,6 +11,7 @@ import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
+import { kstToday } from "@/lib/date-kst";
 import { RichGridView } from "./_components/rich-grid-view";
 import {
   TimetableEditProvider,
@@ -38,7 +39,8 @@ export default async function TimetablePage({
   const view: ViewMode = viewParam === "integrated" ? "integrated" : "basic";
 
   // 주간 이동(타임머신) — week 파라미터(그 주 아무 날)를 월요일로 정규화. 미지정=이번 주.
-  const today = new Date().toISOString().slice(0, 10);
+  // 기준 '오늘'은 KST(서버 UTC라 새벽 시간대 하루 밀림 방지). week.ts 내부 날짜 산술은 UTC 결정적 유지.
+  const today = kstToday();
   const thisWk = thisMonday(today);
   const week = weekRaw && /^\d{4}-\d{2}-\d{2}$/.test(weekRaw) ? mondayOf(weekRaw) : thisWk;
   // 그 시점 명단 재구성 기준일 = ijw getWeekReferenceDate(미래주→월/이번주→오늘/과거주→일).

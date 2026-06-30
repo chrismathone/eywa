@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 
 const STATUSES = ["present", "absent", "late", "excused", "makeup", "early_leave"] as const;
@@ -22,6 +23,7 @@ export async function saveAttendance(
 ): Promise<SaveAttendanceState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
   const classId = String(formData.get("classId") ?? "").trim();
   const date = String(formData.get("date") ?? "").trim();
@@ -127,6 +129,7 @@ export async function setAttendanceCell(input: {
 }): Promise<CellResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "attendance"))) return { error: "출석 관리 권한이 없습니다" };
 
   const { studentId, classId, sessionDate, status } = input;
   const noteProvided = input.note !== undefined;

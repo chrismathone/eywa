@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { attendanceRate } from "@/lib/calc/attendance";
 
@@ -311,7 +312,7 @@ function buildMonthDays(month: string): MatrixDay[] {
   const [y, m] = month.split("-").map(Number);
   if (!y || !m) return [];
   const lastDay = new Date(y, m, 0).getDate();
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = kstToday();
   const days: MatrixDay[] = [];
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;

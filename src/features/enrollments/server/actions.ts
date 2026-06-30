@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -45,11 +46,12 @@ export async function createEnrollment(
 ): Promise<CreateEnrollmentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const classId = String(formData.get("classId") ?? "").trim();
   const startDate =
-    String(formData.get("startDate") ?? "").trim() || new Date().toISOString().slice(0, 10);
+    String(formData.get("startDate") ?? "").trim() || kstToday();
   const endDate = String(formData.get("endDate") ?? "").trim() || null;
   // 분리등원: 콤마구분 요일(예 "mon,thu"). 비거나 수업의 전 요일이면 [] = 전 요일 등원.
   const pickedDays = String(formData.get("attendanceDays") ?? "")
@@ -103,11 +105,12 @@ export async function moveEnrollment(
 ): Promise<MoveEnrollmentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const newClassId = String(formData.get("newClassId") ?? "").trim();
   const startDate =
-    String(formData.get("startDate") ?? "").trim() || new Date().toISOString().slice(0, 10);
+    String(formData.get("startDate") ?? "").trim() || kstToday();
 
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
   if (!newClassId) return { error: "이동할 반을 선택해주세요" };
@@ -121,7 +124,7 @@ export async function moveEnrollment(
   if (!current) return { error: "기존 수강 정보를 찾을 수 없습니다" };
 
   // 1) 기존 enrollment 종료
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const { error: endErr } = await supabase
     .from("enrollments")
     .update({ end_date: today, withdrawal_reason: "반 이동" })
@@ -179,6 +182,7 @@ export async function moveEnrollmentsBatch(
 ): Promise<MoveEnrollmentsBatchState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
   if (!Array.isArray(moves) || moves.length === 0) return { results: [] };
 
   const eff =

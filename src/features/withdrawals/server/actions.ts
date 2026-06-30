@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import {
@@ -36,6 +37,7 @@ export async function updateWithdrawalReason(
 ): Promise<WithdrawalReasonState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "withdrawals"))) return { error: "퇴원 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const reasonStr = String(formData.get("reason") ?? "").trim();
@@ -95,6 +97,7 @@ export async function toggleConsultationStep(
 ): Promise<ConsultationToggleState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "withdrawals"))) return { error: "퇴원 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const step = String(formData.get("step") ?? "").trim() as keyof WithdrawalConsultation;
@@ -147,6 +150,7 @@ export async function reactivateStudent(
 ): Promise<ReactivateState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "withdrawals"))) return { error: "퇴원 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };

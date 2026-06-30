@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { AlertCircle, Loader2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,7 +118,7 @@ export function ExpenseDialog({
               <input
                 name="expenseDate"
                 type="date"
-                defaultValue={expense?.expenseDate ?? new Date().toISOString().slice(0, 10)}
+                defaultValue={expense?.expenseDate ?? kstToday()}
                 className={inputCls}
               />
             </Field>

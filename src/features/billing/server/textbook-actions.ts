@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 
 // 교재신청(textbook_orders) CRUD — invoices actions 골격 본뜸. 상태 전환 시 해당 타임스탬프를
@@ -45,6 +47,7 @@ async function resolveStudentName(
 export async function createTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const f = parse(formData);
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
 
@@ -59,7 +62,7 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
     book_detail: f.bookDetail,
     price: f.price,
     status: "requested",
-    request_date: f.requestDate ?? new Date().toISOString().slice(0, 10),
+    request_date: f.requestDate ?? kstToday(),
     status_at: new Date().toISOString(),
     status_by_name: user.displayName,
     notes: f.notes,
@@ -73,6 +76,7 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
 export async function updateTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "교재신청 ID가 누락되었습니다" };
   const f = parse(formData);
@@ -105,6 +109,7 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
 export async function toggleTextbookCheck(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   const field = String(formData.get("field") ?? "").trim();
   const checked = String(formData.get("checked") ?? "") === "true";
@@ -149,6 +154,7 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
 export async function deleteTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "교재 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "교재신청 ID가 누락되었습니다" };
 

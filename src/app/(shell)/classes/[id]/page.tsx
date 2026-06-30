@@ -8,6 +8,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
+import { kstToday } from "@/lib/date-kst";
 import {
   getClassAttendanceStats,
   getClassDetail,
@@ -39,7 +40,7 @@ const DAY_LABEL: Record<DayOfWeek, string> = {
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return kstToday();
 }
 
 export default async function ClassDetailPage({

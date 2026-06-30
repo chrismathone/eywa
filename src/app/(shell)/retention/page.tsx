@@ -6,6 +6,7 @@ import {
   type RosterStudent,
 } from "@/features/retention/server/queries";
 import { RetentionTabs } from "@/features/retention/components/retention-tabs";
+import { kstToday } from "@/lib/date-kst";
 import { RetentionGauge } from "@/features/retention/components/retention-gauge";
 import { PulseTiles } from "@/features/retention/components/pulse-tiles";
 import { ActionQueue } from "@/features/retention/components/action-queue";
@@ -14,9 +15,9 @@ import { formatWonShort, ddayLabel } from "@/features/retention/format";
 
 export const metadata = { title: "이탈 방어 — eywa" };
 
-// new Date()를 컴포넌트 본문 밖 헬퍼로 분리(RSC purity 룰 회피). request당 1회 평가.
+// KST 오늘(서버 UTC라 새벽 시간대 하루 밀림 방지). request당 1회 평가.
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  return kstToday();
 }
 function subOf(r: RosterStudent): string {
   return [r.grade, r.school].filter(Boolean).join(" · ") || "—";

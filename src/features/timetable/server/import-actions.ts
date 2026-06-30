@@ -3,6 +3,8 @@
 import ExcelJS from "exceljs";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { parseEditSheet } from "@/features/timetable/import/parse";
@@ -86,6 +88,7 @@ export type PreviewState = { error?: string; diff?: ImportDiff };
 export async function previewTimetableImport(formData: FormData): Promise<PreviewState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일을 선택해주세요" };
 
@@ -119,8 +122,9 @@ export type ApplyState = {
 export async function applyTimetableImport(diff: ImportDiff): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
   // 1) 스냅샷 — 영향 enrollment의 before 상태(이동·삭제 대상) 백업
   const affectedIds = [

@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { Loader2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { changeStudentStatus, type ChangeStatusState } from "@/features/students/server/actions";
@@ -34,14 +35,12 @@ export function StatusDialog({
   studentId,
   studentName,
   currentStatus,
-  open,
   initialTarget,
   onClose,
 }: {
   studentId: string;
   studentName: string;
   currentStatus: string;
-  open: boolean;
   initialTarget: Target;
   onClose: (changed: boolean) => void;
 }) {
@@ -51,12 +50,15 @@ export function StatusDialog({
   );
   const [target, setTarget] = useState<Target>(initialTarget);
 
-  if (!open) return null;
-
-  // close on success
-  if (state && !state.error) {
-    queueMicrotask(() => onClose(true));
-  }
+  // 성공 시 1회만 닫기 — 렌더 본문 부수효과(queueMicrotask) 대신 가드된 effect(#67).
+  // 부모가 조건부 마운트({open ? … })라 닫히면 언마운트 → useActionState 리셋 → stale 성공 재발화 불가.
+  const closedRef = useRef(false);
+  useEffect(() => {
+    if (state && !state.error && !closedRef.current) {
+      closedRef.current = true;
+      onClose(true);
+    }
+  }, [state, onClose]);
 
   const isWithdraw = target === "withdrawn";
   const isHold = target === "on_hold";
@@ -100,7 +102,7 @@ export function StatusDialog({
                   name="date"
                   type="date"
                   required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  defaultValue={kstToday()}
                   className="border-border bg-card text-foreground num w-full rounded-md border px-3 py-2 text-sm"
                 />
               </div>

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import {
   createUploadTicket,
@@ -76,7 +77,7 @@ function won(v: FormDataEntryValue | null): number {
 }
 
 const VALID_ROLES = new Set(["author", "director", "ceo", "executor"]);
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => kstToday();
 
 function parse(formData: FormData) {
   const categoryRaw = String(formData.get("category") ?? "기타").trim();
@@ -124,6 +125,7 @@ function validate(f: ReturnType<typeof parse>): ExpenseState {
 export async function createExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const f = parse(formData);
   const invalid = validate(f);
   if (invalid) return invalid;
@@ -157,6 +159,7 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
 export async function updateExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   const f = parse(formData);
@@ -194,6 +197,7 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
 export async function deleteExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
 
@@ -224,6 +228,7 @@ export async function toggleExpenseApproval(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   const role = String(formData.get("role") ?? "").trim();
@@ -259,6 +264,7 @@ export async function toggleExpenseApproval(
 export async function duplicateExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
 
@@ -306,6 +312,7 @@ export async function setExpenseReceiptType(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   const type = String(formData.get("receiptType") ?? "").trim();
@@ -364,6 +371,7 @@ export async function addExpenseReceipt(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   const path = String(formData.get("path") ?? "").trim();
@@ -408,6 +416,7 @@ export async function removeExpenseReceipt(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   const path = String(formData.get("path") ?? "").trim();

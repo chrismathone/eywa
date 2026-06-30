@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createStudentGrade, type CreateGradeState } from "@/features/students/server/actions";
@@ -46,7 +47,7 @@ export function GradeForm({
           name="takenOn"
           type="date"
           required
-          defaultValue={new Date().toISOString().slice(0, 10)}
+          defaultValue={kstToday()}
           className="border-border bg-card text-foreground num rounded-md border px-2 py-1 text-xs sm:col-span-1"
         />
         <select

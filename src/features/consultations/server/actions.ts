@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 
 type CareFocus = {
@@ -28,7 +28,7 @@ export async function runStudentCareAnalysis(
   // 역할 게이트 — 유료 AI 호출은 학생 접근권이 있는 역할만(비용통제, #S5 형제).
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "students"))) {
+  if (!(await canWriteTenant(user.systemRole, "students"))) {
     return { error: "학생 권한이 없습니다" };
   }
 
@@ -206,6 +206,7 @@ export async function createStudentConsultation(
 ): Promise<ConsultationFormState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "consultations"))) return { error: "상담 관리 권한이 없습니다" };
 
   const input = readConsultationForm(formData);
   const fieldErrors = validateConsultation(input);
@@ -245,6 +246,7 @@ export async function updateStudentConsultation(
 ): Promise<ConsultationFormState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "consultations"))) return { error: "상담 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
@@ -312,6 +314,7 @@ export async function deleteStudentConsultation(
 ): Promise<DeleteConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "consultations"))) return { error: "상담 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();

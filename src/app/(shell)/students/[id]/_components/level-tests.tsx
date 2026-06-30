@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { AlertCircle, Loader2, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -44,7 +45,7 @@ function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void
     undefined,
   );
   const [subject, setSubject] = useState(subjects.options[0]?.value ?? "");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">

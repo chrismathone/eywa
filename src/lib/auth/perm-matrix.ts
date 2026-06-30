@@ -3,6 +3,7 @@ import { cache } from "react";
 import {
   accessLevel,
   canAccess,
+  canWrite,
   resolveMatrix,
   type Access,
   type AccessMatrix,
@@ -32,9 +33,17 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
   }
 });
 
-/** 현재 테넌트 매트릭스로 메뉴 접근 여부(서버 액션 직접 게이트용). 매트릭스 fetch는 cache(1회). */
+/** 현재 테넌트 매트릭스로 메뉴 접근 여부(읽기 게이트용 — none만 차단, readonly 통과). 매트릭스 fetch는 cache(1회). */
 export async function canAccessTenant(role: SystemRole, menu: MenuKey): Promise<boolean> {
   return canAccess(role, menu, await getPermMatrix());
+}
+
+/**
+ * 현재 테넌트 매트릭스로 쓰기 권한 여부(변경 서버 액션 게이트용 — full|scoped만 통과, readonly/none 차단).
+ * ⚠️ 쓰기 액션은 canAccessTenant 대신 이걸 쓸 것(readonly 누수 방지).
+ */
+export async function canWriteTenant(role: SystemRole, menu: MenuKey): Promise<boolean> {
+  return canWrite(role, menu, await getPermMatrix());
 }
 
 /** 현재 테넌트 매트릭스로 접근 수준(readonly 다운그레이드가 쓰기 차단에 반영되도록). */

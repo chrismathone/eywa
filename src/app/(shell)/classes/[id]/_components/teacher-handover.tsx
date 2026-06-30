@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { AlertCircle, ArrowRight, Check, Loader2, UserCog, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +39,7 @@ function HandoverDialog({
   onClose: () => void;
 }) {
   const [state, formAction] = useActionState<HandoverState, FormData>(scheduleHandover, undefined);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
   useEffect(() => {
     if (state?.ok) onClose();

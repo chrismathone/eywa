@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { kstToday } from "@/lib/date-kst";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ function shiftPeriod(period: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return kstToday();
 }
 function currentPeriod(): string {
   const d = new Date();

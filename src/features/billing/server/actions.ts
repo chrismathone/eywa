@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -27,6 +28,8 @@ export async function updateInvoicePayment(
 ): Promise<UpdateInvoiceState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "청구서 ID가 누락되었습니다" };
@@ -100,6 +103,8 @@ export async function batchMarkInvoicesPaid(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+
   const idsRaw = String(formData.get("ids") ?? "").trim();
   const ids = idsRaw.split(",").map((s) => s.trim()).filter(Boolean);
   if (ids.length === 0) return { error: "선택된 청구서가 없습니다" };
@@ -154,6 +159,8 @@ export async function createInvoice(
 ): Promise<CreateInvoiceState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+
+  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();

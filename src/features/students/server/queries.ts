@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
@@ -1214,7 +1215,7 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
   ]);
   if (!detail) return null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const unpaid = invoices.filter((i) => i.status !== "paid");
   const overdue = unpaid.filter((i) => i.dueDate != null && i.dueDate < today);
   const latest = invoices[0] ?? null; // period desc 정렬이라 [0]이 최신

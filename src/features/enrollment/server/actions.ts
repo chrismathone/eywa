@@ -6,7 +6,8 @@ import { z } from "zod";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
@@ -127,6 +128,7 @@ export async function createEnrollmentConsultation(
 
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const learningHistory: Record<string, unknown> = {};
   if (parsed.data.prevAcademy) learningHistory.prevAcademy = parsed.data.prevAcademy;
@@ -241,7 +243,7 @@ export async function updateEnrollmentConsultation(
 ): Promise<UpdateConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
@@ -300,7 +302,7 @@ export async function setEnrollmentOutcome(
 ): Promise<SetOutcomeState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const outcome = String(formData.get("outcome") ?? "") as Outcome;
@@ -334,7 +336,7 @@ export async function deleteEnrollmentConsultation(
 ): Promise<DeleteConsultationState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const redirectTo = String(formData.get("redirectTo") ?? "").trim();
@@ -406,7 +408,7 @@ export async function runAiAnalysis(
   // enrollment:none 역할도 호출 자체는 트리거할 수 있어 막는다.
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "enrollment"))) {
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) {
     return { error: "등록상담 권한이 없습니다" };
   }
 
@@ -532,6 +534,7 @@ export async function convertConsultationToStudent(
 ): Promise<ConvertToStudentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const consultationId = String(formData.get("consultationId") ?? "").trim();
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
@@ -566,7 +569,7 @@ export async function convertConsultationToStudent(
     return { studentId: c.student_id };
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
   // students INSERT
   const { data: stu, error: stuErr } = await supabase
@@ -629,6 +632,7 @@ export async function startConsultationFromAudio(
 ): Promise<StartConsultationFromAudioState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const prospectName = String(formData.get("prospectName") ?? "").trim();
   const prospectGrade = String(formData.get("prospectGrade") ?? "").trim() || null;
@@ -745,7 +749,7 @@ export async function updateConsultationReportSection(
 ): Promise<UpdateConsultationReportState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
 
   const analysisId = String(formData.get("analysisId") ?? "").trim();
   const consultationId = String(formData.get("consultationId") ?? "").trim();

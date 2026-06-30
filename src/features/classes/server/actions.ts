@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { logAction } from "@/features/audit/server/log";
 import { getClassroomAssignmentData } from "./queries";
@@ -107,8 +108,8 @@ export async function createClass(
   _prev: ClassFormState,
   formData: FormData,
 ): Promise<ClassFormState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
+  const { user, error: gateError } = await requireClassWrite();
+  if (gateError || !user) return { error: gateError };
 
   const allowed = await allowedSubjectSet();
   const input = readForm(formData, allowed);
@@ -155,7 +156,7 @@ export async function createClass(
 
   if (input.schedules.length > 0) {
     // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 전 스케줄 저장이 조용히 실패).
-    const validFrom = new Date().toISOString().slice(0, 10);
+    const validFrom = kstToday();
     const rows = input.schedules.map((s) => ({
       tenant_id: user.tenantId,
       class_id: data.id,
@@ -185,8 +186,8 @@ export async function updateClass(
   _prev: ClassFormState,
   formData: FormData,
 ): Promise<ClassFormState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
+  const { user, error: gateError } = await requireClassWrite();
+  if (gateError || !user) return { error: gateError };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "반 ID가 누락되었습니다" };
@@ -238,7 +239,7 @@ export async function updateClass(
 
   if (input.schedules.length > 0) {
     // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 delete만 되고 재삽입이 실패).
-    const validFrom = new Date().toISOString().slice(0, 10);
+    const validFrom = kstToday();
     const rows = input.schedules.map((s) => ({
       tenant_id: user.tenantId,
       class_id: id,
@@ -300,7 +301,7 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
   if (error || !user) return { error };
 
   const id = String(formData.get("id") ?? "").trim();
-  const date = String(formData.get("date") ?? "").trim() || new Date().toISOString().slice(0, 10);
+  const date = String(formData.get("date") ?? "").trim() || kstToday();
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
   const supabase = await createClient();
@@ -550,7 +551,7 @@ async function detectTeacherConflict(
   if (cands.length === 0) return null;
 
   const days = [...new Set(cands.map((c) => c.day))];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
 
   // 같은 요일의 기존 스케줄(활성 반만, !inner + is_active). 종강·만료는 JS에서 추가 제외.
   const { data } = await supabase

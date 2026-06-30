@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 
 export type LogActionState = { ok?: boolean; error?: string } | undefined;
@@ -17,6 +18,7 @@ export async function logRetentionAction(
 ): Promise<LogActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "retention"))) return { error: "이탈 방어 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const summary = String(formData.get("summary") ?? "").trim();
@@ -55,6 +57,7 @@ const CAMPAIGN_STATUSES = ["pending", "contacted", "enrolled", "declined"];
 export async function campaignAdd(studentId: string): Promise<CampaignResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!studentId) return { ok: false, error: "학생 ID가 누락되었습니다" };
   const supabase = await createClient();
   const { error } = await supabase.from("reenrollment_campaign_targets").insert({
@@ -74,6 +77,7 @@ export async function campaignAdd(studentId: string): Promise<CampaignResult> {
 export async function campaignSetStatus(targetId: string, status: string): Promise<CampaignResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!targetId || !CAMPAIGN_STATUSES.includes(status)) return { ok: false, error: "잘못된 요청입니다" };
   const supabase = await createClient();
   const patch: Record<string, unknown> = { status };
@@ -93,6 +97,7 @@ export async function campaignSetStatus(targetId: string, status: string): Promi
 export async function campaignRemove(targetId: string): Promise<CampaignResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "retention"))) return { ok: false, error: "이탈 방어 권한이 없습니다" };
   if (!targetId) return { ok: false, error: "대상 ID가 누락되었습니다" };
   const supabase = await createClient();
   const { error } = await supabase.from("reenrollment_campaign_targets").delete().eq("id", targetId);

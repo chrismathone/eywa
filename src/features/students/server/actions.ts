@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { kstToday } from "@/lib/date-kst";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
   type WithdrawalMetadata,
@@ -98,6 +99,7 @@ export async function createStudent(
 ): Promise<StudentFormState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const input = readForm(formData);
   const fieldErrors = validate(input);
@@ -156,6 +158,7 @@ export async function updateStudent(
 ): Promise<StudentFormState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "학생 ID가 누락되었습니다" };
@@ -274,6 +277,7 @@ export async function changeStudentStatus(
 ): Promise<ChangeStatusState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const target = String(formData.get("target") ?? "").trim();
@@ -378,7 +382,7 @@ export async function endSingleEnrollment(
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim() || "other";
-  const date = String(formData.get("date") ?? "").trim() || new Date().toISOString().slice(0, 10);
+  const date = String(formData.get("date") ?? "").trim() || kstToday();
 
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
 
@@ -408,6 +412,7 @@ export async function createStudentMemo(
 ): Promise<CreateMemoState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || "general";
@@ -439,6 +444,7 @@ export async function deleteStudentMemo(
 ): Promise<DeleteMemoState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
@@ -460,6 +466,7 @@ export async function updateStudentMemo(
 ): Promise<UpdateMemoState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
@@ -487,6 +494,7 @@ export async function toggleStudentMemoPin(
 ): Promise<ToggleMemoPinState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
@@ -512,6 +520,7 @@ export async function createStudentGrade(
 ): Promise<CreateGradeState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const examName = String(formData.get("examName") ?? "").trim();
@@ -692,6 +701,7 @@ export async function createStudentLevelTest(
 ): Promise<LevelTestState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const testTypeRaw = String(formData.get("testType") ?? "placement").trim();
@@ -735,6 +745,7 @@ export async function deleteStudentLevelTest(
 ): Promise<LevelTestState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();

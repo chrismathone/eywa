@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import {
   applyLevelChange,
@@ -23,6 +24,7 @@ export async function changeClassLevel(
 ): Promise<ChangeClassLevelState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 관리 권한이 없습니다" };
   if (!classId) return { error: "반 ID가 누락되었습니다" };
 
   const supabase = await createClient();

@@ -71,17 +71,18 @@ export function StatusAction({
           ))}
         </div>
       ) : null}
-      <StatusDialog
-        studentId={studentId}
-        studentName={studentName}
-        currentStatus={STATUS_LABEL[currentStatus] ?? currentStatus}
-        open={open}
-        initialTarget={target}
-        onClose={(changed) => {
-          setOpen(false);
-          if (changed) location.reload();
-        }}
-      />
+      {open ? (
+        <StatusDialog
+          studentId={studentId}
+          studentName={studentName}
+          currentStatus={STATUS_LABEL[currentStatus] ?? currentStatus}
+          initialTarget={target}
+          onClose={(changed) => {
+            setOpen(false);
+            if (changed) location.reload();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

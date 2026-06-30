@@ -1026,7 +1026,26 @@ attendance/date 9·max class 15. → 결론: **상담 통계만 현재 데이터
 
 > ⚠️ **권한/접근제어를 건드리는 새 코드는 반드시 `requireAccess`/`apiAccess`/`accessLevelTenant`/`canAccessTenant`(tenant-aware)로
 > 게이트**할 것 — 매트릭스 인자 없는 `canAccess(role,menu)`/`accessLevel`은 override를 무시한다(위 orphan 0건을 깨지 말 것).
+> ⚠️ **변경(mutating) 서버 액션의 쓰기 게이트는 `canWriteTenant(role,menu)`(=full|scoped)** 를 쓴다 — `canAccessTenant`(=none만 차단)는
+> **readonly도 통과**시켜 쓰기 누수가 난다(아래 2026-07-01 참조). 읽기 게이트만 `canAccessTenant`.
 > 그리고 이런 중요한 배선은 **구현할 때마다 이 CLAUDE.md에 소비처·갭을 기록**한다(사용자 지침).
+
+### 변경 서버 액션 역할 게이트 전면 배선 + readonly 누수 차단 + KST '오늘' 교정 (2026-07-01) — ✅ 4게이트 그린
+적대적 전수 검증(5에이전트 + 직접 교차검증)에서 "변경 서버 액션 ~40개가 `getCurrentUser()` 비널 체크만 하고 **역할 게이트 없음**"이
+최대 클러스터로 확인(같은 파일 형제 액션은 게이트됨 = 누락 증거). RLS는 테넌트만 막고 역할은 못 막으므로 같은 학원 저권한 계정
+(회계·뷰어·학생, 일부 강사)이 직접 POST로 UI에 없는 변경 가능했던 **테넌트 내 권한상승 갭**. 무회귀 원칙(full·scoped는 그대로 통과,
+readonly/none만 차단)으로 일괄 배선.
+- **공용 헬퍼 신설**: [`canWrite(role,menu,matrix)`](src/lib/permissions.ts)(=`full`|`scoped`) + [`canWriteTenant`](src/lib/auth/perm-matrix.ts)
+  (override 반영). ⚠️ **쓰기 게이트는 canAccessTenant(=`none`만 차단, readonly 통과) 금지** — 반드시 canWriteTenant.
+- **신규 게이트(무게이트였던 ~40 액션)**: attendance(save/cell)·billing(invoice/expense8/textbook4)·withdrawals3·retention4·enrollments(create/move/batch)·
+  timetable(changeClassLevel/import)·classes(create/update=`requireClassWrite` 재사용)·consultations(create/update/delete)·students10(create/update/status/
+  memo4/grade/levelTest create+**delete**)·enrollment(createConsultation[public 진입]·startFromAudio·convert). admin(`mergeStudents`·`closeOrphanEnrollments`)=**master 전용**(형제 `bulkWithdrawStudents` 패턴).
+- **기존 canAccessTenant 쓰기 게이트 교정(readonly 누수)**: meetings 7곳(viewer=readonly 쓰기 차단)·consultations `runStudentCareAnalysis`(회계/뷰어 readonly 유료 AI 차단)·enrollment 5곳(일관성, enrollment엔 readonly 없어 동작 동일). **읽기 게이트 보존**: search 팰릿(readonly 검색 정상), kiosk(master 전용).
+  ⚠️ private helper(`createConsultationWithAudio`)·읽기 액션(expense `signExpenseReceipts/signExpenseReceipt`)은 게이트 안 함(public 진입점·readonly 열람 보존).
+- **함께 수정한 쿼리/다이얼로그 버그**: ① [`getEnrollmentConsultations`](src/features/enrollment/server/queries.ts) 무필터 전건 select(1000 절단)+무청크 `.in()`+`(ai ?? [])` error 삼킴 → `fetchAllPaged`(페이지별 빌더)+`fetchInChunks`. ② [`closeOrphanEnrollments`](src/features/admin/server/actions.ts) master 게이트 + `fetchAllPaged`+`chunkIds`. ③ 상태 다이얼로그 #67(always-mounted+렌더본문 queueMicrotask) → 부모 조건부 마운트 + 가드된 effect([status-action](<src/app/(shell)/students/[id]/_components/status-action.tsx>)/[status-dialog](<src/app/(shell)/students/[id]/_components/status-dialog.tsx>)).
+- **UTC/KST '오늘' 교정**: 서버 UTC(Vercel)에서 `new Date().toISOString().slice(0,10)`이 00:00–09:00 KST에 하루 전(키오스크 체크인·녹음은 이미 KST라 불일치). 신설 [`date-kst.ts`](src/lib/date-kst.ts) `kstToday`/`kstMonthStart`/`kstMonth`/`kstMinutesOfDay`(server/client 공용, server-only 금지)로 **비즈니스 '오늘'** 치환: 대시보드(월 KPI·오늘 기록 반·current period)·시간표(주 기준일·`getTodaySchedule` 요일+**슬롯 상태 nowMins**[기존 `now.getHours()`=UTC 9시간 오차 실버그])·출석 그리드·연체 판정·생성/변경 기본일·클라 날짜입력 defaultValue 다수. ⚠️ **보존(치환 금지)**: `week.ts` parse/fmt·결정적 UTC 산술·롤링 윈도우(7일 추세·30일·N일)·`ai_model_version` 라벨·엑셀 파일명.
+- 검증: typecheck0 / lint0(경고 7, baseline 8에서 classes-tab 미사용 disable 제거로 감소) / **test547**(신규 [permissions.test](src/lib/permissions.test.ts) 3 + [date-kst.test](src/lib/date-kst.test.ts) 5) / build✓. 회귀 0 = 게이트가 막는 역할은 readonly/none뿐(MENU_ACCESS 대조), full·scoped 현재 동작 보존.
+- ⚠️ **잔여(이번 범위 밖)**: full|scoped 게이트는 역할만 보고 행 단위 소유(강사 본인 담당 학생만)는 안 막음 → 행 스코프는 후속. 급여 혼합길이 세션 오산정·잠복 B2(현<1000)·P2 경미(라벨/죽은코드)는 별도.
 
 ### 수강료 계산기 전면 재구현 — 신입생 상담 견적 도구 + 환불규정 + 공휴일 정밀화 (2026-06-19)
 사용자 지적: 계산기의 "청구서로 저장"이 **재원생 + invoices 테이블**에 묶여 엉뚱했고(신입생 상담 견적 도구여야 함),

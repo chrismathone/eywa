@@ -8,7 +8,7 @@ import { submitTranscript } from "@/lib/ai/assemblyai";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
@@ -45,7 +45,7 @@ export async function runMeetingAiAnalysis(
   // 역할 게이트 — 유료 AI 호출은 회의록 접근권이 있는 역할만(비용통제, #S5 형제). RLS는 데이터만 막는다.
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) {
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) {
     return { error: "회의록 권한이 없습니다" };
   }
 
@@ -130,7 +130,7 @@ export async function updateMeetingTitle(
 ): Promise<UpdateMeetingTitleState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
@@ -168,7 +168,7 @@ export async function updateMeetingReportSection(
 ): Promise<UpdateReportSectionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const key = String(formData.get("key") ?? "").trim();
@@ -217,7 +217,7 @@ export async function updateMeetingSpeakers(
 ): Promise<UpdateMeetingSpeakersState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "회의록 ID가 누락되었습니다" };
@@ -267,6 +267,7 @@ export async function startMeetingFromAudio(
 ): Promise<StartMeetingFromAudioState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const title = String(formData.get("title") ?? "").trim();
   const heldAt = String(formData.get("heldAt") ?? "").trim();
@@ -365,7 +366,7 @@ export async function deleteMeeting(
 ): Promise<DeleteMeetingState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const redirectTo = String(formData.get("redirectTo") ?? "").trim();
@@ -406,7 +407,7 @@ export async function retryMeetingProcessing(
 ): Promise<RetryMeetingState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "회의록 ID가 누락되었습니다" };
@@ -473,7 +474,7 @@ export async function regenerateMeetingAnalysis(
 ): Promise<RegenerateMeetingState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canAccessTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "회의록 ID가 누락되었습니다" };

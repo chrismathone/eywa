@@ -1,5 +1,6 @@
 import { CalendarDays } from "lucide-react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { kstToday } from "@/lib/date-kst";
 import { Pill } from "@/components/atoms/pill";
 import {
   getStudentClassesDetail,
@@ -41,8 +42,7 @@ export async function ClassesTab({
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
-  // eslint-disable-next-line react-hooks/purity -- 서버 컴포넌트는 요청당 1회 렌더(today는 안정)
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
   const current = rows.filter((r) => !hasEnded(r) && r.startDate <= today);
   const scheduled = rows.filter((r) => !hasEnded(r) && r.startDate > today);

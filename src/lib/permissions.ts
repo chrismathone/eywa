@@ -79,6 +79,16 @@ export function accessLevel(role: SystemRole, menu: MenuKey, matrix: AccessMatri
   return matrix[menu][role];
 }
 
+/**
+ * 쓰기 권한 여부 = 접근 수준이 full 또는 scoped. readonly/none은 false.
+ * ⚠️ 변경(mutating) 서버 액션의 게이트는 canAccess(=none만 차단, readonly 통과)가 아니라 이걸 써야 한다 —
+ * readonly 역할이 쓰기 액션을 통과하는 누수 방지. (tenant override 반영은 canWriteTenant.)
+ */
+export function canWrite(role: SystemRole, menu: MenuKey, matrix: AccessMatrix = MENU_ACCESS): boolean {
+  const a = matrix[menu][role];
+  return a === "full" || a === "scoped";
+}
+
 // === 테넌트 권한 override (owner 설정 permissions 섹션) ===
 export type PermissionOverride = { menu: MenuKey; role: SystemRole; access: Access };
 

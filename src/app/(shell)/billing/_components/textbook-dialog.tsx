@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { kstToday } from "@/lib/date-kst";
 import { AlertCircle, Loader2, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -125,7 +126,7 @@ export function TextbookDialog({
               <input
                 name="requestDate"
                 type="date"
-                defaultValue={order?.requestDate ?? new Date().toISOString().slice(0, 10)}
+                defaultValue={order?.requestDate ?? kstToday()}
                 className={inputCls}
               />
             </Field>

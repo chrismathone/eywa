@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 
 export type LearningHistory = {
   prevAcademy?: string;
@@ -104,47 +105,41 @@ export async function getEnrollmentConsultations(
   filter?: ConsultationFilter,
 ): Promise<ConsultationListRow[]> {
   const supabase = await createClient();
-  let q = supabase
-    .from("enrollment_consultations")
-    .select(
-      `id, prospect_name, prospect_grade, prospect_school,
-       parent_phone, parent_request, outcome, consulted_at,
-       processing_status, audio_path, from_public_intake,
-       consultant:consultant_id ( display_name )`,
-    )
-    .order("consulted_at", { ascending: false });
-
-  if (filter?.month) {
-    const { startIso, endIso } = monthBounds(filter.month);
-    q = q.gte("consulted_at", startIso).lt("consulted_at", endIso);
-  }
-  if (filter?.consultantId) {
-    q = q.eq("consultant_id", filter.consultantId);
-  }
-  if (filter?.outcome) {
-    q = q.eq("outcome", filter.outcome);
-  }
-  if (filter?.q) {
-    // 이름·전화·학교는 enrollment_consultations에 직접 있어 학생 id 조인 불필요(학생상담보다 단순).
-    const safe = filter.q.trim().replace(/[(),]/g, " ");
-    if (safe)
-      q = q.or(
-        `prospect_name.ilike.%${safe}%,parent_phone.ilike.%${safe}%,prospect_school.ilike.%${safe}%`,
+  // 무필터 기본 칸반은 enrollment_consultations 전건이라 무페이징 select면 1000행에서 silent 절단된다(B2).
+  // fetchAllPaged 콜백 안에서 매번 새 빌더로 필터·정렬을 재적용(range/filter 누적 방지).
+  const data = await fetchAllPaged((from, to) => {
+    let q = supabase
+      .from("enrollment_consultations")
+      .select(
+        `id, prospect_name, prospect_grade, prospect_school,
+         parent_phone, parent_request, outcome, consulted_at,
+         processing_status, audio_path, from_public_intake,
+         consultant:consultant_id ( display_name )`,
       );
-  }
-
-  const { data } = await q;
-  if (!data) return [];
+    if (filter?.month) {
+      const { startIso, endIso } = monthBounds(filter.month);
+      q = q.gte("consulted_at", startIso).lt("consulted_at", endIso);
+    }
+    if (filter?.consultantId) q = q.eq("consultant_id", filter.consultantId);
+    if (filter?.outcome) q = q.eq("outcome", filter.outcome);
+    if (filter?.q) {
+      // 이름·전화·학교는 enrollment_consultations에 직접 있어 학생 id 조인 불필요(학생상담보다 단순).
+      const safe = filter.q.trim().replace(/[(),]/g, " ");
+      if (safe)
+        q = q.or(
+          `prospect_name.ilike.%${safe}%,parent_phone.ilike.%${safe}%,prospect_school.ilike.%${safe}%`,
+        );
+    }
+    return q.order("consulted_at", { ascending: false }).range(from, to);
+  });
+  if (data.length === 0) return [];
 
   const ids = data.map((c) => c.id);
-  let hasAi = new Set<string>();
-  if (ids.length > 0) {
-    const { data: ai } = await supabase
-      .from("consultation_ai_analysis")
-      .select("consultation_id")
-      .in("consultation_id", ids);
-    hasAi = new Set((ai ?? []).map((a) => a.consultation_id));
-  }
+  // id가 수백+ 가능 → 청크 분할(.in() URL 414 방지, error는 throw — 조용히 삼키지 않음, B3).
+  const ai = await fetchInChunks<{ consultation_id: string }>(ids, (chunk) =>
+    supabase.from("consultation_ai_analysis").select("consultation_id").in("consultation_id", chunk),
+  );
+  const hasAi = new Set(ai.map((a) => a.consultation_id));
 
   return data.map((c) => {
     const consultant = (Array.isArray(c.consultant) ? c.consultant[0] : c.consultant) as

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { followUpUrgency, type FollowUpUrgency } from "@/features/consultations/server/queries";
 
@@ -24,25 +25,23 @@ export async function getEnrolledStudentCount(): Promise<number> {
 
 export async function getNewStudentsThisMonth(): Promise<number> {
   const supabase = await createClient();
-  const start = new Date();
-  start.setDate(1);
+  const startIso = kstMonthStart();
   const { count } = await supabase
     .from("students")
     .select("*", { count: "exact", head: true })
     .eq("status", "enrolled")
-    .gte("enrolled_at", toIsoDate(start));
+    .gte("enrolled_at", startIso);
   return count ?? 0;
 }
 
 export async function getWithdrawalsThisMonth(): Promise<number> {
   const supabase = await createClient();
-  const start = new Date();
-  start.setDate(1);
+  const startIso = kstMonthStart();
   const { count } = await supabase
     .from("students")
     .select("*", { count: "exact", head: true })
     .eq("status", "withdrawn")
-    .gte("withdrawn_at", toIsoDate(start));
+    .gte("withdrawn_at", startIso);
   return count ?? 0;
 }
 
@@ -61,9 +60,7 @@ export type EnrollmentChanges = {
 /** 이번 달 신규 등록 + 퇴원 학생 명단(드릴다운용). 카운트는 getNew/WithdrawalsThisMonth와 동일 기준. */
 export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
   const supabase = await createClient();
-  const start = new Date();
-  start.setDate(1);
-  const startIso = toIsoDate(start);
+  const startIso = kstMonthStart();
   const [{ data: nw }, { data: wd }] = await Promise.all([
     supabase
       .from("students")
@@ -132,7 +129,7 @@ async function snapshotForDate(date: string): Promise<AttendanceSnapshot | null>
 }
 
 export async function getMostRecentAttendanceSnapshot(): Promise<AttendanceSnapshot | null> {
-  const today = toIsoDate(new Date());
+  const today = kstToday();
   const todaySnap = await snapshotForDate(today);
   if (todaySnap) return todaySnap;
 
@@ -194,7 +191,7 @@ export async function getRecentAnnouncements(limit = 3): Promise<AnnouncementRow
 /** 오늘 출석을 1건이라도 기록한 반 id 집합 — '미기록' 추적용(시작한 수업 기준 판정은 호출부에서). */
 export async function getTodayRecordedClassIds(): Promise<string[]> {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kstToday();
   const { data } = await supabase
     .from("attendance_records")
     .select("class_id")
@@ -310,8 +307,7 @@ export type PaymentSnapshot = {
 
 export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null> {
   const supabase = await createClient();
-  const d = new Date();
-  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const period = kstMonth();
   const { data } = await supabase
     .from("invoices")
     .select("amount_total, amount_paid, status")
@@ -391,8 +387,7 @@ export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
 }
 
 function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 
 // ─────────── 추가 대시보드 위젯 ───────────
