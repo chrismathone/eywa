@@ -252,6 +252,8 @@ export type ConsultationDetail = ConsultationListRow & {
   audioDurationSec: number | null;
   recommendedClasses: { id: string; className: string; subject: string }[];
   studentId: string | null;
+  /** makeedu counselSeq — 있으면 makeedu 원본 상세 페이지로 바로 가는 링크를 표시. */
+  makeeduId: string | null;
   fields: FullConsultationFields;
 };
 
@@ -262,7 +264,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     .select(
       `id, prospect_name, prospect_grade, prospect_school,
        parent_name, parent_phone, parent_request, learning_history,
-       outcome, consulted_at, student_id, from_public_intake,
+       outcome, consulted_at, student_id, from_public_intake, makeedu_id,
        audio_path, audio_duration_sec, transcription, speaker_labels,
        processing_status, processing_error,
        english_name, gender, blood_type, birth_date, student_phone, home_phone,
@@ -360,6 +362,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
       : null,
     recommendedClasses,
     studentId: (c as { student_id?: string | null }).student_id ?? null,
+    makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
     fields: mapFullFields(c as Record<string, unknown>),
   };
 }

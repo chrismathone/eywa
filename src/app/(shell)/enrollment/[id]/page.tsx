@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ClipboardList, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
+import { AlertCircle, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
@@ -206,6 +206,17 @@ export default async function EnrollmentDetailPage({
             ) : (
               <p className="text-text-faint text-sm">기재된 상담 내용이 없습니다.</p>
             )}
+            {/* makeedu 동기화된 예비상담(makeedu_id=counselSeq)은 원본 상세로 바로 가는 링크. 클릭 시 makeedu 로그인 필요. */}
+            {consult.makeeduId ? (
+              <a
+                href={`https://school.makeedu.co.kr/counsel/counselList_detail.do?counselSeq=${consult.makeeduId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary mt-3 inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+              >
+                makeedu에서 원본 상세 보기 <ExternalLink className="size-3.5" />
+              </a>
+            ) : null}
           </Card>
 
           <Card emoji="📚" title="학습 이력">
