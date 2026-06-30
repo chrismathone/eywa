@@ -10,7 +10,11 @@ import {
   updateClass,
   type ClassFormState,
 } from "@/features/classes/server/actions";
-import { subjectWeekdayPeriods, type PeriodsConfig } from "@/features/timetable/lib/periods";
+import {
+  subjectWeekdayPeriods,
+  subjectWeekendPeriods,
+  type PeriodsConfig,
+} from "@/features/timetable/lib/periods";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
@@ -85,6 +89,8 @@ export function ClassForm({
   // 과목은 교시표(8↔10교시)를 좌우하므로 상태로 들어 그리드와 동기. select는 name=subject로 그대로 제출.
   const [subject, setSubject] = useState(defaults?.subject ?? subjects[0]?.value ?? "math");
   const periods = subjectWeekdayPeriods(subject, periodsConfig);
+  // 주말(토·일) 교시는 평일과 시각이 달라 그리드에 별도로 넘긴다(주말은 과목 무관 = config.weekend).
+  const weekendPeriods = subjectWeekendPeriods(periodsConfig);
   // 담임도 상태로 — 그리드 셀이 담임 이름을 표시하고, 교시별 부담임 드롭다운의 "담임" 기본값으로 쓴다.
   const [teacherId, setTeacherId] = useState(defaults?.teacherId ?? "");
   // 반 색상(시간표 통합뷰 헤더색) — 빈 문자열=미지정(과목색 폴백). 글자색은 서버가 휘도로 자동.
@@ -258,7 +264,8 @@ export function ClassForm({
 
         <ScheduleGrid
           key={gridKey}
-          periods={periods}
+          weekdayPeriods={periods}
+          weekendPeriods={weekendPeriods}
           initial={restoredSchedules ?? defaults?.schedules ?? []}
           teacherId={teacherId || null}
           teacherOptions={teacherOptions}

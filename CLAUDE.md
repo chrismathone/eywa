@@ -329,6 +329,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 반 편집 주간 스케줄 그리드 = 평일/주말 두 표 분리(주말 교시 시각 반영) (2026-06-30) — ✅ 게이트 그린 + 라이브
+사용자 제보: 반 편집 "주간 스케줄"에서 토/일 칸이 평일 교시 시각(14:30~)으로만 떠 **주말 시간대(09:00~)를 못 넣음**. 원인: [schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>)가 단일 `periods`(평일)만 받아 7요일에 똑같이 적용 — 주말 교시(`config.weekend`)를 안 씀.
+- 같은 "N교시"라도 평일·주말 시각이 다르므로(설정의 평일 교시 ↔ 주말 교시) **그리드를 두 표로 분리**: 평일(월~금, weekdayPeriods) + 주말(토·일, weekendPeriods). 선택 상태·제출 hidden(`schedule_*_${i}`)은 **공유(연속 인덱스)**, 셀 시각은 요일이 주말이면 weekendById에서 해석(`periodFor`).
+- 신규 [`subjectWeekendPeriods(config)`](src/features/timetable/lib/periods.ts)(주말은 과목 무관 `config.weekend`) + [class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>)가 평일·주말 교시 둘 다 전달. initState 역매핑·activeKeys 유효성도 요일 종류별 교시표로 판정.
+- 검증: typecheck0/lint0 + 라이브(/classes/new): 평일 표 14:30~ / 주말 표 09:00~ 2표 렌더, **토 1교시 셀 클릭 → 제출 hidden이 day=sat·start=09:00·end=10:00**(주말 시각 정확 반영) 확인.
+
 ### 커맨드 팰릿 검색 결과 = 항목 상세로 이동(수업·등록상담) (2026-06-30) — ✅ 게이트 그린
 사용자 제보: 팰릿에서 "정서우"(등록상담)를 눌러도 그 사람 상세가 아니라 등록상담 **목록**만 열림. 원인: [command-palette.tsx](src/components/command-palette.tsx) `go()`가 class/consultation/enrollment hit을 "상세 창이 없어"라며 메뉴 목록(`/enrollment`)으로만 보냈음(옛 주석). → **상세 페이지가 있는 종류는 상세로**: 등록상담 `/enrollment/{id}`·수업 `/classes/{id}`(둘 다 상세 페이지 존재), 학생상담은 전용 상세 페이지가 없어 목록 유지. 상세 창 id는 `windowIdForHref`로 도출(앱 전체 상세 링크와 동일). 검증: typecheck0/lint0 + `/enrollment/{정서우 id}` 직접 이동 시 상세 정상 렌더(목록 아님) 확인.
 

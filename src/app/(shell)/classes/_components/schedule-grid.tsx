@@ -23,28 +23,33 @@ const DAYS = [
   { key: "sat", label: "토" },
   { key: "sun", label: "일" },
 ];
+const WEEKDAY_DAYS = DAYS.slice(0, 5);
+const WEEKEND_DAYS = DAYS.slice(5);
 const DAY_LABEL: Record<string, string> = Object.fromEntries(DAYS.map((d) => [d.key, d.label]));
 const dayIndex = (k: string) => DAYS.findIndex((d) => d.key === k);
+const isWeekendDay = (k: string) => k === "sat" || k === "sun";
 
 const cellKey = (day: string, periodId: string) => `${day}__${periodId}`;
 
 /**
- * 반 스케줄 = 요일(월~일) × 교시 클릭 그리드 (ijw 패리티). 셀을 눌러 토글하면 그 교시 시각으로
- * class_schedules 행이 생성된다. 셀에는 담임 이름을 표시(교시별 부담임이 있으면 그 이름).
+ * 반 스케줄 = 요일 × 교시 클릭 그리드 (ijw 패리티). **평일(월~금)과 주말(토/일)은 교시 시각이 달라
+ * (평일 14:30~ / 주말 09:00~) 두 표로 분리** — 같은 "N교시"라도 평일·주말 시각이 다르므로 셀의 시각은
+ * 그 요일이 평일이면 weekdayPeriods, 주말이면 weekendPeriods에서 가져온다. 선택 상태·제출 hidden은 공유.
  *
  * 세부옵션 "교시별 부담임/강의실": 선택한 교시마다 담임과 다른 강사(부담임)·다른 강의실을 지정 가능.
- * NULL(미지정)이면 반의 담임/기본 강의실을 상속(class_schedules.teacher_id/classroom_id). 제출은
- * schedule_{day,start,end,teacher,classroom}_${i} hidden input — 서버액션이 그대로 읽어 저장.
+ * NULL(미지정)이면 반의 담임/기본 강의실을 상속. 제출은 schedule_{day,start,end,teacher,classroom}_${i}.
  */
 export function ScheduleGrid({
-  periods,
+  weekdayPeriods,
+  weekendPeriods,
   initial,
   teacherId,
   teacherOptions,
   classroomOptions,
   bgColor,
 }: {
-  periods: Period[];
+  weekdayPeriods: Period[];
+  weekendPeriods: Period[];
   initial: InitialSlot[];
   /** 반 담임(폼에서 lift) — 셀 기본 표시 이름 + 부담임 드롭다운의 "담임" 기본값. */
   teacherId: string | null;
@@ -53,14 +58,22 @@ export function ScheduleGrid({
   /** 반 색(폼 라이브 값) — 선택 셀을 이 색으로 미리보기(시간표와 동일). 없으면 기본 초록. */
   bgColor?: string | null;
 }) {
-  // 초기: 기존 스케줄의 (요일,시작시각)을 교시로 역매핑 + 교시별 오버라이드 복원(마운트 1회).
+  const weekdayById = useMemo(() => new Map(weekdayPeriods.map((p) => [p.id, p])), [weekdayPeriods]);
+  const weekendById = useMemo(() => new Map(weekendPeriods.map((p) => [p.id, p])), [weekendPeriods]);
+  // 요일이 평일이냐 주말이냐에 따라 교시 시각을 다른 표에서 해석.
+  const periodFor = (day: string, id: string): Period | undefined =>
+    (isWeekendDay(day) ? weekendById : weekdayById).get(id);
+
+  // 초기: 기존 스케줄의 (요일,시작시각)을 교시로 역매핑(요일 종류별 표로) + 오버라이드 복원(마운트 1회).
   const initState = useMemo(() => {
-    const startToId = new Map(periods.map((p) => [p.startTime, p.id]));
+    const wdStartToId = new Map(weekdayPeriods.map((p) => [p.startTime, p.id]));
+    const weStartToId = new Map(weekendPeriods.map((p) => [p.startTime, p.id]));
     const sel = new Set<string>();
     const st: Record<string, string> = {};
     const sc: Record<string, string> = {};
     for (const s of initial) {
-      const id = startToId.get(s.startTime.slice(0, 5));
+      const map = isWeekendDay(s.dayOfWeek) ? weStartToId : wdStartToId;
+      const id = map.get(s.startTime.slice(0, 5));
       if (!id) continue;
       const k = cellKey(s.dayOfWeek, id);
       sel.add(k);
@@ -82,26 +95,27 @@ export function ScheduleGrid({
   const classroomNameOf = (id: string | null | undefined) =>
     id ? (classroomOptions.find((c) => c.id === id)?.name ?? null) : null;
 
-  const periodById = useMemo(() => new Map(periods.map((p) => [p.id, p])), [periods]);
-  const validIds = useMemo(() => new Set(periods.map((p) => p.id)), [periods]);
-
-  // 유효 선택(현재 교시표 기준), 요일→교시 순 정렬.
+  // 유효 선택(현재 교시표 기준 — 요일 종류별로 그 교시가 존재해야), 요일→교시 순 정렬.
   const activeKeys = useMemo(
     () =>
       [...selected]
-        .filter((k) => validIds.has(k.split("__")[1]))
+        .filter((k) => {
+          const [day, id] = k.split("__");
+          return !!periodFor(day, id);
+        })
         .sort((a, b) => {
           const [da, pa] = a.split("__");
           const [db, pb] = b.split("__");
           return dayIndex(da) - dayIndex(db) || Number(pa) - Number(pb);
         }),
-    [selected, validIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- periodFor는 weekday/weekendById에서 파생
+    [selected, weekdayById, weekendById],
   );
   const activeSet = useMemo(() => new Set(activeKeys), [activeKeys]);
 
   const rows = activeKeys.map((k) => {
     const [day, id] = k.split("__");
-    const p = periodById.get(id)!;
+    const p = periodFor(day, id)!;
     return { key: k, day, periodId: id, start: p.startTime, end: p.endTime };
   });
 
@@ -115,7 +129,6 @@ export function ScheduleGrid({
       return next;
     });
     if (removing) {
-      // 셀 해제 시 그 교시 오버라이드 정리
       setSlotTeacher((prev) => {
         const n = { ...prev };
         delete n[k];
@@ -153,9 +166,82 @@ export function ScheduleGrid({
     ...classroomOptions.map((c) => ({ value: c.id, label: c.name })),
   ];
 
+  // 평일/주말 한 표 — days(요일 부분집합) × periodList(그 종류 교시)로 클릭 그리드 렌더.
+  const renderTable = (
+    caption: string,
+    days: { key: string; label: string }[],
+    periodList: Period[],
+  ) => {
+    if (periodList.length === 0) return null;
+    return (
+      <div className="space-y-1">
+        <p className="text-muted-foreground text-[11px] font-medium">{caption}</p>
+        <div className="border-border overflow-hidden rounded-md border">
+          <table className="w-full table-fixed border-collapse text-center text-xs">
+            <thead>
+              <tr className="bg-muted/40">
+                <th className="border-border text-muted-foreground w-10 border-b border-r py-1.5 font-medium">
+                  교시
+                </th>
+                {days.map((d) => (
+                  <th
+                    key={d.key}
+                    className="border-border text-foreground border-b border-r py-1.5 font-medium last:border-r-0"
+                  >
+                    {d.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {periodList.map((p) => (
+                <tr key={p.id}>
+                  <th className="border-border bg-muted/20 text-muted-foreground border-b border-r py-1 font-normal leading-tight last:border-b-0">
+                    <div className="text-foreground text-[11px] font-semibold">{p.id}</div>
+                    <div className="num text-[9px]">{p.startTime}</div>
+                  </th>
+                  {days.map((d) => {
+                    const k = cellKey(d.key, p.id);
+                    const on = activeSet.has(k);
+                    const override = slotTeacher[k];
+                    const eff = override ? teacherNameOf(override) : homeTeacherName;
+                    const preview = on && bgColor;
+                    return (
+                      <td key={d.key} className="border-border border-b border-r p-0 last:border-r-0">
+                        <button
+                          type="button"
+                          aria-pressed={on}
+                          aria-label={`${d.label} ${p.id}교시`}
+                          onClick={() => toggle(d.key, p.id)}
+                          style={preview ? { background: bgColor, color: readableTextColor(bgColor) } : undefined}
+                          className={`block h-9 w-full px-0.5 transition ${
+                            on
+                              ? preview
+                                ? `hover:brightness-95 ${override ? "ring-2 ring-inset ring-purple-700" : ""}`
+                                : `${override ? "bg-purple/85 hover:bg-purple" : "bg-primary/85 hover:bg-primary"} text-primary-foreground`
+                              : "hover:bg-muted text-transparent"
+                          }`}
+                          title={on && override ? `부담임 · ${eff}` : undefined}
+                        >
+                          <span className="block truncate text-[10px] font-semibold leading-none">
+                            {on ? (eff ?? "●") : "·"}
+                          </span>
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-2">
-      {/* 제출용 hidden input — 선택 셀을 교시 시각 + 교시별 오버라이드로 변환(서버액션 포맷) */}
+    <div className="space-y-3">
+      {/* 제출용 hidden input — 선택 셀을 교시 시각(평일/주말 각 표에서 해석) + 오버라이드로 변환 */}
       {rows.map((r, i) => (
         <div key={`${r.key}-${i}`}>
           <input type="hidden" name={`schedule_day_${i}`} value={r.day} />
@@ -166,71 +252,14 @@ export function ScheduleGrid({
         </div>
       ))}
 
-      <div className="border-border overflow-hidden rounded-md border">
-        <table className="w-full table-fixed border-collapse text-center text-xs">
-          <thead>
-            <tr className="bg-muted/40">
-              <th className="border-border text-muted-foreground w-10 border-b border-r py-1.5 font-medium">
-                교시
-              </th>
-              {DAYS.map((d) => (
-                <th
-                  key={d.key}
-                  className="border-border text-foreground border-b border-r py-1.5 font-medium last:border-r-0"
-                >
-                  {d.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {periods.map((p) => (
-              <tr key={p.id}>
-                <th className="border-border bg-muted/20 text-muted-foreground border-b border-r py-1 font-normal leading-tight last:border-b-0">
-                  <div className="text-foreground text-[11px] font-semibold">{p.id}</div>
-                  <div className="num text-[9px]">{p.startTime}</div>
-                </th>
-                {DAYS.map((d) => {
-                  const k = cellKey(d.key, p.id);
-                  const on = activeSet.has(k);
-                  const override = slotTeacher[k];
-                  const eff = override ? teacherNameOf(override) : homeTeacherName;
-                  // 선택 셀 미리보기: 반 색이 있으면 그 색(시간표와 동일), 없으면 기본 초록. 부담임은 보라 링으로 구분.
-                  const preview = on && bgColor;
-                  return (
-                    <td key={d.key} className="border-border border-b border-r p-0 last:border-r-0">
-                      <button
-                        type="button"
-                        aria-pressed={on}
-                        aria-label={`${d.label} ${p.id}교시`}
-                        onClick={() => toggle(d.key, p.id)}
-                        style={preview ? { background: bgColor, color: readableTextColor(bgColor) } : undefined}
-                        className={`block h-9 w-full px-0.5 transition ${
-                          on
-                            ? preview
-                              ? `hover:brightness-95 ${override ? "ring-2 ring-inset ring-purple-700" : ""}`
-                              : `${override ? "bg-purple/85 hover:bg-purple" : "bg-primary/85 hover:bg-primary"} text-primary-foreground`
-                            : "hover:bg-muted text-transparent"
-                        }`}
-                        title={on && override ? `부담임 · ${eff}` : undefined}
-                      >
-                        <span className="block truncate text-[10px] font-semibold leading-none">
-                          {on ? (eff ?? "●") : "·"}
-                        </span>
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-start">
+        {renderTable("평일 (월~금)", WEEKDAY_DAYS, weekdayPeriods)}
+        {renderTable("주말 (토·일)", WEEKEND_DAYS, weekendPeriods)}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-xs">
-          <span className="text-foreground font-semibold">{rows.length}</span>개 교시 선택 ·
-          칸을 눌러 수업 교시를 지정
+          <span className="text-foreground font-semibold">{rows.length}</span>개 교시 선택 · 칸을 눌러 수업 교시를 지정
         </p>
         {rows.length > 0 ? (
           <button
@@ -269,9 +298,7 @@ export function ScheduleGrid({
                 ariaLabel={`${DAY_LABEL[r.day]} ${r.periodId}교시 강의실`}
               />
               {slotClassroom[r.key] ? (
-                <span className="text-text-faint text-[10px]">
-                  {classroomNameOf(slotClassroom[r.key])}
-                </span>
+                <span className="text-text-faint text-[10px]">{classroomNameOf(slotClassroom[r.key])}</span>
               ) : null}
             </div>
           ))}

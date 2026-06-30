@@ -145,6 +145,18 @@ export function subjectWeekdayPeriods(
 }
 
 /**
+ * 주말(토·일) 개별 교시 목록 — 반 편집 클릭그리드 주말 열용. 주말은 과목 무관 config.weekend(보통 8교시·시간단위).
+ * 평일 교시(subjectWeekdayPeriods)와 시각이 달라(주말 09:00~ / 평일 14:30~) 별도 표로 렌더해야 한다.
+ */
+export function subjectWeekendPeriods(
+  config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
+): { id: string; startTime: string; endTime: string }[] {
+  return Object.entries(config.weekend)
+    .map(([id, t]) => ({ id, startTime: hm(t.startTime), endTime: hm(t.endTime) }))
+    .sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+/**
  * periodId(통일 또는 레거시) + 과목 + 주말여부 → {startTime, endTime}. 알 수 없으면 null.
  * 주말이면 과목 무관 config.weekend, 평일이면 과목별 표(영어=상수, 그 외=config.weekday).
  */
