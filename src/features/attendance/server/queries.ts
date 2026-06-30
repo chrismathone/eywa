@@ -260,12 +260,14 @@ export async function getMostRecentAttendanceDate(): Promise<string | null> {
 // ─────────────────── ijw 스타일 월 매트릭스 ───────────────────
 
 export type MatrixDay = {
-  date: string; // "2026-05-01"
+  date: string; // "2026-05-01" (placeholder면 "pad-29" 등 합성 키)
   day: number; // 1~31
-  dow: number; // 0=일, 6=토
-  label: string; // "일/월/화/.../토"
+  dow: number; // 0=일, 6=토 (placeholder면 -1)
+  label: string; // "일/월/화/.../토" (placeholder면 "")
   isWeekend: boolean;
   isToday: boolean;
+  // 그 달에 없는 날(예 28일 달의 29~31) — 항상 31칸을 렌더해 출석률 위치를 고정하기 위한 빈 여백.
+  placeholder?: boolean;
 };
 
 export type MatrixStudent = {

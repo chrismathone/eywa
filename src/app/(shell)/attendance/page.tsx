@@ -46,6 +46,17 @@ function formatMonth(month: string): string {
   return `${y}년 ${Number(m)}월`;
 }
 
+// 월 보기를 항상 31칸으로 — 그 달 실제 일수 뒤에 placeholder 빈 칸을 채운다(예: 28일 달은 29~31 빈 칸).
+// 컬럼 수를 31로 고정해 셀 폭과 '출석률' 열 위치가 달마다 일정해지게 한다.
+function padTo31(days: AttendanceMatrix["days"]): AttendanceMatrix["days"] {
+  if (days.length >= 31) return days;
+  const out = [...days];
+  for (let n = days.length + 1; n <= 31; n++) {
+    out.push({ date: `pad-${n}`, day: n, dow: -1, label: "", isWeekend: false, isToday: false, placeholder: true });
+  }
+  return out;
+}
+
 export default async function AttendancePage({
   searchParams,
 }: {
@@ -91,7 +102,9 @@ export default async function AttendancePage({
   const prevMonth = shiftMonth(month, -1);
   const nextMonth = shiftMonth(month, 1);
   // 2주 보기는 가로 컬럼을 줄이려 마지막 14일만 노출(출석률은 전체 기록 기준 유지).
-  const visibleDays = range === "2w" ? matrix.days.slice(-14) : matrix.days;
+  // 월 보기는 **항상 31칸**으로 패딩 — 28/30일 달도 뒤에 빈 칸(29~31)을 채워 컬럼 수를 일정하게 한다.
+  // 그래야 셀 폭과 '출석률' 열 위치가 달마다 안 바뀐다(빈 칸은 여백). 패딩은 표시 전용(쿼리/집계 무관).
+  const visibleDays = range === "2w" ? matrix.days.slice(-14) : padTo31(matrix.days);
 
   return (
     <div className="space-y-4">
@@ -259,21 +272,26 @@ function MatrixTable({
             <th className="bg-bg-soft border-line border-b border-r px-2 py-2 text-left whitespace-nowrap">
               <span className="micro">학교</span>
             </th>
-            {days.map((d) => (
-              <th
-                key={d.date}
-                className={`border-line border-b border-r px-1 py-2 text-center font-mono text-[10px] ${
-                  d.isToday
-                    ? "bg-primary text-primary-foreground"
-                    : d.isWeekend
-                      ? "bg-bg-soft/70 text-text-faint"
-                      : "bg-bg-soft text-text-dim"
-                }`}
-              >
-                <div className="font-bold">{d.day}</div>
-                <div className="opacity-70">{d.label}</div>
-              </th>
-            ))}
+            {days.map((d) =>
+              d.placeholder ? (
+                // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
+                <th key={d.date} className="border-line bg-bg-soft/30 min-w-[34px] border-b border-r" aria-hidden />
+              ) : (
+                <th
+                  key={d.date}
+                  className={`border-line min-w-[34px] border-b border-r px-1 py-2 text-center font-mono text-[10px] ${
+                    d.isToday
+                      ? "bg-primary text-primary-foreground"
+                      : d.isWeekend
+                        ? "bg-bg-soft/70 text-text-faint"
+                        : "bg-bg-soft text-text-dim"
+                  }`}
+                >
+                  <div className="font-bold">{d.day}</div>
+                  <div className="opacity-70">{d.label}</div>
+                </th>
+              ),
+            )}
             <th className="bg-bg-soft border-line sticky right-0 z-10 border-b border-l px-2 py-2 text-right whitespace-nowrap">
               <span className="micro">출석률</span>
             </th>
@@ -309,13 +327,19 @@ function MatrixTable({
                   {s.school ?? "—"}
                 </td>
                 {days.map((d) => {
+                  // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
+                  if (d.placeholder) {
+                    return (
+                      <td key={d.date} className="border-line bg-bg-soft/20 min-w-[34px] border-b border-r" aria-hidden />
+                    );
+                  }
                   const mark = (studentMarks[d.date] as AttendanceStatus | undefined) ?? null;
                   // 주말 음영은 td(셀 전체)에 — 헤더(th)와 동일. 내부 칩(28px)에 주던 옛 방식은
                   // 행 높이가 칩보다 커 위아래로 음영이 안 차는 버그가 있었다. align-middle로 칩은 중앙.
                   return (
                     <td
                       key={d.date}
-                      className={`border-line border-b border-r p-0 text-center align-middle ${
+                      className={`border-line min-w-[34px] border-b border-r p-0 text-center align-middle ${
                         d.isWeekend ? "bg-bg-soft/40" : ""
                       }`}
                     >
