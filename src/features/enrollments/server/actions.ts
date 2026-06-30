@@ -46,7 +46,14 @@ export async function createEnrollment(
 ): Promise<CreateEnrollmentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
+  // "반 배정"은 반 상세(classes) + 학생 상세(students) 양쪽에서 호출 — 둘 중 하나라도 쓰기면 허용
+  // (counselor는 classes=none이나 students=full로 학생 상세에서 배정. 회계/뷰어=양쪽 readonly/none → 차단).
+  if (
+    !(await canWriteTenant(user.systemRole, "classes")) &&
+    !(await canWriteTenant(user.systemRole, "students"))
+  ) {
+    return { error: "반 배정 권한이 없습니다" };
+  }
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const classId = String(formData.get("classId") ?? "").trim();
