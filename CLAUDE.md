@@ -329,6 +329,17 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 커맨드 팰릿 검색 결과 = 항목 상세로 이동(수업·등록상담) (2026-06-30) — ✅ 게이트 그린
+사용자 제보: 팰릿에서 "정서우"(등록상담)를 눌러도 그 사람 상세가 아니라 등록상담 **목록**만 열림. 원인: [command-palette.tsx](src/components/command-palette.tsx) `go()`가 class/consultation/enrollment hit을 "상세 창이 없어"라며 메뉴 목록(`/enrollment`)으로만 보냈음(옛 주석). → **상세 페이지가 있는 종류는 상세로**: 등록상담 `/enrollment/{id}`·수업 `/classes/{id}`(둘 다 상세 페이지 존재), 학생상담은 전용 상세 페이지가 없어 목록 유지. 상세 창 id는 `windowIdForHref`로 도출(앱 전체 상세 링크와 동일). 검증: typecheck0/lint0 + `/enrollment/{정서우 id}` 직접 이동 시 상세 정상 렌더(목록 아님) 확인.
+
+### 운영 체계에 강의실(classrooms) CRUD 추가 — 관계형 테이블 = jsonb 설정과 다른 자체 저장 (2026-06-30) — ✅ 게이트 그린 + 적대리뷰
+사용자 제보: "운영 체계에 강의실 설정이 없네?" — 강의실은 시드/임포트로만 생기고 **추가/수정/삭제 UI가 없었다**(읽기·자동배정만). 운영 체계(/owner?tab=operations)에 강의실 관리 카드 신설.
+- ⚠️ **강의실은 관계형 테이블**(`classrooms`, classes/class_schedules가 `classroom_id` FK 참조)이라 과목·학년처럼 `tenant_settings.data` jsonb에 못 넣는다(FK 깨짐). → **자체 서버 액션 CRUD**로 별도 저장(SectionForm jsonb 저장 흐름 **밖**, 즉시 저장).
+- **서버**: [classroom-queries.ts](src/features/owner/server/classroom-queries.ts) `getClassroomsWithUsage`(강의실 + 사용 현황: 기본 강의실 활성 반 수 `classCount` + 시간표 슬롯 override 수 `slotCount`) · [classroom-actions.ts](src/features/owner/server/classroom-actions.ts) create/update/delete(**master 게이트** + tenant 스코프 `.eq tenant_id`, 유니크 `(tenant,name)` 23505 친절 메시지). 삭제는 FK `onDelete:set null`이라 참조 반/슬롯의 강의실만 미지정으로 바뀜(FK 위반·고아 없음).
+- **UI**: [classroom-manager.tsx](<src/app/(shell)/owner/_components/classroom-manager.tsx>)(추가 폼 + 인라인 수정/삭제, 삭제 시 "반 N개·시간표 슬롯 M개 미지정" 경고) — operations-section이 SectionForm **밖**에 렌더(nested form 회피), owner/page는 operations 탭일 때만 `getClassroomsWithUsage` 로드.
+- **소비처(orphan 아님)**: 추가한 강의실은 반 폼·시간표의 강의실 드롭다운(`getClassroomOptions`, classrooms 테이블 직접 읽기)에 즉시 반영. CRUD가 `/owner`·`/classes`·`/timetable` revalidate.
+- 검증: typecheck0/lint0 + 라이브(PSS): 강의실 카드 운영체계 8번째 렌더(기존 18개)·추가 E2E(DB 18→19 "QA테스트실 401" 정원12·목록 즉시 갱신) 후 정리. **적대리뷰 워크플로(7에이전트, 4차원 find→검증) 확정 2건(둘 다 LOW) 수정**: ① 삭제 경고가 `class_schedules` 슬롯 override 누락 과소표시 → `slotCount` 집계 추가 ② 삭제 감사로그 raw UUID → 강의실명 기록(create와 대칭). ⚠️ 새 서버액션은 첫 제출 시 #35(핫리로드 미등록)로 1회 무반응 가능 — dev 재컴파일 후 정상.
+
 ### 공지 팝업(notice_popups) — 셸 진입 시 뜨는 창형 공지("팝업광고" 패턴) + 7일/다시 보지 않기 (2026-06-30) — ✅ 4게이트 그린 + 라이브 E2E
 사용자 요청: 일반 사이트 팝업광고처럼 **셸 진입 시 창처럼 여러 개 뜨고, "7일간/다시 보지 않기" 체크로 안 보이게**. 사용자 선택 = **전용 테이블 신설**(이미지·링크·노출기간·위치·크기·우선순위). announcements(대시보드 카드)와는 **별개**(이건 진입 시 강제 1회 노출 배너형).
 - **데이터**(`0060a` `notice_popups`, dev적용·RLS 격리): title·body·image_url·link_url/label·audience(announcement_audience 재사용)·width·position(cascade/center/4모서리)·priority·is_active·starts_at/ends_at·author_id. 표시 dismiss는 **DB 아닌 브라우저 localStorage**(일반 팝업광고와 동일 = 기기 단위).

@@ -15,6 +15,8 @@ export const AUDIT_ACTIONS = {
   owner_settings_update: "학원 설정 변경",
   notice_popup_create: "팝업 공지 생성",
   notice_popup_delete: "팝업 공지 삭제",
+  classroom_create: "강의실 추가",
+  classroom_delete: "강의실 삭제",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

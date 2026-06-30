@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { OperationsSettings } from "@/features/owner/settings-types";
+import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SectionForm, SettingsCard } from "./section-form";
+import { ClassroomManager } from "./classroom-manager";
 import {
   HolidayListEditor,
   PeriodListEditor,
@@ -11,11 +13,18 @@ import {
   SubjectListEditor,
 } from "./list-editors";
 
-export function OperationsSection({ initial }: { initial: OperationsSettings }) {
+export function OperationsSection({
+  initial,
+  classrooms,
+}: {
+  initial: OperationsSettings;
+  classrooms: ClassroomRow[];
+}) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
 
   return (
+    <div className="space-y-4">
     <SectionForm section="operations" payload={o}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
       <SettingsCard
@@ -66,5 +75,9 @@ export function OperationsSection({ initial }: { initial: OperationsSettings }) 
       </SettingsCard>
       </div>
     </SectionForm>
+
+      {/* 강의실 = 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(SectionForm 밖). */}
+      <ClassroomManager rooms={classrooms} />
+    </div>
   );
 }

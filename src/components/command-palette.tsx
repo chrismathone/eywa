@@ -10,6 +10,7 @@ import { NAV_GROUPS } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
+import { windowIdForHref } from "@/components/workspace/window-link";
 import type { PaletteHit } from "@/features/search/server/queries";
 
 /** 헤더 검색 버튼 등 외부 요소가 팰릿을 여는 데 쓰는 커스텀 이벤트 이름. */
@@ -145,13 +146,24 @@ export function CommandPalette({
       else router.push(`/students/${hit.id}`);
       return;
     }
-    // 수업/상담/등록상담은 상세 창이 없어 해당 메뉴 창으로
-    const dest =
+    // 수업·등록상담은 상세 페이지로(상세 창) — 검색 결과 클릭 시 해당 항목 상세가 열린다.
+    // 학생상담(consultation)은 전용 상세 페이지가 없어 목록 창으로(기존 동작 유지).
+    const detailHref =
       hit.kind === "class"
-        ? { id: "classes", title: "수업목록", href: "/classes" }
-        : hit.kind === "consultation"
-          ? { id: "consultations", title: "학생상담", href: "/consultations" }
-          : { id: "enrollment", title: "등록상담", href: "/enrollment" };
+        ? `/classes/${hit.id}`
+        : hit.kind === "enrollment"
+          ? `/enrollment/${hit.id}`
+          : null;
+    if (detailHref) {
+      if (isDesktop) {
+        const id = windowIdForHref(detailHref)?.id ?? detailHref.slice(1);
+        openWindow("route", { id, title: hit.title, href: detailHref });
+      } else {
+        router.push(detailHref);
+      }
+      return;
+    }
+    const dest = { id: "consultations", title: "학생상담", href: "/consultations" };
     if (isDesktop) openWindow("route", dest);
     else router.push(dest.href);
   }
