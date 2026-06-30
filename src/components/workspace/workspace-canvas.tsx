@@ -9,6 +9,7 @@ import { usePrefs } from "./use-prefs";
 import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
+import { iframeRegistry } from "./route-window";
 import { WindowSwitcher } from "./window-switcher";
 import { BackgroundDropZone } from "./background-drop-zone";
 import { SnapAssist } from "./snap-assist";
@@ -107,6 +108,27 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       unsub();
       if (installed) window.removeEventListener("beforeunload", guard);
     };
+  }, []);
+
+  // 창 본문(iframe) 클릭 → 그 창을 최상단(focus)으로. iframe 내부 pointerdown은 부모로 버블되지 않으므로
+  // embed 페이지(EmbedFocusSignal)가 window.parent로 'focus me'를 postMessage한다. event.source(=클릭된
+  // iframe의 contentWindow)를 iframeRegistry와 대조해 정확한 창 id를 찾아 focus(중복창·다중탭 안전).
+  // 이미 포커스된 창이면 skip해 매 클릭마다 불필요한 store set(재렌더)을 막는다.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const data = e.data as { type?: string } | null;
+      if (!data || data.type !== "eywa-window-focus" || !e.source) return;
+      for (const [winId, el] of iframeRegistry) {
+        if (el.contentWindow === e.source) {
+          const st = useWindowStore.getState();
+          if (st.focusedId !== winId) st.focus(winId);
+          break;
+        }
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
   if (!isDesktop) return null;

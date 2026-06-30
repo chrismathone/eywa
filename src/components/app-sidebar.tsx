@@ -67,6 +67,7 @@ export function AppSidebar({
   jobTitle,
   className,
   logoText = "EYWA",
+  logoSrc,
   permMatrix,
 }: {
   systemRole: SystemRole;
@@ -75,6 +76,7 @@ export function AppSidebar({
   jobTitle?: string | null;
   className?: string;
   logoText?: string;
+  logoSrc?: string | null;
   permMatrix?: AccessMatrix;
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
@@ -122,9 +124,14 @@ export function AppSidebar({
         {/* brand — 로고는 접힘 레일 중앙(left 26px) 고정, 워드마크만 페이드 */}
         <div className="border-line flex h-12 shrink-0 items-center overflow-hidden border-b pl-3">
           <Link href="/dashboard" aria-label="EYWA 대시보드" className="flex items-center gap-2.5">
-            <span className="bg-primary shadow-primary-glow flex size-7 shrink-0 items-center justify-center rounded-[5px]">
-              <EyIcon name="sprout" size={16} strokeWidth={1.9} className="text-white" />
-            </span>
+            {logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), next/image 최적화 불필요
+              <img src={logoSrc} alt={logoText} className="size-7 shrink-0 rounded-[5px] object-contain" />
+            ) : (
+              <span className="bg-primary shadow-primary-glow flex size-7 shrink-0 items-center justify-center rounded-[5px]">
+                <EyIcon name="sprout" size={16} strokeWidth={1.9} className="text-white" />
+              </span>
+            )}
             <span
               className={`text-foreground overflow-hidden text-[15px] font-extrabold tracking-tight whitespace-nowrap ${
                 expanded ? "max-w-[120px] opacity-100" : "max-w-0 opacity-0"

@@ -7,6 +7,8 @@ import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
 import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TuitionCalculator } from "./tuition-calculator";
 import { TuitionPricesPanel } from "./tuition-prices-panel";
 import { CatalogPanel } from "./catalog-panel";
@@ -61,15 +63,19 @@ export async function CalculatorPanel({ sp }: { sp: Sp }) {
 }
 
 async function CalculatorTab({ qid }: { qid?: string }) {
-  const [settings, catalog, textbooks, initial] = await Promise.all([
+  const [settings, catalog, textbooks, initial, user] = await Promise.all([
     getTenantSettings(),
     getTuitionCatalogActive(),
     getCatalogOptions(), // 교재 단가표(146권) — 교재/기타 picker에 합쳐 교재명 검색 가능
     qid ? getQuoteById(qid) : Promise.resolve(null),
+    getCurrentUser(), // 로고 signed URL 해석에 tenantId 필요(React cache라 추가 라운드트립 0)
   ]);
+  // 학원 로고 이미지 → 수강료 안내문 헤더. 미업로드면 null → 안내문이 학원명 머리글자 배지로 폴백.
+  const logoSrc = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
   return (
     <TuitionCalculator
       academyName={settings.profile.name || "인재원"}
+      logoSrc={logoSrc}
       defaultPeriod={currentPeriod()}
       holidays={settings.operations.holidays.map((h) => h.date)}
       catalog={catalog}

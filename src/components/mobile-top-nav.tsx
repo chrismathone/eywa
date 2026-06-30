@@ -20,12 +20,14 @@ export function MobileTopNav({
   email,
   className,
   brand = "EYWA",
+  logoSrc,
   permMatrix,
 }: {
   systemRole: SystemRole;
   email: string;
   className?: string;
   brand?: string;
+  logoSrc?: string | null;
   permMatrix?: AccessMatrix;
 }) {
   const pathname = usePathname();
@@ -41,12 +43,17 @@ export function MobileTopNav({
       {/* 브랜드 banner + 계정 메뉴 */}
       <div className="border-line/60 flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="bg-ink flex size-5 items-center justify-center rounded-[3px]">
-            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
-              <circle cx="8" cy="8" r="2" fill="#fff" />
-            </svg>
-          </span>
+          {logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), next/image 최적화 불필요
+            <img src={logoSrc} alt={brand} className="size-5 shrink-0 rounded-[3px] object-contain" />
+          ) : (
+            <span className="bg-ink flex size-5 items-center justify-center rounded-[3px]">
+              <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
+                <circle cx="8" cy="8" r="2" fill="#fff" />
+              </svg>
+            </span>
+          )}
           <span className="text-foreground text-[13px] font-extrabold tracking-tight">{brand}</span>
         </Link>
         <UserMenu email={email} />

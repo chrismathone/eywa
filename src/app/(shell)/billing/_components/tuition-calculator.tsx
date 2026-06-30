@@ -45,6 +45,7 @@ function SaveBtn({ disabled }: { disabled: boolean }) {
 
 export function TuitionCalculator({
   academyName,
+  logoSrc,
   defaultPeriod,
   holidays = [],
   catalog = [],
@@ -52,6 +53,7 @@ export function TuitionCalculator({
   initial,
 }: {
   academyName: string;
+  logoSrc?: string | null; // 학원 로고(서버에서 resolveBrandingSrc로 푼 signed URL) — 안내문 헤더
   defaultPeriod: string;
   holidays?: string[];
   catalog?: TuitionCatalogOption[];
@@ -289,6 +291,7 @@ export function TuitionCalculator({
       <div className="border-line bg-card overflow-hidden rounded-md border print:overflow-visible print:rounded-none print:border-0 print:bg-white print:shadow-none">
         <QuoteDocument
           academyName={academyName}
+          logoSrc={logoSrc}
           student={student}
           courses={courses}
           extras={extras}

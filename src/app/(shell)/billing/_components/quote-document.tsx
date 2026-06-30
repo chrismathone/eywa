@@ -12,6 +12,7 @@ const HEAD = "border-line bg-gold/15 text-foreground border px-2 py-1.5 text-[12
 
 export function QuoteDocument({
   academyName,
+  logoSrc,
   student,
   courses,
   extras,
@@ -20,6 +21,7 @@ export function QuoteDocument({
   createdLabel,
 }: {
   academyName: string;
+  logoSrc?: string | null;
   student: QuoteStudent;
   courses: QuoteCourse[];
   extras: QuoteExtra[];
@@ -36,9 +38,14 @@ export function QuoteDocument({
       {/* 헤더 */}
       <header className="flex flex-col items-center gap-2">
         <div className="text-primary inline-flex items-center gap-2 text-xl font-extrabold tracking-tight">
-          <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-sm text-sm">
-            {academyName.slice(0, 1)}
-          </span>
+          {logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), 인쇄 문서라 next/image 최적화 불필요
+            <img src={logoSrc} alt={academyName} className="h-8 w-auto object-contain" />
+          ) : (
+            <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-sm text-sm">
+              {academyName.slice(0, 1)}
+            </span>
+          )}
           {academyName}
         </div>
         <h2 className="text-foreground text-2xl font-black tracking-[0.3em]">수강료 안내문</h2>

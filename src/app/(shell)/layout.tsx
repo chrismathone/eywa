@@ -9,6 +9,7 @@ import { UserMenu } from "@/components/user-menu";
 import { TeacherMenu } from "@/components/teacher-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getActivePopups } from "@/features/notices/server/queries";
 import { NoticePopupLayer } from "@/features/notices/components/notice-popup-layer";
 import { OperationsProvider } from "@/features/owner/operations-context";
@@ -16,6 +17,7 @@ import { resolveMatrix } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { EmbedProvider } from "@/components/workspace/embed-context";
+import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
@@ -36,6 +38,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <EmbedProvider embed>
         <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
           <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+            <EmbedFocusSignal />
             {children}
           </main>
         </OperationsProvider>
@@ -50,6 +53,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const brand = settings.profile.logoText || "EYWA";
   const academyLine =
     [settings.profile.name, settings.profile.branchLabel].filter(Boolean).join(" · ") || brand;
+  // 학원 로고 이미지(GCS 비공개 path는 signed URL, 외부 http URL은 그대로). 셸 크롬(사이드바·미니셸·모바일내비)에
+  // 공유. 미업로드/실패면 null → 각 표면이 기존 마크(sprout/동심원)로 폴백. 임베드는 위에서 이미 return(크롬 없음).
+  const logoSrc = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
@@ -58,12 +64,17 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden">
         <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
           <div className="flex items-center gap-2.5">
-            <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
-              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
-                <circle cx="8" cy="8" r="2" fill="#fff" />
-              </svg>
-            </span>
+            {logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), next/image 최적화 불필요
+              <img src={logoSrc} alt={brand} className="size-7 shrink-0 rounded-[3px] object-contain" />
+            ) : (
+              <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
+                  <circle cx="8" cy="8" r="2" fill="#fff" />
+                </svg>
+              </span>
+            )}
             <div className="leading-none">
               <div className="text-foreground text-[17px] font-extrabold tracking-tight">{brand}</div>
               <div className="text-text-dim mt-[3px] font-mono text-[10px] tracking-wider">
@@ -107,6 +118,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           displayName={user.displayName}
           jobTitle={user.jobTitle}
           logoText={brand}
+          logoSrc={logoSrc}
           permMatrix={permMatrix}
           className="hidden lg:pointer-fine:flex"
         />
@@ -114,7 +126,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} permMatrix={permMatrix} className="lg:pointer-fine:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
