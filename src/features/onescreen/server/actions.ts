@@ -18,7 +18,7 @@ export type SaveLessonReportInput = {
  */
 export async function saveLessonReport(
   input: SaveLessonReportInput,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; id?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
@@ -47,17 +47,22 @@ export async function saveLessonReport(
     now.getDate(),
   ).padStart(2, "0")}`;
 
-  const { error } = await supabase.from("lesson_reports").insert({
-    tenant_id: user.tenantId,
-    student_id: input.studentId,
-    report_date: reportDate,
-    progress: input.progress || null,
-    exam_info: input.examInfo || null,
-    homework_score: input.homeworkScore || null,
-    teacher_name: user.displayName ?? null,
-    notes: input.notes || null,
-    source: "onescreen",
-  });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  // .select("id").single() → 삽입한 행 id 반환(PDF 인쇄 창이 이 id로 보고서 문서를 연다).
+  const { data, error } = await supabase
+    .from("lesson_reports")
+    .insert({
+      tenant_id: user.tenantId,
+      student_id: input.studentId,
+      report_date: reportDate,
+      progress: input.progress || null,
+      exam_info: input.examInfo || null,
+      homework_score: input.homeworkScore || null,
+      teacher_name: user.displayName ?? null,
+      notes: input.notes || null,
+      source: "onescreen",
+    })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
+  return { ok: true, id: data.id };
 }

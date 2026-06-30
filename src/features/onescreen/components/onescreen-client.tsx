@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, TODAY } from "../data";
 import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
@@ -56,6 +57,7 @@ export function OneScreenClient({
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
+  const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
 
   const visible =
     classFilter === "전체" ? students : students.filter((s) => s.tag === classFilter);
@@ -176,14 +178,25 @@ export function OneScreenClient({
       return;
     }
     patchReport(selected.id, subjectName, () => ({ draft, sent: true }));
-    // D3: 저장은 실제(lesson_reports). 카톡/문자/PDF 발송 연동은 후속 — 토스트는 정직하게.
-    const msg =
-      channel === "pdf"
-        ? `${subjectName} 보고서를 저장했습니다 (PDF 내보내기는 준비 중)`
-        : channel === "save"
-          ? `${subjectName} 보고서를 기록에 저장했습니다`
-          : `${subjectName} 보고서를 저장했습니다 (${channel} 발송 연동은 준비 중)`;
-    toast.success(msg);
+    // 저장은 실제(lesson_reports). PDF는 인쇄 문서 창을 실제로 연다. 카톡/문자는 미연동 →
+    // "발송 완료" 거짓말 없이 "기록 저장 + 연동 후 발송"으로 정직하게(라벨도 report-card에서 "기록 저장").
+    if (channel === "pdf") {
+      if (res.id) {
+        openPrint({
+          id: `print/lesson_reports/${res.id}`,
+          href: `/lesson_reports/${res.id}/print`,
+          title: "수업 보고서",
+        });
+        toast.success(`${subjectName} 보고서 저장 — 인쇄 미리보기를 열었습니다`);
+      } else {
+        toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
+      }
+    } else if (channel === "save") {
+      toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
+    } else {
+      // 카톡/문자: 실발송 미연동 — 기록만 저장하고 정직하게 안내(실 학부모에게 안 감).
+      toast.success(`${subjectName} 보고서를 기록에 저장했습니다 — ${channel} 연동 후 발송 가능`);
+    }
   }
 
   return (

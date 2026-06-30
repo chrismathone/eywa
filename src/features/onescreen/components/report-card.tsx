@@ -86,7 +86,8 @@ export function ReportCard({
             </p>
             <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
           </div>
-          {rep.sent ? <Pill color="primary">발송 완료</Pill> : null}
+          {/* 실발송이 아니라 lesson_reports 기록 저장(PDF만 실제 인쇄). "발송 완료" 거짓 약속 방지. */}
+          {rep.sent ? <Pill color="primary">기록 저장</Pill> : null}
         </div>
         {/* 과목 선택 (여러 과목일 때만) — 발송한 과목엔 체크 */}
         {student.subjects.length > 1 ? (
