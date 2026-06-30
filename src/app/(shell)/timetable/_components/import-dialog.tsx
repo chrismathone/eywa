@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Upload, X } from "lucide-react";
+import { Loader2, Sheet, Upload, X } from "lucide-react";
 import {
   applyTimetableImport,
+  previewSheetImport,
   previewTimetableImport,
   type ApplyState,
 } from "@/features/timetable/server/import-actions";
@@ -12,8 +13,13 @@ import type { ImportDiff } from "@/features/timetable/import/types";
 
 const LARGE_CHANGE = 30;
 
-/** 엑셀 가져오기 — 내보낸 xlsx의 '수강편집' 시트를 수정해 재업로드 → 미리보기 → 적용. */
-export function TimetableImportDialog() {
+/**
+ * 엑셀 가져오기 — 내보낸 xlsx의 '수강편집' 시트를 수정해 재업로드 → 미리보기 → 적용.
+ * mode="sheet"면 파일 업로드 대신 **연결된 구글 시트의 '수강편집' 탭**을 읽어온다(master 전용).
+ * diff 미리보기·적용(applyTimetableImport)은 두 모드 공유.
+ */
+export function TimetableImportDialog({ mode = "file" }: { mode?: "file" | "sheet" }) {
+  const sheet = mode === "sheet";
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -35,10 +41,18 @@ export function TimetableImportDialog() {
   }
 
   function preview() {
-    if (!file) return;
     setError(null);
     setResult(null);
     setDiff(null);
+    if (sheet) {
+      startPreview(async () => {
+        const res = await previewSheetImport();
+        if (res.error) setError(res.error);
+        else setDiff(res.diff ?? null);
+      });
+      return;
+    }
+    if (!file) return;
     const fd = new FormData();
     fd.set("file", file);
     startPreview(async () => {
@@ -52,7 +66,15 @@ export function TimetableImportDialog() {
 
   function apply() {
     if (!diff || total === 0) return;
-    if (total >= LARGE_CHANGE && !confirm(`${total}건의 대량 변경입니다. 적용할까요?`)) return;
+    const rm = diff.removes.length;
+    const needConfirm = total >= LARGE_CHANGE || rm >= 10;
+    if (needConfirm) {
+      const msg =
+        rm > 0
+          ? `이동 ${diff.moves.length} · 추가 ${diff.adds.length} · 삭제 ${rm}건을 적용합니다.\n삭제는 시트에서 빠진 수강을 종료합니다 — 진행할까요?`
+          : `${total}건의 변경을 적용할까요?`;
+      if (!confirm(msg)) return;
+    }
     startApply(async () => {
       const res = await applyTimetableImport(diff);
       setResult(res);
@@ -70,8 +92,8 @@ export function TimetableImportDialog() {
         onClick={() => setOpen(true)}
         className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
       >
-        <Upload className="size-3" />
-        가져오기
+        {sheet ? <Sheet className="size-3" /> : <Upload className="size-3" />}
+        {sheet ? "시트에서 가져오기" : "가져오기"}
       </button>
 
       {open ? (
@@ -80,48 +102,75 @@ export function TimetableImportDialog() {
           <div
             className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5"
             role="dialog"
-            aria-label="엑셀 가져오기"
+            aria-label={sheet ? "구글 시트에서 가져오기" : "엑셀 가져오기"}
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-extrabold">시간표 엑셀 가져오기</h2>
+              <h2 className="text-foreground text-[15px] font-extrabold">
+                {sheet ? "구글 시트에서 가져오기" : "시간표 엑셀 가져오기"}
+              </h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>
             </header>
-            <p className="text-text-dim mt-1 text-[11px]">
-              내보낸 엑셀의 <b>수강편집</b> 시트에서 학생의 <b>반</b>만 바꿔 다시 올리세요. (enrollmentId 열은 수정 금지)
-            </p>
-            <p className="text-text-faint mt-1 text-[11px]">
-              구글시트로 편집했다면 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받아 올리면 됩니다.
-            </p>
 
-            <label className="text-foreground mt-3 block text-[12px] font-medium">
-              엑셀 파일 <span className="text-danger">*</span>
-            </label>
-            <div className="mt-1.5 flex items-center gap-2">
-              <input
-                type="file"
-                accept=".xlsx"
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] ?? null);
-                  setDiff(null);
-                  setResult(null);
-                }}
-                className="text-text-dim flex-1 text-[12px]"
-              />
-              <button
-                type="button"
-                onClick={preview}
-                disabled={!file || previewing}
-                className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
-              >
-                {previewing ? <Loader2 className="size-3 animate-spin" /> : null}
-                미리보기
-              </button>
-            </div>
-            {!file ? (
-              <p className="text-text-faint mt-1.5 text-[11px]">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
-            ) : null}
+            {sheet ? (
+              <>
+                <p className="text-text-dim mt-1 text-[11px]">
+                  연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요. (enrollmentId 열은 수정 금지)
+                </p>
+                <p className="text-text-faint mt-1 text-[11px]">
+                  ⚠️ 시트에서 편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b> — 전체 덮어쓰기라 편집분이 사라집니다.
+                </p>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={preview}
+                    disabled={previewing}
+                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                  >
+                    {previewing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
+                    시트에서 불러오기
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-text-dim mt-1 text-[11px]">
+                  내보낸 엑셀의 <b>수강편집</b> 시트에서 학생의 <b>반</b>만 바꿔 다시 올리세요. (enrollmentId 열은 수정 금지)
+                </p>
+                <p className="text-text-faint mt-1 text-[11px]">
+                  구글시트로 편집했다면 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받아 올리면 됩니다.
+                </p>
+
+                <label className="text-foreground mt-3 block text-[12px] font-medium">
+                  엑셀 파일 <span className="text-danger">*</span>
+                </label>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    onChange={(e) => {
+                      setFile(e.target.files?.[0] ?? null);
+                      setDiff(null);
+                      setResult(null);
+                    }}
+                    className="text-text-dim flex-1 text-[12px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={preview}
+                    disabled={!file || previewing}
+                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                  >
+                    {previewing ? <Loader2 className="size-3 animate-spin" /> : null}
+                    미리보기
+                  </button>
+                </div>
+                {!file ? (
+                  <p className="text-text-faint mt-1.5 text-[11px]">엑셀 파일을 선택하면 미리보기가 활성화됩니다.</p>
+                ) : null}
+              </>
+            )}
 
             {error ? <p className="text-chart-4 mt-3 text-[12px]">{error}</p> : null}
 

@@ -108,4 +108,23 @@ describe("computeImportDiff", () => {
     expect(totalChanges(d)).toBe(0);
     expect(d.warnings).toHaveLength(0);
   });
+
+  it("protectNewerThan: 시트 push 이후 시작된 수강은 삭제 제외(stale-drift 보호)", () => {
+    const current: EnrollmentSnapshotRow[] = [
+      { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3", startDate: "2026-06-01" },
+      { enrollmentId: "eNew", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3", startDate: "2026-07-05" },
+    ];
+    // 시트엔 e1만(eNew는 push 후 등록). cutoff = push 시각.
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP3" },
+    ];
+    const d = computeImportDiff(parsed, current, CLASSES, STUDENTS, {
+      protectNewerThan: "2026-06-30T10:00:00Z",
+    });
+    expect(d.removes).toHaveLength(0); // eNew 보호
+    expect(d.warnings.length).toBeGreaterThanOrEqual(1);
+    // cutoff 없으면 eNew가 삭제로 잡힘(대조)
+    const d2 = computeImportDiff(parsed, current, CLASSES, STUDENTS);
+    expect(d2.removes.map((r) => r.enrollmentId)).toEqual(["eNew"]);
+  });
 });

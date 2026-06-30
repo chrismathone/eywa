@@ -15,8 +15,16 @@ export function computeImportDiff(
   current: EnrollmentSnapshotRow[],
   classes: ClassRef[],
   students: StudentRef[],
+  opts?: {
+    /**
+     * 구글 시트 경로 stale-drift 보호 — 이 시각(보통 시트 push=last_synced_at) 이후 **시작된** 수강은
+     * 시트가 알 수 없으므로 '삭제'로 잡지 않는다. 날짜(YYYY-MM-DD)만 비교. 파일 경로는 미전달(보호 없음).
+     */
+    protectNewerThan?: string | null;
+  },
 ): ImportDiff {
   const diff: ImportDiff = { moves: [], removes: [], adds: [], unchanged: 0, warnings: [] };
+  const cutoffDate = opts?.protectNewerThan ? opts.protectNewerThan.slice(0, 10) : null;
 
   const currentById = new Map(current.map((c) => [c.enrollmentId, c]));
   const seen = new Set<string>();
@@ -78,13 +86,19 @@ export function computeImportDiff(
 
   // 시트에서 사라진 기존 수강 → 삭제
   for (const cur of current) {
-    if (!seen.has(cur.enrollmentId)) {
-      diff.removes.push({
-        enrollmentId: cur.enrollmentId,
-        studentName: cur.studentName,
-        className: cur.className,
-      });
+    if (seen.has(cur.enrollmentId)) continue;
+    // 시트 생성 시점 이후 시작된 수강은 시트가 알 수 없음 → 삭제 후보에서 제외(stale-drift 보호).
+    if (cutoffDate && cur.startDate && cur.startDate.slice(0, 10) > cutoffDate) {
+      diff.warnings.push(
+        `"${cur.studentName}"(${cur.className})은 시트 생성 이후 등록돼 삭제하지 않았습니다(시트가 모르는 신규).`,
+      );
+      continue;
     }
+    diff.removes.push({
+      enrollmentId: cur.enrollmentId,
+      studentName: cur.studentName,
+      className: cur.className,
+    });
   }
 
   return diff;

@@ -10,6 +10,8 @@ export interface EnrollmentSnapshotRow {
   grade: string | null;
   classId: string;
   className: string;
+  /** 수강 시작일(YYYY-MM-DD). 시트 stale-drift 보호용 — 시트 생성 시점 이후 시작한 수강은 삭제 후보에서 제외. */
+  startDate?: string | null;
 }
 
 /** 운영자가 편집해 다시 올린 '수강편집' 시트의 한 행. enrollmentId 없으면 신규 추가. */

@@ -59,6 +59,8 @@ export function TimetableToolbarActions({
               시트 반영
             </button>
           ) : null}
+          {/* 시트→앱 되읽기: '수강편집' 탭의 반 변경을 미리보기→적용(원장 전용). */}
+          {canSync ? <TimetableImportDialog mode="sheet" /> : null}
           {sheetUrl ? (
             <a
               href={sheetUrl}

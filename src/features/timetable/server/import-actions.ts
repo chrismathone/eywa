@@ -7,8 +7,10 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { parseEditSheet } from "@/features/timetable/import/parse";
+import { EDIT_SHEET_NAME, parseEditSheet, rowsToEditRows } from "@/features/timetable/import/parse";
 import { computeImportDiff } from "@/features/timetable/import/diff";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { readSheetTabRows } from "@/features/integrations/google-sheets";
 import type {
   ClassRef,
   EnrollmentSnapshotRow,
@@ -28,6 +30,7 @@ async function loadContext(): Promise<Ctx> {
     id: string;
     class_id: string;
     student_id: string;
+    start_date: string | null;
     class?: { class_name?: string } | { class_name?: string }[];
     student?:
       | { name?: string; school?: string | null; grade?: string | null }
@@ -36,7 +39,7 @@ async function loadContext(): Promise<Ctx> {
     supabase
       .from("enrollments")
       .select(
-        "id, class_id, student_id, class:class_id ( class_name ), student:student_id ( name, school, grade )",
+        "id, class_id, student_id, start_date, class:class_id ( class_name ), student:student_id ( name, school, grade )",
       )
       .is("end_date", null)
       .range(from, to),
@@ -54,6 +57,7 @@ async function loadContext(): Promise<Ctx> {
       grade: stu?.grade ?? null,
       classId: e.class_id,
       className: cls?.class_name ?? "",
+      startDate: e.start_date ?? null,
     };
   });
 
@@ -104,6 +108,48 @@ export async function previewTimetableImport(formData: FormData): Promise<Previe
     return { diff };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "엑셀 파싱 실패" };
+  }
+}
+
+/**
+ * 연결된 구글 시트의 '수강편집' 탭을 읽어 현재 DB와 diff(읽기 전용, DB 미변경).
+ * 파일 업로드(previewTimetableImport)의 구글시트판 — 운영자가 시트에서 '반'만 바꾼 걸 되읽는다.
+ * ⚠️ master 전용: 시트 전체(테넌트 전 강사·전 학생 명단)를 읽어 enrollment를 바꾸므로 syncSheetsNow와 대칭(B5 PII).
+ * spreadsheetId·sync_enabled 해석은 syncSheetsNow와 동일(전용 연동 또는 settings.notifications.googleSheetId).
+ * 적용은 파일 경로와 동일한 applyTimetableImport(diff)를 재사용한다.
+ */
+export async function previewSheetImport(): Promise<PreviewState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") return { error: "구글 시트 가져오기는 원장(master)만 할 수 있습니다" };
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("user_integrations")
+    .select("spreadsheet_id, sync_enabled, last_synced_at")
+    .eq("provider", "google_sheets")
+    .maybeSingle();
+  if (data?.sync_enabled !== true) {
+    return { error: "구글 시트 연동이 꺼져 있습니다(학원 설정 › 연동에서 켜세요)" };
+  }
+  const settings = await getTenantSettings();
+  const spreadsheetId = data?.spreadsheet_id || settings.notifications.googleSheetId.trim();
+  if (!spreadsheetId) return { error: "대상 구글 시트가 설정되지 않았습니다(관리자에게 문의)" };
+
+  try {
+    const grid = await readSheetTabRows(spreadsheetId, EDIT_SHEET_NAME);
+    const parsed = rowsToEditRows(grid);
+    if (parsed.length === 0) {
+      return { error: "'수강편집' 탭에 데이터가 없습니다(시트를 확인하세요)." };
+    }
+    const ctx = await loadContext();
+    // stale-drift 보호: 시트 push(last_synced_at) 이후 등록된 수강은 삭제 후보에서 제외.
+    const diff = computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students, {
+      protectNewerThan: data?.last_synced_at ?? null,
+    });
+    return { diff };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "시트 읽기 실패" };
   }
 }
 
