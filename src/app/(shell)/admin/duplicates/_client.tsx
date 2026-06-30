@@ -119,7 +119,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
       {state?.error ? <p className="text-chart-4 mt-2 text-xs">{state.error}</p> : null}
       {state?.mergedRows !== undefined ? (
         <p className="text-chart-2 mt-2 text-xs">
-          {state.mergedRows}개 항목 이전 완료. 페이지를 새로고침하세요.
+          {state.mergedRows}개 항목 이전 완료 — 통합된 학생은 목록에서 사라집니다.
         </p>
       ) : null}
     </li>

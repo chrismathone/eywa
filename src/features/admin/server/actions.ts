@@ -65,7 +65,9 @@ export async function mergeStudents(
     })
     .eq("id", mergeeId);
 
-  revalidatePath("/admin/duplicates");
+  // 중복 병합 UI는 /owner?tab=data(데이터 정리 면)에 있다 — 그 경로를 revalidate해야 병합 후 목록이
+  // 자동 갱신된다(구 /admin/duplicates는 redirect stub이라 무의미했음). /students도 함께(mergee 퇴원).
+  revalidatePath("/owner");
   revalidatePath("/students");
   return { mergedRows };
 }

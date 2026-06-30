@@ -22,13 +22,28 @@ export type DuplicateGroup = {
  */
 export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("students")
-    .select("id, name, grade, school, status, enrolled_at, parent_phone")
-    .order("name");
-
-  if (error) throw new Error(`findDuplicateStudents: ${error.message}`);
-  if (!data) return [];
+  // ⚠️ 퇴원(withdrawn)생은 중복 후보에서 제외한다. 자연키 유니크 인덱스가 `WHERE status<>'withdrawn'`이라
+  //    퇴원생은 애초에 중복 충돌 대상이 아니고, 병합(mergeStudents)은 mergee를 withdrawn으로 만든다.
+  //    포함하면 병합 후에도 keeper와 같은 키(이름+학년/전화)로 계속 2명 그룹으로 잡혀 "병합했는데
+  //    목록에 그대로 남는" 버그가 난다([[#66]] 계열). 전건 무페이징 select는 1000행 silent 절단 위험(B2)
+  //    → fetchAllPaged로 전건(id 정렬 = 페이지 경계 안정).
+  const data = await fetchAllPaged<{
+    id: string;
+    name: string;
+    grade: string | null;
+    school: string | null;
+    status: string;
+    enrolled_at: string | null;
+    parent_phone: string | null;
+  }>((from, to) =>
+    supabase
+      .from("students")
+      .select("id, name, grade, school, status, enrolled_at, parent_phone")
+      .neq("status", "withdrawn")
+      .order("id")
+      .range(from, to),
+  );
+  if (data.length === 0) return [];
 
   // 같은 키를 공유하는 학생들을 엮을 버킷 구성
   const buckets = new Map<string, string[]>();
