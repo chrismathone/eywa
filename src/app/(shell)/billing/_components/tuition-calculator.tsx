@@ -1,9 +1,11 @@
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Check, Loader2, Plus, Printer, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useStateDraft } from "@/components/forms/use-state-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { saveTuitionQuote, type SaveQuoteState } from "@/features/billing/server/tuition-quote-actions";
 import { DISCOUNT_CATEGORY, type TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 import { koreanHolidayDatesForRange } from "@/features/billing/holidays-data";
@@ -148,10 +150,41 @@ export function TuitionCalculator({
   const payload = (k: "courses" | "extras" | "discounts") =>
     JSON.stringify(k === "courses" ? courses : k === "extras" ? extras : discounts);
 
+  // 로컬 초안 자동저장 — 입력이 React state(동적 행 배열)라 useStateDraft로 스냅샷 직렬화 저장.
+  // 복구는 setState로 일괄 rehydrate + uid 카운터 재시드. 저장 성공(state.ok) 시 초안 삭제.
+  const draftScope = initial?.id ? `quote:${initial.id}` : "quote:new";
+  const draftSnapshot = useMemo(
+    () => ({ student, courses, extras, discounts }),
+    [student, courses, extras, discounts],
+  );
+  const draft = useStateDraft({
+    scope: draftScope,
+    snapshot: draftSnapshot,
+    hasContent: (s) => s.student.name.trim() !== "" || s.courses.length > 0,
+  });
+  const clearDraft = draft.clear;
+  useEffect(() => {
+    if (state?.ok) clearDraft();
+  }, [state, clearDraft]);
+
+  function restoreDraft() {
+    const d = draft.restore();
+    if (!d) return;
+    setStudent(d.student);
+    setCourses(d.courses);
+    setExtras(d.extras);
+    setDiscounts(d.discounts);
+    // uid 카운터를 복원 행들의 최대치 이상으로 → 이후 nextUid()가 기존 행과 충돌 안 함.
+    uidRef.current = [...d.courses, ...d.extras, ...d.discounts]
+      .map((x) => Number(String(x.uid).replace(/\D/g, "")) || 0)
+      .reduce((a, b) => Math.max(a, b), uidRef.current);
+  }
+
   return (
     <div className="grid grid-cols-1 gap-5 print:block xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
       {/* 입력 (인쇄 시 숨김) */}
       <div className="space-y-4 print:hidden">
+        <DraftBanner savedAt={draft.draftSavedAt} onRestore={restoreDraft} onDiscard={draft.discard} />
         {/* 학생 정보 */}
         <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
           <h2 className="text-foreground text-[15px] font-bold">상담 정보 (신입생)</h2>

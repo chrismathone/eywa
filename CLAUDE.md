@@ -1442,6 +1442,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - **인프라**: [`useFormDraft({ scope, formRef, enabled?, onRestore?, exclude?, ignoreForBanner? })`](src/components/forms/use-form-draft.ts)
   (입력 700ms 디바운스 → IDB 저장, 다시 열면 `draftSavedAt` 세팅) + [`<DraftBanner savedAt onRestore onDiscard />`](src/components/forms/draft-banner.tsx)(공용 복구 배너)
   + [`form-draft.ts`](src/lib/form-draft.ts)(`readFormValues`/`applyFormValues`/`hasMeaningfulValues` — **DOM 일괄 캡처/복원**). 녹음 IDB 복구와 같은 패턴, **별개 레이어**(둘 다 동작).
+  + **상태 기반 변형** [`useStateDraft({ scope, snapshot, hasContent })`](src/components/forms/use-state-draft.ts) — 입력이 `<form>` DOM이 아니라 **React state(동적 배열)** 인 폼용(수강료 계산기). 직렬화 가능한 `snapshot`을 통째로 JSON으로 디바운스 저장, `restore()`가 파싱본을 돌려주면 호출부가 setState로 rehydrate.
 - **적용 5단계**(레퍼런스 [consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)):
   ① `const formRef = useRef<HTMLFormElement>(null)` + `<form ref={formRef}>` (동시편집 가드가 이미 formRef를 쓰면 **재사용**).
   ② `const draft = useFormDraft({ scope: mode==="create" ? "x:new" : ` + "`x:${id}`" + ` })`. ③ 폼 첫 자식에 `<DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />`.
@@ -1451,8 +1452,9 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   · **컨트롤드 React state**(과목점수 jsonb·반 색·SearchableSelect 등)는 자동복원 안 됨 → **hidden input(name)로 직렬화**돼 있어야 캡처되고, **`onRestore`로 setState rehydrate**(레퍼런스 subjectDetails 패턴). 신뢰 안 되면 `exclude`로 빼고 사용자 재입력(학생상담 studentId).
   · **비밀번호·서버 prop·봇 트랩**(직원 임시비번·공개접수 renderedAt/company/token)은 `exclude`로 **IDB에 안 남기기**(보안).
   · **기본값이 항상 채워지는 필드**(상담 일시 now·category·audience 등)는 `ignoreForBanner`로 빼서 **빈 폼 오탐 배너** 방지.
-- **적용 현황(2026-06-30)**: ✅ 등록상담·학생(생성/수정)·직원·학생상담. ⏳ **SPECIAL(보류)** = 반(class-form ScheduleGrid)·수강료계산기(입력이 `<form>` 밖)·
-  학부모 QR 공개접수(다중선택/false·null lossy)·학원설정(제네릭 래퍼) — 동적행·배열을 hidden JSON 직렬화 + onRestore 일괄 rehydrate가 필요한 **무거운 폼별 작업**이라 별도 패스. ⏭️ **skip** = 짧은 폼(시험 등록·회의 신규·성적 인라인·상담 녹음[녹음은 이미 복구]).
+- **적용 현황(2026-06-30)**: ✅ 등록상담·학생(생성/수정)·직원·학생상담 + **수강료 계산기**(`useStateDraft` 스냅샷)·**반**(class-form: 스케줄 grid hidden input
+  schedule_*_${i}를 onRestore에서 배열로 복원 → `key`로 ScheduleGrid remount + 과목/담임/색 setState). ⏳ **SPECIAL 남음** = 학부모 QR 공개접수(uncontrolled DOM + 다중선택/false·null
+  lossy state 혼합 → 하이브리드)·학원설정(제네릭 래퍼라 각 *-section이 직접 useFormDraft 또는 onRestoreDraft 콜백 필요) — 별도 패스. ⏭️ **skip** = 짧은 폼(시험 등록·회의 신규·성적 인라인·상담 녹음[녹음은 이미 복구]).
 - ⚠️ 새 "긴 폼"을 추가하면 이 5단계로 초안 자동저장을 붙인다. 컨트롤드/동적 state가 있으면 hidden 직렬화+onRestore를 잊지 말 것(안 그러면 복원이 반쪽).
 
 ### 인쇄(Print) — 인쇄 버튼이 있는 모든 곳은 플로팅 창 + A4 (⚠️ 새 인쇄 표면 기본값, 2026-06-24)

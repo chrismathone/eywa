@@ -12,6 +12,8 @@ import {
 } from "@/features/classes/server/actions";
 import { subjectWeekdayPeriods, type PeriodsConfig } from "@/features/timetable/lib/periods";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { ScheduleGrid } from "./schedule-grid";
 
 // 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
@@ -80,16 +82,6 @@ export function ClassForm({
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
 
-  // 저장 성공 확정(nonce) 후: 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
-  const handledNonce = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
-      handledNonce.current = state.nonce;
-      notifySaved();
-      if (state.redirectTo) router.push(state.redirectTo);
-    }
-  }, [state, notifySaved, router]);
-
   // 과목은 교시표(8↔10교시)를 좌우하므로 상태로 들어 그리드와 동기. select는 name=subject로 그대로 제출.
   const [subject, setSubject] = useState(defaults?.subject ?? subjects[0]?.value ?? "math");
   const periods = subjectWeekdayPeriods(subject, periodsConfig);
@@ -97,11 +89,51 @@ export function ClassForm({
   const [teacherId, setTeacherId] = useState(defaults?.teacherId ?? "");
   // 반 색상(시간표 통합뷰 헤더색) — 빈 문자열=미지정(과목색 폴백). 글자색은 서버가 휘도로 자동.
   const [bgColor, setBgColor] = useState(defaults?.bgColor ?? "");
+  // 초안 복원용 — 복원된 스케줄을 그리드 initial로 주고 key를 바꿔 remount(그리드는 initial을 마운트 1회만 읽음).
+  const [restoredSchedules, setRestoredSchedules] = useState<Schedule[] | null>(null);
+  const [gridKey, setGridKey] = useState(0);
+
+  // 로컬 초안 자동저장 — 스케줄(그리드 hidden input schedule_*_${i})·과목·담임·색까지 onRestore로 rehydrate.
+  const draft = useFormDraft({
+    scope: mode === "create" ? "class:new" : `class:${defaults?.id ?? "edit"}`,
+    formRef,
+    onRestore: (vals) => {
+      if (vals.subject) setSubject(vals.subject);
+      setTeacherId(vals.teacherId ?? "");
+      setBgColor(vals.bgColor ?? "");
+      // schedule_*_${i} 인덱스 hidden을 스케줄 배열로 복원 → 그리드 remount.
+      const sched: Schedule[] = [];
+      for (let i = 0; vals[`schedule_day_${i}`] !== undefined; i++) {
+        sched.push({
+          dayOfWeek: vals[`schedule_day_${i}`]!,
+          startTime: vals[`schedule_start_${i}`] ?? "",
+          endTime: vals[`schedule_end_${i}`] ?? "",
+          teacherId: vals[`schedule_teacher_${i}`] || null,
+          classroomId: vals[`schedule_classroom_${i}`] || null,
+        });
+      }
+      setRestoredSchedules(sched);
+      setGridKey((k) => k + 1);
+    },
+  });
+  const clearDraft = draft.clear;
+
+  // 저장 성공 확정(nonce) 후: 초안 삭제 → 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      clearDraft();
+      notifySaved();
+      if (state.redirectTo) router.push(state.redirectTo);
+    }
+  }, [state, notifySaved, router, clearDraft]);
 
   const fieldErrs = state?.fieldErrors ?? {};
 
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {defaults?.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -225,8 +257,9 @@ export function ClassForm({
         ) : null}
 
         <ScheduleGrid
+          key={gridKey}
           periods={periods}
-          initial={defaults?.schedules ?? []}
+          initial={restoredSchedules ?? defaults?.schedules ?? []}
           teacherId={teacherId || null}
           teacherOptions={teacherOptions}
           classroomOptions={classroomOptions.map((c) => ({ id: c.id, name: c.name }))}
