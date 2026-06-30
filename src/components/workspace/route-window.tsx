@@ -54,9 +54,11 @@ export function RouteWindow({ win }: { win: Win }) {
   const prevReload = useRef(reloadNonce);
   useEffect(() => {
     if (reloadNonce === prevReload.current) return; // 초기 마운트/무변경
-    prevReload.current = reloadNonce;
     const el = iframeRef.current;
+    // 아직 비활성(stagger 복원 중)이면 nonce를 소비하지 말 것 — 소비하면 활성화 후 재실행 때 무변경으로
+    // 걸러져 reload가 영구 유실된다. 활성화돼 실제 reload를 수행할 때만 nonce 소비.
     if (!el || !activated) return;
+    prevReload.current = reloadNonce;
     setLoaded(false);
     try {
       el.contentWindow?.location.reload();

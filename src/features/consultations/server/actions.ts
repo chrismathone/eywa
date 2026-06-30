@@ -165,7 +165,7 @@ export async function runStudentCareAnalysis(
 
 // ───────── 학생상담 CRUD ─────────
 export type ConsultationFormState =
-  | { error?: string; fieldErrors?: Record<string, string> }
+  | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
   | undefined;
 
 const CATEGORIES = ["general", "academic", "emotional", "career", "social", "other"] as const;
@@ -234,7 +234,9 @@ export async function createStudentConsultation(
 
   revalidatePath("/consultations");
   revalidatePath(`/students/${input.studentId}`);
-  redirect("/consultations");
+  // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
+  // (제출 시점 무조건 clear는 서버 검증 실패 시 입력 유실 위험 → 성공 확정 기반으로 전환.)
+  return { ok: true, redirectTo: "/consultations", nonce: Date.now() };
 }
 
 export async function updateStudentConsultation(
@@ -272,7 +274,8 @@ export async function updateStudentConsultation(
 
   revalidatePath("/consultations");
   revalidatePath(`/students/${input.studentId}`);
-  redirect("/consultations");
+  // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
+  return { ok: true, redirectTo: "/consultations", nonce: Date.now() };
 }
 
 export type ToggleFollowUpState = { error?: string } | undefined;

@@ -29,10 +29,13 @@ import {
 export function AudioRecorderField({
   file,
   onChange,
+  onRecordingChange,
   disabled = false,
 }: {
   file: File | null;
   onChange: (f: File | null) => void;
+  /** 녹음 진행 여부를 부모로 끌어올림 — 녹음 중 제출(=진행 녹음 silent 유실) 방지용. 안정 setter 권장. */
+  onRecordingChange?: (recording: boolean) => void;
   disabled?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +50,10 @@ export function AudioRecorderField({
 
   // 녹음 중이면 이 폼이 든 플로팅 창의 닫기(X)·배경보내기·탭 새로고침을 잠근다(우발적 유실 방지).
   useRecordingLock(isRecording);
+  // 녹음 진행 여부를 부모로 통지 → 부모가 제출 버튼을 막아 진행 중 녹음이 silent하게 유실되는 것 방지.
+  useEffect(() => {
+    onRecordingChange?.(isRecording);
+  }, [isRecording, onRecordingChange]);
 
   useEffect(() => {
     let cancelled = false;

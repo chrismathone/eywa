@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import type { SystemRole } from "@/lib/permissions";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import {
@@ -140,7 +139,13 @@ export async function createStaff(
   }
 
   revalidatePath("/staff");
-  redirect(`/staff?invited=${encodeURIComponent(input.email)}`);
+  // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·동시편집 신호·이동(B-2).
+  // (redirect()면 NEXT_REDIRECT throw로 폼의 nonce 효과가 안 돌아 'staff:new' 초안이 안 비워진다.)
+  return {
+    ok: true,
+    redirectTo: `/staff?invited=${encodeURIComponent(input.email)}`,
+    nonce: Date.now(),
+  };
 }
 
 export async function updateStaff(

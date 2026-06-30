@@ -84,6 +84,8 @@ export function StaffForm({
     scope: mode === "create" ? "staff:new" : `staff:${initialValue?.id ?? "edit"}`,
     formRef,
     exclude: ["password"],
+    // systemRole은 빈 옵션 없이 항상 첫 역할이 제출되므로 빈 폼 오탐 배너 방지로 의미판정서 제외.
+    ignoreForBanner: ["systemRole"],
     onRestore: (vals) => setBgColor(vals.bgColor ?? ""),
   });
   const clearDraft = draft.clear;

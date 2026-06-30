@@ -342,6 +342,22 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **로컬 초안 자동저장**(아래 디자인시스템 "로컬 초안 자동저장" 규약 신설): 긴 폼 입력 유실 방지 — 입력 중 IDB 자동보관 → 다시 열면 복구 배너 → 실제 저장 성공 시 삭제.
   멀티에이전트 폼 전수 검토(11폼) 후 `apply` 4폼(등록상담·학생·직원·학생상담) 적용. SPECIAL 4폼(반·수강료계산기·공개접수·학원설정)은 동적행/배열/jsonb가 React state라 hidden JSON 직렬화+onRestore 필요 → 보류.
 
+### 전체 점검 — 로컬 초안 자동저장 버그 6건 적발·수정 (20에이전트 적대 감사, 2026-06-30) — ✅ 게이트 그린
+사용자 "속도 저하 기능 이상 없는지 전체적 점검" → 20에이전트 적대 감사(검토→검증). **속도 저하는 사실상 없음**(perf 발견 1건 low·무해).
+진짜 결함은 직전에 넣은 **로컬 초안 자동저장**(useFormDraft/useStateDraft)의 기능 버그였고, 확정 12건 중 실결함 전부 수정. typecheck0/lint0/**test523**.
+- **🔴 create 폼 초안이 저장 성공 후 안 지워짐(학생·직원·반·등록상담 4폼)**: create 액션이 `redirect()`라 폼의 `state.ok&&nonce` effect가 영영 안 돌아
+  'x:new' 초안 잔존 → 다음 '새 X'에 방금 저장한 stale 복구 배너(설계 의도의 정반대). → **create 액션을 update처럼 `return {ok:true,redirectTo,nonce:Date.now()}`로 통일**
+  (createStudent/createStaff/createClass/createStudentConsultation·updateStudentConsultation, redirect import 제거). 폼의 nonce effect가 create/edit 공통으로 clearDraft+router.push.
+  등록상담 create는 클라 onSubmit 핸들러라 **`catch`의 `if(/NEXT_REDIRECT/.test(msg)){ clearDraft(); return; }`** 분기에서 clear(네비는 프레임워크). ⚠️ 규약: **redirect-only 액션에 `onSubmit 무조건 clear` 금지**(아래).
+- **🔴 학생상담 폼 `onSubmit` 무조건 clear → 서버 검증 실패 시 입력 유실**: studentId 미선택·요약<5자가 native 통과·server 거부인데 초안이 먼저 삭제돼 창 닫으면 복구 불가
+  → onSubmit clear 제거, **성공 확정(nonce) effect 기반 clear**로 전환(다른 폼과 동일).
+- **🟡 `useStateDraft` 마운트 클로버**(수강료 계산기 편집): 마운트 직후 저장이 같은 scope의 복구 대기 초안을 서버 초기값으로 덮어씀 → 저장 effect에 **`if(json===initialJsonRef.current) return`** 가드.
+- **🟡 빈 폼 오탐 배너**(학생 `status`·직원 `systemRole` 항상 채워지는 기본값) → `ignoreForBanner`로 의미판정 제외(saveDraft도 같은 ignore 게이트).
+- **🟡 등록상담 녹음 중 저장 = 진행 녹음 silent 유실**(audioFile은 onstop 전 null) → AudioRecorderField `onRecordingChange`로 부모에 끌어올려 제출 버튼 disabled + handleCreateSubmit early-return.
+- **⚪ 창별 새로고침 nonce가 stagger 복원 중 비활성 창에서 영구 유실** → route-window가 **활성 창에서만 nonce 소비**(소비를 `!activated` 가드 뒤로).
+- 의식적으로 둔 LOW 2건: 제목 정중앙 라벨이 최협폭 긴 제목서 좌측 버튼과 시각만 겹침(`pointer-events-none`=클릭 무영향) · 초안 복원 직후 멱등 재저장 1회(무해).
+- ⚠️ **규약(디자인시스템 "로컬 초안 자동저장" ④ 갱신)**: 초안 clear는 **"서버 성공 확정 후"만**. create 액션도 `{ok,redirectTo,nonce}` 반환(redirect 금지)해 nonce effect가 발화하게 하고, 제출 시점 무조건 clear는 금지(검증 실패 시 유실).
+
 ### makeedu→eywa 동기화 = ijw 베이스 복원 + makeedu additive 오버레이 (진행중) + 시간표 명단 요약 + 창 복원 버그픽스 (2026-06-29)
 인재원은 실운영을 **makeedu**(school.makeedu.co.kr)에서 한다. eywa를 실데이터로 돌리기 위한 단방향 동기화. 설계·진행은
 [[project_makeedu-eywa-sync]] + 계획 [`expressive-weaving-glacier.md`]. 범위 7개(학생·예비/등록상담·재원상담·반/수업·수강·수납인보이스·교재단가표).
@@ -1446,7 +1462,9 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - **적용 5단계**(레퍼런스 [consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)):
   ① `const formRef = useRef<HTMLFormElement>(null)` + `<form ref={formRef}>` (동시편집 가드가 이미 formRef를 쓰면 **재사용**).
   ② `const draft = useFormDraft({ scope: mode==="create" ? "x:new" : ` + "`x:${id}`" + ` })`. ③ 폼 첫 자식에 `<DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />`.
-  ④ **서버 저장 성공 시 `draft.clear()`**(B-2 nonce effect 안 / redirect-only 액션은 `<form onSubmit={()=>void draft.clear()}>` — redirect는 클라 네비라 IDB 삭제 완주).
+  ④ **서버 저장 "성공 확정 후"에만 `draft.clear()`** — `state.ok && state.nonce` effect 안에서(B-2). ⚠️ **`<form onSubmit={()=>void draft.clear()}>`(제출 시점 무조건 clear) 금지** — 서버 검증
+  실패해도(폼 화면에 남는데) 초안이 먼저 지워져 창 닫으면 복구 불가(2026-06-30 학생상담서 버그). ⚠️ **create 액션이 `redirect()`면 NEXT_REDIRECT throw로 nonce effect가 영영 안 돌아 'x:new' 초안이 안
+  비워진다** → create 액션도 update처럼 **`return { ok:true, redirectTo, nonce: Date.now() }`**(redirect 금지)로 통일해 nonce effect가 create/edit 공통 발화하게 한다. 클라 onSubmit로 액션을 직접 await하는 폼(등록상담 create)은 **`catch`의 `if(/NEXT_REDIRECT/.test(msg)){ clearDraft(); return; }`** 분기에서 clear(네비는 프레임워크).
   ⑤ scope는 **폼마다 고유 접두**(등록상담 `consultation:*` ↔ 학생상담 `student-consultation:*` — 같으면 IDB 초안을 서로 덮어씀).
 - **⚠️ 캡처 규칙**: DOM의 **name 가진** input/select/textarea/checkbox만 캡처/복원된다. 그래서 ―
   · **컨트롤드 React state**(과목점수 jsonb·반 색·SearchableSelect 등)는 자동복원 안 됨 → **hidden input(name)로 직렬화**돼 있어야 캡처되고, **`onRestore`로 setState rehydrate**(레퍼런스 subjectDetails 패턴). 신뢰 안 되면 `exclude`로 빼고 사용자 재입력(학생상담 studentId).

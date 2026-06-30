@@ -46,8 +46,12 @@ export function useStateDraft<T>({
   // 스냅샷 변경을 디바운스 저장(의미 있는 내용일 때만). json/has는 렌더에서 계산.
   const json = JSON.stringify(snapshot);
   const has = hasContent(snapshot);
+  // 마운트 시점 스냅샷 — 사용자가 아직 안 건드렸으면(현재=초기) 저장 보류. 편집 모드에서 마운트 직후
+  // 저장이 같은 scope의 '복구 대기 초안'을 서버 초기값으로 덮어쓰던 클로버 방지(사용자가 restore 누르기 전).
+  const initialJsonRef = useRef(json);
   useEffect(() => {
     if (!enabled || !has) return;
+    if (json === initialJsonRef.current) return;
     const t = setTimeout(() => void saveDraft(scope, { __json: json }), 700);
     return () => clearTimeout(t);
   }, [scope, enabled, json, has]);

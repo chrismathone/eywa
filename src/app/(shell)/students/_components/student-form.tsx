@@ -102,9 +102,11 @@ export function StudentForm({
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
 
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 전 필드 언컨트롤드라 onRestore 불필요.
+  // status는 빈 옵션 없이 항상 'prospect' 등 기본값이 제출되므로 빈 폼 오탐 배너 방지로 의미판정서 제외.
   const draft = useFormDraft({
     scope: mode === "create" ? "student:new" : `student:${initialValue?.id ?? "edit"}`,
     formRef,
+    ignoreForBanner: ["status"],
   });
   const clearDraft = draft.clear;
 

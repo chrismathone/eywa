@@ -98,6 +98,8 @@ export function ConsultationFullForm({
     undefined,
   );
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  // 녹음 진행 여부(자식 AudioRecorderField에서 끌어올림) — 녹음 중 제출 시 진행 녹음이 onstop 전이라 유실되므로 막는다.
+  const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [createError, setCreateError] = useState<string | null>(null);
   const busy = phase !== "idle";
@@ -142,6 +144,11 @@ export function ConsultationFullForm({
   async function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError(null);
+    // 녹음이 진행 중이면 audioFile은 아직 onstop 전이라 null — 그대로 저장하면 진행 녹음이 첨부 없이 유실된다.
+    if (recordingActive) {
+      setCreateError("녹음을 먼저 중지한 후 저장해주세요.");
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     fd.set("subjectDetails", JSON.stringify(details));
     try {
@@ -172,19 +179,20 @@ export function ConsultationFullForm({
       }
       setPhase("submitting");
       const result = await createEnrollmentConsultation(undefined, fd);
-      // 성공 시 서버가 상세로 redirect(여기 도달 안 함). 에러만 처리.
+      // 성공이면 서버가 상세로 redirect → NEXT_REDIRECT가 throw돼 아래 catch로 간다. 여기엔 {error}(실패)만 도달.
       if (result?.error) {
         setCreateError(result.error);
         setPhase("idle");
-      } else {
-        clearDraft(); // 성공 → 로컬 초안 삭제(다음 '새 등록상담'에서 stale 복구 방지)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (!/NEXT_REDIRECT/.test(msg)) {
-        setCreateError(msg);
-        setPhase("idle");
+      if (/NEXT_REDIRECT/.test(msg)) {
+        // 성공(redirect) → 로컬 초안 삭제(다음 '새 등록상담'에서 stale 복구 방지). 네비게이션은 프레임워크가 수행.
+        clearDraft();
+        return;
       }
+      setCreateError(msg);
+      setPhase("idle");
     }
   }
 
@@ -334,7 +342,12 @@ export function ConsultationFullForm({
           <p className="text-text-dim text-xs">
             입력하면서 바로 녹음하거나 음성 파일을 올리면, 저장 시 자동으로 전사·13섹션 AI 분석을 실행합니다. 입력하신 내용은 그대로 보존됩니다.
           </p>
-          <AudioRecorderField file={audioFile} onChange={setAudioFile} disabled={busy} />
+          <AudioRecorderField
+            file={audioFile}
+            onChange={setAudioFile}
+            onRecordingChange={setRecordingActive}
+            disabled={busy}
+          />
         </Section>
       ) : null}
 
@@ -455,8 +468,14 @@ export function ConsultationFullForm({
 
       <div className="flex justify-end">
         {isCreate ? (
-          <Button type="submit" disabled={busy}>
-            {phase === "uploading" ? "음성 업로드 중…" : phase === "submitting" ? "저장 중…" : "저장하고 상세로"}
+          <Button type="submit" disabled={busy || recordingActive}>
+            {recordingActive
+              ? "녹음 중 — 정지 후 저장"
+              : phase === "uploading"
+                ? "음성 업로드 중…"
+                : phase === "submitting"
+                  ? "저장 중…"
+                  : "저장하고 상세로"}
             <ArrowRight className="size-4" />
           </Button>
         ) : (

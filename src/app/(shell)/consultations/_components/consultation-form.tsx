@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -85,6 +86,7 @@ export function ConsultationForm({
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
+  const router = useRouter();
 
   const v: ConsultationFormValue = initialValue ?? {
     studentId: "",
@@ -111,10 +113,21 @@ export function ConsultationForm({
     exclude: ["studentId"],
     ignoreForBanner: ["consultedAt", "category", "audience"],
   });
+  const clearDraft = draft.clear;
+
+  // 저장 성공 확정(nonce) 후에만 초안 삭제 → 이동(B-2). 제출 시점 무조건 clear는 서버 검증 실패 시
+  // (학생 미선택·요약 5자 미만 등) 입력이 먼저 사라져 창을 닫으면 복구 불가라 성공 기반으로 전환.
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      clearDraft();
+      if (state.redirectTo) router.push(state.redirectTo);
+    }
+  }, [state, router, clearDraft]);
 
   return (
-    // 액션이 성공 시 redirect만 하고 ok를 안 줘서, 제출(클라 검증 통과) 시점에 초안 삭제(redirect는 클라 네비라 IDB 삭제 완주).
-    <form ref={formRef} action={formAction} onSubmit={() => void draft.clear()} className="space-y-5">
+    <form ref={formRef} action={formAction} className="space-y-5">
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />

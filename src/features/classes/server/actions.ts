@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -177,7 +176,9 @@ export async function createClass(
 
   revalidatePath("/classes");
   revalidatePath("/timetable");
-  redirect(`/classes/${data.id}`);
+  // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·동시편집 신호·이동(B-2).
+  // (redirect()면 NEXT_REDIRECT throw로 폼의 nonce 효과가 안 돌아 'class:new' 초안이 안 비워진다.)
+  return { ok: true, redirectTo: `/classes/${data.id}`, nonce: Date.now() };
 }
 
 export async function updateClass(
