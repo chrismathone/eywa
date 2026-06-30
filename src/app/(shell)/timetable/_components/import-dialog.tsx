@@ -91,6 +91,9 @@ export function TimetableImportDialog() {
             <p className="text-text-dim mt-1 text-[11px]">
               내보낸 엑셀의 <b>수강편집</b> 시트에서 학생의 <b>반</b>만 바꿔 다시 올리세요. (enrollmentId 열은 수정 금지)
             </p>
+            <p className="text-text-faint mt-1 text-[11px]">
+              구글시트로 편집했다면 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받아 올리면 됩니다.
+            </p>
 
             <label className="text-foreground mt-3 block text-[12px] font-medium">
               엑셀 파일 <span className="text-danger">*</span>

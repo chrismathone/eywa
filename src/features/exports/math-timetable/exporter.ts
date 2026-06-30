@@ -27,6 +27,8 @@ export interface ExportTimetableParams {
     studentMemoMap?: Record<string, string>;
     /** true면 다운로드 안 하고 xlsx ArrayBuffer 반환 (Google Sheets 업로드용) */
     returnBufferOnly?: boolean;
+    /** writeBuffer 직전 워크북에 시트 추가(예: '수강편집' 라운드트립 시트). 서버 빌더가 주입. */
+    appendSheets?: (workbook: import("exceljs").Workbook) => void | Promise<void>;
 }
 
 const hexToARGB = (hex: string | undefined, fallback: string): string => {
@@ -1598,6 +1600,9 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
             e.bgColorSnapshot || '', e.textColorSnapshot || '',
         ]);
     });
+
+    // 서버 빌더가 주입한 추가 시트(예: '수강편집' 라운드트립 시트)를 직렬화 직전에 덧붙임.
+    await params.appendSheets?.(workbook);
 
     const buffer = await workbook.xlsx.writeBuffer();
 

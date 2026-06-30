@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
+import { appendEnrollmentEditSheet } from "@/features/exports/enrollment-edit-sheet";
 import { assembleMathParams } from "./assemble";
 import { exportMathTimetableToExcel } from "./exporter";
 
@@ -45,5 +46,10 @@ export async function buildMathTimetableBuffer(opts?: {
     referenceMonday: opts?.referenceMonday ?? thisMonday(),
     teacherColors,
   });
-  return (await exportMathTimetableToExcel({ ...params, returnBufferOnly: true })) as ArrayBuffer;
+  return (await exportMathTimetableToExcel({
+    ...params,
+    returnBufferOnly: true,
+    // 라운드트립 import용 '수강편집' 시트를 직렬화 직전에 덧붙임(다운로드·구글시트 push 공유 버퍼).
+    appendSheets: (wb) => appendEnrollmentEditSheet(wb, supabase),
+  })) as ArrayBuffer;
 }

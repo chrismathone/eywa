@@ -329,6 +329,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 엑셀/구글시트 가져오기 라운드트립 — 수학 export에도 '수강편집' 시트 추가(옵션 A) (2026-06-30) — ✅ 게이트 + Chrome 라이브
+ijw "메타데이터" 라운드트립 대비 감사(워크플로 9에이전트, 36주장 적대검증) 결론: eywa에서 **실제 DB 반영되는 import는 학생(신규 insert-only)·시간표 '수강편집' 시트(수강 이동/추가/삭제)뿐**이고, 둘 다 `.xlsx` 파일 업로드 전용. **기본 '엑셀' 버튼으로 받는 수학 export는 `_meta`만 있고 importer가 읽는 '수강편집' 시트가 없어 라운드트립이 끊겨** 있었다(`parseEditSheet`가 빈 배열→ "'수강편집' 시트 없음" 거부). 구글시트는 단방향 push(`overwriteMathTimetableSheet`)만이라 시트 편집이 앱에 반영 안 됨. (수학 export의 `_meta`는 ijw 익스포터 verbatim 이식 잔재 = eywa엔 소비처 없는 orphan.)
+- **수정(옵션 A)**: '수강편집' 시트 생성 로직을 공용 헬퍼 [appendEnrollmentEditSheet](src/features/exports/enrollment-edit-sheet.ts)로 추출(일반·수학 단일 소스). 수학 익스포터([exporter.ts](src/features/exports/math-timetable/exporter.ts))에 `writeBuffer` 직전 `appendSheets?` 훅 추가 → [build-buffer.ts](src/features/exports/math-timetable/build-buffer.ts)(다운로드+구글시트 push 공유 버퍼)가 그 훅으로 '수강편집' 주입. 일반 export([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 인라인 블록 → 헬퍼 호출(동작 동일). 가져오기 다이얼로그에 "구글시트는 .xlsx로 다운로드해 올리세요" 안내 1줄.
+- **효과**: 기본 '엑셀' 버튼·구글시트 push 워크북 둘 다 '수강편집' 탭 보유 → 라운드트립 단절 복구. 다운로드→편집→업로드, 또는 구글시트 편집→.xlsx 다운로드→업로드가 동작.
+- 검증: typecheck0/lint0/test17(import) + **Chrome 라이브**(로그인 박소선, localhost:3001): export를 fetch→xlsx(zip)를 페이지에서 `DecompressionStream`으로 풀어 시트구조 직접 검사 — 수학 `?subject=math` HTTP200·**13시트(전엔 12)**·'수강편집' **814데이터행+헤더[반/학생/학교/학년/enrollmentId] 완비** / 영어 `?subject=english`도 '수강편집' 보유(헬퍼 추출 회귀0).
+- ⚠️ **한계(설계)**: 이 시트로 바꿀 수 있는 건 **학생↔반 배정뿐**(반이름·색·강사·요일·교시·신규반은 import 불가 — 그 정보가 시트에 없음). enrollmentId 앵커라 행 정렬/삽입에 안 깨짐(ijw `_meta` 위치 방식의 취약점 회피). '수강편집' 탭엔 전 과목 활성 수강이 다 들어감(일반 export 동일). 구글시트는 앱이 다시 push하면 전체 덮어쓰기라 시트 편집분이 날아감 → 편집 후엔 re-push 말고 가져오기부터.
+- **후속(옵션 B, 진행 예정)**: 구글시트 values 읽어 `parseEditSheet`로 흘리는 server action + 툴바 '시트에서 가져오기' 버튼 → 다운로드 단계 없이 시트 편집→앱 자동 반영. ⚠️ **옵션 C(ijw식 `_meta` 위치 라운드트립=시각 그리드 직접 편집)는 비이식** — Firestore 서브컬렉션 모델 가정 + 위치 메타라 취약(시트 행삽입/정렬에 깨짐)이고, eywa는 화면 내 드래그 편집(타임머신)이 이미 같은 목적 달성.
+
 ### 시간표 요일 병합을 과목별 프리셋으로 설정 (2026-06-30) — ✅ 게이트 그린 + 라이브
 사용자 제보: 기본뷰 요일 병합이 **수학 패턴(월목/화금/수)으로 하드코딩**돼 모든 과목에 적용 — 과목마다 수업 요일이 다른데(영어=월화/목금 등) 전부 월목/화금으로 묶임. 과목별로 병합 요일을 설정 가능하게.
 - **사용자 선택 = 프리셋 방식**(자유 분할 대신 드롭다운). 과목 설정에 `weekdayGrouping` 추가(스키마 `subjectSchema`): `mon-thu`(월목·화금, 수 단독=기본)·`mon-tue`(월화·목금)·`mon-wed-fri`(월수금·화목)·`none`(병합 없음, 요일별 풀너비).
