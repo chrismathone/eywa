@@ -2030,6 +2030,16 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 ⚠️ **rehydrate를 다시 effect 안으로 옮기지 말 것**(재발). autoClose(새 X 폼) 창은 partialize에서 의도적 영속 제외(부활 방지).
 검증: 창 심고 새로고침 → iframe 복원·localStorage 보존, window-store 테스트 12 passed. [[reference_window-store-rehydrate-module-level]].
 
+### 66. 테이블 셀 배경/음영은 td에 — 내부 고정 크기 자식에 주면 셀을 못 채운다 (출석부 주말 음영)
+사용자 제보: 출석부 매트릭스의 주말(토/일) 음영이 "셀 전체가 아니라" 일부에만 칠해졌다. 원인: 주말 배경을 셀(`<td>`)이
+아니라 셀 안의 **고정 크기 자식**([attendance-cell.tsx](<src/app/(shell)/attendance/_components/attendance-cell.tsx>)의
+`<button size-7>`=28px)에 줬다. 그런데 컬럼 실폭은 63px·행 높이 34px이라(이름/번호 칸 `py-2`로 행이 칩보다 큼) 28px 칩에만
+칠한 음영이 셀 왼쪽·위아래로 띠를 남겨 "셀을 못 채운" 것처럼 보였다. 헤더(th)는 처음부터 셀 전체를 음영(`bg-bg-soft/70`)했는데
+본문만 어긋났다. **해결**: 주말 음영을 **td(셀 전체)** 로 옮기고([page.tsx](<src/app/(shell)/attendance/page.tsx>) day `<td>`에
+`${d.isWeekend ? "bg-bg-soft/40" : ""}` + `align-middle`), 칩은 `mx-auto`로 셀 중앙에. 라이브 검증: 주말 td 배경이 63×34 셀
+전체·전 행 연속·칩 좌우 17px 대칭(중앙). **규칙: 칸(셀/행/열) 단위 배경·음영·hover는 컨테이너(td/tr)에 준다 — 셀보다 작은
+고정 크기 내부 요소(칩·버튼)에 주면 셀을 못 채워 어긋난다.** (상태 칩처럼 "칸 안의 작은 표식"만 내부 요소 배경 OK.)
+
 ---
 
 ## 마이그레이션 & 시드 흐름

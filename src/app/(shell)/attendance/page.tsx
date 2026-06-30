@@ -310,14 +310,20 @@ function MatrixTable({
                 </td>
                 {days.map((d) => {
                   const mark = (studentMarks[d.date] as AttendanceStatus | undefined) ?? null;
+                  // 주말 음영은 td(셀 전체)에 — 헤더(th)와 동일. 내부 칩(28px)에 주던 옛 방식은
+                  // 행 높이가 칩보다 커 위아래로 음영이 안 차는 버그가 있었다. align-middle로 칩은 중앙.
                   return (
-                    <td key={d.date} className="border-line border-b border-r p-0 text-center">
+                    <td
+                      key={d.date}
+                      className={`border-line border-b border-r p-0 text-center align-middle ${
+                        d.isWeekend ? "bg-bg-soft/40" : ""
+                      }`}
+                    >
                       <AttendanceCell
                         studentId={s.id}
                         classId={selectedClassId}
                         sessionDate={d.date}
                         initialStatus={mark}
-                        isWeekend={d.isWeekend}
                         note={matrix.notes[s.id]?.[d.date] ?? null}
                       />
                     </td>

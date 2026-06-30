@@ -38,14 +38,12 @@ export function AttendanceCell({
   classId,
   sessionDate,
   initialStatus,
-  isWeekend,
   note,
 }: {
   studentId: string;
   classId: string;
   sessionDate: string;
   initialStatus: AttendanceStatus | null;
-  isWeekend: boolean;
   note?: string | null;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
@@ -85,8 +83,8 @@ export function AttendanceCell({
           setOpen(true);
         }}
         title={noteVal || undefined}
-        className={`relative block size-7 leading-7 font-mono text-[11px] font-bold ${cls} ${
-          status ? "" : `text-text-faint hover:bg-bg-soft ${isWeekend ? "bg-bg-soft/40" : ""}`
+        className={`relative mx-auto block size-7 text-center leading-7 font-mono text-[11px] font-bold ${cls} ${
+          status ? "" : "text-text-faint hover:bg-bg-soft"
         }`}
         aria-label={noteVal ? `출결 상태 변경 (메모: ${noteVal})` : "출결 상태 변경"}
       >
