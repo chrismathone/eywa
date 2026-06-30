@@ -18,8 +18,12 @@ export function BackgroundTabs() {
   const activeId = useWindowStore((s) => s.activeBackgroundId);
   const setBackground = useWindowStore((s) => s.setBackground);
   const backgroundToWindow = useWindowStore((s) => s.backgroundToWindow);
+  const spotlight = useWindowStore((s) => s.spotlight);
 
   if (background.length <= 1) return null;
+  // 앨범(스포트라이트) 모드에선 포커스 창이 배경을 완전히 덮는다 → 배경탭은 의미가 없고, 활성 배경
+  // 하이라이트가 실제 보이는 배경과 어긋나 보일 수 있어(현재 라우트가 배경 스택 밖일 때) 숨긴다.
+  if (spotlight) return null;
 
   function popToWindow(id: string) {
     backgroundToWindow(id);

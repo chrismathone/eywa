@@ -60,6 +60,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "print/enrollment": { w: 840, h: 1120 }, // 신입생 인수인계서
   "print/meetings": { w: 840, h: 1120 }, // 회의록
   "print/textbook": { w: 800, h: 1040 }, // 교재요청서 카드(짧음)
+  "print/lesson_reports": { w: 840, h: 1120 }, // 수업 보고서(원스크린 PDF)
 };
 
 /**
@@ -107,6 +108,21 @@ export function spotlightTop(bounds: Bounds): Rect {
   const w = Math.min(bounds.width - 32, 1100);
   const h = Math.round(bounds.height * 0.6);
   const x = Math.round((bounds.width - w) / 2);
+  return clampRect({ x, y: 16, w, h }, bounds);
+}
+
+/**
+ * 스포트라이트 상단 타일 — 올라온 창(spotlightRaised) count개를 상단 영역에 가로로 균등 타일.
+ * count<=1이면 spotlightTop(중앙 큰 박스 1개). 2~3개면 좌우로 분할(가운데 gap). 하단 ~40%는 커버 스트립 몫.
+ */
+export function spotlightTile(bounds: Bounds, index: number, count: number): Rect {
+  if (count <= 1) return spotlightTop(bounds);
+  const margin = 16;
+  const gap = 14;
+  const h = Math.round(bounds.height * 0.6);
+  const areaW = bounds.width - margin * 2;
+  const w = Math.round((areaW - gap * (count - 1)) / count);
+  const x = margin + index * (w + gap);
   return clampRect({ x, y: 16, w, h }, bounds);
 }
 

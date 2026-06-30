@@ -135,7 +135,8 @@ type State = {
   dragBackground: boolean; // 드래그 중 포인터가 배경 드롭 칩 위 → "배경으로 보내기" 하이라이트
   background: WindowParams[]; // 배경 스택(첫=대시보드 기본). 삽입 순서 고정. 미영속, pathname 동기
   activeBackgroundId: string; // 현재 메인 프레임에 보이는 배경 id(=하이라이트). 선택해도 스택 순서는 불변.
-  spotlight: boolean; // 스포트라이트 모드(포커스 창 상단 크게, 나머지는 하단 커버 스트립). 런타임.
+  spotlight: boolean; // 스포트라이트 모드(올라온 창 상단 타일, 나머지는 하단 커버 스트립). 런타임.
+  spotlightRaised: string[]; // 스포트라이트에서 상단에 타일된 창들(최대 3). 진입 시 [포커스창]. 런타임.
   // 라우트 창의 iframe 현재 문서 제목/뒤로가능 여부(런타임, 미영속). RouteWindow가 iframe title·path를
   // 관찰해 갱신 → 타이틀바가 서브뷰 드릴인을 반영하고 크롬 뒤로(←) 버튼을 띄운다(인페이지 백 대체).
   live: Record<string, { title: string; canBack: boolean }>;
@@ -185,8 +186,10 @@ type Actions = {
   restore: (id: string) => void;
   applyLayout: (template: LayoutTemplate) => void; // Snap Assist 레이아웃 선택 → 자동 타일링
   dismissAssist: () => void;
-  enterSpotlight: (id?: string) => void; // 스포트라이트 진입(포커스 창 = 상단 큰 창)
+  enterSpotlight: (id?: string) => void; // 스포트라이트 진입(포커스 창 = 상단 타일)
   exitSpotlight: () => void;
+  raiseToSpotlight: (id: string) => void; // 스트립 카드 → 상단으로 올림(최대 3, 초과 시 가장 오래된 것 내림)
+  lowerFromSpotlight: (id: string) => void; // 상단 타일 창 → 스트립으로 내림(마지막 1개는 유지)
   adoptOwner: (owner: string) => void;
 };
 
@@ -208,6 +211,7 @@ export const useWindowStore = create<State & Actions>()(
       background: [{ id: "dashboard", title: "대시보드", href: "/dashboard" }],
       activeBackgroundId: "dashboard",
       spotlight: false,
+      spotlightRaised: [],
       live: {},
       nav: {},
       reloadNonce: {},
@@ -576,7 +580,7 @@ export const useWindowStore = create<State & Actions>()(
             activeBackgroundId = background[background.length - 1]?.id ?? "dashboard";
           }
 
-          return { windows, order, background, activeBackgroundId, focusedId: winId, spotlight: true, snapAssist: null, snapPreview: null };
+          return { windows, order, background, activeBackgroundId, focusedId: winId, spotlight: true, spotlightRaised: [winId], snapAssist: null, snapPreview: null };
         }),
 
       close: (id) =>
@@ -588,12 +592,16 @@ export const useWindowStore = create<State & Actions>()(
           delete live[id];
           const nav = { ...s.nav };
           delete nav[id];
+          // 스포트라이트 상단에서도 제거 — 비면 스포트라이트 해제(상단 빈 화면 방지).
+          const raised = s.spotlightRaised.filter((x) => x !== id);
           return {
             windows,
             order,
             live,
             nav,
             focusedId: s.focusedId === id ? (order[order.length - 1] ?? null) : s.focusedId,
+            spotlightRaised: raised,
+            spotlight: s.spotlight && raised.length === 0 ? false : s.spotlight,
             snapAssist: null,
           };
         }),
@@ -699,9 +707,13 @@ export const useWindowStore = create<State & Actions>()(
           const w = s.windows[id];
           if (!w) return s;
           const rest = s.order.filter((x) => x !== id);
+          // 최소화된 창은 스포트라이트 상단에서 제거 — 비면 해제.
+          const raised = s.spotlightRaised.filter((x) => x !== id);
           return {
             windows: { ...s.windows, [id]: { ...w, minimized: true } },
             focusedId: rest[rest.length - 1] ?? null,
+            spotlightRaised: raised,
+            spotlight: s.spotlight && raised.length === 0 ? false : s.spotlight,
             snapAssist: null,
           };
         }),
@@ -764,6 +776,7 @@ export const useWindowStore = create<State & Actions>()(
                 : open[open.length - 1];
           return {
             spotlight: true,
+            spotlightRaised: [focusId],
             focusedId: focusId,
             order: bringToFront(s.order, focusId),
             snapAssist: null,
@@ -771,7 +784,29 @@ export const useWindowStore = create<State & Actions>()(
             dragLayout: null,
           };
         }),
-      exitSpotlight: () => set({ spotlight: false }),
+      exitSpotlight: () => set({ spotlight: false, spotlightRaised: [] }),
+
+      // 스트립 카드 클릭 → 상단으로 올림. 이미 올라와 있으면 포커스만. 3개 초과면 가장 오래된 것 내림(FIFO).
+      raiseToSpotlight: (id) =>
+        set((s) => {
+          if (!s.spotlight || !s.windows[id] || s.windows[id].minimized) return s;
+          if (s.spotlightRaised.includes(id)) {
+            return { focusedId: id, order: bringToFront(s.order, id) };
+          }
+          let raised = [...s.spotlightRaised, id];
+          if (raised.length > 3) raised = raised.slice(raised.length - 3);
+          return { spotlightRaised: raised, focusedId: id, order: bringToFront(s.order, id) };
+        }),
+
+      // 상단 타일 창 → 스트립으로 내림. 마지막 1개는 못 내림(상단이 비어 빈 화면이 되는 것 방지).
+      lowerFromSpotlight: (id) =>
+        set((s) => {
+          if (!s.spotlight) return s;
+          const raised = s.spotlightRaised.filter((x) => x !== id);
+          if (raised.length === 0) return s;
+          const focusedId = s.focusedId === id ? raised[raised.length - 1]! : s.focusedId;
+          return { spotlightRaised: raised, focusedId, order: bringToFront(s.order, focusedId!) };
+        }),
 
       // 복원 직후 호출: 다른 계정/테넌트 레이아웃이면 초기화(메타 누수 방지), 같으면 viewport clamp.
       adoptOwner: (owner) =>

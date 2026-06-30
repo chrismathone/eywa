@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw } from "lucide-react";
+import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "lucide-react";
 import { useWindowStore, isDuplicate, instanceLabel, type Win } from "./window-store";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { usePointerDrag } from "./use-pointer-drag";
@@ -11,7 +11,7 @@ import { WindowContent } from "./window-content";
 import { iframeRegistry } from "./route-window";
 import { WINDOW_TRANSITION } from "./motion";
 import { usePrefs } from "./use-prefs";
-import { spotlightTop, type ResizeHandle } from "./window-geometry";
+import { spotlightTile, type ResizeHandle } from "./window-geometry";
 
 const HANDLES: { h: ResizeHandle; cls: string }[] = [
   { h: "n", cls: "top-0 inset-x-3 h-1.5 cursor-n-resize" },
@@ -62,13 +62,16 @@ export function FloatingWindow({
     [win.id],
   );
 
-  // 스포트라이트: 포커스 창은 상단 큰 영역(spotlightTop, store rect 불변→해제 시 글라이드 복원),
-  // 비포커스 창은 숨김(마운트 유지=iframe 보존, 카드 클릭 swap 시 리로드 없음). 드래그/리사이즈 잠금.
-  const spot = spotlight && focused;
-  // 비포커스 스포트라이트 창: display:none(hidden) 대신 opacity로 가림 — 해제(X) 시 숨어있던
+  // 스포트라이트: 상단에 올라온(spotlightRaised) 창들은 상단 영역에 가로 타일(spotlightTile, store rect
+  // 불변→해제 시 글라이드 복원), 나머지는 숨김(마운트 유지=iframe 보존, 카드 클릭 raise 시 리로드 없음).
+  const spotlightRaised = useWindowStore((s) => s.spotlightRaised);
+  const lowerFromSpotlight = useWindowStore((s) => s.lowerFromSpotlight);
+  const raisedIndex = spotlight ? spotlightRaised.indexOf(win.id) : -1;
+  const spot = raisedIndex >= 0;
+  // 상단에 안 올라온 스포트라이트 창: display:none(hidden) 대신 opacity로 가림 — 해제(X) 시 숨어있던
   // iframe 여러 개가 동시에 재레이아웃되며 생기던 렉 제거(레이아웃은 유지, 합성만 토글).
-  const veiled = spotlight && !focused && !win.minimized;
-  const rect = spot ? spotlightTop(bounds) : win.rect;
+  const veiled = spotlight && raisedIndex < 0 && !win.minimized;
+  const rect = spot ? spotlightTile(bounds, raisedIndex, spotlightRaised.length) : win.rect;
 
   const animationsOn = usePrefs((s) => s.animations);
   const animOff = !animationsOn;
@@ -222,6 +225,17 @@ export function FloatingWindow({
             onPointerDown={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
           >
+            {spot && spotlightRaised.length > 1 ? (
+              <button
+                type="button"
+                aria-label="스트립으로 내리기"
+                title="앨범 스트립으로 내리기"
+                onClick={() => lowerFromSpotlight(win.id)}
+                className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
+              >
+                <ChevronDown size={15} strokeWidth={2} />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="최소화"
