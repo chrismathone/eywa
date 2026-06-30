@@ -349,6 +349,10 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   · page가 `canEditDates`(owner)면 셀을 편집 가능 셀로, 아니면 기존 읽기 전용 텍스트.
 - ⚠️ 한계: 기간을 줄여도 그 밖 `attendance_records`는 보존(의미상 고아, ijw 동일). "+ 반 배정"(createEnrollment)은 이번 범위 밖이라 게이트 미적용(후속 가능).
 - 검증: typecheck0/lint0/test539. 라이브 E2E는 병렬 dev 서버 `.next` 충돌(#17/#23) 회피로 정적 게이트 + 사용자 HMR 환경 검증으로 대체.
+- **후속(같은 날) — 인라인 날짜 편집을 다른 화면에 확장 + 전수 검토**: `EditableDateCell`을 공용 위치([features/enrollments/components/editable-date-cell.tsx](src/features/enrollments/components/editable-date-cell.tsx))로 이동(라우트 사적 폴더 `_components` 교차 import 회피, 학생 탭 import 갱신).
+  · **수업 상세 로스터**([classes/[id]/page.tsx](<src/app/(shell)/classes/[id]/page.tsx>)): 쿼리가 `end_date IS NULL`(활성만)이라 종료를 넣으면(미래여도) 학생이 **즉시 로스터에서 사라져** 혼란 → **시작일만** 편집(종료 수정은 날짜 기준 섹션을 가진 학생 탭에서). owner 게이트.
+  · **퇴원 상세 수강 이력**([withdrawals/[studentId]/page.tsx](<src/app/(shell)/withdrawals/[studentId]/page.tsx>)): 전 이력이라 **시작·종료 둘 다** 편집. ⚠️ 편집 시 `EditableDateCell`이 `<form>`을 렌더하므로 편집 케이스 컨테이너는 `<p>` 아닌 **`<div>`**(phrasing 안에 form 금지). owner 게이트.
+  · **전수 검토 결과**: enrollment 시작/종료 날짜 표시 7곳 중 인라인 편집 대상은 위 2곳 + 학생 탭(완료)뿐. 제외 = 학생 개요 '등록일'(`students.enrolled_at` 학생 레벨 필드 → 학생 수정 폼), 시간표 hover/셀(드래그+타임머신 **자체 편집 모델**과 충돌), 수강료 계산기/견적(견적 기간=다른 도메인), 직원 account-actions(enrollment 무관). 검증: typecheck0/lint0/test539.
 
 ### 학생배정 다이얼로그 재오픈 불가 버그픽스 + 다이얼로그 성공 부수효과 전수 점검 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test531)
 사용자 제보: 수업목록(반 상세)/학생 상세에서 "학생 배정"(반 배정)을 **한 번 성공한 뒤 다시 누르면 다이얼로그가 안 열림**(클릭 무반응). 원인 = [enrollment-assign-dialog.tsx](src/components/enrollment-assign-dialog.tsx)가 부모([class-assign-action](<src/app/(shell)/classes/[id]/_components/class-assign-action.tsx>)·[student-assign-action](<src/app/(shell)/students/[id]/_components/student-assign-action.tsx>))에 **항상 마운트**(open prop만 토글, 언마운트 없음)라 첫 배정 성공 후 `useActionState`의 `state.enrollmentId`가 **stale하게 잔존** → 성공 처리 `if`블록(가드 없음, 매 렌더 실행)이 재오픈 렌더에서 또 `onClose(true)`를 호출 → 열리자마자 닫힘. 자세한 패턴은 막혔던 점 [[#67]].

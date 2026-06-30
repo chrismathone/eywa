@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { BookOpen, MessagesSquare, ScrollText } from "lucide-react";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
+import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import {
   enrollmentDuration,
   getWithdrawalDetail,
@@ -21,7 +23,7 @@ export default async function WithdrawalDetailPage({
 }: {
   params: Promise<{ studentId: string }>;
 }) {
-  await requireAccess("withdrawals");
+  const user = await requireAccess("withdrawals");
   const { studentId } = await params;
   const [detail, settings] = await Promise.all([
     getWithdrawalDetail(studentId),
@@ -29,6 +31,8 @@ export default async function WithdrawalDetailPage({
   ]);
   if (!detail) notFound();
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  // 수강 이력 시작/종료일 더블클릭 정정 = owner(원장) 권한 이상만(다른 화면과 동일 게이트).
+  const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
 
   const md = detail.metadata;
   const duration = enrollmentDuration(detail.enrolledAt, detail.withdrawnAt);
@@ -122,11 +126,19 @@ export default async function WithdrawalDetailPage({
               <li key={e.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <p className="text-sm font-medium">{e.className}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {subjects.labelOf(e.subject)} ·{" "}
-                    <span className="num">{e.startDate}</span>
-                    {e.endDate ? <> ~ <span className="num">{e.endDate}</span></> : <> ~ 현재</>}
-                  </p>
+                  {canEditDates ? (
+                    <div className="text-muted-foreground inline-flex flex-wrap items-center gap-1 text-xs">
+                      <span>{subjects.labelOf(e.subject)} ·</span>
+                      <EditableDateCell enrollmentId={e.id} field="start" value={e.startDate} />
+                      <EditableDateCell enrollmentId={e.id} field="end" value={e.endDate} />
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      {subjects.labelOf(e.subject)} ·{" "}
+                      <span className="num">{e.startDate}</span>
+                      {e.endDate ? <> ~ <span className="num">{e.endDate}</span></> : <> ~ 현재</>}
+                    </p>
+                  )}
                 </div>
                 {e.reason ? (
                   <span className="text-muted-foreground text-xs italic">{e.reason}</span>

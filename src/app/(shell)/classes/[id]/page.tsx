@@ -5,7 +5,9 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
+import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import {
   getClassAttendanceStats,
   getClassDetail,
@@ -45,7 +47,7 @@ export default async function ClassDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("classes");
+  const user = await requireAccess("classes");
   const { id } = await params;
   const [klass, students, stats, allEnrolledStudents, settings, teacherOptions] = await Promise.all([
     getClassDetail(id),
@@ -56,6 +58,9 @@ export default async function ClassDetailPage({
     getClassTeacherOptions(),
   ]);
   if (!klass) notFound();
+
+  // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
+  const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
 
   // 인수인계 대상 강사 풀 — 과목 담당 우선(없으면 전체), 현재 담임 제외.
   const subjectTeachers = teacherOptions.filter((t) => t.subjects.includes(klass.subject));
@@ -253,8 +258,13 @@ export default async function ClassDetailPage({
                           {attendanceBadge(s.attendanceDays)}
                         </span>
                       ) : null}
-                      <span className="text-muted-foreground num text-xs">
-                        {s.enrolledAt} ~ 현재
+                      <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                        {canEditDates ? (
+                          <EditableDateCell enrollmentId={s.enrollmentId} field="start" value={s.enrolledAt} />
+                        ) : (
+                          <span className="num">{s.enrolledAt}</span>
+                        )}
+                        ~ 현재
                       </span>
                       {s.onHold ? (
                         <span className="text-chart-3 bg-chart-3/10 border-chart-3/20 rounded-md border px-2 py-0.5 text-xs font-medium">

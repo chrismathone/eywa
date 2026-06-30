@@ -11,7 +11,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
-import { EditableDateCell } from "../_components/editable-date-cell";
+import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 
 // 요일 chip 색(ijw DAY_COLORS 대응 — eywa 토큰).
 const DAY_CHIP: Record<string, string> = {
