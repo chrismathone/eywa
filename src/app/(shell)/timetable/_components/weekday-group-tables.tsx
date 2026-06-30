@@ -10,33 +10,51 @@ import {
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
 import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
+import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { ClassCell } from "./class-cell";
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
 };
 
-// 요일 그룹 — ijw식 월목/화금/수/주말. band=그룹타이틀 색, tint=요일헤더 색.
+// 요일 그룹 — 과목별 프리셋(weekdayPartition)으로 동적 구성. band=그룹타이틀 색, tint=요일헤더 색.
 type GroupDef = { title: string; days: DayOfWeek[]; band: string; tint: string; merge: boolean };
 
-const WEEKDAY_GROUPS: GroupDef[] = [
-  { title: "월/목", days: ["mon", "thu"], band: "bg-blue-soft text-blue", tint: "bg-blue-soft/50", merge: true },
-  { title: "화/금", days: ["tue", "fri"], band: "bg-purple-soft text-purple", tint: "bg-purple-soft/50", merge: true },
-  { title: "수", days: ["wed"], band: "bg-primary-soft text-primary", tint: "bg-primary-soft/50", merge: true },
+// 그룹 밴드/헤더 색 팔레트 — 그룹 수가 과목별로 가변이라 고정색 대신 인덱스 순환.
+const GROUP_PALETTE: { band: string; tint: string }[] = [
+  { band: "bg-blue-soft text-blue", tint: "bg-blue-soft/50" },
+  { band: "bg-purple-soft text-purple", tint: "bg-purple-soft/50" },
+  { band: "bg-primary-soft text-primary", tint: "bg-primary-soft/50" },
+  { band: "bg-rose-soft text-rose", tint: "bg-rose-soft/50" },
+  { band: "bg-amber-soft text-amber", tint: "bg-amber-soft/50" },
 ];
+
+// 과목 프리셋 → 평일 그룹 정의. 묶인 요일(길이≥2)=병합 표시, 단독(길이1)=풀너비. 색은 팔레트 순환.
+function buildWeekdayGroupDefs(grouping: WeekdayGrouping): GroupDef[] {
+  return weekdayPartition(grouping).map((days, i) => {
+    const pal = GROUP_PALETTE[i % GROUP_PALETTE.length];
+    return {
+      title: days.map((d) => DAY_LABEL[d] ?? d).join("/"),
+      days,
+      band: pal.band,
+      tint: pal.tint,
+      merge: days.length >= 2,
+    };
+  });
+}
+
 const WEEKEND_GROUP: GroupDef = {
   title: "주말", days: ["sat", "sun"], band: "bg-amber-soft text-amber", tint: "bg-amber-soft/50", merge: false,
 };
 const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 
 // 엑셀식 격자 — table-layout:fixed + colgroup으로 요일 컬럼 폭을 못박는다(줄맞춤).
-// 폭은 스프레드시트/엑셀 기준(실측 교시 79·요일 51px)에서 **가독성 위해 요일열만 살짝 +**(52→60px). 수/주말 2배(120px).
+// 폭은 스프레드시트/엑셀 기준(실측 교시 79·요일 51px)에서 **가독성 위해 요일열만 살짝 +**(52→60px). 단독/주말 2배(120px).
 // (좁은 셀 본문은 이름 우선 truncate, 전체 정보는 hover 카드 — 스프레드시트식 고밀도.)
 const PERIOD_COL_W = 80;
 const DAY_COL_W = 60;
-// 수·토·일은 2배 폭 — 수=단일 그룹, 주말(토/일)은 정보 여유.
-const WIDE_DAY_COLS = new Set<DayOfWeek>(["wed", "sat", "sun"]);
-const dayColW = (d: DayOfWeek) => (WIDE_DAY_COLS.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
+// 단독(병합 안 되는) 요일은 2배 폭 — wide 집합은 호출부가 그룹 구성에서 도출(평일=단독 그룹 요일, 주말=토/일).
+const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
 // 셀 명단이 최소 10명 보이도록 + 글자 30% 확대(가독성)에 맞춰 비례 상향(256→330).
 // 셀 스크롤 maxHeight = rowSpan*ROW_H - 16, 헤더(~48) + 학생행(~25)×10 ≈ 298. (주말은 ROW_H/2로 격자 정렬.)
@@ -142,6 +160,7 @@ function GroupTable({
   stickyPeriod = true,
   config,
   dateOf,
+  wideDays,
 }: {
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
@@ -152,6 +171,8 @@ function GroupTable({
   config: PeriodsConfig;
   /** 요일 → "M/D" 라벨(스프레드시트처럼 요일 헤더에 날짜 표시). 없으면 요일만. */
   dateOf?: (d: DayOfWeek) => string | undefined;
+  /** 2배 폭으로 그릴 요일(단독 그룹·주말) — 그룹 구성에서 호출부가 도출. */
+  wideDays: Set<DayOfWeek>;
 }) {
   // 평일 표만 교시열 sticky(좌측 고정). 우측 주말 표는 자기 교시열이라 non-sticky(겹침 방지).
   const periodHeadSticky = stickyPeriod ? "sticky left-0 z-20" : "";
@@ -195,14 +216,14 @@ function GroupTable({
 
   // 평탄 요일 컬럼 목록 — colgroup으로 폭 고정(엑셀 줄맞춤). 수·토·일은 2배 폭.
   const dayCols = groups.flatMap((g) => g.teachers.flatMap((t) => t.days));
-  const tableW = PERIOD_COL_W + dayCols.reduce((sum, d) => sum + dayColW(d), 0);
+  const tableW = PERIOD_COL_W + dayCols.reduce((sum, d) => sum + dayColW(d, wideDays), 0);
 
   return (
     <table className="border-collapse text-sm" style={{ tableLayout: "fixed", width: tableW }}>
       <colgroup>
         <col style={{ width: PERIOD_COL_W }} />
         {dayCols.map((d, i) => (
-          <col key={i} style={{ width: dayColW(d) }} />
+          <col key={i} style={{ width: dayColW(d, wideDays) }} />
         ))}
       </colgroup>
       <thead>
@@ -337,11 +358,14 @@ export function WeekdayGroupTables({
   slots,
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
+  weekdayGrouping = "mon-thu",
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
   /** 조회 중인 주의 월요일("YYYY-MM-DD") — 요일 헤더에 날짜(M/D) 표시(스프레드시트 패리티). */
   weekMonday?: string;
+  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
+  weekdayGrouping?: WeekdayGrouping;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
@@ -352,7 +376,12 @@ export function WeekdayGroupTables({
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
-  const weekdayGroups = buildGroups(weekdaySlots, WEEKDAY_GROUPS);
+  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide). 주말은 토/일 항상 풀너비.
+  const weekdayDefs = buildWeekdayGroupDefs(weekdayGrouping);
+  const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
+  const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
+
+  const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs);
   const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP]);
 
   return (
@@ -369,6 +398,7 @@ export function WeekdayGroupTables({
             rowHeight={weekdayRowH}
             config={config}
             dateOf={dateOf}
+            wideDays={weekdayWide}
           />
         ) : null}
         {weekendGroups.length > 0 ? (
@@ -381,6 +411,7 @@ export function WeekdayGroupTables({
             stickyPeriod={false}
             config={config}
             dateOf={dateOf}
+            wideDays={weekendWide}
           />
         ) : null}
       </div>

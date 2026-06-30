@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { Plus, X } from "lucide-react";
 import { SUBJECT_COLORS, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
+import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 
 const cellCls =
   "border-line text-foreground rounded-md border bg-transparent px-2.5 py-1.5 text-[13px] outline-none focus:border-primary";
@@ -118,6 +119,7 @@ export function SubjectListEditor({
         <div className="text-text-faint micro flex flex-wrap items-center gap-2 px-0.5">
           <span className="w-[150px]">과목명</span>
           <span className="w-[122px]">색</span>
+          <span className="w-[170px]">시간표 요일 병합</span>
           <span className="w-[100px]">내부 ID</span>
         </div>
       ) : null}
@@ -151,6 +153,19 @@ export function SubjectListEditor({
                   ))}
                 </select>
               </span>
+              {/* 요일 병합 — 과목별 시간표 기본뷰 병합 프리셋(월목/화금·월화/목금·월수금/화목·없음) */}
+              <select
+                className={`${cellCls} w-[170px]`}
+                value={s.weekdayGrouping ?? "mon-thu"}
+                onChange={(e) => set(i, { weekdayGrouping: e.target.value as SubjectSetting["weekdayGrouping"] })}
+                aria-label="시간표 요일 병합"
+              >
+                {WEEKDAY_GROUPING_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
                 className="text-text-faint w-[100px] shrink-0 truncate font-mono text-[11px]"
@@ -168,7 +183,10 @@ export function SubjectListEditor({
       })}
       <AddButton
         onClick={() =>
-          onChange([...value, { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral" }])
+          onChange([
+            ...value,
+            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: "mon-thu" },
+          ])
         }
         label="과목 추가"
       />

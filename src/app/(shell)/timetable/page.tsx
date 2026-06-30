@@ -9,6 +9,7 @@ import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
 import { RichGridView } from "./_components/rich-grid-view";
 import {
@@ -77,6 +78,10 @@ export default async function TimetablePage({
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
+  // 과목별 요일 병합 프리셋(설정) — 미설정/구데이터는 mon-thu 폴백(resolve가 스키마 미통과).
+  const weekdayGrouping = normalizeWeekdayGrouping(
+    settings.operations.subjects.find((s) => s.key === subject)?.weekdayGrouping,
+  );
 
   const isIntegrated = view === "integrated";
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
@@ -196,7 +201,12 @@ export default async function TimetablePage({
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">
-            <WeekdayGroupTables slots={slots} config={periodsConfig} weekMonday={week} />
+            <WeekdayGroupTables
+              slots={slots}
+              config={periodsConfig}
+              weekMonday={week}
+              weekdayGrouping={weekdayGrouping}
+            />
           </div>
         </TimetableDndArea>
       )}

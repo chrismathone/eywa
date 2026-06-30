@@ -12,6 +12,12 @@ export const SUBJECT_COLORS = [
   "primary", "blue", "rose", "amber", "danger", "purple", "gold", "neutral",
 ] as const;
 
+// 과목별 시간표 요일 병합 프리셋 — 같은 반이 묶인 요일에 걸치면 한 칸으로 병합(기본뷰).
+// mon-thu=월목/화금(수 단독, 수학식), mon-tue=월화/목금(수 단독, 영어식), mon-wed-fri=월수금/화목, none=요일별 개별.
+// 실제 요일 분할·라벨은 features/timetable/lib/weekday-groups.ts(단일 소스). 미설정 행은 코드에서 mon-thu 폴백.
+export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "none"] as const;
+export type WeekdayGrouping = (typeof WEEKDAY_GROUPINGS)[number];
+
 export const periodTimeSchema = z.object({
   label: z.string().min(1).max(20),
   startTime: z.string().regex(HHMM, "HH:MM 형식"),
@@ -23,6 +29,8 @@ export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
   color: z.enum(SUBJECT_COLORS).default("neutral"),
+  // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
+  weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 

@@ -79,12 +79,12 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   operations: {
     // 과목 — 현재 SUBJECT_LABEL 중복 맵 이식(단일 소스). color=Pill 토큰.
     subjects: [
-      { key: "math", label: "수학", color: "primary" },
+      { key: "math", label: "수학", color: "primary", weekdayGrouping: "mon-thu" },
       // 수학(심화)는 학원 고유 과목이라 표준키 대신 subject_N 계열로 통일(2026-06-19, highmath→subject_1 마이그레이션).
-      { key: "subject_1", label: "수학(심화)", color: "primary" },
-      { key: "english", label: "영어", color: "blue" },
-      { key: "science", label: "과학", color: "purple" },
-      { key: "korean", label: "국어", color: "rose" },
+      { key: "subject_1", label: "수학(심화)", color: "primary", weekdayGrouping: "mon-thu" },
+      { key: "english", label: "영어", color: "blue", weekdayGrouping: "mon-tue" },
+      { key: "science", label: "과학", color: "purple", weekdayGrouping: "none" },
+      { key: "korean", label: "국어", color: "rose", weekdayGrouping: "mon-thu" },
     ],
     jobTitles: ["원장", "부원장", "실장", "강사", "조교", "행정"],
     gradeLevels: ["초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"],

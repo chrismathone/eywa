@@ -329,6 +329,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 요일 병합을 과목별 프리셋으로 설정 (2026-06-30) — ✅ 게이트 그린 + 라이브
+사용자 제보: 기본뷰 요일 병합이 **수학 패턴(월목/화금/수)으로 하드코딩**돼 모든 과목에 적용 — 과목마다 수업 요일이 다른데(영어=월화/목금 등) 전부 월목/화금으로 묶임. 과목별로 병합 요일을 설정 가능하게.
+- **사용자 선택 = 프리셋 방식**(자유 분할 대신 드롭다운). 과목 설정에 `weekdayGrouping` 추가(스키마 `subjectSchema`): `mon-thu`(월목·화금, 수 단독=기본)·`mon-tue`(월화·목금)·`mon-wed-fri`(월수금·화목)·`none`(병합 없음, 요일별 풀너비).
+- **단일 소스** [`weekday-groups.ts`](src/features/timetable/lib/weekday-groups.ts): 프리셋→평일 분할(`weekdayPartition`)·라벨·옵션·`normalizeWeekdayGrouping`(미설정/구데이터 폴백 — resolve가 스키마 미통과하므로 읽는 쪽에서 mon-thu 폴백). 시간표 렌더 + 과목 편집기 공용.
+- **시간표** [weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>): 하드코딩 `WEEKDAY_GROUPS` 제거 → `buildWeekdayGroupDefs(grouping)`(묶인 요일 길이≥2=병합, 단독=풀너비, 밴드색 팔레트 순환). 열너비 `wideDays`(단독 그룹 요일+주말)를 그룹 구성에서 동적 도출(하드코딩 `WIDE_DAY_COLS` 제거). [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 현재 과목의 `weekdayGrouping`을 넘김.
+- **과목 편집기** [list-editors.tsx](<src/app/(shell)/owner/_components/list-editors.tsx>) `SubjectListEditor`: 과목 행에 "시간표 요일 병합" 드롭다운(4프리셋). + defaults.ts 기본 과목에 weekdayGrouping(수학=mon-thu·영어=mon-tue·과학=none).
+- 검증: 제 파일 typecheck0/lint0(병렬 세션 spotlight-strip 미완 import 에러는 무관) + 라이브(PSS): owner 과목 편집기 드롭다운 5개·영어=월화/목금 저장(DB `english.weekdayGrouping=mon-tue`) → 시간표 **영어=월/화·목/금·수**, **수학=월/목·화/금·수**(과목별 차등) 확인. ⚠️ jsonb라 DB 마이그 불요. 엑셀(timetable-excel)은 평탄 DAY_ORDER라 병합 무관(미변경).
+
 ### 학생배정 다이얼로그 재오픈 불가 버그픽스 + 다이얼로그 성공 부수효과 전수 점검 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test531)
 사용자 제보: 수업목록(반 상세)/학생 상세에서 "학생 배정"(반 배정)을 **한 번 성공한 뒤 다시 누르면 다이얼로그가 안 열림**(클릭 무반응). 원인 = [enrollment-assign-dialog.tsx](src/components/enrollment-assign-dialog.tsx)가 부모([class-assign-action](<src/app/(shell)/classes/[id]/_components/class-assign-action.tsx>)·[student-assign-action](<src/app/(shell)/students/[id]/_components/student-assign-action.tsx>))에 **항상 마운트**(open prop만 토글, 언마운트 없음)라 첫 배정 성공 후 `useActionState`의 `state.enrollmentId`가 **stale하게 잔존** → 성공 처리 `if`블록(가드 없음, 매 렌더 실행)이 재오픈 렌더에서 또 `onClose(true)`를 호출 → 열리자마자 닫힘. 자세한 패턴은 막혔던 점 [[#67]].
 - **수정**: 렌더 본문 `queueMicrotask` 부수효과 → **`enrollmentId`를 키로 한 ref 가드 + `useEffect`**로 교체(처리한 enrollmentId 기록 → stale state 재발화 차단, 진짜 새 배정[새 UUID]만 닫힘 → 같은 다이얼로그로 연속 배정 정상). ⚠️ boolean 가드를 "재오픈 시 리셋"하면 stale state가 다시 발화해 버그 재발 → 일부러 id-키 가드.
