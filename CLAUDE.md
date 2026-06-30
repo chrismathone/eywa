@@ -1570,9 +1570,16 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 **행이 수십을 넘을 수 있는 모든 목록은 서버 페이지네이션으로 통일한다.** 스타일·구조를 한 곳에
 맞춰 학생·수납·상담이 동일하게 보이고 동작하도록:
 
-- **공용 컴포넌트** [`src/components/pagination.tsx`](src/components/pagination.tsx)의 `<Pagination>` —
-  `이전/다음` + `현재/전체` 칩. **인라인으로 nav를 다시 짜지 말 것.** props: `page`, `totalPages`,
-  `hrefForPage(p)=>string`. `totalPages<=1`이면 자동으로 null. (서버 컴포넌트끼리 함수 prop 안전.)
+- **공용 컴포넌트 = 페이저 표준 룩** [`src/components/pagination.tsx`](src/components/pagination.tsx)의 `<Pagination>` —
+  **테두리 없는 `◀ 이전 / {page} / {totalPages}(· N건) / 다음 ▶` + hover 배경**(2026-06-30 통일). **인라인으로 nav를
+  다시 짜지 말 것.** props: `page`, `totalPages`, `hrefForPage(p)=>string`, 선택 `total`(주면 "· N건" 표시).
+  `totalPages<=1`이면 자동 null. (서버 컴포넌트끼리 함수 prop 안전.)
+  - **클라이언트 state 페이저**(href 아닌 onClick, 예: 등록상담 칸반 [column-cards](<src/app/(shell)/enrollment/_components/column-cards.tsx>))는
+    `<Pagination>`을 직접 못 쓰니, 같은 모듈이 export하는 **`PAGER_STEP_BASE`/`PAGER_STEP_ENABLED`/`PAGER_STEP_DISABLED`/`PAGER_LABEL`**
+    클래스 상수로 버튼·라벨을 만들어 **시각을 동일하게** 한다(새 페이저는 native 버튼 손깎기 말고 이 상수 사용).
+  - ⚠️ **페이지 이동 시 위치 고정**: 마지막(짧은) 페이지나 페이지별 내용 높이 차로 목록이 줄면 페이저가 위로 튄다.
+    **클라 state 페이저(버튼이 커서 밑에서 움직임)는 목록 영역을 고정 높이로**(column-cards `h-[56vh] overflow-y-auto`).
+    서버 href 페이저는 페이지 전환=리로드라 버튼이 커서 밑에서 안 움직여 영향이 작다.
 - **쿼리 헬퍼 2종** (feature `server/queries.ts`):
   - `getXPage(filters, page=1, pageSize=50): Promise<{ rows, total }>` — Supabase `.range(from,from+size-1)`
     + `.select(cols, { count: "exact" })`. **필터는 가능한 한 SQL로** (eq/gte/ilike/or). 조인 컬럼
@@ -2084,6 +2091,13 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
   ⚠️ **boolean 가드를 "open될 때 리셋"하는 건 함정** — stale state를 재무장시켜 버그가 재발한다. **렌더 본문에서 `queueMicrotask`로 부수효과 내기**도 가드 없으면 매 렌더 실행이라 금지.
 - **대안(안전한 기존 패턴)**: 부모를 **조건부 마운트(`{open && <Dialog/>}`)** 로 두면 닫힐 때 언마운트→`useActionState` 리셋이라 가드 없이도 안전(eywa
   다이얼로그 대다수가 이쪽 — 시험/청구서/지출/강의실). 새 다이얼로그는 둘 중 하나를 **명시적으로** 택할 것. always-mounted를 쓰면 id-키 가드가 필수다.
+
+### 68. 스포트라이트(앨범)모드 = 다중 창 타일 + 배경 비표시 (2026-06-30)
+사용자 요청 2건: ① 앨범모드에서 배경탭이 실제 배경과 어긋나고, 포커스 창이 배경을 덮어 **배경이 의미 없음** ② 공간이 여유로우니
+**2~3개 창을 상단에 올려** 다중 스포트라이트. → 스포트라이트 모델을 "포커스 1개만 큼"에서 **`spotlightRaised: string[]`(최대 3, 상단 가로 타일)** 로 일반화.
+- **store**([window-store.ts](src/components/workspace/window-store.ts)): `spotlightRaised` 상태 + `raiseToSpotlight`(스트립 카드→상단, 3 초과 시 FIFO)·`lowerFromSpotlight`(상단→스트립, 마지막 1개는 유지). enter/exit/backgroundToWindow가 세팅, **close/minimize가 raised에서 제거**(비면 스포트라이트 해제 — 상단 빈 화면 방지).
+- **타일**([window-geometry.ts](src/components/workspace/window-geometry.ts) `spotlightTile(bounds,index,count)`): count<=1=중앙 큰 박스(spotlightTop), 2~3=상단 가로 균등 분할. [floating-window](src/components/workspace/floating-window.tsx)는 `raisedIndex>=0`이면 타일 rect·`spotlightRaised.length>1`이면 타이틀바 "내리기(↓)" 버튼.
+- **배경 제거**: 앨범모드에선 [background-tabs](src/components/workspace/background-tabs.tsx)가 `spotlight`면 `return null`(헤더 배경탭 숨김), [spotlight-strip](src/components/workspace/spotlight-strip.tsx)도 **배경 카드("교체하기")를 빼고** 창만 — 클릭=raiseToSpotlight. 배경은 가려져 의미 없으므로 앨범모드 어디에도 안 보인다.
 
 ---
 
