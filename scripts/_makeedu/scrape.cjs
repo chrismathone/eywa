@@ -90,8 +90,16 @@ async function login(page) {
     pwInput.press("Enter"),
   ]);
   await page.waitForTimeout(1500);
-  if (/\/login\.do/i.test(page.url())) {
+  const url = page.url();
+  if (/\/login\.do/i.test(url)) {
     throw new Error("로그인 실패(여전히 login.do) — ID/PW 또는 폼 셀렉터 확인.");
+  }
+  // makeedu는 낯선 IP·헤드리스 새 로그인을 재인증(CAPTCHA+휴대폰)으로 막는다. 그 페이지에 떨어지면 명확히 실패.
+  if (/loginReCert\.do|reCert/i.test(url)) {
+    throw new Error(
+      "makeedu 재인증 벽(loginReCert.do) — CAPTCHA+휴대폰 인증 필요. 헤드리스/낯선 IP 새 로그인은 못 뚫는다. " +
+        "capture-session.cjs로 세션을 캡처해 MAKEEDU_STORAGE_STATE로 재사용하거나, 신뢰 IP(로컬/셀프호스티드)에서 실행하세요.",
+    );
   }
 }
 
@@ -146,10 +154,35 @@ async function scrapeList(page, key, cfg) {
   fs.mkdirSync(OUT, { recursive: true });
 
   const browser = await chromium.launch({ headless: !HEADED });
-  const page = await browser.newPage();
+  // 세션 재사용 — MAKEEDU_STORAGE_STATE(capture-session.cjs로 캡처한 storageState JSON)가 있으면 로그인을 건너뛴다.
+  // makeedu가 낯선 IP/헤드리스 새 로그인을 CAPTCHA로 막으므로, 신뢰 IP에서 캡처한 세션을 들고 바로 접근(CAPTCHA 회피).
+  let storage = null;
+  if (process.env.MAKEEDU_STORAGE_STATE) {
+    try {
+      storage = JSON.parse(process.env.MAKEEDU_STORAGE_STATE);
+    } catch {
+      throw new Error("MAKEEDU_STORAGE_STATE 파싱 실패 — capture-session.cjs로 다시 캡처해 시크릿을 갱신하세요.");
+    }
+  }
+  const ctx = storage
+    ? await browser.newContext({ storageState: storage })
+    : await browser.newContext();
+  const page = await ctx.newPage();
   try {
-    await login(page);
-    console.log("login ok →", page.url().slice(0, 60));
+    if (storage) {
+      // 로그인 건너뜀 — main.do로 세션 유효성만 확인(만료/IP거부면 로그인·재인증으로 튕긴다).
+      await page.goto(`${BASE}/main.do`, { waitUntil: "domcontentloaded" }).catch(() => {});
+      if (/login\.do|loginReCert\.do/i.test(page.url())) {
+        throw new Error(
+          "저장된 세션이 무효/만료됐거나 IP에서 거부됨(main.do→로그인 리다이렉트). capture-session.cjs로 재캡처해 " +
+            "MAKEEDU_STORAGE_STATE를 갱신하세요. 재캡처해도 GitHub에서만 실패하면 세션이 IP에 묶인 것 → 로컬/셀프호스티드 실행 필요.",
+        );
+      }
+      console.log("session reuse ok →", page.url().slice(0, 60));
+    } else {
+      await login(page);
+      console.log("login ok →", page.url().slice(0, 60));
+    }
     for (const key of keys) {
       const cfg = LISTS[key];
       if (!cfg) {
