@@ -201,8 +201,10 @@ export function ConvertToStudentDialog({
                                     {subjects.labelOf(c.subject)}
                                   </span>
                                   {isRecommended ? (
+                                    // 추천 = 학생 학년이 반 이름에 들어가는 반(actions.ts gradePrefix 부분일치).
+                                    // AI 추론이 아니라 학년 매칭이므로 "학년 추천"으로 정직하게 표기.
                                     <span className="bg-chart-4/10 text-chart-4 border-chart-4/20 rounded-md border px-1 py-0 text-[9px] font-medium">
-                                      AI 추천
+                                      학년 추천
                                     </span>
                                   ) : null}
                                 </div>
