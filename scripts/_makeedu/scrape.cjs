@@ -132,11 +132,35 @@ async function safeEvaluate(page, fn) {
   }
 }
 
+// 가장 큰 테이블의 tbody 행 수가 안정될 때까지 대기(AJAX 렌더·페이지크기 변경 후 정착) — 부분 로드 읽기 방지.
+async function waitForStableTable(page, maxWait = 8000) {
+  const count = () =>
+    safeEvaluate(page, () => {
+      let max = 0;
+      for (const t of document.querySelectorAll("table")) max = Math.max(max, t.querySelectorAll("tbody tr").length);
+      return max;
+    }).catch(() => 0);
+  let last = -1,
+    stable = 0;
+  for (let t = 0; t < maxWait; t += 400) {
+    const n = await count();
+    if (n > 0 && n === last) {
+      if (++stable >= 2) return n; // 2회 연속 동일 + >0 → 정착
+    } else {
+      stable = 0;
+      last = n;
+    }
+    await page.waitForTimeout(400);
+  }
+  return last;
+}
+
 async function scrapeList(page, key, cfg) {
   await page.goto(`${BASE}${cfg.url}`, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.waitForLoadState("networkidle").catch(() => {});
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(500);
   await maximizeListSize(page);
+  await waitForStableTable(page); // 페이지크기 최대화 후 테이블 정착 대기
 
   let headers = [];
   const all = [];
@@ -159,7 +183,7 @@ async function scrapeList(page, key, cfg) {
     if (added === 0 || (await next.count()) === 0) break;
     await next.first().click().catch(() => {});
     await page.waitForLoadState("networkidle").catch(() => {});
-    await page.waitForTimeout(700);
+    await waitForStableTable(page); // 다음 페이지 정착 대기
   }
   return { key, scrapedAt: new Date().toISOString(), headers, rows: all };
 }
