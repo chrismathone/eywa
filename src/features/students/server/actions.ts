@@ -557,6 +557,10 @@ export async function recomputePrimaryTeacher(
 ): Promise<RecomputeTeacherState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // 테넌트 전체 담임을 재계산하는 bulk 변경 — 학생 관리 full 권한만 허용(다른 students 쓰기와 동일 게이트).
+  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") {
+    return { error: "담임 재계산 권한이 없습니다" };
+  }
 
   const targetStudentId = String(formData.get("studentId") ?? "").trim();
 

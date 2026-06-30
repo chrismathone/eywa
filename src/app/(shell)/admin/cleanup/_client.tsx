@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, Loader2, Trash2, UserMinus, Wrench } from "lucide-react";
+import { CheckCircle2, Loader2, Trash2, UserMinus, Users, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   closeOrphanEnrollments,
@@ -11,6 +11,10 @@ import {
   bulkDeleteStudents,
   type CleanupState,
 } from "@/features/admin/server/actions";
+import {
+  recomputePrimaryTeacher,
+  type RecomputeTeacherState,
+} from "@/features/students/server/actions";
 import type { OrphanReport } from "@/features/admin/server/queries";
 
 function CleanBtn() {
@@ -23,9 +27,23 @@ function CleanBtn() {
   );
 }
 
+function RecomputeBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="outline" disabled={pending}>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Users className="size-4" />}
+      담임 자동 재계산
+    </Button>
+  );
+}
+
 export function CleanupClient({ report }: { report: OrphanReport }) {
   const [state, action] = useActionState<CleanupState, FormData>(
     closeOrphanEnrollments,
+    undefined,
+  );
+  const [recState, recAction] = useActionState<RecomputeTeacherState, FormData>(
+    recomputePrimaryTeacher,
     undefined,
   );
 
@@ -109,6 +127,24 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
             문제 없음
           </p>
         )}
+      </section>
+
+      {/* 4. 담임 자동 재계산 — recomputePrimaryTeacher(orphan 액션 배선). 활성 수강 시간 최다 강사를 담임으로. */}
+      <section className="bg-card border-border rounded-md border p-5">
+        <header className="mb-2 flex items-baseline justify-between">
+          <h2 className="text-foreground text-sm font-semibold">담임 자동 재계산</h2>
+        </header>
+        <p className="text-muted-foreground text-xs">
+          각 재원생의 활성 수강 중 수업 시간이 가장 많은 강사를 담임으로 자동 설정합니다. 반
+          배정·이동으로 담임이 비거나 어긋났을 때 전체를 일괄로 맞춥니다.
+        </p>
+        <form action={recAction} className="mt-3">
+          <RecomputeBtn />
+          {recState?.error ? <p className="text-chart-4 mt-2 text-xs">{recState.error}</p> : null}
+          {recState?.updated !== undefined ? (
+            <p className="text-chart-2 mt-2 text-xs">{recState.updated}명 담임 재계산 완료</p>
+          ) : null}
+        </form>
       </section>
     </div>
   );
