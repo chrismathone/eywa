@@ -38,6 +38,32 @@ export async function setSheetsExportEnabled(enabled: boolean): Promise<ToggleSt
   return { enabled };
 }
 
+/**
+ * makeedu 자동 동기화(GitHub Actions cron) ON/OFF (master 전용). `user_integrations(provider=makeedu).sync_enabled` 토글.
+ * cron 오케스트레이터(sync-all.cjs)가 매 실행 시작에 이 값을 읽어 false면 스킵한다(행 없으면 기본 ON).
+ */
+export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") {
+    return { error: "makeedu 자동 동기화는 원장(master)만 변경할 수 있습니다" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("user_integrations").upsert(
+    {
+      tenant_id: user.tenantId,
+      provider: "makeedu",
+      sync_enabled: enabled,
+    },
+    { onConflict: "tenant_id,provider" },
+  );
+  if (error) return { error: error.message };
+
+  revalidatePath("/owner");
+  return { enabled };
+}
+
 export type SyncState = { error?: string; ok?: boolean } | undefined;
 
 export async function syncSheetsNow(

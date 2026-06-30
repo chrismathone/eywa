@@ -68,6 +68,12 @@ function gradeNorm(v) {
   return txt(v);
 }
 
+// Phase 2 cron(목록 수준)이 추가한 예비상담은 상세 본문을 안 가져오므로, enrollment 상세가 비어 보이지 않게
+// parent_request에 이 안내문구를 채운다. **sentinel** — 나중에 sync-prospects가 실제 본문이 오면 이 값을 덮어쓴다
+// (coalesce(nullif(parent_request, PROSPECT_LIST_NOTE), 실본문, parent_request))로 오염을 막는다. 양쪽이 같은 상수를 써야 함.
+const PROSPECT_LIST_NOTE =
+  "ℹ️ makeedu 목록 동기화로 자동 등록된 예비상담입니다. 상세 상담 내용은 makeedu 예비원생관리에서 확인하세요.";
+
 // makeedu 수업목록엔 진짜 수업이 아닌 과금/관리용 가짜 항목이 섞여 있다(교재 단가·시스템 사용료·행사·설명회·미납조회용).
 // 이들은 반(classes)으로 임포트하면 안 됨. 이름에 아래 키워드가 있으면 비-수업으로 차단.
 // ⚠️ 향후 학원설정(makeedu 연동)에서 차단 문구를 편집 가능하게 외부화 검토(현재 하드코딩 기본값).
@@ -146,6 +152,7 @@ module.exports = {
   tieredMatcher,
   isNonClass,
   NONCLASS_RE,
+  PROSPECT_LIST_NOTE,
   txt,
   parseDate,
   parseTimestamp,

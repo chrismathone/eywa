@@ -165,7 +165,8 @@ function toFields(meta, content) {
           blood_type = coalesce(blood_type, ${f.bloodType}),
           subject = coalesce(subject, ${f.subject}),
           registration_status = coalesce(registration_status, ${f.registrationStatus}),
-          parent_request = coalesce(parent_request, ${f.parentRequest}),
+          -- parent_request: 빈 값이거나 목록-동기화 안내문구(sentinel)면 실제 본문으로 덮어씀(그 외 ijw/기존 본문은 보존).
+          parent_request = coalesce(nullif(parent_request, ${L.PROSPECT_LIST_NOTE}), ${f.parentRequest}, parent_request),
           follow_up_content = coalesce(follow_up_content, ${f.followUpContent}),
           shuttle_bus_request = shuttle_bus_request or ${f.shuttleBus},
           installment_agreement = installment_agreement or ${f.installmentAgree},

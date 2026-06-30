@@ -1,0 +1,61 @@
+name: makeedu-sync
+
+# makeedu(school.makeedu.co.kr) → eywa Supabase **증분 동기화**(additive). 임포터가 멱등이라 매 실행이 증분.
+# 먼저 "Run workflow"(수동)로 첫 검증 후, cron이 하루 2회(KST 06/18시) 자동 실행.
+#
+# ⚠️ 필요한 Secrets — 레포 Settings → Secrets and variables → Actions:
+#    · MAKEEDU_ID          makeedu 로그인 아이디
+#    · MAKEEDU_PW          makeedu 로그인 비밀번호
+#    · DATABASE_URL        Supabase 세션 풀러 연결 문자열(직접 연결, 로컬 .env.local과 동일)
+#    · MAKEEDU_STUDENTS_URL (선택) 재원생 목록 URL이 기본값과 다르면 여기서 교정
+# ⚠️ 앱에서 학원설정 → 연동의 'makeedu 동기화'를 끄면(user_integrations.sync_enabled=false) cron이 스킵한다.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * *" # 06:00 KST (UTC+9)
+    - cron: "0 9 * * *" # 18:00 KST
+
+# 긴 스크래핑이 겹치지 않게 한 번에 하나만.
+concurrency:
+  group: makeedu-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MAKEEDU_ID: ${{ secrets.MAKEEDU_ID }}
+      MAKEEDU_PW: ${{ secrets.MAKEEDU_PW }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      MAKEEDU_STUDENTS_URL: ${{ secrets.MAKEEDU_STUDENTS_URL }}
+      MAKEEDU_OUT: ./.makeedu-tmp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — 필수 Secrets 확인
+        run: |
+          if [ -z "$MAKEEDU_ID" ] || [ -z "$MAKEEDU_PW" ] || [ -z "$DATABASE_URL" ]; then
+            echo "::error::MAKEEDU_ID / MAKEEDU_PW / DATABASE_URL Secrets가 설정되지 않았습니다 (레포 Settings → Secrets)."
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run makeedu sync (additive)
+        run: node scripts/_makeedu/sync-all.cjs --apply

@@ -399,7 +399,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
   검증: 242 중 parent_request 228·구조화필드 18·보호자명 20 채움(천용훈=인터넷검색·대구역유림노르웨이숲·남매있음·혈액형B·과목 영어). 상세 페이지
   ([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>))가 학부모 요구사항·학생 상세 정보 카드로 실제 렌더(write-only-orphan 아님).
   ⚠️ 상담 본문 비ASCII clean은 U+200B/U+FEFF/U+00A0를 \u 명시 escape로(리터럴 invisible char를 소스에 넣지 말 것 — Edit 매칭이 깨진다).
-- ⚠️ **남은 작업**: Phase 2(도메인 on/off 토글·GitHub Actions Playwright cron 증분)는 미착수. 비-수업 차단문구 학원설정 외부화도 검토 대상.
+- ✅ **Phase 2 완료(2026-06-30) — GitHub Actions cron 증분 자동화 + 전역 ON/OFF 토글**(사용자 "깃헙에서 동기화 완성"): 임포터가 전부 멱등·additive라 **재실행=증분**(새 행만) → 신규 코드는 오케스트레이터·DOM students·워크플로뿐. 마이그 0.
+  · **오케스트레이터** [sync-all.cjs](scripts/_makeedu/sync-all.cjs): 전역 토글 확인(off=스킵) → scrape(1로그인,4리스트) → 멱등 도메인 import --apply(도메인별 실패 격리·실패 시 sync_state error 기록+exit1=다음 cron 멱등 재시도). `--no-scrape`=기존 JSON 적재만(로컬).
+  · **cron 도메인(멱등만)**: students(신규 DOM)·classes·prospects·invoices. **제외(수동)**: enrollments(엑셀 '수업'컬럼 의존)·consultations(import-consultations **deprecated**, No≠counselSeq)·catalog(tuition 기타 이름 insert=재실행 중복)·prospects 상세본문(sync-prospects 레코드별 fetch).
+  · **students DOM 이식**: 헤드리스라 47컬럼 엑셀 대신 **재원생 목록 DOM**([scrape.cjs](scripts/_makeedu/scrape.cjs) `students`, URL `MAKEEDU_STUDENTS_URL`로 교정·첫실행 0행이면 URL확인) → 신규 [import-students-list.cjs](scripts/_makeedu/import-students-list.cjs) header-driven(자연키 이름+학교+학년 매칭→신규 insert·활성 자연키 가드, **고유번호 컬럼 있을 때만** makeedu_id 백필 — DOM 첫셀 No=표시순번≠안정PK라 방어).
+  · **예비상담 안내문구**(사용자 요청): cron이 상세 본문을 안 가져오므로 신규 예비상담 insert 시 parent_request=`PROSPECT_LIST_NOTE`(lib.cjs sentinel "상세는 makeedu에서 확인"). ⚠️ sync-prospects가 실본문 가져오면 sentinel 덮어쓰게 backfill을 `coalesce(nullif(parent_request,NOTE),실본문,parent_request)`로 수정(오염 방지).
+  · **워크플로** [.github/workflows/makeedu-sync.yml](.github/workflows/makeedu-sync.yml): workflow_dispatch(수동 첫검증)+cron(KST 06/18시)·concurrency group. **Secrets(사용자가 추가, 나는 안 봄)**: MAKEEDU_ID·MAKEEDU_PW·DATABASE_URL(+선택 MAKEEDU_STUDENTS_URL).
+  · **전역 ON/OFF 토글**(user_integrations provider=makeedu sync_enabled 재사용, 마이그0): [setMakeeduSyncEnabled](src/features/integrations/server/actions.ts)(master)+[getMakeeduAutoSyncStatus](src/features/integrations/server/makeedu-sync.ts)+[MakeeduSyncCard](<src/app/(shell)/owner/_components/makeedu-sync-card.tsx>)를 연동 면(sheets-face) 상단에. 행 없으면 기본 ON(opt-out)=끄면 sync-all 스킵. owner/page.tsx 안 건드림(병렬 popups 충돌 회피).
+  · 검증: CJS node --check 8 / 내 TS typecheck0·lint0 / test531. ⚠️ **라이브 cron은 사용자가 Secrets 추가 후 workflow_dispatch 1회로 검증**(헤드리스 로그인 CAPTCHA/2FA·students DOM URL은 그때만 확인 가능 — 코드는 방어적, 0행/실패 명확 로깅). 재원생 상담 자동화는 sync-consultations(counselSeq 상세) 기반 별도 설계 필요. 비-수업 차단문구 외부화도 검토 대상.
 - **시간표 상단 명단 요약**(ijw 패리티, [timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)): 툴바 우측에 **재원·신입·전입·대기·퇴원
   + N슬롯**(색상 토큰). 그 주 시점(타임머신) 기준, `studentId`로 유일 집계(한 학생이 여러 반 → 상태 우선순위 재원>대기>퇴원). 신입·전입은 재원 학생만.
 - **🐛 창 복원 버그픽스**(별건, 같은 세션 — [[#65]]): 새로고침마다 플로팅 창 전멸 + localStorage 영속본 파괴. window-store rehydrate를

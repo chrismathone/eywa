@@ -1,8 +1,10 @@
 import type { NotificationsSettings } from "@/features/owner/settings-types";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
+import { getMakeeduAutoSyncStatus } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
 import { SheetsClient } from "@/app/(shell)/admin/integrations/sheets/_client";
 import { SheetsTargetForm } from "./sheets-target-form";
+import { MakeeduSyncCard } from "./makeedu-sync-card";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.
@@ -14,10 +16,18 @@ import { SheetsTargetForm } from "./sheets-target-form";
  *    서비스계정을 '편집자'로 공유해야 하고, 동기화는 그 시트를 **전체 덮어쓰기**한다.
  */
 export async function SheetsFace({ notifications }: { notifications: NotificationsSettings }) {
-  const status = await getGoogleSheetsStatus();
+  // 독립 조회 둘 → 병렬(B4).
+  const [status, makeeduStatus] = await Promise.all([
+    getGoogleSheetsStatus(),
+    getMakeeduAutoSyncStatus(),
+  ]);
   const saEmail = getServiceAccountEmail();
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-8">
+      {/* makeedu 자동 동기화 (GitHub Actions cron) — 외부 연동 면 상단 */}
+      <MakeeduSyncCard status={makeeduStatus} />
+
+      <div className="space-y-5">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 외부 연동</p>
         <h2 className="text-foreground text-lg font-semibold">구글 시트 내보내기</h2>
@@ -61,6 +71,7 @@ export async function SheetsFace({ notifications }: { notifications: Notificatio
           <SheetsClient status={status} />
           <SheetsTargetForm initial={notifications} />
         </div>
+      </div>
       </div>
     </div>
   );

@@ -27,13 +27,17 @@ const BASE = "https://school.makeedu.co.kr";
 const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
 const HEADED = !!process.env.HEADED;
 
-// 학생은 엑셀(47컬럼)로 별도 확보 → 여기선 나머지 5 + (옵션)students DOM.
+// 부트스트랩 때 학생은 엑셀(47컬럼)로 확보했지만, Phase 2 cron은 헤드리스라 엑셀 다운로드 대신
+// **재원생 목록 DOM**을 긁는다(컬럼 적어도 증분엔 충분 — import-students-list.cjs가 header-driven으로 소비).
 const LISTS = {
   classes: { url: "/lesson/lessonAllList.do" },
   prospects: { url: "/member/student/resList.do" },
   consultations: { url: "/counsel/counselList.do" },
   invoices: { url: "/pay/payUnionDeList.do" },
   catalog: { url: "/config/bookList.do" },
+  // ⚠️ 재원생 목록 URL은 최초 실행에서 확인할 것. students.json이 0행이면 URL이 틀린 것 →
+  //    MAKEEDU_STUDENTS_URL 환경변수로 정확한 경로를 덮어쓴다(코드 변경 없이 교정).
+  students: { url: process.env.MAKEEDU_STUDENTS_URL || "/member/student/list.do" },
 };
 
 // 페이지 내 실행: 가장 큰 테이블을 헤더+행배열로. 셀값 = select 선택값 > innerText > input.value.
@@ -136,8 +140,9 @@ async function scrapeList(page, key, cfg) {
 }
 
 (async () => {
+  // --list=invoices 또는 --list=students,classes,prospects,invoices (쉼표 다중). 없으면 전체.
   const only = (process.argv.find((a) => a.startsWith("--list=")) || "").split("=")[1];
-  const keys = only ? [only] : Object.keys(LISTS);
+  const keys = only ? only.split(",").map((s) => s.trim()).filter(Boolean) : Object.keys(LISTS);
   fs.mkdirSync(OUT, { recursive: true });
 
   const browser = await chromium.launch({ headless: !HEADED });
@@ -155,6 +160,10 @@ async function scrapeList(page, key, cfg) {
       fs.writeFileSync(path.join(OUT, `${key}.json`), JSON.stringify(data));
       console.log(`  ✓ ${key}: ${data.rows.length} rows, ${data.headers.length} cols → ${key}.json`);
       console.log(`    headers: ${data.headers.filter(Boolean).join(" | ").slice(0, 160)}`);
+      if (data.rows.length === 0) {
+        const hint = key === "students" ? " (URL 확인: MAKEEDU_STUDENTS_URL 환경변수로 교정)" : "";
+        console.warn(`    ⚠️ ${key} 0행 — 목록 URL/로그인 세션을 확인하세요${hint}`);
+      }
     }
   } finally {
     await browser.close();

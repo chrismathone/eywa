@@ -81,11 +81,13 @@ function outcome(v) {
       linked += res.count;
     }
     for (const r of toInsert) {
+      // 목록 수준 동기화라 상세 본문이 없다 → parent_request에 안내문구(sentinel)를 채워 상세가 비어 보이지 않게.
+      // 나중에 sync-prospects가 실제 본문을 가져오면 이 sentinel을 덮어쓴다(lib.PROSPECT_LIST_NOTE).
       await sql`
         insert into enrollment_consultations
-          (tenant_id, makeedu_id, prospect_name, prospect_school, prospect_grade, parent_phone, student_phone, outcome, consulted_at)
+          (tenant_id, makeedu_id, prospect_name, prospect_school, prospect_grade, parent_phone, student_phone, outcome, consulted_at, parent_request)
         values (${tenantId}, ${r.makeedu_id}, ${r.prospect_name}, ${r.prospect_school}, ${r.prospect_grade},
-                ${r.parent_phone}, ${r.student_phone}, ${r.outcome}, ${r.consulted_at ?? null})
+                ${r.parent_phone}, ${r.student_phone}, ${r.outcome}, ${r.consulted_at ?? null}, ${L.PROSPECT_LIST_NOTE})
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
       inserted++;
     }
