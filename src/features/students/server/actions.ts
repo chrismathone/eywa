@@ -370,6 +370,10 @@ export async function endSingleEnrollment(
 ): Promise<ChangeStatusState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  // 수강 종료 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor). UI 숨김 + 이 서버 게이트 이중 방어.
+  if ((await accessLevelTenant(user.systemRole, "students")) !== "full") {
+    return { error: "수강 종료 권한이 없습니다" };
+  }
 
   const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { getStudentById } from "@/features/students/server/queries";
 import { RunCareAiButton } from "./run-care-ai-button";
@@ -43,7 +44,7 @@ export default async function StudentDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  await requireAccess("students");
+  const user = await requireAccess("students");
   const { id } = await params;
   const { tab: tabParam } = await searchParams;
   const tab = isStudentTabKey(tabParam) ? tabParam : "overview";
@@ -52,6 +53,10 @@ export default async function StudentDetailPage({
   if (!student) notFound();
 
   const hasCareAi = student.aiCareSummary !== null;
+  // 수강 종료 노출 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor).
+  const canEndEnrollment = (await accessLevelTenant(user.systemRole, "students")) === "full";
+  // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
+  const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
 
   return (
     <div className="space-y-6">
@@ -100,7 +105,7 @@ export default async function StudentDetailPage({
         {tab === "overview" ? (
           <OverviewTab student={student} />
         ) : tab === "classes" ? (
-          <ClassesTab student={student} />
+          <ClassesTab student={student} canEnd={canEndEnrollment} canEditDates={canEditDates} />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
         ) : tab === "progress" ? (

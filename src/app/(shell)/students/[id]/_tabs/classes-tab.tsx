@@ -11,6 +11,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
+import { EditableDateCell } from "../_components/editable-date-cell";
 
 // 요일 chip 색(ijw DAY_COLORS 대응 — eywa 토큰).
 const DAY_CHIP: Record<string, string> = {
@@ -24,7 +25,15 @@ const DAY_CHIP: Record<string, string> = {
 };
 
 /** 수업 탭(ijw CoursesTab 이식) — 수강 중/배정 예정/지난 3섹션 + 스케줄(요일+교시)·강사·인원. */
-export async function ClassesTab({ student }: { student: StudentDetail }) {
+export async function ClassesTab({
+  student,
+  canEnd,
+  canEditDates,
+}: {
+  student: StudentDetail;
+  canEnd: boolean;
+  canEditDates: boolean;
+}) {
   const [rows, allActiveClasses, settings] = await Promise.all([
     getStudentClassesDetail(student.id),
     getClassesList({ active: "active" }),
@@ -50,6 +59,8 @@ export async function ClassesTab({ student }: { student: StudentDetail }) {
         kind="current"
         studentId={student.id}
         subjects={subjects}
+        canEnd={canEnd}
+        canEditDates={canEditDates}
         action={
           <StudentAssignAction
             student={{ id: student.id, name: student.name, grade: student.grade }}
@@ -64,8 +75,8 @@ export async function ClassesTab({ student }: { student: StudentDetail }) {
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
       />
-      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} />
-      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} />
+      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} />
+      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} />
     </div>
   );
 }
@@ -76,6 +87,8 @@ function Section({
   kind,
   studentId,
   subjects,
+  canEnd,
+  canEditDates,
   action,
   note,
 }: {
@@ -84,9 +97,14 @@ function Section({
   kind: "current" | "scheduled" | "past";
   studentId: string;
   subjects: SubjectMaps;
+  canEnd: boolean;
+  canEditDates: boolean;
   action?: React.ReactNode;
   note?: string;
 }) {
+  // 수강 종료 컬럼: 쓰기 권한 + 비-지난 섹션에서만. 셀 버튼은 재원중(end_date==null)에만 —
+  // 이미 종료일이 있는 행엔 버튼을 숨겨 "종료된 행 재클릭 시 팝업 반복" 버그를 막는다.
+  const showEndCol = canEnd && kind !== "past";
   return (
     <section className="bg-card border-border rounded-md border">
       <header className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
@@ -112,7 +130,7 @@ function Section({
                 <th className="px-4 py-2 text-right font-medium">인원</th>
                 <th className="px-4 py-2 text-left font-medium">시작</th>
                 <th className="px-4 py-2 text-left font-medium">종료</th>
-                {kind !== "past" ? <th className="px-2 py-2" /> : null}
+                {showEndCol ? <th className="px-2 py-2" /> : null}
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -127,9 +145,17 @@ function Section({
                     <ScheduleCell schedule={r.schedule} />
                   </td>
                   <td className="text-text-dim num px-4 py-2.5 text-right text-xs">{r.studentCount}명</td>
-                  <td className="text-text-dim num px-4 py-2.5 text-xs">{r.startDate}</td>
                   <td className="px-4 py-2.5 text-xs">
-                    {kind === "scheduled" ? (
+                    {canEditDates ? (
+                      <EditableDateCell enrollmentId={r.enrollmentId} field="start" value={r.startDate} />
+                    ) : (
+                      <span className="text-text-dim num">{r.startDate}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs">
+                    {canEditDates ? (
+                      <EditableDateCell enrollmentId={r.enrollmentId} field="end" value={r.endDate} />
+                    ) : kind === "scheduled" ? (
                       <span className="text-text-faint">—</span>
                     ) : r.endDate ? (
                       <span className="text-amber num font-medium">~{r.endDate}</span>
@@ -138,9 +164,11 @@ function Section({
                     )}
                     {r.onHold ? <span className="text-amber ml-1">(휴원)</span> : null}
                   </td>
-                  {kind !== "past" ? (
+                  {showEndCol ? (
                     <td className="px-2 py-2.5 text-right">
-                      <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
+                      {r.endDate == null ? (
+                        <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
+                      ) : null}
                     </td>
                   ) : null}
                 </tr>

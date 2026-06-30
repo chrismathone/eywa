@@ -337,6 +337,19 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **과목 편집기** [list-editors.tsx](<src/app/(shell)/owner/_components/list-editors.tsx>) `SubjectListEditor`: 과목 행에 "시간표 요일 병합" 드롭다운(4프리셋). + defaults.ts 기본 과목에 weekdayGrouping(수학=mon-thu·영어=mon-tue·과학=none).
 - 검증: 제 파일 typecheck0/lint0(병렬 세션 spotlight-strip 미완 import 에러는 무관) + 라이브(PSS): owner 과목 편집기 드롭다운 5개·영어=월화/목금 저장(DB `english.weekdayGrouping=mon-tue`) → 시간표 **영어=월/화·목/금·수**, **수학=월/목·화/금·수**(과목별 차등) 확인. ⚠️ jsonb라 DB 마이그 불요. 엑셀(timetable-excel)은 평탄 DAY_ORDER라 병합 무관(미변경).
 
+### 학생 수업 탭 — 수강 종료 라벨/버그/권한 + 시작·종료일 더블클릭 인라인 수정 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test539)
+학생 상세 '수업' 탭([classes-tab.tsx](<src/app/(shell)/students/[id]/_tabs/classes-tab.tsx>)) 두 묶음.
+- **A. 수강 종료 X → '수강 종료' 라벨 + 버그픽스 + 권한 게이트**: 사용자 제보 ① 이미 종료된 행에서도 X가 떠 누르면 **확인 팝업이 반복** ② "X"가 **반 삭제처럼 보임** ③ 특정 권한 이상만 노출.
+  · 버그: 종료 액션을 **`end_date == null`(재원중) 행에만** 렌더 → 이미 종료일 있는 행은 버튼이 사라져 재클릭·팝업 반복 차단(종료하면 다음 렌더부터 자동 사라짐).
+  · 라벨: [end-enrollment-button.tsx](<src/app/(shell)/students/[id]/_components/end-enrollment-button.tsx>) X 아이콘 → **`LogOut` + "수강 종료" 텍스트**(툴팁 "반 삭제 아님").
+  · 권한: **학생 쓰기(full) 이상만**(master·admin·manager·counselor) — page가 `accessLevel(role,"students")==="full"`을 `canEnd`로 전달(UI 숨김) + [endSingleEnrollment](src/features/students/server/actions.ts) 서버 게이트 **이중 방어**(#58). 강사(scoped)·회계/뷰어(readonly) 미노출.
+- **B. 시작/종료일 더블클릭 인라인 수정**(관리자 정정): 사용자 결정 = **모든 수업(지난 수업 포함) / owner(원장) 권한 이상**.
+  · 신규 액션 [updateEnrollmentDates](src/features/enrollments/server/actions.ts) — **owner 게이트**(`accessLevel(role,"owner")==="full"`) + 검증(시작≤종료·ISO) + **GiST(`enrollments_no_overlap`) 충돌 친절 처리**("같은 반에서 수강 기간이 겹칩니다", 23P01) + revalidate(시간표·학생·반). enrollments는 temporal 테이블이라 날짜 변경이 **타임머신·시간표에 그대로 반영**.
+  · 신규 클라 [editable-date-cell.tsx](<src/app/(shell)/students/[id]/_components/editable-date-cell.tsx>) — 더블클릭 → date input + 저장/취소(Esc). 종료를 **비워 저장하면 "재원중" 복귀**(withdrawal_reason도 해제). 성공 1회 가드는 [[#67]] 패턴(state 객체 동일성 비교 → 재오픈 stale 재발화 방지).
+  · page가 `canEditDates`(owner)면 셀을 편집 가능 셀로, 아니면 기존 읽기 전용 텍스트.
+- ⚠️ 한계: 기간을 줄여도 그 밖 `attendance_records`는 보존(의미상 고아, ijw 동일). "+ 반 배정"(createEnrollment)은 이번 범위 밖이라 게이트 미적용(후속 가능).
+- 검증: typecheck0/lint0/test539. 라이브 E2E는 병렬 dev 서버 `.next` 충돌(#17/#23) 회피로 정적 게이트 + 사용자 HMR 환경 검증으로 대체.
+
 ### 학생배정 다이얼로그 재오픈 불가 버그픽스 + 다이얼로그 성공 부수효과 전수 점검 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test531)
 사용자 제보: 수업목록(반 상세)/학생 상세에서 "학생 배정"(반 배정)을 **한 번 성공한 뒤 다시 누르면 다이얼로그가 안 열림**(클릭 무반응). 원인 = [enrollment-assign-dialog.tsx](src/components/enrollment-assign-dialog.tsx)가 부모([class-assign-action](<src/app/(shell)/classes/[id]/_components/class-assign-action.tsx>)·[student-assign-action](<src/app/(shell)/students/[id]/_components/student-assign-action.tsx>))에 **항상 마운트**(open prop만 토글, 언마운트 없음)라 첫 배정 성공 후 `useActionState`의 `state.enrollmentId`가 **stale하게 잔존** → 성공 처리 `if`블록(가드 없음, 매 렌더 실행)이 재오픈 렌더에서 또 `onClose(true)`를 호출 → 열리자마자 닫힘. 자세한 패턴은 막혔던 점 [[#67]].
 - **수정**: 렌더 본문 `queueMicrotask` 부수효과 → **`enrollmentId`를 키로 한 ref 가드 + `useEffect`**로 교체(처리한 enrollmentId 기록 → stale state 재발화 차단, 진짜 새 배정[새 UUID]만 닫힘 → 같은 다이얼로그로 연속 배정 정상). ⚠️ boolean 가드를 "재오픈 시 리셋"하면 stale state가 다시 발화해 버그 재발 → 일부러 id-키 가드.

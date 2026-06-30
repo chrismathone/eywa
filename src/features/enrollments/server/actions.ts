@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -197,4 +198,75 @@ export async function moveEnrollmentsBatch(
   const results = (data ?? []) as BatchMoveResult[];
   revalidatePath("/timetable");
   return { results };
+}
+
+export type UpdateEnrollmentDatesState = { ok?: boolean; error?: string } | undefined;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 수강 시작/종료일 직접 수정 (관리자 정정). owner(원장) 콘솔 권한 이상만(master).
+ * enrollments는 시간 구간(temporal) 테이블이라 날짜 변경이 타임머신·시간표에 그대로 반영된다.
+ * GiST EXCLUDE(enrollments_no_overlap = 같은 학생+같은 반 기간 겹침)에 걸리면 친절 메시지로 거부.
+ */
+export async function updateEnrollmentDates(
+  _prev: UpdateEnrollmentDatesState,
+  formData: FormData,
+): Promise<UpdateEnrollmentDatesState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  // owner(원장) 콘솔 권한 이상만 — 날짜 정정은 수강 이력을 다시 쓰는 민감 작업이라 최상위로 제한.
+  if ((await accessLevelTenant(user.systemRole, "owner")) !== "full") {
+    return { error: "날짜 수정 권한이 없습니다 (원장 전용)" };
+  }
+
+  const enrollmentId = String(formData.get("enrollmentId") ?? "").trim();
+  const field = String(formData.get("field") ?? "").trim(); // "start" | "end"
+  const raw = String(formData.get("value") ?? "").trim();
+
+  if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
+  if (field !== "start" && field !== "end") return { error: "잘못된 필드입니다" };
+
+  const value = raw || null;
+  if (field === "start" && !value) return { error: "시작일은 비울 수 없습니다" };
+  if (value && !ISO_DATE.test(value)) return { error: "날짜 형식이 올바르지 않습니다" };
+
+  const supabase = await createClient();
+  const { data: current, error: fetchErr } = await supabase
+    .from("enrollments")
+    .select("start_date, end_date, student_id, class_id")
+    .eq("id", enrollmentId)
+    .single();
+  if (fetchErr || !current) return { error: "수강 정보를 찾을 수 없습니다" };
+
+  // 시작 ≤ 종료 검증(ISO 문자열은 사전식 비교가 곧 날짜 비교).
+  const nextStart = field === "start" ? (value as string) : (current.start_date as string);
+  const nextEnd = field === "end" ? value : (current.end_date as string | null);
+  if (nextEnd && nextStart > nextEnd) {
+    return { error: "시작일이 종료일보다 늦을 수 없습니다" };
+  }
+
+  // 종료를 비우면(null) 재원중 복귀 = withdrawal_reason도 해제.
+  const patch: { start_date?: string; end_date?: string | null; withdrawal_reason?: string | null } =
+    field === "start"
+      ? { start_date: value as string }
+      : value
+        ? { end_date: value }
+        : { end_date: null, withdrawal_reason: null };
+
+  const { error } = await supabase.from("enrollments").update(patch).eq("id", enrollmentId);
+  if (error) {
+    if (
+      error.message?.includes("enrollments_no_overlap") ||
+      (error as { code?: string }).code === "23P01"
+    ) {
+      return { error: "같은 반에서 수강 기간이 겹칩니다" };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/timetable");
+  revalidatePath(`/students/${current.student_id}`);
+  revalidatePath(`/classes/${current.class_id}`);
+  return { ok: true };
 }
