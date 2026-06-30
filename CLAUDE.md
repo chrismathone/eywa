@@ -329,6 +329,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학생배정 다이얼로그 재오픈 불가 버그픽스 + 다이얼로그 성공 부수효과 전수 점검 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test531)
+사용자 제보: 수업목록(반 상세)/학생 상세에서 "학생 배정"(반 배정)을 **한 번 성공한 뒤 다시 누르면 다이얼로그가 안 열림**(클릭 무반응). 원인 = [enrollment-assign-dialog.tsx](src/components/enrollment-assign-dialog.tsx)가 부모([class-assign-action](<src/app/(shell)/classes/[id]/_components/class-assign-action.tsx>)·[student-assign-action](<src/app/(shell)/students/[id]/_components/student-assign-action.tsx>))에 **항상 마운트**(open prop만 토글, 언마운트 없음)라 첫 배정 성공 후 `useActionState`의 `state.enrollmentId`가 **stale하게 잔존** → 성공 처리 `if`블록(가드 없음, 매 렌더 실행)이 재오픈 렌더에서 또 `onClose(true)`를 호출 → 열리자마자 닫힘. 자세한 패턴은 막혔던 점 [[#67]].
+- **수정**: 렌더 본문 `queueMicrotask` 부수효과 → **`enrollmentId`를 키로 한 ref 가드 + `useEffect`**로 교체(처리한 enrollmentId 기록 → stale state 재발화 차단, 진짜 새 배정[새 UUID]만 닫힘 → 같은 다이얼로그로 연속 배정 정상). ⚠️ boolean 가드를 "재오픈 시 리셋"하면 stale state가 다시 발화해 버그 재발 → 일부러 id-키 가드.
+- **전수 점검(멀티에이전트 7 = 적대 검증 1 + 6 다이얼로그 sweep)**: 같은 무가드 패턴 6곳 중 **always-mounted 2곳만 버그** — ① 학생/반 배정(수정) ② [exam-delete-button](<src/app/(shell)/exams/_components/exam-delete-button.tsx>)(재오픈 아님, 성공 후 `router.push` 매 렌더 중복 발화 → 같이 ref 가드 추가). 나머지 4곳(시험 등록/수정·청구서 수정·지출·강의실 배정)은 **조건부 마운트(`{open && <X/>}`)라 닫힐 때 언마운트→state 리셋 = 안전**(가드 없어도 무방).
+- ⚠️ 라이브 E2E는 미실행(병렬 세션 dev 서버 정황에서 2번째 `pnpm dev`=`.next` 충돌 #17/#23 회피) — 정적 게이트 + 적대 근본원인 검증으로 대체.
+
 ### 반 편집 주간 스케줄 그리드 = 평일/주말 두 표 분리(주말 교시 시각 반영) (2026-06-30) — ✅ 게이트 그린 + 라이브
 사용자 제보: 반 편집 "주간 스케줄"에서 토/일 칸이 평일 교시 시각(14:30~)으로만 떠 **주말 시간대(09:00~)를 못 넣음**. 원인: [schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>)가 단일 `periods`(평일)만 받아 7요일에 똑같이 적용 — 주말 교시(`config.weekend`)를 안 씀.
 - 같은 "N교시"라도 평일·주말 시각이 다르므로(설정의 평일 교시 ↔ 주말 교시) **그리드를 두 표로 분리**: 평일(월~금, weekdayPeriods) + 주말(토·일, weekendPeriods). 선택 상태·제출 hidden(`schedule_*_${i}`)은 **공유(연속 인덱스)**, 셀 시각은 요일이 주말이면 weekendById에서 해석(`periodFor`).
@@ -2059,6 +2065,17 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 `${d.isWeekend ? "bg-bg-soft/40" : ""}` + `align-middle`), 칩은 `mx-auto`로 셀 중앙에. 라이브 검증: 주말 td 배경이 63×34 셀
 전체·전 행 연속·칩 좌우 17px 대칭(중앙). **규칙: 칸(셀/행/열) 단위 배경·음영·hover는 컨테이너(td/tr)에 준다 — 셀보다 작은
 고정 크기 내부 요소(칩·버튼)에 주면 셀을 못 채워 어긋난다.** (상태 칩처럼 "칸 안의 작은 표식"만 내부 요소 배경 OK.)
+
+### 67. 항상 마운트된 다이얼로그 + 가드 없는 useActionState 성공 부수효과 = 재오픈 즉시닫힘("클릭 무반응")
+다이얼로그가 부모에서 **항상 마운트(`<Dialog open={open}/>`, 내부 `if(!open) return null`)** 되면 닫혀도 언마운트되지 않아
+`useActionState`의 성공 state(예: `state.enrollmentId`/`state.ok`)가 **stale하게 잔존**한다. 성공 처리 부수효과(close/refresh/navigate)에
+"한 번만" 가드가 없으면 **재오픈 렌더에서 그 stale state가 다시 발화**해 다이얼로그가 열리자마자 닫히거나(=클릭 무반응) 중복 네비가 난다.
+(enrollment-assign-dialog 실측: 첫 학생배정 성공 뒤 재오픈 불가 — 2026-06-30. 멀티에이전트 적대 검증 `hypothesisHolds:true,high`.)
+- **규칙**: 성공 부수효과는 **`useEffect` + "처리완료" 가드**로 1회만 발화. 처리한 식별자를 ref에 기록(`handledRef.current !== state.id`)하는
+  **id-키 가드**가 가장 견고 — 같은 stale state는 재오픈해도 다시 안 돌고, 진짜 새 결과(새 id)만 발화한다([class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>) `handledNonce`·[speaker-editor.tsx](<src/app/(shell)/meetings/[id]/speaker-editor.tsx>) `handled` 패턴 참조).
+  ⚠️ **boolean 가드를 "open될 때 리셋"하는 건 함정** — stale state를 재무장시켜 버그가 재발한다. **렌더 본문에서 `queueMicrotask`로 부수효과 내기**도 가드 없으면 매 렌더 실행이라 금지.
+- **대안(안전한 기존 패턴)**: 부모를 **조건부 마운트(`{open && <Dialog/>}`)** 로 두면 닫힐 때 언마운트→`useActionState` 리셋이라 가드 없이도 안전(eywa
+  다이얼로그 대다수가 이쪽 — 시험/청구서/지출/강의실). 새 다이얼로그는 둘 중 하나를 **명시적으로** 택할 것. always-mounted를 쓰면 id-키 가드가 필수다.
 
 ---
 

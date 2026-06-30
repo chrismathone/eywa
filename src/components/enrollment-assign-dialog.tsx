@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, UserPlus, X } from "lucide-react";
@@ -102,12 +102,22 @@ export function EnrollmentAssignDialog({
     });
   const orderedClassDays = classDaysKey ? classDaysKey.split(",") : [];
 
-  if (state?.enrollmentId && !state?.error) {
-    queueMicrotask(() => {
+  // 배정 성공 시 1회만: 배경 새로고침 + 닫기. 부모(ClassAssignAction/StudentAssignAction)가
+  // 다이얼로그를 항상 마운트한 채 open만 토글하므로(언마운트 없음) useActionState state가 잔존한다.
+  // handledRef에 처리한 enrollmentId를 기록해, stale state가 재오픈 렌더에서 다이얼로그를 다시
+  // 닫는 것(=클릭 무반응 버그)을 막는다. 진짜 새 배정(새 UUID)일 때만 다시 발화한다.
+  const handledEnrollmentId = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      state?.enrollmentId &&
+      !state.error &&
+      handledEnrollmentId.current !== state.enrollmentId
+    ) {
+      handledEnrollmentId.current = state.enrollmentId;
       router.refresh();
       onClose(true);
-    });
-  }
+    }
+  }, [state, router, onClose]);
 
   if (!open) return null;
 

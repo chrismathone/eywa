@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,14 @@ export function ExamDeleteButton({ examId }: { examId: string }) {
     deleteExam,
     undefined,
   );
-  if (state?.ok) queueMicrotask(() => router.push("/exams"));
+  // 삭제 성공 시 1회만 네비(가드 없으면 state.ok가 true인 동안 매 렌더 중복 push).
+  const pushed = useRef(false);
+  useEffect(() => {
+    if (state?.ok && !pushed.current) {
+      pushed.current = true;
+      router.push("/exams");
+    }
+  }, [state, router]);
 
   if (!confirming) {
     return (
