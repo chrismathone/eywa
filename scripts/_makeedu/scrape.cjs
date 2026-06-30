@@ -116,8 +116,25 @@ async function maximizeListSize(page) {
   await page.waitForTimeout(600);
 }
 
+// page.evaluate가 네비게이션 레이스("Execution context was destroyed")로 터지면 잠깐 정착 후 재시도.
+async function safeEvaluate(page, fn) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await page.evaluate(fn);
+    } catch (e) {
+      if (attempt < 2 && /context was destroyed|destroyed|navigation/i.test(e.message || "")) {
+        await page.waitForLoadState("domcontentloaded").catch(() => {});
+        await page.waitForTimeout(800);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 async function scrapeList(page, key, cfg) {
-  await page.goto(`${BASE}${cfg.url}`, { waitUntil: "networkidle" }).catch(() => {});
+  await page.goto(`${BASE}${cfg.url}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(800);
   await maximizeListSize(page);
 
@@ -125,7 +142,7 @@ async function scrapeList(page, key, cfg) {
   const all = [];
   const seen = new Set();
   for (let p = 1; p <= 30; p++) {
-    const { headers: h, rows } = await page.evaluate(EXTRACT);
+    const { headers: h, rows } = await safeEvaluate(page, EXTRACT);
     if (h.length) headers = h;
     let added = 0;
     for (const r of rows) {
@@ -189,7 +206,14 @@ async function scrapeList(page, key, cfg) {
         console.error("unknown list:", key);
         continue;
       }
-      const data = await scrapeList(page, key, cfg);
+      // 한 목록 실패(네비게이션 레이스·URL 오류 등)가 나머지를 막지 않게 격리 — 실패 목록은 0행으로 기록하고 계속.
+      let data;
+      try {
+        data = await scrapeList(page, key, cfg);
+      } catch (e) {
+        console.warn(`  ⚠️ ${key} 스크래핑 실패: ${e.message} — 건너뜀(0행)`);
+        data = { key, scrapedAt: new Date().toISOString(), headers: [], rows: [] };
+      }
       fs.writeFileSync(path.join(OUT, `${key}.json`), JSON.stringify(data));
       console.log(`  ✓ ${key}: ${data.rows.length} rows, ${data.headers.length} cols → ${key}.json`);
       console.log(`    headers: ${data.headers.filter(Boolean).join(" | ").slice(0, 160)}`);
