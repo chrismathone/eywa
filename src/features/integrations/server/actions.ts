@@ -64,6 +64,51 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
   return { enabled };
 }
 
+export type TriggerSyncState = { error?: string; ok?: boolean } | undefined;
+
+/**
+ * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용). GitHub Actions의 makeedu-sync 워크플로를
+ * `workflow_dispatch`(force=true=토글 무시)로 트리거한다. 실제 동기화는 GitHub에서 ~1-2분 비동기로 돌고,
+ * 결과는 각 화면의 '↻ 동기화' 배지(마지막 동기화 시각)로 반영된다.
+ * ⚠️ `GITHUB_DISPATCH_TOKEN`(workflow dispatch 권한 PAT) 필요 — 미설정 시 명확한 에러(앱 비밀 유출 없음).
+ */
+export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") {
+    return { error: "동기화 실행은 원장(master)만 할 수 있습니다" };
+  }
+
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  if (!token) {
+    return { error: "GitHub 토큰(GITHUB_DISPATCH_TOKEN)이 설정되지 않았습니다 (관리자에게 문의)" };
+  }
+  const repo = process.env.GITHUB_DISPATCH_REPO || "BIGSHOL/eywa";
+  const workflow = process.env.GITHUB_DISPATCH_WORKFLOW || "makeedu-sync.yml";
+  const ref = process.env.GITHUB_DISPATCH_REF || "main";
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ref, inputs: { force: "true" } }),
+      },
+    );
+    if (res.status === 204) return { ok: true };
+    const text = await res.text().catch(() => "");
+    return { error: `GitHub 트리거 실패 (${res.status}): ${text.slice(0, 140) || res.statusText}` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "GitHub 트리거 중 오류" };
+  }
+}
+
 export type SyncState = { error?: string; ok?: boolean } | undefined;
 
 export async function syncSheetsNow(

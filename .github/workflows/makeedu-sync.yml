@@ -14,6 +14,11 @@ name: makeedu-sync
 # ⚠️ 앱에서 학원설정 → 연동의 'makeedu 동기화'를 끄면(user_integrations.sync_enabled=false) cron이 스킵한다.
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "동기화 OFF 토글을 무시하고 강제 실행(앱 '지금 동기화' 버튼이 사용)"
+        type: boolean
+        default: false
   schedule:
     - cron: "0 21 * * *" # 06:00 KST (UTC+9)
     - cron: "0 9 * * *" # 18:00 KST
@@ -33,6 +38,7 @@ jobs:
       MAKEEDU_STORAGE_STATE: ${{ secrets.MAKEEDU_STORAGE_STATE }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       MAKEEDU_STUDENTS_URL: ${{ secrets.MAKEEDU_STUDENTS_URL }}
+      MAKEEDU_FORCE: ${{ inputs.force }}
       MAKEEDU_OUT: ./.makeedu-tmp
     steps:
       - uses: actions/checkout@v4

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
-import { setMakeeduSyncEnabled } from "@/features/integrations/server/actions";
+import { Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { setMakeeduSyncEnabled, triggerMakeeduSyncNow } from "@/features/integrations/server/actions";
 import type { MakeeduAutoSyncStatus } from "@/features/integrations/server/makeedu-sync";
 
 /**
@@ -13,6 +14,8 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
   const [enabled, setEnabled] = useState(status.enabled);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [running, startRun] = useTransition();
+  const [runMsg, setRunMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   function toggle() {
     if (pending) return;
@@ -22,6 +25,17 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
       const res = await setMakeeduSyncEnabled(next);
       if (res?.error) setError(res.error);
       else setEnabled(next);
+    });
+  }
+
+  // 지금 즉시 1회 동기화 — GitHub Actions 워크플로를 force=true(토글 무시)로 트리거. 결과는 ~1-2분 뒤 배지 반영.
+  function runNow() {
+    if (running) return;
+    setRunMsg(null);
+    startRun(async () => {
+      const res = await triggerMakeeduSyncNow();
+      if (res?.error) setRunMsg({ ok: false, text: res.error });
+      else setRunMsg({ ok: true, text: "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다." });
     });
   }
 
@@ -57,6 +71,16 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
       </div>
 
       {error ? <p className="text-chart-4 text-sm">{error}</p> : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={runNow} disabled={running}>
+          {running ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          지금 동기화
+        </Button>
+        {runMsg ? (
+          <span className={`text-xs ${runMsg.ok ? "text-primary" : "text-chart-4"}`}>{runMsg.text}</span>
+        ) : null}
+      </div>
 
       <p className="text-muted-foreground border-t pt-3 text-[11px]">
         반영 시각은 각 화면(학생·수업·상담·수납)의 ‘↻ 동기화’ 배지에 표시됩니다.

@@ -46,7 +46,9 @@ function run(label, file, args) {
     const [row] = await sql`
       select sync_enabled from user_integrations
       where tenant_id = ${tenantId} and provider = 'makeedu' limit 1`;
-    if (row && row.sync_enabled === false) {
+    // MAKEEDU_FORCE=true(앱 '지금 동기화' 버튼)면 토글을 무시하고 강제 실행. cron/일반 실행은 토글 존중.
+    const FORCE = process.env.MAKEEDU_FORCE === "true";
+    if (!FORCE && row && row.sync_enabled === false) {
       console.log("⏸  makeedu 동기화 OFF (user_integrations.sync_enabled=false) — 스킵.");
       return;
     }
