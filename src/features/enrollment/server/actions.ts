@@ -319,6 +319,51 @@ export async function setEnrollmentOutcome(
   return { ok: true };
 }
 
+export type DeleteConsultationState = { error?: string } | undefined;
+
+/**
+ * 등록상담 완전 삭제(상세 페이지 인라인 확인) — deleteMeeting과 동일 패턴.
+ * RLS가 테넌트 스코프를 보장하고, consultation_ai_analysis는 FK onDelete cascade(0046a)라 함께 제거된다.
+ * 첨부 음성(테넌트 경로)이 있으면 Storage 객체도 정리한다. 성공 시 redirectTo(목록)로 이동.
+ * ⚠️ makeedu 동기화로 들어온 상담(makeedu_id 보유)은 영구 삭제해도 다음 동기화에 additive로 다시 추가된다
+ * (자체 생성 테스트 카드 = makeedu_id NULL이라 영구 삭제). 이는 의도된 동작(실데이터 안전판).
+ */
+export async function deleteEnrollmentConsultation(
+  _prev: DeleteConsultationState,
+  formData: FormData,
+): Promise<DeleteConsultationState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const redirectTo = String(formData.get("redirectTo") ?? "").trim();
+  if (!id) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  // RLS 스코프 — 같은 테넌트 상담만 조회/삭제. 음성 경로 정리를 위해 audio_path만 선조회.
+  const { data: c } = await supabase
+    .from("enrollment_consultations")
+    .select("id, audio_path")
+    .eq("id", id)
+    .single();
+  if (!c) return { error: "상담을 찾을 수 없습니다" };
+
+  // 1) 첨부 음성(테넌트 경로) Storage 제거 — 레거시/공유 경로는 isTenantAudioPath로 걸러 미삭제.
+  const audioPath = (c as { audio_path?: string | null }).audio_path;
+  if (audioPath && isTenantAudioPath(audioPath, user.tenantId)) {
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+  }
+
+  // 2) row 삭제(RLS). consultation_ai_analysis는 FK cascade.
+  const { error } = await supabase.from("enrollment_consultations").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/enrollment");
+  if (redirectTo) redirect(redirectTo);
+  return undefined;
+}
+
 type AnalysisShape = {
   diagnosis: {
     strengths: string[];

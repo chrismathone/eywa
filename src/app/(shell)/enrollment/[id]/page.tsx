@@ -20,7 +20,7 @@ import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
-import { ConsultationManageButtons } from "./_components/consultation-manage";
+import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -149,6 +149,7 @@ export default async function EnrollmentDetailPage({
             alreadyConverted={!!consult.studentId}
             linkedStudentId={consult.studentId}
           />
+          <ConsultationDeleteButton id={consult.id} />
         </div>
       </header>
 

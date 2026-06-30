@@ -2,9 +2,14 @@
 
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Tag, X } from "lucide-react";
+import { Loader2, Tag, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { setEnrollmentOutcome, type SetOutcomeState } from "@/features/enrollment/server/actions";
+import {
+  deleteEnrollmentConsultation,
+  setEnrollmentOutcome,
+  type DeleteConsultationState,
+  type SetOutcomeState,
+} from "@/features/enrollment/server/actions";
 
 const OUTCOME_OPTIONS = [
   { value: "pending", label: "대기" },
@@ -98,5 +103,48 @@ export function ConsultationManageButtons({ values }: { values: ConsultValues })
       </Button>
       {open ? <OutcomeDialog id={values.id} current={values.outcome} onClose={() => setOpen(false)} /> : null}
     </>
+  );
+}
+
+function DeleteSubmit() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+      {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+      삭제 확인
+    </Button>
+  );
+}
+
+/**
+ * 등록상담 완전 삭제 — 2단계 인라인 확인(MeetingDeleteButton 패턴). 성공 시 서버가 /enrollment로 redirect.
+ * cascade로 AI 분석도 함께 삭제. makeedu 동기화 상담은 다음 동기화에 다시 추가될 수 있음(자체 테스트 카드는 영구).
+ */
+export function ConsultationDeleteButton({ id }: { id: string }) {
+  const [armed, setArmed] = useState(false);
+  const [state, action] = useActionState<DeleteConsultationState, FormData>(
+    deleteEnrollmentConsultation,
+    undefined,
+  );
+
+  if (!armed) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setArmed(true)}>
+        <Trash2 className="size-3.5" />
+        삭제
+      </Button>
+    );
+  }
+
+  return (
+    <form action={action} className="flex items-center gap-2">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="redirectTo" value="/enrollment" />
+      <DeleteSubmit />
+      <Button type="button" variant="ghost" size="sm" onClick={() => setArmed(false)}>
+        취소
+      </Button>
+      {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
+    </form>
   );
 }
