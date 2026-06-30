@@ -1,0 +1,311 @@
+"use client";
+
+import { useActionState, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
+import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  createNoticePopup,
+  updateNoticePopup,
+  deleteNoticePopup,
+  toggleNoticePopupActive,
+  type NoticePopupActionState,
+} from "@/features/notices/server/actions";
+import {
+  POPUP_AUDIENCES,
+  AUDIENCE_LABEL,
+  POPUP_POSITIONS,
+  POSITION_LABEL,
+  type PopupAudience,
+  type PopupPosition,
+} from "@/features/notices/audience";
+import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
+import type { AdminPopup } from "@/features/notices/server/queries";
+
+const INPUT = "border-border bg-card text-foreground w-full rounded-md border px-2.5 py-1.5 text-sm";
+const LABEL = "text-text-dim text-xs font-medium";
+
+/** ISO → datetime-local 입력값("YYYY-MM-DDTHH:mm", 로컬 시각). 빈 값은 "". */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function SubmitBtn({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+      {label}
+    </Button>
+  );
+}
+
+function ToggleForm({ id, isActive }: { id: string; isActive: boolean }) {
+  const [, action] = useActionState(toggleNoticePopupActive, undefined);
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="isActive" value={isActive ? "false" : "true"} />
+      <button
+        type="submit"
+        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition ${
+          isActive
+            ? "bg-primary-soft text-primary hover:bg-primary-soft/70"
+            : "bg-bg-soft text-text-faint hover:bg-line-strong/20"
+        }`}
+      >
+        {isActive ? "노출 중" : "꺼짐"}
+      </button>
+    </form>
+  );
+}
+
+function DeleteForm({ id }: { id: string }) {
+  const [, action] = useActionState(deleteNoticePopup, undefined);
+  const [confirm, setConfirm] = useState(false);
+  if (!confirm) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirm(true)}
+        aria-label="삭제"
+        className="text-text-dim hover:text-danger inline-flex items-center transition"
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    );
+  }
+  return (
+    <form action={action} className="flex items-center gap-1">
+      <input type="hidden" name="id" value={id} />
+      <button type="submit" className="text-danger text-[11px] font-semibold">
+        삭제
+      </button>
+      <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-[11px]">
+        취소
+      </button>
+    </form>
+  );
+}
+
+/** 팝업 이미지 업로드(branding 슬롯 재사용, master 전용). value=저장 경로/URL. */
+function PopupImageField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setErr(null);
+    if (!file.type.startsWith("image/")) return setErr("이미지 파일만 업로드할 수 있습니다");
+    if (file.size > 5 * 1024 * 1024) return setErr("파일이 너무 큽니다 (최대 5MB)");
+    setBusy(true);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const fd = new FormData();
+      fd.set("slot", "popup");
+      fd.set("ext", ext);
+      fd.set("contentType", file.type);
+      fd.set("size", String(file.size));
+      const tk = await issueBrandingUploadTicket(undefined, fd);
+      if (tk?.error || !tk?.ticket) return setErr(tk?.error ?? "업로드 준비 실패");
+      await uploadToTicket(tk.ticket, file);
+      onChange(tk.ticket.path);
+      setPreview(URL.createObjectURL(file));
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "업로드 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const previewSrc = preview || (value.startsWith("http") ? value : null);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className={LABEL}>이미지 (선택)</span>
+      <input type="hidden" name="imageUrl" value={value} />
+      <div className="flex items-center gap-3">
+        <div className="border-line bg-bg-soft flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded border">
+          {previewSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- objectURL/외부 미리보기
+            <img src={previewSrc} alt="" className="h-full w-full object-contain" />
+          ) : value ? (
+            <span className="text-text-faint text-[10px]">업로드됨</span>
+          ) : (
+            <span className="text-text-faint text-[10px]">없음</span>
+          )}
+        </div>
+        <label className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs transition">
+          <input type="file" accept="image/*" hidden onChange={onFile} disabled={busy} />
+          {busy ? "업로드 중…" : "이미지 업로드"}
+        </label>
+        {value ? (
+          <button type="button" onClick={() => { onChange(""); setPreview(null); }} className="text-text-faint hover:text-danger text-xs">
+            제거
+          </button>
+        ) : null}
+      </div>
+      {err ? <p className="text-danger text-xs">{err}</p> : null}
+    </div>
+  );
+}
+
+export function PopupsManager({ items }: { items: AdminPopup[] }) {
+  const [editing, setEditing] = useState<AdminPopup | null>(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const [formKey, setFormKey] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const [state, action] = useActionState<NoticePopupActionState, FormData>(
+    async (prev, formData) => {
+      const run = editing ? updateNoticePopup : createNoticePopup;
+      const res = await run(prev, formData);
+      if (res?.ok) {
+        setEditing(null);
+        setImageUrl("");
+        setFormKey((k) => k + 1);
+      }
+      return res;
+    },
+    undefined,
+  );
+
+  const startNew = () => { setEditing(null); setImageUrl(""); setFormKey((k) => k + 1); };
+  const startEdit = (p: AdminPopup) => { setEditing(p); setImageUrl(p.imageUrl ?? ""); setFormKey((k) => k + 1); };
+  const e = editing;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      {/* 작성/수정 폼 */}
+      <section className="bg-card border-line shadow-card rounded-md border p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-foreground text-sm font-semibold">{e ? "팝업 수정" : "새 팝업 공지"}</h2>
+          {e ? (
+            <Button type="button" variant="ghost" size="sm" onClick={startNew}>
+              새로 작성
+            </Button>
+          ) : null}
+        </div>
+
+        <form key={formKey} ref={formRef} action={action} className="space-y-3">
+          {e ? <input type="hidden" name="id" value={e.id} /> : null}
+
+          <div className="flex flex-col gap-1.5">
+            <span className={LABEL}>제목 *</span>
+            <input name="title" required defaultValue={e?.title ?? ""} placeholder="예: 여름방학 특강 안내" className={INPUT} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className={LABEL}>본문</span>
+            <textarea name="body" rows={3} defaultValue={e?.body ?? ""} placeholder="공지 내용 (이미지만 쓰면 비워도 됩니다)" className={INPUT} />
+          </div>
+
+          <PopupImageField value={imageUrl} onChange={setImageUrl} />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>링크 URL</span>
+              <input name="linkUrl" type="url" defaultValue={e?.linkUrl ?? ""} placeholder="https://…" className={INPUT} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>링크 버튼 라벨</span>
+              <input name="linkLabel" defaultValue={e?.linkLabel ?? ""} placeholder="자세히 보기" className={INPUT} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>대상</span>
+              <select name="audience" defaultValue={e?.audience ?? "all"} className={INPUT}>
+                {POPUP_AUDIENCES.map((a) => (
+                  <option key={a} value={a}>{AUDIENCE_LABEL[a as PopupAudience]}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>위치</span>
+              <select name="position" defaultValue={e?.position ?? "cascade"} className={INPUT}>
+                {POPUP_POSITIONS.map((p) => (
+                  <option key={p} value={p}>{POSITION_LABEL[p as PopupPosition]}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>폭 (px, 280–720)</span>
+              <input name="width" type="number" min={280} max={720} defaultValue={e?.width ?? 380} className={INPUT} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>우선순위 (클수록 먼저)</span>
+              <input name="priority" type="number" min={0} max={999} defaultValue={e?.priority ?? 0} className={INPUT} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>노출 시작 (선택)</span>
+              <input name="startsAt" type="datetime-local" defaultValue={toLocalInput(e?.startsAt ?? null)} className={INPUT} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={LABEL}>노출 종료 (선택)</span>
+              <input name="endsAt" type="datetime-local" defaultValue={toLocalInput(e?.endsAt ?? null)} className={INPUT} />
+            </div>
+          </div>
+
+          <label className="text-foreground flex items-center gap-2 text-sm">
+            <input type="checkbox" name="isActive" defaultChecked={e ? e.isActive : true} />
+            노출 활성화 (체크 해제 시 표시 안 함)
+          </label>
+
+          {state?.error ? <p className="text-danger text-sm">{state.error}</p> : null}
+          <div className="flex justify-end">
+            <SubmitBtn label={e ? "수정 저장" : "팝업 생성"} />
+          </div>
+        </form>
+      </section>
+
+      {/* 목록 */}
+      <section className="bg-card border-line shadow-card rounded-md border p-5">
+        <p className="micro mb-3">등록된 팝업 ({items.length})</p>
+        {items.length === 0 ? (
+          <p className="text-text-faint py-6 text-center text-sm">아직 팝업 공지가 없습니다</p>
+        ) : (
+          <ul className="divide-line divide-y">
+            {items.map((p) => (
+              <li key={p.id} className="flex items-start justify-between gap-3 py-3">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  {p.imageSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed/외부 썸네일
+                    <img src={p.imageSrc} alt="" className="border-line h-10 w-14 shrink-0 rounded border object-cover" />
+                  ) : null}
+                  <div className="min-w-0">
+                    <p className="text-foreground truncate text-[13px] font-semibold">{p.title}</p>
+                    <p className="text-text-faint mt-0.5 text-[11px]">
+                      {AUDIENCE_LABEL[p.audience as PopupAudience] ?? p.audience} · {POSITION_LABEL[p.position as PopupPosition] ?? p.position} · 우선 {p.priority}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2.5 pt-0.5">
+                  <ToggleForm id={p.id} isActive={p.isActive} />
+                  <button type="button" onClick={() => startEdit(p)} aria-label="수정" className="text-text-dim hover:text-foreground inline-flex items-center transition">
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <DeleteForm id={p.id} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

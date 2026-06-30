@@ -55,7 +55,8 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "수납·청구", href: "/owner?tab=billing" },
     { label: "알림·약관", href: "/owner?tab=notifications" },
     { label: "역할·권한", href: "/owner?tab=permissions" },
-    // 관리 그룹(구 /admin 흡수) — 데이터 정리(고아+중복 통합)·감사·연동.
+    // 관리 그룹(구 /admin 흡수) — 팝업 공지·데이터 정리(고아+중복 통합)·감사·연동.
+    { label: "팝업 공지", href: "/owner?tab=popups" },
     { label: "데이터 정리", href: "/owner?tab=data" },
     { label: "감사로그", href: "/owner?tab=audit" },
     { label: "연동", href: "/owner?tab=sheets" },

@@ -38,9 +38,10 @@ pnpm db:seed
 
 ## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-25, +makeedu 0057a·0058a·종강 0059a 적용 2026-06-29)
 
-공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha `0001a`~`0059a` 전부 적용 완료**. `pnpm db:alphas`로
+공유 Supabase(데모 테넌트)에는 **번호본 0000~0027 + alpha `0001a`~`0060a` 전부 적용 완료**. `pnpm db:alphas`로
 전 alpha를 멱등 일괄 적용·재실행 수렴 확인(`0019a`는 dropped `scenarios` 가드로 no-op). `0057a`(makeedu 외부키 5컬럼+부분유니크)·
-`0058a`(`makeedu_sync_state`+RLS)·`0059a`(`classes.closed_at` 종강일)는 2026-06-29 dev 적용. 직접 조회로도 확인:
+`0058a`(`makeedu_sync_state`+RLS)·`0059a`(`classes.closed_at` 종강일)는 2026-06-29 dev 적용. `0060a`(`notice_popups`+RLS, 공지 팝업)는
+2026-06-30 dev 적용. 직접 조회로도 확인:
 
 - `pg_trgm` 확장 **설치됨**, `0024a`의 trigram GIN 인덱스 **11개 전부 존재**
   (students 5 · classes 2 · student_consultations 1 · enrollment_consultations 3).
@@ -117,6 +118,7 @@ pnpm db:seed
 | `0057a_makeedu_sync` | **makeedu 동기화 외부키 5컬럼**(`students.makeedu_id`·`classes.makeedu_lesson_id`·`enrollment_consultations.makeedu_id`·`student_consultations.makeedu_id`·`textbook_catalog.makeedu_id`, 전부 nullable) + 부분 유니크 `(tenant_id, col) WHERE col IS NOT NULL` 5개. makeedu 고유No↔eywa 행 매칭키. invoices=자연키(tenant,student,period)·enrollments=자연키(student,class) 재사용이라 컬럼 없음. ⚠️ `students.makeedu_id`는 ijw `student_code`와 분리. |
 | `0058a_makeedu_sync_state` | **`makeedu_sync_state`(tenant_id·domain → synced_at·row_count·status·error, PK(tenant,domain)) + RLS select(`tenant_id=auth_tenant_id()`)** — 도메인별 마지막 동기화 시각 단일소스. 임포터가 성공 시 `recordSync`로 기록 → `MakeeduSyncBadge`("동기화 N분 전")가 화면 헤더에 표시. |
 | `0059a_class_closed_at` | **`classes.closed_at` date(nullable)** — 종강(운영 종료일). 폐지(`is_active=false`, 전체 숨김)와 별개로, 종강 반은 `is_active=true`를 유지하고 타임머신에서 `closed_at` 이전 주엔 표시(수강이력)·이후 주·현재엔 숨김. 시간표 쿼리(`fetchSlots`/`getTodaySchedule`/엑셀)가 `closed_at` + `valid_from≤주끝` 필터. |
+| `0060a_notice_popups` | **`notice_popups` 공지 팝업 테이블 + RLS 격리 + index** — 셸 진입 시 창처럼 뜨는 배너형 공지("팝업광고" 패턴). title·body·image_url·link_url/label·audience(announcement_audience 재사용)·width·position·priority·is_active·starts_at/ends_at·author_id. announcements(대시보드 카드)와 별개. 표시 dismiss("7일/다시 보지 않기")는 DB 아닌 브라우저 localStorage(기기 단위). 표시 조회=`getActivePopups`(tenantId별 unstable_cache), 작성=owner "팝업 공지" 면. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

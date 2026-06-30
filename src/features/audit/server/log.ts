@@ -13,6 +13,8 @@ export const AUDIT_ACTIONS = {
   payroll_upsert: "급여 정산",
   withdrawal_update: "퇴원 사유",
   owner_settings_update: "학원 설정 변경",
+  notice_popup_create: "팝업 공지 생성",
+  notice_popup_delete: "팝업 공지 삭제",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

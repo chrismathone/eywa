@@ -10,6 +10,7 @@ import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { AuditFace } from "./_components/audit-face";
 import { SheetsFace } from "./_components/sheets-face";
+import { PopupsFace } from "./_components/popups-face";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ type OwnerTab =
   | "billing"
   | "notifications"
   | "permissions"
+  | "popups"
   | "data"
   | "audit"
   | "sheets";
@@ -30,6 +32,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   billing: "수납·청구",
   notifications: "알림·약관",
   permissions: "역할·권한",
+  popups: "팝업 공지",
   data: "데이터 정리",
   audit: "감사로그",
   sheets: "연동",
@@ -41,6 +44,7 @@ const VALID_TABS: OwnerTab[] = [
   "billing",
   "notifications",
   "permissions",
+  "popups",
   "data",
   "audit",
   "sheets",
@@ -59,6 +63,7 @@ const FACES: Face[] = [
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing", group: "설정" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
+  { key: "popups", label: TAB_LABEL.popups, href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
   { key: "audit", label: TAB_LABEL.audit, href: "/owner?tab=audit", group: "관리" },
   { key: "sheets", label: TAB_LABEL.sheets, href: "/owner?tab=sheets", group: "관리" },
@@ -110,6 +115,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "permissions" ? <PermissionsSection initial={settings.permissions} /> : null}
+      {tab === "popups" ? <PopupsFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">
           <DataFace />

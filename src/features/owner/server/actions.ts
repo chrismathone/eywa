@@ -26,7 +26,8 @@ const SECTION_LABELS: Record<SectionKey, string> = {
  */
 // 로고/직인 이미지 업로드 티켓 — master 전용(saveOwnerSection과 동일 게이트). 반환 path를 logoUrl/sealUrl에 저장.
 export type IssueBrandingTicketState = { ticket?: UploadTicket; error?: string } | undefined;
-const BRANDING_SLOTS = new Set(["logo", "seal"]);
+// logo/seal=인쇄물 브랜딩. popup=공지 팝업 이미지(같은 branding 버킷·경로·권한 재사용 — master 전용 이미지).
+const BRANDING_SLOTS = new Set(["logo", "seal", "popup"]);
 export async function issueBrandingUploadTicket(
   _prev: IssueBrandingTicketState,
   formData: FormData,

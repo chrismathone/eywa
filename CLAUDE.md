@@ -329,6 +329,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 공지 팝업(notice_popups) — 셸 진입 시 뜨는 창형 공지("팝업광고" 패턴) + 7일/다시 보지 않기 (2026-06-30) — ✅ 4게이트 그린 + 라이브 E2E
+사용자 요청: 일반 사이트 팝업광고처럼 **셸 진입 시 창처럼 여러 개 뜨고, "7일간/다시 보지 않기" 체크로 안 보이게**. 사용자 선택 = **전용 테이블 신설**(이미지·링크·노출기간·위치·크기·우선순위). announcements(대시보드 카드)와는 **별개**(이건 진입 시 강제 1회 노출 배너형).
+- **데이터**(`0060a` `notice_popups`, dev적용·RLS 격리): title·body·image_url·link_url/label·audience(announcement_audience 재사용)·width·position(cascade/center/4모서리)·priority·is_active·starts_at/ends_at·author_id. 표시 dismiss는 **DB 아닌 브라우저 localStorage**(일반 팝업광고와 동일 = 기기 단위).
+- **표시**([notice-popup-layer.tsx](src/features/notices/components/notice-popup-layer.tsx)+[notice-popup-card.tsx](src/features/notices/components/notice-popup-card.tsx)): 셸 레이아웃이 진입 시 `getActivePopups(role,tenantId)` → 카드를 fixed 레이어(**pointer-events-none**, 카드만 auto=배경 클릭 통과)에 **그리드(flex-wrap) 타일링**. ⚠️ **겹치지 않음**(사용자 요청): position 앵커(중앙/4모서리, cascade=중앙 흡수)별로 그룹 → 같은 앵커 팝업은 flex-wrap으로 나란히(여러 개여도 비겹침 — flex가 구조적 보장, 절대배치·드래그 없음). 카드=이미지/본문/링크 버튼·footer 체크박스(`7일간`/`다시 보지 않기`)+닫기. **임베드(iframe 창)엔 미마운트**(최상위 프레임만 1회) — 멀티윈도우 N배 방지.
+- **dismiss 영속**([popup-store.ts](src/features/notices/popup-store.ts), zustand persist `eywa-notice-dismiss`, 모듈 로드 rehydrate #65): `{id:{until,v}}`. `7일`=now+7d·`다시`=forever. ⭐ **`v`=updatedAt 버전** — 팝업을 **수정하면 옛 dismiss 무시하고 재노출**(낡은 광고를 새로 고치면 다시 보임).
+- **표시 캐시**(B6): `getActivePopups`는 tenantId별 `unstable_cache`(admin client+신뢰키, 이미지 signed URL resolve 1회, TTL 60s) — 매 네비마다 DB/GCS 호출 방지. CRUD가 `updateTag`로 즉시 무효화. audience↔역할 매칭은 캐시 밖(순수 [audience.ts](src/features/notices/audience.ts), Vitest).
+- **작성 UI**: owner "관리" 면에 **팝업 공지** 탭 신설([popups-manager.tsx](<src/app/(shell)/owner/_components/popups-manager.tsx>)) — 생성/수정/노출토글/삭제 + 이미지 업로드(branding 슬롯 `popup` 재사용, master 전용). 액션 게이트=`canManageStaff`.
+- 검증: typecheck0/lint0/**test531**(notices 8: audience 매칭·isHidden) + 라이브 E2E(PSS): 생성→대시보드 노출(체크박스·닫기)·배경 클릭 통과·`7일간` dismiss→네비 후 미노출(localStorage +7d)·**수정→재노출**(v 무효화)·삭제 + **그리드 검증: 팝업 3개가 한 줄에 균등 타일(380폭+16gap)·겹침 0·중앙 정렬**. ⚠️ 이미지 업로드는 코드 동치(branding 파이프라인)라 메커니즘만, 실파일 UI 미검.
+
 ### UX 묶음 — 창 새로고침·타이틀바 재배치 / 등록상담 녹음 통합 / 상담내용 표시 / 로컬 초안 자동저장 (2026-06-30) — ✅ 게이트 그린
 사용자 연속 요청 묶음. typecheck0/lint0 + 단위테스트(window-store 13·form-draft 4).
 - **창별 새로고침 + 타이틀바 좌/우/중앙 재배치**([floating-window.tsx](src/components/workspace/floating-window.tsx)·[route-window.tsx](src/components/workspace/route-window.tsx)·[window-store.ts](src/components/workspace/window-store.ts)):

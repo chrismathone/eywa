@@ -9,6 +9,8 @@ import { UserMenu } from "@/components/user-menu";
 import { TeacherMenu } from "@/components/teacher-menu";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { getActivePopups } from "@/features/notices/server/queries";
+import { NoticePopupLayer } from "@/features/notices/components/notice-popup-layer";
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { resolveMatrix } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
@@ -40,6 +42,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </EmbedProvider>
     );
   }
+
+  // 공지 팝업(셸 진입 시 창처럼 노출) — 임베드(iframe 창)엔 위에서 이미 return했으므로 최상위 프레임에서만
+  // 1회 fetch(테넌트별 unstable_cache·역할 audience 필터). 대부분 0건이라 비용 거의 없음.
+  const popups = await getActivePopups(user.systemRole, user.tenantId);
 
   const brand = settings.profile.logoText || "EYWA";
   const academyLine =
@@ -79,6 +85,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             {children}
           </OperationsProvider>
         </main>
+        <NoticePopupLayer popups={popups} />
       </div>
     );
   }
@@ -126,6 +133,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} />
+
+      {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
+      <NoticePopupLayer popups={popups} />
     </div>
   );
 }

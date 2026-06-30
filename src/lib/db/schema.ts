@@ -1166,6 +1166,34 @@ export const announcements = pgTable(
   (t) => [index("announcements_tenant_pinned_created_idx").on(t.tenantId, t.pinned, t.createdAt)],
 );
 
+// === notice_popups (셸 진입 시 뜨는 창형 공지 — "팝업광고" 패턴, 0060a) ===
+// announcements(대시보드 카드)와 별개: 노출기간·이미지·링크·위치·크기·우선순위를 가진 배너형.
+export const noticePopups = pgTable(
+  "notice_popups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body"),
+    imageUrl: text("image_url"),
+    linkUrl: text("link_url"),
+    linkLabel: text("link_label"),
+    audience: announcementAudienceEnum("audience").notNull().default("all"),
+    width: integer("width").notNull().default(380),
+    position: text("position").notNull().default("cascade"),
+    priority: integer("priority").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("notice_popups_tenant_active_idx").on(t.tenantId, t.isActive, t.priority)],
+);
+
 // === super_admins (SaaS owner layer — academy 권한과 직교) ===
 // PK = auth.users.id (1:1 sync). tenant 컬럼 없음 — 모든 tenant 위에 존재.
 // 한 사람이 academy master + super_admin 둘 다 가능 (chrismathone 케이스).
@@ -1397,6 +1425,8 @@ export type Invoice = typeof invoices.$inferSelect;
 export type NewInvoice = typeof invoices.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
+export type NoticePopup = typeof noticePopups.$inferSelect;
+export type NewNoticePopup = typeof noticePopups.$inferInsert;
 export type StudentGrade = typeof studentGrades.$inferSelect;
 export type NewStudentGrade = typeof studentGrades.$inferInsert;
 export type StudentMemo = typeof studentMemos.$inferSelect;
