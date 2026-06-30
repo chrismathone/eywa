@@ -34,7 +34,7 @@ function statusFrom(v) {
   const data = JSON.parse(fs.readFileSync(file, "utf8"));
   const H = idx(data.headers);
   const ci = {
-    name: H("이름"),
+    name: H("원생명") >= 0 ? H("원생명") : H("이름"), // 재원생 목록=원생명, 예비/기타 목록=이름
     school: H("학교"),
     grade: H("학년"),
     gender: H("성별"),
@@ -43,6 +43,8 @@ function statusFrom(v) {
     parentName: H("보호자이름"),
     code: H("출결"),
     status: H("상태"),
+    birth: H("생년월일"),
+    enrolled: H("입학일"),
     uid: H("고유"), // 원생고유번호(있으면 안정 PK) — 없으면 -1
   };
 
@@ -61,6 +63,8 @@ function statusFrom(v) {
       parent_phone: ci.parentPhone >= 0 ? L.normPhone(r[ci.parentPhone]) : null,
       parent_name: ci.parentName >= 0 ? L.txt(r[ci.parentName]) : null,
       attendance_code: ci.code >= 0 ? L.txt(r[ci.code]) : null,
+      birth_date: ci.birth >= 0 ? L.parseDate(r[ci.birth]) : null,
+      enrolled_at: ci.enrolled >= 0 ? L.parseDate(r[ci.enrolled]) : null,
       status: ci.status >= 0 ? statusFrom(r[ci.status]) : "enrolled",
     });
   }
@@ -113,9 +117,9 @@ function statusFrom(v) {
       try {
         await sql`
           insert into students (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
-            student_phone, parent_phone, parent_name, status)
+            student_phone, parent_phone, parent_name, birth_date, enrolled_at, status)
           values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.gender}, ${r.attendance_code}, ${r.school}, ${r.grade},
-            ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.status})`;
+            ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.birth_date}, ${r.enrolled_at}, ${r.status})`;
         inserted++;
       } catch (e) {
         if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) { skippedDup++; continue; }
