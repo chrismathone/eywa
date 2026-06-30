@@ -36,6 +36,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const snapPreview = useWindowStore((s) => s.snapPreview);
   const dragLayout = useWindowStore((s) => s.dragLayout);
   const spotlight = useWindowStore((s) => s.spotlight);
+  const exitSpotlight = useWindowStore((s) => s.exitSpotlight);
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
@@ -146,6 +147,15 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       className="pointer-events-none fixed z-40"
       style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
+      {/* 앨범(스포트라이트) 딤 — 뒤 배경(메인 프레임)을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).
+          빈 딤 영역 클릭 = 앨범 나가기(클릭 아웃). 캔버스는 pointer-events-none이라 이 막만 클릭 흡수. */}
+      {spotlight ? (
+        <div
+          className="animate-in fade-in-0 pointer-events-auto absolute inset-0 z-0 bg-background/70 backdrop-blur-[2px] duration-200"
+          onClick={() => exitSpotlight()}
+          aria-hidden="true"
+        />
+      ) : null}
       {layoutGhosts
         ? layoutGhosts.map((r, i) => (
             <div

@@ -2105,12 +2105,16 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 - **대안(안전한 기존 패턴)**: 부모를 **조건부 마운트(`{open && <Dialog/>}`)** 로 두면 닫힐 때 언마운트→`useActionState` 리셋이라 가드 없이도 안전(eywa
   다이얼로그 대다수가 이쪽 — 시험/청구서/지출/강의실). 새 다이얼로그는 둘 중 하나를 **명시적으로** 택할 것. always-mounted를 쓰면 id-키 가드가 필수다.
 
-### 68. 스포트라이트(앨범)모드 = 다중 창 타일 + 배경 비표시 (2026-06-30)
+### 68. 스포트라이트(앨범)모드 = 다중 창 타일 + 배경 딤 + 배경 카드를 앨범 안으로 (2026-06-30)
 사용자 요청 2건: ① 앨범모드에서 배경탭이 실제 배경과 어긋나고, 포커스 창이 배경을 덮어 **배경이 의미 없음** ② 공간이 여유로우니
 **2~3개 창을 상단에 올려** 다중 스포트라이트. → 스포트라이트 모델을 "포커스 1개만 큼"에서 **`spotlightRaised: string[]`(최대 3, 상단 가로 타일)** 로 일반화.
 - **store**([window-store.ts](src/components/workspace/window-store.ts)): `spotlightRaised` 상태 + `raiseToSpotlight`(스트립 카드→상단, 3 초과 시 FIFO)·`lowerFromSpotlight`(상단→스트립, 마지막 1개는 유지). enter/exit/backgroundToWindow가 세팅, **close/minimize가 raised에서 제거**(비면 스포트라이트 해제 — 상단 빈 화면 방지).
 - **타일**([window-geometry.ts](src/components/workspace/window-geometry.ts) `spotlightTile(bounds,index,count)`): count<=1=중앙 큰 박스(spotlightTop), 2~3=상단 가로 균등 분할. [floating-window](src/components/workspace/floating-window.tsx)는 `raisedIndex>=0`이면 타일 rect·`spotlightRaised.length>1`이면 타이틀바 "내리기(↓)" 버튼.
-- **배경 제거**: 앨범모드에선 [background-tabs](src/components/workspace/background-tabs.tsx)가 `spotlight`면 `return null`(헤더 배경탭 숨김), [spotlight-strip](src/components/workspace/spotlight-strip.tsx)도 **배경 카드("교체하기")를 빼고** 창만 — 클릭=raiseToSpotlight. 배경은 가려져 의미 없으므로 앨범모드 어디에도 안 보인다.
+- **배경 처리(2026-06-30 2차 수정)**: 스포트라이트 창(spotlightTop 60%)이 캔버스를 다 안 덮어 **배경(메인 프레임)이 뒤에
+  비쳐** 산만했다(사용자 제보). → ① [workspace-canvas](src/components/workspace/workspace-canvas.tsx)에 `spotlight`면 **딤 막**(`bg-background/70 backdrop-blur`,
+  창들 뒤 z-0, 빈 영역 클릭=나가기)으로 배경을 흐림. ② 헤더 배경탭은 숨기되([background-tabs](src/components/workspace/background-tabs.tsx) `spotlight→null`),
+  **배경을 [spotlight-strip](src/components/workspace/spotlight-strip.tsx)의 카드("배경")로 가져온다** — 클릭=swapFocusedWithBackground(그 배경을 위로). "배경탭을 앨범 안으로".
+  (⚠️ 1차엔 "배경 제거"였으나, 배경이 실제로 가려지지 않아 딤+스트립 카드로 방향 전환.)
 
 ---
 

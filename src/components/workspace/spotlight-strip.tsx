@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, type LucideIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Layers, X, type LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { useWindowStore, instanceLabel } from "./window-store";
@@ -34,6 +35,7 @@ type StripItem = {
   title: string;
   subtitle?: string;
   Icon: LucideIcon | null; // null → 학생 요약(seed)
+  isBackground: boolean; // 배경 라우트 카드 — "배경" 표식 + 클릭 시 그 배경을 위로 올림(swap)
   onClick: () => void;
 };
 
@@ -67,14 +69,16 @@ function FanCard({
       onClick={item.onClick}
       onMouseEnter={() => setHovered(index)}
       onMouseLeave={() => setHovered(null)}
-      title={`${item.title} — 클릭: 위로 올리기`}
+      title={item.isBackground ? `${item.title} — 클릭: 이 배경을 위로` : `${item.title} — 클릭: 위로 올리기`}
       style={{
         marginLeft: index === 0 ? 0 : -OVERLAP,
         zIndex: isHot ? 100 : index + 1,
         transform,
         transformOrigin: ORIGIN,
       }}
-      className="group/card border-line bg-card shadow-card relative h-[132px] w-[176px] shrink-0 rounded-l-md rounded-r-xl border transition-transform duration-200 ease-out will-change-transform"
+      className={`group/card border-line shadow-card relative h-[132px] w-[176px] shrink-0 rounded-l-md rounded-r-xl border transition-transform duration-200 ease-out will-change-transform ${
+        item.isBackground ? "bg-bg-soft" : "bg-card"
+      }`}
     >
       {/* 책등(spine) — 왼쪽 색 띠 */}
       <span
@@ -87,6 +91,12 @@ function FanCard({
         style={{ background: "repeating-linear-gradient(90deg, rgba(13,17,16,0.06) 0 1px, transparent 1px 3px)" }}
         aria-hidden
       />
+      {/* 배경 카드 표식 */}
+      {item.isBackground ? (
+        <span className="text-text-faint absolute top-2 right-3 flex items-center gap-1 font-mono text-[9px] tracking-wider uppercase">
+          <Layers size={10} /> 배경
+        </span>
+      ) : null}
       <span className="absolute inset-0 flex flex-col px-3.5 py-3 pl-5 text-left">
         <span className={`flex size-9 items-center justify-center rounded-lg ${COVERS[index % COVERS.length]}`}>
           {Icon ? <Icon size={18} strokeWidth={1.9} /> : <EyIcon name="seed" size={17} />}
@@ -94,7 +104,7 @@ function FanCard({
         <span className="mt-auto block min-w-0">
           <span className="text-foreground block truncate text-[12.5px] font-bold">{item.title}</span>
           <span className="text-text-faint block truncate text-[10px]">
-            {item.subtitle ?? "창"}
+            {item.isBackground ? "배경 — 위로" : (item.subtitle ?? "창")}
           </span>
         </span>
       </span>
@@ -140,16 +150,20 @@ function PageStack({
 }
 
 /**
- * 스포트라이트(앨범) 하단 커버 스트립 — 상단에 안 올라온 창들을 "책 페이지"처럼 부채꼴로 겹쳐 세운다.
- * 카드 클릭 = 그 창을 상단으로 올림(raiseToSpotlight, 최대 3개 = 다중 스포트라이트). 너무 많으면 "+N" 축약.
- * 좌측 나가기 버튼·Esc로 해제. (배경은 앨범모드에서 가려져 의미가 없으므로 스트립에 넣지 않는다.)
+ * 스포트라이트(앨범) 하단 커버 스트립 — 상단에 안 올라온 창 + 배경 라우트를 "책 페이지"처럼 부채꼴로 세운다.
+ * 창 카드 클릭 = 상단으로 올림(raiseToSpotlight, 최대 3 = 다중 스포트라이트). 배경 카드("배경") 클릭 = 그
+ * 배경을 위로(swapFocusedWithBackground). 너무 많으면 "+N" 축약. 좌측 나가기·Esc·딤 클릭으로 해제.
+ * (배경은 앨범 뒤에 딤으로 비치므로 헤더 배경탭 대신 여기 스트립으로 가져와 전환한다.)
  */
 export function SpotlightStrip() {
+  const router = useRouter();
   const spotlight = useWindowStore((s) => s.spotlight);
   const windows = useWindowStore((s) => s.windows);
   const order = useWindowStore((s) => s.order);
+  const background = useWindowStore((s) => s.background);
   const spotlightRaised = useWindowStore((s) => s.spotlightRaised);
   const raiseToSpotlight = useWindowStore((s) => s.raiseToSpotlight);
+  const swapFocusedWithBackground = useWindowStore((s) => s.swapFocusedWithBackground);
   const exitSpotlight = useWindowStore((s) => s.exitSpotlight);
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -164,9 +178,17 @@ export function SpotlightStrip() {
 
   if (!spotlight) return null;
 
-  // 상단에 안 올라온 창 = 스트립 페이지(최근부터). 클릭하면 상단으로 올린다(최대 3 = 다중 스포트라이트).
-  // ⚠️ 배경은 앨범모드에서 포커스 창에 완전히 가려져 의미가 없으므로 스트립에 넣지 않는다(배경 카드·교체 제거).
-  const items: StripItem[] = order
+  // 배경 카드 클릭 = 그 배경을 위로 올림(포커스 창은 배경으로 내려감). 새 활성 배경으로 메인 프레임 이동.
+  function swapBg(bgId: string) {
+    swapFocusedWithBackground(bgId);
+    const st = useWindowStore.getState();
+    const active = st.background.find((b) => b.id === st.activeBackgroundId);
+    if (active?.href) router.push(active.href);
+  }
+
+  // 스트립 = 상단에 안 올라온 창(클릭=위로 올림, 최대 3 다중 스포트라이트) + **배경 라우트 카드**(클릭=그
+  // 배경을 위로). 배경은 앨범모드에서도 뒤에 비치므로(딤 처리) "배경탭"을 앨범 안으로 가져와 여기서 전환한다.
+  const windowItems: StripItem[] = order
     .filter((id) => !spotlightRaised.includes(id) && !windows[id]?.minimized)
     .map((id) => windows[id])
     .reverse()
@@ -178,8 +200,17 @@ export function SpotlightStrip() {
         w.kind === "route"
           ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]] ?? null)
           : null,
+      isBackground: false,
       onClick: () => raiseToSpotlight(w.id),
     }));
+  const bgItems: StripItem[] = background.map((b) => ({
+    key: `bg:${b.id}`,
+    title: b.title,
+    Icon: ICON_BY_MENU[b.id] ?? ICON_BY_MENU[b.id.split("/")[0]] ?? null,
+    isBackground: true,
+    onClick: () => swapBg(b.id),
+  }));
+  const items = [...windowItems, ...bgItems];
 
   const overflow = items.length > MAX_VISIBLE;
   const visible = overflow ? items.slice(0, MAX_VISIBLE - 1) : items;
