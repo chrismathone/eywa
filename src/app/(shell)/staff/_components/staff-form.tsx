@@ -77,6 +77,16 @@ export function StaffForm({
   };
 
   const [bgColor, setBgColor] = useState(v.bgColor ?? "");
+  // 직급 입력(uncontrolled) — 빠른 선택 칩이 값을 채울 수 있게 ref. 칩 클릭 시 input 이벤트를
+  // 발화해 초안 자동저장·동시편집 가드가 변경을 포착하게 한다(setter 직접 호출은 이벤트 미발화).
+  const jobTitleRef = useRef<HTMLInputElement>(null);
+  const pickJobTitle = (t: string) => {
+    const el = jobTitleRef.current;
+    if (!el) return;
+    el.value = t;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.focus();
+  };
 
   // 로컬 초안 자동저장 — 입력 중 보관, 다시 열면 복구. ⚠️ 임시비번(password)은 보안상 IDB 캡처 제외,
   // 색(bgColor)은 hidden input으로 값 캡처되나 스와치 동기화 위해 onRestore→setBgColor.
@@ -171,17 +181,27 @@ export function StaffForm({
           <input
             id="jobTitle"
             name="jobTitle"
-            list="jobTitleOptions"
+            ref={jobTitleRef}
             defaultValue={v.jobTitle ?? ""}
-            placeholder="예: 강사 / 실장 (학원 설정의 직급 또는 직접 입력)"
+            placeholder="직접 입력하거나 아래에서 선택"
             className={inputClass}
           />
+          {/* 학원 설정(operations.jobTitles)의 직급을 빠른 선택 칩으로 — 항상 노출(현재 값과 무관).
+              datalist(▼)는 크롬이 입력값으로 제안을 필터링해 "부장" 같은 설정 밖 값이 차 있으면 빈
+              드롭다운처럼 보였다(#오해). 칩은 항상 보이고, 클릭하면 채워지며, 직접 입력도 그대로. */}
           {jobTitleOptions.length > 0 ? (
-            <datalist id="jobTitleOptions">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {jobTitleOptions.map((t) => (
-                <option key={t} value={t} />
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => pickJobTitle(t)}
+                  className="border-line text-text-dim hover:border-primary hover:text-primary rounded border px-2 py-0.5 text-xs transition"
+                >
+                  {t}
+                </button>
               ))}
-            </datalist>
+            </div>
           ) : null}
         </Field>
       </div>

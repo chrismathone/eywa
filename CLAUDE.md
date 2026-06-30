@@ -1294,7 +1294,8 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   **모션 OFF(`usePrefs.animations`)면 트랜지션 전부 0s**(즉시). 드래그 중엔 1:1 추종이라 트랜지션 off.
 - 5그룹: 홈 / 수업 / 학생 / 운영 / 지원 + 01~05 인덱스 (mono uppercase)
 - 활성 메뉴: primary bg + white text + shadow-primary-glow
-- 푸터: `김수진 / 원장 · chrismathone@gmail.com`
+- 푸터: 로그인 사용자 **이름 + 호칭**(`display_name` 윗줄 / `job_title` 아랫줄, 빈 호칭은 `ROLE_LABEL` 폴백). 이메일은
+  떼고 UserMenu 드롭다운에만 보존(2026-06-30 — "누가 로그인했는지 한눈에"). 미니셸(강사/학생) UserMenu도 동일.
 - **Topbar 64px**: breadcrumb (mono 11px primary) + 19px 800 페이지 제목 + 검색바 280px + 알림 + 사용자
 
 ### shadcn base-nova (Base UI) 유지 사항
@@ -1319,6 +1320,12 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   (`searchable`/`ariaLabel` prop은 호환용, 무시).
 - 폼 필드는 `SearchableSelect`에 `name`을 주면 hidden input으로 값 제출.
 - **native `<select>` 신규 금지** — OS 팝업은 디자인 스크롤바 미적용·스타일 불일치.
+- **자유입력이 필요한 필드(직급 등)는 datalist(`<input list=…>`)도 금지** (2026-06-30). datalist는 ① `list` 속성만
+  있으면 **제안이 비어도 브라우저가 ▼를 그려** "고를 게 없는 빈 드롭다운"처럼 보이고, ② 크롬/웨일이 **현재 입력값으로
+  제안을 필터링**해 목록 밖 값(예 "부장")이 차 있으면 ▼를 눌러도 아무것도 안 떠 혼란을 준다. `SearchableSelect`는
+  목록 전용이라 자유입력을 못 담는다. → **plain `<input>` + 설정값(`operations.*`) "빠른 선택 칩"**(입력칸 아래 항상
+  노출, 클릭=채움, 직접 타이핑 그대로). 칩 클릭은 `el.value=…` 후 `input` 이벤트를 dispatch해 초안 자동저장·동시편집
+  가드가 변경을 포착하게 한다. 레퍼런스: [staff-form.tsx](<src/app/(shell)/staff/_components/staff-form.tsx>) 직급 필드.
 
 ### 비밀번호 입력 규약 (⚠️ 마스킹 비밀번호 필드 기본값, 2026-06-30)
 사용자가 **가려지는(`type="password"`) 비밀번호를 칠 때 "잘 쳤는지 확인할 눈 토글"** 이 필요하다(로그인이 대표). 마스킹
