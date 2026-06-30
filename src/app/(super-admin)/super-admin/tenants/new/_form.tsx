@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { createTenantWithMaster, type CreateTenantState } from "@/features/super-admin/server/actions";
+import { PasswordInput } from "@/components/ui/password-input";
 
 const initial: CreateTenantState = undefined;
 
@@ -75,15 +76,26 @@ function Field({
   return (
     <label className="block">
       <span className="text-foreground text-[12px] font-semibold">{label}</span>
-      <input
-        type={type}
-        name={name}
-        placeholder={placeholder}
-        defaultValue={defaultValue}
-        className={`border-line text-foreground mt-1 block w-full rounded-md border bg-transparent px-3 py-2 text-[13px] ${
-          error ? "border-danger" : ""
-        }`}
-      />
+      {type === "password" ? (
+        <PasswordInput
+          name={name}
+          placeholder={placeholder}
+          defaultValue={defaultValue}
+          className={`border-line text-foreground mt-1 block h-auto w-full rounded-md border bg-transparent px-3 py-2 text-[13px] ${
+            error ? "border-danger" : ""
+          }`}
+        />
+      ) : (
+        <input
+          type={type}
+          name={name}
+          placeholder={placeholder}
+          defaultValue={defaultValue}
+          className={`border-line text-foreground mt-1 block w-full rounded-md border bg-transparent px-3 py-2 text-[13px] ${
+            error ? "border-danger" : ""
+          }`}
+        />
+      )}
       {error ? (
         <p className="text-danger mt-1 text-[11px]">{error}</p>
       ) : hint ? (

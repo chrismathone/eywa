@@ -1304,6 +1304,14 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - 폼 필드는 `SearchableSelect`에 `name`을 주면 hidden input으로 값 제출.
 - **native `<select>` 신규 금지** — OS 팝업은 디자인 스크롤바 미적용·스타일 불일치.
 
+### 비밀번호 입력 규약 (⚠️ 마스킹 비밀번호 필드 기본값, 2026-06-30)
+사용자가 **가려지는(`type="password"`) 비밀번호를 칠 때 "잘 쳤는지 확인할 눈 토글"** 이 필요하다(로그인이 대표). 마스킹
+비밀번호 입력은 [`PasswordInput`](src/components/ui/password-input.tsx)으로 통일 — 공용 `<Input>` 기반(동일 룩) + 우측 눈
+아이콘으로 password↔text 토글. `type`은 내부에서 토글하므로 넘기지 말고, 나머지는 `<Input>`과 동일 props(`name`/`required`/`className` 등).
+- 적용: 로그인([login-form](<src/app/(auth)/login/login-form.tsx>))·학원발급 초기비번([super-admin tenants/new](<src/app/(super-admin)/super-admin/tenants/new/_form.tsx>)).
+- ⚠️ **이미 `type="text"`로 일부러 보이게 한 필드(직원 임시비번·계정 직접설정 = 원장이 직원에게 불러주는 용도)는 토글 불요** — 대상 아님.
+- 새 마스킹 비밀번호 칸은 raw `<input type="password">` 말고 `PasswordInput`을 쓸 것.
+
 ### 버튼 크기 — 헤더 액션은 공용 `<Button>` 기본 크기로 통일 (⚠️ 새 버튼 기본값, 2026-06-24)
 한 줄(페이지/상세 헤더의 액션 클러스터, 다이얼로그 푸터)에 들어가는 액션 버튼은 **크기가 제각각이면 안 된다**.
 증상: 1차 액션은 공용 `<Button>`(기본 `h-8 text-sm`)인데 옆의 2차 액션("통계 보기"·"엑셀 내보내기"·"월별 급여"
