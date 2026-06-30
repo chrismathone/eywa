@@ -329,6 +329,19 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### UX 묶음 — 창 새로고침·타이틀바 재배치 / 등록상담 녹음 통합 / 상담내용 표시 / 로컬 초안 자동저장 (2026-06-30) — ✅ 게이트 그린
+사용자 연속 요청 묶음. typecheck0/lint0 + 단위테스트(window-store 13·form-draft 4).
+- **창별 새로고침 + 타이틀바 좌/우/중앙 재배치**([floating-window.tsx](src/components/workspace/floating-window.tsx)·[route-window.tsx](src/components/workspace/route-window.tsx)·[window-store.ts](src/components/workspace/window-store.ts)):
+  전체 F5(셸·전 창 재실행)가 느려 **그 창 iframe만 reload** — `reloadNonce`/`reloadWindow`(store) + RouteWindow가 현재 URL reload(드릴인 보존, 스켈레톤 재노출), 녹음 중 잠금.
+  타이틀바 6컨트롤을 **좌(새로고침·복제·배경으로, 드릴인 시 ←) / 우(최소화·최대화·닫기)** 로 분리, 창 이름은 `absolute left-1/2`로 **바 정중앙 고정**(좌우 그룹 너비 무관, 드래그 통과).
+- **신규 등록상담 폼 통합**([enrollment/new/page.tsx](<src/app/(shell)/enrollment/new/page.tsx>)·[consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)): "수동 입력/녹음 업로드" 2탭 → **한 폼**.
+  전체 구조화 폼에 공용 녹음 위젯([audio-recorder-field.tsx](<src/app/(shell)/enrollment/_components/audio-recorder-field.tsx>), 라이브 마이크+업로드+IDB복구+창잠금) 추가(recording-form/mode-tabs 삭제).
+  `createEnrollmentConsultation`에 audioPath 분기(`createConsultationWithAudio`): 구조화 필드로 행 생성 + 음성 첨부 + AssemblyAI 전사 시작 → 웹훅 13섹션 AI + **buildFormPatch가 빈 필드만 보강(수기 입력 보존)**.
+- **상담 내용 표시**([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>)): 상세 '학부모 요구사항' → **'상담 내용'**(폼 필드명 일치) + **줄바꿈 보존(`whitespace-pre-wrap`)** + 길면 스크롤(`max-h-72 overflow-y-auto`).
+  좌(상담 기록)/우(AI 분석) **카드 줄맞춤** — 우측에 좌측과 동일 톤 'AI 분석' 제목행(✨) 추가해 카드 상단 정렬.
+- **로컬 초안 자동저장**(아래 디자인시스템 "로컬 초안 자동저장" 규약 신설): 긴 폼 입력 유실 방지 — 입력 중 IDB 자동보관 → 다시 열면 복구 배너 → 실제 저장 성공 시 삭제.
+  멀티에이전트 폼 전수 검토(11폼) 후 `apply` 4폼(등록상담·학생·직원·학생상담) 적용. SPECIAL 4폼(반·수강료계산기·공개접수·학원설정)은 동적행/배열/jsonb가 React state라 hidden JSON 직렬화+onRestore 필요 → 보류.
+
 ### makeedu→eywa 동기화 = ijw 베이스 복원 + makeedu additive 오버레이 (진행중) + 시간표 명단 요약 + 창 복원 버그픽스 (2026-06-29)
 인재원은 실운영을 **makeedu**(school.makeedu.co.kr)에서 한다. eywa를 실데이터로 돌리기 위한 단방향 동기화. 설계·진행은
 [[project_makeedu-eywa-sync]] + 계획 [`expressive-weaving-glacier.md`]. 범위 7개(학생·예비/등록상담·재원상담·반/수업·수강·수납인보이스·교재단가표).
@@ -1422,6 +1435,25 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   "모바일 peek 폴백 잔존"이라 적혀 있었으나 **실제로는 어디서도 import 안 되는 dead 컴포넌트**(미연결). 제거/재연결은 백로그([`docs/audit-log.md`](docs/audit-log.md)).
 - 한계: 배경(메인 프레임) 목록은 `router.refresh()`로 갱신되지만, 목록이 **별도 창**이면 그 창은 즉시
   갱신되지 않음(창 X 버튼 `closeAndRefresh`와 동일한 앱 전반 한계).
+
+### 로컬 초안 자동저장 — 길게 입력하는 폼은 입력 중 유실 방지 (⚠️ 긴 폼 기본값, 2026-06-30)
+"한참 입력하다 창을 닫거나 새로고침하면 통째로 날아가는" 긴 폼(등록상담·학생·직원·학생상담 등)은 **입력 중 로컬(IndexedDB)에
+자동 보관**하고 다시 열면 복구한다. "실제 저장"(서버 커밋)은 기존 그대로 — 초안은 유실 방지/이어쓰기용일 뿐 **서버에 안 보낸다**.
+- **인프라**: [`useFormDraft({ scope, formRef, enabled?, onRestore?, exclude?, ignoreForBanner? })`](src/components/forms/use-form-draft.ts)
+  (입력 700ms 디바운스 → IDB 저장, 다시 열면 `draftSavedAt` 세팅) + [`<DraftBanner savedAt onRestore onDiscard />`](src/components/forms/draft-banner.tsx)(공용 복구 배너)
+  + [`form-draft.ts`](src/lib/form-draft.ts)(`readFormValues`/`applyFormValues`/`hasMeaningfulValues` — **DOM 일괄 캡처/복원**). 녹음 IDB 복구와 같은 패턴, **별개 레이어**(둘 다 동작).
+- **적용 5단계**(레퍼런스 [consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)):
+  ① `const formRef = useRef<HTMLFormElement>(null)` + `<form ref={formRef}>` (동시편집 가드가 이미 formRef를 쓰면 **재사용**).
+  ② `const draft = useFormDraft({ scope: mode==="create" ? "x:new" : ` + "`x:${id}`" + ` })`. ③ 폼 첫 자식에 `<DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />`.
+  ④ **서버 저장 성공 시 `draft.clear()`**(B-2 nonce effect 안 / redirect-only 액션은 `<form onSubmit={()=>void draft.clear()}>` — redirect는 클라 네비라 IDB 삭제 완주).
+  ⑤ scope는 **폼마다 고유 접두**(등록상담 `consultation:*` ↔ 학생상담 `student-consultation:*` — 같으면 IDB 초안을 서로 덮어씀).
+- **⚠️ 캡처 규칙**: DOM의 **name 가진** input/select/textarea/checkbox만 캡처/복원된다. 그래서 ―
+  · **컨트롤드 React state**(과목점수 jsonb·반 색·SearchableSelect 등)는 자동복원 안 됨 → **hidden input(name)로 직렬화**돼 있어야 캡처되고, **`onRestore`로 setState rehydrate**(레퍼런스 subjectDetails 패턴). 신뢰 안 되면 `exclude`로 빼고 사용자 재입력(학생상담 studentId).
+  · **비밀번호·서버 prop·봇 트랩**(직원 임시비번·공개접수 renderedAt/company/token)은 `exclude`로 **IDB에 안 남기기**(보안).
+  · **기본값이 항상 채워지는 필드**(상담 일시 now·category·audience 등)는 `ignoreForBanner`로 빼서 **빈 폼 오탐 배너** 방지.
+- **적용 현황(2026-06-30)**: ✅ 등록상담·학생(생성/수정)·직원·학생상담. ⏳ **SPECIAL(보류)** = 반(class-form ScheduleGrid)·수강료계산기(입력이 `<form>` 밖)·
+  학부모 QR 공개접수(다중선택/false·null lossy)·학원설정(제네릭 래퍼) — 동적행·배열을 hidden JSON 직렬화 + onRestore 일괄 rehydrate가 필요한 **무거운 폼별 작업**이라 별도 패스. ⏭️ **skip** = 짧은 폼(시험 등록·회의 신규·성적 인라인·상담 녹음[녹음은 이미 복구]).
+- ⚠️ 새 "긴 폼"을 추가하면 이 5단계로 초안 자동저장을 붙인다. 컨트롤드/동적 state가 있으면 hidden 직렬화+onRestore를 잊지 말 것(안 그러면 복원이 반쪽).
 
 ### 인쇄(Print) — 인쇄 버튼이 있는 모든 곳은 플로팅 창 + A4 (⚠️ 새 인쇄 표면 기본값, 2026-06-24)
 **인쇄 버튼이 달린 모든 곳은 새 브라우저 탭이 아니라 eywa 플로팅 창으로 열고, 결과는 항상 A4로 깔끔히 인쇄된다**

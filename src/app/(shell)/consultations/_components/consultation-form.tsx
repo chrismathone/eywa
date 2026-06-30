@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import {
   createStudentConsultation,
   updateStudentConsultation,
@@ -99,8 +101,21 @@ export function ConsultationForm({
 
   const errors = state?.fieldErrors ?? {};
 
+  // 로컬 초안 자동저장 — 요약 등 텍스트 입력 보관, 다시 열면 복구. studentId(SearchableSelect)는 복원 신뢰성이
+  // 낮아 제외(복구 후 재선택), 기본값이 항상 채워지는 일시/범주/대상은 빈 폼 오탐 방지로 banner 판정서 제외.
+  // ⚠️ scope는 등록상담(consultation:*)과 분리(student-consultation:*) — 안 그러면 두 폼이 IDB 초안을 덮어씀.
+  const formRef = useRef<HTMLFormElement>(null);
+  const draft = useFormDraft({
+    scope: mode === "create" ? "student-consultation:new" : `student-consultation:${initialValue?.id ?? "edit"}`,
+    formRef,
+    exclude: ["studentId"],
+    ignoreForBanner: ["consultedAt", "category", "audience"],
+  });
+
   return (
-    <form action={formAction} className="space-y-5">
+    // 액션이 성공 시 redirect만 하고 ok를 안 줘서, 제출(클라 검증 통과) 시점에 초안 삭제(redirect는 클라 네비라 IDB 삭제 완주).
+    <form ref={formRef} action={formAction} onSubmit={() => void draft.clear()} className="space-y-5">
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}

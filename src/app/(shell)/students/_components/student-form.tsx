@@ -12,6 +12,8 @@ import {
 } from "@/features/students/server/actions";
 import type { TeacherOption } from "@/features/students/server/queries";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 
 type Mode = "create" | "edit";
 
@@ -99,15 +101,23 @@ export function StudentForm({
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
 
-  // 저장 성공 확정(nonce) 후: 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
+  // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 전 필드 언컨트롤드라 onRestore 불필요.
+  const draft = useFormDraft({
+    scope: mode === "create" ? "student:new" : `student:${initialValue?.id ?? "edit"}`,
+    formRef,
+  });
+  const clearDraft = draft.clear;
+
+  // 저장 성공 확정(nonce) 후: 초안 삭제 → 동시편집 신호 발화 → 상세로 이동(서버 redirect 대체, B-2).
   const handledNonce = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
       handledNonce.current = state.nonce;
+      clearDraft();
       notifySaved();
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, notifySaved, router]);
+  }, [state, notifySaved, router, clearDraft]);
 
   const v = initialValue ?? {
     name: "",
@@ -148,6 +158,7 @@ export function StudentForm({
 
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}

@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, ArrowRight, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
@@ -100,20 +102,40 @@ export function ConsultationFullForm({
   const [createError, setCreateError] = useState<string | null>(null);
   const busy = phase !== "idle";
 
-  // 수정 성공 시 상세로 복귀(생성은 서버 redirect가 처리).
-  useEffect(() => {
-    if (!isCreate && editState?.ok && v.id) {
-      router.push(`/enrollment/${v.id}`);
-      router.refresh();
-    }
-  }, [editState, isCreate, v.id, router]);
-
   // 과목 점수 탭 — 클라 상태로 보유, 제출 시 hidden input(JSON)으로 직렬화.
   const [details, setDetails] = useState<SubjectDetails>(() => v.subjectDetails ?? {});
   const [activeTab, setActiveTab] = useState(SUBJECT_TABS[0]!.key);
   const setField = (subj: string, key: string, val: string) =>
     setDetails((d) => ({ ...d, [subj]: { ...(d[subj] ?? {}), [key]: val } }));
   const englishType = details.english?.testType ?? "ai";
+
+  // 로컬 초안 자동저장 — 입력 중 IDB에 자동 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear(stale 방지).
+  const formRef = useRef<HTMLFormElement>(null);
+  const draftScope = isCreate ? "consultation:new" : `consultation:${v.id ?? "edit"}`;
+  const draft = useFormDraft({
+    scope: draftScope,
+    formRef,
+    // 과목점수(jsonb)는 React state라 DOM 자동복원이 안 됨 → hidden input 값을 파싱해 rehydrate.
+    onRestore: (vals) => {
+      if (vals.subjectDetails) {
+        try {
+          setDetails(JSON.parse(vals.subjectDetails) as SubjectDetails);
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+  });
+  const clearDraft = draft.clear;
+
+  // 수정 성공 시 상세로 복귀(생성은 서버 redirect가 처리) + 로컬 초안 삭제.
+  useEffect(() => {
+    if (!isCreate && editState?.ok && v.id) {
+      clearDraft();
+      router.push(`/enrollment/${v.id}`);
+      router.refresh();
+    }
+  }, [editState, isCreate, v.id, router, clearDraft]);
 
   // 생성 제출: 녹음/업로드 음성이 있으면 먼저 업로드(signed PUT) → audioPath 동봉 → createEnrollmentConsultation.
   // 음성이 있으면 서버가 전사·13섹션 AI까지 자동 실행(입력값은 웹훅 buildFormPatch가 보존). 성공 시 서버 redirect.
@@ -154,6 +176,8 @@ export function ConsultationFullForm({
       if (result?.error) {
         setCreateError(result.error);
         setPhase("idle");
+      } else {
+        clearDraft(); // 성공 → 로컬 초안 삭제(다음 '새 등록상담'에서 stale 복구 방지)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -168,11 +192,14 @@ export function ConsultationFullForm({
 
   return (
     <form
+      ref={formRef}
       {...(isCreate ? { onSubmit: handleCreateSubmit } : { action: editFormAction })}
       className="space-y-5"
     >
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
+
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
 
       <Section title="학생 정보">
         <Grid cols={3}>

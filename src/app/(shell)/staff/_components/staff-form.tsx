@@ -13,6 +13,8 @@ import {
 import type { SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
 
 type Mode = "create" | "edit";
 
@@ -61,16 +63,6 @@ export function StaffForm({
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
 
-  // 저장 성공 확정(nonce) 후: 동시편집 신호 발화 → 직원관리로 이동(서버 redirect 대체, B-2).
-  const handledNonce = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
-      handledNonce.current = state.nonce;
-      notifySaved();
-      if (state.redirectTo) router.push(state.redirectTo);
-    }
-  }, [state, notifySaved, router]);
-
   const v: StaffFormValue = initialValue ?? {
     displayName: "",
     email: "",
@@ -85,10 +77,33 @@ export function StaffForm({
   };
 
   const [bgColor, setBgColor] = useState(v.bgColor ?? "");
+
+  // 로컬 초안 자동저장 — 입력 중 보관, 다시 열면 복구. ⚠️ 임시비번(password)은 보안상 IDB 캡처 제외,
+  // 색(bgColor)은 hidden input으로 값 캡처되나 스와치 동기화 위해 onRestore→setBgColor.
+  const draft = useFormDraft({
+    scope: mode === "create" ? "staff:new" : `staff:${initialValue?.id ?? "edit"}`,
+    formRef,
+    exclude: ["password"],
+    onRestore: (vals) => setBgColor(vals.bgColor ?? ""),
+  });
+  const clearDraft = draft.clear;
+
+  // 저장 성공 확정(nonce) 후: 초안 삭제 → 동시편집 신호 발화 → 직원관리로 이동(서버 redirect 대체, B-2).
+  const handledNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
+      handledNonce.current = state.nonce;
+      clearDraft();
+      notifySaved();
+      if (state.redirectTo) router.push(state.redirectTo);
+    }
+  }, [state, notifySaved, router, clearDraft]);
+
   const errors = state?.fieldErrors ?? {};
 
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}
