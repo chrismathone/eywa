@@ -8,6 +8,7 @@ export type CurrentUser = {
   tenantId: string;
   email: string;
   displayName: string;
+  jobTitle: string | null;
   systemRole: SystemRole;
 };
 
@@ -22,7 +23,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const { data } = await supabase
     .from("users")
-    .select("id, tenant_id, email, display_name, system_role")
+    .select("id, tenant_id, email, display_name, job_title, system_role")
     .eq("id", user.id)
     .single();
 
@@ -32,6 +33,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     tenantId: data.tenant_id,
     email: data.email,
     displayName: data.display_name,
+    jobTitle: data.job_title,
     systemRole: data.system_role as SystemRole,
   };
 });

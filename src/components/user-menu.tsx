@@ -14,7 +14,15 @@ import {
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { signOut } from "@/app/(auth)/login/actions";
 
-export function UserMenu({ email }: { email: string }) {
+export function UserMenu({
+  email,
+  displayName,
+  jobTitle,
+}: {
+  email: string;
+  displayName?: string;
+  jobTitle?: string;
+}) {
   const animations = usePrefs((s) => s.animations);
   const setAnimations = usePrefs((s) => s.setAnimations);
   return (
@@ -29,8 +37,16 @@ export function UserMenu({ email }: { email: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="flex items-center gap-2">
-          <User className="size-4" />
-          <span className="truncate text-sm font-normal">{email}</span>
+          <User className="size-4 shrink-0" />
+          {displayName ? (
+            <span className="min-w-0 truncate text-sm font-normal">
+              {displayName}
+              {jobTitle ? <span className="text-text-dim"> · {jobTitle}</span> : null}
+              <span className="text-text-faint block truncate text-[11px]">{email}</span>
+            </span>
+          ) : (
+            <span className="truncate text-sm font-normal">{email}</span>
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem

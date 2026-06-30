@@ -67,7 +67,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
           <div className="flex items-center gap-1.5">
             {user.systemRole === "teacher" ? <TeacherMenu /> : null}
-            <UserMenu email={user.email} />
+            <UserMenu
+              email={user.email}
+              displayName={user.displayName}
+              jobTitle={user.jobTitle ?? undefined}
+            />
           </div>
         </header>
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
@@ -93,6 +97,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <AppSidebar
           systemRole={user.systemRole}
           email={user.email}
+          displayName={user.displayName}
+          jobTitle={user.jobTitle}
           logoText={brand}
           permMatrix={permMatrix}
           className="hidden lg:pointer-fine:flex"

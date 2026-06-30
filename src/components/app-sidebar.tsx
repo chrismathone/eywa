@@ -13,6 +13,7 @@ import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { NAV_GROUPS, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
+import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
@@ -62,16 +63,24 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
 export function AppSidebar({
   systemRole,
   email,
+  displayName,
+  jobTitle,
   className,
   logoText = "EYWA",
   permMatrix,
 }: {
   systemRole: SystemRole;
   email: string;
+  displayName: string;
+  jobTitle?: string | null;
   className?: string;
   logoText?: string;
   permMatrix?: AccessMatrix;
 }) {
+  // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
+  const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
+  // 이름이 비면(이론상 거의 없음) 이메일 앞부분으로 폴백해 빈 줄을 방지.
+  const name = displayName?.trim() || email.split("@")[0];
   const pathname = usePathname();
   const currentTab = useSearchParams().get("tab"); // 활성 하부탭 표시용(배경 프레임 기준)
   const isDesktop = useIsDesktop();
@@ -205,15 +214,16 @@ export function AppSidebar({
           ) : null}
         </nav>
 
-        {/* user — 계정/로그아웃. 아이콘은 접힘 중앙 고정, 이메일만 페이드 */}
+        {/* user — 계정/로그아웃. 아이콘은 접힘 중앙 고정, 이름·호칭만 페이드 */}
         <div className="border-line flex h-14 shrink-0 items-center gap-2.5 overflow-hidden border-t pl-2">
-          <UserMenu email={email} />
+          <UserMenu email={email} displayName={name} jobTitle={title} />
           <div
             className={`overflow-hidden whitespace-nowrap ${
               expanded ? "max-w-[150px] opacity-100" : "max-w-0 opacity-0"
             } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
           >
-            <div className="text-foreground truncate text-[12px] font-semibold">{email}</div>
+            <div className="text-foreground truncate text-[12px] font-semibold leading-tight">{name}</div>
+            <div className="text-text-dim truncate text-[11px] leading-tight">{title}</div>
           </div>
         </div>
 
