@@ -17,6 +17,8 @@ export type ClassListRow = {
   teacherName: string | null;
   classroomName: string | null;
   isActive: boolean;
+  /** 종강일(0059a) — 있으면 종강(운영 종료). is_active=false(폐지)와 구분. */
+  closedAt: string | null;
   studentCount: number;
   days: ClassDaySlot[]; // 운영 요일(+시작시각), 요일순 정렬
   notes: string | null;
@@ -58,6 +60,8 @@ export type ClassDetail = {
   classroomId: string | null;
   classroomName: string | null;
   isActive: boolean;
+  /** 종강일(0059a) — 있으면 종강. is_active=false(폐지)와 구분. */
+  closedAt: string | null;
   notes: string | null;
   bgColor: string | null;
   // 강사 인수인계 예약(0044a) — pendingTeacherId 있으면 예약 존재.
@@ -126,7 +130,7 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
   let qb = supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, notes, teacher_id,
+      `id, class_name, subject, is_active, closed_at, notes, teacher_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
     )
@@ -188,6 +192,7 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
       teacherName: teacher?.display_name ?? null,
       classroomName: room?.name ?? null,
       isActive: c.is_active,
+      closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
       studentCount: counts.get(c.id) ?? 0,
       days: sortedDaySlots(daysByClass.get(c.id)),
       notes: c.notes ?? null,
@@ -274,7 +279,7 @@ export async function getClassesPage(
   let qb = supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, notes, teacher_id,
+      `id, class_name, subject, is_active, closed_at, notes, teacher_id,
        teacher:teacher_id ( display_name ),
        classroom:classroom_id ( name )`,
     )
@@ -342,6 +347,7 @@ export async function getClassesPage(
       teacherName: teacher?.display_name ?? null,
       classroomName: room?.name ?? null,
       isActive: c.is_active,
+      closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
       studentCount: counts.get(c.id) ?? 0,
       days: sortedDaySlots(daysByClass.get(c.id)),
       notes: c.notes ?? null,
@@ -377,7 +383,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
   const { data: c } = await supabase
     .from("classes")
     .select(
-      `id, class_name, subject, is_active, notes, bg_color,
+      `id, class_name, subject, is_active, closed_at, notes, bg_color,
        teacher_id, classroom_id,
        pending_teacher_id, pending_teacher_date, pending_teacher_reason,
        teacher:teacher_id ( display_name ),
@@ -423,6 +429,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
     classroomId: c.classroom_id,
     classroomName: room?.name ?? null,
     isActive: c.is_active,
+    closedAt: (c as { closed_at?: string | null }).closed_at ?? null,
     notes: c.notes,
     bgColor: (c as { bg_color?: string | null }).bg_color ?? null,
     pendingTeacherId: (c as { pending_teacher_id?: string | null }).pending_teacher_id ?? null,

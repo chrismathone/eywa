@@ -19,6 +19,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ClassAssignAction } from "./_components/class-assign-action";
 import { ClassLevelAction } from "./_components/class-level-action";
 import { ArchiveClassButton } from "./_components/archive-class-button";
+import { ClassTermButton } from "./_components/class-term-button";
 import { HandoverAction, HandoverBanner } from "./_components/teacher-handover";
 
 export const metadata = { title: "수업 상세 — eywa" };
@@ -96,7 +97,11 @@ export default async function ClassDetailPage({
             <Pill color={subjects.colorOf(klass.subject)}>{subjects.labelOf(klass.subject)}</Pill>
             {!klass.isActive ? (
               <span className="text-muted-foreground bg-muted border-border inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
-                종료
+                폐지
+              </span>
+            ) : klass.closedAt ? (
+              <span className="text-amber border-amber/30 bg-amber/10 inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
+                종강 {klass.closedAt}
               </span>
             ) : null}
           </div>
@@ -145,6 +150,9 @@ export default async function ClassDetailPage({
               currentTeacherName={klass.teacherName}
               teacherOptions={handoverPool}
             />
+          ) : null}
+          {klass.isActive ? (
+            <ClassTermButton classId={klass.id} className={klass.className} closedAt={klass.closedAt} />
           ) : null}
           <ArchiveClassButton classId={klass.id} isActive={klass.isActive} className={klass.className} />
         </div>

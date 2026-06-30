@@ -216,7 +216,7 @@ export function ClassForm({
         <header>
           <h3 className="text-foreground text-sm font-semibold">주간 스케줄</h3>
           <p className="text-muted-foreground text-xs">
-            요일 × 교시 칸을 눌러 수업 교시를 지정하세요. 강의실 시간 겹침은 저장 시 자동 감지.
+            요일 × 교시 칸을 눌러 수업 교시를 지정하세요. 강의실·강사 시간 겹침은 저장 시 자동 감지(강사 겹침은 합반 등 의도 시 무시 가능).
           </p>
         </header>
 
@@ -234,10 +234,23 @@ export function ClassForm({
         />
       </section>
 
+      {state?.teacherConflict ? (
+        <div className="border-amber/30 bg-amber/10 rounded-md border px-3 py-2.5">
+          <p className="text-amber text-sm font-medium">⚠️ 강사 시간 겹침: {state.teacherConflict}</p>
+          <p className="text-text-dim mt-0.5 text-xs">
+            합반 등 의도된 겹침이면 아래 “겹침 무시하고 저장”을 누르세요. 아니면 강사·시간을 조정하세요.
+          </p>
+        </div>
+      ) : null}
       {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
 
       <footer className="flex items-center justify-end gap-2 border-t pt-4">
         <Submit mode={mode} />
+        {state?.teacherConflict ? (
+          <Button type="submit" variant="outline" name="ignoreTeacherConflict" value="1">
+            겹침 무시하고 저장
+          </Button>
+        ) : null}
       </footer>
     </form>
   );

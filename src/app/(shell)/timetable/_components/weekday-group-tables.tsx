@@ -281,6 +281,8 @@ function GroupTable({
                     for (let cc = ci; cc < ci + block.colSpan; cc++) acc.push(...t.cellAt(rr, cc));
                   }
                   const merged = mergeSlotsByClass(acc);
+                  // 합반(ijw식) — 같은 강사·교시·요일에 2개반+ = 합반. 셀을 그대로 적층하되 테두리로 묶고 배지 표시.
+                  const isHapban = merged.length >= 2;
                   return (
                     <td
                       key={`${g.title}-${t.name}-${d}-${row.key}`}
@@ -293,10 +295,18 @@ function GroupTable({
                       {merged.length === 0 ? null : (
                         // 고정높이 flex-col — 대기·퇴원 있는 셀(ClassCell이 flex-1)이 칸을 채워
                         // 그 그룹을 셀 하단에 정렬. 재원만 있는 셀은 content 높이로 상단 정렬(기존과 동일).
+                        // 합반이면 앰버 테두리 박스로 묶고 상단에 "합반 N반" 배지(ijw식 — 같은 강사·교시 여러 반).
                         <div
-                          className="flex flex-col gap-1.5 overflow-y-auto"
+                          className={`flex flex-col overflow-y-auto ${
+                            isHapban ? "border-amber/50 bg-amber/5 gap-1 rounded-md border p-1" : "gap-1.5"
+                          }`}
                           style={{ height: block.rowSpan * rowHeight - 16 }}
                         >
+                          {isHapban ? (
+                            <span className="text-amber bg-amber/15 sticky top-0 z-10 -mx-1 -mt-1 mb-0.5 rounded-t-md px-1 py-0.5 text-center font-mono text-[9px] font-bold whitespace-nowrap">
+                              합반 {merged.length}반
+                            </span>
+                          ) : null}
                           {merged.map((s) => (
                             <ClassCell
                               key={s.id}

@@ -243,6 +243,9 @@ export const classes = pgTable(
     teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }),
     classroomId: uuid("classroom_id").references(() => classrooms.id, { onDelete: "set null" }),
     isActive: boolean("is_active").notNull().default(true),
+    // 종강(0059a): 운영 종료일. is_active(폐지)와 별개 — 종강 반은 is_active=true 유지하고
+    // 타임머신에서 closed_at 이전 주엔 표시(이력), 이후 주에선 숨김. NULL=운영중.
+    closedAt: date("closed_at"),
     notes: text("notes"),
     // Cell color (ijw bgColor/textColor). Stored as #RRGGBB; ARGB normalized on import.
     bgColor: text("bg_color"),

@@ -231,12 +231,14 @@ function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                   {c.studentCount}명
                 </td>
                 <td className="px-4 py-2.5">
-                  {c.isActive ? (
+                  {!c.isActive ? (
+                    <Pill color="neutral">폐지</Pill>
+                  ) : c.closedAt ? (
+                    <Pill color="amber">종강</Pill>
+                  ) : (
                     <Pill color="primary" soft={false}>
                       운영
                     </Pill>
-                  ) : (
-                    <Pill color="neutral">종료</Pill>
                   )}
                 </td>
                 <td className="text-text-dim px-4 py-2.5 text-xs">
@@ -272,12 +274,14 @@ function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
             <header className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Pill color={meta.color}>{meta.label}</Pill>
-                {c.isActive ? (
+                {!c.isActive ? (
+                  <Pill color="neutral">폐지</Pill>
+                ) : c.closedAt ? (
+                  <Pill color="amber">종강</Pill>
+                ) : (
                   <Pill color="primary" soft={false}>
                     ● 운영
                   </Pill>
-                ) : (
-                  <Pill color="neutral">종료</Pill>
                 )}
               </div>
             </header>

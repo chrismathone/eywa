@@ -50,24 +50,32 @@ export type ScheduleSlot = {
 async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
   const supabase = await createClient();
   const weekEnd = weekEndOf(referenceDate);
-  // 그 주 시점에 유효한 스케줄만(valid_to < 기준일 = 만료 제외). valid_to is null = 무기한 유효.
-  // 폐지(is_active=false=종료)된 반은 제외 — `!inner` 조인 + class.is_active 필터로 부모(스케줄) 행을 거른다
-  // (반 폐지 버튼이 약속한 "시간표에서 종료 처리"). 미적용 시 폐지 반이 계속 시간표에 남았었다.
+  // 그 주 시점에 유효한 스케줄만: valid_from ≤ 주끝(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
+  // 폐지(is_active=false)된 반은 `!inner` 조인 + class.is_active 필터로 전체 주에서 제외.
+  // 종강(class.closed_at)된 반은 종강일 이후 주에서만 제외(이전 주엔 수강이력으로 표시) — JS에서 거른다.
   const { data } = await supabase
     .from("class_schedules")
     .select(
       `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
        class:class_id!inner (
-         id, class_name, subject, bg_color, text_color, is_active,
+         id, class_name, subject, bg_color, text_color, is_active, closed_at,
          teacher:teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
     )
     .eq("class.is_active", true)
+    .lte("valid_from", weekEnd)
     .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
     .order("start_time");
 
   if (!data) return [];
+
+  // 종강 반: closed_at < 기준일이면 그 주엔 이미 종강 → 제외(closed_at ≥ 기준일인 과거 주엔 표시).
+  const visible = data.filter((r) => {
+    const k = (Array.isArray(r.class) ? r.class[0] : r.class) as { closed_at?: string | null } | undefined;
+    const closedAt = k?.closed_at ?? null;
+    return !closedAt || closedAt >= referenceDate;
+  });
 
   // as-of-week 재원 카운트 — 그 주 끝(weekEnd)까지 시작했고 그 주 끝에 아직 안 끝난 enrollment.
   // (정확한 재원/대기/퇴원 분류는 getWeeklyScheduleWithStudents. 여기선 셀 헤더 카운트용 근사.) #54 페이지네이션.
@@ -85,7 +93,7 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
     counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
   }
 
-  return data.map((r) => {
+  return visible.map((r) => {
     const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
       | {
           id?: string;
@@ -393,26 +401,35 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   const today = now.toISOString().slice(0, 10);
 
   // 오늘 요일 스케줄만 — fetchSlots(전 요일 fetch 후 JS 필터)를 SQL 필터로 좁힘(데이터 ~1/7).
-  // 폐지(is_active=false)된 반은 제외(시간표·대시보드 일관) — `!inner` + class.is_active 필터.
+  // 폐지(is_active=false)·미래 시작·만료 스케줄 제외 + 종강(closed_at<오늘)은 JS에서 제외(시간표와 일관).
   const { data } = await supabase
     .from("class_schedules")
     .select(
       `id, day_of_week, start_time, end_time, class_id,
        class:class_id!inner (
-         class_name, subject, is_active,
+         class_name, subject, is_active, closed_at,
          teacher:teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
     )
     .eq("day_of_week", todayKey)
     .eq("class.is_active", true)
+    .lte("valid_from", today)
     .or(`valid_to.is.null,valid_to.gte.${today}`)
     .order("start_time");
   if (!data || data.length === 0) return [];
 
+  // 종강 반(closed_at < 오늘)은 오늘 일정에서 제외.
+  const visible = data.filter((r) => {
+    const k = (Array.isArray(r.class) ? r.class[0] : r.class) as { closed_at?: string | null } | undefined;
+    const closedAt = k?.closed_at ?? null;
+    return !closedAt || closedAt >= today;
+  });
+  if (visible.length === 0) return [];
+
   // 오늘 반의 활성 enrollment만 카운트 — 전체 enrollment 전건 페이지네이션 대신 오늘 반(classIds)으로 좁힘.
   // classIds는 수십 개라 .in() URL 안전 + range로 1000행 방어(#53/#54).
-  const classIds = [...new Set(data.map((r) => r.class_id as string))];
+  const classIds = [...new Set(visible.map((r) => r.class_id as string))];
   const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
     supabase
       .from("enrollments")
@@ -430,7 +447,7 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
     return Number(h) * 60 + Number(m);
   };
 
-  return data
+  return visible
     .map((r): ScheduleSlot => {
       const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
         | {

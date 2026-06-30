@@ -376,6 +376,44 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **🐛 창 복원 버그픽스**(별건, 같은 세션 — [[#65]]): 새로고침마다 플로팅 창 전멸 + localStorage 영속본 파괴. window-store rehydrate를
   effect에서 호출하던 게 화근(다른 effect set이 먼저 빈 상태를 persist에 써서 클로버). **rehydrate를 모듈 로드 시점(클라)으로 이동**해 해결. 검증: 창 복원·테스트12.
 
+### 시간표 합반 표시 = ijw식 "한 셀 적층 + 합반 배지 + 테두리" (2026-06-30) — ✅ 게이트 그린 + 라이브
+사용자 제안: 합반 수업을 합반 수만큼 열로 분할 + 테두리로 묶기. **사용자 요청으로 ijw-calander 처리 방식을 먼저 조사**([D:\ijw-calander] TimetableGrid/ClassCard/EnglishTeacherTab) →
+**ijw는 열 분할 안 함**. 한 셀에 적층 + 배지(수학=회색 "합반" pulsing + 학생 `[1][2]` 라벨 / 영어=빨강 "+N" + 호버 툴팁). 판별=런타임 휴리스틱(같은 강사·요일·교시), `mergeGroup` 필드 없음(eywa도 628슬롯 중 0개).
+- **결정(사용자)**: 원안 열-분할 폐기 → **ijw식 배지 + 사용자가 원한 테두리** 결합. eywa 기본뷰는 **이미 한 셀에 반별 카드 적층**(ijw 기본 모델과 동일, 게다가 반별 카드라 ijw 수학 인덱스 라벨보다 명확) → 빠진 "합반 표시"만 추가.
+- **구현**([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)): 셀의 `mergeSlotsByClass` 결과가 **2개반+ = 합반**(셀 키가 강사·요일·교시라 자동으로 같은 강사·교시) →
+  적층 카드를 **앰버 테두리 박스**(`border-amber/50 bg-amber/5`)로 묶고 상단에 **"합반 N반" 배지**(sticky, 스크롤해도 보임). 1개반 셀은 기존 그대로(테두리 없음). 그리드 컬럼 구조·computeBlocks 2D 병합은 불변(열 분할 안 함=ijw식).
+- **라이브 검증**: 영어 기본뷰 **합반 박스 62개**("합반 3반"=DP2+PJ4·KW3, "합반 2반"=LT4a+LT4b 등 정확) + 앰버 테두리로 묶임 / **수학은 합반 0건이라 무변(배지 0)** — 합반 실재하는 영어만 개선. typecheck0/lint0/test522.
+- ⚠️ 통합뷰(반=열)는 미적용(이미 열로 분리 표시 — 필요 시 같은 강사 인접 열 테두리 그룹화는 후속). 합반 판별은 휴리스틱이라 의도된 합반·실수 이중배정을 구분 못 함(둘 다 배지) — 실수는 위 "강사 시간 겹침" 경고가 별도로 잡음.
+
+### 강사 시간 겹침 감지 = 부분허용(경고+무시하고 저장) — 합반 대비 (2026-06-29) — ✅ 게이트 그린 + 라이브 E2E
+사용자 질문: 같은 강사가 같은 시간대 두 반에 들어가면 방지 로직이 있나? → **없었음**(충돌 검사는 강의실만 — `detectScheduleConflict`).
+강사 겹침은 무방비라 이중배정이 그대로 저장됐다. 사용자 결정: **영어 합반 수업처럼 의도된 겹침이 있으니 하드 차단 말고 "부분허용"**.
+- **감지** [`detectTeacherConflict`](src/features/classes/server/actions.ts): 후보 슬롯의 **실효 강사(슬롯 override `class_schedules.teacher_id` ?? 반 담임 `classes.teacher_id`)** 가
+  같은 요일·시간 겹치는 다른 **활성** 반과 충돌하는지. `class:class_id!inner`+`is_active` 필터 + JS로 종강(`closed_at<오늘`)·만료(`valid_to<오늘`)·자기자신(`excludeClassId`) 제외.
+  ⚠️ 자유입력 슬롯 라벨(`slot_teacher_label`, "Hannah"/"LAB")은 FK가 아니라 검사 불가 → teacher_id로 풀리는 것만.
+- **부분허용 UX**(하드 차단 아님): create/update에서 충돌 시 `{ teacherConflict }` 반환(저장 안 함). [class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>)가
+  앰버 경고 배너 + **"겹침 무시하고 저장"** 버튼(submit `name="ignoreTeacherConflict" value="1"` — 상태 없이 버튼이 플래그 전달) 노출. 액션은 그 플래그면 검사 skip → 저장(합반 통과).
+  일반 "변경 저장"이 Enter 기본이라 무시 버튼은 그 뒤(실수 skip 방지). 강의실 충돌은 기존대로 **하드 차단**(물리적 공유 불가) — 강사만 부분허용.
+- **라이브 E2E**(초등M 개별 BS1B 수정 → 강사 김은정): 충돌 경고 "김은정 · 월요일 14:30~15:25 (초등M 개별 CR1C)" 정확 표시·저장 차단 / "겹침 무시하고 저장" → 충돌 무시하고 김은정으로 저장 확인 → 데모 원복.
+  ⚠️ 검증 함정: 컨트롤드 `<select>`가 충돌 재렌더 때 state값으로 리셋 → override 직전 DOM 재설정해야 충돌 강사가 제출됨(테스트 아티팩트, 제품 무관). 또 데모 "이수연"은 role=viewer라 강사 드롭다운(active teacher/manager/master) 제외.
+- typecheck0/lint0/test519. ⚠️ `detectTeacherConflict`는 요일별 스케줄을 무페이징 select(현 ~628행<1000이라 안전, Firebase 전체이식 후 1000 접근 시 페이지네이션 필요 #54).
+
+### 수업 종강(closed_at) — 폐지와 분리한 운영 종료일 + 타임머신 이력 보존 (2026-06-29) — ✅ 게이트 그린 + 라이브 E2E
+사용자 제보: 폐지(`is_active=false`)는 "잘못 만든 반 완전 제거"라 타임머신 포함 전체에서 숨기는 게 맞지만, **종강(정상 운영 종료)은
+수강이력이라 과거 주(종강일 이전)엔 보여야** 한다. 기존 모델은 `classes.is_active`(운영중/폐지) 2상태뿐 — 종강/휴강/수강 구분 없음
+(`on_hold`/휴원은 학생·enrollment 단위만). 사용자 선택 = **종강만**(휴강은 기간 갭 모델링 필요 → 보류). typecheck0/lint0/test519 + Chrome MCP 라이브.
+- **모델**: `classes.closed_at` date nullable 신설(`0059a`, dev적용). 종강 = `closed_at`에 종료일 + **`is_active=true` 유지**(폐지와 분리).
+  스케줄 `valid_to`를 직접 만지는 대신 클래스 1필드 → 재개강(`closed_at=null`)·목록 배지가 단순. 폐지(is_active=false)는 그대로 전체 숨김.
+- **타임머신 필터**([queries.ts](src/features/timetable/server/queries.ts) `fetchSlots`·`getTodaySchedule` + [timetable-excel.ts](src/features/exports/timetable-excel.ts)):
+  종강 반은 `closed_at < 기준일`인 주에서만 제외(JS 필터, `closed_at ≥ 기준일`인 과거 주엔 표시). **+ 같이 고친 갭**: `fetchSlots`가 `valid_to`만 보고
+  `valid_from`을 안 봐서 미래 시작 스케줄이 과거 주에 새던 것 → `.lte("valid_from", weekEnd)` 추가(미래 주도 정확).
+- **액션/UI**: [actions.ts](src/features/classes/server/actions.ts) `endClassTerm`(날짜 지정)·`reopenClassTerm`(master 게이트, audit log) +
+  [class-term-button.tsx](<src/app/(shell)/classes/[id]/_components/class-term-button.tsx>)(운영중→"종강"[날짜 인라인 입력] / 종강→"재개강"). 폐지 버튼(ArchiveClassButton)과 공존.
+  배지 3상태: 목록·상세 모두 **폐지(neutral)/종강(amber)/운영(primary)**. `ClassListRow`·`ClassDetail`에 `closedAt` 추가.
+- **라이브 E2E**(초등M 초6 BS2P, closed_at=2026-05-30): 현재 주(06-29) 숨김 / 과거 주 05-15(종강 이전) **표시** / 06-10(종강 이후) 숨김 — 타임머신 정확.
+  종강 버튼(날짜→확정→배지)·재개강 버튼(배지 제거)·목록 종강 배지 전부 확인 후 데모 원복(closed_at=null).
+- ⚠️ **미이식**: 휴강(기간 일시정지)은 valid 구간 갭이 필요해 보류(사용자 결정). 종강 시 **enrollment 자동 종료는 안 함**(타임머신엔 무영향 — 이후 주엔 반 자체가 숨음. 수강정리가 필요하면 별도). 목록 "종료" 필터(`active=closed`)는 여전히 is_active=false(폐지) 기준 — 종강은 배지로만 구분(필터 세분화는 추후).
+
 ### 시간표 폴리시 — 시트 열기 + 엑셀/가져오기 그룹화 + 교시 코너 비우기 + 폐지 반 제외 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
 사용자 시간표 UX·버그 4건. typecheck0/lint0/test518 + Chrome MCP 라이브(PSS, localhost:3001).
 - **A. '시트 열기' 버튼**([toolbar-actions.tsx](<src/app/(shell)/timetable/_components/toolbar-actions.tsx>)): 기존 '시트'(push)만 있고 연결 시트를 여는 길이 없었음 → [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `getGoogleSheetsStatus()`의 spreadsheetId로 `https://docs.google.com/spreadsheets/d/{id}/edit` URL을 toolbar에 전달, **새 탭(`target=_blank`)** 으로 연다. 대상 시트가 설정돼 있을 때만 노출(조회를 master만 수행 → master 한정). '시트'→**'시트 반영'** 으로 개칭(반영↔열기 한 쌍 명확).

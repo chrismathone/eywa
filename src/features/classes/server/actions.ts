@@ -12,8 +12,26 @@ import { getClassroomAssignmentData } from "./queries";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 
 export type ClassFormState =
-  | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
+  | {
+      error?: string;
+      fieldErrors?: Record<string, string>;
+      // 강사 시간 겹침 경고(부분허용) — 합반 등 의도된 겹침은 "무시하고 저장"으로 통과.
+      teacherConflict?: string;
+      ok?: true;
+      redirectTo?: string;
+      nonce?: number;
+    }
   | undefined;
+
+const DAY_LABEL_KR: Record<string, string> = {
+  mon: "월",
+  tue: "화",
+  wed: "수",
+  thu: "목",
+  fri: "금",
+  sat: "토",
+  sun: "일",
+};
 
 type ScheduleInput = {
   dayOfWeek: string;
@@ -112,6 +130,12 @@ export async function createClass(
     }
   }
 
+  // 강사 시간 겹침(부분허용) — 같은 강사 같은 시간대면 경고. "무시하고 저장"(ignoreTeacherConflict=1)이면 통과(합반 등).
+  if (input.schedules.length > 0 && formData.get("ignoreTeacherConflict") !== "1") {
+    const tConflict = await detectTeacherConflict(supabase, input.schedules, input.teacherId);
+    if (tConflict) return { teacherConflict: tConflict };
+  }
+
   const { data, error } = await supabase
     .from("classes")
     .insert({
@@ -186,6 +210,12 @@ export async function updateClass(
     }
   }
 
+  // 강사 시간 겹침(부분허용) — 자기 자신(id) 제외. "무시하고 저장"이면 통과(합반 등).
+  if (input.schedules.length > 0 && formData.get("ignoreTeacherConflict") !== "1") {
+    const tConflict = await detectTeacherConflict(supabase, input.schedules, input.teacherId, id);
+    if (tConflict) return { teacherConflict: tConflict };
+  }
+
   const { error } = await supabase
     .from("classes")
     .update({
@@ -252,6 +282,62 @@ export async function archiveClass(
 
   if (error) return { error: error.message };
 
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${id}`);
+  revalidatePath("/timetable");
+  return undefined;
+}
+
+// ────────────────────── 종강 / 재개강 (운영 종료일) ──────────────────────
+// 폐지(archiveClass, is_active)와 별개: 종강은 closed_at에 종료일을 찍고 is_active=true를 유지.
+// → 타임머신에서 종강일 이전 주엔 표시(수강이력 보존), 이후 주에선 숨김(폐지는 전체 숨김).
+export type ClassTermState = { error?: string } | undefined;
+
+/** 종강 — closed_at에 종료일 기록(기본 오늘). */
+export async function endClassTerm(_prev: ClassTermState, formData: FormData): Promise<ClassTermState> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const date = String(formData.get("date") ?? "").trim() || new Date().toISOString().slice(0, 10);
+  if (!id) return { error: "반 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: klass } = await supabase.from("classes").select("class_name").eq("id", id).single();
+  const { error: updErr } = await supabase.from("classes").update({ closed_at: date }).eq("id", id);
+  if (updErr) return { error: updErr.message };
+
+  await logAction({
+    action: "class_end_term",
+    targetType: "class",
+    targetLabel: klass?.class_name,
+    metadata: { classId: id, closedAt: date },
+  });
+  revalidatePath("/classes");
+  revalidatePath(`/classes/${id}`);
+  revalidatePath("/timetable");
+  return undefined;
+}
+
+/** 재개강 — closed_at 비움(다시 운영). */
+export async function reopenClassTerm(_prev: ClassTermState, formData: FormData): Promise<ClassTermState> {
+  const { user, error } = await requireClassWrite();
+  if (error || !user) return { error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "반 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: klass } = await supabase.from("classes").select("class_name").eq("id", id).single();
+  const { error: updErr } = await supabase.from("classes").update({ closed_at: null }).eq("id", id);
+  if (updErr) return { error: updErr.message };
+
+  await logAction({
+    action: "class_reopen_term",
+    targetType: "class",
+    targetLabel: klass?.class_name,
+    metadata: { classId: id },
+  });
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
@@ -444,6 +530,65 @@ export async function applyClassroomAssignments(
  * 강의실의 기존 스케줄과 새 스케줄 시간이 겹치는지 확인.
  * 같은 반(excludeClassId)은 제외 (수정 시 자기 자신).
  */
+/**
+ * 강사 시간 겹침 감지 — 같은 강사(실효 강사 = 슬롯 override ?? 반 담임)가 같은 요일·시간대에
+ * 다른 활성 반과 겹치는지. 폐지(is_active=false)·종강(closed_at<오늘)·만료(valid_to<오늘) 반은 제외.
+ * 자유입력 슬롯 라벨(slot_teacher_label)은 FK가 아니라 검사 불가 → teacher_id로 풀리는 것만.
+ * 하드 차단이 아니라 "경고"용(부분허용) — 합반 등 의도된 겹침은 호출부에서 무시 가능.
+ */
+async function detectTeacherConflict(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  candidates: ScheduleInput[],
+  classDefaultTeacherId: string | null,
+  excludeClassId?: string,
+): Promise<string | null> {
+  // 실효 강사가 있는 후보 슬롯만(강사 미지정 슬롯은 검사 불가).
+  const cands = candidates
+    .map((s) => ({ day: s.dayOfWeek, start: s.startTime, end: s.endTime, teacher: s.teacherId ?? classDefaultTeacherId }))
+    .filter((s): s is { day: string; start: string; end: string; teacher: string } => !!s.teacher);
+  if (cands.length === 0) return null;
+
+  const days = [...new Set(cands.map((c) => c.day))];
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 같은 요일의 기존 스케줄(활성 반만, !inner + is_active). 종강·만료는 JS에서 추가 제외.
+  const { data } = await supabase
+    .from("class_schedules")
+    .select(
+      "class_id, day_of_week, start_time, end_time, teacher_id, valid_to, class:class_id!inner ( class_name, teacher_id, is_active, closed_at )",
+    )
+    .in("day_of_week", days)
+    .eq("class.is_active", true);
+  if (!data) return null;
+
+  for (const c of cands) {
+    for (const ex of data) {
+      if (excludeClassId && ex.class_id === excludeClassId) continue; // 자기 자신(수정 시)
+      if (ex.day_of_week !== c.day) continue;
+      const k = (Array.isArray(ex.class) ? ex.class[0] : ex.class) as
+        | { class_name?: string; teacher_id?: string | null; closed_at?: string | null }
+        | undefined;
+      if (!k) continue;
+      if (ex.valid_to && String(ex.valid_to).slice(0, 10) < today) continue; // 만료 스케줄 제외
+      if (k.closed_at && String(k.closed_at).slice(0, 10) < today) continue; // 종강 반 제외
+      const exTeacher = (ex.teacher_id as string | null) ?? k.teacher_id ?? null;
+      if (!exTeacher || exTeacher !== c.teacher) continue; // 같은 강사만
+      const exStart = String(ex.start_time).slice(0, 5);
+      const exEnd = String(ex.end_time).slice(0, 5);
+      if (c.start < exEnd && c.end > exStart) {
+        const { data: u } = await supabase
+          .from("users")
+          .select("display_name")
+          .eq("id", exTeacher)
+          .maybeSingle();
+        const tname = u?.display_name ?? "해당 강사";
+        return `${tname} · ${DAY_LABEL_KR[c.day] ?? c.day}요일 ${exStart}~${exEnd} (${k.class_name ?? "기존 반"})`;
+      }
+    }
+  }
+  return null;
+}
+
 async function detectScheduleConflict(
   supabase: Awaited<ReturnType<typeof createClient>>,
   classroomId: string,
