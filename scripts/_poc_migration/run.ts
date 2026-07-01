@@ -42,7 +42,7 @@ const DEMO_TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
 
 const sql = postgres(dbUrl, { prepare: false, max: 4 });
 const tenantId = TARGET === "demo" ? DEMO_TENANT : randomUUID();
-const slug = TARGET === "demo" ? "ijw-demo" : `poc-mig-${Date.now()}`;
+const slug = TARGET === "demo" ? "injaewon" : `poc-mig-${Date.now()}`;
 const tally: Record<string, number> = {};
 const note = (k: string, n = 1) => { tally[k] = (tally[k] ?? 0) + n; };
 const errKey = (e: any) => (e?.code ? `${e.code}${e.constraint_name ? " " + e.constraint_name : ""}` : String(e?.message ?? "err").slice(0, 40));
@@ -51,7 +51,7 @@ const ins = async (label: string, fn: () => Promise<any>) => { try { await fn();
 async function main() {
   if (TARGET === "demo") {
     const t = await sql`select slug from tenants where id = ${tenantId}`;
-    if (t[0]?.slug !== "ijw-demo") throw new Error("ijw-demo 테넌트 id 불일치 — 중단");
+    if (t[0]?.slug !== "injaewon") throw new Error("injaewon(구 ijw-demo) 테넌트 id 불일치 — 중단");
     // 데이터 wipe(FK 순서) + 가짜 시드강사만 삭제(로그인 가능 auth 계정 보존)
     for (const tb of ["attendance_records", "invoices", "student_consultations", "enrollment_consultations", "meeting_minutes", "enrollments", "class_schedules", "students", "classes", "classrooms"])
       await sql`delete from ${sql(tb)} where tenant_id = ${tenantId}`;

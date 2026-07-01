@@ -18,7 +18,9 @@
 const fs = require("fs");
 const postgres = require("postgres");
 
-const EXPORT = "D:/tmp/ijw-export-2026-06-16T09-19-58-534Z.json";
+// 최신 ijw export 자동 선택(run.ts·import-textbooks-expenses와 동일 패턴 — 하드코딩 파일명 footgun 제거).
+const TMP = "D:/tmp";
+const EXPORT = require("path").join(TMP, fs.readdirSync(TMP).filter((x) => x.startsWith("ijw-export-") && x.endsWith(".json")).sort().pop());
 const APPLY = process.argv.includes("--apply");
 
 // POC 임포트(transform.ts)와 동일 교시표 — 백필 start_time이 임포트한 행과 정확히 맞도록.

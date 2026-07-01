@@ -12,7 +12,9 @@
 const fs = require("fs");
 const postgres = require("postgres");
 
-const EXPORT = "D:/tmp/ijw-export-2026-06-16T09-19-58-534Z.json";
+// 최신 ijw export 자동 선택(run.ts·import-textbooks-expenses와 동일 패턴 — 하드코딩 파일명 footgun 제거).
+const TMP = "D:/tmp";
+const EXPORT = require("path").join(TMP, fs.readdirSync(TMP).filter((x) => x.startsWith("ijw-export-") && x.endsWith(".json")).sort().pop());
 const APPLY = process.argv.includes("--apply");
 const asDocs = (c) => (Array.isArray(c) ? c : c && c.docs ? c.docs : Object.values(c));
 const HEX = /^#[0-9a-fA-F]{6}$/;
