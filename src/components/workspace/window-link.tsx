@@ -55,16 +55,29 @@ export function WindowLink({
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
   function onClick(e: MouseEvent<HTMLAnchorElement>) {
-    // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지. shift는 아래에서 "새 인스턴스(듀얼)"로 전용.
-    if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
+    // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const resolved = windowIdForHref(href);
     if (!resolved) return; // 메뉴 라우트가 아니면 기본 이동
+    // 창(iframe) 안에서 shift+클릭 = 드릴인 대신 **부모 워크스페이스에 새 플로팅 창**으로 연다.
+    // iframe은 별도 문서라 window-store에 직접 접근 못 함 → 부모(workspace-canvas)에 postMessage하면
+    // 그 리스너가 open("route")을 대신 호출한다(EmbedFocusSignal 브리지와 동일 방식).
+    if (inFrame && e.shiftKey) {
+      e.preventDefault();
+      window.parent.postMessage(
+        { type: "eywa-open-window", id: resolved.id, title: title ?? resolved.navLabel, href },
+        window.location.origin,
+      );
+      return;
+    }
+    // 임베드 iframe 내부(일반 클릭=자연스러운 드릴인) 또는 모바일 = 기본 Link 이동으로 떨어짐.
+    if (!isDesktop) return;
     e.preventDefault();
     // 마우스 클릭(detail>0)이면 커서 위치에서 팝업, 키보드 활성(detail=0, clientX/Y 0)이면 cascade.
     const anchor = e.detail > 0 ? { x: e.clientX, y: e.clientY } : undefined;
     const params = { id: resolved.id, title: title ?? resolved.navLabel ?? "보기", href };
     const store = useWindowStore.getState();
-    // shift+클릭 = 같은 화면을 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
+    // 최상위 프레임: shift+클릭 = 같은 화면을 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
     if (e.shiftKey) store.openNewInstance("route", params, anchor);
     else store.open("route", params, anchor);
   }

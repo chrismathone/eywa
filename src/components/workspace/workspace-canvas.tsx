@@ -111,21 +111,32 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
     };
   }, []);
 
-  // 창 본문(iframe) 클릭 → 그 창을 최상단(focus)으로. iframe 내부 pointerdown은 부모로 버블되지 않으므로
-  // embed 페이지(EmbedFocusSignal)가 window.parent로 'focus me'를 postMessage한다. event.source(=클릭된
-  // iframe의 contentWindow)를 iframeRegistry와 대조해 정확한 창 id를 찾아 focus(중복창·다중탭 안전).
-  // 이미 포커스된 창이면 skip해 매 클릭마다 불필요한 store set(재렌더)을 막는다.
+  // iframe(창) → 부모 브리지(postMessage): iframe 내부 이벤트는 부모로 버블되지 않으므로 embed 페이지가
+  // window.parent로 메시지를 보낸다. event.source(=클릭된 iframe의 contentWindow)를 iframeRegistry와 대조해
+  // 어느 창인지 찾는다(우리 플로팅 창에서 온 것만 수용 — 중복창·다중탭 안전). 2종:
+  //  · 'eywa-window-focus'(EmbedFocusSignal) → 그 창을 최상단(focus). 이미 포커스면 skip(재렌더 방지).
+  //  · 'eywa-open-window'(WindowLink shift+클릭) → 드릴인 대신 링크 대상을 **새 플로팅 창**으로 open.
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
-      const data = e.data as { type?: string } | null;
-      if (!data || data.type !== "eywa-window-focus" || !e.source) return;
+      const data = e.data as { type?: string; id?: string; title?: string; href?: string } | null;
+      if (!data || !e.source) return;
+      let sourceWinId: string | null = null;
       for (const [winId, el] of iframeRegistry) {
         if (el.contentWindow === e.source) {
-          const st = useWindowStore.getState();
-          if (st.focusedId !== winId) st.focus(winId);
+          sourceWinId = winId;
           break;
         }
+      }
+      if (sourceWinId === null) return; // 우리 플로팅 창이 아닌 곳에서 온 메시지 무시.
+      const st = useWindowStore.getState();
+      if (data.type === "eywa-window-focus") {
+        if (st.focusedId !== sourceWinId) st.focus(sourceWinId);
+        return;
+      }
+      if (data.type === "eywa-open-window" && data.id && data.href) {
+        st.open("route", { id: data.id, title: data.title ?? "보기", href: data.href });
+        return;
       }
     };
     window.addEventListener("message", onMessage);
