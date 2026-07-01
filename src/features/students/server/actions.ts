@@ -173,7 +173,7 @@ export async function updateStudent(
   // 다시 재원으로 돌리면 null로 비움. 이미 퇴원 상태였으면 손대지 않음.
   const { data: cur } = await supabase
     .from("students")
-    .select("status, withdrawal_metadata")
+    .select("status, withdrawal_metadata, withdrawn_at")
     .eq("id", id)
     .single();
   const prevStatus = cur?.status as string | undefined;
@@ -230,6 +230,10 @@ export async function updateStudent(
       .is("end_date", null);
     if (enrErr) return { error: enrErr.message };
   } else if (input.status === "enrolled" && prevStatus !== "enrolled") {
+    // 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 시간표 '퇴원'에 남음.
+    const withdrawnDate = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
+    const reopenErr = await reopenEnrollmentsClosedByWithdrawal(supabase, id, withdrawnDate);
+    if (reopenErr) return { error: reopenErr };
     const { error: enrErr } = await supabase
       .from("enrollments")
       .update({ on_hold: false })
@@ -249,6 +253,26 @@ export async function updateStudent(
   revalidatePath("/students");
   // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2). nonce로 연속 저장 구분.
   return { ok: true, redirectTo: `/students/${id}`, nonce: Date.now() };
+}
+
+/**
+ * 재원 복구 시, 그 퇴원(withdrawnDate)이 닫은 enrollment를 다시 연다.
+ * 퇴원은 활성 enrollment를 end_date=퇴원일로 닫으므로, 복구는 그 날짜로 닫힌 것만 되돌린다
+ * (그 이전에 개별 종료된 과거 수강은 유지). 안 하면 학생은 재원인데 수강이 종료로 남아
+ * 시간표 셀 '퇴원' 섹션에 계속 뜬다. withdrawnDate가 없으면(휴원→재원 등) no-op.
+ */
+async function reopenEnrollmentsClosedByWithdrawal(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  studentId: string,
+  withdrawnDate: string | null,
+): Promise<string | null> {
+  if (!withdrawnDate) return null;
+  const { error } = await supabase
+    .from("enrollments")
+    .update({ end_date: null, withdrawal_reason: null, on_hold: false })
+    .eq("student_id", studentId)
+    .eq("end_date", withdrawnDate);
+  return error?.message ?? null;
 }
 
 // ────────────────────── 상태 전환 모달 (퇴원/휴원/수강종료/복구) ──────────────────────
@@ -342,6 +366,14 @@ export async function changeStudentStatus(
       .is("end_date", null);
     if (enrErr) return { error: enrErr.message };
   } else if (target === "enrolled") {
+    // 복구 전에 이 학생의 퇴원일(withdrawn_at)을 먼저 읽는다 — 그 날짜로 닫힌 enrollment가 이번 퇴원이 종료시킨 것.
+    const { data: before } = await supabase
+      .from("students")
+      .select("withdrawn_at")
+      .eq("id", id)
+      .single();
+    const withdrawnDate = before?.withdrawn_at ? String(before.withdrawn_at).slice(0, 10) : null;
+
     // 복구: status=enrolled, withdrawn_at=null, metadata=null, on_hold=false
     const { error: stuErr } = await supabase
       .from("students")
@@ -353,6 +385,11 @@ export async function changeStudentStatus(
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
 
+    // ⚠️ 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 수강이 종료로 남아 시간표 '퇴원'에 뜬다.
+    const reopenErr = await reopenEnrollmentsClosedByWithdrawal(supabase, id, withdrawnDate);
+    if (reopenErr) return { error: reopenErr };
+
+    // 나머지 이미 열려있던 enrollment의 on_hold 해제.
     const { error: enrErr } = await supabase
       .from("enrollments")
       .update({ on_hold: false })
