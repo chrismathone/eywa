@@ -1,5 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import {
   getStudentOptions,
   getStudentOptionsForIds,
@@ -15,6 +17,7 @@ import { TextbookRequestClient } from "./_client";
 export default async function TextbookRequestsPage() {
   const user = await requireAccess("textbook_requests");
   const isTeacher = user.systemRole === "teacher";
+  const settings = await getTenantSettings();
 
   let rows;
   let students;
@@ -31,5 +34,17 @@ export default async function TextbookRequestsPage() {
     students = opts;
   }
 
-  return <TextbookRequestClient rows={rows} students={students} isTeacher={isTeacher} />;
+  // '바로 다운로드'(목록에서 새 탭 없이 요청서 PNG)용 — 카드에 학원명·로고·계좌 필요.
+  const logoUrl = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
+
+  return (
+    <TextbookRequestClient
+      rows={rows}
+      students={students}
+      isTeacher={isTeacher}
+      academyName={settings.profile.name || "인재원"}
+      logoUrl={logoUrl}
+      account={settings.billing.account}
+    />
+  );
 }

@@ -119,6 +119,75 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
   return { ok: true, createdId: data?.id as string | undefined }; // 생성 직후 요청서 자동 다운로드용
 }
 
+/**
+ * 강사 교재 요청 수정/삭제 — 사무실이 **아무것도 처리하지 않은**(등록/주문/납부 체크 0) 요청만 허용.
+ * 사무실이 처리를 시작하면 잠금(강사가 임의 변경 불가). 강사는 본인 담당 학생 요청만.
+ * (사무실은 기존 /billing 교재 면의 updateTextbookOrder/deleteTextbookOrder로 잠금 없이 처리.)
+ */
+async function loadEditableRequest(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  id: string,
+  user: { systemRole: string; id: string },
+): Promise<{ error: string } | { ok: true }> {
+  const { data: row } = await supabase
+    .from("textbook_orders")
+    .select("student_id, registered_at, ordered_at, paid_at")
+    .eq("id", id)
+    .single();
+  if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
+  // 강사는 본인 담당 학생 요청만.
+  if (user.systemRole === "teacher") {
+    const { studentIds } = await getTeacherScope(user.id);
+    if (!row.student_id || !studentIds.includes(row.student_id)) return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
+  }
+  // 사무실이 하나라도 처리(등록/주문/납부)했으면 잠금.
+  if (row.registered_at || row.ordered_at || row.paid_at) {
+    return { error: "사무실에서 처리 중인 요청은 수정·삭제할 수 없습니다" };
+  }
+  return { ok: true };
+}
+
+export async function updateTextbookRequest(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "textbook_requests"))) return { error: "교재 요청 권한이 없습니다" };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "교재 요청 ID가 누락되었습니다" };
+  const f = parse(formData);
+  if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
+
+  const supabase = await createClient();
+  const gate = await loadEditableRequest(supabase, id, user);
+  if ("error" in gate) return { error: gate.error };
+
+  const { error } = await supabase
+    .from("textbook_orders")
+    .update({ book_name: f.bookName, book_detail: f.bookDetail, notes: f.notes, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/textbook-requests");
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
+export async function deleteTextbookRequest(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "textbook_requests"))) return { error: "교재 요청 권한이 없습니다" };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "교재 요청 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const gate = await loadEditableRequest(supabase, id, user);
+  if ("error" in gate) return { error: gate.error };
+
+  const { error } = await supabase.from("textbook_orders").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/textbook-requests");
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
 export async function updateTextbookOrder(_prev: TextbookState, formData: FormData): Promise<TextbookState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
