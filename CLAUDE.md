@@ -353,6 +353,12 @@ ijw `ExcelImportPreviewModal`(가져오기 전 검토/검증 모달) 대비 감�
 - **문구 정리(사용자 지시)**: `enrollmentId` 언급 제거(사용자가 알 필요 없음)·`변경없음` 카운트 제거·백업 안내 제거(**롤백 UI가 없어 "되돌릴 수 있습니다"는 과잉약속=write-only-orphan 회피**).
 - 검증: import-dialog typecheck0/lint0 + 라이브(마스터, 실 연결 시트: 이동1+매칭실패1 → 섹션·무시·확인 메시지 정확, 적용 취소로 DB 무변경). ⚠️ 스냅샷 write(`timetable_snapshots`)는 있으나 **사용자용 복원 UI는 미구현**(1b) — 그래서 UI에서 "되돌리기" 약속 안 함. ⚠️ 위치메타 시각편집(옵션C)은 CLAUDE.md 판정대로 비이식 유지.
 
+### 반 활성 체크박스 해제 무시 버그 — is_active=false 저장 안 됨 → 시간표 잔존 (2026-07-01) — ✅ 한 줄 수정
+사용자 제보: 반 수정 폼에서 '활성' 체크를 해제·저장했는데 시간표에 계속 보임. 원인 = **HTML 체크박스는 해제 시 FormData에 값을 안 보냄**인데 [parseClassInput](src/features/classes/server/actions.ts)이 `isActive: get("isActive") !== "false"`로 판정 → 해제(빈 값)여도 `"" !== "false"` = **true**라 항상 활성으로 저장(=체크 해제가 무시됨). 폼엔 `<input type="checkbox" name="isActive" value="true">` 하나뿐(hidden 짝 없음).
+- **수정**: `isActive: get("isActive") === "true"`(체크됐을 때만 true, 해제=false). createClass는 체크박스 기본 checked라 무영향. **같은 footgun 다른 곳 없음**(전역 검색: class-form defaultChecked·makeedu-sync는 boolean/DB값 비교라 무관).
+- **검증**: 시간표 쿼리는 원래 정상 — `fetchSlots`가 `class:class_id!inner + .eq("class.is_active", true)`로 폐지 반 제외, `getWeeklyScheduleWithStudents`도 슬롯을 fetchSlots에서만 도출(반→누수 경로 0). DB 실측: is_active=false면 fetchSlots 반환 **0행**(정확 제외). typecheck0/lint0.
+- ⚠️ **잔존 표시는 stale 창**: 반 편집(다른 창)에서 저장 → 이미 열려 있던 시간표 창(별도 iframe 문서)엔 자동 반영 안 됨([[#55]]) → 시간표 창 새로고침 필요(쿼리 자체는 이미 제외).
+
 ### 시간표 요일 병합을 과목별 프리셋으로 설정 (2026-06-30) — ✅ 게이트 그린 + 라이브
 사용자 제보: 기본뷰 요일 병합이 **수학 패턴(월목/화금/수)으로 하드코딩**돼 모든 과목에 적용 — 과목마다 수업 요일이 다른데(영어=월화/목금 등) 전부 월목/화금으로 묶임. 과목별로 병합 요일을 설정 가능하게.
 - **사용자 선택 = 프리셋 방식**(자유 분할 대신 드롭다운). 과목 설정에 `weekdayGrouping` 추가(스키마 `subjectSchema`): `mon-thu`(월목·화금, 수 단독=기본)·`mon-tue`(월화·목금)·`mon-wed-fri`(월수금·화목)·`none`(병합 없음, 요일별 풀너비).

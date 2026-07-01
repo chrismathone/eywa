@@ -68,7 +68,9 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
     teacherId: get("teacherId") || null,
     classroomId: get("classroomId") || null,
     notes: get("notes") || null,
-    isActive: get("isActive") !== "false",
+    // ⚠️ 체크박스는 해제 시 FormData에 아무것도 안 보냄 → "" 가 온다. `!== "false"`면 해제해도 true로
+    //    저장돼(체크 해제 무시 버그) 폐지한 반이 시간표에 계속 노출됐다. 체크됐을 때만(value="true") true.
+    isActive: get("isActive") === "true",
     bgColor,
     textColor: bgColor ? readableTextColor(bgColor) || null : null,
     schedules: parseSchedules(formData),
