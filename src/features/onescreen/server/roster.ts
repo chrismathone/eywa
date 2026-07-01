@@ -122,7 +122,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
           check: { score: null, max: 20, prevScore: null },
         },
         attitude: null,
-        homework: "—",
+        homework: "",
         progressConfirmed: false,
         reportDraft: "",
         reportSent: false,

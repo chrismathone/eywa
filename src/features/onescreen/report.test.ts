@@ -136,6 +136,23 @@ describe("buildReport", () => {
     expect(r).toContain("과제는 완료");
   });
 
+  it("태도만 있고 과제 미입력이면 과제 문구 생략", () => {
+    const r = buildReport(makeStudent({ attitude: "보통", homework: "" }));
+    expect(r).toContain("수업 태도는 '보통'입니다");
+    expect(r).not.toContain("과제는");
+  });
+
+  it("과제만 있고 태도 없으면 과제 문장 단독 포함", () => {
+    const r = buildReport(makeStudent({ attitude: null, homework: "완료" }));
+    expect(r).toContain("과제는 완료 상태입니다");
+    expect(r).not.toContain("수업 태도");
+  });
+
+  it('과제 "—"는 미입력으로 취급(문구 생략)', () => {
+    const r = buildReport(makeStudent({ attitude: "좋음", homework: "—" }));
+    expect(r).not.toContain("과제는");
+  });
+
   it("직전 회차 대비 증감 꼬리표", () => {
     const up = buildReport(
       makeStudent({

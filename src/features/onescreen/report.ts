@@ -57,7 +57,12 @@ function testAndClosingLines(st: OneScreenStudent): string[] {
   if (cPart) tparts.push(cPart);
   if (tparts.length) lines.push(tparts.join(", ") + " 결과를 받았습니다.");
 
-  if (st.attitude) lines.push(`수업 태도는 '${st.attitude}', 과제는 ${st.homework} 상태입니다.`);
+  // 태도·과제를 독립 처리 — 빈 값(과제 미입력 "" / "—")은 문장에서 생략(무의미한 "과제는 — 상태입니다" 방지).
+  const hasHomework = !!st.homework && st.homework !== "—";
+  if (st.attitude && hasHomework)
+    lines.push(`수업 태도는 '${st.attitude}', 과제는 ${st.homework} 상태입니다.`);
+  else if (st.attitude) lines.push(`수업 태도는 '${st.attitude}'입니다.`);
+  else if (hasHomework) lines.push(`과제는 ${st.homework} 상태입니다.`);
 
   const scored = [st.tests.daily, st.tests.check].filter(
     (t): t is TestScore & { score: number } => t.score != null,

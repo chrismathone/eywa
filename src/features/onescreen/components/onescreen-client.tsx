@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { usePrintWindow } from "@/components/workspace/print-window";
-import { ATTITUDE, CLASS_TAGS, TODAY } from "../data";
+import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
 import { saveLessonReport } from "../server/actions";
@@ -139,6 +139,10 @@ export function OneScreenClient({
     if (!selected) return;
     patch(selected.id, (s) => ({ ...s, attitude: s.attitude === a ? null : a }));
   }
+  function setHomework(h: string) {
+    if (!selected) return;
+    patch(selected.id, (s) => ({ ...s, homework: s.homework === h ? "" : h }));
+  }
   function setSubjectDraft(subjectName: string, text: string) {
     if (!selected) return;
     patchReport(selected.id, subjectName, (r) => ({ ...r, draft: text }));
@@ -248,7 +252,9 @@ export function OneScreenClient({
                 student={selected}
                 reports={reports[selected.id] ?? {}}
                 attitudes={ATTITUDE}
+                homeworks={HOMEWORK}
                 onAttitude={setAttitude}
+                onHomework={setHomework}
                 onSubjectDraft={setSubjectDraft}
                 onAutoWrite={autoWriteSubject}
                 onSend={sendSubject}

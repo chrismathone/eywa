@@ -42,7 +42,7 @@ function MiniSummary({ st, subject }: { st: OneScreenStudent; subject: Subject }
         <span className="tabular">{fmt(check)}</span>
         <DeltaChip score={check.score} prev={check.prevScore} />
       </Row>
-      <Row label="태도 · 과제">{(st.attitude ?? "—") + " · " + st.homework}</Row>
+      <Row label="태도 · 과제">{(st.attitude ?? "—") + " · " + (st.homework || "—")}</Row>
     </div>
   );
 }
@@ -56,7 +56,9 @@ export function ReportCard({
   student,
   reports,
   attitudes,
+  homeworks,
   onAttitude,
+  onHomework,
   onSubjectDraft,
   onAutoWrite,
   onSend,
@@ -64,7 +66,9 @@ export function ReportCard({
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
   attitudes: readonly string[];
+  homeworks: readonly string[];
   onAttitude: (a: string) => void;
+  onHomework: (h: string) => void;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onAutoWrite: (subjectName: string) => void;
   onSend: (subjectName: string, channel: string) => void;
@@ -143,6 +147,30 @@ export function ReportCard({
           </div>
         </div>
 
+        <div>
+          <p className="micro text-text-faint mb-1.5">과제</p>
+          <div className="flex flex-wrap gap-1.5">
+            {homeworks.map((h) => {
+              const on = student.homework === h;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => onHomework(h)}
+                  aria-pressed={on}
+                  className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+                    on
+                      ? "bg-primary text-primary-foreground"
+                      : "border-line text-text-dim hover:bg-bg-soft border"
+                  }`}
+                >
+                  {h}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <p className="micro text-text-faint">{subjectName} 보고서</p>
@@ -159,11 +187,20 @@ export function ReportCard({
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <Button size="sm" onClick={() => onSend(subjectName, "카카오톡")}>
-            카톡 발송
+          <Button
+            size="sm"
+            title="메시징 연동 후 발송 — 지금은 보고서 기록만 저장됩니다"
+            onClick={() => onSend(subjectName, "카카오톡")}
+          >
+            카톡용 저장
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onSend(subjectName, "문자")}>
-            문자
+          <Button
+            variant="outline"
+            size="sm"
+            title="메시징 연동 후 발송 — 지금은 보고서 기록만 저장됩니다"
+            onClick={() => onSend(subjectName, "문자")}
+          >
+            문자용 저장
           </Button>
           <Button variant="ghost" size="sm" onClick={() => onSend(subjectName, "pdf")}>
             PDF

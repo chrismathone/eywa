@@ -12,6 +12,9 @@ export const TODAY = "2026년 6월 1일 (월)";
 /** 수업 태도 선택지 */
 export const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
 
+/** 과제 상태 선택지 */
+export const HOMEWORK = ["완료", "일부 미흡", "미제출"] as const;
+
 /** 학년 필터 칩 (수학 강사가 맡는 학년) */
 export const CLASS_TAGS = ["전체", "초3", "초4", "초5", "초6", "중1", "중2", "중3"] as const;
 
