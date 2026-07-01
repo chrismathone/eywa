@@ -361,6 +361,25 @@ async function requireClassWrite() {
   return { user, error: undefined as string | undefined };
 }
 
+/**
+ * 인계 대상이 이 학원의 활성 강사/실장/원장인지 검증 — 예약(schedule)·적용(apply) 공통.
+ * RLS가 users SELECT를 자기 테넌트로 제한 → 타 테넌트 id는 null로 거부.
+ * ⚠️ apply에서도 반드시 재검증할 것 — 예약~적용 사이에 대상이 퇴사/역할변경되면 schedule 검증이 무의미해진다.
+ */
+async function isAssignableTeacher(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("users")
+    .select("system_role, status")
+    .eq("id", userId)
+    .maybeSingle();
+  return (
+    !!data && ["teacher", "manager", "master"].includes(data.system_role) && data.status === "active"
+  );
+}
+
 /** 강사 인수인계 예약 — 예정 강사·적용일·사유를 classes에 저장(아직 teacher_id 미변경). */
 export async function scheduleHandover(_prev: HandoverState, formData: FormData): Promise<HandoverState> {
   const { user, error } = await requireClassWrite();
@@ -382,6 +401,12 @@ export async function scheduleHandover(_prev: HandoverState, formData: FormData)
     .single();
   if (!klass) return { error: "반을 찾을 수 없습니다" };
   if (klass.teacher_id === newTeacherId) return { error: "현재 담임과 동일한 강사입니다" };
+
+  // 인계 대상이 이 학원의 활성 강사/실장/원장인지 검증 — UI는 검색으로 전체 강사를 노출하므로
+  // 서버에서도 유효성을 못박는다(변조 payload·타 테넌트 id 방어).
+  if (!(await isAssignableTeacher(supabase, newTeacherId))) {
+    return { error: "유효한 강사가 아닙니다" };
+  }
 
   const { error: updErr } = await supabase
     .from("classes")
@@ -443,6 +468,12 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
     .single();
   if (!klass) return { error: "반을 찾을 수 없습니다" };
   if (!klass.pending_teacher_id) return { error: "예약된 인수인계가 없습니다" };
+
+  // ⚠️ 예약 시점 검증만으론 부족 — 예약~적용 사이에 대상이 퇴사/역할변경됐을 수 있어 적용 직전 재검증.
+  // (FK onDelete:set null이라 하드삭제는 위 null 가드가 잡지만 status/role 변경은 안 잡힘.)
+  if (!(await isAssignableTeacher(supabase, klass.pending_teacher_id))) {
+    return { error: "예정된 강사가 더 이상 유효하지 않습니다(퇴사·역할 변경). 인수인계를 다시 예약해주세요." };
+  }
 
   const { error: updErr } = await supabase
     .from("classes")

@@ -63,19 +63,33 @@ export default async function ClassDetailPage({
   // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
 
-  // 인수인계 대상 강사 풀 — 과목 담당 우선(없으면 전체), 현재 담임 제외.
-  const subjectTeachers = teacherOptions.filter((t) => t.subjects.includes(klass.subject));
-  const handoverPool = (subjectTeachers.length ? subjectTeachers : teacherOptions)
+  // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+
+  // 인수인계 대상 강사 풀 — 활성 강사/실장/원장 전원(현재 담임 제외).
+  // 과목 담당자를 상단에 정렬하고, 나머지(신입·타 과목)는 검색으로 선택할 수 있게 hint를 붙인다.
+  // ⚠️ 과목으로 하드 필터하면 subjects[] 미지정 신입 강사가 후보에서 통째로 빠져 인계 불가 → 필터 대신 정렬로.
+  const handoverPool = teacherOptions
     .filter((t) => t.id !== klass.teacherId)
-    .map((t) => ({ id: t.id, name: t.name }));
+    .map((t) => {
+      const isSubjectMatch = t.subjects.includes(klass.subject);
+      return {
+        id: t.id,
+        name: t.name,
+        isSubjectMatch,
+        hint: isSubjectMatch
+          ? "이 반 과목"
+          : t.subjects.length
+            ? t.subjects.map((s) => subjects.labelOf(s)).join("·")
+            : "과목 미지정",
+      };
+    })
+    .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
   const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= todayIso();
 
   // 이 반에 이미 활성 등록된 학생 제외
   const enrolledIds = new Set(students.map((s) => s.studentId));
   const candidateStudents = allEnrolledStudents.filter((s) => !enrolledIds.has(s.id));
-
-  // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
-  const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const scheduleByDay = new Map<DayOfWeek, typeof klass.scheduleSlots>();
   for (const s of klass.scheduleSlots) {

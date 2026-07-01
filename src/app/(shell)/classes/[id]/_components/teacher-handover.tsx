@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
 import { AlertCircle, ArrowRight, Check, Loader2, UserCog, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   applyHandover,
   cancelHandover,
@@ -15,7 +16,7 @@ import {
 const inputCls =
   "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
-type TeacherOption = { id: string; name: string };
+type TeacherOption = { id: string; name: string; hint?: string };
 
 function SaveBtn() {
   const { pending } = useFormStatus();
@@ -47,7 +48,8 @@ function HandoverDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      {/* ⚠️ overflow-y-auto/max-h를 두지 않는다 — SearchableSelect 팝업(absolute)이 잘린다(EnrollmentAssignDialog 패턴). 폼이 짧아 뷰포트 넘칠 일 없음. */}
+      <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <h2 className="text-foreground text-lg font-semibold">강사 인수인계 예약</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="닫기">
@@ -62,19 +64,19 @@ function HandoverDialog({
             새 담임으로 교체를 예약합니다. 적용일에 <span className="text-foreground">지금 적용</span> 버튼으로 반영됩니다.
           </p>
 
-          <label className="block space-y-1.5">
+          <div className="space-y-1.5">
             <span className="text-foreground block text-sm font-medium">새 담임 *</span>
-            <select name="newTeacherId" defaultValue="" className={inputCls}>
-              <option value="" disabled>
-                강사 선택
-              </option>
-              {teacherOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <SearchableSelect
+              name="newTeacherId"
+              options={teacherOptions.map((t) => ({ value: t.id, label: t.name, hint: t.hint }))}
+              placeholder="강사 선택"
+              searchPlaceholder="이름으로 검색..."
+              ariaLabel="새 담임 강사"
+            />
+            <p className="text-text-faint text-xs">
+              이 반 과목 담당 강사가 위에 표시됩니다. 신입·타 과목 강사도 이름으로 검색해 선택할 수 있어요.
+            </p>
+          </div>
 
           <label className="block space-y-1.5">
             <span className="text-foreground block text-sm font-medium">적용일 *</span>
