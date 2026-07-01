@@ -156,7 +156,10 @@ async function main() {
       if (!e.classId || !insertedClass.has(e.classId)) { note("enr.skip(class)"); continue; }
       const start = normDate(e.startDate || e.enrollmentDate || st.startDate) || "2026-03-01";
       const end0 = normDate(e.endDate || e.withdrawalDate);
-      const end = end0 && end0 < start ? null : end0; // end<start → 진행중으로 보정
+      // ⚠️ ijw는 종료·전출된 수강을 end<start(종료일이 시작일보다 이름)로 기록한다. 이를 null(진행중)로
+      // 되살리면 옛 반이 안 닫혀 시간표에 유령으로 남는다(강사 간 학생 중복). 종료로 취급하되,
+      // GiST daterange(start,end,'[)')는 end<start면 throw하므로 end_date=start(빈 구간=활성 아님)로 닫는다.
+      const end = end0 && end0 < start ? start : end0;
       // 분리등원(요일 한글 → eywa day 코드) + 전입 플래그 보존.
       const attDays = Array.isArray(e.attendanceDays) ? e.attendanceDays.map((d: string) => DAY_MAP[d] ?? d) : [];
       cands.push({ st: studentIds.get(st.id), cls: classIds.get(e.classId), start, end, onHold: e.onHold ?? false, reason: e.cancelReason ?? null, isTransferred: e.isTransferred ?? false, attendanceDays: attDays });
