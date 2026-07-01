@@ -4,7 +4,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import type { OneScreenStudent } from "../types";
+import { kstToday } from "@/lib/date-kst";
+import { parseExamScores } from "../exam-info";
+import type { AttendanceMark, OneScreenStudent } from "../types";
 
 /**
  * 선생님 원스크린 — 실데이터 로더(데모 스냅샷 대체).
@@ -129,6 +131,67 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     }
     if (!os.subjects.some((su) => su.subjectKey === cls.subject)) {
       os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, prev: "", today: "" });
+    }
+  }
+
+  // 이전 진도/점수(직전 회차) + 오늘 발송 여부 + 오늘 출결을 실데이터로 채운다(하드코딩 초기값 대체).
+  // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
+  const todayIso = kstToday();
+  const [reportRows, attRows] = await Promise.all([
+    fetchInChunks<{ student_id: string; report_date: string; progress: string | null; exam_info: string | null }>(
+      studentIds,
+      (chunk) =>
+        supabase
+          .from("lesson_reports")
+          .select("student_id, report_date, progress, exam_info")
+          .in("student_id", chunk)
+          .order("report_date", { ascending: false }),
+    ),
+    fetchInChunks<{ student_id: string; status: string; recorded_at: string }>(
+      studentIds,
+      (chunk) =>
+        supabase
+          .from("attendance_records")
+          .select("student_id, status, recorded_at")
+          .eq("session_date", todayIso)
+          .in("student_id", chunk)
+          .order("recorded_at", { ascending: false }),
+    ),
+  ]);
+
+  // student별: 오늘 저장된 보고서 존재(reportSent) + 오늘 이전 최신 보고서(prev 진도/prevScore).
+  const sentToday = new Set<string>();
+  const priorReport = new Map<string, { progress: string | null; examInfo: string | null }>();
+  for (const r of reportRows) {
+    if (r.report_date === todayIso) sentToday.add(r.student_id);
+    else if (!priorReport.has(r.student_id))
+      priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
+  }
+  // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신).
+  const attById = new Map<string, string>();
+  for (const a of attRows) if (!attById.has(a.student_id)) attById.set(a.student_id, a.status);
+  const toMark = (status: string | undefined): AttendanceMark =>
+    status === "late" ? "지각" : status === "absent" || status === "early_leave" ? "결석" : "출석";
+
+  for (const os of byStudent.values()) {
+    os.reportSent = sentToday.has(os.id);
+    os.attendance = toMark(attById.get(os.id));
+    const pr = priorReport.get(os.id);
+    if (pr) {
+      const { daily, check } = parseExamScores(pr.examInfo);
+      os.tests.daily.prevScore = daily;
+      os.tests.check.prevScore = check;
+      if (pr.progress) {
+        // 이전 진도 텍스트("수학 1-1-2 …")를 과목명 접두로 매칭 → 그 과목 prev. 폴백=첫 과목.
+        let matched = false;
+        for (const su of os.subjects) {
+          if (su.name && pr.progress.startsWith(su.name)) {
+            su.prev = pr.progress.slice(su.name.length).trim() || pr.progress;
+            matched = true;
+          }
+        }
+        if (!matched && os.subjects[0]) os.subjects[0].prev = pr.progress;
+      }
     }
   }
 
