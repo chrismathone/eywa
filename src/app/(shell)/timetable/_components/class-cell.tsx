@@ -85,6 +85,7 @@ const ROW_CLASS =
  */
 function DraggableStudentRow({
   enrollmentId,
+  studentId,
   classId,
   className,
   name,
@@ -94,6 +95,8 @@ function DraggableStudentRow({
   attendanceDays,
 }: {
   enrollmentId: string;
+  /** 학생 id — 편집 모드 Delete=오늘 수강 종료 시 hover 추적에 사용. */
+  studentId?: string;
   classId: string;
   className: string;
   name: string;
@@ -104,7 +107,7 @@ function DraggableStudentRow({
   /** 이 학생의 등원 요일(분리등원, 비면 전 요일) — 도착 셀 '전입 예정' 요일 라벨용으로 drag data에 실어 보냄. */
   attendanceDays?: string[];
 }) {
-  const { pending } = useTimetableEdit();
+  const { pending, setHovered } = useTimetableEdit();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dayKey ? `student:${enrollmentId}:${dayKey}` : `student:${enrollmentId}`,
     data: { classId, name, fromClassName: className, enrollmentId, attendanceDays },
@@ -115,6 +118,8 @@ function DraggableStudentRow({
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      onMouseEnter={() => setHovered({ enrollmentId, studentId: studentId ?? "", name, className })}
+      onMouseLeave={() => setHovered(null)}
       className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
     >
       <span className={`overflow-hidden whitespace-nowrap text-clip ${target ? "line-through" : ""}`}>
@@ -226,6 +231,7 @@ function StudentSection({
           <DraggableStudentRow
             key={s.enrollmentId}
             enrollmentId={s.enrollmentId}
+            studentId={s.studentId}
             classId={classId}
             className={className}
             name={s.name}
@@ -444,6 +450,7 @@ export function ClassCell({
                                   <DraggableStudentRow
                                     key={s.enrollmentId}
                                     enrollmentId={s.enrollmentId}
+                                    studentId={s.studentId}
                                     dayKey={day}
                                     classId={realClassId}
                                     className={slot.className}

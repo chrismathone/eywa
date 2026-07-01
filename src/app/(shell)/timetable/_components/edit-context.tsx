@@ -5,6 +5,9 @@ import { createContext, useContext } from "react";
 /** 셀 → 보드로 흐르는 편집 상태. 보드(client)가 제공, ClassCell(client)이 소비. */
 export type PendingTarget = { toClassId: string; toClassName: string };
 
+/** 마우스 오버 중인 학생(편집 모드 Delete=오늘 수강 종료용). ref로 추적해 hover마다 리렌더 안 함. */
+export type HoveredStudent = { enrollmentId: string; studentId: string; name: string; className: string };
+
 /** 도착 셀에 미리 그릴 전입 예정 학생 1명(출발 반 이름·목적지 등원 요일까지 보여 어디서/어느 요일로 오는지 표시). */
 export type IncomingStudent = {
   enrollmentId: string;
@@ -49,6 +52,8 @@ export interface TimetableEditState {
   setScheduledDate: (d: string | null) => void;
   /** 적용일 입력의 기본·최소값(= 조회 주 기준일 ?? 오늘). 편집 바가 date input 기본값으로 사용. */
   dateFloor: string;
+  /** 마우스 오버 중인 학생 등록(편집 모드 Delete=오늘 수강 종료). ref 세팅이라 리렌더 없음. null=해제. */
+  setHovered: (h: HoveredStudent | null) => void;
 }
 
 const noop = () => {};
@@ -67,6 +72,7 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   scheduledDate: null,
   setScheduledDate: noop,
   dateFloor: "",
+  setHovered: noop,
 });
 
 export function useTimetableEdit(): TimetableEditState {

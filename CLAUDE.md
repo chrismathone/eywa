@@ -329,6 +329,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 편집 모드 Delete = 오늘 그 반 수강 종료 (hover + 확인 팝업) (2026-07-01) — ✅ typecheck0/lint0 + 라이브 팝업 검증
+사용자 요청: 시간표에서 학생에 **마우스 올린 채 Delete → 오늘 그 반 수강 종료**. ⚠️ 정정: "퇴원"(전체 학생 status)이 아니라 **그 반의 수강 종료**(이력=수강 종료, 그 셀에선 퇴원 목록으로 이동, **모든 반 수강종료 시 자연히 퇴원**). 기존 [endSingleEnrollment](src/features/students/server/actions.ts)(end_date=오늘, 학생 쓰기 full 게이트) 재사용.
+- **hover 추적 = ref**([edit-context](<src/app/(shell)/timetable/_components/edit-context.tsx>) `HoveredStudent`·`setHovered`): DraggableStudentRow `onMouseEnter/Leave`가 **ref만 세팅**(hover마다 리렌더 방지). context에 stable `setHovered` 노출.
+- **Delete 리스너**([timetable-board](<src/app/(shell)/timetable/_components/timetable-board.tsx>) provider): **편집 모드에서만**(`editing` 게이트, 사용자 선택) + 입력창(input/textarea/select/contenteditable) 타이핑 중 무시. hover된 학생 있으면 확인 팝업.
+- **확인 팝업 필수**(`EndEnrollmentConfirm`, 사용자 선택): 파괴적이라 확인 1번 — Esc/바깥클릭=취소, 확인 버튼 autofocus, danger 색. 확인 시 `endSingleEnrollment(오늘)` → **`router.refresh()`**(그 액션은 /timetable revalidate 안 해 클라 새로고침 필요).
+- **셀 표시 자동**: enrollment end_date=오늘(전출 아님) → [queries.ts:257-269](src/features/timetable/server/queries.ts)에서 `hasEnded→status="withdrawn"` → 그 셀 **퇴원 섹션**. 다른 반은 active 유지(학생 전체 퇴원 아님).
+- 검증: typecheck0/lint0/test + **라이브 E2E**(편집 진입→학생 hover(mouseover)→Delete→'이채은 학생을 초등M 개별 BS1B 반에서 오늘(2026-07-01) 수강 종료할까요?' 팝업·danger 버튼·취소로 닫힘). ⚠️ **실제 '수강 종료' 클릭(DB write)은 실 학생 종료라 라이브 미실행** — 기존 검증된 액션 + 검증된 셀 표시 로직이라 by-construction.
+
 ### 시간표 내보내기(엑셀/시트) 셀 넘침 → 잘림 (2026-07-01) — ✅ typecheck0/lint0 + 수학 xlsx fetch 검증
 사용자 제보: 수학 시간표 export에서 학생 이름이 셀 밖으로 넘쳐 옆 칸을 침범. **엑셀·시트 모두 넘침 방지**로.
 - **구글 시트**([overwriteMathTimetableSheet](src/features/integrations/google-sheets.ts)): 구글 시트는 xlsx import 시 기본이 **OVERFLOW_CELL**이라
@@ -1657,7 +1665,8 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   · **비밀번호·서버 prop·봇 트랩**(직원 임시비번·공개접수 renderedAt/company/token)은 `exclude`로 **IDB에 안 남기기**(보안).
   · **기본값이 항상 채워지는 필드**(상담 일시 now·category·audience 등)는 `ignoreForBanner`로 빼서 **빈 폼 오탐 배너** 방지.
 - **적용 현황(2026-06-30)**: ✅ 등록상담·학생(생성/수정)·직원·학생상담 + **수강료 계산기**(`useStateDraft` 스냅샷)·**반**(class-form: 스케줄 grid hidden input
-  schedule_*_${i}를 onRestore에서 배열로 복원 → `key`로 ScheduleGrid remount + 과목/담임/색 setState). ⏳ **SPECIAL 남음** = 학부모 QR 공개접수(uncontrolled DOM + 다중선택/false·null
+  schedule_*_${i}를 onRestore에서 배열로 복원 → `key`로 ScheduleGrid remount + 과목/담임/색 setState)·**지출**(2026-07-01, expense-dialog — 하이브리드: DOM 필드 자동 캡처/복원 + 라인아이템·통화는 onRestore로 setState;
+  빈 항목이면 hidden `lineItems`를 `""`로 정규화[액션 parse는 `""`·`"[]"` 동치=null]해 오탐 배너 방지, `ignoreForBanner`=분류/일자/합계/통화; 다이얼로그 조건부 마운트라 성공 시 clear+onClose 안전). ⏳ **SPECIAL 남음** = 학부모 QR 공개접수(uncontrolled DOM + 다중선택/false·null
   lossy state 혼합 → 하이브리드)·학원설정(제네릭 래퍼라 각 *-section이 직접 useFormDraft 또는 onRestoreDraft 콜백 필요) — 별도 패스. ⏭️ **skip** = 짧은 폼(시험 등록·회의 신규·성적 인라인·상담 녹음[녹음은 이미 복구]).
 - ⚠️ 새 "긴 폼"을 추가하면 이 5단계로 초안 자동저장을 붙인다. 컨트롤드/동적 state가 있으면 hidden 직렬화+onRestore를 잊지 말 것(안 그러면 복원이 반쪽).
 

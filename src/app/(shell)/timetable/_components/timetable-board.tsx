@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -16,11 +16,13 @@ import {
 } from "@dnd-kit/core";
 import { Check, GripVertical, Loader2, Pencil, X } from "lucide-react";
 import { moveEnrollmentsBatch } from "@/features/enrollments/server/actions";
+import { endSingleEnrollment } from "@/features/students/server/actions";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
 import { zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
 import {
   TimetableEditContext,
   useTimetableEdit,
+  type HoveredStudent,
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
@@ -58,6 +60,51 @@ export function TimetableEditProvider({
   // 사용자가 편집 바에서 정한 적용일(예정일). null이면 기본(조회 주 기준 effectiveDate ?? 오늘).
   const [scheduledDate, setScheduledDate] = useState<string | null>(null);
   const dateFloor = effectiveDate ?? today;
+
+  // 편집 모드 Delete = 오늘 수강 종료(그 반만). hover는 ref로 추적(hover마다 리렌더 방지), 확인 팝업만 state.
+  const hoveredRef = useRef<HoveredStudent | null>(null);
+  const setHovered = useCallback((h: HoveredStudent | null) => {
+    hoveredRef.current = h;
+  }, []);
+  const [endTarget, setEndTarget] = useState<HoveredStudent | null>(null);
+  const [ending, setEnding] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
+
+  // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 확인 팝업. 입력창 타이핑 중엔 무시. 편집 모드에서만.
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete") return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      const cur = hoveredRef.current;
+      if (!cur) return;
+      e.preventDefault();
+      setEndError(null);
+      setEndTarget(cur);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing]);
+
+  async function confirmEndEnrollment() {
+    if (!endTarget) return;
+    setEnding(true);
+    setEndError(null);
+    const fd = new FormData();
+    fd.set("enrollmentId", endTarget.enrollmentId);
+    if (endTarget.studentId) fd.set("studentId", endTarget.studentId);
+    fd.set("date", today); // 오늘 날짜로 종료
+    const res = await endSingleEnrollment(undefined, fd);
+    setEnding(false);
+    if (res?.error) {
+      setEndError(res.error);
+      return;
+    }
+    setEndTarget(null);
+    router.refresh(); // endSingleEnrollment는 /timetable revalidate 안 함 → 클라 새로고침
+  }
 
   // net 압축 결과(이름·출발반명·목적지 셀/요일까지 포함) — 표시용 pending/incoming의 단일 출처.
   const resolved = useMemo<Queued[]>(() => {
@@ -183,10 +230,87 @@ export function TimetableEditProvider({
         scheduledDate,
         setScheduledDate,
         dateFloor,
+        setHovered,
       }}
     >
       {children}
+      {endTarget ? (
+        <EndEnrollmentConfirm
+          target={endTarget}
+          today={today}
+          ending={ending}
+          error={endError}
+          onCancel={() => setEndTarget(null)}
+          onConfirm={confirmEndEnrollment}
+        />
+      ) : null}
     </TimetableEditContext.Provider>
+  );
+}
+
+/** 편집 모드 Delete → 오늘 수강 종료 확인 팝업(파괴적 동작이라 확인 필수). Esc/바깥클릭=취소, 확인 버튼 autofocus. */
+function EndEnrollmentConfirm({
+  target,
+  today,
+  ending,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  target: HoveredStudent;
+  today: string;
+  ending: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !ending) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ending, onCancel]);
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4"
+      onClick={() => !ending && onCancel()}
+    >
+      <div
+        className="bg-card border-line w-[340px] rounded-lg border p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-foreground text-sm font-bold">수강 종료</p>
+        <p className="text-text-dim mt-2 text-[13px] leading-relaxed">
+          <b className="text-foreground">{target.name}</b> 학생을{" "}
+          <b className="text-foreground">{target.className}</b> 반에서{" "}
+          <b className="text-foreground">오늘({today})</b> 수강 종료할까요?
+        </p>
+        <p className="text-text-faint mt-1 text-[11px]">
+          이 반의 퇴원 목록으로 이동합니다. 다른 반 수강은 유지됩니다.
+        </p>
+        {error ? <p className="text-chart-4 mt-2 text-xs">{error}</p> : null}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={ending}
+            className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            disabled={ending}
+            className="bg-danger hover:bg-danger/90 rounded-md px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+          >
+            {ending ? "처리 중…" : "수강 종료"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
