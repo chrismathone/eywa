@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { EditingBanner } from "@/features/presence/editing-badge";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
@@ -24,6 +26,7 @@ import {
 } from "@/features/enrollment/server/actions";
 import {
   BLOOD_OPTIONS,
+  COMMON_FIELDS,
   CONSULTATION_PATHS,
   ENGLISH_GROUPS,
   ENGLISH_TEST_TYPES,
@@ -141,13 +144,18 @@ export function ConsultationFullForm({
   });
   const clearDraft = draft.clear;
 
+  // 동시편집 가드(same-browser 저장경고) + cross-user "수정중" presence(edit 모드) — 둘 다 공존.
+  const editScope = !isCreate && v.id ? `consultation:${v.id}` : undefined;
+  const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
+
   useEffect(() => {
     if (!isCreate && editState?.ok && v.id) {
       clearDraft();
+      notifySaved();
       router.push(`/enrollment/${v.id}`);
       router.refresh();
     }
-  }, [editState, isCreate, v.id, router, clearDraft]);
+  }, [editState, isCreate, v.id, router, clearDraft, notifySaved]);
 
   async function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -213,6 +221,7 @@ export function ConsultationFullForm({
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
 
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      {editScope ? <EditingBanner scope={editScope} /> : null}
 
       {/* 녹음 바 — 상단(생성 모드). 저장 시 자동 전사·13섹션 AI 분석(입력값 보존). */}
       {isCreate ? (
@@ -269,8 +278,8 @@ export function ConsultationFullForm({
           </Grid>
         </Card>
 
-        {/* 2. 학생 정보 ↔ 상담 내용 (2단) */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+        {/* 2. 학생 정보 ↔ 상담 내용 (2단, 높이 맞춰 stretch — 상담내용 textarea가 빈 세로공간 채움) */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Card title="학생 정보">
             <Grid cols={2}>
               <L label="학생 이름" icon={User} required>
@@ -359,7 +368,7 @@ export function ConsultationFullForm({
             </Grid>
           </Card>
 
-          <Card title="상담 내용">
+          <Card title="상담 내용" fill>
             <Grid cols={2}>
               <L label="상담일" icon={Calendar}>
                 <input name="consultationDate" type="date" defaultValue={v.consultationDate ?? (isCreate ? kstToday() : "")} className={`${input} num`} />
@@ -373,15 +382,19 @@ export function ConsultationFullForm({
                 </select>
               </L>
             </Grid>
-            <L label="상담 내용" icon={MessageSquare}>
+            {/* 상담 내용 — 남는 세로공간 전부 채움(학생정보 카드 높이에 맞춰 늘어남) */}
+            <label className="flex flex-1 flex-col space-y-1">
+              <span className="text-text-dim flex items-center gap-1 text-[11px] font-medium">
+                <MessageSquare className="size-3 shrink-0" />
+                상담 내용
+              </span>
               <textarea
                 name="parentRequest"
-                rows={14}
                 defaultValue={v.parentRequest ?? ""}
                 placeholder="상담 내용 / 학부모 요구사항 / 관찰"
-                className={`${input} resize-none`}
+                className={`${input} min-h-40 flex-1 resize-none`}
               />
-            </L>
+            </label>
           </Card>
         </div>
 
@@ -472,7 +485,7 @@ export function ConsultationFullForm({
             </L>
           </Grid>
           <div className="flex flex-wrap gap-4 pt-1">
-            <Check name="installmentAgreement" label="할부 규정 동의" defaultChecked={v.installmentAgreement} />
+            <Check name="installmentAgreement" label="환불·학칙 동의" defaultChecked={v.installmentAgreement} />
             <Check name="privacyAgreement" label="개인정보 활용 동의" defaultChecked={v.privacyAgreement} />
           </div>
         </Card>
@@ -495,7 +508,7 @@ export function ConsultationFullForm({
                     ))}
                   </select>
                 </L>
-                {(ENGLISH_GROUPS[englishType] ?? []).map((g, i) => (
+                {[...(ENGLISH_GROUPS[englishType] ?? []), COMMON_FIELDS].map((g, i) => (
                   <GroupInputs key={i} group={g} subjectKey="english" details={details} onChange={setField} />
                 ))}
               </div>
@@ -562,29 +575,60 @@ function GroupInputs({
     <div className="space-y-2">
       {group.title ? <p className="text-text-dim text-xs font-semibold">{group.title}</p> : null}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${group.cols ?? 2}, minmax(0, 1fr))` }}>
-        {group.fields.map((f) => (
-          <label key={f.key} className="block space-y-1">
-            <span className="text-text-dim text-[11px]">{f.label}</span>
-            <input
-              type={f.type === "date" ? "date" : "text"}
-              value={details[subjectKey]?.[f.key] ?? ""}
-              onChange={(e) => onChange(subjectKey, f.key, e.target.value)}
-              className={input}
-            />
-          </label>
-        ))}
+        {group.fields.map((f) => {
+          const val = details[subjectKey]?.[f.key] ?? "";
+          // 히스토리·진도·성적·상담내역·기타 = 여러 줄(full-width). 점수 = 3자리 좁은 칸. 나머지 = 1행.
+          if (f.type === "textarea") {
+            return (
+              <label key={f.key} className="col-span-full block space-y-1">
+                <span className="text-text-dim text-[11px]">{f.label}</span>
+                <textarea
+                  rows={2}
+                  value={val}
+                  onChange={(e) => onChange(subjectKey, f.key, e.target.value)}
+                  className={`${input} resize-y`}
+                />
+              </label>
+            );
+          }
+          if (f.type === "score") {
+            return (
+              <label key={f.key} className="block space-y-1">
+                <span className="text-text-dim text-[11px]">{f.label}</span>
+                <input
+                  inputMode="numeric"
+                  maxLength={3}
+                  value={val}
+                  onChange={(e) => onChange(subjectKey, f.key, e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                  className={`${input} max-w-[5rem] text-center`}
+                />
+              </label>
+            );
+          }
+          return (
+            <label key={f.key} className="block space-y-1">
+              <span className="text-text-dim text-[11px]">{f.label}</span>
+              <input
+                type={f.type === "date" ? "date" : "text"}
+                value={val}
+                onChange={(e) => onChange(subjectKey, f.key, e.target.value)}
+                className={input}
+              />
+            </label>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+function Card({ title, children, fill }: { title: string; children: ReactNode; fill?: boolean }) {
   return (
-    <div className="bg-card border-border overflow-hidden rounded-lg border">
+    <div className={`bg-card border-border overflow-hidden rounded-lg border ${fill ? "flex h-full flex-col" : ""}`}>
       <div className="border-border bg-bg-soft/50 border-b px-3 py-1.5">
         <h3 className="text-primary text-xs font-bold">{title}</h3>
       </div>
-      <div className="space-y-2 p-2.5">{children}</div>
+      <div className={`space-y-2 p-2.5 ${fill ? "flex flex-1 flex-col" : ""}`}>{children}</div>
     </div>
   );
 }

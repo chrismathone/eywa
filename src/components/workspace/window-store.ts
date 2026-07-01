@@ -28,6 +28,9 @@ export type WindowParams = {
   /** /X/new 같은 "생성 폼" 창 — iframe이 초기 href 경로를 벗어나면(=제출 성공 후 redirect/push)
    *  RouteWindow가 창을 자동으로 닫고 배경을 새로고침한다(우측 패널 닫기+목록 갱신 대체). */
   autoClose?: boolean;
+  /** 이 창을 연 소스 창 id(플로팅 창=iframe 안의 "새 X" 버튼이 부모 브리지로 열었을 때만). autoClose로 닫힐 때
+   *  최상위 router.refresh()는 배경만 갱신하고 소스 리스트 창(별도 iframe)은 stale로 남으므로, 그 창도 reload. */
+  spawnedBy?: string;
 };
 /** 절반 스냅 직후 반대편 half를 채울 창을 고르게 하는 Snap Assist 상태(런타임). */
 export type SnapAssist = { half: "left" | "right"; originId: string };

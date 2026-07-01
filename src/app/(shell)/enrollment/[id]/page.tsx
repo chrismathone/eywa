@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertCircle, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles } from "lucide-react";
+import {
+  AlertCircle, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
@@ -11,9 +14,10 @@ import {
   getEnrollmentConsultationById,
   type AiAnalysisDetail,
   type ConsultationProcessingStatus,
-  type FullConsultationFields,
 } from "@/features/enrollment/server/queries";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
 import { RunAiButton } from "./run-ai-button";
@@ -60,11 +64,20 @@ export default async function EnrollmentDetailPage({
 }) {
   await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses] = await Promise.all([
+  const [consult, allClasses, settings] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
+    getTenantSettings(),
   ]);
   if (!consult) notFound();
+
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const f = consult.fields;
+  const genderLabel = f.gender ? (GENDER_OPTIONS.find((g) => g.value === f.gender)?.label ?? f.gender) : null;
+  const addr = [f.address, f.addressDetail].filter(Boolean).join(" ") || null;
+  const subjectLabel = f.subject ? subjectMaps.labelOf(f.subject) : null;
+  const consultationDateLabel =
+    f.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR");
 
   const badge = OUTCOME_BADGE[consult.outcome] ?? OUTCOME_BADGE.pending!;
   const procBadge = PROCESSING_BADGE[consult.processingStatus];
@@ -186,111 +199,166 @@ export default async function EnrollmentDetailPage({
         </section>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-1">
-          {/* 좌측 = 상담 기록(입력 정보) — 학부모 QR 제출/상담사 입력/AI 자동입력이 함께 채우는 한 기록. 우측 'AI 분석'과 대칭. */}
-          <header className="flex flex-wrap items-center gap-2">
-            <ClipboardList className="text-primary size-4 shrink-0" />
-            <h2 className="text-foreground text-sm font-semibold">상담 기록</h2>
-            {consult.fromPublicIntake ? (
-              <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap">
-                학부모 직접 제출
+      {/* ── 상담 기록 (입력 정보) — 수정 폼과 동일한 카드 구조/그룹핑(접수 → 학생정보|상담내용 → 학원관리 → 후속조치 → 등록결제). ── */}
+      <div className="space-y-3">
+        <SectionHeader icon={ClipboardList} title="상담 기록">
+          {consult.fromPublicIntake ? (
+            <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap">
+              학부모 직접 제출
+            </span>
+          ) : null}
+        </SectionHeader>
+
+        {/* 1. 접수 정보 */}
+        <InfoCard
+          title="접수 정보"
+          rows={[
+            ["상담자", f.counselor ?? consult.consultantName],
+            ["접수일", f.receivedDate, true],
+            ["상담 경로", f.consultationPath],
+          ]}
+        />
+
+        {/* 2. 학생 정보 ↔ 상담 내용 (2단, 상담내용이 세로공간 채움) */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <InfoCard
+            title="학생 정보"
+            rows={[
+              ["학년", consult.prospectGrade],
+              ["학교", consult.prospectSchool],
+              ["학생 전화", f.studentPhone, true],
+              ["영문 이름", f.englishName],
+              ["성별", genderLabel],
+              ["혈액형", f.bloodType ? `${f.bloodType}형` : null],
+              ["생년월일", f.birthDate, true],
+              ["집 전화", f.homePhone, true],
+              ["주소", addr],
+              ["우편번호", f.zipCode, true],
+              ["보호자 성함", consult.parentName],
+              ["보호자 연락처", consult.parentPhone, true],
+              ["학생과의 관계", f.parentRelation],
+            ]}
+            flags={[f.shuttleBusRequest ? "셔틀버스 신청" : null]}
+          />
+
+          {/* 상담 내용 — 상담일/과목 + 자유서술(학부모 QR/상담사 입력). 세로공간 전부 채움. */}
+          <SectionCard title="상담 내용" fill>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <span className="text-text-dim text-xs">
+                상담일 <span className="num text-foreground ml-0.5">{consultationDateLabel}</span>
               </span>
-            ) : null}
-          </header>
-          <Card emoji="📝" title="상담 내용">
-            {consult.parentRequest ? (
-              // 줄바꿈 보존(whitespace-pre-wrap) + 길면 스크롤(max-h + overflow). 전역 스크롤바 하네스 적용.
-              <p className="text-foreground max-h-72 overflow-y-auto text-sm leading-relaxed break-words whitespace-pre-wrap">
-                {consult.parentRequest}
-              </p>
-            ) : (
-              <p className="text-text-faint text-sm">기재된 상담 내용이 없습니다.</p>
-            )}
-            {/* makeedu 동기화된 예비상담(makeedu_id=counselSeq)은 원본 상세로 바로 가는 링크. 클릭 시 makeedu 로그인 필요. */}
-            {consult.makeeduId ? (
-              <a
-                href={`https://school.makeedu.co.kr/counsel/counselList_detail.do?counselSeq=${consult.makeeduId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary mt-3 inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
-              >
-                makeedu에서 원본 상세 보기 <ExternalLink className="size-3.5" />
-              </a>
-            ) : null}
-          </Card>
-
-          <Card emoji="📚" title="학습 이력">
-            <dl className="space-y-2.5 text-sm">
-              <Field label="이전 학원" value={consult.learningHistory?.prevAcademy ?? null} />
-              <Field label="최근 성적" value={consult.learningHistory?.lastScore ?? null} />
-              <Field
-                label="약점 단원"
-                value={
-                  consult.learningHistory?.weakSubjects?.length
-                    ? consult.learningHistory.weakSubjects.join(", ")
-                    : null
-                }
-              />
-            </dl>
-          </Card>
-
-          <Card emoji="📇" title="연락처">
-            <dl className="space-y-2.5 text-sm">
-              <Field label="학부모" value={consult.parentName} />
-              <Field label="연락처" value={consult.parentPhone} mono />
-              <Field label="상담사" value={consult.consultantName} />
-              <Field
-                label="상담일"
-                value={consult.fields.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR")}
-                mono
-              />
-            </dl>
-          </Card>
-
-          <ExtraInfoCard f={consult.fields} />
-          {/* 과목별 점수는 입력 데이터(폼)이므로 분석(우측)이 아니라 상담 기록(좌측)에 둔다. */}
-          <SubjectScoresCard details={consult.fields.subjectDetails} />
+              {subjectLabel ? (
+                <span className="text-text-dim text-xs">
+                  과목 <span className="text-foreground ml-0.5">{subjectLabel}</span>
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-1 flex-col">
+              {consult.parentRequest ? (
+                <p className="text-foreground min-h-24 flex-1 overflow-y-auto text-sm leading-relaxed break-words whitespace-pre-wrap">
+                  {consult.parentRequest}
+                </p>
+              ) : (
+                <p className="text-text-faint flex-1 text-sm">기재된 상담 내용이 없습니다.</p>
+              )}
+              {/* makeedu 동기화 예비상담(makeedu_id=counselSeq) → 원본 상세 링크(클릭 시 makeedu 로그인 필요). */}
+              {consult.makeeduId ? (
+                <a
+                  href={`https://school.makeedu.co.kr/counsel/counselList_detail.do?counselSeq=${consult.makeeduId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary mt-3 inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+                >
+                  makeedu에서 원본 상세 보기 <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+            </div>
+          </SectionCard>
         </div>
 
-        <div className="space-y-4 lg:col-span-2">
-          {/* 우측 제목행 — 좌측 '상담 기록' 헤더와 같은 높이로 두어 카드 상단을 맞춘다(좌우 줄맞춤). */}
-          <header className="flex flex-wrap items-center gap-2">
-            <Sparkles className="text-gold size-4 shrink-0" />
-            <h2 className="text-foreground text-sm font-semibold">AI 분석</h2>
-          </header>
-          {consult.audioReport && consult.aiAnalysis ? (
-            <ConsultationReportEditor
-              report={consult.audioReport}
-              analysisId={consult.aiAnalysis.id}
-              consultationId={consult.id}
-              generatedAt={consult.aiAnalysis.generatedAt}
-              editedBy={consult.aiAnalysis.reportEditedBy}
-              editedAt={consult.aiAnalysis.reportEditedAt}
-            />
-          ) : consult.aiAnalysis ? (
-            <AiAnalysisPanel
-              analysis={consult.aiAnalysis}
-              recommendedClasses={consult.recommendedClasses}
-            />
-          ) : !isProcessing ? (
-            <Card title="AI 분석 결과">
-              <p className="text-muted-foreground py-12 text-center text-sm">
-                아직 AI 분석이 실행되지 않았습니다.
-                <br />
-                상담 완료 후 분석을 실행하면 학생 진단과 추천 반이 자동 생성됩니다.
-              </p>
-            </Card>
-          ) : null}
+        {/* 3. 학원 관리 정보 */}
+        <InfoCard
+          title="학원 관리 정보"
+          rows={[
+            ["희망 진로", f.careerGoal],
+            ["학생 구분", f.studentType],
+            ["남매 관계", f.siblings],
+            ["남매 관계 기록", f.siblingsDetails],
+            ["안전사항", f.safetyNotes],
+            ["이전 학원", consult.learningHistory?.prevAcademy ?? null],
+            ["최근 성적", consult.learningHistory?.lastScore ?? null],
+            [
+              "약점 단원",
+              consult.learningHistory?.weakSubjects?.length
+                ? consult.learningHistory.weakSubjects.join(", ")
+                : null,
+            ],
+          ]}
+        />
 
-          {consult.transcription || (consult.speakerLabels?.length ?? 0) > 0 ? (
-            <TranscriptSection
-              utterances={consult.speakerLabels}
-              speakerRoles={consult.speakerRoles}
-              plainText={consult.transcription}
-            />
-          ) : null}
-        </div>
+        {/* 4. 후속 조치 */}
+        <InfoCard
+          title="후속 조치"
+          rows={[
+            ["후속 조치일", f.followUpDate, true],
+            ["조치 내용", f.followUpContent],
+            ["미등록 사유", f.nonRegistrationReason],
+          ]}
+        />
+
+        {/* 5. 등록 / 결제 */}
+        <InfoCard
+          title="등록 / 결제"
+          rows={[
+            ["등록 상태", f.registrationStatus],
+            ["결제 금액", f.paymentAmount ? `${Number(f.paymentAmount).toLocaleString()}원` : null],
+            ["결제일", f.paymentDate, true],
+            ["등록자", f.registrar],
+          ]}
+          flags={[
+            f.privacyAgreement ? "개인정보 동의" : null,
+            f.installmentAgreement ? "환불·학칙 동의" : null,
+          ]}
+        />
+
+        {/* 6. 과목별 점수 */}
+        <SubjectScoresCard details={f.subjectDetails} />
+      </div>
+
+      {/* ── AI 분석 ── */}
+      <div className="space-y-4">
+        <SectionHeader icon={Sparkles} iconClass="text-gold" title="AI 분석" />
+        {consult.audioReport && consult.aiAnalysis ? (
+          <ConsultationReportEditor
+            report={consult.audioReport}
+            analysisId={consult.aiAnalysis.id}
+            consultationId={consult.id}
+            generatedAt={consult.aiAnalysis.generatedAt}
+            editedBy={consult.aiAnalysis.reportEditedBy}
+            editedAt={consult.aiAnalysis.reportEditedAt}
+          />
+        ) : consult.aiAnalysis ? (
+          <AiAnalysisPanel
+            analysis={consult.aiAnalysis}
+            recommendedClasses={consult.recommendedClasses}
+          />
+        ) : !isProcessing ? (
+          <Card title="AI 분석 결과">
+            <p className="text-muted-foreground py-12 text-center text-sm">
+              아직 AI 분석이 실행되지 않았습니다.
+              <br />
+              상담 완료 후 분석을 실행하면 학생 진단과 추천 반이 자동 생성됩니다.
+            </p>
+          </Card>
+        ) : null}
+
+        {consult.transcription || (consult.speakerLabels?.length ?? 0) > 0 ? (
+          <TranscriptSection
+            utterances={consult.speakerLabels}
+            speakerRoles={consult.speakerRoles}
+            plainText={consult.transcription}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -310,12 +378,84 @@ function Card({ title, emoji, children }: { title: string; emoji?: string; child
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
+// 섹션 헤더(상담 기록 / AI 분석) — 아이콘 + 제목 + 배지 슬롯.
+function SectionHeader({
+  icon: Icon,
+  iconClass,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  iconClass?: string;
+  title: string;
+  children?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-center gap-2 pt-1">
+      <Icon className={`size-4 shrink-0 ${iconClass ?? "text-primary"}`} />
+      <h2 className="text-foreground text-sm font-semibold">{title}</h2>
+      {children}
+    </header>
+  );
+}
+
+// 수정 폼과 동일한 카드 스타일(단일 박스 + 상단 음영 헤더바 + primary 제목) — 읽기/편집 화면 톤 통일.
+function SectionCard({ title, children, fill }: { title: string; children: ReactNode; fill?: boolean }) {
+  return (
+    <section className={`bg-card border-border overflow-hidden rounded-lg border ${fill ? "flex h-full flex-col" : ""}`}>
+      <div className="border-border bg-bg-soft/50 border-b px-3 py-1.5">
+        <h3 className="text-primary text-xs font-bold">{title}</h3>
+      </div>
+      <div className={`space-y-2 p-2.5 ${fill ? "flex flex-1 flex-col" : ""}`}>{children}</div>
+    </section>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
+  if (!value) return null;
   return (
     <div className="flex items-start justify-between gap-3">
-      <dt className="text-muted-foreground shrink-0 text-xs">{label}</dt>
-      <dd className={`text-foreground text-right text-sm ${mono ? "num" : ""}`}>{value ?? "—"}</dd>
+      <dt className="text-text-dim shrink-0 text-xs">{label}</dt>
+      <dd className={`text-foreground text-right text-sm break-keep ${mono ? "num" : ""}`}>{value}</dd>
     </div>
+  );
+}
+
+// 값이 있는 행만 렌더(빈 값 숨김). 표시할 행·플래그·자식이 하나도 없으면 카드 자체를 안 그림.
+function InfoCard({
+  title,
+  rows,
+  flags,
+  children,
+}: {
+  title: string;
+  rows?: [label: string, value: string | null, mono?: boolean][];
+  flags?: (string | null)[];
+  children?: ReactNode;
+}) {
+  const visible = (rows ?? []).filter(([, v]) => v);
+  const chips = (flags ?? []).filter(Boolean) as string[];
+  if (!children && visible.length === 0 && chips.length === 0) return null;
+  return (
+    <SectionCard title={title}>
+      {visible.length > 0 ? (
+        <dl className="space-y-1.5">
+          {visible.map(([label, value, mono]) => (
+            <Row key={label} label={label} value={value} mono={mono} />
+          ))}
+        </dl>
+      ) : null}
+      {children}
+      {chips.length > 0 ? (
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {chips.map((t) => (
+            <span key={t} className="bg-bg-soft text-text-dim rounded px-2 py-0.5 text-[11px]">
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </SectionCard>
   );
 }
 
@@ -414,74 +554,17 @@ function Plan({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-function ExtraInfoCard({ f }: { f: FullConsultationFields }) {
-  const genderLabel = f.gender ? (GENDER_OPTIONS.find((g) => g.value === f.gender)?.label ?? f.gender) : null;
-  const rows: [string, string | null][] = [
-    ["상담자", f.counselor],
-    ["접수일", f.receivedDate],
-    ["성별", genderLabel],
-    ["생년월일", f.birthDate],
-    ["학생 연락처", f.studentPhone],
-    ["집 전화", f.homePhone],
-    ["보호자 관계", f.parentRelation],
-    ["주소", [f.address, f.addressDetail].filter(Boolean).join(" ") || null],
-    ["유입 경로", f.consultationPath],
-    ["희망 진로", f.careerGoal],
-    ["형제관계", f.siblings],
-    ["남매 관계 기록", f.siblingsDetails],
-    ["학생 구분", f.studentType],
-    ["안전사항", f.safetyNotes],
-    ["등록 상태", f.registrationStatus],
-    ["결제 금액", f.paymentAmount ? `${Number(f.paymentAmount).toLocaleString()}원` : null],
-    ["결제일", f.paymentDate],
-    ["등록자", f.registrar],
-    ["후속 조치일", f.followUpDate],
-    ["조치 내용", f.followUpContent],
-    ["미등록 사유", f.nonRegistrationReason],
-  ];
-  const flags = [
-    f.shuttleBusRequest ? "셔틀버스" : null,
-    f.privacyAgreement ? "개인정보 동의" : null,
-    f.installmentAgreement ? "할부 동의" : null,
-  ].filter(Boolean) as string[];
-  const visible = rows.filter(([, v]) => v);
-  if (visible.length === 0 && flags.length === 0) return null;
-  return (
-    <Card emoji="🧑‍🎓" title="학생 상세 정보">
-      <dl className="space-y-2.5 text-sm">
-        {visible.map(([label, val]) => (
-          <Field key={label} label={label} value={val} />
-        ))}
-      </dl>
-      {flags.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {flags.map((t) => (
-            <span key={t} className="bg-muted text-muted-foreground rounded px-2 py-0.5 text-[11px]">
-              {t}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </Card>
-  );
-}
-
-function subjectLabelMap(subjectKey: string): Record<string, string> {
+// 전역 과목 필드 라벨 맵 — 모든 과목/영어/공통 필드 라벨을 한 번에 시드. 어떤 키가 어느 과목에 저장돼
+// 있어도(예: 수학 details에 levelTestScore) 한글 라벨로 해석 → 상세 '과목별 점수'에 raw 키가 안 새게.
+const SUBJECT_FIELD_LABELS: Record<string, string> = (() => {
   const map: Record<string, string> = { testType: "테스트 유형" };
-  // 공통 필드(학원히스토리·진도·추천반·기타 등)는 모든 과목에서 추출될 수 있어 항상 한글 라벨 포함
-  // (영어는 ENGLISH_GROUPS에 공통필드가 없어 raw 키로 떨어지던 것 해소).
   COMMON_FIELDS.fields.forEach((fd) => (map[fd.key] = fd.label));
-  const tab = SUBJECT_TABS.find((t) => t.key === subjectKey);
-  if (!tab) return map;
-  if (tab.english) {
-    Object.values(ENGLISH_GROUPS)
-      .flat()
-      .forEach((g) => g.fields.forEach((fd) => (map[fd.key] = fd.label)));
-  } else {
-    (tab.groups ?? []).forEach((g) => g.fields.forEach((fd) => (map[fd.key] = fd.label)));
-  }
+  SUBJECT_TABS.forEach((t) => (t.groups ?? []).forEach((g) => g.fields.forEach((fd) => (map[fd.key] = fd.label))));
+  Object.values(ENGLISH_GROUPS)
+    .flat()
+    .forEach((g) => g.fields.forEach((fd) => (map[fd.key] = fd.label)));
   return map;
-}
+})();
 
 function SubjectScoresCard({ details }: { details: Record<string, Record<string, string>> | null }) {
   if (!details) return null;
@@ -495,7 +578,7 @@ function SubjectScoresCard({ details }: { details: Record<string, Record<string,
       <div className="space-y-4">
         {entries.map(([subj, vals]) => {
           const tab = SUBJECT_TABS.find((t) => t.key === subj);
-          const labels = subjectLabelMap(subj);
+          const labels = SUBJECT_FIELD_LABELS;
           const items = Object.entries(vals).filter(([k, v]) => String(v).trim() && k !== "testType");
           return (
             <div key={subj}>

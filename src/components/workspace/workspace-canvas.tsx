@@ -119,7 +119,13 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
-      const data = e.data as { type?: string; id?: string; title?: string; href?: string } | null;
+      const data = e.data as {
+        type?: string;
+        id?: string;
+        title?: string;
+        href?: string;
+        autoClose?: boolean;
+      } | null;
       if (!data || !e.source) return;
       let sourceWinId: string | null = null;
       for (const [winId, el] of iframeRegistry) {
@@ -135,7 +141,16 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         return;
       }
       if (data.type === "eywa-open-window" && data.id && data.href) {
-        st.open("route", { id: data.id, title: data.title ?? "보기", href: data.href });
+        // autoClose=true(useOpenFormWindow "새 X" 폼)면 제출 성공 후 창 자동 닫힘. shift+클릭(WindowLink)은
+        // autoClose 없음 → false(그냥 새 창). spawnedBy=소스 창 id → autoClose로 닫힐 때 그 리스트 창도 reload
+        // (최상위 router.refresh()는 배경만 갱신 = 소스 iframe엔 신규 항목이 stale로 남던 것 해소).
+        st.open("route", {
+          id: data.id,
+          title: data.title ?? "보기",
+          href: data.href,
+          autoClose: data.autoClose === true,
+          spawnedBy: sourceWinId,
+        });
         return;
       }
     };

@@ -29,7 +29,8 @@ export const REGISTRATION_STATUSES = [
 
 // ── 과목별 점수 탭(subject_details jsonb) ──
 // ijw ConsultationForm 과목 탭 이식. 데이터 주도 — 폼이 이 config를 map해 입력 렌더(필드 수기 나열 회피).
-export type FieldDef = { key: string; label: string; type?: "text" | "date" };
+// type: text=1행 · date=날짜 · textarea=여러 줄(히스토리/상담류) · score=3자리 좁은 점수칸(최대 100점)
+export type FieldDef = { key: string; label: string; type?: "text" | "date" | "textarea" | "score" };
 export type FieldGroup = { title?: string; cols?: number; fields: FieldDef[] };
 
 // 과목 공통 필드(학원히스토리·진도·시험성적·추천반·담임·기타 등). math/국어/과학 탭에 포함되며,
@@ -38,14 +39,14 @@ export const COMMON_FIELDS: FieldGroup = {
   title: "공통",
   cols: 2,
   fields: [
-    { key: "academyHistory", label: "학원 히스토리" },
-    { key: "learningProgress", label: "학습 진도" },
-    { key: "examResults", label: "시험 성적" },
-    { key: "consultationHistory", label: "상담 내역" },
+    { key: "academyHistory", label: "학원 히스토리", type: "textarea" },
+    { key: "learningProgress", label: "학습 진도", type: "textarea" },
+    { key: "examResults", label: "시험 성적", type: "textarea" },
+    { key: "consultationHistory", label: "상담 내역", type: "textarea" },
     { key: "recommendedClass", label: "추천반" },
     { key: "homeRoomTeacher", label: "담임" },
     { key: "firstClassDate", label: "첫 수업일", type: "date" },
-    { key: "notes", label: "기타" },
+    { key: "notes", label: "기타", type: "textarea" },
   ],
 };
 
@@ -92,16 +93,16 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     },
     {
       title: "AI 세부 (내 점수 / 평균)",
-      cols: 2,
+      cols: 4,
       fields: [
-        { key: "aiWordMy", label: "단어(내)" },
-        { key: "aiWordAvg", label: "단어(평균)" },
-        { key: "aiListenMy", label: "듣기(내)" },
-        { key: "aiListenAvg", label: "듣기(평균)" },
-        { key: "aiReadMy", label: "읽기(내)" },
-        { key: "aiReadAvg", label: "읽기(평균)" },
-        { key: "aiWriteMy", label: "쓰기(내)" },
-        { key: "aiWriteAvg", label: "쓰기(평균)" },
+        { key: "aiWordMy", label: "단어(내)", type: "score" },
+        { key: "aiWordAvg", label: "단어(평균)", type: "score" },
+        { key: "aiListenMy", label: "듣기(내)", type: "score" },
+        { key: "aiListenAvg", label: "듣기(평균)", type: "score" },
+        { key: "aiReadMy", label: "읽기(내)", type: "score" },
+        { key: "aiReadAvg", label: "읽기(평균)", type: "score" },
+        { key: "aiWriteMy", label: "쓰기(내)", type: "score" },
+        { key: "aiWriteAvg", label: "쓰기(평균)", type: "score" },
       ],
     },
   ],
@@ -116,12 +117,12 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     },
     {
       title: "NELT 세부",
-      cols: 2,
+      cols: 4,
       fields: [
-        { key: "neltVocab", label: "어휘" },
-        { key: "neltGrammar", label: "문법" },
-        { key: "neltListening", label: "듣기" },
-        { key: "neltReading", label: "독해" },
+        { key: "neltVocab", label: "어휘", type: "score" },
+        { key: "neltGrammar", label: "문법", type: "score" },
+        { key: "neltListening", label: "듣기", type: "score" },
+        { key: "neltReading", label: "독해", type: "score" },
       ],
     },
   ],
@@ -146,16 +147,16 @@ export const ENGLISH_GROUPS: Record<string, FieldGroup[]> = {
     },
     {
       title: "EiE 세부 (내 점수 / 평균)",
-      cols: 2,
+      cols: 4,
       fields: [
-        { key: "eieVocabMy", label: "어휘(내)" },
-        { key: "eieVocabAvg", label: "어휘(평균)" },
-        { key: "eieListenMy", label: "듣기(내)" },
-        { key: "eieListenAvg", label: "듣기(평균)" },
-        { key: "eieReadMy", label: "읽기(내)" },
-        { key: "eieReadAvg", label: "읽기(평균)" },
-        { key: "eieGrammarMy", label: "문법(내)" },
-        { key: "eieGrammarAvg", label: "문법(평균)" },
+        { key: "eieVocabMy", label: "어휘(내)", type: "score" },
+        { key: "eieVocabAvg", label: "어휘(평균)", type: "score" },
+        { key: "eieListenMy", label: "듣기(내)", type: "score" },
+        { key: "eieListenAvg", label: "듣기(평균)", type: "score" },
+        { key: "eieReadMy", label: "읽기(내)", type: "score" },
+        { key: "eieReadAvg", label: "읽기(평균)", type: "score" },
+        { key: "eieGrammarMy", label: "문법(내)", type: "score" },
+        { key: "eieGrammarAvg", label: "문법(평균)", type: "score" },
       ],
     },
   ],

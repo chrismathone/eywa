@@ -273,6 +273,14 @@ export function PublicIntakeForm({
         <Field label="집주소 (동 또는 아파트 이름)">
           <input name="address" placeholder="예: 침산동, 센트럴자이" className={input} />
         </Field>
+        <Field label="상담 시 궁금한 점 / 요청사항">
+          <textarea
+            name="parentRequest"
+            rows={4}
+            placeholder="상담 시 문의하실 내용이나 학생에 대해 미리 알려주실 점을 자유롭게 적어주세요."
+            className="border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </Field>
       </Section>
 
       {/* 셔틀버스 (danger) — 학원설정 operations.shuttle. 표시 OFF면 섹션 자체를 숨김. */}

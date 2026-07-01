@@ -28,6 +28,7 @@ export function RouteWindow({ win }: { win: Win }) {
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const observeIframe = useWindowStore((s) => s.observeIframe);
   const close = useWindowStore((s) => s.close);
+  const reloadWindow = useWindowStore((s) => s.reloadWindow);
   const isFocused = useWindowStore((s) => s.focusedId === win.id);
   const order = useWindowStore((s) => s.order);
   const router = useRouter();
@@ -91,7 +92,10 @@ export function RouteWindow({ win }: { win: Win }) {
           if (initialPath && path !== initialPath) {
             autoClosedRef.current = true;
             close(win.id);
-            router.refresh();
+            router.refresh(); // 배경(최상위 프레임) 목록 갱신
+            // 소스가 플로팅 창(iframe 안 "새 X")이면 그 창은 별도 문서라 router.refresh가 안 닿음 → 직접 reload
+            // (신규 항목이 소스 리스트 창에 즉시 보이게). 이미 닫힌 창이면 no-op.
+            if (win.params.spawnedBy) reloadWindow(win.params.spawnedBy);
             return;
           }
         }
@@ -125,7 +129,7 @@ export function RouteWindow({ win }: { win: Win }) {
       obs?.disconnect();
       iframeRegistry.delete(win.id);
     };
-  }, [win.id, fallbackTitle, observeIframe, href, win.params.autoClose, close, router]);
+  }, [win.id, fallbackTitle, observeIframe, href, win.params.autoClose, win.params.spawnedBy, close, reloadWindow, router]);
 
   if (!href) return null;
 
