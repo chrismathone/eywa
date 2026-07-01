@@ -143,6 +143,8 @@ export function transformStaff(doc: any, tenantId: string, staffIds: IdMap) {
     hire_date: doc.hireDate ?? null,
     subjects: Array.isArray(doc.subjects) ? doc.subjects : null,
     job_title: doc.jobTitle ?? null,
+    phone: doc.phone ?? null,
+    default_classroom: doc.defaultRoom ?? null,
   };
 }
 
@@ -168,6 +170,19 @@ export function transformStudent(doc: any, tenantId: string, studentIds: IdMap, 
     withdrawal_metadata: withdrawal,
     student_code: doc.studentCode ?? null,
     notes: doc.memo ?? null,
+    // 프로필 확장(0027f) — ijw 필드 직결. gender는 male/female만(그 외 null), 나머지 텍스트/날짜 그대로.
+    gender: doc.gender === "male" || doc.gender === "female" ? doc.gender : null,
+    birth_date: normDate(doc.birthDate),
+    parent_relation: doc.parentRelation ?? null,
+    student_phone: doc.studentPhone ?? null,
+    home_phone: doc.homePhone ?? null,
+    other_phone: doc.otherPhone ?? null,
+    address: doc.address ?? null,
+    zip_code: doc.zipCode ?? null,
+    address_detail: doc.addressDetail ?? null,
+    email: doc.email ?? doc.studentEmail ?? null,
+    nickname: doc.nickname ?? null,
+    graduation_year: doc.graduationYear ?? null,
   };
 }
 
@@ -181,7 +196,7 @@ export function transformClass(doc: any, tenantId: string, classIds: IdMap, clas
     teacher_id: teacherUuid,
     classroom_id: classroomUuid,
     is_active: doc.isActive ?? true,
-    notes: null as string | null,
+    notes: (doc.memo ?? null) as string | null, // ijw classes.memo → eywa classes.notes(반 메모)
   };
   const schedules = (doc.schedule ?? [])
     .map((s: any) => {

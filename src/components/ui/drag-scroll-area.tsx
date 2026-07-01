@@ -189,8 +189,14 @@ export function DragScrollArea({
     <div className={`relative overflow-hidden ${className}`}>
       <div
         ref={ref}
-        className={`h-full w-full overscroll-contain rounded-[inherit] ${
-          barX ? "scroll-x-always overflow-y-auto" : "overflow-auto"
+        className={`h-full w-full rounded-[inherit] ${
+          // barX(시간표 큰 그리드)만 내부 세로 스크롤(min-h-0 flex-1로 높이 제한) → overflow-y-auto.
+          // 나머지 표/보드는 높이 제한이 없어 세로는 페이지가 담당 → overflow-y-hidden으로 두면
+          // 그 축의 스크롤 컨테이너가 아니게 되어 세로 휠이 컨테이너에 안 먹히고 페이지로 전파된다.
+          // (가로만 넘치는 표 위에서 세로 스크롤이 죽던 버그 — overscroll-y:auto만으론 부족했음.)
+          barX
+            ? "scroll-x-always overflow-y-auto overscroll-contain"
+            : "overflow-x-auto overflow-y-hidden overscroll-x-contain"
         } ${grabbable ? "cursor-grab" : ""}`}
       >
         {children}

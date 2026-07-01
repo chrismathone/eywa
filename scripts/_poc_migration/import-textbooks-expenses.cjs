@@ -34,6 +34,37 @@ function expenseCategory(title, items) {
   return "기타";
 }
 
+// ijw 결재 체크(작성/원장/대표/집행자) → eywa approval_checks(유효 역할만). ijw·eywa 동일 키(author/director/ceo/executor).
+const APPROVAL_ROLES = ["author", "director", "ceo", "executor"];
+function normChecks(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = {};
+  for (const role of APPROVAL_ROLES) {
+    const s = raw[role];
+    if (s && typeof s === "object") out[role] = { checked: s.checked === true, date: typeof s.date === "string" ? s.date : null };
+  }
+  return Object.keys(out).length ? out : null;
+}
+// ijw 통화 심볼 → eywa 통화 코드.
+const CUR_CODE = { "₩": "KRW", "$": "USD", "¥": "JPY", "€": "EUR", "£": "GBP" };
+// ijw receiptUrls(Firebase 다운로드 URL 배열) → eywa receipt_urls([{path,name}]). path=공개 http URL 그대로(오디오처럼 Firebase 콜드 백엔드 유지).
+function receiptName(url) {
+  try {
+    const m = String(url).match(/\/o\/([^?]+)/);
+    const dec = m ? decodeURIComponent(m[1]) : String(url);
+    return (dec.split("/").pop() || "").split("?")[0] || "영수증";
+  } catch {
+    return "영수증";
+  }
+}
+function normReceipts(raw) {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out = arr
+    .filter((u) => typeof u === "string" && /^https?:\/\//i.test(u))
+    .map((u) => ({ path: u, name: receiptName(u) }));
+  return out.length ? out : null;
+}
+
 (async () => {
   try {
     // 학생명 → eywa uuid (교재신청은 studentName만 있음 — 이름 매칭, 동명이인은 첫 매치)
@@ -69,12 +100,22 @@ function expenseCategory(title, items) {
       const items = Array.isArray(e.items) ? e.items : [];
       const amount = Math.round(Number(e.totalAmount) || items.reduce((s, i) => s + (Number(i.totalPrice) || 0), 0));
       const vendors = [...new Set(items.map((i) => i.vendor).filter(Boolean))];
+      const checks = normChecks(e.approvalChecks);
+      const receipts = normReceipts(e.receiptUrls);
+      // 결재완료 = 원장+대표 승인(eywa toggleExpenseApproval 파생 규칙과 동일) or ijw approvalStatus.
+      const approved = !!(checks && checks.director && checks.director.checked && checks.ceo && checks.ceo.checked);
       expRows.push({
         id: randomUUID(), tenant_id: T, title: e.title && String(e.title).trim() ? String(e.title).trim() : "(제목 없음)",
-        category: expenseCategory(e.title, items), amount, expense_date: date,
+        category: expenseCategory(e.title, items), amount, currency: CUR_CODE[String(e.currency ?? "").trim()] ?? "KRW",
+        expense_date: date,
         vendor: vendors[0] ?? null, department: e.department ?? null, author: e.author ?? null,
-        payment_method: e.paymentMethod ?? null, approval_status: e.approvalStatus === "approved" ? "approved" : "pending",
-        line_items: items.length ? JSON.stringify(items) : null, memo: e.memo && String(e.memo).trim() ? String(e.memo).trim() : null,
+        position: e.position ?? null, bank_name: e.bankName ?? null, account_number: e.accountNumber ?? null,
+        payment_method: e.paymentMethod ?? null,
+        approval_status: approved || e.approvalStatus === "approved" ? "approved" : "pending",
+        approval_checks: JSON.stringify(checks ?? {}), // NOT NULL default '{}'
+        line_items: items.length ? JSON.stringify(items) : null,
+        receipt_urls: JSON.stringify(receipts ?? []), // NOT NULL default '[]'
+        memo: e.memo && String(e.memo).trim() ? String(e.memo).trim() : null,
       });
     }
 
@@ -83,6 +124,9 @@ function expenseCategory(title, items) {
     console.log("=== import-textbooks-expenses", APPLY ? "[APPLY]" : "[DRY-RUN]", "===");
     console.log("textbook_orders:", tbRows.length, "| student matched:", tbMatched, "| byStatus:", JSON.stringify(tbByStatus));
     console.log("expenses:", expRows.length, "| total:", expRows.reduce((s, r) => s + r.amount, 0).toLocaleString(), "| byCat:", JSON.stringify(expByCat));
+    const roleSet = new Set();
+    for (const e of expSrc) if (e.approvalChecks && typeof e.approvalChecks === "object") for (const k of Object.keys(e.approvalChecks)) roleSet.add(k);
+    console.log("  결재체크 rows:", expRows.filter((r) => r.approval_checks).length, "| 역할키:", [...roleSet].join(",") || "(없음)", "| 증빙 rows:", expRows.filter((r) => r.receipt_urls).length);
 
     if (!APPLY) { console.log("[DRY-RUN] 쓰기 없음. --apply 로 적용."); return; }
 

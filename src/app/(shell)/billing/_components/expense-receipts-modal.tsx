@@ -19,7 +19,7 @@ import type { ExpenseReceipt, ExpenseRow } from "@/features/billing/server/expen
 // 사진류(브라우저가 <img>로 그릴 수 있는 형식)면 항상 썸네일 미리보기. PDF 등은 파일 카드.
 const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "bmp", "avif", "heic", "heif"]);
 function isImageReceipt(name: string, path: string): boolean {
-  const src = name || path;
+  const src = (name || path).split("?")[0]; // 레거시 Firebase URL의 쿼리스트링(?alt=media&token=…) 제거 후 확장자 판별
   const ext = src.includes(".") ? src.split(".").pop()!.toLowerCase() : "";
   return IMAGE_EXT.has(ext);
 }
@@ -186,6 +186,11 @@ export function ExpenseReceiptsModal({
 
   async function handleView(r: ExpenseReceipt) {
     setError(null);
+    // 레거시 http(s) 증빙(ijw Firebase 다운로드 URL)은 이미 공개 토큰 URL → 서버 서명 없이 바로 연다.
+    if (/^https?:\/\//i.test(r.path)) {
+      window.open(r.path, "_blank", "noopener,noreferrer");
+      return;
+    }
     const fd = new FormData();
     fd.append("path", r.path);
     const res = await signExpenseReceipt(undefined, fd);

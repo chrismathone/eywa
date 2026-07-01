@@ -8,7 +8,7 @@ import path from "node:path";
 import {
   makeIdMap, normName, normDate, monthGte,
   transformStaff, transformStudent, transformClass,
-  mapAttendanceCount, mapConsultationOutcome, mapInvoiceStatus,
+  mapAttendanceCount, mapConsultationOutcome, mapInvoiceStatus, DAY_MAP,
 } from "./transform";
 
 const BILLING_SINCE = "2026-03"; // 수납: 이 월(YYYY-MM) 이후만
@@ -22,6 +22,25 @@ const addDays = (iso: string, n: number): string => {
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 };
+// 등록상담 과목 라벨(영어/수학…) → eywa 과목 키(english/math…). subject_details 키도 동일.
+const SUBJECT_LABEL_TO_KEY: Record<string, string> = { "영어": "english", "수학": "math", "국어": "korean", "과학": "science" };
+const consultSubjectKey = (s?: string): string | null => (s && SUBJECT_LABEL_TO_KEY[String(s).trim()]) || null;
+// ijw 등록상담 status가 등록상태 enum에 맞으면 registration_status로(그 외는 outcome만 파생).
+const REG_STATUSES = new Set(["상담전", "이번달 등록예정", "추후 등록예정", "등록완료", "미등록"]);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const asBool = (v: any): boolean => v === true || v === "true";
+// ijw 결제수단 코드(C=카드·B=계좌이체·선택=미지정) → eywa payment_method.
+const PAY_CODE: Record<string, string> = { C: "card", B: "transfer" };
+// ijw 과목별 상담 오브젝트({math,english,korean,science,etc}Consultation) → eywa subject_details jsonb(과목키별).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildSubjectDetails(k: any): Record<string, unknown> | null {
+  const sd: Record<string, unknown> = {};
+  for (const [src, key] of [["mathConsultation", "math"], ["englishConsultation", "english"], ["koreanConsultation", "korean"], ["scienceConsultation", "science"], ["etcConsultation", "etc"]] as const) {
+    const v = k[src];
+    if (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length) sd[key] = v;
+  }
+  return Object.keys(sd).length ? sd : null;
+}
 
 let dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
@@ -86,8 +105,8 @@ async function main() {
   const insertedStaff = new Set<string>();
   for (const s of C.staff ?? []) {
     const row = transformStaff(s, tenantId, staffIds);
-    if (await ins("staff", () => sql`insert into users (id,tenant_id,email,display_name,system_role,status,hire_date,subjects,job_title)
-      values (${row.id},${row.tenant_id},${row.email},${row.display_name},${row.system_role},${row.status},${normDate(row.hire_date)},${row.subjects as any},${row.job_title})`)) {
+    if (await ins("staff", () => sql`insert into users (id,tenant_id,email,display_name,system_role,status,hire_date,subjects,job_title,phone,default_classroom)
+      values (${row.id},${row.tenant_id},${row.email},${row.display_name},${row.system_role},${row.status},${normDate(row.hire_date)},${row.subjects as any},${row.job_title},${row.phone},${row.default_classroom})`)) {
       insertedStaff.add(s.id);
       if (s.name) nameToTeacher.set(s.name, row.id);
       fallbackUser ??= row.id;
@@ -123,13 +142,13 @@ async function main() {
       if (seenActive.has(key)) { note("student.dedup-skip"); continue; }
       seenActive.add(key);
     }
-    if (await ins("student", () => sql`insert into students (id,tenant_id,name,school,grade,parent_phone,parent_name,status,enrolled_at,withdrawn_at,withdrawal_metadata,student_code,notes)
-      values (${row.id},${row.tenant_id},${row.name},${row.school},${row.grade},${row.parent_phone},${row.parent_name},${row.status},${normDate(row.enrolled_at)},${normDate(row.withdrawn_at)},${row.withdrawal_metadata ? sql.json(row.withdrawal_metadata) : null},${row.student_code},${row.notes})`))
+    if (await ins("student", () => sql`insert into students (id,tenant_id,name,school,grade,parent_phone,parent_name,status,enrolled_at,withdrawn_at,withdrawal_metadata,student_code,notes,gender,birth_date,parent_relation,student_phone,home_phone,other_phone,address,zip_code,address_detail,email,nickname,graduation_year)
+      values (${row.id},${row.tenant_id},${row.name},${row.school},${row.grade},${row.parent_phone},${row.parent_name},${row.status},${normDate(row.enrolled_at)},${normDate(row.withdrawn_at)},${row.withdrawal_metadata ? sql.json(row.withdrawal_metadata) : null},${row.student_code},${row.notes},${row.gender},${row.birth_date},${row.parent_relation},${row.student_phone},${row.home_phone},${row.other_phone},${row.address},${row.zip_code},${row.address_detail},${row.email},${row.nickname},${row.graduation_year})`))
       insertedStudent.add(st.id);
   }
 
   // enrollments (그리디 비겹침: student×class별 start 정렬 후 겹치면 스킵)
-  type Cand = { st: string; cls: string; start: string; end: string | null; onHold: boolean; reason: string | null };
+  type Cand = { st: string; cls: string; start: string; end: string | null; onHold: boolean; reason: string | null; isTransferred: boolean; attendanceDays: string[] };
   const cands: Cand[] = [];
   for (const st of C.students ?? []) {
     if (!insertedStudent.has(st.id)) { note("enr.skip(student)"); continue; }
@@ -138,7 +157,9 @@ async function main() {
       const start = normDate(e.startDate || e.enrollmentDate || st.startDate) || "2026-03-01";
       const end0 = normDate(e.endDate || e.withdrawalDate);
       const end = end0 && end0 < start ? null : end0; // end<start → 진행중으로 보정
-      cands.push({ st: studentIds.get(st.id), cls: classIds.get(e.classId), start, end, onHold: e.onHold ?? false, reason: e.cancelReason ?? null });
+      // 분리등원(요일 한글 → eywa day 코드) + 전입 플래그 보존.
+      const attDays = Array.isArray(e.attendanceDays) ? e.attendanceDays.map((d: string) => DAY_MAP[d] ?? d) : [];
+      cands.push({ st: studentIds.get(st.id), cls: classIds.get(e.classId), start, end, onHold: e.onHold ?? false, reason: e.cancelReason ?? null, isTransferred: e.isTransferred ?? false, attendanceDays: attDays });
     }
   }
   const kept = new Map<string, { start: string; end: string }[]>(); // student|class → 채택 구간
@@ -149,8 +170,8 @@ async function main() {
     const end = c.end ?? "9999-12-31";
     if (arr.some((iv) => c.start < iv.end && iv.start < end)) { note("enr.overlap-skip"); continue; }
     arr.push({ start: c.start, end }); kept.set(key, arr);
-    await ins("enr", () => sql`insert into enrollments (id,tenant_id,student_id,class_id,start_date,end_date,on_hold,withdrawal_reason)
-      values (${randomUUID()},${tenantId},${c.st},${c.cls},${c.start},${c.end},${c.onHold},${c.reason})`);
+    await ins("enr", () => sql`insert into enrollments (id,tenant_id,student_id,class_id,start_date,end_date,on_hold,withdrawal_reason,is_transferred,attendance_days)
+      values (${randomUUID()},${tenantId},${c.st},${c.cls},${c.start},${c.end},${c.onHold},${c.reason},${c.isTransferred},${c.attendanceDays as any})`);
   }
 
   // attendance_records — ijw는 월별 문서 + "반이름::날짜"→카운트 맵. 일별 행으로 펼쳐서 배치 적재.
@@ -176,11 +197,21 @@ async function main() {
     catch (e) { note("att.chunkFAIL " + errKey(e)); for (const r of chunk) await ins("att", () => sql`insert into attendance_records ${sql(r)}`); }
   }
 
-  // consultations(인테이크) → enrollment_consultations
+  // consultations(인테이크) → enrollment_consultations. 상세 폼(0046a) 전 필드 매핑 + subject_details jsonb.
   for (const k of C.consultations ?? []) {
     const consultant = k.counselor ? (nameToTeacher.get(k.counselor) ?? null) : null;
-    await ins("econsult", () => sql`insert into enrollment_consultations (id,tenant_id,prospect_name,prospect_grade,prospect_school,parent_name,parent_phone,parent_request,consultant_id,outcome,consulted_at)
-      values (${randomUUID()},${tenantId},${k.studentName ?? "미상"},${k.grade ?? null},${k.schoolName ?? null},${k.parentName ?? null},${k.parentPhone ?? null},${k.notes ?? k.enrollmentReason ?? null},${consultant},${mapConsultationOutcome(k.status)},${normDate(k.consultationDate) || new Date().toISOString()})`);
+    const regStatus = REG_STATUSES.has(String(k.status ?? "").trim()) ? String(k.status).trim() : null;
+    const subjectDetails = buildSubjectDetails(k);
+    await ins("econsult", () => sql`insert into enrollment_consultations (
+      id,tenant_id,prospect_name,prospect_grade,prospect_school,parent_name,parent_phone,parent_request,consultant_id,outcome,consulted_at,
+      address,gender,parent_relation,blood_type,student_phone,payment_amount,payment_date,registrar,non_registration_reason,
+      follow_up_date,follow_up_content,career_goal,siblings,consultation_path,shuttle_bus_request,privacy_agreement,installment_agreement,
+      registration_status,subject,subject_details)
+      values (
+      ${randomUUID()},${tenantId},${k.studentName ?? "미상"},${k.grade ?? null},${k.schoolName ?? null},${k.parentName ?? null},${k.parentPhone ?? null},${k.notes ?? k.enrollmentReason ?? null},${consultant},${mapConsultationOutcome(k.status)},${normDate(k.consultationDate) || new Date().toISOString()},
+      ${k.address ?? null},${k.gender === "male" || k.gender === "female" ? k.gender : null},${k.parentRelation ?? null},${k.bloodType ?? null},${k.studentPhone ?? null},${Number(k.paymentAmount) || null},${normDate(k.paymentDate)},${k.registrar ?? null},${k.nonRegistrationReason ?? null},
+      ${normDate(k.followUpDate)},${k.followUpContent ?? null},${k.careerGoal ?? null},${k.siblings ?? null},${k.consultationPath ?? null},${asBool(k.shuttleBusRequest)},${asBool(k.privacyAgreement)},${asBool(k.installmentAgreement)},
+      ${regStatus},${consultSubjectKey(k.subject)},${subjectDetails ? sql.json(subjectDetails as any) : null})`);
   }
 
   // student_consultations
@@ -224,32 +255,36 @@ async function main() {
   };
 
   // student×month 집계(unique 충돌 회피, line_items에 분해)
-  const byInv = new Map<string, { sid: string; period: string; total: number; paid: number; disc: number; items: any[]; due: string | null; paidAt: string | null }>();
+  const byInv = new Map<string, { sid: string; period: string; total: number; paid: number; disc: number; items: any[]; due: string | null; paidAt: string | null; points: number; pm: Record<string, number> }>();
   for (const b of C.billing ?? []) {
     if (!monthGte(b.month, BILLING_SINCE)) { note("inv.skip(before-cutoff)"); continue; }
     const sid = matchStudent(b);
     if (!sid) { note("inv.skip(no-match)"); continue; }
     const period = String(b.month).slice(0, 7);
     const key = `${sid}|${period}`;
-    const g = byInv.get(key) ?? { sid, period, total: 0, paid: 0, disc: 0, items: [], due: null, paidAt: null };
+    const g = byInv.get(key) ?? { sid, period, total: 0, paid: 0, disc: 0, items: [], due: null, paidAt: null, points: 0, pm: {} };
     g.total += Number(b.billedAmount) || 0;
     g.paid += Number(b.paidAmount) || 0;
     g.disc += Number(b.discountAmount) || 0;
+    g.points += Number(b.pointsUsed) || 0;
+    const pmCode = PAY_CODE[String(b.paymentMethod ?? "").trim()];
+    if (pmCode) g.pm[pmCode] = (g.pm[pmCode] ?? 0) + 1;
     g.items.push({ kind: b.category ?? "tuition", description: b.billingName ?? b.category ?? "", amount: Number(b.billedAmount) || 0 });
     if (!g.due && b.billingDay) { const d = String(b.billingDay).padStart(2, "0"); if (+d >= 1 && +d <= 31) g.due = `${period}-${d}`; }
     g.paidAt = normDate(b.paidDate) || g.paidAt;
     byInv.set(key, g);
   }
   for (const g of byInv.values()) {
-    await ins("inv", () => sql`insert into invoices (id,tenant_id,student_id,period,category,amount_total,amount_paid,amount_discount,status,line_items,due_date,paid_at)
-      values (${randomUUID()},${tenantId},${g.sid},${g.period},'tuition',${g.total},${g.paid},${g.disc},${mapInvoiceStatus(g.total, g.paid)},${sql.json(g.items)},${g.due},${g.paidAt})`);
+    const pm = Object.entries(g.pm).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null; // 최빈 결제수단(card/transfer)
+    await ins("inv", () => sql`insert into invoices (id,tenant_id,student_id,period,category,amount_total,amount_paid,amount_discount,status,line_items,due_date,paid_at,payment_method,points_used)
+      values (${randomUUID()},${tenantId},${g.sid},${g.period},'tuition',${g.total},${g.paid},${g.disc},${mapInvoiceStatus(g.total, g.paid)},${sql.json(g.items)},${g.due},${g.paidAt},${pm},${g.points})`);
   }
 
   // meeting_reports → meeting_minutes (AI 텍스트 스냅샷; 오디오 파일은 GCS라 경로만)
   for (const m of C.meeting_reports ?? []) {
     const hasReport = !!m.report;
-    await ins("meeting", () => sql`insert into meeting_minutes (id,tenant_id,title,content,attendees,held_at,transcription,ai_report,ai_speaker_roles,ai_summary,ai_model_version,ai_generated_at,processing_status,audio_path)
-      values (${randomUUID()},${tenantId},${m.title ?? "회의"},'',${m.attendees ? sql.json((m.attendees as any[]).map((n: any) => (typeof n === "string" ? n : String(n?.name ?? n)))) : null},${normDate(m.meetingDate) || new Date().toISOString()},${m.transcription ?? null},${m.report ? sql.json(m.report) : null},${m.speakerRoles ? sql.json(m.speakerRoles) : null},${m.report?.summary ?? null},${hasReport ? "ijw-import" : null},${hasReport ? new Date().toISOString() : null},${hasReport ? "completed" : "idle"},${m.storagePath ?? null})`);
+    await ins("meeting", () => sql`insert into meeting_minutes (id,tenant_id,title,content,attendees,held_at,transcription,ai_report,ai_speaker_roles,ai_summary,ai_model_version,ai_generated_at,processing_status,audio_path,audio_duration_sec)
+      values (${randomUUID()},${tenantId},${m.title ?? "회의"},'',${m.attendees ? sql.json((m.attendees as any[]).map((n: any) => (typeof n === "string" ? n : String(n?.name ?? n)))) : null},${normDate(m.meetingDate) || new Date().toISOString()},${m.transcription ?? null},${m.report ? sql.json(m.report) : null},${m.speakerRoles ? sql.json(m.speakerRoles) : null},${m.report?.summary ?? null},${hasReport ? "ijw-import" : null},${hasReport ? new Date().toISOString() : null},${hasReport ? "completed" : "idle"},${m.storagePath ?? null},${m.durationSeconds ? Math.round(Number(m.durationSeconds)) : null})`);
   }
 
   // ── 검증 ──

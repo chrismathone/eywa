@@ -420,7 +420,9 @@ export async function removeExpenseReceipt(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
   const path = String(formData.get("path") ?? "").trim();
-  if (!isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
+  // 레거시 http(s) 증빙(ijw Firebase URL)은 우리 스토리지 객체가 아니라 목록에서만 제거(경로검증·객체삭제 건너뜀).
+  const isLegacy = /^https?:\/\//i.test(path);
+  if (!isLegacy && !isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
 
   const supabase = await createClient();
   const { data: row } = await supabase.from("expenses").select("receipt_urls").eq("id", id).maybeSingle();
@@ -432,7 +434,7 @@ export async function removeExpenseReceipt(
     .eq("id", id);
   if (error) return { error: error.message };
 
-  await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
+  if (!isLegacy) await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
 
   revalidatePath("/billing");
   return { ok: true };
@@ -460,15 +462,18 @@ export async function signExpenseReceipts(
     .maybeSingle();
   if (!row) return { error: "지출을 찾을 수 없습니다" };
 
-  // 경로 검증(임의 객체 서명 차단) 후 일괄 서명. 깨진 경로는 조용히 제외.
-  const paths = parseReceipts(row.receipt_urls)
-    .map((r) => r.path)
-    .filter((p) => isTenantReceiptPath(p, user.tenantId, expenseId));
-  if (paths.length === 0) return { urls: {} };
-
-  // 현 백엔드(GCS/Supabase)로 일괄 서명(10분). 깨진 경로는 조용히 제외.
-  const urls = await resolveTenantReadUrls(paths, "receipt", user.tenantId, 10 * 60 * 1000);
-  return { urls };
+  // 레거시 http(s) 증빙(ijw Firebase 다운로드 URL)은 이미 공개 토큰 URL이라 그대로 통과(서명 불필요),
+  // 테넌트 스토리지 경로만 서명(임의 객체 서명 차단). 깨진 경로는 조용히 제외.
+  const out: Record<string, string> = {};
+  const tenantPaths: string[] = [];
+  for (const r of parseReceipts(row.receipt_urls)) {
+    if (/^https?:\/\//i.test(r.path)) out[r.path] = r.path;
+    else if (isTenantReceiptPath(r.path, user.tenantId, expenseId)) tenantPaths.push(r.path);
+  }
+  if (tenantPaths.length > 0) {
+    Object.assign(out, await resolveTenantReadUrls(tenantPaths, "receipt", user.tenantId, 10 * 60 * 1000));
+  }
+  return { urls: out };
 }
 
 export async function signExpenseReceipt(
