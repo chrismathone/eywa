@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import {
@@ -279,7 +279,7 @@ export function ConsultationFullForm({
         </Card>
 
         {/* 2. 학생 정보 ↔ 상담 내용 (2단, 높이 맞춰 stretch — 상담내용 textarea가 빈 세로공간 채움) */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-stretch">
           <Card title="학생 정보">
             <Grid cols={2}>
               <L label="학생 이름" icon={User} required>
@@ -560,6 +560,53 @@ function SubmitBtn() {
   );
 }
 
+// 자동 높이 textarea — 수동 리사이즈 핸들 없이 기본 minRows(4줄) → 내용 따라 자동 확장 → maxRows(10줄) 넘으면 스크롤.
+// 컨트롤드라 value가 바뀔 때마다(타이핑·초안 복구·과목 전환) effect가 높이 재계산. lineHeight/패딩은 실제 computed에서 도출.
+function AutoGrowTextarea({
+  value,
+  onChange,
+  className,
+  placeholder,
+  minRows = 4,
+  maxRows = 10,
+}: {
+  value: string;
+  onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
+  className?: string;
+  placeholder?: string;
+  minRows?: number;
+  maxRows?: number;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    const line = parseFloat(cs.lineHeight) || 20;
+    const pad =
+      parseFloat(cs.paddingTop) +
+      parseFloat(cs.paddingBottom) +
+      parseFloat(cs.borderTopWidth) +
+      parseFloat(cs.borderBottomWidth);
+    const min = line * minRows + pad;
+    const max = line * maxRows + pad;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(min, Math.min(el.scrollHeight, max))}px`;
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+  }, [value, minRows, maxRows]);
+  return (
+    <textarea
+      ref={ref}
+      rows={minRows}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={className}
+      style={{ resize: "none" }}
+    />
+  );
+}
+
 function GroupInputs({
   group,
   subjectKey,
@@ -582,11 +629,10 @@ function GroupInputs({
             return (
               <label key={f.key} className="col-span-full block space-y-1">
                 <span className="text-text-dim text-[11px]">{f.label}</span>
-                <textarea
-                  rows={2}
+                <AutoGrowTextarea
                   value={val}
                   onChange={(e) => onChange(subjectKey, f.key, e.target.value)}
-                  className={`${input} resize-y`}
+                  className={input}
                 />
               </label>
             );
@@ -622,9 +668,11 @@ function GroupInputs({
   );
 }
 
+// fill=true면 grid의 align-items:stretch로 늘어난 셀 높이를 flex-col로 채운다(상담내용 textarea가 학생정보 높이에 맞춤).
+// ⚠️ 여기에 h-full(height:100%)을 주면 auto-height grid 행에서 퍼센트 높이가 content로 resolve돼 stretch가 무력화된다 → 금지.
 function Card({ title, children, fill }: { title: string; children: ReactNode; fill?: boolean }) {
   return (
-    <div className={`bg-card border-border overflow-hidden rounded-lg border ${fill ? "flex h-full flex-col" : ""}`}>
+    <div className={`bg-card border-border overflow-hidden rounded-lg border ${fill ? "flex flex-col" : ""}`}>
       <div className="border-border bg-bg-soft/50 border-b px-3 py-1.5">
         <h3 className="text-primary text-xs font-bold">{title}</h3>
       </div>
