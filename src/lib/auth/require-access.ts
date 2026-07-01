@@ -1,6 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
-import { canAccess, type MenuKey } from "@/lib/permissions";
+import { canAccess, roleHome, type MenuKey } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "./current-user";
 import { getPermMatrix } from "./perm-matrix";
 
@@ -18,10 +18,10 @@ export async function requireAccess(menu: MenuKey): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const matrix = await getPermMatrix(); // 테넌트 override 반영 매트릭스(요청당 1회 cache)
-  // 권한 없음: 대시보드 접근 가능하면 대시보드로, 아니면(예: student) 공개 랜딩으로.
-  // 대시보드 미접근 role을 /dashboard로 보내면 그 페이지가 또 막혀 리다이렉트 루프가 난다.
+  // 권한 없음: 역할 홈으로 폴백(강사=/onescreen, 학생=/my-learning, 그 외=대시보드/랜딩). 단일 소스 roleHome.
+  // (강사가 /dashboard 등 강제 URL 진입 시 owner 대시보드 대신 원스크린으로.) 강사/학생 홈은 ROLE_LOCKED라 루프 없음.
   if (!canAccess(user.systemRole, menu, matrix)) {
-    redirect(canAccess(user.systemRole, "dashboard", matrix) ? "/dashboard" : "/");
+    redirect(roleHome(user.systemRole, matrix));
   }
   return user;
 }

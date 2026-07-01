@@ -43,7 +43,9 @@ export type Access = "full" | "scoped" | "readonly" | "none";
 export type AccessMatrix = Record<MenuKey, Record<SystemRole, Access>>;
 
 export const MENU_ACCESS: AccessMatrix = {
-  dashboard: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "scoped", accountant: "scoped", viewer: "readonly", student: "none" },
+  // 강사=none — 대시보드는 테넌트 전체 재무(미수·수납률·미수상위 등)를 보여주고 강사 스코핑이 없어 누수라,
+  // 강사는 접근 불가(강제 URL 진입 시 requireAccess가 roleHome=/onescreen으로 폴백). 강사 홈은 원스크린.
+  dashboard: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", student: "none" },
   timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", student: "none" },
   classes: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
@@ -52,14 +54,17 @@ export const MENU_ACCESS: AccessMatrix = {
   exams: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
   enrollment: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "none", viewer: "none", student: "none" },
   consultations: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "none", viewer: "readonly", student: "none" },
-  withdrawals: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
+  // 강사=none — 전체 퇴원 학생(테넌트 전역, 강사 스코핑 없음)이라 누수. 강사 메뉴엔 없음(담당 교육 페이지만).
+  withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 이탈 방어(리텐션) — 위험도 기반 재등록 방어. 강사는 담당 학생만(scoped), 회계는 매출 위험 열람.
   retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
-  staff: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "none", accountant: "full", viewer: "none", student: "none" },
+  // 강사=none — 전체 직원 목록·상세(급여·계정 등 민감)라 누수. 강사 메뉴엔 없음.
+  staff: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   // 교재 요청 — 강사가 본인 담당 학생 교재를 요청(스코프)하는 전용 면. 사무실(master/admin/accountant)은 /billing 교재 면에서 처리하되 여기서도 열람 가능.
   textbook_requests: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "full", viewer: "none", student: "none" },
-  meetings: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
+  // 강사=none — 원장 회의 포함 전체 회의록(민감)이라 누수. 강사 메뉴엔 없음(화자 연결은 데이터일 뿐 열람권 아님).
+  meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", student: "none" },
   // master 전용 — 중복 병합 / 데이터 정리 / Google Sheets 통합 등 위험도 높은 도구
   admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
@@ -90,6 +95,17 @@ export function accessLevel(role: SystemRole, menu: MenuKey, matrix: AccessMatri
 export function canWrite(role: SystemRole, menu: MenuKey, matrix: AccessMatrix = MENU_ACCESS): boolean {
   const a = matrix[menu][role];
   return a === "full" || a === "scoped";
+}
+
+/**
+ * 역할별 홈(폴백) 경로 — 강사=원스크린, 학생=내 학습, 그 외=대시보드(미접근이면 공개 랜딩).
+ * requireAccess 거부 시·로그인 후 착지점의 **단일 소스**. 강사/학생 전용 메뉴(teacher_onescreen·my_learning)는
+ * ROLE_LOCKED라 항상 접근 가능 → 무한 리다이렉트 없음. (클라·서버 공용, server-only 아님.)
+ */
+export function roleHome(role: SystemRole, matrix: AccessMatrix = MENU_ACCESS): string {
+  if (role === "teacher") return "/onescreen";
+  if (role === "student") return "/my-learning";
+  return canAccess(role, "dashboard", matrix) ? "/dashboard" : "/";
 }
 
 // === 테넌트 권한 override (owner 설정 permissions 섹션) ===
