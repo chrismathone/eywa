@@ -5,18 +5,34 @@ import { EyIcon, MENU_ICON, type EywaIconName } from "@/components/icons/eywa-ic
 
 type MenuItem = { id: string; label: string; href: string; description: string };
 type FaqItem = { q: string; a: string };
+type QuickStep = { title: string; desc: string; href: string; hrefLabel: string };
 
-export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] }) {
+export function HelpBrowser({
+  menus,
+  faq,
+  quickstart,
+}: {
+  menus: MenuItem[];
+  faq: FaqItem[];
+  quickstart: QuickStep[];
+}) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
+  const filteredSteps = q
+    ? quickstart.filter((s) => `${s.title} ${s.desc}`.toLowerCase().includes(q))
+    : quickstart;
   const filteredMenus = q
     ? menus.filter((m) => `${m.label} ${m.description}`.toLowerCase().includes(q))
     : menus;
   const filteredFaq = q
     ? faq.filter((f) => `${f.q} ${f.a}`.toLowerCase().includes(q))
     : faq;
-  const noResults = q.length > 0 && filteredMenus.length === 0 && filteredFaq.length === 0;
+  const noResults =
+    q.length > 0 &&
+    filteredSteps.length === 0 &&
+    filteredMenus.length === 0 &&
+    filteredFaq.length === 0;
 
   return (
     <>
@@ -34,12 +50,10 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
           ))}
         </svg>
         <div className="relative max-w-2xl">
-          <p className="font-mono text-[11px] tracking-wider uppercase text-[#e9c876]">
-            HELP CENTER
-          </p>
+          <p className="font-mono text-[11px] tracking-wider uppercase text-[#e9c876]">HELP CENTER</p>
           <h1 className="mt-2 text-[28px] font-extrabold leading-tight">무엇을 도와드릴까요?</h1>
           <p className="mt-2 text-[13px] text-white/85">
-            {menus.length}개 메뉴 가이드와 자주 묻는 질문을 한 곳에 모았어요.
+            처음이신가요? 아래 <b>빠른 시작</b>부터 따라 해보세요. 메뉴별 안내와 자주 묻는 질문도 한 곳에 있어요.
           </p>
           <div className="mt-5 flex items-center gap-2 rounded-full bg-white/15 px-4 py-2.5 backdrop-blur-sm">
             <EyIcon name="search" size={15} />
@@ -47,7 +61,7 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="메뉴·FAQ 검색 (예: 출석, AI 분석)"
+              placeholder="검색 (예: 출석, 학생 등록, 엑셀 가져오기)"
               autoComplete="off"
               aria-label="도움말 검색"
               className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/60 focus:outline-none"
@@ -68,10 +82,48 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
 
       {noResults ? (
         <section className="bg-card border-line shadow-card rounded-2xl border p-10 text-center">
-          <p className="text-foreground text-sm font-bold">
-            &lsquo;{query}&rsquo; 검색 결과가 없습니다
-          </p>
+          <p className="text-foreground text-sm font-bold">&lsquo;{query}&rsquo; 검색 결과가 없습니다</p>
           <p className="text-text-dim mt-1 text-xs">다른 검색어를 입력하거나 검색어를 지워보세요.</p>
+        </section>
+      ) : null}
+
+      {/* 빠른 시작 — 처음 사용자를 위한 순서 */}
+      {filteredSteps.length > 0 ? (
+        <section>
+          <header className="mb-3">
+            <p className="micro">처음이신가요?</p>
+            <h2 className="text-foreground mt-0.5 text-[17px] font-bold">빠른 시작 — 이 순서로 준비하세요</h2>
+          </header>
+          <ol className="bg-card border-line shadow-card space-y-1 rounded-2xl border p-2">
+            {filteredSteps.map((s, i) => (
+              <li
+                key={s.title}
+                className="hover:bg-bg-soft/60 flex items-start gap-3 rounded-lg px-3 py-2.5 transition"
+              >
+                <span className="bg-primary text-white shadow-primary-glow mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold tabular-nums">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <h3 className="text-foreground text-[13px] font-bold break-keep">{s.title}</h3>
+                    <a
+                      href={s.href}
+                      className="text-primary hover:bg-primary-soft ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition"
+                    >
+                      {s.hrefLabel} <EyIcon name="arrowRight" size={11} />
+                    </a>
+                  </div>
+                  <p className="text-text-dim mt-1 text-[12px] leading-relaxed break-keep">{s.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          {!q ? (
+            <p className="text-text-faint mt-2 px-1 text-[11px] leading-relaxed break-keep">
+              💡 메뉴를 누르면 <b>창</b>으로 열립니다. 여러 메뉴를 동시에 띄워두고, 창을 화면 가장자리로 끌면 나란히 볼 수
+              있어요. 최소화해도 작업 상태는 그대로 보존됩니다.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -79,7 +131,7 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
       {filteredMenus.length > 0 ? (
         <section>
           <header className="mb-3">
-            <p className="micro">{menus.length}개 메뉴 가이드</p>
+            <p className="micro">{menus.length}개 메뉴 안내</p>
             <h2 className="text-foreground mt-0.5 text-[17px] font-bold">기능 한눈에 보기</h2>
           </header>
           {/* 동질 목록(메뉴)은 개별 카드로 과박싱하지 않고 한 컨테이너 안 리스트로(영역 구분 규약: 과적용 금지, FAQ와 동일 톤). */}
@@ -119,12 +171,10 @@ export function HelpBrowser({ menus, faq }: { menus: MenuItem[]; faq: FaqItem[] 
             {filteredFaq.map((item) => (
               <details key={item.q} className="group px-5 py-4">
                 <summary className="text-foreground flex cursor-pointer items-center justify-between text-[13px] font-bold">
-                  <span>{item.q}</span>
-                  <span className="text-text-dim ml-2 text-lg transition-transform group-open:rotate-45">
-                    +
-                  </span>
+                  <span className="break-keep">{item.q}</span>
+                  <span className="text-text-dim ml-2 text-lg transition-transform group-open:rotate-45">+</span>
                 </summary>
-                <p className="text-text-dim mt-3 text-[12px] leading-relaxed">{item.a}</p>
+                <p className="text-text-dim mt-3 text-[12px] leading-relaxed break-keep">{item.a}</p>
               </details>
             ))}
           </div>
