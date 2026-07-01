@@ -637,6 +637,43 @@ export const lessonReports = pgTable(
   ],
 );
 
+// === onescreen_daily_sessions (선생님 원스크린 "오늘 작업중" 상태 영속 — 새로고침 유지, 0065a) ===
+// 점수/진도/태도/과제/진도확정을 (student, session_date) 하루 1행 upsert. lesson_reports(발송 스냅샷)와 별개.
+export const onescreenDailySessions = pgTable(
+  "onescreen_daily_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    sessionDate: date("session_date").notNull(),
+    classId: uuid("class_id").references(() => classes.id, { onDelete: "set null" }),
+    studyGrade: text("study_grade"),
+    subjectProgress: jsonb("subject_progress").notNull().default({}),
+    dailyScore: integer("daily_score"),
+    dailyMax: integer("daily_max"),
+    checkScore: integer("check_score"),
+    checkMax: integer("check_max"),
+    attitude: text("attitude"),
+    homework: text("homework"),
+    progressConfirmed: boolean("progress_confirmed").notNull().default(false),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("onescreen_daily_sessions_student_date_key").on(
+      t.tenantId,
+      t.studentId,
+      t.sessionDate,
+    ),
+    index("onescreen_daily_sessions_lookup_idx").on(t.tenantId, t.sessionDate, t.studentId),
+  ],
+);
+
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
 export const consultationAiAnalysis = pgTable(
   "consultation_ai_analysis",

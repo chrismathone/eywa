@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
-import { saveLessonReport } from "../server/actions";
+import { saveLessonReport, saveOnescreenSession } from "../server/actions";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { OneScreenHubBar } from "./hub-bar";
@@ -59,6 +59,58 @@ export function OneScreenClient({
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
 
+  // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
+  const studentsRef = useRef(students);
+  const reportsRef = useRef(reports);
+  // ref 미러는 render 중이 아니라 effect에서 갱신(react-hooks/refs). 타이머는 800ms 뒤라 항상 최신 반영.
+  useEffect(() => {
+    studentsRef.current = students;
+    reportsRef.current = reports;
+  });
+  const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => {
+    const timers = saveTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+    };
+  }, []);
+  function buildSessionInput(s: OneScreenStudent, r: Record<string, SubjectReport> | undefined) {
+    return {
+      studentId: s.id,
+      classId: s.classId ?? null,
+      studyGrade: s.studyGrade ?? null,
+      subjectProgress: Object.fromEntries(
+        s.subjects.map((su) => [
+          su.subjectKey || su.name,
+          { today: su.today, draft: r?.[su.name]?.draft ?? "" },
+        ]),
+      ),
+      dailyScore: s.tests.daily.score,
+      dailyMax: s.tests.daily.max,
+      checkScore: s.tests.check.score,
+      checkMax: s.tests.check.max,
+      attitude: s.attitude,
+      homework: s.homework || null,
+      progressConfirmed: s.progressConfirmed,
+    };
+  }
+  // 학생별 디바운스 upsert — 편집 800ms 후 저장. 학생별 타이머라 학생 전환에도 유실 없음.
+  function queueSave(studentId: string) {
+    const prev = saveTimers.current.get(studentId);
+    if (prev) clearTimeout(prev);
+    saveTimers.current.set(
+      studentId,
+      setTimeout(() => {
+        saveTimers.current.delete(studentId);
+        const s = studentsRef.current.find((x) => x.id === studentId);
+        if (!s) return;
+        void saveOnescreenSession(buildSessionInput(s, reportsRef.current[studentId])).then((res) => {
+          if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
+        });
+      }, 800),
+    );
+  }
+
   const visible =
     classFilter === "전체" ? students : students.filter((s) => s.tag === classFilter);
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
@@ -82,6 +134,7 @@ export function OneScreenClient({
 
   function patch(id: string, fn: (s: OneScreenStudent) => OneScreenStudent) {
     setStudents((prev) => prev.map((s) => (s.id === id ? fn(s) : s)));
+    queueSave(id); // 편집 → 디바운스 서버 영속(onescreen_daily_sessions)
   }
   function patchReport(
     studentId: string,
@@ -95,6 +148,7 @@ export function OneScreenClient({
         [subjectName]: fn(prev[studentId]?.[subjectName] ?? { draft: "", sent: false }),
       },
     }));
+    queueSave(studentId);
   }
 
   function confirmProgress() {

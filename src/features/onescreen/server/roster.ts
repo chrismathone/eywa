@@ -36,6 +36,19 @@ export type TeacherRoster = {
   todayClasses: TodayClass[]; // 오늘(또는 폴백 전체) 담당 반 — 시작시각순
 };
 
+type OnescreenSessionRow = {
+  student_id: string;
+  study_grade: string | null;
+  subject_progress: Record<string, { today?: string; draft?: string }> | null;
+  daily_score: number | null;
+  daily_max: number | null;
+  check_score: number | null;
+  check_max: number | null;
+  attitude: string | null;
+  homework: string | null;
+  progress_confirmed: boolean | null;
+};
+
 function emptyRoster(today: string, teacherName: string): TeacherRoster {
   return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [] };
 }
@@ -137,7 +150,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 이전 진도/점수(직전 회차) + 오늘 발송 여부 + 오늘 출결을 실데이터로 채운다(하드코딩 초기값 대체).
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   const todayIso = kstToday();
-  const [reportRows, attRows] = await Promise.all([
+  const [reportRows, attRows, sessionRows] = await Promise.all([
     fetchInChunks<{ student_id: string; report_date: string; progress: string | null; exam_info: string | null }>(
       studentIds,
       (chunk) =>
@@ -157,7 +170,18 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
           .in("student_id", chunk)
           .order("recorded_at", { ascending: false }),
     ),
+    // Phase3: 오늘 "작업중" 세션(점수/진도/태도/과제/확정) 복원 — 새로고침에도 유지.
+    fetchInChunks<OnescreenSessionRow>(studentIds, (chunk) =>
+      supabase
+        .from("onescreen_daily_sessions")
+        .select(
+          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, progress_confirmed",
+        )
+        .eq("session_date", todayIso)
+        .in("student_id", chunk),
+    ),
   ]);
+  const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
 
   // student별: 오늘 저장된 보고서 존재(reportSent) + 오늘 이전 최신 보고서(prev 진도/prevScore).
   const sentToday = new Set<string>();
@@ -191,6 +215,23 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
           }
         }
         if (!matched && os.subjects[0]) os.subjects[0].prev = pr.progress;
+      }
+    }
+    // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
+    const sess = sessionById.get(os.id);
+    if (sess) {
+      if (sess.study_grade) os.studyGrade = sess.study_grade;
+      if (sess.daily_score != null) os.tests.daily.score = sess.daily_score;
+      if (sess.daily_max != null) os.tests.daily.max = sess.daily_max;
+      if (sess.check_score != null) os.tests.check.score = sess.check_score;
+      if (sess.check_max != null) os.tests.check.max = sess.check_max;
+      if (sess.attitude != null) os.attitude = sess.attitude;
+      if (sess.homework != null) os.homework = sess.homework;
+      if (sess.progress_confirmed != null) os.progressConfirmed = sess.progress_confirmed;
+      const sp = sess.subject_progress ?? {};
+      for (const su of os.subjects) {
+        const entry = sp[su.subjectKey || su.name];
+        if (entry?.today) su.today = entry.today;
       }
     }
   }
