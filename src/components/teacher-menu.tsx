@@ -12,6 +12,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EXTERNAL_NAV } from "@/lib/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,9 @@ const LINKS = [
 ] as const;
 
 export function TeacherMenu() {
+  // 수업보고서 = 외부 앱(Edutrix). 사이드바와 동일 소스(EXTERNAL_NAV)·동일 링크. cross-origin이라 새 탭(_blank).
+  const report = EXTERNAL_NAV.find((e) => e.label === "수업보고서");
+  const ReportIcon = report?.icon;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -54,6 +58,13 @@ export function TeacherMenu() {
             <Icon className="size-4" /> {label}
           </DropdownMenuItem>
         ))}
+        {report && ReportIcon ? (
+          <DropdownMenuItem
+            render={<a href={report.href} target="_blank" rel="noopener noreferrer" className="cursor-pointer" />}
+          >
+            <ReportIcon className="size-4" /> {report.label}
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
