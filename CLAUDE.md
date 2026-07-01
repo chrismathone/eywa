@@ -1701,6 +1701,36 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 - 한계: 배경(메인 프레임) 목록은 `router.refresh()`로 갱신되지만, 목록이 **별도 창**이면 그 창은 즉시
   갱신되지 않음(창 X 버튼 `closeAndRefresh`와 동일한 앱 전반 한계).
 
+### 동시편집 "수정중" 실시간 표시 — cross-user presence (⚠️ 편집 표면 기본, 2026-07-01)
+같은 레코드를 두 사람이 동시에 수정 → 마지막 저장이 앞을 덮어쓰는 유실을 **목록 배지 + 폼 배너로 예방**(soft 표시,
+하드 잠금 아님). 기존 [`useConcurrentEditGuard`](src/components/workspace/use-concurrent-edit-guard.ts)(BroadcastChannel)는
+**같은 브라우저**만 잡으므로, **다른 사람/기기**는 **Supabase Realtime Presence**로(스키마 0·ephemeral·이미 켜진 Realtime 재사용).
+- **인프라** [`features/presence/`](src/features/presence): `presence-state.ts`(순수 — presenceState→scope별 편집자,
+  **내 presence key 제외**[같은 계정 다른 탭도 표시]·allowlist **콜론 매칭**[`student:`가 `student-consultation:`을 오매칭 안 함]·
+  dedupeEditors, Vitest 8) · `edit-presence.tsx`(테넌트 단일 채널 `edit-presence:${tenantId}`, `EditPresenceProvider`+
+  `useEditingOthers`/`useEditPresence`. `useSyncExternalStore` scope단위 구독·**refcount Map**[같은 문서 2컴포넌트 안전]·
+  myKey는 effect 내 생성[렌더 순수성]) · `editing-badge.tsx`(`EditingBadge` 앰버·`EditingBanner` 폼 경고, userId dedupe).
+- **scope = 기존 가드 scope 재사용**: `student:${id}`·`class:${id}`·`staff:${id}`·`consultation:${id}`(등록상담)·
+  `student-consultation:${id}`·`meeting:${id}`·`tenant-settings:${section}` → 배지·폼·가드 자동 매칭.
+- **쓰기**: `useConcurrentEditGuard`에 `useEditPresence(scope,!!scope)` 통합(**항상 호출**·allowlist는 훅 내부) → 학생·반·직원·
+  설정 폼 자동. 미배선 폼(등록상담 [consultation-full-form](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)·학생상담) 가드 추가.
+  회의 **3 편집 표면**(제목·AI보고서·화자) `useEditPresence`. 폼 상단 `EditingBanner`.
+- **읽기**: `EditingBadge` 목록 인라인(등록상담 칸반/테이블·학생·수업·직원·회의·학생상담) — 서버 컴포넌트에도 클라 아일랜드로.
+  [`layout.tsx`](<src/app/(shell)/layout.tsx>) 3경로에 `EditPresenceProvider`.
+- ⚠️ **[배포 전 결정] 채널 보안**: v1 public 채널(코드 TODO). 프로덕션 전 `private:true` + `realtime.messages` RLS 결정.
+  presence=이름·scope만 노출(저민감)·ephemeral(감사로그 아님)·**soft**(last-write-wins 못 막음 → 진짜 충돌방지는 `updated_at`
+  낙관적 동시성=후속). 창(iframe)마다 채널 구독(멀티윈도우 비용). 기존 same-browser 저장경고와 공존.
+- 검증: typecheck0/lint0/**test584**(presence-state 8). ⚠️ Realtime presence는 2-브라우저 수동 E2E(단위테스트 부적합).
+- ⚠️ **커밋 분산**: 인프라·배선·배지는 `cb3d8f6`(main), 등록상담 폼 배선은 병렬 세션이 폼 재구조화 커밋(`7c1456e`)에 함께 포함(내 working 변경을 흡수).
+
+### 강사 접근 조임 — 강제 URL = roleHome 폴백 (2026-07-01, `84199c4`)
+강사가 `/dashboard`를 강제 URL로 열면 **owner 대시보드(테넌트 전체 재무: 미수·수납률 등)** 가 보이던 intra-tenant 누수 수정.
+- **MENU_ACCESS 강사 = none**([permissions.ts](src/lib/permissions.ts)): `dashboard`·`withdrawals`·`staff`·`meetings`. 전부
+  테넌트 전역 + 강사 스코핑 없음 + 강사 의도 메뉴(원스크린 + 담당 교육 페이지)에도 없던 항목. (강사가 계속 쓰는 학생·출석·
+  수업·성적·상담·시간표는 스코핑된 채 유지.)
+- **`roleHome(role)` 단일 소스**(강사=/onescreen·학생=/my-learning·그 외=/dashboard-or-/) + [`requireAccess`](src/lib/auth/require-access.ts)가
+  **거부 시 roleHome으로 폴백**(기존 무조건 /dashboard → 강사가 대시보드로 새던 경로 차단). 강사/학생 홈은 ROLE_LOCKED라 루프 없음.
+
 ### 로컬 초안 자동저장 — 길게 입력하는 폼은 입력 중 유실 방지 (⚠️ 긴 폼 기본값, 2026-06-30)
 "한참 입력하다 창을 닫거나 새로고침하면 통째로 날아가는" 긴 폼(등록상담·학생·직원·학생상담 등)은 **입력 중 로컬(IndexedDB)에
 자동 보관**하고 다시 열면 복구한다. "실제 저장"(서버 커밋)은 기존 그대로 — 초안은 유실 방지/이어쓰기용일 뿐 **서버에 안 보낸다**.
