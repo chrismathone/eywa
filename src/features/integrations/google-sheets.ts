@@ -122,6 +122,28 @@ export async function overwriteMathTimetableSheet(
         supportsAllDrives: true,
       }),
     );
+    // media 교체 후: 모든 탭 전 셀을 CLIP(넘침 방지)으로 강제. 구글 시트는 xlsx import 시 기본이
+    // OVERFLOW_CELL이라 학생 이름이 옆 칸으로 넘쳐 흉하다(사용자 요청 "다 잘림"). xlsx의 shrinkToFit은
+    // 시트가 무시하므로 여기서 wrapStrategy=CLIP을 시트 API로 못박는다.
+    const sheets = google.sheets({ version: "v4", auth });
+    const meta = await withSheetsRetry(() =>
+      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId)" }),
+    );
+    const requests = (meta.data.sheets ?? [])
+      .map((s) => s.properties?.sheetId)
+      .filter((id): id is number => typeof id === "number")
+      .map((sheetId) => ({
+        repeatCell: {
+          range: { sheetId },
+          cell: { userEnteredFormat: { wrapStrategy: "CLIP" } },
+          fields: "userEnteredFormat.wrapStrategy",
+        },
+      }));
+    if (requests.length > 0) {
+      await withSheetsRetry(() =>
+        sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } }),
+      );
+    }
   } catch (e) {
     throw new Error(translateSheetsError(e));
   }

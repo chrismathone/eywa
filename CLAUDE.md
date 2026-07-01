@@ -329,6 +329,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 내보내기(엑셀/시트) 셀 넘침 → 잘림 (2026-07-01) — ✅ typecheck0/lint0 + 수학 xlsx fetch 검증
+사용자 제보: 수학 시간표 export에서 학생 이름이 셀 밖으로 넘쳐 옆 칸을 침범. **엑셀·시트 모두 넘침 방지**로.
+- **구글 시트**([overwriteMathTimetableSheet](src/features/integrations/google-sheets.ts)): 구글 시트는 xlsx import 시 기본이 **OVERFLOW_CELL**이라
+  이름이 옆으로 넘친다 → media 교체(`drive.files.update`) **후 Sheets API `batchUpdate`로 전 탭 전 셀 `wrapStrategy=CLIP`** 강제(`repeatCell` per 탭). xlsx의 shrinkToFit은 시트가 무시하므로 시트 API로 못박음.
+- **엑셀 xlsx**([exporter.ts](src/features/exports/math-timetable/exporter.ts)): Excel은 CLIP이 없어 → 학생 이름 셀(왼쪽정렬 `indent:1`)에 **`shrinkToFit:true`**(셀 폭에 맞춰 폰트 축소=넘침 방지). 일반 export([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 `wrapText`(줄바꿈)이라 넘침 없어 무변경.
+- 검증: typecheck0/lint0 + **수학 xlsx fetch**(status200·유효 xlsx·styles `shrinkToFit="1"` 18개). ⚠️ 시트 CLIP 라이브 검증은 사용자 실 시트를 덮어써야 해서 미실행 — **다음 '시트 반영' 시 적용**(표준 Sheets API라 확실).
+
 ### 시간표 분리등원 이식 + 요일 지정 반이동(드래그-투-데이) + 반이동 잠복버그 수정 (2026-07-01) — ✅ typecheck0/lint0/test562 + RPC 롤백 E2E
 사용자 "월목 수업에서 월요일만 오는 학생(분리등원) 표시가 없다" → ijw 충실 이식. **표시 + 요일 지정 이동 + 색/날짜**를 한 묶음으로.
 - **분리등원 표시(P1·P2)**: `enrollments.attendance_days`(요일코드 배열, []=전 요일)를 ijw export에서 백필([backfill-attendance-days.cjs](scripts/_poc_migration/backfill-attendance-days.cjs),

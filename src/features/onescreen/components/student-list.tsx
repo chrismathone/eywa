@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { studentStatus } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
@@ -106,11 +110,33 @@ export function StudentList({
     ...[...groups.keys()].filter((k) => !(classOrder ?? []).includes(k)),
   ];
 
+  // 반 그룹별 접기 상태 (세션 한정 — 새로고침 시 초기화).
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const allCollapsed = orderedKeys.length > 0 && orderedKeys.every((k) => collapsed.has(k));
+
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
-      <header className="border-line flex items-baseline justify-between border-b px-3 py-2.5">
+      <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">학생 · 반별</p>
-        <p className="text-text-dim font-mono text-[11px]">{students.length}명</p>
+        <div className="flex items-center gap-2">
+          {orderedKeys.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(orderedKeys))}
+              className="text-text-faint hover:text-text-dim text-[10px] font-medium whitespace-nowrap"
+            >
+              {allCollapsed ? "모두 펼치기" : "모두 접기"}
+            </button>
+          ) : null}
+          <p className="text-text-dim font-mono text-[11px]">{students.length}명</p>
+        </div>
       </header>
       <div className="scrollbar-thin flex max-h-[calc(100vh-220px)] flex-col gap-2 overflow-y-auto p-2 [scrollbar-gutter:stable]">
         {students.length === 0 ? (
@@ -118,22 +144,36 @@ export function StudentList({
         ) : (
           orderedKeys.map((key) => {
             const rows = groups.get(key)!;
+            const isCollapsed = collapsed.has(key);
             return (
               <div key={key} className="flex flex-col gap-1">
-                {/* 반 헤더 — sticky로 스크롤 중에도 어느 반인지 보이게 */}
-                <div className="bg-card/95 sticky top-0 z-10 flex items-center justify-between px-1.5 py-0.5 backdrop-blur">
-                  <span className="text-text-dim truncate text-[11px] font-bold">{key}</span>
+                {/* 반 헤더 — 클릭하면 접기/펼치기, sticky로 스크롤 중에도 어느 반인지 보이게 */}
+                <button
+                  type="button"
+                  onClick={() => toggle(key)}
+                  aria-expanded={!isCollapsed}
+                  className="bg-card/95 hover:bg-bg-soft sticky top-0 z-10 flex items-center justify-between gap-1.5 rounded-sm px-1.5 py-0.5 text-left backdrop-blur transition"
+                >
+                  <span className="flex min-w-0 items-center gap-1">
+                    <ChevronDown
+                      className={`text-text-faint size-3 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                      strokeWidth={2.5}
+                    />
+                    <span className="text-text-dim truncate text-[11px] font-bold">{key}</span>
+                  </span>
                   <span className="text-text-faint shrink-0 font-mono text-[10px]">{rows.length}명</span>
-                </div>
-                {rows.map((st) => (
-                  <StudentRow
-                    key={st.id}
-                    st={st}
-                    active={st.id === selId}
-                    reportCell={reportCellById?.[st.id]}
-                    onClick={() => onSelect(st.id)}
-                  />
-                ))}
+                </button>
+                {!isCollapsed
+                  ? rows.map((st) => (
+                      <StudentRow
+                        key={st.id}
+                        st={st}
+                        active={st.id === selId}
+                        reportCell={reportCellById?.[st.id]}
+                        onClick={() => onSelect(st.id)}
+                      />
+                    ))
+                  : null}
               </div>
             );
           })

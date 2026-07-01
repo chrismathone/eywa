@@ -1256,7 +1256,7 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                 applyMemo(c, meta.student.name);
                 c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: style.bgARGB } };
                 c.font = { bold: style.bold, color: { argb: style.fgARGB }, size: 9, name: 'Malgun Gothic' };
-                c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+                c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
                 c.border = { top: THIN, bottom: THIN, left: THIN, right: rightBorder };
                 metaEntries.push({
                     kind: 'student',
@@ -1294,7 +1294,7 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                     } else {
                         cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
                     }
-                    cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+                    cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
                     cc.border = {
                         top: THIN,
                         bottom: THIN,
@@ -1338,7 +1338,7 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                     applyMemo(c, meta.student.name);
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
                     c.font = { color: { argb: 'FF92400E' }, size: 9, name: 'Malgun Gothic' };
-                    c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+                    c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
                     c.border = { top: THIN, bottom: THIN, left: THIN, right: rightBorder };
                     metaEntries.push({
                         kind: 'student',
@@ -1375,7 +1375,7 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                         } else {
                             cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
                         }
-                        cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+                        cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
                         cc.border = {
                             top: THIN,
                             bottom: THIN,
@@ -1424,7 +1424,7 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                     });
                 }
                 c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: WITHDRAWN_BG } };
-                c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+                c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
                 c.border = { top: THIN, bottom: THIN, left: THIN, right: rightBorder };
             }
         }
