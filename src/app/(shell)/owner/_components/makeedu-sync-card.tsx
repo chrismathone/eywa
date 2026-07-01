@@ -28,7 +28,8 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
     });
   }
 
-  // 지금 즉시 1회 동기화 — GitHub Actions 워크플로를 force=true(토글 무시)로 트리거. 결과는 ~1-2분 뒤 배지 반영.
+  // 지금 즉시 1회 동기화 — 서버(로컬/셀프호스티드)에서 sync-all.cjs를 force로 실행. 결과는 ~1-2분 뒤 배지 반영.
+  // (Vercel/서버리스면 액션이 명확한 에러를 반환 → 아래 runMsg에 표시.)
   function runNow() {
     if (running) return;
     setRunMsg(null);

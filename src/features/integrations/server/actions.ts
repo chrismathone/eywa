@@ -1,5 +1,9 @@
 "use server";
 
+import { spawn } from "node:child_process";
+import { existsSync, openSync, closeSync, statSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
@@ -67,10 +71,11 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
 export type TriggerSyncState = { error?: string; ok?: boolean } | undefined;
 
 /**
- * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용). GitHub Actions의 makeedu-sync 워크플로를
- * `workflow_dispatch`(force=true=토글 무시)로 트리거한다. 실제 동기화는 GitHub에서 ~1-2분 비동기로 돌고,
- * 결과는 각 화면의 '↻ 동기화' 배지(마지막 동기화 시각)로 반영된다.
- * ⚠️ `GITHUB_DISPATCH_TOKEN`(workflow dispatch 권한 PAT) 필요 — 미설정 시 명확한 에러(앱 비밀 유출 없음).
+ * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용). **앱이 도는 서버에서 로컬 `sync-all.cjs`를 직접 spawn**한다.
+ * (GitHub 방식은 makeedu가 데이터센터 IP를 거부해 폐기 — 서버가 신뢰 IP[집 PC/셀프호스티드]에 있으면 여기서 바로 됨.
+ *  서버는 계속 도는 프로세스라 detached 자식이 ~1-2분 비동기로 완주하고, 결과는 각 화면 '↻ 동기화' 배지에 반영.)
+ * ⚠️ **로컬/셀프호스티드 Node 서버 전용** — Vercel(서버리스: 스크립트 미포함·원격 IP·ephemeral)에선 명확히 거부한다.
+ * force=true(MAKEEDU_FORCE) = 연동 ON/OFF 토글 무시(수동 강제). 성공 검증한 로컬 명령과 동일 인자.
  */
 export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
   const user = await getCurrentUser();
@@ -79,33 +84,40 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
     return { error: "동기화 실행은 원장(master)만 할 수 있습니다" };
   }
 
-  const token = process.env.GITHUB_DISPATCH_TOKEN;
-  if (!token) {
-    return { error: "GitHub 토큰(GITHUB_DISPATCH_TOKEN)이 설정되지 않았습니다 (관리자에게 문의)" };
+  const cwd = process.cwd();
+  const script = path.join("scripts", "_makeedu", "sync-all.cjs");
+  // 서버리스/원격(Vercel 등)에선 로컬 스크립트를 spawn할 수 없다(파일 미포함·원격·ephemeral) → 명확히 거부.
+  if (process.env.VERCEL || !existsSync(path.join(cwd, script))) {
+    return {
+      error:
+        "이 서버에선 즉시 동기화를 실행할 수 없습니다(서버리스/원격). makeedu는 신뢰 IP를 요구하므로, " +
+        "동기화 PC의 작업 스케줄러(eywa-makeedu-sync) 또는 PowerShell `Start-ScheduledTask`로 실행하세요.",
+    };
   }
-  const repo = process.env.GITHUB_DISPATCH_REPO || "BIGSHOL/eywa";
-  const workflow = process.env.GITHUB_DISPATCH_WORKFLOW || "makeedu-sync.yml";
-  const ref = process.env.GITHUB_DISPATCH_REF || "main";
+
+  // 중복 실행 방지(중복 makeedu 로그인·DB 경합) — 90초 디바운스(마커 파일 mtime 기준).
+  const markPath = path.join(os.tmpdir(), "eywa-makeedu-sync-last");
+  const now = Date.now();
+  if (existsSync(markPath) && now - statSync(markPath).mtimeMs < 90_000) {
+    return { error: "방금 동기화를 시작했습니다 — 1~2분 뒤 다시 시도하세요." };
+  }
 
   try {
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ ref, inputs: { force: "true" } }),
-      },
-    );
-    if (res.status === 204) return { ok: true };
-    const text = await res.text().catch(() => "");
-    return { error: `GitHub 트리거 실패 (${res.status}): ${text.slice(0, 140) || res.statusText}` };
+    writeFileSync(markPath, ""); // touch(mtime=now) = 디바운스 기준
+    const logFd = openSync(path.join(os.tmpdir(), "eywa-makeedu-sync-button.log"), "a");
+    // 로컬 명령과 동일: node --env-file=.env.local scripts/_makeedu/sync-all.cjs --apply
+    // detached+unref → 액션은 즉시 반환하고 자식이 백그라운드로 완주(~1-2분). MAKEEDU_FORCE=토글 무시.
+    const child = spawn(process.execPath, ["--env-file=.env.local", script, "--apply"], {
+      cwd,
+      detached: true,
+      stdio: ["ignore", logFd, logFd],
+      env: { ...process.env, MAKEEDU_FORCE: "true" },
+    });
+    child.unref();
+    closeSync(logFd); // 자식이 fd를 dup했으므로 부모 핸들은 닫아 누수 방지.
+    return { ok: true };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "GitHub 트리거 중 오류" };
+    return { error: e instanceof Error ? e.message : "로컬 동기화 시작 중 오류" };
   }
 }
 
