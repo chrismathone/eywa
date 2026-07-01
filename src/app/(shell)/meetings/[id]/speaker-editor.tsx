@@ -11,6 +11,7 @@ import {
 } from "@/features/meetings/server/actions";
 import type { StaffOption } from "@/features/meetings/server/queries";
 import type { TranscriptUtterance } from "@/components/transcript-section";
+import { useEditPresence } from "@/features/presence/edit-presence";
 
 const FREE = "__free__"; // 자유입력 옵션 sentinel
 
@@ -59,6 +60,9 @@ export function SpeakerEditor({
     undefined,
   );
   const handled = useRef(false);
+
+  // "수정중" presence — 화자 지정 편집기가 열려 있는 동안 track(닫히면 자동 해제).
+  useEditPresence(`meeting:${meetingId}`, editing);
 
   function openEditor() {
     const init: Record<string, { staffId: string; label: string }> = {};

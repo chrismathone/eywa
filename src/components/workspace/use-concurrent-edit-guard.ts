@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { toast } from "sonner";
 import { serializeForm } from "@/lib/realtime/form-snapshot";
 import { publishRecordSaved, subscribeRecordSaved } from "@/lib/realtime/record-channel";
+import { useEditPresence } from "@/features/presence/edit-presence";
 
 /**
  * 동시 편집 가드 — 같은 레코드(scope)를 **다른 창/탭에서 저장**하면, 이 폼이 미저장 변경(dirty)을 가진
@@ -22,6 +23,10 @@ export function useConcurrentEditGuard({
 }) {
   const baseline = useRef<string | null>(null);
   const lastWarnedAt = useRef(0);
+
+  // cross-user "수정중" presence — scope 있으면(edit 모드) 이 폼을 여는 동안 track한다(allowlist는 훅 내부).
+  // 같은 브라우저 저장경고(아래 record-channel)와 크로스유저 표시가 공존. 항상 호출, enabled로 제어.
+  useEditPresence(scope, !!scope);
 
   // 마운트(폼 렌더) 후 baseline 스냅샷 — uncontrolled defaultValue/hidden input 초기값 포함.
   useEffect(() => {

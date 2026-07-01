@@ -7,6 +7,7 @@ import {
   updateMeetingTitle,
   type UpdateMeetingTitleState,
 } from "@/features/meetings/server/actions";
+import { useEditPresence } from "@/features/presence/edit-presence";
 
 function SaveBtn() {
   const { pending } = useFormStatus();
@@ -30,6 +31,9 @@ export function MeetingTitleEditor({ meetingId, title }: { meetingId: string; ti
     undefined,
   );
   const handled = useRef(false);
+
+  // "수정중" presence — 제목 편집이 열려 있는 동안 track(닫히면 자동 해제).
+  useEditPresence(`meeting:${meetingId}`, editing);
 
   useEffect(() => {
     if (state?.ok && !handled.current) {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { Mic, RefreshCw } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
@@ -67,6 +68,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-foreground text-[15px] font-bold">{m.title}</h3>
+                <EditingBadge scope={`meeting:${m.id}`} />
                 {m.hasAudio ? (
                   <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
                     <EyIcon name="dot" size={10} />

@@ -4,6 +4,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { outcomePill } from "./outcome-meta";
 
 function daysSince(iso: string): number {
@@ -44,6 +45,7 @@ export function EnrollmentTable({ rows }: { rows: ConsultationListRow[] }) {
                   >
                     {c.prospectName}
                   </WindowLink>
+                  <EditingBadge scope={`consultation:${c.id}`} className="ml-1.5" />
                 </td>
                 <td className="text-text-dim px-4 py-2.5 text-xs">
                   {c.prospectGrade ?? "—"}

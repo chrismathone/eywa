@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { EditingBanner } from "@/features/presence/editing-badge";
 import {
   createStudentConsultation,
   updateStudentConsultation,
@@ -115,6 +117,10 @@ export function ConsultationForm({
   });
   const clearDraft = draft.clear;
 
+  // 동시편집 가드(same-browser 저장경고) + cross-user "수정중" presence(edit 모드).
+  const editScope = mode === "edit" && initialValue?.id ? `student-consultation:${initialValue.id}` : undefined;
+  const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
+
   // 저장 성공 확정(nonce) 후에만 초안 삭제 → 이동(B-2). 제출 시점 무조건 clear는 서버 검증 실패 시
   // (학생 미선택·요약 5자 미만 등) 입력이 먼저 사라져 창을 닫으면 복구 불가라 성공 기반으로 전환.
   const handledNonce = useRef<number | undefined>(undefined);
@@ -122,13 +128,15 @@ export function ConsultationForm({
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
       handledNonce.current = state.nonce;
       clearDraft();
+      notifySaved();
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, router, clearDraft]);
+  }, [state, router, clearDraft, notifySaved]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-5">
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      {editScope ? <EditingBanner scope={editScope} /> : null}
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}

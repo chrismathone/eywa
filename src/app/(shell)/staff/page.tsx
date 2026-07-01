@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, CalendarClock, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
@@ -237,7 +238,10 @@ export default async function StaffPage({
                 <header className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="min-w-0">
-                      <p className="text-foreground text-[15px] font-bold">{s.displayName}</p>
+                      <p className="text-foreground flex items-center gap-1.5 text-[15px] font-bold">
+                        {s.displayName}
+                        <EditingBadge scope={`staff:${s.id}`} />
+                      </p>
                       <p className="text-text-dim num mt-0.5 truncate text-[11px]">{s.email}</p>
                     </div>
                   </div>

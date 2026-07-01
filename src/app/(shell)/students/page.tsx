@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -195,6 +196,7 @@ export default async function StudentsPage({
                           {s.name}
                         </WindowLink>
                         {s.syncNew ? <MakeeduOriginTag /> : null}
+                        <EditingBadge scope={`student:${s.id}`} />
                       </span>
                     </td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.grade ?? "—"}</td>

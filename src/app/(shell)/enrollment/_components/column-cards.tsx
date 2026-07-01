@@ -11,6 +11,7 @@ import {
 } from "@/components/pagination";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { OUTCOME_PILL } from "./outcome-meta";
 
 const PAGE_SIZE = 8;
@@ -62,6 +63,7 @@ export function ColumnCards({
                           </span>
                         ) : null}
                         {c.syncAddedAt ? <MakeeduOriginTag /> : null}
+                        <EditingBadge scope={`consultation:${c.id}`} />
                       </p>
                       <p className="text-text-dim text-[11px]">
                         {c.prospectGrade ?? "—"}

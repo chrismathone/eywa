@@ -1,5 +1,6 @@
 import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
@@ -211,6 +212,7 @@ function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                   >
                     {c.className}
                   </WindowLink>
+                  <EditingBadge scope={`class:${c.id}`} className="ml-1.5" />
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
@@ -285,8 +287,9 @@ function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                 )}
               </div>
             </header>
-            <h3 className="text-foreground text-[17px] font-extrabold leading-tight">
+            <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-[17px] font-extrabold leading-tight">
               {c.className}
+              <EditingBadge scope={`class:${c.id}`} />
             </h3>
             <div className="text-[12px]">
               <div className="flex items-center gap-2">

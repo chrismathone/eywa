@@ -5,6 +5,7 @@ import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react";
 import type { MeetingReportSection } from "@/features/meetings/server/queries";
 import { updateMeetingReportSection } from "@/features/meetings/server/actions";
 import { RichText } from "@/components/rich-text";
+import { useEditPresence } from "@/features/presence/edit-presence";
 
 /**
  * 회의별 AI 보고서 — 이모지 라벨 + 섹션별 접기/펼치기 + **섹션 인라인 수정**(staff가 인쇄/공유 전 AI 오류 교정).
@@ -53,6 +54,9 @@ export function MeetingReportAccordion({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
+
+  // "수정중" presence — 어느 섹션이든 인라인 편집 중이면 track(닫히면 자동 해제).
+  useEditPresence(`meeting:${meetingId}`, editing !== null);
 
   // 수정으로 비어졌다 다시 채워질 수 있으니 항상 7섹션 노출(빈 섹션도 수정 진입 가능하게).
   const visible = editing ? SECTIONS : available;

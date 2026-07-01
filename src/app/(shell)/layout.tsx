@@ -13,6 +13,7 @@ import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getActivePopups } from "@/features/notices/server/queries";
 import { NoticePopupLayer } from "@/features/notices/components/notice-popup-layer";
 import { OperationsProvider } from "@/features/owner/operations-context";
+import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { resolveMatrix } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
@@ -36,12 +37,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (embed) {
     return (
       <EmbedProvider embed>
-        <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+        <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
           <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {children}
           </main>
-        </OperationsProvider>
+        </OperationsProvider></EditPresenceProvider>
       </EmbedProvider>
     );
   }
@@ -92,9 +93,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
         </header>
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
-          <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
             {children}
-          </OperationsProvider>
+          </OperationsProvider></EditPresenceProvider>
         </main>
         <NoticePopupLayer popups={popups} />
       </div>
@@ -134,9 +135,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <AppHeader brand={brand} />
         </HideInFrame>
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
-          <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
             {children}
-          </OperationsProvider>
+          </OperationsProvider></EditPresenceProvider>
         </main>
       </div>
 
