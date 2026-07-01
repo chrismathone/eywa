@@ -15,13 +15,17 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Check, GripVertical, Loader2, Pencil, X } from "lucide-react";
-import { moveEnrollmentsBatch } from "@/features/enrollments/server/actions";
+import {
+  moveEnrollmentsBatch,
+  updateEnrollmentsAttendanceBatch,
+} from "@/features/enrollments/server/actions";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
-import { zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
+import { DAY_LABEL, sameDaySet, zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
 import {
   TimetableEditContext,
   useTimetableEdit,
+  type DayEditTarget,
   type HoveredStudent,
   type IncomingStudent,
   type PendingTarget,
@@ -69,6 +73,10 @@ export function TimetableEditProvider({
   const [endTarget, setEndTarget] = useState<HoveredStudent | null>(null);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
+
+  // 편집 모드에서 학생 클릭 → 같은 반 요일 편집 팝오버. 적용 시 이동 배치(pending)에 같은 반 변경으로 큐잉.
+  const [dayEdit, setDayEdit] = useState<DayEditTarget | null>(null);
+  const openDayEdit = useCallback((t: DayEditTarget) => setDayEdit(t), []);
 
   // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 확인 팝업. 입력창 타이핑 중엔 무시. 편집 모드에서만.
   useEffect(() => {
@@ -122,21 +130,32 @@ export function TimetableEditProvider({
         order.push(q.enrollmentId);
       }
     }
-    return order.map((id) => net.get(id)!).filter((m) => m.fromClassId !== m.toClassId);
+    // 같은 반이라도 요일이 바뀌면(2일↔1일 편집) 유지. 같은 반+같은 요일만 no-op으로 제거.
+    return order
+      .map((id) => net.get(id)!)
+      .filter((m) => m.fromClassId !== m.toClassId || !sameDaySet(m.fromDays, m.toDays));
   }, [queue]);
 
-  // enrollmentId → 최종 이동 대상. 출발 셀이 취소선+→대상 마커를 그리는 데 사용.
+  // enrollmentId → 최종 대상. 출발 셀이 취소선+→대상(반이동) 또는 "→요일"(같은 반 요일편집) 마커를 그리는 데 사용.
   const pending = useMemo<Map<string, PendingTarget>>(() => {
     const m = new Map<string, PendingTarget>();
-    for (const r of resolved) m.set(r.enrollmentId, { toClassId: r.toClassId, toClassName: r.toClassName });
+    for (const r of resolved)
+      m.set(r.enrollmentId, {
+        toClassId: r.toClassId,
+        toClassName: r.toClassName,
+        toDays: r.toDays,
+        sameClass: r.fromClassId === r.toClassId,
+      });
     return m;
   }, [resolved]);
 
   // 도착 셀 slot.id(=toSlotId) → 전입 예정 학생들. 도착 셀이 초록 미리보기 행을 그리는 데 사용.
   // 마커는 "그 셀"에 붙어야 하므로 반 id가 아니라 셀 slot.id로 키잉(한 반이 여러 셀에 걸쳐도 드롭한 셀만).
+  // ⚠️ 같은 반 요일 편집(반 이동 아님)은 '전입 예정'이 아니므로 제외 — 출발 셀의 "→요일" 배지로만 표시.
   const incoming = useMemo<Map<string, IncomingStudent[]>>(() => {
     const m = new Map<string, IncomingStudent[]>();
     for (const r of resolved) {
+      if (r.fromClassId === r.toClassId) continue; // 같은 반 요일 편집 → 전입 예정 아님
       const key = r.toSlotId ?? r.toClassId;
       const arr = m.get(key) ?? [];
       arr.push({
@@ -159,10 +178,28 @@ export function TimetableEditProvider({
     name: string;
     toSlotId?: string;
     toDays?: string[];
+    fromDays?: string[];
   }) {
     setError(null);
     setFailed([]);
     setQueue((prev) => [...prev, move]);
+  }
+
+  // 같은 반 요일 편집(팝오버) → toClassId=fromClassId + 선택 요일로 큐잉(저장 시 반영). fromClassName은 배지에 안 쓰임.
+  function applyDayEdit(days: string[]) {
+    if (!dayEdit) return;
+    queueMove({
+      enrollmentId: dayEdit.enrollmentId,
+      fromClassId: dayEdit.classId,
+      fromClassName: "",
+      toClassId: dayEdit.classId,
+      toClassName: "",
+      name: dayEdit.name,
+      toSlotId: dayEdit.slotId,
+      toDays: days,
+      fromDays: dayEdit.currentDays,
+    });
+    setDayEdit(null);
   }
 
   const compressed = compressMoves(queue);
@@ -178,21 +215,33 @@ export function TimetableEditProvider({
     setError(null);
     setFailed([]);
     try {
-      const res = await moveEnrollmentsBatch(
-        compressed.map((m) => ({
-          enrollmentId: m.enrollmentId,
-          newClassId: m.toClassId,
-          attendanceDays: m.toDays ?? [],
-        })),
-        scheduledDate ?? effectiveDate,
-      );
-      if (res.error) {
-        setError(res.error);
-        return;
+      // 교차 반 이동 = move_enrollments_batch(적용일 split). 같은 반 요일 편집 = attendance_days 갱신(전입 플래그 없음).
+      const moves = compressed.filter((m) => m.fromClassId !== m.toClassId);
+      const dayEdits = compressed.filter((m) => m.fromClassId === m.toClassId);
+      if (moves.length > 0) {
+        const res = await moveEnrollmentsBatch(
+          moves.map((m) => ({
+            enrollmentId: m.enrollmentId,
+            newClassId: m.toClassId,
+            attendanceDays: m.toDays ?? [],
+          })),
+          scheduledDate ?? effectiveDate,
+        );
+        if (res.error) {
+          setError(res.error);
+          return;
+        }
+        const fails = (res.results ?? []).filter((r) => !r.ok);
+        if (fails.length > 0) setFailed(fails.map((f) => f.error ?? f.enrollmentId));
       }
-      const fails = (res.results ?? []).filter((r) => !r.ok);
-      if (fails.length > 0) {
-        setFailed(fails.map((f) => f.error ?? f.enrollmentId));
+      if (dayEdits.length > 0) {
+        const r2 = await updateEnrollmentsAttendanceBatch(
+          dayEdits.map((m) => ({ enrollmentId: m.enrollmentId, days: m.toDays ?? [] })),
+        );
+        if (r2.error) {
+          setError(r2.error);
+          return;
+        }
       }
       setQueue([]);
       setScheduledDate(null);
@@ -231,6 +280,7 @@ export function TimetableEditProvider({
         setScheduledDate,
         dateFloor,
         setHovered,
+        openDayEdit,
       }}
     >
       {children}
@@ -244,7 +294,104 @@ export function TimetableEditProvider({
           onConfirm={confirmEndEnrollment}
         />
       ) : null}
+      {dayEdit ? (
+        <DayEditPopover target={dayEdit} onCancel={() => setDayEdit(null)} onApply={applyDayEdit} />
+      ) : null}
     </TimetableEditContext.Provider>
+  );
+}
+
+/**
+ * 같은 반 요일 편집 팝오버 — 편집 모드에서 학생 클릭 시. 그 셀이 덮는 요일(월/목 등)을 토글로 보여주고,
+ * 적용하면 그 요일만 등원(전부 선택=전 요일)으로 이동 배치에 큐잉(저장 시 반영). 반 이동이 아니라 요일만 편집.
+ */
+function DayEditPopover({
+  target,
+  onCancel,
+  onApply,
+}: {
+  target: DayEditTarget;
+  onCancel: () => void;
+  onApply: (days: string[]) => void;
+}) {
+  // 현재 등원 요일 — []=전 요일(덮는 요일 전부 선택 상태로 시작).
+  const covers = target.coveringDays;
+  const initial =
+    target.currentDays.length === 0
+      ? new Set(covers)
+      : new Set(covers.filter((d) => target.currentDays.includes(d)));
+  const [sel, setSel] = useState<Set<string>>(initial);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  const toggle = (d: string) =>
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+  // 저장값 = 전부 선택이면 [](전 요일), 아니면 선택 요일. 요일순.
+  const picked = covers.filter((d) => sel.has(d));
+  const toDays = picked.length === covers.length ? [] : picked;
+  const none = picked.length === 0;
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-card border-line w-[280px] rounded-lg border p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-foreground text-sm font-bold">
+          <span className="text-text-dim font-normal">{target.name} · </span>등원 요일
+        </p>
+        <p className="text-text-faint mt-1 text-[11px]">이 반에서 오는 요일만 선택(전부 = 전 요일 등원).</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {covers.map((d) => {
+            const on = sel.has(d);
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => toggle(d)}
+                aria-pressed={on}
+                className={`min-w-[44px] rounded-md border px-3 py-1.5 text-sm font-medium transition ${
+                  on
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-line text-text-dim hover:bg-bg-soft"
+                }`}
+              >
+                {DAY_LABEL[d] ?? d}
+              </button>
+            );
+          })}
+        </div>
+        {none ? <p className="text-chart-4 mt-2 text-xs">최소 한 요일은 선택해야 합니다.</p> : null}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs font-medium transition"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={() => onApply(toDays)}
+            disabled={none}
+            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-md px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+          >
+            적용
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -423,12 +570,16 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     const toClassId = overData?.classId;
     if (!toClassId) return;
     const data = active.data.current as
-      | { classId?: string; fromClassName?: string; name?: string; enrollmentId?: string }
+      | { classId?: string; fromClassName?: string; name?: string; enrollmentId?: string; attendanceDays?: string[] }
       | undefined;
     // 분리등원 요일 칸에서 온 드래그는 id가 `student:{id}:{day}`로 유니크 → id 파싱 대신 data.enrollmentId 우선.
     const enrollmentId = data?.enrollmentId ?? activeIdStr.slice("student:".length);
     const fromClassId = data?.classId ?? ""; // 출발 반 id(실제 반 id)
-    if (!fromClassId || fromClassId === toClassId) return; // 같은 반은 v1 미지원(교차 반 이동만)
+    const fromDays = data?.attendanceDays ?? []; // 출발 시점 등원 요일(no-op 판정)
+    const toDays = zoneAttendanceDays(overData?.day); // 요일 존=[그 요일], 공통 존=[]
+    if (!fromClassId) return;
+    // 같은 반이면 요일이 바뀔 때만(2일↔1일 편집), 교차 반이면 항상 이동.
+    if (fromClassId === toClassId && sameDaySet(fromDays, toDays)) return;
     queueMove({
       enrollmentId,
       fromClassId,
@@ -437,7 +588,8 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       toClassName: overData?.className ?? "다른 반",
       name: data?.name ?? "학생",
       toSlotId: overData?.slotId,
-      toDays: zoneAttendanceDays(overData?.day), // 요일 존=[그 요일], 공통 존=[]
+      toDays,
+      fromDays,
     });
   }
 

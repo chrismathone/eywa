@@ -6,7 +6,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
-import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
+import { DAY_LABEL, dayChangeLabel, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
@@ -93,6 +93,8 @@ function DraggableStudentRow({
   tone,
   dayKey,
   attendanceDays,
+  slotId,
+  coveringDays,
 }: {
   enrollmentId: string;
   /** 학생 id — 편집 모드 Delete=오늘 수강 종료 시 hover 추적에 사용. */
@@ -106,13 +108,18 @@ function DraggableStudentRow({
   dayKey?: string;
   /** 이 학생의 등원 요일(분리등원, 비면 전 요일) — 도착 셀 '전입 예정' 요일 라벨용으로 drag data에 실어 보냄. */
   attendanceDays?: string[];
+  /** 이 셀 slot.id + 덮는 요일 — 클릭 시 같은 반 요일 편집 팝오버(2요일+ 셀에서만). */
+  slotId?: string;
+  coveringDays?: string[];
 }) {
-  const { pending, setHovered } = useTimetableEdit();
+  const { pending, setHovered, openDayEdit } = useTimetableEdit();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dayKey ? `student:${enrollmentId}:${dayKey}` : `student:${enrollmentId}`,
     data: { classId, name, fromClassName: className, enrollmentId, attendanceDays },
   });
   const target = pending.get(enrollmentId);
+  const moving = !!target && !target.sameClass; // 반 이동=취소선+dim / 같은 반 요일 편집=배지만
+  const canEditDays = (coveringDays?.length ?? 0) >= 2 && !!slotId;
   return (
     <div
       ref={setNodeRef}
@@ -120,14 +127,35 @@ function DraggableStudentRow({
       {...listeners}
       onMouseEnter={() => setHovered({ enrollmentId, studentId: studentId ?? "", name, className })}
       onMouseLeave={() => setHovered(null)}
-      className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${target ? "opacity-60" : ""}`}
+      onClick={
+        canEditDays
+          ? () =>
+              openDayEdit({
+                enrollmentId,
+                classId,
+                slotId: slotId!,
+                name,
+                currentDays: attendanceDays ?? [],
+                coveringDays: coveringDays!,
+              })
+          : undefined
+      }
+      className={`${ROW_CLASS} cursor-grab touch-none select-none active:cursor-grabbing ${tone} ${isDragging ? "opacity-40" : ""} ${moving ? "opacity-60" : ""}`}
     >
-      <span className={`overflow-hidden whitespace-nowrap text-clip ${target ? "line-through" : ""}`}>
+      <span className={`overflow-hidden whitespace-nowrap text-clip ${moving ? "line-through" : ""}`}>
         {name}
         {!target && meta ? <span className="opacity-60">/{meta}</span> : null}
       </span>
-      {/* 이동 중: 좁은 칸에서 반이름이 학생이름을 밀어내므로 반이름은 빼고 작은 "→"만(학생이름 우선). */}
-      {target ? <span className="text-primary shrink-0 font-mono text-[12px]">→</span> : null}
+      {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌). */}
+      {target ? (
+        target.sameClass ? (
+          <span className="text-primary shrink-0 font-mono text-[10px] font-bold">
+            →{dayChangeLabel(target.toDays)}
+          </span>
+        ) : (
+          <span className="text-primary shrink-0 font-mono text-[12px]">→</span>
+        )
+      ) : null}
     </div>
   );
 }
@@ -202,6 +230,8 @@ function StudentSection({
   tone,
   label,
   labelTone,
+  slotId,
+  coveringDays,
 }: {
   students: ClassDetailQuick["students"];
   classId: string;
@@ -212,6 +242,9 @@ function StudentSection({
   tone: (s: { isNew?: boolean; isTransferredIn?: boolean }) => string;
   label?: string;
   labelTone?: string;
+  /** 클릭 시 같은 반 요일 편집 팝오버용(재원 섹션에만 전달). */
+  slotId?: string;
+  coveringDays?: string[];
 }) {
   if (students.length === 0) return null;
   const visible = students.slice(0, cap);
@@ -238,6 +271,8 @@ function StudentSection({
             meta={metaLabel(s.school, s.grade)}
             tone={tone(s)}
             attendanceDays={s.attendanceDays}
+            slotId={slotId}
+            coveringDays={coveringDays}
           />
         ) : (
           <StudentRow
@@ -428,6 +463,8 @@ export function ClassCell({
                 cap={activeCap}
                 draggable
                 tone={studentRowTone}
+                slotId={slot.id}
+                coveringDays={covers}
               />
             </div>
             {/* 하단 그룹 — 분리등원(월/목) → 전입예정 → 대기 → 퇴원 순으로 셀 하단에 붙임(mt-auto). */}
@@ -458,6 +495,8 @@ export function ClassCell({
                                     meta={metaLabel(s.school, s.grade)}
                                     tone={studentRowTone(s)}
                                     attendanceDays={s.attendanceDays}
+                                    slotId={slot.id}
+                                    coveringDays={covers}
                                   />
                                 ) : (
                                   <StudentRow

@@ -41,3 +41,19 @@ export function incomingDayLabel(
 export function zoneAttendanceDays(day: string | null | undefined): string[] {
   return day ? [day] : [];
 }
+
+/** 두 요일 집합이 같은지(순서 무관). 같은 반 요일 편집의 no-op(변경 없음) 판정용. */
+export function sameDaySet(a: string[] | undefined, b: string[] | undefined): boolean {
+  const sa = new Set(a ?? []);
+  const sb = new Set(b ?? []);
+  if (sa.size !== sb.size) return false;
+  for (const x of sa) if (!sb.has(x)) return false;
+  return true;
+}
+
+/** 같은 반 요일 편집 배지 라벨 — []=전 요일, ['thu']="목만", ['mon','thu']="월·목만". */
+export function dayChangeLabel(days: string[] | undefined): string {
+  const d = days ?? [];
+  if (d.length === 0) return "전 요일";
+  return d.map((x) => DAY_LABEL[x] ?? x).join("·") + "만";
+}

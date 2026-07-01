@@ -215,6 +215,39 @@ export async function moveEnrollmentsBatch(
   return { results };
 }
 
+export type AttendanceEdit = { enrollmentId: string; days: string[] };
+
+/**
+ * 같은 반 등원 요일 편집(2일↔1일) 일괄 반영 — 반 이동이 아니라 **기존 enrollment의 attendance_days만 갱신**.
+ * (반 이동처럼 종료+신규 생성/전입 플래그를 붙이면 초록 전입색·'반 이동' 사유가 잘못 붙는다.)
+ * RLS(tenant_isolation)로 본 테넌트 enrollment만 갱신. days=[]는 전 요일 등원(분리 해제).
+ * ⚠️ 셀 단위 편집이라 그 셀이 덮는 요일만 담긴다 — 한 반이 여러 셀에 걸치면 편집은 그 셀 요일 기준(v1 한계).
+ */
+export async function updateEnrollmentsAttendanceBatch(
+  edits: AttendanceEdit[],
+): Promise<{ error?: string; count?: number }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "반 배정 권한이 없습니다" };
+  if (!Array.isArray(edits) || edits.length === 0) return { count: 0 };
+
+  const supabase = await createClient();
+  let count = 0;
+  for (const e of edits) {
+    const enrollmentId = String(e?.enrollmentId ?? "").trim();
+    if (!enrollmentId) continue;
+    const days = DAY_ORDER.filter((d) => (e.days ?? []).includes(d)); // 유효 요일코드만·요일순
+    const { error } = await supabase
+      .from("enrollments")
+      .update({ attendance_days: days })
+      .eq("id", enrollmentId);
+    if (error) return { error: error.message, count };
+    count++;
+  }
+  revalidatePath("/timetable");
+  return { count };
+}
+
 export type UpdateEnrollmentDatesState = { ok?: boolean; error?: string } | undefined;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

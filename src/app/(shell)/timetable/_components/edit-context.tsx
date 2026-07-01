@@ -3,7 +3,24 @@
 import { createContext, useContext } from "react";
 
 /** 셀 → 보드로 흐르는 편집 상태. 보드(client)가 제공, ClassCell(client)이 소비. */
-export type PendingTarget = { toClassId: string; toClassName: string };
+export type PendingTarget = {
+  toClassId: string;
+  toClassName: string;
+  /** 목적지 등원 요일 — 같은 반 요일 편집이면 배지 표시용([]=전 요일). */
+  toDays?: string[];
+  /** 같은 반 요일 편집(반 이동 아님) — true면 이동 화살표 대신 "→요일" 변경 배지. */
+  sameClass?: boolean;
+};
+
+/** 같은 반 요일 편집 팝오버 대상(편집 모드에서 학생 클릭 시). coveringDays=그 셀이 덮는 요일(월/목 등). */
+export type DayEditTarget = {
+  enrollmentId: string;
+  classId: string;
+  slotId: string;
+  name: string;
+  currentDays: string[];
+  coveringDays: string[];
+};
 
 /** 마우스 오버 중인 학생(편집 모드 Delete=오늘 수강 종료용). ref로 추적해 hover마다 리렌더 안 함. */
 export type HoveredStudent = { enrollmentId: string; studentId: string; name: string; className: string };
@@ -39,6 +56,7 @@ export interface TimetableEditState {
     name: string;
     toSlotId?: string;
     toDays?: string[];
+    fromDays?: string[];
   }) => void;
   /** 압축된 이동 대기 건수. */
   pendingCount: number;
@@ -54,6 +72,8 @@ export interface TimetableEditState {
   dateFloor: string;
   /** 마우스 오버 중인 학생 등록(편집 모드 Delete=오늘 수강 종료). ref 세팅이라 리렌더 없음. null=해제. */
   setHovered: (h: HoveredStudent | null) => void;
+  /** 편집 모드에서 학생 클릭 → 같은 반 요일 편집 팝오버 열기. */
+  openDayEdit: (t: DayEditTarget) => void;
 }
 
 const noop = () => {};
@@ -73,6 +93,7 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   setScheduledDate: noop,
   dateFloor: "",
   setHovered: noop,
+  openDayEdit: noop,
 });
 
 export function useTimetableEdit(): TimetableEditState {

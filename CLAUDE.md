@@ -329,6 +329,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 같은 반 등원 요일 편집(2일↔1일) — 드래그 + 클릭 팝오버 (2026-07-01) — ✅ typecheck0/lint0/test128 + 라이브·롤백 검증
+사용자 제보: 이미 2요일(월목) 다니는 학생을 1요일로(또는 반대로) **수정**하는 기능이 없음 — 처음 배정·교차 반이동 드래그만 요일을 정할 수 있었음. 같은 반 요일 편집을 **드래그·팝오버 둘 다**로.
+- **팝오버**: 편집 모드에서 학생 **클릭** → 그 셀 덮는 요일(월/목) 토글 → 적용 → 이동 배치(pending)에 같은 반 변경으로 큐잉([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `DayEditPopover`). 전부 선택=`[]`(전 요일), 일부=그 요일만.
+- **드래그**: 같은 반의 다른 요일 칸/공통으로 드래그 — onDragEnd의 `fromClassId===toClassId` skip 제거 → **요일 다를 때만** 큐잉(`sameDaySet` no-op 가드, [split-attendance.ts](src/features/timetable/lib/split-attendance.ts)). 교차 반 이동과 통일.
+- **마커 분리**: 같은 반 요일 편집은 전입예정 초록 대신 **"→월만" 배지**(pending에 `sameClass`·`toDays`, `dayChangeLabel`). incoming(전입예정)은 교차 반만. 반 이동은 취소선+→(불변).
+- **저장 분리**([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `save`): compressed를 교차/같은반으로 나눠 — 교차=`move_enrollments_batch`(적용일 split·전입 플래그), **같은 반=신규 [updateEnrollmentsAttendanceBatch](src/features/enrollments/server/actions.ts)** — enrollment의 `attendance_days`만 **retroactive 갱신**(반 이동 아님이라 `is_transferred_in`/`withdrawal_reason` 안 붙여 **초록 전입색·"반 이동" 사유 오류 방지**). RLS 테넌트 격리 + canWriteTenant("classes") 게이트.
+- 검증: typecheck0/lint0/**test128**(sameDaySet·dayChangeLabel) + **라이브**(이채은 클릭→"이채은·등원 요일" 팝오버→목 해제·적용→**"이채은→월만" 배지·1건 대기**) + **롤백 DB**(attendance_days `[]→[mon]`·end_date/전입/사유 무변경=깨끗). ⚠️ 실 마우스 드래그(같은 반)·실 저장→DB는 dnd-kit 합성 한계([[#52]])로 자동 미검 — **팝오버가 동일 큐→배지→저장 경로 증명**.
+- ⚠️ 한계: ① 한 반이 여러 셀(월목+수)에 걸치면 편집이 **그 셀 요일 기준**(멀티셀 — 셀 밖 요일은 팝오버에 안 뜸). ② 같은 반 편집은 **retroactive**(과거 주도 반영) — 교차 이동의 적용일 split과 다름(의도: "수정"). ③ 클릭=팝오버 / 드래그=이동 이중 동작(dnd-kit distance:5로 구분).
+
 ### 시간표 편집 모드 Delete = 오늘 그 반 수강 종료 (hover + 확인 팝업) (2026-07-01) — ✅ typecheck0/lint0 + 라이브 팝업 검증
 사용자 요청: 시간표에서 학생에 **마우스 올린 채 Delete → 오늘 그 반 수강 종료**. ⚠️ 정정: "퇴원"(전체 학생 status)이 아니라 **그 반의 수강 종료**(이력=수강 종료, 그 셀에선 퇴원 목록으로 이동, **모든 반 수강종료 시 자연히 퇴원**). 기존 [endSingleEnrollment](src/features/students/server/actions.ts)(end_date=오늘, 학생 쓰기 full 게이트) 재사용.
 - **hover 추적 = ref**([edit-context](<src/app/(shell)/timetable/_components/edit-context.tsx>) `HoveredStudent`·`setHovered`): DraggableStudentRow `onMouseEnter/Leave`가 **ref만 세팅**(hover마다 리렌더 방지). context에 stable `setHovered` 노출.

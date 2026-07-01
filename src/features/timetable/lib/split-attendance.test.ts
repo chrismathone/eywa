@@ -1,5 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { incomingDayLabel, zoneAttendanceDays } from "./split-attendance";
+import {
+  dayChangeLabel,
+  incomingDayLabel,
+  sameDaySet,
+  zoneAttendanceDays,
+} from "./split-attendance";
+
+describe("sameDaySet — 요일 집합 동일 판정(no-op)", () => {
+  it("순서 무관 동일", () => {
+    expect(sameDaySet(["mon", "thu"], ["thu", "mon"])).toBe(true);
+    expect(sameDaySet([], [])).toBe(true);
+    expect(sameDaySet(undefined, [])).toBe(true);
+  });
+  it("다르면 false", () => {
+    expect(sameDaySet(["mon"], ["thu"])).toBe(false);
+    expect(sameDaySet([], ["mon"])).toBe(false);
+    expect(sameDaySet(["mon", "thu"], ["mon"])).toBe(false);
+  });
+});
+
+describe("dayChangeLabel — 요일 변경 배지", () => {
+  it("빈 배열=전 요일", () => {
+    expect(dayChangeLabel([])).toBe("전 요일");
+    expect(dayChangeLabel(undefined)).toBe("전 요일");
+  });
+  it("요일 지정=OO만", () => {
+    expect(dayChangeLabel(["thu"])).toBe("목만");
+    expect(dayChangeLabel(["mon", "thu"])).toBe("월·목만");
+  });
+});
 
 describe("zoneAttendanceDays — 드롭 존 → 등원 요일", () => {
   it("요일 존은 그 요일만", () => {
