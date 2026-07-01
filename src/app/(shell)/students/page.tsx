@@ -4,6 +4,7 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
+import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -184,14 +185,17 @@ export default async function StudentsPage({
                 return (
                   <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors">
                     <td className="px-5 py-3">
-                      <WindowLink
-                        href={`/students/${s.id}`}
-                        title={s.name}
-                        ariaLabel={`${s.name} 학생 정보`}
-                        className="text-foreground text-[13px] font-bold hover:underline"
-                      >
-                        {s.name}
-                      </WindowLink>
+                      <span className="flex items-center gap-1.5">
+                        <WindowLink
+                          href={`/students/${s.id}`}
+                          title={s.name}
+                          ariaLabel={`${s.name} 학생 정보`}
+                          className="text-foreground text-[13px] font-bold hover:underline"
+                        >
+                          {s.name}
+                        </WindowLink>
+                        {s.syncNew ? <MakeeduOriginTag /> : null}
+                      </span>
                     </td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.grade ?? "—"}</td>
                     <td className="text-text-dim px-5 py-3 text-xs">{s.school ?? "—"}</td>

@@ -37,6 +37,7 @@ export type InvoiceRow = {
   pointsUsed: number;
   discountReason: string | null;
   billedAt: string | null;
+  syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
 };
 
 export type SortKey =
@@ -65,7 +66,7 @@ export async function getInvoicesForPeriod(
     .from("invoices")
     .select(
       `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
-       payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at,
+       payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at,
        student:student_id ( id, name, grade, teacher:primary_teacher_id ( display_name ) )`,
     )
     .eq("period", periodKey);
@@ -111,6 +112,7 @@ export async function getInvoicesForPeriod(
       pointsUsed: Number((r as { points_used?: number }).points_used ?? 0),
       discountReason: (r as { discount_reason?: string | null }).discount_reason ?? null,
       billedAt: (r as { billed_at?: string | null }).billed_at ?? null,
+      syncAddedAt: (r as { sync_added_at?: string | null }).sync_added_at ?? null,
     };
   });
 

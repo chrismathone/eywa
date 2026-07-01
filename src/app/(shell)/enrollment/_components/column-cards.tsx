@@ -10,6 +10,7 @@ import {
   PAGER_LABEL,
 } from "@/components/pagination";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
+import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { OUTCOME_PILL } from "./outcome-meta";
 
 const PAGE_SIZE = 8;
@@ -60,6 +61,7 @@ export function ColumnCards({
                             QR
                           </span>
                         ) : null}
+                        {c.syncAddedAt ? <MakeeduOriginTag /> : null}
                       </p>
                       <p className="text-text-dim text-[11px]">
                         {c.prospectGrade ?? "—"}

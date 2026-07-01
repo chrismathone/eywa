@@ -163,13 +163,17 @@ function EXTRACT_DETAIL() {
     await Promise.all(Array.from({ length: CONC }, () => worker()));
     console.log("detail fetched, failed:", failed);
 
+    // ↻ 동기화 배지 = "지난 동기화가 새로 추가한 상담". 이 성공 실행 시작에 지난 신규 표시를 클리어(0062a).
+    // (do update에는 sync_added_at을 넣지 않아 기존 행은 NULL 유지 = 신규 insert만 라벨 대상.)
+    const cleared = await sql`update student_consultations set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
+    if (cleared.count) console.log(`  지난 동기화 라벨 클리어: ${cleared.count}`);
     // upsert (makeedu_id=counselSeq, summary=내용 || 제목)
     let up = 0;
     for (const r of matched) {
       const summary = r.content && r.content.length > 10 ? r.content : r.title || "상담";
       await sql`
-        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, summary, consulted_at)
-        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`})
+        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, summary, consulted_at, sync_added_at)
+        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null
         do update set student_id = excluded.student_id, counselor_id = excluded.counselor_id,
           summary = excluded.summary, consulted_at = excluded.consulted_at, updated_at = now()`;

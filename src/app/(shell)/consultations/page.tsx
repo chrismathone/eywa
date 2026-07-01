@@ -11,6 +11,7 @@ import {
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
+import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -282,6 +283,7 @@ export default async function ConsultationsPage({
                         >
                           {c.studentName}
                         </WindowLink>
+                        {c.syncAddedAt ? <MakeeduOriginTag /> : null}
                         {c.studentGrade ? (
                           <span className="text-text-dim text-xs">{c.studentGrade}</span>
                         ) : null}

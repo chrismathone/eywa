@@ -84,6 +84,9 @@ function coarseGrade(v) {
       console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
       return;
     }
+    // ↻ 동기화 배지 = "지난 동기화가 새로 추가한 교재". 이 성공 실행 시작에 지난 신규 표시를 클리어(0062a).
+    const cleared = await sql`update textbook_catalog set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
+    if (cleared.count) console.log(`  지난 동기화 라벨 클리어: ${cleared.count}`);
     let bl = 0, bi = 0, e = 0;
     for (const t of bookLink) {
       const res = await sql`update textbook_catalog set makeedu_id = ${t.makeedu_id}, updated_at = now() where id = ${t.id} and makeedu_id is null`;
@@ -91,8 +94,8 @@ function coarseGrade(v) {
     }
     for (const r of bookInsert) {
       await sql`
-        insert into textbook_catalog (tenant_id, makeedu_id, title, grade_level, publisher, price, is_active)
-        values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.grade}, ${r.publisher}, ${r.price}, ${r.is_active})
+        insert into textbook_catalog (tenant_id, makeedu_id, title, grade_level, publisher, price, is_active, sync_added_at)
+        values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.grade}, ${r.publisher}, ${r.price}, ${r.is_active}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
       bi++;
     }

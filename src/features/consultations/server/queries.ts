@@ -52,6 +52,7 @@ export type StudentConsultationRow = {
   processingStatus: ConsultationProcessingStatus;
   hasAudio: boolean;
   hasAi: boolean;
+  syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
 };
 
 export type StudentConsultationDetail = StudentConsultationRow & {
@@ -67,7 +68,7 @@ export type StudentConsultationDetail = StudentConsultationRow & {
 
 const SELECT_COLUMNS = `id, consulted_at, summary, follow_up_action,
   follow_up_date, follow_up_done, category, subject, audience, counselor_id,
-  processing_status, audio_path, ai_summary,
+  processing_status, audio_path, ai_summary, sync_added_at,
   student:student_id ( id, name, grade ),
   counselor:counselor_id ( display_name )`;
 
@@ -90,6 +91,7 @@ function mapRow(r: {
   processing_status?: string | null;
   audio_path?: string | null;
   ai_summary?: string | null;
+  sync_added_at?: string | null;
   student: unknown;
   counselor: unknown;
 }): StudentConsultationRow {
@@ -116,6 +118,7 @@ function mapRow(r: {
     processingStatus: (r.processing_status as ConsultationProcessingStatus | null) ?? "idle",
     hasAudio: !!r.audio_path,
     hasAi: !!r.ai_summary,
+    syncAddedAt: r.sync_added_at ?? null,
   };
 }
 

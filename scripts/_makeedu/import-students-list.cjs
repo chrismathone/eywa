@@ -108,6 +108,10 @@ function statusFrom(v) {
 
     if (!APPLY) { console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
 
+    // "↻ 동기화" 배지 = "지난 동기화가 새로 추가한 학생". 이 실행(=성공한 동기화)이 시작되면
+    // 먼저 지난 실행의 신규 표시를 전부 클리어한다 → 라벨이 "다음 동기화까지만" 유지되고 이번엔 사라진다(0061a).
+    const cleared = await sql`update students set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
+
     let linked = 0, inserted = 0;
     for (const t of toLink) {
       const res = await sql`update students set makeedu_id = ${t.makeedu_id}, updated_at = now() where id = ${t.id} and makeedu_id is null`;
@@ -115,11 +119,12 @@ function statusFrom(v) {
     }
     for (const r of toInsert) {
       try {
+        // 신규 추가 학생만 sync_added_at=now() → 이번 동기화 라벨 대상(매칭 백필은 대상 아님).
         await sql`
           insert into students (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
-            student_phone, parent_phone, parent_name, birth_date, enrolled_at, status)
+            student_phone, parent_phone, parent_name, birth_date, enrolled_at, status, sync_added_at)
           values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.gender}, ${r.attendance_code}, ${r.school}, ${r.grade},
-            ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.birth_date}, ${r.enrolled_at}, ${r.status})`;
+            ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.birth_date}, ${r.enrolled_at}, ${r.status}, now())`;
         inserted++;
       } catch (e) {
         if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) { skippedDup++; continue; }
@@ -127,6 +132,7 @@ function statusFrom(v) {
       }
     }
     await L.recordSync(sql, tenantId, "students", linked + inserted);
+    console.log(`  라벨 클리어(지난 신규): ${cleared.count} → 이번 신규 라벨: ${inserted}`);
     console.log(`\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}` + (skippedDup ? ` | skipped(자연키 중복): ${skippedDup}` : ""));
   } finally {
     await sql.end();

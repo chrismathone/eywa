@@ -15,6 +15,7 @@ import {
   type CatalogActionState,
 } from "@/features/billing/server/catalog-actions";
 import type { CatalogRow } from "@/features/billing/server/catalog-queries";
+import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -215,6 +216,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
                 <tr key={r.id} className="hover:bg-bg-soft/50">
                   <td className="px-4 py-2.5">
                     <span className="text-foreground text-[13px] font-bold">{r.title}</span>
+                    {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
                     {r.bookDetail ? <span className="text-text-faint ml-1.5 text-[11px]">{r.bookDetail}</span> : null}
                   </td>
                   <td className="text-text-dim px-4 py-2.5 text-[12px]">{r.gradeLevel ?? "—"}</td>

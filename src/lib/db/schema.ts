@@ -278,6 +278,9 @@ export const students = pgTable(
     // makeedu 동기화 외부키 — makeedu 원생고유번호(예 09327). ⚠️ student_code와 분리(ijw studentCode 충돌 방지).
     // 부분 유니크 (tenant_id, makeedu_id) WHERE makeedu_id IS NOT NULL 는 손수 alpha SQL(0057a).
     makeeduId: text("makeedu_id"),
+    // "지난 동기화가 새로 추가한 학생" 표시용(목록의 ↻ 동기화 배지). 동기화 신규 insert 시 now(),
+    // 다음 동기화가 성공하면 그 실행 시작에 전부 NULL로 클리어 → 라벨이 "다음 동기화까지만" 유지된다(0061a).
+    syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
     name: text("name").notNull(),
     englishName: text("english_name"),
     school: text("school"),
@@ -544,6 +547,8 @@ export const enrollmentConsultations = pgTable(
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),
     // makeedu 동기화 외부키 — makeedu 예비원생 No(예 725). 부분 유니크는 손수 alpha SQL(0057a).
     makeeduId: text("makeedu_id"),
+    // "지난 동기화가 새로 추가" 표시용(목록 ↻ 동기화 배지). 신규 insert 시 now(), 다음 동기화 성공 시 클리어(0062a).
+    syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
     consultedAt: timestamp("consulted_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -687,6 +692,8 @@ export const studentConsultations = pgTable(
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     // makeedu 동기화 외부키 — makeedu 상담 No(예 5046). 부분 유니크는 손수 alpha SQL(0057a).
     makeeduId: text("makeedu_id"),
+    // "지난 동기화가 새로 추가" 표시용(목록 ↻ 동기화 배지). 신규 insert 시 now(), 다음 동기화 성공 시 클리어(0062a).
+    syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -795,6 +802,8 @@ export const invoices = pgTable(
     notes: text("notes"),
     dueDate: date("due_date"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    // "지난 동기화가 새로 추가" 표시용(목록 ↻ 동기화 배지). 신규 insert 시 now(), 다음 동기화 성공 시 클리어(0062a).
+    syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
     // 결제 상세(회계/세무 투명성, 0042a) — 결제수단·카드사·현금영수증·적립금·할인사유·청구일.
     paymentMethod: text("payment_method"), // card/transfer/cash/other
     cardCompany: text("card_company"),
@@ -872,6 +881,8 @@ export const textbookCatalog = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     // makeedu 동기화 외부키 — makeedu 단가표 No(예 170). 부분 유니크는 손수 alpha SQL(0057a).
     makeeduId: text("makeedu_id"),
+    // "지난 동기화가 새로 추가" 표시용(목록 ↻ 동기화 배지). 신규 insert 시 now(), 다음 동기화 성공 시 클리어(0062a).
+    syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

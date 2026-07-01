@@ -73,6 +73,10 @@ function outcome(v) {
       console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
       return;
     }
+    // ↻ 동기화 배지 = "지난 동기화가 새로 추가한 예비상담". 이 성공 실행 시작에 지난 신규 표시를 클리어
+    // → 라벨이 "다음 동기화까지만" 유지되고 이번엔 사라진다(0062a). 매칭 백필(아래 toLink)에는 세팅 안 함.
+    const cleared = await sql`update enrollment_consultations set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
+    if (cleared.count) console.log(`  지난 동기화 라벨 클리어: ${cleared.count}`);
     let linked = 0, inserted = 0;
     for (const t of toLink) {
       const res = await sql`
@@ -85,9 +89,9 @@ function outcome(v) {
       // 나중에 sync-prospects가 실제 본문을 가져오면 이 sentinel을 덮어쓴다(lib.PROSPECT_LIST_NOTE).
       await sql`
         insert into enrollment_consultations
-          (tenant_id, makeedu_id, prospect_name, prospect_school, prospect_grade, parent_phone, student_phone, outcome, consulted_at, parent_request)
+          (tenant_id, makeedu_id, prospect_name, prospect_school, prospect_grade, parent_phone, student_phone, outcome, consulted_at, parent_request, sync_added_at)
         values (${tenantId}, ${r.makeedu_id}, ${r.prospect_name}, ${r.prospect_school}, ${r.prospect_grade},
-                ${r.parent_phone}, ${r.student_phone}, ${r.outcome}, ${r.consulted_at ?? null}, ${L.PROSPECT_LIST_NOTE})
+                ${r.parent_phone}, ${r.student_phone}, ${r.outcome}, ${r.consulted_at ?? null}, ${L.PROSPECT_LIST_NOTE}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
       inserted++;
     }

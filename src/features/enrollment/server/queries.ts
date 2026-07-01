@@ -83,6 +83,7 @@ export type ConsultationListRow = {
   processingStatus: ConsultationProcessingStatus;
   hasAudio: boolean;
   fromPublicIntake: boolean;
+  syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
 };
 
 export type ConsultationFilter = {
@@ -113,7 +114,7 @@ export async function getEnrollmentConsultations(
       .select(
         `id, prospect_name, prospect_grade, prospect_school,
          parent_phone, parent_request, outcome, consulted_at,
-         processing_status, audio_path, from_public_intake,
+         processing_status, audio_path, from_public_intake, sync_added_at,
          consultant:consultant_id ( display_name )`,
       );
     if (filter?.month) {
@@ -159,6 +160,7 @@ export async function getEnrollmentConsultations(
       processingStatus: c.processing_status as ConsultationProcessingStatus,
       hasAudio: !!c.audio_path,
       fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
+      syncAddedAt: (c as { sync_added_at?: string | null }).sync_added_at ?? null,
     };
   });
 }
@@ -333,6 +335,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     processingStatus: c.processing_status as ConsultationProcessingStatus,
     hasAudio: !!c.audio_path,
     fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
+    syncAddedAt: null, // 상세 화면은 목록 ↻ 배지가 불필요 → null(타입만 충족)
     transcription: c.transcription,
     // 비배열/null이면 null로(잘못된 jsonb가 TranscriptSection.slice 크래시 안 나게) — meetings 쿼리와 동일 방어.
     speakerLabels: Array.isArray(c.speaker_labels)

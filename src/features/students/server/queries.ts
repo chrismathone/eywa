@@ -48,6 +48,7 @@ export type StudentListRow = {
   enrolledAt: string | null;
   parentPhone: string | null;
   subjects: string[]; // 수강 중인 과목 unique list
+  syncNew: boolean; // 지난 동기화가 새로 추가한 학생(sync_added_at != null) → "↻ 동기화" 배지 (다음 동기화 성공 시 해제)
 };
 
 export type StudentSort = "grade" | "name" | "recent";
@@ -110,7 +111,7 @@ export async function getStudentsList(
     let qb = supabase
       .from("students")
       .select(
-        `id, name, school, grade, status, enrolled_at, parent_phone,
+        `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at,
          teacher:primary_teacher_id ( display_name )`,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
@@ -173,6 +174,7 @@ export async function getStudentsList(
       enrolledAt: r.enrolled_at,
       parentPhone: r.parent_phone,
       subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+      syncNew: r.sync_added_at != null,
     } satisfies StudentListRow;
   });
 
@@ -264,7 +266,7 @@ export async function getStudentsPage(
   let qb = supabase
     .from("students")
     .select(
-      `id, name, school, grade, status, enrolled_at, parent_phone,
+      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at,
        teacher:primary_teacher_id ( display_name )`,
       { count: "exact" },
     );
@@ -327,6 +329,7 @@ export async function getStudentsPage(
       enrolledAt: r.enrolled_at,
       parentPhone: r.parent_phone,
       subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+      syncNew: r.sync_added_at != null,
     } satisfies StudentListRow;
   });
 

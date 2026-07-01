@@ -76,13 +76,16 @@ const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(
     console.log("새 청구월 표본:", [...new Set(fresh.map((i) => i.period))].sort().slice(-6));
 
     if (!APPLY) { console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
+    // ↻ 동기화 배지 = "지난 동기화가 새로 추가한 청구". 이 성공 실행 시작에 지난 신규 표시를 클리어(0062a).
+    const cleared = await sql`update invoices set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
+    if (cleared.count) console.log(`  지난 동기화 라벨 클리어: ${cleared.count}`);
     let up = 0;
     for (const i of fresh) {
       await sql`
         insert into invoices (tenant_id, student_id, period, category, amount_total, amount_paid, amount_discount,
-          points_used, status, line_items, payment_method, billed_at, due_date, paid_at)
+          points_used, status, line_items, payment_method, billed_at, due_date, paid_at, sync_added_at)
         values (${tenantId}, ${i.student_id}, ${i.period}, ${"tuition"}, ${i.total}, ${i.paid}, ${i.discount},
-          ${i.point}, ${i.status}, ${JSON.stringify(i.items)}, ${i.method}, ${i.billed}, ${i.billed}, ${i.pdate})
+          ${i.point}, ${i.status}, ${JSON.stringify(i.items)}, ${i.method}, ${i.billed}, ${i.billed}, ${i.pdate}, now())
         on conflict (tenant_id, student_id, period) do nothing`;
       up++;
     }

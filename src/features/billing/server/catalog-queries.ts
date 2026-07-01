@@ -10,6 +10,7 @@ export type CatalogRow = {
   publisher: string | null;
   price: number;
   isActive: boolean;
+  syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
 };
 
 // textbook-dialog 교재검색 picker용 경량 옵션
@@ -36,7 +37,7 @@ export async function getCatalogPage(
   const from = (page - 1) * pageSize;
   let q = supabase
     .from("textbook_catalog")
-    .select("id, title, book_detail, grade_level, subject, publisher, price, is_active", {
+    .select("id, title, book_detail, grade_level, subject, publisher, price, is_active, sync_added_at", {
       count: "exact",
     })
     .order("title", { ascending: true })
@@ -62,6 +63,7 @@ export async function getCatalogPage(
       publisher: r.publisher,
       price: num(r.price),
       isActive: r.is_active,
+      syncAddedAt: (r as { sync_added_at?: string | null }).sync_added_at ?? null,
     })),
     total: count ?? 0,
   };

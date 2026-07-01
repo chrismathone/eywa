@@ -21,6 +21,7 @@ import {
   type UpdateInvoiceState,
 } from "@/features/billing/server/actions";
 import type { InvoiceRow } from "@/features/billing/server/queries";
+import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 
 const STATUS_LABEL: Record<string, string> = {
   paid: "완납",
@@ -272,6 +273,7 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
                     >
                       {r.studentName}
                     </WindowLink>
+                    {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
                     {description !== "—" ? (
                       <span
                         className="text-text-faint block max-w-[220px] truncate text-[11px]"
