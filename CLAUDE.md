@@ -329,6 +329,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 강사 인수인계 예약 반 = 배경 틴트(blue) + hover 상세 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST 검증
+사용자 요청: "인수인계 하는 반"을 시간표에서 시각 구분(테두리 vs 배경 → **사용자 선택=배경 틴트**). "인수인계"=강사 인수인계 예약(`classes.pending_teacher_id`, 0044a) — 지금까진 **수업 상세에서만 예약/표시**되고 시간표엔 안 나오던 것을 시간표에 소비처 배선.
+- **데이터**([queries.ts](src/features/timetable/server/queries.ts) `fetchSlots`): class(...) select에 `pending_teacher_id`·`pending_teacher_date` + `pendingTeacher:pending_teacher_id(display_name)` 조인 → `ScheduleSlot.pendingHandover:{teacherName,date}|null`(getTodaySchedule도 null 충족). ⚠️ classes→users **다중 FK**(teacher/pending/secondary)라 PostgREST 임베딩을 **컬럼명(`pending_teacher_id`)으로 disambiguate**(teacher:teacher_id 패턴 동일, 실검증으로 애매성 없음 확인).
+- **표시**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>)): 예약 있으면 명단 영역 `bg-card`→**`bg-blue-soft` 틴트**(합반 앰버·전입 초록·신입 빨강과 색 구분, **테두리 없음**=사용자 선택). hover 카드([hover-cards.tsx](<src/app/(shell)/timetable/_components/hover-cards.tsx>) `ClassInfoCard`)에 "강사 인수인계 예정 → 강사 (적용일)".
+- 검증: typecheck0/lint0 + **PostgREST 실검증**(다중 FK 임베딩 null 200 + 한 반에 임시 예약→`pendingTeacher.display_name`·날짜 populated→즉시 원복). ⚠️ 현재 예약된 반 0개라 시각은 안 뜸(수업 상세에서 예약 시 그 반만 틴트). **통합뷰(rich-card-group)는 별도 구조라 미적용**(기본뷰만 — 후속 가능).
+
 ### 시간표 강사 간 학생 중복 = ijw 이관 "유령 수강" + 재원 복구 미완 버그 (2026-07-01) — ✅ typecheck0/lint0 + 롤백 트랜잭션 검증
 사용자 제보: 시간표에서 김윤하·이유정 두 강사 학생이 제법 중복. **원인 2개** — 둘 다 프로덕션 실데이터에 외과적 수정(전체 재복원 없이, makeedu 세션 무간섭).
 - **A. ijw 이관 "유령 수강"** ([run.ts:159](scripts/_poc_migration/run.ts)): ijw는 종료·전출 수강을 `end<start`(종료일<시작일)로 기록하는데, 이관 코드가 이를 데이터오류로 오인해 **`end_date`를 null(=무한 활성 `daterange(start,∞)`)로 "보정"** → 옛 반이 안 닫혀 시간표에 유령으로 남아 **옛 반·새 반 양쪽에 표시**. null로 한 건 GiST `daterange(start,end,'[)')`가 `end<start`면 throw하기 때문. **영구 수정**: `end<start → end_date=start`(빈 구간=활성 아님, throw 회피). **핫픽스** [close-phantom-enrollments.cjs](scripts/_poc_migration/close-phantom-enrollments.cjs)(멱등): ijw 원본 대조로 "그 (학생·반)이 ijw에선 전부 종료됐는데 eywa엔 end_date=null로 남은" **유령 22건만** `end_date=start_date`로 닫음(김윤하/이유정 중복 13→6). 남은 6은 **ijw 실제 이중등록**(정상, eywa 충실 재현). 매칭=학생(name+school+grade)·반(현재 className, enrollment.className 스냅샷 아님). ⚠️ enrollments엔 `makeedu_id`·`updated_at` 컬럼 없음.

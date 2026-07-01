@@ -29,6 +29,8 @@ export type ClassDetailQuick = {
   /** 반 색(ijw bg_color) — 있으면 헤더 배경. 없으면 과목색 폴백. (ScheduleSlotWithStudents가 런타임에 채움.) */
   classBgColor?: string | null;
   classTextColor?: string | null;
+  /** 강사 인수인계 예약(0044a) — 있으면 명단 영역 배경 틴트 + hover 상세. null=예약 없음. */
+  pendingHandover?: { teacherName: string | null; date: string | null } | null;
   students: StudentQuick[];
 };
 
@@ -355,6 +357,8 @@ export function ClassCell({
   const headerStyle = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
     : undefined;
+  // 강사 인수인계 예약된 반 — 명단 영역에 은은한 blue 틴트(합반 앰버·전입 초록·신입 빨강과 구분). 상세는 hover 카드.
+  const handover = slot.pendingHandover ?? null;
 
   // 재원/대기/퇴원 분리 — ijw 셀처럼 섹션별 표시. status 없으면(구버전) 재원으로 간주.
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
@@ -419,6 +423,7 @@ export function ClassCell({
                 room={slot.classroomName}
                 schedule={`${shortTime(slot.startTime)}~${shortTime(slot.endTime)}`}
                 counts={{ active: active.length, hold: hold.length, withdrawn: withdrawn.length }}
+                pendingHandover={handover}
               />
             }
           >
@@ -449,7 +454,7 @@ export function ClassCell({
         {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
           <div
-            className={`bg-card text-[13px] ${
+            className={`text-[13px] ${handover ? "bg-blue-soft" : "bg-card"} ${
               hasBottom ? "flex min-h-0 flex-1 flex-col overflow-y-auto" : ""
             }`}
           >

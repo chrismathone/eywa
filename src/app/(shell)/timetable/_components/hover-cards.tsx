@@ -89,6 +89,7 @@ export function ClassInfoCard({
   schedule,
   textbook,
   counts,
+  pendingHandover,
 }: {
   className: string;
   subject: string;
@@ -97,6 +98,7 @@ export function ClassInfoCard({
   schedule?: string | null;
   textbook?: string | null;
   counts: { active: number; hold: number; withdrawn: number };
+  pendingHandover?: { teacherName: string | null; date: string | null } | null;
 }) {
   const subjects = useSubjectMaps();
   return (
@@ -105,6 +107,13 @@ export function ClassInfoCard({
         <span className="text-foreground text-[13px] font-bold">{className}</span>
         <Pill color={subjects.colorOf(subject)}>{subjects.labelOf(subject)}</Pill>
       </div>
+      {pendingHandover ? (
+        <div className="bg-blue-soft text-blue rounded px-1.5 py-1 text-[10px] font-semibold">
+          강사 인수인계 예정
+          {pendingHandover.teacherName ? ` → ${pendingHandover.teacherName}` : ""}
+          {pendingHandover.date ? ` (${pendingHandover.date})` : ""}
+        </div>
+      ) : null}
       <div className="space-y-1">
         <Row label="담임" value={teacherName ?? "—"} />
         <Row label="강의실" value={room ?? "—"} />

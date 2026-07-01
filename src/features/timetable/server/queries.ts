@@ -46,6 +46,8 @@ export type ScheduleSlot = {
   // 반 헤더색(ijw bgColor/textColor) — 통합뷰 수업명 헤더. null=과목색 폴백.
   classBgColor: string | null;
   classTextColor: string | null;
+  // 강사 인수인계 예약(0044a `classes.pending_teacher_id`) — 있으면 셀 배경 틴트 + hover 상세. null=예약 없음.
+  pendingHandover: { teacherName: string | null; date: string | null } | null;
 };
 
 async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
@@ -60,7 +62,9 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
       `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at,
+         pending_teacher_id, pending_teacher_date,
          teacher:teacher_id ( display_name ),
+         pendingTeacher:pending_teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
     )
@@ -102,7 +106,10 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
           subject?: string;
           bg_color?: string | null;
           text_color?: string | null;
+          pending_teacher_id?: string | null;
+          pending_teacher_date?: string | null;
           teacher?: { display_name?: string } | { display_name?: string }[];
+          pendingTeacher?: { display_name?: string } | { display_name?: string }[];
           classroom?: { name?: string } | { name?: string }[];
         }
       | undefined;
@@ -113,6 +120,10 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
     const roomField = klass?.classroom;
     const room = (Array.isArray(roomField) ? roomField[0] : roomField) as
       | { name?: string }
+      | undefined;
+    const pendingField = klass?.pendingTeacher;
+    const pending = (Array.isArray(pendingField) ? pendingField[0] : pendingField) as
+      | { display_name?: string }
       | undefined;
     return {
       id: r.id,
@@ -129,6 +140,9 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
       slotRoomLabel: (r.slot_room_label as string | null) ?? null,
       classBgColor: klass?.bg_color ?? null,
       classTextColor: klass?.text_color ?? null,
+      pendingHandover: klass?.pending_teacher_id
+        ? { teacherName: pending?.display_name ?? null, date: (klass?.pending_teacher_date as string | null) ?? null }
+        : null,
     };
   });
 }
@@ -475,11 +489,12 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
         teacherName: teacher?.display_name ?? null,
         classroomName: room?.name ?? null,
         studentCount: counts.get(r.class_id) ?? 0,
-        // 대시보드 오늘 일정은 셀 라벨·색 미사용 — 타입 충족용 null.
+        // 대시보드 오늘 일정은 셀 라벨·색·인수인계 미사용 — 타입 충족용 null.
         slotTeacherLabel: null,
         slotRoomLabel: null,
         classBgColor: null,
         classTextColor: null,
+        pendingHandover: null,
       };
     })
     .sort((a, b) => toMins(a.startTime) - toMins(b.startTime))
