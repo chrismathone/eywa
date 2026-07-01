@@ -240,7 +240,11 @@ export default async function EnrollmentDetailPage({
               <Field label="학부모" value={consult.parentName} />
               <Field label="연락처" value={consult.parentPhone} mono />
               <Field label="상담사" value={consult.consultantName} />
-              <Field label="상담일" value={new Date(consult.consultedAt).toLocaleDateString("ko-KR")} mono />
+              <Field
+                label="상담일"
+                value={consult.fields.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR")}
+                mono
+              />
             </dl>
           </Card>
 
@@ -413,6 +417,8 @@ function Plan({ label, items }: { label: string; items: string[] }) {
 function ExtraInfoCard({ f }: { f: FullConsultationFields }) {
   const genderLabel = f.gender ? (GENDER_OPTIONS.find((g) => g.value === f.gender)?.label ?? f.gender) : null;
   const rows: [string, string | null][] = [
+    ["상담자", f.counselor],
+    ["접수일", f.receivedDate],
     ["성별", genderLabel],
     ["생년월일", f.birthDate],
     ["학생 연락처", f.studentPhone],
@@ -422,6 +428,8 @@ function ExtraInfoCard({ f }: { f: FullConsultationFields }) {
     ["유입 경로", f.consultationPath],
     ["희망 진로", f.careerGoal],
     ["형제관계", f.siblings],
+    ["남매 관계 기록", f.siblingsDetails],
+    ["학생 구분", f.studentType],
     ["안전사항", f.safetyNotes],
     ["등록 상태", f.registrationStatus],
     ["결제 금액", f.paymentAmount ? `${Number(f.paymentAmount).toLocaleString()}원` : null],

@@ -57,6 +57,12 @@ const createSchema = z.object({
   privacyAgreement: opt,
   installmentAgreement: opt,
   subjectDetails: opt, // 과목 탭 JSON 문자열
+  // 완전 이식(0064a) — ijw ConsultationForm 잔여 필드.
+  counselor: opt,
+  receivedDate: opt,
+  studentType: opt,
+  siblingsDetails: opt,
+  consultationDate: opt, // 상담일 → consultation_date(전용 date 컬럼)
 });
 
 type FullForm = z.infer<typeof createSchema>;
@@ -111,6 +117,13 @@ function buildConsultationRow(d: FullForm) {
     privacy_agreement: asBool(d.privacyAgreement),
     installment_agreement: asBool(d.installmentAgreement),
     subject_details: subjectDetails,
+    counselor: d.counselor || null,
+    received_date: d.receivedDate || null,
+    student_type: d.studentType || null,
+    siblings_details: d.siblingsDetails || null,
+    // 상담일 = 전용 date 컬럼. consulted_at(timestamptz, 정렬용)은 폼에서 절대 건드리지 않는다
+    // — timestamptz에 date 문자열을 쓰면 KST↔UTC 하루밀림·시각 소실이 생김(적대리뷰 확정).
+    consultation_date: d.consultationDate || null,
   };
 }
 

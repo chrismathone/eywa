@@ -235,6 +235,12 @@ export type FullConsultationFields = {
   privacyAgreement: boolean;
   installmentAgreement: boolean;
   subjectDetails: Record<string, Record<string, string>> | null;
+  // 완전 이식(0064a)
+  counselor: string | null;
+  receivedDate: string | null;
+  studentType: string | null;
+  siblingsDetails: string | null;
+  consultationDate: string | null; // consulted_at → 상담일(date)
 };
 
 export type ConsultationDetail = ConsultationListRow & {
@@ -270,6 +276,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
        non_registration_reason, shuttle_bus_request, privacy_agreement,
        installment_agreement, subject_details,
+       counselor, received_date, student_type, siblings_details, consultation_date,
        consultant:consultant_id ( display_name )`,
     )
     .eq("id", id)
@@ -395,6 +402,12 @@ function mapFullFields(c: Record<string, unknown>): FullConsultationFields {
     privacyAgreement: !!c.privacy_agreement,
     installmentAgreement: !!c.installment_agreement,
     subjectDetails: (c.subject_details as Record<string, Record<string, string>> | null) ?? null,
+    counselor: s(c.counselor),
+    receivedDate: s(c.received_date),
+    studentType: s(c.student_type),
+    siblingsDetails: s(c.siblings_details),
+    // 상담일 = 전용 date 컬럼(순수 date라 TZ 변환/slice 불필요). consulted_at을 자르지 않는다(하루밀림 방지).
+    consultationDate: s(c.consultation_date),
   };
 }
 

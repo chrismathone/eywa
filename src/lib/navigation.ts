@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Settings,
   Building2,
+  NotebookPen,
   type LucideIcon,
 } from "lucide-react";
 import type { MenuKey } from "@/lib/permissions";
@@ -111,6 +112,17 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/admin", label: "관리자 도구", icon: Settings, menuKey: "admin", hidden: true },
     ],
   },
+];
+
+/**
+ * 외부 링크 탭 — 내부 라우트(플로팅 창)가 아니라 **별도 앱(다른 오리진)**. menuKey가 없고 cross-origin
+ * 이라 iframe(창) 불가 → NAV_GROUPS(내부 라우트 전용, 권한 게이트·창 해석 대상)와 **분리**한다.
+ * 사이드바가 `group` 라벨을 맞춰 해당 섹션 하단에 새 탭(_blank) 앵커로 렌더(창·권한·findNavItem 무관).
+ */
+export type ExternalNavItem = { href: string; label: string; icon: LucideIcon; group: string };
+export const EXTERNAL_NAV: ExternalNavItem[] = [
+  // 수업보고서 = Edutrix(진도·수업보고서 별도 앱, eywa 시간표 hover 진도의 원본 시스템). 지원(05) 섹션.
+  { href: "https://edutrix.vercel.app/auth/login", label: "수업보고서", icon: NotebookPen, group: "지원" },
 ];
 
 export function findNavItem(pathname: string): NavItem | undefined {

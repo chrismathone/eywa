@@ -61,6 +61,13 @@ export default async function EditEnrollmentPage({
           privacyAgreement: f.privacyAgreement,
           installmentAgreement: f.installmentAgreement,
           subjectDetails: f.subjectDetails,
+          counselor: f.counselor,
+          receivedDate: f.receivedDate,
+          studentType: f.studentType,
+          siblingsDetails: f.siblingsDetails,
+          consultationDate: f.consultationDate,
+          prevAcademy: (c.learningHistory as { prevAcademy?: string | null } | null)?.prevAcademy ?? null,
+          lastScore: (c.learningHistory as { lastScore?: string | null } | null)?.lastScore ?? null,
         }}
       />
     </div>

@@ -542,6 +542,14 @@ export const enrollmentConsultations = pgTable(
     followUpContent: text("follow_up_content"),
     nonRegistrationReason: text("non_registration_reason"),
     subjectDetails: jsonb("subject_details"),
+    // 완전 이식(0064a) — ijw ConsultationForm 잔여 필드.
+    counselor: text("counselor"),
+    receivedDate: date("received_date"),
+    studentType: text("student_type"),
+    siblingsDetails: text("siblings_details"),
+    // 상담일 = 편집 가능한 순수 date. consulted_at(timestamptz)는 정렬용 레코드 타임스탬프라 폼에서 안 건드린다
+    // (timestamptz에 date 문자열을 쓰면 KST↔UTC 하루밀림·시각 소실 발생).
+    consultationDate: date("consultation_date"),
     // QR 공개접수 출처(0047a)
     fromPublicIntake: boolean("from_public_intake").notNull().default(false),
     intakeTokenId: uuid("intake_token_id").references(() => intakeTokens.id, { onDelete: "set null" }),

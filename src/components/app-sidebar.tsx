@@ -9,9 +9,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ExternalLink } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { NAV_GROUPS, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
+import {
+  NAV_GROUPS,
+  SUBTABS_BY_MENU,
+  EXTERNAL_NAV,
+  type NavItem,
+  type ExternalNavItem,
+} from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
@@ -207,6 +214,10 @@ export function AppSidebar({
                   </div>
                 );
               })}
+              {/* 외부 링크 탭(수업보고서=Edutrix 등) — 이 섹션에 속한 외부 앱을 새 탭으로. 창·권한·subtab 없음. */}
+              {EXTERNAL_NAV.filter((x) => x.group === group.label).map((x) => (
+                <ExternalRailItem key={x.href} item={x} expanded={expanded} motion={motion} />
+              ))}
             </div>
           ))}
 
@@ -413,6 +424,63 @@ function RailItem({
   );
 
   // 펼침 모드: 라벨이 이미 보이므로 Tooltip 생략. 접힘 모드: 우측 Tooltip 라벨.
+  if (expanded) return link;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={link} />
+      <TooltipContent side="right">{item.label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * 외부 링크 레일 항목 — RailItem의 시각(아이콘+라벨+접힘/펼침 모핑·hover 하이라이트·접힘 Tooltip)을
+ * 따르되, 내부 창/권한/드래그 로직 없이 **새 브라우저 탭**으로 여는 순수 앵커(cross-origin 별도 앱).
+ * 펼침 시 라벨 옆 작은 ↗ 아이콘으로 "새 탭으로 열림"을 표시.
+ */
+function ExternalRailItem({
+  item,
+  expanded,
+  motion,
+}: {
+  item: ExternalNavItem;
+  expanded: boolean;
+  motion: boolean;
+}) {
+  const Icon = item.icon;
+  const link = (
+    <a
+      href={item.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${item.label} (새 탭으로 열림)`}
+      className="group relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus:outline-none"
+    >
+      <span
+        aria-hidden="true"
+        style={{ left: expanded ? 4 : 8, right: expanded ? 4 : 8 }}
+        className={`bg-sidebar-accent pointer-events-none absolute inset-y-0 z-0 rounded-[6px] opacity-0 group-hover:opacity-100 ${
+          motion ? `transition-[left,right,opacity] duration-200 ${EASE}` : ""
+        }`}
+      />
+      <Icon
+        size={18}
+        strokeWidth={1.85}
+        className={`text-text-dim group-hover:text-foreground relative z-10 shrink-0 ${
+          motion ? "transition-colors duration-200" : ""
+        }`}
+      />
+      <span
+        className={`text-text-dim group-hover:text-foreground relative z-10 inline-flex items-center gap-1 overflow-hidden text-[13px] font-medium whitespace-nowrap ${
+          expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
+        } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
+      >
+        <span className="truncate">{item.label}</span>
+        <ExternalLink size={11} strokeWidth={2} className="text-text-faint shrink-0" aria-hidden="true" />
+      </span>
+    </a>
+  );
+
   if (expanded) return link;
   return (
     <Tooltip>

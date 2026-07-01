@@ -1,9 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, ArrowRight, Save } from "lucide-react";
+import {
+  AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
+  CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
+  MapPin, MessageSquare, Save, School, Tag, Target, Users, User, UserCheck, XCircle,
+  Droplet, type LucideIcon,
+} from "lucide-react";
+import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
 import { useFormDraft } from "@/components/forms/use-form-draft";
@@ -30,8 +36,9 @@ import {
   type SubjectDetails,
 } from "@/features/enrollment/form-config";
 
+// 컴팩트 입력(ijw 밀도) — eywa 토큰. 카드/라벨/그리드는 아래 헬퍼로 통일.
 const input =
-  "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 export type ConsultationFormInitial = {
   id?: string;
@@ -67,17 +74,15 @@ export type ConsultationFormInitial = {
   privacyAgreement?: boolean;
   installmentAgreement?: boolean;
   subjectDetails?: SubjectDetails | null;
+  // 완전 이식(0064a)
+  counselor?: string | null;
+  receivedDate?: string | null;
+  studentType?: string | null;
+  siblingsDetails?: string | null;
+  consultationDate?: string | null;
+  prevAcademy?: string | null;
+  lastScore?: string | null;
 };
-
-function SubmitBtn({ mode }: { mode: "create" | "edit" }) {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? "저장 중…" : mode === "create" ? "저장하고 상세로" : "저장"}
-      {mode === "create" ? <ArrowRight className="size-4" /> : <Save className="size-4" />}
-    </Button>
-  );
-}
 
 export function ConsultationFullForm({
   mode,
@@ -92,32 +97,38 @@ export function ConsultationFullForm({
 
   const router = useRouter();
   const isCreate = mode === "create";
-  // 수정 = 서버액션 useActionState. 생성 = 클라 오케스트레이션(녹음 있으면 업로드 후 createEnrollmentConsultation).
   const [editState, editFormAction] = useActionState<UpdateConsultationState, FormData>(
     updateEnrollmentConsultation,
     undefined,
   );
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  // 녹음 진행 여부(자식 AudioRecorderField에서 끌어올림) — 녹음 중 제출 시 진행 녹음이 onstop 전이라 유실되므로 막는다.
   const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
   const [createError, setCreateError] = useState<string | null>(null);
   const busy = phase !== "idle";
 
-  // 과목 점수 탭 — 클라 상태로 보유, 제출 시 hidden input(JSON)으로 직렬화.
+  // 상단 탭(ijw 구조): 기본 정보 + 과목별 상담. AI 분석은 상세 화면에서 보여준다(폼은 입력 전용).
+  const TABS = [{ key: "basic", label: "기본 정보" }, ...SUBJECT_TABS.map((t) => ({ key: t.key, label: `${t.label} 상담` }))];
+  const [activeTab, setActiveTab] = useState("basic");
+
+  // 접을 수 있는 확장 섹션(기본 접힘) — ijw와 동일.
+  const [showAcademy, setShowAcademy] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
+
+  // 과목 점수/상담 detail — 클라 상태, 제출 시 hidden input(JSON)으로 직렬화.
   const [details, setDetails] = useState<SubjectDetails>(() => v.subjectDetails ?? {});
-  const [activeTab, setActiveTab] = useState(SUBJECT_TABS[0]!.key);
   const setField = (subj: string, key: string, val: string) =>
     setDetails((d) => ({ ...d, [subj]: { ...(d[subj] ?? {}), [key]: val } }));
   const englishType = details.english?.testType ?? "ai";
 
-  // 로컬 초안 자동저장 — 입력 중 IDB에 자동 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear(stale 방지).
+  // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear.
   const formRef = useRef<HTMLFormElement>(null);
   const draftScope = isCreate ? "consultation:new" : `consultation:${v.id ?? "edit"}`;
   const draft = useFormDraft({
     scope: draftScope,
+    // 항상 기본값이 채워지는 날짜/상태 필드는 "의미 있는 입력" 판정에서 제외(빈 폼 오탐 배너 방지).
+    ignoreForBanner: ["receivedDate", "consultationDate", "registrationStatus", "parentRelation"],
     formRef,
-    // 과목점수(jsonb)는 React state라 DOM 자동복원이 안 됨 → hidden input 값을 파싱해 rehydrate.
     onRestore: (vals) => {
       if (vals.subjectDetails) {
         try {
@@ -130,7 +141,6 @@ export function ConsultationFullForm({
   });
   const clearDraft = draft.clear;
 
-  // 수정 성공 시 상세로 복귀(생성은 서버 redirect가 처리) + 로컬 초안 삭제.
   useEffect(() => {
     if (!isCreate && editState?.ok && v.id) {
       clearDraft();
@@ -139,12 +149,9 @@ export function ConsultationFullForm({
     }
   }, [editState, isCreate, v.id, router, clearDraft]);
 
-  // 생성 제출: 녹음/업로드 음성이 있으면 먼저 업로드(signed PUT) → audioPath 동봉 → createEnrollmentConsultation.
-  // 음성이 있으면 서버가 전사·13섹션 AI까지 자동 실행(입력값은 웹훅 buildFormPatch가 보존). 성공 시 서버 redirect.
   async function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError(null);
-    // 녹음이 진행 중이면 audioFile은 아직 onstop 전이라 null — 그대로 저장하면 진행 녹음이 첨부 없이 유실된다.
     if (recordingActive) {
       setCreateError("녹음을 먼저 중지한 후 저장해주세요.");
       return;
@@ -179,7 +186,6 @@ export function ConsultationFullForm({
       }
       setPhase("submitting");
       const result = await createEnrollmentConsultation(undefined, fd);
-      // 성공이면 서버가 상세로 redirect → NEXT_REDIRECT가 throw돼 아래 catch로 간다. 여기엔 {error}(실패)만 도달.
       if (result?.error) {
         setCreateError(result.error);
         setPhase("idle");
@@ -187,7 +193,6 @@ export function ConsultationFullForm({
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/NEXT_REDIRECT/.test(msg)) {
-        // 성공(redirect) → 로컬 초안 삭제(다음 '새 등록상담'에서 stale 복구 방지). 네비게이션은 프레임워크가 수행.
         clearDraft();
         return;
       }
@@ -202,262 +207,308 @@ export function ConsultationFullForm({
     <form
       ref={formRef}
       {...(isCreate ? { onSubmit: handleCreateSubmit } : { action: editFormAction })}
-      className="space-y-5"
+      className="space-y-3"
     >
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
 
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
 
-      <Section title="학생 정보">
-        <Grid cols={3}>
-          <L label="이름" required>
-            <input name="prospectName" required defaultValue={v.prospectName ?? ""} className={input} />
-          </L>
-          <L label="영문 이름">
-            <input name="englishName" defaultValue={v.englishName ?? ""} className={input} />
-          </L>
-          <L label="학년">
-            <select name="prospectGrade" defaultValue={v.prospectGrade ?? ""} className={input}>
-              <option value="">선택</option>
-              {gradeLevels.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
-          </L>
-          <L label="학교">
-            <input name="prospectSchool" defaultValue={v.prospectSchool ?? ""} className={input} />
-          </L>
-          <L label="성별">
-            <select name="gender" defaultValue={v.gender ?? ""} className={input}>
-              <option value="">선택</option>
-              {GENDER_OPTIONS.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-          </L>
-          <L label="혈액형">
-            <select name="bloodType" defaultValue={v.bloodType ?? ""} className={input}>
-              <option value="">선택</option>
-              {BLOOD_OPTIONS.map((b) => (
-                <option key={b} value={b}>
-                  {b}형
-                </option>
-              ))}
-            </select>
-          </L>
-          <L label="생년월일">
-            <input name="birthDate" type="date" defaultValue={v.birthDate ?? ""} className={`${input} num`} />
-          </L>
-          <L label="학생 연락처">
-            <input name="studentPhone" defaultValue={v.studentPhone ?? ""} className={input} />
-          </L>
-          <L label="희망 과목">
-            <select name="subject" defaultValue={v.subject ?? ""} className={input}>
-              <option value="">선택</option>
-              {subjects.options.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </L>
-          <L label="희망 진로">
-            <input name="careerGoal" defaultValue={v.careerGoal ?? ""} className={input} />
-          </L>
-          <L label="형제관계">
-            <select name="siblings" defaultValue={v.siblings ?? ""} className={input}>
-              <option value="">선택</option>
-              {SIBLINGS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </L>
-        </Grid>
-      </Section>
-
-      <Section title="학부모 / 연락처">
-        <Grid cols={3}>
-          <L label="보호자 성함">
-            <input name="parentName" defaultValue={v.parentName ?? ""} className={input} />
-          </L>
-          <L label="관계">
-            <select name="parentRelation" defaultValue={v.parentRelation ?? ""} className={input}>
-              <option value="">선택</option>
-              {RELATION_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </L>
-          <L label="보호자 연락처">
-            <input name="parentPhone" defaultValue={v.parentPhone ?? ""} className={input} />
-          </L>
-          <L label="집 전화">
-            <input name="homePhone" defaultValue={v.homePhone ?? ""} className={input} />
-          </L>
-          <L label="상담 경로">
-            <select name="consultationPath" defaultValue={v.consultationPath ?? ""} className={input}>
-              <option value="">선택</option>
-              {CONSULTATION_PATHS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </L>
-        </Grid>
-        <Grid cols={3}>
-          <L label="주소 (동/아파트)">
-            <input name="address" defaultValue={v.address ?? ""} className={input} />
-          </L>
-          <L label="상세주소">
-            <input name="addressDetail" defaultValue={v.addressDetail ?? ""} className={input} />
-          </L>
-          <L label="우편번호">
-            <input name="zipCode" defaultValue={v.zipCode ?? ""} className={input} />
-          </L>
-        </Grid>
-      </Section>
-
-      <Section title="상담 내용">
-        <textarea
-          name="parentRequest"
-          rows={4}
-          defaultValue={v.parentRequest ?? ""}
-          placeholder="상담 내용 / 학부모 요구사항 / 관찰"
-          className={`${input} resize-y`}
-        />
-      </Section>
-
+      {/* 녹음 바 — 상단(생성 모드). 저장 시 자동 전사·13섹션 AI 분석(입력값 보존). */}
       {isCreate ? (
-        <Section title="상담 녹음 (선택)">
-          <p className="text-text-dim text-xs">
-            입력하면서 바로 녹음하거나 음성 파일을 올리면, 저장 시 자동으로 전사·13섹션 AI 분석을 실행합니다. 입력하신 내용은 그대로 보존됩니다.
-          </p>
+        <div className="border-primary/25 bg-primary/5 space-y-2 rounded-lg border p-3">
           <AudioRecorderField
             file={audioFile}
             onChange={setAudioFile}
             onRecordingChange={setRecordingActive}
             disabled={busy}
           />
-        </Section>
+          <p className="text-text-dim text-[11px]">
+            녹음하거나 음성 파일을 올리면 저장 시 자동으로 한국어 전사 + 13섹션 AI 분석을 실행합니다(입력하신 내용은 보존).
+          </p>
+        </div>
       ) : null}
 
-      {/* 과목별 점수 탭 */}
-      <Section title="과목별 점수">
-        <div className="border-border mb-3 flex flex-wrap gap-1 border-b">
-          {SUBJECT_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setActiveTab(t.key)}
-              className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${
-                activeTab === t.key
-                  ? "border-primary text-primary font-semibold"
-                  : "text-text-dim border-transparent"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+      {/* 상단 탭바 */}
+      <div className="border-border scrollbar-thin flex gap-1 overflow-x-auto border-b">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap ${
+              activeTab === t.key
+                ? "border-primary text-primary font-semibold"
+                : "text-text-dim hover:text-foreground border-transparent"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 기본 정보 탭 — 항상 마운트(inactive는 hidden). 숨겨도 DOM 유지 → FormData/초안 필드 유실 방지. */}
+      <div className={`space-y-3 ${activeTab === "basic" ? "" : "hidden"}`}>
+        {/* 1. 접수 정보 */}
+        <Card title="접수 정보">
+          <Grid cols={3}>
+            <L label="상담자" icon={UserCheck}>
+              <input name="counselor" defaultValue={v.counselor ?? ""} placeholder="상담 선생님" className={input} />
+            </L>
+            <L label="접수일" icon={Calendar}>
+              <input name="receivedDate" type="date" defaultValue={v.receivedDate ?? (isCreate ? kstToday() : "")} className={`${input} num`} />
+            </L>
+            <L label="상담 경로" icon={Globe}>
+              <select name="consultationPath" defaultValue={v.consultationPath ?? ""} className={input}>
+                <option value="">선택</option>
+                {CONSULTATION_PATHS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </L>
+          </Grid>
+        </Card>
+
+        {/* 2. 학생 정보 ↔ 상담 내용 (2단) */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+          <Card title="학생 정보">
+            <Grid cols={2}>
+              <L label="학생 이름" icon={User} required>
+                <input name="prospectName" defaultValue={v.prospectName ?? ""} className={input} />
+              </L>
+              <L label="학생 전화" icon={MessageSquare}>
+                <input name="studentPhone" defaultValue={v.studentPhone ?? ""} placeholder="010-0000-0000" className={input} />
+              </L>
+            </Grid>
+            <Grid cols={2}>
+              <L label="보호자 성함" icon={User}>
+                <input name="parentName" defaultValue={v.parentName ?? ""} placeholder="김영희" className={input} />
+              </L>
+              <L label="보호자 연락처" icon={MessageSquare}>
+                <input name="parentPhone" defaultValue={v.parentPhone ?? ""} className={input} />
+              </L>
+            </Grid>
+            <Grid cols={2}>
+              <L label="학교" icon={School}>
+                <input name="prospectSchool" defaultValue={v.prospectSchool ?? ""} className={input} />
+              </L>
+              <L label="학년" icon={GraduationCap}>
+                <select name="prospectGrade" defaultValue={v.prospectGrade ?? ""} className={input}>
+                  <option value="">선택</option>
+                  {gradeLevels.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </L>
+            </Grid>
+            <Grid cols={2}>
+              <L label="영문 이름" icon={Languages}>
+                <input name="englishName" defaultValue={v.englishName ?? ""} className={input} />
+              </L>
+              <L label="집 전화" icon={Home}>
+                <input name="homePhone" defaultValue={v.homePhone ?? ""} className={input} />
+              </L>
+            </Grid>
+            <L label="주소 (동 또는 아파트)" icon={MapPin}>
+              <input name="address" defaultValue={v.address ?? ""} placeholder="복현동" className={input} />
+            </L>
+            <Grid cols={2}>
+              <L label="상세주소" icon={MapPin}>
+                <input name="addressDetail" defaultValue={v.addressDetail ?? ""} className={input} />
+              </L>
+              <L label="우편번호" icon={Hash}>
+                <input name="zipCode" defaultValue={v.zipCode ?? ""} className={input} />
+              </L>
+            </Grid>
+            {/* 셔틀버스 신청 — 강조 단독 줄 */}
+            <label className="border-amber/40 bg-amber/5 text-amber flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-bold">
+              <input type="checkbox" name="shuttleBusRequest" value="true" defaultChecked={v.shuttleBusRequest} className="size-4" />
+              <Bus className="size-4" />
+              셔틀버스 신청
+            </label>
+            <Grid cols={2}>
+              <L label="성별" icon={User}>
+                <select name="gender" defaultValue={v.gender ?? ""} className={input}>
+                  <option value="">선택 안함</option>
+                  {GENDER_OPTIONS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
+                  ))}
+                </select>
+              </L>
+              <L label="혈액형" icon={Droplet}>
+                <select name="bloodType" defaultValue={v.bloodType ?? ""} className={input}>
+                  <option value="">선택 안함</option>
+                  {BLOOD_OPTIONS.map((b) => (
+                    <option key={b} value={b}>{b}형</option>
+                  ))}
+                </select>
+              </L>
+            </Grid>
+            <Grid cols={2}>
+              <L label="생년월일" icon={Cake}>
+                <input name="birthDate" type="date" defaultValue={v.birthDate ?? ""} className={`${input} num`} />
+              </L>
+              <L label="학생과의 관계" icon={Users}>
+                <select name="parentRelation" defaultValue={v.parentRelation ?? ""} className={input}>
+                  <option value="">선택 안함</option>
+                  {RELATION_OPTIONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </L>
+            </Grid>
+          </Card>
+
+          <Card title="상담 내용">
+            <Grid cols={2}>
+              <L label="상담일" icon={Calendar}>
+                <input name="consultationDate" type="date" defaultValue={v.consultationDate ?? (isCreate ? kstToday() : "")} className={`${input} num`} />
+              </L>
+              <L label="과목" icon={BookOpen}>
+                <select name="subject" defaultValue={v.subject ?? ""} className={input}>
+                  <option value="">선택</option>
+                  {subjects.options.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </L>
+            </Grid>
+            <L label="상담 내용" icon={MessageSquare}>
+              <textarea
+                name="parentRequest"
+                rows={14}
+                defaultValue={v.parentRequest ?? ""}
+                placeholder="상담 내용 / 학부모 요구사항 / 관찰"
+                className={`${input} resize-none`}
+              />
+            </L>
+          </Card>
         </div>
 
-        {SUBJECT_TABS.map((tab) => {
-          if (tab.key !== activeTab) return null;
-          if (tab.english) {
-            return (
-              <div key={tab.key} className="space-y-4">
-                <L label="테스트 유형">
+        {/* 3. 학원 관리 정보 (선택, 접이식) */}
+        <Collapsible
+          icon={Tag}
+          tone="amber"
+          title="학원 관리 정보 (선택)"
+          subtitle="안전사항, 희망진로, 남매 관계 등"
+          open={showAcademy}
+          onToggle={() => setShowAcademy((s) => !s)}
+        >
+          <L label="안전사항" icon={AlertTriangle}>
+            <textarea name="safetyNotes" rows={2} defaultValue={v.safetyNotes ?? ""} placeholder="알레르기, 주의사항 등" className={`${input} resize-none`} />
+          </L>
+          <Grid cols={2}>
+            <L label="희망진로" icon={Target}>
+              <input name="careerGoal" defaultValue={v.careerGoal ?? ""} placeholder="의사, 교사 등" className={input} />
+            </L>
+            <L label="학생 구분" icon={Tag}>
+              <input name="studentType" defaultValue={v.studentType ?? ""} placeholder="예비/재원" className={input} />
+            </L>
+          </Grid>
+          <Grid cols={2}>
+            <L label="남매 관계" icon={Users}>
+              <select name="siblings" defaultValue={v.siblings ?? ""} className={input}>
+                <option value="">선택</option>
+                {SIBLINGS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </L>
+            <L label="남매 관계 기록" icon={Users}>
+              <input name="siblingsDetails" defaultValue={v.siblingsDetails ?? ""} placeholder="재원생 여부 등" className={input} />
+            </L>
+          </Grid>
+          <Grid cols={2}>
+            <L label="이전 학원" icon={School}>
+              <input name="prevAcademy" defaultValue={v.prevAcademy ?? ""} className={input} />
+            </L>
+            <L label="최근 성적" icon={Target}>
+              <input name="lastScore" defaultValue={v.lastScore ?? ""} className={input} />
+            </L>
+          </Grid>
+        </Collapsible>
+
+        {/* 4. 후속 조치 (선택, 접이식) */}
+        <Collapsible
+          icon={Calendar}
+          tone="purple"
+          title="후속 조치 (선택)"
+          subtitle="후속 조치일, 미등록 사유 등"
+          open={showFollowUp}
+          onToggle={() => setShowFollowUp((s) => !s)}
+        >
+          <Grid cols={2}>
+            <L label="후속 조치일" icon={Calendar}>
+              <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
+            </L>
+            <L label="조치 내용" icon={MessageSquare}>
+              <input name="followUpContent" defaultValue={v.followUpContent ?? ""} className={input} />
+            </L>
+          </Grid>
+          <L label="미등록 사유" icon={XCircle}>
+            <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} placeholder="등록 안한 이유" className={input} />
+          </L>
+        </Collapsible>
+
+        {/* 5. 등록 / 결제 */}
+        <Card title="등록 / 결제">
+          <L label="등록 상태" icon={CheckCircle}>
+            <select name="registrationStatus" defaultValue={v.registrationStatus ?? ""} className={input}>
+              <option value="">선택</option>
+              {REGISTRATION_STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </L>
+          <Grid cols={3}>
+            <L label="결제 금액" icon={Banknote}>
+              <input name="paymentAmount" defaultValue={v.paymentAmount ?? ""} placeholder="예: 150000" className={input} />
+            </L>
+            <L label="결제일" icon={Calendar}>
+              <input name="paymentDate" type="date" defaultValue={v.paymentDate ?? ""} className={`${input} num`} />
+            </L>
+            <L label="등록자" icon={UserCheck}>
+              <input name="registrar" defaultValue={v.registrar ?? ""} className={input} />
+            </L>
+          </Grid>
+          <div className="flex flex-wrap gap-4 pt-1">
+            <Check name="installmentAgreement" label="할부 규정 동의" defaultChecked={v.installmentAgreement} />
+            <Check name="privacyAgreement" label="개인정보 활용 동의" defaultChecked={v.privacyAgreement} />
+          </div>
+        </Card>
+      </div>
+
+      {/* 과목별 상담 탭 — 각각 항상 마운트, inactive는 hidden(과목 detail은 컨트롤드 state라 값 보존). */}
+      {SUBJECT_TABS.map((tab) => (
+        <div key={tab.key} className={activeTab === tab.key ? "" : "hidden"}>
+          <Card title={`${tab.label} 상담`}>
+            {tab.english ? (
+              <div className="space-y-3">
+                <L label="테스트 유형" icon={BookOpen}>
                   <select
                     value={englishType}
                     onChange={(e) => setField("english", "testType", e.target.value)}
                     className={`${input} max-w-xs`}
                   >
                     {ENGLISH_TEST_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
+                      <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
                 </L>
                 {(ENGLISH_GROUPS[englishType] ?? []).map((g, i) => (
-                  <GroupInputs
-                    key={i}
-                    group={g}
-                    subjectKey="english"
-                    details={details}
-                    onChange={setField}
-                  />
+                  <GroupInputs key={i} group={g} subjectKey="english" details={details} onChange={setField} />
                 ))}
               </div>
-            );
-          }
-          return (
-            <div key={tab.key} className="space-y-4">
-              {(tab.groups ?? []).map((g, i) => (
-                <GroupInputs key={i} group={g} subjectKey={tab.key} details={details} onChange={setField} />
-              ))}
-            </div>
-          );
-        })}
-      </Section>
-
-      <Section title="학원 관리 (선택)">
-        <Grid cols={2}>
-          <L label="안전사항 (알레르기 등)">
-            <input name="safetyNotes" defaultValue={v.safetyNotes ?? ""} className={input} />
-          </L>
-          <L label="이전 학원">
-            <input name="prevAcademy" defaultValue={undefined} className={input} />
-          </L>
-        </Grid>
-      </Section>
-
-      <Section title="후속 / 등록·결제 (선택)">
-        <Grid cols={3}>
-          <L label="등록 상태">
-            <select name="registrationStatus" defaultValue={v.registrationStatus ?? ""} className={input}>
-              <option value="">선택</option>
-              {REGISTRATION_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </L>
-          <L label="결제 금액">
-            <input name="paymentAmount" defaultValue={v.paymentAmount ?? ""} placeholder="예: 150000" className={input} />
-          </L>
-          <L label="결제일">
-            <input name="paymentDate" type="date" defaultValue={v.paymentDate ?? ""} className={`${input} num`} />
-          </L>
-          <L label="등록자">
-            <input name="registrar" defaultValue={v.registrar ?? ""} className={input} />
-          </L>
-          <L label="후속 조치일">
-            <input name="followUpDate" type="date" defaultValue={v.followUpDate ?? ""} className={`${input} num`} />
-          </L>
-          <L label="조치 내용">
-            <input name="followUpContent" defaultValue={v.followUpContent ?? ""} className={input} />
-          </L>
-        </Grid>
-        <L label="미등록 사유">
-          <input name="nonRegistrationReason" defaultValue={v.nonRegistrationReason ?? ""} className={input} />
-        </L>
-        <div className="flex flex-wrap gap-4 pt-1">
-          <Check name="shuttleBusRequest" label="셔틀버스 신청" defaultChecked={v.shuttleBusRequest} />
-          <Check name="privacyAgreement" label="개인정보 활용 동의" defaultChecked={v.privacyAgreement} />
-          <Check name="installmentAgreement" label="할부 규정 동의" defaultChecked={v.installmentAgreement} />
+            ) : (
+              <div className="space-y-3">
+                {(tab.groups ?? []).map((g, i) => (
+                  <GroupInputs key={i} group={g} subjectKey={tab.key} details={details} onChange={setField} />
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
-      </Section>
+      ))}
 
       {errorMsg ? (
         <p className="text-danger bg-danger/5 border-danger/20 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
@@ -479,10 +530,20 @@ export function ConsultationFullForm({
             <ArrowRight className="size-4" />
           </Button>
         ) : (
-          <SubmitBtn mode="edit" />
+          <SubmitBtn />
         )}
       </div>
     </form>
+  );
+}
+
+function SubmitBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "저장 중…" : "저장"}
+      <Save className="size-4" />
+    </Button>
   );
 }
 
@@ -500,10 +561,7 @@ function GroupInputs({
   return (
     <div className="space-y-2">
       {group.title ? <p className="text-text-dim text-xs font-semibold">{group.title}</p> : null}
-      <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${group.cols ?? 2}, minmax(0, 1fr))` }}
-      >
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${group.cols ?? 2}, minmax(0, 1fr))` }}>
         {group.fields.map((f) => (
           <label key={f.key} className="block space-y-1">
             <span className="text-text-dim text-[11px]">{f.label}</span>
@@ -520,40 +578,77 @@ function GroupInputs({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="bg-card border-border space-y-3 rounded-lg border p-5">
-      <h3 className="eyebrow">{title}</h3>
-      {children}
-    </section>
+    <div className="bg-card border-border overflow-hidden rounded-lg border">
+      <div className="border-border bg-bg-soft/50 border-b px-3 py-1.5">
+        <h3 className="text-primary text-xs font-bold">{title}</h3>
+      </div>
+      <div className="space-y-2 p-2.5">{children}</div>
+    </div>
   );
 }
 
-function Grid({ cols, children }: { cols: number; children: React.ReactNode }) {
+function Grid({ cols = 2, children }: { cols?: 2 | 3; children: ReactNode }) {
   return (
-    <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${cols >= 3 ? "lg:grid-cols-3" : ""}`}>
-      {children}
-    </div>
+    <div className={`grid grid-cols-1 gap-2 ${cols === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>{children}</div>
   );
 }
 
 function L({
   label,
+  icon: Icon,
   required,
   children,
 }: {
   label: string;
+  icon?: LucideIcon;
   required?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-foreground block text-xs font-medium">
+    <label className="block space-y-1">
+      <span className="text-text-dim flex items-center gap-1 text-[11px] font-medium">
+        {Icon ? <Icon className="size-3 shrink-0" /> : null}
         {label}
-        {required ? <span className="text-danger ml-0.5">*</span> : null}
+        {required ? <span className="text-danger">*</span> : null}
       </span>
       {children}
     </label>
+  );
+}
+
+function Collapsible({
+  icon: Icon,
+  title,
+  subtitle,
+  tone,
+  open,
+  onToggle,
+  children,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  subtitle: string;
+  tone: "amber" | "purple";
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const tones = {
+    amber: "border-amber/30 bg-amber/5 text-amber",
+    purple: "border-purple/30 bg-purple/5 text-purple",
+  } as const;
+  return (
+    <div className={`overflow-hidden rounded-lg border ${tones[tone]}`}>
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+        {open ? <ChevronDown className="size-4 shrink-0" /> : <ChevronRight className="size-4 shrink-0" />}
+        {Icon ? <Icon className="size-3.5 shrink-0" /> : null}
+        <span className="text-foreground text-sm font-bold">{title}</span>
+        <span className="text-text-dim text-[11px]">{subtitle}</span>
+      </button>
+      {open ? <div className="space-y-2 px-3 pb-3 pt-1">{children}</div> : null}
+    </div>
   );
 }
 
