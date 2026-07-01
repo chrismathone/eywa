@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   Briefcase,
   Wallet,
+  BookMarked,
   FileText,
   HelpCircle,
   Settings,
@@ -100,6 +101,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/staff", label: "직원관리", icon: Briefcase, menuKey: "staff" },
       { href: "/billing", label: "수납관리", icon: Wallet, menuKey: "billing" },
+      // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
+      { href: "/textbook-requests", label: "교재 요청", icon: BookMarked, menuKey: "textbook_requests", hidden: true },
       { href: "/meetings", label: "회의록", icon: FileText, menuKey: "meetings" },
     ],
   },

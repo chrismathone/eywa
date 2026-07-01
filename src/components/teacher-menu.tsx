@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   CalendarDays,
   BookOpen,
+  BookMarked,
   GraduationCap,
   MessageCircle,
 } from "lucide-react";
@@ -33,6 +34,8 @@ const LINKS = [
   { href: "/timetable", label: "시간표", icon: CalendarDays },
   { href: "/exams", label: "성적관리", icon: GraduationCap },
   { href: "/consultations", label: "학생상담", icon: MessageCircle },
+  // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
+  { href: "/textbook-requests", label: "교재 요청", icon: BookMarked },
 ] as const;
 
 export function TeacherMenu() {

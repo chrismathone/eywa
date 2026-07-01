@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 
 // 교재신청(textbook_orders) — 수납관리 창의 '교재' 책갈피 면. tenant 스코프는 RLS가 강제.
 export type TextbookOrderRow = {
@@ -85,6 +86,7 @@ export type TextbookOrderDetail = {
   id: string;
   bookName: string;
   bookDetail: string | null;
+  studentId: string | null; // 강사 스코프 검증용(프린트 라우트) — 본인 담당 학생 요청서만 열람.
   studentName: string | null;
   studentGrade: string | null;
   studentSchool: string | null;
@@ -111,6 +113,7 @@ export async function getTextbookOrderById(id: string): Promise<TextbookOrderDet
     id: data.id,
     bookName: data.book_name,
     bookDetail: data.book_detail,
+    studentId: data.student_id,
     studentName: data.student_name,
     studentGrade: student?.grade ?? null,
     studentSchool: student?.school ?? null,
@@ -119,6 +122,61 @@ export async function getTextbookOrderById(id: string): Promise<TextbookOrderDet
     status: data.status,
     requestDate: data.request_date,
   };
+}
+
+// 강사 교재 요청 면 — 본인 담당 학생(studentIds)의 교재 요청만. 대량 .in()은 청크(#53), 요청일 최신순.
+export async function getTextbookOrdersForStudents(studentIds: string[]): Promise<TextbookOrderRow[]> {
+  if (studentIds.length === 0) return [];
+  const supabase = await createClient();
+  type Raw = {
+    id: string; book_name: string; book_detail: string | null; student_id: string | null;
+    student_name: string | null; teacher_name: string | null; price: number; status: string;
+    request_date: string | null; notes: string | null; registered_at: string | null;
+    ordered_at: string | null; paid_at: string | null; status_by_name: string | null; status_at: string | null;
+  };
+  const data = await fetchInChunks<Raw>(studentIds, (chunk) =>
+    supabase
+      .from("textbook_orders")
+      .select(
+        "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at",
+      )
+      .in("student_id", chunk),
+  );
+  return data
+    .map((r) => ({
+      id: r.id,
+      bookName: r.book_name,
+      bookDetail: r.book_detail,
+      studentId: r.student_id,
+      studentName: r.student_name,
+      teacherName: r.teacher_name,
+      price: Number(r.price),
+      status: r.status,
+      requestDate: r.request_date,
+      notes: r.notes,
+      registered: !!r.registered_at,
+      ordered: !!r.ordered_at,
+      paid: !!r.paid_at,
+      registeredAt: r.registered_at,
+      orderedAt: r.ordered_at,
+      paidAt: r.paid_at,
+      statusByName: r.status_by_name,
+      statusAt: r.status_at,
+    }))
+    .sort((a, b) => (b.requestDate ?? "").localeCompare(a.requestDate ?? ""));
+}
+
+// 강사 교재 요청 폼의 학생 picker — 본인 담당 학생(studentIds)만, 재원·휴원(퇴원 제외), 이름순.
+export async function getStudentOptionsForIds(studentIds: string[]): Promise<StudentOption[]> {
+  if (studentIds.length === 0) return [];
+  const supabase = await createClient();
+  type Raw = { id: string; name: string; grade: string | null; status: string };
+  const data = await fetchInChunks<Raw>(studentIds, (chunk) =>
+    supabase.from("students").select("id, name, grade, status").in("id", chunk).neq("status", "withdrawn"),
+  );
+  return data
+    .map((s) => ({ id: s.id, name: s.name, grade: s.grade }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
 
 // 교재 신청 모달의 학생 SearchableSelect 옵션 — 재원·휴원 학생만(퇴원 제외), 이름순.

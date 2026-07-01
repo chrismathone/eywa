@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageDown, Loader2, Printer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AccountSetting } from "@/features/owner/settings-types";
@@ -33,6 +33,7 @@ export function TextbookRequestCard({
   logoUrl,
   account,
   embedded,
+  autoDownload,
 }: {
   order: TextbookOrderDetail;
   academyName: string;
@@ -40,6 +41,8 @@ export function TextbookRequestCard({
   account: AccountSetting;
   // 플로팅 창 안이면 window.close() 무효 → 닫기 숨김(창 X로 닫음).
   embedded?: boolean;
+  // ?download=1 진입(강사 요청 직후·재다운로드) — 마운트 시 PNG 자동 저장(ijw "등록 시 자동 다운로드" 패리티).
+  autoDownload?: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
@@ -47,7 +50,7 @@ export function TextbookRequestCard({
   const dateText = formatRequestDate(order.requestDate);
   const hasAccount = !!(account.bank || account.holder || account.number);
 
-  async function savePng() {
+  const savePng = useCallback(async () => {
     if (!cardRef.current) return;
     setSaving(true);
     try {
@@ -68,7 +71,16 @@ export function TextbookRequestCard({
     } finally {
       setSaving(false);
     }
-  }
+  }, [order.requestDate, order.studentName, order.bookName]);
+
+  // 자동 다운로드(1회) — 로고 등 이미지 로드 후 canvas가 정확하도록 다음 프레임에 실행. 재실행 방지 ref 가드.
+  const didAuto = useRef(false);
+  useEffect(() => {
+    if (!autoDownload || didAuto.current) return;
+    didAuto.current = true;
+    const t = setTimeout(() => void savePng(), 400);
+    return () => clearTimeout(t);
+  }, [autoDownload, savePng]);
 
   return (
     <div className="mx-auto max-w-[800px] px-4 py-6 print:p-0">
