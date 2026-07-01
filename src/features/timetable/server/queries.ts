@@ -268,7 +268,11 @@ export async function getWeeklyScheduleWithStudents(
     // 이 반 실효 종료일 = enrollment.end_date(반 이탈)와 학생 퇴원일 중 이른 것.
     const effectiveEnd =
       [r.end_date, stuWithdraw].filter((x): x is string => !!x).sort()[0] ?? null;
-    const hasEnded = effectiveEnd != null && effectiveEnd <= weekEnd;
+    // ⚠️ "종료됨"은 **기준일(referenceDate) 시점** 기준 — 롤링 창 끝(weekEnd=ref+6)이 아니다.
+    // weekEnd로 판정하면 기준일엔 재원 중인데 앞으로 6일 안에 끝나는(특히 반이동 전출 예정) 학생이
+    // 조기에 "퇴원/전출"로 숨겨져 시간표에서 사라진다(이동일 전인데 옛 반에서 증발). daterange [start,end)라
+    // end<=referenceDate면 기준일엔 이미 비활성 = 종료. (weekEnd는 아래 fetch의 '예정 학생' look-ahead 전용.)
+    const hasEnded = effectiveEnd != null && effectiveEnd <= referenceDate;
 
     // 반이동 전출(이 반 종료 + is_transferred): 새 반에서 보이므로 옛 반엔 표시 안 함.
     if (hasEnded && r.is_transferred) continue;
