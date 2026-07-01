@@ -34,7 +34,6 @@ function ScoreBlock({
         <input
           inputMode="numeric"
           value={empty ? "" : String(test.score)}
-          placeholder="—"
           aria-label={`${kicker} 점수`}
           onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))}
           className="border-line focus:border-primary tabular w-14 rounded-sm border bg-background px-2 py-1 text-center text-[15px] font-bold outline-none"
