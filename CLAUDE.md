@@ -329,6 +329,10 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 반 폼 주간 스케줄 그리드 짜부 버그 — grid `auto` 트랙이 `w-full` 표를 컨테이너 전폭으로 부풀림 (2026-07-01) — ✅ 라이브 검증
+사용자 제보: 반 생성/편집의 "주간 스케줄"이 짜부됨 — **평일(월~금) 표가 0폭으로 collapse, 주말(토·일) 표가 전폭 차지**. 원인: 6/30 평일/주말 두 표 분리 시 컨테이너를 `grid-cols-[1fr_auto]`로 짰는데, 주말 표가 `w-full table-fixed`라 **`auto` 트랙이 `width:100%`를 컨테이너 전폭으로 부풀려** 평일 `1fr`을 0폭으로 짜부. 수정: [schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>) `lg:grid-cols-[minmax(0,5fr)_minmax(0,2fr)]`(요일 수 비례 5:2 + `minmax(0,…)` 수축 허용). 검증: 평일 682px(월화수목금 각 ~128px)·주말 272px(토·일 ~116px), lint0.
+- ⚠️ **교훈(반복 방지): grid `auto`/`max-content` 트랙에 `width:100%`(`w-full`) 표·블록을 넣지 말 것** — width:100%가 트랙을 컨테이너 전폭으로 부풀려 형제 트랙을 0폭으로 짜부린다. 비례 나눔은 **`minmax(0,Nfr)`**(min=0로 수축 허용).
+
 ### 시간표 같은 반 등원 요일 편집(2일↔1일) — 드래그 + 클릭 팝오버 (2026-07-01) — ✅ typecheck0/lint0/test128 + 라이브·롤백 검증
 사용자 제보: 이미 2요일(월목) 다니는 학생을 1요일로(또는 반대로) **수정**하는 기능이 없음 — 처음 배정·교차 반이동 드래그만 요일을 정할 수 있었음. 같은 반 요일 편집을 **드래그·팝오버 둘 다**로.
 - **팝오버**: 편집 모드에서 학생 **클릭** → 그 셀 덮는 요일(월/목) 토글 → 적용 → 이동 배치(pending)에 같은 반 변경으로 큐잉([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `DayEditPopover`). 전부 선택=`[]`(전 요일), 일부=그 요일만.

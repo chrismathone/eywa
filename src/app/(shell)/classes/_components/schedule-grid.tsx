@@ -252,7 +252,9 @@ export function ScheduleGrid({
         </div>
       ))}
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-start">
+      {/* 평일(5요일)·주말(2요일) 두 표를 요일 수 비례(5:2)로 나란히. ⚠️ auto 트랙은 w-full table을
+          컨테이너 전폭으로 부풀려 반대편을 0폭으로 짜부시킴 → minmax(0,Nfr)로 비례+수축 허용. */}
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,2fr)] lg:items-start">
         {renderTable("평일 (월~금)", WEEKDAY_DAYS, weekdayPeriods)}
         {renderTable("주말 (토·일)", WEEKEND_DAYS, weekendPeriods)}
       </div>
