@@ -110,6 +110,7 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
     const child = spawn(process.execPath, ["--env-file=.env.local", script, "--apply"], {
       cwd,
       detached: true,
+      windowsHide: true, // ⚠️ Windows: detached 자식이 새 콘솔 창(도스창)을 띄우는 것을 숨김.
       stdio: ["ignore", logFd, logFd],
       env: { ...process.env, MAKEEDU_FORCE: "true" },
     });
