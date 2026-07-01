@@ -6,6 +6,7 @@ import { findNavItem } from "@/lib/navigation";
 import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { useInFrame } from "./use-in-frame";
+import { useWorkspaceEnabled } from "./workspace-enabled";
 import { withEmbed } from "./embed-context";
 
 /**
@@ -54,6 +55,7 @@ export function WindowLink({
 }) {
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
+  const workspaceEnabled = useWorkspaceEnabled();
   function onClick(e: MouseEvent<HTMLAnchorElement>) {
     // ctrl/cmd/alt+클릭은 브라우저 기본(새 탭 등) 유지.
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -72,6 +74,8 @@ export function WindowLink({
     }
     // 임베드 iframe 내부(일반 클릭=자연스러운 드릴인) 또는 모바일 = 기본 Link 이동으로 떨어짐.
     if (!isDesktop) return;
+    // 워크스페이스 캔버스 없는 셸(강사·학생 미니멀 셸) = 창을 못 여니 기본 Link 이동(드릴인)으로.
+    if (!workspaceEnabled) return;
     e.preventDefault();
     // 마우스 클릭(detail>0)이면 커서 위치에서 팝업, 키보드 활성(detail=0, clientX/Y 0)이면 cascade.
     const anchor = e.detail > 0 ? { x: e.clientX, y: e.clientY } : undefined;

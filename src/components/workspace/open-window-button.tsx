@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
 import { useInFrame } from "./use-in-frame";
+import { useWorkspaceEnabled } from "./workspace-enabled";
 import { windowIdForHref } from "./window-link";
 
 /**
@@ -22,6 +23,7 @@ import { windowIdForHref } from "./window-link";
 export function useOpenFormWindow() {
   const isDesktop = useIsDesktop();
   const inFrame = useInFrame();
+  const workspaceEnabled = useWorkspaceEnabled();
   const router = useRouter();
 
   return function openFormWindow(href: string, title: string, e?: MouseEvent<HTMLElement>) {
@@ -35,8 +37,8 @@ export function useOpenFormWindow() {
       );
       return;
     }
-    // 모바일/태블릿(창 시스템 없음): 풀페이지 네비게이션.
-    if (!isDesktop) {
+    // 모바일/태블릿(창 시스템 없음) 또는 캔버스 없는 미니멀 셸(강사·학생): 풀페이지 네비게이션.
+    if (!isDesktop || !workspaceEnabled) {
       router.push(href);
       return;
     }

@@ -17,6 +17,7 @@ import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { resolveMatrix } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
+import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
@@ -93,9 +94,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
         </header>
         <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
-          <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
-            {children}
-          </OperationsProvider></EditPresenceProvider>
+          {/* 미니멀 셸엔 WorkspaceCanvas가 없다 → WindowLink/새폼이 창을 열지 않고 드릴인(일반 네비)하게 false. */}
+          <WorkspaceEnabledProvider enabled={false}>
+            <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
+              {children}
+            </OperationsProvider></EditPresenceProvider>
+          </WorkspaceEnabledProvider>
         </main>
         <NoticePopupLayer popups={popups} />
       </div>
