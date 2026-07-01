@@ -329,6 +329,19 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 강사 "교재 요청" 탭 + 교재요청서 다운로드 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST/라우트 검증
+사용자 요청: 강사 미니셸 '내 메뉴'에 **교재 요청** 탭. 교재 기능이 `/billing`(billing 권한)에 묶여 **강사=billing none**이라 "링크만 추가"로는 안 됨 → 강사 전용 스코프 기능 신설(PII teacher-scope 필수).
+- **권한**: 새 menuKey **`textbook_requests`**([permissions.ts](src/lib/permissions.ts)) — teacher/master/admin/manager/accountant=full, 그 외 none. [permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>) 라벨 + [navigation.ts](src/lib/navigation.ts) hidden NavItem(창/타이틀 해석용).
+- **페이지**([`/textbook-requests`](<src/app/(shell)/textbook-requests/page.tsx>) + `_client.tsx`): 강사면 **본인 담당 학생만**(getTeacherScope) 요청 생성 + 진행상태(신청→주문→납부) 목록. 사무실 역할은 전체(처리는 기존 /billing 교재 면). [teacher-menu.tsx](src/components/teacher-menu.tsx)에 링크.
+- **액션** [`requestTextbook`](src/features/billing/server/textbook-actions.ts): `textbook_requests` 게이트 + **강사는 studentId ∈ 담당 스코프** 검증(사무실 createTextbookOrder는 billing 게이트 유지, 분리). 생성 후 `createdId` 반환. 스코프 쿼리 [`getTextbookOrdersForStudents`·`getStudentOptionsForIds`](src/features/billing/server/textbook-queries.ts)(청크 #53).
+- **교재요청서 다운로드**(ijw "등록 시 자동 다운로드" 패리티): 목록 **행 "요청서" 링크** → 새 탭 요청서 카드(강사 미니셸엔 창 없음 → 새 탭). 생성 성공 → **"요청서 다운로드"** 링크(`?download=1` → 카드 마운트 시 PNG 자동저장). 프린트 게이트 `billing`→**`textbook_requests`**([print/page.tsx](<src/app/(print)/textbook/[id]/print/page.tsx>), 사무실 역할 전원 유지 + 강사 추가) + **강사는 `order.studentId` 스코프 검증**. 카드([textbook-request-card.tsx](<src/app/(print)/textbook/[id]/print/textbook-request-card.tsx>))에 `autoDownload`(1회 가드). `getTextbookOrderById`에 studentId 추가.
+- 검증: typecheck0/lint0 + 프린트 라우트 컴파일/게이트 200 + 강사 스코프 데이터(김윤하 담당 56명·요청 96건, order.studentId ∈ scope) + PostgREST. ⚠️ **데모 강사 로그인 불가**(teacher@ijw-demo.com이 전체 복원 wipe로 public.users 소실 #31/#32) → 강사 클릭테스트는 계정 복구 후. master는 `/textbook-requests`·요청서 접근 가능(textbook_requests=full). 통합뷰 등 무관.
+
+### 시간표 강사 간 학생 중복 2차 — 종료 판정을 롤링 창(ref+6)이 아니라 referenceDate 기준으로 (2026-07-01) — ✅ typecheck0/lint0 + 전 학생 데이터 대조
+사용자 제보: 이정원(MS2B 김화영, 종료 07-07, BS4A로 07-09 이동 예약)이 이동 전인데 시간표에서 사라짐. 원인: [getWeeklyScheduleWithStudents](src/features/timetable/server/queries.ts)의 `hasEnded`가 **weekEnd(=referenceDate+6 롤링 창)** 기준이라, 현재 주 referenceDate=오늘(07-01)이면 창 끝(07-07)이 MS2B 종료(07-07)와 만나 `hasEnded=true` + 전출(is_transferred) → **옛 반에서 숨김**. BS4A(07-09)는 창 밖이라 미표시 → **양쪽에서 증발**.
+- **수정**: `hasEnded = effEnd <= referenceDate`(as-of 오늘, daterange `[start,end)`). look-ahead 창(weekEnd)은 아래 fetch의 '예정 학생' 포함용으로만 유지.
+- **검증**: 현재 주 전 enrollment(1049) OLD vs NEW 대조 → **정확히 10명 변화**(숨김/퇴원→재원), **10명 전원 07-01에 실제 재원 구간**(잘못 뒤집힘 0). 대부분 학기말(07-05) 전출 배치가 조기 숨겨졌던 것. 기존 타임머신 버그(전출 예약이 롤링 창에 걸릴 때).
+
 ### 등록상담 폼/상세 재설계 + QR 배선 감사 + "새 X" 창 브리지(iframe→부모) + 소스창 갱신 (2026-07-01) — ✅ typecheck0/lint0 + chrome 라이브 + 적대리뷰
 사용자 요청 묶음(등록상담 수정 폼 레이아웃 + 상세 화면을 "수정창과 비슷한 디자인으로 완전히 갈아엎기" + QR 배선 검토 + "신규 등록"을 새 창으로).
 - **A. QR 공개접수 배선 감사(에이전트) → 결함 3건 수정**: ① 🔴 **parentRequest** = 공개폼([public-intake-form.tsx](<src/app/(intake)/intake/[token]/public-intake-form.tsx>))에 `name="parentRequest"` 입력이 **아예 없어** QR 상담은 상세 '상담 내용'이 **항상 빈 값**(액션은 저장하려는데 writer 필드 부재=mismatch) → "상담 시 궁금한 점/요청사항" textarea 추가(라이브 확인, 액션이 이미 `parent_request` 저장). ② 🟡 **혈액형**·③ 🟡 **과목(subject)** = 저장되나 상세에 표시 행이 없던 orphan → 재설계 상세에 표시(혈액형 O형·과목 수학 확인). (schoolType은 초/중/고 UI필터라 의도적 미저장·경미.)
