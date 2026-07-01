@@ -1,7 +1,9 @@
 name: makeedu-sync
 
 # makeedu(school.makeedu.co.kr) → eywa Supabase **증분 동기화**(additive). 임포터가 멱등이라 매 실행이 증분.
-# 먼저 "Run workflow"(수동)로 첫 검증 후, cron이 하루 2회(KST 06/18시) 자동 실행.
+# ⚠️ 자동 cron 비활성(2026-07-01) — makeedu가 세션을 캡처 IP(집)에 묶어 GitHub 데이터센터 IP를 거부 →
+#    여기선 신뢰성 있게 안 됨. 자동 동기화는 **로컬 Windows 작업 스케줄러**(scripts/_makeedu/run-local-sync.ps1)로
+#    전환했다. 이 워크플로는 수동(workflow_dispatch)만 남긴다(집 신뢰 IP 러너가 생기면 아래 schedule 복구 가능).
 #
 # ⚠️ 필요한 Secrets — 레포 Settings → Secrets and variables → Actions:
 #    · DATABASE_URL          Supabase 세션 풀러 연결 문자열(로컬 .env.local과 동일) — 필수
@@ -19,9 +21,11 @@ on:
         description: "동기화 OFF 토글을 무시하고 강제 실행(앱 '지금 동기화' 버튼이 사용)"
         type: boolean
         default: false
-  schedule:
-    - cron: "0 21 * * *" # 06:00 KST (UTC+9)
-    - cron: "0 9 * * *" # 18:00 KST
+  # ⚠️ 자동 스케줄 비활성(2026-07-01) — GitHub 데이터센터 IP는 makeedu 세션이 거부됨(IP 종속).
+  #    자동 동기화 = 로컬 작업 스케줄러(run-local-sync.ps1, 06/18 KST). workflow_dispatch(수동)만 유지.
+  # schedule:
+  #   - cron: "0 21 * * *" # 06:00 KST (UTC+9)
+  #   - cron: "0 9 * * *" # 18:00 KST
 
 # 긴 스크래핑이 겹치지 않게 한 번에 하나만.
 concurrency:
