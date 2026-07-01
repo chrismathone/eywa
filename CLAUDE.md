@@ -329,6 +329,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 강사 '내 메뉴' 탭 표시 = 학원설정 전용 토글(역할·권한 배선) — 하드코딩 → 매트릭스 소비 (2026-07-01) — ✅ typecheck0/lint0/test574 + 워크플로 적대검증
+사용자 제보: 강사 '내 메뉴' 드롭다운의 **일부 탭을 학원에서 끄고 싶은데 설정 경로가 없음**. 원인: [teacher-menu.tsx](src/components/teacher-menu.tsx)가 **하드코딩 링크 목록**이라 권한 매트릭스(학원 오버라이드)를 안 읽음(전형적 "설정 무시"/write-only-orphan) — 학원설정 '역할·권한'에서 강사 접근을 바꿔도 탭이 그대로 떴음.
+- **전용 토글 신설**(사용자 선택): 학원설정 → 역할·권한 상단에 **"강사 '내 메뉴' 표시"** 카드([permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>)) — 8개 탭 체크박스. **별도 필드·액션 없이 같은 matrix 상태를 편집**(같은 SectionForm, 한 번 저장 → 아래 세부 권한표와 완전 정합·클로버 0). 끄기=강사 접근 `none`.
+- **단일 소스** [`TEACHER_MENU_KEYS`](src/lib/permissions.ts): teacher-menu 소비처 + owner 토글 공유(원스크린 먼저, 8키). teacher_onescreen은 ROLE_LOCKED라 토글 고정(항상 표시=강사 홈).
+- **소비처 배선**: teacher-menu가 `permMatrix` prop 받아 `canAccess("teacher", menu, permMatrix)`로 **필터**(각 링크에 MenuKey). [layout.tsx](<src/app/(shell)/layout.tsx>) 강사 미니셸이 `resolveMatrix(settings.permissions.overrides)`를 주입(일반 셸과 공유, 추가 쿼리 0).
+- **진짜 비활성화(숨김+차단)**: 8개 강사 페이지 전부 `requireAccess("<키>")`(tenant-aware `getPermMatrix`)라, 끄면 탭 숨김 + **URL 직접 진입도 차단**(roleHome=/onescreen 폴백). 단순 숨김 아님.
+- **⚠️ 워크플로 적대리뷰(3차원, 4에이전트) 확정 1건(med) 수정**: 빠른 토글의 '켜기 복원값'이 **마운트 시점 값 고정**이라, 같은 세션에서 매트릭스로 바꾼 값(예 scoped→readonly)을 그 탭 off/on 하면 유실 → **끄기 직전 live 값을 ref로 캡처해 복원**(세션 편집 보존). 부수효과(탭 숨김이 원스크린 등 잔존 기능 깨뜨림)·배선·직렬화는 문제 없음 확인.
+- 검증: typecheck0/lint0/**test574**. ⚠️ 라이브는 auth 게이트 + 병렬 dev 충돌 회피로 정적 게이트+적대리뷰 대체(원장 HMR 실토글 1회 확인 권장). ⚠️ **수업보고서(Edutrix 외부링크)는 MenuKey 없어 이 토글 대상 아님**(항상 표시 — 토글하려면 별도 설정 플래그 필요, 후속).
+
 ### 강사 "교재 요청" 탭 + 교재요청서 다운로드 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST/라우트 검증
 사용자 요청: 강사 미니셸 '내 메뉴'에 **교재 요청** 탭. 교재 기능이 `/billing`(billing 권한)에 묶여 **강사=billing none**이라 "링크만 추가"로는 안 됨 → 강사 전용 스코프 기능 신설(PII teacher-scope 필수).
 - **권한**: 새 menuKey **`textbook_requests`**([permissions.ts](src/lib/permissions.ts)) — teacher/master/admin/manager/accountant=full, 그 외 none. [permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>) 라벨 + [navigation.ts](src/lib/navigation.ts) hidden NavItem(창/타이틀 해석용).

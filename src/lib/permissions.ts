@@ -39,6 +39,22 @@ export const MENU_KEYS = [
 ] as const;
 export type MenuKey = (typeof MENU_KEYS)[number];
 
+/**
+ * 강사 미니멀 셸 '내 메뉴' 드롭다운에 노출되는 메뉴(=표시 순서). 강사 메뉴 소비처(teacher-menu.tsx)와
+ * owner '역할·권한'의 '강사 내 메뉴 표시' 토글이 공유하는 단일 소스.
+ * teacher_onescreen(수업 마감 원스크린)은 ROLE_LOCKED라 항상 표시(끌 수 없음) — 목록엔 포함하되 토글에선 고정.
+ */
+export const TEACHER_MENU_KEYS = [
+  "teacher_onescreen",
+  "students",
+  "attendance",
+  "classes",
+  "timetable",
+  "exams",
+  "consultations",
+  "textbook_requests",
+] as const satisfies readonly MenuKey[];
+
 export type Access = "full" | "scoped" | "readonly" | "none";
 export type AccessMatrix = Record<MenuKey, Record<SystemRole, Access>>;
 

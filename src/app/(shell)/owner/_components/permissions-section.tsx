@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { SectionForm } from "./section-form";
 import {
   MENU_ACCESS,
   MENU_KEYS,
   SYSTEM_ROLES,
+  TEACHER_MENU_KEYS,
   isPermissionLocked,
   resolveMatrix,
   type Access,
@@ -92,8 +93,68 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
     setMatrix((m) => ({ ...m, [menu]: { ...m[menu], [role]: next } }));
   }
 
+  // '강사 내 메뉴 표시' 빠른 토글 — 같은 matrix 상태를 편집(별도 저장/필드 없음, 아래 표와 한 폼).
+  // 켜기 복원값 = '끄기 직전의 실제 강사 접근값'(세션 중 매트릭스로 바꾼 readonly 등도 보존). 마운트 값으로 초기화.
+  // ⚠️ 마운트 값 고정으로 복원하면 세션 중 매트릭스 편집이 off/on 사이클에 유실됨 → 끄기 시점에 live 값을 캡처.
+  // 처음부터 '없음'이던 탭을 켜면 코드 기본값(scoped/full). 끄기=none → 탭 숨김 + 페이지 접근 차단.
+  const prevTeacherAccessRef = useRef<Record<string, Access> | null>(null);
+  if (prevTeacherAccessRef.current === null) {
+    prevTeacherAccessRef.current = Object.fromEntries(
+      TEACHER_MENU_KEYS.map((k) => [k, matrix[k].teacher]),
+    ) as Record<string, Access>;
+  }
+  function setTeacherShown(menu: MenuKey, shown: boolean) {
+    if (menu === "teacher_onescreen") return; // 강사 홈 — 항상 표시(ROLE_LOCKED)
+    setMatrix((m) => {
+      const prev = prevTeacherAccessRef.current!;
+      if (!shown) {
+        // 끄기 직전의 비-none 값을 기억 → 다시 켤 때 복원(매트릭스로 방금 바꾼 값 유실 방지)
+        if (m[menu].teacher !== "none") prev[menu] = m[menu].teacher;
+        return { ...m, [menu]: { ...m[menu], teacher: "none" } };
+      }
+      const restore = prev[menu];
+      const next: Access = restore && restore !== "none" ? restore : MENU_ACCESS[menu].teacher;
+      return { ...m, [menu]: { ...m[menu], teacher: next } };
+    });
+  }
+
   return (
     <SectionForm section="permissions" payload={{ overrides }}>
+      <>
+      <section className="border-border bg-card rounded-lg border p-5">
+        <h3 className="text-foreground text-sm font-bold">강사 &lsquo;내 메뉴&rsquo; 표시</h3>
+        <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
+          강사 화면 우상단 <b>내 메뉴</b> 드롭다운에 보여줄 탭을 고릅니다. 끄면 그 탭이 숨겨지고 강사가 해당
+          페이지에 접근할 수 없습니다(모든 강사 공통). <b>수업 마감(원스크린)</b>은 강사 홈이라 항상 표시됩니다.
+          세부 권한(담당/읽기 등)은 아래 표에서 조정합니다.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {TEACHER_MENU_KEYS.map((menu) => {
+            const shown = matrix[menu].teacher !== "none";
+            const locked = menu === "teacher_onescreen";
+            return (
+              <label
+                key={menu}
+                className={`border-border flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] ${
+                  locked ? "opacity-60" : "hover:bg-bg-soft cursor-pointer"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={shown}
+                  disabled={locked}
+                  onChange={(e) => setTeacherShown(menu, e.target.checked)}
+                  className="accent-primary size-4"
+                />
+                <span className="truncate">
+                  {MENU_LABEL[menu]}
+                  {locked ? " · 고정" : ""}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </section>
       <section className="border-border bg-card rounded-lg border p-5">
         <h3 className="text-foreground text-sm font-bold">역할별 메뉴 권한</h3>
         <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
@@ -146,6 +207,7 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
           </table>
         </DragScrollArea>
       </section>
+      </>
     </SectionForm>
   );
 }

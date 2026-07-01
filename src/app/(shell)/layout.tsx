@@ -59,6 +59,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 공유. 미업로드/실패면 null → 각 표면이 기존 마크(sprout/동심원)로 폴백. 임베드는 위에서 이미 return(크롬 없음).
   const logoSrc = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
+  // 테넌트 권한 override 반영 매트릭스 — 강사 '내 메뉴'·사이드바·팰릿·모바일내비 메뉴 필터에 주입(클라 소비처).
+  // settings는 위에서 이미 fetch(cache) → 추가 쿼리 0. 빈 override면 하드코딩 MENU_ACCESS 그대로.
+  const permMatrix = resolveMatrix(settings.permissions.overrides);
+
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
   if (user.systemRole === "teacher" || user.systemRole === "student") {
@@ -85,7 +89,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {user.systemRole === "teacher" ? <TeacherMenu /> : null}
+            {user.systemRole === "teacher" ? <TeacherMenu permMatrix={permMatrix} /> : null}
             <UserMenu
               email={user.email}
               displayName={user.displayName}
@@ -106,9 +110,6 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     );
   }
 
-  // 테넌트 권한 override 반영 매트릭스 — 사이드바·팰릿·모바일내비 메뉴 필터에 주입(클라 소비처).
-  // settings는 위에서 이미 fetch(cache) → 추가 쿼리 0. 빈 override면 하드코딩 MENU_ACCESS 그대로.
-  const permMatrix = resolveMatrix(settings.permissions.overrides);
   return (
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
