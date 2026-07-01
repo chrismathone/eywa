@@ -329,6 +329,17 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### ijw-calander 전체 데이터 프로덕션 이식 + 테넌트 injaewon 개명 (2026-07-01) — ✅ 실행·DB 검증 완료
+사용자가 **ijw-calander를 은퇴**시키고 실데이터를 eywa로 완전 이관. 기존 `ijw-demo` 테넌트(`becaa316-…`)를 **프로덕션으로 승격**(신규 테넌트 대신 재사용 — 파이프라인이 tenant_id에 배선돼 스크립트 수정 0, auth·RLS·설정 보존). 상세 런북·검증카운트 = 메모리 [[reference_ijw-full-restore]].
+- **신규 export**: `node D:/ijw-calander/scripts/exportForMigration.mjs` → 라이브 Firestore **`restore20260319`**(⚠️ 이 파일 옛 기록의 `restore260202`는 오기)에서 오늘자 덤프(52컬렉션·25,004문서). serviceAccount = **`D:/ijw-calander/serviceAccount.json`**(⚠️ 옛 기록 `F:\`는 오기). `run.ts`·백필 모두 최신 export 자동선택.
+- **런북(9단계, `scripts/_poc_migration/`)**: `run.ts`(auth보존 wipe+코어) → highmath→subject_1 → fix-primary-teacher → backfill-english-slots/teacher-colors → import-catalog/tuition-catalog → textbooks-expenses → lesson-reports(Edutrix Supabase) → import-meeting-speakers(Firebase). **제외=fabricate-grades(가짜성적)·assign-demo-teacher·fix-consultations(옛 버그용).**
+- **검증 카운트**: 학생567(재원527)·반129(색상52·담임128)·스케줄628·수강1050·출결5799·등록상담208·학생상담1411·수납2000·회의47(화자44)·교재신청385·지출117·교재단가146·수강료단가50·진도(Edutrix)3521. subject분포 {math68·english46·subject_1 15, **highmath 0**}. makeedu_id 전부 null(fresh restore).
+- **⚠️ highmath 재마이그 함정**: `migrate-highmath-to-subject1`이 "settings에 이미 subject_1 존재" 가드로 **전체 abort** → 신규 export가 재도입한 15개 심화수학 반+1강사만 타깃 UPDATE로 변환(subject_1 라벨="수학(심화)"=동일개념 DB확인 후) + 슬롯 백필 재실행(129/129 매칭). 재마이그 시 이 가드 재발.
+- **테넌트 개명**: `tenants` slug `ijw-demo`→**`injaewon`**, name `인재원 (데모)`→**`인재원`**(plan은 `demo` 유지). UI 학원명은 원래도 `tenant_settings.profile.name="인재원"`이라 무영향. `run.ts` demo-path slug 가드도 `injaewon`으로 갱신. tenant_id 불변 → RLS/auth/로그인 무영향(로그인 이메일 `@ijw-demo.com`은 auth계정이라 미변경).
+- **코드 픽스(커밋 `8c668f9`, main push됨)**: backfill 2종 하드코딩 export 파일명 → 최신 자동선택(`readdirSync…sort().pop()`, footgun 제거) + `run.ts` slug 가드.
+- **makeedu**: 사용자가 병행 유지 선택 → wipe로 `makeedu_id`=null 됐으나 GitHub Actions cron(KST 06/18, additive·멱등)이 자가복구. 즉시는 `gh workflow run makeedu-sync.yml -f force=true`.
+- ⚠️⚠️ **이 테넌트는 이제 데모가 아니라 프로덕션 실데이터** — 검증 중 무심코 mutation 금지(옛 "데모=일회용" 전제 폐기). 오디오는 Firebase Storage `ijw-calander.firebasestorage.app` 콜드 백엔드 유지(삭제 금지).
+
 ### 엑셀/구글시트 가져오기 라운드트립 — 수학 export에도 '수강편집' 시트 추가(옵션 A) (2026-06-30) — ✅ 게이트 + Chrome 라이브
 ijw "메타데이터" 라운드트립 대비 감사(워크플로 9에이전트, 36주장 적대검증) 결론: eywa에서 **실제 DB 반영되는 import는 학생(신규 insert-only)·시간표 '수강편집' 시트(수강 이동/추가/삭제)뿐**이고, 둘 다 `.xlsx` 파일 업로드 전용. **기본 '엑셀' 버튼으로 받는 수학 export는 `_meta`만 있고 importer가 읽는 '수강편집' 시트가 없어 라운드트립이 끊겨** 있었다(`parseEditSheet`가 빈 배열→ "'수강편집' 시트 없음" 거부). 구글시트는 단방향 push(`overwriteMathTimetableSheet`)만이라 시트 편집이 앱에 반영 안 됨. (수학 export의 `_meta`는 ijw 익스포터 verbatim 이식 잔재 = eywa엔 소비처 없는 orphan.)
 - **수정(옵션 A)**: '수강편집' 시트 생성 로직을 공용 헬퍼 [appendEnrollmentEditSheet](src/features/exports/enrollment-edit-sheet.ts)로 추출(일반·수학 단일 소스). 수학 익스포터([exporter.ts](src/features/exports/math-timetable/exporter.ts))에 `writeBuffer` 직전 `appendSheets?` 훅 추가 → [build-buffer.ts](src/features/exports/math-timetable/build-buffer.ts)(다운로드+구글시트 push 공유 버퍼)가 그 훅으로 '수강편집' 주입. 일반 export([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 인라인 블록 → 헬퍼 호출(동작 동일). 가져오기 다이얼로그에 "구글시트는 .xlsx로 다운로드해 올리세요" 안내 1줄.
@@ -1240,7 +1251,7 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
   전화 정규화, AI 재분석 generated_at, 내학습 결석 리포트 모순, 권한 리다이렉트(루프 방지), super-admin 상태라벨.
 - **AI provider = Upstage Solar 기본** 적용(`openai` 패키지 설치 + `UPSTAGE_API_KEY`; 없으면 Anthropic 폴백). "AI 모델 정책" 참고.
 - ⚠️ **데모 데이터는 seed가 아니라 ijw POC 임포트본**(564명). 쓰레기 레코드·접미사·빈 성적·담임공란은 데이터 결함(코드 아님).
-  최종 목표는 Firebase 전체 이식(serviceAccount `F:\ijw-calander\serviceAccount.json`, 명명DB `restore260202`) — 별도 과제.
+  ~~최종 목표는 Firebase 전체 이식 — 별도 과제.~~ → **✅ 완료(2026-07-01)**: serviceAccount `D:\ijw-calander\serviceAccount.json`(옛 `F:\`는 오기), 라이브 DB `restore20260319`(옛 `restore260202`는 오기)에서 전체 이식 + 프로덕션 승격(테넌트 `injaewon`). 진행상황 최상단 + [[reference_ijw-full-restore]] 참조.
 
 ### 선생님 원스크린 (강사 전용, 2026-06-01)
 - 강사용 **수업 마감 원스크린** (`/onescreen`) — `data/원스크린_전달/` 디자인 핸드오프(React/JSX 프로토타입)를 eywa 톤으로 충실 이식.
