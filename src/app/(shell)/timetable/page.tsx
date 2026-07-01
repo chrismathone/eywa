@@ -113,7 +113,7 @@ export default async function TimetablePage({
   const transferCount = [...transferIds].filter((id) => statusOf.get(id) === "active").length;
 
   return (
-    <TimetableEditProvider effectiveDate={effectiveDate}>
+    <TimetableEditProvider effectiveDate={effectiveDate} today={today}>
       <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
@@ -175,7 +175,6 @@ export default async function TimetablePage({
           {transferCount > 0 ? <span className="text-[color:var(--blue)]">전입 {transferCount}</span> : null}
           {holdCount > 0 ? <span className="text-[color:var(--amber)]">대기 {holdCount}</span> : null}
           {withdrawnCount > 0 ? <span className="text-[color:var(--text-faint)]">퇴원 {withdrawnCount}</span> : null}
-          <span className="text-[color:var(--text-faint)]">· {slots.length}슬롯</span>
         </div>
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰=읽기전용, 과거=조회 전용).

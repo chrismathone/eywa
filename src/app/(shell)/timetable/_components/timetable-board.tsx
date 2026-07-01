@@ -6,14 +6,18 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Check, GripVertical, Loader2, Pencil, X } from "lucide-react";
 import { moveEnrollmentsBatch } from "@/features/enrollments/server/actions";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
+import { zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
 import {
   TimetableEditContext,
   useTimetableEdit,
@@ -23,21 +27,27 @@ import {
 
 type Queued = PendingMove & { fromClassName: string; toClassName: string; name: string };
 
+/** 도착 셀 slot.id → 반 id 매핑용 드롭 대상 data(요일 존/공통 존 공통). */
+type DropData = { className?: string; classId?: string; slotId?: string; day?: string };
+
 /**
- * 시간표 편집 상태 provider — 편집 토글·이동 큐·저장/취소를 소유하고 context로 제공.
+ * 시간표 편집 상태 provider — 편집 토글·이동 큐·저장/취소·적용일을 소유하고 context로 제공.
  * 편집 컨트롤(TimetableEditControls, 툴바에 인라인)과 드롭영역(TimetableDndArea, 그리드)이
- * 분리돼 같은 상태를 소비한다. (이전 단일 TimetableBoard에서 분리 — 편집 버튼이 툴바로 이동.)
+ * 분리돼 같은 상태를 소비한다.
  * - 읽기 전용(기본): 학생 드래그 비활성, 셀 클릭 → drawer.
- * - 편집 모드: 학생을 다른 셀로 드롭 → 델타 버퍼에 누적(DB 미반영). '저장' 시 compressMoves로
- *   A→B→C를 A→C로 압축 후 moveEnrollmentsBatch(단일 RPC)로 커밋.
+ * - 편집 모드: 학생을 다른 반의 요일 존/공통 존으로 드롭 → 델타 버퍼에 누적(DB 미반영). 요일 존=그 요일만
+ *   등원(분리등원), 공통 존=전 요일. '저장' 시 compressMoves 후 moveEnrollmentsBatch(단일 RPC)로 커밋.
  */
 export function TimetableEditProvider({
   children,
   effectiveDate,
+  today,
 }: {
   children: ReactNode;
   /** 이동 적용일(YYYY-MM-DD) — 미래 주 편집 시 그 주 월요일. 미지정=오늘 즉시. (Phase B 주간 이동) */
   effectiveDate?: string;
+  /** 오늘(KST, YYYY-MM-DD) — 적용일 입력 기본·최소값. */
+  today: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -45,10 +55,11 @@ export function TimetableEditProvider({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
+  // 사용자가 편집 바에서 정한 적용일(예정일). null이면 기본(조회 주 기준 effectiveDate ?? 오늘).
+  const [scheduledDate, setScheduledDate] = useState<string | null>(null);
+  const dateFloor = effectiveDate ?? today;
 
-  // net 압축 결과(이름·출발반명까지 포함) — 표시용 pending/incoming의 단일 출처.
-  // 알고리즘은 compressMoves(저장 커밋용, 단위테스트됨)와 동일: 최초 출발지 유지·마지막 목적지 채택·
-  // 원점 복귀(A→B→A) 제거. 둘이 같은 net이라 화면 마커 == 실제 커밋.
+  // net 압축 결과(이름·출발반명·목적지 셀/요일까지 포함) — 표시용 pending/incoming의 단일 출처.
   const resolved = useMemo<Queued[]>(() => {
     const net = new Map<string, Queued>();
     const order: string[] = [];
@@ -57,6 +68,8 @@ export function TimetableEditProvider({
       if (ex) {
         ex.toClassId = q.toClassId; // 출발지는 최초 유지, 목적지만 갱신
         ex.toClassName = q.toClassName;
+        ex.toSlotId = q.toSlotId;
+        ex.toDays = q.toDays;
       } else {
         net.set(q.enrollmentId, { ...q });
         order.push(q.enrollmentId);
@@ -72,13 +85,20 @@ export function TimetableEditProvider({
     return m;
   }, [resolved]);
 
-  // 대상 셀 slot.id → 전입 예정 학생들. 도착 셀이 초록 미리보기 행을 그리는 데 사용.
+  // 도착 셀 slot.id(=toSlotId) → 전입 예정 학생들. 도착 셀이 초록 미리보기 행을 그리는 데 사용.
+  // 마커는 "그 셀"에 붙어야 하므로 반 id가 아니라 셀 slot.id로 키잉(한 반이 여러 셀에 걸쳐도 드롭한 셀만).
   const incoming = useMemo<Map<string, IncomingStudent[]>>(() => {
     const m = new Map<string, IncomingStudent[]>();
     for (const r of resolved) {
-      const arr = m.get(r.toClassId) ?? [];
-      arr.push({ enrollmentId: r.enrollmentId, name: r.name, fromClassName: r.fromClassName });
-      m.set(r.toClassId, arr);
+      const key = r.toSlotId ?? r.toClassId;
+      const arr = m.get(key) ?? [];
+      arr.push({
+        enrollmentId: r.enrollmentId,
+        name: r.name,
+        fromClassName: r.fromClassName,
+        attendanceDays: r.toDays, // 도착 요일 존의 등원 요일([목] 등) — 미리보기 라벨용
+      });
+      m.set(key, arr);
     }
     return m;
   }, [resolved]);
@@ -90,6 +110,8 @@ export function TimetableEditProvider({
     toClassId: string;
     toClassName: string;
     name: string;
+    toSlotId?: string;
+    toDays?: string[];
   }) {
     setError(null);
     setFailed([]);
@@ -102,6 +124,7 @@ export function TimetableEditProvider({
     if (compressed.length === 0) {
       setEditing(false);
       setQueue([]);
+      setScheduledDate(null);
       return;
     }
     setSaving(true);
@@ -109,8 +132,12 @@ export function TimetableEditProvider({
     setFailed([]);
     try {
       const res = await moveEnrollmentsBatch(
-        compressed.map((m) => ({ enrollmentId: m.enrollmentId, newClassId: m.toClassId })),
-        effectiveDate,
+        compressed.map((m) => ({
+          enrollmentId: m.enrollmentId,
+          newClassId: m.toClassId,
+          attendanceDays: m.toDays ?? [],
+        })),
+        scheduledDate ?? effectiveDate,
       );
       if (res.error) {
         setError(res.error);
@@ -121,6 +148,7 @@ export function TimetableEditProvider({
         setFailed(fails.map((f) => f.error ?? f.enrollmentId));
       }
       setQueue([]);
+      setScheduledDate(null);
       setEditing(false);
       router.refresh();
     } catch (err) {
@@ -132,6 +160,7 @@ export function TimetableEditProvider({
 
   function cancel() {
     setQueue([]);
+    setScheduledDate(null);
     setEditing(false);
     setError(null);
     setFailed([]);
@@ -151,6 +180,9 @@ export function TimetableEditProvider({
         saving,
         error,
         failed,
+        scheduledDate,
+        setScheduledDate,
+        dateFloor,
       }}
     >
       {children}
@@ -158,10 +190,21 @@ export function TimetableEditProvider({
   );
 }
 
-/** 편집 토글/저장/취소 컨트롤 — 툴바에 인라인 배치(별도 행 차지 안 함). */
+/** 편집 토글/저장/취소/적용일 컨트롤 — 툴바에 인라인 배치(별도 행 차지 안 함). */
 export function TimetableEditControls() {
-  const { editing, setEditing, pendingCount, save, cancel, saving, error, failed } =
-    useTimetableEdit();
+  const {
+    editing,
+    setEditing,
+    pendingCount,
+    save,
+    cancel,
+    saving,
+    error,
+    failed,
+    scheduledDate,
+    setScheduledDate,
+    dateFloor,
+  } = useTimetableEdit();
   return (
     <div className="print:hidden flex flex-wrap items-center gap-2 text-xs">
       {!editing ? (
@@ -180,6 +223,19 @@ export function TimetableEditControls() {
             편집 중
           </span>
           <span className="text-text-faint font-mono">{pendingCount}건 이동 대기</span>
+          {/* 적용일(즉시=오늘/조회 주, 예정일=날짜 지정). 이동은 이 날짜에 반영(옛 반은 그날 전까지 유지). */}
+          <label className="text-text-dim inline-flex items-center gap-1">
+            적용일
+            <input
+              type="date"
+              aria-label="이동 적용일"
+              min={dateFloor}
+              value={scheduledDate ?? dateFloor}
+              onChange={(e) => setScheduledDate(e.target.value || null)}
+              disabled={saving}
+              className="border-line rounded-md border px-1.5 py-0.5 text-xs disabled:opacity-50"
+            />
+          </label>
           <button
             type="button"
             onClick={save}
@@ -208,6 +264,17 @@ export function TimetableEditControls() {
   );
 }
 
+/**
+ * 드롭 대상 우선순위 — 요일 존(class:slotId:day, 콜론 3조각)이 셀(class:slotId, 2조각)과 겹치면 요일 존을 택한다.
+ * 그래야 "목 칸에 드롭 = 목만 등원"이 셀 전체 드롭(=전 요일)보다 우선한다. slotId는 UUID라 콜론이 없어 조각 수로 구분.
+ */
+const preferDayZone: CollisionDetection = (args) => {
+  const hits = pointerWithin(args);
+  const dayZone = hits.find((h) => String(h.id).split(":").length >= 3);
+  if (dayZone) return [dayZone];
+  return hits.length > 0 ? hits : rectIntersection(args);
+};
+
 /** DnD 드롭영역 — 시간표 그리드를 감싼다. 편집 모드에서만 이동을 큐에 누적.
  * DragOverlay로 잡은 학생 이름 칩이 커서를 따라다녀 "끌고 있다"는 느낌을 준다. */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
@@ -226,16 +293,18 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     const { active, over } = e;
     if (!over) return;
     const activeIdStr = String(active.id);
-    const overIdStr = String(over.id);
-    if (!activeIdStr.startsWith("student:") || !overIdStr.startsWith("class:")) return;
-    const enrollmentId = activeIdStr.slice("student:".length);
-    const toClassId = overIdStr.slice("class:".length);
+    if (!activeIdStr.startsWith("student:")) return;
+    // 도착 정보는 드롭존 data에서 읽는다(id 파싱 금지) — classId=실제 반 id, slotId=셀 id, day=요일 존이면 요일.
+    const overData = over.data.current as DropData | undefined;
+    const toClassId = overData?.classId;
+    if (!toClassId) return;
     const data = active.data.current as
-      | { classId?: string; fromClassName?: string; name?: string }
+      | { classId?: string; fromClassName?: string; name?: string; enrollmentId?: string }
       | undefined;
-    const fromClassId = data?.classId ?? "";
-    if (!fromClassId || fromClassId === toClassId) return;
-    const overData = over.data.current as { className?: string } | undefined;
+    // 분리등원 요일 칸에서 온 드래그는 id가 `student:{id}:{day}`로 유니크 → id 파싱 대신 data.enrollmentId 우선.
+    const enrollmentId = data?.enrollmentId ?? activeIdStr.slice("student:".length);
+    const fromClassId = data?.classId ?? ""; // 출발 반 id(실제 반 id)
+    if (!fromClassId || fromClassId === toClassId) return; // 같은 반은 v1 미지원(교차 반 이동만)
     queueMove({
       enrollmentId,
       fromClassId,
@@ -243,6 +312,8 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
       toClassId,
       toClassName: overData?.className ?? "다른 반",
       name: data?.name ?? "학생",
+      toSlotId: overData?.slotId,
+      toDays: zoneAttendanceDays(overData?.day), // 요일 존=[그 요일], 공통 존=[]
     });
   }
 
@@ -250,6 +321,7 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     <DndContext
       id="timetable-dnd"
       sensors={sensors}
+      collisionDetection={preferDayZone}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={() => setDragName(null)}

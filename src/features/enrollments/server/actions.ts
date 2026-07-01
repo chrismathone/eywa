@@ -166,6 +166,8 @@ export type BatchMoveInput = {
   enrollmentId: string;
   newClassId: string;
   startDate?: string;
+  /** 목적지 등원 요일(분리등원) — 요일 존 드롭=[그 요일], 공통 존=[](전 요일). 비면 전 요일 등원. */
+  attendanceDays?: string[];
 };
 export type BatchMoveResult = {
   enrollmentId: string;
@@ -200,6 +202,8 @@ export async function moveEnrollmentsBatch(
       enrollmentId: m.enrollmentId,
       newClassId: m.newClassId,
       startDate: m.startDate ?? null,
+      // 유효 요일코드만(mon..sun) 요일순 — 목적지 반 스케줄 밖 요일은 표시가 알아서 걸러지므로 서버 정규화는 최소.
+      attendanceDays: DAY_ORDER.filter((d) => (m.attendanceDays ?? []).includes(d)),
     })),
     p_effective_date: eff,
   });

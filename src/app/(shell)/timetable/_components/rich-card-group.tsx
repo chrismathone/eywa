@@ -142,7 +142,7 @@ function ClassColumn({
             ariaLabel={`${card.className} 반 정보`}
             className="flex h-full w-full items-center justify-center px-1 text-center text-[13px] font-bold transition hover:brightness-95"
           >
-            <span className="truncate">{card.className}</span>
+            <span className="overflow-hidden whitespace-nowrap text-clip">{card.className}</span>
           </WindowLink>
         </HoverCard>
       </div>
@@ -265,7 +265,7 @@ function RosterRow({ s }: { s: GridStudent }) {
   const name = s.englishName ? `${s.name} (${s.englishName})` : s.name;
   const inner = (
     <>
-      <span className={`truncate ${withdrawn ? "line-through" : ""}`}>{name}</span>
+      <span className={`overflow-hidden whitespace-nowrap text-clip ${withdrawn ? "line-through" : ""}`}>{name}</span>
       {meta ? <span className="text-text-faint shrink-0 font-mono text-[9px]">{meta}</span> : null}
     </>
   );

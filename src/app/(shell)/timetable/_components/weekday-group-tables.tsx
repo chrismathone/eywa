@@ -49,8 +49,8 @@ const WEEKEND_GROUP: GroupDef = {
 const WEEKEND_KEYS = new Set<DayOfWeek>(["sat", "sun"]);
 
 // 엑셀식 격자 — table-layout:fixed + colgroup으로 요일 컬럼 폭을 못박는다(줄맞춤).
-// 폭은 스프레드시트/엑셀 기준(실측 교시 79·요일 51px)에서 **가독성 위해 요일열만 살짝 +**(52→60px). 단독/주말 2배(120px).
-// (좁은 셀 본문은 이름 우선 truncate, 전체 정보는 hover 카드 — 스프레드시트식 고밀도.)
+// 폭은 스프레드시트/엑셀 기준(실측 교시 79·요일 51px)에서 **가독성 위해 요일열만 +**(52→60px). 단독(수)/주말(토·일) 2배(120px).
+// (좁은 셀 본문은 이름 우선 — 생략(…) 없이 넘치면 잘림(clip), 전체 정보는 hover 카드. 스프레드시트식 고밀도.)
 const PERIOD_COL_W = 80;
 const DAY_COL_W = 60;
 // 단독(병합 안 되는) 요일은 2배 폭 — wide 집합은 호출부가 그룹 구성에서 도출(평일=단독 그룹 요일, 주말=토/일).
@@ -254,7 +254,7 @@ function GroupTable({
                 colSpan={t.days.length}
                 className="bg-bg-soft border-line border-b border-r px-2 py-1.5 text-center"
               >
-                <span className="text-foreground block truncate text-[12px] font-bold">{t.name}</span>
+                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold">{t.name}</span>
               </th>
             )),
           )}
@@ -302,6 +302,8 @@ function GroupTable({
                     for (let cc = ci; cc < ci + block.colSpan; cc++) acc.push(...t.cellAt(rr, cc));
                   }
                   const merged = mergeSlotsByClass(acc);
+                  // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
+                  const coveringDays = t.days.slice(ci, ci + block.colSpan);
                   // 합반(ijw식) — 같은 강사·교시·요일에 2개반+ = 합반. 셀을 그대로 적층하되 테두리로 묶고 배지 표시.
                   const isHapban = merged.length >= 2;
                   return (
@@ -334,6 +336,7 @@ function GroupTable({
                               slot={s}
                               roster="names"
                               subSlot={subSlotOf(s, config, row.key)}
+                              coveringDays={coveringDays}
                             />
                           ))}
                         </div>

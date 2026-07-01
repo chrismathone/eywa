@@ -5,15 +5,21 @@
 
 export interface PendingMove {
   enrollmentId: string;
+  /** 실제 반 id(출발) — no-op(같은 반) 판정용. ⚠️ 스케줄 id 아님(그건 마커 키 toSlotId). */
   fromClassId: string;
+  /** 실제 반 id(목적지) — 서버 RPC newClassId. */
   toClassId: string;
+  /** 목적지 셀 slot.id(스케줄 id) — 도착 셀 '전입 예정' 마커 키(incoming). 마커는 셀 단위라 반 id 아님. */
+  toSlotId?: string;
+  /** 목적지 등원 요일(분리등원) — 요일 존=[그 요일], 공통 존=[](전 요일). */
+  toDays?: string[];
   studentId?: string; // 표시용(서버 RPC가 enrollment에서 직접 도출하므로 로직엔 불필요)
 }
 
 /**
  * enrollment별로 순서대로 누적된 이동을 net 이동 하나로 압축.
- * - 최초 fromClassId 유지, 마지막 toClassId 채택.
- * - fromClassId === toClassId(원점 복귀)는 제거(커밋 불필요).
+ * - 최초 fromClassId 유지, 마지막 목적지(toClassId·toSlotId·toDays) 채택.
+ * - fromClassId === toClassId(원점 복귀)는 제거(커밋 불필요). ⚠️ 실제 반 id로 비교.
  * 입력 순서를 보존한 배열을 반환한다(결정적).
  */
 export function compressMoves(moves: PendingMove[]): PendingMove[] {
@@ -22,7 +28,10 @@ export function compressMoves(moves: PendingMove[]): PendingMove[] {
   for (const m of moves) {
     const existing = net.get(m.enrollmentId);
     if (existing) {
-      existing.toClassId = m.toClassId; // 출발지는 최초 유지, 목적지만 갱신
+      // 출발지는 최초 유지, 목적지(반·셀·요일)만 마지막 값으로 갱신.
+      existing.toClassId = m.toClassId;
+      existing.toSlotId = m.toSlotId;
+      existing.toDays = m.toDays;
     } else {
       net.set(m.enrollmentId, { ...m });
       order.push(m.enrollmentId);
