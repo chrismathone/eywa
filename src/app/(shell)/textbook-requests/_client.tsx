@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { BookMarked, FileDown, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookMarked, Check, FileDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -15,21 +15,34 @@ import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/
 import { TextbookRequestCardBody } from "@/app/(print)/textbook/[id]/print/textbook-request-card-body";
 import { downloadCardPng } from "@/app/(print)/textbook/[id]/print/download-card";
 
-/** 진행 3단계 배지 — 신청→주문→납부. 글자수가 달라도 고정폭 + 짧은 라벨은 자간으로 크기 통일. */
-function StatusBadge({ row }: { row: TextbookOrderRow }) {
-  const label = row.paid ? "납부 완료" : row.ordered ? "주문됨" : "신청됨";
-  const tone = row.paid
-    ? "bg-primary-soft text-primary"
-    : row.ordered
-      ? "bg-blue-soft text-blue"
-      : "bg-amber-soft/50 text-amber";
-  const short = label.length <= 3; // 신청됨·주문됨(3) → 자간을 넓혀 '납부 완료'(고정폭)와 크기 통일
+// ijw식 3개 독립 체크(등록·납부·주문) — 사무실 표(textbooks-table)와 동일 색·순서. 강사 뷰는 읽기전용
+// (사무실이 /billing에서 토글, 강사는 진행상태만 확인). 체크됨=솔리드 색, 미완료=회색.
+const PROGRESS_CHECKS: { key: "registered" | "paid" | "ordered"; label: string; on: string }[] = [
+  { key: "registered", label: "등록", on: "bg-primary text-primary-foreground border-primary" },
+  { key: "paid", label: "납부", on: "bg-blue text-white border-blue" },
+  { key: "ordered", label: "주문", on: "bg-amber text-white border-amber" },
+];
+
+/** 진행상태(등록·납부·주문) 읽기전용 배지 그룹 — 사무실이 찍은 3개 상태를 그대로 표시. */
+function ProgressChecks({ row }: { row: TextbookOrderRow }) {
   return (
-    <span
-      className={`inline-flex w-[62px] shrink-0 items-center justify-center rounded py-0.5 text-center text-[11px] font-semibold ${tone} ${short ? "tracking-[0.12em] indent-[0.12em]" : ""}`}
-    >
-      {label}
-    </span>
+    <div className="flex shrink-0 items-center gap-1">
+      {PROGRESS_CHECKS.map((c) => {
+        const on = row[c.key];
+        return (
+          <span
+            key={c.key}
+            title={on ? `${c.label} 완료` : `${c.label} 대기`}
+            className={`inline-flex w-[40px] shrink-0 items-center justify-center gap-0.5 rounded-sm border py-0.5 text-[11px] font-medium ${
+              on ? c.on : "border-line text-text-faint"
+            }`}
+          >
+            {on ? <Check className="size-3" strokeWidth={2.5} /> : null}
+            {c.label}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -115,7 +128,7 @@ function RequestRow({
         </div>
         {err ? <div className="text-danger mt-0.5 text-[12px]">{err}</div> : null}
       </div>
-      <StatusBadge row={row} />
+      <ProgressChecks row={row} />
       <button
         type="button"
         onClick={() => onDownload(row)}
