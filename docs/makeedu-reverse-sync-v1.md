@@ -93,6 +93,9 @@
   - **옮길 때**: 옛 PC `-Remove` → 새 PC 실행. **두 PC 동시 워처 금지**(makeedu 이중 로그인).
   - ⚠️ 이 `.ps1`은 **UTF-8 BOM**으로 저장돼야 PS5.1이 한글·기호를 정확히 파싱한다(무BOM이면 파싱 깨짐).
     편집 후 BOM 유지 필요(다른 무BOM 래퍼와 달리 이 파일은 박스문자·기호가 많아 BOM 필수).
+- **담당 PC 상태(웹)**: 연동 면에 "동기화 담당 PC" 카드 — 워처가 매 폴(15초)마다 hostname·last_seen을
+  `makeedu_sync_workers`(0073a)에 심장박동으로 기록 → 온라인(60초 이내)/오프라인·마지막 활동 시각 표시.
+  2대 이상 온라인이면 경고(한 대 권장). 워처 없으면 지정 안내(setup-sync-pc.ps1).
 - **로그**: `D:\tmp\makeedu\watch-requests.log` (워처 + writer 출력 append).
 - **수동 CLI**(동기화 PC):
   - dry-run(제출 없이 폼 값만 확인): `node --env-file=.env.local scripts/_makeedu/push-consultations.cjs --ids=<uuid>`

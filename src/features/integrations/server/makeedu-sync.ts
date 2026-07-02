@@ -74,6 +74,39 @@ export async function getMakeeduSyncRuns(limit = 8): Promise<MakeeduSyncRun[]> {
   }));
 }
 
+// ───────── 동기화 워처 심장박동(0073a) — 어느 PC가 담당·온라인인지 ─────────
+
+export type MakeeduWorker = {
+  hostname: string;
+  lastSeen: string;
+  startedAt: string | null;
+  /** 마지막 활동이 60초 이내면 온라인(워처 폴 15초 × 4 여유). */
+  online: boolean;
+};
+
+/**
+ * 동기화 담당 PC(워처) 목록 + 온라인 여부. 워처가 매 폴(15초)마다 last_seen을 갱신 → 60초 이내면 온라인.
+ * RLS로 현재 테넌트만. 행 없으면 [](= 지정된 PC 없음 → UI가 안내). now는 서버 렌더 시각.
+ */
+export async function getMakeeduSyncWorkers(nowMs: number): Promise<MakeeduWorker[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("makeedu_sync_workers")
+    .select("hostname, last_seen, started_at")
+    .order("last_seen", { ascending: false });
+  return (data ?? []).map((w) => {
+    const lastSeen = w.last_seen as string;
+    return {
+      hostname: w.hostname as string,
+      lastSeen,
+      startedAt: (w.started_at as string | null) ?? null,
+      online: nowMs - new Date(lastSeen).getTime() < 60_000,
+    };
+  });
+}
+
 export type MakeeduAutoSyncStatus = {
   /** GitHub Actions cron 자동 동기화 ON/OFF. 행이 없으면 기본 ON(cron opt-out 모델 — 끄면 cron이 스킵). */
   enabled: boolean;

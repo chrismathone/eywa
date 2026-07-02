@@ -15,14 +15,18 @@
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const postgres = require("postgres");
+const L = require("./lib.cjs");
 
 const POLL_MS = 15_000;
 const HERE = __dirname;
 const REPO = path.resolve(HERE, "..", "..");
 const LOG_DIR = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
 const LOG = path.join(LOG_DIR, "watch-requests.log");
+const HOSTNAME = os.hostname();
+const STARTED_AT = new Date().toISOString(); // 이 워처 프로세스 시작 시각(재시작 감지)
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -87,10 +91,23 @@ async function pendingPushCount() {
   return row ? row.n : 0;
 }
 
+// 심장박동(0073a) — 이 PC가 동기화 담당·살아있음을 매 폴마다 기록 → 웹 연동 면에서 온라인/오프라인 표시.
+// best-effort: 실패해도 요청 처리를 막지 않는다. 테넌트는 시작 시 1회 해석(단일 테넌트 배포).
+let heartbeatTenantId = null;
+async function heartbeat() {
+  if (!heartbeatTenantId) heartbeatTenantId = await L.resolveTenantId(db());
+  await db()`
+    insert into makeedu_sync_workers (tenant_id, hostname, started_at, last_seen)
+    values (${heartbeatTenantId}, ${HOSTNAME}, ${STARTED_AT}, now())
+    on conflict (tenant_id, hostname) do update set last_seen = now(), started_at = excluded.started_at`;
+}
+
 (async () => {
   log(`워처 시작 — repo: ${REPO}, poll: ${POLL_MS / 1000}s`);
   for (;;) {
     try {
+      // 0) 심장박동 — 담당 PC 생존 신호(웹 표시용). best-effort라 실패해도 요청 처리 계속.
+      await heartbeat().catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
       // 1) 정방향 동기화 요청.
       const claimed = await claimPending();
       if (claimed.length) {

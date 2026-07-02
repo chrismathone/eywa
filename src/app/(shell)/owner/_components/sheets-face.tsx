@@ -4,11 +4,13 @@ import {
   getMakeeduAutoSyncStatus,
   getMakeeduSyncRuns,
   getUnpushedIntakeConsultations,
+  getMakeeduSyncWorkers,
 } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
 import { SheetsClient } from "@/app/(shell)/admin/integrations/sheets/_client";
 import { SheetsTargetForm } from "./sheets-target-form";
 import { MakeeduSyncCard } from "./makeedu-sync-card";
+import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 import { MakeeduPushCard } from "./makeedu-push-card";
 
@@ -22,18 +24,23 @@ import { MakeeduPushCard } from "./makeedu-push-card";
  *    서비스계정을 '편집자'로 공유해야 하고, 동기화는 그 시트를 **전체 덮어쓰기**한다.
  */
 export async function SheetsFace({ notifications }: { notifications: NotificationsSettings }) {
-  // 독립 조회 넷 → 병렬(B4).
-  const [status, makeeduStatus, makeeduRuns, pushCandidates] = await Promise.all([
+  // 서버 렌더 시각 — 워처 온라인/상대시각 판정용(RSC는 요청당 1회 실행이라 안정).
+  // eslint-disable-next-line react-hooks/purity -- server component renders once per request
+  const nowMs = Date.now();
+  // 독립 조회 다섯 → 병렬(B4).
+  const [status, makeeduStatus, makeeduRuns, pushCandidates, workers] = await Promise.all([
     getGoogleSheetsStatus(),
     getMakeeduAutoSyncStatus(),
     getMakeeduSyncRuns(),
     getUnpushedIntakeConsultations(),
+    getMakeeduSyncWorkers(nowMs),
   ]);
   const saEmail = getServiceAccountEmail();
   return (
     <div className="w-full space-y-8">
-      {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 최근 실행 이력(0070a) */}
+      {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
       <MakeeduSyncCard status={makeeduStatus} />
+      <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />
       <MakeeduSyncRunsList runs={makeeduRuns} />
       {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
       <MakeeduPushCard candidates={pushCandidates} />
