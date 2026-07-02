@@ -329,6 +329,20 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 인쇄 빈 2페이지 버그 — named page(portrait-doc) 경계가 만든 유령 landscape 페이지 (2026-07-02) — ✅ PDF 실측(픽스=1p/무효화=2p)
+사용자 제보: 지출결의서 인쇄 시 내용은 1페이지인데 **빈 2페이지**가 딸려 나옴. 원인 = CSS **named page 경계**:
+전역 `@page`는 landscape(시간표용), 문서는 `.print-portrait{page:portrait-doc}`인데, **문서(main) 뒤에 body 직계
+in-flow 박스**(sonner 토스터 래퍼 `section[aria-label="Notifications…"]`·TanStack 데브툴 `.tsqd-parent-container` — 둘 다
+position:static, 0높이여도 박스 생성)가 기본(landscape) 페이지 이름을 가져 Chromium이 이름 경계마다 강제 브레이크 →
+**빈 landscape 2페이지**(사용자 스크린샷의 2페이지가 1페이지보다 넓던 이유).
+- **수정**([globals.css](src/app/globals.css) print-portrait 블록): ① `body:has(.print-portrait){page:portrait-doc}` —
+  문서가 세로 인쇄면 **body 전체를 같은 named page로 통일**해 경계 자체를 제거. ② 토스트/데브툴은 인쇄물이 아님 —
+  `section[aria-label^="Notifications"]`·`[data-sonner-toaster]`·`.tsqd-parent-container` print에서 display:none(잔여 박스 생성도 차단).
+  지출결의서뿐 아니라 **모든 print-portrait 표면**(수강료 안내문·교재요청서·회의록·등록상담 인쇄)의 동일 잠복 버그 해소.
+- **검증 = 실제 print-to-PDF**(Playwright headless `page.pdf({preferCSSPageSize})`, 마스터 로그인 후 실 지출결의서):
+  픽스 적용 **1페이지 PORTRAIT** / 픽스만 스타일 주입으로 무효화 **2페이지 [PORTRAIT, LANDSCAPE]** = 인과 확정.
+  ⚠️ 향후 인쇄 페이지수/방향 검증은 이 방식(headless pdf + `/Count`·MediaBox 파싱)이 스크린샷보다 결정적.
+
 ### 로그인 시 랜딩(/) → 역할 홈 자동 폴백 — '로그아웃된 느낌' 해소 (2026-07-02) — ✅ typecheck0/lint0
 사용자 제보: 로그인 상태로 `/`(마케팅 랜딩) 방문 시 랜딩이 떠 **로그아웃된 느낌**([proxy.ts](src/lib/supabase/proxy.ts) 주석에 "client-side redirect to /dashboard can be added later" TODO로 남아있던 것). → 서버 컴포넌트 [(marketing)/page.tsx](<src/app/(marketing)/page.tsx>)에서 `getCurrentUser()`로 세션 확인 후 **[roleHome](src/lib/permissions.ts)** 로 서버 리다이렉트(강사=/onescreen·학생=/my-learning·그 외=/dashboard). 로그인 폼·`requireAccess`와 **같은 roleHome 단일 소스**.
 - **무한루프 방지**: `requireAccess`와 **동일 매트릭스**([getPermMatrix](src/lib/auth/perm-matrix.ts), 테넌트 override 반영)로 계산 + **`home !== "/"` 가드** → 권한 override로 홈이 `/`가 되는 엣지(예: 대시보드 revoke된 뷰어)에선 리다이렉트 스킵 → 랜딩 유지(루프 없음).

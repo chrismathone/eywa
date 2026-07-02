@@ -404,6 +404,19 @@
   .print-portrait {
     page: portrait-doc;
   }
+  /* ⚠️ named page는 "이름이 다른 in-flow 박스 런" 경계마다 강제 페이지 브레이크를 만든다 — 문서(main) 뒤에
+     남는 body 직계 in-flow 박스(sonner 토스터 래퍼 section, 데브툴 컨테이너 등)가 기본(landscape) 페이지
+     이름을 가져 **빈 landscape 2페이지**가 생겼다(지출결의서 실측 2026-07-02). 문서가 print-portrait를
+     쓰는 인쇄에선 body 전체를 같은 named page로 통일해 경계 자체를 제거. */
+  body:has(.print-portrait) {
+    page: portrait-doc;
+  }
+  /* 토스트·쿼리 데브툴은 인쇄물이 아님 — 모든 인쇄 표면에서 숨김(0높이 in-flow 박스 생성도 차단). */
+  section[aria-label^="Notifications"],
+  [data-sonner-toaster],
+  .tsqd-parent-container {
+    display: none !important;
+  }
   /* ⚠️ 셸/임베드는 h-screen + overflow로 화면을 잡는다 → 인쇄 시 그대로면 문서가 "한 화면 높이"로
      잘려 2페이지째(예: 환불 규정)가 통째로 사라진다. 인쇄에선 높이/overflow 제약을 풀어 자연 흐름. */
   html,
