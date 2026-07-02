@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { Pagination } from "@/components/pagination";
@@ -93,10 +93,18 @@ export default async function StaffPage({
 
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
   const [rawAll, superAdminIds] = await Promise.all([getStaffList(), getSuperAdminIds()]);
-  const all = rawAll.map((s) => ({
-    ...s,
-    systemRole: displayRoleFor(s.id, s.systemRole, superAdminIds),
-  }));
+  const all = rawAll
+    .map((s) => ({
+      ...s,
+      systemRole: displayRoleFor(s.id, s.systemRole, superAdminIds),
+    }))
+    // 배지뿐 아니라 정렬도 위장 role 기준으로 — 안 그러면 super_admin이 실제 role(master)로
+    // 맨 위(owner 위)에 뜨는데 배지는 '관리자'라 어긋난다(위장 role로 재정렬 → admin 그룹 이름순).
+    .sort(
+      (a, b) =>
+        ROLE_HIERARCHY[a.systemRole] - ROLE_HIERARCHY[b.systemRole] ||
+        a.displayName.localeCompare(b.displayName, "ko"),
+    );
   let staff = all;
   if (q) {
     const term = q.toLowerCase();
