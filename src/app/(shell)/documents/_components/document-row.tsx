@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
 import { deleteDocument, toggleDocumentPin } from "@/features/documents/server/actions";
-import { downloadDocument, previewDocument } from "@/features/documents/open-file";
-import type { DocumentKind } from "@/features/documents/categories";
+import { downloadDocument } from "@/features/documents/open-file";
+import { isPreviewableType, type DocumentKind } from "@/features/documents/categories";
 
 export type DocumentRowData = {
   id: string;
@@ -87,15 +87,14 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.5} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
           {doc.kind === "file" ? (
-            <button
-              type="button"
-              onClick={() => void run(() => previewDocument(doc.id, doc.typeLabel))}
-              disabled={busy}
-              className="text-foreground hover:text-primary min-w-0 truncate text-left font-medium hover:underline"
-              title={`${doc.title} — 클릭하여 미리보기`}
+            // 내부 창 미리보기 — 클릭 시 앱 플로팅 창(드릴인)으로 열림. 미지원 형식도 창에서 "불가" 안내 + 다운로드.
+            <WindowLink
+              href={`/documents/${doc.id}/preview`}
+              title={doc.title}
+              className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
             >
               {doc.title}
-            </button>
+            </WindowLink>
           ) : (
             <WindowLink
               href={`/documents/${doc.id}`}
@@ -105,6 +104,11 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
               {doc.title}
             </WindowLink>
           )}
+          {doc.kind === "file" && isPreviewableType(doc.typeLabel) ? (
+            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap">
+              미리보기
+            </span>
+          ) : null}
         </div>
         {doc.description ? <p className="text-text-faint mt-0.5 truncate pl-6 text-xs">{doc.description}</p> : null}
       </td>

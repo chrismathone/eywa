@@ -6,11 +6,11 @@ import { AlertCircle, Download, Eye, Loader2, Pencil, Save } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { updateDocument } from "@/features/documents/server/actions";
-import { downloadDocument, previewDocument } from "@/features/documents/open-file";
+import { downloadDocument } from "@/features/documents/open-file";
+import { WindowLink } from "@/components/workspace/window-link";
 import {
   CATEGORY_LABEL,
   DOCUMENT_CATEGORIES,
-  fileTypeLabel,
   type DocumentCategory,
   type DocumentKind,
 } from "@/features/documents/categories";
@@ -43,8 +43,6 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
       router.refresh();
     }
   }, [state, router]);
-
-  const typeLabel = fileTypeLabel(doc.kind, doc.fileName, null);
 
   async function run(fn: () => Promise<void>) {
     if (busy) return;
@@ -104,7 +102,8 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
               다운로드
             </Button>
-            <Button variant="outline" onClick={() => void run(() => previewDocument(doc.id, typeLabel))} disabled={busy}>
+            {/* 내부 창 미리보기(드릴인) — 미지원 형식도 창에서 안내 */}
+            <Button variant="outline" render={<WindowLink href={`/documents/${doc.id}/preview`} title={doc.title} />}>
               <Eye className="size-4" /> 미리보기
             </Button>
           </>

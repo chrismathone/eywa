@@ -34,6 +34,11 @@ export function fileTypeLabel(kind: DocumentKind, fileName: string | null, mimeT
   return ext ? ext.toUpperCase() : "파일";
 }
 
+/** 웹 미리보기 가능 유형 — 이미지/PDF=브라우저 네이티브, Word/Excel=MS Office 온라인 뷰어. HWP·기타=불가. */
+export function isPreviewableType(typeLabel: string): boolean {
+  return typeLabel === "이미지" || typeLabel === "PDF" || typeLabel === "Word" || typeLabel === "Excel";
+}
+
 /** 바이트 → 탐색기식 크기 표기("12.3KB"·"1.2MB"). */
 export function formatFileSize(bytes: number | null): string {
   if (!bytes || bytes <= 0) return "—";
