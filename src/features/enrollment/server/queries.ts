@@ -244,6 +244,19 @@ export type FullConsultationFields = {
   consultationDate: string | null; // consulted_at → 상담일(date)
 };
 
+/** 등록상담 녹음 행(consultation_recordings, 0068a) — 여러 상담사가 각자 추가한 녹음. */
+export type ConsultationRecordingRow = {
+  id: string;
+  createdAt: string;
+  sizeBytes: number | null;
+  durationSec: number | null;
+  status: ConsultationProcessingStatus;
+  error: string | null;
+  transcription: string | null;
+  speakerLabels: { speaker: string; text: string }[] | null;
+  recordedByName: string | null;
+};
+
 export type ConsultationDetail = ConsultationListRow & {
   parentName: string | null;
   learningHistory: LearningHistory | null;
@@ -256,6 +269,8 @@ export type ConsultationDetail = ConsultationListRow & {
   speakerRoles: Record<string, string> | null;
   processingError: string | null;
   audioDurationSec: number | null;
+  /** 녹음 행들(시간순) — 상세의 녹음 섹션·수정 폼 "등록된 녹음 N개" 표시가 소비. */
+  recordings: ConsultationRecordingRow[];
   recommendedClasses: { id: string; className: string; subject: string }[];
   studentId: string | null;
   /** makeedu counselSeq — 있으면 makeedu 원본 상세 페이지로 바로 가는 링크를 표시. */
@@ -287,16 +302,47 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
 
   if (!c) return null;
 
-  const { data: aiList } = await supabase
-    .from("consultation_ai_analysis")
-    .select(
-      `id, model_version, diagnosis, learning_plan, print_payload, recommended_class_ids, generated_at, report_edited_by, report_edited_at`,
-    )
-    .eq("consultation_id", id)
-    .order("generated_at", { ascending: false })
-    .limit(1);
+  // AI 분석 + 녹음 행은 서로 독립 → 병렬(B4). 녹음은 시간순(=녹음 1·2·… 번호와 일치).
+  const [{ data: aiList }, { data: recRows }] = await Promise.all([
+    supabase
+      .from("consultation_ai_analysis")
+      .select(
+        `id, model_version, diagnosis, learning_plan, print_payload, recommended_class_ids, generated_at, report_edited_by, report_edited_at`,
+      )
+      .eq("consultation_id", id)
+      .order("generated_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("consultation_recordings")
+      .select(
+        `id, created_at, audio_size_bytes, audio_duration_sec, transcription, speaker_labels,
+         processing_status, processing_error, recordedBy:recorded_by ( display_name )`,
+      )
+      .eq("consultation_id", id)
+      .order("created_at", { ascending: true }),
+  ]);
 
   const ai = aiList?.[0] ?? null;
+
+  const recordings: ConsultationRecordingRow[] = (recRows ?? []).map((r) => {
+    const by = (Array.isArray(r.recordedBy) ? r.recordedBy[0] : r.recordedBy) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: r.id,
+      createdAt: r.created_at,
+      sizeBytes: r.audio_size_bytes,
+      durationSec: r.audio_duration_sec,
+      status: r.processing_status as ConsultationProcessingStatus,
+      error: r.processing_error,
+      transcription: r.transcription,
+      // 비배열/null이면 null(TranscriptSection 방어 — 상담 행 speaker_labels와 동일 규칙).
+      speakerLabels: Array.isArray(r.speaker_labels)
+        ? (r.speaker_labels as { speaker: string; text: string }[])
+        : null,
+      recordedByName: by?.display_name ?? null,
+    };
+  });
 
   let recommendedClasses: { id: string; className: string; subject: string }[] = [];
   const recommendedIds = (ai?.recommended_class_ids ?? []) as string[];
@@ -362,6 +408,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     speakerRoles,
     processingError: c.processing_error,
     audioDurationSec: c.audio_duration_sec,
+    recordings,
     audioReport,
     aiFormSuggestions,
     aiAnalysis: ai

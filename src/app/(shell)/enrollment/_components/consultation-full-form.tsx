@@ -41,6 +41,16 @@ import {
 const input =
   "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
+// 기존 녹음 "마지막 M/D HH:mm" 라벨 — KST 고정(서버/클라 하이드레이션 일치).
+const KST_REC_LABEL = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
 export type ConsultationFormInitial = {
   id?: string;
   prospectName?: string | null;
@@ -89,11 +99,14 @@ export function ConsultationFullForm({
   mode,
   initial,
   aiSuggestedParentRequest,
+  existingRecordings = [],
 }: {
   mode: "create" | "edit";
   initial?: ConsultationFormInitial;
   /** 녹음 분석이 추출한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전. 있으면 '✨ AI 제안'으로 비파괴 제시. */
   aiSuggestedParentRequest?: string | null;
+  /** 이미 등록된 녹음 행(수정 모드) — 새 녹음이 "덮어쓰기"가 아니라 "추가"임을 명시하는 표시용. */
+  existingRecordings?: { createdAt: string; status: string }[];
 }) {
   const subjects = useSubjectMaps();
   const gradeLevels = useGradeLevels();
@@ -243,19 +256,42 @@ export function ConsultationFullForm({
       {editScope ? <EditingBanner scope={editScope} /> : null}
 
       {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
-          수정: QR 접수건을 상담사가 상담하며 녹음 → 첨부 시 전사·분석 재실행. */}
-      <div className="border-primary/25 bg-primary/5 space-y-2 rounded-lg border p-3">
+          수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
+      <div className="border-primary/25 bg-primary/5 space-y-2.5 rounded-lg border p-3">
+        {!isCreate && existingRecordings.length > 0 ? (
+          <p className="text-text-dim flex items-center gap-1.5 text-[11px]">
+            <span className="text-[13px] leading-none">🎙️</span>
+            이미 등록된 녹음 <span className="num text-foreground font-semibold">{existingRecordings.length}개</span>
+            {" "}(마지막 {KST_REC_LABEL.format(new Date(existingRecordings[existingRecordings.length - 1].createdAt))})
+            — 새 녹음은 기존 녹음을 지우지 않고 <span className="text-foreground font-semibold">추가</span>됩니다.
+          </p>
+        ) : null}
         <AudioRecorderField
           file={audioFile}
           onChange={setAudioFile}
           onRecordingChange={setRecordingActive}
           disabled={busy}
         />
-        <p className="text-text-dim text-[11px]">
-          {isCreate
-            ? "녹음하거나 음성 파일을 올리면 저장 시 자동으로 한국어 전사 + 13섹션 AI 분석을 실행합니다(입력하신 내용은 보존)."
-            : "상담을 녹음하거나 음성 파일을 올린 뒤 저장하면 전사 + AI 분석을 새로 실행합니다(입력하신 내용은 보존). 접수만 된 상담을 직접 상담하며 녹음할 때 사용하세요."}
-        </p>
+        {/* 안내 — 흐린 11px 한 줄이라 잘 안 보이던 것 → 아이콘 + 핵심 강조 + 12px로 또렷하게. */}
+        <div className="border-primary/20 bg-card/70 flex items-start gap-2 rounded-md border px-2.5 py-2">
+          <Sparkles className="text-primary mt-0.5 size-4 shrink-0" />
+          <p className="text-foreground text-xs leading-relaxed">
+            {isCreate ? (
+              <>
+                <span className="text-primary font-bold">저장하면 한국어 전사 + 13섹션 AI 분석이 자동 실행</span>
+                됩니다. <span className="text-text-dim">입력하신 내용은 그대로 보존됩니다.</span>
+              </>
+            ) : (
+              <>
+                <span className="text-primary font-bold">
+                  저장하면 이 녹음이 추가되고 전사 + AI 분석이 전체 녹음 기준으로 다시 실행
+                </span>
+                됩니다. 접수만 된 상담을 직접 상담하며 녹음하거나, 추가 상담을 이어 붙일 때 쓰세요.{" "}
+                <span className="text-text-dim">기존 녹음·입력하신 내용은 그대로 보존됩니다.</span>
+              </>
+            )}
+          </p>
+        </div>
       </div>
 
       {/* 상단 탭바 — overflow-y-hidden: overflow-x-auto가 버튼 -mb-px로 세로 1px 넘쳐 세로 스크롤바가

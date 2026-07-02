@@ -17,6 +17,8 @@ import {
   type CurrentConsultationValues,
   type ExtractedConsultationForm,
 } from "@/features/enrollment/form-fill";
+import { combineConsultationTranscripts } from "@/features/enrollment/transcripts";
+import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** 상수시간 문자열 비교 — 타이밍 공격 방지. 길이 다르면 즉시 false. */
@@ -110,6 +112,38 @@ export async function POST(req: Request) {
     return handleMeeting(admin, transcriptId, meeting);
   }
 
+  // 등록상담 녹음 행(consultation_recordings) — 신규 경로(녹음=여러 행). 레거시 단일 컬럼보다 먼저 매칭.
+  const { data: recording } = await admin
+    .from("consultation_recordings")
+    .select(
+      "id, processing_status, created_at, consultation:consultation_id (id, tenant_id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, processing_status)",
+    )
+    .eq("assemblyai_transcript_id", transcriptId)
+    .maybeSingle();
+
+  if (recording?.consultation) {
+    // PostgREST 단일 FK 임베드는 객체를 주지만 타입은 배열 유니온이라 단언.
+    const rc = recording.consultation as unknown as ConsultationContext & {
+      processing_status: string;
+    };
+    if (recording.processing_status === "completed") {
+      // 전사는 끝났는데 상담 미러가 미완이면 = 분석 단계에서 죽은 것(함수 타임아웃/크래시).
+      // replay를 분석 복구로 취급 — 완료 녹음 합본으로 분석만 재실행(전사 재fetch·행 재기록 불요).
+      // (적대리뷰 #2: 레거시 경로는 replay로 회복됐던 것의 회귀 방지.)
+      if (rc.processing_status === "analyzing" || rc.processing_status === "transcribing") {
+        return recoverConsultationAnalysis(admin, rc);
+      }
+      return NextResponse.json({ ok: true, skipped: "already completed" });
+    }
+    return handleConsultationRecording(
+      admin,
+      transcriptId,
+      { id: recording.id, createdAt: recording.created_at as string },
+      rc,
+    );
+  }
+
+  // 레거시 경로 — 배포 전 in-flight(transcript id가 상담 행에 직접 붙은) 건 처리용 폴백.
   const { data: consult } = await admin
     .from("enrollment_consultations")
     .select(
@@ -265,18 +299,213 @@ async function handleMeeting(
 
 // ─────────────────────────── consultation flow ───────────────────────────
 
+/** 상담 컨텍스트 — 분석 프롬프트에 들어가는 상담 행 필드(레거시 단일 컬럼·녹음 행 경로 공용). */
+type ConsultationContext = {
+  id: string;
+  tenant_id: string;
+  prospect_name: string;
+  prospect_grade: string | null;
+  prospect_school: string | null;
+  parent_name: string | null;
+  parent_phone: string | null;
+};
+
+/**
+ * 녹음 행 실패 처리 — 행에 실패 기록 후, 상담 미러는 syncMirrorAfterRecordingFailure로 동기화:
+ * 완료 녹음이 하나라도 있으면 미러 completed 복원(상담 전체가 '처리 실패'로 오표시되는 것 방지 —
+ * 실패는 그 녹음 행의 상태칩·에러로만), 없으면 레거시처럼 failed + 에러(적대리뷰 #9).
+ */
+async function failRecording(
+  admin: SupabaseClient,
+  recordingId: string,
+  consultationId: string,
+  message: string,
+  partialTranscript?: string,
+) {
+  await admin
+    .from("consultation_recordings")
+    .update({
+      processing_status: "failed",
+      processing_error: message,
+      ...(partialTranscript ? { transcription: partialTranscript } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", recordingId);
+  await syncMirrorAfterRecordingFailure(admin, consultationId, message);
+}
+
+/**
+ * 등록상담 녹음 행(consultation_recordings) 완료 처리 — 신규 경로(녹음=여러 행, 2026-07-02).
+ * 전사를 녹음 행에 저장(행 상태 completed)한 뒤, 이 상담의 **완료된 전체 녹음 전사 합본**으로
+ * 13섹션 분석·폼 보강을 재실행한다 → 녹음이 추가될 때마다 분석이 전체 맥락으로 갱신(추가 분석).
+ * 상담 행 단일 컬럼은 미러: transcription=합본, speaker_labels=단일 녹음일 때만, 상태=진행 상태.
+ */
+/** 완료 녹음 행 타입(합본용 최소 필드). */
+type DoneRecordingRow = {
+  id: string;
+  transcription: string | null;
+  speaker_labels: unknown;
+  created_at: string;
+};
+
+/** 완료 녹음 행들 → 합본 입력. */
+function toCombineInputs(rows: DoneRecordingRow[]) {
+  return rows.map((r) => ({
+    utterances: Array.isArray(r.speaker_labels) ? (r.speaker_labels as SpeakerUtterance[]) : null,
+    plainText: r.transcription,
+    recordedAt: r.created_at,
+  }));
+}
+
+/**
+ * 분석 복구 — 녹음 행은 completed인데 상담 미러가 analyzing/transcribing에 멈춘 경우
+ * (분석 단계에서 함수 타임아웃/크래시 후 AssemblyAI가 웹훅을 재전송). 저장된 완료 전사 합본으로
+ * 분석만 재실행한다(전사 재fetch·행 재기록 불요). 적대리뷰 #2.
+ */
+async function recoverConsultationAnalysis(admin: SupabaseClient, consult: ConsultationContext) {
+  const { data: doneRecs } = await admin
+    .from("consultation_recordings")
+    .select("id, transcription, speaker_labels, created_at")
+    .eq("consultation_id", consult.id)
+    .eq("processing_status", "completed")
+    .order("created_at", { ascending: true });
+  const rows = (doneRecs ?? []) as DoneRecordingRow[];
+  if (rows.length === 0) return NextResponse.json({ ok: true, skipped: "no completed recordings" });
+
+  const inputs = toCombineInputs(rows);
+  const combined = combineConsultationTranscripts(inputs);
+  const multi =
+    inputs.filter((i) => (i.utterances?.length ?? 0) > 0 || (i.plainText ?? "").trim().length > 0)
+      .length > 1;
+
+  await runWrite(
+    "consultation.analyzing",
+    consult.id,
+    admin
+      .from("enrollment_consultations")
+      .update({
+        transcription: combined,
+        processing_status: "analyzing",
+        processing_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", consult.id),
+  );
+
+  return analyzeConsultationAndPersist(admin, consult, combined, {
+    multi,
+    analyzedIds: rows.map((r) => r.id),
+  });
+}
+
+async function handleConsultationRecording(
+  admin: SupabaseClient,
+  transcriptId: string,
+  rec: { id: string; createdAt: string },
+  consult: ConsultationContext,
+) {
+  let transcript;
+  try {
+    transcript = await getTranscript(transcriptId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await failRecording(admin, rec.id, consult.id, localizeTranscriptionError(msg));
+    return NextResponse.json({ ok: true });
+  }
+
+  if (transcript.status === "error" || !transcript.text) {
+    await failRecording(
+      admin,
+      rec.id,
+      consult.id,
+      localizeTranscriptionError(transcript.error ?? "전사 결과가 비어있습니다"),
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  const cleanedText = transcript.text.replace(/\s/g, "");
+  if (cleanedText.length < 30 || (transcript.audio_duration ?? 0) < 5) {
+    await failRecording(
+      admin,
+      rec.id,
+      consult.id,
+      "녹음이 너무 짧거나 음성이 인식되지 않았습니다",
+      transcript.text,
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // 녹음 행 = 전사 확정 시점에 completed(분석은 상담 레벨 상태로 추적).
+  await runWrite(
+    "consultation.recording.completed",
+    rec.id,
+    admin
+      .from("consultation_recordings")
+      .update({
+        transcription: transcript.text,
+        speaker_labels: transcript.utterances ?? [],
+        audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+        processing_status: "completed",
+        processing_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", rec.id),
+  );
+
+  // 완료된 전체 녹음 합본(시간순) — 1개면 레거시와 동일 포맷(프롬프트 무변).
+  // ⚠️ 현재 녹음은 DB read-back이 아니라 **in-memory 전사를 직접 병합** — 바로 위 completed write가
+  // 실패(runWrite는 로깅만)해도 합본에서 이 전사가 빠지지 않는다(적대리뷰 #3).
+  const { data: doneRecs } = await admin
+    .from("consultation_recordings")
+    .select("id, transcription, speaker_labels, created_at")
+    .eq("consultation_id", consult.id)
+    .eq("processing_status", "completed")
+    .neq("id", rec.id)
+    .order("created_at", { ascending: true });
+  const rows: DoneRecordingRow[] = [
+    ...((doneRecs ?? []) as DoneRecordingRow[]),
+    {
+      id: rec.id,
+      transcription: transcript.text,
+      speaker_labels: transcript.utterances ?? [],
+      created_at: rec.createdAt,
+    },
+  ].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const inputs = toCombineInputs(rows);
+  const combined = combineConsultationTranscripts(inputs);
+  const nonEmptyCount = inputs.filter(
+    (i) => (i.utterances?.length ?? 0) > 0 || (i.plainText ?? "").trim().length > 0,
+  ).length;
+  const multi = nonEmptyCount > 1;
+
+  // 상담 행 미러 — transcription=합본(전체 맥락). 다중 녹음이면 단일 speaker_labels는 비워
+  // 합본 텍스트와 어긋난 stale 화자 라벨 노출을 방지(녹음별 라벨은 각 행에 보존). 상태는 analyzing.
+  await runWrite(
+    "consultation.analyzing",
+    consult.id,
+    admin
+      .from("enrollment_consultations")
+      .update({
+        transcription: combined,
+        speaker_labels: multi ? [] : (transcript.utterances ?? []),
+        audio_duration_sec: Math.round(transcript.audio_duration ?? 0),
+        processing_status: "analyzing",
+        processing_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", consult.id),
+  );
+
+  return analyzeConsultationAndPersist(admin, consult, combined, {
+    multi,
+    analyzedIds: rows.map((r) => r.id),
+  });
+}
+
 async function handleConsultation(
   admin: SupabaseClient,
   transcriptId: string,
-  consult: {
-    id: string;
-    tenant_id: string;
-    prospect_name: string;
-    prospect_grade: string | null;
-    prospect_school: string | null;
-    parent_name: string | null;
-    parent_phone: string | null;
-  },
+  consult: ConsultationContext,
 ) {
   let transcript;
   try {
@@ -335,6 +564,27 @@ async function handleConsultation(
         .join("\n")
     : transcript.text;
 
+  return analyzeConsultationAndPersist(admin, consult, formatted, { multi: false });
+}
+
+/**
+ * 13섹션 심층분석 + 폼 추출 + consultation_ai_analysis upsert + 빈 필드 자동보강 — 공유 tail.
+ * 레거시 단일 컬럼 경로(handleConsultation)와 녹음 행 경로(handleConsultationRecording)가 공유한다.
+ * formatted = 단일 전사 또는 다중 녹음 합본(《녹음 n》 헤더). multi면 프롬프트에 회차 안내 한 줄 추가
+ * (단일이면 레거시와 바이트 동일 프롬프트 — 기존 품질 보존).
+ *
+ * opts.analyzedIds(녹음 행 경로만): 이 분석의 입력이 된 완료 녹음 id 집합 — 분석(수십 초) 후
+ * 쓰기 직전 **최신성 재확인**에 쓴다. 그 사이 다른 녹음이 completed로 늘었으면(더 완전한 합본을
+ * 든 웹훅이 존재) 이 분석의 모든 쓰기를 skip — 부분 합본이 전체 합본을 덮는 fan-in 레이스 차단
+ * (적대리뷰 #1/#5). 진행 중 녹음이 남아 있으면 미러를 completed 대신 transcribing으로 남겨
+ * StatusWatcher가 계속 살아 있게 한다(적대리뷰 #8).
+ */
+async function analyzeConsultationAndPersist(
+  admin: SupabaseClient,
+  consult: ConsultationContext,
+  formatted: string,
+  opts: { multi: boolean; analyzedIds?: string[] },
+) {
   let extracted: ExtractedConsultationForm | null = null;
 
   // 13섹션 심층분석 + 폼 필드 추출을 병렬 실행(ijw processRegistrationRecording 패턴).
@@ -400,6 +650,13 @@ async function handleConsultation(
             "",
             "추측 금지. 전사에 안 나온 정보는 빈 문자열 또는 null.",
             "JSON만 출력. 마크다운 코드 블록 없이.",
+            // 다중 녹음 합본일 때만 회차 안내(단일이면 레거시와 동일 프롬프트).
+            ...(opts.multi
+              ? [
+                  "",
+                  "※ 전사가 《녹음 n》 헤더로 나뉘어 있으면 같은 학생에 대해 여러 차례 진행된 상담입니다 — 전체 회차를 종합해 분석하세요. 화자 라벨(A/B)은 녹음마다 독립이므로 speakerRoles는 가장 최근 녹음 기준으로만 추론하세요.",
+                ]
+              : []),
       ].join("\n"),
     }),
     extractConsultationForm(formatted, {
@@ -409,9 +666,36 @@ async function handleConsultation(
     }),
   ]);
 
+  // ── 최신성/동시성 재확인(녹음 행 경로만, 적대리뷰 #1/#5/#8) ──
+  // 분석은 수십 초 걸린다 — 그 사이 다른 녹음이 completed로 늘었으면 그 웹훅이 더 완전한 합본을
+  // 들고 있으므로 이 분석의 쓰기를 전부 skip(부분 합본이 전체 합본을 last-write-wins로 덮는 것 방지).
+  // 아직 전사 중(uploaded/transcribing)인 녹음이 남았으면 미러를 completed로 닫지 않는다(#8).
+  let inFlightRemains = false;
+  if (opts.analyzedIds) {
+    const analyzed = new Set(opts.analyzedIds);
+    const { data: recsNow } = await admin
+      .from("consultation_recordings")
+      .select("id, processing_status")
+      .eq("consultation_id", consult.id);
+    const hasNewerCompleted = (recsNow ?? []).some(
+      (r) => r.processing_status === "completed" && !analyzed.has(r.id),
+    );
+    if (hasNewerCompleted) {
+      return NextResponse.json({ ok: true, skipped: "stale analysis snapshot" });
+    }
+    inFlightRemains = (recsNow ?? []).some(
+      (r) => r.processing_status === "uploaded" || r.processing_status === "transcribing",
+    );
+  }
+
   if (analysisRes.status === "rejected") {
     const e = analysisRes.reason;
     const msg = e instanceof Error ? e.message : String(e);
+    // 다른 녹음이 아직 전사 중이면 failed로 덮지 않는다 — 그 녹음의 완료가 곧 재분석하므로
+    // 일시 실패를 상담 전체 실패로 오표시하지 않음(다 실패로 끝나면 그 웹훅이 failed 기록).
+    if (inFlightRemains) {
+      return NextResponse.json({ ok: true, skipped: "analysis failed, newer recording in flight" });
+    }
     await admin
       .from("enrollment_consultations")
       .update({ processing_status: "failed", processing_error: `AI 분석 실패: ${msg}` })
@@ -476,11 +760,22 @@ async function handleConsultation(
     ),
   );
 
+  // outcome 회귀 방지(적대리뷰 #4) — 등록완료(enrolled)·거절(declined)·노쇼(no_show) 등 종결 상태의
+  // 상담에 녹음을 추가해도 칸반이 'AI 완료'로 되돌아가지 않는다(초기 단계일 때만 ai_done 승격).
+  const { data: outcomeRow } = await admin
+    .from("enrollment_consultations")
+    .select("outcome")
+    .eq("id", consult.id)
+    .maybeSingle();
+  const TERMINAL_OUTCOMES = new Set(["enrolled", "declined", "no_show"]);
+  const keepOutcome = !!outcomeRow && TERMINAL_OUTCOMES.has(outcomeRow.outcome as string);
+
   // Auto-fill — 빈 필드만 채운다(상담사 수기 입력 절대 안 덮어씀).
+  // 진행 중 녹음이 남아 있으면 completed 대신 transcribing 유지(#8 — StatusWatcher 생존).
   const patch: Record<string, unknown> = {
-    processing_status: "completed",
+    processing_status: inFlightRemains ? "transcribing" : "completed",
     processing_error: null,
-    outcome: "ai_done",
+    ...(keepOutcome ? {} : { outcome: "ai_done" }),
   };
   // (1) 13섹션 분석의 extracted 4필드 — 기본 baseline(폼 추출 실패 시에도 동작).
   if (!consult.prospect_grade && report.extracted.grade) patch.prospect_grade = report.extracted.grade;

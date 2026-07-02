@@ -19,10 +19,13 @@ export function TranscriptSection({
   utterances,
   speakerRoles,
   plainText,
+  frameless = false,
 }: {
   utterances: TranscriptUtterance[] | null;
   speakerRoles: Record<string, string> | null;
   plainText: string | null;
+  /** 부모가 이미 카드(테두리 박스)일 때 true — 자체 테두리·라운드를 빼 이중 박스 방지(등록상담 녹음 행). */
+  frameless?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -33,7 +36,11 @@ export function TranscriptSection({
   const rest = count - rows.length;
 
   return (
-    <section className="border-line bg-card overflow-hidden rounded-md border">
+    <section
+      className={
+        frameless ? "overflow-hidden" : "border-line bg-card overflow-hidden rounded-md border"
+      }
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

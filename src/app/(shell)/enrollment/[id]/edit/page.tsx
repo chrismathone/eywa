@@ -28,6 +28,7 @@ export default async function EditEnrollmentPage({
       <ConsultationFullForm
         mode="edit"
         aiSuggestedParentRequest={c.aiFormSuggestions?.parentRequest ?? null}
+        existingRecordings={c.recordings.map((r) => ({ createdAt: r.createdAt, status: r.status }))}
         initial={{
           id: c.id,
           prospectName: c.prospectName,

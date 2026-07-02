@@ -20,6 +20,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
+import { RecordingsSection } from "./recordings-section";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
 import { ConsultationStatusWatcher } from "./status-watcher";
@@ -377,7 +378,19 @@ export default async function EnrollmentDetailPage({
           </Card>
         ) : null}
 
-        {consult.transcription || (consult.speakerLabels?.length ?? 0) > 0 ? (
+        {consult.recordings.length > 0 ? (
+          // 녹음 = 여러 행(0068a) — 행마다 메타·상태·전사. speakerRoles는 **완료 녹음이 1개일 때만**
+          // (웹훅 multi 판정과 동일 기준 — 실패 행이 껴도 유일한 유효 전사의 역할 라벨이 살아있게).
+          <RecordingsSection
+            recordings={consult.recordings}
+            speakerRoles={
+              consult.recordings.filter((r) => r.status === "completed").length === 1
+                ? consult.speakerRoles
+                : null
+            }
+          />
+        ) : consult.transcription || (consult.speakerLabels?.length ?? 0) > 0 ? (
+          // 레거시 폴백 — 녹음 행이 없는 옛 데이터(단일 컬럼만 채워진 경우).
           <TranscriptSection
             utterances={consult.speakerLabels}
             speakerRoles={consult.speakerRoles}

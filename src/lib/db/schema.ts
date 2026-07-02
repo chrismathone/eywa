@@ -707,6 +707,42 @@ export const consultationAiAnalysis = pgTable(
   (t) => [uniqueIndex("ai_consultation_model_idx").on(t.consultationId, t.modelVersion)],
 );
 
+// === consultation_recordings (등록상담 녹음 — 여러 행, 0068a 손수 alpha) ===
+// 여러 상담사가 같은 등록상담에 각자 녹음/업로드를 추가한다(사용자 결정 2026-07-02).
+// enrollment_consultations의 단일 오디오 컬럼은 "최신 녹음 미러"로 유지(레거시 소비처 무회귀),
+// 13섹션 분석은 녹음 완료 시마다 완료된 전체 녹음 전사 합본으로 재생성(웹훅).
+export const consultationRecordings = pgTable(
+  "consultation_recordings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    consultationId: uuid("consultation_id")
+      .notNull()
+      .references(() => enrollmentConsultations.id, { onDelete: "cascade" }),
+    audioPath: text("audio_path").notNull(),
+    audioSizeBytes: integer("audio_size_bytes"),
+    audioDurationSec: integer("audio_duration_sec"),
+    transcription: text("transcription"),
+    speakerLabels: jsonb("speaker_labels"),
+    processingStatus: consultationProcessingStatusEnum("processing_status")
+      .notNull()
+      .default("uploaded"),
+    processingError: text("processing_error"),
+    assemblyaiTranscriptId: text("assemblyai_transcript_id"),
+    // 누가 녹음/업로드했나(여러 상담사 구분)
+    recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("cr_consultation_idx").on(t.consultationId, t.createdAt),
+    index("cr_assemblyai_transcript_idx").on(t.assemblyaiTranscriptId),
+    index("cr_tenant_idx").on(t.tenantId),
+  ],
+);
+
 // === student_consultations (재원생 상담 기록) ===
 // 카테고리: 일반(general), 학습/성적(academic), 정서/심리(emotional), 진로(career), 교우관계(social), 기타(other)
 // 대상: 학부모(parent) / 학생(student) / 학부모+학생(both)

@@ -17,7 +17,14 @@ export const dynamic = "force-dynamic";
 
 const STUCK_STATES = ["uploaded", "transcribing", "analyzing"];
 const STUCK_MINUTES = 30;
-const TABLES = ["meeting_minutes", "enrollment_consultations", "student_consultations"] as const;
+// consultation_recordings: 등록상담 녹음 행(0068a) — 상담 행 미러와 별개로 행 자체도 회수해야
+// 상세의 녹음 행 상태칩이 영구 스피너로 남지 않는다(updated_at은 제출/전이 시 명시 세팅됨).
+const TABLES = [
+  "meeting_minutes",
+  "enrollment_consultations",
+  "student_consultations",
+  "consultation_recordings",
+] as const;
 const STUCK_ERROR = "전사 시간 초과(웹훅 미수신). 다시 시도하세요.";
 
 export async function GET(req: Request) {

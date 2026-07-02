@@ -19,6 +19,7 @@ import {
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
+import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -180,8 +181,9 @@ export async function createEnrollmentConsultation(
 }
 
 /**
- * 녹음 동반 등록상담 생성 — 구조화 필드(buildConsultationRow)로 행을 만들고 음성을 첨부한 뒤
- * AssemblyAI 전사를 시작한다(startConsultationFromAudio와 동일 파이프라인, 단 풀 폼 필드 포함).
+ * 녹음 동반 등록상담 생성 — 구조화 필드(buildConsultationRow)로 행을 만들고 녹음 행을 추가한 뒤
+ * AssemblyAI 전사를 시작한다. (옛 오디오 전용 액션 startConsultationFromAudio는 통합 폼 전환으로
+ * 호출처 0이 되어 삭제 — 2026-07-02, 녹음=여러 행 전환과 함께.)
  * 웹훅이 전사 완료 후 13섹션 분석 + buildFormPatch(빈 필드만 보강)를 수행 → 수기 입력 보존.
  */
 async function createConsultationWithAudio(
@@ -213,6 +215,7 @@ async function createConsultationWithAudio(
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: "consulted",
+      // 단일 오디오 컬럼 = "최신 녹음 미러"(목록 🎙️ 배지·StatusWatcher 레거시 소비처용).
       audio_path: audioPath,
       audio_size_bytes: verifiedSize,
       processing_status: "uploaded",
@@ -221,7 +224,14 @@ async function createConsultationWithAudio(
     .single();
   if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
 
-  const err = await triggerTranscription(admin, consult.id, audioUrl);
+  const err = await insertRecordingAndTranscribe(admin, {
+    tenantId: user.tenantId,
+    consultationId: consult.id,
+    audioPath,
+    audioSizeBytes: verifiedSize,
+    recordedBy: user.id,
+    audioUrl,
+  });
   if (err) return { error: err };
 
   revalidatePath("/enrollment");
@@ -229,42 +239,77 @@ async function createConsultationWithAudio(
 }
 
 /**
- * AssemblyAI 전사 제출 + 상태 갱신 — 생성/수정 오디오 첨부가 공유하는 tail.
- * 성공 시 assemblyai_transcript_id 저장 + 'transcribing', 실패 시 'failed'+한글 오류.
- * 반환: null(성공) | 한글 오류 문자열(실패). 웹훅(handleConsultation)이 전사 완료 후 13섹션 분석을 이어받는다.
+ * 녹음 행(consultation_recordings) 생성 + AssemblyAI 전사 제출 — 생성/수정 오디오 첨부가 공유하는 tail.
+ * 녹음은 **행으로 누적**된다(여러 상담사가 각자 추가, 사용자 결정 2026-07-02). 성공 시
+ * 녹음 행에 assemblyai_transcript_id + 'transcribing', 상담 행 미러도 'transcribing'.
+ * 실패 시 녹음 행·상담 미러 둘 다 'failed'+한글 오류. 반환: null(성공) | 한글 오류 문자열.
+ * 웹훅(handleConsultationRecording)이 전사 완료 후 "완료된 전체 녹음 합본"으로 13섹션 분석을 이어받는다.
  */
-async function triggerTranscription(
+async function insertRecordingAndTranscribe(
   admin: ReturnType<typeof createAdminClient>,
-  consultId: string,
-  audioUrl: string,
+  args: {
+    tenantId: string;
+    consultationId: string;
+    audioPath: string;
+    audioSizeBytes: number;
+    recordedBy: string;
+    audioUrl: string;
+  },
 ): Promise<string | null> {
+  const { data: rec, error: recErr } = await admin
+    .from("consultation_recordings")
+    .insert({
+      tenant_id: args.tenantId,
+      consultation_id: args.consultationId,
+      audio_path: args.audioPath,
+      audio_size_bytes: args.audioSizeBytes,
+      recorded_by: args.recordedBy,
+      processing_status: "uploaded",
+    })
+    .select("id")
+    .single();
+  if (recErr || !rec) return `녹음 행 생성 실패: ${recErr?.message ?? "unknown"}`;
+
   const webhookUrl = getAssemblyaiWebhookUrl();
   try {
     const result = await submitTranscript({
-      audioUrl,
+      audioUrl: args.audioUrl,
       webhookUrl,
       webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
         ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
         : undefined,
     });
+    // ⚠️ transcript id는 녹음 행에만 — 상담 행에 미러하면 웹훅이 레거시 경로로 이중 매칭된다.
+    await admin
+      .from("consultation_recordings")
+      .update({
+        assemblyai_transcript_id: result.id,
+        processing_status: "transcribing",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", rec.id);
     await admin
       .from("enrollment_consultations")
-      .update({ assemblyai_transcript_id: result.id, processing_status: "transcribing" })
-      .eq("id", consultId);
+      .update({ processing_status: "transcribing", updated_at: new Date().toISOString() })
+      .eq("id", args.consultationId);
     return null;
   } catch (e) {
     const ko = localizeTranscriptionError(e instanceof Error ? e.message : String(e));
+    // 행은 failed로 남긴다(오디오 객체는 이미 업로드됨 — 실녹음 유실 방지 위해 삭제 안 함).
     await admin
-      .from("enrollment_consultations")
-      .update({ processing_status: "failed", processing_error: ko })
-      .eq("id", consultId);
+      .from("consultation_recordings")
+      .update({ processing_status: "failed", processing_error: ko, updated_at: new Date().toISOString() })
+      .eq("id", rec.id);
+    // 상담 미러 — 완료 녹음이 있으면 completed 복원(상담 전체 실패 오표시 방지, 적대리뷰 #7/#9).
+    await syncMirrorAfterRecordingFailure(admin, args.consultationId, ko);
     return ko;
   }
 }
 
 /**
- * 기존 등록상담에 새 녹음을 첨부하고 전사·분석을 재실행 — 수정 폼 녹음(QR 접수건을 상담사가 수정하며 녹음)용.
- * 이미 audio가 있으면 전사 완료 후 웹훅이 13섹션을 재생성한다(buildFormPatch는 빈 필드만 보강 → 수기 입력 보존).
+ * 기존 등록상담에 새 녹음을 **추가**하고 전사·분석을 재실행 — 수정 폼 녹음
+ * (QR 접수건·기존 상담을 상담사가 수정하며 녹음)용. 기존 녹음 행은 그대로 보존되고 새 행이 쌓인다.
+ * 전사 완료 시 웹훅이 완료된 전체 녹음 합본으로 13섹션을 재생성(buildFormPatch는 빈 필드만 보강 → 수기 입력 보존).
  * 반환: null(성공) | 한글 오류 문자열(검증/전사 실패). ⚠️ verifyUploadedObject 실패 시 방금 올린 객체를 정리한다.
  */
 async function attachAudioAndTranscribe(
@@ -287,19 +332,37 @@ async function attachAudioAndTranscribe(
     return e instanceof Error ? e.message : "오디오 검증 실패";
   }
 
-  const { error: updErr } = await admin
+  // 상담 행 미러(최신 녹음) — 목록 🎙️ 배지·상세 진행 배너가 이 컬럼을 본다. 기존 녹음 행은 불변.
+  // ⚠️ .select()로 실제 갱신된 행을 확인 — admin client(RLS 우회)라 0행 no-op이 조용히 통과하면
+  // 타 테넌트 상담 id에 녹음을 붙이고 웹훅이 그 상담에 분석을 쓰는 크로스 테넌트 홀이 된다.
+  const { data: mirrored, error: updErr } = await admin
     .from("enrollment_consultations")
     .update({
       audio_path: audioPath,
       audio_size_bytes: verifiedSize,
       processing_status: "uploaded",
       processing_error: null,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", consultId)
-    .eq("tenant_id", user.tenantId);
+    .eq("tenant_id", user.tenantId)
+    .select("id")
+    .maybeSingle();
   if (updErr) return `음성 첨부 실패: ${updErr.message}`;
+  if (!mirrored) {
+    // 소유권 불일치(타 테넌트 id 변조 등) — 방금 올린 객체 정리 후 거부.
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    return "상담을 찾을 수 없습니다";
+  }
 
-  return triggerTranscription(admin, consultId, audioUrl);
+  return insertRecordingAndTranscribe(admin, {
+    tenantId: user.tenantId,
+    consultationId: consultId,
+    audioPath,
+    audioSizeBytes: verifiedSize,
+    recordedBy: user.id,
+    audioUrl,
+  });
 }
 
 export type UpdateConsultationState = { error?: string; ok?: boolean } | undefined;
@@ -354,7 +417,13 @@ export async function updateEnrollmentConsultation(
       audioPath,
       Number(formData.get("audioSizeBytes") ?? 0),
     );
-    if (audioErr) return { error: audioErr };
+    if (audioErr) {
+      // 필드 UPDATE는 이미 커밋됐다 — "전체 실패"로 오독되지 않게 명시(적대리뷰 #7). 재저장해도
+      // 필드는 멱등이고 녹음만 다시 첨부되므로 그대로 다시 저장하면 된다.
+      revalidatePath("/enrollment");
+      revalidatePath(`/enrollment/${id}`);
+      return { error: `입력 내용은 저장되었습니다. 녹음 첨부만 실패: ${audioErr}` };
+    }
   }
 
   revalidatePath("/enrollment");
@@ -431,13 +500,21 @@ export async function deleteEnrollmentConsultation(
     .single();
   if (!c) return { error: "상담을 찾을 수 없습니다" };
 
-  // 1) 첨부 음성(테넌트 경로) Storage 제거 — 레거시/공유 경로는 isTenantAudioPath로 걸러 미삭제.
-  const audioPath = (c as { audio_path?: string | null }).audio_path;
-  if (audioPath && isTenantAudioPath(audioPath, user.tenantId)) {
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+  // 1) 첨부 음성(테넌트 경로) Storage 제거 — 녹음 행 전체 + 레거시 단일 컬럼(미러) 합쳐 dedupe.
+  //    레거시/공유 경로는 isTenantAudioPath로 걸러 미삭제. 행 자체는 FK cascade로 함께 삭제된다.
+  const { data: recRows } = await supabase
+    .from("consultation_recordings")
+    .select("audio_path")
+    .eq("consultation_id", id);
+  const paths = new Set<string>(
+    [(c as { audio_path?: string | null }).audio_path, ...(recRows ?? []).map((r) => r.audio_path)]
+      .filter((p): p is string => !!p && isTenantAudioPath(p, user.tenantId)),
+  );
+  for (const p of paths) {
+    await removeObject(p, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
   }
 
-  // 2) row 삭제(RLS). consultation_ai_analysis는 FK cascade.
+  // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
   const { error } = await supabase.from("enrollment_consultations").delete().eq("id", id);
   if (error) return { error: error.message };
 
@@ -698,106 +775,6 @@ export async function convertConsultationToStudent(
   return { studentId: stu.id };
 }
 
-/**
- * Audio flow: client uploaded an audio file to the consultation-recordings bucket.
- * Server creates a consultation row, generates a signed URL, submits to AssemblyAI
- * with the shared webhook, and redirects to the detail page. The webhook handles
- * the rest (transcript fetch → Claude 13-section analysis → DB update).
- */
-export type StartConsultationFromAudioState = { error?: string } | undefined;
-
-export async function startConsultationFromAudio(
-  _prev: StartConsultationFromAudioState,
-  formData: FormData,
-): Promise<StartConsultationFromAudioState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
-
-  const prospectName = String(formData.get("prospectName") ?? "").trim();
-  const prospectGrade = String(formData.get("prospectGrade") ?? "").trim() || null;
-  const prospectSchool = String(formData.get("prospectSchool") ?? "").trim() || null;
-  const parentName = String(formData.get("parentName") ?? "").trim() || null;
-  const parentPhone = String(formData.get("parentPhone") ?? "").trim() || null;
-  const audioPath = String(formData.get("audioPath") ?? "").trim();
-  const audioSizeBytes = Number(formData.get("audioSizeBytes") ?? 0);
-
-  if (!prospectName) return { error: "학생 이름을 입력해주세요" };
-  if (!audioPath) return { error: "음성 파일이 누락되었습니다" };
-
-  const admin = createAdminClient();
-
-  // Verify the path is a single object key under this tenant (#S4).
-  if (!isTenantAudioPath(audioPath, user.tenantId)) {
-    return { error: "파일 경로가 잘못되었습니다" };
-  }
-
-  // 업로드 객체 검증(exists·size·contentType) 후 AssemblyAI가 fetch할 signed URL.
-  let audioUrl: string;
-  let verifiedSize = audioSizeBytes;
-  try {
-    const meta = await verifyUploadedObject("registration", audioPath);
-    if (meta.size > 0) verifiedSize = meta.size;
-    audioUrl = await resolveAudioReadUrl(audioPath, "registration", user.tenantId);
-  } catch (e) {
-    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
-    return { error: e instanceof Error ? e.message : "오디오 검증 실패" };
-  }
-
-  // Create consultation row in uploaded state
-  const { data: consult, error: insertErr } = await admin
-    .from("enrollment_consultations")
-    .insert({
-      tenant_id: user.tenantId,
-      prospect_name: prospectName,
-      prospect_grade: prospectGrade,
-      prospect_school: prospectSchool,
-      parent_name: parentName,
-      parent_phone: parentPhone,
-      consultant_id: user.id,
-      outcome: "consulted",
-      audio_path: audioPath,
-      audio_size_bytes: verifiedSize,
-      processing_status: "uploaded",
-    })
-    .select("id")
-    .single();
-
-  if (insertErr || !consult) {
-    return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
-  }
-
-  // Kick off AssemblyAI with webhook
-  const webhookUrl = getAssemblyaiWebhookUrl();
-
-  try {
-    const result = await submitTranscript({
-      audioUrl,
-      webhookUrl,
-      webhookAuthHeader: process.env.ASSEMBLYAI_WEBHOOK_SECRET
-        ? { name: "x-eywa-webhook-secret", value: process.env.ASSEMBLYAI_WEBHOOK_SECRET }
-        : undefined,
-    });
-    await admin
-      .from("enrollment_consultations")
-      .update({
-        assemblyai_transcript_id: result.id,
-        processing_status: "transcribing",
-      })
-      .eq("id", consult.id);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const ko = localizeTranscriptionError(msg);
-    await admin
-      .from("enrollment_consultations")
-      .update({ processing_status: "failed", processing_error: ko })
-      .eq("id", consult.id);
-    return { error: ko };
-  }
-
-  revalidatePath("/enrollment");
-  redirect(`/enrollment/${consult.id}`);
-}
 
 export type UpdateConsultationReportState =
   | { error?: string; ok?: true; editedBy?: string; editedAt?: string }
