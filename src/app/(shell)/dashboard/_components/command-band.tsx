@@ -19,6 +19,7 @@ const ACCENT_DANGER = "#f09595"; // 다크 위 미수 경고
 
 export function CommandBand({
   name,
+  honorific,
   enrolled,
   enrolledDelta,
   attendanceRate,
@@ -30,6 +31,8 @@ export function CommandBand({
   withdrawn,
 }: {
   name: string;
+  /** 로그인 사용자 호칭 — 본인 직급(job_title) 우선, 없으면 역할 기반(원장/관리자/실장/선생…). */
+  honorific: string;
   enrolled: number;
   enrolledDelta: number;
   attendanceRate: number | null;
@@ -66,7 +69,7 @@ export function CommandBand({
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-gold font-mono text-[10px] tracking-wider uppercase">{eyebrow}</p>
-          <h1 className="mt-2 text-[25px] font-extrabold tracking-tight">안녕하세요, {name} 원장님.</h1>
+          <h1 className="mt-2 text-[25px] font-extrabold tracking-tight">안녕하세요, {name} {honorific}님.</h1>
           <p className="mt-1.5 text-[12px] text-white/50">
             {unpaidCount > 0 ? `오늘은 미수 ${unpaidCount}건만 챙기면 됩니다.` : "오늘도 잘 부탁드립니다."}
           </p>

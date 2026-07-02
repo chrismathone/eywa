@@ -83,7 +83,18 @@ export default async function DashboardPage() {
     (s) => s.status !== "upcoming" && !recordedSet.has(s.classId),
   ).length;
 
-  const name = user.displayName ?? "원장";
+  const name = user.displayName ?? "선생";
+  // 인사말 호칭 — 본인 직급(job_title) 우선, 없으면 역할 기반 한국어 호칭(누구나 "원장님" 금지).
+  const HONORIFIC: Record<string, string> = {
+    master: "원장",
+    admin: "관리자",
+    manager: "실장",
+    accountant: "회계",
+    counselor: "상담",
+    teacher: "선생",
+    viewer: "선생",
+  };
+  const honorific = user.jobTitle?.trim() || HONORIFIC[user.systemRole] || "선생";
   const attendanceRate = attendance && attendance.total > 0 ? attendance.rate : null;
   // 출석 스냅샷이 과거일 폴백이면 기준일을 정직하게 표기("M/D 기준") — 오래된 100%가 오늘처럼 보이는 것 방지.
   const attendanceAsOf =
@@ -98,6 +109,7 @@ export default async function DashboardPage() {
       {/* ① 커맨드 밴드 */}
       <CommandBand
         name={name}
+        honorific={honorific}
         enrolled={enrolled}
         enrolledDelta={enrollmentDelta(
           enrollmentChanges.newStudents.length,
