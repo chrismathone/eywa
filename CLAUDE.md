@@ -329,6 +329,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 탭 재오픈 로그아웃 수정 — 미들웨어 세션 갱신 복원(표준 @supabase/ssr) + getCurrentUser 폴백 (2026-07-02) — ✅ typecheck0/lint0 + 적대리뷰(4렌즈, 확정1 수정)
+사용자 제보: 탭 닫고 재오픈하면(수 초 내 같은 탭도) 로그아웃. 진단(라이브러리 소스 대조): 브라우저 쿠키는 지속(400일·path=/·SameSite=lax·secure아님)이라 문제가 아님. **진짜 원인 = 미들웨어([proxy.ts](src/lib/supabase/proxy.ts))가 쿠키 존재만 체크하고 표준 세션 갱신을 안 함** → Server Component는 쿠키 못 씀(server.ts setAll no-op) → 아무도 만료·회전(refresh rotation) 토큰을 refresh·persist 못 함 → @supabase/ssr가 소스에 경고한 *"random logouts / early session termination"*.
+- **수정**: 미들웨어에 표준 세션 갱신 복원 — 매 요청 `createServerClient`+`getClaims()`로 refresh, `setAll`이 갱신 쿠키를 **응답(Set-Cookie)·요청 헤더 양쪽에** 반영. **canonical 패턴**(변경된 `request`를 통째 `NextResponse.next({ request })`로 forward)이라 같은 요청의 (shell)/layout `getCurrentUser`가 **fresh 토큰**을 읽어 이중 refresh/회전 경합 없음.
+- ⚠️ **#10 로그인 루프 회피**: 리다이렉트 게이트는 여전히 **쿠키 존재**로만 판정(getClaims 결과 미사용) + try/catch. 과거 middleware `getUser()`가 base64 쿠키 검증 실패로 정상 로그인을 /login으로 튕겨 루프 났던 것 → 결과에 게이트 안 걸면 재발 없음. 진짜 검증은 layout getCurrentUser.
+- **[getCurrentUser](src/lib/auth/current-user.ts) 폴백 강화**: `getClaims`가 sub를 못 내도(콜드/엣지에서 조용히 빈손) **세션 토큰이 있으면**(`getSession` 로컬 확인) authoritative `getUser`로 확정 → 정상 세션이 로컬검증 실패만으로 /login 튕기는 것 방지. 무세션은 `getSession` null이라 `getUser` 스킵(anonymous 성능 보존).
+- **⚠️ 적대리뷰 확정 1건 선수정**: 최초 구현이 `reqHeaders`를 쿠키 변경 **이전에** 복제해 forward → `request.cookies.set`은 원본 `request.headers`만 갱신하는데 다운스트림엔 stale 복제본이 가서 **RSC가 옛 쿠키 → 이중 refresh + 회전 경합**(엄격 회전 구성에선 재-로그아웃). → `request.headers` 직접 변형(x-embed) + `{ request }` forward로 교정.
+- ⚠️ **미들웨어 변경이라 dev 재시작 필요**(#35). **라이브 로그인 지속은 배포 후 검증 필요** — 비밀번호 직접 입력 불가로 게이트+적대리뷰로 대체, 원장이 로그인→탭닫기→재오픈(즉시/1h+)·루프無 1회 확인 권장. 24h+ 지속은 Supabase Dashboard Auth의 JWT expiry·**Time-box/Inactivity timeout** 설정에도 걸림.
+
 ### 인쇄 파트 전수 감사 — 확정 결함 7건 일괄 수정 (2026-07-02) — ✅ print 에뮬레이션 computed + PDF 스윕(회귀0)
 빈 2페이지 픽스(아래) 직후 사용자 "이런 버그스러운 인쇄 파트 있나 검토" → **실측 스윕(headless print-to-PDF, 6표면)** +
 **코드 감사 워크플로(3방향 find→적대 verify, 11에이전트)**. 스윕은 전 표면 그린(혼합방향 0·빈페이지 0 — 어제 픽스가 전 표면
