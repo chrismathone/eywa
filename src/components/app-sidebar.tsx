@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -96,6 +96,30 @@ export function AppSidebar({
   const { expanded, width, dragging, handleProps } = useSidebarResize();
   const animations = usePrefs((s) => s.animations);
   const toggleSidebar = usePrefs((s) => s.toggleSidebar); // 브랜드 줄 접기/펼치기 버튼(드래그·더블클릭과 동일 상태)
+
+  // nav 스크롤 페이드 — 작은 창에서 메뉴가 넘칠 때 스크롤바 대신 상/하단 페이드로 "더 있음" 표시
+  // (nav는 scrollbar-hide로 스크롤바 숨김·스크롤 유지). 패턴은 DragScrollArea edges와 동일.
+  const navRef = useRef<HTMLElement>(null);
+  const [navEdges, setNavEdges] = useState({ top: false, bottom: false });
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const update = () => {
+      const maxY = el.scrollHeight - el.clientHeight;
+      setNavEdges({ top: el.scrollTop > 1, bottom: el.scrollTop < maxY - 1 });
+    };
+    update();
+    // 접힘↔펼침은 콘텐츠 높이(그룹 슬롯 등)만 바뀌어 RO(박스 관찰)가 못 잡음 → 전환 트랜지션(200ms) 후 재계산.
+    const settle = setTimeout(update, 250);
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      clearTimeout(settle);
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [expanded]);
   // 모션: 설정 ON & 드래그 중이 아닐 때만 슬라이드(드래그는 1:1 추종이라 트랜지션 off).
   const motion = animations && !dragging;
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -173,8 +197,14 @@ export function AppSidebar({
           </button>
         </div>
 
-        {/* nav — 아이콘 레일(접힘) / 아이콘+라벨(펼침). 항목은 항상 풀폭, 내부 패딩으로 아이콘 고정. */}
-        <nav className="flex flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto py-2.5">
+        {/* nav — 아이콘 레일(접힘) / 아이콘+라벨(펼침). 항목은 항상 풀폭, 내부 패딩으로 아이콘 고정.
+            작은 창에서 넘치면 스크롤바 없이 스크롤(scrollbar-hide) + 상/하단 페이드가 "더 있음" 힌트
+            (페이드는 스크롤되지 않는 래퍼에 절대배치 — DragScrollArea와 동일 2겹 구조). */}
+        <div className="relative min-h-0 flex-1">
+          <nav
+            ref={navRef}
+            className="scrollbar-hide flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-2.5"
+          >
           {groups.map((group, gi) => (
             <div key={group.label} className="flex w-full flex-col gap-1">
               {/* 그룹 구분 — 슬롯 높이가 펼침(22)↔접힘(헤더 0줄: gi>0은 구분선 13, 첫 그룹 6)으로
@@ -254,7 +284,21 @@ export function AppSidebar({
               +클릭하면 같은 화면을 새 창으로 하나 더 열 수 있어요.
             </p>
           ) : null}
-        </nav>
+          </nav>
+          {/* 상/하단 스크롤 페이드 — 해당 방향으로 더 스크롤할 수 있을 때만 표시(내용이 배경으로 녹아듦) */}
+          <span
+            aria-hidden
+            className={`from-sidebar pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b to-transparent transition-opacity duration-200 ${
+              navEdges.top ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <span
+            aria-hidden
+            className={`from-sidebar pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t to-transparent transition-opacity duration-200 ${
+              navEdges.bottom ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        </div>
 
         {/* user — 계정/로그아웃. 아이콘은 접힘 중앙 고정, 이름·호칭만 페이드 */}
         <div className="border-line flex h-14 shrink-0 items-center gap-2.5 overflow-hidden border-t pl-2">

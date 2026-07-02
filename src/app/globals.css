@@ -545,6 +545,16 @@ body {
   scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
 }
 
+/* .scrollbar-hide — 스크롤바 없이 스크롤만(휠·터치·키). 사이드바 레일처럼 폭이 좁고
+   상/하단 페이드가 "더 있음" 힌트를 대신하는 영역 전용 — 일반 콘텐츠엔 전역 스크롤바가 기본. */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* .scroll-x-always — 가로 스크롤바를 항상·또렷하게 노출(시간표 등 항상 넓은 표).
    overflow-x:scroll로 트랙을 늘 예약하고, 전역(연한 0.18)보다 진한 thumb로 또렷이.
    현대 Chrome은 scrollbar-width/color(표준)를 쓰면 ::-webkit-scrollbar를 무시하므로
