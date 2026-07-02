@@ -13,6 +13,8 @@ const HEAD = "border-line bg-gold/15 text-foreground border px-2 py-1.5 text-[12
 export function QuoteDocument({
   academyName,
   logoSrc,
+  showLogo = true,
+  showName = true,
   student,
   courses,
   extras,
@@ -22,6 +24,10 @@ export function QuoteDocument({
 }: {
   academyName: string;
   logoSrc?: string | null;
+  /** 헤더에 로고 이미지 표시 여부(로고에 학원명 워드마크가 들어간 경우 중복 방지용 토글). */
+  showLogo?: boolean;
+  /** 헤더에 학원명 텍스트 표시 여부. */
+  showName?: boolean;
   student: QuoteStudent;
   courses: QuoteCourse[];
   extras: QuoteExtra[];
@@ -35,19 +41,23 @@ export function QuoteDocument({
 
   return (
     <div className="quote-doc print-portrait bg-card text-foreground mx-auto w-full max-w-[760px] space-y-5 p-6 print:max-w-none print:space-y-2 print:p-0">
-      {/* 헤더 */}
+      {/* 헤더 — 로고/학원명은 토글(로고 워드마크에 학원명이 있으면 하나만 켜서 중복 방지). */}
       <header className="flex flex-col items-center gap-2">
-        <div className="text-primary inline-flex items-center gap-2 text-xl font-extrabold tracking-tight">
-          {logoSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), 인쇄 문서라 next/image 최적화 불필요
-            <img src={logoSrc} alt={academyName} className="h-8 w-auto object-contain" />
-          ) : (
-            <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-sm text-sm">
-              {academyName.slice(0, 1)}
-            </span>
-          )}
-          {academyName}
-        </div>
+        {showLogo || showName ? (
+          <div className="text-primary inline-flex items-center gap-2 text-xl font-extrabold tracking-tight">
+            {showLogo ? (
+              logoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), 인쇄 문서라 next/image 최적화 불필요
+                <img src={logoSrc} alt={academyName} className="h-8 w-auto object-contain" />
+              ) : (
+                <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-sm text-sm">
+                  {academyName.slice(0, 1)}
+                </span>
+              )
+            ) : null}
+            {showName ? academyName : null}
+          </div>
+        ) : null}
         <h2 className="text-foreground text-2xl font-black tracking-[0.3em]">수강료 안내문</h2>
       </header>
 

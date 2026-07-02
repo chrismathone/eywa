@@ -75,6 +75,10 @@ export function TuitionCalculator({
   const [extras, setExtras] = useState<QuoteExtra[]>(initial?.extras ?? []);
   const [discounts, setDiscounts] = useState<QuoteDiscount[]>(initial?.discounts ?? []);
   const [createdLabel] = useState(() => todayLabel(initial?.createdAt));
+  // 안내문 헤더 로고/학원명 표시 토글 — 로고 이미지에 학원명 워드마크가 있으면 하나만 켜서 중복 제거.
+  // 표시 전용(견적 데이터 아님)이라 저장/복구엔 미포함.
+  const [showLogo, setShowLogo] = useState(true);
+  const [showName, setShowName] = useState(true);
   const [state, formAction] = useActionState<SaveQuoteState, FormData>(saveTuitionQuote, undefined);
 
   const courseOpts = useMemo(
@@ -213,6 +217,18 @@ export function TuitionCalculator({
             </label>
           </div>
           <input className={inputCls} placeholder="상담자" value={student.consultant} onChange={(e) => setStudent({ ...student, consultant: e.target.value })} />
+          {/* 안내문 헤더 표시 — 로고 이미지에 학원명이 들어가 있으면 하나만 켜서 중복 제거. */}
+          <div className="border-line flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3">
+            <span className="text-text-faint text-[11px]">안내문 헤더</span>
+            <label className="text-foreground inline-flex items-center gap-1.5 text-xs">
+              <input type="checkbox" checked={showLogo} onChange={(e) => setShowLogo(e.target.checked)} className="size-4" />
+              로고 이미지
+            </label>
+            <label className="text-foreground inline-flex items-center gap-1.5 text-xs">
+              <input type="checkbox" checked={showName} onChange={(e) => setShowName(e.target.checked)} className="size-4" />
+              학원명 텍스트
+            </label>
+          </div>
         </section>
 
         {/* 수강 과목 */}
@@ -292,6 +308,8 @@ export function TuitionCalculator({
         <QuoteDocument
           academyName={academyName}
           logoSrc={logoSrc}
+          showLogo={showLogo}
+          showName={showName}
           student={student}
           courses={courses}
           extras={extras}
