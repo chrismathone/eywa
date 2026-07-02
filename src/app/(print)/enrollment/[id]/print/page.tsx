@@ -218,8 +218,10 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-6 break-inside-avoid">
-      <h2 className="text-xs font-bold tracking-[0.15em] uppercase">{title}</h2>
+    // ⚠️ 통짜 break-inside-avoid 금지(인쇄 규약) — AI 리포트 12섹션·수납정책 등 임의 길이 콘텐츠를 감싸므로
+    // 섹션 통째 avoid면 페이지 경계에서 다음 장으로 밀려 하단 대공백. 제목 고아만 방지(break-after-avoid).
+    <section className="mt-6">
+      <h2 className="text-xs font-bold tracking-[0.15em] uppercase break-after-avoid">{title}</h2>
       <div className="mt-2">{children}</div>
     </section>
   );

@@ -45,7 +45,8 @@ export function NoticePopupLayer({ popups }: { popups: ActivePopup[] }) {
       {[...groups.entries()].map(([pos, items]) => {
         const a = anchorOf(pos);
         return (
-          <div key={pos} className={`pointer-events-none fixed inset-0 z-[55] flex p-4 ${a.outer}`}>
+          // print:hidden — 팝업 뜬 채 문서 인쇄 시 카드가 인쇄물 위에 찍히는 것 방지.
+          <div key={pos} className={`pointer-events-none fixed inset-0 z-[55] flex p-4 print:hidden ${a.outer}`}>
             <div className={`flex max-w-full flex-wrap content-start gap-4 ${a.inner}`}>
               {items.map((p) => (
                 <NoticePopupCard key={p.id} popup={p} />

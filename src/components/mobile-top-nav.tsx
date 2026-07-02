@@ -37,7 +37,7 @@ export function MobileTopNav({
 
   return (
     <nav
-      className={`bg-sidebar border-line sticky top-0 z-20 border-b ${className ?? ""}`}
+      className={`bg-sidebar border-line sticky top-0 z-20 border-b print:hidden ${className ?? ""}`}
       aria-label="메뉴"
     >
       {/* 브랜드 banner + 계정 메뉴 */}

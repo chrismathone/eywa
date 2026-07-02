@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -22,8 +24,9 @@ function Field({ label, value }: { label: string; value: string }) {
 
 /**
  * 수업 보고서(lesson_reports) A4 인쇄 문서 — 강사 원스크린 "PDF" 버튼이 여는 플로팅 인쇄 창.
- * 접근: getCurrentUser(로그인) + RLS(테넌트 격리)로 행 조회 — 다른 테넌트 보고서면 notFound.
- * (원스크린 메뉴는 강사 전용이라 requireAccess 대신 RLS 스코프로 강사·원장 공통 열람.)
+ * 접근(교재요청서 print 패턴, 2026-07-02 게이트 보강): 로그인 + **students 메뉴 접근**(none=student 등 차단,
+ * override 반영) + **강사는 본인 담당 학생 보고서만**(getTeacherScope — intra-tenant PII 스코프).
+ * 원스크린 메뉴키(teacher 전용, master=none)로는 원장 열람이 막혀 students 메뉴를 게이트로 쓴다.
  * 레퍼런스 = (print)/enrollment/[id]/print/page.tsx (print-portrait + PrintActions embedded).
  */
 export default async function LessonReportPrintPage({
@@ -33,6 +36,8 @@ export default async function LessonReportPrintPage({
 }) {
   const user = await getCurrentUser();
   if (!user) notFound();
+  // 학생 정보(이름·학교·진도·강사 코멘트)가 담긴 문서 — students 접근 none 역할(학생 계정 등)은 차단.
+  if (!(await canAccessTenant(user.systemRole, "students"))) notFound();
   const { id } = await params;
   // 플로팅 창(iframe)이면 proxy가 x-embed 주입 → 닫기 버튼 숨김(창 X로 닫음).
   const embedded = (await headers()).get("x-embed") === "1";
@@ -45,6 +50,11 @@ export default async function LessonReportPrintPage({
     .eq("id", id)
     .single();
   if (!report) notFound();
+  // 강사는 본인 담당 학생 보고서만(비담당 학생 PII 차단). 사무실 역할은 전체 허용.
+  if (user.systemRole === "teacher") {
+    const { studentIds } = await getTeacherScope(user.id);
+    if (!report.student_id || !studentIds.includes(report.student_id)) notFound();
+  }
 
   const [{ data: student }, settings] = await Promise.all([
     supabase

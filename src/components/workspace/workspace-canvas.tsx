@@ -170,7 +170,9 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   return (
     <>
     <div
-      className="pointer-events-none fixed z-40"
+      // print:hidden — 배경 문서를 인쇄(계산기·시간표 Ctrl+P 등)할 때 열려 있는 플로팅 창·딤이
+      // fixed로 매 페이지 위에 찍히는 것 방지(인쇄물은 문서만).
+      className="pointer-events-none fixed z-40 print:hidden"
       style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
       {/* 앨범(스포트라이트) 딤 — 뒤 배경(메인 프레임)을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).

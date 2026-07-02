@@ -329,6 +329,33 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 인쇄 파트 전수 감사 — 확정 결함 7건 일괄 수정 (2026-07-02) — ✅ print 에뮬레이션 computed + PDF 스윕(회귀0)
+빈 2페이지 픽스(아래) 직후 사용자 "이런 버그스러운 인쇄 파트 있나 검토" → **실측 스윕(headless print-to-PDF, 6표면)** +
+**코드 감사 워크플로(3방향 find→적대 verify, 11에이전트)**. 스윕은 전 표면 그린(혼합방향 0·빈페이지 0 — 어제 픽스가 전 표면
+커버 확인), 코드 감사에서 **confirmed 7건**(중복 1 제외 실질 6건) 발견·일괄 수정:
+- **① 풀셸(비임베드) 인쇄 클리핑**(감사 최고 심각도): 인쇄 리셋(globals.css)이 html/body/main만 풀고 **(shell)/layout의
+  h-screen+overflow-hidden 래퍼 div 2개(+미니멀 셸 1개)는 그대로** → 직접 URL/배경/모바일 경로에서 2페이지+ 문서가 1페이지
+  높이로 잘림(임베드=창 경로는 원래 정상) → 래퍼 3곳에 `print:h-auto print:overflow-visible`([layout.tsx](<src/app/(shell)/layout.tsx>)).
+- **② MobileTopNav가 인쇄물 상단에 통째로 인쇄**: 크롬 숨김 셀렉터 `nav[aria-label*="네비게이션"]`이 실마크업(aria-label="메뉴")과
+  불일치한 **죽은 셀렉터** + `lg:pointer-fine:hidden`은 인쇄 폭(A4 세로 ≈794px<1024)에서 lg 불성립이라 무력 →
+  [mobile-top-nav.tsx](src/components/mobile-top-nav.tsx) 루트에 `print:hidden` + 셀렉터 `nav[aria-label="메뉴"]`로 교정(이중 방어).
+  ⚠️ **교훈: 인쇄 미디어쿼리는 화면이 아니라 인쇄 용지 폭으로 재평가된다** — `lg:` 숨김은 인쇄에서 못 믿는다. print:hidden을 직접.
+- **③ 전역 `table { page-break-inside: avoid }` 제거**: 주석은 '시간표 셀' 용도인데 무스코프 전역이라 전 인쇄 표
+  (환불규정·지출 항목표 등)에 **통짜 avoid**("통짜 금지" 규칙 위반) — 페이지 경계의 긴 표가 통째로 다음 장으로 밀려 하단
+  대공백. 행 단위(tr/td/th) avoid만 남김. 부수 효과: 시간표 Ctrl+P가 4p→**3p**로 개선(행 경계 분할).
+- **④ 등록상담 인수인계서 Section 통짜 break-inside-avoid**([(print)/enrollment/[id]/print/page.tsx](<src/app/(print)/enrollment/[id]/print/page.tsx>)):
+  AI 12섹션·수납정책 등 임의 길이 콘텐츠를 감싸는 공용 Section이 통짜 avoid → 제거 + 제목만 `break-after-avoid`(고아 방지).
+- **⑤⑥ fixed 오버레이 인쇄 누출**: [WorkspaceCanvas](src/components/workspace/workspace-canvas.tsx)(열린 플로팅 창·스포트라이트 딤이
+  배경 문서 인쇄 위에 페이지마다 찍힘)·[NoticePopupLayer](src/features/notices/components/notice-popup-layer.tsx)(팝업 뜬 채 인쇄 시 카드 찍힘)
+  → 루트에 `print:hidden`.
+- **⑦ lesson_reports 인쇄 게이트 갭**(intra-tenant PII): 형제 print 라우트와 달리 로그인+RLS만 — 같은 테넌트 student/viewer도
+  UUID로 임의 수업보고서(학생명·진도·강사 코멘트) 열람 가능 → **students 메뉴 접근(canAccessTenant, override 반영) + 강사는
+  getTeacherScope 본인 학생 검증**(교재요청서 print 패턴)([lesson_reports print/page.tsx](<src/app/(print)/lesson_reports/[id]/print/page.tsx>)).
+- **검증**: 픽스 워크트리 dev(3002)에서 **print 미디어 에뮬레이션 computed 실측**(nav display:none·래퍼 height:auto/overflow:visible·
+  캔버스/토스터 none) + **풀셸 지출결의서 PDF 1p PORTRAIT** + 전 표면 PDF 스윕 회귀 0. typecheck0/lint0.
+  ⚠️ 등록상담 인수인계서는 `consultation_ai_analysis` 0행(이관 미포함)이라 실데이터 스윕 불가 — 새 녹음 분석 생기면 인쇄 가능.
+  ⚠️ 워크트리 dev는 **repo 안(.claude/worktrees/)에 둬야** Turbopack이 node_modules junction을 허용(밖이면 "Symlink points out of filesystem root" 패닉).
+
 ### 인쇄 빈 2페이지 버그 — named page(portrait-doc) 경계가 만든 유령 landscape 페이지 (2026-07-02) — ✅ PDF 실측(픽스=1p/무효화=2p)
 사용자 제보: 지출결의서 인쇄 시 내용은 1페이지인데 **빈 2페이지**가 딸려 나옴. 원인 = CSS **named page 경계**:
 전역 `@page`는 landscape(시간표용), 문서는 `.print-portrait{page:portrait-doc}`인데, **문서(main) 뒤에 body 직계

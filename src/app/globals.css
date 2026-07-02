@@ -358,9 +358,12 @@
     margin: 12mm;
   }
 
-  /* 사이드바·헤더·상단 nav·toolbar 숨김 */
+  /* 사이드바·헤더·상단 nav·toolbar 숨김.
+     ⚠️ 구 셀렉터 nav[aria-label*="네비게이션"]은 실제 마크업(aria-label="메뉴")과 불일치한 죽은 셀렉터였음
+     (2026-07-02 감사) — 모바일 상단 nav가 풀셸 인쇄물 상단에 통째로 찍혔다. 컴포넌트(print:hidden) +
+     여기 셀렉터 이중 방어로 교정. */
   aside[class*="sidebar"],
-  nav[aria-label*="네비게이션"],
+  nav[aria-label="메뉴"],
   header[class*="border-line"],
   .print\:hidden {
     display: none !important;
@@ -371,13 +374,15 @@
     color: black !important;
   }
 
-  /* 시간표 셀: 컬러는 유지하되 텍스트 가독성 강화 */
+  /* 표 테두리 정합(인쇄 시 collapse 강제).
+     ⚠️ 표 전체 page-break-inside:avoid는 두지 말 것("통짜 avoid 금지" 규칙) — 페이지 경계에 걸린 긴 표
+     (환불규정·지출 항목표 등)가 통째로 다음 장으로 밀려 하단 대공백을 만들었다(2026-07-02 감사).
+     행 단위 보호(아래 tr/td/th)가 표를 행 경계에서 끊는다. */
   table {
     border-collapse: collapse !important;
-    page-break-inside: avoid;
   }
 
-  /* 페이지 분할 회피 */
+  /* 페이지 분할 회피 — 행 단위(표는 행 경계에서만 끊김) */
   tr,
   td,
   th {
