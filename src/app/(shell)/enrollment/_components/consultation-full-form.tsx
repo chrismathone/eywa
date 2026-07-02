@@ -1,8 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useFormStatus } from "react-dom";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
@@ -22,7 +21,6 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   createEnrollmentConsultation,
   updateEnrollmentConsultation,
-  type UpdateConsultationState,
 } from "@/features/enrollment/server/actions";
 import {
   BLOOD_OPTIONS,
@@ -103,14 +101,10 @@ export function ConsultationFullForm({
 
   const router = useRouter();
   const isCreate = mode === "create";
-  const [editState, editFormAction] = useActionState<UpdateConsultationState, FormData>(
-    updateEnrollmentConsultation,
-    undefined,
-  );
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const busy = phase !== "idle";
 
   // 상단 탭(ijw 구조): 기본 정보 + 과목별 상담. AI 분석은 상세 화면에서 보여준다(폼은 입력 전용).
@@ -168,20 +162,13 @@ export function ConsultationFullForm({
   const editScope = !isCreate && v.id ? `consultation:${v.id}` : undefined;
   const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
 
-  useEffect(() => {
-    if (!isCreate && editState?.ok && v.id) {
-      clearDraft();
-      notifySaved();
-      router.push(`/enrollment/${v.id}`);
-      router.refresh();
-    }
-  }, [editState, isCreate, v.id, router, clearDraft, notifySaved]);
-
-  async function handleCreateSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // 생성·수정 통합 제출 — 녹음이 있으면 클라에서 티켓 발급→업로드 후 audioPath를 실어 액션 호출(생성/수정 공통).
+  // 수정 모드도 녹음 첨부 가능(QR 접수건을 상담사가 수정하며 상담 녹음 → 전사·AI 분석 재실행).
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setCreateError(null);
+    setSubmitError(null);
     if (recordingActive) {
-      setCreateError("녹음을 먼저 중지한 후 저장해주세요.");
+      setSubmitError("녹음을 먼저 중지한 후 저장해주세요.");
       return;
     }
     const fd = new FormData(e.currentTarget);
@@ -198,14 +185,14 @@ export function ConsultationFullForm({
         fdT.set("size", String(audioFile.size));
         const tk = await issueAudioUploadTicket(undefined, fdT);
         if (tk?.error || !tk?.ticket) {
-          setCreateError(tk?.error ?? "업로드 준비 실패");
+          setSubmitError(tk?.error ?? "업로드 준비 실패");
           setPhase("idle");
           return;
         }
         try {
           await uploadToTicket(tk.ticket, audioFile);
         } catch (err) {
-          setCreateError(err instanceof Error ? err.message : "업로드 실패");
+          setSubmitError(err instanceof Error ? err.message : "업로드 실패");
           setPhase("idle");
           return;
         }
@@ -213,10 +200,26 @@ export function ConsultationFullForm({
         fd.set("audioSizeBytes", String(audioFile.size));
       }
       setPhase("submitting");
-      const result = await createEnrollmentConsultation(undefined, fd);
-      if (result?.error) {
-        setCreateError(result.error);
-        setPhase("idle");
+      if (isCreate) {
+        // 성공 시 서버가 redirect(NEXT_REDIRECT throw) → catch에서 clearDraft.
+        const result = await createEnrollmentConsultation(undefined, fd);
+        if (result?.error) {
+          setSubmitError(result.error);
+          setPhase("idle");
+        }
+      } else {
+        const result = await updateEnrollmentConsultation(undefined, fd);
+        if (result?.error) {
+          setSubmitError(result.error);
+          setPhase("idle");
+          return;
+        }
+        if (result?.ok && v.id) {
+          clearDraft();
+          notifySaved();
+          router.push(`/enrollment/${v.id}`);
+          router.refresh();
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -224,42 +227,40 @@ export function ConsultationFullForm({
         clearDraft();
         return;
       }
-      setCreateError(msg);
+      setSubmitError(msg);
       setPhase("idle");
     }
   }
 
-  const errorMsg = isCreate ? createError : editState?.error;
+  const errorMsg = submitError;
 
   return (
-    <form
-      ref={formRef}
-      {...(isCreate ? { onSubmit: handleCreateSubmit } : { action: editFormAction })}
-      className="space-y-3"
-    >
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-3">
       {mode === "edit" && v.id ? <input type="hidden" name="id" value={v.id} /> : null}
       <input type="hidden" name="subjectDetails" value={JSON.stringify(details)} />
 
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {editScope ? <EditingBanner scope={editScope} /> : null}
 
-      {/* 녹음 바 — 상단(생성 모드). 저장 시 자동 전사·13섹션 AI 분석(입력값 보존). */}
-      {isCreate ? (
-        <div className="border-primary/25 bg-primary/5 space-y-2 rounded-lg border p-3">
-          <AudioRecorderField
-            file={audioFile}
-            onChange={setAudioFile}
-            onRecordingChange={setRecordingActive}
-            disabled={busy}
-          />
-          <p className="text-text-dim text-[11px]">
-            녹음하거나 음성 파일을 올리면 저장 시 자동으로 한국어 전사 + 13섹션 AI 분석을 실행합니다(입력하신 내용은 보존).
-          </p>
-        </div>
-      ) : null}
+      {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
+          수정: QR 접수건을 상담사가 상담하며 녹음 → 첨부 시 전사·분석 재실행. */}
+      <div className="border-primary/25 bg-primary/5 space-y-2 rounded-lg border p-3">
+        <AudioRecorderField
+          file={audioFile}
+          onChange={setAudioFile}
+          onRecordingChange={setRecordingActive}
+          disabled={busy}
+        />
+        <p className="text-text-dim text-[11px]">
+          {isCreate
+            ? "녹음하거나 음성 파일을 올리면 저장 시 자동으로 한국어 전사 + 13섹션 AI 분석을 실행합니다(입력하신 내용은 보존)."
+            : "상담을 녹음하거나 음성 파일을 올린 뒤 저장하면 전사 + AI 분석을 새로 실행합니다(입력하신 내용은 보존). 접수만 된 상담을 직접 상담하며 녹음할 때 사용하세요."}
+        </p>
+      </div>
 
-      {/* 상단 탭바 */}
-      <div className="border-border scrollbar-thin flex gap-1 overflow-x-auto border-b">
+      {/* 상단 탭바 — overflow-y-hidden: overflow-x-auto가 버튼 -mb-px로 세로 1px 넘쳐 세로 스크롤바가
+          생기던 것 차단(가로만 스크롤). */}
+      <div className="border-border scrollbar-thin flex gap-1 overflow-x-auto overflow-y-hidden border-b">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -588,32 +589,20 @@ export function ConsultationFullForm({
       ) : null}
 
       <div className="flex justify-end">
-        {isCreate ? (
-          <Button type="submit" disabled={busy || recordingActive}>
-            {recordingActive
-              ? "녹음 중 — 정지 후 저장"
-              : phase === "uploading"
-                ? "음성 업로드 중…"
-                : phase === "submitting"
-                  ? "저장 중…"
-                  : "저장하고 상세로"}
-            <ArrowRight className="size-4" />
-          </Button>
-        ) : (
-          <SubmitBtn />
-        )}
+        <Button type="submit" disabled={busy || recordingActive}>
+          {recordingActive
+            ? "녹음 중 — 정지 후 저장"
+            : phase === "uploading"
+              ? "음성 업로드 중…"
+              : phase === "submitting"
+                ? "저장 중…"
+                : isCreate
+                  ? "저장하고 상세로"
+                  : "저장"}
+          {isCreate ? <ArrowRight className="size-4" /> : <Save className="size-4" />}
+        </Button>
       </div>
     </form>
-  );
-}
-
-function SubmitBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? "저장 중…" : "저장"}
-      <Save className="size-4" />
-    </Button>
   );
 }
 

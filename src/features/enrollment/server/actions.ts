@@ -221,6 +221,23 @@ async function createConsultationWithAudio(
     .single();
   if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
 
+  const err = await triggerTranscription(admin, consult.id, audioUrl);
+  if (err) return { error: err };
+
+  revalidatePath("/enrollment");
+  redirect(`/enrollment/${consult.id}`);
+}
+
+/**
+ * AssemblyAI 전사 제출 + 상태 갱신 — 생성/수정 오디오 첨부가 공유하는 tail.
+ * 성공 시 assemblyai_transcript_id 저장 + 'transcribing', 실패 시 'failed'+한글 오류.
+ * 반환: null(성공) | 한글 오류 문자열(실패). 웹훅(handleConsultation)이 전사 완료 후 13섹션 분석을 이어받는다.
+ */
+async function triggerTranscription(
+  admin: ReturnType<typeof createAdminClient>,
+  consultId: string,
+  audioUrl: string,
+): Promise<string | null> {
   const webhookUrl = getAssemblyaiWebhookUrl();
   try {
     const result = await submitTranscript({
@@ -233,18 +250,56 @@ async function createConsultationWithAudio(
     await admin
       .from("enrollment_consultations")
       .update({ assemblyai_transcript_id: result.id, processing_status: "transcribing" })
-      .eq("id", consult.id);
+      .eq("id", consultId);
+    return null;
   } catch (e) {
     const ko = localizeTranscriptionError(e instanceof Error ? e.message : String(e));
     await admin
       .from("enrollment_consultations")
       .update({ processing_status: "failed", processing_error: ko })
-      .eq("id", consult.id);
-    return { error: ko };
+      .eq("id", consultId);
+    return ko;
+  }
+}
+
+/**
+ * 기존 등록상담에 새 녹음을 첨부하고 전사·분석을 재실행 — 수정 폼 녹음(QR 접수건을 상담사가 수정하며 녹음)용.
+ * 이미 audio가 있으면 전사 완료 후 웹훅이 13섹션을 재생성한다(buildFormPatch는 빈 필드만 보강 → 수기 입력 보존).
+ * 반환: null(성공) | 한글 오류 문자열(검증/전사 실패). ⚠️ verifyUploadedObject 실패 시 방금 올린 객체를 정리한다.
+ */
+async function attachAudioAndTranscribe(
+  user: { id: string; tenantId: string },
+  consultId: string,
+  audioPath: string,
+  audioSizeBytes: number,
+): Promise<string | null> {
+  if (!isTenantAudioPath(audioPath, user.tenantId)) return "파일 경로가 잘못되었습니다";
+  const admin = createAdminClient();
+
+  let audioUrl: string;
+  let verifiedSize = audioSizeBytes;
+  try {
+    const meta = await verifyUploadedObject("registration", audioPath);
+    if (meta.size > 0) verifiedSize = meta.size;
+    audioUrl = await resolveAudioReadUrl(audioPath, "registration", user.tenantId);
+  } catch (e) {
+    await removeObject(audioPath, { backend: getMediaBackend(), bucket: "consultation-recordings" }).catch(() => {});
+    return e instanceof Error ? e.message : "오디오 검증 실패";
   }
 
-  revalidatePath("/enrollment");
-  redirect(`/enrollment/${consult.id}`);
+  const { error: updErr } = await admin
+    .from("enrollment_consultations")
+    .update({
+      audio_path: audioPath,
+      audio_size_bytes: verifiedSize,
+      processing_status: "uploaded",
+      processing_error: null,
+    })
+    .eq("id", consultId)
+    .eq("tenant_id", user.tenantId);
+  if (updErr) return `음성 첨부 실패: ${updErr.message}`;
+
+  return triggerTranscription(admin, consultId, audioUrl);
 }
 
 export type UpdateConsultationState = { error?: string; ok?: boolean } | undefined;
@@ -289,6 +344,18 @@ export async function updateEnrollmentConsultation(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // 수정 중 새 녹음 첨부(QR 접수건을 상담사가 수정하며 상담 녹음) — 전사·13섹션 분석 재실행.
+  const audioPath = String(formData.get("audioPath") ?? "").trim();
+  if (audioPath) {
+    const audioErr = await attachAudioAndTranscribe(
+      user,
+      id,
+      audioPath,
+      Number(formData.get("audioSizeBytes") ?? 0),
+    );
+    if (audioErr) return { error: audioErr };
+  }
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${id}`);
