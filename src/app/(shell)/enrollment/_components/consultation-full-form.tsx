@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
-  MapPin, MessageSquare, Save, School, Tag, Target, Users, User, UserCheck, XCircle,
+  MapPin, MessageSquare, Save, School, Sparkles, Tag, Target, Users, User, UserCheck, XCircle,
   Droplet, type LucideIcon,
 } from "lucide-react";
 import { kstToday } from "@/lib/date-kst";
@@ -90,9 +90,12 @@ export type ConsultationFormInitial = {
 export function ConsultationFullForm({
   mode,
   initial,
+  aiSuggestedParentRequest,
 }: {
   mode: "create" | "edit";
   initial?: ConsultationFormInitial;
+  /** 녹음 분석이 추출한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전. 있으면 '✨ AI 제안'으로 비파괴 제시. */
+  aiSuggestedParentRequest?: string | null;
 }) {
   const subjects = useSubjectMaps();
   const gradeLevels = useGradeLevels();
@@ -123,6 +126,23 @@ export function ConsultationFullForm({
   const setField = (subj: string, key: string, val: string) =>
     setDetails((d) => ({ ...d, [subj]: { ...(d[subj] ?? {}), [key]: val } }));
   const englishType = details.english?.testType ?? "ai";
+
+  // 상담 내용 '✨ AI 제안' — uncontrolled textarea라 ref로 값 주입 + input 이벤트 dispatch(초안/동시편집 가드 포착).
+  const parentRequestRef = useRef<HTMLTextAreaElement>(null);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
+  const suggestedPR = (aiSuggestedParentRequest ?? "").trim();
+  // 저장값이 제안을 이미 포함(교체/추가 후 저장)하면 숨김 — includes가 정확일치·부분포함 둘 다 커버.
+  const showParentRequestSuggestion =
+    !isCreate && !!suggestedPR && !(v.parentRequest ?? "").includes(suggestedPR) && !suggestionDismissed;
+  function applyParentRequest(kind: "replace" | "append") {
+    const el = parentRequestRef.current;
+    if (!el || !suggestedPR) return;
+    const cur = el.value.trimEnd();
+    el.value = kind === "replace" || cur.length === 0 ? suggestedPR : `${cur}\n\n${suggestedPR}`;
+    // 초안 자동저장·동시편집 가드가 변경을 포착하도록 input 이벤트 발생(CLAUDE.md 칩 패턴).
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    setSuggestionDismissed(true);
+  }
 
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 서버 저장 성공 시 clear.
   const formRef = useRef<HTMLFormElement>(null);
@@ -389,12 +409,49 @@ export function ConsultationFullForm({
                 상담 내용
               </span>
               <textarea
+                ref={parentRequestRef}
                 name="parentRequest"
                 defaultValue={v.parentRequest ?? ""}
                 placeholder="상담 내용 / 학부모 요구사항 / 관찰"
                 className={`${input} min-h-40 flex-1 resize-none`}
               />
             </label>
+            {/* 녹음 분석이 정리한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전. 비파괴로 제시(교체/추가/무시). */}
+            {showParentRequestSuggestion ? (
+              <div className="border-gold/40 bg-gold-soft/30 space-y-2 rounded-md border px-3 py-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="text-gold size-3.5 shrink-0" />
+                  <span className="text-foreground text-xs font-medium">AI가 정리한 상담 내용</span>
+                </div>
+                <p className="text-text-dim max-h-32 overflow-y-auto text-xs leading-relaxed break-words whitespace-pre-wrap">
+                  {suggestedPR}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyParentRequest("replace")}
+                    className="border-gold/50 bg-gold text-white hover:bg-gold/90 rounded-sm border px-2 py-0.5 text-xs font-medium transition"
+                  >
+                    교체
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyParentRequest("append")}
+                    className="border-gold/50 text-gold hover:bg-gold-soft rounded-sm border px-2 py-0.5 text-xs font-medium transition"
+                  >
+                    아래에 추가
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSuggestionDismissed(true)}
+                    className="text-text-faint hover:text-foreground px-1 text-xs transition"
+                  >
+                    무시
+                  </button>
+                  <span className="text-text-faint ml-auto text-[10px]">저장해야 반영됩니다</span>
+                </div>
+              </div>
+            ) : null}
           </Card>
         </div>
 

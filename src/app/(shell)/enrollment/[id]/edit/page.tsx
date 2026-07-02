@@ -27,6 +27,7 @@ export default async function EditEnrollmentPage({
 
       <ConsultationFullForm
         mode="edit"
+        aiSuggestedParentRequest={c.aiFormSuggestions?.parentRequest ?? null}
         initial={{
           id: c.id,
           prospectName: c.prospectName,

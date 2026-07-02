@@ -73,6 +73,13 @@ export default async function EnrollmentDetailPage({
 
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const f = consult.fields;
+
+  // 녹음 분석이 추출한 상담 내용 — 이미 값이 있어 자동입력에서 버려진 경우, 읽기전용으로 되살려 보여준다
+  // (수정에서 반영). 저장값과 동일하면 숨김.
+  const aiSuggestedParentRequest = consult.aiFormSuggestions?.parentRequest?.trim() || null;
+  // 저장값이 제안을 이미 포함(교체/추가 후 저장)하면 숨김 — includes가 정확일치·부분포함 둘 다 커버.
+  const showParentRequestSuggestion =
+    !!aiSuggestedParentRequest && !(consult.parentRequest ?? "").includes(aiSuggestedParentRequest);
   const genderLabel = f.gender ? (GENDER_OPTIONS.find((g) => g.value === f.gender)?.label ?? f.gender) : null;
   const addr = [f.address, f.addressDetail].filter(Boolean).join(" ") || null;
   const subjectLabel = f.subject ? subjectMaps.labelOf(f.subject) : null;
@@ -261,6 +268,24 @@ export default async function EnrollmentDetailPage({
               ) : (
                 <p className="text-text-faint flex-1 text-sm">기재된 상담 내용이 없습니다.</p>
               )}
+              {/* 녹음 분석이 정리한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전을 되살려 제시(비파괴). */}
+              {showParentRequestSuggestion ? (
+                <details className="border-gold/40 bg-gold-soft/30 mt-2 rounded-md border px-3 py-2">
+                  <summary className="text-foreground flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium">
+                    <Sparkles className="text-gold size-3.5 shrink-0" />
+                    AI가 정리한 상담 내용 보기
+                  </summary>
+                  <p className="text-text-dim mt-2 max-h-48 overflow-y-auto text-xs leading-relaxed break-words whitespace-pre-wrap">
+                    {aiSuggestedParentRequest}
+                  </p>
+                  <Link
+                    href={`/enrollment/${consult.id}/edit`}
+                    className="text-gold hover:text-gold/80 mt-2 inline-flex items-center gap-1 text-xs font-medium"
+                  >
+                    수정에서 반영하기 <ExternalLink className="size-3" />
+                  </Link>
+                </details>
+              ) : null}
               {/* makeedu 동기화 예비상담(makeedu_id=counselSeq) → 원본 상세 링크(클릭 시 makeedu 로그인 필요). */}
               {consult.makeeduId ? (
                 <a

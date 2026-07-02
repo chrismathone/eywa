@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import type { ExtractedConsultationForm } from "../form-fill";
 
 export type LearningHistory = {
   prevAcademy?: string;
@@ -248,6 +249,8 @@ export type ConsultationDetail = ConsultationListRow & {
   learningHistory: LearningHistory | null;
   aiAnalysis: AiAnalysisDetail | null;
   audioReport: ConsultationAudioReport | null;
+  /** 녹음 분석이 전사에서 추출한 폼 값 원본(빈 칸만 자동입력됨). 이미 채워진 필드는 '✨ AI 제안'으로 비파괴 제시. */
+  aiFormSuggestions: ExtractedConsultationForm | null;
   transcription: string | null;
   speakerLabels: { speaker: string; text: string }[] | null;
   speakerRoles: Record<string, string> | null;
@@ -315,7 +318,11 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
 
   const printPayload =
     (ai?.print_payload as
-      | (PrintPayload & { audioReport?: ConsultationAudioReport; speakerRoles?: Record<string, string> })
+      | (PrintPayload & {
+          audioReport?: ConsultationAudioReport;
+          speakerRoles?: Record<string, string>;
+          formSuggestions?: ExtractedConsultationForm;
+        })
       | null) ?? null;
   const audioReport =
     printPayload && typeof printPayload === "object" && "audioReport" in printPayload
@@ -324,6 +331,10 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
   const speakerRoles =
     printPayload && typeof printPayload === "object" && printPayload.speakerRoles
       ? printPayload.speakerRoles
+      : null;
+  const aiFormSuggestions =
+    printPayload && typeof printPayload === "object" && printPayload.formSuggestions
+      ? printPayload.formSuggestions
       : null;
 
   return {
@@ -352,6 +363,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     processingError: c.processing_error,
     audioDurationSec: c.audio_duration_sec,
     audioReport,
+    aiFormSuggestions,
     aiAnalysis: ai
       ? {
           id: ai.id,

@@ -452,6 +452,9 @@ async function handleConsultation(
     audioReport: reportSections,
     // 전사 화자→역할(상담자/학부모/학생) 매핑 — 상세 전사 패널이 화자별 역할 라벨로 렌더.
     speakerRoles: inferredSpeakerRoles ?? {},
+    // 폼 자동추출 원본 스냅샷 — buildFormPatch는 "빈 칸만" 채우므로, 이미 채워진 필드의 AI 추출값은
+    // 여기 보존해 상세/수정폼이 '✨ AI 제안'으로 비파괴 제시(상담 내용 등)한다. 추출 실패 시 미포함.
+    ...(extracted ? { formSuggestions: extracted } : {}),
   };
 
   const modelVersion = `${modelId}-${new Date().toISOString().slice(0, 10)}`;
