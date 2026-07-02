@@ -1313,7 +1313,7 @@ export const academyDocuments = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     category: academyDocumentCategoryEnum("category").notNull().default("other"),
-    kind: text("kind").notNull(), // 'file' | 'text'
+    kind: text("kind").notNull(), // 'file' | 'text' | 'form'
     description: text("description"),
     // kind='file'
     filePath: text("file_path"),
@@ -1322,6 +1322,12 @@ export const academyDocuments = pgTable(
     mimeType: text("mime_type"),
     // kind='text'
     body: text("body"),
+    // kind='form' — 웹 작성 폼 문서(0072a). form_type='staff_resume' 등, form_data는 폼별 구조화 스키마
+    // (직원 이력서 = src/features/staff/resume.ts StaffResumeData). 작성 화면은 /staff?tab=resumes.
+    formType: text("form_type"),
+    formData: jsonb("form_data"),
+    // 사무실 전용 열람(주민번호·급여 등 민감 HR 문서) — RLS restrictive 정책(0072a)이 DB 레벨에서도 강제.
+    restricted: boolean("restricted").notNull().default(false),
     pinned: boolean("pinned").notNull().default(false), // 자주 쓰는 서식 상단 고정(목록 정렬 pinned→최신)
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

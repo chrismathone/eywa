@@ -9,6 +9,7 @@ export type DocumentRow = {
   title: string;
   category: DocumentCategory;
   kind: DocumentKind;
+  formType: string | null; // kind='form'일 때 폼 종류(staff_resume 등)
   description: string | null;
   fileName: string | null;
   fileSize: number | null;
@@ -37,7 +38,7 @@ export async function getDocumentsPage(
   let qb = supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, description, file_name, file_size, mime_type, pinned, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, form_type, description, file_name, file_size, mime_type, pinned, created_at, uploader:uploaded_by(display_name)",
       { count: "exact" },
     );
   if (opts.category && (DOCUMENT_CATEGORIES as readonly string[]).includes(opts.category)) {
@@ -56,6 +57,7 @@ export async function getDocumentsPage(
     title: r.title,
     category: r.category as DocumentCategory,
     kind: r.kind as DocumentKind,
+    formType: r.form_type,
     description: r.description,
     fileName: r.file_name,
     fileSize: r.file_size,
@@ -91,7 +93,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
   const { data } = await supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, description, file_path, file_name, file_size, mime_type, body, pinned, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, form_type, description, file_path, file_name, file_size, mime_type, body, pinned, created_at, uploader:uploaded_by(display_name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -101,6 +103,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
     title: data.title,
     category: data.category as DocumentCategory,
     kind: data.kind as DocumentKind,
+    formType: data.form_type,
     description: data.description,
     fileName: data.file_name,
     fileSize: data.file_size,

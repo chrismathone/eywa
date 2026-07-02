@@ -12,7 +12,9 @@ import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { Pagination } from "@/components/pagination";
+import { FaceTabs, type Face } from "@/components/face-tabs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
+import { ResumesFace } from "./_components/resumes-face";
 
 export const metadata = { title: "직원관리 — eywa" };
 
@@ -75,6 +77,7 @@ export default async function StaffPage({
 }: {
   searchParams: Promise<{
     invited?: string;
+    tab?: string;
     role?: RoleKey;
     status?: StatusKey;
     q?: string;
@@ -85,6 +88,21 @@ export default async function StaffPage({
   const user = await getCurrentUser();
   const canManage = !!user && canManageStaff(user.systemRole);
   const sp = await searchParams;
+
+  // 면 전환(FaceTabs) — 직원 목록 / 직원 이력서(웹 작성 서식 → 데이터베이스 저장).
+  const FACES: Face[] = [
+    { key: "list", label: "직원 목록", href: "/staff" },
+    { key: "resumes", label: "직원 이력서", href: "/staff?tab=resumes" },
+  ];
+  if (sp.tab === "resumes") {
+    return (
+      <div className="space-y-4">
+        <FaceTabs faces={FACES} active="resumes" ariaLabel="직원관리 면" />
+        <ResumesFace page={Math.max(1, Number(sp.page) || 1)} />
+      </div>
+    );
+  }
+
   const invited = sp.invited;
   const role: RoleKey = (sp.role as RoleKey) ?? "all";
   const status: StatusKey = (sp.status as StatusKey) ?? "all";
@@ -137,6 +155,8 @@ export default async function StaffPage({
 
   return (
     <div className="space-y-4">
+      <FaceTabs faces={FACES} active="list" ariaLabel="직원관리 면" />
+
       {/* Stat strip */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
         <Stat label="전체" value={all.length} icon={Users} color="primary" />

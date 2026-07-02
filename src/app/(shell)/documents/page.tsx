@@ -145,11 +145,17 @@ export default async function DocumentsPage({
                         kind: r.kind,
                         description: r.description,
                         categoryLabel: CATEGORY_LABEL[r.category],
-                        typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType),
+                        typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType),
                         sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",
                         createdAt: r.createdAt,
                         uploaderName: r.uploaderName,
                         pinned: r.pinned,
+                        href:
+                          r.kind === "file"
+                            ? `/documents/${r.id}/preview`
+                            : r.kind === "form"
+                              ? `/staff/resumes/${r.id}`
+                              : `/documents/${r.id}`,
                       }}
                       canWrite={canWrite}
                     />

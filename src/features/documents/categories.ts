@@ -20,10 +20,21 @@ export const CATEGORY_LABEL: Record<DocumentCategory, string> = {
   other: "기타",
 };
 
-export type DocumentKind = "file" | "text";
+export type DocumentKind = "file" | "text" | "form";
+
+/** 폼 문서(form_type) → 표시 라벨. 새 폼 종류를 추가하면 여기에 등록. */
+export const FORM_TYPE_LABEL: Record<string, string> = {
+  staff_resume: "이력서",
+};
 
 /** 파일 확장자 → 표시용 종류 라벨(탐색기 '유형' 컬럼). */
-export function fileTypeLabel(kind: DocumentKind, fileName: string | null, mimeType: string | null): string {
+export function fileTypeLabel(
+  kind: DocumentKind,
+  fileName: string | null,
+  mimeType: string | null,
+  formType?: string | null,
+): string {
+  if (kind === "form") return FORM_TYPE_LABEL[formType ?? ""] ?? "작성 서식";
   if (kind === "text") return "문서";
   const ext = (fileName?.split(".").pop() ?? "").toLowerCase();
   if (ext === "pdf") return "PDF";

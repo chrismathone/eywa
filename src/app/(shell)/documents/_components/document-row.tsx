@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  ClipboardList,
   Download,
   File,
   FileImage,
@@ -30,11 +31,14 @@ export type DocumentRowData = {
   createdAt: string;
   uploaderName: string | null;
   pinned: boolean;
+  /** 이름 클릭 목적지 — 페이지가 kind별로 계산(file=내부 미리보기 / text=상세 / form=이력서 뷰). */
+  href: string;
 };
 
 // 유형 → 탐색기식 파일 아이콘(색으로 형식 구분).
 function TypeIcon({ typeLabel, kind }: { typeLabel: string; kind: DocumentKind }) {
   const cls = "size-4 shrink-0";
+  if (kind === "form") return <ClipboardList className={`${cls} text-rose`} />;
   if (kind === "text") return <StickyNote className={`${cls} text-text-dim`} />;
   if (typeLabel === "PDF") return <FileText className={`${cls} text-danger`} />;
   if (typeLabel === "Word") return <FileText className={`${cls} text-blue`} />;
@@ -86,24 +90,14 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
         <div className="flex min-w-0 items-center gap-2">
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.5} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
-          {doc.kind === "file" ? (
-            // 내부 창 미리보기 — 클릭 시 앱 플로팅 창(드릴인)으로 열림. 미지원 형식도 창에서 "불가" 안내 + 다운로드.
-            <WindowLink
-              href={`/documents/${doc.id}/preview`}
-              title={doc.title}
-              className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
-            >
-              {doc.title}
-            </WindowLink>
-          ) : (
-            <WindowLink
-              href={`/documents/${doc.id}`}
-              title={doc.title}
-              className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
-            >
-              {doc.title}
-            </WindowLink>
-          )}
+          {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산) */}
+          <WindowLink
+            href={doc.href}
+            title={doc.title}
+            className="text-foreground hover:text-primary min-w-0 truncate font-medium hover:underline"
+          >
+            {doc.title}
+          </WindowLink>
           {doc.kind === "file" && isPreviewableType(doc.typeLabel) ? (
             <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap">
               미리보기
