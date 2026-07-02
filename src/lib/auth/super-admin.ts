@@ -2,8 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "./current-user";
-import { canAccess } from "@/lib/permissions";
+import { canAccess, type SystemRole } from "@/lib/permissions";
 
 export type CurrentSuperAdmin = {
   id: string;
@@ -52,6 +53,33 @@ export const isCurrentUserSuperAdmin = cache(async (): Promise<boolean> => {
     .maybeSingle();
   return !!data;
 });
+
+/**
+ * 전체 super_admin id 집합 — **service_role**(RLS 우회)로 조회.
+ * super_admins RLS는 "본인 행만" 노출하므로, academy master 등 **다른 사용자**가 목록에서
+ * super_admin 계정을 식별하려면 admin client가 필요하다. 아래 displayRoleFor(표시 위장) 전용.
+ */
+export const getSuperAdminIds = cache(async (): Promise<Set<string>> => {
+  const admin = createAdminClient();
+  const { data } = await admin.from("super_admins").select("id");
+  return new Set((data ?? []).map((r) => r.id as string));
+});
+
+/**
+ * super_admin 계정의 **표시** 역할을 '관리자(admin)'로 위장 — 실제 role/접근/권한은 불변.
+ * super_admin은 학원 안에서 숨은 총괄이라 owner(master)로 노출되면 안 됨(사용자 결정 2026-07-02).
+ * 역할·권한 매트릭스는 이미 getPermMatrix에서 우회되므로 여기선 "보이는 라벨"만 바꾼다.
+ * ⚠️ **표시 전용** — 위계/권한 판정(canManageStaffMember·assignableRoles·급여 게이트 등)엔 절대
+ * 쓰지 말 것(반드시 실제 systemRole 사용). 위장값을 위계에 넣으면 master가 super_admin을
+ * '하위 admin'으로 오인해 편집·삭제할 수 있게 된다.
+ */
+export function displayRoleFor(
+  userId: string,
+  realRole: SystemRole,
+  superAdminIds: Set<string>,
+): SystemRole {
+  return superAdminIds.has(userId) && realRole === "master" ? "admin" : realRole;
+}
 
 export async function requireSuperAdmin(): Promise<CurrentSuperAdmin> {
   const sa = await getCurrentSuperAdmin();

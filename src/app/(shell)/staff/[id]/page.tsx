@@ -13,6 +13,7 @@ import {
   ROLE_LABEL,
 } from "@/lib/auth/role-hierarchy";
 import { getStaffById } from "@/features/staff/server/queries";
+import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { StaffTabsNav, isStaffTabKey } from "./_components/tabs-nav";
 import { BasicInfoTab } from "./_tabs/basic-info-tab";
 import { ScheduleTab } from "./_tabs/schedule-tab";
@@ -49,8 +50,15 @@ export default async function StaffDetailPage({
   const { tab: tabParam } = await searchParams;
   const tab = isStaffTabKey(tabParam) ? tabParam : "info";
 
-  const [staff, viewer] = await Promise.all([getStaffById(id), getCurrentUser()]);
+  const [staff, viewer, superAdminIds] = await Promise.all([
+    getStaffById(id),
+    getCurrentUser(),
+    getSuperAdminIds(),
+  ]);
   if (!staff) notFound();
+
+  // 표시 위장(fake admin) — 배지·버튼 노출 등 '보이는 것'에만. 위계/권한 판정엔 실제 staff.systemRole 사용.
+  const displayRole = displayRoleFor(staff.id, staff.systemRole, superAdminIds);
 
   const canManage = !!viewer && canManageStaff(viewer.systemRole);
   const canManageThis = !!viewer && canManageStaffMember(viewer.systemRole, staff.systemRole);
@@ -58,9 +66,10 @@ export default async function StaffDetailPage({
   const roleOptions = canManageThis && viewer ? assignableRoles(viewer.systemRole) : [];
   // 급여 노출은 원장(master) + 본인만 (schema.ts 주석). admin/manager에게도 보이면 안 됨.
   const canSeeSalary = !!viewer && (viewer.systemRole === "master" || viewer.id === staff.id);
-  const role = ROLE_COLOR[staff.systemRole] ?? ROLE_COLOR.viewer!;
+  const role = ROLE_COLOR[displayRole] ?? ROLE_COLOR.viewer!;
   const status = STATUS_META[staff.status] ?? STATUS_META.active!;
-  const isTeacherLike = staff.systemRole === "teacher" || staff.systemRole === "master";
+  // 급여·휴가 버튼 노출은 표시 역할 기준(위장된 admin은 일반 관리자처럼 미노출) — 순수 표시.
+  const isTeacherLike = displayRole === "teacher" || displayRole === "master";
 
   return (
     <div className="space-y-6">
@@ -76,7 +85,7 @@ export default async function StaffDetailPage({
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-2">
-            <Pill color={role.pill}>{ROLE_LABEL[staff.systemRole] ?? staff.systemRole}</Pill>
+            <Pill color={role.pill}>{ROLE_LABEL[displayRole] ?? displayRole}</Pill>
             <Pill color={status.color} soft>
               {status.label}
             </Pill>
@@ -122,6 +131,7 @@ export default async function StaffDetailPage({
         {tab === "info" ? (
           <BasicInfoTab
             staff={staff}
+            displayRole={displayRole}
             canManageThis={canManageThis}
             showSalary={canSeeSalary}
             roleOptions={roleOptions}

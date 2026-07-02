@@ -441,6 +441,26 @@ override(`retention master=none` 실존)에 같이 잠겨 있었음 → 우회 �
   '이탈 방어' 노출 + `/retention` 200 + 매트릭스 헤더 "owner" / chrismathone → 사이드바 미노출 + `/retention` 직접 진입
   시 `/dashboard` 리다이렉트(override 정상 적용 = 우회가 super_admin에게만).
 
+### super_admin = 학원 화면에서 '관리자'로 위장(fake admin) — 표시 전용, 권한/위계 불변 (2026-07-02) — ✅ typecheck0/lint0 + 라이브 양방향
+위 "매트릭스 위" 결정의 후속(사용자 결정): st2000423은 **숨은 super_admin이니 학원 화면에선 일반 '관리자'처럼 보이게** 하되,
+역할·권한은 이미 우회돼 영향 없음(페이크 관리자). 즉 **라벨만** 위장. ⚠️ 이전 "라벨 통일"로 master=**owner** 표시라, super_admin인
+st2000423도 학원 직원 목록/상세에 그대로 "owner"로 노출됐던 것을 admin으로 가림.
+- **단일 소스** [`getSuperAdminIds`·`displayRoleFor`](src/lib/auth/super-admin.ts): `getSuperAdminIds`=**service_role(admin client)로
+  super_admins 전건 조회**(⚠️ super_admins RLS는 "본인 행만"이라 chrismathone 같은 **다른 사용자**가 목록에서 super_admin을
+  식별하려면 admin client 필수). `displayRoleFor(userId, realRole, ids)`=`super_admin && master → "admin"`, 그 외 realRole 그대로.
+- **소비처(표시 전용)**: 직원 목록([staff/page.tsx](<src/app/(shell)/staff/page.tsx>), Pill·필터·Stat 카운트 전부 위장 role로) +
+  직원 상세([staff/[id]/page.tsx](<src/app/(shell)/staff/[id]/page.tsx>), 헤더 배지·급여/휴가 버튼 노출[isTeacherLike]) +
+  상세 기본정보 탭([basic-info-tab.tsx](<src/app/(shell)/staff/[id]/_tabs/basic-info-tab.tsx>), "시스템 역할" 필드·급여 카드).
+- **⚠️ 불변식**: 위장은 **displayRole(보이는 것)에만**. 위계/권한 판정(`canManageStaffMember`·역할변경 패널 `AccountActions currentRole`·
+  급여 게이트)엔 **실제 `staff.systemRole`(master) 유지** — 위장값을 위계에 넣으면 master가 super_admin을 '하위 admin'으로 오인해
+  **편집·삭제**하게 됨(displayRoleFor 주석에 명시). 실측: chris(master)↔st(master)는 `canManageStaffMember`=false라 역할변경 패널
+  자체가 안 떠 누출 없음. **super-admin 콘솔(`/super-admin/tenants/[id]`)은 위장 안 함**(SaaS 백스테이지 = 진짜 role 보여야 맞음).
+- 검증: typecheck0/lint0(경고 7=baseline) + **라이브 양방향**(localhost:3001, chris 로그인해 cross-user 확인): st2000423 → 목록/상세
+  헤더배지/시스템역할 필드 전부 **"관리자"** + owner/master 누출 0 + 급여·휴가 버튼/급여 카드 숨김 / chrismathone(진짜 owner) →
+  전부 "owner" + 급여·휴가 표시. ⚠️ 검증 중 상세 404는 세션 초 node_modules 파손 시절 뜬 dev 서버의 `.next` 오염(위장 무관 계정도
+  404) → `.next` 삭제+dev 재시작으로 정상화(내 코드 무관 확인). ⚠️ **`getSuperAdminIds`는 무필터 전건 select** — super_admins는
+  극소수(현 1)라 안전하나, 규모 커지면 대상 id `.in()`/캐시 고려.
+
 ### 강사 "교재 요청" 탭 + 교재요청서 다운로드 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST/라우트 검증
 사용자 요청: 강사 미니셸 '내 메뉴'에 **교재 요청** 탭. 교재 기능이 `/billing`(billing 권한)에 묶여 **강사=billing none**이라 "링크만 추가"로는 안 됨 → 강사 전용 스코프 기능 신설(PII teacher-scope 필수).
 - **권한**: 새 menuKey **`textbook_requests`**([permissions.ts](src/lib/permissions.ts)) — teacher/master/admin/manager/accountant=full, 그 외 none. [permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>) 라벨 + [navigation.ts](src/lib/navigation.ts) hidden NavItem(창/타이틀 해석용).

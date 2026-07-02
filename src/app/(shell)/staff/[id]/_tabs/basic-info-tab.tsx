@@ -17,11 +17,15 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 export async function BasicInfoTab({
   staff,
+  displayRole,
   canManageThis,
   showSalary,
   roleOptions,
 }: {
   staff: StaffDetail;
+  // 표시용 역할(super_admin은 '관리자'로 위장). 배지·급여카드 노출 등 '보이는 것'에만 사용.
+  // 권한/위계 로직(AccountActions)엔 실제 staff.systemRole 유지.
+  displayRole: SystemRole;
   canManageThis: boolean;
   showSalary: boolean;
   roleOptions: SystemRole[];
@@ -29,7 +33,7 @@ export async function BasicInfoTab({
   const settings = await getTenantSettings();
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjects = buildSubjectMaps(settings.operations.subjects);
-  const isTeacherLike = staff.systemRole === "teacher" || staff.systemRole === "master";
+  const isTeacherLike = displayRole === "teacher" || displayRole === "master";
   const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
   return (
@@ -38,7 +42,7 @@ export async function BasicInfoTab({
         <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
           <Field label="이메일" value={<span className="num">{staff.email}</span>} />
           <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
-          <Field label="시스템 역할" value={ROLE_LABEL[staff.systemRole] ?? staff.systemRole} />
+          <Field label="시스템 역할" value={ROLE_LABEL[displayRole] ?? displayRole} />
           <Field label="직책" value={staff.jobTitle} />
           <Field label="입사일" value={staff.hireDate ? <span className="num">{staff.hireDate}</span> : null} />
           <Field label="기본 강의실" value={staff.defaultClassroom} />

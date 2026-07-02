@@ -10,6 +10,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
+import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { Pagination } from "@/components/pagination";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
 
@@ -90,7 +91,12 @@ export default async function StaffPage({
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const all = await getStaffList();
+  // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
+  const [rawAll, superAdminIds] = await Promise.all([getStaffList(), getSuperAdminIds()]);
+  const all = rawAll.map((s) => ({
+    ...s,
+    systemRole: displayRoleFor(s.id, s.systemRole, superAdminIds),
+  }));
   let staff = all;
   if (q) {
     const term = q.toLowerCase();
