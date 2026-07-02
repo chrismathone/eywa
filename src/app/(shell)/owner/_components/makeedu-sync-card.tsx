@@ -1,21 +1,66 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { setMakeeduSyncEnabled, triggerMakeeduSyncNow } from "@/features/integrations/server/actions";
-import type { MakeeduAutoSyncStatus } from "@/features/integrations/server/makeedu-sync";
+import {
+  setMakeeduSyncEnabled,
+  triggerMakeeduSyncNow,
+  checkMakeeduSyncLock,
+} from "@/features/integrations/server/actions";
+import type { MakeeduAutoSyncStatus, MakeeduSyncLock } from "@/features/integrations/server/makeedu-sync";
 
 /**
  * makeedu 자동 동기화 ON/OFF 카드 (연동 면). 토글은 user_integrations(provider=makeedu).sync_enabled를 바꾸고,
  * GitHub Actions cron(sync-all.cjs)이 매 실행 시작에 이 값을 읽어 off면 스킵한다. master 전용(서버 액션이 게이트).
+ *
+ * '지금 동기화' 버튼은 **모든 사용자 공유 잠금**(initialLock)으로 진행 중/쿨다운 동안 비활성 — 동시 실행·연타
+ * 방지(데이터 안전은 dedup·원자적 claim이 이미 보장, 이건 UX). 20초 폴링으로 다른 사용자의 트리거도 실시간 반영.
  */
-export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
+export function MakeeduSyncCard({
+  status,
+  initialLock,
+}: {
+  status: MakeeduAutoSyncStatus;
+  initialLock: MakeeduSyncLock;
+}) {
   const [enabled, setEnabled] = useState(status.enabled);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [running, startRun] = useTransition();
+  const [triggering, startRun] = useTransition();
   const [runMsg, setRunMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [lock, setLock] = useState<MakeeduSyncLock>(initialLock);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  // 두 타이머: (1) 1초 틱 — 하단 카운트다운(mm:ss)과 쿨다운 만료 시 자동 재활성. (2) 20초 폴링 —
+  // 다른 사용자/탭이 트리거하면 이 카드 버튼도 실시간 비활성(공유 lock DB에서 재조회).
+  useEffect(() => {
+    let alive = true;
+    const secTick = setInterval(() => setNowMs(Date.now()), 1000);
+    const poll = async () => {
+      try {
+        const l = await checkMakeeduSyncLock();
+        if (alive) setLock(l);
+      } catch {
+        /* 폴링 실패는 무시(다음 틱 재시도) */
+      }
+    };
+    void poll();
+    const pollId = setInterval(poll, 20_000);
+    return () => {
+      alive = false;
+      clearInterval(secTick);
+      clearInterval(pollId);
+    };
+  }, []);
+
+  const busyUntilMs = lock.busyUntil ? Date.parse(lock.busyUntil) : 0;
+  const cooling = busyUntilMs > nowMs;
+  const inProgress = triggering || lock.running;
+  const busy = inProgress || cooling;
+  // 하단 카운트다운 mm분 ss초.
+  const remainSec = cooling ? Math.max(0, Math.ceil((busyUntilMs - nowMs) / 1000)) : 0;
+  const remLabel = `${Math.floor(remainSec / 60)}분 ${String(remainSec % 60).padStart(2, "0")}초`;
 
   function toggle() {
     if (pending) return;
@@ -29,18 +74,23 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
   }
 
   // 지금 즉시 1회 동기화 — 로컬 서버면 sync-all.cjs 직접 실행, Vercel(프로덕션)이면 요청 큐에 접수
-  // (동기화 PC 워처가 15초 내 대신 실행). 어느 경로든 결과는 ~1-2분 뒤 배지 반영.
+  // (동기화 PC 워처가 15초 내 대신 실행). 어느 경로든 결과는 ~1-2분 뒤 배지 반영. 잠금 중이면 무시.
   function runNow() {
-    if (running) return;
+    if (triggering || busy) return;
     setRunMsg(null);
     startRun(async () => {
       const res = await triggerMakeeduSyncNow();
       if (res?.error) setRunMsg({ ok: false, text: res.error });
-      else
+      else {
         setRunMsg({
           ok: true,
           text: res?.message ?? "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다.",
         });
+        if (res?.lock) {
+          setLock(res.lock); // 트리거 즉시 잠금(눌린 사용자 버튼 바로 비활성)
+          setNowMs(Date.now());
+        }
+      }
     });
   }
 
@@ -77,13 +127,24 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
 
       {error ? <p className="text-chart-4 text-sm">{error}</p> : null}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={runNow} disabled={running}>
-          {running ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-          지금 동기화
-        </Button>
-        {runMsg ? (
-          <span className={`text-xs ${runMsg.ok ? "text-primary" : "text-chart-4"}`}>{runMsg.text}</span>
+      <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={runNow} disabled={busy}>
+            {inProgress ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {inProgress ? "동기화 진행 중" : "지금 동기화"}
+          </Button>
+          {runMsg ? (
+            <span className={`text-xs ${runMsg.ok ? "text-primary" : "text-chart-4"}`}>{runMsg.text}</span>
+          ) : null}
+        </div>
+        {/* 비활성 사용자에게도 언제 다시 가능한지 초 단위로 — 1초 틱으로 갱신. */}
+        {cooling ? (
+          <p className="text-text-faint mt-1.5 text-xs tabular">
+            {inProgress ? "동기화 진행 중 · " : "동기화 완료 대기 · "}
+            다시 가능까지 <span className="text-text-dim font-medium">{remLabel}</span>
+          </p>
+        ) : inProgress ? (
+          <p className="text-text-faint mt-1.5 text-xs">동기화 진행 중…</p>
         ) : null}
       </div>
 

@@ -5,6 +5,7 @@ import {
   getMakeeduSyncRuns,
   getUnpushedIntakeConsultations,
   getMakeeduSyncWorkers,
+  getMakeeduSyncLock,
 } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
 import { SheetsClient } from "@/app/(shell)/admin/integrations/sheets/_client";
@@ -37,13 +38,14 @@ export async function SheetsFace({
   // 서버 렌더 시각 — 워처 온라인/상대시각 판정용(RSC는 요청당 1회 실행이라 안정).
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const nowMs = Date.now();
-  // 독립 조회 다섯 → 병렬(B4).
-  const [status, makeeduStatus, runsPage, pushCandidates, workers] = await Promise.all([
+  // 독립 조회 여섯 → 병렬(B4).
+  const [status, makeeduStatus, runsPage, pushCandidates, workers, syncLock] = await Promise.all([
     getGoogleSheetsStatus(),
     getMakeeduAutoSyncStatus(),
     getMakeeduSyncRuns(page, RUNS_PAGE_SIZE),
     getUnpushedIntakeConsultations(),
     getMakeeduSyncWorkers(nowMs),
+    getMakeeduSyncLock(),
   ]);
   const saEmail = getServiceAccountEmail();
   const runsTotalPages = Math.max(1, Math.ceil(runsPage.total / RUNS_PAGE_SIZE));
@@ -57,7 +59,7 @@ export async function SheetsFace({
   return (
     <div className="w-full space-y-8">
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
-      <MakeeduSyncCard status={makeeduStatus} />
+      <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} />
       <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />
       <MakeeduSyncRunsList
         runs={runsPage.runs}

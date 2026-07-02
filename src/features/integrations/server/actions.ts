@@ -12,7 +12,26 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { overwriteMathTimetableSheet } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
 
+import {
+  getMakeeduSyncLock,
+  SYNC_COOLDOWN_MS,
+  type MakeeduSyncLock,
+} from "@/features/integrations/server/makeedu-sync";
+
+// 트리거 직후 버튼을 즉시 잠글 락(요청/실행 행이 아직 커밋 전이어도 눌린 사용자 버튼이 바로 비활성).
+function freshBusyLock(): MakeeduSyncLock {
+  return { busyUntil: new Date(Date.now() + SYNC_COOLDOWN_MS).toISOString(), running: true };
+}
+
 export type ToggleState = { error?: string; enabled?: boolean } | undefined;
+
+/**
+ * '지금 동기화' 버튼 공유 잠금 상태 폴링용 — 카드가 주기적으로 호출해 모든 사용자 버튼을 실시간 동기화.
+ * (읽기 전용. 게이트 불필요 — 잠금 상태는 민감정보 아님, RLS로 테넌트 격리.)
+ */
+export async function checkMakeeduSyncLock(): Promise<MakeeduSyncLock> {
+  return getMakeeduSyncLock();
+}
 
 /**
  * 구글 시트 내보내기 연동 ON/OFF (master 전용). `user_integrations.sync_enabled`를 토글.
@@ -69,7 +88,9 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
   return { enabled };
 }
 
-export type TriggerSyncState = { error?: string; ok?: boolean; message?: string } | undefined;
+export type TriggerSyncState =
+  | { error?: string; ok?: boolean; message?: string; lock?: MakeeduSyncLock }
+  | undefined;
 
 /**
  * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용).
@@ -97,7 +118,15 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
   const markPath = path.join(os.tmpdir(), "eywa-makeedu-sync-last");
   const now = Date.now();
   if (existsSync(markPath) && now - statSync(markPath).mtimeMs < 90_000) {
-    return { error: "방금 동기화를 시작했습니다 — 1~2분 뒤 다시 시도하세요." };
+    // 이미 조금 전에 시작됨 — 버튼은 원래 트리거(마커 mtime) 기준 쿨다운까지 잠금 유지.
+    return {
+      ok: true,
+      message: "이미 조금 전에 동기화가 시작됐습니다 — 완료까지 기다려 주세요.",
+      lock: {
+        busyUntil: new Date(statSync(markPath).mtimeMs + SYNC_COOLDOWN_MS).toISOString(),
+        running: true,
+      },
+    };
   }
 
   try {
@@ -114,7 +143,11 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
     });
     child.unref();
     closeSync(logFd); // 자식이 fd를 dup했으므로 부모 핸들은 닫아 누수 방지.
-    return { ok: true, message: "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다." };
+    return {
+      ok: true,
+      message: "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다.",
+      lock: freshBusyLock(),
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "로컬 동기화 시작 중 오류" };
   }
@@ -136,12 +169,14 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
       .limit(1);
     if (selErr) return { error: `동기화 요청 확인 실패: ${selErr.message}` };
     if (existing && existing.length > 0) {
+      // 다른 사용자(또는 다른 탭)가 이미 눌러 처리 중 — 같은 시각까지 이 버튼도 잠근다(공유 lock).
       return {
         ok: true,
         message:
           existing[0].status === "running"
-            ? "동기화가 이미 실행 중입니다 — 1~2분 뒤 각 화면 배지에 반영됩니다."
-            : "이미 접수된 동기화 요청이 있습니다 — 동기화 PC가 곧 실행합니다.",
+            ? "이미 다른 곳에서 동기화가 실행 중입니다 — 완료까지 기다려 주세요."
+            : "이미 다른 곳에서 동기화 요청이 접수됐습니다 — 동기화 PC가 곧 실행합니다.",
+        lock: await getMakeeduSyncLock(),
       };
     }
 
@@ -154,6 +189,7 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
       message:
         "동기화 요청을 보냈습니다 — 동기화 PC가 켜져 있으면 곧 실행되고, 1~2분 뒤 각 화면 배지에 반영됩니다. " +
         "(PC가 꺼져 있으면 켜질 때 자동 실행)",
+      lock: freshBusyLock(),
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "동기화 요청 접수 중 오류" };

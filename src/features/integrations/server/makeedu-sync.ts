@@ -118,6 +118,61 @@ export async function getMakeeduSyncWorkers(nowMs: number): Promise<MakeeduWorke
   });
 }
 
+// ───────── 동기화 버튼 잠금(동시 실행/연타 방지) — 모든 사용자 공유 ─────────
+
+/** 동기화 트리거 후 이 시간 동안 '지금 동기화' 버튼을 모든 사용자에게 비활성(연타·동시 실행 방지). */
+export const SYNC_COOLDOWN_MS = 5 * 60_000; // 5분(사용자 지정). 조정하려면 이 값만.
+
+export type MakeeduSyncLock = {
+  /** 이 시각까지 버튼 비활성(마지막 트리거 + 쿨다운). null이면 트리거 기록 없음. */
+  busyUntil: string | null;
+  /** 지금 동기화가 실제 진행 중(pending/running 요청 또는 running 실행) — 라벨 "진행 중"용. */
+  running: boolean;
+};
+
+/**
+ * 동기화 버튼 공유 잠금 상태 — DB의 요청/실행 기록에서 계산(클라 로컬 아님 → 모든 사용자 공유).
+ * busyUntil = 마지막 트리거(요청 requested_at / 실행 started_at 중 최신) + SYNC_COOLDOWN_MS.
+ * running = 처리 대기·진행 중(pending/running 요청) 또는 진행 중 실행(runs.status='running').
+ * RLS로 현재 테넌트만. 데이터 안전(dedup·원자적 claim)은 별개 — 이건 UX 잠금.
+ */
+export async function getMakeeduSyncLock(): Promise<MakeeduSyncLock> {
+  const user = await getCurrentUser();
+  if (!user) return { busyUntil: null, running: false };
+  const supabase = await createClient();
+  // 독립 조회 셋 → 병렬(B4). 최신 요청/실행 + 진행 중(pending/running) 요청 개수(head:true=행 미수신).
+  const [{ data: lastReq }, { data: lastRun }, { count: inflightCount }] = await Promise.all([
+    supabase
+      .from("makeedu_sync_requests")
+      .select("requested_at")
+      .order("requested_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("makeedu_sync_runs")
+      .select("started_at, status")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("makeedu_sync_requests")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "running"]),
+  ]);
+  const triggerTimes = [
+    lastReq?.requested_at as string | undefined,
+    lastRun?.started_at as string | undefined,
+  ]
+    .filter(Boolean)
+    .map((t) => new Date(t as string).getTime());
+  const lastTrigger = triggerTimes.length ? Math.max(...triggerTimes) : null;
+  const running = (inflightCount ?? 0) > 0 || lastRun?.status === "running";
+  return {
+    busyUntil: lastTrigger != null ? new Date(lastTrigger + SYNC_COOLDOWN_MS).toISOString() : null,
+    running,
+  };
+}
+
 export type MakeeduAutoSyncStatus = {
   /** GitHub Actions cron 자동 동기화 ON/OFF. 행이 없으면 기본 ON(cron opt-out 모델 — 끄면 cron이 스킵). */
   enabled: boolean;
