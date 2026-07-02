@@ -84,6 +84,15 @@
 - **전송 실패 시**: 카드에 "전송 실패" 배지 — 원인 확인 후 **다시 선택해 재전송 가능**(error 상태는 잠기지 않음).
 - **PC 요건**: 기존 makeedu 사용 PC(신뢰 IP) 1대에 상주 워처(`eywa-makeedu-sync-watcher`, 로그온 자동시작).
   실행 PC는 **1대만 권장** — 여러 대가 각자 makeedu에 로그인하면 봇 탐지/재인증 위험.
+- **동기화 PC 지정(원커맨드)** — 웹 버튼은 PC에 작업을 설치할 수 없으므로(브라우저 샌드박스·Vercel 원격),
+  지정할 PC에서 **한 번 실행**한다. 관리자 권한 불필요.
+  - 지정: `powershell -File scripts\_makeedu\setup-sync-pc.ps1` — 사전요건 확인 → 작업 2개 등록
+    (`eywa-makeedu-sync` 06/18시 · `eywa-makeedu-sync-watcher` 로그온 상주) → 워처 시작 → **makeedu
+    로그인(신뢰 IP) 테스트**([check-login.cjs](../scripts/_makeedu/check-login.cjs))까지 자동.
+  - 상태: `... setup-sync-pc.ps1 -Status` / 로그인만: `-Test` / 해제(옛 PC): `-Remove`.
+  - **옮길 때**: 옛 PC `-Remove` → 새 PC 실행. **두 PC 동시 워처 금지**(makeedu 이중 로그인).
+  - ⚠️ 이 `.ps1`은 **UTF-8 BOM**으로 저장돼야 PS5.1이 한글·기호를 정확히 파싱한다(무BOM이면 파싱 깨짐).
+    편집 후 BOM 유지 필요(다른 무BOM 래퍼와 달리 이 파일은 박스문자·기호가 많아 BOM 필수).
 - **로그**: `D:\tmp\makeedu\watch-requests.log` (워처 + writer 출력 append).
 - **수동 CLI**(동기화 PC):
   - dry-run(제출 없이 폼 값만 확인): `node --env-file=.env.local scripts/_makeedu/push-consultations.cjs --ids=<uuid>`
