@@ -12,32 +12,44 @@ export function MakeeduSyncRunsList({ runs }: { runs: MakeeduSyncRun[] }) {
     <section className="bg-card border-border rounded-md border p-6">
       <h3 className="text-foreground text-sm font-semibold">최근 동기화 실행</h3>
       <ul className="divide-border mt-3 divide-y">
-        {runs.map((run) => (
-          <li key={run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-[13px]">
-            <span className="text-foreground tabular whitespace-nowrap">
-              {new Date(run.startedAt).toLocaleString("ko-KR", {
-                month: "numeric",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-            <span className="text-text-dim whitespace-nowrap">{TRIGGER_LABEL[run.triggerSource] ?? run.triggerSource}</span>
-            <StatusPill status={run.status} />
-            <span className="text-text-faint whitespace-nowrap">
-              {run.durationMs != null ? `${Math.round(run.durationMs / 1000)}초` : null}
-              {affectedRowCount(run) > 0 ? ` · 반영 ${affectedRowCount(run)}건` : null}
-            </span>
-            {run.status === "partial" && run.failedDomains.length > 0 ? (
-              <span className="text-amber text-xs">실패: {run.failedDomains.join(", ")}</span>
-            ) : null}
-            {run.error ? (
-              <span className="text-chart-4 min-w-0 flex-1 truncate text-xs" title={run.error}>
-                {run.error}
-              </span>
-            ) : null}
-          </li>
-        ))}
+        {runs.map((run) => {
+          const total = affectedRowCount(run);
+          const breakdown = affectedBreakdown(run);
+          return (
+            <li key={run.id} className="py-2 text-[13px]">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-foreground tabular whitespace-nowrap">
+                  {new Date(run.startedAt).toLocaleString("ko-KR", {
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="text-text-dim whitespace-nowrap">{TRIGGER_LABEL[run.triggerSource] ?? run.triggerSource}</span>
+                <StatusPill status={run.status} />
+                <span className="text-text-faint whitespace-nowrap">
+                  {run.durationMs != null ? `${Math.round(run.durationMs / 1000)}초` : null}
+                  {total > 0 ? ` · 반영 ${total}건` : null}
+                </span>
+                {run.status === "partial" && run.failedDomains.length > 0 ? (
+                  <span className="text-amber text-xs">실패: {run.failedDomains.join(", ")}</span>
+                ) : null}
+                {run.error ? (
+                  <span className="text-chart-4 min-w-0 flex-1 truncate text-xs" title={run.error}>
+                    {run.error}
+                  </span>
+                ) : null}
+              </div>
+              {/* 반영 N건이 어느 영역에서 나왔는지 다음 줄에 간단히 — 도메인 스냅샷의 rows>0만. */}
+              {breakdown.length > 0 ? (
+                <div className="text-text-faint mt-0.5 pl-1 text-xs">
+                  {breakdown.map((b) => `${b.label} ${b.rows}`).join(" · ")}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -62,4 +74,22 @@ function StatusPill({ status }: { status: string }) {
 function affectedRowCount(run: MakeeduSyncRun): number {
   if (!run.domains) return 0;
   return Object.values(run.domains).reduce((sum, d) => sum + (d.rows ?? 0), 0);
+}
+
+const DOMAIN_LABEL: Record<string, string> = {
+  students: "학생",
+  classes: "반",
+  prospects: "예비상담",
+  invoices: "수납",
+  consultations: "재원상담",
+  catalog: "교재",
+  enrollments: "수강",
+};
+
+// "반영 N건"의 도메인별 내역(rows>0만) — 다음 줄에 "학생 2 · 예비상담 1"처럼.
+function affectedBreakdown(run: MakeeduSyncRun): { label: string; rows: number }[] {
+  if (!run.domains) return [];
+  return Object.entries(run.domains)
+    .filter(([, d]) => (d.rows ?? 0) > 0)
+    .map(([key, d]) => ({ label: DOMAIN_LABEL[key] ?? key, rows: d.rows ?? 0 }));
 }
