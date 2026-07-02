@@ -137,7 +137,7 @@ export function ResumeSheet({
     );
 
   const sheet = (
-    <div className="resume-sheet border-foreground/60 bg-card text-foreground mx-auto w-full max-w-[780px] border-2 p-6 sm:p-8 print:border print:p-3">
+    <div className="resume-sheet border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-md border shadow-card p-6 sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:shadow-none print:p-3">
       <h1 className="text-center text-[26px] font-bold tracking-[0.6em] print:text-[20px]">이력서</h1>
 
       <SectionHead>1. 인적사항</SectionHead>
