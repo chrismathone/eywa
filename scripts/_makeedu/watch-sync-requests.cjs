@@ -64,36 +64,46 @@ async function finish(ids, ok, errMsg) {
     where id in ${db()(idList)}`;
 }
 
-// sync-all을 동기(블로킹)로 완주 — 실행 중엔 폴링도 멈춰 중복 실행이 구조적으로 없음.
-function runSync() {
+// 스크립트를 동기(블로킹)로 완주 — 실행 중엔 폴링도 멈춰 중복 실행이 구조적으로 없음.
+function runScript(scriptRel, extraEnv) {
   const r = spawnSync(
     process.execPath,
-    ["--env-file=.env.local", path.join("scripts", "_makeedu", "sync-all.cjs"), "--apply"],
-    {
-      cwd: REPO,
-      encoding: "utf8",
-      windowsHide: true,
-      // 버튼과 동일 semantics: 수동 요청 = 토글 무시(MAKEEDU_FORCE). relay = 실행 로그 트리거 라벨.
-      env: { ...process.env, MAKEEDU_FORCE: "true", MAKEEDU_TRIGGER: "relay" },
-    },
+    ["--env-file=.env.local", path.join("scripts", "_makeedu", scriptRel), "--apply"],
+    { cwd: REPO, encoding: "utf8", windowsHide: true, env: { ...process.env, ...extraEnv } },
   );
   const out = `${r.stdout || ""}${r.stderr || ""}`;
-  try {
-    fs.appendFileSync(LOG, out);
-  } catch {}
+  try { fs.appendFileSync(LOG, out); } catch {}
   return { ok: r.status === 0, tail: out.split("\n").filter(Boolean).slice(-5).join(" | ").slice(0, 500) };
+}
+
+// 정방향 동기화(sync-all). 버튼과 동일 semantics: 수동 요청 = 토글 무시(MAKEEDU_FORCE). relay = 실행 로그 트리거 라벨.
+const runSync = () => runScript("sync-all.cjs", { MAKEEDU_FORCE: "true", MAKEEDU_TRIGGER: "relay" });
+// 역동기화 푸시(push-consultations) — 큐의 pending 요청을 스크립트가 자체 claim해 makeedu에 제출.
+const runPush = () => runScript("push-consultations.cjs", {});
+
+// 역동기화 pending 푸시 요청이 있으면 push-consultations를 실행(스크립트가 pending을 claim). count만 보고 트리거.
+async function pendingPushCount() {
+  const [row] = await db()`select count(*)::int n from makeedu_push_requests where status = 'pending'`;
+  return row ? row.n : 0;
 }
 
 (async () => {
   log(`워처 시작 — repo: ${REPO}, poll: ${POLL_MS / 1000}s`);
   for (;;) {
     try {
+      // 1) 정방향 동기화 요청.
       const claimed = await claimPending();
       if (claimed.length) {
-        log(`요청 ${claimed.length}건 감지 → sync-all 실행`);
+        log(`동기화 요청 ${claimed.length}건 감지 → sync-all 실행`);
         const { ok, tail } = runSync();
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
         log(ok ? "✅ 동기화 완료 (done)" : `✖ 동기화 실패 (error): ${tail}`);
+      }
+      // 2) 역동기화 푸시 요청(eywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
+      if ((await pendingPushCount()) > 0) {
+        log(`푸시 요청 감지 → push-consultations 실행`);
+        const { ok, tail } = runPush();
+        log(ok ? "✅ 푸시 완료 (done)" : `✖ 푸시 실패/부분실패: ${tail}`);
       }
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);

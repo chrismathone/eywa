@@ -160,6 +160,62 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
   }
 }
 
+export type PushState = { error?: string; ok?: boolean; message?: string } | undefined;
+
+/**
+ * 역동기화(eywa→makeedu) — 선택한 QR 공개접수 상담을 makeedu 예비상담 등록 큐(makeedu_push_requests)에 넣는다 (master 전용).
+ * 실제 makeedu 쓰기는 동기화 PC 워처(watch-sync-requests.cjs → push-consultations.cjs)가 신뢰 IP에서 수행.
+ * 멱등: 이미 pending/running 요청이 있거나 이미 푸시된(makeedu_id/makeedu_pushed_at) 상담은 큐잉하지 않는다.
+ */
+export async function enqueueConsultationPush(ids: string[]): Promise<PushState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") return { error: "makeedu 전송은 원장(master)만 할 수 있습니다" };
+  const clean = [...new Set((ids ?? []).map((s) => String(s)).filter(Boolean))];
+  if (clean.length === 0) return { error: "전송할 상담을 선택하세요" };
+
+  const admin = createAdminClient();
+  // 대상 검증: 이 테넌트의 QR 접수 + 미푸시(makeedu_id/pushed_at 없음) + 미등록만.
+  // enrolled 제외 = 학원 등록이 끝난 학생은 예비원생 단계를 지났음 — 예비상담으로 푸시하면 군더더기.
+  // (makeedu 원생목록에도 없는 enrolled는 '원생등록' 푸시가 맞는 경로 — v2 후보. 후보 쿼리와 동일 가드.)
+  const { data: valid, error: selErr } = await admin
+    .from("enrollment_consultations")
+    .select("id")
+    .eq("tenant_id", user.tenantId)
+    .eq("from_public_intake", true)
+    .is("makeedu_id", null)
+    .is("makeedu_pushed_at", null)
+    .neq("outcome", "enrolled")
+    .in("id", clean);
+  if (selErr) return { error: `대상 확인 실패: ${selErr.message}` };
+  const validIds = (valid ?? []).map((r) => r.id as string);
+  if (validIds.length === 0)
+    return { error: "전송 가능한 상담이 없습니다(이미 전송됐거나, 등록완료됐거나, QR 접수가 아님)" };
+
+  // 이미 큐에 있는(pending/running) 상담은 제외 — 중복 큐잉 방지.
+  const { data: inflight } = await admin
+    .from("makeedu_push_requests")
+    .select("consultation_id")
+    .in("consultation_id", validIds)
+    .in("status", ["pending", "running"]);
+  const busy = new Set((inflight ?? []).map((r) => r.consultation_id as string));
+  const toQueue = validIds.filter((id) => !busy.has(id));
+  if (toQueue.length === 0) return { ok: true, message: "선택한 상담은 이미 전송 대기 중입니다." };
+
+  const { error: insErr } = await admin.from("makeedu_push_requests").insert(
+    toQueue.map((cid) => ({ tenant_id: user.tenantId, consultation_id: cid, requested_by: user.id })),
+  );
+  if (insErr) return { error: `전송 요청 접수 실패: ${insErr.message}` };
+
+  revalidatePath("/owner");
+  return {
+    ok: true,
+    message:
+      `${toQueue.length}건을 makeedu 전송 대기열에 넣었습니다 — 동기화 PC가 켜져 있으면 곧 등록되고, ` +
+      "완료되면 목록에서 사라집니다. (PC가 꺼져 있으면 켜질 때 자동 전송)",
+  };
+}
+
 export type SyncState = { error?: string; ok?: boolean } | undefined;
 
 export async function syncSheetsNow(
