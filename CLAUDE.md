@@ -329,6 +329,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 선생님 원스크린 배선 전수수정 — 데모 클라state → 실 영속(읽기배선·orphan정리·구조화영속) (2026-07-02) — ✅ 게이트 + 라이브 E2E
+배선 전수감사(5-agent 워크플로 + 3-agent 조사): `/onescreen`(강사 수업마감)이 프로덕션인데 **실제 DB 저장은 보고서(`lesson_reports`) 하나뿐**, 나머지는 전부 클라 임시 state(새로고침 유실)거나 하드코딩 죽은 데이터였음("데모 충실 이식" 설계가 프로덕션에 노출된 갭). Phase 1→2→3 순차 수정(각 dev 검증 후 승인 머지):
+- **Phase 1 — roster 읽기 배선**([roster.ts](src/features/onescreen/server/roster.ts)): `lesson_reports`(최신, [timetable 로더 패턴](src/features/timetable/server/queries.ts:335) 재사용) + 오늘 `attendance_records`를 `Promise.all`+`fetchInChunks` 배치 조회 → `reportSent`(오늘 저장분 → "보"셀·**중복작성 방지**)·이전 진도(`prev`)·`prevScore`(exam_info 파싱 [parseExamScores](src/features/onescreen/exam-info.ts), Vitest)·실 출결(late→지각/absent→결석). KST=[kstToday](src/lib/date-kst.ts). (이전엔 전부 하드코딩 `""`/`null`/`"—"`/`"출석"`이라 DeltaChip·이전진도·출결배지 사멸.)
+- **Phase 2 — orphan/라벨**: 과제(homework)를 태도식 칩(완료/일부미흡/미제출)으로 **실배선**(기존 `lesson_reports.homework_score` 저장경로 활성) + [report.ts](src/features/onescreen/report.ts) 빈 과제 문구 생략("과제는 — 상태입니다" 제거) + 발송 미연동 "카톡/문자" 라벨을 "카톡용 저장"/"문자용 저장"으로 정직화.
+- **Phase 3 — 구조화 영속화**: 신규 `onescreen_daily_sessions`([0065a](supabase/migrations/0065a_onescreen_daily_sessions.sql), RLS 격리, `(student,session_date)` 하루 1행) + [saveOnescreenSession](src/features/onescreen/server/actions.ts)(auth+강사 스코프 이중게이트 upsert) + 클라 **학생별 디바운스(800ms) 자동저장**([onescreen-client.tsx](src/features/onescreen/components/onescreen-client.tsx), ref 미러·학생 전환에도 무유실) + roster 복원. **점수/진도/태도/과제/진도확정이 새로고침·재접속에도 유지.**
+- 검증: typecheck0/lint0/**test584** + **라이브 E2E**(강사 김윤하, 실 61학생): 지각 배지·reportSent·이전 진도 로드 / 과제 칩→보고서 "과제는 완료 상태입니다" / 자동저장→새로고침→값 복원. ⚠️ 마이그레이션 번호는 병렬 세션 `0064a` 충돌로 **`0065a`**. draft 복원·진도 today 이중공백은 후속. + 좌측 반별 로스터 접기/펼치기·점수 "—" placeholder 제거 동반.
+
 ### 강사 '내 메뉴' 탭 표시 = 학원설정 전용 토글(역할·권한 배선) — 하드코딩 → 매트릭스 소비 (2026-07-01) — ✅ typecheck0/lint0/test574 + 워크플로 적대검증
 사용자 제보: 강사 '내 메뉴' 드롭다운의 **일부 탭을 학원에서 끄고 싶은데 설정 경로가 없음**. 원인: [teacher-menu.tsx](src/components/teacher-menu.tsx)가 **하드코딩 링크 목록**이라 권한 매트릭스(학원 오버라이드)를 안 읽음(전형적 "설정 무시"/write-only-orphan) — 학원설정 '역할·권한'에서 강사 접근을 바꿔도 탭이 그대로 떴음.
 - **전용 토글 신설**(사용자 선택): 학원설정 → 역할·권한 상단에 **"강사 '내 메뉴' 표시"** 카드([permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>)) — 8개 탭 체크박스. **별도 필드·액션 없이 같은 matrix 상태를 편집**(같은 SectionForm, 한 번 저장 → 아래 세부 권한표와 완전 정합·클로버 0). 끄기=강사 접근 `none`.
@@ -2348,6 +2355,16 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 6. **`pnpm db:seed`** — `scripts/seed.ts` 실행. idempotent (테넌트 데이터 전부 삭제 후 재삽입).
 
 ## Git 협업 규칙 (⚠️ 여러 세션이 병렬로 작업함)
+
+### ⚠️⚠️ eywa는 이제 실제 가동 중 — main 직접 커밋·push 금지, dev 검증 후 반영 (2026-07-01, 사용자 지시)
+**eywa가 실운영 중이므로 변경을 main에 바로 커밋·push하지 않는다.** 반드시 **dev(로컬/워크트리)에서 검증을 끝낸
+뒤에만** main에 반영한다. 흐름:
+1. **작업·검증은 브랜치/워크트리에서** — 기능 구현 후 게이트(typecheck/lint/test/build) + 실동작(dev 서버·브라우저) 검증까지 완료.
+2. **main 반영은 명시적 승인 후에만** — 사용자가 "반영/머지/push해라"라고 확인하기 전까지 **main으로 커밋·push하지 않는다.**
+   (프로덕션이 main을 따라가므로, 미검증 변경이 main에 들어가면 곧 실서비스에 나간다.)
+3. 급하더라도 **검증 없이 main push 금지** — 검증하지 못하는 이유가 있으면 그 사실을 먼저 알리고 승인을 받는다.
+
+> **한 줄 규칙: main = 프로덕션. dev에서 검증 끝나고 사용자 승인이 있을 때만 main에 반영한다. 곧바로 main 커밋·push 금지.**
 
 **여러 Claude 세션·사용자가 동시에 이 repo에 커밋·push한다.** 그래서:
 
