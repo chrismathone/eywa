@@ -26,7 +26,7 @@ export function MakeeduSyncRunsList({ runs }: { runs: MakeeduSyncRun[] }) {
             <StatusPill status={run.status} />
             <span className="text-text-faint whitespace-nowrap">
               {run.durationMs != null ? `${Math.round(run.durationMs / 1000)}초` : null}
-              {newRowCount(run) > 0 ? ` · 신규 ${newRowCount(run)}건` : null}
+              {affectedRowCount(run) > 0 ? ` · 반영 ${affectedRowCount(run)}건` : null}
             </span>
             {run.status === "partial" && run.failedDomains.length > 0 ? (
               <span className="text-amber text-xs">실패: {run.failedDomains.join(", ")}</span>
@@ -58,8 +58,8 @@ function StatusPill({ status }: { status: string }) {
   return <Pill color="blue">실행 중</Pill>;
 }
 
-// 이번 실행에서 새로 추가된 행 합계(도메인 스냅샷의 rows 합).
-function newRowCount(run: MakeeduSyncRun): number {
+// 이번 실행이 반영한 행 합계(도메인 스냅샷 rows 합 — 임포터별 신규+백필 = "반영" 건수).
+function affectedRowCount(run: MakeeduSyncRun): number {
   if (!run.domains) return 0;
   return Object.values(run.domains).reduce((sum, d) => sum + (d.rows ?? 0), 0);
 }
