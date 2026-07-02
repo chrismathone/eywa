@@ -27,13 +27,20 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   // 빠른 경로: 로컬 JWT 검증(getUser의 네트워크 왕복 제거).
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
   let sub = claimsData?.claims?.sub;
-  // 안전망: getClaims가 **에러로** 검증 못 했을 때만 authoritative getUser로 폴백(비호환/엣지 환경에서 정상
-  // 토큰까지 막혀 "전원 로그아웃" 되는 파국 방지). 정상 로그인은 위에서 sub 확보 → 폴백 미발생. 무세션은 둘 다 null.
-  if (!sub && claimsError) {
+  // 안전망: getClaims가 sub를 못 냈을 때(에러이거나, 콜드 인스턴스/비호환으로 조용히 빈손) — **세션 토큰이
+  // 실제로 존재하면** authoritative getUser로 확정한다. 정상 세션이 로컬검증 실패만으로 /login으로 튕겨
+  // "탭 재오픈 로그아웃"이 나는 것을 막는다(파국 방지). getSession은 쿠키에서 로컬로 읽어 토큰 유무만 판별하므로,
+  // 진짜 무세션(비로그인)은 getUser 네트워크 비용 없이 즉시 null — 랜딩 등 공개 페이지 성능 보존.
+  if (!sub) {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    sub = user?.id;
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session || claimsError) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      sub = user?.id;
+    }
   }
   if (!sub) return null;
 

@@ -1,58 +1,81 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Cheap auth gate — just checks if a Supabase auth cookie exists.
- * The (shell) layout still calls supabase.auth.getUser() for the real
- * verification + tenant lookup, so an invalid/expired cookie still
- * results in a /login bounce; this middleware is only there to avoid
- * rendering the full app shell when there's no session at all.
+ * 미들웨어 세션 갱신(표준 @supabase/ssr 패턴) — **지속 로그인의 핵심**.
  *
- * We previously tried server-side getUser() here, but on Vercel +
- * Next.js 16 + @supabase/ssr 0.10.x the cookie-format ('base64-...'
- * prefix) didn't round-trip cleanly through the middleware adapter,
- * which caused a login → /login loop. Pushing the check into the
- * layout (where the cookies adapter is the same as data queries)
- * sidesteps the mismatch.
+ * 매 요청마다 server client로 `getClaims()`를 불러 (만료 임박) 토큰을 refresh하고, 그 refresh가
+ * 발화하는 `setAll`로 **갱신된 auth 쿠키를 응답(Set-Cookie)에 실어** 브라우저에 되돌린다. 동시에
+ * `request.cookies.set`으로 **요청 헤더도 갱신**해 `NextResponse.next({ request })`가 그 갱신 쿠키를
+ * 다운스트림(같은 요청의 (shell)/layout getCurrentUser)에 전달 → RSC가 refresh된 토큰을 읽어
+ * **이중 refresh(회전 토큰 재제출) 없음**. Server Component는 쿠키를 못 써서(server.ts setAll no-op)
+ * 이 미들웨어가 유일하게 쿠키를 갱신·지속한다. 없으면 @supabase/ssr가 경고하는
+ * "random logouts / early session termination"이 난다(탭 재오픈 로그아웃).
+ *
+ * ⚠️ **canonical 패턴 준수**: 변경된 `request`(쿠키·x-embed 헤더가 반영된)를 통째로 forward한다.
+ * 헤더를 미리 복제(new Headers)해 넘기면 request.cookies.set이 그 복제본을 안 건드려 **stale 쿠키가
+ * RSC로 전달**되는 잠복 레이스가 생긴다(적대리뷰 확정) → 반드시 request.headers를 직접 변형 + `{ request }` forward.
+ *
+ * ⚠️ 인증 게이트(리다이렉트)는 여전히 **쿠키 존재 여부**로만 판정한다 — getClaims 결과로 판정하지 않는다.
+ * 과거(#10) middleware `getUser()`가 base64 쿠키 검증에 실패해 정상 로그인을 /login으로 튕겨 **로그인 루프**가
+ * 났었다. getClaims 결과에 게이트를 걸지 않으면(존재 체크 + try/catch) 그 루프가 재발하지 않는다.
+ * 진짜 검증은 (shell)/layout의 getCurrentUser가 담당(만료 쿠키면 그때 /login).
  */
 
 // Paths that the marketing landing serves — accessible without auth
 const PUBLIC_PATHS = new Set(["/"]);
 
-/**
- * Stage Manager가 메뉴를 임베드할 때 붙이는 ?embed=1을 x-embed 요청 헤더로 승격.
- * (shell)/layout이 await headers()로 읽어 사이드바/헤더 없는 크롬리스로 렌더한다.
- * 레이아웃은 searchParams를 못 받으므로 헤더가 정답(Next16 문서 권장).
- */
-function nextWithEmbed(request: NextRequest) {
-  if (request.nextUrl.searchParams.get("embed") === "1") {
-    const headers = new Headers(request.headers);
-    headers.set("x-embed", "1");
-    return NextResponse.next({ request: { headers } });
-  }
-  return NextResponse.next({ request });
-}
-
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  const isAuthRoute = pathname.startsWith("/login");
-  const isPublicAsset =
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico";
-  // /api/* 라우트 (webhook 포함)는 자체 인증 (시크릿 헤더 등) 사용 — middleware 통과
+  const isPublicAsset = pathname.startsWith("/_next") || pathname === "/favicon.ico";
+  // /api/* 라우트 (webhook 포함)는 자체 인증 (시크릿 헤더 등) 사용 — 세션 갱신 불필요.
   const isApiRoute = pathname.startsWith("/api/");
-
-  if (isAuthRoute || isPublicAsset || isApiRoute) {
+  if (isPublicAsset || isApiRoute) {
     return NextResponse.next({ request });
   }
 
-  const hasAuthCookie = request.cookies
-    .getAll()
-    .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+  // Stage Manager가 메뉴를 임베드할 때 붙이는 ?embed=1을 x-embed 요청 헤더로 승격.
+  // (shell)/layout이 await headers()로 읽어 사이드바/헤더 없는 크롬리스로 렌더한다.
+  // ⚠️ request.headers를 직접 변형해야 아래 `NextResponse.next({ request })` forward에 함께 실린다.
+  if (request.nextUrl.searchParams.get("embed") === "1") {
+    request.headers.set("x-embed", "1");
+  }
+
+  // ── 세션 갱신: getClaims가 refresh를 유발하면 setAll이 갱신 쿠키를 요청·응답 양쪽에 반영한다. ──
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          // 요청 쿠키 갱신(=request.headers 변형) → 같은 요청의 RSC가 refresh된 토큰을 읽음.
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          // 변경된 request를 통째로 forward(canonical) + 응답 Set-Cookie(브라우저용).
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        },
+      },
+    },
+  );
+  try {
+    // 로컬 JWT 검증(getCurrentUser와 동일) — 만료 임박이면 refresh → setAll이 갱신 쿠키를 요청·응답에 실음.
+    // 결과값은 게이트에 쓰지 않는다(위 #10 루프 회피). 검증 불가(콜드/비호환)면 쿠키 보존한 채 통과.
+    await supabase.auth.getClaims();
+  } catch {
+    // no-op — 게이트는 아래 쿠키 존재 체크라 세션이 살아있으면 통과, 죽었으면 layout이 /login.
+  }
+
+  const isAuthRoute = pathname.startsWith("/login");
+  if (isAuthRoute) {
+    return response;
+  }
 
   // Public routes (marketing landing) — let everyone through.
-  // Logged-in users on "/" still see the landing here; client-side redirect
-  // to /dashboard can be added later if desired.
   //
   // /kiosk* (무인 출석 키오스크)도 비로그인 통과 — 실제 보안은 디바이스 토큰(httpOnly 쿠키)으로
   // 페이지·API가 직접 검증한다. ⚠️ "/kiosk"·"/kiosk/…"만 공개. "/kiosk-settings"(원장 전용,
@@ -62,9 +85,13 @@ export async function updateSession(request: NextRequest) {
   // admin client로 직접 검증한다(토큰이 테넌트를 해석). "/intake"·"/intake/…"만 공개.
   const isIntakePublic = pathname === "/intake" || pathname.startsWith("/intake/");
   if (PUBLIC_PATHS.has(pathname) || isKioskPublic || isIntakePublic) {
-    return NextResponse.next({ request });
+    return response;
   }
 
+  // Cheap auth gate — 쿠키 존재만 확인(진짜 검증은 layout의 getCurrentUser).
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
   if (!hasAuthCookie) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -72,5 +99,5 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return nextWithEmbed(request);
+  return response;
 }
