@@ -44,7 +44,11 @@ export function ColumnCards({
           ("페이지 이동 때마다 위치가 틀어짐" 해소). 한 페이지가 더 길면 내부 스크롤. */}
       <ul className={`space-y-2 p-3 ${totalPages > 1 ? "h-[56vh] overflow-y-auto" : ""}`}>
         {visible.map((c) => {
-          const pill = OUTCOME_PILL[c.outcome] ?? OUTCOME_PILL.pending!;
+          // 수업이 1개 이상 배정된 카드는 outcome 라벨("등록") 대신 진짜 완료 배지 "배정 완료".
+          const assigned = c.assignedClassCount >= 1;
+          const pill = assigned
+            ? { label: "배정 완료", color: "primary" as const }
+            : (OUTCOME_PILL[c.outcome] ?? OUTCOME_PILL.pending!);
           return (
             <li key={c.id}>
               <WindowLink
@@ -68,6 +72,7 @@ export function ColumnCards({
                       <p className="text-text-dim text-[11px]">
                         {c.prospectGrade ?? "—"}
                         {c.prospectSchool ? <> · {c.prospectSchool}</> : null}
+                        {assigned ? <span className="text-primary"> · 수업 {c.assignedClassCount}개</span> : null}
                       </p>
                     </div>
                   </div>

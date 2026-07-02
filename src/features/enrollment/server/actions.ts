@@ -696,7 +696,7 @@ export async function convertConsultationToStudent(
   const consultationId = String(formData.get("consultationId") ?? "").trim();
   if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
 
-  // form에서 다중 class id 받음 (선택)
+  // form에서 다중 class id 받음 (최소 1개 — 아래 검증)
   const classIds = formData
     .getAll("classIds")
     .map((v) => String(v).trim())
@@ -725,6 +725,9 @@ export async function convertConsultationToStudent(
     // 이미 연결된 학생이 있으면 그 학생으로 이동
     return { studentId: c.student_id };
   }
+
+  // 수업 배정 = 반 최소 1개 필수(클라 disabled와 이중 방어). 반 없이 학생만 만들면 "배정 완료"에 안 잡혀 애매.
+  if (classIds.length === 0) return { error: "배정할 반을 1개 이상 선택하세요" };
 
   const today = kstToday();
 

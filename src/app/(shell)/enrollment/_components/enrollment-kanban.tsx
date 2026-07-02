@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, MessagesSquare } from "lucide-react";
+import { CalendarClock, GraduationCap, MessagesSquare } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { ColumnCards } from "./column-cards";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
@@ -30,6 +30,8 @@ function columnIcon(key: string) {
       return <MessagesSquare size={13} strokeWidth={2} />;
     case "ai_done":
       return <EyIcon name="sparkle" size={13} />;
+    case "assigned":
+      return <GraduationCap size={13} strokeWidth={2} />;
     default:
       return <EyIcon name="check" size={13} />;
   }
@@ -45,8 +47,8 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
 
   return (
     <div>
-      {/* 좁은 화면 전용 탭바 — lg(4열)부터 숨김 */}
-      <div className="mb-3 flex gap-1.5 overflow-x-auto lg:hidden">
+      {/* 좁은 화면 전용 탭바 — xl(5열)부터 숨김 */}
+      <div className="mb-3 flex gap-1.5 overflow-x-auto xl:hidden">
         {columns.map((col, i) => (
           <button
             key={col.key}
@@ -65,12 +67,12 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
         ))}
       </div>
 
-      {/* 컬럼 그리드 — lg에서 4열, 그 아래에서는 활성 탭 컬럼 1개만 노출 */}
-      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-4">
+      {/* 컬럼 그리드 — xl에서 5열(대기·상담·AI·등록종료·배정완료), 좁으면 활성 탭 1개만 노출 */}
+      <div className="grid grid-cols-1 gap-3.5 xl:grid-cols-5">
         {columns.map((col, i) => (
           <div
             key={col.key}
-            className={`bg-card border-line shadow-card min-h-[300px] flex-col rounded-2xl border lg:flex ${
+            className={`bg-card border-line shadow-card min-h-[300px] flex-col rounded-2xl border xl:flex ${
               i === active ? "flex" : "hidden"
             }`}
           >

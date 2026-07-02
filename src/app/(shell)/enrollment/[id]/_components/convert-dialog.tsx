@@ -20,12 +20,12 @@ type ClassOption = {
   teacherName: string | null;
 };
 
-function SubmitBtn() {
+function SubmitBtn({ disabled }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending}>
+    <Button type="submit" disabled={pending || disabled}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
-      학생 등록
+      수업 배정
     </Button>
   );
 }
@@ -113,7 +113,7 @@ export function ConvertToStudentDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <UserPlus className="size-4" />
-        학생 등록 완료
+        수업 배정
       </Button>
 
       {open ? (
@@ -121,12 +121,12 @@ export function ConvertToStudentDialog({
           <div className="bg-background border-border w-full max-w-lg rounded-lg border p-6 shadow-lg">
             <header className="mb-4 flex items-start justify-between">
               <div>
-                <p className="eyebrow">상담 → 학생 전환</p>
+                <p className="eyebrow">상담 → 수업 배정</p>
                 <h2 className="text-foreground mt-1 text-lg font-semibold">
-                  {defaults.name} 학생 등록
+                  {defaults.name} 수업 배정
                 </h2>
                 <p className="text-muted-foreground text-xs">
-                  학생 정보를 확인하고 배정할 반을 선택하세요.
+                  학생 정보를 확인하고 배정할 반을 1개 이상 선택하세요.
                 </p>
               </div>
               <button
@@ -162,7 +162,7 @@ export function ConvertToStudentDialog({
 
               <div className="space-y-1.5">
                 <label className="text-foreground block text-sm font-medium">
-                  배정할 반 (다중 선택)
+                  배정할 반 (다중 선택, 최소 1개)
                 </label>
                 {classes.length > 12 ? (
                   <input
@@ -222,17 +222,20 @@ export function ConvertToStudentDialog({
                   )}
                 </div>
                 <p className="text-muted-foreground text-[11px]">
-                  선택하지 않아도 등록 가능합니다. 나중에 학생 상세에서 추가할 수 있습니다.
+                  선택한 반으로 학생이 생성되고 수업이 배정됩니다. 반은 나중에 학생 상세에서 추가·변경할 수 있습니다.
                 </p>
               </div>
 
               {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
+              {selected.size === 0 ? (
+                <p className="text-muted-foreground text-[11px]">배정할 반을 1개 이상 선택해야 합니다.</p>
+              ) : null}
 
               <footer className="flex items-center justify-end gap-2 pt-2">
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                   취소
                 </Button>
-                <SubmitBtn />
+                <SubmitBtn disabled={selected.size === 0} />
               </footer>
             </form>
           </div>

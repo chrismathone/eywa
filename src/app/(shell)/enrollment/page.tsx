@@ -17,6 +17,8 @@ import { IntakeQrSection } from "./_components/intake-qr-section";
 
 export const metadata = { title: "등록상담 — eywa" };
 
+// outcome 기반 4컬럼 + 파생 5번째 "배정 완료"(수업≥1). 배정 완료는 outcome이 아니라
+// 연결 학생의 미종료 수강 수(assignedClassCount)로 판정하므로 build 단계에서 별도 추가(상호배타).
 const COLUMNS: {
   key: string;
   label: string;
@@ -64,17 +66,22 @@ export default async function EnrollmentPage({
   ]);
 
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
-  const enrolled = items.filter((i) => i.outcome === "enrolled").length;
-  const conversionRate = items.length > 0 ? ((enrolled / items.length) * 100).toFixed(0) : "0";
+  // "배정 완료" = 상담 → 수업 배정으로 학생이 생기고 수업이 1개 이상 붙은 진짜 완료(outcome 라벨과 별개).
+  const assigned = items.filter((i) => i.assignedClassCount >= 1);
+  const assignedIds = new Set(assigned.map((i) => i.id));
 
   const filterActive = !!selectedMonth || !!selectedConsultant || !!selectedOutcome || !!searchQuery;
 
-  const columns: KanbanColumn[] = COLUMNS.map((col) => ({
-    key: col.key,
-    label: col.label,
-    color: col.color,
-    cards: items.filter((i) => col.outcomes.includes(i.outcome)),
-  }));
+  const columns: KanbanColumn[] = [
+    // outcome 컬럼 — 배정 완료로 옮겨간 카드는 제외(상호배타, 중복 표시 방지).
+    ...COLUMNS.map((col) => ({
+      key: col.key,
+      label: col.label,
+      color: col.color,
+      cards: items.filter((i) => col.outcomes.includes(i.outcome) && !assignedIds.has(i.id)),
+    })),
+    { key: "assigned", label: "배정 완료", color: "primary" as const, cards: assigned },
+  ];
 
   return (
     <div className="space-y-4">
@@ -83,9 +90,11 @@ export default async function EnrollmentPage({
       {/* 상단 헤더 — 통계 + 신규등록 (기존 AI 그래픽 배너 제거, 통계만 유지) */}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-text-dim text-[13px]">
+          {/* '등록 전환율'(outcome=enrolled 라벨 기반)은 실제 학생 미생성 건까지 세어 과대였음 →
+              진짜 완료 지표인 '배정 완료(수업≥1)' 건수로 교체(정직). */}
           {filterActive
-            ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 전환율 ${conversionRate}%`
-            : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 등록 전환율 ${conversionRate}%`}
+            ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 배정 완료 ${assigned.length}건`
+            : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 배정 완료 ${assigned.length}건`}
         </p>
         <div className="flex items-center gap-2">
           <Suspense

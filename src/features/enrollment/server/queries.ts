@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
 import type { ExtractedConsultationForm } from "../form-fill";
 
 export type LearningHistory = {
@@ -85,6 +86,8 @@ export type ConsultationListRow = {
   hasAudio: boolean;
   fromPublicIntake: boolean;
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
+  studentId: string | null; // 수업 배정으로 생성된 학생(연결) — null이면 아직 학생 미생성
+  assignedClassCount: number; // 연결 학생의 미종료 수강(반) 수 → ≥1이면 "배정 완료"
 };
 
 export type ConsultationFilter = {
@@ -115,7 +118,7 @@ export async function getEnrollmentConsultations(
       .select(
         `id, prospect_name, prospect_grade, prospect_school,
          parent_phone, parent_request, outcome, consulted_at,
-         processing_status, audio_path, from_public_intake, sync_added_at,
+         processing_status, audio_path, from_public_intake, sync_added_at, student_id,
          consultant:consultant_id ( display_name )`,
       );
     if (filter?.month) {
@@ -138,10 +141,27 @@ export async function getEnrollmentConsultations(
 
   const ids = data.map((c) => c.id);
   // id가 수백+ 가능 → 청크 분할(.in() URL 414 방지, error는 throw — 조용히 삼키지 않음, B3).
-  const ai = await fetchInChunks<{ consultation_id: string }>(ids, (chunk) =>
-    supabase.from("consultation_ai_analysis").select("consultation_id").in("consultation_id", chunk),
-  );
+  // 연결 학생(student_id)의 미종료 수강 수 = "배정 완료" 판정 재료도 병렬로(독립 조회 = B4).
+  const studentIds = [...new Set(data.map((c) => c.student_id).filter((v): v is string => !!v))];
+  const today = kstToday();
+  const [ai, enr] = await Promise.all([
+    fetchInChunks<{ consultation_id: string }>(ids, (chunk) =>
+      supabase.from("consultation_ai_analysis").select("consultation_id").in("consultation_id", chunk),
+    ),
+    studentIds.length
+      ? fetchInChunks<{ student_id: string }>(studentIds, (chunk) =>
+          // 미종료 수강 = end_date IS NULL(진행) 또는 end_date >= 오늘(미래 종료 예정). 학생당 소수라 절단 없음.
+          supabase
+            .from("enrollments")
+            .select("student_id")
+            .in("student_id", chunk)
+            .or(`end_date.is.null,end_date.gte.${today}`),
+        )
+      : Promise.resolve([] as { student_id: string }[]),
+  ]);
   const hasAi = new Set(ai.map((a) => a.consultation_id));
+  const classCount = new Map<string, number>();
+  for (const row of enr) classCount.set(row.student_id, (classCount.get(row.student_id) ?? 0) + 1);
 
   return data.map((c) => {
     const consultant = (Array.isArray(c.consultant) ? c.consultant[0] : c.consultant) as
@@ -162,6 +182,8 @@ export async function getEnrollmentConsultations(
       hasAudio: !!c.audio_path,
       fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
       syncAddedAt: (c as { sync_added_at?: string | null }).sync_added_at ?? null,
+      studentId: (c as { student_id?: string | null }).student_id ?? null,
+      assignedClassCount: c.student_id ? (classCount.get(c.student_id) ?? 0) : 0,
     };
   });
 }
@@ -362,6 +384,18 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     | { display_name?: string }
     | undefined;
 
+  // 연결 학생의 미종료 수강 수(목록과 동일 기준) — 상세도 "배정 완료" 판정에 쓸 수 있게 채운다.
+  const linkedStudentId = (c as { student_id?: string | null }).student_id ?? null;
+  let assignedClassCount = 0;
+  if (linkedStudentId) {
+    const { count } = await supabase
+      .from("enrollments")
+      .select("*", { count: "exact", head: true })
+      .eq("student_id", linkedStudentId)
+      .or(`end_date.is.null,end_date.gte.${kstToday()}`);
+    assignedClassCount = count ?? 0;
+  }
+
   const printPayload =
     (ai?.print_payload as
       | (PrintPayload & {
@@ -425,7 +459,8 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
         }
       : null,
     recommendedClasses,
-    studentId: (c as { student_id?: string | null }).student_id ?? null,
+    studentId: linkedStudentId,
+    assignedClassCount,
     makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
     fields: mapFullFields(c as Record<string, unknown>),
   };
