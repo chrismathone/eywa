@@ -329,6 +329,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 대시보드 개편 1차 — 과목별 진행 수업·등록상담 목록·"오늘 조치할 것" 통합 패널 + 정합/죽은코드 정리 (2026-07-02) — ✅ test595/tsc0/lint0 + 라이브(마스터, 수업시간대)
+사용자 "알찬 것만" 방향 + 워크플로 조사(4에이전트: eywa 신호 전수·ijw 대시보드·현 대시보드 감사 → Top 8 랭킹) 기반 1차 적용.
+- **오늘의 일정 = 진행 중 수업 과목별 나열**([now-cockpit.tsx](<src/app/(shell)/dashboard/_components/now-cockpit.tsx>) + 순수 [`groupOngoingBySubject`](src/features/dashboard/ongoing.ts) Vitest6): 옛 "카드 3개+외 N" → 과목 헤더(설정색 점+라벨+N개) 아래 컴팩트 행(시간대·반·강사·강의실·인원, 반 상세 드릴인). **그룹당 5행 캡 + 초과 스크롤**(max-h-44, 사용자 요청). 진행 중 0건이면 빈 상태 문구. 라이브: 영어 6건(5행+스크롤)·수학 4건 동시 검증.
+- **등록상담 파이프라인 → 목록 카드**([enrollment-list-card.tsx](<src/app/(shell)/dashboard/_components/enrollment-list-card.tsx>) + `getActiveEnrollmentConsultations`): 퍼널 분포 대신 "누가·어느 단계·언제" 최근 6건(이름+학교·학년+단계 Pill+날짜, 행=상담 상세 창) + 활성 총건수(count exact). consultation-funnel.tsx·getActiveConsultationsCount 삭제.
+- **"오늘 조치할 것" 통합 패널**([today-actions-band.tsx](<src/app/(shell)/dashboard/_components/today-actions-band.tsx>) + 순수 [`buildTodayActions`](src/features/dashboard/today-actions.ts) Vitest8 + 수집 [`getTodayActionSignals`](src/features/dashboard/server/action-signals.ts)): 조건부 신호를 위젯 난립 없이 한 밴드 칩으로 — 🔴오늘 무단결석(학생 dedupe 명단)·🔴녹음 분석 실패(3테이블, **7일 창**=오래된 실패 영구잔소리 방지, 최다 메뉴로 링크)·🟠어제 출석 미기록(getDailyProcessingStatus 재사용, `/attendance/{어제}` 링크)·🟠지출 결재 대기(**7일 창** — 이관 레거시 pending 119건 잔소리 방지)·🟠교재 신청 미처리(requested)·🟠휴가 승인 대기(ends_on≥오늘)·🟠makeedu 동기화 이상(status≠ok 또는 26h+ 미동기, **sync_enabled OFF면 무경고**=토글 존중)·🔵오늘 휴가 직원. 전부 0건=✓"정상" 한 줄(안심 신호, ijw 패턴). 전 쿼리 병렬+count head:true(B2/B4).
+- **밴드 정합**([command-band.tsx](<src/app/(shell)/dashboard/_components/command-band.tsx>)): ① "학원 17일째" 하드코딩 삭제(매일 같은 거짓 숫자) ② 미수 "N건"→**"이번 달 미수" 총액 만원**(+건수 sub) — `outstanding`에 **amount_discount 차감** 추가(과대계상 버그 픽스) ③ 출석 스냅샷이 과거일 폴백이면 **"M/D 기준"** 표기(6/9 데이터가 오늘 100%처럼 보이던 것). 미수 카드 제목 "미수 상위"→**"누적 미수 상위"**(모집단 구분).
+- **죽은코드/중복 제거**: `getUpcomingPayments`·`buildActionItems`/`ActionItem`(+테스트)·`diffMinutes` 삭제(호출처 0), 신규/퇴원 count 쿼리 2개 → `getMonthlyEnrollmentChanges` 배열 길이로 도출(B4), **공지 이중 fetch 통합**(ManageAnnouncementRow를 카드 상위집합으로 확장 → canManage면 관리 목록에서 카드 4건 도출, 정렬 동일). QuickActions "수업 추가" `/classes`→`/classes/new`(폼 직행).
+- ⚠️ **참고**: "어제 출석 미기록 46/46"은 출결 기록이 6/9(ijw 데이터 끝) 이후 없어서 — eywa 출석부 채택 시 자연 감소(정직한 채택 신호로 유지). 등록상담 김연우 4중복은 실데이터(사용자 정리 대상). **후속 후보(조사 Top 8 잔여)**: QR 신규 제출 미응대·이번 달 상담 커버리지(RPC)·이탈 위험 3숫자·SlimTrend 수납률 라인→재원생 30일 추이 교체.
+
 ### 등록상담 녹음분석 '상담 내용' AI 제안 칩 — 채워진 필드도 AI 추출값을 비파괴로 제시 (2026-07-02) — ✅ typecheck0/lint0 + 적대리뷰(4렌즈) 결함0
 사용자 지적: 녹음 분석이 전사에서 뽑은 상담 내용(`parent_request`)은 [buildFormPatch](src/features/enrollment/form-fill.ts)의 "빈 칸만 채움" 규칙 때문에, 상담사가 이미 써놨으면 **통째로 버려져** 나중에 볼 수도 없었다(print_payload엔 13섹션 audioReport만 남고 포커스 추출 요약은 미보존). 해결 = **AI 제안 칩(비파괴)** — 자동 덮어쓰기/자동 append는 비채택.
 - **보존**: 웹훅 [handleConsultation](<src/app/api/webhooks/assemblyai/route.ts>)이 `extractConsultationForm` 원본 `extracted`를 `consultation_ai_analysis.print_payload.formSuggestions`에 스냅샷 저장(마이그레이션 0, jsonb 재사용, 추출 실패 시 미포함).

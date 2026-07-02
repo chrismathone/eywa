@@ -2,30 +2,32 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import {
   getAbsenceRiskStudents,
-  getActiveConsultationsCount,
+  getActiveEnrollmentConsultations,
   getAnnouncementsForManage,
   getEnrolledStudentCount,
   getFollowUpConsultations,
   getMonthlyEnrollmentChanges,
   getMostRecentAttendanceSnapshot,
-  getNewStudentsThisMonth,
   getPaymentRateThisMonth,
   getRecentAnnouncements,
   getTodayRecordedClassIds,
   getTopOutstanding,
   getTrendDataLast7Days,
-  getWithdrawalsThisMonth,
 } from "@/features/dashboard/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { kstToday } from "@/lib/date-kst";
+import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
+import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
 import { QuickActions } from "./_components/quick-actions";
+import { TodayActionsBand } from "./_components/today-actions-band";
 import { NowCockpit } from "./_components/now-cockpit";
 import { AbsenceRiskCard } from "./_components/absence-risk-card";
 import { OutstandingCard } from "./_components/outstanding-card";
-import { ConsultationFunnel } from "./_components/consultation-funnel";
+import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { SlimTrend } from "./_components/slim-trend";
@@ -37,39 +39,41 @@ export default async function DashboardPage() {
   const canManageAnnouncements = canManageStaff(user.systemRole);
   const [
     enrolled,
-    newThisMonth,
-    withdrawnThisMonth,
     attendance,
     trend,
     todaySchedule,
     payment,
-    consultations,
+    enrollList,
     absenceRisks,
     outstanding,
-    announcements,
+    recentAnnouncements,
     manageAnnouncements,
     followUps,
     recordedClassIds,
     settings,
     enrollmentChanges,
+    actionSignals,
   ] = await Promise.all([
     getEnrolledStudentCount(),
-    getNewStudentsThisMonth(),
-    getWithdrawalsThisMonth(),
     getMostRecentAttendanceSnapshot(),
     getTrendDataLast7Days(),
     getTodaySchedule(),
     getPaymentRateThisMonth(),
-    getActiveConsultationsCount(),
+    getActiveEnrollmentConsultations(),
     getAbsenceRiskStudents(),
     getTopOutstanding(),
-    getRecentAnnouncements(4),
+    // 관리 권한이면 관리 목록(상위집합)에서 카드 4건을 도출 → 이중 fetch 제거. 아니면 카드용 4건만.
+    canManageAnnouncements ? Promise.resolve(null) : getRecentAnnouncements(4),
     canManageAnnouncements ? getAnnouncementsForManage() : Promise.resolve([]),
     getFollowUpConsultations(8),
     getTodayRecordedClassIds(),
     getTenantSettings(),
     getMonthlyEnrollmentChanges(),
+    getTodayActionSignals(),
   ]);
+  const announcements = recentAnnouncements ?? manageAnnouncements.slice(0, 4);
+  // "오늘 조치할 것" 불릿 — 전부 0건이면 빈 배열(패널이 '정상' 한 줄 표시).
+  const todayActions = buildTodayActions(actionSignals);
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
@@ -81,6 +85,11 @@ export default async function DashboardPage() {
 
   const name = user.displayName ?? "원장";
   const attendanceRate = attendance && attendance.total > 0 ? attendance.rate : null;
+  // 출석 스냅샷이 과거일 폴백이면 기준일을 정직하게 표기("M/D 기준") — 오래된 100%가 오늘처럼 보이는 것 방지.
+  const attendanceAsOf =
+    attendance && attendance.date !== kstToday()
+      ? `${Number(attendance.date.slice(5, 7))}/${Number(attendance.date.slice(8, 10))}`
+      : null;
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
 
@@ -90,16 +99,24 @@ export default async function DashboardPage() {
       <CommandBand
         name={name}
         enrolled={enrolled}
-        enrolledDelta={enrollmentDelta(newThisMonth, withdrawnThisMonth)}
+        enrolledDelta={enrollmentDelta(
+          enrollmentChanges.newStudents.length,
+          enrollmentChanges.withdrawn.length,
+        )}
         attendanceRate={attendanceRate}
+        attendanceAsOf={attendanceAsOf}
         paymentRate={paymentRate}
         unpaidCount={unpaidCount}
+        outstanding={payment?.outstanding ?? 0}
         newStudents={enrollmentChanges.newStudents}
         withdrawn={enrollmentChanges.withdrawn}
       />
 
       {/* 빠른 작업 */}
       <QuickActions />
+
+      {/* 오늘 조치할 것 — 조건부 신호 통합 패널(0건이면 '정상' 한 줄) */}
+      <TodayActionsBand items={todayActions} />
 
       {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr_1fr] lg:items-stretch">
@@ -110,7 +127,7 @@ export default async function DashboardPage() {
           <FollowUpCard items={followUps} />
         </div>
         <div className="flex flex-col gap-4">
-          <ConsultationFunnel pipeline={consultations} />
+          <EnrollmentListCard list={enrollList} />
           <AnnouncementsCard
             items={announcements}
             canManage={canManageAnnouncements}

@@ -22,8 +22,10 @@ export function CommandBand({
   enrolled,
   enrolledDelta,
   attendanceRate,
+  attendanceAsOf,
   paymentRate,
   unpaidCount,
+  outstanding,
   newStudents,
   withdrawn,
 }: {
@@ -31,15 +33,20 @@ export function CommandBand({
   enrolled: number;
   enrolledDelta: number;
   attendanceRate: number | null;
+  /** 출석 스냅샷이 오늘이 아니면 기준일 "M/D" (오늘이거나 없음 = null) — 과거 폴백을 정직하게 표기 */
+  attendanceAsOf: string | null;
   paymentRate: number | null;
   unpaidCount: number;
+  /** 이번 달 미수 총액(원) — 원장에겐 '몇 건'보다 '얼마' */
+  outstanding: number;
   newStudents: EnrollmentChangeStudent[];
   withdrawn: EnrollmentChangeStudent[];
 }) {
   const parts = KO_DATE_FULL.formatToParts(new Date());
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  const eyebrow = `${get("year")}.${get("month")}.${get("day")} ${get("weekday")} · 학원 17일째`;
+  const eyebrow = `${get("year")}.${get("month")}.${get("day")} ${get("weekday")}`;
   const deltaText = enrolledDelta === 0 ? "±0" : enrolledDelta > 0 ? `+${enrolledDelta}` : `${enrolledDelta}`;
+  const outstandingMan = Math.round(outstanding / 10000);
 
   return (
     <section className="bg-ink relative overflow-hidden rounded-2xl px-6 py-5 text-white">
@@ -83,6 +90,11 @@ export function CommandBand({
             value={attendanceRate == null ? "—" : String(Math.round(attendanceRate))}
             unit={attendanceRate == null ? "" : "%"}
             valueColor={attendanceRate == null ? undefined : ACCENT_GREEN}
+            sub={
+              attendanceAsOf ? (
+                <div className="mt-1 font-mono text-[10px] text-white/45">{attendanceAsOf} 기준</div>
+              ) : undefined
+            }
           />
           <BandMetric
             label="수납"
@@ -90,10 +102,15 @@ export function CommandBand({
             unit={paymentRate == null ? "" : "%"}
           />
           <BandMetric
-            label="미수"
-            value={String(unpaidCount)}
-            unit="건"
-            valueColor={unpaidCount > 0 ? ACCENT_DANGER : undefined}
+            label="이번 달 미수"
+            value={outstandingMan.toLocaleString()}
+            unit="만원"
+            valueColor={outstanding > 0 ? ACCENT_DANGER : undefined}
+            sub={
+              unpaidCount > 0 ? (
+                <div className="mt-1 font-mono text-[10px] text-white/45">{unpaidCount}건</div>
+              ) : undefined
+            }
           />
         </div>
       </div>

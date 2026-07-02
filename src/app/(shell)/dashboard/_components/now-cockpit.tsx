@@ -1,6 +1,6 @@
 /**
  * ② 지금 진행 콕핏 — 대형 학원에서 수업이 쏟아져도 컴팩트하게:
- *  · 진행 중 수업은 카드로(라이브 펄스, 최대 3 + 외 N)
+ *  · 진행 중 수업은 **과목별로 묶어** 전부 나열(과목 헤더 + 컴팩트 행, 라이브 펄스)
  *  · 하루 밀도 타임라인 — 시간대별 수업 수를 과목색 누적 막대로(+'지금' 마커)
  *  · 다음 타임 — 곧 시작하는 수업만 과목색 칩으로
  *  · 과목 분포 요약 + 전체 시간표 링크
@@ -8,8 +8,9 @@
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { TodaySlot } from "@/features/timetable/server/queries";
-import { diffMinutes, shortTime } from "@/features/dashboard/subject-meta";
-import { SUBJECT_BORDER, SUBJECT_ICON_BG, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
+import { groupOngoingBySubject } from "@/features/dashboard/ongoing";
+import { shortTime } from "@/features/dashboard/subject-meta";
+import { SUBJECT_ICON_BG, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 
 const KO_TODAY = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" });
 // 30분 단위 슬롯 인덱스 (h*2 + 0|1) — 막대를 더 정교하게.
@@ -102,8 +103,13 @@ export function NowCockpit({
         <div className="text-text-dim flex flex-1 items-center justify-center px-5 py-12 text-sm">오늘은 예정된 수업이 없습니다</div>
       ) : (
         <div className="flex flex-1 flex-col gap-4 px-5 pb-5">
-          {ongoing.slice(0, 3).map((slot) => <OngoingCard key={slot.id} slot={slot} subjects={subjects} />)}
-          {ongoing.length > 3 ? <p className="text-text-faint px-1 text-[11px]">외 {ongoing.length - 3}개 진행 중</p> : null}
+          {ongoing.length > 0 ? (
+            <OngoingBySubject slots={slots} subjects={subjects} />
+          ) : (
+            <p className="text-text-dim border-line rounded-xl border border-dashed px-4 py-3 text-center text-[12px]">
+              지금 진행 중인 수업이 없습니다
+            </p>
+          )}
 
           <DensityStrip slots={slots} subjects={subjects} />
 
@@ -196,36 +202,52 @@ function NextSlot({ time, classes, subjects }: { time: string; classes: TodaySlo
   );
 }
 
-function OngoingCard({ slot, subjects }: { slot: TodaySlot; subjects: SubjectMaps }) {
-  const duration = diffMinutes(slot.startTime, slot.endTime);
+/** 진행 중 수업을 과목별로 묶어 나열(과목 헤더 + 컴팩트 행). 그룹당 5행까지 보이고 넘치면 스크롤. */
+function OngoingBySubject({ slots, subjects }: { slots: TodaySlot[]; subjects: SubjectMaps }) {
+  const groups = groupOngoingBySubject(slots, subjects);
   return (
-    <div className={`flex items-center gap-3.5 rounded-xl border-[1.5px] px-4 py-3.5 ${SUBJECT_BORDER[subjects.colorOf(slot.subject)]}`}>
-      <div className="w-[52px] shrink-0 text-center">
-        <p className="num text-primary text-[15px] font-extrabold leading-none">{shortTime(slot.startTime)}</p>
-        <p className="text-text-faint mt-1 font-mono text-[10px]">{duration}분</p>
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="min-w-0 truncate text-[15px] font-extrabold">
-            <WindowLink
-              href={`/classes/${slot.classId}`}
-              title={slot.className}
-              className="text-foreground hover:text-primary hover:underline"
-              ariaLabel={`${slot.className} 수업 상세 열기`}
-            >
-              {slot.className}
-            </WindowLink>
-          </h3>
-          <Pill color="primary">진행 중</Pill>
+    <div className="space-y-3">
+      {groups.map((g) => (
+        <div key={g.subject}>
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className={`${SUBJECT_SOLID[g.color]} size-2.5 rounded-[3px]`} aria-hidden="true" />
+            <span className="text-foreground text-[13px] font-bold">{g.label}</span>
+            <span className="text-text-faint num font-mono text-[11px]">{g.slots.length}개 진행 중</span>
+          </div>
+          {/* max-h-44 ≈ 행(≈31.5px)×5 + 간격 — 6개째부터 스크롤(전역 디자인 스크롤바). */}
+          <div className="max-h-44 space-y-1 overflow-y-auto">
+            {g.slots.map((s) => <OngoingRow key={s.id} slot={s} />)}
+          </div>
         </div>
-        <p className="text-text-dim mt-1 truncate text-[12px]">
-          {slot.teacherName ? `${slot.teacherName} 강사` : "담임 미정"}
-          {slot.classroomName ? ` · ${slot.classroomName}` : ""}
-          {" · "}
-          <span className="num">{slot.studentCount}명</span>
-        </p>
-      </div>
-      <span className="animate-pulse bg-primary size-2.5 shrink-0 rounded-full" style={{ boxShadow: "0 0 0 4px rgba(26,95,60,0.15)" }} aria-hidden="true" />
+      ))}
     </div>
+  );
+}
+
+/** 진행 중 수업 한 줄 — 시간대·반이름·강사/강의실·인원 + 라이브 펄스. 반 상세로 드릴인. */
+function OngoingRow({ slot }: { slot: TodaySlot }) {
+  return (
+    <WindowLink
+      href={`/classes/${slot.classId}`}
+      title={slot.className}
+      ariaLabel={`${slot.className} 수업 상세 열기`}
+      className="group hover:bg-bg-soft flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors"
+    >
+      <span className="num text-primary w-[86px] shrink-0 text-[11px] font-bold">
+        {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
+      </span>
+      <span className="text-foreground group-hover:text-primary min-w-0 flex-1 truncate text-[13px] font-semibold">
+        {slot.className}
+      </span>
+      <span className="text-text-dim hidden max-w-[9rem] shrink-0 truncate text-[11px] sm:inline">
+        {slot.teacherName ?? "담임 미정"}
+        {slot.classroomName ? ` · ${slot.classroomName}` : ""}
+      </span>
+      <span className="num text-text-faint shrink-0 text-[11px]">{slot.studentCount}명</span>
+      <span
+        className="animate-pulse bg-primary size-1.5 shrink-0 rounded-full"
+        aria-hidden="true"
+      />
+    </WindowLink>
   );
 }

@@ -23,28 +23,6 @@ export async function getEnrolledStudentCount(): Promise<number> {
   return count ?? 0;
 }
 
-export async function getNewStudentsThisMonth(): Promise<number> {
-  const supabase = await createClient();
-  const startIso = kstMonthStart();
-  const { count } = await supabase
-    .from("students")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "enrolled")
-    .gte("enrolled_at", startIso);
-  return count ?? 0;
-}
-
-export async function getWithdrawalsThisMonth(): Promise<number> {
-  const supabase = await createClient();
-  const startIso = kstMonthStart();
-  const { count } = await supabase
-    .from("students")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "withdrawn")
-    .gte("withdrawn_at", startIso);
-  return count ?? 0;
-}
-
 export type EnrollmentChangeStudent = {
   id: string;
   name: string;
@@ -57,7 +35,7 @@ export type EnrollmentChanges = {
   withdrawn: EnrollmentChangeStudent[];
 };
 
-/** 이번 달 신규 등록 + 퇴원 학생 명단(드릴다운용). 카운트는 getNew/WithdrawalsThisMonth와 동일 기준. */
+/** 이번 달 신규 등록 + 퇴원 학생 명단(드릴다운용). 밴드 카운트도 배열 길이로 도출(별도 count 쿼리 불요). */
 export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
   const supabase = await createClient();
   const startIso = kstMonthStart();
@@ -242,25 +220,40 @@ export type ManageAnnouncementRow = {
   content: string;
   audience: string;
   pinned: boolean;
+  createdAt: string;
+  authorName: string | null;
 };
 
-/** 공지 관리 모달용 — 최근 공지(고정 우선) 목록. 카드(getRecentAnnouncements)보다 길게. */
+/**
+ * 공지 관리 모달용 — 최근 공지(고정 우선) 목록. AnnouncementRow의 상위집합(작성자·일시 포함)이라
+ * canManage면 카드(앞 4건)도 여기서 도출 = getRecentAnnouncements 이중 fetch 제거(정렬 동일).
+ */
 export async function getAnnouncementsForManage(limit = 30): Promise<ManageAnnouncementRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("announcements")
-    .select("id, title, content, audience, pinned, created_at")
+    .select(
+      `id, title, content, audience, pinned, created_at,
+       author:author_id ( display_name )`,
+    )
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
   if (!data) return [];
-  return data.map((row) => ({
-    id: row.id,
-    title: row.title,
-    content: row.content,
-    audience: row.audience,
-    pinned: row.pinned,
-  }));
+  return data.map((row) => {
+    const a = (Array.isArray(row.author) ? row.author[0] : row.author) as
+      | { display_name?: string }
+      | undefined;
+    return {
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      audience: row.audience,
+      pinned: row.pinned,
+      createdAt: row.created_at as string,
+      authorName: a?.display_name ?? null,
+    };
+  });
 }
 
 export type TrendPoint = {
@@ -270,30 +263,39 @@ export type TrendPoint = {
   payment: number; // placeholder until invoices land
 };
 
-export type ConsultationPipeline = {
-  total: number;
-  pending: number;
-  scheduled: number;
-  consulted: number;
-  aiDone: number;
+export type DashEnrollmentRow = {
+  id: string;
+  name: string;
+  /** 학교·학년 (없으면 null) */
+  meta: string | null;
+  outcome: "pending" | "scheduled" | "consulted" | "ai_done";
+  /** 상담일(consultation_date) ?? 접수 시각 날짜부 — "YYYY-MM-DD" */
+  date: string | null;
 };
 
-export async function getActiveConsultationsCount(): Promise<ConsultationPipeline> {
+export type DashEnrollmentList = { total: number; rows: DashEnrollmentRow[] };
+
+/** 등록상담 목록(활성 = 대기·예약·상담완료·AI완료) — 최근 순 limit건 + 전체 활성 건수(count exact, 절단 무관). */
+export async function getActiveEnrollmentConsultations(limit = 6): Promise<DashEnrollmentList> {
   const supabase = await createClient();
-  // SQL count(exact, head) 4개 병렬 — 활성 상담 전건을 끌어와 JS로 세던 것 교체(#P1: 1000행 절단 위험).
-  const base = () =>
-    supabase.from("enrollment_consultations").select("*", { count: "exact", head: true });
-  const [pending, scheduled, consulted, aiDone] = await Promise.all([
-    base().eq("outcome", "pending"),
-    base().eq("outcome", "scheduled"),
-    base().eq("outcome", "consulted"),
-    base().eq("outcome", "ai_done"),
-  ]);
-  const p = pending.count ?? 0;
-  const s = scheduled.count ?? 0;
-  const c = consulted.count ?? 0;
-  const a = aiDone.count ?? 0;
-  return { total: p + s + c + a, pending: p, scheduled: s, consulted: c, aiDone: a };
+  const { data, count } = await supabase
+    .from("enrollment_consultations")
+    .select("id, prospect_name, prospect_school, prospect_grade, outcome, consultation_date, consulted_at", {
+      count: "exact",
+    })
+    .in("outcome", ["pending", "scheduled", "consulted", "ai_done"])
+    .order("consulted_at", { ascending: false })
+    .limit(limit);
+  const rows: DashEnrollmentRow[] = (data ?? []).map((r) => ({
+    id: r.id as string,
+    name: (r.prospect_name as string | null) ?? "(이름 없음)",
+    meta: [r.prospect_school, r.prospect_grade].filter(Boolean).join(" ") || null,
+    outcome: r.outcome as DashEnrollmentRow["outcome"],
+    date:
+      (r.consultation_date as string | null) ??
+      (typeof r.consulted_at === "string" ? r.consulted_at.slice(0, 10) : null),
+  }));
+  return { total: count ?? 0, rows };
 }
 
 export type PaymentSnapshot = {
@@ -310,12 +312,13 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
   const period = kstMonth();
   const { data } = await supabase
     .from("invoices")
-    .select("amount_total, amount_paid, status")
+    .select("amount_total, amount_paid, amount_discount, status")
     .eq("period", period);
   if (!data || data.length === 0) return null;
 
   const totalBilled = data.reduce((s, r) => s + Number(r.amount_total), 0);
   const totalPaid = data.reduce((s, r) => s + Number(r.amount_paid), 0);
+  const totalDiscount = data.reduce((s, r) => s + Number(r.amount_discount ?? 0), 0);
   const paidCount = data.filter((r) => r.status === "paid").length;
   const unpaidCount = data.filter((r) => r.status === "unpaid" || r.status === "partial").length;
   return {
@@ -324,7 +327,8 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
     paidCount,
     unpaidCount,
     paymentRate: totalBilled > 0 ? (totalPaid / totalBilled) * 100 : 0,
-    outstanding: totalBilled - totalPaid,
+    // 미수 총액 = 청구 - 납부 - 할인(할인 빼면 과대계상 — 밴드 '이번 달 미수'가 소비).
+    outstanding: Math.max(0, totalBilled - totalPaid - totalDiscount),
   };
 }
 
@@ -391,55 +395,6 @@ function currentPeriod(): string {
 }
 
 // ─────────── 추가 대시보드 위젯 ───────────
-
-export type UpcomingPayment = {
-  studentId: string;
-  studentName: string;
-  amount: number;
-  dueDate: string;
-  daysUntilDue: number;
-};
-
-/** 이번 주 결제 예정 (due_date 이내 7일, unpaid/partial). */
-export async function getUpcomingPayments(daysAhead = 7): Promise<UpcomingPayment[]> {
-  const supabase = await createClient();
-  const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
-  const limit = new Date(today);
-  limit.setDate(limit.getDate() + daysAhead);
-  const limitIso = limit.toISOString().slice(0, 10);
-
-  const { data } = await supabase
-    .from("invoices")
-    .select(
-      `id, amount_total, amount_paid, amount_discount, due_date,
-       student:student_id ( id, name )`,
-    )
-    .gte("due_date", todayIso)
-    .lte("due_date", limitIso)
-    .in("status", ["unpaid", "partial"])
-    .order("due_date");
-
-  return (data ?? [])
-    .map((r) => {
-      const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
-        | { id: string; name: string }
-        | undefined;
-      if (!stu) return null;
-      const balance =
-        Number(r.amount_total) - Number(r.amount_paid) - Number(r.amount_discount ?? 0);
-      const due = new Date(r.due_date as string);
-      const days = Math.max(0, Math.round((due.getTime() - today.getTime()) / 86_400_000));
-      return {
-        studentId: stu.id,
-        studentName: stu.name,
-        amount: balance,
-        dueDate: r.due_date as string,
-        daysUntilDue: days,
-      } satisfies UpcomingPayment;
-    })
-    .filter((r): r is UpcomingPayment => r !== null);
-}
 
 export type OutstandingItem = {
   studentId: string;

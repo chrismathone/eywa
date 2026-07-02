@@ -1,5 +1,6 @@
 /**
- * 미수 상위 — 잔액 큰 순 미납 명단(이름 클릭=학생 상세 창). 밴드의 '미수 N건'에 '누구·얼마'를 붙임.
+ * 누적 미수 상위 — 전 기간 잔액 큰 순 미납 명단(이름 클릭=학생 상세 창).
+ * 밴드 '이번 달 미수'(당월 총액)와 모집단이 다름 — 제목으로 구분(정합 감사 2026-07-02).
  */
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
@@ -13,7 +14,7 @@ function man(amount: number): string {
 export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
   return (
     <DashCard
-      title="미수 상위"
+      title="누적 미수 상위"
       count={items.length > 0 ? `${items.length}명` : undefined}
       href="/billing"
       hrefLabel="수납 →"

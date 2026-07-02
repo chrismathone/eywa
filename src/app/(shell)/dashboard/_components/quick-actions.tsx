@@ -7,7 +7,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 
 const ACTIONS = [
   { href: "/students/new", title: "학생 등록", label: "학생 등록", icon: UserPlus },
-  { href: "/classes", title: "수업 관리", label: "수업 추가", icon: BookPlus },
+  { href: "/classes/new", title: "새 반 만들기", label: "수업 추가", icon: BookPlus },
   { href: "/consultations/new", title: "상담 기록", label: "상담 기록", icon: MessageSquarePlus },
 ];
 

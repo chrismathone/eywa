@@ -6,9 +6,3 @@
 export function shortTime(t: string) {
   return t.slice(0, 5);
 }
-
-export function diffMinutes(start: string, end: string): number {
-  const [sh, sm] = start.split(":");
-  const [eh, em] = end.split(":");
-  return Number(eh) * 60 + Number(em) - (Number(sh) * 60 + Number(sm));
-}
