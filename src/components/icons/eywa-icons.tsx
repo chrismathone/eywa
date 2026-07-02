@@ -256,5 +256,6 @@ export const MENU_ICON: Record<string, EywaIconName> = {
   staff: "roots",
   billing: "pollen",
   meetings: "rings",
+  documents: "rings", // 데이터베이스(서식 저장소) — 겹층 링=적층 저장 이미지
   help: "spore",
 };

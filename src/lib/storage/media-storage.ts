@@ -6,6 +6,7 @@ import {
   classifyAudioPath,
   isTenantAudioPath,
   isTenantBrandingPath,
+  isTenantDocumentPath,
   isTenantReceiptPath,
   SUPABASE_BUCKET_BY_KIND,
   type AudioKind,
@@ -19,12 +20,25 @@ import type { MediaKind, StorageBackend, UploadTicket } from "./types";
 const AUDIO_MAX = 50 * 1024 * 1024; // 50MB (클라 validateAudioFile과 동일 — 필요 시 함께 상향)
 const RECEIPT_MAX = 10 * 1024 * 1024; // 10MB
 const BRANDING_MAX = 5 * 1024 * 1024; // 5MB
+const DOCUMENT_MAX = 20 * 1024 * 1024; // 20MB — 스캔 PDF 등 큰 서식 고려
 const READ_TTL_MS = 2 * 60 * 60 * 1000; // 2h — AssemblyAI 큐+다운로드 여유
 const UPLOAD_TTL_MS = 15 * 60 * 1000; // 15m — signed PUT 유효
 
 const isAudioCT = (ct: string) => /^audio\//.test(ct);
 const isImageCT = (ct: string) => /^image\//.test(ct);
 const isReceiptCT = (ct: string) => /^image\//.test(ct) || ct === "application/pdf";
+// 서식 문서 — 이미지·PDF(향후 OCR 대상) + 오피스 문서 + HWP(흔히 CT가 애매해 octet-stream 폴백 허용).
+const DOCUMENT_CT_ALLOW = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/haansofthwp",
+  "application/x-hwp",
+  "application/octet-stream",
+]);
+const isDocumentCT = (ct: string) => /^image\//.test(ct) || DOCUMENT_CT_ALLOW.has(ct);
 
 type KindMeta = {
   /** Supabase 백엔드 버킷(GCS 백엔드는 단일 버킷이라 미사용). */
@@ -44,6 +58,7 @@ export const MEDIA_KIND: Record<MediaKind, KindMeta> = {
   registration: { supabaseBucket: SUPABASE_BUCKET_BY_KIND.registration, maxBytes: AUDIO_MAX, allowCT: isAudioCT, validate: isTenantAudioPath, hasLegacy: true },
   receipt: { supabaseBucket: "expense-receipts", maxBytes: RECEIPT_MAX, allowCT: isReceiptCT, validate: isTenantReceiptPath, hasLegacy: false },
   branding: { supabaseBucket: "branding", maxBytes: BRANDING_MAX, allowCT: isImageCT, validate: isTenantBrandingPath, hasLegacy: false },
+  document: { supabaseBucket: "academy-documents", maxBytes: DOCUMENT_MAX, allowCT: isDocumentCT, validate: isTenantDocumentPath, hasLegacy: false },
 };
 
 export { getMediaBackend }; // backend.ts(순수)에서 — 호출부는 media-storage에서 계속 import 가능.
@@ -150,10 +165,10 @@ export async function resolveAudioReadUrl(
   throw new Error("잘못된 오디오 경로입니다");
 }
 
-/** 이미지(영수증/브랜딩) signed GET URL — legacy 없음, tenant 전용. */
+/** 이미지·문서(영수증/브랜딩/서식) signed GET URL — legacy 없음, tenant 전용. */
 export async function resolveTenantReadUrl(
   path: string,
-  kind: "receipt" | "branding",
+  kind: "receipt" | "branding" | "document",
   tenantId: string,
   ttlMs: number = READ_TTL_MS,
 ): Promise<string> {
@@ -184,7 +199,7 @@ export async function resolveBrandingSrc(
 /** 복수 영수증 등 — path→signed URL 맵(실패 path는 생략). */
 export async function resolveTenantReadUrls(
   paths: string[],
-  kind: "receipt" | "branding",
+  kind: "receipt" | "branding" | "document",
   tenantId: string,
   ttlMs: number = READ_TTL_MS,
 ): Promise<Record<string, string>> {

@@ -92,3 +92,10 @@ export function isTenantBrandingPath(path: string, tenantId: string): boolean {
   if (!path.startsWith(prefix)) return false;
   return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(path.slice(prefix.length));
 }
+
+/** 서식 문서(academy_documents) 경로 `{tenantId}/documents/{파일명}` — 서버가 uuid.ext로 빌드(원본 파일명은 DB에만 보존). */
+export function isTenantDocumentPath(path: string, tenantId: string): boolean {
+  const prefix = `${tenantId}/documents/`;
+  if (!path.startsWith(prefix)) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]+$/.test(path.slice(prefix.length));
+}

@@ -9,6 +9,7 @@ import {
   CalendarDays,
   BookOpen,
   BookMarked,
+  FolderOpen,
   GraduationCap,
   MessageCircle,
 } from "lucide-react";
@@ -42,6 +43,8 @@ const LINKS: { href: string; label: string; icon: LucideIcon; menu: MenuKey }[] 
   { href: "/consultations", label: "학생상담", icon: MessageCircle, menu: "consultations" },
   // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
   { href: "/textbook-requests", label: "교재 요청", icon: BookMarked, menu: "textbook_requests" },
+  // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
+  { href: "/documents", label: "데이터베이스", icon: FolderOpen, menu: "documents" },
 ];
 
 export function TeacherMenu({ permMatrix }: { permMatrix: AccessMatrix }) {

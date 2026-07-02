@@ -14,6 +14,7 @@ import {
   Wallet,
   BookMarked,
   FileText,
+  FolderOpen,
   HelpCircle,
   Settings,
   Building2,
@@ -104,6 +105,8 @@ export const NAV_GROUPS: NavGroup[] = [
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
       { href: "/textbook-requests", label: "교재 요청", icon: BookMarked, menuKey: "textbook_requests", hidden: true },
       { href: "/meetings", label: "회의록", icon: FileText, menuKey: "meetings" },
+      // 데이터베이스 = 학원 각종 서식(빈 양식 파일·앱 작성 문서) 저장소 — 윈도우 탐색기형 뷰.
+      { href: "/documents", label: "데이터베이스", icon: FolderOpen, menuKey: "documents" },
     ],
   },
   {

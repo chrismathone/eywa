@@ -118,6 +118,16 @@ export const reenrollmentStatusEnum = pgEnum("reenrollment_status", [
   "declined",
 ]);
 
+// 데이터베이스(서식 저장소) 카테고리 — 학원 행정에서 흔한 분류. 옵션 목록이라 필요 시 추가만(파괴적 변경 지양).
+export const academyDocumentCategoryEnum = pgEnum("academy_document_category", [
+  "enrollment",
+  "billing",
+  "consultation",
+  "hr",
+  "class",
+  "other",
+]);
+
 // === tenants ===
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1251,6 +1261,38 @@ export const noticePopups = pgTable(
   (t) => [index("notice_popups_tenant_active_idx").on(t.tenantId, t.isActive, t.priority)],
 );
 
+// === academy_documents (데이터베이스 — 학원 서식 저장소, 0067a) ===
+// 업로드 파일(kind='file', GCS/Storage 경로)과 앱 작성 문서(kind='text', 인쇄 가능 본문)를 한 목록에서 관리.
+// ⚠️ 향후(v2, 미구현): OCR 미처리 파일(이미지·스캔 PDF)을 AI OCR로 본문 추출→메타데이터·색인 저장해 검색 가능하게.
+// 그때 `ocr_text text` + 필요 시 `metadata jsonb` 컬럼 추가(평면 테이블이라 ALTER 1번, pg_trgm GIN은 0024a 패턴 재사용).
+// · provider = Gemini/OpenAI/Anthropic 중 가성비 비교로 선정 — **Upstage(Solar) vision/OCR 배제**(사용자 실측: 품질 처참, 2026-07-02 결정).
+// · 실시간 불필요(업로드 후 백그라운드 캐싱)라 provider **비동기 Batch API(~50% 할인)** 사용이 정석.
+// 지금은 title/description/file_name만 검색 대상(orphan 컬럼 금지 원칙 — 소비처 생길 때 컬럼 추가).
+export const academyDocuments = pgTable(
+  "academy_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    category: academyDocumentCategoryEnum("category").notNull().default("other"),
+    kind: text("kind").notNull(), // 'file' | 'text'
+    description: text("description"),
+    // kind='file'
+    filePath: text("file_path"),
+    fileName: text("file_name"),
+    fileSize: integer("file_size"),
+    mimeType: text("mime_type"),
+    // kind='text'
+    body: text("body"),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("academy_documents_tenant_category_idx").on(t.tenantId, t.category, t.createdAt)],
+);
+
 // === super_admins (SaaS owner layer — academy 권한과 직교) ===
 // PK = auth.users.id (1:1 sync). tenant 컬럼 없음 — 모든 tenant 위에 존재.
 // 한 사람이 academy master + super_admin 둘 다 가능 (chrismathone 케이스).
@@ -1484,6 +1526,8 @@ export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
 export type NoticePopup = typeof noticePopups.$inferSelect;
 export type NewNoticePopup = typeof noticePopups.$inferInsert;
+export type AcademyDocument = typeof academyDocuments.$inferSelect;
+export type NewAcademyDocument = typeof academyDocuments.$inferInsert;
 export type StudentGrade = typeof studentGrades.$inferSelect;
 export type NewStudentGrade = typeof studentGrades.$inferInsert;
 export type StudentMemo = typeof studentMemos.$inferSelect;

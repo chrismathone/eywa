@@ -1,0 +1,43 @@
+// 데이터베이스(서식 저장소) 공유 상수 — 클라/서버 공용, ⚠️ server-only 금지 [[#61]].
+// 분류는 DB enum(academy_document_category, 0067a)과 1:1 — 시스템 분류(운영 enum 아님·코드 고정).
+
+export const DOCUMENT_CATEGORIES = [
+  "enrollment",
+  "billing",
+  "consultation",
+  "hr",
+  "class",
+  "other",
+] as const;
+export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
+
+export const CATEGORY_LABEL: Record<DocumentCategory, string> = {
+  enrollment: "등록·입학",
+  billing: "수납·결제",
+  consultation: "상담",
+  hr: "인사·직원",
+  class: "수업",
+  other: "기타",
+};
+
+export type DocumentKind = "file" | "text";
+
+/** 파일 확장자 → 표시용 종류 라벨(탐색기 '유형' 컬럼). */
+export function fileTypeLabel(kind: DocumentKind, fileName: string | null, mimeType: string | null): string {
+  if (kind === "text") return "문서";
+  const ext = (fileName?.split(".").pop() ?? "").toLowerCase();
+  if (ext === "pdf") return "PDF";
+  if (ext === "doc" || ext === "docx") return "Word";
+  if (ext === "xls" || ext === "xlsx") return "Excel";
+  if (ext === "hwp" || ext === "hwpx") return "한글";
+  if (mimeType?.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) return "이미지";
+  return ext ? ext.toUpperCase() : "파일";
+}
+
+/** 바이트 → 탐색기식 크기 표기("12.3KB"·"1.2MB"). */
+export function formatFileSize(bytes: number | null): string {
+  if (!bytes || bytes <= 0) return "—";
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}

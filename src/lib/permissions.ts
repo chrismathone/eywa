@@ -30,6 +30,7 @@ export const MENU_KEYS = [
   "billing",
   "textbook_requests",
   "meetings",
+  "documents",
   "help",
   "admin",
   "owner",
@@ -53,6 +54,7 @@ export const TEACHER_MENU_KEYS = [
   "exams",
   "consultations",
   "textbook_requests",
+  "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 
 export type Access = "full" | "scoped" | "readonly" | "none";
@@ -81,6 +83,8 @@ export const MENU_ACCESS: AccessMatrix = {
   textbook_requests: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   // 강사=none — 원장 회의 포함 전체 회의록(민감)이라 누수. 강사 메뉴엔 없음(화자 연결은 데이터일 뿐 열람권 아님).
   meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
+  // 데이터베이스(서식 저장소) — 사무실(master/admin/manager)이 업로드·작성, 나머지는 조회만. 학생은 미노출.
+  documents: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", student: "none" },
   // master 전용 — 중복 병합 / 데이터 정리 / Google Sheets 통합 등 위험도 높은 도구
   admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },

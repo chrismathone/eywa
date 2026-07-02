@@ -3,8 +3,8 @@
 
 export type StorageBackend = "gcs" | "supabase";
 
-/** 미디어 종류 — 오디오 3종 + 이미지 2종. 각자 버킷/검증/크기·형식 제한이 다름(media-storage MEDIA_KIND). */
-export type MediaKind = "meeting" | "consultation" | "registration" | "receipt" | "branding";
+/** 미디어 종류 — 오디오 3종 + 이미지 2종 + 서식 문서 1종. 각자 버킷/검증/크기·형식 제한이 다름(media-storage MEDIA_KIND). */
+export type MediaKind = "meeting" | "consultation" | "registration" | "receipt" | "branding" | "document";
 
 /**
  * 업로드 티켓 — 서버가 발급, 클라가 `uploadToTicket`으로 소비.
