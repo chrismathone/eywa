@@ -28,15 +28,19 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
     });
   }
 
-  // 지금 즉시 1회 동기화 — 서버(로컬/셀프호스티드)에서 sync-all.cjs를 force로 실행. 결과는 ~1-2분 뒤 배지 반영.
-  // (Vercel/서버리스면 액션이 명확한 에러를 반환 → 아래 runMsg에 표시.)
+  // 지금 즉시 1회 동기화 — 로컬 서버면 sync-all.cjs 직접 실행, Vercel(프로덕션)이면 요청 큐에 접수
+  // (동기화 PC 워처가 15초 내 대신 실행). 어느 경로든 결과는 ~1-2분 뒤 배지 반영.
   function runNow() {
     if (running) return;
     setRunMsg(null);
     startRun(async () => {
       const res = await triggerMakeeduSyncNow();
       if (res?.error) setRunMsg({ ok: false, text: res.error });
-      else setRunMsg({ ok: true, text: "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다." });
+      else
+        setRunMsg({
+          ok: true,
+          text: res?.message ?? "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다.",
+        });
     });
   }
 

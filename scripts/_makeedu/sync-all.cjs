@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/sync-all.cjs — makeedu → eywa **증분 동기화 오케스트레이터** (Phase 2, GitHub Actions cron).
+ * scripts/_makeedu/sync-all.cjs — makeedu → eywa **증분 동기화 오케스트레이터**.
  *
  * 전역 토글 확인 → 라이브 스크래핑(1 로그인) → 안전·멱등 도메인만 additive 임포트(--apply). 도메인별 실패 격리.
  * 임포터는 전부 additive(makeedu_id/자연키 매칭 + on-conflict-do-nothing/backfill)라 **재실행 = 증분**(새 행만 추가).
@@ -7,6 +7,9 @@
  * 포함 도메인(멱등): students(DOM)·classes·prospects·invoices.
  * 제외(수동): enrollments(엑셀 '수업' 컬럼 의존)·consultations(import-consultations deprecated, No≠counselSeq)·
  *            catalog(tuition 기타가 이름 insert라 재실행 중복)·prospects 상세본문(sync-prospects = 레코드별 상세 fetch).
+ *
+ * 실행 로그(0070a makeedu_sync_runs): 매 실행을 running→ok|partial|error(+skipped)로 기록 — 연동 면 이력 표시.
+ * 트리거 라벨은 호출자가 env MAKEEDU_TRIGGER로 주입(scheduled|button|relay|manual — 미지정 시 manual).
  *
  * 사용:
  *   node --env-file=.env.local scripts/_makeedu/sync-all.cjs --apply               # 스크래핑 + 적재
@@ -21,6 +24,7 @@ const L = require("./lib.cjs");
 const APPLY = process.argv.includes("--apply");
 const SKIP_SCRAPE = process.argv.includes("--no-scrape");
 const HERE = __dirname;
+const TRIGGER = process.env.MAKEEDU_TRIGGER || "manual";
 
 // cron이 도는 안전·멱등 도메인만(위 헤더 '제외' 참고). 스크래핑 리스트 키와 임포터를 1:1로.
 const SCRAPE_LISTS = ["students", "classes", "prospects", "invoices"];
@@ -37,24 +41,69 @@ function run(label, file, args) {
   if (r.status !== 0) throw new Error(`${file} exited ${r.status}`);
 }
 
-(async () => {
-  // 1) 전역 토글 — user_integrations(provider=makeedu).sync_enabled=false면 스킵(행 없으면 기본 ON).
-  let tenantId;
+// 짧은 DB 작업용(스크래핑/임포트 동안 유휴 연결을 안 들고 있게 매번 열고 닫는다 — 기존 sql/sql2 패턴).
+async function withDb(fn) {
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
-    tenantId = await L.resolveTenantId(sql);
-    const [row] = await sql`
-      select sync_enabled from user_integrations
-      where tenant_id = ${tenantId} and provider = 'makeedu' limit 1`;
-    // MAKEEDU_FORCE=true(앱 '지금 동기화' 버튼)면 토글을 무시하고 강제 실행. cron/일반 실행은 토글 존중.
-    const FORCE = process.env.MAKEEDU_FORCE === "true";
-    if (!FORCE && row && row.sync_enabled === false) {
-      console.log("⏸  makeedu 동기화 OFF (user_integrations.sync_enabled=false) — 스킵.");
-      return;
-    }
-    console.log("▶  makeedu 동기화 시작 — tenant:", tenantId);
+    return await fn(sql);
   } finally {
     await sql.end();
+  }
+}
+
+// 실행 로그(0070a) — 실패해도 동기화 자체를 막지 않게 best-effort.
+let runId = null;
+let tenantIdG = null;
+const t0 = Date.now();
+
+async function finishRun(status, { failed = [], error = null } = {}) {
+  if (!runId) return;
+  try {
+    await withDb(async (sql) => {
+      // 이번 실행이 갱신한 도메인 스냅샷(sync_state.updated_at >= 시작 시각)을 함께 보존.
+      const rows = await sql`
+        select domain, status, row_count from makeedu_sync_state
+        where tenant_id = ${tenantIdG} and updated_at >= to_timestamp(${t0 / 1000})`;
+      const domains = {};
+      for (const r of rows) domains[r.domain] = { status: r.status, rows: r.row_count };
+      await sql`
+        update makeedu_sync_runs
+        set status = ${status}, finished_at = now(), duration_ms = ${Date.now() - t0},
+            domains = ${sql.json(domains)}, failed_domains = ${failed}, error = ${error}
+        where id = ${runId}`;
+    });
+  } catch (e) {
+    console.error("(실행 로그 기록 실패 — 동기화 결과와 무관)", e.message);
+  }
+}
+
+(async () => {
+  // 1) 전역 토글 + 실행 로그 시작 — user_integrations(provider=makeedu).sync_enabled=false면 스킵(행 없으면 기본 ON).
+  let skipped = false;
+  await withDb(async (sql) => {
+    tenantIdG = await L.resolveTenantId(sql);
+    const [row] = await sql`
+      select sync_enabled from user_integrations
+      where tenant_id = ${tenantIdG} and provider = 'makeedu' limit 1`;
+    // MAKEEDU_FORCE=true(앱 '지금 동기화' 버튼/워처)면 토글을 무시하고 강제 실행. cron/일반 실행은 토글 존중.
+    const FORCE = process.env.MAKEEDU_FORCE === "true";
+    if (!FORCE && row && row.sync_enabled === false) {
+      skipped = true;
+      // 건너뛴 실행도 로그로 남긴다("cron이 돌긴 했는데 토글 OFF였다"까지 추적).
+      await sql`
+        insert into makeedu_sync_runs (tenant_id, trigger_source, status, finished_at, duration_ms)
+        values (${tenantIdG}, ${TRIGGER}, 'skipped', now(), 0)`.catch(() => {});
+      return;
+    }
+    const [r] = await sql`
+      insert into makeedu_sync_runs (tenant_id, trigger_source)
+      values (${tenantIdG}, ${TRIGGER}) returning id`.catch(() => [null]);
+    runId = r ? r.id : null;
+    console.log("▶  makeedu 동기화 시작 — tenant:", tenantIdG, "| trigger:", TRIGGER);
+  });
+  if (skipped) {
+    console.log("⏸  makeedu 동기화 OFF (user_integrations.sync_enabled=false) — 스킵.");
+    return;
   }
 
   // 2) 스크래핑(1 로그인, 4 리스트). --no-scrape면 기존 JSON 재사용(로컬 테스트).
@@ -74,18 +123,18 @@ function run(label, file, args) {
   }
 
   // 4) 실패 도메인은 makeedu_sync_state에 error 기록(성공 도메인은 임포터가 ok로 기록함 → 화면 배지에 노출).
-  if (APPLY && failed.length && tenantId) {
-    const sql2 = postgres(process.env.DATABASE_URL, { prepare: false });
-    try {
-      for (const d of failed) await L.recordSync(sql2, tenantId, d, null, "error", "sync-all 임포터 실패");
-    } finally {
-      await sql2.end();
-    }
+  if (APPLY && failed.length && tenantIdG) {
+    await withDb(async (sql2) => {
+      for (const d of failed) await L.recordSync(sql2, tenantIdG, d, null, "error", "sync-all 임포터 실패");
+    });
   }
 
+  await finishRun(failed.length ? "partial" : "ok", { failed });
   console.log(`\n✅ 동기화 완료. 실패 도메인: ${failed.length ? failed.join(", ") : "없음"}`);
   if (failed.length) process.exit(1); // CI가 부분 실패를 인지(다음 cron이 멱등 재시도)
-})().catch((e) => {
+})().catch(async (e) => {
+  // 전체 실패(스크래핑 크래시 등)도 실행 로그에 남긴다.
+  await finishRun("error", { error: (e && e.message) || String(e) });
   console.error("ERR", e.message);
   process.exit(1);
 });

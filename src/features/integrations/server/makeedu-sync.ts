@@ -38,6 +38,42 @@ export const getMakeeduSyncState = cache(
   },
 );
 
+export type MakeeduSyncRun = {
+  id: string;
+  triggerSource: string; // scheduled|button|relay|manual
+  status: string; // running|ok|partial|error|skipped
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  /** 이번 실행이 갱신한 도메인 스냅샷 {students:{status,rows}, ...} */
+  domains: Record<string, { status: string; rows: number | null }> | null;
+  failedDomains: string[];
+  error: string | null;
+};
+
+/** 최근 동기화 실행 로그(0070a makeedu_sync_runs) — 연동 면 이력 표시. RLS로 현재 테넌트만. */
+export async function getMakeeduSyncRuns(limit = 8): Promise<MakeeduSyncRun[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("makeedu_sync_runs")
+    .select("id, trigger_source, status, started_at, finished_at, duration_ms, domains, failed_domains, error")
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    triggerSource: r.trigger_source as string,
+    status: r.status as string,
+    startedAt: r.started_at as string,
+    finishedAt: (r.finished_at as string | null) ?? null,
+    durationMs: (r.duration_ms as number | null) ?? null,
+    domains: (r.domains as MakeeduSyncRun["domains"]) ?? null,
+    failedDomains: (r.failed_domains as string[] | null) ?? [],
+    error: (r.error as string | null) ?? null,
+  }));
+}
+
 export type MakeeduAutoSyncStatus = {
   /** GitHub Actions cron 자동 동기화 ON/OFF. 행이 없으면 기본 ON(cron opt-out 모델 — 끄면 cron이 스킵). */
   enabled: boolean;

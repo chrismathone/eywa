@@ -25,6 +25,7 @@ $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
 Add-Content -Path $log -Encoding UTF8 -Value "`n===== $stamp  동기화 시작 (repo: $repo) ====="
 # node 실행(stdout+stderr) → 문자열 캡처 → UTF-8 로 append. --env-file 로 .env.local 로드(비밀은 node 가 읽음).
+$env:MAKEEDU_TRIGGER = "scheduled"  # 실행 로그(0070a makeedu_sync_runs) 트리거 라벨
 $out = & node --env-file=.env.local scripts/_makeedu/sync-all.cjs --apply 2>&1 | Out-String
 $code = $LASTEXITCODE
 Add-Content -Path $log -Encoding UTF8 -Value $out

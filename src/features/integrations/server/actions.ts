@@ -7,6 +7,7 @@ import os from "node:os";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { overwriteMathTimetableSheet } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
@@ -68,13 +69,14 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
   return { enabled };
 }
 
-export type TriggerSyncState = { error?: string; ok?: boolean } | undefined;
+export type TriggerSyncState = { error?: string; ok?: boolean; message?: string } | undefined;
 
 /**
- * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용). **앱이 도는 서버에서 로컬 `sync-all.cjs`를 직접 spawn**한다.
- * (GitHub 방식은 makeedu가 데이터센터 IP를 거부해 폐기 — 서버가 신뢰 IP[집 PC/셀프호스티드]에 있으면 여기서 바로 됨.
- *  서버는 계속 도는 프로세스라 detached 자식이 ~1-2분 비동기로 완주하고, 결과는 각 화면 '↻ 동기화' 배지에 반영.)
- * ⚠️ **로컬/셀프호스티드 Node 서버 전용** — Vercel(서버리스: 스크립트 미포함·원격 IP·ephemeral)에선 명확히 거부한다.
+ * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용).
+ * - 로컬/셀프호스티드 서버(스크립트 있음): `sync-all.cjs`를 직접 spawn(즉시 실행, 기존 경로).
+ * - Vercel(서버리스: 스크립트 미포함·원격 IP·ephemeral): 직접 실행이 불가하므로 **makeedu_sync_requests(0069a)에
+ *   요청 행을 남긴다** → 동기화 PC의 상주 워처(watch-sync-requests.cjs, 15초 폴링)가 감지해 대신 실행.
+ *   즉 프로덕션 웹에서도 버튼이 실제로 동작한다(PC가 꺼져 있으면 pending으로 대기, 켜지면 따라잡음).
  * force=true(MAKEEDU_FORCE) = 연동 ON/OFF 토글 무시(수동 강제). 성공 검증한 로컬 명령과 동일 인자.
  */
 export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
@@ -86,13 +88,9 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
 
   const cwd = process.cwd();
   const script = path.join("scripts", "_makeedu", "sync-all.cjs");
-  // 서버리스/원격(Vercel 등)에선 로컬 스크립트를 spawn할 수 없다(파일 미포함·원격·ephemeral) → 명확히 거부.
+  // 서버리스/원격(Vercel 등)에선 로컬 스크립트를 spawn할 수 없다 → 요청 큐로 릴레이(동기화 PC 워처가 실행).
   if (process.env.VERCEL || !existsSync(path.join(cwd, script))) {
-    return {
-      error:
-        "이 서버에선 즉시 동기화를 실행할 수 없습니다(서버리스/원격). makeedu는 신뢰 IP를 요구하므로, " +
-        "동기화 PC의 작업 스케줄러(eywa-makeedu-sync) 또는 PowerShell `Start-ScheduledTask`로 실행하세요.",
-    };
+    return enqueueSyncRequest(user.tenantId, user.id);
   }
 
   // 중복 실행 방지(중복 makeedu 로그인·DB 경합) — 90초 디바운스(마커 파일 mtime 기준).
@@ -112,13 +110,53 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
       detached: true,
       windowsHide: true, // ⚠️ Windows: detached 자식이 새 콘솔 창(도스창)을 띄우는 것을 숨김.
       stdio: ["ignore", logFd, logFd],
-      env: { ...process.env, MAKEEDU_FORCE: "true" },
+      env: { ...process.env, MAKEEDU_FORCE: "true", MAKEEDU_TRIGGER: "button" },
     });
     child.unref();
     closeSync(logFd); // 자식이 fd를 dup했으므로 부모 핸들은 닫아 누수 방지.
-    return { ok: true };
+    return { ok: true, message: "동기화를 시작했습니다 — 1~2분 뒤 각 화면 배지에 반영됩니다." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "로컬 동기화 시작 중 오류" };
+  }
+}
+
+/**
+ * Vercel(서버리스) 경로: makeedu_sync_requests에 pending 요청을 남긴다(admin client — master 게이트는
+ * 호출부에서 이미 통과). 동기화 PC의 워처가 15초 내 감지해 sync-all을 실행하고 done/error로 마감한다.
+ * 이미 pending/running 요청이 있으면 중복 insert 없이 그 사실만 알린다(연타 = 동기화 1회).
+ */
+async function enqueueSyncRequest(tenantId: string, userId: string): Promise<TriggerSyncState> {
+  try {
+    const admin = createAdminClient();
+    const { data: existing, error: selErr } = await admin
+      .from("makeedu_sync_requests")
+      .select("id, status")
+      .eq("tenant_id", tenantId)
+      .in("status", ["pending", "running"])
+      .limit(1);
+    if (selErr) return { error: `동기화 요청 확인 실패: ${selErr.message}` };
+    if (existing && existing.length > 0) {
+      return {
+        ok: true,
+        message:
+          existing[0].status === "running"
+            ? "동기화가 이미 실행 중입니다 — 1~2분 뒤 각 화면 배지에 반영됩니다."
+            : "이미 접수된 동기화 요청이 있습니다 — 동기화 PC가 곧 실행합니다.",
+      };
+    }
+
+    const { error: insErr } = await admin
+      .from("makeedu_sync_requests")
+      .insert({ tenant_id: tenantId, requested_by: userId });
+    if (insErr) return { error: `동기화 요청 접수 실패: ${insErr.message}` };
+    return {
+      ok: true,
+      message:
+        "동기화 요청을 보냈습니다 — 동기화 PC가 켜져 있으면 곧 실행되고, 1~2분 뒤 각 화면 배지에 반영됩니다. " +
+        "(PC가 꺼져 있으면 켜질 때 자동 실행)",
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "동기화 요청 접수 중 오류" };
   }
 }
 

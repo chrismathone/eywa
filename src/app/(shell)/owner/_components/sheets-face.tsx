@@ -1,10 +1,11 @@
 import type { NotificationsSettings } from "@/features/owner/settings-types";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
-import { getMakeeduAutoSyncStatus } from "@/features/integrations/server/makeedu-sync";
+import { getMakeeduAutoSyncStatus, getMakeeduSyncRuns } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
 import { SheetsClient } from "@/app/(shell)/admin/integrations/sheets/_client";
 import { SheetsTargetForm } from "./sheets-target-form";
 import { MakeeduSyncCard } from "./makeedu-sync-card";
+import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.
@@ -16,16 +17,18 @@ import { MakeeduSyncCard } from "./makeedu-sync-card";
  *    서비스계정을 '편집자'로 공유해야 하고, 동기화는 그 시트를 **전체 덮어쓰기**한다.
  */
 export async function SheetsFace({ notifications }: { notifications: NotificationsSettings }) {
-  // 독립 조회 둘 → 병렬(B4).
-  const [status, makeeduStatus] = await Promise.all([
+  // 독립 조회 셋 → 병렬(B4).
+  const [status, makeeduStatus, makeeduRuns] = await Promise.all([
     getGoogleSheetsStatus(),
     getMakeeduAutoSyncStatus(),
+    getMakeeduSyncRuns(),
   ]);
   const saEmail = getServiceAccountEmail();
   return (
     <div className="w-full space-y-8">
-      {/* makeedu 자동 동기화 (GitHub Actions cron) — 외부 연동 면 상단 */}
+      {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 최근 실행 이력(0070a) */}
       <MakeeduSyncCard status={makeeduStatus} />
+      <MakeeduSyncRunsList runs={makeeduRuns} />
 
       <div className="space-y-5">
       <header className="border-border border-b pb-3">
