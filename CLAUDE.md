@@ -329,6 +329,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 로그인 시 랜딩(/) → 역할 홈 자동 폴백 — '로그아웃된 느낌' 해소 (2026-07-02) — ✅ typecheck0/lint0
+사용자 제보: 로그인 상태로 `/`(마케팅 랜딩) 방문 시 랜딩이 떠 **로그아웃된 느낌**([proxy.ts](src/lib/supabase/proxy.ts) 주석에 "client-side redirect to /dashboard can be added later" TODO로 남아있던 것). → 서버 컴포넌트 [(marketing)/page.tsx](<src/app/(marketing)/page.tsx>)에서 `getCurrentUser()`로 세션 확인 후 **[roleHome](src/lib/permissions.ts)** 로 서버 리다이렉트(강사=/onescreen·학생=/my-learning·그 외=/dashboard). 로그인 폼·`requireAccess`와 **같은 roleHome 단일 소스**.
+- **무한루프 방지**: `requireAccess`와 **동일 매트릭스**([getPermMatrix](src/lib/auth/perm-matrix.ts), 테넌트 override 반영)로 계산 + **`home !== "/"` 가드** → 권한 override로 홈이 `/`가 되는 엣지(예: 대시보드 revoke된 뷰어)에선 리다이렉트 스킵 → 랜딩 유지(루프 없음).
+- ⚠️ **트레이드오프**: `getCurrentUser`가 쿠키를 읽어 랜딩이 **동적 렌더**가 됨(정적 CDN 캐싱 상실). 무세션은 `getClaims` 로컬 JWT 검증만(가벼움). 랜딩 정적성이 중요해지면 대안(미들웨어 `/`→`/dashboard` + requireAccess 라우팅)이 있으나 override-루프 엣지가 있어 현 방식이 안전 기본값. 비로그인 방문자는 랜딩 그대로(동작 무변, 렌더만 동적).
+
+### 교재요청 강사뷰 = 사무실 등록·납부·주문 3배지 반영 (배선 완결) (2026-07-02) — ✅ typecheck0/lint0
+사용자 배선 확인 요청: 사무실이 /billing 교재 면에서 찍는 **등록/주문/납부 3개 독립 체크**([toggleTextbookCheck](src/features/billing/server/textbook-actions.ts))가 강사 `/textbook-requests`에 반영되나? → **DB 배선은 연결됨**(같은 `textbook_orders.{registered_at,ordered_at,paid_at}` 컬럼을 [getTextbookOrdersForStudents](src/features/billing/server/textbook-queries.ts)가 읽음). 단 강사 뷰의 **단일 배지**(신청됨/주문됨/납부 완료)가 `paid`/`ordered`만 반영하고 **`registered`(등록)는 표시 안 함**(등록은 status에도 없는 독립 플래그) — 갭 발견. → 사무실 표(textbooks-table)와 동일한 **읽기전용 3배지(등록·납부·주문)**로 교체([_client.tsx](<src/app/(shell)/textbook-requests/_client.tsx>) `ProgressChecks`) → 3개 상태 모두 강사에게 보임.
+- ⚠️ **실시간 아님**: `toggleTextbookCheck`는 `/textbook-requests`를 revalidate 안 하나, 그 페이지가 쿠키(RLS) 기반 **동적 렌더**라 강사가 새로 열면 최신. 즉시 반영은 realtime 필요(별도). `registered`는 강사 **수정/삭제 잠금**(`isUntouched`)엔 이미 쓰였음. (같은 세션 앞서 사무실 표 배지 순서도 등록→납부→주문으로 통일 — 커밋 `c21c8b6`.)
+
 ### 대시보드 개편 1차 — 과목별 진행 수업·등록상담 목록·"오늘 조치할 것" 통합 패널 + 정합/죽은코드 정리 (2026-07-02) — ✅ test595/tsc0/lint0 + 라이브(마스터, 수업시간대)
 사용자 "알찬 것만" 방향 + 워크플로 조사(4에이전트: eywa 신호 전수·ijw 대시보드·현 대시보드 감사 → Top 8 랭킹) 기반 1차 적용.
 - **오늘의 일정 = 진행 중 수업 과목별 나열**([now-cockpit.tsx](<src/app/(shell)/dashboard/_components/now-cockpit.tsx>) + 순수 [`groupOngoingBySubject`](src/features/dashboard/ongoing.ts) Vitest6): 옛 "카드 3개+외 N" → 과목 헤더(설정색 점+라벨+N개) 아래 컴팩트 행(시간대·반·강사·강의실·인원, 반 상세 드릴인). **그룹당 5행 캡 + 초과 스크롤**(max-h-44, 사용자 요청). 진행 중 0건이면 빈 상태 문구. 라이브: 영어 6건(5행+스크롤)·수학 4건 동시 검증.
