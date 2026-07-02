@@ -29,6 +29,9 @@ create table if not exists academy_documents (
 create index if not exists academy_documents_tenant_category_idx
   on academy_documents (tenant_id, category, created_at);
 
+-- 상단 고정(자주 쓰는 서식) — 목록 정렬 pinned desc → created_at desc. (idempotent — 기존 배포에도 안전)
+alter table academy_documents add column if not exists pinned boolean not null default false;
+
 alter table academy_documents enable row level security;
 
 drop policy if exists academy_documents_tenant_isolation on academy_documents;

@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { attachmentFilename } from "@/lib/http/content-disposition";
 import { getMediaBackend } from "./backend";
 import { gcsFile } from "./gcs-client";
 import {
@@ -123,7 +124,9 @@ export async function verifyUploadedObject(
 }
 
 // ── 읽기(signed GET URL) ─────────────────────────────────────
-async function gcsSignedRead(path: string, ttlMs: number): Promise<string> {
+// downloadName을 주면 attachment disposition으로 서명 → 브라우저가 미리보기 대신 그 파일명으로 저장.
+// (한글 파일명은 attachmentFilename이 RFC 5987로 안전 인코딩 — B1 헤더 규칙.)
+async function gcsSignedRead(path: string, ttlMs: number, downloadName?: string): Promise<string> {
   const file = gcsFile(path);
   const [exists] = await file.exists();
   if (!exists) {
@@ -131,14 +134,24 @@ async function gcsSignedRead(path: string, ttlMs: number): Promise<string> {
       "원본 파일이 없습니다(보존기간 만료 등). 'AI 분석 다시 생성'으로 텍스트 기반 재분석을 사용하세요.",
     );
   }
-  const [url] = await file.getSignedUrl({ version: "v4", action: "read", expires: Date.now() + ttlMs });
+  const [url] = await file.getSignedUrl({
+    version: "v4",
+    action: "read",
+    expires: Date.now() + ttlMs,
+    ...(downloadName ? { responseDisposition: attachmentFilename(downloadName) } : {}),
+  });
   return url;
 }
 
-async function supabaseSignedRead(bucket: string, path: string, ttlMs: number): Promise<string> {
+async function supabaseSignedRead(
+  bucket: string,
+  path: string,
+  ttlMs: number,
+  downloadName?: string,
+): Promise<string> {
   const { data, error } = await createAdminClient()
     .storage.from(bucket)
-    .createSignedUrl(path, Math.floor(ttlMs / 1000));
+    .createSignedUrl(path, Math.floor(ttlMs / 1000), downloadName ? { download: downloadName } : undefined);
   if (error || !data?.signedUrl) {
     throw new Error(`signed URL 생성 실패: ${error?.message ?? "unknown"}`);
   }
@@ -165,17 +178,18 @@ export async function resolveAudioReadUrl(
   throw new Error("잘못된 오디오 경로입니다");
 }
 
-/** 이미지·문서(영수증/브랜딩/서식) signed GET URL — legacy 없음, tenant 전용. */
+/** 이미지·문서(영수증/브랜딩/서식) signed GET URL — legacy 없음, tenant 전용. downloadName=attachment 저장. */
 export async function resolveTenantReadUrl(
   path: string,
   kind: "receipt" | "branding" | "document",
   tenantId: string,
   ttlMs: number = READ_TTL_MS,
+  downloadName?: string,
 ): Promise<string> {
   if (!MEDIA_KIND[kind].validate(path, tenantId)) throw new Error("잘못된 파일 경로입니다");
   return getMediaBackend() === "gcs"
-    ? gcsSignedRead(path, ttlMs)
-    : supabaseSignedRead(MEDIA_KIND[kind].supabaseBucket, path, ttlMs);
+    ? gcsSignedRead(path, ttlMs, downloadName)
+    : supabaseSignedRead(MEDIA_KIND[kind].supabaseBucket, path, ttlMs, downloadName);
 }
 
 /**

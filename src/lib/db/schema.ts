@@ -1286,6 +1286,7 @@ export const academyDocuments = pgTable(
     mimeType: text("mime_type"),
     // kind='text'
     body: text("body"),
+    pinned: boolean("pinned").notNull().default(false), // 자주 쓰는 서식 상단 고정(목록 정렬 pinned→최신)
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

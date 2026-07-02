@@ -4,16 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  Download,
   File,
   FileImage,
   FileSpreadsheet,
   FileText,
   Loader2,
+  Pin,
   StickyNote,
   Trash2,
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { deleteDocument, signDocumentUrl } from "@/features/documents/server/actions";
+import { deleteDocument, toggleDocumentPin } from "@/features/documents/server/actions";
+import { downloadDocument, previewDocument } from "@/features/documents/open-file";
 import type { DocumentKind } from "@/features/documents/categories";
 
 export type DocumentRowData = {
@@ -26,6 +29,7 @@ export type DocumentRowData = {
   sizeLabel: string;
   createdAt: string;
   uploaderName: string | null;
+  pinned: boolean;
 };
 
 // 유형 → 탐색기식 파일 아이콘(색으로 형식 구분).
@@ -49,48 +53,46 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  // 파일 = 클릭 시 새 탭으로 열기/다운로드. 팝업 차단 회피: 제스처 스택에서 동기 open 후 URL 주입.
-  async function openFile() {
+  async function run(fn: () => Promise<void>) {
     if (busy) return;
     setBusy(true);
-    const w = window.open("about:blank", "_blank");
     try {
-      const res = await signDocumentUrl(doc.id);
-      if (res.url && w) w.location.href = res.url;
-      else {
-        w?.close();
-        toast.error(res.error ?? "다운로드 URL 생성 실패");
-      }
+      await fn();
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onTogglePin() {
+    await run(async () => {
+      const res = await toggleDocumentPin(doc.id, !doc.pinned);
+      if (res.error) toast.error(res.error);
+      else router.refresh();
+    });
   }
 
   async function onDelete() {
-    if (busy) return;
-    setBusy(true);
-    try {
+    await run(async () => {
       const res = await deleteDocument(doc.id);
       if (res.error) toast.error(res.error);
       else router.refresh();
-    } finally {
-      setBusy(false);
-      setConfirming(false);
-    }
+    });
+    setConfirming(false);
   }
 
   return (
-    <tr className="border-line hover:bg-bg-soft/50 border-t transition-colors">
+    <tr className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""}`}>
       <td className="px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
+          {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.5} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
           {doc.kind === "file" ? (
             <button
               type="button"
-              onClick={openFile}
+              onClick={() => void run(() => previewDocument(doc.id, doc.typeLabel))}
               disabled={busy}
               className="text-foreground hover:text-primary min-w-0 truncate text-left font-medium hover:underline"
-              title={`${doc.title} — 클릭하여 열기/다운로드`}
+              title={`${doc.title} — 클릭하여 미리보기`}
             >
               {doc.title}
             </button>
@@ -112,28 +114,54 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(doc.createdAt)}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.uploaderName ?? "—"}</td>
       <td className="px-3 py-2 text-right whitespace-nowrap">
-        {canWrite ? (
-          confirming ? (
-            <span className="inline-flex items-center gap-1.5 text-xs">
-              <button type="button" onClick={onDelete} disabled={busy} className="text-danger font-semibold hover:underline">
-                {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
-              </button>
-              <button type="button" onClick={() => setConfirming(false)} className="text-text-dim hover:underline">
-                취소
-              </button>
-            </span>
-          ) : (
+        <span className="inline-flex items-center gap-2">
+          {doc.kind === "file" ? (
             <button
               type="button"
-              onClick={() => setConfirming(true)}
-              className="text-text-faint hover:text-danger"
-              aria-label={`${doc.title} 삭제`}
-              title="삭제"
+              onClick={() => void run(() => downloadDocument(doc.id))}
+              disabled={busy}
+              className="text-text-faint hover:text-primary"
+              aria-label={`${doc.title} 다운로드`}
+              title="다운로드"
             >
-              <Trash2 className="size-4" />
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
             </button>
-          )
-        ) : null}
+          ) : null}
+          {canWrite ? (
+            <button
+              type="button"
+              onClick={() => void onTogglePin()}
+              disabled={busy}
+              className={doc.pinned ? "text-gold hover:text-text-dim" : "text-text-faint hover:text-gold"}
+              aria-label={doc.pinned ? `${doc.title} 고정 해제` : `${doc.title} 상단 고정`}
+              title={doc.pinned ? "고정 해제" : "상단 고정"}
+            >
+              <Pin className={`size-4 ${doc.pinned ? "fill-current" : ""}`} strokeWidth={1.8} />
+            </button>
+          ) : null}
+          {canWrite ? (
+            confirming ? (
+              <span className="inline-flex items-center gap-1.5 text-xs">
+                <button type="button" onClick={() => void onDelete()} disabled={busy} className="text-danger font-semibold hover:underline">
+                  {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
+                </button>
+                <button type="button" onClick={() => setConfirming(false)} className="text-text-dim hover:underline">
+                  취소
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="text-text-faint hover:text-danger"
+                aria-label={`${doc.title} 삭제`}
+                title="삭제"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            )
+          ) : null}
+        </span>
       </td>
     </tr>
   );

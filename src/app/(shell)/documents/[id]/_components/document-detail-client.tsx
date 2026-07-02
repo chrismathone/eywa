@@ -2,14 +2,15 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { AlertCircle, Download, Loader2, Pencil, Save } from "lucide-react";
+import { AlertCircle, Download, Eye, Loader2, Pencil, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { signDocumentUrl, updateDocument } from "@/features/documents/server/actions";
+import { updateDocument } from "@/features/documents/server/actions";
+import { downloadDocument, previewDocument } from "@/features/documents/open-file";
 import {
   CATEGORY_LABEL,
   DOCUMENT_CATEGORIES,
+  fileTypeLabel,
   type DocumentCategory,
   type DocumentKind,
 } from "@/features/documents/categories";
@@ -43,17 +44,13 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
     }
   }, [state, router]);
 
-  async function openFile() {
+  const typeLabel = fileTypeLabel(doc.kind, doc.fileName, null);
+
+  async function run(fn: () => Promise<void>) {
     if (busy) return;
     setBusy(true);
-    const w = window.open("about:blank", "_blank");
     try {
-      const res = await signDocumentUrl(doc.id);
-      if (res.url && w) w.location.href = res.url;
-      else {
-        w?.close();
-        toast.error(res.error ?? "다운로드 URL 생성 실패");
-      }
+      await fn();
     } finally {
       setBusy(false);
     }
@@ -102,10 +99,15 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {doc.kind === "file" ? (
-          <Button onClick={openFile} disabled={busy}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            열기 / 다운로드
-          </Button>
+          <>
+            <Button onClick={() => void run(() => downloadDocument(doc.id))} disabled={busy}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              다운로드
+            </Button>
+            <Button variant="outline" onClick={() => void run(() => previewDocument(doc.id, typeLabel))} disabled={busy}>
+              <Eye className="size-4" /> 미리보기
+            </Button>
+          </>
         ) : null}
         {canWrite ? (
           <Button variant="outline" onClick={() => setEditing(true)}>

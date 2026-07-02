@@ -15,6 +15,7 @@ export type DocumentRow = {
   mimeType: string | null;
   uploaderName: string | null;
   createdAt: string;
+  pinned: boolean;
 };
 
 const PAGE = 50;
@@ -36,7 +37,7 @@ export async function getDocumentsPage(
   let qb = supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, description, file_name, file_size, mime_type, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, description, file_name, file_size, mime_type, pinned, created_at, uploader:uploaded_by(display_name)",
       { count: "exact" },
     );
   if (opts.category && (DOCUMENT_CATEGORIES as readonly string[]).includes(opts.category)) {
@@ -44,7 +45,11 @@ export async function getDocumentsPage(
   }
   const term = opts.q ? sanitize(opts.q) : "";
   if (term) qb = qb.or(`title.ilike.%${term}%,description.ilike.%${term}%,file_name.ilike.%${term}%`);
-  qb = qb.order("created_at", { ascending: false }).range(from, from + pageSize - 1);
+  // 고정(pinned) 먼저 → 최신순. (탐색기 상단 고정 = 자주 쓰는 서식)
+  qb = qb
+    .order("pinned", { ascending: false })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
   const { data, count } = await qb;
   const rows: DocumentRow[] = (data ?? []).map((r) => ({
     id: r.id,
@@ -57,6 +62,7 @@ export async function getDocumentsPage(
     mimeType: r.mime_type,
     uploaderName: uploaderNameOf(r.uploader),
     createdAt: r.created_at,
+    pinned: !!r.pinned,
   }));
   return { rows, total: count ?? rows.length };
 }
@@ -85,7 +91,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
   const { data } = await supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, description, file_path, file_name, file_size, mime_type, body, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, description, file_path, file_name, file_size, mime_type, body, pinned, created_at, uploader:uploaded_by(display_name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -101,6 +107,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
     mimeType: data.mime_type,
     uploaderName: uploaderNameOf(data.uploader),
     createdAt: data.created_at,
+    pinned: !!data.pinned,
     body: data.body,
     filePath: data.file_path,
   };

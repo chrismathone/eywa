@@ -190,8 +190,14 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
   return { ok: true };
 }
 
-/** 다운로드용 signed URL — 읽기 액션(readonly도 허용, 서식 다운로드가 목적). RLS가 테넌트 격리. */
-export async function signDocumentUrl(id: string): Promise<{ url?: string; error?: string }> {
+/**
+ * 열람/다운로드용 signed URL — 읽기 액션(readonly도 허용, 서식 배포가 목적). RLS가 테넌트 격리.
+ * mode="download"면 attachment disposition(원본 파일명으로 저장), "view"면 inline(브라우저 미리보기).
+ */
+export async function signDocumentUrl(
+  id: string,
+  mode: "view" | "download" = "view",
+): Promise<{ url?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canAccessTenant(user.systemRole, "documents"))) return { error: "접근 권한이 없습니다" };
@@ -199,13 +205,35 @@ export async function signDocumentUrl(id: string): Promise<{ url?: string; error
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("academy_documents")
-    .select("file_path")
+    .select("file_path, file_name")
     .eq("id", id)
     .maybeSingle();
   if (!row?.file_path) return { error: "파일이 없는 문서입니다" };
   try {
-    return { url: await resolveTenantReadUrl(row.file_path, "document", user.tenantId) };
+    const downloadName =
+      mode === "download" ? (row.file_name ?? row.file_path.split("/").pop() ?? "document") : undefined;
+    return {
+      url: await resolveTenantReadUrl(row.file_path, "document", user.tenantId, undefined, downloadName),
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "다운로드 URL 생성 실패" };
   }
+}
+
+/** 상단 고정 토글 — 자주 쓰는 서식을 목록 맨 위에(pinned desc 정렬). */
+export async function toggleDocumentPin(
+  id: string,
+  pinned: boolean,
+): Promise<{ ok?: boolean; error?: string }> {
+  const gate = await requireDocumentWrite();
+  if ("error" in gate) return { error: gate.error };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("academy_documents")
+    .update({ pinned, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: `고정 변경 실패: ${error.message}` };
+  revalidatePath("/documents");
+  return { ok: true };
 }

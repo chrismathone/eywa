@@ -149,6 +149,7 @@ export default async function DocumentsPage({
                         sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",
                         createdAt: r.createdAt,
                         uploaderName: r.uploaderName,
+                        pinned: r.pinned,
                       }}
                       canWrite={canWrite}
                     />
