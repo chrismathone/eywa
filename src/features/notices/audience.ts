@@ -1,11 +1,12 @@
 import type { SystemRole } from "@/lib/permissions";
 
-export const POPUP_AUDIENCES = ["all", "staff", "teachers", "counselors", "accounting"] as const;
+export const POPUP_AUDIENCES = ["all", "staff", "office", "teachers", "counselors", "accounting"] as const;
 export type PopupAudience = (typeof POPUP_AUDIENCES)[number];
 
 export const AUDIENCE_LABEL: Record<PopupAudience, string> = {
   all: "전체",
   staff: "전 직원",
+  office: "운영진 (강사 제외)",
   teachers: "강사",
   counselors: "상담사",
   accounting: "회계",
@@ -32,7 +33,8 @@ export const POSITION_LABEL: Record<PopupPosition, string> = {
 
 /**
  * 공지 청중(audience)이 이 역할에게 보여야 하는가. 순수 함수(서버·클라 공용).
- * 'staff'=학생 외 전 직원, 나머지는 해당 시스템 역할에 직접 매핑.
+ * 'staff'=학생 외 전 직원, 'office'=강사·학생 제외 운영진(풀셸 사용자 — 강사 미니셸 무관 공지용),
+ * 나머지는 해당 시스템 역할에 직접 매핑.
  */
 export function audienceMatchesRole(audience: string, role: SystemRole): boolean {
   switch (audience) {
@@ -40,6 +42,8 @@ export function audienceMatchesRole(audience: string, role: SystemRole): boolean
       return true;
     case "staff":
       return role !== "student";
+    case "office":
+      return role !== "student" && role !== "teacher";
     case "teachers":
       return role === "teacher";
     case "counselors":

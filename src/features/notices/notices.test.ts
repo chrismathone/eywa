@@ -16,6 +16,15 @@ describe("audienceMatchesRole", () => {
     expect(audienceMatchesRole("staff", "student")).toBe(false);
   });
 
+  it("office → 강사·학생 제외 운영진", () => {
+    expect(audienceMatchesRole("office", "master")).toBe(true);
+    expect(audienceMatchesRole("office", "counselor")).toBe(true);
+    expect(audienceMatchesRole("office", "accountant")).toBe(true);
+    expect(audienceMatchesRole("office", "viewer")).toBe(true);
+    expect(audienceMatchesRole("office", "teacher")).toBe(false);
+    expect(audienceMatchesRole("office", "student")).toBe(false);
+  });
+
   it("teachers/counselors/accounting → 해당 역할만", () => {
     expect(audienceMatchesRole("teachers", "teacher")).toBe(true);
     expect(audienceMatchesRole("teachers", "master")).toBe(false);

@@ -52,6 +52,7 @@ export const attendanceAccessMethodEnum = pgEnum("attendance_access_method", ["m
 export const announcementAudienceEnum = pgEnum("announcement_audience", [
   "all",
   "staff",
+  "office", // 강사·학생 제외 운영진(0066a) — 강사 미니셸과 무관한 풀셸 공지용
   "teachers",
   "counselors",
   "accounting",
