@@ -118,8 +118,10 @@ export default async function DashboardPage() {
       {/* 오늘 조치할 것 — 조건부 신호 통합 패널(0건이면 '정상' 한 줄) */}
       <TodayActionsBand items={todayActions} />
 
-      {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr) */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr_1fr] lg:items-stretch">
+      {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr).
+          ⚠️ minmax(0,Nfr): 그냥 Nfr은 min=min-content라 한 컬럼의 긴 내용이 다른 컬럼을 굶겨(좁은 창에서
+          좌측 콕핏이 ~50px로 짜부) → min=0으로 비례(1.6:1:1) 나눔 강제. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch">
         <NowCockpit slots={todaySchedule} subjects={subjects} unrecordedCount={unrecordedCount} />
         <div className="flex flex-col gap-4">
           <AbsenceRiskCard items={absenceRisks} />
