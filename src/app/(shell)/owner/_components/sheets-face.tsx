@@ -35,8 +35,8 @@ export async function SheetsFace({ notifications }: { notifications: Notificatio
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 최근 실행 이력(0070a) */}
       <MakeeduSyncCard status={makeeduStatus} />
       <MakeeduSyncRunsList runs={makeeduRuns} />
-      {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(후보 있을 때만) */}
-      {pushCandidates.length > 0 ? <MakeeduPushCard candidates={pushCandidates} /> : null}
+      {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
+      <MakeeduPushCard candidates={pushCandidates} />
 
       <div className="space-y-5">
       <header className="border-border border-b pb-3">

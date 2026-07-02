@@ -66,6 +66,14 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
         <p className={`text-sm ${msg.ok ? "text-primary" : "text-chart-4"}`}>{msg.text}</p>
       ) : null}
 
+      {candidates.length === 0 ? (
+        // 빈 상태 — 후보가 없어도 카드는 남겨 발견성 유지(어디서 보내는지 항상 노출). 버튼은 비활성.
+        <div className="border-border text-text-dim flex items-center justify-center rounded-md border border-dashed px-4 py-8 text-center text-sm">
+          지금 makeedu로 보낼 새 QR 접수 상담이 없습니다.
+          <br className="hidden sm:block" />
+          <span className="text-text-faint"> 새 공개접수가 들어오면(이미 등록·전송된 건 제외) 여기에 표시됩니다.</span>
+        </div>
+      ) : (
       <div className="border-border overflow-hidden rounded-md border">
         <table className="w-full text-[13px]">
           <thead className="bg-bg-soft text-text-dim">
@@ -128,6 +136,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
           </tbody>
         </table>
       </div>
+      )}
       <p className="text-text-faint text-[11px]">
         ⚠️ makeedu는 정본입니다 — 전송은 <strong>새로 추가만</strong> 하고 기존 makeedu 데이터는 건드리지 않습니다.
         전송 실패 건은 원인을 확인 후 다시 선택해 보낼 수 있습니다.
