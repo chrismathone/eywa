@@ -13,8 +13,9 @@ export const ROLE_HIERARCHY: Record<SystemRole, number> = {
   student: 7,
 };
 
+// master 표시 라벨 = "owner"(테넌트 소유자) — 사용자 결정 2026-07-02. super_admin(SaaS 총괄)과는 별개 개념.
 export const ROLE_LABEL: Record<SystemRole, string> = {
-  master: "마스터",
+  master: "owner",
   admin: "관리자",
   manager: "매니저",
   accountant: "회계",

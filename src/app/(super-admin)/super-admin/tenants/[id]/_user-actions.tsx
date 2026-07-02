@@ -8,7 +8,7 @@ import {
 } from "@/features/super-admin/server/actions";
 
 const ROLE_OPTIONS = [
-  { value: "master", label: "원장" },
+  { value: "master", label: "owner" },
   { value: "admin", label: "관리자" },
   { value: "manager", label: "매니저" },
   { value: "teacher", label: "강사" },

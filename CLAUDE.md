@@ -385,6 +385,26 @@ position:static, 0높이여도 박스 생성)가 기본(landscape) 페이지 이
 - **진짜 비활성화(숨김+차단)**: 8개 강사 페이지 전부 `requireAccess("<키>")`(tenant-aware `getPermMatrix`)라, 끄면 탭 숨김 + **URL 직접 진입도 차단**(roleHome=/onescreen 폴백). 단순 숨김 아님.
 - **⚠️ 워크플로 적대리뷰(3차원, 4에이전트) 확정 1건(med) 수정**: 빠른 토글의 '켜기 복원값'이 **마운트 시점 값 고정**이라, 같은 세션에서 매트릭스로 바꾼 값(예 scoped→readonly)을 그 탭 off/on 하면 유실 → **끄기 직전 live 값을 ref로 캡처해 복원**(세션 편집 보존). 부수효과(탭 숨김이 원스크린 등 잔존 기능 깨뜨림)·배선·직렬화는 문제 없음 확인.
 - 검증: typecheck0/lint0/**test574**. ⚠️ 라이브는 auth 게이트 + 병렬 dev 충돌 회피로 정적 게이트+적대리뷰 대체(원장 HMR 실토글 1회 확인 권장). ⚠️ **수업보고서(Edutrix 외부링크)는 MenuKey 없어 이 토글 대상 아님**(항상 표시 — 토글하려면 별도 설정 플래그 필요, 후속).
+### super_admin은 테넌트 권한 매트릭스 위 + master 라벨 "원장"→"owner" 통일 (2026-07-02) — ✅ typecheck0/lint0/test595 + 라이브 양방향
+사용자 결정: 역할·권한 매트릭스의 "원장" 열 = **테넌트 owner(master, 현재 chrismathone)** 이고, **super_admin(st2000423)은
+이 매트릭스의 영향을 받으면 안 된다**. 실측: 기존엔 super_admin도 학원 셸에선 `public.users` role(master)로만 취급돼
+override(`retention master=none` 실존)에 같이 잠겨 있었음 → 우회 배선.
+- **우회 = [`getPermMatrix`](src/lib/auth/perm-matrix.ts) 단일 지점**: super_admin이면 override를 무시하고 **코드 기본
+  MENU_ACCESS**로 취급(blanket full 아님 — 역할 전용 화면[원스크린/내 학습] 접근이 새로 안 생기고, 기본 master=전 메뉴
+  full이라 실질 전체 접근). requireAccess·canAccessTenant/canWriteTenant/accessLevelTenant가 전부 이걸 타므로 한 곳 수정으로
+  페이지·액션·읽기 게이트 전체 커버. **[layout.tsx](<src/app/(shell)/layout.tsx>)의 사이드바/팰릿 permMatrix도 `resolveMatrix`
+  직접 호출 → `getPermMatrix()`로 교체**(같은 React cache 공유 = 추가 쿼리 0, UI 노출까지 일관).
+- **판정 비용(반응속도)**: 신규 [`isCurrentUserSuperAdmin`](src/lib/auth/super-admin.ts)(React cache) — `auth.getUser()`
+  (GoTrue 네트워크 왕복) 대신 **이미 캐시된 getCurrentUser(getClaims 로컬검증)의 id로 super_admins PK 조회만**. 그것도
+  **override가 0개면 검사 자체 스킵**(쿼리 0). ⚠️ 테넌트 users 행 없는 순수 super_admin은 false — 학원 셸 우회 전용
+  (셸은 어차피 users 행 없으면 진입 불가), `/super-admin` 게이트는 기존 `getCurrentSuperAdmin`(getUser) 유지.
+- **라벨 통일**: master의 사용자 표시 라벨을 "원장"/"마스터" → **"owner"** — [permissions-section](<src/app/(shell)/owner/_components/permissions-section.tsx>)
+  (매트릭스 헤더+안내문)·[role-hierarchy.ts](src/lib/auth/role-hierarchy.ts) `ROLE_LABEL`(직원 상세/폼/급여/사이드바 폴백)·
+  [staff/page.tsx](<src/app/(shell)/staff/page.tsx>)(목록 Pill+필터칩)·super-admin 테넌트 상세/역할변경 드롭다운 5곳.
+  (사이드바 푸터는 `job_title` 우선이라 chrismathone은 여전히 "원장" 직함 표시 — 직급 자유텍스트는 별개.)
+- 검증: typecheck0/lint0(경고 7=baseline)/**test595** + **라이브 양방향**(localhost:3001, PSS): st2000423 → 사이드바에
+  '이탈 방어' 노출 + `/retention` 200 + 매트릭스 헤더 "owner" / chrismathone → 사이드바 미노출 + `/retention` 직접 진입
+  시 `/dashboard` 리다이렉트(override 정상 적용 = 우회가 super_admin에게만).
 
 ### 강사 "교재 요청" 탭 + 교재요청서 다운로드 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST/라우트 검증
 사용자 요청: 강사 미니셸 '내 메뉴'에 **교재 요청** 탭. 교재 기능이 `/billing`(billing 권한)에 묶여 **강사=billing none**이라 "링크만 추가"로는 안 됨 → 강사 전용 스코프 기능 신설(PII teacher-scope 필수).

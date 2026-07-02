@@ -11,17 +11,28 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 
 /**
  * 현재 테넌트의 유효 권한 매트릭스 = 하드코딩 MENU_ACCESS(기본값) + owner 설정 permissions override.
  * 요청당 1회(React cache). getTenantSettings도 cache라 추가 라운드트립 0(반응속도 #1).
  * 비로그인/설정없음 등 실패는 빈 override(=MENU_ACCESS 그대로)로 폴백 — 미인증 게이트는 호출부가 별도 처리.
  * ⚠️ getCurrentUser에 직접 싣지 않는 이유: current-user ← owner/queries ← current-user 순환 import 회피.
+ *
+ * ⚠️ super_admin 우회: super_admin(SaaS 총괄, super_admins 테이블)은 owner가 편집하는 역할·권한
+ * 매트릭스 **위에** 있다 — owner(master) override가 super_admin까지 잠그면 안 됨(사용자 결정 2026-07-02).
+ * super_admin이면 override를 무시하고 **코드 기본 MENU_ACCESS**로 취급(blanket full이 아니라 기본값 —
+ * 역할 전용 화면(원스크린/내 학습) 접근이 새로 생기지 않고, 기본 master=전 메뉴 full이라 실질 전체 접근).
+ * 비용: override가 0개면 검사 자체를 스킵(쿼리 0), 있으면 요청당 1회 캐시된 PK 조회(GoTrue 왕복 없음).
  */
 export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
   try {
     const settings = await getTenantSettings();
-    return resolveMatrix(settings.permissions.overrides);
+    const overrides = settings.permissions.overrides;
+    if (overrides.length > 0 && (await isCurrentUserSuperAdmin())) {
+      return resolveMatrix([]);
+    }
+    return resolveMatrix(overrides);
   } catch (e) {
     // ⚠️ fail-open(코드 기본값 복귀) = revoke override가 일시 무효화되는 방향 — 의도적·최종 결정이다.
     // 이유: fail-closed(차단)는 설정 조회 장애 시 master까지 /owner에 못 들어가 **복구 불능 락아웃**이 된다

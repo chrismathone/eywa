@@ -34,6 +34,25 @@ export const getCurrentSuperAdmin = cache(async (): Promise<CurrentSuperAdmin | 
   };
 });
 
+/**
+ * 현재 로그인 사용자가 super_admin인지 — **경량 판정**(perm-matrix 등 요청 핫패스용).
+ * getCurrentSuperAdmin과 달리 auth.getUser()(GoTrue 네트워크 왕복)를 안 타고, 이미 요청 캐시된
+ * getCurrentUser(getClaims 로컬검증)의 id로 super_admins PK 조회만 한다(RLS: 본인 row select).
+ * ⚠️ 테넌트 users 행이 없는 순수 super_admin은 false가 나온다 — 학원 셸 권한 우회 용도로만 쓸 것
+ * (셸은 어차피 users 행이 없으면 진입 불가). /super-admin 게이트는 기존 getCurrentSuperAdmin 유지.
+ */
+export const isCurrentUserSuperAdmin = cache(async (): Promise<boolean> => {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("super_admins")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+  return !!data;
+});
+
 export async function requireSuperAdmin(): Promise<CurrentSuperAdmin> {
   const sa = await getCurrentSuperAdmin();
   if (sa) return sa;

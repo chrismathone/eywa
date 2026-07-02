@@ -14,7 +14,7 @@ import { getActivePopups } from "@/features/notices/server/queries";
 import { NoticePopupLayer } from "@/features/notices/components/notice-popup-layer";
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
-import { resolveMatrix } from "@/lib/permissions";
+import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -60,8 +60,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const logoSrc = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
   // 테넌트 권한 override 반영 매트릭스 — 강사 '내 메뉴'·사이드바·팰릿·모바일내비 메뉴 필터에 주입(클라 소비처).
-  // settings는 위에서 이미 fetch(cache) → 추가 쿼리 0. 빈 override면 하드코딩 MENU_ACCESS 그대로.
-  const permMatrix = resolveMatrix(settings.permissions.overrides);
+  // getPermMatrix = getTenantSettings(위에서 이미 fetch, cache 공유) + override 적용 + **super_admin 우회**
+  // (super_admin은 owner override 무시 = 코드 기본값). 페이지 requireAccess와 같은 캐시를 공유해 추가 쿼리 0.
+  const permMatrix = await getPermMatrix();
 
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)

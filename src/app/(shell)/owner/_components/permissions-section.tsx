@@ -42,7 +42,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
 };
 
 const ROLE_LABEL: Record<SystemRole, string> = {
-  master: "원장",
+  master: "owner",
   admin: "관리자",
   manager: "실장",
   teacher: "강사",
@@ -160,7 +160,7 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
         <p className="text-text-dim mt-1 text-[12px] leading-relaxed">
           셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
           (현재 {overrides.length}개 변경). 선생님 원스크린·내 학습은 역할 전용이라 고정이고, 학생 역할과
-          원장의 설정·관리자 도구·대시보드 접근은 잠글 수 없습니다.
+          owner의 설정·관리자 도구·대시보드 접근은 잠글 수 없습니다.
         </p>
         <DragScrollArea className="border-border mt-4 rounded-md border">
           <table className="w-full border-collapse text-[12px]">
