@@ -329,6 +329,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 등록상담 녹음분석 '상담 내용' AI 제안 칩 — 채워진 필드도 AI 추출값을 비파괴로 제시 (2026-07-02) — ✅ typecheck0/lint0 + 적대리뷰(4렌즈) 결함0
+사용자 지적: 녹음 분석이 전사에서 뽑은 상담 내용(`parent_request`)은 [buildFormPatch](src/features/enrollment/form-fill.ts)의 "빈 칸만 채움" 규칙 때문에, 상담사가 이미 써놨으면 **통째로 버려져** 나중에 볼 수도 없었다(print_payload엔 13섹션 audioReport만 남고 포커스 추출 요약은 미보존). 해결 = **AI 제안 칩(비파괴)** — 자동 덮어쓰기/자동 append는 비채택.
+- **보존**: 웹훅 [handleConsultation](<src/app/api/webhooks/assemblyai/route.ts>)이 `extractConsultationForm` 원본 `extracted`를 `consultation_ai_analysis.print_payload.formSuggestions`에 스냅샷 저장(마이그레이션 0, jsonb 재사용, 추출 실패 시 미포함).
+- **노출**: [getEnrollmentConsultationById](src/features/enrollment/server/queries.ts)가 `aiFormSuggestions`(ExtractedConsultationForm) 노출.
+- **상세**([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>)): 상담 내용 카드에 `✨ AI가 정리한 상담 내용 보기`(native `<details>`=클라 JS 0) + "수정에서 반영" 링크. 저장값이 제안을 이미 `includes`하면 숨김(교체/추가 후 재-nag 방지).
+- **수정폼**([consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)): 상담 내용 textarea(uncontrolled) 아래 **[교체]/[아래에 추가]/[무시]** 패널. 적용=ref로 `el.value` 주입 + `new Event("input",{bubbles})` dispatch → **폼 레벨 리스너인 [useFormDraft](src/components/forms/use-form-draft.ts)(IDB 초안)·동시편집 가드가 포착**(datalist 칩 패턴). **저장해야 반영**.
+- **불변식(유지)**: `buildFormPatch`("빈 칸만")·자동입력 로직 **전혀 안 건드림**. 제안 반영은 100% 명시적 클릭. `formSuggestions`엔 전체 추출값(학교·주소·성별 등) 보존 → 다른 필드로 확장 쉬움(v1은 상담 내용만).
+- ⚠️ **소급 없음**: 기존 완료 분석엔 `formSuggestions`가 없어 칩 미표시 — **다음 녹음 분석부터** 적용. ⚠️ 2-계정 라이브 E2E는 새 formSuggestions 데이터가 필요해 미실행(적대리뷰 4렌즈 find→verify 결함0 + 이벤트-dispatch 메커니즘 직접확인으로 대체).
+
 ### 선생님 원스크린 배선 전수수정 — 데모 클라state → 실 영속(읽기배선·orphan정리·구조화영속) (2026-07-02) — ✅ 게이트 + 라이브 E2E
 배선 전수감사(5-agent 워크플로 + 3-agent 조사): `/onescreen`(강사 수업마감)이 프로덕션인데 **실제 DB 저장은 보고서(`lesson_reports`) 하나뿐**, 나머지는 전부 클라 임시 state(새로고침 유실)거나 하드코딩 죽은 데이터였음("데모 충실 이식" 설계가 프로덕션에 노출된 갭). Phase 1→2→3 순차 수정(각 dev 검증 후 승인 머지):
 - **Phase 1 — roster 읽기 배선**([roster.ts](src/features/onescreen/server/roster.ts)): `lesson_reports`(최신, [timetable 로더 패턴](src/features/timetable/server/queries.ts:335) 재사용) + 오늘 `attendance_records`를 `Promise.all`+`fetchInChunks` 배치 조회 → `reportSent`(오늘 저장분 → "보"셀·**중복작성 방지**)·이전 진도(`prev`)·`prevScore`(exam_info 파싱 [parseExamScores](src/features/onescreen/exam-info.ts), Vitest)·실 출결(late→지각/absent→결석). KST=[kstToday](src/lib/date-kst.ts). (이전엔 전부 하드코딩 `""`/`null`/`"—"`/`"출석"`이라 DeltaChip·이전진도·출결배지 사멸.)
