@@ -90,7 +90,15 @@ export function MakeeduSyncCard({ status }: { status: MakeeduAutoSyncStatus }) {
       <p className="text-muted-foreground border-t pt-3 text-[11px]">
         반영 시각은 각 화면(학생·수업·상담·수납)의 ‘↻ 동기화’ 배지에 표시됩니다.
         {status.lastSyncedAt
-          ? ` · 마지막 동기화 ${new Date(status.lastSyncedAt).toLocaleString("ko-KR")}`
+          ? ` · 마지막 동기화 ${new Date(status.lastSyncedAt).toLocaleString("ko-KR", {
+              timeZone: "Asia/Seoul",
+              year: "numeric",
+              month: "numeric",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            })}`
           : null}
       </p>
     </section>

@@ -119,7 +119,11 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
                   </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{c.consultationPath ?? "—"}</td>
                   <td className="text-text-faint px-3 py-2 whitespace-nowrap tabular">
-                    {new Date(c.createdAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}
+                    {new Date(c.createdAt).toLocaleDateString("ko-KR", {
+                      timeZone: "Asia/Seoul",
+                      month: "numeric",
+                      day: "numeric",
+                    })}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {c.pushStatus === "pending" || c.pushStatus === "running" ? (

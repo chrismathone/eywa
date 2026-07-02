@@ -51,17 +51,27 @@ export type MakeeduSyncRun = {
   error: string | null;
 };
 
-/** 최근 동기화 실행 로그(0070a makeedu_sync_runs) — 연동 면 이력 표시. RLS로 현재 테넌트만. */
-export async function getMakeeduSyncRuns(limit = 8): Promise<MakeeduSyncRun[]> {
+/**
+ * 동기화 실행 로그(0070a makeedu_sync_runs) — 연동 면 이력. RLS로 현재 테넌트만.
+ * 페이지네이션(로그는 append-only라 쌓임): page(1-base)·pageSize로 잘라 {runs, total} 반환.
+ */
+export async function getMakeeduSyncRuns(
+  page = 1,
+  pageSize = 8,
+): Promise<{ runs: MakeeduSyncRun[]; total: number }> {
   const user = await getCurrentUser();
-  if (!user) return [];
+  if (!user) return { runs: [], total: 0 };
   const supabase = await createClient();
-  const { data } = await supabase
+  const from = (Math.max(1, page) - 1) * pageSize;
+  const { data, count } = await supabase
     .from("makeedu_sync_runs")
-    .select("id, trigger_source, status, started_at, finished_at, duration_ms, domains, failed_domains, error")
+    .select(
+      "id, trigger_source, status, started_at, finished_at, duration_ms, domains, failed_domains, error",
+      { count: "exact" },
+    )
     .order("started_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []).map((r) => ({
+    .range(from, from + pageSize - 1);
+  const runs = (data ?? []).map((r) => ({
     id: r.id as string,
     triggerSource: r.trigger_source as string,
     status: r.status as string,
@@ -72,6 +82,7 @@ export async function getMakeeduSyncRuns(limit = 8): Promise<MakeeduSyncRun[]> {
     failedDomains: (r.failed_domains as string[] | null) ?? [],
     error: (r.error as string | null) ?? null,
   }));
+  return { runs, total: count ?? 0 };
 }
 
 // ───────── 동기화 워처 심장박동(0073a) — 어느 PC가 담당·온라인인지 ─────────

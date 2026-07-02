@@ -23,25 +23,49 @@ import { MakeeduPushCard } from "./makeedu-push-card";
  * ⚠️ 서비스계정은 자체 Drive 용량이 0이라 시트를 새로 만들지 못한다 → 사람이 만든 빈 시트에
  *    서비스계정을 '편집자'로 공유해야 하고, 동기화는 그 시트를 **전체 덮어쓰기**한다.
  */
-export async function SheetsFace({ notifications }: { notifications: NotificationsSettings }) {
+const RUNS_PAGE_SIZE = 8;
+
+export async function SheetsFace({
+  notifications,
+  page = 1,
+  isEmbed = false,
+}: {
+  notifications: NotificationsSettings;
+  page?: number;
+  isEmbed?: boolean;
+}) {
   // 서버 렌더 시각 — 워처 온라인/상대시각 판정용(RSC는 요청당 1회 실행이라 안정).
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const nowMs = Date.now();
   // 독립 조회 다섯 → 병렬(B4).
-  const [status, makeeduStatus, makeeduRuns, pushCandidates, workers] = await Promise.all([
+  const [status, makeeduStatus, runsPage, pushCandidates, workers] = await Promise.all([
     getGoogleSheetsStatus(),
     getMakeeduAutoSyncStatus(),
-    getMakeeduSyncRuns(),
+    getMakeeduSyncRuns(page, RUNS_PAGE_SIZE),
     getUnpushedIntakeConsultations(),
     getMakeeduSyncWorkers(nowMs),
   ]);
   const saEmail = getServiceAccountEmail();
+  const runsTotalPages = Math.max(1, Math.ceil(runsPage.total / RUNS_PAGE_SIZE));
+  // 실행 이력 페이저 href — ?tab=sheets(+embed) 보존, page>1일 때만 page 파라미터(1페이지는 생략).
+  const runsHref = (p: number) => {
+    const params = new URLSearchParams({ tab: "sheets" });
+    if (isEmbed) params.set("embed", "1");
+    if (p > 1) params.set("page", String(p));
+    return `/owner?${params.toString()}`;
+  };
   return (
     <div className="w-full space-y-8">
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
       <MakeeduSyncCard status={makeeduStatus} />
       <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />
-      <MakeeduSyncRunsList runs={makeeduRuns} />
+      <MakeeduSyncRunsList
+        runs={runsPage.runs}
+        page={page}
+        totalPages={runsTotalPages}
+        total={runsPage.total}
+        hrefForPage={runsHref}
+      />
       {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
       <MakeeduPushCard candidates={pushCandidates} />
 

@@ -1,36 +1,52 @@
 import { Pill } from "@/components/atoms/pill";
+import { Pagination } from "@/components/pagination";
 import type { MakeeduSyncRun } from "@/features/integrations/server/makeedu-sync";
 
 /**
- * makeedu 동기화 최근 실행 이력(0070a makeedu_sync_runs) — 연동 면, MakeeduSyncCard 바로 아래.
+ * makeedu 동기화 실행 이력(0070a makeedu_sync_runs) — 연동 면, MakeeduSyncCard 바로 아래.
  * 매 실행(자동/버튼/원격 요청/수동)이 언제·어떻게 끝났는지 원장이 직접 확인("동기화 왜 안 되나" 예방).
- * 서버 컴포넌트(RLS read) — 행이 없으면(로그 도입 전) 섹션 자체를 숨긴다.
+ * 서버 컴포넌트(RLS read) — 행이 없으면(로그 도입 전) 섹션 자체를 숨긴다. 로그는 쌓이므로 페이지네이션.
+ * ⚠️ 시각은 **KST 고정**(timeZone: Asia/Seoul, 24h) — 서버(Vercel=UTC) 렌더라 안 박으면 UTC로 나온다.
  */
-export function MakeeduSyncRunsList({ runs }: { runs: MakeeduSyncRun[] }) {
-  if (runs.length === 0) return null;
+export function MakeeduSyncRunsList({
+  runs,
+  page,
+  totalPages,
+  total,
+  hrefForPage,
+}: {
+  runs: MakeeduSyncRun[];
+  page: number;
+  totalPages: number;
+  total: number;
+  hrefForPage: (page: number) => string;
+}) {
+  if (total === 0) return null;
   return (
     <section className="bg-card border-border rounded-md border p-6">
       <h3 className="text-foreground text-sm font-semibold">최근 동기화 실행</h3>
       <ul className="divide-border mt-3 divide-y">
         {runs.map((run) => {
-          const total = affectedRowCount(run);
+          const affected = affectedRowCount(run);
           const breakdown = affectedBreakdown(run);
           return (
             <li key={run.id} className="py-2 text-[13px]">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-foreground tabular whitespace-nowrap">
                   {new Date(run.startedAt).toLocaleString("ko-KR", {
+                    timeZone: "Asia/Seoul",
                     month: "numeric",
                     day: "numeric",
                     hour: "2-digit",
                     minute: "2-digit",
+                    hour12: false,
                   })}
                 </span>
                 <span className="text-text-dim whitespace-nowrap">{TRIGGER_LABEL[run.triggerSource] ?? run.triggerSource}</span>
                 <StatusPill status={run.status} />
                 <span className="text-text-faint whitespace-nowrap">
                   {run.durationMs != null ? `${Math.round(run.durationMs / 1000)}초` : null}
-                  {total > 0 ? ` · 반영 ${total}건` : null}
+                  {affected > 0 ? ` · 반영 ${affected}건` : null}
                 </span>
                 {run.status === "partial" && run.failedDomains.length > 0 ? (
                   <span className="text-amber text-xs">실패: {run.failedDomains.join(", ")}</span>
@@ -51,6 +67,7 @@ export function MakeeduSyncRunsList({ runs }: { runs: MakeeduSyncRun[] }) {
           );
         })}
       </ul>
+      <Pagination page={page} totalPages={totalPages} total={total} hrefForPage={hrefForPage} />
     </section>
   );
 }
