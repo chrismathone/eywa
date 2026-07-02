@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import {
@@ -95,6 +95,7 @@ export function AppSidebar({
   const isDesktop = useIsDesktop();
   const { expanded, width, dragging, handleProps } = useSidebarResize();
   const animations = usePrefs((s) => s.animations);
+  const toggleSidebar = usePrefs((s) => s.toggleSidebar); // 브랜드 줄 접기/펼치기 버튼(드래그·더블클릭과 동일 상태)
   // 모션: 설정 ON & 드래그 중이 아닐 때만 슬라이드(드래그는 1:1 추종이라 트랜지션 off).
   const motion = animations && !dragging;
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -128,9 +129,18 @@ export function AppSidebar({
           motion ? `transition-[width] duration-200 ${EASE}` : ""
         } relative ${className ?? ""}`}
       >
-        {/* brand — 로고는 접힘 레일 중앙(left 26px) 고정, 워드마크만 페이드 */}
-        <div className="border-line flex h-12 shrink-0 items-center overflow-hidden border-b pl-3">
-          <Link href="/dashboard" aria-label="EYWA 대시보드" className="flex items-center gap-2.5">
+        {/* brand — 펼침: 로고+워드마크 + 우측 접기 버튼 / 접힘: 펼치기 버튼만(로고는 크로스페이드로 사라짐).
+            버튼은 absolute right-3 하나로 두 상태 모두 정합 — 접힘 52px에서 right 12px = 중앙 26px(레일 아이콘 축),
+            펼침에선 우측 가장자리(Claude 패턴). 하단 배치는 계정 줄과 겹쳐 실패했던 이력(#57) — 상단 고정. */}
+        <div className="border-line relative flex h-12 shrink-0 items-center overflow-hidden border-b pr-3 pl-3">
+          <Link
+            href="/dashboard"
+            aria-label="EYWA 대시보드"
+            tabIndex={expanded ? undefined : -1}
+            className={`flex min-w-0 flex-1 items-center gap-2.5 pr-9 ${
+              expanded ? "opacity-100" : "pointer-events-none opacity-0"
+            } ${motion ? "transition-opacity duration-200" : ""}`}
+          >
             {logoSrc ? (
               // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), next/image 최적화 불필요
               <img src={logoSrc} alt={logoText} className="size-7 shrink-0 rounded-[5px] object-contain" />
@@ -147,6 +157,20 @@ export function AppSidebar({
               {logoText}
             </span>
           </Link>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={expanded ? "사이드바 접기" : "사이드바 펼치기"}
+            title={expanded ? "사이드바 접기" : "사이드바 펼치기"}
+            aria-expanded={expanded}
+            className="bg-sidebar text-text-dim hover:bg-bg-soft hover:text-foreground absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded-[5px] transition-colors"
+          >
+            {expanded ? (
+              <PanelLeftClose className="size-4" strokeWidth={1.8} />
+            ) : (
+              <PanelLeftOpen className="size-4" strokeWidth={1.8} />
+            )}
+          </button>
         </div>
 
         {/* nav — 아이콘 레일(접힘) / 아이콘+라벨(펼침). 항목은 항상 풀폭, 내부 패딩으로 아이콘 고정. */}
