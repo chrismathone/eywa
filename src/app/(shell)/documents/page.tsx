@@ -13,6 +13,7 @@ import {
   DOCUMENT_CATEGORIES,
   fileTypeLabel,
   formatFileSize,
+  formViewHref,
   type DocumentCategory,
 } from "@/features/documents/categories";
 import { DocumentToolbar } from "./_components/document-toolbar";
@@ -154,7 +155,7 @@ export default async function DocumentsPage({
                           r.kind === "file"
                             ? `/documents/${r.id}/preview`
                             : r.kind === "form"
-                              ? `/staff/resumes/${r.id}`
+                              ? formViewHref(r.formType, r.id)
                               : `/documents/${r.id}`,
                       }}
                       canWrite={canWrite}

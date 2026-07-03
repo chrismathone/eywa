@@ -49,6 +49,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
 
   "staff/payroll": { w: 920, h: 640 }, // 월별 전직원 급여표(8열) — 폭 넓음
   "staff/resumes": { w: 840, h: 720 }, // 직원 이력서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
+  "billing/refunds": { w: 840, h: 720 }, // 환불 요청서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
   owner: { w: 960, h: 720 }, // 학원 설정 콘솔 — 탭 + 목록 편집(과목·교시·직급) 폼
   documents: { w: 980, h: 640 }, // 데이터베이스(서식 저장소) — 탐색기형(좌 폴더 팬 + 우 상세 테이블)
   // "새 X" 생성 폼 창(옛 우측 슬라이드 패널 폭 계승). 기본 480×560은 다열 폼엔 좁다.

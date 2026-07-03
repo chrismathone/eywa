@@ -25,7 +25,14 @@ export type DocumentKind = "file" | "text" | "form";
 /** 폼 문서(form_type) → 표시 라벨. 새 폼 종류를 추가하면 여기에 등록. */
 export const FORM_TYPE_LABEL: Record<string, string> = {
   staff_resume: "이력서",
+  refund_request: "환불 요청서",
 };
+
+/** 폼 문서 전용 뷰 라우트 — 탐색기(목록·상세)가 폼 행을 이 경로로 연다. 새 폼 종류 추가 시 등록. */
+export function formViewHref(formType: string | null | undefined, id: string): string {
+  if (formType === "refund_request") return `/billing/refunds/${id}`;
+  return `/staff/resumes/${id}`; // staff_resume + 미등록 폴백(기존 동작 보존)
+}
 
 /** 파일 확장자 → 표시용 종류 라벨(탐색기 '유형' 컬럼). */
 export function fileTypeLabel(

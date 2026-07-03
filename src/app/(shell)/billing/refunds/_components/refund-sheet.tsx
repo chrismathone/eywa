@@ -1,0 +1,309 @@
+"use client";
+
+import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useFormStatus } from "react-dom";
+import { AlertCircle, Loader2, Pencil, Save, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useFormDraft } from "@/components/forms/use-form-draft";
+import { DraftBanner } from "@/components/forms/draft-banner";
+import { APPROVAL_SLOTS, REFUND_METHODS, type RefundRequestData } from "@/features/billing/refund-request";
+import { saveRefundRequest, type RefundActionState } from "@/features/billing/server/refund-actions";
+import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
+
+// 종이 서식("환불처리요청서") 레이아웃을 재현한 시트 — 읽기(뷰) ↔ 인라인 편집 한 컴포넌트(WYSIWYG).
+// 화면·A4 인쇄 공용. 직원 이력서(resume-sheet) 패턴 — 전 필드가 plain input/textarea라 초안 자동복원도 DOM 캡처만으로 완결.
+
+const T = "w-full border-collapse text-[12px] leading-relaxed print:text-[11px] print:leading-snug";
+const cell = "border-foreground/35 border px-2 py-1.5 align-middle print:py-1";
+const head = `${cell} bg-bg-soft/70 text-center font-semibold whitespace-nowrap`;
+const inputBase =
+  "w-full min-w-0 rounded-sm bg-bg-soft/40 px-1.5 py-0.5 text-[12px] outline-none placeholder:text-text-faint/60 focus:bg-primary-soft/25 focus:ring-1 focus:ring-primary/50";
+
+const V = (s: string) => s || " ";
+
+function SaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+      저장
+    </Button>
+  );
+}
+
+export function RefundSheet({
+  data,
+  id,
+  canWrite = false,
+  startEditing = false,
+}: {
+  data: RefundRequestData;
+  id?: string;
+  canWrite?: boolean;
+  startEditing?: boolean;
+}) {
+  const [editing, setEditing] = useState(startEditing);
+  const [state, formAction] = useActionState<RefundActionState, FormData>(saveRefundRequest, undefined);
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const draft = useFormDraft({
+    scope: id ? `billing-refund:${id}` : "billing-refund:new",
+    formRef,
+    enabled: editing,
+  });
+  const clearDraft = draft.clear;
+
+  // 저장 성공 확정(nonce) 1회만 처리(#67 가드). 편집 종료(setEditing)는 렌더 중 조정(#25 회피),
+  // 부수효과(초안 삭제·네비)만 아래 effect에서 — resume-sheet와 동일 패턴.
+  const [seenNonce, setSeenNonce] = useState<number | undefined>(undefined);
+  if (state?.ok && state.nonce && state.nonce !== seenNonce) {
+    setSeenNonce(state.nonce);
+    if (id) setEditing(false); // 수정(기존): 뷰로 복귀. 생성은 아래 effect가 새 뷰로 이동.
+  }
+  const doneNonce = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!state?.ok || !state.nonce || state.nonce === doneNonce.current) return;
+    doneNonce.current = state.nonce;
+    clearDraft();
+    if (id) router.refresh(); // 수정: 서버 데이터 재조회 → 뷰에 반영.
+    else if (state.redirectTo) router.push(state.redirectTo); // 생성: 새 요청서 뷰로 이동.
+  }, [state, router, clearDraft, id]);
+
+  function cancel() {
+    if (id) setEditing(false);
+    else router.push("/billing?tab=refunds");
+  }
+
+  const s = data.student;
+  const r = data.refund;
+  const res = data.result;
+
+  const field = (
+    name: string,
+    value: string,
+    opts: { ph?: string; type?: string; align?: "left" | "center" } = {},
+  ) =>
+    editing ? (
+      <input
+        name={name}
+        defaultValue={value}
+        placeholder={opts.ph}
+        type={opts.type ?? "text"}
+        className={`${inputBase} ${opts.align === "center" ? "text-center" : ""}`}
+      />
+    ) : (
+      <>{V(value)}</>
+    );
+
+  const areaField = (name: string, value: string, rows: number, ph?: string) =>
+    editing ? (
+      <textarea name={name} defaultValue={value} rows={rows} placeholder={ph} className={`${inputBase} resize-y`} />
+    ) : (
+      <div className="min-h-[1.5em] whitespace-pre-wrap">{V(value)}</div>
+    );
+
+  const sheet = (
+    <div className="border-line bg-card text-foreground mx-auto w-full max-w-[780px] rounded-md border p-6 shadow-card sm:p-8 print:rounded-none print:border-2 print:border-foreground/60 print:p-3 print:shadow-none">
+      {/* 상단 — 제목 + 결재란(담당/부원장/원장) */}
+      <table className={T}>
+        <tbody>
+          <tr>
+            <td className={`${cell} w-[46%] border-2 text-center`} rowSpan={2}>
+              <span className="text-[24px] font-bold tracking-[0.3em] print:text-[19px]">환불처리요청서</span>
+            </td>
+            <th className={`${head} w-14`} rowSpan={2}>
+              결재
+            </th>
+            {APPROVAL_SLOTS.map((a) => (
+              <th key={a.key} className={head}>
+                {a.label}
+              </th>
+            ))}
+          </tr>
+          <tr>
+            {APPROVAL_SLOTS.map((a) => (
+              <td key={a.key} className={`${cell} h-16 text-center align-bottom`}>
+                {editing ? (
+                  <input
+                    name={`a_${a.key}`}
+                    defaultValue={data.approval[a.key]}
+                    placeholder="(서명)"
+                    className={`${inputBase} text-center`}
+                  />
+                ) : (
+                  V(data.approval[a.key])
+                )}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 학생 정보 */}
+      <table className={`${T} mt-4 print:mt-2`}>
+        <tbody>
+          <tr>
+            <th className={`${head} w-20`} rowSpan={10}>
+              학생 정보
+            </th>
+            <th className={`${head} w-28`}>이 름</th>
+            <td className={cell}>{field("s_name", s.name, { ph: "학생 이름" })}</td>
+          </tr>
+          <tr>
+            <th className={head}>학교/학년</th>
+            <td className={cell}>{field("s_schoolGrade", s.schoolGrade, { ph: "예: 경명중 2" })}</td>
+          </tr>
+          <tr>
+            <th className={head}>주소</th>
+            <td className={cell}>{field("s_address", s.address)}</td>
+          </tr>
+          <tr>
+            <th className={head}>환불사유</th>
+            <td className={cell}>{areaField("s_reason", s.reason, 5, "환불 사유를 입력하세요")}</td>
+          </tr>
+          <tr>
+            <th className={head}>담임선생님</th>
+            <td className={cell}>{field("s_homeroomTeacher", s.homeroomTeacher)}</td>
+          </tr>
+          <tr>
+            <th className={head}>수강반</th>
+            <td className={cell}>{areaField("s_className", s.className, 2)}</td>
+          </tr>
+          <tr>
+            <th className={head}>담당선생님</th>
+            <td className={cell}>{field("s_staffTeacher", s.staffTeacher)}</td>
+          </tr>
+          <tr>
+            <th className={head}>수업날짜</th>
+            <td className={`${cell} num`}>{field("s_classDate", s.classDate, { ph: "예: 2026-06-01 ~ 06-30" })}</td>
+          </tr>
+          <tr>
+            <th className={head}>총수업횟수</th>
+            <td className={`${cell} num`}>{field("s_totalSessions", s.totalSessions, { ph: "예: 12회" })}</td>
+          </tr>
+          <tr>
+            <th className={head}>환불요청일자</th>
+            <td className={`${cell} num`}>{field("s_requestDate", s.requestDate, { type: "date" })}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 환불내역 */}
+      <table className={`${T} mt-4 print:mt-2`}>
+        <tbody>
+          <tr>
+            <th className={`${head} w-20`} rowSpan={6}>
+              환불내역
+            </th>
+            <th className={`${head} w-28`}>결제내역</th>
+            <td className={cell} colSpan={2}>
+              {areaField("r_paymentDetails", r.paymentDetails, 4, "결제 내역(월·금액·결제수단 등)")}
+            </td>
+          </tr>
+          <tr>
+            <th className={head}>차감내역</th>
+            <td className={cell} colSpan={2}>
+              {areaField("r_deductionDetails", r.deductionDetails, 4, "차감 내역(수강 회차·교재비 등)")}
+            </td>
+          </tr>
+          <tr>
+            <th className={head}>총 환불금액</th>
+            <td className={`${cell} num font-semibold`} colSpan={2}>
+              {field("r_totalAmount", r.totalAmount, { ph: "예: 200,000원" })}
+            </td>
+          </tr>
+          {REFUND_METHODS.map((m, i) => (
+            <tr key={m.key}>
+              {i === 0 ? (
+                <th className={head} rowSpan={REFUND_METHODS.length}>
+                  환불방식
+                </th>
+              ) : null}
+              <th className={`${head} w-28`}>{m.label}</th>
+              <td className={`${cell} num`}>
+                {field(`m_${m.key}`, r.method[m.key], { ph: m.key === "account" ? "은행·계좌번호" : "" })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* 처리결과 */}
+      <table className={`${T} mt-4 print:mt-2`}>
+        <tbody>
+          <tr>
+            <th className={`${head} w-20`} rowSpan={3}>
+              처리결과
+            </th>
+            <th className={`${head} w-28`}>환불처리일자</th>
+            <td className={`${cell} num`}>{field("res_processedDate", res.processedDate, { type: "date" })}</td>
+          </tr>
+          <tr>
+            <th className={head}>전산처리여부</th>
+            <td className={cell}>{field("res_systemProcessed", res.systemProcessed, { ph: "예: 완료 / 미처리" })}</td>
+          </tr>
+          <tr>
+            <th className={head}>담당자</th>
+            <td className={cell}>{field("res_manager", res.manager)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const toolbar = (
+    <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+      <p className="text-text-dim text-xs">
+        {editing ? "칸을 클릭해 바로 입력하세요 — 저장해야 반영됩니다." : "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다."}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {editing ? (
+          <>
+            <Button type="button" variant="outline" onClick={cancel}>
+              <X className="size-4" />
+              취소
+            </Button>
+            <SaveButton />
+          </>
+        ) : (
+          <>
+            {canWrite ? (
+              <Button type="button" onClick={() => setEditing(true)}>
+                <Pencil className="size-4" />
+                수정
+              </Button>
+            ) : null}
+            <PrintRefundButton />
+            {canWrite && id ? <DeleteRefundButton id={id} name={s.name} /> : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        {toolbar}
+        {sheet}
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction} ref={formRef} className="space-y-4">
+      {id ? <input type="hidden" name="id" value={id} /> : null}
+      {toolbar}
+      <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
+      {state?.error ? (
+        <p className="text-danger flex items-center gap-1.5 text-sm">
+          <AlertCircle className="size-4 shrink-0" />
+          {state.error}
+        </p>
+      ) : null}
+      {sheet}
+    </form>
+  );
+}

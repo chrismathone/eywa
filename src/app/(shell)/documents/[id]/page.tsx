@@ -4,7 +4,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { Pill } from "@/components/atoms/pill";
 import { getDocumentById } from "@/features/documents/server/queries";
-import { CATEGORY_LABEL, fileTypeLabel, formatFileSize } from "@/features/documents/categories";
+import { CATEGORY_LABEL, fileTypeLabel, formatFileSize, formViewHref } from "@/features/documents/categories";
 import { DocumentDetailClient } from "./_components/document-detail-client";
 
 export const metadata = { title: "문서 상세 — eywa" };
@@ -17,8 +17,8 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
     canWriteTenant(user.systemRole, "documents"),
   ]);
   if (!doc) notFound();
-  // 폼 문서(직원 이력서 등)는 전용 뷰가 따로 — 텍스트 상세/수정 폼으로 열면 body가 없어 깨진다.
-  if (doc.kind === "form") redirect(`/staff/resumes/${doc.id}`);
+  // 폼 문서(직원 이력서·환불 요청서 등)는 전용 뷰가 따로 — 텍스트 상세/수정 폼으로 열면 body가 없어 깨진다.
+  if (doc.kind === "form") redirect(formViewHref(doc.formType, doc.id));
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-6">
