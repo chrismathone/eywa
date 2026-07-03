@@ -15,8 +15,10 @@ import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/buil
 
 import {
   getMakeeduSyncLock,
+  getMakeeduSyncWorkers,
   SYNC_COOLDOWN_MS,
   type MakeeduSyncLock,
+  type MakeeduWorker,
 } from "@/features/integrations/server/makeedu-sync";
 
 // 트리거 직후 버튼을 즉시 잠글 락(요청/실행 행이 아직 커밋 전이어도 눌린 사용자 버튼이 바로 비활성).
@@ -32,6 +34,16 @@ export type ToggleState = { error?: string; enabled?: boolean } | undefined;
  */
 export async function checkMakeeduSyncLock(): Promise<MakeeduSyncLock> {
   return getMakeeduSyncLock();
+}
+
+/**
+ * 동기화 담당 PC(워처) 상태 폴링용 — 워커 상태 카드가 20초마다 호출해 온라인/오프라인을 실시간 반영.
+ * 카드가 정적 스냅샷이라 "새로고침 전 옛 상태"로 화면마다 다르게 보이던 혼란(2026-07-03) 해소.
+ * (읽기 전용. 게이트 불필요 — hostname·활동시각은 민감정보 아님, getMakeeduSyncWorkers가 getCurrentUser+RLS로 격리.)
+ */
+export async function checkMakeeduSyncWorkers(): Promise<{ workers: MakeeduWorker[]; nowMs: number }> {
+  const nowMs = Date.now();
+  return { workers: await getMakeeduSyncWorkers(nowMs), nowMs };
 }
 
 /**

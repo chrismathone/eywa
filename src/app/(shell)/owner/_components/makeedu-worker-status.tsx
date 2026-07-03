@@ -1,13 +1,50 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { checkMakeeduSyncWorkers } from "@/features/integrations/server/actions";
 import type { MakeeduWorker } from "@/features/integrations/server/makeedu-sync";
 
 /**
  * 동기화 담당 PC 상태(0073a 심장박동) — 연동 면. 어느 PC가 makeedu 동기화를 실행하는지 + 온라인/오프라인.
- * 원장이 "담당 PC가 켜져 있어 요청이 처리될지"를 한눈에 확인. 서버 컴포넌트(RLS read).
+ * 원장이 "담당 PC가 켜져 있어 요청이 처리될지"를 한눈에 확인.
  * - 워처 없음: 지정 안내(setup-sync-pc.ps1).
  * - 온라인: 초록 · 방금 활동. 오프라인: 회색 · 마지막 활동 시각(요청은 쌓였다 PC 켜지면 처리).
  * - 2대 이상 온라인: 경고(한 대만 권장 — makeedu 이중 로그인).
+ *
+ * ⚠️ 20초 폴링(sync-card와 동일 패턴, 2026-07-03): 정적 스냅샷이던 시절 "새로고침 전 옛 상태"가
+ * 화면마다 남아 같은 시각에 자리별로 온라인/오프라인이 다르게 보이는 혼란이 있었음 → 전 화면이
+ * 새로고침 없이 20초 안에 같은 상태로 수렴. 초기값은 서버 렌더(sheets-face)가 주입.
  */
-export function MakeeduWorkerStatus({ workers, nowMs }: { workers: MakeeduWorker[]; nowMs: number }) {
+export function MakeeduWorkerStatus({
+  workers: initialWorkers,
+  nowMs: initialNowMs,
+}: {
+  workers: MakeeduWorker[];
+  nowMs: number;
+}) {
+  const [workers, setWorkers] = useState(initialWorkers);
+  const [nowMs, setNowMs] = useState(initialNowMs);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const r = await checkMakeeduSyncWorkers();
+        if (alive) {
+          setWorkers(r.workers);
+          setNowMs(r.nowMs);
+        }
+      } catch {
+        /* 폴링 실패는 무시(다음 틱 재시도) */
+      }
+    };
+    const pollId = setInterval(poll, 20_000);
+    return () => {
+      alive = false;
+      clearInterval(pollId);
+    };
+  }, []);
+
   const onlineCount = workers.filter((w) => w.online).length;
   return (
     <section className="bg-card border-border rounded-md border p-4">

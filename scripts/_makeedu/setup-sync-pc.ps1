@@ -11,6 +11,9 @@
 #   .\scripts\_makeedu\setup-sync-pc.ps1 -Remove    # 지정 해제(옛 PC에서 실행)
 #
 # ⚠️ 동기화 PC를 옮길 땐: 옛 PC에서 -Remove → 새 PC에서 실행. 두 PC 동시 워처 금지(makeedu 이중 로그인).
+# ⚠️ 워처 "일시 정지"는 Stop-ScheduledTask만으론 안 됨 — 10분 반복 트리거가 자동 부활시킴(2026-07-03).
+#    정말 멈추려면 -Remove(해제) 또는 작업 스케줄러에서 '사용 안 함'. 크리덴셜(.env.local) 교체 후엔
+#    이 스크립트를 다시 실행하면 됨(아래 Stop-Watcher가 옛 인스턴스를 내리고 fresh env로 재시작).
 
 param([switch]$Remove, [switch]$Status, [switch]$Test)
 
@@ -23,6 +26,18 @@ $syncWrapper = Join-Path $repo "scripts\_makeedu\run-local-sync.ps1"
 $watchWrapper = Join-Path $repo "scripts\_makeedu\run-watch-requests.ps1"
 
 function Write-Head($t) { Write-Host "`n== $t ==" -ForegroundColor Cyan }
+
+function Stop-Watcher {
+  # 실행 중 워처를 확실히 내린다 — Stop-ScheduledTask는 래퍼(powershell)만 죽이고 자식 node가
+  # orphan으로 남을 수 있어(2026-07-03 실측) 커맨드라인 매칭으로 node까지 명시 종료.
+  # 재등록/-Remove 시 fresh 인스턴스 보장(옛 env·옛 크리덴셜 잔존 방지). IgnoreNew라 옛 인스턴스를
+  # 안 내리면 Start-ScheduledTask가 no-op이 되는 것도 함께 해소.
+  Stop-ScheduledTask -TaskName $WATCH -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 1
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "watch-sync-requests" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
 
 function Show-Status {
   Write-Head "현재 상태 (repo: $repo)"
@@ -58,6 +73,7 @@ if ($Test) { if (Test-Login) { return } else { exit 1 } }
 
 if ($Remove) {
   Write-Head "동기화 PC 지정 해제"
+  Stop-Watcher  # 실행 중 워처(래퍼+orphan node)를 먼저 내림 — Unregister는 러닝 프로세스를 안 죽임
   foreach ($n in @($SYNC, $WATCH)) {
     if (Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue) {
       Unregister-ScheduledTask -TaskName $n -Confirm:$false
@@ -85,9 +101,13 @@ if (-not (Test-Path $watchWrapper)) { Write-Host "  ✖ 래퍼 없음: $watchWra
 if ($fail) { Write-Host "`n사전요건 미충족 — 위 항목을 갖춘 뒤 다시 실행하세요." -ForegroundColor Red; exit 1 }
 
 # ② 작업 등록 (관리자 불필요·현재 사용자). -Force = 멱등 재등록.
+# ⚠️ 창 숨김 = conhost.exe --headless 로 powershell 실행(2026-07-03). Win11 기본 터미널(Windows Terminal)이
+#    powershell의 -WindowStyle Hidden을 무시해 작업이 뜰 때마다 콘솔 창이 보였고(그 창을 닫으면 워처가
+#    죽어 오프라인 사고 = exit 0xC000013A), --headless는 콘솔을 완전 창 없이 호스팅 → 닫을 창이 없음.
+#    conhost는 자식(node)이 살아있는 동안 블로킹 → IgnoreNew 중복방지 유지. (Win11+ 필요.)
 Write-Head "작업 스케줄러 등록"
-$syncAction = New-ScheduledTaskAction -Execute "powershell.exe" `
-  -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $syncWrapper)
+$hidden = '--headless powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"'
+$syncAction = New-ScheduledTaskAction -Execute "conhost.exe" -Argument ($hidden -f $syncWrapper)
 $syncTriggers = @(
   (New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(6))),
   (New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(18)))
@@ -97,17 +117,23 @@ $syncSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstan
 Register-ScheduledTask -TaskName $SYNC -Action $syncAction -Trigger $syncTriggers -Settings $syncSettings -Force | Out-Null
 Write-Host "  ✓ $SYNC (매일 06시·18시 자동 동기화)" -ForegroundColor Green
 
-$watchAction = New-ScheduledTaskAction -Execute "powershell.exe" `
-  -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $watchWrapper)
-$watchTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$watchAction = New-ScheduledTaskAction -Execute "conhost.exe" -Argument ($hidden -f $watchWrapper)
+# 트리거 2개: 로그온 시 시작 + 10분마다 자동 부활(2026-07-03 — 세션 중 워처가 죽으면[수동 정지·크래시]
+# 로그온 트리거만으론 다음 로그온까지 오프라인이던 갭 해소. IgnoreNew라 이미 돌고 있으면 중복 실행 없음).
+# ⚠️ RepetitionDuration은 생략 = 무기한([TimeSpan]::MaxValue는 "out of range"로 거부됨 — 2026-07-03 실측).
+$watchTriggers = @(
+  (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
+  (New-ScheduledTaskTrigger -Once -At ([datetime]::Today) -RepetitionInterval (New-TimeSpan -Minutes 10))
+)
 $watchSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew `
   -StartWhenAvailable -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 5)
-Register-ScheduledTask -TaskName $WATCH -Action $watchAction -Trigger $watchTrigger -Settings $watchSettings -Force | Out-Null
-Write-Host "  ✓ $WATCH (로그온 시 상주 — 지금동기화·역동기화 요청 처리)" -ForegroundColor Green
+Register-ScheduledTask -TaskName $WATCH -Action $watchAction -Trigger $watchTriggers -Settings $watchSettings -Force | Out-Null
+Write-Host "  ✓ $WATCH (로그온 시 상주 + 10분마다 자동 부활 — 지금동기화·역동기화 요청 처리)" -ForegroundColor Green
 
-# ③ 워처 시작
+# ③ 워처 시작 — 옛 인스턴스(옛 env)를 먼저 내려 fresh 재시작(크리덴셜 교체 재실행에도 안전).
+Stop-Watcher
 Start-ScheduledTask -TaskName $WATCH
-Write-Host "  ✓ 워처 시작됨"
+Write-Host "  ✓ 워처 시작됨(기존 인스턴스가 있었으면 fresh 재시작)"
 
 # ④ 로그인(신뢰 IP) 확인
 $ok = Test-Login
