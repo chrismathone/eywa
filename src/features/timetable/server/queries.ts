@@ -4,6 +4,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, shiftDays } from "../lib/week";
+import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
 
 /** 오늘(YYYY-MM-DD, 기준일 기본값) — KST 기준(서버 UTC라 새벽 시간대 하루 밀림 방지). */
@@ -321,19 +322,9 @@ export async function getWeeklyScheduleWithStudents(
     byClass.set(classId, list);
   }
 
-  // 셀 표시 순서: 재원 → 대기 → 퇴원. 재원 안에서는 신입 > 반이동(전입) > 기존(그룹 내 가나다),
-  // 퇴원은 최신순, 대기는 가나다.
-  const rank = (l: StudentLine) => (l.status === "active" ? 0 : l.status === "hold" ? 1 : 2);
-  const activeSubRank = (l: StudentLine) => (l.isNew ? 0 : l.isTransferredIn ? 1 : 2);
+  // 셀 표시 순서: 재원 → 대기 → 퇴원(상세 규칙·단일 소스 = lib/student-sort.ts, 합반 통합 명단과 공유).
   for (const list of byClass.values()) {
-    list.sort((a, b) => {
-      if (rank(a) !== rank(b)) return rank(a) - rank(b);
-      if (a.status === "active" && activeSubRank(a) !== activeSubRank(b)) {
-        return activeSubRank(a) - activeSubRank(b);
-      }
-      if (a.status === "withdrawn") return (b.endDate ?? "").localeCompare(a.endDate ?? "");
-      return a.name.localeCompare(b.name, "ko");
-    });
+    list.sort(compareStudentLines);
   }
 
   // 학생별 최근 교재 — ijw 학생 hover의 "교재" 줄. textbook_orders는 학생별이며 delivered_at(없으면 request_date) 최신 1건.

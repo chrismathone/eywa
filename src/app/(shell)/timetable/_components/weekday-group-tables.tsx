@@ -12,6 +12,7 @@ import {
 import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { ClassCell } from "./class-cell";
+import { HapbanCell } from "./hapban-cell";
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -330,9 +331,10 @@ function GroupTable({
                       }`}
                     >
                       {merged.length === 0 ? null : (
-                        // 고정높이 flex-col — 대기·퇴원 있는 셀(ClassCell이 flex-1)이 칸을 채워
+                        // 고정높이 flex-col — 대기·퇴원 있는 셀(ClassCell/HapbanCell이 flex-1)이 칸을 채워
                         // 그 그룹을 셀 하단에 정렬. 재원만 있는 셀은 content 높이로 상단 정렬(기존과 동일).
-                        // 합반이면 앰버 테두리 박스로 묶고 상단에 "합반 N반" 배지(ijw식 — 같은 강사·교시 여러 반).
+                        // 합반이면 앰버 박스 + "합반 N반" 배지 + **통합 명단 카드 1개**(HapbanCell — 반별 카드
+                        // 적층은 중복 학생·총원 불명·flex-1 위치 제각각 문제로 폐기, ijw ClassCard 패턴).
                         <div
                           className={`flex flex-col overflow-y-auto ${
                             isHapban ? "border-amber/50 bg-amber/5 gap-1 rounded-md border p-1" : "gap-1.5"
@@ -344,15 +346,30 @@ function GroupTable({
                               합반 {merged.length}반
                             </span>
                           ) : null}
-                          {merged.map((s) => (
-                            <ClassCell
-                              key={s.id}
-                              slot={s}
-                              roster="names"
-                              subSlot={subSlotOf(s, config, row.key)}
+                          {isHapban ? (
+                            <HapbanCell
+                              slots={merged}
+                              // 두 반의 서브슬롯(1-1/1-2)이 같을 때만 빈 밴드 표시, 다르면 full(분할 생략).
+                              subSlot={
+                                merged.every(
+                                  (s) => subSlotOf(s, config, row.key) === subSlotOf(merged[0]!, config, row.key),
+                                )
+                                  ? subSlotOf(merged[0]!, config, row.key)
+                                  : "full"
+                              }
                               coveringDays={coveringDays}
                             />
-                          ))}
+                          ) : (
+                            merged.map((s) => (
+                              <ClassCell
+                                key={s.id}
+                                slot={s}
+                                roster="names"
+                                subSlot={subSlotOf(s, config, row.key)}
+                                coveringDays={coveringDays}
+                              />
+                            ))
+                          )}
                         </div>
                       )}
                     </td>

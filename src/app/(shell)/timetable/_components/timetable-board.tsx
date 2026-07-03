@@ -21,6 +21,7 @@ import {
 } from "@/features/enrollments/server/actions";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
+import { resolveDropTarget } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, sameDaySet, zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
 import {
   TimetableEditContext,
@@ -34,7 +35,14 @@ import {
 type Queued = PendingMove & { fromClassName: string; toClassName: string; name: string };
 
 /** 도착 셀 slot.id → 반 id 매핑용 드롭 대상 data(요일 존/공통 존 공통). */
-type DropData = { className?: string; classId?: string; slotId?: string; day?: string };
+type DropData = {
+  className?: string;
+  classId?: string;
+  slotId?: string;
+  day?: string;
+  /** 합반 카드의 본문/요일존에만 실림(구성 반 id들) — 멤버 드롭=자기 반 요일편집으로 재해석(resolveDropTarget). */
+  memberClassIds?: string[];
+};
 
 /**
  * 시간표 편집 상태 provider — 편집 토글·이동 큐·저장/취소·적용일을 소유하고 context로 제공.
@@ -567,17 +575,32 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     if (!activeIdStr.startsWith("student:")) return;
     // 도착 정보는 드롭존 data에서 읽는다(id 파싱 금지) — classId=실제 반 id, slotId=셀 id, day=요일 존이면 요일.
     const overData = over.data.current as DropData | undefined;
-    const toClassId = overData?.classId;
-    if (!toClassId) return;
+    if (!overData?.classId) return;
     const data = active.data.current as
-      | { classId?: string; fromClassName?: string; name?: string; enrollmentId?: string; attendanceDays?: string[] }
+      | {
+          classId?: string;
+          fromClassName?: string;
+          name?: string;
+          enrollmentId?: string;
+          attendanceDays?: string[];
+          blockingClassIds?: string[];
+        }
       | undefined;
     // 분리등원 요일 칸에서 온 드래그는 id가 `student:{id}:{day}`로 유니크 → id 파싱 대신 data.enrollmentId 우선.
     const enrollmentId = data?.enrollmentId ?? activeIdStr.slice("student:".length);
     const fromClassId = data?.classId ?? ""; // 출발 반 id(실제 반 id)
-    const fromDays = data?.attendanceDays ?? []; // 출발 시점 등원 요일(no-op 판정)
-    const toDays = zoneAttendanceDays(overData?.day); // 요일 존=[그 요일], 공통 존=[]
     if (!fromClassId) return;
+    // 합반 드롭 의미(순수 규칙, lib/hapban.ts): ① 멤버의 카드 내(본문/요일존) 드롭 = 자기 반 요일편집으로
+    // 재해석 ② 이미 열린 수강이 있는 반으로의 이동 = no-op(저장 시 GiST 실패 방지) ③ 그 외 기존 동작.
+    // ⚠️ 반환 계약: {toClassId, day}만 — toSlotId/toClassName은 overData에서 그대로 유지(전입예정 배지 근거).
+    const target = resolveDropTarget(
+      { classId: fromClassId, blockingClassIds: data?.blockingClassIds },
+      overData,
+    );
+    if (!target) return;
+    const toClassId = target.toClassId;
+    const fromDays = data?.attendanceDays ?? []; // 출발 시점 등원 요일(no-op 판정)
+    const toDays = zoneAttendanceDays(target.day); // 요일 존=[그 요일], 공통 존=[]
     // 같은 반이면 요일이 바뀔 때만(2일↔1일 편집), 교차 반이면 항상 이동.
     if (fromClassId === toClassId && sameDaySet(fromDays, toDays)) return;
     queueMove({
