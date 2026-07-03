@@ -2586,6 +2586,21 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
   "동작 안 함"으로 보였다가 `.next` 삭제+dev 재시작 후 정상). ⚠️ 이 계열 변경의 라이브 검증은 **깨끗한 dev**에서. 검증: 재시작 후 owner 설정 창에서
   타이핑(blur 없이)→X→확인 오버레이 / 계속 작성=유지 / Esc=확인 취소 / 저장 안 함=닫힘, 전부 통과. + resume 편집 하단 sticky 바(취소/저장).
 
+### 70. 미러 트리거가 metadata-only 갱신에서 role을 stale app_metadata로 덮음 → 임포트 강사 조용한 강등 (2026-07-01)
+프로덕션(injaewon)에서 임포트 강사 계정 8명이 `auth.users.app_metadata.system_role='viewer'`인데 `public.users.system_role='teacher'`로 어긋나 있었다.
+원인 = 미러 트리거 [`tg_sync_user_from_auth`](supabase/migrations/0001a_rls_constraints_triggers.sql)의 `on conflict do update set system_role = excluded.system_role`.
+`excluded.system_role`은 `coalesce(app_metadata.system_role, 'viewer')`라, **GoTrue가 어떤 `updateUserById`(비번리셋·ban·이메일변경)에서든 `raw_app_meta_data`를 재기록**하며
+`update of raw_app_meta_data` 트리거를 발동 → app_metadata에 role이 없거나 stale하면 `public.users` role을 **덮어써** teacher→viewer로 강등(2026-07-01 이수연/kelly에 실발생, 이후 8명 추가 확인).
+`getCurrentUser`/`auth_tenant_id()`는 `public.users`를 읽어 평소엔 무해하나, **트리거가 write 시 stale app_metadata를 재전파**하는 게 함정.
+- **하드닝**([`0075a`](supabase/migrations/0075a_mirror_trigger_role_hardening.sql), `create or replace`, dev=prod 적용): `v_role`(viewer 폴백)을 **`v_role_explicit`**(app_metadata에 role이 **명시적으로 있을 때만** non-null)로 분리.
+  on conflict 브랜치를 **`system_role = coalesce(v_role_explicit, public.users.system_role)`** 로 바꿔, **명시 role이 있을 때만 채택하고 없으면 기존(권위) role 보존**. INSERT 경로(신규=viewer 폴백)는 불변.
+- **회귀 0**: 모든 의도적 role 변경 경로(createStaff·super-admin createTenantWithMaster·changeStaffRole·changeUserRole)는 **app_metadata.system_role을 명시**로 넣어 v_role_explicit이 non-null → 옛 동작과 동일. metadata-only 갱신만 "강등 안 함"으로 바뀜.
+- **데이터 교정**: 8명 auth app_metadata를 `updateUserById`로 `teacher`로 정정(provider/providers/tenant_id 병합 보존). ⚠️ **하드닝만으로는 이 8명이 안 고쳐진다** — 그들 app_metadata가 **명시적으로 'viewer'**라 다음 비번리셋에 또 강등 → 정정 필수.
+- **검증**: 실 트리거를 **`BEGIN…ROLLBACK` 트랜잭션**(무영속)으로 10/10 통과(옛=강등 재현, 하드=보존·명시변경 추종·신규 viewer·정정 시나리오 안정). 정정 후 테넌트 auth-backed **drift=0**.
+  ⚠️ **검증 함정**: postgres-js 템플릿에서 `${JSON.stringify(obj)}::jsonb` 바인딩은 트리거가 `->>'tenant_id'`를 null로 읽는 값을 만들어(클라 직렬화 quirk) 트리거가 조용히 no-op(early-return). **jsonb는 서버측 `jsonb_build_object`로** 만들 것(GoTrue 저장 방식과 동일). 프로덕션(GoTrue)은 무관.
+- ⚠️ **범위 밖(별도 백로그)**: 8명 중 5명(Florence·Kristine·김주희·김태건)은 **케이스만 다른 이메일**(`florence@`↔`Florence@` 등)의 **auth 없는 viewer 중복 `public.users` 행**이 잔존(#31 id-mismatch 산물). role drift와 무관 — 병합/삭제는 별도 결정.
+- ⚠️ **마이그 번호 정정(2026-07-03)**: 원래 `0063a`로 만들었으나 병렬 세션 `0063a_move_enrollments_attendance_days.sql`과 충돌 → main 병합 시 **`0075a`로 리넘버**(내용 동일, 멱등이라 재적용 안전).
+
 ---
 
 ## 마이그레이션 & 시드 흐름
