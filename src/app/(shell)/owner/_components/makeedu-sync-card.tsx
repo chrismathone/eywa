@@ -100,8 +100,8 @@ export function MakeeduSyncCard({
         <div className="min-w-0">
           <h2 className="text-foreground text-base font-semibold">makeedu 자동 동기화</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            켜면 <strong>하루 2회</strong> makeedu에서 학생·예비상담·수납·반을 자동으로 가져옵니다
-            (기존 데이터는 보존하고 새 항목만 추가). 끄면 자동 동기화를 멈춥니다.
+            켜면 <strong>하루 2회</strong> makeedu에서 학생·예비상담·재원상담·수납·반을 자동으로
+            가져옵니다 (기존 데이터는 보존하고 새 항목만 추가). 끄면 자동 동기화를 멈춥니다.
           </p>
         </div>
         <button

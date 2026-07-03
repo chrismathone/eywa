@@ -130,18 +130,23 @@ export type MakeeduSyncLock = {
   running: boolean;
 };
 
+/** 'running' 표시가 이 나이를 넘으면 stale로 간주(킬된 실행/워처가 마감 못 한 잔류) — 버튼 영구 잠금 방지. */
+const RUNNING_STALE_MS = 30 * 60_000;
+
 /**
  * 동기화 버튼 공유 잠금 상태 — DB의 요청/실행 기록에서 계산(클라 로컬 아님 → 모든 사용자 공유).
  * busyUntil = 마지막 트리거(요청 requested_at / 실행 started_at 중 최신) + SYNC_COOLDOWN_MS.
- * running = 처리 대기·진행 중(pending/running 요청) 또는 진행 중 실행(runs.status='running').
+ * running = pending 요청(동기화 PC 대기 — 나이 무관, 정직한 잠금) 또는 **30분 이내의** running 요청/실행.
+ * ⚠️ running 나이 제한: 프로세스가 킬되면(스케줄러 20분 컷·크래시) 'running' 행이 마감 없이 잔류해
+ * 버튼이 다음 실행까지(최대 반나절) 잠기던 잠재 버그 방어 — 30분 지난 running은 stale로 무시.
  * RLS로 현재 테넌트만. 데이터 안전(dedup·원자적 claim)은 별개 — 이건 UX 잠금.
  */
 export async function getMakeeduSyncLock(): Promise<MakeeduSyncLock> {
   const user = await getCurrentUser();
   if (!user) return { busyUntil: null, running: false };
   const supabase = await createClient();
-  // 독립 조회 셋 → 병렬(B4). 최신 요청/실행 + 진행 중(pending/running) 요청 개수(head:true=행 미수신).
-  const [{ data: lastReq }, { data: lastRun }, { count: inflightCount }] = await Promise.all([
+  // 독립 조회 셋 → 병렬(B4). 최신 요청/실행 + 진행 중(pending/running) 요청 소수 행(나이 판정에 시각 필요).
+  const [{ data: lastReq }, { data: lastRun }, { data: inflight }] = await Promise.all([
     supabase
       .from("makeedu_sync_requests")
       .select("requested_at")
@@ -156,9 +161,13 @@ export async function getMakeeduSyncLock(): Promise<MakeeduSyncLock> {
       .maybeSingle(),
     supabase
       .from("makeedu_sync_requests")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["pending", "running"]),
+      .select("status, requested_at, started_at")
+      .in("status", ["pending", "running"])
+      .limit(20),
   ]);
+  const now = Date.now();
+  const fresh = (iso: string | null | undefined) =>
+    !!iso && now - new Date(iso).getTime() < RUNNING_STALE_MS;
   const triggerTimes = [
     lastReq?.requested_at as string | undefined,
     lastRun?.started_at as string | undefined,
@@ -166,7 +175,13 @@ export async function getMakeeduSyncLock(): Promise<MakeeduSyncLock> {
     .filter(Boolean)
     .map((t) => new Date(t as string).getTime());
   const lastTrigger = triggerTimes.length ? Math.max(...triggerTimes) : null;
-  const running = (inflightCount ?? 0) > 0 || lastRun?.status === "running";
+  const running =
+    (inflight ?? []).some((r) =>
+      r.status === "pending"
+        ? true // 대기 요청 = PC가 켜지면 처리될 정직한 잠금(나이 무관)
+        : fresh((r.started_at as string | null) ?? (r.requested_at as string | null)),
+    ) ||
+    (lastRun?.status === "running" && fresh(lastRun.started_at as string | null));
   return {
     busyUntil: lastTrigger != null ? new Date(lastTrigger + SYNC_COOLDOWN_MS).toISOString() : null,
     running,
