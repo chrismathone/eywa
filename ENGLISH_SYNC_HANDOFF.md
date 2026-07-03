@@ -5,13 +5,20 @@
 
 ---
 
-## 0. 다음 세션 시작하는 법
+## 0. 다음 세션 시작하는 법 — ⚠️ 메인 브랜치 전환 금지
 
-1. Claude Code를 **`D:\eywa_refactoring` 에서 직접 열기** (그래야 이 프로젝트의 CLAUDE.md·권한·스킬 자동 적용).
-2. 이 작업 브랜치 체크아웃(또는 계속 워크트리에서):
-   - 브랜치: **`Injaewon/english-timetable-import`**
-   - 워크트리: `.claude/worktrees/english-timetable-import` (node_modules 정션, `.env.local` 복사됨)
-3. 이 문서 + 아래 "재현 아티팩트" 읽고 이어서.
+**메인(`D:\eywa_refactoring`)의 브랜치를 이 브랜치로 전환하지 말 것.**
+→ 사장님의 미커밋 ijw 작업(5파일)이 걸리고, 그 폴더를 쓰는 **다른 세션(27개)이 전부 영향**받음.
+
+대신 **이미 이 브랜치가 체크아웃된 워크트리 폴더를 직접 열면 됨** (전환 불필요):
+
+1. Claude Code/IDE를 **`D:\eywa_refactoring\.claude\worktrees\english-timetable-import`** 에서 열기.
+   - 브랜치 `Injaewon/english-timetable-import`가 이미 체크아웃된 **독립 작업공간**.
+   - `CLAUDE.md`·`AGENTS.md`(프로젝트 규칙), `.env.local`(DB 접속), `node_modules`(메인 정션·rimraf 수정됨) 모두 갖춰짐.
+   - **메인·다른 27개 세션 무영향.**
+2. 이 문서 + 아래 "재현 아티팩트" 읽고 이어서.
+
+> 참고: git은 한 브랜치를 두 곳에 동시 체크아웃 못 하므로, 이 브랜치는 워크트리에만 있으면 됨. 메인은 계속 `main`으로 두기.
 
 ---
 
