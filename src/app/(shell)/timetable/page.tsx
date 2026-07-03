@@ -21,6 +21,7 @@ import {
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
+import { TeacherGridView } from "./_components/teacher-grid";
 
 export const metadata = { title: "시간표 — eywa" };
 
@@ -212,19 +213,12 @@ export default async function TimetablePage({
       ) : isIntegrated ? (
         <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} />
       ) : view === "teacher" ? (
-        // 강사뷰 — 슬롯 강사 기준 재구성(시트 강사별 배치 패리티). 읽기전용(드래그 편집은 기본뷰).
+        // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용.
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="text-text-faint mb-1 shrink-0 text-right font-mono text-[11px]">
-            읽기 전용 · 실제 수업 강사(슬롯) 기준 · 편집은 기본뷰
+            읽기 전용 · 강사별 배치(시트 강사별영어시간표) · 편집은 기본뷰
           </div>
-          <WeekdayGroupTables
-            slots={slots}
-            config={periodsConfig}
-            weekMonday={week}
-            weekdayGrouping={weekdayGrouping}
-            groupBySlotTeacher
-            teacherColors={teacherColors}
-          />
+          <TeacherGridView slots={slots} config={periodsConfig} weekMonday={week} teacherColors={teacherColors} />
         </div>
       ) : (
         <TimetableDndArea>

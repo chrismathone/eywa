@@ -77,13 +77,21 @@
 - 이미 있음(커밋됨·테스트 14개 통과): `types.ts`, `parse-grid.ts`(그리드→슬롯 순수파서), `match.ts`(슬롯↔기존레코드 이름매칭).
 - 필요: `google-sheets.ts`에 `readSheetGridWithMerges`(`includeGridData`로 병합까지) 추가 → `values.get`은 병합 잃음. + diff + 적용 서버액션(스냅샷 백업) + UI 트리거(수학의 "시트 반영"과 동일 패턴).
 
-### 3-5. 영어 '강사뷰' 추가 ✅ (2026-07-04 — 시트 강사별 그리드 패리티)
-`/timetable?subject=english&view=teacher` — 뷰 토글 3번째 칩(영어에서만 노출). 기본뷰와 같은
-요일밴드×교시 격자를 **슬롯 강사(slot_teacher_label ?? 담임) 기준**으로 재구성 = 시트의 강사별 배치와 동형.
-- [weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)에 `groupBySlotTeacher`/`teacherColors` prop — 컬럼 키·셀 키를 `TeacherOf` 함수로 통일(기본뷰=담임, 강사뷰=슬롯 강사). **컬럼 순서 = 최빈 방**(Jane 301→…→Florence 606→방 없는 강사 뒤 = 시트 물리 배치), 강사 헤더에 저장색(getTeacherColorMap, english_name 키 — 미등록 강사는 회색).
-- 읽기전용(편집 컨트롤·DndArea는 기본뷰만). 타과목 전환 시 기본뷰로 폴백. 슬롯 방 없으면 반 기본 강의실 상속 표시(LT2→본원605).
-- 검증: typecheck0/lint0 + 라이브(dev 3012, 마스터): 칩·읽기전용 힌트·컬럼 순서·색 헤더 28·수학 칩 미노출 + **셀 매핑 시트 대조**(월 14:20: Anna=DP5(602)·이주희=LT2 정확).
-- ⚠️ 레이아웃은 eywa 기본뷰 관용구(요일밴드 → 강사 → 요일) — 시트의 강사-major(강사 블록 안에 월~토)와 축 순서가 다름. 정보는 등가(강사별 배치 전부 표시). 강사-major 변형이 필요하면 후속.
+### 3-5. 영어 '강사뷰' = 시트 "강사별영어시간표" 그대로(강사-major) ✅ (2026-07-04)
+`/timetable?subject=english&view=teacher` — 뷰 토글 3번째 칩(영어에서만). ⚠️ **1차 시도(요일-major)는
+사용자가 "완전 틀렸다"고 반려** — 시트는 **강사-major**(강사=세로 블록, 그 안에 월~토 가로, 왼쪽 단일 시각열,
+셀=반명+방·학생 없음)라 축을 뒤집어 전용 컴포넌트로 재작성.
+- **관계 확정(사용자)**: 시트 `강사별영어시간표` = 마스터(강사들이 직접 짜는 배치) → `통합영어시간표`(반-major+학생명단)를
+  931개 수식으로 자동 파생 = **eywa 통합뷰**에 대응. 그러니 강사뷰 = **강사별 마스터 그리드를 그대로 옮긴 것**.
+- 전용 컴포넌트 [teacher-grid.tsx](<src/app/(shell)/timetable/_components/teacher-grid.tsx>) `TeacherGridView`:
+  컬럼 = 강사(시트 좌→우 순서) → 그 강사 요일(월→토 자연순, 실제 가르치는 요일만). 행 = 영어 10교시(+비정렬 기타).
+  **토요일도 오후라 영어 평일 교시 축에 정렬**(rowOf에 'mon' 강제 → 주말 09:00 교시 미사용). 셀 = ClassCell `roster="none"`(반명+방만, 학생 X — 시트 강사별 탭과 동일). 연속 교시 반은 세로 병합(rowSpan), 요일 병합 없음(각 요일 독립 컬럼).
+- **강사 순서·색 = 시트 실측**([english-teacher-sheet.ts](src/features/timetable/lib/english-teacher-sheet.ts) — [read-teacher-grid.cjs](scripts/_english_sync/read-teacher-grid.cjs)로 시트 강사 헤더 병합·배경색 추출):
+  Jane #dd7e6b · Hannah #f9b3d1 · Elsa #674ea7 · Charlie #f6b26b · 부원장 #d9ead3 · Dom #76a5af · Anna #4285f4 ·
+  Florence #cc0000 · Kristine #a4c2f4 · Sam #ffc000 · JJ #bdbdbd · 이주희 #fff2cc. DB(getTeacherColorMap) 우선, 미등록 강사(대부분)는 이 시트 미러색 폴백 → 강사 등록되면 자동으로 DB색이 우선.
+- 읽기전용(편집·DndArea는 기본뷰), 타과목 전환 시 기본뷰 폴백.
+- 검증: typecheck0/lint0 + 라이브(dev 3012, 마스터): 강사 밴드 순서 12명 시트 일치·색 헤더 12·요일 서브컬럼(월6/29~토7/4)·토 정렬(Jane 토 1교시 고등E_고2 심화/301)·셀=반명+방(DP5/본원602 등). ⚠️ 1차 요일-major 컴포넌트 변경(weekday-group-tables `groupBySlotTeacher`)은 되돌림.
+- ⏭️ 후속: 강사별 시트엔 강사 근무메모(r2 "월~금 2:00-10:00")도 있음 — eywa엔 미보존(강사 등록 시 users 메모로). 셀 반명 긴 것은 클립(hover 전체) — 시트도 동일.
 
 ### 후속 권장 (데이터 아님·운영 결정)
 - **강사 5명 직원 등록**: Elsa(전양원)·Anna(육소희)·Dom(김동후)·JJ·이주희는 users에 없어 담임 미배정/기본뷰 강사 컬럼이 옛 담임 기준. 직원관리에서 등록 + `english_name` 세팅 후 해당 반 담임 지정하면 완결(통합뷰 슬롯 라벨은 이미 정확).
