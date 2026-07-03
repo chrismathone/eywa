@@ -1,0 +1,58 @@
+// 강사별 그리드 시트(구글 스프레드시트) → class_schedules 구조 import의 타입.
+// 기존 enrollment import(../types.ts)는 학생 이동만 다룬다. 이쪽은 "배치 구조"(수업/요일/시각/방/강사)를
+// 시트 그리드에서 파싱한다. 파서(parse-grid.ts)는 순수함수라 이 타입만 의존(Sheets/DB 비의존).
+
+import type { DayOfWeek } from "@/features/timetable/lib/periods";
+
+/**
+ * Sheets `spreadsheets.get(includeGridData:true)`의 한 탭을 옮긴 격자 스냅샷.
+ * - cells: [row][col] 0-based, 각 셀의 formattedValue(빈 셀은 ""). 병합셀은 좌상단에만 값이 있다.
+ * - merges: 0-based, **end-exclusive**(Sheets 원형 그대로). values.get은 병합을 잃으므로 필수.
+ */
+export interface SheetGridMerge {
+  startRowIndex: number; // 0-based inclusive
+  endRowIndex: number; // 0-based exclusive
+  startColumnIndex: number; // 0-based inclusive
+  endColumnIndex: number; // 0-based exclusive
+}
+export interface SheetGrid {
+  tabName?: string;
+  cells: string[][];
+  merges: SheetGridMerge[];
+}
+
+/** 강사별 그리드의 강사 블록 1개(가로 6열 = 월~토). */
+export interface ParsedTeacherBlock {
+  index: number; // 1행의 블록 번호(1..16)
+  header: string; // 2행 원문 "Jane 추민아 301 (프리랜서)"
+  name: string; // 선두 토큰 강사명 "Jane" (englishName 매칭 앵커)
+  homeRoom: string | null; // 헤더에서 뽑은 담임 방 "301"
+  note: string; // 3행 메모(근무시간 등)
+  reserve: boolean; // "예비N" 빈 블록
+  startColumn: number; // 0-based 블록 시작 열
+}
+
+/** 파싱된 수업 배치 1건 = 향후 class_schedules 한 행. */
+export interface ParsedStructureSlot {
+  teacherIndex: number;
+  teacherName: string;
+  teacherHeader: string;
+  day: DayOfWeek; // mon..sat
+  koDay: string; // 월..토
+  className: string; // "중등E_중2 심화" | "LT2"
+  room: string | null; // "301" | "SKY" | null(담임방 폴백 후에도 없으면)
+  startTime: string; // "HH:MM" 24h
+  endTime: string | null; // "HH:MM" 24h (라벨에서 끝시각 못 구하면 null)
+  rawTimeLabel: string; // A열 원문 "4:20~5:00"
+  starred: boolean; // 셀 선두 '*' (보강/임시 표시)
+  raw: string; // 셀 원문
+  /** 출처(0-based, r2/c2 inclusive) — _meta 라운드트립·디버깅용. */
+  grid: { r1: number; c1: number; r2: number; c2: number };
+}
+
+export interface ParsedStructure {
+  tabName?: string;
+  teachers: ParsedTeacherBlock[];
+  slots: ParsedStructureSlot[];
+  warnings: string[];
+}
