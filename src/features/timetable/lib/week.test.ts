@@ -6,6 +6,7 @@ import {
   shiftDays,
   getWeekReferenceDate,
   weekEndOf,
+  weekSundayOf,
   weekLabel,
   weekRelation,
 } from "./week";
@@ -45,6 +46,14 @@ describe("getWeekReferenceDate — ijw 3분기", () => {
   it("weekEndOf = ref+6", () => {
     expect(weekEndOf("2026-06-26")).toBe("2026-07-02");
     expect(weekEndOf("2026-06-14")).toBe("2026-06-20");
+  });
+  it("weekSundayOf = 그 주 실제 일요일 (롤링 창 아님)", () => {
+    expect(weekSundayOf("2026-06-28")).toBe("2026-06-28"); // 과거 주 ref=일요일 → 자기 자신
+    expect(weekSundayOf("2026-07-03")).toBe("2026-07-05"); // 금요일 → 그 주 일요일
+    expect(weekSundayOf("2026-07-06")).toBe("2026-07-12"); // 미래 주 ref=월요일 → +6
+    // 스케줄 전환(temporal cutover) 시나리오: valid_from=07-03이 직전 과거 주(ref 06-28)에 새면 안 됨
+    expect(weekSundayOf("2026-06-28") < "2026-07-03").toBe(true);
+    expect(weekEndOf("2026-06-28") >= "2026-07-03").toBe(true); // 옛 롤링 창은 샜음(버그 근거)
   });
 });
 

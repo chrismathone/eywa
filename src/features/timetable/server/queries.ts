@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { weekEndOf, shiftDays } from "../lib/week";
+import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
 import type { TeacherColorMap } from "../lib/class-grid";
 
 /** 오늘(YYYY-MM-DD, 기준일 기본값) — KST 기준(서버 UTC라 새벽 시간대 하루 밀림 방지). */
@@ -53,7 +53,9 @@ export type ScheduleSlot = {
 async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
   const supabase = await createClient();
   const weekEnd = weekEndOf(referenceDate);
-  // 그 주 시점에 유효한 스케줄만: valid_from ≤ 주끝(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
+  // 그 주 시점에 유효한 스케줄만: valid_from ≤ 그 주 일요일(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
+  // ⚠️ valid_from 상한은 weekEnd(ref+6 롤링 창)가 아니라 weekSundayOf(그 주 실제 끝) — 롤링 창이면
+  // 과거 주(ref=일요일) 조회에 다음 주 시작 스케줄이 새어 스케줄 전환(temporal cutover) 시 중복 표시된다.
   // 폐지(is_active=false)된 반은 `!inner` 조인 + class.is_active 필터로 전체 주에서 제외.
   // 종강(class.closed_at)된 반은 종강일 이후 주에서만 제외(이전 주엔 수강이력으로 표시) — JS에서 거른다.
   const { data } = await supabase
@@ -69,7 +71,7 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
        )`,
     )
     .eq("class.is_active", true)
-    .lte("valid_from", weekEnd)
+    .lte("valid_from", weekSundayOf(referenceDate))
     .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
     .order("start_time");
 

@@ -51,6 +51,18 @@ export function weekEndOf(referenceDate: string): string {
 }
 
 /**
+ * 기준일이 속한 주의 일요일 — 스케줄 유효성(valid_from) 상한용.
+ * ⚠️ weekEndOf(ref+6)는 롤링 창이라 과거 주(ref=일요일)에서 다음 주 목요일까지 뻗어,
+ * 미래 시작 스케줄(valid_from이 그 6일 안)이 직전 과거 주에 새는 버그가 있었다
+ * (2026-07-01 enrollment hasEnded 롤링 창 픽스와 같은 계열). 예정 학생 look-ahead(enrollment
+ * fetch)는 의도적 롤링 창이라 weekEndOf 유지 — 스케줄 valid_from 판정만 이 함수를 쓴다.
+ */
+export function weekSundayOf(referenceDate: string): string {
+  const dow = parse(referenceDate).getUTCDay(); // 0=일 .. 6=토
+  return dow === 0 ? referenceDate : shiftDays(referenceDate, 7 - dow);
+}
+
+/**
  * "2026년 6월 4주차 (22일~28일)" — 달 경계면 "29일~7/5일". (ijw TimetableManager.tsx:2320-2335)
  * @param monday 그 주 월요일(YYYY-MM-DD)
  */
