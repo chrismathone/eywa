@@ -101,7 +101,8 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
       tenant_id: user.tenantId,
       student_id: f.studentId,
       student_name: studentName,
-      teacher_name: user.displayName, // 요청 강사 본인
+      // ijw 패리티 — 폼의 '담임 선생님'(기본=요청자 본인, 자유 표시명·대리 작성 가능). 미입력이면 요청자.
+      teacher_name: f.teacherName || user.displayName,
       book_name: f.bookName,
       book_detail: f.bookDetail,
       price: f.price,

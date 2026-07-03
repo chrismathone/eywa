@@ -48,6 +48,7 @@ export default async function TextbookRequestsPage() {
       academyName={settings.profile.name || "인재원"}
       logoUrl={logoUrl}
       account={settings.billing.account}
+      requesterName={user.displayName}
     />
   );
 }
