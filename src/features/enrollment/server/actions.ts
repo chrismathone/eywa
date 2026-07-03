@@ -20,6 +20,7 @@ import {
 } from "@/lib/storage/media-storage";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
+import { notifyClassAssignment } from "@/features/notifications/server/notify";
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -729,6 +730,14 @@ export async function convertConsultationToStudent(
   // 수업 배정 = 반 최소 1개 필수(클라 disabled와 이중 방어). 반 없이 학생만 만들면 "배정 완료"에 안 잡혀 애매.
   if (classIds.length === 0) return { error: "배정할 반을 1개 이상 선택하세요" };
 
+  // 반이 전부 본 테넌트 것인지 검증(RLS 스코프) — enrollments RLS가 class_id 테넌트를 안 봐서
+  // 조작된 foreign class id로 유령 수강·타 테넌트 알림이 생기는 것 방어(적대리뷰).
+  const { data: validClasses } = await supabase.from("classes").select("id").in("id", classIds);
+  const validClassIds = new Set((validClasses ?? []).map((c) => c.id));
+  if (classIds.some((id) => !validClassIds.has(id))) {
+    return { error: "배정할 반을 찾을 수 없습니다" };
+  }
+
   const today = kstToday();
 
   // students INSERT
@@ -764,6 +773,13 @@ export async function convertConsultationToStudent(
       // 학생은 생성됐지만 enrollment 실패 — 사용자에게 알림 (학생 ID는 반환)
       return { error: `학생은 생성됐으나 반 배정 실패: ${enrErr.message}`, studentId: stu.id };
     }
+    // 배정된 반들의 담임에게 인앱 알림 — best-effort.
+    await notifyClassAssignment({
+      tenantId: c.tenant_id,
+      actorId: user.id,
+      assignments: classIds.map((classId) => ({ classId, studentId: stu.id })),
+      type: "enrollment_assigned",
+    });
   }
 
   // 상담에 학생 ID + outcome=enrolled 연결

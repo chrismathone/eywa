@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { TeacherMenu } from "@/components/teacher-menu";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
@@ -93,6 +94,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           </div>
           <div className="flex items-center gap-1.5">
             {user.systemRole === "teacher" ? <TeacherMenu permMatrix={permMatrix} /> : null}
+            {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}
+            {user.systemRole === "teacher" ? <NotificationBell /> : null}
             <UserMenu
               email={user.email}
               displayName={user.displayName}

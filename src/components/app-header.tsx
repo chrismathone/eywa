@@ -2,15 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
 import { BackgroundTabs } from "@/components/workspace/background-tabs";
+import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
 
 export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
@@ -51,26 +45,7 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
           <span className="flex-1 truncate text-left text-[13px]">메뉴 · 학생 · 수업 어디로든 점프</span>
         </button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label="알림"
-                className="border-line bg-card text-foreground hover:bg-surface-hi relative flex size-9 items-center justify-center rounded-[4px] border transition"
-              />
-            }
-          >
-            <EyIcon name="bell" size={15} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>알림</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="text-text-dim px-2 py-6 text-center text-xs">
-              새 알림이 없습니다
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <NotificationBell />
       </div>
     </header>
   );

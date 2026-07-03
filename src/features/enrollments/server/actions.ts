@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { notifyClassAssignment } from "@/features/notifications/server/notify";
 
 export type CreateEnrollmentState =
   | { error?: string; enrollmentId?: string }
@@ -71,6 +72,11 @@ export async function createEnrollment(
 
   const supabase = await createClient();
 
+  // 반이 본 테넌트 것인지 검증(RLS로 스코프 — 타 테넌트 반 id면 null). enrollments RLS가 class_id의
+  // 테넌트를 검증하지 않아 조작된 foreign class로 유령 수강이 생기는 것을 막는다(적대리뷰).
+  const { data: klass } = await supabase.from("classes").select("id").eq("id", classId).maybeSingle();
+  if (!klass) return { error: "반을 찾을 수 없습니다" };
+
   // 수업의 운영 요일 — 선택값을 그 안으로 좁히고, "전 요일 선택"이면 []로 정규화(분리등원 아님).
   const attendanceDays = await normalizeAttendanceDays(supabase, classId, pickedDays);
 
@@ -93,6 +99,14 @@ export async function createEnrollment(
     }
     return { error: error?.message ?? "수강 배정 실패" };
   }
+
+  // 담당 강사(반 담임)에게 인앱 알림 — best-effort(실패해도 배정은 성공).
+  await notifyClassAssignment({
+    tenantId: user.tenantId,
+    actorId: user.id,
+    assignments: [{ classId, studentId }],
+    type: "enrollment_assigned",
+  });
 
   revalidatePath("/timetable");
   revalidatePath(`/students/${studentId}`);
@@ -211,6 +225,31 @@ export async function moveEnrollmentsBatch(
   if (error) return { error: error.message };
 
   const results = (data ?? []) as BatchMoveResult[];
+
+  // 목적지 반 담임에게 전입 알림 — 성공한 이동만. 학생 id는 이동한 (구)enrollment 행에서 조회
+  // (RPC 결과엔 enrollmentId만 있고 studentId·newClassId는 입력 moves에 있음). best-effort.
+  const okIds = new Set(results.filter((r) => r.ok).map((r) => r.enrollmentId));
+  const okMoves = moves.filter((m) => okIds.has(m.enrollmentId));
+  if (okMoves.length > 0) {
+    const { data: enrRows } = await supabase
+      .from("enrollments")
+      .select("id, student_id")
+      .in(
+        "id",
+        okMoves.map((m) => m.enrollmentId),
+      );
+    const studentByEnrollment = new Map((enrRows ?? []).map((e) => [e.id, e.student_id as string]));
+    const assignments = okMoves
+      .map((m) => ({ classId: m.newClassId, studentId: studentByEnrollment.get(m.enrollmentId) }))
+      .filter((a): a is { classId: string; studentId: string } => !!a.studentId && !!a.classId);
+    await notifyClassAssignment({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      assignments,
+      type: "enrollment_transferred_in",
+    });
+  }
+
   revalidatePath("/timetable");
   return { results };
 }

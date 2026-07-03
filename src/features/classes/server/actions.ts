@@ -8,6 +8,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { logAction } from "@/features/audit/server/log";
+import { notifyUsers } from "@/features/notifications/server/notify";
 import { getClassroomAssignmentData } from "./queries";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 
@@ -424,6 +425,18 @@ export async function scheduleHandover(_prev: HandoverState, formData: FormData)
     targetLabel: klass.class_name,
     metadata: { newTeacherId, effectiveDate },
   });
+  // 새 담임으로 예약된 강사에게 알림 — best-effort(실패해도 예약은 성공).
+  await notifyUsers([
+    {
+      tenantId: user.tenantId,
+      recipientId: newTeacherId,
+      type: "teacher_handover",
+      title: "강사 인수인계 예약",
+      body: `${klass.class_name} 반의 새 담임으로 예약되었습니다 (적용일 ${effectiveDate}).`,
+      link: `/classes/${classId}`,
+      actorId: user.id,
+    },
+  ]);
   revalidatePath(`/classes/${classId}`);
   revalidatePath("/classes");
   revalidatePath("/timetable");

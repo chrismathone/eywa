@@ -743,6 +743,32 @@ export const consultationRecordings = pgTable(
   ],
 );
 
+// === notifications (인앱 알림 — 직원 대상, 0074a 손수 alpha) ===
+// "자신과 관련된 행동"이 생기면 수신자에게 1행(수업 배정·반이동 전입·강사 인수인계 등).
+// 발송은 service_role(notifyUsers)이 타 사용자에게 insert. RLS: 수신자는 자기 알림만 조회/읽음/삭제.
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  // ⚠️ 실 DB(0074a)엔 created_at DESC + 부분 인덱스 `notifications_recipient_unread_idx WHERE read_at is null`도
+  // 있으나 Drizzle이 정렬방향·partial을 표현 못 해 여기선 생략(손수 alpha가 정본, CLAUDE.md #15). db:generate 금지.
+  (t) => [index("notifications_recipient_idx").on(t.recipientId, t.createdAt)],
+);
+
 // === student_consultations (재원생 상담 기록) ===
 // 카테고리: 일반(general), 학습/성적(academic), 정서/심리(emotional), 진로(career), 교우관계(social), 기타(other)
 // 대상: 학부모(parent) / 학생(student) / 학부모+학생(both)
