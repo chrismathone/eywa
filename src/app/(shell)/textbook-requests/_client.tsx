@@ -12,6 +12,7 @@ import {
   updateTextbookRequest,
 } from "@/features/billing/server/textbook-actions";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
+import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import { TextbookRequestCardBody } from "@/app/(print)/textbook/[id]/print/textbook-request-card-body";
 import { downloadCardPng } from "@/app/(print)/textbook/[id]/print/download-card";
 
@@ -65,12 +66,14 @@ function RequestRow({
   const [bookName, setBookName] = useState(row.bookName);
   const [bookDetail, setBookDetail] = useState(row.bookDetail ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
+  const [price, setPrice] = useState<number | string>(row.price);
   const canManage = isUntouched(row);
 
   const openEdit = () => {
     setBookName(row.bookName);
     setBookDetail(row.bookDetail ?? "");
     setNotes(row.notes ?? "");
+    setPrice(row.price);
     setErr(null);
     setEditing(true);
   };
@@ -82,6 +85,7 @@ function RequestRow({
       fd.set("bookName", bookName);
       fd.set("bookDetail", bookDetail);
       fd.set("notes", notes);
+      fd.set("price", String(price));
       const res = await updateTextbookRequest(undefined, fd);
       if (res?.ok) setEditing(false);
       else setErr(res?.error ?? res?.fieldErrors?.bookName ?? "저장에 실패했습니다");
@@ -100,10 +104,20 @@ function RequestRow({
   if (editing) {
     return (
       <li className="bg-card space-y-2 px-3 py-2.5 text-[13px]">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-4">
           <Input value={bookName} onChange={(e) => setBookName(e.target.value)} placeholder="교재명" aria-label="교재명" />
           <Input value={bookDetail} onChange={(e) => setBookDetail(e.target.value)} placeholder="비고" aria-label="비고" />
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="메모" aria-label="메모" />
+          <Input
+            type="number"
+            min={0}
+            step={500}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="금액(원)"
+            aria-label="금액"
+            className="num text-right"
+          />
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={save} disabled={pending}>{pending ? "저장 중…" : "저장"}</Button>
@@ -124,6 +138,7 @@ function RequestRow({
         <div className="text-text-dim mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
           {row.studentName ? <span>{row.studentName}</span> : null}
           {row.requestDate ? <span className="text-text-faint">· {row.requestDate}</span> : null}
+          {row.price > 0 ? <span className="num text-text-faint">· {row.price.toLocaleString()}원</span> : null}
           {row.notes ? <span className="text-text-faint">· {row.notes}</span> : null}
         </div>
         {err ? <div className="text-danger mt-0.5 text-[12px]">{err}</div> : null}
@@ -161,6 +176,7 @@ function RequestRow({
 export function TextbookRequestClient({
   rows,
   students,
+  catalog,
   isTeacher,
   academyName,
   logoUrl,
@@ -168,6 +184,7 @@ export function TextbookRequestClient({
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
+  catalog: CatalogOption[];
   isTeacher: boolean;
   academyName: string;
   logoUrl: string | null;
@@ -176,8 +193,15 @@ export function TextbookRequestClient({
   // 성공 시 목록은 서버 액션 revalidatePath로 자동 갱신. 폼 값은 유지(같은 학생 다른 교재 연속 요청에 편함).
   const [state, formAction, pending] = useActionState(requestTextbook, undefined);
 
-  // 바로 다운로드 — 클릭한 요청의 카드를 화면 밖에 렌더 → html2canvas → PNG 저장(새 탭·창 없음).
-  const kRef = useRef(0);
+  // 교재명·비고·금액은 '교재 검색'(단가표) 선택이 자동 채우므로 controlled(사무실 textbook-dialog 패턴).
+  // 메모도 controlled — React19 form action은 uncontrolled만 자동 리셋해 "폼 값 유지" 정책이 필드별로 갈라지는 것 방지.
+  const [bookName, setBookName] = useState("");
+  const [bookDetail, setBookDetail] = useState("");
+  const [price, setPrice] = useState<number | string>("");
+  const [notes, setNotes] = useState("");
+
+  // 바로 다운로드 — 요청의 카드를 화면 밖에 렌더 → html2canvas → PNG 저장(새 탭·창 없음).
+  // k는 dl 상태에서만 파생(updater) — remount 키 충돌 없이 단조 증가.
   const [dl, setDl] = useState<{ row: TextbookOrderRow; k: number } | null>(null);
   const hiddenRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -193,9 +217,34 @@ export function TextbookRequestClient({
       clearTimeout(t);
     };
   }, [dl]);
-  const download = (row: TextbookOrderRow) => setDl({ row, k: (kRef.current += 1) });
+  const download = (row: TextbookOrderRow) => setDl((prev) => ({ row, k: (prev?.k ?? 0) + 1 }));
+
+  // 저장 성공 → 요청서 PNG 자동 다운로드(ijw '이미지 저장 및 기록' 패리티). revalidation으로 새 행이
+  // rows에 도착한 렌더에서 1회만 발화 — 렌더 중 상태조정(#25 회피) + createdId 키 가드(#67).
+  const [handledId, setHandledId] = useState<string | null>(null);
+  const createdId = state?.ok ? state.createdId : undefined;
+  if (createdId && createdId !== handledId) {
+    const createdRow = rows.find((r) => r.id === createdId);
+    if (createdRow) {
+      setHandledId(createdId);
+      setDl((prev) => ({ row: createdRow, k: (prev?.k ?? 0) + 1 }));
+    }
+  }
 
   const options = students.map((s) => ({ value: s.id, label: s.name, hint: s.grade ?? undefined }));
+  // 교재 검색 옵션 — 타이핑하면 SearchableSelect가 즉시 필터. hint에 가격(+상세)을 보여 고르기 쉽게.
+  const catalogOptions = catalog.map((c) => ({
+    value: c.id,
+    label: c.title,
+    hint: `${c.price.toLocaleString()}원${c.bookDetail ? ` · ${c.bookDetail}` : ""}`,
+  }));
+  const pickCatalog = (id: string) => {
+    const c = catalog.find((x) => x.id === id);
+    if (!c) return;
+    setBookName(c.title);
+    setBookDetail(c.bookDetail ?? "");
+    setPrice(c.price);
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
@@ -220,6 +269,21 @@ export function TextbookRequestClient({
           <p className="text-text-dim text-[13px]">담당 학생이 없어 교재를 요청할 수 없습니다.</p>
         ) : (
           <form action={formAction} className="grid gap-3 sm:grid-cols-2">
+            {catalogOptions.length > 0 ? (
+              <label className="space-y-1 sm:col-span-2">
+                <span className="text-text-dim text-[12px] font-medium">교재 검색 (단가표에서 불러오기)</span>
+                {/* value=""(controlled) — 선택 후 placeholder로 복귀하는 '불러오기' 동작(아래 교재명을 손으로 고쳐도 표시 불일치 없음) */}
+                <SearchableSelect
+                  value=""
+                  options={catalogOptions}
+                  placeholder="교재명을 입력해 검색..."
+                  searchPlaceholder="교재명 검색..."
+                  ariaLabel="교재 단가표 검색"
+                  onValueChange={pickCatalog}
+                />
+                <span className="text-text-faint text-[11px]">선택하면 교재명·비고·금액이 자동으로 채워집니다 (직접 수정 가능)</span>
+              </label>
+            ) : null}
             <label className="space-y-1">
               <span className="text-text-dim text-[12px] font-medium">
                 학생 <span className="text-danger">*</span>
@@ -233,18 +297,41 @@ export function TextbookRequestClient({
               <span className="text-text-dim text-[12px] font-medium">
                 교재명 <span className="text-danger">*</span>
               </span>
-              <Input name="bookName" placeholder="예: 쎈 중등수학 2-1" />
+              <Input
+                name="bookName"
+                value={bookName}
+                onChange={(e) => setBookName(e.target.value)}
+                placeholder="예: 쎈 중등수학 2-1"
+              />
               {state?.fieldErrors?.bookName ? (
                 <span className="text-danger text-[11px]">{state.fieldErrors.bookName}</span>
               ) : null}
             </label>
             <label className="space-y-1">
               <span className="text-text-dim text-[12px] font-medium">비고(선택)</span>
-              <Input name="bookDetail" placeholder="예: 3권, 개정판" />
+              <Input
+                name="bookDetail"
+                value={bookDetail}
+                onChange={(e) => setBookDetail(e.target.value)}
+                placeholder="예: 3권, 개정판"
+              />
             </label>
             <label className="space-y-1">
+              <span className="text-text-dim text-[12px] font-medium">금액(선택)</span>
+              <Input
+                name="price"
+                type="number"
+                min={0}
+                step={500}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="교재 검색 시 자동 입력"
+                className="num text-right"
+              />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
               <span className="text-text-dim text-[12px] font-medium">메모(선택)</span>
-              <Input name="notes" placeholder="사무실 전달 메모" />
+              <Input name="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="사무실 전달 메모" />
             </label>
             <div className="flex items-center gap-3 sm:col-span-2">
               <Button type="submit" disabled={pending}>
@@ -252,7 +339,9 @@ export function TextbookRequestClient({
               </Button>
               {state?.error ? <span className="text-danger text-[12px]">{state.error}</span> : null}
               {state?.ok ? (
-                <span className="text-primary text-[12px]">요청되었습니다. 아래 목록에서 요청서를 다운로드하세요.</span>
+                <span className="text-primary text-[12px]">
+                  요청되었습니다 — 요청서 이미지가 자동 저장됩니다. (목록의 &lsquo;요청서&rsquo;로 다시 받을 수 있어요)
+                </span>
               ) : null}
             </div>
           </form>

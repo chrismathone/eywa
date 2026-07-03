@@ -2,6 +2,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import {
   getStudentOptions,
   getStudentOptionsForIds,
@@ -17,7 +18,8 @@ import { TextbookRequestClient } from "./_client";
 export default async function TextbookRequestsPage() {
   const user = await requireAccess("textbook_requests");
   const isTeacher = user.systemRole === "teacher";
-  const settings = await getTenantSettings();
+  // 카탈로그 = 폼 '교재 검색'(단가표 146권, 선택 시 교재명·상세·금액 자동입력 — ijw 패리티). 독립 조회라 병렬(B4).
+  const [settings, catalog] = await Promise.all([getTenantSettings(), getCatalogOptions()]);
 
   let rows;
   let students;
@@ -41,6 +43,7 @@ export default async function TextbookRequestsPage() {
     <TextbookRequestClient
       rows={rows}
       students={students}
+      catalog={catalog}
       isTeacher={isTeacher}
       academyName={settings.profile.name || "인재원"}
       logoUrl={logoUrl}

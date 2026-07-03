@@ -21,7 +21,8 @@ const CHECK_COLS: Record<string, string> = {
 };
 
 function won(v: FormDataEntryValue | null): number {
-  return Number(String(v ?? "0").replace(/[,\s]/g, "")) || 0;
+  // 금액은 음수 불가 — 클라 min=0을 우회하는 직접 호출(FormData 수동 조립)에도 서버에서 0으로 클램프.
+  return Math.max(0, Number(String(v ?? "0").replace(/[,\s]/g, "")) || 0);
 }
 
 function parse(formData: FormData) {
@@ -162,7 +163,13 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
 
   const { error } = await supabase
     .from("textbook_orders")
-    .update({ book_name: f.bookName, book_detail: f.bookDetail, notes: f.notes, updated_at: new Date().toISOString() })
+    .update({
+      book_name: f.bookName,
+      book_detail: f.bookDetail,
+      notes: f.notes,
+      price: f.price, // 미처리(untouched) 요청만 이 경로에 오므로 강사가 금액 정정 가능(폼이 항상 전송)
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/textbook-requests");
