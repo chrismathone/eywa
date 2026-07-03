@@ -145,6 +145,8 @@ export function TextbookRequestClient({
   }
 
   const showMsg = state !== undefined && state !== msgHiddenFor;
+  // 필수(학생·교재명)가 다 채워져야 저장 가능 — 서버 검증(fieldErrors)과 이중, 미충족이면 버튼 비활성화.
+  const canSubmit = studentId !== "" && bookName.trim() !== "";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
@@ -279,10 +281,13 @@ export function TextbookRequestClient({
                 <Eraser className="size-4" />
                 초기화
               </Button>
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" disabled={pending || !canSubmit}>
                 <Save className="size-4" />
                 {pending ? "저장 중…" : "이미지 저장 및 기록"}
               </Button>
+              {!canSubmit ? (
+                <span className="text-text-faint text-[11px]">학생과 교재명을 입력하면 저장할 수 있어요</span>
+              ) : null}
             </div>
             {showMsg && state?.error ? <p className="text-danger text-[12px]">{state.error}</p> : null}
             {showMsg && state?.ok ? (
