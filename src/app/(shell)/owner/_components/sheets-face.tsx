@@ -81,9 +81,10 @@ export async function SheetsFace({
         </p>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      {/* 두 컬럼을 동일 높이로(stretch) — 짧은 좌측 카드 아래 빈 그리드 여백이 드러나지 않게. */}
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
         {/* 좌 — 최초 1회 설정 안내(서비스계정은 새 시트를 못 만들어 사람이 만든 시트에 공유가 필요) */}
-        <section className="border-border bg-card rounded-md border p-5 text-[13px] leading-relaxed">
+        <section className="border-border bg-card flex flex-col rounded-md border p-5 text-[13px] leading-relaxed">
           <p className="text-foreground font-semibold">처음 한 번 설정</p>
           <ol className="text-text-dim mt-2 list-decimal space-y-1.5 pl-5">
             <li>
@@ -104,7 +105,7 @@ export async function SheetsFace({
             </li>
             <li>우측 토글을 켜고, 시간표 화면의 ‘시트’ 버튼으로 동기화합니다.</li>
           </ol>
-          <p className="text-text-faint mt-3 text-[12px]">
+          <p className="text-text-faint mt-auto pt-3 text-[12px]">
             ⚠️ 서비스계정은 저장공간이 없어 시트를 새로 만들 수 없습니다(미리 만든 시트 필요). 동기화는
             그 시트를 <strong>전체 덮어쓰기</strong>하므로 다른 내용과 섞지 말고 eywa 전용 시트로 쓰세요.
           </p>
