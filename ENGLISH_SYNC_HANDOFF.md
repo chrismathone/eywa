@@ -53,27 +53,33 @@
 - **추가로 필요**: `next.config.ts` 에 `serverExternalPackages: ["exceljs"]` (컴파일타임 번들 회피). → 메인에는 이미(미커밋), 이 브랜치엔 커밋함.
 - ⚠️ `pnpm install --force`가 `pnpm-lock.yaml`을 수정해서 **되돌렸음**(메인 클린 유지). node_modules 복구는 남아있음.
 
-## 3. 남은 작업 (미완)
+## 3. 남은 작업 → ✅ 3-1/3-2/3-3 완료 (2026-07-03 저녁, 운영 DB 반영)
 
-### 3-1. class_schedules(배치: 시간·강의실·담임) 재구축 — **최우선**
-지금 14개 신규 반은 스케줄이 없어 **시간표 격자에 안 보임**. 강사별 그리드 → class_schedules 필요.
-- 슬롯 추출 완료: **254개 유효**(노이즈 21개 제외: 날짜·"쉬는 시간"·"수업준비"·"교수부미팅"·"연차사용"·별표변형 `*MEC1-3` 등).
-- 해석 드라이런 결과:
-  - **반 254/254 매칭** (전부 존재).
-  - **강사 131/254 매칭**(englishName). 라벨처리 필요(FK 없음): **Anna, Dom, Elsa, JJ, 부원장, 이주희** → `class_schedules.slot_teacher_label`(자유텍스트) 사용.
-  - **강의실**: eywa는 `본원301`·`바른602`처럼 **건물 접두어**. 시트의 `301~304, 601, 602, 604`는 `본원3xx/6xx`로 매칭되나 **`305, 605, 606, SKY`는 eywa에 없음**. → **결정 필요**: (a) `본원305/605/606` 신규 생성 (b) `slot_room_label`(자유텍스트)로 처리. **eywa 강의실 컨벤션(CLAUDE.md 검색) 확인 후 진행**.
-  - 시각: A열 교시라벨 범위("4:20~5:00")→24h. `ENGLISH_PERIODS`(10교시)와 정렬 검증됨.
-- ⚠️ `enrollments_no_overlap`(GiST EXCLUDE) 제약 주의. class_schedules에는 slot 오버라이드(teacher_id/classroom_id 또는 label), `merge_group`(합반) 지원.
+### 3-1. class_schedules 재구축 ✅ (적대리뷰 6에이전트급 검증 + 라이브 E2E)
+[scripts/_english_sync/apply-english-schedules.cjs](scripts/_english_sync/apply-english-schedules.cjs) (dry-run 기본·`--apply`)로 적용:
+- **진실원본 = `normalized_model.json`의 periods**(병합 행 범위 기반 정확한 시작·끝 시각 — ⚠️ `english_slots.json`의 시각은 A열 라벨 첫 행만 읽어 끝시각이 틀림, 쓰지 말 것). 유효 254 = 275 − 노이즈 18 − 별표 3.
+- **temporal 전환**: 기존 영어 스케줄 371행 `valid_to='2026-07-02'` 마감 + 신규 254행 `valid_from='2026-07-03'` 삽입(삭제 0 = 타임머신 과거 주 보존). 단일 트랜잭션, 마감 UPDATE에 `valid_from < CUTOVER` 술어(동시 편집 레이스 봉쇄).
+- **강사**: english_name 매칭(teacher/viewer 중복행은 `system_role='teacher'` 우선으로 해소 — #70 잔재 안전) 131/254 → `teacher_id`+라벨. 미해석 6명(Elsa·Anna·Dom·JJ·부원장·이주희 — **users에 계정 자체가 없음**) → `slot_teacher_label`만.
+- **강의실**: (a)+(b) 혼합 — `본원305/605/606` **신규 생성**(실재 방, 강사 상주), `SKY`는 **`본원SKY` 라벨-only**(기존 슬롯 라벨에 "본원SKY" 전례·LAB실 패턴). 전 슬롯 `slot_room_label='본원'+토큰` + 해석되는 것만 `classroom_id`.
+- **classes 담임/기본강의실 39건 갱신**: ⚠️ 최빈값은 **강사 이름 기준(전 슬롯)** — 해석된 슬롯만 세면 미해석 강사가 다수인 반의 담임이 소수 슬롯 강사에게 오배정(적대리뷰 MED-1, 13개 반 실측). 최빈 이름이 계정으로 해석될 때만 갱신, 미해석/동률=기존 유지.
+- **⚠️ 동반 버그픽스(제품 코드)**: `fetchSlots`의 valid_from 상한이 `weekEndOf`(ref+6 롤링 창)라 과거 주(6/22~28) 조회에 새 스케줄이 새어 **구·신 시간표 합성 표시**(적대리뷰 MED-2와 독립 발견 일치) → 신규 [`weekSundayOf`](src/features/timetable/lib/week.ts)(그 주 실제 일요일)로 교체 + 테스트. enrollment look-ahead(예정 학생)는 의도적 롤링 창이라 불변.
+- **검증**: 현재 주 254/과거 주 371 정확(중복 0 — 픽스 전이면 625 합성), 신규 14개 반 전부 스케줄 확보, 스팟체크(중등E_중2 심화=Jane 월수목 16:20-17:20/17:20-18:10+JJ 수 305) 시트 일치, 비영어 257 무변(수학 불가침), **라이브 E2E**(dev 3012, 마스터 로그인): 현재 주=신규 반만·과거 주=옛 반만·통합뷰 슬롯 강사/방 라벨·담임 폴백(LS2a→Anna)·수학 200. typecheck0/lint(에러0)/test631.
+- 백업/언두: `SCHED_BACKUP_2026-07-03.json`(371행 전체) / `SCHED_UNDO_2026-07-03.json`(복원 순서 명시).
 
-### 3-2. 옛 영어 반 폐강 — 19개
-시트에 없는 eywa active 영어반(이미 수강 0): `LE4 PJ4 고등E_고2 SKY LT1 PL5 고등E_고1 특별 고등E_고1 정규 A RTT3 DP2 LS2 고등E_고1 정규 B LT4b JP6 KW3 고등E_고2 TOP 고등특강(테스트) PJ2 LT4a LS1` → `is_active=false` + `closed_at`.
+### 3-2. 옛 영어 반 19개 ✅ — 종강 18 + 폐지 1 (핸드오프 원안에서 의도적 수정)
+[scripts/_english_sync/close-old-english-classes.cjs](scripts/_english_sync/close-old-english-classes.cjs). 원안 "is_active=false+closed_at"는 eywa 의미론상 **폐지=타임머신에서도 숨김**이라, 실수강 이력(3~10건)이 있는 18개는 **종강(closed_at='2026-07-02', is_active 유지)** — 과거 주에 이력 표시 보존(검증: ref 06-28에 18개 표시). 이력 0의 `고등특강(테스트)`만 폐지. 언두: `CLASSES_UNDO_2026-07-03.json`.
 
-### 3-3. 이재윤 동명이인 1건 — 학년/학교로 구분 후 배정.
+### 3-3. 이재윤 동명이인 ✅ — 쓰기 0으로 해결
+시트 배정(중등E_중1 TOP·일중·중1)은 eywa `0524df0a`(일중·중1)의 **기존 열린 수강(2026-04-07~)이 이미 충족** — TOP 명단 시트=DB 10명 완전 일치. 다른 이재윤(`821441f9`·대구일중·중1·수강0)은 **중복 학생 행 의심** → 병합/정리는 owner 데이터정리(중복 학생) 도구 소관(별건).
 
-### 3-4. 정식 코드화 (재사용 가능한 "시트 반영" 버튼)
-지금 반영은 일회성 스크립트로 했음. 반복 동기화하려면 `src/features/timetable/import/structure/` 에 정식 편입 필요:
+### 3-4. 정식 코드화 (재사용 가능한 "시트 반영" 버튼) — 유일한 잔여
+지금 반영은 일회성 스크립트(스크립트들은 `scripts/_english_sync/`에 커밋됨). 반복 동기화하려면 `src/features/timetable/import/structure/` 에 정식 편입 필요:
 - 이미 있음(커밋됨·테스트 14개 통과): `types.ts`, `parse-grid.ts`(그리드→슬롯 순수파서), `match.ts`(슬롯↔기존레코드 이름매칭).
 - 필요: `google-sheets.ts`에 `readSheetGridWithMerges`(`includeGridData`로 병합까지) 추가 → `values.get`은 병합 잃음. + diff + 적용 서버액션(스냅샷 백업) + UI 트리거(수학의 "시트 반영"과 동일 패턴).
+
+### 후속 권장 (데이터 아님·운영 결정)
+- **강사 5명 직원 등록**: Elsa(전양원)·Anna(육소희)·Dom(김동후)·JJ·이주희는 users에 없어 담임 미배정/기본뷰 강사 컬럼이 옛 담임 기준. 직원관리에서 등록 + `english_name` 세팅 후 해당 반 담임 지정하면 완결(통합뷰 슬롯 라벨은 이미 정확).
+- **ENGLISH_PERIODS(10교시 상수) vs 7월 시트 시간구조**: 시트는 40분 그리드(1~3교시)와 50~60분 블록(16:20~17:20·17:20~18:10·18:20~19:20·19:20~20:10·20:20~21:10·21:10~22:00)이 혼재 — 기본뷰에서 비정렬 시작(17:20·19:20·20:20·21:10 등 ~75슬롯)은 '기타' 행 폴백으로 표시(안전·정상 렌더). 교시표 갱신은 과거 주 표시와 트레이드오프라 사용자 결정 사안.
 
 ## 4. 코드 상태 (브랜치 `Injaewon/english-timetable-import`)
 
@@ -100,7 +106,9 @@
 - Node: `import postgres from "postgres"; postgres(url, {ssl:"require"})`. (`exceljs`/`postgres` 모두 node_modules에 있음)
 - **모든 쿼리 `tenant_id='becaa316-...'` + `subject='english'` 스코프. 쓰기는 트랜잭션 + 백업 필수.**
 
-## 7. 핵심 수치 스냅샷 (2026-07-03 반영 후)
+## 7. 핵심 수치 스냅샷 (2026-07-03 스케줄 반영 후)
 
-- 인재원: 학생 568(재원 526), 영어반 46(active), 영어 열린수강 **247**, class_schedules(전체) 628.
+- 인재원: 학생 568(재원 526), 영어반 **운영중 41 / 종강 18 / 폐지 1**, 영어 열린수강 **247**.
+- class_schedules: 영어 열린(신규) **254**(valid_from 07-03) + 마감(옛) 371(valid_to 07-02, 타임머신용 보존) + 비영어 257(무변).
+- 강의실 +3(본원305·605·606, 계 21). classes 갱신 39(담임 10·기본강의실).
 - 시트: 배정 247건 / 유효 배치슬롯 254 / 강사 12명 / 방 11종(301-305,601-606,SKY).

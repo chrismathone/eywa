@@ -117,7 +117,8 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
 
         const topLabel = cell(grid, mg.r1, TIME_COL);
         const t = parseTimeLabel(topLabel);
-        let { start, end } = t;
+        const { start } = t;
+        let { end } = t;
         if (!start) {
           warnings.push(`시각 인식 실패: (${mg.r1},${TIME_COL}) "${topLabel}" — ${className(raw)}`);
           continue;
