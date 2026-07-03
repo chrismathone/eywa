@@ -101,3 +101,59 @@ export interface MatchResult {
   matchedTeachers: number;
   matchedRooms: number;
 }
+
+// ── diff/conflict/dry-run ────────────────────────────────────────────────────
+
+/** 시트에서 도출한 목표 class_schedules 한 행(중복 병합 후). */
+export interface TargetSchedule {
+  className: string;
+  classId: string | null;
+  day: DayOfWeek;
+  startTime: string;
+  endTime: string | null;
+  room: string | null;
+  classroomId: string | null;
+  /** 이 슬롯을 가르치는 강사(합반이면 복수). 첫 강사가 담임 후보. */
+  teachers: { name: string; teacherId: string | null }[];
+  starred: boolean;
+}
+
+/** 기존 DB의 class_schedules 스냅샷(diff 대상). */
+export interface ExistingSchedule {
+  id: string;
+  classId: string;
+  day: DayOfWeek;
+  startTime: string; // "HH:MM"
+  endTime: string | null;
+}
+
+export type ScheduleAction = "create" | "update" | "keep" | "remove";
+export interface SchedulePlanItem {
+  action: ScheduleAction;
+  className: string;
+  day: DayOfWeek;
+  startTime: string;
+  endTime: string | null;
+  room: string | null;
+  teacherNames: string[];
+  scheduleId?: string; // update/keep/remove 대상 기존 행
+}
+
+/** 강의실 중복(같은 방·요일·시간 겹침 + 다른 수업/강사). */
+export interface RoomConflict {
+  room: string;
+  day: DayOfWeek;
+  a: { className: string; teachers: string[]; startTime: string; endTime: string | null };
+  b: { className: string; teachers: string[]; startTime: string; endTime: string | null };
+}
+
+export interface DryRunReport {
+  slotsParsed: number;
+  targetSchedules: number;
+  entitiesToCreate: { teachers: string[]; classes: string[]; rooms: string[] };
+  matched: { classes: number; teachers: number; rooms: number };
+  plan: { create: number; update: number; keep: number; remove: number };
+  planItems: SchedulePlanItem[];
+  conflicts: RoomConflict[];
+  warnings: string[];
+}
