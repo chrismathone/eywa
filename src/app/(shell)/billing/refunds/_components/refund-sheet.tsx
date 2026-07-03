@@ -83,7 +83,7 @@ export function RefundSheet({
   const field = (
     name: string,
     value: string,
-    opts: { ph?: string; type?: string; align?: "left" | "center" } = {},
+    opts: { ph?: string; type?: string; align?: "left" | "center"; required?: boolean } = {},
   ) =>
     editing ? (
       <input
@@ -91,6 +91,7 @@ export function RefundSheet({
         defaultValue={value}
         placeholder={opts.ph}
         type={opts.type ?? "text"}
+        required={opts.required}
         className={`${inputBase} ${opts.align === "center" ? "text-center" : ""}`}
       />
     ) : (
@@ -148,8 +149,10 @@ export function RefundSheet({
             <th className={`${head} w-20`} rowSpan={10}>
               학생 정보
             </th>
-            <th className={`${head} w-28`}>이 름</th>
-            <td className={cell}>{field("s_name", s.name, { ph: "학생 이름" })}</td>
+            <th className={`${head} w-28`}>
+              이 름{editing ? <span className="text-danger"> *</span> : null}
+            </th>
+            <td className={cell}>{field("s_name", s.name, { ph: "학생 이름", required: true })}</td>
           </tr>
           <tr>
             <th className={head}>학교/학년</th>
@@ -256,7 +259,13 @@ export function RefundSheet({
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
       <p className="text-text-dim text-xs">
-        {editing ? "칸을 클릭해 바로 입력하세요 — 저장해야 반영됩니다." : "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다."}
+        {editing ? (
+          <>
+            칸을 클릭해 바로 입력하세요 — <span className="text-danger">*</span>는 필수, 저장해야 반영됩니다.
+          </>
+        ) : (
+          "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다."
+        )}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {editing ? (
