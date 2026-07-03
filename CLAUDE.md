@@ -335,7 +335,8 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - **⚠️⚠️ 드롭 의미 = [`resolveDropTarget`](src/features/timetable/lib/hapban.ts) 순서 결정적**(외부검토 2건+적대리뷰 2건이 이 순서 결함을 잡음): ① **멤버 재해석(최우선·통과)** — 드롭존 data `memberClassIds`(합반 본문/요일존에만)에 출발 반이 있으면 `{toClassId: fromClassId}` 즉시 반환(자기 반 요일편집 — no-op 금지, 진짜 no-op은 caller `sameDaySet`) ② **소속 차단** — `target !== from && blockingClassIds.includes(target)`면 null(**자기 반(target===from) 드롭은 통과** — 같은-반 요일편집 제스처 보존, 다른 소속 반으로의 이동만 차단=GiST `enrollments_no_overlap` 사고 방지) ③ 기본 이동. **반 이동은 헤더 세그먼트 드롭만**(세그먼트 data엔 memberClassIds 없음). 반환 계약 `{toClassId, day}`만 — toSlotId/toClassName은 caller가 overData에서 유지(전입예정 배지 근거). onDragEnd([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>))가 이 함수 경유(일반 셀=meta 부재=기존 동작 그대로).
 - **컴포넌트**: [hapban-cell.tsx](<src/app/(shell)/timetable/_components/hapban-cell.tsx>)(세그먼트=자기 반 색+인덱스+재원수+HoverCard+WindowLink+**드롭존 `class:${slot.id}`**(기존 카드 계약 동일) / 본문=**`hapban:${slots[0].id}`**(2조각 — `class:` 재사용은 세그1과 중복, 3조각은 preferDayZone이 요일존 오인) / 재원 헤더 `count`=통합 총원(분리등원 포함) / 전입예정=전 slot.id 병합+세그 배지). class-cell.tsx(602줄)에서 **[student-rows.tsx](<src/app/(shell)/timetable/_components/student-rows.tsx>)·[student-section.tsx](<src/app/(shell)/timetable/_components/student-section.tsx>) 추출**(200줄 규칙, 행에 `badge`·ownClass* 폴백 — 일반 셀 동작 무변경).
 - **dedup 부작용(수용·문서화)**: 양쪽 재원 학생의 드래그/Delete는 채택 enrollment 1건만 — 이동 후 `1,2`→`2` 배지로 잔존 보임, Delete 확인창 "다른 반 수강 유지" 기존 문구가 커버.
-- 검증: typecheck0/lint0/**test638**(hapban 22 — dedup·요일합집합·dayOwners·드롭 규칙 순서·자기반 통과) + **라이브(dev, DB 무변경)**: 합반 3셀 — 세그먼트 2등분(반색·인덱스·카운트)·**노현우 `1,2` 1행**(중복 해소)·재원 15/11 통합(분리등원 포함)·요일 칸 세그 배지·일반 셀 무변 / 편집: 통합 행 클릭=요일편집 팝오버("노현우 · 등원 요일", own 바인딩)·Delete 확인창=채택 반명("중등M 중2 PS2S")·전부 취소=큐 0. ⚠️ 실 마우스 드래그는 dnd-kit 합성 한계([[#52]]) — resolveDropTarget 단위테스트가 규칙 커버, 원장 실드래그 1회 확인 권장.
+- **후속(같은 날, 사용자 제안) — 합반 드롭 = 반+요일 선택 간이 팝업**: 외부 학생을 합반에 놓으면 조용히 대표 반으로 가던 것을 **ClassPickPopover**([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>), DayEditPopover 문법)로 — 반 후보(①/② 인덱스 배지, **이미 열린 수강 반은 비활성 "이미 소속"**) + 요일 토글(전부=전 요일)을 **한 번에** 선택 후 이동(분리등원 이동이 원스텝). 판정=순수 [`shouldOpenClassPick`](src/features/timetable/lib/hapban.ts): **외부 학생→합반 어디든**(세그먼트=그 반, 요일존=그 요일 미리 선택) / **멤버→다른 세그먼트**(이동 의사 명시)만 팝업 — 멤버→본문/요일존은 기존 자기 반 요일편집 재해석 유지(원스텝). 드롭존 data가 `memberClasses`(반 정보)+`coveringDays`+`hapbanZone`(segment/roster)을 실음(resolveDropTarget엔 id 배열만 파생 전달 = lib 계약 불변). `applyClassPick`이 고른 반 세그먼트 slotId로 큐잉 → 전입예정 배지 인덱스 정확.
+- 검증: typecheck0/lint0/**test642**(hapban 26 — dedup·요일합집합·dayOwners·드롭 규칙 순서·자기반 통과·shouldOpenClassPick 4) + **라이브(dev, DB 무변경)**: 합반 3셀 — 세그먼트 2등분(반색·인덱스·카운트)·**노현우 `1,2` 1행**(중복 해소)·재원 15/11 통합(분리등원 포함)·요일 칸 세그 배지·일반 셀 무변 / 편집: 통합 행 클릭=요일편집 팝오버("노현우 · 등원 요일", own 바인딩)·Delete 확인창=채택 반명("중등M 중2 PS2S")·**합성 드래그로 외부 학생→합반 본문 = 반+요일 팝업 실검증**(② 선택+금만 → 전입예정 `2`·`[금]` 정확 큐잉)·전부 취소=큐 0. 합성 드래그 기법(이제 가능) = [[#52]] 갱신 참조.
 
 ### 시간표 기본뷰 가독성 개선 — 균일 격자 테두리 + sticky 교시열 좌·우 테두리 고정 (2026-07-03) — ✅ 라이브(dev) + typecheck0/lint0 + main push(`0b3213e`)
 사용자 피드백: "ijw-calander 대비 eywa 시간표 가독성이 너무 떨어진다". ijw 그리드([`D:\ijw-calander\components\Timetable\Math\components\TimetableGrid.tsx`])와 대조 → 원인 진단: ① **테두리가 흐리다**(ijw 굵은 검정 3~4px ↔ eywa 얇은 `--line` 연회색 → 셀 경계 뭉개짐) ② 행 큼(330 고정, 휑함) ③ 강사 헤더 회색 ④ 밀도 조절 UI 없음. 사용자 지시로 **①(테두리) 중심 + 세로폭은 원래대로** 진행.
@@ -2442,6 +2443,12 @@ SSR(0)↔CSR(1) 카운터가 어긋나 hydration 경고("attributes … didn't m
 **둘 다** no-op stub해야 정확 재현. 또 드래그 결과 측정은 **outer div의 `.style.width`/rect**로 —
 inner dialog `getBoundingClientRect`는 글라이드 트랜지션 중 mistimed(스냅 후 456으로 보였다가 outer는 934).
 배경 칩/스냅 셀 위로 가려면 포인터를 먼저 상단(stage sy≤44)으로 올려 reveal 후 셀로 내려야 함.
+- **⚠️ 정정(2026-07-04): dnd-kit 시간표 드래그도 합성으로 가능** — 옛 "dnd-kit 합성 한계로 자동 미검" 기록은
+  캡처 stub 누락이 원인이었다. 레시피: ① `Element.prototype.{set,release}PointerCapture` 둘 다 no-op stub
+  ② 드래그 소스는 **`[aria-roledescription="draggable"]`** 로 선택(cursor-grab 클래스는 DragScrollArea 팬 컨테이너도
+  잡아 오선택) ③ PointerEvent 시퀀스: 소스에 `pointerdown`(buttons:1) → document에 `pointermove` +12px(활성화
+  임계 5px 초과) → document에 `pointermove` 타겟 좌표 → document에 `pointerup`(buttons:0), 각 단계 60~150ms 대기.
+  합반 반+요일 팝업(ClassPickPopover)을 이 방식으로 실검증(드롭→팝업→선택→큐잉 E2E).
 
 ### 53. 대량 `.in("…id", ids)` = HTTP 414 + error 삼킴 (반복 안티패턴)
 수백~수천 개 id를 단일 `.in()`에 넣으면 supabase-js가 GET 쿼리스트링에 전부 직렬화 → URL이 ~16KB+ 한도를

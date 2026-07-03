@@ -4,7 +4,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
-import { buildHapbanRoster } from "@/features/timetable/lib/hapban";
+import { buildHapbanRoster, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ClassDetailQuick } from "./class-cell";
@@ -26,17 +26,36 @@ function shortTime(t: string) {
   return t.slice(0, 5);
 }
 
-/** 헤더 세그먼트 1칸 — 자기 반 색 + 인덱스 + 반이름(clip) + 재원수. 드롭=그 반으로 이동(명시적). */
-function SegmentHeader({ slot, index, colorClass }: { slot: ClassDetailQuick; index: number; colorClass: string }) {
+/** 헤더 세그먼트 1칸 — 자기 반 색 + 인덱스 + 반이름(clip) + 재원수. 드롭=그 반 미리 선택된 반+요일 팝업. */
+function SegmentHeader({
+  slot,
+  index,
+  colorClass,
+  memberClasses,
+  coveringDays,
+}: {
+  slot: ClassDetailQuick;
+  index: number;
+  colorClass: string;
+  memberClasses: HapbanMemberClass[];
+  coveringDays: string[];
+}) {
   const realClassId = slot.classId ?? slot.id;
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
   const hold = slot.students.filter((s) => s.status === "hold");
   const withdrawn = slot.students.filter((s) => s.status === "withdrawn");
-  // 세그먼트 드롭존 — 기존 카드별 droppable과 동일 id/data 계약(`class:${slot.id}`) → onDragEnd 무변경.
-  // ⚠️ memberClassIds는 싣지 않음(세그먼트=명시적 반 이동 대상 — 본문/요일존만 멤버 재해석).
+  // 세그먼트 드롭존 — 기존 카드별 droppable과 동일 id/data 계약(`class:${slot.id}`).
+  // hapbanZone="segment" → 외부 학생/멤버의 다른 반 드롭 시 반+요일 팝업(이 반 미리 선택, shouldOpenClassPick).
   const { setNodeRef, isOver } = useDroppable({
     id: `class:${slot.id}`,
-    data: { className: slot.className, classId: realClassId, slotId: slot.id },
+    data: {
+      className: slot.className,
+      classId: realClassId,
+      slotId: slot.id,
+      memberClasses,
+      coveringDays,
+      hapbanZone: "segment" as const,
+    },
   });
   const style = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
@@ -100,8 +119,13 @@ export function HapbanCell({
   const { editing, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
   const roster = buildHapbanRoster(slots);
-  const memberClassIds = roster.segments.map((s) => s.classId);
-  const rep = slots[0]!; // 대표(본문 드롭 데이터·전입예정 기본 키) — resolveDropTarget이 멤버 드롭을 재해석하므로 안전.
+  // 합반 구성 반 목록(드롭존 data 공용) — 멤버 재해석(resolveDropTarget)·반+요일 팝업 후보(shouldOpenClassPick) 양쪽에 사용.
+  const memberClasses: HapbanMemberClass[] = roster.segments.map((s) => ({
+    classId: s.classId,
+    className: s.className,
+    slotId: s.slotId,
+  }));
+  const rep = slots[0]!; // 대표(본문 드롭 데이터·전입예정 기본 키) — 외부 드롭은 팝업이, 멤버 드롭은 재해석이 처리해 안전.
   const repClassId = rep.classId ?? rep.id;
 
   // 분리등원 — 표시는 displayAttendanceDays(최고 status 요일 합집합) 기준. A월만+B목만 `1,2` 학생은 공통 섹션.
@@ -125,10 +149,18 @@ export function HapbanCell({
   const showRoster = totalStudents > 0 || incomingAll.length > 0;
 
   // 본문(통합 명단) 드롭존 — id는 `hapban:`(콜론 2조각: `class:${rep.id}`는 세그먼트1과 중복, 3조각은
-  // preferDayZone이 요일존으로 오인). onDragEnd는 data만 읽으므로 계약 무변경. memberClassIds=멤버 재해석.
+  // preferDayZone이 요일존으로 오인). onDragEnd는 data만 읽으므로 계약 무변경.
+  // memberClasses=멤버 재해석 + 외부 학생 드롭 시 반+요일 팝업 후보. hapbanZone="roster"(팝업 preset 없음).
   const { setNodeRef: setBodyRef, isOver } = useDroppable({
     id: `hapban:${rep.id}`,
-    data: { className: rep.className, classId: repClassId, slotId: rep.id, memberClassIds },
+    data: {
+      className: rep.className,
+      classId: repClassId,
+      slotId: rep.id,
+      memberClasses,
+      coveringDays: covers,
+      hapbanZone: "roster" as const,
+    },
   });
 
   return (
@@ -137,7 +169,14 @@ export function HapbanCell({
       {/* 헤더 가로 N등분 — 반마다 자기 색·인덱스·재원수. 클릭=그 반 상세 창, 드롭=그 반으로 이동. */}
       <div className="flex shrink-0">
         {slots.map((s, i) => (
-          <SegmentHeader key={s.id} slot={s} index={i + 1} colorClass={SUBJECT_SOFT[subjects.colorOf(s.subject)]} />
+          <SegmentHeader
+            key={s.id}
+            slot={s}
+            index={i + 1}
+            colorClass={SUBJECT_SOFT[subjects.colorOf(s.subject)]}
+            memberClasses={memberClasses}
+            coveringDays={covers}
+          />
         ))}
       </div>
       {subSlot === "top" ? <SubSlotBand /> : null}
@@ -228,7 +267,8 @@ export function HapbanCell({
                           classId={repClassId}
                           className={rep.className}
                           day={day}
-                          memberClassIds={memberClassIds}
+                          memberClasses={memberClasses}
+                          coveringDays={covers}
                         >
                           {col}
                         </DayDropZone>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import type { HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DraggableStudentRow, StudentRow, metaLabel, type StudentQuick } from "./student-rows";
 
 /**
@@ -105,26 +106,37 @@ export function StudentSection({
 /**
  * 요일 드롭존 — 편집 모드에서 분리등원 반(월목 등)의 요일 칸을 개별 드롭 대상으로. ijw ClassCard의 "월만/목만" 존.
  * 드롭 시 data.day가 곧 목적지 등원 요일(요일 존=[그 요일], 공통 존=셀 전체=전 요일). id는 셀 slot.id로 유니크.
- * 합반 셀에선 memberClassIds(구성 반들)를 실어 — 멤버의 드롭을 자기 반 요일편집으로 재해석(resolveDropTarget).
+ * 합반 셀에선 memberClasses(구성 반들)+coveringDays를 실어 — 멤버 드롭=자기 반 요일편집 재해석(resolveDropTarget),
+ * 외부 학생 드롭=반+요일 선택 팝업(shouldOpenClassPick, 그 요일 미리 선택).
  */
 export function DayDropZone({
   slotId,
   classId,
   className,
   day,
-  memberClassIds,
+  memberClasses,
+  coveringDays,
   children,
 }: {
   slotId: string;
   classId: string;
   className: string;
   day: string;
-  memberClassIds?: string[];
+  memberClasses?: HapbanMemberClass[];
+  coveringDays?: string[];
   children: ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `class:${slotId}:${day}`,
-    data: { className, classId, slotId, day, memberClassIds },
+    data: {
+      className,
+      classId,
+      slotId,
+      day,
+      memberClasses,
+      coveringDays,
+      hapbanZone: memberClasses ? ("roster" as const) : undefined,
+    },
   });
   return (
     <div

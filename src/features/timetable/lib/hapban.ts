@@ -156,6 +156,27 @@ export function buildHapbanRoster<S extends HapbanStudentIn>(slots: HapbanSlotIn
   return { segments, active, hold, withdrawn };
 }
 
+/** 합반 구성 반 1개(드롭존 data·반 선택 팝업 후보) — slotId는 그 반 세그먼트의 스케줄 id(전입예정 배지 키). */
+export type HapbanMemberClass = { classId: string; className: string; slotId: string };
+
+/**
+ * 합반 드롭이 **반+요일 선택 팝업**(ClassPickPopover)을 띄워야 하는지 — 대표 반으로 조용히 보내는 대신
+ * 명시적으로 고르게 한다(어느 반인지 모호 + 좁은 세그먼트 타겟팅 부담 해소, 이동+분리등원 한 번에).
+ * · 외부 학생(합반 미소속) → 어느 존에 놓든 true.
+ * · 멤버 → **다른 반 세그먼트** 드롭만 true(이동 의사 명시) — 본문/요일존/자기 세그먼트는 false
+ *   (resolveDropTarget 규칙 1이 자기 반 요일편집으로 재해석하는 한 스텝 흐름 유지).
+ */
+export function shouldOpenClassPick(
+  fromClassId: string,
+  over: { classId?: string; memberClasses?: { classId: string }[]; hapbanZone?: "segment" | "roster" },
+): boolean {
+  const mc = over.memberClasses;
+  if (!mc || mc.length < 2) return false;
+  const isMember = mc.some((c) => c.classId === fromClassId);
+  if (!isMember) return true;
+  return over.hapbanZone === "segment" && over.classId !== fromClassId;
+}
+
 /** 드래그 학생의 합반 메타(드래그 data에 실림). */
 export type DropActiveData = {
   classId?: string; // 출발 반(채택 enrollment의 반)

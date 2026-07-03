@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildHapbanRoster, resolveDropTarget, type HapbanSlotIn } from "./hapban";
+import { buildHapbanRoster, resolveDropTarget, shouldOpenClassPick, type HapbanSlotIn } from "./hapban";
 import { compareStudentLines } from "./student-sort";
 
 const stu = (
@@ -228,6 +228,31 @@ describe("resolveDropTarget", () => {
       toClassId: "class-y",
       day: undefined,
     });
+  });
+});
+
+describe("shouldOpenClassPick (합반 드롭 → 반+요일 선택 팝업 판정)", () => {
+  const mc = [
+    { classId: "class-a", className: "A반", slotId: "slot-a" },
+    { classId: "class-b", className: "B반", slotId: "slot-b" },
+  ];
+
+  it("외부 학생 → 본문/요일존/세그먼트 어디든 팝업", () => {
+    expect(shouldOpenClassPick("class-x", { classId: "class-a", memberClasses: mc, hapbanZone: "roster" })).toBe(true);
+    expect(shouldOpenClassPick("class-x", { classId: "class-a", memberClasses: mc, hapbanZone: "segment" })).toBe(true);
+  });
+
+  it("멤버 → 본문/요일존 = 팝업 없음(자기 반 요일편집 재해석 유지)", () => {
+    expect(shouldOpenClassPick("class-a", { classId: "class-a", memberClasses: mc, hapbanZone: "roster" })).toBe(false);
+  });
+
+  it("멤버 → 자기 세그먼트 = 팝업 없음 / 다른 세그먼트 = 팝업(이동+요일 한 번에)", () => {
+    expect(shouldOpenClassPick("class-a", { classId: "class-a", memberClasses: mc, hapbanZone: "segment" })).toBe(false);
+    expect(shouldOpenClassPick("class-a", { classId: "class-b", memberClasses: mc, hapbanZone: "segment" })).toBe(true);
+  });
+
+  it("일반 셀(memberClasses 부재) = 항상 팝업 없음", () => {
+    expect(shouldOpenClassPick("class-x", { classId: "class-y" })).toBe(false);
   });
 });
 

@@ -21,16 +21,19 @@ import {
 } from "@/features/enrollments/server/actions";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 import { compressMoves, type PendingMove } from "@/features/timetable/lib/move-compress";
-import { resolveDropTarget } from "@/features/timetable/lib/hapban";
+import { resolveDropTarget, shouldOpenClassPick, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, sameDaySet, zoneAttendanceDays } from "@/features/timetable/lib/split-attendance";
 import {
   TimetableEditContext,
   useTimetableEdit,
+  type ClassPickCandidate,
+  type ClassPickTarget,
   type DayEditTarget,
   type HoveredStudent,
   type IncomingStudent,
   type PendingTarget,
 } from "./edit-context";
+import { IndexBadge } from "./student-rows";
 
 type Queued = PendingMove & { fromClassName: string; toClassName: string; name: string };
 
@@ -40,8 +43,12 @@ type DropData = {
   classId?: string;
   slotId?: string;
   day?: string;
-  /** 합반 카드의 본문/요일존에만 실림(구성 반 id들) — 멤버 드롭=자기 반 요일편집으로 재해석(resolveDropTarget). */
-  memberClassIds?: string[];
+  /** 합반 카드 드롭존에만 실림(구성 반들) — 멤버 드롭=자기 반 요일편집 재해석 + 외부 드롭=반+요일 팝업 후보. */
+  memberClasses?: HapbanMemberClass[];
+  /** 합반 셀이 덮는 요일(팝업 요일 토글용). */
+  coveringDays?: string[];
+  /** 합반 드롭존 종류 — segment=반 미리 선택 팝업, roster=본문/요일존(멤버 재해석 대상). */
+  hapbanZone?: "segment" | "roster";
 };
 
 /**
@@ -85,6 +92,9 @@ export function TimetableEditProvider({
   // 편집 모드에서 학생 클릭 → 같은 반 요일 편집 팝오버. 적용 시 이동 배치(pending)에 같은 반 변경으로 큐잉.
   const [dayEdit, setDayEdit] = useState<DayEditTarget | null>(null);
   const openDayEdit = useCallback((t: DayEditTarget) => setDayEdit(t), []);
+  // 합반 드롭 → 반+요일 선택 팝업(외부 학생 어디든 / 멤버의 다른 세그먼트). 선택해야 큐잉, 취소=무효.
+  const [classPick, setClassPick] = useState<ClassPickTarget | null>(null);
+  const openClassPick = useCallback((t: ClassPickTarget) => setClassPick(t), []);
 
   // 학생 위에 마우스 올린 채 Delete → 오늘 수강 종료 확인 팝업. 입력창 타이핑 중엔 무시. 편집 모드에서만.
   useEffect(() => {
@@ -193,6 +203,23 @@ export function TimetableEditProvider({
     setQueue((prev) => [...prev, move]);
   }
 
+  // 합반 반+요일 선택 팝업 적용 → 고른 반·요일로 이동 큐잉. toSlotId=그 반 세그먼트 slot(전입예정 배지 인덱스 정확).
+  function applyClassPick(picked: ClassPickCandidate, days: string[]) {
+    if (!classPick) return;
+    queueMove({
+      enrollmentId: classPick.enrollmentId,
+      fromClassId: classPick.fromClassId,
+      fromClassName: classPick.fromClassName,
+      toClassId: picked.classId,
+      toClassName: picked.className,
+      name: classPick.name,
+      toSlotId: picked.slotId,
+      toDays: days,
+      fromDays: classPick.fromDays,
+    });
+    setClassPick(null);
+  }
+
   // 같은 반 요일 편집(팝오버) → toClassId=fromClassId + 선택 요일로 큐잉(저장 시 반영). fromClassName은 배지에 안 쓰임.
   function applyDayEdit(days: string[]) {
     if (!dayEdit) return;
@@ -289,6 +316,7 @@ export function TimetableEditProvider({
         dateFloor,
         setHovered,
         openDayEdit,
+        openClassPick,
       }}
     >
       {children}
@@ -304,6 +332,9 @@ export function TimetableEditProvider({
       ) : null}
       {dayEdit ? (
         <DayEditPopover target={dayEdit} onCancel={() => setDayEdit(null)} onApply={applyDayEdit} />
+      ) : null}
+      {classPick ? (
+        <ClassPickPopover target={classPick} onCancel={() => setClassPick(null)} onApply={applyClassPick} />
       ) : null}
     </TimetableEditContext.Provider>
   );
@@ -396,6 +427,137 @@ function DayEditPopover({
             className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-md px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             적용
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 합반 드롭 반+요일 선택 팝업 — 외부 학생을 합반 셀에 놓거나 멤버를 다른 세그먼트에 놓으면
+ * "어느 반으로, 어느 요일에" 를 한 번에 고른다(DayEditPopover와 동일 문법). 세그먼트 드롭=그 반,
+ * 요일존 드롭=그 요일 미리 선택. 이미 열린 수강이 있는 반은 비활성("이미 소속" — 저장 시 GiST 실패 방지).
+ */
+function ClassPickPopover({
+  target,
+  onCancel,
+  onApply,
+}: {
+  target: ClassPickTarget;
+  onCancel: () => void;
+  onApply: (picked: ClassPickCandidate, days: string[]) => void;
+}) {
+  const covers = target.coveringDays;
+  const showDays = covers.length >= 2; // 단일 요일 셀이면 요일 선택 의미 없음(전 요일)
+  const [pickedId, setPickedId] = useState<string | null>(
+    target.presetClassId && target.candidates.some((c) => c.classId === target.presetClassId && !c.disabled)
+      ? target.presetClassId
+      : null,
+  );
+  const [sel, setSel] = useState<Set<string>>(
+    target.presetDay ? new Set([target.presetDay]) : new Set(covers),
+  );
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  const toggle = (d: string) =>
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+  // 저장값 = 전부 선택이면 [](전 요일), 아니면 선택 요일(요일순).
+  const pickedDays = covers.filter((d) => sel.has(d));
+  const toDays = !showDays || pickedDays.length === covers.length ? [] : pickedDays;
+  const noDay = showDays && pickedDays.length === 0;
+  const picked = target.candidates.find((c) => c.classId === pickedId) ?? null;
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-card border-line w-[300px] rounded-lg border p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-foreground text-sm font-bold">
+          <span className="text-text-dim font-normal">{target.name} · </span>합반으로 이동
+        </p>
+        <p className="text-text-faint mt-1 text-[11px]">
+          합반 수업입니다 — 이동할 반{showDays ? "과 등원 요일을" : "을"} 선택하세요.
+        </p>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {target.candidates.map((c) => {
+            const on = pickedId === c.classId;
+            return (
+              <button
+                key={c.classId}
+                type="button"
+                onClick={() => !c.disabled && setPickedId(c.classId)}
+                disabled={c.disabled}
+                aria-pressed={on}
+                className={`flex items-baseline gap-1.5 rounded-md border px-3 py-1.5 text-left text-sm font-medium transition ${
+                  on
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : c.disabled
+                      ? "border-line text-text-faint cursor-not-allowed opacity-60"
+                      : "border-line text-foreground hover:bg-bg-soft"
+                }`}
+              >
+                <IndexBadge badge={String(c.index)} />
+                <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip">{c.className}</span>
+                {c.disabled ? <span className="shrink-0 text-[10px]">이미 소속</span> : null}
+              </button>
+            );
+          })}
+        </div>
+        {showDays ? (
+          <>
+            <p className="text-text-dim mt-3 text-[11px] font-bold">등원 요일 (전부 = 전 요일)</p>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {covers.map((d) => {
+                const on = sel.has(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggle(d)}
+                    aria-pressed={on}
+                    className={`min-w-[44px] rounded-md border px-3 py-1.5 text-sm font-medium transition ${
+                      on
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-line text-text-dim hover:bg-bg-soft"
+                    }`}
+                  >
+                    {DAY_LABEL[d] ?? d}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+        {noDay ? <p className="text-chart-4 mt-2 text-xs">최소 한 요일은 선택해야 합니다.</p> : null}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs font-medium transition"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={() => picked && onApply(picked, toDays)}
+            disabled={!picked || noDay}
+            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-md px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+          >
+            이동
           </button>
         </div>
       </div>
@@ -557,7 +719,7 @@ const preferDayZone: CollisionDetection = (args) => {
 /** DnD 드롭영역 — 시간표 그리드를 감싼다. 편집 모드에서만 이동을 큐에 누적.
  * DragOverlay로 잡은 학생 이름 칩이 커서를 따라다녀 "끌고 있다"는 느낌을 준다. */
 export function TimetableDndArea({ children }: { children: ReactNode }) {
-  const { editing, queueMove } = useTimetableEdit();
+  const { editing, queueMove, openClassPick } = useTimetableEdit();
   const [dragName, setDragName] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -590,12 +752,33 @@ export function TimetableDndArea({ children }: { children: ReactNode }) {
     const enrollmentId = data?.enrollmentId ?? activeIdStr.slice("student:".length);
     const fromClassId = data?.classId ?? ""; // 출발 반 id(실제 반 id)
     if (!fromClassId) return;
+    // 합반 드롭 = 반+요일 선택 팝업(외부 학생 어디든 / 멤버의 다른 세그먼트) — 조용히 대표 반으로 보내지
+    // 않고 명시적으로 고르게 한다. 세그먼트 드롭=그 반, 요일존 드롭=그 요일이 미리 선택된 채 열림.
+    if (shouldOpenClassPick(fromClassId, overData)) {
+      const mc = overData.memberClasses!;
+      openClassPick({
+        enrollmentId,
+        name: data?.name ?? "학생",
+        fromClassId,
+        fromClassName: data?.fromClassName ?? "다른 반",
+        fromDays: data?.attendanceDays ?? [],
+        coveringDays: overData.coveringDays ?? [],
+        presetClassId: overData.hapbanZone === "segment" ? overData.classId : undefined,
+        presetDay: overData.day,
+        candidates: mc.map((c, i) => ({
+          index: i + 1,
+          ...c,
+          disabled: data?.blockingClassIds?.includes(c.classId) ?? false,
+        })),
+      });
+      return;
+    }
     // 합반 드롭 의미(순수 규칙, lib/hapban.ts): ① 멤버의 카드 내(본문/요일존) 드롭 = 자기 반 요일편집으로
     // 재해석 ② 이미 열린 수강이 있는 반으로의 이동 = no-op(저장 시 GiST 실패 방지) ③ 그 외 기존 동작.
     // ⚠️ 반환 계약: {toClassId, day}만 — toSlotId/toClassName은 overData에서 그대로 유지(전입예정 배지 근거).
     const target = resolveDropTarget(
       { classId: fromClassId, blockingClassIds: data?.blockingClassIds },
-      overData,
+      { ...overData, memberClassIds: overData.memberClasses?.map((c) => c.classId) },
     );
     if (!target) return;
     const toClassId = target.toClassId;
