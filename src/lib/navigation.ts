@@ -51,6 +51,7 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "교재", href: "/billing?tab=textbooks" },
     { label: "지출", href: "/billing?tab=expenses" },
     { label: "수강료 계산기", href: "/billing?tab=calculator" },
+    { label: "환불 요청서", href: "/billing?tab=refunds" },
   ],
   owner: [
     { label: "프로필·브랜드", href: "/owner" },
