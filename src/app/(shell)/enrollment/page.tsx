@@ -3,7 +3,10 @@ import { QrCode, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
+import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
+import { getUnpushedIntakeConsultations } from "@/features/integrations/server/makeedu-sync";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { ConsultationTabs } from "../consultations/_components/consultation-tabs";
 import {
   getConsultantOptions,
@@ -47,7 +50,7 @@ export default async function EnrollmentPage({
     view?: string;
   }>;
 }) {
-  await requireAccess("enrollment");
+  const user = await requireAccess("enrollment");
   const { month, consultant, q, outcome, view: viewParam } = await searchParams;
   const selectedMonth = month ?? null;
   const selectedConsultant = consultant ?? null;
@@ -55,7 +58,10 @@ export default async function EnrollmentPage({
   const searchQuery = q?.trim() || null;
   const view: "kanban" | "table" = viewParam === "table" ? "table" : "kanban";
 
-  const [items, consultants] = await Promise.all([
+  // makeedu 역동기화 카드 노출 — `integrations` 쓰기 권한(기본 master/admin/manager)일 때만 후보 조회.
+  // (권한 판정은 캐시된 매트릭스 재사용 = 추가 쿼리 0. 후보 조회는 권한자에게만 1쿼리, 아래 병렬 B4.)
+  const canPushMakeedu = await canWriteTenant(user.systemRole, "integrations");
+  const [items, consultants, pushCandidates] = await Promise.all([
     getEnrollmentConsultations({
       month: selectedMonth,
       consultantId: selectedConsultant,
@@ -63,6 +69,7 @@ export default async function EnrollmentPage({
       q: searchQuery,
     }),
     getConsultantOptions(),
+    canPushMakeedu ? getUnpushedIntakeConsultations() : Promise.resolve([]),
   ]);
 
   const aiDone = items.filter((i) => i.outcome === "ai_done").length;
@@ -119,6 +126,10 @@ export default async function EnrollmentPage({
         view={view}
         consultants={consultants}
       />
+
+      {/* 역동기화 — makeedu에 아직 없는 QR 접수 상담. 후보가 있을 때만(빈 상태는 owner 연동 면 담당),
+          integrations 쓰기 권한자에게만. 처리하면(전송/등록) 사라지는 액션 큐라 보드 위에 노출. */}
+      {pushCandidates.length > 0 ? <MakeeduPushCard candidates={pushCandidates} /> : null}
 
       {items.length === 0 ? (
         <EmptyState

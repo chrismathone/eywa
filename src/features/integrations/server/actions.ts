@@ -6,6 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -93,7 +94,8 @@ export type TriggerSyncState =
   | undefined;
 
 /**
- * makeedu 동기화를 **지금 즉시 1회** 실행 (master 전용).
+ * makeedu 동기화를 **지금 즉시 1회** 실행.
+ * 게이트 = `integrations` 권한 키(canWriteTenant — 기본 master/admin/manager, 역할·권한 면에서 조정 가능).
  * - 로컬/셀프호스티드 서버(스크립트 있음): `sync-all.cjs`를 직접 spawn(즉시 실행, 기존 경로).
  * - Vercel(서버리스: 스크립트 미포함·원격 IP·ephemeral): 직접 실행이 불가하므로 **makeedu_sync_requests(0069a)에
  *   요청 행을 남긴다** → 동기화 PC의 상주 워처(watch-sync-requests.cjs, 15초 폴링)가 감지해 대신 실행.
@@ -103,8 +105,22 @@ export type TriggerSyncState =
 export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") {
-    return { error: "동기화 실행은 원장(master)만 할 수 있습니다" };
+  if (!(await canWriteTenant(user.systemRole, "integrations"))) {
+    return { error: "동기화 실행 권한이 없습니다 — 학원 설정 › 역할·권한의 'makeedu 연동'에서 조정할 수 있습니다" };
+  }
+
+  // 공유 쿨다운(5분)·진행 중을 **서버에서도** 강제 — 어느 화면(owner 카드·목록 배지 버튼)에서 누르든,
+  // 클라 초기 락이 없어도 쿨다운 중 재실행/중복 큐잉이 안 된다(목록 배지 버튼은 페이지 로드 비용 0을 위해
+  // 락 선조회를 안 하므로 이 서버 강제가 유일한 방어다).
+  const lock = await getMakeeduSyncLock();
+  if (lock.running || (lock.busyUntil && Date.parse(lock.busyUntil) > Date.now())) {
+    return {
+      ok: true,
+      message: lock.running
+        ? "이미 다른 곳에서 동기화가 실행 중입니다 — 완료까지 기다려 주세요."
+        : "조금 전에 동기화가 실행됐습니다 — 아래 남은 시간 후 다시 시도할 수 있습니다.",
+      lock,
+    };
   }
 
   const cwd = process.cwd();
@@ -154,8 +170,8 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
 }
 
 /**
- * Vercel(서버리스) 경로: makeedu_sync_requests에 pending 요청을 남긴다(admin client — master 게이트는
- * 호출부에서 이미 통과). 동기화 PC의 워처가 15초 내 감지해 sync-all을 실행하고 done/error로 마감한다.
+ * Vercel(서버리스) 경로: makeedu_sync_requests에 pending 요청을 남긴다(admin client — integrations 쓰기
+ * 게이트는 호출부에서 이미 통과). 동기화 PC의 워처가 15초 내 감지해 sync-all을 실행하고 done/error로 마감한다.
  * 이미 pending/running 요청이 있으면 중복 insert 없이 그 사실만 알린다(연타 = 동기화 1회).
  */
 async function enqueueSyncRequest(tenantId: string, userId: string): Promise<TriggerSyncState> {
@@ -199,14 +215,17 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
 export type PushState = { error?: string; ok?: boolean; message?: string } | undefined;
 
 /**
- * 역동기화(eywa→makeedu) — 선택한 QR 공개접수 상담을 makeedu 예비상담 등록 큐(makeedu_push_requests)에 넣는다 (master 전용).
+ * 역동기화(eywa→makeedu) — 선택한 QR 공개접수 상담을 makeedu 예비상담 등록 큐(makeedu_push_requests)에 넣는다.
+ * 게이트 = `integrations` 권한 키(canWriteTenant — 기본 master/admin/manager, 역할·권한 면에서 조정 가능).
  * 실제 makeedu 쓰기는 동기화 PC 워처(watch-sync-requests.cjs → push-consultations.cjs)가 신뢰 IP에서 수행.
  * 멱등: 이미 pending/running 요청이 있거나 이미 푸시된(makeedu_id/makeedu_pushed_at) 상담은 큐잉하지 않는다.
  */
 export async function enqueueConsultationPush(ids: string[]): Promise<PushState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "makeedu 전송은 원장(master)만 할 수 있습니다" };
+  if (!(await canWriteTenant(user.systemRole, "integrations"))) {
+    return { error: "makeedu 전송 권한이 없습니다 — 학원 설정 › 역할·권한의 'makeedu 연동'에서 조정할 수 있습니다" };
+  }
   const clean = [...new Set((ids ?? []).map((s) => String(s)).filter(Boolean))];
   if (clean.length === 0) return { error: "전송할 상담을 선택하세요" };
 
@@ -244,6 +263,7 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   if (insErr) return { error: `전송 요청 접수 실패: ${insErr.message}` };
 
   revalidatePath("/owner");
+  revalidatePath("/enrollment"); // 전송 카드가 등록상담 화면에도 뜬다(2026-07-03)
   return {
     ok: true,
     message:

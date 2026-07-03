@@ -13,7 +13,7 @@ import { SheetsTargetForm } from "./sheets-target-form";
 import { MakeeduSyncCard } from "./makeedu-sync-card";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
-import { MakeeduPushCard } from "./makeedu-push-card";
+import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.

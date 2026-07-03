@@ -34,6 +34,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
   textbook_requests: "교재 요청",
   meetings: "회의록",
   documents: "데이터베이스",
+  integrations: "makeedu 연동",
   help: "도움말",
   admin: "관리자 도구",
   owner: "학원 설정",
