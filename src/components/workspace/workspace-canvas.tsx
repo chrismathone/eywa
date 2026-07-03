@@ -125,6 +125,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         title?: string;
         href?: string;
         autoClose?: boolean;
+        dirty?: boolean;
       } | null;
       if (!data || !e.source) return;
       let sourceWinId: string | null = null;
@@ -138,6 +139,11 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       const st = useWindowStore.getState();
       if (data.type === "eywa-window-focus") {
         if (st.focusedId !== sourceWinId) st.focus(sourceWinId);
+        return;
+      }
+      if (data.type === "eywa-window-dirty") {
+        // 창 본문 폼의 미저장 변경 여부(useUnsavedGuard) → 그 창 id로 저장. FloatingWindow가 X/Esc 확인에 사용.
+        st.setWindowDirty(sourceWinId, data.dirty === true);
         return;
       }
       if (data.type === "eywa-open-window" && data.id && data.href) {

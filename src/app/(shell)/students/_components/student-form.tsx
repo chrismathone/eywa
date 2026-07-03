@@ -12,6 +12,8 @@ import {
 } from "@/features/students/server/actions";
 import type { TeacherOption } from "@/features/students/server/queries";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 
@@ -100,6 +102,8 @@ export function StudentForm({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
+  // 미저장 변경 시 창 닫기(X)·Esc에서 확인. 생성/수정 모두.
+  const { markSaved } = useUnsavedGuard({ formRef });
 
   // 로컬 초안 자동저장 — 입력 중 IDB 보관, 다시 열면 복구 배너. 전 필드 언컨트롤드라 onRestore 불필요.
   // status는 빈 옵션 없이 항상 'prospect' 등 기본값이 제출되므로 빈 폼 오탐 배너 방지로 의미판정서 제외.
@@ -117,9 +121,10 @@ export function StudentForm({
       handledNonce.current = state.nonce;
       clearDraft();
       notifySaved();
+      markSaved(); // dirty 해제 → 저장 후 닫아도 확인 안 뜸
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, notifySaved, router, clearDraft]);
+  }, [state, notifySaved, markSaved, router, clearDraft]);
 
   const v = initialValue ?? {
     name: "",
@@ -467,9 +472,9 @@ export function StudentForm({
         </p>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 border-t pt-5">
+      <FormActionBar>
         <SubmitButton mode={mode} />
-      </div>
+      </FormActionBar>
     </form>
   );
 }

@@ -107,6 +107,11 @@ export function RouteWindow({ win }: { win: Win }) {
       }
     };
     const onLoad = () => {
+      // 전체 문서 로드(하드 리로드·⟳·브라우저 back)는 iframe React 컨텍스트를 파괴하며 언마운트 cleanup(미저장
+      // 가드의 send(false))을 못 돌린다 → 부모에 stale dirty=true가 남아 리로드된 pristine 폼을 거짓 잠금.
+      // 새 문서는 항상 clean에서 시작하므로 로드 시 dirty 해제(편집하면 새 폼의 가드가 다시 dirty를 올림).
+      // (소프트 client nav[드릴인/백]은 load가 안 떠 이 경로를 안 타고, 폼 언마운트 cleanup이 이미 처리.)
+      useWindowStore.getState().setWindowDirty(win.id, false);
       sync();
       try {
         // head 서브트리 관찰 — <title> 텍스트 변경뿐 아니라 client-side nav 시 title 엘리먼트

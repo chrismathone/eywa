@@ -14,6 +14,8 @@ import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-cont
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
@@ -174,6 +176,7 @@ export function ConsultationFullForm({
   // 동시편집 가드(same-browser 저장경고) + cross-user "수정중" presence(edit 모드) — 둘 다 공존.
   const editScope = !isCreate && v.id ? `consultation:${v.id}` : undefined;
   const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
+  const { markSaved } = useUnsavedGuard({ formRef });
 
   // 생성·수정 통합 제출 — 녹음이 있으면 클라에서 티켓 발급→업로드 후 audioPath를 실어 액션 호출(생성/수정 공통).
   // 수정 모드도 녹음 첨부 가능(QR 접수건을 상담사가 수정하며 상담 녹음 → 전사·AI 분석 재실행).
@@ -225,11 +228,14 @@ export function ConsultationFullForm({
         if (result?.error) {
           setSubmitError(result.error);
           setPhase("idle");
+          // 부분 성공(필드는 저장, 녹음 첨부만 실패)이면 폼은 저장된 상태 — 미저장 가드 해제(닫아도 거짓 확인 안 뜸).
+          if (result.saved) markSaved();
           return;
         }
         if (result?.ok && v.id) {
           clearDraft();
           notifySaved();
+          markSaved();
           router.push(`/enrollment/${v.id}`);
           router.refresh();
         }
@@ -238,6 +244,7 @@ export function ConsultationFullForm({
       const msg = err instanceof Error ? err.message : String(err);
       if (/NEXT_REDIRECT/.test(msg)) {
         clearDraft();
+        markSaved();
         return;
       }
       setSubmitError(msg);
@@ -624,7 +631,7 @@ export function ConsultationFullForm({
         </p>
       ) : null}
 
-      <div className="flex justify-end">
+      <FormActionBar>
         <Button type="submit" disabled={busy || recordingActive}>
           {recordingActive
             ? "녹음 중 — 정지 후 저장"
@@ -637,7 +644,7 @@ export function ConsultationFullForm({
                   : "저장"}
           {isCreate ? <ArrowRight className="size-4" /> : <Save className="size-4" />}
         </Button>
-      </div>
+      </FormActionBar>
     </form>
   );
 }

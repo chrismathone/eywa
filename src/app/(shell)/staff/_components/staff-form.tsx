@@ -13,6 +13,8 @@ import {
 import type { SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 
@@ -62,6 +64,7 @@ export function StaffForm({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
+  const { markSaved } = useUnsavedGuard({ formRef });
 
   const v: StaffFormValue = initialValue ?? {
     displayName: "",
@@ -107,9 +110,10 @@ export function StaffForm({
       handledNonce.current = state.nonce;
       clearDraft();
       notifySaved();
+      markSaved();
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, notifySaved, router, clearDraft]);
+  }, [state, notifySaved, markSaved, router, clearDraft]);
 
   const errors = state?.fieldErrors ?? {};
 
@@ -297,9 +301,9 @@ export function StaffForm({
         </p>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 border-t pt-5">
+      <FormActionBar>
         <SubmitButton mode={mode} />
-      </div>
+      </FormActionBar>
     </form>
   );
 }

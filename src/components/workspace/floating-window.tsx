@@ -62,6 +62,11 @@ export function FloatingWindow({
     [win.id],
   );
 
+  // 미저장 변경(dirty) — 창 안 폼이 작성 중이면 닫기(X)·Esc 시 "정말 닫을까요?" 확인.
+  // useUnsavedGuard(iframe)가 부모로 postMessage → workspace-canvas가 iframe→win.id 매칭 후 store에 세팅.
+  const dirty = useWindowStore((s) => s.dirty[win.id] ?? false);
+  const [confirmClose, setConfirmClose] = useState(false);
+
   // 스포트라이트: 상단에 올라온(spotlightRaised) 창들은 상단 영역에 가로 타일(spotlightTile, store rect
   // 불변→해제 시 글라이드 복원), 나머지는 숨김(마운트 유지=iframe 보존, 카드 클릭 raise 시 리로드 없음).
   const spotlightRaised = useWindowStore((s) => s.spotlightRaised);
@@ -112,6 +117,20 @@ export function FloatingWindow({
     if (win.kind === "route") router.refresh();
   }
 
+  // 닫기 요청(X·Esc) — 미저장 변경이 있으면 즉시 닫지 않고 확인부터. 잠금(녹음) 중이면 애초에 막힘.
+  function requestClose() {
+    if (locked) return;
+    if (confirmClose) {
+      setConfirmClose(false); // 확인이 열린 상태서 Esc = 확인 취소(키보드로 되돌리기).
+      return;
+    }
+    if (dirty) {
+      setConfirmClose(true);
+      return;
+    }
+    runExit(closeAndRefresh);
+  }
+
   // 최소화는 언마운트하지 않고 숨김(display:none) — iframe 문서/스크롤 상태 보존(진짜 멀티태스킹).
   return (
     <div
@@ -136,7 +155,7 @@ export function FloatingWindow({
         aria-label={win.params.title}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === "Escape" && !locked) runExit(closeAndRefresh);
+          if (e.key === "Escape" && !locked) requestClose();
         }}
         className={`bg-card relative flex h-full w-full flex-col overflow-hidden rounded-xl border ${
           animOff ? "" : `duration-150 ${exiting ? "animate-out fade-out-0 zoom-out-95" : "animate-in fade-in-0 zoom-in-95"}`
@@ -260,7 +279,7 @@ export function FloatingWindow({
               type="button"
               aria-label="닫기"
               title={locked ? "녹음 중 — 정지 후 닫기 가능" : "닫기"}
-              onClick={() => { if (!locked) runExit(closeAndRefresh); }}
+              onClick={requestClose}
               disabled={locked}
               className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[3px] transition hover:text-white disabled:pointer-events-none disabled:opacity-40"
             >
@@ -273,6 +292,40 @@ export function FloatingWindow({
         <div className="min-h-0 flex-1">
           <WindowContent win={win} />
         </div>
+
+        {/* 미저장 변경 상태에서 닫기 시도 시 확인 — 이 창 위 오버레이(작성 중 내용 유실 방지). */}
+        {confirmClose ? (
+          <div
+            className="absolute inset-0 z-40 flex items-center justify-center bg-ink/40 p-4"
+            onPointerDown={(e) => {
+              if (e.target === e.currentTarget) setConfirmClose(false);
+            }}
+          >
+            <div className="bg-card border-line shadow-modal w-full max-w-xs rounded-lg border p-5">
+              <p className="text-foreground text-sm font-semibold">저장하지 않고 닫을까요?</p>
+              <p className="text-text-dim mt-1.5 text-xs leading-relaxed">
+                작성 중인 변경 내용이 있습니다. 닫으면 저장하지 않은 내용이 사라질 수 있어요.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setConfirmClose(false)}
+                  className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-md border px-3 py-1.5 text-xs font-medium transition"
+                >
+                  계속 작성
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmClose(false); runExit(closeAndRefresh); }}
+                  className="bg-danger rounded-md px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+                >
+                  저장 안 함, 닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* 8방향 리사이즈 핸들 (스포트라이트 상단 창은 잠금) */}
         {spot

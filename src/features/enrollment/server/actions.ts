@@ -366,7 +366,8 @@ async function attachAudioAndTranscribe(
   });
 }
 
-export type UpdateConsultationState = { error?: string; ok?: boolean } | undefined;
+// saved=true인 error는 "필드는 저장됐고 녹음 첨부만 실패"(부분 성공) — 클라가 미저장 가드를 해제(markSaved)하되 재시도 안내는 유지.
+export type UpdateConsultationState = { error?: string; ok?: boolean; saved?: boolean } | undefined;
 
 /** 등록상담 레코드 수정 — 생성과 동일 필드. learning_history는 기존 키(weakSubjects 등) 보존하며 병합. */
 export async function updateEnrollmentConsultation(
@@ -423,7 +424,7 @@ export async function updateEnrollmentConsultation(
       // 필드는 멱등이고 녹음만 다시 첨부되므로 그대로 다시 저장하면 된다.
       revalidatePath("/enrollment");
       revalidatePath(`/enrollment/${id}`);
-      return { error: `입력 내용은 저장되었습니다. 녹음 첨부만 실패: ${audioErr}` };
+      return { error: `입력 내용은 저장되었습니다. 녹음 첨부만 실패: ${audioErr}`, saved: true };
     }
   }
 

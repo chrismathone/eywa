@@ -9,6 +9,8 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
 import {
   createStudentConsultation,
@@ -120,6 +122,7 @@ export function ConsultationForm({
   // 동시편집 가드(same-browser 저장경고) + cross-user "수정중" presence(edit 모드).
   const editScope = mode === "edit" && initialValue?.id ? `student-consultation:${initialValue.id}` : undefined;
   const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
+  const { markSaved } = useUnsavedGuard({ formRef });
 
   // 저장 성공 확정(nonce) 후에만 초안 삭제 → 이동(B-2). 제출 시점 무조건 clear는 서버 검증 실패 시
   // (학생 미선택·요약 5자 미만 등) 입력이 먼저 사라져 창을 닫으면 복구 불가라 성공 기반으로 전환.
@@ -129,9 +132,10 @@ export function ConsultationForm({
       handledNonce.current = state.nonce;
       clearDraft();
       notifySaved();
+      markSaved();
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, router, clearDraft, notifySaved]);
+  }, [state, router, clearDraft, notifySaved, markSaved]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-5">
@@ -274,9 +278,9 @@ export function ConsultationForm({
         </p>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 border-t pt-5">
+      <FormActionBar>
         <SubmitButton mode={mode} />
-      </div>
+      </FormActionBar>
     </form>
   );
 }

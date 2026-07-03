@@ -1804,6 +1804,28 @@ billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment �
 
 > **한 줄 규칙: 한 액션 행의 버튼은 공용 `<Button>` 기본 크기로 통일(색=variant만 차이). 손깎은 text-xs 링크·`size="sm"`를 1차 버튼 옆에 두지 말 것.**
 
+### 저장 버튼 = 창 하단 고정 sticky 바 + 미저장 닫기 가드 (⚠️ 창 데이터입력 폼 기본값, 2026-07-03)
+창(iframe)으로 열리는 **데이터 입력 폼**(생성/수정)은 저장 버튼이 폼 맨 아래에 있어 긴 폼일수록 스크롤해야 눌렀다(사용자
+제보: "위치가 다 제각각"). **모든 창 폼의 저장 액션은 우하단에 sticky로 고정**해 스크롤 위치와 무관하게 항상 보이고,
+같은 위치라 창마다 헷갈리지 않는다. + **작성 중(dirty)인 폼의 창을 닫으면(X/Esc) "저장하지 않고 닫을까요?" 확인**.
+- **저장 바** = [`<FormActionBar>`](src/components/forms/form-action-bar.tsx)(sticky bottom-0 z-20, 우측정렬 backdrop-blur).
+  폼의 제출 버튼(들)을 이 바로 감싼다. 손깎은 `justify-end border-t pt-N` footer는 이걸로 교체. 1·2차 버튼은 위 "버튼 크기" 규칙대로 바 안에.
+- **미저장 닫기 가드** = [`useUnsavedGuard({ formRef, enabled? })`](src/components/workspace/use-unsaved-guard.ts) → `{ markSaved }`.
+  · **전달 = iframe→부모 postMessage**(`eywa-window-dirty`) — winId를 경로로 추측하지 않고 부모([workspace-canvas](src/components/workspace/workspace-canvas.tsx))가
+    `event.source`(=이 iframe의 contentWindow)를 iframeRegistry와 대조해 **정확한 창**을 찾는다(드릴인·복제창·새 창 안전). [[#69]]
+  · dirty는 `serializeForm(formRef)` ↔ 마운트 baseline 비교. **저장 성공 확정 후 `markSaved()`** 호출(baseline 재스냅샷+dirty 해제 → 저장하고 닫아도 거짓 확인 안 뜸).
+  · 부모 [floating-window](src/components/workspace/floating-window.tsx) `requestClose`가 `dirty[win.id]`면 확인 오버레이(계속 작성/저장 안 함, 닫기). Esc가 확인을 되돌린다.
+- **적용 5단계**(레퍼런스 [student-form](<src/app/(shell)/students/_components/student-form.tsx>)): ① `const formRef=useRef` + `<form ref={formRef}>`(동시편집 가드가 이미 쓰면 재사용)
+  ② `const {markSaved}=useUnsavedGuard({formRef})` ③ 제출 버튼을 `<FormActionBar>`로 감쌈 ④ **저장 성공(nonce/ok) effect에서 `markSaved()`** ⑤ effect deps에 markSaved.
+- **적용 현황(2026-07-03)**: ✅ student·staff·class·consultation(학생상담)·enrollment 등록상담(full-form)·owner section-form + resume-sheet(편집 시 하단 바, 뷰 툴바는 인쇄/삭제만).
+  ⏭️ 제외(구조가 다름) = 시험 batch-score-grid(상세 페이지 하위 섹션)·수강료 계산기(다패널 견적, 컨트롤드 state)·exam-form-dialog(모달, 자체 취소/저장).
+- **⚠️⚠️ 컨트롤드 입력이 hidden input에 값을 미러하는 폼**(학원설정 section-form의 `data` jsonb·등록상담 과목점수 `subjectDetails`)은
+  **React 커밋이 네이티브 `input` 리스너보다 늦어** 즉시 `serializeForm`하면 stale을 읽어 dirty를 놓친다 → 가드가 **`setTimeout(0)`으로 미뤄 커밋 후 비교**(적대리뷰 HIGH). 새 컨트롤드-미러 폼도 이 경로로 자동 커버 + **값을 hidden input에 반드시 미러**해야 스냅샷이 본다.
+- **알려진 한계(수용, 데이터손실 경고는 유지)**: `배경으로 보내기`·창→배경 드래그·창 6개 초과 축출은 앱 확인을 안 거쳐 dirty 폼을 파괴할 수 있으나 드물고 의도적 제스처
+  라 문서화만(기존 동시편집 가드도 미커버). 창 자체 하드리로드(⟳)·브라우저 back(전체 네비)은 iframe 네이티브 `beforeunload`가 뜬다(데이터손실 경고라 무해). 진짜 실시간 충돌방지(낙관적 동시성)는 별개.
+
+> **한 줄 규칙: 창 폼의 저장은 `<FormActionBar>`(우하단 sticky)로, 미저장 닫기는 `useUnsavedGuard({formRef})`+저장성공시 `markSaved()`. 컨트롤드 값은 hidden input에 미러(가드가 setTimeout(0)로 커밋 후 읽음).**
+
 ### 줄바꿈 / 워드브레이크 — 한글 어절 단위 (⚠️ 전역, 좁은 창에서 특히 중요)
 **텍스트가 "발표·세미 / 나" 식으로 단어 한가운데서 깨지지 않게 한다.** 플로팅 창은 폭이 좁아
 (기본 480px) 이런 "얼토당토 않은 곳에서의 줄바꿈"이 흉한 뷰를 만든다. 전역 규칙이 기본을 잡는다:
@@ -2546,6 +2568,23 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
   창들 뒤 z-0, 빈 영역 클릭=나가기)으로 배경을 흐림. ② 헤더 배경탭은 숨기되([background-tabs](src/components/workspace/background-tabs.tsx) `spotlight→null`),
   **배경을 [spotlight-strip](src/components/workspace/spotlight-strip.tsx)의 카드("배경")로 가져온다** — 클릭=swapFocusedWithBackground(그 배경을 위로). "배경탭을 앨범 안으로".
   (⚠️ 1차엔 "배경 제거"였으나, 배경이 실제로 가려지지 않아 딤+스트립 카드로 방향 전환.)
+
+### 69. 미저장 닫기 가드 — winId 경로추측 금지(iframe→부모 postMessage) + 컨트롤드-미러 폼은 커밋 후 읽기 + 워크스페이스 HMR은 stale
+창 폼의 "작성 중 닫으면 확인"([useUnsavedGuard](src/components/workspace/use-unsaved-guard.ts))을 만들며 3함정:
+- **① winId를 경로로 추측하면 드릴인에서 깨진다**: 처음엔 `windowIdForHref(pathname)`로 창 id를 계산해 BroadcastChannel로 dirty를
+  보냈는데, 드릴인 창(목록→상세→수정)은 **iframe pathname이 바뀌어도 창 id는 그대로**(`route:students/123`)라 계산한 id(`students/123/edit`)와
+  **불일치 → dirty가 엉뚱한/없는 창으로** 갔다. → **iframe이 `window.parent`로 postMessage**하고 부모(workspace-canvas)가 `event.source ===
+  el.contentWindow`로 iframeRegistry를 뒤져 **프레임 단위로 정확한 창**을 찾는다(EmbedFocusSignal·shift+클릭 브리지와 동일). 창(iframe)이 아니면
+  `window.parent===window`라 안 보냄(전체화면·미니셸 무해).
+- **② 컨트롤드 입력이 hidden input에 값을 미러하는 폼은 즉시 `serializeForm`하면 stale**: 학원설정 section-form은 편집 위젯이 unnamed
+  controlled이고 값은 `<input name="data" value={JSON.stringify(payload)}>`에만 실린다. 네이티브 `input` 리스너는 **React 커밋 전(버블 단계)**
+  에 돌아 옛 `data`를 읽어 dirty=false로 놓쳤다(적대리뷰 HIGH — "타이핑 후 blur 없이 X" 흐름에서 무음 닫힘). → 리스너에서 **`setTimeout(0)`으로 미뤄
+  커밋 후 비교**. uncontrolled(named defaultValue) 폼은 원래도 정상이라 무해. + 컨트롤드 값은 **hidden input에 미러돼 있어야** 스냅샷이 본다
+  (등록상담 `subjectDetails`는 이미 hidden으로 미러 중 → 자동 커버).
+- **③ 워크스페이스 모듈 HMR은 stale — 라이브 검증은 dev 재시작**: window-store(zustand+persist)·floating-window·workspace-canvas는 모듈
+  전역 상태(iframeRegistry·store 인스턴스)라 **HMR이 부분 적용**돼, 한 세션에서 이 파일들을 여러 번 고치면 실행 코드가 어긋난다(실측: 새 dirty 배선이
+  "동작 안 함"으로 보였다가 `.next` 삭제+dev 재시작 후 정상). ⚠️ 이 계열 변경의 라이브 검증은 **깨끗한 dev**에서. 검증: 재시작 후 owner 설정 창에서
+  타이핑(blur 없이)→X→확인 오버레이 / 계속 작성=유지 / Esc=확인 취소 / 저장 안 함=닫힘, 전부 통과. + resume 편집 하단 sticky 바(취소/저장).
 
 ---
 

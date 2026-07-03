@@ -4,6 +4,8 @@ import { useActionState, useEffect, useRef, type ReactNode } from "react";
 import { saveOwnerSection, type OwnerSaveState } from "@/features/owner/server/actions";
 import type { SectionKey } from "@/features/owner/settings-types";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 
 /**
  * 섹션 폼 공통 래퍼 — 편집 상태(payload)를 hidden JSON으로 직렬화해 saveOwnerSection 호출.
@@ -24,6 +26,7 @@ export function SectionForm({
   );
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
+  const { markSaved } = useUnsavedGuard({ formRef });
 
   // 저장 성공 확정(nonce) 후 동시편집 신호 발화(in-window — 이동 없음). 연속 저장마다 1회씩.
   const handledNonce = useRef<number | undefined>(undefined);
@@ -31,15 +34,18 @@ export function SectionForm({
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
       handledNonce.current = state.nonce;
       notifySaved();
+      markSaved();
     }
-  }, [state, notifySaved]);
+  }, [state, notifySaved, markSaved]);
 
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
       <input type="hidden" name="section" value={section} />
       <input type="hidden" name="data" value={JSON.stringify(payload)} />
       {children}
-      <div className="border-border flex items-center gap-3 border-t pt-4">
+      <FormActionBar>
+        {state?.ok ? <span className="text-primary mr-1 text-[12px] font-semibold">저장됨 · 테넌트 전체 적용</span> : null}
+        {state?.error ? <span className="text-danger mr-1 text-[12px]">{state.error}</span> : null}
         <button
           type="submit"
           disabled={pending}
@@ -47,9 +53,7 @@ export function SectionForm({
         >
           {pending ? "저장 중…" : "저장"}
         </button>
-        {state?.ok ? <span className="text-primary text-[12px] font-semibold">저장됨 · 테넌트 전체 적용</span> : null}
-        {state?.error ? <span className="text-danger text-[12px]">{state.error}</span> : null}
-      </div>
+      </FormActionBar>
     </form>
   );
 }

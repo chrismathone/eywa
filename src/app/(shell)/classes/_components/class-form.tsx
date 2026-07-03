@@ -16,6 +16,8 @@ import {
   type PeriodsConfig,
 } from "@/features/timetable/lib/periods";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { ScheduleGrid } from "./schedule-grid";
@@ -85,6 +87,7 @@ export function ClassForm({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const { notifySaved } = useConcurrentEditGuard({ scope, formRef });
+  const { markSaved } = useUnsavedGuard({ formRef });
 
   // 과목은 교시표(8↔10교시)를 좌우하므로 상태로 들어 그리드와 동기. select는 name=subject로 그대로 제출.
   const [subject, setSubject] = useState(defaults?.subject ?? subjects[0]?.value ?? "math");
@@ -131,9 +134,10 @@ export function ClassForm({
       handledNonce.current = state.nonce;
       clearDraft();
       notifySaved();
+      markSaved();
       if (state.redirectTo) router.push(state.redirectTo);
     }
-  }, [state, notifySaved, router, clearDraft]);
+  }, [state, notifySaved, markSaved, router, clearDraft]);
 
   const fieldErrs = state?.fieldErrors ?? {};
 
@@ -284,14 +288,14 @@ export function ClassForm({
       ) : null}
       {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
 
-      <footer className="flex items-center justify-end gap-2 border-t pt-4">
+      <FormActionBar>
         <Submit mode={mode} />
         {state?.teacherConflict ? (
           <Button type="submit" variant="outline" name="ignoreTeacherConflict" value="1">
             겹침 무시하고 저장
           </Button>
         ) : null}
-      </footer>
+      </FormActionBar>
     </form>
   );
 }
