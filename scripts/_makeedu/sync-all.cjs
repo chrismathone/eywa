@@ -26,6 +26,13 @@ const APPLY = process.argv.includes("--apply");
 const SKIP_SCRAPE = process.argv.includes("--no-scrape");
 const HERE = __dirname;
 const TRIGGER = process.env.MAKEEDU_TRIGGER || "manual";
+// "누가 실행했는지"(0076a) — 앱 '지금 동기화' 버튼을 누른 user id(로컬 spawn=현재 사용자 / 원격=요청자).
+// 자동(scheduled)·CLI는 미주입 → null → UI에서 "[자동 실행]". uuid 형식만 신뢰(잘못된 값은 null 처리).
+const TRIGGERED_BY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+  process.env.MAKEEDU_TRIGGERED_BY || "",
+)
+  ? process.env.MAKEEDU_TRIGGERED_BY
+  : null;
 
 // cron이 도는 안전·멱등 도메인만(위 헤더 '제외' 참고). 스크래핑 리스트 키와 임포터를 1:1로.
 const SCRAPE_LISTS = ["students", "classes", "prospects", "invoices"];
@@ -100,13 +107,13 @@ async function finishRun(status, { failed = [], error = null } = {}) {
       skipped = true;
       // 건너뛴 실행도 로그로 남긴다("cron이 돌긴 했는데 토글 OFF였다"까지 추적).
       await sql`
-        insert into makeedu_sync_runs (tenant_id, trigger_source, status, finished_at, duration_ms)
-        values (${tenantIdG}, ${TRIGGER}, 'skipped', now(), 0)`.catch(() => {});
+        insert into makeedu_sync_runs (tenant_id, trigger_source, triggered_by, status, finished_at, duration_ms)
+        values (${tenantIdG}, ${TRIGGER}, ${TRIGGERED_BY}, 'skipped', now(), 0)`.catch(() => {});
       return;
     }
     const [r] = await sql`
-      insert into makeedu_sync_runs (tenant_id, trigger_source)
-      values (${tenantIdG}, ${TRIGGER}) returning id`.catch(() => [null]);
+      insert into makeedu_sync_runs (tenant_id, trigger_source, triggered_by)
+      values (${tenantIdG}, ${TRIGGER}, ${TRIGGERED_BY}) returning id`.catch(() => [null]);
     runId = r ? r.id : null;
     console.log("▶  makeedu 동기화 시작 — tenant:", tenantIdG, "| trigger:", TRIGGER);
   });

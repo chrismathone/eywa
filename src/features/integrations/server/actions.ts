@@ -167,7 +167,8 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
       detached: true,
       windowsHide: true, // ⚠️ Windows: detached 자식이 새 콘솔 창(도스창)을 띄우는 것을 숨김.
       stdio: ["ignore", logFd, logFd],
-      env: { ...process.env, MAKEEDU_FORCE: "true", MAKEEDU_TRIGGER: "button" },
+      // MAKEEDU_TRIGGERED_BY = 버튼 누른 사용자 → sync-all이 실행 로그에 "누가"로 남김(0076a). 원격 경로는 요청자(requested_by).
+      env: { ...process.env, MAKEEDU_FORCE: "true", MAKEEDU_TRIGGER: "button", MAKEEDU_TRIGGERED_BY: user.id },
     });
     child.unref();
     closeSync(logFd); // 자식이 fd를 dup했으므로 부모 핸들은 닫아 누수 방지.

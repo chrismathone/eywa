@@ -51,13 +51,13 @@ async function dropDb() {
   if (s) await s.end({ timeout: 1 }).catch(() => {});
 }
 
-// pending 전부를 running으로 claim(요청 N개 = 동기화 1회). returning으로 이번에 잡은 id만 확보.
+// pending 전부를 running으로 claim(요청 N개 = 동기화 1회). requested_by도 확보 → "누가 눌렀는지" 로그(0076a).
 async function claimPending() {
   return db()`
     update makeedu_sync_requests
     set status = 'running', started_at = now()
     where status = 'pending'
-    returning id`;
+    returning id, requested_by`;
 }
 
 async function finish(ids, ok, errMsg) {
@@ -81,7 +81,13 @@ function runScript(scriptRel, extraEnv) {
 }
 
 // 정방향 동기화(sync-all). 버튼과 동일 semantics: 수동 요청 = 토글 무시(MAKEEDU_FORCE). relay = 실행 로그 트리거 라벨.
-const runSync = () => runScript("sync-all.cjs", { MAKEEDU_FORCE: "true", MAKEEDU_TRIGGER: "relay" });
+// triggeredBy = 이번에 claim한 요청의 요청자 user id(여럿이면 첫 요청자) → sync-all이 실행 로그에 "누가"로 남김.
+const runSync = (triggeredBy) =>
+  runScript("sync-all.cjs", {
+    MAKEEDU_FORCE: "true",
+    MAKEEDU_TRIGGER: "relay",
+    ...(triggeredBy ? { MAKEEDU_TRIGGERED_BY: triggeredBy } : {}),
+  });
 // 역동기화 푸시(push-consultations) — 큐의 pending 요청을 스크립트가 자체 claim해 makeedu에 제출.
 const runPush = () => runScript("push-consultations.cjs", {});
 
@@ -111,8 +117,10 @@ async function heartbeat() {
       // 1) 정방향 동기화 요청.
       const claimed = await claimPending();
       if (claimed.length) {
+        // 여럿이 동시에 눌러 합쳐졌으면 첫(가장 이른) 요청자를 대표로 로그에 남긴다.
+        const requester = claimed.map((c) => c.requested_by).find(Boolean) || null;
         log(`동기화 요청 ${claimed.length}건 감지 → sync-all 실행`);
-        const { ok, tail } = runSync();
+        const { ok, tail } = runSync(requester);
         await finish(claimed, ok, ok ? null : tail || "sync-all 실패");
         log(ok ? "✅ 동기화 완료 (done)" : `✖ 동기화 실패 (error): ${tail}`);
       }

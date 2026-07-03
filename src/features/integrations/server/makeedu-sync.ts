@@ -41,6 +41,8 @@ export const getMakeeduSyncState = cache(
 export type MakeeduSyncRun = {
   id: string;
   triggerSource: string; // scheduled|button|relay|manual
+  /** 수동 실행(button/relay)을 누른 사용자 이름. 자동(scheduled)·CLI(manual)·구데이터는 null → UI "[자동 실행]". */
+  triggeredByName: string | null;
   status: string; // running|ok|partial|error|skipped
   startedAt: string;
   finishedAt: string | null;
@@ -66,14 +68,23 @@ export async function getMakeeduSyncRuns(
   const { data, count } = await supabase
     .from("makeedu_sync_runs")
     .select(
-      "id, trigger_source, status, started_at, finished_at, duration_ms, domains, failed_domains, error",
+      "id, trigger_source, triggered_by, status, started_at, finished_at, duration_ms, domains, failed_domains, error",
       { count: "exact" },
     )
     .order("started_at", { ascending: false })
     .range(from, from + pageSize - 1);
-  const runs = (data ?? []).map((r) => ({
+  const rows = data ?? [];
+  // "누가 실행했는지"(0076a) 이름 해석 — 이 페이지의 triggered_by를 배치 1회로(같은 테넌트 users, RLS 통과).
+  const actorIds = [...new Set(rows.map((r) => r.triggered_by as string | null).filter(Boolean))] as string[];
+  const nameById = new Map<string, string>();
+  if (actorIds.length) {
+    const { data: actors } = await supabase.from("users").select("id, display_name").in("id", actorIds);
+    for (const u of actors ?? []) nameById.set(u.id as string, (u.display_name as string | null) ?? "");
+  }
+  const runs = rows.map((r) => ({
     id: r.id as string,
     triggerSource: r.trigger_source as string,
+    triggeredByName: r.triggered_by ? nameById.get(r.triggered_by as string) || null : null,
     status: r.status as string,
     startedAt: r.started_at as string,
     finishedAt: (r.finished_at as string | null) ?? null,

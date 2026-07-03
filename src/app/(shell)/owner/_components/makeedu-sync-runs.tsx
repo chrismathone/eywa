@@ -29,6 +29,12 @@ export function MakeeduSyncRunsList({
         {runs.map((run) => {
           const affected = affectedRowCount(run);
           const breakdown = affectedBreakdown(run);
+          // "누가 실행했는지"(0076a): 수동 실행자 이름 → 그 이름 / 자동(스케줄) → [자동 실행] / 구데이터·CLI → 트리거 라벨.
+          const actor = run.triggeredByName
+            ? run.triggeredByName
+            : run.triggerSource === "scheduled"
+              ? "[자동 실행]"
+              : (TRIGGER_LABEL[run.triggerSource] ?? run.triggerSource);
           return (
             <li key={run.id} className="py-2 text-[13px]">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -42,7 +48,7 @@ export function MakeeduSyncRunsList({
                     hour12: false,
                   })}
                 </span>
-                <span className="text-text-dim whitespace-nowrap">{TRIGGER_LABEL[run.triggerSource] ?? run.triggerSource}</span>
+                <span className="text-text-dim whitespace-nowrap">{actor}</span>
                 <StatusPill status={run.status} />
                 <span className="text-text-faint whitespace-nowrap">
                   {run.durationMs != null ? `${Math.round(run.durationMs / 1000)}초` : null}
