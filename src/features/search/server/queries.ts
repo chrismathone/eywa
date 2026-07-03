@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { type SystemRole } from "@/lib/permissions";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
@@ -63,12 +64,15 @@ async function searchClasses(term: string): Promise<PaletteHit[]> {
 
 async function searchConsultations(term: string): Promise<PaletteHit[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  // 강사 스코프: 강사는 **본인이 등록한 상담(counselor_id=나)** 만 검색 — 목록/상세와 동일 불변식(남의 상담 미노출).
+  const user = await getCurrentUser();
+  // ⚠️ filter(.eq)는 transform(.order/.limit)보다 먼저 — supabase-js는 transform 뒤 filter 불가.
+  let qb = supabase
     .from("student_consultations")
     .select("id, summary, consulted_at, student:student_id ( name )")
-    .ilike("summary", `%${term}%`)
-    .order("consulted_at", { ascending: false })
-    .limit(LIMIT);
+    .ilike("summary", `%${term}%`);
+  if (user?.systemRole === "teacher") qb = qb.eq("counselor_id", user.id);
+  const { data } = await qb.order("consulted_at", { ascending: false }).limit(LIMIT);
   return (data ?? []).map((r): PaletteHit => {
     const s = (Array.isArray(r.student) ? r.student[0] : r.student) as { name?: string } | undefined;
     return {
