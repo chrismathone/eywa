@@ -1294,7 +1294,10 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                     } else {
                         cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
                     }
-                    cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
+                    // 분리등원(단일 요일 열)은 폭이 공통 병합셀의 절반이라 shrinkToFit이면 폰트가 더 축소돼
+                    // 다른 학생보다 글씨가 작아진다(사용자 제보). shrinkToFit 제거 → 공통과 동일 size 9 유지
+                    // (긴 이름은 이웃 요일칸으로 넘침/잘림 — ijw 클라 truncate와 동일 취지).
+                    cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
                     cc.border = {
                         top: THIN,
                         bottom: THIN,
@@ -1375,7 +1378,10 @@ export async function exportMathTimetableToExcel(params: ExportTimetableParams):
                         } else {
                             cc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
                         }
-                        cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
+                        // 분리등원(단일 요일 열)은 폭이 공통 병합셀의 절반이라 shrinkToFit이면 폰트가 더 축소돼
+                    // 다른 학생보다 글씨가 작아진다(사용자 제보). shrinkToFit 제거 → 공통과 동일 size 9 유지
+                    // (긴 이름은 이웃 요일칸으로 넘침/잘림 — ijw 클라 truncate와 동일 취지).
+                    cc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
                         cc.border = {
                             top: THIN,
                             bottom: THIN,

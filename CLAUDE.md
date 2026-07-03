@@ -329,6 +329,11 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 수학 엑셀 — 분리등원(단일 요일) 학생 글씨가 작던 버그 = shrinkToFit이 좁은 열에서 폰트 과축소 (2026-07-04) — ✅ typecheck0/lint0/build✓ + 합성 xlsx 생성 검증
+사용자 제보: 강사뷰 시간표 '엑셀' 다운로드 시 **한 요일만 등원하는 학생(분리등원)의 글씨가 다른 학생보다 작다**. 원인([math-timetable/exporter.ts](src/features/exports/math-timetable/exporter.ts)): **공통(전 요일) 학생은 병합된 넓은 셀**(월목 = `DAY_COL_W`7.5 × 2 = 15)에, **분리등원 학생은 단일 요일 좁은 셀**(7.5, 절반)에 쓰는데 **둘 다 `shrinkToFit:true, size:9`**. shrinkToFit은 **열 폭에 맞춰 폰트를 자동 축소** → 같은 이름("이름/학교학년")이 공통(넓음)엔 맞아 9pt 유지, 분리등원(좁음)엔 안 맞아 ~5–6pt로 축소 = 글씨 작음.
+- **수정**: **분리등원 셀(단일 요일)만 `shrinkToFit` 제거**([exporter.ts](src/features/exports/math-timetable/exporter.ts) 재원 partial·대기 partial 2곳 `cc.alignment`) → 폰트 9pt 유지(공통과 동일). 공통·퇴원 셀(넓은 병합)은 `shrinkToFit` 유지(넓어서 안 줄고 초장문 안전망). ⚠️ 트레이드오프: 긴 이름은 이웃 요일칸으로 넘침/잘림(ijw 클라 `truncate`와 동일 취지 — 작은 글씨보다 나음). 행 높이 16(1줄 고정)이라 wrapText는 불가(2줄 잘림).
+- 검증: typecheck0/lint0/build✓ + **합성 데이터로 실 xlsx 생성**(월목 셀 + 공통학생·분리학생[목only] → exportMathTimetableToExcel `returnBufferOnly` → exceljs로 셀 읽기): **분리학생 shrinkToFit=false·size=9, 공통학생 size=9** 확인(둘 다 9pt로 동일). ⚠️ 영어(일반) 익스포터([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 `wrapText`(줄바꿈)·`join(", ")`이라 학생별 폰트 차 없음 — 무관.
+
 ### 강사 학생상담 = "내 담당 학생" → "내가 등록한 상담(counselor_id=나)" 스코핑 전환 + 임포트 보조T 재배정 + 누수 4표면 봉쇄 (2026-07-04) — ✅ 4게이트(test642)/build✓ + 적대리뷰(2렌즈, HIGH 3 봉쇄) + 실 DB 검증
 사용자 제보: 강사뷰 학생상담에 **"다른 사람이 상담한 내용이 계속 보인다 — 내가 등록한 것만 봐야 한다"**. 원인 = 강사 상담 스코프가 `getTeacherScope().studentIds`(내 담당 학생) 기준이라, 담당 학생이면 **남이 쓴 상담도** 보였다. 작성자(counselor_id) 기준으로 전환.
 - **⚠️ 데이터 함정(재배정 필요)**: `counselor_id`는 100% 채워져 있으나 **ijw 전체복원 임포트분 1411건이 전부 'fallbackUser'(보조T)** 에 몰려 있었다(makeedu 39건만 실제 상담자). 원인 = [run.ts](scripts/_poc_migration/run.ts) `resolveUser = (uid) => uidToUser.get(uid) || fallbackUser`가 **uid 미해결 시 항상 fallbackUser를 반환**해, 뒤의 `?? nameToTeacher.get(consultantName)`(이름 매칭)이 **dead code**였다. 그래서 스코프만 바꾸면 실제 강사 화면이 **텅 빈다**(임포트분이 다 보조T라).
