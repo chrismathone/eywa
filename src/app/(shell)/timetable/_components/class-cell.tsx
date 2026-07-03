@@ -399,7 +399,7 @@ export function ClassCell({
   return (
     <div
       ref={setDroppableRef}
-      className={`border-line overflow-hidden rounded-[3px] border transition ${
+      className={`overflow-hidden rounded-[2px] transition ${
         hasBottom ? "flex min-h-0 flex-1 flex-col" : ""
       } ${isOver ? "ring-primary ring-2" : ""}`}
     >

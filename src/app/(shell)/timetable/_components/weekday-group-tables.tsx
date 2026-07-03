@@ -56,9 +56,19 @@ const DAY_COL_W = 60;
 // 단독(병합 안 되는) 요일은 2배 폭 — wide 집합은 호출부가 그룹 구성에서 도출(평일=단독 그룹 요일, 주말=토/일).
 const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
-// 셀 명단이 최소 10명 보이도록 + 글자 30% 확대(가독성)에 맞춰 비례 상향(256→330).
-// 셀 스크롤 maxHeight = rowSpan*ROW_H - 16, 헤더(~48) + 학생행(~25)×10 ≈ 298. (주말은 ROW_H/2로 격자 정렬.)
+// ⚠️ 가독성 개선(2026-07-03): 330은 대부분 셀(학생 소수)에 큰 빈 공간을 만들어 "휑함" → 한 화면에 2교시만.
+// 210으로 축소(≈1.6배 더 촘촘, 한 화면에 더 많은 교시). 학생 많은 셀은 내부 스크롤(overflow-y-auto). (주말은 ROW_H/2.)
 const ROW_H = 330;
+// 격자선 — 전 격자를 **하나의 동일한 테두리**(색·굵기 통일)로. 얇은 --line(연회색)은 셀 경계가 뭉개져 가독성↓ → 진한 ink 1px.
+// ⚠️ 구조선/안쪽선 굵기 구분 없이 균일 + 셀 카드 중복 테두리 제거(사용자 요청). 색값은 아래 sticky 교시열 box-shadow와 동일.
+const GRID = "border-ink/25"; // 전 셀·헤더 공통 1px 격자
+// ⚠️ sticky 좌측 교시열의 좌·우 테두리 — border-collapse에선 셀 테두리가 표(외곽 border 포함)에 속해 sticky 셀을 안 따라온다
+// (가로 스크롤 시 표가 밀리며 교시열 왼쪽 프레임·오른쪽 divider가 둘 다 사라짐). box-shadow도 병합모드 td에선 불안정 →
+// **셀 자식 가상요소(::before=왼쪽 프레임, ::after=오른쪽 divider) 1px 실선**으로 그린다(셀과 함께 고정, GRID와 동일 색).
+// sticky일 때만 pseudo(비-sticky 주말표는 스크롤로 안 밀려 일반 border-r로 충분 — 아래 GroupTable).
+const STICKY_EDGES =
+  "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-ink/25 before:content-[''] " +
+  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
 
 // 요일 → 월요일로부터의 오프셋(일수). 요일 헤더 날짜 라벨 계산용.
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
@@ -177,6 +187,10 @@ function GroupTable({
   // 평일 표만 교시열 sticky(좌측 고정). 우측 주말 표는 자기 교시열이라 non-sticky(겹침 방지).
   const periodHeadSticky = stickyPeriod ? "sticky left-0 z-20" : "";
   const periodCellSticky = stickyPeriod ? "sticky left-0 z-10" : "";
+  // 교시열 오른쪽 divider — sticky일 때는 셀 자식 가상요소(::after 실선)로 셀과 함께 고정(가로 스크롤 시 사라짐 방지).
+  // sticky 셀은 그 자체가 positioned라 after:absolute의 기준이 됨(relative 추가 시 sticky가 깨지므로 넣지 않음).
+  // 비-sticky(주말)는 스크롤로 밀릴 일이 없어 일반 border-r로 충분.
+  const periodDivider = stickyPeriod ? STICKY_EDGES : `border-r ${GRID}`;
   // 평일 수학계열은 4그룹 행(1교시=1-1+1-2). 셀은 풀높이(학생 공간 확보) — 1시간 수업도 풀높이 셀에
   // 카드로 표시되고 서브슬롯은 헤더 시각("15:25~16:20")으로 구분(ijw 방식). 1-1/1-2가 다른 반이면 셀 안 2카드 적층.
   const rowOf = (s: ScheduleSlotWithStudents) =>
@@ -219,7 +233,7 @@ function GroupTable({
   const tableW = PERIOD_COL_W + dayCols.reduce((sum, d) => sum + dayColW(d, wideDays), 0);
 
   return (
-    <table className="border-collapse text-sm" style={{ tableLayout: "fixed", width: tableW }}>
+    <table className={`border-collapse border ${GRID} text-sm`} style={{ tableLayout: "fixed", width: tableW }}>
       <colgroup>
         <col style={{ width: PERIOD_COL_W }} />
         {dayCols.map((d, i) => (
@@ -233,13 +247,13 @@ function GroupTable({
           <th
             rowSpan={3}
             aria-hidden
-            className={`bg-bg-soft border-line ${periodHeadSticky} w-[80px] border-b border-r p-2`}
+            className={`bg-bg-soft ${GRID} ${periodHeadSticky} ${periodDivider} w-[80px] border-b p-2`}
           />
           {groups.map((g) => (
             <th
               key={g.title}
               colSpan={g.dayCount}
-              className={`${g.band} border-line border-b border-r px-2 py-1.5 text-center text-[12px] font-bold`}
+              className={`${g.band} ${GRID} border-b border-r px-2 py-1.5 text-center text-[12px] font-bold`}
             >
               {g.title}
             </th>
@@ -252,7 +266,7 @@ function GroupTable({
               <th
                 key={`${g.title}-${t.name}`}
                 colSpan={t.days.length}
-                className="bg-bg-soft border-line border-b border-r px-2 py-1.5 text-center"
+                className={`bg-bg-soft ${GRID} border-b border-r px-2 py-1.5 text-center`}
               >
                 <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold">{t.name}</span>
               </th>
@@ -268,7 +282,7 @@ function GroupTable({
                 return (
                   <th
                     key={`${g.title}-${t.name}-${d}`}
-                    className={`${g.tint} border-line text-text-dim border-b border-r px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}
+                    className={`${g.tint} text-text-dim border-b border-r ${GRID} px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}
                   >
                     {DAY_LABEL[d] ?? d}
                     {date ? (
@@ -285,7 +299,7 @@ function GroupTable({
         {rows.map((row, ri) => (
           <tr key={row.key}>
             <td
-              className={`bg-bg-soft border-line text-foreground ${periodCellSticky} border-b border-r px-2 py-2 align-top text-[12px] font-bold whitespace-nowrap`}
+              className={`bg-bg-soft text-foreground ${periodCellSticky} ${periodDivider} border-b ${GRID} px-2 py-2 align-top text-[12px] font-bold whitespace-nowrap`}
               style={{ height: rowHeight }}
             >
               {row.label}
@@ -311,8 +325,8 @@ function GroupTable({
                       key={`${g.title}-${t.name}-${d}-${row.key}`}
                       rowSpan={block.rowSpan}
                       colSpan={block.colSpan}
-                      className={`border-line border-b border-r p-1.5 align-top ${
-                        merged.length === 0 ? "bg-bg-soft/60" : ""
+                      className={`border-b border-r ${GRID} p-1.5 align-top ${
+                        merged.length === 0 ? "bg-ink/[0.06]" : ""
                       }`}
                     >
                       {merged.length === 0 ? null : (
