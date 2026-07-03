@@ -329,6 +329,14 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 기본뷰 가독성 개선 — 균일 격자 테두리 + sticky 교시열 좌·우 테두리 고정 (2026-07-03) — ✅ 라이브(dev) + typecheck0/lint0 + main push(`0b3213e`)
+사용자 피드백: "ijw-calander 대비 eywa 시간표 가독성이 너무 떨어진다". ijw 그리드([`D:\ijw-calander\components\Timetable\Math\components\TimetableGrid.tsx`])와 대조 → 원인 진단: ① **테두리가 흐리다**(ijw 굵은 검정 3~4px ↔ eywa 얇은 `--line` 연회색 → 셀 경계 뭉개짐) ② 행 큼(330 고정, 휑함) ③ 강사 헤더 회색 ④ 밀도 조절 UI 없음. 사용자 지시로 **①(테두리) 중심 + 세로폭은 원래대로** 진행.
+- **격자 테두리 균일화**([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)): 전 격자선을 **단일 `border-ink/25` 1px**로 통일(`const GRID`). 구조선 2px/안쪽 1px 섞임 제거 + **셀 안 ClassCell 카드의 중복 테두리 제거**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `border-ink/15 border` → 무테두리) = **셀당 테두리 1개**. 빈 셀 `bg-ink/[0.06]` 틴트. `ROW_H` 330 유지(학생 명단 충분 노출 — 사용자 요청).
+- **⚠️⚠️ sticky 교시열 좌·우 테두리 고정(핵심 버그픽스)**: 좌측 교시열(`sticky left-0`)의 **왼쪽 프레임·오른쪽 divider가 가로 스크롤 시 사라짐**(사용자 2회 제보). 원인 = **`border-collapse` 모드에선 셀 테두리·표 외곽 border가 표(table)에 속해 sticky 셀을 안 따라온다**(스크롤하면 표가 밀리며 테두리만 떨어져 나감). **box-shadow도 병합모드 `td`에선 불안정**(1차 시도 실패). → **sticky 교시 셀의 자식 가상요소 실선**으로 해결: `::before`(왼쪽 프레임)+`::after`(오른쪽 divider), 각 1px `bg-ink/25`, `absolute inset-y-0 left-0/right-0`(`const STICKY_EDGES`). sticky 셀 자체가 positioned라 `after:absolute`의 기준이 됨(⚠️ `relative` 추가하면 sticky 깨지므로 금지). 비-sticky(주말표)는 스크롤로 안 밀려 일반 `border-r` 분기(`periodDivider`). 검증: computed pseudo(1px·ink/25·left:0/right:0) + 스크롤 400px 고정 + scroll=0 이중선 없음.
+- **곁들인 dev 블로커 픽스**: [next.config.ts](next.config.ts) `serverExternalPackages: ["exceljs"]` — exceljs(→unzipper→fstream→rimraf, pnpm 심볼릭 링크)를 정적 번들에서 제외. 안 그러면 그 서버액션(엑셀 가져오기)이 붙은 `/timetable`이 **dev(Turbopack)에서 "Module not found: rimraf"로 아예 안 뜸**(런타임 Node는 rimraf resolve 정상 = 프로덕션 무영향, dev만 막힘). external로 두면 dev/프로덕션 모두 안정 + 서버 번들 경량.
+- **⏭️ 후속 레버(미적용, 옵션 — 사용자 "좀 아쉽지만 충분")**: ① 테두리 더 진하게(ijw 순수 검정에 가깝게 — 현재는 eywa 팔레트 맞춰 ink/25 중간톤) ② **강사 헤더 색**(ijw는 강사별 `bgColor` 헤더 → 좌우 스캔 빠름, eywa는 회색 `bg-bg-soft`) ③ **밀도 조절 UI**(ijw는 열폭/행높이/글자크기 + 학교·학년 표시 토글 = 각자 튜닝, eywa는 고정값). 상세 = 메모리 [[reference_timetable-readability-followups]].
+- ⚠️ 커밋은 내 3파일만 명시경로(병렬 세션 ijw-sync WIP 미포함). ⚠️ **교훈: border-collapse 표의 sticky 행/열 테두리는 셀/box-shadow가 아니라 `::before`/`::after` 실선으로** — 아래 막혔던 점 [[#71]].
+
 ### 수납관리 '환불 요청서' 탭 — 종이 서식을 웹 폼으로, 작성본은 데이터베이스에 저장 (2026-07-03) — ✅ 4게이트(test616) + 라이브 E2E 16체크(원복·DB잔여0) + 필수* 6체크
 사용자 요청: "환불처리요청서" 종이 서식(결재란·학생정보·환불내역·처리결과)을 **직원 이력서처럼 웹앱 안에서 작성·저장·열람**하게 — /billing 내부탭에 '환불 요청서' 추가. **이력서(staff_resume) 패턴을 그대로 미러** — 별도 테이블·마이그레이션 없이 `academy_documents`의 폼 문서(kind='form') 인프라(0072a) 재사용.
 - **데이터 = 새 form_type `refund_request`**(마이그레이션 0): `kind='form'` + `form_data jsonb` + **`restricted=true`**(계좌·환불금액 민감 → RLS restrictive 0072a가 DB 레벨에서도 사무실 역할[master/admin/manager/accountant]만 열람). 탐색기(/documents 수납·결제 분류)에 같은 행이 유형 '환불 요청서'로 노출.
@@ -2608,6 +2616,18 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
   ⚠️ **검증 함정**: postgres-js 템플릿에서 `${JSON.stringify(obj)}::jsonb` 바인딩은 트리거가 `->>'tenant_id'`를 null로 읽는 값을 만들어(클라 직렬화 quirk) 트리거가 조용히 no-op(early-return). **jsonb는 서버측 `jsonb_build_object`로** 만들 것(GoTrue 저장 방식과 동일). 프로덕션(GoTrue)은 무관.
 - ⚠️ **범위 밖(별도 백로그)**: 8명 중 5명(Florence·Kristine·김주희·김태건)은 **케이스만 다른 이메일**(`florence@`↔`Florence@` 등)의 **auth 없는 viewer 중복 `public.users` 행**이 잔존(#31 id-mismatch 산물). role drift와 무관 — 병합/삭제는 별도 결정.
 - ⚠️ **마이그 번호 정정(2026-07-03)**: 원래 `0063a`로 만들었으나 병렬 세션 `0063a_move_enrollments_attendance_days.sql`과 충돌 → main 병합 시 **`0075a`로 리넘버**(내용 동일, 멱등이라 재적용 안전).
+
+### 71. border-collapse 표의 sticky 행/열 테두리는 셀 border·box-shadow가 아니라 `::before`/`::after` 실선으로
+`border-collapse: collapse` 표에서 **`position: sticky` 셀의 테두리·표 외곽 border는 sticky 셀을 안 따라온다** — 병합모드에선
+테두리 소유권이 개별 셀이 아니라 **표(table)**에 있어, 가로/세로 스크롤 시 sticky 셀만 남고 **테두리는 표와 함께 밀려 사라진다**
+(시간표 기본뷰 좌측 sticky 교시열의 좌·우 테두리가 스크롤 시 증발 — 사용자 2회 제보). **`box-shadow`도 병합모드 `td`/`th`에선
+불안정**(렌더 안 되거나 얇게 잘림 — 1차 시도 실패). **해결 = sticky 셀의 자식 가상요소 실선**: `::before`(왼쪽/위 프레임)·`::after`
+(오른쪽/아래 divider)를 `absolute inset-y-0 left-0`(또는 `right-0`) `w-px bg-<color>`로. 가상요소는 셀의 자식이라 sticky 셀과
+**함께 고정**되고 실 `<div>`/실선이라 렌더 안정적. ⚠️ **주의**: sticky 셀은 이미 positioned라 `after:absolute`의 기준이 됨 —
+`relative`를 추가로 붙이면 `position`이 덮여 **sticky가 깨진다**(둘 다 position 값). 비-sticky 셀(스크롤로 안 밀리는)은 일반
+`border`로 충분 → sticky 여부로 분기. 레퍼런스: [weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)
+`STICKY_EDGES`·`periodDivider`. (대안: 표를 `border-separate border-spacing-0`로 바꾸면 셀이 테두리를 소유해 sticky를 따라오나,
+외곽/이중선 처리가 번거로워 미채택.)
 
 ---
 
