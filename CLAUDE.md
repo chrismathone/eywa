@@ -329,6 +329,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학생상담 상세(읽기) 페이지 신설 — "클릭=보기, 수정=버튼" 전 엔티티 통일 (2026-07-03) — ✅ typecheck0/lint0/build✓
+사용자 지적: 학생상담만 카드 클릭이 **곧장 수정 폼**(`[id]/edit`만 존재, 상세 없음) — 다른 엔티티(등록상담·학생·반·직원·회의록)는 전부 클릭=상세(읽기)·수정=버튼. 실질 문제 2: ① 편집 폼에 동시편집 가드(presence)가 붙어 **읽으려고 연 사람도 "수정중" 배지**로 잡히고 초안 자동저장이 무장됨(1,429건 이력 열람이 주 사용인데) ② 녹음·전사·AI 7섹션(읽기 콘텐츠)이 편집 폼에 섞임.
+- **신설 [`/consultations/[id]`](<src/app/(shell)/consultations/[id]/page.tsx>)**: 헤더(학생명=학생 상세 WindowLink·학년·카테고리/과목(buildSubjectMaps 라벨)/대상/후속 urgency Pill·🎙️/AI/↻동기화 배지·EditingBadge) + **수정 버튼**(→edit) + 삭제 + 상담 내용(pre-wrap, max-h 스크롤) + 후속 조치 카드(FollowUpToggle 재사용, 내용 있을 때만) + **RecordingPanel(녹음·전사·AI 분석)을 edit에서 상세로 이동**(읽기 콘텐츠 + 명시적 'AI 분석' 버튼 정책 부합).
+- **배선**: 목록 카드 클릭 → 상세(`상담 상세` 창) / edit BackLink → 상세 / **커맨드 팰릿 학생상담 결과 → 상세**(이전엔 상세가 없어 목록으로 우회하던 것 해소) / `ROUTE_WINDOW_SIZE.consultations=760×640`(목록·상세 prefix 상속). CATEGORY_META/URGENCY_META/AUDIENCE_LABEL은 [_components/consultation-meta.ts](<src/app/(shell)/consultations/_components/consultation-meta.ts>)로 추출(목록·상세 공유).
+- ⚠️ 라이브 시각 검증은 auth 게이트로 게이트 검증 대체(build에 라우트 등록 확인) — 원장 HMR 확인 권장. 상세 페이지는 edit과 동일 게이트(requireAccess consultations, RLS 테넌트 격리 — 접근 범위 확장 없음).
+
 ### 등록상담 "수업 배정" + 칸반 "배정 완료" 컬럼(수업≥1) — "등록" 라벨 ≠ 학생 생성 혼동 해소 (2026-07-02) — ✅ 4게이트(test595) + 라이브 E2E 6단계(원복)
 사용자 제보: 등록상담을 "등록"으로 진행했는데 학생 목록에 없음(허다언). 진단: 상단 **"등록" 뱃지 = `outcome='enrolled'` 라벨일 뿐** 학생을 안 만든다 — 실제 학생 생성은 **"학생 등록 완료" 버튼**(`convertConsultationToStudent`)이 눌려야 함(students INSERT + `student_id` 연결). DB 실측: `outcome='enrolled'` 상담 172건 중 **student_id 연결 0건**(ijw/makeedu가 상담·학생을 각각 임포트 → 원래 안 연결, 학생은 students로 직접 들어옴). 즉 "등록"은 거짓 완료 신호(write-only-orphan의 UX판).
 - **사용자 확정 2건**: ① 칸반 **5번째 "배정 완료" 컬럼** 추가 ② "학생 등록 완료" → **"수업 배정"** + 반 **최소 1개 필수**.

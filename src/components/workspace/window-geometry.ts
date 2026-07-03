@@ -45,6 +45,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   // 유발), 1280이면 30·31일 달 모두 이름이 한 줄로 펴져 콘텐츠가 ~488px로 줄어든다(세로 스크롤 제거).
   attendance: { w: 1280, h: 620 },
   exams: { w: 960, h: 680 }, // 시험 목록(통계 열) + 반 일괄 점수 그리드
+  consultations: { w: 760, h: 640 }, // 상담 목록(카드)·상세(내용+AI 7섹션) — 읽기 콘텐츠라 기본 480은 좁음. 상세 id도 prefix 상속
+
   "staff/payroll": { w: 920, h: 640 }, // 월별 전직원 급여표(8열) — 폭 넓음
   "staff/resumes": { w: 840, h: 720 }, // 직원 이력서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
   owner: { w: 960, h: 720 }, // 학원 설정 콘솔 — 탭 + 목록 편집(과목·교시·직급) 폼

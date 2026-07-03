@@ -146,14 +146,16 @@ export function CommandPalette({
       else router.push(`/students/${hit.id}`);
       return;
     }
-    // 수업·등록상담은 상세 페이지로(상세 창) — 검색 결과 클릭 시 해당 항목 상세가 열린다.
-    // 학생상담(consultation)은 전용 상세 페이지가 없어 목록 창으로(기존 동작 유지).
+    // 수업·등록상담·학생상담은 상세 페이지로(상세 창) — 검색 결과 클릭 시 해당 항목 상세가 열린다.
+    // (학생상담 상세는 2026-07-03 신설 — 이전엔 상세가 없어 목록 창으로 보냈었다.)
     const detailHref =
       hit.kind === "class"
         ? `/classes/${hit.id}`
         : hit.kind === "enrollment"
           ? `/enrollment/${hit.id}`
-          : null;
+          : hit.kind === "consultation"
+            ? `/consultations/${hit.id}`
+            : null;
     if (detailHref) {
       if (isDesktop) {
         const id = windowIdForHref(detailHref)?.id ?? detailHref.slice(1);

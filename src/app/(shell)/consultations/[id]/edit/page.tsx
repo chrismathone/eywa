@@ -8,7 +8,6 @@ import {
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { ConsultationForm } from "../../_components/consultation-form";
 import { ConsultationDeleteButton } from "../../_components/consultation-delete-button";
-import { RecordingPanel } from "../../_components/recording-panel";
 
 export const metadata = { title: "상담 수정 — eywa" };
 
@@ -28,7 +27,8 @@ export default async function EditConsultationPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <BackLink href="/consultations" label="학생상담으로" />
+      {/* 상세(읽기) 페이지가 생겨(2026-07-03) 뒤로가기는 상세로 — 녹음/전사/AI 패널(읽기 콘텐츠)도 상세로 이동. */}
+      <BackLink href={`/consultations/${item.id}`} label="상담 상세로" />
 
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">
@@ -41,16 +41,6 @@ export default async function EditConsultationPage({
           redirectTo="/consultations"
         />
       </header>
-
-      <RecordingPanel
-        id={item.id}
-        processingStatus={item.processingStatus}
-        transcription={item.transcription}
-        audioDurationSec={item.audioDurationSec}
-        processingError={item.processingError}
-        aiReport={item.aiReport}
-        aiGeneratedAt={item.aiGeneratedAt}
-      />
 
       <ConsultationForm
         mode="edit"

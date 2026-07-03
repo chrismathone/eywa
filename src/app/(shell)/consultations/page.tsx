@@ -13,7 +13,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
-import { Pill, type PillColor } from "@/components/atoms/pill";
+import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -22,32 +22,14 @@ import {
   followUpUrgency,
   getStudentConsultationCounts,
   getStudentConsultationsPage,
-  type FollowUpUrgency,
   type StudentConsultationCategory,
 } from "@/features/consultations/server/queries";
 import { Pagination } from "@/components/pagination";
 import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
 import { ConsultationDeleteButton } from "./_components/consultation-delete-button";
+import { CATEGORY_META, URGENCY_META } from "./_components/consultation-meta";
 
 export const metadata = { title: "학생상담 — eywa" };
-
-const CATEGORY_META: Record<StudentConsultationCategory, { label: string; color: PillColor }> = {
-  general: { label: "일반", color: "neutral" },
-  academic: { label: "학습", color: "primary" },
-  emotional: { label: "정서", color: "rose" },
-  career: { label: "진로", color: "blue" },
-  social: { label: "교우", color: "gold" },
-  other: { label: "기타", color: "neutral" },
-};
-
-const URGENCY_META: Record<FollowUpUrgency, { label: string; color: PillColor } | null> = {
-  done: { label: "완료", color: "primary" },
-  overdue: { label: "지연", color: "danger" },
-  today: { label: "오늘", color: "danger" },
-  soon: { label: "3일 내", color: "amber" },
-  later: { label: "예정", color: "blue" },
-  none: null,
-};
 
 function relativeTime(iso: string): string {
   const diff = Math.max(0, Date.now() - new Date(iso).getTime());
@@ -266,11 +248,12 @@ export default async function ConsultationsPage({
                     : "border-line bg-card hover:border-primary/40"
                 }`}
               >
-                {/* 카드 전체 클릭 → 상담 수정(stretched link). 내부 학생 이름 링크는 z-10로 위에 둠. */}
+                {/* 카드 전체 클릭 → 상담 상세(읽기 — 다른 엔티티와 일관, 수정은 상세의 버튼).
+                    내부 학생 이름 링크는 z-10로 위에 둠. */}
                 <WindowLink
-                  href={`/consultations/${c.id}/edit`}
-                  title="상담 수정"
-                  ariaLabel={`${c.studentName} 상담 수정`}
+                  href={`/consultations/${c.id}`}
+                  title="상담 상세"
+                  ariaLabel={`${c.studentName} 상담 상세`}
                   className="absolute inset-0 z-0"
                 />
                 <header className="relative flex flex-wrap items-start justify-between gap-3">
