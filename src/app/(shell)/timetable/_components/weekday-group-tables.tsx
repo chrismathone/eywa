@@ -11,6 +11,7 @@ import {
 } from "@/features/timetable/lib/periods";
 import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { ClassCell } from "./class-cell";
 
 const DAY_LABEL: Record<string, string> = {
@@ -102,11 +103,45 @@ function subSlotOf(
 type TeacherCol = { name: string; days: DayOfWeek[] };
 type GroupCols = GroupDef & { teachers: TeacherCol[]; dayCount: number };
 
+/** 컬럼(강사) 키 — 기본뷰=반 담임, 강사뷰=슬롯 강사(시트 강사별 배치, 라벨 없으면 담임 폴백). */
+type TeacherOf = (s: ScheduleSlotWithStudents) => string;
+const byClassTeacher: TeacherOf = (s) => s.teacherName ?? "—";
+const bySlotTeacher: TeacherOf = (s) => s.slotTeacherLabel ?? s.teacherName ?? "—";
+
+/**
+ * 강사뷰 컬럼 순서 — 최빈 방(시트의 물리 배치: 본원301→…→본원SKY) → 이름. 방 없는 강사(Dom)는 뒤.
+ * 기본뷰는 기존대로 이름순(호출부에서 order 미전달).
+ */
+function teacherOrderByRoom(slots: ScheduleSlotWithStudents[], teacherOf: TeacherOf): Map<string, string> {
+  const rooms = new Map<string, Map<string, number>>();
+  for (const s of slots) {
+    const t = teacherOf(s);
+    if (!s.slotRoomLabel) continue;
+    const m = rooms.get(t) ?? rooms.set(t, new Map()).get(t)!;
+    m.set(s.slotRoomLabel, (m.get(s.slotRoomLabel) ?? 0) + 1);
+  }
+  const order = new Map<string, string>();
+  for (const [t, m] of rooms) {
+    order.set(t, [...m.entries()].sort((a, b) => b[1] - a[1])[0]![0]);
+  }
+  return order;
+}
+
 /** 슬롯에서 그룹별 컬럼(강사→요일) 구성. 해당 그룹 요일에 수업 있는 강사만, 요일은 그룹 순서. */
-function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): GroupCols[] {
-  const teachers = Array.from(new Set(slots.map((s) => s.teacherName ?? "—"))).sort((a, b) =>
-    a.localeCompare(b, "ko"),
-  );
+function buildGroups(
+  slots: ScheduleSlotWithStudents[],
+  defs: GroupDef[],
+  teacherOf: TeacherOf,
+  roomOrder?: Map<string, string>,
+): GroupCols[] {
+  const teachers = Array.from(new Set(slots.map(teacherOf))).sort((a, b) => {
+    if (roomOrder) {
+      const ra = roomOrder.get(a) ?? "￿";
+      const rb = roomOrder.get(b) ?? "￿";
+      if (ra !== rb) return ra.localeCompare(rb, "ko");
+    }
+    return a.localeCompare(b, "ko");
+  });
   const out: GroupCols[] = [];
   for (const def of defs) {
     const groupDaySet = new Set(def.days);
@@ -116,7 +151,7 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
         Array.from(
           new Set(
             slots
-              .filter((s) => (s.teacherName ?? "—") === t && groupDaySet.has(s.dayOfWeek as DayOfWeek))
+              .filter((s) => teacherOf(s) === t && groupDaySet.has(s.dayOfWeek as DayOfWeek))
               .map((s) => s.dayOfWeek as DayOfWeek),
           ),
         ),
@@ -161,6 +196,8 @@ function GroupTable({
   config,
   dateOf,
   wideDays,
+  teacherOf = byClassTeacher,
+  teacherColors,
 }: {
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
@@ -173,6 +210,10 @@ function GroupTable({
   dateOf?: (d: DayOfWeek) => string | undefined;
   /** 2배 폭으로 그릴 요일(단독 그룹·주말) — 그룹 구성에서 호출부가 도출. */
   wideDays: Set<DayOfWeek>;
+  /** 컬럼 키(기본=반 담임, 강사뷰=슬롯 강사) — buildGroups와 동일 함수를 써야 셀이 맞는다. */
+  teacherOf?: TeacherOf;
+  /** 강사 헤더 저장색(강사뷰 — 시트/ijw처럼 강사별 색 헤더). 없거나 미등록 강사는 기본 회색. */
+  teacherColors?: TeacherColorMap;
 }) {
   // 평일 표만 교시열 sticky(좌측 고정). 우측 주말 표는 자기 교시열이라 non-sticky(겹침 방지).
   const periodHeadSticky = stickyPeriod ? "sticky left-0 z-20" : "";
@@ -191,10 +232,10 @@ function GroupTable({
   }
   const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
 
-  // (teacher::day::rowKey) → slots
+  // (teacher::day::rowKey) → slots — teacher 키는 buildGroups와 동일한 teacherOf로.
   const cell = new Map<string, ScheduleSlotWithStudents[]>();
   for (const s of slots) {
-    const k = `${s.teacherName ?? "—"}::${s.dayOfWeek}::${rowOf(s).key}`;
+    const k = `${teacherOf(s)}::${s.dayOfWeek}::${rowOf(s).key}`;
     (cell.get(k) ?? cell.set(k, []).get(k)!).push(s);
   }
 
@@ -245,18 +286,26 @@ function GroupTable({
             </th>
           ))}
         </tr>
-        {/* 강사 행 */}
+        {/* 강사 행 — 강사뷰(teacherColors)면 저장색 헤더(시트/ijw 강사색 패리티), 미등록 강사는 회색. */}
         <tr>
           {groups.flatMap((g) =>
-            g.teachers.map((t) => (
-              <th
-                key={`${g.title}-${t.name}`}
-                colSpan={t.days.length}
-                className="bg-bg-soft border-line border-b border-r px-2 py-1.5 text-center"
-              >
-                <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold">{t.name}</span>
-              </th>
-            )),
+            g.teachers.map((t) => {
+              const c = teacherColors?.[t.name];
+              return (
+                <th
+                  key={`${g.title}-${t.name}`}
+                  colSpan={t.days.length}
+                  className="bg-bg-soft border-line border-b border-r px-2 py-1.5 text-center"
+                  style={c ? { backgroundColor: c.bg, color: c.text } : undefined}
+                >
+                  <span
+                    className={`block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold ${c ? "" : "text-foreground"}`}
+                  >
+                    {t.name}
+                  </span>
+                </th>
+              );
+            }),
           )}
         </tr>
         {/* 요일 행 */}
@@ -362,6 +411,8 @@ export function WeekdayGroupTables({
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
   weekdayGrouping = "mon-thu",
+  groupBySlotTeacher = false,
+  teacherColors,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
@@ -369,6 +420,13 @@ export function WeekdayGroupTables({
   weekMonday?: string;
   /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
   weekdayGrouping?: WeekdayGrouping;
+  /**
+   * 강사뷰(시트 강사별 배치 패리티) — 컬럼을 반 담임이 아니라 **슬롯 강사**(slot_teacher_label,
+   * 없으면 담임 폴백)로 구성. 컬럼 순서도 이름순 대신 최빈 방(시트 물리 배치)순.
+   */
+  groupBySlotTeacher?: boolean;
+  /** 강사 헤더 저장색(강사뷰) — getTeacherColorMap() 결과. 미등록 강사는 회색 폴백. */
+  teacherColors?: TeacherColorMap;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
@@ -384,8 +442,12 @@ export function WeekdayGroupTables({
   const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
   const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
 
-  const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs);
-  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP]);
+  // 컬럼 키 — 기본뷰=반 담임 / 강사뷰=슬롯 강사(+최빈 방 순서 = 시트 물리 배치).
+  const teacherOf = groupBySlotTeacher ? bySlotTeacher : byClassTeacher;
+  const roomOrder = groupBySlotTeacher ? teacherOrderByRoom(slots, teacherOf) : undefined;
+
+  const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs, teacherOf, roomOrder);
+  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP], teacherOf, roomOrder);
 
   return (
     <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
@@ -402,6 +464,8 @@ export function WeekdayGroupTables({
             config={config}
             dateOf={dateOf}
             wideDays={weekdayWide}
+            teacherOf={teacherOf}
+            teacherColors={groupBySlotTeacher ? teacherColors : undefined}
           />
         ) : null}
         {weekendGroups.length > 0 ? (
@@ -415,6 +479,8 @@ export function WeekdayGroupTables({
             config={config}
             dateOf={dateOf}
             wideDays={weekendWide}
+            teacherOf={teacherOf}
+            teacherColors={groupBySlotTeacher ? teacherColors : undefined}
           />
         ) : null}
       </div>

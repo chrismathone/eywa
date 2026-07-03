@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { Columns3, LayoutGrid, CalendarOff } from "lucide-react";
+import { Columns3, LayoutGrid, CalendarOff, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
@@ -24,9 +24,11 @@ import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 
 export const metadata = { title: "시간표 — eywa" };
 
-type ViewMode = "basic" | "integrated";
-// 둘 다 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).
+type ViewMode = "basic" | "integrated" | "teacher";
+// 전부 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).
 // 통합뷰 = 반=단위 반응형 카드 그리드(반 카드: 헤더·학생명단·정원, 읽기전용 — 한눈에 반 단위로 본다).
+// 강사뷰 = 기본뷰와 같은 격자를 **슬롯 강사**(slot_teacher_label) 기준으로 재구성(시트 강사별 배치 패리티,
+// 읽기전용) — 영어처럼 한 반을 (요일,교시)마다 다른 강사가 가르치는 과목용. 칩은 english에서만 노출.
 // 과목 키·순서·라벨·색은 전부 학원설정(operations.subjects) 단일 소스(하드코딩 금지).
 
 export default async function TimetablePage({
@@ -36,7 +38,8 @@ export default async function TimetablePage({
 }) {
   const user = await requireAccess("timetable");
   const { view: viewParam, subject: subjectParam, week: weekRaw } = await searchParams;
-  const view: ViewMode = viewParam === "integrated" ? "integrated" : "basic";
+  const view: ViewMode =
+    viewParam === "integrated" ? "integrated" : viewParam === "teacher" ? "teacher" : "basic";
 
   // 주간 이동(타임머신) — week 파라미터(그 주 아무 날)를 월요일로 정규화. 미지정=이번 주.
   // 기준 '오늘'은 KST(서버 UTC라 새벽 시간대 하루 밀림 방지). week.ts 내부 날짜 산술은 UTC 결정적 유지.
@@ -60,8 +63,8 @@ export default async function TimetablePage({
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
     user.systemRole === "master" ? getGoogleSheetsStatus() : Promise.resolve(null),
-    // 강사색 맵은 통합뷰에서만 필요(셀·담임색). 기본뷰는 생략.
-    view === "integrated" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
+    // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. 기본뷰는 생략.
+    view !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
   ]);
   const canSync = user.systemRole === "master" && sheetsStatus?.enabled === true;
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(master 한정, 위 조회가 master만 수행).
@@ -125,13 +128,19 @@ export default async function TimetablePage({
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 과목 chip — 두 뷰 다 과목별(클릭 = 과목 전환) */}
+        {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰는 english 전용이라 타과목 전환 시 기본뷰로. */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">과목</span>
           {available.map((k) => (
             <Link
               key={k}
-              href={buildHref({ view, subject: k, defaultSubject, week, thisWk })}
+              href={buildHref({
+                view: view === "teacher" && k !== "english" ? "basic" : view,
+                subject: k,
+                defaultSubject,
+                week,
+                thisWk,
+              })}
               className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
                 subject === k
                   ? "border-foreground bg-foreground text-background font-medium"
@@ -144,12 +153,15 @@ export default async function TimetablePage({
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 뷰 토글 */}
+        {/* 뷰 토글 — 강사뷰는 슬롯 강사 데이터가 있는 english에서만 노출(시트 강사별 배치 패리티). */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">뷰</span>
           {([
             { key: "basic", label: "기본뷰", icon: Columns3 },
             { key: "integrated", label: "통합뷰", icon: LayoutGrid },
+            ...(subject === "english"
+              ? [{ key: "teacher" as ViewMode, label: "강사뷰", icon: Users }]
+              : []),
           ] as { key: ViewMode; label: string; icon: LucideIcon }[]).map((v) => {
             const Icon = v.icon;
             return (
@@ -177,9 +189,9 @@ export default async function TimetablePage({
           {withdrawnCount > 0 ? <span className="text-[color:var(--text-faint)]">퇴원 {withdrawnCount}</span> : null}
         </div>
 
-        {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰=읽기전용, 과거=조회 전용).
+        {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
-        {!isIntegrated && slots.length > 0 && canEdit ? (
+        {view === "basic" && slots.length > 0 && canEdit ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <TimetableEditControls />
@@ -199,6 +211,21 @@ export default async function TimetablePage({
         />
       ) : isIntegrated ? (
         <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} />
+      ) : view === "teacher" ? (
+        // 강사뷰 — 슬롯 강사 기준 재구성(시트 강사별 배치 패리티). 읽기전용(드래그 편집은 기본뷰).
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="text-text-faint mb-1 shrink-0 text-right font-mono text-[11px]">
+            읽기 전용 · 실제 수업 강사(슬롯) 기준 · 편집은 기본뷰
+          </div>
+          <WeekdayGroupTables
+            slots={slots}
+            config={periodsConfig}
+            weekMonday={week}
+            weekdayGrouping={weekdayGrouping}
+            groupBySlotTeacher
+            teacherColors={teacherColors}
+          />
+        </div>
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">
