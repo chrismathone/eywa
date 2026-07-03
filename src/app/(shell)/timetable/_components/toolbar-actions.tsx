@@ -34,7 +34,8 @@ export function TimetableToolbarActions({
   const hasSheetGroup = canSync || !!sheetUrl;
 
   return (
-    <div className="print:hidden flex items-center gap-1">
+    // flex-wrap — 좁은 화면(모바일)에서 버튼 5개가 한 줄로 강제돼 카드 밖으로 넘치지 않게 줄바꿈.
+    <div className="print:hidden flex flex-wrap items-center gap-1">
       {/* 엑셀 그룹: 내보내기 + 가져오기 (둘 다 엑셀 작업 — 한 묶음으로 묶어 '가져오기'가 시트 import로 오해되지 않게) */}
       <div className="flex items-center gap-1">
         <a href={exportHref} className={btnCls}>
@@ -44,9 +45,9 @@ export function TimetableToolbarActions({
         <TimetableImportDialog />
       </div>
 
-      {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리 */}
+      {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리(줄바꿈 시에도 그룹 단위 유지) */}
       {hasSheetGroup ? (
-        <div className="border-line ml-0.5 flex items-center gap-1 border-l pl-2">
+        <div className="border-line ml-0.5 flex flex-wrap items-center gap-1 border-l pl-2">
           {canSync ? (
             <button
               type="button"

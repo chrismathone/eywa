@@ -7,6 +7,8 @@ import { AlertCircle, Loader2, Pencil, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EMPLOYMENT_TYPES, WORKDAYS, type StaffResumeData } from "@/features/staff/resume";
 import { saveStaffResume, type ResumeActionState } from "@/features/staff/server/resume-actions";
 import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
@@ -17,7 +19,8 @@ import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
 // 인쇄(print:)는 A4 1장에 들어가게 압축 — 화면은 여유 있게.
 const T = "w-full border-collapse text-[12px] leading-relaxed print:text-[11px] print:leading-snug";
 const cell = "border-foreground/35 border px-2 py-1.5 align-middle print:py-1";
-const head = `${cell} bg-bg-soft/70 text-center font-semibold whitespace-nowrap`;
+// 화면(모바일)에선 헤더가 keep-all로 어절 단위 접혀 표가 카드폭에 수용됨. 인쇄만 nowrap(A4는 폭 여유).
+const head = `${cell} bg-bg-soft/70 text-center font-semibold print:whitespace-nowrap`;
 const inputBase =
   "w-full min-w-0 rounded-sm bg-bg-soft/40 px-1.5 py-0.5 text-[12px] outline-none placeholder:text-text-faint/60 focus:bg-primary-soft/25 focus:ring-1 focus:ring-primary/50";
 
@@ -94,7 +97,8 @@ export function ResumeSheet({
     },
   });
   const clearDraft = draft.clear;
-
+  // 편집 중일 때만 미저장 가드 활성(뷰 모드는 dirty 없음) → 편집 중 창 X 시 확인.
+  const { markSaved } = useUnsavedGuard({ formRef, enabled: editing });
   // 저장 성공 확정(nonce) 1회만 처리(#67 가드). 편집 종료(setEditing)는 렌더 중 조정(React 권장 #25 —
   // effect setState 금지 회피, enrollment-assign-dialog 패턴), 부수효과(초안 삭제·네비)는 아래 effect에서.
   const [seenNonce, setSeenNonce] = useState<number | undefined>(undefined);
@@ -107,9 +111,10 @@ export function ResumeSheet({
     if (!state?.ok || !state.nonce || state.nonce === doneNonce.current) return;
     doneNonce.current = state.nonce;
     clearDraft();
+    markSaved();
     if (id) router.refresh(); // 수정: 배경 서버 데이터 재조회 → 뷰에 반영.
     else if (state.redirectTo) router.push(state.redirectTo); // 생성: 새 이력서 뷰로 이동.
-  }, [state, router, clearDraft, id]);
+  }, [state, router, clearDraft, markSaved, id]);
 
   function startEdit() {
     setEmpType(data.contract.employmentType);
@@ -382,15 +387,8 @@ export function ResumeSheet({
         {editing ? "칸을 클릭해 바로 입력하세요 — 저장해야 반영됩니다." : "종이 서식 그대로 — 인쇄하거나 수정할 수 있습니다."}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {editing ? (
-          <>
-            <Button type="button" variant="outline" onClick={cancel}>
-              <X className="size-4" />
-              취소
-            </Button>
-            <SaveButton />
-          </>
-        ) : (
+        {/* 편집 중 취소/저장은 하단 고정 FormActionBar로(다른 창 폼과 동일 위치). 뷰 모드 액션만 여기. */}
+        {editing ? null : (
           <>
             {canWrite ? (
               <Button type="button" onClick={startEdit}>
@@ -427,6 +425,13 @@ export function ResumeSheet({
         </p>
       ) : null}
       {sheet}
+      <FormActionBar>
+        <Button type="button" variant="outline" onClick={cancel}>
+          <X className="size-4" />
+          취소
+        </Button>
+        <SaveButton />
+      </FormActionBar>
     </form>
   );
 }

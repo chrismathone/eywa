@@ -79,8 +79,8 @@ export default async function ExamDetailPage({
           </div>
         </div>
 
-        {/* 전체 통계 (모든 반 합산) */}
-        <div className="border-line mt-4 grid grid-cols-4 gap-3 border-t pt-4 text-center">
+        {/* 전체 통계 (모든 반 합산) — 좁은 폭에선 2열(값+% 세로붕괴 방지), sm↑ 4열 */}
+        <div className="border-line mt-4 grid grid-cols-2 gap-3 border-t pt-4 text-center sm:grid-cols-4">
           <Stat label="응시" value={exam.stats.count} unit="명" />
           <Stat label="평균" value={exam.stats.avg} unit={exam.stats.avgPct != null ? `(${exam.stats.avgPct}%)` : ""} />
           <Stat label="최고" value={exam.stats.max} unit="" />

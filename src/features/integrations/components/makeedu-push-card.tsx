@@ -75,7 +75,8 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
           <span className="text-text-faint"> 새 공개접수가 들어오면(이미 등록·전송된 건 제외) 여기에 표시됩니다.</span>
         </div>
       ) : (
-      <div className="border-border overflow-hidden rounded-md border">
+      <div className="border-border overflow-x-auto overflow-y-hidden rounded-md border">
+        {/* 가로만 넘치는 7열 표 — overflow-x-auto로 스크롤(overflow-y-hidden 병행: Chrome 세로 휠 삼킴 방지). */}
         <table className="w-full text-[13px]">
           <thead className="bg-bg-soft text-text-dim">
             <tr>

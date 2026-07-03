@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
@@ -35,6 +37,11 @@ export function MobileTopNav({
     (item) => !item.hidden && canAccess(systemRole, item.menuKey, permMatrix),
   );
 
+  // 표준 모바일 햄버거 패턴 — 기본 접힘(배너 한 줄만), 탭하면 그리드 펼침, 메뉴 선택하면 자동 닫힘.
+  // 14개 메뉴 그리드가 매 화면 상단 4줄을 차지하던 것 해소(2026-07-02 사용자 제보). transient state라
+  // SSR=닫힘·클라=닫힘으로 hydration 일치(영속 불필요 — 목적지는 breadcrumb·본문이 이미 보여줌).
+  const [open, setOpen] = useState(false);
+
   return (
     <nav
       className={`bg-sidebar border-line sticky top-0 z-20 border-b print:hidden ${className ?? ""}`}
@@ -56,10 +63,23 @@ export function MobileTopNav({
           )}
           <span className="text-foreground text-[13px] font-extrabold tracking-tight">{brand}</span>
         </Link>
-        <UserMenu email={email} />
+        <div className="flex items-center gap-1">
+          {/* 햄버거 토글 — 기본 접힘, 탭하면 메뉴 그리드 펼침(선택 시 자동 닫힘). */}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
+            aria-expanded={open}
+            className="text-text-dim hover:text-foreground hover:bg-bg-soft flex size-7 items-center justify-center rounded-sm transition"
+          >
+            {open ? <X size={16} strokeWidth={2} /> : <Menu size={16} strokeWidth={2} />}
+          </button>
+          <UserMenu email={email} />
+        </div>
       </div>
 
-      {/* 메뉴 grid (모든 cell 균등 너비) */}
+      {/* 메뉴 grid (모든 cell 균등 너비) — 햄버거로 펼쳤을 때만. 선택하면 닫혀 본문 공간 확보. */}
+      {open ? (
       <ul
         className="grid gap-1 px-2 py-1.5"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))" }}
@@ -71,6 +91,7 @@ export function MobileTopNav({
             <li key={item.href}>
               <Link
                 href={item.href}
+                onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
                 className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-sm px-2 text-[12px] font-semibold transition ${
                   active
@@ -85,6 +106,7 @@ export function MobileTopNav({
           );
         })}
       </ul>
+      ) : null}
     </nav>
   );
 }

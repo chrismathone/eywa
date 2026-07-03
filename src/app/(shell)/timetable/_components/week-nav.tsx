@@ -23,7 +23,7 @@ export function WeekNav({
   const iconBtn =
     "border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center rounded-md border p-1 transition";
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro mr-0.5">주</span>
       <div className="flex items-center gap-0.5">
         <Link href={hrefForWeek(addWeeks(currentWeek, -1))} aria-label="이전 주" className={iconBtn}>

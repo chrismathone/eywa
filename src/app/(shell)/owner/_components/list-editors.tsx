@@ -206,7 +206,7 @@ export function PeriodListEditor({
   return (
     <div className="space-y-2">
       {value.map((p, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={i} className="flex flex-wrap items-center gap-2">
           <input
             className={`${cellCls} w-[90px]`}
             value={p.label}

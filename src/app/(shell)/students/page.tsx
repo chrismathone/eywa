@@ -130,14 +130,14 @@ export default async function StudentsPage({
         gradeFilters={gradeFilters}
       />
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      {/* Toolbar — 좁은 폭(모바일/360px 창)에서 버튼 클러스터가 넘치지 않게 flex-wrap */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="micro">
           결과 <span className="text-foreground font-bold">{total}</span>명
           {totalPages > 1 ? <span className="text-text-dim ml-2">{page}/{totalPages} 페이지</span> : null}
           {q ? <span className="text-text-dim ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             render={

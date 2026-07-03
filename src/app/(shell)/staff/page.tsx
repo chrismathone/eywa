@@ -222,7 +222,7 @@ export default async function StaffPage({
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="micro">
           결과 <span className="text-foreground font-bold">{total}</span>명
           {totalPages > 1 ? (
@@ -231,7 +231,7 @@ export default async function StaffPage({
             </span>
           ) : null}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {user?.systemRole === "master" ? (
             <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
               <Wallet className="size-4" />
