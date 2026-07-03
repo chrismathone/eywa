@@ -45,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# makeedu import drop zone (real PII files - never commit)
+scripts/_makeedu/_incoming/
