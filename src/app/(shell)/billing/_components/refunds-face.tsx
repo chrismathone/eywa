@@ -76,11 +76,12 @@ export async function RefundsFace({ page }: { page: number }) {
                     </WindowLink>
                   </td>
                   <td className="text-text-dim max-w-40 truncate px-3 py-2">{r.className || "—"}</td>
-                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.processedDate || "—"}</td>
+                  {/* '환불처리일자'·'담당자'는 헤더만 리네임 — 데이터는 기존 그대로(서식 환불요청일자·작성자). 사용자 지시. */}
+                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.requestDate || "—"}</td>
                   <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.completedDate || "—"}</td>
                   <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.totalAmount || "—"}</td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(r.createdAt)}</td>
-                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.handlerName ?? "—"}</td>
+                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.authorName ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
