@@ -56,3 +56,48 @@ export interface ParsedStructure {
   slots: ParsedStructureSlot[];
   warnings: string[];
 }
+
+// ── match: 파싱 슬롯 ↔ 기존 DB 레코드(이름 기준) ──────────────────────────────
+// eywa 레코드가 구버전이라 신뢰 대상이 아니다 → 시트를 진실원본으로 두고
+// "이름으로 매칭되면 그 레코드, 없으면 신규 생성 대상"으로 분류만 한다(쓰기 없음).
+
+export interface ExistingClassRef {
+  id: string;
+  className: string;
+  subject: string;
+  teacherId: string | null;
+  classroomId: string | null;
+}
+export interface ExistingTeacherRef {
+  id: string;
+  englishName: string | null;
+  displayName: string;
+}
+export interface ExistingRoomRef {
+  id: string;
+  name: string;
+}
+/** 매칭에 필요한 기존 레코드 스냅샷(서버가 주입 — 순수 match는 DB 비의존). */
+export interface ExistingContext {
+  classes: ExistingClassRef[];
+  teachers: ExistingTeacherRef[];
+  classrooms: ExistingRoomRef[];
+}
+
+/** 슬롯 + 해석된 기존 ID(없으면 null = 신규 대상). */
+export interface ResolvedSlot extends ParsedStructureSlot {
+  classId: string | null;
+  teacherId: string | null;
+  classroomId: string | null;
+}
+
+export interface MatchResult {
+  resolved: ResolvedSlot[];
+  /** 시트엔 있으나 기존 레코드에 없어 새로 만들어야 하는 것들(중복 제거·정렬). */
+  newClassNames: string[];
+  newTeacherNames: string[];
+  newRoomNames: string[];
+  matchedClasses: number;
+  matchedTeachers: number;
+  matchedRooms: number;
+}
