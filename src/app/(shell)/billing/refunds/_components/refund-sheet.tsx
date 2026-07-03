@@ -237,7 +237,7 @@ export function RefundSheet({
       <table className={`${T} mt-4 print:mt-2`}>
         <tbody>
           <tr>
-            <th className={`${head} w-20`} rowSpan={3}>
+            <th className={`${head} w-20`} rowSpan={5}>
               처리결과
             </th>
             <th className={`${head} w-28`}>환불처리일자</th>
@@ -250,6 +250,25 @@ export function RefundSheet({
           <tr>
             <th className={head}>담당자</th>
             <td className={cell}>{field("res_manager", res.manager)}</td>
+          </tr>
+          <tr>
+            <th className={head}>환불완료일자</th>
+            <td className={`${cell} num`}>{field("res_completedDate", res.completedDate, { type: "date" })}</td>
+          </tr>
+          <tr>
+            {/* 완료 처리자 = 환불완료일자 저장 시 서버가 자동 기록(읽기 전용, 위조 불가) */}
+            <th className={head}>완료 처리자</th>
+            <td className={cell}>
+              {res.completedByName ? (
+                V(res.completedByName)
+              ) : editing ? (
+                <span className="text-text-faint text-[11px] print:hidden">
+                  환불완료일자를 입력·저장하면 자동 기록됩니다
+                </span>
+              ) : (
+                V("")
+              )}
+            </td>
           </tr>
         </tbody>
       </table>

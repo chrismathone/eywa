@@ -55,10 +55,11 @@ export async function RefundsFace({ page }: { page: number }) {
               <tr className="text-text-dim border-line border-b text-left text-xs">
                 <th className="px-4 py-2 font-medium">학생</th>
                 <th className="px-3 py-2 font-medium whitespace-nowrap">수강반</th>
-                <th className="px-3 py-2 font-medium whitespace-nowrap">환불요청일자</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">환불처리일자</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">환불완료일자</th>
                 <th className="px-3 py-2 font-medium whitespace-nowrap">총 환불금액</th>
                 <th className="px-3 py-2 font-medium whitespace-nowrap">작성일</th>
-                <th className="px-3 py-2 font-medium whitespace-nowrap">작성자</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">담당자</th>
               </tr>
             </thead>
             <tbody>
@@ -75,10 +76,11 @@ export async function RefundsFace({ page }: { page: number }) {
                     </WindowLink>
                   </td>
                   <td className="text-text-dim max-w-40 truncate px-3 py-2">{r.className || "—"}</td>
-                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.requestDate || "—"}</td>
+                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.processedDate || "—"}</td>
+                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.completedDate || "—"}</td>
                   <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.totalAmount || "—"}</td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(r.createdAt)}</td>
-                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.authorName ?? "—"}</td>
+                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.handlerName ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

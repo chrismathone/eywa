@@ -9,11 +9,12 @@ export type RefundListRow = {
   id: string;
   name: string;
   className: string;
-  requestDate: string;
+  processedDate: string; // 환불처리일자
+  completedDate: string; // 환불완료일자
   totalAmount: string;
   createdAt: string;
   updatedAt: string;
-  authorName: string | null;
+  handlerName: string | null; // 담당자 = 완료 처리자(자동 기록) 우선, 없으면 서식의 담당자(수기)
 };
 
 // PostgREST to-one 임베딩을 supabase-js가 배열로 타이핑하는 경우 대비.
@@ -27,7 +28,7 @@ export async function getRefundRequests(): Promise<RefundListRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("academy_documents")
-    .select("id, form_data, created_at, updated_at, uploader:uploaded_by(display_name)")
+    .select("id, form_data, created_at, updated_at")
     .eq("form_type", REFUND_FORM_TYPE)
     .order("created_at", { ascending: false });
   return (data ?? []).map((r) => {
@@ -36,11 +37,12 @@ export async function getRefundRequests(): Promise<RefundListRow[]> {
       id: r.id,
       name: d.student.name || "(이름 미입력)",
       className: d.student.className,
-      requestDate: d.student.requestDate,
+      processedDate: d.result.processedDate,
+      completedDate: d.result.completedDate,
       totalAmount: d.refund.totalAmount,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
-      authorName: authorNameOf(r.uploader),
+      handlerName: d.result.completedByName || d.result.manager || null,
     };
   });
 }
