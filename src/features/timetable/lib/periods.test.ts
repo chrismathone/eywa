@@ -88,10 +88,10 @@ describe("교시→시각", () => {
   it("highmath는 수학 교시표 공용", () => {
     expect(periodToTimes("5", "highmath")).toEqual(periodToTimes("5", "math"));
   });
-  it("영어는 10교시(1~6 40분, 7~10 55분)", () => {
+  it("영어는 11교시(통합영어시간표 시트 col A 기준)", () => {
     expect(periodToTimes("1", "english")).toEqual({ startTime: "14:20", endTime: "15:00" });
-    expect(periodToTimes("6", "english")).toEqual({ startTime: "17:40", endTime: "18:20" });
-    expect(periodToTimes("10", "english")).toEqual({ startTime: "21:05", endTime: "22:00" });
+    expect(periodToTimes("6", "english")).toEqual({ startTime: "17:20", endTime: "18:10" });
+    expect(periodToTimes("11", "english")).toEqual({ startTime: "21:10", endTime: "22:00" });
   });
   it("레거시 키도 변환 후 매핑", () => {
     expect(periodToTimes("1-1", "math")).toEqual({ startTime: "14:30", endTime: "15:25" });
@@ -111,9 +111,9 @@ describe("교시→시각", () => {
       endTime: "17:00",
     });
   });
-  it("영어 평일 9·10교시는 평일표에만, 주말 8교시엔 없음", () => {
-    expect(periodToTimes("10", "english")).not.toBeNull();
-    expect(periodToTimes("10", "english", { weekend: true })).toBeNull();
+  it("영어 평일 10·11교시는 평일표에만, 주말 8교시엔 없음", () => {
+    expect(periodToTimes("11", "english")).not.toBeNull();
+    expect(periodToTimes("11", "english", { weekend: true })).toBeNull();
   });
   it("알 수 없는 교시는 null", () => {
     expect(periodToTimes("99", "math")).toBeNull();
@@ -145,10 +145,11 @@ describe("시각→그리드 행(slotPeriodRow)", () => {
   it("고등수학은 수학 그룹 체계 공용", () => {
     expect(slotPeriodRow("highmath", "14:30", "mon").key).toBe("m-1");
   });
-  it("영어 평일: 10교시 개별 행", () => {
+  it("영어 평일: 11교시 개별 행(통합 시트 시각)", () => {
     expect(slotPeriodRow("english", "14:20", "mon")).toMatchObject({ key: "e-1", label: "1교시" });
     expect(slotPeriodRow("english", "16:20", "mon")).toMatchObject({ key: "e-4", time: "16:20~17:00" });
-    expect(slotPeriodRow("english", "21:05", "mon").key).toBe("e-10");
+    expect(slotPeriodRow("english", "17:20", "mon")).toMatchObject({ key: "e-6", time: "17:20~18:10" });
+    expect(slotPeriodRow("english", "21:10", "mon").key).toBe("e-11");
   });
   it("같은 16:20이라도 과목 따라 다른 행(수학 2그룹 vs 영어 4교시)", () => {
     expect(slotPeriodRow("math", "16:20", "mon").key).toBe("m-2");

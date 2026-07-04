@@ -94,12 +94,12 @@ describe("buildRichCardGroups", () => {
     expect(g.holdRows).toBe(1); // max(1,0)=1 → 빈 칸도 한 줄 높이
   });
 
-  it("끝 가까운 섹션도 5교시 확보(윈도우 당김) — 8교시 시작 → 6~10교시", () => {
+  it("끝 가까운 섹션도 5교시 확보(윈도우 당김) — 10교시 시작 → 7~11교시", () => {
     const groups = buildRichCardGroups(
-      [slot({ classId: "x", className: "X", dayOfWeek: "mon", startTime: "19:15" })], // 영어 8교시
+      [slot({ classId: "x", className: "X", dayOfWeek: "mon", startTime: "20:20" })], // 영어 10교시(통합 시트)
       C,
     );
-    expect(groups[0].periodRows.map((p) => p.label)).toEqual(["6교시", "7교시", "8교시", "9교시", "10교시"]);
+    expect(groups[0].periodRows.map((p) => p.label)).toEqual(["7교시", "8교시", "9교시", "10교시", "11교시"]);
   });
 
   it("영문이름·신입/전입은 학생에 보존", () => {

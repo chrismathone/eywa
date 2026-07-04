@@ -69,18 +69,22 @@ const MATH_PERIODS: Record<string, PeriodTime> = {
   "8": { startTime: "21:05", endTime: "22:00" },
 };
 
-// 영어 교시표(10교시 — 1~6은 40분, 7~10은 55분).
+// 영어 교시표(11교시) — 진실원본 = **통합영어시간표(7월)** 시트 col A 시각.
+// ⚠️ 강사별영어시간표는 10분 단위로 쪼개 놓은 것(시작시각 일치 시 통합에 수식 출력)이라 교시 기준이 아님.
+// 오후 16:20~17:40 구간은 40분·60분 두 수업 체계가 공존해 4~7교시 시간대가 일부 겹침(시트 실제 구조).
+// 끝시각은 통합 col A의 시작시각별 최빈값(예 16:20 시작은 →17:00이 다수, →17:20 60분반은 소수).
 const ENGLISH_PERIODS: Record<string, PeriodTime> = {
   "1": { startTime: "14:20", endTime: "15:00" },
   "2": { startTime: "15:00", endTime: "15:40" },
   "3": { startTime: "15:40", endTime: "16:20" },
   "4": { startTime: "16:20", endTime: "17:00" },
   "5": { startTime: "17:00", endTime: "17:40" },
-  "6": { startTime: "17:40", endTime: "18:20" },
-  "7": { startTime: "18:20", endTime: "19:15" },
-  "8": { startTime: "19:15", endTime: "20:10" },
-  "9": { startTime: "20:10", endTime: "21:05" },
-  "10": { startTime: "21:05", endTime: "22:00" },
+  "6": { startTime: "17:20", endTime: "18:10" },
+  "7": { startTime: "17:40", endTime: "18:20" },
+  "8": { startTime: "18:20", endTime: "19:20" },
+  "9": { startTime: "19:20", endTime: "20:10" },
+  "10": { startTime: "20:20", endTime: "21:10" },
+  "11": { startTime: "21:10", endTime: "22:00" },
 };
 
 // 주말 교시표(과목 무관, 09:00부터 1시간 단위 8교시).
