@@ -1,7 +1,25 @@
-# 영어 시간표 → eywa 동기화 · 핸드오프 (2026-07-03)
+# 영어 시간표 → eywa 동기화 · 핸드오프 (2026-07-03, 최신 갱신 2026-07-04)
 
 > **목적**: 구글 스프레드시트(인재원 7월 영어시간표)를 진실원본으로 삼아 eywa의 **영어** 데이터(학생 배정·반·배치)를 완전히 재구축.
 > **철칙**: 모든 DB 작업은 **`subject='english'` 로만** 스코프. **수학(math)은 절대 건드리지 않는다.**
+
+---
+
+## 📌 진행 상황 스냅샷 (이어가기용 — 최신 위)
+
+**브랜치 `Injaewon/english-timetable-import`(워크트리 전용, origin push됨). main 미반영(사용자 승인 후에만). 워크트리는 clean.**
+
+| 커밋 | 내용 | 검증 | 상태 |
+|---|---|---|---|
+| `eb2c92e` | 시트 A열(교시) 정찰 스크립트 보존 | node --check | ✅ push |
+| `7740aa4` | 교시 갱신 핸드오프 반영(문서) | — | ✅ push |
+| **`491aea6`** | **영어 교시 = 통합영어시간표 시트 col A 11교시로 교체**(periods.ts) | **tsc0/lint0/test631 + 헤드리스 렌더체크** | ✅ push |
+| `ddb8348` | 영어 강사뷰(`?view=teacher`, 강사-major, teacher-grid.tsx) | tsc0/lint0/build✓ | ✅ push |
+| (이전) | enrollment 247 / class_schedules temporal 254 / 종강18·폐지1 / fetchSlots weekSundayOf 픽스 | 라이브 E2E·롤백 | ✅ 운영 DB 반영 |
+
+**🟢 이번 턴 요약(2026-07-04)**: 사용자 정정 — **교시 진실원본 = 통합영어시간표(7월) 시트**(강사별은 10분 단위로 쪼갠 것, 시작시각 일치 시 통합에 수식 출력이라 교시 기준 아님). `ENGLISH_PERIODS`를 옛 10교시(시각 일부 오류) → **통합 col A distinct start 11개**로 교체([periods.ts](src/features/timetable/lib/periods.ts)). 추출도구 [extract-integrated-period-times.cjs](scripts/_english_sync/extract-integrated-period-times.cjs). 4게이트 통과 + 실 production 영어 slot 12 start → subjectPeriodRows 11행·slotPeriodRow e-1~e-11 매핑(16:00 anomaly 2슬롯만 기타). **수학 별도 상수(MATH_PERIODS) 무변.** 상세 = 아래 §후속 권장(교시 항목) + §4 코드 상태.
+
+**🔜 잔여(우선순위)**: ① 정식 코드화 — "시트 반영" 버튼(§3-4, structure/ 파서·매칭 커밋됨, readSheetGridWithMerges+diff+액션+UI 필요) ② 강사 5명(Elsa·Anna·Dom·JJ·이주희) 직원 등록+english_name+담임 재지정(§후속) ③ (옵션) 16:00 anomaly 2슬롯 DB 정규화(→15:40 start)=기타 0, **프로덕션 mutation이라 승인 후** ④ **main 반영은 사용자 승인 후에만**.
 
 ---
 
@@ -107,6 +125,8 @@
   - `*.test.ts` — 실 시트 픽스처로 검증, **14/14 통과**. (`npx vitest run src/features/timetable/import/structure/`)
   - `fixtures/teacher-grid.sample.json` — 실 강사별 시트를 Sheets includeGridData 형태로 스냅샷.
 - `next.config.ts` — `serverExternalPackages: ["exceljs"]` 추가(커밋).
+- `src/features/timetable/lib/periods.ts` — **`ENGLISH_PERIODS` = 통합 시트 col A 11교시**(커밋 `491aea6`). ⚠️ 교시 진실원본은 **통합영어시간표**(강사별 아님). 수학 상수(`MATH_PERIODS`)는 별도·무변. 관련 테스트 `periods.test.ts`(26)·`class-grid.test.ts`(7) 갱신.
+- `scripts/_english_sync/extract-integrated-period-times.cjs` — 통합 시트 col A(A1:A194)에서 오후→24h 변환 후 distinct start→end 집계(11교시 재검증용, 재현 가능·커밋 `eb2c92e`).
 
 ## 5. 재현 아티팩트 위치
 
