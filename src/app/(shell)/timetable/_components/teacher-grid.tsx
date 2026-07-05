@@ -2,12 +2,13 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
-import { cellClassKey, computeBlocks } from "@/features/timetable/lib/grid";
 import {
-  assignLanes,
   buildClassIntervals,
-  buildCoveringRows,
   buildTenMinuteRows,
+  minToHM,
+  packGroups,
+  slotRowSpan,
+  type ClassInterval,
 } from "@/features/timetable/lib/ten-minute-grid";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import {
@@ -19,10 +20,11 @@ import { TeacherChip } from "./teacher-chip";
 // 시트 "강사별영어시간표(7월)" = 강사-major 그리드(강사가 세로 블록, 그 안에 월~토가 가로).
 // ⚠️ 축 = 시트와 동일한 **10분 단위 행**(2026-07-06 재작업 — 이전엔 교시 1행이라 40/60분 수업이
 // 전부 같은 높이로 뭉개졌음). 수업 블록은 실제 길이만큼 rowSpan 세로 병합 = 시트 병합 셀 미러.
-// - 컬럼: [시각] + 강사별(시트 좌→우 순서) → 요일 → **레인**(병렬 반 = 시트 LAB 서브컬럼 미러).
-//   일반 강사는 병렬이 없어 레인 1개(화면 무변), JJ·이주희는 동시 반 수만큼 나란히(칩 반복 없음).
+// - 컬럼: [시각] + 강사별(시트 좌→우 순서) → 요일. **같은 시간 범위의 병렬 반(합반·LAB)은
+//   한 셀(colSpan)로 묶어 amber 테두리 안에 나란히**(packGroups) — 낱개 레인으로 흩어지지 않는다.
+//   시간 범위가 다른 겹침만 별도 레인. 일반 강사는 병렬이 없어 레인 1개(화면 무변).
 // - 셀: 반명+방 칩(TeacherChip) — 클릭하면 그 자리에서 재원 학생 명단으로 전환(다시 클릭=복귀).
-//   back-to-back 같은 반은 한 블록으로 병합.
+//   back-to-back 같은 반은 buildClassIntervals가 한 구간으로 접는다.
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -71,18 +73,9 @@ function dayDateLabels(weekMonday?: string): Partial<Record<DayOfWeek, string>> 
   return out;
 }
 
-/** 같은 반(classId) 슬롯을 한 chip으로 — 시간범위 min~max(back-to-back 병합 블록의 hover 시각 정확). */
-function mergeByClass(slots: ScheduleSlotWithStudents[]): ScheduleSlotWithStudents[] {
-  const byClass = new Map<string, ScheduleSlotWithStudents[]>();
-  for (const s of slots) (byClass.get(s.classId) ?? byClass.set(s.classId, []).get(s.classId)!).push(s);
-  const out: ScheduleSlotWithStudents[] = [];
-  for (const g of byClass.values()) {
-    const first = g[0]!;
-    const startTime = g.reduce((mn, s) => (s.startTime < mn ? s.startTime : mn), first.startTime);
-    const endTime = g.reduce((mx, s) => (s.endTime > mx ? s.endTime : mx), first.endTime);
-    out.push({ ...first, startTime, endTime });
-  }
-  return out.sort((a, b) => a.startTime.localeCompare(b.startTime));
+/** 구간 → 칩 표시용 슬롯(대표 슬롯 + 구간 전체 시간범위 — hover 시각이 병합 범위를 정확히 표시). */
+function intervalSlot(iv: ClassInterval<ScheduleSlotWithStudents>): ScheduleSlotWithStudents {
+  return { ...iv.slots[0]!, startTime: minToHM(iv.startMin), endTime: minToHM(iv.endMin) };
 }
 
 type TeacherCol = { name: string; days: DayOfWeek[]; color: { bg: string; text: string } | null };
@@ -120,26 +113,30 @@ export function TeacherGridView({
   // (옛 교시축의 rowOf 'mon' 주말 핵이 필요 없어짐).
   const rows = buildTenMinuteRows(slots);
 
-  // 강사×요일×레인: 병렬 반은 레인으로 분해(시트 LAB 서브컬럼 미러) → 레인별 세로 병합 블록.
+  // 강사×요일: 같은 시간 범위 병렬 반 = 한 그룹(합반, colSpan 셀) → 그룹 단위 레인 패킹.
   const prepared = teachers.map((t) => {
     const cols = t.days.map((day) => {
       const colSlots = slots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
-      const lanes = assignLanes(buildClassIntervals(colSlots)).map((laneIntervals) => {
-        const laneSlots = laneIntervals.flatMap((iv) => iv.slots);
-        const covering = buildCoveringRows(rows, laneSlots);
-        const keys = covering.map((cs) => cellClassKey(cs.map((s) => s.classId)));
-        const blocks = computeBlocks(rows.length, 1, (ri) => keys[ri]!, false);
-        return { covering, blocks };
-      });
+      const { groups, laneCount } = packGroups(buildClassIntervals(colSlots));
+      // (행,레인) → 앵커 그룹 / 피복 셀 사전계산.
+      const anchors = new Map<string, { group: (typeof groups)[number]; span: number }>();
+      const covered = new Set<string>();
+      for (const g of groups) {
+        const { index, span } = slotRowSpan(rows, minToHM(g.startMin), minToHM(g.endMin));
+        anchors.set(`${index}:${g.laneStart}`, { group: g, span });
+        for (let r = index; r < index + span; r++)
+          for (let l = g.laneStart; l < g.laneStart + g.laneWidth; l++)
+            if (!(r === index && l === g.laneStart)) covered.add(`${r}:${l}`);
+      }
       // 레인 폭 — 1레인=기본 96, 다중(병렬)=레인당 64(시트도 좁은 서브컬럼).
-      const laneW = lanes.length > 1 ? LANE_COL_W : DAY_COL_W;
-      return { day, lanes, laneW };
+      const laneW = laneCount > 1 ? LANE_COL_W : DAY_COL_W;
+      return { day, laneCount, laneW, anchors, covered };
     });
     return { ...t, cols };
   });
 
   const laneColsFlat = prepared.flatMap((t) =>
-    t.cols.flatMap((col) => col.lanes.map(() => col.laneW)),
+    t.cols.flatMap((col) => Array.from({ length: col.laneCount }, () => col.laneW)),
   );
   const tableW = TIME_COL_W + laneColsFlat.reduce((a, w) => a + w, 0);
 
@@ -168,7 +165,7 @@ export function TeacherGridView({
             {prepared.map((t) => (
               <th
                 key={t.name}
-                colSpan={t.cols.reduce((a, c) => a + c.lanes.length, 0)}
+                colSpan={t.cols.reduce((a, c) => a + c.laneCount, 0)}
                 className={`sticky top-0 z-20 px-2 py-1 text-center ${STICKY_HEAD_EDGES}`}
                 style={{
                   height: HEAD_TEACHER_H,
@@ -187,7 +184,7 @@ export function TeacherGridView({
               t.cols.map((col) => (
                 <th
                   key={`${t.name}-${col.day}`}
-                  colSpan={col.lanes.length}
+                  colSpan={col.laneCount}
                   className={`bg-bg-soft text-text-dim sticky z-20 px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${STICKY_HEAD_EDGES}`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
                 >
@@ -214,12 +211,12 @@ export function TeacherGridView({
               </td>
               {prepared.flatMap((t) =>
                 t.cols.flatMap((col) =>
-                  col.lanes.map((lane, li) => {
-                    const block = lane.blocks.get(`${ri}:0`);
-                    if (!block) return null; // 위 병합 블록에 피복됨
+                  Array.from({ length: col.laneCount }, (_, li) => {
                     const key = `${t.name}-${col.day}-${li}-${row.key}`;
+                    if (col.covered.has(`${ri}:${li}`)) return null; // 그룹 셀에 피복됨
+                    const anchor = col.anchors.get(`${ri}:${li}`);
                     // 빈 1×1 셀 — 격자 프레임 유지(옅은 선, 정시 경계만 진하게).
-                    if (lane.covering[ri]!.length === 0) {
+                    if (!anchor) {
                       return (
                         <td
                           key={key}
@@ -227,27 +224,32 @@ export function TeacherGridView({
                         />
                       );
                     }
-                    // 수업 블록 — rowSpan = 실길이/10분. 내용은 **고정높이 래퍼**(td height는 최소값이라
-                    // 칩이 넘치면 행이 늘어나 10분 축 전체가 깨짐 — 명단 토글 등 넘침은 블록 내부 스크롤).
-                    const acc: ScheduleSlotWithStudents[] = [];
-                    for (let rr = ri; rr < ri + block.rowSpan; rr++) acc.push(...lane.covering[rr]!);
-                    const merged = mergeByClass(acc);
+                    const { group, span } = anchor;
+                    const isMerged = group.intervals.length > 1; // 합반(같은 시간 병렬)
+                    // 그룹 셀 — rowSpan = 실길이/10분, colSpan = 병렬 반 수. 내용은 **고정높이 래퍼**
+                    // (td height는 최소값이라 칩이 넘치면 행이 늘어나 10분 축 전체가 깨짐 — 넘침은 내부 스크롤).
                     return (
                       <td
                         key={key}
-                        rowSpan={block.rowSpan}
-                        className={`border-r border-b p-0 align-top ${GRID_FAINT} ${bottomGrid(ri + block.rowSpan)}`}
+                        rowSpan={span}
+                        colSpan={group.laneWidth}
+                        className={`border-r border-b p-0 align-top ${GRID_FAINT} ${bottomGrid(ri + span)}`}
                       >
-                        <div
-                          className="flex flex-col gap-px overflow-y-auto p-px"
-                          style={{ height: block.rowSpan * ROW_H - 1 }}
-                        >
-                          {merged.map((s) => (
-                            // 방 = 슬롯 방(slot_room_label)만 — classroomName은 반의 "기본" 강의실이라
-                            // 시트 미러가 아니다(JJ LAB=305인데 반 기본방이 뜨는 오류). 이주희(라벨 null)는
-                            // 시트 셀처럼 방 미표기. (레인 안은 안 겹치므로 보통 칩 1개.)
-                            <TeacherChip key={s.id} slot={{ ...s, classroomName: s.slotRoomLabel }} />
-                          ))}
+                        <div className="p-px" style={{ height: span * ROW_H - 1 }}>
+                          {/* 합반 = 하나의 amber 테두리로 묶고 그 안에 반 칩들을 나란히(시트 병렬 서브컬럼). */}
+                          <div
+                            className={`flex h-full min-w-0 gap-px ${
+                              isMerged ? "border-amber overflow-hidden rounded-[4px] border-2" : ""
+                            }`}
+                          >
+                            {group.intervals.map((iv) => {
+                              const s = intervalSlot(iv);
+                              // 방 = 슬롯 방(slot_room_label)만 — classroomName은 반의 "기본" 강의실이라
+                              // 시트 미러가 아니다(JJ LAB=305인데 반 기본방이 뜨는 오류). 이주희(라벨 null)는
+                              // 시트 셀처럼 방 미표기.
+                              return <TeacherChip key={s.id} slot={{ ...s, classroomName: s.slotRoomLabel }} />;
+                            })}
+                          </div>
                         </div>
                       </td>
                     );

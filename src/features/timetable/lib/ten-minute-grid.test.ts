@@ -5,6 +5,7 @@ import {
   buildClassIntervals,
   buildCoveringRows,
   buildTenMinuteRows,
+  packGroups,
   slotRowSpan,
   timeToMin,
 } from "./ten-minute-grid";
@@ -120,6 +121,63 @@ describe("timeToMin", () => {
     expect(timeToMin("14:20")).toBe(860);
     expect(timeToMin("14:20:00")).toBe(860);
     expect(timeToMin("bogus")).toBeNull();
+  });
+});
+
+describe("packGroups — 같은 시간 병렬 = 한 그룹(합반 묶음)", () => {
+  it("동시·동일 범위 3반 → 그룹 1개(laneWidth 3) — 낱개 레인 흩어짐 없음", () => {
+    const { groups, laneCount } = packGroups(
+      buildClassIntervals([
+        slot("14:20", "15:00", "LT2"),
+        slot("14:20", "15:00", "KW6"),
+        slot("14:20", "15:00", "PJ5"),
+      ]),
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ laneStart: 0, laneWidth: 3 });
+    expect(groups[0]!.intervals.map((i) => i.classId)).toEqual(["KW6", "LT2", "PJ5"]);
+    expect(laneCount).toBe(3);
+  });
+
+  it("순차 수업(겹침 없음) → 그룹들 전부 lane 0, laneCount 1", () => {
+    const { groups, laneCount } = packGroups(
+      buildClassIntervals([slot("14:20", "15:00", "c1"), slot("15:00", "15:40", "c2")]),
+    );
+    expect(groups).toHaveLength(2);
+    for (const g of groups) expect(g).toMatchObject({ laneStart: 0, laneWidth: 1 });
+    expect(laneCount).toBe(1);
+  });
+
+  it("다른 길이 겹침(JJ 월: 40분 합반 2반 + 60분 단독) → 그룹 2개, 레인 분리", () => {
+    const { groups, laneCount } = packGroups(
+      buildClassIntervals([
+        slot("16:20", "17:00", "sky"),
+        slot("16:20", "17:00", "bridgeC"),
+        slot("16:20", "17:20", "top"),
+      ]),
+    );
+    expect(groups).toHaveLength(2);
+    const pair = groups.find((g) => g.laneWidth === 2)!;
+    const solo = groups.find((g) => g.laneWidth === 1)!;
+    expect(pair.laneStart).toBe(0);
+    expect(solo.laneStart).toBe(2); // 합반이 0-1 점유 → 단독은 2
+    expect(laneCount).toBe(3);
+  });
+
+  it("앞 그룹 종료 후 레인 재사용", () => {
+    const { groups, laneCount } = packGroups(
+      buildClassIntervals([
+        slot("14:20", "15:00", "a"),
+        slot("14:20", "15:00", "b"),
+        slot("15:00", "15:40", "c"),
+      ]),
+    );
+    expect(groups.find((g) => g.intervals[0]!.classId === "c")).toMatchObject({ laneStart: 0, laneWidth: 1 });
+    expect(laneCount).toBe(2);
+  });
+
+  it("빈 입력 → 그룹 0, laneCount 1(빈 요일 프레임)", () => {
+    expect(packGroups([])).toEqual({ groups: [], laneCount: 1 });
   });
 });
 

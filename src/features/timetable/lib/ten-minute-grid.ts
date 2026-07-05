@@ -27,7 +27,7 @@ export function timeToMin(t: string): number | null {
   return Number.isFinite(min) ? min : null;
 }
 
-const minToHM = (min: number) =>
+export const minToHM = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
 const floorStep = (min: number) => Math.floor(min / STEP_MIN) * STEP_MIN;
@@ -150,4 +150,62 @@ export function assignLanes<T>(intervals: readonly ClassInterval<T>[]): ClassInt
     }
   }
   return lanes.length > 0 ? lanes.map((l) => l.items) : [[]];
+}
+
+// ── 병렬 그룹 패킹(합반 묶음) ──────────────────────────────────────────────────
+// 같은 시간 범위(start·end 동일)의 병렬 반들 = 한 그룹(합반) → 렌더에서 한 셀(colSpan)로 묶어
+// 하나의 테두리 안에 나란히. 시간 범위가 다른 겹침만 별도 레인으로. 낱개 레인 흩어짐 방지.
+
+export type PlacedGroup<T> = {
+  startMin: number;
+  endMin: number;
+  /** 배치된 시작 레인(0-based)과 점유 레인 수(=병렬 반 수). */
+  laneStart: number;
+  laneWidth: number;
+  /** 그룹 구성 반 구간들(반당 1개, classId 오름차순). 길이 ≥2면 합반. */
+  intervals: ClassInterval<T>[];
+};
+
+/**
+ * 구간들을 (start,end) 동일 그룹으로 묶고, 그룹 단위로 연속 빈 레인에 그리디 배치.
+ * 반환 laneCount = 그 요일에 필요한 총 레인 수(겹침 없으면 1).
+ */
+export function packGroups<T>(intervals: readonly ClassInterval<T>[]): {
+  groups: PlacedGroup<T>[];
+  laneCount: number;
+} {
+  const byRange = new Map<string, ClassInterval<T>[]>();
+  for (const iv of intervals) {
+    const k = `${iv.startMin}:${iv.endMin}`;
+    (byRange.get(k) ?? byRange.set(k, []).get(k)!).push(iv);
+  }
+  const raw = [...byRange.values()]
+    .map((ivs) => ({
+      startMin: ivs[0]!.startMin,
+      endMin: ivs[0]!.endMin,
+      intervals: [...ivs].sort((a, b) => a.classId.localeCompare(b.classId)),
+    }))
+    .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+  const laneEnds: number[] = []; // 레인별 마지막 점유 endMin
+  const groups: PlacedGroup<T>[] = [];
+  for (const g of raw) {
+    const width = g.intervals.length;
+    // 첫 "연속 width개 빈 레인" 탐색(없으면 뒤에 증설).
+    let start = 0;
+    for (;;) {
+      let ok = true;
+      for (let l = start; l < start + width; l++) {
+        if ((laneEnds[l] ?? 0) > g.startMin) {
+          ok = false;
+          start = l + 1;
+          break;
+        }
+      }
+      if (ok) break;
+    }
+    for (let l = start; l < start + width; l++) laneEnds[l] = g.endMin;
+    groups.push({ ...g, laneStart: start, laneWidth: width });
+  }
+  return { groups, laneCount: Math.max(1, laneEnds.length) };
 }
