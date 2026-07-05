@@ -18,7 +18,8 @@ const crypto = require("crypto");
 const postgres = require("postgres");
 
 const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
-const ART_DIR = "D:/영어시간표/_english-sync-artifacts";
+// 아티팩트 경로: env 우선, 기본은 리포 내 _artifacts(git 미추적) — PC 이동 시 재현성 (2026-07-06, 구 D:/영어시간표 고정 경로 대체)
+const ART_DIR = process.env.ENGLISH_SYNC_ART_DIR || path.join(__dirname, "_artifacts");
 const CUTOVER = "2026-07-03"; // 새 스케줄 시작일 (enrollment 전환일과 동일)
 const CLOSE_AT = "2026-07-02"; // 옛 스케줄 마지막 유효일 (fetchSlots: valid_to >= referenceDate)
 const APPLY = process.argv.includes("--apply");
@@ -38,8 +39,21 @@ function to24(minFromNoon) {
 function nameKey(s) {
   return String(s).replace(/\s+/g, "").toLowerCase();
 }
-function roomLabel(token) {
-  return token ? `본원${token.toUpperCase()}` : null;
+// SKY 반들의 실제 방 (시트 강사별 탭 실측 2026-07-06 — fix-sky-room-labels.cjs와 동일 매핑).
+// 'SKY' 토큰을 본원SKY 라벨-only로 만들면 시트 표시와 어긋남 → 강사 기준 실방으로 해석.
+const SKY_ROOM_BY_TEACHER = {
+  Jane: "본원301",
+  Elsa: "본원303",
+  Dom: "본원303",
+  Florence: "본원303",
+  JJ: "본원305",
+};
+
+function roomLabel(token, teacher) {
+  if (!token) return null;
+  const raw = `본원${token.toUpperCase()}`;
+  if (token.toUpperCase() === "SKY") return SKY_ROOM_BY_TEACHER[teacher] ?? raw;
+  return raw;
 }
 
 async function main() {
@@ -51,11 +65,13 @@ async function main() {
   try {
     // ── 1. 슬롯 로드 ──────────────────────────────────────────────────────────
     const model = JSON.parse(fs.readFileSync(path.join(ART_DIR, "normalized_model.json"), "utf8"));
-    const valid = model.periods.filter(
-      (p) => !NOISE.test(p.class) && !DATEISH.test(p.class) && !/^\*/.test(p.raw || ""),
-    );
+    // 별표(*) 항목은 노이즈가 아니라 실스케줄 — 통합영어시간표가 `*LAB` 교시로 파생 표시함(정규시간 밖
+    // 추가 LAB 세션, 2026-07-06 확인). 원 임포트(7/3)의 /^\*/ 제외 필터는 제거하고 별표만 벗겨 포함.
+    const valid = model.periods
+      .filter((p) => !NOISE.test(p.class) && !DATEISH.test(p.class))
+      .map((p) => (/^\*/.test(p.class) ? { ...p, class: p.class.replace(/^\*+/, "").trim() } : p));
     console.log(`슬롯: 전체 ${model.periods.length} → 유효 ${valid.length}`);
-    if (valid.length !== 254) throw new Error(`유효 슬롯 254 기대, 실제 ${valid.length}`);
+    if (valid.length < 254) throw new Error(`유효 슬롯 254+ 기대, 실제 ${valid.length}`);
 
     // ── 2. 기존 레코드 로드 ────────────────────────────────────────────────────
     const classes = await sql`
@@ -113,7 +129,7 @@ async function main() {
       if (!day) throw new Error(`요일 해석 실패: ${p.day}`);
       const user = resolveTeacher(p.teacher, p.teacher_raw);
       if (!user) unresolvedTeachers.set(p.teacher, (unresolvedTeachers.get(p.teacher) || 0) + 1);
-      const rLabel = roomLabel(p.room);
+      const rLabel = roomLabel(p.room, p.teacher);
       if (rLabel) usedRoomLabels.add(rLabel);
       targets.push({
         classId: cls.id,
