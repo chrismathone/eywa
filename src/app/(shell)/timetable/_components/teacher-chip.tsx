@@ -52,21 +52,29 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
           type="button"
           onClick={() => setOpen((o) => !o)}
           title={open ? "반명으로" : "학생 명단"}
-          className={`block w-full cursor-pointer px-1.5 py-0.5 text-left transition hover:brightness-95 ${slot.classBgColor ? "" : color} ${
-            open ? "border-line shrink-0 border-b" : "min-h-0 flex-1"
+          className={`block w-full cursor-pointer px-1.5 py-1 text-left transition hover:brightness-95 ${slot.classBgColor ? "" : color} ${
+            open ? "border-line shrink-0 border-b" : "min-h-0 flex-1 overflow-hidden"
           }`}
           style={headerStyle}
         >
-          <div className="flex items-baseline justify-between gap-1">
-            <span className="overflow-hidden text-[12px] leading-tight font-bold whitespace-nowrap text-clip">
-              {slot.className}
-            </span>
-            {open ? (
+          {open ? (
+            /* 펼침 헤더 — 명단 공간 확보를 위해 한 줄(반명+인원). */
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="overflow-hidden text-[12px] leading-tight font-bold whitespace-nowrap text-clip">
+                {slot.className}
+              </span>
               <span className="num shrink-0 font-mono text-[10px] opacity-75">{active.length}</span>
-            ) : slot.classroomName ? (
-              <span className="shrink-0 font-mono text-[10px] opacity-75">{slot.classroomName}</span>
-            ) : null}
-          </div>
+            </div>
+          ) : (
+            /* 접힘 — 블록이 세로로 여유로우니 시트처럼 반명(줄바꿈 허용) 위 / 강의실 아랫줄.
+               한 줄에 욱여넣어 반명이 잘리던 것 해소(2026-07-06 사용자 지적). */
+            <div className="text-center">
+              <span className="block text-[12px] leading-tight font-bold break-keep">{slot.className}</span>
+              {slot.classroomName ? (
+                <span className="mt-0.5 block font-mono text-[10px] opacity-75">{slot.classroomName}</span>
+              ) : null}
+            </div>
+          )}
         </button>
       </HoverCard>
       {/* 학생 명단(토글) — 시트 통합 탭의 반별 명단처럼 이름 세로 나열. 블록 잔여 높이를 채우고 넘치면 스크롤. */}
