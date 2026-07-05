@@ -64,8 +64,13 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
     expect(names.has("중등E_중2 심화")).toBe(true); // 내신
   });
 
-  it("SKY 방 인식(정규식 \\b(\\d{3}|SKY)\\b)", () => {
-    const sky = parsed.slots.filter((s) => s.room === "SKY");
-    expect(sky.length).toBeGreaterThan(0);
+  it("SKY 이름 반의 방 = 실방(반명 제외 잔여에서만 방 탐색 — 'SKY' 오인 금지)", () => {
+    // 옛 동작: raw 전체 ROOM_RE 매칭 → 반명 "중등E_초6 SKY"의 SKY가 방으로 오인(원 임포트
+    // '본원SKY' 오류의 근본 원인). 정정 후: 그 셀들의 방은 실방(301/303 등 숫자 3자리)이어야 한다.
+    const skyClasses = parsed.slots.filter((s) => /SKY/.test(s.className));
+    expect(skyClasses.length).toBeGreaterThan(0);
+    for (const s of skyClasses) expect(s.room).toMatch(/^\d{3}$/);
+    // room==='SKY'는 실제 방 줄에 SKY라고 적힌 경우에만 — 현 시트엔 없다.
+    expect(parsed.slots.filter((s) => s.room === "SKY")).toHaveLength(0);
   });
 });

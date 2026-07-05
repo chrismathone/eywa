@@ -1,4 +1,4 @@
-# 영어 시간표 → eywa 동기화 · 핸드오프 (2026-07-03, 최신 갱신 2026-07-04)
+# 영어 시간표 → eywa 동기화 · 핸드오프 (2026-07-03, 최신 갱신 2026-07-06)
 
 > **목적**: 구글 스프레드시트(인재원 7월 영어시간표)를 진실원본으로 삼아 eywa의 **영어** 데이터(학생 배정·반·배치)를 완전히 재구축.
 > **철칙**: 모든 DB 작업은 **`subject='english'` 로만** 스코프. **수학(math)은 절대 건드리지 않는다.**
@@ -8,6 +8,26 @@
 ## 📌 진행 상황 스냅샷 (이어가기용 — 최신 위)
 
 **브랜치 `Injaewon/english-timetable-import`(워크트리 전용, origin push됨). main 미반영(사용자 승인 후에만). 워크트리는 clean.**
+
+### 🟢 2026-07-06 — 시트↔강사뷰 전격비교 → 패리티 3픽스 + 10분 격자 재작업 (새 PC `C:\tmp\eywa-english`, dev 3002)
+
+전격비교(시트 xlsx ↔ 운영 DB 정규형 diff): 실강사 9명 완전 일치, 차이 3건 발견·전부 수정 →
+**`verify-sheet-parity.cjs` 기준 강사 12명 전 세션 시트=eywa 일치(diff 0)**. 이 스크립트가 상시 회귀 검증기.
+
+| 커밋 | 내용 | 검증 |
+|---|---|---|
+| `aa44830` | **P0** verify-timetable-live 하드코딩 자격증명 → env(EYWA_VERIFY_EMAIL/PASSWORD). ⚠️ **비번 회전 권고**(계정이 main CLAUDE.md 데모 표에도 있어 회전 시 문서 동반 갱신) | node --check |
+| `3b21f93` | 반명 `고등E_고1 특별S`→`특별 S`(시트 표기, DB 1행) | 멱등·undo |
+| `f7c4044` | **SKY 라벨 방 15슬롯 → 실방**(Jane→301·Elsa/Dom/Florence→303·JJ→305, label+classroom_id 동시). 마감된 옛 슬롯 5건은 타임머신 이력 보존 위해 불변. + apply 스크립트 재발방지(SKY_ROOM_BY_TEACHER 매핑·별표 필터 제거·ART_DIR env화) | 멱등·undo |
+| `c7578ea` | **LAB(JJ·이주희) 병렬 수업 54슬롯 이식** — xlsx 병합 기반(import-lab-parallel-slots.cjs). 시트 101세션=기존 47+신규 54, DB-only 0. 별표(*) 7건 포함(=통합 `*LAB` 파생 실스케줄 — 정규시간 밖 추가 LAB; *MEC1-3 수 1건만 통합 미표시, 기록). + parse-grid.ts 시각을 **행 인덱스 규칙**으로(A열 라벨 미신뢰) — 스팟체크 end 17:00→17:20 정정 | 멱등·undo·test 15 |
+| `e74b6b8` | **강사뷰 = 10분 격자(46행) + 시트식 병합(rowSpan)** — ten-minute-grid.ts(순수, test 13) + teacher-grid 재작업. 블록=실길이 비례(40분=4행)·back-to-back 병합·LAB 병렬 칩 스택. **고정높이 래퍼**(td height=최소값 함정)·**#71 STICKY_EDGES 로컬 복제**(이 브랜치는 main 픽스 이전 — weekday-group-tables 수정 금지)·sticky thead·dense ClassCell·칩 방=slot_room_label만(반 기본 강의실 아님). 옛 교시축(rowOf 'mon' 주말 핵) 자연 소멸 | tsc0/lint0/test645/실브라우저 |
+
+- **🔑 근본 원인 발견**: 원 임포트의 `본원SKY`는 **파서가 반명 속 "SKY"를 방으로 오인**한 것(ROOM_RE를 raw 전체에 매칭 — 시트는 처음부터 301/303). parse-grid.ts·verify 스크립트 모두 "반명 뺀 잔여에서만 방 탐색"으로 정정 + 테스트 고정.
+- **핸드오프 정정**: ① 옛 "16:00 anomaly DB 정규화(옵션)" 항목 **폐기** — 그 2슬롯(15:40~16:00/16:00~16:20)은 시트와 정확히 일치(10분 축에서 자연 렌더, 건드리면 오히려 시트와 어긋남). ② 아티팩트 경로 = `scripts/_english_sync/_artifacts/`(env `ENGLISH_SYNC_ART_DIR`, 구 `D:\영어시간표\_english-sync-artifacts` 대체 — 구 PC의 undo/백업 JSON은 이 PC에 없음, 7/6 이후 것만 있음). ③ 시트는 **링크 공유 상태**라 `export?format=xlsx` 무인증 다운로드 가능(서비스계정 키 불필요 — §3-4 정식화 때 참고).
+- **부수효과(의도)**: LAB 세션이 기본뷰·통합뷰(반 미니그리드 "이주희" 셀)에도 표시 — 시트 충실. ⚠️ 담임 미등록 반(JP1 등)의 통합뷰 담임 폴백(최빈 슬롯강사)이 "이주희"로 보일 수 있음 — §후속 "강사 5명 직원 등록"으로 해소.
+- **강사뷰 v2 후속(선택)**: 부분 겹침(같은 시작·다른 길이 병렬) 시 긴 반 칩이 블록 경계에서 반복 — 시트식 서브컬럼 분할로 해소 가능(ten-minute-grid.test.ts에 현 동작 명세 고정).
+
+### (이전) 2026-07-04까지
 
 | 커밋 | 내용 | 검증 | 상태 |
 |---|---|---|---|

@@ -142,7 +142,9 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         const start = rowStartHM(mg.r1);
         const end = rowEndHM(mg.r2);
 
-        const room = raw.match(ROOM_RE)?.[1] ?? block.homeRoom;
+        // ⚠️ 방은 **반명을 뺀 잔여**에서만 탐색 — 반명에 "SKY"가 든 반(중등E_초6 SKY)에서 raw 전체를
+        // 매칭하면 실제 방(303)보다 이름의 SKY가 먼저 걸린다(2026-07-06 — 원 임포트 '본원SKY' 오류의 근본 원인).
+        const room = raw.replace(className(raw), "").match(ROOM_RE)?.[1] ?? block.homeRoom;
         const slot: ParsedStructureSlot = {
           teacherIndex: block.index,
           teacherName: block.name,
