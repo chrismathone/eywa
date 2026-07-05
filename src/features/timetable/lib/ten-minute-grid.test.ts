@@ -1,0 +1,122 @@
+import { describe, expect, it } from "vitest";
+import { cellClassKey, computeBlocks } from "./grid";
+import {
+  buildCoveringRows,
+  buildTenMinuteRows,
+  slotRowSpan,
+  timeToMin,
+} from "./ten-minute-grid";
+
+const slot = (startTime: string, endTime: string, classId = "c1") => ({ startTime, endTime, classId });
+
+describe("buildTenMinuteRows", () => {
+  it("빈 슬롯 → 폴백 프레임 46행(14:20~22:00), isHour는 정시에만", () => {
+    const rows = buildTenMinuteRows([]);
+    expect(rows).toHaveLength(46);
+    expect(rows[0]!.key).toBe("14:20");
+    expect(rows[rows.length - 1]!.key).toBe("21:50");
+    expect(rows[0]!.isHour).toBe(false); // 14:20
+    const hours = rows.filter((r) => r.isHour).map((r) => r.key);
+    expect(hours).toEqual(["15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00"]);
+  });
+
+  it("데이터가 폴백 안이면 폴백이 이긴다(빈 주에도 시트 프레임)", () => {
+    const rows = buildTenMinuteRows([slot("15:00", "15:40")]);
+    expect(rows).toHaveLength(46);
+  });
+
+  it("범위 밖 슬롯은 바깥쪽 라운딩으로 축 확장", () => {
+    const rows = buildTenMinuteRows([slot("13:55", "14:05")]);
+    expect(rows[0]!.key).toBe("13:50"); // floor(13:55)
+    expect(rows).toHaveLength(49); // 13:50~22:00
+  });
+});
+
+describe("slotRowSpan", () => {
+  const rows = buildTenMinuteRows([]);
+
+  it("정렬 시각 정밀: 15:00~15:40=span4 · 17:20~18:10=span5 · 21:10~22:00=마지막까지 span5", () => {
+    expect(slotRowSpan(rows, "15:00", "15:40")).toEqual({ index: 4, span: 4 });
+    expect(slotRowSpan(rows, "17:20", "18:10")).toEqual({ index: 18, span: 5 });
+    const last = slotRowSpan(rows, "21:10", "22:00");
+    expect(last).toEqual({ index: 41, span: 5 });
+    expect(last.index + last.span).toBe(rows.length);
+  });
+
+  it("HH:MM:SS 허용(DB time 문자열)", () => {
+    expect(slotRowSpan(rows, "15:00:00", "15:40:00")).toEqual({ index: 4, span: 4 });
+  });
+
+  it("방어: 비정렬 내림/올림 · 역전 · 동일시각 · 파싱실패 — throw 없이 span≥1", () => {
+    expect(slotRowSpan(rows, "15:05", "15:35")).toEqual({ index: 4, span: 4 }); // floor/ceil
+    expect(slotRowSpan(rows, "15:40", "15:00").span).toBeGreaterThanOrEqual(1); // 역전
+    expect(slotRowSpan(rows, "15:00", "15:00").span).toBe(1); // zero-length
+    expect(slotRowSpan(rows, "잘못됨", "??").span).toBeGreaterThanOrEqual(1); // 파싱 실패
+  });
+
+  it("클램프: 축 범위 밖 시각은 경계로", () => {
+    const r = slotRowSpan(rows, "13:00", "23:30");
+    expect(r.index).toBe(0);
+    expect(r.index + r.span).toBe(rows.length);
+  });
+});
+
+describe("buildCoveringRows — half-open 피복", () => {
+  const rows = buildTenMinuteRows([]);
+
+  it("15:00~15:40 슬롯은 15:00·15:10·15:20·15:30 행만 덮는다(15:40 미포함)", () => {
+    const covering = buildCoveringRows(rows, [slot("15:00", "15:40")]);
+    const coveredKeys = rows.filter((_, i) => covering[i]!.length > 0).map((r) => r.key);
+    expect(coveredKeys).toEqual(["15:00", "15:10", "15:20", "15:30"]);
+  });
+});
+
+describe("computeBlocks 통합 — 시트식 세로 병합", () => {
+  const rows = buildTenMinuteRows([]);
+  const keysOf = (slots: ReturnType<typeof slot>[]) => {
+    const covering = buildCoveringRows(rows, slots);
+    return covering.map((cs) => cellClassKey(cs.map((s) => s.classId)));
+  };
+
+  it("back-to-back 동일 반(15:00~15:40 + 15:40~16:20) → rowSpan 8 단일 블록", () => {
+    const keys = keysOf([slot("15:00", "15:40"), slot("15:40", "16:20")]);
+    const blocks = computeBlocks(rows.length, 1, (ri) => keys[ri]!, false);
+    expect(blocks.get("4:0")).toMatchObject({ rowSpan: 8 });
+    expect(blocks.get("5:0")).toBeUndefined(); // 피복 행은 맵에 없음
+  });
+
+  it("갭 있는 동일 반(15:00~15:40 / 16:00~16:40) → 블록 2개(사이 빈 1×1)", () => {
+    const keys = keysOf([slot("15:00", "15:40"), slot("16:00", "16:40")]);
+    const blocks = computeBlocks(rows.length, 1, (ri) => keys[ri]!, false);
+    expect(blocks.get("4:0")).toMatchObject({ rowSpan: 4 });
+    expect(blocks.get("10:0")).toMatchObject({ rowSpan: 4 }); // 16:00
+    expect(blocks.get("8:0")).toMatchObject({ rowSpan: 1 }); // 15:40 빈 행
+  });
+
+  it("동일 길이 병렬(LAB: 3반 18:20~19:20) → 단일 블록 rowSpan 6", () => {
+    const keys = keysOf([
+      slot("18:20", "19:20", "c1"),
+      slot("18:20", "19:20", "c2"),
+      slot("18:20", "19:20", "c3"),
+    ]);
+    const blocks = computeBlocks(rows.length, 1, (ri) => keys[ri]!, false);
+    expect(blocks.get("24:0")).toMatchObject({ rowSpan: 6 }); // 18:20 = index 24
+  });
+
+  it("부분 겹침(c1 16:20~17:00 + c2 16:20~17:20) → 블록 분할 — v1 수용 동작 고정", () => {
+    // 반세트 키가 중간에 바뀌므로 c2 chip이 두 블록에 반복 표시된다(단일 컬럼 rowSpan 모델의
+    // 수학적 한계 — 시트는 서브컬럼이라 미발생). v2(서브컬럼 분할) 전까지 이 동작이 명세.
+    const keys = keysOf([slot("16:20", "17:00", "c1"), slot("16:20", "17:20", "c2")]);
+    const blocks = computeBlocks(rows.length, 1, (ri) => keys[ri]!, false);
+    expect(blocks.get("12:0")).toMatchObject({ rowSpan: 4 }); // 16:20~17:00 {c1,c2}
+    expect(blocks.get("16:0")).toMatchObject({ rowSpan: 2 }); // 17:00~17:20 {c2}
+  });
+});
+
+describe("timeToMin", () => {
+  it("HH:MM / HH:MM:SS / 실패", () => {
+    expect(timeToMin("14:20")).toBe(860);
+    expect(timeToMin("14:20:00")).toBe(860);
+    expect(timeToMin("bogus")).toBeNull();
+  });
+});

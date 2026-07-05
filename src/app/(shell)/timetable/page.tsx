@@ -218,7 +218,7 @@ export default async function TimetablePage({
           <div className="text-text-faint mb-1 shrink-0 text-right font-mono text-[11px]">
             읽기 전용 · 강사별 배치(시트 강사별영어시간표) · 편집은 기본뷰
           </div>
-          <TeacherGridView slots={slots} config={periodsConfig} weekMonday={week} teacherColors={teacherColors} />
+          <TeacherGridView slots={slots} weekMonday={week} teacherColors={teacherColors} />
         </div>
       ) : (
         <TimetableDndArea>
