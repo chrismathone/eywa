@@ -21,6 +21,13 @@ const PERIOD_H = 26;
 const STU_H = 20; // 학생 1행
 const LABEL_W = 58;
 const CARD_W = 176;
+// 명단 섹션 고정 행수(2026-07-06, 사용자 지정) — 그룹 내 최대 인원으로 늘리지 않는다.
+// 예전엔 재원=무제한(flex-1)·대기/퇴원=그룹 max 동기화라 한 반(예: DP5 퇴원 10명)이 전 카드를
+// 세로로 폭주시켰음. 이제 섹션 높이는 항상 이 행수로 고정, 넘치는 명단은 섹션 안에서 스크롤.
+const ACTIVE_ROWS = 12;
+const HOLD_ROWS = 3;
+const WD_ROWS = 5;
+const SECTION_PAD = 8; // p-1(4px) 상하
 
 function abbrev(label: string): string {
   return label.length > 4 ? label.slice(0, 4) : label;
@@ -36,13 +43,15 @@ export function RichCardGroupBoard({
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
 }) {
-  const holdH = group.holdRows * STU_H + 6;
-  const wdH = group.withdrawnRows * STU_H + 6;
+  // 고정 행수(재원12·대기3·퇴원5) — 그룹 max와 무관하게 모든 그룹·카드 동일 프레임(시트처럼).
+  const activeH = ACTIVE_ROWS * STU_H + SECTION_PAD;
+  const holdH = HOLD_ROWS * STU_H + SECTION_PAD;
+  const wdH = WD_ROWS * STU_H + SECTION_PAD;
 
   return (
     <DragScrollArea barX className="border-line border-t">
       <div className="flex w-max items-stretch">
-        <LabelColumn group={group} holdH={holdH} wdH={wdH} />
+        <LabelColumn group={group} activeH={activeH} holdH={holdH} wdH={wdH} />
         {group.cards.map((c) => (
           <ClassColumn
             key={c.classId}
@@ -50,6 +59,7 @@ export function RichCardGroupBoard({
             group={group}
             subjectSoftClass={subjectSoftClass}
             teacherColors={teacherColors}
+            activeH={activeH}
             holdH={holdH}
             wdH={wdH}
           />
@@ -60,7 +70,17 @@ export function RichCardGroupBoard({
 }
 
 /** 좌측 고정 라벨열 — 카드와 동일 높이 섹션을 "라벨"로. */
-function LabelColumn({ group, holdH, wdH }: { group: RichCardGroup; holdH: number; wdH: number }) {
+function LabelColumn({
+  group,
+  activeH,
+  holdH,
+  wdH,
+}: {
+  group: RichCardGroup;
+  activeH: number;
+  holdH: number;
+  wdH: number;
+}) {
   const cell = "border-line text-text-dim flex items-center justify-center border-b text-[10px] font-bold";
   return (
     <div
@@ -81,7 +101,7 @@ function LabelColumn({ group, holdH, wdH }: { group: RichCardGroup; holdH: numbe
           <span className="text-[7px]">{p.time}</span>
         </div>
       ))}
-      <div className="text-primary flex flex-1 items-center justify-center border-b border-line text-[10px] font-bold" style={{ minHeight: 60 }}>
+      <div className="text-primary border-line flex items-center justify-center border-b text-[10px] font-bold" style={{ height: activeH }}>
         재원
       </div>
       <div className={`${cell} text-rose`} style={{ height: holdH }}>대기</div>
@@ -98,6 +118,7 @@ function ClassColumn({
   group,
   subjectSoftClass,
   teacherColors,
+  activeH,
   holdH,
   wdH,
 }: {
@@ -105,6 +126,7 @@ function ClassColumn({
   group: RichCardGroup;
   subjectSoftClass: string;
   teacherColors: TeacherColorMap;
+  activeH: number;
   holdH: number;
   wdH: number;
 }) {
@@ -179,24 +201,24 @@ function ClassColumn({
           ))}
         </div>
       ))}
-      {/* 재원생 */}
-      <div className="bg-card flex-1 border-b border-line p-1" style={{ minHeight: 60 }}>
+      {/* 재원생 — 고정 12행, 넘치면 섹션 내부 스크롤(카드 높이 불변 = 이단 스크롤 방지). */}
+      <div className="bg-card border-line overflow-y-auto border-b p-1" style={{ height: activeH }}>
         {card.activeCount === 0 ? (
           <div className="text-text-faint py-2 text-center text-[10px]">-</div>
         ) : (
           card.active.map((s, i) => <RosterRow key={s.studentId ?? `a-${i}`} s={s} />)
         )}
       </div>
-      {/* 대기 */}
-      <div className="bg-rose-soft/30 border-line border-b p-1" style={{ height: holdH }}>
+      {/* 대기 — 고정 3행 + 내부 스크롤 */}
+      <div className="bg-rose-soft/30 border-line overflow-y-auto border-b p-1" style={{ height: holdH }}>
         {card.hold.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (
           card.hold.map((s, i) => <RosterRow key={s.studentId ?? `h-${i}`} s={s} />)
         )}
       </div>
-      {/* 퇴원 — 재원/대기와 동일 서식(이름·영문·학교/학년), 취소선·dim 톤으로 구분 */}
-      <div className="bg-bg-soft p-1" style={{ height: wdH }}>
+      {/* 퇴원 — 고정 5행 + 내부 스크롤. 재원/대기와 동일 서식, 취소선·dim 톤으로 구분 */}
+      <div className="bg-bg-soft overflow-y-auto p-1" style={{ height: wdH }}>
         {card.withdrawn.length === 0 ? (
           <div className="text-text-faint text-center text-[10px]">-</div>
         ) : (

@@ -26,7 +26,10 @@ export function RichGridView({
   const subjectSoftClass = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
 
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+    // ⚠️ 자체 overflow-y-auto 금지 — 셸 스크롤과 중첩돼 우측 이단 스크롤바가 생긴다(2026-07-06).
+    // 세로 스크롤은 바깥(셸) 하나만: 명단 섹션이 고정 행수(재원12·대기3·퇴원5)로 캡되어 그룹 높이가
+    // 유계라, 그룹들이 자연 문서 흐름으로 쌓이고 넘침은 셸이 스크롤한다.
+    <div className="space-y-4">
       <div className="text-text-faint text-right font-mono text-[11px]">
         읽기 전용 · {total}개 수업 · 편집은 기본뷰
       </div>
