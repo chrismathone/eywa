@@ -20,12 +20,18 @@
 | `3b21f93` | 반명 `고등E_고1 특별S`→`특별 S`(시트 표기, DB 1행) | 멱등·undo |
 | `f7c4044` | **SKY 라벨 방 15슬롯 → 실방**(Jane→301·Elsa/Dom/Florence→303·JJ→305, label+classroom_id 동시). 마감된 옛 슬롯 5건은 타임머신 이력 보존 위해 불변. + apply 스크립트 재발방지(SKY_ROOM_BY_TEACHER 매핑·별표 필터 제거·ART_DIR env화) | 멱등·undo |
 | `c7578ea` | **LAB(JJ·이주희) 병렬 수업 54슬롯 이식** — xlsx 병합 기반(import-lab-parallel-slots.cjs). 시트 101세션=기존 47+신규 54, DB-only 0. 별표(*) 7건 포함(=통합 `*LAB` 파생 실스케줄 — 정규시간 밖 추가 LAB; *MEC1-3 수 1건만 통합 미표시, 기록). + parse-grid.ts 시각을 **행 인덱스 규칙**으로(A열 라벨 미신뢰) — 스팟체크 end 17:00→17:20 정정 | 멱등·undo·test 15 |
-| `e74b6b8` | **강사뷰 = 10분 격자(46행) + 시트식 병합(rowSpan)** — ten-minute-grid.ts(순수, test 13) + teacher-grid 재작업. 블록=실길이 비례(40분=4행)·back-to-back 병합·LAB 병렬 칩 스택. **고정높이 래퍼**(td height=최소값 함정)·**#71 STICKY_EDGES 로컬 복제**(이 브랜치는 main 픽스 이전 — weekday-group-tables 수정 금지)·sticky thead·dense ClassCell·칩 방=slot_room_label만(반 기본 강의실 아님). 옛 교시축(rowOf 'mon' 주말 핵) 자연 소멸 | tsc0/lint0/test645/실브라우저 |
+| `e74b6b8` | **강사뷰 = 10분 격자(46행) + 시트식 병합(rowSpan)** — ten-minute-grid.ts(순수) + teacher-grid 재작업. 블록=실길이 비례(40분=4행). **고정높이 래퍼**(td height=최소값 함정)·**#71 STICKY_EDGES 로컬 복제**(이 브랜치는 main 픽스 이전 — weekday-group-tables 수정 금지)·sticky thead·칩 방=slot_room_label만(반 기본 강의실 아님). 옛 교시축(rowOf 'mon' 주말 핵) 자연 소멸 | tsc0/lint0/실브라우저 |
+| `f193efe`~`6d785b3` | **강사뷰 v2 반복 7커밋**(사용자 피드백): 칩 토글·블록 색면 채움·packGroups 합반 그룹 셀·교시별 셀 분할·칩 세로 배치·격자 톤 수학 동일+강사 경계 2px + **통합뷰 명단 고정 행수/이단 스크롤 해소**(afc4c0a). 상세 아래 불릿 | tsc0/lint0/test656/실브라우저 각 단계 |
 
 - **🔑 근본 원인 발견**: 원 임포트의 `본원SKY`는 **파서가 반명 속 "SKY"를 방으로 오인**한 것(ROOM_RE를 raw 전체에 매칭 — 시트는 처음부터 301/303). parse-grid.ts·verify 스크립트 모두 "반명 뺀 잔여에서만 방 탐색"으로 정정 + 테스트 고정.
 - **핸드오프 정정**: ① 옛 "16:00 anomaly DB 정규화(옵션)" 항목 **폐기** — 그 2슬롯(15:40~16:00/16:00~16:20)은 시트와 정확히 일치(10분 축에서 자연 렌더, 건드리면 오히려 시트와 어긋남). ② 아티팩트 경로 = `scripts/_english_sync/_artifacts/`(env `ENGLISH_SYNC_ART_DIR`, 구 `D:\영어시간표\_english-sync-artifacts` 대체 — 구 PC의 undo/백업 JSON은 이 PC에 없음, 7/6 이후 것만 있음). ③ 시트는 **링크 공유 상태**라 `export?format=xlsx` 무인증 다운로드 가능(서비스계정 키 불필요 — §3-4 정식화 때 참고).
 - **부수효과(의도)**: LAB 세션이 기본뷰·통합뷰(반 미니그리드 "이주희" 셀)에도 표시 — 시트 충실. ⚠️ 담임 미등록 반(JP1 등)의 통합뷰 담임 폴백(최빈 슬롯강사)이 "이주희"로 보일 수 있음 — §후속 "강사 5명 직원 등록"으로 해소.
-- **✅ 강사뷰 v2 완료(같은 날 후속, 사용자 요청)**: ① **다중 레인** — LAB(JJ·이주희) 병렬 반을 시트 서브컬럼처럼 나란히(assignLanes 그리디 interval coloring, 일반 강사=1레인 무변·병렬 레인당 64px). 부분 겹침 칩 반복 한계 자연 해소. ② **칩 클릭 = 반명↔학생 명단 토글**(TeacherChip 클라 칩 — 기본 반명+방, 클릭 시 그 자리 재원 명단, 학생 행 클릭=학생 창, hover 수업카드 유지). class-cell의 dense prop은 미사용화로 원복.
+- **✅ 강사뷰 v2 완료(같은 날 사용자 피드백 반복 7커밋 — 최종 상태)**:
+  · **칩 클릭 = 반명↔학생 명단 토글**([teacher-chip.tsx](<src/app/(shell)/timetable/_components/teacher-chip.tsx>) 클라 칩 신설 — 접힘=색면이 병합 블록 **전체**를 채움(시트 병합 셀 미러, 반명 줄바꿈 허용+강의실 아랫줄 세로 배치·중앙), 펼침=색 헤더 1줄+잔여 높이 재원 명단(내부 스크롤), 학생 행 클릭=학생 창, hover 수업카드. ClassCell 미사용 — 헤더가 반 창 링크라 토글과 충돌, dense prop 원복).
+  · **병렬 반(합반·LAB) = packGroups** ([ten-minute-grid.ts](src/features/timetable/lib/ten-minute-grid.ts)): 같은 (start,end) 병렬 반 = 한 그룹 → **한 셀(rowSpan×colSpan) 안에 나란히**(그룹 단위 연속 빈 레인 그리디 패킹, 병렬 레인당 64px). 다른 길이 겹침만 별도 레인. 일반 강사=1레인 무변. 초기 assignLanes(레인별 낱개 분산)·합반 amber 테두리는 **폐기**(사용자: 테두리 제거).
+  · **연결 교시 수업 = 교시별 셀 분할**(buildSlotIntervals — 슬롯=블록 1:1, 접기 없음): 시트가 2교시 수업을 교시별 셀 2개로 그리는 것(검은 교시선)을 그대로. 예: Jane 심화 16:20~18:10 = 셀 2개, 토 고2심화 = 셀 3개.
+  · **격자 톤 = 수학 기본뷰와 동일**: 가로줄 균일 border-line(옅음/정시 구분 제거), sticky 가상요소(#71)도 bg-line, **강사 밴드 경계만 같은 색 2px 세로줄**. top-sticky 헤더 세로선은 x축으론 표와 함께 움직여 일반 border-r 안전(하단만 가상요소).
+- **✅ 통합뷰 명단 고정 행수(afc4c0a)**: 재원 12행·대기 3행·퇴원 5행 **고정 프레임**(그룹 max 동기화 폐기 — DP5 퇴원 10명이 전 카드를 늘리던 것), 넘침은 섹션 내부 스크롤. + RichGridView 자체 overflow-y-auto 제거 → **우측 이단 스크롤 해소**(세로 스크롤은 셸 하나만). ⚠️ 이 컴포넌트는 수학 통합뷰도 공유 — 회귀 확인 완료.
 
 ### (이전) 2026-07-04까지
 
@@ -147,6 +153,11 @@
 - `next.config.ts` — `serverExternalPackages: ["exceljs"]` 추가(커밋).
 - `src/features/timetable/lib/periods.ts` — **`ENGLISH_PERIODS` = 통합 시트 col A 11교시**(커밋 `491aea6`). ⚠️ 교시 진실원본은 **통합영어시간표**(강사별 아님). 수학 상수(`MATH_PERIODS`)는 별도·무변. 관련 테스트 `periods.test.ts`(26)·`class-grid.test.ts`(7) 갱신.
 - `scripts/_english_sync/extract-integrated-period-times.cjs` — 통합 시트 col A(A1:A194)에서 오후→24h 변환 후 distinct start→end 집계(11교시 재검증용, 재현 가능·커밋 `eb2c92e`).
+- **(2026-07-06 신규)**
+  - [`src/features/timetable/lib/ten-minute-grid.ts`](src/features/timetable/lib/ten-minute-grid.ts)(+test 24) — 10분 행 축·피복·slotRowSpan·buildSlotIntervals(슬롯=블록 1:1)·packGroups(합반 그룹 레인 패킹). 순수([[#61]]).
+  - [`teacher-chip.tsx`](<src/app/(shell)/timetable/_components/teacher-chip.tsx>) — 강사뷰 전용 클라 칩(반명↔명단 토글).
+  - `scripts/_english_sync/fix-classname-teukbyeol-s.cjs` · `fix-sky-room-labels.cjs` · `import-lab-parallel-slots.cjs` · **`verify-sheet-parity.cjs`**(상시 회귀 검증기 — xlsx↔DB 정규형 diff, exit code 게이트) — 전부 dry-run 기본·멱등·undo(`_artifacts/`).
+  - xlsx 획득: `curl -sL ".../export?format=xlsx"`(시트 링크 공유라 무인증, gid 없이 전체 워크북).
 
 ## 5. 재현 아티팩트 위치
 
