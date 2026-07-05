@@ -2,8 +2,11 @@
 // 구조 가정(현 인재원 영어 강사별 시트):
 //   · 1행: 블록 번호(강사 블록마다 6열 간격, B/H/N/…)
 //   · 2행: 강사명 + 담임 방 + 메모   · 3행: 근무 메모
-//   · 4행: 블록 내 요일 헤더(월~토, 열마다 1개)   · A열: 시각 라벨(교시 = "4:20~5:00" 범위)
+//   · 4행: 블록 내 요일 헤더(월~토, 열마다 1개)   · A열: 시각 라벨(참고용 — 신뢰 불가)
 //   · 데이터 셀: "수업명/방번호"(병합셀 = 한 수업). 값은 병합 좌상단에만 존재.
+// ⚠️ 시각 = 행 인덱스 규칙(2026-07-06 정정): 데이터 행은 10분 격자라
+//   start = 앵커(14:20) + (병합 시작행 − DATA_START_ROW)×10분, end = 병합 높이로 도출.
+//   A열 라벨 텍스트는 불규칙("3:00~3:40" 다음 행이 "3:10~3:20")해 end가 틀렸었음 — 앵커 검증에만 사용.
 // 파서는 throw하지 않는다 — 인식 못한 셀은 건너뛰고 warnings에 남긴다(자유 편집 시트 방어).
 
 import { koDayToEnum } from "@/features/timetable/lib/periods";
@@ -37,14 +40,17 @@ function to24(token: string): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-/** A열 라벨에서 {start, end} 추출. 범위("A~B")면 첫·끝, 단일이면 end=null. */
-function parseTimeLabel(label: string): { start: string | null; end: string | null } {
+/** A열 라벨에서 첫 시각 토큰만 (앵커 검증용 — end 등 나머지 토큰은 불규칙해 신뢰 불가). */
+function firstTimeToken(label: string): string | null {
   const toks = label.match(TIME_TOKEN_RE);
-  if (!toks || toks.length === 0) return { start: null, end: null };
-  return {
-    start: to24(toks[0]!),
-    end: toks.length > 1 ? to24(toks[toks.length - 1]!) : null,
-  };
+  return toks && toks.length > 0 ? to24(toks[0]!) : null;
+}
+
+const STEP_MIN = 10; // 데이터 행 = 10분 격자 (행 인덱스가 시각의 진실)
+const DEFAULT_ANCHOR_MIN = 14 * 60 + 20; // DATA_START_ROW = 14:20
+
+function minToHM(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
 /** 헤더 "Jane 추민아 301 …" → 선두 강사명 토큰(영문 또는 한글 2~4자). */
@@ -62,6 +68,22 @@ function className(raw: string): string {
 export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
   const warnings: string[] = [];
   const rowCount = grid.cells.length;
+
+  // 시각 앵커 — DATA_START_ROW의 A열 라벨 첫 토큰으로 검증(파싱 실패 시 14:20 기본 + 경고).
+  // 이후 모든 시각은 행 인덱스 × 10분 산술로만 도출(라벨 텍스트 미신뢰 — 2026-07-06 정정).
+  const anchorLabel = cell(grid, DATA_START_ROW, TIME_COL);
+  const anchorTok = firstTimeToken(anchorLabel);
+  let anchorMin = DEFAULT_ANCHOR_MIN;
+  if (anchorTok) {
+    const [h, m] = anchorTok.split(":").map(Number);
+    anchorMin = h! * 60 + m!;
+    if (anchorMin !== DEFAULT_ANCHOR_MIN)
+      warnings.push(`시각 앵커가 14:20이 아님: "${anchorLabel}" → ${anchorTok} (행 인덱스 규칙으로 계속)`);
+  } else {
+    warnings.push(`시각 앵커 라벨 인식 실패: (${DATA_START_ROW},${TIME_COL}) "${anchorLabel}" — 14:20 가정`);
+  }
+  const rowStartHM = (r: number) => minToHM(anchorMin + (r - DATA_START_ROW) * STEP_MIN);
+  const rowEndHM = (r: number) => minToHM(anchorMin + (r - DATA_START_ROW + 1) * STEP_MIN);
 
   // 병합 좌상단 → 범위(0-based, r2/c2 inclusive) 조회맵.
   const mergeAt = new Map<string, { r1: number; c1: number; r2: number; c2: number }>();
@@ -115,16 +137,10 @@ export function parseTeacherGrid(grid: SheetGrid): ParsedStructure {
         if (raw === "") continue;
         const mg = mergeAt.get(`${r},${c}`) ?? { r1: r, c1: c, r2: r, c2: c };
 
+        // 시각 = 행 인덱스 규칙 — start는 병합 시작행, end는 병합 높이(하단행+1칸)로.
         const topLabel = cell(grid, mg.r1, TIME_COL);
-        const t = parseTimeLabel(topLabel);
-        const { start } = t;
-        let { end } = t;
-        if (!start) {
-          warnings.push(`시각 인식 실패: (${mg.r1},${TIME_COL}) "${topLabel}" — ${className(raw)}`);
-          continue;
-        }
-        // 상단 라벨이 단일 시각이면 병합 하단행 라벨에서 끝시각 보완.
-        if (!end && mg.r2 > mg.r1) end = parseTimeLabel(cell(grid, mg.r2, TIME_COL)).end;
+        const start = rowStartHM(mg.r1);
+        const end = rowEndHM(mg.r2);
 
         const room = raw.match(ROOM_RE)?.[1] ?? block.homeRoom;
         const slot: ParsedStructureSlot = {
