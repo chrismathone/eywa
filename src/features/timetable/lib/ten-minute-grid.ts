@@ -92,3 +92,62 @@ export function buildCoveringRows<T extends { startTime: string; endTime: string
   }
   return out;
 }
+
+// ── LAB 다중 레인(시트 서브컬럼 미러) ──────────────────────────────────────────
+// 시트 LAB 블록(JJ·이주희)은 한 시간대 병렬 반들을 요일당 여러 서브컬럼에 나란히 그린다.
+// 같은 반의 back-to-back 슬롯을 구간으로 접고, 겹치는 구간을 그리디 interval coloring으로
+// 레인에 배정 — 일반 강사(병렬 없음)는 자연히 1레인이라 화면 무변.
+
+export type ClassInterval<T> = {
+  classId: string;
+  startMin: number;
+  endMin: number;
+  slots: T[];
+};
+
+/** 같은 반의 인접(끝=시작)·중복 슬롯을 하나의 구간으로 접기. 시각은 10분 바깥쪽 라운딩. */
+export function buildClassIntervals<
+  T extends { startTime: string; endTime: string; classId: string },
+>(slots: readonly T[]): ClassInterval<T>[] {
+  const byClass = new Map<string, T[]>();
+  for (const s of slots) (byClass.get(s.classId) ?? byClass.set(s.classId, []).get(s.classId)!).push(s);
+  const out: ClassInterval<T>[] = [];
+  for (const [classId, group] of byClass) {
+    const sorted = [...group].sort(
+      (a, b) => (timeToMin(a.startTime) ?? 0) - (timeToMin(b.startTime) ?? 0),
+    );
+    for (const s of sorted) {
+      const a = timeToMin(s.startTime);
+      const b = timeToMin(s.endTime);
+      const start = a != null ? floorStep(a) : 0;
+      const end = Math.max(b != null ? ceilStep(b) : start + STEP_MIN, start + STEP_MIN);
+      const prev = out[out.length - 1];
+      if (prev && prev.classId === classId && start <= prev.endMin) {
+        prev.endMin = Math.max(prev.endMin, end);
+        prev.slots.push(s);
+      } else {
+        out.push({ classId, startMin: start, endMin: end, slots: [s] });
+      }
+    }
+  }
+  return out.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+}
+
+/**
+ * 구간 → 레인 배정(그리디 interval coloring, 시작 오름차순 · 첫 빈 레인).
+ * 각 레인 안에선 구간이 안 겹친다. 겹침 없으면 레인 1개.
+ */
+export function assignLanes<T>(intervals: readonly ClassInterval<T>[]): ClassInterval<T>[][] {
+  const sorted = [...intervals].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  const lanes: { end: number; items: ClassInterval<T>[] }[] = [];
+  for (const iv of sorted) {
+    const lane = lanes.find((l) => l.end <= iv.startMin);
+    if (lane) {
+      lane.items.push(iv);
+      lane.end = iv.endMin;
+    } else {
+      lanes.push({ end: iv.endMin, items: [iv] });
+    }
+  }
+  return lanes.length > 0 ? lanes.map((l) => l.items) : [[]];
+}

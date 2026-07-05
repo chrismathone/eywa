@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { cellClassKey, computeBlocks } from "./grid";
 import {
+  assignLanes,
+  buildClassIntervals,
   buildCoveringRows,
   buildTenMinuteRows,
   slotRowSpan,
@@ -118,5 +120,74 @@ describe("timeToMin", () => {
     expect(timeToMin("14:20")).toBe(860);
     expect(timeToMin("14:20:00")).toBe(860);
     expect(timeToMin("bogus")).toBeNull();
+  });
+});
+
+describe("buildClassIntervals — 반별 구간 접기", () => {
+  it("back-to-back 같은 반(15:00~15:40 + 15:40~16:20) → 구간 1개(15:00~16:20)", () => {
+    const iv = buildClassIntervals([slot("15:00", "15:40"), slot("15:40", "16:20")]);
+    expect(iv).toHaveLength(1);
+    expect(iv[0]).toMatchObject({ classId: "c1", startMin: 900, endMin: 980 });
+    expect(iv[0]!.slots).toHaveLength(2);
+  });
+
+  it("갭 있는 같은 반(14:20~15:00 / 16:20~17:00) → 별도 구간 2개(레인 재사용 가능)", () => {
+    const iv = buildClassIntervals([slot("14:20", "15:00"), slot("16:20", "17:00")]);
+    expect(iv).toHaveLength(2);
+  });
+
+  it("다른 반은 겹쳐도 구간 분리", () => {
+    const iv = buildClassIntervals([slot("15:00", "15:40", "c1"), slot("15:00", "15:40", "c2")]);
+    expect(iv).toHaveLength(2);
+  });
+});
+
+describe("assignLanes — 그리디 레인 배정(시트 LAB 서브컬럼)", () => {
+  it("겹침 없는 순차 수업 → 레인 1개(일반 강사 컬럼 무변)", () => {
+    const lanes = assignLanes(
+      buildClassIntervals([slot("14:20", "15:00", "c1"), slot("15:00", "15:40", "c2"), slot("16:20", "17:00", "c3")]),
+    );
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0]).toHaveLength(3);
+  });
+
+  it("동시 병렬 3반(이주희 월 14:20 LT2·KW6·PJ5) → 레인 3개", () => {
+    const lanes = assignLanes(
+      buildClassIntervals([
+        slot("14:20", "15:00", "LT2"),
+        slot("14:20", "15:00", "KW6"),
+        slot("14:20", "15:00", "PJ5"),
+        slot("15:00", "15:40", "DP5"), // 뒤 단독 수업은 첫 레인 재사용
+      ]),
+    );
+    expect(lanes).toHaveLength(3);
+    expect(lanes[0]!.map((iv) => iv.classId)).toEqual(["LT2", "DP5"]);
+  });
+
+  it("부분 겹침(c1 16:20~17:00 + c2 16:20~17:20) → 레인 2개 — 칩 반복 없이 나란히", () => {
+    const lanes = assignLanes(
+      buildClassIntervals([slot("16:20", "17:00", "c1"), slot("16:20", "17:20", "c2")]),
+    );
+    expect(lanes).toHaveLength(2);
+  });
+
+  it("레인 안 구간은 서로 안 겹친다(불변식)", () => {
+    const lanes = assignLanes(
+      buildClassIntervals([
+        slot("14:20", "15:00", "a"),
+        slot("14:20", "15:40", "b"),
+        slot("15:00", "15:40", "c"),
+        slot("15:40", "16:20", "d"),
+      ]),
+    );
+    for (const lane of lanes) {
+      for (let i = 1; i < lane.length; i++) {
+        expect(lane[i]!.startMin).toBeGreaterThanOrEqual(lane[i - 1]!.endMin);
+      }
+    }
+  });
+
+  it("빈 입력 → 빈 레인 1개(빈 요일 컬럼 프레임 유지)", () => {
+    expect(assignLanes([])).toEqual([[]]);
   });
 });

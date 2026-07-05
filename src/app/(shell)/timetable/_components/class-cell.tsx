@@ -336,7 +336,6 @@ export function ClassCell({
   roster = "full",
   subSlot = "full",
   coveringDays,
-  dense = false,
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
@@ -348,8 +347,6 @@ export function ClassCell({
   subSlot?: "top" | "bottom" | "full";
   /** 이 셀(병합 블록)이 덮는 요일. 2일+이고 일부 요일만 오는 재원생이 있으면 요일 칸으로 분할(분리등원, ijw식). 기본뷰만 전달. */
   coveringDays?: string[];
-  /** 10분 격자(강사뷰) 컴팩트 칩 — 헤더 1줄(반명+방 인라인·인원 생략, hover 카드에 있음). roster="none"과 함께. */
-  dense?: boolean;
 }) {
   const { editing, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
@@ -434,32 +431,18 @@ export function ClassCell({
               href={`/classes/${slot.classId ?? slot.id}`}
               title={slot.className}
               ariaLabel={`${slot.className} 반 정보`}
-              className={`block w-full text-left ${dense ? "px-1.5 py-0.5" : "px-2 py-1"}`}
+              className="block w-full px-2 py-1 text-left"
             >
-              {dense ? (
-                /* 컴팩트(10분 격자) — 반명+방 1줄. 인원·시각은 hover 카드로. 20분(2행) 블록에도 들어간다. */
-                <div className="flex items-baseline justify-between gap-1">
-                  <span className="overflow-hidden whitespace-nowrap text-clip text-[12px] leading-tight font-bold">
-                    {slot.className}
-                  </span>
-                  {slot.classroomName ? (
-                    <span className="shrink-0 font-mono text-[10px] opacity-75">{slot.classroomName}</span>
-                  ) : null}
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
+                <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
+              </div>
+              {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시. */}
+              {slot.classroomName ? (
+                <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
+                  <span className="overflow-hidden whitespace-nowrap text-clip font-mono">{slot.classroomName}</span>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
-                    <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
-                  </div>
-                  {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시. */}
-                  {slot.classroomName ? (
-                    <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
-                      <span className="overflow-hidden whitespace-nowrap text-clip font-mono">{slot.classroomName}</span>
-                    </div>
-                  ) : null}
-                </>
-              )}
+              ) : null}
             </WindowLink>
           </HoverCard>
         </div>
