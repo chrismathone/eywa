@@ -31,7 +31,9 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
 
   return (
-    <div className="border-line bg-card overflow-hidden rounded-[3px] border">
+    // 블록(병합 셀) 전체를 채운다 — 시트 병합 셀처럼 접힘 상태에선 색면이 블록을 꽉 채우고
+    // (반명은 상단), 펼침 상태에선 색 헤더 한 줄 + 아래 학생 명단. 레인 구조상 블록당 칩 1개.
+    <div className="border-line flex min-h-0 flex-1 flex-col overflow-hidden rounded-[3px] border">
       <HoverCard
         width={230}
         card={
@@ -50,7 +52,9 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
           type="button"
           onClick={() => setOpen((o) => !o)}
           title={open ? "반명으로" : "학생 명단"}
-          className={`block w-full cursor-pointer px-1.5 py-0.5 text-left transition hover:brightness-95 ${slot.classBgColor ? "" : color}`}
+          className={`block w-full cursor-pointer px-1.5 py-0.5 text-left transition hover:brightness-95 ${slot.classBgColor ? "" : color} ${
+            open ? "border-line shrink-0 border-b" : "min-h-0 flex-1"
+          }`}
           style={headerStyle}
         >
           <div className="flex items-baseline justify-between gap-1">
@@ -65,9 +69,9 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
           </div>
         </button>
       </HoverCard>
-      {/* 학생 명단(토글) — 시트 통합 탭의 반별 명단처럼 이름 세로 나열. */}
+      {/* 학생 명단(토글) — 시트 통합 탭의 반별 명단처럼 이름 세로 나열. 블록 잔여 높이를 채우고 넘치면 스크롤. */}
       {open ? (
-        <div className="divide-line/40 divide-y text-[12px]">
+        <div className="bg-card divide-line/40 min-h-0 flex-1 divide-y overflow-y-auto text-[12px]">
           {active.length === 0 ? (
             <div className="text-text-faint px-1.5 py-0.5">재원생 없음</div>
           ) : (
