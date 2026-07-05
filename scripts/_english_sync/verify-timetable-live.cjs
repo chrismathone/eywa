@@ -1,9 +1,17 @@
 // 라이브 뷰 검증 — 마스터 로그인 후 /timetable(영어) 현재/과거 주 렌더 확인.
-// 사용: node scripts/_english_sync/verify-timetable-live.cjs <port>
+// 사용: EYWA_VERIFY_EMAIL/EYWA_VERIFY_PASSWORD env 필수 (자격증명 하드코딩 금지 — 2026-07-06 P0 픽스).
+//   node --env-file=.env.local scripts/_english_sync/verify-timetable-live.cjs <port>
 const { chromium } = require("@playwright/test");
 
 const PORT = process.argv[2] || "3012";
 const BASE = `http://localhost:${PORT}`;
+
+const EMAIL = process.env.EYWA_VERIFY_EMAIL;
+const PASSWORD = process.env.EYWA_VERIFY_PASSWORD;
+if (!EMAIL || !PASSWORD) {
+  console.error("EYWA_VERIFY_EMAIL / EYWA_VERIFY_PASSWORD env가 필요합니다 (마스터 계정).");
+  process.exit(1);
+}
 
 (async () => {
   const browser = await chromium.launch();
@@ -12,8 +20,8 @@ const BASE = `http://localhost:${PORT}`;
 
   // 로그인 (클라이언트 signInWithPassword → router.push)
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-  await page.fill('input[type="email"]', "st2000423@gmail.com");
-  await page.fill('input[type="password"]', "qkrthtjs1234@");
+  await page.fill('input[type="email"]', EMAIL);
+  await page.fill('input[type="password"]', PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForURL(/dashboard/, { timeout: 60_000 });
   console.log("로그인 OK →", page.url());
