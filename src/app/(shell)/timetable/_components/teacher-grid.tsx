@@ -3,7 +3,7 @@ import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 import {
-  buildClassIntervals,
+  buildSlotIntervals,
   buildTenMinuteRows,
   minToHM,
   packGroups,
@@ -24,7 +24,7 @@ import { TeacherChip } from "./teacher-chip";
 //   한 셀(colSpan)로 묶어 amber 테두리 안에 나란히**(packGroups) — 낱개 레인으로 흩어지지 않는다.
 //   시간 범위가 다른 겹침만 별도 레인. 일반 강사는 병렬이 없어 레인 1개(화면 무변).
 // - 셀: 반명+방 칩(TeacherChip) — 클릭하면 그 자리에서 재원 학생 명단으로 전환(다시 클릭=복귀).
-//   back-to-back 같은 반은 buildClassIntervals가 한 구간으로 접는다.
+//   한 수업이 2교시 연속이어도 시트처럼 **교시별 셀 2개**(슬롯=블록 1:1, 접기 없음 — 검은 교시선 미러).
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -117,7 +117,8 @@ export function TeacherGridView({
   const prepared = teachers.map((t) => {
     const cols = t.days.map((day) => {
       const colSlots = slots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
-      const { groups, laneCount } = packGroups(buildClassIntervals(colSlots));
+      // ⚠️ 슬롯=블록 1:1(접기 없음) — 한 수업이 2교시 연속이어도 시트처럼 교시별 셀 2개로(2026-07-06).
+      const { groups, laneCount } = packGroups(buildSlotIntervals(colSlots));
       // (행,레인) → 앵커 그룹 / 피복 셀 사전계산.
       const anchors = new Map<string, { group: (typeof groups)[number]; span: number }>();
       const covered = new Set<string>();

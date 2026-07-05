@@ -134,22 +134,25 @@ export function buildClassIntervals<
 }
 
 /**
- * 구간 → 레인 배정(그리디 interval coloring, 시작 오름차순 · 첫 빈 레인).
- * 각 레인 안에선 구간이 안 겹친다. 겹침 없으면 레인 1개.
+ * 슬롯 → 구간 **접기 없음**(시트 셀 1:1) — 같은 반이 2교시 연속이어도 시트처럼 **셀 2개**로 유지
+ * (2026-07-06 사용자 지정: 시트는 한 수업의 연결 교시를 교시별 셀로 쪼개 그린다 — 검은 교시선).
+ * DB 슬롯 자체가 시트 셀 단위(교시당 1행)라 슬롯=구간 1:1이 곧 시트 표현. 동일 (반,시각) 중복만 병합.
  */
-export function assignLanes<T>(intervals: readonly ClassInterval<T>[]): ClassInterval<T>[][] {
-  const sorted = [...intervals].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
-  const lanes: { end: number; items: ClassInterval<T>[] }[] = [];
-  for (const iv of sorted) {
-    const lane = lanes.find((l) => l.end <= iv.startMin);
-    if (lane) {
-      lane.items.push(iv);
-      lane.end = iv.endMin;
-    } else {
-      lanes.push({ end: iv.endMin, items: [iv] });
-    }
+export function buildSlotIntervals<
+  T extends { startTime: string; endTime: string; classId: string },
+>(slots: readonly T[]): ClassInterval<T>[] {
+  const map = new Map<string, ClassInterval<T>>();
+  for (const s of slots) {
+    const a = timeToMin(s.startTime);
+    const b = timeToMin(s.endTime);
+    const start = a != null ? floorStep(a) : 0;
+    const end = Math.max(b != null ? ceilStep(b) : start + STEP_MIN, start + STEP_MIN);
+    const k = `${s.classId}:${start}:${end}`;
+    const ex = map.get(k);
+    if (ex) ex.slots.push(s);
+    else map.set(k, { classId: s.classId, startMin: start, endMin: end, slots: [s] });
   }
-  return lanes.length > 0 ? lanes.map((l) => l.items) : [[]];
+  return [...map.values()].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 }
 
 // ── 병렬 그룹 패킹(합반 묶음) ──────────────────────────────────────────────────
