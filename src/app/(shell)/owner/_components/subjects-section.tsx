@@ -162,34 +162,16 @@ export function SubjectsSection({
                       </select>
                     </label>
                     {/* 격자 한 칸(=격자 단위 분) 높이(px). 내부는 "분당 px"로 저장(스텝 무관 밀도) — 스텝을 바꾸면
-                        칸 높이는 비례로 재계산된다. 숫자 입력하는 대로 강사뷰 세로 간격이 바뀐다. */}
+                        칸 높이는 비례로 재계산된다. 비우면 기본값(placeholder) 사용. 숫자 입력하는 대로 강사뷰 세로 간격이 바뀐다. */}
                     <label className="flex items-center gap-2 text-[12px]">
                       <span className="text-text-dim w-[90px] shrink-0">한 칸 높이(px)</span>
-                      <input
-                        type="number"
-                        className={`${cellCls} w-[100px]`}
-                        min={5}
-                        max={120}
-                        step={1}
-                        value={Math.round(
-                          (s.teacherViewPxPerMin ?? DEFAULT_TEACHER_VIEW_PX_PER_MIN) *
-                            (s.teacherViewStep ?? 10),
-                        )}
-                        onChange={(e) => {
-                          const step = s.teacherViewStep ?? 10;
-                          const px = Number(e.target.value);
-                          if (!Number.isFinite(px) || px <= 0) {
-                            return patchSubject(i, { teacherViewPxPerMin: undefined });
-                          }
-                          // px(한 칸) → 분당 px 환산 + 스키마 범위(0.5~6) 클램프.
-                          patchSubject(i, {
-                            teacherViewPxPerMin: Math.min(6, Math.max(0.5, px / step)),
-                          });
-                        }}
-                        aria-label="강사뷰 격자 한 칸 높이(px)"
+                      <RowHeightInput
+                        pxPerMin={s.teacherViewPxPerMin}
+                        step={s.teacherViewStep ?? 10}
+                        onChange={(v) => patchSubject(i, { teacherViewPxPerMin: v })}
                       />
                       <span className="text-text-faint text-[11px]">
-                        {s.teacherViewStep ?? 10}분 한 칸의 세로 높이
+                        {s.teacherViewStep ?? 10}분 한 칸의 세로 높이 (비우면 기본)
                       </span>
                     </label>
                     <div className="space-y-1.5">
@@ -421,6 +403,52 @@ function TimeListEditor({
         <Plus className="size-3.5" /> 가로줄 추가
       </button>
     </div>
+  );
+}
+
+/**
+ * 강사뷰 한 칸 높이(px) 입력 — **로컬 문자열 상태**라 필드를 완전히 비울 수 있다(비워도 14로 스냅백 안 함).
+ * 비우면 placeholder로 기본값을 보여주고 teacherViewPxPerMin=undefined(=기본 사용). 내부 저장은 "분당 px"(스텝 무관 밀도).
+ * ⚠️ 스텝 변경(외부 요인)일 때만 표시값을 재동기 — 사용자 타이핑/클램프 중엔 draft를 안 건드려 커서·값 튐이 없다.
+ */
+function RowHeightInput({
+  pxPerMin,
+  step,
+  onChange,
+}: {
+  pxPerMin: number | undefined;
+  step: number;
+  onChange: (pxPerMin: number | undefined) => void;
+}) {
+  const defaultPx = Math.round(DEFAULT_TEACHER_VIEW_PX_PER_MIN * step);
+  const [draft, setDraft] = useState(pxPerMin != null ? String(Math.round(pxPerMin * step)) : "");
+  // 스텝이 바뀌면(다른 외부 요인) 표시 px 재계산. 렌더 중 prev 비교 = effect-setState 룰 회피(#25).
+  const [prevStep, setPrevStep] = useState(step);
+  if (step !== prevStep) {
+    setPrevStep(step);
+    setDraft(pxPerMin != null ? String(Math.round(pxPerMin * step)) : "");
+  }
+  return (
+    <input
+      type="number"
+      className={`${cellCls} w-[100px]`}
+      min={5}
+      max={120}
+      step={1}
+      value={draft}
+      placeholder={String(defaultPx)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw); // 빈 문자열 허용 — 스냅백 없음
+        const px = Number(raw);
+        if (raw.trim() === "" || !Number.isFinite(px) || px <= 0) {
+          onChange(undefined); // 비우면 기본값 사용
+        } else {
+          onChange(Math.min(6, Math.max(0.5, px / step))); // px(한 칸)→분당 px + 스키마 범위 클램프
+        }
+      }}
+      aria-label="강사뷰 격자 한 칸 높이(px)"
+    />
   );
 }
 
