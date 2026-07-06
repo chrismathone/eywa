@@ -13,6 +13,8 @@ export const AUDIT_ACTIONS = {
   payroll_upsert: "급여 정산",
   withdrawal_update: "퇴원 사유",
   owner_settings_update: "학원 설정 변경",
+  owner_subject_absorb: "과목 흡수·삭제",
+  owner_subject_delete: "과목 삭제(미사용)",
   notice_popup_create: "팝업 공지 생성",
   notice_popup_delete: "팝업 공지 삭제",
   classroom_create: "강의실 추가",
