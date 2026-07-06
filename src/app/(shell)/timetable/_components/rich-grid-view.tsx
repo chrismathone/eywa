@@ -21,7 +21,7 @@ export function RichGridView({
   subjectMaps: SubjectMaps;
   config: PeriodsConfig;
   teacherColors: TeacherColorMap;
-  /** 빈 교시 행 숨기기(1시간 단위 압축) — 통합뷰 툴바 토글. */
+  /** '1시간 단위' 툴바 토글 — 그룹별 사이 빈 교시 행만 숨김(위아래 패딩 유지). */
   compact?: boolean;
 }) {
   const groups = buildRichCardGroups(slots, config, compact);

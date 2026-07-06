@@ -102,7 +102,7 @@ describe("buildRichCardGroups", () => {
     expect(groups[0].periodRows.map((p) => p.label)).toEqual(["7교시", "8교시", "9교시", "10교시", "11교시"]);
   });
 
-  it("compact=true면 섹션 전체에 빈 교시 행 제거(1시간 단위: 4·6·8교시만, 5·7교시 제거)", () => {
+  it("compact('1시간 단위')=그룹별 사이 빈 교시만 제거(4·6·8 점유 → 5·7 숨김)", () => {
     // 1시간 단위 수업 = 16:20(4교시)·17:20(6교시)·18:20(8교시) → 5·7교시가 빔.
     const oneHour = [
       slot({ dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }),
@@ -113,27 +113,70 @@ describe("buildRichCardGroups", () => {
     expect(buildRichCardGroups(oneHour, C)[0].periodRows.map((p) => p.label)).toEqual([
       "4교시", "5교시", "6교시", "7교시", "8교시",
     ]);
-    // compact — 실제 쓰는 교시만(빈 5·7 제거 = 1시간 단위 압축).
+    // compact — 점유 범위(4~8) 사이의 빈 5·7만 제거 = 1시간 단위.
     expect(buildRichCardGroups(oneHour, C, true)[0].periodRows.map((p) => p.label)).toEqual([
       "4교시", "6교시", "8교시",
     ]);
   });
 
-  it("compact여도 섹션 내 어떤 반이 쓰는 교시는 유지(클립 없음)", () => {
-    const groups = buildRichCardGroups(
-      [
-        slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "16:20" }), // 4교시
-        slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "18:20" }), // 8교시
-        slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "16:20" }), // 4교시(같은 '4교시 시작' 섹션)
-        slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:00" }), // 5교시 — B가 사용
-      ],
-      C,
-      true,
-    );
-    const labels = groups[0].periodRows.map((p) => p.label);
-    expect(labels).toContain("5교시"); // B가 써서 유지(제거되면 B 클립)
-    expect(labels).not.toContain("6교시"); // 아무도 안 씀 → 제거
-    expect(labels).not.toContain("7교시");
+  it("compact여도 그룹 위아래 빈 교시(윈도우 패딩)는 유지 — 사이만 숨김", () => {
+    // 아래 패딩: 1·2·3교시만 점유(사이 공백 없음) → 뒤따르는 빈 4·5교시 유지(compact 무변).
+    const morning = [
+      slot({ dayOfWeek: "mon", startTime: "14:20" }),
+      slot({ dayOfWeek: "mon", startTime: "15:00" }),
+      slot({ dayOfWeek: "mon", startTime: "15:40" }),
+    ];
+    expect(buildRichCardGroups(morning, C, true)[0].periodRows.map((p) => p.label)).toEqual([
+      "1교시", "2교시", "3교시", "4교시", "5교시",
+    ]);
+    // 위 패딩: 8·10교시 점유(윈도우 당김으로 7~11) → 위 7·아래 11 유지, 사이 9만 숨김.
+    const evening = [
+      slot({ dayOfWeek: "mon", startTime: "18:20", endTime: "19:20" }),
+      slot({ dayOfWeek: "mon", startTime: "20:20", endTime: "21:10" }),
+    ];
+    expect(buildRichCardGroups(evening, C, true)[0].periodRows.map((p) => p.label)).toEqual([
+      "7교시", "8교시", "10교시", "11교시",
+    ]);
+  });
+
+  it("compact=같은 시작 교시라도 체계 다른 반은 별도 그룹 분리(각 그룹이 자기 축으로 압축·클립 없음)", () => {
+    // 1시간 체계 A(4·6·8) + 40분 체계 B(4·5·7) — 같은 '4교시 시작'이지만 서로의 빈 행을 점유.
+    const mixed = [
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }),
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "17:20", endTime: "18:20" }),
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "18:20", endTime: "19:20" }),
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "16:20", endTime: "17:00" }),
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:00", endTime: "17:40" }),
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:40", endTime: "18:20" }),
+    ];
+    // compact 아님 — 한 그룹, 유니언 축(4~8 전부).
+    const plain = buildRichCardGroups(mixed, C);
+    expect(plain).toHaveLength(1);
+    expect(plain[0].periodRows.map((p) => p.label)).toEqual(["4교시", "5교시", "6교시", "7교시", "8교시"]);
+    // compact — 두 그룹으로 분리, 각자 사이 빈 행만 숨김(B의 5·7교시 클립 없음).
+    const groups = buildRichCardGroups(mixed, C, true);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].label).toBe("4교시 시작");
+    expect(groups[0].cards.map((c) => c.className)).toEqual(["A"]);
+    expect(groups[0].periodRows.map((p) => p.label)).toEqual(["4교시", "6교시", "8교시"]);
+    expect(groups[1].label).toBe("4교시 시작 ②");
+    expect(groups[1].cards.map((c) => c.className)).toEqual(["B"]);
+    // B 축: 4·5·7 점유 + 사이 6 숨김 + 아래 패딩 8 유지.
+    expect(groups[1].periodRows.map((p) => p.label)).toEqual(["4교시", "5교시", "7교시", "8교시"]);
+  });
+
+  it("compact=같은 체계(부분집합 점유)는 한 그룹 유지 — 과분리 없음", () => {
+    const sameChain = [
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }),
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "17:20", endTime: "18:20" }),
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "18:20", endTime: "19:20" }), // 4·6·8
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }),
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:20", endTime: "18:20" }), // 4·6
+    ];
+    const groups = buildRichCardGroups(sameChain, C, true);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].cards.map((c) => c.className)).toEqual(["A", "B"]);
+    expect(groups[0].periodRows.map((p) => p.label)).toEqual(["4교시", "6교시", "8교시"]);
   });
 
   it("영문이름·신입/전입은 학생에 보존", () => {

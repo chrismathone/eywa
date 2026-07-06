@@ -39,7 +39,7 @@ export default async function TimetablePage({
 }) {
   const user = await requireAccess("timetable");
   const { view: viewParam, subject: subjectParam, week: weekRaw, compact: compactRaw } = await searchParams;
-  const compact = compactRaw === "1"; // 통합뷰 '빈 교시 숨기기'(1시간 단위 압축) 토글
+  const compact = compactRaw === "1"; // 통합뷰 '1시간 단위' 토글(그룹별 사이 빈 교시 숨김)
   const view: ViewMode =
     viewParam === "integrated" ? "integrated" : viewParam === "teacher" ? "teacher" : "basic";
 
@@ -202,7 +202,8 @@ export default async function TimetablePage({
           })}
         </div>
 
-        {/* 통합뷰 전용 — 빈 교시 행(1시간 단위 수업이 만드는 5·7교시 등 가운데 공백) 숨기기 토글. URL 파라미터라 저장 안 함. */}
+        {/* 통합뷰 전용 — '1시간 단위' 토글: 그룹(섹션)별로 실제 쓰는 교시 사이의 빈 행(5·7교시 등
+            가운데 공백)만 숨긴다. 그룹 위아래 빈 교시는 유지. URL 파라미터라 저장 안 함. */}
         {isIntegrated ? (
           <Link
             href={buildHref({ view: effView, subject, defaultSubject, week, thisWk, compact: !compact })}
@@ -220,7 +221,7 @@ export default async function TimetablePage({
             >
               {compact ? "✓" : ""}
             </span>
-            빈 교시 숨기기
+            1시간 단위
           </Link>
         ) : null}
 
@@ -292,7 +293,7 @@ function buildHref(opts: {
   defaultSubject: string;
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
-  compact?: boolean; // 통합뷰 빈 교시 숨기기(다른 네비 시 유지)
+  compact?: boolean; // 통합뷰 '1시간 단위'(다른 네비 시 유지)
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);

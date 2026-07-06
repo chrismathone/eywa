@@ -126,8 +126,12 @@ function classroomLabel(perDayRooms: Map<DayOfWeek, Set<string>>): string {
 
 /**
  * 한 과목 슬롯 → 시작 교시별 리치 카드 섹션. 교시 정렬은 평일 기준, 주말 전용 반은 "주말" 섹션.
- * compact=true면 **섹션 전체에 비어있는 교시 행을 제거**(1시간 단위 수업이 만드는 5·7교시 등 가운데 공백 제거).
- * 어떤 반이 실제 쓰는 교시(presentOrders)는 유지 → 클립 없음. 통합뷰 툴바 '빈 교시 숨기기' 토글용.
+ * compact=true('1시간 단위' 토글, 사용자 결정 2026-07-06)면:
+ * ① 같은 시작 교시라도 **교시 체계가 다른 반은 별도 그룹으로 분리**(예: 영어 16:20 시작 = 1시간
+ *    체계 4·6·8교시 ↔ 40분 체계 4·5·7교시 — 한 축에 섞으면 서로가 상대의 빈 행을 점유해 못 숨김).
+ * ② 각 그룹에서 실제 쓰는 교시 "사이"의 빈 행만 제거(1시간 수업이 만드는 5·7교시 공백 등).
+ * ⚠️ 그룹 위아래의 빈 교시(윈도우 패딩)는 유지("사이교시만, 위아래는 놔둬야").
+ * 어떤 반이 실제 쓰는 교시(presentOrders)는 항상 유지 → 클립 없음.
  */
 export function buildRichCardGroups(
   slots: GridSlot[],
@@ -189,15 +193,68 @@ export function buildRichCardGroups(
     (groupMap.get(key) ?? groupMap.set(key, []).get(key)!).push(c);
   }
 
-  return [...groupMap.values()]
-    .map((cs) => {
-      cs.sort((a, b) => a.className.localeCompare(b.className, "ko"));
-      const weekend = cs[0].groupOrder === WEEKEND_ORDER;
+  /** 카드가 이 섹션 체계(평일/주말)에서 실제 쓰는 표준 교시 order 집합. */
+  const cardStdOrders = (c: RichClassCard, weekend: boolean, standardByOrder: Map<number, GridPeriodRow>) => {
+    const out = new Set<number>();
+    for (const k of Object.keys(c.cells)) {
+      const [ordPart, dayPart] = k.split(":");
+      if (WEEKEND.has(dayPart) !== weekend) continue;
+      const o = Number(ordPart);
+      if (standardByOrder.has(o)) out.add(o);
+    }
+    return out;
+  };
+  /** rows의 [min,max] 사이에서 비어있는 표준 교시(=사이 빈 행). */
+  const interiorGaps = (rows: Set<number>, standard: GridPeriodRow[]) => {
+    if (rows.size < 2) return new Set<number>();
+    const lo = Math.min(...rows);
+    const hi = Math.max(...rows);
+    return new Set(standard.filter((r) => r.order > lo && r.order < hi && !rows.has(r.order)).map((r) => r.order));
+  };
+
+  const out: RichCardGroup[] = [];
+  for (const cs of groupMap.values()) {
+    cs.sort((a, b) => a.className.localeCompare(b.className, "ko"));
+    const weekend = cs[0].groupOrder === WEEKEND_ORDER;
+    const standard = subjectPeriodRows(subject, weekend, config);
+    const standardByOrder = new Map(standard.map((r) => [r.order, r]));
+
+    // compact('1시간 단위') = 같은 시작 교시라도 **교시 체계가 다른 반은 별도 그룹으로 분리**
+    // (사용자 결정 2026-07-06 "각각의 그룹에 대해 적용"). 예: 영어 16:20 시작에 1시간 체계(4·6·8교시)와
+    // 40분 체계(4·5·7교시)가 공존 — 한 축에 두면 서로의 교시가 상대 그룹의 '사이 빈 행'을 점유해
+    // 아무것도 못 숨긴다. 클러스터 규칙: 서로의 사이 빈 행(interiorGaps)을 침범하지 않는 카드끼리 병합.
+    let clusters: RichClassCard[][];
+    if (compact) {
+      const acc: { rows: Set<number>; cards: RichClassCard[] }[] = [];
+      for (const c of cs) {
+        const rows = cardStdOrders(c, weekend, standardByOrder);
+        const fit = acc.find((cl) => {
+          const clGaps = interiorGaps(cl.rows, standard);
+          const cGaps = interiorGaps(rows, standard);
+          return ![...rows].some((o) => clGaps.has(o)) && ![...cl.rows].some((o) => cGaps.has(o));
+        });
+        if (fit) {
+          for (const o of rows) fit.rows.add(o);
+          fit.cards.push(c);
+        } else acc.push({ rows: new Set(rows), cards: [c] });
+      }
+      // 큰 클러스터(주 체계) 먼저, 동수면 첫 반 이름순.
+      acc.sort(
+        (a, b) =>
+          b.cards.length - a.cards.length ||
+          a.cards[0].className.localeCompare(b.cards[0].className, "ko"),
+      );
+      clusters = acc.map((cl) => cl.cards);
+    } else {
+      clusters = [cs];
+    }
+
+    clusters.forEach((cluster, ci) => {
       // 셀(order:day)에서 "이 섹션 체계(평일/주말)의 요일"에 실제 있는 교시 order만 수집.
       // order=자정기준 분이라 평일 영어 2교시(15:00)와 주말 7교시(토 15:00)가 충돌 → 요일로 체계를 가른다.
       const daySet = new Set<DayOfWeek>();
       const presentOrders = new Set<number>();
-      for (const c of cs) {
+      for (const c of cluster) {
         for (const k of Object.keys(c.cells)) {
           const [ordPart, dayPart] = k.split(":");
           const day = dayPart as DayOfWeek;
@@ -207,8 +264,6 @@ export function buildRichCardGroups(
       }
       // 교시축 = 표준 교시표에서 섹션 시작 교시부터 5칸 윈도우(5×5 기본). 끝 가까운 섹션은
       // 윈도우를 당겨 항상 5칸 확보(표준 교시가 5개 미만인 수학계열은 전부).
-      const standard = subjectPeriodRows(subject, weekend, config);
-      const standardByOrder = new Map(standard.map((r) => [r.order, r]));
       // 앵커 = 섹션에 실제 등장하는 표준 교시 중 가장 이른 것(폴백 시각·다른 체계는 제외됨).
       const presentStd = [...presentOrders].filter((o) => standardByOrder.has(o));
       const anchorOrder = presentStd.length ? Math.min(...presentStd) : standard[0]?.order ?? 0;
@@ -227,21 +282,30 @@ export function buildRichCardGroups(
       }
       // 요일축 = 평일 섹션은 항상 월~금(5열), 주말 섹션은 실제 주말요일.
       const days = weekend ? DAY_ORDER.filter((d) => WEEKEND.has(d) && daySet.has(d)) : WEEKDAY_DAYS;
-      // compact = 섹션 전체에 비어있는 교시 행 제거(present인 교시만). 앵커는 항상 present라 최소 1행 보장.
+      // compact = 이 그룹이 실제 쓰는 교시 범위 [lo,hi] "사이"의 빈 행만 제거.
+      // 범위 밖(그룹 위아래 패딩 행)은 유지 — 5칸 윈도우의 컨텍스트 보존(사용자 결정 2026-07-06).
       const winList = [...winRows.values()].sort((a, b) => a.order - b.order);
-      const compactList = winList.filter((r) => presentOrders.has(r.order));
-      return {
-        key: `${cs[0].groupOrder}::${cs[0].groupLabel}`,
-        label: cs[0].groupLabel,
-        order: cs[0].groupOrder,
-        cards: cs,
-        periodRows: compact && compactList.length > 0 ? compactList : winList,
+      let periodRows = winList;
+      if (compact && presentStd.length > 0) {
+        const lo = Math.min(...presentStd);
+        const hi = Math.max(...presentStd);
+        periodRows = winList.filter((r) => r.order <= lo || r.order >= hi || presentOrders.has(r.order));
+      }
+      // 분리된 부그룹은 라벨에 ②③… 접미(같은 "N교시 시작"이 두 박스로 나뉠 때 구분).
+      const label = ci === 0 ? cluster[0].groupLabel : `${cluster[0].groupLabel} ${"②③④⑤"[ci - 1] ?? `(${ci + 1})`}`;
+      out.push({
+        key: `${cluster[0].groupOrder}::${cluster[0].groupLabel}::${ci}`,
+        label,
+        order: cluster[0].groupOrder + ci * 0.001, // 같은 앵커의 부그룹은 바로 뒤에 정렬
+        cards: cluster,
+        periodRows,
         days,
-        holdRows: Math.max(1, ...cs.map((c) => c.hold.length)),
-        withdrawnRows: Math.max(1, ...cs.map((c) => c.withdrawn.length)),
-      };
-    })
-    .sort((a, b) => a.order - b.order);
+        holdRows: Math.max(1, ...cluster.map((c) => c.hold.length)),
+        withdrawnRows: Math.max(1, ...cluster.map((c) => c.withdrawn.length)),
+      });
+    });
+  }
+  return out.sort((a, b) => a.order - b.order);
 }
 
 // 솔리드 배경 + 흰 글자라 대비가 충분한 색만(amber·gold 제외 — 흰 글자 대비 미달로 셀 강사명이 안 읽힘).
