@@ -336,6 +336,20 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 강사뷰 세로 밀도(한 칸 높이) 과목 설정 배선 — 숫자 입력대로 간격 조절 (2026-07-06) — ✅ typecheck0/lint0 + 라이브 E2E(14→50px 실측·원복) + main push(`4ec0035`)
+사용자 요청: 강사뷰 10분 격자 **세로 간격**을 연동탭(과목 운영)에서 숫자로 설정. 기존 `teacherViewStep`/`teacherViewBreaks`/`teacherViewLineExcluded`와 **동일 패턴**(과목 설정 단일 소스 → page.tsx 도출 → teacher-grid 주입).
+- **스키마**([settings-types.ts](src/features/owner/settings-types.ts)): `subjects[].teacherViewPxPerMin`(분당 px, `z.number().min(0.5).max(6).optional()`) + 기본 상수 `DEFAULT_TEACHER_VIEW_PX_PER_MIN`(1.4, teacher-grid의 폴백 `PX_PER_MIN`과 동일값 유지).
+- **편집기**([subjects-section.tsx](<src/app/(shell)/owner/_components/subjects-section.tsx>)): 강사뷰 설정에 "한 칸 높이(px)" 숫자 입력. 표시=`round(pxPerMin×step)`, 저장=`px/step`(**스텝 무관 분당 밀도로 저장** → 격자 단위를 바꿔도 칸 높이가 비례 재계산).
+- **소비처**([teacher-grid.tsx](<src/app/(shell)/timetable/_components/teacher-grid.tsx>)): `rowH = Math.round(stepMin × (pxPerMin ?? PX_PER_MIN))`. [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `subjectRow.teacherViewPxPerMin`을 도출해 `pxPerMin` prop으로 주입.
+- 검증: typecheck0/lint0 + **라이브 E2E**(과목 운영 입력 저장→DB `teacherViewPxPerMin=5`→강사뷰 10분 칸 **14→50px** 실측→테스트값 DB 원복). ⚠️ 검증 중 [[#73]] 함정(dev `.next` stale로 저장 시 필드 strip) 발견·기록. 원장 사용법: 과목 운영→영어→강사별시간표(강사뷰)→"한 칸 높이(px)".
+
+### 직원관리 담당 과목 = 운영설정 토글 칩 + 임포트 이메일 교정 + "직급(닉네임)" 라벨 (2026-07-06) — ✅ 4게이트(test716) + 라이브(로그인 파이프라인 결정검증) + main push(`30a487b`)
+사용자 3건. 커밋 `30a487b`.
+- **담당 과목 = 운영설정 단일 소스**: 쉼표 자유입력("english" 타이핑) → 학원설정(`operations.subjects`) **토글 칩**([staff-form.tsx](<src/app/(shell)/staff/_components/staff-form.tsx>) `useSubjectMaps()`). 선택 키만 hidden input에 쉼표 join으로 미러 → 서버 파싱(comma-split)·초안 캡처 **불변**. 설정에서 지워진 레거시 키는 해제 가능 칩으로 노출(silent drop 방지). 컨트롤드라 `onRestore`로 초안 rehydrate. (운영 enum 하드코딩 금지 규칙 준수 — 라벨=`labelOf`, 색=`SUBJECT_SOFT[colorOf]`.)
+- **임포트 이메일 교정**: 임포트 산물 이메일(형식불량·`LAB 김주희@imported.local`·`@imported.local`)이 수정 폼에서 **안 고쳐지던 것**(edit 폼 email readonly) → **auth 계정 없는 임포트 직원만 이메일 편집 허용**([updateStaff](src/features/staff/server/actions.ts) `canEditEmail`, 실 로그인 이메일은 잠금 · UI+서버 이중검증). 이메일은 **"변경된 경우에만" 검증·반영** → 깨진 기존값이 다른 필드 저장을 막지 않음. auth 계정 있으면 `admin.auth.admin.updateUserById({email, email_confirm:true})`로 **로그인 이메일까지 변경**(미러 트리거가 public.users 동기).
+  · **로그인 배선 결정검증**: throwaway 계정으로 `updateUserById({email})` 후 **새 이메일 로그인 성공 / 옛 이메일 "Invalid login credentials"** 확인(프로덕션 실계정 무접촉; 실 김주희 auth 이메일 변경도 실측 후 pg 원복). ⚠️ `@imported.local` 임포트 계정은 로그인 **비밀번호 미설정**일 수 있어, 실제 로그인 가능케 하려면 이메일 교정 + 임시비번 부여(super-admin) **병행** 필요.
+- **라벨 "직급" → "직급 (닉네임)"**([staff-form.tsx](<src/app/(shell)/staff/_components/staff-form.tsx>)·[basic-info-tab.tsx](<src/app/(shell)/staff/[id]/_tabs/basic-info-tab.tsx>)): 영어 강사가 이 값(예: Charlie T)을 수업 닉네임으로 쓰기 때문(라벨만, 데이터·저장 불변).
+
 ### 시간표 수학 엑셀 — 분리등원(단일 요일) 학생 글씨가 작던 버그 = shrinkToFit이 좁은 열에서 폰트 과축소 (2026-07-04) — ✅ typecheck0/lint0/build✓ + 합성 xlsx 생성 검증
 사용자 제보: 강사뷰 시간표 '엑셀' 다운로드 시 **한 요일만 등원하는 학생(분리등원)의 글씨가 다른 학생보다 작다**. 원인([math-timetable/exporter.ts](src/features/exports/math-timetable/exporter.ts)): **공통(전 요일) 학생은 병합된 넓은 셀**(월목 = `DAY_COL_W`7.5 × 2 = 15)에, **분리등원 학생은 단일 요일 좁은 셀**(7.5, 절반)에 쓰는데 **둘 다 `shrinkToFit:true, size:9`**. shrinkToFit은 **열 폭에 맞춰 폰트를 자동 축소** → 같은 이름("이름/학교학년")이 공통(넓음)엔 맞아 9pt 유지, 분리등원(좁음)엔 안 맞아 ~5–6pt로 축소 = 글씨 작음.
 - **수정**: **분리등원 셀(단일 요일)만 `shrinkToFit` 제거**([exporter.ts](src/features/exports/math-timetable/exporter.ts) 재원 partial·대기 partial 2곳 `cc.alignment`) → 폰트 9pt 유지(공통과 동일). 공통·퇴원 셀(넓은 병합)은 `shrinkToFit` 유지(넓어서 안 줄고 초장문 안전망). ⚠️ 트레이드오프: 긴 이름은 이웃 요일칸으로 넘침/잘림(ijw 클라 `truncate`와 동일 취지 — 작은 글씨보다 나음). 행 높이 16(1줄 고정)이라 wrapText는 불가(2줄 잘림).
@@ -2691,6 +2705,11 @@ realtime-js가 그 키로 WS URL을 만들며 `\n`이 `%0A`로 인코딩돼 **�
   **이 코드만 재배포하면 Vercel env를 안 고쳐도 개행이 런타임에 제거돼 폭주 소멸**(env 정리는 위생상 병행 권장).
 - **교훈**: 배포 UI 붙여넣기 env(특히 클라 번들에 박히는 `NEXT_PUBLIC_*`)는 트레일링 개행/공백이 섞이기 쉽다 → **키를
   URL/헤더/WS apikey로 넘기는 소비처는 `.trim()`으로 방어**. 증상이 "WS 무한 재연결 + `%0A`"면 이 케이스.
+
+### 73. 새 Zod 스키마 필드가 저장 시 사라짐 = dev `.next`가 서버 모듈만 stale 컴파일(클라 fresh/서버 stale 분기) (2026-07-06)
+과목 설정에 새 필드(`teacherViewPxPerMin`)를 추가하고 라이브 검증하니, **편집기 입력은 렌더되고 payload에도 실리는데 저장하면 DB에서 그 필드만 사라졌다**(액션은 `ok:true`). 원인 = Zod `z.object`는 기본이 **미지 키 strip**인데, **dev 서버의 `.next` 캐시가 필드 추가 이전에 컴파일된 서버측 스키마 모듈(settings-types)을 재사용**해, 그 서버 스키마엔 새 필드가 없어 저장 시 strip한 것. **클라 번들은 새로 컴파일(입력 렌더됨)됐는데 서버 모듈만 stale** = Turbopack 클라/서버 캐시 분기. `.env.local`처럼 파일은 최신인데도 발생(이전 dev 세션이 남긴 `.next` 캐시가 화근).
+- **해소**: dev 서버 종료 → **`.next` 삭제** → 재시작(fresh 재컴파일). 그 후 저장이 새 필드를 정상 persist(실측: DB에 값 반영). **프로덕션은 매 배포가 fresh 빌드라 무관** — dev 전용 함정.
+- **교훈**: **새 스키마/서버액션 필드를 추가한 뒤 라이브 검증**하는데 "저장은 성공인데 값만 안 남는다"면 코드 의심 전에 **`.next` 삭제+dev 재시작**부터. (서버액션 stale은 [[#35]]의 확장 — #35는 "새 액션 미등록", 여기선 "새 스키마 필드 strip".)
 
 ---
 
