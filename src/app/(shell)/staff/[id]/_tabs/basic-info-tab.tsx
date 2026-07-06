@@ -43,7 +43,7 @@ export async function BasicInfoTab({
           <Field label="이메일" value={<span className="num">{staff.email}</span>} />
           <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
           <Field label="시스템 역할" value={ROLE_LABEL[displayRole] ?? displayRole} />
-          <Field label="직책" value={staff.jobTitle} />
+          <Field label="직급 (닉네임)" value={staff.jobTitle} />
           <Field label="입사일" value={staff.hireDate ? <span className="num">{staff.hireDate}</span> : null} />
           <Field label="기본 강의실" value={staff.defaultClassroom} />
           <Field

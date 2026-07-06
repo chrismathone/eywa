@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { getStaffById } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isImportArtifactEmail } from "@/features/staff/email";
 import { StaffForm } from "../../_components/staff-form";
 
 export const metadata = { title: "직원 수정 — eywa" };
@@ -26,6 +27,9 @@ export default async function EditStaffPage({
   const { id } = await params;
   const [staff, { operations }] = await Promise.all([getStaffById(id), getTenantSettings()]);
   if (!staff) notFound();
+  // canEditEmail: 임포트 산물 이메일(형식불량·@imported.local)만 편집 허용 — 실 로그인 이메일은 잠금.
+  // auth 계정 보유 시 서버 액션이 auth.users 이메일을 직접 변경(미러 트리거가 public 동기, 0075a).
+  const canEditEmail = isImportArtifactEmail(staff.email);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -56,6 +60,7 @@ export default async function EditStaffPage({
         scope={`staff:${id}`}
         assignableRoleOptions={[]}
         jobTitleOptions={operations.jobTitles}
+        canEditEmail={canEditEmail}
         initialValue={{
           id: staff.id,
           displayName: staff.displayName,

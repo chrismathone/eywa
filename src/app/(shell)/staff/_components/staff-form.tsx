@@ -17,6 +17,8 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
+import { useSubjectMaps } from "@/features/owner/operations-context";
+import { SUBJECT_SOFT } from "@/features/owner/subjects";
 
 type Mode = "create" | "edit";
 
@@ -51,6 +53,7 @@ export function StaffForm({
   assignableRoleOptions,
   jobTitleOptions = [],
   scope,
+  canEditEmail = false,
 }: {
   mode: Mode;
   initialValue?: StaffFormValue;
@@ -58,6 +61,8 @@ export function StaffForm({
   jobTitleOptions?: string[];
   /** 동시 편집 가드 스코프(예: `staff:123`). 수정 모드에서만 — 다른 창 저장 시 경고. */
   scope?: string;
+  /** 수정 모드에서 이메일 편집 허용 — 임포트 산물 이메일(형식불량·@imported.local)만(서버가 이중 검증). */
+  canEditEmail?: boolean;
 }) {
   const action = mode === "create" ? createStaff : updateStaff;
   const [state, formAction] = useActionState<StaffFormState, FormData>(action, undefined);
@@ -80,6 +85,23 @@ export function StaffForm({
   };
 
   const [bgColor, setBgColor] = useState(v.bgColor ?? "");
+
+  // 담당 과목 = 학원설정(operations.subjects) 단일 소스 — 자유입력(쉼표 구분) 폐기, 설정 과목 토글 칩.
+  // 값은 hidden input(name="subjects")에 쉼표 join으로 미러 → 서버 파싱(comma-split)·초안 캡처 불변.
+  const subjectMaps = useSubjectMaps();
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>(v.subjects);
+  const subjectsInputRef = useRef<HTMLInputElement>(null);
+  const toggleSubject = (key: string) => {
+    setSelectedSubjects((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+    // hidden input은 네이티브 이벤트가 없어 초안 자동저장·미저장 가드가 변경을 못 본다 → 폼 이벤트 발화
+    // (양쪽 모두 디바운스/setTimeout(0) 뒤 DOM을 읽으므로 React 커밋 후 값이 캡처된다).
+    subjectsInputRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  // 설정에서 지워진(레거시) 키가 이미 배정돼 있으면 숨기지 않고 해제 가능한 칩으로 노출(silent drop 방지).
+  const settingSubjectKeys = new Set(subjectMaps.options.map((o) => o.value));
+  const legacySelectedSubjects = selectedSubjects.filter((k) => !settingSubjectKeys.has(k));
   // 직급 입력(uncontrolled) — 빠른 선택 칩이 값을 채울 수 있게 ref. 칩 클릭 시 input 이벤트를
   // 발화해 초안 자동저장·동시편집 가드가 변경을 포착하게 한다(setter 직접 호출은 이벤트 미발화).
   const jobTitleRef = useRef<HTMLInputElement>(null);
@@ -99,7 +121,16 @@ export function StaffForm({
     exclude: ["password"],
     // systemRole은 빈 옵션 없이 항상 첫 역할이 제출되므로 빈 폼 오탐 배너 방지로 의미판정서 제외.
     ignoreForBanner: ["systemRole"],
-    onRestore: (vals) => setBgColor(vals.bgColor ?? ""),
+    onRestore: (vals) => {
+      setBgColor(vals.bgColor ?? "");
+      // subjects는 hidden 미러(컨트롤드) — DOM 복원만으론 React가 되덮으므로 state rehydrate.
+      setSelectedSubjects(
+        (vals.subjects ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      );
+    },
   });
   const clearDraft = draft.clear;
 
@@ -144,8 +175,15 @@ export function StaffForm({
             required
             placeholder="staff@example.com"
             className={inputClass}
-            readOnly={mode === "edit"}
+            readOnly={mode === "edit" && !canEditEmail}
           />
+          {mode === "edit" ? (
+            <p className="text-muted-foreground mt-1 text-xs">
+              {canEditEmail
+                ? "임포트 과정에서 잘못 저장된 이메일 — 올바른 주소로 수정할 수 있습니다"
+                : "로그인 계정 이메일은 여기서 변경할 수 없습니다"}
+            </p>
+          ) : null}
         </Field>
       </div>
 
@@ -181,7 +219,8 @@ export function StaffForm({
             <p className="text-muted-foreground mt-1 text-xs">본인보다 약한 역할만 부여 가능</p>
           </Field>
         ) : null}
-        <Field label="직급" htmlFor="jobTitle">
+        {/* "(닉네임)" — 영어 강사는 이 값(예: Charlie T)을 수업에서 닉네임으로 쓴다(라벨만, 데이터 바인딩 불변). */}
+        <Field label="직급 (닉네임)" htmlFor="jobTitle">
           <input
             id="jobTitle"
             name="jobTitle"
@@ -244,13 +283,52 @@ export function StaffForm({
 
       <Field label="담당 과목" htmlFor="subjects">
         <input
+          ref={subjectsInputRef}
+          type="hidden"
           id="subjects"
           name="subjects"
-          defaultValue={v.subjects.join(", ")}
-          placeholder="예: math, english"
-          className={inputClass}
+          value={selectedSubjects.join(",")}
         />
-        <p className="text-muted-foreground mt-1 text-xs">쉼표로 구분</p>
+        {subjectMaps.options.length > 0 || legacySelectedSubjects.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {subjectMaps.options.map((o) => {
+              const active = selectedSubjects.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleSubject(o.value)}
+                  className={
+                    active
+                      ? `${SUBJECT_SOFT[subjectMaps.colorOf(o.value)]} rounded border border-transparent px-2.5 py-1 text-xs font-medium transition`
+                      : "border-line text-text-dim hover:border-primary hover:text-primary rounded border px-2.5 py-1 text-xs transition"
+                  }
+                >
+                  {active ? "✓ " : ""}
+                  {o.label}
+                </button>
+              );
+            })}
+            {legacySelectedSubjects.map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed
+                onClick={() => toggleSubject(k)}
+                title="학원 설정에 없는 과목 — 클릭하면 해제"
+                className={`${SUBJECT_SOFT[subjectMaps.colorOf(k)]} rounded border border-transparent px-2.5 py-1 text-xs font-medium transition`}
+              >
+                ✓ {subjectMaps.labelOf(k)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-text-faint text-xs">
+            등록된 과목이 없습니다 — 학원 설정 → 운영 체계에서 과목을 먼저 추가하세요.
+          </p>
+        )}
+        <p className="text-muted-foreground mt-1 text-xs">학원 설정(운영 체계)의 과목에서 선택</p>
       </Field>
 
       <Field label="시간표 색" htmlFor="bgColor">

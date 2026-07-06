@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
+import { EMAIL_RE, isImportArtifactEmail } from "@/features/staff/email";
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
 const STATUSES = ["active", "inactive", "pending"] as const;
@@ -50,7 +51,7 @@ function validateBase(input: ReturnType<typeof readBaseForm>): Record<string, st
   const errors: Record<string, string> = {};
   if (!input.displayName) errors.displayName = "이름은 필수입니다";
   if (!input.email) errors.email = "이메일은 필수입니다";
-  else if (!/^\S+@\S+\.\S+$/.test(input.email)) errors.email = "이메일 형식이 올바르지 않습니다";
+  else if (!EMAIL_RE.test(input.email)) errors.email = "이메일 형식이 올바르지 않습니다";
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
@@ -162,15 +163,65 @@ export async function updateStaff(
   if (!id) return { error: "직원 ID가 누락되었습니다" };
 
   const input = readBaseForm(formData);
-  const fieldErrors = validateBase(input);
-  if (fieldErrors) return { fieldErrors };
+
+  // 저장된 이메일과 대조 — 임포트 직원의 깨진 레거시 이메일("LAB 김주희@imported.local" 등)이
+  // 그대로 재제출될 때 형식 검증이 다른 필드 수정까지 막지 않게, 이메일은 "변경된 경우에만" 검증·반영.
+  const admin = createAdminClient();
+  const { data: target, error: targetErr } = await admin
+    .from("users")
+    .select("tenant_id, email")
+    .eq("id", id)
+    .single();
+  if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
+  if (target.tenant_id !== actor.tenantId) {
+    return { error: "다른 지점의 계정은 변경할 수 없습니다" };
+  }
+  const emailChanged =
+    input.email.toLowerCase() !== String(target.email ?? "").toLowerCase();
+
+  const fieldErrors = validateBase(input) ?? {};
+  if (!emailChanged) delete fieldErrors.email;
+  if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
+
+  if (emailChanged) {
+    // 임포트 산물 이메일(형식불량·@imported.local)만 교정 허용 — 실 로그인 이메일 오변경 방지(UI와 동일 기준 이중 검증).
+    if (!isImportArtifactEmail(String(target.email ?? ""))) {
+      return {
+        fieldErrors: { email: "실사용 로그인 이메일은 여기서 변경할 수 없습니다" },
+      };
+    }
+    // 같은 테넌트 중복(대소문자 무시, 본인 제외) — (tenant_id,email) 유니크 위반 사전 안내.
+    const { data: dup } = await admin
+      .from("users")
+      .select("id")
+      .eq("tenant_id", actor.tenantId)
+      .ilike("email", input.email)
+      .neq("id", id)
+      .limit(1)
+      .maybeSingle();
+    if (dup) {
+      return { fieldErrors: { email: "이미 이 이메일로 등록된 직원이 있습니다" } };
+    }
+    // auth 계정이 있으면 로그인 이메일(auth.users) 자체를 변경 — public.users만 바꾸면 미러 트리거
+    // (0075a: email = excluded.email)가 다음 auth 갱신 때 옛 이메일로 되덮는다. 트리거가 public도 동기.
+    const { data: authData } = await admin.auth.admin.getUserById(id);
+    if (authData?.user) {
+      const { error: authErr } = await admin.auth.admin.updateUserById(id, {
+        email: input.email,
+        email_confirm: true,
+      });
+      if (authErr) {
+        return { fieldErrors: { email: `로그인 이메일 변경 실패: ${authErr.message}` } };
+      }
+    }
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("users")
     .update({
       display_name: input.displayName,
-      email: input.email,
+      ...(emailChanged ? { email: input.email } : {}),
       phone: input.phone,
       hire_date: input.hireDate,
       job_title: input.jobTitle,
