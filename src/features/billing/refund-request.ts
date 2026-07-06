@@ -43,7 +43,10 @@ export type RefundRequestData = {
   result: {
     processedDate: string; // 환불처리일자 (YYYY-MM-DD)
     systemProcessed: string; // 전산처리여부
-    manager: string; // 담당자
+    manager: string; // 담당자 (수기 — 종이 서식 필드)
+    completedDate: string; // 환불완료일자 (YYYY-MM-DD) — 이 값을 처음 입력·저장하면 아래 completedBy가 못박힌다.
+    completedBy: string; // 완료 처리자 user id — 서버 전용(폼에서 안 받음, 위조 불가). 비우면(완료 해제) 함께 지워짐.
+    completedByName: string; // 완료 처리자 표시명 스냅샷 — 목록·시트에 그대로 노출(조인 없이 표시).
   };
 };
 
@@ -68,7 +71,14 @@ export function emptyRefund(): RefundRequestData {
       totalAmount: "",
       method: { account: "", internetCard: "", card: "" },
     },
-    result: { processedDate: "", systemProcessed: "", manager: "" },
+    result: {
+      processedDate: "",
+      systemProcessed: "",
+      manager: "",
+      completedDate: "",
+      completedBy: "",
+      completedByName: "",
+    },
   };
 }
 
@@ -111,6 +121,10 @@ export function parseRefundForm(fd: FormData): RefundRequestData {
       processedDate: s("res_processedDate"),
       systemProcessed: s("res_systemProcessed"),
       manager: s("res_manager"),
+      completedDate: s("res_completedDate"),
+      // completedBy/completedByName은 폼에서 안 받는다 — 서버(refund-actions)가 못박는다(위조 방지).
+      completedBy: "",
+      completedByName: "",
     },
   };
 }
@@ -159,6 +173,9 @@ export function normalizeRefund(v: unknown): RefundRequestData {
       processedDate: str(res.processedDate),
       systemProcessed: str(res.systemProcessed),
       manager: str(res.manager),
+      completedDate: str(res.completedDate),
+      completedBy: str(res.completedBy),
+      completedByName: str(res.completedByName),
     },
   };
 }

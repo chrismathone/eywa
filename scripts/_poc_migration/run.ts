@@ -116,7 +116,6 @@ async function main() {
   for (const si of C.staffIndex ?? []) {
     if (si.staffId && staffIds.has(si.staffId) && insertedStaff.has(si.staffId)) uidToUser.set(si.id, staffIds.get(si.staffId));
   }
-  const resolveUser = (uid?: string) => (uid && uidToUser.get(uid)) || fallbackUser;
 
   // classes (+schedules)
   const insertedClass = new Set<string>();
@@ -224,7 +223,16 @@ async function main() {
   for (const k of C.student_consultations ?? []) {
     const sid = k.studentId && insertedStudent.has(k.studentId) ? studentIds.get(k.studentId) : null;
     if (!sid) { note("sconsult.skip(student)"); continue; }
-    const counselor = resolveUser(k.consultantId) ?? (k.consultantName ? nameToTeacher.get(k.consultantName) ?? null : null);
+    // ⚠️ 상담자 우선순위: consultantId(uid) → consultantName(이름, 괄호 영문닉 제거 폴백) → fallbackUser.
+    // (옛 버그: resolveUser(uid)가 미해결 시 항상 fallbackUser를 반환해 이름 매칭이 dead code가 됐고,
+    //  1411건 전부 '보조T'(fallbackUser)로 몰렸다. reattribute-consultation-counselors.cjs로 사후 교정.)
+    const stripParen = (n: string) => n.replace(/\s*\(.*?\)\s*/g, "").trim();
+    const counselor =
+      (k.consultantId ? uidToUser.get(k.consultantId) : undefined) ??
+      (k.consultantName
+        ? nameToTeacher.get(k.consultantName) ?? nameToTeacher.get(stripParen(k.consultantName))
+        : undefined) ??
+      fallbackUser;
     const consultedAt = normDate(k.date) || new Date().toISOString();
     const summary = k.content && String(k.content).trim() ? String(k.content).trim() : "(내용 없음)";
     const category = k.category && String(k.category).trim() ? String(k.category).trim() : "general";

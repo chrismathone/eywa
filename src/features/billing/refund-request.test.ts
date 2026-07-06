@@ -38,6 +38,7 @@ describe("parseRefundForm", () => {
         res_processedDate: "2026-07-05",
         res_systemProcessed: "완료",
         res_manager: "박소선",
+        res_completedDate: "2026-07-07",
       }),
     );
     expect(d.student.name).toBe("홍길동");
@@ -45,6 +46,10 @@ describe("parseRefundForm", () => {
     expect(d.refund.method.account).toBe("국민 000-000");
     expect(d.refund.method.internetCard).toBe("");
     expect(d.result.manager).toBe("박소선");
+    expect(d.result.completedDate).toBe("2026-07-07");
+    // 완료 처리자는 폼에서 안 받는다(서버 스탬프) — parse 결과는 항상 빈 값이어야 위조 불가.
+    expect(d.result.completedBy).toBe("");
+    expect(d.result.completedByName).toBe("");
     expect(d.approval.director).toBe("박원장");
   });
 

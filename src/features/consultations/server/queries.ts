@@ -126,11 +126,12 @@ export async function getStudentConsultationById(
   id: string,
 ): Promise<StudentConsultationDetail | null> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("student_consultations")
-    .select(DETAIL_SELECT)
-    .eq("id", id)
-    .single();
+  // 강사 스코프: 강사는 **본인이 등록한 상담**만 열람 — 남의 상담은 URL 직접 진입해도 null(notFound).
+  // (RLS는 테넌트만 격리하므로 역할·작성자 스코프는 앱 레벨에서 강제 #58. 목록/검색과 동일 불변식.)
+  const user = await getCurrentUser();
+  let qb = supabase.from("student_consultations").select(DETAIL_SELECT).eq("id", id);
+  if (user?.systemRole === "teacher") qb = qb.eq("counselor_id", user.id);
+  const { data } = await qb.maybeSingle();
   if (!data) return null;
   const d = data as Record<string, unknown>;
   return {
@@ -170,15 +171,13 @@ export type StudentConsultationCounts = {
 export async function getStudentConsultationCounts(): Promise<StudentConsultationCounts> {
   const supabase = await createClient();
   const today = localDateStr(0);
-  // 강사 스코프: Stat 카드도 본인 담당 학생 상담 기준(목록과 일치).
+  // 강사 스코프: Stat 카드도 **본인이 등록한 상담(counselor_id=나)** 기준(목록과 일치).
+  // 담당 학생이어도 남이 쓴 상담은 제외 — 작성자 기준(사용자 요청 "내가 한 것만").
   const user = await getCurrentUser();
-  const teacherStudentIds =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
-  if (teacherStudentIds && teacherStudentIds.length === 0)
-    return { total: 0, lastWeek: 0, pendingFollowUps: 0, overdueFollowUps: 0 };
+  const teacherId = user?.systemRole === "teacher" ? user.id : null;
   const base = () => {
     const q = supabase.from("student_consultations").select("*", { count: "exact", head: true });
-    return teacherStudentIds ? q.in("student_id", teacherStudentIds) : q;
+    return teacherId ? q.eq("counselor_id", teacherId) : q;
   };
   const [{ count: total }, { count: lastWeek }, { count: pending }, { count: overdue }] =
     await Promise.all([
@@ -216,14 +215,13 @@ export async function getStudentConsultationsPage(
 ): Promise<{ rows: StudentConsultationRow[]; total: number }> {
   const supabase = await createClient();
 
-  // 강사 스코프: teacher면 본인 담당 반 학생의 상담만.
+  // 강사 스코프: teacher면 **본인이 등록한 상담(counselor_id=나)** 만 — 담당 학생이어도 남이 쓴 상담은 제외.
+  // (사용자 요청 "내가 한 것만 보이게". 담당 학생 기준이던 것에서 작성자 기준으로 전환.)
   const user = await getCurrentUser();
-  const teacherStudentIds =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
-  if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
+  const teacherId = user?.systemRole === "teacher" ? user.id : null;
 
   let qb = supabase.from("student_consultations").select(SELECT_COLUMNS, { count: "exact" });
-  if (teacherStudentIds) qb = qb.in("student_id", teacherStudentIds);
+  if (teacherId) qb = qb.eq("counselor_id", teacherId);
 
   // 기간
   if (filters.range === "7d") qb = qb.gte("consulted_at", isoDaysAgo(7));

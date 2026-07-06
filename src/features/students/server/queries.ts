@@ -982,15 +982,19 @@ export async function getStudentConsultationHistory(
   studentId: string,
 ): Promise<StudentConsultationRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  // 강사 스코프: 학생 상세의 상담 탭도 **본인이 등록한 상담**만 — 남이 쓴 상담 미노출(상담 목록/상세와 동일 불변식).
+  const user = await getCurrentUser();
+  // ⚠️ filter(.eq)는 transform(.order)보다 먼저 — supabase-js는 transform 뒤 filter 불가.
+  let qb = supabase
     .from("student_consultations")
     .select(
       `id, consulted_at, category, subject, audience, summary,
        follow_up_action, follow_up_date, follow_up_done,
        counselor:counselor_id ( display_name )`,
     )
-    .eq("student_id", studentId)
-    .order("consulted_at", { ascending: false });
+    .eq("student_id", studentId);
+  if (user?.systemRole === "teacher") qb = qb.eq("counselor_id", user.id);
+  const { data } = await qb.order("consulted_at", { ascending: false });
   if (!data) return [];
   return data.map((r) => {
     const c = (Array.isArray(r.counselor) ? r.counselor[0] : r.counselor) as
@@ -1093,6 +1097,14 @@ export type TimelineEvent = {
 export async function getStudentTimeline(studentId: string): Promise<TimelineEvent[]> {
   const supabase = await createClient();
 
+  // 강사 스코프: 타임라인의 상담 이벤트도 **본인이 등록한 상담**만(남이 쓴 상담 내용 미노출, 상담 목록/상세와 동일).
+  const user = await getCurrentUser();
+  let consultQuery = supabase
+    .from("student_consultations")
+    .select(`consulted_at, category, summary`)
+    .eq("student_id", studentId);
+  if (user?.systemRole === "teacher") consultQuery = consultQuery.eq("counselor_id", user.id);
+
   const [
     { data: enrollments },
     { data: consultations },
@@ -1103,10 +1115,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
       .from("enrollments")
       .select(`start_date, end_date, withdrawal_reason, class:class_id ( class_name )`)
       .eq("student_id", studentId),
-    supabase
-      .from("student_consultations")
-      .select(`consulted_at, category, summary`)
-      .eq("student_id", studentId),
+    consultQuery,
     supabase
       .from("student_memos")
       .select(`created_at, category, content`)

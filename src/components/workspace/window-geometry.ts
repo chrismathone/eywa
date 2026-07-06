@@ -52,6 +52,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "billing/refunds": { w: 840, h: 720 }, // 환불 요청서(작성 폼·A4형 시트 뷰) — 상세 id도 prefix로 상속
   owner: { w: 960, h: 720 }, // 학원 설정 콘솔 — 탭 + 목록 편집(과목·교시·직급) 폼
   documents: { w: 980, h: 640 }, // 데이터베이스(서식 저장소) — 탐색기형(좌 폴더 팬 + 우 상세 테이블)
+  // ⚠️ 메뉴 루트 창 id는 경로가 아니라 menuKey(언더스코어) — windowIdForHref가 menuKey를 반환한다.
+  textbook_requests: { w: 1180, h: 760 }, // 교재 요청 — ijw 구조(좌 폼 + 우 실시간 요청서 미리보기 720px)
   // "새 X" 생성 폼 창(옛 우측 슬라이드 패널 폭 계승). 기본 480×560은 다열 폼엔 좁다.
   "classes/new": { w: 760, h: 680 },
   "staff/new": { w: 620, h: 680 },

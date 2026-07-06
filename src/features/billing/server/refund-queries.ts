@@ -9,11 +9,12 @@ export type RefundListRow = {
   id: string;
   name: string;
   className: string;
-  requestDate: string;
+  requestDate: string; // 서식 '환불요청일자' 값 — 목록에선 '환불처리일자' 헤더로 표시(⚠️ 데이터 유지·헤더만 리네임 = 사용자 지시)
+  completedDate: string; // 환불완료일자 (처리결과 신규 필드)
   totalAmount: string;
   createdAt: string;
   updatedAt: string;
-  authorName: string | null;
+  authorName: string | null; // 작성자 — 목록에선 '담당자' 헤더로 표시(⚠️ 데이터 유지·헤더만 리네임)
 };
 
 // PostgREST to-one 임베딩을 supabase-js가 배열로 타이핑하는 경우 대비.
@@ -37,6 +38,7 @@ export async function getRefundRequests(): Promise<RefundListRow[]> {
       name: d.student.name || "(이름 미입력)",
       className: d.student.className,
       requestDate: d.student.requestDate,
+      completedDate: d.result.completedDate,
       totalAmount: d.refund.totalAmount,
       createdAt: r.created_at,
       updatedAt: r.updated_at,

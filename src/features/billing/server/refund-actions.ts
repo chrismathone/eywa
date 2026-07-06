@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { parseRefundForm, refundTitle, REFUND_FORM_TYPE } from "../refund-request";
+import {
+  normalizeRefund,
+  parseRefundForm,
+  refundTitle,
+  REFUND_FORM_TYPE,
+  type RefundRequestData,
+} from "../refund-request";
 
 // 환불 요청서(웹 작성 폼) 변경 액션 — 게이트는 canWriteTenant("billing")(수납 쓰기 = master/admin/accountant).
 // 저장소는 academy_documents(kind='form', restricted=true) — 데이터베이스 탐색기에도 같은 행이 보인다.
@@ -23,6 +29,22 @@ async function requireBillingWrite() {
   return { user };
 }
 
+/**
+ * 환불완료 처리자 자동 기록 — 환불완료일자가 채워지면 "누가 완료 처리했는지"를 서버에서 못박는다(위조 불가).
+ * 최초 완료(빈 값→값) 때만 저장한 사람으로 기록하고, 이미 기록돼 있으면 그대로 보존(마지막 편집자로 안 바뀜).
+ * 완료일자를 비우면(완료 해제) 처리자 기록도 함께 지운다. makeedu 실행 이력의 triggered_by와 동일 패턴.
+ */
+function stampCompletion(
+  data: RefundRequestData,
+  prev: RefundRequestData | null,
+  user: { id: string; displayName: string },
+): RefundRequestData {
+  const completed = data.result.completedDate.trim() !== "";
+  const completedBy = completed ? prev?.result.completedBy || user.id : "";
+  const completedByName = completed ? prev?.result.completedByName || user.displayName || "" : "";
+  return { ...data, result: { ...data.result, completedBy, completedByName } };
+}
+
 /** 생성/수정 겸용 — formData에 id가 있으면 해당 요청서 갱신, 없으면 신규 작성. */
 export async function saveRefundRequest(
   _prev: RefundActionState,
@@ -31,13 +53,22 @@ export async function saveRefundRequest(
   const gate = await requireBillingWrite();
   if ("error" in gate) return { error: gate.error };
 
-  const data = parseRefundForm(formData);
-  if (!data.student.name) return { error: "학생 이름을 입력하세요" };
+  const parsed = parseRefundForm(formData);
+  if (!parsed.student.name) return { error: "학생 이름을 입력하세요" };
 
   const supabase = await createClient();
   const id = String(formData.get("id") ?? "").trim();
 
   if (id) {
+    // 완료 처리자 자동 기록엔 직전 저장분이 필요(이미 기록된 완료자를 보존하려고).
+    const { data: existing } = await supabase
+      .from("academy_documents")
+      .select("form_data")
+      .eq("id", id)
+      .eq("form_type", REFUND_FORM_TYPE)
+      .maybeSingle();
+    const prev = existing ? normalizeRefund(existing.form_data) : null;
+    const data = stampCompletion(parsed, prev, gate.user);
     const { error } = await supabase
       .from("academy_documents")
       .update({ title: refundTitle(data), form_data: data, updated_at: new Date().toISOString() })
@@ -48,6 +79,7 @@ export async function saveRefundRequest(
     return { ok: true, id, nonce: Date.now(), redirectTo: `/billing/refunds/${id}` };
   }
 
+  const data = stampCompletion(parsed, null, gate.user); // 생성 시 완료일자를 함께 넣으면 작성자가 완료자로 기록.
   const { data: row, error } = await supabase
     .from("academy_documents")
     .insert({

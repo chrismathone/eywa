@@ -25,6 +25,32 @@ export type DayEditTarget = {
 /** 마우스 오버 중인 학생(편집 모드 Delete=오늘 수강 종료용). ref로 추적해 hover마다 리렌더 안 함. */
 export type HoveredStudent = { enrollmentId: string; studentId: string; name: string; className: string };
 
+/** 합반 드롭 반+요일 선택 팝업의 반 후보(합반 구성 반 + 비활성 사유). */
+export type ClassPickCandidate = {
+  index: number; // 세그먼트 인덱스(1부터) — 학생 배지와 동일 번호
+  classId: string;
+  className: string;
+  slotId: string; // 그 반 세그먼트의 스케줄 id(전입예정 배지 키)
+  /** 드래그 학생이 이미 열린 수강을 가진 반 — 선택 불가("이미 소속"). */
+  disabled?: boolean;
+};
+
+/** 합반 드롭 → 반+요일 선택 팝업 대상(외부 학생 어디든 / 멤버의 다른 세그먼트 드롭). */
+export type ClassPickTarget = {
+  enrollmentId: string;
+  name: string;
+  fromClassId: string;
+  fromClassName: string;
+  fromDays: string[];
+  /** 셀이 덮는 요일(월/목 등) — 요일 토글. 2개 미만이면 요일 선택 숨김(전 요일). */
+  coveringDays: string[];
+  /** 세그먼트에 드롭했으면 그 반 미리 선택. */
+  presetClassId?: string;
+  /** 요일 존에 드롭했으면 그 요일만 미리 선택. */
+  presetDay?: string;
+  candidates: ClassPickCandidate[];
+};
+
 /** 도착 셀에 미리 그릴 전입 예정 학생 1명(출발 반 이름·목적지 등원 요일까지 보여 어디서/어느 요일로 오는지 표시). */
 export type IncomingStudent = {
   enrollmentId: string;
@@ -74,6 +100,8 @@ export interface TimetableEditState {
   setHovered: (h: HoveredStudent | null) => void;
   /** 편집 모드에서 학생 클릭 → 같은 반 요일 편집 팝오버 열기. */
   openDayEdit: (t: DayEditTarget) => void;
+  /** 합반 드롭 → 반+요일 선택 팝업 열기(외부 학생 어디든 / 멤버의 다른 세그먼트). */
+  openClassPick: (t: ClassPickTarget) => void;
 }
 
 const noop = () => {};
@@ -94,6 +122,7 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   dateFloor: "",
   setHovered: noop,
   openDayEdit: noop,
+  openClassPick: noop,
 });
 
 export function useTimetableEdit(): TimetableEditState {
