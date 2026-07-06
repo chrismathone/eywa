@@ -23,6 +23,13 @@ function slot(p: Partial<GridSlot>): GridSlot {
   };
 }
 
+// '1시간 단위'는 섹션별 토글(compactSections=압축할 섹션의 sectionKey 집합). 테스트 편의로 모든 섹션을 압축:
+// 비압축으로 한 번 돌려 섹션 키를 얻은 뒤 그 전부를 압축 집합으로 재실행("전 섹션 토글 ON"과 동치).
+function compactAll(slots: GridSlot[], config = C) {
+  const keys = new Set(buildRichCardGroups(slots, config).map((g) => g.sectionKey));
+  return buildRichCardGroups(slots, config, keys);
+}
+
 describe("buildRichCardGroups", () => {
   it("반별 카드 + 요일×교시 셀(슬롯 강사/LAB)·요일별 강의실 도출", () => {
     const groups = buildRichCardGroups(
@@ -114,7 +121,7 @@ describe("buildRichCardGroups", () => {
       "4교시", "5교시", "6교시", "7교시", "8교시",
     ]);
     // compact — 점유 범위(4~8) 사이의 빈 5·7만 제거 = 1시간 단위.
-    expect(buildRichCardGroups(oneHour, C, true)[0].periodRows.map((p) => p.label)).toEqual([
+    expect(compactAll(oneHour)[0].periodRows.map((p) => p.label)).toEqual([
       "4교시", "6교시", "8교시",
     ]);
   });
@@ -126,7 +133,7 @@ describe("buildRichCardGroups", () => {
       slot({ dayOfWeek: "mon", startTime: "15:00" }),
       slot({ dayOfWeek: "mon", startTime: "15:40" }),
     ];
-    expect(buildRichCardGroups(morning, C, true)[0].periodRows.map((p) => p.label)).toEqual([
+    expect(compactAll(morning)[0].periodRows.map((p) => p.label)).toEqual([
       "1교시", "2교시", "3교시", "4교시", "5교시",
     ]);
     // 위 패딩: 8·10교시 점유(윈도우 당김으로 7~11) → 위 7·아래 11 유지, 사이 9만 숨김.
@@ -134,7 +141,7 @@ describe("buildRichCardGroups", () => {
       slot({ dayOfWeek: "mon", startTime: "18:20", endTime: "19:20" }),
       slot({ dayOfWeek: "mon", startTime: "20:20", endTime: "21:10" }),
     ];
-    expect(buildRichCardGroups(evening, C, true)[0].periodRows.map((p) => p.label)).toEqual([
+    expect(compactAll(evening)[0].periodRows.map((p) => p.label)).toEqual([
       "7교시", "8교시", "10교시", "11교시",
     ]);
   });
@@ -154,7 +161,7 @@ describe("buildRichCardGroups", () => {
     expect(plain).toHaveLength(1);
     expect(plain[0].periodRows.map((p) => p.label)).toEqual(["4교시", "5교시", "6교시", "7교시", "8교시"]);
     // compact — 두 그룹으로 분리, 각자 사이 빈 행만 숨김(B의 5·7교시 클립 없음).
-    const groups = buildRichCardGroups(mixed, C, true);
+    const groups = compactAll(mixed);
     expect(groups).toHaveLength(2);
     expect(groups[0].label).toBe("4교시 시작");
     expect(groups[0].cards.map((c) => c.className)).toEqual(["A"]);
@@ -173,10 +180,34 @@ describe("buildRichCardGroups", () => {
       slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }),
       slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:20", endTime: "18:20" }), // 4·6
     ];
-    const groups = buildRichCardGroups(sameChain, C, true);
+    const groups = compactAll(sameChain);
     expect(groups).toHaveLength(1);
     expect(groups[0].cards.map((c) => c.className)).toEqual(["A", "B"]);
     expect(groups[0].periodRows.map((p) => p.label)).toEqual(["4교시", "6교시", "8교시"]);
+  });
+
+  it("'1시간 단위'는 섹션별 — 고른 섹션만 압축, 나머지 섹션은 풀 윈도우 유지", () => {
+    const two = [
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "14:20" }), // 1교시 시작
+      slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "15:00" }), // 2교시
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }), // 4교시
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:20", endTime: "18:20" }), // 6교시
+      slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "18:20", endTime: "19:20" }), // 8교시
+    ];
+    const plain = buildRichCardGroups(two, C);
+    const s1 = plain.find((g) => g.label === "1교시 시작")!;
+    const s4 = plain.find((g) => g.label === "4교시 시작")!;
+    // sectionKey = 시작 교시 order(=자정기준 분): 14:20→860, 16:20→980.
+    expect(s1.sectionKey).toBe(860);
+    expect(s4.sectionKey).toBe(980);
+    // 4교시 시작 섹션만 압축(그 sectionKey만 집합에).
+    const groups = buildRichCardGroups(two, C, new Set([s4.sectionKey]));
+    const c1 = groups.find((g) => g.label === "1교시 시작")!;
+    const c4 = groups.find((g) => g.label === "4교시 시작")!;
+    expect(c1.compacted).toBe(false);
+    expect(c1.periodRows.map((p) => p.label)).toEqual(["1교시", "2교시", "3교시", "4교시", "5교시"]); // 미압축
+    expect(c4.compacted).toBe(true);
+    expect(c4.periodRows.map((p) => p.label)).toEqual(["4교시", "6교시", "8교시"]); // 사이 5·7 숨김
   });
 
   it("영문이름·신입/전입은 학생에 보존", () => {

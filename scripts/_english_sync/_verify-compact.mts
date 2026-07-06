@@ -32,8 +32,10 @@ const slots: GridSlot[] = rows.map((r) => ({
   students: [],
 }));
 
-const before = buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG, false);
-const after = buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG, true);
+const before = buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG);
+// '1시간 단위'는 섹션별 — 전 섹션 압축(비압축으로 sectionKey 수집 후 그 전부를 압축 집합으로).
+const allKeys = new Set(before.map((g) => g.sectionKey));
+const after = buildRichCardGroups(slots, DEFAULT_PERIODS_CONFIG, allKeys);
 const fmt = (g: (typeof before)[number]) => g.periodRows.map((p) => p.label.replace("교시", "")).join(",");
 
 console.log(`영어 활성 슬롯 ${slots.length}건 → 기본 ${before.length}그룹 / 1시간단위 ${after.length}그룹\n`);

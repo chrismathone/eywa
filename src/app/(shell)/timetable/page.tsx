@@ -35,11 +35,19 @@ type ViewMode = "basic" | "integrated" | "teacher";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact1h?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, week: weekRaw, compact: compactRaw } = await searchParams;
-  const compact = compactRaw === "1"; // 통합뷰 '1시간 단위' 토글(그룹별 사이 빈 교시 숨김)
+  const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw } = await searchParams;
+  // 통합뷰 '1시간 단위' — **섹션별 토글**(사용자 결정 2026-07-06, 전역 아님). compact1h=쉼표구분 sectionKey
+  // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다. 읽기전용이라 상태는 URL 파라미터.
+  const compactSections = new Set(
+    (compact1hRaw ?? "")
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0),
+  );
+  const compactList = [...compactSections];
   const view: ViewMode =
     viewParam === "integrated" ? "integrated" : viewParam === "teacher" ? "teacher" : "basic";
 
@@ -109,6 +117,18 @@ export default async function TimetablePage({
   const teacherViewExcluded = subjectRow?.teacherViewLineExcluded ?? [];
 
   const isIntegrated = effView === "integrated";
+  // 섹션별 '1시간 단위' 토글 href — 그 sectionKey를 압축 집합에 넣고/빼기(다른 필터·주·과목은 유지).
+  const hrefForSectionToggle = (sectionKey: number) =>
+    buildHref({
+      view: effView,
+      subject,
+      defaultSubject,
+      week,
+      thisWk,
+      compact1h: compactSections.has(sectionKey)
+        ? compactList.filter((k) => k !== sectionKey)
+        : [...compactList, sectionKey],
+    });
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
   // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
   const statusOf = new Map<string, "active" | "hold" | "withdrawn">();
@@ -144,7 +164,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact1h: compactList })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -160,7 +180,7 @@ export default async function TimetablePage({
                 defaultSubject,
                 week,
                 thisWk,
-                compact,
+                // 과목 전환 = 섹션 order가 과목마다 달라 '1시간 단위' 압축 집합을 초기화(엉뚱한 섹션 압축 방지).
               })}
               className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
                 subject === k
@@ -188,7 +208,7 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact })}
+                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -202,28 +222,8 @@ export default async function TimetablePage({
           })}
         </div>
 
-        {/* 통합뷰 전용 — '1시간 단위' 토글: 그룹(섹션)별로 실제 쓰는 교시 사이의 빈 행(5·7교시 등
-            가운데 공백)만 숨긴다. 그룹 위아래 빈 교시는 유지. URL 파라미터라 저장 안 함. */}
-        {isIntegrated ? (
-          <Link
-            href={buildHref({ view: effView, subject, defaultSubject, week, thisWk, compact: !compact })}
-            aria-pressed={compact}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
-              compact
-                ? "border-primary bg-primary/10 text-primary font-medium"
-                : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
-            }`}
-          >
-            <span
-              className={`flex size-3.5 items-center justify-center rounded-[3px] border text-[9px] leading-none ${
-                compact ? "border-primary bg-primary text-primary-foreground" : "border-line"
-              }`}
-            >
-              {compact ? "✓" : ""}
-            </span>
-            1시간 단위
-          </Link>
-        ) : null}
+        {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
+            (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
 
         <div className="ml-auto flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
           <span className="text-[color:var(--primary)]">재원 {enrolledCount}</span>
@@ -254,7 +254,14 @@ export default async function TimetablePage({
           title="해당 과목의 시간표가 없습니다"
         />
       ) : isIntegrated ? (
-        <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} compact={compact} />
+        <RichGridView
+          slots={slots}
+          subjectMaps={subjectMaps}
+          config={periodsConfig}
+          teacherColors={teacherColors}
+          compactSections={compactSections}
+          hrefForSectionToggle={hrefForSectionToggle}
+        />
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
@@ -293,13 +300,14 @@ function buildHref(opts: {
   defaultSubject: string;
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
-  compact?: boolean; // 통합뷰 '1시간 단위'(다른 네비 시 유지)
+  compact1h?: number[]; // 통합뷰 '1시간 단위' 압축 섹션(sectionKey 집합) — 다른 네비 시 유지, 미지정=초기화
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
   if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
-  if (opts.compact) params.set("compact", "1");
+  if (opts.compact1h && opts.compact1h.length)
+    params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

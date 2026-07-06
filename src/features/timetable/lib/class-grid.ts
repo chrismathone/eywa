@@ -83,6 +83,10 @@ export type RichCardGroup = {
   key: string;
   label: string; // "1교시 시작" | "주말"
   order: number;
+  /** 이 그룹이 속한 "N교시 시작" 섹션의 식별자(=groupOrder). '1시간 단위' 토글은 섹션 단위(같은 sectionKey를 켜고 끔). */
+  sectionKey: number;
+  /** 이 섹션이 현재 '1시간 단위'로 압축됐는지(토글 체크 상태). 압축 섹션은 부그룹 ②③로 나뉠 수 있어 각 부그룹이 동일 sectionKey·compacted. */
+  compacted: boolean;
   cards: RichClassCard[];
   periodRows: GridPeriodRow[]; // 그룹 공통 교시축(카드 union, order순)
   days: DayOfWeek[]; // 그룹 공통 요일축(카드 union)
@@ -93,7 +97,8 @@ export type RichCardGroup = {
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const WEEKDAY_DAYS: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri"];
 const WEEKEND = new Set<string>(["sat", "sun"]);
-const WEEKEND_ORDER = 100000;
+/** 주말 섹션의 groupOrder(=sectionKey). 교시 체계가 없어 '1시간 단위' 압축 대상이 아니다. */
+export const WEEKEND_ORDER = 100000;
 const GRID_MIN = 5; // 미니그리드 기본 크기 — 평일 섹션은 항상 5요일(월~금) × 5교시(섹션 시작부터).
 
 /** "본원304" → "304"(공통 건물 접두사 제거로 라벨 압축). "LAB실"·타건물은 그대로 — 건물 구분 유지. */
@@ -126,17 +131,17 @@ function classroomLabel(perDayRooms: Map<DayOfWeek, Set<string>>): string {
 
 /**
  * 한 과목 슬롯 → 시작 교시별 리치 카드 섹션. 교시 정렬은 평일 기준, 주말 전용 반은 "주말" 섹션.
- * compact=true('1시간 단위' 토글, 사용자 결정 2026-07-06)면:
- * ① 같은 시작 교시라도 **교시 체계가 다른 반은 별도 그룹으로 분리**(예: 영어 16:20 시작 = 1시간
+ * '1시간 단위'는 **섹션(N교시 시작)별 토글**(사용자 결정 2026-07-06 — 전역 아님): compactSections(=압축할
+ * 섹션의 groupOrder 집합)에 든 섹션만 압축. 압축 섹션은:
+ * ① 같은 시작 교시라도 **교시 체계가 다른 반은 별도 부그룹(②③)으로 분리**(예: 영어 16:20 시작 = 1시간
  *    체계 4·6·8교시 ↔ 40분 체계 4·5·7교시 — 한 축에 섞으면 서로가 상대의 빈 행을 점유해 못 숨김).
- * ② 각 그룹에서 실제 쓰는 교시 "사이"의 빈 행만 제거(1시간 수업이 만드는 5·7교시 공백 등).
- * ⚠️ 그룹 위아래의 빈 교시(윈도우 패딩)는 유지("사이교시만, 위아래는 놔둬야").
- * 어떤 반이 실제 쓰는 교시(presentOrders)는 항상 유지 → 클립 없음.
+ * ② 각 부그룹에서 실제 쓰는 교시 "사이"의 빈 행만 제거(위아래 윈도우 패딩은 유지). 실제 쓰는 교시는 항상 유지 → 클립 없음.
+ * 압축 안 된 섹션은 한 그룹·풀 윈도우(빈 행 유지).
  */
 export function buildRichCardGroups(
   slots: GridSlot[],
   config: PeriodsConfig,
-  compact = false,
+  compactSections: Set<number> = new Set(),
 ): RichCardGroup[] {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const byClass = new Map<string, GridSlot[]>();
@@ -218,13 +223,15 @@ export function buildRichCardGroups(
     const weekend = cs[0].groupOrder === WEEKEND_ORDER;
     const standard = subjectPeriodRows(subject, weekend, config);
     const standardByOrder = new Map(standard.map((r) => [r.order, r]));
+    // '1시간 단위'는 섹션별 토글(사용자 결정 2026-07-06 "각 교시 시작별로 세팅, 전역 아님").
+    // 이 섹션(groupOrder)이 압축 집합에 있을 때만 압축한다.
+    const sectionCompact = compactSections.has(cs[0].groupOrder);
 
-    // compact('1시간 단위') = 같은 시작 교시라도 **교시 체계가 다른 반은 별도 그룹으로 분리**
-    // (사용자 결정 2026-07-06 "각각의 그룹에 대해 적용"). 예: 영어 16:20 시작에 1시간 체계(4·6·8교시)와
-    // 40분 체계(4·5·7교시)가 공존 — 한 축에 두면 서로의 교시가 상대 그룹의 '사이 빈 행'을 점유해
-    // 아무것도 못 숨긴다. 클러스터 규칙: 서로의 사이 빈 행(interiorGaps)을 침범하지 않는 카드끼리 병합.
+    // 압축 섹션 = 같은 시작 교시라도 **교시 체계가 다른 반은 별도 그룹으로 분리**. 예: 영어 16:20 시작에
+    // 1시간 체계(4·6·8교시)와 40분 체계(4·5·7교시)가 공존 — 한 축에 두면 서로의 교시가 상대 그룹의
+    // '사이 빈 행'을 점유해 아무것도 못 숨긴다. 클러스터 규칙: 서로의 사이 빈 행(interiorGaps)을 안 침범하는 카드끼리 병합.
     let clusters: RichClassCard[][];
-    if (compact) {
+    if (sectionCompact) {
       const acc: { rows: Set<number>; cards: RichClassCard[] }[] = [];
       for (const c of cs) {
         const rows = cardStdOrders(c, weekend, standardByOrder);
@@ -286,7 +293,7 @@ export function buildRichCardGroups(
       // 범위 밖(그룹 위아래 패딩 행)은 유지 — 5칸 윈도우의 컨텍스트 보존(사용자 결정 2026-07-06).
       const winList = [...winRows.values()].sort((a, b) => a.order - b.order);
       let periodRows = winList;
-      if (compact && presentStd.length > 0) {
+      if (sectionCompact && presentStd.length > 0) {
         const lo = Math.min(...presentStd);
         const hi = Math.max(...presentStd);
         periodRows = winList.filter((r) => r.order <= lo || r.order >= hi || presentOrders.has(r.order));
@@ -297,6 +304,8 @@ export function buildRichCardGroups(
         key: `${cluster[0].groupOrder}::${cluster[0].groupLabel}::${ci}`,
         label,
         order: cluster[0].groupOrder + ci * 0.001, // 같은 앵커의 부그룹은 바로 뒤에 정렬
+        sectionKey: cluster[0].groupOrder,
+        compacted: sectionCompact,
         cards: cluster,
         periodRows,
         days,
