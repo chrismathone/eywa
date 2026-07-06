@@ -1,7 +1,7 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
-import { ENGLISH_PERIODS, type DayOfWeek } from "@/features/timetable/lib/periods";
+import type { DayOfWeek } from "@/features/timetable/lib/periods";
 import {
   buildSlotIntervals,
   buildTenMinuteRows,
@@ -45,17 +45,14 @@ const GRID = "border-line";
 // 강사 밴드 경계 세로줄 — 일반 격자(연회색)와 구분되게 **찐한 회색 2px**(사용자 지정).
 // border-r-ink/40(변 전용 색)이 GRID의 shorthand border-color를 우선한다.
 const TEACHER_EDGE = "border-r-2 border-r-ink/40";
-// 수업시간(교시) 경계 가로줄 — 세로 강사 경계선과 동일 톤(시트의 검은 교시선 미러, 사용자 지정).
-// 수업 블록 하단은 항상, 빈 영역·시각열은 영어 교시 경계 시각에서만(스팬 블록 내부는 안 끊김).
+// 수업시간(교시) 경계 가로줄 — 세로 강사 경계선과 동일 톤(시트의 검은 교시선 미러).
 const PERIOD_EDGE = "border-b-2 border-b-ink/40";
-// 교시 경계 시각(분) = ENGLISH_PERIODS 전 교시의 시작·끝 합집합.
-const PERIOD_EDGE_MINS = new Set<number>();
-for (const p of Object.values(ENGLISH_PERIODS)) {
-  const a = timeToMin(p.startTime);
-  const b = timeToMin(p.endTime);
-  if (a != null) PERIOD_EDGE_MINS.add(a);
-  if (b != null) PERIOD_EDGE_MINS.add(b);
-}
+// 내부 가로줄 위치(2026-07-06 사용자 지정): 오후 4:10·6:00·6:20·7:10·8:00·8:20만.
+// (전 교시 시작·끝 합집합은 선이 너무 촘촘 → 큰 섹션 경계만. 바깥 프레임은 별개로 유지.)
+// TODO(로드맵): 학원설정 운영체계 → 과목별 "강사별시간표 가로줄"로 커스터마이징 배선 예정.
+const PERIOD_EDGE_MINS = new Set<number>(
+  ["16:10", "18:00", "18:20", "19:10", "20:00", "20:20"].map((t) => timeToMin(t)!),
+);
 
 // ⚠️ [[#71]] border-collapse×sticky: 병합 모드에선 셀 테두리가 표에 속해 가로 스크롤 시 sticky
 // 좌측 시각열의 좌 프레임·우 divider가 표와 함께 밀려 사라진다. box-shadow도 병합모드 td에선 불안정
@@ -271,7 +268,7 @@ export function TeacherGridView({
                         key={key}
                         rowSpan={span}
                         colSpan={group.laneWidth}
-                        className={`p-0 align-top ${PERIOD_EDGE} ${GRID} ${
+                        className={`p-0 align-top ${periodBottom(ri + span)} ${GRID} ${
                           isTeacherBoundary(col, isLastDay, group.laneStart + group.laneWidth)
                             ? TEACHER_EDGE
                             : "border-r"
