@@ -25,8 +25,29 @@ export function OperationsSection({
   return (
     <div className="space-y-4">
     <SectionForm section="operations" payload={o}>
-      {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장. */}
+      {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장.
+          카드 배치는 키가 비슷한 것끼리 짝(평일|주말 = 교시 목록, 학년|직급 = 칩 목록) — 2열 그리드 빈 구멍 방지. */}
       <div className="grid items-start gap-4 xl:grid-cols-2">
+      <SettingsCard
+        title="평일 교시 (기본값)"
+        description={
+          <>
+            1교시가 언제부터 언제까지인지 등 평일 수업 시간대. 과목 전용 교시가 없는 과목의 시간표 교시 축에
+            적용됩니다. 과목별 교시는{" "}
+            <a href="/owner?tab=subjects" className="text-primary underline underline-offset-2">
+              과목 운영 탭
+            </a>
+            에서.
+          </>
+        }
+      >
+        <PeriodListEditor value={o.weekdayPeriods} onChange={(v) => set({ weekdayPeriods: v })} />
+      </SettingsCard>
+
+      <SettingsCard title="주말 교시" description="토·일 수업 시간대.">
+        <PeriodListEditor value={o.weekendPeriods} onChange={(v) => set({ weekendPeriods: v })} />
+      </SettingsCard>
+
       <SettingsCard title="학년 체계" description="학생 학년 선택지.">
         <StringListEditor
           value={o.gradeLevels}
@@ -34,17 +55,6 @@ export function OperationsSection({
           placeholder="중1"
           addLabel="학년 추가"
         />
-      </SettingsCard>
-
-      <SettingsCard
-        title="평일 교시 (기본값)"
-        description="1교시가 언제부터 언제까지인지 등 평일 수업 시간대. 과목 전용 교시가 없는 과목의 시간표 교시 축에 적용됩니다. 과목별 교시는 과목 운영 탭에서."
-      >
-        <PeriodListEditor value={o.weekdayPeriods} onChange={(v) => set({ weekdayPeriods: v })} />
-      </SettingsCard>
-
-      <SettingsCard title="주말 교시" description="토·일 수업 시간대.">
-        <PeriodListEditor value={o.weekendPeriods} onChange={(v) => set({ weekendPeriods: v })} />
       </SettingsCard>
 
       <SettingsCard title="직급" description="직원 등록·수정의 직급 선택지.">
@@ -59,7 +69,11 @@ export function OperationsSection({
       {/* ⚠️ 학기(terms)는 소비처가 없어 v1에서 입력 숨김(상태·스키마·저장은 보존).
           성적/상담 학기 셀렉트 등 소비처가 생기면 SettingsCard만 복원. */}
 
-      <SettingsCard title="공휴일·휴원일" description="수강료 계산 시 수업일에서 제외됩니다. 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다.">
+      <SettingsCard
+        title="공휴일·휴원일"
+        description="수강료 계산 시 수업일에서 제외됩니다. 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다."
+        span2
+      >
         <HolidayListEditor value={o.holidays} onChange={(v) => set({ holidays: v })} />
       </SettingsCard>
 

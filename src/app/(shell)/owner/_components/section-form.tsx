@@ -65,7 +65,7 @@ export function SettingsCard({
   span2,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   children: ReactNode;
   // 내용이 큰 카드(약관·셔틀 등)는 2열 그리드에서 한 줄 전체를 차지해 빈 열·ragged를 방지.
   span2?: boolean;

@@ -117,10 +117,10 @@ export function SubjectListEditor({
       {/* 행 제목(열 헤더) */}
       {value.length > 0 ? (
         <div className="text-text-faint micro flex flex-wrap items-center gap-2 px-0.5">
-          <span className="w-[150px]">과목명</span>
+          <span className="w-[110px]">과목명</span>
           <span className="w-[122px]">색</span>
-          <span className="w-[170px]">시간표 요일 병합</span>
-          <span className="w-[100px]">내부 ID</span>
+          <span className="w-[160px]">시간표 요일 병합</span>
+          <span className="w-[70px]">내부 ID</span>
         </div>
       ) : null}
       {value.map((s, i) => {
@@ -130,7 +130,7 @@ export function SubjectListEditor({
             <div className="flex flex-wrap items-center gap-2">
               {/* 과목명(한글) — 학원장이 자유롭게 편집(바꿔도 데이터 안 깨짐). blur 시 key 확정. */}
               <input
-                className={`${cellCls} w-[150px] ${dup ? "border-danger focus:border-danger" : ""}`}
+                className={`${cellCls} w-[110px] ${dup ? "border-danger focus:border-danger" : ""}`}
                 value={s.label}
                 placeholder="과목명 (예: 수학)"
                 onChange={(e) => set(i, { label: e.target.value })}
@@ -155,7 +155,7 @@ export function SubjectListEditor({
               </span>
               {/* 요일 병합 — 과목별 시간표 기본뷰 병합 프리셋(월목/화금·월화/목금·월수금/화목·없음) */}
               <select
-                className={`${cellCls} w-[170px]`}
+                className={`${cellCls} w-[160px]`}
                 value={s.weekdayGrouping ?? "mon-thu"}
                 onChange={(e) => set(i, { weekdayGrouping: e.target.value as SubjectSetting["weekdayGrouping"] })}
                 aria-label="시간표 요일 병합"
@@ -168,7 +168,7 @@ export function SubjectListEditor({
               </select>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
-                className="text-text-faint w-[100px] shrink-0 truncate font-mono text-[11px]"
+                className="text-text-faint w-[70px] shrink-0 truncate font-mono text-[11px]"
                 title={`내부 ID: ${s.key} (자동·변경 불가)`}
               >
                 {s.key}
