@@ -38,6 +38,14 @@ export function SectionForm({
     }
   }, [state, notifySaved, markSaved]);
 
+  // 버튼→state→hidden input 경로(행 추가/삭제 등)는 native input 이벤트가 없어 useUnsavedGuard가
+  // dirty를 못 본다(적대리뷰 2026-07-06) → payload가 바뀔 때마다 폼에 input 이벤트를 쏴 재계산 유도.
+  // 마운트 시 1회 발화는 baseline과 동일해 no-op(무해). 가드는 setTimeout(0)으로 커밋 후 스냅샷을 읽음.
+  const serialized = JSON.stringify(payload);
+  useEffect(() => {
+    formRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [serialized]);
+
   return (
     <form action={formAction} ref={formRef} className="space-y-5">
       <input type="hidden" name="section" value={section} />

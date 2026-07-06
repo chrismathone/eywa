@@ -93,6 +93,18 @@ export function SearchableSelect({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter = 첫 결과 선택. preventDefault 필수 — 폼 안에서 쓰이면 Enter가 바깥 폼을
+                // 암묵 제출(HTML implicit submission)해 의도치 않은 저장이 발화한다(적대리뷰 2026-07-06).
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (shown.length > 0) choose(shown[0].value);
+                } else if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setOpen(false);
+                  setQ("");
+                }
+              }}
               placeholder={searchPlaceholder}
               className="text-foreground placeholder:text-text-faint w-full bg-transparent text-sm focus:outline-none"
             />
