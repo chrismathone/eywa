@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -18,8 +19,9 @@ import {
   EXTERNAL_NAV,
   type NavItem,
   type ExternalNavItem,
+  type SubTab as SubTabItem,
 } from "@/lib/navigation";
-import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
+import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
@@ -120,6 +122,32 @@ export function AppSidebar({
       ro.disconnect();
     };
   }, [expanded]);
+  // 하부탭 플라이아웃(WordPress식) — 비활성 메뉴 hover 시 우측에 면 목록을 fixed 포털로 띄운다.
+  // 인라인 노출은 hover마다 왼쪽 메뉴 전체를 리플로우해 산만 → **왼쪽 메뉴 고정** + 우측 팝업.
+  // 활성(클릭·네비된) 메뉴만 왼쪽 인라인 하부탭 유지. nav가 overflow-clip이라 인라인 left-full은
+  // 잘리므로 body 포털 + position:fixed(측정 좌표)로 클리핑 회피(HoverCard 패턴).
+  const [flyout, setFlyout] = useState<
+    { menuKey: MenuKey; label: string; subs: SubTabItem[]; top: number; left: number } | null
+  >(null);
+  const flyoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelFlyoutClose = () => {
+    if (flyoutTimer.current) {
+      clearTimeout(flyoutTimer.current);
+      flyoutTimer.current = null;
+    }
+  };
+  const openFlyout = (item: NavItem, subs: SubTabItem[], el: HTMLElement) => {
+    cancelFlyoutClose();
+    const r = el.getBoundingClientRect();
+    setFlyout({ menuKey: item.menuKey, label: item.label, subs, top: r.top, left: r.right + 4 });
+  };
+  // 아이템 → 플라이아웃 이동 사이의 짧은 유예(둘 다 벗어나면 닫힘). 붙어 있어 이동은 연속이나 안전판.
+  const scheduleFlyoutClose = () => {
+    cancelFlyoutClose();
+    flyoutTimer.current = setTimeout(() => setFlyout(null), 140);
+  };
+  useEffect(() => () => cancelFlyoutClose(), []);
+
   // 모션: 설정 ON & 드래그 중이 아닐 때만 슬라이드(드래그는 1:1 추종이라 트랜지션 off).
   const motion = animations && !dragging;
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -203,6 +231,7 @@ export function AppSidebar({
         <div className="relative min-h-0 flex-1">
           <nav
             ref={navRef}
+            onScroll={() => setFlyout(null)}
             className="scrollbar-hide flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-2.5"
           >
           {groups.map((group, gi) => (
@@ -240,8 +269,19 @@ export function AppSidebar({
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
                 const subs = SUBTABS_BY_MENU[item.menuKey];
+                // 비활성 메뉴 + 하부탭 有 → hover 시 우측 플라이아웃(왼쪽 메뉴는 고정, 리플로우 없음).
+                const flyoutable = isDesktop && expanded && !!subs && !active;
                 return (
-                  <div key={item.href} className="group/menu">
+                  <div
+                    key={item.href}
+                    className="group/menu"
+                    onMouseEnter={
+                      flyoutable
+                        ? (e) => openFlyout(item, subs!, e.currentTarget)
+                        : undefined
+                    }
+                    onMouseLeave={flyoutable ? scheduleFlyoutClose : undefined}
+                  >
                     <RailItem
                       item={item}
                       active={active}
@@ -250,9 +290,9 @@ export function AppSidebar({
                       expanded={expanded}
                       motion={motion}
                     />
-                    {/* 하부탭(면) — 펼친 사이드바에서, 활성 메뉴는 항상 / 그 외엔 마우스오버 시 노출(들여쓰기) */}
-                    {isDesktop && expanded && subs ? (
-                      <ul className={`mt-0.5 mb-1 space-y-px ${active ? "" : "hidden group-hover/menu:block"}`}>
+                    {/* 하부탭(면) — 활성(클릭·네비된) 메뉴만 왼쪽에 인라인 노출. 비활성은 hover 우측 플라이아웃(위 참조). */}
+                    {isDesktop && expanded && subs && active ? (
+                      <ul className="mt-0.5 mb-1 space-y-px">
                         {subs.map((sub) => (
                           <li key={sub.href}>
                             <SubTab
@@ -331,6 +371,38 @@ export function AppSidebar({
           />
         </div>
       </aside>
+
+      {/* 하부탭 플라이아웃 — 비활성 메뉴 hover 시 우측 팝업(body 포털 + fixed = nav overflow 클리핑 회피).
+          z-[46] = 사이드바(45) 위·커맨드 팰릿(50) 아래. 아이템↔팝업 이동 유예로 안 사라짐. */}
+      {isDesktop && expanded && flyout
+        ? createPortal(
+            <div
+              onMouseEnter={cancelFlyoutClose}
+              onMouseLeave={scheduleFlyoutClose}
+              onClick={() => setFlyout(null)}
+              style={{ top: flyout.top, left: flyout.left }}
+              className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-md border p-1"
+            >
+              <p className="text-text-faint px-2.5 pt-1 pb-1.5 font-mono text-[10px] font-bold tracking-wide">
+                {flyout.label}
+              </p>
+              <ul className="space-y-px">
+                {flyout.subs.map((sub) => (
+                  <li key={sub.href}>
+                    <SubTab
+                      menuKey={flyout.menuKey}
+                      label={sub.label}
+                      href={sub.href}
+                      active={isSubActive(sub.href, pathname, currentTab)}
+                      inFlyout
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>,
+            document.body,
+          )
+        : null}
     </TooltipProvider>
   );
 }
@@ -343,17 +415,20 @@ function isSubActive(href: string, pathname: string, currentTab: string | null):
   return (tab ?? null) === (currentTab ?? null);
 }
 
-/** 하부탭(면) 링크 — 클릭 시 부모 menuKey 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비). */
+/** 하부탭(면) 링크 — 클릭 시 부모 menuKey 창에서 그 면으로 이동(open이 href 갱신 → iframe 네비).
+ *  inFlyout=우측 플라이아웃 팝업 안(아이콘 들여쓰기 pl-9 대신 균등 px-2.5). */
 function SubTab({
   menuKey,
   label,
   href,
   active,
+  inFlyout,
 }: {
   menuKey: string;
   label: string;
   href: string;
   active: boolean;
+  inFlyout?: boolean;
 }) {
   return (
     <Link
@@ -366,9 +441,9 @@ function SubTab({
         if (e.shiftKey) store.openNewInstance("route", { id: menuKey, title: label, href });
         else store.open("route", { id: menuKey, title: label, href });
       }}
-      className={`block truncate rounded py-0.5 pr-2 pl-9 text-[11px] transition ${
-        active ? "text-primary font-medium" : "text-text-faint hover:text-foreground hover:bg-bg-soft"
-      }`}
+      className={`block truncate rounded text-[11px] transition ${
+        inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"
+      } ${active ? "text-primary font-medium" : "text-text-faint hover:text-foreground hover:bg-bg-soft"}`}
     >
       {label}
     </Link>
