@@ -333,9 +333,11 @@ export async function getWeeklyScheduleWithStudents(
       studentId: r.student_id,
       status,
       endDate: status === "withdrawn" ? effectiveEnd : undefined,
-      isNew: status !== "withdrawn" && start >= newCutoff,
-      enrollmentDate: start,
+      // 반이동 학생은 새 enrollment라 start_date가 최근이라 isNew 조건에도 걸리지만, "신입"이 아니라
+      // "전입(반이동)"으로만 분류한다(전입 우선·상호배타) — 신입·전입 동시 배지/정렬 어긋남 방지(사용자 지적).
       isTransferredIn: status !== "withdrawn" && r.is_transferred_in === true,
+      isNew: status !== "withdrawn" && start >= newCutoff && r.is_transferred_in !== true,
+      enrollmentDate: start,
       attendanceDays: r.attendance_days ?? [],
       englishName: s.english_name ?? null,
     };

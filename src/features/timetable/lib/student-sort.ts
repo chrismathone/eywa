@@ -17,7 +17,9 @@ const rank = (l: SortableStudentLine) => {
   const st = l.status ?? "active";
   return st === "active" ? 0 : st === "hold" ? 1 : 2;
 };
-const activeSubRank = (l: SortableStudentLine) => (l.isNew ? 0 : l.isTransferredIn ? 1 : 2);
+// 신입(0) → 전입/반이동(1) → 기존(2). ⚠️ 전입을 먼저 검사 — 반이동 학생이 isNew에도 걸리는 경우
+// (상호배타 보정 전 데이터·타 경로)에도 "전입(반이동)"으로 분류해 색(studentRowTone)·배지와 어긋나지 않게.
+const activeSubRank = (l: SortableStudentLine) => (l.isTransferredIn ? 1 : l.isNew ? 0 : 2);
 
 /** 정렬 comparator — `list.sort(compareStudentLines)`. */
 export function compareStudentLines(a: SortableStudentLine, b: SortableStudentLine): number {

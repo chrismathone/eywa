@@ -276,12 +276,14 @@ function Cell({
 /** 학생 행 — 신입=빨강·전입=초록·퇴원=취소선/dim, 이름(영문), 학교/학년. 클릭=학생 창. */
 function RosterRow({ s }: { s: GridStudent }) {
   const withdrawn = s.status === "withdrawn";
+  // ⚠️ 전입(반이동)을 신입보다 먼저 — 반이동 학생은 start_date가 최근이라 isNew에도 걸릴 수 있으나 "전입"으로.
+  // (studentRowTone과 동일 순서. 데이터 계층에서 이미 상호배타지만 표시도 방어적으로.)
   const tone = withdrawn
     ? "bg-card border-line text-text-dim border"
-    : s.isNew
-      ? "bg-danger-soft text-danger"
-      : s.isTransferredIn
-        ? "bg-primary-soft text-primary"
+    : s.isTransferredIn
+      ? "bg-primary-soft text-primary"
+      : s.isNew
+        ? "bg-danger-soft text-danger"
         : "text-foreground";
   const meta = [s.school, s.grade].filter(Boolean).join(" ");
   const name = s.englishName ? `${s.name} (${s.englishName})` : s.name;

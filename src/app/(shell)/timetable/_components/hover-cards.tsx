@@ -194,10 +194,14 @@ export function StudentInfoCard({
       </div>
       {hasDetail ? (
         <div className="border-line space-y-1 border-t pt-1.5">
-          {isNew || isTransferredIn ? (
+          {/* 신입·전입 상호배타 — 반이동 학생은 전입만(전입 우선). 데이터 계층에서 이미 배타지만 표시도 방어적으로. */}
+          {isTransferredIn ? (
             <div className="flex flex-wrap gap-1">
-              {isNew ? <Pill color="danger">신입</Pill> : null}
-              {isTransferredIn ? <Pill color="primary">전입</Pill> : null}
+              <Pill color="primary">전입</Pill>
+            </div>
+          ) : isNew ? (
+            <div className="flex flex-wrap gap-1">
+              <Pill color="danger">신입</Pill>
             </div>
           ) : null}
           {partial ? <Row label="등원" value={partial} /> : null}
