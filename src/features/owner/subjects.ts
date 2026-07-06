@@ -11,12 +11,16 @@ const LEGACY_LABELS: Record<string, string> = {
   social: "사회",
   other: "기타",
   etc: "기타",
+  // highmath는 subject_1로 폐기(2026-06-19)됐으나 ijw 베이스 복원 시 잔존할 수 있어 표시 폴백만 유지한다
+  // (선택지 options/filters엔 안 섞임 — subject_1 "수학(심화)"와 동일 라벨·색). 정석 정리는 migrate-highmath-to-subject1.cjs.
+  highmath: "수학(심화)",
 };
 const LEGACY_COLORS: Record<string, PillColor> = {
   arts: "amber",
   social: "neutral",
   other: "neutral",
   etc: "neutral",
+  highmath: "primary",
 };
 
 // 흔한 한글 과목명 → 표준 내부 키. 운영 과목 추가 시 이 이름을 입력하면 표준 키를 부여해

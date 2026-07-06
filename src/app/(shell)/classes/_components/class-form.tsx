@@ -26,7 +26,8 @@ import { ScheduleGrid } from "./schedule-grid";
 // (드리프트 방지). 서버 부모가 subjectOptions를 주면 그 값(=테넌트 설정)이 우선한다.
 const DEFAULT_SUBJECT_OPTIONS = [
   { value: "math", label: "수학" },
-  { value: "highmath", label: "수학(심화)" },
+  // 수학(심화)는 subject_1로 통일(highmath 폐기, 2026-06-19). DEFAULT_SETTINGS.subjects와 키/순서 일치.
+  { value: "subject_1", label: "수학(심화)" },
   { value: "english", label: "영어" },
   { value: "science", label: "과학" },
   { value: "korean", label: "국어" },
