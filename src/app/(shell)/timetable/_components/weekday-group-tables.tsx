@@ -189,9 +189,11 @@ function GroupTable({
   /** 2배 폭으로 그릴 요일(단독 그룹·주말) — 그룹 구성에서 호출부가 도출. */
   wideDays: Set<DayOfWeek>;
 }) {
-  // 평일 표만 교시열 sticky(좌측 고정). 우측 주말 표는 자기 교시열이라 non-sticky(겹침 방지).
-  const periodHeadSticky = stickyPeriod ? "sticky left-0 z-20" : "";
-  const periodCellSticky = stickyPeriod ? "sticky left-0 z-10" : "";
+  // 교시열 좌측 고정(가로 스크롤) — 평일 표만(주말은 자체 교시열이라 겹침 방지로 비고정).
+  // 헤더 상단 고정(세로 스크롤) — 두 표 모두(아래 thead th에 sticky top-0/30/60). 스크롤해도 강사·요일 헤더가 붙어 있음.
+  // z 계층: 본문(0) < 헤더 day-th(10) < 교시열 본문(20) < 좌상단 코너(30, 세로·가로 둘 다 고정).
+  const periodHeadSticky = stickyPeriod ? "sticky left-0 top-0 z-30" : "sticky top-0 z-30"; // 좌상단 코너(rowSpan=3)
+  const periodCellSticky = stickyPeriod ? "sticky left-0 z-20" : "";
   // 교시열 오른쪽 divider — sticky일 때는 셀 자식 가상요소(::after 실선)로 셀과 함께 고정(가로 스크롤 시 사라짐 방지).
   // sticky 셀은 그 자체가 positioned라 after:absolute의 기준이 됨(relative 추가 시 sticky가 깨지므로 넣지 않음).
   // 비-sticky(주말)는 스크롤로 밀릴 일이 없어 일반 border-r로 충분.
@@ -258,9 +260,11 @@ function GroupTable({
             <th
               key={g.title}
               colSpan={g.dayCount}
-              className={`${g.band} ${GRID} border-b border-r px-2 py-1.5 text-center text-[12px] font-bold`}
+              className={`bg-card ${GRID} sticky top-0 z-10 border-b border-r`}
             >
-              {g.title}
+              {/* sticky 헤더는 불투명 base(bg-card) 위에 반투명 밴드색을 얹는다 — soft 토큰은 12% 알파라
+                  셀 자체를 그 색으로 두면 스크롤 시 본문(학생 이름)이 비쳐 보인다. */}
+              <div className={`${g.band} px-2 py-1.5 text-center text-[12px] font-bold`}>{g.title}</div>
             </th>
           ))}
         </tr>
@@ -271,7 +275,7 @@ function GroupTable({
               <th
                 key={`${g.title}-${t.name}`}
                 colSpan={t.days.length}
-                className={`bg-bg-soft ${GRID} border-b border-r px-2 py-1.5 text-center`}
+                className={`bg-bg-soft ${GRID} sticky top-[30px] z-10 border-b border-r px-2 py-1.5 text-center`}
               >
                 <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold">{t.name}</span>
               </th>
@@ -287,12 +291,15 @@ function GroupTable({
                 return (
                   <th
                     key={`${g.title}-${t.name}-${d}`}
-                    className={`${g.tint} text-text-dim border-b border-r ${GRID} px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}
+                    className={`bg-card ${GRID} sticky top-[60px] z-10 border-b border-r`}
                   >
-                    {DAY_LABEL[d] ?? d}
-                    {date ? (
-                      <span className="text-text-faint block text-[9px] font-normal">{date}</span>
-                    ) : null}
+                    {/* 불투명 base + 반투명 tint(위 그룹밴드와 동일 이유 — 비침 방지). */}
+                    <div className={`${g.tint} text-text-dim px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}>
+                      {DAY_LABEL[d] ?? d}
+                      {date ? (
+                        <span className="text-text-faint block text-[9px] font-normal">{date}</span>
+                      ) : null}
+                    </div>
                   </th>
                 );
               }),
