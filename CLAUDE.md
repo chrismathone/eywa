@@ -224,8 +224,10 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
 - **금지 패턴(이름 불문)**: `SUBJECT_META`·`SUBJECT_LABEL`·`SUBJECT_COLOR`·`SUBJECT_OPTIONS`·`SUBJECT_FILTERS`·`GRADE_FILTERS`·
   `GRADES` 등 **과목/학년 라벨·색·선택지를 코드에 박은 상수**. 새로 만들지도, 남기지도 말 것. (단 [`subjects.ts`](src/features/owner/subjects.ts)의
   `LEGACY_LABELS`/`LEGACY_COLORS`는 **미등록 키 표시 폴백**이라 의도적 — 선택지(options/filters)엔 안 섞고 labelOf 폴백으로만.)
-- **알려진 예외(KNOWN_EXCEPTION, 스키마 한계)**: ① 영어 10교시 `ENGLISH_PERIODS`(`periods.ts`) — 과목별 교시 세트
-  스키마 미존재. ② 레벨테스트 `SUBSCORE_KEYS`(과목별 세부점수 차원) — operations 스키마 밖 도메인 메타. 둘 다 스키마 확장 시 전환.
+- **알려진 예외(KNOWN_EXCEPTION, 스키마 한계)**: ~~① 영어 교시 `ENGLISH_PERIODS`~~ → **✅ 해소(2026-07-06)**:
+  `subjects[].weekdayPeriods`(과목별 평일 교시, 과목 운영 탭) 신설 — `weekdayTableFor(subject, config)`가 과목 전용 →
+  english 내장 → 전역 순 폴백(`ENGLISH_PERIODS`는 무설정 폴백 상수로만 잔존). ② 레벨테스트 `SUBSCORE_KEYS`(과목별
+  세부점수 차원) — operations 스키마 밖 도메인 메타, 스키마 확장 시 전환.
 - **시스템 역할(`SystemRole`: master/teacher/accountant/student…)·요일·학생상태·시험유형은 운영 enum이 아니다**(코드 고정) — 이 규칙 대상 아님.
 
 > **한 줄 규칙: 과목/학년/직급/교시 라벨·색·선택지를 코드에 적지 말 것. 서버는 `buildSubjectMaps(getTenantSettings)`, 클라는 `useSubjectMaps()`/`useGradeLevels()`.**
@@ -248,7 +250,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   profile `representativeName`·`phone`·`email`·`address` + billing `latePolicy`(등록 인쇄물 푸터/안내,
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
-  - ⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS`(`periods.ts`) 하드코딩 → `weekdayPeriods` 설정과 무관(Phase 3 과목별 교시로 해소 예정).
+  - ~~⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS` 하드코딩~~ → **✅ 해소(2026-07-06)**: 과목 운영 탭 `subjects[].weekdayPeriods`로 과목별 설정 가능(미설정=english 내장→전역 폴백).
   - **(2026-06-19) operations `subjects`/`gradeLevels` 하드코딩 소비처 전수 배선 완료(20건/17파일)** — 멀티에이전트
     전수감사로 "설정 무시" 위반 20건 적발·수정. 첫 발견은 학생목록·수업목록·성적관리 과목 드롭다운에 설정에 없는
     "예술(arts)" 누출(`SUBJECT_FILTERS`/`SUBJECT_META`)이었고, 이어 과목 라벨/색/선택지/엑셀출력을 하드코딩한
@@ -272,8 +274,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 `tenant_settings.data`는 텍스트/숫자/배열만 담는다 — **이미지·파일은 Supabase Storage 버킷이 별도 필요**:
 - 로고 **이미지**(현재 `logoText` 텍스트 워드마크뿐)·직인/도장 이미지 → Storage 버킷 + `…profile.logoUrl`/`sealUrl` 경로.
 - 사업자등록번호·운영시간(영업시간, 교시와 별개) → jsonb 필드 추가만으로 가능(스키마 확장).
-- **과목별 교시 세트**(영어 1교시≠수학 1교시 시각 — 위 `ENGLISH_PERIODS` 하드코딩의 근본 원인) →
-  `weekdayPeriods: PeriodTime[]` → `Record<subjectKey, PeriodTime[]>`로 확장 + 기존 데이터 마이그레이션.
+- ~~**과목별 교시 세트**~~ → **✅ 완료(2026-07-06)**: `subjects[].weekdayPeriods`(jsonb, 마이그 0) + 과목 운영 탭 편집기
+  + `weekdayTableFor` 폴백 체인(과목 전용→english 내장→전역). 시간표 기본뷰·통합뷰·강사뷰·학생 상세 라벨 전부 소비.
 - **역할/권한 편집**(현재 `permissions.ts` 코드 하드코딩 — ijw 패리티 갭) → `tenant_role_permissions` 테이블 또는
   `…data.permissions` jsonb + 편집 UI(RLS와의 경계 설계 필요).
 

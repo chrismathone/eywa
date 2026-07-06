@@ -33,6 +33,33 @@
   · **격자 톤 = 수학 기본뷰와 동일**: 가로줄 균일 border-line(옅음/정시 구분 제거), sticky 가상요소(#71)도 bg-line, **강사 밴드 경계만 같은 색 2px 세로줄**. top-sticky 헤더 세로선은 x축으론 표와 함께 움직여 일반 border-r 안전(하단만 가상요소).
 - **✅ 통합뷰 명단 고정 행수(afc4c0a)**: 재원 12행·대기 3행·퇴원 5행 **고정 프레임**(그룹 max 동기화 폐기 — DP5 퇴원 10명이 전 카드를 늘리던 것), 넘침은 섹션 내부 스크롤. + RichGridView 자체 overflow-y-auto 제거 → **우측 이단 스크롤 해소**(세로 스크롤은 셸 하나만). ⚠️ 이 컴포넌트는 수학 통합뷰도 공유 — 회귀 확인 완료.
 
+### 🟢 2026-07-06 (2차) — 과목 운영 설정 배선: 강사뷰 가로줄·격자단위 + 과목별 평일 교시 + "과목 운영" 탭 신설
+
+강사뷰 하드코딩 3종(내부 가로줄 6시각·10분 격자·영어 교시표)을 **학원설정 과목별 커스터마이징**으로 배선
+(사용자 지시 4항목 전부, 마이그레이션 0 = 전부 `tenant_settings.data` jsonb). 계획 [`gentle-sleeping-starlight.md`].
+
+- **스키마**: `subjectSchema` + 3필드 — `weekdayPeriods?`(과목 전용 평일 교시, 미설정=폴백)·`teacherViewLines?`(HH:MM[])·
+  `teacherViewStep?`(**60의 약수 literal union** 5|10|15|20|30|60 — 정시선·rowSpan 예측성). 기본값: english에
+  `ENGLISH_WEEKDAY_PERIOD_LIST`(11교시)+가로줄 6시각+step 10 프리필. `normalizeSubjects`(resolve.ts) = 저장 행에
+  누락 필드를 key 기반 기본값으로 주입(normalizeHolidays식 읽기 승격, **기본값 있는 필드만** — undefined 키 노이즈 금지).
+- **lib**: `PeriodsConfig.weekdayBySubject?`(plain Record — 직렬화) + **`weekdayTableFor(subject, config)` = 과목 전용 ??
+  (english ? ENGLISH_PERIODS : 전역)** 폴백 체인으로 4소비처(slotPeriodRow·subjectPeriodRows·periodToTimes·
+  subjectWeekdayPeriods) 통일. subject 인자 전부 `string`화(subject_1 등 커스텀 키도 커버). ten-minute-grid
+  **stepMin 파라미터화**(축 경계 자정 기준 step 배수 스냅 — 14:20이 30분 격자면 14:00으로, 분수 인덱스 방지.
+  slotRowSpan은 rows에서 step 추론=시그니처 불변). `DEFAULT_TEACHER_VIEW_LINES` 상수로 이동.
+- **소비처**: teacher-grid가 `sectionLineMins`/`stepMin` props + **`rowH = round(stepMin×1.4)`**(분당 px 고정 — step 30에서도
+  60분 수업 84px 유지) + 가로줄 시각을 `floor(m/step)*step` 스냅(silent drop 방지). page.tsx **비영어 teacher뷰 URL 가드**
+  (`?view=teacher&subject=math` 직입력 → basic 강제, 노출 조건 = english 또는 가로줄/step 설정 과목). weekday-group-tables
+  `subSlotOf`·students 쿼리 `groupSchedule`(학생 상세 N교시 라벨)도 config 경유로 정합.
+- **UI**: **"과목 운영" FaceTab 신설**(owner, 설정 그룹 — 운영 체계 옆). SubjectListEditor 이동 + 과목별 카드(평일 교시
+  전용표 만들기/되돌리기 + 강사뷰 격자단위 select + 가로줄 time 목록). **같은 `operations` 섹션에 저장**(face→section
+  매핑은 UI 레벨, 동시편집 가드 scope 동일). 운영 체계 면 평일 교시는 "(기본값)"으로 개칭.
+- **검증**: tsc0/lint0/**test666**(periods 4·ten-minute-grid 5·resolve 1 신규) + **라이브 라운드트립**(3002, master):
+  영어 카드 프리필(11교시·6줄·10분) → 가로줄 16:10 삭제+step 20 저장 → 강사뷰 23행 20분 격자·16:10 선 소멸·19:10→19:00
+  스냅 → 원복 저장 → 46행 복원 / math+`view=teacher` → 기본뷰 강제(토글 미노출) / 운영 체계 저장이 과목 필드 클로버 0 /
+  기본뷰 영어 1교시 14:20~15:00 무회귀 / 학생 상세 수업 탭 "9-11교시" 라벨 정합 / **verify-sheet-parity diff 0** / 콘솔 에러 0.
+- CLAUDE.md **KNOWN_EXCEPTION(영어 교시 하드코딩) 해소 기록** 3곳 갱신.
+
 ### (이전) 2026-07-04까지
 
 | 커밋 | 내용 | 검증 | 상태 |
@@ -45,7 +72,7 @@
 
 **🟢 이번 턴 요약(2026-07-04)**: 사용자 정정 — **교시 진실원본 = 통합영어시간표(7월) 시트**(강사별은 10분 단위로 쪼갠 것, 시작시각 일치 시 통합에 수식 출력이라 교시 기준 아님). `ENGLISH_PERIODS`를 옛 10교시(시각 일부 오류) → **통합 col A distinct start 11개**로 교체([periods.ts](src/features/timetable/lib/periods.ts)). 추출도구 [extract-integrated-period-times.cjs](scripts/_english_sync/extract-integrated-period-times.cjs). 4게이트 통과 + 실 production 영어 slot 12 start → subjectPeriodRows 11행·slotPeriodRow e-1~e-11 매핑(16:00 anomaly 2슬롯만 기타). **수학 별도 상수(MATH_PERIODS) 무변.** 상세 = 아래 §후속 권장(교시 항목) + §4 코드 상태.
 
-**🔜 잔여(우선순위)**: ① 정식 코드화 — "시트 반영" 버튼(§3-4, structure/ 파서·매칭 커밋됨, readSheetGridWithMerges+diff+액션+UI 필요) ② 강사 5명(Elsa·Anna·Dom·JJ·이주희) 직원 등록+english_name+담임 재지정(§후속) ③ (옵션) 16:00 anomaly 2슬롯 DB 정규화(→15:40 start)=기타 0, **프로덕션 mutation이라 승인 후** ④ **main 반영은 사용자 승인 후에만**.
+**🔜 잔여(우선순위)**: ① 정식 코드화 — "시트 반영" 버튼(§3-4, structure/ 파서·매칭 커밋됨, readSheetGridWithMerges+diff+액션+UI 필요) ② 강사 5명(Elsa·Anna·Dom·JJ·이주희) 직원 등록+english_name+담임 재지정(§후속) ③ (옵션) 16:00 anomaly 2슬롯 DB 정규화(→15:40 start)=기타 0, **프로덕션 mutation이라 승인 후** ④ **main 반영은 사용자 승인 후에만**. ~~⑤ 강사뷰 가로줄·격자·과목별 교시 설정 배선~~ → ✅ 완료(2026-07-06 2차, 위 섹션).
 
 ---
 
