@@ -228,12 +228,22 @@ export function TeacherGridView({
             <tr key={row.key}>
               {/* 시각열 — sticky left. 매 행 라벨(시트 미러), 정시 라벨만 강조. 좌·우 경계는 가상요소(#71). */}
               <td
-                className={`bg-bg-soft sticky left-0 z-10 px-1 py-0 text-right align-top font-mono leading-none ${periodBottom(ri + 1)} ${GRID} ${STICKY_EDGES} ${
+                className={`bg-bg-soft sticky left-0 z-10 px-1 py-0 text-right align-top font-mono leading-none ${STICKY_EDGES} ${
                   row.isHour ? "text-foreground text-[9px] font-bold" : "text-text-faint text-[9px]"
                 }`}
                 style={{ height: ROW_H }}
               >
                 {row.key}
+                {/* ⚠️ 하단 선도 가상요소가 아닌 셀 자식 실선(#71 가로판) — border-b는 병합 모드에서 표에
+                    속해 가로 스크롤 시 표와 함께 밀려, 시각열 선이 사라지고 뒤 컬럼 선이 비쳐 보인다. */}
+                <span
+                  aria-hidden
+                  className={`pointer-events-none absolute inset-x-0 bottom-0 ${
+                    (rows[ri + 1]?.startMin == null || PERIOD_EDGE_MINS.has(rows[ri + 1]!.startMin))
+                      ? "bg-ink/40 h-[2px]"
+                      : "bg-line h-px"
+                  }`}
+                />
               </td>
               {prepared.flatMap((t) =>
                 t.cols.flatMap((col, ci) => {
