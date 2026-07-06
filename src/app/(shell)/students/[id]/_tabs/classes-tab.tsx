@@ -43,7 +43,7 @@ const DAY_CHIP: Record<string, string> = {
   "일": "bg-purple/15 text-purple",
 };
 
-/** 수업 탭(ijw CoursesTab 이식) — 수강 중/배정 예정/지난 3섹션 + 스케줄(요일+교시)·강사·인원. */
+/** 수업 탭(ijw CoursesTab 이식) — 수강 중/배정 예정/지난 3섹션 + 스케줄(요일+교시)·강사. */
 export async function ClassesTab({
   student,
   canEnd,
@@ -158,7 +158,6 @@ function Section({
                 <th className="px-4 py-2 text-left font-medium">수업명</th>
                 <th className="px-4 py-2 text-left font-medium">강사</th>
                 <th className="px-4 py-2 text-left font-medium">스케줄</th>
-                <th className="px-4 py-2 text-right font-medium">인원</th>
                 <th className="px-4 py-2 text-left font-medium">시작</th>
                 <th className="px-4 py-2 text-left font-medium">종료</th>
                 {showEndCol ? <th className="px-2 py-2" /> : null}
@@ -175,7 +174,6 @@ function Section({
                   <td className="px-4 py-2.5">
                     <ScheduleCell schedule={r.schedule} />
                   </td>
-                  <td className="text-text-dim num px-4 py-2.5 text-right text-xs">{r.studentCount}명</td>
                   <td className="px-4 py-2.5 text-xs">
                     {canEditDates ? (
                       <EditableDateCell enrollmentId={r.enrollmentId} field="start" value={r.startDate} />
