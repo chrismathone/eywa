@@ -93,6 +93,7 @@ export function TeacherGridView({
   teacherColors,
   sectionLineMins,
   stepMin = 10,
+  pxPerMin,
   breakRanges,
   excludedTeachers,
 }: {
@@ -104,6 +105,8 @@ export function TeacherGridView({
   sectionLineMins?: number[];
   /** 격자 단위(분, 60의 약수) — 과목 설정 teacherViewStep. */
   stepMin?: number;
+  /** 세로 밀도(분당 px) — 과목 설정 teacherViewPxPerMin. 미설정 = 폴백 PX_PER_MIN(1.4). */
+  pxPerMin?: number;
   /** 쉬는 시간 범위(HH:MM~HH:MM) — 과목 설정 teacherViewBreaks. 앞뒤 수업 붙은 강사 컬럼에만 셀 표시. */
   breakRanges?: { start: string; end: string }[];
   /** 가로줄(큰 섹션 경계) 미표시 강사 라벨 — 과목 설정 teacherViewLineExcluded. */
@@ -111,7 +114,8 @@ export function TeacherGridView({
 }) {
   const dayDates = dayDateLabels(weekMonday);
   // 행 높이 = 분당 px 고정(스텝 무관 블록 크기 동일). 가로줄 시각은 step 격자에 스냅(격자 밖이면 silent drop 방지).
-  const rowH = Math.round(stepMin * PX_PER_MIN);
+  // 밀도는 과목 설정(teacherViewPxPerMin) 우선, 미설정이면 PX_PER_MIN(=DEFAULT_TEACHER_VIEW_PX_PER_MIN).
+  const rowH = Math.round(stepMin * (pxPerMin ?? PX_PER_MIN));
   const periodEdgeMins = new Set(
     (sectionLineMins ?? []).map((m) => Math.floor(m / stepMin) * stepMin),
   );

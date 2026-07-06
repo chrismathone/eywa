@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import {
+  DEFAULT_TEACHER_VIEW_PX_PER_MIN,
   TEACHER_VIEW_STEPS,
   type BreakRangeSetting,
   type OperationsSettings,
@@ -159,6 +160,37 @@ export function SubjectsSection({
                           </option>
                         ))}
                       </select>
+                    </label>
+                    {/* 격자 한 칸(=격자 단위 분) 높이(px). 내부는 "분당 px"로 저장(스텝 무관 밀도) — 스텝을 바꾸면
+                        칸 높이는 비례로 재계산된다. 숫자 입력하는 대로 강사뷰 세로 간격이 바뀐다. */}
+                    <label className="flex items-center gap-2 text-[12px]">
+                      <span className="text-text-dim w-[90px] shrink-0">한 칸 높이(px)</span>
+                      <input
+                        type="number"
+                        className={`${cellCls} w-[100px]`}
+                        min={5}
+                        max={120}
+                        step={1}
+                        value={Math.round(
+                          (s.teacherViewPxPerMin ?? DEFAULT_TEACHER_VIEW_PX_PER_MIN) *
+                            (s.teacherViewStep ?? 10),
+                        )}
+                        onChange={(e) => {
+                          const step = s.teacherViewStep ?? 10;
+                          const px = Number(e.target.value);
+                          if (!Number.isFinite(px) || px <= 0) {
+                            return patchSubject(i, { teacherViewPxPerMin: undefined });
+                          }
+                          // px(한 칸) → 분당 px 환산 + 스키마 범위(0.5~6) 클램프.
+                          patchSubject(i, {
+                            teacherViewPxPerMin: Math.min(6, Math.max(0.5, px / step)),
+                          });
+                        }}
+                        aria-label="강사뷰 격자 한 칸 높이(px)"
+                      />
+                      <span className="text-text-faint text-[11px]">
+                        {s.teacherViewStep ?? 10}분 한 칸의 세로 높이
+                      </span>
                     </label>
                     <div className="space-y-1.5">
                       <span className="text-text-dim block text-[12px]">가로줄(큰 섹션 경계) 시각</span>

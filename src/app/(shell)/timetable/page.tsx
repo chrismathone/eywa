@@ -103,6 +103,7 @@ export default async function TimetablePage({
     })
     .filter((m) => Number.isFinite(m));
   const teacherViewStep = subjectRow?.teacherViewStep ?? 10;
+  const teacherViewPxPerMin = subjectRow?.teacherViewPxPerMin;
   const teacherViewBreaks = subjectRow?.teacherViewBreaks ?? [];
   const teacherViewExcluded = subjectRow?.teacherViewLineExcluded ?? [];
 
@@ -239,6 +240,7 @@ export default async function TimetablePage({
             teacherColors={teacherColors}
             sectionLineMins={sectionLineMins}
             stepMin={teacherViewStep}
+            pxPerMin={teacherViewPxPerMin}
             breakRanges={teacherViewBreaks}
             excludedTeachers={teacherViewExcluded}
           />

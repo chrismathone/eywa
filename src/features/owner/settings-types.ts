@@ -29,6 +29,10 @@ export type PeriodTimeRow = z.infer<typeof periodTimeSchema>;
 export const TEACHER_VIEW_STEPS = [5, 10, 15, 20, 30, 60] as const;
 export type TeacherViewStep = (typeof TEACHER_VIEW_STEPS)[number];
 
+// 강사뷰 세로 밀도 기본값(분당 px). 격자 한 칸(step분) 높이 = step × 이 값(예: 10분 칸 = 14px).
+// ⚠️ teacher-grid.tsx의 폴백 상수 PX_PER_MIN과 같은 값을 유지할 것(둘 다 "미설정 기본").
+export const DEFAULT_TEACHER_VIEW_PX_PER_MIN = 1.4;
+
 // 강사뷰 쉬는 시간 범위("HH:MM"~"HH:MM") — 앞뒤로 수업이 붙은 강사 컬럼에 "쉬는 시간" 셀로 표시.
 export const breakRangeSchema = z.object({
   start: z.string().regex(HHMM, "HH:MM 형식"),
@@ -54,6 +58,8 @@ export const subjectSchema = z.object({
   teacherViewBreaks: z.array(breakRangeSchema).max(20).optional(),
   // 강사뷰 가로줄(큰 섹션 경계 진한 선)에서 제외할 강사 라벨 — 이 강사 컬럼엔 가로줄 미표시. 미설정=전원 표시.
   teacherViewLineExcluded: z.array(z.string().min(1).max(40)).max(80).optional(),
+  // 강사뷰 세로 밀도(분당 px). 격자 한 칸(step분) 높이 = step × 이 값. 미설정 = DEFAULT_TEACHER_VIEW_PX_PER_MIN(1.4).
+  teacherViewPxPerMin: z.number().min(0.5).max(6).optional(),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 
