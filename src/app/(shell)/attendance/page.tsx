@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { CalendarX, Clock, UserCheck, Users, UserX, type LucideIcon } from "lucide-react";
+import { Clock, ListFilter, UserCheck, Users, UserX, type LucideIcon } from "lucide-react";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
   getMonthlyAttendanceMatrix,
   type AttendanceMatrix,
@@ -21,10 +23,12 @@ function attHref(p: {
   month: string;
   range: RangeKey;
   teacherId?: string | null;
+  subjectId?: string | null;
 }): string {
   const sp = new URLSearchParams();
-  if (p.classId) sp.set("class", p.classId);
+  if (p.subjectId) sp.set("subject", p.subjectId);
   if (p.teacherId) sp.set("teacher", p.teacherId);
+  if (p.classId) sp.set("class", p.classId);
   sp.set("month", p.month);
   if (p.range === "2w") sp.set("range", "2w");
   return `/attendance?${sp.toString()}`;
@@ -60,7 +64,7 @@ function padTo31(days: AttendanceMatrix["days"]): AttendanceMatrix["days"] {
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ class?: string; month?: string; range?: string; teacher?: string }>;
+  searchParams: Promise<{ class?: string; month?: string; range?: string; teacher?: string; subject?: string }>;
 }) {
   await requireAccess("attendance");
   const {
@@ -68,37 +72,62 @@ export default async function AttendancePage({
     month: monthParam,
     range: rangeParam,
     teacher: teacherParam,
+    subject: subjectParam,
   } = await searchParams;
   const month = monthParam ?? currentMonthKey();
   const range: RangeKey = rangeParam === "2w" ? "2w" : "month";
 
-  // 전체 반 목록은 어떤 classId로 불러도 동일 — 강사 필터로 좁힌다.
-  const initial = await getMonthlyAttendanceMatrix(month, classParam ?? null);
-  const allClasses = initial.classes;
-  // 강사 드롭다운(담임 배정된 반에서 distinct)
+  // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
+  const base = await getMonthlyAttendanceMatrix(month, null);
+  const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
+  const { operations } = await getTenantSettings();
+  const subjectMaps = buildSubjectMaps(operations.subjects);
+
+  // ── 과목 → 강사 → 반 계층(넓→좁). 위를 고르면 아래 선택지가 좁혀지는 cascade. ──
+  // 과목(가장 큰 필터) 선택지 = 반에 실제 존재하는 과목(설정 순서 + 미등록 키는 라벨 폴백으로 뒤에).
+  const presentSubjects = new Set(allClasses.map((c) => c.subject).filter(Boolean));
+  const subjectOptions = [
+    ...subjectMaps.options.filter((o) => presentSubjects.has(o.value)),
+    ...[...presentSubjects]
+      .filter((s) => !subjectMaps.options.some((o) => o.value === s))
+      .map((s) => ({ value: s, label: subjectMaps.labelOf(s) })),
+  ];
+  const effectiveSubject = subjectParam && presentSubjects.has(subjectParam) ? subjectParam : null;
+
+  // 강사 선택지 = (선택 과목의) 반 담임 distinct.
+  const classesForSubject = effectiveSubject
+    ? allClasses.filter((c) => c.subject === effectiveSubject)
+    : allClasses;
   const teacherOptions = Array.from(
     new Map(
-      allClasses
+      classesForSubject
         .filter((c) => c.teacherId && c.teacherName)
         .map((c) => [c.teacherId as string, c.teacherName as string]),
     ),
-  ).map(([value, label]) => ({ value, label }));
-  const filteredClasses = teacherParam
-    ? allClasses.filter((c) => c.teacherId === teacherParam)
-    : allClasses;
-  // 첫 진입/강사 변경 시: 필터된 반 중 첫 번째 자동 선택. 현재 class가 필터에 없으면 교체.
-  const selectedClassId =
-    classParam && filteredClasses.some((c) => c.id === classParam)
-      ? classParam
-      : filteredClasses[0]?.id ?? null;
-  const matrix =
-    classParam && selectedClassId === classParam
-      ? initial
-      : selectedClassId
-        ? await getMonthlyAttendanceMatrix(month, selectedClassId)
-        : initial;
+  )
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ko"));
+  const effectiveTeacher =
+    teacherParam && teacherOptions.some((t) => t.value === teacherParam) ? teacherParam : null;
 
-  const selectedClass = matrix.classes.find((c) => c.id === selectedClassId) ?? null;
+  // 반 선택지 = 과목 + 강사로 좁힌 반. ⚠️ 첫 반 자동선택 안 함 — 반 미선택 = 안내문구(렉 방지 + '전체' 정상 동작).
+  const classesForFilters = classesForSubject.filter(
+    (c) => !effectiveTeacher || c.teacherId === effectiveTeacher,
+  );
+  const classOptions = classesForFilters.map((c) => ({ value: c.id, label: c.className }));
+  const effectiveClassId =
+    classParam && classesForFilters.some((c) => c.id === classParam) ? classParam : null;
+
+  const selectedClass = effectiveClassId
+    ? allClasses.find((c) => c.id === effectiveClassId) ?? null
+    : null;
+  // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.
+  const matrix = effectiveClassId ? await getMonthlyAttendanceMatrix(month, effectiveClassId) : base;
+
+  // 드롭다운 표시값 — 반 선택 시 그 반의 과목·강사를 강제로 채운다(누구 선생님인지 바로 보이게).
+  const subjectValue = selectedClass ? selectedClass.subject : effectiveSubject;
+  const teacherValue = selectedClass ? selectedClass.teacherId : effectiveTeacher;
+
   const prevMonth = shiftMonth(month, -1);
   const nextMonth = shiftMonth(month, 1);
   // 2주 보기는 가로 컬럼을 줄이려 마지막 14일만 노출(출석률은 전체 기록 기준 유지).
@@ -110,33 +139,41 @@ export default async function AttendancePage({
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
-        {/* 강사 dropdown — 담임 기준으로 반 좁히기 */}
-        {teacherOptions.length > 0 ? (
-          <>
-            <div className="flex items-center gap-1.5">
-              <span className="micro mr-1">강사</span>
-              <FilterSelect
-                paramName="teacher"
-                value={teacherParam ?? null}
-                options={teacherOptions}
-                ariaLabel="강사 필터"
-                allLabel="전체 강사"
-                searchable
-              />
-            </div>
-            <span className="bg-line h-4 w-px" aria-hidden />
-          </>
-        ) : null}
+        {/* 과목 → 강사 → 반 계층 필터(넓→좁). 위를 고르면 아래 선택지가 좁혀지고, 반을 골라야 출석부가 뜬다.
+            반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). */}
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">과목</span>
+          <FilterSelect
+            paramName="subject"
+            value={subjectValue}
+            options={subjectOptions}
+            ariaLabel="과목 필터"
+            allLabel="전체 과목"
+          />
+        </div>
+        <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 반 dropdown */}
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">강사</span>
+          <FilterSelect
+            paramName="teacher"
+            value={teacherValue}
+            options={teacherOptions}
+            ariaLabel="강사 필터"
+            allLabel="전체 강사"
+          />
+        </div>
+        <span className="bg-line h-4 w-px" aria-hidden />
+
+        {/* 반 dropdown — '전체 반'은 반 미선택(안내문구) */}
         <div className="flex items-center gap-1.5">
           <span className="micro mr-1">반</span>
           <FilterSelect
             paramName="class"
-            value={selectedClassId}
-            options={filteredClasses.map((c) => ({ value: c.id, label: c.className }))}
+            value={effectiveClassId}
+            options={classOptions}
             ariaLabel="반 필터"
-            searchable
+            allLabel="전체 반"
           />
         </div>
 
@@ -145,7 +182,7 @@ export default async function AttendancePage({
         {/* 월 navigator */}
         <div className="flex items-center gap-1.5">
           <Link
-            href={attHref({ classId: selectedClassId, month: prevMonth, range, teacherId: teacherParam })}
+            href={attHref({ classId: effectiveClassId, month: prevMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="이전 달"
           >
@@ -155,7 +192,7 @@ export default async function AttendancePage({
             {formatMonth(month)}
           </span>
           <Link
-            href={attHref({ classId: selectedClassId, month: nextMonth, range, teacherId: teacherParam })}
+            href={attHref({ classId: effectiveClassId, month: nextMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="다음 달"
           >
@@ -174,7 +211,7 @@ export default async function AttendancePage({
           ] as const).map(([key, label]) => (
             <Link
               key={key}
-              href={attHref({ classId: selectedClassId, month, range: key, teacherId: teacherParam })}
+              href={attHref({ classId: effectiveClassId, month, range: key, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
               className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
                 range === key
                   ? "border-foreground bg-foreground text-background font-medium"
@@ -186,50 +223,47 @@ export default async function AttendancePage({
           ))}
         </div>
 
-        {/* 우측 요약 — 반/강사는 좌측 드롭다운과 중복이라 제거. 강사 필터가 '전체'일 때만
-            선택 반의 담당 강사를 보조 표기(그땐 좌측에 강사명이 없어 유용). */}
-        <span className="text-text-faint ml-auto font-mono text-[11px]">
-          {!selectedClass
-            ? "반을 선택하세요"
-            : !teacherParam && selectedClass.teacherName
-              ? `${selectedClass.teacherName} 강사`
-              : null}
-        </span>
       </div>
 
-      {/* Stat 4 */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="등록 학생" value={matrix.stats.totalStudents} unit="명" color="primary" icon={Users} />
-        <Stat
-          label="출석률"
-          value={matrix.stats.presentRate}
-          unit="%"
-          color={
-            matrix.stats.presentRate >= 90
-              ? "primary"
-              : matrix.stats.presentRate >= 80
-                ? "amber"
-                : "danger"
-          }
-          icon={UserCheck}
-        />
-        <Stat label="결석" value={matrix.stats.absentCount} unit="회" color="danger" icon={UserX} />
-        <Stat label="지각" value={matrix.stats.lateCount} unit="회" color="amber" icon={Clock} />
-      </section>
-
-      {!selectedClassId ? (
+      {!effectiveClassId ? (
+        // 반 미선택 — 무거운 출석 데이터를 안 불러오고 가운데 안내(전체는 학생 많아 렉이라 미표시).
         <EmptyState
-          icon={() => <CalendarX size={32} strokeWidth={1.5} />}
-          title="등록된 반이 없습니다"
-        />
-      ) : matrix.students.length === 0 ? (
-        <EmptyState
-          icon={() => <Users size={32} strokeWidth={1.5} />}
-          title="이 반에 등록된 학생이 없습니다"
-          description="학생목록에서 등록 후 다시 확인하세요."
+          icon={() => <ListFilter size={32} strokeWidth={1.5} />}
+          title="과목 · 선생님 · 반을 선택해 주세요"
+          description="한 반을 선택하면 그 반의 출석부가 표시됩니다. 전체는 학생이 많아 표시하지 않습니다."
         />
       ) : (
-        <MatrixTable matrix={matrix} days={visibleDays} selectedClassId={selectedClassId} />
+        <>
+          {/* Stat 4 — 반을 선택했을 때만 */}
+          <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+            <Stat label="등록 학생" value={matrix.stats.totalStudents} unit="명" color="primary" icon={Users} />
+            <Stat
+              label="출석률"
+              value={matrix.stats.presentRate}
+              unit="%"
+              color={
+                matrix.stats.presentRate >= 90
+                  ? "primary"
+                  : matrix.stats.presentRate >= 80
+                    ? "amber"
+                    : "danger"
+              }
+              icon={UserCheck}
+            />
+            <Stat label="결석" value={matrix.stats.absentCount} unit="회" color="danger" icon={UserX} />
+            <Stat label="지각" value={matrix.stats.lateCount} unit="회" color="amber" icon={Clock} />
+          </section>
+
+          {matrix.students.length === 0 ? (
+            <EmptyState
+              icon={() => <Users size={32} strokeWidth={1.5} />}
+              title="이 반에 등록된 학생이 없습니다"
+              description="학생목록에서 등록 후 다시 확인하세요."
+            />
+          ) : (
+            <MatrixTable matrix={matrix} days={visibleDays} selectedClassId={effectiveClassId} />
+          )}
+        </>
       )}
     </div>
   );
