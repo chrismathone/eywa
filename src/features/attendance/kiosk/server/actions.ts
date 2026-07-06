@@ -4,7 +4,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
@@ -12,9 +12,11 @@ import { assignAttendanceCode } from "../codes";
 import { KIOSK_COOKIE } from "../constants";
 import { parseForwardedFor } from "../device-info";
 
-async function requireMaster() {
+// 키오스크 설정 mutation 게이트 = 쓰기 권한(canWriteTenant, #58 — readonly 누수 방지).
+// 기본 matrix는 master만 full이나, 원장이 역할·권한에서 admin/manager에게 kiosk_settings를 위임하면 열림.
+async function requireKioskWrite() {
   const user = await getCurrentUser();
-  if (!user || !(await canAccessTenant(user.systemRole, "kiosk_settings"))) {
+  if (!user || !(await canWriteTenant(user.systemRole, "kiosk_settings"))) {
     throw new Error("권한이 없습니다");
   }
   return user;
@@ -27,7 +29,7 @@ export async function registerKioskDevice(
   _prev: KioskActionState,
   formData: FormData,
 ): Promise<KioskActionState> {
-  const user = await requireMaster();
+  const user = await requireKioskWrite();
   const name = String(formData.get("name") ?? "").trim() || "키오스크";
 
   const token = randomBytes(32).toString("base64url");
@@ -69,7 +71,7 @@ export async function revokeKioskDevice(
   _prev: KioskActionState,
   formData: FormData,
 ): Promise<KioskActionState> {
-  const user = await requireMaster();
+  const user = await requireKioskWrite();
   const id = String(formData.get("deviceId") ?? "").trim();
   if (!id) return { error: "기기 ID가 필요합니다" };
 
@@ -90,7 +92,7 @@ export async function assignAttendanceCodesAction(
   _prev: KioskActionState,
   _formData: FormData,
 ): Promise<KioskActionState> {
-  const user = await requireMaster();
+  const user = await requireKioskWrite();
   const supabase = await createClient();
 
   const { data: rows, error } = await supabase
@@ -142,7 +144,7 @@ export async function saveKakaoChannel(
   _prev: KioskActionState,
   formData: FormData,
 ): Promise<KioskActionState> {
-  const user = await requireMaster();
+  const user = await requireKioskWrite();
   const pfId = String(formData.get("pfId") ?? "").trim();
   const checkinTemplateId = String(formData.get("checkinTemplateId") ?? "").trim();
   const checkoutTemplateId = String(formData.get("checkoutTemplateId") ?? "").trim();
@@ -170,7 +172,7 @@ export async function sendTestAlimtalk(
   _prev: KioskActionState,
   formData: FormData,
 ): Promise<KioskActionState> {
-  const user = await requireMaster();
+  const user = await requireKioskWrite();
   const phone = String(formData.get("phone") ?? "").replace(/\D/g, "");
   if (phone.length < 10) return { error: "받는 번호를 정확히 입력하세요." };
 

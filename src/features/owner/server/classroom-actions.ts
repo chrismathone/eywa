@@ -2,10 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 
-// 강의실(classrooms 테이블) CRUD — 운영 체계 "강의실" 카드에서 호출. 학원 설정과 동일하게 master 전용.
+// 강의실(classrooms 테이블) CRUD — 운영 체계 "강의실" 카드에서 호출. 학원 설정(owner 메뉴)과 동일 게이트.
+// ⚠️ 하드코딩 master 체크 금지(#58) — 원장이 역할·권한에서 admin/manager에게 owner를 위임(override)하면
+// 강의실 관리도 함께 열려야 한다(2026-07-06 "관리자가 강의실 추가를 못함" 실버그).
 // classes/schedules의 classroom_id FK는 onDelete:set null이라, 삭제 시 참조 반의 강의실만 미지정으로 바뀐다.
 
 export type ClassroomActionState = { error?: string; ok?: boolean } | undefined;
@@ -13,7 +16,9 @@ export type ClassroomActionState = { error?: string; ok?: boolean } | undefined;
 async function gate() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
-  if (user.systemRole !== "master") return { error: "원장(master)만 강의실을 관리할 수 있습니다" as const };
+  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" as const };
+  }
   return { user };
 }
 

@@ -47,15 +47,16 @@ export async function checkMakeeduSyncWorkers(): Promise<{ workers: MakeeduWorke
 }
 
 /**
- * 구글 시트 내보내기 연동 ON/OFF (master 전용). `user_integrations.sync_enabled`를 토글.
- * 켜면 **시간표 화면에 '시트' 버튼**이 노출되고(원장), 그 버튼이 `syncSheetsNow`를 호출한다.
- * 대상 스프레드시트·서비스 계정(`GOOGLE_SERVICE_ACCOUNT_KEY`)은 운영자가 설정 — 학원장은 ON/OFF만.
+ * 구글 시트 내보내기 연동 ON/OFF. owner 콘솔(연동 면)의 설정 토글이라 게이트도 owner 메뉴 쓰기
+ * (canWriteTenant, override 반영 — 위임받은 admin/manager도 조정 가능. #58 owner 콘솔 위임 정합).
+ * ⚠️ 켜기만으로 데이터가 나가진 않음 — 실제 **내보내기 실행**(syncSheetsNow, 테넌트 전체 시간표를 외부
+ * 시트로)은 여전히 master 전용(B5 PII). 대상 스프레드시트·서비스 계정은 운영자 설정.
  */
 export async function setSheetsExportEnabled(enabled: boolean): Promise<ToggleState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") {
-    return { error: "구글 시트 연동은 원장(master)만 변경할 수 있습니다" };
+  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
 
   const supabase = await createClient();
@@ -76,14 +77,16 @@ export async function setSheetsExportEnabled(enabled: boolean): Promise<ToggleSt
 }
 
 /**
- * makeedu 자동 동기화(GitHub Actions cron) ON/OFF (master 전용). `user_integrations(provider=makeedu).sync_enabled` 토글.
+ * makeedu 자동 동기화(cron) ON/OFF. owner 콘솔(연동 면)의 설정 토글이라 게이트도 owner 메뉴 쓰기
+ * (canWriteTenant, override 반영 — 위임받은 admin/manager도 조정 가능. #58 owner 콘솔 위임 정합).
  * cron 오케스트레이터(sync-all.cjs)가 매 실행 시작에 이 값을 읽어 false면 스킵한다(행 없으면 기본 ON).
+ * (수동 '지금 동기화' 트리거는 별도로 integrations 권한 키 게이트 — triggerMakeeduSyncNow.)
  */
 export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") {
-    return { error: "makeedu 자동 동기화는 원장(master)만 변경할 수 있습니다" };
+  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
 
   const supabase = await createClient();

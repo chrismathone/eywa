@@ -96,7 +96,10 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {
-  await requireAccess("owner");
+  const viewer = await requireAccess("owner");
+  // 역할·권한(permissions) 편집은 항상 master 전용(self-escalation 차단 — saveOwnerSection·0080a 트리거와 동일).
+  // 위임받은 admin/manager는 다른 설정 면은 편집 가능하되 이 면만 안내로 대체(저장이 실패할 폼을 보여주지 않음).
+  const isMaster = viewer.systemRole === "master";
   const sp = await searchParams;
   const tab = resolveTab(sp);
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
@@ -111,10 +114,11 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header className="border-border border-b pb-5">
-        <p className="eyebrow">학원 설정 · owner 전용</p>
+        <p className="eyebrow">학원 설정</p>
         <h1 className="display text-foreground text-2xl">{settings.profile.name || "학원"} 설정</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)만 변경할 수 있습니다.
+          학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)과
+          역할·권한에서 위임받은 계정만 변경할 수 있고, 역할·권한 면은 원장 전용입니다.
         </p>
         <p className="text-text-faint mt-1 text-[12px]">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>
       </header>
@@ -130,7 +134,19 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       ) : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
-      {tab === "permissions" ? <PermissionsSection initial={settings.permissions} /> : null}
+      {tab === "permissions" ? (
+        isMaster ? (
+          <PermissionsSection initial={settings.permissions} />
+        ) : (
+          <div className="bg-card border-line rounded-md border p-6">
+            <p className="text-foreground text-sm font-semibold">역할·권한은 원장(master)만 변경할 수 있습니다</p>
+            <p className="text-text-dim mt-1 text-sm">
+              위임받은 계정으로도 이 면(역할·권한)은 편집할 수 없어요 — 권한 자체를 바꾸는 일은 원장 계정 전용입니다.
+              나머지 설정 면(프로필·운영 체계·과목·수납·알림)은 그대로 편집할 수 있습니다.
+            </p>
+          </div>
+        )
+      ) : null}
       {tab === "popups" ? <PopupsFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">

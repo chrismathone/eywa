@@ -16,6 +16,7 @@
 // **DB에서 원자 실행** — 클라 read-then-overwrite 루프의 동시저장(원스크린 800ms 자동저장) 유실 레이스와
 // 행당 왕복 누적으로 인한 서버리스 타임아웃을 제거(적대리뷰 확정 2건).
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
@@ -40,14 +41,18 @@ export type SubjectUsage = {
   items: { label: string; count: number }[];
 };
 
-type MasterGate =
+type OwnerWriteGate =
   | { error: string; actor?: undefined }
   | { error?: undefined; actor: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>> };
 
-async function requireMaster(): Promise<MasterGate> {
+// 과목 운영 탭 = owner 콘솔 소속 → 게이트도 owner 메뉴 쓰기(override 반영, #58) — 원장이 위임하면 열림.
+// (내부의 설정 행 제거는 saveOwnerSection(operations) 경유라 동일 게이트로 정합.)
+async function requireOwnerWrite(): Promise<OwnerWriteGate> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (actor.systemRole !== "master") return { error: "원장(master)만 실행할 수 있습니다" };
+  if (!(await canWriteTenant(actor.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+  }
   return { actor };
 }
 
@@ -97,7 +102,7 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
 
 /** 과목 키를 참조하는 데이터 건수(표면별) — 삭제 다이얼로그 표시용. */
 export async function getSubjectUsage(key: string): Promise<SubjectUsage | { error: string }> {
-  const gate = await requireMaster();
+  const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   if (!isValidSubjectKey(key)) return { error: "잘못된 과목 키입니다" };
   try {
@@ -140,7 +145,7 @@ export type AbsorbResult = { ok?: boolean; moved?: number; error?: string };
  * DB 이동 → 설정 제거 순서 — 중간 실패 시 과목은 설정에 남아(사용량 0으로 재시도/일반 삭제 가능).
  */
 export async function absorbSubject(input: { from: string; to: string }): Promise<AbsorbResult> {
-  const gate = await requireMaster();
+  const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   const { actor } = gate;
   const from = String(input.from ?? "");
@@ -235,7 +240,7 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
  * 설정에서 과목 행을 즉시 제거(saveOwnerSection 경유). 사용 데이터가 생겼으면 거부(흡수 삭제 안내).
  */
 export async function removeUnusedSubject(key: string): Promise<AbsorbResult> {
-  const gate = await requireMaster();
+  const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   if (!isValidSubjectKey(key)) return { error: "잘못된 과목 키입니다" };
   const t = gate.actor.tenantId;

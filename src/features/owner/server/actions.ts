@@ -2,6 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
@@ -21,10 +22,12 @@ const SECTION_LABELS: Record<SectionKey, string> = {
 };
 
 /**
- * 학원 설정 섹션 1개 저장. master 전용. data(JSON)를 섹션 Zod로 검증 후 기존 jsonb에 머지(섹션 단위
- * 덮어쓰기 — 다른 섹션 보존). best-effort 감사로그 + 셸 전역 revalidate(브랜드·과목 등 반영).
+ * 학원 설정 섹션 1개 저장. 게이트 = 역할·권한 매트릭스(owner 메뉴, override 반영 — #58) —
+ * 원장이 admin/manager에게 owner를 위임하면 설정 편집도 열린다. 단 **permissions(역할·권한) 섹션만은
+ * 항상 master 전용**(self-escalation 차단 — 위임받은 역할이 권한 자체를 바꾸는 것 금지, 0080a DB 트리거와 이중 방어).
+ * data(JSON)를 섹션 Zod로 검증 후 기존 jsonb에 머지(섹션 단위 덮어쓰기 — 다른 섹션 보존).
  */
-// 로고/직인 이미지 업로드 티켓 — master 전용(saveOwnerSection과 동일 게이트). 반환 path를 logoUrl/sealUrl에 저장.
+// 로고/직인/팝업 이미지 업로드 티켓 — saveOwnerSection과 동일 게이트(owner 쓰기). 반환 path를 logoUrl/sealUrl에 저장.
 export type IssueBrandingTicketState = { ticket?: UploadTicket; error?: string } | undefined;
 // logo/seal=인쇄물 브랜딩. popup=공지 팝업 이미지(같은 branding 버킷·경로·권한 재사용 — master 전용 이미지).
 const BRANDING_SLOTS = new Set(["logo", "seal", "popup"]);
@@ -34,7 +37,9 @@ export async function issueBrandingUploadTicket(
 ): Promise<IssueBrandingTicketState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (actor.systemRole !== "master") return { error: "원장(master)만 업로드할 수 있습니다" };
+  if (!(await canWriteTenant(actor.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+  }
 
   const slot = String(formData.get("slot") ?? "");
   if (!BRANDING_SLOTS.has(slot)) return { error: "잘못된 슬롯입니다" };
@@ -61,13 +66,20 @@ export async function saveOwnerSection(
 ): Promise<OwnerSaveState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (actor.systemRole !== "master") {
-    return { error: "학원 설정은 원장(master)만 변경할 수 있습니다" };
-  }
 
   const section = String(formData.get("section") ?? "") as SectionKey;
   const schema = SECTION_SCHEMAS[section];
   if (!schema) return { error: "알 수 없는 설정 섹션입니다" };
+
+  // 역할·권한(permissions) 섹션 = 항상 master 전용(self-escalation 차단 — 위임받은 역할이 자기/타인 권한을
+  // 못 바꿈, 0080a DB 트리거 이중 방어). 그 외 섹션 = owner 메뉴 쓰기 권한(override 반영 — 위임 가능).
+  if (section === "permissions") {
+    if (actor.systemRole !== "master") {
+      return { error: "역할·권한은 원장(master)만 변경할 수 있습니다" };
+    }
+  } else if (!(await canWriteTenant(actor.systemRole, "owner"))) {
+    return { error: "학원 설정 변경 권한이 없습니다" };
+  }
 
   let parsedJson: unknown;
   try {

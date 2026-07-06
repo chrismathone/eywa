@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
@@ -23,7 +24,8 @@ export async function mergeStudents(
 ): Promise<MergeStudentsState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "원장만 가능합니다" };
+  // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
+  if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
   const keeperId = String(formData.get("keeperId") ?? "").trim();
   const mergeeId = String(formData.get("mergeeId") ?? "").trim();
@@ -84,7 +86,8 @@ export async function closeOrphanEnrollments(
 ): Promise<CleanupState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "원장만 가능합니다" };
+  // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
+  if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
   const supabase = await createClient();
   const today = kstToday();
@@ -135,7 +138,7 @@ function parseSelectedIds(formData: FormData): string[] {
 
 /**
  * 선택한 학생들을 일괄 퇴원 처리(상태=withdrawn + withdrawn_at + 활성 enrollment 종료).
- * "수강 없는 재원생" 정리용 — 가역적(학생 상세에서 재원 복구 가능). master 전용.
+ * "수강 없는 재원생" 정리용 — 가역적(학생 상세에서 재원 복구 가능). 관리 도구(admin) 쓰기 권한(기본 master, 위임 시 admin/manager).
  */
 export async function bulkWithdrawStudents(
   _prev: BulkStudentState,
@@ -143,7 +146,8 @@ export async function bulkWithdrawStudents(
 ): Promise<BulkStudentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "원장만 가능합니다" };
+  // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
+  if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
   const ids = parseSelectedIds(formData);
   if (ids.length === 0) return { error: "학생을 선택해주세요" };
@@ -184,7 +188,7 @@ export async function bulkWithdrawStudents(
 
 /**
  * 선택한 학생들을 일괄 삭제(영구). 대부분 FK는 cascade지만 invoices는 onDelete=restrict이므로
- * 청구 기록이 있는 학생은 삭제 불가 → 건너뛰고 보고(퇴원 처리 권장). master 전용.
+ * 청구 기록이 있는 학생은 삭제 불가 → 건너뛰고 보고(퇴원 처리 권장). 관리 도구(admin) 쓰기 권한(기본 master, 위임 시 admin/manager).
  */
 export async function bulkDeleteStudents(
   _prev: BulkStudentState,
@@ -192,7 +196,8 @@ export async function bulkDeleteStudents(
 ): Promise<BulkStudentState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "원장만 가능합니다" };
+  // 관리 도구(admin 메뉴) 쓰기 — 기본 matrix는 master만이나, 원장이 역할·권한에서 위임(override)하면 열림(#58).
+  if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "관리 도구 권한이 없습니다" };
 
   const ids = parseSelectedIds(formData);
   if (ids.length === 0) return { error: "학생을 선택해주세요" };
