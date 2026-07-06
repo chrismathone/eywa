@@ -8,7 +8,6 @@ import {
   minToHM,
   packGroups,
   slotRowSpan,
-  timeToMin,
   type ClassInterval,
 } from "@/features/timetable/lib/ten-minute-grid";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
@@ -36,7 +35,8 @@ const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, 
 const TIME_COL_W = 48; // "14:20" 한 줄 라벨
 const DAY_COL_W = 96; // 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤.
 const LANE_COL_W = 64; // 다중 레인(LAB 서브컬럼) 폭 — 레벨코드 반명(LT2 등) 기준. 시트도 좁은 서브컬럼.
-const ROW_H = 14; // 10분 = 1행. 40분 수업 = 4행(56px) 블록.
+// 행 높이 = 분당 1.4px 고정(스텝 무관 블록 높이 동일 — step 10=14px/행, step 30=42px/행: 60분 수업은 항상 84px).
+const PX_PER_MIN = 1.4;
 const HEAD_TEACHER_H = 26; // 강사 밴드 행 높이(sticky top 오프셋 계산용)
 const HEAD_DAY_H = 30; // 요일 행 높이
 
@@ -46,13 +46,8 @@ const GRID = "border-line";
 // border-r-ink/40(변 전용 색)이 GRID의 shorthand border-color를 우선한다.
 const TEACHER_EDGE = "border-r-2 border-r-ink/40";
 // 수업시간(교시) 경계 가로줄 — 세로 강사 경계선과 동일 톤(시트의 검은 교시선 미러).
+// 위치는 과목 설정(operations.subjects[].teacherViewLines, 학원설정 과목 운영)에서 — props로 주입.
 const PERIOD_EDGE = "border-b-2 border-b-ink/40";
-// 내부 가로줄 위치(2026-07-06 사용자 지정): 오후 4:10·6:00·6:20·7:10·8:00·8:20만.
-// (전 교시 시작·끝 합집합은 선이 너무 촘촘 → 큰 섹션 경계만. 바깥 프레임은 별개로 유지.)
-// TODO(로드맵): 학원설정 운영체계 → 과목별 "강사별시간표 가로줄"로 커스터마이징 배선 예정.
-const PERIOD_EDGE_MINS = new Set<number>(
-  ["16:10", "18:00", "18:20", "19:10", "20:00", "20:20"].map((t) => timeToMin(t)!),
-);
 
 // ⚠️ [[#71]] border-collapse×sticky: 병합 모드에선 셀 테두리가 표에 속해 가로 스크롤 시 sticky
 // 좌측 시각열의 좌 프레임·우 divider가 표와 함께 밀려 사라진다. box-shadow도 병합모드 td에선 불안정
@@ -98,13 +93,24 @@ export function TeacherGridView({
   slots,
   weekMonday,
   teacherColors,
+  sectionLineMins,
+  stepMin = 10,
 }: {
   slots: ScheduleSlotWithStudents[];
   weekMonday?: string;
   /** 강사 헤더색(DB getTeacherColorMap) — 직원 등록된 강사 우선. 미등록은 시트 미러색 폴백. */
   teacherColors?: TeacherColorMap;
+  /** 내부 가로줄 시각(자정 기준 분) — 과목 설정 teacherViewLines. page.tsx가 도출. */
+  sectionLineMins?: number[];
+  /** 격자 단위(분, 60의 약수) — 과목 설정 teacherViewStep. */
+  stepMin?: number;
 }) {
   const dayDates = dayDateLabels(weekMonday);
+  // 행 높이 = 분당 px 고정(스텝 무관 블록 크기 동일). 가로줄 시각은 step 격자에 스냅(격자 밖이면 silent drop 방지).
+  const rowH = Math.round(stepMin * PX_PER_MIN);
+  const periodEdgeMins = new Set(
+    (sectionLineMins ?? []).map((m) => Math.floor(m / stepMin) * stepMin),
+  );
 
   // 강사 목록 = 슬롯 강사 라벨, 시트 좌→우 순서. 각 강사의 요일은 실제 가르치는 요일만(자연순 월→토).
   const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(compareSheetTeachers);
@@ -123,16 +129,16 @@ export function TeacherGridView({
     })
     .filter((t) => t.days.length > 0);
 
-  // 행 = 10분 격자(데이터 범위 ∪ 시트 폴백 14:20~22:00). 절대 시각축이라 토요일 오후도 자연 정렬
-  // (옛 교시축의 rowOf 'mon' 주말 핵이 필요 없어짐).
-  const rows = buildTenMinuteRows(slots);
+  // 행 = 시간 격자(데이터 범위 ∪ 시트 폴백 14:20~22:00, 단위=stepMin). 절대 시각축이라 토요일 오후도
+  // 자연 정렬(옛 교시축의 rowOf 'mon' 주말 핵이 필요 없어짐).
+  const rows = buildTenMinuteRows(slots, undefined, stepMin);
 
   // 강사×요일: 같은 시간 범위 병렬 반 = 한 그룹(합반, colSpan 셀) → 그룹 단위 레인 패킹.
   const prepared = teachers.map((t) => {
     const cols = t.days.map((day) => {
       const colSlots = slots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
       // ⚠️ 슬롯=블록 1:1(접기 없음) — 한 수업이 2교시 연속이어도 시트처럼 교시별 셀 2개로(2026-07-06).
-      const { groups, laneCount } = packGroups(buildSlotIntervals(colSlots));
+      const { groups, laneCount } = packGroups(buildSlotIntervals(colSlots, stepMin));
       // (행,레인) → 앵커 그룹 / 피복 셀 사전계산.
       const anchors = new Map<string, { group: (typeof groups)[number]; span: number }>();
       const covered = new Set<string>();
@@ -159,10 +165,10 @@ export function TeacherGridView({
   // 강사 경계 세로줄 — 그 강사의 마지막 요일·마지막 레인(또는 거기까지 걸친 그룹 셀)에 2px.
   const isTeacherBoundary = (col: { laneCount: number }, isLastDay: boolean, laneEnd: number) =>
     isLastDay && laneEnd === col.laneCount;
-  // 교시 경계 가로줄 — 이 행의 하단(=다음 행 시작)이 교시 경계 시각이면 진한 2px, 아니면 옅은 1px.
+  // 교시 경계 가로줄 — 이 행의 하단(=다음 행 시작)이 설정된 가로줄 시각이면 진한 2px, 아니면 옅은 1px.
   const periodBottom = (nextRi: number) => {
     const m = rows[nextRi]?.startMin;
-    return m == null || PERIOD_EDGE_MINS.has(m) ? PERIOD_EDGE : "border-b";
+    return m == null || periodEdgeMins.has(m) ? PERIOD_EDGE : "border-b";
   };
 
   return (
@@ -228,7 +234,7 @@ export function TeacherGridView({
                 className={`bg-bg-soft sticky left-0 z-10 px-1 py-0 text-right align-top font-mono leading-none ${STICKY_EDGES} ${
                   row.isHour ? "text-foreground text-[9px] font-bold" : "text-text-faint text-[9px]"
                 }`}
-                style={{ height: ROW_H }}
+                style={{ height: rowH }}
               >
                 {row.key}
                 {/* ⚠️ 하단 선도 가상요소가 아닌 셀 자식 실선(#71 가로판) — border-b는 병합 모드에서 표에
@@ -236,7 +242,7 @@ export function TeacherGridView({
                 <span
                   aria-hidden
                   className={`pointer-events-none absolute inset-x-0 bottom-0 ${
-                    (rows[ri + 1]?.startMin == null || PERIOD_EDGE_MINS.has(rows[ri + 1]!.startMin))
+                    (rows[ri + 1]?.startMin == null || periodEdgeMins.has(rows[ri + 1]!.startMin))
                       ? "bg-ink/40 h-[2px]"
                       : "bg-line h-px"
                   }`}
@@ -274,7 +280,7 @@ export function TeacherGridView({
                             : "border-r"
                         }`}
                       >
-                        <div className="p-px" style={{ height: span * ROW_H - 1 }}>
+                        <div className="p-px" style={{ height: span * rowH - 1 }}>
                           <div className="flex h-full min-w-0 gap-px">
                             {group.intervals.map((iv) => {
                               const s = intervalSlot(iv);

@@ -84,12 +84,27 @@ export default async function TimetablePage({
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
+  const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
   // 과목별 요일 병합 프리셋(설정) — 미설정/구데이터는 mon-thu 폴백(resolve가 스키마 미통과).
-  const weekdayGrouping = normalizeWeekdayGrouping(
-    settings.operations.subjects.find((s) => s.key === subject)?.weekdayGrouping,
-  );
+  const weekdayGrouping = normalizeWeekdayGrouping(subjectRow?.weekdayGrouping);
 
-  const isIntegrated = view === "integrated";
+  // 강사뷰 허용 = 영어 또는 강사별시간표 설정(teacherViewLines)이 있는 과목만 — URL 직입력으로
+  // 비영어에 영어 전용 격자·시트 강사 순서가 렌더되던 것 서버 강제 차단(2026-07-06, effView로 렌더).
+  const allowsTeacherView = (k: string) =>
+    k === "english" ||
+    ((settings.operations.subjects.find((s) => s.key === k)?.teacherViewLines?.length ?? 0) > 0);
+  const teacherViewAllowed = allowsTeacherView(subject);
+  const effView: ViewMode = view === "teacher" && !teacherViewAllowed ? "basic" : view;
+  // 강사뷰 커스터마이징(과목 설정) — 가로줄 시각(분)·격자 단위. english는 resolve가 기본 프리필.
+  const sectionLineMins = (subjectRow?.teacherViewLines ?? [])
+    .map((t) => {
+      const [h, m] = t.split(":").map(Number);
+      return (h ?? 0) * 60 + (m ?? 0);
+    })
+    .filter((m) => Number.isFinite(m));
+  const teacherViewStep = subjectRow?.teacherViewStep ?? 10;
+
+  const isIntegrated = effView === "integrated";
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
   // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
   const statusOf = new Map<string, "active" | "hold" | "withdrawn">();
@@ -125,18 +140,18 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view, subject, defaultSubject, week: monday, thisWk })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰는 english 전용이라 타과목 전환 시 기본뷰로. */}
+        {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰 비허용 과목으로 전환 시 기본뷰로. */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">과목</span>
           {available.map((k) => (
             <Link
               key={k}
               href={buildHref({
-                view: view === "teacher" && k !== "english" ? "basic" : view,
+                view: effView === "teacher" && !allowsTeacherView(k) ? "basic" : effView,
                 subject: k,
                 defaultSubject,
                 week,
@@ -154,13 +169,13 @@ export default async function TimetablePage({
         </div>
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 뷰 토글 — 강사뷰는 슬롯 강사 데이터가 있는 english에서만 노출(시트 강사별 배치 패리티). */}
+        {/* 뷰 토글 — 강사뷰는 허용 과목(영어 또는 강사별시간표 설정 보유)에서만 노출. */}
         <div className="flex items-center gap-1">
           <span className="micro mr-1">뷰</span>
           {([
             { key: "basic", label: "기본뷰", icon: Columns3 },
             { key: "integrated", label: "통합뷰", icon: LayoutGrid },
-            ...(subject === "english"
+            ...(teacherViewAllowed
               ? [{ key: "teacher" as ViewMode, label: "강사뷰", icon: Users }]
               : []),
           ] as { key: ViewMode; label: string; icon: LucideIcon }[]).map((v) => {
@@ -170,7 +185,7 @@ export default async function TimetablePage({
                 key={v.key}
                 href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
-                  view === v.key
+                  effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
@@ -192,7 +207,7 @@ export default async function TimetablePage({
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
-        {view === "basic" && slots.length > 0 && canEdit ? (
+        {effView === "basic" && slots.length > 0 && canEdit ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
             <TimetableEditControls />
@@ -212,10 +227,17 @@ export default async function TimetablePage({
         />
       ) : isIntegrated ? (
         <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} />
-      ) : view === "teacher" ? (
+      ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
+        // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
         <div className="flex min-h-0 flex-1 flex-col">
-          <TeacherGridView slots={slots} weekMonday={week} teacherColors={teacherColors} />
+          <TeacherGridView
+            slots={slots}
+            weekMonday={week}
+            teacherColors={teacherColors}
+            sectionLineMins={sectionLineMins}
+            stepMin={teacherViewStep}
+          />
         </div>
       ) : (
         <TimetableDndArea>

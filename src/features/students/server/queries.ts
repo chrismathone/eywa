@@ -7,9 +7,10 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
   slotPeriodRow,
+  settingsToPeriodsConfig,
   enumDayToKo,
   type DayOfWeek,
-  type TimetableSubject,
+  type PeriodsConfig,
 } from "@/features/timetable/lib/periods";
 import { goalAchieved } from "../grades-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -508,7 +509,6 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
 }
 
 // ───────── 수업 탭(ijw CoursesTab 이식) — 스케줄(요일+교시)·강사·인원 포함 ─────────
-const TIMETABLE_SUBJECTS = new Set(["math", "highmath", "english", "science", "korean"]);
 const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
 
 export type ScheduleGroup = { days: string[]; label: string }; // {days:["월","목"], label:"1~3교시"}
@@ -551,15 +551,17 @@ function mergePeriodRanges(nums: number[]): string {
 // attendanceDays 있으면 그 요일만(분리등원). 교시 매칭 실패 시각은 원라벨 그대로(병합 대상 아님).
 function groupSchedule(
   slots: { day: DayOfWeek; startTime: string }[],
-  subj: TimetableSubject,
+  subj: string,
   attendanceDaysKo: string[],
+  config: PeriodsConfig,
 ): ScheduleGroup[] {
   // 1) 요일 → 교시번호[] + 매칭 안 된 원라벨[]
   const byDay = new Map<string, { nums: number[]; other: string[] }>();
   for (const s of slots) {
     const dayKo = enumDayToKo(s.day);
     if (attendanceDaysKo.length > 0 && !attendanceDaysKo.includes(dayKo)) continue;
-    const label = slotPeriodRow(subj, s.startTime, s.day).label;
+    // 테넌트 설정 교시(과목별 override 포함)로 라벨 해석 — 무config 호출은 커스텀 교시 저장 시 라벨이 틀어진다(2026-07-06).
+    const label = slotPeriodRow(subj, s.startTime, s.day, config).label;
     const entry = byDay.get(dayKo) ?? { nums: [], other: [] };
     const m = label.match(/^(\d+)교시$/);
     if (m) entry.nums.push(Number(m[1]));
@@ -626,6 +628,9 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     }),
   );
 
+  // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준 — getTenantSettings는 React cache라 추가 쿼리 0.
+  const periodsConfig = settingsToPeriodsConfig((await getTenantSettings()).operations);
+
   return ens.map((e) => {
     const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
       | { class_name?: string; subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] }
@@ -633,8 +638,9 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     const teacher = klass
       ? ((Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as { display_name?: string } | undefined)
       : undefined;
+    // 과목 키를 그대로 전달(string) — 커스텀 키(subject_1 등)도 과목별 교시표로 해석되고,
+    // 미지의 키는 weekdayTableFor가 전역 평일표로 폴백(옛 'math 강제 coerce'와 동일 결과).
     const subject = klass?.subject ?? "other";
-    const subj = (TIMETABLE_SUBJECTS.has(subject) ? subject : "math") as TimetableSubject;
     const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
     return {
       enrollmentId: e.id,
@@ -646,7 +652,12 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       endDate: e.end_date,
       onHold: e.on_hold,
       studentCount: countByClass.get(e.class_id) ?? 0,
-      schedule: groupSchedule(schedByClass.get(e.class_id) ?? [], subj, attDays.map((d) => enumDayToKo(d as DayOfWeek))),
+      schedule: groupSchedule(
+        schedByClass.get(e.class_id) ?? [],
+        subject,
+        attDays.map((d) => enumDayToKo(d as DayOfWeek)),
+        periodsConfig,
+      ),
     } satisfies StudentClassRow;
   });
 }

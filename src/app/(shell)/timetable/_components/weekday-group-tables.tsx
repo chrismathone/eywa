@@ -3,6 +3,7 @@ import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queri
 import {
   slotPeriodRow,
   subjectPeriodRows,
+  weekdayTableFor,
   DEFAULT_PERIODS_CONFIG,
   type DayOfWeek,
   type PeriodRow,
@@ -91,8 +92,11 @@ function subSlotOf(
   const m = /^m-(\d+)$/.exec(rowKey);
   if (!m) return "full";
   const g = Number(m[1]);
-  const firstEnd = config.weekday[String(2 * g - 1)]?.endTime;
-  const secondStart = config.weekday[String(2 * g)]?.startTime;
+  // ⚠️ 과목별 평일 교시 override(weekdayBySubject) 반영 — config.weekday 직접 참조는
+  // 수학계 커스텀 교시 시 서브슬롯(1-1/1-2) 판정이 엉뚱한 시각과 비교된다(2026-07-06).
+  const table = weekdayTableFor(card.subject, config);
+  const firstEnd = table[String(2 * g - 1)]?.endTime;
+  const secondStart = table[String(2 * g)]?.startTime;
   const hm5 = (t: string) => t.slice(0, 5);
   if (secondStart && hm5(card.startTime) === hm5(secondStart)) return "bottom";
   if (firstEnd && hm5(card.endTime) === hm5(firstEnd)) return "top";
