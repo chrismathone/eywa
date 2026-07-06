@@ -10,6 +10,9 @@ import {
   getTextbookStats,
 } from "@/features/billing/server/textbook-queries";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TextbooksTable } from "./textbooks-table";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -29,13 +32,19 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ rows, total }, stats, students, catalog] = await Promise.all([
+  // settings·user는 다이얼로그 실시간 미리보기(요청서 카드: 학원명·로고·계좌)용. 둘 다 React 캐시라 저비용.
+  const [{ rows, total }, stats, students, catalog, settings, user] = await Promise.all([
     getTextbookOrdersPage({ status, q }, page, PAGE_SIZE),
     getTextbookStats(),
     getStudentOptions(),
     getCatalogOptions(),
+    getTenantSettings(),
+    getCurrentUser(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const academyName = settings.profile.name || "인재원";
+  const logoUrl = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
+  const account = settings.billing.account;
 
   const chipHref = (s: string) => {
     const p = new URLSearchParams({ tab: "textbooks" });
@@ -112,10 +121,24 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
       </div>
 
       {total === 0 ? (
-        <TextbooksTable rows={[]} students={students} catalog={catalog} />
+        <TextbooksTable
+          rows={[]}
+          students={students}
+          catalog={catalog}
+          academyName={academyName}
+          logoUrl={logoUrl}
+          account={account}
+        />
       ) : (
         <>
-          <TextbooksTable rows={rows} students={students} catalog={catalog} />
+          <TextbooksTable
+            rows={rows}
+            students={students}
+            catalog={catalog}
+            academyName={academyName}
+            logoUrl={logoUrl}
+            account={account}
+          />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}

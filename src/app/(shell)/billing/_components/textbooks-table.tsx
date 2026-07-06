@@ -8,6 +8,7 @@ import { usePrintWindow } from "@/components/workspace/print-window";
 import { deleteTextbookOrder, toggleTextbookCheck } from "@/features/billing/server/textbook-actions";
 import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/textbook-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
+import type { AccountSetting } from "@/features/owner/settings-types";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
@@ -35,10 +36,17 @@ export function TextbooksTable({
   rows,
   students,
   catalog,
+  academyName,
+  logoUrl,
+  account,
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
   catalog: CatalogOption[];
+  // 다이얼로그 실시간 미리보기(요청서 카드)용 — billing 페이지가 학원설정에서 도출.
+  academyName: string;
+  logoUrl: string | null;
+  account: AccountSetting;
 }) {
   const [dialog, setDialog] = useState<{ order: TextbookOrderRow | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -134,9 +142,11 @@ export function TextbooksTable({
                         );
                       })}
                     </div>
-                    {r.statusAt || r.statusByName ? (
-                      <p className="text-text-faint mt-1 text-[10px]" title={fmtFull(r.statusAt)}>
-                        {r.statusAt ? fmtShort(r.statusAt) : ""}
+                    {/* '처리자·시각'은 사무실이 실제로 등록/납부/주문을 체크했을 때만 — 신규(미처리) 요청엔
+                        status_by_name이 생성자(=요청 강사)라 신청일·강사 컬럼과 중복되고 "등록함"으로 오해됨. */}
+                    {(r.registered || r.paid || r.ordered) && (r.statusAt || r.statusByName) ? (
+                      <p className="text-text-faint mt-1 text-[10px]" title={`마지막 처리 · ${fmtFull(r.statusAt)}`}>
+                        처리 {r.statusAt ? fmtShort(r.statusAt) : ""}
                         {r.statusByName ? ` · ${r.statusByName}` : ""}
                       </p>
                     ) : null}
@@ -195,6 +205,9 @@ export function TextbooksTable({
           order={dialog.order}
           students={students}
           catalog={catalog}
+          academyName={academyName}
+          logoUrl={logoUrl}
+          account={account}
           onClose={() => setDialog(null)}
         />
       ) : null}
