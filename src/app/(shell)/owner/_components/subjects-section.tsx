@@ -4,7 +4,7 @@
 // 운영 체계 면과 **같은 operations 섹션**에 저장(face→section 매핑은 UI 레벨) — payload는 full
 // operations(여기선 subjects만 편집, 나머지는 initial 통과). 동시편집 가드 scope도 동일해 두 면 커버.
 // 과목별 편집기는 native <details>(기본 접힘 + 요약 배지) — 과목 수만큼 빈 풀폭 카드가 늘어지는 것 방지.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import {
   TEACHER_VIEW_STEPS,
@@ -12,6 +12,14 @@ import {
   type SubjectSetting,
 } from "@/features/owner/settings-types";
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
+import {
+  absorbSubject,
+  getSubjectUsage,
+  removeUnusedSubject,
+  type SubjectUsage,
+} from "@/features/owner/server/subject-actions";
+import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SectionForm, SettingsCard } from "./section-form";
 import { PeriodListEditor, SubjectListEditor } from "./list-editors";
 
@@ -27,15 +35,26 @@ export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
   const setSubjects = (v: SubjectSetting[]) => setO((prev) => ({ ...prev, subjects: v }));
   const patchSubject = (i: number, patch: Partial<SubjectSetting>) =>
     setSubjects(o.subjects.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  // 삭제 = 흡수 다이얼로그(조건부 마운트 — 닫히면 언마운트로 state 리셋, #67 안전)
+  const [removing, setRemoving] = useState<{ index: number; key: string; label: string } | null>(null);
+  const removeRowLocal = (index: number) =>
+    setO((prev) => ({ ...prev, subjects: prev.subjects.filter((_, j) => j !== index) }));
 
   return (
     <SectionForm section="operations" payload={o}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <SettingsCard
           title="운영 과목"
-          description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가)."
+          description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가). 삭제 시 그 과목의 데이터를 다른 과목에 흡수시킵니다."
         >
-          <SubjectListEditor value={o.subjects} onChange={setSubjects} />
+          <SubjectListEditor
+            value={o.subjects}
+            onChange={setSubjects}
+            onRemove={(i) => {
+              const s = o.subjects[i];
+              setRemoving({ index: i, key: s.key, label: s.label.trim() || s.key });
+            }}
+          />
         </SettingsCard>
 
         <SettingsCard
@@ -143,7 +162,154 @@ export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
           </div>
         </SettingsCard>
       </div>
+
+      {removing ? (
+        <AbsorbDialog
+          from={removing}
+          targets={o.subjects
+            .filter((s) => s.key !== removing.key)
+            .map((s) => ({ value: s.key, label: s.label.trim() || s.key }))}
+          onClose={() => setRemoving(null)}
+          onRemoved={() => {
+            removeRowLocal(removing.index);
+            setRemoving(null);
+          }}
+        />
+      ) : null}
     </SectionForm>
+  );
+}
+
+/**
+ * 과목 삭제 다이얼로그 — 사용 데이터가 있으면 다른 과목으로 **흡수 후 삭제**, 없으면 **미사용 삭제**.
+ * 둘 다 서버에서 즉시 확정(폼 저장 버튼과 무관 — 미사용 삭제도 실행 시점 사용량 재검증, TOCTOU 차단).
+ * native <dialog> + showModal — 배경 inert(키보드로 뒤 폼 조작 불가)·Esc(cancel)·포커스 격리를
+ * 브라우저가 제공. SectionForm(form) 안이라 중첩 form 금지 — 서버 액션을 버튼 핸들러에서 직접
+ * 호출(전 버튼 type="button", SearchableSelect 검색창은 컴포넌트 레벨 Enter 가드).
+ */
+function AbsorbDialog({
+  from,
+  targets,
+  onClose,
+  onRemoved,
+}: {
+  from: { key: string; label: string };
+  targets: { value: string; label: string }[];
+  onClose: () => void;
+  onRemoved: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [usage, setUsage] = useState<SubjectUsage | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    dialogRef.current?.showModal();
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    getSubjectUsage(from.key)
+      .then((res) => {
+        if (!alive) return;
+        if ("error" in res) setLoadError(res.error);
+        else setUsage(res);
+      })
+      .catch(() => {
+        if (alive) setLoadError("사용량 조회에 실패했습니다 — 닫았다가 다시 시도해 주세요.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [from.key]);
+
+  // 실행 공통 래퍼 — 네트워크 단절 등 reject에도 busy가 고착되지 않게(취소 불능 방지).
+  const run = async (fn: () => Promise<{ ok?: boolean; error?: string }>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fn();
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      onRemoved();
+    } catch {
+      setError("실행 결과를 확인하지 못했습니다(네트워크 오류 등). 다시 시도해 주세요 — 재실행은 안전합니다.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onCancel={(e) => {
+        // Esc — 실행 중엔 닫힘 방지(핸들러는 최신 렌더 클로저라 busy 직접 참조 안전)
+        if (busy) e.preventDefault();
+        else onClose();
+      }}
+      className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-md rounded-lg border p-5 shadow-lg"
+    >
+      <h3 className="text-foreground text-sm font-bold">‘{from.label}’ 과목 삭제</h3>
+
+      {loadError ? (
+        <p className="text-danger mt-3 text-[12px]">{loadError}</p>
+      ) : !usage ? (
+        <p className="text-text-dim mt-3 text-[12px]">사용 데이터 확인 중…</p>
+      ) : usage.total === 0 ? (
+        <p className="text-text-dim mt-3 text-[13px]">
+          이 과목을 쓰는 데이터가 없습니다. 삭제하면 즉시 적용됩니다.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <p className="text-text-dim text-[13px]">
+            이 과목을 쓰는 데이터 <b className="text-foreground">{usage.total}건</b>이 있습니다. 삭제하려면
+            아래에서 선택한 과목으로 <b className="text-foreground">모두 흡수</b>됩니다(즉시 적용).
+          </p>
+          <ul className="text-text-dim flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
+            {usage.items.map((it) => (
+              <li key={it.label} className="whitespace-nowrap">
+                {it.label} <b className="text-foreground">{it.count}</b>
+              </li>
+            ))}
+          </ul>
+          <div className="space-y-1">
+            <span className="text-text-dim block text-[12px]">흡수할 과목</span>
+            <SearchableSelect
+              options={targets}
+              value={target}
+              onValueChange={setTarget}
+              placeholder="과목 선택"
+              ariaLabel="흡수할 과목"
+            />
+          </div>
+        </div>
+      )}
+
+      {error ? <p className="text-danger mt-3 text-[12px]">{error}</p> : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+          취소
+        </Button>
+        {usage && usage.total === 0 ? (
+          <Button type="button" onClick={() => void run(() => removeUnusedSubject(from.key))} disabled={busy}>
+            {busy ? "삭제 중…" : "삭제"}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            onClick={() => void run(() => absorbSubject({ from: from.key, to: target }))}
+            disabled={!usage || !target || busy}
+          >
+            {busy ? "흡수 중…" : "모두 흡수하고 삭제"}
+          </Button>
+        )}
+      </div>
+    </dialog>
   );
 }
 

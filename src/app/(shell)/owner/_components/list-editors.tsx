@@ -84,9 +84,12 @@ function nextSubjectKey(taken: Set<string>): string {
 export function SubjectListEditor({
   value,
   onChange,
+  onRemove,
 }: {
   value: SubjectSetting[];
   onChange: (v: SubjectSetting[]) => void;
+  // 삭제를 가로채는 콜백(과목 흡수 다이얼로그) — 미지정 시 기존처럼 행 즉시 제거.
+  onRemove?: (index: number) => void;
 }) {
   // 확정된 key 집합 — 최초 로드된(저장된) key + 이번 세션에서 blur로 확정된 key. 여기 든 key는 다신 안 바뀐다.
   const frozen = useRef<Set<string>>(new Set(value.map((s) => s.key).filter(Boolean)));
@@ -173,7 +176,9 @@ export function SubjectListEditor({
               >
                 {s.key}
               </span>
-              <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
+              <RemoveButton
+                onClick={() => (onRemove ? onRemove(i) : onChange(value.filter((_, j) => j !== i)))}
+              />
             </div>
             {dup ? (
               <p className="text-danger pl-0.5 text-[11px]">이미 있는 과목명입니다 — 다른 이름을 쓰거나 한 행을 삭제하세요.</p>
