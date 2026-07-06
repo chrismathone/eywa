@@ -258,16 +258,18 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
   next[col] = checked ? now : null;
   const status = next.paid_at ? "paid" : next.ordered_at ? "ordered" : "requested";
 
-  const { error } = await supabase
-    .from("textbook_orders")
-    .update({
-      [col]: next[col],
-      status,
-      status_at: now,
-      status_by_name: user.displayName,
-      updated_at: now,
-    })
-    .eq("id", id);
+  const patch: Record<string, string | null> = {
+    [col]: next[col],
+    status,
+    status_at: now,
+    status_by_name: user.displayName,
+    updated_at: now,
+  };
+  // 등록/납부 해제 = "사람 소유" 마커(0079a) — makeedu 자동 체크(mirror-textbook-checks)가 이 신청을
+  // 영구 제외해 해제↔재체크 핑퐁을 막는다(환불·오체크 정정 존중). 주문 해제는 자동화 무관이라 마커 안 찍음.
+  if (!checked && (col === "registered_at" || col === "paid_at")) patch.check_dismissed_at = now;
+
+  const { error } = await supabase.from("textbook_orders").update(patch).eq("id", id);
   if (error) return { error: error.message };
 
   revalidatePath("/billing");

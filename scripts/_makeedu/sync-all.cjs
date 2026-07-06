@@ -4,8 +4,10 @@
  * 전역 토글 확인 → 라이브 스크래핑(1 로그인) → 안전·멱등 도메인만 additive 임포트(--apply). 도메인별 실패 격리.
  * 임포터는 전부 additive(makeedu_id/자연키 매칭 + on-conflict-do-nothing/backfill)라 **재실행 = 증분**(새 행만 추가).
  *
- * 포함 도메인(멱등): students(DOM)·classes·prospects·invoices·consultations(증분 — sync-consultations-incremental,
- *                    최근 창만 목록 걷고 신규만 상세 fetch. 초기 대량은 엑셀 부트스트랩 import-consultations-excel).
+ * 포함 도메인(멱등): students(DOM)·classes·prospects·invoices·textbook_checks(교재 자동 체크 —
+ *                    mirror-textbook-checks: 수납 라인 생성=등록·완납=납부, 입력자='자동화', ON만/OFF 없음)·
+ *                    consultations(증분 — sync-consultations-incremental, 최근 창만 목록 걷고 신규만 상세 fetch.
+ *                    초기 대량은 엑셀 부트스트랩 import-consultations-excel).
  * 제외(수동): enrollments(엑셀 '수업' 컬럼 의존)·catalog(tuition 기타가 이름 insert라 재실행 중복)·
  *            prospects 상세본문(sync-prospects = 레코드별 상세 fetch).
  *
@@ -41,7 +43,9 @@ const IMPORTERS = [
   ["classes", "import-classes.cjs"],
   ["prospects", "import-prospects.cjs"],
   ["invoices", "import-invoices.cjs"],
-  // 재원생 상담 증분(마지막 — 자체 Playwright 로그인·상세 fetch. 실패해도 앞 4개 도메인은 무사).
+  // 교재 자동 체크 — scrape가 갱신한 invoices.json(라인 단위)을 소비하므로 invoices 뒤·DB만 접근(Playwright 無).
+  ["textbook_checks", "mirror-textbook-checks.cjs"],
+  // 재원생 상담 증분(마지막 — 자체 Playwright 로그인·상세 fetch. 실패해도 앞 도메인은 무사).
   ["consultations", "sync-consultations-incremental.cjs"],
 ];
 

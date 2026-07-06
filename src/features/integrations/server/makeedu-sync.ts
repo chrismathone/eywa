@@ -11,7 +11,8 @@ export type MakeeduSyncDomain =
   | "invoices"
   | "consultations"
   | "prospects"
-  | "catalog";
+  | "catalog"
+  | "textbook_checks";
 
 export type MakeeduSyncState = {
   syncedAt: string;
