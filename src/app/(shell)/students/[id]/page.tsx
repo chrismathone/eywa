@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
+import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById } from "@/features/students/server/queries";
+import { DupSuspectNotice } from "./_components/dup-suspect-notice";
 import { RunCareAiButton } from "./run-care-ai-button";
 import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";
 import { StatusAction } from "./_components/status-action";
@@ -65,7 +67,10 @@ export default async function StudentDetailPage({
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
           <p className="eyebrow">학생</p>
-          <h1 className="display text-foreground text-3xl">{student.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="display text-foreground text-3xl">{student.name}</h1>
+            {student.dupSuspect ? <DupSuspectTag /> : null}
+          </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             {student.grade ? <span>{student.grade}</span> : null}
             {student.school ? <span>· {student.school}</span> : null}
@@ -73,6 +78,9 @@ export default async function StudentDetailPage({
               <span className="num">· 학번 {student.studentCode}</span>
             ) : null}
           </div>
+          {student.dupSuspect ? (
+            <DupSuspectNotice studentId={student.id} canClear={canEndEnrollment} />
+          ) : null}
         </div>
         <div className="flex flex-col items-end gap-2">
           <span

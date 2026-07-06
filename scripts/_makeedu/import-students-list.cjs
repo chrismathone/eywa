@@ -20,6 +20,30 @@ const APPLY = process.argv.includes("--apply");
 const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
 const idx = (H) => (sub) => H.findIndex((h) => (h || "").includes(sub));
 
+// 학교 core(접미사 정규화) — "달성초"·"달성초등학교" 동일 취급(상담 임포터와 동일 규약).
+const schoolCore = (v) => (L.txt(v) || "").replace(/(초등학교|중학교|고등학교|초|중|고)$/, "");
+const phoneDigits = (v) => (L.normPhone(v) || "").replace(/[^0-9]/g, "") || null;
+
+// 엑셀 컬럼식 알파벳 접미사: 1→A, 26→Z, 27→AA, … (한바퀴 돌면 AA). 동명이인 구분용.
+function excelSuffix(n) {
+  let s = "";
+  while (n > 0) {
+    n--;
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26);
+  }
+  return s;
+}
+// base 이름이 이미 있으면(taken=정규화 이름 집합) 다음 미사용 접미사 부여: 테스트→테스트A→테스트B…
+// 사용자 규칙(2026-07-06): makeedu에서 새 학생인데 이름이 eywa에 이미 있으면(퇴원 포함) 뒤에 알파벳.
+function uniqueName(base, taken) {
+  if (!taken.has(L.normalizeName(base))) return base;
+  for (let i = 1; ; i++) {
+    const cand = base + excelSuffix(i);
+    if (!taken.has(L.normalizeName(cand))) return cand;
+  }
+}
+
 // DOM 상태 텍스트 → eywa status. 재원생 목록이라 미상이면 enrolled 가정.
 function statusFrom(v) {
   const s = L.txt(v) || "";
@@ -75,36 +99,41 @@ function statusFrom(v) {
   try {
     const tenantId = await L.resolveTenantId(sql);
     const existing = await sql`
-      select id, makeedu_id, name, school, grade, status from students where tenant_id = ${tenantId}`;
+      select id, makeedu_id, name, school, grade, status, student_phone, parent_phone from students where tenant_id = ${tenantId}`;
     const byMakeedu = new Map(existing.filter((e) => e.makeedu_id).map((e) => [e.makeedu_id, e.id]));
-    // 활성 자연키(이름+학교+학년) 집합 — 부분유니크 ux_students_active_natural_key(status<>'withdrawn')와 동일.
-    const activeNatural = new Set(
-      existing.filter((e) => e.status !== "withdrawn").map((e) => `${L.normalizeName(e.name)}|${e.school || ""}|${e.grade || ""}`),
-    );
+    // 매칭 = **강한 키만**(이름+학교core+학년 → 이름+학생전화 → 이름+보호자전화). 이름 단독·이름+학년(느슨)
+    // 티어는 제거 — 동명이인(다른 학교/학년)이 같은 이름 1명에 잘못 붙어 스킵되던 갭 차단. 학교 표기 드리프트는
+    // schoolCore가, 학년 드리프트는 전화가 흡수. 모호/미매칭 = 신규로 보고 아래에서 알파벳 접미사로 구분.
+    const nkey = (x) => L.normalizeName(x.name);
+    const gkey = (x) => L.gradeNorm(x.grade) || "";
     const match = L.tieredMatcher(existing, [
-      (r) => `${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`,
-      (r) => `${L.normalizeName(r.name)}|${r.grade || ""}`,
-      (r) => L.normalizeName(r.name),
+      (x) => (x.name && schoolCore(x.school) ? `${nkey(x)}|${schoolCore(x.school)}|${gkey(x)}` : null),
+      (x) => { const p = phoneDigits(x.student_phone); return x.name && p ? `${nkey(x)}|s|${p}` : null; },
+      (x) => { const p = phoneDigits(x.parent_phone); return x.name && p ? `${nkey(x)}|p|${p}` : null; },
     ]);
+    // 이름 충돌 집합 = 전 상태(퇴원 포함) 정규화 이름. 신규 추가 때마다 확정 이름을 넣어 순차(A,B,…) 부여.
+    const takenNames = new Set(existing.map((e) => L.normalizeName(e.name)));
 
     const toLink = []; // 기존 학생에 makeedu_id 백필(고유번호 있을 때만)
-    const toInsert = []; // eywa에 없는 신규 학생
-    let alreadyLinked = 0, skippedDup = 0;
+    const toInsert = []; // eywa에 없는 신규 학생(이름 충돌 시 접미사 붙인 finalName 포함)
+    let alreadyLinked = 0, suffixed = 0, skippedDup = 0; // skippedDup = insert 제약 백스톱 카운트
     for (const r of rows) {
       if (r.makeedu_id && byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; }
       const id = match(r);
       if (id) {
         if (r.makeedu_id) toLink.push({ id, makeedu_id: r.makeedu_id });
-        else alreadyLinked++; // 자연키로 이미 존재(makeedu_id 없어 백필 불가) = 멱등 스킵
+        else alreadyLinked++; // 강한 키로 이미 존재(makeedu_id 없어 백필 불가) = 멱등 스킵
         continue;
       }
-      // 미매칭이지만 활성 동일 자연키가 있으면(모호 미연결) 신규 생성 시 제약 위반 → 사전 스킵.
-      if (activeNatural.has(`${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`)) { skippedDup++; continue; }
-      toInsert.push(r);
+      // 신규 = makeedu 기준 새 학생. 이름이 eywa에 이미 있으면(퇴원 포함) 다음 알파벳 접미사로 구분.
+      const finalName = uniqueName(r.name, takenNames);
+      if (finalName !== r.name) suffixed++;
+      takenNames.add(L.normalizeName(finalName));
+      toInsert.push({ ...r, name: finalName, baseName: r.name });
     }
     console.log(`\n[additive] eywa 기존 학생 ${existing.length} | makeedu DOM ${rows.length}`);
-    console.log(`  이미 존재(멱등): ${alreadyLinked} | makeedu_id 백필: ${toLink.length} | 신규 추가: ${toInsert.length}` + (skippedDup ? ` | 자연키중복 스킵: ${skippedDup}` : ""));
-    if (toInsert.length) console.log("  신규 표본:", toInsert.slice(0, 5).map((r) => `${r.name}/${r.school || "?"}/${r.grade || "?"}`).join(", "));
+    console.log(`  이미 존재(멱등): ${alreadyLinked} | makeedu_id 백필: ${toLink.length} | 신규 추가: ${toInsert.length}` + (suffixed ? ` | 그중 동명이인 접미사: ${suffixed}` : ""));
+    if (toInsert.length) console.log("  신규 표본:", toInsert.slice(0, 8).map((r) => `${r.baseName === r.name ? r.name : `${r.baseName}→${r.name}`}/${r.school || "?"}/${r.grade || "?"}`).join(", "));
 
     if (!APPLY) { console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
 
@@ -120,11 +149,12 @@ function statusFrom(v) {
     for (const r of toInsert) {
       try {
         // 신규 추가 학생만 sync_added_at=now() → 이번 동기화 라벨 대상(매칭 백필은 대상 아님).
+        // dup_suspect = eywa가 이름 충돌로 접미사를 새로 붙인 경우만(사람 확인 필요). makeedu 원래 이름 그대로면 false.
         await sql`
           insert into students (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
-            student_phone, parent_phone, parent_name, birth_date, enrolled_at, status, sync_added_at)
+            student_phone, parent_phone, parent_name, birth_date, enrolled_at, status, sync_added_at, dup_suspect)
           values (${tenantId}, ${r.makeedu_id}, ${r.name}, ${r.gender}, ${r.attendance_code}, ${r.school}, ${r.grade},
-            ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.birth_date}, ${r.enrolled_at}, ${r.status}, now())`;
+            ${r.student_phone}, ${r.parent_phone}, ${r.parent_name}, ${r.birth_date}, ${r.enrolled_at}, ${r.status}, now(), ${r.name !== r.baseName})`;
         inserted++;
       } catch (e) {
         if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) { skippedDup++; continue; }

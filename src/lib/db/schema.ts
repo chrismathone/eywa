@@ -292,6 +292,9 @@ export const students = pgTable(
     // "지난 동기화가 새로 추가한 학생" 표시용(목록의 ↻ 동기화 배지). 동기화 신규 insert 시 now(),
     // 다음 동기화가 성공하면 그 실행 시작에 전부 NULL로 클리어 → 라벨이 "다음 동기화까지만" 유지된다(0061a).
     syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
+    // makeedu 동기화가 이름 충돌로 자동 접미사(테스트→테스트A)를 붙여 만든 신규 학생 표시(0078a).
+    // "확인 필요" 배지 → 사람이 '정상 확인'하거나 병합할 때까지 유지(동기화로 안 지워짐, sync_added_at과 별개).
+    dupSuspect: boolean("dup_suspect").notNull().default(false),
     name: text("name").notNull(),
     englishName: text("english_name"),
     school: text("school"),
@@ -967,6 +970,8 @@ export const textbookOrders = pgTable(
     deliveredAt: timestamp("delivered_at", { withTimezone: true }), // (폐기)
     billedAt: timestamp("billed_at", { withTimezone: true }), // (폐기)
     paidAt: timestamp("paid_at", { withTimezone: true }), // 납부
+    // 수동 해제 마커(0079a) — 등록/납부 체크 해제 시 기록, makeedu 자동 체크(mirror-textbook-checks)가 영구 제외(핑퐁 방지).
+    checkDismissedAt: timestamp("check_dismissed_at", { withTimezone: true }),
     statusByName: text("status_by_name"), // 마지막 변경자(이름 denormalize)
     statusAt: timestamp("status_at", { withTimezone: true }), // 마지막 변경 시각
     notes: text("notes"),

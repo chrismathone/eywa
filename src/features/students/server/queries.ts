@@ -50,6 +50,7 @@ export type StudentListRow = {
   parentPhone: string | null;
   subjects: string[]; // 수강 중인 과목 unique list
   syncNew: boolean; // 지난 동기화가 새로 추가한 학생(sync_added_at != null) → "↻ 동기화" 배지 (다음 동기화 성공 시 해제)
+  dupSuspect: boolean; // 동기화 자동 접미사(동명이인 판정) → "확인 필요" 배지 (사람이 정상 확인/병합할 때까지 유지)
 };
 
 export type StudentSort = "grade" | "name" | "recent";
@@ -112,7 +113,7 @@ export async function getStudentsList(
     let qb = supabase
       .from("students")
       .select(
-        `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at,
+        `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect,
          teacher:primary_teacher_id ( display_name )`,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
@@ -176,6 +177,7 @@ export async function getStudentsList(
       parentPhone: r.parent_phone,
       subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
       syncNew: r.sync_added_at != null,
+      dupSuspect: r.dup_suspect === true,
     } satisfies StudentListRow;
   });
 
@@ -267,7 +269,7 @@ export async function getStudentsPage(
   let qb = supabase
     .from("students")
     .select(
-      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at,
+      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect,
        teacher:primary_teacher_id ( display_name )`,
       { count: "exact" },
     );
@@ -331,6 +333,7 @@ export async function getStudentsPage(
       parentPhone: r.parent_phone,
       subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
       syncNew: r.sync_added_at != null,
+      dupSuspect: r.dup_suspect === true,
     } satisfies StudentListRow;
   });
 
@@ -374,6 +377,7 @@ export type StudentDetail = {
   withdrawnAt: string | null;
   notes: string | null;
   createdAt: string;
+  dupSuspect: boolean; // 동기화 자동 접미사(동명이인 판정) → "확인 필요" 배지
   aiCareSummary: string | null;
   aiCareFocus: CareFocus[] | null;
   aiCareModelVersion: string | null;
@@ -410,7 +414,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
       `id, name, english_name, school, grade, status, student_code, attendance_code,
        gender, birth_date, nickname, graduation_year,
        address, zip_code, address_detail, email, student_phone, home_phone, other_phone,
-       enrolled_at, withdrawn_at, created_at, notes,
+       enrolled_at, withdrawn_at, created_at, notes, dup_suspect,
        parent_name, parent_phone, parent_relation,
        primary_teacher_id, secondary_teacher_id,
        ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at,
@@ -460,6 +464,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     parentPhone: data.parent_phone,
     parentRelation: data.parent_relation,
     createdAt: data.created_at,
+    dupSuspect: data.dup_suspect === true,
     aiCareSummary: data.ai_care_summary,
     aiCareFocus: Array.isArray(data.ai_care_focus)
       ? (data.ai_care_focus as CareFocus[])

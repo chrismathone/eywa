@@ -950,3 +950,25 @@ export async function deleteStudentGradeComment(
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
 }
+
+/**
+ * 동명이인 '의심' 해제 — 사람이 확인해 "실제 다른 학생이 맞다"고 확정하면 dup_suspect=false(배지 제거).
+ * (실제로 같은 사람(중복)이면 이 버튼이 아니라 관리자 병합 도구로 합친다.) students 쓰기(full) 권한 필요.
+ */
+export async function clearDupSuspect(
+  studentId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
+  const id = String(studentId ?? "").trim();
+  if (!id) return { error: "학생 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("students").update({ dup_suspect: false }).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/students/${id}`);
+  revalidatePath("/students");
+  return { ok: true };
+}
