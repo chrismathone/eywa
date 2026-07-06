@@ -336,6 +336,25 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 출석부 과목→강사→반 계층 필터 + 반 미선택 안내문구 + 반 선택 시 강사 자동 (2026-07-06) — ✅ typecheck0/lint0 + 라이브(안내·무로드/매트릭스+자동/계층/전체버그·콘솔0) — 커밋 `da01496`(로컬 미푸시)
+사용자 제보: 출석부([attendance/page.tsx](<src/app/(shell)/attendance/page.tsx>))에서 반 '전체'가 클릭 안 됨 + 과목 필터 요청 + "전체×3면 학생 많아 렉이니 아무것도 안 보이고 안내문구" + "반만 선택 시 강사 강제 표시(누구 선생님인지 꼭 알아야)".
+- **'전체' 버그**: 반 미선택 시 코드가 **첫 반 강제 선택**(`filteredClasses[0]`)해 '전체'가 첫 반으로 튕겼다 → 강제선택 제거(effectiveClassId, auto-select 없음).
+- **과목 → 강사 → 반 계층**(넓→좁 cascade): `getMonthlyAttendanceMatrix`의 classes에 이미 있는 `subject`·`teacherId` 활용(쿼리 추가 0). 상위를 고르면 하위 선택지가 좁혀지고, 상위 변경으로 현재 반이 안 맞으면 자동 해제. 과목 라벨=`buildSubjectMaps(getTenantSettings)` 단일 소스.
+- **반 미선택 = 무거운 출석 데이터 미로드 + 가운데 안내문구**("과목·선생님·반을 선택해 주세요"). `getMonthlyAttendanceMatrix(month, null)`은 반 목록만 반환(매트릭스 스킵) → 렉 방지. 반 골라야 매트릭스·Stat 표시.
+- **반 선택 시 과목·강사 드롭다운을 그 반의 값으로 자동 표시**(subjectValue/teacherValue — ?class만 있어도 과목·담임 채움). 우측 중복 강사 노트 제거.
+- ⚠️ 결정(사용자 확인): "과목/강사만 골라도 **반을 골라야 표가 뜸**"(렉 안전) — 강사 1명의 여러 반 합친 뷰는 별도.
+
+### 시간표 기본뷰 상단 헤더 스크롤 고정(sticky-top) + -soft 반투명 비침 수정 (2026-07-06) — ✅ typecheck0/lint0 + 라이브(세로·가로+세로 동시 스크롤 고정·비침0) — 커밋 `64ad061`(로컬 미푸시)
+사용자 제보: 기본뷰([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>))에서 아래로 스크롤하면 강사·요일 헤더가 위로 사라짐(thead 3행에 sticky 없음).
+- thead 3행에 **sticky top-0/[30px]/[60px]**(측정 행높이 30/30/33) + 좌상단 교시 코너는 **세로·가로 둘 다 고정**(sticky top+left). z 계층: 본문(0)<헤더 day-th(10)<교시열 본문(20)<코너(30) — 겹침 없음. 스크롤 컨테이너 = DragScrollArea `barX`(overflow-y-auto).
+- ⚠️ **비침 버그**([[#74]]): `-soft` 색 토큰이 **12% 알파(반투명)**라 그룹밴드·요일 셀을 그대로 sticky로 두면 스크롤 시 본문(학생 이름)이 비쳤다 → **불투명 base(bg-card) 셀 + 그 위 반투명 색밴드(자식 div)** 구조로 전환(색감 동일, 비침 0). 강사행(bg-bg-soft)·코너는 원래 불투명이라 무변경. (강사뷰·통합뷰는 별도 컴포넌트라 무영향.)
+
+### 교재요청 관리자뷰 — 진행 서브라인 '처리됨만' + 새 교재신청 강사뷰식(좌폼+우 실시간 미리보기) (2026-07-06) — ✅ typecheck0/lint0 + 라이브(서브라인 조건·좌폼+우미리보기·fit-to-width·콘솔0) + main push(`b1e9053`)
+사용자 2건(수납관리›교재).
+- **진행 배지 서브라인 정리**([textbooks-table.tsx](<src/app/(shell)/billing/_components/textbooks-table.tsx>)): 배지 아래 `status_at·status_by_name`(마지막 처리 시각·처리자)이 **생성 시점엔 생성자(=요청 강사)로 세팅**([textbook-actions.ts](src/features/billing/server/textbook-actions.ts))돼, 미처리 신규 요청에 "요청일·요청강사"가 찍혀 신청일·강사 컬럼과 중복 + "등록 밑에 요청강사" 오해. → **사무실이 실제로 등록/납부/주문을 체크했을 때만**(`registered||paid||ordered`) "처리 M/D·처리자" 표시(미처리 요청엔 숨김).
+- **새 교재신청 = 강사뷰식**([textbook-dialog.tsx](<src/app/(shell)/billing/_components/textbook-dialog.tsx>) 재작성): 미리보기 없는 좁은 모달 → **넓은 다이얼로그(좌 폼 + 우 실시간 요청서 미리보기)**, 강사뷰(/textbook-requests)와 동일 `TextbookRequestCardBody` 재사용(전 필드 controlled). 관리자 전용(강사 자유입력·전체 학생·기존 행 수정) 유지. billing 페이지가 학원설정에서 학원명·로고·계좌 도출해 배선.
+- **미리보기 fit-to-width**(720px 인쇄 서식이 좁은 칸에서 잘림): `ScaledPreview`(ResizeObserver로 칸폭÷720 스케일 + 래퍼 높이 자동) → 카드 전체 표시(잘림 없음).
+
 ### 교재 신청 등록·납부 자동 체크 — makeedu 수납 미러(입력자='자동화') + 적대리뷰 15건 전부 반영 (2026-07-06) — ✅ dry-run 실측 + 적대리뷰(3렌즈 18에이전트, confirmed 15/refuted 0 → 전부 수정) + tsc0/lint0
 사용자 확정 기준: **등록 = makeedu 수납에 그 교재 수납명 라인이 생성됨(미납이어도)** / **납부 = 그 라인이 완납 처리됨** / **입력자 = "자동화"**. ijw `mirrorTextbookRequestsFromBilling` 이식 + eywa식 재설계(이름 문자열 대조 → student_id 대조).
 - **신규 [mirror-textbook-checks.cjs](scripts/_makeedu/mirror-textbook-checks.cjs)**(dry-run 기본·`--apply`·`--from=YYYY-MM`): 소스 = **스크랩 원본 invoices.json 라인**(⚠️ eywa invoices 테이블 아님 — (학생,청구월) additive라 이미 임포트된 달의 후속 교재비 라인이 영영 안 들어오고 라인별 납부상태가 집계에서 소실. 실증: 이윤 교재 수납이 스크랩엔 있는데 테이블엔 없음). 납부 판정 = **금액 기준**(미납<=0 && (실납>0 || (청구액>0 && 할인+적립>=청구액))) — makeedu '수납여부' 드롭다운 텍스트는 미납인데 "완납"으로 찍혀 불신.
@@ -2761,6 +2780,11 @@ realtime-js가 그 키로 WS URL을 만들며 `\n`이 `%0A`로 인코딩돼 **�
 과목 설정에 새 필드(`teacherViewPxPerMin`)를 추가하고 라이브 검증하니, **편집기 입력은 렌더되고 payload에도 실리는데 저장하면 DB에서 그 필드만 사라졌다**(액션은 `ok:true`). 원인 = Zod `z.object`는 기본이 **미지 키 strip**인데, **dev 서버의 `.next` 캐시가 필드 추가 이전에 컴파일된 서버측 스키마 모듈(settings-types)을 재사용**해, 그 서버 스키마엔 새 필드가 없어 저장 시 strip한 것. **클라 번들은 새로 컴파일(입력 렌더됨)됐는데 서버 모듈만 stale** = Turbopack 클라/서버 캐시 분기. `.env.local`처럼 파일은 최신인데도 발생(이전 dev 세션이 남긴 `.next` 캐시가 화근).
 - **해소**: dev 서버 종료 → **`.next` 삭제** → 재시작(fresh 재컴파일). 그 후 저장이 새 필드를 정상 persist(실측: DB에 값 반영). **프로덕션은 매 배포가 fresh 빌드라 무관** — dev 전용 함정.
 - **교훈**: **새 스키마/서버액션 필드를 추가한 뒤 라이브 검증**하는데 "저장은 성공인데 값만 안 남는다"면 코드 의심 전에 **`.next` 삭제+dev 재시작**부터. (서버액션 stale은 [[#35]]의 확장 — #35는 "새 액션 미등록", 여기선 "새 스키마 필드 strip".)
+
+### 74. 반투명 `-soft` 토큰 셀을 sticky로 만들면 본문이 비친다 → 불투명 base + 색밴드 레이어 (2026-07-06)
+시간표 기본뷰 헤더를 sticky-top으로 고정하니 스크롤 시 헤더에 본문(학생 이름)이 **비쳐 보였다**. 원인 = eywa `-soft` 색 토큰(`bg-blue-soft` 등)이 **12% 알파(반투명)**·`/50`은 6% → sticky 셀이 반투명이라 아래로 스크롤되는 본문이 그대로 비침(computed `rgba(31,107,168,0.12)`로 확인). 불투명한 `bg-bg-soft`(rgb, 알파 없음)·`bg-card`는 안 비친다.
+- **수정**: 반투명 색을 셀에 직접 주지 말고 **불투명 base(`bg-card`) 셀 + 그 위에 반투명 색밴드를 얹는 자식 div**로 분리(색감 동일, 본문 비침 차단). 두 bg-color 클래스 스택(`bg-card bg-blue-soft`)은 Tailwind 출력 순서로 승자가 갈려 불안정 → 레이어(자식 div) 방식.
+- **교훈**: **sticky/fixed로 스크롤 본문 위에 겹치는 셀은 배경이 불투명해야 한다.** eywa `-soft`(12%)·`/50` 토큰을 스크롤 컨테이너 안 sticky로 쓰면 비친다 → 불투명 base + 색 레이어. (겹치는 요소는 배경/차단을 명시 — body-portal 오버레이 `print:hidden` [[#68]]과 같은 결.)
 
 ---
 
