@@ -60,6 +60,7 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   owner: [
     { label: "프로필·브랜드", href: "/owner" },
     { label: "운영 체계", href: "/owner?tab=operations" },
+    { label: "과목 운영", href: "/owner?tab=subjects" },
     { label: "수납·청구", href: "/owner?tab=billing" },
     { label: "알림·약관", href: "/owner?tab=notifications" },
     { label: "역할·권한", href: "/owner?tab=permissions" },

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { assembleMathParams } from "./assemble";
+import { DEFAULT_PERIODS_CONFIG, type PeriodsConfig } from "@/features/timetable/lib/periods";
 import type { ScheduleSlotWithStudents, StudentLine } from "@/features/timetable/server/queries";
 
 function student(over: Partial<StudentLine> & { studentId: string; name: string }): StudentLine {
@@ -125,5 +126,42 @@ describe("assembleMathParams", () => {
     );
     expect(p.studentMemoMap?.["권나연"]).toContain("쎈 수학");
     expect(p.studentMemoMap?.["권나연"]).toContain("함수 단원");
+  });
+
+  // 교시 설정 파생 매핑(적대리뷰 2026-07-06) — 기본 설정=하드코딩 상수와 동일 산출(회귀 0),
+  // 커스텀 교시는 슬롯이 조용히 증발하지 않고(파생 맵으로 배치) 실패분은 onSkippedSlots로 알림.
+  describe("periodsConfig 파생 매핑", () => {
+    it("기본 설정(DEFAULT_PERIODS_CONFIG) = config 미전달과 동일 산출(회귀 카나리)", () => {
+      const slots = [
+        slot({ dayOfWeek: "mon", startTime: "16:20:00" }),
+        slot({ classId: "c2", dayOfWeek: "sat", startTime: "09:00:00" }),
+      ];
+      const without = assembleMathParams(slots, { referenceMonday: MON });
+      const withCfg = assembleMathParams(slots, { referenceMonday: MON, periodsConfig: DEFAULT_PERIODS_CONFIG });
+      expect(withCfg.filteredClasses.map((c) => c.schedule)).toEqual(without.filteredClasses.map((c) => c.schedule));
+      expect(withCfg.currentPeriods).toEqual(without.currentPeriods);
+    });
+
+    it("커스텀 교시 시각 = 파생 맵으로 배치(하드코딩이면 증발했을 슬롯)", () => {
+      const custom: PeriodsConfig = {
+        ...DEFAULT_PERIODS_CONFIG,
+        weekday: { "1": { startTime: "15:00", endTime: "15:50" }, "2": { startTime: "15:50", endTime: "16:40" } },
+      };
+      const p = assembleMathParams([slot({ dayOfWeek: "mon", startTime: "15:00:00" })], {
+        referenceMonday: MON,
+        periodsConfig: custom,
+      });
+      expect(p.filteredClasses[0].schedule).toContain("월 1-1"); // 커스텀 1교시 15:00 → 1-1
+    });
+
+    it("매핑 실패 슬롯은 onSkippedSlots로 카운트 통지(무에러 증발 금지)", () => {
+      let skipped = 0;
+      const p = assembleMathParams(
+        [slot({ dayOfWeek: "mon", startTime: "13:13:00" })], // 어떤 교시 시작과도 불일치
+        { referenceMonday: MON, periodsConfig: DEFAULT_PERIODS_CONFIG, onSkippedSlots: (n) => (skipped = n) },
+      );
+      expect(skipped).toBe(1);
+      expect(p.filteredClasses).toHaveLength(0);
+    });
   });
 });

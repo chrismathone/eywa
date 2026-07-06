@@ -39,9 +39,11 @@ export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
   const [removing, setRemoving] = useState<{ index: number; key: string; label: string } | null>(null);
   const removeRowLocal = (index: number) =>
     setO((prev) => ({ ...prev, subjects: prev.subjects.filter((_, j) => j !== index) }));
+  // 흡수/미사용 삭제는 서버 즉시 확정 → SectionForm baseline 재스냅샷 신호(거짓 '미저장' 확인 방지).
+  const [savedNonce, setSavedNonce] = useState(0);
 
   return (
-    <SectionForm section="operations" payload={o}>
+    <SectionForm section="operations" payload={o} savedNonce={savedNonce}>
       <div className="grid items-start gap-4 xl:grid-cols-2">
         <SettingsCard
           title="운영 과목"
@@ -173,6 +175,7 @@ export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
           onRemoved={() => {
             removeRowLocal(removing.index);
             setRemoving(null);
+            setSavedNonce(Date.now());
           }}
         />
       ) : null}

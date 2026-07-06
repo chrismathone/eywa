@@ -7,6 +7,7 @@
  * 학생 등원요일(Korean)·신입 enrollmentDate 매핑이 핵심. 순수함수(단위테스트).
  */
 import type { ScheduleSlotWithStudents, StudentLine } from "@/features/timetable/server/queries";
+import { weekdayTableFor, type PeriodsConfig, type PeriodTime } from "@/features/timetable/lib/periods";
 import { LEGACY_TO_UNIFIED_PERIOD_MAP } from "./constants";
 import { buildStudentMemoText, type ExportTimetableParams } from "./exporter";
 import type { TimetableClass, TimetableStudent, Teacher } from "./types";
@@ -48,10 +49,28 @@ const WEEKEND_START_TO_PERIOD: Record<string, string> = {
 const hm = (t: string): string => (t ?? "").slice(0, 5);
 const isWeekend = (dow: string): boolean => dow === "sat" || dow === "sun";
 
-/** eywa 슬롯(dayOfWeek+startTime) → ijw periodId(1-1..4-2). 매핑 실패 시 null(그리드 배치 불가). */
-function slotPeriodId(dow: string, startTime: string): string | null {
-  const map = isWeekend(dow) ? WEEKEND_START_TO_PERIOD : WEEKDAY_START_TO_PERIOD;
-  return map[hm(startTime)] ?? null;
+// 익스포터 그리드는 레거시 8교시(1-1..4-2) 고정 — 설정 교시를 숫자 id 정렬 앞 8개→레거시 id로 사상.
+const LEGACY_PERIOD_IDS = ["1-1", "1-2", "2-1", "2-2", "3-1", "3-2", "4-1", "4-2"];
+
+/**
+ * 설정 교시표 → start(HH:MM)→레거시 periodId 역인덱스. 테넌트가 교시 시각을 커스터마이징하면
+ * (과목 운영 탭 수학 전용 교시·전역 평일/주말 교시) 하드코딩 상수 대신 이걸로 매핑해야 슬롯이
+ * 엑셀/시트에서 무에러 증발하지 않는다(병합 적대리뷰 2026-07-06). 기본 설정에서의 산출은
+ * WEEKDAY/WEEKEND_START_TO_PERIOD 상수와 동일(회귀 0 — 단위테스트 고정).
+ * 한계: 8교시 초과 커스텀 교시는 레거시 그리드에 못 올림(초과분은 매핑 없음 → skip 카운트로 노출).
+ */
+function startToPeriodMap(table: Record<string, PeriodTime>): Record<string, string> {
+  const ids = Object.keys(table)
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+    .slice(0, LEGACY_PERIOD_IDS.length);
+  const out: Record<string, string> = {};
+  ids.forEach((id, i) => {
+    const start = hm(table[String(id)]?.startTime ?? "");
+    if (start) out[start] = LEGACY_PERIOD_IDS[i];
+  });
+  return out;
 }
 
 function pad2(n: number): string {
@@ -70,6 +89,10 @@ export type AssembleOpts = {
   weekLabel?: string;
   /** 과목 표시명(헤더). 기본 "수학". */
   subjectLabel?: string;
+  /** 테넌트 교시 설정(과목별 override 포함) — 미지정 시 기본 상수 맵(기본 설정과 동일 산출). */
+  periodsConfig?: PeriodsConfig;
+  /** 교시 매핑 실패로 그리드에서 제외된 슬롯 수 알림(무에러 증발 방지 — 호출부가 로깅). */
+  onSkippedSlots?: (count: number) => void;
 };
 
 /** eywa StudentLine → 익스포터 studentList 항목(상태/날짜/등원요일 전부 포함, any로 소비됨). */
@@ -101,6 +124,17 @@ export function assembleMathParams(
 ): ExportTimetableParams {
   const slots = allSlots.filter((s) => s.subject === "math");
 
+  // 시각→periodId 맵: 설정(config) 파생 우선, 미전달 시 기본 상수(동일 산출 — 회귀 0).
+  const weekdayMap = opts.periodsConfig
+    ? startToPeriodMap(weekdayTableFor("math", opts.periodsConfig))
+    : WEEKDAY_START_TO_PERIOD;
+  const weekendMap = opts.periodsConfig
+    ? startToPeriodMap(opts.periodsConfig.weekend)
+    : WEEKEND_START_TO_PERIOD;
+  const slotPeriodIdOf = (dow: string, startTime: string): string | null =>
+    (isWeekend(dow) ? weekendMap : weekdayMap)[hm(startTime)] ?? null;
+  let skippedSlots = 0;
+
   // 반(classId)별 묶기
   const byClass = new Map<string, ScheduleSlotWithStudents[]>();
   for (const s of slots) {
@@ -122,8 +156,11 @@ export function assembleMathParams(
 
     for (const s of cslots) {
       const dayKo = DOW_KO[s.dayOfWeek];
-      const periodId = slotPeriodId(s.dayOfWeek, s.startTime);
-      if (!dayKo || !periodId) continue; // 매핑 불가 슬롯은 그리드에 못 올림
+      const periodId = slotPeriodIdOf(s.dayOfWeek, s.startTime);
+      if (!dayKo || !periodId) {
+        skippedSlots += 1; // 매핑 불가 슬롯은 그리드에 못 올림 — 조용히 버리지 않고 카운트해 알림
+        continue;
+      }
       presentPeriods.add(periodId);
       presentDaysKo.add(dayKo);
       schedule.push(`${dayKo} ${periodId}`);
@@ -186,6 +223,8 @@ export function assembleMathParams(
       if (!memoStudents.has(st.studentId)) memoStudents.set(st.studentId, st);
     }
   }
+  if (skippedSlots > 0) opts.onSkippedSlots?.(skippedSlots);
+
   const studentMemoMap: Record<string, string> = {};
   for (const st of memoStudents.values()) {
     const text = buildStudentMemoText(

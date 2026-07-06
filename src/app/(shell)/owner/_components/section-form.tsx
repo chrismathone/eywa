@@ -14,10 +14,13 @@ import { FormActionBar } from "@/components/forms/form-action-bar";
 export function SectionForm({
   section,
   payload,
+  savedNonce,
   children,
 }: {
   section: SectionKey;
   payload: unknown;
+  /** 폼 밖에서 서버 확정된 변경(과목 흡수 삭제 등) 신호 — baseline 재스냅샷(거짓 '미저장' 확인 방지). */
+  savedNonce?: number;
   children: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState<OwnerSaveState, FormData>(
@@ -45,6 +48,18 @@ export function SectionForm({
   useEffect(() => {
     formRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
   }, [serialized]);
+
+  // 폼 밖 서버 확정(과목 흡수/미사용 삭제 = 즉시 저장) 후엔 로컬 payload가 곧 서버 상태 — baseline을
+  // 재스냅샷해 창 닫기 시 거짓 '미저장' 확인이 뜨지 않게 한다. ⚠️ 그 시점의 다른 미저장 편집도 함께
+  // 저장됨으로 간주되는 트레이드오프(삭제-후-닫기 단독 경로가 지배적이라 수용, 병합 적대리뷰 2026-07-06).
+  const handledExternal = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (savedNonce && savedNonce !== handledExternal.current) {
+      handledExternal.current = savedNonce;
+      markSaved();
+      notifySaved();
+    }
+  }, [savedNonce, markSaved, notifySaved]);
 
   return (
     <form action={formAction} ref={formRef} className="space-y-5">

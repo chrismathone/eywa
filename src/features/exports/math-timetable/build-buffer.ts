@@ -1,6 +1,9 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
+import { reportWarning } from "@/lib/observability/report-error";
 import { appendEnrollmentEditSheet } from "@/features/exports/enrollment-edit-sheet";
 import { assembleMathParams } from "./assemble";
 import { exportMathTimetableToExcel } from "./exporter";
@@ -27,9 +30,10 @@ export async function buildMathTimetableBuffer(opts?: {
   teacherId?: string;
   referenceMonday?: Date;
 }): Promise<ArrayBuffer> {
-  const [slots, supabase] = await Promise.all([
+  const [slots, supabase, settings] = await Promise.all([
     getWeeklyScheduleWithStudents({ teacherId: opts?.teacherId }),
     createClient(),
+    getTenantSettings(),
   ]);
 
   const { data: staff } = await supabase
@@ -45,6 +49,12 @@ export async function buildMathTimetableBuffer(opts?: {
   const params = assembleMathParams(slots, {
     referenceMonday: opts?.referenceMonday ?? thisMonday(),
     teacherColors,
+    // 테넌트 교시 설정(과목 전용 포함) — 커스텀 교시 시각 슬롯이 엑셀/시트에서 무에러 증발하지 않게(적대리뷰 2026-07-06).
+    periodsConfig: settingsToPeriodsConfig(settings.operations),
+    onSkippedSlots: (count) =>
+      reportWarning(`수학 시간표 export: 교시 매핑 실패로 그리드에서 제외된 슬롯 ${count}개(교시 시작 시각 불일치 또는 레거시 8교시 초과)`, {
+        scope: "math-timetable-export",
+      }),
   });
   return (await exportMathTimetableToExcel({
     ...params,

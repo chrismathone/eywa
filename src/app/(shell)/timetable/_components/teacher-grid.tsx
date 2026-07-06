@@ -40,8 +40,10 @@ const PX_PER_MIN = 1.4;
 const HEAD_TEACHER_H = 26; // 강사 밴드 행 높이(sticky top 오프셋 계산용)
 const HEAD_DAY_H = 30; // 요일 행 높이
 
-// 격자선 — 수학 기본뷰와 동일한 균일 border-line(엑셀식 균일 격자, 2026-07-06 사용자 지정).
-const GRID = "border-line";
+// 격자선 — 수학 기본뷰와 동일한 균일 톤(엑셀식 균일 격자, 2026-07-06 사용자 지정).
+// main 기본뷰 가독성 리워크(weekday-group-tables const GRID = border-ink/25)와 동일 값으로 유지할 것 —
+// 어긋나면 뷰 토글 한 번에 격자 톤이 갈라진다(병합 적대리뷰 2026-07-06).
+const GRID = "border-ink/25";
 // 강사 밴드 경계 세로줄 — 일반 격자(연회색)와 구분되게 **찐한 회색 2px**(사용자 지정).
 // border-r-ink/40(변 전용 색)이 GRID의 shorthand border-color를 우선한다.
 const TEACHER_EDGE = "border-r-2 border-r-ink/40";
@@ -52,19 +54,19 @@ const PERIOD_EDGE = "border-b-2 border-b-ink/40";
 // ⚠️ [[#71]] border-collapse×sticky: 병합 모드에선 셀 테두리가 표에 속해 가로 스크롤 시 sticky
 // 좌측 시각열의 좌 프레임·우 divider가 표와 함께 밀려 사라진다. box-shadow도 병합모드 td에선 불안정
 // → **가상요소(::before=왼쪽, ::after=오른쪽) 1px 실선**으로 셀에 붙여 그린다(main weekday-group-tables
-// 패턴 로컬 복제 — 이 브랜치는 그 픽스 커밋 이전이라 공유 상수 hoist 금지). sticky 셀에 `relative` 금지
+// STICKY_EDGES와 동일 패턴·동일 톤 ink/25 — 필요 시 공유 상수 hoist 가능). sticky 셀에 `relative` 금지
 // (position을 덮어써 sticky가 죽는다 — sticky 자체가 containing block).
 const STICKY_EDGES =
-  "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line before:content-[''] " +
-  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line after:content-['']";
+  "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-ink/25 before:content-[''] " +
+  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
 // sticky-top 헤더 셀 — 세로 스크롤에서 하단 경계가 표와 함께 사라지는 같은 함정의 세로판.
 // (오른쪽 세로선은 top-sticky가 x축으론 표와 함께 움직여 일반 border-r로 안전 — 하단만 가상요소.)
 const STICKY_HEAD_BOTTOM =
-  "before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-line before:content-['']";
+  "before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-ink/25 before:content-['']";
 // 좌상단 코너(좌+상 sticky) — 오른쪽·하단 둘 다 가상요소로.
 const STICKY_CORNER_EDGES =
-  "before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-line before:content-[''] " +
-  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-line after:content-['']";
+  "before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-ink/25 before:content-[''] " +
+  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
 
 /** 슬롯 강사 라벨(컬럼 키) — slot_teacher_label 우선, 없으면 담임. */
 const teacherOf = (s: ScheduleSlotWithStudents) => s.slotTeacherLabel ?? s.teacherName ?? "—";
@@ -244,7 +246,7 @@ export function TeacherGridView({
                   className={`pointer-events-none absolute inset-x-0 bottom-0 ${
                     (rows[ri + 1]?.startMin == null || periodEdgeMins.has(rows[ri + 1]!.startMin))
                       ? "bg-ink/40 h-[2px]"
-                      : "bg-line h-px"
+                      : "bg-ink/25 h-px"
                   }`}
                 />
               </td>
