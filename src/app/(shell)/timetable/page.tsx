@@ -213,11 +213,8 @@ export default async function TimetablePage({
       ) : isIntegrated ? (
         <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} />
       ) : view === "teacher" ? (
-        // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용.
+        // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="text-text-faint mb-1 shrink-0 text-right font-mono text-[11px]">
-            읽기 전용 · 강사별 배치(시트 강사별영어시간표) · 반 클릭=학생 명단 · 편집은 기본뷰
-          </div>
           <TeacherGridView slots={slots} weekMonday={week} teacherColors={teacherColors} />
         </div>
       ) : (

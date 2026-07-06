@@ -40,8 +40,10 @@ const HEAD_TEACHER_H = 26; // 강사 밴드 행 높이(sticky top 오프셋 계�
 const HEAD_DAY_H = 30; // 요일 행 높이
 
 // 격자선 — 수학 기본뷰와 동일한 균일 border-line(엑셀식 균일 격자, 2026-07-06 사용자 지정).
-// 강사 경계만 같은 색 2px로 구분(border-r-2).
 const GRID = "border-line";
+// 강사 밴드 경계 세로줄 — 일반 격자(연회색)와 구분되게 **찐한 회색 2px**(사용자 지정).
+// border-r-ink/40(변 전용 색)이 GRID의 shorthand border-color를 우선한다.
+const TEACHER_EDGE = "border-r-2 border-r-ink/40";
 
 // ⚠️ [[#71]] border-collapse×sticky: 병합 모드에선 셀 테두리가 표에 속해 가로 스크롤 시 sticky
 // 좌측 시각열의 좌 프레임·우 divider가 표와 함께 밀려 사라진다. box-shadow도 병합모드 td에선 불안정
@@ -171,7 +173,7 @@ export function TeacherGridView({
               <th
                 key={t.name}
                 colSpan={t.cols.reduce((a, c) => a + c.laneCount, 0)}
-                className={`sticky top-0 z-20 border-r-2 px-2 py-1 text-center ${GRID} ${STICKY_HEAD_BOTTOM}`}
+                className={`sticky top-0 z-20 px-2 py-1 text-center ${TEACHER_EDGE} ${GRID} ${STICKY_HEAD_BOTTOM}`}
                 style={{
                   height: HEAD_TEACHER_H,
                   ...(t.color ? { backgroundColor: t.color.bg, color: t.color.text } : {}),
@@ -191,7 +193,7 @@ export function TeacherGridView({
                   key={`${t.name}-${col.day}`}
                   colSpan={col.laneCount}
                   className={`bg-bg-soft text-text-dim sticky z-20 px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${GRID} ${
-                    ci === t.cols.length - 1 ? "border-r-2" : "border-r"
+                    ci === t.cols.length - 1 ? TEACHER_EDGE : "border-r"
                   } ${STICKY_HEAD_BOTTOM}`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
                 >
@@ -229,7 +231,7 @@ export function TeacherGridView({
                         <td
                           key={key}
                           className={`bg-bg-soft/40 border-b ${GRID} ${
-                            isTeacherBoundary(col, isLastDay, li + 1) ? "border-r-2" : "border-r"
+                            isTeacherBoundary(col, isLastDay, li + 1) ? TEACHER_EDGE : "border-r"
                           }`}
                         />
                       );
@@ -244,7 +246,7 @@ export function TeacherGridView({
                         colSpan={group.laneWidth}
                         className={`border-b p-0 align-top ${GRID} ${
                           isTeacherBoundary(col, isLastDay, group.laneStart + group.laneWidth)
-                            ? "border-r-2"
+                            ? TEACHER_EDGE
                             : "border-r"
                         }`}
                       >
