@@ -29,6 +29,13 @@ export type PeriodTimeRow = z.infer<typeof periodTimeSchema>;
 export const TEACHER_VIEW_STEPS = [5, 10, 15, 20, 30, 60] as const;
 export type TeacherViewStep = (typeof TEACHER_VIEW_STEPS)[number];
 
+// 강사뷰 쉬는 시간 범위("HH:MM"~"HH:MM") — 앞뒤로 수업이 붙은 강사 컬럼에 "쉬는 시간" 셀로 표시.
+export const breakRangeSchema = z.object({
+  start: z.string().regex(HHMM, "HH:MM 형식"),
+  end: z.string().regex(HHMM, "HH:MM 형식"),
+});
+export type BreakRangeSetting = z.infer<typeof breakRangeSchema>;
+
 export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
@@ -43,6 +50,10 @@ export const subjectSchema = z.object({
   teacherViewStep: z
     .union([z.literal(5), z.literal(10), z.literal(15), z.literal(20), z.literal(30), z.literal(60)])
     .optional(),
+  // 강사뷰 쉬는 시간(HH:MM~HH:MM) — 앞뒤로 수업이 붙은 강사 컬럼에만 "쉬는 시간" 셀. 미설정=없음.
+  teacherViewBreaks: z.array(breakRangeSchema).max(20).optional(),
+  // 강사뷰 가로줄(큰 섹션 경계 진한 선)에서 제외할 강사 라벨 — 이 강사 컬럼엔 가로줄 미표시. 미설정=전원 표시.
+  teacherViewLineExcluded: z.array(z.string().min(1).max(40)).max(80).optional(),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 

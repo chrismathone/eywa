@@ -103,6 +103,8 @@ export default async function TimetablePage({
     })
     .filter((m) => Number.isFinite(m));
   const teacherViewStep = subjectRow?.teacherViewStep ?? 10;
+  const teacherViewBreaks = subjectRow?.teacherViewBreaks ?? [];
+  const teacherViewExcluded = subjectRow?.teacherViewLineExcluded ?? [];
 
   const isIntegrated = effView === "integrated";
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
@@ -237,6 +239,8 @@ export default async function TimetablePage({
             teacherColors={teacherColors}
             sectionLineMins={sectionLineMins}
             stepMin={teacherViewStep}
+            breakRanges={teacherViewBreaks}
+            excludedTeachers={teacherViewExcluded}
           />
         </div>
       ) : (

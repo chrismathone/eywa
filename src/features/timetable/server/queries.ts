@@ -30,6 +30,42 @@ export async function getTeacherColorMap(): Promise<TeacherColorMap> {
   return map;
 }
 
+/**
+ * 과목별 강사뷰 강사 라벨(distinct) — owner 과목 운영 '가로줄 제외 강사' 칩 선택지.
+ * 라벨 = slot_teacher_label ?? 담임 display_name(teacher-grid의 teacherOf와 동일 규약).
+ * 활성 반만. RLS 테넌트 격리. distinct/whitelist 용도라 fetchAllPaged(1000행 절단 방지, B2).
+ */
+export async function getTeacherLabelsBySubject(): Promise<Record<string, string[]>> {
+  const supabase = await createClient();
+  const rows = await fetchAllPaged<{
+    slot_teacher_label: string | null;
+    class: unknown;
+  }>((from, to) =>
+    supabase
+      .from("class_schedules")
+      .select(
+        `slot_teacher_label, class:class_id!inner ( subject, is_active, teacher:teacher_id ( display_name ) )`,
+      )
+      .eq("class.is_active", true)
+      .range(from, to),
+  );
+  const bySubject = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
+      | { subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] }
+      | undefined;
+    if (!klass?.subject) continue;
+    const tField = klass.teacher;
+    const teacher = (Array.isArray(tField) ? tField[0] : tField) as { display_name?: string } | undefined;
+    const label = r.slot_teacher_label ?? teacher?.display_name ?? null;
+    if (!label) continue;
+    (bySubject.get(klass.subject) ?? bySubject.set(klass.subject, new Set()).get(klass.subject)!).add(label);
+  }
+  const out: Record<string, string[]> = {};
+  for (const [subj, set] of bySubject) out[subj] = [...set].sort((a, b) => a.localeCompare(b, "ko"));
+  return out;
+}
+
 export type ScheduleSlot = {
   id: string;
   classId: string;

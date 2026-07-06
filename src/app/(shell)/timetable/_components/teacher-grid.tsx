@@ -1,12 +1,15 @@
+import type { ReactElement } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 import {
+  breakBlocksForColumn,
   buildSlotIntervals,
   buildTenMinuteRows,
   minToHM,
   packGroups,
+  parseBreakRanges,
   slotRowSpan,
   type ClassInterval,
 } from "@/features/timetable/lib/ten-minute-grid";
@@ -33,7 +36,7 @@ const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
 
 const TIME_COL_W = 48; // "14:20" 한 줄 라벨
-const DAY_COL_W = 96; // 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤.
+const DAY_COL_W = 65; // 반명+방 chip(학생 없음). 강사×요일이 많아 가로 스크롤(2026-07-06 96→65 사용자 지정).
 const LANE_COL_W = 64; // 다중 레인(LAB 서브컬럼) 폭 — 레벨코드 반명(LT2 등) 기준. 시트도 좁은 서브컬럼.
 // 행 높이 = 분당 1.4px 고정(스텝 무관 블록 높이 동일 — step 10=14px/행, step 30=42px/행: 60분 수업은 항상 84px).
 const PX_PER_MIN = 1.4;
@@ -51,22 +54,15 @@ const TEACHER_EDGE = "border-r-2 border-r-ink/40";
 // 위치는 과목 설정(operations.subjects[].teacherViewLines, 학원설정 과목 운영)에서 — props로 주입.
 const PERIOD_EDGE = "border-b-2 border-b-ink/40";
 
-// ⚠️ [[#71]] border-collapse×sticky: 병합 모드에선 셀 테두리가 표에 속해 가로 스크롤 시 sticky
-// 좌측 시각열의 좌 프레임·우 divider가 표와 함께 밀려 사라진다. box-shadow도 병합모드 td에선 불안정
-// → **가상요소(::before=왼쪽, ::after=오른쪽) 1px 실선**으로 셀에 붙여 그린다(main weekday-group-tables
-// STICKY_EDGES와 동일 패턴·동일 톤 ink/25 — 필요 시 공유 상수 hoist 가능). sticky 셀에 `relative` 금지
-// (position을 덮어써 sticky가 죽는다 — sticky 자체가 containing block).
-const STICKY_EDGES =
-  "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-ink/25 before:content-[''] " +
-  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
-// sticky-top 헤더 셀 — 세로 스크롤에서 하단 경계가 표와 함께 사라지는 같은 함정의 세로판.
-// (오른쪽 세로선은 top-sticky가 x축으론 표와 함께 움직여 일반 border-r로 안전 — 하단만 가상요소.)
-const STICKY_HEAD_BOTTOM =
-  "before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-ink/25 before:content-['']";
-// 좌상단 코너(좌+상 sticky) — 오른쪽·하단 둘 다 가상요소로.
-const STICKY_CORNER_EDGES =
-  "before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-ink/25 before:content-[''] " +
-  "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
+// ⚠️⚠️ 이 표는 border-collapse가 아니라 **border-separate(border-spacing-0)** 다 — collapse로 되돌리지 말 것.
+// collapse 모드에선 ① 셀 테두리가 표 소유라 sticky 시각열/헤더에서 선이 표와 함께 밀려 사라지고([[#71]] —
+// 그래서 가상요소·셀 안 span 실선으로 우회했었다) ② collapse 테두리는 경계선 **중앙**에 걸쳐 그려져(2px =
+// 경계 위 1px + 아래 1px) 셀 안 span(경계 위쪽 전부)과 같은 가로줄인데도 세로로 1px 어긋나 보였고
+// ③ 굵은 경계(2px)의 절반이 행 높이에 얹혀 10분 축(rowH 고정)이 행마다 미세 드리프트했다 —
+// "가로줄 굵기가 달라 어긋나 보인다" 제보(2026-07-06)의 원인. separate 모드는 셀이 테두리를 소유해
+// sticky를 그대로 따라오고(가상요소 불필요) 테두리가 셀 박스 안(border-box)에 그려져 **모든 가로줄이
+// 단일 경로로 렌더** → 굵기·위치 균일, 행 높이 정확히 rowH. 세로줄은 border-r만·왼쪽 프레임은 시각열
+// border-l 하나만 = 이중선 없음.
 
 /** 슬롯 강사 라벨(컬럼 키) — slot_teacher_label 우선, 없으면 담임. */
 const teacherOf = (s: ScheduleSlotWithStudents) => s.slotTeacherLabel ?? s.teacherName ?? "—";
@@ -97,6 +93,8 @@ export function TeacherGridView({
   teacherColors,
   sectionLineMins,
   stepMin = 10,
+  breakRanges,
+  excludedTeachers,
 }: {
   slots: ScheduleSlotWithStudents[];
   weekMonday?: string;
@@ -106,6 +104,10 @@ export function TeacherGridView({
   sectionLineMins?: number[];
   /** 격자 단위(분, 60의 약수) — 과목 설정 teacherViewStep. */
   stepMin?: number;
+  /** 쉬는 시간 범위(HH:MM~HH:MM) — 과목 설정 teacherViewBreaks. 앞뒤 수업 붙은 강사 컬럼에만 셀 표시. */
+  breakRanges?: { start: string; end: string }[];
+  /** 가로줄(큰 섹션 경계) 미표시 강사 라벨 — 과목 설정 teacherViewLineExcluded. */
+  excludedTeachers?: string[];
 }) {
   const dayDates = dayDateLabels(weekMonday);
   // 행 높이 = 분당 px 고정(스텝 무관 블록 크기 동일). 가로줄 시각은 step 격자에 스냅(격자 밖이면 silent drop 방지).
@@ -113,6 +115,9 @@ export function TeacherGridView({
   const periodEdgeMins = new Set(
     (sectionLineMins ?? []).map((m) => Math.floor(m / stepMin) * stepMin),
   );
+  // 쉬는 시간(격자 스냅) + 가로줄 제외 강사 집합.
+  const breaks = parseBreakRanges(breakRanges, stepMin);
+  const excludedSet = new Set(excludedTeachers ?? []);
 
   // 강사 목록 = 슬롯 강사 라벨, 시트 좌→우 순서. 각 강사의 요일은 실제 가르치는 요일만(자연순 월→토).
   const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(compareSheetTeachers);
@@ -140,7 +145,8 @@ export function TeacherGridView({
     const cols = t.days.map((day) => {
       const colSlots = slots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
       // ⚠️ 슬롯=블록 1:1(접기 없음) — 한 수업이 2교시 연속이어도 시트처럼 교시별 셀 2개로(2026-07-06).
-      const { groups, laneCount } = packGroups(buildSlotIntervals(colSlots, stepMin));
+      const intervals = buildSlotIntervals(colSlots, stepMin);
+      const { groups, laneCount } = packGroups(intervals);
       // (행,레인) → 앵커 그룹 / 피복 셀 사전계산.
       const anchors = new Map<string, { group: (typeof groups)[number]; span: number }>();
       const covered = new Set<string>();
@@ -151,11 +157,18 @@ export function TeacherGridView({
           for (let l = g.laneStart; l < g.laneStart + g.laneWidth; l++)
             if (!(r === index && l === g.laneStart)) covered.add(`${r}:${l}`);
       }
-      // 레인 폭 — 1레인=기본 96, 다중(병렬)=레인당 64(시트도 좁은 서브컬럼).
+      // 쉬는 시간 블록(앞뒤 수업 붙은 경우만) — 전 레인 폭(colSpan=laneCount). 앵커 행 + 피복 행.
+      const breakAnchors = new Map<number, { span: number }>();
+      const breakCovered = new Set<number>();
+      for (const bl of breakBlocksForColumn(rows, intervals, breaks)) {
+        breakAnchors.set(bl.index, { span: bl.span });
+        for (let r = bl.index; r < bl.index + bl.span; r++) breakCovered.add(r);
+      }
+      // 레인 폭 — 1레인=기본 65, 다중(병렬)=레인당 64(시트도 좁은 서브컬럼).
       const laneW = laneCount > 1 ? LANE_COL_W : DAY_COL_W;
-      return { day, laneCount, laneW, anchors, covered };
+      return { day, laneCount, laneW, anchors, covered, breakAnchors, breakCovered };
     });
-    return { ...t, cols };
+    return { ...t, cols, lineExcluded: excludedSet.has(t.name) };
   });
 
   const laneColsFlat = prepared.flatMap((t) =>
@@ -163,19 +176,24 @@ export function TeacherGridView({
   );
   const tableW = TIME_COL_W + laneColsFlat.reduce((a, w) => a + w, 0);
 
-  // 행 하단 경계 톤 — 다음 행이 정시면 진한 선(모눈종이의 굵은 눈금).
   // 강사 경계 세로줄 — 그 강사의 마지막 요일·마지막 레인(또는 거기까지 걸친 그룹 셀)에 2px.
   const isTeacherBoundary = (col: { laneCount: number }, isLastDay: boolean, laneEnd: number) =>
     isLastDay && laneEnd === col.laneCount;
   // 교시 경계 가로줄 — 이 행의 하단(=다음 행 시작)이 설정된 가로줄 시각이면 진한 2px, 아니면 옅은 1px.
-  const periodBottom = (nextRi: number) => {
+  // px = 블록 셀 내부 래퍼 높이 계산용(border-box: 셀 콘텐츠 높이 = span*rowH − 자기 border-b 굵기).
+  // ⚠️ 표 최하단(m==null)은 외곽 프레임이라 전 컬럼 진하게(제외 강사도 동일 — 프레임 균일).
+  // 내부 섹션선만 제외 강사 컬럼에서 옅게(가로줄 미표시) — 시각열은 항상 전역 참조라 excluded=false.
+  const bottomEdge = (nextRi: number, excluded = false) => {
     const m = rows[nextRi]?.startMin;
-    return m == null || periodEdgeMins.has(m) ? PERIOD_EDGE : "border-b";
+    if (m == null) return { cls: PERIOD_EDGE, px: 2 };
+    return !excluded && periodEdgeMins.has(m)
+      ? { cls: PERIOD_EDGE, px: 2 }
+      : { cls: "border-b", px: 1 };
   };
 
   return (
     <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
-      <table className="border-collapse text-sm" style={{ tableLayout: "fixed", width: tableW }}>
+      <table className="border-separate border-spacing-0 text-sm" style={{ tableLayout: "fixed", width: tableW }}>
         <colgroup>
           <col style={{ width: TIME_COL_W }} />
           {laneColsFlat.map((w, i) => (
@@ -183,19 +201,19 @@ export function TeacherGridView({
           ))}
         </colgroup>
         <thead>
-          {/* 강사 밴드 — 시트 강사 헤더색. sticky top(46행 세로 스크롤 실재) — 경계는 가상요소(#71). */}
+          {/* 강사 밴드 — 시트 강사 헤더색. sticky top(46행 세로 스크롤 실재) — separate 모드라 셀 border가 sticky를 따라온다. */}
           <tr>
             <th
               rowSpan={2}
               aria-hidden
-              className={`bg-bg-soft sticky top-0 left-0 z-30 ${STICKY_CORNER_EDGES}`}
+              className={`bg-bg-soft sticky top-0 left-0 z-30 border-r border-b border-l ${GRID}`}
               style={{ height: HEAD_TEACHER_H + HEAD_DAY_H }}
             />
             {prepared.map((t) => (
               <th
                 key={t.name}
                 colSpan={t.cols.reduce((a, c) => a + c.laneCount, 0)}
-                className={`sticky top-0 z-20 px-2 py-1 text-center ${TEACHER_EDGE} ${GRID} ${STICKY_HEAD_BOTTOM}`}
+                className={`sticky top-0 z-20 border-b px-2 py-1 text-center ${TEACHER_EDGE} ${GRID}`}
                 style={{
                   height: HEAD_TEACHER_H,
                   ...(t.color ? { backgroundColor: t.color.bg, color: t.color.text } : {}),
@@ -214,9 +232,9 @@ export function TeacherGridView({
                 <th
                   key={`${t.name}-${col.day}`}
                   colSpan={col.laneCount}
-                  className={`bg-bg-soft text-text-dim sticky z-20 px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${GRID} ${
+                  className={`bg-bg-soft text-text-dim sticky z-20 border-b px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${GRID} ${
                     ci === t.cols.length - 1 ? TEACHER_EDGE : "border-r"
-                  } ${STICKY_HEAD_BOTTOM}`}
+                  }`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
                 >
                   {DAY_LABEL[col.day] ?? col.day}
@@ -231,58 +249,80 @@ export function TeacherGridView({
         <tbody>
           {rows.map((row, ri) => (
             <tr key={row.key}>
-              {/* 시각열 — sticky left. 매 행 라벨(시트 미러), 정시 라벨만 강조. 좌·우 경계는 가상요소(#71). */}
+              {/* 시각열 — sticky left. 매 행 라벨(시트 미러), 정시 라벨만 강조. separate 모드라 좌·우·하단
+                  전부 **본문 셀과 동일한 실제 border**(같은 렌더 경로 = 굵기·위치가 본문 가로줄과 정확히 일치). */}
               <td
-                className={`bg-bg-soft sticky left-0 z-10 px-1 py-0 text-right align-top font-mono leading-none ${STICKY_EDGES} ${
+                className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-top font-mono leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
                   row.isHour ? "text-foreground text-[9px] font-bold" : "text-text-faint text-[9px]"
                 }`}
                 style={{ height: rowH }}
               >
                 {row.key}
-                {/* ⚠️ 하단 선도 가상요소가 아닌 셀 자식 실선(#71 가로판) — border-b는 병합 모드에서 표에
-                    속해 가로 스크롤 시 표와 함께 밀려, 시각열 선이 사라지고 뒤 컬럼 선이 비쳐 보인다. */}
-                <span
-                  aria-hidden
-                  className={`pointer-events-none absolute inset-x-0 bottom-0 ${
-                    (rows[ri + 1]?.startMin == null || periodEdgeMins.has(rows[ri + 1]!.startMin))
-                      ? "bg-ink/40 h-[2px]"
-                      : "bg-ink/25 h-px"
-                  }`}
-                />
               </td>
               {prepared.flatMap((t) =>
                 t.cols.flatMap((col, ci) => {
                   const isLastDay = ci === t.cols.length - 1;
-                  return Array.from({ length: col.laneCount }, (_, li) => {
+                  const excluded = t.lineExcluded;
+                  const cells: (ReactElement | null)[] = [];
+                  // 쉬는 시간 셀(앵커 행) — 전 레인 폭(colSpan=laneCount), 수업 사이 밴드.
+                  const brk = col.breakAnchors.get(ri);
+                  if (brk) {
+                    const bottom = bottomEdge(ri + brk.span, excluded);
+                    cells.push(
+                      <td
+                        key={`${t.name}-${col.day}-break-${row.key}`}
+                        rowSpan={brk.span}
+                        colSpan={col.laneCount}
+                        className={`bg-ink/[0.06] p-0 align-top ${bottom.cls} ${GRID} ${
+                          isTeacherBoundary(col, isLastDay, col.laneCount) ? TEACHER_EDGE : "border-r"
+                        }`}
+                      >
+                        <div
+                          className="flex items-center justify-center"
+                          style={{ height: brk.span * rowH - bottom.px }}
+                        >
+                          <span className="text-text-faint font-mono text-[10px] whitespace-nowrap">
+                            쉬는 시간
+                          </span>
+                        </div>
+                      </td>,
+                    );
+                  }
+                  const inBreak = col.breakCovered.has(ri); // 쉬는 시간 셀이 이 행 전 레인을 덮음
+                  for (let li = 0; li < col.laneCount; li++) {
+                    if (inBreak) continue;
                     const key = `${t.name}-${col.day}-${li}-${row.key}`;
-                    if (col.covered.has(`${ri}:${li}`)) return null; // 그룹 셀에 피복됨
+                    if (col.covered.has(`${ri}:${li}`)) continue; // 그룹 셀에 피복됨
                     const anchor = col.anchors.get(`${ri}:${li}`);
                     // 빈 1×1 셀 — 균일 격자 프레임(수학 기본뷰와 동일 border-line).
                     if (!anchor) {
-                      return (
+                      cells.push(
                         <td
                           key={key}
-                          className={`bg-bg-soft/40 ${periodBottom(ri + 1)} ${GRID} ${
+                          className={`bg-bg-soft/40 ${bottomEdge(ri + 1, excluded).cls} ${GRID} ${
                             isTeacherBoundary(col, isLastDay, li + 1) ? TEACHER_EDGE : "border-r"
                           }`}
-                        />
+                        />,
                       );
+                      continue;
                     }
                     const { group, span } = anchor;
+                    const bottom = bottomEdge(ri + span, excluded);
                     // 그룹 셀 — rowSpan = 실길이/10분, colSpan = 병렬 반 수(합반, 테두리 없이 나란히).
                     // 내용은 **고정높이 래퍼**(td height는 최소값이라 칩이 넘치면 10분 축 전체가 깨짐 — 넘침은 내부 스크롤).
-                    return (
+                    // 래퍼 높이 = span*rowH − 자기 border-b(1|2px) — 1px라도 넘치면 그 행이 늘어나 10분 축이 어긋난다.
+                    cells.push(
                       <td
                         key={key}
                         rowSpan={span}
                         colSpan={group.laneWidth}
-                        className={`p-0 align-top ${periodBottom(ri + span)} ${GRID} ${
+                        className={`p-0 align-top ${bottom.cls} ${GRID} ${
                           isTeacherBoundary(col, isLastDay, group.laneStart + group.laneWidth)
                             ? TEACHER_EDGE
                             : "border-r"
                         }`}
                       >
-                        <div className="p-px" style={{ height: span * rowH - 1 }}>
+                        <div className="p-px" style={{ height: span * rowH - bottom.px }}>
                           <div className="flex h-full min-w-0 gap-px">
                             {group.intervals.map((iv) => {
                               const s = intervalSlot(iv);
@@ -293,9 +333,10 @@ export function TeacherGridView({
                             })}
                           </div>
                         </div>
-                      </td>
+                      </td>,
                     );
-                  });
+                  }
+                  return cells;
                 }),
               )}
             </tr>

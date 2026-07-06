@@ -106,6 +106,57 @@ export function buildCoveringRows<T extends { startTime: string; endTime: string
   return out;
 }
 
+// ── 쉬는 시간(수업 사이 휴식 밴드) ──────────────────────────────────────────────
+// 과목 설정 teacherViewBreaks("HH:MM"~"HH:MM")를 강사뷰에 표시. 시트처럼 "쉬는 시간" 밴드가
+// **앞뒤로 수업이 붙은 강사 컬럼에만** 뜬다(범위 앞에 끝나는 수업 + 범위 끝에 시작하는 수업 = 수업 사이).
+
+export type BreakRange = { startMin: number; endMin: number };
+
+/** 쉬는 시간 설정 → 격자 스냅된 분 범위. 파싱 실패·역전(길이≤0)은 제외. */
+export function parseBreakRanges(
+  ranges: readonly { start: string; end: string }[] | undefined,
+  stepMin: number = STEP_MIN,
+): BreakRange[] {
+  const out: BreakRange[] = [];
+  for (const r of ranges ?? []) {
+    const a = timeToMin(r.start);
+    const b = timeToMin(r.end);
+    if (a == null || b == null) continue;
+    const s = floorStep(a, stepMin);
+    const e = ceilStep(b, stepMin);
+    if (e > s) out.push({ startMin: s, endMin: e });
+  }
+  return out;
+}
+
+/**
+ * 한 컬럼(강사×요일)에서 렌더할 쉬는 시간 블록 — **앞뒤로 수업이 붙은** 경우만:
+ * ① 범위 시작에 끝나는 수업이 있고 ② 범위 끝에 시작하는 수업이 있고 ③ 범위와 겹치는 수업이 없음
+ * (= 두 수업 사이 쉬는 시간). 앞뒤 중 하나라도 붙은 수업이 없으면(장시간 공백·강사 부재) 미표시.
+ * 축(rows) 범위 밖 범위는 제외(클램프하면 엉뚱한 셀). index/span은 rows 격자 기준.
+ */
+export function breakBlocksForColumn<T>(
+  rows: readonly TenMinuteRow[],
+  intervals: readonly ClassInterval<T>[],
+  breaks: readonly BreakRange[],
+): { index: number; span: number; startMin: number; endMin: number }[] {
+  if (rows.length === 0) return [];
+  const step = stepOf(rows);
+  const lo = rows[0]!.startMin;
+  const hi = rows[rows.length - 1]!.startMin + step;
+  const out: { index: number; span: number; startMin: number; endMin: number }[] = [];
+  for (const b of breaks) {
+    if (b.startMin < lo || b.endMin > hi) continue; // 축 밖
+    const hasBefore = intervals.some((iv) => iv.endMin === b.startMin);
+    const hasAfter = intervals.some((iv) => iv.startMin === b.endMin);
+    const overlaps = intervals.some((iv) => iv.startMin < b.endMin && iv.endMin > b.startMin);
+    if (!hasBefore || !hasAfter || overlaps) continue;
+    const { index, span } = slotRowSpan(rows, minToHM(b.startMin), minToHM(b.endMin));
+    out.push({ index, span, startMin: b.startMin, endMin: b.endMin });
+  }
+  return out;
+}
+
 // ── LAB 다중 레인(시트 서브컬럼 미러) ──────────────────────────────────────────
 // 시트 LAB 블록(JJ·이주희)은 한 시간대 병렬 반들을 요일당 여러 서브컬럼에 나란히 그린다.
 // 같은 반의 back-to-back 슬롯을 구간으로 접고, 겹치는 구간을 그리디 interval coloring으로

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import {
   TEACHER_VIEW_STEPS,
+  type BreakRangeSetting,
   type OperationsSettings,
   type SubjectSetting,
 } from "@/features/owner/settings-types";
@@ -30,7 +31,14 @@ const ghostBtnCls =
 const badgeCls =
   "text-text-dim border-line rounded border px-1.5 py-0.5 font-mono text-[10px] whitespace-nowrap";
 
-export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
+export function SubjectsSection({
+  initial,
+  teacherLabels = {},
+}: {
+  initial: OperationsSettings;
+  /** 과목별 강사 라벨(강사뷰 '가로줄 제외 강사' 칩 선택지) — getTeacherLabelsBySubject. */
+  teacherLabels?: Record<string, string[]>;
+}) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const setSubjects = (v: SubjectSetting[]) => setO((prev) => ({ ...prev, subjects: v }));
   const patchSubject = (i: number, patch: Partial<SubjectSetting>) =>
@@ -78,6 +86,12 @@ export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
                         ? `강사뷰 가로줄 ${s.teacherViewLines.length} · ${s.teacherViewStep ?? 10}분`
                         : "강사뷰 미설정"}
                     </span>
+                    {s.teacherViewBreaks?.length ? (
+                      <span className={badgeCls}>쉬는 시간 {s.teacherViewBreaks.length}</span>
+                    ) : null}
+                    {s.teacherViewLineExcluded?.length ? (
+                      <span className={badgeCls}>제외 강사 {s.teacherViewLineExcluded.length}</span>
+                    ) : null}
                   </span>
                 </summary>
 
@@ -157,6 +171,33 @@ export function SubjectsSection({ initial }: { initial: OperationsSettings }) {
                       강사뷰는 영어 또는 가로줄이 설정된 과목에서 노출됩니다. 가로줄 시각은 격자 단위에
                       맞춰 표시됩니다(예: 30분 격자에서 16:10은 16:00 선으로).
                     </p>
+
+                    {/* 가로줄 제외 강사 — 이 강사 컬럼엔 큰 섹션 가로줄 미표시(예: LAB의 JJ·이주희). */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-text-dim block text-[12px]">가로줄 제외 강사</span>
+                      <ExcludeTeacherChips
+                        options={teacherLabels[s.key] ?? []}
+                        value={s.teacherViewLineExcluded ?? []}
+                        onChange={(v) =>
+                          patchSubject(i, { teacherViewLineExcluded: v.length ? v : undefined })
+                        }
+                      />
+                    </div>
+
+                    {/* 쉬는 시간 — 앞뒤로 수업이 붙은 강사 컬럼에만 "쉬는 시간" 셀로 표시. */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-text-dim block text-[12px]">쉬는 시간</span>
+                      <BreakListEditor
+                        value={s.teacherViewBreaks ?? []}
+                        onChange={(v) =>
+                          patchSubject(i, { teacherViewBreaks: v.length ? v : undefined })
+                        }
+                      />
+                      <p className="text-text-faint text-[11px]">
+                        설정한 시간대 앞에 끝나고 뒤에 시작하는 수업이 모두 있는 강사에게만 &lsquo;쉬는 시간&rsquo;
+                        칸으로 표시됩니다(수업 사이). 앞뒤가 비어 있으면 표시되지 않습니다.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </details>
@@ -347,6 +388,104 @@ function TimeListEditor({
       <button type="button" className={ghostBtnCls} onClick={() => onChange([...value, ""])}>
         <Plus className="size-3.5" /> 가로줄 추가
       </button>
+    </div>
+  );
+}
+
+/** 쉬는 시간(시작~종료) 목록 편집기 — 강사뷰 수업 사이 휴식 밴드. */
+function BreakListEditor({
+  value,
+  onChange,
+}: {
+  value: BreakRangeSetting[];
+  onChange: (v: BreakRangeSetting[]) => void;
+}) {
+  const patch = (i: number, p: Partial<BreakRangeSetting>) =>
+    onChange(value.map((b, j) => (j === i ? { ...b, ...p } : b)));
+  return (
+    <div className="space-y-1.5">
+      {value.map((b, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <input
+            type="time"
+            aria-label="쉬는 시간 시작"
+            className={`${cellCls} w-[110px]`}
+            value={b.start}
+            onChange={(e) => patch(i, { start: e.target.value })}
+          />
+          <span className="text-text-faint text-[12px]">~</span>
+          <input
+            type="time"
+            aria-label="쉬는 시간 종료"
+            className={`${cellCls} w-[110px]`}
+            value={b.end}
+            onChange={(e) => patch(i, { end: e.target.value })}
+          />
+          <button
+            type="button"
+            aria-label="쉬는 시간 삭제"
+            className="text-text-faint hover:text-danger shrink-0 rounded p-1"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className={ghostBtnCls}
+        onClick={() => onChange([...value, { start: "", end: "" }])}
+      >
+        <Plus className="size-3.5" /> 쉬는 시간 추가
+      </button>
+    </div>
+  );
+}
+
+/**
+ * 가로줄 제외 강사 = 토글 칩. 선택지 = 이 과목의 실제 강사 라벨(options) ∪ 이미 저장된 값(value).
+ * 강사가 빠져 options에 없더라도 저장값은 해제 가능하도록 함께 노출.
+ */
+function ExcludeTeacherChips({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const names = Array.from(new Set([...options, ...value]));
+  if (names.length === 0) {
+    return (
+      <p className="text-text-faint text-[11px]">
+        이 과목에 배정된 강사가 아직 없습니다. 시간표에 강사가 배정되면 여기서 선택할 수 있습니다.
+      </p>
+    );
+  }
+  const selected = new Set(value);
+  const toggle = (name: string) =>
+    onChange(selected.has(name) ? value.filter((v) => v !== name) : [...value, name]);
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {names.map((name) => {
+        const on = selected.has(name);
+        return (
+          <button
+            key={name}
+            type="button"
+            onClick={() => toggle(name)}
+            aria-pressed={on}
+            className={`rounded-md border px-2.5 py-1 text-[12px] transition ${
+              on
+                ? "border-primary bg-primary/10 text-primary font-semibold"
+                : "border-line text-text-dim hover:border-primary/60"
+            }`}
+          >
+            {name}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { cellClassKey, computeBlocks } from "./grid";
 import {
+  breakBlocksForColumn,
   buildClassIntervals,
   buildCoveringRows,
   buildSlotIntervals,
   buildTenMinuteRows,
   packGroups,
+  parseBreakRanges,
   slotRowSpan,
   timeToMin,
 } from "./ten-minute-grid";
@@ -256,5 +258,106 @@ describe("buildSlotIntervals — 슬롯=구간 1:1 (시트 셀 미러, 접기 �
     expect(groups).toHaveLength(2);
     for (const g of groups) expect(g).toMatchObject({ laneStart: 0, laneWidth: 1 });
     expect(laneCount).toBe(1);
+  });
+});
+
+describe("parseBreakRanges — 쉬는 시간 설정 파싱·격자 스냅", () => {
+  it("정상 범위 → 분 범위, step 10에선 스냅 무변", () => {
+    expect(parseBreakRanges([{ start: "18:10", end: "18:20" }])).toEqual([
+      { startMin: 1090, endMin: 1100 },
+    ]);
+  });
+
+  it("역전·동일시각·형식오류 제외(길이≤0)", () => {
+    expect(parseBreakRanges([{ start: "18:20", end: "18:10" }])).toEqual([]);
+    expect(parseBreakRanges([{ start: "18:10", end: "18:10" }])).toEqual([]);
+    expect(parseBreakRanges([{ start: "??", end: "18:20" }])).toEqual([]);
+    expect(parseBreakRanges(undefined)).toEqual([]);
+  });
+
+  it("step 30 스냅: 18:10~18:20 → 18:00~18:30(바깥 라운딩)", () => {
+    expect(parseBreakRanges([{ start: "18:10", end: "18:20" }], 30)).toEqual([
+      { startMin: 1080, endMin: 1110 },
+    ]);
+  });
+});
+
+describe("breakBlocksForColumn — 앞뒤 수업 붙은 컬럼에만 쉬는 시간", () => {
+  const rows = buildTenMinuteRows([]); // 14:20~22:00, step 10
+  const iv = (startMin: number, endMin: number, classId = "c") => ({
+    classId,
+    startMin,
+    endMin,
+    slots: [],
+  });
+  const brk = [{ startMin: 1090, endMin: 1100 }]; // 18:10~18:20
+
+  it("앞(끝=18:10)+뒤(시작=18:20) 수업이 둘 다 있으면 블록 렌더", () => {
+    const out = breakBlocksForColumn(rows, [iv(1030, 1090, "a"), iv(1100, 1160, "b")], brk);
+    expect(out).toEqual([{ index: 23, span: 1, startMin: 1090, endMin: 1100 }]); // (1090-860)/10=23
+  });
+
+  it("앞만 있으면(뒤 수업 없음) 미표시", () => {
+    expect(breakBlocksForColumn(rows, [iv(1030, 1090, "a")], brk)).toEqual([]);
+  });
+
+  it("뒤만 있으면(앞 수업 없음) 미표시", () => {
+    expect(breakBlocksForColumn(rows, [iv(1100, 1160, "b")], brk)).toEqual([]);
+  });
+
+  it("범위와 겹치는 수업 있으면 미표시(수업 중이라 쉬는 시간 아님)", () => {
+    // 앞뒤 수업 조건은 만족하되 범위를 가로지르는 수업(18:00~18:30)이 있으면 제외
+    const out = breakBlocksForColumn(
+      rows,
+      [iv(1030, 1090, "a"), iv(1100, 1160, "b"), iv(1080, 1110, "c")],
+      brk,
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("붙지 않은 앞뒤(공백)면 미표시 — 앞 수업이 18:00에 끝나면 18:10과 불일치", () => {
+    expect(breakBlocksForColumn(rows, [iv(1030, 1080, "a"), iv(1100, 1160, "b")], brk)).toEqual([]);
+  });
+
+  it("축 범위 밖 쉬는 시간은 제외", () => {
+    // 폴백 축 14:20~22:00, 23:00~23:10 범위는 축 밖
+    const out = breakBlocksForColumn(
+      rows,
+      [iv(1030, 1090, "a"), iv(1100, 1160, "b")],
+      [{ startMin: 1380, endMin: 1390 }],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("여러 교시 걸친 쉬는 시간(span>1) — 18:10~18:30", () => {
+    const out = breakBlocksForColumn(rows, [iv(1030, 1090, "a"), iv(1110, 1160, "b")], [
+      { startMin: 1090, endMin: 1110 },
+    ]);
+    expect(out).toEqual([{ index: 23, span: 2, startMin: 1090, endMin: 1110 }]);
+  });
+
+  // ⚠️ 다중 레인(LAB) 불변식 — 어느 레인이든 범위에 겹치는 수업이 있으면 억제(수업 안 사라짐·이중 td 방지).
+  it("한 레인은 앞뒤 붙었어도 다른 레인 수업이 범위에 걸치면 미표시(수업 보존)", () => {
+    // 레인0: 앞(끝=18:10)+뒤(시작=18:20) 붙음 / 레인1: 18:10~18:20 병렬 수업 → overlaps=true → 억제
+    const out = breakBlocksForColumn(
+      rows,
+      [iv(1030, 1090, "a0"), iv(1100, 1160, "b0"), iv(1090, 1100, "lab1")],
+      brk,
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("수업이 쉬는 시간 '시작'에 딱 시작하면 겹침으로 억제(그룹 앵커 공동행 불가)", () => {
+    // 18:10에 시작하는 수업(18:10~19:10)은 [1090,1100) 범위와 겹침 → break 억제 = break/그룹 공동 앵커 원천 차단
+    expect(
+      breakBlocksForColumn(rows, [iv(1030, 1090, "a"), iv(1090, 1150, "starts-at-break")], brk),
+    ).toEqual([]);
+  });
+
+  it("수업이 쉬는 시간 '끝'에 딱 끝나면 겹침으로 억제", () => {
+    // 18:20에 끝나는 수업(18:00~18:20)은 범위와 겹침 → 억제
+    expect(
+      breakBlocksForColumn(rows, [iv(1080, 1100, "ends-at-break-end"), iv(1100, 1160, "b")], brk),
+    ).toEqual([]);
   });
 });

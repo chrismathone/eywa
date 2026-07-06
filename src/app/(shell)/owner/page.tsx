@@ -1,6 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings, getSettingsMeta } from "@/features/owner/server/queries";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
+import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { ProfileSection } from "./_components/profile-section";
 import { OperationsSection } from "./_components/operations-section";
@@ -101,6 +102,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
+  // 과목별 강사 라벨(강사뷰 '가로줄 제외 강사' 칩)은 과목 운영 면에서만 로드.
+  const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
   // 관리 면(중복·감사) 페이지네이션용. 창(embed) 컨텍스트는 면 pageHref가 직접 유지.
   const page = Math.max(1, Number(sp.page) || 1);
   const isEmbed = sp.embed === "1";
@@ -122,7 +125,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "operations" ? (
         <OperationsSection initial={settings.operations} classrooms={classrooms} />
       ) : null}
-      {tab === "subjects" ? <SubjectsSection initial={settings.operations} /> : null}
+      {tab === "subjects" ? (
+        <SubjectsSection initial={settings.operations} teacherLabels={teacherLabelsBySubject} />
+      ) : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "permissions" ? <PermissionsSection initial={settings.permissions} /> : null}
