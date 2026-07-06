@@ -15,13 +15,16 @@ export function RichGridView({
   subjectMaps,
   config,
   teacherColors,
+  compact = false,
 }: {
   slots: GridSlot[];
   subjectMaps: SubjectMaps;
   config: PeriodsConfig;
   teacherColors: TeacherColorMap;
+  /** 빈 교시 행 숨기기(1시간 단위 압축) — 통합뷰 툴바 토글. */
+  compact?: boolean;
 }) {
-  const groups = buildRichCardGroups(slots, config);
+  const groups = buildRichCardGroups(slots, config, compact);
   const total = groups.reduce((n, g) => n + g.cards.length, 0);
   const subjectSoftClass = SUBJECT_SOFT[subjectMaps.colorOf(slots[0]?.subject ?? "")];
 

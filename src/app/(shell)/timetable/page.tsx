@@ -35,10 +35,11 @@ type ViewMode = "basic" | "integrated" | "teacher";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, week: weekRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, week: weekRaw, compact: compactRaw } = await searchParams;
+  const compact = compactRaw === "1"; // 통합뷰 '빈 교시 숨기기'(1시간 단위 압축) 토글
   const view: ViewMode =
     viewParam === "integrated" ? "integrated" : viewParam === "teacher" ? "teacher" : "basic";
 
@@ -143,7 +144,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -159,6 +160,7 @@ export default async function TimetablePage({
                 defaultSubject,
                 week,
                 thisWk,
+                compact,
               })}
               className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
                 subject === k
@@ -186,7 +188,7 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk })}
+                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -199,6 +201,28 @@ export default async function TimetablePage({
             );
           })}
         </div>
+
+        {/* 통합뷰 전용 — 빈 교시 행(1시간 단위 수업이 만드는 5·7교시 등 가운데 공백) 숨기기 토글. URL 파라미터라 저장 안 함. */}
+        {isIntegrated ? (
+          <Link
+            href={buildHref({ view: effView, subject, defaultSubject, week, thisWk, compact: !compact })}
+            aria-pressed={compact}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+              compact
+                ? "border-primary bg-primary/10 text-primary font-medium"
+                : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+            }`}
+          >
+            <span
+              className={`flex size-3.5 items-center justify-center rounded-[3px] border text-[9px] leading-none ${
+                compact ? "border-primary bg-primary text-primary-foreground" : "border-line"
+              }`}
+            >
+              {compact ? "✓" : ""}
+            </span>
+            빈 교시 숨기기
+          </Link>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
           <span className="text-[color:var(--primary)]">재원 {enrolledCount}</span>
@@ -229,7 +253,7 @@ export default async function TimetablePage({
           title="해당 과목의 시간표가 없습니다"
         />
       ) : isIntegrated ? (
-        <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} />
+        <RichGridView slots={slots} subjectMaps={subjectMaps} config={periodsConfig} teacherColors={teacherColors} compact={compact} />
       ) : effView === "teacher" ? (
         // 강사뷰 — 시트 "강사별영어시간표" 그대로(강사=세로 블록, 그 안 월~토, 셀=반명+방). 읽기전용, 반 클릭=학생 명단.
         // 가로줄·격자 단위는 과목 설정(teacherViewLines/Step, 학원설정 과목 운영)에서.
@@ -268,11 +292,13 @@ function buildHref(opts: {
   defaultSubject: string;
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
+  compact?: boolean; // 통합뷰 빈 교시 숨기기(다른 네비 시 유지)
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
   if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
+  if (opts.compact) params.set("compact", "1");
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

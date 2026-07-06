@@ -124,8 +124,16 @@ function classroomLabel(perDayRooms: Map<DayOfWeek, Set<string>>): string {
     .join(" / ");
 }
 
-/** 한 과목 슬롯 → 시작 교시별 리치 카드 섹션. 교시 정렬은 평일 기준, 주말 전용 반은 "주말" 섹션. */
-export function buildRichCardGroups(slots: GridSlot[], config: PeriodsConfig): RichCardGroup[] {
+/**
+ * 한 과목 슬롯 → 시작 교시별 리치 카드 섹션. 교시 정렬은 평일 기준, 주말 전용 반은 "주말" 섹션.
+ * compact=true면 **섹션 전체에 비어있는 교시 행을 제거**(1시간 단위 수업이 만드는 5·7교시 등 가운데 공백 제거).
+ * 어떤 반이 실제 쓰는 교시(presentOrders)는 유지 → 클립 없음. 통합뷰 툴바 '빈 교시 숨기기' 토글용.
+ */
+export function buildRichCardGroups(
+  slots: GridSlot[],
+  config: PeriodsConfig,
+  compact = false,
+): RichCardGroup[] {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   const byClass = new Map<string, GridSlot[]>();
   for (const s of slots) (byClass.get(s.classId) ?? byClass.set(s.classId, []).get(s.classId)!).push(s);
@@ -219,12 +227,15 @@ export function buildRichCardGroups(slots: GridSlot[], config: PeriodsConfig): R
       }
       // 요일축 = 평일 섹션은 항상 월~금(5열), 주말 섹션은 실제 주말요일.
       const days = weekend ? DAY_ORDER.filter((d) => WEEKEND.has(d) && daySet.has(d)) : WEEKDAY_DAYS;
+      // compact = 섹션 전체에 비어있는 교시 행 제거(present인 교시만). 앵커는 항상 present라 최소 1행 보장.
+      const winList = [...winRows.values()].sort((a, b) => a.order - b.order);
+      const compactList = winList.filter((r) => presentOrders.has(r.order));
       return {
         key: `${cs[0].groupOrder}::${cs[0].groupLabel}`,
         label: cs[0].groupLabel,
         order: cs[0].groupOrder,
         cards: cs,
-        periodRows: [...winRows.values()].sort((a, b) => a.order - b.order),
+        periodRows: compact && compactList.length > 0 ? compactList : winList,
         days,
         holdRows: Math.max(1, ...cs.map((c) => c.hold.length)),
         withdrawnRows: Math.max(1, ...cs.map((c) => c.withdrawn.length)),

@@ -102,6 +102,40 @@ describe("buildRichCardGroups", () => {
     expect(groups[0].periodRows.map((p) => p.label)).toEqual(["7교시", "8교시", "9교시", "10교시", "11교시"]);
   });
 
+  it("compact=true면 섹션 전체에 빈 교시 행 제거(1시간 단위: 4·6·8교시만, 5·7교시 제거)", () => {
+    // 1시간 단위 수업 = 16:20(4교시)·17:20(6교시)·18:20(8교시) → 5·7교시가 빔.
+    const oneHour = [
+      slot({ dayOfWeek: "mon", startTime: "16:20", endTime: "17:20" }),
+      slot({ dayOfWeek: "mon", startTime: "17:20", endTime: "18:20" }),
+      slot({ dayOfWeek: "mon", startTime: "18:20", endTime: "19:20" }),
+    ];
+    // 기본(compact 아님) — 5칸 윈도우라 빈 5·7교시 포함(가운데 공백).
+    expect(buildRichCardGroups(oneHour, C)[0].periodRows.map((p) => p.label)).toEqual([
+      "4교시", "5교시", "6교시", "7교시", "8교시",
+    ]);
+    // compact — 실제 쓰는 교시만(빈 5·7 제거 = 1시간 단위 압축).
+    expect(buildRichCardGroups(oneHour, C, true)[0].periodRows.map((p) => p.label)).toEqual([
+      "4교시", "6교시", "8교시",
+    ]);
+  });
+
+  it("compact여도 섹션 내 어떤 반이 쓰는 교시는 유지(클립 없음)", () => {
+    const groups = buildRichCardGroups(
+      [
+        slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "16:20" }), // 4교시
+        slot({ classId: "a", className: "A", dayOfWeek: "mon", startTime: "18:20" }), // 8교시
+        slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "16:20" }), // 4교시(같은 '4교시 시작' 섹션)
+        slot({ classId: "b", className: "B", dayOfWeek: "mon", startTime: "17:00" }), // 5교시 — B가 사용
+      ],
+      C,
+      true,
+    );
+    const labels = groups[0].periodRows.map((p) => p.label);
+    expect(labels).toContain("5교시"); // B가 써서 유지(제거되면 B 클립)
+    expect(labels).not.toContain("6교시"); // 아무도 안 씀 → 제거
+    expect(labels).not.toContain("7교시");
+  });
+
   it("영문이름·신입/전입은 학생에 보존", () => {
     const groups = buildRichCardGroups(
       [
