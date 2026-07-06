@@ -7,7 +7,11 @@
 
 ## 📌 진행 상황 스냅샷 (이어가기용 — 최신 위)
 
-**브랜치 `Injaewon/english-timetable-import`(워크트리 전용, origin push됨). main 미반영(사용자 승인 후에만). 워크트리는 clean.**
+**✅ main 반영 완료(2026-07-06, `d8207d7` — 사용자 승인 후 병합 push)**: origin/main(합반 통합 명단·기본뷰
+격자 리워크·shrinkToFit·counselor 스코핑 등 11커밋)을 브랜치에 병합(텍스트 충돌 1=import 합집합, 클로버 0 대조 확인) →
+4게이트(tsc0/lint0/**test703**/build✓) + 패리티 diff0 + 병합 적대리뷰(8에이전트, CONFIRMED 4건 전부 수정: 강사뷰 톤
+ink/25 재동기·수학 export 교시 설정 파생+onSkippedSlots·과목 운영 사이드바 하부탭·savedNonce 거짓 미저장 확인) +
+라이브(병합 dev: 영어 11교시×합반 명단 공존·강사뷰·수학 무회귀·콘솔 0) 후 `git push origin HEAD:main`. 브랜치 tip=main.
 
 ### 🟢 2026-07-06 — 시트↔강사뷰 전격비교 → 패리티 3픽스 + 10분 격자 재작업 (새 PC `C:\tmp\eywa-english`, dev 3002)
 
