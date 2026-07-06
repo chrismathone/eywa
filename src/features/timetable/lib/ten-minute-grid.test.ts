@@ -124,6 +124,40 @@ describe("timeToMin", () => {
   });
 });
 
+describe("stepMin — 격자 단위 파라미터화(과목 설정 teacherViewStep)", () => {
+  it("step 20 폴백 프레임 → 23행, 20분 간격, 첫 행 14:20", () => {
+    const rows = buildTenMinuteRows([], undefined, 20);
+    expect(rows).toHaveLength(23); // 14:20~22:00 = 460분 / 20
+    expect(rows[0]!.key).toBe("14:20");
+    expect(rows[1]!.startMin - rows[0]!.startMin).toBe(20);
+  });
+
+  it("step 30 축 스냅: 14:20은 30의 배수가 아님 → lo=14:00으로 내림, 전 행 :00/:30 정렬(정수 인덱스 불변식)", () => {
+    const rows = buildTenMinuteRows([], undefined, 30);
+    expect(rows[0]!.key).toBe("14:00"); // 860 → 840 스냅
+    for (const r of rows) expect(r.startMin % 30).toBe(0);
+    const span = slotRowSpan(rows, "15:00", "16:00");
+    expect(Number.isInteger(span.index)).toBe(true);
+    expect(span).toEqual({ index: 2, span: 2 }); // 14:00 기준 15:00=2행째, 60분=2행
+  });
+
+  it("slotRowSpan은 rows에서 step 추론(인자 불변) — 30분 축에서 바깥 라운딩", () => {
+    const rows = buildTenMinuteRows([], undefined, 30);
+    expect(slotRowSpan(rows, "16:20", "17:00")).toEqual({ index: 4, span: 2 }); // 16:00~17:00로 라운딩
+  });
+
+  it("buildSlotIntervals step 30 바깥 라운딩", () => {
+    const iv = buildSlotIntervals([slot("16:20", "17:00")], 30);
+    expect(iv[0]).toMatchObject({ startMin: 960, endMin: 1020 }); // 16:00~17:00
+  });
+
+  it("기본값(step 10) 회귀 카나리 — 46행·14:20 시작(기존 동작 그대로)", () => {
+    const rows = buildTenMinuteRows([]);
+    expect(rows).toHaveLength(46);
+    expect(rows[0]!.key).toBe("14:20");
+  });
+});
+
 describe("packGroups — 같은 시간 병렬 = 한 그룹(합반 묶음)", () => {
   it("동시·동일 범위 3반 → 그룹 1개(laneWidth 3) — 낱개 레인 흩어짐 없음", () => {
     const { groups, laneCount } = packGroups(

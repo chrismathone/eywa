@@ -10,6 +10,9 @@ export const STEP_MIN = 10;
 /** 시트 프레임 기본 범위 — 통합영어시간표 교시(14:20~22:00, 46행). */
 export const ENGLISH_GRID_FALLBACK = { start: "14:20", end: "22:00" };
 
+/** 강사뷰 내부 가로줄 기본(영어) — 과목 설정(teacherViewLines) 미설정 시 폴백(2026-07-06 사용자 지정 6시각). */
+export const DEFAULT_TEACHER_VIEW_LINES = ["16:10", "18:00", "18:20", "19:10", "20:00", "20:20"];
+
 export type TenMinuteRow = {
   /** 행 시작 "HH:MM" — td key·시각 라벨 겸용 */
   key: string;
@@ -30,35 +33,44 @@ export function timeToMin(t: string): number | null {
 export const minToHM = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
-const floorStep = (min: number) => Math.floor(min / STEP_MIN) * STEP_MIN;
-const ceilStep = (min: number) => Math.ceil(min / STEP_MIN) * STEP_MIN;
+const floorStep = (min: number, step: number = STEP_MIN) => Math.floor(min / step) * step;
+const ceilStep = (min: number, step: number = STEP_MIN) => Math.ceil(min / step) * step;
 
 /**
- * 슬롯들로 10분 행 축 구성 — 데이터 min~max를 바깥쪽 라운딩 후 폴백 범위와 합집합.
- * 빈 배열이어도 폴백 프레임을 반환(빈 주 렌더 보장).
+ * 슬롯들로 시간 격자 행 축 구성 — 데이터 min~max를 바깥쪽 라운딩 후 폴백 범위와 합집합.
+ * 빈 배열이어도 폴백 프레임을 반환(빈 주 렌더 보장). stepMin은 격자 단위(분, 기본 10 —
+ * 과목 설정 teacherViewStep). ⚠️ 축 경계도 step 배수로 스냅(자정 기준) — 14:20은 30의 배수가
+ * 아니라 step 30이면 lo=14:00으로 내림(안 하면 slotRowSpan이 분수 인덱스를 만든다).
  */
 export function buildTenMinuteRows(
   slots: readonly { startTime: string; endTime: string }[],
   fallback: { start: string; end: string } = ENGLISH_GRID_FALLBACK,
+  stepMin: number = STEP_MIN,
 ): TenMinuteRow[] {
-  let lo = timeToMin(fallback.start) ?? 860;
-  let hi = timeToMin(fallback.end) ?? 1320;
+  let lo = floorStep(timeToMin(fallback.start) ?? 860, stepMin);
+  let hi = ceilStep(timeToMin(fallback.end) ?? 1320, stepMin);
   for (const s of slots) {
     const a = timeToMin(s.startTime);
     const b = timeToMin(s.endTime);
-    if (a != null) lo = Math.min(lo, floorStep(a));
-    if (b != null) hi = Math.max(hi, ceilStep(b));
+    if (a != null) lo = Math.min(lo, floorStep(a, stepMin));
+    if (b != null) hi = Math.max(hi, ceilStep(b, stepMin));
   }
   const rows: TenMinuteRow[] = [];
-  for (let m = lo; m < hi; m += STEP_MIN) {
+  for (let m = lo; m < hi; m += stepMin) {
     rows.push({ key: minToHM(m), startMin: m, isHour: m % 60 === 0 });
   }
   return rows;
 }
 
+/** 행 축에서 격자 단위(분) 추론 — 행 2개 미만이면 기본 10. */
+function stepOf(rows: readonly TenMinuteRow[]): number {
+  return rows.length >= 2 ? rows[1]!.startMin - rows[0]!.startMin : STEP_MIN;
+}
+
 /**
- * 슬롯 → {index, span}. start는 내림·end는 올림으로 10분 정렬, 축 범위로 클램프,
+ * 슬롯 → {index, span}. start는 내림·end는 올림으로 격자 정렬, 축 범위로 클램프,
  * span ≥ 1 보장 — 역전/동일 시각/파싱 실패 어떤 입력에도 throw하지 않는다.
+ * step은 rows에서 추론(시그니처 불변 — 호출부 무변).
  */
 export function slotRowSpan(
   rows: readonly TenMinuteRow[],
@@ -66,14 +78,15 @@ export function slotRowSpan(
   endTime: string,
 ): { index: number; span: number } {
   if (rows.length === 0) return { index: 0, span: 1 };
+  const step = stepOf(rows);
   const lo = rows[0]!.startMin;
-  const hi = rows[rows.length - 1]!.startMin + STEP_MIN;
+  const hi = rows[rows.length - 1]!.startMin + step;
   const rawStart = timeToMin(startTime);
   const rawEnd = timeToMin(endTime);
-  const start = Math.min(Math.max(rawStart != null ? floorStep(rawStart) : lo, lo), hi - STEP_MIN);
-  const end = Math.min(Math.max(rawEnd != null ? ceilStep(rawEnd) : start + STEP_MIN, start + STEP_MIN), hi);
-  const index = (start - lo) / STEP_MIN;
-  const span = (end - start) / STEP_MIN;
+  const start = Math.min(Math.max(rawStart != null ? floorStep(rawStart, step) : lo, lo), hi - step);
+  const end = Math.min(Math.max(rawEnd != null ? ceilStep(rawEnd, step) : start + step, start + step), hi);
+  const index = (start - lo) / step;
+  const span = (end - start) / step;
   return { index, span };
 }
 
@@ -105,10 +118,10 @@ export type ClassInterval<T> = {
   slots: T[];
 };
 
-/** 같은 반의 인접(끝=시작)·중복 슬롯을 하나의 구간으로 접기. 시각은 10분 바깥쪽 라운딩. */
+/** 같은 반의 인접(끝=시작)·중복 슬롯을 하나의 구간으로 접기. 시각은 격자 단위 바깥쪽 라운딩. */
 export function buildClassIntervals<
   T extends { startTime: string; endTime: string; classId: string },
->(slots: readonly T[]): ClassInterval<T>[] {
+>(slots: readonly T[], stepMin: number = STEP_MIN): ClassInterval<T>[] {
   const byClass = new Map<string, T[]>();
   for (const s of slots) (byClass.get(s.classId) ?? byClass.set(s.classId, []).get(s.classId)!).push(s);
   const out: ClassInterval<T>[] = [];
@@ -119,8 +132,8 @@ export function buildClassIntervals<
     for (const s of sorted) {
       const a = timeToMin(s.startTime);
       const b = timeToMin(s.endTime);
-      const start = a != null ? floorStep(a) : 0;
-      const end = Math.max(b != null ? ceilStep(b) : start + STEP_MIN, start + STEP_MIN);
+      const start = a != null ? floorStep(a, stepMin) : 0;
+      const end = Math.max(b != null ? ceilStep(b, stepMin) : start + stepMin, start + stepMin);
       const prev = out[out.length - 1];
       if (prev && prev.classId === classId && start <= prev.endMin) {
         prev.endMin = Math.max(prev.endMin, end);
@@ -140,13 +153,13 @@ export function buildClassIntervals<
  */
 export function buildSlotIntervals<
   T extends { startTime: string; endTime: string; classId: string },
->(slots: readonly T[]): ClassInterval<T>[] {
+>(slots: readonly T[], stepMin: number = STEP_MIN): ClassInterval<T>[] {
   const map = new Map<string, ClassInterval<T>>();
   for (const s of slots) {
     const a = timeToMin(s.startTime);
     const b = timeToMin(s.endTime);
-    const start = a != null ? floorStep(a) : 0;
-    const end = Math.max(b != null ? ceilStep(b) : start + STEP_MIN, start + STEP_MIN);
+    const start = a != null ? floorStep(a, stepMin) : 0;
+    const end = Math.max(b != null ? ceilStep(b, stepMin) : start + stepMin, start + stepMin);
     const k = `${s.classId}:${start}:${end}`;
     const ex = map.get(k);
     if (ex) ex.slots.push(s);

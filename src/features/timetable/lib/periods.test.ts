@@ -8,6 +8,7 @@ import {
   periodToTimes,
   slotPeriodRow,
   subjectPeriodRows,
+  subjectWeekdayPeriods,
   settingsToPeriodsConfig,
 } from "./periods";
 
@@ -175,5 +176,62 @@ describe("시각→그리드 행(slotPeriodRow)", () => {
     expect(slotPeriodRow("math", "16:20", "mon").order).toBeGreaterThan(
       slotPeriodRow("math", "14:30", "mon").order,
     );
+  });
+});
+
+describe("과목별 평일 교시표(weekdayBySubject) — subjects[].weekdayPeriods override", () => {
+  const p = (startTime: string, endTime: string) => ({ startTime, endTime });
+  const base = {
+    weekdayPeriods: [p("14:30", "15:25"), p("15:25", "16:20")],
+    weekendPeriods: [p("09:00", "10:00")],
+  };
+
+  it("커스텀 영어 3교시 → rows 3·e-1..e-3·역조회, 미스매치 시각은 x- 폴백", () => {
+    const cfg = settingsToPeriodsConfig({
+      ...base,
+      subjects: [{ key: "english", weekdayPeriods: [p("13:00", "13:40"), p("13:40", "14:20"), p("14:20", "15:00")] }],
+    });
+    const rows = subjectPeriodRows("english", false, cfg);
+    expect(rows.map((r) => r.key)).toEqual(["e-1", "e-2", "e-3"]);
+    expect(slotPeriodRow("english", "13:40", "mon", cfg).key).toBe("e-2");
+    // 커스텀 테이블 밖 시각(옛 ENGLISH_PERIODS 시각) → 기타 행
+    expect(slotPeriodRow("english", "18:20", "mon", cfg).key).toBe("x-18:20");
+  });
+
+  it("subjects에 english override 없음(빈 배열 포함) → 기존 ENGLISH_PERIODS 동일(무회귀)", () => {
+    const noSub = settingsToPeriodsConfig(base);
+    const emptyOverride = settingsToPeriodsConfig({
+      ...base,
+      subjects: [{ key: "english", weekdayPeriods: [] }],
+    });
+    for (const cfg of [noSub, emptyOverride]) {
+      expect(subjectPeriodRows("english", false, cfg)).toHaveLength(11);
+      expect(slotPeriodRow("english", "14:20", "mon", cfg).key).toBe("e-1");
+    }
+  });
+
+  it("수학계 커스텀 3교시(홀수) → 2그룹(꼬리 단독), 커스텀 없는 과목은 전역 weekday", () => {
+    const cfg = settingsToPeriodsConfig({
+      ...base,
+      subjects: [{ key: "science", weekdayPeriods: [p("10:00", "10:50"), p("11:00", "11:50"), p("12:00", "12:50")] }],
+    });
+    const sci = subjectPeriodRows("science", false, cfg);
+    expect(sci.map((r) => r.key)).toEqual(["m-1", "m-2"]);
+    expect(sci[1]!.time).toBe("12:00~12:50"); // 홀수 꼬리 = 단독 그룹
+    expect(slotPeriodRow("science", "11:00", "mon", cfg).key).toBe("m-1");
+    // math는 override 없음 → 전역 weekday(base 2교시 = 1그룹)
+    expect(subjectPeriodRows("math", false, cfg)).toHaveLength(1);
+    expect(slotPeriodRow("math", "14:30", "mon", cfg).key).toBe("m-1");
+  });
+
+  it("사용자 과목 키(subject_1)에도 커스텀 적용(string subject) + periodToTimes·subjectWeekdayPeriods 해석", () => {
+    const cfg = settingsToPeriodsConfig({
+      ...base,
+      subjects: [{ key: "subject_1", weekdayPeriods: [p("17:00", "18:00")] }],
+    });
+    expect(periodToTimes("1", "subject_1", undefined, cfg)).toEqual({ startTime: "17:00", endTime: "18:00" });
+    expect(subjectWeekdayPeriods("subject_1", cfg)).toEqual([{ id: "1", startTime: "17:00", endTime: "18:00" }]);
+    // 주말은 여전히 과목 무관 config.weekend
+    expect(periodToTimes("1", "subject_1", { weekend: true }, cfg)).toEqual({ startTime: "09:00", endTime: "10:00" });
   });
 });

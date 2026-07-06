@@ -73,6 +73,7 @@ const MATH_PERIODS: Record<string, PeriodTime> = {
 // ⚠️ 강사별영어시간표는 10분 단위로 쪼개 놓은 것(시작시각 일치 시 통합에 수식 출력)이라 교시 기준이 아님.
 // 오후 16:20~17:40 구간은 40분·60분 두 수업 체계가 공존해 4~7교시 시간대가 일부 겹침(시트 실제 구조).
 // 끝시각은 통합 col A의 시작시각별 최빈값(예 16:20 시작은 →17:00이 다수, →17:20 60분반은 소수).
+// 과목별 커스텀(operations.subjects[].weekdayPeriods) 미설정 시의 영어 폴백.
 const ENGLISH_PERIODS: Record<string, PeriodTime> = {
   "1": { startTime: "14:20", endTime: "15:00" },
   "2": { startTime: "15:00", endTime: "15:40" },
@@ -86,6 +87,14 @@ const ENGLISH_PERIODS: Record<string, PeriodTime> = {
   "10": { startTime: "20:20", endTime: "21:10" },
   "11": { startTime: "21:10", endTime: "22:00" },
 };
+
+/** 영어 11교시를 설정 편집기 행 형태로 — 학원설정 기본값(defaults.ts)이 소비(과목별 평일 교시 프리필). */
+export const ENGLISH_WEEKDAY_PERIOD_LIST: { label: string; startTime: string; endTime: string }[] =
+  Object.entries(ENGLISH_PERIODS).map(([id, t]) => ({
+    label: `${id}교시`,
+    startTime: t.startTime,
+    endTime: t.endTime,
+  }));
 
 // 주말 교시표(과목 무관, 09:00부터 1시간 단위 8교시).
 const WEEKEND_PERIODS: Record<string, PeriodTime> = {
@@ -101,10 +110,13 @@ const WEEKEND_PERIODS: Record<string, PeriodTime> = {
 
 // ── 설정 주입(config) — 평일/주말 교시표를 테넌트 설정(owner)으로 대체 가능. ──
 // 미지정 시 DEFAULT_PERIODS_CONFIG(=현 상수)로 폴백 → 설정 없으면 오늘과 동일 동작.
-// 영어 교시표(10교시·40분)는 설정 스키마(평일 1개 표)로 표현 불가하므로 ENGLISH_PERIODS 상수 유지.
+// 평일 교시는 **과목별 override**(operations.subjects[].weekdayPeriods) 가능 — 미설정 과목은
+// english=ENGLISH_PERIODS, 그 외=전역 weekday 폴백(2026-07-06, 옛 "영어 하드코딩" KNOWN_EXCEPTION 해소).
 export interface PeriodsConfig {
-  weekday: Record<string, PeriodTime>; // periodId "1".."N" → 시각 (수학계열 공용)
+  weekday: Record<string, PeriodTime>; // periodId "1".."N" → 시각 (과목 전용 미설정 시 기본)
   weekend: Record<string, PeriodTime>;
+  /** 과목키 → 평일 교시표 override. plain Record(클라 직렬화 — Map 금지). 없으면 위 폴백. */
+  weekdayBySubject?: Record<string, Record<string, PeriodTime>>;
 }
 
 export const DEFAULT_PERIODS_CONFIG: PeriodsConfig = {
@@ -112,10 +124,14 @@ export const DEFAULT_PERIODS_CONFIG: PeriodsConfig = {
   weekend: WEEKEND_PERIODS,
 };
 
-/** 설정(operations)의 교시 배열 → PeriodsConfig. 배열 index+1 = periodId 규약. 빈 배열이면 기본 상수. */
+/**
+ * 설정(operations)의 교시 배열 → PeriodsConfig. 배열 index+1 = periodId 규약. 빈 배열이면 기본 상수.
+ * subjects[].weekdayPeriods(길이>0)는 weekdayBySubject로 — 빈 배열=미설정 관례 동일.
+ */
 export function settingsToPeriodsConfig(operations: {
   weekdayPeriods: { startTime: string; endTime: string }[];
   weekendPeriods: { startTime: string; endTime: string }[];
+  subjects?: { key: string; weekdayPeriods?: { startTime: string; endTime: string }[] }[];
 }): PeriodsConfig {
   const toTable = (rows: { startTime: string; endTime: string }[]): Record<string, PeriodTime> => {
     const t: Record<string, PeriodTime> = {};
@@ -124,13 +140,23 @@ export function settingsToPeriodsConfig(operations: {
     });
     return t;
   };
+  let weekdayBySubject: Record<string, Record<string, PeriodTime>> | undefined;
+  for (const s of operations.subjects ?? []) {
+    if (s.weekdayPeriods?.length) {
+      (weekdayBySubject ??= {})[s.key] = toTable(s.weekdayPeriods);
+    }
+  }
   return {
     weekday: operations.weekdayPeriods.length ? toTable(operations.weekdayPeriods) : MATH_PERIODS,
     weekend: operations.weekendPeriods.length ? toTable(operations.weekendPeriods) : WEEKEND_PERIODS,
+    ...(weekdayBySubject ? { weekdayBySubject } : {}),
   };
 }
 
-function weekdayTable(subject: TimetableSubject, config: PeriodsConfig): Record<string, PeriodTime> {
+/** 과목의 평일 교시표 해석 — 과목 전용 override ?? (english=ENGLISH_PERIODS, 그 외=전역 weekday). */
+export function weekdayTableFor(subject: string, config: PeriodsConfig): Record<string, PeriodTime> {
+  const custom = config.weekdayBySubject?.[subject];
+  if (custom) return custom;
   return subject === "english" ? ENGLISH_PERIODS : config.weekday;
 }
 
@@ -142,7 +168,7 @@ export function subjectWeekdayPeriods(
   subject: string,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
 ): { id: string; startTime: string; endTime: string }[] {
-  const table = subject === "english" ? ENGLISH_PERIODS : config.weekday;
+  const table = weekdayTableFor(subject, config);
   return Object.entries(table)
     .map(([id, t]) => ({ id, startTime: hm(t.startTime), endTime: hm(t.endTime) }))
     .sort((a, b) => Number(a.id) - Number(b.id));
@@ -166,12 +192,12 @@ export function subjectWeekendPeriods(
  */
 export function periodToTimes(
   periodId: string,
-  subject: TimetableSubject,
+  subject: string,
   opts?: { weekend?: boolean },
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
 ): PeriodTime | null {
   const id = normalizePeriodId(periodId);
-  const table = opts?.weekend ? config.weekend : weekdayTable(subject, config);
+  const table = opts?.weekend ? config.weekend : weekdayTableFor(subject, config);
   return table[id] ?? null;
 }
 
@@ -213,8 +239,6 @@ function reverseStart(table: Record<string, PeriodTime>): Map<string, string> {
   return m;
 }
 
-const ENGLISH_REV = reverseStart(ENGLISH_PERIODS);
-
 /**
  * 평일 수학계열 교시표 → 2개씩 묶은 그룹(라벨·통합시간대). config.weekday에서 파생.
  * 기본 MATH_PERIODS(8교시)면 4그룹(1교시=14:30~16:20 …)으로 ijw MATH_GROUP_DISPLAY와 동일.
@@ -246,7 +270,7 @@ function mathGroups(table: Record<string, PeriodTime>): {
  * 매칭 실패 시 그 시각 자체를 '기타' 행으로(절대 throw 금지 — 데모 데이터 시각 불일치 안전).
  */
 export function slotPeriodRow(
-  subject: TimetableSubject,
+  subject: string,
   startTime: string,
   day: DayOfWeek,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
@@ -259,15 +283,18 @@ export function slotPeriodRow(
       return { key: `w-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
     }
   } else if (subject === "english") {
-    const p = ENGLISH_REV.get(start);
+    // 역조회는 해석 테이블에서 per-call(주말·수학 분기와 동일 관례, O(≤20)) — 커스텀 테이블 지원.
+    const table = weekdayTableFor(subject, config);
+    const p = reverseStart(table).get(start);
     if (p) {
-      const t = ENGLISH_PERIODS[p]!;
+      const t = table[p]!;
       return { key: `e-${p}`, label: `${p}교시`, time: `${hm(t.startTime)}~${hm(t.endTime)}`, order: toMin(t.startTime) };
     }
   } else {
-    const p = reverseStart(config.weekday).get(start);
+    const table = weekdayTableFor(subject, config);
+    const p = reverseStart(table).get(start);
     if (p) {
-      const { groupOf, display } = mathGroups(config.weekday);
+      const { groupOf, display } = mathGroups(table);
       const g = groupOf.get(p)!;
       const d = display.get(g)!;
       return { key: `m-${g}`, label: d.label, time: d.time, order: d.order };
@@ -282,7 +309,7 @@ export function slotPeriodRow(
  * 평일 수학계열 = 4그룹(1교시 14:30~16:20 …), 영어 = 10교시, 주말 = 8교시(시간단위).
  */
 export function subjectPeriodRows(
-  subject: TimetableSubject,
+  subject: string,
   weekend: boolean,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
 ): PeriodRow[] {
@@ -295,14 +322,14 @@ export function subjectPeriodRows(
       order: toMin(t.startTime),
     }));
   } else if (subject === "english") {
-    out = Object.entries(ENGLISH_PERIODS).map(([p, t]) => ({
+    out = Object.entries(weekdayTableFor(subject, config)).map(([p, t]) => ({
       key: `e-${p}`,
       label: `${p}교시`,
       time: `${hm(t.startTime)}~${hm(t.endTime)}`,
       order: toMin(t.startTime),
     }));
   } else {
-    out = Array.from(mathGroups(config.weekday).display.entries()).map(([g, d]) => ({
+    out = Array.from(mathGroups(weekdayTableFor(subject, config)).display.entries()).map(([g, d]) => ({
       key: `m-${g}`,
       label: d.label,
       time: d.time,
