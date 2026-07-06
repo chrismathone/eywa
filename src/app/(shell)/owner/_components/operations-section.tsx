@@ -10,7 +10,6 @@ import {
   PeriodListEditor,
   ShuttleEditor,
   StringListEditor,
-  SubjectListEditor,
 } from "./list-editors";
 
 export function OperationsSection({
@@ -26,14 +25,8 @@ export function OperationsSection({
   return (
     <div className="space-y-4">
     <SectionForm section="operations" payload={o}>
+      {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장. */}
       <div className="grid items-start gap-4 xl:grid-cols-2">
-      <SettingsCard
-        title="운영 과목"
-        description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가)."
-      >
-        <SubjectListEditor value={o.subjects} onChange={(v) => set({ subjects: v })} />
-      </SettingsCard>
-
       <SettingsCard title="학년 체계" description="학생 학년 선택지.">
         <StringListEditor
           value={o.gradeLevels}
@@ -44,8 +37,8 @@ export function OperationsSection({
       </SettingsCard>
 
       <SettingsCard
-        title="평일 교시"
-        description="1교시가 언제부터 언제까지인지 등 평일 수업 시간대. 시간표 교시 축에 적용됩니다."
+        title="평일 교시 (기본값)"
+        description="1교시가 언제부터 언제까지인지 등 평일 수업 시간대. 과목 전용 교시가 없는 과목의 시간표 교시 축에 적용됩니다. 과목별 교시는 과목 운영 탭에서."
       >
         <PeriodListEditor value={o.weekdayPeriods} onChange={(v) => set({ weekdayPeriods: v })} />
       </SettingsCard>

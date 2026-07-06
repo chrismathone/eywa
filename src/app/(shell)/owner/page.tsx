@@ -4,6 +4,7 @@ import { getClassroomsWithUsage } from "@/features/owner/server/classroom-querie
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { ProfileSection } from "./_components/profile-section";
 import { OperationsSection } from "./_components/operations-section";
+import { SubjectsSection } from "./_components/subjects-section";
 import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
 import { PermissionsSection } from "./_components/permissions-section";
@@ -19,6 +20,7 @@ type Sp = Record<string, string | undefined>;
 type OwnerTab =
   | "profile"
   | "operations"
+  | "subjects"
   | "billing"
   | "notifications"
   | "permissions"
@@ -30,6 +32,7 @@ type OwnerTab =
 const TAB_LABEL: Record<OwnerTab, string> = {
   profile: "프로필·브랜드",
   operations: "운영 체계",
+  subjects: "과목 운영",
   billing: "수납·청구",
   notifications: "알림·약관",
   permissions: "역할·권한",
@@ -42,6 +45,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
 const VALID_TABS: OwnerTab[] = [
   "profile",
   "operations",
+  "subjects",
   "billing",
   "notifications",
   "permissions",
@@ -61,6 +65,7 @@ function resolveTab(sp: Sp): OwnerTab {
 const FACES: Face[] = [
   { key: "profile", label: TAB_LABEL.profile, href: "/owner", group: "설정" },
   { key: "operations", label: TAB_LABEL.operations, href: "/owner?tab=operations", group: "설정" },
+  { key: "subjects", label: TAB_LABEL.subjects, href: "/owner?tab=subjects", group: "설정" },
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing", group: "설정" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
@@ -117,6 +122,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "operations" ? (
         <OperationsSection initial={settings.operations} classrooms={classrooms} />
       ) : null}
+      {tab === "subjects" ? <SubjectsSection initial={settings.operations} /> : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "permissions" ? <PermissionsSection initial={settings.permissions} /> : null}
