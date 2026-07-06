@@ -1,13 +1,14 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
-import type { DayOfWeek } from "@/features/timetable/lib/periods";
+import { ENGLISH_PERIODS, type DayOfWeek } from "@/features/timetable/lib/periods";
 import {
   buildSlotIntervals,
   buildTenMinuteRows,
   minToHM,
   packGroups,
   slotRowSpan,
+  timeToMin,
   type ClassInterval,
 } from "@/features/timetable/lib/ten-minute-grid";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
@@ -44,6 +45,17 @@ const GRID = "border-line";
 // 강사 밴드 경계 세로줄 — 일반 격자(연회색)와 구분되게 **찐한 회색 2px**(사용자 지정).
 // border-r-ink/40(변 전용 색)이 GRID의 shorthand border-color를 우선한다.
 const TEACHER_EDGE = "border-r-2 border-r-ink/40";
+// 수업시간(교시) 경계 가로줄 — 세로 강사 경계선과 동일 톤(시트의 검은 교시선 미러, 사용자 지정).
+// 수업 블록 하단은 항상, 빈 영역·시각열은 영어 교시 경계 시각에서만(스팬 블록 내부는 안 끊김).
+const PERIOD_EDGE = "border-b-2 border-b-ink/40";
+// 교시 경계 시각(분) = ENGLISH_PERIODS 전 교시의 시작·끝 합집합.
+const PERIOD_EDGE_MINS = new Set<number>();
+for (const p of Object.values(ENGLISH_PERIODS)) {
+  const a = timeToMin(p.startTime);
+  const b = timeToMin(p.endTime);
+  if (a != null) PERIOD_EDGE_MINS.add(a);
+  if (b != null) PERIOD_EDGE_MINS.add(b);
+}
 
 // ⚠️ [[#71]] border-collapse×sticky: 병합 모드에선 셀 테두리가 표에 속해 가로 스크롤 시 sticky
 // 좌측 시각열의 좌 프레임·우 divider가 표와 함께 밀려 사라진다. box-shadow도 병합모드 td에선 불안정
@@ -150,6 +162,11 @@ export function TeacherGridView({
   // 강사 경계 세로줄 — 그 강사의 마지막 요일·마지막 레인(또는 거기까지 걸친 그룹 셀)에 2px.
   const isTeacherBoundary = (col: { laneCount: number }, isLastDay: boolean, laneEnd: number) =>
     isLastDay && laneEnd === col.laneCount;
+  // 교시 경계 가로줄 — 이 행의 하단(=다음 행 시작)이 교시 경계 시각이면 진한 2px, 아니면 옅은 1px.
+  const periodBottom = (nextRi: number) => {
+    const m = rows[nextRi]?.startMin;
+    return m == null || PERIOD_EDGE_MINS.has(m) ? PERIOD_EDGE : "border-b";
+  };
 
   return (
     <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">
@@ -211,7 +228,7 @@ export function TeacherGridView({
             <tr key={row.key}>
               {/* 시각열 — sticky left. 매 행 라벨(시트 미러), 정시 라벨만 강조. 좌·우 경계는 가상요소(#71). */}
               <td
-                className={`bg-bg-soft sticky left-0 z-10 border-b px-1 py-0 text-right align-top font-mono leading-none ${GRID} ${STICKY_EDGES} ${
+                className={`bg-bg-soft sticky left-0 z-10 px-1 py-0 text-right align-top font-mono leading-none ${periodBottom(ri + 1)} ${GRID} ${STICKY_EDGES} ${
                   row.isHour ? "text-foreground text-[9px] font-bold" : "text-text-faint text-[9px]"
                 }`}
                 style={{ height: ROW_H }}
@@ -230,7 +247,7 @@ export function TeacherGridView({
                       return (
                         <td
                           key={key}
-                          className={`bg-bg-soft/40 border-b ${GRID} ${
+                          className={`bg-bg-soft/40 ${periodBottom(ri + 1)} ${GRID} ${
                             isTeacherBoundary(col, isLastDay, li + 1) ? TEACHER_EDGE : "border-r"
                           }`}
                         />
@@ -244,7 +261,7 @@ export function TeacherGridView({
                         key={key}
                         rowSpan={span}
                         colSpan={group.laneWidth}
-                        className={`border-b p-0 align-top ${GRID} ${
+                        className={`p-0 align-top ${PERIOD_EDGE} ${GRID} ${
                           isTeacherBoundary(col, isLastDay, group.laneStart + group.laneWidth)
                             ? TEACHER_EDGE
                             : "border-r"

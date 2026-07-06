@@ -73,7 +73,8 @@ const MATH_PERIODS: Record<string, PeriodTime> = {
 // ⚠️ 강사별영어시간표는 10분 단위로 쪼개 놓은 것(시작시각 일치 시 통합에 수식 출력)이라 교시 기준이 아님.
 // 오후 16:20~17:40 구간은 40분·60분 두 수업 체계가 공존해 4~7교시 시간대가 일부 겹침(시트 실제 구조).
 // 끝시각은 통합 col A의 시작시각별 최빈값(예 16:20 시작은 →17:00이 다수, →17:20 60분반은 소수).
-const ENGLISH_PERIODS: Record<string, PeriodTime> = {
+// (export: 강사뷰 10분 격자가 교시 경계 가로줄 위치로 소비 — 2026-07-06)
+export const ENGLISH_PERIODS: Record<string, PeriodTime> = {
   "1": { startTime: "14:20", endTime: "15:00" },
   "2": { startTime: "15:00", endTime: "15:40" },
   "3": { startTime: "15:40", endTime: "16:20" },
