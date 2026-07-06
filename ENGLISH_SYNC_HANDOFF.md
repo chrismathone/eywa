@@ -60,6 +60,36 @@
   기본뷰 영어 1교시 14:20~15:00 무회귀 / 학생 상세 수업 탭 "9-11교시" 라벨 정합 / **verify-sheet-parity diff 0** / 콘솔 에러 0.
 - CLAUDE.md **KNOWN_EXCEPTION(영어 교시 하드코딩) 해소 기록** 3곳 갱신.
 
+### 🟢 2026-07-06 (3차) — 과목 삭제 = "다른 과목에 흡수" + 두 탭 빈공간 정리
+
+사용자 요청 2건: ① 운영체계 탭 빈공간 정리 ② 운영 과목 삭제 시 그 과목의 데이터를 다른 과목에 전부 흡수.
+
+- **빈공간 정리**: 운영 체계 = 키 높이별 카드 짝([평일|주말]·[학년|직급]·공휴일 span2) + '과목 운영 탭' 링크.
+  과목 운영 = 좌(운영 과목 표) ┃ 우(과목별 설정 **접이식 details + 요약 배지**) 2열 — 빈 풀폭 카드 5장 해소.
+  SubjectListEditor 입력 폭 축소(반폭 카드 행 랩 방지).
+- **과목 흡수 삭제**: X 클릭 → 다이얼로그가 사용량 표시(반·담당 강사·등록/학생상담·성적·시험·레벨테스트·
+  성적목표·학습코멘트·교재단가·상담 과목별점수·원스크린 세션) → 대상 과목 선택 → **모두 흡수하고 삭제(즉시 적용)**.
+  사용 0건이면 **미사용 삭제**(실행 시점 사용량 재검증 = TOCTOU 차단, 서버 즉시 확정).
+  · **저장 표면 전수**(적대리뷰 열거 검증 통과): 스칼라 9테이블 + `users.subjects[]` + jsonb 2곳
+    (`subject_details`·`subject_progress`) + `tenant_settings` 행 제거([subject-actions.ts](src/features/owner/server/subject-actions.ts) 상단 주석이 단일 소스).
+  · **0077a RPC `absorb_subject_key`**: users 배열 치환·순서보존 dedupe + jsonb 키 개명(양쪽 객체면 to-우선
+    얕은 병합)을 **DB 원자 단일 문**으로 — 클라 루프의 동시저장(원스크린 800ms 자동저장) 유실 레이스·행당 왕복
+    타임아웃 제거. 의미 정의 = [subject-absorb.ts](src/features/owner/subject-absorb.ts) 순수 헬퍼(Vitest 8).
+    **프로덕션 DB 적용됨**(함수 생성만 — 브랜치 코드만 호출, main 무영향).
+  · 설정 쓰기는 saveOwnerSection 경유(단일 쓰기 경로) + **저장 직전 fresh 재읽기**(진행 중 다른 창 저장분 보존).
+    classes 유니크 충돌 사전점검(fetchAllPaged) + 23505 친절 매핑. 감사로그 `owner_subject_absorb`/`owner_subject_delete`.
+- **적대 리뷰(워크플로 13에이전트, find 3렌즈→verify)**: 열거 완전성 통과(빠진 표면 0) + CONFIRMED 9건
+  전부 수정 — RPC 원자화(레이스·타임아웃) / 설정 fresh 재읽기 / classes 사전점검 B2 / **SearchableSelect
+  검색창 Enter 가드**(폼 암묵 제출 — 전 사용처 공통 픽스) / 다이얼로그 native `<dialog>`+showModal(배경
+  inert·Esc·포커스 격리) / run·usage try-catch(busy 고착 방지) / **SectionForm payload 변경 시 input dispatch**
+  (버튼→state→hidden 경로가 unsaved guard에 안 잡히던 것 — owner 전 섹션 공통 픽스) / zero-usage 서버 확정.
+  REFUTED 1(fromRow 부재 revalidate — 무효화할 캐시 없음).
+- **검증**: tsc0/lint0/**test674**(subject-absorb 8 신규) + RPC BEGIN…ROLLBACK 의미검증(배열 dedupe·jsonb
+  to-우선 병합 = 순수 헬퍼와 1:1) + **라이브 E2E**(3002, 스로어웨이 과목 2개 + 4표면 합성 데이터): 다이얼로그
+  4건 카운트 → 흡수 → 4표면 전부 이동(병합 정확)·설정 행 제거·감사 metadata {moved:4, detail} → 정리 →
+  zero-usage 삭제(저장 버튼 없이 서버 확정·감사) → **원상 복구 확인**(설정 5과목·english 11교시/6가로줄/10분·residual 0).
+  실과목 스팟체크: 수학(심화) 다이얼로그 = 반 15·담당 강사 4(=highmath 마이그레이션 때 수치와 일치) → 취소.
+
 ### (이전) 2026-07-04까지
 
 | 커밋 | 내용 | 검증 | 상태 |
