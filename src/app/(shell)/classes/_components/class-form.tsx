@@ -17,6 +17,7 @@ import {
 } from "@/features/timetable/lib/periods";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
+import { conflictToast } from "@/lib/ui/conflict-toast";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
@@ -139,6 +140,16 @@ export function ClassForm({
       if (state.redirectTo) router.push(state.redirectTo);
     }
   }, [state, notifySaved, markSaved, router, clearDraft]);
+
+  // 강의실/강사 시간 충돌 등 저장 차단 경고 — 폼 하단 작은 텍스트를 놓치지 않게 가운데(top-center) 토스트 병행.
+  // state 참조가 바뀔 때(=매 제출 결과)만 발화 → 같은 충돌 재제출도 다시 알림.
+  const notifiedState = useRef<ClassFormState>(undefined);
+  useEffect(() => {
+    if (state === notifiedState.current) return;
+    notifiedState.current = state;
+    if (state?.error) conflictToast(state.error);
+    else if (state?.teacherConflict) conflictToast(`강사 시간 겹침: ${state.teacherConflict}`);
+  }, [state]);
 
   const fieldErrs = state?.fieldErrors ?? {};
 

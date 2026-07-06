@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { conflictToast } from "@/lib/ui/conflict-toast";
 import {
   AlertTriangle,
   ArrowRight,
@@ -66,6 +67,14 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
       onClose();
     }
   }, [state, router, onClose]);
+
+  // 적용 실패 경고 — 하단 작은 텍스트를 놓치지 않게 가운데(top-center) 토스트 병행(제출 결과 바뀔 때만).
+  const notifiedError = useRef<ApplyAssignState>(undefined);
+  useEffect(() => {
+    if (state === notifiedError.current) return;
+    notifiedError.current = state;
+    if (state?.error) conflictToast(state.error);
+  }, [state]);
 
   const result = useMemo(
     () => (data ? autoAssignClassrooms(data.classes, data.rooms, opts) : null),

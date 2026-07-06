@@ -386,6 +386,13 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 - 검증: typecheck0/lint0/**test723**(체계 분리·과분리 없음·위아래 패딩 유지·4·6·8 압축) + **실 프로덕션 영어 슬롯 308건 헤드리스**([_verify-compact.mts](scripts/_english_sync/_verify-compact.mts), 읽기 전용): 4교시 시작 12반 **[4,6,8]** / 4교시 시작 ② 5반 **[4,5,7,8]**(클립 0) / 1·2·8·9교시 시작 무변(위아래 유지). ⚠️ 라이브 화면은 auth 게이트로 미실행(원장 실화면 1회 확인 권장) — 순수 함수·렌더 단일소스라 by-construction.
 - ⚠️ **UX 트레이드오프(의도)**: 토글 ON이면 "4교시 시작"이 두 박스(12반/② 5반)로 나뉨 — 체계 혼합 그룹에서 사이 숨김이 가능하려면 분리가 유일한 길.
 
+### 스케줄/시간 충돌 경고 = 화면 가운데(top-center) 토스트 병행 — 전수 배선 (2026-07-06) — ✅ tsc0/lint0/test728
+사용자 제보: '강의실 스케줄 충돌' 같은 경고가 폼 하단 작은 텍스트로만 떠서 긴 폼(스케줄 그리드)에선 스크롤 밖으로 밀려 **놓치기 쉬움**(저장이 조용히 안 된 것처럼 보임). "이런 경고 메시지 전수 검사 + 가운데 알림 추가."
+- **공용 헬퍼** [`conflictToast(message)`](src/lib/ui/conflict-toast.ts): `toast.warning(msg, { position: "top-center", duration: 6000 })` — 전역 Toaster는 top-right지만 이 토스트만 개별 `position` 지정. 인라인 표시는 **맥락용으로 유지**하고 가운데 알림만 병행 추가.
+- **전수 배선(충돌 경고 4계열)**: ① [class-form](<src/app/(shell)/classes/_components/class-form.tsx>) — 강의실 스케줄 충돌(`state.error`)+강사 시간 겹침(`state.teacherConflict`) ② [enrollment-assign-dialog](src/components/enrollment-assign-dialog.tsx) — 수강 기간 겹침(`state.error`)+시간 충돌(`conflicts` prop, 열 때 1회) ③ [move-enrollment-button](<src/app/(shell)/students/[id]/_components/move-enrollment-button.tsx>) — 대상 반 기간 겹침(서버 결과 실패만; 사소한 입력검증은 인라인 유지) ④ [classroom-assign-dialog](<src/app/(shell)/classes/_components/classroom-assign-dialog.tsx>) — 자동배정 적용 실패(`state.error`; conflictsBefore 박스는 이미 큰 모달이라 그대로).
+- **발화 규약**: `useActionState` 폼은 **state 참조가 바뀔 때(=매 제출 결과)만** 발화(`notifiedState` ref로 가드) → 같은 충돌 재제출도 다시 알림, 무관 리렌더엔 안 뜸([[#67]] 계열). 로컬 state 폼(move-dialog)은 `setError`와 나란히 호출.
+- ⚠️ **새 스케줄/시간 충돌 경고를 추가할 땐** 인라인 표시 + `conflictToast(msg)`로 가운데 알림도 병행할 것(헬퍼 주석에 명시). ⚠️ 라이브 폼은 auth 게이트라 브라우저 검증 미실행 — 순수 토스트 추가라 by-construction(sonner 개별 position은 typecheck로 확인). ⚠️ enrollment-assign의 `conflicts` prop은 현재 부모가 안 넘겨 latent(인라인 박스도 동일) — 병행 토스트는 forward-compatible.
+
 ### makeedu 학생 동기화 동명이인 = makeedu_id 식별 + 강한키 매칭 + 이름충돌 시 알파벳 접미사 + '의심' 배지 (2026-07-06) — ✅ tsc0/lint0/test723 + 합성충돌 E2E + DB ROLLBACK 검증
 사용자 지적으로 makeedu↔eywa 학생 동기화 동명이인 처리 감사 → [import-students-list.cjs](scripts/_makeedu/import-students-list.cjs)의 **이름 단독 매칭 티어**가 새 동명이인(다른 학교/학년)을 기존 같은 이름 1명에 잘못 붙여 스킵시키던 갭 발견. 사용자 결정 = **접미사 방식**(테스트→테스트A→…→테스트Z→테스트AA, 엑셀식 base-26).
 - **식별 = makeedu_id(원생고유번호) 우선**. 없으면 강한 자연키만: `이름+학교core+학년 → 이름+학생전화 → 이름+보호자전화`(모호=매칭 안 함). **이름 단독·이름+학년(느슨) 티어 제거** — 동명이인이 오매칭돼 스킵되던 것 차단(학교표기 드리프트=학교core, 학년 드리프트=전화가 흡수). 전화 같으면 같은 사람(사용자 확인).

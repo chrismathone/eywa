@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { moveEnrollmentsBatch } from "@/features/enrollments/server/actions";
 import type { AssignDialogClass, AssignDialogStudent } from "@/components/enrollment-assign-dialog";
+import { conflictToast } from "@/lib/ui/conflict-toast";
 import { kstToday } from "@/lib/date-kst";
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -118,22 +119,25 @@ function MoveDialog({
       );
       if (res.error) {
         setError(res.error);
+        conflictToast(res.error);
         return;
       }
       const r0 = res.results?.[0];
       if (r0 && !r0.ok) {
         // GiST 시간겹침 등 — RPC의 sqlerrm을 친절히 감싼다.
-        setError(
-          /overlap|exclusion|23P01/i.test(r0.error ?? "")
-            ? "대상 반과 수강 기간이 겹칩니다. 적용일이나 반을 확인해 주세요."
-            : (r0.error ?? "이동에 실패했습니다"),
-        );
+        const msg = /overlap|exclusion|23P01/i.test(r0.error ?? "")
+          ? "대상 반과 수강 기간이 겹칩니다. 적용일이나 반을 확인해 주세요."
+          : (r0.error ?? "이동에 실패했습니다");
+        setError(msg);
+        conflictToast(msg);
         return;
       }
       router.refresh();
       onClose();
     } catch {
-      setError("이동 결과를 확인하지 못했습니다(네트워크 오류 등). 다시 시도해 주세요.");
+      const msg = "이동 결과를 확인하지 못했습니다(네트워크 오류 등). 다시 시도해 주세요.";
+      setError(msg);
+      conflictToast(msg);
     } finally {
       setBusy(false);
     }

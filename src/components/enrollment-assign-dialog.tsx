@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { conflictToast } from "@/lib/ui/conflict-toast";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import {
   createEnrollment,
@@ -121,6 +122,22 @@ export function EnrollmentAssignDialog({
       onClose(true);
     }
   }, [state, router, onClose]);
+
+  // 수강 기간 겹침 등 저장 차단 경고 — 인라인 텍스트 + 가운데(top-center) 토스트 병행(제출 결과 바뀔 때만).
+  const notifiedError = useRef<CreateEnrollmentState>(undefined);
+  useEffect(() => {
+    if (state === notifiedError.current) return;
+    notifiedError.current = state;
+    if (state?.error) conflictToast(state.error);
+  }, [state]);
+  // 배정 다이얼로그를 열 때 이미 시간 충돌이 있으면 한 번 가운데 알림(작은 인라인 박스 보완).
+  const prevOpen = useRef(false);
+  useEffect(() => {
+    if (open && !prevOpen.current && conflicts && conflicts.length > 0) {
+      conflictToast(`시간 충돌: ${conflicts.map((c) => `${c.day}요일 ${c.time}`).join(", ")}`);
+    }
+    prevOpen.current = open;
+  }, [open, conflicts]);
 
   if (!open) return null;
 
