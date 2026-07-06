@@ -1,7 +1,7 @@
 // 저장된 부분 설정(jsonb)을 DEFAULT_SETTINGS에 deep-merge해 "완전한" 설정으로 해석.
 // 배열·원시는 저장값이 있으면 교체, 객체는 재귀 병합. 기본 객체는 절대 변형하지 않는다(공유 참조).
 import { DEFAULT_SETTINGS } from "./defaults";
-import type { TenantSettings } from "./settings-types";
+import type { SubjectSetting, TenantSettings } from "./settings-types";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -40,12 +40,35 @@ function normalizeHolidays(arr: unknown): { date: string; name: string }[] {
     .filter((h): h is { date: string; name: string } => h !== null);
 }
 
+// 과목 행 역호환 — deepMerge가 배열을 통째 교체하므로, 새 과목별 필드(weekdayPeriods·
+// teacherViewLines·teacherViewStep, 2026-07-06)가 없는 옛 저장 행을 key 기반 기본값으로 채운다.
+// (normalizeHolidays와 같은 "읽기 시 승격" 패턴.) english=기본 교시/가로줄/step 주입 →
+// 폼·소비처가 프리필된 값을 본다. 기타 과목의 weekdayPeriods는 undefined 유지(=전역 폴백 의미 보존).
+function normalizeSubjects(arr: SubjectSetting[]): SubjectSetting[] {
+  const defaults = new Map(DEFAULT_SETTINGS.operations.subjects.map((s) => [s.key, s]));
+  return arr.map((s) => {
+    const d = defaults.get(s.key);
+    if (!d) return s;
+    // 기본값이 실제로 있는 필드만 주입(없는 과목 행에 undefined 키 노이즈를 만들지 않는다).
+    // 소비처는 어차피 `?? 10` 등으로 폴백하므로 무기본 과목은 미설정 그대로가 정확한 상태.
+    const out: SubjectSetting = { ...s };
+    if (out.weekdayPeriods === undefined && d.weekdayPeriods) out.weekdayPeriods = d.weekdayPeriods;
+    if (out.teacherViewLines === undefined && d.teacherViewLines) out.teacherViewLines = d.teacherViewLines;
+    if (out.teacherViewStep === undefined && d.teacherViewStep !== undefined) out.teacherViewStep = d.teacherViewStep;
+    return out;
+  });
+}
+
 /** 저장값(부분) + 테넌트 메타 → 완전한 설정. name 미입력 시 테넌트 학원명으로 폴백. */
 export function resolveSettings(stored: unknown, tenant: { name: string }): TenantSettings {
   const merged = deepMerge(DEFAULT_SETTINGS, stored);
   return {
     ...merged,
     profile: { ...merged.profile, name: merged.profile.name || tenant.name },
-    operations: { ...merged.operations, holidays: normalizeHolidays(merged.operations.holidays) },
+    operations: {
+      ...merged.operations,
+      subjects: normalizeSubjects(merged.operations.subjects),
+      holidays: normalizeHolidays(merged.operations.holidays),
+    },
   };
 }

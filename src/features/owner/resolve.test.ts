@@ -32,6 +32,27 @@ describe("resolveSettings", () => {
     expect(r.billing.defaultMethod).toBe(DEFAULT_SETTINGS.billing.defaultMethod);
   });
 
+  it("과목 행 역호환 — 옛 english 저장 행에 과목별 교시·강사뷰 기본값 주입, 무기본 과목은 그대로", () => {
+    // 프로덕션 실저장 형태: 새 필드(weekdayPeriods·teacherViewLines·teacherViewStep) 없는 행
+    const subjects = [
+      { key: "english", label: "영어", color: "blue" as const, weekdayGrouping: "mon-tue" as const },
+      { key: "math", label: "수학", color: "primary" as const },
+    ];
+    const r = resolveSettings({ operations: { subjects } }, { name: "X" });
+    const [eng, math] = r.operations.subjects;
+    const engDefault = DEFAULT_SETTINGS.operations.subjects.find((s) => s.key === "english")!;
+    expect(eng.weekdayPeriods).toEqual(engDefault.weekdayPeriods);
+    expect(eng.teacherViewLines).toEqual(engDefault.teacherViewLines);
+    expect(eng.teacherViewStep).toBe(10);
+    // 저장값이 이미 있으면 주입하지 않음(사용자 값 보존)
+    const custom = [{ ...subjects[0], teacherViewStep: 30 as const, teacherViewLines: ["18:00"] }];
+    const r2 = resolveSettings({ operations: { subjects: custom } }, { name: "X" });
+    expect(r2.operations.subjects[0].teacherViewStep).toBe(30);
+    expect(r2.operations.subjects[0].teacherViewLines).toEqual(["18:00"]);
+    // math는 기본에 해당 필드가 없어 undefined 키 노이즈 없이 원형 유지
+    expect(math).toEqual(subjects[1]);
+  });
+
   it("기본 객체를 변형하지 않는다(공유 참조 안전)", () => {
     resolveSettings({ profile: { name: "A" } }, { name: "B" });
     // 다음 호출에 이전 호출의 name이 새어나오면 안 됨

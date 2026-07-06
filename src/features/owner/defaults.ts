@@ -1,6 +1,8 @@
 // DEFAULT_SETTINGS — 설정값이 없을 때의 폴백 = 현재 코드에 하드코딩된 값들.
 // 저장된 행이 없거나 일부 키가 비면 이 값으로 채워 "오늘과 동일한 동작"을 보장(resolve.ts).
 // profile.name은 여기서 비우고 resolver가 tenants.name으로 채운다(테넌트별 실제 학원명).
+import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
+import { DEFAULT_TEACHER_VIEW_LINES } from "@/features/timetable/lib/ten-minute-grid";
 import type { TenantSettings } from "./settings-types";
 
 // 평일 표준 교시(8교시·55분) — periods.ts MATH_PERIODS 이식.
@@ -78,11 +80,20 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   },
   operations: {
     // 과목 — 현재 SUBJECT_LABEL 중복 맵 이식(단일 소스). color=Pill 토큰.
+    // 영어는 과목 전용 평일 교시(내장 11교시)·강사별시간표 기본(가로줄 6시각·격자 10분)을 프리필(2026-07-06).
     subjects: [
       { key: "math", label: "수학", color: "primary", weekdayGrouping: "mon-thu" },
       // 수학(심화)는 학원 고유 과목이라 표준키 대신 subject_N 계열로 통일(2026-06-19, highmath→subject_1 마이그레이션).
       { key: "subject_1", label: "수학(심화)", color: "primary", weekdayGrouping: "mon-thu" },
-      { key: "english", label: "영어", color: "blue", weekdayGrouping: "mon-tue" },
+      {
+        key: "english",
+        label: "영어",
+        color: "blue",
+        weekdayGrouping: "mon-tue",
+        weekdayPeriods: ENGLISH_WEEKDAY_PERIOD_LIST,
+        teacherViewLines: DEFAULT_TEACHER_VIEW_LINES,
+        teacherViewStep: 10,
+      },
       { key: "science", label: "과학", color: "purple", weekdayGrouping: "none" },
       { key: "korean", label: "국어", color: "rose", weekdayGrouping: "mon-thu" },
     ],

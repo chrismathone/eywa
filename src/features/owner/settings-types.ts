@@ -25,12 +25,24 @@ export const periodTimeSchema = z.object({
 });
 export type PeriodTimeRow = z.infer<typeof periodTimeSchema>;
 
+// 강사뷰(강사별시간표) 격자 단위(분) — 60의 약수만(정시선·rowSpan·가로줄 스냅 예측 가능성).
+export const TEACHER_VIEW_STEPS = [5, 10, 15, 20, 30, 60] as const;
+export type TeacherViewStep = (typeof TEACHER_VIEW_STEPS)[number];
+
 export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
   color: z.enum(SUBJECT_COLORS).default("neutral"),
   // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
   weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
+  // 과목 전용 평일 교시(미설정/빈 배열 = 폴백: 영어=내장 11교시, 그 외=전역 평일 교시). 주말은 전역 공통.
+  weekdayPeriods: z.array(periodTimeSchema).max(20).optional(),
+  // 강사뷰(강사별시간표) 내부 가로줄 시각("HH:MM") — 큰 섹션 경계 표시. 미설정 = 영어 기본 6시각.
+  teacherViewLines: z.array(z.string().regex(HHMM, "HH:MM 형식")).max(40).optional(),
+  // 강사뷰 격자 단위(분). 미설정 = 10.
+  teacherViewStep: z
+    .union([z.literal(5), z.literal(10), z.literal(15), z.literal(20), z.literal(30), z.literal(60)])
+    .optional(),
 });
 export type SubjectSetting = z.infer<typeof subjectSchema>;
 
