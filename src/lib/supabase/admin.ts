@@ -7,8 +7,9 @@ import { createClient } from "@supabase/supabase-js";
  * shared-secret check, or internal cron jobs). Never expose to the browser.
  */
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // trim — 배포 env 값에 실수로 섞인 앞뒤 공백/개행 방어(anon 키 개행이 Realtime을 깨뜨린 이슈와 동류).
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!url || !key) throw new Error("Supabase admin env missing");
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 
 // React cache() dedupes per-request — every query in a single page render
 // reuses the same client instance (and the same parsed cookie store).
@@ -8,8 +9,8 @@ export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {

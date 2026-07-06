@@ -2676,6 +2676,22 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 `STICKY_EDGES`·`periodDivider`. (대안: 표를 `border-separate border-spacing-0`로 바꾸면 셀이 테두리를 소유해 sticky를 따라오나,
 외곽/이중선 처리가 번거로워 미채택.)
 
+### 72. Realtime WS 무한 재연결(콘솔 폭주) = 배포 env의 anon 키 끝 개행이 apikey를 `%0A`로 오염 (2026-07-06)
+프로덕션(Vercel) 브라우저 콘솔에 `wss://…/realtime/v1/websocket?apikey=…%0A&vsn=2.0.0` 연결 실패가 수백 줄 폭주.
+원인 = **`NEXT_PUBLIC_SUPABASE_ANON_KEY` 값 끝에 붙은 개행(`\n`)** — Vercel env UI 붙여넣기 시 흔한 실수. Supabase
+realtime-js가 그 키로 WS URL을 만들며 `\n`이 `%0A`로 인코딩돼 **서버가 apikey를 거부 → "transport failure" → 무한 재연결**.
+실측(node): 깨끗한 키=`SUBSCRIBED` / 키+`\n`=`CHANNEL_ERROR: transport failure`(콘솔 증상과 정확히 일치).
+- **폭주 증폭 = 채널 오프너**: Realtime 채널을 여는 곳 = [edit-presence.tsx](src/features/presence/edit-presence.tsx)(수정중
+  presence, **창=iframe마다 마운트** → 각 창이 실패 WS를 각자 무한 재시도, **폴백 없음**) + 회의/등록상담 status-watcher
+  (처리 중일 때만 + 5초 폴링 폴백이라 그나마 degrade). ⚠️ `BroadcastChannel`(window-busy·record-channel)은 Supabase 아님(브라우저 로컬, 무관).
+- **로컬 아닌 배포 env 문제**: `.env.local`은 `cat -A`로 트레일링 `\n`/`^M` 없음(깨끗) → 브라우저 URL의 `%0A`는 **빌드에
+  박힌 Vercel env 값**에서 옴(`NEXT_PUBLIC_*`는 빌드 시 문자열로 인라인).
+- **코드 하드닝(재발 방지)**: 신규 [lib/supabase/env.ts](src/lib/supabase/env.ts)가 공개 URL·anon 키를 **`.trim()`으로 읽어
+  단일 소스화** → client/server/proxy가 사용. admin.ts는 service_role 키도 인라인 trim. ⚠️ **`.trim()`은 런타임에 실행**되므로
+  **이 코드만 재배포하면 Vercel env를 안 고쳐도 개행이 런타임에 제거돼 폭주 소멸**(env 정리는 위생상 병행 권장).
+- **교훈**: 배포 UI 붙여넣기 env(특히 클라 번들에 박히는 `NEXT_PUBLIC_*`)는 트레일링 개행/공백이 섞이기 쉽다 → **키를
+  URL/헤더/WS apikey로 넘기는 소비처는 `.trim()`으로 방어**. 증상이 "WS 무한 재연결 + `%0A`"면 이 케이스.
+
 ---
 
 ## 마이그레이션 & 시드 흐름

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 
 /**
  * 미들웨어 세션 갱신(표준 @supabase/ssr 패턴) — **지속 로그인의 핵심**.
@@ -45,8 +46,8 @@ export async function updateSession(request: NextRequest) {
   // ── 세션 갱신: getClaims가 refresh를 유발하면 setAll이 갱신 쿠키를 요청·응답 양쪽에 반영한다. ──
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {
