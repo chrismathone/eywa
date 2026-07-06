@@ -38,6 +38,8 @@ export type AssignDialogClass = {
   studentCount: number;
   /** 반 운영 요일(분리등원 후보). 없으면 등원 요일 선택 미표시. */
   days?: string[];
+  /** 스케줄 요약("월·목 14:20") — 반 옵션에서 무슨 요일·몇 시인지 표시. */
+  scheduleLabel?: string;
 };
 
 function Submit() {
@@ -179,7 +181,7 @@ export function EnrollmentAssignDialog({
                 options={classes.map((c) => ({
                   value: c.id,
                   label: c.className,
-                  hint: `${subjects.labelOf(c.subject)}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
+                  hint: `${subjects.labelOf(c.subject)}${c.scheduleLabel ? ` · ${c.scheduleLabel}` : ""}${c.teacherName ? ` · ${c.teacherName}` : ""} · ${c.studentCount}명`,
                 }))}
               />
             </div>

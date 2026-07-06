@@ -10,9 +10,27 @@ import {
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
+import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
+import { MoveEnrollmentButton } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
+
+const DAY_CODE_LABEL: Record<string, string> = {
+  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
+};
+const DAY_CODE_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** 반 운영 요일(+시작시각) → "월·목 14:20 · 화 16:00"(같은 시각 요일 묶음). 반 옵션 힌트용. */
+function formatClassSchedule(days: { day: string; start: string | null }[]): string {
+  if (!days.length) return "";
+  const byTime = new Map<string, string[]>();
+  for (const d of [...days].sort((a, b) => DAY_CODE_ORDER.indexOf(a.day) - DAY_CODE_ORDER.indexOf(b.day))) {
+    const t = d.start ? d.start.slice(0, 5) : "";
+    (byTime.get(t) ?? byTime.set(t, []).get(t)!).push(DAY_CODE_LABEL[d.day] ?? d.day);
+  }
+  return [...byTime.entries()].map(([t, ds]) => `${ds.join("·")}${t ? ` ${t}` : ""}`).join(" · ");
+}
 
 // 요일 chip 색(ijw DAY_COLORS 대응 — eywa 토큰).
 const DAY_CHIP: Record<string, string> = {
@@ -49,7 +67,18 @@ export async function ClassesTab({
   const past = rows.filter((r) => hasEnded(r));
 
   const activeClassIds = new Set(current.map((r) => r.classId));
-  const candidateClasses = allActiveClasses.filter((c) => !activeClassIds.has(c.id));
+  // 배정/이동 대상 = 현재 수강 중이 아닌 활성 반. 스케줄(요일·시각)·요일코드 포함.
+  const candidateClasses: AssignDialogClass[] = allActiveClasses
+    .filter((c) => !activeClassIds.has(c.id))
+    .map((c) => ({
+      id: c.id,
+      className: c.className,
+      subject: c.subject,
+      teacherName: c.teacherName,
+      studentCount: c.studentCount,
+      days: c.days.map((d) => d.day),
+      scheduleLabel: formatClassSchedule(c.days),
+    }));
 
   return (
     <div className="space-y-5">
@@ -61,16 +90,12 @@ export async function ClassesTab({
         subjects={subjects}
         canEnd={canEnd}
         canEditDates={canEditDates}
+        moveTargets={candidateClasses}
+        moveStudent={{ id: student.id, name: student.name, grade: student.grade }}
         action={
           <StudentAssignAction
             student={{ id: student.id, name: student.name, grade: student.grade }}
-            classes={candidateClasses.map((c) => ({
-              id: c.id,
-              className: c.className,
-              subject: c.subject,
-              teacherName: c.teacherName,
-              studentCount: c.studentCount,
-            }))}
+            classes={candidateClasses}
           />
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
@@ -89,6 +114,8 @@ function Section({
   subjects,
   canEnd,
   canEditDates,
+  moveTargets,
+  moveStudent,
   action,
   note,
 }: {
@@ -99,10 +126,14 @@ function Section({
   subjects: SubjectMaps;
   canEnd: boolean;
   canEditDates: boolean;
+  /** 반 이동 대상 후보(수강 중 섹션에서만) — 있으면 행에 '반 이동' 버튼. */
+  moveTargets?: AssignDialogClass[];
+  /** 반 이동 다이얼로그 헤더용 학생 정보. */
+  moveStudent?: { id: string; name: string; grade: string | null };
   action?: React.ReactNode;
   note?: string;
 }) {
-  // 수강 종료 컬럼: 쓰기 권한 + 비-지난 섹션에서만. 셀 버튼은 재원중(end_date==null)에만 —
+  // 수강 종료/반 이동 컬럼: 쓰기 권한 + 비-지난 섹션에서만. 셀 버튼은 재원중(end_date==null)에만 —
   // 이미 종료일이 있는 행엔 버튼을 숨겨 "종료된 행 재클릭 시 팝업 반복" 버그를 막는다.
   const showEndCol = canEnd && kind !== "past";
   return (
@@ -167,7 +198,17 @@ function Section({
                   {showEndCol ? (
                     <td className="px-2 py-2.5 text-right">
                       {r.endDate == null ? (
-                        <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
+                        <div className="inline-flex items-center gap-1.5">
+                          {moveTargets && moveStudent ? (
+                            <MoveEnrollmentButton
+                              enrollmentId={r.enrollmentId}
+                              student={moveStudent}
+                              currentClassName={r.className}
+                              classes={moveTargets}
+                            />
+                          ) : null}
+                          <EndEnrollmentButton enrollmentId={r.enrollmentId} studentId={studentId} className={r.className} />
+                        </div>
                       ) : null}
                     </td>
                   ) : null}
