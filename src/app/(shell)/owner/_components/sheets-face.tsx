@@ -14,6 +14,7 @@ import { MakeeduSyncCard } from "./makeedu-sync-card";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
+import { IjwSyncCard } from "./ijw-sync-card";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.
@@ -70,6 +71,9 @@ export async function SheetsFace({
       />
       {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
       <MakeeduPushCard candidates={pushCandidates} />
+
+      {/* Eywa 2.0 → 구 Eywa(ijw-calander) 수학 시간표 동기화 */}
+      <IjwSyncCard />
 
       <div className="space-y-5">
       <header className="border-border border-b pb-3">
