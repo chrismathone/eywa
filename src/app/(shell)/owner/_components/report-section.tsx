@@ -15,8 +15,9 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
 
   return (
     <SectionForm section="report" payload={r}>
-      {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목(세로 목록) — 양 열이 균형 있게 채워지도록. */}
-      <div className="grid items-start gap-4 xl:grid-cols-2">
+      {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려
+          내용이 짧아도 카드가 열을 끝까지 채운다(우측 하단 빈 배경 제거). */}
+      <div className="grid items-stretch gap-4 xl:grid-cols-2">
         <div className="flex flex-col gap-4">
           <SettingsCard
             title="머리글"
