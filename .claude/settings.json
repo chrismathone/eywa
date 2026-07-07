@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [".claude/hooks/guard.cjs"],
+            "timeout": 10,
+            "statusMessage": "eywa 안전 가드 확인 중"
+          }
+        ]
+      }
+    ]
+  }
+}
