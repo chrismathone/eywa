@@ -8,7 +8,26 @@ import { DeltaChip } from "./delta-chip";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
-export type SubjectReport = { draft: string; sent: boolean; shareToken?: string };
+// classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
+export type SubjectReport = { draft: string; sent: boolean; shareToken?: string; classnoteStatus?: string };
+
+/** classnote_status → 표시 라벨 + 색. */
+function classnoteBadge(status?: string): { label: string; cls: string } | null {
+  switch (status) {
+    case "queued":
+      return { label: "ClassNote 발송 대기", cls: "text-text-dim" };
+    case "processing":
+      return { label: "ClassNote 처리 중", cls: "text-text-dim" };
+    case "success":
+      return { label: "ClassNote 발송 완료", cls: "text-primary" };
+    case "failed":
+      return { label: "ClassNote 발송 실패", cls: "text-danger" };
+    case "too_old":
+      return { label: "ClassNote 발송 제외(오래됨)", cls: "text-text-dim" };
+    default:
+      return null;
+  }
+}
 
 function fmt(t: TestScore) {
   return t.score == null ? "미입력" : `${t.score}/${t.max}`;
@@ -65,6 +84,7 @@ export function ReportCard({
   onAutoWrite,
   generatingSubject,
   onSend,
+  onQueueClassnote,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -76,6 +96,7 @@ export function ReportCard({
   onAutoWrite: (subjectName: string) => void;
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
   onSend: (subjectName: string, channel: string) => void;
+  onQueueClassnote: (subjectName: string) => void; // ClassNote 발송 큐 적재
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, student.subjects.length - 1);
@@ -87,6 +108,7 @@ export function ReportCard({
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
   const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
+  const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -194,8 +216,21 @@ export function ReportCard({
           />
         </div>
 
+        {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            title="저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
+            onClick={() => onQueueClassnote(subjectName)}
+          >
+            ClassNote 발송
+          </Button>
+          {cnBadge ? <span className={`text-[11px] font-semibold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
+        </div>
+
         <div className="flex flex-wrap gap-1.5">
           <Button
+            variant="outline"
             size="sm"
             title="저장하면 아래에 학부모 공유 링크가 생성됩니다 — 카톡/문자에 붙여 보내세요"
             onClick={() => onSend(subjectName, "카카오톡")}

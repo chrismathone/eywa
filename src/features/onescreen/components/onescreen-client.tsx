@@ -7,7 +7,12 @@ import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
-import { generateReportComment, saveLessonReport, saveOnescreenSession } from "../server/actions";
+import {
+  generateReportComment,
+  saveAndQueueClassnote,
+  saveLessonReport,
+  saveOnescreenSession,
+} from "../server/actions";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { OneScreenHubBar } from "./hub-bar";
@@ -222,43 +227,46 @@ export function OneScreenClient({
       setGenSubject((cur) => (cur === subjectName ? null : cur));
     }
   }
-  async function sendSubject(subjectName: string, channel: string) {
-    if (!selected) return;
+  // 저장 입력(보고서 필드)을 과목별로 조립 — sendSubject·queueClassnote 공용. 초안 없으면 자동 작성분 사용.
+  function buildSaveInput(subjectName: string) {
+    if (!selected) return null;
     const idx = selected.subjects.findIndex((su) => su.name === subjectName);
     const su = selected.subjects[idx];
-    // 초안이 비어 있으면 그 과목 초안을 자동 작성해 본문으로 사용
     const existing = reports[selected.id]?.[subjectName];
     const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(selected, idx);
     const examInfo = [
-      selected.tests.daily.score != null
-        ? `일일 ${selected.tests.daily.score}/${selected.tests.daily.max}`
-        : null,
-      selected.tests.check.score != null
-        ? `확인 ${selected.tests.check.score}/${selected.tests.check.max}`
-        : null,
+      selected.tests.daily.score != null ? `일일 ${selected.tests.daily.score}/${selected.tests.daily.max}` : null,
+      selected.tests.check.score != null ? `확인 ${selected.tests.check.score}/${selected.tests.check.max}` : null,
     ]
       .filter(Boolean)
       .join(", ");
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
     const dailyTest =
-      selected.tests.daily.score != null
-        ? `${selected.tests.daily.max}문제 중 ${selected.tests.daily.score}개`
-        : "";
+      selected.tests.daily.score != null ? `${selected.tests.daily.max}문제 중 ${selected.tests.daily.score}개` : "";
     const checkTest =
-      selected.tests.check.score != null
-        ? `${selected.tests.check.max}문제 중 ${selected.tests.check.score}개`
-        : "";
+      selected.tests.check.score != null ? `${selected.tests.check.max}문제 중 ${selected.tests.check.score}개` : "";
+    return {
+      draft,
+      input: {
+        studentId: selected.id,
+        progress: su ? `${su.name} ${su.today}`.trim() : "",
+        examInfo,
+        homeworkScore: selected.homework,
+        dailyTest,
+        checkTest,
+        attitude: selected.attitude ?? "",
+        notes: draft,
+        subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
+      },
+    };
+  }
 
-    const res = await saveLessonReport({
-      studentId: selected.id,
-      progress: su ? `${su.name} ${su.today}`.trim() : "",
-      examInfo,
-      homeworkScore: selected.homework,
-      dailyTest,
-      checkTest,
-      attitude: selected.attitude ?? "",
-      notes: draft,
-    });
+  async function sendSubject(subjectName: string, channel: string) {
+    if (!selected) return;
+    const built = buildSaveInput(subjectName);
+    if (!built) return;
+    const { draft, input } = built;
+    const res = await saveLessonReport(input);
     if (!res.ok) {
       toast.error(res.error ?? "보고서 저장에 실패했습니다");
       return;
@@ -284,6 +292,37 @@ export function OneScreenClient({
       // 카톡/문자: 아직 자동발송(알림톡)은 미연동 → 학부모 공개 링크를 생성해 강사가 직접 복사·전달.
       toast.success(`${subjectName} 보고서 저장 완료 — 아래 학부모 공유 링크를 복사해 ${channel}로 보내세요`);
     }
+  }
+
+  // ClassNote 발송 — 저장 + 큐 적재. 실제 게시는 로컬 워커가 백그라운드로(강사는 대기 안 함).
+  async function queueClassnote(subjectName: string) {
+    if (!selected) return;
+    const built = buildSaveInput(subjectName);
+    if (!built) return;
+    const student = selected;
+    const res = await saveAndQueueClassnote(built.input);
+    if (!res.ok) {
+      toast.error(res.error ?? "ClassNote 발송 큐 적재에 실패했습니다");
+      return;
+    }
+    patchReport(student.id, subjectName, (r) => ({
+      ...r,
+      draft: built.draft,
+      sent: true,
+      shareToken: res.shareToken ?? r.shareToken,
+      classnoteStatus: res.status,
+    }));
+    const msg =
+      res.status === "queued"
+        ? "발송 대기 — 워커가 자동으로 게시합니다"
+        : res.status === "success"
+          ? "이미 발송 완료된 보고서입니다"
+          : res.status === "processing"
+            ? "이미 처리 중입니다"
+            : res.status === "too_old"
+              ? "오래된 보고서라 발송에서 제외됩니다"
+              : "대기 중";
+    toast.success(`${subjectName} ClassNote — ${msg}`);
   }
 
   return (
@@ -342,6 +381,7 @@ export function OneScreenClient({
                 onAutoWrite={autoWriteSubject}
                 generatingSubject={genSubject}
                 onSend={sendSubject}
+                onQueueClassnote={queueClassnote}
               />
             </div>
           </>
