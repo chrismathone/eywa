@@ -93,7 +93,7 @@ function DeleteForm({ id }: { id: string }) {
   );
 }
 
-/** 팝업 이미지 업로드(branding 슬롯 재사용, master 전용). value=저장 경로/URL. */
+/** 팝업 이미지 업로드(branding 슬롯 재사용, owner 쓰기 권한 — master + 위임 admin/manager). value=저장 경로/URL. */
 function PopupImageField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

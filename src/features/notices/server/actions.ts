@@ -2,7 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { POPUP_AUDIENCES, POPUP_POSITIONS } from "../audience";
@@ -42,10 +42,15 @@ function readForm(formData: FormData) {
   };
 }
 
+// 팝업 공지 = owner 콘솔(관리 › 팝업 공지) 전용 → 게이트도 owner 메뉴 쓰기(override 반영, #58) —
+// 원장이 admin/manager에게 owner를 위임하면 함께 열린다(owner 콘솔 나머지와 정합). 대시보드 '공지'(broadcast)는
+// dashboard 소속이라 별개(canManageStaff 유지).
 async function gate() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
-  if (!canManageStaff(user.systemRole)) return { error: "공지 팝업 권한이 없습니다" as const };
+  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" as const };
+  }
   return { user };
 }
 
