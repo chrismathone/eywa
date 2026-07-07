@@ -164,7 +164,7 @@ export function HapbanCell({
   });
 
   return (
-    <div className={`overflow-hidden rounded-[2px] transition ${hasBottom ? "flex min-h-0 flex-1 flex-col" : ""}`}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2px] transition">
       {subSlot === "bottom" ? <SubSlotBand /> : null}
       {/* 헤더 가로 N등분 — 반마다 자기 색·인덱스·재원수. 클릭=그 반 상세 창, 드롭=그 반으로 이동. */}
       <div className="flex shrink-0">
@@ -184,8 +184,8 @@ export function HapbanCell({
       {showRoster ? (
         <div
           ref={setBodyRef}
-          className={`text-[13px] ${anyHandover ? "bg-blue-soft" : "bg-card"} ${
-            hasBottom ? "flex min-h-0 flex-1 flex-col overflow-y-auto" : ""
+          className={`tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto text-[13px] ${
+            anyHandover ? "bg-blue-soft" : "bg-card"
           } ${isOver ? "ring-primary ring-2 ring-inset" : ""}`}
         >
           {/* 재원 통합 명단(중복 제거 + 인덱스 배지) — 행 단위 own* 바인딩이라 드래그/Delete/요일편집 정확. */}

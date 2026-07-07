@@ -114,9 +114,9 @@ export function ClassCell({
   return (
     <div
       ref={setDroppableRef}
-      className={`overflow-hidden rounded-[2px] transition ${
-        hasBottom ? "flex min-h-0 flex-1 flex-col" : ""
-      } ${isOver ? "ring-primary ring-2" : ""}`}
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2px] transition ${
+        isOver ? "ring-primary ring-2" : ""
+      }`}
     >
         {/* ijw식 헤더 분할 — 1-2 수업이면 위에 빈 1-1 밴드를 둬 "이건 2번째 칸 수업"임을 한눈에. 학생 영역은 풀 유지. */}
         {subSlot === "bottom" ? (
@@ -168,9 +168,11 @@ export function ClassCell({
 
         {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
         {showRoster ? (
+          // 헤더는 위에 고정(shrink-0), 학생 명단만 이 컨테이너에서 스크롤 — 스크롤바 숨김 + 위·아래 은은한
+          // 페이드(tt-cell-scroll, 스크롤 가능할 때만). 짧은 명단(스크롤 불가)이면 페이드 없음.
           <div
-            className={`text-[13px] ${handover ? "bg-blue-soft" : "bg-card"} ${
-              hasBottom ? "flex min-h-0 flex-1 flex-col overflow-y-auto" : ""
+            className={`tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto text-[13px] ${
+              handover ? "bg-blue-soft" : "bg-card"
             }`}
           >
             {/* 재원 공통(덮는 요일 전부 등원) — 상단 정렬. 분리등원 없으면 재원 전원이 여기. */}

@@ -79,7 +79,7 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
       </HoverCard>
       {/* 학생 명단(토글) — 시트 통합 탭의 반별 명단처럼 이름 세로 나열. 블록 잔여 높이를 채우고 넘치면 스크롤. */}
       {open ? (
-        <div className="bg-card divide-line/40 min-h-0 flex-1 divide-y overflow-y-auto text-[12px]">
+        <div className="tt-cell-scroll bg-card divide-line/40 min-h-0 flex-1 divide-y overflow-y-auto text-[12px]">
           {active.length === 0 ? (
             <div className="text-text-faint px-1.5 py-0.5">재원생 없음</div>
           ) : (
