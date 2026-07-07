@@ -100,8 +100,12 @@ export async function closeOrphanEnrollments(
   if (ids.length === 0) return { closedCount: 0 };
 
   // 대량 .in()은 100개 청크로 분할(URL 414 방지, B3). 청크별 count 합산.
+  // ⚠️ 종료일 = max(start_date, 오늘)로 클램프 — 미래 시작(배정 예정) 수강에 end_date=today를 넣으면
+  //    daterange(start_date, today)가 lower>upper로 throw("range lower bound must be less than or equal
+  //    to range upper bound"). 미래 시작 건은 end_date=start_date(zero-length=미활성=사실상 취소, run.ts 유령수강 픽스와 동일).
   let closedCount = 0;
   for (const part of chunkIds(ids)) {
+    // 정상(시작일 ≤ 오늘): end_date = 오늘 (한 번에).
     const { error, count } = await supabase
       .from("enrollments")
       .update(
@@ -109,9 +113,27 @@ export async function closeOrphanEnrollments(
         { count: "exact" },
       )
       .in("student_id", part)
-      .is("end_date", null);
+      .is("end_date", null)
+      .lte("start_date", today);
     if (error) return { error: error.message };
     closedCount += count ?? 0;
+
+    // 미래 시작(배정 예정): 행마다 start_date가 달라 개별 종료(end_date = 그 수강의 start_date).
+    const { data: future, error: fErr } = await supabase
+      .from("enrollments")
+      .select("id, start_date")
+      .in("student_id", part)
+      .is("end_date", null)
+      .gt("start_date", today);
+    if (fErr) return { error: fErr.message };
+    for (const e of future ?? []) {
+      const { error: uErr } = await supabase
+        .from("enrollments")
+        .update({ end_date: e.start_date, withdrawal_reason: "퇴원에 따른 자동 종료" })
+        .eq("id", e.id);
+      if (uErr) return { error: uErr.message };
+      closedCount += 1;
+    }
   }
 
   revalidatePath("/admin/cleanup");
