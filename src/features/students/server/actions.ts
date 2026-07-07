@@ -223,12 +223,8 @@ export async function updateStudent(
   // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
   // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
   if (input.status === "withdrawn" && prevStatus !== "withdrawn") {
-    const { error: enrErr } = await supabase
-      .from("enrollments")
-      .update({ end_date: input.withdrawnAt })
-      .eq("student_id", id)
-      .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    const enrErr = await closeActiveEnrollmentsClamped(supabase, id, input.withdrawnAt ?? null);
+    if (enrErr) return { error: enrErr };
   } else if (input.status === "enrolled" && prevStatus !== "enrolled") {
     // 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 시간표 '퇴원'에 남음.
     const withdrawnDate = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
@@ -273,6 +269,52 @@ async function reopenEnrollmentsClosedByWithdrawal(
     .eq("student_id", studentId)
     .eq("end_date", withdrawnDate);
   return error?.message ?? null;
+}
+
+/**
+ * 학생의 활성(end_date null) 수강을 date로 종료한다. ⚠️ 미래 시작(start_date > date) 수강에
+ * end_date=date를 넣으면 daterange(start_date, date)가 lower>upper로 throw("range lower bound must be
+ * less than or equal to range upper bound") → 그 건은 end_date=start_date(zero-length=미활성=사실상 취소)로 클램프.
+ * (admin 데이터정리 closeOrphanEnrollments와 동일 원리 — 그쪽은 다중 학생 청크판.) date 없으면 원래 동작(미종료).
+ */
+async function closeActiveEnrollmentsClamped(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  studentId: string,
+  date: string | null,
+  extra: Record<string, unknown> = {},
+): Promise<string | null> {
+  if (!date) {
+    const { error } = await supabase
+      .from("enrollments")
+      .update({ end_date: null, ...extra })
+      .eq("student_id", studentId)
+      .is("end_date", null);
+    return error?.message ?? null;
+  }
+  // 정상(시작일 ≤ date): 일괄 end_date=date.
+  const { error } = await supabase
+    .from("enrollments")
+    .update({ end_date: date, ...extra })
+    .eq("student_id", studentId)
+    .is("end_date", null)
+    .lte("start_date", date);
+  if (error) return error.message;
+  // 미래 시작(배정 예정): 행마다 start_date가 달라 개별 종료(end_date = 그 수강의 start_date).
+  const { data: future, error: fErr } = await supabase
+    .from("enrollments")
+    .select("id, start_date")
+    .eq("student_id", studentId)
+    .is("end_date", null)
+    .gt("start_date", date);
+  if (fErr) return fErr.message;
+  for (const e of future ?? []) {
+    const { error: uErr } = await supabase
+      .from("enrollments")
+      .update({ end_date: e.start_date, ...extra })
+      .eq("id", e.id);
+    if (uErr) return uErr.message;
+  }
+  return null;
 }
 
 // ────────────────────── 상태 전환 모달 (퇴원/휴원/수강종료/복구) ──────────────────────
@@ -342,16 +384,9 @@ export async function changeStudentStatus(
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
 
-    // 활성 enrollment 종료
-    const { error: enrErr } = await supabase
-      .from("enrollments")
-      .update({
-        end_date: date,
-        withdrawal_reason: reasonStr,
-      })
-      .eq("student_id", id)
-      .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    // 활성 enrollment 종료 (미래 시작 수강은 end_date=start_date로 클램프 — daterange 에러 방지).
+    const enrErr = await closeActiveEnrollmentsClamped(supabase, id, date, { withdrawal_reason: reasonStr });
+    if (enrErr) return { error: enrErr };
   } else if (target === "on_hold") {
     const { error: stuErr } = await supabase
       .from("students")
@@ -424,12 +459,18 @@ export async function endSingleEnrollment(
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 미래 시작(배정 예정) 수강을 date로 종료하면 daterange(start_date, date) lower>upper로 throw →
+  // end_date=max(start_date, date)로 클램프(미래 시작 건은 start_date로 종료=zero-length).
+  const { data: enr, error: selErr } = await supabase
+    .from("enrollments")
+    .select("start_date")
+    .eq("id", enrollmentId)
+    .maybeSingle();
+  if (selErr) return { error: selErr.message };
+  const endDate = enr && String(enr.start_date) > date ? String(enr.start_date) : date;
   const { error } = await supabase
     .from("enrollments")
-    .update({
-      end_date: date,
-      withdrawal_reason: reason,
-    })
+    .update({ end_date: endDate, withdrawal_reason: reason })
     .eq("id", enrollmentId);
 
   if (error) return { error: error.message };

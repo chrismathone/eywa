@@ -97,6 +97,10 @@ export async function createEnrollment(
     if (error?.message?.includes("conflicting_period")) {
       return { error: "이 학생이 같은 시간대 다른 반에 이미 배정되어 있습니다" };
     }
+    // daterange lower>upper — 종료일이 시작일보다 빠름(원문 영어 에러 대신 친절 메시지).
+    if (error?.message?.includes("range lower bound")) {
+      return { error: "종료일이 시작일보다 빠릅니다. 날짜를 확인해 주세요." };
+    }
     return { error: error?.message ?? "수강 배정 실패" };
   }
 

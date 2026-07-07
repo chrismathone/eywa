@@ -336,6 +336,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수강 종료 daterange 에러 전수 클램프 — 미래 시작(배정 예정) 수강에 end_date=오늘 넣으면 lower>upper throw (2026-07-07) — ✅ tsc0/lint0 + 실 DB BEGIN…ROLLBACK(재현·수정)
+사용자 제보: 설정 데이터 정리 '자동 종료 실행'이 `range lower bound must be less than or equal to range upper bound` 에러. 원인 = 퇴원 학생의 **미래 시작 수강**(이정원, start_date 2026-07-09)에 `end_date=오늘(07-07)`을 넣어 `daterange(start_date, today)`가 lower>upper로 throw. 같은 패턴이 **자동 종료 4표면 전수**에 잠복.
+- **규칙**: 활성(end_date null) 수강을 특정일로 종료할 땐 **`end_date = max(start_date, date)`로 클램프** — 미래 시작 건은 `end_date=start_date`(zero-length=미활성=사실상 취소, run.ts 유령수강 픽스와 동일 원리). supabase-js가 update에서 컬럼 참조를 못 해 **2단계**(정상=`.lte("start_date",date)` 일괄 + 미래=`.gt("start_date",date)` 행별 개별).
+- **전수 배선(4표면)**: ① [admin/server/actions.ts](src/features/admin/server/actions.ts) `closeOrphanEnrollments`(데이터 정리, 다중 학생 청크) — 커밋 `a3e6e0b` ② [students/server/actions.ts](src/features/students/server/actions.ts) 공용 헬퍼 **`closeActiveEnrollmentsClamped(supabase, studentId, date, extra)`** → `changeStudentStatus`(상태 모달 퇴원)·`updateStudent`(수정 폼 퇴원) ③ 같은 파일 `endSingleEnrollment`(수강 종료 버튼, 단일 id) = 인라인 fetch+max ④ [enrollments/server/actions.ts](src/features/enrollments/server/actions.ts) `createEnrollment` = 종료일<시작일 시 원문 영어 에러 → 친절 메시지("종료일이 시작일보다 빠릅니다").
+- 검증: tsc0/lint0 + **실 DB BEGIN…ROLLBACK**(이정원 5f3c90c6: 옛 close=`range lower bound…` 에러 재현 / 헬퍼 2단계=성공[미래 1건 end_date=start_date] / 무변경). ⚠️ 라이브 폼은 auth 게이트라 브라우저 미검(순수 데이터 로직·DB 롤백으로 커버). ⚠️ **앞으로 enrollment를 특정일로 종료하는 새 코드는 반드시 이 클램프**(또는 `closeActiveEnrollmentsClamped`)를 쓸 것 — 미래 시작 수강이 흔치 않아 놓치기 쉬움.
+
 ### makeedu 역동기화 라운드트립 차단 — eywa QR접수(`[eywa 온라인 접수]`)가 재원생 상담으로 재유입되던 버그 (2026-07-07) — ✅ node --check + DB 확인·정리(1건)
 사용자 제보: 박인유가 **eywa → makeedu → eywa 이중 동기화**로 보임. DB 확인 결과 확정 — 같은 `counselSeq 5258`이 등록상담(`enrollment_consultations`, `from_public_intake` QR접수)과 학생상담(`student_consultations`, `[eywa 온라인 접수]…`) 두 테이블에.
 - **원인**: 역푸시([push-consultations.cjs](scripts/_makeedu/push-consultations.cjs))는 QR접수를 makeedu 예비상담으로 등록하고 counselSeq를 **`enrollment_consultations.makeedu_id`**에 기록 + 제목 `[eywa 온라인 접수]`. 재원생 상담 증분 동기화([sync-consultations-incremental.cjs](scripts/_makeedu/sync-consultations-incremental.cjs))의 스킵 가드 3개가 **전부 미스**: ⓑ 구분 '예비' 미해당 ⓒ 제목 `예비원생 상담`≠`[eywa 온라인 접수]` ⓓ counselSeq 중복 가드(`knownSeq`)가 **student_consultations만** 봐서 enrollment_consultations 쪽 seq를 못 잡음 → 재원생 상담으로 오적재.
