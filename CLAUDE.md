@@ -643,6 +643,8 @@ override(`retention master=none` 실존)에 같이 잠겨 있었음 → 우회 �
   (매트릭스 헤더+안내문)·[role-hierarchy.ts](src/lib/auth/role-hierarchy.ts) `ROLE_LABEL`(직원 상세/폼/급여/사이드바 폴백)·
   [staff/page.tsx](<src/app/(shell)/staff/page.tsx>)(목록 Pill+필터칩)·super-admin 테넌트 상세/역할변경 드롭다운 5곳.
   (사이드바 푸터는 `job_title` 우선이라 chrismathone은 여전히 "원장" 직함 표시 — 직급 자유텍스트는 별개.)
+  - ⚠️ **정정(2026-07-07): master 라벨 "owner" → "원장" 전역 환원**(사용자 결정 — "owner" 영문이 어색). 위 6곳(ROLE_LABEL·
+    staff ROLE_META/필터·permissions 매트릭스·super-admin page/드롭다운) master 라벨을 전부 "원장"으로. 라벨 문자열만, 권한·데이터·displayRoleFor(super_admin 위장) 불변. **앞으로 이 라벨을 "owner"로 되돌리지 말 것**(사용자가 "원장" 확정).
 - 검증: typecheck0/lint0(경고 7=baseline)/**test595** + **라이브 양방향**(localhost:3001, PSS): st2000423 → 사이드바에
   '이탈 방어' 노출 + `/retention` 200 + 매트릭스 헤더 "owner" / chrismathone → 사이드바 미노출 + `/retention` 직접 진입
   시 `/dashboard` 리다이렉트(override 정상 적용 = 우회가 super_admin에게만).

@@ -27,7 +27,7 @@ const ROLE_COLOR: Record<string, PillColor> = {
 };
 
 const ROLE_LABEL: Record<string, string> = {
-  master: "owner",
+  master: "원장",
   admin: "관리자",
   manager: "매니저",
   teacher: "강사",

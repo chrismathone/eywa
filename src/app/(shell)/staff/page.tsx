@@ -21,7 +21,7 @@ export const metadata = { title: "직원관리 — eywa" };
 const PAGE_SIZE = 50;
 
 const ROLE_META: Record<string, { label: string; color: PillColor }> = {
-  master: { label: "owner", color: "danger" },
+  master: { label: "원장", color: "danger" },
   admin: { label: "관리자", color: "blue" },
   manager: { label: "매니저", color: "blue" },
   teacher: { label: "강사", color: "primary" },
@@ -48,7 +48,7 @@ type StatusKey = "all" | "active" | "inactive" | "pending";
 
 const ROLE_FILTERS: { key: RoleKey; label: string }[] = [
   { key: "all", label: "전체" },
-  { key: "master", label: "owner" },
+  { key: "master", label: "원장" },
   { key: "admin", label: "관리자" },
   { key: "manager", label: "매니저" },
   { key: "teacher", label: "강사" },

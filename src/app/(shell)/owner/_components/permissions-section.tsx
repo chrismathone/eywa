@@ -44,7 +44,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
 };
 
 const ROLE_LABEL: Record<SystemRole, string> = {
-  master: "owner",
+  master: "원장",
   admin: "관리자",
   manager: "실장",
   teacher: "강사",
