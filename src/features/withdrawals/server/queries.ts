@@ -10,7 +10,7 @@ export type {
   WithdrawalConsultation,
   WithdrawalMetadata,
 } from "../types";
-export { REASON_LABEL, DEFAULT_WITHDRAWAL_METADATA } from "../types";
+export { REASON_LABEL, reasonLabel, reasonDisplay, DEFAULT_WITHDRAWAL_METADATA } from "../types";
 
 export type WithdrawalRow = {
   id: string;
@@ -125,6 +125,8 @@ export type WithdrawalDetail = WithdrawalRow & {
     id: string;
     className: string;
     subject: string;
+    /** 그 반의 담임(classes.teacher_id) 표시명 — 과목별 담당강사. 미배정이면 null. */
+    teacherName: string | null;
     startDate: string;
     endDate: string | null;
     reason: string | null;
@@ -148,7 +150,7 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
       .from("enrollments")
       .select(
         `id, start_date, end_date, withdrawal_reason,
-         class:class_id ( id, class_name, subject )`,
+         class:class_id ( id, class_name, subject, teacher:teacher_id ( display_name ) )`,
       )
       .eq("student_id", studentId)
       .order("start_date", { ascending: false }),
@@ -159,12 +161,17 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
   const history =
     (enrollments ?? []).map((e) => {
       const k = (Array.isArray(e.class) ? e.class[0] : e.class) as
-        | { id?: string; class_name?: string; subject?: string }
+        | { id?: string; class_name?: string; subject?: string; teacher?: unknown }
+        | undefined;
+      // classes→users 다중 FK라 컬럼명(teacher_id)으로 임베드 disambiguate. 담임 미배정이면 null.
+      const kt = (Array.isArray(k?.teacher) ? k.teacher[0] : k?.teacher) as
+        | { display_name?: string }
         | undefined;
       return {
         id: e.id,
         className: k?.class_name ?? "?",
         subject: k?.subject ?? "?",
+        teacherName: kt?.display_name ?? null,
         startDate: e.start_date,
         endDate: e.end_date,
         reason: e.withdrawal_reason ?? null,
