@@ -9,6 +9,11 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 퇴원 수강 이력 — 과목별 담임 표시 + 사유 라벨 한글화 (2026-07-07) — ✅ tsc0/lint0 + 실데이터(이유하 4행 담임·기타) · 커밋 `8c6e619`(푸시됨)
+- 퇴원 상세(`(shell)/withdrawals/[studentId]`) 수강 이력의 각 행에 **그 반 담임**(`classes.teacher_id`)을 "담임 OOO"로 표시(미배정 폴백). `getWithdrawalDetail`가 `class:class_id ( … teacher:teacher_id ( display_name ) )` 임베드로 조회 — classes→users 다중 FK라 **컬럼명(`teacher_id`)으로 disambiguate**.
+- 사유 표시를 신규 순수함수 [`reasonDisplay`](../src/features/withdrawals/types.ts)로 전환: **표준 사유 키만 한글화**(other→기타, graduated→졸업), **자유 텍스트(`"반 이동"` 112건)는 그대로 보존**.
+- ⚠️ **함정**: 기존 `reasonLabel`은 `normalizeReason`이 **미지 코드를 전부 "other"로 뭉개** "반 이동" 실사유까지 "기타"로 덮음 → 사람이 읽을 수 있는 사유를 보존해야 하는 **표시엔 `reasonDisplay`를 쓸 것**(reasonLabel은 metadata 정규화 라벨 전용).
+
 ### 시간표 기본뷰 셀 재설계 — 재원만 스크롤(페이드) + 대기/퇴원 고정 박스 + 수업 셀을 개별 교시 rowSpan 병합(ijw식 엑셀 셀병합) (2026-07-07) — ✅ tsc0/lint0/test729/build✓ + 실데이터 검증 · 커밋 `73ec6cb`·`077db9b`·`9ec24f5`·`6056cb4`(푸시됨) + 개별교시 rowSpan(이 커밋)
 사용자/직원 제보 3+2건. 셀 명단이 한 덩어리 스크롤이던 것을 3구역으로 나누고, 교시 그룹 셀의 4-1/4-2 병합 오인을 해소.
 - **① 무스크롤 + 위·아래 페이드**(재원만, 커밋 `73ec6cb`): 셀 학생 명단의 6px 스크롤바 제거 + **스크롤 가능할 때만** 은은한 페이드. 공용 [`.tt-cell-scroll`](src/app/globals.css) — 스크롤바 숨김 + `mask-image` + 스크롤드리븐 애니메이션(`animation-timeline: scroll(self)`, 비스크롤=페이드 없음, 미지원=폴백 숨김만, JS 0). ⚠️ preview 헤드리스는 애니메이션 프레임을 안 돌려 페이드 시각 관측 불가(scrollbarPx=0·마스크 부착은 확인) — 실 브라우저는 by-construction.
