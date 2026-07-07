@@ -1,0 +1,1532 @@
+# eywa — 진행 상황 (변경 로그, Tier 1)
+
+> CLAUDE.md에서 분리된 **Tier 1 참조 문서**. 날짜별 구현 로그 — 특정 기능을 다시 열 때만 훑어보세요. (CLAUDE.md는 이 내용을 매 세션 로드하지 않습니다.)
+
+## 진행 상황
+
+**12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1
++ ijw 갭 P0·P1·P2 메우기 완성.**
+디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
+실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
+
+### 수강 종료 daterange 에러 전수 클램프 — 미래 시작(배정 예정) 수강에 end_date=오늘 넣으면 lower>upper throw (2026-07-07) — ✅ tsc0/lint0 + 실 DB BEGIN…ROLLBACK(재현·수정)
+사용자 제보: 설정 데이터 정리 '자동 종료 실행'이 `range lower bound must be less than or equal to range upper bound` 에러. 원인 = 퇴원 학생의 **미래 시작 수강**(이정원, start_date 2026-07-09)에 `end_date=오늘(07-07)`을 넣어 `daterange(start_date, today)`가 lower>upper로 throw. 같은 패턴이 **자동 종료 4표면 전수**에 잠복.
+- **규칙**: 활성(end_date null) 수강을 특정일로 종료할 땐 **`end_date = max(start_date, date)`로 클램프** — 미래 시작 건은 `end_date=start_date`(zero-length=미활성=사실상 취소, run.ts 유령수강 픽스와 동일 원리). supabase-js가 update에서 컬럼 참조를 못 해 **2단계**(정상=`.lte("start_date",date)` 일괄 + 미래=`.gt("start_date",date)` 행별 개별).
+- **전수 배선(4표면)**: ① [admin/server/actions.ts](src/features/admin/server/actions.ts) `closeOrphanEnrollments`(데이터 정리, 다중 학생 청크) — 커밋 `a3e6e0b` ② [students/server/actions.ts](src/features/students/server/actions.ts) 공용 헬퍼 **`closeActiveEnrollmentsClamped(supabase, studentId, date, extra)`** → `changeStudentStatus`(상태 모달 퇴원)·`updateStudent`(수정 폼 퇴원) ③ 같은 파일 `endSingleEnrollment`(수강 종료 버튼, 단일 id) = 인라인 fetch+max ④ [enrollments/server/actions.ts](src/features/enrollments/server/actions.ts) `createEnrollment` = 종료일<시작일 시 원문 영어 에러 → 친절 메시지("종료일이 시작일보다 빠릅니다").
+- 검증: tsc0/lint0 + **실 DB BEGIN…ROLLBACK**(이정원 5f3c90c6: 옛 close=`range lower bound…` 에러 재현 / 헬퍼 2단계=성공[미래 1건 end_date=start_date] / 무변경). ⚠️ 라이브 폼은 auth 게이트라 브라우저 미검(순수 데이터 로직·DB 롤백으로 커버). ⚠️ **앞으로 enrollment를 특정일로 종료하는 새 코드는 반드시 이 클램프**(또는 `closeActiveEnrollmentsClamped`)를 쓸 것 — 미래 시작 수강이 흔치 않아 놓치기 쉬움.
+
+### makeedu 역동기화 라운드트립 차단 — eywa QR접수(`[eywa 온라인 접수]`)가 재원생 상담으로 재유입되던 버그 (2026-07-07) — ✅ node --check + DB 확인·정리(1건)
+사용자 제보: 박인유가 **eywa → makeedu → eywa 이중 동기화**로 보임. DB 확인 결과 확정 — 같은 `counselSeq 5258`이 등록상담(`enrollment_consultations`, `from_public_intake` QR접수)과 학생상담(`student_consultations`, `[eywa 온라인 접수]…`) 두 테이블에.
+- **원인**: 역푸시([push-consultations.cjs](scripts/_makeedu/push-consultations.cjs))는 QR접수를 makeedu 예비상담으로 등록하고 counselSeq를 **`enrollment_consultations.makeedu_id`**에 기록 + 제목 `[eywa 온라인 접수]`. 재원생 상담 증분 동기화([sync-consultations-incremental.cjs](scripts/_makeedu/sync-consultations-incremental.cjs))의 스킵 가드 3개가 **전부 미스**: ⓑ 구분 '예비' 미해당 ⓒ 제목 `예비원생 상담`≠`[eywa 온라인 접수]` ⓓ counselSeq 중복 가드(`knownSeq`)가 **student_consultations만** 봐서 enrollment_consultations 쪽 seq를 못 잡음 → 재원생 상담으로 오적재.
+- **가드(2중 방어)**: ① `knownSeq`에 **`enrollment_consultations.makeedu_id`도 포함** — eywa가 등록상담(예비상담)으로 소유한 seq는 재원생 상담으로 안 들어옴(makeedu kind 분류 비의존, 결정적). ② 목록 필터에 **제목 `[eywa 온라인 접수]` 스킵**(c2 — seq 미기록 케이스까지). 위험 표면 = 역푸시된 QR접수 3건(전부 차단).
+- **정리**: 재유입된 박인유 학생상담 1건 삭제(덤프 `D:/tmp/parkinyu-sc-dump.json` 보관, 잔여 0). ⚠️ 등록상담 쪽은 makeedu_id 매칭으로 원래 안 겹침(학생상담만 새던 구조). ⚠️ **배포 순서**: 가드는 동기화 PC가 main pull 후 다음 실행부터 적용(pull 전 동기화 돌면 1회 재유입 가능·무해·재삭제). ⚠️ 앞으로 eywa→makeedu 푸시 표면을 늘리면 그 seq/라벨도 재원생 동기화 스킵 대상에 넣을 것.
+
+### 직원 이력서 열람 잠금 — 작성자·원장 자유 / 그 외 사무실은 본인 재인증(step-up) (2026-07-07) — ✅ tsc0/lint0 + 토큰 불변식 13/13 + 재인증 실계정 검증 + 적대리뷰(3렌즈, HIGH·MED 2건 반영)
+사용자 요청: 직원 이력서(주민번호·급여·계좌 = HR PII)를 사무실 직원 아무나 열람하던 것을 제한 — "작성 본인 혹은 관리자 비밀번호 입력해야 열람". 사용자 결정 = **본인 재인증**(공유 비밀번호 아님).
+- **게이트**([staff/resumes/[id]/page.tsx](<src/app/(shell)/staff/resumes/[id]/page.tsx>)): `canView = 작성자(uploaded_by)==본인 || master || verifyResumeViewToken(cookie, user.id, resumeId)`. canView일 때만 `ResumeSheet`에 data 전달 — **잠김이면 민감 데이터는 클라로 전송 안 함**(이름만). `canWrite = canView && canWriteTenant("staff")`(못 보면 인라인 수정도 불가). 비-사무실은 기존 RLS restrictive(0072a)로 계속 차단(이중).
+- **재인증 = step-up**([unlockResumeView](src/features/staff/server/resume-actions.ts)): 본인 로그인 비밀번호 재입력 → **쿠키 저장 안 하는 격리 클라이언트**(`createRawClient(anon, {persistSession:false})`)로 `signInWithPassword`만 검증 → 성공 시 서명 쿠키 발급 + `logAction("resume_view_unlock")`. ⚠️ **현재 세션 무손상**(#10 재로그아웃 회피) — 격리 클라이언트는 실제 auth 쿠키를 안 건드림(실계정 검증: 올바른 비번 세션 발급/틀린 비번 거부).
+- **서명 토큰**([resume-view-token.ts](src/features/staff/server/resume-view-token.ts)): HMAC-SHA256(`userId.resumeId.exp`, SERVICE_ROLE_KEY), 10분. **userId·resumeId 이중 바인딩** → 타 사용자·타 이력서 전이 불가(한 번 재인증으로 전 직원 PII 훑기 차단 — 적대리뷰 MED 반영). timingSafeEqual. 시크릿 없으면 fail-closed(항상 잠김).
+- **목록 마스킹**([resumes-face.tsx](<src/app/(shell)/staff/_components/resumes-face.tsx>)): 부서·입사일도 이력서 민감 섹션이라, 작성자·원장 아닌 행은 "잠김"으로 가림(적대리뷰 HIGH 반영 — 목록에서 부분 누수). 이름·작성일·작성자(디렉터리 정보)는 노출.
+- **우회 경로 없음(확인)**: /documents 폼 문서는 게이트 페이지로 redirect·미리보기는 파일만(폼=notFound), `/edit` 라우트 없음(인라인 편집=canView 뒤), 인쇄는 sheet 렌더 후(canView). getStaffResumeById는 server-only(게이트 페이지만 호출).
+- ⚠️ **알려진 한계**: ① save/deleteStaffResume(쓰기)은 canWriteTenant("staff")만 — 열람 게이트와 별개(쓰기 authz는 역할, 열람 잠금은 읽기 PII 보호). ② 브루트포스는 Supabase auth 내장 rate-limit에 의존(커스텀 락아웃 없음). ③ 임포트/이메일 변경 계정은 재인증 실패 가능(작성자·원장 우회는 유효). ⚠️ **라이브 E2E 미실행**(auth 게이트 + 이력서 0건) — 토큰 불변식·재인증 실계정 검증·우회 트레이스·적대리뷰로 커버. 원장/관리자 계정으로 이력서 1건 만들어 비-작성자 열람 시 잠금 화면 1회 확인 권장.
+
+### 출석부 과목→강사→반 계층 필터 + 반 미선택 안내문구 + 반 선택 시 강사 자동 (2026-07-06) — ✅ typecheck0/lint0 + 라이브(안내·무로드/매트릭스+자동/계층/전체버그·콘솔0) — 커밋 `da01496`(로컬 미푸시)
+사용자 제보: 출석부([attendance/page.tsx](<src/app/(shell)/attendance/page.tsx>))에서 반 '전체'가 클릭 안 됨 + 과목 필터 요청 + "전체×3면 학생 많아 렉이니 아무것도 안 보이고 안내문구" + "반만 선택 시 강사 강제 표시(누구 선생님인지 꼭 알아야)".
+- **'전체' 버그**: 반 미선택 시 코드가 **첫 반 강제 선택**(`filteredClasses[0]`)해 '전체'가 첫 반으로 튕겼다 → 강제선택 제거(effectiveClassId, auto-select 없음).
+- **과목 → 강사 → 반 계층**(넓→좁 cascade): `getMonthlyAttendanceMatrix`의 classes에 이미 있는 `subject`·`teacherId` 활용(쿼리 추가 0). 상위를 고르면 하위 선택지가 좁혀지고, 상위 변경으로 현재 반이 안 맞으면 자동 해제. 과목 라벨=`buildSubjectMaps(getTenantSettings)` 단일 소스.
+- **반 미선택 = 무거운 출석 데이터 미로드 + 가운데 안내문구**("과목·선생님·반을 선택해 주세요"). `getMonthlyAttendanceMatrix(month, null)`은 반 목록만 반환(매트릭스 스킵) → 렉 방지. 반 골라야 매트릭스·Stat 표시.
+- **반 선택 시 과목·강사 드롭다운을 그 반의 값으로 자동 표시**(subjectValue/teacherValue — ?class만 있어도 과목·담임 채움). 우측 중복 강사 노트 제거.
+- ⚠️ 결정(사용자 확인): "과목/강사만 골라도 **반을 골라야 표가 뜸**"(렉 안전) — 강사 1명의 여러 반 합친 뷰는 별도.
+
+### 시간표 기본뷰 상단 헤더 스크롤 고정(sticky-top) + -soft 반투명 비침 수정 (2026-07-06) — ✅ typecheck0/lint0 + 라이브(세로·가로+세로 동시 스크롤 고정·비침0) — 커밋 `64ad061`(로컬 미푸시)
+사용자 제보: 기본뷰([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>))에서 아래로 스크롤하면 강사·요일 헤더가 위로 사라짐(thead 3행에 sticky 없음).
+- thead 3행에 **sticky top-0/[30px]/[60px]**(측정 행높이 30/30/33) + 좌상단 교시 코너는 **세로·가로 둘 다 고정**(sticky top+left). z 계층: 본문(0)<헤더 day-th(10)<교시열 본문(20)<코너(30) — 겹침 없음. 스크롤 컨테이너 = DragScrollArea `barX`(overflow-y-auto).
+- ⚠️ **비침 버그**([[#74]]): `-soft` 색 토큰이 **12% 알파(반투명)**라 그룹밴드·요일 셀을 그대로 sticky로 두면 스크롤 시 본문(학생 이름)이 비쳤다 → **불투명 base(bg-card) 셀 + 그 위 반투명 색밴드(자식 div)** 구조로 전환(색감 동일, 비침 0). 강사행(bg-bg-soft)·코너는 원래 불투명이라 무변경. (강사뷰·통합뷰는 별도 컴포넌트라 무영향.)
+
+### 교재요청 관리자뷰 — 진행 서브라인 '처리됨만' + 새 교재신청 강사뷰식(좌폼+우 실시간 미리보기) (2026-07-06) — ✅ typecheck0/lint0 + 라이브(서브라인 조건·좌폼+우미리보기·fit-to-width·콘솔0) + main push(`b1e9053`)
+사용자 2건(수납관리›교재).
+- **진행 배지 서브라인 정리**([textbooks-table.tsx](<src/app/(shell)/billing/_components/textbooks-table.tsx>)): 배지 아래 `status_at·status_by_name`(마지막 처리 시각·처리자)이 **생성 시점엔 생성자(=요청 강사)로 세팅**([textbook-actions.ts](src/features/billing/server/textbook-actions.ts))돼, 미처리 신규 요청에 "요청일·요청강사"가 찍혀 신청일·강사 컬럼과 중복 + "등록 밑에 요청강사" 오해. → **사무실이 실제로 등록/납부/주문을 체크했을 때만**(`registered||paid||ordered`) "처리 M/D·처리자" 표시(미처리 요청엔 숨김).
+- **새 교재신청 = 강사뷰식**([textbook-dialog.tsx](<src/app/(shell)/billing/_components/textbook-dialog.tsx>) 재작성): 미리보기 없는 좁은 모달 → **넓은 다이얼로그(좌 폼 + 우 실시간 요청서 미리보기)**, 강사뷰(/textbook-requests)와 동일 `TextbookRequestCardBody` 재사용(전 필드 controlled). 관리자 전용(강사 자유입력·전체 학생·기존 행 수정) 유지. billing 페이지가 학원설정에서 학원명·로고·계좌 도출해 배선.
+- **미리보기 fit-to-width**(720px 인쇄 서식이 좁은 칸에서 잘림): `ScaledPreview`(ResizeObserver로 칸폭÷720 스케일 + 래퍼 높이 자동) → 카드 전체 표시(잘림 없음).
+
+### 학원 운영(owner 콘솔) 권한 위임 배선 — 하드코딩 master 게이트 → canWriteTenant("owner") + DB 트리거 위임 (2026-07-06) — ✅ 트리거 9케이스 BEGIN…ROLLBACK + tsc0/lint0(권한 파일)
+사용자 제보: **"관리자가 강의실 추가를 못함"**. 원인 = 프로덕션 테넌트가 역할·권한에서 admin/manager에게 **owner·admin·kiosk_settings를 full로 위임**(override 실존)했는데, owner 콘솔의 mutation 액션들이 **하드코딩 `systemRole !== "master"` 게이트**라 override를 무시([[#58]] 위반 — "canAccessTenant/하드코딩 아닌 canWriteTenant, override 반영"). 위임받은 admin이 설정 저장·강의실 추가·과목 흡수를 전부 못 했다.
+- **하드코딩 master → `canWriteTenant("owner")` 전환**(6표면): 강의실 CRUD([classroom-actions.ts](src/features/owner/server/classroom-actions.ts)) · 설정 저장·브랜딩 업로드([owner/server/actions.ts](src/features/owner/server/actions.ts)) · 과목 흡수/삭제 3액션([subject-actions.ts](src/features/owner/server/subject-actions.ts) `requireMaster`→`requireOwnerWrite`) · makeedu·시트 자동동기화 ON/OFF 토글([integrations/server/actions.ts](src/features/integrations/server/actions.ts) — 연동 면에 master 게이팅 없이 렌더돼 위임 admin이 "눌러도 에러"나던 불일치 해소). 관리 도구 4액션(병합·정리·일괄퇴원/삭제, [admin/server/actions.ts](src/features/admin/server/actions.ts))은 `canWriteTenant("admin")`. 키오스크 5액션([kiosk/server/actions.ts](src/features/attendance/kiosk/server/actions.ts))은 읽기 게이트(`canAccessTenant`)→**쓰기 게이트(`canWriteTenant("kiosk_settings")`)**로도 교정(#58 readonly 누수 잠복).
+- **⚠️ self-escalation은 유지(2중 방어)**: ① **역할·권한(permissions) 섹션 저장 = 항상 master 전용** — 위임받은 역할이 자기/타인 권한을 못 바꿈([owner/server/actions.ts](src/features/owner/server/actions.ts) `section === "permissions"` 분기) + owner page 역할·권한 탭은 비-master에게 **읽기 안내 카드**(저장 실패할 폼 미노출). ② **DB 트리거 [`0080a`](supabase/migrations/0080a_tenant_settings_delegated_write.sql)**(0038a 대체, dev=prod 적용): `auth.uid()` null(서비스롤/직접)=통과, master=통과, **비-master는 (a) permissions 섹션 변경 거부 (b) OLD(저장본) overrides에 `{menu:'owner', role, access:full|scoped}`가 있어야 UPDATE 허용 (c) DELETE·최초 INSERT는 master 전용**. NEW가 아니라 **OLD override만 신뢰** → 자기 요청으로 자기에게 권한 부여 불가. ⚠️ upsert(insert…on conflict do update)는 BEFORE INSERT가 먼저라, 기존 행 있으면 통과시키고 UPDATE 분기가 실제 검증(t6/t7 케이스로 확인).
+- **PII 내보내기 실행은 master 유지(의도)**: `syncSheetsNow`(테넌트 전체 시간표를 외부 시트로)·`previewSheetImport`(시트 전체 읽어 enrollment 변경)·timetable `canSync`는 B5 PII 근거로 master 고정 — 위임 admin은 시트 export **켜기**는 되나 **실행**은 안 됨(timetable '시트' 버튼은 canSync=master라 숨김, 에러 아님). 급여 월별표 page도 master 유지.
+- **무회귀 확인**: `resolveMatrix([])`(override 없는 테넌트)에서 admin owner/admin write = **false**(기본 matrix 불변) — 위임 안 한 학원은 옛 동작 그대로. 신규 테넌트 최초 `tenant_settings`는 owner actions.ts upsert가 유일 생성 경로라 master만 만들 수 있음(0080a INSERT 분기와 정합, 락아웃 없음).
+- 검증: 트리거 **9/9 BEGIN…ROLLBACK**(admin 비-permissions 허용·permissions 거부·teacher 무위임 거부·master 허용·DELETE 거부·upsert 양경로·revoke 즉시효력·직접연결 통과, 프로덕션 무변경) + `resolveMatrix`/`canWrite` 실측(위임 시 admin/manager 통과·teacher 거부·무override false) + tsc0(권한 7파일)/lint0. ⚠️ **라이브 브라우저 미실행**(auth 게이트 + 위임 admin 로그인 세션 필요) — 원장이 관리자 계정으로 강의실 추가 1회 확인 권장. ⚠️ 적대 리뷰(3렌즈)는 서버측 rate-limit로 미완 — 핵심 위험(self-escalation·무회귀·최초생성)은 직접 트리거 테스트·매트릭스 실측으로 커버.
+
+### 교재 신청 등록·납부 자동 체크 — makeedu 수납 미러(입력자='자동화') + 적대리뷰 15건 전부 반영 (2026-07-06) — ✅ dry-run 실측 + 적대리뷰(3렌즈 18에이전트, confirmed 15/refuted 0 → 전부 수정) + tsc0/lint0
+사용자 확정 기준: **등록 = makeedu 수납에 그 교재 수납명 라인이 생성됨(미납이어도)** / **납부 = 그 라인이 완납 처리됨** / **입력자 = "자동화"**. ijw `mirrorTextbookRequestsFromBilling` 이식 + eywa식 재설계(이름 문자열 대조 → student_id 대조).
+- **신규 [mirror-textbook-checks.cjs](scripts/_makeedu/mirror-textbook-checks.cjs)**(dry-run 기본·`--apply`·`--from=YYYY-MM`): 소스 = **스크랩 원본 invoices.json 라인**(⚠️ eywa invoices 테이블 아님 — (학생,청구월) additive라 이미 임포트된 달의 후속 교재비 라인이 영영 안 들어오고 라인별 납부상태가 집계에서 소실. 실증: 이윤 교재 수납이 스크랩엔 있는데 테이블엔 없음). 납부 판정 = **금액 기준**(미납<=0 && (실납>0 || (청구액>0 && 할인+적립>=청구액))) — makeedu '수납여부' 드롭다운 텍스트는 미납인데 "완납"으로 찍혀 불신.
+- **[sync-all.cjs](scripts/_makeedu/sync-all.cjs) 배선**: IMPORTERS에 `textbook_checks` 단계(invoices 뒤·consultations 앞 — scrape가 invoices.json을 먼저 갱신, Playwright 불필요). 도메인별 실패 격리·recordSync 동일 패턴. [makeedu-sync-runs.tsx](<src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>) DOMAIN_LABEL `교재 체크` + MakeeduSyncDomain union. 연동 카드 문구에 자동 체크 안내.
+- **⚠️ 적대리뷰(3렌즈 매칭/쓰기/운영 → 반박검증) confirmed 15건 전부 수정** — 오탐(잘못된 체크)이 최악 결함:
+  ① **(HIGH) '구분'=교재 라인만**(fail-closed) — 수강료 라인 `[EiE] PHONICS&ROOKIES 40,000`(구분=수업)이 교재 `[EiE] PHONICS`와 부분일치하는 **실충돌 확인** → 구분 미필터면 수강료 완납이 교재 납부로 오체크(사무실이 교재비 미청구 = 금전 손실). ② **(MED) 필수 헤더 10종 전수 검증 throw** — makeedu가 '미납금액' 컬럼명만 바꿔도 전건 unpaid=0 → 완납 오탐 엔진이 되므로 fail-closed(도메인 에러 격리). ③ **기간 창**: 라인 청구월 ∈ [신청월, 신청월+1](LAG=1) + 근접 우선 pick — 옛 완납 라인/미래 재신청 라인 교차 크레딧 차단. ④ **소비 유니버스 = 전 신청**(체크 완료·해제·창밖 포함, 신청일 asc) — 체크 완료 신청이 자기 라인을 먼저 `consumedBy` 선점 → 같은 교재 재신청이 남의 라인 선취 오탐 차단(조치는 3개월 창·미체크 건만). ⑤ **동명 스킵** — 정규화 이름 비유일 학생 라인은 자동화 제외(학년 드리프트 시 tieredMatcher 티어1이 인접학년 동명이인에 유일 적중해 오귀속 — 임주은 고1/고2 실존). ⑥ **settled 0원 가드** — 청구액>0일 때만 할인·적립 충당 인정(0원 placeholder 오판 차단). ⑦ **수동 해제 핑퐁 방지 = `check_dismissed_at`(`0079a`, dev=prod 적용)** — [toggleTextbookCheck](src/features/billing/server/textbook-actions.ts)가 등록/납부 **해제** 시 마커 기록 → 미러가 그 신청 영구 제외(ijw '동기화마다 수동 처리 롤백' 버그의 역방향 차단. 해제 건도 라인은 소비). ⑧ **UPDATE 레이스 하드닝** — status를 JS 스냅샷이 아니라 **SQL CASE**(쓰기 시점 행 값)로 파생 + 계획-인지 WHERE 가드(수동 선체크 시 0행=수동 입력자 기록 보존) + `r.count` 실갱신만 recordSync 계상.
+- **⚠️ 함정(실측)**: postgres-js가 `date` 컬럼을 Date 객체로 반환 → `String(request_date).slice(0,7)`이 `"Tue Jun"`이 돼 월 파싱이 **조용히 전부 깨짐**(이윤 매칭이 사라지는 것으로 발견) → **`to_char(request_date,'YYYY-MM-DD')`로 문자열 고정**. 날짜를 JS에서 문자열 연산할 쿼리는 to_char로 못박을 것.
+- **알려진 한계(문서화·로그 경고)**: 스크랩 = makeedu 기본 뷰(**당월 청구월 슬라이스**) → 월이 넘어간 뒤 완납된 전월 라인은 관측 불가 = **그 건 납부 체크는 자동 미탐**(수동 토글, 오탐 아님·ON-only라 안전). 실행 로그가 관측 청구월·창 밖 후보 건수를 경고. 근본 해결 = scrape 청구월 폼 다개월 순회(HEADED 폼 확인 필요, 백로그).
+- 검증: dry-run 실측(교재 라인 3 — 이윤 「초5-2 발전 1권(22개정)」 매칭[2026-07 미납]→조치 없음=납부 대기 정확 / 기존 체크 신청이 라인 2건 선소비 / 미매칭 2건=오늘 신청·미청구 / write 0) + node --check + tsc0/lint0. ⚠️ **실효 조건**: 동기화 PC가 main 코드를 pull해야 sync-all에 새 단계가 반영됨(다음 스케줄/버튼 실행부터 자동). 현재 미체크 신청 3건뿐이라 --apply해도 오늘은 write 0 — 다음 교재비 청구부터 자동 체크.
+
+### 강사뷰 세로 밀도(한 칸 높이) 과목 설정 배선 — 숫자 입력대로 간격 조절 (2026-07-06) — ✅ typecheck0/lint0 + 라이브 E2E(14→50px 실측·원복) + main push(`4ec0035`)
+사용자 요청: 강사뷰 10분 격자 **세로 간격**을 연동탭(과목 운영)에서 숫자로 설정. 기존 `teacherViewStep`/`teacherViewBreaks`/`teacherViewLineExcluded`와 **동일 패턴**(과목 설정 단일 소스 → page.tsx 도출 → teacher-grid 주입).
+- **스키마**([settings-types.ts](src/features/owner/settings-types.ts)): `subjects[].teacherViewPxPerMin`(분당 px, `z.number().min(0.5).max(6).optional()`) + 기본 상수 `DEFAULT_TEACHER_VIEW_PX_PER_MIN`(1.4, teacher-grid의 폴백 `PX_PER_MIN`과 동일값 유지).
+- **편집기**([subjects-section.tsx](<src/app/(shell)/owner/_components/subjects-section.tsx>)): 강사뷰 설정에 "한 칸 높이(px)" 숫자 입력. 표시=`round(pxPerMin×step)`, 저장=`px/step`(**스텝 무관 분당 밀도로 저장** → 격자 단위를 바꿔도 칸 높이가 비례 재계산).
+- **소비처**([teacher-grid.tsx](<src/app/(shell)/timetable/_components/teacher-grid.tsx>)): `rowH = Math.round(stepMin × (pxPerMin ?? PX_PER_MIN))`. [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `subjectRow.teacherViewPxPerMin`을 도출해 `pxPerMin` prop으로 주입.
+- 검증: typecheck0/lint0 + **라이브 E2E**(과목 운영 입력 저장→DB `teacherViewPxPerMin=5`→강사뷰 10분 칸 **14→50px** 실측→테스트값 DB 원복). ⚠️ 검증 중 [[#73]] 함정(dev `.next` stale로 저장 시 필드 strip) 발견·기록. 원장 사용법: 과목 운영→영어→강사별시간표(강사뷰)→"한 칸 높이(px)".
+
+### 직원관리 담당 과목 = 운영설정 토글 칩 + 임포트 이메일 교정 + "직급(닉네임)" 라벨 (2026-07-06) — ✅ 4게이트(test716) + 라이브(로그인 파이프라인 결정검증) + main push(`30a487b`)
+사용자 3건. 커밋 `30a487b`.
+- **담당 과목 = 운영설정 단일 소스**: 쉼표 자유입력("english" 타이핑) → 학원설정(`operations.subjects`) **토글 칩**([staff-form.tsx](<src/app/(shell)/staff/_components/staff-form.tsx>) `useSubjectMaps()`). 선택 키만 hidden input에 쉼표 join으로 미러 → 서버 파싱(comma-split)·초안 캡처 **불변**. 설정에서 지워진 레거시 키는 해제 가능 칩으로 노출(silent drop 방지). 컨트롤드라 `onRestore`로 초안 rehydrate. (운영 enum 하드코딩 금지 규칙 준수 — 라벨=`labelOf`, 색=`SUBJECT_SOFT[colorOf]`.)
+- **임포트 이메일 교정**: 임포트 산물 이메일(형식불량·`LAB 김주희@imported.local`·`@imported.local`)이 수정 폼에서 **안 고쳐지던 것**(edit 폼 email readonly) → **auth 계정 없는 임포트 직원만 이메일 편집 허용**([updateStaff](src/features/staff/server/actions.ts) `canEditEmail`, 실 로그인 이메일은 잠금 · UI+서버 이중검증). 이메일은 **"변경된 경우에만" 검증·반영** → 깨진 기존값이 다른 필드 저장을 막지 않음. auth 계정 있으면 `admin.auth.admin.updateUserById({email, email_confirm:true})`로 **로그인 이메일까지 변경**(미러 트리거가 public.users 동기).
+  · **로그인 배선 결정검증**: throwaway 계정으로 `updateUserById({email})` 후 **새 이메일 로그인 성공 / 옛 이메일 "Invalid login credentials"** 확인(프로덕션 실계정 무접촉; 실 김주희 auth 이메일 변경도 실측 후 pg 원복). ⚠️ `@imported.local` 임포트 계정은 로그인 **비밀번호 미설정**일 수 있어, 실제 로그인 가능케 하려면 이메일 교정 + 임시비번 부여(super-admin) **병행** 필요.
+- **라벨 "직급" → "직급 (닉네임)"**([staff-form.tsx](<src/app/(shell)/staff/_components/staff-form.tsx>)·[basic-info-tab.tsx](<src/app/(shell)/staff/[id]/_tabs/basic-info-tab.tsx>)): 영어 강사가 이 값(예: Charlie T)을 수업 닉네임으로 쓰기 때문(라벨만, 데이터·저장 불변).
+
+### 통합뷰 '1시간 단위' 토글 = 그룹 체계별 분리 + 사이 빈 교시만 숨김 (2026-07-06, 같은 날 재작업) — ✅ tsc0/lint0/test723(class-grid 4) + 실데이터 헤드리스 검증
+영어 통합뷰(RichGridView)에서 1시간 단위 수업(16:20→4교시·17:20→6교시·18:20→8교시)이 가운데 빈 교시 행(5·7교시)을 남기는 문제. 1차('빈 교시 숨기기', `6cdfaf4`)가 **섹션 전체의 빈 행을 전부**(위아래 포함) 지우자 사용자 정정 3건: ① 전체가 아니라 **각각의 그룹에** 적용 ② **사이 교시만** 숨기고 **위아래는 유지** ③ 라벨은 **'1시간 단위'**. 재작업 배경(실데이터): "4교시 시작" 그룹(17반)에 **1시간 체계(4·6·8교시) 12반 + 40분 체계(4·5·7교시) 5반(KW1·LS4·LT4·PL2·RTT2)이 공존** — 5·7교시는 빈 행이 아니라 40분 반들이 실제 쓰는 행이라, 한 축에 두는 한 못 숨긴다(숨기면 그 5반 클립).
+- **[buildRichCardGroups(slots, config, compact)](src/features/timetable/lib/class-grid.ts)** compact 재정의 2단: ① **체계 분리 클러스터** — 같은 시작 교시라도 서로의 사이 빈 행(`interiorGaps`)을 침범하는 반은 별도 그룹으로(그리디 병합: 상호 침범 없으면 같은 클러스터, 부분집합 점유 4·6⊂4·6·8은 한 그룹=과분리 없음). 부그룹 라벨 `"4교시 시작 ②"`, order=앵커+0.001·ci로 바로 뒤 정렬. ② **각 그룹의 점유 범위 [lo,hi] "사이" 빈 행만 제거** — 위아래 윈도우 패딩(5칸 컨텍스트)은 유지. compact=false는 기존과 동일(분리·숨김 없음). LabelColumn·ClassColumn이 group.periodRows 단일 소스라 동시 반영.
+- [page.tsx](<src/app/(shell)/timetable/page.tsx>) 툴바 칩 라벨 "빈 교시 숨기기"→**"1시간 단위"**(URL 파라미터 `compact=1`·네비 보존 불변, 통합뷰만 노출).
+- 검증: typecheck0/lint0/**test723**(체계 분리·과분리 없음·위아래 패딩 유지·4·6·8 압축) + **실 프로덕션 영어 슬롯 308건 헤드리스**([_verify-compact.mts](scripts/_english_sync/_verify-compact.mts), 읽기 전용): 4교시 시작 12반 **[4,6,8]** / 4교시 시작 ② 5반 **[4,5,7,8]**(클립 0) / 1·2·8·9교시 시작 무변(위아래 유지). ⚠️ 라이브 화면은 auth 게이트로 미실행(원장 실화면 1회 확인 권장) — 순수 함수·렌더 단일소스라 by-construction.
+- ⚠️ **UX 트레이드오프(의도)**: 토글 ON이면 "4교시 시작"이 두 박스(12반/② 5반)로 나뉨 — 체계 혼합 그룹에서 사이 숨김이 가능하려면 분리가 유일한 길.
+- **후속 정정(2026-07-06, 같은 날) — 전역 토글 → 섹션별 토글** (사용자 "각 교시 시작별로 세팅, 전역 아님") — ✅ tsc0/lint0/test729, 커밋 `48df457`: 위 압축 로직은 맞으나 **툴바 전역 토글**이라 켜면 전 섹션이 함께 압축됐다. **섹션별로 전환**: `buildRichCardGroups`의 `compact:boolean` → **`compactSections: Set<number>`**(압축할 섹션의 `sectionKey`=시작교시 order, 자정기준 분). `RichCardGroup`에 `sectionKey`·`compacted` 노출. [rich-grid-view.tsx](<src/app/(shell)/timetable/_components/rich-grid-view.tsx>): 툴바 전역 토글 **삭제** → **각 섹션 헤더(◎ N교시 시작 바)에 "1시간 단위" 토글**(주말 섹션=교시 체계 없어 숨김, `WEEKEND_ORDER` export). URL `compact=1` → **`compact1h=<쉼표구분 sectionKey>`**: 주·뷰 네비는 압축 집합 유지, **과목 전환은 초기화**(과목마다 섹션 order가 달라 엉뚱한 섹션 오압축 방지). 테스트=`compactAll` 헬퍼로 기존 5건 이관 + 섹션별 신규 1건(한 섹션만 압축·나머지 풀 윈도우). ⚠️ 라이브 미실행(연결 브라우저가 원격 머신이라 localhost 미도달, 로컬 PSS는 사용자 Connect 필요) — 순수 로직 단위테스트로 대체(원장 실화면 1회 확인 권장).
+
+### 스케줄/시간 충돌 경고 = 화면 가운데(top-center) 토스트 병행 — 전수 배선 (2026-07-06) — ✅ tsc0/lint0/test728
+사용자 제보: '강의실 스케줄 충돌' 같은 경고가 폼 하단 작은 텍스트로만 떠서 긴 폼(스케줄 그리드)에선 스크롤 밖으로 밀려 **놓치기 쉬움**(저장이 조용히 안 된 것처럼 보임). "이런 경고 메시지 전수 검사 + 가운데 알림 추가."
+- **공용 헬퍼** [`conflictToast(message)`](src/lib/ui/conflict-toast.ts): `toast.warning(msg, { position: "top-center", duration: 6000 })` — 전역 Toaster는 top-right지만 이 토스트만 개별 `position` 지정. 인라인 표시는 **맥락용으로 유지**하고 가운데 알림만 병행 추가.
+- **전수 배선(충돌 경고 4계열)**: ① [class-form](<src/app/(shell)/classes/_components/class-form.tsx>) — 강의실 스케줄 충돌(`state.error`)+강사 시간 겹침(`state.teacherConflict`) ② [enrollment-assign-dialog](src/components/enrollment-assign-dialog.tsx) — 수강 기간 겹침(`state.error`)+시간 충돌(`conflicts` prop, 열 때 1회) ③ [move-enrollment-button](<src/app/(shell)/students/[id]/_components/move-enrollment-button.tsx>) — 대상 반 기간 겹침(서버 결과 실패만; 사소한 입력검증은 인라인 유지) ④ [classroom-assign-dialog](<src/app/(shell)/classes/_components/classroom-assign-dialog.tsx>) — 자동배정 적용 실패(`state.error`; conflictsBefore 박스는 이미 큰 모달이라 그대로).
+- **발화 규약**: `useActionState` 폼은 **state 참조가 바뀔 때(=매 제출 결과)만** 발화(`notifiedState` ref로 가드) → 같은 충돌 재제출도 다시 알림, 무관 리렌더엔 안 뜸([[#67]] 계열). 로컬 state 폼(move-dialog)은 `setError`와 나란히 호출.
+- ⚠️ **새 스케줄/시간 충돌 경고를 추가할 땐** 인라인 표시 + `conflictToast(msg)`로 가운데 알림도 병행할 것(헬퍼 주석에 명시). ⚠️ 라이브 폼은 auth 게이트라 브라우저 검증 미실행 — 순수 토스트 추가라 by-construction(sonner 개별 position은 typecheck로 확인). ⚠️ enrollment-assign의 `conflicts` prop은 현재 부모가 안 넘겨 latent(인라인 박스도 동일) — 병행 토스트는 forward-compatible.
+
+### makeedu 학생 동기화 동명이인 = makeedu_id 식별 + 강한키 매칭 + 이름충돌 시 알파벳 접미사 + '의심' 배지 (2026-07-06) — ✅ tsc0/lint0/test723 + 합성충돌 E2E + DB ROLLBACK 검증
+사용자 지적으로 makeedu↔eywa 학생 동기화 동명이인 처리 감사 → [import-students-list.cjs](scripts/_makeedu/import-students-list.cjs)의 **이름 단독 매칭 티어**가 새 동명이인(다른 학교/학년)을 기존 같은 이름 1명에 잘못 붙여 스킵시키던 갭 발견. 사용자 결정 = **접미사 방식**(테스트→테스트A→…→테스트Z→테스트AA, 엑셀식 base-26).
+- **식별 = makeedu_id(원생고유번호) 우선**. 없으면 강한 자연키만: `이름+학교core+학년 → 이름+학생전화 → 이름+보호자전화`(모호=매칭 안 함). **이름 단독·이름+학년(느슨) 티어 제거** — 동명이인이 오매칭돼 스킵되던 것 차단(학교표기 드리프트=학교core, 학년 드리프트=전화가 흡수). 전화 같으면 같은 사람(사용자 확인).
+- **접미사**: 매칭 실패(=새 학생)인데 이름이 eywa에 이미 있으면(**퇴원 포함**) `uniqueName`이 다음 미사용 알파벳 부여. 같은 실행 2명이면 순차 A·B(takenNames 집합).
+- **'의심' 배지**(반대 방향 = 같은 사람이 정보부족으로 새로 갈린 오류 대비): `students.dup_suspect`(**0078a**, 프로덕션 적용) — eywa가 접미사를 **새로 붙인** 신규(`finalName≠원래이름`)에만 true(makeedu가 이미 붙여온 김도연A 등 무충돌은 대상 아님). [DupSuspectTag](src/components/dup-suspect-tag.tsx) 앰버 '의심' 배지 = 학생 목록·상세. 상세엔 [DupSuspectNotice](<src/app/(shell)/students/[id]/_components/dup-suspect-notice.tsx>)(설명 + '정상 확인' → [clearDupSuspect](src/features/students/server/actions.ts) `dup_suspect=false`, students full 게이트). **동기화로 안 지워짐**(sync_added_at ↻배지와 별개) — 사람이 확인/병합할 때까지 유지. 실제 중복이면 관리자 병합 도구로.
+- **현재 데이터 영향 = 없음(no-op)**: makeedu 391명 전부 makeedu_id로 이미 매칭(신규 0). 부트스트랩 완료라 지금 접미사·의심 대상 0. 앞으로 이름 겹치는 진짜 신규생이 들어올 때 A·B…가 붙고 '의심' 배지가 뜬다.
+- 검증: typecheck0/lint0/**test723**/importer node --check + **합성충돌 E2E**(새 makeedu 윤수빈[다른 학교/학년/새 makeedu_id] 주입 → 윤수빈→윤수빈A, 잘못 매칭 안 됨) + 순수 헬퍼(A B Z AA AB… / 충돌 순차 / 한바퀴 AA) + **DB BEGIN…ROLLBACK**(dup_suspect insert=true·정상확인=false·잔여0, 프로덕션 무변경). ⚠️ 라이브 배지 화면은 auth 게이트로 미실행(컴파일 307). ⚠️ **한계(수용)**: 이름+학교+학년+전화까지 동일한 진짜 동명이인은 자연키 구분 불가 → makeedu_id + makeedu 자체 접미사에 의존. ⚠️ 부트스트랩 엑셀 임포터(import-students.cjs)엔 미적용(라이브 cron 임포터만) — 필요 시 후속.
+
+### 반이동 = 전용 '반 이동' 액션 + 수동이동 퇴원오표시 백필 + 수강배정 옵션에 요일·시각 (2026-07-06) — ✅ tsc0/lint0/test716 + 백필 dry-run→apply(111쌍) + 실 DB 검증
+사용자 제보 3건. **근본 원인**: 반이동을 **수동 2단계**(수강 배정 + 수강 종료 다이얼로그)로 하면 [endSingleEnrollment](src/features/students/server/actions.ts)·[createEnrollment](src/features/enrollments/server/actions.ts)가 `is_transferred`/`is_transferred_in`을 안 붙여 → 옛 반에 **퇴원 오표시**([queries.ts:317](src/features/timetable/server/queries.ts#L317) `hasEnded && is_transferred`면 숨김) + 새 반 **초록 아님**([studentRowTone](<src/app/(shell)/timetable/_components/student-rows.tsx#L49>) `isTransferredIn`→`bg-primary-soft`). 드래그 이동([move_enrollments_batch](supabase/migrations/0063a_move_enrollments_attendance_days.sql))은 두 플래그를 제대로 설정한다.
+- **① 수강 배정 옵션에 요일·시각**([enrollment-assign-dialog.tsx](src/components/enrollment-assign-dialog.tsx) `AssignDialogClass.scheduleLabel`): 반 선택 힌트가 과목·강사·인원만이라 "무슨 요일 몇 시"를 몰랐음 → [classes-tab.tsx](<src/app/(shell)/students/[id]/_tabs/classes-tab.tsx>) `formatClassSchedule(c.days)`("월·목 16:00 · 화 14:20", 같은 시각 요일 묶음)를 옵션 힌트에 추가(`getClassesList`의 `days: ClassDaySlot[]` 재사용).
+- **② 전용 '반 이동' 버튼**(사용자 결정 = 2단계 폐기): 수강 중 행에 [MoveEnrollmentButton](<src/app/(shell)/students/[id]/_components/move-enrollment-button.tsx>) — 대상 반(스케줄 힌트)+**적용일(기본 내일 = "이 날부터 새 반, 그 전날까지 옛 반")**+등원 요일 → **기존 [moveEnrollmentsBatch](src/features/enrollments/server/actions.ts) 액션 재사용**(RPC가 옛 반 `is_transferred=true`+새 반 `is_transferred_in=true` 원자 설정). 단일 적용일이라 옛 end=새 start=적용일(daterange 반열림 → 같은 날도 중복 없음, 퇴원 안 뜸). `canWriteTenant("classes")` 게이트 상속. 성공 시 `router.refresh`(RPC는 /timetable만 revalidate).
+- **③ 기존 데이터 백필**(사용자 승인, 프로덕션 적용): [backfill-transfer-flags.cjs](scripts/_poc_migration/backfill-transfer-flags.cjs)(dry-run 기본·`--apply`·`--since` 스코프·멱등·되돌리기 id 덤프). 매칭=재원 학생의 (옛 수강 end 있음·is_transferred=false) ↔ (새 수강 active·다른 반·start ∈ [end-1, end+3]) 가장 가까운 1건. **적용: 111쌍**(옛 111 전출·새 104 전입, since 2026-06-01) — 윤수빈 2건→TP4E 1건 + **7/3 영어 레벨 승급 코호트 89명**(RTT3→LT2 등, 안 고치면 89명 옛 반 퇴원 오표시). `withdrawal_reason`은 null/'other'만 '반 이동'으로(구체 사유 보존). 검증: 윤수빈 옛 2건 is_transferred=true·새 is_transferred_in=true 확정. ⚠️ 보수적 오탐 가능(드롭+무관 새 반 동시기)이나 영향 경미(퇴원↔전출 표시)·되돌리기 가능. 전체 154쌍 중 최근 111만 적용(옛 ijw 처리는 미적용).
+- ⚠️ 라이브 화면 검증은 auth 게이트로 미실행(반 이동 다이얼로그·초록·힌트) — 원장 실화면 1회 확인 권장. build 게이트는 dev 서버 공유로 생략(tsc0/lint0/라우트 컴파일 307/데이터 검증으로 커버).
+
+### 영어 강사뷰 — 쉬는 시간 셀 + 가로줄 제외 강사 + 열너비 65 (2026-07-06) — ✅ 4게이트(tsc0/lint0/test716/build✓) + 하네스 픽셀 실측 + 적대리뷰(2렌즈, 확정 0)
+사용자 요청 3건(강사별시간표 강사뷰). 전부 **과목 설정(operations.subjects[])** 필드로 배선 → page.tsx가 도출해 [TeacherGridView](<src/app/(shell)/timetable/_components/teacher-grid.tsx>)에 주입(하드코딩 아님, 학원설정 단일 소스).
+- **① 쉬는 시간(`subjects[].teacherViewBreaks`, HH:MM~HH:MM 배열)**: 강사×요일 컬럼에서 **"범위 시작에 끝나는 수업 + 범위 끝에 시작하는 수업이 둘 다 있고, 범위와 겹치는 수업이 없음"**(=수업 사이)일 때만 "쉬는 시간" 셀(`bg-ink/[0.06]`, colSpan=laneCount 전 레인 폭, rowSpan). 순수 [`breakBlocksForColumn`/`parseBreakRanges`](src/features/timetable/lib/ten-minute-grid.ts)(Vitest 10). ⚠️ **불변식**: `overlaps` 가드가 **어느 레인이든** break 범위에 걸치는 수업이 있으면 break를 억제 → 다중 레인(LAB)에서 수업이 안 사라지고, break.start에 시작하는 수업도 겹침 판정돼 **break/그룹 셀 공동 앵커(이중 td)가 원천 불가**(적대리뷰 HIGH 2건 = 이 가드로 refute, 테스트로 못박음). 렌더는 `inBreak=breakCovered.has(ri)`로 앵커 행 포함 전 레인 skip.
+- **② 가로줄 제외 강사(`subjects[].teacherViewLineExcluded`, 강사 라벨 배열)**: 이 강사 컬럼은 큰 섹션 가로줄(PERIOD_EDGE 2px) 대신 옅은 1px. `bottomEdge(nextRi, excluded)` — **시각열은 항상 excluded=false**(전역 참조 눈금)·**표 최하단 프레임(m==null)은 전 컬럼 2px 균일**(외곽 프레임). 설정은 **토글 칩**([subjects-section.tsx](<src/app/(shell)/owner/_components/subjects-section.tsx>) `ExcludeTeacherChips`) — 선택지 = 신규 [`getTeacherLabelsBySubject`](src/features/timetable/server/queries.ts)(과목별 distinct `slot_teacher_label ?? 담임 display_name`, fetchAllPaged·is_active). ⚠️ 칩 라벨 = 그리드 `teacherOf`와 **동일 규약**이라 조용한 불일치 없음(적대리뷰 확인). owner page는 subjects 탭에서만 쿼리 로드(다른 탭 비용 0).
+- **③ 열너비 96→65**(`DAY_COL_W`, 사용자 지정). 다중 레인(LAB) 레인폭은 64 유지.
+- **설정 흐름**: subjectSchema에 `breakRangeSchema`·2필드 추가([settings-types.ts](src/features/owner/settings-types.ts)) → SectionForm JSON payload로 저장 → resolve deepMerge(배열 통째 교체) — **새 필드는 기본값 없어 normalizeSubjects 무손질**(옛 저장 행 = undefined = "없음", 소비처 `?? []` 폴백). ⚠️ 빈 쉬는 시간 행(start/end="")은 Zod HHMM 거부(teacherViewLines 동일 UX) but `parseBreakRanges`는 렌더에서 관대(무시). 접이 요약 배지에 "쉬는 시간 N"·"제외 강사 N" 추가.
+- 검증: typecheck0/lint0(경고7=baseline)/**test716**(브레이크 순수함수 13: 앞뒤 붙음·겹침 억제·다중 레인·축 밖·span>1)/**build✓** + **하네스 픽셀 실측**(쉬는 시간 셀 두 수업 사이 렌더 / 18:00 경계 시각열·비제외 2px vs 제외 1px / 행높이 균일 14 = border-box라 굵기 무관) + 적대리뷰(렌더·데이터흐름 2렌즈, 확정 0 — HIGH 2건 overlaps 가드로 refute). ⚠️ 라이브 강사뷰 화면 검증은 auth 게이트로 미실행 — 원장 실화면 1회 확인 권장(쉬는 시간·제외 강사는 과목 운영 탭에서 설정 후 강사뷰에서 확인).
+
+### 영어 강사뷰 10분 격자 가로줄 굵기 불균일·어긋남 — border-collapse → border-separate 전환 (2026-07-06) — ✅ typecheck0/lint0/test703 + 하네스 픽셀 실측 + 적대리뷰(3렌즈 14에이전트, 확정 0)
+사용자 제보: 영어 시간표(강사뷰)의 가로줄 **선 굵기가 구간마다 달라 행이 어긋나 보임**(16:00/16:10 부근). 원인([teacher-grid.tsx](<src/app/(shell)/timetable/_components/teacher-grid.tsx>)): 가로줄이 **두 렌더 경로**로 그려짐 — 시각열(sticky)은 #71 우회로 **셀 안 span 실선**(경계선 위쪽에 통째), 본문은 **border-collapse 테두리**(경계선 **중앙**에 걸침: 2px=위1px+아래1px) → 같은 줄인데 좌우 구간이 세로 1px 어긋남. + collapse가 굵은 경계(2px)의 절반을 행 높이에 얹어 **행이 14→14.25px로 드리프트**(하네스 실측: 표 전체 85px vs 기대 84) → 선이 반픽셀 위치에 떨어져 DPR/줌에 따라 굵기 들쭉날쭉.
+- **수정**: 표를 **`border-separate border-spacing-0`**로 전환 — separate 모드는 셀이 테두리를 소유해 **sticky를 그대로 따라오므로**(#71의 미채택 대안을 이 표엔 채택) 가상요소(STICKY_EDGES/HEAD_BOTTOM/CORNER)·시각열 span 실선을 전부 **실제 border(border-l/r/b)로 단일화**(모든 가로줄이 한 경로 = 굵기·위치 균일). `periodBottom`→`bottomEdge({cls,px})`, 블록 셀 내부 래퍼 높이 = `span*rowH − 자기 border-b(1|2px)`(border-box — 1px라도 넘치면 그 행이 늘어 10분 축 붕괴).
+- 검증: 동일 구조 재현 하네스(DPR2) 픽셀 실측 — before 행높이 [14, **14.25**, **14.25**, …]·표 85px / **after 전 행 정확 14.0·표 84px·시각열↔본문 경계 오프셋 0.00px**. 컴파일 CSS에 `.border-separate`/`.border-spacing-0` 생성 확인 + typecheck0/lint0(경고7=baseline)/**test703**. 적대리뷰(기하/스티키/시각일관 3렌즈→반박검증, 14에이전트) **확정 0**(11건 전부 반박 — pre-existing이거나 비가시 서브픽셀). ⚠️ 라이브 강사뷰 화면 검증은 auth 게이트로 미실행(연결 브라우저가 원격·미로그인) — 원장 실화면 1회 확인 권장.
+- ⚠️ known(수용): 인쇄 전역 `table{border-collapse:collapse!important}`(globals.css)가 **인쇄 시** 이 표를 collapse 기하로 되돌림 — 변경 전과 동일한 현상 유지고 이 뷰는 인쇄 표면 아님(인쇄 버튼 없음). 강사뷰를 인쇄 표면으로 만들 땐 이 규칙에서 예외 필요. ⚠️ **이 표를 collapse로 되돌리지 말 것**(파일 상단 주석에 근거 명시 — 되돌리면 굵기 어긋남·행 드리프트 재발).
+
+### 시간표 수학 엑셀 — 분리등원(단일 요일) 학생 글씨가 작던 버그 = shrinkToFit이 좁은 열에서 폰트 과축소 (2026-07-04) — ✅ typecheck0/lint0/build✓ + 합성 xlsx 생성 검증
+사용자 제보: 강사뷰 시간표 '엑셀' 다운로드 시 **한 요일만 등원하는 학생(분리등원)의 글씨가 다른 학생보다 작다**. 원인([math-timetable/exporter.ts](src/features/exports/math-timetable/exporter.ts)): **공통(전 요일) 학생은 병합된 넓은 셀**(월목 = `DAY_COL_W`7.5 × 2 = 15)에, **분리등원 학생은 단일 요일 좁은 셀**(7.5, 절반)에 쓰는데 **둘 다 `shrinkToFit:true, size:9`**. shrinkToFit은 **열 폭에 맞춰 폰트를 자동 축소** → 같은 이름("이름/학교학년")이 공통(넓음)엔 맞아 9pt 유지, 분리등원(좁음)엔 안 맞아 ~5–6pt로 축소 = 글씨 작음.
+- **수정**: **분리등원 셀(단일 요일)만 `shrinkToFit` 제거**([exporter.ts](src/features/exports/math-timetable/exporter.ts) 재원 partial·대기 partial 2곳 `cc.alignment`) → 폰트 9pt 유지(공통과 동일). 공통·퇴원 셀(넓은 병합)은 `shrinkToFit` 유지(넓어서 안 줄고 초장문 안전망). ⚠️ 트레이드오프: 긴 이름은 이웃 요일칸으로 넘침/잘림(ijw 클라 `truncate`와 동일 취지 — 작은 글씨보다 나음). 행 높이 16(1줄 고정)이라 wrapText는 불가(2줄 잘림).
+- 검증: typecheck0/lint0/build✓ + **합성 데이터로 실 xlsx 생성**(월목 셀 + 공통학생·분리학생[목only] → exportMathTimetableToExcel `returnBufferOnly` → exceljs로 셀 읽기): **분리학생 shrinkToFit=false·size=9, 공통학생 size=9** 확인(둘 다 9pt로 동일). ⚠️ 영어(일반) 익스포터([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 `wrapText`(줄바꿈)·`join(", ")`이라 학생별 폰트 차 없음 — 무관.
+
+### 강사 학생상담 = "내 담당 학생" → "내가 등록한 상담(counselor_id=나)" 스코핑 전환 + 임포트 보조T 재배정 + 누수 4표면 봉쇄 (2026-07-04) — ✅ 4게이트(test642)/build✓ + 적대리뷰(2렌즈, HIGH 3 봉쇄) + 실 DB 검증
+사용자 제보: 강사뷰 학생상담에 **"다른 사람이 상담한 내용이 계속 보인다 — 내가 등록한 것만 봐야 한다"**. 원인 = 강사 상담 스코프가 `getTeacherScope().studentIds`(내 담당 학생) 기준이라, 담당 학생이면 **남이 쓴 상담도** 보였다. 작성자(counselor_id) 기준으로 전환.
+- **⚠️ 데이터 함정(재배정 필요)**: `counselor_id`는 100% 채워져 있으나 **ijw 전체복원 임포트분 1411건이 전부 'fallbackUser'(보조T)** 에 몰려 있었다(makeedu 39건만 실제 상담자). 원인 = [run.ts](scripts/_poc_migration/run.ts) `resolveUser = (uid) => uidToUser.get(uid) || fallbackUser`가 **uid 미해결 시 항상 fallbackUser를 반환**해, 뒤의 `?? nameToTeacher.get(consultantName)`(이름 매칭)이 **dead code**였다. 그래서 스코프만 바꾸면 실제 강사 화면이 **텅 빈다**(임포트분이 다 보조T라).
+- **재배정**([reattribute-consultation-counselors.cjs](scripts/_poc_migration/reattribute-consultation-counselors.cjs), dry-run 기본·`--apply`·멱등[보조T 행만]·되돌리기 파일): ijw 원본에 실제 상담자명(consultantName)이 1457/1464건 존재 → eywa 사용자와 매칭(display_name/english_name, 괄호 영문닉 strip). 매칭키 (학생명, 상담일 YMD, 상담내용) → consultantName 해석 userId, 같은 키 다른 userId면 **모호=skip**. **적용: 1411건 중 1381 재배정**(키불일치 0·모호 0), 30건만 미해결(조희연 퇴사·테스트·"대표")로 보조T 유지. 정유진 222·신명진 124·이수연 118… 실제 강사에 정확 배분. run.ts도 **우선순위 수정**(consultantId→consultantName→stripParen→fallbackUser, dead `resolveUser` 제거)해 Firebase 재복원 시 재발 방지.
+- **코드 스코핑**([consultations/server/queries.ts](src/features/consultations/server/queries.ts)): `getStudentConsultationsPage`·`getStudentConsultationCounts` — teacher면 `student_id IN 담당` → **`.eq("counselor_id", user.id)`**. `getStudentOptionsForConsultation`(상담 대상 드롭다운)·`getStudentsNeedingConsultation`은 담당 학생 기준 유지(상담 '대상' ≠ 상담 '이력').
+- **⚠️ 누수 4표면 봉쇄(적대리뷰 HIGH 3 — 목록만 막으면 우회됨)**: ① **커맨드 팰릿 상담검색**([search/server/queries.ts](src/features/search/server/queries.ts) `searchConsultations`) — teacher `.eq(counselor_id)`(안 하면 팰릿으로 남의 상담 제목·요약 검색·클릭 이동). ② **상담 상세**(`getStudentConsultationById`) — teacher면 `.eq(counselor_id)` + `.single()`→`.maybeSingle()`(URL 직접 진입 시 null=notFound, 전문·전사·AI 차단). ③ **학생 상세 상담 탭**([students/server/queries.ts](src/features/students/server/queries.ts) `getStudentConsultationHistory`) — teacher scope(안 하면 상세로 dead 링크 + 남의 상담 노출). ④ **학생 타임라인**(`getStudentTimeline` 상담 이벤트) — teacher scope(요약 노출 차단). ⚠️ **supabase-js는 transform(.order/.limit) 뒤 filter(.eq) 불가** → filter를 order 앞으로.
+- 검증: typecheck0/lint0/**test642**/build✓ + 실 DB(스코프 전환 후 김윤하 194→7·이수진 109→49 본인 것만 / 재배정 1381·보조T 잔존 30 / **누수: 이수진 상담을 김윤하 counselor 스코프로 조회=0(차단)·본인 스코프=1**). ⚠️ 라이브 브라우저는 강사 로그인 불가(#31) — 데이터 레이어로 결정적 검증. ⚠️ **트레이드오프(사용자 인지)**: 강사가 **자기 담당 학생을 상담사/타 강사가 상담한 기록**은 이제 안 보임(상담 목록·학생 상세·타임라인 모두) — "내가 한 것만" 의도의 정직한 결과. 비-teacher 역할(사무실·상담사)은 전체 조회(무스코프, 정상). low(미수정): 상담 작성 시 '상담사'를 타인 지정하면 본인 목록에서 빠짐(기본=본인이라 평상시 정상). ⚠️ **되돌리기**: 재배정 revert 파일(`D:\tmp\reattribute-revert-*.json`)의 id를 보조T로 UPDATE.
+
+### 시간표 합반 셀 = ijw식 통합 명단(카드 1개 + 학생별 반 인덱스 배지) 재설계 (2026-07-03) — ✅ 4게이트(test638, hapban 22) + 외부검토 3라운드 + 적대리뷰(3렌즈, 확정 7건 전부 수정) + 라이브(무DB)
+사용자 피드백 2건: ① 합반 셀의 반별 카드 적층에서 **두 번째 반 위치가 셀마다 제각각**(ClassCell `hasBottom→flex-1`이 고정높이 스택 안에서 카드 하나를 늘림 = 버그) ② **ijw 대비 합반 나열 열등** — 양쪽 반 등록 학생이 두 카드에 중복 표시(노현우), 통합 총원 불명, 헤더 2개 공간 잠식. → **ijw ClassCard 패턴 이식**(2026-06-30 "한 셀 적층+배지" 항목을 대체): 합반 셀 = 카드 1개(헤더 가로 N등분 + 통합 명단), 앰버 박스·"합반 N반" 배지 유지. 통합뷰(반=열)는 무관. 계획 [`effervescent-watching-thunder.md`].
+- **순수 lib** [`lib/hapban.ts`](src/features/timetable/lib/hapban.ts)(Vitest 22): `buildHapbanRoster`(제네릭) — **dedup 키=studentId**, 학생은 전역 최고 status 섹션에 1회만(A퇴원+B재원→재원 `2`만), labels="1,2" 병합, **채택 enrollment**(편집 대상)=statusRank→세그 인덱스 tie-break(`ownClassId/ownClassName/ownSlotId/ownAttendanceDays` 행 바인딩), **표시 요일=최고 status 합집합**(`displayAttendanceDays`+행 attendanceDays 덮어씀 — A월만+B목만 `1,2` 학생이 공통 섹션에 정확히, hover도 일관), **`blockingClassIds`=비퇴원(active+hold) 소속 전부**(드롭 차단용 — labels와 별개), **`dayOwners`**(요일 칸 행은 그 요일 실소유 enrollment에 바인딩 — 채택 고정이면 '수' 칸을 끌 때 엉뚱한 enrollment 편집). + [`lib/student-sort.ts`](src/features/timetable/lib/student-sort.ts) — queries.ts 정렬 comparator 순수 추출(서버·클라 단일 소스).
+- **⚠️⚠️ 드롭 의미 = [`resolveDropTarget`](src/features/timetable/lib/hapban.ts) 순서 결정적**(외부검토 2건+적대리뷰 2건이 이 순서 결함을 잡음): ① **멤버 재해석(최우선·통과)** — 드롭존 data `memberClassIds`(합반 본문/요일존에만)에 출발 반이 있으면 `{toClassId: fromClassId}` 즉시 반환(자기 반 요일편집 — no-op 금지, 진짜 no-op은 caller `sameDaySet`) ② **소속 차단** — `target !== from && blockingClassIds.includes(target)`면 null(**자기 반(target===from) 드롭은 통과** — 같은-반 요일편집 제스처 보존, 다른 소속 반으로의 이동만 차단=GiST `enrollments_no_overlap` 사고 방지) ③ 기본 이동. **반 이동은 헤더 세그먼트 드롭만**(세그먼트 data엔 memberClassIds 없음). 반환 계약 `{toClassId, day}`만 — toSlotId/toClassName은 caller가 overData에서 유지(전입예정 배지 근거). onDragEnd([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>))가 이 함수 경유(일반 셀=meta 부재=기존 동작 그대로).
+- **컴포넌트**: [hapban-cell.tsx](<src/app/(shell)/timetable/_components/hapban-cell.tsx>)(세그먼트=자기 반 색+인덱스+재원수+HoverCard+WindowLink+**드롭존 `class:${slot.id}`**(기존 카드 계약 동일) / 본문=**`hapban:${slots[0].id}`**(2조각 — `class:` 재사용은 세그1과 중복, 3조각은 preferDayZone이 요일존 오인) / 재원 헤더 `count`=통합 총원(분리등원 포함) / 전입예정=전 slot.id 병합+세그 배지). class-cell.tsx(602줄)에서 **[student-rows.tsx](<src/app/(shell)/timetable/_components/student-rows.tsx>)·[student-section.tsx](<src/app/(shell)/timetable/_components/student-section.tsx>) 추출**(200줄 규칙, 행에 `badge`·ownClass* 폴백 — 일반 셀 동작 무변경).
+- **dedup 부작용(수용·문서화)**: 양쪽 재원 학생의 드래그/Delete는 채택 enrollment 1건만 — 이동 후 `1,2`→`2` 배지로 잔존 보임, Delete 확인창 "다른 반 수강 유지" 기존 문구가 커버.
+- **후속(같은 날, 사용자 제안) — 합반 드롭 = 반+요일 선택 간이 팝업**: 외부 학생을 합반에 놓으면 조용히 대표 반으로 가던 것을 **ClassPickPopover**([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>), DayEditPopover 문법)로 — 반 후보(①/② 인덱스 배지, **이미 열린 수강 반은 비활성 "이미 소속"**) + 요일 토글(전부=전 요일)을 **한 번에** 선택 후 이동(분리등원 이동이 원스텝). 판정=순수 [`shouldOpenClassPick`](src/features/timetable/lib/hapban.ts): **외부 학생→합반 어디든**(세그먼트=그 반, 요일존=그 요일 미리 선택) / **멤버→다른 세그먼트**(이동 의사 명시)만 팝업 — 멤버→본문/요일존은 기존 자기 반 요일편집 재해석 유지(원스텝). 드롭존 data가 `memberClasses`(반 정보)+`coveringDays`+`hapbanZone`(segment/roster)을 실음(resolveDropTarget엔 id 배열만 파생 전달 = lib 계약 불변). `applyClassPick`이 고른 반 세그먼트 slotId로 큐잉 → 전입예정 배지 인덱스 정확.
+- 검증: typecheck0/lint0/**test642**(hapban 26 — dedup·요일합집합·dayOwners·드롭 규칙 순서·자기반 통과·shouldOpenClassPick 4) + **라이브(dev, DB 무변경)**: 합반 3셀 — 세그먼트 2등분(반색·인덱스·카운트)·**노현우 `1,2` 1행**(중복 해소)·재원 15/11 통합(분리등원 포함)·요일 칸 세그 배지·일반 셀 무변 / 편집: 통합 행 클릭=요일편집 팝오버("노현우 · 등원 요일", own 바인딩)·Delete 확인창=채택 반명("중등M 중2 PS2S")·**합성 드래그로 외부 학생→합반 본문 = 반+요일 팝업 실검증**(② 선택+금만 → 전입예정 `2`·`[금]` 정확 큐잉)·전부 취소=큐 0. 합성 드래그 기법(이제 가능) = [[#52]] 갱신 참조.
+
+### 시간표 기본뷰 가독성 개선 — 균일 격자 테두리 + sticky 교시열 좌·우 테두리 고정 (2026-07-03) — ✅ 라이브(dev) + typecheck0/lint0 + main push(`0b3213e`)
+사용자 피드백: "ijw-calander 대비 eywa 시간표 가독성이 너무 떨어진다". ijw 그리드([`D:\ijw-calander\components\Timetable\Math\components\TimetableGrid.tsx`])와 대조 → 원인 진단: ① **테두리가 흐리다**(ijw 굵은 검정 3~4px ↔ eywa 얇은 `--line` 연회색 → 셀 경계 뭉개짐) ② 행 큼(330 고정, 휑함) ③ 강사 헤더 회색 ④ 밀도 조절 UI 없음. 사용자 지시로 **①(테두리) 중심 + 세로폭은 원래대로** 진행.
+- **격자 테두리 균일화**([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)): 전 격자선을 **단일 `border-ink/25` 1px**로 통일(`const GRID`). 구조선 2px/안쪽 1px 섞임 제거 + **셀 안 ClassCell 카드의 중복 테두리 제거**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `border-ink/15 border` → 무테두리) = **셀당 테두리 1개**. 빈 셀 `bg-ink/[0.06]` 틴트. `ROW_H` 330 유지(학생 명단 충분 노출 — 사용자 요청).
+- **⚠️⚠️ sticky 교시열 좌·우 테두리 고정(핵심 버그픽스)**: 좌측 교시열(`sticky left-0`)의 **왼쪽 프레임·오른쪽 divider가 가로 스크롤 시 사라짐**(사용자 2회 제보). 원인 = **`border-collapse` 모드에선 셀 테두리·표 외곽 border가 표(table)에 속해 sticky 셀을 안 따라온다**(스크롤하면 표가 밀리며 테두리만 떨어져 나감). **box-shadow도 병합모드 `td`에선 불안정**(1차 시도 실패). → **sticky 교시 셀의 자식 가상요소 실선**으로 해결: `::before`(왼쪽 프레임)+`::after`(오른쪽 divider), 각 1px `bg-ink/25`, `absolute inset-y-0 left-0/right-0`(`const STICKY_EDGES`). sticky 셀 자체가 positioned라 `after:absolute`의 기준이 됨(⚠️ `relative` 추가하면 sticky 깨지므로 금지). 비-sticky(주말표)는 스크롤로 안 밀려 일반 `border-r` 분기(`periodDivider`). 검증: computed pseudo(1px·ink/25·left:0/right:0) + 스크롤 400px 고정 + scroll=0 이중선 없음.
+- **곁들인 dev 블로커 픽스**: [next.config.ts](next.config.ts) `serverExternalPackages: ["exceljs"]` — exceljs(→unzipper→fstream→rimraf, pnpm 심볼릭 링크)를 정적 번들에서 제외. 안 그러면 그 서버액션(엑셀 가져오기)이 붙은 `/timetable`이 **dev(Turbopack)에서 "Module not found: rimraf"로 아예 안 뜸**(런타임 Node는 rimraf resolve 정상 = 프로덕션 무영향, dev만 막힘). external로 두면 dev/프로덕션 모두 안정 + 서버 번들 경량.
+- **⏭️ 후속 레버(미적용, 옵션 — 사용자 "좀 아쉽지만 충분")**: ① 테두리 더 진하게(ijw 순수 검정에 가깝게 — 현재는 eywa 팔레트 맞춰 ink/25 중간톤) ② **강사 헤더 색**(ijw는 강사별 `bgColor` 헤더 → 좌우 스캔 빠름, eywa는 회색 `bg-bg-soft`) ③ **밀도 조절 UI**(ijw는 열폭/행높이/글자크기 + 학교·학년 표시 토글 = 각자 튜닝, eywa는 고정값). 상세 = 메모리 [[reference_timetable-readability-followups]].
+- ⚠️ 커밋은 내 3파일만 명시경로(병렬 세션 ijw-sync WIP 미포함). ⚠️ **교훈: border-collapse 표의 sticky 행/열 테두리는 셀/box-shadow가 아니라 `::before`/`::after` 실선으로** — 아래 막혔던 점 [[#71]].
+
+### 수납관리 '환불 요청서' 탭 — 종이 서식을 웹 폼으로, 작성본은 데이터베이스에 저장 (2026-07-03) — ✅ 4게이트(test616) + 라이브 E2E 16체크(원복·DB잔여0) + 필수* 6체크
+사용자 요청: "환불처리요청서" 종이 서식(결재란·학생정보·환불내역·처리결과)을 **직원 이력서처럼 웹앱 안에서 작성·저장·열람**하게 — /billing 내부탭에 '환불 요청서' 추가. **이력서(staff_resume) 패턴을 그대로 미러** — 별도 테이블·마이그레이션 없이 `academy_documents`의 폼 문서(kind='form') 인프라(0072a) 재사용.
+- **데이터 = 새 form_type `refund_request`**(마이그레이션 0): `kind='form'` + `form_data jsonb` + **`restricted=true`**(계좌·환불금액 민감 → RLS restrictive 0072a가 DB 레벨에서도 사무실 역할[master/admin/manager/accountant]만 열람). 탐색기(/documents 수납·결제 분류)에 같은 행이 유형 '환불 요청서'로 노출.
+- **도메인**([features/billing/refund-request.ts](src/features/billing/refund-request.ts), 순수 공유 모듈 + Vitest 6): RefundRequestData(결재 3칸/학생정보 10필드/환불내역+방식 3행/처리결과 3필드) · parseRefundForm(FormData→구조화, 멀티라인 CRLF→LF 정규화) · normalizeRefund(jsonb 방어 정규화) · refundTitle. 액션 [saveRefundRequest·deleteRefundRequest](src/features/billing/server/refund-actions.ts)(**`canWriteTenant("billing")` 게이트** = master/admin/accountant, create/update 겸용 `{ok,id,nonce,redirectTo}` 반환) + 쿼리 [refund-queries.ts](src/features/billing/server/refund-queries.ts).
+- **UI**: /billing FaceTabs 5번째 면(`?tab=refunds`, [refunds-face](<src/app/(shell)/billing/_components/refunds-face.tsx>) 목록: 학생·수강반·환불요청일자·총 환불금액·작성일·작성자, 메모리 페이지네이션) → [/billing/refunds/new·[id]](<src/app/(shell)/billing/refunds/[id]/page.tsx>). 시트([refund-sheet.tsx](<src/app/(shell)/billing/refunds/_components/refund-sheet.tsx>))=**종이 서식 레이아웃 재현**(결재란 상단 + 학생정보/환불내역/처리결과 표) + **보기↔인라인 편집 WYSIWYG**(이력서 후속 패턴 — 수정 누르면 각 셀이 입력칸, 전 필드 plain input/textarea라 초안복원도 DOM 캡처만으로 완결) + useFormDraft(`billing-refund:*`) + nonce 가드([[#67]]) + `print-portrait` A4 인쇄. 창 크기 `billing/refunds: 840×720`(prefix 상속).
+- **사이드바 하부탭 배선**: [navigation.ts](src/lib/navigation.ts) `SUBTABS_BY_MENU.billing`에 '환불 요청서' 추가(FaceTabs와 별도 미러 — 이걸 빠뜨리면 페이지 탭엔 있고 왼쪽 사이드바 하부탭엔 안 뜸, 사용자 제보로 발견).
+- **탐색기 링크 교정**: /documents의 폼 행 링크가 `/staff/resumes/` 하드코딩이었던 것을 신규 [`formViewHref(formType,id)`](src/features/documents/categories.ts)(form_type 인지)로 교체 — 이력서→/staff/resumes, 환불→/billing/refunds. (documents page.tsx·[id]/page.tsx 양쪽.)
+- **필수 * 표시**: 실제 저장을 막는 필드(**학생 이름**)에만 빨간 `*`(편집 모드에서만) + native `required` + 툴바 안내 "*는 필수". 게이팅 없는 칸엔 * 안 붙임(수강료 계산기 때 정한 "실게이팅 필드만 *" 규약 — 나머지는 처리결과처럼 나중에 채우는 칸이라 부분 저장 자연스러움).
+- 검증: typecheck0/lint0/**test616**(refund-request 6)/build✓(`/billing/refunds/new`·`[id]` 라우트 등록) + **라이브 E2E 16체크**(워크트리 dev 3001, 마스터: FaceTab→빈 목록→작성(결재·학생·환불내역·처리결과)→저장→뷰(텍스트·결재란)→**print-to-PDF 1p PORTRAIT**→수정 prefill round-trip(금액 변경)→목록 행→**탐색기 수납·결제 '환불 요청서' 행 + 전용 뷰 링크**→삭제→목록·탐색기 소멸, **DB 잔여 0**) + 필수* 6체크(빨간 * danger색·required·빈 이름 native 차단·이름 1곳만). ⚠️ restricted RLS는 0072a 정책이 restricted=true 전 행에 적용돼 이력서 때 검증분이 그대로 커버. ⚠️ 후속 후보: 환불사유·요청일·총액 등 추가 필수화(사용자 요청 시)·환불→invoices 실환불 연동(현재 서식 기록만).
+- **후속(2026-07-03) — 환불완료일자 열 + 완료 처리자 자동 기록**(사용자 요청) — ✅ typecheck0/lint0/test6 + 데이터레이어 15체크(실 normalizeRefund import·실 DB ROLLBACK 라운드트립, 프로덕션 무변경): 목록에 **환불완료일자** 열 추가 + "누가 완료 처리했는지" 자동 기록. **마이그레이션 0**(jsonb 필드).
+  · **데이터**([refund-request.ts](src/features/billing/refund-request.ts) `result`에 3필드 추가): `completedDate`(환불완료일자)·`completedBy`(완료자 user id, **폼에서 안 받음=서버 전용**)·`completedByName`(완료자 표시명 **스냅샷**=조인 없이 목록 표시, 완료는 시점 사실이라 live 해석 아님). parseRefundForm은 `res_completedDate`만 파싱하고 completedBy/Name은 항상 "" 반환(위조 방지) — 서버가 못박음.
+  · **자동 스탬프**([refund-actions.ts](src/features/billing/server/refund-actions.ts) `stampCompletion`): 환불완료일자가 채워지면 **최초 완료(빈값→값) 때만** 저장한 사람으로 completedBy/Name 기록 → 이후 다른 사람이 재저장해도 **최초 완료자 보존**(마지막 편집자로 안 바뀜). 완료일자를 비우면 완료자도 삭제. update 경로는 직전 form_data를 select해 prev로 넘김(보존 판정). makeedu 실행 이력 triggered_by와 동일 패턴.
+  · **목록 열 = 헤더만 리네임(⚠️ 데이터 유지 — 사용자 정정 반영)**([refunds-face.tsx](<src/app/(shell)/billing/_components/refunds-face.tsx>)·[refund-queries.ts](src/features/billing/server/refund-queries.ts)): **환불요청일자→환불처리일자**·**작성자→담당자**는 **제목(헤더)만** 바꾸고 데이터는 기존 그대로(서식 `student.requestDate`·업로더 authorName). 1차 구현이 데이터 소스까지 `result.processedDate`/`completedByName||manager`로 갈아끼워 기존 행이 전부 "—"가 됐고 사용자 정정("기존의 것에서 이름만 바꾸자는것인데")으로 되돌림 — **⚠️ 교훈: "제목/이름 변경" 요청은 라벨 문자열만, 데이터 바인딩을 임의로 갈지 말 것**(바꾸는 게 낫다고 판단되면 제안만). + **환불완료일자** 열 신설(`result.completedDate`).
+  · **시트**([refund-sheet.tsx](<src/app/(shell)/billing/refunds/_components/refund-sheet.tsx>) 처리결과 rowSpan 3→5): 환불처리일자/전산처리여부/담당자(수기, 기존) 아래 **환불완료일자**(입력 date) + **완료 처리자**(읽기 전용 auto, 미완료 시 편집모드 힌트 "…저장하면 자동 기록" `print:hidden`). 초안복원은 `res_completedDate`가 named input이라 DOM 캡처로 자동 커버, completedByName은 미입력이라 미캡처(정상).
+  · ⚠️ **소급 없음**: 기존 행(박시완 1건)은 completedDate 없어 **환불완료일자만 "—"**(환불처리일자·담당자는 기존 데이터라 그대로 표시) — 완료자 기록은 다음 완료 저장부터. ⚠️ 라이브 브라우저는 세션 Chrome 끊김으로 미실행 — 실 normalizeRefund + 실 DB ROLLBACK 라운드트립(completedDate/completedByName 저장·재조회·매핑, ROLLBACK로 프로덕션 무변경)으로 대체. 원장 실화면 1회 확인 권장.
+
+### 학생상담 상세(읽기) 페이지 신설 — "클릭=보기, 수정=버튼" 전 엔티티 통일 (2026-07-03) — ✅ typecheck0/lint0/build✓
+사용자 지적: 학생상담만 카드 클릭이 **곧장 수정 폼**(`[id]/edit`만 존재, 상세 없음) — 다른 엔티티(등록상담·학생·반·직원·회의록)는 전부 클릭=상세(읽기)·수정=버튼. 실질 문제 2: ① 편집 폼에 동시편집 가드(presence)가 붙어 **읽으려고 연 사람도 "수정중" 배지**로 잡히고 초안 자동저장이 무장됨(1,429건 이력 열람이 주 사용인데) ② 녹음·전사·AI 7섹션(읽기 콘텐츠)이 편집 폼에 섞임.
+- **신설 [`/consultations/[id]`](<src/app/(shell)/consultations/[id]/page.tsx>)**: 헤더(학생명=학생 상세 WindowLink·학년·카테고리/과목(buildSubjectMaps 라벨)/대상/후속 urgency Pill·🎙️/AI/↻동기화 배지·EditingBadge) + **수정 버튼**(→edit) + 삭제 + 상담 내용(pre-wrap, max-h 스크롤) + 후속 조치 카드(FollowUpToggle 재사용, 내용 있을 때만) + **RecordingPanel(녹음·전사·AI 분석)을 edit에서 상세로 이동**(읽기 콘텐츠 + 명시적 'AI 분석' 버튼 정책 부합).
+- **배선**: 목록 카드 클릭 → 상세(`상담 상세` 창) / edit BackLink → 상세 / **커맨드 팰릿 학생상담 결과 → 상세**(이전엔 상세가 없어 목록으로 우회하던 것 해소) / `ROUTE_WINDOW_SIZE.consultations=760×640`(목록·상세 prefix 상속). CATEGORY_META/URGENCY_META/AUDIENCE_LABEL은 [_components/consultation-meta.ts](<src/app/(shell)/consultations/_components/consultation-meta.ts>)로 추출(목록·상세 공유).
+- ⚠️ 라이브 시각 검증은 auth 게이트로 게이트 검증 대체(build에 라우트 등록 확인) — 원장 HMR 확인 권장. 상세 페이지는 edit과 동일 게이트(requireAccess consultations, RLS 테넌트 격리 — 접근 범위 확장 없음).
+
+### 등록상담 "수업 배정" + 칸반 "배정 완료" 컬럼(수업≥1) — "등록" 라벨 ≠ 학생 생성 혼동 해소 (2026-07-02) — ✅ 4게이트(test595) + 라이브 E2E 6단계(원복)
+사용자 제보: 등록상담을 "등록"으로 진행했는데 학생 목록에 없음(허다언). 진단: 상단 **"등록" 뱃지 = `outcome='enrolled'` 라벨일 뿐** 학생을 안 만든다 — 실제 학생 생성은 **"학생 등록 완료" 버튼**(`convertConsultationToStudent`)이 눌려야 함(students INSERT + `student_id` 연결). DB 실측: `outcome='enrolled'` 상담 172건 중 **student_id 연결 0건**(ijw/makeedu가 상담·학생을 각각 임포트 → 원래 안 연결, 학생은 students로 직접 들어옴). 즉 "등록"은 거짓 완료 신호(write-only-orphan의 UX판).
+- **사용자 확정 2건**: ① 칸반 **5번째 "배정 완료" 컬럼** 추가 ② "학생 등록 완료" → **"수업 배정"** + 반 **최소 1개 필수**.
+- **버튼/다이얼로그 리네임**([convert-dialog.tsx](<src/app/(shell)/enrollment/[id]/_components/convert-dialog.tsx>)): "학생 등록 완료"→**"수업 배정"**, eyebrow "상담 → 수업 배정", 제출 "수업 배정". **반 0개면 제출 disabled + "1개 이상 선택" 안내**. 서버 [convertConsultationToStudent](src/features/enrollment/server/actions.ts)도 `classIds.length===0`이면 거부(이중 방어).
+- **"배정 완료" = 파생 컬럼(outcome 아님)**: 연결 학생(`student_id`)의 **미종료 수강 수**(`end_date is null OR >= 오늘 KST`)가 ≥1이면 배정 완료. [ConsultationListRow](src/features/enrollment/server/queries.ts)에 `studentId`+`assignedClassCount` 추가(목록=fetchInChunks 병렬 B4, 상세=count head:true). [page.tsx](<src/app/(shell)/enrollment/page.tsx>)가 `assignedClassCount>=1` 카드를 배정 완료 컬럼으로 모으고 **outcome 컬럼에선 제외**(상호배타·중복표시 방지). 칸반 grid `xl:grid-cols-5`+GraduationCap 아이콘([enrollment-kanban.tsx](<src/app/(shell)/enrollment/_components/enrollment-kanban.tsx>)).
+- **카드/표 배지**: 배정된 카드는 outcome pill 대신 **"배정 완료"**(primary) + "수업 N개"([column-cards](<src/app/(shell)/enrollment/_components/column-cards.tsx>)·[enrollment-table](<src/app/(shell)/enrollment/_components/enrollment-table.tsx>)).
+- **헤더 통계 정직화**: "등록 전환율 X%"(outcome=enrolled 기반 → 172건 과대) → **"배정 완료 N건"**(수업≥1 실완료).
+- 검증: typecheck0/lint0/**test595**/build✓ + **라이브 E2E 6단계**(워크트리 dev 3007, 마스터, 테스트 상담 SQL 생성→원복): 5컬럼(대기·상담·AI·등록종료·**배정 완료**)·stat "배정 완료 N건" / 상세 버튼 "수업 배정"(옛 라벨 0) / 다이얼로그 0반 제출 비활성+안내 / 반 1개 체크→활성→배정→**학생 생성**·상담이 배정 완료 컬럼("수업 1개"·배정 완료 pill)·**학생 목록 등장** → 생성 학생+수강+테스트 상담 삭제(residual 0). ⚠️ 상세 "등록" 뱃지(outcome)는 유지 — 배정되면 버튼이 "학생 정보 보기"로 바뀌어 구분(뱃지까지 바꾸는 건 후속). ⚠️ 배정 후 모든 수업이 종료되면 배정 완료에서 빠져 등록·종료로 복귀(현재 활성 수업 기준 = 의도).
+- **기존 데이터 백필(사용자 요청 "수업1개 이상 있는 학생 전부 배정 완료로", 프로덕션 적용 완료)**: ijw/makeedu 임포트가 상담·학생을 각각 넣어 `enrollment_consultations.student_id`가 전부 null → outcome='enrolled' 172건도 배정 완료로 못 올라갔다. [backfill-consultation-student-link.cjs](scripts/_poc_migration/backfill-consultation-student-link.cjs)(멱등·dry기본·`--apply`)가 상담(student_id null·enrolled) ↔ 활성 학생을 **① 이름 정규화 ② 학교 core 호환**(초등학교/중학교/고등학교/초/중/고 접미 제거 후 포함관계)으로 매칭, **유일 매칭 + 미종료 수업≥1**일 때만 student_id 채움. ⚠️ **학년은 매칭키에서 제외**(초4→초6 시간차 드리프트로 대부분 놓침) — 대신 **학교 호환이 핵심 판별자**(dry-run 실측: 이름-only 99건 중 동명이인 다수[신암초→성광중·초1→고2 등] → 이름+학교호환 68건·모호 0·표본 전부 정확). **적용: 68건 링크(모호·학교불일치·수업0·무매칭 건너뜀) → 배정 완료 69건**(백필68+기존1), 등록·종료 172→103. 되돌리기=백필이 출력한 id 목록으로 `student_id=null`(student_id가 null이던 것만 채워 안전). ⚠️ 이름+학교 동일 동명이인은 이론상 오링크 가능하나 단일 학원 규모(활성 430명)라 표본 0건.
+
+### 인앱 알림(notifications) — "자신과 관련된 행동"에 알림, 첫 슬라이스 = 수업 배정·전입·인수인계 (2026-07-03) — ✅ typecheck0/lint0/test610 + 적대리뷰(4렌즈, 확정 5건 전부 수정) + 라이브(배지·목록·읽음·RLS격리)
+사용자 결정: 강사 등 직원이 자신과 관련된 행동(수업 배정·반이동 전입 등)에 알림을 받게. **A안(인앱 알림)** 인프라 + 최소 슬라이스. ijw "알림센터"는 원래 의도적 제외였으나 이걸로 경량 신설. 이후 이벤트는 `notifyUsers(...)` 한 줄로 확장.
+- **데이터(0074a, dev적용·RLS·멱등)**: `notifications`(recipient_id·type·title·body·link·actor_id·read_at). RLS = 수신자 self-only(`recipient_id = auth.uid()`) select/update/delete, **insert는 service_role만**(notifyUsers가 타 사용자에게 발송). schema.ts 수기 동기(부분 unread 인덱스·DESC는 alpha 정본, 주석 명시).
+- **발송 헬퍼** [notify.ts](src/features/notifications/server/notify.ts): `notifyUsers`(저수준, **best-effort**=실패해도 본 액션 안 막음, 유발자==수신자 스킵) + `notifyClassAssignment`(반 담임=classes.teacher_id에게, 담임별 집계 "김철수 외 N명"). ⚠️ **admin client는 RLS 우회라 반드시 본 테넌트 반/학생만 필터**(적대리뷰 HIGH: enrollments RLS가 class_id 테넌트 미검증 → 조작된 foreign classId가 외부 강사에게 알림 누출 → notify에서 tenant 필터 + createEnrollment/convert에 반 소유 검증 이중 방어).
+- **배선(4경로)**: createEnrollment·moveEnrollmentsBatch(전입, 성공 이동의 studentId를 구enrollment에서 역조회)·scheduleHandover(새 담임)·convertConsultationToStudent(수업 배정). 전부 best-effort await.
+- **UI**: 헤더 벨을 실기능으로([notification-bell.tsx](src/features/notifications/components/notification-bell.tsx)) — 안읽음 배지·목록(이모지·제목·본문·상대시각·안읽음점)·모두읽음·클릭시 읽음+이동. 서버액션(fetchMyNotifications·markNotificationsRead) + **60초 폴링 + 경로변경 + 창 포커스/가시성 복귀** 새로고침. ⚠️ **강사 미니셸에도 벨 추가**(적대리뷰: 강사가 1차 수신자인데 AppHeader 없는 미니셸이라 벨이 안 뜨던 것).
+- **적대리뷰 확정 5건 전부 수정**: ① HIGH 크로스테넌트 누출→tenant 필터+반소유검증 ② 강사 미니셸 벨 누락→추가 ③ 벨 read 경로가 seq 가드 미공유→느린 폴링이 읽음 되돌림→공용 `run(seq)` 래퍼 ④ 창 안 벨 없음+top-frame 60초 stale→focus/visibility 새로고침 ⑤ schema 인덱스 주석. (REFUTED 1: link는 서버조합 상대경로라 open-redirect 무효.)
+- 검증: typecheck0/lint0/**test610** + 라이브(chris 배지2→목록3→모두읽음→배지소멸 + st2000423 알림이 chris에 미누출=RLS 격리). ⚠️ **강사 로그인 라이브는 미실행**(데모 강사 auth 소실 #31) — 미니셸 벨은 TeacherMenu와 동일 게이트 조건부라 by-construction. ⚠️ 창(iframe) 내 실시간은 focus 새로고침으로 완화(진짜 realtime=Supabase Realtime은 v2). 학생은 수신자 아님(벨 미노출).
+
+### 등록상담 녹음 = 여러 행(consultation_recordings) — 상담사별 추가 녹음 + 합본 재분석 (2026-07-02) — ✅ typecheck0/lint0/test603 + 적대리뷰(4렌즈 16에이전트, 확정 10건 전부 수정) + 라이브 UI
+사용자 결정: "여러 명의 상담사가 녹음할 수도 있다 → **녹음파일들이 행으로 남아있으면 되겠어**". 단일 `audio_path` 덮어쓰기 모델을 폐기.
+- **데이터(0068a, dev적용·RLS 격리·멱등 백필)**: 신규 `consultation_recordings` — 상담 FK(cascade)·audio_path·전사·speaker_labels·상태·**recorded_by**(누가 녹음)·updated_at. 기존 단일 오디오는 백필로 행 이전(현재 0건이라 no-op). schema.ts 수기 동기.
+- **미러 불변식**: 상담 행(enrollment_consultations)의 `audio_path`/`processing_status`는 **최신 녹음 미러**(목록 🎙️배지·StatusWatcher·칸반 무회귀), `transcription`=완료 녹음 **합본**. transcript id는 녹음 행에만(미러하면 웹훅 이중 매칭).
+- **분석 = 합본 재분석**: 녹음 하나 완료될 때마다 완료된 전체 녹음 전사를 [combineConsultationTranscripts](src/features/enrollment/transcripts.ts)(순수, Vitest8)로 합본(1개=레거시와 바이트 동일 프롬프트, 2개+=《녹음 n · M/D HH:mm》 헤더+회차 안내)해 13섹션+폼 보강 재실행. **현재 녹음은 DB read-back이 아니라 in-memory 전사 병합**(completed write 실패에도 안전).
+- **웹훅**([route.ts](src/app/api/webhooks/assemblyai/route.ts)): recordings 우선 lookup → 레거시 폴백(배포 전 in-flight 보호). 공유 tail `analyzeConsultationAndPersist`로 레거시/신규 경로 통합.
+- **적대리뷰 확정 10건 전부 수정**: ① fan-in 레이스(부분 합본이 전체 덮어씀) → **stale-check**(분석 후 완료 집합 재조회, 새 완료 있으면 전체 skip) ② 분석 중 크래시 replay 미복구 → 녹음 completed+상담 미완이면 **replay=분석 복구**(`recoverConsultationAnalysis`) ③ read-back 의존 → in-memory 병합 ④ outcome 회귀 → enrolled/declined/no_show면 ai_done 승격 안 함 ⑤ 다른 녹음 전사 중 미러 completed → **transcribing 유지**(StatusWatcher 생존) ⑥ 녹음 1개 실패=상담 전체 '실패' 오표시 → [syncMirrorAfterRecordingFailure](src/features/enrollment/server/recording-mirror.ts)(완료 녹음 있으면 completed 복원, 실패는 행 상태칩으로만) ⑦ 필드저장+첨부실패 → "입력 내용은 저장되었습니다" 명시 ⑧ 죽은 레거시 `startConsultationFromAudio` 삭제(호출처 0) ⑨ speakerRoles 억제를 **완료 녹음 1개** 기준으로(웹훅 multi 판정과 일치) ⑩ 이중 박스 → TranscriptSection `frameless` prop.
+- **UI**: 상세 [recordings-section.tsx](<src/app/(shell)/enrollment/[id]/recordings-section.tsx>) — 녹음 n행(일시·길이·크기·올린이·상태칩) + 행별 전사(접힘, frameless). 수정 폼 "🎙️ 이미 등록된 녹음 N개 — 새 녹음은 **추가**됩니다" + 강조 콜아웃(✨ 저장하면 전사+분석 자동 실행 — 흐린 11px 안내가 안 보인다는 제보 반영). reconcile cron에 recordings 추가.
+- 검증: typecheck0/lint0/**test603**(transcripts 8) + 라이브 UI(허다언에 테스트 행 심고 상세 3행·수정폼 안내·실패 행 표시·frameless 확인 후 원복). ⚠️ **전체 파이프라인 E2E는 배포 후** — 웹훅이 프로덕션(eywa-alpha)에서 돌아 배포 전 로컬 제출 녹음은 완료 못 함(구 웹훅이 recordings를 모름 → cron이 failed 회수). 배포 직후 실녹음 1회 확인 권장. ⚠️ 실패 녹음 행 삭제/재시도 액션은 후속(행이 쌓이면 지저분 — 정직한 기록이라 v1 수용).
+### 직원관리 '직원 이력서' 탭 — 종이 서식을 웹 폼으로, 작성본은 데이터베이스에 저장 (2026-07-02) — ✅ 4게이트(test600) + 라이브 E2E 10단계(테스트 행 원복) + RLS 롤백 검증
+사용자 요청: "인재원 이력서.docx"(빈 서식)를 **웹앱 안에서 작성**하게 — /staff에 FaceTabs('직원 목록'/'직원 이력서') 신설, "작성하면 데이터베이스로 올라가는" 방향(사용자 확정). doc 파일 직접 편집은 비현실적(MS365/OnlyOffice 필요)이라 **서식을 구조화 웹 폼으로 디지털화** — 인쇄→작성→업로드 단계 자체가 사라짐.
+- **데이터 = academy_documents에 폼 문서 kind 신설**(`0072a`, 프로덕션 적용): `kind='form'` + `form_type`('staff_resume') + `form_data jsonb` + **`restricted boolean`**(사무실 전용 열람). 별도 테이블 없이 데이터베이스 저장소 재사용 → 탐색기(인사·직원)에 같은 행이 유형 '이력서'([FORM_TYPE_LABEL](src/features/documents/categories.ts))로 나타남(이름 클릭=이력서 뷰, [id] 상세는 form이면 redirect).
+- **⚠️ restricted = RLS restrictive 정책(0072a)이 DB 레벨에서도 강제**: 이력서엔 주민번호·급여·계좌가 있어 documents readonly(강사·상담·회계·뷰어)에게 노출되면 안 됨 → 신규 `auth_system_role()`(security definer, auth_tenant_id 패턴) + `as restrictive` 정책으로 **restricted 행은 master/admin/manager/accountant만**(기존 tenant 정책과 AND). 앱 레이어 게이트는 매트릭스(canWriteTenant), DB 정책은 하드코딩 역할 = 거친 백스톱. BEGIN…ROLLBACK 검증: 강사=restricted 0·일반 서식 1(무회귀) / master=1.
+- **도메인**([features/staff/resume.ts](src/features/staff/resume.ts), 순수 공유 모듈 + Vitest 5): StaffResumeData(인적사항/학력4/경력3/자격3/외국어3/계약) · parseResumeForm(FormData→구조화, 근무형태 화이트리스트) · normalizeResume(jsonb 방어 정규화) · resumeTitle. ⚠️ **근무요일 체크박스는 요일별 고유 name**(`c_workday_mon`) — 다중 값 한 name이면 초안(useFormDraft) round-trip이 깨짐. 액션 [saveStaffResume·deleteStaffResume](src/features/staff/server/resume-actions.ts)(canWriteTenant("staff") 게이트, create/update 겸용 `{ok,id,nonce,redirectTo}` 반환).
+- **UI**: /staff FaceTabs(list/resumes, `?tab=`) + [resumes-face](<src/app/(shell)/staff/_components/resumes-face.tsx>)(목록: 성명·부서·입사일·작성일·작성자, 메모리 페이지네이션) → [/staff/resumes/new·[id]·[id]/edit](<src/app/(shell)/staff/resumes/[id]/page.tsx>). 폼([resume-form](<src/app/(shell)/staff/resumes/_components/resume-form.tsx>))=5섹션 + useFormDraft(`staff-resume:*`) + 근무형태 SearchableSelect(컨트롤드, onRestore rehydrate) + nonce 가드(#67). 뷰([resume-sheet](<src/app/(shell)/staff/resumes/_components/resume-sheet.tsx>))=**종이 서식 레이아웃 재현**(표+☑요일+■근무형태), `print-portrait` + 인쇄 버튼(window.print) — **print: 압축 클래스로 A4 1장**(첫 실측 2p→text-[11px]/py-1/p-3로 1p). 창 크기 `staff/resumes: 840×720`(prefix 상속).
+- 검증: typecheck0/lint0/**test600**/build✓ + **라이브 E2E 10단계**(워크트리 dev 3006, 마스터: FaceTabs→빈 목록→작성(성명·학력·부서·입사일·월목 체크)→뷰 시트(☑월☑목☐화)→목록 행→**탐색기 인사·직원에 '이력서' 행**→수정 prefill+영문이름 round-trip→**print-to-PDF 1p PORTRAIT**→삭제→탐색기에서도 소멸) + RLS 롤백 테스트. ⚠️ 후속 후보: 사진란(이미지 첨부)·users(직원) 연결 FK·이력서를 .docx로 내보내기(원본 템플릿 채움).
+- **후속(2026-07-03) — 종이 서식 그대로 인라인 편집(WYSIWYG)** — ✅ 4게이트(test608) + 라이브 E2E 22체크(원복): 사용자 제보 "수정 화면과 미리보기 화면이 너무 다르다 → 미리보기에서 수정 누르면 바로 타이핑" → 별도 라벨 폼(/edit) 폐기하고 **미리보기 종이 서식 자체를 입력칸으로**(뷰↔편집 인라인 토글). [resume-sheet.tsx](<src/app/(shell)/staff/resumes/_components/resume-sheet.tsx>)를 서버 읽기전용 시트 → **클라 뷰/편집 토글 단일 컴포넌트**로: 편집 시 각 셀이 `parseResumeForm` name 입력칸(근무요일=라벨 클릭 체크박스·근무형태=■/□ 토글[hidden c_employmentType]·입사일=date), 뷰=텍스트(마크업 동일). `saveStaffResume`/`useFormDraft`(staff-resume:*)/nonce 가드(#67) 그대로. ⚠️ **편집 종료(setEditing)는 렌더-중 상태조정**(#25 — effect-setState 룰 회피, enrollment-assign-dialog 패턴)이고 **부수효과(초안삭제·네비)만 effect**(생성=새 뷰 이동 / 수정=뷰 복귀+router.refresh). [new/page](<src/app/(shell)/staff/resumes/new/page.tsx>)=편집 모드 시작, [[id]/page](<src/app/(shell)/staff/resumes/[id]/page.tsx>)=뷰(툴바 수정/인쇄/삭제 시트 내장). **`[id]/edit` 라우트·`resume-form.tsx` 삭제**(인라인으로 대체 → 위 356줄 SearchableSelect·/edit 언급은 이 후속으로 대체됨). 라이브(워크트리 dev 3011, 마스터): 신규=편집칸 렌더→저장→뷰(텍스트)→**수정=인라인칸 프리필 재등장(p_name/요일체크/근무형태/학교)**→취소→삭제(테스트 행 DB 원복·잔여 0).
+- **후속2(2026-07-03) — 이력서 창 '이중 스크롤' = 시트 `border-2`가 스크롤바처럼 보인 것 (⚠️ 진단 함정 기록)** — ✅ 헤드드 렌더 before/after + 인쇄 1p 무회귀: 사용자 제보 "이력서 창에만 스크롤 이중". **실제 스크롤 컨테이너는 main 1개뿐**(보기·수정·최대화·폭 360~840 전수 측정 = 세로 1개, 가로 0). 진짜 원인 = **이력서 시트가 유일하게 A4 '종이' 카드라 `border-2 border-foreground/60`(진한 2px 세로 테두리)를 그리는데, 그 오른쪽 테두리 선이 창 스크롤바와 나란히 떠 두 개의 세로 트랙(=이중 스크롤)처럼 보임**(다른 창은 콘텐츠가 폭을 채워 스크롤바 1개만 → 이력서에서만 발생). **수정([resume-sheet.tsx](<src/app/(shell)/staff/resumes/_components/resume-sheet.tsx>) 시트 루트)**: 화면 = `border border-line rounded-md shadow-card`(연한 카드 테두리+그림자+둥근 모서리 → '떠 있는 문서 카드'로 읽힘) / 인쇄 = `print:border-2 print:border-foreground/60 print:rounded-none print:shadow-none`(크리스프 서식 테두리 유지). 검증: 헤드드(classic 스크롤바) 렌더로 before(진한 선+스크롤바 2트랙)/after(소프트 카드+스크롤바 1개) 확인 + print-to-PDF **1p PORTRAIT(595x842) 무회귀** + typecheck0/lint0/test608(마이그0=순수 CSS). ⚠️ **함정 교훈**: overlay 스크롤바(헤드리스)는 공간 0이라 안 보임 → "이중 스크롤" 시각 버그는 **headed(classic 스크롤바) 렌더 + 우측 크롭 스크린샷**이 결정적(scroll-container 카운트만으론 안 잡힘). 그리고 창 안 문서 카드의 진한 테두리는 스크롤바로 오인될 수 있다(다른 창=풀폭 콘텐츠라 무해, 종이 카드형만 주의).
+
+### 데이터베이스(서식 저장소) 메뉴 신설 — 윈도우 탐색기형 V1 (2026-07-02) — ✅ 4게이트 + 라이브 E2E(텍스트 7단계·업로드 4단계, 테스트 행 원복)
+사용자 요청: 사이드바 메인 메뉴 "**데이터베이스**" — 학원 각종 서식 보관소. **빈 양식 파일**(직원이 다운로드해 작성)과 **앱 작성 문서**를 한 목록에서 관리, 역할·권한 매트릭스로 편집 가능, **윈도우 탐색기처럼** 생긴 UI.
+- **데이터**(`0067a` `academy_documents`, dev적용·RLS 격리): title·category(enum 6종: 등록·입학/수납·결제/상담/인사·직원/수업/기타)·kind(`file`|`text`)·description·file_path/name/size/mime·body·uploaded_by. ⚠️ **enum도 alpha에서 생성**(`do $$ create type … exception when duplicate_object$$`) — 손수 alpha 전용 흐름(db:generate 금지)이라 drizzle이 안 만들어 줌.
+- **스토리지**: media-storage에 **`document` kind 신설** — 경로 `{tenantId}/documents/{uuid}.{ext}`(서버 빌드, 원본 파일명은 DB에만), 20MB, 이미지/PDF/Word/Excel/HWP(+octet-stream 폴백, HWP는 CT가 애매). 기존 티켓 파이프라인(발급→클라 PUT→`verifyUploadedObject`→DB 등록, 실패 시 removeObject cleanup) 그대로 재사용. `resolveTenantReadUrl`/`resolveTenantReadUrls` kind에 "document" 추가.
+- **권한**: menuKey **`documents`**([permissions.ts](src/lib/permissions.ts)) — master/admin/manager=full(업로드·작성·수정·삭제), teacher/counselor/accountant/viewer=**readonly**(다운로드), student=none. 쓰기 액션 전부 `canWriteTenant("documents")` 게이트 + 다운로드(`signDocumentUrl`)만 `canAccessTenant`(readonly 허용 = 빈 양식 배포가 목적). 강사 '내 메뉴'(TEACHER_MENU_KEYS + teacher-menu)에도 추가(빈 양식 다운로드).
+- **UI(탐색기형)**: [/documents](<src/app/(shell)/documents/page.tsx>) — **좌 폴더 팬**(전체+분류 6, Folder 아이콘+건수, 좁은 창=상단 칩으로 접힘) + **우 상세 테이블**(이름[유형별 색 아이콘]/분류/유형/크기/등록일/등록자) + 툴바(검색 GET폼·새 문서·업로드). 파일 행 이름 클릭=**서명 URL 새 탭**(팝업차단 회피: 제스처 스택에서 동기 `window.open` 후 URL 주입), 텍스트 행=상세 드릴인([documents/[id]](<src/app/(shell)/documents/[id]/page.tsx>) — 본문 pre-wrap + canWrite면 인라인 수정[nonce 가드 #67]). 업로드 다이얼로그=파일 선택 시 제목 자동 채움(파일명), 진행률 %. 삭제=행 인라인 확인. 창 크기 `documents: 980×640`.
+- **쿼리**([features/documents/server/queries.ts](src/features/documents/server/queries.ts)): `getDocumentsPage`(SQL 필터 ilike + range 페이지네이션 + count exact) · `getDocumentCategoryCounts`(count head:true ×7 병렬 = B2/B4) · `getDocumentById`. 공유 상수 [categories.ts](src/features/documents/categories.ts)(server-only 없음 — 분류는 시스템 분류=코드 고정, 운영 enum 아님).
+- **⚠️ v2 계획(사용자 확정, 미구현)**: OCR 미처리 파일(이미지·스캔 PDF)을 **AI OCR로 본문 추출→메타데이터·색인→검색**. provider = **Gemini/OpenAI/Anthropic 가성비 비교 선정 — Upstage vision/OCR 배제**(사용자 과거 실측: 품질 처참). 실시간 불필요라 **비동기 Batch API(~50% 할인)** 정석. 그때 `ocr_text`/`metadata` 컬럼 추가(schema.ts 주석). [[project_documents-database]]
+- 검증: typecheck0/lint0/**test595**/build✓ + **라이브 E2E**(워크트리 dev, 마스터): 텍스트 문서 7단계(탐색기 렌더 폴더7·생성→목록·폴더 필터 격리·검색·상세=플로팅 창·수정 저장·삭제 원복) + 업로드 4단계(제목 자동 채움·GCS PUT→행 표시 "이미지 70B"·**서명 URL HTTP 200**·삭제 정리). ⚠️ 검증 함정 2: ① 온보딩 코치마크+**실공지 팝업**(z-60 오버레이)이 클릭 차단 → 테스트는 먼저 dismiss ② **GCS CORS는 exact origin(localhost:3001)** — dev를 3003에서 돌리면 업로드 PUT이 CORS 차단(3001로 검증).
+- **후속(같은 날, 사용자 실사용 피드백 3건)** — ✅ typecheck0/lint0/test595 + 라이브 E2E 6단계(드롭→프리셋 다이얼로그·업로드 완주·**다운로드 원본 한글 파일명**·핀 최상단·해제·원복):
+  ① **드래그드랍 업로드**: 페이지 아무 데나 파일을 끌면 전면 오버레이("여기에 놓아 서식 업로드", z-40=다이얼로그 아래) → 놓으면 그 파일이 프리셋된 업로드 다이얼로그가 열림(window dragenter/leave **깊이 카운터**로 자식 요소 flicker 방지, 다이얼로그 열림 중엔 전역 드롭 무시). 다이얼로그 파일 칸도 **드롭존**(점선 박스, 클릭=선택·드롭=교체, input은 sr-only — `required` 제거하고 제출 판정은 file state).
+  ② **미리보기/다운로드 분리 + 내부 창 미리보기**(사용자 "내부창에서 미리보기 못하나?" 후속으로 새 탭→**내부 플로팅 창** 전환): 이름 클릭=**내부 창 미리보기**([documents/[id]/preview](<src/app/(shell)/documents/[id]/preview/page.tsx>) — 이미지/PDF=서명 URL 직접 렌더(**완전 내부, 외부 전송 0**), Word/Excel=**MS Office 온라인 뷰어를 창 안에 iframe 임베드**(⚠️2h 서명 URL이 MS 서버로 전달됨 — 빈 서식 배포 용도라 수용, 완전 내부화는 v2 업로드 시 PDF 사본 변환으로), HWP/기타=창에서 "미리보기 불가" 안내+다운로드 버튼). 미리보기 가능 형식은 행 이름 옆 **[미리보기] 라벨**([isPreviewableType](src/features/documents/categories.ts)). 행·상세 **다운로드 버튼**=attachment disposition 서명 URL을 anchor 클릭(탭 안 열림, **원본 한글 파일명으로 저장** — [media-storage](src/lib/storage/media-storage.ts) signed read에 `downloadName` 옵션: GCS `responseDisposition`=attachmentFilename(RFC 5987, B1)·supabase `{download}`). 다운로드 클라 헬퍼=[open-file.ts](src/features/documents/open-file.ts)(_components 교차 import 회피).
+  ③ **핀 고정**: `pinned` 컬럼(0067a에 idempotent ALTER 추가·dev 적용) + 행 핀 토글(canWrite) → 목록 정렬 `pinned desc → created_at desc`, 고정 행은 gold 핀+배경 틴트. 자주 쓰는 서식을 상단에.
+
+### 탭 재오픈 로그아웃 수정 — 미들웨어 세션 갱신 복원(표준 @supabase/ssr) + getCurrentUser 폴백 (2026-07-02) — ✅ typecheck0/lint0 + 적대리뷰(4렌즈, 확정1 수정)
+사용자 제보: 탭 닫고 재오픈하면(수 초 내 같은 탭도) 로그아웃. 진단(라이브러리 소스 대조): 브라우저 쿠키는 지속(400일·path=/·SameSite=lax·secure아님)이라 문제가 아님. **진짜 원인 = 미들웨어([proxy.ts](src/lib/supabase/proxy.ts))가 쿠키 존재만 체크하고 표준 세션 갱신을 안 함** → Server Component는 쿠키 못 씀(server.ts setAll no-op) → 아무도 만료·회전(refresh rotation) 토큰을 refresh·persist 못 함 → @supabase/ssr가 소스에 경고한 *"random logouts / early session termination"*.
+- **수정**: 미들웨어에 표준 세션 갱신 복원 — 매 요청 `createServerClient`+`getClaims()`로 refresh, `setAll`이 갱신 쿠키를 **응답(Set-Cookie)·요청 헤더 양쪽에** 반영. **canonical 패턴**(변경된 `request`를 통째 `NextResponse.next({ request })`로 forward)이라 같은 요청의 (shell)/layout `getCurrentUser`가 **fresh 토큰**을 읽어 이중 refresh/회전 경합 없음.
+- ⚠️ **#10 로그인 루프 회피**: 리다이렉트 게이트는 여전히 **쿠키 존재**로만 판정(getClaims 결과 미사용) + try/catch. 과거 middleware `getUser()`가 base64 쿠키 검증 실패로 정상 로그인을 /login으로 튕겨 루프 났던 것 → 결과에 게이트 안 걸면 재발 없음. 진짜 검증은 layout getCurrentUser.
+- **[getCurrentUser](src/lib/auth/current-user.ts) 폴백 강화**: `getClaims`가 sub를 못 내도(콜드/엣지에서 조용히 빈손) **세션 토큰이 있으면**(`getSession` 로컬 확인) authoritative `getUser`로 확정 → 정상 세션이 로컬검증 실패만으로 /login 튕기는 것 방지. 무세션은 `getSession` null이라 `getUser` 스킵(anonymous 성능 보존).
+- **⚠️ 적대리뷰 확정 1건 선수정**: 최초 구현이 `reqHeaders`를 쿠키 변경 **이전에** 복제해 forward → `request.cookies.set`은 원본 `request.headers`만 갱신하는데 다운스트림엔 stale 복제본이 가서 **RSC가 옛 쿠키 → 이중 refresh + 회전 경합**(엄격 회전 구성에선 재-로그아웃). → `request.headers` 직접 변형(x-embed) + `{ request }` forward로 교정.
+- ⚠️ **미들웨어 변경이라 dev 재시작 필요**(#35). **라이브 로그인 지속은 배포 후 검증 필요** — 비밀번호 직접 입력 불가로 게이트+적대리뷰로 대체, 원장이 로그인→탭닫기→재오픈(즉시/1h+)·루프無 1회 확인 권장. 24h+ 지속은 Supabase Dashboard Auth의 JWT expiry·**Time-box/Inactivity timeout** 설정에도 걸림.
+
+### 인쇄 파트 전수 감사 — 확정 결함 7건 일괄 수정 (2026-07-02) — ✅ print 에뮬레이션 computed + PDF 스윕(회귀0)
+빈 2페이지 픽스(아래) 직후 사용자 "이런 버그스러운 인쇄 파트 있나 검토" → **실측 스윕(headless print-to-PDF, 6표면)** +
+**코드 감사 워크플로(3방향 find→적대 verify, 11에이전트)**. 스윕은 전 표면 그린(혼합방향 0·빈페이지 0 — 어제 픽스가 전 표면
+커버 확인), 코드 감사에서 **confirmed 7건**(중복 1 제외 실질 6건) 발견·일괄 수정:
+- **① 풀셸(비임베드) 인쇄 클리핑**(감사 최고 심각도): 인쇄 리셋(globals.css)이 html/body/main만 풀고 **(shell)/layout의
+  h-screen+overflow-hidden 래퍼 div 2개(+미니멀 셸 1개)는 그대로** → 직접 URL/배경/모바일 경로에서 2페이지+ 문서가 1페이지
+  높이로 잘림(임베드=창 경로는 원래 정상) → 래퍼 3곳에 `print:h-auto print:overflow-visible`([layout.tsx](<src/app/(shell)/layout.tsx>)).
+- **② MobileTopNav가 인쇄물 상단에 통째로 인쇄**: 크롬 숨김 셀렉터 `nav[aria-label*="네비게이션"]`이 실마크업(aria-label="메뉴")과
+  불일치한 **죽은 셀렉터** + `lg:pointer-fine:hidden`은 인쇄 폭(A4 세로 ≈794px<1024)에서 lg 불성립이라 무력 →
+  [mobile-top-nav.tsx](src/components/mobile-top-nav.tsx) 루트에 `print:hidden` + 셀렉터 `nav[aria-label="메뉴"]`로 교정(이중 방어).
+  ⚠️ **교훈: 인쇄 미디어쿼리는 화면이 아니라 인쇄 용지 폭으로 재평가된다** — `lg:` 숨김은 인쇄에서 못 믿는다. print:hidden을 직접.
+- **③ 전역 `table { page-break-inside: avoid }` 제거**: 주석은 '시간표 셀' 용도인데 무스코프 전역이라 전 인쇄 표
+  (환불규정·지출 항목표 등)에 **통짜 avoid**("통짜 금지" 규칙 위반) — 페이지 경계의 긴 표가 통째로 다음 장으로 밀려 하단
+  대공백. 행 단위(tr/td/th) avoid만 남김. 부수 효과: 시간표 Ctrl+P가 4p→**3p**로 개선(행 경계 분할).
+- **④ 등록상담 인수인계서 Section 통짜 break-inside-avoid**([(print)/enrollment/[id]/print/page.tsx](<src/app/(print)/enrollment/[id]/print/page.tsx>)):
+  AI 12섹션·수납정책 등 임의 길이 콘텐츠를 감싸는 공용 Section이 통짜 avoid → 제거 + 제목만 `break-after-avoid`(고아 방지).
+- **⑤⑥ fixed 오버레이 인쇄 누출**: [WorkspaceCanvas](src/components/workspace/workspace-canvas.tsx)(열린 플로팅 창·스포트라이트 딤이
+  배경 문서 인쇄 위에 페이지마다 찍힘)·[NoticePopupLayer](src/features/notices/components/notice-popup-layer.tsx)(팝업 뜬 채 인쇄 시 카드 찍힘)
+  → 루트에 `print:hidden`.
+- **⑦ lesson_reports 인쇄 게이트 갭**(intra-tenant PII): 형제 print 라우트와 달리 로그인+RLS만 — 같은 테넌트 student/viewer도
+  UUID로 임의 수업보고서(학생명·진도·강사 코멘트) 열람 가능 → **students 메뉴 접근(canAccessTenant, override 반영) + 강사는
+  getTeacherScope 본인 학생 검증**(교재요청서 print 패턴)([lesson_reports print/page.tsx](<src/app/(print)/lesson_reports/[id]/print/page.tsx>)).
+- **검증**: 픽스 워크트리 dev(3002)에서 **print 미디어 에뮬레이션 computed 실측**(nav display:none·래퍼 height:auto/overflow:visible·
+  캔버스/토스터 none) + **풀셸 지출결의서 PDF 1p PORTRAIT** + 전 표면 PDF 스윕 회귀 0. typecheck0/lint0.
+  ⚠️ 등록상담 인수인계서는 `consultation_ai_analysis` 0행(이관 미포함)이라 실데이터 스윕 불가 — 새 녹음 분석 생기면 인쇄 가능.
+  ⚠️ 워크트리 dev는 **repo 안(.claude/worktrees/)에 둬야** Turbopack이 node_modules junction을 허용(밖이면 "Symlink points out of filesystem root" 패닉).
+
+### 인쇄 빈 2페이지 버그 — named page(portrait-doc) 경계가 만든 유령 landscape 페이지 (2026-07-02) — ✅ PDF 실측(픽스=1p/무효화=2p)
+사용자 제보: 지출결의서 인쇄 시 내용은 1페이지인데 **빈 2페이지**가 딸려 나옴. 원인 = CSS **named page 경계**:
+전역 `@page`는 landscape(시간표용), 문서는 `.print-portrait{page:portrait-doc}`인데, **문서(main) 뒤에 body 직계
+in-flow 박스**(sonner 토스터 래퍼 `section[aria-label="Notifications…"]`·TanStack 데브툴 `.tsqd-parent-container` — 둘 다
+position:static, 0높이여도 박스 생성)가 기본(landscape) 페이지 이름을 가져 Chromium이 이름 경계마다 강제 브레이크 →
+**빈 landscape 2페이지**(사용자 스크린샷의 2페이지가 1페이지보다 넓던 이유).
+- **수정**([globals.css](src/app/globals.css) print-portrait 블록): ① `body:has(.print-portrait){page:portrait-doc}` —
+  문서가 세로 인쇄면 **body 전체를 같은 named page로 통일**해 경계 자체를 제거. ② 토스트/데브툴은 인쇄물이 아님 —
+  `section[aria-label^="Notifications"]`·`[data-sonner-toaster]`·`.tsqd-parent-container` print에서 display:none(잔여 박스 생성도 차단).
+  지출결의서뿐 아니라 **모든 print-portrait 표면**(수강료 안내문·교재요청서·회의록·등록상담 인쇄)의 동일 잠복 버그 해소.
+- **검증 = 실제 print-to-PDF**(Playwright headless `page.pdf({preferCSSPageSize})`, 마스터 로그인 후 실 지출결의서):
+  픽스 적용 **1페이지 PORTRAIT** / 픽스만 스타일 주입으로 무효화 **2페이지 [PORTRAIT, LANDSCAPE]** = 인과 확정.
+  ⚠️ 향후 인쇄 페이지수/방향 검증은 이 방식(headless pdf + `/Count`·MediaBox 파싱)이 스크린샷보다 결정적.
+
+### 로그인 시 랜딩(/) → 역할 홈 자동 폴백 — '로그아웃된 느낌' 해소 (2026-07-02) — ✅ typecheck0/lint0
+사용자 제보: 로그인 상태로 `/`(마케팅 랜딩) 방문 시 랜딩이 떠 **로그아웃된 느낌**([proxy.ts](src/lib/supabase/proxy.ts) 주석에 "client-side redirect to /dashboard can be added later" TODO로 남아있던 것). → 서버 컴포넌트 [(marketing)/page.tsx](<src/app/(marketing)/page.tsx>)에서 `getCurrentUser()`로 세션 확인 후 **[roleHome](src/lib/permissions.ts)** 로 서버 리다이렉트(강사=/onescreen·학생=/my-learning·그 외=/dashboard). 로그인 폼·`requireAccess`와 **같은 roleHome 단일 소스**.
+- **무한루프 방지**: `requireAccess`와 **동일 매트릭스**([getPermMatrix](src/lib/auth/perm-matrix.ts), 테넌트 override 반영)로 계산 + **`home !== "/"` 가드** → 권한 override로 홈이 `/`가 되는 엣지(예: 대시보드 revoke된 뷰어)에선 리다이렉트 스킵 → 랜딩 유지(루프 없음).
+- ⚠️ **트레이드오프**: `getCurrentUser`가 쿠키를 읽어 랜딩이 **동적 렌더**가 됨(정적 CDN 캐싱 상실). 무세션은 `getClaims` 로컬 JWT 검증만(가벼움). 랜딩 정적성이 중요해지면 대안(미들웨어 `/`→`/dashboard` + requireAccess 라우팅)이 있으나 override-루프 엣지가 있어 현 방식이 안전 기본값. 비로그인 방문자는 랜딩 그대로(동작 무변, 렌더만 동적).
+
+### 교재요청 강사뷰 = 사무실 등록·납부·주문 3배지 반영 (배선 완결) (2026-07-02) — ✅ typecheck0/lint0
+사용자 배선 확인 요청: 사무실이 /billing 교재 면에서 찍는 **등록/주문/납부 3개 독립 체크**([toggleTextbookCheck](src/features/billing/server/textbook-actions.ts))가 강사 `/textbook-requests`에 반영되나? → **DB 배선은 연결됨**(같은 `textbook_orders.{registered_at,ordered_at,paid_at}` 컬럼을 [getTextbookOrdersForStudents](src/features/billing/server/textbook-queries.ts)가 읽음). 단 강사 뷰의 **단일 배지**(신청됨/주문됨/납부 완료)가 `paid`/`ordered`만 반영하고 **`registered`(등록)는 표시 안 함**(등록은 status에도 없는 독립 플래그) — 갭 발견. → 사무실 표(textbooks-table)와 동일한 **읽기전용 3배지(등록·납부·주문)**로 교체([_client.tsx](<src/app/(shell)/textbook-requests/_client.tsx>) `ProgressChecks`) → 3개 상태 모두 강사에게 보임.
+- ⚠️ **실시간 아님**: `toggleTextbookCheck`는 `/textbook-requests`를 revalidate 안 하나, 그 페이지가 쿠키(RLS) 기반 **동적 렌더**라 강사가 새로 열면 최신. 즉시 반영은 realtime 필요(별도). `registered`는 강사 **수정/삭제 잠금**(`isUntouched`)엔 이미 쓰였음. (같은 세션 앞서 사무실 표 배지 순서도 등록→납부→주문으로 통일 — 커밋 `c21c8b6`.)
+
+### 대시보드 개편 1차 — 과목별 진행 수업·등록상담 목록·"오늘 조치할 것" 통합 패널 + 정합/죽은코드 정리 (2026-07-02) — ✅ test595/tsc0/lint0 + 라이브(마스터, 수업시간대)
+사용자 "알찬 것만" 방향 + 워크플로 조사(4에이전트: eywa 신호 전수·ijw 대시보드·현 대시보드 감사 → Top 8 랭킹) 기반 1차 적용.
+- **오늘의 일정 = 진행 중 수업 과목별 나열**([now-cockpit.tsx](<src/app/(shell)/dashboard/_components/now-cockpit.tsx>) + 순수 [`groupOngoingBySubject`](src/features/dashboard/ongoing.ts) Vitest6): 옛 "카드 3개+외 N" → 과목 헤더(설정색 점+라벨+N개) 아래 컴팩트 행(시간대·반·강사·강의실·인원, 반 상세 드릴인). **그룹당 5행 캡 + 초과 스크롤**(max-h-44, 사용자 요청). 진행 중 0건이면 빈 상태 문구. 라이브: 영어 6건(5행+스크롤)·수학 4건 동시 검증.
+- **등록상담 파이프라인 → 목록 카드**([enrollment-list-card.tsx](<src/app/(shell)/dashboard/_components/enrollment-list-card.tsx>) + `getActiveEnrollmentConsultations`): 퍼널 분포 대신 "누가·어느 단계·언제" 최근 6건(이름+학교·학년+단계 Pill+날짜, 행=상담 상세 창) + 활성 총건수(count exact). consultation-funnel.tsx·getActiveConsultationsCount 삭제.
+- **"오늘 조치할 것" 통합 패널**([today-actions-band.tsx](<src/app/(shell)/dashboard/_components/today-actions-band.tsx>) + 순수 [`buildTodayActions`](src/features/dashboard/today-actions.ts) Vitest8 + 수집 [`getTodayActionSignals`](src/features/dashboard/server/action-signals.ts)): 조건부 신호를 위젯 난립 없이 한 밴드 칩으로 — 🔴오늘 무단결석(학생 dedupe 명단)·🔴녹음 분석 실패(3테이블, **7일 창**=오래된 실패 영구잔소리 방지, 최다 메뉴로 링크)·🟠어제 출석 미기록(getDailyProcessingStatus 재사용, `/attendance/{어제}` 링크)·🟠지출 결재 대기(**7일 창** — 이관 레거시 pending 119건 잔소리 방지)·🟠교재 신청 미처리(requested)·🟠휴가 승인 대기(ends_on≥오늘)·🟠makeedu 동기화 이상(status≠ok 또는 26h+ 미동기, **sync_enabled OFF면 무경고**=토글 존중)·🔵오늘 휴가 직원. 전부 0건=✓"정상" 한 줄(안심 신호, ijw 패턴). 전 쿼리 병렬+count head:true(B2/B4).
+- **밴드 정합**([command-band.tsx](<src/app/(shell)/dashboard/_components/command-band.tsx>)): ① "학원 17일째" 하드코딩 삭제(매일 같은 거짓 숫자) ② 미수 "N건"→**"이번 달 미수" 총액 만원**(+건수 sub) — `outstanding`에 **amount_discount 차감** 추가(과대계상 버그 픽스) ③ 출석 스냅샷이 과거일 폴백이면 **"M/D 기준"** 표기(6/9 데이터가 오늘 100%처럼 보이던 것). 미수 카드 제목 "미수 상위"→**"누적 미수 상위"**(모집단 구분).
+- **죽은코드/중복 제거**: `getUpcomingPayments`·`buildActionItems`/`ActionItem`(+테스트)·`diffMinutes` 삭제(호출처 0), 신규/퇴원 count 쿼리 2개 → `getMonthlyEnrollmentChanges` 배열 길이로 도출(B4), **공지 이중 fetch 통합**(ManageAnnouncementRow를 카드 상위집합으로 확장 → canManage면 관리 목록에서 카드 4건 도출, 정렬 동일). QuickActions "수업 추가" `/classes`→`/classes/new`(폼 직행).
+- ⚠️ **참고**: "어제 출석 미기록 46/46"은 출결 기록이 6/9(ijw 데이터 끝) 이후 없어서 — eywa 출석부 채택 시 자연 감소(정직한 채택 신호로 유지). 등록상담 김연우 4중복은 실데이터(사용자 정리 대상). **후속 후보(조사 Top 8 잔여)**: QR 신규 제출 미응대·이번 달 상담 커버리지(RPC)·이탈 위험 3숫자·SlimTrend 수납률 라인→재원생 30일 추이 교체.
+
+### 등록상담 녹음분석 '상담 내용' AI 제안 칩 — 채워진 필드도 AI 추출값을 비파괴로 제시 (2026-07-02) — ✅ typecheck0/lint0 + 적대리뷰(4렌즈) 결함0
+사용자 지적: 녹음 분석이 전사에서 뽑은 상담 내용(`parent_request`)은 [buildFormPatch](src/features/enrollment/form-fill.ts)의 "빈 칸만 채움" 규칙 때문에, 상담사가 이미 써놨으면 **통째로 버려져** 나중에 볼 수도 없었다(print_payload엔 13섹션 audioReport만 남고 포커스 추출 요약은 미보존). 해결 = **AI 제안 칩(비파괴)** — 자동 덮어쓰기/자동 append는 비채택.
+- **보존**: 웹훅 [handleConsultation](<src/app/api/webhooks/assemblyai/route.ts>)이 `extractConsultationForm` 원본 `extracted`를 `consultation_ai_analysis.print_payload.formSuggestions`에 스냅샷 저장(마이그레이션 0, jsonb 재사용, 추출 실패 시 미포함).
+- **노출**: [getEnrollmentConsultationById](src/features/enrollment/server/queries.ts)가 `aiFormSuggestions`(ExtractedConsultationForm) 노출.
+- **상세**([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>)): 상담 내용 카드에 `✨ AI가 정리한 상담 내용 보기`(native `<details>`=클라 JS 0) + "수정에서 반영" 링크. 저장값이 제안을 이미 `includes`하면 숨김(교체/추가 후 재-nag 방지).
+- **수정폼**([consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)): 상담 내용 textarea(uncontrolled) 아래 **[교체]/[아래에 추가]/[무시]** 패널. 적용=ref로 `el.value` 주입 + `new Event("input",{bubbles})` dispatch → **폼 레벨 리스너인 [useFormDraft](src/components/forms/use-form-draft.ts)(IDB 초안)·동시편집 가드가 포착**(datalist 칩 패턴). **저장해야 반영**.
+- **불변식(유지)**: `buildFormPatch`("빈 칸만")·자동입력 로직 **전혀 안 건드림**. 제안 반영은 100% 명시적 클릭. `formSuggestions`엔 전체 추출값(학교·주소·성별 등) 보존 → 다른 필드로 확장 쉬움(v1은 상담 내용만).
+- ⚠️ **소급 없음**: 기존 완료 분석엔 `formSuggestions`가 없어 칩 미표시 — **다음 녹음 분석부터** 적용. ⚠️ 2-계정 라이브 E2E는 새 formSuggestions 데이터가 필요해 미실행(적대리뷰 4렌즈 find→verify 결함0 + 이벤트-dispatch 메커니즘 직접확인으로 대체).
+
+### 선생님 원스크린 배선 전수수정 — 데모 클라state → 실 영속(읽기배선·orphan정리·구조화영속) (2026-07-02) — ✅ 게이트 + 라이브 E2E
+배선 전수감사(5-agent 워크플로 + 3-agent 조사): `/onescreen`(강사 수업마감)이 프로덕션인데 **실제 DB 저장은 보고서(`lesson_reports`) 하나뿐**, 나머지는 전부 클라 임시 state(새로고침 유실)거나 하드코딩 죽은 데이터였음("데모 충실 이식" 설계가 프로덕션에 노출된 갭). Phase 1→2→3 순차 수정(각 dev 검증 후 승인 머지):
+- **Phase 1 — roster 읽기 배선**([roster.ts](src/features/onescreen/server/roster.ts)): `lesson_reports`(최신, [timetable 로더 패턴](src/features/timetable/server/queries.ts:335) 재사용) + 오늘 `attendance_records`를 `Promise.all`+`fetchInChunks` 배치 조회 → `reportSent`(오늘 저장분 → "보"셀·**중복작성 방지**)·이전 진도(`prev`)·`prevScore`(exam_info 파싱 [parseExamScores](src/features/onescreen/exam-info.ts), Vitest)·실 출결(late→지각/absent→결석). KST=[kstToday](src/lib/date-kst.ts). (이전엔 전부 하드코딩 `""`/`null`/`"—"`/`"출석"`이라 DeltaChip·이전진도·출결배지 사멸.)
+- **Phase 2 — orphan/라벨**: 과제(homework)를 태도식 칩(완료/일부미흡/미제출)으로 **실배선**(기존 `lesson_reports.homework_score` 저장경로 활성) + [report.ts](src/features/onescreen/report.ts) 빈 과제 문구 생략("과제는 — 상태입니다" 제거) + 발송 미연동 "카톡/문자" 라벨을 "카톡용 저장"/"문자용 저장"으로 정직화.
+- **Phase 3 — 구조화 영속화**: 신규 `onescreen_daily_sessions`([0065a](supabase/migrations/0065a_onescreen_daily_sessions.sql), RLS 격리, `(student,session_date)` 하루 1행) + [saveOnescreenSession](src/features/onescreen/server/actions.ts)(auth+강사 스코프 이중게이트 upsert) + 클라 **학생별 디바운스(800ms) 자동저장**([onescreen-client.tsx](src/features/onescreen/components/onescreen-client.tsx), ref 미러·학생 전환에도 무유실) + roster 복원. **점수/진도/태도/과제/진도확정이 새로고침·재접속에도 유지.**
+- 검증: typecheck0/lint0/**test584** + **라이브 E2E**(강사 김윤하, 실 61학생): 지각 배지·reportSent·이전 진도 로드 / 과제 칩→보고서 "과제는 완료 상태입니다" / 자동저장→새로고침→값 복원. ⚠️ 마이그레이션 번호는 병렬 세션 `0064a` 충돌로 **`0065a`**. draft 복원·진도 today 이중공백은 후속. + 좌측 반별 로스터 접기/펼치기·점수 "—" placeholder 제거 동반.
+
+### 강사 '내 메뉴' 탭 표시 = 학원설정 전용 토글(역할·권한 배선) — 하드코딩 → 매트릭스 소비 (2026-07-01) — ✅ typecheck0/lint0/test574 + 워크플로 적대검증
+사용자 제보: 강사 '내 메뉴' 드롭다운의 **일부 탭을 학원에서 끄고 싶은데 설정 경로가 없음**. 원인: [teacher-menu.tsx](src/components/teacher-menu.tsx)가 **하드코딩 링크 목록**이라 권한 매트릭스(학원 오버라이드)를 안 읽음(전형적 "설정 무시"/write-only-orphan) — 학원설정 '역할·권한'에서 강사 접근을 바꿔도 탭이 그대로 떴음.
+- **전용 토글 신설**(사용자 선택): 학원설정 → 역할·권한 상단에 **"강사 '내 메뉴' 표시"** 카드([permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>)) — 8개 탭 체크박스. **별도 필드·액션 없이 같은 matrix 상태를 편집**(같은 SectionForm, 한 번 저장 → 아래 세부 권한표와 완전 정합·클로버 0). 끄기=강사 접근 `none`.
+- **단일 소스** [`TEACHER_MENU_KEYS`](src/lib/permissions.ts): teacher-menu 소비처 + owner 토글 공유(원스크린 먼저, 8키). teacher_onescreen은 ROLE_LOCKED라 토글 고정(항상 표시=강사 홈).
+- **소비처 배선**: teacher-menu가 `permMatrix` prop 받아 `canAccess("teacher", menu, permMatrix)`로 **필터**(각 링크에 MenuKey). [layout.tsx](<src/app/(shell)/layout.tsx>) 강사 미니셸이 `resolveMatrix(settings.permissions.overrides)`를 주입(일반 셸과 공유, 추가 쿼리 0).
+- **진짜 비활성화(숨김+차단)**: 8개 강사 페이지 전부 `requireAccess("<키>")`(tenant-aware `getPermMatrix`)라, 끄면 탭 숨김 + **URL 직접 진입도 차단**(roleHome=/onescreen 폴백). 단순 숨김 아님.
+- **⚠️ 워크플로 적대리뷰(3차원, 4에이전트) 확정 1건(med) 수정**: 빠른 토글의 '켜기 복원값'이 **마운트 시점 값 고정**이라, 같은 세션에서 매트릭스로 바꾼 값(예 scoped→readonly)을 그 탭 off/on 하면 유실 → **끄기 직전 live 값을 ref로 캡처해 복원**(세션 편집 보존). 부수효과(탭 숨김이 원스크린 등 잔존 기능 깨뜨림)·배선·직렬화는 문제 없음 확인.
+- 검증: typecheck0/lint0/**test574**. ⚠️ 라이브는 auth 게이트 + 병렬 dev 충돌 회피로 정적 게이트+적대리뷰 대체(원장 HMR 실토글 1회 확인 권장). ⚠️ **수업보고서(Edutrix 외부링크)는 MenuKey 없어 이 토글 대상 아님**(항상 표시 — 토글하려면 별도 설정 플래그 필요, 후속).
+### super_admin은 테넌트 권한 매트릭스 위 + master 라벨 "원장"→"owner" 통일 (2026-07-02) — ✅ typecheck0/lint0/test595 + 라이브 양방향
+사용자 결정: 역할·권한 매트릭스의 "원장" 열 = **테넌트 owner(master, 현재 chrismathone)** 이고, **super_admin(st2000423)은
+이 매트릭스의 영향을 받으면 안 된다**. 실측: 기존엔 super_admin도 학원 셸에선 `public.users` role(master)로만 취급돼
+override(`retention master=none` 실존)에 같이 잠겨 있었음 → 우회 배선.
+- **우회 = [`getPermMatrix`](src/lib/auth/perm-matrix.ts) 단일 지점**: super_admin이면 override를 무시하고 **코드 기본
+  MENU_ACCESS**로 취급(blanket full 아님 — 역할 전용 화면[원스크린/내 학습] 접근이 새로 안 생기고, 기본 master=전 메뉴
+  full이라 실질 전체 접근). requireAccess·canAccessTenant/canWriteTenant/accessLevelTenant가 전부 이걸 타므로 한 곳 수정으로
+  페이지·액션·읽기 게이트 전체 커버. **[layout.tsx](<src/app/(shell)/layout.tsx>)의 사이드바/팰릿 permMatrix도 `resolveMatrix`
+  직접 호출 → `getPermMatrix()`로 교체**(같은 React cache 공유 = 추가 쿼리 0, UI 노출까지 일관).
+- **판정 비용(반응속도)**: 신규 [`isCurrentUserSuperAdmin`](src/lib/auth/super-admin.ts)(React cache) — `auth.getUser()`
+  (GoTrue 네트워크 왕복) 대신 **이미 캐시된 getCurrentUser(getClaims 로컬검증)의 id로 super_admins PK 조회만**. 그것도
+  **override가 0개면 검사 자체 스킵**(쿼리 0). ⚠️ 테넌트 users 행 없는 순수 super_admin은 false — 학원 셸 우회 전용
+  (셸은 어차피 users 행 없으면 진입 불가), `/super-admin` 게이트는 기존 `getCurrentSuperAdmin`(getUser) 유지.
+- **라벨 통일**: master의 사용자 표시 라벨을 "원장"/"마스터" → **"owner"** — [permissions-section](<src/app/(shell)/owner/_components/permissions-section.tsx>)
+  (매트릭스 헤더+안내문)·[role-hierarchy.ts](src/lib/auth/role-hierarchy.ts) `ROLE_LABEL`(직원 상세/폼/급여/사이드바 폴백)·
+  [staff/page.tsx](<src/app/(shell)/staff/page.tsx>)(목록 Pill+필터칩)·super-admin 테넌트 상세/역할변경 드롭다운 5곳.
+  (사이드바 푸터는 `job_title` 우선이라 chrismathone은 여전히 "원장" 직함 표시 — 직급 자유텍스트는 별개.)
+  - ⚠️ **정정(2026-07-07): master 라벨 "owner" → "원장" 전역 환원**(사용자 결정 — "owner" 영문이 어색). 위 6곳(ROLE_LABEL·
+    staff ROLE_META/필터·permissions 매트릭스·super-admin page/드롭다운) master 라벨을 전부 "원장"으로. 라벨 문자열만, 권한·데이터·displayRoleFor(super_admin 위장) 불변. **앞으로 이 라벨을 "owner"로 되돌리지 말 것**(사용자가 "원장" 확정).
+- 검증: typecheck0/lint0(경고 7=baseline)/**test595** + **라이브 양방향**(localhost:3001, PSS): st2000423 → 사이드바에
+  '이탈 방어' 노출 + `/retention` 200 + 매트릭스 헤더 "owner" / chrismathone → 사이드바 미노출 + `/retention` 직접 진입
+  시 `/dashboard` 리다이렉트(override 정상 적용 = 우회가 super_admin에게만).
+
+### super_admin = 학원 화면에서 '관리자'로 위장(fake admin) — 표시 전용, 권한/위계 불변 (2026-07-02) — ✅ typecheck0/lint0 + 라이브 양방향
+위 "매트릭스 위" 결정의 후속(사용자 결정): st2000423은 **숨은 super_admin이니 학원 화면에선 일반 '관리자'처럼 보이게** 하되,
+역할·권한은 이미 우회돼 영향 없음(페이크 관리자). 즉 **라벨만** 위장. ⚠️ 이전 "라벨 통일"로 master=**owner** 표시라, super_admin인
+st2000423도 학원 직원 목록/상세에 그대로 "owner"로 노출됐던 것을 admin으로 가림.
+- **단일 소스** [`getSuperAdminIds`·`displayRoleFor`](src/lib/auth/super-admin.ts): `getSuperAdminIds`=**service_role(admin client)로
+  super_admins 전건 조회**(⚠️ super_admins RLS는 "본인 행만"이라 chrismathone 같은 **다른 사용자**가 목록에서 super_admin을
+  식별하려면 admin client 필수). `displayRoleFor(userId, realRole, ids)`=`super_admin && master → "admin"`, 그 외 realRole 그대로.
+- **소비처(표시 전용)**: 직원 목록([staff/page.tsx](<src/app/(shell)/staff/page.tsx>), Pill·필터·Stat 카운트 전부 위장 role로) +
+  직원 상세([staff/[id]/page.tsx](<src/app/(shell)/staff/[id]/page.tsx>), 헤더 배지·급여/휴가 버튼 노출[isTeacherLike]) +
+  상세 기본정보 탭([basic-info-tab.tsx](<src/app/(shell)/staff/[id]/_tabs/basic-info-tab.tsx>), "시스템 역할" 필드·급여 카드).
+- **⚠️ 불변식**: 위장은 **displayRole(보이는 것)에만**. 위계/권한 판정(`canManageStaffMember`·역할변경 패널 `AccountActions currentRole`·
+  급여 게이트)엔 **실제 `staff.systemRole`(master) 유지** — 위장값을 위계에 넣으면 master가 super_admin을 '하위 admin'으로 오인해
+  **편집·삭제**하게 됨(displayRoleFor 주석에 명시). 실측: chris(master)↔st(master)는 `canManageStaffMember`=false라 역할변경 패널
+  자체가 안 떠 누출 없음. **super-admin 콘솔(`/super-admin/tenants/[id]`)은 위장 안 함**(SaaS 백스테이지 = 진짜 role 보여야 맞음).
+- 검증: typecheck0/lint0(경고 7=baseline) + **라이브 양방향**(localhost:3001, chris 로그인해 cross-user 확인): st2000423 → 목록/상세
+  헤더배지/시스템역할 필드 전부 **"관리자"** + owner/master 누출 0 + 급여·휴가 버튼/급여 카드 숨김 / chrismathone(진짜 owner) →
+  전부 "owner" + 급여·휴가 표시. ⚠️ 검증 중 상세 404는 세션 초 node_modules 파손 시절 뜬 dev 서버의 `.next` 오염(위장 무관 계정도
+  404) → `.next` 삭제+dev 재시작으로 정상화(내 코드 무관 확인). ⚠️ **`getSuperAdminIds`는 무필터 전건 select** — super_admins는
+  극소수(현 1)라 안전하나, 규모 커지면 대상 id `.in()`/캐시 고려.
+
+### 강사 "교재 요청" 탭 + 교재요청서 다운로드 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST/라우트 검증
+사용자 요청: 강사 미니셸 '내 메뉴'에 **교재 요청** 탭. 교재 기능이 `/billing`(billing 권한)에 묶여 **강사=billing none**이라 "링크만 추가"로는 안 됨 → 강사 전용 스코프 기능 신설(PII teacher-scope 필수).
+- **권한**: 새 menuKey **`textbook_requests`**([permissions.ts](src/lib/permissions.ts)) — teacher/master/admin/manager/accountant=full, 그 외 none. [permissions-section.tsx](<src/app/(shell)/owner/_components/permissions-section.tsx>) 라벨 + [navigation.ts](src/lib/navigation.ts) hidden NavItem(창/타이틀 해석용).
+- **페이지**([`/textbook-requests`](<src/app/(shell)/textbook-requests/page.tsx>) + `_client.tsx`): 강사면 **본인 담당 학생만**(getTeacherScope) 요청 생성 + 진행상태(신청→주문→납부) 목록. 사무실 역할은 전체(처리는 기존 /billing 교재 면). [teacher-menu.tsx](src/components/teacher-menu.tsx)에 링크.
+- **액션** [`requestTextbook`](src/features/billing/server/textbook-actions.ts): `textbook_requests` 게이트 + **강사는 studentId ∈ 담당 스코프** 검증(사무실 createTextbookOrder는 billing 게이트 유지, 분리). 생성 후 `createdId` 반환. 스코프 쿼리 [`getTextbookOrdersForStudents`·`getStudentOptionsForIds`](src/features/billing/server/textbook-queries.ts)(청크 #53).
+- **교재요청서 다운로드**(ijw "등록 시 자동 다운로드" 패리티): 목록 **행 "요청서" 링크** → 새 탭 요청서 카드(강사 미니셸엔 창 없음 → 새 탭). 생성 성공 → **"요청서 다운로드"** 링크(`?download=1` → 카드 마운트 시 PNG 자동저장). 프린트 게이트 `billing`→**`textbook_requests`**([print/page.tsx](<src/app/(print)/textbook/[id]/print/page.tsx>), 사무실 역할 전원 유지 + 강사 추가) + **강사는 `order.studentId` 스코프 검증**. 카드([textbook-request-card.tsx](<src/app/(print)/textbook/[id]/print/textbook-request-card.tsx>))에 `autoDownload`(1회 가드). `getTextbookOrderById`에 studentId 추가.
+- 검증: typecheck0/lint0 + 프린트 라우트 컴파일/게이트 200 + 강사 스코프 데이터(김윤하 담당 56명·요청 96건, order.studentId ∈ scope) + PostgREST. ⚠️ **데모 강사 로그인 불가**(teacher@ijw-demo.com이 전체 복원 wipe로 public.users 소실 #31/#32) → 강사 클릭테스트는 계정 복구 후. master는 `/textbook-requests`·요청서 접근 가능(textbook_requests=full). 통합뷰 등 무관.
+- **후속(2026-07-01) — 바로 다운로드 + 수정/삭제 + 배지 통일**(사용자 요청): ① 목록 "요청서" = **새 탭 없이 바로 PNG 다운로드**(화면 밖에 카드 렌더 → html2canvas). 프린트 카드 본문을 [textbook-request-card-body.tsx](<src/app/(print)/textbook/[id]/print/textbook-request-card-body.tsx>)로 추출(뷰어/목록 공유), 다운로드 [download-card.ts](<src/app/(print)/textbook/[id]/print/download-card.ts>) 공용. ② **수정/삭제** 인라인([`updateTextbookRequest`·`deleteTextbookRequest`](src/features/billing/server/textbook-actions.ts) + `loadEditableRequest` 게이트) — **사무실이 등록/주문/납부 아무것도 체크 안 한 요청만**(클라 버튼 숨김 + 서버 이중), 강사는 본인 학생만. ⚠️ 임포트 385건은 전부 처리이력 있어 잠김 → 강사 신규 요청만 편집 가능. ③ 상태 배지 **고정폭(62px)+중앙+짧은 라벨 자간**으로 크기 통일. effect 규칙 안전(다운로드=effect 내 setState 없음, 수정/삭제=트랜잭션 콜백 setState).
+- **후속2(2026-07-03) — 강사 신청 폼 ijw 패리티: 교재 검색(단가표)+금액 자동입력 + 저장 시 요청서 자동 다운로드**(사용자 요청, ijw 대비 전수 비교 후) — ✅ 4게이트(tsc0/lint0/test616/build✓) + 적대리뷰 3렌즈(high/med 0, low 반영) + 배선 ROLLBACK 검증: ijw TextbookRequestView 대비 강사 폼(/textbook-requests)의 갭 3개를 메움(서버·카탈로그는 이미 준비돼 UI 배선만).
+  · **교재 검색**: 폼 상단 `교재 검색 (단가표에서 불러오기)` [SearchableSelect](src/components/ui/searchable-select.tsx)(146권, 타이핑 즉시 필터, hint=가격·상세) → 선택 시 **교재명·비고·금액 자동입력**(사무실 [textbook-dialog](<src/app/(shell)/billing/_components/textbook-dialog.tsx>) 패턴 이식, controlled 전환). ⚠️ **`value=""`(controlled)로 선택 후 placeholder 복귀** — '불러오기 버튼' 동작(아래 교재명을 손으로 고쳐도 셀렉트 라벨 불일치 없음, 적대리뷰 low 반영). name 미지정이라 FormData 미오염(교재명 input이 단일 소스).
+  · **금액 입력**: 폼에 금액(number) 신설 — 이전엔 강사 요청이 **항상 0원 저장 → 요청서 PNG에 "0원"**(실측). 서버 parse는 원래 price를 받았음(UI만 없었음). 인라인 수정 행에도 금액 추가 + [updateTextbookRequest](src/features/billing/server/textbook-actions.ts)가 price 저장(호출처 1곳뿐=폼이 항상 전송, 0-클로버 없음 grep 확정). **`won()`에 `Math.max(0,…)` 클램프**(수동 FormData 조립이 클라 min=0 우회 가능 — 서버 못박음). 목록 행에도 금액 표시(price>0만).
+  · **저장 시 자동 다운로드**(ijw '이미지 저장 및 기록' 패리티): `requestTextbook`의 `createdId`(반환만 되고 미사용이던 것)를 배선 — revalidation으로 새 행이 rows에 도착한 렌더에서 **렌더 중 상태조정(#25 회피) + createdId 키 가드(#67)**로 1회 발화 → 기존 숨김카드 html2canvas 경로 재사용. dl 키 카운터는 kRef→state updater(렌더 중 ref 쓰기 회피). 메모도 controlled(React19 form action이 uncontrolled만 자동 리셋해 "폼 값 유지" 정책이 필드별로 갈라지는 것 방지).
+  · **배선 체크(사용자 요청)**: 강사 요청 → 관리자(/billing 교재 면) 노출은 **정상 확정** — 같은 textbook_orders에 insert + `getTextbookOrdersPage` 무필터 요청일 desc라 1페이지 최상단(실 DB BEGIN…ROLLBACK로 증명). 7/3 가우스 건이 안 보였던 건 wiring 아니라 **삭제된 것**.
+  · ⚠️ 알려진 low(수용): 사무실 뷰는 rows 100건 절단이라 같은 날 100건+ 요청 시 자동 다운로드 미발화 가능(현 규모 비현실, 문구에 목록 폴백 안내 병기). ⚠️ 라이브 브라우저 검증 미실행(auth 게이트 — 원장 실화면 1회 확인 권장): 검증=4게이트+적대리뷰 3렌즈(핵심 설계 전부 clean: FormData 미오염·렌더중 setState 가드·revalidation 생존·잠금 불변식)+배선 ROLLBACK. ⏭️ 미이식(별도 결정): 실시간 미리보기(좌폼+우 카드)·MakeEdu 수납→등록/납부 자동 체크.
+- **후속3(2026-07-04) — ijw 구조 그대로 이식(선생님 혼동 해소) + 요청 내역 검색·페이지네이션**(사용자 요청 "ijw-calander의 구조만 그대로") — ✅ 4게이트(tsc0/lint0/test616/build✓) + 적대리뷰 3렌즈(med 2·low 3 전부 수정): /textbook-requests를 **ijw TextbookRequestView 화면 구조로 재작성** — 데이터 모델(studentId FK·강사 스코프·계좌=학원설정)은 불변, 화면만 ijw.
+  · **좌측 폼**([_client.tsx](<src/app/(shell)/textbook-requests/_client.tsx>)): ijw 섹션 구조(기본 정보=학생*·**담임 선생님**(기본 요청자, 자유 표시명·대리 작성)·**요청 일자**(기본 오늘) / 교재 내용=교재 검색·교재명·상세(단원)·금액·메모) + **[초기화]**(confirm 후 오늘·본인만 남김)/**[이미지 저장 및 기록]**(ijw 라벨 그대로 — 저장+PNG 자동 다운로드) 버튼. 서버: `teacher_name = f.teacherName || user.displayName`.
+  · **우측 실시간 미리보기**: 전 필드 controlled → TextbookRequestCardBody가 타이핑 즉시 반영(ijw 우측 패널). 카드가 named input 0인 순수 표시라 form 안에 둬도 FormData 미오염(적대리뷰 확인). 빈 날짜는 미리보기도 오늘로(서버 폴백과 WYSIWYG 일치).
+  · **요청 내역 분리**([request-history.tsx](<src/app/(shell)/textbook-requests/request-history.tsx>)): ijw history 구조 — **미완료/완료 필터 탭**(건수 배지, 완료=3체크 전부=ijw isFullyComplete)·**학생명/교재명 검색**·**메모리 페이지네이션 50**(PAGER_* 상수, 파생 page 클램프=revalidation 안전, 다페이지 시 h-[60vh] 고정=페이저 위치고정 표준)·완료행 취소선+회색(ijw). RequestRow(수정/삭제/3배지/잠금)는 무변경 이동.
+  · **적대리뷰 med 2 수정**: ① **창 크기 키 = menuKey(언더스코어)** — `"textbook-requests"`(하이픈)로 등록하면 windowIdForHref가 menuKey `textbook_requests`를 반환해 **영원히 미적용**(480×560 → 2열 붕괴). ⚠️ **교훈: 메뉴 루트 창 크기는 경로가 아니라 menuKey로 등록**([window-geometry.ts](src/components/workspace/window-geometry.ts) 주석 명시). ② **자동 다운로드가 rows(사무실 100건 절단)에 의존 → 제출한 폼 스냅샷으로 직접 발화**로 재설계(dl이 TextbookOrderRow 대신 TextbookCardData) — 백데이트·절단·같은날 100건+와 무관하게 항상 다운로드(이전 커밋의 known-low까지 근본 해소). low: 초기화 시 직전 성공/에러 문구 함께 숨김(msgHiddenFor)·사무실 내역에 "최근 100건 기준" 캡 명시.
+  · ⚠️ 라이브 브라우저 미실행(auth 게이트) — 원장/강사 실화면 1회 확인 권장. 강사 미니셸=풀페이지라 lg에서 2열, 창은 1180×760 등록.
+
+### 시간표 강사 간 학생 중복 2차 — 종료 판정을 롤링 창(ref+6)이 아니라 referenceDate 기준으로 (2026-07-01) — ✅ typecheck0/lint0 + 전 학생 데이터 대조
+사용자 제보: 이정원(MS2B 김화영, 종료 07-07, BS4A로 07-09 이동 예약)이 이동 전인데 시간표에서 사라짐. 원인: [getWeeklyScheduleWithStudents](src/features/timetable/server/queries.ts)의 `hasEnded`가 **weekEnd(=referenceDate+6 롤링 창)** 기준이라, 현재 주 referenceDate=오늘(07-01)이면 창 끝(07-07)이 MS2B 종료(07-07)와 만나 `hasEnded=true` + 전출(is_transferred) → **옛 반에서 숨김**. BS4A(07-09)는 창 밖이라 미표시 → **양쪽에서 증발**.
+- **수정**: `hasEnded = effEnd <= referenceDate`(as-of 오늘, daterange `[start,end)`). look-ahead 창(weekEnd)은 아래 fetch의 '예정 학생' 포함용으로만 유지.
+- **검증**: 현재 주 전 enrollment(1049) OLD vs NEW 대조 → **정확히 10명 변화**(숨김/퇴원→재원), **10명 전원 07-01에 실제 재원 구간**(잘못 뒤집힘 0). 대부분 학기말(07-05) 전출 배치가 조기 숨겨졌던 것. 기존 타임머신 버그(전출 예약이 롤링 창에 걸릴 때).
+
+### 등록상담 폼/상세 재설계 + QR 배선 감사 + "새 X" 창 브리지(iframe→부모) + 소스창 갱신 (2026-07-01) — ✅ typecheck0/lint0 + chrome 라이브 + 적대리뷰
+사용자 요청 묶음(등록상담 수정 폼 레이아웃 + 상세 화면을 "수정창과 비슷한 디자인으로 완전히 갈아엎기" + QR 배선 검토 + "신규 등록"을 새 창으로).
+- **A. QR 공개접수 배선 감사(에이전트) → 결함 3건 수정**: ① 🔴 **parentRequest** = 공개폼([public-intake-form.tsx](<src/app/(intake)/intake/[token]/public-intake-form.tsx>))에 `name="parentRequest"` 입력이 **아예 없어** QR 상담은 상세 '상담 내용'이 **항상 빈 값**(액션은 저장하려는데 writer 필드 부재=mismatch) → "상담 시 궁금한 점/요청사항" textarea 추가(라이브 확인, 액션이 이미 `parent_request` 저장). ② 🟡 **혈액형**·③ 🟡 **과목(subject)** = 저장되나 상세에 표시 행이 없던 orphan → 재설계 상세에 표시(혈액형 O형·과목 수학 확인). (schoolType은 초/중/고 UI필터라 의도적 미저장·경미.)
+- **B. 수정 폼 레이아웃**([consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)): ① 학생정보↔상담내용 2단에서 `lg:items-start` 제거(기본 stretch) + 상담내용 Card `fill`(flex-col h-full) + textarea `flex-1 min-h-40` → **상담내용이 학생정보 높이에 맞춰 세로공간 채움**(공간낭비 해소). ② **히스토리·진도·성적·상담내역·기타 = textarea(여러 줄)** + **영어 세부 점수칸 = 3자리 좁은 칸(cols 2→4, `type:"score"` maxLength3 숫자필터 max-w-[5rem])** + **영어에 공통필드(학원히스토리/상담내역 등) 추가**(`[...ENGLISH_GROUPS[type], COMMON_FIELDS]`) — 데이터주도 [form-config.ts](src/features/enrollment/form-config.ts) `FieldDef.type += "textarea"|"score"`, GroupInputs에 분기. ③ '할부 규정 동의'→**'환불·학칙 동의'** 라벨 정정.
+- **C. 상세 페이지 전면 재설계**([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>)): 옛 3열(좁은 좌측 카드/우측 AI)→**수정 폼과 동일 구조**(접수정보 → 학생정보|상담내용 2단 → 학원관리 → 후속조치 → 등록결제 → 과목별점수) + 동일 카드 스타일(단일 박스+상단 음영 헤더바+primary 제목, `SectionCard`/`Row`/`InfoCard` 신설, 빈 값 행·빈 카드 자동 숨김), AI 분석은 하단 전폭. 과목라벨은 서버 `buildSubjectMaps(getTenantSettings)`. `SUBJECT_FIELD_LABELS` 전역 라벨맵으로 raw 키 누출(levelTestScore) 방지.
+- **D. "신규 등록" = 새 창(iframe→부모 브리지)**: `useOpenFormWindow`([open-window-button.tsx](src/components/workspace/open-window-button.tsx))가 임베드 iframe 내부(`useInFrame`)에선 `isDesktop=false`로 떨어져 **그 창에서 드릴인**만 되던 것(새 창 X) → **부모에 `postMessage("eywa-open-window", {autoClose:true})`**(WindowLink shift+클릭과 동일 브리지) → 부모 [workspace-canvas](src/components/workspace/workspace-canvas.tsx)가 새 autoClose 창 open. 6개 "새 X" 트리거 전부 일관. **적대리뷰 확정 1건(low)**: 리스트를 창으로 열고 생성 시 새 폼창 autoClose가 **최상위만 router.refresh**해 **소스 리스트 창(별도 iframe)은 stale**(#55 확장) → **`WindowParams.spawnedBy`(소스 창 id) 기록 → autoClose 시 `reloadWindow(spawnedBy)`로 소스 창도 리로드**(신규 항목 즉시 표시). ([window-store.ts](src/components/workspace/window-store.ts)·[route-window.tsx](src/components/workspace/route-window.tsx))
+- 검증: typecheck0/lint0(8파일) + **chrome 라이브**(상세 재설계·수정폼 학생정보/상담내용 정렬·영어 3자리 점수칸+공통필드·공개폼 textarea 확인) + 적대리뷰(3차원 find→검증, 확정 1건 수정). ⚠️ "신규 등록 새 창"은 등록상담 창(iframe) 열면 **렌더러 무한애니 프리즈**로 라이브 미검(검증된 브리지+`reloadWindow` 인프라 재사용, typecheck/lint 통과). ⚠️ 검증 중 병렬 세션이 `(shell)/layout.tsx`를 일시 파손(공지팝업, 복구됨).
+
+### 시간표 강사 인수인계 예약 반 = 배경 틴트(blue) + hover 상세 (2026-07-01) — ✅ typecheck0/lint0 + PostgREST 검증
+사용자 요청: "인수인계 하는 반"을 시간표에서 시각 구분(테두리 vs 배경 → **사용자 선택=배경 틴트**). "인수인계"=강사 인수인계 예약(`classes.pending_teacher_id`, 0044a) — 지금까진 **수업 상세에서만 예약/표시**되고 시간표엔 안 나오던 것을 시간표에 소비처 배선.
+- **데이터**([queries.ts](src/features/timetable/server/queries.ts) `fetchSlots`): class(...) select에 `pending_teacher_id`·`pending_teacher_date` + `pendingTeacher:pending_teacher_id(display_name)` 조인 → `ScheduleSlot.pendingHandover:{teacherName,date}|null`(getTodaySchedule도 null 충족). ⚠️ classes→users **다중 FK**(teacher/pending/secondary)라 PostgREST 임베딩을 **컬럼명(`pending_teacher_id`)으로 disambiguate**(teacher:teacher_id 패턴 동일, 실검증으로 애매성 없음 확인).
+- **표시**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>)): 예약 있으면 명단 영역 `bg-card`→**`bg-blue-soft` 틴트**(합반 앰버·전입 초록·신입 빨강과 색 구분, **테두리 없음**=사용자 선택). hover 카드([hover-cards.tsx](<src/app/(shell)/timetable/_components/hover-cards.tsx>) `ClassInfoCard`)에 "강사 인수인계 예정 → 강사 (적용일)".
+- 검증: typecheck0/lint0 + **PostgREST 실검증**(다중 FK 임베딩 null 200 + 한 반에 임시 예약→`pendingTeacher.display_name`·날짜 populated→즉시 원복). ⚠️ 현재 예약된 반 0개라 시각은 안 뜸(수업 상세에서 예약 시 그 반만 틴트). **통합뷰(rich-card-group)는 별도 구조라 미적용**(기본뷰만 — 후속 가능).
+
+### 시간표 강사 간 학생 중복 = ijw 이관 "유령 수강" + 재원 복구 미완 버그 (2026-07-01) — ✅ typecheck0/lint0 + 롤백 트랜잭션 검증
+사용자 제보: 시간표에서 김윤하·이유정 두 강사 학생이 제법 중복. **원인 2개** — 둘 다 프로덕션 실데이터에 외과적 수정(전체 재복원 없이, makeedu 세션 무간섭).
+- **A. ijw 이관 "유령 수강"** ([run.ts:159](scripts/_poc_migration/run.ts)): ijw는 종료·전출 수강을 `end<start`(종료일<시작일)로 기록하는데, 이관 코드가 이를 데이터오류로 오인해 **`end_date`를 null(=무한 활성 `daterange(start,∞)`)로 "보정"** → 옛 반이 안 닫혀 시간표에 유령으로 남아 **옛 반·새 반 양쪽에 표시**. null로 한 건 GiST `daterange(start,end,'[)')`가 `end<start`면 throw하기 때문. **영구 수정**: `end<start → end_date=start`(빈 구간=활성 아님, throw 회피). **핫픽스** [close-phantom-enrollments.cjs](scripts/_poc_migration/close-phantom-enrollments.cjs)(멱등): ijw 원본 대조로 "그 (학생·반)이 ijw에선 전부 종료됐는데 eywa엔 end_date=null로 남은" **유령 22건만** `end_date=start_date`로 닫음(김윤하/이유정 중복 13→6). 남은 6은 **ijw 실제 이중등록**(정상, eywa 충실 재현). 매칭=학생(name+school+grade)·반(현재 className, enrollment.className 스냅샷 아님). ⚠️ enrollments엔 `makeedu_id`·`updated_at` 컬럼 없음.
+- **B. 재원 복구가 퇴원이 닫은 수강을 안 열던 버그** ([students/server/actions.ts](src/features/students/server/actions.ts)): 퇴원(`changeStudentStatus`/`updateStudent`)은 활성 enrollment를 `end_date=퇴원일`로 닫는데, 재원 복구는 `on_hold=false`를 **`end_date IS NULL`인 것에만** 적용 → 닫힌 수강 방치 → **학생은 재원인데 시간표 '퇴원' 섹션에 잔존**(상태변경 모달·편집폼 두 경로 모두). 수정: 복구 시 학생 `withdrawn_at`(퇴원일)을 읽어 **그 날짜로 닫힌 enrollment를 다시 연다**(공용 헬퍼 `reopenEnrollmentsClosedByWithdrawal`: `end_date=null`·`withdrawal_reason=null`·`on_hold=false`). 그 퇴원이 닫은 것만 되돌려 과거 개별종료 수강은 유지. `withdrawn_at`·`end_date` 둘 다 `date` 컬럼이라 "YYYY-MM-DD" 문자열 정확 매칭(TZ 무관).
+- 검증: typecheck0/lint0 + **BEGIN…ROLLBACK 시뮬**(퇴원 2건 닫힘→복구가 정확히 2건 재개→status=enrolled, DB 무변경) + 유령 재검사 0건. 다른 영향 학생 0명(전설 케이스는 사용자가 직접 정리). 커밋 `c25f0b1`(A)·`1e009d7`(B). ⚠️ **B는 서버액션이라 dev 재시작 필요**(#35 — 이 세션에서 `.next` 클린 재시작 완료). 상세 런북=메모리 [[reference_ijw-full-restore]].
+
+### 반 폼 주간 스케줄 그리드 짜부 버그 — grid `auto` 트랙이 `w-full` 표를 컨테이너 전폭으로 부풀림 (2026-07-01) — ✅ 라이브 검증
+사용자 제보: 반 생성/편집의 "주간 스케줄"이 짜부됨 — **평일(월~금) 표가 0폭으로 collapse, 주말(토·일) 표가 전폭 차지**. 원인: 6/30 평일/주말 두 표 분리 시 컨테이너를 `grid-cols-[1fr_auto]`로 짰는데, 주말 표가 `w-full table-fixed`라 **`auto` 트랙이 `width:100%`를 컨테이너 전폭으로 부풀려** 평일 `1fr`을 0폭으로 짜부. 수정: [schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>) `lg:grid-cols-[minmax(0,5fr)_minmax(0,2fr)]`(요일 수 비례 5:2 + `minmax(0,…)` 수축 허용). 검증: 평일 682px(월화수목금 각 ~128px)·주말 272px(토·일 ~116px), lint0.
+- ⚠️ **교훈(반복 방지): grid `auto`/`max-content` 트랙에 `width:100%`(`w-full`) 표·블록을 넣지 말 것** — width:100%가 트랙을 컨테이너 전폭으로 부풀려 형제 트랙을 0폭으로 짜부린다. 비례 나눔은 **`minmax(0,Nfr)`**(min=0로 수축 허용).
+
+### 시간표 같은 반 등원 요일 편집(2일↔1일) — 드래그 + 클릭 팝오버 (2026-07-01) — ✅ typecheck0/lint0/test128 + 라이브·롤백 검증
+사용자 제보: 이미 2요일(월목) 다니는 학생을 1요일로(또는 반대로) **수정**하는 기능이 없음 — 처음 배정·교차 반이동 드래그만 요일을 정할 수 있었음. 같은 반 요일 편집을 **드래그·팝오버 둘 다**로.
+- **팝오버**: 편집 모드에서 학생 **클릭** → 그 셀 덮는 요일(월/목) 토글 → 적용 → 이동 배치(pending)에 같은 반 변경으로 큐잉([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `DayEditPopover`). 전부 선택=`[]`(전 요일), 일부=그 요일만.
+- **드래그**: 같은 반의 다른 요일 칸/공통으로 드래그 — onDragEnd의 `fromClassId===toClassId` skip 제거 → **요일 다를 때만** 큐잉(`sameDaySet` no-op 가드, [split-attendance.ts](src/features/timetable/lib/split-attendance.ts)). 교차 반 이동과 통일.
+- **마커 분리**: 같은 반 요일 편집은 전입예정 초록 대신 **"→월만" 배지**(pending에 `sameClass`·`toDays`, `dayChangeLabel`). incoming(전입예정)은 교차 반만. 반 이동은 취소선+→(불변).
+- **저장 분리**([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `save`): compressed를 교차/같은반으로 나눠 — 교차=`move_enrollments_batch`(적용일 split·전입 플래그), **같은 반=신규 [updateEnrollmentsAttendanceBatch](src/features/enrollments/server/actions.ts)** — enrollment의 `attendance_days`만 **retroactive 갱신**(반 이동 아님이라 `is_transferred_in`/`withdrawal_reason` 안 붙여 **초록 전입색·"반 이동" 사유 오류 방지**). RLS 테넌트 격리 + canWriteTenant("classes") 게이트.
+- 검증: typecheck0/lint0/**test128**(sameDaySet·dayChangeLabel) + **라이브**(이채은 클릭→"이채은·등원 요일" 팝오버→목 해제·적용→**"이채은→월만" 배지·1건 대기**) + **롤백 DB**(attendance_days `[]→[mon]`·end_date/전입/사유 무변경=깨끗). ⚠️ 실 마우스 드래그(같은 반)·실 저장→DB는 dnd-kit 합성 한계([[#52]])로 자동 미검 — **팝오버가 동일 큐→배지→저장 경로 증명**.
+- ⚠️ 한계: ① 한 반이 여러 셀(월목+수)에 걸치면 편집이 **그 셀 요일 기준**(멀티셀 — 셀 밖 요일은 팝오버에 안 뜸). ② 같은 반 편집은 **retroactive**(과거 주도 반영) — 교차 이동의 적용일 split과 다름(의도: "수정"). ③ 클릭=팝오버 / 드래그=이동 이중 동작(dnd-kit distance:5로 구분).
+
+### 강사 인수인계 후보 = "과목 하드필터" → 활성 강사 전원 검색(신입도 인계 가능) + 적대리뷰 2건 수정 (2026-07-01) — ✅ typecheck0/lint0/test562 + 워크플로 적대검증
+사용자 제보: 반 상세 '강사 인수인계 예약'의 **새 담임 드롭다운이 과목 담당자만** 노출(page.tsx가 `t.subjects.includes(klass.subject)`로 **하드 필터**) → **`users.subjects[]` 미지정 신입 강사는 후보에서 통째로 빠져 인계 불가**. "검색해서 추가"로 확장.
+- **후보 풀 = 활성 강사/실장/원장 전원**([classes/[id]/page.tsx](<src/app/(shell)/classes/[id]/page.tsx>) `handoverPool`): 과목 하드필터 **제거** → 전원 노출 + **과목 담당자 상단 정렬**(`isSubjectMatch` sort, JS 안정정렬 + 쿼리 display_name 정렬 보존). 각 강사에 hint(`이 반 과목` / 담당 과목 라벨[buildSubjectMaps.labelOf] / `과목 미지정`). 현재 담임은 계속 제외(`t.id !== klass.teacherId`). `getClassTeacherOptions`(teacher/manager/master·active)는 불변.
+- **native `<select>` → 표준 [SearchableSelect](src/components/ui/searchable-select.tsx)**([teacher-handover.tsx](<src/app/(shell)/classes/[id]/_components/teacher-handover.tsx>)): 이름 검색 → 신입·타 과목 강사도 선택. 드롭다운 규약 위반도 해소. `TeacherOption`에 `hint?` 추가. 안내문구 1줄.
+- **서버 검증 신설(변조 방어)**: `scheduleHandover`가 `newTeacherId`를 그대로 저장(과목 제한 애초에 없음)했었음 → 공용 헬퍼 [`isAssignableTeacher`](src/features/classes/server/actions.ts)(users에서 active teacher/manager/master 확인, RLS가 테넌트 격리 → 타 테넌트 id는 null 거부)로 예약 시 검증.
+- **⚠️ 워크플로 적대리뷰(3차원 find→검증) 확정 2건 수정**: ① **(CONFIRMED med) applyHandover 재검증 누락** — 예약~적용(미래일) 사이 대상이 퇴사(status)·역할변경되면 `applyHandover`가 무조건 `teacher_id`에 넣어 비활성/비강사가 담임이 됨(FK onDelete:set null이라 하드삭제만 null 가드가 잡음, status/role 변경은 안 잡힘) + 재활성화 시 `getTeacherScope` 접근까지 → **applyHandover에도 `isAssignableTeacher` 재검증**(무효면 "다시 예약" 안내). ② **(UNCERTAIN) 드롭다운 클리핑** — 다이얼로그 `max-h-[90vh] overflow-y-auto`가 SearchableSelect absolute 팝업을 자를 위험 → **EnrollmentAssignDialog 패턴(overflow/max-h 없음)으로 통일**(폼이 짧아 뷰포트 넘칠 일 없음).
+- 검증: typecheck0/lint0/**test562**. ⚠️ 라이브 브라우저 검증은 auth 게이트 + 병렬 dev `.next` 충돌 회피로 정적 게이트+적대리뷰로 대체(원장 HMR 환경 실드롭다운 1회 확인 권장). ⚠️ 범위: "이미 직원 등록됐으나 과목 미지정이라 안 보이던 강사"를 검색 노출(직원관리 미등록 신규 강사를 이 다이얼로그에서 인라인 생성하는 건 별도 흐름, 미구현).
+
+### 시간표 편집 모드 Delete = 오늘 그 반 수강 종료 (hover + 확인 팝업) (2026-07-01) — ✅ typecheck0/lint0 + 라이브 팝업 검증
+사용자 요청: 시간표에서 학생에 **마우스 올린 채 Delete → 오늘 그 반 수강 종료**. ⚠️ 정정: "퇴원"(전체 학생 status)이 아니라 **그 반의 수강 종료**(이력=수강 종료, 그 셀에선 퇴원 목록으로 이동, **모든 반 수강종료 시 자연히 퇴원**). 기존 [endSingleEnrollment](src/features/students/server/actions.ts)(end_date=오늘, 학생 쓰기 full 게이트) 재사용.
+- **hover 추적 = ref**([edit-context](<src/app/(shell)/timetable/_components/edit-context.tsx>) `HoveredStudent`·`setHovered`): DraggableStudentRow `onMouseEnter/Leave`가 **ref만 세팅**(hover마다 리렌더 방지). context에 stable `setHovered` 노출.
+- **Delete 리스너**([timetable-board](<src/app/(shell)/timetable/_components/timetable-board.tsx>) provider): **편집 모드에서만**(`editing` 게이트, 사용자 선택) + 입력창(input/textarea/select/contenteditable) 타이핑 중 무시. hover된 학생 있으면 확인 팝업.
+- **확인 팝업 필수**(`EndEnrollmentConfirm`, 사용자 선택): 파괴적이라 확인 1번 — Esc/바깥클릭=취소, 확인 버튼 autofocus, danger 색. 확인 시 `endSingleEnrollment(오늘)` → **`router.refresh()`**(그 액션은 /timetable revalidate 안 해 클라 새로고침 필요).
+- **셀 표시 자동**: enrollment end_date=오늘(전출 아님) → [queries.ts:257-269](src/features/timetable/server/queries.ts)에서 `hasEnded→status="withdrawn"` → 그 셀 **퇴원 섹션**. 다른 반은 active 유지(학생 전체 퇴원 아님).
+- 검증: typecheck0/lint0/test + **라이브 E2E**(편집 진입→학생 hover(mouseover)→Delete→'이채은 학생을 초등M 개별 BS1B 반에서 오늘(2026-07-01) 수강 종료할까요?' 팝업·danger 버튼·취소로 닫힘). ⚠️ **실제 '수강 종료' 클릭(DB write)은 실 학생 종료라 라이브 미실행** — 기존 검증된 액션 + 검증된 셀 표시 로직이라 by-construction.
+
+### 시간표 내보내기(엑셀/시트) 셀 넘침 → 잘림 (2026-07-01) — ✅ typecheck0/lint0 + 수학 xlsx fetch 검증
+사용자 제보: 수학 시간표 export에서 학생 이름이 셀 밖으로 넘쳐 옆 칸을 침범. **엑셀·시트 모두 넘침 방지**로.
+- **구글 시트**([overwriteMathTimetableSheet](src/features/integrations/google-sheets.ts)): 구글 시트는 xlsx import 시 기본이 **OVERFLOW_CELL**이라
+  이름이 옆으로 넘친다 → media 교체(`drive.files.update`) **후 Sheets API `batchUpdate`로 전 탭 전 셀 `wrapStrategy=CLIP`** 강제(`repeatCell` per 탭). xlsx의 shrinkToFit은 시트가 무시하므로 시트 API로 못박음.
+- **엑셀 xlsx**([exporter.ts](src/features/exports/math-timetable/exporter.ts)): Excel은 CLIP이 없어 → 학생 이름 셀(왼쪽정렬 `indent:1`)에 **`shrinkToFit:true`**(셀 폭에 맞춰 폰트 축소=넘침 방지). 일반 export([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 `wrapText`(줄바꿈)이라 넘침 없어 무변경.
+- 검증: typecheck0/lint0 + **수학 xlsx fetch**(status200·유효 xlsx·styles `shrinkToFit="1"` 18개). ⚠️ 시트 CLIP 라이브 검증은 사용자 실 시트를 덮어써야 해서 미실행 — **다음 '시트 반영' 시 적용**(표준 Sheets API라 확실).
+
+### 시간표 분리등원 이식 + 요일 지정 반이동(드래그-투-데이) + 반이동 잠복버그 수정 (2026-07-01) — ✅ typecheck0/lint0/test562 + RPC 롤백 E2E
+사용자 "월목 수업에서 월요일만 오는 학생(분리등원) 표시가 없다" → ijw 충실 이식. **표시 + 요일 지정 이동 + 색/날짜**를 한 묶음으로.
+- **분리등원 표시(P1·P2)**: `enrollments.attendance_days`(요일코드 배열, []=전 요일)를 ijw export에서 백필([backfill-attendance-days.cjs](scripts/_poc_migration/backfill-attendance-days.cjs),
+  한글요일→코드·반 스케줄 교집합·전 요일 덮으면 스킵, 38건). 셀은 `covers`(그 셀 덮는 요일)≥2 + `attendsAllCovered`로 **공통(전 요일)/부분(요일별)** 분리 →
+  공통은 상단 정렬, **하단에 `분리등원(월/목) → 전입예정 → 대기 → 퇴원` 바닥 정렬**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `hasBottom` mt-auto). 순수판정 [split-attendance.ts](src/features/timetable/lib/split-attendance.ts).
+- **요일 지정 반이동(드래그-투-데이, ijw `useStudentDragDrop` 이식)**: 편집 모드의 다요일 셀에 **요일 드롭존(월/목) + 공통 존(셀 전체)** 렌더([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `DayDropZone`,
+  빈 칸=`여기로` 힌트). **드롭한 존이 곧 목적지 등원 요일** — 요일 존=`[그 요일]`(그 요일만), 공통 존=`[]`(전 요일). ijw 규칙 `toZone==='common'?[]:[day]` = 순수 [`zoneAttendanceDays`](src/features/timetable/lib/split-attendance.ts).
+  커스텀 충돌([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `preferDayZone`: `pointerWithin` 중 콜론 3조각=요일 존 우선)로 "목 칸 드롭"이 셀 전체 드롭보다 우선. RPC [move_enrollments_batch](supabase/migrations/0063a_move_enrollments_attendance_days.sql)에 **per-move `attendance_days`**(0063a, dev적용). ⚠️ GiST `enrollments_no_overlap`은 `[)` 반열림이라 old end=eff/new start=eff여도 same-class 경계 무겹침(end-1 불요).
+- **⚠️⚠️ 반이동 잠복 버그 수정(확증)**: 기존 onDragEnd가 `toClassId = slot.id`(=**스케줄 id**)를 RPC에 반 id로 넘겨 `enrollments.class_id` **FK 위반→이동 실패**. DB 확증: `class_id`가 스케줄 id인 enrollments **0건**(=UI 드래그 이동이 성공한 적 없음). CLAUDE.md 옛 이동 E2E는 **RPC 직접 호출**(정확한 반 id)이라 이 **UI 드래그→저장 경로는 미검증**이었음(dnd-kit 합성 드래그가 안 떠서). **수정**: 드롭존 data에 실제 `slot.classId`(=`realClassId`) 실어 onDragEnd가 `over.data.current.classId`를 씀 + 드래그 data.classId도 realClassId. **마커 키는 셀 slot.id(=toSlotId) 유지**(incoming을 반 id로 키잉하면 한 반이 여러 셀에 걸칠 때 오표시 → 셀 단위 = 무회귀).
+- **적용일(즉시/예정일)**: 편집 바에 `적용일` date input([timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>) `TimetableEditControls`, min=오늘/조회주). 저장 시 `scheduledDate ?? effectiveDate`를 RPC `p_effective_date`로 → 미래 날짜면 그날 반영(옛 반은 그 전까지 유지). ijw `ScheduledDateModal`(즉시/예정일) 대응(eywa는 배치 단위 인라인).
+- **전입(반이동) 색**: [studentRowTone](<src/app/(shell)/timetable/_components/class-cell.tsx>) 우선순위 교정 — **전입(초록 `bg-primary-soft`)을 신입(빨강)보다 먼저** 검사(ijw `getEnrollmentStyle` 순서). 반이동은 새 enrollment라 `start_date`가 최근=`isNew`도 true지만 "신입"이 아니라 "전입"으로. RPC가 이동 시 `is_transferred_in=true` 세팅 → 초록. ⚠️ **과거 ijw 전입 backfill 안 함(사용자 결정)** — 라이브 이동만 초록(현재 활성 전입 0).
+- 기타(같은 세션): 열너비 60/**넓은 요일(수·토·일) 120**, 이름 **생략(…)→잘림(clip)** 전 셀·헤더·통합뷰([rich-card-group.tsx](<src/app/(shell)/timetable/_components/rich-card-group.tsx>)), 전입예정 **요일 라벨**([목]=드롭 목적지 요일, [`incomingDayLabel`](src/features/timetable/lib/split-attendance.ts)), **225슬롯 표시 제거**([page.tsx](<src/app/(shell)/timetable/page.tsx>)).
+- 검증: typecheck0/lint0/**test562**(split-attendance 8·move-compress 확장) + **RPC 롤백 트랜잭션 E2E**(실 enrollment 이동→새 반 class_id 정확·`attendance_days=['thu']`·`is_transferred_in=true`·옛 종료, `ROLLBACK`=DB 무변경) + 편집 UI 라이브(요일 드롭존 "여기로" 66·적용일 입력·콘솔0). ⚠️ **실제 마우스 드래그→저장은 dnd-kit 합성 한계로 자동검증 불가([[#52]]) — 원장 실드래그 1회 확인 필요.**
+- ⚠️ **한계**: ① **같은 반 내 요일 변경 미지원(v1)** — 교차 반 이동만(`fromClassId===toClassId` skip, 실 반 id 비교). 같은 반 요일 제한은 마커 same-cell 복잡성으로 후속. ② 통합뷰는 요일 드롭존 미적용(기본뷰만). ③ 과거 전입 backfill 없음.
+
+### ijw 배선 갭 근본 수정(import 미매핑 필드 전수 연결) + 지출탭 스크롤·증빙 버그 (2026-07-01) — ✅ 전체 재복원·DB검증·typecheck0
+**지출 탭 2버그**: ① **내부 스크롤 죽음** — 공용 [DragScrollArea](src/components/ui/drag-scroll-area.tsx)가 표를 `overflow:auto`(양축) 컨테이너로 감싸, **가로만 넘치는 표** 위에서 Chrome이 세로 휠을 컨테이너가 삼켜 페이지로 전파 안 됨(overscroll-y:auto로도 안 풀림). → 비-barX(일반 표/보드 8곳)는 `overflow-x-auto overflow-y-hidden` **정적**(세로축이 스크롤 컨테이너가 아예 안 됨 → 세로 휠이 페이지로 전파). barX(시간표 큰 그리드, min-h-0 flex-1 높이제한)만 `overflow-y-auto` 유지. ② **증빙 미연결** — 이전 import가 `receipt_urls`/`approval_checks` 등 미매핑. [import-textbooks-expenses.cjs](scripts/_poc_migration/import-textbooks-expenses.cjs)에 approval_checks(작성/원장/대표/집행자, ijw·eywa 동일키)·receipt_urls(ijw Firebase 다운로드 URL, 오디오처럼 콜드 백엔드 유지)·currency(₩→KRW)·position·bank/account 매핑. eywa 열람은 3세그 테넌트 경로만 서명 → [signExpenseReceipts](src/features/billing/server/expense-actions.ts)·[모달](<src/app/(shell)/billing/_components/expense-receipts-modal.tsx>)에 **http(s) passthrough**(공개 토큰 URL은 서명 없이 표시/열람). ⚠️ 서버액션 변경이라 **dev 재시작 필요**(#35).
+**ijw 배선 갭 전수 검수**: run.ts/transform.ts가 export 풍부한 필드 중 최소만 매핑해 여러 도메인이 "데이터 있는데 UI 빈칸"(지출 증빙과 동류). ijw필드↔eywa컬럼↔import매핑↔**실제 UI소비**(grep) 교차검증 → **근본 수정(transform.ts+run.ts 매핑 추가) + 전체 재복원**:
+- students: gender·birth_date·parent_relation·student_phone·home/other_phone·address·zip_code·address_detail·email·nickname·graduation_year. classes: notes←memo. staff: phone·default_classroom(⚠️wipe보존이라 재복원 시 신규직원만 갱신).
+- enrollments: is_transferred·attendance_days(한글요일→DAY_MAP코드). enrollment_consultations: address·gender·parent_relation·blood_type·student_phone·payment_amount·payment_date·registrar·non_registration_reason·follow_up_date/content·career_goal·siblings·consultation_path·shuttle/privacy/installment(bool)·registration_status·subject(라벨→키)·**subject_details jsonb**({math,english,…}Consultation→과목키). invoices: payment_method(C→card·B→transfer·최빈)·points_used(합). meeting: audio_duration_sec.
+- **step 11 신규** [clean-empty-strings.cjs](scripts/_poc_migration/clean-empty-strings.cjs): ijw가 부재를 `""`로 저장 → `?? null`이 못 잡아 "빈값 채워진 듯" 보임 → 재복원 마지막에 빈 문자열 텍스트 컬럼 null 정리(멱등). 정리 후 카운트=ijw 정확 일치(등록상담 address 92·registrar 77·subject 146·follow_up 35·blood 14 / 학생 gender 467·phone 464·parent_relation 544 / 반 notes 19·회의 duration 46).
+- 검증: 재복원 10단계 재실행(전 insert 성공)+DB카운트 ijw일치+typecheck0. ⚠️ is_transferred 76·attendance_days 52(ijw 157·110)는 수강 dedup으로 감소(정상). 상세 런북·매핑=메모리 [[reference_ijw-full-restore]].
+
+### ijw-calander 전체 데이터 프로덕션 이식 + 테넌트 injaewon 개명 (2026-07-01) — ✅ 실행·DB 검증 완료
+사용자가 **ijw-calander를 은퇴**시키고 실데이터를 eywa로 완전 이관. 기존 `ijw-demo` 테넌트(`becaa316-…`)를 **프로덕션으로 승격**(신규 테넌트 대신 재사용 — 파이프라인이 tenant_id에 배선돼 스크립트 수정 0, auth·RLS·설정 보존). 상세 런북·검증카운트 = 메모리 [[reference_ijw-full-restore]].
+- **신규 export**: `node D:/ijw-calander/scripts/exportForMigration.mjs` → 라이브 Firestore **`restore20260319`**(⚠️ 이 파일 옛 기록의 `restore260202`는 오기)에서 오늘자 덤프(52컬렉션·25,004문서). serviceAccount = **`D:/ijw-calander/serviceAccount.json`**(⚠️ 옛 기록 `F:\`는 오기). `run.ts`·백필 모두 최신 export 자동선택.
+- **런북(9단계, `scripts/_poc_migration/`)**: `run.ts`(auth보존 wipe+코어) → highmath→subject_1 → fix-primary-teacher → backfill-english-slots/teacher-colors → import-catalog/tuition-catalog → textbooks-expenses → lesson-reports(Edutrix Supabase) → import-meeting-speakers(Firebase). **제외=fabricate-grades(가짜성적)·assign-demo-teacher·fix-consultations(옛 버그용).**
+- **검증 카운트**: 학생567(재원527)·반129(색상52·담임128)·스케줄628·수강1050·출결5799·등록상담208·학생상담1411·수납2000·회의47(화자44)·교재신청385·지출117·교재단가146·수강료단가50·진도(Edutrix)3521. subject분포 {math68·english46·subject_1 15, **highmath 0**}. makeedu_id 전부 null(fresh restore).
+- **⚠️ highmath 재마이그 함정**: `migrate-highmath-to-subject1`이 "settings에 이미 subject_1 존재" 가드로 **전체 abort** → 신규 export가 재도입한 15개 심화수학 반+1강사만 타깃 UPDATE로 변환(subject_1 라벨="수학(심화)"=동일개념 DB확인 후) + 슬롯 백필 재실행(129/129 매칭). 재마이그 시 이 가드 재발.
+- **테넌트 개명**: `tenants` slug `ijw-demo`→**`injaewon`**, name `인재원 (데모)`→**`인재원`**(plan은 `demo` 유지). UI 학원명은 원래도 `tenant_settings.profile.name="인재원"`이라 무영향. `run.ts` demo-path slug 가드도 `injaewon`으로 갱신. tenant_id 불변 → RLS/auth/로그인 무영향(로그인 이메일 `@ijw-demo.com`은 auth계정이라 미변경).
+- **코드 픽스(커밋 `8c668f9`, main push됨)**: backfill 2종 하드코딩 export 파일명 → 최신 자동선택(`readdirSync…sort().pop()`, footgun 제거) + `run.ts` slug 가드.
+- **makeedu**: 사용자가 병행 유지 선택 → wipe로 `makeedu_id`=null 됐으나 GitHub Actions cron(KST 06/18, additive·멱등)이 자가복구. 즉시는 `gh workflow run makeedu-sync.yml -f force=true`.
+- ⚠️⚠️ **이 테넌트는 이제 데모가 아니라 프로덕션 실데이터** — 검증 중 무심코 mutation 금지(옛 "데모=일회용" 전제 폐기). 오디오는 Firebase Storage `ijw-calander.firebasestorage.app` 콜드 백엔드 유지(삭제 금지).
+
+### 엑셀/구글시트 가져오기 라운드트립 — 수학 export에도 '수강편집' 시트 추가(옵션 A) (2026-06-30) — ✅ 게이트 + Chrome 라이브
+ijw "메타데이터" 라운드트립 대비 감사(워크플로 9에이전트, 36주장 적대검증) 결론: eywa에서 **실제 DB 반영되는 import는 학생(신규 insert-only)·시간표 '수강편집' 시트(수강 이동/추가/삭제)뿐**이고, 둘 다 `.xlsx` 파일 업로드 전용. **기본 '엑셀' 버튼으로 받는 수학 export는 `_meta`만 있고 importer가 읽는 '수강편집' 시트가 없어 라운드트립이 끊겨** 있었다(`parseEditSheet`가 빈 배열→ "'수강편집' 시트 없음" 거부). 구글시트는 단방향 push(`overwriteMathTimetableSheet`)만이라 시트 편집이 앱에 반영 안 됨. (수학 export의 `_meta`는 ijw 익스포터 verbatim 이식 잔재 = eywa엔 소비처 없는 orphan.)
+- **수정(옵션 A)**: '수강편집' 시트 생성 로직을 공용 헬퍼 [appendEnrollmentEditSheet](src/features/exports/enrollment-edit-sheet.ts)로 추출(일반·수학 단일 소스). 수학 익스포터([exporter.ts](src/features/exports/math-timetable/exporter.ts))에 `writeBuffer` 직전 `appendSheets?` 훅 추가 → [build-buffer.ts](src/features/exports/math-timetable/build-buffer.ts)(다운로드+구글시트 push 공유 버퍼)가 그 훅으로 '수강편집' 주입. 일반 export([timetable-excel.ts](src/features/exports/timetable-excel.ts))는 인라인 블록 → 헬퍼 호출(동작 동일). 가져오기 다이얼로그에 "구글시트는 .xlsx로 다운로드해 올리세요" 안내 1줄.
+- **효과**: 기본 '엑셀' 버튼·구글시트 push 워크북 둘 다 '수강편집' 탭 보유 → 라운드트립 단절 복구. 다운로드→편집→업로드, 또는 구글시트 편집→.xlsx 다운로드→업로드가 동작.
+- 검증: typecheck0/lint0/test17(import) + **Chrome 라이브**(로그인 박소선, localhost:3001): export를 fetch→xlsx(zip)를 페이지에서 `DecompressionStream`으로 풀어 시트구조 직접 검사 — 수학 `?subject=math` HTTP200·**13시트(전엔 12)**·'수강편집' **814데이터행+헤더[반/학생/학교/학년/enrollmentId] 완비** / 영어 `?subject=english`도 '수강편집' 보유(헬퍼 추출 회귀0).
+- ⚠️ **한계(설계)**: 이 시트로 바꿀 수 있는 건 **학생↔반 배정뿐**(반이름·색·강사·요일·교시·신규반은 import 불가 — 그 정보가 시트에 없음). enrollmentId 앵커라 행 정렬/삽입에 안 깨짐(ijw `_meta` 위치 방식의 취약점 회피). '수강편집' 탭엔 전 과목 활성 수강이 다 들어감(일반 export 동일). 구글시트는 앱이 다시 push하면 전체 덮어쓰기라 시트 편집분이 날아감 → 편집 후엔 re-push 말고 가져오기부터.
+- **후속(옵션 B, 진행 예정)**: 구글시트 values 읽어 `parseEditSheet`로 흘리는 server action + 툴바 '시트에서 가져오기' 버튼 → 다운로드 단계 없이 시트 편집→앱 자동 반영. ⚠️ **옵션 C(ijw식 `_meta` 위치 라운드트립=시각 그리드 직접 편집)는 비이식** — Firestore 서브컬렉션 모델 가정 + 위치 메타라 취약(시트 행삽입/정렬에 깨짐)이고, eywa는 화면 내 드래그 편집(타임머신)이 이미 같은 목적 달성.
+
+### 구글시트에서 가져오기(옵션 B) — 시트 편집→앱 자동 반영 + 적대리뷰 HIGH 2건 선제수정 (2026-06-30) — ✅ 게이트 + 라이브 read
+옵션 A로 '수강편집' 탭이 구글시트에도 생기자, 다운로드 단계 없이 **시트 편집→앱 반영**을 닫음(사용자 목적: 웹앱 셀 이동이 한정적이라 시트로 대량 반배정이 효율적).
+- **읽기**: [readSheetTabRows](src/features/integrations/google-sheets.ts)(Sheets API `values.get`, 기존 서비스계정 JWT·withSheetsRetry·translateSheetsError 재사용, 탭 없으면 "시트 반영 먼저" 친절 에러). **헤더 매핑/빈행 규칙은 [buildEditRow](src/features/timetable/import/parse.ts) 하나로 xlsx·시트 공용** + 시트 dense 그리드용 `rowsToEditRows`.
+- **액션**: [previewSheetImport](src/features/timetable/server/import-actions.ts)(master 게이트=syncSheetsNow 대칭, spreadsheet_id/sync_enabled 해석 동일 → readSheetTabRows→rowsToEditRows→loadContext→computeImportDiff). **적용은 기존 applyTimetableImport 재사용**(신규 apply 0). UI=[import-dialog](<src/app/(shell)/timetable/_components/import-dialog.tsx>) `mode="sheet"`(파일입력 대신 '시트에서 불러오기' 버튼, diff·적용 UI 공유) + 툴바 '시트에서 가져오기'(canSync=master+연동ON일 때만, 서버 게이트 이중방어).
+- **⚠️ 적대리뷰(6에이전트, 확정 4건=HIGH 2) 선제수정**: ① **필수헤더 검증**([assertEditHeaders](src/features/timetable/import/parse.ts)) — 시트에서 enrollmentId/반 헤더를 지우면 전 행이 앵커 없는 신규로 오인 → **현재 DB 전 수강이 삭제+재삽입**되는 파괴 diff → '반'·'enrollmentId' 헤더 없으면 throw(파일 경로 parseEditSheet 잠복버그도 동시 차단). ② **stale-drift 보호**([diff.ts](src/features/timetable/import/diff.ts) `protectNewerThan`) — 시트는 오래 사는 아티팩트라 push 후 앱에서 생긴 신규 수강이 시트엔 없어 **전부 '삭제'로 소급 종료** 위험 → previewSheetImport가 `last_synced_at`(push 시각)를 cutoff로 넘겨 **그 이후 start_date 수강은 삭제 후보에서 제외**(loadContext가 start_date 조회, EnrollmentSnapshotRow에 startDate 추가). ③(low) 삭제 포함 시 확인 메시지 강조(이동·추가·삭제 건수 명시). ④(low) 빈 탭은 ①로 자연 구분.
+- 검증: typecheck0/lint0/**test24**(parse 헤더throw 2 + diff cutoff 1 추가) + **라이브**(실 연결 시트 직접 read, 서비스계정): `_meta` 615행 정상 읽힘(readSheetTabRows 실경로 동작 확인)·`수강편집` 미존재→"Unable to parse range"→친절에러 변환 확인(연동 `sync_enabled=true`·`spreadsheet_id` 등록된 실 DB). ⚠️ 전체 라운드트립(시트 반영→시트편집→가져오기)은 원장이 '시트 반영'을 옵션 A 코드로 1회 누른 뒤 가능(현 연결 시트는 2026-06-29 push라 아직 수강편집 탭 없음).
+- ⚠️ 한계: 시트는 앱이 재push하면 전체 덮어쓰기(편집분 소실) → 편집 후엔 re-push 말고 가져오기부터(다이얼로그 경고문). 시트로 바꾸는 건 학생↔반 배정만(A와 동일, 반이름·색·강사·교시 불가).
+
+### 시간표 가져오기 미리보기 강화 — "무엇이 바뀌는지 + 한 번 더 확인"(갈래1) + 문구 정리 (2026-07-01) — ✅ 게이트 + 라이브
+ijw `ExcelImportPreviewModal`(가져오기 전 검토/검증 모달) 대비 감사 후 사용자 선택 = **갈래1**(리치 프리뷰+확인만; 위치메타 시각편집=옵션C·롤백 뷰어=1b는 비채택 — 타임머신이 대체, 위치메타는 시트 자유편집과 상극). 파일·시트 가져오기 공용 [import-dialog](<src/app/(shell)/timetable/_components/import-dialog.tsx>) 강화:
+- **미리보기 카테고리화**: 이동/추가/삭제를 아이콘+섹션으로(있는 것만 표시) + 요약 카운트에 **무시 N**(매칭실패/모호=적용 제외) + "확인 필요 · 적용에서 제외" 경고 섹션(diff.warnings를 배지·리스트로).
+- **"한 번 더 확인"**: 대량(≥30)/삭제(≥10)/무시(>0)면 적용 직전 confirm이 **무엇을 적용·무엇을 무시**를 요약해 물음.
+- **미적용 이탈 가드**: 미리보기만 하고 안 적용한 채 닫기/새로고침 시 경고(beforeunload + 닫기 confirm, ijw useUnsavedChangesGuard 대응).
+- **문구 정리(사용자 지시)**: `enrollmentId` 언급 제거(사용자가 알 필요 없음)·`변경없음` 카운트 제거·백업 안내 제거(**롤백 UI가 없어 "되돌릴 수 있습니다"는 과잉약속=write-only-orphan 회피**).
+- 검증: import-dialog typecheck0/lint0 + 라이브(마스터, 실 연결 시트: 이동1+매칭실패1 → 섹션·무시·확인 메시지 정확, 적용 취소로 DB 무변경). ⚠️ 스냅샷 write(`timetable_snapshots`)는 있으나 **사용자용 복원 UI는 미구현**(1b) — 그래서 UI에서 "되돌리기" 약속 안 함. ⚠️ 위치메타 시각편집(옵션C)은 CLAUDE.md 판정대로 비이식 유지.
+
+### 반 활성 체크박스 해제 무시 버그 — is_active=false 저장 안 됨 → 시간표 잔존 (2026-07-01) — ✅ 한 줄 수정
+사용자 제보: 반 수정 폼에서 '활성' 체크를 해제·저장했는데 시간표에 계속 보임. 원인 = **HTML 체크박스는 해제 시 FormData에 값을 안 보냄**인데 [parseClassInput](src/features/classes/server/actions.ts)이 `isActive: get("isActive") !== "false"`로 판정 → 해제(빈 값)여도 `"" !== "false"` = **true**라 항상 활성으로 저장(=체크 해제가 무시됨). 폼엔 `<input type="checkbox" name="isActive" value="true">` 하나뿐(hidden 짝 없음).
+- **수정**: `isActive: get("isActive") === "true"`(체크됐을 때만 true, 해제=false). createClass는 체크박스 기본 checked라 무영향. **같은 footgun 다른 곳 없음**(전역 검색: class-form defaultChecked·makeedu-sync는 boolean/DB값 비교라 무관).
+- **검증**: 시간표 쿼리는 원래 정상 — `fetchSlots`가 `class:class_id!inner + .eq("class.is_active", true)`로 폐지 반 제외, `getWeeklyScheduleWithStudents`도 슬롯을 fetchSlots에서만 도출(반→누수 경로 0). DB 실측: is_active=false면 fetchSlots 반환 **0행**(정확 제외). typecheck0/lint0.
+- ⚠️ **잔존 표시는 stale 창**: 반 편집(다른 창)에서 저장 → 이미 열려 있던 시간표 창(별도 iframe 문서)엔 자동 반영 안 됨([[#55]]) → 시간표 창 새로고침 필요(쿼리 자체는 이미 제외).
+
+### 시간표 요일 병합을 과목별 프리셋으로 설정 (2026-06-30) — ✅ 게이트 그린 + 라이브
+사용자 제보: 기본뷰 요일 병합이 **수학 패턴(월목/화금/수)으로 하드코딩**돼 모든 과목에 적용 — 과목마다 수업 요일이 다른데(영어=월화/목금 등) 전부 월목/화금으로 묶임. 과목별로 병합 요일을 설정 가능하게.
+- **사용자 선택 = 프리셋 방식**(자유 분할 대신 드롭다운). 과목 설정에 `weekdayGrouping` 추가(스키마 `subjectSchema`): `mon-thu`(월목·화금, 수 단독=기본)·`mon-tue`(월화·목금)·`mon-wed-fri`(월수금·화목)·`none`(병합 없음, 요일별 풀너비).
+- **단일 소스** [`weekday-groups.ts`](src/features/timetable/lib/weekday-groups.ts): 프리셋→평일 분할(`weekdayPartition`)·라벨·옵션·`normalizeWeekdayGrouping`(미설정/구데이터 폴백 — resolve가 스키마 미통과하므로 읽는 쪽에서 mon-thu 폴백). 시간표 렌더 + 과목 편집기 공용.
+- **시간표** [weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>): 하드코딩 `WEEKDAY_GROUPS` 제거 → `buildWeekdayGroupDefs(grouping)`(묶인 요일 길이≥2=병합, 단독=풀너비, 밴드색 팔레트 순환). 열너비 `wideDays`(단독 그룹 요일+주말)를 그룹 구성에서 동적 도출(하드코딩 `WIDE_DAY_COLS` 제거). [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 현재 과목의 `weekdayGrouping`을 넘김.
+- **과목 편집기** [list-editors.tsx](<src/app/(shell)/owner/_components/list-editors.tsx>) `SubjectListEditor`: 과목 행에 "시간표 요일 병합" 드롭다운(4프리셋). + defaults.ts 기본 과목에 weekdayGrouping(수학=mon-thu·영어=mon-tue·과학=none).
+- 검증: 제 파일 typecheck0/lint0(병렬 세션 spotlight-strip 미완 import 에러는 무관) + 라이브(PSS): owner 과목 편집기 드롭다운 5개·영어=월화/목금 저장(DB `english.weekdayGrouping=mon-tue`) → 시간표 **영어=월/화·목/금·수**, **수학=월/목·화/금·수**(과목별 차등) 확인. ⚠️ jsonb라 DB 마이그 불요. 엑셀(timetable-excel)은 평탄 DAY_ORDER라 병합 무관(미변경).
+
+### 학생 수업 탭 — 수강 종료 라벨/버그/권한 + 시작·종료일 더블클릭 인라인 수정 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test539)
+학생 상세 '수업' 탭([classes-tab.tsx](<src/app/(shell)/students/[id]/_tabs/classes-tab.tsx>)) 두 묶음.
+- **A. 수강 종료 X → '수강 종료' 라벨 + 버그픽스 + 권한 게이트**: 사용자 제보 ① 이미 종료된 행에서도 X가 떠 누르면 **확인 팝업이 반복** ② "X"가 **반 삭제처럼 보임** ③ 특정 권한 이상만 노출.
+  · 버그: 종료 액션을 **`end_date == null`(재원중) 행에만** 렌더 → 이미 종료일 있는 행은 버튼이 사라져 재클릭·팝업 반복 차단(종료하면 다음 렌더부터 자동 사라짐).
+  · 라벨: [end-enrollment-button.tsx](<src/app/(shell)/students/[id]/_components/end-enrollment-button.tsx>) X 아이콘 → **`LogOut` + "수강 종료" 텍스트**(툴팁 "반 삭제 아님").
+  · 권한: **학생 쓰기(full) 이상만**(master·admin·manager·counselor) — page가 `accessLevel(role,"students")==="full"`을 `canEnd`로 전달(UI 숨김) + [endSingleEnrollment](src/features/students/server/actions.ts) 서버 게이트 **이중 방어**(#58). 강사(scoped)·회계/뷰어(readonly) 미노출.
+- **B. 시작/종료일 더블클릭 인라인 수정**(관리자 정정): 사용자 결정 = **모든 수업(지난 수업 포함) / owner(원장) 권한 이상**.
+  · 신규 액션 [updateEnrollmentDates](src/features/enrollments/server/actions.ts) — **owner 게이트**(`accessLevel(role,"owner")==="full"`) + 검증(시작≤종료·ISO) + **GiST(`enrollments_no_overlap`) 충돌 친절 처리**("같은 반에서 수강 기간이 겹칩니다", 23P01) + revalidate(시간표·학생·반). enrollments는 temporal 테이블이라 날짜 변경이 **타임머신·시간표에 그대로 반영**.
+  · 신규 클라 [editable-date-cell.tsx](<src/app/(shell)/students/[id]/_components/editable-date-cell.tsx>) — 더블클릭 → date input + 저장/취소(Esc). 종료를 **비워 저장하면 "재원중" 복귀**(withdrawal_reason도 해제). 성공 1회 가드는 [[#67]] 패턴(state 객체 동일성 비교 → 재오픈 stale 재발화 방지).
+  · page가 `canEditDates`(owner)면 셀을 편집 가능 셀로, 아니면 기존 읽기 전용 텍스트.
+- ⚠️ 한계: 기간을 줄여도 그 밖 `attendance_records`는 보존(의미상 고아, ijw 동일). "+ 반 배정"(createEnrollment)은 이번 범위 밖이라 게이트 미적용(후속 가능).
+- 검증: typecheck0/lint0/test539. 라이브 E2E는 병렬 dev 서버 `.next` 충돌(#17/#23) 회피로 정적 게이트 + 사용자 HMR 환경 검증으로 대체.
+- **후속(같은 날) — 인라인 날짜 편집을 다른 화면에 확장 + 전수 검토**: `EditableDateCell`을 공용 위치([features/enrollments/components/editable-date-cell.tsx](src/features/enrollments/components/editable-date-cell.tsx))로 이동(라우트 사적 폴더 `_components` 교차 import 회피, 학생 탭 import 갱신).
+  · **수업 상세 로스터**([classes/[id]/page.tsx](<src/app/(shell)/classes/[id]/page.tsx>)): 쿼리가 `end_date IS NULL`(활성만)이라 종료를 넣으면(미래여도) 학생이 **즉시 로스터에서 사라져** 혼란 → **시작일만** 편집(종료 수정은 날짜 기준 섹션을 가진 학생 탭에서). owner 게이트.
+  · **퇴원 상세 수강 이력**([withdrawals/[studentId]/page.tsx](<src/app/(shell)/withdrawals/[studentId]/page.tsx>)): 전 이력이라 **시작·종료 둘 다** 편집. ⚠️ 편집 시 `EditableDateCell`이 `<form>`을 렌더하므로 편집 케이스 컨테이너는 `<p>` 아닌 **`<div>`**(phrasing 안에 form 금지). owner 게이트.
+  · **전수 검토 결과**: enrollment 시작/종료 날짜 표시 7곳 중 인라인 편집 대상은 위 2곳 + 학생 탭(완료)뿐. 제외 = 학생 개요 '등록일'(`students.enrolled_at` 학생 레벨 필드 → 학생 수정 폼), 시간표 hover/셀(드래그+타임머신 **자체 편집 모델**과 충돌), 수강료 계산기/견적(견적 기간=다른 도메인), 직원 account-actions(enrollment 무관). 검증: typecheck0/lint0/test539.
+
+### 학생배정 다이얼로그 재오픈 불가 버그픽스 + 다이얼로그 성공 부수효과 전수 점검 (2026-06-30) — ✅ 게이트 그린 (typecheck0/lint0/test531)
+사용자 제보: 수업목록(반 상세)/학생 상세에서 "학생 배정"(반 배정)을 **한 번 성공한 뒤 다시 누르면 다이얼로그가 안 열림**(클릭 무반응). 원인 = [enrollment-assign-dialog.tsx](src/components/enrollment-assign-dialog.tsx)가 부모([class-assign-action](<src/app/(shell)/classes/[id]/_components/class-assign-action.tsx>)·[student-assign-action](<src/app/(shell)/students/[id]/_components/student-assign-action.tsx>))에 **항상 마운트**(open prop만 토글, 언마운트 없음)라 첫 배정 성공 후 `useActionState`의 `state.enrollmentId`가 **stale하게 잔존** → 성공 처리 `if`블록(가드 없음, 매 렌더 실행)이 재오픈 렌더에서 또 `onClose(true)`를 호출 → 열리자마자 닫힘. 자세한 패턴은 막혔던 점 [[#67]].
+- **수정**: 렌더 본문 `queueMicrotask` 부수효과 → **`enrollmentId`를 키로 한 ref 가드 + `useEffect`**로 교체(처리한 enrollmentId 기록 → stale state 재발화 차단, 진짜 새 배정[새 UUID]만 닫힘 → 같은 다이얼로그로 연속 배정 정상). ⚠️ boolean 가드를 "재오픈 시 리셋"하면 stale state가 다시 발화해 버그 재발 → 일부러 id-키 가드.
+- **전수 점검(멀티에이전트 7 = 적대 검증 1 + 6 다이얼로그 sweep)**: 같은 무가드 패턴 6곳 중 **always-mounted 2곳만 버그** — ① 학생/반 배정(수정) ② [exam-delete-button](<src/app/(shell)/exams/_components/exam-delete-button.tsx>)(재오픈 아님, 성공 후 `router.push` 매 렌더 중복 발화 → 같이 ref 가드 추가). 나머지 4곳(시험 등록/수정·청구서 수정·지출·강의실 배정)은 **조건부 마운트(`{open && <X/>}`)라 닫힐 때 언마운트→state 리셋 = 안전**(가드 없어도 무방).
+- ⚠️ 라이브 E2E는 미실행(병렬 세션 dev 서버 정황에서 2번째 `pnpm dev`=`.next` 충돌 #17/#23 회피) — 정적 게이트 + 적대 근본원인 검증으로 대체.
+
+### 반 편집 주간 스케줄 그리드 = 평일/주말 두 표 분리(주말 교시 시각 반영) (2026-06-30) — ✅ 게이트 그린 + 라이브
+사용자 제보: 반 편집 "주간 스케줄"에서 토/일 칸이 평일 교시 시각(14:30~)으로만 떠 **주말 시간대(09:00~)를 못 넣음**. 원인: [schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>)가 단일 `periods`(평일)만 받아 7요일에 똑같이 적용 — 주말 교시(`config.weekend`)를 안 씀.
+- 같은 "N교시"라도 평일·주말 시각이 다르므로(설정의 평일 교시 ↔ 주말 교시) **그리드를 두 표로 분리**: 평일(월~금, weekdayPeriods) + 주말(토·일, weekendPeriods). 선택 상태·제출 hidden(`schedule_*_${i}`)은 **공유(연속 인덱스)**, 셀 시각은 요일이 주말이면 weekendById에서 해석(`periodFor`).
+- 신규 [`subjectWeekendPeriods(config)`](src/features/timetable/lib/periods.ts)(주말은 과목 무관 `config.weekend`) + [class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>)가 평일·주말 교시 둘 다 전달. initState 역매핑·activeKeys 유효성도 요일 종류별 교시표로 판정.
+- 검증: typecheck0/lint0 + 라이브(/classes/new): 평일 표 14:30~ / 주말 표 09:00~ 2표 렌더, **토 1교시 셀 클릭 → 제출 hidden이 day=sat·start=09:00·end=10:00**(주말 시각 정확 반영) 확인.
+
+### 커맨드 팰릿 검색 결과 = 항목 상세로 이동(수업·등록상담) (2026-06-30) — ✅ 게이트 그린
+사용자 제보: 팰릿에서 "정서우"(등록상담)를 눌러도 그 사람 상세가 아니라 등록상담 **목록**만 열림. 원인: [command-palette.tsx](src/components/command-palette.tsx) `go()`가 class/consultation/enrollment hit을 "상세 창이 없어"라며 메뉴 목록(`/enrollment`)으로만 보냈음(옛 주석). → **상세 페이지가 있는 종류는 상세로**: 등록상담 `/enrollment/{id}`·수업 `/classes/{id}`(둘 다 상세 페이지 존재), 학생상담은 전용 상세 페이지가 없어 목록 유지. 상세 창 id는 `windowIdForHref`로 도출(앱 전체 상세 링크와 동일). 검증: typecheck0/lint0 + `/enrollment/{정서우 id}` 직접 이동 시 상세 정상 렌더(목록 아님) 확인.
+
+### 운영 체계에 강의실(classrooms) CRUD 추가 — 관계형 테이블 = jsonb 설정과 다른 자체 저장 (2026-06-30) — ✅ 게이트 그린 + 적대리뷰
+사용자 제보: "운영 체계에 강의실 설정이 없네?" — 강의실은 시드/임포트로만 생기고 **추가/수정/삭제 UI가 없었다**(읽기·자동배정만). 운영 체계(/owner?tab=operations)에 강의실 관리 카드 신설.
+- ⚠️ **강의실은 관계형 테이블**(`classrooms`, classes/class_schedules가 `classroom_id` FK 참조)이라 과목·학년처럼 `tenant_settings.data` jsonb에 못 넣는다(FK 깨짐). → **자체 서버 액션 CRUD**로 별도 저장(SectionForm jsonb 저장 흐름 **밖**, 즉시 저장).
+- **서버**: [classroom-queries.ts](src/features/owner/server/classroom-queries.ts) `getClassroomsWithUsage`(강의실 + 사용 현황: 기본 강의실 활성 반 수 `classCount` + 시간표 슬롯 override 수 `slotCount`) · [classroom-actions.ts](src/features/owner/server/classroom-actions.ts) create/update/delete(**master 게이트** + tenant 스코프 `.eq tenant_id`, 유니크 `(tenant,name)` 23505 친절 메시지). 삭제는 FK `onDelete:set null`이라 참조 반/슬롯의 강의실만 미지정으로 바뀜(FK 위반·고아 없음).
+- **UI**: [classroom-manager.tsx](<src/app/(shell)/owner/_components/classroom-manager.tsx>)(추가 폼 + 인라인 수정/삭제, 삭제 시 "반 N개·시간표 슬롯 M개 미지정" 경고) — operations-section이 SectionForm **밖**에 렌더(nested form 회피), owner/page는 operations 탭일 때만 `getClassroomsWithUsage` 로드.
+- **소비처(orphan 아님)**: 추가한 강의실은 반 폼·시간표의 강의실 드롭다운(`getClassroomOptions`, classrooms 테이블 직접 읽기)에 즉시 반영. CRUD가 `/owner`·`/classes`·`/timetable` revalidate.
+- 검증: typecheck0/lint0 + 라이브(PSS): 강의실 카드 운영체계 8번째 렌더(기존 18개)·추가 E2E(DB 18→19 "QA테스트실 401" 정원12·목록 즉시 갱신) 후 정리. **적대리뷰 워크플로(7에이전트, 4차원 find→검증) 확정 2건(둘 다 LOW) 수정**: ① 삭제 경고가 `class_schedules` 슬롯 override 누락 과소표시 → `slotCount` 집계 추가 ② 삭제 감사로그 raw UUID → 강의실명 기록(create와 대칭). ⚠️ 새 서버액션은 첫 제출 시 #35(핫리로드 미등록)로 1회 무반응 가능 — dev 재컴파일 후 정상.
+
+### 공지 팝업(notice_popups) — 셸 진입 시 뜨는 창형 공지("팝업광고" 패턴) + 7일/다시 보지 않기 (2026-06-30) — ✅ 4게이트 그린 + 라이브 E2E
+사용자 요청: 일반 사이트 팝업광고처럼 **셸 진입 시 창처럼 여러 개 뜨고, "7일간/다시 보지 않기" 체크로 안 보이게**. 사용자 선택 = **전용 테이블 신설**(이미지·링크·노출기간·위치·크기·우선순위). announcements(대시보드 카드)와는 **별개**(이건 진입 시 강제 1회 노출 배너형).
+- **데이터**(`0060a` `notice_popups`, dev적용·RLS 격리): title·body·image_url·link_url/label·audience(announcement_audience 재사용)·width·position(cascade/center/4모서리)·priority·is_active·starts_at/ends_at·author_id. 표시 dismiss는 **DB 아닌 브라우저 localStorage**(일반 팝업광고와 동일 = 기기 단위).
+- **표시**([notice-popup-layer.tsx](src/features/notices/components/notice-popup-layer.tsx)+[notice-popup-card.tsx](src/features/notices/components/notice-popup-card.tsx)): 셸 레이아웃이 진입 시 `getActivePopups(role,tenantId)` → 카드를 fixed 레이어(**pointer-events-none**, 카드만 auto=배경 클릭 통과)에 **그리드(flex-wrap) 타일링**. ⚠️ **겹치지 않음**(사용자 요청): position 앵커(중앙/4모서리, cascade=중앙 흡수)별로 그룹 → 같은 앵커 팝업은 flex-wrap으로 나란히(여러 개여도 비겹침 — flex가 구조적 보장, 절대배치·드래그 없음). 카드=이미지/본문/링크 버튼·footer 체크박스(`7일간`/`다시 보지 않기`)+닫기. **임베드(iframe 창)엔 미마운트**(최상위 프레임만 1회) — 멀티윈도우 N배 방지.
+- **dismiss 영속**([popup-store.ts](src/features/notices/popup-store.ts), zustand persist `eywa-notice-dismiss`, 모듈 로드 rehydrate #65): `{id:{until,v}}`. `7일`=now+7d·`다시`=forever. ⭐ **`v`=updatedAt 버전** — 팝업을 **수정하면 옛 dismiss 무시하고 재노출**(낡은 광고를 새로 고치면 다시 보임).
+- **표시 캐시**(B6): `getActivePopups`는 tenantId별 `unstable_cache`(admin client+신뢰키, 이미지 signed URL resolve 1회, TTL 60s) — 매 네비마다 DB/GCS 호출 방지. CRUD가 `updateTag`로 즉시 무효화. audience↔역할 매칭은 캐시 밖(순수 [audience.ts](src/features/notices/audience.ts), Vitest).
+- **작성 UI**: owner "관리" 면에 **팝업 공지** 탭 신설([popups-manager.tsx](<src/app/(shell)/owner/_components/popups-manager.tsx>)) — 생성/수정/노출토글/삭제 + 이미지 업로드(branding 슬롯 `popup` 재사용, master 전용). 액션 게이트=`canManageStaff`.
+- 검증: typecheck0/lint0/**test531**(notices 8: audience 매칭·isHidden) + 라이브 E2E(PSS): 생성→대시보드 노출(체크박스·닫기)·배경 클릭 통과·`7일간` dismiss→네비 후 미노출(localStorage +7d)·**수정→재노출**(v 무효화)·삭제 + **그리드 검증: 팝업 3개가 한 줄에 균등 타일(380폭+16gap)·겹침 0·중앙 정렬**. ⚠️ 이미지 업로드는 코드 동치(branding 파이프라인)라 메커니즘만, 실파일 UI 미검.
+- **후속(2026-07-03) — 팝업 이미지 클릭 = 원본 크기 라이트박스** — ✅ typecheck0/lint0 + 컴포넌트 테스트 2 + 적대리뷰(2렌즈, 확정1 수정) + print 에뮬레이션 실측: 사용자 제보 "공지 사진이 너무 쥐똥만하게 보인다 → 클릭시 원본 크기로". 카드 안 이미지가 카드폭(380px)에 축소돼 작던 것을 **이미지=확대 버튼**(`cursor-zoom-in`)으로 바꾸고, 클릭 시 **`createPortal(document.body)` 라이트박스**([notice-popup-card.tsx](src/features/notices/components/notice-popup-card.tsx))로 원본 크기 표시(`fixed inset-0 z-[100]`=레이어 z-55 위, 어두운 배경 `bg-ink/85`, 이미지 `object-contain max-h-[92vh] max-w-[92vw]`=원본 크기까지 화면맞춤·억지 확대 없음). 닫기=X·바깥클릭·**Esc**(zoomed일 때만 window keydown 리스너, #25 무관). 이미지+링크 팝업은 이미지 클릭이 이제 확대(링크는 '자세히 보기' 버튼으로만) — 사용자 요청대로. ⚠️ **적대리뷰 확정 1건 수정**: 라이트박스가 **body 포털이라 레이어의 `print:hidden`을 상속 못 받아** 열린 채 인쇄 시 오버레이가 문서 위에 찍힘 → 오버레이 div에 **`print:hidden` 직접 부여**(인쇄 감사 ⑤⑥ 패턴). 검증: 신규 [notice-popup-card.test.tsx](src/features/notices/components/notice-popup-card.test.tsx)(실코드 렌더 — 이미지 클릭→body 포털 라이트박스 열림/Esc 닫힘/**이미지 없으면 버튼 미렌더**[무회귀]/오버레이 `print:hidden`) + 라이브 시각(썸네일 378px→라이트박스 900px 원본, `fixed`·z100·어두운 배경) + **print 미디어 computed 실측**(screen `display:flex` / print `display:none`). ⚠️ makeedu 이미지 팝업이 현재 비활성이라 실 팝업 대신 임시 프리뷰 페이지로 실컴포넌트 렌더 검증(삭제). 마이그0=순수 UI. ⚠️ **교훈(재발 방지): body 포털로 만든 fixed 오버레이는 부모의 `print:hidden`을 상속 못 받으니 오버레이 요소에 직접 붙일 것**(라이트박스·토스트 등).
+
+### UX 묶음 — 창 새로고침·타이틀바 재배치 / 등록상담 녹음 통합 / 상담내용 표시 / 로컬 초안 자동저장 (2026-06-30) — ✅ 게이트 그린
+사용자 연속 요청 묶음. typecheck0/lint0 + 단위테스트(window-store 13·form-draft 4).
+- **창별 새로고침 + 타이틀바 좌/우/중앙 재배치**([floating-window.tsx](src/components/workspace/floating-window.tsx)·[route-window.tsx](src/components/workspace/route-window.tsx)·[window-store.ts](src/components/workspace/window-store.ts)):
+  전체 F5(셸·전 창 재실행)가 느려 **그 창 iframe만 reload** — `reloadNonce`/`reloadWindow`(store) + RouteWindow가 현재 URL reload(드릴인 보존, 스켈레톤 재노출), 녹음 중 잠금.
+  타이틀바 6컨트롤을 **좌(새로고침·복제·배경으로, 드릴인 시 ←) / 우(최소화·최대화·닫기)** 로 분리, 창 이름은 `absolute left-1/2`로 **바 정중앙 고정**(좌우 그룹 너비 무관, 드래그 통과).
+- **신규 등록상담 폼 통합**([enrollment/new/page.tsx](<src/app/(shell)/enrollment/new/page.tsx>)·[consultation-full-form.tsx](<src/app/(shell)/enrollment/_components/consultation-full-form.tsx>)): "수동 입력/녹음 업로드" 2탭 → **한 폼**.
+  전체 구조화 폼에 공용 녹음 위젯([audio-recorder-field.tsx](<src/app/(shell)/enrollment/_components/audio-recorder-field.tsx>), 라이브 마이크+업로드+IDB복구+창잠금) 추가(recording-form/mode-tabs 삭제).
+  `createEnrollmentConsultation`에 audioPath 분기(`createConsultationWithAudio`): 구조화 필드로 행 생성 + 음성 첨부 + AssemblyAI 전사 시작 → 웹훅 13섹션 AI + **buildFormPatch가 빈 필드만 보강(수기 입력 보존)**.
+- **상담 내용 표시**([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>)): 상세 '학부모 요구사항' → **'상담 내용'**(폼 필드명 일치) + **줄바꿈 보존(`whitespace-pre-wrap`)** + 길면 스크롤(`max-h-72 overflow-y-auto`).
+  좌(상담 기록)/우(AI 분석) **카드 줄맞춤** — 우측에 좌측과 동일 톤 'AI 분석' 제목행(✨) 추가해 카드 상단 정렬.
+- **로컬 초안 자동저장**(아래 디자인시스템 "로컬 초안 자동저장" 규약 신설): 긴 폼 입력 유실 방지 — 입력 중 IDB 자동보관 → 다시 열면 복구 배너 → 실제 저장 성공 시 삭제.
+  멀티에이전트 폼 전수 검토(11폼) 후 `apply` 4폼(등록상담·학생·직원·학생상담) 적용. SPECIAL 4폼(반·수강료계산기·공개접수·학원설정)은 동적행/배열/jsonb가 React state라 hidden JSON 직렬화+onRestore 필요 → 보류.
+
+### 전체 점검 — 로컬 초안 자동저장 버그 6건 적발·수정 (20에이전트 적대 감사, 2026-06-30) — ✅ 게이트 그린
+사용자 "속도 저하 기능 이상 없는지 전체적 점검" → 20에이전트 적대 감사(검토→검증). **속도 저하는 사실상 없음**(perf 발견 1건 low·무해).
+진짜 결함은 직전에 넣은 **로컬 초안 자동저장**(useFormDraft/useStateDraft)의 기능 버그였고, 확정 12건 중 실결함 전부 수정. typecheck0/lint0/**test523**.
+- **🔴 create 폼 초안이 저장 성공 후 안 지워짐(학생·직원·반·등록상담 4폼)**: create 액션이 `redirect()`라 폼의 `state.ok&&nonce` effect가 영영 안 돌아
+  'x:new' 초안 잔존 → 다음 '새 X'에 방금 저장한 stale 복구 배너(설계 의도의 정반대). → **create 액션을 update처럼 `return {ok:true,redirectTo,nonce:Date.now()}`로 통일**
+  (createStudent/createStaff/createClass/createStudentConsultation·updateStudentConsultation, redirect import 제거). 폼의 nonce effect가 create/edit 공통으로 clearDraft+router.push.
+  등록상담 create는 클라 onSubmit 핸들러라 **`catch`의 `if(/NEXT_REDIRECT/.test(msg)){ clearDraft(); return; }`** 분기에서 clear(네비는 프레임워크). ⚠️ 규약: **redirect-only 액션에 `onSubmit 무조건 clear` 금지**(아래).
+- **🔴 학생상담 폼 `onSubmit` 무조건 clear → 서버 검증 실패 시 입력 유실**: studentId 미선택·요약<5자가 native 통과·server 거부인데 초안이 먼저 삭제돼 창 닫으면 복구 불가
+  → onSubmit clear 제거, **성공 확정(nonce) effect 기반 clear**로 전환(다른 폼과 동일).
+- **🟡 `useStateDraft` 마운트 클로버**(수강료 계산기 편집): 마운트 직후 저장이 같은 scope의 복구 대기 초안을 서버 초기값으로 덮어씀 → 저장 effect에 **`if(json===initialJsonRef.current) return`** 가드.
+- **🟡 빈 폼 오탐 배너**(학생 `status`·직원 `systemRole` 항상 채워지는 기본값) → `ignoreForBanner`로 의미판정 제외(saveDraft도 같은 ignore 게이트).
+- **🟡 등록상담 녹음 중 저장 = 진행 녹음 silent 유실**(audioFile은 onstop 전 null) → AudioRecorderField `onRecordingChange`로 부모에 끌어올려 제출 버튼 disabled + handleCreateSubmit early-return.
+- **⚪ 창별 새로고침 nonce가 stagger 복원 중 비활성 창에서 영구 유실** → route-window가 **활성 창에서만 nonce 소비**(소비를 `!activated` 가드 뒤로).
+- 의식적으로 둔 LOW 2건: 제목 정중앙 라벨이 최협폭 긴 제목서 좌측 버튼과 시각만 겹침(`pointer-events-none`=클릭 무영향) · 초안 복원 직후 멱등 재저장 1회(무해).
+- ⚠️ **규약(디자인시스템 "로컬 초안 자동저장" ④ 갱신)**: 초안 clear는 **"서버 성공 확정 후"만**. create 액션도 `{ok,redirectTo,nonce}` 반환(redirect 금지)해 nonce effect가 발화하게 하고, 제출 시점 무조건 clear는 금지(검증 실패 시 유실).
+
+### 창 안 shift+클릭 = 드릴인 대신 새 플로팅 창 (2026-07-01) — ✅ 게이트 그린
+시간표 등 **창(iframe) 안에서 학생·수업 이름을 클릭하면 그 창이 상세로 드릴인**되는데, 사용자 요청으로 **shift+클릭 시 부모 워크스페이스에 새 창**으로 열게 했다(브라우저 새 탭 아님 = 앱 내 플로팅 창). 최상위 프레임은 이미 shift=새 인스턴스([[#64]])였으나, **창 안에선 `isDesktop=false`라 [window-link.tsx](src/components/workspace/window-link.tsx) onClick이 조기 return** → shift 분기 미도달(그냥 드릴인)이었다.
+- **브리지**: iframe은 별도 문서라 window-store 직접 접근 불가 → shift+클릭 시 WindowLink가 `window.parent.postMessage("eywa-open-window", {id,title,href})` → 부모 [workspace-canvas](src/components/workspace/workspace-canvas.tsx) 리스너가 `open("route")` 호출(EmbedFocusSignal 본문-클릭 focus 브리지와 **동일 방식·동일 리스너로 통합**). **우리 플로팅 창(iframeRegistry)에서 온 same-origin 메시지만 수용**(보안).
+- 일반 클릭=드릴인(불변), ctrl/cmd/alt=브라우저 기본(새 탭, 보존), **shift=새 창**. **창 안 모든 WindowLink에 일괄 적용**(시간표 학생/수업뿐 아니라 목록 등 어디서든). 검증: typecheck0/lint0(라이브 shift+클릭은 HMR에서 사용자 확인).
+
+### makeedu 동기화 — GitHub 폐기 → 로컬 실행 전환 + 신규항목 '↻ 동기화' 배지 (2026-07-01) — ✅ 게이트 그린 + 라이브
+GitHub Actions cron이 매번 실패(6/30 20:41·7/1 07:13)해 진단: **makeedu가 세션/로그인을 캡처 IP(집)에 묶어 GitHub 데이터센터 IP를 거부**한다('자동 로그인' 재캡처 + `MAKEEDU_STORAGE_STATE` 갱신해도 GitHub 잡에서 또 main.do→로그인 리다이렉트, run 28494607265 실패). **→ GitHub-hosted 방식 폐기.** 반면 **집 신뢰 IP에선 헤드리스 새 로그인이 CAPTCHA 없이 통과**(로컬 `node --env-file=.env.local scripts/_makeedu/sync-all.cjs --apply` → `login ok→main.do`, students412·classes147·prospects245·invoices990 전건 성공, 실패 도메인 0) → **세션 캡처조차 불필요**(매 실행 fresh 로그인). ⚠️ VPS도 불가(데이터센터 IP=GitHub과 동일하게 CAPTCHA), **오직 집 residential IP만 신뢰**받음. 상세: [[project_makeedu-eywa-sync]].
+- **자동 = Windows 작업 스케줄러**([run-local-sync.ps1](scripts/_makeedu/run-local-sync.ps1)): `Register-ScheduledTask "eywa-makeedu-sync"` 06/18시 daily + `-StartWhenAvailable`(PC 꺼져도 켜지면 따라잡기 — 유일 조건=PC 켜짐 완화). 스크립트는 `$PSScriptRoot\..\..`로 repo루트 도출(경로 무하드코딩). ⚠️ **PS5.1 로그 인코딩 함정**: node UTF-8 출력을 `*>>` 리다이렉트가 UTF-16으로 섞어 로그 한글 깨짐 → `[Console]::OutputEncoding=UTF8` + `2>&1|Out-String` 캡처 후 `Add-Content -Encoding UTF8`(읽기도 `Get-Content -Encoding UTF8`). 검증: 작업 LastTaskResult=0, `makeedu_sync_state` 4도메인 ok.
+- **GitHub cron off**([makeedu-sync.yml](.github/workflows/makeedu-sync.yml)): `schedule:` 주석 처리(실패 노이즈 끝), `workflow_dispatch`(수동)만 유지(신뢰 IP 러너 생기면 복구 가능).
+- **"지금 동기화" 버튼 = 로컬 spawn**([triggerMakeeduSyncNow](src/features/integrations/server/actions.ts)): GitHub workflow_dispatch 대신 **앱이 도는 서버에서 `sync-all.cjs`를 detached spawn**(`process.execPath`, `--env-file=.env.local`, `MAKEEDU_FORCE=true`=토글무시, 90초 디바운스[tmpdir 마커 mtime], fd 로그 `%TEMP%/eywa-makeedu-sync-button.log`, **`windowsHide:true`=Windows 도스창 숨김**, unref+closeSync). ⚠️ **로컬/셀프호스티드 Node 서버 전용** — `process.env.VERCEL` 또는 스크립트 미존재면 명확 에러(스케줄러/`Start-ScheduledTask` 안내). 서버가 신뢰 IP면 어디서든 동작(집 PC뿐 아니라 셀프호스티드도). detached+fd+unref+windowsHide Windows 검증(부모 즉시 반환, 자식 백그라운드 완주, 창 숨김). 라이브: 버튼→`sync_state` 4도메인 ok.
+- **신규항목 '↻ 동기화' 배지**([MakeeduOriginTag](src/components/makeedu-origin-tag.tsx), blue-soft ↻): 목록에서 **"지난 동기화가 새로 추가한" 행**에만 표시, **다음 동기화가 성공하면 소멸**("다음 동기화까지만"). `sync_added_at timestamptz` 컬럼(`0061a` students / `0062a` enrollment_consultations·invoices·student_consultations·textbook_catalog) — importer가 **성공 실행 시작에 클리어** + **신규 insert에만** `now()` 마킹(매칭 백필·upsert `do update` 제외 = "추가된" 것만). 5개 목록 배선(학생·등록상담 칸반·수납 테이블·학생상담·교재 단가표). **수업(classes) 제외**(sync가 신규 반 insert 0=ijw 정본, 배지 영원히 안 뜸)·수강/enrollments 제외(자연키·makeedu 컬럼 없음). 부트스트랩 끝나 평소 신규 0=배지 0(정상), 실제 새 항목 들어오면 그것만 배지.
+- 검증: typecheck0/lint0/importer node --check + 라이브(로컬 sync 성공·버튼 sync_state·스케줄러 LastResult 0). 커밋 **eee5c3c**(배지 전도메인)·**c06223e**(cron off+래퍼)·**f242e57**(버튼 로컬 spawn)·**95ca954**(windowsHide). ⚠️ 액션 수정이라 dev 서버 HMR 못 잡으면 재시작(#35).
+- **프로덕션 '지금 동기화' = 요청 큐 릴레이 (2026-07-02)**: Vercel에선 버튼이 에러("서버리스/원격")만 내던 것을 **DB 요청 큐로 릴레이** — 버튼([triggerMakeeduSyncNow](src/features/integrations/server/actions.ts))이 Vercel 경로에서 신규 `makeedu_sync_requests`(`0069a`, RLS: 테넌트 read만·write는 service_role/직접연결)에 pending 행을 admin client로 insert(연타는 기존 pending/running 감지로 1회 합침) → **동기화 PC 상주 워처** [watch-sync-requests.cjs](scripts/_makeedu/watch-sync-requests.cjs)(15초 폴링, 작업 스케줄러 **`eywa-makeedu-sync-watcher`** = 로그온 자동시작·상시·[run-watch-requests.ps1](scripts/_makeedu/run-watch-requests.ps1) 헤더에 등록 명령)가 감지 즉시 `sync-all.cjs --apply`(MAKEEDU_FORCE) 실행 후 done/error 마감. **프로덕션 웹 어디서든(폰 포함) 버튼이 실제 동작**, PC 꺼져 있으면 pending 대기→켜지면 따라잡음(additive·멱등이라 안전). 로컬 서버 경로(직접 spawn)는 불변. 카드가 액션 `message`를 표시(경로별 문구). 로그 `D:\tmp\makeedu\watch-requests.log`. 검증: typecheck0/lint0(경고 2=기존) + **라이브 E2E**(요청 insert→14초 뒤 claim→동기화 완주 50초→done·sync_state 4도메인 갱신, 테스트 행 원복). ⚠️ 06/18시 자동 동기화(eywa-makeedu-sync)와 별개 공존. ~~⚠️ 버튼·카드는 owner 연동 면(master)이라 원장만~~ → **2026-07-03 `integrations` 권한 키로 완화 + 목록 화면 버튼 노출**(아래 "동기화 권한 = integrations 권한 키" 항목).
+  - **'지금 동기화' 버튼 공유 잠금 + 카운트다운 (2026-07-03)**: 동시 실행·연타 방지(데이터는 이미 안전 — dedup+원자적 claim, 이건 UX). [getMakeeduSyncLock](src/features/integrations/server/makeedu-sync.ts)이 최신 요청/실행에서 `busyUntil`(마지막 트리거+`SYNC_COOLDOWN_MS`=5분)·`running`(pending/running 요청 또는 running 실행)을 계산 → [MakeeduSyncCard](<src/app/(shell)/owner/_components/makeedu-sync-card.tsx>)가 초기값(sheets-face `getMakeeduSyncLock`)으로 버튼 비활성 + **1초 틱 카운트다운(mm분 ss초, 버튼 하단)** + **20초 폴링**([checkMakeeduSyncLock](src/features/integrations/server/actions.ts))으로 **다른 사용자/탭 트리거도 실시간 반영**. `triggerMakeeduSyncNow`가 성공 시 `lock` 반환(눌린 즉시 잠금) — enqueue "이미 진행 중" 경로는 공유 busyUntil 반환 + "이미 다른 곳에서 동기화 실행 중" 안내(눌러도 같은 시각까지 잠금). 로컬 디바운스 경로도 마커 mtime 기준 lock 반환. 검증: 락 로직(idle→running 요청 주입 시 busy→삭제 복원, 워처 claim 회피 위해 status='running' 주입). typecheck0/lint0/build✓. ⚠️ 폴링(20초)이라 다른 열린 탭은 최대 20초 지연 후 비활성 — 그 사이 눌러도 enqueue dedup + 안내로 안전.
+  - **동기화 권한 = `integrations` 권한 키 승격 + 목록 화면 컴팩트 버튼 + 역동기화 카드 등록상담 노출 (2026-07-03)** — ✅ 4게이트(test608) + 라이브 E2E(실 sync 완주): 사용자 "액션 게이트를 admin/manager까지 완화 + makeedu식 내부탭 권한 세분화?" → **결론: 전면 세분화 비채택**(eywa는 메뉴가 이미 기능 단위 분리 = 메뉴 매트릭스가 makeedu 2단계와 유사 granularity; 8역할×60키 폭발·orphan 위험) — 대신 **기존 패턴 "기능을 권한 키로 승격"**(textbook_requests 선례).
+    · **신규 MenuKey `integrations`**([permissions.ts](src/lib/permissions.ts), hidden **액션 권한 키** — 사이드바/페이지 없음): 기본 master/admin/manager=full, 그 외 none. **역할·권한 면에 "makeedu 연동" 행이 자동 노출**(원장이 셀 클릭으로 조정 — 상담사에게 열거나 실장 잠그기 가능. Zod menu enum이 MENU_KEYS 파생이라 마이그 0, [permissions-section](<src/app/(shell)/owner/_components/permissions-section.tsx>) MENU_LABEL만 추가).
+    · **게이트 전환(#58 준수)**: [triggerMakeeduSyncNow·enqueueConsultationPush](src/features/integrations/server/actions.ts) = `canWriteTenant("integrations")`(하드코딩 master 체크 폐기). `setMakeeduSyncEnabled`·`setSheetsExportEnabled`·`syncSheetsNow`는 **master 유지**(owner 콘솔 소속 설정/전체 내보내기).
+    · **⚠️ 서버측 쿨다운 강제(신규 불변식)**: `triggerMakeeduSyncNow`가 실행 전 `getMakeeduSyncLock` 확인 — running/busyUntil이면 **스폰·큐잉 없이** 안내+lock 반환. 클라 초기 락이 없어도 5분 쿨다운·중복 실행이 서버에서 차단(컴팩트 버튼이 락 선조회를 생략할 수 있는 전제).
+    · **컴팩트 '지금 동기화' 버튼**([makeedu-sync-now-button.tsx](src/components/makeedu-sync-now-button.tsx)): [MakeeduSyncBadge](src/components/makeedu-sync-badge.tsx)가 권한자에게 배지 옆 렌더 → **5개 목록 화면(학생/수업/학생상담/등록상담/수납) 자동 배선**(owner 연동 면 안 가도 바로 동기화). **페이지 로드 비용 0**(락 선조회·폴링 없음 = B6; 권한 판정은 캐시된 getCurrentUser/getPermMatrix 재사용 = 추가쿼리 0). 클릭 응답 lock으로 1초 카운트다운("N분 SS초 후 가능"). owner 카드(선제 잠금+20초 폴링)는 풀 버전으로 유지. 동기화 이력 없는 테넌트=배지·버튼 둘 다 미노출.
+    · **역동기화 카드 재배치**: MakeeduPushCard를 [features/integrations/components/](src/features/integrations/components/makeedu-push-card.tsx)로 이동(라우트 `_components` 교차 import 회피) — owner 연동 면(항상, 빈 상태 포함) + **[enrollment/page.tsx](<src/app/(shell)/enrollment/page.tsx>)(후보>0 && integrations 쓰기 권한일 때만, 필터 아래)**. enqueue가 `/enrollment`도 revalidate.
+    · 검증: typecheck0/lint0/test608/build✓ + **라이브 E2E**(dev 3100, 마스터): /students 배지 옆 버튼 클릭 → "동기화를 시작했습니다"+5분 카운트다운 → **실 sync-all 완주**(run 로그 `button·ok·55초`, **consultations rows 4 = 오늘 실상담 4건이 증분 동기화로 자연 유입**·같은날 스킵 28) → **리로드 후 재클릭 = 서버 강제 발동**("이미 다른 곳에서 동기화가 실행 중입니다" + 공유 잔여 4:14 잠금 — 새 5분이 아니라 원 트리거 기준=정확) / 역할·권한 면 "makeedu 연동" 행(owner·관리자·실장=전체) / 연동 면·등록상담 렌더 정상(후보 0=카드 숨김). ⚠️ 강사 미노출은 매트릭스 단위테스트로 커버(teacher 데모 계정 로그인 불가 #31 = 기존 이슈). ⚠️ 검증 함정 재확인: `pnpm build` 직후 dev 시작 시 Turbopack SST 캐시 패닉(.next 공유 파손 #17/#23) → `.next` 삭제 후 dev 재시작.
+    · ⚠️ **결정 기록**: makeedu식 커스텀 권한그룹(사용자 정의 역할)·면/탭 단위 전면 권한 매트릭스는 **비채택**(장기 백로그 — "역할/권한 편집 DB화"와 함께). 앞으로 "이 기능만 다른 권한" 요구가 나오면 **menuKey 승격**이 정석.
+- **동기화 실행 로그화 + 연동 면 이력 표시 (2026-07-02)**: makeedu_sync_state(0058a)는 도메인별 "마지막 상태" upsert라 이력이 안 남던 것을, **실행 단위 append 로그** `makeedu_sync_runs`(`0070a`, RLS 테넌트 read) 신설. [sync-all.cjs](scripts/_makeedu/sync-all.cjs)가 시작 시 `running` insert → 종료 시 `ok|partial(일부 도메인 실패)|error(전체)|skipped(토글 OFF)`로 update(+소요시간·도메인 스냅샷·failed_domains·error). **트리거 라벨**은 호출자가 `MAKEEDU_TRIGGER` env로 주입 — `scheduled`([run-local-sync.ps1](scripts/_makeedu/run-local-sync.ps1))·`button`(로컬 spawn)·`relay`(원격 워처)·`manual`(CLI). 표시: [getMakeeduSyncRuns](src/features/integrations/server/makeedu-sync.ts) → [MakeeduSyncRunsList](<src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>)가 연동 면(sheets-face) MakeeduSyncCard 바로 아래 최근 8건(시각·트리거·상태 Pill·소요·반영건수·실패도메인/에러). 로그 0건이면 섹션 숨김. **로그 기록은 best-effort**(실패해도 동기화 자체 안 막음). 검증: typecheck0/lint0 + 라이브 E2E(relay run→`makeedu_sync_runs` ok·39초·도메인 스냅샷 기록, 테스트 행 원복). ⚠️ 0070a 도입 전 스케줄 실행은 로그 없음(다음 실행부터 누적). ⚠️ '반영 N건'=도메인 row_count 합(임포터별 신규+백필, 순수 신규 아님).
+  - **후속(2026-07-03)**: ① **'반영 N건' 도메인 내역** 다음 줄에("학생 2 · 예비상담 1", rows>0만). ② **페이지네이션**(로그 append라 쌓임) — `getMakeeduSyncRuns(page,8)` {runs,total} + `<Pagination>`(owner `page` 파라미터 재사용, `?tab=sheets` 보존, 8건 초과 시 자동 표시). ③ **⚠️ 시각 KST 고정**(사용자 제보 "시간대가 왜 다르지"): 실행 이력은 **서버 컴포넌트**라 `toLocaleString`이 **서버 TZ(Vercel=UTC)** 로 렌더돼 9시간 어긋났고(카드 '마지막 동기화'는 클라=브라우저 KST라 정상이라 대비돼 보임) → makeedu 시각 표시 전부 `{ timeZone: "Asia/Seoul", hour12: false }` 못박음(owner `fmt` 패턴). **교훈: 서버 컴포넌트의 `toLocaleString`/`toLocaleDateString`은 브라우저가 아니라 서버 TZ(프로덕션 UTC)로 렌더 — 절대시각 표시엔 반드시 `timeZone` 명시**(상대시각 relTime은 무관).
+- **동기화 전용 makeedu 계정으로 교체 (2026-07-03)**: 개인 계정 → 전용 계정 **`cseywa`**(.env.local `MAKEEDU_ID/PW` + gh secrets 갱신, 옛 세션 시크릿 MAKEEDU_STORAGE_STATE 삭제). 새 계정 로그인+전체 동기화(4도메인 ok) 실검증 — 이후 푸시 건의 makeedu 등록자도 이 계정. ⚠️ **크리덴셜 변경 시 상주 워처 재시작 필수** — 워처가 시작 시점 env를 물고 있고 자식 `--env-file`은 기존 env를 **안 덮는다**(Node 규칙) → `Stop/Start-ScheduledTask "eywa-makeedu-sync-watcher"`.
+- **동기화 PC 지정 = 원커맨드 셋업 스크립트 (2026-07-03)**: "지정 버튼"은 웹에 못 만든다(브라우저 샌드박스·Vercel 원격이라 PC에 작업 설치 불가) → 지정할 PC에서 **한 번 실행**하는 [setup-sync-pc.ps1](scripts/_makeedu/setup-sync-pc.ps1). 사전요건(node·.env.local·playwright) 확인 → 작업 2개(`eywa-makeedu-sync` 06/18시 + `eywa-makeedu-sync-watcher` 로그온 상주) `-Force` 멱등 등록 → 워처 시작 → **로그인(신뢰 IP) 테스트**([check-login.cjs](scripts/_makeedu/check-login.cjs)). `-Status`/`-Test`/`-Remove`(옛 PC 해제) 플래그. 관리자 불필요. 이 PC에서 전체 실행 검증(등록·로그인 성공·상태 확인). ⚠️ **두 함정**: ① Test-Login이 node 출력을 `| Out-Host`로 콘솔에 직접 보내야 함(안 하면 함수 반환에 섞여 결과 미표시 + 반환 배열이라 실패도 truthy 오판). ② 이 `.ps1`은 **UTF-8 BOM 필수** — 무BOM이면 PS5.1이 박스문자·기호 오독해 파싱 깨짐(단순한 다른 무BOM 래퍼는 통과했으나 이 파일은 실패 → BOM 부여로 해결, 편집 후 BOM 유지).
+- **동기화 담당 PC 웹 표시 = 워처 심장박동 (2026-07-03)**: 어느 PC가 담당인지·살아있는지 연동 면에서 확인. `0073a` `makeedu_sync_workers`(tenant·hostname·started_at·last_seen, RLS 테넌트 read, 프로덕션 DB 적용) — 워처(watch-sync-requests.cjs)가 매 폴(15초) 시작에 `os.hostname()`·now() upsert(best-effort, 실패해도 요청 처리 계속·테넌트는 lib.resolveTenantId 1회). [getMakeeduSyncWorkers(nowMs)](src/features/integrations/server/makeedu-sync.ts)(online=60초 이내) → [MakeeduWorkerStatus](<src/app/(shell)/owner/_components/makeedu-worker-status.tsx>)가 MakeeduSyncCard 아래에 "동기화 담당 PC: DESKTOP-XXX · 🟢온라인 · 마지막 활동 방금"(오프라인=요청 대기 안내, 2대+온라인=이중로그인 경고, 0대=setup-sync-pc 안내). nowMs는 RSC에서 1회(`Date.now()` + purity eslint-disable) 계산해 쿼리·컴포넌트에 주입. 실 heartbeat 검증(DESKTOP-JCN8NU9 온라인). typecheck0/lint0/build✓.
+- **동기화 담당 PC 표시 = 실시간 폴링 + 워처 자동부활 + 창 없이 실행 (2026-07-03)**: 사용자 제보 3연쇄 — ① 컴퓨터 켜져 있는데 카드가 "오프라인" ② 같은 시각인데 자리(화면)마다 온라인/오프라인 다름 ③ "이 콘솔 창 닫으면 문제?". 세 원인·해결:
+  · **[근본] 워처가 콘솔 창을 붙잡고 있었음 → 그 창 닫힘 = 워처 사망(exit `0xC000013A`=CTRL_CLOSE)**: Win11 기본 터미널(Windows Terminal)이 작업 스케줄러가 띄운 powershell의 `-WindowStyle Hidden`을 **무시**해 워처가 뜰 때마다 "관리자:" 콘솔 창이 보였고(프로세스 트리 실측: WindowsTerminal이 워처 래퍼 호스팅), 그 창을 닫으면 워처가 죽어 "PC 켜져 있는데 오프라인"이 됨(오늘 낮 실제 사고의 근본원인). → 작업 액션을 **`conhost.exe --headless powershell …`**로 교체([setup-sync-pc.ps1](scripts/_makeedu/setup-sync-pc.ps1)·[run-watch-requests.ps1](scripts/_makeedu/run-watch-requests.ps1)) = 콘솔을 **완전 창 없이** 호스팅(닫을 창 자체가 없음). conhost가 자식 node 살아있는 동안 블로킹 → IgnoreNew 중복방지 유지. ⚠️ Win11+ 필요.
+  · **[자동부활] 로그온 트리거만 → 세션 중 죽으면 다음 로그온까지 오프라인**: 워처 작업에 **10분마다 반복 트리거** 추가(로그온 + Once@Today RepetitionInterval 10분). IgnoreNew라 돌고 있으면 무시 → 세션 중 워처가 죽어도(수동 정지·크래시) ≤10분 자동 부활. ⚠️ `RepetitionDuration`은 **생략=무기한**(`[TimeSpan]::MaxValue`는 "out of range"로 거부, 실측). ⚠️ `Stop-ScheduledTask`는 래퍼만 죽이고 자식 node를 orphan으로 남김(실측) → -Remove/재등록 경로에 **`Stop-Watcher`**(Stop + 커맨드라인 매칭 node kill) 추가(옛 env·크리덴셜 잔존·이중 워처 방지). ⚠️ **"일시 정지"는 이제 Stop만으론 안 됨**(10분 트리거가 부활) → 정말 멈추려면 `-Remove` 또는 작업 '사용 안 함'.
+  · **[실시간 표시] 카드가 정적 스냅샷 → 화면마다 옛 상태**: [MakeeduWorkerStatus](<src/app/(shell)/owner/_components/makeedu-worker-status.tsx>)를 서버 컴포넌트 → **"use client" + 20초 폴링**(신규 액션 [checkMakeeduSyncWorkers](src/features/integrations/server/actions.ts), sync-card와 동일 패턴). 초기값은 서버 렌더(sheets-face) 주입, 이후 **새로고침 없이 20초 안에 전 화면 수렴** → "같은 시각 자리마다 다름"(=각자 페이지 로드 시점의 스냅샷) 혼란 해소.
+  · 검증: typecheck0/lint0 + **라이브 플립 E2E**(무 새로고침: 워처 완전 정지→카드 60초 뒤 OFFLINE→headless 재기동→15초 뒤 ONLINE, pass) + 프로세스 트리 실측(워처=conhost headless 단일·**관리자 창 0개**·부모=작업스케줄러) + 심장박동 온라인(DESKTOP-JCN8NU9) + 적대리뷰(2렌즈, 확정 LOW 1=−Remove/재등록 orphan node 미종료 → Stop-Watcher로 선수정). ⚠️ 작업 트리거/액션 변경은 이 PC(DESKTOP-JCN8NU9)에 **라이브 적용 완료** — 다른 PC로 옮길 땐 setup-sync-pc.ps1 재실행이 새 정의 반영. ⚠️ 카드 폴링 offline→online 플립은 Realtime 아닌 20초 폴링이라 최대 ~20초 지연(즉시 필요하면 새로고침).
+- **동기화 PC 지정/해제 = 더블클릭 배치파일 (2026-07-03)**: PowerShell 몰라도 쓰게 [setup-sync-pc.ps1](scripts/_makeedu/setup-sync-pc.ps1)을 감싼 배치 3개 — `동기화PC-지정.bat`(등록+시작)·`동기화PC-해제.bat`(작업삭제+워처종료)·`동기화PC-상태확인.bat`(읽기 전용). **PC 옮기기**: 옛 PC에서 해제.bat → 새 PC에서 지정.bat(새 PC는 repo+node+.env.local+`pnpm install` 선행 — ps1이 사전요건 ✓/✖ 체크·안내). ⚠️⚠️ **배치 파일 내용은 반드시 ASCII만**(한글 rem 주석·echo도 금지) — `chcp 65001` 뒤 파일에 한글(멀티바이트) 바이트가 있으면 cmd 파서가 desync돼 `'기' is not recognized`·`'nc-pc.ps1' is not recognized` 류 spurious 오류가 남(실측). 한글 UI는 전부 **ps1이 출력**(`[Console]::OutputEncoding=UTF8` + 배치의 `chcp 65001`로 콘솔 UTF-8). **파일명 한글은 무방**(`%~dp0`가 디렉터리만 쓰고 파일명 미포함 → 내용 바이트만 문제). 검증: 상태확인.bat 실행 → 파서 오류 0·한글 정상 렌더·작업 상태 표시.
+- **동기화 실행 이력에 "누가 실행했는지"(사용자) + [자동 실행] 라벨 (2026-07-03)**: 사용자 요청 — 연동 면 '최근 동기화 실행'에 실행자 표시. `0076a` `makeedu_sync_runs.triggered_by uuid`(→users, on delete set null) — **수동('지금 동기화' 버튼)만** 실행자 기록, **자동(scheduled 작업 스케줄러)·CLI(manual)는 null**. 배선: ① sync-all.cjs가 `MAKEEDU_TRIGGERED_BY` env(uuid 형식만 신뢰)를 run 로그 insert에 기록 ② 로컬 spawn([triggerMakeeduSyncNow](src/features/integrations/server/actions.ts))=`user.id` 주입 / 원격은 [watch-sync-requests.cjs](scripts/_makeedu/watch-sync-requests.cjs)가 claim 시 `requested_by`(합쳐지면 첫 요청자)를 sync-all에 전달 ③ [getMakeeduSyncRuns](src/features/integrations/server/makeedu-sync.ts)가 페이지 triggered_by를 users 배치 1회로 `display_name` 해석(RLS 격리) → `triggeredByName` ④ [MakeeduSyncRunsList](<src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>) `actor` = **실행자 이름 / 자동=`[자동 실행]` / 구데이터·CLI=트리거 라벨 폴백**(scheduled 아닌데 이름 없으면 기존 "지금 동기화(원격)" 등 유지). ⚠️ **소급 없음** — 0076a 이전 실행은 triggered_by=null이라 트리거 라벨로만(다음 실행부터 이름). 검증: typecheck0/lint0 + cjs node --check + **DB 쿼리 로직 실측**(테스트 run 2행 심음: button+원일→"원일" / scheduled→"[자동 실행]" 정확 해석, 구 relay/button은 라벨 폴백 → 테스트 행 삭제). ⚠️ 라이브 브라우저 렌더는 dev의 무관한 `fstream` 턴보팩 오류(내 변경과 무관·`.next` 클린 후에도 잔존, 프로덕션 빌드엔 무영향)로 미실행 — 쿼리 로직+컴포넌트 렌더식이 결정적이라 by-construction. 마이그 0076a dev=prod 적용.
+- **✅ 재원생 상담 증분 자동 동기화 (2026-07-03)**: 아래 엑셀 부트스트랩의 후속 — sync-all 5번째 도메인 편입. [sync-consultations-incremental.cjs](scripts/_makeedu/sync-consultations-incremental.cjs)(dry-run 기본·`--apply`·`--from`·`--allow-large`): **fromYmd 검색필터 안 씀**(correctness엔 무기여, 행 레벨 가드가 담당) → counselList.do 목록 listSize 최대화로 걷되 **cutoff(ok=7일/비ok=30일/일요일=60일 딥패스) 이전 페이지 조기종료**(상담일 desc 전제, 틀려도 오적재0·누락만). 분기: cutoff< 제외 / **'예비' 포함만 스킵**(퇴원면담 등 미지구분 보존) / '예비원생 상담' 템플릿 스킵 / **counselSeq∈기존 스킵** / 학생 3티어 매칭 실패 스킵 → 후보만 상세 fetch. **seq-aware 판정**: strict(학생+KST일+내용head60) 일치+null-id 유일 → **counselSeq 백필**(엑셀분 연결) / 같은날 null-id 상이 → 스킵(표기변형 안전판) / 같은날 전부 다른 seq → 신규(같은날 2번째 복구). **summary=`제목\n\n본문`**(엑셀과 포맷 통일). **insert=ON CONFLICT DO NOTHING**(동시 실행 무해, **DO UPDATE 금지**=eywa 편집 보존). 서킷브레이커(신규>200)·데드라인5분·sync-all spawnSync timeout8분. **인접**: getMakeeduSyncLock running에 **30분 나이제한**(킬된 'running' 잔류가 버튼 반나절 잠그던 잠재버그, pending은 나이무관). 카드문구 +재원상담. **실검증**: dry-run(창6/26·후보47·신규13·백필5·같은날28)→apply(신규13·엑셀5 seq백필·상담사/KST자정/배지)→멱등(신규0·knownSeq18)→sync-all 릴레이 E2E(consultations:ok 45초). typecheck0/lint0/build✓. ⚠️ 운영순서: 전체5069 엑셀은 증분 전 `--skip-same-day`. 60일 초과 소급은 `--from`.
+- **재원생 상담 = 엑셀 1회 부트스트랩 (2026-07-03)**: 재원생 상담은 자동 동기화 4도메인에 빠져 있었음(본문이 상세페이지라 대량 fetch 과중). 사용자 방향 = **초기 대량은 makeedu `excel(댓글)` 다운로드 1회, 이후 증분만 자동**. ⚠️ **makeedu "엑셀"의 실체 = HTML 테이블**(.xls 확장자, `<!DOCTYPE`) → [import-consultations-excel.cjs](scripts/_makeedu/import-consultations-excel.cjs)가 HTML 파싱(인코딩 감지·헤더 검증·dry-run 기본·`--apply`). 학생 매칭 3티어(이름+학교core+학년 → 이름+보호자전화 → 이름+학년, tieredMatcher 모호 차단) — 132행 실측 미매칭 0. **중복 2단계**: 엄격(학생+상담일+내용head60 정규화)=멱등 스킵 / 같은날(`--skip-same-day`)=같은 학생·같은 날 기존 상담 존재 시 스킵 — **실측: 최근 1개월 132행 중 113행이 ijw 이관분과 같은 상담의 다른 표기**(ijw=순수 본문 vs makeedu=템플릿 래핑이라 텍스트 매칭 불가 → 날짜 키가 유일한 안전판). '예비원생 상담' 템플릿 행은 스킵(예비→재원 전환 학생의 입회상담 = enrollment_consultations에 이미 존재). 엑셀엔 counselSeq 없음 → makeedu_id=null 적재, 증분 동기화가 추후 백필. **적용: 신규 5건**(7/1 상담 — ijw 이관 6/30 이후분, 정확히 기대한 증분) + 재실행 멱등 검증(strictDup 5·toInsert 0). ⚠️ **중복판정 날짜는 반드시 KST**(`at time zone 'Asia/Seoul'` — bare `::date`는 세션 TZ(UTC)라 KST 자정 저장분이 전날로 계산돼 멱등 깨짐, 실측으로 잡은 버그). ⚠️ 실 PII 파일은 `scripts/_makeedu/_incoming/`(gitignore) — 커밋 금지. ⚠️ 남은 것: 사용자가 **전체 기간** 엑셀 재다운로드(현 파일=최근 1개월 132행뿐, 전체 5,069건) → 같은 임포터로 대량 적재 → 증분 자동화(sync-consultations 증분화 + sync-all 편입) 설계.
+- **역동기화(eywa→makeedu) 검토 = 전면 자동 비권장 (2026-07-02)**: 읽기 전용 정찰(폼·등록링크·AJAX 엔드포인트 덤프) 결과 → [docs/makeedu-reverse-sync-feasibility.md](docs/makeedu-reverse-sync-feasibility.md). makeedu는 CSRF 없는 서버렌더 `.do`라 폼 POST 재현으로 쓰기 기술적 가능하나, **정본 오염·멱등키 부재(POST=항상 insert→중복)·캡차·핑퐁** 리스크로 전면 양방향 동기화는 비권장. 좁은 opt-in 후보 = **QR 공개접수 신규 상담(from_public_intake) → makeedu 상담등록 건별 수동 푸시**(eywa 원본·저volume·항상 신규=충돌 없음, 워처 릴레이 재사용).
+- **✅ 역동기화 v1 구현 — QR 접수 상담 → makeedu 예비상담 수동 푸시 (2026-07-02)**: 위 opt-in 후보를 구현. **자동 아님** — 사무실이 연동 면에서 후보를 골라 "makeedu로 보내기"만 큐잉하고, 실제 makeedu 쓰기는 동기화 PC 워처가 신뢰 IP에서 수행(Vercel은 못 씀). 정방향 릴레이(0069a) 인프라 재사용.
+  · **데이터(`0071a`, dev 적용·RLS)**: `makeedu_push_requests`(consultation FK·status pending|running|done|error|skipped·counselSeq·error) + `enrollment_consultations.makeedu_pushed_at`(멱등 플래그). **멱등 = 성공 시 pushed_at=now() + makeedu가 부여한 counselSeq→makeedu_id**(딥링크 + 읽기 동기화 중복 방지). seq 못 잡아도 pushed_at으로 재푸시 차단, 다음 읽기 동기화가 자연키로 makeedu_id 백필. **읽기 임포터도 makeedu_id=counselSeq라 체계 일치** → 다음 동기화가 "이미 연결됨"으로 스킵(중복 0, 라이브 검증).
+  · **writer** [push-consultations.cjs](scripts/_makeedu/push-consultations.cjs)(Playwright): makeedu `/counsel/counselList_regist.do?callpage=res` 폼에 채우고 makeedu 자신의 `$('#form').ajaxSubmit(url:_InsProc.do)` 직접 호출 → 응답 `"OK"`면 성공 → resList에서 counselSeq 회수(히든 counselSeqTmp 우선). **매핑**: 학년 라벨→preGrade 코드(초1=11…고3=33), 관계→prePKind(모=M/부=F/기타=E), **전화=000-0000-0000 하이픈**(lib.normPhone 재사용 — makeedu 폼 JS는 공백만 제거해 하이픈 보존, dry-run 실검증), **제목=`[eywa 온라인 접수]` 고정**(학생명은 목록 원생명 컬럼에 이미 노출), 상담내용=parent_request+메타(경로·과목·셔틀·주소·형제·진로) HTML. **enrolled(학원 등록 완료) 가드**: 후보·액션·writer 3중 제외 — 예비원생 단계 지난 학생을 신규 문의로 넣는 군더더기 방지(허다언 케이스). makeedu 원생목록에도 없는 enrolled는 '원생등록' 푸시가 맞는 경로=v2 후보(미구현). **⚠️ dry-run 기본**(`--apply` 없으면 폼 채우고 값만 되읽고 제출 안 함) — 실 makeedu 쓰기 전 검증 안전장치.
+  · **워처 확장** [watch-sync-requests.cjs](scripts/_makeedu/watch-sync-requests.cjs): 정방향 sync 요청 폴링에 더해 `makeedu_push_requests` pending>0면 push-consultations 실행(스크립트가 pending 자체 claim). 동일 15초 폴링·상주 작업(eywa-makeedu-sync-watcher).
+  · **서버/UI**: [enqueueConsultationPush(ids)](src/features/integrations/server/actions.ts)(master, 대상=QR 접수+미푸시만 검증+중복 큐잉 방지, admin insert) + [getUnpushedIntakeConsultations](src/features/integrations/server/makeedu-sync.ts)(후보+최신 요청 상태) + [MakeeduPushCard](<src/app/(shell)/owner/_components/makeedu-push-card.tsx>)(연동 면, 체크박스 목록+전송 버튼, 후보 0건이면 숨김).
+  · 검증: typecheck0/lint0(경고 2=기존)/**build**(진행) + **실 E2E**(dry-run으로 허다언 폼 전 필드 정확 확인 → 김승후 큐잉→워처→makeedu 실제 등록 counselSeq **5231**·등록자 박소선·내용 "[eywa 온라인 접수]"·resList 노출 확인, eywa makeedu_id=5231·pushed_at 세팅). ⚠️ 김승후는 실제 QR 문의라 등록이 정상(테스트 오염 아님). ⚠️ dupChk(makeedu 중복경고)는 ajaxSubmit 직접 호출로 우회 — eywa pushed_at 가드가 재푸시 차단. ⚠️ 후속: 실패 재시도 UI·직원 노출(현재 master만)·다른 도메인(재원생 상담) 확장·makeedu 폼 변경 시 writer 취약.
+
+### makeedu→eywa 동기화 = ijw 베이스 복원 + makeedu additive 오버레이 (진행중) + 시간표 명단 요약 + 창 복원 버그픽스 (2026-06-29)
+인재원은 실운영을 **makeedu**(school.makeedu.co.kr)에서 한다. eywa를 실데이터로 돌리기 위한 단방향 동기화. 설계·진행은
+[[project_makeedu-eywa-sync]] + 계획 [`expressive-weaving-glacier.md`]. 범위 7개(학생·예비/등록상담·재원상담·반/수업·수강·수납인보이스·교재단가표).
+- **⚠️⚠️ 방향(사용자 확정 2026-06-29, 이전 "makeedu에서 재구축" 반전)**: **베이스 = ijw-calander 실데이터**(eywa 2.0가 실제
+  대체하던 것 — 색상·스케줄 완비), **makeedu = 그 위 additive 동기화(ijw에 없는 것만 추가, 덮어쓰기 X)**. 이유: makeedu 입력이
+  대강(요일·시각 부정확), ijw가 정확. **특히 수업은 ijw**(반 색상 때문). **합성 성적·Edutrix lesson_reports 제외 = 실 ijw firebase 데이터만.**
+  복원 = `MIG_TARGET=demo npx tsx scripts/_poc_migration/run.ts`(코어; ⚠️run.ts에 **"기존 users 선로드"** 추가 = 재실행 시 staff
+  email 충돌로도 담임 링크 안 깨짐) + backfill-english-slots(색상/슬롯)·backfill-teacher-colors + import-catalog/tuition-catalog/
+  textbooks-expenses + fix-primary-teacher. 복원 검증: 학생564·반129(색상52·담임128)·스케줄628·수강1056·출결6021·수납1606·
+  상담1340·회의42·교재146·지출95, makeedu_id 전부 null. ⚠️ wipe는 auth 4계정+super_admins+tenant_settings 보존.
+- **외부키(`0057a`)**: `students.makeedu_id`·`classes.makeedu_lesson_id`·`enrollment_consultations.makeedu_id`·
+  `student_consultations.makeedu_id`·`textbook_catalog.makeedu_id`(nullable + 부분유니크 `(tenant_id,col) WHERE col IS NOT NULL`).
+  makeedu 고유No↔eywa 행 매칭키. invoices·enrollments는 자연키 재사용. ⚠️ `students.makeedu_id`는 ijw `student_code`와 분리.
+  **자체생성 레코드=NULL**이라 upsert가 안 건드림(구분) — eywa 자체 생성 액션은 makeedu_id를 안 씀.
+- **동기화 시각 배지(`0058a`)**: `makeedu_sync_state`(테넌트×도메인→synced_at·row_count·status, RLS) + 임포터 `recordSync`(lib.cjs) +
+  [MakeeduSyncBadge](src/components/makeedu-sync-badge.tsx)("↻ 동기화 N분 전") + [makeedu-sync.ts](src/features/integrations/server/makeedu-sync.ts)
+  쿼리 → 5화면 헤더(학생/수업/상담/등록상담/수납[탭별 invoices↔catalog]). 도메인별 cadence가 달라 화면별 표시.
+- **makeedu 데이터 확보 = Playwright**([scripts/_makeedu/](scripts/_makeedu)): `scrape.cjs`(`.env.local`의 MAKEEDU_ID/PW 로그인→
+  evaluate, listSize max+페이지순회 → `D:/tmp/makeedu/*.json`), `import-*.cjs`(dry/--apply), `sync-consultations.cjs`(상담 본문은
+  **목록 아닌 상세페이지** `counselList_detail.do?counselSeq=N` — stable PK=히든 `counselSeqTmp`, 표시 No 아님), `wipe-tenant-data.cjs`(auth 보존),
+  공유 `lib.cjs`(`isNonClass`=교재/사용료/행사/설명회 가짜 수업 차단). ⚠️ Chrome MCP는 대량추출 불가(결과 잘림·블롭 차단)라 Playwright 필수.
+- **✅ additive 재작업 완료(2026-06-29)**: 임포터를 overwrite upsert → **additive**로 전환. 공유 [`tieredMatcher`](scripts/_makeedu/lib.cjs)
+  (정밀→느슨 키, 같은 키 2건+이면 모호=null로 오매칭 차단)로 makeedu→ijw 매칭 → **매칭되면 makeedu_id/makeedu_lesson_id만 백필
+  (ijw 값 절대 미변경), 없으면 신규 추가**. 도메인별: `students`(이름+학교+학년)·`prospects`(이름+학교+학년)·`catalog`(제목+출판사)는
+  백필/신규, `invoices`는 `on conflict do nothing`(ijw 보존, 새 청구월만)·`classes`는 **ijw 정본=신규반 생성 0**(이름 정확일치 시 makeedu_lesson_id만 백필,
+  ijw 코드명 vs makeedu 풀네임이라 대부분 미연결=정상)·`enrollments`는 기존부터 additive(반이름 불일치로 +0)·`consultations`는 **건너뜀**(사용자 결정:
+  ijw 1340 정본, makeedu 2686은 공유키 없어 더하면 대량중복 → [sync-consultations.cjs](scripts/_makeedu/sync-consultations.cjs)에 `--force` 가드).
+  **✅ 적용 완료(2026-06-29, ijw 베이스 위 실행·DB 검증)**: students +1신규/410백필/1스킵(활성 동일자연키 모호) · classes +0/**5백필(bg_color 52 보존)** ·
+  invoices **+394(전부 2026-07, 합계 1.55억=스냅샷 이후 신규 청구월)** · catalog +86교재+6기타/78백필 · prospects +237/5백필. DB 검증: 학생565·반129(색상52)·수강1056·
+  재원상담1340(그대로)·인보이스2000. **ijw 한 건도 덮어쓰지 않음.** **적대리뷰(워크플로 6스크립트 find→검증) 확정 1건 수정**: invoices 인라인 m2(이름|학년) 맵이
+  모호성 가드 없어 동명동학년 오매칭 가능 → `tieredMatcher`로 일원화(모호=null→스킵). **+ 적용 중 발견**: students 신규 insert가 활성 동일 자연키
+  (`ux_students_active_natural_key`, status<>'withdrawn') 충돌 → **사전 스킵(활성 자연키 집합 대조) + try/catch 안전망**(모호 미연결 학생 중복 생성 방지).
+  `import-schedules-from-ijw.cjs`는 ijw 베이스에선 불필요(스케줄 네이티브).
+- **✅ 예비원생(신입생) 상담 본문 동기화([sync-prospects.cjs](scripts/_makeedu/sync-prospects.cjs), 2026-06-29)**: import-prospects는 목록의 기본 정보만 가져와
+  상세 화면이 비어 보였음(사용자 제보). 상담 **본문**(상담경로·주소·셔틀·남매·혈액형·과목·동의 + 보호자명/성별/관계)은 **상세 페이지**에 있다(재원생 상담과 동일 함정).
+  상세 URL은 재원생과 같은 `counselList_detail.do?counselSeq=N`이고 **eywa enrollment_consultations.makeedu_id 가 곧 counselSeq**라 1:1 매칭(import-prospects가 r[0]=seq 저장).
+  → Playwright로 242건 상세 fetch → ① **구조화(노션자동화 템플릿 ~18건)** = key:value를 필드로(consultation_path/address/blood_type/subject/shuttle/동의…)
+  ② **자유텍스트 상담 노트(대다수)** = 본문 전체를 `parent_request`(학부모 요구사항 카드)에. 백필은 **텍스트 COALESCE(빈 값만)·boolean OR(켜기만)** = ijw 값 보존.
+  검증: 242 중 parent_request 228·구조화필드 18·보호자명 20 채움(천용훈=인터넷검색·대구역유림노르웨이숲·남매있음·혈액형B·과목 영어). 상세 페이지
+  ([enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>))가 학부모 요구사항·학생 상세 정보 카드로 실제 렌더(write-only-orphan 아님).
+  ⚠️ 상담 본문 비ASCII clean은 U+200B/U+FEFF/U+00A0를 \u 명시 escape로(리터럴 invisible char를 소스에 넣지 말 것 — Edit 매칭이 깨진다).
+- ✅ **Phase 2 완료(2026-06-30) — GitHub Actions cron 증분 자동화 + 전역 ON/OFF 토글**(사용자 "깃헙에서 동기화 완성"): 임포터가 전부 멱등·additive라 **재실행=증분**(새 행만) → 신규 코드는 오케스트레이터·DOM students·워크플로뿐. 마이그 0.
+  · **오케스트레이터** [sync-all.cjs](scripts/_makeedu/sync-all.cjs): 전역 토글 확인(off=스킵) → scrape(1로그인,4리스트) → 멱등 도메인 import --apply(도메인별 실패 격리·실패 시 sync_state error 기록+exit1=다음 cron 멱등 재시도). `--no-scrape`=기존 JSON 적재만(로컬).
+  · **cron 도메인(멱등만)**: students(신규 DOM)·classes·prospects·invoices. **제외(수동)**: enrollments(엑셀 '수업'컬럼 의존)·consultations(import-consultations **deprecated**, No≠counselSeq)·catalog(tuition 기타 이름 insert=재실행 중복)·prospects 상세본문(sync-prospects 레코드별 fetch).
+  · **students DOM 이식**: 헤드리스라 47컬럼 엑셀 대신 **재원생 목록 DOM**([scrape.cjs](scripts/_makeedu/scrape.cjs) `students`, URL `MAKEEDU_STUDENTS_URL`로 교정·첫실행 0행이면 URL확인) → 신규 [import-students-list.cjs](scripts/_makeedu/import-students-list.cjs) header-driven(자연키 이름+학교+학년 매칭→신규 insert·활성 자연키 가드, **고유번호 컬럼 있을 때만** makeedu_id 백필 — DOM 첫셀 No=표시순번≠안정PK라 방어).
+  · **예비상담 안내문구**(사용자 요청): cron이 상세 본문을 안 가져오므로 신규 예비상담 insert 시 parent_request=`PROSPECT_LIST_NOTE`(lib.cjs sentinel "상세는 makeedu에서 확인"). ⚠️ sync-prospects가 실본문 가져오면 sentinel 덮어쓰게 backfill을 `coalesce(nullif(parent_request,NOTE),실본문,parent_request)`로 수정(오염 방지).
+  · **워크플로** [.github/workflows/makeedu-sync.yml](.github/workflows/makeedu-sync.yml): workflow_dispatch(수동 첫검증)+cron(KST 06/18시)·concurrency group. **Secrets(사용자가 추가, 나는 안 봄)**: MAKEEDU_ID·MAKEEDU_PW·DATABASE_URL(+선택 MAKEEDU_STUDENTS_URL).
+  · **전역 ON/OFF 토글**(user_integrations provider=makeedu sync_enabled 재사용, 마이그0): [setMakeeduSyncEnabled](src/features/integrations/server/actions.ts)(master)+[getMakeeduAutoSyncStatus](src/features/integrations/server/makeedu-sync.ts)+[MakeeduSyncCard](<src/app/(shell)/owner/_components/makeedu-sync-card.tsx>)를 연동 면(sheets-face) 상단에. 행 없으면 기본 ON(opt-out)=끄면 sync-all 스킵. owner/page.tsx 안 건드림(병렬 popups 충돌 회피).
+  · ⚠️⚠️ **라이브 검증에서 발견·해결 — 헤드리스 새 로그인=makeedu CAPTCHA로 차단 → 세션 재사용(2026-06-30, gh CLI E2E)**: GitHub 러너(낯선 IP)+헤드리스 id/pw 로그인은 makeedu가 `loginReCert.do`(이미지 CAPTCHA+휴대폰)로 막아 0행. "로그인 횟수 초과"로 풀어도 또 차단(IP/봇 감지)·사용자 시크릿창(신뢰IP)은 통과=계정 정상. **해결=세션 재사용**: 신규 [capture-session.cjs](scripts/_makeedu/capture-session.cjs)(로컬 헤드드 1회 로그인=CAPTCHA 직접 통과→storageState 저장)→`gh secret set MAKEEDU_STORAGE_STATE`(⚠️PowerShell은 `< file`·`--body` 둘다 깨짐→`Get-Content -Raw file | gh secret set NAME` stdin 파이프). scrape가 그 세션 있으면 로그인 스킵→main.do. **makeedu가 세션을 IP에 안 묶어 GitHub IP서도 통과**. ⚠️세션 만료=capture 재실행+시크릿 갱신(유일 유지보수)·세션 재사용은 로그인 안 해 재실행 CAPTCHA/횟수 무관. scrape 견고화: `safeEvaluate`(네비 레이스 재시도)·`waitForStableTable`(AJAX 행수 정착 폴링 — classes 35↔147·invoices 0↔990 변동 해결)·목록별 try/catch·loginReCert 실패 감지. DOM확정: students URL=`/member/student/list.do`·이름컬럼=`원생명`(예비=`이름`)·`원생고유번호`=makeedu_id.
+  · ✅ **라이브 E2E 성공(gh workflow run, 6회 디버깅)**: session reuse ok→main.do, **students 412·classes 147·prospects 245·invoices 990 전건 안정**, additive 멱등(부트스트랩이 이미 동기화돼 신규 0·실패 도메인 0). cron(KST 06/18) 가동. CJS node --check / 내 TS typecheck0·lint0 / test531. 재원생 상담 자동화는 sync-consultations(counselSeq 상세) 기반 별도 설계 필요.
+  · ✅ **INSERT 경로 실데이터 검증(2026-06-30)**: 평소 "신규 0"이 "INSERT 로직이 안 도는 것"이 아니라 makeedu⊆eywa(부트스트랩 완료)라 멱등인 것임을 증명 — eywa 예비상담 1건 삭제(통제된 구멍)→sync **"신규 추가: 1"** 감지→실제 INSERT(440→441 복원)+`PROSPECT_LIST_NOTE` 안내문구까지 확인. 즉 makeedu에 진짜 새 데이터(새 문의·학생·청구월)가 생기면 **그것만 골라 eywa에 추가**(기존 보존).
+  · **수동 실행 '지금 동기화' 버튼**: [triggerMakeeduSyncNow](src/features/integrations/server/actions.ts)(master, GitHub REST API로 워크플로 `workflow_dispatch` 트리거, `force=true`=토글 무시) + [MakeeduSyncCard](<src/app/(shell)/owner/_components/makeedu-sync-card.tsx>) 버튼. 워크플로 `inputs.force`→`MAKEEDU_FORCE` env→sync-all이 토글 무시(cron은 토글 존중). ⚠️ **`GITHUB_DISPATCH_TOKEN`(workflow dispatch 권한 PAT) env 필요**(Vercel+.env.local, 미설정 시 명확 에러). repo/워크플로는 `GITHUB_DISPATCH_REPO`/`_WORKFLOW` env로 기본 `BIGSHOL/eywa`·`makeedu-sync.yml`. 토큰 없이도 `gh workflow run makeedu-sync.yml -f force=true`.
+  · **makeedu 원본 딥링크**: 동기화 예비상담은 상세 본문이 없어 "makeedu에서 확인" 안내만 있었는데, **enrollment 상세 '상담 내용' 카드에 `makeedu_id`(=counselSeq) 있으면 'makeedu에서 원본 상세 보기' 링크**(`counselList_detail.do?counselSeq=`, 새 탭) 추가 — 일일이 안 찾고 한 번에 이동([getEnrollmentConsultationById](src/features/enrollment/server/queries.ts)가 makeedu_id 노출, [enrollment/[id]/page.tsx](<src/app/(shell)/enrollment/[id]/page.tsx>) 렌더). makeedu_id 가진 전 예비상담에 표시. ⚠️ 클릭 시 makeedu 로그인 필요. 재원생 상담(student_consultations, counselSeq 보유)도 동일 적용 가능(미적용).
+- **시간표 상단 명단 요약**(ijw 패리티, [timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)): 툴바 우측에 **재원·신입·전입·대기·퇴원
+  + N슬롯**(색상 토큰). 그 주 시점(타임머신) 기준, `studentId`로 유일 집계(한 학생이 여러 반 → 상태 우선순위 재원>대기>퇴원). 신입·전입은 재원 학생만.
+- **🐛 창 복원 버그픽스**(별건, 같은 세션 — [[#65]]): 새로고침마다 플로팅 창 전멸 + localStorage 영속본 파괴. window-store rehydrate를
+  effect에서 호출하던 게 화근(다른 effect set이 먼저 빈 상태를 persist에 써서 클로버). **rehydrate를 모듈 로드 시점(클라)으로 이동**해 해결. 검증: 창 복원·테스트12.
+
+### 시간표 합반 표시 = ijw식 "한 셀 적층 + 합반 배지 + 테두리" (2026-06-30) — ⚠️ **대체됨(2026-07-03)**: 적층은 통합 명단(HapbanCell)으로 교체 — 위 "시간표 합반 셀 = ijw식 통합 명단" 참조(앰버 박스·배지는 유지)
+사용자 제안: 합반 수업을 합반 수만큼 열로 분할 + 테두리로 묶기. **사용자 요청으로 ijw-calander 처리 방식을 먼저 조사**([D:\ijw-calander] TimetableGrid/ClassCard/EnglishTeacherTab) →
+**ijw는 열 분할 안 함**. 한 셀에 적층 + 배지(수학=회색 "합반" pulsing + 학생 `[1][2]` 라벨 / 영어=빨강 "+N" + 호버 툴팁). 판별=런타임 휴리스틱(같은 강사·요일·교시), `mergeGroup` 필드 없음(eywa도 628슬롯 중 0개).
+- **결정(사용자)**: 원안 열-분할 폐기 → **ijw식 배지 + 사용자가 원한 테두리** 결합. eywa 기본뷰는 **이미 한 셀에 반별 카드 적층**(ijw 기본 모델과 동일, 게다가 반별 카드라 ijw 수학 인덱스 라벨보다 명확) → 빠진 "합반 표시"만 추가.
+- **구현**([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)): 셀의 `mergeSlotsByClass` 결과가 **2개반+ = 합반**(셀 키가 강사·요일·교시라 자동으로 같은 강사·교시) →
+  적층 카드를 **앰버 테두리 박스**(`border-amber/50 bg-amber/5`)로 묶고 상단에 **"합반 N반" 배지**(sticky, 스크롤해도 보임). 1개반 셀은 기존 그대로(테두리 없음). 그리드 컬럼 구조·computeBlocks 2D 병합은 불변(열 분할 안 함=ijw식).
+- **라이브 검증**: 영어 기본뷰 **합반 박스 62개**("합반 3반"=DP2+PJ4·KW3, "합반 2반"=LT4a+LT4b 등 정확) + 앰버 테두리로 묶임 / **수학은 합반 0건이라 무변(배지 0)** — 합반 실재하는 영어만 개선. typecheck0/lint0/test522.
+- ⚠️ 통합뷰(반=열)는 미적용(이미 열로 분리 표시 — 필요 시 같은 강사 인접 열 테두리 그룹화는 후속). 합반 판별은 휴리스틱이라 의도된 합반·실수 이중배정을 구분 못 함(둘 다 배지) — 실수는 위 "강사 시간 겹침" 경고가 별도로 잡음.
+
+### 강사 시간 겹침 감지 = 부분허용(경고+무시하고 저장) — 합반 대비 (2026-06-29) — ✅ 게이트 그린 + 라이브 E2E
+사용자 질문: 같은 강사가 같은 시간대 두 반에 들어가면 방지 로직이 있나? → **없었음**(충돌 검사는 강의실만 — `detectScheduleConflict`).
+강사 겹침은 무방비라 이중배정이 그대로 저장됐다. 사용자 결정: **영어 합반 수업처럼 의도된 겹침이 있으니 하드 차단 말고 "부분허용"**.
+- **감지** [`detectTeacherConflict`](src/features/classes/server/actions.ts): 후보 슬롯의 **실효 강사(슬롯 override `class_schedules.teacher_id` ?? 반 담임 `classes.teacher_id`)** 가
+  같은 요일·시간 겹치는 다른 **활성** 반과 충돌하는지. `class:class_id!inner`+`is_active` 필터 + JS로 종강(`closed_at<오늘`)·만료(`valid_to<오늘`)·자기자신(`excludeClassId`) 제외.
+  ⚠️ 자유입력 슬롯 라벨(`slot_teacher_label`, "Hannah"/"LAB")은 FK가 아니라 검사 불가 → teacher_id로 풀리는 것만.
+- **부분허용 UX**(하드 차단 아님): create/update에서 충돌 시 `{ teacherConflict }` 반환(저장 안 함). [class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>)가
+  앰버 경고 배너 + **"겹침 무시하고 저장"** 버튼(submit `name="ignoreTeacherConflict" value="1"` — 상태 없이 버튼이 플래그 전달) 노출. 액션은 그 플래그면 검사 skip → 저장(합반 통과).
+  일반 "변경 저장"이 Enter 기본이라 무시 버튼은 그 뒤(실수 skip 방지). 강의실 충돌은 기존대로 **하드 차단**(물리적 공유 불가) — 강사만 부분허용.
+- **라이브 E2E**(초등M 개별 BS1B 수정 → 강사 김은정): 충돌 경고 "김은정 · 월요일 14:30~15:25 (초등M 개별 CR1C)" 정확 표시·저장 차단 / "겹침 무시하고 저장" → 충돌 무시하고 김은정으로 저장 확인 → 데모 원복.
+  ⚠️ 검증 함정: 컨트롤드 `<select>`가 충돌 재렌더 때 state값으로 리셋 → override 직전 DOM 재설정해야 충돌 강사가 제출됨(테스트 아티팩트, 제품 무관). 또 데모 "이수연"은 role=viewer라 강사 드롭다운(active teacher/manager/master) 제외.
+- typecheck0/lint0/test519. ⚠️ `detectTeacherConflict`는 요일별 스케줄을 무페이징 select(현 ~628행<1000이라 안전, Firebase 전체이식 후 1000 접근 시 페이지네이션 필요 #54).
+
+### 수업 종강(closed_at) — 폐지와 분리한 운영 종료일 + 타임머신 이력 보존 (2026-06-29) — ✅ 게이트 그린 + 라이브 E2E
+사용자 제보: 폐지(`is_active=false`)는 "잘못 만든 반 완전 제거"라 타임머신 포함 전체에서 숨기는 게 맞지만, **종강(정상 운영 종료)은
+수강이력이라 과거 주(종강일 이전)엔 보여야** 한다. 기존 모델은 `classes.is_active`(운영중/폐지) 2상태뿐 — 종강/휴강/수강 구분 없음
+(`on_hold`/휴원은 학생·enrollment 단위만). 사용자 선택 = **종강만**(휴강은 기간 갭 모델링 필요 → 보류). typecheck0/lint0/test519 + Chrome MCP 라이브.
+- **모델**: `classes.closed_at` date nullable 신설(`0059a`, dev적용). 종강 = `closed_at`에 종료일 + **`is_active=true` 유지**(폐지와 분리).
+  스케줄 `valid_to`를 직접 만지는 대신 클래스 1필드 → 재개강(`closed_at=null`)·목록 배지가 단순. 폐지(is_active=false)는 그대로 전체 숨김.
+- **타임머신 필터**([queries.ts](src/features/timetable/server/queries.ts) `fetchSlots`·`getTodaySchedule` + [timetable-excel.ts](src/features/exports/timetable-excel.ts)):
+  종강 반은 `closed_at < 기준일`인 주에서만 제외(JS 필터, `closed_at ≥ 기준일`인 과거 주엔 표시). **+ 같이 고친 갭**: `fetchSlots`가 `valid_to`만 보고
+  `valid_from`을 안 봐서 미래 시작 스케줄이 과거 주에 새던 것 → `.lte("valid_from", weekEnd)` 추가(미래 주도 정확).
+- **액션/UI**: [actions.ts](src/features/classes/server/actions.ts) `endClassTerm`(날짜 지정)·`reopenClassTerm`(master 게이트, audit log) +
+  [class-term-button.tsx](<src/app/(shell)/classes/[id]/_components/class-term-button.tsx>)(운영중→"종강"[날짜 인라인 입력] / 종강→"재개강"). 폐지 버튼(ArchiveClassButton)과 공존.
+  배지 3상태: 목록·상세 모두 **폐지(neutral)/종강(amber)/운영(primary)**. `ClassListRow`·`ClassDetail`에 `closedAt` 추가.
+- **라이브 E2E**(초등M 초6 BS2P, closed_at=2026-05-30): 현재 주(06-29) 숨김 / 과거 주 05-15(종강 이전) **표시** / 06-10(종강 이후) 숨김 — 타임머신 정확.
+  종강 버튼(날짜→확정→배지)·재개강 버튼(배지 제거)·목록 종강 배지 전부 확인 후 데모 원복(closed_at=null).
+- ⚠️ **미이식**: 휴강(기간 일시정지)은 valid 구간 갭이 필요해 보류(사용자 결정). 종강 시 **enrollment 자동 종료는 안 함**(타임머신엔 무영향 — 이후 주엔 반 자체가 숨음. 수강정리가 필요하면 별도). 목록 "종료" 필터(`active=closed`)는 여전히 is_active=false(폐지) 기준 — 종강은 배지로만 구분(필터 세분화는 추후).
+
+### 시간표 폴리시 — 시트 열기 + 엑셀/가져오기 그룹화 + 교시 코너 비우기 + 폐지 반 제외 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
+사용자 시간표 UX·버그 4건. typecheck0/lint0/test518 + Chrome MCP 라이브(PSS, localhost:3001).
+- **A. '시트 열기' 버튼**([toolbar-actions.tsx](<src/app/(shell)/timetable/_components/toolbar-actions.tsx>)): 기존 '시트'(push)만 있고 연결 시트를 여는 길이 없었음 → [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `getGoogleSheetsStatus()`의 spreadsheetId로 `https://docs.google.com/spreadsheets/d/{id}/edit` URL을 toolbar에 전달, **새 탭(`target=_blank`)** 으로 연다. 대상 시트가 설정돼 있을 때만 노출(조회를 master만 수행 → master 한정). '시트'→**'시트 반영'** 으로 개칭(반영↔열기 한 쌍 명확).
+- **B. 엑셀+가져오기 그룹화**(사용자 "시트에서 가져오기로 오해될 수 있음"): 엑셀(export)·가져오기(엑셀 import)를 한 묶음으로 붙이고, 시트 그룹(반영·열기)과는 **구분선(border-l)** 으로 분리 → '가져오기'가 시트 import로 오해되지 않게.
+- **C. 교시 코너 비우기**([weekday-group-tables.tsx](<src/app/(shell)/timetable/_components/weekday-group-tables.tsx>)): 기본뷰 좌상단 `rowSpan=3` 코너 th의 '교시' 라벨 제거(빈 칸). 세로축=교시·가로축=요일/강사의 **교차점**이라 어느 축의 라벨도 아님(사용자 지적). ⚠️ 통합뷰 좌측 라벨열의 '교시'는 진짜 행 라벨이라 유지.
+- **D. 🐛 폐지(is_active=false=종료) 반이 시간표에 잔존**(사용자 제보): '반 폐지' 버튼([archive-class-button.tsx](<src/app/(shell)/classes/[id]/_components/archive-class-button.tsx>))은 is_active=false로 바꾸며 주석상 "시간표에서 종료 처리"를 약속하나, 시간표 쿼리들이 class를 조인하며 **is_active를 안 걸렀음** → 폐지 반이 계속 노출. **`class:class_id!inner` + `.eq("class.is_active", true)`** 로 [queries.ts](src/features/timetable/server/queries.ts)(`fetchSlots`=기본·통합뷰·수학엑셀 / `getTodaySchedule`=대시보드 오늘일정) + [timetable-excel.ts](src/features/exports/timetable-excel.ts)(일반 엑셀) 3곳 수정. 라이브: 폐지 '테스트' 반이 기본·통합뷰서 사라짐·활성 반 정상. ⚠️ **트레이드오프**: 폐지 반은 과거 주(타임머신)에서도 안 보임(폐지 의도와 일치 — 반 목록엔 '종료' 배지로 데이터 보존).
+
+### 학원설정 3건 — 브랜드 컬러피커 + 수강없는 재원생 일괄 퇴원/삭제 + 데이터정리·중복학생 탭 통합 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
+사용자 UX 요청 3건. typecheck0/lint0(신규0)/test518 + Chrome MCP 라이브(PSS, localhost:3001) 검증.
+- **A. 브랜드 색상 = 네이티브 컬러피커**: profile 브랜드 색상이 hex 텍스트뿐이라 색 선택 불편 → 공용 [`ColorField`](<src/app/(shell)/owner/_components/fields.tsx>)(네이티브 `<input type=color>` 스와치 + hex 텍스트 동기, 반 색상 폼과 동일 패턴) 신설 → [profile-section.tsx](<src/app/(shell)/owner/_components/profile-section.tsx>)에서 brandColor에 사용. 스와치는 유효 hex일 때만 반영(3/6자리 정규식, 무효면 #000 폴백). ⚠️ 컬러피커는 네이티브 OK(드롭다운/셀렉트 규약의 native `<select>` 금지 대상 아님 — 색 선택은 라이브러리 없이는 대안 없음).
+- **B. "수강 없는 재원생" 전체/개별 선택 → 일괄 퇴원/삭제** ([admin/cleanup/_client.tsx](<src/app/(shell)/admin/cleanup/_client.tsx>) `OrphanStudentManager`): 읽기전용 링크목록이던 것에 체크박스+전체선택+액션바 추가. 신규 액션 [`bulkWithdrawStudents`/`bulkDeleteStudents`](src/features/admin/server/actions.ts)(**master 게이트**, ids는 100청크 `.in()` B3, getCurrentUser+systemRole 검증).
+  · **퇴원**=가역(status=withdrawn + withdrawn_at + 활성 enrollment 종료, withdrawal_metadata.reason="other"). · **삭제**=영구지만 **invoices FK가 onDelete:restrict**(schema.ts:784, 유일하게 restrict — 나머지 student FK는 cascade/set null)라 **청구 기록 있는 학생은 사전조회로 제외하고 건너뜀 보고**("N명은 청구 기록이 있어 건너뜀(퇴원 권장)"). 단일 `.delete().in()`은 한 행이라도 FK 위반이면 전체 실패하므로 pre-filter 필수.
+  · 선택상태는 **현재 렌더 항목으로 라이브 필터**(`live = selected ∩ itemIds`) — 액션 성공 후 목록이 줄면 사라진 id 자동 해제(setState-in-effect 회피 #25). 삭제는 인라인 확인 플로우(삭제 → "N명 영구 삭제?" → 삭제 확정/취소). 라이브 검증: 전체선택 86명 → 퇴원 1명(허은진) E2E(86→85·목록서 제거, 검증 후 복구) + 삭제 확인바 표시→취소.
+- **C. 데이터 정리 + 중복 학생 탭 통합**(사용자 "같이 있어야하지 않나?"): 중복 학생은 데이터 정리의 일종이라 owner FaceTabs에서 **`dup` 탭 제거 → `data` 면 하단에 DuplicatesFace를 DataFace와 함께 렌더**([owner/page.tsx](<src/app/(shell)/owner/page.tsx>)). `resolveTab`이 옛 `?tab=dup`→`data` 흡수(북마크 보존), [duplicates-face](<src/app/(shell)/owner/_components/duplicates-face.tsx>) pageHref·navigation.ts·admin/duplicates redirect도 `data`로. ⚠️ DuplicatesFace는 students 전건 fetch라 무겁지만 data 면 진입 시에만 실행(조건부). 관리 면 4→3(데이터정리·감사·연동).
+
+### 신규 미디어 업로드 = 단일 스토리지 추상화 + ijw Firebase(GCS) 라우팅 (2026-06-29) — ✅ 4게이트 그린 + GCS/CORS 실검증
+사용자 비용 전략: **ijw가 쓰던 그 Firebase(버킷 `ijw-calander.firebasestorage.app`, 레거시 ~2GB가 이미 거기)를 그대로** 신규 미디어
+저장소로. 무료 5GB로 Supabase $25를 늦추고, 결제 구간 오면 Supabase로 스왑 → **백엔드는 `MEDIA_STORAGE_BACKEND` 한 줄로 교체**. 계획 [`expressive-weaving-glacier.md`]. [[project_storage-cost-strategy]].
+- **단일 추상화** [`src/lib/storage/`](src/lib/storage/media-storage.ts): `types.ts`(클라/서버 공용 `UploadTicket`)·`backend.ts`(`getMediaBackend`, 순수)·`gcs-client.ts`(GCS 클라 추출)·
+  `media-storage.ts`(본체: `createUploadTicket`/`verifyUploadedObject`/`resolveAudioReadUrl`/`resolveTenantReadUrl(s)`/`resolveBrandingSrc`/`removeObject`, **kind 메타테이블**로 오디오/영수증/브랜딩 분리)·
+  `upload-to-ticket.ts`(클라 XHR PUT, 진행률)·`legacy-audio.ts`→얇은 wrapper(호출부 무변경). ⚠️ **업로드 패턴 전환**: 브라우저 직접 Supabase upload → **서버 signed PUT URL 발급 → 브라우저 PUT**(GCS는 클라 RLS 불가).
+- **권한·검증 하드닝(리뷰 반영)**: 티켓 발급 액션마다 ① **kind별 권한 게이트**(오디오=메뉴 write / 영수증=expense 테넌트 실존 / 브랜딩=master) ② **경로 서버 빌드**(클라 입력 불신)
+  ③ size·contentType max. + **업로드 후 `verifyUploadedObject`(getMetadata: exists·size·CT)** 통과해야 DB 등록, 실패 시 **서버 `removeObject` cleanup**(GCS는 클라 삭제 불가). ⚠️ sign contentType ≠ PUT Content-Type = **403**(ticket.headers로 강제).
+- **Phase A(오디오 3흐름)**: `issueAudioUploadTicket`([features/media/server/upload-actions.ts](src/features/media/server/upload-actions.ts)) → 3폼(회의·학생상담·등록상담 녹음) → 3 start 액션(`verifyUploadedObject`+`resolveAudioReadUrl`로 AssemblyAI 제출) → 회의 삭제 `removeObject`.
+- **Phase B(이미지)**: 영수증([billing/server/expense-actions.ts](src/features/billing/server/expense-actions.ts)) 업/검증/cleanup/읽기(`resolveTenantReadUrls`)/삭제 GCS 전환 + **로고/직인 업로드 신규**(`issueBrandingUploadTicket` master, [profile-section.tsx](<src/app/(shell)/owner/_components/profile-section.tsx>) `BrandingField`, 인쇄 3곳 `resolveBrandingSrc`로 path→signed URL, http 하위호환).
+- **CORS**: [scripts/setup-gcs-cors.cjs](scripts/setup-gcs-cors.cjs)가 SA로 `setCorsConfiguration` — ⚠️ **ijw 기존 규칙 보존 머지**(setCors는 전체 교체라). exact origin(`localhost:3001`·`eywa-alpha.vercel.app`). `*.vercel.app`(부분 와일드카드) 무효 → preview는 origin 추가 또는 `*` opt-in.
+- 검증: typecheck0/lint0/**test516**(backend env분기·receipt/branding validator)/build✓ + **GCS 실라운드트립**(오디오 audio/webm·이미지 image/png: PUT200·메타·READ200·**wrong-CT 403**·delete) + **CORS preflight**(localhost·eywa-alpha 허용/evil 차단/ijw 보존) + /meetings/new 200.
+- **브라우저 E2E(2026-06-29, PSS 웨일)**: 회의록 녹음(mp3)→브라우저 PUT→GCS 객체(size·audio/mpeg)→AssemblyAI가 GCS 서명URL fetch / 지출 영수증(png)→GCS 3세그 경로 객체+썸네일 GCS 읽기 / 로고(png, master)→GCS branding 경로 객체 — 전부 실객체 확인 후 정리. (학생상담·등록상담 녹음은 동일 issueAudioUploadTicket 코드라 동치.)
+- **검증 중 발견·수정**: `.webm` 오디오 **파일**은 브라우저 MIME이 `video/webm`이라 서버 `allowCT(audio/*)`에 막힘(녹음 경로는 audio/webm이라 무영향) → 3폼에서 **contentType을 audio/*로 정규화**(file.type이 audio/* 아니면 `audio/${ext}`). video/webm 주입→정상 업로드, GCS contentType `audio/webm` 확인.
+- ⚠️ **ops 전제**: ① GCS 업로드 쓰면 `FIREBASE_SERVICE_ACCOUNT_KEY` 선택→**필수**(프로덕션 Vercel 주입). ② 새 프로덕션 도메인/preview는 CORS origin 추가. ③ `MEDIA_STORAGE_BACKEND`는 **전역 플래그**(객체별 아님) — supabase 스왑 전 GCS tenant 객체 일괄 이전 + 프로덕션 Supabase 0 확인. ④ branding Supabase 버킷 RLS는 미작성(GCS 기본이라 불요, 스왑 시 추가). ⑤ 실 마이크/파일 업로드 UI E2E는 입력 한계로 GCS 메커니즘+CORS+렌더로 대체.
+
+### 녹음 = 네이티브 팝업 창 → 내부 플로팅 창 + 녹음 중 창 잠금 (2026-06-26) — ✅ 4게이트 그린
+사용자 제보: 회의록 등에서 "바로 녹음"을 누르면 **별도 브라우저 창**(`window.open` about:blank)이 떠 앱처럼 안 보였다. eywa는 이미 자체
+플로팅 창 시스템이 있고 생성 폼(`meetings/new`·`enrollment/new`·`consultations/new`)도 **이미 플로팅 창**이라 녹음 전용 네이티브 팝업은 불필요·이질적.
+- **결정/근거**: 네이티브 팝업의 유일한 가치는 "별도 OS 창이라 부모 탭 하드 새로고침에도 녹음 생존"이었으나, ① 일상 케이스(녹음하며 배경
+  자유 사용)는 폼 창이 배경 소프트네비를 견뎌 그대로 보존 ② 부모 탭 하드 새로고침 생존은 **IndexedDB 청크 복구**([recording-recovery.ts](src/lib/recording-recovery.ts), 매 1초 저장)로 메움.
+  → **네이티브 팝업 제거**([`recorder-popup.ts`](src/lib/recorder-popup.ts) 삭제), 녹음은 폼 창 안 **인라인**(기존 폴백 경로를 정식 경로로 승격).
+- **녹음 중 창 잠금**(사용자 요청 "X 비활성화로 혹시 모를 일 차단"): same-origin **BroadcastChannel**([`window-busy.ts`](src/lib/realtime/window-busy.ts), record-channel 패턴)로
+  iframe 폼 ↔ 부모 워크스페이스를 묶음. 폼이 [`useRecordingLock(isRecording)`](src/components/workspace/use-recording-lock.ts)로 자기 창 id(`route:meetings/new` 등,
+  pathname에서 도출)로 busy 발행 → 부모 [FloatingWindow](src/components/workspace/floating-window.tsx)가 그 창의 **X(닫기)·배경보내기·Esc·드래그-투-배경 비활성화**
+  (툴팁 "녹음 중 — 정지 후 닫기 가능"). **최소화는 허용**(iframe 마운트 유지=녹음 지속). 부모 탭 하드 새로고침은 [WorkspaceCanvas](src/components/workspace/workspace-canvas.tsx)가
+  busy 동안 `beforeunload` 가드(iframe의 beforeunload는 탭 전체를 못 막으므로 최상위 프레임에서 별도). iframe 자체 이탈은 useRecordingLock이 beforeunload로 막음.
+- **마이크 권한**: [route-window.tsx](src/components/workspace/route-window.tsx) iframe에 `allow="microphone"` 추가(일부 브라우저는 same-origin이어도 getUserMedia에 iframe allow 요구).
+- **3곳 통일**: 회의록·등록상담은 인라인+복구가 이미 있어 팝업만 제거. **학생상담**([audio-consultation-form.tsx](<src/app/(shell)/consultations/_components/audio-consultation-form.tsx>))은 인라인만 있고 복구 없었음 →
+  IDB 복구(`rec.start(1000)`+saveChunk, `RecoveryKind`에 `student-consultation` 추가)·복구 배너·녹음 잠금 추가해 동일 동작.
+- **디스크 백스톱 복원**(사용자 "파일증발 대비"): 팝업이 정지 시 하던 **자동 다운로드**가 인라인 전환에서 빠졌었음 → [`downloadFile`](src/lib/audio-upload.ts)(best-effort,
+  throw 안 함)를 3곳 onstop에 추가 — 정지 즉시 .webm을 다운로드 폴더로 저장(브라우저 내부 IDB 복구와 **별개**의 OS 파일 백업). 보호 3겹: 녹음중 IDB 청크 + 정지시 디스크 + 폼 state.
+- **파일명 KST 통일**: 인라인 전환 때 `toISOString()`(UTC, `Z`접미 = 한국시간과 9시간 오차)로 떨어졌던 것을 공용 [`kstTimestamp()`](src/lib/audio-upload.ts)
+  (`Intl.DateTimeFormat({timeZone:'Asia/Seoul'})`, 옛 팝업과 동일)로 교체. 다운로드 3곳 + IDB 복구 파일명(`복구_*`)까지 전부 `…_KST.webm`(OS 시간대 무관 한국시간).
+- ⚠️ **백업 저장 위치 = 현재 "로컬 디스크 다운로드"(임시 방편), 추후 클라우드 스토리지로 이전 검토**: 정지 시 .webm을 사용자 **다운로드 폴더**로
+  내려받는 건 "파일증발 대비"의 최소 백스톱일 뿐, 다운로드 폴더가 흩어지고 다른 기기에선 못 본다는 한계가 있다. **향후 Supabase Storage(현 업로드
+  버킷 재사용) 또는 Firebase Storage(레거시 오디오 콜드 백엔드 기존 사용)에 정지 즉시 백업 업로드**로 옮기는 것을 검토한다(자동 분석 업로드와 별개로,
+  분석 시작 전·실패해도 원본이 클라우드에 남게). 옮길 때 [`downloadFile`](src/lib/audio-upload.ts) 호출부(3곳 onstop)를 백업 업로드로 대체하거나 병행.
+- 검증: typecheck0/lint0(신규0)/**test511**/build✓. ⚠️ 실제 마이크 녹음·창 잠금·다운로드 라이브 검증은 마이크+로그인 세션 필요(게이트로 대체).
+
+### 시간표 주간 이동(타임머신) ijw 충실 이식 + 편집 드래그 UX + 헤더 재배치 (2026-06-26) — ✅ 4게이트 그린 + 라이브 검증
+사용자 제보: ijw 시간표엔 "날짜 표시 + 주간 이동"이 있어 **반 이동·퇴원이 날짜로 기록**돼 주를 앞뒤로 옮기면 그 시점의 반 구성
+(과거 퇴원·미래 이동 예정까지)을 볼 수 있었는데 eywa엔 미이식(오늘 스냅샷만). ijw 양쪽 소스(`useSubjectClassStudents.ts`·
+`dateUtils.ts`·`TimetableManager.tsx`·`useStudentDragDrop.ts`)를 읽어 **그대로** 이식. 계획 [`expressive-weaving-glacier.md`].
+- **데이터 모델 재확인(DB 실측)**: eywa `enrollments`는 이미 `start_date`+`end_date`+GiST daterange = **시간 구간 테이블**(ijw와 동형).
+  데모 종료 enrollment 263건·시작일 2019~2026 분포 → **과거 재구성이 실제로 다르게 보임**(마이그 0). 미래는 거의 빔(미래시작 2건) → Phase B 필요.
+- **A. 주간 이동 조회**: 순수 유틸 [`week.ts`](src/features/timetable/lib/week.ts)(`getWeekReferenceDate` 미래→월/현재→오늘/과거→일,
+  `weekLabel` "2026년 6월 4주차 (22일~28일)", Vitest 12) + [queries.ts](src/features/timetable/server/queries.ts)
+  `getWeeklyScheduleWithStudents({ referenceDate })`가 그 시점 명단 재구성(재원/대기[미래시작·on_hold]/퇴원/전입/신입을 기준일 기준 분류).
+  **퇴원이 enrollment.end_date 없이 `students.withdrawn_at`로만 기록된 경우까지** 잡도록 student status/withdrawn_at 조인(=기존 "퇴원-개방 학생을 재원 오표시" 버그도 교정).
+  [page.tsx](<src/app/(shell)/timetable/page.tsx>) `?week=` 파라미터 + [week-nav.tsx](<src/app/(shell)/timetable/_components/week-nav.tsx>)
+  ◀ 이번주 ▶ + 주차 라벨 + "과거/미래 조회" 배지. 과거 주는 편집 비활성(소급 금지).
+- **B. 미래 예약 이동**(`0056a` alpha, dev적용): [move_enrollments_batch](supabase/migrations/0056a_move_enrollments_effective_date.sql)에
+  `p_effective_date` 추가(옛 end_date=적용일 / 새 start_date=적용일). [actions.ts](src/features/enrollments/server/actions.ts)
+  `moveEnrollmentsBatch(moves, effectiveDate)` + [timetable-board.tsx](<src/app/(shell)/timetable/_components/timetable-board.tsx>)가
+  **보고 있는 미래 주**를 적용일로 전달 → 미래 주에서 드래그하면 그 주에 이동 예약(현재 주엔 옛 반 유지). ijw `scheduledDate` 패턴.
+- **편집 드래그 UX(별건, 같은 세션)**: ① **DragOverlay** — 잡으면 학생 이름 칩이 커서 따라옴(끄는 느낌). ② **도착 셀 "전입 예정"** —
+  옮긴 학생이 도착 반에 초록 "+이름 ←원래반" 미리보기(`incoming` 맵, edit-context/timetable-board/class-cell). ③ **드래그 URL 고스트 픽스** —
+  [WindowLink](src/components/workspace/window-link.tsx) anchor에 `draggable={false}`(끌 때 링크 URL 딸려오던 것 차단) + 편집 행 `select-none touch-none`.
+- **헤더 재배치(사용자 제안)**: [app-header.tsx](src/components/app-header.tsx) 검색을 중앙 → **우측**, [BackgroundTabs](src/components/workspace/background-tabs.tsx)를
+  부유 오버레이 → **헤더 인라인(검색 왼쪽)**으로 이동(workspace-canvas에서 제거). 배경 2개+일 때만 노출·드래그 꺼내기 동작 유지.
+- 검증: typecheck0/lint0/**test511**(week 12)/build✓ + 라이브(PSS 웨일, localhost:3001): 과거주 2026-03 등록 1424→1124·BS1B as-of 재구성 **DB와 1:1 일치**·
+  과거/미래 배지·과거 편집 비활성 / **Phase B E2E**: 미래(2026-07-13) 예약 → DB split 정확(BS1B end=07-13·tr / CR1C start=07-13·trIn) → 미래 주엔 CR1C·현재 주엔 BS1B → 검증 후 원복.
+  ⚠️ MCP 합성 드래그는 dnd-kit 발화가 까다로워(2단계 PointerEvent) Phase B 데이터·양 주 효과는 RPC 직접+DB+양 주 DOM으로 결정적 검증.
+- ⚠️ 후속: 미래 퇴원 예약은 ijw도 즉시라 범위 밖. 데모 미래 데이터 희소 → 미래 주 검증은 Phase B로 생성 후.
+
+### ijw 강사 색상 이식 + 통합뷰 셀·담임색 배선 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
+계획서 "분기점"(강사 헤더색: ijw 저장색 vs eywa 해시) 해소. ijw `staff`(42명 전원 bgColor/textColor 보유)를 eywa `users`로 이식하고
+시간표 통합뷰가 저장색을 실제로 쓰게 배선(익스포터는 기존부터 `users.bg_color` 소비, 화면은 해시였음).
+- **데이터 이식**: [`backfill-teacher-colors.cjs`](scripts/_poc_migration/backfill-teacher-colors.cjs)(멱등·--apply) — ijw `staff.name`↔eywa `users.display_name`
+  **42/42 매칭(불일치 0)** → `bg_color`/`text_color` + **`english_name`**(영문닉네임). 색 분포 ijw와 완전 일치(24색 히스토그램). 반색은 기존 백필(52).
+- **`users.english_name` 추가**(`0055a`, dev적용): 영어 시간표 슬롯 라벨이 **영문닉네임**("Kristine"·"Hannah")이라 한글 `display_name`로는
+  매칭 불가 → english_name도 키로. 백필 후 distinct 슬롯 라벨 14개 **전부 색 해결(미해결 0)**.
+- **통합뷰 배선**: [`getTeacherColorMap()`](src/features/timetable/server/queries.ts)(users → `display_name`·`english_name` → hex, 테넌트 RLS)
+  → page(통합뷰만 fetch) → [rich-grid-view](<src/app/(shell)/timetable/_components/rich-grid-view.tsx>) → [rich-card-group](<src/app/(shell)/timetable/_components/rich-card-group.tsx>):
+  미니그리드 **셀**(슬롯 강사)·**담임 칩**이 저장색(인라인 hex) 우선, 미해결 라벨만 [`teacherColor`](src/features/timetable/lib/class-grid.ts) 해시 폴백.
+  `TeacherColorMap`은 plain 객체라 클라 전달 안전([[#61]]). LAB은 파란 배지 유지.
+- 검증: typecheck0/lint0/**test499**/build✓ + dev(3001) 통합뷰(영어) HTML에 저장색 인라인 렌더 확인(#ffa8d2·#3b82f6·#93c47d·#674ea7 등).
+- ⚠️ 강사색 기본뷰(요일그룹밴드)는 범위 밖(통합뷰만 — **강사**색 한정). ⚠️ ijw가 진실 — Firebase 재이식 시 backfill-teacher-colors.cjs 재실행(멱등).
+
+### 반 색상(classes.bg_color)을 기본뷰·편집 폼 스케줄까지 반영 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
+사용자 제보: 반 색을 설정해도 시간표에 안 보임. 원인 = **반 색이 통합뷰에만 배선**돼 있고 **기본뷰는 과목색, 편집 폼 스케줄은 고정 초록**(선택 표시)을 써서
+반 색이 새지 않았다(로그인/계정 무관). 통합뷰 외 두 소비처에 배선(커밋 `a9943c3`).
+- **기본뷰 ClassCell 헤더**([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>)): `slot.classBgColor`가 있으면 헤더 인라인 hex(글자색=`readableTextColor` 휘도 자동),
+  없으면 기존 과목색 폴백. ⚠️ **WindowLink는 `style` prop 미지원**([[#61]] 계열) → 색은 **감싸는 styled `<div>`** 에 주고 WindowLink는 그 안에(클래스는 폴백일 때만).
+- **편집 폼 스케줄 그리드**([schedule-grid.tsx](<src/app/(shell)/classes/_components/schedule-grid.tsx>)): 선택 셀이 **반색 미리보기**(폼 라이브 `bgColor`, 없으면 기본 초록 `bg-primary`).
+  부담임 오버라이드 셀은 **보라 링**(`ring-purple-700`)으로 구분(반색 위에서도 식별). [class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>)가 `bgColor` 전달 + 라벨 "(시간표 통합뷰)"→**"(시간표·스케줄)"**.
+- 검증: typecheck0/lint0/**test499**/build✓ + Chrome MCP 라이브(기본뷰 MS2A 헤더 `rgb(250,180,180)`=#fab4b4 / 편집 폼 선택 셀 4개 동일). 이제 통합뷰·기본뷰·편집 폼 3곳 모두 반색 반영.
+
+### 엑셀 다운로드 버그픽스 + 구글시트 연동 단순화(ON/OFF) + 사이드바 경계 + 병목 빠른승리 (2026-06-26) — ✅ 게이트 그린 + 라이브 검증
+사용자 연속 요청 묶음. 게이트: typecheck0/lint0(신규0)/**test499**(content-disposition 4)/build✓. dev(3001) 라이브 검증.
+- **🐛 엑셀 다운로드 전면 깨짐 픽스(핵심)**: 시간표·학생·수납 엑셀 4라우트가 `Content-Disposition: filename="수학_시간표_…"`에
+  **한글**을 넣어 응답 생성 시 `TypeError: Cannot convert argument to a ByteString`(한글 코드포인트>255)로 **500** → "엑셀 버튼
+  무반응"(iframe이 빈 500으로 이동). 익스포터/버퍼는 정상, 파일명 헤더만 문제. **RFC 5987 헬퍼 [`attachmentFilename`](src/lib/http/content-disposition.ts)**(ASCII
+  폴백 `filename` + UTF-8 `filename*`, Vitest 4)로 4라우트 교체. **curl 실측 재검증**: 시간표 200·165KB·유효 xlsx(PK) / 학생 200 / 수납 200.
+- **구글시트 연동 = 단순 ON/OFF 토글로 전환**(사용자 "싹 빼고 ON 버튼만"): 연결 패널(이메일·시트생성·서비스계정 안내·지금동기화)
+  **전면 제거** → owner 연동 면은 **토글 1개**([_client.tsx](<src/app/(shell)/admin/integrations/sheets/_client.tsx>) `setSheetsExportEnabled`,
+  **`user_integrations.sync_enabled` 재활용=마이그 0**). **시간표 '시트' 버튼 = master + 연동 ON일 때만** 노출([timetable/page.tsx](<src/app/(shell)/timetable/page.tsx>)
+  `isGoogleSheetsExportEnabled`, `syncSheetsNow`도 enabled 게이트 이중방어). 대상 시트·서비스계정은 운영자 설정(연동 화면에 "관리자에게 문의").
+  죽은 `connectGoogleSheets`/`disconnectSheets`/`createTenantSpreadsheet` 제거. 라이브 검증: DB off→버튼 숨김 / on→노출(디버그로그로 canSync 확인).
+- **사이드바 오른쪽 경계선 = 사이드바 너비조절로**(사용자 "탭크기와 같이 움직이게"): 창이 경계에 붙으면 창 좌측 리사이즈 핸들이
+  사이드바 핸들을 덮어 "창만 리사이즈"됐음 → 사이드바를 **`z-[45]`**(캔버스 z-40 위·팰릿 z-50 아래)로 올려 경계 드래그=사이드바
+  너비조절(폭 바뀌면 캔버스 left=rail 따라가 창 reflow) + 창 드래그 **x≥0 클램프**([use-pointer-drag.ts](src/components/workspace/use-pointer-drag.ts))로 창이 사이드바 뒤로 안 감.
+- **병목 감사(40에이전트, 확정22/기각10) → 빠른승리 적용**([[project_operational-readiness-verdict]] 계열 후속): ① **시간표 교재→진도
+  직렬→`Promise.all`**(queries.ts) ② **recharts(~367KB) `next/dynamic`(ssr:false) 6곳**(차트 리프 `*-impl.tsx` 분리 + 스켈레톤
+  로딩 — 차트 보일 때만 로드) ③ **`getAvailablePeriods` 무페이징→`fetchAllPaged`**(invoices 1606행 1000절단으로 수납 월칩에서
+  2026-03 누락 **실측 버그** 해소) ④ **findOrphans·시간표엑셀 enrollments→`fetchAllPaged`/`fetchInChunks`**(이식 직전 잠복 절단 봉쇄)
+  ⑤ **dead export `getStudentConsultations` 삭제**(호출 0·footgun).
+- **병목 M-노력 2차(멀티윈도우 비용)**: ⑥ **멀티윈도우 셸 재실행 →`getTenantSettings` tenantId별 `unstable_cache`**
+  ([owner/server/queries.ts](src/features/owner/server/queries.ts) `loadTenantSettingsRaw`: admin client + 신뢰 tenantId 키 = 쿠키 없이 캐시 안전,
+  getTenantSettingsByTenantId와 동일 service_role 패턴·`.eq(tenant_id)` 격리). 창=iframe마다 셸 레이아웃이 재실행돼도 DB 2쿼리를 공유.
+  resolveSettings(DEFAULT merge)는 캐시 밖이라 코드 변경 즉시 반영. 무효화 = `saveOwnerSection`이 **`updateTag`**(server action read-your-writes,
+  즉시) + 기존 `revalidatePath("/","layout")`(unstable_cache 태그 무효화 폴백) + `revalidate:300` TTL 백스톱. ⚠️ Next16 `revalidateTag`는 2-arg
+  (`tag,profile`)로 시그니처 변경 → read-your-writes엔 `updateTag(tag)` 사용([[reference: node_modules/next/dist/docs … version-16.md]]).
+  ⑦ **복원 창 스톰 →route-window iframe `src` stagger 마운트**([route-window.tsx](src/components/workspace/route-window.tsx)): 포커스 창만 즉시,
+  나머지는 z순서×250ms 후 활성화(`activated` state, 동기 setState 없이 setTimeout). 복원 시 6창이 동시에 풀 라우트 렌더+하이드레이션하던 폭발 제거.
+  검증: typecheck0/lint0/test499/build✓ + dev(3001) 라이브 200(설정 캐시 런타임·unstable_cache+admin client 에러 0). 창 stagger는 빌드+로직(드래그 E2E 비실용).
+  ⑧ **시간표 초기로드 스트리밍 →route [`loading.tsx`](<src/app/(shell)/timetable/loading.tsx>)**(무거운 getWeeklyScheduleWithStudents 동안 Next가 스켈레톤을 즉시 스트리밍 — 창=iframe 첫 페인트가 빈 화면 아님).
+  툴바가 데이터(과목칩·인원)에 의존해 부분 페인트가 안 되므로 셸 전체 스켈레톤. ⚠️ **트레이드오프**: 과목/뷰 전환(searchParam 네비)에도 스켈레톤이 잠깐 뜸 — 무플래시로 하려면 과목 필터를 클라(fetch-once)로 옮기는 별도 리팩터 필요.
+  ⚠️ **미적용(별도·근거)**: getCurrentUser 인증 네트워크(GoTrue getUser, 보안 민감 → 보류)·**#9 학생목록 과목필터 `.in()`**(P1 — subject 필터를 resolved id `.in()`으로 좁히는데 distinct+exact count를 PostgREST로 못 풀어 **RPC 필요**, math~400<1000으로 현재 미발현 → Firebase 전체이식 전 전용 작업으로)·**#11 출석 matrix 2회**(null 콜은 early-return으로 **classes 목록만**=경량이라 중복은 light 1쿼리뿐 → 리팩터 가치 낮아 스킵).
+
+### 수학 시간표 = ijw 익스포터 완전이식 + 구글시트 공유-탭 push (2026-06-25) — ✅ 게이트 그린 + 13에이전트 적대리뷰
+계획 [`giggly-orbiting-sunset.md`]. eywa가 ijw `exportMathTimetableToExcel`과 **동일 xlsx**를 생성(verbatim 이식
+[`exporter.ts`](src/features/exports/math-timetable/exporter.ts) + 얇은 어댑터 [`assemble.ts`](src/features/exports/math-timetable/assemble.ts))하고,
+전환기에 **한 구글 스프레드시트를 두 앱(ijw+eywa)이 공유**하도록 eywa는 **자기 탭만 비파괴 추가**한다. (수학만 먼저 — 영어=10교시·LAB 별도, 후속.)
+- **단일 빌더**: [`buildMathTimetableBuffer({teacherId?})`](src/features/exports/math-timetable/build-buffer.ts) = 다운로드 라우트
+  ([route.ts](<src/app/api/exports/timetable/route.ts>) `?subject=math`)와 시트 동기화가 공유(중복 제거). 강사 헤더색은 `users.bg_color/text_color`→없으면 익스포터 해시색.
+- **구글시트 비파괴 공유 push** [`pushMathTimetableTabs(spreadsheetId, buffer, tenantToken)`](src/features/integrations/google-sheets.ts):
+  xlsx→임시 Google Sheets import → 각 탭 `copyTo`(색·병합·서식 보존) → 한 batchUpdate에서 **직전 탭 삭제→신규 탭 rename**(순서 보장: ≥1시트 + 제목충돌 회피) → 임시파일 삭제.
+  소비처=`syncSheetsNow`([integrations/server/actions.ts](src/features/integrations/server/actions.ts)). spreadsheetId=`user_integrations` 또는 `settings.notifications.googleSheetId` 폴백.
+  (옛 `pushTimetableToSheets` 전체 덮어쓰기는 제거 — 공유 시트에서 남의 탭을 지웠음.)
+- **⚠️ 적대리뷰(13에이전트) 확정 6건 전부 수정** — 이 영역의 함정 = "공유 시트 + 액션 중복 노출":
+  1. **(HIGH) 무스코프 PII 누수**: 동기화가 테넌트 **전체** 시간표(전 강사·전 학생)를 외부 시트로 내보내 강사 스코핑(B5) 우회 → **`syncSheetsNow` master 게이트**로 해소(전체 내보내기가 master 권한과 일치).
+  2. **(MED) 액션 게이트 부재**: `/timetable` 툴바 `시트` 버튼이 전 역할 노출 → 서버 master 게이트 + 툴바 `canSync`(master) 숨김 **이중 방어**(CLAUDE.md #58 "페이지 아닌 액션을 게이트").
+  3. **(MED) 멀티테넌트 탭 교차삭제**: 두 테넌트가 같은 시트를 가리키면 `eywa·` 접두만 보고 서로 탭 삭제 → 탭 접두를 **`eywa·{tenant}·`**([sheet-tabs.ts](src/features/exports/math-timetable/sheet-tabs.ts), `tenantId.slice(0,8)`)로 네임스페이스 → 교체 대상이 자기 테넌트로 국한.
+  4. **(LOW) 쓰기 한도/429**: copyTo·batchUpdate에 **429/503 지수백오프 재시도** + 부분 실패 시 방금 복사한 미rename 탭 정리(orphan 누적 차단=사실상 원자적).
+  5. **(LOW) ops 전제 미노출**: ijw 전체 덮어쓰기 경고를 연동 UI([_client.tsx](<src/app/(shell)/admin/integrations/sheets/_client.tsx>))에 한 줄 추가.  6. **(LOW)** 실패 `last_error` upsert best-effort 주석.
+  (기각 4건: batchUpdate 순차적용 의미·copyTo가 hidden 보존·죽은 가드분기·변환 충실도 — 근거 타당.)
+- ⚠️ **ops 전제(코드 불가)**: ① eywa 서비스계정이 공유 시트에 **편집(writer) 권한** ② 공유 기간 동안 **ijw 자동 push 일시중지**(ijw `drive.files.update` 전체 덮어쓰기가 eywa 탭을 지움).
+- 검증: typecheck0/lint0(신규0)/**test495**(sheet-tabs 7, 교차테넌트 격리 포함)/build✓. ⚠️ 구글시트 E2E는 라이브 서비스계정+공유시트 필요 → 순수 단위테스트+게이트+적대리뷰로 대체(로컬 미검).
+
+### 시간표 내보내기 라이브 검증 + 구글시트 push = ijw식 "기존 시트 덮어쓰기"로 전환 (2026-06-29) — ✅ xlsx 실측 / 시트 전제 정정
+사용자 "실제로 스프레드시트에서 확인되나" 요청 → **xlsx는 실측 정상**, **구글시트 push는 위 copyTo 설계가 가용 서비스계정과 호환 안 돼 ijw식으로 교체**.
+- **xlsx 다운로드 = 실데이터 E2E 통과**(Chrome MCP, master 로그인 localhost:3001): `/api/exports/timetable?subject=math` → HTTP200·정확 MIME·163KB·ZIP유효. 브라우저에서 zip 해제·파싱: **14시트**(통합 1 + 강사별 12 + `_meta`), 메인 A1:AY100·셀 5,098·**병합 1,123**·**채움색 33**(밴드/강사색 보존)·실한글(합계행·요일밴드·교시·반명·강의실·이번주 날짜). = Excel/시트에서 정상 열림 확정.
+- **🔑 키 진상**: 앞서 "GOOGLE_SERVICE_ACCOUNT_KEY 없음"은 그 이름의 env만 없던 것 — 실제 서비스계정 키([D:\ijw-calander\serviceAccount.json](D:\ijw-calander\serviceAccount.json))는 **eywa가 이미 `FIREBASE_SERVICE_ACCOUNT_KEY`로 보유**(동일 SA `firebase-adminsdk-fbsvc@ijw-calander.iam.gserviceaccount.com`, base64). 실호출: authorize OK·Drive/Sheets API 활성.
+- **❗ 결정적 제약(라이브 실측)**: 이 서비스계정은 **Drive 저장공간 limit=0** → **파일 생성 불가**(`drive.files.create`/`spreadsheets.create`가 403 `storageQuotaExceeded`). 즉 옛 `pushMathTimetableTabs`의 "xlsx→임시시트 생성→copyTo"는 **첫 단계에서 실패**(가용 키로는 절대 동작 안 함). ijw 자기 코드도 동일 한계를 알고 우회([D:\ijw-calander\functions\timetableSheetsSync.js](D:\ijw-calander\functions\timetableSheetsSync.js) `translateError`·`updateSheetContent`).
+- **→ 전환(2026-06-29)**: 구글시트 push를 **ijw식 [`overwriteMathTimetableSheet(spreadsheetId, buffer)`](src/features/integrations/google-sheets.ts)**(`drive.files.update` media 교체 + `supportsAllDrives`)로 교체. 사람이 **미리 만든 빈 시트**(소유자=원장 계정 용량)에 SA를 **'편집자'로 공유** → eywa는 그 시트를 **전체 덮어쓰기**(생성 안 함). 키는 `GOOGLE_SERVICE_ACCOUNT_KEY` 우선 + **`FIREBASE_SERVICE_ACCOUNT_KEY` 폴백**(기존 키 재사용, 새 env 불요). 신규 [`getServiceAccountEmail()`]이 연동 UI에 **공유 대상 이메일을 직접 표시**([sheets-face.tsx](<src/app/(shell)/owner/_components/sheets-face.tsx>) "처음 한 번 설정" 가이드).
+- ⚠️ **설계 트레이드오프**: copyTo "eywa·{tenant}· 탭 비파괴 다앱 공유"는 **폐기**(시트 전체 덮어쓰기 = 테넌트 1개당 전용 시트 1개 가정). 그래서 [sheet-tabs.ts](src/features/exports/math-timetable)·그 테스트 **삭제**(dead). `syncSheetsNow` caller도 토큰 인자 제거. 같은 시트를 두 테넌트/두 앱이 가리키면 서로 덮어씀 — **전용 시트 필수**.
+- 검증: typecheck0/lint0(신규0)/**test518**/build보류(실행 중 dev 서버 .next 충돌 회피, typecheck로 커버) + **실 push E2E 완료(2026-06-29, 사용자 시트)**: 원장이 빈 시트(`[Eywa] 수학 시간표`) 생성→SA 편집자 공유→연동 탭 ID 등록→sync_enabled ON. **앱 '시트' 버튼 클릭→syncSheetsNow→overwriteMathTimetableSheet** → "시트에 반영됨" + 시트 modifiedTime 갱신 + **14탭(통합+강사12+_meta)·메인 A1 실데이터** 되읽기 확인 + `last_synced_at` 기록·`last_error` null. getServiceAccountEmail=FIREBASE키 재사용도 라이브 증명(GOOGLE_SERVICE_ACCOUNT_KEY env 없이 동작). ⚠️ 사람이 만든 시트가 SA에 공유돼야만 가능(SA 용량0=생성 불가)·시트는 전체 덮어쓰기.
+
+### 시간표 기본뷰 평일 1시간 수업 = ijw식 4그룹 풀높이 셀 + 폭 3개(웹·엑셀·시트) 통일 (2026-06-29) — ✅ 게이트 그린 + 라이브 검증
+사용자 제보: 평일 1~4교시가 2시간 그룹 1칸이라 **1-2·2-1 등 1시간만 하는 반(예 JJ2A=15:25~16:20)을 어떻게 표시**할지 + 가로폭 3개 통일.
+- ⚠️ **방향 정정(시행착오 기록)**: 처음엔 "8서브행(1-1..4-2)으로 쪼개 1시간 수업=반쪽 행" 구현 → **반쪽 행(165px)이 너무 작아 학생 9~10명이 안 들어가는** 실문제(사용자 제보, screenshot 대조). → **ijw 실제 방식으로 복귀**: 평일은 **4그룹 행 유지 + 셀 풀높이**. 1시간 수업도 그룹 셀에 **풀높이 카드**(학생 공간 충분), **서브슬롯은 헤더 시각**("15:25~16:20")으로 구분. periods.ts의 split 인프라(`opts.split`·`mathSubSlotRows`·`PeriodRow.group`)는 전부 제거(되돌림).
+- **렌더(weekday-group-tables.tsx)**: rows=4그룹(`subjectPeriodRows`), 셀은 `slotPeriodRow`(그룹키)로 모은 슬롯을 `mergeSlotsByClass`로 반별 카드화 → 단일 반=풀높이 1카드, **1-1/1-2가 서로 다른 반이면 2카드 적층**(ijw "상단 수업명 반 분할"과 등가). `computeBlocks`가 그룹간 연속·인접요일 rowSpan/colSpan 병합. 검증(라이브): 4그룹 행·JJ2A(1-2) rowSpan=1 **풀높이에 학생 10명 전부 렌더**·시각 15:25~16:20 표시.
+- **폭 통일(스프레드시트=기준)**: 실측(Sheets API) 컬럼폭 **교시 79px·요일 51px** → 웹 `PERIOD_COL_W 92→80·DAY_COL_W 150→60`(51에서 가독성 위해 +9)·수/주말 2배(120)로 맞춤. 스프레드시트=엑셀 익스포터 xlsx 변환이라 거의 일치.
+- **요일 헤더에 날짜(스프레드시트→웹 역이식, 2026-06-29)**: 기본뷰 요일 헤더가 "월"만 보이고 날짜가 없었음(엑셀 익스포터는 이미 날짜 포함) → page가 `weekMonday`(조회 주 월요일)를 WeekdayGroupTables에 전달, 순수 헬퍼 `dayDateLabels`(UTC 롤오버 안전)로 요일별 "M/D" 계산 → 헤더에 "월 6/29 / 목 7/2"(평일·주말 모두). 주간 이동(타임머신)하면 그 주 날짜로 갱신.
+- **학생 행 ijw식(가독성)**: 52px라 기존 justify-between은 이름이 먼저 잘림 → **"이름/학교학년" 한 줄 truncate(이름 우선, 메타가 뒤에서 잘림)**로 전환([class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) StudentRow/DraggableStudentRow). 메타는 **`formatSchoolGrade(...,{numberLast:true})`**로 압축("경명중"+"중1"→**"경명중1"**, exports/math-timetable/student-format.ts 재사용). 좁아도 이름 노출·전체정보는 hover.
+- 검증: typecheck0/lint0(신규0)/**test518** + 라이브(PSS, localhost:3001): 4그룹 행·JJ2A(1-2) 풀높이 학생10명·폭 80/60·요일 날짜(월 6/29)·학생 이름 정상 표시 스크린샷 확인. ⚠️ build 보류(실행 중 dev 서버 .next 충돌 회피, typecheck 커버).
+- **헤더 분할(ijw식 빈 서브슬롯 밴드, 2026-06-29 후속)**: 시각 라벨만으론 1-2를 한눈에 못 본다는 제보 → [class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `ClassCell`에 **`subSlot` prop**(top/bottom/full) 추가. bottom(1-2만)이면 헤더 **위에 빈 1-1 밴드**, top(1-1만)이면 헤더 **아래 빈 1-2 밴드**를 26px로 그려 "어느 칸 수업인지" 시각 표시(**학생 영역은 풀 유지** — 밴드는 26px만 차지). `subSlot`은 weekday-group-tables `subSlotOf(card,config,rowKey)`가 그룹 g의 서브슬롯 시각(2g-1 끝/2g 시작) 대조로 판정. 검증(라이브): JJ2A(1-2) 헤더 위 빈 밴드 + 학생 10명 전부.
+- **셀 시각 텍스트 삭제 + hover 라벨 통일(2026-06-29 후속, 사용자 요청)**: 셀 헤더의 "15:25~16:20"은 hover 카드에 이미 나와 중복 → 셀에선 제거(이름+인원+강의실만). hover 정보카드([hover-cards.tsx](<src/app/(shell)/timetable/_components/hover-cards.tsx>) `StudentInfoCard`) 학교·학년도 셀과 동일하게 **`formatSchoolGrade(numberLast)` 압축**("초6 · 칠성초"→**"칠성초6"**).
+- **편집 드래그 = 학생이름 우선(2026-06-29 후속)**: 좁은 칸(60px)에서 학생 드래그 이동 시 반이름(이동 행의 `→대상반`, 전입예정의 `←출발반`)이 shrink-0라 **학생이름을 밀어내 안 보임**. → [class-cell.tsx](<src/app/(shell)/timetable/_components/class-cell.tsx>) `DraggableStudentRow`는 `→대상반` 제거하고 학생이름+작은 "→"만, "전입 예정" 미리보기도 `←출발반` 제거하고 "+학생이름"만. 드래그 데이터(`fromClassName`)는 유지(이동 동작 무영향), 표시만 학생이름 우선.
+- ⚠️ **트레이드오프**: 60px라도 평일 칸은 학생 메타(학교)가 잘림(이름 우선) — 수/주말 120px 칸은 "이름/경명중1" 다 보임. 통합뷰는 의도적으로 4그룹 유지(subSlot 미전달=헤더 분할 없음). + owner 연동 탭(`?tab=sheets`)도 전체폭 2열로 넓힘. ⚠️ 한 강사 셀에 1-1·1-2 서로 다른 반이면 2카드 적층(ijw 동일, genuine 2반 케이스).
+
+### 직원 등록 createStaff 전면 복구 + 창 스위처 독 자동 숨김 (2026-06-29) — ✅ 게이트 + 실 DB 재현·검증
+**A. 직원 등록 "Database error creating new user" — 버그 2개 수정** ([staff/server/actions.ts](src/features/staff/server/actions.ts)):
+- **① 이메일 중복(사용자 제보 에러)**: `public.users`엔 유니크 `(tenant_id,email)`이 있고, **POC 임포트 직원 41명**(auth 없는 `public.users`-only 행)이 이메일을 점유. 그 이메일로 `createUser`하면 `auth.users`→`public.users` 미러 트리거(`tg_sync_user_from_auth`, 0001a)의 insert가 그 유니크를 위반 → 트리거 raise → createUser가 **"Database error creating new user"(500)** 로 롤백. → **createUser 전 이메일 사전검사**(`.ilike`)로 잡아 명확한 메시지("이미 이 이메일로 등록된 직원이 있습니다").
+- **② 이중 insert(잠복, 신규도 실패)**: createUser가 미러 트리거로 `public.users` 최소행(6컬럼)을 만드는데, createStaff가 **또 같은 id로 `insert`** → `users_pkey` 충돌(23505) → 신규 직원도 항상 "직원 row 생성 실패". → **2단계 insert→update**(트리거가 만든 행을 풀데이터로 보강). 롤백도 auth+`public.users` 둘 다 정리(`deleteUser`는 `public.users`를 안 지워 고아 남던 것 차단).
+- 실 DB 재현/검증: 고아 41명 확인 → 기존 이메일로 createUser 500 재현 → 수정 후 **신선 이메일 정상 등록(풀데이터)·중복 사전검사 잡힘**. super-admin `createTenantWithMaster`는 이중 insert 없어(트리거 위임) 무관. ⚠️ **임포트 직원에게 로그인 계정 부여(활성화)는 여전히 불가**(id 불일치, [[#31]] — 기존 직원→계정 활성화 별도 기능 필요).
+**B. 창 스위처 독 자동 숨김** ([window-switcher.tsx](src/components/workspace/window-switcher.tsx)): 최대화/큰 창의 본문 하단 중앙(페이지네이션 ←이전/다음→·버튼)을 **하단 중앙 고정 독이 덮어 클릭 차단**. → 맥 독식 **자동 숨김**: 평소 얇은 핸들(좁아서 본문 거의 안 가림), 핸들/하단 호버 시 독이 떠오름(슬라이드업), 숨김 시 `pointer-events` 차단으로 **본문 클릭이 그대로 통과**. **창 1개만 열림(최소화 아님)이면 독 자체 숨김**(전환 대상 없음 = 중복·겹침 제거). 라이브 4단계 검증(독 사라짐 → 2창 핸들 → 호버 시 독 → 떼면 숨음).
+
+### 운영 적합성 하드닝 — 블로커 B1~B6 + 강사 시간표 스코핑 (2026-06-25) — ✅ 게이트 그린 + 라이브 검증
+ijw↔eywa 크로스검증(둘 다 Chrome MCP) + 15에이전트 운영적합성 감사([[project_operational-readiness-verdict]]) 결과,
+코어(RLS 격리·접근제어·돈 계산·스케일)는 프로덕션급이나 실학원 end-to-end를 막는 **블로커 6 + 멀티스태프 PII 1**을 수정.
+항목별 게이트(typecheck0/lint0). **test 470→480**(generate 폴백 10), **test:rls 4**(신규), build✓.
+- **관측성 단일 진입점**(B3): 신규 [`reportError`/`reportWarning`](src/lib/observability/report-error.ts)(외부 서비스 0, 구조화 JSON→Vercel 로그 grep) +
+  [`src/instrumentation.ts`](src/instrumentation.ts)(Next16 `register`=zod env 검증[코어4 hard-fail·권장 WARN] + `onRequestError`=서버에러 중앙 캡처).
+  **소비처**: 웹훅 background write ~7곳(`route.ts` `runWrite`로 래핑→`{error}` 검사·로깅), generateJSON 폴백 로그, cron 회수 로그.
+- **AI provider 폴백**(B1): [models.ts](src/lib/ai/models.ts) `resolveModelChain`(키 있는 provider 정렬) + [generate.ts](src/lib/ai/generate.ts) `generateJSON`이
+  **체인 루프**로 호출 → 401/403/429면 다른 provider 자동 재시도(무효·만료 키도 회복; 기존엔 무효 키가 첫 provider에 고정). 그 외 오류는 즉시 한글화 throw.
+- **웹훅 URL 중앙화**(B6): [`getAppUrl`/`getAssemblyaiWebhookUrl`](src/lib/config/app-url.ts) — `eywa-alpha.vercel.app` 조용한 하드코딩 폴백 제거,
+  미설정 시 명확 throw. 3흐름(meetings/enrollment/consultations) 4곳이 이 헬퍼 사용. `.env.local.example`에 `NEXT_PUBLIC_APP_URL` 명시.
+- **멈춘 전사 복구 cron**(B2): [`/api/cron/reconcile-transcriptions`](<src/app/api/cron/reconcile-transcriptions/route.ts>)(`CRON_SECRET` Bearer 게이트) +
+  [vercel.json](vercel.json) `0 18 * * *`(매일 1회 — ⚠️Vercel **Hobby는 cron 일 1회 제한**이라 `*/15`은 배포 거부됨; 더 빠른 회수는 Pro 업그레이드나 외부 스케줄러로 라우트 호출).
+  3테이블 `processing_status IN (uploaded/transcribing/analyzing) AND updated_at<now-30m` → `failed`+안내(명시 실패→사용자 retry 유도). **라이브 E2E**: no-auth 401 / secret 200 `reconciled.meeting_minutes:1` / 멈춘 행→failed.
+- **강사 `/timetable` 스코핑**(intra-tenant PII): [queries.ts](src/features/timetable/server/queries.ts) `getWeeklyScheduleWithStudents(teacherId?)` — teacher면
+  `getTeacherScope().classIds`로 슬롯 필터. [page.tsx](<src/app/(shell)/timetable/page.tsx>)가 `requireAccess` 반환 user로 teacherId 전달. [teacher-menu](src/components/teacher-menu.tsx) 시간표 링크 복원.
+  **라이브 E2E**: 박지훈 영어뷰 48슬롯/489 (영어 칩만, 본인만) vs master 371슬롯/2470(3과목·전강사) — 누수 차단 확인.
+- **DB 프로비저닝 일원화**(B4): [`scripts/apply-all-alphas.ts`](scripts/apply-all-alphas.ts)(`pnpm db:alphas`, 멱등·사전순 54파일) — 신규 DB는
+  `db:migrate && db:alphas`. `0019a`(dropped `scenarios`)는 존재 가드로 no-op화. README §3/§4/§5 갱신(0050a~0053a 추가).
+- **RLS 격리 회귀테스트**(B5): [`tests/integration/rls-isolation.test.ts`](tests/integration/rls-isolation.test.ts)(`pnpm test:rls`, [vitest.integration.config.ts](vitest.integration.config.ts)) —
+  2-테넌트 throwaway + `set local role authenticated`+JWT claim으로 실제 RLS 발동. 본인 테넌트 1·타 테넌트 0 검증. 기본 `pnpm test` 미포함(DB 없는 CI 안전).
+- ⚠️ **사용자 ops(코드 불가)**: Vercel `UPSTAGE_API_KEY` 교체, 카카오 비즈채널·SOLAPI(알림톡), `CRON_SECRET` 프로덕션 설정. 학부모 메시징 실발송·대시보드 강사 스코핑은 후속.
+
+### 인쇄 플로팅 창+A4 표준 / 교재요청서 / 교재 3체크 / 지출 미리보기 / 계산기 / 배선 감사 (2026-06-24) — ✅ 게이트 그린(시각검증 사용자 몫)
+사용자 연속 요청 묶음. 전부 typecheck0/lint0/라우트307. ⚠️ Chrome MCP 미연결 → **시각 인쇄/렌더 검증은 사용자 확인 필요**.
+- **인쇄 = 플로팅 창 + A4 표준**(핵심): 인쇄 버튼 있는 모든 곳을 새 탭이 아니라 **플로팅 창**으로 연다. 신규
+  [`usePrintWindow`/`PrintWindowButton`](src/components/workspace/print-window.tsx)(창 id `print/<type>/<id>` + ROUTE_WINDOW_SIZE `print/<type>` A4 등록 —
+  windowIdForHref 파생 id는 longest-prefix 미스로 DEFAULT 480×560로 떨어지므로 명시 id 필수). 진입점 라벨="인쇄 미리보기"(창 띄움),
+  창 안 window.print()="인쇄". 닫기는 embedded(x-embed 헤더)면 숨김(창 X). **세부 규약·5체크는 디자인 시스템 "인쇄(Print)" 섹션 참조.**
+  - A4 클리핑 근본픽스(globals.css `@media print`): 셸/임베드 `<main h-screen overflow>`가 인쇄 시 문서를 한 화면 높이로 잘라
+    2페이지째(환불 규정 등)가 사라지던 것 → html/body/main `height:auto`·`overflow:visible` 리셋. 전역 landscape @page(시간표용)는
+    유지하되 세로 문서는 `print-portrait` 클래스로 opt-in(@page portrait-doc). **통짜 break-inside-avoid 금지**(섹션 통째 밀림→행 단위).
+  - 인쇄 공간 압축: `.quote-doc`(수강료 안내문)·`.meeting-doc`(회의록) 스코프 CSS로 글씨·패딩·여백 대폭 축소(빈 견적/적은 회의도
+    2페이지 넘던 것 1페이지화). 회의록 인쇄에 **전사 생략 토글**. 화면은 무영향.
+- **교재요청서**(ijw `TextbookPreviewCard` 이식, `(print)/textbook/[id]/print`): serif·가운데정렬·외곽2px/내부1px 카드 + PNG(html2canvas, oklch
+  회피로 inline hex)·인쇄. **학원설정 billing.account(은행/예금주/계좌) 5단계 배선** → 카드 계좌 자동표시(데모 계좌 세팅됨).
+- **교재 상태 = ijw식 3개 독립 체크(등록/주문/납부)**(5단계 드롭다운 폐기, 0051a `registered_at`+`status_by_name/status_at`): 각자
+  타임스탬프 + 마지막 변경자·날짜. flex-wrap으로 좁은 창 자동 2행. [toggleTextbookCheck](src/features/billing/server/textbook-actions.ts).
+- **지출 증빙 첨부 썸네일 미리보기 + 라이트박스 확대**(signExpenseReceipts 일괄 서명). 회의 목록 카드 요약 길면 hover 전문.
+- **수강료 계산기**: 교재/기타 picker에 **교재 단가표(146권) 연동**(교재명 검색)·필수항목 빨간 `*`·교재/기타 에디터 라벨.
+- **비활성 버튼 필수 `*` 전수 sweep**: 실게이팅 3곳(계산기·학생/시간표 엑셀 import)만 적용, 6곳 skip(사유 기록).
+- **배선 orphan 전수 감사**(멀티에이전트 + 수동 적대검증): **나가리되는 user-facing 기능 0건**. dead code(미사용 shadcn 5·죽은
+  컴포넌트 StudentQuickPanel/Popover·죽은 액션 endEnrollment/recomputePrimaryTeacher·write-only `textbook_orders.notes`)만 발견.
+  ⚠️ **CLAUDE.md "student-quick-panel 모바일 peek 폴백 잔존" 메모는 stale**(실제 미연결). 정리는 백로그.
+- **신규 [`docs/audit-log.md`](docs/audit-log.md)**: 검토 항목 체크오프(이중검토 방지). 필수* sweep 8폼 판정 + 배선 감사 결과 기록.
+- **후속 1 — 교재 메모 orphan 복구**: `textbook_orders.notes`가 입력만 받고 어디서도 표시 안 되던 write-only 갭 → 목록 행 "메모:" 표시 + 수정 prefill(round-trip).
+- **후속 2 — dead code 정리**(audit 백로그): 미사용 shadcn 5(tabs·checkbox·badge·card·table)·죽은 컴포넌트 2(StudentQuickPanel/Popover)·중복
+  액션 1(`endEnrollment`, `endSingleEnrollment`가 실사용) 제거. `recomputePrimaryTeacher`는 유용한 미배선 유틸이라 유지.
+- **후속 3 — AI 보고서 섹션 인라인 수정(회의록 + 등록상담)**: staff가 인쇄/공유 전 AI 오류를 직접 교정. 섹션 hover→수정→textarea→저장,
+  해당 섹션만 jsonb 머지(다른 섹션 보존) + 마지막 수정자·시각. 상단에 "OOO님 수정·시각".
+  · 회의록: `ai-report.tsx` 아코디언, `updateMeetingReportSection`(0052a `ai_report_edited_by/at`).
+  · 등록상담: `consultation-report-editor.tsx` 카드 12섹션, `updateConsultationReportSection`(0053a `report_edited_by/at`).
+    `print_payload.audioReport`를 머지 — **동결 스냅샷이지만 명시적 교정 허용(사용자 선택 A)**. ⚠️ 명시적 "재분석"을 누르면 같은
+    model_version 행이 덮어써질 수 있음(재분석은 명시 버튼이라 인지됨). ⚠️ 데모에 분석행 0개라 검증용 테스트 audioReport 1행 시드(상담 d6126902).
+  pnpm build 게이트도 통과(4게이트 그린, 인라인수정·dead code 정리 전 기준 — 변경은 모두 typecheck0/lint0/라우트307).
+- ⚠️ **남은 후속**: ① 시각 인쇄 검증(방향·크롬제외·페이지수, Chrome MCP 미연결) ② 인라인수정·정리 후 `pnpm build` 재확인(dev 점유 시 보류).
+
+### 강사 경험 대규모 보강 — onescreen 데모 → 실작동 + 강사 스코핑 + 허브 (W1~W3, 2026-06-24) — ✅ 브라우저 E2E
+owner 쪽이 ijw 패리티로 대거 채워지는 동안 강사(teacher)는 `/onescreen` 한 화면뿐이고 그마저 **하드코딩 데모**였다.
+멀티에이전트 강사경험 갭 감사(8영역 60건) → **제품결정: B(원스크린 전문화 허브)** 선택(사이드바 복원 A·하이브리드 C 대신,
+"강사=원스크린 전용" 기존 정체성 유지). W1(데모→실데이터)·W2(스코핑+내비)·W3(허브 깊이) 완료.
+
+**W1 — onescreen 데모 → 실데이터 작동 도구:**
+- **데모 강사 실데이터화**: `teacher@ijw-demo.com`(박지훈)은 seed 계정이라 POC 564명 데이터의 반에 담당이 0개였다 →
+  `scripts/_poc_migration/assign-demo-teacher.cjs`(멱등)가 **teacher 없는 english 반 6개(학생 61명, mon~fri 분산)** 배정.
+  ⚠️ **비파괴**: null-teacher 반만 대상 → 기존 POC 강사·병렬 owner 세션 무영향(남의 반 안 뺏음).
+- **실데이터 로더**([onescreen/server/roster.ts](src/features/onescreen/server/roster.ts)): `getCurrentUser` → 강사 본인의
+  **오늘 요일 담당 반 → 활성 수강생** 조회(강사 스코프=누수 없음, fetchInChunks). 오늘 수업 없으면(주말) 전체 담당 반 폴백.
+  `DEMO_ONESCREEN` 하드코딩 제거([page.tsx](<src/app/(shell)/onescreen/page.tsx>)). 날짜·학년필터칩도 실데이터 도출.
+- **과목 인지 진도 입력**: onescreen UI가 math 커리큘럼(757줄 `curriculum.ts`) 전용이었다 → 박지훈은 영어라 빈 드롭다운.
+  `Subject.subjectKey` 추가 → `progress-card`가 **math=커리큘럼 드롭다운 / 그 외=freeform 텍스트**로 분기(미지정=데모=math 보존).
+- **보고서 DB 저장**(D3): 발송이 토스트 목업이었다 → [server/actions.ts](src/features/onescreen/server/actions.ts) `saveLessonReport`가
+  `lesson_reports`(0049a)에 INSERT(진도·시험·과제·강사·본문, source='onescreen') + **강사 스코프 가드**(담당 반 학생 아니면 거부).
+  메시징/PDF 발송 연동은 후속(토스트도 정직하게 "저장됨, 발송 연동 준비 중"). ⭐ lesson_reports는 시간표 hover "[진도]" 소비처와 동일 → 통합.
+**W2 — 강사 데이터 스코핑(E2 보안) + 미니멀 셸 '내 메뉴' 드롭다운(F2):**
+- ⚠️ 갭: 강사는 메뉴에 scoped 권한이 있으나 (1) 쿼리에 강사 필터가 없어 URL로 가면 **테넌트 전체가 보임**(intra-tenant 누수)
+  (2) 미니멀 셸에 내비가 없어 도달 불가. 둘 다 해소.
+- **공유 헬퍼** [`src/lib/auth/teacher-scope.ts`](src/lib/auth/teacher-scope.ts)(React cache): 강사 담당(`classes.teacher_id`) →
+  `classIds`·`studentIds`·`subjects`. **각 목록 쿼리가 자체 스코프**(호출부가 빠뜨려도 `systemRole==='teacher'`면 좁힘=fail-safe).
+- **스코핑 적용 5 feature**: students(목록+Stat) · classes(목록+Stat) · attendance(반selector + URL classId 가드) ·
+  consultations(목록+Stat+학생드롭다운) · exams(담당 **과목** 기준 — exams엔 teacher_id 없음). 검증: 박지훈 학생 524→**61**.
+- **`TeacherMenu`** 드롭다운([teacher-menu.tsx](src/components/teacher-menu.tsx), layout 강사 헤더): **스코핑 완료 페이지만** 노출
+  (원스크린·내 학생·출석부·내 수업·성적관리·학생상담 6링크). ⚠️ 미스코프(시간표·대시보드·retention)는 누수 방지로 **제외**.
+
+**W3 — onescreen 허브 깊이(B2):**
+- [`hub-bar.tsx`](src/features/onescreen/components/hub-bar.tsx): **통계 4카드**(오늘 학생·진도확정·테스트입력·보고서발송, 클라 state 도출)
+  + **오늘 수업 위젯**(roster가 오늘 담당 반·시작시각·인원 반환 → 시각순 칩). 강사가 "오늘 누구·몇 반·언제"를 한눈에.
+
+- **검증**: typecheck0/lint0(신규0)/test441 + **브라우저 E2E**: W1(실학생 51명/오늘 수요일/영어 freeform → 보고서 DB저장
+  "권나연·영어 Unit8·박지훈"·발송완료 pill) · W2(학생 61 스코프·내메뉴 6링크) · W3(통계4·오늘 수업 5개 14:20~18:20 시각순)·콘솔에러0.
+- **남은 후속(저우선)**: 시간표 스코핑(복잡 — onescreen 오늘일정 위젯이 대체) + exams 디테일 스코핑 + 강사 셀프 급여(/my-payroll,
+  데모 급여설정 부재로 임팩트 작음) + 과목별 보고서 스키마(`lesson_reports.subject`) + 카톡/문자/PDF 실발송 연동.
+
+### 등록상담 상세/타임라인 가독성 — 화자구분·전사접힘·AI불릿·월픽커 (2026-06-24) — ✅ 실브라우저 + 멀티에이전트 리뷰
+사용자 요청 4건(타임라인 월 점프 / 전사 기본접힘 / 전사 화자 상담자·학부모·학생 구분 / AI 분석 줄바꿈·강조).
+- **타임라인 월 픽커**: [timeline-view.tsx](<src/app/(shell)/students/[id]/_tabs/timeline-view.tsx>) 가운데 월 라벨을
+  `SearchableSelect`(드롭다운 규약)로 교체 → 아무 달이나 바로 점프(◀▶는 유지). 실검증: 7개월 목록·4월 클릭→점프.
+- **전사 화자구분 + 기본접힘**: 회의록 전용이던 `TranscriptSection`을 **공유 컴포넌트**로 추출
+  ([src/components/transcript-section.tsx](src/components/transcript-section.tsx), 구조적 utterance 타입 `{speaker,text}` —
+  meetings·enrollment 둘 다 만족). 기본 접힘(🎤 클릭 펼침)·발화 60개 캡·"+N개 더보기". **화자→역할**은 웹훅 13섹션
+  콜에 `speakerRoles` 추론 추가([route.ts](<src/app/api/webhooks/assemblyai/route.ts>) handleConsultation, A/B→상담자/학부모/학생,
+  `print_payload.speakerRoles` 별도 저장 — audioReport는 13섹션만, destructure로 분리). 쿼리가 `speakerLabels`(Array.isArray
+  가드)·`speakerRoles` 노출. 역할맵 없으면 "화자 A/B" 폴백. 실검증: [상담자]/[학부모] 라벨 렌더.
+- **AI 분석 가독성**: 신규 [RichText](src/components/rich-text.tsx)(서버컴포넌트 가능·hook無·dangerouslySetInnerHTML無=XSS안전)가
+  `\n`·불릿마커·`**강조**`를 안전 렌더. ⚠️ **solar-pro3가 줄바꿈/불릿 프롬프트 지시를 무시**(쉼표 run-on 반환)하므로
+  프롬프트에만 의존 안 함 — 리스트형 섹션(걱정/질문/요청/특이/대응/세일즈/합의/후속/주의)에 `bulletize` 주면 RichText가
+  **괄호 인식 쉼표 분할**(`splitTopLevelCommas`, "(숙제 부담, 문법)" 같은 괄호 안 쉼표 보존, Vitest 4)로 불릿화 → 모델
+  비협조와 무관하게 동작. 산문 섹션(상담성격/가정배경/만족도)은 문단. 웹 상세 + **인쇄 페이지**(`(print)/enrollment/[id]/print`) 동일 적용.
+- **멀티에이전트 리뷰 적용**: 적대 리뷰 워크플로(차원별 find→검증, 29 에이전트) → 실결함 6건 픽스(강조 정규식 non-greedy·
+  RichText 빈입력 가드·speaker_labels Array.isArray·studentTraits/teacherResponse 불릿추가·audioReport에서 speakerRoles 분리·
+  인쇄 RichText 통일). 나머지 findings는 "정상 확인".
+- 검증: typecheck0/lint0/**test445**(rich-text 4 추가) + 실브라우저(월픽커 점프·전사접힘+[상담자]/[학부모]·AI 52불릿/산문 분류·콘솔0).
+- **후속(사용자 피드백)**: ① AI 분석이 "너무 나열형·영역구분 안 됨" → 12섹션을 각각 **이모지 헤더(🧭🏠😟❓🙋😊🎒🧑‍🏫💡🤝📞⚠️) + 테두리 카드**로
+  분리(회의록 패턴, `ConsultationReportPanel`). ② 과목별 점수 **영어 라벨이 raw 키**(academyHistory·learningProgress 등)로
+  뜨던 것 → `subjectLabelMap`이 `COMMON_FIELDS`(form-config export) 라벨을 항상 포함해 한글화(영어는 ENGLISH_GROUPS에 공통필드가 없어 폴백됐던 것).
+- **후속2(사용자 피드백)**: ① 헤더 **수정 버튼 2개**(전체 편집 `/edit` 링크 + ConsultationManageButtons 모달) → 모달 quick-edit
+  제거하고 **전체 편집 페이지 하나로 통일**. ② 헤더 **배지 2개**(outcome "AI 완료" + processing "완료") → `PROCESSING_BADGE.completed=null`로
+  중복 배지 숨김(진행 중·실패만 표시). ③ **좌우 카드 스타일 통일** — 공용 `Card`를 단일 박스(이모지+굵은 라벨 헤더, 별도 음영 바
+  제거 → "이중 박스"감 해소)로 바꾸고 좌측 정보 카드(🙋📚📇🧑‍🎓📊)·우측 AI 섹션 모두 동일 스타일 사용(17개 카드 동일 클래스 확인).
+- **후속3(IA 정리, 사용자 피드백)**: 우측만 "상담 AI 분석" 제목이 있어 좌우 비대칭이었음 → **좌측에 "상담 기록" 제목 추가**(우측과 대칭).
+  좌측=**상담 기록(입력)**=학부모 QR 제출/상담사 입력/AI 자동입력이 함께 채우는 한 기록, 우측=**녹음 분석**(13섹션 + 전사). 입력 데이터인
+  **과목별 점수를 우측(분석)→좌측(입력)으로 이동**(좁은 컬럼 맞춰 단일 컬럼). `from_public_intake`면 상담 기록 헤더에 **"학부모 직접 제출" 배지**.
+
+### 음성 파이프라인 복구 + 등록상담 폼 자동입력(ijw 패리티) (2026-06-23) — ✅ 실 ijw 녹음 E2E
+사용자 요청: 상담/등록상담의 **녹음→전사→분석**이 실제 작동하는지 점검 + 등록상담은 ijw처럼 **전사 분석으로
+폼 내용까지 자동입력**되는지. ijw Firebase Storage의 **실제 등록상담 녹음**(이윤건 19분/17.7MB,
+`registration-recordings/`, serviceAccount `D:\ijw-calander\serviceAccount.json`, 버킷 `ijw-calander.firebasestorage.app`)을
+eywa 파이프라인에 그대로 흘려 E2E 검증.
+- **🐛 전사 전면 차단 버그 발견·수정**(`4c42531`): [assemblyai.ts](src/lib/ai/assemblyai.ts) `submitTranscript`가
+  **폐기된 `speech_model: "universal"`** 사용 → AssemblyAI가 이제 **HTTP 400 거부** → eywa의 **모든 전사
+  (회의·등록상담·학생상담, submitTranscript 공유)가 깨져 있었음**. `speech_models: ["universal-3-pro","universal-2"]`로
+  교체(ijw functions/index.js와 동일). 실 19분 녹음 → **7,866자 한국어 전사 복구 확인**.
+- **⚠️ 웹훅은 프로덕션에서 실행됨**(`NEXT_PUBLIC_APP_URL` 미설정 → 폴백 `eywa-alpha.vercel.app`). 즉 로컬에서
+  녹음해도 AssemblyAI 콜백은 **프로덕션 웹훅**으로 가고 같은 Supabase DB에 결과를 쓴다(시크릿 일치 확인). 그래서
+  위 "학생상담 AI 녹음"의 "localhost 웹훅 미도달" 메모는 **부정확**. **단 프로덕션 Vercel의 `UPSTAGE_API_KEY`가
+  무효(401)** → 분석이 프로덕션에서 401로 실패(전사는 성공). **운영 조치 필요: Vercel env UPSTAGE_API_KEY 갱신.**
+  (로컬 키는 유효 → 로컬 dev 웹훅으로 분석 완주 검증.)
+- **등록상담 폼 자동입력(ijw `processRegistrationRecording` 패리티)**: 기존엔 13섹션 분석을 읽기 패널로만 보여주고
+  기본 4필드만 자동입력. 이제 **전용 폼 추출 콜**([form-extract.ts](src/features/enrollment/server/form-extract.ts),
+  13섹션과 `Promise.allSettled` 병렬)이 학교·학년·보호자·관계·성별·생일·주소·상담경로·진로·형제·셔틀·등록상태·과목·
+  학부모요구·이전학원/최근성적/약점(learning_history)·후속조치·**과목별 점수(subject_details)**를 추출 →
+  순수 [form-fill.ts](src/features/enrollment/form-fill.ts) `buildFormPatch`가 **빈 필드만** DB 패치로 매핑(수기 입력
+  보존, 정적 enum 검증, Vitest 13). 웹훅 [handleConsultation](<src/app/api/webhooks/assemblyai/route.ts>) 배선.
+  실검증(이윤건 녹음): `subject=english`·`parent_request`·`learning_history{prevAcademy,lastScore,weakSubjects}`·
+  `siblings`·`gender`·`follow_up_content`·`subject_details{math,english}` 자동입력 → 상세 폼 카드에 렌더.
+- **AI 키/인증 오류 한글화**([generate.ts](src/lib/ai/generate.ts) `rethrowAi`): generateJSON이 401·403·429를
+  관리자가 알아볼 한글 메시지로 throw("AI 키 오류: … 관리자가 키를 확인·갱신")→ processing_error에 영문 원문 대신
+  조치 가능한 메시지. (silent provider 폴백은 의도적 미추가 — 키 무효는 표면화돼야 관리자가 고친다.)
+- 검증: typecheck0/lint0(신규)/**test441**(form-fill 13) + 실 ijw 녹음 E2E(전사 7866자·13섹션·폼 자동입력 DB영속).
+  ⚠️ 브라우저 시각검증은 dev 재시작 후 웨일 확장 연결 끊김으로 미캡처(데이터 레이어·서버 200으로 검증). 테스트 행
+  `7149e772`(이윤건)는 데모 DB에 잔존(실 PII — 정리 대상).
+
+### ijw→eywa 갭 전수 재비교 + Tier 1 이식 6건 (2026-06-22) — ✅ 게이트 그린 + 실검증
+ijw-calander ↔ eywa 현행 전수 비교(멀티에이전트 32 — 16영역 비교+검증, 거짓양성 제거) → confirmed 107건을 우선순위
+재분류(`docs/ijw-eywa-gap-2026-06-22.md`). "이미 구현(overstated 16)·의도적 제외 다수"를 빼면 진짜 이식 가치 ≈20건.
+그 중 **Tier 1(작고 임팩트 큼) 6건 구현**(항목별 1커밋, 미push):
+1. **등록상담 텍스트 검색**(이름/전화/학교) — 칸반만이던 enrollment에 `.or(ilike)` 검색(학생상담 패턴 이식, 학생id 조인 불요). 실검증 204→62.
+2. **출석 매트릭스 셀 메모 입력** — 저장·표시는 기존, 팝오버에 메모 input + `setAttendanceCell` note 파라미터(상태와 함께 저장).
+3. **반 색상 폼 배선** — `classes.bg_color/text_color`·시간표 통합뷰 소비처는 기존, 폼·createClass/updateClass 미배선이라 항상 과목색 폴백이던 것 연결. native color picker + text_color 휘도 자동(`color-utils.readableTextColor`).
+4. **회의록 제목 인라인수정 / TXT 다운로드 / 음성회의록 다시분석** — `updateMeetingTitle` + 제목 편집기 / 8섹션·전사 평문 Blob(`MeetingTxtButton`) / 완료 음성건도 재제출 버튼(status 리셋→webhook 'completed' 가드 자연통과, 8섹션 재생성).
+5. **수납 결제 상세 6필드**(결제수단·카드사·현금영수증·적립금·할인사유·청구일) — `0042a` alpha(invoices +6컬럼, dev적용, RLS 0004a 유지) + schema + createInvoice/updateInvoicePayment + 생성/수정 다이얼로그 + 표 결제수단 라벨. 실검증: card/신한 DB영속 + 부분납부 행에도 라벨.
+6. **견적→청구 전환** — 계산기 견적(`tuition_quotes`, student_id 없음)에서 `create-invoice-dialog`를 청구액·메모로 prefill해 열고 학생은 picker로 선택(Option B 저위험, createInvoice 재사용·신규액션/마이그 無).
+- 검증: typecheck0/lint0/test399/build✓ + 실브라우저(로그인, 항목1·5 E2E·항목3·4 렌더·콘솔0). 커밋 `0b4c1b7`~`1df1702`.
+- ⚠️ 남은 갭: Tier 2(등록상담 테이블뷰·성적 목표설정/코멘트·출석 일별 미처리추적·퇴원 연락처/worklist·강사 인수인계·휴가 관리자대시보드·대시보드 30일추이)·Tier 3(학생상담 AI녹음·강의실 자동배정·엑셀 import마법사·시간표 시나리오). 의도적 제외(Calendar/Gantt/Chatbot/MakeEdu/Contracts)는 비이식. ⚠️ 공통UX 비교는 워크플로우 실패(플레이스홀더)·픽셀 시각비교 미수행 — 후속.
+
+### ijw→eywa 탭별 이식 후속 — Tier 2·3 진행 + 스코프 결정 (2026-06-23)
+사용자 상시 지시("모든 탭에 ijw 기능 한 탭씩 이식 + 브라우저/코드 점검을 스스로 끝까지, 10커밋마다 push")로 자율 진행.
+- **Tier 2 완료**: 출석 일별 미처리추적(`89ecec1`)·대시보드 재원변동 드릴다운(`8f0383e`)·휴가 관리자대시보드 `/staff/leaves`(`a884749`)·성적 목표설정+학습코멘트(`03d7860`, 0043a)·등록상담 테이블뷰(`e0bf1d8`)·강사 인수인계(`9e8bb84`, 0044a). (+성적관리 시험범위·퇴원 연락처/worklist는 직전 배치.)
+- **Tier 3**: ✅ **강의실 자동배정**(`9b6c3c0`, 순수 그리디 — 시간충돌회피+정원+균등분산, 마이그無). ✅ **엑셀 import**=학생 일괄등록(`1db514c`, ExcelJS 기설치 재사용)+시간표 enrollment import 기존.
+- **⚠️ 스코프 결정(사용자 2026-06-23)**: **시간표 시뮬레이션(시나리오) = 영구 배제**(Calendar/Gantt/Chatbot/MakeEdu/Contracts와 동급 비이식). **Excel/스프레드시트는 내보내기·가져오기만 있으면 충분**(마법사·임의 컬럼매핑 불요). 현 커버리지: 학생(export+import)·시간표(export+import)·수납(export). 재무 import는 위험·ijw 미존재라 비이식.
+- ✅ **학생상담 AI 녹음**(`4872931`, 0045a): eywa는 음성→전사→AI가 meetings·신입생 등록상담엔 이미 있었고
+  재원생 student_consultations만 텍스트 전용이던 갭을 메움. enrollment 오디오 파이프라인(AssemblyAI·generateJSON·
+  공용 웹훅·consultation-recordings 버킷·processing_status enum) 재사용 + student_consultations에 오디오/AI 컬럼 13개.
+  공유 `consultations/server/ai.ts`(케어 7섹션) → 웹훅 handleStudentConsultation + 텍스트 액션 runStudentConsultationAnalysis
+  단일 프롬프트. UI: 상세 녹음 패널(상태폴링·전사·7섹션·AI분석버튼) + 새상담 녹음/업로드 폼 + 목록 🎙️/AI 배지.
+  ⚠️ (정정 2026-06-23) "localhost 웹훅 미도달"은 부정확 — 실제론 웹훅이 프로덕션으로 라우팅돼 작동하며, 당시 미검의
+  진짜 원인은 `speech_model` 폐기 버그(전 전사 차단)였음. 위 "음성 파이프라인 복구" 섹션 참조(실 ijw 녹음으로 E2E 복구·검증).
+- **⚠️ 스코프 결정(사용자)**: 시간표 시뮬레이션(시나리오) 영구 배제 / Excel은 export·import만(마법사 불요).
+- **→ ijw 탭별 이식 Tier 1·2·3 사실상 완료**(의도적 제외 = Calendar/Gantt/Chatbot/MakeEdu/Contracts/시간표시나리오).
+- 검증: 항목별 typecheck0/lint0 + 신규 Vitest(classroom-assign 11·student-import 12, 전체 428) + Chrome(웨일) 실브라우저
+  E2E(자동배정 적용→DB·재실행 수렴 / 학생 import 6행→신규3·DB영속 / 학생상담 AI 7섹션 실 generateJSON(solar-pro3)→DB영속).
+
+### 등록 상담 폼 전체 + 학부모 QR 공개접수 (2026-06-23) — ✅ 실브라우저 E2E
+사용자 요청: ijw 등록 상담 폼 전체 이식 + 학부모 QR → 공개 등록 프로세스. 둘 다 enrollment에 구현·검증.
+- **등록 상담 폼 전체**(`9bead94`, 0046a): 6필드 → ijw 전체(메인 ~32 + 과목별 점수 탭). 메인은 enrollment_consultations
+  컬럼, 과목 점수(수학 영역점수·영어 AI/NELT/EiE 레벨차트·국어/과학/기타)는 `subject_details jsonb`.
+  데이터주도 [`form-config.ts`](src/features/enrollment/form-config.ts) + 공용 `consultation-full-form`(생성/수정, 섹션+과목탭,
+  useSubjectMaps/useGradeLevels 단일소스) + `/enrollment/[id]/edit` + 상세 '학생 상세 정보'·'과목별 점수' 카드.
+  ⚠️ create insert에 tenant_id 누락으로 RLS 거부되던 기존 버그 동시 수정(getCurrentUser().tenantId 명시).
+- **학부모 QR 공개접수**(`f9d42f2`, 0047a): `intake_tokens`(테넌트별 공개 토큰, RLS) + enrollment_consultations
+  from_public_intake/intake_token_id. 공개 라우트 `(intake)/intake/[token]`(proxy PUBLIC_PATHS, admin client로 토큰→테넌트
+  해석) → 학부모 폼 → `submitPublicIntake`(비인증 admin client: 토큰검증·레이트리밋1h20·허니팟·정화·privacy필수) →
+  enrollment_consultations(pending+from_public_intake). 관리 QR패널(/enrollment, 서버 qrcode SVG+공개URL) + 칸반 'QR' 배지.
+  의존성 `qrcode` 추가. ⚠️ 공개 쓰기는 admin client + 검증된 토큰의 tenant_id만 사용(조작 불가).
+- 검증(Chrome): 전체폼 생성→상세(과목점수95)→DB subject_details·tenant 영속→수정 round-trip / QR 토큰생성→/intake/{token}
+  학부모폼→제출→성공→DB(pending·from_public_intake·tenant·token링크)+submission_count→칸반 QR배지. typecheck0/lint0/test428/콘솔0.
+- **공개접수 서버검증 하드닝(2026-06-23, 멀티에이전트 보안감사 후속)**: `submitPublicIntake`가 비인증·admin client라
+  `<select>`(클라 가드)를 우회한 직접 POST에 무방비였음 → **필수·화이트리스트 서버검증 추가**: 필수(보호자명/연락처/학교/성별/
+  관계/상담경로/학년) 누락 시 거부 + 운영 enum(성별·혈액형·관계·상담경로=`form-config` 상수 / **과목·학년=토큰 테넌트의
+  `getTenantSettingsByTenantId`+`buildSubjectMaps`**, 단일소스 대조)으로 대조해 설정 밖 값 거부, 선택값은 null. 실검증: 정상제출✓·
+  변조 gender 거부(미저장)·무효 subject→null. + **카운터 정합**: `usage_count`를 제출 시가 아니라 공개 페이지 노출에서 +1해
+  조회(usage)≠제출(submission) 분리(패널 "조회·제출" 정확). (테넌트 격리·RLS·토큰 위변조는 감사서 정상 확인.)
+- **공개접수 운영 하드닝 A(2026-06-23, `0048a`)**: 신규 `intake_attempts`(ip_hash·ok·시각, RLS, 0048a) = **시도 기반
+  다층 레이트리밋** 단일소스 → `submitPublicIntake`에 ① **time-trap**(폼 렌더 후 `MIN_FILL_MS`=3s 미만 제출 거부, no-DB
+  선차단) ② **per-IP/per-tenant/per-token 슬라이딩 1h 한도**(상수 `IP_LIMIT`15·`TENANT_LIMIT`200·`TOKEN_LIMIT`60 —
+  합법 오픈하우스 버스트 우선, 거부건도 시도로 기록해 자원소모 abuse 카운트, 기존 "consultations 행 카운트"는 제거) ③
+  **env-gated Cloudflare Turnstile**(`TURNSTILE_SECRET_KEY`/`NEXT_PUBLIC_TURNSTILE_SITE_KEY` — 미설정=캡차 off=데모 무중단,
+  설정 시 siteverify fail-closed; `turnstile-widget.tsx`). IP는 `parseForwardedFor`(키오스크 재사용) → **sha256(ip:tenant)
+  해시만 저장(원본 IP 미보존)**. + `createIntakeToken` **기본 90일 만료**(미입력 시 영구 → +90d). 실검증(라이브 E2E):
+  정상제출✓·time-trap 거부✓·per-IP 16번째 차단✓·기본만료 90일✓·캡차 스킵(키 없음)✓. ⚠️ Turnstile 실키 발급은 운영 몫
+  (데모는 off 경로만 검증). 분산(다수 IP) 공격은 캡차가 주방어, 레이트리밋은 단일/소수 IP 백스톱.
+
+### 시간표 셀 hover 정보 카드 — ijw 시간표 hover 이식 (2026-06-23) — ✅ 실브라우저(ijw 라이브 대조)
+사용자 요청: ijw 시간표 마우스오버 정보를 "ijw와 동일한 정도까지" 이식. **ijw를 dev(3001)로 띄워 실제 hover를 관찰**
+(학생 행 title = HTML title이라 DOM에서 직접 확인) → ijw 학생 hover 4줄 확정: **이름/학년·학교 · (반이동 날짜) ·
+교재(학생별) · [진도] 날짜+내용**. (수업카드 헤더 툴팁은 ijw도 master 권한이라 억제 — 학생 title이 본체.)
+- **hover 인프라**: [`hover-cards.tsx`](<src/app/(shell)/timetable/_components/hover-cards.tsx>) — `HoverCard`(커서 위치
+  포털 fixed·z9999·pointer-events-none, overflow 컨테이너에 안 잘림, cloneElement로 트리거에 핸들러 주입) + `ClassInfoCard`
+  + `StudentInfoCard`. 양 뷰(`class-cell.tsx` 기본 / `rich-card-group.tsx` 통합, 둘 다 client) 배선. WindowLink에
+  onMouseEnter/Leave forward 추가.
+- **데이터(추가 fetch 최소)**: 학생 식별·학년/학교·상태·신입/전입·분리등원·퇴원일·영문명은 이미 props(런타임 StudentLine 전체 도착).
+  · **교재** = `textbook_orders`(이미 학생별, 실데이터 350행) 최신 1건을 시간표 쿼리가 배치 조인 → `StudentLine.latestTextbook`.
+  · **진도** = 신규 `lesson_reports`(`0049a`, RLS) — **ijw Edutrix Supabase의 reports(별도 프로젝트, anon read 15,716건)를
+    학생 이름 매칭으로 이식**([`scripts/_poc_migration/import-lesson-reports.cjs`](scripts/_poc_migration/import-lesson-reports.cjs),
+    멱등 source='edutrix_import', 진도 있는 최신 1건/학생 → 289명 매칭·296행). 시간표 쿼리가 최신 1건 배치 조인 → `StudentLine.latestReport`.
+- 수업 hover(ClassInfoCard)=수업명·과목(설정색)·담임·강의실(통합뷰 요일별)·시간·인원 / 미니그리드셀·강의실라벨=native title(풀 강사/강의실).
+- 검증: typecheck0/lint0/test428 + 실브라우저(eywa 학생 hover에 "교재 초4-2 발전 2권(2026-06-15)" + "진도 2026-03-19·김민주 / 1.9까지의 수의 순서…" 렌더, ijw와 동일 형식).
+- ⚠️ 남은 1줄 = **반이동 '날짜'**(eywa는 전입 배지만, enrollments에 전입일 추가하면 됨 — 소). 클래스 헤더 hover는 ijw(억제)보다 약간 더 보여줌(담임·강의실·인원, 무해).
+- ⚠️ 진도 데이터는 **Edutrix가 진실** — Firebase/Edutrix 재이식 시 import-lesson-reports.cjs 재실행(멱등). ijw .env.local의 VITE_SUPABASE_URL/ANON_KEY 사용.
+
+### 시간표 통합뷰 = ijw EnglishClassTab "반=열 리치 그리드" 충실 이식 (2026-06-22) — ✅ 데이터 백필 + 실검증
+사용자 요청: ijw 영어 통합뷰(스크린샷)의 깔끔함을 **그대로 이식**. 영어는 한 수업 안에 (요일,교시)마다 강사·LAB가
+다른 **여러 케이스**가 있어 요일×교시 미니그리드가 본질. (설계 변천: 전과목색오버뷰→단순카드그리드→**리치 그리드(최종)**.
+앞 둘은 영어 데이터를 못 살려 폐기.) **결정적 발견: eywa 데모 데이터가 평면**이라(슬롯별 강사/강의실/영문이름 0건)
+ijw 익스포트에서 **백필**해야 사진처럼 살아난다 → 백필 + 리치뷰 둘 다 구현.
+- **A. 데이터 백필** ([`scripts/_poc_migration/backfill-english-slots.cjs`](scripts/_poc_migration/backfill-english-slots.cjs),
+  멱등·`--apply`): ijw 익스포트(`D:\tmp\ijw-export-*.json`)의 `slotTeachers`(요일·교시별 강사·"LAB")·`slotRooms`·
+  `bgColor`/`textColor`·학생 `englishName`을 자연키 매칭(반=class_name+subject 유니크 / 슬롯=day+start_time, 교시표는
+  transform.ts와 동일 상수 / 학생=name+학교+학년)으로 eywa에 적재. **적용: slotTeacher 183·slotRoom 84·LAB 65셀·
+  반색 52·영문이름 29, 매칭누락 0**(highmath→subject_1 별칭). ⚠️ POC IdMap 미영속이라 ijw id 직접매칭 불가 → 자연키.
+- **B. 스키마(0041a)**: `class_schedules.slot_teacher_label`·`slot_room_label` 추가(dev적용). 영문닉네임("Hannah"/"Zoe")·
+  "LAB"·"LAB실"은 `users.display_name`(한글)·classrooms FK로 못 풀어 **문자열 라벨로 보존**(셀 표시·해시색). NULL=반 기본 상속.
+  (`classes.bg_color`/`text_color`·`students.english_name`은 기존 컬럼 — 백필만.)
+- **C. 쿼리 확장** ([timetable/server/queries.ts](src/features/timetable/server/queries.ts)): `fetchSlots`가 슬롯 라벨 +
+  반 색을, `getWeeklyScheduleWithStudents`가 학생 영문이름을 읽는다. `ScheduleSlot`에 `slotTeacherLabel/slotRoomLabel/classBgColor/classTextColor`,
+  `StudentLine`에 `englishName` 추가(기본뷰도 더 정확해짐 — 폴백 동일이라 무해).
+- **D. 리치 그리드 뷰**: 순수함수 [`class-grid.ts`](src/features/timetable/lib/class-grid.ts)(`buildRichCardGroups`/`teacherColor`,
+  +test 6) → 서버 [`rich-grid-view.tsx`](<src/app/(shell)/timetable/_components/rich-grid-view.tsx>)(그룹 빌드·섹션헤더) +
+  클라 [`rich-card-group.tsx`](<src/app/(shell)/timetable/_components/rich-card-group.tsx>)(DragScrollArea·좌측 sticky 라벨열·반=열·미니그리드).
+  **시작 교시별 섹션**(평일 기준, 주말 전용은 "주말" 섹션 — 각 섹션은 그 섹션이 쓰는 교시만=visiblePeriods). 카드 = ijw 헤더색(`bg_color`)
+  수업명 + 담임(반기본 ?? 최빈 슬롯강사) + **요일별 강의실**(`월수 본원304 / 목 LAB실·본원304`) + **요일×교시 미니그리드**(셀마다
+  강사약칭(`slice(0,4)`)·강사해시색 / LAB=파란배지) + **재원/대기/퇴원** 3섹션(신입 빨강·전입 초록, 영문이름 `이름 (English)`).
+  대기/퇴원 행높이는 그룹 내 max로 동기화(라벨열·전 카드 baseline 정렬). 읽기전용. 과목칩 양쪽 노출.
+  - **server-only 금지**([[#61]]): class-grid.ts·rich-card-group.tsx(클라)는 server-only 미import. SubjectMaps(메서드 보유)는
+    클라로 못 넘겨 → 서버가 `SUBJECT_SOFT[colorOf]` **plain 클래스 문자열**만 전달. teacherColor는 순수라 클라 import OK.
+- **갭(가짜 없이 폴백)**: 담임 ijw "Hannah"(영문닉네임 FK미해결)→최빈 슬롯강사로 폴백. 합반(classGroupId)·영어 레벨배너 미이식(후속).
+  강사 고정색 없어 이름해시. 슬롯 없는 반(고등E_고2 TOP 등)은 반기본강사 단색(수학과 동일).
+- 제거: 직전 카드섹션 뷰(`class-columns.ts`·`class-column-view.tsx`).
+- 검증: typecheck0/lint0/**test398**(class-grid 6)/build✓. **실브라우저**: 영어 통합뷰 46반·7섹션·LAB 65배지·강사셀(Kristine/Zoe)·
+  영문이름(Willy)·요일별강의실(본원302·LAB실)·PJ2 헤더색#93c47d·콘솔0 / 수학 67반·5섹션·반강사 단색(슬롯데이터 없음).
+- ⚠️ 후속: 슬롯 강사/강의실·영문이름은 **ijw 익스포트가 진실** — Firebase 전체 재이식 시 이 백필 스크립트 재실행(멱등). 합반·영어레벨 미이식.
+
+### 쿼리 성능/정합 2차 — 멀티에이전트 전수 감사 + 측정 기반 픽스 6건 (2026-06-20)
+대시보드 경량화에 이어 **전 feature 쿼리/페이지를 멀티에이전트로 전수 감사**(16 feature, 42 agent — 각 finding을
+적대 검증) → "전건 fetch + JS 집계(PostgREST ~1000행 silent 절단, #54)"·"대량 `.in()`(414, #53)"·"직렬 await"를
+21건 confirmed. **핵심 원칙(사용자 지침): 측정부터.** 감사가 "high"로 라벨한 다수는 **가설상 >1000행 미래 멀티테넌트**
+기준이었다. 데모 DB 실측(1회성 count)으로 **지금 실제로 잘리는 것만** 골라냈다: student_consultations **1340**·
+invoices 1606(단 월버킷 max 400=안전)·enrollments 1057/active 794·enrollment_consultations **204**(안전)·
+attendance/date 9·max class 15. → 결론: **상담 통계만 현재 데이터로 실제 오출력**, 나머지는 방어/지연.
+- **✅ 픽스(6건, 측정으로 선별)**:
+  1. **상담 통계 2함수 → DB group-by RPC**(`0040a_consultation_stats_rpc.sql`, dev적용): `getConsultationByCategory`·
+     `getConsultationTrend`([consultations/server/queries.ts](src/features/consultations/server/queries.ts))가 6개월
+     student_consultations(1340행)를 전건 fetch→JS 집계해 **1000행에서 잘려 카테고리·추세 student 라인이 340행 과소집계**
+     되고 있었다. `consultation_category_counts`/`consultation_monthly_trend`(security invoker + `auth_tenant_id()` 이중격리,
+     0039a 패턴)로 무절단. 브라우저 검증: 차트 렌더·콘솔에러0·trend 바 높이 월별 실분포 반영(4월 343=최고).
+  2. **classes `getClassesList` → `fetchInChunks`**: 활성 enrollment 전건 fetch(현 794, Firebase 이식시 >1000)를
+     표시 반 id로 청크 조회(getClassesPage 패턴). 같은 함수 schedules `.in(classIds)`도 청크화. 브라우저: "등록 학생 794명"·반당 6명·129반 정상.
+  3. **payroll 월 출석 → `fetchAllPaged`**: 활동 많은 강사(반 5+)는 월 출석 1000행 초과 가능 → 전건 fetch면 잘려
+     **시간 과소합산=급여 과소지급**(돈 정확성). range 페이지네이션으로 전건.
+  4·5·6. **직렬 await → `Promise.all`**: `getStaffList`(3쿼리 독립)·`getWithdrawalDetail`(2쿼리)·`getClassDetail`(2쿼리).
+     출력 동일, round-trip 절감. 전 페이지 브라우저 렌더 검증(staff 39·classes·withdrawals·payroll, 에러0).
+- **⚪ 의도적 지연(현재 데이터로 안 잘림 — 방어 백로그, Firebase 전체 이식 후 재점검)**: enrollment 대시보드 3함수
+  (outcomeDistribution·conversionTrend·consultantPerformance — enrollment_consultations 204행이라 안전)·exams
+  `getExamDetail`(시험당 소량)·attendance `getAttendanceForDate`(일자당 9)·매트릭스 `.in()`(반 최대 15명)·admin
+  findDuplicateStudents(564<1000)·findOrphans `.in(129반)`·retention campaign-targets(소량)·billing(월버킷 400=안전)·
+  students 반별 카운트 N+1(3~5쿼리, RPC 필요)·search 직렬 canAccessTenant(캐시됨, 이득~0). **새 코드는 #53/#54 헬퍼로 처음부터.**
+- 검증: typecheck0 / lint0(신규0) / test392 / 브라우저 5페이지 렌더·에러0. 마이그 `0040a`(dev DB 적용, 손수 alpha).
+
+### 같은 탭 다중 창(복제) + 크로스 창/탭 저장 경고 (2026-06-19) — ✅ 구현·검증·데스크톱 UI 확인 완료(main 머지)
+**main 머지 완료**(브랜치 `feat/multi-window-and-save-warning` 삭제됨). 상세 함정·규칙은
+위 "구현 중 막혔던 점 #64", 설계는 [`C:\Users\user\.claude\plans\steady-questing-music.md`](로컬, 미동기).
+- **A. 같은 탭 다중 창**: 타이틀바 **복제 버튼**(현재 화면 그대로) + 탭/링크 **Shift+클릭**(`openNewInstance`, 새 인스턴스)
+  — 둘 다. primary 창 id 보존(`route:students`), 복제본만 `#n`(window-only, 배경 가드 store레벨+드래그훅+스포트라이트).
+  스위처·스포트라이트 `(2)` 라벨. 사이드바 관리자도구 아래 Shift 안내 문구. ([window-store.ts](src/components/workspace/window-store.ts)
+  `windowId(...,instance?)`/`isDuplicate`/`baseWindowId`/`instanceLabel`/`duplicate`/`openNewInstance` + floating-window·app-sidebar·window-link·use-pointer-drag·background-drop-zone·window-switcher·spotlight-strip.)
+- **B. 크로스 창/탭 저장 경고**: 레코드 스코프(`student:123`)+`BroadcastChannel`로 다중 창·다중 탭 동시 보호.
+  publish는 **성공 확정 후**(update 액션 `redirect`→`{ok,redirectTo,nonce}` 반환, nonce로 연속 저장 구분),
+  dirty는 **FormData 스냅샷**(버튼 변경 포착). 신규 [`record-channel.ts`](src/lib/realtime/record-channel.ts)·
+  [`form-snapshot.ts`](src/lib/realtime/form-snapshot.ts)·[`use-concurrent-edit-guard.ts`](src/components/workspace/use-concurrent-edit-guard.ts).
+  배선: 학생·반·직원 수정 폼 + 학원설정 section-form(scope·formRef·nonce effect).
+- **검증**: typecheck0/lint0(신규0)/build✓/**test 392**(신규 19: window-store 12·form-snapshot 4·record-channel 3).
+  **B 실브라우저 검증 완료** — 학생 수정 폼 clean=무경고/ dirty=경고 토스트(+새로고침), BroadcastChannel 배달·Toaster 마운트·콘솔에러0 확인.
+- **✅ A 데스크톱 UI 실브라우저 검증 완료**(2026-06-22, preview 1280×900 + 로그인): ① 학생목록 일반클릭=단일 →
+  Shift+클릭 2회 = `학생목록`/`(2)`/`(3)` 3창 ② primary를 **학생 상세로 드릴인 후 복제 버튼** → `학생 상세 (4)`가
+  드릴인된 상세 URL로 열림(최초 목록 아님 — 검토① 확정) ③ 복제본 `(2)(3)(4)`는 "배경으로 보내기" 버튼 없음(window-only)
+  ④ 사이드바 펼침 시 Shift 안내 문구(`<kbd>` 포함) 렌더. 콘솔에러0. (드래그-투-배경·스포트라이트 store 가드는 단위테스트.)
+
+### 역할/권한 override 배선 전수 감사 + 보안 갭 수정 (2026-06-19) — ✅ 배선 완전, 갭 2건 처리
+사용자 요청으로 owner "역할·권한"(Phase 4) override가 **실제 접근제어에 연결됐는지(write-only-orphan 아닌지)** 전수 검수
+(다중 에이전트 + 직접 grep). **결론: 배선 완전 — 권한을 바꾸면 모든 소비처에서 동작이 실제로 바뀐다. orphan 0건.**
+- **단일 진입점**: 하드코딩 `MENU_ACCESS`(기본) + `tenant_settings.data.permissions.overrides`(sparse) → `resolveMatrix()` →
+  서버는 `getPermMatrix()`(React cache, [perm-matrix.ts](src/lib/auth/perm-matrix.ts)), 클라는 layout이 `resolveMatrix`로 prop 주입.
+- **소비처 전수(전부 tenant-aware, 매트릭스 없는 bare `canAccess`/`accessLevel` 직접호출 = 0건)**:
+  · 페이지 ~60개 = `requireAccess`(메뉴) · export/api 라우트 = `apiAccess`/`canAccessTenant`
+  · 기능 액션(billing/exams/meetings/consultations/enrollment/kiosk/search) = `accessLevelTenant`/`canAccessTenant`
+  · UI(사이드바·커맨드팰릿·모바일내비) = layout `permMatrix` prop → `canAccess(role,menu,permMatrix)`
+  · (bare `canAccess`는 `super-admin.ts`(권한 직교)와 테스트뿐 — 정상)
+- **쓰기·가드레일**: `saveOwnerSection` master 전용 게이트 + Zod `permissionsSchema.superRefine` ↔ 적용단 `isPermissionLocked`
+  **이중 방어**(role-locked 메뉴·student 컬럼·master 자기잠금 금지). `resolveSettings` deep-merge가 sparse 배열 보존.
+- **보안 갭 2건 → 처리 완료(2026-06-19)**:
+  1. ✅ **자기상승(DB레벨) 수정**: `0038a_tenant_settings_master_guard` 트리거로 `tenant_settings` INSERT/UPDATE/DELETE를
+     **master 전용으로 DB레벨 강제**(비-master 인증 사용자의 직접 API 변조 차단, service_role/직접연결=auth.uid() null은 통과 —
+     0026a users-guard 패턴). DB 3-경로 테스트 통과(비-master 차단·master 허용·직접연결 허용). 이제 권한 override 쓰기 경로는
+     앱(saveOwnerSection master 게이트) + DB(트리거) **이중**.
+  2. ✅ **fail-open = 의도적 최종 결정**(코드 변경 없음, 주석 확정): `getPermMatrix`가 설정 조회 실패 시 코드 기본으로 폴백.
+     fail-closed는 장애 시 master까지 /owner 락아웃(복구 불능)이라 채택 안 함. 기본=master full이라 복구 가능성 보존 + #1로
+     override가 항상 정당(master 설정)해져 일시 무효의 잔여 위험 낮음·자가복구. (perm-matrix.ts 주석에 근거 명시.)
+
+> ⚠️ **권한/접근제어를 건드리는 새 코드는 반드시 `requireAccess`/`apiAccess`/`accessLevelTenant`/`canAccessTenant`(tenant-aware)로
+> 게이트**할 것 — 매트릭스 인자 없는 `canAccess(role,menu)`/`accessLevel`은 override를 무시한다(위 orphan 0건을 깨지 말 것).
+> ⚠️ **변경(mutating) 서버 액션의 쓰기 게이트는 `canWriteTenant(role,menu)`(=full|scoped)** 를 쓴다 — `canAccessTenant`(=none만 차단)는
+> **readonly도 통과**시켜 쓰기 누수가 난다(아래 2026-07-01 참조). 읽기 게이트만 `canAccessTenant`.
+> 그리고 이런 중요한 배선은 **구현할 때마다 이 CLAUDE.md에 소비처·갭을 기록**한다(사용자 지침).
+
+### 변경 서버 액션 역할 게이트 전면 배선 + readonly 누수 차단 + KST '오늘' 교정 (2026-07-01) — ✅ 4게이트 그린
+적대적 전수 검증(5에이전트 + 직접 교차검증)에서 "변경 서버 액션 ~40개가 `getCurrentUser()` 비널 체크만 하고 **역할 게이트 없음**"이
+최대 클러스터로 확인(같은 파일 형제 액션은 게이트됨 = 누락 증거). RLS는 테넌트만 막고 역할은 못 막으므로 같은 학원 저권한 계정
+(회계·뷰어·학생, 일부 강사)이 직접 POST로 UI에 없는 변경 가능했던 **테넌트 내 권한상승 갭**. 무회귀 원칙(full·scoped는 그대로 통과,
+readonly/none만 차단)으로 일괄 배선.
+- **공용 헬퍼 신설**: [`canWrite(role,menu,matrix)`](src/lib/permissions.ts)(=`full`|`scoped`) + [`canWriteTenant`](src/lib/auth/perm-matrix.ts)
+  (override 반영). ⚠️ **쓰기 게이트는 canAccessTenant(=`none`만 차단, readonly 통과) 금지** — 반드시 canWriteTenant.
+- **신규 게이트(무게이트였던 ~40 액션)**: attendance(save/cell)·billing(invoice/expense8/textbook4)·withdrawals3·retention4·enrollments(create/move/batch)·
+  timetable(changeClassLevel/import)·classes(create/update=`requireClassWrite` 재사용)·consultations(create/update/delete)·students10(create/update/status/
+  memo4/grade/levelTest create+**delete**)·enrollment(createConsultation[public 진입]·startFromAudio·convert). admin(`mergeStudents`·`closeOrphanEnrollments`)=**master 전용**(형제 `bulkWithdrawStudents` 패턴).
+- **기존 canAccessTenant 쓰기 게이트 교정(readonly 누수)**: meetings 7곳(viewer=readonly 쓰기 차단)·consultations `runStudentCareAnalysis`(회계/뷰어 readonly 유료 AI 차단)·enrollment 5곳(일관성, enrollment엔 readonly 없어 동작 동일). **읽기 게이트 보존**: search 팰릿(readonly 검색 정상), kiosk(master 전용).
+  ⚠️ private helper(`createConsultationWithAudio`)·읽기 액션(expense `signExpenseReceipts/signExpenseReceipt`)은 게이트 안 함(public 진입점·readonly 열람 보존).
+- **함께 수정한 쿼리/다이얼로그 버그**: ① [`getEnrollmentConsultations`](src/features/enrollment/server/queries.ts) 무필터 전건 select(1000 절단)+무청크 `.in()`+`(ai ?? [])` error 삼킴 → `fetchAllPaged`(페이지별 빌더)+`fetchInChunks`. ② [`closeOrphanEnrollments`](src/features/admin/server/actions.ts) master 게이트 + `fetchAllPaged`+`chunkIds`. ③ 상태 다이얼로그 #67(always-mounted+렌더본문 queueMicrotask) → 부모 조건부 마운트 + 가드된 effect([status-action](<src/app/(shell)/students/[id]/_components/status-action.tsx>)/[status-dialog](<src/app/(shell)/students/[id]/_components/status-dialog.tsx>)).
+- **UTC/KST '오늘' 교정**: 서버 UTC(Vercel)에서 `new Date().toISOString().slice(0,10)`이 00:00–09:00 KST에 하루 전(키오스크 체크인·녹음은 이미 KST라 불일치). 신설 [`date-kst.ts`](src/lib/date-kst.ts) `kstToday`/`kstMonthStart`/`kstMonth`/`kstMinutesOfDay`(server/client 공용, server-only 금지)로 **비즈니스 '오늘'** 치환: 대시보드(월 KPI·오늘 기록 반·current period)·시간표(주 기준일·`getTodaySchedule` 요일+**슬롯 상태 nowMins**[기존 `now.getHours()`=UTC 9시간 오차 실버그])·출석 그리드·연체 판정·생성/변경 기본일·클라 날짜입력 defaultValue 다수. ⚠️ **보존(치환 금지)**: `week.ts` parse/fmt·결정적 UTC 산술·롤링 윈도우(7일 추세·30일·N일)·`ai_model_version` 라벨·엑셀 파일명.
+- 검증: typecheck0 / lint0(경고 7, baseline 8에서 classes-tab 미사용 disable 제거로 감소) / **test547**(신규 [permissions.test](src/lib/permissions.test.ts) 3 + [date-kst.test](src/lib/date-kst.test.ts) 5) / build✓. 회귀 0 = 게이트가 막는 역할은 readonly/none뿐(MENU_ACCESS 대조), full·scoped 현재 동작 보존.
+- ⚠️ **잔여(이번 범위 밖)**: full|scoped 게이트는 역할만 보고 행 단위 소유(강사 본인 담당 학생만)는 안 막음 → 행 스코프는 후속. 급여 혼합길이 세션 오산정·잠복 B2(현<1000)·P2 경미(라벨/죽은코드)는 별도.
+
+### 수강료 계산기 전면 재구현 — 신입생 상담 견적 도구 + 환불규정 + 공휴일 정밀화 (2026-06-19)
+사용자 지적: 계산기의 "청구서로 저장"이 **재원생 + invoices 테이블**에 묶여 엉뚱했고(신입생 상담 견적 도구여야 함),
+공휴일 이름이 전부 "공휴일"로 떴으며, 청구서에 환불규정이 없었다. ijw 계산기를 충실 재구현.
+- **신입생 견적 도구로 재설계**: 학생 정보 **자유 입력**(이름/학교/학년/상담자/기간 — 재원생 선택 아님) + **다과목**
+  (단가표에서 추가, 반/요일/시수/금액/비고 편집 + 공휴일 제외·월N회 고정 per-course) + 교재/기타 + 할인. 라이브
+  **수강료 안내문**(우측, 인쇄용) — 월별 분할·소계, 최종 납부 금액. `tuition-calculator.tsx`(오케스트레이터) +
+  `quote-editors.tsx`(행 편집) + `quote-document.tsx`(안내문) + 순수계산 `quote-calc.ts`(splitCoursesByMonth/quoteTotal,
+  Vitest 10케이스).
+- **별도 저장소 `tuition_quotes`**(`0037a` alpha, RLS — invoices와 완전 분리): 학생정보 + courses/extras/discounts jsonb
+  스냅샷 + 총액. `server/tuition-quote-{queries,actions}.ts`(saveQuote/list/get/delete, billing-full). 계산기 서브탭에
+  **저장된 청구서** 추가(`?csub=quotes`, `saved-quotes-{panel,list}.tsx`) — 목록/검색/삭제 + 클릭 시 `?qid=`로 계산기 재열람.
+  ⚠️ 기존 `createInvoice`(재원생 청구)는 **수납 면 신규청구**에 그대로 — 계산기만 분리.
+- **환불 규정 verbatim 이식**(`refund-policy.tsx`, ijw `TuitionInvoicePreview` 그대로): 학원 수칙 3항 + 환불 규정 표
+  (제18조 제2항 1·2호/3호, 1개월 이내/초과 × 경과시점, rowspan/colspan) + 각주 2 + 소득공제 disclaimer. 안내문 하단 고정·인쇄 포함.
+- **공휴일 정밀화**(`holidays-data.ts` → `{date,name}[]`): ijw KOREAN_HOLIDAYS 날짜에 **정확한 이름**(설날/추석/부처님오신날/
+  대체공휴일/어린이날…) 부여(기존 8개만 이름 → 전부). 공휴일 면에 **연도 ◀▶ + 월 선택**(`?hy=&hm=`). 계산기는
+  `koreanHolidayDatesForRange`로 차시 제외.
+- 검증: typecheck0 / lint0(신규0) / test378 / build✓ + 브라우저 4서브탭 200(계산기=신입생도구·환불규정 포함, 견적목록, 공휴일 이름·연도이동).
+- **후속(사용자 "학원 공휴일에 공휴일명도")**: 학원설정 `operations.holidays`를 `string[]` → **`{date,name}[]`**(`holidaySchema`)로.
+  운영 폼에 `HolidayListEditor`(날짜+공휴일명 입력), 공휴일 면 "학원 지정 휴원일"이 이름과 함께 표시. **옛 string[] 저장데이터는
+  `resolve.ts`의 `normalizeHolidays`가 `{date,name:""}`로 승격**(읽기 정규화 — DB 마이그 불요, 다음 저장 시 신형식). 계산기엔
+  `holidays.map(h=>h.date)`로 날짜만 전달. ⚠️ `operations.holidays`를 읽는 새 코드는 객체 배열임에 유의.
+
+### 수강료 계산기 "설정" 이식 — 단가표·할인·세션·공휴일 (2026-06-19)
+ijw 수강료 계산기는 "설정"에 5탭(수강료 단가표 43과목·교재/기타·할인·공휴일·세션)이 붙어 있었는데, eywa는
+회당 단가를 매번 손으로 치는 단순 폼뿐이었다(사용자 제보). ijw 5탭을 eywa 컨벤션으로 충실 이식.
+- **신규 테이블 `tuition_catalog`**(`0034a` alpha, RLS 격리 — schema.ts + 교재 단가표 `textbook_catalog` 패턴 미러).
+  ijw의 분리 컬렉션 3개(`tuition_courses`·`tuition_extras`·`tuition_discounts`)를 **한 테이블에 `category`로 통합**:
+  과목 분류(수학/EIE/영어/국어) → 단가 picker, `기타` → 부가항목, `할인` → 할인 프리셋. 권한도 billing-full 일관.
+  공유 상수·타입은 `features/billing/tuition-catalog.ts`(클라/서버 공용, ⚠️ server-only 금지), DB 쿼리는
+  `server/tuition-catalog-queries.ts`(server-only), CRUD는 `server/tuition-catalog-actions.ts`.
+- **계산기 면에 서브탭(FaceTabs)**: `계산기 · 수강료 단가 · 공휴일` (ijw "계산기 모드 ↔ 설정" 재현, `?csub=`/필터는
+  `cat`/`cactive`/`cpage`로 네임스페이스해 상위 `?tab=`와 충돌 회피). `calculator-panel.tsx`가 서브탭 디스패치.
+- **계산기 강화(소비처 배선)**: `tuition-calculator.tsx`에 **수강료 과목 picker**(선택→회당 단가 자동입력 + 청구서
+  notes에 과목명) + **할인 프리셋 picker**(선택→할인액). 수기 입력도 그대로 가능(오버라이드).
+- **공휴일 면**: 학원 휴원일은 테넌트 설정(master 전용)이라 계산기에선 **읽기전용 표시 + 학원설정(/owner?tab=operations)
+  링크**, 양력 고정 공휴일은 그 해 목록을 이름과 함께 표시(계산기 "양력 공휴일 제외" 토글로 반영). 소비처는
+  기존 `tuition-calc.ts`의 `mergeHolidays`/`countSessions`.
+- **세션(드래그 다중기간 manager)는 의도적 미복제** — eywa는 `countSessions(시작~종료 + 요일 + 공휴일)`로 차시를
+  이미 도출(ijw "default mode"와 동일 계산). ijw의 월별 드래그 다중 range는 데모 임팩트 대비 과중 → 보류.
+- **데이터 이식**: ijw `constants/tuitionCourses.ts` 43과목 + `tuitionExtras.ts` 기타 4·할인 3 = 50행을
+  `scripts/_poc_migration/import-tuition-catalog.cjs`(멱등, ijw-demo 테넌트)로 적재.
+- **후속(같은 날, 사용자 요청 "ijw 공휴일·단가 그대로 + 교재단가표 두 곳에")**: ① **ijw 공휴일 전체 이식** —
+  `features/billing/holidays-data.ts`에 ijw `KOREAN_HOLIDAYS`(2024–2030, 음력·대체·부처님오신날 포함) **그대로**
+  포팅. 계산기 토글이 양력 고정 8개 대신 **그 해 전체 공휴일**을 제외(`koreanHolidaysForRange`), 공휴일 면도 전체
+  목록(`holidayName`과 함께) 표시. (`tuition-calc.ts`의 `mergeHolidays`/`fixedHolidaysForYear`는 테스트만 유지·UI 미사용.)
+  ② **교재 단가표를 "내부탭"으로 두 곳에 배치** — 최상위 `교재 단가표` 면 **제거** → 교재 면(내부탭 `목록`/`교재 단가표`,
+  `tsub=`, `textbooks-face.tsx` 신설) + 계산기 서브탭에 `교재 단가표` 추가(공휴일 왼쪽: 계산기/수강료 단가/교재 단가표/공휴일).
+  **같은 `CatalogPanel` 재사용**(`base` prop으로 위치별 필터/검색/페이지 링크를 해당 면 안에 보존). 검증 그린 + 4면 200.
+- 검증: typecheck 0 / lint 0(기존 경고 9 외 신규 0) / test 368 / build ✓. **브라우저 실검증**: 3개 서브탭
+  200 + 단가표에 임포트 데이터(Dr.Phonics·중등M·형제 할인·시스템 사용료)·계산기 picker 마크업 확인.
+  ⚠️ 검증 중 만난 `/billing` 500은 **병렬 expenses 세션의 stale HMR**(setExpenseApproval)이지 이 작업 무관(#35).
+
+### UX 정돈 — 이름앞 아바타 제거 · 성적관리 리네임 · 생성폼 창화 · 드롭다운 규약 (2026-06-19)
+세션 단위 UX 정돈 묶음.
+- **이름 앞 아바타(Initial) 전면 제거**: 12개 화면의 `<Initial>` 14곳 + `atoms/initial.tsx` 컴포넌트 삭제.
+  사람 표시는 **이름 텍스트만**(영구 규칙 — "디자인 시스템 › Atoms" + `design_handoff_eywa` 문서 갱신). 죽은
+  헬퍼(colorForGrade 등)·ROLE 맵 `init` 필드·빈 아바타 placeholder도 정리.
+- **메뉴 리네임 시험관리 → 성적관리**(`/exams` 라우트·테이블 유지, 라벨만): navigation·메타·권한 주석·docs 갱신.
+- **"새 X" 생성 폼 = 우측 Sheet 패널 → 플로팅 창**(반·직원·학생·등록상담·상담·회의록 6개). 기존 `/X/new` 라우트를
+  `useOpenFormWindow`로 창 오픈 + `WindowParams.autoClose` → 제출 성공(=/X/new 경로 이탈) 시 RouteWindow가
+  창 닫기+배경 새로고침(서버액션·폼 무수정). `ROUTE_WINDOW_SIZE`에 `X/new` 크기 등록. 자세히는 "디자인 시스템 ›
+  생성 폼은 우측 패널이 아니라 창으로" 참고.
+- **수업목록 강사 필터**: 과목 선택 시 해당 과목 담당(`users.subjects`) 강사만 노출 + 과목 전환 시 비해당 강사 초기화.
+- **드롭다운/셀렉트 규약 문서화**: `SearchableSelect` 단일 통일(native `<select>` 신규 금지) + 옛 Base UI `<Select>` 권고 정리.
+- 검증: typecheck 0 / lint 0. ⚠️ 브라우저 실검증은 auth-gate로 보류. student-quick-panel Sheet는 모바일 peek 폴백으로 잔존.
+
+### 시간표 ijw 충실 이식 — 그룹밴드·평일/주말 분리·2D 병합·엑셀 격자 (2026-06-18)
+"기능 자체를 완전히 이식해 자연스러운 이전 느낌"이 목표(디자인 복제 아님). ijw 수학 시간표 코드(`TimetableGrid.tsx`)+
+스크린샷 대조로 기본뷰 전면 재구축.
+- **교시 축 과목 인지**(`features/timetable/lib/periods.ts` `slotPeriodRow`/`subjectPeriodRows`) — 16시→1교시 휴리스틱
+  제거. 수학 8교시→4그룹, 영어 10교시, 주말 8교시(시간단위). 매칭 실패는 '기타' 폴백. 데모 데이터가 ijw 교시 시각 보존.
+- **요일그룹 밴드 + 평일/주말 분리**(`_components/weekday-group-tables.tsx`) — 월목/화금/수 그룹 컬럼 밴드(3단 헤더),
+  주말은 1교시 시작시각이 달라(09:00) 우측에 자체 교시열로. 행높이 2:1(2주말교시=1평일그룹) 격자 정렬.
+- **2D 병합**(`lib/grid.ts` `computeBlocks`) — 같은 반이 연속교시(rowSpan)·인접요일(colSpan)에 걸치면 한 칸 + 셀 내
+  같은 반 합치기. **엑셀 격자**(table-fixed+colgroup 균일 폭, 빈 교시도 균일 높이, 넘치면 셀 내부 스크롤).
+- 셀=학생 세로 명단(이름·학교·학년, 신입 빨강/전입 초록). 통합뷰도 실교시 축.
+- ⚠️ **분리등원(월-only/목-only 학생)·합반**은 데모 데이터(attendance_days 전건 빔, merge_group 희소)가 없어 보류.
+- **남은 기능 이식(학생/수업목록 빠른승리 · 죽은기능 배선 · import복원/강의실배정)은 [`docs/ijw-feature-port.md`](docs/ijw-feature-port.md)** 에 정리 — 다른 컴퓨터에서 이어가기.
+
+### ijw 기능 갭 P2 — 운영 깊이 7건 + 카카오 알림톡 머지 (2026-06-18)
+ijw-calander ↔ eywa 전수 갭검수(143건)에서 P0(막다른 길 9건)·P1(일상운영 9건)에 이어 **P2(운영 깊이 7건)
+전부 완료**. 신규 테이블이 필요한 무거운 기능 — 데모를 '진짜 운영툴'로 보이게 하는 깊이. 계획서
+[`C:\Users\user\.claude\plans\sunny-coalescing-diffie.md`]. 항목별 커밋·검증 그린(typecheck0/lint0/test332/build✓).
+- **P2-1 시험(Exam) 모듈 = 신규 최상위 메뉴 `/exams`**: `exams` 테이블(`0028a` alpha) + `student_grades.exam_id`
+  (부분유니크 `ux_grades_exam_student WHERE exam_id is not null`). 순수 `features/exams/calc.ts`(examStats/rankByScore).
+  목록(통계 on-the-fly, denormalize 안 함) + 상세(반선택→**일괄 점수 그리드**, `batchSaveScores`=제출분 delete→insert 멱등).
+  학생그룹 메뉴(teacher scoped·accountant none), 창 960×680.
+- **P2-2 수강종료(과목 이탈) 추적**(마이그레이션 無): 재원이지만 특정 과목 enrollment 전부 종료된 학생.
+  순수 `withdrawals/subject-ended.ts`(getEndedSubjects) + `withdrawals/page.tsx` 퇴원/수강종료 유형 토글.
+- **P2-3 급여 월별 전직원표** `/staff/payroll`(master): 월 ◀▶ + 상태칩 + tfoot 합계. ⚠️ 미작성 직원은
+  월기본만(전원 동시 calculateMonthlyPayroll 지양 — 반응속도 #1). ⚠️ 데모: 39명 중 급여설정 1명뿐 → 거의 0원.
+- **P2-4 수강료 계산기** `/billing?tab=calculator`(책갈피 4면): 순수 `billing/tuition-calc.ts`(countSessions 공휴일제외)
+  → 라이브 견적 → 청구서 저장(createInvoice 재사용) + 인쇄.
+- **P2-5 교재 카탈로그(단가표)** `textbook_catalog`(`0030a`) + `/billing` 책갈피 5면 '단가표' CRUD + textbook-dialog
+  '교재 검색' picker. **ijw `data/textbookCatalog.ts` 146종 이식**(`import-catalog.cjs`, 초/중/고 수학142+영어4).
+- **P2-6 운영 감사로그** `audit_logs`(`0031a`, RLS 격리) + `/admin/audit` 뷰어(master). **8개 mutation 계측**
+  (역할변경·직원삭제·청구서생성·시험생성/삭제/일괄성적·급여정산·퇴원사유).
+- **P2-7 레벨테스트** `level_tests`(`0032a`) + 학생 상세 성적탭 섹션(배치/승급/진단·과목별 세부점수 jsonb).
+- **카카오 알림톡 PR#1 머지**(`8e27419`) + **main CI 복구**(`43ff624` verify 잡 `NODE_OPTIONS=4096`로 tsc OOM 방지 /
+  `150e490` typecheck 전 최소 `next-env.d.ts` 생성 — gitignore라 CI에 없음). 마이그 `0027d_kakao→0029a`(충돌 해소).
+- ⚠️ **버그픽스 2건**: `18649ba` deleteStaff가 auth 404("User not found")에 멈추던 것 건너뛰고 public 삭제(#31).
+  `8dd7d30` 인페이지 `BackLink`를 `useInFrame`으로도 숨김 — 탭 Link 드릴인이 `?embed=1` 떨궈 ← 이중 + /classes 오이동.
+- ⚠️ **미구현/후속**: ① 데모 갭 — `audit_logs`·`level_tests` 비어있음(필요 시 시드), 급여설정 38명 무설정.
+  ② **브라우저 실검증 보류**(이 세션 Chrome MCP 미연결 — 로직 레벨만). ③ **drizzle 스냅샷 reconciliation 별도 과제**
+  (P2 신규 테이블은 전부 손수 alpha — `db:generate` 금지, #P0-6 드리프트). ④ **P3 미착수**(상담녹음AI / QR공개접수 /
+  시간표시뮬 / 엑셀라운드트립 / 지출결재) + 급여 정책엔진(과정별 단가). ⑤ 시간표 P1 2건(인라인검색·강사색상)은
+  병렬 timetable 세션 소관(이 세션 검토 시 미반영 상태였음 — 그 세션 병합 후 재확인).
+
+### 데모 데이터 정합·온보딩·브랜드 + 수납관리 책갈피(교재/지출) (2026-06-17)
+3제품 비교(makeedu·ijw·eywa) 후 데모 완성 백로그를 우선순위로 처리 + 수납관리 확장.
+- **상담 데이터 버그**(데모 직격): import(`scripts/_poc_migration/run.ts`)가 소스 필드를 다중 오매핑
+  (summary←notes·category←type·follow←followUpContent)해 1340 상담이 전부 "(내용 없음)"·category="parent"였음.
+  run.ts 재매핑 수정 + 기존 행 `fix-consultations.cjs`로 1338행 패치(소스 students로 재조인).
+- **데모 데이터 보강**: 담임 263명 실수강 데이터로 유도(`fix-primary-teacher.cjs`, 261은 반 teacher_id 공란), 성적
+  3290행 **합성**(`fabricate-grades.cjs`, 전 enrolled — ⚠️가짜).
+- **멀티윈도우 온보딩**: 첫 진입 코치마크(`workspace-onboarding.tsx`, prefs.onboarded) + 닫을 때 사이드바 펼침(발견성).
+- **브랜드 로고**: 검은 동심원 → 포레스트그린 사각 + 흰 sprout(botanical) 마크(app-sidebar). (대시보드 차트는 병렬
+  세션의 "운영 콕핏 개편"으로 대체되어 미적용.)
+- **AI 목업 라벨링**: 퇴원관리 "인사이트"(sparkle) → "자동 요약"(pulse) — 라이브 AI(등록/케어/회의록)와 구분.
+- **창 로딩 ← 버그**: route-window가 about:blank 단계 pathname("blank")으로 canBack 오판 → 스켈레톤에 ← 떴음. 가드 추가.
+- **수납관리 책갈피 3면**: 창 오른쪽 세로 책갈피(수납/교재/지출, 파스텔, 앨범 인덱스)로 `?tab=` 면 전환(드릴인 아님 →
+  ← 안 뜸). 신규 `textbook_orders`·`expenses` 테이블(`0025`+`0025a` RLS) + ijw 소스 **실데이터 이식**(교재 350·지출 95,
+  `import-textbooks-expenses.cjs`). 창 폭 760×620. floating-window 타이틀바=live 문서제목 항상 표시.
+- ⚠️ **시연 계정**: 데모는 POC 임포트본이라 `db:seed` 금지(전체 wipe). super-admin 사용자관리는 실-auth(박지훈 등)만.
+
+### 전수 컴팩트화 — 대량 데이터에서 폭발하던 목록·매트릭스·칸반 정비 (2026-06-17)
+멀티에이전트 감사로 "전건 평면 `.map`" 안티패턴 20여 건을 우선순위 순 정비. 모두 기존 표준(`<Pagination>`·
+slice+토글·`DragScrollArea`·네이티브 `<details>`) 재사용. 브라우저 검증 완료(classes 129→3p 페이지 nav,
+billing tfoot·상태칩, attendance 30→14열·출석률 sticky, enrollment 칸반 +N, 콘솔 에러 0).
+- **서버 페이지네이션 신설**: 회의록(메모리)·퇴원(메모리)·수업목록(`getClassesPage`+`getClassesStats`, day는 SQL
+  .in()로 총계 정확)·직원(메모리)·감사로그(`getAuditLogsPage`)·테넌트(`getTenantsPage`+`getTenantPlanStats`,
+  .in()스코프 카운트)·중복그룹(20/p)·테넌트사용자(소수면 자동숨김). **회의록·퇴원·직원은 사이드 집계/필터가
+  전체 기준이라 billing식 메모리 페이지네이션**(전건 fetch는 기존과 동일, 렌더만 캡).
+- **캡+토글**: 회의 전사 발화(60)·등록상담 칸반(8)·이탈캠페인(10)·학생 상담탭(15, `<details>`)·타임라인(50).
+- **수납 테이블**: 11→10컬럼(항목 인라인) + 상태분포 칩 + `<tfoot>` 페이지 합계행.
+- **출석부**: 매트릭스 `DragScrollArea`+출석률 sticky right-0 + 월/2주 토글; 일자상세 반별 `<details>`(기본 접힘).
+- **시간표 통합뷰**: 셀 수업 5개 + 더보기(client `IntegratedCell`).
+- ⚠️ **의도적 미적용 2건**: ① 출석 입력폼 페이지네이션 — 반은 소그룹(정원 ~8)이라 벽 없음 + 단일 저장폼
+  분할 시 미저장분 유실 위험. ② 대시보드 결석위험 캡 — 리스트 아님(카운트만), 캡 시 카운트 과소(버그) +
+  쿼리도 안 가벼워짐. 둘 다 컴팩트 이슈 아님.
+- ⚠️ **병렬 세션 함정 재확인**: 다른 세션이 staged한 파일을 `git add 특정경로` 후 `git commit`이 쓸어담음
+  (랜딩 day-numbers/roi 삭제가 섞임 → reset --soft로 분리). 이후 **`git commit -m "msg" -- <명시경로>`** 사용.
+- **재검수(멀티에이전트 18 agent) — 1차에서 놓친 11건 발견·수정**: 핵심은 **수백 옵션 native `<select>`**
+  (학생 ~547·반 ~129 — 벽 + 전역 스크롤바 미적용 + 페이로드). 새 **`SearchableSelect`**
+  ([src/components/ui/searchable-select.tsx](src/components/ui/searchable-select.tsx)) — 타이핑 필터 + 렌더 캡(50) +
+  디자인 스크롤바 div 팝업. 폼 모드(`name`→hidden input, 필수성은 서버 액션 검증) / 네비 모드(`value`+`onValueChange`).
+  적용: 수강배정 다이얼로그(학생·반)·상담 폼(학생). **`FilterSelect`에 `searchable` prop** 추가(네비 콤보박스) → 출석부 반 스위처.
+  또 **리텐션 보드**(기본 진입 524명 평면 — 최대 누락 벽)·admin/cleanup 고아목록·상담→학생 전환 반 체크박스도 캡/페이지네이션.
+  **새 대량 옵션 드롭다운은 native `<select>` 금지 → `SearchableSelect`** (수십 옵션 넘으면).
+
+### 로그인 후 전수 QA + 창 내비게이션·쿼리 견고화 (2026-06-17)
+- **전수 QA + 멀티에이전트 적대검증**: 로그인 후 전 화면을 브라우저로 훑어 증상 수집 → Workflow 서브에이전트가 코드를
+  직접 읽어 코드버그/시드데이터/정상으로 판별(파일:줄 근거). 발견 코드버그 다수 수정(아래), 시드/데이터 결함은 Firebase 재이식 과제로 분리.
+- **창 내비게이션(Idea A)**: 라우트 창 타이틀바가 iframe 제목/경로 라이브 동기화 + 뒤로(←)는 드릴인 때만(루트=X로 닫기) +
+  인페이지 백은 임베드에서 숨김(`EmbedProvider`+`back-link.tsx`) + 닫을 때 부모 `router.refresh()`로 배경 즉시 반영. (#55·#56)
+- **카드 전체 클릭**: 직원·학생상담 카드 어디나 클릭 → 상세/수정(수정 버튼·힌트 제거).
+- **쿼리 견고화**: 공용 `src/lib/supabase/batch.ts`(`fetchInChunks`/`fetchAllPaged`)로 대량 `.in()` 414·1000행 절단·error
+  삼킴을 retention(CRITICAL)·super-admin·students(export/recompute)·withdrawals·admin 전반에서 해소. (#53·#54)
+- **표시/로직**: 회의 참석자 `[object Object]`, 과목 `HIGHMATH`→"수학(심화)", 수납 미수금 라벨, 퇴원 enrollment 종료,
+  전화 정규화, AI 재분석 generated_at, 내학습 결석 리포트 모순, 권한 리다이렉트(루프 방지), super-admin 상태라벨.
+- **AI provider = Upstage Solar 기본** 적용(`openai` 패키지 설치 + `UPSTAGE_API_KEY`; 없으면 Anthropic 폴백). "AI 모델 정책" 참고.
+- ⚠️ **데모 데이터는 seed가 아니라 ijw POC 임포트본**(564명). 쓰레기 레코드·접미사·빈 성적·담임공란은 데이터 결함(코드 아님).
+  ~~최종 목표는 Firebase 전체 이식 — 별도 과제.~~ → **✅ 완료(2026-07-01)**: serviceAccount `D:\ijw-calander\serviceAccount.json`(옛 `F:\`는 오기), 라이브 DB `restore20260319`(옛 `restore260202`는 오기)에서 전체 이식 + 프로덕션 승격(테넌트 `injaewon`). 진행상황 최상단 + [[reference_ijw-full-restore]] 참조.
+
+### 선생님 원스크린 (강사 전용, 2026-06-01)
+- 강사용 **수업 마감 원스크린** (`/onescreen`) — `data/원스크린_전달/` 디자인 핸드오프(React/JSX 프로토타입)를 eywa 톤으로 충실 이식.
+- 한 화면: ① 진도 확인 ② 일일/확인 테스트 점수 ③ today 보고서 작성·발송. 좌(학생 9명 + 진/테/보 셀) · 중(진도+테스트) · 우(보고서).
+- **데모 충실 이식**: 입력은 클라이언트 state(새로고침 리셋), 보고서는 **템플릿 자동생성**(`buildReport`, 라이브 AI 0), 발송은 **sonner 토스트 목업**(실제 전송 없음 — 알림센터 제외 원칙 유지). 새 DB 테이블·마이그레이션 없음.
+- **강사 전용**: `permissions.ts`에 `teacher_onescreen: { teacher:"full", 나머지 none }` → 원장(master) 사이드바엔 미표시(12메뉴 정체성 유지), 직접 URL 진입 시 `requireAccess`가 `/`로 리다이렉트. 강사용 투어는 `teacher@ijw-demo.com` 계정.
+- 순수함수 `report.ts`(buildReport/studentStatus/pct/delta) + Vitest 15케이스. `src/features/onescreen/`로 도메인 격리.
+
+### 학생 원스크린 — 내 학습 현황 + 데일리 리포트 (학생 전용, 2026-06-01)
+- `data/원스크린_패키지/`의 학생/학부모용 2화면을 강사 원스크린과 **마찬가지 패턴**으로 이식.
+- **내 학습 현황** (`/my-learning`): KPI4(평균정답률·출석률·학습횟수·진도%) + 점수추이 차트(recharts, 과목 필터) + 과목별 진도 바 + 출결 달력 + 최근 기록(→데일리 리포트).
+- **데일리 리포트** (`/my-learning/report?date=M/D`): 그날 진도·일일/확인 테스트(점수·%·delta) + 선생님 한마디(`buildReport` 재사용).
+- **데모 충실 이식**: `src/features/my-learning/history.ts`가 프로토타입 `data.js`의 **결정적 9세션 이력**(LCG RNG)을 이식 — 정적·AI 0·네트워크 0. 강사 원스크린 9명(`DEMO_ONESCREEN`)·`buildReport`·`subjectTone` 재사용. Vitest 10케이스.
+- **학생 전용 접근**: `SystemRole`에 `student` 신설(enum + 망라 맵), `my_learning: { student:"full", 나머지 none }`. `(shell)/layout`이 teacher·student면 **사이드바 없는 미니멀 셸**. 로그인 시 student → `/my-learning` 리다이렉트. 데모 학생 `student@ijw-demo.com`.
+
+### Super-admin Phase 2~5 (4개 commit, 2026-05-29)
+- **Phase 2 audit log**: `super_admin_audit_logs` 테이블 + `logSuperAdminAction` helper + `/super-admin/audit` viewer. 모든 super-admin mutation 추적.
+- **Phase 3 지점장 보기**: `/super-admin/tenants/[id]/view` read-only 미러 (KPI+학생+회의, service_role). 진입 시 `impersonate_view` audit. 실제 조작 진입(RLS 함수 분기)은 Phase 6으로 보류.
+- **Phase 4 라이선스**: `tenant_licenses` 테이블 (좌석형 student_seats + 토글형 ai_analysis/google_sheets/meeting_recording). tenants/[id] 라이선스 섹션.
+- **Phase 5 사용자 관리**: changeUserRole/resetUserPassword/setUserActive (auth admin API) — tenants/[id] 사용자 행 액션.
+- **⚠️ seed 가짜 강사 auth 부재**: seed의 teacher 5명은 `public.users`에만 INSERT (auth.users 없음). auth admin API(updateUserById)가 "User not found" 반환 → Phase 5 액션이 가짜 강사엔 실패. 실 운영 user(createTenantWithMaster/createStaff로 생성)는 auth 있어 정상. 데모 강사 관리하려면 seed를 auth.admin.createUser 기반으로 바꿔야 함 (후속).
+
+### Super-admin Phase 1 (3개 commit, 2026-05-28)
+- `super_admins` 별도 테이블 (academy 권한과 직교 — chrismathone은 master + super_admin 둘 다)
+- RLS: 본인 row select만, write는 service_role 전용 + `is_super_admin(uid)` SQL helper
+- `(super-admin)/` 라우트 그룹 — academy `(shell)`과 시각적 완전 분리 (ink 다크 배경 + gold accent)
+- 4개 페이지: 대시보드 / 학원 목록 / 신규 발급 / 상세
+  - 학원 신규 발급 = tenants INSERT + auth.admin.createUser(app_metadata)로 master 동시 생성
+  - 트리거 `tg_sync_user_from_auth`가 public.users에 자동 mirror
+- 모든 query는 service_role 클라이언트로 RLS bypass (multi-tenant read가 본질)
+- impersonate / audit log / 라이선스 관리는 Phase 2로
+
+### UI 폴리시 (1개 commit, 2026-05-28)
+- ~~OS별 단축키 자동 분기 (`useIsMac()`)~~ → **2026-06-15 단축키 기능 전부 제거.** 가짜 단축키(⌘N·G+D/S/B, 미구현)·키캡 칩·전역 키바인딩·`useIsMac()`/`_shortcuts.tsx` 삭제. 검색 팰릿은 헤더 검색 **클릭**으로만 열림(메뉴 점프 그대로).
+- 모바일 top nav 재구성 — 가로 스크롤 제거, 브랜드 banner 자체 행으로 분리, 메뉴 grid `auto-fit minmax(96px, 1fr)`로 균등 분할 (그룹 구분선 제거)
+- `.scrollbar-thin` 유틸 (globals.css) — 6px width, line-tinted thumb. 디자인 톤에 녹는 스크롤바
+
+### ijw-calander 패리티 (9개 commit, 2026-05-28)
+- 학생 상세 7탭 (Overview/Billing/Grades/Attendance/Consultations/Memos/Timeline)
+- 상태 전환 모달 (퇴원/휴원/재원 복구)
+- 수강 배정 모달 + 반 신규/수정 폼
+- 출석 셀 메모 + 숙제 체크박스
+- 시간표 드래그앤드롭 + PNG export + A4 인쇄
+- 강사 급여 정산 (자동 + 수동) + 휴가 관리
+- billing 카테고리 + 담임 자동 매칭
+- 상담 통계뷰 (전환율/사유/추세 차트)
+- 대시보드 위젯 (결제 예정 / 결석 위험)
+- 엑셀 export (시간표 색상 보존 / 학생 / 수납)
+- Google Sheets 동기화 (service account JWT)
+- Admin 도구 (중복 병합 / 데이터 정리) — 시나리오는 엑셀/스프레드시트로 대체
+
+### 라우트 구조
+- `/` = **제품 중심 랜딩** (Hero 제품 쇼케이스 → 자동연동(0.4s) → 기능 목업 시간표/출석부/수납 → **워크스페이스 멀티윈도우** → AI → 데이터 → ROI → 12메뉴 점선목차 → 단일 인터뷰 → 베타 요금 → CTA). 구 8섹션(Flow/LogoWall/Manifesto 등) 폐기. 컴포넌트: `(marketing)/_sections/*` + `_ui/*`(BrowserFrame·product-showcase·mock-{timetable,attendance,billing,workspace}·feature-block·cta-button) + `_motion/*`(Reveal·CountUp·landing.css). 워크스페이스 목업 레일은 실제 `app-sidebar`와 동일한 Lucide 아이콘.
+- `/dashboard` = 대시보드 (예전 `/`에서 이동)
+- `/exams`, `/exams/[id]` = **성적관리** (신규 최상위 메뉴, 학생 그룹) — 일괄 성적입력
+- `/staff/payroll` = 급여 월별 전직원표 (master 전용, /staff 드릴인)
+- `/login` = 로그인. 성공 시 `/dashboard` redirect
+- `/admin/*` = **학원 설정(/owner) "관리" 면으로 병합됨(2026-06-20)** — 구 라우트는 `/owner?tab=data|dup|audit|sheets` redirect stub(북마크 보존), 본문은 `owner/_components/{data,duplicates,audit,sheets}-face.tsx`(admin `_client.tsx` 재사용). admin menuKey는 hidden 보존(리다이렉트·창 해석용). owner = 설정 5면 ┃ 관리 4면(FaceTabs group 구분선)
+- `/super-admin/*` = **SaaS owner 전용 super_admin 레이어** (academy 권한과 직교)
+- `(marketing)/` = 랜딩 그룹 (사이드바·헤더 없음, marketing nav 64h)
+- `(shell)/` = 인증된 12개 메뉴 + admin (사이드바 232px + Topbar 64px)
+- `(super-admin)/` = super_admin 그룹 (다크 사이드바 + gold accent + "Super Admin" 라벨)
+- `(print)/enrollment/[id]/print/` = A4 인쇄
+
+### 12개 메뉴 — 핵심 위젯 (ijw 패리티 적용 후)
+
+| 메뉴 | 데이터 | 핵심 위젯 |
+|---|---|---|
+| 대시보드 (`/dashboard`) | dashboard 9개 쿼리 | 김수진 인사말 + KPI 4 + Timeline(1.55fr) + Announcements(1fr) + 7일 추세 |
+| 시간표 (`/timetable`) | `class_schedules`(+슬롯 라벨) + `enrollments` + `students` | **과목 단일선택(기본 수학)** + 기본뷰(요일그룹밴드 월목/화금/수 + 주말 별도판, 과목별 실교시, 같은반 2D병합, 엑셀격자) / 통합뷰(ijw 반=열 리치 그리드 — 시작교시 섹션 + 좌측 고정 라벨열 + 반=열: 수업명(반색)·담임·요일별강의실·**요일×교시 미니그리드(셀마다 강사/LAB)**·재원/대기/퇴원, 읽기전용). [`docs/ijw-feature-port.md`] |
+| 출석부 (`/attendance`) | `attendance_records` | **학생 × 30일 매트릭스** + Stat 4 + 반 chip + 월 ◀▶ + 셀 클릭 입력 (`/attendance/[date]/[classId]`) |
+| 수업목록 (`/classes`) | `classes` + schedules + enrollments | **테이블/카드 토글** + 과목·강사·요일 chip + 검색 + 메모/요일 컬럼 |
+| 학생목록 (`/students`) | `students` + enrollments | Stat 4 + **검색 + 과목/상태 chip** + 학생별 수강 과목 다중 pill (상세 성적탭에 **레벨테스트** 섹션) |
+| 성적관리 (`/exams`) | `exams` + `student_grades` | 시험 목록(응시/평균/최고/최저 통계) + 등록 + 상세 **반선택 → 일괄 점수 그리드** + 석차 |
+| 등록상담 (`/enrollment`) | `enrollment_consultations` + AI | **AI 배너 (forest gradient + sparkle)** + 4열 칸반 + 월/상담사 chip + 대시보드 (recharts) |
+| 학생상담 (`/consultations`) | `student_consultations` | Stat 4 + **기간/카테고리/후속 chip + 검색** + Follow-up urgency 자동 |
+| 퇴원관리 (`/withdrawals`) | `students.status='withdrawn'` | Stat 4 + 리스트(1.4fr) + 사유 분석 진행바(1fr) + **기간/사유 chip + 검색** + amber AI 인사이트 |
+| 직원관리 (`/staff`) | `users` + classes/students 카운트 | Stat 5 + **역할/상태 chip + 검색** + 3col 카드 그리드 + **급여 월별표 진입(`/staff/payroll`)** |
+| 수납관리 (`/billing`) | `invoices` + `textbook_orders` + `expenses` + `textbook_catalog` + `tuition_catalog` | Stat 5 + 월 ◀▶ + 검색 + 정렬 + **FaceTabs 4면**(수납/교재/지출/**계산기**). 교재 면=내부탭(목록/교재 단가표), 계산기 면=서브탭(계산기/**수강료 단가**/교재 단가표/공휴일/**저장된 청구서**). 계산기=**신입생 상담 견적 도구**(자유입력 학생정보 + 다과목 + 교재/할인 + 환불규정 포함 인쇄 안내문 → `tuition_quotes` 저장, invoices와 분리). 교재 단가표는 두 면이 같은 `CatalogPanel` 재사용, 공휴일은 ijw 전체(음력·대체·이름·연도이동) |
+| 회의록 (`/meetings`) | `meeting_minutes` + AssemblyAI | Stat 3 + **기간/상태 chip + 검색** + 음성 + AI 요약 + LIVE pill |
+| 도움말 (`/help`) | (정적) | Search hero(gradient) + 12 메뉴 가이드 + FAQ + 1:1 문의 |
+
+### 인증 / RLS
+
+- 두 master 계정 (`chrismathone@gmail.com`, `st2000423@gmail.com`)이 `ijw-demo` 테넌트에 sync됨
+- master `chrismathone`의 `display_name = "김수진"`, `job_title = "원장"`, `hire_date = 1998-03-15` (시안 페르소나)
+- **`st2000423`만 super_admin (SaaS 총괄)**, **`chrismathone`은 인재원 지점장(academy master)일 뿐 super_admin 아님.** 둘 다 ijw-demo의 academy master지만 super_admins 테이블엔 st2000423만 있음. (super_admin ⊥ academy master — 직교.)
+- 권한 매트릭스는 `lib/permissions.ts`의 `canAccess(role, menuKey)` 헬퍼. AppSidebar에서 필터링, 빈 그룹 자동 숨김
+- super_admin 권한은 `getCurrentSuperAdmin()` / `requireSuperAdmin()` (`src/lib/auth/super-admin.ts`)
+- 실제 데이터 보안은 RLS (`auth_tenant_id()` 함수 + tenant_isolation 정책)에서 강제
+- super-admin 영역은 `createAdminClient()` (service_role)로 RLS bypass — multi-tenant read가 본질이므로
+
+---
+
