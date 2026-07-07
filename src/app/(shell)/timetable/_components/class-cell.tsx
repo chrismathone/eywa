@@ -41,6 +41,14 @@ function shortTime(t: string) {
   return t.slice(0, 5);
 }
 
+// 명단 섹션 배치(2026-07-07 사용자 지정) — 재원은 이 영역만 스크롤(위/아래 페이드), 대기/퇴원은
+// 고정 박스로 각자 스크롤. 재원 10칸 기본 + 대기 2칸 + 퇴원 3칸에 맞춰 교시 행높이(weekday-group-tables
+// ROW_H)를 잡는다. 대기/퇴원은 내용 있을 때만 렌더(빈 슬롯 예약 안 함), 넘치면 그 박스만 스크롤.
+const STU_ROW_H = 23; // 학생 1행(실측 22.25 + divide-y 1px ≈ 23)
+const SEC_LABEL_H = 17; // 대기/퇴원 라벨행(실측 17)
+export const HOLD_MAX_H = 2 * STU_ROW_H + SEC_LABEL_H; // 대기 2칸 = 63px(합반 셀도 공유)
+export const WD_MAX_H = 3 * STU_ROW_H + SEC_LABEL_H; // 퇴원 3칸 = 86px
+
 /**
  * 시간표 셀 — 반이름 헤더 바 + 그 아래 학생 세로 나열(엑셀식 칸 안 행). ijw 시간표 패턴.
  * 헤더 클릭 → 반 정보 창 팝업(/classes/[id]), 학생 행 클릭 → 학생 정보 창 팝업(/students/[id]).
@@ -89,19 +97,14 @@ export function ClassCell({
   const partialActive = splitByDay ? active.filter((s) => !attendsAllCovered(s)) : [];
   const hold = slot.students.filter((s) => s.status === "hold");
   const withdrawn = slot.students.filter((s) => s.status === "withdrawn");
-  const activeCap = roster === "names" ? 15 : 8;
-  const SECTION_CAP = 6;
+  // 재원·대기·퇴원 모두 스크롤로 전원 노출('외 N명' 숨김이 아니라 박스 스크롤) — 큰 cap으로 현실 인원 커버.
+  const activeCap = 40;
+  const SECTION_CAP = 40;
   // 이 셀로 전입 예정인 학생(편집 모드에서 다른 반에서 끌어온 학생) — 도착 셀에 초록 미리보기로 표시.
   const incomingHere = incoming.get(slot.id) ?? [];
   const showRoster = roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0);
-  // 대기·퇴원이 있으면 셀 높이를 채워 그 그룹을 셀 하단에 정렬(재원 바로 아래가 아니라). 고정높이
-  // flex 컨테이너(weekday-group) 안에서만 fill 효과 — 통합뷰(블록 부모)에선 flex-1이 무시돼 기존대로.
-  const hasSecondary = hold.length > 0 || withdrawn.length > 0;
-  // 하단 그룹(분리등원 월목 → 전입예정 → 대기 → 퇴원)이 있으면 셀을 flex로 채워 그 그룹을 바닥 정렬.
-  // 공통(전 요일 등원)은 상단, 분리등원·대기·퇴원은 아래로(ijw ClassCard: 공통 위 / 요일·상태 아래).
-  // 편집 모드의 다요일 셀(covers≥2)은 요일 드롭존을 항상 노출(분리등원 지정 가능) → 하단 그룹 상시.
-  const hasBottom =
-    partialActive.length > 0 || incomingHere.length > 0 || hasSecondary || (editing && covers.length >= 2);
+  // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
+  const hasSplit = partialActive.length > 0 || (editing && covers.length >= 2);
 
   // ⚠️ 이동 목적지 반은 slot.id(스케줄 id)가 아니라 slot.classId(실제 반 id) — 드롭 data로 전달(과거 onDragEnd가
   // slot.id를 반 id로 넘겨 RPC FK 실패하던 버그 수정). id는 셀 유니크(slot.id) 유지, slotId는 마커 키.
@@ -166,37 +169,32 @@ export function ClassCell({
           <div className="border-line bg-bg-soft/70 shrink-0 border-b" style={{ height: 26 }} aria-hidden />
         ) : null}
 
-        {/* 학생 세로 나열 — 재원(상단)과 대기·퇴원(셀 하단 mt-auto) 분리. 신입=빨강·전입=초록·퇴원=취소선. */}
+        {/* 학생 명단 — 재원(이 영역만 스크롤+페이드) / 대기·퇴원(고정 박스, 각자 스크롤)을 분리.
+            신입=빨강·전입=초록·퇴원=취소선. 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). */}
         {showRoster ? (
-          // 헤더는 위에 고정(shrink-0), 학생 명단만 이 컨테이너에서 스크롤 — 스크롤바 숨김 + 위·아래 은은한
-          // 페이드(tt-cell-scroll, 스크롤 가능할 때만). 짧은 명단(스크롤 불가)이면 페이드 없음.
-          <div
-            className={`tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto text-[13px] ${
-              handover ? "bg-blue-soft" : "bg-card"
-            }`}
-          >
-            {/* 재원 공통(덮는 요일 전부 등원) — 상단 정렬. 분리등원 없으면 재원 전원이 여기. */}
-            <div className="divide-line/40 shrink-0 divide-y">
-              <StudentSection
-                students={commonActive}
-                classId={realClassId}
-                className={slot.className}
-                editing={editing}
-                cap={activeCap}
-                draggable
-                tone={studentRowTone}
-                slotId={slot.id}
-                coveringDays={covers}
-              />
-            </div>
-            {/* 하단 그룹 — 분리등원(월/목) → 전입예정 → 대기 → 퇴원 순으로 셀 하단에 붙임(mt-auto). */}
-            {hasBottom ? (
-              <div className="mt-auto shrink-0">
-                {/* 분리등원 요일 칸 — 편집 모드의 다요일 셀엔 요일 드롭존을 항상(요일별 등원 지정), 아니면 분리 학생 있을 때만. */}
-                {partialActive.length > 0 || (editing && covers.length >= 2) ? (
-                  <div className="border-line/60 border-t border-dashed">
-                    <div className="flex">
-                      {covers.map((day) => {
+          <div className={`flex min-h-0 flex-1 flex-col text-[13px] ${handover ? "bg-blue-soft" : "bg-card"}`}>
+            {/* 재원 — 이 영역만 스크롤(스크롤바 숨김 + 위·아래 페이드). 10칸 기본, 넘으면 스크롤.
+                재원 공통 + 분리등원 요일 칸 + 전입예정(편집)을 포함. flex-1이라 대기/퇴원이 있으면
+                그만큼 줄어 재원≈10칸, 없으면 재원이 더 넓게 채운다(짧으면 페이드 없음). */}
+            <div className="tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+              <div className="divide-line/40 shrink-0 divide-y">
+                <StudentSection
+                  students={commonActive}
+                  classId={realClassId}
+                  className={slot.className}
+                  editing={editing}
+                  cap={activeCap}
+                  draggable
+                  tone={studentRowTone}
+                  slotId={slot.id}
+                  coveringDays={covers}
+                />
+              </div>
+              {/* 분리등원 요일 칸 — 편집 모드의 다요일 셀엔 요일 드롭존을 항상(요일별 등원 지정), 아니면 분리 학생 있을 때만. */}
+              {hasSplit ? (
+                <div className="border-line/60 shrink-0 border-t border-dashed">
+                  <div className="flex">
+                    {covers.map((day) => {
                         const dayStudents = partialActive.filter((s) => (s.attendanceDays ?? []).includes(day));
                         const col = (
                           <>
@@ -261,55 +259,65 @@ export function ClassCell({
                     </div>
                   </div>
                 ) : null}
-                {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로. */}
-                {incomingHere.length > 0 ? (
-                  <div className="divide-line/40 border-primary/40 divide-y border-t border-dashed">
-                    <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
-                      <span>전입 예정</span>
-                      <span className="num">{incomingHere.length}</span>
-                    </div>
-                    {incomingHere.map((s) => {
-                      // 등원 요일 라벨 — 분리등원 학생이면 이 셀에서 오는 요일([월])을 표시(누가·어느 요일 오는지).
-                      const dayTag = incomingDayLabel(s.attendanceDays, covers);
-                      return (
-                        <div key={s.enrollmentId} className={`${ROW_CLASS} bg-primary-soft/30 text-primary`}>
-                          {/* 전입 예정: 좁은 칸에선 출발 반이름 대신 **학생이름**을 보여준다(누가 들어오는지 우선). */}
-                          <span className="overflow-hidden whitespace-nowrap text-clip">+ {s.name}</span>
-                          {dayTag ? (
-                            <span className="text-primary shrink-0 font-mono text-[10px] font-bold">[{dayTag}]</span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+              {/* 전입 예정(편집 모드) — 다른 반에서 끌어온 학생을 도착 셀에 초록 미리보기로(재원 스크롤 안). */}
+              {incomingHere.length > 0 ? (
+                <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
+                  <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
+                    <span>전입 예정</span>
+                    <span className="num">{incomingHere.length}</span>
                   </div>
-                ) : null}
-                {/* 대기·퇴원 */}
-                {hasSecondary ? (
-                  <div className="divide-line/40 divide-y border-t">
-                    <StudentSection
-                      students={hold}
-                      classId={slot.id}
-                      className={slot.className}
-                      editing={editing}
-                      cap={SECTION_CAP}
-                      draggable={false}
-                      tone={() => "text-text-dim"}
-                      label="대기"
-                      labelTone="bg-amber-soft/40 text-amber"
-                    />
-                    <StudentSection
-                      students={withdrawn}
-                      classId={slot.id}
-                      className={slot.className}
-                      editing={editing}
-                      cap={SECTION_CAP}
-                      draggable={false}
-                      tone={() => "text-text-faint line-through"}
-                      label="퇴원"
-                      labelTone="bg-bg-soft text-text-faint"
-                    />
-                  </div>
-                ) : null}
+                  {incomingHere.map((s) => {
+                    // 등원 요일 라벨 — 분리등원 학생이면 이 셀에서 오는 요일([월])을 표시(누가·어느 요일 오는지).
+                    const dayTag = incomingDayLabel(s.attendanceDays, covers);
+                    return (
+                      <div key={s.enrollmentId} className={`${ROW_CLASS} bg-primary-soft/30 text-primary`}>
+                        {/* 전입 예정: 좁은 칸에선 출발 반이름 대신 **학생이름**을 보여준다(누가 들어오는지 우선). */}
+                        <span className="overflow-hidden whitespace-nowrap text-clip">+ {s.name}</span>
+                        {dayTag ? (
+                          <span className="text-primary shrink-0 font-mono text-[10px] font-bold">[{dayTag}]</span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+            {/* 대기 — 고정 박스(최대 2칸), 넘으면 이 박스만 스크롤(스크롤바 숨김). 있을 때만 렌더(빈 슬롯 예약 X). */}
+            {hold.length > 0 ? (
+              <div
+                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                style={{ maxHeight: HOLD_MAX_H }}
+              >
+                <StudentSection
+                  students={hold}
+                  classId={slot.id}
+                  className={slot.className}
+                  editing={editing}
+                  cap={SECTION_CAP}
+                  draggable={false}
+                  tone={() => "text-text-dim"}
+                  label="대기"
+                  labelTone="bg-amber-soft/40 text-amber"
+                />
+              </div>
+            ) : null}
+            {/* 퇴원 — 고정 박스(최대 3칸), 넘으면 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
+            {withdrawn.length > 0 ? (
+              <div
+                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                style={{ maxHeight: WD_MAX_H }}
+              >
+                <StudentSection
+                  students={withdrawn}
+                  classId={slot.id}
+                  className={slot.className}
+                  editing={editing}
+                  cap={SECTION_CAP}
+                  draggable={false}
+                  tone={() => "text-text-faint line-through"}
+                  label="퇴원"
+                  labelTone="bg-bg-soft text-text-faint"
+                />
               </div>
             ) : null}
           </div>

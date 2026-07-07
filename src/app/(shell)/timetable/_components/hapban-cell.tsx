@@ -7,7 +7,7 @@ import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { buildHapbanRoster, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
-import type { ClassDetailQuick } from "./class-cell";
+import { HOLD_MAX_H, WD_MAX_H, type ClassDetailQuick } from "./class-cell";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, studentRowTone, ROW_CLASS } from "./student-rows";
@@ -139,11 +139,11 @@ export function HapbanCell({
   // 전입예정 — 전 슬롯의 incoming 병합. slotId 키라 fetch 시점에 대상 세그먼트 인덱스를 안다(배지).
   const incomingAll = slots.flatMap((s, i) => (incoming.get(s.id) ?? []).map((st) => ({ st, seg: i + 1 })));
 
-  const hasSecondary = roster.hold.length > 0 || roster.withdrawn.length > 0;
-  const hasBottom =
-    partialActive.length > 0 || incomingAll.length > 0 || hasSecondary || (editing && covers.length >= 2);
-  const activeCap = 15 * slots.length; // 옛 카드 적층(카드당 15)의 정보량 유지
-  const SECTION_CAP = 6;
+  // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
+  const hasSplit = partialActive.length > 0 || (editing && covers.length >= 2);
+  // 재원·대기·퇴원 모두 스크롤로 전원 노출('외 N명' 숨김이 아니라 박스 스크롤).
+  const activeCap = 40 * slots.length; // 합반은 반 수만큼 늘려도 스크롤로 흡수
+  const SECTION_CAP = 40;
   const anyHandover = slots.some((s) => s.pendingHandover);
   const totalStudents = slots.reduce((n, s) => n + s.students.length, 0);
   const showRoster = totalStudents > 0 || incomingAll.length > 0;
@@ -182,36 +182,37 @@ export function HapbanCell({
       {subSlot === "top" ? <SubSlotBand /> : null}
 
       {showRoster ? (
+        // 컨테이너 자체는 스크롤 안 함(재원·대기·퇴원 박스가 각자). setBodyRef=드롭존은 이 전체 영역.
         <div
           ref={setBodyRef}
-          className={`tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto text-[13px] ${
+          className={`flex min-h-0 flex-1 flex-col text-[13px] ${
             anyHandover ? "bg-blue-soft" : "bg-card"
           } ${isOver ? "ring-primary ring-2 ring-inset" : ""}`}
         >
-          {/* 재원 통합 명단(중복 제거 + 인덱스 배지) — 행 단위 own* 바인딩이라 드래그/Delete/요일편집 정확. */}
-          <div className="divide-line/40 shrink-0 divide-y">
-            <StudentSection
-              students={commonActive}
-              classId={repClassId}
-              className={rep.className}
-              editing={editing}
-              cap={activeCap}
-              draggable
-              tone={studentRowTone}
-              slotId={rep.id}
-              coveringDays={covers}
-              label="재원"
-              labelTone="bg-bg-soft/60 text-text-dim"
-              count={roster.active.length}
-            />
-          </div>
-          {hasBottom ? (
-            <div className="mt-auto shrink-0">
-              {/* 분리등원 요일 칸 — DayDropZone에 memberClassIds(멤버 드롭=자기 반 요일편집). */}
-              {partialActive.length > 0 || (editing && covers.length >= 2) ? (
-                <div className="border-line/60 border-t border-dashed">
-                  <div className="flex">
-                    {covers.map((day) => {
+          {/* 재원 통합 명단 — 이 영역만 스크롤(스크롤바 숨김 + 위/아래 페이드). flex-1이라 대기/퇴원 있으면
+              그만큼 줄어 재원≈10칸. 분리등원·전입예정 포함. 행 단위 own* 바인딩이라 드래그/Delete/요일편집 정확. */}
+          <div className="tt-cell-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div className="divide-line/40 shrink-0 divide-y">
+              <StudentSection
+                students={commonActive}
+                classId={repClassId}
+                className={rep.className}
+                editing={editing}
+                cap={activeCap}
+                draggable
+                tone={studentRowTone}
+                slotId={rep.id}
+                coveringDays={covers}
+                label="재원"
+                labelTone="bg-bg-soft/60 text-text-dim"
+                count={roster.active.length}
+              />
+            </div>
+            {/* 분리등원 요일 칸 — DayDropZone에 memberClassIds(멤버 드롭=자기 반 요일편집). */}
+            {hasSplit ? (
+              <div className="border-line/60 shrink-0 border-t border-dashed">
+                <div className="flex">
+                  {covers.map((day) => {
                       const dayStudents = partialActive.filter((s) => s.displayAttendanceDays.includes(day));
                       const col = (
                         <>
@@ -281,9 +282,9 @@ export function HapbanCell({
                   </div>
                 </div>
               ) : null}
-              {/* 전입 예정 — 대상 반 인덱스 배지(어느 반으로 오는지). */}
+              {/* 전입 예정 — 대상 반 인덱스 배지(어느 반으로 오는지). 재원 스크롤 안. */}
               {incomingAll.length > 0 ? (
-                <div className="divide-line/40 border-primary/40 divide-y border-t border-dashed">
+                <div className="divide-line/40 border-primary/40 shrink-0 divide-y border-t border-dashed">
                   <div className="bg-primary-soft/50 text-primary flex items-center justify-between px-2 py-px text-[10px] font-bold tracking-wide">
                     <span>전입 예정</span>
                     <span className="num">{incomingAll.length}</span>
@@ -303,37 +304,47 @@ export function HapbanCell({
                   })}
                 </div>
               ) : null}
-              {/* 대기·퇴원 — 통합(dedup 적용: 학생은 전역 최고 status 섹션에만 등장). */}
-              {hasSecondary ? (
-                <div className="divide-line/40 divide-y border-t">
-                  <StudentSection
-                    students={roster.hold}
-                    classId={repClassId}
-                    className={rep.className}
-                    editing={editing}
-                    cap={SECTION_CAP}
-                    draggable={false}
-                    tone={() => "text-text-dim"}
-                    label="대기"
-                    labelTone="bg-amber-soft/40 text-amber"
-                  />
-                  <StudentSection
-                    students={roster.withdrawn}
-                    classId={repClassId}
-                    className={rep.className}
-                    editing={editing}
-                    cap={SECTION_CAP}
-                    draggable={false}
-                    tone={() => "text-text-faint line-through"}
-                    label="퇴원"
-                    labelTone="bg-bg-soft text-text-faint"
-                  />
-                </div>
-              ) : null}
             </div>
-          ) : null}
-        </div>
-      ) : null}
+            {/* 대기 — 고정 박스(최대 2칸), 넘으면 이 박스만 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
+            {roster.hold.length > 0 ? (
+              <div
+                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                style={{ maxHeight: HOLD_MAX_H }}
+              >
+                <StudentSection
+                  students={roster.hold}
+                  classId={repClassId}
+                  className={rep.className}
+                  editing={editing}
+                  cap={SECTION_CAP}
+                  draggable={false}
+                  tone={() => "text-text-dim"}
+                  label="대기"
+                  labelTone="bg-amber-soft/40 text-amber"
+                />
+              </div>
+            ) : null}
+            {/* 퇴원 — 고정 박스(최대 3칸), 넘으면 스크롤(스크롤바 숨김). 있을 때만 렌더. */}
+            {roster.withdrawn.length > 0 ? (
+              <div
+                className="scrollbar-hide divide-line/40 shrink-0 divide-y overflow-y-auto border-t"
+                style={{ maxHeight: WD_MAX_H }}
+              >
+                <StudentSection
+                  students={roster.withdrawn}
+                  classId={repClassId}
+                  className={rep.className}
+                  editing={editing}
+                  cap={SECTION_CAP}
+                  draggable={false}
+                  tone={() => "text-text-faint line-through"}
+                  label="퇴원"
+                  labelTone="bg-bg-soft text-text-faint"
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
     </div>
   );
 }
