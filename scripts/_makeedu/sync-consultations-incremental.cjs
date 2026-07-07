@@ -181,6 +181,14 @@ function EXTRACT_DETAIL() {
              to_char(consulted_at at time zone 'Asia/Seoul', 'YYYY-MM-DD') as d, summary
       from student_consultations where tenant_id = ${tenantId}`;
     const knownSeq = new Set(existing.filter((e) => e.makeedu_id).map((e) => String(e.makeedu_id)));
+    // ⚠️ eywa가 makeedu로 역푸시한 예비상담(등록상담)의 counselSeq도 스킵 — 재원생 상담으로 되돌아오면 안 된다
+    // (라운드트립 방지: push-consultations는 seq를 enrollment_consultations.makeedu_id에 기록. makeedu kind 분류에
+    //  의존하지 않는 결정적 가드). '[eywa 온라인 접수]' 제목 가드(아래 c2)와 2중 방어.
+    for (const e of await sql`
+      select makeedu_id from enrollment_consultations
+      where tenant_id = ${tenantId} and makeedu_id is not null`) {
+      knownSeq.add(String(e.makeedu_id));
+    }
     const strictMap = new Map(); // strictKey -> rows[]
     const dayMap = new Map(); // dayKey -> rows[]
     for (const e of existing) {
@@ -248,7 +256,7 @@ function EXTRACT_DETAIL() {
     console.log(`목록: ${listRows.length}행 (${pagesWalked}페이지)`);
 
     // ── 행 분기 a~e ──
-    const stats = { list: listRows.length, beforeCutoff: 0, prospectKind: 0, prospectTemplate: 0, knownSeq: 0, noStudent: 0, unknownKind: 0 };
+    const stats = { list: listRows.length, beforeCutoff: 0, prospectKind: 0, prospectTemplate: 0, eywaOnline: 0, knownSeq: 0, noStudent: 0, unknownKind: 0 };
     const candidates = [];
     const noStudentSamples = [];
     for (const r of listRows) {
@@ -257,7 +265,8 @@ function EXTRACT_DETAIL() {
       if (/예비/.test(r.kind || "")) { stats.prospectKind++; continue; } // b — '예비' 포함만 스킵(퇴원 등 보존)
       if (r.kind && r.kind !== "재원생") stats.unknownKind++; // 미지 구분은 통과하되 보고
       if (/예비원생 상담/.test((r.title || "").slice(0, 30))) { stats.prospectTemplate++; continue; } // c
-      if (knownSeq.has(String(r.seq))) { stats.knownSeq++; continue; } // d
+      if (/^\[eywa 온라인 접수\]/.test((r.title || "").trimStart())) { stats.eywaOnline++; continue; } // c2 — eywa 역푸시 접수 라벨(재유입 차단)
+      if (knownSeq.has(String(r.seq))) { stats.knownSeq++; continue; } // d (등록상담 seq 포함 = 역푸시 예비상담도 스킵)
       const rec = { name: r.name, grade: L.gradeNorm(r.grade), schoolCore: schoolCore(r.school), parentPhoneD: phoneDigits(r.pphone) };
       const studentId = matchActive(rec) || matchAll(rec); // e
       if (!studentId) {

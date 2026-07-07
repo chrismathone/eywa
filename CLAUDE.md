@@ -336,6 +336,12 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### makeedu 역동기화 라운드트립 차단 — eywa QR접수(`[eywa 온라인 접수]`)가 재원생 상담으로 재유입되던 버그 (2026-07-07) — ✅ node --check + DB 확인·정리(1건)
+사용자 제보: 박인유가 **eywa → makeedu → eywa 이중 동기화**로 보임. DB 확인 결과 확정 — 같은 `counselSeq 5258`이 등록상담(`enrollment_consultations`, `from_public_intake` QR접수)과 학생상담(`student_consultations`, `[eywa 온라인 접수]…`) 두 테이블에.
+- **원인**: 역푸시([push-consultations.cjs](scripts/_makeedu/push-consultations.cjs))는 QR접수를 makeedu 예비상담으로 등록하고 counselSeq를 **`enrollment_consultations.makeedu_id`**에 기록 + 제목 `[eywa 온라인 접수]`. 재원생 상담 증분 동기화([sync-consultations-incremental.cjs](scripts/_makeedu/sync-consultations-incremental.cjs))의 스킵 가드 3개가 **전부 미스**: ⓑ 구분 '예비' 미해당 ⓒ 제목 `예비원생 상담`≠`[eywa 온라인 접수]` ⓓ counselSeq 중복 가드(`knownSeq`)가 **student_consultations만** 봐서 enrollment_consultations 쪽 seq를 못 잡음 → 재원생 상담으로 오적재.
+- **가드(2중 방어)**: ① `knownSeq`에 **`enrollment_consultations.makeedu_id`도 포함** — eywa가 등록상담(예비상담)으로 소유한 seq는 재원생 상담으로 안 들어옴(makeedu kind 분류 비의존, 결정적). ② 목록 필터에 **제목 `[eywa 온라인 접수]` 스킵**(c2 — seq 미기록 케이스까지). 위험 표면 = 역푸시된 QR접수 3건(전부 차단).
+- **정리**: 재유입된 박인유 학생상담 1건 삭제(덤프 `D:/tmp/parkinyu-sc-dump.json` 보관, 잔여 0). ⚠️ 등록상담 쪽은 makeedu_id 매칭으로 원래 안 겹침(학생상담만 새던 구조). ⚠️ **배포 순서**: 가드는 동기화 PC가 main pull 후 다음 실행부터 적용(pull 전 동기화 돌면 1회 재유입 가능·무해·재삭제). ⚠️ 앞으로 eywa→makeedu 푸시 표면을 늘리면 그 seq/라벨도 재원생 동기화 스킵 대상에 넣을 것.
+
 ### 직원 이력서 열람 잠금 — 작성자·원장 자유 / 그 외 사무실은 본인 재인증(step-up) (2026-07-07) — ✅ tsc0/lint0 + 토큰 불변식 13/13 + 재인증 실계정 검증 + 적대리뷰(3렌즈, HIGH·MED 2건 반영)
 사용자 요청: 직원 이력서(주민번호·급여·계좌 = HR PII)를 사무실 직원 아무나 열람하던 것을 제한 — "작성 본인 혹은 관리자 비밀번호 입력해야 열람". 사용자 결정 = **본인 재인증**(공유 비밀번호 아님).
 - **게이트**([staff/resumes/[id]/page.tsx](<src/app/(shell)/staff/resumes/[id]/page.tsx>)): `canView = 작성자(uploaded_by)==본인 || master || verifyResumeViewToken(cookie, user.id, resumeId)`. canView일 때만 `ResumeSheet`에 data 전달 — **잠김이면 민감 데이터는 클라로 전송 안 함**(이름만). `canWrite = canView && canWriteTenant("staff")`(못 보면 인라인 수정도 불가). 비-사무실은 기존 RLS restrictive(0072a)로 계속 차단(이중).
