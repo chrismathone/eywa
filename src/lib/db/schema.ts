@@ -643,11 +643,14 @@ export const lessonReports = pgTable(
     teacherName: text("teacher_name"),
     notes: text("notes"),
     source: text("source"),
+    // 학부모 공개 보고서 링크(/r/[token]) 토큰 — 0081a. 공개 페이지가 service_role로 이 토큰 단건 조회.
+    shareToken: uuid("share_token").notNull().defaultRandom(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("lesson_reports_student_idx").on(t.studentId, t.reportDate),
     index("lesson_reports_tenant_idx").on(t.tenantId),
+    uniqueIndex("lesson_reports_share_token_key").on(t.shareToken),
   ],
 );
 

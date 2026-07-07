@@ -85,7 +85,10 @@ export async function updateSession(request: NextRequest) {
   // /intake/* (학부모 QR 공개 접수)도 비로그인 통과 — 실제 보안은 접수 토큰을 페이지·서버액션이
   // admin client로 직접 검증한다(토큰이 테넌트를 해석). "/intake"·"/intake/…"만 공개.
   const isIntakePublic = pathname === "/intake" || pathname.startsWith("/intake/");
-  if (PUBLIC_PATHS.has(pathname) || isKioskPublic || isIntakePublic) {
+  // /r/* (학부모 공개 수업 보고서 링크)도 비로그인 통과 — 실제 보안은 share_token을 페이지가 admin
+  // client로 단건 조회해 검증한다(전역 유니크 토큰이 테넌트를 해석). "/r"·"/r/…"만 공개.
+  const isReportPublic = pathname === "/r" || pathname.startsWith("/r/");
+  if (PUBLIC_PATHS.has(pathname) || isKioskPublic || isIntakePublic || isReportPublic) {
     return response;
   }
 

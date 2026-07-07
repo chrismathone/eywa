@@ -19,7 +19,7 @@ export type SaveLessonReportInput = {
  */
 export async function saveLessonReport(
   input: SaveLessonReportInput,
-): Promise<{ ok: boolean; id?: string; error?: string }> {
+): Promise<{ ok: boolean; id?: string; shareToken?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
@@ -62,10 +62,11 @@ export async function saveLessonReport(
       notes: input.notes || null,
       source: "onescreen",
     })
-    .select("id")
+    // share_token은 DB default(gen_random_uuid)로 생성 — 학부모 공개 링크(/r/[token]) 발급용.
+    .select("id, share_token")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
-  return { ok: true, id: data.id };
+  return { ok: true, id: data.id, shareToken: data.share_token };
 }
 
 export type SaveOnescreenSessionInput = {

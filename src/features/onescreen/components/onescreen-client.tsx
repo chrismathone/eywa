@@ -235,7 +235,8 @@ export function OneScreenClient({
       toast.error(res.error ?? "보고서 저장에 실패했습니다");
       return;
     }
-    patchReport(selected.id, subjectName, () => ({ draft, sent: true }));
+    // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사하게.
+    patchReport(selected.id, subjectName, () => ({ draft, sent: true, shareToken: res.shareToken }));
     // 저장은 실제(lesson_reports). PDF는 인쇄 문서 창을 실제로 연다. 카톡/문자는 미연동 →
     // "발송 완료" 거짓말 없이 "기록 저장 + 연동 후 발송"으로 정직하게(라벨도 report-card에서 "기록 저장").
     if (channel === "pdf") {
@@ -252,8 +253,8 @@ export function OneScreenClient({
     } else if (channel === "save") {
       toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
     } else {
-      // 카톡/문자: 실발송 미연동 — 기록만 저장하고 정직하게 안내(실 학부모에게 안 감).
-      toast.success(`${subjectName} 보고서를 기록에 저장했습니다 — ${channel} 연동 후 발송 가능`);
+      // 카톡/문자: 아직 자동발송(알림톡)은 미연동 → 학부모 공개 링크를 생성해 강사가 직접 복사·전달.
+      toast.success(`${subjectName} 보고서 저장 완료 — 아래 학부모 공유 링크를 복사해 ${channel}로 보내세요`);
     }
   }
 

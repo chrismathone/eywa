@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
@@ -6,7 +7,8 @@ import { subjectTone, toneSoftClass } from "../data";
 import { DeltaChip } from "./delta-chip";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
-export type SubjectReport = { draft: string; sent: boolean };
+// shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
+export type SubjectReport = { draft: string; sent: boolean; shareToken?: string };
 
 function fmt(t: TestScore) {
   return t.score == null ? "미입력" : `${t.score}/${t.max}`;
@@ -79,6 +81,9 @@ export function ReportCard({
   if (!subject) return null;
   const subjectName = subject.name;
   const rep = reports[subjectName] ?? { draft: "", sent: false };
+  // 학부모 공개 링크 — 저장 후(shareToken 존재) 노출. 강사가 복사해 카톡/문자로 전달.
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -189,7 +194,7 @@ export function ReportCard({
         <div className="flex flex-wrap gap-1.5">
           <Button
             size="sm"
-            title="메시징 연동 후 발송 — 지금은 보고서 기록만 저장됩니다"
+            title="저장하면 아래에 학부모 공유 링크가 생성됩니다 — 카톡/문자에 붙여 보내세요"
             onClick={() => onSend(subjectName, "카카오톡")}
           >
             카톡용 저장
@@ -197,7 +202,7 @@ export function ReportCard({
           <Button
             variant="outline"
             size="sm"
-            title="메시징 연동 후 발송 — 지금은 보고서 기록만 저장됩니다"
+            title="저장하면 아래에 학부모 공유 링크가 생성됩니다 — 카톡/문자에 붙여 보내세요"
             onClick={() => onSend(subjectName, "문자")}
           >
             문자용 저장
@@ -209,6 +214,26 @@ export function ReportCard({
             저장
           </Button>
         </div>
+
+        {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
+        {rep.sent && shareUrl ? (
+          <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
+            <p className="text-text-faint mb-1 text-[11px] font-semibold">학부모 공유 링크</p>
+            <div className="flex items-center gap-2">
+              <code className="text-text-dim min-w-0 flex-1 truncate text-[11px]">{shareUrl}</code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(shareUrl);
+                  toast.success("학부모 공유 링크를 복사했습니다");
+                }}
+              >
+                복사
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
