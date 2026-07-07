@@ -163,6 +163,39 @@ function mergeSlotsByClass(slots: ScheduleSlotWithStudents[]): ScheduleSlotWithS
 }
 
 /**
+ * 그룹 셀의 한 서브슬롯(4-1 또는 4-2) 내용 — 그 서브슬롯 수업. 2개반+이면 진짜 합반(같은 교시·시간)이라
+ * 앰버 박스 + "합반 N반" 배지. 서브슬롯 반쪽 위치가 곧 4-1/4-2를 나타내므로 subSlot 밴드는 안 씀(subSlot="full").
+ */
+function SubSlotContent({
+  slots,
+  coveringDays,
+}: {
+  slots: ScheduleSlotWithStudents[];
+  coveringDays: DayOfWeek[];
+}) {
+  const merged = mergeSlotsByClass(slots);
+  const isHapban = merged.length >= 2;
+  return (
+    <div
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+        isHapban ? "border-amber/50 bg-amber/5 gap-1 rounded-md border p-1" : ""
+      }`}
+    >
+      {isHapban ? (
+        <span className="text-amber bg-amber/15 -mx-1 -mt-1 mb-0.5 shrink-0 rounded-t-md px-1 py-0.5 text-center font-mono text-[9px] font-bold whitespace-nowrap">
+          합반 {merged.length}반
+        </span>
+      ) : null}
+      {isHapban ? (
+        <HapbanCell slots={merged} subSlot="full" coveringDays={coveringDays} />
+      ) : (
+        <ClassCell slot={merged[0]!} roster="names" subSlot="full" coveringDays={coveringDays} />
+      )}
+    </div>
+  );
+}
+
+/**
  * 그룹밴드 시간표 한 판 — 좌측 교시열 + (그룹타이틀 → 강사 → 요일) 3단 헤더 + 교시 행.
  * 같은 반은 연속 교시(세로 rowSpan)·인접 요일(가로 colSpan)에 걸쳐 한 칸으로 병합(computeBlocks).
  * 주말 그룹은 가로 병합 끔(merge=false, 토/일 분리). 평일/주말 각각 호출.
@@ -328,60 +361,47 @@ function GroupTable({
                   for (let rr = ri; rr < ri + block.rowSpan; rr++) {
                     for (let cc = ci; cc < ci + block.colSpan; cc++) acc.push(...t.cellAt(rr, cc));
                   }
-                  const merged = mergeSlotsByClass(acc);
                   // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
                   const coveringDays = t.days.slice(ci, ci + block.colSpan);
-                  // 합반(ijw식) — 같은 강사·교시·요일에 2개반+ = 합반. 셀을 그대로 적층하되 테두리로 묶고 배지 표시.
-                  const isHapban = merged.length >= 2;
+                  const cellH = block.rowSpan * rowHeight - 16;
+                  // 서브슬롯 분리 — m-그룹(수학계열)에서 4-1(상)·4-2(하)로 나눠 렌더. 4-1만 하는 수업이 4-2까지
+                  // 걸친 듯 보이거나, 같은 강사·요일의 4-1·4-2가 한 셀로 합반 오인되던 것을 해소(2026-07-07).
+                  // 영어(e-)·주말(w-)은 subSlotOf가 "full"이라 자동으로 비분리(개별 교시 행이라 분리 불필요).
+                  const topSlots = acc.filter((s) => subSlotOf(s, config, row.key) === "top");
+                  const bottomSlots = acc.filter((s) => subSlotOf(s, config, row.key) === "bottom");
+                  // 그룹 전체(full) 슬롯이 없고 전부 4-1/4-2일 때만 분리. full 섞이면 기존 풀높이(안전).
+                  const canSplit = acc.length > 0 && topSlots.length + bottomSlots.length === acc.length;
                   return (
                     <td
                       key={`${g.title}-${t.name}-${d}-${row.key}`}
                       rowSpan={block.rowSpan}
                       colSpan={block.colSpan}
                       className={`border-b border-r ${GRID} p-1.5 align-top ${
-                        merged.length === 0 ? "bg-ink/[0.06]" : ""
+                        acc.length === 0 ? "bg-ink/[0.06]" : ""
                       }`}
                     >
-                      {merged.length === 0 ? null : (
-                        // 고정높이 flex-col — 대기·퇴원 있는 셀(ClassCell/HapbanCell이 flex-1)이 칸을 채워
-                        // 그 그룹을 셀 하단에 정렬. 재원만 있는 셀은 content 높이로 상단 정렬(기존과 동일).
-                        // 합반이면 앰버 박스 + "합반 N반" 배지 + **통합 명단 카드 1개**(HapbanCell — 반별 카드
-                        // 적층은 중복 학생·총원 불명·flex-1 위치 제각각 문제로 폐기, ijw ClassCard 패턴).
-                        <div
-                          className={`flex flex-col overflow-y-auto ${
-                            isHapban ? "border-amber/50 bg-amber/5 gap-1 rounded-md border p-1" : "gap-1.5"
-                          }`}
-                          style={{ height: block.rowSpan * rowHeight - 16 }}
-                        >
-                          {isHapban ? (
-                            <span className="text-amber bg-amber/15 sticky top-0 z-10 -mx-1 -mt-1 mb-0.5 rounded-t-md px-1 py-0.5 text-center font-mono text-[9px] font-bold whitespace-nowrap">
-                              합반 {merged.length}반
-                            </span>
-                          ) : null}
-                          {isHapban ? (
-                            <HapbanCell
-                              slots={merged}
-                              // 두 반의 서브슬롯(1-1/1-2)이 같을 때만 빈 밴드 표시, 다르면 full(분할 생략).
-                              subSlot={
-                                merged.every(
-                                  (s) => subSlotOf(s, config, row.key) === subSlotOf(merged[0]!, config, row.key),
-                                )
-                                  ? subSlotOf(merged[0]!, config, row.key)
-                                  : "full"
-                              }
-                              coveringDays={coveringDays}
-                            />
-                          ) : (
-                            merged.map((s) => (
-                              <ClassCell
-                                key={s.id}
-                                slot={s}
-                                roster="names"
-                                subSlot={subSlotOf(s, config, row.key)}
-                                coveringDays={coveringDays}
-                              />
-                            ))
-                          )}
+                      {acc.length === 0 ? null : canSplit ? (
+                        // 상(4-1)·하(4-2) 서브슬롯 분리. 빈 반쪽은 옅은 틴트로 "그 교시 비어있음"을 표시.
+                        <div className="flex flex-col" style={{ height: cellH }}>
+                          <div className={`flex min-h-0 flex-1 flex-col overflow-hidden border-b ${GRID}`}>
+                            {topSlots.length > 0 ? (
+                              <SubSlotContent slots={topSlots} coveringDays={coveringDays} />
+                            ) : (
+                              <div className="bg-ink/[0.04] flex-1" aria-hidden />
+                            )}
+                          </div>
+                          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                            {bottomSlots.length > 0 ? (
+                              <SubSlotContent slots={bottomSlots} coveringDays={coveringDays} />
+                            ) : (
+                              <div className="bg-ink/[0.04] flex-1" aria-hidden />
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        // 그룹 전체를 차지하는 수업(full) 또는 비-수학(영어·주말 = 개별 교시 행) — 기존 풀높이 렌더.
+                        <div className="flex flex-col" style={{ height: cellH }}>
+                          <SubSlotContent slots={acc} coveringDays={coveringDays} />
                         </div>
                       )}
                     </td>
