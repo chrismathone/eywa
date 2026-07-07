@@ -336,6 +336,15 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 직원 이력서 열람 잠금 — 작성자·원장 자유 / 그 외 사무실은 본인 재인증(step-up) (2026-07-07) — ✅ tsc0/lint0 + 토큰 불변식 13/13 + 재인증 실계정 검증 + 적대리뷰(3렌즈, HIGH·MED 2건 반영)
+사용자 요청: 직원 이력서(주민번호·급여·계좌 = HR PII)를 사무실 직원 아무나 열람하던 것을 제한 — "작성 본인 혹은 관리자 비밀번호 입력해야 열람". 사용자 결정 = **본인 재인증**(공유 비밀번호 아님).
+- **게이트**([staff/resumes/[id]/page.tsx](<src/app/(shell)/staff/resumes/[id]/page.tsx>)): `canView = 작성자(uploaded_by)==본인 || master || verifyResumeViewToken(cookie, user.id, resumeId)`. canView일 때만 `ResumeSheet`에 data 전달 — **잠김이면 민감 데이터는 클라로 전송 안 함**(이름만). `canWrite = canView && canWriteTenant("staff")`(못 보면 인라인 수정도 불가). 비-사무실은 기존 RLS restrictive(0072a)로 계속 차단(이중).
+- **재인증 = step-up**([unlockResumeView](src/features/staff/server/resume-actions.ts)): 본인 로그인 비밀번호 재입력 → **쿠키 저장 안 하는 격리 클라이언트**(`createRawClient(anon, {persistSession:false})`)로 `signInWithPassword`만 검증 → 성공 시 서명 쿠키 발급 + `logAction("resume_view_unlock")`. ⚠️ **현재 세션 무손상**(#10 재로그아웃 회피) — 격리 클라이언트는 실제 auth 쿠키를 안 건드림(실계정 검증: 올바른 비번 세션 발급/틀린 비번 거부).
+- **서명 토큰**([resume-view-token.ts](src/features/staff/server/resume-view-token.ts)): HMAC-SHA256(`userId.resumeId.exp`, SERVICE_ROLE_KEY), 10분. **userId·resumeId 이중 바인딩** → 타 사용자·타 이력서 전이 불가(한 번 재인증으로 전 직원 PII 훑기 차단 — 적대리뷰 MED 반영). timingSafeEqual. 시크릿 없으면 fail-closed(항상 잠김).
+- **목록 마스킹**([resumes-face.tsx](<src/app/(shell)/staff/_components/resumes-face.tsx>)): 부서·입사일도 이력서 민감 섹션이라, 작성자·원장 아닌 행은 "잠김"으로 가림(적대리뷰 HIGH 반영 — 목록에서 부분 누수). 이름·작성일·작성자(디렉터리 정보)는 노출.
+- **우회 경로 없음(확인)**: /documents 폼 문서는 게이트 페이지로 redirect·미리보기는 파일만(폼=notFound), `/edit` 라우트 없음(인라인 편집=canView 뒤), 인쇄는 sheet 렌더 후(canView). getStaffResumeById는 server-only(게이트 페이지만 호출).
+- ⚠️ **알려진 한계**: ① save/deleteStaffResume(쓰기)은 canWriteTenant("staff")만 — 열람 게이트와 별개(쓰기 authz는 역할, 열람 잠금은 읽기 PII 보호). ② 브루트포스는 Supabase auth 내장 rate-limit에 의존(커스텀 락아웃 없음). ③ 임포트/이메일 변경 계정은 재인증 실패 가능(작성자·원장 우회는 유효). ⚠️ **라이브 E2E 미실행**(auth 게이트 + 이력서 0건) — 토큰 불변식·재인증 실계정 검증·우회 트레이스·적대리뷰로 커버. 원장/관리자 계정으로 이력서 1건 만들어 비-작성자 열람 시 잠금 화면 1회 확인 권장.
+
 ### 출석부 과목→강사→반 계층 필터 + 반 미선택 안내문구 + 반 선택 시 강사 자동 (2026-07-06) — ✅ typecheck0/lint0 + 라이브(안내·무로드/매트릭스+자동/계층/전체버그·콘솔0) — 커밋 `da01496`(로컬 미푸시)
 사용자 제보: 출석부([attendance/page.tsx](<src/app/(shell)/attendance/page.tsx>))에서 반 '전체'가 클릭 안 됨 + 과목 필터 요청 + "전체×3면 학생 많아 렉이니 아무것도 안 보이고 안내문구" + "반만 선택 시 강사 강제 표시(누구 선생님인지 꼭 알아야)".
 - **'전체' 버그**: 반 미선택 시 코드가 **첫 반 강제 선택**(`filteredClasses[0]`)해 '전체'가 첫 반으로 튕겼다 → 강제선택 제거(effectiveClassId, auto-select 없음).

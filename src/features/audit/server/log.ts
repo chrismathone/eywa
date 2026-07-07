@@ -19,6 +19,7 @@ export const AUDIT_ACTIONS = {
   notice_popup_delete: "팝업 공지 삭제",
   classroom_create: "강의실 추가",
   classroom_delete: "강의실 삭제",
+  resume_view_unlock: "이력서 열람(재인증)",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

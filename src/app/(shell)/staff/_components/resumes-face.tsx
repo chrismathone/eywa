@@ -20,6 +20,10 @@ export async function ResumesFace({ page }: { page: number }) {
   const user = await getCurrentUser();
   const canWrite = !!user && (await canWriteTenant(user.systemRole, "staff"));
   const all = await getStaffResumes();
+  // 목록 마스킹: 부서·입사일은 이력서(민감 섹션) 내용이라, 상세와 동일하게 작성자 본인·원장에게만 노출.
+  // 그 외 사무실은 이름/작성일/작성자(디렉터리 정보)만 보고, 열려면 상세에서 재인증한다.
+  const isMaster = user?.systemRole === "master";
+  const canSeeDetail = (uploadedBy: string | null) => isMaster || (!!user && uploadedBy === user.id);
 
   const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
   const rows = all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -73,8 +77,12 @@ export async function ResumesFace({ page }: { page: number }) {
                       {r.name}
                     </WindowLink>
                   </td>
-                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.department || "—"}</td>
-                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.startDate || "—"}</td>
+                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">
+                    {canSeeDetail(r.uploadedBy) ? r.department || "—" : <span className="text-text-faint">잠김</span>}
+                  </td>
+                  <td className="text-text-dim num px-3 py-2 whitespace-nowrap">
+                    {canSeeDetail(r.uploadedBy) ? r.startDate || "—" : <span className="text-text-faint">잠김</span>}
+                  </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(r.createdAt)}</td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{r.authorName ?? "—"}</td>
                 </tr>
