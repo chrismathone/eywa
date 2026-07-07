@@ -6,7 +6,8 @@ import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
-import { saveLessonReport, saveOnescreenSession } from "../server/actions";
+import { buildReportCommentInput } from "../report-comment";
+import { generateReportComment, saveLessonReport, saveOnescreenSession } from "../server/actions";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { OneScreenHubBar } from "./hub-bar";
@@ -57,6 +58,7 @@ export function OneScreenClient({
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
+  const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(버튼 로딩)
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
 
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
@@ -201,10 +203,24 @@ export function OneScreenClient({
     if (!selected) return;
     patchReport(selected.id, subjectName, (r) => ({ ...r, draft: text }));
   }
-  function autoWriteSubject(subjectName: string) {
+  async function autoWriteSubject(subjectName: string) {
     if (!selected) return;
-    const idx = selected.subjects.findIndex((su) => su.name === subjectName);
-    patchReport(selected.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(selected, idx) }));
+    const student = selected; // 클로저 고정 — 생성 중 학생 전환돼도 원래 학생에 반영
+    const idx = student.subjects.findIndex((su) => su.name === subjectName);
+    if (idx < 0) return;
+    setGenSubject(subjectName);
+    try {
+      const res = await generateReportComment(buildReportCommentInput(student, idx));
+      // AI 성공 시 멘트, 실패(키 없음·오류·빈응답) 시 결정적 템플릿으로 폴백(무중단).
+      const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
+      if (!res.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+      patchReport(student.id, subjectName, (r) => ({ ...r, draft: text }));
+    } catch {
+      patchReport(student.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(student, idx) }));
+      toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+    } finally {
+      setGenSubject((cur) => (cur === subjectName ? null : cur));
+    }
   }
   async function sendSubject(subjectName: string, channel: string) {
     if (!selected) return;
@@ -312,6 +328,7 @@ export function OneScreenClient({
                 onHomework={setHomework}
                 onSubjectDraft={setSubjectDraft}
                 onAutoWrite={autoWriteSubject}
+                generatingSubject={genSubject}
                 onSend={sendSubject}
               />
             </div>

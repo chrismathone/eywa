@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
+import { generateJSON } from "@/lib/ai/generate";
+import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -132,4 +134,28 @@ export async function saveOnescreenSession(
   );
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * AI 학부모 멘트 자동작성 — edutrix generateDailyNotice의 Solar 이식.
+ * eywa 단일 진입점 generateJSON(기본 Solar Pro 3, 직접 provider 호출 금지)로 `{comment}` 생성.
+ * DB 미변경(순수 생성) → 로그인만 확인. 실패 시 ok:false → 클라이언트가 결정적 템플릿(buildSubjectReport)으로 폴백.
+ */
+export async function generateReportComment(
+  input: ReportCommentInput,
+): Promise<{ ok: boolean; comment?: string; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  try {
+    const { data } = await generateJSON<{ comment?: string }>({
+      prompt: buildReportCommentPrompt(input),
+      maxTokens: 700,
+      keyName: "default",
+    });
+    const comment = (data.comment ?? "").trim();
+    if (!comment) return { ok: false, error: "빈 응답" };
+    return { ok: true, comment };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
+  }
 }

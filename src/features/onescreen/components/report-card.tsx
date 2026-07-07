@@ -63,6 +63,7 @@ export function ReportCard({
   onHomework,
   onSubjectDraft,
   onAutoWrite,
+  generatingSubject,
   onSend,
 }: {
   student: OneScreenStudent;
@@ -73,6 +74,7 @@ export function ReportCard({
   onHomework: (h: string) => void;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onAutoWrite: (subjectName: string) => void;
+  generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
   onSend: (subjectName: string, channel: string) => void;
 }) {
   const [selIdx, setSelIdx] = useState(0);
@@ -84,6 +86,7 @@ export function ReportCard({
   // 학부모 공개 링크 — 저장 후(shareToken 존재) 노출. 강사가 복사해 카톡/문자로 전달.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
+  const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -179,8 +182,8 @@ export function ReportCard({
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <p className="micro text-text-faint">{subjectName} 보고서</p>
-            <Button variant="ghost" size="sm" onClick={() => onAutoWrite(subjectName)}>
-              <EyIcon name="sparkle" size={13} /> 자동 작성
+            <Button variant="ghost" size="sm" disabled={generating} onClick={() => onAutoWrite(subjectName)}>
+              <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
             </Button>
           </div>
           <textarea
