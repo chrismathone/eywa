@@ -3,7 +3,6 @@ import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queri
 import {
   slotPeriodRow,
   subjectPeriodRows,
-  weekdayTableFor,
   DEFAULT_PERIODS_CONFIG,
   type DayOfWeek,
   type PeriodRow,
@@ -91,29 +90,6 @@ function dayDateLabels(weekMonday: string): Partial<Record<DayOfWeek, string>> {
   return out;
 }
 
-/**
- * 카드가 그룹 셀(m-g)의 어느 서브슬롯에 있는지 — top(1-1만)/bottom(1-2만)/full(둘 다).
- * ijw식 헤더 분할용. 그룹 행(m-1..m-4)만 판정; 주말(w-)·영어(e-)·폴백(x-)은 full(분할 없음).
- * 그룹 g의 첫 서브슬롯 periodId=2g-1, 둘째=2g. 카드 시작시각이 둘째 시작=bottom, 끝시각이 첫째 끝=top, 그 외 full.
- */
-function subSlotOf(
-  card: ScheduleSlotWithStudents,
-  config: PeriodsConfig,
-  rowKey: string,
-): "top" | "bottom" | "full" {
-  const m = /^m-(\d+)$/.exec(rowKey);
-  if (!m) return "full";
-  const g = Number(m[1]);
-  // ⚠️ 과목별 평일 교시 override(weekdayBySubject) 반영 — config.weekday 직접 참조는
-  // 수학계 커스텀 교시 시 서브슬롯(1-1/1-2) 판정이 엉뚱한 시각과 비교된다(2026-07-06).
-  const table = weekdayTableFor(card.subject, config);
-  const firstEnd = table[String(2 * g - 1)]?.endTime;
-  const secondStart = table[String(2 * g)]?.startTime;
-  const hm5 = (t: string) => t.slice(0, 5);
-  if (secondStart && hm5(card.startTime) === hm5(secondStart)) return "bottom";
-  if (firstEnd && hm5(card.endTime) === hm5(firstEnd)) return "top";
-  return "full";
-}
 
 type TeacherCol = { name: string; days: DayOfWeek[] };
 type GroupCols = GroupDef & { teachers: TeacherCol[]; dayCount: number };
@@ -162,9 +138,15 @@ function mergeSlotsByClass(slots: ScheduleSlotWithStudents[]): ScheduleSlotWithS
   return out.sort((a, b) => a.startTime.localeCompare(b.startTime));
 }
 
+/** "HH:MM…" → 자정 기준 분(수업 셀 시각 위치/높이 계산용). */
+function timeToMin(t: string): number {
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
 /**
- * 그룹 셀의 한 서브슬롯(4-1 또는 4-2) 내용 — 그 서브슬롯 수업. 2개반+이면 진짜 합반(같은 교시·시간)이라
- * 앰버 박스 + "합반 N반" 배지. 서브슬롯 반쪽 위치가 곧 4-1/4-2를 나타내므로 subSlot 밴드는 안 씀(subSlot="full").
+ * 한 시간대(band) 내용 — 같은 시각의 수업(들). 2개반+이면 진짜 합반(같은 교시·시간)이라 앰버 박스 +
+ * "합반 N반" 배지. 셀 안에서 시각 범위로 위치가 정해지므로 subSlot 밴드는 안 씀(subSlot="full").
  */
 function SubSlotContent({
   slots,
@@ -364,13 +346,32 @@ function GroupTable({
                   // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
                   const coveringDays = t.days.slice(ci, ci + block.colSpan);
                   const cellH = block.rowSpan * rowHeight - 16;
-                  // 서브슬롯 분리 — m-그룹(수학계열)에서 4-1(상)·4-2(하)로 나눠 렌더. 4-1만 하는 수업이 4-2까지
-                  // 걸친 듯 보이거나, 같은 강사·요일의 4-1·4-2가 한 셀로 합반 오인되던 것을 해소(2026-07-07).
-                  // 영어(e-)·주말(w-)은 subSlotOf가 "full"이라 자동으로 비분리(개별 교시 행이라 분리 불필요).
-                  const topSlots = acc.filter((s) => subSlotOf(s, config, row.key) === "top");
-                  const bottomSlots = acc.filter((s) => subSlotOf(s, config, row.key) === "bottom");
-                  // 그룹 전체(full) 슬롯이 없고 전부 4-1/4-2일 때만 분리. full 섞이면 기존 풀높이(안전).
-                  const canSplit = acc.length > 0 && topSlots.length + bottomSlots.length === acc.length;
+                  // 수업 셀을 **실제 시각 범위**에 맞춰 그린다(2026-07-07). 그룹 셀(예 4교시=20:10~22:00)에서
+                  // 4-1(~21:05)만 하는 수업은 위쪽만, 3교시~4-1(3-1·3-2·4-1)에 걸친 수업은 4-1에서 끝나고 4-2는 빈칸
+                  // — "안 쓰는 교시까지 병합되던" 문제 해소. 같은 시각 2개반+만 합반, 다른 시각(순차 4-1/4-2)은 각자 위치.
+                  // (영어 e-·주말 w-은 개별 교시 행이라 수업이 셀을 꽉 채움 = 폴백 동일.)
+                  const blockStartMin = timeToMin(rows[ri]!.time.split("~")[0]!);
+                  const blockEndMin = timeToMin(rows[ri + block.rowSpan - 1]!.time.split("~")[1]!);
+                  const blockSpan = Math.max(1, blockEndMin - blockStartMin);
+                  // 반별 시각 범위(여러 교시 슬롯 = 한 수업의 [최소 시작, 최대 끝]) → 같은 범위끼리 묶기(진짜 합반).
+                  const byClass = new Map<string, { slots: ScheduleSlotWithStudents[]; s: number; e: number }>();
+                  for (const sl of acc) {
+                    const sm = timeToMin(sl.startTime);
+                    const em = timeToMin(sl.endTime);
+                    const cur = byClass.get(sl.classId);
+                    if (cur) {
+                      cur.slots.push(sl);
+                      cur.s = Math.min(cur.s, sm);
+                      cur.e = Math.max(cur.e, em);
+                    } else byClass.set(sl.classId, { slots: [sl], s: sm, e: em });
+                  }
+                  const bandMap = new Map<string, { slots: ScheduleSlotWithStudents[]; s: number; e: number }>();
+                  for (const c of byClass.values()) {
+                    const k = `${c.s}-${c.e}`;
+                    const b = bandMap.get(k);
+                    if (b) b.slots.push(...c.slots);
+                    else bandMap.set(k, { slots: [...c.slots], s: c.s, e: c.e });
+                  }
                   return (
                     <td
                       key={`${g.title}-${t.name}-${d}-${row.key}`}
@@ -380,28 +381,22 @@ function GroupTable({
                         acc.length === 0 ? "bg-ink/[0.06]" : ""
                       }`}
                     >
-                      {acc.length === 0 ? null : canSplit ? (
-                        // 상(4-1)·하(4-2) 서브슬롯 분리. 빈 반쪽은 옅은 틴트로 "그 교시 비어있음"을 표시.
-                        <div className="flex flex-col" style={{ height: cellH }}>
-                          <div className={`flex min-h-0 flex-1 flex-col overflow-hidden border-b ${GRID}`}>
-                            {topSlots.length > 0 ? (
-                              <SubSlotContent slots={topSlots} coveringDays={coveringDays} />
-                            ) : (
-                              <div className="bg-ink/[0.04] flex-1" aria-hidden />
-                            )}
-                          </div>
-                          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            {bottomSlots.length > 0 ? (
-                              <SubSlotContent slots={bottomSlots} coveringDays={coveringDays} />
-                            ) : (
-                              <div className="bg-ink/[0.04] flex-1" aria-hidden />
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        // 그룹 전체를 차지하는 수업(full) 또는 비-수학(영어·주말 = 개별 교시 행) — 기존 풀높이 렌더.
-                        <div className="flex flex-col" style={{ height: cellH }}>
-                          <SubSlotContent slots={acc} coveringDays={coveringDays} />
+                      {acc.length === 0 ? null : (
+                        // 시각 범위로 위치. 안 쓰는 교시는 셀 배경 그대로 = 빈칸.
+                        <div className="relative" style={{ height: cellH }}>
+                          {[...bandMap.values()].map((band, bi) => {
+                            const topPx = Math.max(0, Math.round(((band.s - blockStartMin) / blockSpan) * cellH));
+                            const hPx = Math.max(0, Math.round(((band.e - band.s) / blockSpan) * cellH));
+                            return (
+                              <div
+                                key={bi}
+                                className="absolute inset-x-0 flex flex-col overflow-hidden"
+                                style={{ top: topPx, height: hPx }}
+                              >
+                                <SubSlotContent slots={band.slots} coveringDays={coveringDays} />
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </td>
