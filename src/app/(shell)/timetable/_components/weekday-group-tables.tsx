@@ -1,8 +1,8 @@
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import {
-  slotPeriodRow,
-  subjectPeriodRows,
+  subjectWeekdayPeriods,
+  subjectWeekendPeriods,
   DEFAULT_PERIODS_CONFIG,
   type DayOfWeek,
   type PeriodRow,
@@ -57,10 +57,10 @@ const DAY_COL_W = 60;
 // 단독(병합 안 되는) 요일은 2배 폭 — wide 집합은 호출부가 그룹 구성에서 도출(평일=단독 그룹 요일, 주말=토/일).
 const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W * 2 : DAY_COL_W);
 // 모든 교시 행을 동일 높이로 통일 → 평일·주말 표가 같은 격자선에 정렬(ijw식). 넘치면 셀 내부 스크롤.
-// 교시 셀 높이 — 헤더 + 재원 10칸 + 대기 2칸 + 퇴원 3칸을 담게 잡음(2026-07-07 사용자 지정: 재원만
-// 이 영역 스크롤+페이드, 대기/퇴원은 고정 박스 각자 스크롤). 재원은 셀 안에서 flex-1로 ~10칸 확보(대기/퇴원이
-// 있으면 그만큼 줄고 없으면 더 넓게 채움). 실측: 셀 래퍼(-16 패딩) + 헤더 47 + 재원 10칸 232 + 대기 63 + 퇴원 86 ≈ 444. (주말은 ROW_H/2.)
-const ROW_H = 444;
+// 교시 1칸 높이 — 개별 교시 행(2026-07-07 ijw식). 수업은 실제 쓰는 연속 교시 수만큼 세로 rowSpan 병합(엑셀
+// 셀병합): 2교시 병합 = 2×222≈444(헤더+재원~10칸+대기+퇴원 여유), 1교시 수업 = 222(재원 ~7칸, 넘으면 스크롤).
+// 4-1만 하는 수업은 1칸(222)만 차지하고 4-2는 별도 빈칸 → "안 쓰는 교시까지 병합" 문제 해소. (주말도 교시 1칸 = ROW_H.)
+const ROW_H = 222;
 // 격자선 — 전 격자를 **하나의 동일한 테두리**(색·굵기 통일)로. 얇은 --line(연회색)은 셀 경계가 뭉개져 가독성↓ → 진한 ink 1px.
 // ⚠️ 구조선/안쪽선 굵기 구분 없이 균일 + 셀 카드 중복 테두리 제거(사용자 요청). 색값은 아래 sticky 교시열 box-shadow와 동일.
 const GRID = "border-ink/25"; // 전 셀·헤더 공통 1px 격자
@@ -214,24 +214,43 @@ function GroupTable({
   // sticky 셀은 그 자체가 positioned라 after:absolute의 기준이 됨(relative 추가 시 sticky가 깨지므로 넣지 않음).
   // 비-sticky(주말)는 스크롤로 밀릴 일이 없어 일반 border-r로 충분.
   const periodDivider = stickyPeriod ? STICKY_EDGES : `border-r ${GRID}`;
-  // 평일 수학계열은 4그룹 행(1교시=1-1+1-2). 셀은 풀높이(학생 공간 확보) — 1시간 수업도 풀높이 셀에
-  // 카드로 표시되고 서브슬롯은 헤더 시각("15:25~16:20")으로 구분(ijw 방식). 1-1/1-2가 다른 반이면 셀 안 2카드 적층.
-  const rowOf = (s: ScheduleSlotWithStudents) =>
-    slotPeriodRow(subject, s.startTime, s.dayOfWeek as DayOfWeek, config);
+  // ⚠️ 핵심(2026-07-07 ijw 방식 이식): 수학계열도 **개별 교시 행**(8교시)으로 둔다. 예전엔 7·8교시를 묶은
+  // "그룹(m-4)"을 통째로 처리해, 4-1(7교시)만 하는 수업이 그룹(4-2 포함) 전체를 먹었다(="스케줄과 렌더 배선
+  // 어긋남"). 개별 교시로 두면 computeBlocks가 **실제 연속 교시만** rowSpan 병합(엑셀 셀병합, ijw getConsecutiveSpan
+  // 대응) → 5·6·7교시 수업은 3칸 병합하고 8교시(4-2)는 별도. 교시 축은 라벨 컬럼이 그룹(3교시/4교시)을 2행
+  // rowSpan으로 묶어 표시(아래 tbody) — 축은 8개로 안 늘어남. 수학계열만 그룹 라벨(영어는 개별 교시라 무관).
+  const isMathFamily = !weekend && subject !== "english";
+  const hm5 = (t: string) => t.slice(0, 5);
+  const periodList = weekend ? subjectWeekendPeriods(config) : subjectWeekdayPeriods(subject, config);
+  const startToId = new Map<string, string>();
+  for (const p of periodList) if (!startToId.has(hm5(p.startTime))) startToId.set(hm5(p.startTime), p.id);
+  const rowKeyOf = (s: ScheduleSlotWithStudents) => {
+    const st = hm5(s.startTime);
+    return startToId.has(st) ? `p-${startToId.get(st)!}` : `x-${st}`;
+  };
 
-  // 표준 교시 전체(수업 없어도 표시 — 빈 교시도 균일 높이) + 데이터에만 있는 비표준 시각(폴백) 합집합.
+  // 표준 교시 행 전체(수업 없어도 표시 — 빈 교시도 균일 높이) + 데이터에만 있는 비표준 시각(폴백) 합집합.
   const rowMap = new Map<string, PeriodRow>();
-  for (const r of subjectPeriodRows(subject, weekend, config)) rowMap.set(r.key, r);
+  for (const p of periodList) {
+    rowMap.set(`p-${p.id}`, {
+      key: `p-${p.id}`,
+      label: `${p.id}교시`,
+      time: `${hm5(p.startTime)}~${hm5(p.endTime)}`,
+      order: timeToMin(p.startTime),
+    });
+  }
   for (const s of slots) {
-    const r = rowOf(s);
-    if (!rowMap.has(r.key)) rowMap.set(r.key, r);
+    const st = hm5(s.startTime);
+    if (!startToId.has(st) && !rowMap.has(`x-${st}`)) {
+      rowMap.set(`x-${st}`, { key: `x-${st}`, label: st, time: st, order: timeToMin(st) });
+    }
   }
   const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
 
   // (teacher::day::rowKey) → slots
   const cell = new Map<string, ScheduleSlotWithStudents[]>();
   for (const s of slots) {
-    const k = `${s.teacherName ?? "—"}::${s.dayOfWeek}::${rowOf(s).key}`;
+    const k = `${s.teacherName ?? "—"}::${s.dayOfWeek}::${rowKeyOf(s)}`;
     (cell.get(k) ?? cell.set(k, []).get(k)!).push(s);
   }
 
@@ -324,88 +343,68 @@ function GroupTable({
         </tr>
       </thead>
       <tbody>
-        {rows.map((row, ri) => (
-          <tr key={row.key}>
-            <td
-              className={`bg-bg-soft text-foreground ${periodCellSticky} ${periodDivider} border-b ${GRID} px-2 py-2 align-top text-[12px] font-bold whitespace-nowrap`}
-              style={{ height: rowHeight }}
-            >
-              {row.label}
-              <div className="text-text-faint mt-0.5 font-mono text-[10px]">{row.time}</div>
-            </td>
-            {prepared.flatMap((g) =>
-              g.teachers.flatMap((t) =>
-                t.days.map((d, ci) => {
-                  const block = t.blocks.get(`${ri}:${ci}`);
-                  if (!block) return null; // 위/왼쪽 병합에 피복됨 — 렌더 스킵
-                  // 블록 전체(rowSpan×colSpan) 슬롯 모아 같은 반 합치기(시간 범위 병합)
-                  const acc: ScheduleSlotWithStudents[] = [];
-                  for (let rr = ri; rr < ri + block.rowSpan; rr++) {
-                    for (let cc = ci; cc < ci + block.colSpan; cc++) acc.push(...t.cellAt(rr, cc));
-                  }
-                  // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
-                  const coveringDays = t.days.slice(ci, ci + block.colSpan);
-                  const cellH = block.rowSpan * rowHeight - 16;
-                  // 수업 셀을 **실제 시각 범위**에 맞춰 그린다(2026-07-07). 그룹 셀(예 4교시=20:10~22:00)에서
-                  // 4-1(~21:05)만 하는 수업은 위쪽만, 3교시~4-1(3-1·3-2·4-1)에 걸친 수업은 4-1에서 끝나고 4-2는 빈칸
-                  // — "안 쓰는 교시까지 병합되던" 문제 해소. 같은 시각 2개반+만 합반, 다른 시각(순차 4-1/4-2)은 각자 위치.
-                  // (영어 e-·주말 w-은 개별 교시 행이라 수업이 셀을 꽉 채움 = 폴백 동일.)
-                  const blockStartMin = timeToMin(rows[ri]!.time.split("~")[0]!);
-                  const blockEndMin = timeToMin(rows[ri + block.rowSpan - 1]!.time.split("~")[1]!);
-                  const blockSpan = Math.max(1, blockEndMin - blockStartMin);
-                  // 반별 시각 범위(여러 교시 슬롯 = 한 수업의 [최소 시작, 최대 끝]) → 같은 범위끼리 묶기(진짜 합반).
-                  const byClass = new Map<string, { slots: ScheduleSlotWithStudents[]; s: number; e: number }>();
-                  for (const sl of acc) {
-                    const sm = timeToMin(sl.startTime);
-                    const em = timeToMin(sl.endTime);
-                    const cur = byClass.get(sl.classId);
-                    if (cur) {
-                      cur.slots.push(sl);
-                      cur.s = Math.min(cur.s, sm);
-                      cur.e = Math.max(cur.e, em);
-                    } else byClass.set(sl.classId, { slots: [sl], s: sm, e: em });
-                  }
-                  const bandMap = new Map<string, { slots: ScheduleSlotWithStudents[]; s: number; e: number }>();
-                  for (const c of byClass.values()) {
-                    const k = `${c.s}-${c.e}`;
-                    const b = bandMap.get(k);
-                    if (b) b.slots.push(...c.slots);
-                    else bandMap.set(k, { slots: [...c.slots], s: c.s, e: c.e });
-                  }
-                  return (
-                    <td
-                      key={`${g.title}-${t.name}-${d}-${row.key}`}
-                      rowSpan={block.rowSpan}
-                      colSpan={block.colSpan}
-                      className={`border-b border-r ${GRID} p-1.5 align-top ${
-                        acc.length === 0 ? "bg-ink/[0.06]" : ""
-                      }`}
-                    >
-                      {acc.length === 0 ? null : (
-                        // 시각 범위로 위치. 안 쓰는 교시는 셀 배경 그대로 = 빈칸.
-                        <div className="relative" style={{ height: cellH }}>
-                          {[...bandMap.values()].map((band, bi) => {
-                            const topPx = Math.max(0, Math.round(((band.s - blockStartMin) / blockSpan) * cellH));
-                            const hPx = Math.max(0, Math.round(((band.e - band.s) / blockSpan) * cellH));
-                            return (
-                              <div
-                                key={bi}
-                                className="absolute inset-x-0 flex flex-col overflow-hidden"
-                                style={{ top: topPx, height: hPx }}
-                              >
-                                <SubSlotContent slots={band.slots} coveringDays={coveringDays} />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </td>
-                  );
-                }),
-              ),
-            )}
-          </tr>
-        ))}
+        {rows.map((row, ri) => {
+          // 라벨 셀 — 수학계열은 그룹(3교시/4교시)을 2행 rowSpan으로 묶어 표시(축은 8개로 안 늘어남),
+          // 영어/주말/폴백은 개별 교시 라벨. 그룹 둘째 교시(짝수 id)는 위 rowSpan에 피복돼 라벨 셀 없음.
+          const labelCls = `bg-bg-soft text-foreground ${periodCellSticky} ${periodDivider} border-b ${GRID} px-2 py-2 align-top text-[12px] font-bold whitespace-nowrap`;
+          const pid = /^p-(\d+)$/.exec(row.key)?.[1];
+          const mathN = isMathFamily && pid ? Number(pid) : null;
+          const isGroupSecond = mathN !== null && mathN % 2 === 0;
+          const nextRow = rows[ri + 1];
+          const nextPid = nextRow ? /^p-(\d+)$/.exec(nextRow.key)?.[1] : undefined;
+          const paired = mathN !== null && nextPid !== undefined && Number(nextPid) === mathN + 1;
+          return (
+            <tr key={row.key}>
+              {isGroupSecond ? null : mathN !== null ? (
+                <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (paired ? 2 : 1) }}>
+                  {Math.ceil(mathN / 2)}교시
+                  <div className="text-text-faint mt-0.5 font-mono text-[10px]">
+                    {row.time.split("~")[0]}~{(paired ? nextRow! : row).time.split("~")[1]}
+                  </div>
+                </td>
+              ) : (
+                <td className={labelCls} style={{ height: rowHeight }}>
+                  {row.label}
+                  <div className="text-text-faint mt-0.5 font-mono text-[10px]">{row.time}</div>
+                </td>
+              )}
+              {prepared.flatMap((g) =>
+                g.teachers.flatMap((t) =>
+                  t.days.map((d, ci) => {
+                    const block = t.blocks.get(`${ri}:${ci}`);
+                    if (!block) return null; // 위/왼쪽 병합에 피복됨 — 렌더 스킵
+                    // 블록 전체(rowSpan×colSpan) 슬롯 모아 같은 반 합치기.
+                    const acc: ScheduleSlotWithStudents[] = [];
+                    for (let rr = ri; rr < ri + block.rowSpan; rr++) {
+                      for (let cc = ci; cc < ci + block.colSpan; cc++) acc.push(...t.cellAt(rr, cc));
+                    }
+                    // 이 병합 블록이 덮는 요일 — 분리등원 요일 칸 분할용(월목 병합이면 [mon,thu]). 단독 셀이면 [그 요일].
+                    const coveringDays = t.days.slice(ci, ci + block.colSpan);
+                    // 셀 높이 = 실제 연속 교시 수(block.rowSpan) × 교시 높이. 엑셀 셀병합처럼 수업이 쓰는
+                    // 교시만큼만 세로로 차지(4-1만 하면 1칸, 5·6·7교시면 3칸). 안 쓰는 교시는 별도 빈칸.
+                    const cellH = block.rowSpan * rowHeight - 16;
+                    return (
+                      <td
+                        key={`${g.title}-${t.name}-${d}-${row.key}`}
+                        rowSpan={block.rowSpan > 1 ? block.rowSpan : undefined}
+                        colSpan={block.colSpan > 1 ? block.colSpan : undefined}
+                        className={`border-b border-r ${GRID} p-1.5 align-top ${
+                          acc.length === 0 ? "bg-ink/[0.06]" : ""
+                        }`}
+                      >
+                        {acc.length === 0 ? null : (
+                          <div className="flex flex-col" style={{ height: cellH }}>
+                            <SubSlotContent slots={acc} coveringDays={coveringDays} />
+                          </div>
+                        )}
+                      </td>
+                    );
+                  }),
+                ),
+              )}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -432,7 +431,7 @@ export function WeekdayGroupTables({
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
   const dayDates = weekMonday ? dayDateLabels(weekMonday) : {};
   const dateOf = (d: DayOfWeek) => dayDates[d];
-  // 평일 행 높이 — 영어는 10개 개별 교시(행당 ROW_H), 그 외 수학계열은 4그룹(행당 ROW_H). 둘 다 풀높이.
+  // 행 높이 = 교시 1칸(ROW_H). 개별 교시 행이라 평일·주말 모두 교시당 ROW_H. 수업은 실제 연속 교시만큼 rowSpan 병합.
   const weekdayRowH = ROW_H;
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
@@ -468,7 +467,7 @@ export function WeekdayGroupTables({
             subject={subject}
             groups={weekendGroups}
             weekend
-            rowHeight={ROW_H / 2}
+            rowHeight={ROW_H}
             stickyPeriod={false}
             config={config}
             dateOf={dateOf}
