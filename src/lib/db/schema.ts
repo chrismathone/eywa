@@ -649,6 +649,14 @@ export const lessonReports = pgTable(
     attitude: text("attitude"),
     // 학부모 공개 보고서 링크(/r/[token]) 토큰 — 0081a. 공개 페이지가 service_role로 이 토큰 단건 조회.
     shareToken: uuid("share_token").notNull().defaultRandom(),
+    // ClassNote 발송 큐 + 과목별 dedup — 0083a. 인덱스(부분 유니크·queued 부분)는 0083a alpha에 정의.
+    subject: text("subject"),
+    classnoteStatus: text("classnote_status"), // NULL=미요청 / queued / processing / success / failed / too_old
+    classnoteError: text("classnote_error"),
+    classnoteQueuedAt: timestamp("classnote_queued_at", { withTimezone: true }),
+    classnoteProcessingAt: timestamp("classnote_processing_at", { withTimezone: true }),
+    classnoteSentAt: timestamp("classnote_sent_at", { withTimezone: true }),
+    classnoteRetryCount: integer("classnote_retry_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

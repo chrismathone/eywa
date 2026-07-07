@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
+import { isClassnoteAllowed } from "../classnote-guard";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -15,6 +16,7 @@ export type SaveLessonReportInput = {
   dailyTest?: string; // "20문제 중 18개" (학부모 보고서 일일테스트 표시용)
   checkTest?: string; // "20문제 중 19개"
   attitude?: string; // "좋음"
+  subject?: string; // 과목키(math/english…) — (student,date,subject) 과목별 1행 dedup용
 };
 
 /**
@@ -51,28 +53,72 @@ export async function saveLessonReport(
   // KST 오늘 — Vercel UTC 오전에 report_date가 하루 밀리는 것 방지(saveOnescreenSession·too_old 가드와 동일 기준).
   const reportDate = kstToday();
 
-  // .select("id").single() → 삽입한 행 id 반환(PDF 인쇄 창이 이 id로 보고서 문서를 연다).
+  // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
+  // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
   const { data, error } = await supabase
     .from("lesson_reports")
-    .insert({
-      tenant_id: user.tenantId,
-      student_id: input.studentId,
-      report_date: reportDate,
-      progress: input.progress || null,
-      exam_info: input.examInfo || null,
-      homework_score: input.homeworkScore || null,
-      daily_test: input.dailyTest || null,
-      check_test: input.checkTest || null,
-      attitude: input.attitude || null,
-      teacher_name: user.displayName ?? null,
-      notes: input.notes || null,
-      source: "onescreen",
-    })
-    // share_token은 DB default(gen_random_uuid)로 생성 — 학부모 공개 링크(/r/[token]) 발급용.
+    .upsert(
+      {
+        tenant_id: user.tenantId,
+        student_id: input.studentId,
+        report_date: reportDate,
+        subject: input.subject || null,
+        progress: input.progress || null,
+        exam_info: input.examInfo || null,
+        homework_score: input.homeworkScore || null,
+        daily_test: input.dailyTest || null,
+        check_test: input.checkTest || null,
+        attitude: input.attitude || null,
+        teacher_name: user.displayName ?? null,
+        notes: input.notes || null,
+        source: "onescreen",
+      },
+      { onConflict: "tenant_id,student_id,report_date,subject" },
+    )
     .select("id, share_token")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
   return { ok: true, id: data.id, shareToken: data.share_token };
+}
+
+/**
+ * 원스크린 "ClassNote 발송" — 보고서 저장(upsert) + ClassNote 큐 적재를 한 액션으로.
+ * 강사는 큐에 넣고 즉시 반환(비동기) — 실제 게시는 로컬 워커가 폴링해 처리(P3). 권한 재검증은 saveLessonReport가 담당.
+ * 이미 queued/processing/success면 재큐잉 차단(중복 게시 방지). too_old(전 달 1일 이전) 보고서는 'too_old'로 표시만.
+ */
+export async function saveAndQueueClassnote(
+  input: SaveLessonReportInput,
+): Promise<{ ok: boolean; id?: string; shareToken?: string; status?: string; error?: string }> {
+  const saved = await saveLessonReport(input); // 권한 재검증 + 과목별 upsert + share_token
+  if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("lesson_reports")
+    .select("classnote_status")
+    .eq("id", saved.id)
+    .maybeSingle();
+  const cur: string | null = row?.classnote_status ?? null;
+  // 이미 발송 대기/처리중/완료면 재큐잉 안 함(같은 행이라 중복 행은 애초에 불가 — 상태만 보존).
+  if (cur === "queued" || cur === "processing" || cur === "success") {
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: cur };
+  }
+  // too_old 가드 — 오늘 저장(kstToday)은 항상 통과하지만, 규약상 명시(과거보고서 오발송 사고 방지).
+  if (!isClassnoteAllowed(kstToday())) {
+    await supabase.from("lesson_reports").update({ classnote_status: "too_old" }).eq("id", saved.id);
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "too_old" };
+  }
+  const { error } = await supabase
+    .from("lesson_reports")
+    .update({
+      classnote_status: "queued",
+      classnote_queued_at: new Date().toISOString(),
+      classnote_retry_count: 0,
+      classnote_error: null,
+    })
+    .eq("id", saved.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "queued" };
 }
 
 export type SaveOnescreenSessionInput = {
