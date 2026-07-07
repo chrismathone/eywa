@@ -141,6 +141,34 @@ export function NumberField({
   );
 }
 
+/** on/off 토글 — 라벨 우측 체크박스. 보고서 표시 항목 등 불리언 설정용. */
+export function ToggleField({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
+      <span className="min-w-0">
+        <span className="text-foreground text-[12px] font-semibold">{label}</span>
+        {hint ? <span className="text-text-dim ml-2 text-[11px]">{hint}</span> : null}
+      </span>
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(e) => onChange(e.target.checked)}
+        className="border-line accent-primary h-4 w-4 shrink-0 cursor-pointer rounded"
+      />
+    </label>
+  );
+}
+
 export function SelectField({
   label,
   hint,

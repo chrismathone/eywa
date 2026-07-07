@@ -239,12 +239,24 @@ export function OneScreenClient({
     ]
       .filter(Boolean)
       .join(", ");
+    // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
+    const dailyTest =
+      selected.tests.daily.score != null
+        ? `${selected.tests.daily.max}문제 중 ${selected.tests.daily.score}개`
+        : "";
+    const checkTest =
+      selected.tests.check.score != null
+        ? `${selected.tests.check.max}문제 중 ${selected.tests.check.score}개`
+        : "";
 
     const res = await saveLessonReport({
       studentId: selected.id,
       progress: su ? `${su.name} ${su.today}`.trim() : "",
       examInfo,
       homeworkScore: selected.homework,
+      dailyTest,
+      checkTest,
+      attitude: selected.attitude ?? "",
       notes: draft,
     });
     if (!res.ok) {

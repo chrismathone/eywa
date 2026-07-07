@@ -163,6 +163,23 @@ export const notificationsSchema = z.object({
 });
 export type NotificationsSettings = z.infer<typeof notificationsSchema>;
 
+// === 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정 ===
+// 표시 세부를 하드코딩 대신 원장이 제어(로고/학원명 중복 제거, 항목 토글, 바닥글). 배열 없음(deepMerge 안전).
+export const reportSchema = z.object({
+  title: z.string().max(40),
+  showLogo: z.boolean(),
+  showAcademyName: z.boolean(),
+  showFooter: z.boolean(),
+  footerNote: z.string().max(200),
+  showProgress: z.boolean(),
+  showDailyTest: z.boolean(),
+  showCheckTest: z.boolean(),
+  showHomework: z.boolean(),
+  showAttitude: z.boolean(),
+  showParentNote: z.boolean(),
+});
+export type ReportSettings = z.infer<typeof reportSchema>;
+
 // === 역할/권한 — 테넌트별 메뉴 접근 override (sparse) ===
 // 진짜 기본값은 코드의 하드코딩 MENU_ACCESS(permissions.ts). 여기엔 원장이 바꾼 (menu,role) 셀만
 // 담는다. ⚠️ 배열 모델인 이유: resolve.ts deepMerge가 base 키만 순회 → 빈 {} 기본값 아래 객체 record는
@@ -197,6 +214,7 @@ export const tenantSettingsSchema = z.object({
   operations: operationsSchema,
   billing: billingSchema,
   notifications: notificationsSchema,
+  report: reportSchema,
   permissions: permissionsSchema,
 });
 export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
@@ -207,6 +225,7 @@ export const SECTION_SCHEMAS = {
   operations: operationsSchema,
   billing: billingSchema,
   notifications: notificationsSchema,
+  report: reportSchema,
   permissions: permissionsSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;

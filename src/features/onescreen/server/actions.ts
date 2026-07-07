@@ -9,9 +9,12 @@ import { buildReportCommentPrompt, type ReportCommentInput } from "../report-com
 export type SaveLessonReportInput = {
   studentId: string;
   progress: string; // "영어 Unit 8 · p.90"
-  examInfo: string; // "일일 18/20, 확인 19/20"
+  examInfo: string; // "일일 18/20, 확인 19/20" (roster prev-score 파싱용 합본 — 보존)
   homeworkScore: string; // 과제 상태
   notes: string; // 학부모 보고서 본문
+  dailyTest?: string; // "20문제 중 18개" (학부모 보고서 일일테스트 표시용)
+  checkTest?: string; // "20문제 중 19개"
+  attitude?: string; // "좋음"
 };
 
 /**
@@ -45,10 +48,8 @@ export async function saveLessonReport(
     .limit(1);
   if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
 
-  const now = new Date();
-  const reportDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-    now.getDate(),
-  ).padStart(2, "0")}`;
+  // KST 오늘 — Vercel UTC 오전에 report_date가 하루 밀리는 것 방지(saveOnescreenSession·too_old 가드와 동일 기준).
+  const reportDate = kstToday();
 
   // .select("id").single() → 삽입한 행 id 반환(PDF 인쇄 창이 이 id로 보고서 문서를 연다).
   const { data, error } = await supabase
@@ -60,6 +61,9 @@ export async function saveLessonReport(
       progress: input.progress || null,
       exam_info: input.examInfo || null,
       homework_score: input.homeworkScore || null,
+      daily_test: input.dailyTest || null,
+      check_test: input.checkTest || null,
+      attitude: input.attitude || null,
       teacher_name: user.displayName ?? null,
       notes: input.notes || null,
       source: "onescreen",

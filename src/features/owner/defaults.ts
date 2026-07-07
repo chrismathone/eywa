@@ -120,6 +120,20 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     privacyTerms: DEFAULT_PRIVACY_TERMS,
     serviceTerms: DEFAULT_SERVICE_TERMS,
   },
+  // 학부모 보고서(/r)·ClassNote 게시 이미지 표시 — 기본은 전부 표시(기존 동작 유지). 로고 중복은 원장이 학원명 off로.
+  report: {
+    title: "수업 보고서",
+    showLogo: true,
+    showAcademyName: true,
+    showFooter: true,
+    footerNote: "",
+    showProgress: true,
+    showDailyTest: true,
+    showCheckTest: true,
+    showHomework: true,
+    showAttitude: true,
+    showParentNote: true,
+  },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   permissions: { overrides: [] },
 };

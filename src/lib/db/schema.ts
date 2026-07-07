@@ -643,6 +643,10 @@ export const lessonReports = pgTable(
     teacherName: text("teacher_name"),
     notes: text("notes"),
     source: text("source"),
+    // 학부모 보고서 표시용 분리 필드 — 0082a(일일/확인테스트·수업태도). 기존 exam_info 합본의 3단계 분리.
+    dailyTest: text("daily_test"),
+    checkTest: text("check_test"),
+    attitude: text("attitude"),
     // 학부모 공개 보고서 링크(/r/[token]) 토큰 — 0081a. 공개 페이지가 service_role로 이 토큰 단건 조회.
     shareToken: uuid("share_token").notNull().defaultRandom(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

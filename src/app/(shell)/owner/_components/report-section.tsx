@@ -1,0 +1,88 @@
+"use client";
+
+import { useState } from "react";
+import type { ReportSettings } from "@/features/owner/settings-types";
+import { SectionForm, SettingsCard } from "./section-form";
+import { TextField, ToggleField } from "./fields";
+
+/**
+ * 학원 운영 > 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정.
+ * notifications-section 패턴(로컬 state + SectionForm이 저장 배관 담당). /r 페이지가 이 값을 읽어 렌더.
+ */
+export function ReportSection({ initial }: { initial: ReportSettings }) {
+  const [r, setR] = useState<ReportSettings>(initial);
+  const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
+
+  return (
+    <SectionForm section="report" payload={r}>
+      {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목(세로 목록) — 양 열이 균형 있게 채워지도록. */}
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          <SettingsCard
+            title="머리글"
+            description="보고서 상단 로고·학원명·제목. 로고 이미지에 학원명이 이미 있으면 '학원명 표시'를 꺼서 중복을 없앨 수 있습니다."
+          >
+            <div className="space-y-1">
+              <ToggleField label="로고 표시" value={r.showLogo} onChange={(v) => set({ showLogo: v })} />
+              <ToggleField
+                label="학원명(텍스트) 표시"
+                hint="로고에 이름이 있으면 끄기"
+                value={r.showAcademyName}
+                onChange={(v) => set({ showAcademyName: v })}
+              />
+              <div className="pt-2">
+                <TextField
+                  label="보고서 제목"
+                  value={r.title}
+                  onChange={(v) => set({ title: v })}
+                  placeholder="수업 보고서"
+                />
+              </div>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard title="바닥글" description="보고서 하단 문구. 비우면 '학원명 · 날짜'가 표시됩니다.">
+            <div className="space-y-1">
+              <ToggleField label="바닥글 표시" value={r.showFooter} onChange={(v) => set({ showFooter: v })} />
+              <div className="pt-2">
+                <TextField
+                  label="바닥글 문구"
+                  hint="비우면 학원명·날짜"
+                  value={r.footerNote}
+                  onChange={(v) => set({ footerNote: v })}
+                />
+              </div>
+            </div>
+          </SettingsCard>
+        </div>
+
+        <SettingsCard
+          title="표시 항목"
+          description="학부모 보고서에 표시할 항목을 켜고 끕니다. 끈 항목은 보고서에서 숨겨집니다."
+        >
+          {/* 세로 목록 + 행 구분선 — 좁은 열에서 라벨↔체크박스 간격을 좁혀 빈 공간 제거. */}
+          <div className="border-border divide-border divide-y rounded-md border">
+            {(
+              [
+                ["진도", "showProgress"],
+                ["일일테스트", "showDailyTest"],
+                ["확인테스트", "showCheckTest"],
+                ["과제", "showHomework"],
+                ["수업 태도", "showAttitude"],
+                ["학부모 전달 내용", "showParentNote"],
+              ] as const
+            ).map(([label, key]) => (
+              <div key={key} className="px-3">
+                <ToggleField
+                  label={label}
+                  value={r[key]}
+                  onChange={(v) => set({ [key]: v } as Partial<ReportSettings>)}
+                />
+              </div>
+            ))}
+          </div>
+        </SettingsCard>
+      </div>
+    </SectionForm>
+  );
+}

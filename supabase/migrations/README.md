@@ -121,6 +121,7 @@ pnpm db:seed
 | `0077a_absorb_subject_rpc` | **`absorb_subject_key(p_from, p_to)` RPC** — 과목 흡수(운영 과목 삭제) 시 `users.subjects[]` 치환·순서보존 dedupe + 과목 키 jsonb 2곳(`enrollment_consultations.subject_details`·`onescreen_daily_sessions.subject_progress`) 개명(양쪽 객체면 to-우선 얕은 병합)을 DB에서 원자 실행. `security invoker`+`auth_tenant_id()` 이중격리(0039a/0040a 패턴). 클라 read-then-overwrite 루프의 동시저장 유실·행당 왕복 타임아웃 제거. 의미 정의=`src/features/owner/subject-absorb.ts`(Vitest). |
 | `0060a_notice_popups` | **`notice_popups` 공지 팝업 테이블 + RLS 격리 + index** — 셸 진입 시 창처럼 뜨는 배너형 공지("팝업광고" 패턴). title·body·image_url·link_url/label·audience(announcement_audience 재사용)·width·position·priority·is_active·starts_at/ends_at·author_id. announcements(대시보드 카드)와 별개. 표시 dismiss("7일/다시 보지 않기")는 DB 아닌 브라우저 localStorage(기기 단위). 표시 조회=`getActivePopups`(tenantId별 unstable_cache), 작성=owner "팝업 공지" 면. |
 | `0081a_lesson_reports_share_token` | **`lesson_reports.share_token` uuid(not null default gen_random_uuid) + 전역 유니크 인덱스** — 학부모 공개 보고서 링크(`/r/[token]`) 기반(Edutrix 발송 시스템 이식 P0). 공개 페이지가 service_role로 token→단건 조회(RLS 우회, 전역 유니크 토큰이 테넌트 해석 = (intake) 패턴). 기존 행 default 백필. 강사 원스크린 "카톡용/문자용 저장"이 이 링크 생성. |
+| `0082a_lesson_reports_report_fields` | **`lesson_reports.daily_test`·`check_test`·`attitude`(nullable text)** — 학부모 보고서에서 일일테스트/확인테스트/수업태도를 분리 표시(기존 `exam_info` 합본 → 3단계). nullable 추가라 락 없음. 기존 행 null → `/r`가 `exam_info` 폴백. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
