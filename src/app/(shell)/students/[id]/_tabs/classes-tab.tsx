@@ -10,6 +10,7 @@ import {
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
+import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
@@ -60,6 +61,7 @@ export async function ClassesTab({
     getTenantSettings(),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const periodsConfig = settingsToPeriodsConfig(settings.operations);
 
   const today = kstToday();
   const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
@@ -83,8 +85,8 @@ export async function ClassesTab({
 
   return (
     <div className="space-y-5">
-      {/* 주간 시간표(읽기전용) — 수강 중 반의 전 과목·전 강사 통합. 슬롯 없으면 컴포넌트가 null. */}
-      <StudentWeekGrid rows={current} subjects={subjects} />
+      {/* 주간 시간표(읽기전용) — 수강 중 반의 전 과목·전 강사 통합 + 과목별 교시 기본뷰 탭. 슬롯 없으면 null. */}
+      <StudentWeekGrid rows={current} config={periodsConfig} />
       <Section
         title="수강 중인 수업"
         rows={current}
