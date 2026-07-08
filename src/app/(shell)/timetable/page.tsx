@@ -250,7 +250,7 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <TimetableToolbarActions subject={subject} canSync={canSync} sheetUrl={sheetUrl} />
+        <TimetableToolbarActions subject={subject} canSync={canSync} sheetUrl={sheetUrl} compact1h={compactList} />
       </div>
 
       {slots.length === 0 ? (

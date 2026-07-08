@@ -17,6 +17,10 @@ import { appendInjaewonIntegratedSheet } from "./injaewon-integrated-sheet";
  */
 export async function buildEnglishTimetableBuffer(opts?: {
   teacherId?: string;
+  /** true=구글시트용(수식) / false·미지정=엑셀 다운로드용(정적 값). */
+  withFormulas?: boolean;
+  /** '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일. */
+  compactSections?: Set<number>;
 }): Promise<ArrayBuffer> {
   const [slots, teacherColors, settings] = await Promise.all([
     getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId }),
@@ -56,6 +60,8 @@ export async function buildEnglishTimetableBuffer(opts?: {
     capacityByClassId,
     teacherColors,
     referenceDate: weekMonday,
+    compactSections: opts?.compactSections,
+    withFormulas: opts?.withFormulas,
     title: `${academyLabel} ${month}월 통합 영어시간표`,
   });
   appendTeacherGridSheet(wb, slots, {

@@ -331,15 +331,15 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
 
 export type SyncState = { error?: string; ok?: boolean } | undefined;
 
-/** 과목별 xlsx 버퍼 빌더 선택(레지스트리) — SHEET_EXPORT_SUBJECTS와 1:1. */
-async function buildTimetableBufferFor(subject: SheetExportSubject): Promise<ArrayBuffer> {
+/** 과목별 xlsx 버퍼 빌더 선택(레지스트리) — SHEET_EXPORT_SUBJECTS와 1:1. 구글시트는 수식(withFormulas). */
+async function buildTimetableBufferFor(subject: SheetExportSubject, compactSections?: Set<number>): Promise<ArrayBuffer> {
   // master 전용 경로라 전체(unscoped) 내보내기 — teacherId 미지정.
   return subject === "math"
     ? buildMathTimetableBuffer()
-    : buildEnglishTimetableBuffer();
+    : buildEnglishTimetableBuffer({ withFormulas: true, compactSections });
 }
 
-export async function syncSheetsNow(subject: string): Promise<SyncState> {
+export async function syncSheetsNow(subject: string, compact1h?: number[]): Promise<SyncState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   // ⚠️ master 전용 (CLAUDE.md #58: 페이지가 아니라 액션을 게이트). 이 동기화는 **테넌트 전체 시간표**
@@ -376,7 +376,7 @@ export async function syncSheetsNow(subject: string): Promise<SyncState> {
   try {
     // 과목 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에 통째 덮어쓰기
     // (서비스계정 용량 0이라 '생성' 불가 → '갱신'만). 대상 시트=과목당 전용 1개(수학·영어 분리).
-    const buffer = await buildTimetableBufferFor(subject);
+    const buffer = await buildTimetableBufferFor(subject, new Set(compact1h ?? []));
     await overwriteTimetableSheet(spreadsheetId, buffer);
     await supabase.from("user_integrations").upsert(
       {

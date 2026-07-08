@@ -10,24 +10,28 @@ export function TimetableToolbarActions({
   subject,
   canSync = false,
   sheetUrl = null,
+  compact1h = [],
 }: {
   subject?: string;
   /** 구글 시트 동기화(=테넌트 전체 시간표 외부 push)는 master + 지원 과목 + 연동 ON일 때만. */
   canSync?: boolean;
   /** 연결된 구글 시트 URL(설정돼 있을 때만). 있으면 '시트 열기' 노출. */
   sheetUrl?: string | null;
+  /** 현재 화면의 '1시간 단위' 압축 섹션(sectionKey) — 엑셀·시트 내보내기에 그대로 반영. */
+  compact1h?: number[];
 }) {
   const [syncing, startSync] = useTransition();
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const subjectKey = subject ?? "math";
-  const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subjectKey)}`;
+  const compactParam = compact1h.length ? `&compact1h=${[...compact1h].sort((a, b) => a - b).join(",")}` : "";
+  const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subjectKey)}${compactParam}`;
   // 가져오기(수강편집 라운드트립)는 math 전용(영어는 내보내기 전용). 파일·시트 두 경로 모두 게이트.
   const canImport = supportsTimetableImport(subjectKey);
 
   function pushToSheet() {
     setSyncMsg(null);
     startSync(async () => {
-      const res = await syncSheetsNow(subjectKey);
+      const res = await syncSheetsNow(subjectKey, compact1h);
       if (res?.error) setSyncMsg(res.error);
       else setSyncMsg("시트에 반영됨");
     });

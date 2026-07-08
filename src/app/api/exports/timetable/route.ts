@@ -27,7 +27,11 @@ export async function GET(req: Request) {
   // 영어 = 강사별(마스터) + 통합(파생) 2탭 익스포터. 화면 강사뷰/통합뷰와 동일 순수 모델 emit.
   if (subject === "english") {
     const teacherId = user.systemRole === "teacher" ? user.id : undefined;
-    const buf = await buildEnglishTimetableBuffer({ teacherId });
+    // '1시간 단위' 토글(compact1h) 반영. 엑셀 다운로드 = 정적 값(withFormulas 미지정=false).
+    const compactSections = new Set(
+      (new URL(req.url).searchParams.get("compact1h") ?? "").split(",").map(Number).filter(Number.isFinite),
+    );
+    const buf = await buildEnglishTimetableBuffer({ teacherId, compactSections });
     return new NextResponse(Buffer.from(buf), {
       headers: {
         "Content-Type": XLSX_MIME,

@@ -56,6 +56,36 @@ const hashIdx = (s: string, mod: number) => {
   for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return h % mod;
 };
+/** 1-based 열 번호 → 엑셀 열 문자(3→"C"). */
+const colLetter = (n: number): string => {
+  let x = "", k = n;
+  while (k > 0) { x = String.fromCharCode(65 + ((k - 1) % 26)) + x; k = Math.floor((k - 1) / 26); }
+  return x;
+};
+/**
+ * 방 행 수식(구글시트 전용) — 원본 1-rxc의 방-집계 LET/LAMBDA를 이 블록의 실제 행/열로 재현.
+ * 블록의 미니그리드(요일×교시, "강사↵↵방")에서 방번호(3자리/SKY)를 요일별로 추출·집계해 "월수 602 / 목 605".
+ * 원본은 ROW()/COLUMN() 상대참조라 고정 레이아웃 가정 → 여기선 동적 레이아웃이라 상수로 박아 넣는다.
+ */
+function roomFormula(headerRow: number, blockCol: number, gridStart: number, gridEnd: number): string {
+  return (
+    `IFNA(LET(헤더행,${headerRow},블록열,${blockCol},데이터시작행,${gridStart},데이터끝행,${gridEnd},` +
+    `PROCESS_COLUMN,LAMBDA(컬럼오프셋,LET(` +
+    `요일라벨,TRIM(TO_TEXT(INDIRECT(ADDRESS(헤더행+3,블록열+컬럼오프셋,4)))),` +
+    `범위,INDIRECT(ADDRESS(데이터시작행,블록열+컬럼오프셋,4)&":"&ADDRESS(데이터끝행,블록열+컬럼오프셋,4)),` +
+    `extracted,MAP(범위,LAMBDA(cell,IFERROR(REGEXEXTRACT(TO_TEXT(cell),"\\b(\\d{3}|SKY)\\b")))),` +
+    `uniques,UNIQUE(TOCOL(extracted,1)),joined,TEXTJOIN("-",1,uniques),` +
+    `IF(AND(joined<>"",LEN(요일라벨)>0),요일라벨&" "&joined,""))),` +
+    `initial_results,MAP(SEQUENCE(5,1,0),LAMBDA(o,PROCESS_COLUMN(o))),` +
+    `final_results,IFERROR(FILTER(initial_results,initial_results<>""),""),` +
+    `IF(COUNTA(final_results)=0,"",LET(` +
+    `unique_classrooms,UNIQUE(MAP(final_results,LAMBDA(x,IFERROR(REGEXEXTRACT(x,"\\s(.+)"),"")))),` +
+    `grouped_results,MAP(unique_classrooms,LAMBDA(cr,LET(` +
+    `days,FILTER(final_results,REGEXMATCH(final_results,"\\s"&cr&"$")),` +
+    `day_headers,MAP(days,LAMBDA(y,IFERROR(REGEXEXTRACT(y,"(.+?)\\s"),""))),` +
+    `TEXTJOIN("",1,day_headers)&" "&cr))),TEXTJOIN(" / ",1,grouped_results)))),"")`
+  );
+}
 
 const studentName = (s: StudentLine) => (s.englishName ? `${s.name}(${s.englishName})` : s.name);
 // 학교+학년 = 수학과 동일 공용 헬퍼(빈값 "-"·레벨/숫자 추출). 순서만 numberLast:true("종로초2") — 통합 원본 표기.
@@ -100,6 +130,8 @@ export type InjaewonSheetOpts = {
   capacityByClassId?: Record<string, number | null>;
   teacherColors?: TeacherColorMap;
   referenceDate?: string; // 기준 월요일(YYYY-MM-DD) — 신입/퇴원 윈도우. 미지정=오늘.
+  compactSections?: Set<number>; // '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일.
+  withFormulas?: boolean; // true=구글시트용(인원/퇴원수 COUNTA·방 행 파생 수식) / false=엑셀용(정적 값).
   sheetName?: string;
   title?: string;
 };
@@ -132,6 +164,7 @@ export function appendInjaewonIntegratedSheet(
   opts: InjaewonSheetOpts,
 ): Worksheet {
   const refMs = opts.referenceDate ? new Date(opts.referenceDate).getTime() : Date.now();
+  const withFormulas = opts.withFormulas ?? false;
   const teacherColors = opts.teacherColors ?? {};
   const teacherBg = (label: string): string => {
     const c = teacherColors[label]?.bg;
@@ -146,7 +179,7 @@ export function appendInjaewonIntegratedSheet(
   };
 
   // 앱 통합뷰와 동일 그룹핑/순서/교시축/요일축(N교시 시작, 카드 가나다).
-  const groups = buildRichCardGroups(slots as unknown as GridSlot[], opts.config).filter(
+  const groups = buildRichCardGroups(slots as unknown as GridSlot[], opts.config, opts.compactSections ?? new Set()).filter(
     (g) => g.days.some((d) => WEEKDAYS.includes(d as Weekday)),
   );
   // 셀별 방(인재원 셀 "강사↵↵방") — buildRichCardGroups는 방을 헤더로만 집계하므로 order 키로 별도 매핑.
@@ -173,11 +206,12 @@ export function appendInjaewonIntegratedSheet(
     fmt?: {
       bg?: string; color?: string; bold?: boolean; size?: number;
       h?: "left" | "center"; vAlign?: "top" | "middle" | "bottom"; wrap?: boolean;
-      border?: Partial<Record<Side, Line>>; note?: string;
+      border?: Partial<Record<Side, Line>>; note?: string; formula?: string;
     },
   ) => {
     const cell = sheet.getCell(r, c);
-    if (v !== "") cell.value = v;
+    if (fmt?.formula && withFormulas) cell.value = { formula: fmt.formula, result: v === "" ? undefined : v };
+    else if (v !== "") cell.value = v;
     cell.font = { name: FONT, size: fmt?.size ?? 10, bold: fmt?.bold ?? false, ...(fmt?.color ? { color: { argb: fmt.color } } : {}) };
     cell.alignment = { horizontal: fmt?.h ?? "center", vertical: fmt?.vAlign ?? "middle", wrapText: fmt?.wrap ?? false };
     if (fmt?.bg) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fmt.bg } };
@@ -219,12 +253,17 @@ export function appendInjaewonIntegratedSheet(
     sheet.getRow(secRow).height = 26;
     sheet.getRow(secRow + 1).height = 19;
 
-    // 2) 방 행(classroomLabel = "월수 304 / 목 LAB실")
+    // 2) 방 행 — classroomLabel(정적) / 구글시트는 미니그리드 방번호 파생 수식(원본 재현).
     const roomRow = secRow + 2;
+    const gridStart = secRow + 4; // 첫 교시 행(dayRow+1)
+    const gridEnd = secRow + 3 + pRows.length; // 마지막 교시 행
     cards.forEach((c, i) => {
       const cs = classColStart(i);
       merge(roomRow, cs, roomRow, cs + CLASS_COLS - 1);
-      set(roomRow, cs, c.classroomLabel, { bg: hexToARGB(c.bgColor, PASTELS[hashIdx(c.classId, PASTELS.length)]), bold: true, size: 10 });
+      set(roomRow, cs, c.classroomLabel, {
+        bg: hexToARGB(c.bgColor, PASTELS[hashIdx(c.classId, PASTELS.length)]), bold: true, size: 10,
+        formula: roomFormula(secRow, cs, gridStart, gridEnd),
+      });
     });
     sheet.getRow(roomRow).height = 19;
 
@@ -272,6 +311,7 @@ export function appendInjaewonIntegratedSheet(
 
     // 5) 명단 (순번 1~11 고정, 초과 확장) : 이름 C:E · 학교학년 F:G, 상태색+메모
     const rosterN = Math.max(11, ...activeByCard.map((a) => a.length));
+    const rosterStart = row;
     for (let k = 0; k < rosterN; k++) {
       const rr = row++;
       set(rr, 2, String(k + 1), { size: 9 });
@@ -288,6 +328,7 @@ export function appendInjaewonIntegratedSheet(
       });
       sheet.getRow(rr).height = 19;
     }
+    const rosterEnd = row - 1;
 
     // 6) 정원
     const capRow = row++;
@@ -305,7 +346,7 @@ export function appendInjaewonIntegratedSheet(
     cards.forEach((_, i) => {
       const cs = classColStart(i);
       merge(cntRow, cs, cntRow, cs + CLASS_COLS - 1);
-      set(cntRow, cs, String(activeByCard[i].length), { size: 10 });
+      set(cntRow, cs, String(activeByCard[i].length), { size: 10, formula: `COUNTA(${colLetter(cs)}${rosterStart}:${colLetter(cs)}${rosterEnd})` });
     });
 
     // 8) 대기(2행 고정, 초과 확장)
@@ -344,12 +385,13 @@ export function appendInjaewonIntegratedSheet(
     set(wdStart, 2, "퇴원생\n명단", { size: 10, wrap: true });
 
     // 10) 퇴원수
+    const wdEnd = row - 1;
     const wdcRow = row++;
     set(wdcRow, 2, "퇴원수", { size: 10 });
     cards.forEach((_, i) => {
       const cs = classColStart(i);
       merge(wdcRow, cs, wdcRow, cs + CLASS_COLS - 1);
-      set(wdcRow, cs, String(wdByCard[i].length), { size: 10 });
+      set(wdcRow, cs, String(wdByCard[i].length), { size: 10, formula: `COUNTA(${colLetter(cs)}${wdStart}:${colLetter(cs)}${wdEnd})` });
     });
 
     // ── 테두리: 얇은 격자 + 구조 굵은선. 교시 미니그리드는 색으로만 구분(내부선 없음) ──
