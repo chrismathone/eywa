@@ -3,6 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { attachmentFilename } from "@/lib/http/content-disposition";
 import { buildTimetableWorkbook } from "@/features/exports/timetable-excel";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
+import { buildEnglishTimetableBuffer } from "@/features/exports/english-timetable/build-buffer";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -23,7 +24,19 @@ export async function GET(req: Request) {
     });
   }
 
-  // 그 외 과목(영어 등) — 익스포터 미이식, 기존 범용 워크북 폴백(후속 이식).
+  // 영어 = 강사별(마스터) + 통합(파생) 2탭 익스포터. 화면 강사뷰/통합뷰와 동일 순수 모델 emit.
+  if (subject === "english") {
+    const teacherId = user.systemRole === "teacher" ? user.id : undefined;
+    const buf = await buildEnglishTimetableBuffer({ teacherId });
+    return new NextResponse(Buffer.from(buf), {
+      headers: {
+        "Content-Type": XLSX_MIME,
+        "Content-Disposition": attachmentFilename(`영어_시간표_${date}.xlsx`),
+      },
+    });
+  }
+
+  // 그 외 과목 — 익스포터 미이식, 기존 범용 워크북 폴백(후속 이식).
   const wb = await buildTimetableWorkbook();
   const buf = await wb.xlsx.writeBuffer();
   return new NextResponse(buf, {

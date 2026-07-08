@@ -1,5 +1,6 @@
-import type { NotificationsSettings } from "@/features/owner/settings-types";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
+import { SHEET_EXPORT_SUBJECTS } from "@/features/integrations/sheets-provider";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
   getMakeeduAutoSyncStatus,
   getMakeeduSyncRuns,
@@ -8,8 +9,7 @@ import {
   getMakeeduSyncLock,
 } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
-import { SheetsClient } from "@/app/(shell)/admin/integrations/sheets/_client";
-import { SheetsTargetForm } from "./sheets-target-form";
+import { SubjectSheetCard } from "./subject-sheet-card";
 import { MakeeduSyncCard } from "./makeedu-sync-card";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
@@ -27,26 +27,28 @@ import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push
 const RUNS_PAGE_SIZE = 8;
 
 export async function SheetsFace({
-  notifications,
+  subjects,
   page = 1,
   isEmbed = false,
 }: {
-  notifications: NotificationsSettings;
+  /** 과목 라벨 소스(operations.subjects) — 시트 세팅 카드 제목용(하드코딩 금지). */
+  subjects: Parameters<typeof buildSubjectMaps>[0];
   page?: number;
   isEmbed?: boolean;
 }) {
   // 서버 렌더 시각 — 워처 온라인/상대시각 판정용(RSC는 요청당 1회 실행이라 안정).
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const nowMs = Date.now();
-  // 독립 조회 여섯 → 병렬(B4).
-  const [status, makeeduStatus, runsPage, pushCandidates, workers, syncLock] = await Promise.all([
-    getGoogleSheetsStatus(),
+  // 독립 조회 → 병렬(B4). 시트 상태는 지원 과목(math·english)마다 별도 provider 행.
+  const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, workers, syncLock] = await Promise.all([
+    Promise.all(SHEET_EXPORT_SUBJECTS.map((s) => getGoogleSheetsStatus(s))),
     getMakeeduAutoSyncStatus(),
     getMakeeduSyncRuns(page, RUNS_PAGE_SIZE),
     getUnpushedIntakeConsultations(),
     getMakeeduSyncWorkers(nowMs),
     getMakeeduSyncLock(),
   ]);
+  const subjectMaps = buildSubjectMaps(subjects);
   const saEmail = getServiceAccountEmail();
   const runsTotalPages = Math.max(1, Math.ceil(runsPage.total / RUNS_PAGE_SIZE));
   // 실행 이력 페이저 href — ?tab=sheets(+embed) 보존, page>1일 때만 page 파라미터(1페이지는 생략).
@@ -74,24 +76,24 @@ export async function SheetsFace({
       <div className="space-y-5">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 외부 연동</p>
-        <h2 className="text-foreground text-lg font-semibold">구글 시트 내보내기</h2>
+        <h2 className="text-foreground text-lg font-semibold">구글 시트 내보내기 (과목별)</h2>
         <p className="text-muted-foreground mt-1 max-w-3xl text-sm">
-          연동을 켜면 수학 시간표 화면에 ‘구글 시트’ 버튼이 생깁니다(원장 전용). 누르면 아래에 등록한
-          구글 시트에 현재 시간표가 <strong>통째로 덮어쓰기</strong>됩니다(전체·강사별·요약 탭).
+          과목마다 <strong>전용 구글 시트</strong>를 등록하고 켜면 그 과목 시간표 화면에 ‘시트 반영’ 버튼이
+          생깁니다(원장 전용). 누르면 등록한 시트에 현재 시간표가 <strong>통째로 덮어쓰기</strong>됩니다.
+          <br />⚠️ 전체 덮어쓰기라 <strong>과목마다 서로 다른 시트</strong>를 써야 합니다(수학·영어를 한 시트에 섞지 마세요).
         </p>
       </header>
 
-      {/* 두 컬럼을 동일 높이로(stretch) — 짧은 좌측 카드 아래 빈 그리드 여백이 드러나지 않게. */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
         {/* 좌 — 최초 1회 설정 안내(서비스계정은 새 시트를 못 만들어 사람이 만든 시트에 공유가 필요) */}
         <section className="border-border bg-card flex flex-col rounded-md border p-5 text-[13px] leading-relaxed">
-          <p className="text-foreground font-semibold">처음 한 번 설정</p>
+          <p className="text-foreground font-semibold">처음 한 번 설정 (과목마다)</p>
           <ol className="text-text-dim mt-2 list-decimal space-y-1.5 pl-5">
             <li>
-              구글 드라이브에서 <strong>빈 구글 시트</strong>를 하나 만듭니다(원장 계정 소유).
+              구글 드라이브에서 <strong>빈 구글 시트</strong>를 과목 수만큼 만듭니다(원장 계정 소유).
             </li>
             <li>
-              그 시트를 아래 계정에 <strong>‘편집자’로 공유</strong>합니다:
+              각 시트를 아래 계정에 <strong>‘편집자’로 공유</strong>합니다:
               {saEmail ? (
                 <code className="bg-bg-soft border-line mt-1 block w-fit rounded border px-1.5 py-0.5 text-[12px] break-all">
                   {saEmail}
@@ -101,20 +103,21 @@ export async function SheetsFace({
               )}
             </li>
             <li>
-              시트 URL의 <code>/d/</code> 뒤 ID를 우측 <strong>Google Sheets ID</strong>에 등록합니다.
+              시트 URL의 <code>/d/</code> 뒤 ID를 오른쪽 과목 카드의 <strong>Google Sheets ID</strong>에 등록합니다.
             </li>
-            <li>우측 토글을 켜고, 시간표 화면의 ‘시트’ 버튼으로 동기화합니다.</li>
+            <li>토글을 켜고, 시간표 화면의 ‘시트 반영’ 버튼으로 동기화합니다.</li>
           </ol>
           <p className="text-text-faint mt-auto pt-3 text-[12px]">
             ⚠️ 서비스계정은 저장공간이 없어 시트를 새로 만들 수 없습니다(미리 만든 시트 필요). 동기화는
-            그 시트를 <strong>전체 덮어쓰기</strong>하므로 다른 내용과 섞지 말고 eywa 전용 시트로 쓰세요.
+            그 시트를 <strong>전체 덮어쓰기</strong>하므로 다른 내용과 섞지 말고 과목 전용 시트로 쓰세요.
           </p>
         </section>
 
-        {/* 우 — 토글 + 대상 시트 ID */}
+        {/* 우 — 과목별 시트 카드(토글 + 대상 ID + 상태) */}
         <div className="space-y-4">
-          <SheetsClient status={status} />
-          <SheetsTargetForm initial={notifications} />
+          {SHEET_EXPORT_SUBJECTS.map((s, i) => (
+            <SubjectSheetCard key={s} subject={s} label={subjectMaps.labelOf(s)} status={sheetStatuses[i]} />
+          ))}
         </div>
       </div>
       </div>

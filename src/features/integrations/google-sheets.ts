@@ -92,17 +92,17 @@ function translateSheetsError(e: unknown): string {
 }
 
 /**
- * 수학 시간표 xlsx를 **운영자가 미리 만들어 서비스계정과 공유한 기존 구글 시트에 통째 덮어쓰기**.
+ * 시간표 xlsx를 **운영자가 미리 만들어 서비스계정과 공유한 기존 구글 시트에 통째 덮어쓰기**(과목 무관).
  * (ijw `timetableSheetsSync.updateSheetContent`와 동일 방식 — `drive.files.update` media 교체.)
  *
  * ⚠️ **서비스계정은 자체 Drive 용량이 0이라 새 시트를 만들 수 없다**(storageQuotaExceeded). 그래서
  *    ① 사람이 빈 구글 시트를 만들고(소유자=원장 계정 용량 사용) ② 그 시트를 서비스계정 이메일
  *    ([getServiceAccountEmail])에 **'편집자'로 공유**한 뒤 ③ 그 시트 ID를 연동에 등록해야 한다.
  *    eywa는 그 기존 시트를 **갱신(update)만** 한다.
- * ⚠️ 이는 **시트 전체 덮어쓰기**다 — 대상 시트의 기존 탭은 보존되지 않는다(테넌트 1개 = 전용 시트 1개 가정).
- *    xlsx의 탭 구성(전체·강사별·_meta)이 그대로 시트에 반영된다.
+ * ⚠️ 이는 **시트 전체 덮어쓰기**다 — 대상 시트의 기존 탭은 보존되지 않는다(과목당 전용 시트 1개 가정 —
+ *    수학·영어는 서로 다른 시트여야 한다). 넘긴 xlsx의 탭 구성이 그대로 시트에 반영된다.
  */
-export async function overwriteMathTimetableSheet(
+export async function overwriteTimetableSheet(
   spreadsheetId: string,
   buffer: ArrayBuffer,
 ): Promise<void> {

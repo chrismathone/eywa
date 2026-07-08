@@ -8,6 +8,7 @@ import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
+import { isSheetExportSubject } from "@/features/integrations/sheets-provider";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { getWeekReferenceDate, mondayOf, thisMonday, weekRelation } from "@/features/timetable/lib/week";
@@ -67,20 +68,12 @@ export default async function TimetablePage({
 
   // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
   const teacherId = user.systemRole === "teacher" ? user.id : undefined;
-  // '시트' 버튼 = master + 구글 시트 내보내기 연동 ON일 때만(비-master는 조회도 생략).
-  // '시트 열기'는 대상 시트(spreadsheetId)가 설정돼 있으면 노출 → 상태(enabled+spreadsheetId)를 함께 받는다.
-  const [allSlots, settings, sheetsStatus, teacherColors] = await Promise.all([
+  const [allSlots, settings, teacherColors] = await Promise.all([
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),
-    user.systemRole === "master" ? getGoogleSheetsStatus() : Promise.resolve(null),
     // 강사색 맵은 통합뷰(셀·담임색)·강사뷰(헤더색)에서만 필요. 기본뷰는 생략.
     view !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
   ]);
-  const canSync = user.systemRole === "master" && sheetsStatus?.enabled === true;
-  // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(master 한정, 위 조회가 master만 수행).
-  const sheetUrl = sheetsStatus?.spreadsheetId
-    ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
-    : null;
   // 교시 시각 = owner 설정(operations.weekdayPeriods/weekendPeriods) → PeriodsConfig. 미설정 시 기본 상수.
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -91,6 +84,18 @@ export default async function TimetablePage({
   const defaultSubject = available[0] ?? "";
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+
+  // '시트 반영' 버튼 = master + 지원 과목(math·english) + 연동 ON. 상태는 **현재 보는 과목** 기준.
+  // (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 — master 한정 1회 경량 쿼리.)
+  const sheetsStatus =
+    user.systemRole === "master" && isSheetExportSubject(subject)
+      ? await getGoogleSheetsStatus(subject)
+      : null;
+  const canSync = sheetsStatus?.enabled === true;
+  // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
+  const sheetUrl = sheetsStatus?.spreadsheetId
+    ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
+    : null;
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   const slots = allSlots.filter((s) => s.subject === subject);
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);

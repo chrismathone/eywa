@@ -1,23 +1,10 @@
 import type { ReactElement } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { readableTextColor } from "@/lib/color-utils";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
-import {
-  breakBlocksForColumn,
-  buildSlotIntervals,
-  buildTenMinuteRows,
-  minToHM,
-  packGroups,
-  parseBreakRanges,
-  slotRowSpan,
-  type ClassInterval,
-} from "@/features/timetable/lib/ten-minute-grid";
+import { minToHM, type ClassInterval } from "@/features/timetable/lib/ten-minute-grid";
+import { buildTeacherGridModel } from "@/features/timetable/lib/teacher-grid-model";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
-import {
-  ENGLISH_SHEET_TEACHERS,
-  compareSheetTeachers,
-} from "@/features/timetable/lib/english-teacher-sheet";
 import { TeacherChip } from "./teacher-chip";
 
 // 시트 "강사별영어시간표(7월)" = 강사-major 그리드(강사가 세로 블록, 그 안에 월~토가 가로).
@@ -64,9 +51,6 @@ const PERIOD_EDGE = "border-b-2 border-b-ink/40";
 // 단일 경로로 렌더** → 굵기·위치 균일, 행 높이 정확히 rowH. 세로줄은 border-r만·왼쪽 프레임은 시각열
 // border-l 하나만 = 이중선 없음.
 
-/** 슬롯 강사 라벨(컬럼 키) — slot_teacher_label 우선, 없으면 담임. */
-const teacherOf = (s: ScheduleSlotWithStudents) => s.slotTeacherLabel ?? s.teacherName ?? "—";
-
 /** 요일 헤더 "M/D" 라벨(주 월요일 기준, UTC 롤오버 안전). */
 function dayDateLabels(weekMonday?: string): Partial<Record<DayOfWeek, string>> {
   if (!weekMonday) return {};
@@ -84,8 +68,6 @@ function dayDateLabels(weekMonday?: string): Partial<Record<DayOfWeek, string>> 
 function intervalSlot(iv: ClassInterval<ScheduleSlotWithStudents>): ScheduleSlotWithStudents {
   return { ...iv.slots[0]!, startTime: minToHM(iv.startMin), endTime: minToHM(iv.endMin) };
 }
-
-type TeacherCol = { name: string; days: DayOfWeek[]; color: { bg: string; text: string } | null };
 
 export function TeacherGridView({
   slots,
@@ -119,64 +101,19 @@ export function TeacherGridView({
   const periodEdgeMins = new Set(
     (sectionLineMins ?? []).map((m) => Math.floor(m / stepMin) * stepMin),
   );
-  // 쉬는 시간(격자 스냅) + 가로줄 제외 강사 집합.
-  const breaks = parseBreakRanges(breakRanges, stepMin);
-  const excludedSet = new Set(excludedTeachers ?? []);
 
-  // 강사 목록 = 슬롯 강사 라벨, 시트 좌→우 순서. 각 강사의 요일은 실제 가르치는 요일만(자연순 월→토).
-  const teacherNames = Array.from(new Set(slots.map(teacherOf))).sort(compareSheetTeachers);
-  const colorFor = (name: string): { bg: string; text: string } | null => {
-    const db = teacherColors?.[name]; // 직원 등록 강사 = DB 저장색 우선
-    if (db) return { bg: db.bg, text: db.text ?? readableTextColor(db.bg) };
-    const sheet = ENGLISH_SHEET_TEACHERS[name]?.color; // 미등록 = 시트 미러색
-    if (sheet) return { bg: sheet, text: readableTextColor(sheet) };
-    return null;
-  };
-  const teachers: TeacherCol[] = teacherNames
-    .map((name) => {
-      const daySet = new Set(slots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));
-      const days = DAY_ORDER.filter((d) => daySet.has(d));
-      return { name, days, color: colorFor(name) };
-    })
-    .filter((t) => t.days.length > 0);
-
-  // 행 = 시간 격자(데이터 범위 ∪ 시트 폴백 14:20~22:00, 단위=stepMin). 절대 시각축이라 토요일 오후도
-  // 자연 정렬(옛 교시축의 rowOf 'mon' 주말 핵이 필요 없어짐).
-  const rows = buildTenMinuteRows(slots, undefined, stepMin);
-
-  // 강사×요일: 같은 시간 범위 병렬 반 = 한 그룹(합반, colSpan 셀) → 그룹 단위 레인 패킹.
-  const prepared = teachers.map((t) => {
-    const cols = t.days.map((day) => {
-      const colSlots = slots.filter((s) => teacherOf(s) === t.name && s.dayOfWeek === day);
-      // ⚠️ 슬롯=블록 1:1(접기 없음) — 한 수업이 2교시 연속이어도 시트처럼 교시별 셀 2개로(2026-07-06).
-      const intervals = buildSlotIntervals(colSlots, stepMin);
-      const { groups, laneCount } = packGroups(intervals);
-      // (행,레인) → 앵커 그룹 / 피복 셀 사전계산.
-      const anchors = new Map<string, { group: (typeof groups)[number]; span: number }>();
-      const covered = new Set<string>();
-      for (const g of groups) {
-        const { index, span } = slotRowSpan(rows, minToHM(g.startMin), minToHM(g.endMin));
-        anchors.set(`${index}:${g.laneStart}`, { group: g, span });
-        for (let r = index; r < index + span; r++)
-          for (let l = g.laneStart; l < g.laneStart + g.laneWidth; l++)
-            if (!(r === index && l === g.laneStart)) covered.add(`${r}:${l}`);
-      }
-      // 쉬는 시간 블록(앞뒤 수업 붙은 경우만) — 전 레인 폭(colSpan=laneCount). 앵커 행 + 피복 행.
-      const breakAnchors = new Map<number, { span: number }>();
-      const breakCovered = new Set<number>();
-      for (const bl of breakBlocksForColumn(rows, intervals, breaks)) {
-        breakAnchors.set(bl.index, { span: bl.span });
-        for (let r = bl.index; r < bl.index + bl.span; r++) breakCovered.add(r);
-      }
-      // 레인 폭 — 1레인=기본 65, 다중(병렬)=레인당 64(시트도 좁은 서브컬럼).
-      const laneW = laneCount > 1 ? LANE_COL_W : DAY_COL_W;
-      return { day, laneCount, laneW, anchors, covered, breakAnchors, breakCovered };
-    });
-    return { ...t, cols, lineExcluded: excludedSet.has(t.name) };
+  // 레이아웃(강사·요일·10분 격자·병렬 레인·강사색)은 순수 모델 단일 소스 — 엑셀 익스포터와 공유해
+  // 화면·엑셀 셀 배치가 구조적으로 일치한다. 화면은 이 모델을 순회해 렌더(px·테두리·JSX)만 담당.
+  const { rows, teachers: prepared } = buildTeacherGridModel(slots, {
+    stepMin,
+    breakRanges,
+    excludedTeachers,
+    teacherColors,
   });
-
+  // 레인 폭(px) — 1레인=기본 65, 다중(병렬)=레인당 64(시트도 좁은 서브컬럼). 표현이라 화면 소관.
+  const laneW = (laneCount: number) => (laneCount > 1 ? LANE_COL_W : DAY_COL_W);
   const laneColsFlat = prepared.flatMap((t) =>
-    t.cols.flatMap((col) => Array.from({ length: col.laneCount }, () => col.laneW)),
+    t.cols.flatMap((col) => Array.from({ length: col.laneCount }, () => laneW(col.laneCount))),
   );
   const tableW = TIME_COL_W + laneColsFlat.reduce((a, w) => a + w, 0);
 
