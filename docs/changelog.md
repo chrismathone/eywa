@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 활동 로그 가독성 — "누구"(target_label) + 한글 필드명 + 기계 노이즈 제외 (2026-07-08) — ✅ 프로덕션 적용·백필 완료(null 0) + 실렌더 검증 + tsc0/lint0 · 0083a
+사용자 제보: "등록상담 수정 — siblings 있음→—, career_goal…" 전혀 알아볼 수 없음(누구인지·무슨 필드인지). 원인: 등록상담은 학생이 아니라 `prospect_name`에 이름이 있는데 트리거 coalesce에 없어 target_label null + 영어 컬럼명 노출.
+- **누구(target_label)**([0083a](../supabase/migrations/0083a_activity_target_label.sql)): 트리거 `log_activity()` 재작성 — 이름 컬럼 폭넓게(`name·prospect_name·student_name·class_name·title·book_name·display_name·parent_name`) → 없으면 **`student_id`→학생명 조회**(상담/성적/수납/수강/레벨테스트 등 링크 테이블). **기존 로그 19건 전부 백필**(null 0).
+- **한글 필드명**: [COLUMN_LABEL](../src/features/audit/activity.ts) 대폭 확장(등록상담 필드 등 40여개) + 빈값 `→비움` 렌더. 결과: `등록상담 「이주아」 수정 — 형제자매 있음→비움, 희망진로 신약개발연구원→비움, 과목상세 변경`.
+- **기계 노이즈 제외**: 오디오 처리 파이프라인(업로드→전사→분석, AssemblyAI 웹훅)·makeedu 동기화 자동필드(`audio_*·processing_*·transcription·speaker_labels·makeedu_*`)를 트리거 noise로 이동 → 사람 편집만 로그(이 필드만 바뀐 UPDATE는 미기록). (참고: 웹훅은 actor null=시스템이라 선생님별 탭엔 애초 미노출 — 저장·미래 전체뷰 위생.)
+
 ### 최근 접속(로그인) 기록 — 활동 로그 탭에 추가 + 자동 로그인 판별 (2026-07-08) — ✅ 롤백테스트 + 프로덕션 실동작 검증(무오염) + 적대리뷰 3렌즈 6건 전부 반영 + tsc0/lint0 · 0082a **프로덕션 적용됨**
 사용자 요청: "최근 접속(로그인) 기록 + 자동로그인 구분 스마트하게". 결정: 옵션①(지속세션 재접속=자동). ⚠️ Supabase `auth.audit_log_entries`는 이 프로젝트에서 비어 있어 못 씀 → 앱 기록 + `auth.sessions` 읽기 조합.
 - **수동 로그인 영구 기록**([login_events](../supabase/migrations/0082a_login_events.sql)): 로그인 액션([`(auth)/login/actions.ts`](<../src/app/(auth)/login/actions.ts>))이 signInWithPassword 성공 시 기록(누가·언제·기기·IP). ⚠️ **`after()` 백그라운드 + admin 클라이언트**([recordLoginEvent](../src/features/audit/server/login-log.ts)) — 로그 지연이 로그인 크리티컬 패스를 절대 안 막음([[#10]] 보호, 적대리뷰 HIGH). 세션 만료 후에도 이력 잔존.
