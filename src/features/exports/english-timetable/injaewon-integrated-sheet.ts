@@ -325,7 +325,7 @@ export function appendInjaewonIntegratedSheet(
     merge(waitStart, 2, row - 1, 2);
     set(waitStart, 2, "대기", { size: 10 });
 
-    // 9) 퇴원생 명단(3행 고정, 초과 확장)
+    // 9) 퇴원생 명단(3행 고정, 초과 확장) — 퇴원생 셀 = 검은 배경·흰 글씨·볼드(사용자 지정).
     const wdN = Math.max(3, ...wdByCard.map((w) => w.length));
     const wdStart = row;
     for (let k = 0; k < wdN; k++) {
@@ -333,10 +333,11 @@ export function appendInjaewonIntegratedSheet(
       cards.forEach((_, i) => {
         const cs = classColStart(i);
         const s = wdByCard[i][k];
+        const wf = s ? { bg: "FF000000", color: "FFFFFFFF", bold: true } : {};
         merge(rr, cs, rr, cs + NAME_COLS - 1);
-        set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left" });
+        set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left", ...wf });
         merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
-        set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left" });
+        set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left", ...wf });
       });
     }
     merge(wdStart, 2, row - 1, 2);
