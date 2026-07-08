@@ -15,6 +15,13 @@ import {
   saveLessonReport,
   saveOnescreenSession,
 } from "../server/actions";
+import {
+  issueReportAttachmentUploadTicket,
+  registerReportAttachment,
+  removeReportAttachment,
+  signReportAttachmentUrls,
+} from "../server/attachment-actions";
+import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { OneScreenHubBar } from "./hub-bar";
@@ -40,6 +47,7 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         classnoteStatus: su.classnoteStatus,
         revoked: !!su.revokedAt,
         viewCount: su.viewCount,
+        attachments: su.attachments ?? [],
       };
   }
   return out;
@@ -76,6 +84,8 @@ export function OneScreenClient({
   const [classFilter, setClassFilter] = useState<string>("전체");
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(버튼 로딩)
+  const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
+  const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
 
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
@@ -378,6 +388,113 @@ export function OneScreenClient({
     toast.success(`${subjectName} 공유 링크를 재발급했습니다 — 새 링크를 다시 전달하세요`);
   }
 
+  // ── 학생 사진 첨부(P2b) — 저장된 보고서에만(서버 강제). subject는 DB 저장키(subjectKey)로 넘긴다. ──
+  const subjectKeyOf = (subjectName: string): string | undefined => {
+    const su = selected?.subjects.find((s) => s.name === subjectName);
+    return su?.subjectKey || su?.name || undefined;
+  };
+
+  // 선택 학생 과목별 첨부 path 시그니처 — 경로 변경 시에만 썸네일 URL 재요청(draft 편집엔 재요청 안 함).
+  const attTargets = selected
+    ? selected.subjects
+        .map((su) => ({
+          subject: su.subjectKey || su.name || undefined,
+          paths: (reports[selected.id]?.[su.name]?.attachments ?? []).map((a) => a.path),
+        }))
+        .filter((t) => t.paths.length > 0)
+    : [];
+  const attSig = attTargets.map((t) => `${t.subject ?? ""}:${t.paths.join(",")}`).join("|");
+  useEffect(() => {
+    // attTargets 없으면 재요청 안 함(기존 map은 path 키라 stale해도 오표시 없음 — 신규 서명 시 전체 교체).
+    if (!selected || attTargets.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const merged: Record<string, string> = {};
+      for (const t of attTargets) {
+        const res = await signReportAttachmentUrls({ studentId: selected.id, subject: t.subject });
+        if (res.urls) Object.assign(merged, res.urls);
+      }
+      if (!cancelled) setAttUrls(merged);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attSig가 attTargets 내용을 대표(경로 변경 시에만 재요청)
+  }, [selected?.id, attSig]);
+
+  // 파일별 순차 업로드(register read-modify-write clobber 방지). issue→uploadToTicket→register.
+  async function addAttachments(subjectName: string, files: File[]) {
+    if (!selected) return;
+    const studentId = selected.id;
+    const subject = subjectKeyOf(subjectName);
+    setUploadingSubject(subjectName);
+    let added = 0;
+    try {
+      for (const file of files) {
+        const ext = file.name.split(".").pop() || "jpg";
+        const issued = await issueReportAttachmentUploadTicket({
+          studentId,
+          subject,
+          contentType: file.type,
+          size: file.size,
+          ext,
+        });
+        if (issued.error || !issued.ticket) {
+          toast.error(issued.error ?? "업로드 준비에 실패했습니다");
+          break;
+        }
+        try {
+          await uploadToTicket(issued.ticket, file);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
+          break;
+        }
+        const reg = await registerReportAttachment({
+          studentId,
+          subject,
+          path: issued.ticket.path,
+          name: file.name,
+          size: file.size,
+        });
+        if (!reg.ok) {
+          toast.error(reg.error ?? "첨부 등록에 실패했습니다");
+          break;
+        }
+        added++;
+        // 첨부 변경 시 서버가 classnote 상태 리셋 → UI 배지도 클리어(재발송 유도).
+        patchReport(studentId, subjectName, (r) => ({
+          ...r,
+          attachments: reg.attachments ?? r.attachments,
+          classnoteStatus: undefined,
+        }));
+      }
+      if (added) toast.success(`사진 ${added}장 첨부 — ClassNote는 다시 발송하세요`);
+    } finally {
+      setUploadingSubject(null);
+    }
+  }
+
+  async function removeAttachment(subjectName: string, path: string) {
+    if (!selected) return;
+    const studentId = selected.id;
+    const res = await removeReportAttachment({ studentId, subject: subjectKeyOf(subjectName), path });
+    if (!res.ok) {
+      toast.error(res.error ?? "첨부 삭제에 실패했습니다");
+      return;
+    }
+    patchReport(studentId, subjectName, (r) => ({
+      ...r,
+      attachments: res.attachments ?? [],
+      classnoteStatus: undefined,
+    }));
+    setAttUrls((prev) => {
+      const n = { ...prev };
+      delete n[path];
+      return n;
+    });
+    toast.success("첨부를 삭제했습니다");
+  }
+
   return (
     <div className="space-y-4">
       <OneScreenTopBar
@@ -437,6 +554,10 @@ export function OneScreenClient({
                 onQueueClassnote={queueClassnote}
                 onRevoke={revokeShare}
                 onReissue={reissueShare}
+                onAddFiles={addAttachments}
+                onRemoveAttachment={removeAttachment}
+                attachmentUrls={attUrls}
+                uploadingSubject={uploadingSubject}
               />
             </div>
           </>

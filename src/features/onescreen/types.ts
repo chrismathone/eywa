@@ -23,6 +23,7 @@ export type Subject = {
   classnoteStatus?: string; // ClassNote 발송 상태(queued/processing/success/failed/too_old, null=미요청)
   revokedAt?: string; // 공유링크 취소 시각(P2a) — 있으면 링크 열람 차단됨
   viewCount?: number; // 학부모 열람 수(share_link_views count, P2a)
+  attachments?: { path: string; name: string }[]; // 학생 사진 첨부(P2b) — /r·ClassNote 스샷에 렌더
 };
 
 /** 한 테스트(일일/확인)의 점수 + 만점 + 직전 회차 점수 */

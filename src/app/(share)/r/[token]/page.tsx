@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
-import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { ClosedReportScreen } from "./_closed";
@@ -59,7 +59,7 @@ export default async function PublicLessonReportPage({
   const { data: report } = await admin
     .from("lesson_reports")
     .select(
-      "id, tenant_id, student_id, report_date, revoked_at, progress, exam_info, homework_score, teacher_name, notes, daily_test, check_test, attitude",
+      "id, tenant_id, student_id, report_date, revoked_at, progress, exam_info, homework_score, teacher_name, notes, daily_test, check_test, attitude, attachments",
     )
     .eq("share_token", token)
     .maybeSingle();
@@ -100,6 +100,19 @@ export default async function PublicLessonReportPage({
   const logoSrc = settings.profile.logoUrl
     ? await resolveBrandingSrc(settings.profile.logoUrl, report.tenant_id as string).catch(() => null)
     : null;
+
+  // 학생 사진 첨부(P2b) — path별 signed URL(실패 path는 resolveTenantReadUrls가 자동 생략, 페이지 안 깨짐).
+  const attachments = (report.attachments as { path: string; name: string }[] | null) ?? [];
+  const attachmentUrls: Record<string, string> = attachments.length
+    ? await resolveTenantReadUrls(
+        attachments.map((a) => a.path),
+        "report_attachment",
+        report.tenant_id as string,
+      ).catch(() => ({}))
+    : {};
+  const attachmentImgs = attachments
+    .map((a) => ({ ...a, url: attachmentUrls[a.path] }))
+    .filter((a): a is { path: string; name: string; url: string } => !!a.url);
 
   const reportDate = report.report_date
     ? new Date(`${report.report_date}T00:00:00`).toLocaleDateString("ko-KR", {
@@ -165,6 +178,23 @@ export default async function PublicLessonReportPage({
             <p className="text-foreground text-[14px] leading-relaxed whitespace-pre-wrap">
               {report.notes || "작성된 보고 내용이 없습니다."}
             </p>
+          </Section>
+        ) : null}
+
+        {/* 학생 사진 첨부(P2b) — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. */}
+        {attachmentImgs.length ? (
+          <Section title="첨부">
+            <div className="grid grid-cols-2 gap-2">
+              {attachmentImgs.map((a) => (
+                // eslint-disable-next-line @next/next/no-img-element -- 공개 페이지 첨부(signed URL, 최적화 불필요)
+                <img
+                  key={a.path}
+                  src={a.url}
+                  alt={a.name}
+                  className="max-h-64 w-full rounded-md object-contain"
+                />
+              ))}
+            </div>
           </Section>
         ) : null}
 

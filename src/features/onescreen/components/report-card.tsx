@@ -17,7 +17,10 @@ export type SubjectReport = {
   classnoteStatus?: string;
   revoked?: boolean;
   viewCount?: number;
+  attachments?: { path: string; name: string }[]; // 학생 사진 첨부(P2b)
 };
+
+const MAX_ATTACHMENTS = 6;
 
 /** classnote_status → 표시 라벨 + 색. */
 function classnoteBadge(status?: string): { label: string; cls: string } | null {
@@ -97,6 +100,10 @@ export function ReportCard({
   onQueueClassnote,
   onRevoke,
   onReissue,
+  onAddFiles,
+  onRemoveAttachment,
+  attachmentUrls,
+  uploadingSubject,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -111,6 +118,10 @@ export function ReportCard({
   onQueueClassnote: (subjectName: string) => void; // ClassNote 발송 큐 적재
   onRevoke: (subjectName: string) => void; // 공유링크 취소(열람 차단)
   onReissue: (subjectName: string) => void; // 공유링크 재발급(새 토큰)
+  onAddFiles: (subjectName: string, files: File[]) => void; // 사진 첨부(P2b)
+  onRemoveAttachment: (subjectName: string, path: string) => void;
+  attachmentUrls?: Record<string, string>; // path→signed 썸네일 URL
+  uploadingSubject?: string | null; // 첨부 업로드 중인 과목
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, student.subjects.length - 1);
@@ -123,6 +134,8 @@ export function ReportCard({
   const shareUrl = rep.shareToken ? `${origin}/r/${rep.shareToken}` : "";
   const generating = generatingSubject === subjectName; // 이 과목 AI 멘트 생성 중
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
+  const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
+  const uploadingAtt = uploadingSubject === subjectName;
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -266,6 +279,68 @@ export function ReportCard({
             저장
           </Button>
         </div>
+
+        {/* P2b: 학생 사진 첨부 — 저장된 보고서에만(rep.sent). /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. */}
+        {rep.sent ? (
+          <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-text-faint text-[11px] font-semibold">
+                학생 사진 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
+              </p>
+              <label
+                className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-semibold ${
+                  uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {uploadingAtt ? "업로드 중…" : "사진 추가"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  disabled={uploadingAtt || atts.length >= MAX_ATTACHMENTS}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = ""; // 같은 파일 재선택 허용
+                    if (files.length) onAddFiles(subjectName, files);
+                  }}
+                />
+              </label>
+            </div>
+            {atts.length ? (
+              <div className="grid grid-cols-3 gap-1.5">
+                {atts.map((a) => (
+                  <div key={a.path} className="group relative">
+                    {attachmentUrls?.[a.path] ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- 세션 내 signed URL 썸네일(최적화 불필요)
+                      <img
+                        src={attachmentUrls[a.path]}
+                        alt={a.name}
+                        className="bg-card h-16 w-full rounded object-contain"
+                      />
+                    ) : (
+                      <div className="bg-card text-text-faint flex h-16 w-full items-center justify-center rounded px-1 text-center text-[10px]">
+                        {a.name}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAttachment(subjectName, a.path)}
+                      className="bg-danger absolute top-0.5 right-0.5 rounded px-1 text-[11px] leading-tight font-bold text-white opacity-0 transition group-hover:opacity-100"
+                      aria-label={`${a.name} 삭제`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-text-faint text-[11px]">
+                사진을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
+              </p>
+            )}
+          </div>
+        ) : null}
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
         {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}

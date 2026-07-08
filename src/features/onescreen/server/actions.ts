@@ -7,6 +7,7 @@ import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
 import { isClassnoteAllowed } from "../classnote-guard";
+import { teacherOwnsStudent } from "./scope";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -136,25 +137,6 @@ export async function saveAndQueueClassnote(
     .eq("id", saved.id);
   if (error) return { ok: false, error: error.message };
   return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
-}
-
-/** 강사 스코프 — 이 학생이 로그인 강사의 담당 반 활성 수강생인지(saveLessonReport 36-51과 동일 이중방어). */
-async function teacherOwnsStudent(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  teacherId: string,
-  studentId: string,
-): Promise<boolean> {
-  const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", teacherId);
-  const myClassIds = (myClasses ?? []).map((c) => c.id);
-  if (myClassIds.length === 0) return false;
-  const { data: enr } = await supabase
-    .from("enrollments")
-    .select("id")
-    .eq("student_id", studentId)
-    .is("end_date", null)
-    .in("class_id", myClassIds)
-    .limit(1);
-  return !!enr && enr.length > 0;
 }
 
 /**

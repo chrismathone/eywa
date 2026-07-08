@@ -36,6 +36,10 @@ const RECEIPT_MIME_TYPES = [
 ];
 const RECEIPT_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB — 영수증 1장에 충분
 
+// 수업 보고서 학생 사진 첨부(P2b) — 사진만(jpeg/png/webp). 학생 PII라 비공개 + admin signed URL.
+const REPORT_ATTACHMENT_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const REPORT_ATTACHMENT_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
+
 const BUCKETS = [
   {
     id: "meeting-recordings",
@@ -54,6 +58,12 @@ const BUCKETS = [
     public: false,
     file_size_limit: RECEIPT_SIZE_LIMIT,
     allowed_mime_types: RECEIPT_MIME_TYPES,
+  },
+  {
+    id: "report-attachments",
+    public: false,
+    file_size_limit: REPORT_ATTACHMENT_SIZE_LIMIT,
+    allowed_mime_types: REPORT_ATTACHMENT_MIME_TYPES,
   },
 ];
 

@@ -161,12 +161,15 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       share_token: string | null;
       classnote_status: string | null;
       revoked_at: string | null;
+      attachments: { path: string; name: string }[] | null;
     }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at")
+          .select(
+            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments",
+          )
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
     ),
@@ -198,7 +201,13 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   const sentToday = new Set<string>();
   const todayBySubject = new Map<
     string,
-    { reportId: string; shareToken: string | null; classnoteStatus: string | null; revokedAt: string | null }
+    {
+      reportId: string;
+      shareToken: string | null;
+      classnoteStatus: string | null;
+      revokedAt: string | null;
+      attachments: { path: string; name: string }[];
+    }
   >();
   const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
   const priorReport = new Map<string, { progress: string | null; examInfo: string | null }>();
@@ -214,6 +223,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
           shareToken: r.share_token,
           classnoteStatus: r.classnote_status,
           revokedAt: r.revoked_at,
+          attachments: r.attachments ?? [],
         });
         todayReportIds.push(r.id);
       }
@@ -245,6 +255,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         su.classnoteStatus = t.classnoteStatus ?? undefined;
         su.revokedAt = t.revokedAt ?? undefined;
         su.viewCount = viewCountByReport.get(t.reportId) ?? 0;
+        su.attachments = t.attachments;
       }
     }
     os.attendance = toMark(attById.get(os.id));

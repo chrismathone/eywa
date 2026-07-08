@@ -660,6 +660,8 @@ export const lessonReports = pgTable(
     // 공유 링크 폐기(취소) — 0085a. 만료(보고서일+90일)는 파생이라 컬럼 없음(share-expiry.ts).
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
+    // 학생 사진 첨부 — 0087a. [{path,name,size}] (report-attachments 버킷). /r·ClassNote 스샷에 렌더.
+    attachments: jsonb("attachments").notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

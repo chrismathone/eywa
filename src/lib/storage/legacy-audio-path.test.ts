@@ -5,6 +5,7 @@ import {
   isTenantAudioPath,
   isTenantBrandingPath,
   isTenantReceiptPath,
+  isTenantReportAttachmentPath,
 } from "./legacy-audio-path";
 
 const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
@@ -68,5 +69,18 @@ describe("isTenantBrandingPath — {tenant}/branding/{file}", () => {
     expect(isTenantBrandingPath(`${TENANT}/logo.png`, TENANT)).toBe(false); // branding 폴더 없음
     expect(isTenantBrandingPath(`${TENANT}/branding/../x.png`, TENANT)).toBe(false);
     expect(isTenantBrandingPath(`other/branding/logo.png`, TENANT)).toBe(false);
+  });
+});
+
+describe("isTenantReportAttachmentPath — {tenant}/report-attachments/{file}", () => {
+  it("통과/거부", () => {
+    expect(isTenantReportAttachmentPath(`${TENANT}/report-attachments/abc.jpg`, TENANT)).toBe(true);
+    expect(isTenantReportAttachmentPath(`${TENANT}/report-attachments/photo.webp`, TENANT)).toBe(true);
+    expect(isTenantReportAttachmentPath(`${TENANT}/abc.jpg`, TENANT)).toBe(false); // 폴더 없음
+    expect(isTenantReportAttachmentPath(`${TENANT}/documents/abc.jpg`, TENANT)).toBe(false); // 다른 폴더
+    expect(isTenantReportAttachmentPath(`${TENANT}/report-attachments/../x.jpg`, TENANT)).toBe(false); // traversal
+    expect(isTenantReportAttachmentPath(`${TENANT}/report-attachments/sub/x.jpg`, TENANT)).toBe(false); // 하위경로
+    expect(isTenantReportAttachmentPath(`other/report-attachments/abc.jpg`, TENANT)).toBe(false); // 교차테넌트
+    expect(isTenantReportAttachmentPath(`${TENANT}/report-attachments/noext`, TENANT)).toBe(false); // 확장자 없음
   });
 });
