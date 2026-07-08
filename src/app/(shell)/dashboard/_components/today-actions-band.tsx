@@ -32,21 +32,23 @@ export function TodayActionsBand({ items }: { items: TodayActionItem[] }) {
   }
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-3.5">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+      {/* 믹스 폰트 크기(13/12/11px)는 items-center(박스 중심)로는 작은 글씨가 ~1px 떠 보인다 —
+          텍스트 줄답게 베이스라인 정렬, 비텍스트(점·구분선)만 self-center. */}
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-2">
         <h2 className="text-foreground shrink-0 text-[13px] font-bold whitespace-nowrap">
           오늘 조치할 것
         </h2>
         <span className="num text-text-faint font-mono text-[11px]">{items.length}</span>
-        <span className="bg-line h-4 w-px shrink-0" aria-hidden="true" />
+        <span className="bg-line h-4 w-px shrink-0 self-center" aria-hidden="true" />
         {items.map((it) => (
           <WindowLink
             key={it.key}
             href={it.href}
             title={it.label}
             ariaLabel={`${it.label}${it.count !== null ? ` ${it.count}건` : ""} 보기`}
-            className="group border-line hover:bg-bg-soft inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors"
+            className="group border-line hover:bg-bg-soft inline-flex max-w-full items-baseline gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors"
           >
-            <span className={`${DOT[it.severity]} size-2 shrink-0 rounded-full`} aria-hidden="true" />
+            <span className={`${DOT[it.severity]} size-2 shrink-0 self-center rounded-full`} aria-hidden="true" />
             <span className="text-foreground text-[12px] font-semibold whitespace-nowrap">{it.label}</span>
             {it.count !== null ? (
               <span className={`num text-[12px] font-extrabold ${NUM[it.severity]}`}>{it.count}</span>

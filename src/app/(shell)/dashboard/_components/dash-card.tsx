@@ -22,7 +22,8 @@ export function DashCard({
 }) {
   return (
     <section className="bg-card border-line shadow-card flex flex-1 flex-col overflow-hidden rounded-2xl border">
-      <header className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-2">
+      {/* 믹스 크기(13/11px) 한 줄은 baseline 정렬(작은 글씨 ~1px 뜸 방지) — 복합 action 슬롯만 self-center. */}
+      <header className="flex items-baseline justify-between gap-2 px-4 pt-3.5 pb-2">
         <div className="flex items-baseline gap-2">
           <h2 className="text-foreground text-[13px] font-bold">{title}</h2>
           {count != null ? (
@@ -30,7 +31,7 @@ export function DashCard({
           ) : null}
         </div>
         {action ? (
-          action
+          <div className="self-center">{action}</div>
         ) : href ? (
           <WindowLink
             href={href}

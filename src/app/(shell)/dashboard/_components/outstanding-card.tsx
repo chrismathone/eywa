@@ -23,14 +23,17 @@ export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
         <DashEmpty>미납 항목이 없습니다</DashEmpty>
       ) : (
         <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
+          {/* 13/12px 한 줄 = baseline 정렬. truncate는 flex 자식에 두면 baseline이 박스 하단으로
+              합성돼 어긋남 → 내부 block span으로 이동. Pill(inline-flex+텍스트)도 baseline에 직접
+              — self-center로 띄우면 텍스트 그룹과 배지 중심이 ~3px 갈라진다(실측). */}
           {items.map((p) => (
-            <li key={p.studentId} className="flex items-center justify-between gap-2 py-1.5">
+            <li key={p.studentId} className="flex items-baseline justify-between gap-2 py-1.5">
               <WindowLink
                 href={`/students/${p.studentId}?tab=billing`}
                 title={p.studentName}
-                className="group min-w-0 flex-1 truncate"
+                className="group min-w-0 flex-1"
               >
-                <span className="text-foreground group-hover:text-primary text-[13px] font-medium">
+                <span className="text-foreground group-hover:text-primary block truncate text-[13px] font-medium">
                   {p.studentName}
                 </span>
               </WindowLink>
