@@ -4,7 +4,8 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
 import { thisMonday } from "@/features/timetable/lib/week";
-import { appendTeacherGridSheet } from "./teacher-grid-sheet";
+import { buildTeacherGridModel } from "@/features/timetable/lib/teacher-grid-model";
+import { appendTeacherGridSheet, computeTeacherGeometry, TEACHER_SHEET_NAME } from "./teacher-grid-sheet";
 import { appendInjaewonIntegratedSheet, type FormulaCell } from "./injaewon-integrated-sheet";
 
 /** 통합 탭 시트명(수식 주입 대상). */
@@ -57,6 +58,10 @@ export async function buildEnglishTimetableBuffer(opts?: {
   wb.creator = "eywa";
   wb.created = new Date();
 
+  // 강사뷰 모델 = 강사별 탭 + 통합 미니그리드 조회수식이 공유(같은 열/행 배치를 가리켜야 정합).
+  const teacherModel = buildTeacherGridModel(slots, { stepMin, breakRanges, excludedTeachers, teacherColors });
+  const teacherGeometry = computeTeacherGeometry(teacherModel, TEACHER_SHEET_NAME);
+
   // 탭 순서 = 원본 인재원 시트와 동일: 통합영어시간표(원장 손작업 형식 재현) → 강사별영어시간표(화면 강사뷰).
   const formulaCells: FormulaCell[] = [];
   appendInjaewonIntegratedSheet(wb, slots, {
@@ -66,6 +71,8 @@ export async function buildEnglishTimetableBuffer(opts?: {
     referenceDate: weekMonday,
     compactSections: opts?.compactSections,
     formulaSink: opts?.withFormulas ? formulaCells : undefined,
+    // 스마트 동기화: 미니그리드를 강사별 역조회 수식으로(구글시트만 — withFormulas일 때 sink와 함께).
+    teacherGeometry: opts?.withFormulas ? teacherGeometry : undefined,
     sheetName: INTEGRATED_SHEET_NAME,
     title: `${academyLabel} ${month}월 통합 영어시간표`,
   });
@@ -76,6 +83,8 @@ export async function buildEnglishTimetableBuffer(opts?: {
     excludedTeachers,
     sectionLineMins,
     weekMonday,
+    sheetName: TEACHER_SHEET_NAME,
+    model: teacherModel,
   });
 
   return { buffer: (await wb.xlsx.writeBuffer()) as ArrayBuffer, formulaCells };

@@ -11,6 +11,7 @@ import { type PeriodsConfig, slotPeriodRow, enumDayToKo, type DayOfWeek } from "
 import { buildRichCardGroups, type GridSlot, type RichClassCard, type TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { readableTextColor } from "@/lib/color-utils";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
+import type { TeacherGeometry } from "./teacher-grid-sheet";
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri"] as const;
 type Weekday = (typeof WEEKDAYS)[number];
@@ -87,6 +88,51 @@ function roomFormula(headerRow: number, blockCol: number, gridStart: number, gri
   );
 }
 
+/**
+ * 미니그리드 셀 = **강사별 탭 역조회 수식**(구글시트 전용, 스마트 동기화). 이 반(className)이 그 요일의
+ * 어느 강사 열(cols)에, 그 교시 시간행(r1~r2)에 있는지 강사별을 검색해 강사+방을 도출 → **강사별을 편집하면
+ * 통합이 따라온다**. 원본 5천자 범용수식 대신 eywa 레이아웃(요일별 열·강사·행범위)에 파라미터화한 조회식.
+ * 강사별 셀 포맷 = "반명↵방"(teacher-grid-sheet): 첫 줄=반명 매칭, 마지막 줄=방. ‖ 는 강사·방 내부 구분자.
+ */
+function miniGridFormula(
+  className: string,
+  cols: { colLetter: string; teacher: string }[],
+  r1: number,
+  r2: number,
+  sheetName: string,
+): string {
+  const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const colArr = cols.map((c) => q(c.colLetter)).join(";");
+  const teacherArr = cols.map((c) => q(c.teacher)).join(";");
+  const sheet = sheetName.replace(/'/g, "''");
+  return (
+    `IFERROR(LET(` +
+    `수업명,${q(className)},` +
+    `열들,{${colArr}},강사들,{${teacherArr}},` +
+    `히트,MAP(열들,강사들,LAMBDA(cl,tn,LET(` +
+    `범위,INDIRECT("'${sheet}'!"&cl&${r1}&":"&cl&${r2}),` +
+    `매치들,MAP(범위,LAMBDA(x,IF(IFERROR(TRIM(REGEXEXTRACT(TO_TEXT(x),"^[^\\n]+"))=수업명,FALSE),TO_TEXT(x),""))),` +
+    `셀,IFERROR(TEXTJOIN("",TRUE,FILTER(매치들,LEN(매치들)>0)),""),` +
+    `방,IFERROR(REGEXEXTRACT(셀,"\\n\\s*([^\\n]+)$"),""),` +
+    `IF(LEN(셀)>0,tn&"‖"&방,"")))),` +
+    `유효,IFERROR(FILTER(히트,LEN(히트)>0),""),` +
+    `강사,IFERROR(TEXTJOIN(", ",TRUE,UNIQUE(BYROW(유효,LAMBDA(x,IFERROR(REGEXEXTRACT(x,"^[^‖]+"),""))))),""),` +
+    `방,IFERROR(REGEXEXTRACT(INDEX(유효,1,1),"‖(.*)$"),""),` +
+    `IF(LEN(강사)=0,"",IF(LEN(방)=0,강사,강사&CHAR(10)&CHAR(10)&방))` +
+    `),"")`
+  );
+}
+
+/** 통합 교시(pr.time "HH:MM~HH:MM")를 강사별 시각행 범위 [r1,r2]로 매핑. 겹치는 행 없으면 null. */
+function teacherRowRange(geometry: TeacherGeometry, timeRange: string): [number, number] | null {
+  const [s, e] = timeRange.split("~");
+  const startMin = toMin(s), endMin = toMin(e);
+  const within = geometry.rows.filter((r) => r.startMin >= startMin && r.startMin < endMin);
+  if (within.length > 0) return [within[0].row, within[within.length - 1].row];
+  const exact = geometry.rows.find((r) => r.startMin === startMin); // 경계 미정렬 폴백
+  return exact ? [exact.row, exact.row] : null;
+}
+
 const studentName = (s: StudentLine) => (s.englishName ? `${s.name}(${s.englishName})` : s.name);
 // 학교+학년 = 수학과 동일 공용 헬퍼(빈값 "-"·레벨/숫자 추출). 순서만 numberLast:true("종로초2") — 통합 원본 표기.
 const schoolGrade = (s: StudentLine) => formatSchoolGrade(s.school, s.grade, { numberLast: true });
@@ -134,6 +180,9 @@ export type InjaewonSheetOpts = {
   // 제공 시 수식 셀을 여기 수집(셀엔 정적 값을 씀). ⚠️ xlsx에 구글 수식(LET/LAMBDA)을 넣으면 xlsx→시트
   // 변환이 통째로 실패("Conversion not supported")하므로, 수식은 업로드 후 Sheets API로 별도 주입한다.
   formulaSink?: FormulaCell[];
+  // 제공 시 미니그리드 셀을 **강사별 탭 역조회 수식**으로 생성(스마트 동기화). 강사별을 편집하면 통합이
+  // 따라온다. formulaSink(구글시트 API 후주입)와 함께 있을 때만 동작 — xlsx엔 정적 값 유지.
+  teacherGeometry?: TeacherGeometry;
   sheetName?: string;
   title?: string;
 };
@@ -170,6 +219,7 @@ export function appendInjaewonIntegratedSheet(
 ): Worksheet {
   const refMs = opts.referenceDate ? new Date(opts.referenceDate).getTime() : Date.now();
   const formulaSink = opts.formulaSink;
+  const geometry = opts.teacherGeometry;
   const teacherColors = opts.teacherColors ?? {};
   const teacherBg = (label: string): string => {
     const c = teacherColors[label]?.bg;
@@ -295,9 +345,16 @@ export function appendInjaewonIntegratedSheet(
         WEEKDAYS.forEach((d, di) => {
           const cell = c.cells[`${pr.order}:${d}`];
           if (!cell) { set(gr, cs + di, "", { size: 7 }); return; }
-          if (cell.isLab) { set(gr, cs + di, "LAB", { bg: LAB_BG, bold: true, size: 7 }); return; }
+          // 스마트 동기화: 강사별 탭 역조회 수식(geometry+sink 있을 때). xlsx엔 아래 정적 값 그대로.
+          let formula: string | undefined;
+          if (geometry && formulaSink) {
+            const dayCols = geometry.dayColumns[d as DayOfWeek];
+            const range = teacherRowRange(geometry, pr.time);
+            if (dayCols && dayCols.length && range) formula = miniGridFormula(c.className, dayCols, range[0], range[1], geometry.sheetName);
+          }
+          if (cell.isLab) { set(gr, cs + di, "LAB", { bg: LAB_BG, bold: true, size: 7, formula }); return; }
           const rm = roomByCell.get(`${c.classId}:${pr.order}:${d}`) ?? "";
-          set(gr, cs + di, rm ? `${cell.label}\n\n${rm}` : cell.label, { bg: teacherBg(cell.label), color: teacherFg(cell.label), size: 7, wrap: true });
+          set(gr, cs + di, rm ? `${cell.label}\n\n${rm}` : cell.label, { bg: teacherBg(cell.label), color: teacherFg(cell.label), size: 7, wrap: true, formula });
         });
       });
       sheet.getRow(gr).height = 19;

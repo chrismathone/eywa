@@ -6,7 +6,10 @@ import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queri
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 import { readableTextColor } from "@/lib/color-utils";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
-import { buildTeacherGridModel } from "@/features/timetable/lib/teacher-grid-model";
+import { buildTeacherGridModel, type TeacherGridModel } from "@/features/timetable/lib/teacher-grid-model";
+
+/** 강사별 탭 시트명(통합 미니그리드 조회 수식이 INDIRECT로 참조 — 단일 소스). */
+export const TEACHER_SHEET_NAME = "강사별영어시간표";
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -45,6 +48,51 @@ function dayDateLabels(weekMonday?: string): Partial<Record<DayOfWeek, string>> 
   return out;
 }
 
+/** "본원304" → "304"(공통 접두 제거). class-grid/통합 shortRoom과 동일 — 강사별 셀·통합 조회 방 표기 일치. */
+function shortRoom(room: string): string {
+  return room.replace(/^본원/, "") || room;
+}
+
+/** 1-based 열 번호 → 엑셀 열 문자(2→"B", 28→"AB"). */
+function colLetterOf(n: number): string {
+  let x = "", k = n;
+  while (k > 0) { x = String.fromCharCode(65 + ((k - 1) % 26)) + x; k = Math.floor((k - 1) / 26); }
+  return x;
+}
+
+/**
+ * 강사별 탭 기하 — 통합 미니그리드 조회 수식이 "어느 요일이 어느 열(강사)이고, 어느 시각이 어느 행인지"
+ * 알아야 강사별을 역조회할 수 있다. appendTeacherGridSheet의 열/행 배치와 **동일 규칙**(col1=시각,
+ * 강사 좌→우, 각 강사의 요일마다 laneCount 열, 본문 행=BODY_START(3)부터)으로 계산 → 반드시 같은 model로.
+ */
+export type TeacherGeometry = {
+  sheetName: string;
+  /** 본문 10분 행: startMin(자정기준 분) → 그 행의 엑셀 행번호(1-based). */
+  rows: { startMin: number; row: number }[];
+  /** 요일 → 그 요일의 열들(강사별 각 강사·레인) {열번호·열문자·강사명}. 미니그리드가 이 열들을 역조회. */
+  dayColumns: Partial<Record<DayOfWeek, { col: number; colLetter: string; teacher: string }[]>>;
+};
+
+/** buildTeacherGridModel 결과 → 강사별 시트 기하(열=요일·강사, 행=시각). appendTeacherGridSheet와 동일 배치.
+ *  슬롯 타입 T-무관(name·cols.{day,laneCount}·rows.startMin만 읽음)이라 최소 구조로 받는다. */
+export function computeTeacherGeometry(
+  model: { teachers: { name: string; cols: { day: DayOfWeek; laneCount: number }[] }[]; rows: { startMin: number }[] },
+  sheetName: string,
+): TeacherGeometry {
+  const dayColumns: TeacherGeometry["dayColumns"] = {};
+  let abs = 2; // col 1 = 시각
+  for (const t of model.teachers) {
+    for (const col of t.cols) {
+      for (let l = 0; l < col.laneCount; l++) {
+        (dayColumns[col.day] ??= []).push({ col: abs, colLetter: colLetterOf(abs), teacher: t.name });
+        abs++;
+      }
+    }
+  }
+  const rows = model.rows.map((r, ri) => ({ startMin: r.startMin, row: 3 + ri })); // BODY_START=3
+  return { sheetName, rows, dayColumns };
+}
+
 export type TeacherSheetOpts = {
   teacherColors?: TeacherColorMap;
   stepMin?: number;
@@ -54,6 +102,8 @@ export type TeacherSheetOpts = {
   sectionLineMins?: number[];
   weekMonday?: string;
   sheetName?: string;
+  /** 사전계산 모델(build-buffer가 통합 지오메트리와 공유) — 미지정 시 내부 계산. */
+  model?: TeacherGridModel<ScheduleSlotWithStudents>;
 };
 
 /**
@@ -65,7 +115,7 @@ export function appendTeacherGridSheet(
   opts: TeacherSheetOpts = {},
 ): Worksheet {
   const stepMin = opts.stepMin ?? 10;
-  const { rows, teachers } = buildTeacherGridModel(slots, {
+  const { rows, teachers } = opts.model ?? buildTeacherGridModel(slots, {
     stepMin,
     breakRanges: opts.breakRanges,
     excludedTeachers: opts.excludedTeachers,
@@ -182,7 +232,7 @@ export function appendTeacherGridSheet(
           const s = anchor.interval.slots[0];
           if (anchor.span > 1) sheet.mergeCells(excelRow, absCol, excelRow + anchor.span - 1, absCol);
           const cell = sheet.getCell(excelRow, absCol);
-          const room = s.slotRoomLabel ?? "";
+          const room = s.slotRoomLabel ? shortRoom(s.slotRoomLabel) : "";
           cell.value = room ? `${s.className}\n${room}` : s.className;
           cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
           const bg = hexToARGB(s.classBgColor, "FFF1F5F4");
