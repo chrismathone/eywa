@@ -62,20 +62,34 @@ for (const seg of segments) {
   }
 }
 
-// --- 3) db:seed / seed 스크립트 (테넌트 데이터 wipe) ---
-if (/\bdb:seed\b/.test(cmd) || /(?:tsx|node|ts-node)\s+\S*scripts[\/\\]seed\.[a-z]+/.test(cmd)) {
-  block("사유: db:seed 는 테넌트 데이터를 전부 wipe합니다. 프로덕션(injaewon) 데이터 파괴 위험.");
-}
+// --- 3)/4)는 "SQL/스크립트를 실제 실행할 수 있는 명령"에만 적용 ---
+// git push 세그먼트 검사와 같은 취지의 오탐 방지: git commit 메시지·문서 텍스트에 TRUNCATE/db:seed
+// 같은 단어가 들어가도(2026-07-08 실사례: CSS 'truncate' 언급 커밋 차단) 실행 수단이 없으면 통과.
+// echo "TRUNCATE x" | psql 류는 전체 명령에 psql이 있어 여전히 걸린다.
+const SQL_CAPABLE =
+  /\b(?:psql|pg_dump|pg_restore|supabase|node|tsx|ts-node|npx|pnpm|npm|yarn|bun|deno|python3?)\b/i.test(cmd) ||
+  /DATABASE_URL|\.sql\b/i.test(cmd);
 
-// --- 4) 파괴적 SQL / wipe 스크립트 (인자 안에 들어오므로 substring 검사) ---
-if (/\bwipe-tenant/i.test(cmd)) {
-  block("사유: 테넌트 데이터 wipe 스크립트.");
-}
-if (/\bdrop\s+(?:table|schema)\b/i.test(cmd) || /\btruncate\b/i.test(cmd)) {
-  block("사유: 파괴적 SQL (DROP / TRUNCATE).");
-}
-if (/\bdelete\s+from\b/i.test(cmd) && !/\bwhere\b/i.test(cmd)) {
-  block("사유: WHERE 없는 DELETE FROM = 전체 행 삭제 위험.");
+if (SQL_CAPABLE) {
+  // --- 3) db:seed / seed 스크립트 (테넌트 데이터 wipe) ---
+  if (/\bdb:seed\b/.test(cmd) || /(?:tsx|node|ts-node)\s+\S*scripts[\/\\]seed\.[a-z]+/.test(cmd)) {
+    block("사유: db:seed 는 테넌트 데이터를 전부 wipe합니다. 프로덕션(injaewon) 데이터 파괴 위험.");
+  }
+
+  // --- 4) 파괴적 SQL / wipe 스크립트 (인자 안에 들어오므로 substring 검사) ---
+  if (/\bwipe-tenant/i.test(cmd)) {
+    block("사유: 테넌트 데이터 wipe 스크립트.");
+  }
+  // TRUNCATE는 SQL 문 형태(뒤에 [TABLE] 식별자)만 — 산문 속 단어 언급(CSS truncate 등)은 통과.
+  if (
+    /\bdrop\s+(?:table|schema|database)\b/i.test(cmd) ||
+    /\btruncate\s+(?:table\s+)?["'`a-z_]/i.test(cmd)
+  ) {
+    block("사유: 파괴적 SQL (DROP / TRUNCATE).");
+  }
+  if (/\bdelete\s+from\b/i.test(cmd) && !/\bwhere\b/i.test(cmd)) {
+    block("사유: WHERE 없는 DELETE FROM = 전체 행 삭제 위험.");
+  }
 }
 
 process.exit(0);
