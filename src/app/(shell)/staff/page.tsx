@@ -15,6 +15,7 @@ import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
+import { PAYROLL_ENABLED } from "@/features/payroll/config";
 import { ResumesFace } from "./_components/resumes-face";
 
 export const metadata = { title: "직원관리 — eywa" };
@@ -221,7 +222,7 @@ export default async function StaffPage({
           ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {user?.systemRole === "master" ? (
+          {PAYROLL_ENABLED && user?.systemRole === "master" ? (
             <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
               <Wallet className="size-4" />
               월별 급여

@@ -9,6 +9,17 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 급여 비활성화 + 선생님별 활동 로그(전면 감사 추적) (2026-07-08) — ✅ 롤백테스트 15단언 + 프로덕션 트리거 실동작 검증 + 적대리뷰 3렌즈(HIGH 급여누수 수정) + tsc0/lint0 · 0081a **프로덕션 적용됨**
+사용자 요청: ① "월별 급여 비활성화" ② "선생님별 로그 — 누가 했는지 밝히는 전면 감사". 결정: 급여=기능 전체 숨김(복구가능) / 로그=의미있는 변경만(초고빈도 미세쓰기 제외).
+- **① 급여 비활성화**: [`PAYROLL_ENABLED`](../src/features/payroll/config.ts)=false 단일 플래그. 월별([staff/page.tsx](<../src/app/(shell)/staff/page.tsx>))·개인별([id]/page·[id]/edit) "급여" 버튼 3곳 숨김 + `/staff/payroll`·`/staff/[id]/payroll` 라우트 리다이렉트 2곳. **휴가 유지**. 복구 = 플래그 true 한 줄(코드·payroll 테이블 보존).
+- **② 활동 로그**([0081a](../supabase/migrations/0081a_activity_log.sql)): `activity_log` + **범용 트리거 `log_activity()`**(security definer)를 핵심 17테이블(students·classes·class_schedules·enrollments·invoices·expenses·student_grades·exams·level_tests·student_consultations·enrollment_consultations·textbook_orders·users·academy_documents·meeting_minutes·grade_goals·grade_comments)에 부착. INSERT/DELETE=스냅샷, UPDATE=바뀐 컬럼 old→new만. actor=`auth.uid()`(null=시스템), actor_name·target_label 비정규화.
+  - ⚠️ **안전 제1원칙**: 트리거는 **절대 원래 쓰기를 막지 않음** — 모든 예외 삼킴(`exception→return null`, AFTER·re-raise 금지가 핵심). **WHEN 가드**(`old.* is distinct from new.*`)로 무변경 UPDATE는 함수 호출 자체 스킵 → INSERT/DELETE + UPDATE 2트리거 분리.
+  - **민감정보 redact**(내용 미기록·"바뀜"만): form_data·transcription·print_payload·ai_summary·subject_details·subject_progress + **hourly_rate·monthly_base(급여)**. ⚠️ **적대리뷰 HIGH(3렌즈 전원)**: 급여는 원장 전용인데 activity_log는 admin/manager도 읽음 → 급여 컬럼 redact 필수. **새 민감 컬럼을 부착 테이블에 추가하면 0081a redact에도 추가**(blocklist 유지책임).
+  - **RLS** `activity_log_office_read`: 사무실(master/admin/manager)만 SELECT. write 정책 없음 → 트리거(definer)만 기록(위·변조 차단).
+  - **뷰어**: 직원 상세 **"활동 로그" 탭**([activity-log-tab.tsx](<../src/app/(shell)/staff/[id]/_tabs/activity-log-tab.tsx>), 사무실만 — `?tab=activity` 직접진입도 canManage 아니면 info 폴백 + RLS 이중). [`activitySummary`](../src/features/audit/activity.ts) `학생 「홍길동」 수정 — 학년 초5→초6` 렌더. [`getStaffActivityLog`](../src/features/audit/server/activity-queries.ts) actor_id 필터·페이지네이션.
+- 검증: BEGIN…ROLLBACK 15단언 + **프로덕션 트리거 실동작**(INSERT/DELETE 기록→검증행 제거=무오염) + 적대리뷰 3렌즈. ⚠️ 라이브 브라우저 E2E는 auth 게이트로 미실행.
+- **Phase 2(후속)**: 보관정책(N개월 자동정리 pg_cron — created_at 인덱스 선반영) · 전체 감사 뷰(actor 필터). ⚠️ payroll_records·staff_leaves는 트리거 미부착(급여 비활성화 맥락) — 재활성화 시 급여 컬럼 redact 재점검.
+
 ### 학생 상세 — 개인 주간 시간표(과목별 교시 기본뷰, 읽기전용) (2026-07-08) — ✅ tsc0/lint0/test7 · 커밋 `8d073f0`→`3439f27`
 - 강사 원스크린에서 "내 학생이 **다른 선생님 수업**까지 어떤 시간표를 도는지" 볼 경로 부재(시간표 메뉴는 강사 본인 담당 반만 스코핑) → 학생 상세 '수업' 탭 상단에 주간 시간표 추가.
 - **과목 탭**(수학/영어/…, 설정 순서·`useSubjectMaps`, 첫 과목 기본). 각 탭이 실제 시간표 기본뷰처럼 **교시축 + 연속 교시 세로 rowSpan 병합**([`computeBlocks`](../src/features/timetable/lib/grid.ts) allowColMerge=false), 수학계열 2교시 묶음 라벨. 데이터는 수업 탭이 이미 로드한 current 재사용([`getStudentClassesDetail`](../src/features/students/server/queries.ts)이 등원요일 필터된 `slots` 반환) — **추가 쿼리 0**(B2/B4 무위반).
