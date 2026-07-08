@@ -22,6 +22,7 @@ import {
   signReportAttachmentUrls,
 } from "../server/attachment-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
+import { resizeImageForUpload } from "../resize-image";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { OneScreenHubBar } from "./hub-bar";
@@ -51,6 +52,14 @@ function initReports(students: OneScreenStudent[]): ReportsState {
       };
   }
   return out;
+}
+
+/** 이미지 MIME → 저장 경로 확장자(P2b 첨부). 리사이즈로 포맷 보존되니 원본 파일명 ext보다 type이 정확. */
+function extFromType(type: string): string | null {
+  if (type === "image/jpeg") return "jpg";
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  return null;
 }
 
 /** 보 셀: 과목 전부 발송=ok, 일부 발송/초안=warn, 없음=todo */
@@ -430,8 +439,10 @@ export function OneScreenClient({
     setUploadingSubject(subjectName);
     let added = 0;
     try {
-      for (const file of files) {
-        const ext = file.name.split(".").pop() || "jpg";
+      for (const original of files) {
+        // 업로드 전 클라 다운스케일(포맷 보존). 실패 시 원본 반환이라 업로드는 항상 진행.
+        const file = await resizeImageForUpload(original);
+        const ext = extFromType(file.type) ?? file.name.split(".").pop() ?? "jpg";
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
           subject,
@@ -453,7 +464,7 @@ export function OneScreenClient({
           studentId,
           subject,
           path: issued.ticket.path,
-          name: file.name,
+          name: original.name,
           size: file.size,
         });
         if (!reg.ok) {
