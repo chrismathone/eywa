@@ -129,14 +129,21 @@ function PeriodTable({
                 const block = blocks.get(`${ri}:${ci}`);
                 if (!block) return null; // 위 병합 블록에 피복 — 렌더 스킵
                 const c = cellAt(ri, ci);
+                // 이 셀이 차지하는 총높이(연속 교시 병합 반영) — 색 블록이 셀 전체를 채우도록 명시.
+                // (h-full=height:100%는 table td에서 불안정해 하단 빈공간이 생김 → 실제 시간표처럼 명시 높이.)
+                const spanH = block.rowSpan * rowHeight;
                 return (
                   <td
                     key={d}
                     rowSpan={block.rowSpan > 1 ? block.rowSpan : undefined}
+                    style={{ height: spanH }}
                     className={`border-b border-r ${GRID} p-1 align-top ${c ? "" : "bg-ink/[0.03]"}`}
                   >
                     {c ? (
-                      <div className={`flex h-full flex-col rounded-md px-1.5 py-1 ${cellColor}`}>
+                      <div
+                        className={`flex flex-col rounded-md px-1.5 py-1 ${cellColor}`}
+                        style={{ height: spanH - 8 }} // p-1(상하 8px) 보정 → 셀 전체 채움
+                      >
                         <span className="text-foreground text-[12px] leading-tight font-semibold break-keep">
                           {c.className}
                         </span>
