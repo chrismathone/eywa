@@ -4,30 +4,21 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { createClient } from "@/lib/supabase/server";
-import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 
 export const metadata = { title: "수업 보고서 — eywa" };
 
-/** 라벨/값 한 줄(좌측 음영 라벨 + 우측 값). 모듈 레벨 선언(render 중 컴포넌트 생성 금지). */
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex">
-      <div className="w-28 shrink-0 border border-black/20 bg-black/[0.04] px-3 py-2 text-[12px] font-semibold">
-        {label}
-      </div>
-      <div className="flex-1 border border-l-0 border-black/20 px-3 py-2 text-[12px]">{value}</div>
-    </div>
-  );
-}
-
 /**
- * 수업 보고서(lesson_reports) A4 인쇄 문서 — 강사 원스크린 "PDF" 버튼이 여는 플로팅 인쇄 창.
- * 접근(교재요청서 print 패턴, 2026-07-02 게이트 보강): 로그인 + **students 메뉴 접근**(none=student 등 차단,
- * override 반영) + **강사는 본인 담당 학생 보고서만**(getTeacherScope — intra-tenant PII 스코프).
- * 원스크린 메뉴키(teacher 전용, master=none)로는 원장 열람이 막혀 students 메뉴를 게이트로 쓴다.
- * 레퍼런스 = (print)/enrollment/[id]/print/page.tsx (print-portrait + PrintActions embedded).
+ * 수업 보고서(lesson_reports) 강사 PDF 미리보기 — 원스크린 "PDF" 버튼이 여는 인쇄 문서.
+ * ⚠️ 렌더는 학부모 공개 링크(/r/[token])·ClassNote 게시 이미지와 **동일한 `ParentReportCard`**를 쓴다
+ * (강사 미리보기 = 실제 발송물 디자인). 차이는 (1) 인증 라우트(조회 로그 없음 → 열람수 오염 없음)
+ * (2) PrintActions(인쇄/닫기). 데이터·표시 토글(settings.report)은 /r과 같은 소스.
+ *
+ * 접근(교재요청서 print 패턴): 로그인 + **students 메뉴 접근**(none=student 등 차단, override 반영) +
+ * **강사는 본인 담당 학생 보고서만**(getTeacherScope — intra-tenant PII 스코프).
  */
 export default async function LessonReportPrintPage({
   params,
@@ -46,7 +37,9 @@ export default async function LessonReportPrintPage({
   // RLS가 테넌트 격리 — 같은 테넌트 보고서만 조회된다.
   const { data: report } = await supabase
     .from("lesson_reports")
-    .select("id, student_id, report_date, progress, exam_info, homework_score, teacher_name, notes")
+    .select(
+      "id, student_id, report_date, progress, exam_info, homework_score, teacher_name, notes, daily_test, check_test, attitude, attachments",
+    )
     .eq("id", id)
     .single();
   if (!report) notFound();
@@ -57,65 +50,54 @@ export default async function LessonReportPrintPage({
   }
 
   const [{ data: student }, settings] = await Promise.all([
-    supabase
-      .from("students")
-      .select("name, school, grade")
-      .eq("id", report.student_id)
-      .single(),
+    supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
   ]);
 
-  const profile = settings.profile;
-  const academyName = profile.name || "인재원";
-  const printHeader = settings.notifications.printHeader || "eywa · 인재원 학원관리";
-  // 학원 로고 — GCS 비공개 path면 signed URL로 resolve(외부 URL은 그대로).
-  const logoSrc = await resolveBrandingSrc(profile.logoUrl, user.tenantId);
+  const academyName = settings.profile.name || "인재원";
+  const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭) — /r과 동일 소스
+  // 로고 해석은 GCS signed URL 등 외부 의존 — 실패해도 문서는 로고 없이 렌더.
+  const logoSrc = settings.profile.logoUrl
+    ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId).catch(() => null)
+    : null;
 
-  const reportDate = report.report_date
-    ? new Date(`${report.report_date}T00:00:00`).toLocaleDateString("ko-KR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : "-";
-  const schoolGrade = [student?.school, student?.grade].filter(Boolean).join(" ") || "-";
+  // 학생 사진 첨부(P2b) — path별 signed URL(실패 생략). 표시 토글 off면 해석도 건너뜀.
+  const attachments = (report.attachments as { path: string; name: string }[] | null) ?? [];
+  const attachmentUrls: Record<string, string> =
+    rpt.showAttachments && attachments.length
+      ? await resolveTenantReadUrls(
+          attachments.map((a) => a.path),
+          "report_attachment",
+          user.tenantId,
+        ).catch(() => ({}))
+      : {};
+  const attachmentImgs = attachments
+    .map((a) => ({ ...a, url: attachmentUrls[a.path] }))
+    .filter((a): a is { path: string; name: string; url: string } => !!a.url);
 
   return (
-    <div className="print-portrait mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">
-      <PrintActions embedded={embedded} />
-
-      <header className="border-b-2 border-black/80 pb-4">
-        {logoSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element -- 인쇄물 외부 이미지(최적화 불필요)
-          <img src={logoSrc} alt={academyName} className="mb-3 h-12 w-auto object-contain" />
-        ) : null}
-        <div className="flex items-center justify-between">
-          <p className="font-mono text-[11px] tracking-[0.25em] uppercase">{printHeader}</p>
-          <p className="text-[12px] text-black/60">{academyName}</p>
-        </div>
-        <h1 className="mt-2 text-2xl font-black tracking-[0.2em]">수업 보고서</h1>
-      </header>
-
-      <section className="mt-6 space-y-px">
-        <Field label="학생" value={student?.name || "-"} />
-        <Field label="학교 · 학년" value={schoolGrade} />
-        <Field label="보고일" value={reportDate} />
-        <Field label="담당 강사" value={report.teacher_name || "-"} />
-        {report.progress ? <Field label="오늘 진도" value={report.progress} /> : null}
-        {report.exam_info ? <Field label="테스트" value={report.exam_info} /> : null}
-        {report.homework_score ? <Field label="과제" value={report.homework_score} /> : null}
-      </section>
-
-      <section className="mt-6">
-        <h2 className="mb-2 text-[13px] font-bold">학부모 보고 내용</h2>
-        <div className="min-h-[160px] rounded-sm border border-black/20 px-4 py-3 text-[13px] leading-relaxed whitespace-pre-wrap">
-          {report.notes || "작성된 보고 내용이 없습니다."}
-        </div>
-      </section>
-
-      <footer className="mt-10 border-t border-black/20 pt-3 text-[10px] text-black/50">
-        {academyName} · {reportDate} 발행
-      </footer>
+    <div className="flex min-h-screen flex-col items-center px-4 py-6 print:py-0">
+      <div className="w-full max-w-md">
+        <PrintActions embedded={embedded} />
+        <ParentReportCard
+          report={{
+            reportDate: report.report_date,
+            teacherName: report.teacher_name,
+            progress: report.progress,
+            dailyTest: report.daily_test,
+            checkTest: report.check_test,
+            examInfo: report.exam_info,
+            homeworkScore: report.homework_score,
+            attitude: report.attitude,
+            notes: report.notes,
+          }}
+          student={student ?? null}
+          academyName={academyName}
+          logoSrc={logoSrc}
+          settings={rpt}
+          attachments={attachmentImgs}
+        />
+      </div>
     </div>
   );
 }
