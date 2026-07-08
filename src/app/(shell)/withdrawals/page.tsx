@@ -9,7 +9,7 @@ import {
   UserX,
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { SearchForm } from "@/components/search-form";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -269,28 +269,7 @@ export default async function WithdrawalsPage({
               </Link>
             ))}
           </div>
-          <form action="/withdrawals" method="get" className="ml-auto flex items-center gap-2">
-            {range !== "all" ? <input type="hidden" name="range" value={range} /> : null}
-            {reason !== "all" ? <input type="hidden" name="reason" value={reason} /> : null}
-            {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
-            {consult !== "all" ? <input type="hidden" name="consult" value={consult} /> : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="학생명"
-                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              className="border-line bg-card hover:bg-bg-soft rounded-sm border px-3 py-1.5 text-xs"
-            >
-              검색
-            </button>
-          </form>
+          <SearchForm placeholder="학생명" defaultValue={q} resetParams={["type"]} />
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-1.5">

@@ -13,6 +13,7 @@ import {
   type SortKey,
 } from "@/features/billing/server/queries";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
+import { SearchForm } from "@/components/search-form";
 import { BillingTable } from "./billing-table";
 import { CreateInvoiceTrigger } from "./create-invoice-dialog";
 import { Pagination } from "@/components/pagination";
@@ -150,24 +151,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           ))}
         </div>
 
-        <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
-          <input type="hidden" name="period" value={period} />
-          {sort !== "status" ? <input type="hidden" name="sort" value={sort} /> : null}
-          {desc ? <input type="hidden" name="desc" value="1" /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="학생명·항목"
-              className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">
-            검색
-          </Button>
-        </form>
+        <SearchForm placeholder="학생명·항목" defaultValue={q} inputWidth="w-36" />
       </div>
 
       <div className="flex items-center justify-between">
