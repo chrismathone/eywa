@@ -9,6 +9,18 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 목록 검색 무플래시 — GET 폼 → 공용 SearchForm 클라 내비 전환 12곳 (2026-07-08) — ✅ tsc0/lint0 + 마커 실측 3곳 · 커밋 `279915d`
+- "검색하면 새로고침처럼 깜빡" 제보 — 원인은 검색만 순수 GET `<form>`(문서 전체 새로고침). 신규 [`SearchForm`](../src/components/search-form.tsx)(`router.push`+`useTransition`)으로 기존 화면 유지한 채 결과만 교체. **다른 searchParams 전체 보존**(hidden input 불필요) + `page` 자동 리셋, 사이트별 네임스페이스 리셋은 `resetParams`(저장견적 `qpage`·수강료 `cpage`·직원 `invited/tab`·퇴원 `type`).
+- 전환: 등록상담·퇴원·학생상담·직원·급여·회의록·리텐션보드·수납 5패널. ⚠️ **시험(exams)은 미전환** — 기간(from/to) 필터가 같은 폼이라 단순 교체 시 기간 검색이 깨짐(재설계 대상). 새 목록 검색은 GET 폼 금지, SearchForm 사용.
+
+### 대시보드 믹스 폰트 크기 광학 정렬 — 베이스라인 전환 9곳 (2026-07-08) — ✅ tsc0/lint0 + 글리프 실측 ±0.5px · 커밋 `ccfcfe7`
+- "우측 작은 글씨가 중앙보다 조금 위" 제보(오늘조치 밴드) — 서로 다른 font-size를 `items-center`(박스 중심)로 정렬하면 작은 글씨가 ~1px 떠 보임(실측 0.7px). **한 줄 텍스트 행은 `items-baseline` + 비텍스트(점·구분선·복합 슬롯)만 `self-center`**가 정석. 워크플로 12에이전트 전수 스캔으로 확정 8곳 + 밴드 = 9곳 픽스.
+- ⚠️ 함정 2: ① 말줄임(ellipsis) 클래스를 flex 자식에 직접 두면 baseline이 박스 하단으로 합성 → **내부 `block` 말줄임 span으로 이동** ② Pill(inline-flex+텍스트) 배지는 baseline에 직접 — self-center로 띄우면 텍스트와 ~3px 갈라짐(실측).
+
+### 등록상담 — 대기·예약 256건 → 상담 완료 일괄 이동 + QR 재저장 "상담 완료" 확인 팝업 (2026-07-08) — ✅ tsc0/lint0 + 실 E2E(박인유) · 커밋 `2ad60a5`
+- **일괄 이동(운영 적용)**: pending 248·scheduled 8 → `consulted`. [`queue-to-consulted.cjs`](../scripts/_oneoff/queue-to-consulted.cjs)(dry-run 기본·UNDO json 로컬 보존). 칸반 실측 대기·예약 0/상담 완료 278. makeedu 역동기화 후보는 `enrolled`만 제외 조건이라 무영향, 월칩은 `consulted_at` 기준이라 무영향.
+- **QR 재저장 팝업**: 수정 폼 저장 시 QR 접수(`from_public_intake`)+대기·예약이면 native dialog "상담 완료로 변경할까요?"([상담 완료로 저장]/[상태 유지하고 저장]/[취소]). 서버가 `markConsulted` 플래그를 **조건 재검증 후에만** 적용(클라 조작·낡은 폼 방어). edit 페이지가 `confirmConsultedOnSave` prop 주입.
+
 ### 퇴원 수강 이력 — 과목별 담임 표시 + 사유 라벨 한글화 (2026-07-07) — ✅ tsc0/lint0 + 실데이터(이유하 4행 담임·기타) · 커밋 `8c6e619`(푸시됨)
 - 퇴원 상세(`(shell)/withdrawals/[studentId]`) 수강 이력의 각 행에 **그 반 담임**(`classes.teacher_id`)을 "담임 OOO"로 표시(미배정 폴백). `getWithdrawalDetail`가 `class:class_id ( … teacher:teacher_id ( display_name ) )` 임베드로 조회 — classes→users 다중 FK라 **컬럼명(`teacher_id`)으로 disambiguate**.
 - 사유 표시를 신규 순수함수 [`reasonDisplay`](../src/features/withdrawals/types.ts)로 전환: **표준 사유 키만 한글화**(other→기타, graduated→졸업), **자유 텍스트(`"반 이동"` 112건)는 그대로 보존**.
