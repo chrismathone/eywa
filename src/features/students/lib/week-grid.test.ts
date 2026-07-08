@@ -1,11 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_PERIODS_CONFIG } from "@/features/timetable/lib/periods";
-import {
-  buildWeekGrid,
-  buildSubjectPeriodGrid,
-  weekCellKey,
-  type WeekGridRow,
-} from "./week-grid";
+import { buildSubjectPeriodGrid, type WeekGridRow } from "./week-grid";
 
 const row = (
   classId: string,
@@ -19,47 +14,6 @@ const mathRow = (classId: string, className: string, slots: WeekGridRow["slots"]
   row(classId, "math", className, "김샘", slots);
 
 const cfg = DEFAULT_PERIODS_CONFIG; // 평일=MATH_PERIODS(8교시), 주말=09:00~ 8교시
-
-describe("buildWeekGrid (시각축 · 전체 탭)", () => {
-  it("빈 입력 → 빈 격자", () => {
-    const g = buildWeekGrid([]);
-    expect(g.days).toEqual([]);
-    expect(g.times).toEqual([]);
-    expect(g.cells.size).toBe(0);
-  });
-
-  it("등장한 요일만 월→일 순(입력 순서 무관)", () => {
-    const g = buildWeekGrid([
-      row("c1", "english", "E반", "Anna", [
-        { day: "fri", startTime: "16:00", periodLabel: "3교시" },
-        { day: "mon", startTime: "16:00", periodLabel: "3교시" },
-        { day: "wed", startTime: "16:00", periodLabel: "3교시" },
-      ]),
-    ]);
-    expect(g.days).toEqual(["mon", "wed", "fri"]);
-  });
-
-  it("시각은 오름차순·중복 제거", () => {
-    const g = buildWeekGrid([
-      mathRow("c1", "M반", [
-        { day: "mon", startTime: "09:00", periodLabel: "1교시" },
-        { day: "mon", startTime: "14:20", periodLabel: "5교시" },
-      ]),
-      row("c2", "english", "E반", "Anna", [{ day: "mon", startTime: "09:00", periodLabel: "1교시" }]),
-    ]);
-    expect(g.times).toEqual(["09:00", "14:20"]);
-  });
-
-  it("같은 (요일,시각)에 다른 과목·강사 → 한 셀에 두 항목", () => {
-    const g = buildWeekGrid([
-      mathRow("c1", "수학심화", [{ day: "tue", startTime: "18:00", periodLabel: "6교시" }]),
-      row("c2", "english", "영어리딩", "Anna", [{ day: "tue", startTime: "18:00", periodLabel: "4교시" }]),
-    ]);
-    const cell = g.cells.get(weekCellKey("tue", "18:00"));
-    expect(cell).toHaveLength(2);
-    expect(cell!.map((c) => c.teacherName).sort()).toEqual(["Anna", "김샘"]);
-  });
-});
 
 describe("buildSubjectPeriodGrid (교시축 · 과목 탭)", () => {
   it("평일 단일 수업 → 그 과목 교시행 전체 + 해당 교시 셀", () => {
@@ -146,5 +100,15 @@ describe("buildSubjectPeriodGrid (교시축 · 과목 탭)", () => {
     expect(g.rows.some((r) => r.key === "x-16:00")).toBe(true);
     const xi = g.rows.findIndex((r) => r.key === "x-16:00");
     expect(g.cellAt(xi, 0)?.className).toBe("A");
+  });
+
+  it("영어(11교시) 행 수 — 과목별 교시표 반영", () => {
+    const g = buildSubjectPeriodGrid(
+      [row("c1", "english", "E반", "Anna", [{ day: "mon", startTime: "14:20", periodLabel: "1교시" }])],
+      "english",
+      false,
+      cfg,
+    );
+    expect(g.rows.length).toBe(11); // ENGLISH_PERIODS 11교시
   });
 });

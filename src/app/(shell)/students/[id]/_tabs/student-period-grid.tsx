@@ -12,23 +12,26 @@ import {
 const DAY_KO: Record<DayOfWeek, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
 };
-const ROW_H = 46; // 교시 1칸 높이(rowSpan 병합·수학 묶음 라벨 2등분이 균일하도록 명시).
 const GRID = "border-ink/20";
 
 /**
  * 과목 탭 — 교시 행 × 요일 열, 실제 시간표 기본뷰 패리티. 평일표 + (있으면)주말표.
- * 단일 학생이라 한 칸 0/1개 수업. 연속 교시는 세로 rowSpan 병합(엑셀 셀병합), 수학계열은 2교시 묶음 라벨.
+ * 단일 학생이라 한 칸 0/1개 수업. 연속 교시는 세로 rowSpan 병합, 수학계열은 2교시 묶음 라벨.
+ * tableHeight = 카드 고정 총높이(가장 교시 많은 과목 기준) — 표가 이 높이를 채우도록 행 높이를 조정해
+ * 탭을 바꿔도 높이가 안 흔들린다(교시 적은 과목은 행이 늘어남).
  */
 export function StudentPeriodGrid({
   rows,
   subject,
   config,
   subjects,
+  tableHeight,
 }: {
   rows: WeekGridRow[];
   subject: string;
   config: PeriodsConfig;
   subjects: SubjectMaps;
+  tableHeight: number;
 }) {
   const weekday = buildSubjectPeriodGrid(rows, subject, false, config);
   const weekend = buildSubjectPeriodGrid(rows, subject, true, config);
@@ -42,10 +45,10 @@ export function StudentPeriodGrid({
     <DragScrollArea>
       <div className="flex items-start gap-4">
         {hasWeekday ? (
-          <PeriodTable grid={weekday} subject={subject} weekend={false} cellColor={cellColor} />
+          <PeriodTable grid={weekday} subject={subject} weekend={false} cellColor={cellColor} tableHeight={tableHeight} />
         ) : null}
         {hasWeekend ? (
-          <PeriodTable grid={weekend} subject={subject} weekend cellColor={cellColor} />
+          <PeriodTable grid={weekend} subject={subject} weekend cellColor={cellColor} tableHeight={tableHeight} />
         ) : null}
       </div>
     </DragScrollArea>
@@ -57,13 +60,17 @@ function PeriodTable({
   subject,
   weekend,
   cellColor,
+  tableHeight,
 }: {
   grid: SubjectPeriodGrid;
   subject: string;
   weekend: boolean;
   cellColor: string;
+  tableHeight: number;
 }) {
   const { days, rows, cellAt, blocks } = grid;
+  // 이 표가 고정 총높이(tableHeight)를 채우도록 행 높이 = 총높이/행수. 교시 적은 과목일수록 행이 커진다.
+  const rowHeight = tableHeight / Math.max(1, rows.length);
   // 수학계열(평일·비영어)만 2교시 묶음 라벨(1교시=1·2교시 …). 영어·주말·폴백은 개별 교시 라벨.
   const isMathFamily = !weekend && subject !== "english";
   const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-[11px] font-semibold whitespace-nowrap`;
@@ -100,21 +107,20 @@ function PeriodTable({
           const prevPid = prevRow ? /^p-(\d+)$/.exec(prevRow.key)?.[1] : undefined;
           const isGroupSecond =
             mathN !== null && mathN % 2 === 0 && prevPid !== undefined && Number(prevPid) === mathN - 1;
+          const oddPaired = mathN !== null && mathN % 2 === 1 && paired;
           return (
-            <tr key={row.key} style={{ height: ROW_H }}>
+            <tr key={row.key} style={{ height: rowHeight }}>
               {isGroupSecond ? null : mathN !== null ? (
                 // 묶음 병합(rowSpan=2)·시간범위 결합은 **홀수 앵커 + 실제 짝일 때만**. 짝수가 폴백으로
                 // 앵커가 된 퇴화 케이스는 개별 라벨(다음 홀수와 오병합 금지).
-                <td rowSpan={mathN % 2 === 1 && paired ? 2 : 1} className={labelCls}>
+                <td rowSpan={oddPaired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (oddPaired ? 2 : 1) }}>
                   {Math.ceil(mathN / 2)}교시
                   <div className="text-text-faint mt-0.5 font-mono text-[9px] font-normal">
-                    {mathN % 2 === 1 && paired
-                      ? `${row.time.split("~")[0]}~${nextRow!.time.split("~")[1]}`
-                      : row.time}
+                    {oddPaired ? `${row.time.split("~")[0]}~${nextRow!.time.split("~")[1]}` : row.time}
                   </div>
                 </td>
               ) : (
-                <td className={labelCls}>
+                <td className={labelCls} style={{ height: rowHeight }}>
                   {row.label}
                   <div className="text-text-faint mt-0.5 font-mono text-[9px] font-normal">{row.time}</div>
                 </td>

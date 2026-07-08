@@ -8,12 +8,9 @@ import {
 import { computeBlocks, cellClassKey, type CellBlock } from "@/features/timetable/lib/grid";
 
 /**
- * 학생 개인 주간 시간표의 순수 배치 로직 — 서버/클라 무관 순수함수 → Vitest로 고정.
- * 두 축 모드:
- *  ① buildWeekGrid = **시각(HH:MM) 행 × 요일 열** — 전 과목 통합('전체' 탭). 과목마다 교시 체계가 달라
- *     시각이 유일한 정확 병합축.
- *  ② buildSubjectPeriodGrid = **교시 행 × 요일 열** — 단일 과목('수학/영어…' 탭). 실제 시간표 기본뷰처럼
- *     연속 교시를 세로 rowSpan으로 병합(computeBlocks). 과목 교시표가 하나라 교시 축이 명확.
+ * 학생 개인 주간 시간표(과목별)의 순수 배치 로직 — 서버/클라 무관 순수함수 → Vitest로 고정.
+ * **교시 행 × 요일 열** — 단일 과목. 실제 시간표 기본뷰처럼 연속 교시를 세로 rowSpan으로 병합(computeBlocks).
+ * 과목 교시표가 하나라 교시 축이 명확(전 과목 통합은 교시 체계가 달라 시각축이라야 정확 → v1에서 제거).
  */
 
 export type WeekGridRow = {
@@ -33,47 +30,6 @@ const toMin = (t: string) => {
   return (h ?? 0) * 60 + (m ?? 0);
 };
 
-// ───────── ① 시각축(전체 탭) ─────────
-export type WeekGridCell = {
-  subject: string;
-  className: string;
-  teacherName: string | null;
-  periodLabel: string;
-};
-
-export type WeekGrid = {
-  days: DayOfWeek[]; // 실제 등장하는 요일만, 월→일 순
-  times: string[]; // 실제 등장하는 시작시각만, 오름차순("HH:MM" 제로패딩 → 문자열 정렬)
-  cells: Map<string, WeekGridCell[]>; // key = weekCellKey(day,time)
-};
-
-export const weekCellKey = (day: DayOfWeek, time: string) => `${day}|${time}`;
-
-export function buildWeekGrid(rows: WeekGridRow[]): WeekGrid {
-  const cells = new Map<string, WeekGridCell[]>();
-  const daySet = new Set<DayOfWeek>();
-  const timeSet = new Set<string>();
-  for (const r of rows) {
-    for (const s of r.slots) {
-      daySet.add(s.day);
-      timeSet.add(s.startTime);
-      const key = weekCellKey(s.day, s.startTime);
-      const arr = cells.get(key) ?? [];
-      arr.push({
-        subject: r.subject,
-        className: r.className,
-        teacherName: r.teacherName,
-        periodLabel: s.periodLabel,
-      });
-      cells.set(key, arr);
-    }
-  }
-  const days = DAY_ORDER.filter((d) => daySet.has(d));
-  const times = [...timeSet].sort();
-  return { days, times, cells };
-}
-
-// ───────── ② 교시축(과목 탭) — 실제 기본뷰 병합 패리티 ─────────
 export type PeriodCell = {
   classId: string;
   className: string;
