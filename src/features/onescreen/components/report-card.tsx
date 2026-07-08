@@ -255,28 +255,19 @@ export function ReportCard({
           {cnBadge ? <span className={`text-[11px] font-semibold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
         </div>
 
+        {/* ClassNote 발송이 주 채널(위 행). 여기선 기록 저장 + PDF만. 카톡·문자 자동발송(알림톡)은 후속 —
+            지금은 저장 후 아래 '학부모 공유 링크' 복사로 수동 전달. */}
         <div className="flex flex-wrap gap-1.5">
           <Button
             variant="outline"
             size="sm"
-            title="저장하면 아래에 학부모 공유 링크가 생성됩니다 — 카톡/문자에 붙여 보내세요"
-            onClick={() => onSend(subjectName, "카카오톡")}
+            title="보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
+            onClick={() => onSend(subjectName, "save")}
           >
-            카톡용 저장
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            title="저장하면 아래에 학부모 공유 링크가 생성됩니다 — 카톡/문자에 붙여 보내세요"
-            onClick={() => onSend(subjectName, "문자")}
-          >
-            문자용 저장
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onSend(subjectName, "pdf")}>
-            PDF
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onSend(subjectName, "save")}>
             저장
+          </Button>
+          <Button variant="ghost" size="sm" title="학부모 보고서 미리보기·인쇄" onClick={() => onSend(subjectName, "pdf")}>
+            PDF
           </Button>
         </div>
 

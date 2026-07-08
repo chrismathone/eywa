@@ -304,24 +304,17 @@ export function OneScreenClient({
     }
     // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사하게.
     patchReport(selected.id, subjectName, () => ({ draft, sent: true, shareToken: res.shareToken }));
-    // 저장은 실제(lesson_reports). PDF는 인쇄 문서 창을 실제로 연다. 카톡/문자는 미연동 →
-    // "발송 완료" 거짓말 없이 "기록 저장 + 연동 후 발송"으로 정직하게(라벨도 report-card에서 "기록 저장").
-    if (channel === "pdf") {
-      if (res.id) {
-        openPrint({
-          id: `print/lesson_reports/${res.id}`,
-          href: `/lesson_reports/${res.id}/print`,
-          title: "수업 보고서",
-        });
-        toast.success(`${subjectName} 보고서 저장 — 인쇄 미리보기를 열었습니다`);
-      } else {
-        toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
-      }
-    } else if (channel === "save") {
-      toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
+    // 채널은 pdf(인쇄 미리보기 창)·save(기록 저장)뿐. 카톡·문자 자동발송(알림톡)은 후속 —
+    // 지금은 저장 후 하단 '학부모 공유 링크' 복사로 수동 전달(별도 버튼 제거).
+    if (channel === "pdf" && res.id) {
+      openPrint({
+        id: `print/lesson_reports/${res.id}`,
+        href: `/lesson_reports/${res.id}/print`,
+        title: "수업 보고서",
+      });
+      toast.success(`${subjectName} 보고서 저장 — 미리보기를 열었습니다`);
     } else {
-      // 카톡/문자: 아직 자동발송(알림톡)은 미연동 → 학부모 공개 링크를 생성해 강사가 직접 복사·전달.
-      toast.success(`${subjectName} 보고서 저장 완료 — 아래 학부모 공유 링크를 복사해 ${channel}로 보내세요`);
+      toast.success(`${subjectName} 보고서를 기록에 저장했습니다`);
     }
   }
 
