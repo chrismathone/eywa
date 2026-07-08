@@ -297,6 +297,8 @@ export const students = pgTable(
     dupSuspect: boolean("dup_suspect").notNull().default(false),
     name: text("name").notNull(),
     englishName: text("english_name"),
+    // ClassNote 보드명 오버라이드(동명이인 구분, 0088a) — 지정 시 워커 보드명·감지가 (classnote_name || name) 사용.
+    classnoteName: text("classnote_name"),
     school: text("school"),
     grade: text("grade"),
     gender: text("gender"), // "male" | "female" | null

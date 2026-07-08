@@ -342,7 +342,7 @@ export function OneScreenClient({
     }
     if (res.status === "name_conflict") {
       toast.error(
-        `${subjectName} — 동명이인이 있어 자동 발송을 막았습니다. 학생 이름을 구분(예: "홍길동(중2)")한 뒤 다시 발송하세요`,
+        `${subjectName} — 동명이인이 있어 자동 발송을 막았습니다. 학생 관리에서 'ClassNote 이름'을 구분(예: "홍길동(중2)") 지정 후 다시 발송하세요`,
       );
       return;
     }

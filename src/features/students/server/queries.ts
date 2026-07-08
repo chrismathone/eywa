@@ -351,6 +351,7 @@ export type StudentDetail = {
   id: string;
   name: string;
   englishName: string | null;
+  classnoteName: string | null;
   studentCode: string | null;
   attendanceCode: string | null;
   school: string | null;
@@ -412,7 +413,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
   const { data } = await supabase
     .from("students")
     .select(
-      `id, name, english_name, school, grade, status, student_code, attendance_code,
+      `id, name, english_name, classnote_name, school, grade, status, student_code, attendance_code,
        gender, birth_date, nickname, graduation_year,
        address, zip_code, address_detail, email, student_phone, home_phone, other_phone,
        enrolled_at, withdrawn_at, created_at, notes, dup_suspect,
@@ -438,6 +439,7 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     id: data.id,
     name: data.name,
     englishName: data.english_name,
+    classnoteName: data.classnote_name,
     studentCode: data.student_code,
     attendanceCode: data.attendance_code,
     school: data.school,

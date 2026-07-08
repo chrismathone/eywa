@@ -23,6 +23,7 @@ export type StudentFormValue = {
   id?: string;
   name: string;
   englishName: string | null;
+  classnoteName: string | null;
   grade: string | null;
   school: string | null;
   studentCode: string | null;
@@ -129,6 +130,7 @@ export function StudentForm({
   const v = initialValue ?? {
     name: "",
     englishName: null,
+    classnoteName: null,
     grade: null,
     school: null,
     studentCode: null,
@@ -179,6 +181,15 @@ export function StudentForm({
             required
             className={inputClass}
             placeholder="예: 김민준"
+          />
+        </Field>
+        <Field label="ClassNote 이름" htmlFor="classnoteName" hint="동명이인 구분용 — 비우면 학생 이름 사용">
+          <input
+            id="classnoteName"
+            name="classnoteName"
+            defaultValue={v.classnoteName ?? ""}
+            className={inputClass}
+            placeholder='예: 김서윤(중2)'
           />
         </Field>
         <Field label="영문 이름" htmlFor="englishName">
@@ -486,11 +497,13 @@ function Field({
   label,
   htmlFor,
   error,
+  hint,
   children,
 }: {
   label: string;
   htmlFor: string;
   error?: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -499,6 +512,7 @@ function Field({
         {label}
       </label>
       {children}
+      {hint ? <p className="text-text-faint text-xs">{hint}</p> : null}
       {error ? <p className="text-chart-4 text-xs">{error}</p> : null}
     </div>
   );

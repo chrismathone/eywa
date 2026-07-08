@@ -36,13 +36,28 @@ export async function hasClassnoteNameCollision(
   supabase: ServerClient,
   studentId: string,
 ): Promise<boolean> {
-  const { data: me } = await supabase.from("students").select("name").eq("id", studentId).maybeSingle();
-  const name = me?.name?.trim();
-  if (!name) return false;
-  const { count } = await supabase
+  const { data: me } = await supabase
     .from("students")
-    .select("id", { count: "exact", head: true })
-    .eq("name", name)
-    .neq("status", "withdrawn");
-  return (count ?? 0) > 1; // 본인 포함 2명 이상 = 동명이인 존재
+    .select("name, classnote_name")
+    .eq("id", studentId)
+    .maybeSingle();
+  // 유효이름 = classnote_name(오버라이드) || name. 워커 보드명도 이 이름을 쓴다.
+  const effName = me?.classnote_name?.trim() || me?.name?.trim();
+  if (!effName) return false;
+  // 유효이름이 같은 비탈원 학생 수 — coalesce 필터를 피해 두 조건(오버라이드 일치 / 미설정+이름 일치) 합산.
+  // (한 행은 classnote_name이 null이거나 non-null이라 두 집합은 상호배타 → 중복 카운트 없음.)
+  const [withOverride, withoutOverride] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .eq("classnote_name", effName)
+      .neq("status", "withdrawn"),
+    supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .is("classnote_name", null)
+      .eq("name", effName)
+      .neq("status", "withdrawn"),
+  ]);
+  return (withOverride.count ?? 0) + (withoutOverride.count ?? 0) > 1; // 본인 포함 2명 이상 = 충돌
 }

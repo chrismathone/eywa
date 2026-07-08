@@ -39,6 +39,7 @@ export default async function EditStudentPage({
           id: student.id,
           name: student.name,
           englishName: student.englishName,
+          classnoteName: student.classnoteName,
           grade: student.grade,
           school: student.school,
           studentCode: student.studentCode,

@@ -47,6 +47,7 @@ function readForm(formData: FormData) {
   return {
     name: get("name"),
     englishName: get("englishName") || null,
+    classnoteName: get("classnoteName") || null,
     grade: get("grade") || null,
     school: get("school") || null,
     studentCode: get("studentCode") || null,
@@ -112,6 +113,7 @@ export async function createStudent(
       tenant_id: user.tenantId,
       name: input.name,
       english_name: input.englishName,
+      classnote_name: input.classnoteName,
       grade: input.grade,
       school: input.school,
       student_code: input.studentCode,
@@ -190,6 +192,7 @@ export async function updateStudent(
     .update({
       name: input.name,
       english_name: input.englishName,
+      classnote_name: input.classnoteName,
       grade: input.grade,
       school: input.school,
       student_code: input.studentCode,

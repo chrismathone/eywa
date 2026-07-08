@@ -81,8 +81,9 @@ export async function processQueueOnce(sql, browser, opts) {
   log(`[worker] 클레임 ${claimed.length}건`);
 
   for (const r of claimed) {
-    const [stu] = await sql`select name from students where id=${r.student_id} and tenant_id=${tenant}`;
-    const studentName = stu?.name ?? "";
+    const [stu] = await sql`select name, classnote_name from students where id=${r.student_id} and tenant_id=${tenant}`;
+    // ClassNote 보드명·원아 = 유효이름(classnote_name 오버라이드 || name). 동명이인은 오버라이드로 구분(0088a).
+    const studentName = (stu?.classnote_name?.trim() || stu?.name || "").trim();
     try {
       // 스크린샷 (INTERNAL_SECRET 헤더 → /r이 조회로그 skip)
       const ctx = await browser.newContext({
