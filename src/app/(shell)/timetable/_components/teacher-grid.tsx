@@ -96,6 +96,7 @@ export function TeacherGridView({
   pxPerMin,
   breakRanges,
   excludedTeachers,
+  showUnusedDays = true,
 }: {
   slots: ScheduleSlotWithStudents[];
   weekMonday?: string;
@@ -111,6 +112,8 @@ export function TeacherGridView({
   breakRanges?: { start: string; end: string }[];
   /** 가로줄(큰 섹션 경계) 미표시 강사 라벨 — 과목 설정 teacherViewLineExcluded. */
   excludedTeachers?: string[];
+  /** true(기본) = 강사마다 월~토 전 요일 컬럼(수업 없는 요일도 빈 컬럼으로). false = 수업 있는 요일만. */
+  showUnusedDays?: boolean;
 }) {
   const dayDates = dayDateLabels(weekMonday);
   // 행 높이 = 분당 px 고정(스텝 무관 블록 크기 동일). 가로줄 시각은 step 격자에 스냅(격자 밖이면 silent drop 방지).
@@ -135,7 +138,10 @@ export function TeacherGridView({
   const teachers: TeacherCol[] = teacherNames
     .map((name) => {
       const daySet = new Set(slots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));
-      const days = DAY_ORDER.filter((d) => daySet.has(d));
+      // 기본 = 월~토 전 컬럼(빈 요일 포함, 일요일은 수업 있을 때만). 토글 해제 시 수업 요일만.
+      const days = DAY_ORDER.filter((d) =>
+        showUnusedDays ? d !== "sun" || daySet.has(d) : daySet.has(d),
+      );
       return { name, days, color: colorFor(name) };
     })
     .filter((t) => t.days.length > 0);
