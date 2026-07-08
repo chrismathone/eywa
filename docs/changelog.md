@@ -16,7 +16,17 @@
 - **행 클릭**: 교재 = A4 인쇄 카드 창(`usePrintWindow`, `/textbook/[id]/print`) / 견적 = 수강료 계산기 딥링크(`?qid=`). 행은 [linked-row.tsx](<../src/app/(shell)/documents/_components/linked-row.tsx>) — 고정/삭제/다운로드 없음(읽기 전용). 설명줄 = 상세·가격·상태 한글, 견적은 `schoolGradeLabel` 압축 표기.
 - **권한**: `canAccessTenant("billing")` 게이트 — 강사에겐 폴더 비노출·직접 URL도 전체 폴백(담당 학생 스코프 밖 전체 목록 차단, 강사는 전용 면 /textbook-requests 사용). 이력서·환불요청서 restricted RLS와 별개 축.
 - 부수: `TextbookOrderRow.createdAt`(요청일 null 폴백용)·`QuoteListItem.consultant`(등록자 컬럼) additive 추가. 새 연동 소스 추가 = linked.ts 등록 + linked-queries.ts 분기.
-- **후속(같은 날, "페이지네이션 안 보임" 제보)**: 하단 표준 페이저는 있었으나 **작은 창에선 50행 아래라 발견 불가** → ① 테이블 헤더 "N/M 페이지" 표시를 **클릭 가능한 컴팩트 페이저(◀ ▶)** 로 승격(`PageStep` export 재사용, 하단 페이저 병존) ② 창(iframe) 안 폴더·페이저·검색 드릴인에 **embed=1 유지**(잃으면 클릭마다 풀셸 레이아웃 서버 실행 — 크롬은 HideInFrame self-heal이라 눈엔 안 보였음, face-tabs 관례로 정합). 실검증: 창 안 폴더 클릭→`cat=textbooks&embed=1`, 헤더 ▶ 클릭→`page=2&embed=1` 2/8 렌더. — ✅ 프로덕션 8,486행 전수 렌더감사(위반 0 수렴) + 실브라우저 검증(허은진 탭) + tsc0/lint0/test752
+- **후속(같은 날, "페이지네이션 안 보임" 제보)**: 하단 표준 페이저는 있었으나 **작은 창에선 50행 아래라 발견 불가** → ① 테이블 헤더 "N/M 페이지" 표시를 **클릭 가능한 컴팩트 페이저(◀ ▶)** 로 승격(`PageStep` export 재사용, 하단 페이저 병존) ② 창(iframe) 안 폴더·페이저·검색 드릴인에 **embed=1 유지**(잃으면 클릭마다 풀셸 레이아웃 서버 실행 — 크롬은 HideInFrame self-heal이라 눈엔 안 보였음, face-tabs 관례로 정합). 실검증: 창 안 폴더 클릭→`cat=textbooks&embed=1`, 헤더 ▶ 클릭→`page=2&embed=1` 2/8 렌더.
+
+### 진도(lesson_reports) 임포트 — ijw 폴더 의존 제거·Edutrix 직접 연결 + 데이터 최신화(6/30→7/8) (2026-07-09) — ✅ 실행 검증(3,532행 재적재) + 진도 탭 실브라우저 확인
+사용자 질문 "ijw-calander 거치지 말고 Edutrix 직접 가져오면 안 되나?" → 조사: [import-lesson-reports.cjs](../scripts/_poc_migration/import-lesson-reports.cjs)는 **원래도 Edutrix Supabase(reports)를 직접** 읽었고, ijw 의존은 접속 키를 `D:/ijw-calander/.env.local`에서 읽는 한 줄뿐이었음. 그런데 **그 폴더가 D:에서 사라져(F:로 이동) 스크립트가 실행 불능** 상태였음.
+- **키 이관**: F:/ijw-calander/.env.local의 Edutrix 키 → eywa `.env.local`의 **`EDUTRIX_SUPABASE_URL`/`EDUTRIX_SUPABASE_ANON_KEY`**(gitignore). 스크립트는 env 전용으로 전환(파일 파싱 제거, 미설정 시 명확 에러) — ijw 폴더 의존 0.
+- **재실행·최신화**: 3,532행 재적재(멱등 delete+insert), 최신 report_date **6/30 → 7/8**. 진도 탭 실브라우저 확인(정미선 7/8 이성우 "1.함수의 극한…").
+- **⚠️ 활동 로그 오염 방어**: lesson_reports에 0084a 트리거가 붙은 뒤라 벌크 재적재가 **actor null 노이즈 ~7,053행**을 activity_log에 쏟음(실측·삭제 완료) → 스크립트가 재적재 동안 `tg_log_activity_*` 2개만 지정 disable(try/finally로 크래시에도 재활성 보장, FK 등 다른 트리거 무관). 재실행 검증: 활동 로그 0행·트리거 재활성 확인.
+- 검증 로그인 원복: 프리뷰(HeadlessChrome) 세션은 **UA 필터로** 삭제(시간 window 필터는 오인 소지 — 실사용 세션 무피해 확인됨).
+- ⚠️ 여전히 일회성 수동 스크립트(자동 동기화 아님) — 주기 실행이 필요해지면 makeedu 동기화 PC 워처에 편입 후보.
+
+### 활동 로그 "이상한 멘트" 전수 필터링 — 영문 enum·uuid·ISO시각·JSON 원문 노출 해소 (2026-07-08) — ✅ 프로덕션 8,486행 전수 렌더감사(위반 0 수렴) + 실브라우저 검증(허은진 탭) + tsc0/lint0/test752
 사용자 제보: "로그에 이상한 알수없는 멘트". activity_log 전 행을 뷰어 로직(activityDetail)으로 렌더하는 감사 스크립트로 원문 노출 4종 적발 → [activity.ts](../src/features/audit/activity.ts) 순수 함수에서 해소(+Vitest 8):
 - **영문 enum 값 → 한글 `VALUE_LABEL`**(값 전체 일치 시만): "상태 requested→paid"→"신청→완납", "active→inactive"→"활성→비활성", "비움→card"→"비움→카드", 학생상태 enrolled/withdrawn→등록/퇴원, 출결·역할·요일·처리상태 등 50여 값. 미등록 값은 원문 폴백.
 - **읽을 수 없는 diff는 "변경" 축약**: uuid↔uuid(teacher_id 등 — id 원문은 정보 아님) + 객체/JSON직렬화문자열↔객체("품목 (내용)→(내용)"·이중 인코딩 line_items 실측).
