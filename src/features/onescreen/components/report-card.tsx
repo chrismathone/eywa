@@ -95,6 +95,8 @@ export function ReportCard({
   homeworks,
   onAttitude,
   onHomework,
+  onTextbook,
+  onMakeup,
   onSubjectDraft,
   onAutoWrite,
   generatingSubject,
@@ -113,6 +115,8 @@ export function ReportCard({
   homeworks: readonly string[];
   onAttitude: (a: string) => void;
   onHomework: (h: string) => void;
+  onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
+  onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   onSubjectDraft: (subjectName: string, text: string) => void;
   onAutoWrite: (subjectName: string) => void;
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
@@ -181,6 +185,40 @@ export function ReportCard({
 
       <div className="flex flex-1 flex-col gap-3 px-4 py-3">
         <MiniSummary st={student} subject={subject} />
+
+        {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={subject.textbook ?? ""}
+              onChange={(e) => onTextbook(subjectName, e.target.value)}
+              placeholder="교재명 (예: 개념원리 중2-1)"
+              aria-label={`${subjectName} 교재명`}
+              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => onMakeup(subjectName)}
+              aria-pressed={!!subject.makeup}
+              title="보강 수업 표시"
+              className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+                subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
+              }`}
+            >
+              보강
+            </button>
+          </div>
+          {student.attendance !== "출석" ? (
+            <span
+              className={`self-start rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
+                student.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
+              }`}
+            >
+              오늘 {student.attendance}
+            </span>
+          ) : null}
+        </div>
 
         <div>
           <p className="micro text-text-faint mb-1.5">수업 태도</p>

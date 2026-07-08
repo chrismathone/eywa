@@ -40,6 +40,7 @@ export type ParentReportCardProps = {
   report: {
     reportDate: string | null; // YYYY-MM-DD (원시). 표시는 여기서 ko-KR 포맷.
     teacherName: string | null;
+    textbook: string | null; // 교재명 — 0089a(showTextbook 토글)
     progress: string | null;
     dailyTest: string | null;
     checkTest: string | null;
@@ -79,6 +80,7 @@ export function ParentReportCard({
       ? report.examInfo
       : null;
   const showToday =
+    (rpt.showTextbook && report.textbook) ||
     (rpt.showProgress && report.progress) ||
     (rpt.showDailyTest && report.dailyTest) ||
     (rpt.showCheckTest && report.checkTest) ||
@@ -108,6 +110,7 @@ export function ParentReportCard({
 
       {showToday ? (
         <Section title="오늘 수업">
+          {rpt.showTextbook && report.textbook ? <Field label="교재" value={report.textbook} /> : null}
           {rpt.showProgress && report.progress ? <Field label="진도" value={report.progress} /> : null}
           {rpt.showDailyTest && report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
           {rpt.showCheckTest && report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}

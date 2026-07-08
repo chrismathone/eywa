@@ -16,6 +16,10 @@ export type Subject = {
   // 미지정(데모)이면 "math"로 간주 → 기존 커리큘럼 동작 보존.
   subjectKey?: string;
 
+  // 교재명·보강 — 0089a(edutrix 강사 필드 패리티). 과목별. textbook=학부모 카드에도 표시, makeup=보강 수업.
+  textbook?: string;
+  makeup?: boolean;
+
   // ── 오늘 보고서 발송 상태(과목별) — roster가 오늘 lesson_reports를 subject로 매칭해 채움 ──
   // 학생단위로 뭉개면 다과목(수학만 저장해도 영어까지 sent)이 오카운트되므로 과목별로 분리.
   reportSent?: boolean; // 오늘 이 과목 보고서가 저장됨

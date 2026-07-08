@@ -649,6 +649,9 @@ export const lessonReports = pgTable(
     dailyTest: text("daily_test"),
     checkTest: text("check_test"),
     attitude: text("attitude"),
+    // 교재명·보강 — 0089a(edutrix 강사 필드 패리티). textbook=과목 교재(학부모 카드에도 표시), makeup=보강 수업 여부.
+    textbook: text("textbook"),
+    makeup: boolean("makeup").notNull().default(false),
     // 학부모 공개 보고서 링크(/r/[token]) 토큰 — 0081a. 공개 페이지가 service_role로 이 토큰 단건 조회.
     shareToken: uuid("share_token").notNull().defaultRandom(),
     // ClassNote 발송 큐 + 과목별 dedup — 0083a. 인덱스(부분 유니크·queued 부분)는 0083a alpha에 정의.

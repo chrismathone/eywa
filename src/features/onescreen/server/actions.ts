@@ -11,6 +11,8 @@ import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 
 export type SaveLessonReportInput = {
   studentId: string;
+  textbook?: string; // 교재명 — 0089a(학부모 카드 showTextbook)
+  makeup?: boolean; // 보강 수업 여부 — 0089a
   progress: string; // "영어 Unit 8 · p.90"
   examInfo: string; // "일일 18/20, 확인 19/20" (roster prev-score 파싱용 합본 — 보존)
   homeworkScore: string; // 과제 상태
@@ -65,6 +67,8 @@ export async function saveLessonReport(
         student_id: input.studentId,
         report_date: reportDate,
         subject: input.subject || null,
+        textbook: input.textbook || null,
+        makeup: input.makeup ?? false,
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: input.homeworkScore || null,
@@ -221,7 +225,7 @@ export type SaveOnescreenSessionInput = {
   studentId: string;
   classId?: string | null;
   studyGrade?: string | null;
-  subjectProgress?: Record<string, { today?: string; draft?: string }>;
+  subjectProgress?: Record<string, { today?: string; draft?: string; textbook?: string; makeup?: boolean }>;
   dailyScore?: number | null;
   dailyMax?: number | null;
   checkScore?: number | null;

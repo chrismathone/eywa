@@ -127,6 +127,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showAcademyName: true,
     showFooter: true,
     footerNote: "",
+    showTextbook: true,
     showProgress: true,
     showDailyTest: true,
     showCheckTest: true,

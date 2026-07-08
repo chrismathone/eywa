@@ -120,7 +120,7 @@ export function OneScreenClient({
       subjectProgress: Object.fromEntries(
         s.subjects.map((su) => [
           su.subjectKey || su.name,
-          { today: su.today, draft: r?.[su.name]?.draft ?? "" },
+          { today: su.today, draft: r?.[su.name]?.draft ?? "", textbook: su.textbook ?? "", makeup: su.makeup ?? false },
         ]),
       ),
       dailyScore: s.tests.daily.score,
@@ -239,6 +239,21 @@ export function OneScreenClient({
     if (!selected) return;
     patchReport(selected.id, subjectName, (r) => ({ ...r, draft: text }));
   }
+  // 교재명·보강 — 과목별(subjectName으로 해당 과목만 갱신). 자동저장(patch→queueSave)에 실림.
+  function setTextbook(subjectName: string, text: string) {
+    if (!selected) return;
+    patch(selected.id, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, textbook: text } : su)),
+    }));
+  }
+  function toggleMakeup(subjectName: string) {
+    if (!selected) return;
+    patch(selected.id, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, makeup: !su.makeup } : su)),
+    }));
+  }
   async function autoWriteSubject(subjectName: string) {
     if (!selected) return;
     const student = selected; // 클로저 고정 — 생성 중 학생 전환돼도 원래 학생에 반영
@@ -280,6 +295,8 @@ export function OneScreenClient({
       draft,
       input: {
         studentId: selected.id,
+        textbook: su?.textbook || "",
+        makeup: su?.makeup ?? false,
         progress: su ? `${su.name} ${su.today}`.trim() : "",
         examInfo,
         homeworkScore: selected.homework,
@@ -577,6 +594,8 @@ export function OneScreenClient({
                 homeworks={HOMEWORK}
                 onAttitude={setAttitude}
                 onHomework={setHomework}
+                onTextbook={setTextbook}
+                onMakeup={toggleMakeup}
                 onSubjectDraft={setSubjectDraft}
                 onAutoWrite={autoWriteSubject}
                 generatingSubject={genSubject}

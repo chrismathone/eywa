@@ -65,6 +65,7 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
           <div className="border-border divide-border divide-y rounded-md border">
             {(
               [
+                ["교재명", "showTextbook"],
                 ["진도", "showProgress"],
                 ["일일테스트", "showDailyTest"],
                 ["확인테스트", "showCheckTest"],

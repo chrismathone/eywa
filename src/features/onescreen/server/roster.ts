@@ -39,7 +39,7 @@ export type TeacherRoster = {
 type OnescreenSessionRow = {
   student_id: string;
   study_grade: string | null;
-  subject_progress: Record<string, { today?: string; draft?: string }> | null;
+  subject_progress: Record<string, { today?: string; draft?: string; textbook?: string; makeup?: boolean }> | null;
   daily_score: number | null;
   daily_max: number | null;
   check_score: number | null;
@@ -143,7 +143,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       byStudent.set(stu.id, os);
     }
     if (!os.subjects.some((su) => su.subjectKey === cls.subject)) {
-      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, prev: "", today: "" });
+      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, prev: "", today: "", textbook: "", makeup: false });
     }
   }
 
@@ -291,6 +291,8 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       for (const su of os.subjects) {
         const entry = sp[su.subjectKey || su.name];
         if (entry?.today) su.today = entry.today;
+        if (entry?.textbook != null) su.textbook = entry.textbook;
+        if (entry?.makeup != null) su.makeup = entry.makeup;
       }
     }
   }

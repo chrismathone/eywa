@@ -171,6 +171,7 @@ export const reportSchema = z.object({
   showAcademyName: z.boolean(),
   showFooter: z.boolean(),
   footerNote: z.string().max(200),
+  showTextbook: z.boolean(), // 교재명 — 0089a(강사 필드 패리티)
   showProgress: z.boolean(),
   showDailyTest: z.boolean(),
   showCheckTest: z.boolean(),
