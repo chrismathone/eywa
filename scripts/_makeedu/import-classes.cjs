@@ -2,7 +2,7 @@
  * scripts/_makeedu/import-classes.cjs — makeedu 수업목록 → eywa `classes` **additive(ijw 정본)**.
  * ⚠️ ijw 반이 정본(반 색상·스케줄·담임 보유). makeedu-only 반은 생성하지 않고, 이름이 정확히 일치하는
  *    ijw 반에만 `makeedu_lesson_id`를 백필(미설정인 경우만). ijw 코드명 vs makeedu 풀네임이라 대부분 미일치(정상).
- * 입력: $MAKEEDU_OUT(기본 D:/tmp/makeedu)/classes.json (scrape.cjs 산출, rows=[헤더→셀]).
+ * 입력: $MAKEEDU_OUT(기본 <repo>/.makeedu-tmp)/classes.json (scrape.cjs 산출, rows=[헤더→셀]).
  *   node --env-file=.env.local scripts/_makeedu/import-classes.cjs [--apply]
  */
 const fs = require("fs");
@@ -11,7 +11,7 @@ const postgres = require("postgres");
 const L = require("./lib.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 
 function load(key) {
   return JSON.parse(fs.readFileSync(path.join(OUT, `${key}.json`), "utf8"));

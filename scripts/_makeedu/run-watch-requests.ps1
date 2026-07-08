@@ -15,7 +15,7 @@
 #   Register-ScheduledTask -TaskName "eywa-makeedu-sync-watcher" -Action $action -Trigger $triggers -Settings $settings
 #   Start-ScheduledTask -TaskName "eywa-makeedu-sync-watcher"
 #
-# 로그는 워처(node)가 직접 D:\tmp\makeedu\watch-requests.log 에 쓴다(장기 실행이라 리다이렉트 캡처 부적합).
+# 로그는 워처(node)가 직접 <repo>\.makeedu-tmp\watch-requests.log 에 쓴다(장기 실행이라 리다이렉트 캡처 부적합).
 
 $ErrorActionPreference = "Continue"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path

@@ -7,8 +7,8 @@
  * 사용(형님 PC 로컬):
  *   node scripts/_makeedu/capture-session.cjs
  *   → 브라우저가 열리면 직접 로그인(CAPTCHA·휴대폰 인증 통과) → 대시보드(main.do)가 보이면 이 터미널로 와 Enter
- *   → 세션 저장(기본 D:/tmp/makeedu/session.json) → GitHub 시크릿 등록:
- *        gh secret set MAKEEDU_STORAGE_STATE < D:/tmp/makeedu/session.json
+ *   → 세션 저장(기본 <repo>/.makeedu-tmp/session.json) → GitHub 시크릿 등록:
+ *        gh secret set MAKEEDU_STORAGE_STATE < .makeedu-tmp/session.json
  * ⚠️ 세션은 만료될 수 있음 — 동기화가 "세션 무효/만료"로 실패하면 이 캡처를 다시 실행해 시크릿을 갱신.
  */
 const fs = require("fs");
@@ -18,7 +18,7 @@ let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
 
 const BASE = "https://school.makeedu.co.kr";
-const OUT = process.env.MAKEEDU_SESSION_FILE || "D:/tmp/makeedu/session.json";
+const OUT = process.env.MAKEEDU_SESSION_FILE || path.resolve(__dirname, "..", "..", ".makeedu-tmp", "session.json");
 
 (async () => {
   const browser = await chromium.launch({ headless: false }); // 사람이 직접 보고 로그인

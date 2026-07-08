@@ -11,7 +11,7 @@
  *
  * 실행: node --env-file=.env.local scripts/_makeedu/watch-sync-requests.cjs
  * 등록: 작업 스케줄러 "eywa-makeedu-sync-watcher" (run-watch-requests.ps1, 로그온 트리거 + 상시 실행)
- * 로그: D:/tmp/makeedu/watch-requests.log
+ * 로그: <repo>/.makeedu-tmp/watch-requests.log (MAKEEDU_OUT로 재정의 가능)
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -23,7 +23,7 @@ const L = require("./lib.cjs");
 const POLL_MS = 15_000;
 const HERE = __dirname;
 const REPO = path.resolve(HERE, "..", "..");
-const LOG_DIR = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const LOG_DIR = process.env.MAKEEDU_OUT || path.join(REPO, ".makeedu-tmp");
 const LOG = path.join(LOG_DIR, "watch-requests.log");
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 워처 프로세스 시작 시각(재시작 감지)
