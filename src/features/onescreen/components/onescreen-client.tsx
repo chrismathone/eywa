@@ -439,6 +439,26 @@ export function OneScreenClient({
     setUploadingSubject(subjectName);
     let added = 0;
     try {
+      // 첨부 먼저 UX — 미저장 상태면 현재 초안으로 자동저장해 보고서 행을 먼저 만든다(첨부는 저장된 행에만).
+      // 수동 '저장' 클릭을 없앨 뿐 결과는 "저장 후 첨부"와 동일(진짜 저장된 행).
+      if (!reports[studentId]?.[subjectName]?.sent) {
+        const built = buildSaveInput(subjectName);
+        if (!built) {
+          toast.error("저장할 보고서 정보를 찾을 수 없습니다");
+          return;
+        }
+        const saved = await saveLessonReport(built.input);
+        if (!saved.ok || !saved.id) {
+          toast.error(saved.error ?? "보고서 저장에 실패했습니다");
+          return;
+        }
+        patchReport(studentId, subjectName, (r) => ({
+          ...r,
+          draft: built.draft,
+          sent: true,
+          shareToken: saved.shareToken ?? r.shareToken,
+        }));
+      }
       for (const original of files) {
         // 업로드 전 클라 다운스케일(포맷 보존). 실패 시 원본 반환이라 업로드는 항상 진행.
         const file = await resizeImageForUpload(original);

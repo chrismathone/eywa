@@ -280,9 +280,9 @@ export function ReportCard({
           </Button>
         </div>
 
-        {/* P2b: 학생 사진 첨부 — 저장된 보고서에만(rep.sent). /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. */}
-        {rep.sent ? (
-          <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
+        {/* P2b: 학생 사진 첨부 — 항상 노출. 미저장 상태에서 추가하면 첫 첨부 시 자동저장(핸들러). */}
+        {/* /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. */}
+        <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-text-faint text-[11px] font-semibold">
                 학생 사진 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
@@ -340,7 +340,6 @@ export function ReportCard({
               </p>
             )}
           </div>
-        ) : null}
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
         {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}
