@@ -74,7 +74,7 @@ describe("인재원 통합영어시간표 익스포터", () => {
     const joined = vals.join(" | ");
 
     expect(joined).toContain("인재원 본원 통합 영어시간표"); // 타이틀
-    expect(joined).toContain("오후 2:20"); // 섹션 라벨
+    expect(joined).toContain("1교시 시작"); // 섹션 라벨(앱 통합뷰 그룹핑 = N교시 시작)
     expect(vals.some((v) => v.includes("DP5") && v.includes("2:20") && v.includes("(Anna)"))).toBe(true); // 반 헤더
     expect(vals.some((v) => v.includes("Anna") && v.includes("602"))).toBe(true); // 교시 셀 강사+방
     expect(joined).toContain("LAB");
