@@ -80,6 +80,49 @@ const COLUMN_LABEL: Record<string, string> = {
   base_amount: "기본급", hours_worked: "근무시간", hourly_amount: "시급정산", bonus: "상여",
   deduction: "공제", total: "합계", trigger_reason: "사유", contacted_at: "연락일", decided_at: "결정일",
   abbreviation: "약어", full_name: "이름", color: "색상", sort_order: "정렬", expires_at: "만료일",
+  // 렌더 전수감사(2026-07-08)에서 원문 노출 확인분 — 수납 결제 상세·퇴원 메타·오디오 파이프라인(과거 행)
+  amount_paid: "납부액", amount_discount: "할인액", billed_at: "청구일", card_company: "카드사",
+  discount_reason: "할인사유", cash_receipt_number: "현금영수증", points_used: "적립금사용",
+  withdrawal_metadata: "퇴원정보", is_transferred: "반이동", classnote_name: "클래스노트이름",
+  request_date: "신청일", transcription: "전사", speaker_labels: "화자구분", audio_path: "오디오",
+  audio_duration_sec: "오디오길이(초)", audio_size_bytes: "오디오용량",
+  // redact 대상 컬럼(트리거 0081a·0084a) — "X 변경"으로만 뜨므로 라벨 없으면 영문 그대로 노출된다
+  hourly_rate: "시급", monthly_base: "월급여", form_data: "서식내용", print_payload: "인쇄본",
+  ai_summary: "AI요약", share_token: "공유링크", token: "토큰", token_hash: "토큰",
+  attachments: "첨부", payload: "내용",
+};
+
+/**
+ * 영문 enum 값 → 한글(값 전체가 정확히 일치할 때만). 컬럼 무관 전역 매핑 — 실데이터 감사(2026-07-08)에서
+ * "상태 active→inactive"·"unpaid→paid"·"비움→card" 같은 원문 노출을 확인해 도입. 의미가 겹치는 값
+ * (pending·enrolled 등)은 모든 맥락에서 무난히 읽히는 일반어를 택했다. 미등록 값은 원문 노출(폴백).
+ */
+const VALUE_LABEL: Record<string, string> = {
+  // 상태 공통
+  pending: "대기", active: "활성", inactive: "비활성", completed: "완료", failed: "실패", idle: "대기",
+  // 학생 상태
+  prospect: "잠재", consulted: "상담완료", enrolled: "등록", on_hold: "휴원", withdrawn: "퇴원",
+  // 수납/교재
+  unpaid: "미납", partial: "부분납", paid: "완납", refunded: "환불", void: "무효",
+  requested: "신청", ordered: "주문",
+  // 결제수단
+  card: "카드", transfer: "계좌이체", cash: "현금", other: "기타",
+  // 출결
+  present: "출석", absent: "결석", late: "지각", excused: "인정결석", makeup: "보강", early_leave: "조퇴",
+  manual: "수동", kiosk: "키오스크",
+  // 등록상담 outcome / 재등록 캠페인
+  scheduled: "예약", ai_done: "AI완료", declined: "거절", no_show: "노쇼", contacted: "연락완료",
+  // 오디오 파이프라인(과거 행)
+  uploaded: "업로드됨", transcribing: "전사중", analyzing: "분석중",
+  // 역할
+  master: "원장", admin: "관리자", manager: "매니저", teacher: "강사", counselor: "상담사",
+  accountant: "회계", viewer: "열람", student: "학생",
+  // 요일
+  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
+  // 공지 대상
+  all: "전체", staff: "직원", office: "운영진", teachers: "강사", counselors: "상담", accounting: "회계",
+  // 청구 분류
+  tuition: "수강료", material: "교재", exam: "시험",
 };
 
 const colLabel = (c: string) => COLUMN_LABEL[c] ?? c;
@@ -89,7 +132,28 @@ function shortVal(v: unknown): string {
   if (typeof v === "boolean") return v ? "예" : "아니오";
   if (typeof v === "object") return "(내용)";
   const s = String(v);
+  if (VALUE_LABEL[s]) return VALUE_LABEL[s];
+  // ISO 타임스탬프("2026-07-08T11:33:32.691+…") → KST 시각(paid_at 등 — 원문은 기계 문자열)
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}/.test(s)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime()))
+      return d.toLocaleString("ko-KR", {
+        timeZone: "Asia/Seoul",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+      });
+  }
   return s.length > 24 ? s.slice(0, 24) + "…" : s;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** 사람이 못 읽는 diff(uuid id / 객체↔객체)는 old→new 대신 "변경"으로 축약할지 판정. */
+function unreadableDiff(old: unknown, next: unknown): boolean {
+  const isUuid = (v: unknown) => typeof v === "string" && UUID_RE.test(v);
+  if (isUuid(old) || isUuid(next)) return true; // teacher_id 등 — uuid→uuid는 정보가 아님
+  // 객체 또는 JSON 직렬화 문자열(이중 인코딩 jsonb — invoices.line_items 실측) 둘 다 "내용"으로 취급.
+  const contentish = (v: unknown) =>
+    (typeof v === "object" && v !== null) || (typeof v === "string" && /^[[{]/.test(v.trim()));
+  return contentish(old) && contentish(next); // "(내용)→(내용)" 무의미 → "변경"
 }
 
 export type ActivityChange = { redacted?: true; old?: unknown; new?: unknown };
@@ -116,6 +180,7 @@ export function activityDetail(
   const changes = all.slice(0, CHANGES_CAP).map(([col, ch]) => {
     if (ch && typeof ch === "object" && "redacted" in ch && ch.redacted) return `${colLabel(col)} 변경`;
     const c = ch as ActivityChange;
+    if (unreadableDiff(c.old, c.new)) return `${colLabel(col)} 변경`;
     return `${colLabel(col)} ${shortVal(c.old)}→${shortVal(c.new)}`;
   });
   const more = all.length - Math.min(all.length, CHANGES_CAP);

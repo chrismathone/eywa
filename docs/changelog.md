@@ -9,6 +9,14 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 활동 로그 "이상한 멘트" 전수 필터링 — 영문 enum·uuid·ISO시각·JSON 원문 노출 해소 (2026-07-08) — ✅ 프로덕션 8,486행 전수 렌더감사(위반 0 수렴) + 실브라우저 검증(허은진 탭) + tsc0/lint0/test752
+사용자 제보: "로그에 이상한 알수없는 멘트". activity_log 전 행을 뷰어 로직(activityDetail)으로 렌더하는 감사 스크립트로 원문 노출 4종 적발 → [activity.ts](../src/features/audit/activity.ts) 순수 함수에서 해소(+Vitest 8):
+- **영문 enum 값 → 한글 `VALUE_LABEL`**(값 전체 일치 시만): "상태 requested→paid"→"신청→완납", "active→inactive"→"활성→비활성", "비움→card"→"비움→카드", 학생상태 enrolled/withdrawn→등록/퇴원, 출결·역할·요일·처리상태 등 50여 값. 미등록 값은 원문 폴백.
+- **읽을 수 없는 diff는 "변경" 축약**: uuid↔uuid(teacher_id 등 — id 원문은 정보 아님) + 객체/JSON직렬화문자열↔객체("품목 (내용)→(내용)"·이중 인코딩 line_items 실측).
+- **ISO 타임스탬프 → KST**: "납부 비움→2026-07-08T11:33:32.691+…" → "2026. 07. 08. 20:33".
+- **미번역 컬럼 라벨 추가**: 수납 결제 상세(amount_paid·card_company·현금영수증 등)·withdrawal_metadata(퇴원정보)·is_transferred(반이동)·오디오 파이프라인(과거 행) + **redact 컬럼 전부**(hourly_rate "시급" 등 — 라벨 없으면 "hourly_rate 변경"으로 영문 노출, 테스트가 적발).
+- 잔여 "비움→(내용)"(빈 값이 채워짐)은 정보성 있어 의도 유지. 감사 스크립트는 일회성(원문 노출 0 수렴 확인 후 삭제).
+
 ### 역동기화 카드 "상담 상태" 컬럼 + 학교·학년 표기 전역 통일("경명여중1") (2026-07-08) — ✅ 실브라우저 검증(dev 3100 로그인→/enrollment 표 3행 정확 렌더, 검증 세션 원복) + tsc0/lint0/test744
 사용자 요청: ① 역동기화 표에 등록상담 진행 상태 표시 ② "경명여중 중1"→"경명여중1" 표기 통일("지침 사라졌나 체크").
 - **① 상담 상태 컬럼**([makeedu-push-card](../src/features/integrations/components/makeedu-push-card.tsx)): `getUnpushedIntakeConsultations`가 `outcome` 반환 → 칸반과 동일 Pill(대기/예약/상담완료/AI 완료…)로 "경로"와 "접수일" 사이 표시. 기존 "상태" 헤더는 **"전송 상태"**로 명확화. 단일 소스 유지 위해 [outcome-meta](../src/features/enrollment/outcome-meta.ts)를 `features/enrollment`로 승격(app 쪽 원위치는 re-export shim — features→app 역참조 회피).
