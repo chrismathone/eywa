@@ -83,42 +83,54 @@ export async function saveLessonReport(
 
 /**
  * 원스크린 "ClassNote 발송" — 보고서 저장(upsert) + ClassNote 큐 적재를 한 액션으로.
- * 강사는 큐에 넣고 즉시 반환(비동기) — 실제 게시는 로컬 워커가 폴링해 처리(P3). 권한 재검증은 saveLessonReport가 담당.
- * 이미 queued/processing/success면 재큐잉 차단(중복 게시 방지). too_old(전 달 1일 이전) 보고서는 'too_old'로 표시만.
+ * 강사는 큐에 넣고 즉시 반환(비동기) — 실제 게시는 로컬 워커가 폴링해 처리(P3).
+ *
+ * 재발송 정책(리뷰 반영): **저장 전** 기존 상태를 확인한다.
+ * - `processing`(워커가 게시 중) → 내용을 덮어쓰지 않고 반환(레이스·오게시 방지).
+ * - 그 외(null/queued/success/failed) → upsert 후 `queued`로 재적재 → **재발송 허용**(강사의 발송 재클릭 = 재게시 의도).
+ *   기존엔 저장을 먼저 해 내용은 바뀌고 success면 재큐잉을 막아 ClassNote와 불일치가 났음.
  */
 export async function saveAndQueueClassnote(
   input: SaveLessonReportInput,
 ): Promise<{ ok: boolean; id?: string; shareToken?: string; status?: string; error?: string }> {
-  const saved = await saveLessonReport(input); // 권한 재검증 + 과목별 upsert + share_token
-  if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
 
   const supabase = await createClient();
-  const { data: row } = await supabase
+  const reportDate = kstToday();
+
+  // 저장 전 상태 pre-read(오늘 (student,subject) 행). RLS로 테넌트 격리.
+  const base = supabase
     .from("lesson_reports")
-    .select("classnote_status")
-    .eq("id", saved.id)
-    .maybeSingle();
-  const cur: string | null = row?.classnote_status ?? null;
-  // 이미 발송 대기/처리중/완료면 재큐잉 안 함(같은 행이라 중복 행은 애초에 불가 — 상태만 보존).
-  if (cur === "queued" || cur === "processing" || cur === "success") {
-    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: cur };
+    .select("id, classnote_status")
+    .eq("student_id", input.studentId)
+    .eq("report_date", reportDate);
+  const { data: prior } = await (
+    input.subject ? base.eq("subject", input.subject) : base.is("subject", null)
+  ).maybeSingle();
+  // 워커 게시 중이면 내용 덮어쓰지 않고 그대로 반환(in-flight 보호).
+  if (prior?.classnote_status === "processing") {
+    return { ok: true, id: prior.id, status: "processing" };
   }
-  // too_old 가드 — 오늘 저장(kstToday)은 항상 통과하지만, 규약상 명시(과거보고서 오발송 사고 방지).
-  if (!isClassnoteAllowed(kstToday())) {
-    await supabase.from("lesson_reports").update({ classnote_status: "too_old" }).eq("id", saved.id);
-    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "too_old" };
-  }
+
+  // 저장(upsert) — 권한 재검증(getCurrentUser+담당 활성수강생)은 saveLessonReport 내부.
+  const saved = await saveLessonReport(input);
+  if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
+
+  // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.
+  const allowed = isClassnoteAllowed(reportDate);
   const { error } = await supabase
     .from("lesson_reports")
     .update({
-      classnote_status: "queued",
-      classnote_queued_at: new Date().toISOString(),
+      classnote_status: allowed ? "queued" : "too_old",
+      classnote_queued_at: allowed ? new Date().toISOString() : null,
       classnote_retry_count: 0,
       classnote_error: null,
     })
     .eq("id", saved.id);
   if (error) return { ok: false, error: error.message };
-  return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "queued" };
+  return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
 }
 
 export type SaveOnescreenSessionInput = {

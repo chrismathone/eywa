@@ -151,12 +151,20 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   const todayIso = kstToday();
   const [reportRows, attRows, sessionRows] = await Promise.all([
-    fetchInChunks<{ student_id: string; report_date: string; progress: string | null; exam_info: string | null }>(
+    fetchInChunks<{
+      student_id: string;
+      report_date: string;
+      progress: string | null;
+      exam_info: string | null;
+      subject: string | null;
+      share_token: string | null;
+      classnote_status: string | null;
+    }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("student_id, report_date, progress, exam_info")
+          .select("student_id, report_date, progress, exam_info, subject, share_token, classnote_status")
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
     ),
@@ -184,11 +192,19 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
 
   // student별: 오늘 저장된 보고서 존재(reportSent) + 오늘 이전 최신 보고서(prev 진도/prevScore).
+  // 오늘 보고서는 **과목별**로도 적재(sentToday는 학생단위 폴백, todayBySubject는 과목별 발송상태).
   const sentToday = new Set<string>();
+  const todayBySubject = new Map<string, { shareToken: string | null; classnoteStatus: string | null }>();
+  const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
   const priorReport = new Map<string, { progress: string | null; examInfo: string | null }>();
   for (const r of reportRows) {
-    if (r.report_date === todayIso) sentToday.add(r.student_id);
-    else if (!priorReport.has(r.student_id))
+    if (r.report_date === todayIso) {
+      sentToday.add(r.student_id);
+      // report_date desc 정렬이라 (학생,과목) 첫 건이 오늘 최신 → 뒤 건은 덮지 않음.
+      const k = subjKey(r.student_id, r.subject);
+      if (!todayBySubject.has(k))
+        todayBySubject.set(k, { shareToken: r.share_token, classnoteStatus: r.classnote_status });
+    } else if (!priorReport.has(r.student_id))
       priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
   }
   // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신).
@@ -199,6 +215,15 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
 
   for (const os of byStudent.values()) {
     os.reportSent = sentToday.has(os.id);
+    // 과목별 오늘 발송상태 — report.subject ↔ subject.subjectKey 매칭(학생단위 뭉갬 방지).
+    for (const su of os.subjects) {
+      const t = todayBySubject.get(subjKey(os.id, su.subjectKey ?? null));
+      if (t) {
+        su.reportSent = true;
+        su.shareToken = t.shareToken ?? undefined;
+        su.classnoteStatus = t.classnoteStatus ?? undefined;
+      }
+    }
     os.attendance = toMark(attById.get(os.id));
     const pr = priorReport.get(os.id);
     if (pr) {

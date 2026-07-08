@@ -28,7 +28,15 @@ function initReports(students: OneScreenStudent[]): ReportsState {
   const out: ReportsState = {};
   for (const s of students) {
     out[s.id] = {};
-    for (const su of s.subjects) out[s.id]![su.name] = { draft: "", sent: s.reportSent };
+    // 발송상태·공유토큰·ClassNote 상태는 **과목별**(su)로 초기화 — 학생단위(s.reportSent) 뭉갬 금지.
+    // 새로고침 시 워커가 쓴 최종 classnoteStatus(success/failed 등)도 roster 초기로드로 반영됨.
+    for (const su of s.subjects)
+      out[s.id]![su.name] = {
+        draft: "",
+        sent: su.reportSent ?? false,
+        shareToken: su.shareToken,
+        classnoteStatus: su.classnoteStatus,
+      };
   }
   return out;
 }

@@ -32,26 +32,38 @@ function boardClassName(subject, studentName) {
   return `(${subjectLabel(subject)})${studentName}`;
 }
 
+/** ⚠️ tenant 격리 필수 — DATABASE_URL 직결(RLS 우회)이라 필터 없으면 다른 테넌트 보고서를 이 계정으로 게시.
+ *  CLASSNOTE_TENANT_ID env 우선, 없으면 단일 테넌트 자동 해석, 여럿이면 오발송 방지 위해 중단. */
+async function resolveTenant(sql) {
+  const env = process.env.CLASSNOTE_TENANT_ID;
+  if (env) return env;
+  const rows = await sql`select id from tenants`;
+  if (rows.length === 1) return rows[0].id;
+  throw new Error(`테넌트 ${rows.length}개 — CLASSNOTE_TENANT_ID env를 지정해야 함(공유 DB 오발송 방지)`);
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) { console.error("DATABASE_URL 없음"); process.exit(1); }
   if (POST && (!process.env.CLASSNOTE_UPLOAD_ID || !process.env.CLASSNOTE_UPLOAD_PW)) {
     console.error("--post엔 CLASSNOTE_UPLOAD_ID/PW env 필요"); process.exit(1);
   }
   const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 1 });
+  const TENANT = await resolveTenant(sql);
   const md = minDate();
-  console.log(`[worker] mode=${POST ? "POST(실게시)" : "DRY-RUN"} base=${BASE} minDate=${md}`);
+  console.log(`[worker] mode=${POST ? "POST(실게시)" : "DRY-RUN"} tenant=${TENANT} base=${BASE} minDate=${md}`);
 
-  // 1) stale 복구: processing 10분 초과 → queued
+  // 1) stale 복구: processing 10분 초과 → queued (tenant 격리)
   const stale = await sql`update lesson_reports set classnote_status='queued'
-    where classnote_status='processing' and classnote_processing_at < now() - (${STALE_MIN} || ' minutes')::interval
+    where tenant_id = ${TENANT} and classnote_status='processing'
+      and classnote_processing_at < now() - (${STALE_MIN} || ' minutes')::interval
     returning id`;
   if (stale.length) console.log(`[worker] stale 복구 ${stale.length}건`);
 
-  // 2) 원자 클레임: queued → processing (FOR UPDATE SKIP LOCKED)
+  // 2) 원자 클레임: queued → processing (FOR UPDATE SKIP LOCKED, tenant 격리)
   const claimed = await sql`
     with cte as (
       select id from lesson_reports
-      where classnote_status='queued' and report_date >= ${md}
+      where tenant_id = ${TENANT} and classnote_status='queued' and report_date >= ${md}
       order by classnote_queued_at nulls first limit ${BATCH}
       for update skip locked
     )
@@ -64,7 +76,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const r of claimed) {
-      const [stu] = await sql`select name from students where id=${r.student_id}`;
+      const [stu] = await sql`select name from students where id=${r.student_id} and tenant_id=${TENANT}`;
       const studentName = stu?.name ?? "";
       try {
         // 스크린샷

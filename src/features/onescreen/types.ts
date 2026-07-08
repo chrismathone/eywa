@@ -15,6 +15,12 @@ export type Subject = {
   // "math"면 커리큘럼 드롭다운(curriculum.ts), 그 외(영어 등)면 freeform 텍스트.
   // 미지정(데모)이면 "math"로 간주 → 기존 커리큘럼 동작 보존.
   subjectKey?: string;
+
+  // ── 오늘 보고서 발송 상태(과목별) — roster가 오늘 lesson_reports를 subject로 매칭해 채움 ──
+  // 학생단위로 뭉개면 다과목(수학만 저장해도 영어까지 sent)이 오카운트되므로 과목별로 분리.
+  reportSent?: boolean; // 오늘 이 과목 보고서가 저장됨
+  shareToken?: string; // 오늘 이 과목 보고서의 /r 공유 토큰
+  classnoteStatus?: string; // ClassNote 발송 상태(queued/processing/success/failed/too_old, null=미요청)
 };
 
 /** 한 테스트(일일/확인)의 점수 + 만점 + 직전 회차 점수 */
