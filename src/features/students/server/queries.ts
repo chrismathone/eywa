@@ -15,6 +15,7 @@ import {
 import { goalAchieved } from "../grades-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { isShareExpired } from "@/features/onescreen/share-expiry";
 
 /** 임포트된 상담/메모 텍스트("[제목]\n본문\n[등록자: 이름]")를 제목·본문·등록자로 분리. */
 function parseImportedNote(raw: string | null | undefined): {
@@ -779,18 +780,31 @@ export type LessonReportRow = {
   examInfo: string | null;
   homeworkScore: string | null;
   teacherName: string | null;
+  classnoteStatus: string | null; // ClassNote 발송 상태(queued/processing/success/failed/too_old, null=미발송)
+  linkStatus: "active" | "revoked" | "expired"; // 학부모 공유 링크 상태(P2a)
+  viewCount: number; // 학부모 열람 수(share_link_views)
 };
 
-/** 학생 최근 수업보고서 N건(최신순). 데이터는 Edutrix 이식(import-lesson-reports.cjs). */
+/** 학생 최근 수업보고서 N건(최신순) + 발송상태·링크상태·열람수(P2a/P3). 데이터는 Edutrix 이식(import-lesson-reports.cjs). */
 export async function getStudentLessonReports(studentId: string, limit = 12): Promise<LessonReportRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, progress, exam_info, homework_score, teacher_name")
+    .select("id, report_date, progress, exam_info, homework_score, teacher_name, classnote_status, revoked_at")
     .eq("student_id", studentId)
     .order("report_date", { ascending: false })
     .limit(limit);
   if (!data) return [];
+
+  // 학부모 열람 수(share_link_views) — 이 보고서 id들로 조회 후 JS 집계(roster와 동일 패턴, RLS 테넌트 격리).
+  const ids = data.map((r) => r.id);
+  const viewRows = await fetchInChunks<{ lesson_report_id: string }>(ids, (chunk) =>
+    supabase.from("share_link_views").select("lesson_report_id").in("lesson_report_id", chunk),
+  );
+  const viewCountById = new Map<string, number>();
+  for (const v of viewRows)
+    viewCountById.set(v.lesson_report_id, (viewCountById.get(v.lesson_report_id) ?? 0) + 1);
+
   return data.map((r) => ({
     id: r.id,
     reportDate: r.report_date,
@@ -798,6 +812,9 @@ export async function getStudentLessonReports(studentId: string, limit = 12): Pr
     examInfo: r.exam_info,
     homeworkScore: r.homework_score,
     teacherName: r.teacher_name,
+    classnoteStatus: r.classnote_status,
+    linkStatus: r.revoked_at ? "revoked" : isShareExpired(r.report_date) ? "expired" : "active",
+    viewCount: viewCountById.get(r.id) ?? 0,
   }));
 }
 
