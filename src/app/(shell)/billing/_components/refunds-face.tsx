@@ -13,6 +13,10 @@ const PAGE_SIZE = 50;
 const dateLabel = (iso: string) =>
   new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" });
 
+// 수강반: 서식 textarea에 여러 반을 줄바꿈으로 입력 → 줄 단위로 분해(목록은 쉼표, 전체는 hover).
+const classLinesOf = (cn: string) =>
+  (cn ?? "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+
 // ── 월 스테퍼(지출 패널과 동일 패턴, "YYYY-MM") ──
 function formatPeriod(period: string): string {
   const [y, m] = period.split("-");
@@ -144,7 +148,13 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
                             {r.name}
                           </WindowLink>
                         </td>
-                        <td className="text-text-dim max-w-40 truncate px-3 py-2">{r.className || "—"}</td>
+                        {/* 수강반 여러 개(줄바꿈 입력) → 쉼표로 축약 표시 + 마우스 올리면 전체(title, 줄 단위). */}
+                        <td
+                          className="text-text-dim max-w-40 truncate px-3 py-2"
+                          title={classLinesOf(r.className).join("\n") || undefined}
+                        >
+                          {classLinesOf(r.className).join(", ") || "—"}
+                        </td>
                         {/* '환불처리일자'·'담당자'는 헤더만 리네임 — 데이터는 기존 그대로(서식 환불요청일자·작성자). 사용자 지시. */}
                         <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.requestDate || "—"}</td>
                         <td className="text-text-dim num px-3 py-2 whitespace-nowrap">{r.completedDate || "—"}</td>
