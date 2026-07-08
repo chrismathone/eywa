@@ -9,7 +9,14 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
-### 활동 로그 "이상한 멘트" 전수 필터링 — 영문 enum·uuid·ISO시각·JSON 원문 노출 해소 (2026-07-08) — ✅ 프로덕션 8,486행 전수 렌더감사(위반 0 수렴) + 실브라우저 검증(허은진 탭) + tsc0/lint0/test752
+### 데이터베이스 탭 "수납관리 연동" 폴더 — 교재 요청서·수강료 견적서 읽기 전용 링크 행 (2026-07-09) — ✅ 실브라우저 검증(dev 3100 마스터 로그인 — 폴더 394·1건, 인쇄 버튼 50행, qid 딥링크, 폴더 내 검색 12건, 전체 문서 8건 무혼입) + tsc0/lint0/test759(신규 7)
+"환불 요청서는 데이터베이스 탭에 보이는데 교재 요청서는 안 보인다" 제보. 환불요청서·이력서는 `academy_documents`(kind='form') 네이티브 저장인 반면 교재요청서(`textbook_orders`)·견적서(`tuition_quotes`)는 별도 운영 테이블이라 탐색기에 안 걸렸음. **이중 저장 대신 연동 폴더(읽기 전용 링크 행)** 로 해소:
+- **연동 레지스트리** [linked.ts](../src/features/documents/linked.ts)(순수·Vitest 7) + [linked-queries.ts](../src/features/documents/server/linked-queries.ts) — 기존 수납 쿼리(`getTextbookOrdersPage`·`getQuotesPage`, 페이징·검색·count 내장 B2 충족)에 위임, 표시 행으로만 매핑. 원본 단일 소스 유지(makeedu 동기화 충돌 없음).
+- **폴더 팬**: 서식 분류 6개 아래 "수납관리 연동" 구분 캡션 + 교재 요청서·수강료 견적서 폴더([folder-nav.tsx](<../src/app/(shell)/documents/_components/folder-nav.tsx>) 분리). **"전체 문서"에는 미혼입**(대량 링크 행 도배 방지 — 전용 폴더에서만). 카운트는 head:true(B2)·병렬(B4).
+- **행 클릭**: 교재 = A4 인쇄 카드 창(`usePrintWindow`, `/textbook/[id]/print`) / 견적 = 수강료 계산기 딥링크(`?qid=`). 행은 [linked-row.tsx](<../src/app/(shell)/documents/_components/linked-row.tsx>) — 고정/삭제/다운로드 없음(읽기 전용). 설명줄 = 상세·가격·상태 한글, 견적은 `schoolGradeLabel` 압축 표기.
+- **권한**: `canAccessTenant("billing")` 게이트 — 강사에겐 폴더 비노출·직접 URL도 전체 폴백(담당 학생 스코프 밖 전체 목록 차단, 강사는 전용 면 /textbook-requests 사용). 이력서·환불요청서 restricted RLS와 별개 축.
+- 부수: `TextbookOrderRow.createdAt`(요청일 null 폴백용)·`QuoteListItem.consultant`(등록자 컬럼) additive 추가. 새 연동 소스 추가 = linked.ts 등록 + linked-queries.ts 분기.
+- **후속(같은 날, "페이지네이션 안 보임" 제보)**: 하단 표준 페이저는 있었으나 **작은 창에선 50행 아래라 발견 불가** → ① 테이블 헤더 "N/M 페이지" 표시를 **클릭 가능한 컴팩트 페이저(◀ ▶)** 로 승격(`PageStep` export 재사용, 하단 페이저 병존) ② 창(iframe) 안 폴더·페이저·검색 드릴인에 **embed=1 유지**(잃으면 클릭마다 풀셸 레이아웃 서버 실행 — 크롬은 HideInFrame self-heal이라 눈엔 안 보였음, face-tabs 관례로 정합). 실검증: 창 안 폴더 클릭→`cat=textbooks&embed=1`, 헤더 ▶ 클릭→`page=2&embed=1` 2/8 렌더. — ✅ 프로덕션 8,486행 전수 렌더감사(위반 0 수렴) + 실브라우저 검증(허은진 탭) + tsc0/lint0/test752
 사용자 제보: "로그에 이상한 알수없는 멘트". activity_log 전 행을 뷰어 로직(activityDetail)으로 렌더하는 감사 스크립트로 원문 노출 4종 적발 → [activity.ts](../src/features/audit/activity.ts) 순수 함수에서 해소(+Vitest 8):
 - **영문 enum 값 → 한글 `VALUE_LABEL`**(값 전체 일치 시만): "상태 requested→paid"→"신청→완납", "active→inactive"→"활성→비활성", "비움→card"→"비움→카드", 학생상태 enrolled/withdrawn→등록/퇴원, 출결·역할·요일·처리상태 등 50여 값. 미등록 값은 원문 폴백.
 - **읽을 수 없는 diff는 "변경" 축약**: uuid↔uuid(teacher_id 등 — id 원문은 정보 아님) + 객체/JSON직렬화문자열↔객체("품목 (내용)→(내용)"·이중 인코딩 line_items 실측).

@@ -63,7 +63,8 @@ export function Pagination({
   );
 }
 
-function PageStep({
+/** 페이저 스텝 단추(이전/다음) — 하단 표준 페이저 외에 목록 헤더의 컴팩트 페이저(◀ ▶)에서도 재사용. */
+export function PageStep({
   href,
   disabled,
   children,

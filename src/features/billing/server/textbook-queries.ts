@@ -23,6 +23,7 @@ export type TextbookOrderRow = {
   paidAt: string | null;
   statusByName: string | null; // 마지막 변경자
   statusAt: string | null; // 마지막 변경 시각
+  createdAt: string; // 행 생성 시각 — 데이터베이스 연동 폴더의 등록일 폴백(request_date null 대비)
 };
 
 export type StudentOption = { id: string; name: string; grade: string | null };
@@ -50,7 +51,7 @@ export async function getTextbookOrdersPage(
   let qb = supabase
     .from("textbook_orders")
     .select(
-      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at",
+      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
       { count: "exact" },
     );
   if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
@@ -77,6 +78,7 @@ export async function getTextbookOrdersPage(
     paidAt: r.paid_at,
     statusByName: r.status_by_name,
     statusAt: r.status_at,
+    createdAt: r.created_at,
   }));
   return { rows, total: count ?? rows.length };
 }
@@ -133,12 +135,13 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
     student_name: string | null; teacher_name: string | null; price: number; status: string;
     request_date: string | null; notes: string | null; registered_at: string | null;
     ordered_at: string | null; paid_at: string | null; status_by_name: string | null; status_at: string | null;
+    created_at: string;
   };
   const data = await fetchInChunks<Raw>(studentIds, (chunk) =>
     supabase
       .from("textbook_orders")
       .select(
-        "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at",
+        "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
       )
       .in("student_id", chunk),
   );
@@ -162,6 +165,7 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
       paidAt: r.paid_at,
       statusByName: r.status_by_name,
       statusAt: r.status_at,
+      createdAt: r.created_at,
     }))
     .sort((a, b) => (b.requestDate ?? "").localeCompare(a.requestDate ?? ""));
 }

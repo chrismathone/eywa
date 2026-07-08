@@ -25,11 +25,18 @@ export function DocumentToolbar({
   canWrite,
   initialQuery,
   category,
+  catParam,
+  embed,
 }: {
   canWrite: boolean;
   initialQuery: string;
   category: DocumentCategory | null;
+  /** 검색 폼이 유지할 현재 폴더 키 — 연동 폴더(교재 요청서 등)는 category가 아니라 이 값으로만 전달. */
+  catParam?: string | null;
+  /** 플로팅 창(embed) 안이면 검색 GET에도 embed=1 유지(크롬리스 분기 유지). */
+  embed?: boolean;
 }) {
+  const keepCat = catParam !== undefined ? catParam : category;
   const [dialog, setDialog] = useState<"upload" | "text" | null>(null);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -90,7 +97,8 @@ export function DocumentToolbar({
     <div className="flex flex-wrap items-center gap-2">
       {/* 검색 — GET 폼(현재 폴더 유지, page 리셋) */}
       <form action="/documents" className="relative">
-        {category ? <input type="hidden" name="cat" value={category} /> : null}
+        {keepCat ? <input type="hidden" name="cat" value={keepCat} /> : null}
+        {embed ? <input type="hidden" name="embed" value="1" /> : null}
         <Search className="text-text-faint pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
         <input
           type="search"
