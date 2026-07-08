@@ -9,7 +9,8 @@ import postgres from "postgres";
 import { chromium } from "@playwright/test";
 
 const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
-const BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113";
+const BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
+const SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || "https://eywa-alpha.vercel.app"; // 게시글 상단 공유 링크(/r) 공개 도메인 — P0~P3 배포 후 활성
 const BATCH = 2;
 const STALE_MIN = 10;
 const POST = process.argv.includes("--post");
@@ -84,7 +85,8 @@ async function main() {
           loginPw: process.env.CLASSNOTE_UPLOAD_PW,
           reports: [{
             reportId: r.id, studentName, className, teacherName: className,
-            reportDate: `${r.report_date}T12:00:00`, imageBase64, isExactMatchNeeded: true, shareUrl: "",
+            reportDate: `${r.report_date}T12:00:00`, imageBase64, isExactMatchNeeded: true,
+            shareUrl: `${SHARE_BASE}/r/${r.share_token}`,
           }],
         };
         console.log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${className}" img=${buf.length}B`);
