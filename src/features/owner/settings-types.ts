@@ -177,6 +177,7 @@ export const reportSchema = z.object({
   showHomework: z.boolean(),
   showAttitude: z.boolean(),
   showParentNote: z.boolean(),
+  showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

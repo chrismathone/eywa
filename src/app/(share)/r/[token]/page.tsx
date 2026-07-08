@@ -102,14 +102,16 @@ export default async function PublicLessonReportPage({
     : null;
 
   // 학생 사진 첨부(P2b) — path별 signed URL(실패 path는 resolveTenantReadUrls가 자동 생략, 페이지 안 깨짐).
+  // 학원 설정에서 첨부 표시를 끄면 signed URL 생성도 건너뜀(불필요한 외부 호출 회피).
   const attachments = (report.attachments as { path: string; name: string }[] | null) ?? [];
-  const attachmentUrls: Record<string, string> = attachments.length
-    ? await resolveTenantReadUrls(
-        attachments.map((a) => a.path),
-        "report_attachment",
-        report.tenant_id as string,
-      ).catch(() => ({}))
-    : {};
+  const attachmentUrls: Record<string, string> =
+    rpt.showAttachments && attachments.length
+      ? await resolveTenantReadUrls(
+          attachments.map((a) => a.path),
+          "report_attachment",
+          report.tenant_id as string,
+        ).catch(() => ({}))
+      : {};
   const attachmentImgs = attachments
     .map((a) => ({ ...a, url: attachmentUrls[a.path] }))
     .filter((a): a is { path: string; name: string; url: string } => !!a.url);
@@ -181,8 +183,8 @@ export default async function PublicLessonReportPage({
           </Section>
         ) : null}
 
-        {/* 학생 사진 첨부(P2b) — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. */}
-        {attachmentImgs.length ? (
+        {/* 학생 사진 첨부(P2b) — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. 학원 설정 토글로 on/off. */}
+        {rpt.showAttachments && attachmentImgs.length ? (
           <Section title="첨부">
             <div className="grid grid-cols-2 gap-2">
               {attachmentImgs.map((a) => (

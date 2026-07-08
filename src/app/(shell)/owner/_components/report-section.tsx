@@ -71,6 +71,7 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
                 ["과제", "showHomework"],
                 ["수업 태도", "showAttitude"],
                 ["학부모 전달 내용", "showParentNote"],
+                ["학생 사진 첨부", "showAttachments"],
               ] as const
             ).map(([label, key]) => (
               <div key={key} className="px-3">
