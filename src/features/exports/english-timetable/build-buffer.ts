@@ -1,5 +1,4 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
@@ -19,16 +18,13 @@ import { appendInjaewonIntegratedSheet } from "./injaewon-integrated-sheet";
 export async function buildEnglishTimetableBuffer(opts?: {
   teacherId?: string;
 }): Promise<ArrayBuffer> {
-  const supabase = await createClient();
-  const [slots, teacherColors, settings, capacityRows] = await Promise.all([
+  const [slots, teacherColors, settings] = await Promise.all([
     getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId }),
     getTeacherColorMap(),
     getTenantSettings(),
-    // 반 정원(통합 탭 '정원' 행) — 영어 활성 반만(소수, 무페이징 안전). RLS 테넌트 격리.
-    supabase.from("classes").select("id, capacity").eq("subject", "english").eq("is_active", true),
   ]);
+  // ⚠️ 반 정원(통합 탭 '정원' 행)은 현 DB `classes`에 capacity 컬럼이 없어 공백 처리(스키마 확장 시 채움).
   const capacityByClassId: Record<string, number | null> = {};
-  for (const c of capacityRows.data ?? []) capacityByClassId[c.id as string] = (c.capacity as number | null) ?? null;
 
   const config = settingsToPeriodsConfig(settings.operations);
   const weekMonday = thisMonday(kstToday());
