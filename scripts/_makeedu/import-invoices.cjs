@@ -74,7 +74,11 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
         inv.set(key, a);
       }
       a.total += l.total; a.discount += l.discount; a.point += l.point; a.paid += l.paid; a.unpaid += l.unpaid;
-      a.items.push({ kind: l.gubun, description: l.item, amount: l.total });
+      // 라인 단위 표(makeedu 동일)를 위해 항목별 금액·결제정보를 모두 보존.
+      a.items.push({
+        kind: l.gubun, description: l.item, amount: l.total, discount: l.discount, points: l.point,
+        paid: l.paid, unpaid: l.unpaid, method: l.method, paidDate: l.pdate, receipt: l.receipt, dueDay: l.dueDay,
+      });
       a.kindAmt[l.gubun] = (a.kindAmt[l.gubun] || 0) + l.total;
       if (l.paid > 0 || l.method) {
         if (!a.method && l.method) a.method = l.method;

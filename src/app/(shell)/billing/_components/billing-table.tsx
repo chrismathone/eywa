@@ -1,65 +1,27 @@
-"use client";
-
-import { useActionState, useState, useTransition } from "react";
-import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Copy,
-  Loader2,
-  MessageSquare,
-  Pencil,
-  Save,
-  X,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  batchMarkInvoicesPaid,
-  updateInvoicePayment,
-  type UpdateInvoiceState,
-} from "@/features/billing/server/actions";
-import type { InvoiceRow } from "@/features/billing/server/queries";
+import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 
-const STATUS_LABEL: Record<string, string> = {
-  paid: "완납",
-  partial: "부분",
-  unpaid: "미수",
-  refunded: "환불",
-  void: "취소",
+// 구분(수납 분류) = makeedu 고정 taxonomy(과목 enum 아님) → 여기 라벨/색 하드코딩 허용.
+const KIND_STYLE: Record<string, string> = {
+  수업: "text-primary bg-primary-soft",
+  교재: "text-gold bg-gold-soft",
+  차량비: "text-text-dim bg-bg-soft",
+  기타: "text-text-dim bg-bg-soft",
+  원복: "text-text-dim bg-bg-soft",
 };
-
-const STATUS_COLOR: Record<string, string> = {
-  paid: "text-chart-2 bg-chart-2/10 border-chart-2/20",
-  partial: "text-chart-3 bg-chart-3/10 border-chart-3/20",
-  unpaid: "text-chart-4 bg-chart-4/10 border-chart-4/20",
-  refunded: "text-muted-foreground bg-muted border-border",
-  void: "text-muted-foreground bg-muted border-border",
-};
-
-const STATUS_ORDER = ["unpaid", "partial", "paid", "refunded", "void"] as const;
-
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   card: "카드",
   transfer: "계좌이체",
   cash: "현금",
   other: "기타",
 };
-
 const KRW = new Intl.NumberFormat("ko-KR");
-function won(n: number) {
-  return `${KRW.format(n)}원`;
-}
-
-type SortKey =
-  | "status"
-  | "name"
-  | "amount_total"
-  | "amount_paid"
-  | "amount_discount"
-  | "due_date";
+const won = (n: number) => `${KRW.format(n)}원`;
+const dash = (n: number) => (n > 0 ? won(n) : "—");
+const shortDate = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : "—";
 
 type Props = {
   rows: InvoiceRow[];
@@ -76,7 +38,6 @@ function buildSortHref(
   const params = new URLSearchParams();
   if (current.period) params.set("period", current.period);
   if (current.q) params.set("q", current.q);
-  // 같은 col 두번 클릭하면 desc 토글
   const nextDesc = current.sort === col ? !current.desc : false;
   if (col !== "status") params.set("sort", col);
   if (nextDesc) params.set("desc", "1");
@@ -99,9 +60,7 @@ function SortHeader({
   return (
     <Link
       href={buildSortHref(col, current)}
-      className={`text-text-dim hover:text-foreground inline-flex items-center gap-0.5 transition ${
-        active ? "text-foreground font-bold" : ""
-      } ${className ?? ""}`}
+      className={`text-text-dim hover:text-foreground inline-flex items-center gap-0.5 transition ${active ? "text-foreground font-bold" : ""} ${className ?? ""}`}
     >
       {label}
       <span className="font-mono text-[9px]">{active ? (current.desc ? "▼" : "▲") : "▼"}</span>
@@ -109,549 +68,146 @@ function SortHeader({
   );
 }
 
+// InvoiceRow(집계) → 라인 단위 행 목록. 구데이터(항목 상세 없음)는 인보이스 값으로 1행 폴백.
+function toLines(r: InvoiceRow): InvoiceLineItem[] {
+  if (r.lineItems.length > 0) return r.lineItems;
+  return [
+    {
+      kind: "수업",
+      description: r.notes ?? "수납",
+      amount: r.amountTotal,
+      discount: r.amountDiscount,
+      paid: r.amountPaid,
+      unpaid: Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid),
+      points: r.pointsUsed,
+      method: r.paymentMethod,
+      paidDate: r.paidAt,
+    },
+  ];
+}
+
 export function BillingTable({ rows, sort, desc, period, q }: Props) {
   const current = { sort, desc, period, q };
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<InvoiceRow | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const groups = rows.map((r) => ({ r, lines: toLines(r) }));
 
-  const unpaidRows = rows.filter((r) => r.status === "unpaid" || r.status === "partial");
-  const allSelectable = unpaidRows.length;
-  const allSelected = allSelectable > 0 && unpaidRows.every((r) => selected.has(r.id));
+  // 페이지 합계(라인 기준)
+  let pageBilled = 0, pageDiscount = 0, pagePoints = 0, pagePaid = 0, pageUnpaid = 0, lineCount = 0;
+  for (const g of groups)
+    for (const li of g.lines) {
+      pageBilled += li.amount;
+      pageDiscount += li.discount ?? 0;
+      pagePoints += li.points ?? 0;
+      pagePaid += li.paid ?? 0;
+      pageUnpaid += li.unpaid ?? 0;
+      lineCount++;
+    }
 
-  // 이 페이지(rows) 기준 합계·상태 분포 — 표 위 칩 바(BILL-3)와 합계행(BILL-2)에 쓴다.
-  const pageBilled = rows.reduce((s, r) => s + r.amountTotal, 0);
-  const pageDiscount = rows.reduce((s, r) => s + r.amountDiscount, 0);
-  const pagePaid = rows.reduce((s, r) => s + r.amountPaid, 0);
-  const pageOutstanding = pageBilled - pagePaid;
-  const statusCounts = rows.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  function toggle(id: string) {
-    setSelected((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    setSelected((s) => {
-      if (allSelected) return new Set();
-      const next = new Set(s);
-      for (const r of unpaidRows) next.add(r.id);
-      return next;
-    });
-  }
-
-  function handleBatchPaid() {
-    if (selected.size === 0) return;
-    if (!confirm(`${selected.size}건을 모두 완납 처리합니다. 진행할까요?`)) return;
-    const fd = new FormData();
-    fd.append("ids", Array.from(selected).join(","));
-    startTransition(async () => {
-      const result = await batchMarkInvoicesPaid(undefined, fd);
-      if (result?.error) {
-        setToast(`실패: ${result.error}`);
-      } else if (result?.saved) {
-        setToast(`${result.saved}건 완납 처리됨`);
-        setSelected(new Set());
-      }
-    });
-  }
-
+  const numTh = "eyebrow num px-3 py-3 text-right font-normal";
   return (
-    <>
-      {toast ? (
-        <div className="border-chart-2/30 bg-chart-2/5 text-chart-2 mb-3 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-          <CheckCircle2 className="size-4" />
-          {toast}
-        </div>
-      ) : null}
-
-      <div className="border-border bg-card mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5">
-        <span className="text-muted-foreground text-xs">
-          선택 <span className="text-foreground num font-medium">{selected.size}</span> / {allSelectable}건 미수금
-        </span>
-        <Button
-          size="sm"
-          variant={selected.size > 0 ? "default" : "outline"}
-          disabled={selected.size === 0 || isPending}
-          onClick={handleBatchPaid}
-        >
-          {isPending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-          선택 항목 완납 처리
-        </Button>
-      </div>
-
-      {/* 상태 분포 칩 — 이 페이지에 무엇이 있는지 한눈에 (표는 상태순 정렬) */}
-      <div className="text-muted-foreground mb-3 flex flex-wrap items-center gap-1.5 text-xs">
-        <span className="eyebrow mr-1">이 페이지</span>
-        {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => (
-          <span
-            key={s}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-medium ${
-              STATUS_COLOR[s] ?? "bg-muted text-muted-foreground border-border"
-            }`}
-          >
-            {STATUS_LABEL[s]} <span className="num">{statusCounts[s]}</span>
-          </span>
-        ))}
-      </div>
-
-      <div className="bg-card border-border overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm [&_td]:whitespace-nowrap">
-          <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
-            <tr>
-              <th className="w-10 px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                  disabled={allSelectable === 0}
-                  className="size-4"
-                  aria-label="전체 선택"
-                />
-              </th>
-              <th className="eyebrow px-5 py-3 font-normal">학년</th>
-              <th className="eyebrow px-5 py-3 font-normal">
-                <SortHeader col="name" label="이름" current={current} />
-              </th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">
-                <SortHeader col="amount_total" label="청구액" current={current} />
-              </th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">
-                <SortHeader col="amount_discount" label="할인" current={current} />
-              </th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">
-                <SortHeader col="amount_paid" label="수납액" current={current} />
-              </th>
-              <th className="eyebrow px-5 py-3 font-normal">
-                <SortHeader col="status" label="상태" current={current} />
-              </th>
-              <th className="eyebrow num px-5 py-3 text-right font-normal">
-                <SortHeader col="due_date" label="기한·결제" current={current} />
-              </th>
-              <th className="eyebrow px-5 py-3 font-normal">메모</th>
-              <th className="w-10 px-3 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-border divide-y">
-            {rows.map((r) => {
-              const description = r.lineItems[0]?.description ?? "—";
-              const settledAt = r.paidAt
-                ? new Date(r.paidAt).toLocaleDateString("ko-KR")
-                : null;
-              const selectable = r.status === "unpaid" || r.status === "partial";
+    <div className="bg-card border-border overflow-x-auto rounded-lg border">
+      <table className="w-full min-w-[1080px] text-sm [&_td]:whitespace-nowrap">
+        <thead className="border-border text-muted-foreground border-b text-left text-xs [&_th]:whitespace-nowrap">
+          <tr>
+            <th className="eyebrow px-3 py-3 font-normal">학년</th>
+            <th className="eyebrow px-3 py-3 font-normal">
+              <SortHeader col="name" label="이름" current={current} />
+            </th>
+            <th className="eyebrow px-3 py-3 font-normal">청구월</th>
+            <th className="eyebrow px-3 py-3 text-center font-normal">청구일</th>
+            <th className="eyebrow px-3 py-3 font-normal">구분</th>
+            <th className="eyebrow px-3 py-3 font-normal">수납명</th>
+            <th className={numTh}>
+              <SortHeader col="amount_total" label="청구액" current={current} className="justify-end" />
+            </th>
+            <th className={numTh}>할인액</th>
+            <th className={numTh}>적립금</th>
+            <th className={numTh}>실제낸금액</th>
+            <th className={numTh}>미납금액</th>
+            <th className="eyebrow px-3 py-3 font-normal">결제수단</th>
+            <th className="eyebrow num px-3 py-3 text-center font-normal">수납일</th>
+            <th className="eyebrow px-3 py-3 font-normal">메모</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(({ r, lines }) =>
+            lines.map((li, i) => {
+              const first = i === 0;
+              const unpaid = li.unpaid ?? 0;
               return (
                 <tr
-                  key={r.id}
-                  className={`hover:bg-accent/40 transition-colors ${
-                    selected.has(r.id) ? "bg-accent/30" : ""
-                  }`}
+                  key={`${r.id}-${i}`}
+                  className={`hover:bg-accent/30 transition-colors ${first ? "border-border border-t" : ""}`}
                 >
-                  <td className="px-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(r.id)}
-                      onChange={() => toggle(r.id)}
-                      disabled={!selectable}
-                      className="size-4"
-                      aria-label={`${r.studentName} 선택`}
-                    />
-                  </td>
-                  <td className="text-muted-foreground px-5 py-3">{r.studentGrade ?? "—"}</td>
-                  <td className="px-5 py-3">
-                    <WindowLink
-                      href={`/students/${r.studentId}`}
-                      title={r.studentName}
-                      className="text-foreground font-medium hover:underline"
-                    >
-                      {r.studentName}
-                    </WindowLink>
-                    {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
-                    {description !== "—" ? (
-                      <span
-                        className="text-text-faint block max-w-[220px] truncate text-[11px]"
-                        title={description}
-                      >
-                        {description}
+                  <td className="text-muted-foreground px-3 py-2.5">{first ? (r.studentGrade ?? "—") : ""}</td>
+                  <td className="px-3 py-2.5">
+                    {first ? (
+                      <span className="inline-flex items-center">
+                        <WindowLink
+                          href={`/students/${r.studentId}`}
+                          title={r.studentName}
+                          className="text-foreground font-medium hover:underline"
+                        >
+                          {r.studentName}
+                        </WindowLink>
+                        {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
                       </span>
-                    ) : null}
+                    ) : (
+                      ""
+                    )}
                   </td>
-                  <td className="text-foreground num px-5 py-3 text-right">{won(r.amountTotal)}</td>
-                  <td className="num px-5 py-3 text-right text-xs">
-                    {r.amountDiscount > 0 ? (
-                      <span className="text-amber">-{won(r.amountDiscount)}</span>
+                  <td className="text-muted-foreground num px-3 py-2.5 text-xs">{first ? r.period : ""}</td>
+                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">{li.dueDay ?? "—"}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium ${KIND_STYLE[li.kind] ?? "text-text-dim bg-bg-soft"}`}>
+                      {li.kind || "수업"}
+                    </span>
+                  </td>
+                  <td className="text-foreground max-w-[280px] truncate px-3 py-2.5" title={li.description}>
+                    {li.description || "—"}
+                  </td>
+                  <td className="text-foreground num px-3 py-2.5 text-right">{won(li.amount)}</td>
+                  <td className="num px-3 py-2.5 text-right text-xs">
+                    {(li.discount ?? 0) > 0 ? <span className="text-amber">-{won(li.discount ?? 0)}</span> : <span className="text-text-faint">—</span>}
+                  </td>
+                  <td className="num px-3 py-2.5 text-right text-xs">
+                    {(li.points ?? 0) > 0 ? <span className="text-text-dim">{won(li.points ?? 0)}</span> : <span className="text-text-faint">—</span>}
+                  </td>
+                  <td className="num px-3 py-2.5 text-right">
+                    <span className={(li.paid ?? 0) > 0 ? "text-primary" : "text-text-faint"}>{dash(li.paid ?? 0)}</span>
+                  </td>
+                  <td className="num px-3 py-2.5 text-right">
+                    {unpaid > 0 ? <span className="text-danger font-medium">{won(unpaid)}</span> : <span className="text-chart-2">완납</span>}
+                  </td>
+                  <td className="text-muted-foreground px-3 py-2.5 text-xs">
+                    {li.method ? (PAYMENT_METHOD_LABEL[li.method] ?? li.method) : "—"}
+                  </td>
+                  <td className="text-muted-foreground num px-3 py-2.5 text-center text-xs">{shortDate(li.paidDate)}</td>
+                  <td className="text-text-dim px-3 py-2.5 text-xs">
+                    {first && r.notes ? (
+                      <span className="line-clamp-1" title={r.notes}>{r.notes}</span>
                     ) : (
                       <span className="text-text-faint">—</span>
                     )}
-                  </td>
-                  <td className="num px-5 py-3 text-right">
-                    <span
-                      className={
-                        r.amountPaid === r.amountTotal
-                          ? "text-primary"
-                          : "text-text-dim"
-                      }
-                    >
-                      {won(r.amountPaid)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
-                        STATUS_COLOR[r.status] ?? "bg-muted text-muted-foreground border-border"
-                      }`}
-                    >
-                      {STATUS_LABEL[r.status] ?? r.status}
-                    </span>
-                  </td>
-                  <td className="num px-5 py-3 text-right text-xs">
-                    <span className="text-muted-foreground">
-                      {settledAt ? settledAt : `기한 ${r.dueDate ?? "—"}`}
-                      {r.paymentMethod ? (
-                        <span className="text-text-faint">
-                          {" "}
-                          · {PAYMENT_METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod}
-                        </span>
-                      ) : null}
-                    </span>
-                  </td>
-                  <td className="text-text-dim px-5 py-3 text-xs">
-                    {r.notes ? (
-                      <span className="line-clamp-1" title={r.notes}>
-                        {r.notes}
-                      </span>
-                    ) : (
-                      <span className="text-text-faint">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(r)}
-                      className="text-muted-foreground hover:text-foreground inline-flex items-center"
-                      aria-label="수정"
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
                   </td>
                 </tr>
               );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-border bg-bg-soft border-t font-semibold">
-              <td className="text-muted-foreground px-5 py-3 text-xs" colSpan={3}>
-                이 페이지 합계 · <span className="num">{rows.length}</span>건
-              </td>
-              <td className="text-foreground num px-5 py-3 text-right">{won(pageBilled)}</td>
-              <td className="num px-5 py-3 text-right text-xs">
-                {pageDiscount > 0 ? (
-                  <span className="text-amber">-{won(pageDiscount)}</span>
-                ) : (
-                  <span className="text-text-faint">—</span>
-                )}
-              </td>
-              <td className="text-foreground num px-5 py-3 text-right">{won(pagePaid)}</td>
-              <td className="px-5 py-3 text-xs" colSpan={4}>
-                미수 <span className="text-danger num">{won(pageOutstanding)}</span>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      {editing ? (
-        <EditInvoiceDialog
-          invoice={editing}
-          onClose={(saved) => {
-            setEditing(null);
-            if (saved) setToast(`${editing.studentName} 수납 정보 저장됨`);
-          }}
-        />
-      ) : null}
-    </>
-  );
-}
-
-// ─────────────────────────── edit dialog ───────────────────────────
-
-function SubmitEdit() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-      저장
-    </Button>
-  );
-}
-
-function EditInvoiceDialog({
-  invoice,
-  onClose,
-}: {
-  invoice: InvoiceRow;
-  onClose: (saved: boolean) => void;
-}) {
-  const [state, formAction] = useActionState<UpdateInvoiceState, FormData>(
-    updateInvoicePayment,
-    undefined,
-  );
-  const [amountPaid, setAmountPaid] = useState(invoice.amountPaid);
-  const [status, setStatus] = useState(invoice.status);
-  const [paymentMethod, setPaymentMethod] = useState(invoice.paymentMethod ?? "");
-
-  const remaining = invoice.amountTotal - amountPaid;
-
-  // Close on successful save (no fieldErrors, no error → undefined)
-  if (state && !state.error && !state.fieldErrors) {
-    queueMicrotask(() => onClose(true));
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
-        <header className="mb-4 flex items-start justify-between">
-          <div>
-            <p className="eyebrow">청구서 수정</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">{invoice.studentName}</h2>
-            <p className="text-muted-foreground text-xs">
-              {invoice.studentGrade ?? "—"} · {invoice.period} ·{" "}
-              {invoice.lineItems[0]?.description ?? "—"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onClose(false)}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="닫기"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
-
-        <form action={formAction} className="space-y-4">
-          <input type="hidden" name="id" value={invoice.id} />
-
-          <div className="border-border bg-muted/30 rounded-md border px-3 py-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">청구액</span>
-              <span className="text-foreground num font-medium">
-                {KRW.format(invoice.amountTotal)}원
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="amountPaid" className="text-foreground block text-sm font-medium">
-              수납액
-            </label>
-            <input
-              id="amountPaid"
-              name="amountPaid"
-              type="number"
-              min="0"
-              step="1000"
-              defaultValue={amountPaid}
-              onChange={(e) => setAmountPaid(Number(e.target.value) || 0)}
-              className="border-input bg-background num w-full rounded-md border px-3 py-2 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            {state?.fieldErrors?.amountPaid ? (
-              <p className="text-chart-4 text-xs">{state.fieldErrors.amountPaid}</p>
-            ) : null}
-            <p
-              className={`text-xs ${
-                remaining <= 0 ? "text-chart-2" : "text-muted-foreground"
-              }`}
-            >
-              잔액 <span className="num">{KRW.format(Math.max(0, remaining))}</span>원
-              {remaining <= 0 ? " · 완납" : ""}
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label htmlFor="status" className="text-foreground block text-sm font-medium">
-              상태
-            </label>
-            <select
-              id="status"
-              name="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="">자동 (수납액으로 판정)</option>
-              <option value="refunded">환불</option>
-              <option value="void">취소</option>
-            </select>
-            <p className="text-muted-foreground text-xs">
-              비워두면 수납액에 따라 미수/부분/완납 자동 설정
-            </p>
-          </div>
-
-          {/* 결제 상세 (0042a) — 회계/세무 투명성 */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-foreground block text-sm font-medium">결제수단</label>
-              <select
-                name="paymentMethod"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="">미지정</option>
-                <option value="card">카드</option>
-                <option value="transfer">계좌이체</option>
-                <option value="cash">현금</option>
-                <option value="other">기타</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-foreground block text-sm font-medium">적립금 사용</label>
-              <input
-                name="pointsUsed"
-                type="number"
-                min="0"
-                step="1000"
-                defaultValue={invoice.pointsUsed}
-                className="border-input bg-background num w-full rounded-md border px-3 py-2 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-          </div>
-          {paymentMethod === "card" ? (
-            <div className="space-y-1.5">
-              <label className="text-foreground block text-sm font-medium">카드사</label>
-              <input
-                name="cardCompany"
-                type="text"
-                defaultValue={invoice.cardCompany ?? ""}
-                placeholder="예: 신한"
-                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-          ) : null}
-          {paymentMethod === "cash" ? (
-            <div className="space-y-1.5">
-              <label className="text-foreground block text-sm font-medium">현금영수증 번호</label>
-              <input
-                name="cashReceiptNumber"
-                type="text"
-                defaultValue={invoice.cashReceiptNumber ?? ""}
-                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-          ) : null}
-          <div className="space-y-1.5">
-            <label className="text-foreground block text-sm font-medium">할인 사유</label>
-            <input
-              name="discountReason"
-              type="text"
-              defaultValue={invoice.discountReason ?? ""}
-              placeholder="선택"
-              className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-
-          {state?.error ? (
-            <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
-              <AlertCircle className="size-4" />
-              {state.error}
-            </p>
-          ) : null}
-
-          {/* 결제 알림 메시지 (미수/부분일 때만 노출) */}
-          {remaining > 0 ? (
-            <ReminderMessage invoice={invoice} balance={remaining} />
-          ) : null}
-
-          <div className="flex items-center justify-end gap-2 border-t pt-4">
-            <Button type="button" variant="outline" onClick={() => onClose(false)}>
-              취소
-            </Button>
-            <SubmitEdit />
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function ReminderMessage({
-  invoice,
-  balance,
-}: {
-  invoice: InvoiceRow;
-  balance: number;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const message = [
-    `안녕하세요, ${invoice.studentName} 학부모님.`,
-    ``,
-    `${invoice.period} 수강료 안내 드립니다.`,
-    `청구금액: ${KRW.format(invoice.amountTotal)}원`,
-    invoice.amountDiscount > 0 ? `할인: ${KRW.format(invoice.amountDiscount)}원` : null,
-    invoice.amountPaid > 0 ? `입금 확인: ${KRW.format(invoice.amountPaid)}원` : null,
-    `미납 잔액: ${KRW.format(balance)}원`,
-    invoice.dueDate ? `기한: ${invoice.dueDate}` : null,
-    ``,
-    `편하신 시간에 입금 부탁드립니다. 감사합니다.`,
-  ]
-    .filter((line): line is string => line !== null)
-    .join("\n");
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(message);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // fallback
-      const ta = document.createElement("textarea");
-      ta.value = message;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }
-
-  return (
-    <div className="border-border bg-bg-soft/40 rounded-md border p-3">
-      <div className="text-foreground mb-2 inline-flex items-center gap-1.5 text-xs font-semibold">
-        <MessageSquare className="size-3.5" />
-        결제 알림 메시지 (학부모 발송용)
-      </div>
-      <pre className="text-foreground bg-card border-border whitespace-pre-wrap rounded-sm border p-2.5 text-[11px] leading-relaxed">
-        {message}
-      </pre>
-      <div className="mt-2 flex justify-end">
-        <button
-          type="button"
-          onClick={copy}
-          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition"
-        >
-          {copied ? (
-            <>
-              <CheckCircle2 className="text-chart-2 size-3" />
-              복사됨
-            </>
-          ) : (
-            <>
-              <Copy className="size-3" />
-              메시지 복사
-            </>
+            }),
           )}
-        </button>
-      </div>
+        </tbody>
+        <tfoot>
+          <tr className="border-border bg-bg-soft border-t font-semibold">
+            <td className="text-muted-foreground px-3 py-3 text-xs" colSpan={6}>
+              이 페이지 합계 · <span className="num">{lineCount}</span>개 항목 / {groups.length}건
+            </td>
+            <td className="text-foreground num px-3 py-3 text-right">{won(pageBilled)}</td>
+            <td className="num px-3 py-3 text-right text-xs">{pageDiscount > 0 ? <span className="text-amber">-{won(pageDiscount)}</span> : "—"}</td>
+            <td className="num px-3 py-3 text-right text-xs">{pagePoints > 0 ? won(pagePoints) : "—"}</td>
+            <td className="text-foreground num px-3 py-3 text-right">{won(pagePaid)}</td>
+            <td className="num px-3 py-3 text-right">{pageUnpaid > 0 ? <span className="text-danger">{won(pageUnpaid)}</span> : <span className="text-chart-2">완납</span>}</td>
+            <td colSpan={3} />
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }

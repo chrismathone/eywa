@@ -111,7 +111,11 @@ async function readLines() {
         inv.set(key, a);
       }
       a.total += l.total; a.paid += l.paid; a.disc += l.disc; a.point += l.point; a.unpaid += l.unpaid;
-      a.items.push({ kind: l.gubun, description: l.item, amount: l.total });
+      // 라인 단위 표(makeedu 동일)를 위해 항목별 금액·결제정보를 모두 보존.
+      a.items.push({
+        kind: l.gubun, description: l.item, amount: l.total, discount: l.disc, points: l.point,
+        paid: l.paid, unpaid: l.unpaid, method: l.method, paidDate: l.payDate, receipt: l.receipt, dueDay: l.day,
+      });
       a.kindAmt[l.gubun] = (a.kindAmt[l.gubun] || 0) + l.total;
       if (!a.day && l.day) a.day = l.day;
       // 대표 결제정보 = 실납 있는 라인 우선(첫 등장 유지)

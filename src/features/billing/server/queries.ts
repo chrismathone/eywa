@@ -8,10 +8,19 @@ export { summarizeInvoices };
 export type { BillingSummary };
 
 export type InvoiceLineItem = {
-  kind: string;
-  description: string;
+  kind: string; // 구분: 수업/교재/차량비/기타
+  description: string; // 수납명
   classId?: string;
-  amount: number;
+  amount: number; // 청구액
+  // 라인 단위 수납 표(makeedu 동일)용 항목별 상세(임포터 보강, 2026-07-08). 구데이터는 없을 수 있어 optional.
+  discount?: number; // 할인액
+  points?: number; // 적립금
+  paid?: number; // 실제낸금액
+  unpaid?: number; // 미납금액
+  method?: string | null; // 결제수단
+  paidDate?: string | null; // 수납일
+  receipt?: string | null; // 현금영수증
+  dueDay?: number | null; // 청구일
 };
 
 export type InvoiceRow = {
