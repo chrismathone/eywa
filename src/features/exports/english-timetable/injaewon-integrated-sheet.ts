@@ -11,6 +11,7 @@ import type { ScheduleSlotWithStudents, StudentLine } from "@/features/timetable
 import { type PeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { readableTextColor } from "@/lib/color-utils";
+import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri"] as const;
 type Weekday = (typeof WEEKDAYS)[number];
@@ -60,10 +61,47 @@ const hashIdx = (s: string, mod: number) => {
 };
 
 const studentName = (s: StudentLine) => (s.englishName ? `${s.name}(${s.englishName})` : s.name);
-// "종로초2" — 학교(초/중/고 포함) + 학년 숫자만(eywa grade "초6"의 레벨 접두 제거해 원본 표기 일치).
-const schoolGrade = (s: StudentLine) => `${s.school ?? ""}${(s.grade ?? "").replace(/\D/g, "")}`;
+// 학교+학년 = 수학 익스포터와 **동일 공용 헬퍼**(빈값 "-"·레벨/숫자 추출 일관성). 통합 원본 표기는
+// 학교-우선("종로초2")이라 numberLast:true(수학 그리드는 number-first이나 순서는 인재원 시트 스타일 유지).
+const schoolGrade = (s: StudentLine) => formatSchoolGrade(s.school, s.grade, { numberLast: true });
 /** 요일 압축 — 전 평일이면 "매일", 아니면 "월수목". */
 const dayCompact = (days: Weekday[]) => (days.length === 5 ? "매일" : days.map((d) => DAY_KO[d]).join(""));
+
+const MS_DAY = 86400000;
+// ── 수학 익스포터와 일관성: 학생 상태색·정렬 가중치·셀 메모(레이아웃이 아닌 데이터 규칙) ──
+/** 학생 상태색 — 수학 resolveStudentStyle 동일(반이동 초록·신입30 빨강·신입60 분홍). refMs=기준 월요일. */
+function studentStatusStyle(s: StudentLine, refMs: number): { bg: string; fg: string; bold: boolean } {
+  if (s.isTransferredIn) return { bg: "FFBBF7D0", fg: "FF111827", bold: true };
+  const base = s.enrollmentDate; // eywa는 firstSubjectEnrollmentDate 미보유 → enrollmentDate
+  if (base) {
+    const days = Math.ceil((refMs - new Date(base).getTime()) / MS_DAY);
+    if (days <= 30) return { bg: "FFEF4444", fg: "FFFFFFFF", bold: true };
+    if (days <= 60) return { bg: "FFFCE7F3", fg: "FF111827", bold: true };
+  }
+  return { bg: "FFFFFFFF", fg: "FF111827", bold: false };
+}
+/** 재원 정렬 가중치 — 수학 getEnrollmentWeight 동일(반이동 -1 → 일반 1 → 60일 2 → 30일 3, 오름차순). */
+function enrollmentWeight(s: StudentLine, refMs: number): number {
+  if (s.isTransferredIn) return -1;
+  if (s.enrollmentDate) {
+    const days = Math.ceil((refMs - new Date(s.enrollmentDate).getTime()) / MS_DAY);
+    if (days <= 30) return 3;
+    if (days <= 60) return 2;
+  }
+  return 1;
+}
+/** 셀 메모(교재/진도) — 수학 buildStudentMemoText 형식. StudentLine latestTextbook/latestReport에서. */
+function studentMemo(s: StudentLine): string | null {
+  const parts: string[] = [];
+  if (s.latestTextbook?.name) parts.push(`교재: ${s.latestTextbook.name}`);
+  const rep = s.latestReport;
+  if (rep?.progress) {
+    const d = rep.date;
+    const label = d && /^\d{4}-\d{2}-\d{2}/.test(d) ? ` ${d.slice(2, 4)}.${d.slice(5, 7)}.${d.slice(8, 10)}` : "";
+    parts.push(`[진도]${label}\n${rep.progress}`);
+  }
+  return parts.length ? parts.join("\n────────\n") : null;
+}
 
 type Cell = { teacher: string; room: string; isLab: boolean };
 type ClassInfo = {
@@ -106,7 +144,9 @@ function buildClassInfos(
   slots: ScheduleSlotWithStudents[],
   config: PeriodsConfig,
   capacityByClassId: Record<string, number | null>,
+  refMs: number,
 ): { infos: ClassInfo[]; periods: { id: string; start: number; end: number }[] } {
+  const weekEndMs = refMs + 6 * MS_DAY; // 그 주 일요일(수학과 동일: 퇴원 30일 윈도우 기준)
   const table = weekdayTableFor("english", config);
   const periods = Object.entries(table)
     .map(([id, t]) => ({ id, start: toMin(t.startTime), end: toMin(t.endTime) }))
@@ -166,9 +206,16 @@ function buildClassInfos(
       roomText: roomSummary(perDayRooms),
       cells,
       periodIdx,
-      active: students.filter((s) => s.status === "active"),
+      // 재원 = 수학 정렬(반이동→일반→60일→30일) + 이름. 퇴원 = 수학과 동일 **30일 윈도우**(날짜 없으면 표시).
+      active: students
+        .filter((s) => s.status === "active")
+        .sort((a, b) => enrollmentWeight(a, refMs) - enrollmentWeight(b, refMs) || a.name.localeCompare(b.name, "ko")),
       hold: students.filter((s) => s.status === "hold"),
-      withdrawn: students.filter((s) => s.status === "withdrawn"),
+      withdrawn: students.filter((s) => {
+        if (s.status !== "withdrawn") return false;
+        if (!s.endDate) return true;
+        return Math.floor((weekEndMs - new Date(s.endDate).getTime()) / MS_DAY) <= 30;
+      }),
     });
   }
   infos.sort((a, b) => a.minStart - b.minStart || a.className.localeCompare(b.className, "ko"));
@@ -179,6 +226,7 @@ export type InjaewonSheetOpts = {
   config: PeriodsConfig;
   capacityByClassId?: Record<string, number | null>;
   teacherColors?: TeacherColorMap;
+  referenceDate?: string; // 기준 월요일(YYYY-MM-DD) — 신입/퇴원 윈도우(수학과 동일). 미지정=오늘.
   sheetName?: string;
   title?: string;
 };
@@ -196,7 +244,8 @@ export function appendInjaewonIntegratedSheet(
   slots: ScheduleSlotWithStudents[],
   opts: InjaewonSheetOpts,
 ): Worksheet {
-  const { infos, periods } = buildClassInfos(slots, opts.config, opts.capacityByClassId ?? {});
+  const refMs = opts.referenceDate ? new Date(opts.referenceDate).getTime() : Date.now();
+  const { infos, periods } = buildClassInfos(slots, opts.config, opts.capacityByClassId ?? {}, refMs);
   const teacherColors = opts.teacherColors ?? {};
   const teacherBg = (label: string): string => {
     const c = teacherColors[label]?.bg;
@@ -233,7 +282,7 @@ export function appendInjaewonIntegratedSheet(
     fmt?: {
       bg?: string; color?: string; bold?: boolean; size?: number;
       h?: "left" | "center"; vAlign?: "top" | "middle" | "bottom"; wrap?: boolean;
-      border?: Partial<Record<Side, Line>>;
+      border?: Partial<Record<Side, Line>>; note?: string;
     },
   ) => {
     const cell = sheet.getCell(r, c);
@@ -242,6 +291,7 @@ export function appendInjaewonIntegratedSheet(
     cell.alignment = { horizontal: fmt?.h ?? "center", vertical: fmt?.vAlign ?? "middle", wrapText: fmt?.wrap ?? false };
     if (fmt?.bg) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fmt.bg } };
     if (fmt?.border) cell.border = fmt.border as Partial<Borders>;
+    if (fmt?.note) cell.note = fmt.note;
     return cell;
   };
   const merge = (r1: number, c1: number, r2: number, c2: number) => {
@@ -324,6 +374,7 @@ export function appendInjaewonIntegratedSheet(
       });
       sheet.getRow(pr).height = 19;
     }
+    const periodEnd = row - 1; // 마지막 교시 행(가로 경계선용)
 
     // 5) 명단 (순번 1~11 고정, 초과 시 확장) : 이름 C:E · 학교학년 F:G
     const rosterN = Math.max(11, ...classes.map((c) => c.active.length));
@@ -333,10 +384,14 @@ export function appendInjaewonIntegratedSheet(
       classes.forEach((c, i) => {
         const cs = classColStart(i);
         const s = c.active[k];
+        // 상태색(신입/반이동)·메모(교재/진도) = 수학과 동일 규칙(레이아웃은 인재원 원본 유지).
+        const st = s ? studentStatusStyle(s, refMs) : null;
+        const fill = st && st.bg !== "FFFFFFFF" ? { bg: st.bg } : {};
+        const memo = s ? studentMemo(s) : null;
         merge(rr, cs, rr, cs + NAME_COLS - 1);
-        set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left" });
+        set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left", ...fill, color: st?.fg, bold: st?.bold, ...(memo ? { note: memo } : {}) });
         merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
-        set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left" });
+        set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left", ...fill, color: st?.fg, bold: st?.bold });
       });
       sheet.getRow(rr).height = 19;
     }
@@ -402,21 +457,27 @@ export function appendInjaewonIntegratedSheet(
       set(wdcRow, cs, String(c.withdrawn.length), { size: 10 });
     });
 
-    // ── 테두리 오버레이(섹션 블록) ──
-    // A열 = 섹션 좌 외곽 굵은선 / B열 우 얇은선 / 각 반 블록 좌우 굵은선 / 섹션 상하 굵은선.
+    // ── 테두리: 전 셀 얇은 격자(원본 SOLID) + 구조 경계 굵은선(원본 SOLID_MEDIUM) ──
+    // 1) 얇은 격자 — 섹션 전 셀 사방(가로·세로 모두). 지난 버전은 이 가로선이 없어 "미흡"했음.
+    for (let r = secRow; r <= wdcRow; r++)
+      for (let c = 1; c <= endCol; c++)
+        applyBorderSide(sheet, r, c, { top: SS, bottom: SS, left: SS, right: SS });
+    // 2) 세로 굵은선 — 섹션 외곽 + 각 반 블록 좌우 경계.
     for (let r = secRow; r <= wdcRow; r++) {
-      applyBorderSide(sheet, r, 1, { left: SM, right: SS });
-      applyBorderSide(sheet, r, 2, { right: SM });
+      applyBorderSide(sheet, r, 1, { left: SM });
+      applyBorderSide(sheet, r, endCol, { right: SM });
       classes.forEach((_, i) => {
         const cs = classColStart(i);
-        for (let cc = cs; cc < cs + CLASS_COLS; cc++)
-          applyBorderSide(sheet, r, cc, { left: cc === cs ? SM : SS, right: cc === cs + CLASS_COLS - 1 ? SM : SS });
+        applyBorderSide(sheet, r, cs, { left: SM });
+        applyBorderSide(sheet, r, cs + CLASS_COLS - 1, { right: SM });
       });
     }
-    // 섹션 상단(반헤더 top)·요일헤더 하단·명단 상단·퇴원수 하단 = 굵은 가로선.
+    // 3) 가로 굵은선 — 섹션 상단 · 요일↔교시 · 교시↔명단 · 명단↔요약(정원 위) · 섹션 하단.
     for (let cc = 1; cc <= endCol; cc++) {
       applyBorderSide(sheet, secRow, cc, { top: SM });
       applyBorderSide(sheet, dayRow, cc, { bottom: SM });
+      applyBorderSide(sheet, periodEnd, cc, { bottom: SM });
+      applyBorderSide(sheet, capRow, cc, { top: SM });
       applyBorderSide(sheet, wdcRow, cc, { bottom: SM });
     }
 

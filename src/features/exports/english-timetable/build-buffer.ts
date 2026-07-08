@@ -55,6 +55,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
     config,
     capacityByClassId,
     teacherColors,
+    referenceDate: weekMonday,
     title: `${academyLabel} ${month}월 통합 영어시간표`,
   });
   appendTeacherGridSheet(wb, slots, {
