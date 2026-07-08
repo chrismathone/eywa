@@ -69,26 +69,25 @@ const dayCompact = (days: Weekday[]) => (days.length === 5 ? "매일" : days.map
 
 const MS_DAY = 86400000;
 // ── 수학 익스포터와 일관성: 학생 상태색·정렬 가중치·셀 메모(레이아웃이 아닌 데이터 규칙) ──
-/** 학생 상태색 — 수학 resolveStudentStyle 동일(반이동 초록·신입30 빨강·신입60 분홍). refMs=기준 월요일. */
+/** 학생 상태색 — 수학과 동일 팔레트: 반이동 초록·신입생(30일) 빨강·신규생(60일) 분홍. refMs=기준 월요일. */
 function studentStatusStyle(s: StudentLine, refMs: number): { bg: string; fg: string; bold: boolean } {
   if (s.isTransferredIn) return { bg: "FFBBF7D0", fg: "FF111827", bold: true };
   const base = s.enrollmentDate; // eywa는 firstSubjectEnrollmentDate 미보유 → enrollmentDate
   if (base) {
     const days = Math.ceil((refMs - new Date(base).getTime()) / MS_DAY);
-    if (days <= 30) return { bg: "FFEF4444", fg: "FFFFFFFF", bold: true };
-    if (days <= 60) return { bg: "FFFCE7F3", fg: "FF111827", bold: true };
+    if (days <= 30) return { bg: "FFEF4444", fg: "FFFFFFFF", bold: true }; // 신입생
+    if (days <= 60) return { bg: "FFFCE7F3", fg: "FF111827", bold: true }; // 신규생
   }
-  return { bg: "FFFFFFFF", fg: "FF111827", bold: false };
+  return { bg: "FFFFFFFF", fg: "FF111827", bold: false }; // 재원생
 }
-/** 재원 정렬 가중치 — 수학 getEnrollmentWeight 동일(반이동 -1 → 일반 1 → 60일 2 → 30일 3, 오름차순). */
-function enrollmentWeight(s: StudentLine, refMs: number): number {
-  if (s.isTransferredIn) return -1;
+/** 재원 명단 배치(사용자 지정) — **신입생(30일) → 신규생(60일) → 재원생**, 각 그룹 내 가나다. (반이동은 날짜로 편입, 색만 초록.) */
+function rosterRank(s: StudentLine, refMs: number): number {
   if (s.enrollmentDate) {
     const days = Math.ceil((refMs - new Date(s.enrollmentDate).getTime()) / MS_DAY);
-    if (days <= 30) return 3;
-    if (days <= 60) return 2;
+    if (days <= 30) return 0; // 신입생
+    if (days <= 60) return 1; // 신규생
   }
-  return 1;
+  return 2; // 재원생
 }
 /** 셀 메모(교재/진도) — 수학 buildStudentMemoText 형식. StudentLine latestTextbook/latestReport에서. */
 function studentMemo(s: StudentLine): string | null {
@@ -206,10 +205,10 @@ function buildClassInfos(
       roomText: roomSummary(perDayRooms),
       cells,
       periodIdx,
-      // 재원 = 수학 정렬(반이동→일반→60일→30일) + 이름. 퇴원 = 수학과 동일 **30일 윈도우**(날짜 없으면 표시).
+      // 재원 배치 = 신입생(30일)→신규생(60일)→재원생, 각 그룹 가나다. 퇴원 = 30일 윈도우(날짜 없으면 표시).
       active: students
         .filter((s) => s.status === "active")
-        .sort((a, b) => enrollmentWeight(a, refMs) - enrollmentWeight(b, refMs) || a.name.localeCompare(b.name, "ko")),
+        .sort((a, b) => rosterRank(a, refMs) - rosterRank(b, refMs) || a.name.localeCompare(b.name, "ko")),
       hold: students.filter((s) => s.status === "hold"),
       withdrawn: students.filter((s) => {
         if (s.status !== "withdrawn") return false;
