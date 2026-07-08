@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useWindowStore } from "./window-store";
 import { useIsDesktop } from "./use-is-desktop";
+import { useWorkspaceEnabled } from "./workspace-enabled";
 
 /**
  * 인쇄 문서(인수인계서·회의록·교재요청서 등)를 **플로팅 창**으로 여는 핸들러 훅.
@@ -16,13 +17,16 @@ import { useIsDesktop } from "./use-is-desktop";
  */
 export function usePrintWindow() {
   const isDesktop = useIsDesktop();
+  const workspaceEnabled = useWorkspaceEnabled();
   const router = useRouter();
 
   return function openPrint(
     opts: { id: string; href: string; title: string },
     e?: MouseEvent<HTMLElement>,
   ) {
-    if (!isDesktop) {
+    // 창 시스템이 없는 셸(모바일·태블릿 + 강사/학생 미니멀 셸=WorkspaceCanvas 미마운트)에서는
+    // 플로팅 창을 열어도 렌더할 캔버스가 없어 무반응 → 전체 페이지로 이동(WindowLink 드릴인과 동일).
+    if (!isDesktop || !workspaceEnabled) {
       router.push(opts.href);
       return;
     }
