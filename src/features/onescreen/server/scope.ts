@@ -25,3 +25,24 @@ export async function teacherOwnsStudent(
     .limit(1);
   return !!enr && enr.length > 0;
 }
+
+/**
+ * ClassNote 동명이인 감지 — 이 학생과 **같은 이름의 활성(탈원 아님) 학생이 또 있으면** true.
+ * ClassNote 보드/원아 선택이 이름 텍스트 기반(정확 일치 시 첫 발견 클릭, 고유 ID 없음)이라, 동명이인은
+ * 엉뚱한 학생 보드에 게시될 위험이 있다 → 자동 발송을 막기 위한 안전 감지(RLS로 테넌트 격리).
+ * ⚠️ 안전 우선: withdrawn만 제외(prospect/consulted/enrolled/on_hold는 잠재 보드 충돌로 간주해 과잉 차단).
+ */
+export async function hasClassnoteNameCollision(
+  supabase: ServerClient,
+  studentId: string,
+): Promise<boolean> {
+  const { data: me } = await supabase.from("students").select("name").eq("id", studentId).maybeSingle();
+  const name = me?.name?.trim();
+  if (!name) return false;
+  const { count } = await supabase
+    .from("students")
+    .select("id", { count: "exact", head: true })
+    .eq("name", name)
+    .neq("status", "withdrawn");
+  return (count ?? 0) > 1; // 본인 포함 2명 이상 = 동명이인 존재
+}

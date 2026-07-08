@@ -37,6 +37,8 @@ function classnoteBadge(status?: string): { label: string; cls: string } | null 
       return { label: "ClassNote 발송 제외(오래됨)", cls: "text-text-dim" };
     case "revoked":
       return { label: "링크 취소됨 — 재발급 필요", cls: "text-danger" };
+    case "name_conflict":
+      return { label: "동명이인 — 자동 발송 차단", cls: "text-danger" };
     default:
       return null;
   }

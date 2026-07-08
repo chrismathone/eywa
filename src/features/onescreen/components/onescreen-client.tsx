@@ -340,6 +340,12 @@ export function OneScreenClient({
       toast.error(`${subjectName} — 취소된 링크입니다. 재발급 후 발송하세요`);
       return;
     }
+    if (res.status === "name_conflict") {
+      toast.error(
+        `${subjectName} — 동명이인이 있어 자동 발송을 막았습니다. 학생 이름을 구분(예: "홍길동(중2)")한 뒤 다시 발송하세요`,
+      );
+      return;
+    }
     const msg =
       res.status === "queued"
         ? "발송 대기 — 워커가 자동으로 게시합니다"

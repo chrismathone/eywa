@@ -22,6 +22,8 @@ function classnoteBadge(status: string | null): { label: string; cls: string } {
       return { label: "실패", cls: "text-danger" };
     case "too_old":
       return { label: "제외", cls: "text-text-faint" };
+    case "name_conflict":
+      return { label: "동명이인", cls: "text-danger" };
     default:
       return { label: "—", cls: "text-text-faint" };
   }

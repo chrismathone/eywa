@@ -7,7 +7,7 @@ import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
 import { isClassnoteAllowed } from "../classnote-guard";
-import { teacherOwnsStudent } from "./scope";
+import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -123,6 +123,20 @@ export async function saveAndQueueClassnote(
   // 저장(upsert) — 권한 재검증(getCurrentUser+담당 활성수강생)은 saveLessonReport 내부.
   const saved = await saveLessonReport(input);
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
+
+  // 동명이인 감지 — ClassNote 이름 매칭이 첫 일치라 오발송 위험 → 자동 발송 차단(보고서 저장은 유지, 큐잉만 막음).
+  // 강사가 학생 이름을 구분(예: "김민수(중2)")하거나 수동 확인 후 다시 시도. 워커는 'queued'만 잡아 name_conflict는 미처리.
+  if (await hasClassnoteNameCollision(supabase, input.studentId)) {
+    await supabase
+      .from("lesson_reports")
+      .update({
+        classnote_status: "name_conflict",
+        classnote_queued_at: null,
+        classnote_error: "동명이인 감지 — 자동 발송 차단",
+      })
+      .eq("id", saved.id);
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict" };
+  }
 
   // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.
   const allowed = isClassnoteAllowed(reportDate);
