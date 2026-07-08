@@ -9,6 +9,11 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 학생 hover 진도 스마트 줄바꿈 — 인라인 번호 run-on 분리 (2026-07-09) — ✅ 실브라우저 검증(dev 3000 — 정미선 hover 카드 3항목 각자 줄) + 신규 Vitest 8/lint0(내 파일 tsc 클린 — 트리 에러 2건은 타 세션 edutrix-sync WIP)
+"1.함수의 극한 2.함수의 좌극한과 우극한 3.함수의 극한값의 계산"처럼 수업 리포트 진도가 한 줄 run-on으로 접혀 hover 카드에서 읽기 어려움(기존 `line-clamp-2`는 절단까지). RichText `bulletize`는 줄바꿈/쉼표 기반이라 인라인 번호 마커는 못 쪼갬 → 전용 순수 함수 신설:
+- [`splitNumberedItems`](../src/lib/text/split-numbered.ts)(Vitest 8) — 공백 경계 "N."/"N)" 마커 2개+ & 연속 오름차순일 때만 분리(소수점 "3.5"·비연속·단독 번호·"중2.함수" 같은 오탐은 원문 유지). 서두 텍스트 첫 줄 보존, 원문 `\n` 있으면 그 줄바꿈 우선.
+- [hover-cards.tsx](<../src/app/(shell)/timetable/_components/hover-cards.tsx>) `StudentInfoCard` 진도 `<p>` = `whitespace-pre-line`(원문 \n 평탄화도 해소) + `line-clamp-2→5`(항목별 줄이라 세로 성장 허용, 물리 줄 기준 상한).
+
 ### 데이터베이스 탭 "수납관리 연동" 폴더 — 교재 요청서·수강료 견적서 읽기 전용 링크 행 (2026-07-09) — ✅ 실브라우저 검증(dev 3100 마스터 로그인 — 폴더 394·1건, 인쇄 버튼 50행, qid 딥링크, 폴더 내 검색 12건, 전체 문서 8건 무혼입) + tsc0/lint0/test759(신규 7)
 "환불 요청서는 데이터베이스 탭에 보이는데 교재 요청서는 안 보인다" 제보. 환불요청서·이력서는 `academy_documents`(kind='form') 네이티브 저장인 반면 교재요청서(`textbook_orders`)·견적서(`tuition_quotes`)는 별도 운영 테이블이라 탐색기에 안 걸렸음. **이중 저장 대신 연동 폴더(읽기 전용 링크 행)** 로 해소:
 - **연동 레지스트리** [linked.ts](../src/features/documents/linked.ts)(순수·Vitest 7) + [linked-queries.ts](../src/features/documents/server/linked-queries.ts) — 기존 수납 쿼리(`getTextbookOrdersPage`·`getQuotesPage`, 페이징·검색·count 내장 B2 충족)에 위임, 표시 행으로만 매핑. 원본 단일 소스 유지(makeedu 동기화 충돌 없음).
@@ -17,6 +22,13 @@
 - **권한**: `canAccessTenant("billing")` 게이트 — 강사에겐 폴더 비노출·직접 URL도 전체 폴백(담당 학생 스코프 밖 전체 목록 차단, 강사는 전용 면 /textbook-requests 사용). 이력서·환불요청서 restricted RLS와 별개 축.
 - 부수: `TextbookOrderRow.createdAt`(요청일 null 폴백용)·`QuoteListItem.consultant`(등록자 컬럼) additive 추가. 새 연동 소스 추가 = linked.ts 등록 + linked-queries.ts 분기.
 - **후속(같은 날, "페이지네이션 안 보임" 제보)**: 하단 표준 페이저는 있었으나 **작은 창에선 50행 아래라 발견 불가** → ① 테이블 헤더 "N/M 페이지" 표시를 **클릭 가능한 컴팩트 페이저(◀ ▶)** 로 승격(`PageStep` export 재사용, 하단 페이저 병존) ② 창(iframe) 안 폴더·페이저·검색 드릴인에 **embed=1 유지**(잃으면 클릭마다 풀셸 레이아웃 서버 실행 — 크롬은 HideInFrame self-heal이라 눈엔 안 보였음, face-tabs 관례로 정합). 실검증: 창 안 폴더 클릭→`cat=textbooks&embed=1`, 헤더 ▶ 클릭→`page=2&embed=1` 2/8 렌더.
+
+### Edutrix 진도 일일 자동 동기화 cron — /api/cron/edutrix-sync (2026-07-09) — ✅ 로컬 실호출 검증(401·정상·멱등 재호출 + 행 삭제→복원 왕복 inserted:1) + tsc0/lint0 · ⚠️ Vercel env 등록 필요
+사용자 결정: "왜 동기화? → 복사 유지(반응속도 hot path·이름 매칭·Edutrix 은퇴 대비) + 자동화 만들어". Edutrix는 정식 Supabase API라 **makeedu와 달리 신뢰 IP·동기화 PC 불필요** → Vercel cron으로 직접.
+- **라우트** [api/cron/edutrix-sync](../src/app/api/cron/edutrix-sync/route.ts): Bearer `CRON_SECRET` 인증(reconcile-transcriptions 관례 동일) → **증분 append** — 워터마크(기존 이식 최신 보고일)−7일 겹침 윈도우에서 Edutrix reports를 읽어 (student, date, teacher) 키로 중복 스킵 후 새 행만 insert. 전체 delete+reinsert가 아니라 활동로그 시스템 행이 "진짜 새 보고서" 수십 건 수준(invoices makeedu 동기화와 같은 수용 패턴). B2(fetchAllPaged 3곳)·B4(독립 3조회 병렬) 준수.
+- **스케줄**: [vercel.json](../vercel.json) `30 18 * * *`(03:30 KST, Hobby 일1회·2개 한도 내). [instrumentation.ts](../src/instrumentation.ts) 권장 env에 `EDUTRIX_SUPABASE_URL`/`EDUTRIX_SUPABASE_ANON_KEY` 추가(미설정 시 부팅 WARN + 라우트 500 명확 에러).
+- ⚠️ **한계**: Edutrix에서 기존 보고서를 **수정**한 건 전파 안 됨(중복 키에 내용 미포함) — 정합 재구축 = 전체 리로드 스크립트(import-lesson-reports.cjs) 수동 실행. 동명이인은 스크립트와 동일하게 전원 복제 삽입.
+- ⚠️ **배포 조건**: Vercel 환경변수에 `EDUTRIX_SUPABASE_URL`·`EDUTRIX_SUPABASE_ANON_KEY` 등록(값 = eywa .env.local과 동일). `CRON_SECRET`은 기존 cron이 이미 사용 중(설정돼 있는지 확인).
 
 ### 진도(lesson_reports) 임포트 — ijw 폴더 의존 제거·Edutrix 직접 연결 + 데이터 최신화(6/30→7/8) (2026-07-09) — ✅ 실행 검증(3,532행 재적재) + 진도 탭 실브라우저 확인
 사용자 질문 "ijw-calander 거치지 말고 Edutrix 직접 가져오면 안 되나?" → 조사: [import-lesson-reports.cjs](../scripts/_poc_migration/import-lesson-reports.cjs)는 **원래도 Edutrix Supabase(reports)를 직접** 읽었고, ijw 의존은 접속 키를 `D:/ijw-calander/.env.local`에서 읽는 한 줄뿐이었음. 그런데 **그 폴더가 D:에서 사라져(F:로 이동) 스크립트가 실행 불능** 상태였음.

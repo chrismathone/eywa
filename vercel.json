@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/reconcile-transcriptions",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/edutrix-sync",
+      "schedule": "30 18 * * *"
     }
   ]
 }
