@@ -22,6 +22,22 @@ export const ACTIVITY_TABLE_LABEL: Record<string, string> = {
   meeting_minutes: "회의록",
   grade_goals: "성적목표",
   grade_comments: "학습코멘트",
+  // 0084a 확장분
+  attendance_records: "출결",
+  lesson_reports: "수업리포트",
+  student_memos: "학생메모",
+  classrooms: "강의실",
+  textbook_catalog: "교재목록",
+  tuition_catalog: "수강료항목",
+  tuition_quotes: "수강료견적",
+  notice_popups: "공지팝업",
+  announcements: "공지",
+  staff_leaves: "휴가",
+  payroll_records: "급여",
+  reenrollment_campaign_targets: "재등록캠페인",
+  english_levels: "영어레벨",
+  intake_tokens: "QR접수링크",
+  kiosk_devices: "키오스크",
 };
 
 const OP_LABEL: Record<ActivityOp, string> = { INSERT: "생성", UPDATE: "수정", DELETE: "삭제" };
@@ -50,6 +66,20 @@ const COLUMN_LABEL: Record<string, string> = {
   // 공통 추가
   teacher_name: "강사명", student_name: "학생", subject_progress: "진도", subject_details: "과목상세",
   homework: "과제", attendance_status: "출결", start_date: "시작일", end_date: "종료일",
+  // 0084a 확장분(출결/리포트/메모/카탈로그/견적/공지/휴가/급여/캠페인/QR)
+  session_date: "수업일", note: "메모", homework_required: "과제부여", homework_done: "과제완료",
+  access_method: "기록방식", report_date: "리포트일", progress: "진도", homework_score: "과제점수",
+  daily_test: "데일리테스트", check_test: "체크테스트", attitude: "태도", content: "내용", pinned: "고정",
+  capacity: "정원", publisher: "출판사", book_detail: "교재상세", grade_level: "학년",
+  expense_date: "지출일", vendor: "거래처", department: "부서", author: "작성자",
+  payment_method: "결제수단", approval_status: "결재상태", line_items: "품목",
+  body: "내용", audience: "대상", link_url: "링크", link_label: "링크명", priority: "우선순위",
+  starts_at: "시작", ends_at: "종료", consultant: "상담담당", courses: "수강과정", extras: "추가항목",
+  discounts: "할인", total_amount: "총액", leave_type: "휴가유형", starts_on: "시작일", ends_on: "종료일",
+  reason: "사유", approved_by: "승인자", approved_at: "승인일시",
+  base_amount: "기본급", hours_worked: "근무시간", hourly_amount: "시급정산", bonus: "상여",
+  deduction: "공제", total: "합계", trigger_reason: "사유", contacted_at: "연락일", decided_at: "결정일",
+  abbreviation: "약어", full_name: "이름", color: "색상", sort_order: "정렬", expires_at: "만료일",
 };
 
 const colLabel = (c: string) => COLUMN_LABEL[c] ?? c;
