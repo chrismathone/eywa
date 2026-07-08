@@ -15,6 +15,7 @@ import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
 import { MoveEnrollmentButton } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
+import { StudentWeekGrid } from "./student-week-grid";
 
 const DAY_CODE_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -82,6 +83,8 @@ export async function ClassesTab({
 
   return (
     <div className="space-y-5">
+      {/* 주간 시간표(읽기전용) — 수강 중 반의 전 과목·전 강사 통합. 슬롯 없으면 컴포넌트가 null. */}
+      <StudentWeekGrid rows={current} subjects={subjects} />
       <Section
         title="수강 중인 수업"
         rows={current}

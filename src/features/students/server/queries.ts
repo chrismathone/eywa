@@ -517,6 +517,8 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
 const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
 
 export type ScheduleGroup = { days: string[]; label: string }; // {days:["월","목"], label:"1~3교시"}
+// 개별 슬롯(요일 하나 × 시작시각 하나) — 주간 시간표 그리드 배치용(교시 체계가 과목마다 달라 시각 기준 병합).
+export type ClassSlot = { day: DayOfWeek; startTime: string; periodLabel: string };
 export type StudentClassRow = {
   enrollmentId: string;
   classId: string;
@@ -528,6 +530,8 @@ export type StudentClassRow = {
   onHold: boolean;
   studentCount: number; // 반 현재 인원(활성 enrollment)
   schedule: ScheduleGroup[];
+  // 등원요일로 필터링된 개별 슬롯(groupSchedule과 동일 필터) — 학생 주간 시간표 그리드 소스.
+  slots: ClassSlot[];
 };
 
 // 연속 교시 번호를 범위로 병합: [3,4,5,6]→"3-6교시", [2,3,5]→"2-3, 5교시", [2]→"2교시".
@@ -647,6 +651,16 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     // 미지의 키는 weekdayTableFor가 전역 평일표로 폴백(옛 'math 강제 coerce'와 동일 결과).
     const subject = klass?.subject ?? "other";
     const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
+    const attKo = attDays.map((d) => enumDayToKo(d as DayOfWeek));
+    const rawSlots = schedByClass.get(e.class_id) ?? [];
+    // 등원요일 필터(분리등원) = groupSchedule과 동일 규칙. 각 슬롯에 과목별 교시 라벨 부착(그리드 셀 힌트).
+    const slots: ClassSlot[] = rawSlots
+      .filter((s) => attKo.length === 0 || attKo.includes(enumDayToKo(s.day)))
+      .map((s) => ({
+        day: s.day,
+        startTime: s.startTime,
+        periodLabel: slotPeriodRow(subject, s.startTime, s.day, periodsConfig).label,
+      }));
     return {
       enrollmentId: e.id,
       classId: e.class_id,
@@ -660,9 +674,10 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       schedule: groupSchedule(
         schedByClass.get(e.class_id) ?? [],
         subject,
-        attDays.map((d) => enumDayToKo(d as DayOfWeek)),
+        attKo,
         periodsConfig,
       ),
+      slots,
     } satisfies StudentClassRow;
   });
 }
