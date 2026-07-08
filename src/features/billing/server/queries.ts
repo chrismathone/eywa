@@ -56,6 +56,28 @@ export type InvoiceFilters = {
   category?: string; // "all" | "tuition" | "material" | "exam" | "other"
 };
 
+// line_items jsonb는 소스마다 형태가 다르다: eywa 폼/POC 임포트는 {kind,description,amount},
+// makeedu 동기화(import-invoices.cjs)는 {name,amount}로 **description 키가 없다**. description을 단일
+// 소스로 정규화(makeedu는 name→description)해 검색 필터·표시가 `undefined.toLowerCase()`로 터지지
+// 않게 한다 — 검색어가 있을 때만 필터가 도므로, 정규화 전엔 makeedu 청구가 섞인 달에서 아무 검색이나 500.
+function normalizeInvoiceLineItems(raw: unknown): InvoiceLineItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    const description =
+      typeof o.description === "string" && o.description
+        ? o.description
+        : typeof o.name === "string"
+          ? o.name
+          : "";
+    return {
+      kind: typeof o.kind === "string" ? o.kind : "tuition",
+      description,
+      ...(typeof o.classId === "string" ? { classId: o.classId } : {}),
+      amount: Number(o.amount) || 0,
+    };
+  });
+}
 
 export async function getInvoicesForPeriod(
   options?: InvoiceFilters,
@@ -104,7 +126,7 @@ export async function getInvoicesForPeriod(
       dueDate: r.due_date,
       paidAt: r.paid_at,
       notes: r.notes ?? null,
-      lineItems: (r.line_items as InvoiceLineItem[]) ?? [],
+      lineItems: normalizeInvoiceLineItems(r.line_items),
       teacherName: teacher?.display_name ?? null,
       paymentMethod: (r as { payment_method?: string | null }).payment_method ?? null,
       cardCompany: (r as { card_company?: string | null }).card_company ?? null,
