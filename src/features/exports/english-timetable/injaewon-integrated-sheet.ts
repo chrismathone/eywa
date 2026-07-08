@@ -457,11 +457,15 @@ export function appendInjaewonIntegratedSheet(
       set(wdcRow, cs, String(c.withdrawn.length), { size: 10 });
     });
 
-    // ── 테두리: 전 셀 얇은 격자(원본 SOLID) + 구조 경계 굵은선(원본 SOLID_MEDIUM) ──
-    // 1) 얇은 격자 — 섹션 전 셀 사방(가로·세로 모두). 지난 버전은 이 가로선이 없어 "미흡"했음.
-    for (let r = secRow; r <= wdcRow; r++)
-      for (let c = 1; c <= endCol; c++)
+    // ── 테두리: 얇은 격자 + 구조 경계 굵은선. 단 교시 미니그리드(강사색 셀)는 내부선 없이 색으로만 구분 ──
+    // 1) 얇은 격자 — 미니그리드 교시 셀(행 dayRow+1~periodEnd, 열 C 이후)만 제외(색으로 구분, 내부선 불요).
+    for (let r = secRow; r <= wdcRow; r++) {
+      const inMiniGrid = r > dayRow && r <= periodEnd;
+      for (let c = 1; c <= endCol; c++) {
+        if (inMiniGrid && c >= START_COL) continue; // 미니그리드 교시 셀 = 내부 테두리 스킵
         applyBorderSide(sheet, r, c, { top: SS, bottom: SS, left: SS, right: SS });
+      }
+    }
     // 2) 세로 굵은선 — 섹션 외곽 + 각 반 블록 좌우 경계.
     for (let r = secRow; r <= wdcRow; r++) {
       applyBorderSide(sheet, r, 1, { left: SM });
