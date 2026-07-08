@@ -150,6 +150,9 @@ function PeriodTable({
                         {c.teacherName ? (
                           <span className="text-text-dim mt-0.5 text-[10px]">{c.teacherName}</span>
                         ) : null}
+                        {c.room ? (
+                          <span className="text-text-faint mt-auto pt-0.5 font-mono text-[10px]">{c.room}</span>
+                        ) : null}
                       </div>
                     ) : null}
                   </td>

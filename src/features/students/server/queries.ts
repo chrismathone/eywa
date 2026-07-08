@@ -518,7 +518,7 @@ const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
 
 export type ScheduleGroup = { days: string[]; label: string }; // {days:["월","목"], label:"1~3교시"}
 // 개별 슬롯(요일 하나 × 시작시각 하나) — 주간 시간표 그리드 배치용(교시 체계가 과목마다 달라 시각 기준 병합).
-export type ClassSlot = { day: DayOfWeek; startTime: string; periodLabel: string };
+export type ClassSlot = { day: DayOfWeek; startTime: string; periodLabel: string; room: string | null };
 export type StudentClassRow = {
   enrollmentId: string;
   classId: string;
@@ -604,7 +604,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     .from("enrollments")
     .select(
       `id, class_id, start_date, end_date, on_hold, attendance_days,
-       class:class_id ( class_name, subject, teacher:teacher_id ( display_name ) )`,
+       class:class_id ( class_name, subject, teacher:teacher_id ( display_name ), classroom:classroom_id ( name ) )`,
     )
     .eq("student_id", studentId)
     .order("start_date", { ascending: false });
@@ -615,12 +615,16 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   // 반별 스케줄(요일·시작시각)
   const { data: scheds } = await supabase
     .from("class_schedules")
-    .select("class_id, day_of_week, start_time")
+    .select("class_id, day_of_week, start_time, slot_room_label")
     .in("class_id", classIds);
-  const schedByClass = new Map<string, { day: DayOfWeek; startTime: string }[]>();
+  const schedByClass = new Map<string, { day: DayOfWeek; startTime: string; roomLabel: string | null }[]>();
   for (const s of scheds ?? []) {
     const arr = schedByClass.get(s.class_id) ?? [];
-    arr.push({ day: s.day_of_week as DayOfWeek, startTime: String(s.start_time).slice(0, 5) });
+    arr.push({
+      day: s.day_of_week as DayOfWeek,
+      startTime: String(s.start_time).slice(0, 5),
+      roomLabel: (s.slot_room_label as string | null) ?? null,
+    });
     schedByClass.set(s.class_id, arr);
   }
 
@@ -642,11 +646,20 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
 
   return ens.map((e) => {
     const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
-      | { class_name?: string; subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] }
+      | {
+          class_name?: string;
+          subject?: string;
+          teacher?: { display_name?: string } | { display_name?: string }[];
+          classroom?: { name?: string } | { name?: string }[];
+        }
       | undefined;
     const teacher = klass
       ? ((Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as { display_name?: string } | undefined)
       : undefined;
+    // 반 기본 강의실(classes.classroom_id) — 슬롯 라벨(slot_room_label)이 없을 때 상속.
+    const defaultRoom =
+      ((Array.isArray(klass?.classroom) ? klass?.classroom[0] : klass?.classroom) as { name?: string } | undefined)
+        ?.name ?? null;
     // 과목 키를 그대로 전달(string) — 커스텀 키(subject_1 등)도 과목별 교시표로 해석되고,
     // 미지의 키는 weekdayTableFor가 전역 평일표로 폴백(옛 'math 강제 coerce'와 동일 결과).
     const subject = klass?.subject ?? "other";
@@ -660,6 +673,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
         day: s.day,
         startTime: s.startTime,
         periodLabel: slotPeriodRow(subject, s.startTime, s.day, periodsConfig).label,
+        // 슬롯별 강의실 라벨 우선, 없으면 반 기본 강의실 상속(메인 시간표와 동일 규칙).
+        room: s.roomLabel ?? defaultRoom,
       }));
     return {
       enrollmentId: e.id,

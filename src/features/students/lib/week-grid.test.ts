@@ -102,6 +102,28 @@ describe("buildSubjectPeriodGrid (교시축 · 과목 탭)", () => {
     expect(g.cellAt(xi, 0)?.className).toBe("A");
   });
 
+  it("슬롯 강의실(room)이 셀에 전달됨 (slot_room_label ?? 반 기본)", () => {
+    const g = buildSubjectPeriodGrid(
+      [mathRow("c1", "수학A", [{ day: "mon", startTime: "16:20", periodLabel: "3교시", room: "201호" }])],
+      "math",
+      false,
+      cfg,
+    );
+    const p3 = g.rows.findIndex((r) => r.key === "p-3");
+    expect(g.cellAt(p3, 0)?.room).toBe("201호");
+  });
+
+  it("강의실 없는 슬롯 → room null", () => {
+    const g = buildSubjectPeriodGrid(
+      [mathRow("c1", "수학A", [{ day: "mon", startTime: "16:20", periodLabel: "3교시" }])],
+      "math",
+      false,
+      cfg,
+    );
+    const p3 = g.rows.findIndex((r) => r.key === "p-3");
+    expect(g.cellAt(p3, 0)?.room).toBeNull();
+  });
+
   it("영어(11교시) 행 수 — 과목별 교시표 반영", () => {
     const g = buildSubjectPeriodGrid(
       [row("c1", "english", "E반", "Anna", [{ day: "mon", startTime: "14:20", periodLabel: "1교시" }])],

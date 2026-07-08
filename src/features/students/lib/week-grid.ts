@@ -18,7 +18,7 @@ export type WeekGridRow = {
   subject: string;
   className: string;
   teacherName: string | null;
-  slots: { day: DayOfWeek; startTime: string; periodLabel: string }[];
+  slots: { day: DayOfWeek; startTime: string; periodLabel: string; room?: string | null }[];
 };
 
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -35,6 +35,8 @@ export type PeriodCell = {
   className: string;
   teacherName: string | null;
   subject: string;
+  /** 그 슬롯의 강의실(slot_room_label ?? 반 기본 classroom). 없으면 null. */
+  room: string | null;
 };
 
 /** 교시 행 1개(개별 교시). 수학계열 '2교시 묶음' 라벨은 렌더 단계에서 rowSpan=2로 표시(축은 개별 교시). */
@@ -93,6 +95,7 @@ export function buildSubjectPeriodGrid(
         className: r.className,
         teacherName: r.teacherName,
         subject: r.subject,
+        room: s.room ?? null,
       });
     }
   }
