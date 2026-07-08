@@ -31,8 +31,8 @@ export async function GET(req: Request) {
     const compactSections = new Set(
       (new URL(req.url).searchParams.get("compact1h") ?? "").split(",").map(Number).filter(Number.isFinite),
     );
-    const buf = await buildEnglishTimetableBuffer({ teacherId, compactSections });
-    return new NextResponse(Buffer.from(buf), {
+    const { buffer } = await buildEnglishTimetableBuffer({ teacherId, compactSections });
+    return new NextResponse(Buffer.from(buffer), {
       headers: {
         "Content-Type": XLSX_MIME,
         "Content-Disposition": attachmentFilename(`영어_시간표_${date}.xlsx`),

@@ -131,10 +131,15 @@ export type InjaewonSheetOpts = {
   teacherColors?: TeacherColorMap;
   referenceDate?: string; // 기준 월요일(YYYY-MM-DD) — 신입/퇴원 윈도우. 미지정=오늘.
   compactSections?: Set<number>; // '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일.
-  withFormulas?: boolean; // true=구글시트용(인원/퇴원수 COUNTA·방 행 파생 수식) / false=엑셀용(정적 값).
+  // 제공 시 수식 셀을 여기 수집(셀엔 정적 값을 씀). ⚠️ xlsx에 구글 수식(LET/LAMBDA)을 넣으면 xlsx→시트
+  // 변환이 통째로 실패("Conversion not supported")하므로, 수식은 업로드 후 Sheets API로 별도 주입한다.
+  formulaSink?: FormulaCell[];
   sheetName?: string;
   title?: string;
 };
+
+/** 시트 API 후처리로 주입할 수식 셀(1-based row/col). */
+export type FormulaCell = { row: number; col: number; formula: string };
 
 const LEVEL_LEGEND =
   "※ Class Level : Phonics → Pre Let's → Ready To Talk → Let's Talk → Ready to Speak → Let's Speak → Let's Express → Kopi Wang → Pre Junior → Junior Plus → Senior Plus";
@@ -164,7 +169,7 @@ export function appendInjaewonIntegratedSheet(
   opts: InjaewonSheetOpts,
 ): Worksheet {
   const refMs = opts.referenceDate ? new Date(opts.referenceDate).getTime() : Date.now();
-  const withFormulas = opts.withFormulas ?? false;
+  const formulaSink = opts.formulaSink;
   const teacherColors = opts.teacherColors ?? {};
   const teacherBg = (label: string): string => {
     const c = teacherColors[label]?.bg;
@@ -210,8 +215,8 @@ export function appendInjaewonIntegratedSheet(
     },
   ) => {
     const cell = sheet.getCell(r, c);
-    if (fmt?.formula && withFormulas) cell.value = { formula: fmt.formula, result: v === "" ? undefined : v };
-    else if (v !== "") cell.value = v;
+    if (v !== "") cell.value = v; // xlsx엔 항상 정적 값(수식은 아래 sink로 별도 수집).
+    if (fmt?.formula && formulaSink) formulaSink.push({ row: r, col: c, formula: fmt.formula });
     cell.font = { name: FONT, size: fmt?.size ?? 10, bold: fmt?.bold ?? false, ...(fmt?.color ? { color: { argb: fmt.color } } : {}) };
     cell.alignment = { horizontal: fmt?.h ?? "center", vertical: fmt?.vAlign ?? "middle", wrapText: fmt?.wrap ?? false };
     if (fmt?.bg) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fmt.bg } };
@@ -321,9 +326,9 @@ export function appendInjaewonIntegratedSheet(
         const st = s ? studentStatusStyle(s, refMs) : null;
         const fill = st && st.bg !== "FFFFFFFF" ? { bg: st.bg } : {};
         const memo = s ? studentMemo(s) : null;
-        merge(rr, cs, rr, cs + NAME_COLS - 1);
+        if (s) merge(rr, cs, rr, cs + NAME_COLS - 1); // 빈 슬롯은 병합 안 함(병합 총량이 시트 변환 한계 초과 방지)
         set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left", ...fill, color: st?.fg, bold: st?.bold, ...(memo ? { note: memo } : {}) });
-        merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
+        if (s) merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
         set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left", ...fill, color: st?.fg, bold: st?.bold });
       });
       sheet.getRow(rr).height = 19;
@@ -357,9 +362,9 @@ export function appendInjaewonIntegratedSheet(
       cards.forEach((_, i) => {
         const cs = classColStart(i);
         const s = holdByCard[i][k];
-        merge(rr, cs, rr, cs + NAME_COLS - 1);
+        if (s) merge(rr, cs, rr, cs + NAME_COLS - 1);
         set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left" });
-        merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
+        if (s) merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
         set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left" });
       });
     }
@@ -375,9 +380,9 @@ export function appendInjaewonIntegratedSheet(
         const cs = classColStart(i);
         const s = wdByCard[i][k];
         const wf = s ? { bg: "FF000000", color: "FFFFFFFF", bold: true } : {};
-        merge(rr, cs, rr, cs + NAME_COLS - 1);
+        if (s) merge(rr, cs, rr, cs + NAME_COLS - 1);
         set(rr, cs, s ? studentName(s) : "", { size: 9, h: "left", ...wf });
-        merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
+        if (s) merge(rr, cs + NAME_COLS, rr, cs + CLASS_COLS - 1);
         set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left", ...wf });
       });
     }

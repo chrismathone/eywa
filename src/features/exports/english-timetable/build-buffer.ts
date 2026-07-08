@@ -5,7 +5,10 @@ import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
 import { thisMonday } from "@/features/timetable/lib/week";
 import { appendTeacherGridSheet } from "./teacher-grid-sheet";
-import { appendInjaewonIntegratedSheet } from "./injaewon-integrated-sheet";
+import { appendInjaewonIntegratedSheet, type FormulaCell } from "./injaewon-integrated-sheet";
+
+/** 통합 탭 시트명(수식 주입 대상). */
+export const INTEGRATED_SHEET_NAME = "통합영어시간표";
 
 /**
  * 영어 시간표 xlsx 버퍼 빌드 — **강사별영어시간표(마스터) + 통합영어시간표(파생)** 2탭.
@@ -17,11 +20,11 @@ import { appendInjaewonIntegratedSheet } from "./injaewon-integrated-sheet";
  */
 export async function buildEnglishTimetableBuffer(opts?: {
   teacherId?: string;
-  /** true=구글시트용(수식) / false·미지정=엑셀 다운로드용(정적 값). */
+  /** true=수식 셀 목록도 수집(구글시트 API 후주입용) / false·미지정=엑셀용(정적만). xlsx 자체는 항상 정적. */
   withFormulas?: boolean;
   /** '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일. */
   compactSections?: Set<number>;
-}): Promise<ArrayBuffer> {
+}): Promise<{ buffer: ArrayBuffer; formulaCells: FormulaCell[] }> {
   const [slots, teacherColors, settings] = await Promise.all([
     getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId }),
     getTeacherColorMap(),
@@ -55,13 +58,15 @@ export async function buildEnglishTimetableBuffer(opts?: {
   wb.created = new Date();
 
   // 탭 순서 = 원본 인재원 시트와 동일: 통합영어시간표(원장 손작업 형식 재현) → 강사별영어시간표(화면 강사뷰).
+  const formulaCells: FormulaCell[] = [];
   appendInjaewonIntegratedSheet(wb, slots, {
     config,
     capacityByClassId,
     teacherColors,
     referenceDate: weekMonday,
     compactSections: opts?.compactSections,
-    withFormulas: opts?.withFormulas,
+    formulaSink: opts?.withFormulas ? formulaCells : undefined,
+    sheetName: INTEGRATED_SHEET_NAME,
     title: `${academyLabel} ${month}월 통합 영어시간표`,
   });
   appendTeacherGridSheet(wb, slots, {
@@ -73,5 +78,5 @@ export async function buildEnglishTimetableBuffer(opts?: {
     weekMonday,
   });
 
-  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  return { buffer: (await wb.xlsx.writeBuffer()) as ArrayBuffer, formulaCells };
 }

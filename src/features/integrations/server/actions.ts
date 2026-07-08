@@ -10,9 +10,10 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { overwriteTimetableSheet } from "@/features/integrations/google-sheets";
+import { overwriteTimetableSheet, applySheetFormulas } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
-import { buildEnglishTimetableBuffer } from "@/features/exports/english-timetable/build-buffer";
+import { buildEnglishTimetableBuffer, INTEGRATED_SHEET_NAME } from "@/features/exports/english-timetable/build-buffer";
+import type { FormulaCell } from "@/features/exports/english-timetable/injaewon-integrated-sheet";
 import {
   isSheetExportSubject,
   sheetsProvider,
@@ -332,11 +333,13 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
 export type SyncState = { error?: string; ok?: boolean } | undefined;
 
 /** 과목별 xlsx 버퍼 빌더 선택(레지스트리) — SHEET_EXPORT_SUBJECTS와 1:1. 구글시트는 수식(withFormulas). */
-async function buildTimetableBufferFor(subject: SheetExportSubject, compactSections?: Set<number>): Promise<ArrayBuffer> {
+async function buildTimetableBufferFor(
+  subject: SheetExportSubject,
+  compactSections?: Set<number>,
+): Promise<{ buffer: ArrayBuffer; formulaCells: FormulaCell[] }> {
   // master 전용 경로라 전체(unscoped) 내보내기 — teacherId 미지정.
-  return subject === "math"
-    ? buildMathTimetableBuffer()
-    : buildEnglishTimetableBuffer({ withFormulas: true, compactSections });
+  if (subject === "math") return { buffer: await buildMathTimetableBuffer(), formulaCells: [] };
+  return buildEnglishTimetableBuffer({ withFormulas: true, compactSections });
 }
 
 export async function syncSheetsNow(subject: string, compact1h?: number[]): Promise<SyncState> {
@@ -376,8 +379,10 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
   try {
     // 과목 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에 통째 덮어쓰기
     // (서비스계정 용량 0이라 '생성' 불가 → '갱신'만). 대상 시트=과목당 전용 1개(수학·영어 분리).
-    const buffer = await buildTimetableBufferFor(subject, new Set(compact1h ?? []));
+    const { buffer, formulaCells } = await buildTimetableBufferFor(subject, new Set(compact1h ?? []));
     await overwriteTimetableSheet(spreadsheetId, buffer);
+    // 정적 값 업로드(변환) 후 구글시트 수식 주입(방 행 파생·인원/퇴원수 COUNTA). 영어만 수집됨.
+    if (formulaCells.length) await applySheetFormulas(spreadsheetId, INTEGRATED_SHEET_NAME, formulaCells);
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,

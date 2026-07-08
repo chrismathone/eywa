@@ -155,6 +155,42 @@ export async function overwriteTimetableSheet(
 }
 
 /**
+ * 업로드(변환) 후 특정 탭 셀에 **구글시트 수식**을 주입한다(정적 값 위에 덮어쓰기).
+ * ⚠️ xlsx에 구글 전용 함수(LET/LAMBDA/REGEXEXTRACT 등)를 넣으면 xlsx→시트 변환이 통째로 실패
+ *    ("Conversion not supported")하므로, 정적 값으로 먼저 올린 뒤 Sheets API로 수식만 덮는다.
+ */
+export async function applySheetFormulas(
+  spreadsheetId: string,
+  sheetName: string,
+  cells: { row: number; col: number; formula: string }[],
+): Promise<void> {
+  if (cells.length === 0) return;
+  const auth = getServiceAccountAuth();
+  await auth.authorize();
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    const meta = await withSheetsRetry(() =>
+      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,title)" }),
+    );
+    const sheetId = (meta.data.sheets ?? []).find((s) => s.properties?.title === sheetName)?.properties?.sheetId;
+    if (typeof sheetId !== "number") throw new Error(`시트 탭 '${sheetName}'을 찾을 수 없습니다`);
+    const requests = cells.map((c) => ({
+      updateCells: {
+        range: { sheetId, startRowIndex: c.row - 1, endRowIndex: c.row, startColumnIndex: c.col - 1, endColumnIndex: c.col },
+        rows: [{ values: [{ userEnteredValue: { formulaValue: c.formula.startsWith("=") ? c.formula : `=${c.formula}` } }] }],
+        fields: "userEnteredValue",
+      },
+    }));
+    for (let i = 0; i < requests.length; i += 500) {
+      const chunk = requests.slice(i, i + 500);
+      await withSheetsRetry(() => sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: chunk } }));
+    }
+  } catch (e) {
+    throw new Error(translateSheetsError(e));
+  }
+}
+
+/**
  * 구글 시트의 한 탭(`tabName`) 전체 셀 값을 2D 문자열 배열로 읽는다(1행=헤더).
  * '시트에서 가져오기'(라운드트립 import) — 시트 편집분을 앱으로 되읽는 단방향 반대 경로.
  * 탭이 없으면(예: '시트 반영' 전) Sheets가 400(Unable to parse range)을 주므로 친절 메시지로 변환.
