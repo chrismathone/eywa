@@ -368,6 +368,7 @@ export function appendInjaewonIntegratedSheet(
         set(rr, cs + NAME_COLS, s ? schoolGrade(s) : "", { size: 9, h: "left" });
       });
     }
+    const waitEnd = row - 1;
     merge(waitStart, 2, row - 1, 2);
     set(waitStart, 2, "대기", { size: 10 });
 
@@ -399,11 +400,18 @@ export function appendInjaewonIntegratedSheet(
       set(wdcRow, cs, String(wdByCard[i].length), { size: 10, formula: `COUNTA(${colLetter(cs)}${wdStart}:${colLetter(cs)}${wdEnd})` });
     });
 
-    // ── 테두리: 얇은 격자 + 구조 굵은선. 교시 미니그리드는 색으로만 구분(내부선 없음) ──
+    // ── 테두리: 얇은 격자 + 구조 굵은선. 미니그리드·빈 학생 셀은 내부선 없음(외부 위주) ──
+    const inList = (r: number) =>
+      (r >= rosterStart && r <= rosterEnd) || (r >= waitStart && r <= waitEnd) || (r >= wdStart && r <= wdEnd);
     for (let r = secRow; r <= wdcRow; r++) {
       const inMiniGrid = r > dayRow && r <= periodEnd;
+      const listRow = inList(r);
       for (let c = 1; c <= endCol; c++) {
         if (inMiniGrid && c >= START_COL) continue;
+        if (listRow && c >= START_COL) {
+          const cell = sheet.getCell(r, c);
+          if (cell.value == null && !cell.isMerged) continue; // 빈 학생 셀 = 내부 테두리 없음
+        }
         applyBorderSide(sheet, r, c, { top: SS, bottom: SS, left: SS, right: SS });
       }
     }
@@ -416,11 +424,15 @@ export function appendInjaewonIntegratedSheet(
         applyBorderSide(sheet, r, cs + CLASS_COLS - 1, { right: SM });
       });
     }
+    // 가로 굵은선: 섹션 상단·요일↔교시·교시↔명단·명단↔정원·정원↔인원·인원↔대기·대기↔퇴원명단·섹션 하단.
     for (let cc = 1; cc <= endCol; cc++) {
       applyBorderSide(sheet, secRow, cc, { top: SM });
       applyBorderSide(sheet, dayRow, cc, { bottom: SM });
       applyBorderSide(sheet, periodEnd, cc, { bottom: SM });
       applyBorderSide(sheet, capRow, cc, { top: SM });
+      applyBorderSide(sheet, cntRow, cc, { top: SM });
+      applyBorderSide(sheet, waitStart, cc, { top: SM });
+      applyBorderSide(sheet, wdStart, cc, { top: SM });
       applyBorderSide(sheet, wdcRow, cc, { bottom: SM });
     }
 
