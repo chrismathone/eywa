@@ -9,7 +9,7 @@ import {
   ACTIVITY_PAGE_SIZE,
 } from "@/features/audit/server/activity-queries";
 import type { AccessSession, LoginEventRow } from "@/features/audit/server/activity-queries";
-import { activitySummary, activityOpLabel, deviceLabel, type ActivityOp } from "@/features/audit/activity";
+import { activityDetail, activityOpLabel, deviceLabel, type ActivityOp } from "@/features/audit/activity";
 
 const OP_COLOR: Record<ActivityOp, PillColor> = { INSERT: "primary", UPDATE: "blue", DELETE: "danger" };
 
@@ -95,17 +95,37 @@ export async function ActivityLogTab({ userId, page }: { userId: string; page: n
             <span className="text-text-faint ml-2 normal-case">· 핵심 데이터 변경을 자동 기록(책임추적)</span>
           </p>
           <ul className="bg-card border-line divide-line divide-y rounded-md border">
-            {rows.map((r) => (
-              <li key={r.id} className="flex items-start gap-3 px-4 py-2.5">
-                <Pill color={OP_COLOR[r.op]}>{activityOpLabel(r.op)}</Pill>
-                <div className="min-w-0 flex-1">
-                  <p className="text-foreground text-sm break-keep">
-                    {activitySummary(r.table, r.op, r.targetLabel, r.changed)}
-                  </p>
-                  <p className="text-text-faint num mt-0.5 text-xs">{when(r.createdAt)}</p>
-                </div>
-              </li>
-            ))}
+            {rows.map((r) => {
+              const { head, changes } = activityDetail(r.table, r.op, r.targetLabel, r.changed);
+              return (
+                <li key={r.id} className="flex items-start gap-3 px-4 py-2.5">
+                  <Pill color={OP_COLOR[r.op]}>{activityOpLabel(r.op)}</Pill>
+                  <div className="min-w-0 flex-1">
+                    {changes.length <= 1 ? (
+                      // 변경 0~1건: 한 줄 인라인.
+                      <p className="text-foreground text-sm break-keep">
+                        {head}
+                        {changes.length ? ` — ${changes[0]}` : ""}
+                      </p>
+                    ) : (
+                      // 변경 여러 건: 머리말 + 항목별 줄바꿈 리스트.
+                      <>
+                        <p className="text-foreground text-sm font-medium break-keep">{head}</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {changes.map((c, i) => (
+                            <li key={i} className="text-text-dim flex gap-1.5 text-[13px] break-keep">
+                              <span className="text-text-faint select-none">·</span>
+                              <span>{c}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    <p className="text-text-faint num mt-1 text-xs">{when(r.createdAt)}</p>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
           <Pagination page={page} totalPages={totalPages} hrefForPage={hrefForPage} total={total} />
         </section>

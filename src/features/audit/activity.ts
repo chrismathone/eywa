@@ -64,27 +64,33 @@ function shortVal(v: unknown): string {
 
 export type ActivityChange = { redacted?: true; old?: unknown; new?: unknown };
 
-/** 활동 1건을 사람이 읽는 요약 문자열로. 예: `학생 「홍길동」 수정 — 학년 초5→초6`. */
-export function activitySummary(
+const CHANGES_CAP = 8; // 변경 목록 최대 표시 개수(초과분은 "외 N건")
+
+/**
+ * 활동 1건을 머리말 + 변경 목록으로 구조화 — 뷰어가 변경 1건이면 인라인, 여러 건이면 줄바꿈 리스트로.
+ * 예: head="등록상담 「이주아」 수정", changes=["형제자매 있음→비움","희망진로 신약개발연구원→비움","과목상세 변경"].
+ * INSERT/DELETE는 changes=[](머리말만).
+ */
+export function activityDetail(
   table: string,
   op: ActivityOp,
   targetLabel: string | null,
   changed: Record<string, ActivityChange> | unknown,
-): string {
+): { head: string; changes: string[] } {
   const domain = ACTIVITY_TABLE_LABEL[table] ?? table;
   const who = targetLabel ? `「${targetLabel}」` : "";
   const head = `${domain} ${who} ${OP_LABEL[op]}`.replace(/\s+/g, " ").trim();
-  if (op !== "UPDATE" || !changed || typeof changed !== "object") return head;
+  if (op !== "UPDATE" || !changed || typeof changed !== "object") return { head, changes: [] };
 
-  const entries = Object.entries(changed as Record<string, ActivityChange>).slice(0, 4);
-  const parts = entries.map(([col, ch]) => {
+  const all = Object.entries(changed as Record<string, ActivityChange>);
+  const changes = all.slice(0, CHANGES_CAP).map(([col, ch]) => {
     if (ch && typeof ch === "object" && "redacted" in ch && ch.redacted) return `${colLabel(col)} 변경`;
     const c = ch as ActivityChange;
     return `${colLabel(col)} ${shortVal(c.old)}→${shortVal(c.new)}`;
   });
-  const more = Object.keys(changed as object).length - entries.length;
-  const tail = parts.join(", ") + (more > 0 ? ` 외 ${more}건` : "");
-  return tail ? `${head} — ${tail}` : head;
+  const more = all.length - Math.min(all.length, CHANGES_CAP);
+  if (more > 0) changes.push(`외 ${more}건`);
+  return { head, changes };
 }
 
 export const activityOpLabel = (op: ActivityOp) => OP_LABEL[op];
