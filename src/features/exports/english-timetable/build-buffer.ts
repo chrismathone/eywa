@@ -1,25 +1,12 @@
 import "server-only";
+import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
-import { buildSubjectMaps } from "@/features/owner/subjects";
-import type { PillColor } from "@/components/atoms/pill";
 import { kstToday } from "@/lib/date-kst";
 import { thisMonday } from "@/features/timetable/lib/week";
 import { appendTeacherGridSheet } from "./teacher-grid-sheet";
-import { appendIntegratedSheet } from "./integrated-sheet";
-
-// 과목 소프트색(PillColor) → 엑셀 셀 hex. 통합 탭 반 헤더 폴백(card.bgColor 없을 때).
-const PILL_SOFT_HEX: Record<PillColor, string> = {
-  primary: "FFDCEFE4",
-  blue: "FFD7E7F5",
-  rose: "FFF6DEE5",
-  purple: "FFE7DEF3",
-  amber: "FFF7E8CE",
-  gold: "FFF3E8D0",
-  danger: "FFF8DCDC",
-  neutral: "FFEEEADD",
-};
+import { appendInjaewonIntegratedSheet } from "./injaewon-integrated-sheet";
 
 /**
  * 영어 시간표 xlsx 버퍼 빌드 — **강사별영어시간표(마스터) + 통합영어시간표(파생)** 2탭.
@@ -32,15 +19,18 @@ const PILL_SOFT_HEX: Record<PillColor, string> = {
 export async function buildEnglishTimetableBuffer(opts?: {
   teacherId?: string;
 }): Promise<ArrayBuffer> {
-  const [slots, teacherColors, settings] = await Promise.all([
+  const supabase = await createClient();
+  const [slots, teacherColors, settings, capacityRows] = await Promise.all([
     getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId }),
     getTeacherColorMap(),
     getTenantSettings(),
+    // 반 정원(통합 탭 '정원' 행) — 영어 활성 반만(소수, 무페이징 안전). RLS 테넌트 격리.
+    supabase.from("classes").select("id, capacity").eq("subject", "english").eq("is_active", true),
   ]);
+  const capacityByClassId: Record<string, number | null> = {};
+  for (const c of capacityRows.data ?? []) capacityByClassId[c.id as string] = (c.capacity as number | null) ?? null;
 
   const config = settingsToPeriodsConfig(settings.operations);
-  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const subjectSoftHex = PILL_SOFT_HEX[subjectMaps.colorOf("english") as PillColor];
   const weekMonday = thisMonday(kstToday());
 
   // 강사뷰 파라미터 = 과목 설정(operations.subjects[english]) — page.tsx 도출과 동일(resolve가 english 프리필).
@@ -60,7 +50,12 @@ export async function buildEnglishTimetableBuffer(opts?: {
   wb.creator = "eywa";
   wb.created = new Date();
 
-  // 마스터 = 강사별(화면 강사뷰). 그 다음 파생 = 통합(반=열 + 학생명단).
+  // 탭 순서 = 원본 인재원 시트와 동일: 통합영어시간표(원장 손작업 형식 재현) → 강사별영어시간표(화면 강사뷰).
+  appendInjaewonIntegratedSheet(wb, slots, {
+    config,
+    capacityByClassId,
+    title: "인재원 본원 통합 영어시간표",
+  });
   appendTeacherGridSheet(wb, slots, {
     teacherColors,
     stepMin,
@@ -68,11 +63,6 @@ export async function buildEnglishTimetableBuffer(opts?: {
     excludedTeachers,
     sectionLineMins,
     weekMonday,
-  });
-  appendIntegratedSheet(wb, slots, {
-    config,
-    teacherColors,
-    subjectSoftHex,
   });
 
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
