@@ -75,3 +75,21 @@ export function activitySummary(
 }
 
 export const activityOpLabel = (op: ActivityOp) => OP_LABEL[op];
+
+/** user-agent → 짧은 기기 라벨. 예: "Windows · Chrome". 미상은 "기기 미상". */
+export function deviceLabel(ua: string | null | undefined): string {
+  if (!ua) return "기기 미상";
+  const os = /Windows/i.test(ua) ? "Windows"
+    : /iPhone|iPad|iPod/i.test(ua) ? "iOS"
+    : /Android/i.test(ua) ? "Android"
+    : /Mac OS X|Macintosh/i.test(ua) ? "Mac"
+    : /Linux/i.test(ua) ? "Linux" : null;
+  const browser = /Edg\//i.test(ua) ? "Edge"
+    : /OPR\/|Opera/i.test(ua) ? "Opera"
+    : /Whale/i.test(ua) ? "웨일"
+    : /SamsungBrowser/i.test(ua) ? "삼성"
+    : /Chrome\//i.test(ua) ? "Chrome"
+    : /Firefox\//i.test(ua) ? "Firefox"
+    : /Safari\//i.test(ua) ? "Safari" : null;
+  return [os, browser].filter(Boolean).join(" · ") || "기기 미상";
+}

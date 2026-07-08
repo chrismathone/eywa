@@ -9,6 +9,14 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 최근 접속(로그인) 기록 — 활동 로그 탭에 추가 + 자동 로그인 판별 (2026-07-08) — ✅ 롤백테스트 + 프로덕션 실동작 검증(무오염) + 적대리뷰 3렌즈 6건 전부 반영 + tsc0/lint0 · 0082a **프로덕션 적용됨**
+사용자 요청: "최근 접속(로그인) 기록 + 자동로그인 구분 스마트하게". 결정: 옵션①(지속세션 재접속=자동). ⚠️ Supabase `auth.audit_log_entries`는 이 프로젝트에서 비어 있어 못 씀 → 앱 기록 + `auth.sessions` 읽기 조합.
+- **수동 로그인 영구 기록**([login_events](../supabase/migrations/0082a_login_events.sql)): 로그인 액션([`(auth)/login/actions.ts`](<../src/app/(auth)/login/actions.ts>))이 signInWithPassword 성공 시 기록(누가·언제·기기·IP). ⚠️ **`after()` 백그라운드 + admin 클라이언트**([recordLoginEvent](../src/features/audit/server/login-log.ts)) — 로그 지연이 로그인 크리티컬 패스를 절대 안 막음([[#10]] 보호, 적대리뷰 HIGH). 세션 만료 후에도 이력 잔존.
+- **최근 접속·자동 판별**: [`get_staff_recent_access(target)`](../supabase/migrations/0082a_login_events.sql)(security definer, 사무실+동일테넌트 게이트)가 `auth.sessions`에서 세션별 로그인 시각·마지막 활동·기기·IP 읽음. 오래 유지 세션="세션 유지"(재로그인 없이 접속 중), 최근="최근 로그인". ⚠️ `refreshed_at`(비-tz) → `at time zone 'utc'` 고정(적대리뷰 LOW).
+- **뷰어**: 활동 로그 탭([activity-log-tab.tsx](<../src/app/(shell)/staff/[id]/_tabs/activity-log-tab.tsx>)) "최근 접속" 섹션. 사무실(master/admin/manager)만(RLS `login_events_office_read` + 함수 게이트 + 탭 게이트). [deviceLabel](../src/features/audit/activity.ts) user-agent→"Windows · Chrome".
+- **적대리뷰 6건 반영**: HIGH(로그인 블로킹→after) · MED(직렬 워터폴→Promise.all B4) · MED(auto 오분류→라벨 분리+시각 병기) · LOW×2(IP 스푸핑→`x-vercel-forwarded-for`/`x-real-ip` 우선) · LOW(타임존 UTC 고정).
+- ⚠️ **핵심 안전**: getCurrentUser(핫패스)·미들웨어 무변경. 로그인 기록은 응답 이후 백그라운드라 로그인 흐름 영향 0. 검증: 롤백 + 프로덕션 실동작(세션 9건 조회·login_events 왕복→검증행 제거 무오염). 라이브 로그인 E2E는 auth 게이트로 미실행. **Phase 2**: 자동접속 영구 이력·전체 접속 뷰.
+
 ### 환불 요청서 — 월별 필터(◀ 년월 ▶) + 수강반 쉼표/hover (2026-07-08) — ✅ tsc0/lint0 + 실데이터 검증(7건/전부 2026-07) · 커밋 `e56ca1a`·`f085501`
 - **월별 필터**([refunds-face](<../src/app/(shell)/billing/_components/refunds-face.tsx>)): 지출 패널과 동일 `◀ 년월 ▶` 스테퍼. 기준 = 환불처리일자(YYYY-MM-DD) 우선, 미입력이면 작성월(월 필터에서 숨김 방지). 기본 표시월 = 가장 최근 데이터 월(첫 로드 빈 화면 방지). URL `period=YYYY-MM` 보존·월 변경 시 page 리셋. billing 페이지가 `sp` 통째 전달(지출과 통일).
 - **수강반 쉼표/hover**: 서식 수강반은 2줄 textarea라 여러 반을 줄바꿈으로 입력 → 목록 `truncate`(nowrap)가 줄바꿈을 공백으로 뭉개 한 줄로 붙어 보였음. 줄 단위 분해 → 쉼표(", ") 축약 표시 + 마우스 올리면 `title`(줄 단위)로 전체. (박성준 4줄 실검증.)
