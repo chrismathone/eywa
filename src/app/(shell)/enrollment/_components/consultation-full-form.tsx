@@ -102,6 +102,7 @@ export function ConsultationFullForm({
   initial,
   aiSuggestedParentRequest,
   existingRecordings = [],
+  confirmConsultedOnSave = false,
 }: {
   mode: "create" | "edit";
   initial?: ConsultationFormInitial;
@@ -109,6 +110,8 @@ export function ConsultationFullForm({
   aiSuggestedParentRequest?: string | null;
   /** 이미 등록된 녹음 행(수정 모드) — 새 녹음이 "덮어쓰기"가 아니라 "추가"임을 명시하는 표시용. */
   existingRecordings?: { createdAt: string; status: string }[];
+  /** QR 접수 + 대기·예약 건(수정 모드) — 저장 시 "상담 완료로 변경?" 확인 팝업을 띄운다(서버도 조건 재검증). */
+  confirmConsultedOnSave?: boolean;
 }) {
   const subjects = useSubjectMaps();
   const gradeLevels = useGradeLevels();
@@ -178,6 +181,18 @@ export function ConsultationFullForm({
   const { notifySaved } = useConcurrentEditGuard({ scope: editScope, formRef });
   const { markSaved } = useUnsavedGuard({ formRef });
 
+  // QR 접수(대기·예약) 재저장 확인 팝업 — 저장 직전에 "상담 완료로 변경?"을 묻는다. 확인=markConsulted 플래그.
+  const consultedDialogRef = useRef<HTMLDialogElement>(null);
+  const pendingFdRef = useRef<FormData | null>(null);
+  function resolveConsultedPrompt(mark: boolean | null) {
+    consultedDialogRef.current?.close();
+    const fd = pendingFdRef.current;
+    pendingFdRef.current = null;
+    if (mark === null || !fd) return; // 취소 — 저장 자체를 중단(폼으로 복귀)
+    if (mark) fd.set("markConsulted", "1");
+    void submitForm(fd);
+  }
+
   // 생성·수정 통합 제출 — 녹음이 있으면 클라에서 티켓 발급→업로드 후 audioPath를 실어 액션 호출(생성/수정 공통).
   // 수정 모드도 녹음 첨부 가능(QR 접수건을 상담사가 수정하며 상담 녹음 → 전사·AI 분석 재실행).
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -189,6 +204,16 @@ export function ConsultationFullForm({
     }
     const fd = new FormData(e.currentTarget);
     fd.set("subjectDetails", JSON.stringify(details));
+    // QR 접수 대기·예약 건 — 저장 전에 상담 완료 전환 여부를 묻고, 선택에 따라 이어서 제출.
+    if (confirmConsultedOnSave && !isCreate) {
+      pendingFdRef.current = fd;
+      consultedDialogRef.current?.showModal();
+      return;
+    }
+    await submitForm(fd);
+  }
+
+  async function submitForm(fd: FormData) {
     try {
       if (audioFile) {
         setPhase("uploading");
@@ -629,6 +654,41 @@ export function ConsultationFullForm({
           <AlertCircle className="size-4" />
           {errorMsg}
         </p>
+      ) : null}
+
+      {/* QR 접수(대기·예약) 재저장 확인 — native dialog(showModal: 배경 inert·Esc·포커스 격리).
+          form 안이지만 전 버튼 type="button"이라 중첩 제출 없음(subjects-section AbsorbDialog 패턴). */}
+      {confirmConsultedOnSave && !isCreate ? (
+        <dialog
+          ref={consultedDialogRef}
+          onCancel={() => resolveConsultedPrompt(null)}
+          className="bg-card border-line backdrop:bg-ink/40 m-auto w-full max-w-sm rounded-lg border p-5 shadow-lg"
+        >
+          <h3 className="text-foreground text-sm font-bold">상담 완료로 변경할까요?</h3>
+          <p className="text-text-dim mt-2 text-xs leading-relaxed">
+            QR로 접수된 <span className="text-foreground font-semibold">대기 · 예약</span> 상담입니다. 저장하면서
+            상태를 <span className="text-foreground font-semibold">상담 완료</span>로 옮길 수 있습니다.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => resolveConsultedPrompt(null)}
+              className="text-text-dim hover:text-foreground rounded-md px-2.5 py-1.5 text-xs transition"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={() => resolveConsultedPrompt(false)}
+              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-md border px-2.5 py-1.5 text-xs transition"
+            >
+              상태 유지하고 저장
+            </button>
+            <Button type="button" size="sm" onClick={() => resolveConsultedPrompt(true)}>
+              상담 완료로 저장
+            </Button>
+          </div>
+        </dialog>
       ) : null}
 
       <FormActionBar>

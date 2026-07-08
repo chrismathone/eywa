@@ -381,6 +381,9 @@ export async function updateEnrollmentConsultation(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
 
+  // QR 접수(대기·예약) 재저장 확인 팝업의 "상담 완료로 저장" 선택 — 아래에서 서버 조건 재검증 후 전환.
+  const markConsulted = String(formData.get("markConsulted") ?? "") === "1";
+
   const parsed = createSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요" };
@@ -390,7 +393,7 @@ export async function updateEnrollmentConsultation(
   // 기존 learning_history를 읽어 prevAcademy/lastScore만 갱신(AI 파생 weakSubjects 등 보존).
   const { data: existing } = await supabase
     .from("enrollment_consultations")
-    .select("learning_history")
+    .select("learning_history, outcome, from_public_intake")
     .eq("id", id)
     .single();
   const lh: Record<string, unknown> = { ...((existing?.learning_history as Record<string, unknown>) ?? {}) };
@@ -399,11 +402,18 @@ export async function updateEnrollmentConsultation(
   if (parsed.data.lastScore) lh.lastScore = parsed.data.lastScore;
   else delete lh.lastScore;
 
+  // 상담 완료 전환은 QR 접수건 + 현재 대기·예약(pending/scheduled)일 때만(클라 조작·낡은 폼 방어).
+  const promoteToConsulted =
+    markConsulted &&
+    !!existing?.from_public_intake &&
+    ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
+
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
       ...buildConsultationRow(parsed.data),
       learning_history: Object.keys(lh).length > 0 ? lh : null,
+      ...(promoteToConsulted ? { outcome: "consulted" } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
