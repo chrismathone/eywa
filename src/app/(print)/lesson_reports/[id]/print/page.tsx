@@ -76,7 +76,9 @@ export default async function LessonReportPrintPage({
     .filter((a): a is { path: string; name: string; url: string } => !!a.url);
 
   return (
-    <div className="flex min-h-screen flex-col items-center px-4 py-6 print:py-0">
+    // ⚠️ (print) 레이아웃은 bg-white(공문서 기본)라 여기서 bg-bg-soft로 덮어 /r(share 레이아웃)·ClassNote
+    // 스샷과 같은 크림 배경 위에 카드가 앉게 한다(디자인 동일). 종이 인쇄는 print:bg-white(잉크 절약).
+    <div className="bg-bg-soft text-foreground flex min-h-screen flex-col items-center px-4 py-6 print:bg-white print:py-0">
       <div className="w-full max-w-md">
         <PrintActions embedded={embedded} />
         <ParentReportCard

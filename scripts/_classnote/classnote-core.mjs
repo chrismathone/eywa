@@ -94,7 +94,7 @@ export async function processQueueOnce(sql, browser, opts) {
       await page.goto(`${base}/r/${r.share_token}`, { waitUntil: "networkidle", timeout: 30000 });
       await page.evaluate(() => document.fonts?.ready).catch(() => {});
       await new Promise((x) => setTimeout(x, 700));
-      const card = page.locator(".max-w-md").first();
+      const card = page.locator(".report-capture").first(); // ParentReportCard 루트(공유 컴포넌트) — 폭 유틸과 분리된 안정 마커
       const buf = (await card.count())
         ? await card.screenshot({ type: "jpeg", quality: 90 })
         : await page.screenshot({ type: "jpeg", quality: 90, fullPage: true });

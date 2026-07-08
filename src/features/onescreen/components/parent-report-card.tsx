@@ -9,9 +9,9 @@ import type { ReportSettings } from "@/features/owner/settings-types";
 /** 라벨/값 한 줄 — 좌측 라벨 + 우측 값(모바일 친화). 값의 줄바꿈(진도 "1.…\n2.…") 보존. */
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-line flex items-start justify-between gap-3 border-b py-2.5 last:border-b-0">
-      <span className="text-text-faint shrink-0 text-[13px]">{label}</span>
-      <span className="text-foreground text-right text-[13px] font-semibold whitespace-pre-line">
+    <div className="border-line flex items-start justify-between gap-3 border-b py-3 last:border-b-0">
+      <span className="text-text-faint shrink-0 text-[15px]">{label}</span>
+      <span className="text-foreground text-right text-[15px] font-semibold whitespace-pre-line">
         {value.replace(/\r\n?/g, "\n")}
       </span>
     </div>
@@ -20,8 +20,8 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="bg-card border-line shadow-card rounded-md border px-4 py-3">
-      <h2 className="text-text-faint mb-2 text-[12px] font-semibold">{title}</h2>
+    <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+      <h2 className="text-text-faint mb-2.5 text-[13px] font-semibold">{title}</h2>
       {children}
     </section>
   );
@@ -87,14 +87,16 @@ export function ParentReportCard({
     (rpt.showAttitude && report.attitude);
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-3">
-      <header className="flex flex-col items-center gap-2 pt-2 pb-1 text-center">
+    // ⚠️ report-capture = ClassNote 워커 스크린샷 대상 클래스(classnote-core.mjs가 이 선택자로 캡처).
+    // max-w-lg로 넓혀 ClassNote·학부모·PDF에서 큼직하게 보이도록(사용자 요청). 폭 변경 시 워커 선택자 동기 필수.
+    <div className="report-capture flex w-full max-w-lg flex-col gap-4">
+      <header className="flex flex-col items-center gap-2.5 pt-2 pb-1 text-center">
         {rpt.showLogo && logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 외부 로고(최적화 불필요)
-          <img src={logoSrc} alt={academyName} className="h-10 w-auto object-contain" />
+          <img src={logoSrc} alt={academyName} className="h-14 w-auto object-contain" />
         ) : null}
-        {rpt.showAcademyName ? <p className="text-text-dim text-[13px]">{academyName}</p> : null}
-        <h1 className="text-foreground text-xl font-bold tracking-[0.1em]">{rpt.title || "수업 보고서"}</h1>
+        {rpt.showAcademyName ? <p className="text-text-dim text-[15px]">{academyName}</p> : null}
+        <h1 className="text-foreground text-2xl font-bold tracking-[0.1em]">{rpt.title || "수업 보고서"}</h1>
       </header>
 
       <Section title="학생 정보">
@@ -119,7 +121,7 @@ export function ParentReportCard({
 
       {rpt.showParentNote ? (
         <Section title="학부모 전달 내용">
-          <p className="text-foreground text-[14px] leading-relaxed whitespace-pre-wrap">
+          <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">
             {report.notes || "작성된 보고 내용이 없습니다."}
           </p>
         </Section>
@@ -131,14 +133,14 @@ export function ParentReportCard({
           <div className="grid grid-cols-2 gap-2">
             {attachments.map((a) => (
               // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
-              <img key={a.path} src={a.url} alt={a.name} className="max-h-64 w-full rounded-md object-contain" />
+              <img key={a.path} src={a.url} alt={a.name} className="max-h-72 w-full rounded-md object-contain" />
             ))}
           </div>
         </Section>
       ) : null}
 
       {rpt.showFooter ? (
-        <footer className="text-text-faint mt-2 pb-4 text-center text-[11px]">
+        <footer className="text-text-faint mt-2 pb-4 text-center text-[12px]">
           {rpt.footerNote || `${academyName} · ${reportDate}`}
         </footer>
       ) : null}
