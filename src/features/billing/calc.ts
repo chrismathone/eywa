@@ -29,11 +29,21 @@ export function currentPeriod(): string {
 /**
  * 청구서 배열 → 요약 KPI (순수, 네트워크 0).
  * 페이지가 월 전체를 한 번만 fetch한 뒤 이 함수로 요약을 도출해 이중 fetch를 없앤다.
- * paymentRate는 청구액 0이면 0(0-나눗셈 방어).
+ *
+ * ⚠️ 미수금·수납률은 **할인을 차감한 실청구(net = 청구−할인)** 기준이다. 학생이 할인받은 만큼
+ * 덜 내는 게 정상이므로 `outstanding = 청구−할인−수납`(음수는 0으로 바닥)이어야 한다. 예전엔
+ * `청구−수납`이라 할인액이 통째로 미수금으로 잡혀(수납률도 100% 미달) 완납 학생이 미수로 보였다.
+ * refunded/void는 미수 집계에서 제외. paymentRate는 net 0이면 0(0-나눗셈 방어), 100% 상한.
  */
 export function summarizeInvoices(rows: InvoiceSummaryInput[], period?: string): BillingSummary {
   const totalBilled = rows.reduce((s, r) => s + r.amountTotal, 0);
   const totalCollected = rows.reduce((s, r) => s + r.amountPaid, 0);
+  const totalDiscount = rows.reduce((s, r) => s + r.amountDiscount, 0);
+  const netBilled = totalBilled - totalDiscount;
+  const outstanding = rows.reduce((s, r) => {
+    if (r.status === "refunded" || r.status === "void") return s;
+    return s + Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid);
+  }, 0);
   return {
     period: period ?? currentPeriod(),
     totalCount: rows.length,
@@ -42,8 +52,8 @@ export function summarizeInvoices(rows: InvoiceSummaryInput[], period?: string):
     unpaidCount: rows.filter((r) => r.status === "unpaid").length,
     totalBilled,
     totalCollected,
-    totalDiscount: rows.reduce((s, r) => s + r.amountDiscount, 0),
-    outstanding: totalBilled - totalCollected,
-    paymentRate: totalBilled > 0 ? (totalCollected / totalBilled) * 100 : 0,
+    totalDiscount,
+    outstanding,
+    paymentRate: netBilled > 0 ? Math.min((totalCollected / netBilled) * 100, 100) : 0,
   };
 }

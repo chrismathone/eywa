@@ -77,17 +77,24 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       r.dueDate !== null &&
       r.dueDate < today,
   );
-  const overdueAmount = overdue.reduce((s, r) => s + (r.amountTotal - r.amountPaid), 0);
+  // 미수금은 실청구(청구−할인) 기준 — 할인액을 미납으로 잡지 않는다(음수는 0).
+  const overdueAmount = overdue.reduce(
+    (s, r) => s + Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid),
+    0,
+  );
 
   const prevPeriod = shiftPeriod(period, -1);
   const nextPeriod = shiftPeriod(period, 1);
 
-  const billedBase = summary.totalBilled || 1;
-  const paidPct = (summary.totalCollected / billedBase) * 100;
+  // 진행률 바도 실청구(청구−할인) 기준 — 완납 학생이 할인폭만큼 미수 밴드로 새지 않게.
+  const netBase = summary.totalBilled - summary.totalDiscount || 1;
+  const paidPct = Math.min((summary.totalCollected / netBase) * 100, 100);
   const partialPct = Math.max(
     0,
-    (monthRows.filter((r) => r.status === "partial").reduce((s, r) => s + (r.amountTotal - r.amountPaid), 0) /
-      billedBase) *
+    (monthRows
+      .filter((r) => r.status === "partial")
+      .reduce((s, r) => s + Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid), 0) /
+      netBase) *
       100,
   );
   const unpaidPct = Math.max(0, 100 - paidPct - partialPct);

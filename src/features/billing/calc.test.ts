@@ -45,6 +45,37 @@ describe("summarizeInvoices", () => {
     expect(s.totalDiscount).toBe(20);
   });
 
+  it("할인 후 완납 → 미수금 0 · 수납률 100% (할인을 미수로 잡지 않음)", () => {
+    // 청구 667,500 · 할인 10,000 · 수납 657,500 (= 청구−할인) = 완납
+    const s = summarizeInvoices(
+      [row({ amountTotal: 667500, amountPaid: 657500, amountDiscount: 10000, status: "paid" })],
+      "2026-07",
+    );
+    expect(s.outstanding).toBe(0);
+    expect(s.paymentRate).toBe(100);
+  });
+
+  it("할인 있는 진짜 부분납부 → 미수금 = 청구−할인−수납", () => {
+    // 청구 100 · 할인 20 · 수납 50 → 실청구 80, 미수 30
+    const s = summarizeInvoices(
+      [row({ amountTotal: 100, amountPaid: 50, amountDiscount: 20, status: "partial" })],
+      "2026-06",
+    );
+    expect(s.outstanding).toBe(30);
+    expect(s.paymentRate).toBeCloseTo(62.5, 3); // 50 / (100−20)
+  });
+
+  it("refunded/void는 미수 집계에서 제외", () => {
+    const s = summarizeInvoices(
+      [
+        row({ amountTotal: 100, amountPaid: 0, status: "refunded" }),
+        row({ amountTotal: 100, amountPaid: 0, status: "void" }),
+      ],
+      "2026-06",
+    );
+    expect(s.outstanding).toBe(0);
+  });
+
   it("전액 수납 → 100%", () => {
     const s = summarizeInvoices(
       [row({ amountTotal: 50, amountPaid: 50, status: "paid" })],

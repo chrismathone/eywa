@@ -735,6 +735,7 @@ export async function getStudentAttendanceStats(
 
 // ────────────────────── 7탭 데이터 ──────────────────────
 
+export type StudentBillingLineItem = { description: string; amount: number };
 export type StudentBillingRow = {
   id: string;
   period: string;
@@ -746,6 +747,9 @@ export type StudentBillingRow = {
   dueDate: string | null;
   paidAt: string | null;
   notes: string | null;
+  // makeedu는 (학생×월×항목) 라인 단위지만 eywa는 (학생×월) 1행으로 집계 → 항목 내역은 line_items에 보존.
+  // 화면에서 "수업료" 대신 실제 항목명(강의명 등)을 펼쳐 보여주기 위해 함께 반환.
+  lineItems: StudentBillingLineItem[];
 };
 
 export async function getStudentInvoices(studentId: string): Promise<StudentBillingRow[]> {
@@ -753,7 +757,7 @@ export async function getStudentInvoices(studentId: string): Promise<StudentBill
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes",
+      "id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items",
     )
     .eq("student_id", studentId)
     .order("period", { ascending: false });
@@ -769,6 +773,12 @@ export async function getStudentInvoices(studentId: string): Promise<StudentBill
     dueDate: r.due_date,
     paidAt: r.paid_at,
     notes: r.notes,
+    lineItems: Array.isArray(r.line_items)
+      ? (r.line_items as { description?: string; name?: string; amount?: number }[]).map((li) => ({
+          description: String(li.description ?? li.name ?? "").trim(),
+          amount: Number(li.amount ?? 0),
+        }))
+      : [],
   }));
 }
 

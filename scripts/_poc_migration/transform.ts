@@ -47,9 +47,11 @@ export function mapConsultationOutcome(s?: string): string {
   return "consulted";
 }
 // ijw billing(status+금액) → eywa invoice_status
-export function mapInvoiceStatus(total: number, paid: number): string {
+// ⚠️ 완납 판정은 할인 차감 후(paid >= 청구−할인). 할인을 안 빼면 할인받고 완납한 학생이 전부
+//    partial로 잡힌다(2026-07 실측: 848건 오판, 가짜 미수 12.2M = 할인 합계). import-invoices.cjs와 동일 규칙.
+export function mapInvoiceStatus(total: number, paid: number, discount = 0): string {
   if (paid <= 0) return "unpaid";
-  if (paid >= total) return "paid";
+  if (paid >= total - discount) return "paid";
   return "partial";
 }
 
