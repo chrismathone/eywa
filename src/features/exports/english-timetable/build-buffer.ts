@@ -27,7 +27,11 @@ export async function buildEnglishTimetableBuffer(opts?: {
   const capacityByClassId: Record<string, number | null> = {};
 
   const config = settingsToPeriodsConfig(settings.operations);
-  const weekMonday = thisMonday(kstToday());
+  const today = kstToday();
+  const weekMonday = thisMonday(today);
+  const month = Number(today.slice(5, 7));
+  const academyLabel =
+    [settings.profile?.name, settings.profile?.branchLabel].filter(Boolean).join(" ") || "인재원 본원";
 
   // 강사뷰 파라미터 = 과목 설정(operations.subjects[english]) — page.tsx 도출과 동일(resolve가 english 프리필).
   const subjectRow = settings.operations.subjects.find((s) => s.key === "english");
@@ -50,7 +54,8 @@ export async function buildEnglishTimetableBuffer(opts?: {
   appendInjaewonIntegratedSheet(wb, slots, {
     config,
     capacityByClassId,
-    title: "인재원 본원 통합 영어시간표",
+    teacherColors,
+    title: `${academyLabel} ${month}월 통합 영어시간표`,
   });
   appendTeacherGridSheet(wb, slots, {
     teacherColors,
