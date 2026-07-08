@@ -9,6 +9,8 @@ import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
   generateReportComment,
+  reissueShareLink,
+  revokeShareLink,
   saveAndQueueClassnote,
   saveLessonReport,
   saveOnescreenSession,
@@ -36,6 +38,8 @@ function initReports(students: OneScreenStudent[]): ReportsState {
         sent: su.reportSent ?? false,
         shareToken: su.shareToken,
         classnoteStatus: su.classnoteStatus,
+        revoked: !!su.revokedAt,
+        viewCount: su.viewCount,
       };
   }
   return out;
@@ -320,6 +324,10 @@ export function OneScreenClient({
       shareToken: res.shareToken ?? r.shareToken,
       classnoteStatus: res.status,
     }));
+    if (res.status === "revoked") {
+      toast.error(`${subjectName} — 취소된 링크입니다. 재발급 후 발송하세요`);
+      return;
+    }
     const msg =
       res.status === "queued"
         ? "발송 대기 — 워커가 자동으로 게시합니다"
@@ -331,6 +339,43 @@ export function OneScreenClient({
               ? "오래된 보고서라 발송에서 제외됩니다"
               : "대기 중";
     toast.success(`${subjectName} ClassNote — ${msg}`);
+  }
+
+  // 공유링크 취소(revoke) — 학부모 열람 즉시 차단. 대상은 그 과목의 현재 shareToken.
+  async function revokeShare(subjectName: string) {
+    if (!selected) return;
+    const token = reports[selected.id]?.[subjectName]?.shareToken;
+    if (!token) return;
+    const student = selected;
+    const res = await revokeShareLink(token);
+    if (!res.ok) {
+      toast.error(res.error ?? "링크 취소에 실패했습니다");
+      return;
+    }
+    patchReport(student.id, subjectName, (r) => ({ ...r, revoked: true }));
+    toast.success(`${subjectName} 공유 링크를 취소했습니다 — 학부모 열람이 차단됩니다`);
+  }
+
+  // 공유링크 재발급(reissue) — 새 토큰. 옛 링크(카톡/문자/ClassNote 게시)는 즉시 무효화되므로 확인 후 실행.
+  async function reissueShare(subjectName: string) {
+    if (!selected) return;
+    const token = reports[selected.id]?.[subjectName]?.shareToken;
+    if (!token) return;
+    if (!window.confirm("이미 전달·게시된 옛 링크는 즉시 열리지 않게 됩니다. 새 링크를 발급할까요?")) return;
+    const student = selected;
+    const res = await reissueShareLink(token);
+    if (!res.ok || !res.shareToken) {
+      toast.error(res.error ?? "링크 재발급에 실패했습니다");
+      return;
+    }
+    // 새 토큰 반영 + 취소·ClassNote 상태 초기화(재발급=미발송으로 되돌림).
+    patchReport(student.id, subjectName, (r) => ({
+      ...r,
+      shareToken: res.shareToken,
+      revoked: false,
+      classnoteStatus: undefined,
+    }));
+    toast.success(`${subjectName} 공유 링크를 재발급했습니다 — 새 링크를 다시 전달하세요`);
   }
 
   return (
@@ -390,6 +435,8 @@ export function OneScreenClient({
                 generatingSubject={genSubject}
                 onSend={sendSubject}
                 onQueueClassnote={queueClassnote}
+                onRevoke={revokeShare}
+                onReissue={reissueShare}
               />
             </div>
           </>

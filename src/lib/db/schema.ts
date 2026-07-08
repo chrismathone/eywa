@@ -657,12 +657,37 @@ export const lessonReports = pgTable(
     classnoteProcessingAt: timestamp("classnote_processing_at", { withTimezone: true }),
     classnoteSentAt: timestamp("classnote_sent_at", { withTimezone: true }),
     classnoteRetryCount: integer("classnote_retry_count").notNull().default(0),
+    // 공유 링크 폐기(취소) — 0085a. 만료(보고서일+90일)는 파생이라 컬럼 없음(share-expiry.ts).
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("lesson_reports_student_idx").on(t.studentId, t.reportDate),
     index("lesson_reports_tenant_idx").on(t.tenantId),
     uniqueIndex("lesson_reports_share_token_key").on(t.shareToken),
+  ],
+);
+
+// === share_link_views (학부모 공개 보고서 /r/[token] 조회 로그 — 0086a) ===
+// 부모 열람 1회 = 1행(공개 페이지가 service_role로 insert). "N회 열람" 배지·이력. ip_hash는 원본 IP 미저장.
+export const shareLinkViews = pgTable(
+  "share_link_views",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    lessonReportId: uuid("lesson_report_id")
+      .notNull()
+      .references(() => lessonReports.id, { onDelete: "cascade" }),
+    ipHash: text("ip_hash"),
+    userAgent: text("user_agent"),
+    viewedAt: timestamp("viewed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("share_link_views_report_idx").on(t.lessonReportId, t.viewedAt),
+    index("share_link_views_tenant_idx").on(t.tenantId, t.viewedAt),
   ],
 );
 

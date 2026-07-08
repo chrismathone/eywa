@@ -152,6 +152,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   const todayIso = kstToday();
   const [reportRows, attRows, sessionRows] = await Promise.all([
     fetchInChunks<{
+      id: string;
       student_id: string;
       report_date: string;
       progress: string | null;
@@ -159,12 +160,13 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       subject: string | null;
       share_token: string | null;
       classnote_status: string | null;
+      revoked_at: string | null;
     }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select("student_id, report_date, progress, exam_info, subject, share_token, classnote_status")
+          .select("id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at")
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
     ),
@@ -192,21 +194,40 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
 
   // student별: 오늘 저장된 보고서 존재(reportSent) + 오늘 이전 최신 보고서(prev 진도/prevScore).
-  // 오늘 보고서는 **과목별**로도 적재(sentToday는 학생단위 폴백, todayBySubject는 과목별 발송상태).
+  // 오늘 보고서는 **과목별**로도 적재(sentToday는 학생단위 폴백, todayBySubject는 과목별 발송상태·공유링크 수명).
   const sentToday = new Set<string>();
-  const todayBySubject = new Map<string, { shareToken: string | null; classnoteStatus: string | null }>();
+  const todayBySubject = new Map<
+    string,
+    { reportId: string; shareToken: string | null; classnoteStatus: string | null; revokedAt: string | null }
+  >();
   const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
   const priorReport = new Map<string, { progress: string | null; examInfo: string | null }>();
+  const todayReportIds: string[] = [];
   for (const r of reportRows) {
     if (r.report_date === todayIso) {
       sentToday.add(r.student_id);
       // report_date desc 정렬이라 (학생,과목) 첫 건이 오늘 최신 → 뒤 건은 덮지 않음.
       const k = subjKey(r.student_id, r.subject);
-      if (!todayBySubject.has(k))
-        todayBySubject.set(k, { shareToken: r.share_token, classnoteStatus: r.classnote_status });
+      if (!todayBySubject.has(k)) {
+        todayBySubject.set(k, {
+          reportId: r.id,
+          shareToken: r.share_token,
+          classnoteStatus: r.classnote_status,
+          revokedAt: r.revoked_at,
+        });
+        todayReportIds.push(r.id);
+      }
     } else if (!priorReport.has(r.student_id))
       priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
   }
+
+  // 오늘 보고서들의 학부모 열람 수(share_link_views) — PostgREST group-by 대신 행을 청크로 가져와 JS 집계(fetchInChunks).
+  const viewCountByReport = new Map<string, number>();
+  const viewRows = await fetchInChunks<{ lesson_report_id: string }>(todayReportIds, (chunk) =>
+    supabase.from("share_link_views").select("lesson_report_id").in("lesson_report_id", chunk),
+  );
+  for (const v of viewRows)
+    viewCountByReport.set(v.lesson_report_id, (viewCountByReport.get(v.lesson_report_id) ?? 0) + 1);
   // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신).
   const attById = new Map<string, string>();
   for (const a of attRows) if (!attById.has(a.student_id)) attById.set(a.student_id, a.status);
@@ -222,6 +243,8 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         su.reportSent = true;
         su.shareToken = t.shareToken ?? undefined;
         su.classnoteStatus = t.classnoteStatus ?? undefined;
+        su.revokedAt = t.revokedAt ?? undefined;
+        su.viewCount = viewCountByReport.get(t.reportId) ?? 0;
       }
     }
     os.attendance = toMark(attById.get(os.id));

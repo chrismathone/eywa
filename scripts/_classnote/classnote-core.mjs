@@ -11,6 +11,8 @@ export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://loc
 export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || "https://eywa-alpha.vercel.app"; // 게시글 상단 공유 링크(/r) 공개 도메인
 export const BATCH = 2;
 export const STALE_MIN = 10;
+// /r이 이 secret 헤더를 보면 조회로그(share_link_views)를 안 남김 — 워커 스크린샷을 "학부모 열람"으로 오집계 방지(P2a).
+const INTERNAL_SECRET = process.env.CLASSNOTE_INTERNAL_SECRET;
 
 /** too_old 최소날짜 = 오늘(로컬) 기준 전 달 1일. 워커도 belt-and-suspenders 가드. */
 export function minDate() {
@@ -67,6 +69,7 @@ export async function processQueueOnce(sql, browser, opts) {
     with cte as (
       select id from lesson_reports
       where tenant_id = ${tenant} and classnote_status='queued' and report_date >= ${md}
+        and revoked_at is null
       order by classnote_queued_at nulls first limit ${BATCH}
       for update skip locked
     )
@@ -81,8 +84,12 @@ export async function processQueueOnce(sql, browser, opts) {
     const [stu] = await sql`select name from students where id=${r.student_id} and tenant_id=${tenant}`;
     const studentName = stu?.name ?? "";
     try {
-      // 스크린샷
-      const ctx = await browser.newContext({ viewport: { width: 800, height: 1200 }, deviceScaleFactor: 2 });
+      // 스크린샷 (INTERNAL_SECRET 헤더 → /r이 조회로그 skip)
+      const ctx = await browser.newContext({
+        viewport: { width: 800, height: 1200 },
+        deviceScaleFactor: 2,
+        ...(INTERNAL_SECRET ? { extraHTTPHeaders: { "x-eywa-internal": INTERNAL_SECRET } } : {}),
+      });
       const page = await ctx.newPage();
       await page.goto(`${base}/r/${r.share_token}`, { waitUntil: "networkidle", timeout: 30000 });
       await page.evaluate(() => document.fonts?.ready).catch(() => {});
@@ -109,6 +116,14 @@ export async function processQueueOnce(sql, browser, opts) {
         // dry-run: 게시 안 하고 다시 queued로 반환(재처리 가능하게)
         await sql`update lesson_reports set classnote_status='queued' where id=${r.id}`;
         summary.requeued++;
+        continue;
+      }
+      // 게시 직전 취소(revoke) 재확인 — claim~여기 사이에 강사가 취소했을 수 있음(死링크 게시 방지).
+      const [fresh] = await sql`select revoked_at from lesson_reports where id=${r.id}`;
+      if (fresh?.revoked_at) {
+        await sql`update lesson_reports set classnote_status='queued' where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: 취소됨 → 게시 skip`);
         continue;
       }
       // 실게시

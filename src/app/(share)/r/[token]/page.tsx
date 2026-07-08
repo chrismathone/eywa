@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
+import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { ClosedReportScreen } from "./_closed";
 
 // 학생 PII 문서 — 검색엔진 색인 차단(링크 유출 시에도 인덱싱 방지).
 export const metadata = { title: "수업 보고서", robots: { index: false, follow: false } };
@@ -54,11 +59,35 @@ export default async function PublicLessonReportPage({
   const { data: report } = await admin
     .from("lesson_reports")
     .select(
-      "tenant_id, student_id, report_date, progress, exam_info, homework_score, teacher_name, notes, daily_test, check_test, attitude",
+      "id, tenant_id, student_id, report_date, revoked_at, progress, exam_info, homework_score, teacher_name, notes, daily_test, check_test, attitude",
     )
     .eq("share_token", token)
     .maybeSingle();
   if (!report) notFound();
+  // 취소(강사가 열람 차단) → 취소화면. 만료(보고서일+90일 경과) → 만료화면. 둘 다 생 404 대신 친화 안내.
+  if (report.revoked_at) return <ClosedReportScreen reason="revoked" />;
+  if (isShareExpired(report.report_date as string)) return <ClosedReportScreen reason="expired" />;
+
+  // 조회 로그(0086a, best-effort) — 부모 열람 1회 = 1행. 워커 스크린샷(x-eywa-internal secret 일치)은 제외해 과집계 방지.
+  const hdrs = await headers();
+  const internalSecret = process.env.CLASSNOTE_INTERNAL_SECRET;
+  const isInternal = !!internalSecret && hdrs.get("x-eywa-internal") === internalSecret;
+  if (!isInternal) {
+    const ipRaw = parseForwardedFor(hdrs.get("x-forwarded-for"), hdrs.get("x-real-ip"));
+    const ipHash = createHash("sha256")
+      .update(`${ipRaw ?? "unknown"}:${report.tenant_id as string}`)
+      .digest("hex");
+    try {
+      await admin.from("share_link_views").insert({
+        tenant_id: report.tenant_id,
+        lesson_report_id: report.id,
+        ip_hash: ipHash,
+        user_agent: hdrs.get("user-agent"),
+      });
+    } catch {
+      /* 조회 로그 실패가 학부모 열람을 막으면 안 됨 */
+    }
+  }
 
   const [{ data: student }, settings] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),

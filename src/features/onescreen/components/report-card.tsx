@@ -9,7 +9,15 @@ import type { OneScreenStudent, Subject, TestScore } from "../types";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
 // classnoteStatus: ClassNote 발송 큐 상태(queued/processing/success/failed/too_old) — 발송 후에만.
-export type SubjectReport = { draft: string; sent: boolean; shareToken?: string; classnoteStatus?: string };
+// revoked: 공유링크 취소됨(P2a) — 링크 열람 차단, 재발급 필요. viewCount: 학부모 열람 수.
+export type SubjectReport = {
+  draft: string;
+  sent: boolean;
+  shareToken?: string;
+  classnoteStatus?: string;
+  revoked?: boolean;
+  viewCount?: number;
+};
 
 /** classnote_status → 표시 라벨 + 색. */
 function classnoteBadge(status?: string): { label: string; cls: string } | null {
@@ -24,6 +32,8 @@ function classnoteBadge(status?: string): { label: string; cls: string } | null 
       return { label: "ClassNote 발송 실패", cls: "text-danger" };
     case "too_old":
       return { label: "ClassNote 발송 제외(오래됨)", cls: "text-text-dim" };
+    case "revoked":
+      return { label: "링크 취소됨 — 재발급 필요", cls: "text-danger" };
     default:
       return null;
   }
@@ -85,6 +95,8 @@ export function ReportCard({
   generatingSubject,
   onSend,
   onQueueClassnote,
+  onRevoke,
+  onReissue,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -97,6 +109,8 @@ export function ReportCard({
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
   onSend: (subjectName: string, channel: string) => void;
   onQueueClassnote: (subjectName: string) => void; // ClassNote 발송 큐 적재
+  onRevoke: (subjectName: string) => void; // 공유링크 취소(열람 차단)
+  onReissue: (subjectName: string) => void; // 공유링크 재발급(새 토큰)
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, student.subjects.length - 1);
@@ -254,22 +268,50 @@ export function ReportCard({
         </div>
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
+        {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}
         {rep.sent && shareUrl ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
-            <p className="text-text-faint mb-1 text-[11px] font-semibold">학부모 공유 링크</p>
-            <div className="flex items-center gap-2">
-              <code className="text-text-dim min-w-0 flex-1 truncate text-[11px]">{shareUrl}</code>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(shareUrl);
-                  toast.success("학부모 공유 링크를 복사했습니다");
-                }}
-              >
-                복사
-              </Button>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-text-faint text-[11px] font-semibold">학부모 공유 링크</p>
+              <div className="flex items-center gap-2 text-[10px]">
+                {typeof rep.viewCount === "number" && rep.viewCount > 0 ? (
+                  <span className="text-text-dim">{rep.viewCount}회 열람</span>
+                ) : null}
+                {rep.revoked ? <span className="text-danger font-semibold">취소됨</span> : null}
+              </div>
             </div>
+            {rep.revoked ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-text-dim text-[11px]">이 링크는 열람이 차단됐습니다.</p>
+                <Button variant="outline" size="sm" onClick={() => onReissue(subjectName)}>
+                  재발급
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <code className="text-text-dim min-w-0 flex-1 truncate text-[11px]">{shareUrl}</code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(shareUrl);
+                      toast.success("학부모 공유 링크를 복사했습니다");
+                    }}
+                  >
+                    복사
+                  </Button>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <Button variant="ghost" size="sm" onClick={() => onReissue(subjectName)}>
+                    재발급
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => onRevoke(subjectName)}>
+                    취소
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         ) : null}
       </div>

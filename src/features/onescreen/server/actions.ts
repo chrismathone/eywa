@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
@@ -103,12 +104,16 @@ export async function saveAndQueueClassnote(
   // 저장 전 상태 pre-read(오늘 (student,subject) 행). RLS로 테넌트 격리.
   const base = supabase
     .from("lesson_reports")
-    .select("id, classnote_status")
+    .select("id, classnote_status, revoked_at")
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
   const { data: prior } = await (
     input.subject ? base.eq("subject", input.subject) : base.is("subject", null)
   ).maybeSingle();
+  // 취소된 링크는 재큐잉 안 함 — 옛 링크가 死링크라 재발송하려면 먼저 재발급(새 토큰·취소 해제)해야 함.
+  if (prior?.revoked_at) {
+    return { ok: true, id: prior.id, status: "revoked" };
+  }
   // 워커 게시 중이면 내용 덮어쓰지 않고 그대로 반환(in-flight 보호).
   if (prior?.classnote_status === "processing") {
     return { ok: true, id: prior.id, status: "processing" };
@@ -131,6 +136,89 @@ export async function saveAndQueueClassnote(
     .eq("id", saved.id);
   if (error) return { ok: false, error: error.message };
   return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
+}
+
+/** 강사 스코프 — 이 학생이 로그인 강사의 담당 반 활성 수강생인지(saveLessonReport 36-51과 동일 이중방어). */
+async function teacherOwnsStudent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  teacherId: string,
+  studentId: string,
+): Promise<boolean> {
+  const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", teacherId);
+  const myClassIds = (myClasses ?? []).map((c) => c.id);
+  if (myClassIds.length === 0) return false;
+  const { data: enr } = await supabase
+    .from("enrollments")
+    .select("id")
+    .eq("student_id", studentId)
+    .is("end_date", null)
+    .in("class_id", myClassIds)
+    .limit(1);
+  return !!enr && enr.length > 0;
+}
+
+/**
+ * 공유 링크 취소(revoke) — 강사가 학부모 공개 링크(/r/[token]) 열람을 즉시 차단(오발송 회수).
+ * 링크·토큰은 유지하되 revoked_at을 세워 /r이 취소화면을 렌더. 대상은 share_token으로 식별(전역 유니크).
+ */
+export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!shareToken) return { ok: false, error: "링크 정보가 없습니다" };
+  const supabase = await createClient();
+  const { data: report } = await supabase
+    .from("lesson_reports")
+    .select("id, student_id")
+    .eq("share_token", shareToken)
+    .maybeSingle();
+  if (!report) return { ok: false, error: "보고서를 찾을 수 없습니다" };
+  if (!(await teacherOwnsStudent(supabase, user.id, report.student_id)))
+    return { ok: false, error: "담당 학생이 아닙니다" };
+  const { error } = await supabase
+    .from("lesson_reports")
+    .update({ revoked_at: new Date().toISOString(), revoked_by: user.id })
+    .eq("id", report.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * 공유 링크 재발급(reissue) — 새 토큰 발급 → 옛 토큰은 전역 유니크라 /r에서 자동 404(유출 대응·완전 교체).
+ * 취소(revoked_*) 해제로 재활성화하고 ClassNote 상태도 리셋 — 이미 게시된 옛 링크는 死링크라 미발송 상태로
+ * 되돌려 재발송을 유도(안 그러면 success로 남아 死링크가 ClassNote 게시글에 방치됨).
+ */
+export async function reissueShareLink(
+  shareToken: string,
+): Promise<{ ok: boolean; shareToken?: string; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!shareToken) return { ok: false, error: "링크 정보가 없습니다" };
+  const supabase = await createClient();
+  const { data: report } = await supabase
+    .from("lesson_reports")
+    .select("id, student_id")
+    .eq("share_token", shareToken)
+    .maybeSingle();
+  if (!report) return { ok: false, error: "보고서를 찾을 수 없습니다" };
+  if (!(await teacherOwnsStudent(supabase, user.id, report.student_id)))
+    return { ok: false, error: "담당 학생이 아닙니다" };
+  const newToken = randomUUID(); // ⚠️ supabase-js update엔 SQL gen_random_uuid()를 못 씀 → Node에서 생성
+  const { error } = await supabase
+    .from("lesson_reports")
+    .update({
+      share_token: newToken,
+      revoked_at: null,
+      revoked_by: null,
+      classnote_status: null,
+      classnote_error: null,
+      classnote_queued_at: null,
+      classnote_processing_at: null,
+      classnote_sent_at: null,
+      classnote_retry_count: 0,
+    })
+    .eq("id", report.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, shareToken: newToken };
 }
 
 export type SaveOnescreenSessionInput = {

@@ -21,6 +21,8 @@ export type Subject = {
   reportSent?: boolean; // 오늘 이 과목 보고서가 저장됨
   shareToken?: string; // 오늘 이 과목 보고서의 /r 공유 토큰
   classnoteStatus?: string; // ClassNote 발송 상태(queued/processing/success/failed/too_old, null=미요청)
+  revokedAt?: string; // 공유링크 취소 시각(P2a) — 있으면 링크 열람 차단됨
+  viewCount?: number; // 학부모 열람 수(share_link_views count, P2a)
 };
 
 /** 한 테스트(일일/확인)의 점수 + 만점 + 직전 회차 점수 */
