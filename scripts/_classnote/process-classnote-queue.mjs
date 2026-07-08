@@ -21,10 +21,14 @@ function minDate() {
   const m = d.getMonth() === 0 ? 12 : d.getMonth(); // getMonth()=0-based → 전 달 = 그대로(1-based로 -1)
   return `${y}-${String(m).padStart(2, "0")}-01`;
 }
-/** teacher_name → ClassNote 보드 닉네임. ⚠️ 실 보드명 확인 후 확정(열린 항목) — 임시로 성 뺀 나머지. */
-function boardName(teacherName) {
-  const n = (teacherName || "").trim();
-  return n.length >= 2 ? n.slice(1) : n; // 김은정 → 은정 (임시)
+/** subject(subjectKey) → ClassNote 과목 라벨. injaewon ClassNote는 학생모드 보드 `(과목)학생명` 사용(실게시 검증됨). */
+function subjectLabel(subject) {
+  if (subject === "english") return "영어";
+  return "수학"; // math·subject_1(고등수학) → 수학. ⚠️ 영어/기타 보드 관례는 실게시로 추가 확인 필요.
+}
+/** ClassNote 보드 target(className) = 학생모드 `(과목)학생명`. 함수가 이 prefix로 학생모드 판정. */
+function boardClassName(subject, studentName) {
+  return `(${subjectLabel(subject)})${studentName}`;
 }
 
 async function main() {
@@ -74,16 +78,16 @@ async function main() {
           : await page.screenshot({ type: "jpeg", quality: 90, fullPage: true });
         await ctx.close();
         const imageBase64 = `data:image/jpeg;base64,${buf.toString("base64")}`;
-        const teacher = boardName(r.teacher_name);
+        const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
         const payload = {
           loginId: process.env.CLASSNOTE_UPLOAD_ID,
           loginPw: process.env.CLASSNOTE_UPLOAD_PW,
           reports: [{
-            reportId: r.id, studentName, className: teacher, teacherName: teacher,
-            reportDate: `${r.report_date}T12:00:00`, imageBase64, isExactMatchNeeded: false, shareUrl: "",
+            reportId: r.id, studentName, className, teacherName: className,
+            reportDate: `${r.report_date}T12:00:00`, imageBase64, isExactMatchNeeded: true, shareUrl: "",
           }],
         };
-        console.log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${teacher}" img=${buf.length}B`);
+        console.log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${className}" img=${buf.length}B`);
 
         if (!POST) {
           // dry-run: 게시 안 하고 다시 queued로 반환(재처리 가능하게)
