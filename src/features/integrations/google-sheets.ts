@@ -101,6 +101,9 @@ function translateSheetsError(e: unknown): string {
  *    eywa는 그 기존 시트를 **갱신(update)만** 한다.
  * ⚠️ 이는 **시트 전체 덮어쓰기**다 — 대상 시트의 기존 탭은 보존되지 않는다(과목당 전용 시트 1개 가정 —
  *    수학·영어는 서로 다른 시트여야 한다). 넘긴 xlsx의 탭 구성이 그대로 시트에 반영된다.
+ * ⚠️⚠️ **`requestBody.mimeType`를 구글시트 타입으로 반드시 지정**해야 Drive가 xlsx를 **변환**해 탭·셀을
+ *    채운다. 이 힌트가 없으면 files.update가 네이티브 구글시트를 **빈 시트(기본 1탭)로 날려버린다**(2026-07-08
+ *    실측: 200 OK로 조용히 성공하지만 내용 0). media만으론 변환이 안 걸림 — 반드시 requestBody와 함께.
  */
 export async function overwriteTimetableSheet(
   spreadsheetId: string,
@@ -115,6 +118,8 @@ export async function overwriteTimetableSheet(
     await withSheetsRetry(() =>
       drive.files.update({
         fileId: spreadsheetId,
+        // 변환 강제 — 없으면 시트가 빈 채로 덮어써진다(위 ⚠️⚠️).
+        requestBody: { mimeType: "application/vnd.google-apps.spreadsheet" },
         media: {
           mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           body: Readable.from(Buffer.from(buffer)),
