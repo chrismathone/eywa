@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 export const metadata = { title: "수업 보고서 — eywa" };
 
@@ -78,7 +79,7 @@ export default async function LessonReportPrintPage({
         day: "numeric",
       })
     : "-";
-  const schoolGrade = [student?.school, student?.grade].filter(Boolean).join(" ") || "-";
+  const schoolGrade = schoolGradeLabel(student?.school, student?.grade) || "-";
 
   return (
     <div className="print-portrait mx-auto max-w-[210mm] bg-white px-12 py-10 text-black print:p-0">

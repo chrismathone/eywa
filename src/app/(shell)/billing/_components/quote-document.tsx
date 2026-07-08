@@ -1,6 +1,7 @@
 // 수강료 안내문 — ijw `TuitionInvoicePreview` 문서부 이식. 계산기 우측 라이브 미리보기 + 인쇄.
 // 순수 표시 컴포넌트(훅 없음 → 클라이언트 트리에서 사용 가능). 계산은 quote-calc 순수함수.
 import { splitCoursesByMonth, quoteTotal } from "@/features/billing/quote-calc";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
 import { RefundPolicy } from "./refund-policy";
 
@@ -68,7 +69,7 @@ export function QuoteDocument({
             <th className={`${HEAD} w-[16%]`}>학생 이름</th>
             <td className={`${CELL} w-[18%]`}>{student.name || "-"}</td>
             <th className={`${HEAD} w-[16%]`}>학교/학년</th>
-            <td className={`${CELL} w-[18%]`}>{[student.school, student.grade].filter(Boolean).join(" ") || "-"}</td>
+            <td className={`${CELL} w-[18%]`}>{schoolGradeLabel(student.school, student.grade) || "-"}</td>
             <th className={`${HEAD} w-[16%]`}>작성일</th>
             <td className={`${CELL} w-[16%]`}>{createdLabel}</td>
           </tr>

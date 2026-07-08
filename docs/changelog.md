@@ -9,6 +9,19 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 역동기화 카드 "상담 상태" 컬럼 + 학교·학년 표기 전역 통일("경명여중1") (2026-07-08) — ✅ 실브라우저 검증(dev 3100 로그인→/enrollment 표 3행 정확 렌더, 검증 세션 원복) + tsc0/lint0/test744
+사용자 요청: ① 역동기화 표에 등록상담 진행 상태 표시 ② "경명여중 중1"→"경명여중1" 표기 통일("지침 사라졌나 체크").
+- **① 상담 상태 컬럼**([makeedu-push-card](../src/features/integrations/components/makeedu-push-card.tsx)): `getUnpushedIntakeConsultations`가 `outcome` 반환 → 칸반과 동일 Pill(대기/예약/상담완료/AI 완료…)로 "경로"와 "접수일" 사이 표시. 기존 "상태" 헤더는 **"전송 상태"**로 명확화. 단일 소스 유지 위해 [outcome-meta](../src/features/enrollment/outcome-meta.ts)를 `features/enrollment`로 승격(app 쪽 원위치는 re-export shim — features→app 역참조 회피).
+- **② 표기 지침 확인 결과**: `formatSchoolGrade(numberLast)`가 ijw 이식본으로 존재(시간표 셀·hover 카드 적용, changelog 2026-06-29 기록)했으나 **design-conventions에 규칙이 없어** 새 표면들이 공백 join으로 회귀. → [`schoolGradeLabel`](../src/lib/format/school-grade.ts)로 승격(원 파일 student-format.ts는 shim, Vitest 신규) + **7곳 일괄 통일**: 역동기화 카드·대시보드 등록상담 카드 meta·시간표 RosterRow·수업리포트 인쇄·수강료 견적서·저장 견적 목록·전역 검색 subtitle. **규칙 문서화**: design-conventions "학교·학년 표기" 절 + CLAUDE.md 디자인 인덱스 한 줄(⚠️ 전역 — 공백 join 새로 만들지 말 것).
+- **③ 이주아 역동기화 예측(DB 실측)**: outcome=ai_done·makeedu 미연결. 전송 시 makeedu 예비상담 폼 = 이주아/침산중/중1(코드 21)/보호자 사공향(모)/010-6619-4248/상담일 2026-07-08/제목 "[eywa 온라인 접수]"/노트(경로·희망과목 수학·셔틀 불필요·주소·형제·학부모 요청사항 전문).
+
+### 활동 로그 커버리지 확장 — 출결·급여·휴가·카탈로그·공지 등 15테이블 추가(총 32) (2026-07-08) — ✅ 프로덕션 적용 + 트리거 실동작 스모크(INSERT/UPDATE/DELETE→원복 무오염) + tsc0/lint0 · 0084a **프로덕션 적용됨**
+사용자 요청: "지출탭이나 기타 등등 필요한 로그 추가". 조사 결과 지출(expenses)은 0081a에서 이미 부착 — 실제 공백 15테이블을 [0084a](../supabase/migrations/0084a_activity_log_expand.sql)로 부착: **attendance_records(출결)·lesson_reports(수업리포트)·student_memos·classrooms·textbook_catalog·tuition_catalog·tuition_quotes·notice_popups·announcements·staff_leaves(휴가)·payroll_records(급여)·reenrollment_campaign_targets·english_levels·intake_tokens(QR접수링크)·kiosk_devices**.
+- **"의미있는 변경만" 결정 유지**: noise += classnote 발송 파이프라인(lesson_reports 기계 상태 전이)·QR usage/submission 카운터·키오스크 last_seen 핑·recorded_at → 이것만 바뀐 UPDATE는 로그 0건. 여전히 미부착: attendance_checkins(원시 핑)·onescreen_daily_sessions·consultation_recordings·timetable_snapshots·makeedu_*·notifications.
+- **급여 redact(0081a HIGH 후속 해소)**: payroll_records 금액 전부(base_amount·hours_worked·hourly_amount·bonus·deduction·total) redact — admin/manager가 읽는 로그에 급여 원문 미복사("바뀜"만). + 공개링크 토큰(share_token·token·token_hash)·대형 blob(attachments·payload)도 redact. ⚠️ redact는 전 테이블 공용 blocklist — 'total'은 현재 payroll에만 존재(invoices=amount_total·tuition_quotes=total_amount라 안전), 새 컬럼 추가 시 겹침 확인.
+- **target_label**: full_name(english_levels) + student_id 다음 **user_id→직원명** 폴백(staff_leaves/payroll_records = "누구의" 휴가/급여). [activity.ts](../src/features/audit/activity.ts) 테이블 라벨 15개·컬럼 한글 40여개 추가, 빈 상태 문구 갱신.
+- 검증: 프로덕션 스모크(classrooms insert→update→delete 3건 정확 기록·라벨/old→new 확인 후 테스트 로그 원복 삭제) + tsc0/lint0. ⚠️ 0081a Phase 2의 "payroll_records·staff_leaves 미부착" 항목 이걸로 해소.
+
 ### 활동 로그 가독성 — "누구"(target_label) + 한글 필드명 + 기계 노이즈 제외 (2026-07-08) — ✅ 프로덕션 적용·백필 완료(null 0) + 실렌더 검증 + tsc0/lint0 · 0083a
 사용자 제보: "등록상담 수정 — siblings 있음→—, career_goal…" 전혀 알아볼 수 없음(누구인지·무슨 필드인지). 원인: 등록상담은 학생이 아니라 `prospect_name`에 이름이 있는데 트리거 coalesce에 없어 target_label null + 영어 컬럼명 노출.
 - **누구(target_label)**([0083a](../supabase/migrations/0083a_activity_target_label.sql)): 트리거 `log_activity()` 재작성 — 이름 컬럼 폭넓게(`name·prospect_name·student_name·class_name·title·book_name·display_name·parent_name`) → 없으면 **`student_id`→학생명 조회**(상담/성적/수납/수강/레벨테스트 등 링크 테이블). **기존 로그 19건 전부 백필**(null 0).

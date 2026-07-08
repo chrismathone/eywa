@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { enqueueConsultationPush } from "@/features/integrations/server/actions";
 import type { UnpushedIntakeConsultation } from "@/features/integrations/server/makeedu-sync";
+import { outcomePill } from "@/features/enrollment/outcome-meta";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 /**
  * 역동기화(eywa→makeedu) 카드 — QR 공개접수로 들어온 신규 상담 중 makeedu에 아직 없는 것을
@@ -76,7 +78,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
         </div>
       ) : (
       <div className="border-border overflow-x-auto overflow-y-hidden rounded-md border">
-        {/* 가로만 넘치는 7열 표 — overflow-x-auto로 스크롤(overflow-y-hidden 병행: Chrome 세로 휠 삼킴 방지). */}
+        {/* 가로만 넘치는 8열 표 — overflow-x-auto로 스크롤(overflow-y-hidden 병행: Chrome 세로 휠 삼킴 방지). */}
         <table className="w-full text-[13px]">
           <thead className="bg-bg-soft text-text-dim">
             <tr>
@@ -93,8 +95,9 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
               <th className="px-3 py-2 text-left font-medium">학교·학년</th>
               <th className="px-3 py-2 text-left font-medium">보호자</th>
               <th className="px-3 py-2 text-left font-medium">경로</th>
+              <th className="px-3 py-2 text-left font-medium">상담 상태</th>
               <th className="px-3 py-2 text-left font-medium">접수일</th>
-              <th className="px-3 py-2 text-left font-medium">상태</th>
+              <th className="px-3 py-2 text-left font-medium">전송 상태</th>
             </tr>
           </thead>
           <tbody className="divide-border divide-y">
@@ -113,13 +116,17 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
                   </td>
                   <td className="text-foreground px-3 py-2 font-medium whitespace-nowrap">{c.prospectName}</td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
-                    {[c.prospectSchool, c.prospectGrade].filter(Boolean).join(" ") || "—"}
+                    {schoolGradeLabel(c.prospectSchool, c.prospectGrade) || "—"}
                   </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
                     {c.parentName ?? "—"}
                     {c.parentPhone ? <span className="text-text-faint"> · {c.parentPhone}</span> : null}
                   </td>
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">{c.consultationPath ?? "—"}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {/* 등록상담 진행 단계(칸반과 동일 표기) — makeedu로 보내기 전 어디까지 진행됐는지 판단용. */}
+                    <Pill color={outcomePill(c.outcome).color}>{outcomePill(c.outcome).label}</Pill>
+                  </td>
                   <td className="text-text-faint px-3 py-2 whitespace-nowrap tabular">
                     {new Date(c.createdAt).toLocaleDateString("ko-KR", {
                       timeZone: "Asia/Seoul",

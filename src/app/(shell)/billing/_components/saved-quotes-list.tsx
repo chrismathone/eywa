@@ -12,6 +12,7 @@ import {
 import type { QuoteListItem } from "@/features/billing/server/tuition-quote-queries";
 import type { StudentOption } from "@/features/billing/server/textbook-queries";
 import { CreateInvoiceTrigger } from "./create-invoice-dialog";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 function fmtDate(iso: string): string {
@@ -62,7 +63,7 @@ export function SavedQuotesList({
             <div className="flex items-baseline gap-2">
               <span className="text-foreground truncate text-sm font-bold">{r.studentName}</span>
               <span className="text-text-dim shrink-0 text-xs">
-                {[r.school, r.grade].filter(Boolean).join(" ")}
+                {schoolGradeLabel(r.school, r.grade)}
               </span>
             </div>
             <p className="text-text-faint mt-0.5 text-[11px]">

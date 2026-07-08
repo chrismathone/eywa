@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import { attendanceRate } from "@/lib/calc/attendance";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { followUpUrgency, type FollowUpUrgency } from "@/features/consultations/server/queries";
 
 const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
@@ -289,7 +290,7 @@ export async function getActiveEnrollmentConsultations(limit = 6): Promise<DashE
   const rows: DashEnrollmentRow[] = (data ?? []).map((r) => ({
     id: r.id as string,
     name: (r.prospect_name as string | null) ?? "(이름 없음)",
-    meta: [r.prospect_school, r.prospect_grade].filter(Boolean).join(" ") || null,
+    meta: schoolGradeLabel(r.prospect_school as string | null, r.prospect_grade as string | null) || null,
     outcome: r.outcome as DashEnrollmentRow["outcome"],
     date:
       (r.consultation_date as string | null) ??
