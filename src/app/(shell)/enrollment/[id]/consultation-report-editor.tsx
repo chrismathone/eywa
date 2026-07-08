@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2, Pencil, Sparkles, X } from "lucide-react";
+import { Check, Loader2, Pencil, X } from "lucide-react";
 import type { ConsultationAudioReport } from "@/features/enrollment/server/queries";
 import { updateConsultationReportSection } from "@/features/enrollment/server/actions";
 import { RichText } from "@/components/rich-text";
 import { formatCreatedAt } from "@/lib/utils";
 
 /**
- * 등록상담 AI 분석(13섹션 중 텍스트 12) — 섹션별 인라인 수정(staff가 인쇄/공유 전 AI 오류 교정).
+ * 등록상담 AI 분석(텍스트 섹션) — 섹션별 인라인 수정(staff가 인쇄/공유 전 AI 오류 교정).
  * 회의록 ai-report.tsx 패턴을 카드 레이아웃으로. 저장 시 print_payload.audioReport 머지 + 수정자·시각.
  */
 
@@ -22,8 +22,7 @@ const SECTIONS: { key: SectionKey; label: string; emoji: string; list?: boolean 
   { key: "parentRequests", label: "학부모 요청", emoji: "🙋", list: true },
   { key: "parentSatisfaction", label: "학부모 만족도", emoji: "😊" },
   { key: "studentTraits", label: "학생 특이사항", emoji: "🎒", list: true },
-  { key: "teacherResponse", label: "교사 대응", emoji: "🧑‍🏫", list: true },
-  { key: "salesPoints", label: "세일즈 포인트", emoji: "💡", list: true },
+  { key: "teacherResponse", label: "상담자 대응", emoji: "🧑‍🏫", list: true },
   { key: "agreements", label: "합의 사항", emoji: "🤝", list: true },
   { key: "followUps", label: "후속 조치", emoji: "📞", list: true },
   { key: "warnings", label: "주의 신호", emoji: "⚠️", list: true },
@@ -80,12 +79,9 @@ export function ConsultationReportEditor({
 
   return (
     <section className="space-y-3">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="inline-flex items-center gap-2">
-          <Sparkles className="text-chart-4 size-4" />
-          <h2 className="text-foreground text-sm font-semibold">상담 AI 분석</h2>
-        </div>
-        <div className="flex items-center gap-2">
+      {/* 상단 "AI 분석" 섹션 제목은 상세 페이지가 제공 — 여기선 생성/수정 시각만(중복 제목 제거). */}
+      {attribution || generatedAt ? (
+        <div className="flex items-center justify-end gap-2">
           {attribution ? (
             <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
               <Pencil className="size-3" />
@@ -95,7 +91,7 @@ export function ConsultationReportEditor({
             <span className="text-muted-foreground num text-[11px]">{formatCreatedAt(generatedAt)}</span>
           ) : null}
         </div>
-      </header>
+      ) : null}
 
       {SECTIONS.map(({ key, label, emoji, list }) => {
         const body = ((report[key] as string) ?? "").trim();

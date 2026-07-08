@@ -810,7 +810,7 @@ export type UpdateConsultationReportState =
   | { error?: string; ok?: true; editedBy?: string; editedAt?: string }
   | undefined;
 
-// 인라인 수정 가능한 12개 audioReport 섹션(extracted는 구조화 데이터라 제외).
+// 인라인 수정 가능한 11개 audioReport 섹션(extracted는 구조화 데이터라 제외).
 const EDITABLE_AUDIO_KEYS = new Set([
   "consultationType",
   "familyBackground",
@@ -820,7 +820,6 @@ const EDITABLE_AUDIO_KEYS = new Set([
   "parentSatisfaction",
   "studentTraits",
   "teacherResponse",
-  "salesPoints",
   "agreements",
   "followUps",
   "warnings",
