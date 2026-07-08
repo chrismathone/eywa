@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학생 상세 — 개인 주간 시간표(과목별 교시 기본뷰, 읽기전용) (2026-07-08) — ✅ tsc0/lint0/test7 · 커밋 `8d073f0`→`3439f27`
+- 강사 원스크린에서 "내 학생이 **다른 선생님 수업**까지 어떤 시간표를 도는지" 볼 경로 부재(시간표 메뉴는 강사 본인 담당 반만 스코핑) → 학생 상세 '수업' 탭 상단에 주간 시간표 추가.
+- **과목 탭**(수학/영어/…, 설정 순서·`useSubjectMaps`, 첫 과목 기본). 각 탭이 실제 시간표 기본뷰처럼 **교시축 + 연속 교시 세로 rowSpan 병합**([`computeBlocks`](../src/features/timetable/lib/grid.ts) allowColMerge=false), 수학계열 2교시 묶음 라벨. 데이터는 수업 탭이 이미 로드한 current 재사용([`getStudentClassesDetail`](../src/features/students/server/queries.ts)이 등원요일 필터된 `slots` 반환) — **추가 쿼리 0**(B2/B4 무위반).
+- 배치 로직 순수함수 [`buildSubjectPeriodGrid`](../src/features/students/lib/week-grid.ts) + Vitest7. '전체'(시각축)는 한 시간대 다과목 겹침으로 세로병합 불가 → 제거(과목 탭만). **탭 전환 시 카드 높이 고정**(가장 교시 많은 과목 기준 총높이, 교시 적은 과목은 행높이 확장). 셀 색 블록은 병합 반영 **명시 높이**로 셀 전체 채움(`h-full`은 table td 불안정).
+- 부수: **dev 헤더 64KB**([`.claude/launch.json`](../.claude/launch.json) NODE_OPTIONS) — localhost Supabase 쿠키 누적이 Node 기본 16KB 초과 시 dev 431(Request Header Fields Too Large) 방지. 커밋 `4f80362`.
+
 ### 목록 검색 무플래시 — GET 폼 → 공용 SearchForm 클라 내비 전환 12곳 (2026-07-08) — ✅ tsc0/lint0 + 마커 실측 3곳 · 커밋 `279915d`
 - "검색하면 새로고침처럼 깜빡" 제보 — 원인은 검색만 순수 GET `<form>`(문서 전체 새로고침). 신규 [`SearchForm`](../src/components/search-form.tsx)(`router.push`+`useTransition`)으로 기존 화면 유지한 채 결과만 교체. **다른 searchParams 전체 보존**(hidden input 불필요) + `page` 자동 리셋, 사이트별 네임스페이스 리셋은 `resetParams`(저장견적 `qpage`·수강료 `cpage`·직원 `invited/tab`·퇴원 `type`).
 - 전환: 등록상담·퇴원·학생상담·직원·급여·회의록·리텐션보드·수납 5패널. ⚠️ **시험(exams)은 미전환** — 기간(from/to) 필터가 같은 폼이라 단순 교체 시 기간 검색이 깨짐(재설계 대상). 새 목록 검색은 GET 폼 금지, SearchForm 사용.
