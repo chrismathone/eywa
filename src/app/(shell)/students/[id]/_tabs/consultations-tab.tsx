@@ -168,7 +168,7 @@ function EnrollmentConsultItem({
   subjectLabel: string | null;
 }) {
   return (
-    <li className="bg-primary/5 border-primary/20 space-y-1.5 rounded-md border px-4 py-3">
+    <li className="bg-primary/5 border-primary/20 space-y-2 rounded-md border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-2">
         <span className="bg-primary/10 text-primary border-primary/20 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold">
           입학 상담
@@ -190,11 +190,25 @@ function EnrollmentConsultItem({
           상세 보기
         </WindowLink>
       </header>
-      {e.request ? (
-        <p className="text-foreground line-clamp-2 text-sm leading-relaxed">{e.request}</p>
-      ) : (
-        <p className="text-muted-foreground text-xs italic">상담 내용 요약은 상세에서 확인하세요</p>
-      )}
+      {/* 상담 원문을 전문 노출(2줄 클램프 제거) — 등록상담은 대부분 원본 필드만 채워지고 AI분석은 희소. */}
+      {e.request ? <EnrollField label="상담 내용" value={e.request} /> : null}
+      {e.careerGoal ? <EnrollField label="진로·목표" value={e.careerGoal} /> : null}
+      {e.followUp ? <EnrollField label="후속" value={e.followUp} /> : null}
+      {!e.request && !e.careerGoal && !e.followUp ? (
+        <p className="text-muted-foreground text-xs italic">
+          기본 정보만 있는 상담입니다 — 학부모 정보 등 전체는 ‘상세 보기’에서 확인하세요
+        </p>
+      ) : null}
     </li>
+  );
+}
+
+/** 입학 상담 카드 안 라벨+내용 블록 — 전문 노출(한글 어절 줄바꿈·줄바꿈 보존). */
+function EnrollField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-muted-foreground mb-0.5 text-[11px] font-medium">{label}</p>
+      <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap">{value}</p>
+    </div>
   );
 }

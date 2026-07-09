@@ -1058,6 +1058,8 @@ export type StudentEnrollmentConsultRow = {
   subject: string | null;
   outcome: string | null;
   request: string | null;
+  careerGoal: string | null;
+  followUp: string | null;
 };
 
 /**
@@ -1071,7 +1073,9 @@ export async function getStudentEnrollmentConsultations(
   const supabase = await createClient();
   const { data } = await supabase
     .from("enrollment_consultations")
-    .select("id, consulted_at, consultation_date, created_at, subject, outcome, parent_request")
+    .select(
+      "id, consulted_at, consultation_date, created_at, subject, outcome, parent_request, career_goal, follow_up_content",
+    )
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
   if (!data) return [];
@@ -1081,6 +1085,8 @@ export async function getStudentEnrollmentConsultations(
     subject: r.subject,
     outcome: r.outcome,
     request: r.parent_request,
+    careerGoal: r.career_goal,
+    followUp: r.follow_up_content,
   }));
 }
 
