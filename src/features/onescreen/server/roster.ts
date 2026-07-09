@@ -34,6 +34,7 @@ export type TeacherRoster = {
   teacherName: string;
   students: OneScreenStudent[];
   todayClasses: TodayClass[]; // 오늘(또는 폴백 전체) 담당 반 — 시작시각순
+  allowTeacherTestMax: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(report 설정) — 원스크린 입력 UI 분기
 };
 
 type OnescreenSessionRow = {
@@ -50,7 +51,7 @@ type OnescreenSessionRow = {
 };
 
 function emptyRoster(today: string, teacherName: string): TeacherRoster {
-  return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [] };
+  return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [], allowTeacherTestMax: false };
 }
 
 export async function getTeacherRoster(): Promise<TeacherRoster> {
@@ -66,6 +67,9 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   const settings = await getTenantSettings();
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const gradeOrder = settings.operations.gradeLevels;
+  // 과목별 테스트 문항수(만점) — 원스크린 점수 입력 /N 기본값. 미설정 과목은 5.
+  const subjectTestMax = new Map(settings.operations.subjects.map((su) => [su.key, su.testMax ?? 5]));
+  const allowTeacherTestMax = settings.report.allowTeacherTestMax;
 
   // 1) 강사 담당 활성 반
   const { data: classes } = await supabase
@@ -119,6 +123,8 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     const cls = classById.get(e.class_id);
     if (!stu || !cls) continue;
     const grade = stu.grade ?? "";
+    // 테스트 만점 = 이 학생 (첫) 과목의 문항수 설정. 세션에 저장된 값이 있으면 아래에서 덮어씀.
+    const tmax = subjectTestMax.get(cls.subject) ?? 5;
     let os = byStudent.get(stu.id);
     if (!os) {
       os = {
@@ -131,8 +137,8 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         attendance: "출석",
         subjects: [],
         tests: {
-          daily: { score: null, max: 20, prevScore: null },
-          check: { score: null, max: 20, prevScore: null },
+          daily: { score: null, max: tmax, prevScore: null },
+          check: { score: null, max: tmax, prevScore: null },
         },
         attitude: null,
         homework: "",
@@ -327,5 +333,5 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).
   const classTags = ["전체", ...todayClasses.map((c) => c.name)];
 
-  return { today, classTags, teacherName, students, todayClasses };
+  return { today, classTags, teacherName, students, todayClasses, allowTeacherTestMax };
 }

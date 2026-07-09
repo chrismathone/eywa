@@ -190,7 +190,7 @@ export function SubjectListEditor({
         onClick={() =>
           onChange([
             ...value,
-            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: "mon-thu" },
+            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: "mon-thu", testMax: 5 },
           ])
         }
         label="과목 추가"

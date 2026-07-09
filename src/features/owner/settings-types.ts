@@ -46,6 +46,8 @@ export const subjectSchema = z.object({
   color: z.enum(SUBJECT_COLORS).default("neutral"),
   // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
   weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
+  // 일일·확인테스트 문항수(만점) — 원스크린 점수 입력의 /N. 기본 5. (강사 변경 허용은 report.allowTeacherTestMax.)
+  testMax: z.number().int().min(1).max(100).default(5),
   // 과목 전용 평일 교시(미설정/빈 배열 = 폴백: 영어=내장 11교시, 그 외=전역 평일 교시). 주말은 전역 공통.
   weekdayPeriods: z.array(periodTimeSchema).max(20).optional(),
   // 강사뷰(강사별시간표) 내부 가로줄 시각("HH:MM") — 큰 섹션 경계 표시. 미설정 = 영어 기본 6시각.
@@ -179,6 +181,7 @@ export const reportSchema = z.object({
   showAttitude: z.boolean(),
   showParentNote: z.boolean(),
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
+  allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

@@ -82,9 +82,9 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     // 과목 — 현재 SUBJECT_LABEL 중복 맵 이식(단일 소스). color=Pill 토큰.
     // 영어는 과목 전용 평일 교시(내장 11교시)·강사별시간표 기본(가로줄 6시각·격자 10분)을 프리필(2026-07-06).
     subjects: [
-      { key: "math", label: "수학", color: "primary", weekdayGrouping: "mon-thu" },
+      { key: "math", label: "수학", color: "primary", weekdayGrouping: "mon-thu", testMax: 5 },
       // 수학(심화)는 학원 고유 과목이라 표준키 대신 subject_N 계열로 통일(2026-06-19, highmath→subject_1 마이그레이션).
-      { key: "subject_1", label: "수학(심화)", color: "primary", weekdayGrouping: "mon-thu" },
+      { key: "subject_1", label: "수학(심화)", color: "primary", weekdayGrouping: "mon-thu", testMax: 5 },
       {
         key: "english",
         label: "영어",
@@ -93,9 +93,10 @@ export const DEFAULT_SETTINGS: TenantSettings = {
         weekdayPeriods: ENGLISH_WEEKDAY_PERIOD_LIST,
         teacherViewLines: DEFAULT_TEACHER_VIEW_LINES,
         teacherViewStep: 10,
+        testMax: 5,
       },
-      { key: "science", label: "과학", color: "purple", weekdayGrouping: "none" },
-      { key: "korean", label: "국어", color: "rose", weekdayGrouping: "mon-thu" },
+      { key: "science", label: "과학", color: "purple", weekdayGrouping: "none", testMax: 5 },
+      { key: "korean", label: "국어", color: "rose", weekdayGrouping: "mon-thu", testMax: 5 },
     ],
     jobTitles: ["원장", "부원장", "실장", "강사", "조교", "행정"],
     gradeLevels: ["초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"],
@@ -135,6 +136,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showAttitude: true,
     showParentNote: true,
     showAttachments: true,
+    allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   permissions: { overrides: [] },

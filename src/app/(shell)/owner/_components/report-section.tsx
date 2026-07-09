@@ -55,6 +55,18 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
               </div>
             </div>
           </SettingsCard>
+
+          <SettingsCard
+            title="테스트 문항수"
+            description="일일·확인테스트 만점(/N)은 과목별로 설정합니다(학원 운영 > 과목). 아래를 켜면 강사가 원스크린에서 직접 바꿀 수 있습니다."
+          >
+            <ToggleField
+              label="강사가 문항수 직접 변경 허용"
+              hint="끄면 과목 설정값 고정"
+              value={r.allowTeacherTestMax}
+              onChange={(v) => set({ allowTeacherTestMax: v })}
+            />
+          </SettingsCard>
         </div>
 
         <SettingsCard

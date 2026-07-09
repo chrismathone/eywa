@@ -18,6 +18,7 @@ export default async function OneScreenPage() {
       today={roster.today}
       classTags={roster.classTags}
       todayClasses={roster.todayClasses}
+      allowTeacherTestMax={roster.allowTeacherTestMax}
     />
   );
 }

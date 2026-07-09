@@ -84,11 +84,13 @@ export function OneScreenClient({
   today = TODAY,
   classTags = CLASS_TAGS,
   todayClasses = [],
+  allowTeacherTestMax = false,
 }: {
   initial: OneScreenStudent[];
   today?: string;
   classTags?: readonly string[];
   todayClasses?: TodayClass[];
+  allowTeacherTestMax?: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(학원 설정)
 }) {
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
@@ -223,6 +225,15 @@ export function OneScreenClient({
   function setScoreFor(studentId: string, which: "daily" | "check", v: number | null) {
     patch(studentId, (s) => ({ ...s, tests: { ...s.tests, [which]: { ...s.tests[which], score: v } } }));
   }
+  // 테스트 만점(/N) 변경 — 학원설정 allowTeacherTestMax on일 때만 UI 노출. 점수가 새 만점 초과면 함께 클램프.
+  function setMaxFor(studentId: string, which: "daily" | "check", v: number) {
+    const max = Math.max(1, Math.min(100, Math.round(v) || 1));
+    patch(studentId, (s) => {
+      const cur = s.tests[which];
+      const score = cur.score != null ? Math.min(cur.score, max) : cur.score;
+      return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
+    });
+  }
   // 표=SET(선택값), 카드=TOGGLE(같은 값 재클릭 시 해제) — 카드 wrapper가 토글을 계산해 SET 호출.
   function setAttitudeValue(studentId: string, a: string | null) {
     patch(studentId, (s) => ({ ...s, attitude: a }));
@@ -245,6 +256,10 @@ export function OneScreenClient({
   function setScore(which: "daily" | "check", v: number | null) {
     if (!selected) return;
     setScoreFor(selected.id, which, v);
+  }
+  function setMax(which: "daily" | "check", v: number) {
+    if (!selected) return;
+    setMaxFor(selected.id, which, v);
   }
   function setAttitude(a: string) {
     if (!selected) return;
@@ -672,6 +687,8 @@ export function OneScreenClient({
           onSendRow={sendRow}
           onSaveAll={saveAllVisible}
           onSendAll={sendAllVisible}
+          allowTestMax={allowTeacherTestMax}
+          onMax={setMaxFor}
         />
       ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
@@ -698,7 +715,7 @@ export function OneScreenClient({
                 onStudyGrade={setStudyGrade}
                 onSemester={setSemester}
               />
-              <TestCard student={selected} onScore={setScore} />
+              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} />
             </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">

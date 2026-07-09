@@ -11,11 +11,15 @@ function ScoreBlock({
   range,
   test,
   onChange,
+  allowMax,
+  onMax,
 }: {
   kicker: string;
   range: string;
   test: TestScore;
   onChange: (v: number | null) => void;
+  allowMax?: boolean; // 학원설정: 강사 문항수 변경 허용
+  onMax?: (v: number) => void;
 }) {
   const empty = test.score == null;
   const setVal = (raw: string | number) => {
@@ -38,7 +42,23 @@ function ScoreBlock({
           onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))}
           className="border-line focus:border-primary tabular w-14 rounded-sm border bg-background px-2 py-1 text-center text-[15px] font-bold outline-none"
         />
-        <span className="text-text-faint tabular text-[12px]">/ {test.max}</span>
+        {allowMax && onMax ? (
+          <span className="text-text-faint tabular flex items-center gap-0.5 text-[12px]">
+            /
+            <input
+              inputMode="numeric"
+              value={String(test.max)}
+              aria-label={`${kicker} 문항수`}
+              onChange={(e) => {
+                const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                if (!Number.isNaN(n) && n > 0) onMax(n);
+              }}
+              className="border-line focus:border-primary tabular w-10 rounded-sm border bg-background px-1 py-0.5 text-center text-[12px] outline-none"
+            />
+          </span>
+        ) : (
+          <span className="text-text-faint tabular text-[12px]">/ {test.max}</span>
+        )}
         <div className="flex flex-col">
           <button
             type="button"
@@ -72,9 +92,13 @@ function ScoreBlock({
 export function TestCard({
   student,
   onScore,
+  allowMax,
+  onMax,
 }: {
   student: OneScreenStudent;
   onScore: (which: "daily" | "check", v: number | null) => void;
+  allowMax?: boolean; // 강사 문항수 변경 허용(학원 설정)
+  onMax?: (which: "daily" | "check", v: number) => void;
 }) {
   const prevRange = student.subjects.map((s) => s.prev.split("·")[0]?.trim()).join(" / ");
   const todayRange = student.subjects.map((s) => s.today.split("·")[0]?.trim()).join(" / ");
@@ -93,12 +117,16 @@ export function TestCard({
           range={`이전 진도 · ${prevRange}`}
           test={student.tests.daily}
           onChange={(v) => onScore("daily", v)}
+          allowMax={allowMax}
+          onMax={onMax ? (v) => onMax("daily", v) : undefined}
         />
         <ScoreBlock
           kicker="확인테스트"
           range={`오늘 진도 · ${todayRange}`}
           test={student.tests.check}
           onChange={(v) => onScore("check", v)}
+          allowMax={allowMax}
+          onMax={onMax ? (v) => onMax("check", v) : undefined}
         />
       </div>
     </div>

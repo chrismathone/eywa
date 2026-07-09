@@ -97,6 +97,29 @@ export function SubjectsSection({
                 </summary>
 
                 <div className="space-y-5 px-1 pt-1 pb-4">
+                  {/* 수업 보고서 — 원스크린 일일·확인테스트 만점(문항 수). 기본 5. */}
+                  <div className="space-y-2">
+                    <h4 className="text-foreground text-[12px] font-bold">수업 보고서 · 테스트</h4>
+                    <label className="flex flex-wrap items-center gap-2 text-[12px]">
+                      <span className="text-text-dim w-[90px] shrink-0">테스트 문항수</span>
+                      <input
+                        type="number"
+                        className={`${cellCls} w-[90px]`}
+                        min={1}
+                        max={100}
+                        step={1}
+                        value={s.testMax ?? 5}
+                        onChange={(e) =>
+                          patchSubject(i, {
+                            testMax: Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 5))),
+                          })
+                        }
+                        aria-label={`${s.label.trim() || s.key} 테스트 문항수`}
+                      />
+                      <span className="text-text-faint text-[11px]">일일·확인테스트 만점(/N). 기본 5</span>
+                    </label>
+                  </div>
+
                   {/* 평일 교시(과목 전용) — 미설정이면 전역(운영 체계 탭) 폴백. 주말 교시는 전역 공통. */}
                   <div className="space-y-2">
                     <h4 className="text-foreground text-[12px] font-bold">평일 교시 (과목 전용)</h4>

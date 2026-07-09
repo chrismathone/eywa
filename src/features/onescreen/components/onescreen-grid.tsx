@@ -55,7 +55,7 @@ function GridProgressCell({
         onChange={(e) => onProgress(student.id, subjectIndex, e.target.value)}
         placeholder="오늘 진도 (예: Unit 8 · p.90)"
         aria-label={`${student.name} ${su.name} 오늘 진도`}
-        className="border-line bg-card focus:border-primary h-8 w-full min-w-[180px] rounded-sm border px-2 text-[12px] outline-none"
+        className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
       />
     );
   }
@@ -65,7 +65,7 @@ function GridProgressCell({
   const semesters = semestersForGrade(studyGrade);
   const units = curriculumForGradeSemester(studyGrade, semester);
   return (
-    <div className="flex min-w-[240px] flex-col gap-1">
+    <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1">
         <Select value={studyGrade} onValueChange={(v) => v && onStudyGrade(student.id, v as string)}>
           <SelectTrigger size="sm" aria-label={`${student.name} 진도 학년`}>
@@ -116,20 +116,24 @@ function GridProgressCell({
   );
 }
 
-/** 점수 셀 — 맞은 개수 입력 + /만점. test-card clamp 패턴 축약. */
+/** 점수 셀 — 맞은 개수 입력 + /만점. allowMax면 만점(/N)도 편집 가능(학원 설정). */
 function ScoreInput({
   value,
   max,
   onChange,
   label,
+  allowMax,
+  onMax,
 }: {
   value: number | null;
   max: number;
   onChange: (v: number | null) => void;
   label: string;
+  allowMax?: boolean;
+  onMax?: (v: number) => void;
 }) {
   return (
-    <div className="flex items-center justify-center gap-1">
+    <div className="flex items-center justify-center gap-0.5">
       <input
         inputMode="numeric"
         value={value == null ? "" : String(value)}
@@ -138,9 +142,24 @@ function ScoreInput({
           const raw = e.target.value.replace(/[^0-9]/g, "");
           onChange(raw === "" ? null : clamp(parseInt(raw, 10) || 0, max));
         }}
-        className="border-line focus:border-primary tabular h-8 w-11 rounded-sm border bg-background px-1 text-center text-[13px] font-bold outline-none"
+        className="border-line focus:border-primary tabular h-8 w-10 rounded-sm border bg-background px-1 text-center text-[13px] font-bold outline-none"
       />
-      <span className="text-text-faint tabular text-[11px]">/{max}</span>
+      <span className="text-text-faint tabular text-[11px]">/</span>
+      {allowMax && onMax ? (
+        <input
+          inputMode="numeric"
+          value={String(max)}
+          aria-label={`${label} 문항수`}
+          title="문항수(만점)"
+          onChange={(e) => {
+            const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+            if (!Number.isNaN(n) && n > 0) onMax(n);
+          }}
+          className="border-line focus:border-primary tabular h-8 w-8 rounded-sm border bg-background px-0.5 text-center text-[11px] outline-none"
+        />
+      ) : (
+        <span className="text-text-faint tabular text-[11px]">{max}</span>
+      )}
     </div>
   );
 }
@@ -168,6 +187,8 @@ export function OneScreenGrid({
   onSendRow,
   onSaveAll,
   onSendAll,
+  allowTestMax,
+  onMax,
 }: {
   students: OneScreenStudent[]; // 현재 필터(반)로 보이는 학생만
   reports: Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → 발송상태
@@ -183,6 +204,8 @@ export function OneScreenGrid({
   onSendRow: (student: OneScreenStudent, subjectName: string) => void;
   onSaveAll: () => void;
   onSendAll: () => void;
+  allowTestMax: boolean; // 강사 문항수 변경 허용(학원 설정)
+  onMax: (studentId: string, which: "daily" | "check", v: number) => void;
 }) {
   const rows = buildGridRows(students);
   const eligible = rows.filter((r) => isReportEligible(r.subject)).length;
@@ -214,10 +237,21 @@ export function OneScreenGrid({
       </div>
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
-        <table className="w-full border-collapse text-[12px]">
+        {/* table-fixed + colgroup — 헤더/본문 열 폭을 결정적으로 고정해 정렬 어긋남 제거. */}
+        <table className="w-full min-w-[1140px] table-fixed border-collapse text-[12px]">
+          <colgroup>
+            <col className="w-[150px]" /> {/* 학생·반 */}
+            <col /> {/* 진도 — 나머지 폭 */}
+            <col className="w-[100px]" /> {/* 일일 */}
+            <col className="w-[100px]" /> {/* 확인 */}
+            <col className="w-[116px]" /> {/* 태도 */}
+            <col className="w-[116px]" /> {/* 과제 */}
+            <col className="w-[180px]" /> {/* 교재명 */}
+            <col className="w-[120px]" /> {/* 발송 */}
+          </colgroup>
           <thead>
             <tr className="bg-bg-soft">
-              <th className={`${TH} sticky left-0 z-10 bg-bg-soft`}>학생 · 반</th>
+              <th className={TH}>학생 · 반</th>
               <th className={TH}>진도(오늘)</th>
               <th className={`${TH} text-center`}>일일</th>
               <th className={`${TH} text-center`}>확인</th>
@@ -235,7 +269,7 @@ export function OneScreenGrid({
               const att = student.attendance;
               return (
                 <tr key={key} className="hover:bg-bg-soft/50">
-                  <td className={`${TD} bg-card sticky left-0 z-10 min-w-[140px]`}>
+                  <td className={TD}>
                     <div className="flex items-center gap-1.5">
                       <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
                       <span className="text-foreground font-semibold">{student.name}</span>
@@ -271,6 +305,8 @@ export function OneScreenGrid({
                       max={student.tests.daily.max}
                       onChange={(v) => onScore(student.id, "daily", v)}
                       label={`${student.name} 일일테스트`}
+                      allowMax={allowTestMax}
+                      onMax={(v) => onMax(student.id, "daily", v)}
                     />
                   </td>
                   <td className={`${TD} text-center`}>
@@ -279,6 +315,8 @@ export function OneScreenGrid({
                       max={student.tests.check.max}
                       onChange={(v) => onScore(student.id, "check", v)}
                       label={`${student.name} 확인테스트`}
+                      allowMax={allowTestMax}
+                      onMax={(v) => onMax(student.id, "check", v)}
                     />
                   </td>
                   <td className={TD}>
@@ -324,7 +362,7 @@ export function OneScreenGrid({
                       onChange={(e) => onTextbook(student.id, subject.name, e.target.value)}
                       placeholder="교재명"
                       aria-label={`${student.name} ${subject.name} 교재명`}
-                      className="border-line bg-card focus:border-primary h-8 w-full min-w-[120px] rounded-sm border px-2 text-[12px] outline-none"
+                      className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
                     />
                   </td>
                   <td className={`${TD} text-center`}>
