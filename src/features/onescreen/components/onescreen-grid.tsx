@@ -186,6 +186,7 @@ export function OneScreenGrid({
   onHomework,
   onTextbook,
   onDraft,
+  onTrend,
   onSendRow,
   onSaveAll,
   onSendAll,
@@ -210,6 +211,7 @@ export function OneScreenGrid({
   onHomework: (studentId: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
   onDraft: (studentId: string, subjectName: string, text: string) => void; // 학부모 문구(멘트) 편집
+  onTrend: (studentId: string, subjectName: string, text: string) => void; // 학습 추세(종합분석) 편집(4a)
   onSendRow: (student: OneScreenStudent, subjectName: string) => void;
   onSaveAll: (keys?: string[]) => void; // keys(선택 행) 있으면 그 행만, 없으면 전체
   onSendAll: (keys?: string[]) => void;
@@ -455,14 +457,23 @@ export function OneScreenGrid({
                     </div>
                   </td>
                   <td className={TD}>
-                    {/* 학부모 문구(멘트) — 자동작성 채움 · 직접 편집 · 발송 전 확인. 우측 남는 폭 활용. */}
-                    <textarea
-                      value={rep?.draft ?? ""}
-                      onChange={(e) => onDraft(student.id, subject.name, e.target.value)}
-                      placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
-                      aria-label={`${student.name} ${subject.name} 학부모 문구`}
-                      className="border-line focus:border-primary scrollbar-thin h-[72px] w-full resize-none rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none"
-                    />
+                    {/* 학부모 문구(멘트) + 학습 추세 — 자동작성이 함께 채움 · 직접 편집 · 발송 전 확인. 우측 남는 폭 활용. */}
+                    <div className="flex flex-col gap-1">
+                      <textarea
+                        value={rep?.draft ?? ""}
+                        onChange={(e) => onDraft(student.id, subject.name, e.target.value)}
+                        placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
+                        aria-label={`${student.name} ${subject.name} 학부모 문구`}
+                        className="border-line focus:border-primary scrollbar-thin h-[72px] w-full resize-none rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none"
+                      />
+                      <textarea
+                        value={rep?.trendDraft ?? ""}
+                        onChange={(e) => onTrend(student.id, subject.name, e.target.value)}
+                        placeholder="학습 추세(종합분석) · 기록 적으면 비어 있음"
+                        aria-label={`${student.name} ${subject.name} 학습 추세`}
+                        className="border-line focus:border-primary scrollbar-thin h-[48px] w-full resize-none rounded-sm border bg-bg-soft px-2 py-1 text-[11px] leading-snug outline-none"
+                      />
+                    </div>
                   </td>
                   <td className={TD}>
                     <div className="flex flex-col items-stretch gap-1">

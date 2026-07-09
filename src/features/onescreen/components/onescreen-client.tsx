@@ -9,6 +9,7 @@ import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
   generateReportComment,
+  generateTrendComment,
   reissueShareLink,
   revokeShareLink,
   saveAndQueueClassnote,
@@ -71,6 +72,16 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
   if (sent >= subjectCount) return "ok";
   if (sent > 0 || vals.some((v) => v.draft.trim())) return "warn";
   return "todo";
+}
+
+/** 오늘 시험·테스트 합본("일일 18/20, 확인 19/20") — exam_info 규격(추세 조립·prev-score 파싱 공용). 미입력 항목은 생략. */
+function buildExamInfo(st: OneScreenStudent): string {
+  return [
+    st.tests.daily.score != null ? `일일 ${st.tests.daily.score}/${st.tests.daily.max}` : null,
+    st.tests.check.score != null ? `확인 ${st.tests.check.score}/${st.tests.check.max}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 /**
@@ -277,6 +288,14 @@ export function OneScreenClient({
     if (!selected) return;
     setDraftFor(selected.id, subjectName, text);
   }
+  // 학습 추세(종합분석) 초안 편집 — 멘트(draft)와 별개 필드(4a).
+  function setTrendDraftFor(studentId: string, subjectName: string, text: string) {
+    patchReport(studentId, subjectName, (r) => ({ ...r, trendDraft: text }));
+  }
+  function setSubjectTrend(subjectName: string, text: string) {
+    if (!selected) return;
+    setTrendDraftFor(selected.id, subjectName, text);
+  }
   // 교재명·보강 — 과목별(subjectName으로 해당 과목만 갱신). 자동저장(patch→queueSave)에 실림.
   function setTextbookFor(studentId: string, subjectName: string, text: string) {
     patch(studentId, (s) => ({
@@ -298,15 +317,31 @@ export function OneScreenClient({
     if (!selected) return;
     toggleMakeupFor(selected.id, subjectName);
   }
-  // AI 학부모 멘트 생성 코어(카드·표 공용) — 성공 시 멘트, 실패 시 결정적 템플릿 폴백. reports state의 draft에 반영.
+  // AI 학부모 멘트 + 학습 추세 생성 코어(카드·표 공용) — 멘트 실패 시 결정적 템플릿 폴백,
+  // 추세는 표본 부족/실패면 조용히 생략(기존 값 유지). 둘을 학생별 병렬(Promise.all)로 생성해 지연 최소화.
   async function generateDraftFor(student: OneScreenStudent, subjectName: string) {
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     if (idx < 0) return;
+    const su = student.subjects[idx];
+    const subjectKey = su?.subjectKey || su?.name || undefined;
     try {
-      const res = await generateReportComment(buildReportCommentInput(student, idx));
-      const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
-      if (!res.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
-      patchReport(student.id, subjectName, (r) => ({ ...r, draft: text }));
+      const [commentRes, trendRes] = await Promise.all([
+        generateReportComment(buildReportCommentInput(student, idx)),
+        generateTrendComment({
+          studentId: student.id,
+          subject: subjectKey,
+          todayExamInfo: buildExamInfo(student),
+          todayHomework: student.homework,
+        }),
+      ]);
+      const text = commentRes.ok && commentRes.comment ? commentRes.comment : buildSubjectReport(student, idx);
+      if (!commentRes.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+      patchReport(student.id, subjectName, (r) => ({
+        ...r,
+        draft: text,
+        // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존).
+        ...(trendRes.ok && trendRes.trend ? { trendDraft: trendRes.trend } : {}),
+      }));
     } catch {
       patchReport(student.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(student, idx) }));
       toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
@@ -368,12 +403,8 @@ export function OneScreenClient({
     const su = student.subjects[idx];
     const existing = reports[student.id]?.[subjectName];
     const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(student, idx);
-    const examInfo = [
-      student.tests.daily.score != null ? `일일 ${student.tests.daily.score}/${student.tests.daily.max}` : null,
-      student.tests.check.score != null ? `확인 ${student.tests.check.score}/${student.tests.check.max}` : null,
-    ]
-      .filter(Boolean)
-      .join(", ");
+    const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
+    const examInfo = buildExamInfo(student);
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
     const dailyTest =
       student.tests.daily.score != null ? `${student.tests.daily.max}문제 중 ${student.tests.daily.score}개` : "";
@@ -392,6 +423,7 @@ export function OneScreenClient({
         checkTest,
         attitude: student.attitude ?? "",
         notes: draft,
+        trendNote, // 학습 추세(종합분석) — 4a
         subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
       },
     };
@@ -737,6 +769,7 @@ export function OneScreenClient({
           onHomework={setHomeworkValue}
           onTextbook={setTextbookFor}
           onDraft={setDraftFor}
+          onTrend={setTrendDraftFor}
           onSendRow={sendRow}
           onSaveAll={saveAllVisible}
           onSendAll={sendAllVisible}
@@ -792,6 +825,7 @@ export function OneScreenClient({
                 onTextbook={setTextbook}
                 onMakeup={toggleMakeup}
                 onSubjectDraft={setSubjectDraft}
+                onSubjectTrend={setSubjectTrend}
                 onAutoWrite={autoWriteSubject}
                 generatingSubject={genSubject}
                 onSend={sendSubject}

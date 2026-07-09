@@ -135,6 +135,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showHomework: true,
     showAttitude: true,
     showParentNote: true,
+    showTrendNote: true, // 학습 추세(종합분석) 기본 표시 — 0091a
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
   },

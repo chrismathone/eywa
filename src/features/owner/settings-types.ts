@@ -180,6 +180,7 @@ export const reportSchema = z.object({
   showHomework: z.boolean(),
   showAttitude: z.boolean(),
   showParentNote: z.boolean(),
+  showTrendNote: z.boolean(), // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식)
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
 });

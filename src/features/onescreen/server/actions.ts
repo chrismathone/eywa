@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
+import { buildTrendInput, buildTrendPrompt, type TrendHistoryRow } from "../trend-comment";
 import { isClassnoteAllowed } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { ingestReport } from "@/features/progress/server/ingest";
@@ -21,6 +22,7 @@ export type SaveLessonReportInput = {
   dailyTest?: string; // "20문제 중 18개" (학부모 보고서 일일테스트 표시용)
   checkTest?: string; // "20문제 중 19개"
   attitude?: string; // "좋음"
+  trendNote?: string; // 학습 추세(종합분석) 문구 — 0091a. 멘트(notes)와 별개 저장·표시.
   subject?: string; // 과목키(math/english…) — (student,date,subject) 과목별 1행 dedup용
 };
 
@@ -78,6 +80,7 @@ export async function saveLessonReport(
         attitude: input.attitude || null,
         teacher_name: user.displayName ?? null,
         notes: input.notes || null,
+        trend_note: input.trendNote || null,
         source: "onescreen",
       },
       { onConflict: "tenant_id,student_id,report_date,subject" },
@@ -322,6 +325,70 @@ export async function generateReportComment(
     const comment = (data.comment ?? "").trim();
     if (!comment) return { ok: false, error: "빈 응답" };
     return { ok: true, comment };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
+  }
+}
+
+/**
+ * AI 학습 추세(종합분석) 자동작성 — edutrix generateTrendAnalysis 이식.
+ * 학생의 과거 lesson_reports(같은 과목) 최근 N회 시험·과제 흐름 + 오늘(작업중, 미저장일 수 있음)을 합쳐
+ * generateJSON(기본 Solar Pro 3)로 `{trend}` 한 단락 생성. 표본 부족·실패 → ok:false(멘트처럼 조용히 생략).
+ * DB 미변경(순수 생성) → 로그인만 확인. RLS(테넌트 스코프)는 supabase가 담당.
+ */
+export async function generateTrendComment(args: {
+  studentId: string;
+  subject?: string; // 과목키(math…) — lesson_reports.subject 매칭. 미지정=null-subject 행.
+  todayExamInfo?: string; // 오늘 시험·테스트 합본("일일 18/20, 확인 19/20")
+  todayHomework?: string; // 오늘 과제 상태
+}): Promise<{ ok: boolean; trend?: string; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!args.studentId) return { ok: false, error: "학생 정보가 없습니다" };
+
+  const supabase = await createClient();
+  const today = kstToday();
+  // 과거 저장 보고서(같은 과목) 최근 N — 오늘 이전(오늘은 아래에서 작업중 값으로 append). RLS 테넌트 스코프.
+  let q = supabase
+    .from("lesson_reports")
+    .select("report_date, exam_info, homework_score")
+    .eq("student_id", args.studentId)
+    .lt("report_date", today)
+    .not("exam_info", "is", null)
+    .order("report_date", { ascending: false })
+    .limit(10);
+  // 과목 매칭: native math("math")는 legacy 임포트(subject=null, 대부분 수학)도 흐름에 포함(progress ingest와 동형).
+  // 그 외 과목은 정확 매칭(과목 혼선 방지). 미지정이면 null-subject만.
+  if (!args.subject) q = q.is("subject", null);
+  else if (args.subject === "math") q = q.or("subject.eq.math,subject.is.null");
+  else q = q.eq("subject", args.subject);
+  const { data: past } = await q;
+
+  const history: TrendHistoryRow[] = (past ?? [])
+    .map((r) => ({
+      date: r.report_date as string,
+      examInfo: (r.exam_info as string | null) ?? null,
+      homeworkScore: (r.homework_score as string | null) ?? null,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  // 오늘(작업중) 포함 — edutrix "오늘 포함" 패리티. 저장 전이라도 화면 값으로 최신 회차 반영.
+  history.push({
+    date: today,
+    examInfo: args.todayExamInfo?.trim() || null,
+    homeworkScore: args.todayHomework?.trim() || null,
+  });
+
+  const input = buildTrendInput(history);
+  if (!input) return { ok: false, error: "표본 부족" };
+  try {
+    const { data } = await generateJSON<{ trend?: string }>({
+      prompt: buildTrendPrompt(input),
+      maxTokens: 700,
+      keyName: "default",
+    });
+    const trend = (data.trend ?? "").trim();
+    if (!trend) return { ok: false, error: "빈 응답" };
+    return { ok: true, trend };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }

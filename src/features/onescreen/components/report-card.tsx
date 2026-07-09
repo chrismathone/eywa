@@ -12,6 +12,7 @@ import type { OneScreenStudent, Subject, TestScore } from "../types";
 // revoked: 공유링크 취소됨(P2a) — 링크 열람 차단, 재발급 필요. viewCount: 학부모 열람 수.
 export type SubjectReport = {
   draft: string;
+  trendDraft?: string; // 학습 추세(종합분석) 초안 — 4a. 멘트(draft)와 별개, 자동작성 시 함께 채움.
   sent: boolean;
   shareToken?: string;
   classnoteStatus?: string;
@@ -98,6 +99,7 @@ export function ReportCard({
   onTextbook,
   onMakeup,
   onSubjectDraft,
+  onSubjectTrend,
   onAutoWrite,
   generatingSubject,
   onSend,
@@ -118,6 +120,7 @@ export function ReportCard({
   onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   onSubjectDraft: (subjectName: string, text: string) => void;
+  onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   onAutoWrite: (subjectName: string) => void;
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
   onSend: (subjectName: string, channel: string) => void;
@@ -280,6 +283,17 @@ export function ReportCard({
             onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
             placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
             className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+          />
+        </div>
+
+        {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 표본 부족 시 빈 채로 둠(수동 입력 가능). */}
+        <div className="flex flex-col gap-1.5">
+          <p className="micro text-text-faint">학습 추세 (종합분석)</p>
+          <textarea
+            value={rep.trendDraft ?? ""}
+            onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
+            placeholder="'자동 작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다."
+            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
 

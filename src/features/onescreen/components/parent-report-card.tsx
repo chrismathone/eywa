@@ -48,6 +48,7 @@ export type ParentReportCardProps = {
     homeworkScore: string | null;
     attitude: string | null;
     notes: string | null;
+    trendNote: string | null; // 학습 추세(종합분석) — 0091a(showTrendNote 토글)
   };
   student: { name: string | null; school: string | null; grade: string | null } | null;
   academyName: string;
@@ -127,6 +128,13 @@ export function ParentReportCard({
           <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">
             {report.notes || "작성된 보고 내용이 없습니다."}
           </p>
+        </Section>
+      ) : null}
+
+      {/* 학습 추세(종합분석) — 0091a. 내용 있을 때만 노출(빈 회차엔 섹션 자체를 숨김). */}
+      {rpt.showTrendNote && report.trendNote ? (
+        <Section title="학습 추세">
+          <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
         </Section>
       ) : null}
 
