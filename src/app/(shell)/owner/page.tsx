@@ -12,6 +12,7 @@ import { ReportSection } from "./_components/report-section";
 import { AiMentSection } from "./_components/ai-ment-section";
 import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { PermissionsSection } from "./_components/permissions-section";
+import { ReportMgmtFace } from "./_components/report-mgmt-face";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { AuditFace } from "./_components/audit-face";
@@ -31,6 +32,7 @@ type OwnerTab =
   | "ai_ment"
   | "permissions"
   | "popups"
+  | "report_mgmt"
   | "data"
   | "audit"
   | "sheets";
@@ -45,6 +47,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   ai_ment: "AI 멘트",
   permissions: "역할·권한",
   popups: "팝업 공지",
+  report_mgmt: "보고서 관리",
   data: "데이터 정리",
   audit: "감사로그",
   sheets: "연동",
@@ -60,6 +63,7 @@ const VALID_TABS: OwnerTab[] = [
   "ai_ment",
   "permissions",
   "popups",
+  "report_mgmt",
   "data",
   "audit",
   "sheets",
@@ -82,6 +86,7 @@ const FACES: Face[] = [
   { key: "ai_ment", label: TAB_LABEL.ai_ment, href: "/owner?tab=ai_ment", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
   { key: "popups", label: TAB_LABEL.popups, href: "/owner?tab=popups", group: "관리" },
+  { key: "report_mgmt", label: TAB_LABEL.report_mgmt, href: "/owner?tab=report_mgmt", group: "관리" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
   { key: "audit", label: TAB_LABEL.audit, href: "/owner?tab=audit", group: "관리" },
   { key: "sheets", label: TAB_LABEL.sheets, href: "/owner?tab=sheets", group: "관리" },
@@ -163,6 +168,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         )
       ) : null}
       {tab === "popups" ? <PopupsFace /> : null}
+      {tab === "report_mgmt" ? <ReportMgmtFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">
           <DataFace />
