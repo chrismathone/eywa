@@ -29,6 +29,7 @@ export default async function RetentionMessagesPage() {
 
       {queue.length === 0 ? (
         <EmptyState
+          image="sends"
           icon={() => <MessageSquareOff size={32} strokeWidth={1.5} />}
           title="메시지 대상이 없습니다"
           description="위험·관심 학생이나 상담 공백 학생이 생기면 이곳에서 학부모 메시지 초안을 만들 수 있습니다."

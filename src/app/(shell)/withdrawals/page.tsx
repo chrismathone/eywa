@@ -357,6 +357,7 @@ export default async function WithdrawalsPage({
 
       {rows.length === 0 ? (
         <EmptyState
+          image="withdrawals"
           icon={() => <UserX size={32} strokeWidth={1.5} />}
           title="퇴원 학생이 없습니다"
           description="퇴원 처리된 학생이 생기면 이곳에 표시됩니다."
@@ -477,6 +478,7 @@ function SubjectEndedView({
   if (rows.length === 0) {
     return (
       <EmptyState
+        image="withdrawals"
         icon={() => <UserX size={32} strokeWidth={1.5} />}
         title="수강종료 학생이 없습니다"
         description="재원 중이지만 특정 과목을 모두 끊은 학생이 생기면 여기에 표시됩니다."

@@ -160,6 +160,7 @@ export default async function ExamsPage({
 
       {total === 0 ? (
         <EmptyState
+          image="exams"
           icon={() => <SearchX size={32} strokeWidth={1.5} />}
           title="등록된 시험이 없습니다"
           description="시험을 등록하고 반 전체 점수를 일괄 입력해 보세요."

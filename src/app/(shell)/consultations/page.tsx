@@ -212,7 +212,11 @@ export default async function ConsultationsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState icon={() => <MessagesSquare size={32} strokeWidth={1.5} />} title="기록된 상담이 없습니다" />
+        <EmptyState
+          image="meetings"
+          icon={() => <MessagesSquare size={32} strokeWidth={1.5} />}
+          title="기록된 상담이 없습니다"
+        />
       ) : (
         <>
         <ul className="space-y-2.5">

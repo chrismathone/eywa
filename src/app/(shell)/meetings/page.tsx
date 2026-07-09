@@ -279,6 +279,7 @@ export default async function MeetingsPage({
 
       {total === 0 ? (
         <EmptyState
+          image="meetings"
           icon={() => <Mic size={32} strokeWidth={1.5} />}
           title="기록된 회의가 없습니다"
         />

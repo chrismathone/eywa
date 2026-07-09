@@ -117,6 +117,7 @@ export default async function DocumentsPage({
 
           {total === 0 ? (
             <EmptyState
+              image={q ? "search" : "documents"}
               title={q ? "검색 결과가 없습니다" : "아직 문서가 없습니다"}
               description={
                 canWrite ? "우측 상단 '업로드'로 서식 파일을 올리거나 '새 문서'를 작성하세요." : "관리자가 서식을 올리면 여기에 표시됩니다."
