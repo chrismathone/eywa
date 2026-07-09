@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 겸직(관리자+강사) 뷰 전환 토글 — 강사뷰 ↔ 관리자뷰 (2026-07-09) — ✅ 라이브 E2E 4/4(겸직 계정 임시 더미반→검증→원복) + typecheck0/lint0/test775/build✓
+관리자 계열 역할이면서 실제 담당 반이 있는 겸직 사용자가 셸 뷰를 전환. **관리자뷰(풀셸) 사이드바 하단 '강사뷰로 전환' / 강사 미니셸 '내 메뉴' 드롭다운 맨 하단(구분선 아래) '관리자뷰로 전환'**. 뷰 전환 = 쿠키(`eywa-view`, httpOnly)만 바꿈 — 실 `system_role`은 그대로 authoritative(RLS·requireAccess·canWriteTenant), **권한 불변·락아웃 없음**.
+- **스코프 단일소스** [`effectiveTeacherId`/`effectiveTeacherScope`](../src/lib/auth/view-mode.ts): 실 강사면 본인 id(불변·회귀0), 겸직+쿠키teacher+담당반≥1이면 본인 id, 그 외 null. 기존 **26곳**의 `systemRole==="teacher" ? user.id` 스코프(classes·attendance·students·exams·consultations·search·timetable·retention·textbook·print·exports)를 이 헬퍼로 중앙화. 노출 판정 `canUseTeacherView`는 head:true 카운트(B2).
+- **배선**: `(shell)/layout.tsx` `getShellView()` 분기(겸직+쿠키teacher→강사 미니셸) + [`TeacherViewToggle`](../src/components/view-mode-toggle.tsx)(사이드바 레일톤) / [`TeacherMenu`](../src/components/teacher-menu.tsx) `canReturnToAdmin`(드롭다운). 액션 [`features/shell/view-actions.ts`](../src/features/shell/view-actions.ts).
+- ⚠️ **함정**: base-ui 드롭다운(Menu.Item) 안에서 호출한 **서버액션 `redirect()`는 클라 네비게이션이 유실**(쿠키만 바뀌고 화면 안 넘어감 — onClick/form/closeOnClick 다 실패, 실측). → `switchToAdminView`는 착지경로를 **반환**하고 클라 `window.location.assign()`으로 확정 이동(사이드바 버튼은 일반 흐름이라 redirect 정상).
+- 라이브 E2E(박소선 master + 임시 더미 반으로 겸직화): 사이드바 토글 노출 → 강사 미니셸(/onescreen) → 수업목록 본인 담당 1건만 스코핑 → 내 메뉴 관리자뷰 전환 → 관리자 풀셸 복귀. 더미 반 삭제·원복 완료.
+
 ### 활동 로그 — 환불요청서 서식 내용 필드별 노출 (2026-07-09) — ✅ 코드 main 반영·test(refund 3 추가)/tsc0/lint0 + 트랜잭션 E2E(트리거 form_data 객체 nest 확인·ROLLBACK) · 0085a
 사용자 요청: 지출·환불요청서·교재요청서 작성/수정/삭제도 활동 로그에 남는지 확인 + 남되 "영문 안 나오게 철저히 한글화". 조사: 셋 다 트리거 부착 테이블(`expenses`·`academy_documents`·`textbook_orders`)이라 이미 추적되나, **환불요청서만** 내용이 `academy_documents.form_data`(jsonb) 한 컬럼 + redact 대상이라 필드별 변경이 "서식내용 변경"으로만 남았음.
 - **트리거([0085a](../supabase/migrations/0085a_refund_form_activity.sql))**: `log_activity()` create-or-replace(0084a 커버리지 확장 위에) — UPDATE 시 `form_data`가 redact여도 **`form_type='refund_request'`이면 예외적으로 old/new 원본 기록**(이력서·전사·급여·토큰은 redact 유지 = 누수 방지). INSERT/DELETE 스냅샷은 form_data 계속 제외. ⚠️ **트레이드오프**: 환불요청서 계좌번호 등이 사무실(master/admin/manager) 활동 로그에 노출(사용자 승인).
