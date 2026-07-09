@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, RotateCcw, Sheet, X } from "lucide-react";
 import {
   applyStructureImport,
@@ -18,6 +19,7 @@ const tch = (names: string[]) => (names.length ? names.join(", ") : "—");
  * 편집한 강사별 시트가 eywa 배치를 어떻게 바꿀지 화면에서 검증한다. master 전용.
  */
 export function StructureImportDialog({ subject }: { subject: string }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [report, setReport] = useState<DryRunReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function StructureImportDialog({ subject }: { subject: string }) {
         setApplied(res.applied ?? null);
         setSnapshotId(res.snapshotId ?? null);
         setConfirming(false);
+        router.refresh(); // 시간표 그리드 자동 갱신(수동 새로고침 불필요) — 다이얼로그 상태는 유지.
       }
     });
   }
@@ -78,6 +81,7 @@ export function StructureImportDialog({ subject }: { subject: string }) {
         );
         setSnapshotId(null);
         setApplied(null);
+        router.refresh(); // 롤백 후에도 시간표 그리드 자동 갱신.
       }
     });
   }
