@@ -24,10 +24,13 @@ export function splitTopLevelCommas(text: string): string[] {
   const out: string[] = [];
   let depth = 0;
   let cur = "";
-  for (const ch of text) {
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (ch === "(" || ch === "（" || ch === "[") depth++;
     else if (ch === ")" || ch === "）" || ch === "]") depth = Math.max(0, depth - 1);
-    if ((ch === "," || ch === "，") && depth === 0) {
+    // 천단위 콤마(숫자,숫자 = 288,000)는 분할하지 않는다 — 금액이 "288"/"000원"으로 쪼개지던 버그 방지.
+    const isThousands = /[0-9]/.test(text[i - 1] ?? "") && /[0-9]/.test(text[i + 1] ?? "");
+    if ((ch === "," || ch === "，") && depth === 0 && !isThousands) {
       out.push(cur.trim());
       cur = "";
     } else cur += ch;

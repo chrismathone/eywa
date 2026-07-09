@@ -8,6 +8,7 @@ import {
   type ConsultationAudioReport,
 } from "@/features/enrollment/server/queries";
 import { RichText } from "@/components/rich-text";
+import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { PrintActions } from "./print-actions";
 
 export const metadata = { title: "신입생 인수인계서 — eywa" };
@@ -258,9 +259,12 @@ function AudioReportSections({ report }: { report: ConsultationAudioReport }) {
       {sections.map(({ key, label, list }) => {
         const body = report[key];
         if (typeof body !== "string" || !body.trim()) return null;
+        // 리스트 섹션 후보정. 단일 항목 병합 시 bulletize를 꺼 콤마분할(병합 되돌림) 회피.
+        const normalized = list ? normalizeAiListText(body) : body;
+        const asList = !!list && normalized.includes("\n");
         return (
           <Section key={key} title={label}>
-            <RichText text={body} bulletize={list} className="space-y-1 text-sm leading-relaxed" />
+            <RichText text={normalized} bulletize={asList} className="space-y-1 text-sm leading-relaxed" />
           </Section>
         );
       })}

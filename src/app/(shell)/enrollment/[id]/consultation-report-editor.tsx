@@ -17,6 +17,7 @@ import {
   updateConsultationReportSection,
 } from "@/features/enrollment/server/actions";
 import { RichText } from "@/components/rich-text";
+import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { ConversationFlowTree } from "./conversation-flow-tree";
 import { formatCreatedAt } from "@/lib/utils";
 
@@ -103,7 +104,10 @@ export function ConsultationReportEditor({
 
   function startEdit(key: TextKey) {
     setError(null);
-    setDraft((report[key] as string) ?? "");
+    const raw = (report[key] as string) ?? "";
+    const isList = SECTIONS.find((s) => s.key === key)?.list;
+    // 리스트 섹션은 후보정된 텍스트를 편집(저장하면 정리된 형태로 DB에 반영 — 점진 정리).
+    setDraft(isList ? normalizeAiListText(raw) : raw);
     setEditing(key);
     setExpanded((prev) => new Set(prev).add(key));
   }
@@ -218,6 +222,9 @@ export function ConsultationReportEditor({
       {/* 아코디언 섹션 */}
       {visibleSections.map(({ key, label, emoji, list }) => {
         const body = ((report[key] as string) ?? "").trim();
+        // 리스트 섹션은 후보정. 단일 항목으로 병합되면 bulletize를 꺼 RichText 콤마분할(병합 되돌림)을 피한다.
+        const normalized = list ? normalizeAiListText(body) : body;
+        const asList = !!list && normalized.includes("\n");
         const isOpen = expanded.has(key);
         const isEditing = editing === key;
         return (
@@ -299,8 +306,8 @@ export function ConsultationReportEditor({
                   </div>
                 ) : (
                   <RichText
-                    text={body}
-                    bulletize={list}
+                    text={normalized}
+                    bulletize={asList}
                     className="text-foreground space-y-1.5 text-sm leading-relaxed"
                   />
                 )}

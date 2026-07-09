@@ -24,4 +24,13 @@ describe("splitTopLevelCommas — 괄호 인식 쉼표 분할", () => {
     expect(splitTopLevelCommas("단일 항목")).toEqual(["단일 항목"]);
     expect(splitTopLevelCommas("a, , b,")).toEqual(["a", "b"]);
   });
+
+  it("천단위 콤마(숫자,숫자)는 쪼개지 않는다 — 288,000원 보호", () => {
+    expect(splitTopLevelCommas("수업료 288,000원")).toEqual(["수업료 288,000원"]);
+    expect(splitTopLevelCommas("교재비 2만원, 총 288,000원, 인강 3만원")).toEqual([
+      "교재비 2만원",
+      "총 288,000원",
+      "인강 3만원",
+    ]);
+  });
 });
