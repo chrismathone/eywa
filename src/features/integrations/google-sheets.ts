@@ -1,5 +1,6 @@
 import "server-only";
 import { google } from "googleapis";
+import type { SheetGrid } from "@/features/timetable/import/structure/types";
 
 /**
  * Sheets/Drive 쓰기 호출을 429/503에 한해 지수 백오프 재시도.
@@ -92,17 +93,20 @@ function translateSheetsError(e: unknown): string {
 }
 
 /**
- * 수학 시간표 xlsx를 **운영자가 미리 만들어 서비스계정과 공유한 기존 구글 시트에 통째 덮어쓰기**.
+ * 시간표 xlsx를 **운영자가 미리 만들어 서비스계정과 공유한 기존 구글 시트에 통째 덮어쓰기**(과목 무관).
  * (ijw `timetableSheetsSync.updateSheetContent`와 동일 방식 — `drive.files.update` media 교체.)
  *
  * ⚠️ **서비스계정은 자체 Drive 용량이 0이라 새 시트를 만들 수 없다**(storageQuotaExceeded). 그래서
  *    ① 사람이 빈 구글 시트를 만들고(소유자=원장 계정 용량 사용) ② 그 시트를 서비스계정 이메일
  *    ([getServiceAccountEmail])에 **'편집자'로 공유**한 뒤 ③ 그 시트 ID를 연동에 등록해야 한다.
  *    eywa는 그 기존 시트를 **갱신(update)만** 한다.
- * ⚠️ 이는 **시트 전체 덮어쓰기**다 — 대상 시트의 기존 탭은 보존되지 않는다(테넌트 1개 = 전용 시트 1개 가정).
- *    xlsx의 탭 구성(전체·강사별·_meta)이 그대로 시트에 반영된다.
+ * ⚠️ 이는 **시트 전체 덮어쓰기**다 — 대상 시트의 기존 탭은 보존되지 않는다(과목당 전용 시트 1개 가정 —
+ *    수학·영어는 서로 다른 시트여야 한다). 넘긴 xlsx의 탭 구성이 그대로 시트에 반영된다.
+ * ⚠️⚠️ **`requestBody.mimeType`를 구글시트 타입으로 반드시 지정**해야 Drive가 xlsx를 **변환**해 탭·셀을
+ *    채운다. 이 힌트가 없으면 files.update가 네이티브 구글시트를 **빈 시트(기본 1탭)로 날려버린다**(2026-07-08
+ *    실측: 200 OK로 조용히 성공하지만 내용 0). media만으론 변환이 안 걸림 — 반드시 requestBody와 함께.
  */
-export async function overwriteMathTimetableSheet(
+export async function overwriteTimetableSheet(
   spreadsheetId: string,
   buffer: ArrayBuffer,
 ): Promise<void> {
@@ -115,6 +119,8 @@ export async function overwriteMathTimetableSheet(
     await withSheetsRetry(() =>
       drive.files.update({
         fileId: spreadsheetId,
+        // 변환 강제 — 없으면 시트가 빈 채로 덮어써진다(위 ⚠️⚠️).
+        requestBody: { mimeType: "application/vnd.google-apps.spreadsheet" },
         media: {
           mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           body: Readable.from(Buffer.from(buffer)),
@@ -150,6 +156,42 @@ export async function overwriteMathTimetableSheet(
 }
 
 /**
+ * 업로드(변환) 후 특정 탭 셀에 **구글시트 수식**을 주입한다(정적 값 위에 덮어쓰기).
+ * ⚠️ xlsx에 구글 전용 함수(LET/LAMBDA/REGEXEXTRACT 등)를 넣으면 xlsx→시트 변환이 통째로 실패
+ *    ("Conversion not supported")하므로, 정적 값으로 먼저 올린 뒤 Sheets API로 수식만 덮는다.
+ */
+export async function applySheetFormulas(
+  spreadsheetId: string,
+  sheetName: string,
+  cells: { row: number; col: number; formula: string }[],
+): Promise<void> {
+  if (cells.length === 0) return;
+  const auth = getServiceAccountAuth();
+  await auth.authorize();
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    const meta = await withSheetsRetry(() =>
+      sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,title)" }),
+    );
+    const sheetId = (meta.data.sheets ?? []).find((s) => s.properties?.title === sheetName)?.properties?.sheetId;
+    if (typeof sheetId !== "number") throw new Error(`시트 탭 '${sheetName}'을 찾을 수 없습니다`);
+    const requests = cells.map((c) => ({
+      updateCells: {
+        range: { sheetId, startRowIndex: c.row - 1, endRowIndex: c.row, startColumnIndex: c.col - 1, endColumnIndex: c.col },
+        rows: [{ values: [{ userEnteredValue: { formulaValue: c.formula.startsWith("=") ? c.formula : `=${c.formula}` } }] }],
+        fields: "userEnteredValue",
+      },
+    }));
+    for (let i = 0; i < requests.length; i += 500) {
+      const chunk = requests.slice(i, i + 500);
+      await withSheetsRetry(() => sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: chunk } }));
+    }
+  } catch (e) {
+    throw new Error(translateSheetsError(e));
+  }
+}
+
+/**
  * 구글 시트의 한 탭(`tabName`) 전체 셀 값을 2D 문자열 배열로 읽는다(1행=헤더).
  * '시트에서 가져오기'(라운드트립 import) — 시트 편집분을 앱으로 되읽는 단방향 반대 경로.
  * 탭이 없으면(예: '시트 반영' 전) Sheets가 400(Unable to parse range)을 주므로 친절 메시지로 변환.
@@ -165,6 +207,50 @@ export async function readSheetTabRows(spreadsheetId: string, tabName: string): 
     );
     const values = (res.data.values ?? []) as unknown[][];
     return values.map((row) => row.map((c) => (c == null ? "" : String(c))));
+  } catch (e) {
+    const msg = ((e as { message?: string })?.message || "").toLowerCase();
+    if (msg.includes("unable to parse range") || msg.includes("not found")) {
+      throw new Error(`시트에 '${tabName}' 탭이 없습니다. 먼저 시간표에서 '시트 반영'을 한 번 누르세요.`);
+    }
+    throw new Error(translateSheetsError(e));
+  }
+}
+
+/**
+ * 시트 탭을 **셀 + 병합** 포함으로 읽는다(구조 import용). `values.get`은 병합을 잃어(강사별 그리드는
+ * 병합=수업길이라 필수) `spreadsheets.get(includeGridData:true)`로 읽는다. cells=formattedValue(빈="") 0-based,
+ * merges=Sheets 원형(0-based, end-exclusive). 후행 완전 빈 행은 트림.
+ */
+export async function readSheetGridWithMerges(spreadsheetId: string, tabName: string): Promise<SheetGrid> {
+  const auth = getServiceAccountAuth();
+  await auth.authorize();
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    const res = await withSheetsRetry(() =>
+      sheets.spreadsheets.get({
+        spreadsheetId,
+        ranges: [`'${tabName}'`],
+        includeGridData: true,
+        fields: "sheets(data(rowData(values(formattedValue))),merges)",
+      }),
+    );
+    const sheet = res.data.sheets?.[0];
+    const rowData = sheet?.data?.[0]?.rowData ?? [];
+    const maxCol = Math.max(0, ...rowData.map((r) => (r.values ?? []).length));
+    const cells: string[][] = rowData.map((r) => {
+      const vs = r.values ?? [];
+      const row: string[] = [];
+      for (let c = 0; c < maxCol; c++) row.push(vs[c]?.formattedValue ?? "");
+      return row;
+    });
+    while (cells.length && cells[cells.length - 1]!.every((x) => x === "")) cells.pop();
+    const merges = (sheet?.merges ?? []).map((m) => ({
+      startRowIndex: m.startRowIndex ?? 0,
+      endRowIndex: m.endRowIndex ?? 0,
+      startColumnIndex: m.startColumnIndex ?? 0,
+      endColumnIndex: m.endColumnIndex ?? 0,
+    }));
+    return { tabName, cells, merges };
   } catch (e) {
     const msg = ((e as { message?: string })?.message || "").toLowerCase();
     if (msg.includes("unable to parse range") || msg.includes("not found")) {

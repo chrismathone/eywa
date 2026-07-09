@@ -69,7 +69,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       ) : tab === "calculator" ? (
         <CalculatorPanel sp={sp} />
       ) : tab === "refunds" ? (
-        <RefundsFace page={Math.max(1, Number(sp.page) || 1)} />
+        <RefundsFace sp={sp} />
       ) : (
         <BillingContent sp={sp} />
       )}

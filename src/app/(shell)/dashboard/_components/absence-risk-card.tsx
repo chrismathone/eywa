@@ -25,7 +25,7 @@ export function AbsenceRiskCard({ items }: { items: AbsenceRisk[] }) {
               <WindowLink
                 href={`/students/${s.studentId}?tab=attendance`}
                 title={s.studentName}
-                className="group flex items-center justify-between py-1.5"
+                className="group flex items-baseline justify-between py-1.5"
               >
                 <span className="text-foreground group-hover:text-primary text-[13px] font-medium">
                   {s.studentName}

@@ -23,6 +23,7 @@ import { TranscriptSection } from "@/components/transcript-section";
 import { RecordingsSection } from "./recordings-section";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
+import { ConsultationContentActions } from "./consultation-content-actions";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
@@ -193,7 +194,7 @@ export default async function EnrollmentDetailPage({
             <h2 className="text-foreground text-sm font-semibold">
               {consult.processingStatus === "uploaded" || consult.processingStatus === "transcribing"
                 ? "녹음을 한국어로 전사 중입니다"
-                : "AI가 상담록을 13개 섹션으로 분석 중입니다"}
+                : "AI가 상담록을 12개 섹션으로 분석 중입니다"}
             </h2>
           </div>
           <p className="text-muted-foreground text-xs">
@@ -269,24 +270,14 @@ export default async function EnrollmentDetailPage({
               ) : (
                 <p className="text-text-faint flex-1 text-sm">기재된 상담 내용이 없습니다.</p>
               )}
-              {/* 녹음 분석이 정리한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전을 되살려 제시(비파괴). */}
-              {showParentRequestSuggestion ? (
-                <details className="border-gold/40 bg-gold-soft/30 mt-2 rounded-md border px-3 py-2">
-                  <summary className="text-foreground flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium">
-                    <Sparkles className="text-gold size-3.5 shrink-0" />
-                    AI가 정리한 상담 내용 보기
-                  </summary>
-                  <p className="text-text-dim mt-2 max-h-48 overflow-y-auto text-xs leading-relaxed break-words whitespace-pre-wrap">
-                    {aiSuggestedParentRequest}
-                  </p>
-                  <Link
-                    href={`/enrollment/${consult.id}/edit`}
-                    className="text-gold hover:text-gold/80 mt-2 inline-flex items-center gap-1 text-xs font-medium"
-                  >
-                    수정에서 반영하기 <ExternalLink className="size-3" />
-                  </Link>
-                </details>
-              ) : null}
+              {/* AI 액션 2종 — 같은 컴팩트 버튼으로 가로 정렬. ① 요약 채우기/덧붙이기(직접 쓰기) ② 추출기 후보 보기(펼침+편집 링크). */}
+              <ConsultationContentActions
+                consultationId={consult.id}
+                hasExisting={!!consult.parentRequest}
+                canAddSummary={!!consult.audioReport?.summary?.trim()}
+                aiSuggestion={showParentRequestSuggestion ? aiSuggestedParentRequest : null}
+                editHref={`/enrollment/${consult.id}/edit`}
+              />
               {/* makeedu 동기화 예비상담(makeedu_id=counselSeq) → 원본 상세 링크(클릭 시 makeedu 로그인 필요). */}
               {consult.makeeduId ? (
                 <a
@@ -354,6 +345,15 @@ export default async function EnrollmentDetailPage({
       {/* ── AI 분석 ── */}
       <div className="space-y-4">
         <SectionHeader icon={Sparkles} iconClass="text-gold" title="AI 분석" />
+        {/* 재분석 진행 표시 — 버튼이 있는 이 섹션에서 바로 보이게(상단 배너는 시야 밖). StatusWatcher가 완료 시 자동 갱신. */}
+        {consult.processingStatus === "analyzing" && consult.audioReport ? (
+          <div className="border-chart-3/20 bg-chart-3/5 flex items-center gap-2 rounded-md border px-3.5 py-2.5">
+            <Loader2 className="text-chart-3 size-4 shrink-0 animate-spin" />
+            <p className="text-foreground text-xs">
+              AI가 다시 분석 중입니다 — 완료되면 아래 결과가 자동으로 갱신됩니다.
+            </p>
+          </div>
+        ) : null}
         {consult.audioReport && consult.aiAnalysis ? (
           <ConsultationReportEditor
             report={consult.audioReport}
@@ -362,6 +362,9 @@ export default async function EnrollmentDetailPage({
             generatedAt={consult.aiAnalysis.generatedAt}
             editedBy={consult.aiAnalysis.reportEditedBy}
             editedAt={consult.aiAnalysis.reportEditedAt}
+            studentName={consult.prospectName}
+            consultationDate={consult.consultedAt?.slice(0, 10)}
+            transcript={consult.transcription}
           />
         ) : consult.aiAnalysis ? (
           <AiAnalysisPanel

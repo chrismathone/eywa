@@ -131,7 +131,7 @@ export default async function ClassesPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState icon={() => <SearchX size={32} strokeWidth={1.5} />} title="결과 없음" />
+        <EmptyState image="classes" icon={() => <SearchX size={32} strokeWidth={1.5} />} title="결과 없음" />
       ) : (
         <>
           {view === "table" ? (

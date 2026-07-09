@@ -177,7 +177,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       ) : null}
       {tab === "audit" ? <AuditFace action={sp.action} page={page} isEmbed={isEmbed} /> : null}
       {tab === "sheets" ? (
-        <SheetsFace notifications={settings.notifications} page={page} isEmbed={isEmbed} />
+        <SheetsFace subjects={settings.operations.subjects} page={page} isEmbed={isEmbed} />
       ) : null}
     </div>
   );

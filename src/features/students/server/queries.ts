@@ -2,8 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
   slotPeriodRow,
@@ -205,10 +204,8 @@ export async function getStudentStatusCounts(): Promise<{
   withdrawn: number;
 }> {
   const supabase = await createClient();
-  // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치).
-  const user = await getCurrentUser();
-  const teacherStudentIds =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
+  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0)
     return { all: 0, enrolled: 0, prospect: 0, withdrawn: 0 };
   const base = () => {
@@ -243,10 +240,8 @@ export async function getStudentsPage(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  // 강사 스코프: teacher면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
-  const user = await getCurrentUser();
-  const teacherStudentIds =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
+  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
 
   let subjectIds: string[] | null = null;
@@ -520,6 +515,8 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
 const KO_DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
 
 export type ScheduleGroup = { days: string[]; label: string }; // {days:["월","목"], label:"1~3교시"}
+// 개별 슬롯(요일 하나 × 시작시각 하나) — 주간 시간표 그리드 배치용(교시 체계가 과목마다 달라 시각 기준 병합).
+export type ClassSlot = { day: DayOfWeek; startTime: string; periodLabel: string; room: string | null };
 export type StudentClassRow = {
   enrollmentId: string;
   classId: string;
@@ -531,6 +528,11 @@ export type StudentClassRow = {
   onHold: boolean;
   studentCount: number; // 반 현재 인원(활성 enrollment)
   schedule: ScheduleGroup[];
+  // 등원요일로 필터링된 개별 슬롯(groupSchedule과 동일 필터) — 학생 주간 시간표 그리드 소스.
+  slots: ClassSlot[];
+  // 분리등원 편집(EditableAttendanceCell)용: 실제 등원 요일(raw, []=전체) + 반 운영 요일(선택지).
+  attendanceDays: string[];
+  classDays: string[];
 };
 
 // 연속 교시 번호를 범위로 병합: [3,4,5,6]→"3-6교시", [2,3,5]→"2-3, 5교시", [2]→"2교시".
@@ -603,7 +605,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     .from("enrollments")
     .select(
       `id, class_id, start_date, end_date, on_hold, attendance_days,
-       class:class_id ( class_name, subject, teacher:teacher_id ( display_name ) )`,
+       class:class_id ( class_name, subject, teacher:teacher_id ( display_name ), classroom:classroom_id ( name ) )`,
     )
     .eq("student_id", studentId)
     .order("start_date", { ascending: false });
@@ -614,12 +616,16 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   // 반별 스케줄(요일·시작시각)
   const { data: scheds } = await supabase
     .from("class_schedules")
-    .select("class_id, day_of_week, start_time")
+    .select("class_id, day_of_week, start_time, slot_room_label")
     .in("class_id", classIds);
-  const schedByClass = new Map<string, { day: DayOfWeek; startTime: string }[]>();
+  const schedByClass = new Map<string, { day: DayOfWeek; startTime: string; roomLabel: string | null }[]>();
   for (const s of scheds ?? []) {
     const arr = schedByClass.get(s.class_id) ?? [];
-    arr.push({ day: s.day_of_week as DayOfWeek, startTime: String(s.start_time).slice(0, 5) });
+    arr.push({
+      day: s.day_of_week as DayOfWeek,
+      startTime: String(s.start_time).slice(0, 5),
+      roomLabel: (s.slot_room_label as string | null) ?? null,
+    });
     schedByClass.set(s.class_id, arr);
   }
 
@@ -641,15 +647,38 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
 
   return ens.map((e) => {
     const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
-      | { class_name?: string; subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] }
+      | {
+          class_name?: string;
+          subject?: string;
+          teacher?: { display_name?: string } | { display_name?: string }[];
+          classroom?: { name?: string } | { name?: string }[];
+        }
       | undefined;
     const teacher = klass
       ? ((Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as { display_name?: string } | undefined)
       : undefined;
+    // 반 기본 강의실(classes.classroom_id) — 슬롯 라벨(slot_room_label)이 없을 때 상속.
+    const defaultRoom =
+      ((Array.isArray(klass?.classroom) ? klass?.classroom[0] : klass?.classroom) as { name?: string } | undefined)
+        ?.name ?? null;
     // 과목 키를 그대로 전달(string) — 커스텀 키(subject_1 등)도 과목별 교시표로 해석되고,
     // 미지의 키는 weekdayTableFor가 전역 평일표로 폴백(옛 'math 강제 coerce'와 동일 결과).
     const subject = klass?.subject ?? "other";
     const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
+    const attKo = attDays.map((d) => enumDayToKo(d as DayOfWeek));
+    const rawSlots = schedByClass.get(e.class_id) ?? [];
+    // 반 운영 요일(분리등원 선택지) = 이 반 스케줄의 distinct 요일(요일순).
+    const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => rawSlots.some((s) => s.day === d));
+    // 등원요일 필터(분리등원) = groupSchedule과 동일 규칙. 각 슬롯에 과목별 교시 라벨 부착(그리드 셀 힌트).
+    const slots: ClassSlot[] = rawSlots
+      .filter((s) => attKo.length === 0 || attKo.includes(enumDayToKo(s.day)))
+      .map((s) => ({
+        day: s.day,
+        startTime: s.startTime,
+        periodLabel: slotPeriodRow(subject, s.startTime, s.day, periodsConfig).label,
+        // 슬롯별 강의실 라벨 우선, 없으면 반 기본 강의실 상속(메인 시간표와 동일 규칙).
+        room: s.roomLabel ?? defaultRoom,
+      }));
     return {
       enrollmentId: e.id,
       classId: e.class_id,
@@ -663,9 +692,12 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       schedule: groupSchedule(
         schedByClass.get(e.class_id) ?? [],
         subject,
-        attDays.map((d) => enumDayToKo(d as DayOfWeek)),
+        attKo,
         periodsConfig,
       ),
+      slots,
+      attendanceDays: attDays,
+      classDays,
     } satisfies StudentClassRow;
   });
 }
@@ -1007,7 +1039,7 @@ export async function getStudentConsultationHistory(
 ): Promise<StudentConsultationRow[]> {
   const supabase = await createClient();
   // 강사 스코프: 학생 상세의 상담 탭도 **본인이 등록한 상담**만 — 남이 쓴 상담 미노출(상담 목록/상세와 동일 불변식).
-  const user = await getCurrentUser();
+  const tId = await effectiveTeacherId();
   // ⚠️ filter(.eq)는 transform(.order)보다 먼저 — supabase-js는 transform 뒤 filter 불가.
   let qb = supabase
     .from("student_consultations")
@@ -1017,7 +1049,7 @@ export async function getStudentConsultationHistory(
        counselor:counselor_id ( display_name )`,
     )
     .eq("student_id", studentId);
-  if (user?.systemRole === "teacher") qb = qb.eq("counselor_id", user.id);
+  if (tId) qb = qb.eq("counselor_id", tId);
   const { data } = await qb.order("consulted_at", { ascending: false });
   if (!data) return [];
   return data.map((r) => {
@@ -1037,6 +1069,44 @@ export async function getStudentConsultationHistory(
       counselorName: c?.display_name ?? null,
     };
   });
+}
+
+export type StudentEnrollmentConsultRow = {
+  id: string;
+  date: string | null;
+  subject: string | null;
+  outcome: string | null;
+  request: string | null;
+  careerGoal: string | null;
+  followUp: string | null;
+};
+
+/**
+ * 학생에 연결된 **등록상담(입학 상담)** — 학생 상세 상담 탭 상단에 [입학 상담] 라벨로 고정 노출.
+ * 학생당 1~3건. RLS로 테넌트 자동 격리 + 호출부(page)가 enrollment 접근권한으로 게이트(민감정보).
+ * ⚠️ 이건 enrollment_consultations(입학상담) — student_consultations(재원생 상담)와 별개 테이블.
+ */
+export async function getStudentEnrollmentConsultations(
+  studentId: string,
+): Promise<StudentEnrollmentConsultRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollment_consultations")
+    .select(
+      "id, consulted_at, consultation_date, created_at, subject, outcome, parent_request, career_goal, follow_up_content",
+    )
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    date: r.consulted_at ?? r.consultation_date ?? r.created_at ?? null,
+    subject: r.subject,
+    outcome: r.outcome,
+    request: r.parent_request,
+    careerGoal: r.career_goal,
+    followUp: r.follow_up_content,
+  }));
 }
 
 export type StudentAttendanceDay = {
@@ -1122,12 +1192,12 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   const supabase = await createClient();
 
   // 강사 스코프: 타임라인의 상담 이벤트도 **본인이 등록한 상담**만(남이 쓴 상담 내용 미노출, 상담 목록/상세와 동일).
-  const user = await getCurrentUser();
+  const tId = await effectiveTeacherId();
   let consultQuery = supabase
     .from("student_consultations")
     .select(`consulted_at, category, summary`)
     .eq("student_id", studentId);
-  if (user?.systemRole === "teacher") consultQuery = consultQuery.eq("counselor_id", user.id);
+  if (tId) consultQuery = consultQuery.eq("counselor_id", tId);
 
   const [
     { data: enrollments },

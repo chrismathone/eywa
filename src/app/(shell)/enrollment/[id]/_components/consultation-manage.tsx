@@ -60,27 +60,42 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
   const [selected, setSelected] = useState(current);
   const [state, action] = useActionState<SetOutcomeState, FormData>(setEnrollmentOutcome, undefined);
   if (state?.ok) queueMicrotask(onClose);
+  // 배정 완료(등록)된 상담은 이전 단계로 되돌릴 수 없다 — '등록' 유지 또는 '거절'만 허용(서버도 이중 방어).
+  const isConverted = current === "enrolled";
+  const allowed = (v: string) => !isConverted || v === "enrolled" || v === "declined";
   return (
     <Modal title="상태 변경" onClose={onClose}>
       <form action={action} className="space-y-3">
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="outcome" value={selected} />
         <div className="flex flex-wrap gap-2">
-          {OUTCOME_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => setSelected(o.value)}
-              className={`rounded-sm border px-2.5 py-1 text-xs transition ${
-                selected === o.value
-                  ? "border-primary bg-primary text-primary-foreground font-medium"
-                  : "border-line text-text-dim hover:bg-bg-soft"
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
+          {OUTCOME_OPTIONS.map((o) => {
+            const disabled = !allowed(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => setSelected(o.value)}
+                title={disabled ? "배정 완료된 상담은 이전 단계로 되돌릴 수 없습니다" : undefined}
+                className={`rounded-sm border px-2.5 py-1 text-xs transition ${
+                  disabled
+                    ? "border-line text-text-faint cursor-not-allowed opacity-40"
+                    : selected === o.value
+                      ? "border-primary bg-primary text-primary-foreground font-medium"
+                      : "border-line text-text-dim hover:bg-bg-soft"
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
         </div>
+        {isConverted ? (
+          <p className="text-text-dim text-[11px]">
+            배정 완료(등록)된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소는 ‘거절’로 처리하세요.
+          </p>
+        ) : null}
         {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
         <footer className="flex items-center justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>

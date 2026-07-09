@@ -226,7 +226,34 @@ export function ConvertToStudentDialog({
                 </p>
               </div>
 
-              {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
+              {state?.error ? (
+                <div className="border-chart-4/40 bg-chart-4/5 space-y-2 rounded-md border px-3 py-2">
+                  <p className="text-chart-4 text-sm">{state.error}</p>
+                  {state.existingStudentId ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const sid = state?.existingStudentId;
+                        if (!sid) return;
+                        const href = `/students/${sid}`;
+                        if (isDesktop) {
+                          useWindowStore.getState().open("route", {
+                            id: `students/${sid}`,
+                            title: defaults.name ?? "학생",
+                            href,
+                          });
+                        } else {
+                          router.push(href);
+                        }
+                      }}
+                    >
+                      <UserPlus className="size-4" />
+                      기존 학생 정보 보기
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               {selected.size === 0 ? (
                 <p className="text-muted-foreground text-[11px]">배정할 반을 1개 이상 선택해야 합니다.</p>
               ) : null}

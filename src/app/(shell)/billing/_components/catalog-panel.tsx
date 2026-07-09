@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { BookText, CheckCircle2 } from "lucide-react";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
+import { SearchForm } from "@/components/search-form";
 import { Pagination } from "@/components/pagination";
 import { getCatalogPage, getCatalogStats } from "@/features/billing/server/catalog-queries";
 import { CatalogTable } from "./catalog-table";
@@ -72,26 +71,8 @@ export async function CatalogPanel({ sp, base }: { sp: Sp; base: Record<string, 
             </Chip>
           ))}
         </div>
-        <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
-          {Object.entries(base).map(([k, v]) => (
-            <input key={k} type="hidden" name={k} value={v} />
-          ))}
-          {grade !== "all" ? <input type="hidden" name="grade" value={grade} /> : null}
-          {active !== "all" ? <input type="hidden" name="active" value={active} /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="교재명·출판사"
-              className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">
-            검색
-          </Button>
-        </form>
+        {/* 검색 — 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체(base·grade·active 등 현재 param 자동 보존) */}
+        <SearchForm placeholder="교재명·출판사" defaultValue={q} />
       </div>
 
       <div className="flex items-center justify-between">

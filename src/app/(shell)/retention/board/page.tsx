@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, AlertCircle, ShieldCheck, TrendingDown } from "lucide-react";
-import { EyIcon } from "@/components/icons/eywa-icons";
 import { FilterSelect } from "@/components/filter-select";
+import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
   getRetentionRoster,
   summarizeRoster,
@@ -56,7 +57,8 @@ export default async function RetentionBoardPage({
     page?: string;
   }>;
 }) {
-  const user = await requireAccess("retention");
+  await requireAccess("retention");
+  const tId = await effectiveTeacherId();
   const sp = await searchParams;
   const state: SearchState = {
     level: sp.level ?? "all",
@@ -66,9 +68,7 @@ export default async function RetentionBoardPage({
   };
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const roster = await getRetentionRoster(
-    user.systemRole === "teacher" ? { teacherId: user.id } : undefined,
-  );
+  const roster = await getRetentionRoster(tId ? { teacherId: tId } : undefined);
   const stats = summarizeRoster(roster);
   const teacherNames = Array.from(
     new Set(roster.map((r) => r.teacherName).filter((n): n is string => !!n)),
@@ -128,27 +128,7 @@ export default async function RetentionBoardPage({
               </Link>
             ))}
           </div>
-          <form action="/retention/board" method="get" className="ml-auto flex items-center gap-2">
-            {state.level !== "all" ? <input type="hidden" name="level" value={state.level} /> : null}
-            {state.teacher ? <input type="hidden" name="teacher" value={state.teacher} /> : null}
-            {state.sort !== "risk" ? <input type="hidden" name="sort" value={state.sort} /> : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={state.q}
-                placeholder="학생명"
-                className="text-foreground placeholder:text-text-faint w-28 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              className="border-line bg-card hover:bg-bg-soft rounded-sm border px-3 py-1.5 text-xs"
-            >
-              검색
-            </button>
-          </form>
+          <SearchForm placeholder="학생명" defaultValue={state.q} inputWidth="w-28" />
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5">

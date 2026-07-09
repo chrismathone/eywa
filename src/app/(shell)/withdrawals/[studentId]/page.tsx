@@ -9,6 +9,7 @@ import {
   enrollmentDuration,
   getWithdrawalDetail,
   REASON_LABEL,
+  reasonDisplay,
 } from "@/features/withdrawals/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -128,20 +129,22 @@ export default async function WithdrawalDetailPage({
                   <p className="text-sm font-medium">{e.className}</p>
                   {canEditDates ? (
                     <div className="text-muted-foreground inline-flex flex-wrap items-center gap-1 text-xs">
-                      <span>{subjects.labelOf(e.subject)} ·</span>
+                      <span>
+                        {subjects.labelOf(e.subject)} · 담임 {e.teacherName ?? "미배정"} ·
+                      </span>
                       <EditableDateCell enrollmentId={e.id} field="start" value={e.startDate} />
                       <EditableDateCell enrollmentId={e.id} field="end" value={e.endDate} />
                     </div>
                   ) : (
                     <p className="text-muted-foreground text-xs">
-                      {subjects.labelOf(e.subject)} ·{" "}
+                      {subjects.labelOf(e.subject)} · 담임 {e.teacherName ?? "미배정"} ·{" "}
                       <span className="num">{e.startDate}</span>
                       {e.endDate ? <> ~ <span className="num">{e.endDate}</span></> : <> ~ 현재</>}
                     </p>
                   )}
                 </div>
                 {e.reason ? (
-                  <span className="text-muted-foreground text-xs italic">{e.reason}</span>
+                  <span className="text-muted-foreground text-xs italic">{reasonDisplay(e.reason)}</span>
                 ) : null}
               </li>
             ))}

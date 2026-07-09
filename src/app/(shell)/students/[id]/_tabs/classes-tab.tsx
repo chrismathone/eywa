@@ -10,11 +10,15 @@ import {
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
+import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentButton } from "../_components/end-enrollment-button";
 import { MoveEnrollmentButton } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
+import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
+import { WindowLink } from "@/components/workspace/window-link";
+import { StudentWeekGrid } from "./student-week-grid";
 
 const DAY_CODE_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -48,10 +52,13 @@ export async function ClassesTab({
   student,
   canEnd,
   canEditDates,
+  canEditSchedule,
 }: {
   student: StudentDetail;
   canEnd: boolean;
   canEditDates: boolean;
+  /** 분리등원 요일(스케줄 셀) 더블클릭 편집 노출 — canWriteTenant("classes"). */
+  canEditSchedule: boolean;
 }) {
   const [rows, allActiveClasses, settings] = await Promise.all([
     getStudentClassesDetail(student.id),
@@ -59,6 +66,7 @@ export async function ClassesTab({
     getTenantSettings(),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const periodsConfig = settingsToPeriodsConfig(settings.operations);
 
   const today = kstToday();
   const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
@@ -82,6 +90,8 @@ export async function ClassesTab({
 
   return (
     <div className="space-y-5">
+      {/* 주간 시간표(읽기전용) — 수강 중 반의 전 과목·전 강사 통합 + 과목별 교시 기본뷰 탭. 슬롯 없으면 null. */}
+      <StudentWeekGrid rows={current} config={periodsConfig} />
       <Section
         title="수강 중인 수업"
         rows={current}
@@ -90,6 +100,7 @@ export async function ClassesTab({
         subjects={subjects}
         canEnd={canEnd}
         canEditDates={canEditDates}
+        canEditSchedule={canEditSchedule}
         moveTargets={candidateClasses}
         moveStudent={{ id: student.id, name: student.name, grade: student.grade }}
         action={
@@ -100,8 +111,8 @@ export async function ClassesTab({
         }
         note="실제 학생이 등원하는 요일만 표기됩니다"
       />
-      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} />
-      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} />
+      <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
+      <Section title="지난 수업" rows={past} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
     </div>
   );
 }
@@ -114,6 +125,7 @@ function Section({
   subjects,
   canEnd,
   canEditDates,
+  canEditSchedule,
   moveTargets,
   moveStudent,
   action,
@@ -126,6 +138,7 @@ function Section({
   subjects: SubjectMaps;
   canEnd: boolean;
   canEditDates: boolean;
+  canEditSchedule: boolean;
   /** 반 이동 대상 후보(수강 중 섹션에서만) — 있으면 행에 '반 이동' 버튼. */
   moveTargets?: AssignDialogClass[];
   /** 반 이동 다이얼로그 헤더용 학생 정보. */
@@ -169,10 +182,20 @@ function Section({
                   <td className="px-4 py-2.5">
                     <Pill color={subjects.colorOf(r.subject)}>{subjects.labelOf(r.subject)}</Pill>
                   </td>
-                  <td className="text-foreground px-4 py-2.5 font-medium">{r.className}</td>
+                  <td className="text-foreground px-4 py-2.5 font-medium">
+                    <WindowLink href={`/classes/${r.classId}`} title={r.className} className="hover:text-primary hover:underline">
+                      {r.className}
+                    </WindowLink>
+                  </td>
                   <td className="text-text-dim px-4 py-2.5 text-xs">{r.teacherName ?? "—"}</td>
                   <td className="px-4 py-2.5">
-                    <ScheduleCell schedule={r.schedule} />
+                    {canEditSchedule ? (
+                      <EditableAttendanceCell enrollmentId={r.enrollmentId} classDays={r.classDays} attendanceDays={r.attendanceDays}>
+                        <ScheduleCell schedule={r.schedule} />
+                      </EditableAttendanceCell>
+                    ) : (
+                      <ScheduleCell schedule={r.schedule} />
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-xs">
                     {canEditDates ? (

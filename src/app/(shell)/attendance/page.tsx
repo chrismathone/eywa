@@ -228,6 +228,7 @@ export default async function AttendancePage({
       {!effectiveClassId ? (
         // 반 미선택 — 무거운 출석 데이터를 안 불러오고 가운데 안내(전체는 학생 많아 렉이라 미표시).
         <EmptyState
+          image="attendance"
           icon={() => <ListFilter size={32} strokeWidth={1.5} />}
           title="과목 · 선생님 · 반을 선택해 주세요"
           description="한 반을 선택하면 그 반의 출석부가 표시됩니다. 전체는 학생이 많아 표시하지 않습니다."
@@ -256,6 +257,7 @@ export default async function AttendancePage({
 
           {matrix.students.length === 0 ? (
             <EmptyState
+              image="students"
               icon={() => <Users size={32} strokeWidth={1.5} />}
               title="이 반에 등록된 학생이 없습니다"
               description="학생목록에서 등록 후 다시 확인하세요."
@@ -275,7 +277,7 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present: "O",
   absent: "X",
   late: "L",
-  excused: "공",
+  excused: "X",
   makeup: "보",
   early_leave: "조",
 };
@@ -408,7 +410,7 @@ function MatrixTable({
                   총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결 즉시 변경
                 </span>
                 <span className="micro ml-auto">범례</span>
-                {(["present", "absent", "late", "early_leave", "excused", "makeup"] as AttendanceStatus[]).map(
+                {(["present", "absent", "late", "early_leave", "makeup"] as AttendanceStatus[]).map(
                   (s) => (
                     <Pill key={s} color={pillColorFor(s)}>
                       {STATUS_LABEL[s]} {labelFor(s)}
@@ -431,7 +433,7 @@ function pillColorFor(
   if (s === "absent") return "danger";
   if (s === "late") return "amber";
   if (s === "early_leave") return "rose";
-  if (s === "excused") return "blue";
+  if (s === "excused") return "danger";
   return "purple";
 }
 
@@ -440,7 +442,7 @@ function labelFor(s: AttendanceStatus): string {
   if (s === "absent") return "결석";
   if (s === "late") return "지각";
   if (s === "early_leave") return "조퇴";
-  if (s === "excused") return "공결";
+  if (s === "excused") return "결석";
   return "보강";
 }
 

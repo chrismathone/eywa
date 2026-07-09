@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { SearchForm } from "@/components/search-form";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
@@ -186,24 +186,7 @@ export default async function ConsultationsPage({
               </Link>
             ))}
           </div>
-          <form action="/consultations" method="get" className="ml-auto flex items-center gap-2">
-            {range !== "all" ? <input type="hidden" name="range" value={range} /> : null}
-            {cat !== "all" ? <input type="hidden" name="cat" value={cat} /> : null}
-            {urg !== "all" ? <input type="hidden" name="urg" value={urg} /> : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="학생명·요약"
-                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <Button type="submit" variant="outline" size="sm">
-              검색
-            </Button>
-          </form>
+          <SearchForm placeholder="학생명·요약" defaultValue={q} />
         </div>
       </div>
 
@@ -229,7 +212,11 @@ export default async function ConsultationsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState icon={() => <MessagesSquare size={32} strokeWidth={1.5} />} title="기록된 상담이 없습니다" />
+        <EmptyState
+          image="meetings"
+          icon={() => <MessagesSquare size={32} strokeWidth={1.5} />}
+          title="기록된 상담이 없습니다"
+        />
       ) : (
         <>
         <ul className="space-y-2.5">

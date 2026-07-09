@@ -40,7 +40,7 @@ const DAY_COL_W = 65; // 반명+방 chip(학생 없음). 강사×요일이 많�
 const LANE_COL_W = 64; // 다중 레인(LAB 서브컬럼) 폭 — 레벨코드 반명(LT2 등) 기준. 시트도 좁은 서브컬럼.
 // 행 높이 = 분당 1.4px 고정(스텝 무관 블록 높이 동일 — step 10=14px/행, step 30=42px/행: 60분 수업은 항상 84px).
 const PX_PER_MIN = 1.4;
-const HEAD_TEACHER_H = 26; // 강사 밴드 행 높이(sticky top 오프셋 계산용)
+const HEAD_TEACHER_H = 30; // 강사 밴드 행 높이(sticky top 오프셋 계산용) — 이름 16px 수용
 const HEAD_DAY_H = 30; // 요일 행 높이
 
 // 격자선 — 수학 기본뷰와 동일한 균일 톤(엑셀식 균일 격자, 2026-07-06 사용자 지정).
@@ -96,6 +96,7 @@ export function TeacherGridView({
   pxPerMin,
   breakRanges,
   excludedTeachers,
+  showUnusedDays = true,
 }: {
   slots: ScheduleSlotWithStudents[];
   weekMonday?: string;
@@ -111,6 +112,8 @@ export function TeacherGridView({
   breakRanges?: { start: string; end: string }[];
   /** 가로줄(큰 섹션 경계) 미표시 강사 라벨 — 과목 설정 teacherViewLineExcluded. */
   excludedTeachers?: string[];
+  /** true(기본) = 강사마다 월~토 전 요일 컬럼(수업 없는 요일도 빈 컬럼으로). false = 수업 있는 요일만. */
+  showUnusedDays?: boolean;
 }) {
   const dayDates = dayDateLabels(weekMonday);
   // 행 높이 = 분당 px 고정(스텝 무관 블록 크기 동일). 가로줄 시각은 step 격자에 스냅(격자 밖이면 silent drop 방지).
@@ -135,7 +138,10 @@ export function TeacherGridView({
   const teachers: TeacherCol[] = teacherNames
     .map((name) => {
       const daySet = new Set(slots.filter((s) => teacherOf(s) === name).map((s) => s.dayOfWeek as DayOfWeek));
-      const days = DAY_ORDER.filter((d) => daySet.has(d));
+      // 기본 = 월~토 전 컬럼(빈 요일 포함, 일요일은 수업 있을 때만). 토글 해제 시 수업 요일만.
+      const days = DAY_ORDER.filter((d) =>
+        showUnusedDays ? d !== "sun" || daySet.has(d) : daySet.has(d),
+      );
       return { name, days, color: colorFor(name) };
     })
     .filter((t) => t.days.length > 0);
@@ -223,7 +229,7 @@ export function TeacherGridView({
                   ...(t.color ? { backgroundColor: t.color.bg, color: t.color.text } : {}),
                 }}
               >
-                <span className={`block overflow-hidden text-[12px] font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
+                <span className={`block overflow-hidden text-[16px] leading-tight font-bold whitespace-nowrap text-clip ${t.color ? "" : "text-foreground bg-bg-soft"}`}>
                   {t.name}
                 </span>
               </th>
@@ -236,14 +242,14 @@ export function TeacherGridView({
                 <th
                   key={`${t.name}-${col.day}`}
                   colSpan={col.laneCount}
-                  className={`bg-bg-soft text-text-dim sticky z-20 border-b px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${GRID} ${
+                  className={`bg-bg-soft text-foreground sticky z-20 border-b px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${GRID} ${
                     ci === t.cols.length - 1 ? TEACHER_EDGE : "border-r"
                   }`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
                 >
                   {DAY_LABEL[col.day] ?? col.day}
                   {dayDates[col.day] ? (
-                    <span className="text-text-faint block text-[9px] font-normal">{dayDates[col.day]}</span>
+                    <span className="text-ink/80 block text-[9px] font-bold">{dayDates[col.day]}</span>
                   ) : null}
                 </th>
               )),
@@ -256,8 +262,8 @@ export function TeacherGridView({
               {/* 시각열 — sticky left. 매 행 라벨(시트 미러), 정시 라벨만 강조. separate 모드라 좌·우·하단
                   전부 **본문 셀과 동일한 실제 border**(같은 렌더 경로 = 굵기·위치가 본문 가로줄과 정확히 일치). */}
               <td
-                className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-top font-mono leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
-                  row.isHour ? "text-foreground text-[9px] font-bold" : "text-text-faint text-[9px]"
+                className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-middle font-mono leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
+                  row.isHour ? "text-foreground text-[9px] font-bold" : "text-ink/80 text-[9px] font-bold"
                 }`}
                 style={{ height: rowH }}
               >

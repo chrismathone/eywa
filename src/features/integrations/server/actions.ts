@@ -10,8 +10,15 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { overwriteMathTimetableSheet } from "@/features/integrations/google-sheets";
+import { overwriteTimetableSheet, applySheetFormulas } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
+import { buildEnglishTimetableBuffer, INTEGRATED_SHEET_NAME } from "@/features/exports/english-timetable/build-buffer";
+import type { FormulaCell } from "@/features/exports/english-timetable/injaewon-integrated-sheet";
+import {
+  isSheetExportSubject,
+  sheetsProvider,
+  type SheetExportSubject,
+} from "@/features/integrations/sheets-provider";
 
 import {
   getMakeeduSyncLock,
@@ -52,9 +59,13 @@ export async function checkMakeeduSyncWorkers(): Promise<{ workers: MakeeduWorke
  * ⚠️ 켜기만으로 데이터가 나가진 않음 — 실제 **내보내기 실행**(syncSheetsNow, 테넌트 전체 시간표를 외부
  * 시트로)은 여전히 master 전용(B5 PII). 대상 스프레드시트·서비스 계정은 운영자 설정.
  */
-export async function setSheetsExportEnabled(enabled: boolean): Promise<ToggleState> {
+export async function setSheetsExportEnabled(
+  subject: string,
+  enabled: boolean,
+): Promise<ToggleState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
+  if (!isSheetExportSubject(subject)) return { error: "지원하지 않는 과목입니다" };
   if (!(await canWriteTenant(user.systemRole, "owner"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
@@ -63,7 +74,7 @@ export async function setSheetsExportEnabled(enabled: boolean): Promise<ToggleSt
   const { error } = await supabase.from("user_integrations").upsert(
     {
       tenant_id: user.tenantId,
-      provider: "google_sheets",
+      provider: sheetsProvider(subject),
       sync_enabled: enabled,
     },
     { onConflict: "tenant_id,provider" },
@@ -74,6 +85,37 @@ export async function setSheetsExportEnabled(enabled: boolean): Promise<ToggleSt
   revalidatePath("/owner");
   revalidatePath("/timetable");
   return { enabled };
+}
+
+/**
+ * 과목별 내보낼 대상 구글 시트 ID 등록. owner 콘솔(연동 면)이라 게이트=owner 메뉴 쓰기(canWriteTenant).
+ * `user_integrations`의 `sheetsProvider(subject)` 행에 spreadsheet_id upsert(과목마다 전용 시트).
+ */
+export async function setSubjectSheetTarget(
+  subject: string,
+  spreadsheetId: string,
+): Promise<{ error?: string; ok?: boolean } | undefined> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!isSheetExportSubject(subject)) return { error: "지원하지 않는 과목입니다" };
+  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("user_integrations").upsert(
+    {
+      tenant_id: user.tenantId,
+      provider: sheetsProvider(subject),
+      spreadsheet_id: spreadsheetId.trim() || null,
+    },
+    { onConflict: "tenant_id,provider" },
+  );
+  if (error) return { error: error.message };
+
+  revalidatePath("/owner");
+  revalidatePath("/timetable");
+  return { ok: true };
 }
 
 /**
@@ -290,23 +332,34 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
 
 export type SyncState = { error?: string; ok?: boolean } | undefined;
 
-export async function syncSheetsNow(
-  _prev: SyncState,
-  _formData: FormData,
-): Promise<SyncState> {
+/** 과목별 xlsx 버퍼 빌더 선택(레지스트리) — SHEET_EXPORT_SUBJECTS와 1:1. 구글시트는 수식(withFormulas). */
+async function buildTimetableBufferFor(
+  subject: SheetExportSubject,
+  compactSections?: Set<number>,
+): Promise<{ buffer: ArrayBuffer; formulaCells: FormulaCell[] }> {
+  // master 전용 경로라 전체(unscoped) 내보내기 — teacherId 미지정.
+  if (subject === "math") return { buffer: await buildMathTimetableBuffer(), formulaCells: [] };
+  return buildEnglishTimetableBuffer({ withFormulas: true, compactSections });
+}
+
+export async function syncSheetsNow(subject: string, compact1h?: number[]): Promise<SyncState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // ⚠️ master 전용 (CLAUDE.md #58: 페이지가 아니라 액션을 게이트). 이 동기화는 **테넌트 전체 수학
-  // 시간표**(전 강사·전 학생 명단)를 외부 공유 시트로 내보내므로 원장만. 버튼 숨김과 이중 방어.
+  // ⚠️ master 전용 (CLAUDE.md #58: 페이지가 아니라 액션을 게이트). 이 동기화는 **테넌트 전체 시간표**
+  // (전 강사·전 학생 명단)를 외부 공유 시트로 내보내므로 원장만. 버튼 숨김과 이중 방어.
   if (user.systemRole !== "master") {
     return { error: "구글 시트 동기화는 원장(master)만 할 수 있습니다" };
   }
+  if (!isSheetExportSubject(subject)) {
+    return { error: "지원하지 않는 과목입니다" };
+  }
+  const provider = sheetsProvider(subject);
 
   const supabase = await createClient();
   const { data } = await supabase
     .from("user_integrations")
     .select("spreadsheet_id, sync_enabled")
-    .eq("provider", "google_sheets")
+    .eq("provider", provider)
     .maybeSingle();
 
   // 연동이 꺼져 있으면 거부(시간표 '시트' 버튼도 같은 조건으로 숨김 — 이중 방어).
@@ -314,22 +367,26 @@ export async function syncSheetsNow(
     return { error: "구글 시트 내보내기 연동이 꺼져 있습니다(학원 설정 › 연동에서 켜세요)" };
   }
 
-  // 대상 시트: 전용 연동 spreadsheet_id 또는 학원 설정 googleSheetId(운영자 설정) 폴백.
-  const settings = await getTenantSettings();
-  const spreadsheetId = data?.spreadsheet_id || settings.notifications.googleSheetId.trim();
+  // 대상 시트: 과목 provider 행의 spreadsheet_id. math는 학원 설정 googleSheetId 폴백(레거시 보존).
+  let spreadsheetId = data?.spreadsheet_id ?? "";
+  if (!spreadsheetId && subject === "math") {
+    const settings = await getTenantSettings();
+    spreadsheetId = settings.notifications.googleSheetId.trim();
+  }
   if (!spreadsheetId)
-    return { error: "내보낼 구글 시트가 설정되지 않았습니다(관리자에게 문의)" };
+    return { error: "내보낼 구글 시트가 설정되지 않았습니다(학원 설정 › 연동에서 시트 ID 등록)" };
 
   try {
-    // 수학 시간표 = ijw 충실 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에
-    // 통째 덮어쓰기(ijw updateSheetContent 방식). 서비스계정 용량 0이라 '생성'은 불가 → '갱신'만.
-    // master 전용이라 전체(unscoped) 내보내기가 정당(전 강사·전 학생). 대상 시트=테넌트 전용 1개 가정.
-    const buffer = await buildMathTimetableBuffer();
-    await overwriteMathTimetableSheet(spreadsheetId, buffer);
+    // 과목 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에 통째 덮어쓰기
+    // (서비스계정 용량 0이라 '생성' 불가 → '갱신'만). 대상 시트=과목당 전용 1개(수학·영어 분리).
+    const { buffer, formulaCells } = await buildTimetableBufferFor(subject, new Set(compact1h ?? []));
+    await overwriteTimetableSheet(spreadsheetId, buffer);
+    // 정적 값 업로드(변환) 후 구글시트 수식 주입(방 행 파생·인원/퇴원수 COUNTA). 영어만 수집됨.
+    if (formulaCells.length) await applySheetFormulas(spreadsheetId, INTEGRATED_SHEET_NAME, formulaCells);
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,
-        provider: "google_sheets",
+        provider,
         spreadsheet_id: spreadsheetId,
         last_synced_at: new Date().toISOString(),
         last_error: null,
@@ -346,7 +403,7 @@ export async function syncSheetsNow(
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,
-        provider: "google_sheets",
+        provider,
         spreadsheet_id: spreadsheetId,
         last_error: msg,
       },

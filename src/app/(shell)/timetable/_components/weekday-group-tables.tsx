@@ -354,7 +354,10 @@ function GroupTable({
           const nextPid = nextRow ? /^p-(\d+)$/.exec(nextRow.key)?.[1] : undefined;
           const paired = mathN !== null && nextPid !== undefined && Number(nextPid) === mathN + 1;
           return (
-            <tr key={row.key}>
+            // ⚠️ 교시 행 높이를 rowHeight로 **명시 고정** → 그룹 라벨(rowSpan=2)이 두 교시(예 4-1/4-2)를
+            // 정확히 2등분(각 rowHeight). tr에 안 박으면 border-collapse 표에서 브라우저가 rowSpan=2 라벨의
+            // 444를 두 행에 **내용량 비례로 분배** → 학생 많은 4-1이 커지고 4-2가 얇아짐(2026-07-07 사용자 지적).
+            <tr key={row.key} style={{ height: rowHeight }}>
               {isGroupSecond ? null : mathN !== null ? (
                 <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (paired ? 2 : 1) }}>
                   {Math.ceil(mathN / 2)}교시

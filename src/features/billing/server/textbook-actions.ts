@@ -4,13 +4,21 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 
 // 교재신청(textbook_orders) CRUD — invoices actions 골격 본뜸. 상태 전환 시 해당 타임스탬프를
 // 진입 시각으로 채운다(ijw timestamp-on-toggle). tenant_id는 RLS 강제(INSERT엔 명시).
 export type TextbookState =
-  | { error?: string; fieldErrors?: Record<string, string>; ok?: boolean; createdId?: string }
+  | {
+      error?: string;
+      fieldErrors?: Record<string, string>;
+      ok?: boolean;
+      createdId?: string;
+      /** 일괄 요청 시 생성된 각 학생의 요청(학생별 요청서 PNG 자동 발행용). */
+      created?: { id: string; studentName: string | null }[];
+    }
   | undefined;
 
 // ijw식 3개 독립 체크(등록/주문/납부) → 각자 타임스탬프 컬럼. status는 체크에서 파생.
@@ -86,39 +94,56 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
   if (!(await canWriteTenant(user.systemRole, "textbook_requests"))) return { error: "교재 요청 권한이 없습니다" };
   const f = parse(formData);
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
-  if (!f.studentId) return { fieldErrors: { studentId: "학생을 선택해주세요" } };
-  // 강사는 본인 담당 학생만 요청 가능(intra-tenant PII 스코프). 사무실 역할(master/admin/accountant)은 전체 허용.
-  if (user.systemRole === "teacher") {
-    const { studentIds } = await getTeacherScope(user.id);
-    if (!studentIds.includes(f.studentId)) return { error: "담당 학생만 교재를 요청할 수 있습니다" };
+  // 같은 교재를 여러 학생에게 일괄 요청 — studentId를 복수(hidden input N개)로 받는다(중복·빈값 제거).
+  const studentIds = [...new Set(formData.getAll("studentId").map((v) => String(v).trim()).filter(Boolean))];
+  if (studentIds.length === 0) return { fieldErrors: { studentId: "학생을 선택해주세요" } };
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생만 요청 가능 — 하나라도 스코프 밖이면 전체 거부(intra-tenant PII 스코프).
+  const tId = await effectiveTeacherId();
+  if (tId) {
+    const { studentIds: scoped } = await getTeacherScope(tId);
+    const scopedSet = new Set(scoped);
+    if (!studentIds.every((id) => scopedSet.has(id))) {
+      return { error: "담당 학생만 교재를 요청할 수 있습니다" };
+    }
   }
 
   const supabase = await createClient();
-  const studentName = await resolveStudentName(supabase, f.studentId);
+  // 학생 이름 일괄 조회(N 단건 대신 1쿼리) — student_name 스냅샷 컬럼 채움.
+  const { data: studentRows } = await supabase.from("students").select("id, name").in("id", studentIds);
+  const nameById = new Map((studentRows ?? []).map((s) => [s.id as string, (s.name as string | null) ?? null]));
+
+  const nowIso = new Date().toISOString();
+  const teacherName = f.teacherName || user.displayName;
+  const requestDate = f.requestDate ?? kstToday();
+  const rows = studentIds.map((sid) => ({
+    tenant_id: user.tenantId,
+    student_id: sid,
+    student_name: nameById.get(sid) ?? null,
+    // ijw 패리티 — 폼의 '담임 선생님'(기본=요청자 본인, 자유 표시명·대리 작성 가능). 미입력이면 요청자.
+    teacher_name: teacherName,
+    book_name: f.bookName,
+    book_detail: f.bookDetail,
+    price: f.price,
+    status: "requested",
+    request_date: requestDate,
+    status_at: nowIso,
+    status_by_name: user.displayName,
+    notes: f.notes,
+  }));
   const { data, error } = await supabase
     .from("textbook_orders")
-    .insert({
-      tenant_id: user.tenantId,
-      student_id: f.studentId,
-      student_name: studentName,
-      // ijw 패리티 — 폼의 '담임 선생님'(기본=요청자 본인, 자유 표시명·대리 작성 가능). 미입력이면 요청자.
-      teacher_name: f.teacherName || user.displayName,
-      book_name: f.bookName,
-      book_detail: f.bookDetail,
-      price: f.price,
-      status: "requested",
-      request_date: f.requestDate ?? kstToday(),
-      status_at: new Date().toISOString(),
-      status_by_name: user.displayName,
-      notes: f.notes,
-    })
-    .select("id")
-    .single();
+    .insert(rows)
+    .select("id, student_name");
   if (error) return { error: error.message };
 
   revalidatePath("/textbook-requests");
   revalidatePath("/billing"); // 사무실 교재 면에도 즉시 반영
-  return { ok: true, createdId: data?.id as string | undefined }; // 생성 직후 요청서 자동 다운로드용
+  // 생성 직후 학생별 요청서 자동 발행용.
+  const created = (data ?? []).map((r) => ({
+    id: r.id as string,
+    studentName: (r.student_name as string | null) ?? null,
+  }));
+  return { ok: true, created };
 }
 
 /**
@@ -129,7 +154,6 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
 async function loadEditableRequest(
   supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
-  user: { systemRole: string; id: string },
 ): Promise<{ error: string } | { ok: true }> {
   const { data: row } = await supabase
     .from("textbook_orders")
@@ -137,9 +161,10 @@ async function loadEditableRequest(
     .eq("id", id)
     .single();
   if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
-  // 강사는 본인 담당 학생 요청만.
-  if (user.systemRole === "teacher") {
-    const { studentIds } = await getTeacherScope(user.id);
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생 요청만.
+  const tId = await effectiveTeacherId();
+  if (tId) {
+    const { studentIds } = await getTeacherScope(tId);
     if (!row.student_id || !studentIds.includes(row.student_id)) return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
   }
   // 사무실이 하나라도 처리(등록/주문/납부)했으면 잠금.
@@ -159,7 +184,7 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
 
   const supabase = await createClient();
-  const gate = await loadEditableRequest(supabase, id, user);
+  const gate = await loadEditableRequest(supabase, id);
   if ("error" in gate) return { error: gate.error };
 
   const { error } = await supabase
@@ -186,7 +211,7 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   if (!id) return { error: "교재 요청 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const gate = await loadEditableRequest(supabase, id, user);
+  const gate = await loadEditableRequest(supabase, id);
   if ("error" in gate) return { error: gate.error };
 
   const { error } = await supabase.from("textbook_orders").delete().eq("id", id);

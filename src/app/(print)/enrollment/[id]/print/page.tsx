@@ -8,6 +8,7 @@ import {
   type ConsultationAudioReport,
 } from "@/features/enrollment/server/queries";
 import { RichText } from "@/components/rich-text";
+import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { PrintActions } from "./print-actions";
 
 export const metadata = { title: "신입생 인수인계서 — eywa" };
@@ -240,14 +241,15 @@ function AudioReportSections({ report }: { report: ConsultationAudioReport }) {
   // list=나열형 섹션 → 불릿. 웹 상세(enrollment/[id]/page.tsx)와 동일 분류로 인쇄도 같은 형식.
   const sections: { key: keyof ConsultationAudioReport; label: string; list?: boolean }[] = [
     { key: "consultationType", label: "상담 성격" },
+    { key: "summary", label: "상담 요약" },
     { key: "familyBackground", label: "가정 배경" },
     { key: "parentConcerns", label: "학부모 걱정", list: true },
     { key: "parentQuestions", label: "학부모 질문", list: true },
     { key: "parentRequests", label: "학부모 요청", list: true },
     { key: "parentSatisfaction", label: "학부모 만족도" },
     { key: "studentTraits", label: "학생 특이사항", list: true },
-    { key: "teacherResponse", label: "교사 대응", list: true },
-    { key: "salesPoints", label: "세일즈 포인트", list: true },
+    { key: "teacherResponse", label: "상담자 대응", list: true },
+    { key: "salesPoints", label: "상담사 세일즈 포인트", list: true },
     { key: "agreements", label: "합의 사항", list: true },
     { key: "followUps", label: "후속 조치", list: true },
     { key: "warnings", label: "주의 신호", list: true },
@@ -257,14 +259,42 @@ function AudioReportSections({ report }: { report: ConsultationAudioReport }) {
       {sections.map(({ key, label, list }) => {
         const body = report[key];
         if (typeof body !== "string" || !body.trim()) return null;
+        // 리스트 섹션 후보정. 단일 항목 병합 시 bulletize를 꺼 콤마분할(병합 되돌림) 회피.
+        const normalized = list ? normalizeAiListText(body) : body;
+        const asList = !!list && normalized.includes("\n");
         return (
           <Section key={key} title={label}>
-            <RichText text={body} bulletize={list} className="space-y-1 text-sm leading-relaxed" />
+            <RichText text={normalized} bulletize={asList} className="space-y-1 text-sm leading-relaxed" />
           </Section>
         );
       })}
+      {report.conversationFlow && report.conversationFlow.length > 0 ? (
+        <Section title="상담 흐름 수형도">
+          <ul className="space-y-1 text-sm leading-relaxed">
+            {flattenFlow(report.conversationFlow).map((n, i) => (
+              <li key={i} style={{ paddingLeft: `${n.depth * 14}px` }}>
+                <span className="font-semibold">{n.topic}</span>
+                {n.summary ? <span className="text-gray-600"> — {n.summary}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
     </>
   );
+}
+
+/** 수형도 트리 → 깊이 있는 평면 목록(인쇄용, 순수). */
+function flattenFlow(
+  nodes: NonNullable<ConsultationAudioReport["conversationFlow"]>,
+  depth = 0,
+  out: { topic: string; summary: string; depth: number }[] = [],
+): { topic: string; summary: string; depth: number }[] {
+  for (const n of nodes) {
+    out.push({ topic: n.topic, summary: n.summary, depth });
+    if (n.children && n.children.length > 0) flattenFlow(n.children, depth + 1, out);
+  }
+  return out;
 }
 
 function Plan({ label, items }: { label: string; items: string[] }) {

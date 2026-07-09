@@ -32,7 +32,12 @@ export default async function StaffLeavesPage() {
       </header>
 
       {leaves.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="등록된 휴가가 없습니다" description="강사 상세에서 휴가를 신청할 수 있습니다." />
+        <EmptyState
+          image="leaves"
+          icon={CalendarClock}
+          title="등록된 휴가가 없습니다"
+          description="강사 상세에서 휴가를 신청할 수 있습니다."
+        />
       ) : (
         <LeavesAdminClient leaves={leaves} />
       )}

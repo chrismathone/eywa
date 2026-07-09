@@ -5,7 +5,7 @@
 #
 # 전제: .env.local 에 MAKEEDU_ID / MAKEEDU_PW / DATABASE_URL (형님이 관리, 스크립트만 읽음). node 가 PATH 에.
 # 등록(1회, 아래 Register-ScheduledTask) 후 PC 가 켜져 있으면 하루 2회(06/18시) 자동 실행.
-# 로그: D:\tmp\makeedu\sync-local.log (실패해도 다음 실행이 additive·멱등으로 따라잡음 = 데이터 손실 0).
+# 로그: <repo>\.makeedu-tmp\sync-local.log (실패해도 다음 실행이 additive·멱등으로 따라잡음 = 데이터 손실 0).
 
 $ErrorActionPreference = "Continue"
 # 이 스크립트 위치(scripts/_makeedu) 기준으로 repo 루트 도출 → 경로 하드코딩 없이 이동 가능.
@@ -18,7 +18,7 @@ Set-Location $repo
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$logDir = "D:\tmp\makeedu"
+$logDir = Join-Path $repo ".makeedu-tmp"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
 $log = Join-Path $logDir "sync-local.log"
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

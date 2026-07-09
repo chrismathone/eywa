@@ -9,6 +9,7 @@ export type QuoteListItem = {
   studentName: string;
   school: string | null;
   grade: string | null;
+  consultant: string | null;
   courseCount: number;
   extraCount: number;
   totalAmount: number;
@@ -61,7 +62,7 @@ export async function getQuotesPage(
   const from = (page - 1) * pageSize;
   let q = supabase
     .from("tuition_quotes")
-    .select("id, student_name, school, grade, courses, extras, total_amount, created_at", {
+    .select("id, student_name, school, grade, consultant, courses, extras, total_amount, created_at", {
       count: "exact",
     })
     .order("created_at", { ascending: false })
@@ -80,6 +81,7 @@ export async function getQuotesPage(
       studentName: r.student_name,
       school: r.school,
       grade: r.grade,
+      consultant: r.consultant,
       courseCount: asArray(r.courses).length,
       extraCount: asArray(r.extras).length,
       totalAmount: num(r.total_amount),

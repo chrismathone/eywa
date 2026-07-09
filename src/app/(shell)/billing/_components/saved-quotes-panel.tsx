@@ -1,7 +1,6 @@
 import { FileText } from "lucide-react";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { SearchForm } from "@/components/search-form";
 import { Pagination } from "@/components/pagination";
 import { getQuotesPage } from "@/features/billing/server/tuition-quote-queries";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
@@ -35,25 +34,17 @@ export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
           <FileText className="text-primary size-4" />
           저장된 청구서 <span className="num text-text-dim font-normal">{total}건</span>
         </p>
-        <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
-          <input type="hidden" name="tab" value="calculator" />
-          <input type="hidden" name="csub" value="quotes" />
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="학생 이름·학교"
-              className="text-foreground placeholder:text-text-faint w-36 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">검색</Button>
-        </form>
+        <SearchForm
+          placeholder="학생 이름·학교"
+          defaultValue={q}
+          inputWidth="w-36"
+          resetParams={["qpage"]}
+        />
       </div>
 
       {total === 0 ? (
         <EmptyState
+          image={q ? "search" : "billing"}
           icon={() => <FileText size={32} strokeWidth={1.5} />}
           title={q ? "검색 결과 없음" : "저장된 견적이 없습니다"}
           description={q ? "검색어를 조정해보세요." : "계산기 탭에서 신입생 상담 견적을 만들어 저장하세요."}

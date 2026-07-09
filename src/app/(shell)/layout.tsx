@@ -16,6 +16,7 @@ import { NoticePopupLayer } from "@/features/notices/components/notice-popup-lay
 import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
+import { getShellView, canUseTeacherView, isFullShellRole } from "@/lib/auth/view-mode";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -65,9 +66,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // (super_admin은 owner override 무시 = 코드 기본값). 페이지 requireAccess와 같은 캐시를 공유해 추가 쿼리 0.
   const permMatrix = await getPermMatrix();
 
+  // 셸 크롬 결정 — student=학생 미니셸, teacher(실 강사 or 겸직-강사뷰)=강사 미니셸, 그 외=풀셸.
+  // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).
+  const view = await getShellView();
+
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)
-  if (user.systemRole === "teacher" || user.systemRole === "student") {
+  if (view === "teacher" || view === "student") {
     return (
       // print:h-auto/overflow-visible — 인쇄 시 h-screen+overflow-hidden 래퍼가 문서를 1페이지 높이로
       // 클리핑하는 것 방지(globals.css의 html/body/main 인쇄 리셋과 세트 — 래퍼 div는 셀렉터 밖이라 여기서).
@@ -93,9 +98,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {user.systemRole === "teacher" ? <TeacherMenu permMatrix={permMatrix} /> : null}
+            {/* 겸직이면 '내 메뉴' 드롭다운 하단에 '관리자뷰로 전환'을 넣는다(헤더 별도 버튼 X). 실 강사는 미노출. */}
+            {view === "teacher" ? (
+              <TeacherMenu permMatrix={permMatrix} canReturnToAdmin={isFullShellRole(user.systemRole)} />
+            ) : null}
             {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}
-            {user.systemRole === "teacher" ? <NotificationBell /> : null}
+            {view === "teacher" ? <NotificationBell /> : null}
             <UserMenu
               email={user.email}
               displayName={user.displayName}
@@ -116,6 +124,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     );
   }
 
+  // 겸직(관리자 계열 + 실제 담당 반) → 사이드바 하단에 '강사뷰로 전환' 노출. head:true 카운트라 저비용.
+  const canTeacherView = await canUseTeacherView();
+
   return (
     // print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일).
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible lg:flex-row">
@@ -133,6 +144,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           logoText={brand}
           logoSrc={logoSrc}
           permMatrix={permMatrix}
+          canTeacherView={canTeacherView}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>

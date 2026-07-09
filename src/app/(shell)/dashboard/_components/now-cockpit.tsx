@@ -115,7 +115,7 @@ export function NowCockpit({
 
           {nextClasses.length > 0 && nextStart ? <NextSlot time={nextStart} classes={nextClasses} subjects={subjects} /> : null}
 
-          <div className="border-line mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-3">
+          <div className="border-line mt-auto flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t pt-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {dist.map((d) => (
                 <span key={d.label} className="text-text-dim inline-flex items-center gap-1 text-[11px]">
@@ -184,13 +184,14 @@ function NextSlot({ time, classes, subjects }: { time: string; classes: TodaySlo
               href={`/classes/${s.classId}`}
               title={s.className}
               ariaLabel={`${s.className} 수업 상세 열기`}
-              className={`${SUBJECT_ICON_BG[subjects.colorOf(s.subject)]} inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow hover:shadow-sm`}
+              className={`${SUBJECT_ICON_BG[subjects.colorOf(s.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow hover:shadow-sm`}
             >
+              {/* truncate(overflow-hidden)를 flex 자식에 직접 두면 baseline이 박스 하단으로 합성 → 내부 block span으로. */}
               <span
-                className="max-w-[8rem] truncate"
+                className="max-w-[8rem] min-w-0"
                 title={`${s.className}${s.teacherName ? ` · ${s.teacherName}` : ""}${s.classroomName ? ` · ${s.classroomName}` : ""} · ${s.studentCount}명`}
               >
-                {s.className}
+                <span className="block truncate">{s.className}</span>
               </span>
               <span className="num font-mono text-[9px] opacity-60">{s.studentCount}</span>
             </WindowLink>
@@ -209,8 +210,8 @@ function OngoingBySubject({ slots, subjects }: { slots: TodaySlot[]; subjects: S
     <div className="space-y-3">
       {groups.map((g) => (
         <div key={g.subject}>
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className={`${SUBJECT_SOLID[g.color]} size-2.5 rounded-[3px]`} aria-hidden="true" />
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <span className={`${SUBJECT_SOLID[g.color]} size-2.5 self-center rounded-[3px]`} aria-hidden="true" />
             <span className="text-foreground text-[13px] font-bold">{g.label}</span>
             <span className="text-text-faint num font-mono text-[11px]">{g.slots.length}개 진행 중</span>
           </div>
@@ -231,21 +232,24 @@ function OngoingRow({ slot }: { slot: TodaySlot }) {
       href={`/classes/${slot.classId}`}
       title={slot.className}
       ariaLabel={`${slot.className} 수업 상세 열기`}
-      className="group hover:bg-bg-soft flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors"
+      className="group hover:bg-bg-soft flex items-baseline gap-2.5 rounded-md px-2 py-1.5 transition-colors"
     >
       <span className="num text-primary w-[86px] shrink-0 text-[11px] font-bold">
         {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
       </span>
-      <span className="text-foreground group-hover:text-primary min-w-0 flex-1 truncate text-[13px] font-semibold">
-        {slot.className}
+      {/* 13/11px 한 줄 = baseline 정렬. truncate는 flex 자식에 두면 baseline이 박스 하단으로 합성 → 내부 block span으로. */}
+      <span className="text-foreground group-hover:text-primary min-w-0 flex-1 text-[13px] font-semibold">
+        <span className="block truncate">{slot.className}</span>
       </span>
-      <span className="text-text-dim hidden max-w-[9rem] shrink-0 truncate text-[11px] sm:inline">
-        {slot.teacherName ?? "담임 미정"}
-        {slot.classroomName ? ` · ${slot.classroomName}` : ""}
+      <span className="text-text-dim hidden max-w-[9rem] shrink-0 text-[11px] sm:inline">
+        <span className="block truncate">
+          {slot.teacherName ?? "담임 미정"}
+          {slot.classroomName ? ` · ${slot.classroomName}` : ""}
+        </span>
       </span>
       <span className="num text-text-faint shrink-0 text-[11px]">{slot.studentCount}명</span>
       <span
-        className="animate-pulse bg-primary size-1.5 shrink-0 rounded-full"
+        className="animate-pulse bg-primary size-1.5 shrink-0 self-center rounded-full"
         aria-hidden="true"
       />
     </WindowLink>

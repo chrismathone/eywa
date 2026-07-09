@@ -27,6 +27,7 @@ export default async function EditEnrollmentPage({
 
       <ConsultationFullForm
         mode="edit"
+        confirmConsultedOnSave={c.fromPublicIntake && ["pending", "scheduled"].includes(c.outcome)}
         aiSuggestedParentRequest={c.aiFormSuggestions?.parentRequest ?? null}
         existingRecordings={c.recordings.map((r) => ({ createdAt: r.createdAt, status: r.status }))}
         initial={{

@@ -2,8 +2,7 @@ import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { BarChart3, LayoutGrid, List } from "lucide-react";
 import { FilterSelect } from "@/components/filter-select";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
+import { SearchForm } from "@/components/search-form";
 import { OUTCOME_OPTIONS } from "./outcome-meta";
 
 type Props = {
@@ -156,28 +155,8 @@ export function KanbanFilters({
         </Link>
       </div>
 
-      {/* 이름·전화·학교 검색 (월/상담사/상태/뷰 hidden 보존, page 리셋) */}
-      <form action="/enrollment" method="get" className="ml-auto flex items-center gap-2">
-        {selectedMonth ? <input type="hidden" name="month" value={selectedMonth} /> : null}
-        {selectedConsultant ? (
-          <input type="hidden" name="consultant" value={selectedConsultant} />
-        ) : null}
-        {selectedOutcome ? <input type="hidden" name="outcome" value={selectedOutcome} /> : null}
-        {view === "table" ? <input type="hidden" name="view" value="table" /> : null}
-        <div className="border-border bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-          <EyIcon name="search" size={13} />
-          <input
-            type="search"
-            name="q"
-            defaultValue={searchQuery ?? ""}
-            placeholder="이름·전화·학교"
-            className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-          />
-        </div>
-        <Button type="submit" variant="outline" size="sm">
-          검색
-        </Button>
-      </form>
+      {/* 이름·전화·학교 검색 — 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체(다른 param 자동 보존) */}
+      <SearchForm placeholder="이름·전화·학교" defaultValue={searchQuery} />
 
       <WindowLink
         href="/enrollment/dashboard"

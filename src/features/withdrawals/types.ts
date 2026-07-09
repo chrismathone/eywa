@@ -57,6 +57,16 @@ export function reasonLabel(raw: string | null | undefined): string {
   return norm ? REASON_LABEL[norm] : "미기재";
 }
 
+/**
+ * 표시용: 표준 사유 키(other/graduated…)만 한글 라벨로, 자유 텍스트(예 "반 이동")는 **그대로** 둔다.
+ * ⚠️ `reasonLabel`은 normalizeReason이 미지 코드를 "other"로 뭉개 "반 이동" 같은 실사유를
+ * "기타"로 덮으므로, 이미 사람이 읽을 수 있는 사유를 보존해야 하는 표시엔 이걸 쓴다. 빈 값=null.
+ */
+export function reasonDisplay(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  return (REASON_LABEL as Record<string, string>)[raw] ?? raw;
+}
+
 export const DEFAULT_WITHDRAWAL_METADATA: WithdrawalMetadata = {
   reason: "other",
   memo: null,

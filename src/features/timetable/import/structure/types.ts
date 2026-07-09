@@ -72,6 +72,8 @@ export interface ExistingTeacherRef {
   id: string;
   englishName: string | null;
   displayName: string;
+  /** 매칭 모호성 해소용 역할 필터(teacher/manager/master 우선). 미지정이면 필터 미적용. */
+  systemRole?: string;
 }
 export interface ExistingRoomRef {
   id: string;
@@ -118,25 +120,49 @@ export interface TargetSchedule {
   starred: boolean;
 }
 
-/** 기존 DB의 class_schedules 스냅샷(diff 대상). */
+/** 기존 DB의 class_schedules 스냅샷(diff 대상 + apply temporal 마감에 필요한 필드 전부). */
 export interface ExistingSchedule {
   id: string;
   classId: string;
+  className: string; // 반명(remove 항목 표시·conflict용, 서버가 classes 조인해 채움)
   day: DayOfWeek;
   startTime: string; // "HH:MM"
   endTime: string | null;
+  teacherId: string | null;
+  classroomId: string | null;
+  slotTeacherLabel: string | null;
+  slotRoomLabel: string | null;
+  mergeGroup: string | null; // 합반 — keep/update 시 보존
+  validFrom: string; // "YYYY-MM-DD"
+  validTo: string | null;
 }
 
 export type ScheduleAction = "create" | "update" | "keep" | "remove";
 export interface SchedulePlanItem {
   action: ScheduleAction;
+  classId: string | null; // 시트 반명 매칭 결과(null=신규 반, apply 제외)
   className: string;
   day: DayOfWeek;
   startTime: string;
   endTime: string | null;
   room: string | null;
   teacherNames: string[];
-  scheduleId?: string; // update/keep/remove 대상 기존 행
+  scheduleId?: string; // update/keep/remove 대상 기존 행 id
+  /** create/update: 새 class_schedules 행에 넣을 해석된 강사 id(첫 강사=담임 후보, 미해석=null). */
+  teacherId?: string | null;
+  /** create/update: 새 class_schedules 행에 넣을 해석된 강의실 id(미해석=null → 라벨-only). */
+  classroomId?: string | null;
+  /** update일 때 변경 전 값(화면 "이전→이후" 표시용). */
+  before?: { endTime: string | null; room: string | null; teacherNames: string[] };
+}
+
+/** classes 담임/기본강의실 갱신 계획 1건(apply payload) — teacherId/classroomId=null이면 그 필드 미변경. */
+export interface ApplyClassUpdate {
+  classId: string;
+  teacherId: string | null;
+  classroomId: string | null;
+  prevTeacherId: string | null; // 롤백 복원용
+  prevClassroomId: string | null;
 }
 
 /** 강의실 중복(같은 방·요일·시간 겹침 + 다른 수업/강사). */
@@ -156,4 +182,6 @@ export interface DryRunReport {
   planItems: SchedulePlanItem[];
   conflicts: RoomConflict[];
   warnings: string[];
+  /** 계획(변경분)의 결정적 해시 — Phase 2 apply가 서버 재계산 결과와 대조해 스테일/조작 차단. */
+  hash: string;
 }

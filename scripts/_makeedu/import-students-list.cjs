@@ -17,7 +17,7 @@ const postgres = require("postgres");
 const L = require("./lib.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (sub) => H.findIndex((h) => (h || "").includes(sub));
 
 // 학교 core(접미사 정규화) — "달성초"·"달성초등학교" 동일 취급(상담 임포터와 동일 규약).

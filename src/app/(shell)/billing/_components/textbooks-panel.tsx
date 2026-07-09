@@ -1,9 +1,8 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { BookText, Clock, CircleDollarSign, Receipt } from "lucide-react";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/pagination";
+import { SearchForm } from "@/components/search-form";
 import {
   getStudentOptions,
   getTextbookOrdersPage,
@@ -87,21 +86,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
             {s.label} {stats.byStatus[s.key] ?? 0}
           </Link>
         ))}
-        <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
-          <input type="hidden" name="tab" value="textbooks" />
-          {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="교재명·학생"
-              className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">검색</Button>
-        </form>
+        <SearchForm placeholder="교재명·학생" defaultValue={q} />
       </div>
 
       {/* KPI */}

@@ -12,7 +12,6 @@ import {
   Clock,
   ExternalLink,
   Loader2,
-  Mail,
   Pencil,
   RotateCcw,
   Save,
@@ -38,37 +37,31 @@ const STATUS_DEFS: {
     value: "present",
     label: "출석",
     icon: Check,
-    activeClass: "text-chart-2 bg-chart-2/10 border-chart-2/30",
+    activeClass: "text-primary bg-primary/10 border-primary/30",
   },
   {
     value: "absent",
     label: "결석",
     icon: X,
-    activeClass: "text-chart-4 bg-chart-4/10 border-chart-4/30",
+    activeClass: "text-danger bg-danger/10 border-danger/30",
   },
   {
     value: "late",
     label: "지각",
     icon: Clock,
-    activeClass: "text-chart-3 bg-chart-3/10 border-chart-3/30",
+    activeClass: "text-amber bg-amber/10 border-amber/30",
   },
   {
     value: "early_leave",
     label: "조퇴",
     icon: Clock,
-    activeClass: "text-chart-5 bg-chart-5/10 border-chart-5/30",
-  },
-  {
-    value: "excused",
-    label: "공결",
-    icon: Mail,
-    activeClass: "text-muted-foreground bg-muted border-border",
+    activeClass: "text-rose bg-rose/10 border-rose/30",
   },
   {
     value: "makeup",
     label: "보강",
     icon: RotateCcw,
-    activeClass: "text-chart-1 bg-chart-1/10 border-chart-1/30",
+    activeClass: "text-purple bg-purple/10 border-purple/30",
   },
 ];
 
@@ -163,23 +156,23 @@ export function AttendanceInputForm({
       <input type="hidden" name="date" value={date} />
 
       {/* Bulk actions */}
-      <div className="border-border bg-card flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-2.5">
-        <div className="text-muted-foreground text-xs">
+      <div className="border-line bg-card flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-2.5">
+        <div className="text-text-dim text-xs">
           입력 {filled} / {rows.length}
         </div>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setAll("present")}
-            className="text-chart-2 hover:bg-chart-2/10 rounded-md px-2 py-1 text-xs font-medium transition"
+            className="text-primary hover:bg-primary/10 rounded-md px-2 py-1 text-xs font-medium transition"
           >
             전체 출석
           </button>
-          <span className="text-muted-foreground/40 text-xs">·</span>
+          <span className="text-text-dim/40 text-xs">·</span>
           <button
             type="button"
             onClick={clearAll}
-            className="text-muted-foreground hover:text-foreground rounded-md px-2 py-1 text-xs transition"
+            className="text-text-dim hover:text-foreground rounded-md px-2 py-1 text-xs transition"
           >
             전체 초기화
           </button>
@@ -187,11 +180,11 @@ export function AttendanceInputForm({
       </div>
 
       {rows.length === 0 ? (
-        <div className="border-border bg-muted/20 rounded-lg border border-dashed p-8 text-center">
-          <p className="text-muted-foreground text-sm">이 날짜에 활성 재원생이 없습니다.</p>
+        <div className="border-line bg-bg-soft/20 rounded-lg border border-dashed p-8 text-center">
+          <p className="text-text-dim text-sm">이 날짜에 활성 재원생이 없습니다.</p>
         </div>
       ) : (
-        <ul className="bg-card border-border divide-border divide-y rounded-lg border">
+        <ul className="bg-card border-line divide-border divide-y rounded-lg border">
           {rows.map((r) => {
             const cell = pending[r.studentId];
             const hasExtra = !!(cell.note || cell.homeworkRequired);
@@ -206,16 +199,16 @@ export function AttendanceInputForm({
                       title={`${r.studentName} 학생 상세로 이동 (새 탭)`}
                     >
                       {r.studentName}
-                      <ExternalLink className="text-muted-foreground size-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ExternalLink className="text-text-dim size-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </Link>
                     {r.studentGrade ? (
-                      <span className="text-muted-foreground text-xs">{r.studentGrade}</span>
+                      <span className="text-text-dim text-xs">{r.studentGrade}</span>
                     ) : null}
                     {r.existingRecordId ? (
-                      <span className="text-muted-foreground text-[10px]">· 이전 기록 있음</span>
+                      <span className="text-text-dim text-[10px]">· 이전 기록 있음</span>
                     ) : null}
                     {hasExtra ? (
-                      <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                      <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
                         {cell.note ? <Pencil className="size-2.5" /> : null}
                         {cell.homeworkRequired ? <BookOpen className="size-2.5" /> : null}
                       </span>
@@ -262,7 +255,7 @@ export function AttendanceInputForm({
                           className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition ${
                             active
                               ? s.activeClass
-                              : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft/30"
                           }`}
                           aria-pressed={active}
                         >
@@ -274,7 +267,7 @@ export function AttendanceInputForm({
                     <button
                       type="button"
                       onClick={() => patchOne(r.studentId, { expanded: !cell.expanded })}
-                      className="text-muted-foreground hover:text-foreground ml-1 inline-flex size-6 items-center justify-center rounded-md"
+                      className="text-text-dim hover:text-foreground ml-1 inline-flex size-6 items-center justify-center rounded-md"
                       aria-label={cell.expanded ? "접기" : "메모/숙제 펼치기"}
                     >
                       {cell.expanded ? (
@@ -287,15 +280,15 @@ export function AttendanceInputForm({
                 </div>
 
                 {cell.expanded ? (
-                  <div className="bg-bg-soft/30 border-border mt-2 space-y-2 rounded-md border p-2.5">
+                  <div className="bg-bg-soft/30 border-line mt-2 space-y-2 rounded-md border p-2.5">
                     <div className="flex items-start gap-2">
-                      <Pencil className="text-muted-foreground mt-1.5 size-3" />
+                      <Pencil className="text-text-dim mt-1.5 size-3" />
                       <input
                         type="text"
                         value={cell.note}
                         onChange={(e) => patchOne(r.studentId, { note: e.target.value })}
                         placeholder="메모 (오늘의 특이사항 등)"
-                        className="border-border bg-card text-foreground flex-1 rounded-md border px-2 py-1.5 text-xs"
+                        className="border-line bg-card text-foreground flex-1 rounded-md border px-2 py-1.5 text-xs"
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
@@ -307,11 +300,11 @@ export function AttendanceInputForm({
                             patchOne(r.studentId, { homeworkRequired: e.target.checked })
                           }
                         />
-                        <BookOpen className="text-muted-foreground size-3" />
+                        <BookOpen className="text-text-dim size-3" />
                         숙제 부여
                       </label>
                       <label
-                        className={`inline-flex items-center gap-1.5 text-xs ${cell.homeworkRequired ? "text-foreground" : "text-muted-foreground opacity-50"}`}
+                        className={`inline-flex items-center gap-1.5 text-xs ${cell.homeworkRequired ? "text-foreground" : "text-text-dim opacity-50"}`}
                       >
                         <input
                           type="checkbox"
@@ -333,14 +326,14 @@ export function AttendanceInputForm({
       )}
 
       {state?.error ? (
-        <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
+        <p className="text-danger bg-danger/10 border-danger/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
           <AlertCircle className="size-4" />
           {state.error}
         </p>
       ) : null}
 
       <div className="flex items-center justify-end gap-2 border-t pt-5">
-        <span className="text-muted-foreground text-xs">
+        <span className="text-text-dim text-xs">
           {dirty ? "변경됨" : "변경 사항 없음"}
         </span>
         <SubmitButton />

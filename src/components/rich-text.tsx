@@ -24,10 +24,13 @@ export function splitTopLevelCommas(text: string): string[] {
   const out: string[] = [];
   let depth = 0;
   let cur = "";
-  for (const ch of text) {
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (ch === "(" || ch === "（" || ch === "[") depth++;
     else if (ch === ")" || ch === "）" || ch === "]") depth = Math.max(0, depth - 1);
-    if ((ch === "," || ch === "，") && depth === 0) {
+    // 천단위 콤마(숫자,숫자 = 288,000)는 분할하지 않는다 — 금액이 "288"/"000원"으로 쪼개지던 버그 방지.
+    const isThousands = /[0-9]/.test(text[i - 1] ?? "") && /[0-9]/.test(text[i + 1] ?? "");
+    if ((ch === "," || ch === "，") && depth === 0 && !isThousands) {
       out.push(cur.trim());
       cur = "";
     } else cur += ch;
@@ -39,12 +42,24 @@ export function splitTopLevelCommas(text: string): string[] {
 function BulletList({ items }: { items: string[] }) {
   return (
     <ul className="space-y-1">
-      {items.map((b, i) => (
-        <li key={i} className="flex gap-2">
-          <span className="text-primary/60 mt-[2px] shrink-0 text-xs">●</span>
-          <span className="min-w-0 break-keep">{renderInline(b)}</span>
-        </li>
-      ))}
+      {items.map((b, i) => {
+        // '→'로 시작하는 줄(질문의 답변 등)은 앞 항목의 하위줄 — 불릿(●) 없이 들여쓰기(모델이 답변을
+        // 새 줄로 뱉어도 별도 불릿이 붙지 않게). 등록상담 학부모 질문 '- 질문\n→ 답변' 대응.
+        const isSub = /^→/.test(b);
+        if (isSub) {
+          return (
+            <li key={i} className="text-text-dim min-w-0 pl-5 break-keep">
+              {renderInline(b)}
+            </li>
+          );
+        }
+        return (
+          <li key={i} className="flex gap-2">
+            <span className="text-primary/60 mt-[2px] shrink-0 text-xs">●</span>
+            <span className="min-w-0 break-keep">{renderInline(b)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

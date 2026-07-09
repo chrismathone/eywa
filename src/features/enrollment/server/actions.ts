@@ -11,6 +11,9 @@ import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
+import { after } from "next/server";
+import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
+import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import {
   getMediaBackend,
@@ -381,6 +384,9 @@ export async function updateEnrollmentConsultation(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "상담 ID가 누락되었습니다" };
 
+  // QR 접수(대기·예약) 재저장 확인 팝업의 "상담 완료로 저장" 선택 — 아래에서 서버 조건 재검증 후 전환.
+  const markConsulted = String(formData.get("markConsulted") ?? "") === "1";
+
   const parsed = createSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요" };
@@ -390,7 +396,7 @@ export async function updateEnrollmentConsultation(
   // 기존 learning_history를 읽어 prevAcademy/lastScore만 갱신(AI 파생 weakSubjects 등 보존).
   const { data: existing } = await supabase
     .from("enrollment_consultations")
-    .select("learning_history")
+    .select("learning_history, outcome, from_public_intake")
     .eq("id", id)
     .single();
   const lh: Record<string, unknown> = { ...((existing?.learning_history as Record<string, unknown>) ?? {}) };
@@ -399,11 +405,18 @@ export async function updateEnrollmentConsultation(
   if (parsed.data.lastScore) lh.lastScore = parsed.data.lastScore;
   else delete lh.lastScore;
 
+  // 상담 완료 전환은 QR 접수건 + 현재 대기·예약(pending/scheduled)일 때만(클라 조작·낡은 폼 방어).
+  const promoteToConsulted =
+    markConsulted &&
+    !!existing?.from_public_intake &&
+    ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
+
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
       ...buildConsultationRow(parsed.data),
       learning_history: Object.keys(lh).length > 0 ? lh : null,
+      ...(promoteToConsulted ? { outcome: "consulted" } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -461,6 +474,23 @@ export async function setEnrollmentOutcome(
   if (!(OUTCOMES as readonly string[]).includes(outcome)) return { error: "유효한 상태가 아닙니다" };
 
   const supabase = await createClient();
+
+  // 배정 완료(등록) 상담은 이전 단계로 되돌릴 수 없다 — 학생이 이미 생성·연결됐기 때문(유령 '대기' 방지).
+  // 취소는 '거절'로만. (enrolled 유지 또는 declined만 허용; 그 외 backward·노쇼 차단.)
+  const { data: cur } = await supabase
+    .from("enrollment_consultations")
+    .select("outcome, student_id")
+    .eq("id", id)
+    .single();
+  if (!cur) return { error: "상담을 찾을 수 없습니다" };
+  const isConverted = cur.outcome === "enrolled" || !!cur.student_id;
+  if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
+    return {
+      error:
+        "이미 배정 완료(등록)된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
+    };
+  }
+
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({ outcome, updated_at: new Date().toISOString() })
@@ -681,7 +711,9 @@ export async function runAiAnalysis(
 
 // ────────────────── 상담 → 학생 자동 전환 ──────────────────
 
-export type ConvertToStudentState = { error?: string; studentId?: string } | undefined;
+export type ConvertToStudentState =
+  | { error?: string; studentId?: string; existingStudentId?: string }
+  | undefined;
 
 /**
  * 등록상담 → 학생 자동 생성. 선택한 반들에 enrollments도 동시에 INSERT.
@@ -721,7 +753,7 @@ export async function convertConsultationToStudent(
     .eq("id", consultationId)
     .single();
 
-  if (cErr || !c) return { error: cErr?.message ?? "상담을 찾을 수 없습니다" };
+  if (cErr || !c) return { error: "상담 정보를 불러오지 못했습니다" };
 
   if (c.student_id) {
     // 이미 연결된 학생이 있으면 그 학생으로 이동
@@ -741,14 +773,19 @@ export async function convertConsultationToStudent(
 
   const today = kstToday();
 
+  // 자연키(같은 이름·학교·학년의 재원 학생) 값 — 중복 안내에도 재사용.
+  const studentName = overrideName || c.prospect_name;
+  const studentSchool = overrideSchool ?? c.prospect_school;
+  const studentGrade = overrideGrade ?? c.prospect_grade;
+
   // students INSERT
   const { data: stu, error: stuErr } = await supabase
     .from("students")
     .insert({
       tenant_id: c.tenant_id,
-      name: overrideName || c.prospect_name,
-      grade: overrideGrade ?? c.prospect_grade,
-      school: overrideSchool ?? c.prospect_school,
+      name: studentName,
+      grade: studentGrade,
+      school: studentSchool,
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",
@@ -757,42 +794,87 @@ export async function convertConsultationToStudent(
     .select("id")
     .single();
 
-  if (stuErr || !stu) {
-    return { error: stuErr?.message ?? "학생 생성 실패" };
+  // 학생 확정: 생성 성공이면 그 id, 자연키 충돌(이미 재원 학생 — 대개 makeedu 왕복)이면 기존 학생 재사용(B).
+  let studentId: string;
+  let reusedExisting = false;
+  if (stu && !stuErr) {
+    studentId = stu.id;
+  } else {
+    const isDuplicate =
+      stuErr?.code === "23505" || /duplicate key|natural_key/i.test(stuErr?.message ?? "");
+    if (!isDuplicate) {
+      console.error("[convertConsultationToStudent] 학생 생성 실패", stuErr);
+      return { error: "학생을 생성하지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요." };
+    }
+    // 같은 자연키(정규화 이름 + 학교·학년)의 기존 재원 학생을 찾아 재사용 — 원본 에러 노출 없이 매끄럽게 해소.
+    const norm = studentName.toLowerCase().replace(/\s+/g, "");
+    const { data: candidates } = await supabase
+      .from("students")
+      .select("id, school, grade")
+      .eq("tenant_id", c.tenant_id)
+      .eq("name_normalized", norm)
+      .neq("status", "withdrawn");
+    const existing = (candidates ?? []).find(
+      (s) => (s.school ?? "") === (studentSchool ?? "") && (s.grade ?? "") === (studentGrade ?? ""),
+    );
+    if (!existing) {
+      // 폴백(A): 충돌은 났으나 정확 매칭 실패(정규화 차이 등) → 친절 안내 + (있으면) 기존 학생 링크.
+      const who = [studentName, studentSchool, studentGrade].filter(Boolean).join(" · ");
+      return {
+        error: `이미 같은 이름·학교·학년의 재원 학생이 있습니다 (${who}). 학생 목록에서 그 학생에 반을 배정해 주세요.`,
+        existingStudentId: candidates?.[0]?.id,
+      };
+    }
+    studentId = existing.id;
+    reusedExisting = true;
   }
 
-  // enrollments 다중 INSERT
-  if (classIds.length > 0) {
-    const rows = classIds.map((classId) => ({
+  // enrollments 배정 — 기존 학생 재사용 시 이미 등록된 반은 제외(중복 배정·제약 위반 방지).
+  let assignClassIds = classIds;
+  if (reusedExisting) {
+    const { data: already } = await supabase
+      .from("enrollments")
+      .select("class_id")
+      .eq("student_id", studentId)
+      .in("class_id", classIds);
+    const inSet = new Set((already ?? []).map((e) => e.class_id as string));
+    assignClassIds = classIds.filter((id) => !inSet.has(id));
+  }
+  if (assignClassIds.length > 0) {
+    const rows = assignClassIds.map((classId) => ({
       tenant_id: c.tenant_id,
-      student_id: stu.id,
+      student_id: studentId,
       class_id: classId,
       start_date: today,
     }));
     const { error: enrErr } = await supabase.from("enrollments").insert(rows);
     if (enrErr) {
-      // 학생은 생성됐지만 enrollment 실패 — 사용자에게 알림 (학생 ID는 반환)
-      return { error: `학생은 생성됐으나 반 배정 실패: ${enrErr.message}`, studentId: stu.id };
+      // 원본 메시지 대신 친절 안내(학생 ID는 반환해 이동 유도).
+      console.error("[convertConsultationToStudent] 반 배정 실패", enrErr);
+      return {
+        error: "학생은 준비됐으나 반 배정에 실패했습니다. 학생 상세에서 반을 배정해 주세요.",
+        studentId,
+      };
     }
     // 배정된 반들의 담임에게 인앱 알림 — best-effort.
     await notifyClassAssignment({
       tenantId: c.tenant_id,
       actorId: user.id,
-      assignments: classIds.map((classId) => ({ classId, studentId: stu.id })),
+      assignments: assignClassIds.map((classId) => ({ classId, studentId })),
       type: "enrollment_assigned",
     });
   }
 
-  // 상담에 학생 ID + outcome=enrolled 연결
+  // 상담에 학생 ID + outcome=enrolled 연결(재사용/신규 모두 — orphan 상담 해소).
   await supabase
     .from("enrollment_consultations")
-    .update({ student_id: stu.id, outcome: "enrolled" })
+    .update({ student_id: studentId, outcome: "enrolled" })
     .eq("id", consultationId);
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/students");
-  return { studentId: stu.id };
+  return { studentId };
 }
 
 
@@ -800,9 +882,10 @@ export type UpdateConsultationReportState =
   | { error?: string; ok?: true; editedBy?: string; editedAt?: string }
   | undefined;
 
-// 인라인 수정 가능한 12개 audioReport 섹션(extracted는 구조화 데이터라 제외).
+// 인라인 수정 가능한 11개 audioReport 섹션(extracted는 구조화 데이터라 제외).
 const EDITABLE_AUDIO_KEYS = new Set([
   "consultationType",
+  "summary",
   "familyBackground",
   "parentConcerns",
   "parentQuestions",
@@ -864,4 +947,188 @@ export async function updateConsultationReportSection(
   if (consultationId) revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
   return { ok: true, editedBy: user.displayName, editedAt: now };
+}
+
+/**
+ * 등록상담 AI 분석 재실행(재분석) — 저장된 전사(완료 녹음 합본 또는 레거시 단일 전사)로 심층분석을
+ * 다시 돌려 print_payload.audioReport(섹션) + speakerRoles만 새로 덮는다. diagnosis/learning_plan/
+ * prospect/formSuggestions·폼 자동입력은 건드리지 않는다(상담사 수기 입력 보호). 무거운 분석은 after()
+ * 백그라운드 — 즉시 '분석 중' 표시(회의 재분석과 동일 UX). ⚠️ 프롬프트는 웹훅과 동일 단일 소스(consultation-analysis.ts).
+ */
+export async function regenerateConsultationAnalysis(
+  consultationId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: consult } = await supabase
+    .from("enrollment_consultations")
+    .select(
+      "id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, transcription, processing_status, updated_at",
+    )
+    .eq("id", consultationId)
+    .single();
+  if (!consult) return { error: "상담을 찾을 수 없습니다" };
+
+  // 완료 녹음 합본 우선, 없으면 레거시 단일 전사.
+  const { data: recs } = await supabase
+    .from("consultation_recordings")
+    .select("transcription, speaker_labels, created_at")
+    .eq("consultation_id", consultationId)
+    .eq("processing_status", "completed")
+    .order("created_at", { ascending: true });
+  const inputs = (recs ?? []).map((r) => ({
+    utterances: Array.isArray(r.speaker_labels) ? (r.speaker_labels as SpeakerUtterance[]) : null,
+    plainText: r.transcription as string | null,
+    recordedAt: r.created_at as string,
+  }));
+  const nonEmpty = inputs.filter(
+    (i) => (i.utterances?.length ?? 0) > 0 || (i.plainText ?? "").trim().length > 0,
+  );
+  const formatted =
+    nonEmpty.length > 0
+      ? combineConsultationTranscripts(nonEmpty)
+      : (consult.transcription ?? "").trim();
+  const multi = nonEmpty.length > 1;
+  if (!formatted.trim())
+    return { error: "재분석할 전사가 없습니다. 녹음/전사가 남아 있어야 재분석할 수 있어요." };
+
+  // 기존 분석 행 — 재분석은 이 행의 섹션만 갱신(diagnosis/learning_plan 등 보존).
+  const { data: existing } = await supabase
+    .from("consultation_ai_analysis")
+    .select("id, print_payload")
+    .eq("consultation_id", consultationId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!existing) return { error: "기존 AI 분석이 없어 재분석할 수 없습니다. 먼저 분석을 실행하세요." };
+
+  // 원자적 claim(동시 재분석 방어) — '분석 중'이 아닐 때만 상태를 선점한다. 여러 명이 동시에 눌러도
+  // DB update가 원자적이라 한 명만 1행을 claim하고(select로 확인) 나머지는 0행 → "이미 진행 중" 안내.
+  // 단, 5분 넘게 '분석 중'에 멈춘 stuck(after() 크래시/타임아웃)은 재실행 허용(neq 가드 우회).
+  const now = new Date();
+  const analyzingStuck =
+    consult.processing_status === "analyzing" &&
+    now.getTime() - new Date(consult.updated_at).getTime() > 5 * 60 * 1000;
+  const admin = createAdminClient();
+  let claim = admin
+    .from("enrollment_consultations")
+    .update({ processing_status: "analyzing", processing_error: null, updated_at: now.toISOString() })
+    .eq("id", consultationId);
+  if (!analyzingStuck) claim = claim.neq("processing_status", "analyzing");
+  const { data: claimed } = await claim.select("id");
+  if (!claimed || claimed.length === 0) {
+    return { error: "이미 재분석이 진행 중입니다. 완료되면 화면이 자동으로 갱신됩니다." };
+  }
+  revalidatePath(`/enrollment/${consultationId}`);
+  revalidatePath("/enrollment");
+
+  const ctx = {
+    prospect_name: consult.prospect_name,
+    prospect_grade: consult.prospect_grade,
+    prospect_school: consult.prospect_school,
+    parent_name: consult.parent_name,
+    parent_phone: consult.parent_phone,
+  };
+  const analysisId = existing.id;
+  const priorPayload =
+    existing.print_payload && typeof existing.print_payload === "object"
+      ? (existing.print_payload as Record<string, unknown>)
+      : {};
+
+  // 무거운 분석은 응답 후 백그라운드(after). 완료 시 StatusWatcher가 새 결과로 갱신.
+  after(async () => {
+    const bg = createAdminClient();
+    try {
+      const { data: report, model } = await runConsultationAnalysis(ctx, formatted, multi);
+      const { speakerRoles, ...sections } = report;
+      const now = new Date().toISOString();
+      await bg
+        .from("consultation_ai_analysis")
+        .update({
+          print_payload: {
+            ...priorPayload,
+            audioReport: sections,
+            speakerRoles: speakerRoles ?? priorPayload.speakerRoles ?? {},
+          },
+          model_version: `${model}-${now.slice(0, 10)}`,
+          generated_at: now,
+          // 재분석 = 새 AI 결과 → 이전 사람 수정 이력 초기화(덮어쓰기 의미 명확).
+          report_edited_by: null,
+          report_edited_at: null,
+        })
+        .eq("id", analysisId);
+      await bg
+        .from("enrollment_consultations")
+        .update({ processing_status: "completed", processing_error: null, updated_at: now })
+        .eq("id", consultationId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await bg
+        .from("enrollment_consultations")
+        .update({ processing_status: "failed", processing_error: `AI 재분석 실패: ${msg}` })
+        .eq("id", consultationId);
+    }
+  });
+
+  return { ok: true };
+}
+
+/**
+ * AI 분석의 '상담 요약'을 상담 내용(parent_request)에 채운다/덧붙인다 — 원장 요청("AI 분석을 상담 내용에 추가").
+ * 비어 있으면 요약으로 채우고, 이미 값이 있으면 구분선 아래로 덧붙인다(기존 상담 내용 보존).
+ */
+export async function appendAiSummaryToConsultationContent(
+  consultationId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: consult } = await supabase
+    .from("enrollment_consultations")
+    .select("id, parent_request")
+    .eq("id", consultationId)
+    .single();
+  if (!consult) return { error: "상담을 찾을 수 없습니다" };
+
+  const { data: ai } = await supabase
+    .from("consultation_ai_analysis")
+    .select("print_payload")
+    .eq("consultation_id", consultationId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const pp =
+    ai?.print_payload && typeof ai.print_payload === "object"
+      ? (ai.print_payload as Record<string, unknown>)
+      : null;
+  const audioReport =
+    pp?.audioReport && typeof pp.audioReport === "object"
+      ? (pp.audioReport as Record<string, unknown>)
+      : null;
+  const summary = typeof audioReport?.summary === "string" ? audioReport.summary.trim() : "";
+  if (!summary) return { error: "추가할 AI 요약이 없습니다. 먼저 분석/재분석을 실행하세요." };
+
+  const existing = (consult.parent_request ?? "").trim();
+  // 멱등성 — 같은 요약을 반복해서 덧붙이지 않는다(버튼 여러 번 눌러도 중복 누적 방지).
+  if (existing.includes(summary)) {
+    return { error: "이미 이 AI 요약이 상담 내용에 들어 있습니다." };
+  }
+  const next = existing ? `${existing}\n\n— AI 상담 요약 —\n${summary}` : summary;
+
+  const { error } = await supabase
+    .from("enrollment_consultations")
+    .update({ parent_request: next, updated_at: new Date().toISOString() })
+    .eq("id", consultationId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/enrollment/${consultationId}`);
+  revalidatePath("/enrollment");
+  return { ok: true };
 }

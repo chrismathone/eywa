@@ -55,7 +55,7 @@ const MENUS: { id: string; label: string; href: string; description: string }[] 
     id: "attendance",
     label: "출석부",
     href: "/attendance",
-    description: "학생 × 날짜 격자에서 출결을 체크합니다 — 출석·결석·지각·공결·보강.",
+    description: "학생 × 날짜 격자에서 출결을 체크합니다 — 출석·결석·지각·보강.",
   },
   {
     id: "classes",

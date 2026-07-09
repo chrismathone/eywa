@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { BookMarked, BookOpen, Eraser, Eye, Save, User } from "lucide-react";
+import { BookMarked, BookOpen, Eraser, Eye, Save, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -54,7 +54,7 @@ export function TextbookRequestClient({
   const [state, formAction, pending] = useActionState(requestTextbook, undefined);
 
   // 전 필드 controlled — 우측 실시간 미리보기의 데이터 소스이자, '교재 검색'(단가표) 자동입력 대상.
-  const [studentId, setStudentId] = useState("");
+  const [studentIds, setStudentIds] = useState<string[]>([]);
   const [teacherName, setTeacherName] = useState(requesterName);
   const [requestDate, setRequestDate] = useState(kstToday());
   const [bookName, setBookName] = useState("");
@@ -66,25 +66,42 @@ export function TextbookRequestClient({
   const [msgHiddenFor, setMsgHiddenFor] = useState<TextbookState>(undefined);
 
   // 바로 다운로드 — 카드 데이터를 화면 밖에 렌더 → html2canvas → PNG 저장(새 탭·창 없음).
-  // k는 dl 상태에서만 파생(updater) — remount 키 충돌 없이 단조 증가.
-  const [dl, setDl] = useState<{ data: TextbookCardData; k: number } | null>(null);
+  // 여러 명 일괄 발행을 위해 **큐**: head를 렌더 → 다운로드 완료 후 slice → 다음. k는 updater에서 파생(단조).
+  const [dlQueue, setDlQueue] = useState<{ data: TextbookCardData; k: number }[]>([]);
   const hiddenRef = useRef<HTMLDivElement>(null);
+  const dlHead = dlQueue[0] ?? null;
   useEffect(() => {
-    if (!dl) return;
+    if (!dlHead) return;
     let cancelled = false;
-    // 로고 이미지 로드 후 canvas가 정확하도록 짧게 지연. setState 없음(다운로드만) → effect 규칙 안전.
+    // 로고 이미지 로드 후 canvas가 정확하도록 짧게 지연. 다운로드 완료 후 다음 카드로 진행(순차 발행 — 레이스 방지).
     const t = setTimeout(() => {
-      if (cancelled || !hiddenRef.current) return;
-      void downloadCardPng(hiddenRef.current, dl.data.requestDate, dl.data.studentName, dl.data.bookName);
+      if (cancelled) return;
+      const el = hiddenRef.current;
+      const advance = () => {
+        if (!cancelled) setDlQueue((q) => q.slice(1));
+      };
+      if (!el) {
+        advance();
+        return;
+      }
+      void downloadCardPng(el, dlHead.data.requestDate, dlHead.data.studentName, dlHead.data.bookName)
+        .catch(() => {})
+        .finally(advance);
     }, 350);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [dl]);
+  }, [dlHead?.k]);
+  // 카드 데이터 배열을 큐에 추가(k는 마지막 항목에서 이어 단조 증가 — 드레인 후 재사용도 remount라 안전).
+  const enqueueCards = (items: TextbookCardData[]) =>
+    setDlQueue((q) => {
+      const base = (q[q.length - 1]?.k ?? 0) + 1;
+      return [...q, ...items.map((data, i) => ({ data, k: base + i }))];
+    });
   const download = (row: TextbookOrderRow) =>
-    setDl((prev) => ({
-      data: {
+    enqueueCards([
+      {
         studentName: row.studentName,
         teacherName: row.teacherName,
         requestDate: row.requestDate,
@@ -92,8 +109,7 @@ export function TextbookRequestClient({
         bookDetail: row.bookDetail,
         price: row.price,
       },
-      k: (prev?.k ?? 0) + 1,
-    }));
+    ]);
 
   const options = students.map((s) => ({ value: s.id, label: s.name, hint: s.grade ?? undefined }));
   // 교재 검색 옵션 — 타이핑하면 SearchableSelect가 즉시 필터. hint에 가격(+상세)을 보여 고르기 쉽게.
@@ -113,7 +129,7 @@ export function TextbookRequestClient({
   // ijw '초기화' — confirm 후 오늘 날짜·본인 담임만 남기고 리셋(계좌는 학원설정이라 폼에 없음).
   const reset = () => {
     if (!window.confirm("입력한 내용을 모두 초기화하시겠습니까?")) return;
-    setStudentId("");
+    setStudentIds([]);
     setTeacherName(requesterName);
     setRequestDate(kstToday());
     setBookName("");
@@ -123,30 +139,37 @@ export function TextbookRequestClient({
     setMsgHiddenFor(state); // 직전 성공/에러 문구도 함께 치움
   };
 
-  const studentName = options.find((o) => o.value === studentId)?.label ?? "";
+  // 선택된 학생들(칩·미리보기용) + 추가 셀렉트에서 이미 선택된 건 제외.
+  const selectedStudents = studentIds.map((id) => ({
+    id,
+    name: options.find((o) => o.value === id)?.label ?? id,
+  }));
+  const availableOptions = options.filter((o) => !studentIds.includes(o.value));
+  const firstStudentName = selectedStudents[0]?.name ?? "";
 
   // 저장 성공 → 요청서 PNG 자동 다운로드(ijw '이미지 저장 및 기록' 패리티). rows(사무실은 최근 100건
   // 절단)에 의존하지 않고 **제출한 폼 스냅샷**으로 즉시 발화 — 백데이트·절단과 무관하게 항상 다운로드.
   // 렌더 중 상태조정(#25 회피) + createdId 키 가드(#67). 서버 저장값과 동일 규칙(빈 날짜=오늘).
-  const createdId = state?.ok ? state.createdId : undefined;
-  if (createdId && createdId !== handledId) {
-    setHandledId(createdId);
-    setDl((prev) => ({
-      data: {
-        studentName: studentName || null,
+  const created = state?.ok ? state.created : undefined;
+  const createdKey = created && created.length > 0 ? created[0].id : undefined;
+  if (createdKey && createdKey !== handledId) {
+    setHandledId(createdKey);
+    // 학생별 요청서 1장씩 — 서버가 반환한 각 학생 이름으로(교재·금액·담임·날짜는 공통).
+    enqueueCards(
+      created!.map((c) => ({
+        studentName: c.studentName,
         teacherName: teacherName.trim() || requesterName,
         requestDate: requestDate || kstToday(),
         bookName,
         bookDetail: bookDetail.trim() || null,
         price: Math.max(0, Number(price) || 0),
-      },
-      k: (prev?.k ?? 0) + 1,
-    }));
+      })),
+    );
   }
 
   const showMsg = state !== undefined && state !== msgHiddenFor;
   // 필수(학생·교재명)가 다 채워져야 저장 가능 — 서버 검증(fieldErrors)과 이중, 미충족이면 버튼 비활성화.
-  const canSubmit = studentId !== "" && bookName.trim() !== "";
+  const canSubmit = studentIds.length > 0 && bookName.trim() !== "";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
@@ -172,23 +195,52 @@ export function TextbookRequestClient({
           <section className="border-line bg-card space-y-5 rounded-md border p-4">
             <div className="space-y-3">
               <SectionLabel icon={<User className="size-3.5" />}>기본 정보</SectionLabel>
-              <label className="block space-y-1">
-                <span className="text-text-dim text-[12px] font-medium">
+              <div className="space-y-1.5">
+                <span className="text-text-dim block text-[12px] font-medium">
                   학생 이름 <span className="text-danger">*</span>
+                  {studentIds.length > 0 ? (
+                    <span className="text-primary ml-1 font-semibold">· {studentIds.length}명</span>
+                  ) : null}
                 </span>
+                {/* 여러 명 추가 가능 — 같은 교재를 선택한 학생 전원에게 요청서 1장씩 발행 */}
                 <SearchableSelect
-                  name="studentId"
-                  value={studentId}
-                  onValueChange={setStudentId}
-                  options={options}
-                  placeholder="학생 이름을 입력하세요"
+                  value=""
+                  onValueChange={(id) =>
+                    setStudentIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+                  }
+                  options={availableOptions}
+                  placeholder="학생을 검색해 추가 (여러 명 가능)"
                   searchPlaceholder="학생 이름 검색..."
-                  ariaLabel="교재 요청 학생 선택"
+                  ariaLabel="교재 요청 학생 추가"
                 />
+                {selectedStudents.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {selectedStudents.map((s) => (
+                      <span
+                        key={s.id}
+                        className="border-line bg-bg-soft text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]"
+                      >
+                        {s.name}
+                        <button
+                          type="button"
+                          onClick={() => setStudentIds((prev) => prev.filter((x) => x !== s.id))}
+                          aria-label={`${s.name} 제거`}
+                          className="text-text-faint hover:text-danger"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {/* FormData.getAll("studentId") 로 서버 액션이 복수 학생 수신 */}
+                {studentIds.map((id) => (
+                  <input key={id} type="hidden" name="studentId" value={id} />
+                ))}
                 {state?.fieldErrors?.studentId ? (
                   <span className="text-danger text-[11px]">{state.fieldErrors.studentId}</span>
                 ) : null}
-              </label>
+              </div>
               <label className="block space-y-1">
                 <span className="text-text-dim text-[12px] font-medium">담임 선생님</span>
                 <Input
@@ -292,7 +344,9 @@ export function TextbookRequestClient({
             {showMsg && state?.error ? <p className="text-danger text-[12px]">{state.error}</p> : null}
             {showMsg && state?.ok ? (
               <p className="text-primary text-[12px]">
-                기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 &lsquo;요청서&rsquo;로 다시 받을 수 있어요)
+                {(state.created?.length ?? 0) > 1
+                  ? `${state.created!.length}명에게 교재 요청이 기록되었습니다 — 요청서 ${state.created!.length}장이 각각 저장됩니다.`
+                  : "기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 ‘요청서’로 다시 받을 수 있어요)"}
               </p>
             ) : null}
           </section>
@@ -303,10 +357,15 @@ export function TextbookRequestClient({
               <Eye className="size-3.5" />
               미리보기
             </h2>
+            {studentIds.length > 1 ? (
+              <p className="text-primary text-[11px] font-medium">
+                같은 교재를 {studentIds.length}명에게 발행합니다 — 미리보기는 {firstStudentName} 기준(요청서는 학생별 1장씩 저장)
+              </p>
+            ) : null}
             <div className="bg-bg-soft/60 border-line overflow-x-auto rounded-md border p-3 sm:p-6">
               <TextbookRequestCardBody
                 data={{
-                  studentName: studentName || null,
+                  studentName: firstStudentName || null,
                   teacherName: teacherName || null,
                   // 빈 날짜는 저장 시 오늘로 폴백(서버 규칙)이라 미리보기도 동일하게 — WYSIWYG 일치.
                   requestDate: requestDate || kstToday(),
@@ -331,13 +390,13 @@ export function TextbookRequestClient({
           사무실 rows는 최근 100건 절단이라 카운트가 전체 통계로 읽히지 않게 명시(강사=담당 전건이라 정확). */}
       <RequestHistory rows={rows} onDownload={download} capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"} />
 
-      {/* 바로 다운로드용 숨김 카드 — 화면 밖에서 html2canvas 대상. 클릭 시에만 렌더(key로 remount). */}
-      {dl ? (
+      {/* 바로 다운로드용 숨김 카드 — 큐의 head를 렌더(다운로드 후 다음으로). 여러 명 일괄 발행 시 순차 렌더. */}
+      {dlHead ? (
         <div aria-hidden style={{ position: "fixed", left: -99999, top: 0, width: 720, pointerEvents: "none" }}>
           <TextbookRequestCardBody
-            key={dl.k}
+            key={dlHead.k}
             cardRef={hiddenRef}
-            data={dl.data}
+            data={dlHead.data}
             academyName={academyName}
             logoUrl={logoUrl}
             account={account}

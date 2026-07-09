@@ -246,16 +246,20 @@ const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefine
  * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1년·반이동 제외(셀에서 status로 분리 렌더).
  */
 export async function getWeeklyScheduleWithStudents(
-  opts?: { referenceDate?: string; teacherId?: string },
+  opts?: { referenceDate?: string; teacherId?: string; subject?: string },
 ): Promise<ScheduleSlotWithStudents[]> {
   // 주차 기준일(미지정=오늘) 기준으로 그 시점의 반 명단을 재구성 — ijw 시간표 주간 이동(타임머신).
   const referenceDate = opts?.referenceDate ?? todayStr();
   const teacherId = opts?.teacherId;
+  const subject = opts?.subject;
   const weekEnd = weekEndOf(referenceDate); // 재구성 윈도우 끝(ref+6, ijw useSubjectClassStudents)
   const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
   const withdrawnFloor = shiftDays(referenceDate, -365); // 퇴원 표시 윈도우: 기준일 1년 전까지(클러터 캡)
 
   let slots = await fetchSlots(referenceDate);
+  // 과목 스코핑(선택) — 한 과목만 필요한 호출부(과목별 익스포터 등)는 classIds를 먼저 좁혀
+  // 무거운 학생/수강/진도 조회량을 줄인다(전 과목 로딩 방지, B2). 필터 후 빈 결과는 아래 조기반환.
+  if (subject) slots = slots.filter((s) => s.subject === subject);
   // 강사 스코핑(intra-tenant PII) — teacher면 본인 담당 반만. 안 하면 강사가 /timetable 직타 시
   // 전 학생 명단(이름·학교·학년·진도)이 노출된다. RLS는 테넌트만 격리하므로 앱레벨에서 좁힌다.
   if (teacherId) {

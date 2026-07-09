@@ -1,4 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { getCampaignBoard } from "@/features/retention/server/campaign-queries";
 import { CampaignBoard } from "@/features/retention/components/campaign-board";
@@ -6,10 +7,9 @@ import { CampaignBoard } from "@/features/retention/components/campaign-board";
 export const metadata = { title: "재등록 캠페인 — eywa" };
 
 export default async function RetentionCampaignPage() {
-  const user = await requireAccess("retention");
-  const board = await getCampaignBoard(
-    user.systemRole === "teacher" ? { teacherId: user.id } : undefined,
-  );
+  await requireAccess("retention");
+  const tId = await effectiveTeacherId();
+  const board = await getCampaignBoard(tId ? { teacherId: tId } : undefined);
 
   return (
     <div className="space-y-4">

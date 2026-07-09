@@ -23,6 +23,7 @@ import {
 } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { TeacherViewToggle } from "@/components/view-mode-toggle";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
@@ -78,6 +79,7 @@ export function AppSidebar({
   logoText = "EYWA",
   logoSrc,
   permMatrix,
+  canTeacherView = false,
 }: {
   systemRole: SystemRole;
   email: string;
@@ -87,6 +89,8 @@ export function AppSidebar({
   logoText?: string;
   logoSrc?: string | null;
   permMatrix?: AccessMatrix;
+  /** 겸직(관리자 계열 + 담당 반 보유) → 하단에 '강사뷰로 전환' 노출. */
+  canTeacherView?: boolean;
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
@@ -339,6 +343,13 @@ export function AppSidebar({
             }`}
           />
         </div>
+
+        {/* 겸직(관리자+담당반) 강사뷰 전환 — user 줄 위, nav와 구분선으로 분리. 레일 톤. */}
+        {canTeacherView ? (
+          <div className="border-line shrink-0 border-t px-1 py-1.5">
+            <TeacherViewToggle expanded={expanded} motion={motion} />
+          </div>
+        ) : null}
 
         {/* user — 계정/로그아웃. 아이콘은 접힘 중앙 고정, 이름·호칭만 페이드 */}
         <div className="border-line flex h-14 shrink-0 items-center gap-2.5 overflow-hidden border-t pl-2">
