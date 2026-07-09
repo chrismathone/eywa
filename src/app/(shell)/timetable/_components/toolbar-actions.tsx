@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { ExternalLink, FileSpreadsheet, Loader2, Sheet } from "lucide-react";
 import { TimetableImportDialog } from "./import-dialog";
+import { StructureImportDialog } from "./structure-import-dialog";
 import { syncSheetsNow } from "@/features/integrations/server/actions";
-import { supportsTimetableImport } from "@/features/integrations/sheets-provider";
+import { supportsTimetableImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
 
 export function TimetableToolbarActions({
   subject,
@@ -27,6 +28,8 @@ export function TimetableToolbarActions({
   const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subjectKey)}${compactParam}`;
   // 가져오기(수강편집 라운드트립)는 math 전용(영어는 내보내기 전용). 파일·시트 두 경로 모두 게이트.
   const canImport = supportsTimetableImport(subjectKey);
+  // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
+  const canStructureImport = supportsStructureImport(subjectKey);
 
   function pushToSheet() {
     setSyncMsg(null);
@@ -70,6 +73,8 @@ export function TimetableToolbarActions({
           ) : null}
           {/* 시트→앱 되읽기: '수강편집' 탭의 반 변경을 미리보기→적용(원장 전용·math 전용). */}
           {canSync && canImport ? <TimetableImportDialog mode="sheet" /> : null}
+          {/* 구조 되읽기: 강사별 그리드 편집 → class_schedules 미리보기(원장 전용·english 전용). */}
+          {canSync && canStructureImport ? <StructureImportDialog subject={subjectKey} /> : null}
           {sheetUrl ? (
             <a
               href={sheetUrl}

@@ -26,3 +26,11 @@ export function sheetsProvider(subject: string): string {
 export function supportsTimetableImport(subject: string): boolean {
   return subject === "math";
 }
+
+/**
+ * 시간표 '구조 가져오기'(강사별 그리드 시트 → class_schedules 재구축 = 수업·요일·시각·방·강사 배치) 지원 과목.
+ * enrollment 라운드트립(supportsTimetableImport)과 별개 — 이쪽은 배치 구조를 되읽는다. 현재 **english 전용**.
+ */
+export function supportsStructureImport(subject: string): boolean {
+  return subject === "english";
+}
