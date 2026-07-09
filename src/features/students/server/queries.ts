@@ -1052,6 +1052,38 @@ export async function getStudentConsultationHistory(
   });
 }
 
+export type StudentEnrollmentConsultRow = {
+  id: string;
+  date: string | null;
+  subject: string | null;
+  outcome: string | null;
+  request: string | null;
+};
+
+/**
+ * 학생에 연결된 **등록상담(입학 상담)** — 학생 상세 상담 탭 상단에 [입학 상담] 라벨로 고정 노출.
+ * 학생당 1~3건. RLS로 테넌트 자동 격리 + 호출부(page)가 enrollment 접근권한으로 게이트(민감정보).
+ * ⚠️ 이건 enrollment_consultations(입학상담) — student_consultations(재원생 상담)와 별개 테이블.
+ */
+export async function getStudentEnrollmentConsultations(
+  studentId: string,
+): Promise<StudentEnrollmentConsultRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("enrollment_consultations")
+    .select("id, consulted_at, consultation_date, created_at, subject, outcome, parent_request")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (!data) return [];
+  return data.map((r) => ({
+    id: r.id,
+    date: r.consulted_at ?? r.consultation_date ?? r.created_at ?? null,
+    subject: r.subject,
+    outcome: r.outcome,
+    request: r.parent_request,
+  }));
+}
+
 export type StudentAttendanceDay = {
   date: string;
   status: string;

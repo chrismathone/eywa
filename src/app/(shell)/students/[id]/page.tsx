@@ -61,6 +61,8 @@ export default async function StudentDetailPage({
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
   // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
   const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
+  // 입학 상담(등록상담) 상담탭 노출 = enrollment 접근권한 있을 때만(민감정보 — 상세는 자체 게이트).
+  const canSeeEnrollment = (await accessLevelTenant(user.systemRole, "enrollment")) !== "none";
 
   return (
     <div className="space-y-6">
@@ -123,7 +125,7 @@ export default async function StudentDetailPage({
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (
-          <ConsultationsTab studentId={student.id} />
+          <ConsultationsTab studentId={student.id} canSeeEnrollment={canSeeEnrollment} />
         ) : tab === "memos" ? (
           <MemosTab studentId={student.id} />
         ) : tab === "billing" ? (

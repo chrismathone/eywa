@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { getStudentConsultationHistory } from "@/features/students/server/queries";
+import {
+  getStudentConsultationHistory,
+  getStudentEnrollmentConsultations,
+  type StudentEnrollmentConsultRow,
+} from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { WindowLink } from "@/components/workspace/window-link";
 import { ConsultationDeleteButton } from "../../../consultations/_components/consultation-delete-button";
 import { FollowUpToggle } from "../../../consultations/_components/follow-up-toggle";
 
@@ -18,12 +25,35 @@ const AUDIENCE_LABEL: Record<string, string> = {
   both: "학부모+학생",
 };
 
+// 등록상담 결과(입학 상담 outcome) — 고정 도메인 enum(운영 enum 아님). 알려진 값만 라벨, 미지정은 미표시.
+const ENROLL_OUTCOME_LABEL: Record<string, string> = {
+  enrolled: "등록완료",
+  registered: "등록완료",
+  pending: "보류",
+  hold: "보류",
+  declined: "미등록",
+  rejected: "미등록",
+};
+
 type Consult = Awaited<ReturnType<typeof getStudentConsultationHistory>>[number];
 
 const CAP = 15;
 
-export async function ConsultationsTab({ studentId }: { studentId: string }) {
-  const consults = await getStudentConsultationHistory(studentId);
+export async function ConsultationsTab({
+  studentId,
+  canSeeEnrollment = false,
+}: {
+  studentId: string;
+  /** 등록상담(입학 상담) 노출 여부 — 호출부(page)가 enrollment 접근권한으로 게이트(민감정보). */
+  canSeeEnrollment?: boolean;
+}) {
+  // 학생상담 이력 + (권한 있으면) 등록상담 + 과목 라벨용 설정을 병렬로.
+  const [consults, enrollConsults, settings] = await Promise.all([
+    getStudentConsultationHistory(studentId),
+    canSeeEnrollment ? getStudentEnrollmentConsultations(studentId) : Promise.resolve([]),
+    canSeeEnrollment ? getTenantSettings() : Promise.resolve(null),
+  ]);
+  const subjects = settings ? buildSubjectMaps(settings.operations.subjects) : null;
   const visible = consults.slice(0, CAP);
   const rest = consults.slice(CAP);
 
@@ -44,8 +74,19 @@ export async function ConsultationsTab({ studentId }: { studentId: string }) {
         </Link>
       </header>
 
+      {/* 입학 상담(등록상담) — 아주 중요한 상담이라 상단 고정. 별도 테이블(enrollment_consultations). */}
+      {enrollConsults.length > 0 ? (
+        <ul className="space-y-2">
+          {enrollConsults.map((e) => (
+            <EnrollmentConsultItem key={e.id} e={e} subjectLabel={subjects?.labelOf(e.subject ?? "") ?? null} />
+          ))}
+        </ul>
+      ) : null}
+
       {consults.length === 0 ? (
-        <p className="text-muted-foreground py-8 text-center text-sm">상담 기록이 없습니다</p>
+        enrollConsults.length === 0 ? (
+          <p className="text-muted-foreground py-8 text-center text-sm">상담 기록이 없습니다</p>
+        ) : null
       ) : (
         <>
           <ul className="space-y-3">
@@ -114,6 +155,46 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
           ) : null}
         </div>
       ) : null}
+    </li>
+  );
+}
+
+/** 입학 상담(등록상담) 고정 카드 — [입학 상담] 라벨 + 날짜·과목·결과 + 내용 요약 + 상세(플로팅 창) 링크. */
+function EnrollmentConsultItem({
+  e,
+  subjectLabel,
+}: {
+  e: StudentEnrollmentConsultRow;
+  subjectLabel: string | null;
+}) {
+  return (
+    <li className="bg-primary/5 border-primary/20 space-y-1.5 rounded-md border px-4 py-3">
+      <header className="flex flex-wrap items-baseline gap-2">
+        <span className="bg-primary/10 text-primary border-primary/20 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold">
+          입학 상담
+        </span>
+        {e.date ? (
+          <span className="num text-muted-foreground text-xs">
+            {new Date(e.date).toLocaleDateString("ko-KR")}
+          </span>
+        ) : null}
+        {subjectLabel ? <span className="text-muted-foreground text-[10px]">· {subjectLabel}</span> : null}
+        {e.outcome && ENROLL_OUTCOME_LABEL[e.outcome] ? (
+          <span className="text-chart-2 text-[10px]">· {ENROLL_OUTCOME_LABEL[e.outcome]}</span>
+        ) : null}
+        <WindowLink
+          href={`/enrollment/${e.id}`}
+          title="입학 상담 상세"
+          className="text-chart-1 ml-auto text-[11px] hover:underline"
+        >
+          상세 보기
+        </WindowLink>
+      </header>
+      {e.request ? (
+        <p className="text-foreground line-clamp-2 text-sm leading-relaxed">{e.request}</p>
+      ) : (
+        <p className="text-muted-foreground text-xs italic">상담 내용 요약은 상세에서 확인하세요</p>
+      )}
     </li>
   );
 }
