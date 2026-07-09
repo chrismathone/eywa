@@ -12,9 +12,11 @@ import {
   FolderOpen,
   GraduationCap,
   MessageCircle,
+  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EXTERNAL_NAV } from "@/lib/navigation";
+import { switchToAdminView } from "@/features/shell/view-actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +49,14 @@ const LINKS: { href: string; label: string; icon: LucideIcon; menu: MenuKey }[] 
   { href: "/documents", label: "데이터베이스", icon: FolderOpen, menu: "documents" },
 ];
 
-export function TeacherMenu({ permMatrix }: { permMatrix: AccessMatrix }) {
+export function TeacherMenu({
+  permMatrix,
+  canReturnToAdmin = false,
+}: {
+  permMatrix: AccessMatrix;
+  /** 겸직(관리자 계열)이 강사뷰에 있을 때 → 드롭다운 하단에 '관리자뷰로 전환'. 실 강사는 false. */
+  canReturnToAdmin?: boolean;
+}) {
   // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
   const links = LINKS.filter((l) => canAccess("teacher", l.menu, permMatrix));
   // 수업보고서 = 외부 앱(Edutrix). 사이드바와 동일 소스(EXTERNAL_NAV)·동일 링크. cross-origin이라 새 탭(_blank).
@@ -74,6 +83,24 @@ export function TeacherMenu({ permMatrix }: { permMatrix: AccessMatrix }) {
           >
             <ReportIcon className="size-4" /> {report.label}
           </DropdownMenuItem>
+        ) : null}
+        {/* 겸직(관리자 계열)만 — 맨 하단 구분선 아래 '관리자뷰로 전환'(쿠키만 지우고 관리자 홈 복귀, 권한 불변).
+            액션이 착지경로를 반환 → window.location으로 확정 네비게이션(드롭다운 안에선 서버액션 redirect의
+            클라 네비게이션이 유실되기 때문). closeOnClick=false로 액션 완료 전 메뉴가 닫히는 것을 방지. */}
+        {canReturnToAdmin ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              closeOnClick={false}
+              className="cursor-pointer"
+              onClick={async () => {
+                const dest = await switchToAdminView();
+                window.location.assign(dest);
+              }}
+            >
+              <LayoutDashboard className="size-4" /> 관리자뷰로 전환
+            </DropdownMenuItem>
+          </>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

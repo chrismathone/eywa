@@ -28,10 +28,15 @@ export async function switchToTeacherView() {
   redirect("/onescreen");
 }
 
-/** 강사뷰 → 관리자뷰. 쿠키 제거 후 역할 홈(관리자=대시보드)으로 착지. */
-export async function switchToAdminView() {
+/**
+ * 강사뷰 → 관리자뷰. 쿠키만 제거하고 **착지 경로(역할 홈)를 반환** — 네비게이션은 호출부(클라)가 한다.
+ * ⚠️ 여기서 redirect()를 쓰지 않는 이유: 이 액션은 base-ui 드롭다운(내 메뉴) 안에서 호출되는데,
+ * 드롭다운 컨텍스트에선 서버액션 redirect의 클라 네비게이션이 유실된다(쿠키만 지워지고 화면이 안 바뀜).
+ * 그래서 경로만 반환하고 호출부가 window.location으로 확정 네비게이션한다(사이드바 버튼은 일반 흐름이라 redirect 유지).
+ */
+export async function switchToAdminView(): Promise<string> {
   const user = await getCurrentUser();
-  if (!user) return;
+  if (!user) return "/";
   (await cookies()).delete(VIEW_MODE_COOKIE);
-  redirect(roleHome(user.systemRole));
+  return roleHome(user.systemRole);
 }

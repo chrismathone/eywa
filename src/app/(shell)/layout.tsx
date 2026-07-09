@@ -17,7 +17,6 @@ import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, isFullShellRole } from "@/lib/auth/view-mode";
-import { AdminViewToggle } from "@/components/view-mode-toggle";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -99,9 +98,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {/* 겸직(관리자 계열)이 강사뷰에 있을 때만 '관리자뷰로 전환' — 쿠키만 지우고 대시보드 복귀(권한 불변). */}
-            {view === "teacher" && isFullShellRole(user.systemRole) ? <AdminViewToggle /> : null}
-            {view === "teacher" ? <TeacherMenu permMatrix={permMatrix} /> : null}
+            {/* 겸직이면 '내 메뉴' 드롭다운 하단에 '관리자뷰로 전환'을 넣는다(헤더 별도 버튼 X). 실 강사는 미노출. */}
+            {view === "teacher" ? (
+              <TeacherMenu permMatrix={permMatrix} canReturnToAdmin={isFullShellRole(user.systemRole)} />
+            ) : null}
             {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}
             {view === "teacher" ? <NotificationBell /> : null}
             <UserMenu

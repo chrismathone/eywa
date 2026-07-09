@@ -1,33 +1,12 @@
 "use client";
 
 import { useTransition } from "react";
-import { GraduationCap, LayoutDashboard } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { GraduationCap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { switchToAdminView, switchToTeacherView } from "@/features/shell/view-actions";
+import { switchToTeacherView } from "@/features/shell/view-actions";
 
 // 펼침/접힘 모핑 이징 — 사이드바 레일과 동일 톤.
 const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
-
-/**
- * 강사뷰 → 관리자뷰 (강사 미니셸 헤더용, 겸직일 때만 노출).
- * 실 role은 관리자 그대로라 이 액션은 쿠키만 지우고 대시보드로 되돌린다(권한 변경 아님).
- */
-export function AdminViewToggle() {
-  const [pending, start] = useTransition();
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="gap-1.5 rounded-md"
-      disabled={pending}
-      title="관리자뷰로 전환"
-      onClick={() => start(() => switchToAdminView())}
-    >
-      <LayoutDashboard className="size-4" /> 관리자뷰
-    </Button>
-  );
-}
 
 /**
  * 관리자 → 강사뷰 (사이드바 하단, 겸직일 때만 노출). 레일 톤(아이콘+라벨, 접힘 시 아이콘+우측 툴팁)에 맞춘다.
