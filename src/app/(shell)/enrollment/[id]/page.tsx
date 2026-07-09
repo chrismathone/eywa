@@ -23,7 +23,7 @@ import { TranscriptSection } from "@/components/transcript-section";
 import { RecordingsSection } from "./recordings-section";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
-import { AddAiSummaryButton } from "./add-ai-summary-button";
+import { ConsultationContentActions } from "./consultation-content-actions";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
@@ -270,28 +270,14 @@ export default async function EnrollmentDetailPage({
               ) : (
                 <p className="text-text-faint flex-1 text-sm">기재된 상담 내용이 없습니다.</p>
               )}
-              {/* AI 분석의 '상담 요약'을 상담 내용에 채우기/덧붙이기(원장 요청). 분석에 요약이 있을 때만 노출. */}
-              {consult.audioReport?.summary?.trim() ? (
-                <AddAiSummaryButton consultationId={consult.id} hasExisting={!!consult.parentRequest} />
-              ) : null}
-              {/* 녹음 분석이 정리한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전을 되살려 제시(비파괴). */}
-              {showParentRequestSuggestion ? (
-                <details className="border-gold/40 bg-gold-soft/30 mt-2 rounded-md border px-3 py-2">
-                  <summary className="text-foreground flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium">
-                    <Sparkles className="text-gold size-3.5 shrink-0" />
-                    AI가 정리한 상담 내용 보기
-                  </summary>
-                  <p className="text-text-dim mt-2 max-h-48 overflow-y-auto text-xs leading-relaxed break-words whitespace-pre-wrap">
-                    {aiSuggestedParentRequest}
-                  </p>
-                  <Link
-                    href={`/enrollment/${consult.id}/edit`}
-                    className="text-gold hover:text-gold/80 mt-2 inline-flex items-center gap-1 text-xs font-medium"
-                  >
-                    수정에서 반영하기 <ExternalLink className="size-3" />
-                  </Link>
-                </details>
-              ) : null}
+              {/* AI 액션 2종 — 같은 컴팩트 버튼으로 가로 정렬. ① 요약 채우기/덧붙이기(직접 쓰기) ② 추출기 후보 보기(펼침+편집 링크). */}
+              <ConsultationContentActions
+                consultationId={consult.id}
+                hasExisting={!!consult.parentRequest}
+                canAddSummary={!!consult.audioReport?.summary?.trim()}
+                aiSuggestion={showParentRequestSuggestion ? aiSuggestedParentRequest : null}
+                editHref={`/enrollment/${consult.id}/edit`}
+              />
               {/* makeedu 동기화 예비상담(makeedu_id=counselSeq) → 원본 상세 링크(클릭 시 makeedu 로그인 필요). */}
               {consult.makeeduId ? (
                 <a

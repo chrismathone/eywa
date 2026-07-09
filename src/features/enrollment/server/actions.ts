@@ -1047,6 +1047,10 @@ export async function appendAiSummaryToConsultationContent(
   if (!summary) return { error: "추가할 AI 요약이 없습니다. 먼저 분석/재분석을 실행하세요." };
 
   const existing = (consult.parent_request ?? "").trim();
+  // 멱등성 — 같은 요약을 반복해서 덧붙이지 않는다(버튼 여러 번 눌러도 중복 누적 방지).
+  if (existing.includes(summary)) {
+    return { error: "이미 이 AI 요약이 상담 내용에 들어 있습니다." };
+  }
   const next = existing ? `${existing}\n\n— AI 상담 요약 —\n${summary}` : summary;
 
   const { error } = await supabase

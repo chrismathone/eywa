@@ -39,12 +39,24 @@ export function splitTopLevelCommas(text: string): string[] {
 function BulletList({ items }: { items: string[] }) {
   return (
     <ul className="space-y-1">
-      {items.map((b, i) => (
-        <li key={i} className="flex gap-2">
-          <span className="text-primary/60 mt-[2px] shrink-0 text-xs">●</span>
-          <span className="min-w-0 break-keep">{renderInline(b)}</span>
-        </li>
-      ))}
+      {items.map((b, i) => {
+        // '→'로 시작하는 줄(질문의 답변 등)은 앞 항목의 하위줄 — 불릿(●) 없이 들여쓰기(모델이 답변을
+        // 새 줄로 뱉어도 별도 불릿이 붙지 않게). 등록상담 학부모 질문 '- 질문\n→ 답변' 대응.
+        const isSub = /^→/.test(b);
+        if (isSub) {
+          return (
+            <li key={i} className="text-text-dim min-w-0 pl-5 break-keep">
+              {renderInline(b)}
+            </li>
+          );
+        }
+        return (
+          <li key={i} className="flex gap-2">
+            <span className="text-primary/60 mt-[2px] shrink-0 text-xs">●</span>
+            <span className="min-w-0 break-keep">{renderInline(b)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

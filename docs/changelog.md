@@ -9,6 +9,14 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 등록상담 AI 요약 산문화·화자기호 제거 + 질문 렌더 + 버튼 정리 (2026-07-09) — ✅ typecheck0/lint0/test108 + 실전사 dry-run(이태경·이주아)
+원장 실사용 후속 제보 다발. ① 요약이 "상담자(A)와 학부모(B)는…" 회의록 나열체 + 화자기호 누출, ② 이태경·이주아 요약 스타일 제각각, ③ 학부모 질문의 답변(→) 줄에도 불릿(●), ④ "덧붙이기" 반복 시 같은 요약 중복 누적, ⑤ 상담 내용 하단 AI 버튼 2종 크기 제각각.
+- **프롬프트(등록상담 전용, 웹훅 인라인 + [consultation-analysis.ts](../src/features/enrollment/server/consultation-analysis.ts) 동시 수정)**: summary=학생 주어 산문(불릿·회의록 나열 금지) · **모든 섹션 화자기호(A/B/C·(A)·화자 A·학생 C) 금지**(이름/역할로만) · 산문형 섹션 불릿 금지 · parentQuestions=한 줄('- 질문 → (답변) 답변'). ⚠️ 회의록 프롬프트(features/meetings)와는 **별도 유지**(용도 다름).
+- **RichText 안전망**([rich-text.tsx](../src/components/rich-text.tsx)): `→`로 시작하는 줄은 불릿 없이 들여쓰기(모델이 답변을 새 줄로 뱉어도 ● 안 붙게). Solar가 한 줄 지시를 늘 따르진 않아 렌더 단에서도 방어.
+- **덧붙이기 멱등성**([appendAiSummaryToConsultationContent](../src/features/enrollment/server/actions.ts)): 이미 같은 요약이 상담 내용에 있으면 거부("이미 들어 있습니다") — 반복 클릭 중복 누적 방지.
+- **버튼 정리**([consultation-content-actions.tsx](<../src/app/(shell)/enrollment/[id]/consultation-content-actions.tsx>)): AI 액션 2종을 같은 컴팩트 버튼으로 가로 정렬. ① **AI 요약 채우기/덧붙이기**=AI '분석' 요약을 parent_request에 직접 쓰기 / ② **AI가 정리한 상담 내용 보기**=AI '폼 추출기' 후보를 펼쳐보고 수정에서 반영(직접 안 씀). 옛 add-ai-summary-button.tsx + 전폭 details 제거.
+- 검증: typecheck0/lint0/test108 + **실전사 dry-run(이태경·이주아)**: summary 화자기호 0·산문·학생 주어 일관, 질문 답변줄 렌더 정상.
+
 ### 등록상담 재분석 진행표시·동시성 가드 + AI 요약→상담 내용 추가 (2026-07-09) — ✅ typecheck0/lint0
 직전 재분석 기능 후속(원장 실사용 제보). ① "재분석 눌러도 진행되는지 모르겠다": 진행 배너가 페이지 최상단이라 버튼(하단 AI 섹션) 시야 밖 + 그 자리엔 옛 리포트 그대로. ② "여러 명이 재분석 누르면?": 동시 재분석 방어 없음. ③ "AI 분석을 상담 내용에 추가하고 싶은데 없다"(이태경 상담).
 - **진행 표시**: AI 섹션에 인라인 "재분석 중" 배너(`processingStatus==='analyzing'` + 기존 리포트 있을 때). 옛 리포트는 유지하고 배너로 진행 표시 → 완료 시 기존 `ConsultationStatusWatcher`(realtime+5초 폴링)가 자동 갱신.
