@@ -4,7 +4,7 @@ import type { TrendHistoryRow } from "../trend-comment";
 /**
  * 추세용 점수 이력 — 같은 학생·과목의 저장 보고서 최근 N(beforeDate 이전, exam_info 있는 것) 날짜 오름차순.
  * 과목 매칭: native math("math")는 legacy 임포트(subject=null, 대부분 수학)도 포함(progress ingest 동형).
- * 그 외 과목은 정확 매칭(혼선 방지), 미지정이면 null-subject만. generateTrendComment·testPrompt 공용.
+ * 그 외 과목은 정확 매칭(혼선 방지), 미지정이면 null-subject만. generateReportComment(추세 섹션)·testPrompt 공용.
  */
 export async function fetchScoreHistory(
   supabase: SupabaseClient,

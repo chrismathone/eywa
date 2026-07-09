@@ -5,13 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
-import {
-  buildReportCommentPrompt,
-  buildCommentP1Prompt,
-  buildCommentP2Prompt,
-  type ReportCommentInput,
-} from "../report-comment";
-import { buildTrendInput, buildTrendPrompt } from "../trend-comment";
+import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
+import { buildTrendInput, trendBody } from "../trend-comment";
+import { assembleCombined, type PromptSection } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -317,13 +313,15 @@ export async function saveOnescreenSession(
 }
 
 /**
- * AI 학부모 멘트 자동작성 — edutrix generateDailyNotice의 Solar 이식.
- * eywa 단일 진입점 generateJSON(기본 Solar Pro 3, 직접 provider 호출 금지)로 `{comment}` 생성.
- * DB 미변경(순수 생성) → 로그인만 확인. 실패 시 ok:false → 클라이언트가 결정적 템플릿(buildSubjectReport)으로 폴백.
+ * AI 학부모 멘트 + 학습 추세 자동작성 — edutrix generateDailyNotice/generateTrendAnalysis 이식.
+ * **통합 1회 호출**: 활성 프롬프트(모드 A=멘트, B=P1·P2)와 추세(표본 충분 시)를 하나의 멀티출력 프롬프트로
+ * 조립해 generateJSON을 한 번만 호출한다(학생당 2~3회 → 1회, 비용·지연↓). 프롬프트는 여전히 문구별 편집 가능.
+ * trendCtx 주면 추세도 함께 생성해 반환. DB 미변경 → 로그인만 확인. 실패 시 ok:false → 클라 템플릿 폴백.
  */
 export async function generateReportComment(
   input: ReportCommentInput,
-): Promise<{ ok: boolean; comment?: string; error?: string }> {
+  trendCtx?: { studentId?: string; subject?: string; todayExamInfo?: string; todayHomework?: string },
+): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   try {
@@ -331,81 +329,52 @@ export async function generateReportComment(
     const settings = await getTenantSettings();
     const mode = settings.report.noticeMode ?? "A";
 
-    // 공지 모드 B: 수업내용(P1) + 태도·특이사항(P2) 2문단 분리 생성 후 join. 사실 없는 문단은 생략.
+    const sections: PromptSection[] = [];
+    // 멘트 섹션 — 모드 A=단일(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2). 사실 없는 문단은 생략.
     if (mode === "B") {
       const [p1tpl, p2tpl] = await Promise.all([
         loadActivePrompt(supabase, user.tenantId, "comment_p1"),
         loadActivePrompt(supabase, user.tenantId, "comment_p2"),
       ]);
-      const genPara = (prompt: string | null): Promise<string> =>
-        prompt
-          ? generateJSON<{ comment?: string }>({ prompt, maxTokens: 700, keyName: "default" }).then((r) =>
-              (r.data.comment ?? "").trim(),
-            )
-          : Promise.resolve("");
-      const [p1, p2] = await Promise.all([
-        genPara(buildCommentP1Prompt(input, p1tpl)),
-        genPara(buildCommentP2Prompt(input, p2tpl)),
-      ]);
-      const comment = [p1, p2].filter(Boolean).join("\n\n");
-      if (!comment) return { ok: false, error: "빈 응답" };
-      return { ok: true, comment };
+      const p1 = commentP1Body(input, p1tpl);
+      const p2 = commentP2Body(input, p2tpl);
+      if (p1) sections.push({ type: "comment_p1", field: "p1", body: p1 });
+      if (p2) sections.push({ type: "comment_p2", field: "p2", body: p2 });
+    } else {
+      const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
+      sections.push({ type: "comment", field: "comment", body: commentBody(input, tpl) });
     }
 
-    // 모드 A(기본): 단일 문단(사실+특이사항 종합).
-    const template = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
-    const { data } = await generateJSON<{ comment?: string }>({
-      prompt: buildReportCommentPrompt(input, template),
-      maxTokens: 700,
+    // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 오늘(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
+    let hasTrend = false;
+    if (trendCtx?.studentId) {
+      const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, kstToday());
+      history.push({
+        date: kstToday(),
+        examInfo: trendCtx.todayExamInfo?.trim() || null,
+        homeworkScore: trendCtx.todayHomework?.trim() || null,
+      });
+      const ti = buildTrendInput(history);
+      if (ti) {
+        const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
+        sections.push({ type: "trend", field: "trend", body: trendBody(ti, ttpl) });
+        hasTrend = true;
+      }
+    }
+
+    if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
+
+    // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성.
+    const { data } = await generateJSON<Record<string, string>>({
+      prompt: assembleCombined(sections),
+      maxTokens: 1000,
       keyName: "default",
     });
-    const comment = (data.comment ?? "").trim();
+    const pick = (k: string) => (data[k] ?? "").trim();
+    const comment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
     if (!comment) return { ok: false, error: "빈 응답" };
-    return { ok: true, comment };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
-  }
-}
-
-/**
- * AI 학습 추세(종합분석) 자동작성 — edutrix generateTrendAnalysis 이식.
- * 학생의 과거 lesson_reports(같은 과목) 최근 N회 시험·과제 흐름 + 오늘(작업중, 미저장일 수 있음)을 합쳐
- * generateJSON(기본 Solar Pro 3)로 `{trend}` 한 단락 생성. 표본 부족·실패 → ok:false(멘트처럼 조용히 생략).
- * DB 미변경(순수 생성) → 로그인만 확인. RLS(테넌트 스코프)는 supabase가 담당.
- */
-export async function generateTrendComment(args: {
-  studentId: string;
-  subject?: string; // 과목키(math…) — lesson_reports.subject 매칭. 미지정=null-subject 행.
-  todayExamInfo?: string; // 오늘 시험·테스트 합본("일일 18/20, 확인 19/20")
-  todayHomework?: string; // 오늘 과제 상태
-}): Promise<{ ok: boolean; trend?: string; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!args.studentId) return { ok: false, error: "학생 정보가 없습니다" };
-
-  const supabase = await createClient();
-  const today = kstToday();
-  // 과거 저장 보고서(같은 과목) 최근 N — 오늘 이전(오늘은 아래에서 작업중 값으로 append). RLS 테넌트 스코프.
-  const history = await fetchScoreHistory(supabase, args.studentId, args.subject, today);
-  // 오늘(작업중) 포함 — edutrix "오늘 포함" 패리티. 저장 전이라도 화면 값으로 최신 회차 반영.
-  history.push({
-    date: today,
-    examInfo: args.todayExamInfo?.trim() || null,
-    homeworkScore: args.todayHomework?.trim() || null,
-  });
-
-  const input = buildTrendInput(history);
-  if (!input) return { ok: false, error: "표본 부족" };
-  try {
-    const template = await loadActivePrompt(supabase, user.tenantId, "trend"); // DB 활성값 > 기본
-    const { data } = await generateJSON<{ trend?: string }>({
-      prompt: buildTrendPrompt(input, template),
-      maxTokens: 700,
-      keyName: "default",
-    });
-    const trend = (data.trend ?? "").trim();
-    if (!trend) return { ok: false, error: "빈 응답" };
-    return { ok: true, trend };
+    const trend = hasTrend ? pick("trend") || undefined : undefined;
+    return { ok: true, comment, trend };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }

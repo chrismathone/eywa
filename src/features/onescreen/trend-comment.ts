@@ -2,10 +2,10 @@
  * 선생님 원스크린 — AI 학습 추세(종합분석) 프롬프트(순수 함수).
  * edutrix generateTrendAnalysis + historySummary 조립(reportActions.ts)의 이식.
  * 최근 N회 저장 보고서의 시험·과제 흐름을 한 문단으로 요약한다(멘트와 별개 출력).
- * 실 AI 호출은 server/actions.ts의 generateTrendComment. 라이브 호출 없음(빌더만).
+ * 실 AI 호출은 server/actions.ts의 generateReportComment(멘트와 통합 1회 호출). 라이브 호출 없음(빌더만).
  * CLAUDE.md 원칙: 계산/프롬프트 조립은 순수 함수 + Vitest.
  */
-import { DEFAULT_PROMPTS, interpolate } from "./prompt-defaults";
+import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 
 /** 추세 조립 입력 1행 — 저장된 보고서(같은 과목)의 날짜·시험·과제. */
 export type TrendHistoryRow = {
@@ -59,6 +59,12 @@ function historySummary(input: TrendInput): string {
  * 추세 프롬프트 — 기본 템플릿(DEFAULT_PROMPTS.trend)에 조립한 [기록]을 주입. edutrix DEFAULT_TREND_PROMPT 이식.
  * template 인자를 주면(원장 DB 오버라이드) 그것을 대신 사용 — 프로덕션은 활성값이 기본을 덮음.
  */
-export function buildTrendPrompt(input: TrendInput, template?: string | null): string {
+/** 추세 본문(출력 계약 없음) — 통합 호출 섹션용. template=원장 오버라이드. */
+export function trendBody(input: TrendInput, template?: string | null): string {
   return interpolate(template || DEFAULT_PROMPTS.trend, { historySummary: historySummary(input) });
+}
+
+/** 추세 단일 프롬프트(본문 + {trend} 계약) — 미리보기·개별 테스트용. */
+export function buildTrendPrompt(input: TrendInput, template?: string | null): string {
+  return assembleSingle(trendBody(input, template), "trend");
 }

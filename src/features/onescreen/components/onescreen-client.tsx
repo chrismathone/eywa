@@ -9,7 +9,6 @@ import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
   generateReportComment,
-  generateTrendComment,
   reissueShareLink,
   revokeShareLink,
   saveAndQueueClassnote,
@@ -334,22 +333,20 @@ export function OneScreenClient({
     const su = student.subjects[idx];
     const subjectKey = su?.subjectKey || su?.name || undefined;
     try {
-      const [commentRes, trendRes] = await Promise.all([
-        generateReportComment(buildReportCommentInput(student, idx)),
-        generateTrendComment({
-          studentId: student.id,
-          subject: subjectKey,
-          todayExamInfo: buildExamInfo(student),
-          todayHomework: student.homework,
-        }),
-      ]);
-      const text = commentRes.ok && commentRes.comment ? commentRes.comment : buildSubjectReport(student, idx);
-      if (!commentRes.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+      // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
+      const res = await generateReportComment(buildReportCommentInput(student, idx), {
+        studentId: student.id,
+        subject: subjectKey,
+        todayExamInfo: buildExamInfo(student),
+        todayHomework: student.homework,
+      });
+      const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
+      if (!res.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
       patchReport(student.id, subjectName, (r) => ({
         ...r,
         draft: text,
         // 추세는 생성 성공 시에만 갱신(표본 부족·실패면 기존 초안·수동 입력 보존).
-        ...(trendRes.ok && trendRes.trend ? { trendDraft: trendRes.trend } : {}),
+        ...(res.ok && res.trend ? { trendDraft: res.trend } : {}),
       }));
     } catch {
       patchReport(student.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(student, idx) }));

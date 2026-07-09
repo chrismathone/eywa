@@ -6,7 +6,7 @@
  * CLAUDE.md 원칙: 계산/프롬프트 조립은 순수 함수 + Vitest.
  */
 import type { OneScreenStudent } from "./types";
-import { DEFAULT_PROMPTS, interpolate } from "./prompt-defaults";
+import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
 
 export type ReportCommentInput = {
   studentName: string;
@@ -64,8 +64,14 @@ export function buildFactBlock(input: ReportCommentInput): string {
  * 멘트 프롬프트 — 기본 템플릿(DEFAULT_PROMPTS.comment)에 채워진 사실만 주입. Upstage JSON mode용 {comment} 계약.
  * template 인자를 주면(원장 DB 오버라이드) 그것을 대신 사용 — 프로덕션은 활성값이 기본을 덮음.
  */
-export function buildReportCommentPrompt(input: ReportCommentInput, template?: string | null): string {
+/** 멘트 본문(출력 계약 없음) — 통합 호출 섹션용. template=원장 오버라이드. */
+export function commentBody(input: ReportCommentInput, template?: string | null): string {
   return interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) });
+}
+
+/** 멘트 단일 프롬프트(본문 + {comment} 출력 계약) — 미리보기·개별 테스트용. */
+export function buildReportCommentPrompt(input: ReportCommentInput, template?: string | null): string {
+  return assembleSingle(commentBody(input, template), "comment");
 }
 
 // ── 공지 모드 B(2문단 분리) — P1(수업 내용) + P2(태도·특이사항) ──
@@ -88,16 +94,28 @@ export function buildP2FactBlock(input: ReportCommentInput): string | null {
   return facts.length ? facts.join("\n") : null;
 }
 
-/** 모드 B P1 프롬프트. 사실 없으면 null(호출부가 이 문단 생략). template=원장 오버라이드. */
-export function buildCommentP1Prompt(input: ReportCommentInput, template?: string | null): string | null {
+/** 모드 B P1 본문(출력 계약 없음) — 통합 호출 섹션용. 사실 없으면 null(문단 생략). */
+export function commentP1Body(input: ReportCommentInput, template?: string | null): string | null {
   const p1facts = buildP1FactBlock(input);
   if (!p1facts) return null;
   return interpolate(template || DEFAULT_PROMPTS.comment_p1, { p1facts });
 }
 
-/** 모드 B P2 프롬프트. 사실 없으면 null. template=원장 오버라이드. */
-export function buildCommentP2Prompt(input: ReportCommentInput, template?: string | null): string | null {
+/** 모드 B P2 본문(출력 계약 없음). 사실 없으면 null. */
+export function commentP2Body(input: ReportCommentInput, template?: string | null): string | null {
   const p2facts = buildP2FactBlock(input);
   if (!p2facts) return null;
   return interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts });
+}
+
+/** 모드 B P1 단일 프롬프트(본문 + {comment} 계약) — 미리보기·개별 테스트용. 사실 없으면 null. */
+export function buildCommentP1Prompt(input: ReportCommentInput, template?: string | null): string | null {
+  const body = commentP1Body(input, template);
+  return body ? assembleSingle(body, "comment_p1") : null;
+}
+
+/** 모드 B P2 단일 프롬프트. 사실 없으면 null. */
+export function buildCommentP2Prompt(input: ReportCommentInput, template?: string | null): string | null {
+  const body = commentP2Body(input, template);
+  return body ? assembleSingle(body, "comment_p2") : null;
 }
