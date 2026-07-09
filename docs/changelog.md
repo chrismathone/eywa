@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 영어 시트 구조 가져오기 Phase 1·2 + 분리등원 요일 인라인 편집 (2026-07-09) — ✅ main 반영(80e9143)·프로덕션 0087a 적용
+- **구조 가져오기**: 강사별영어시간표 구글시트 편집 → `class_schedules`(수업·요일·시각·방·강사) 재구축. 수학의 기존 가져오기(학생 enrollment 재배정)와 다른 경로.
+  - Phase 1(미리보기, 무쓰기): `readSheetGridWithMerges`(병합보존) → `parseEywaTeacherGrid`(순수+Vitest) → `matchStructure` → `computeStructureDiff`(create/update/keep/remove + FNV-1a hash) → `previewStructureImport`(master).
+  - Phase 2(적용/롤백): ①서버 재검증(클라 plan 불신, 시트+DB 재읽어 재계산·hash 대조) ②원자 RPC `0087a_apply_english_structure`(security invoker+auth_tenant_id, 스냅샷→마감(valid_to=오늘-1)→삽입(valid_from=오늘)→classes 담임/강의실 modal갱신→로그) ③`rollback_english_structure`(payload 역재생) + 다이얼로그 적용/되돌리기.
+  - ⚠️ **"반 갱신 N" side-effect**: 매 apply가 classes.teacher_id/classroom_id를 시트 modal에 동기화 → 첫 실적용 시 사전 담임 드리프트도 교정(apply-english-schedules.cjs 규칙). 합반=v1 첫강사만+경고(실데이터 0).
+  - 검증: typecheck0/lint0/test792/build✓ + **라이브 E2E 전과정**(시트 G3 방301→302→미리보기 변경1→적용 마감1·삽입1·반4→UI롤백→시트복원→미리보기 308keep, 순변화0) + RPC BEGIN…ROLLBACK 직접검증.
+- **분리등원 요일 인라인 편집**: 학생 수업탭 스케줄 셀·수업 상세 로스터 "화만"/"모두" 배지를 **더블클릭**하면 요일 편집(EditableDateCell 패턴 이식, `updateEnrollmentsAttendanceBatch`). 전원등원="모두"(회색), 분리="X만"(색). 학생탭 수업명=반 상세 WindowLink. 게이트 `canWriteTenant("classes")`.
+- ⚠️ 마이그 0087a=origin/main 0086a(활동로그) 충돌회피 번호. postgres-js 검증 하네스는 `sql.json()` 필수(`${JSON}::jsonb`=이중인코딩 quirk) — 실 서버액션 `supabase.rpc`는 무관.
+
 ### 활동 로그 target_label 디테일 — 수강/시간표/출결에 반·시간·날짜 조인 (2026-07-09) — ✅ 트랜잭션 E2E 4/4(라벨 확인 후 ROLLBACK)·프로덕션 0086a 적용 · 0086a
 사용자 제보: "수강 「김재윤」 생성"은 어느 반인지 안 보여 수강 생성인지 수업 배정인지 모르겠고, "시간표 생성"은 대상이 아예 없음(class_schedules는 이름 컬럼 없이 class_id·요일·교시만 → target_label NULL). 이 정보는 전부 FK(class_id=uuid) 뒤라 표시 레이어에선 못 풀어 **트리거에서 classes 조인해 라벨에 굽는다**([0086a](../supabase/migrations/0086a_activity_label_detail.sql), `log_activity()` create-or-replace — 0085a refund 예외·noise·redact·트리거부착 전부 보존, 라벨 enrichment만 추가):
 - **enrollments** → `학생명 · 반이름`(예: "김재윤 · 중2 수학A") = 사실상 수업 배정임을 라벨로 명시.
