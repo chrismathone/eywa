@@ -89,36 +89,63 @@ function roomFormula(headerRow: number, blockCol: number, gridStart: number, gri
 }
 
 /**
- * 미니그리드 셀 = **강사별 탭 역조회 수식**(구글시트 전용, 스마트 동기화). 이 반(className)이 그 요일의
- * 어느 강사 열(cols)에, 그 교시 시간행(r1~r2)에 있는지 강사별을 검색해 강사+방을 도출 → **강사별을 편집하면
- * 통합이 따라온다**. 원본 5천자 범용수식 대신 eywa 레이아웃(요일별 열·강사·행범위)에 파라미터화한 조회식.
- * 강사별 셀 포맷 = "반명↵방"(teacher-grid-sheet): 첫 줄=반명 매칭, 마지막 줄=방. ‖ 는 강사·방 내부 구분자.
+ * **단일 균등 조회 수식**(구글시트 전용, 스마트 동기화) — 원본의 "하나의 수식이 모든 미니그리드에 균등하게
+ * 작동" 설계를 eywa 동적 레이아웃에 재현. **모든 미니그리드 칸(빈 칸 포함)에 동일 문자열**을 넣고, 각 셀이
+ * `ROW()`/`COLUMN()`로 자기 위치를 파악한다:
+ *  - `헤더행` = 섹션 경계 래더(ROW()→섹션 헤더행). eywa 실제 섹션 행을 상수로 구움.
+ *  - `블록열` = INT((COLUMN()-3)/5)*5+3 (5열 블록).
+ *  - `수업명` = 블록 헤더 첫 줄(자기 위치에서 읽음 → 통합 헤더 반명 바꾸면 따라옴).
+ *  - `일레이블` = 요일행에서 이 열의 요일.
+ *  - `r1/r2` = ROW()→강사별 행범위 래더(사전계산). `열들/강사들` = 요일→강사별 열/강사 스위치.
+ * 그 뒤 강사별을 역조회(반명 매칭)해 강사+방 도출. 강사별 셀 포맷 "반명↵방": 첫 줄=반명, 마지막 줄=방.
  */
-function miniGridFormula(
-  className: string,
-  cols: { colLetter: string; teacher: string }[],
-  r1: number,
-  r2: number,
-  sheetName: string,
+function buildUniformFormula(
+  sectionRows: number[],
+  rowRange: Map<number, [number, number]>,
+  geometry: TeacherGeometry,
 ): string {
   const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const colArr = cols.map((c) => q(c.colLetter)).join(";");
-  const teacherArr = cols.map((c) => q(c.teacher)).join(";");
-  const sheet = sheetName.replace(/'/g, "''");
+  const sheet = geometry.sheetName.replace(/'/g, "''");
+  // 섹션 래더: ROW() → 헤더행(secRow). 구간 [sec_k, sec_{k+1}) → sec_k, 마지막은 TRUE.
+  const secs = [...sectionRows].sort((a, b) => a - b);
+  const secLadder = secs.map((s, i) => (i < secs.length - 1 ? `ROW()<${secs[i + 1]},${s}` : `TRUE,${s}`)).join(",");
+  // r1/r2 래더: ROW() → 강사별 행범위(teacherRowRange 사전계산). 미니그리드 아닌 행은 0.
+  const rrs = [...rowRange.entries()].sort((a, b) => a[0] - b[0]);
+  const r1Ladder = rrs.map(([gr, [r1]]) => `${gr},${r1}`).join(",");
+  const r2Ladder = rrs.map(([gr, [, r2]]) => `${gr},${r2}`).join(",");
+  // 요일 스위치: 일레이블(월화수목금) → 강사별 열들·강사들.
+  const days: { ko: string; day: DayOfWeek }[] = [
+    { ko: "월", day: "mon" }, { ko: "화", day: "tue" }, { ko: "수", day: "wed" }, { ko: "목", day: "thu" }, { ko: "금", day: "fri" },
+  ];
+  const colParts: string[] = [], teachParts: string[] = [];
+  for (const { ko, day } of days) {
+    const cols = geometry.dayColumns[day];
+    if (!cols || !cols.length) continue;
+    colParts.push(`${q(ko)},{${cols.map((c) => q(c.colLetter)).join(";")}}`);
+    teachParts.push(`${q(ko)},{${cols.map((c) => q(c.teacher)).join(";")}}`);
+  }
+  const colSwitch = `SWITCH(일레이블,${colParts.join(",")},{""})`;
+  const teachSwitch = `SWITCH(일레이블,${teachParts.join(",")},{""})`;
   return (
     `IFERROR(LET(` +
-    `수업명,${q(className)},` +
-    `열들,{${colArr}},강사들,{${teacherArr}},` +
-    `히트,MAP(열들,강사들,LAMBDA(cl,tn,LET(` +
-    `범위,INDIRECT("'${sheet}'!"&cl&${r1}&":"&cl&${r2}),` +
+    `헤더행,SWITCH(TRUE,${secLadder}),` +
+    `블록열,INT((COLUMN()-3)/5)*5+3,` +
+    `수업명,IFERROR(TRIM(REGEXEXTRACT(TO_TEXT(INDIRECT(ADDRESS(헤더행,블록열,4))),"^[^\\n]+")),""),` +
+    `일레이블,TRIM(TO_TEXT(INDIRECT(ADDRESS(헤더행+3,COLUMN(),4)))),` +
+    `r1,SWITCH(ROW(),${r1Ladder},0),r2,SWITCH(ROW(),${r2Ladder},0),` +
+    `열들,${colSwitch},강사들,${teachSwitch},` +
+    `IF(OR(수업명="",r1=0),"",LET(` +
+    `히트,MAP(열들,강사들,LAMBDA(cl,tn,IF(cl="","",LET(` +
+    `범위,INDIRECT("'${sheet}'!"&cl&r1&":"&cl&r2),` +
     `매치들,MAP(범위,LAMBDA(x,IF(IFERROR(TRIM(REGEXEXTRACT(TO_TEXT(x),"^[^\\n]+"))=수업명,FALSE),TO_TEXT(x),""))),` +
     `셀,IFERROR(TEXTJOIN("",TRUE,FILTER(매치들,LEN(매치들)>0)),""),` +
     `방,IFERROR(REGEXEXTRACT(셀,"\\n\\s*([^\\n]+)$"),""),` +
-    `IF(LEN(셀)>0,tn&"‖"&방,"")))),` +
+    `IF(LEN(셀)>0,tn&"‖"&방,""))))),` +
     `유효,IFERROR(FILTER(히트,LEN(히트)>0),""),` +
     `강사,IFERROR(TEXTJOIN(", ",TRUE,UNIQUE(BYROW(유효,LAMBDA(x,IFERROR(REGEXEXTRACT(x,"^[^‖]+"),""))))),""),` +
     `방,IFERROR(REGEXEXTRACT(INDEX(유효,1,1),"‖(.*)$"),""),` +
     `IF(LEN(강사)=0,"",IF(LEN(방)=0,강사,강사&CHAR(10)&CHAR(10)&방))` +
+    `))` +
     `),"")`
   );
 }
@@ -290,11 +317,17 @@ export function appendInjaewonIntegratedSheet(
   sheet.getRow(row).height = 25;
   row++;
 
+  // 균등 조회 수식용 수집: 미니그리드 전 칸 위치 + 섹션 헤더행(래더) + ROW()→강사별 행범위(래더).
+  const miniCells: { row: number; col: number }[] = [];
+  const sectionRows: number[] = [];
+  const rowRange = new Map<number, [number, number]>();
+
   for (const group of groups) {
     const cards = group.cards;
     const endCol = START_COL + CLASS_COLS * cards.length - 1;
     const pRows = [...group.periodRows].sort((a, b) => a.order - b.order);
     const secRow = row;
+    sectionRows.push(secRow);
 
     // 1) 반 헤더(2행×5열) : 반명↵스케줄↵(강사), bg=반색
     cards.forEach((c, i) => {
@@ -340,21 +373,18 @@ export function appendInjaewonIntegratedSheet(
       const gr = row++;
       set(gr, 1, timeRange12(pr.time), { size: 10 });
       set(gr, 2, pr.label.replace("교시", ""), { size: 12 });
+      // ROW()→강사별 행범위(균등수식 래더용).
+      if (geometry) { const range = teacherRowRange(geometry, pr.time); if (range) rowRange.set(gr, range); }
       cards.forEach((c, i) => {
         const cs = classColStart(i);
         WEEKDAYS.forEach((d, di) => {
+          // 모든 미니그리드 칸(빈 칸 포함)에 균등 조회수식 — 위치만 수집, 수식은 루프 후 일괄 주입.
+          if (geometry && formulaSink) miniCells.push({ row: gr, col: cs + di });
           const cell = c.cells[`${pr.order}:${d}`];
           if (!cell) { set(gr, cs + di, "", { size: 7 }); return; }
-          // 스마트 동기화: 강사별 탭 역조회 수식(geometry+sink 있을 때). xlsx엔 아래 정적 값 그대로.
-          let formula: string | undefined;
-          if (geometry && formulaSink) {
-            const dayCols = geometry.dayColumns[d as DayOfWeek];
-            const range = teacherRowRange(geometry, pr.time);
-            if (dayCols && dayCols.length && range) formula = miniGridFormula(c.className, dayCols, range[0], range[1], geometry.sheetName);
-          }
-          if (cell.isLab) { set(gr, cs + di, "LAB", { bg: LAB_BG, bold: true, size: 7, formula }); return; }
+          if (cell.isLab) { set(gr, cs + di, "LAB", { bg: LAB_BG, bold: true, size: 7 }); return; }
           const rm = roomByCell.get(`${c.classId}:${pr.order}:${d}`) ?? "";
-          set(gr, cs + di, rm ? `${cell.label}\n\n${rm}` : cell.label, { bg: teacherBg(cell.label), color: teacherFg(cell.label), size: 7, wrap: true, formula });
+          set(gr, cs + di, rm ? `${cell.label}\n\n${rm}` : cell.label, { bg: teacherBg(cell.label), color: teacherFg(cell.label), size: 7, wrap: true });
         });
       });
       sheet.getRow(gr).height = 19;
@@ -499,6 +529,13 @@ export function appendInjaewonIntegratedSheet(
       for (let cc = 1; cc <= endCol; cc++) set(gr, cc, "", { bg: GRAY_BG });
       sheet.getRow(gr).height = 8;
     }
+  }
+
+  // 균등 조회 수식: 섹션 경계·행범위·요일열을 상수로 구운 **단일 문자열**을 전 미니그리드 칸에 동일 주입.
+  // 각 셀이 ROW()/COLUMN()로 자기 위치를 파악 → 원본의 "하나의 수식이 모든 미니그리드에 균등 작동" 재현.
+  if (geometry && formulaSink && miniCells.length) {
+    const uniform = buildUniformFormula(sectionRows, rowRange, geometry);
+    for (const mc of miniCells) formulaSink.push({ row: mc.row, col: mc.col, formula: uniform });
   }
 
   return sheet;
