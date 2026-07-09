@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 
@@ -96,9 +97,10 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
   // 같은 교재를 여러 학생에게 일괄 요청 — studentId를 복수(hidden input N개)로 받는다(중복·빈값 제거).
   const studentIds = [...new Set(formData.getAll("studentId").map((v) => String(v).trim()).filter(Boolean))];
   if (studentIds.length === 0) return { fieldErrors: { studentId: "학생을 선택해주세요" } };
-  // 강사는 본인 담당 학생만 요청 가능 — 하나라도 스코프 밖이면 전체 거부(intra-tenant PII 스코프).
-  if (user.systemRole === "teacher") {
-    const { studentIds: scoped } = await getTeacherScope(user.id);
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생만 요청 가능 — 하나라도 스코프 밖이면 전체 거부(intra-tenant PII 스코프).
+  const tId = await effectiveTeacherId();
+  if (tId) {
+    const { studentIds: scoped } = await getTeacherScope(tId);
     const scopedSet = new Set(scoped);
     if (!studentIds.every((id) => scopedSet.has(id))) {
       return { error: "담당 학생만 교재를 요청할 수 있습니다" };
@@ -152,7 +154,6 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
 async function loadEditableRequest(
   supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
-  user: { systemRole: string; id: string },
 ): Promise<{ error: string } | { ok: true }> {
   const { data: row } = await supabase
     .from("textbook_orders")
@@ -160,9 +161,10 @@ async function loadEditableRequest(
     .eq("id", id)
     .single();
   if (!row) return { error: "교재 요청을 찾을 수 없습니다" };
-  // 강사는 본인 담당 학생 요청만.
-  if (user.systemRole === "teacher") {
-    const { studentIds } = await getTeacherScope(user.id);
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생 요청만.
+  const tId = await effectiveTeacherId();
+  if (tId) {
+    const { studentIds } = await getTeacherScope(tId);
     if (!row.student_id || !studentIds.includes(row.student_id)) return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
   }
   // 사무실이 하나라도 처리(등록/주문/납부)했으면 잠금.
@@ -182,7 +184,7 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
   if (!f.bookName) return { fieldErrors: { bookName: "교재명을 입력해주세요" } };
 
   const supabase = await createClient();
-  const gate = await loadEditableRequest(supabase, id, user);
+  const gate = await loadEditableRequest(supabase, id);
   if ("error" in gate) return { error: gate.error };
 
   const { error } = await supabase
@@ -209,7 +211,7 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   if (!id) return { error: "교재 요청 ID가 누락되었습니다" };
 
   const supabase = await createClient();
-  const gate = await loadEditableRequest(supabase, id, user);
+  const gate = await loadEditableRequest(supabase, id);
   if ("error" in gate) return { error: gate.error };
 
   const { error } = await supabase.from("textbook_orders").delete().eq("id", id);

@@ -2,8 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
   slotPeriodRow,
@@ -204,10 +203,8 @@ export async function getStudentStatusCounts(): Promise<{
   withdrawn: number;
 }> {
   const supabase = await createClient();
-  // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치).
-  const user = await getCurrentUser();
-  const teacherStudentIds =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
+  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0)
     return { all: 0, enrolled: 0, prospect: 0, withdrawn: 0 };
   const base = () => {
@@ -242,10 +239,8 @@ export async function getStudentsPage(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  // 강사 스코프: teacher면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
-  const user = await getCurrentUser();
-  const teacherStudentIds =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).studentIds : null;
+  // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반 학생만(intra-tenant 누수 차단 + 사용성). fail-safe(쿼리가 자체 스코프).
+  const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return { rows: [], total: 0 };
 
   let subjectIds: string[] | null = null;
@@ -1018,7 +1013,7 @@ export async function getStudentConsultationHistory(
 ): Promise<StudentConsultationRow[]> {
   const supabase = await createClient();
   // 강사 스코프: 학생 상세의 상담 탭도 **본인이 등록한 상담**만 — 남이 쓴 상담 미노출(상담 목록/상세와 동일 불변식).
-  const user = await getCurrentUser();
+  const tId = await effectiveTeacherId();
   // ⚠️ filter(.eq)는 transform(.order)보다 먼저 — supabase-js는 transform 뒤 filter 불가.
   let qb = supabase
     .from("student_consultations")
@@ -1028,7 +1023,7 @@ export async function getStudentConsultationHistory(
        counselor:counselor_id ( display_name )`,
     )
     .eq("student_id", studentId);
-  if (user?.systemRole === "teacher") qb = qb.eq("counselor_id", user.id);
+  if (tId) qb = qb.eq("counselor_id", tId);
   const { data } = await qb.order("consulted_at", { ascending: false });
   if (!data) return [];
   return data.map((r) => {
@@ -1133,12 +1128,12 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   const supabase = await createClient();
 
   // 강사 스코프: 타임라인의 상담 이벤트도 **본인이 등록한 상담**만(남이 쓴 상담 내용 미노출, 상담 목록/상세와 동일).
-  const user = await getCurrentUser();
+  const tId = await effectiveTeacherId();
   let consultQuery = supabase
     .from("student_consultations")
     .select(`consulted_at, category, summary`)
     .eq("student_id", studentId);
-  if (user?.systemRole === "teacher") consultQuery = consultQuery.eq("counselor_id", user.id);
+  if (tId) consultQuery = consultQuery.eq("counselor_id", tId);
 
   const [
     { data: enrollments },

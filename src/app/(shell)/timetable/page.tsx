@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { Columns3, LayoutGrid, CalendarOff, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
@@ -68,8 +69,8 @@ export default async function TimetablePage({
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
 
-  // 강사는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
-  const teacherId = user.systemRole === "teacher" ? user.id : undefined;
+  // 강사(또는 겸직-강사뷰)는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
+  const teacherId = (await effectiveTeacherId()) ?? undefined;
   const [allSlots, settings, teacherColors] = await Promise.all([
     getWeeklyScheduleWithStudents({ referenceDate, teacherId }),
     getTenantSettings(),

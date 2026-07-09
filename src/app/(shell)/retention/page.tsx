@@ -1,5 +1,6 @@
 import { CalendarClock, Bell, MessageCircle } from "lucide-react";
 import { requireAccess } from "@/lib/auth/require-access";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
   getRetentionRoster,
   summarizeRoster,
@@ -24,10 +25,9 @@ function subOf(r: RosterStudent): string {
 }
 
 export default async function RetentionPage() {
-  const user = await requireAccess("retention");
-  const roster = await getRetentionRoster(
-    user.systemRole === "teacher" ? { teacherId: user.id } : undefined,
-  );
+  await requireAccess("retention");
+  const tId = await effectiveTeacherId();
+  const roster = await getRetentionRoster(tId ? { teacherId: tId } : undefined);
   const stats = summarizeRoster(roster);
   const todayIso = isoToday();
 

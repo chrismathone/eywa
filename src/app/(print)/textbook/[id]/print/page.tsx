@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getTextbookOrderById } from "@/features/billing/server/textbook-queries";
@@ -28,11 +28,9 @@ export default async function TextbookPrintPage({
     getTenantSettings(),
   ]);
   if (!order) notFound();
-  // 강사는 본인 담당 학생 요청서만 열람(intra-tenant PII 스코프). 사무실 역할(billing full)은 전체 허용.
-  if (user.systemRole === "teacher") {
-    const { studentIds } = await getTeacherScope(user.id);
-    if (!order.studentId || !studentIds.includes(order.studentId)) notFound();
-  }
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생 요청서만 열람(intra-tenant PII 스코프). 사무실 역할(billing full)은 전체 허용.
+  const scope = await effectiveTeacherScope();
+  if (scope && (!order.studentId || !scope.studentIds.includes(order.studentId))) notFound();
   // 로고 — GCS 비공개 path면 signed URL로 resolve(외부 URL은 그대로).
   const logoUrl = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
