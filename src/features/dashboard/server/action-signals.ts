@@ -2,7 +2,36 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
+import { getTodaySchedule } from "@/features/timetable/server/queries";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import type { TodayActionsRaw } from "../today-actions";
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * 오늘 미작성 보고서 신호 — 오늘 수업이 **시작된** 반(getTodaySchedule status≠upcoming)의 활성 수강생 중
+ * 오늘 lesson_report가 0건인 학생 수(+대표 명단). 학생 단위(과목 무시) MVP. RLS 테넌트 스코프.
+ */
+async function unwrittenReportsSignal(supabase: Supabase, today: string): Promise<TodayActionsRaw["unwrittenReportsToday"]> {
+  const slots = await getTodaySchedule();
+  const startedClassIds = [...new Set(slots.filter((s) => s.status !== "upcoming").map((s) => s.classId))];
+  if (startedClassIds.length === 0) return { count: 0, names: [] };
+  const enr = await fetchInChunks<{ student_id: string }>(startedClassIds, (chunk) =>
+    supabase.from("enrollments").select("student_id").is("end_date", null).in("class_id", chunk),
+  );
+  const expected = [...new Set(enr.map((e) => e.student_id))];
+  if (expected.length === 0) return { count: 0, names: [] };
+  const reps = await fetchInChunks<{ student_id: string }>(expected, (chunk) =>
+    supabase.from("lesson_reports").select("student_id").eq("report_date", today).in("student_id", chunk),
+  );
+  const reported = new Set(reps.map((r) => r.student_id));
+  const missing = expected.filter((id) => !reported.has(id));
+  if (missing.length === 0) return { count: 0, names: [] };
+  const studs = await fetchInChunks<{ name: string }>(missing.slice(0, 100), (chunk) =>
+    supabase.from("students").select("name").in("id", chunk),
+  );
+  return { count: missing.length, names: studs.map((s) => s.name) };
+}
 
 /** KST 날짜 문자열에서 n일 전(YYYY-MM-DD) — 결정적 UTC 산술(date-kst 주석 규칙). */
 function daysBefore(ymd: string, n: number): string {
@@ -40,6 +69,7 @@ export async function getTodayActionSignals(): Promise<TodayActionsRaw> {
     textbooksRes,
     leavesPendingRes,
     leavesTodayRes,
+    unwrittenReports,
   ] = await Promise.all([
     // 오늘 무단결석 — 명단 필요(이름 표시)라 행 조회, 상한으로 방어.
     supabase
@@ -73,6 +103,7 @@ export async function getTodayActionSignals(): Promise<TodayActionsRaw> {
       .lte("starts_on", today)
       .gte("ends_on", today)
       .limit(20),
+    unwrittenReportsSignal(supabase, today),
   ]);
 
   // 무단결석 — 한 학생이 여러 반에서 결석해도 1명(학생 단위 dedupe).
@@ -118,5 +149,6 @@ export async function getTodayActionSignals(): Promise<TodayActionsRaw> {
       const u = (Array.isArray(r.user) ? r.user[0] : r.user) as { display_name?: string } | undefined;
       return { name: u?.display_name ?? "(직원)" };
     }),
+    unwrittenReportsToday: unwrittenReports,
   };
 }

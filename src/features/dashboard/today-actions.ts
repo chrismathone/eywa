@@ -24,6 +24,8 @@ export type TodayActionsRaw = {
   leavesPending: number;
   /** 오늘 휴가 중인 직원 */
   leavesToday: { name: string }[];
+  /** 오늘 수업(시작됨)이 있는데 아직 보고서 0건인 학생 — 미작성 리마인더(5단계-1). */
+  unwrittenReportsToday: { count: number; names: string[] };
 };
 
 export type TodayActionItem = {
@@ -80,6 +82,17 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: failedTotal,
       detail: parts.join(" · "),
       href,
+    });
+  }
+
+  if (raw.unwrittenReportsToday.count > 0) {
+    items.push({
+      key: "unwritten-reports",
+      severity: "amber",
+      label: "오늘 미작성 보고서",
+      count: raw.unwrittenReportsToday.count,
+      detail: nameList(raw.unwrittenReportsToday.names),
+      href: "/onescreen",
     });
   }
 

@@ -11,6 +11,7 @@ const EMPTY: TodayActionsRaw = {
   requestedTextbooks: 0,
   leavesPending: 0,
   leavesToday: [],
+  unwrittenReportsToday: { count: 0, names: [] },
 };
 
 describe("buildTodayActions", () => {
@@ -33,6 +34,21 @@ describe("buildTodayActions", () => {
       count: 2,
       detail: "김민준·이서연",
       href: "/attendance",
+    });
+  });
+
+  it("미작성 보고서 = amber + 명단 요약 + /onescreen 링크", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      unwrittenReportsToday: { count: 4, names: ["김민준", "이서연", "박지호", "최유진"] },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      key: "unwritten-reports",
+      severity: "amber",
+      count: 4,
+      detail: "김민준·이서연·박지호 외 1",
+      href: "/onescreen",
     });
   });
 
