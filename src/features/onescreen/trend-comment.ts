@@ -5,6 +5,7 @@
  * 실 AI 호출은 server/actions.ts의 generateTrendComment. 라이브 호출 없음(빌더만).
  * CLAUDE.md 원칙: 계산/프롬프트 조립은 순수 함수 + Vitest.
  */
+import { DEFAULT_PROMPTS, interpolate } from "./prompt-defaults";
 
 /** 추세 조립 입력 1행 — 저장된 보고서(같은 과목)의 날짜·시험·과제. */
 export type TrendHistoryRow = {
@@ -55,27 +56,9 @@ function historySummary(input: TrendInput): string {
 }
 
 /**
- * 추세 프롬프트 — edutrix DEFAULT_TREND_PROMPT 이식(숫자 정확·전망/격려 금지·상투어 금지·few-shot).
- * eywa generateJSON(Upstage JSON mode)에 맞춰 `{"trend":"..."}` 출력 계약으로 조정.
+ * 추세 프롬프트 — 기본 템플릿(DEFAULT_PROMPTS.trend)에 조립한 [기록]을 주입. edutrix DEFAULT_TREND_PROMPT 이식.
+ * template 인자를 주면(원장 DB 오버라이드) 그것을 대신 사용 — 프로덕션은 활성값이 기본을 덮음.
  */
-export function buildTrendPrompt(input: TrendInput): string {
-  return [
-    "당신은 학원 담임 선생님입니다. 아래 [기록]의 시험·과제 점수 변화를 학부모님께 한 문단의 자연스러운 문장으로 전합니다.",
-    "",
-    "[반드시]",
-    "- [기록]에 있는 날짜·점수만 쓰세요. 없는 회차·점수·평가·전망을 지어내지 마세요.",
-    "- 점수 숫자는 [기록] 그대로 정확히 옮기세요. 'X/Y'는 'Y문제 중 X문제'로 풀어쓰세요.",
-    "- 날짜를 나열하거나 줄로 끊지 말고, 점수 변화를 한 문단의 이어지는 문장(3~4문장)으로 이야기하세요.",
-    "- '만점 가능/기대됩니다' 같은 전망·격려·조언은 넣지 마세요. 오직 점수 변화 사실만.",
-    "- 점수가 떨어졌어도 담담히 사실만 전하세요(비난 없이). 수신인 호칭·인사말·마크다운·불릿 금지.",
-    "",
-    "[예시]",
-    "기록) 시험·테스트 점수 흐름(날짜순): [06-01] 일일 6/10 -> [06-08] 일일 8/10 -> [06-15] 일일 9/10",
-    '출력) {"trend": "6월 1일 일일테스트에서 10문제 중 6개, 6월 8일 10문제 중 8개, 6월 15일 10문제 중 9개로 점수가 꾸준히 올랐습니다."}',
-    "",
-    "[기록]",
-    historySummary(input),
-    "",
-    '[출력] JSON만 출력: {"trend": "..."} — trend는 한국어 한 단락(줄바꿈 없이). 마크다운 코드블록 금지.',
-  ].join("\n");
+export function buildTrendPrompt(input: TrendInput, template?: string | null): string {
+  return interpolate(template || DEFAULT_PROMPTS.trend, { historySummary: historySummary(input) });
 }

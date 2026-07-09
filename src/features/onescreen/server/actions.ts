@@ -6,7 +6,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
-import { buildTrendInput, buildTrendPrompt, type TrendHistoryRow } from "../trend-comment";
+import { buildTrendInput, buildTrendPrompt } from "../trend-comment";
+import { loadActivePrompt } from "./prompt-loader";
+import { fetchScoreHistory } from "./score-history";
 import { isClassnoteAllowed } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { ingestReport } from "@/features/progress/server/ingest";
@@ -317,8 +319,10 @@ export async function generateReportComment(
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   try {
+    const supabase = await createClient();
+    const template = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
     const { data } = await generateJSON<{ comment?: string }>({
-      prompt: buildReportCommentPrompt(input),
+      prompt: buildReportCommentPrompt(input, template),
       maxTokens: 700,
       keyName: "default",
     });
@@ -349,28 +353,7 @@ export async function generateTrendComment(args: {
   const supabase = await createClient();
   const today = kstToday();
   // 과거 저장 보고서(같은 과목) 최근 N — 오늘 이전(오늘은 아래에서 작업중 값으로 append). RLS 테넌트 스코프.
-  let q = supabase
-    .from("lesson_reports")
-    .select("report_date, exam_info, homework_score")
-    .eq("student_id", args.studentId)
-    .lt("report_date", today)
-    .not("exam_info", "is", null)
-    .order("report_date", { ascending: false })
-    .limit(10);
-  // 과목 매칭: native math("math")는 legacy 임포트(subject=null, 대부분 수학)도 흐름에 포함(progress ingest와 동형).
-  // 그 외 과목은 정확 매칭(과목 혼선 방지). 미지정이면 null-subject만.
-  if (!args.subject) q = q.is("subject", null);
-  else if (args.subject === "math") q = q.or("subject.eq.math,subject.is.null");
-  else q = q.eq("subject", args.subject);
-  const { data: past } = await q;
-
-  const history: TrendHistoryRow[] = (past ?? [])
-    .map((r) => ({
-      date: r.report_date as string,
-      examInfo: (r.exam_info as string | null) ?? null,
-      homeworkScore: (r.homework_score as string | null) ?? null,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const history = await fetchScoreHistory(supabase, args.studentId, args.subject, today);
   // 오늘(작업중) 포함 — edutrix "오늘 포함" 패리티. 저장 전이라도 화면 값으로 최신 회차 반영.
   history.push({
     date: today,
@@ -381,8 +364,9 @@ export async function generateTrendComment(args: {
   const input = buildTrendInput(history);
   if (!input) return { ok: false, error: "표본 부족" };
   try {
+    const template = await loadActivePrompt(supabase, user.tenantId, "trend"); // DB 활성값 > 기본
     const { data } = await generateJSON<{ trend?: string }>({
-      prompt: buildTrendPrompt(input),
+      prompt: buildTrendPrompt(input, template),
       maxTokens: 700,
       keyName: "default",
     });

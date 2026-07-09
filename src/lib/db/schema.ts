@@ -826,6 +826,28 @@ export const progressEvents = pgTable(
   ],
 );
 
+// === ai_prompt_overrides (AI 멘트 프롬프트 런타임 오버라이드 — edutrix ai_prompt_settings 이식, 0092a) ===
+// 활성값(is_active)이 코드 기본 프롬프트를 덮어씀. append-only(버전 이력). (tenant,type)당 활성 1건(부분 unique).
+export const aiPromptOverrides = pgTable(
+  "ai_prompt_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    promptType: text("prompt_type").notNull(), // comment | trend | comment_p1 | comment_p2
+    promptText: text("prompt_text").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("ai_prompt_overrides_active_key").on(t.tenantId, t.promptType).where(sql`is_active`),
+    index("ai_prompt_overrides_history_idx").on(t.tenantId, t.promptType, t.createdAt),
+  ],
+);
+
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
 export const consultationAiAnalysis = pgTable(
   "consultation_ai_analysis",

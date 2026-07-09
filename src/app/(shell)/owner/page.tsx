@@ -9,6 +9,8 @@ import { SubjectsSection } from "./_components/subjects-section";
 import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
 import { ReportSection } from "./_components/report-section";
+import { AiMentSection } from "./_components/ai-ment-section";
+import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { PermissionsSection } from "./_components/permissions-section";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
@@ -26,6 +28,7 @@ type OwnerTab =
   | "billing"
   | "notifications"
   | "report"
+  | "ai_ment"
   | "permissions"
   | "popups"
   | "data"
@@ -39,6 +42,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   billing: "수납·청구",
   notifications: "알림·약관",
   report: "보고서",
+  ai_ment: "AI 멘트",
   permissions: "역할·권한",
   popups: "팝업 공지",
   data: "데이터 정리",
@@ -53,6 +57,7 @@ const VALID_TABS: OwnerTab[] = [
   "billing",
   "notifications",
   "report",
+  "ai_ment",
   "permissions",
   "popups",
   "data",
@@ -74,6 +79,7 @@ const FACES: Face[] = [
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing", group: "설정" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
   { key: "report", label: TAB_LABEL.report, href: "/owner?tab=report", group: "설정" },
+  { key: "ai_ment", label: TAB_LABEL.ai_ment, href: "/owner?tab=ai_ment", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
   { key: "popups", label: TAB_LABEL.popups, href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
@@ -112,6 +118,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 과목별 강사 라벨(강사뷰 '가로줄 제외 강사' 칩)은 과목 운영 면에서만 로드.
   const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
+  // AI 멘트 프롬프트(타입별 활성 오버라이드 또는 기본값)는 그 면에서만 로드.
+  const aiPrompts = tab === "ai_ment" ? ((await getActivePrompts()).prompts ?? []) : [];
   // 관리 면(중복·감사) 페이지네이션용. 창(embed) 컨텍스트는 면 pageHref가 직접 유지.
   const page = Math.max(1, Number(sp.page) || 1);
   const isEmbed = sp.embed === "1";
@@ -140,6 +148,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "report" ? <ReportSection initial={settings.report} /> : null}
+      {tab === "ai_ment" ? <AiMentSection initial={aiPrompts} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
           <PermissionsSection initial={settings.permissions} />
