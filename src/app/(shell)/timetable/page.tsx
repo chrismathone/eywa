@@ -36,10 +36,12 @@ type ViewMode = "basic" | "integrated" | "teacher";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact1h?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact1h?: string; emptydays?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw } = await searchParams;
+  // 강사뷰 '미사용 요일' 토글 — 기본 = 표시(강사마다 월~토 전 컬럼). emptydays=hide 일 때만 수업 요일만.
+  const hideEmptyDays = emptydaysRaw === "hide";
   // 통합뷰 '1시간 단위' — **섹션별 토글**(사용자 결정 2026-07-06, 전역 아님). compact1h=쉼표구분 sectionKey
   // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다. 읽기전용이라 상태는 URL 파라미터.
   const compactSections = new Set(
@@ -133,6 +135,7 @@ export default async function TimetablePage({
       compact1h: compactSections.has(sectionKey)
         ? compactList.filter((k) => k !== sectionKey)
         : [...compactList, sectionKey],
+      hideEmptyDays,
     });
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
   // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
@@ -169,7 +172,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact1h: compactList })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact1h: compactList, hideEmptyDays })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -213,7 +216,7 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList })}
+                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList, hideEmptyDays })}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
@@ -226,6 +229,33 @@ export default async function TimetablePage({
             );
           })}
         </div>
+
+        {/* 강사뷰 '미사용 요일' 토글 — 기본 활성(월~토 전 컬럼). 해제 시 수업 있는 요일만. */}
+        {effView === "teacher" ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <Link
+              href={buildHref({
+                view: effView,
+                subject,
+                defaultSubject,
+                week,
+                thisWk,
+                compact1h: compactList,
+                hideEmptyDays: !hideEmptyDays,
+              })}
+              title="수업 없는 요일 컬럼 표시/숨김"
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+                !hideEmptyDays
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              <CalendarOff size={11} strokeWidth={2} />
+              미사용 요일
+            </Link>
+          </>
+        ) : null}
 
         {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
             (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
@@ -280,6 +310,7 @@ export default async function TimetablePage({
             pxPerMin={teacherViewPxPerMin}
             breakRanges={teacherViewBreaks}
             excludedTeachers={teacherViewExcluded}
+            showUnusedDays={!hideEmptyDays}
           />
         </div>
       ) : (
@@ -306,6 +337,7 @@ function buildHref(opts: {
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
   compact1h?: number[]; // 통합뷰 '1시간 단위' 압축 섹션(sectionKey 집합) — 다른 네비 시 유지, 미지정=초기화
+  hideEmptyDays?: boolean; // 강사뷰 '미사용 요일' 해제 상태 — 기본(표시)이면 파라미터 생략
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
@@ -313,6 +345,7 @@ function buildHref(opts: {
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
   if (opts.compact1h && opts.compact1h.length)
     params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));
+  if (opts.hideEmptyDays) params.set("emptydays", "hide");
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

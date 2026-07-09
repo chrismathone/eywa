@@ -14,7 +14,7 @@ export function SlimTrend({ data }: { data: TrendPoint[] }) {
 
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-      <header className="mb-3 flex items-center justify-between">
+      <header className="mb-3 flex items-baseline justify-between">
         <h2 className="text-foreground text-[15px] font-bold">최근 7일 추세</h2>
         <span className="text-text-faint font-mono text-[10px]">{range}</span>
       </header>

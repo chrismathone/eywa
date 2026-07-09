@@ -1,20 +1,3 @@
-import type { PillColor } from "@/components/atoms/pill";
-
-// 등록상담 진행 상태(시스템 고정 enum — 운영 enum 아님, 하드코딩 허용). 칸반 카드·테이블·필터 단일 소스.
-export const OUTCOME_PILL: Record<string, { label: string; color: PillColor }> = {
-  pending: { label: "대기", color: "amber" },
-  scheduled: { label: "예약", color: "amber" },
-  consulted: { label: "상담완료", color: "blue" },
-  ai_done: { label: "AI 완료", color: "primary" },
-  enrolled: { label: "등록", color: "primary" },
-  declined: { label: "거절", color: "neutral" },
-  no_show: { label: "노쇼", color: "rose" },
-};
-
-export const OUTCOME_OPTIONS: { value: string; label: string }[] = Object.entries(OUTCOME_PILL).map(
-  ([value, m]) => ({ value, label: m.label }),
-);
-
-export function outcomePill(key: string): { label: string; color: PillColor } {
-  return OUTCOME_PILL[key] ?? OUTCOME_PILL.pending!;
-}
+// 등록상담 진행 상태 메타 — 구현이 `@/features/enrollment/outcome-meta`로 승격됨(연동 카드 등 features에서도
+// 소비하기 위해). 이 파일은 re-export shim(기존 import 무변경). 새 코드는 features 쪽을 직접 import.
+export { OUTCOME_PILL, OUTCOME_OPTIONS, outcomePill } from "@/features/enrollment/outcome-meta";

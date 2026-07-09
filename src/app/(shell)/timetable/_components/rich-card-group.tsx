@@ -3,6 +3,7 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   teacherColor,
   type GridStudent,
@@ -285,7 +286,7 @@ function RosterRow({ s }: { s: GridStudent }) {
       : s.isNew
         ? "bg-danger-soft text-danger"
         : "text-foreground";
-  const meta = [s.school, s.grade].filter(Boolean).join(" ");
+  const meta = schoolGradeLabel(s.school, s.grade);
   const name = s.englishName ? `${s.name} (${s.englishName})` : s.name;
   const inner = (
     <>

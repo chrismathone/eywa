@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { type SystemRole } from "@/lib/permissions";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
@@ -35,7 +36,7 @@ async function searchStudents(term: string): Promise<PaletteHit[]> {
       kind: "student",
       id: r.id,
       title: r.name,
-      subtitle: [r.school, r.grade].filter(Boolean).join(" · ") || null,
+      subtitle: schoolGradeLabel(r.school, r.grade) || null,
     }),
   );
 }

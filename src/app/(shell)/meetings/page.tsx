@@ -6,7 +6,7 @@ import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
+import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getMeetings,
@@ -261,23 +261,7 @@ export default async function MeetingsPage({
               </Link>
             ))}
           </div>
-          <form action="/meetings" method="get" className="ml-auto flex items-center gap-2">
-            {range !== "all" ? <input type="hidden" name="range" value={range} /> : null}
-            {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="제목·참석자"
-                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <Button type="submit" variant="outline" size="sm">
-              검색
-            </Button>
-          </form>
+          <SearchForm placeholder="제목·참석자" defaultValue={q} />
         </div>
       </div>
 

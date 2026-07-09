@@ -9,7 +9,7 @@ const postgres = require("postgres");
 const L = require("./lib.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 
 // 등원가능성 자유텍스트 → enrollment_consultations.outcome enum.

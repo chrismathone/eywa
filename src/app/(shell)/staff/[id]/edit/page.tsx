@@ -10,6 +10,7 @@ import { getStaffById } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isImportArtifactEmail } from "@/features/staff/email";
 import { StaffForm } from "../../_components/staff-form";
+import { PAYROLL_ENABLED } from "@/features/payroll/config";
 
 export const metadata = { title: "직원 수정 — eywa" };
 
@@ -43,10 +44,12 @@ export default async function EditStaffPage({
         </div>
         {(staff.systemRole === "teacher" || staff.systemRole === "master") ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}>
-              <Wallet className="size-4" />
-              급여 정산
-            </Button>
+            {PAYROLL_ENABLED ? (
+              <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}>
+                <Wallet className="size-4" />
+                급여 정산
+              </Button>
+            ) : null}
             <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
               <CalendarDays className="size-4" />
               휴가 관리

@@ -36,7 +36,9 @@ export function register() {
     { key: "NEXT_PUBLIC_APP_URL", why: "오디오 전사 웹훅 콜백 URL(미설정 시 녹음 분석 불가)" },
     { key: "ASSEMBLYAI_API_KEY", why: "녹음 전사" },
     { key: "ASSEMBLYAI_WEBHOOK_SECRET", why: "전사 웹훅 인증" },
-    { key: "CRON_SECRET", why: "멈춘 전사 복구 cron 인증" },
+    { key: "CRON_SECRET", why: "멈춘 전사 복구·Edutrix 진도 동기화 cron 인증" },
+    { key: "EDUTRIX_SUPABASE_URL", why: "Edutrix 진도 일일 동기화(미설정 시 진도 자동 최신화 불가)" },
+    { key: "EDUTRIX_SUPABASE_ANON_KEY", why: "Edutrix 진도 일일 동기화(미설정 시 진도 자동 최신화 불가)" },
   ];
   for (const { key, why } of recommended) {
     if (!process.env[key]) {

@@ -9,6 +9,103 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 학생 hover 진도 스마트 줄바꿈 — 인라인 번호 run-on 분리 (2026-07-09) — ✅ 실브라우저 검증(dev 3000 — 정미선 hover 카드 3항목 각자 줄) + 신규 Vitest 8/lint0(내 파일 tsc 클린 — 트리 에러 2건은 타 세션 edutrix-sync WIP)
+"1.함수의 극한 2.함수의 좌극한과 우극한 3.함수의 극한값의 계산"처럼 수업 리포트 진도가 한 줄 run-on으로 접혀 hover 카드에서 읽기 어려움(기존 `line-clamp-2`는 절단까지). RichText `bulletize`는 줄바꿈/쉼표 기반이라 인라인 번호 마커는 못 쪼갬 → 전용 순수 함수 신설:
+- [`splitNumberedItems`](../src/lib/text/split-numbered.ts)(Vitest 8) — 공백 경계 "N."/"N)" 마커 2개+ & 연속 오름차순일 때만 분리(소수점 "3.5"·비연속·단독 번호·"중2.함수" 같은 오탐은 원문 유지). 서두 텍스트 첫 줄 보존, 원문 `\n` 있으면 그 줄바꿈 우선.
+- [hover-cards.tsx](<../src/app/(shell)/timetable/_components/hover-cards.tsx>) `StudentInfoCard` 진도 `<p>` = `whitespace-pre-line`(원문 \n 평탄화도 해소) + `line-clamp-2→5`(항목별 줄이라 세로 성장 허용, 물리 줄 기준 상한).
+
+### 데이터베이스 탭 "수납관리 연동" 폴더 — 교재 요청서·수강료 견적서 읽기 전용 링크 행 (2026-07-09) — ✅ 실브라우저 검증(dev 3100 마스터 로그인 — 폴더 394·1건, 인쇄 버튼 50행, qid 딥링크, 폴더 내 검색 12건, 전체 문서 8건 무혼입) + tsc0/lint0/test759(신규 7)
+"환불 요청서는 데이터베이스 탭에 보이는데 교재 요청서는 안 보인다" 제보. 환불요청서·이력서는 `academy_documents`(kind='form') 네이티브 저장인 반면 교재요청서(`textbook_orders`)·견적서(`tuition_quotes`)는 별도 운영 테이블이라 탐색기에 안 걸렸음. **이중 저장 대신 연동 폴더(읽기 전용 링크 행)** 로 해소:
+- **연동 레지스트리** [linked.ts](../src/features/documents/linked.ts)(순수·Vitest 7) + [linked-queries.ts](../src/features/documents/server/linked-queries.ts) — 기존 수납 쿼리(`getTextbookOrdersPage`·`getQuotesPage`, 페이징·검색·count 내장 B2 충족)에 위임, 표시 행으로만 매핑. 원본 단일 소스 유지(makeedu 동기화 충돌 없음).
+- **폴더 팬**: 서식 분류 6개 아래 "수납관리 연동" 구분 캡션 + 교재 요청서·수강료 견적서 폴더([folder-nav.tsx](<../src/app/(shell)/documents/_components/folder-nav.tsx>) 분리). **"전체 문서"에는 미혼입**(대량 링크 행 도배 방지 — 전용 폴더에서만). 카운트는 head:true(B2)·병렬(B4).
+- **행 클릭**: 교재 = A4 인쇄 카드 창(`usePrintWindow`, `/textbook/[id]/print`) / 견적 = 수강료 계산기 딥링크(`?qid=`). 행은 [linked-row.tsx](<../src/app/(shell)/documents/_components/linked-row.tsx>) — 고정/삭제/다운로드 없음(읽기 전용). 설명줄 = 상세·가격·상태 한글, 견적은 `schoolGradeLabel` 압축 표기.
+- **권한**: `canAccessTenant("billing")` 게이트 — 강사에겐 폴더 비노출·직접 URL도 전체 폴백(담당 학생 스코프 밖 전체 목록 차단, 강사는 전용 면 /textbook-requests 사용). 이력서·환불요청서 restricted RLS와 별개 축.
+- 부수: `TextbookOrderRow.createdAt`(요청일 null 폴백용)·`QuoteListItem.consultant`(등록자 컬럼) additive 추가. 새 연동 소스 추가 = linked.ts 등록 + linked-queries.ts 분기.
+- **후속(같은 날, "페이지네이션 안 보임" 제보)**: 하단 표준 페이저는 있었으나 **작은 창에선 50행 아래라 발견 불가** → ① 테이블 헤더 "N/M 페이지" 표시를 **클릭 가능한 컴팩트 페이저(◀ ▶)** 로 승격(`PageStep` export 재사용, 하단 페이저 병존) ② 창(iframe) 안 폴더·페이저·검색 드릴인에 **embed=1 유지**(잃으면 클릭마다 풀셸 레이아웃 서버 실행 — 크롬은 HideInFrame self-heal이라 눈엔 안 보였음, face-tabs 관례로 정합). 실검증: 창 안 폴더 클릭→`cat=textbooks&embed=1`, 헤더 ▶ 클릭→`page=2&embed=1` 2/8 렌더.
+
+### Edutrix 진도 일일 자동 동기화 cron — /api/cron/edutrix-sync (2026-07-09) — ✅ 로컬 실호출 검증(401·정상·멱등 재호출 + 행 삭제→복원 왕복 inserted:1) + tsc0/lint0 · ⚠️ Vercel env 등록 필요
+사용자 결정: "왜 동기화? → 복사 유지(반응속도 hot path·이름 매칭·Edutrix 은퇴 대비) + 자동화 만들어". Edutrix는 정식 Supabase API라 **makeedu와 달리 신뢰 IP·동기화 PC 불필요** → Vercel cron으로 직접.
+- **라우트** [api/cron/edutrix-sync](../src/app/api/cron/edutrix-sync/route.ts): Bearer `CRON_SECRET` 인증(reconcile-transcriptions 관례 동일) → **증분 append** — 워터마크(기존 이식 최신 보고일)−7일 겹침 윈도우에서 Edutrix reports를 읽어 (student, date, teacher) 키로 중복 스킵 후 새 행만 insert. 전체 delete+reinsert가 아니라 활동로그 시스템 행이 "진짜 새 보고서" 수십 건 수준(invoices makeedu 동기화와 같은 수용 패턴). B2(fetchAllPaged 3곳)·B4(독립 3조회 병렬) 준수.
+- **스케줄**: [vercel.json](../vercel.json) `30 18 * * *`(03:30 KST, Hobby 일1회·2개 한도 내). [instrumentation.ts](../src/instrumentation.ts) 권장 env에 `EDUTRIX_SUPABASE_URL`/`EDUTRIX_SUPABASE_ANON_KEY` 추가(미설정 시 부팅 WARN + 라우트 500 명확 에러).
+- ⚠️ **한계**: Edutrix에서 기존 보고서를 **수정**한 건 전파 안 됨(중복 키에 내용 미포함) — 정합 재구축 = 전체 리로드 스크립트(import-lesson-reports.cjs) 수동 실행. 동명이인은 스크립트와 동일하게 전원 복제 삽입.
+- ⚠️ **배포 조건**: Vercel 환경변수에 `EDUTRIX_SUPABASE_URL`·`EDUTRIX_SUPABASE_ANON_KEY` 등록(값 = eywa .env.local과 동일). `CRON_SECRET`은 기존 cron이 이미 사용 중(설정돼 있는지 확인).
+
+### 진도(lesson_reports) 임포트 — ijw 폴더 의존 제거·Edutrix 직접 연결 + 데이터 최신화(6/30→7/8) (2026-07-09) — ✅ 실행 검증(3,532행 재적재) + 진도 탭 실브라우저 확인
+사용자 질문 "ijw-calander 거치지 말고 Edutrix 직접 가져오면 안 되나?" → 조사: [import-lesson-reports.cjs](../scripts/_poc_migration/import-lesson-reports.cjs)는 **원래도 Edutrix Supabase(reports)를 직접** 읽었고, ijw 의존은 접속 키를 `D:/ijw-calander/.env.local`에서 읽는 한 줄뿐이었음. 그런데 **그 폴더가 D:에서 사라져(F:로 이동) 스크립트가 실행 불능** 상태였음.
+- **키 이관**: F:/ijw-calander/.env.local의 Edutrix 키 → eywa `.env.local`의 **`EDUTRIX_SUPABASE_URL`/`EDUTRIX_SUPABASE_ANON_KEY`**(gitignore). 스크립트는 env 전용으로 전환(파일 파싱 제거, 미설정 시 명확 에러) — ijw 폴더 의존 0.
+- **재실행·최신화**: 3,532행 재적재(멱등 delete+insert), 최신 report_date **6/30 → 7/8**. 진도 탭 실브라우저 확인(정미선 7/8 이성우 "1.함수의 극한…").
+- **⚠️ 활동 로그 오염 방어**: lesson_reports에 0084a 트리거가 붙은 뒤라 벌크 재적재가 **actor null 노이즈 ~7,053행**을 activity_log에 쏟음(실측·삭제 완료) → 스크립트가 재적재 동안 `tg_log_activity_*` 2개만 지정 disable(try/finally로 크래시에도 재활성 보장, FK 등 다른 트리거 무관). 재실행 검증: 활동 로그 0행·트리거 재활성 확인.
+- 검증 로그인 원복: 프리뷰(HeadlessChrome) 세션은 **UA 필터로** 삭제(시간 window 필터는 오인 소지 — 실사용 세션 무피해 확인됨).
+- ⚠️ 여전히 일회성 수동 스크립트(자동 동기화 아님) — 주기 실행이 필요해지면 makeedu 동기화 PC 워처에 편입 후보.
+
+### 활동 로그 "이상한 멘트" 전수 필터링 — 영문 enum·uuid·ISO시각·JSON 원문 노출 해소 (2026-07-08) — ✅ 프로덕션 8,486행 전수 렌더감사(위반 0 수렴) + 실브라우저 검증(허은진 탭) + tsc0/lint0/test752
+사용자 제보: "로그에 이상한 알수없는 멘트". activity_log 전 행을 뷰어 로직(activityDetail)으로 렌더하는 감사 스크립트로 원문 노출 4종 적발 → [activity.ts](../src/features/audit/activity.ts) 순수 함수에서 해소(+Vitest 8):
+- **영문 enum 값 → 한글 `VALUE_LABEL`**(값 전체 일치 시만): "상태 requested→paid"→"신청→완납", "active→inactive"→"활성→비활성", "비움→card"→"비움→카드", 학생상태 enrolled/withdrawn→등록/퇴원, 출결·역할·요일·처리상태 등 50여 값. 미등록 값은 원문 폴백.
+- **읽을 수 없는 diff는 "변경" 축약**: uuid↔uuid(teacher_id 등 — id 원문은 정보 아님) + 객체/JSON직렬화문자열↔객체("품목 (내용)→(내용)"·이중 인코딩 line_items 실측).
+- **ISO 타임스탬프 → KST**: "납부 비움→2026-07-08T11:33:32.691+…" → "2026. 07. 08. 20:33".
+- **미번역 컬럼 라벨 추가**: 수납 결제 상세(amount_paid·card_company·현금영수증 등)·withdrawal_metadata(퇴원정보)·is_transferred(반이동)·오디오 파이프라인(과거 행) + **redact 컬럼 전부**(hourly_rate "시급" 등 — 라벨 없으면 "hourly_rate 변경"으로 영문 노출, 테스트가 적발).
+- 잔여 "비움→(내용)"(빈 값이 채워짐)은 정보성 있어 의도 유지. 감사 스크립트는 일회성(원문 노출 0 수렴 확인 후 삭제).
+
+### 역동기화 카드 "상담 상태" 컬럼 + 학교·학년 표기 전역 통일("경명여중1") (2026-07-08) — ✅ 실브라우저 검증(dev 3100 로그인→/enrollment 표 3행 정확 렌더, 검증 세션 원복) + tsc0/lint0/test744
+사용자 요청: ① 역동기화 표에 등록상담 진행 상태 표시 ② "경명여중 중1"→"경명여중1" 표기 통일("지침 사라졌나 체크").
+- **① 상담 상태 컬럼**([makeedu-push-card](../src/features/integrations/components/makeedu-push-card.tsx)): `getUnpushedIntakeConsultations`가 `outcome` 반환 → 칸반과 동일 Pill(대기/예약/상담완료/AI 완료…)로 "경로"와 "접수일" 사이 표시. 기존 "상태" 헤더는 **"전송 상태"**로 명확화. 단일 소스 유지 위해 [outcome-meta](../src/features/enrollment/outcome-meta.ts)를 `features/enrollment`로 승격(app 쪽 원위치는 re-export shim — features→app 역참조 회피).
+- **② 표기 지침 확인 결과**: `formatSchoolGrade(numberLast)`가 ijw 이식본으로 존재(시간표 셀·hover 카드 적용, changelog 2026-06-29 기록)했으나 **design-conventions에 규칙이 없어** 새 표면들이 공백 join으로 회귀. → [`schoolGradeLabel`](../src/lib/format/school-grade.ts)로 승격(원 파일 student-format.ts는 shim, Vitest 신규) + **7곳 일괄 통일**: 역동기화 카드·대시보드 등록상담 카드 meta·시간표 RosterRow·수업리포트 인쇄·수강료 견적서·저장 견적 목록·전역 검색 subtitle. **규칙 문서화**: design-conventions "학교·학년 표기" 절 + CLAUDE.md 디자인 인덱스 한 줄(⚠️ 전역 — 공백 join 새로 만들지 말 것).
+- **③ 이주아 역동기화 예측(DB 실측)**: outcome=ai_done·makeedu 미연결. 전송 시 makeedu 예비상담 폼 = 이주아/침산중/중1(코드 21)/보호자 사공향(모)/010-6619-4248/상담일 2026-07-08/제목 "[eywa 온라인 접수]"/노트(경로·희망과목 수학·셔틀 불필요·주소·형제·학부모 요청사항 전문).
+
+### 활동 로그 커버리지 확장 — 출결·급여·휴가·카탈로그·공지 등 15테이블 추가(총 32) (2026-07-08) — ✅ 프로덕션 적용 + 트리거 실동작 스모크(INSERT/UPDATE/DELETE→원복 무오염) + tsc0/lint0 · 0084a **프로덕션 적용됨**
+사용자 요청: "지출탭이나 기타 등등 필요한 로그 추가". 조사 결과 지출(expenses)은 0081a에서 이미 부착 — 실제 공백 15테이블을 [0084a](../supabase/migrations/0084a_activity_log_expand.sql)로 부착: **attendance_records(출결)·lesson_reports(수업리포트)·student_memos·classrooms·textbook_catalog·tuition_catalog·tuition_quotes·notice_popups·announcements·staff_leaves(휴가)·payroll_records(급여)·reenrollment_campaign_targets·english_levels·intake_tokens(QR접수링크)·kiosk_devices**.
+- **"의미있는 변경만" 결정 유지**: noise += classnote 발송 파이프라인(lesson_reports 기계 상태 전이)·QR usage/submission 카운터·키오스크 last_seen 핑·recorded_at → 이것만 바뀐 UPDATE는 로그 0건. 여전히 미부착: attendance_checkins(원시 핑)·onescreen_daily_sessions·consultation_recordings·timetable_snapshots·makeedu_*·notifications.
+- **급여 redact(0081a HIGH 후속 해소)**: payroll_records 금액 전부(base_amount·hours_worked·hourly_amount·bonus·deduction·total) redact — admin/manager가 읽는 로그에 급여 원문 미복사("바뀜"만). + 공개링크 토큰(share_token·token·token_hash)·대형 blob(attachments·payload)도 redact. ⚠️ redact는 전 테이블 공용 blocklist — 'total'은 현재 payroll에만 존재(invoices=amount_total·tuition_quotes=total_amount라 안전), 새 컬럼 추가 시 겹침 확인.
+- **target_label**: full_name(english_levels) + student_id 다음 **user_id→직원명** 폴백(staff_leaves/payroll_records = "누구의" 휴가/급여). [activity.ts](../src/features/audit/activity.ts) 테이블 라벨 15개·컬럼 한글 40여개 추가, 빈 상태 문구 갱신.
+- 검증: 프로덕션 스모크(classrooms insert→update→delete 3건 정확 기록·라벨/old→new 확인 후 테스트 로그 원복 삭제) + tsc0/lint0. ⚠️ 0081a Phase 2의 "payroll_records·staff_leaves 미부착" 항목 이걸로 해소.
+
+### 활동 로그 가독성 — "누구"(target_label) + 한글 필드명 + 기계 노이즈 제외 (2026-07-08) — ✅ 프로덕션 적용·백필 완료(null 0) + 실렌더 검증 + tsc0/lint0 · 0083a
+사용자 제보: "등록상담 수정 — siblings 있음→—, career_goal…" 전혀 알아볼 수 없음(누구인지·무슨 필드인지). 원인: 등록상담은 학생이 아니라 `prospect_name`에 이름이 있는데 트리거 coalesce에 없어 target_label null + 영어 컬럼명 노출.
+- **누구(target_label)**([0083a](../supabase/migrations/0083a_activity_target_label.sql)): 트리거 `log_activity()` 재작성 — 이름 컬럼 폭넓게(`name·prospect_name·student_name·class_name·title·book_name·display_name·parent_name`) → 없으면 **`student_id`→학생명 조회**(상담/성적/수납/수강/레벨테스트 등 링크 테이블). **기존 로그 19건 전부 백필**(null 0).
+- **한글 필드명**: [COLUMN_LABEL](../src/features/audit/activity.ts) 대폭 확장(등록상담 필드 등 40여개) + 빈값 `→비움` 렌더. 결과: `등록상담 「이주아」 수정 — 형제자매 있음→비움, 희망진로 신약개발연구원→비움, 과목상세 변경`.
+- **기계 노이즈 제외**: 오디오 처리 파이프라인(업로드→전사→분석, AssemblyAI 웹훅)·makeedu 동기화 자동필드(`audio_*·processing_*·transcription·speaker_labels·makeedu_*`)를 트리거 noise로 이동 → 사람 편집만 로그(이 필드만 바뀐 UPDATE는 미기록). (참고: 웹훅은 actor null=시스템이라 선생님별 탭엔 애초 미노출 — 저장·미래 전체뷰 위생.)
+
+### 최근 접속(로그인) 기록 — 활동 로그 탭에 추가 + 자동 로그인 판별 (2026-07-08) — ✅ 롤백테스트 + 프로덕션 실동작 검증(무오염) + 적대리뷰 3렌즈 6건 전부 반영 + tsc0/lint0 · 0082a **프로덕션 적용됨**
+사용자 요청: "최근 접속(로그인) 기록 + 자동로그인 구분 스마트하게". 결정: 옵션①(지속세션 재접속=자동). ⚠️ Supabase `auth.audit_log_entries`는 이 프로젝트에서 비어 있어 못 씀 → 앱 기록 + `auth.sessions` 읽기 조합.
+- **수동 로그인 영구 기록**([login_events](../supabase/migrations/0082a_login_events.sql)): 로그인 액션([`(auth)/login/actions.ts`](<../src/app/(auth)/login/actions.ts>))이 signInWithPassword 성공 시 기록(누가·언제·기기·IP). ⚠️ **`after()` 백그라운드 + admin 클라이언트**([recordLoginEvent](../src/features/audit/server/login-log.ts)) — 로그 지연이 로그인 크리티컬 패스를 절대 안 막음([[#10]] 보호, 적대리뷰 HIGH). 세션 만료 후에도 이력 잔존.
+- **최근 접속·자동 판별**: [`get_staff_recent_access(target)`](../supabase/migrations/0082a_login_events.sql)(security definer, 사무실+동일테넌트 게이트)가 `auth.sessions`에서 세션별 로그인 시각·마지막 활동·기기·IP 읽음. 오래 유지 세션="세션 유지"(재로그인 없이 접속 중), 최근="최근 로그인". ⚠️ `refreshed_at`(비-tz) → `at time zone 'utc'` 고정(적대리뷰 LOW).
+- **뷰어**: 활동 로그 탭([activity-log-tab.tsx](<../src/app/(shell)/staff/[id]/_tabs/activity-log-tab.tsx>)) "최근 접속" 섹션. 사무실(master/admin/manager)만(RLS `login_events_office_read` + 함수 게이트 + 탭 게이트). [deviceLabel](../src/features/audit/activity.ts) user-agent→"Windows · Chrome".
+- **적대리뷰 6건 반영**: HIGH(로그인 블로킹→after) · MED(직렬 워터폴→Promise.all B4) · MED(auto 오분류→라벨 분리+시각 병기) · LOW×2(IP 스푸핑→`x-vercel-forwarded-for`/`x-real-ip` 우선) · LOW(타임존 UTC 고정).
+- ⚠️ **핵심 안전**: getCurrentUser(핫패스)·미들웨어 무변경. 로그인 기록은 응답 이후 백그라운드라 로그인 흐름 영향 0. 검증: 롤백 + 프로덕션 실동작(세션 9건 조회·login_events 왕복→검증행 제거 무오염). 라이브 로그인 E2E는 auth 게이트로 미실행. **Phase 2**: 자동접속 영구 이력·전체 접속 뷰.
+
+### 환불 요청서 — 월별 필터(◀ 년월 ▶) + 수강반 쉼표/hover (2026-07-08) — ✅ tsc0/lint0 + 실데이터 검증(7건/전부 2026-07) · 커밋 `e56ca1a`·`f085501`
+- **월별 필터**([refunds-face](<../src/app/(shell)/billing/_components/refunds-face.tsx>)): 지출 패널과 동일 `◀ 년월 ▶` 스테퍼. 기준 = 환불처리일자(YYYY-MM-DD) 우선, 미입력이면 작성월(월 필터에서 숨김 방지). 기본 표시월 = 가장 최근 데이터 월(첫 로드 빈 화면 방지). URL `period=YYYY-MM` 보존·월 변경 시 page 리셋. billing 페이지가 `sp` 통째 전달(지출과 통일).
+- **수강반 쉼표/hover**: 서식 수강반은 2줄 textarea라 여러 반을 줄바꿈으로 입력 → 목록 `truncate`(nowrap)가 줄바꿈을 공백으로 뭉개 한 줄로 붙어 보였음. 줄 단위 분해 → 쉼표(", ") 축약 표시 + 마우스 올리면 `title`(줄 단위)로 전체. (박성준 4줄 실검증.)
+
+### 급여 비활성화 + 선생님별 활동 로그(전면 감사 추적) (2026-07-08) — ✅ 롤백테스트 15단언 + 프로덕션 트리거 실동작 검증 + 적대리뷰 3렌즈(HIGH 급여누수 수정) + tsc0/lint0 · 0081a **프로덕션 적용됨**
+사용자 요청: ① "월별 급여 비활성화" ② "선생님별 로그 — 누가 했는지 밝히는 전면 감사". 결정: 급여=기능 전체 숨김(복구가능) / 로그=의미있는 변경만(초고빈도 미세쓰기 제외).
+- **① 급여 비활성화**: [`PAYROLL_ENABLED`](../src/features/payroll/config.ts)=false 단일 플래그. 월별([staff/page.tsx](<../src/app/(shell)/staff/page.tsx>))·개인별([id]/page·[id]/edit) "급여" 버튼 3곳 숨김 + `/staff/payroll`·`/staff/[id]/payroll` 라우트 리다이렉트 2곳. **휴가 유지**. 복구 = 플래그 true 한 줄(코드·payroll 테이블 보존).
+- **② 활동 로그**([0081a](../supabase/migrations/0081a_activity_log.sql)): `activity_log` + **범용 트리거 `log_activity()`**(security definer)를 핵심 17테이블(students·classes·class_schedules·enrollments·invoices·expenses·student_grades·exams·level_tests·student_consultations·enrollment_consultations·textbook_orders·users·academy_documents·meeting_minutes·grade_goals·grade_comments)에 부착. INSERT/DELETE=스냅샷, UPDATE=바뀐 컬럼 old→new만. actor=`auth.uid()`(null=시스템), actor_name·target_label 비정규화.
+  - ⚠️ **안전 제1원칙**: 트리거는 **절대 원래 쓰기를 막지 않음** — 모든 예외 삼킴(`exception→return null`, AFTER·re-raise 금지가 핵심). **WHEN 가드**(`old.* is distinct from new.*`)로 무변경 UPDATE는 함수 호출 자체 스킵 → INSERT/DELETE + UPDATE 2트리거 분리.
+  - **민감정보 redact**(내용 미기록·"바뀜"만): form_data·transcription·print_payload·ai_summary·subject_details·subject_progress + **hourly_rate·monthly_base(급여)**. ⚠️ **적대리뷰 HIGH(3렌즈 전원)**: 급여는 원장 전용인데 activity_log는 admin/manager도 읽음 → 급여 컬럼 redact 필수. **새 민감 컬럼을 부착 테이블에 추가하면 0081a redact에도 추가**(blocklist 유지책임).
+  - **RLS** `activity_log_office_read`: 사무실(master/admin/manager)만 SELECT. write 정책 없음 → 트리거(definer)만 기록(위·변조 차단).
+  - **뷰어**: 직원 상세 **"활동 로그" 탭**([activity-log-tab.tsx](<../src/app/(shell)/staff/[id]/_tabs/activity-log-tab.tsx>), 사무실만 — `?tab=activity` 직접진입도 canManage 아니면 info 폴백 + RLS 이중). [`activitySummary`](../src/features/audit/activity.ts) `학생 「홍길동」 수정 — 학년 초5→초6` 렌더. [`getStaffActivityLog`](../src/features/audit/server/activity-queries.ts) actor_id 필터·페이지네이션.
+- 검증: BEGIN…ROLLBACK 15단언 + **프로덕션 트리거 실동작**(INSERT/DELETE 기록→검증행 제거=무오염) + 적대리뷰 3렌즈. ⚠️ 라이브 브라우저 E2E는 auth 게이트로 미실행.
+- **Phase 2(후속)**: 보관정책(N개월 자동정리 pg_cron — created_at 인덱스 선반영) · 전체 감사 뷰(actor 필터). ⚠️ payroll_records·staff_leaves는 트리거 미부착(급여 비활성화 맥락) — 재활성화 시 급여 컬럼 redact 재점검.
+
+### 학생 상세 — 개인 주간 시간표(과목별 교시 기본뷰, 읽기전용) (2026-07-08) — ✅ tsc0/lint0/test7 · 커밋 `8d073f0`→`3439f27`
+- 강사 원스크린에서 "내 학생이 **다른 선생님 수업**까지 어떤 시간표를 도는지" 볼 경로 부재(시간표 메뉴는 강사 본인 담당 반만 스코핑) → 학생 상세 '수업' 탭 상단에 주간 시간표 추가.
+- **과목 탭**(수학/영어/…, 설정 순서·`useSubjectMaps`, 첫 과목 기본). 각 탭이 실제 시간표 기본뷰처럼 **교시축 + 연속 교시 세로 rowSpan 병합**([`computeBlocks`](../src/features/timetable/lib/grid.ts) allowColMerge=false), 수학계열 2교시 묶음 라벨. 데이터는 수업 탭이 이미 로드한 current 재사용([`getStudentClassesDetail`](../src/features/students/server/queries.ts)이 등원요일 필터된 `slots` 반환) — **추가 쿼리 0**(B2/B4 무위반).
+- 배치 로직 순수함수 [`buildSubjectPeriodGrid`](../src/features/students/lib/week-grid.ts) + Vitest7. '전체'(시각축)는 한 시간대 다과목 겹침으로 세로병합 불가 → 제거(과목 탭만). **탭 전환 시 카드 높이 고정**(가장 교시 많은 과목 기준 총높이, 교시 적은 과목은 행높이 확장). 셀 색 블록은 병합 반영 **명시 높이**로 셀 전체 채움(`h-full`은 table td 불안정).
+- 부수: **dev 헤더 64KB**([`.claude/launch.json`](../.claude/launch.json) NODE_OPTIONS) — localhost Supabase 쿠키 누적이 Node 기본 16KB 초과 시 dev 431(Request Header Fields Too Large) 방지. 커밋 `4f80362`.
+
+### 목록 검색 무플래시 — GET 폼 → 공용 SearchForm 클라 내비 전환 12곳 (2026-07-08) — ✅ tsc0/lint0 + 마커 실측 3곳 · 커밋 `279915d`
+- "검색하면 새로고침처럼 깜빡" 제보 — 원인은 검색만 순수 GET `<form>`(문서 전체 새로고침). 신규 [`SearchForm`](../src/components/search-form.tsx)(`router.push`+`useTransition`)으로 기존 화면 유지한 채 결과만 교체. **다른 searchParams 전체 보존**(hidden input 불필요) + `page` 자동 리셋, 사이트별 네임스페이스 리셋은 `resetParams`(저장견적 `qpage`·수강료 `cpage`·직원 `invited/tab`·퇴원 `type`).
+- 전환: 등록상담·퇴원·학생상담·직원·급여·회의록·리텐션보드·수납 5패널. ⚠️ **시험(exams)은 미전환** — 기간(from/to) 필터가 같은 폼이라 단순 교체 시 기간 검색이 깨짐(재설계 대상). 새 목록 검색은 GET 폼 금지, SearchForm 사용.
+
+### 대시보드 믹스 폰트 크기 광학 정렬 — 베이스라인 전환 9곳 (2026-07-08) — ✅ tsc0/lint0 + 글리프 실측 ±0.5px · 커밋 `ccfcfe7`
+- "우측 작은 글씨가 중앙보다 조금 위" 제보(오늘조치 밴드) — 서로 다른 font-size를 `items-center`(박스 중심)로 정렬하면 작은 글씨가 ~1px 떠 보임(실측 0.7px). **한 줄 텍스트 행은 `items-baseline` + 비텍스트(점·구분선·복합 슬롯)만 `self-center`**가 정석. 워크플로 12에이전트 전수 스캔으로 확정 8곳 + 밴드 = 9곳 픽스.
+- ⚠️ 함정 2: ① 말줄임(ellipsis) 클래스를 flex 자식에 직접 두면 baseline이 박스 하단으로 합성 → **내부 `block` 말줄임 span으로 이동** ② Pill(inline-flex+텍스트) 배지는 baseline에 직접 — self-center로 띄우면 텍스트와 ~3px 갈라짐(실측).
+
+### 등록상담 — 대기·예약 256건 → 상담 완료 일괄 이동 + QR 재저장 "상담 완료" 확인 팝업 (2026-07-08) — ✅ tsc0/lint0 + 실 E2E(박인유) · 커밋 `2ad60a5`
+- **일괄 이동(운영 적용)**: pending 248·scheduled 8 → `consulted`. [`queue-to-consulted.cjs`](../scripts/_oneoff/queue-to-consulted.cjs)(dry-run 기본·UNDO json 로컬 보존). 칸반 실측 대기·예약 0/상담 완료 278. makeedu 역동기화 후보는 `enrolled`만 제외 조건이라 무영향, 월칩은 `consulted_at` 기준이라 무영향.
+- **QR 재저장 팝업**: 수정 폼 저장 시 QR 접수(`from_public_intake`)+대기·예약이면 native dialog "상담 완료로 변경할까요?"([상담 완료로 저장]/[상태 유지하고 저장]/[취소]). 서버가 `markConsulted` 플래그를 **조건 재검증 후에만** 적용(클라 조작·낡은 폼 방어). edit 페이지가 `confirmConsultedOnSave` prop 주입.
+
 ### 퇴원 수강 이력 — 과목별 담임 표시 + 사유 라벨 한글화 (2026-07-07) — ✅ tsc0/lint0 + 실데이터(이유하 4행 담임·기타) · 커밋 `8c6e619`(푸시됨)
 - 퇴원 상세(`(shell)/withdrawals/[studentId]`) 수강 이력의 각 행에 **그 반 담임**(`classes.teacher_id`)을 "담임 OOO"로 표시(미배정 폴백). `getWithdrawalDetail`가 `class:class_id ( … teacher:teacher_id ( display_name ) )` 임베드로 조회 — classes→users 다중 FK라 **컬럼명(`teacher_id`)으로 disambiguate**.
 - 사유 표시를 신규 순수함수 [`reasonDisplay`](../src/features/withdrawals/types.ts)로 전환: **표준 사유 키만 한글화**(other→기타, graduated→졸업), **자유 텍스트(`"반 이동"` 112건)는 그대로 보존**.

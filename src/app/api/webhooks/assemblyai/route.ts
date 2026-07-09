@@ -55,8 +55,7 @@ type ConsultationReport13 = {
   parentRequests: string; // 학부모 요청
   parentSatisfaction: string; // 학부모 만족도
   studentTraits: string; // 학생 특이사항
-  teacherResponse: string; // 교사 대응
-  salesPoints: string; // 세일즈 포인트
+  teacherResponse: string; // 상담자 대응
   agreements: string; // 합의 사항
   followUps: string; // 후속 조치
   warnings: string; // 주의 신호
@@ -593,7 +592,12 @@ async function analyzeConsultationAndPersist(
     generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
       maxTokens: 8192,
       prompt: [
-        "다음은 학원 신입생 등록상담 녹음 전사입니다. 13개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
+        "다음은 학원 신입생 등록상담 녹음 전사입니다. 12개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
+        "",
+        "⚠️ 분석 원칙 (최우선·반드시 준수):",
+        "- 팩트 기반: 전사에 실제로 나온 발화만 근거로 분석한다. 전사에 없는 내용은 창작·추측·환각 절대 금지(일반론·보편적 조언·있을 법한 시나리오·다른 학생에게도 통할 뻔한 문구 금지).",
+        "- 상담 외 잡담 배제: 녹음이 상담 종료 후에도 계속돼 섞인, 등록상담과 무관한 대화(잡담·일상 대화·음식/식사·다른 사람 이야기·오가는 인사말 등)는 분석 대상에서 제외하고 실제 상담 내용만 분석한다.",
+        "- 근거 없으면 비운다: 각 섹션은 전사에 근거가 있을 때만 채우고, 근거가 없으면 빈 문자열(추출 정보는 null). 억지로 채우지 않는다.",
         "",
         "출력 형식 규칙(중요):",
         "- 리스트형 섹션(parentQuestions/parentRequests/agreements/followUps/warnings 등 여러 항목)은 각 항목을 줄바꿈(\\n)으로 구분하고 항목 앞에 '- '를 붙이세요.",
@@ -614,12 +618,11 @@ async function analyzeConsultationAndPersist(
             "5. parentRequests: 학부모가 요청한 사항",
             "6. parentSatisfaction: 상담 중 만족/불만족 신호",
             "7. studentTraits: 학생 특이사항 (성격, 학습 스타일)",
-            "8. teacherResponse: 교사/상담사의 대응 방식 평가",
-            "9. salesPoints: 학원이 어필한 장점",
-            "10. agreements: 양측 합의 사항",
-            "11. followUps: 향후 후속 조치 (연락/방문/시범수업 등)",
-            "12. warnings: 등록 실패 가능성·주의 신호",
-            "13. extracted: 전사에서 자동 추출한 핵심 정보 (학생 이름/학년/학교/학부모/연락처). 발화에 명시되지 않으면 null.",
+            "8. teacherResponse: 상담자의 대응 방식 평가",
+            "9. agreements: 양측 합의 사항",
+            "10. followUps: 향후 후속 조치 (연락/방문/시범수업 등)",
+            "11. warnings: 상담 중 실제로 드러난 주의 신호만 — 명시적 이탈 의사·불만·미납/결제 우려 등 전사에 근거가 있는 것. 근거 없으면 빈 문자열(추측·미래 예측·일반론 창작 금지).",
+            "12. extracted: 전사에서 자동 추출한 핵심 정보 (학생 이름/학년/학교/학부모/연락처). 발화에 명시되지 않으면 null.",
             "",
             "녹음 전사 (화자 라벨 포함):",
             formatted,
@@ -635,7 +638,6 @@ async function analyzeConsultationAndPersist(
             '  "parentSatisfaction": string,',
             '  "studentTraits": string,',
             '  "teacherResponse": string,',
-            '  "salesPoints": string,',
             '  "agreements": string,',
             '  "followUps": string,',
             '  "warnings": string,',
@@ -648,7 +650,7 @@ async function analyzeConsultationAndPersist(
             "  }",
             "}",
             "",
-            "추측 금지. 전사에 안 나온 정보는 빈 문자열 또는 null.",
+            "추측·창작·환각 금지 — 전사에 실제 근거가 없는 내용은 빈 문자열 또는 null(억지로 채우지 말 것). 상담과 무관한 잡담은 무시.",
             "JSON만 출력. 마크다운 코드 블록 없이.",
             // 다중 녹음 합본일 때만 회차 안내(단일이면 레거시와 동일 프롬프트).
             ...(opts.multi

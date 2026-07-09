@@ -6,20 +6,32 @@ export const STAFF_TABS = [
   { key: "classes", label: "수업이력" },
 ] as const;
 
-export type StaffTabKey = (typeof STAFF_TABS)[number]["key"];
+// 활동 로그 탭 — 사무실(master/admin/manager)에게만 노출(activity_log RLS와 정합). 별도 상수로 조건부 부착.
+const ACTIVITY_TAB = { key: "activity", label: "활동 로그" } as const;
+
+export type StaffTabKey = (typeof STAFF_TABS)[number]["key"] | "activity";
 
 export function isStaffTabKey(v: string | undefined): v is StaffTabKey {
-  return STAFF_TABS.some((t) => t.key === v);
+  return v === "activity" || STAFF_TABS.some((t) => t.key === v);
 }
 
-export function StaffTabsNav({ staffId, active }: { staffId: string; active: StaffTabKey }) {
+export function StaffTabsNav({
+  staffId,
+  active,
+  showActivity,
+}: {
+  staffId: string;
+  active: StaffTabKey;
+  showActivity: boolean;
+}) {
+  const tabs = showActivity ? [...STAFF_TABS, ACTIVITY_TAB] : STAFF_TABS;
   return (
     <nav
       role="tablist"
       className="scrollbar-thin border-border bg-card overflow-x-auto rounded-md border"
     >
       <ul className="flex gap-0.5 px-1.5 py-1.5">
-        {STAFF_TABS.map((t) => {
+        {tabs.map((t) => {
           const isActive = t.key === active;
           const href = t.key === "info" ? `/staff/${staffId}` : `/staff/${staffId}?tab=${t.key}`;
           return (

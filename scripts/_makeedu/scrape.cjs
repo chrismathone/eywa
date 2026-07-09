@@ -10,8 +10,8 @@
  *   HEADED=1 node --env-file=.env.local scripts/_makeedu/scrape.cjs   # 디버그(브라우저 보임)
  *
  * 필요: .env.local 에 MAKEEDU_ID / MAKEEDU_PW (사용자가 입력 — 스크립트만 읽고, 사람은 안 봄).
- * 출력: $MAKEEDU_OUT(기본 D:/tmp/makeedu)/<key>.json  = { key, scrapedAt, headers, rows:[[...cells]] }.
- *   ⚠️ 실 PII라 repo 밖(D:/tmp). rows는 [헤더→셀] 배열, 임포터가 헤더 substring으로 인덱싱.
+ * 출력: $MAKEEDU_OUT(기본 <repo>/.makeedu-tmp)/<key>.json  = { key, scrapedAt, headers, rows:[[...cells]] }.
+ *   ⚠️ 실 PII — repo 안 .makeedu-tmp(gitignore로 제외)에 저장. rows는 [헤더→셀] 배열, 임포터가 헤더 substring으로 인덱싱.
  */
 const fs = require("fs");
 const path = require("path");
@@ -24,7 +24,7 @@ try {
 }
 
 const BASE = "https://school.makeedu.co.kr";
-const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const HEADED = !!process.env.HEADED;
 
 // 부트스트랩 때 학생은 엑셀(47컬럼)로 확보했지만, Phase 2 cron은 헤드리스라 엑셀 다운로드 대신

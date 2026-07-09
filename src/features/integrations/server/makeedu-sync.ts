@@ -219,6 +219,8 @@ export type UnpushedIntakeConsultation = {
   subject: string | null;
   consultationPath: string | null;
   createdAt: string;
+  /** 등록상담 진행 상태(outcome enum: pending|scheduled|consulted|ai_done|declined|no_show — enrolled는 후보 제외). */
+  outcome: string;
   /** 진행 중 푸시 요청 상태(pending|running|error) — 있으면 큐에 있거나 실패한 것. */
   pushStatus: string | null;
   pushError: string | null;
@@ -240,7 +242,7 @@ export async function getUnpushedIntakeConsultations(limit = 50): Promise<Unpush
   const { data: rows } = await supabase
     .from("enrollment_consultations")
     .select(
-      "id, prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, subject, consultation_path, created_at",
+      "id, prospect_name, prospect_school, prospect_grade, parent_name, parent_phone, subject, consultation_path, created_at, outcome",
     )
     .eq("from_public_intake", true)
     .is("makeedu_id", null)
@@ -276,6 +278,7 @@ export async function getUnpushedIntakeConsultations(limit = 50): Promise<Unpush
       subject: (c.subject as string | null) ?? null,
       consultationPath: (c.consultation_path as string | null) ?? null,
       createdAt: c.created_at as string,
+      outcome: c.outcome as string,
       // done/skipped는 후보에서 이미 빠지므로(pushed_at 세팅) pending|running|error만 의미.
       pushStatus: st && st.status !== "done" && st.status !== "skipped" ? st.status : null,
       pushError: st ? st.error : null,

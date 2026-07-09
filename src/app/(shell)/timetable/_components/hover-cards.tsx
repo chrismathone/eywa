@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
+import { splitNumberedItems } from "@/lib/text/split-numbered";
 
 const DAY_KO: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -227,7 +228,11 @@ export function StudentInfoCard({
             <span className="num font-mono">{report.date}</span>
             {report.teacherName ? <span>· {report.teacherName}</span> : null}
           </div>
-          <p className="text-foreground line-clamp-2">{report.progress}</p>
+          {/* 진도 스마트 줄바꿈 — "1.극한 2.연속" 인라인 번호 run-on을 항목별 줄로(오탐 시 원문 1줄).
+              whitespace-pre-line이라 원문 \n도 살고, line-clamp가 물리 줄 기준으로 과대 성장 방지. */}
+          <p className="text-foreground line-clamp-5 whitespace-pre-line">
+            {splitNumberedItems(report.progress).join("\n")}
+          </p>
           {report.examInfo || report.homeworkScore ? (
             <div className="text-text-dim flex flex-wrap gap-x-2.5 font-mono text-[10px]">
               {report.examInfo ? <span>시험 {report.examInfo}</span> : null}

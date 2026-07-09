@@ -5,9 +5,10 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { BackLink } from "@/components/back-link";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { SearchForm } from "@/components/search-form";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
+import { PAYROLL_ENABLED } from "@/features/payroll/config";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { currentPeriod } from "@/features/billing/calc";
@@ -46,6 +47,7 @@ export default async function StaffPayrollPage({
   searchParams: Promise<{ period?: string; q?: string; status?: string }>;
 }) {
   const viewer = await requireAccess("staff");
+  if (!PAYROLL_ENABLED) redirect("/staff"); // 급여 기능 비활성화(직접 URL 진입 차단)
   // 급여 노출은 원장(master) 전용 (schema.ts 주석 — 전직원 급여는 민감 정보).
   if (viewer.systemRole !== "master") redirect("/staff");
 
@@ -131,21 +133,8 @@ export default async function StaffPayrollPage({
           ))}
         </div>
 
-        {/* 검색 */}
-        <form action="/staff/payroll" method="get" className="ml-auto flex items-center gap-2">
-          {period !== currentPeriod() ? <input type="hidden" name="period" value={period} /> : null}
-          {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="직원명"
-              className="text-foreground placeholder:text-text-faint w-28 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-        </form>
+        {/* 검색 — 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체(period·status 자동 보존) */}
+        <SearchForm placeholder="직원명" defaultValue={q} inputWidth="w-28" />
       </div>
 
       <p className="micro">

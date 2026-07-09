@@ -193,7 +193,7 @@ export default async function EnrollmentDetailPage({
             <h2 className="text-foreground text-sm font-semibold">
               {consult.processingStatus === "uploaded" || consult.processingStatus === "transcribing"
                 ? "녹음을 한국어로 전사 중입니다"
-                : "AI가 상담록을 13개 섹션으로 분석 중입니다"}
+                : "AI가 상담록을 12개 섹션으로 분석 중입니다"}
             </h2>
           </div>
           <p className="text-muted-foreground text-xs">

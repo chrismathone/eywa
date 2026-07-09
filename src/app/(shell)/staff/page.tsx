@@ -12,8 +12,10 @@ import { canManageStaff, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { getStaffList } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { Pagination } from "@/components/pagination";
+import { SearchForm } from "@/components/search-form";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { NewStaffTrigger } from "./_components/new-staff-trigger";
+import { PAYROLL_ENABLED } from "@/features/payroll/config";
 import { ResumesFace } from "./_components/resumes-face";
 
 export const metadata = { title: "직원관리 — eywa" };
@@ -202,23 +204,11 @@ export default async function StaffPage({
               </Link>
             ))}
           </div>
-          <form action="/staff" method="get" className="ml-auto flex items-center gap-2">
-            {role !== "all" ? <input type="hidden" name="role" value={role} /> : null}
-            {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="이름·이메일·연락처"
-                className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-              />
-            </div>
-            <Button type="submit" variant="outline" size="sm">
-              검색
-            </Button>
-          </form>
+          <SearchForm
+            placeholder="이름·이메일·연락처"
+            defaultValue={q}
+            resetParams={["invited", "tab"]}
+          />
         </div>
       </div>
 
@@ -232,7 +222,7 @@ export default async function StaffPage({
           ) : null}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {user?.systemRole === "master" ? (
+          {PAYROLL_ENABLED && user?.systemRole === "master" ? (
             <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
               <Wallet className="size-4" />
               월별 급여

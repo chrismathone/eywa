@@ -50,7 +50,7 @@ function Show-Status {
       Write-Host ("  {0,-26} (미등록)" -f $n) -ForegroundColor DarkYellow
     }
   }
-  $log = "D:\tmp\makeedu\watch-requests.log"
+  $log = Join-Path $repo ".makeedu-tmp\watch-requests.log"
   if (Test-Path $log) {
     $last = (Get-Item $log).LastWriteTime
     Write-Host "  워처 로그 마지막 기록: $last"

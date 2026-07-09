@@ -45,7 +45,7 @@ const postgres = require("postgres");
 const L = require("./lib.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const fromArg = (process.argv.find((a) => a.startsWith("--from=")) || "").slice(7);
 
 // KST 기준 N개월 전 'YYYY-MM'(조치 대상 신청일 창 기본값).

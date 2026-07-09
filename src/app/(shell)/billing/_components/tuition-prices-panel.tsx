@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Coins, CheckCircle2 } from "lucide-react";
-import { EyIcon } from "@/components/icons/eywa-icons";
-import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/pagination";
+import { SearchForm } from "@/components/search-form";
 import {
   getTuitionCatalogPage,
   getTuitionCatalogStats,
@@ -70,25 +69,7 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
             </Chip>
           ))}
         </div>
-        <form action="/billing" method="get" className="ml-auto flex items-center gap-2">
-          <input type="hidden" name="tab" value="calculator" />
-          <input type="hidden" name="csub" value="prices" />
-          {category !== "all" ? <input type="hidden" name="cat" value={category} /> : null}
-          {active !== "all" ? <input type="hidden" name="cactive" value={active} /> : null}
-          <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
-            <EyIcon name="search" size={13} />
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="항목명·분류"
-              className="text-foreground placeholder:text-text-faint w-32 bg-transparent text-xs focus:outline-none"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">
-            검색
-          </Button>
-        </form>
+        <SearchForm placeholder="항목명·분류" defaultValue={q} resetParams={["cpage"]} />
       </div>
 
       <div className="flex items-center justify-between">

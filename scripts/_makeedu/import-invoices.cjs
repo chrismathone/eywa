@@ -10,7 +10,7 @@ const postgres = require("postgres");
 const L = require("./lib.cjs");
 
 const APPLY = process.argv.includes("--apply");
-const OUT = process.env.MAKEEDU_OUT || "D:/tmp/makeedu";
+const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(\d{2})/); return m ? `${m[1]}-${m[2]}` : null; };
 
@@ -55,7 +55,9 @@ const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(
       let a = inv.get(key);
       if (!a) { a = { student_id: sid, period: l.period, total: 0, discount: 0, point: 0, paid: 0, items: [], method: null, dueDay: l.dueDay, pdate: null }; inv.set(key, a); }
       a.total += l.total; a.discount += l.discount; a.point += l.point; a.paid += l.paid;
-      a.items.push({ name: l.item, amount: l.total });
+      // eywa/POC와 동일한 line_items 형태(description)로 통일 — name-only는 검색/표시에서
+      // description 부재로 취급돼 500을 유발했었다(런타임 normalizeInvoiceLineItems가 기존 name-only도 흡수).
+      a.items.push({ kind: "tuition", description: l.item, amount: l.total });
       if (!a.method && l.method) a.method = l.method;
       if (!a.pdate && l.pdate) a.pdate = l.pdate;
     }

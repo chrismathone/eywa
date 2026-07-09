@@ -48,3 +48,5 @@ next-env.d.ts
 
 # makeedu import drop zone (real PII files - never commit)
 scripts/_makeedu/_incoming/
+# makeedu scrape 출력·로그 (real PII - never commit) — 기본 출력 디렉터리(MAKEEDU_OUT 미설정 시)
+/.makeedu-tmp/

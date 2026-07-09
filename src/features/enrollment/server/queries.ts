@@ -58,7 +58,6 @@ export type ConsultationAudioReport = {
   parentSatisfaction: string;
   studentTraits: string;
   teacherResponse: string;
-  salesPoints: string;
   agreements: string;
   followUps: string;
   warnings: string;
