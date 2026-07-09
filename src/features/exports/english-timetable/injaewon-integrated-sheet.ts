@@ -113,30 +113,32 @@ function buildUniformFormula(
   const rrs = [...rowRange.entries()].sort((a, b) => a[0] - b[0]);
   const r1Ladder = rrs.map(([gr, [r1]]) => `${gr},${r1}`).join(",");
   const r2Ladder = rrs.map(([gr, [, r2]]) => `${gr},${r2}`).join(",");
-  // 요일 스위치: 일레이블(월화수목금) → 강사별 열들·강사들.
+  // 요일 → 강사별 열들·강사들. ⚠️ **SWITCH 금지** — Google Sheets SWITCH는 배열 반환값을 스칼라(첫 원소)로
+  // 뭉개서 열이 하나로 축소된다(검색 전멸). **중첩 IF는 배열을 보존**하므로 IF로 짠다.
   const days: { ko: string; day: DayOfWeek }[] = [
     { ko: "월", day: "mon" }, { ko: "화", day: "tue" }, { ko: "수", day: "wed" }, { ko: "목", day: "thu" }, { ko: "금", day: "fri" },
   ];
-  const colParts: string[] = [], teachParts: string[] = [];
+  const dayCells: { key: string; cols: string; teachers: string }[] = [];
   for (const { ko, day } of days) {
     const cols = geometry.dayColumns[day];
     if (!cols || !cols.length) continue;
-    colParts.push(`${q(ko)},{${cols.map((c) => q(c.colLetter)).join(";")}}`);
-    teachParts.push(`${q(ko)},{${cols.map((c) => q(c.teacher)).join(";")}}`);
+    dayCells.push({ key: q(ko), cols: cols.map((c) => q(c.colLetter)).join(";"), teachers: cols.map((c) => q(c.teacher)).join(";") });
   }
-  const colSwitch = `SWITCH(일레이블,${colParts.join(",")},{""})`;
-  const teachSwitch = `SWITCH(일레이블,${teachParts.join(",")},{""})`;
+  const colSwitch = dayCells.reduceRight((acc, d) => `IF(일레이블=${d.key},{${d.cols}},${acc})`, `{""}`);
+  const teachSwitch = dayCells.reduceRight((acc, d) => `IF(일레이블=${d.key},{${d.teachers}},${acc})`, `{""}`);
   return (
     `IFERROR(LET(` +
     `헤더행,SWITCH(TRUE,${secLadder}),` +
     `블록열,INT((COLUMN()-3)/5)*5+3,` +
     `수업명,IFERROR(TRIM(REGEXEXTRACT(TO_TEXT(INDIRECT(ADDRESS(헤더행,블록열,4))),"^[^\\n]+")),""),` +
     `일레이블,TRIM(TO_TEXT(INDIRECT(ADDRESS(헤더행+3,COLUMN(),4)))),` +
-    `r1,SWITCH(ROW(),${r1Ladder},0),r2,SWITCH(ROW(),${r2Ladder},0),` +
+    // ⚠️ LET 변수명에 `r1`/`r2` 금지 — LAMBDA 안에서 셀 참조 R1/R2로 오인돼 #NAME?(→IFERROR가 삼켜 "").
+    // 한글명(시작행/끝행)은 셀 참조와 안 겹쳐 LAMBDA 클로저로 정상 접근된다.
+    `시작행,SWITCH(ROW(),${r1Ladder},0),끝행,SWITCH(ROW(),${r2Ladder},0),` +
     `열들,${colSwitch},강사들,${teachSwitch},` +
-    `IF(OR(수업명="",r1=0),"",LET(` +
+    `IF(OR(수업명="",시작행=0),"",LET(` +
     `히트,MAP(열들,강사들,LAMBDA(cl,tn,IF(cl="","",LET(` +
-    `범위,INDIRECT("'${sheet}'!"&cl&r1&":"&cl&r2),` +
+    `범위,INDIRECT("'${sheet}'!"&cl&시작행&":"&cl&끝행),` +
     `매치들,MAP(범위,LAMBDA(x,IF(IFERROR(TRIM(REGEXEXTRACT(TO_TEXT(x),"^[^\\n]+"))=수업명,FALSE),TO_TEXT(x),""))),` +
     `셀,IFERROR(TEXTJOIN("",TRUE,FILTER(매치들,LEN(매치들)>0)),""),` +
     `방,IFERROR(REGEXEXTRACT(셀,"\\n\\s*([^\\n]+)$"),""),` +
