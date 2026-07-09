@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isIncompleteItem, normalizeAiListText } from "./report-normalize";
+import { cleanQaTags, isIncompleteItem, normalizeAiListText } from "./report-normalize";
 
 describe("normalizeAiListText — 런온(' - ') 분리", () => {
   it("한 줄에 ' - '로 이어붙인 항목을 줄바꿈으로 분리", () => {
@@ -68,6 +68,25 @@ describe("normalizeAiListText — 정리/경계", () => {
   });
   it("중복 공백 축약", () => {
     expect(normalizeAiListText("-   항목   하나다")).toBe("항목 하나다");
+  });
+});
+
+describe("cleanQaTags — (미답변)/(답변) 태그 교정", () => {
+  it("'(미답변)' 뒤에 답변 내용이 있으면 태그 제거(오라벨 교정)", () => {
+    expect(cleanQaTags("성적이 안 오른 이유는? → (미답변) 공부법이 책과 실제가 다름")).toBe(
+      "성적이 안 오른 이유는? → 공부법이 책과 실제가 다름",
+    );
+  });
+  it("진짜 미답변('(미답변)' 뒤에 내용 없음)은 유지", () => {
+    expect(cleanQaTags("교재는 무엇인지? → (미답변)")).toBe("교재는 무엇인지? → (미답변)");
+  });
+  it("'(답변)' 중복 태그는 제거", () => {
+    expect(cleanQaTags("시간표는? → (답변) 방학 중에도 유지")).toBe("시간표는? → 방학 중에도 유지");
+  });
+  it("normalizeAiListText가 런온 Q&A의 오라벨까지 교정", () => {
+    expect(
+      normalizeAiListText("- 이유는? → (미답변) 공부법 차이 - 시간표는? → (답변) 유지됨"),
+    ).toBe("이유는? → 공부법 차이\n시간표는? → 유지됨");
   });
 });
 

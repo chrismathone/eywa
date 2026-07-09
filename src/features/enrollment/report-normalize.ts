@@ -60,5 +60,20 @@ export function normalizeAiListText(raw: string): string {
     }
   }
 
-  return merged.join("\n");
+  // 3) 학부모 질문 Q&A 태그 교정: Solar가 답을 써놓고도 '(미답변)'을 붙이는 오라벨을 정리.
+  return merged.map(cleanQaTags).join("\n");
+}
+
+/**
+ * '질문 → (답변)/(미답변) 답변' 형태의 태그 잡음 교정.
+ * - '→ (미답변) <내용>' : 뒤에 답변 내용이 있으면 실제로 답한 것 → '(미답변)' 태그 제거(오라벨 교정).
+ * - '→ (답변) <내용>' : 중복 태그 제거.
+ * - '→ (미답변)'(뒤에 내용 없음)은 진짜 미답변이므로 유지.
+ */
+export function cleanQaTags(item: string): string {
+  return item
+    .replace(/→\s*\(미답변\)\s*(?=\S)/g, "→ ")
+    .replace(/→\s*\(답변\)\s*/g, "→ ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }

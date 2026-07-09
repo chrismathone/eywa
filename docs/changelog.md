@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 등록상담 학부모 질문 '(미답변)' 오라벨 교정 — 환각 아님(전사 대조) (2026-07-09) — ✅ typecheck0/lint0/test28 + 실 전사 대조·DB 시뮬
+원장 제보: 학부모 질문이 '질문 → (미답변) [답변 내용]'처럼 **(미답변)이라 써놓고 답변이 붙어** 모순. "환각/창작인가?" 우려. **실 전사(32,141자) 대조 결과 답변 내용은 전부 팩트**(수영14·288·인강4·오리엔테이션4·7/13·6시20분6·심화18 등 실재) → **환각 아님, Solar의 '(미답변)' 라벨만 틀림**(답을 쓰고도 미답변 태그).
+- **후보정 교정**([report-normalize.ts](../src/features/enrollment/report-normalize.ts) `cleanQaTags`): '→ (미답변) <내용>'은 뒤에 답변이 있으면 실제로 답한 것 → 태그 제거. '→ (답변) <내용>' 중복 태그 제거. **'→ (미답변)'(뒤 내용 없음)은 진짜 미답변이라 유지.** Vitest +4. ⚠️ 렌더 후보정이라 **기존 분석도 재분석 없이 즉시 교정**.
+- **프롬프트(양쪽 동시)**: parentQuestions 형식을 '- 질문 → 답변'으로, "실제로 답한 경우에만 답변을 쓰고 답 안 한 질문만 '(미답변)', **답변 내용과 '(미답변)' 동시 금지**"로 강화(예방).
+- 검증: 실 DB 시뮬 — 이태경 오라벨 6건 태그 제거(답변 표시), e7e26a2c 진짜 미답변 10건 유지, 288,000원 보존. typecheck0/lint0/test28.
+
 ### 상담↔학생 자동연결 트리거 — makeedu 왕복 중복 근본 차단 (2026-07-09) — ✅ main(f69b1d4)·프로덕션 0088a 적용·트랜잭션+실적용 검증
 원장 제보(스크린샷): 등록상담 "수업 배정"(convert) 시 `duplicate key ... ux_students_active_natural_key` **원본 Postgres 에러가 그대로 노출**. 근본원인(사용자 추론=실데이터 검증): eywa 상담 → **makeedu 역동기화(푸시)** → makeedu에서 학생화 → **정동기화로 eywa에 학생 재유입**. 상담·학생 makeedu_id가 서로 달라(이태경 5276/14104) **자연키(정규화 이름+학교+학년)만이 동일인을 연결**하는데, 학생 임포트([import-students.cjs](../scripts/_makeedu/import-students.cjs))가 기존 '학생'과만 매칭하고 '상담'은 안 봐 상담이 **orphan(student_id null)**으로 남고 → convert가 학생을 또 INSERT하려다 부분 유니크 위반. blast radius 실측: 미연결 상담 388 중 자연키 충돌 orphan 10(7건 makeedu 왕복, 매 왕복마다 +1 누적).
 - **트리거([0088a](../supabase/migrations/0088a_link_consultation_on_student.sql), security definer)**: 학생 INSERT/UPDATE(status·name·school·grade) 시 같은 자연키의 미연결 활성 상담을 자동 연결(student_id+outcome=enrolled). **sync·수동·convert·QR 어느 경로든 orphan 구조적 불가.** 정규화=students.name_normalized 동일(`lower(regexp_replace(name,'\s+','','g'))`).
