@@ -100,7 +100,7 @@ export function StructureImportDialog({ subject }: { subject: string }) {
         onClick={() => setOpen(true)}
         className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
       >
-        <Sheet className="size-3" /> 구조 가져오기
+        <Sheet className="size-3" /> 시트에서 가져오기
       </button>
 
       {open ? (
@@ -109,10 +109,10 @@ export function StructureImportDialog({ subject }: { subject: string }) {
           <div
             className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5"
             role="dialog"
-            aria-label="강사별 시트에서 구조 가져오기"
+            aria-label="시트에서 가져오기"
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-extrabold">강사별 시트에서 구조 가져오기</h2>
+              <h2 className="text-foreground text-[15px] font-extrabold">시트에서 가져오기</h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>
