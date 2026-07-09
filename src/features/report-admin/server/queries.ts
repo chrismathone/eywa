@@ -165,3 +165,25 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
 
   return { dates, rates: computeWritingRates(dates, reports, todayTargets) };
 }
+
+export type ReportFilterOptions = { teachers: string[]; subjects: string[] };
+
+/** 보고서 목록 필터 옵션(원장 보고서 관리 Part C) — 최근 보고서에서 강사·과목 distinct. */
+export async function getReportFilterOptions(): Promise<ReportFilterOptions> {
+  const user = await getCurrentUser();
+  if (!user) return { teachers: [], subjects: [] };
+  const supabase = await createClient();
+  const since = daysBefore(kstToday(), 60);
+  const { data } = await supabase
+    .from("lesson_reports")
+    .select("teacher_name, subject")
+    .gte("report_date", since)
+    .limit(5000);
+  const teachers = new Set<string>();
+  const subjects = new Set<string>();
+  for (const r of data ?? []) {
+    if (r.teacher_name) teachers.add(r.teacher_name as string);
+    if (r.subject) subjects.add(r.subject as string);
+  }
+  return { teachers: [...teachers].sort(), subjects: [...subjects].sort() };
+}
