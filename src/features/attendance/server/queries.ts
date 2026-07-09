@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -339,9 +339,8 @@ export async function getMonthlyAttendanceMatrix(
 ): Promise<AttendanceMatrix> {
   const supabase = await createClient();
 
-  // 강사 스코프: teacher면 selector·데이터를 본인 담당 반만(URL로 남의 classId 넘겨도 무시).
-  const user = await getCurrentUser();
-  const tId = user?.systemRole === "teacher" ? user.id : null;
+  // 강사 스코프: teacher(또는 겸직-강사뷰)면 selector·데이터를 본인 담당 반만(URL로 남의 classId 넘겨도 무시).
+  const tId = await effectiveTeacherId();
 
   // 모든 반 (selector용) — 강사면 본인 담당 반만.
   let classesQuery = supabase

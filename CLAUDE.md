@@ -315,6 +315,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **라이트 전용(Daylight)** — 다크모드 제거. 폰트 = Pretendard **정적 풀 한글 subset**(dynamic-subset 아님).
 - **이름 앞 아바타/이니셜 배지 = 금지 (영구).** 사람 표시는 이름 텍스트만.
 - **master 시스템역할 표시 라벨 = "원장"** (2026-07-07 "owner→원장" 전역 환원, 최신). ⚠️ 07-02엔 "owner"로 통일했다가 뒤집힘 — **다시 owner로 되돌리지 말 것**.
+- **겸직(관리자 계열 + 담당 반) 뷰 전환 = 강사뷰↔관리자뷰 토글** (2026-07-09). 관리자뷰 사이드바 하단 '강사뷰로 전환' / 강사 미니셸 '내 메뉴' 드롭다운 하단 '관리자뷰로 전환'. 쿠키(`eywa-view`)만 바꿈 = **권한 불변**(실 `system_role`이 authoritative). 강사 데이터 스코프는 **`effectiveTeacherId`/`effectiveTeacherScope`([view-mode.ts](src/lib/auth/view-mode.ts)) 단일소스** — 새 teacher-scope 코드는 `systemRole==="teacher"` 직접비교 금지, 이 헬퍼 사용. ⚠️ base-ui 드롭다운 안 서버액션 `redirect()`는 클라 네비 유실 → 경로반환 + `window.location`.
 
 ## 🗣️ 사용자 작업 선호 — 반복 교정 금지 (항상 적용)
 

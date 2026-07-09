@@ -1,8 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getClassesList, getClassStudents } from "@/features/classes/server/queries";
 import { examStats, rankByScore, type ExamStats } from "../calc";
 
@@ -38,10 +37,8 @@ export async function getExamsPage(
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
 
-  // 강사 스코프: teacher면 본인 담당 과목의 시험만(영어 강사→영어 시험). exams엔 teacher_id가 없어 과목 기준.
-  const user = await getCurrentUser();
-  const teacherSubjects =
-    user?.systemRole === "teacher" ? (await getTeacherScope(user.id)).subjects : null;
+  // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 과목의 시험만(영어 강사→영어 시험). exams엔 teacher_id가 없어 과목 기준.
+  const teacherSubjects = (await effectiveTeacherScope())?.subjects ?? null;
   if (teacherSubjects && teacherSubjects.length === 0) return { rows: [], total: 0 };
 
   let q = supabase

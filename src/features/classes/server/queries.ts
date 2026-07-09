@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
@@ -213,9 +213,8 @@ export async function getClassesList(options?: ClassListFilters): Promise<ClassL
  */
 export async function getClassesStats(): Promise<{ total: number; active: number; totalSeats: number }> {
   const supabase = await createClient();
-  // 강사 스코프: teacher면 본인 담당 반·그 반 수강만 카운트(목록과 일치).
-  const user = await getCurrentUser();
-  const tId = user?.systemRole === "teacher" ? user.id : null;
+  // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반·그 반 수강만 카운트(목록과 일치).
+  const tId = await effectiveTeacherId();
   const classBase = () => {
     const q = supabase.from("classes").select("*", { count: "exact", head: true });
     return tId ? q.eq("teacher_id", tId) : q;
@@ -259,9 +258,8 @@ export async function getClassesPage(
   const supabase = await createClient();
   const sort: ClassSort = options.sort ?? "name";
 
-  // 강사 스코프: teacher면 본인 담당 반만(옵션 teacherId 무시하고 강제).
-  const user = await getCurrentUser();
-  const forcedTeacherId = user?.systemRole === "teacher" ? user.id : null;
+  // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 반만(옵션 teacherId 무시하고 강제).
+  const forcedTeacherId = await effectiveTeacherId();
 
   // 요일(다중) 필터 — 선택 요일 중 하나라도 운영하는 수업 id로 좁힘(ijw "하나라도 포함" 의미).
   let dayClassIds: string[] | null = null;

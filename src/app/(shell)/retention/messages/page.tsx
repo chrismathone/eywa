@@ -1,6 +1,7 @@
 import { MessageSquareOff } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getRetentionRoster, getTenantName } from "@/features/retention/server/queries";
 import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { MessageComposer } from "@/features/retention/components/message-composer";
@@ -10,8 +11,9 @@ export const metadata = { title: "학부모 메시지 — eywa" };
 
 export default async function RetentionMessagesPage() {
   const user = await requireAccess("retention");
+  const tId = await effectiveTeacherId();
   const [roster, academyName] = await Promise.all([
-    getRetentionRoster(user.systemRole === "teacher" ? { teacherId: user.id } : undefined),
+    getRetentionRoster(tId ? { teacherId: tId } : undefined),
     getTenantName(),
   ]);
 

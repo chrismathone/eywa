@@ -9,6 +9,26 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 활동 로그 target_label 디테일 — 수강/시간표/출결에 반·시간·날짜 조인 (2026-07-09) — ✅ 트랜잭션 E2E 4/4(라벨 확인 후 ROLLBACK)·프로덕션 0086a 적용 · 0086a
+사용자 제보: "수강 「김재윤」 생성"은 어느 반인지 안 보여 수강 생성인지 수업 배정인지 모르겠고, "시간표 생성"은 대상이 아예 없음(class_schedules는 이름 컬럼 없이 class_id·요일·교시만 → target_label NULL). 이 정보는 전부 FK(class_id=uuid) 뒤라 표시 레이어에선 못 풀어 **트리거에서 classes 조인해 라벨에 굽는다**([0086a](../supabase/migrations/0086a_activity_label_detail.sql), `log_activity()` create-or-replace — 0085a refund 예외·noise·redact·트리거부착 전부 보존, 라벨 enrichment만 추가):
+- **enrollments** → `학생명 · 반이름`(예: "김재윤 · 중2 수학A") = 사실상 수업 배정임을 라벨로 명시.
+- **class_schedules** → `반이름 · 요일(한글) 교시/시각`(예: "중2 수학A · 월 3교시", period_label 없으면 "· 수 17:00").
+- **attendance_records** → `학생명 · MM-DD 출결상태`(예: "홍길동 · 07-09 출석", 상태 한글 CASE 매핑).
+- 검증: 트랜잭션 안 테스트 학생·반 생성→수강/시간표/출결 insert→`target_label` 4종 기대치 일치 확인 후 ROLLBACK(프로덕션 무영향). 기존 로그는 소급 안 됨(트리거는 이후 쓰기에만; 필요 시 백필 별도).
+
+### 겸직(관리자+강사) 뷰 전환 토글 — 강사뷰 ↔ 관리자뷰 (2026-07-09) — ✅ 라이브 E2E 4/4(겸직 계정 임시 더미반→검증→원복) + typecheck0/lint0/test775/build✓
+관리자 계열 역할이면서 실제 담당 반이 있는 겸직 사용자가 셸 뷰를 전환. **관리자뷰(풀셸) 사이드바 하단 '강사뷰로 전환' / 강사 미니셸 '내 메뉴' 드롭다운 맨 하단(구분선 아래) '관리자뷰로 전환'**. 뷰 전환 = 쿠키(`eywa-view`, httpOnly)만 바꿈 — 실 `system_role`은 그대로 authoritative(RLS·requireAccess·canWriteTenant), **권한 불변·락아웃 없음**.
+- **스코프 단일소스** [`effectiveTeacherId`/`effectiveTeacherScope`](../src/lib/auth/view-mode.ts): 실 강사면 본인 id(불변·회귀0), 겸직+쿠키teacher+담당반≥1이면 본인 id, 그 외 null. 기존 **26곳**의 `systemRole==="teacher" ? user.id` 스코프(classes·attendance·students·exams·consultations·search·timetable·retention·textbook·print·exports)를 이 헬퍼로 중앙화. 노출 판정 `canUseTeacherView`는 head:true 카운트(B2).
+- **배선**: `(shell)/layout.tsx` `getShellView()` 분기(겸직+쿠키teacher→강사 미니셸) + [`TeacherViewToggle`](../src/components/view-mode-toggle.tsx)(사이드바 레일톤) / [`TeacherMenu`](../src/components/teacher-menu.tsx) `canReturnToAdmin`(드롭다운). 액션 [`features/shell/view-actions.ts`](../src/features/shell/view-actions.ts).
+- ⚠️ **함정**: base-ui 드롭다운(Menu.Item) 안에서 호출한 **서버액션 `redirect()`는 클라 네비게이션이 유실**(쿠키만 바뀌고 화면 안 넘어감 — onClick/form/closeOnClick 다 실패, 실측). → `switchToAdminView`는 착지경로를 **반환**하고 클라 `window.location.assign()`으로 확정 이동(사이드바 버튼은 일반 흐름이라 redirect 정상).
+- 라이브 E2E(박소선 master + 임시 더미 반으로 겸직화): 사이드바 토글 노출 → 강사 미니셸(/onescreen) → 수업목록 본인 담당 1건만 스코핑 → 내 메뉴 관리자뷰 전환 → 관리자 풀셸 복귀. 더미 반 삭제·원복 완료.
+
+### 활동 로그 — 환불요청서 서식 내용 필드별 노출 (2026-07-09) — ✅ 코드 main 반영·test(refund 3 추가)/tsc0/lint0 + 트랜잭션 E2E(트리거 form_data 객체 nest 확인·ROLLBACK) · 0085a
+사용자 요청: 지출·환불요청서·교재요청서 작성/수정/삭제도 활동 로그에 남는지 확인 + 남되 "영문 안 나오게 철저히 한글화". 조사: 셋 다 트리거 부착 테이블(`expenses`·`academy_documents`·`textbook_orders`)이라 이미 추적되나, **환불요청서만** 내용이 `academy_documents.form_data`(jsonb) 한 컬럼 + redact 대상이라 필드별 변경이 "서식내용 변경"으로만 남았음.
+- **트리거([0085a](../supabase/migrations/0085a_refund_form_activity.sql))**: `log_activity()` create-or-replace(0084a 커버리지 확장 위에) — UPDATE 시 `form_data`가 redact여도 **`form_type='refund_request'`이면 예외적으로 old/new 원본 기록**(이력서·전사·급여·토큰은 redact 유지 = 누수 방지). INSERT/DELETE 스냅샷은 form_data 계속 제외. ⚠️ **트레이드오프**: 환불요청서 계좌번호 등이 사무실(master/admin/manager) 활동 로그에 노출(사용자 승인).
+- **표시**: [refund-request.ts](../src/features/billing/refund-request.ts) `refundFieldList`(고정 순서·한글 라벨, `completedBy` 내부 id 제외) + [activity.ts](../src/features/audit/activity.ts) `refundFormChanges`가 중첩 form_data를 필드별로 펼침(총환불금액/환불사유/환불방식-계좌 등). 그 외 jsonb는 기존 `unreadableDiff`로 "…변경"(변경 없음). [activity.test.ts](../src/features/audit/activity.test.ts) refund 3케이스 추가.
+- 검증: 트랜잭션 안 실 UPDATE→트리거가 form_data old/new를 **객체로 nest**(총환불금액 300000→250000·환불사유·계좌) 확인 후 ROLLBACK. 실 refund_request 문서 5건 `jsonb_typeof=object`. ⚠️ 0085a는 코드 배포와 함께 적용(구 activity.ts는 unredacted form_data를 영문 렌더).
+
 ### 시간표 학생 hover 진도 스마트 줄바꿈 — 인라인 번호 run-on 분리 (2026-07-09) — ✅ 실브라우저 검증(dev 3000 — 정미선 hover 카드 3항목 각자 줄) + 신규 Vitest 8/lint0(내 파일 tsc 클린 — 트리 에러 2건은 타 세션 edutrix-sync WIP)
 "1.함수의 극한 2.함수의 좌극한과 우극한 3.함수의 극한값의 계산"처럼 수업 리포트 진도가 한 줄 run-on으로 접혀 hover 카드에서 읽기 어려움(기존 `line-clamp-2`는 절단까지). RichText `bulletize`는 줄바꿈/쉼표 기반이라 인라인 번호 마커는 못 쪼갬 → 전용 순수 함수 신설:
 - [`splitNumberedItems`](../src/lib/text/split-numbered.ts)(Vitest 8) — 공백 경계 "N."/"N)" 마커 2개+ & 연속 오름차순일 때만 분리(소수점 "3.5"·비연속·단독 번호·"중2.함수" 같은 오탐은 원문 유지). 서두 텍스트 첫 줄 보존, 원문 `\n` 있으면 그 줄바꿈 우선.

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -51,11 +51,9 @@ export default async function LessonReportPrintPage({
     .eq("id", id)
     .single();
   if (!report) notFound();
-  // 강사는 본인 담당 학생 보고서만(비담당 학생 PII 차단). 사무실 역할은 전체 허용.
-  if (user.systemRole === "teacher") {
-    const { studentIds } = await getTeacherScope(user.id);
-    if (!report.student_id || !studentIds.includes(report.student_id)) notFound();
-  }
+  // 강사(또는 겸직-강사뷰)는 본인 담당 학생 보고서만(비담당 학생 PII 차단). 사무실 역할은 전체 허용.
+  const scope = await effectiveTeacherScope();
+  if (scope && (!report.student_id || !scope.studentIds.includes(report.student_id))) notFound();
 
   const [{ data: student }, settings] = await Promise.all([
     supabase

@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
@@ -17,14 +18,16 @@ import { TextbookRequestClient } from "./_client";
  */
 export default async function TextbookRequestsPage() {
   const user = await requireAccess("textbook_requests");
-  const isTeacher = user.systemRole === "teacher";
+  // teacher(또는 겸직-강사뷰)면 본인 담당 학생만. isTeacher는 클라 UI(스코프 톤)에도 전달.
+  const teacherId = await effectiveTeacherId();
+  const isTeacher = teacherId !== null;
   // 카탈로그 = 폼 '교재 검색'(단가표 146권, 선택 시 교재명·상세·금액 자동입력 — ijw 패리티). 독립 조회라 병렬(B4).
   const [settings, catalog] = await Promise.all([getTenantSettings(), getCatalogOptions()]);
 
   let rows;
   let students;
-  if (isTeacher) {
-    const { studentIds } = await getTeacherScope(user.id);
+  if (teacherId) {
+    const { studentIds } = await getTeacherScope(teacherId);
     [rows, students] = await Promise.all([
       getTextbookOrdersForStudents(studentIds),
       getStudentOptionsForIds(studentIds),
