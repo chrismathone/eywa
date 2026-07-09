@@ -23,6 +23,7 @@ import { TranscriptSection } from "@/components/transcript-section";
 import { RecordingsSection } from "./recordings-section";
 import { RunAiButton } from "./run-ai-button";
 import { ConsultationReportEditor } from "./consultation-report-editor";
+import { AddAiSummaryButton } from "./add-ai-summary-button";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
@@ -269,6 +270,10 @@ export default async function EnrollmentDetailPage({
               ) : (
                 <p className="text-text-faint flex-1 text-sm">기재된 상담 내용이 없습니다.</p>
               )}
+              {/* AI 분석의 '상담 요약'을 상담 내용에 채우기/덧붙이기(원장 요청). 분석에 요약이 있을 때만 노출. */}
+              {consult.audioReport?.summary?.trim() ? (
+                <AddAiSummaryButton consultationId={consult.id} hasExisting={!!consult.parentRequest} />
+              ) : null}
               {/* 녹음 분석이 정리한 상담 내용 — 이미 입력값이 있어 자동입력에서 버려진 버전을 되살려 제시(비파괴). */}
               {showParentRequestSuggestion ? (
                 <details className="border-gold/40 bg-gold-soft/30 mt-2 rounded-md border px-3 py-2">
@@ -354,6 +359,15 @@ export default async function EnrollmentDetailPage({
       {/* ── AI 분석 ── */}
       <div className="space-y-4">
         <SectionHeader icon={Sparkles} iconClass="text-gold" title="AI 분석" />
+        {/* 재분석 진행 표시 — 버튼이 있는 이 섹션에서 바로 보이게(상단 배너는 시야 밖). StatusWatcher가 완료 시 자동 갱신. */}
+        {consult.processingStatus === "analyzing" && consult.audioReport ? (
+          <div className="border-chart-3/20 bg-chart-3/5 flex items-center gap-2 rounded-md border px-3.5 py-2.5">
+            <Loader2 className="text-chart-3 size-4 shrink-0 animate-spin" />
+            <p className="text-foreground text-xs">
+              AI가 다시 분석 중입니다 — 완료되면 아래 결과가 자동으로 갱신됩니다.
+            </p>
+          </div>
+        ) : null}
         {consult.audioReport && consult.aiAnalysis ? (
           <ConsultationReportEditor
             report={consult.audioReport}

@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 등록상담 재분석 진행표시·동시성 가드 + AI 요약→상담 내용 추가 (2026-07-09) — ✅ typecheck0/lint0
+직전 재분석 기능 후속(원장 실사용 제보). ① "재분석 눌러도 진행되는지 모르겠다": 진행 배너가 페이지 최상단이라 버튼(하단 AI 섹션) 시야 밖 + 그 자리엔 옛 리포트 그대로. ② "여러 명이 재분석 누르면?": 동시 재분석 방어 없음. ③ "AI 분석을 상담 내용에 추가하고 싶은데 없다"(이태경 상담).
+- **진행 표시**: AI 섹션에 인라인 "재분석 중" 배너(`processingStatus==='analyzing'` + 기존 리포트 있을 때). 옛 리포트는 유지하고 배너로 진행 표시 → 완료 시 기존 `ConsultationStatusWatcher`(realtime+5초 폴링)가 자동 갱신.
+- **동시성 가드**([regenerateConsultationAnalysis](../src/features/enrollment/server/actions.ts)): 무조건 상태 update → **원자적 claim**으로 교체 — `.neq('processing_status','analyzing').select('id')`로 한 명만 1행 선점, 나머지 0행 → "이미 재분석이 진행 중입니다" 안내. 5분+ 멈춘 stuck(after() 크래시)은 neq 가드 우회해 재실행 허용(updated_at 기준).
+- **AI 요약→상담 내용**([appendAiSummaryToConsultationContent](../src/features/enrollment/server/actions.ts) + [add-ai-summary-button.tsx](<../src/app/(shell)/enrollment/[id]/add-ai-summary-button.tsx>)): '상담 내용'(parent_request)이 비면 AI 요약으로 채우고, 있으면 `— AI 상담 요약 —` 구분선 아래로 덧붙임(기존 보존). 상담 내용 섹션에 버튼(요약 있을 때만). canWriteTenant 게이트.
+- 검증: typecheck0/lint0 + 이태경 상담 실데이터 확인(재분석 completed·요약 정상). ⚠️ 브라우저 E2E는 로그인 제약으로 DB+렌더 확인 대체.
+
 ### 등록상담 AI 분석 ijw 풀 이식 — 15섹션 아코디언 + 포맷·오분석 수정 (2026-07-09) — ✅ typecheck0/lint0/test33 + 실전사 dry-run(Solar)
 원장 제보: 등록상담 AI 분석이 ① 줄바꿈이 안 되고 `**`가 리터럴로 노출 ② 전사를 잘못 분석(형제자매 "없음"인데 "형제 할인" 나오는 모순). 스크린샷으로 **ijw-calander 분석 탭 풀세트로 회귀** 지시(교사 대응→상담자 대응만 리네임).
 - **원인**: `01465ef` 리팩터가 프롬프트를 얕게 바꾸며 ① "핵심어 `**굵게`" 지시를 넣었는데 Solar Pro 3가 `**` 짝을 자주 틀려 RichText가 리터럴로 노출 ② 세일즈포인트·요약·수형도 삭제 + 필드별 정밀 지침 상실 → 오분석.

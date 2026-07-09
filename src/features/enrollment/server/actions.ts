@@ -897,7 +897,9 @@ export async function regenerateConsultationAnalysis(
   const supabase = await createClient();
   const { data: consult } = await supabase
     .from("enrollment_consultations")
-    .select("id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, transcription")
+    .select(
+      "id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, transcription, processing_status, updated_at",
+    )
     .eq("id", consultationId)
     .single();
   if (!consult) return { error: "상담을 찾을 수 없습니다" };
@@ -935,12 +937,23 @@ export async function regenerateConsultationAnalysis(
     .maybeSingle();
   if (!existing) return { error: "기존 AI 분석이 없어 재분석할 수 없습니다. 먼저 분석을 실행하세요." };
 
-  // 즉시 '분석 중' — 페이지가 스켈레톤+StatusWatcher로 전환.
+  // 원자적 claim(동시 재분석 방어) — '분석 중'이 아닐 때만 상태를 선점한다. 여러 명이 동시에 눌러도
+  // DB update가 원자적이라 한 명만 1행을 claim하고(select로 확인) 나머지는 0행 → "이미 진행 중" 안내.
+  // 단, 5분 넘게 '분석 중'에 멈춘 stuck(after() 크래시/타임아웃)은 재실행 허용(neq 가드 우회).
+  const now = new Date();
+  const analyzingStuck =
+    consult.processing_status === "analyzing" &&
+    now.getTime() - new Date(consult.updated_at).getTime() > 5 * 60 * 1000;
   const admin = createAdminClient();
-  await admin
+  let claim = admin
     .from("enrollment_consultations")
-    .update({ processing_status: "analyzing", processing_error: null, updated_at: new Date().toISOString() })
+    .update({ processing_status: "analyzing", processing_error: null, updated_at: now.toISOString() })
     .eq("id", consultationId);
+  if (!analyzingStuck) claim = claim.neq("processing_status", "analyzing");
+  const { data: claimed } = await claim.select("id");
+  if (!claimed || claimed.length === 0) {
+    return { error: "이미 재분석이 진행 중입니다. 완료되면 화면이 자동으로 갱신됩니다." };
+  }
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
 
@@ -992,5 +1005,57 @@ export async function regenerateConsultationAnalysis(
     }
   });
 
+  return { ok: true };
+}
+
+/**
+ * AI 분석의 '상담 요약'을 상담 내용(parent_request)에 채운다/덧붙인다 — 원장 요청("AI 분석을 상담 내용에 추가").
+ * 비어 있으면 요약으로 채우고, 이미 값이 있으면 구분선 아래로 덧붙인다(기존 상담 내용 보존).
+ */
+export async function appendAiSummaryToConsultationContent(
+  consultationId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: consult } = await supabase
+    .from("enrollment_consultations")
+    .select("id, parent_request")
+    .eq("id", consultationId)
+    .single();
+  if (!consult) return { error: "상담을 찾을 수 없습니다" };
+
+  const { data: ai } = await supabase
+    .from("consultation_ai_analysis")
+    .select("print_payload")
+    .eq("consultation_id", consultationId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const pp =
+    ai?.print_payload && typeof ai.print_payload === "object"
+      ? (ai.print_payload as Record<string, unknown>)
+      : null;
+  const audioReport =
+    pp?.audioReport && typeof pp.audioReport === "object"
+      ? (pp.audioReport as Record<string, unknown>)
+      : null;
+  const summary = typeof audioReport?.summary === "string" ? audioReport.summary.trim() : "";
+  if (!summary) return { error: "추가할 AI 요약이 없습니다. 먼저 분석/재분석을 실행하세요." };
+
+  const existing = (consult.parent_request ?? "").trim();
+  const next = existing ? `${existing}\n\n— AI 상담 요약 —\n${summary}` : summary;
+
+  const { error } = await supabase
+    .from("enrollment_consultations")
+    .update({ parent_request: next, updated_at: new Date().toISOString() })
+    .eq("id", consultationId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/enrollment/${consultationId}`);
+  revalidatePath("/enrollment");
   return { ok: true };
 }
