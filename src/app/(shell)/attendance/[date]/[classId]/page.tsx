@@ -37,10 +37,10 @@ export default async function AttendanceInputPage({
     <div className="mx-auto max-w-4xl space-y-6">
       <BackLink href={`/attendance/${date}`} label={`${formatKoreanDate(date)}로`} />
 
-      <header className="border-border space-y-1 border-b pb-5">
+      <header className="border-line space-y-1 border-b pb-5">
         <p className="eyebrow">{formatKoreanDate(date)}</p>
         <h1 className="display text-foreground text-2xl">{klass.className}</h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-text-dim text-sm">
           {klass.subject}
           {klass.teacherName ? ` · 담임 ${klass.teacherName}` : ""} · 재원생{" "}
           <span className="num">{rows.length}</span>명
