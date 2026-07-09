@@ -9,6 +9,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { isClassnoteAllowed } from "@/features/onescreen/classnote-guard";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
+import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../report-filters";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
@@ -71,29 +72,6 @@ export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: numb
   if (error) return { ok: false, error: error.message };
   return { ok: true, reset: (data ?? []).length };
 }
-
-export type ReportListRow = {
-  id: string;
-  studentName: string;
-  subject: string | null;
-  reportDate: string;
-  classnoteStatus: string | null;
-  teacherName: string | null;
-  shareToken: string | null;
-  source: string | null; // edutrix_import=이관분(발송 아님) · onescreen=eywa 네이티브
-};
-
-// 상태 필터 특수값: 발송 이력 없는 이관분(edutrix_import). classnote_status가 아니라 source로 거른다.
-export const IMPORT_FILTER = "__import__";
-
-export type ReportListFilters = {
-  from?: string;
-  to?: string;
-  status?: string;
-  teacher?: string;
-  subject?: string;
-  page?: number;
-};
 
 const REPORT_PAGE_SIZE = 30;
 

@@ -5,7 +5,8 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
-import { IMPORT_FILTER, listReports, type ReportListFilters, type ReportListRow } from "@/features/report-admin/server/actions";
+import { listReports } from "@/features/report-admin/server/actions";
+import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "@/features/report-admin/report-filters";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 
 const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict"];
