@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 자동 로그인(절대 로그아웃 안 함) — refresh 토큰 회전 끔 (2026-07-09) — ✅ Management API로 프로덕션 적용·재조회 검증(rotation=false)
+원장 제보: "밤새 자리 비우고 오면 로그아웃"(프로덕션). 코드(미들웨어 세션 갱신 [proxy.ts](../src/lib/supabase/proxy.ts)·`@supabase/ssr` 400일 지속 쿠키)는 정상이고 origin/main과 동일 → 원인은 **서버측 Supabase Auth 설정**으로 좁혀짐. Management API 실측: `sessions_timebox=0`·`sessions_inactivity_timeout=0`(원인 아님) → **진짜 원인 = refresh 토큰 회전(`refresh_token_rotation_enabled=true`) + 재사용 유예 10초**.
+- **메커니즘**: eywa는 메뉴마다 same-origin iframe이라 창 여러 개면 각 iframe 브라우저 클라가 **같은 refresh 토큰으로 동시 갱신**(특히 노트북 절전 후 깨어날 때 타이머 일괄 발화) → 첫 갱신이 회전시키면 10초 유예 넘긴 나머지가 "이미 쓴 토큰" 제출 → Supabase가 **탈취 의심으로 세션 전체 폐기** → 로그아웃(쿠키는 400일로 멀쩡, 토큰만 무효).
+- **해결(사용자 승인)**: `PATCH /v1/projects/{ref}/config/auth {"refresh_token_rotation_enabled": false}` → 회전 경합 폐기 자체 제거. timebox·inactivity=0과 맞물려 **사실상 무기한 유지**. **기존 세션 무폐기**(적용 시 즉시 로그아웃 없음). ⚠️ 트레이드오프: 탈취 refresh 토큰 자동무효화 포기 — **학원 내부 운영툴**이라 수용.
+- **문서·되돌리기**: [docs/auth-session-policy.md](auth-session-policy.md) — **외부/공개 SaaS 전환 시 회전 복원(+유예 60~120초)** 명령 포함. 결정 로그(CLAUDE.md)에도 등재. PAT는 설정 변경 전용(앱 미사용) → 작업 후 폐기, 전환 시 재발급.
+
 ### 영어 시트 구조 가져오기 Phase 1·2 + 분리등원 요일 인라인 편집 (2026-07-09) — ✅ main 반영(80e9143)·프로덕션 0087a 적용
 - **구조 가져오기**: 강사별영어시간표 구글시트 편집 → `class_schedules`(수업·요일·시각·방·강사) 재구축. 수학의 기존 가져오기(학생 enrollment 재배정)와 다른 경로.
   - Phase 1(미리보기, 무쓰기): `readSheetGridWithMerges`(병합보존) → `parseEywaTeacherGrid`(순수+Vitest) → `matchStructure` → `computeStructureDiff`(create/update/keep/remove + FNV-1a hash) → `previewStructureImport`(master).
