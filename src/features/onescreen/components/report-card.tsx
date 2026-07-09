@@ -22,8 +22,8 @@ export type SubjectReport = {
 
 const MAX_ATTACHMENTS = 6;
 
-/** classnote_status → 표시 라벨 + 색. */
-function classnoteBadge(status?: string): { label: string; cls: string } | null {
+/** classnote_status → 표시 라벨 + 색. 표 뷰(onescreen-grid)와 공용(중복 방지) → export. */
+export function classnoteBadge(status?: string): { label: string; cls: string } | null {
   switch (status) {
     case "queued":
       return { label: "ClassNote 발송 대기", cls: "text-text-dim" };

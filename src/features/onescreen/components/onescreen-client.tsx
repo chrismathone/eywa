@@ -31,6 +31,8 @@ import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
+import { OneScreenGrid } from "./onescreen-grid";
+import { buildGridRows, isReportEligible } from "../grid";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -91,6 +93,7 @@ export function OneScreenClient({
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
+  const [view, setView] = useState<"card" | "grid">("card"); // 카드(학생별) ↔ 표(반 전체 대량작성)
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(버튼 로딩)
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
@@ -193,59 +196,78 @@ export function OneScreenClient({
     if (!selected) return;
     patch(selected.id, (s) => ({ ...s, progressConfirmed: !s.progressConfirmed }));
   }
-  function setProgress(subjectIndex: number, today: string) {
-    if (!selected) return;
-    patch(selected.id, (s) => ({
+  // ── studentId 파라미터 핸들러(표=행별 직접 호출, 카드=selected wrapper) — 로직 단일 소스 ──
+  function setProgressFor(studentId: string, subjectIndex: number, today: string) {
+    patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su, i) => (i === subjectIndex ? { ...su, today } : su)),
     }));
   }
-  function setStudyGrade(grade: string) {
-    if (!selected) return;
+  function setStudyGradeFor(studentId: string, grade: string) {
     // 진도 학년 변경(선행/후행) → 진도(prev/today)를 그 학년 1학기 첫 차시로 초기화(유효값 보장).
     const first = curriculumForGrade(grade)[0]?.lessons[0] ?? "";
-    patch(selected.id, (s) => ({
+    patch(studentId, (s) => ({
       ...s,
       studyGrade: grade,
       subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })),
     }));
   }
+  function setSemesterFor(studentId: string, semester: Semester) {
+    // 학기 변경 → 진도를 그 학기 첫 차시로 초기화(차시 드롭다운 스코프와 일치 보장).
+    patch(studentId, (s) => {
+      const grade = s.studyGrade ?? s.grade;
+      const first = curriculumForGradeSemester(grade, semester)[0]?.lessons[0] ?? "";
+      return { ...s, subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })) };
+    });
+  }
+  function setScoreFor(studentId: string, which: "daily" | "check", v: number | null) {
+    patch(studentId, (s) => ({ ...s, tests: { ...s.tests, [which]: { ...s.tests[which], score: v } } }));
+  }
+  // 표=SET(선택값), 카드=TOGGLE(같은 값 재클릭 시 해제) — 카드 wrapper가 토글을 계산해 SET 호출.
+  function setAttitudeValue(studentId: string, a: string | null) {
+    patch(studentId, (s) => ({ ...s, attitude: a }));
+  }
+  function setHomeworkValue(studentId: string, h: string) {
+    patch(studentId, (s) => ({ ...s, homework: h }));
+  }
+  function setProgress(subjectIndex: number, today: string) {
+    if (!selected) return;
+    setProgressFor(selected.id, subjectIndex, today);
+  }
+  function setStudyGrade(grade: string) {
+    if (!selected) return;
+    setStudyGradeFor(selected.id, grade);
+  }
   function setSemester(semester: Semester) {
     if (!selected) return;
-    // 학기 변경 → 진도를 그 학기 첫 차시로 초기화(차시 드롭다운 스코프와 일치 보장).
-    const grade = selected.studyGrade ?? selected.grade;
-    const first = curriculumForGradeSemester(grade, semester)[0]?.lessons[0] ?? "";
-    patch(selected.id, (s) => ({
-      ...s,
-      subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })),
-    }));
+    setSemesterFor(selected.id, semester);
   }
   function setScore(which: "daily" | "check", v: number | null) {
     if (!selected) return;
-    patch(selected.id, (s) => ({
-      ...s,
-      tests: { ...s.tests, [which]: { ...s.tests[which], score: v } },
-    }));
+    setScoreFor(selected.id, which, v);
   }
   function setAttitude(a: string) {
     if (!selected) return;
-    patch(selected.id, (s) => ({ ...s, attitude: s.attitude === a ? null : a }));
+    setAttitudeValue(selected.id, selected.attitude === a ? null : a);
   }
   function setHomework(h: string) {
     if (!selected) return;
-    patch(selected.id, (s) => ({ ...s, homework: s.homework === h ? "" : h }));
+    setHomeworkValue(selected.id, selected.homework === h ? "" : h);
   }
   function setSubjectDraft(subjectName: string, text: string) {
     if (!selected) return;
     patchReport(selected.id, subjectName, (r) => ({ ...r, draft: text }));
   }
   // 교재명·보강 — 과목별(subjectName으로 해당 과목만 갱신). 자동저장(patch→queueSave)에 실림.
-  function setTextbook(subjectName: string, text: string) {
-    if (!selected) return;
-    patch(selected.id, (s) => ({
+  function setTextbookFor(studentId: string, subjectName: string, text: string) {
+    patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, textbook: text } : su)),
     }));
+  }
+  function setTextbook(subjectName: string, text: string) {
+    if (!selected) return;
+    setTextbookFor(selected.id, subjectName, text);
   }
   function toggleMakeup(subjectName: string) {
     if (!selected) return;
@@ -273,54 +295,82 @@ export function OneScreenClient({
       setGenSubject((cur) => (cur === subjectName ? null : cur));
     }
   }
-  // 저장 입력(보고서 필드)을 과목별로 조립 — sendSubject·queueClassnote 공용. 초안 없으면 자동 작성분 사용.
-  function buildSaveInput(subjectName: string) {
-    if (!selected) return null;
-    const idx = selected.subjects.findIndex((su) => su.name === subjectName);
-    const su = selected.subjects[idx];
-    const existing = reports[selected.id]?.[subjectName];
-    const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(selected, idx);
+  // 저장 입력(보고서 필드)을 (학생,과목)별로 조립 — 카드/표 공용. 초안 없으면 자동 작성분 사용.
+  function buildSaveInputFor(student: OneScreenStudent, subjectName: string) {
+    const idx = student.subjects.findIndex((su) => su.name === subjectName);
+    const su = student.subjects[idx];
+    const existing = reports[student.id]?.[subjectName];
+    const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(student, idx);
     const examInfo = [
-      selected.tests.daily.score != null ? `일일 ${selected.tests.daily.score}/${selected.tests.daily.max}` : null,
-      selected.tests.check.score != null ? `확인 ${selected.tests.check.score}/${selected.tests.check.max}` : null,
+      student.tests.daily.score != null ? `일일 ${student.tests.daily.score}/${student.tests.daily.max}` : null,
+      student.tests.check.score != null ? `확인 ${student.tests.check.score}/${student.tests.check.max}` : null,
     ]
       .filter(Boolean)
       .join(", ");
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
     const dailyTest =
-      selected.tests.daily.score != null ? `${selected.tests.daily.max}문제 중 ${selected.tests.daily.score}개` : "";
+      student.tests.daily.score != null ? `${student.tests.daily.max}문제 중 ${student.tests.daily.score}개` : "";
     const checkTest =
-      selected.tests.check.score != null ? `${selected.tests.check.max}문제 중 ${selected.tests.check.score}개` : "";
+      student.tests.check.score != null ? `${student.tests.check.max}문제 중 ${student.tests.check.score}개` : "";
     return {
       draft,
       input: {
-        studentId: selected.id,
+        studentId: student.id,
         textbook: su?.textbook || "",
         makeup: su?.makeup ?? false,
         progress: su ? `${su.name} ${su.today}`.trim() : "",
         examInfo,
-        homeworkScore: selected.homework,
+        homeworkScore: student.homework,
         dailyTest,
         checkTest,
-        attitude: selected.attitude ?? "",
+        attitude: student.attitude ?? "",
         notes: draft,
         subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
       },
     };
   }
+  function buildSaveInput(subjectName: string) {
+    if (!selected) return null;
+    return buildSaveInputFor(selected, subjectName);
+  }
+
+  // ── 저장·발송 코어(카드·표 공용) — (학생,과목) 저장/큐잉 + reports state 반영. ──
+  async function saveRecord(student: OneScreenStudent, subjectName: string) {
+    const built = buildSaveInputFor(student, subjectName);
+    const res = await saveLessonReport(built.input);
+    if (res.ok) {
+      // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
+      patchReport(student.id, subjectName, (r) => ({
+        ...r,
+        draft: built.draft,
+        sent: true,
+        shareToken: res.shareToken ?? r.shareToken,
+      }));
+    }
+    return res;
+  }
+  async function queueOne(student: OneScreenStudent, subjectName: string) {
+    const built = buildSaveInputFor(student, subjectName);
+    const res = await saveAndQueueClassnote(built.input);
+    if (res.ok) {
+      patchReport(student.id, subjectName, (r) => ({
+        ...r,
+        draft: built.draft,
+        sent: true,
+        shareToken: res.shareToken ?? r.shareToken,
+        classnoteStatus: res.status,
+      }));
+    }
+    return res;
+  }
 
   async function sendSubject(subjectName: string, channel: string) {
     if (!selected) return;
-    const built = buildSaveInput(subjectName);
-    if (!built) return;
-    const { draft, input } = built;
-    const res = await saveLessonReport(input);
+    const res = await saveRecord(selected, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "보고서 저장에 실패했습니다");
       return;
     }
-    // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사하게.
-    patchReport(selected.id, subjectName, () => ({ draft, sent: true, shareToken: res.shareToken }));
     // 채널은 pdf(인쇄 미리보기 창)·save(기록 저장)뿐. 카톡·문자 자동발송(알림톡)은 후속 —
     // 지금은 저장 후 하단 '학부모 공유 링크' 복사로 수동 전달(별도 버튼 제거).
     if (channel === "pdf" && res.id) {
@@ -335,24 +385,14 @@ export function OneScreenClient({
     }
   }
 
-  // ClassNote 발송 — 저장 + 큐 적재. 실제 게시는 로컬 워커가 백그라운드로(강사는 대기 안 함).
+  // ClassNote 발송(카드) — 저장 + 큐 적재. 실제 게시는 로컬 워커가 백그라운드로(강사는 대기 안 함).
   async function queueClassnote(subjectName: string) {
     if (!selected) return;
-    const built = buildSaveInput(subjectName);
-    if (!built) return;
-    const student = selected;
-    const res = await saveAndQueueClassnote(built.input);
+    const res = await queueOne(selected, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "ClassNote 발송 큐 적재에 실패했습니다");
       return;
     }
-    patchReport(student.id, subjectName, (r) => ({
-      ...r,
-      draft: built.draft,
-      sent: true,
-      shareToken: res.shareToken ?? r.shareToken,
-      classnoteStatus: res.status,
-    }));
     if (res.status === "revoked") {
       toast.error(`${subjectName} — 취소된 링크입니다. 재발급 후 발송하세요`);
       return;
@@ -374,6 +414,65 @@ export function OneScreenClient({
               ? "오래된 보고서라 발송에서 제외됩니다"
               : "대기 중";
     toast.success(`${subjectName} ClassNote — ${msg}`);
+  }
+
+  // ── 표(그리드) 행별/일괄 — 카드와 같은 코어(queueOne/saveRecord) 재사용. 오늘 진도 있는 행만. ──
+  async function sendRow(student: OneScreenStudent, subjectName: string) {
+    const res = await queueOne(student, subjectName);
+    if (!res.ok) {
+      toast.error(res.error ?? "발송에 실패했습니다");
+      return;
+    }
+    if (res.status === "name_conflict") {
+      toast.error(`${student.name} — 동명이인이 있어 발송을 막았습니다(학생 관리에서 ClassNote 이름 지정)`);
+    } else if (res.status === "revoked") {
+      toast.error(`${student.name} — 취소된 링크입니다(재발급 필요)`);
+    } else if (res.status === "too_old") {
+      toast.message(`${student.name} — 오래된 보고서라 발송에서 제외됩니다`);
+    } else {
+      toast.success(`${student.name} ${subjectName} — 발송 대기`);
+    }
+  }
+  async function saveAllVisible() {
+    const rows = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+    if (rows.length === 0) {
+      toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
+      return;
+    }
+    let ok = 0;
+    let fail = 0;
+    for (const r of rows) {
+      const res = await saveRecord(r.student, r.subject.name);
+      if (res.ok) ok++;
+      else fail++;
+    }
+    toast.success(`${ok}건 저장 완료${fail ? ` · ${fail}건 실패` : ""}`);
+  }
+  async function sendAllVisible() {
+    const rows = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+    if (rows.length === 0) {
+      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요");
+      return;
+    }
+    if (!window.confirm(`표시된 ${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)`))
+      return;
+    let queued = 0;
+    let blocked = 0;
+    let skipped = 0;
+    let fail = 0;
+    for (const r of rows) {
+      const res = await queueOne(r.student, r.subject.name);
+      if (!res.ok) fail++;
+      else if (res.status === "queued") queued++;
+      else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
+      else skipped++; // success/processing/too_old
+    }
+    toast.success(
+      `발송 대기 ${queued}건` +
+        (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
+        (skipped ? ` · 제외 ${skipped}건` : "") +
+        (fail ? ` · 실패 ${fail}건` : ""),
+    );
   }
 
   // 공유링크 취소(revoke) — 학부모 열람 즉시 차단. 대상은 그 과목의 현재 shareToken.
@@ -551,10 +650,30 @@ export function OneScreenClient({
         onFilter={setClassFilter}
         doneCount={doneCount}
         total={students.length}
+        view={view}
+        onView={setView}
       />
 
       <OneScreenHubBar stats={hubStats} todayClasses={todayClasses} />
 
+      {view === "grid" ? (
+        <OneScreenGrid
+          students={visible}
+          reports={reports}
+          attitudes={ATTITUDE}
+          homeworks={HOMEWORK}
+          onProgress={setProgressFor}
+          onStudyGrade={setStudyGradeFor}
+          onSemester={setSemesterFor}
+          onScore={setScoreFor}
+          onAttitude={setAttitudeValue}
+          onHomework={setHomeworkValue}
+          onTextbook={setTextbookFor}
+          onSendRow={sendRow}
+          onSaveAll={saveAllVisible}
+          onSendAll={sendAllVisible}
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
         <StudentList
           students={visible}
@@ -616,6 +735,7 @@ export function OneScreenClient({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

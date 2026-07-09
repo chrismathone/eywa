@@ -8,6 +8,8 @@ export function OneScreenTopBar({
   onFilter,
   doneCount,
   total,
+  view,
+  onView,
 }: {
   today: string;
   classTags: readonly string[];
@@ -15,6 +17,8 @@ export function OneScreenTopBar({
   onFilter: (tag: string) => void;
   doneCount: number;
   total: number;
+  view: "card" | "grid";
+  onView: (v: "card" | "grid") => void;
 }) {
   const pctDone = total ? Math.round((doneCount / total) * 100) : 0;
   return (
@@ -53,6 +57,23 @@ export function OneScreenTopBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {/* 카드 ↔ 표(스프레드시트) 뷰 전환 */}
+        <div className="border-line flex items-center rounded-md border p-0.5">
+          {(["card", "grid"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onView(v)}
+              aria-pressed={view === v}
+              className={`rounded-sm px-2 py-1 text-[11px] font-semibold transition ${
+                view === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+              }`}
+            >
+              {v === "card" ? "카드" : "표"}
+            </button>
+          ))}
+        </div>
+        <span className="bg-line h-4 w-px" aria-hidden />
         <div className="bg-bg-soft relative h-2 w-28 overflow-hidden rounded-pill">
           <div
             className="bg-primary absolute inset-y-0 left-0 rounded-pill transition-all"
