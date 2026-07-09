@@ -97,7 +97,9 @@ export function OneScreenClient({
   const [classFilter, setClassFilter] = useState<string>("전체");
   const [view, setView] = useState<"card" | "grid">("card"); // 카드(학생별) ↔ 표(반 전체 대량작성)
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
-  const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(버튼 로딩)
+  const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
+  const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
+  const [bulkGen, setBulkGen] = useState(false); // 표 일괄 자동작성 진행중
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
   const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
@@ -284,31 +286,72 @@ export function OneScreenClient({
     if (!selected) return;
     setTextbookFor(selected.id, subjectName, text);
   }
-  function toggleMakeup(subjectName: string) {
-    if (!selected) return;
-    patch(selected.id, (s) => ({
+  function toggleMakeupFor(studentId: string, subjectName: string) {
+    patch(studentId, (s) => ({
       ...s,
       subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, makeup: !su.makeup } : su)),
     }));
   }
-  async function autoWriteSubject(subjectName: string) {
+  function toggleMakeup(subjectName: string) {
     if (!selected) return;
-    const student = selected; // 클로저 고정 — 생성 중 학생 전환돼도 원래 학생에 반영
+    toggleMakeupFor(selected.id, subjectName);
+  }
+  // AI 학부모 멘트 생성 코어(카드·표 공용) — 성공 시 멘트, 실패 시 결정적 템플릿 폴백. reports state의 draft에 반영.
+  async function generateDraftFor(student: OneScreenStudent, subjectName: string) {
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     if (idx < 0) return;
-    setGenSubject(subjectName);
     try {
       const res = await generateReportComment(buildReportCommentInput(student, idx));
-      // AI 성공 시 멘트, 실패(키 없음·오류·빈응답) 시 결정적 템플릿으로 폴백(무중단).
       const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
       if (!res.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
       patchReport(student.id, subjectName, (r) => ({ ...r, draft: text }));
     } catch {
       patchReport(student.id, subjectName, (r) => ({ ...r, draft: buildSubjectReport(student, idx) }));
       toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
+    }
+  }
+  async function autoWriteSubject(subjectName: string) {
+    if (!selected) return;
+    const student = selected; // 클로저 고정 — 생성 중 학생 전환돼도 원래 학생에 반영
+    setGenSubject(subjectName);
+    try {
+      await generateDraftFor(student, subjectName);
     } finally {
       setGenSubject((cur) => (cur === subjectName ? null : cur));
     }
+  }
+  // 표: 행별 자동작성(genKey로 그 행만 로딩) + 일괄 자동작성(순차). 생성된 draft는 일괄 발송이 그대로 사용.
+  async function autoWriteRow(student: OneScreenStudent, subjectName: string) {
+    const key = `${student.id}::${subjectName}`;
+    setGenKey(key);
+    try {
+      await generateDraftFor(student, subjectName);
+    } finally {
+      setGenKey((cur) => (cur === key ? null : cur));
+    }
+  }
+  async function autoWriteAllVisible() {
+    const rows = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+    if (rows.length === 0) {
+      toast.message("자동작성할 행이 없습니다 — 오늘 진도를 입력하세요");
+      return;
+    }
+    setBulkGen(true);
+    try {
+      for (const r of rows) {
+        setGenKey(`${r.student.id}::${r.subject.name}`);
+        await generateDraftFor(r.student, r.subject.name);
+      }
+    } finally {
+      setGenKey(null);
+      setBulkGen(false);
+    }
+    toast.success(`${rows.length}건 자동작성 완료`);
+  }
+  // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
+  function openCard(studentId: string) {
+    setSelId(studentId);
+    setView("card");
   }
   // 저장 입력(보고서 필드)을 (학생,과목)별로 조립 — 카드/표 공용. 초안 없으면 자동 작성분 사용.
   function buildSaveInputFor(student: OneScreenStudent, subjectName: string) {
@@ -689,6 +732,12 @@ export function OneScreenClient({
           onSendAll={sendAllVisible}
           allowTestMax={allowTeacherTestMax}
           onMax={setMaxFor}
+          onMakeup={toggleMakeupFor}
+          onAutoWrite={autoWriteRow}
+          onAutoWriteAll={autoWriteAllVisible}
+          onOpenCard={openCard}
+          genKey={genKey}
+          bulkGen={bulkGen}
         />
       ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">

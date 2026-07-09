@@ -189,6 +189,12 @@ export function OneScreenGrid({
   onSendAll,
   allowTestMax,
   onMax,
+  onMakeup,
+  onAutoWrite,
+  onAutoWriteAll,
+  onOpenCard,
+  genKey,
+  bulkGen,
 }: {
   students: OneScreenStudent[]; // 현재 필터(반)로 보이는 학생만
   reports: Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → 발송상태
@@ -206,6 +212,12 @@ export function OneScreenGrid({
   onSendAll: () => void;
   allowTestMax: boolean; // 강사 문항수 변경 허용(학원 설정)
   onMax: (studentId: string, which: "daily" | "check", v: number) => void;
+  onMakeup: (studentId: string, subjectName: string) => void; // 보강 토글
+  onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
+  onAutoWriteAll: () => void; // 표시 행 전체 자동작성
+  onOpenCard: (studentId: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
+  genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
+  bulkGen?: boolean; // 전체 자동작성 진행중
 }) {
   const rows = buildGridRows(students);
   const eligible = rows.filter((r) => isReportEligible(r.subject)).length;
@@ -226,28 +238,31 @@ export function OneScreenGrid({
           표시 <span className="text-foreground font-bold">{rows.length}</span>행 · 발송가능(진도 입력){" "}
           <span className="text-foreground font-bold">{eligible}</span>행
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <Button variant="outline" size="sm" onClick={onSaveAll} disabled={eligible === 0}>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Button variant="ghost" size="sm" onClick={onAutoWriteAll} disabled={eligible === 0 || bulkGen}>
+            {bulkGen ? "자동작성 중…" : "전체 자동작성"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={onSaveAll} disabled={eligible === 0 || bulkGen}>
             일괄 저장
           </Button>
-          <Button size="sm" onClick={onSendAll} disabled={eligible === 0}>
+          <Button size="sm" onClick={onSendAll} disabled={eligible === 0 || bulkGen}>
             ClassNote 일괄 발송
           </Button>
         </div>
       </div>
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
-        {/* table-fixed + colgroup — 헤더/본문 열 폭을 결정적으로 고정해 정렬 어긋남 제거. */}
-        <table className="w-full min-w-[1140px] table-fixed border-collapse text-[12px]">
+        {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
+        <table className="table-fixed border-collapse text-[12px]">
           <colgroup>
-            <col className="w-[150px]" /> {/* 학생·반 */}
-            <col /> {/* 진도 — 나머지 폭 */}
-            <col className="w-[100px]" /> {/* 일일 */}
-            <col className="w-[100px]" /> {/* 확인 */}
-            <col className="w-[116px]" /> {/* 태도 */}
-            <col className="w-[116px]" /> {/* 과제 */}
-            <col className="w-[180px]" /> {/* 교재명 */}
-            <col className="w-[120px]" /> {/* 발송 */}
+            <col className="w-[132px]" /> {/* 학생·반 */}
+            <col className="w-[210px]" /> {/* 진도 */}
+            <col className="w-[92px]" /> {/* 일일 */}
+            <col className="w-[92px]" /> {/* 확인 */}
+            <col className="w-[104px]" /> {/* 태도 */}
+            <col className="w-[104px]" /> {/* 과제 */}
+            <col className="w-[160px]" /> {/* 교재명 · 보강 */}
+            <col className="w-[150px]" /> {/* 자동작성 · 카드 · 발송 */}
           </colgroup>
           <thead>
             <tr className="bg-bg-soft">
@@ -257,8 +272,8 @@ export function OneScreenGrid({
               <th className={`${TH} text-center`}>확인</th>
               <th className={TH}>태도</th>
               <th className={TH}>과제</th>
-              <th className={TH}>교재명</th>
-              <th className={`${TH} text-center`}>발송</th>
+              <th className={TH}>교재명 · 보강</th>
+              <th className={TH}>발송 · 편집</th>
             </tr>
           </thead>
           <tbody>
@@ -267,6 +282,8 @@ export function OneScreenGrid({
               const rep = reports[student.id]?.[subject.name];
               const badge = classnoteBadge(rep?.classnoteStatus);
               const att = student.attendance;
+              const genRowBusy = genKey === key; // 이 행 자동작성 중
+              const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
               return (
                 <tr key={key} className="hover:bg-bg-soft/50">
                   <td className={TD}>
@@ -356,17 +373,50 @@ export function OneScreenGrid({
                     </Select>
                   </td>
                   <td className={TD}>
-                    <input
-                      type="text"
-                      value={subject.textbook ?? ""}
-                      onChange={(e) => onTextbook(student.id, subject.name, e.target.value)}
-                      placeholder="교재명"
-                      aria-label={`${student.name} ${subject.name} 교재명`}
-                      className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
-                    />
+                    <div className="flex flex-col gap-1">
+                      <input
+                        type="text"
+                        value={subject.textbook ?? ""}
+                        onChange={(e) => onTextbook(student.id, subject.name, e.target.value)}
+                        placeholder="교재명"
+                        aria-label={`${student.name} ${subject.name} 교재명`}
+                        className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+                      />
+                      <label className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]">
+                        <input
+                          type="checkbox"
+                          checked={!!subject.makeup}
+                          onChange={() => onMakeup(student.id, subject.name)}
+                          className="accent-primary size-3.5"
+                          aria-label={`${student.name} ${subject.name} 보강`}
+                        />
+                        보강
+                      </label>
+                    </div>
                   </td>
-                  <td className={`${TD} text-center`}>
-                    <div className="flex flex-col items-center gap-1">
+                  <td className={TD}>
+                    <div className="flex flex-col items-stretch gap-1">
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onAutoWrite(student, subject.name)}
+                          disabled={genRowBusy || bulkGen}
+                          title="AI 학부모 멘트 자동작성 (발송 문구)"
+                          className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-semibold disabled:opacity-50 ${
+                            hasDraft ? "text-primary" : "text-text-dim"
+                          }`}
+                        >
+                          {genRowBusy ? "…" : hasDraft ? "✓멘트" : "자동작성"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenCard(student.id)}
+                          title="카드로 열어 본문·첨부·링크 편집"
+                          className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-[11px] font-semibold"
+                        >
+                          카드
+                        </button>
+                      </div>
                       <Button
                         size="sm"
                         variant="outline"
@@ -375,7 +425,9 @@ export function OneScreenGrid({
                       >
                         발송
                       </Button>
-                      {badge ? <span className={`text-[10px] font-semibold ${badge.cls}`}>{badge.label}</span> : null}
+                      {badge ? (
+                        <span className={`text-center text-[10px] font-semibold ${badge.cls}`}>{badge.label}</span>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
