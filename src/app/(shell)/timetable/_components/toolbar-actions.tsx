@@ -6,6 +6,7 @@ import { TimetableImportDialog } from "./import-dialog";
 import { StructureImportDialog } from "./structure-import-dialog";
 import { syncSheetsNow } from "@/features/integrations/server/actions";
 import { supportsTimetableImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 export function TimetableToolbarActions({
   subject,
@@ -24,6 +25,8 @@ export function TimetableToolbarActions({
   const [syncing, startSync] = useTransition();
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const subjectKey = subject ?? "math";
+  // 과목 라벨(수학/영어…)은 학원설정 단일 소스에서 — 툴팁 등 문구 하드코딩 금지(클라는 useSubjectMaps 훅).
+  const subjectLabel = useSubjectMaps().labelOf(subjectKey);
   const compactParam = compact1h.length ? `&compact1h=${[...compact1h].sort((a, b) => a - b).join(",")}` : "";
   const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subjectKey)}${compactParam}`;
   // 가져오기(수강편집 라운드트립)는 math 전용(영어는 내보내기 전용). 파일·시트 두 경로 모두 게이트.
@@ -64,7 +67,7 @@ export function TimetableToolbarActions({
               type="button"
               onClick={pushToSheet}
               disabled={syncing}
-              title={syncMsg ?? "수학 시간표 전체를 연결된 구글 시트에 반영(원장 전용)"}
+              title={syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영(원장 전용)`}
               className={btnCls}
             >
               {syncing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
