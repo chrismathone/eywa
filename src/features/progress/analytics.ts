@@ -45,12 +45,14 @@ export function computeSpeedStats(entries: ProgressEntry[], sinceDays: number, t
   for (let i = 1; i < win.length; i++) {
     advancement += Math.max(0, win[i]!.globalPosition - win[i - 1]!.globalPosition);
   }
-  const span = Math.max(1, daysBetween(win[0]!.entryDate, win[win.length - 1]!.entryDate));
+  // 창이 하루 이내(같은 날짜만)면 span=0 → 일당 속도 산출 불가 → 0(edutrix days<=0 가드).
+  // Math.max(1,…)로 span을 1일로 깔면 하루치 전진을 매일 반복으로 외삽해 허위 예측이 난다.
+  const span = daysBetween(win[0]!.entryDate, win[win.length - 1]!.entryDate);
   return {
     advancement,
     lessonDays,
     speedPerLessonDay: lessonDays > 0 ? advancement / lessonDays : 0,
-    speedPerDay: advancement / span,
+    speedPerDay: span >= 1 ? advancement / span : 0,
     windowEntries: win.length,
   };
 }

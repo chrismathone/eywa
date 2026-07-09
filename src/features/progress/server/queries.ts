@@ -107,11 +107,12 @@ async function peerSpeeds(
 ): Promise<number[]> {
   const { data: peers } = await supabase
     .from("students")
-    .select("id")
+    .select("id, status")
     .eq("tenant_id", tenantId)
-    .eq("grade", grade)
-    .neq("status", "withdrawn");
-  const ids = (peers ?? []).map((p) => p.id as string);
+    .eq("grade", grade);
+  // status <> 'withdrawn'를 JS로 판정 — Postgres neq는 status=NULL을 UNKNOWN→탈락시켜
+  // NULL-status 또래(및 대상 학생)가 풀에서 누락되는 걸 방지(NULL은 미탈원으로 간주).
+  const ids = (peers ?? []).filter((p) => p.status !== "withdrawn").map((p) => p.id as string);
   if (ids.length === 0) return [];
 
   const { data: conts } = await supabase

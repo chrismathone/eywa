@@ -36,6 +36,18 @@ describe("computeSpeedStats", () => {
     expect(computeSpeedStats([], 30, today).speedPerLessonDay).toBe(0);
     expect(computeSpeedStats([{ globalPosition: 5, entryDate: "2026-07-08" }], 30, today).speedPerDay).toBe(0);
   });
+  it("창이 하루 이내(같은 날짜만) → speedPerDay 0(허위 예측 방지), speedPerLessonDay는 산출", () => {
+    const s = computeSpeedStats(
+      [
+        { globalPosition: 100, entryDate: "2026-07-09" },
+        { globalPosition: 103, entryDate: "2026-07-09" },
+      ],
+      30,
+      today,
+    );
+    expect(s.speedPerLessonDay).toBe(3); // 같은날 3차시 / 수업일 1
+    expect(s.speedPerDay).toBe(0); // span 0 → 일당 속도 불가
+  });
 });
 
 describe("percentileOf", () => {
