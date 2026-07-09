@@ -271,9 +271,12 @@ export function OneScreenClient({
     if (!selected) return;
     setHomeworkValue(selected.id, selected.homework === h ? "" : h);
   }
+  function setDraftFor(studentId: string, subjectName: string, text: string) {
+    patchReport(studentId, subjectName, (r) => ({ ...r, draft: text }));
+  }
   function setSubjectDraft(subjectName: string, text: string) {
     if (!selected) return;
-    patchReport(selected.id, subjectName, (r) => ({ ...r, draft: text }));
+    setDraftFor(selected.id, subjectName, text);
   }
   // 교재명·보강 — 과목별(subjectName으로 해당 과목만 갱신). 자동저장(patch→queueSave)에 실림.
   function setTextbookFor(studentId: string, subjectName: string, text: string) {
@@ -330,8 +333,15 @@ export function OneScreenClient({
       setGenKey((cur) => (cur === key ? null : cur));
     }
   }
-  async function autoWriteAllVisible() {
-    const rows = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+  // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시된 발송가능(진도 입력) 행 전체.
+  function selectRows(keys?: string[]) {
+    const all = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+    if (!keys || keys.length === 0) return all;
+    const set = new Set(keys);
+    return all.filter((r) => set.has(r.key));
+  }
+  async function autoWriteAllVisible(keys?: string[]) {
+    const rows = selectRows(keys);
     if (rows.length === 0) {
       toast.message("자동작성할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
@@ -491,8 +501,8 @@ export function OneScreenClient({
       toast.success(`${student.name} ${subjectName} — 발송 대기`);
     }
   }
-  async function saveAllVisible() {
-    const rows = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+  async function saveAllVisible(keys?: string[]) {
+    const rows = selectRows(keys);
     if (rows.length === 0) {
       toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
@@ -506,13 +516,13 @@ export function OneScreenClient({
     }
     toast.success(`${ok}건 저장 완료${fail ? ` · ${fail}건 실패` : ""}`);
   }
-  async function sendAllVisible() {
-    const rows = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+  async function sendAllVisible(keys?: string[]) {
+    const rows = selectRows(keys);
     if (rows.length === 0) {
       toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
     }
-    if (!window.confirm(`표시된 ${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)`))
+    if (!window.confirm(`${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)`))
       return;
     let queued = 0;
     let blocked = 0;
@@ -727,6 +737,7 @@ export function OneScreenClient({
           onAttitude={setAttitudeValue}
           onHomework={setHomeworkValue}
           onTextbook={setTextbookFor}
+          onDraft={setDraftFor}
           onSendRow={sendRow}
           onSaveAll={saveAllVisible}
           onSendAll={sendAllVisible}

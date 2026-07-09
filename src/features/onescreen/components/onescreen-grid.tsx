@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Select,
   SelectContent,
@@ -184,6 +185,7 @@ export function OneScreenGrid({
   onAttitude,
   onHomework,
   onTextbook,
+  onDraft,
   onSendRow,
   onSaveAll,
   onSendAll,
@@ -207,20 +209,40 @@ export function OneScreenGrid({
   onAttitude: (studentId: string, a: string | null) => void;
   onHomework: (studentId: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
+  onDraft: (studentId: string, subjectName: string, text: string) => void; // 학부모 문구(멘트) 편집
   onSendRow: (student: OneScreenStudent, subjectName: string) => void;
-  onSaveAll: () => void;
-  onSendAll: () => void;
+  onSaveAll: (keys?: string[]) => void; // keys(선택 행) 있으면 그 행만, 없으면 전체
+  onSendAll: (keys?: string[]) => void;
   allowTestMax: boolean; // 강사 문항수 변경 허용(학원 설정)
   onMax: (studentId: string, which: "daily" | "check", v: number) => void;
   onMakeup: (studentId: string, subjectName: string) => void; // 보강 토글
   onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
-  onAutoWriteAll: () => void; // 표시 행 전체 자동작성
+  onAutoWriteAll: (keys?: string[]) => void; // 선택(또는 전체) 행 자동작성
   onOpenCard: (studentId: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
 }) {
   const rows = buildGridRows(students);
-  const eligible = rows.filter((r) => isReportEligible(r.subject)).length;
+  const eligibleRows = rows.filter((r) => isReportEligible(r.subject));
+  const eligible = eligibleRows.length;
+  // 행 선택(체크) — 일괄 작업 대상. 선택 없으면 발송가능 전체가 대상.
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const selectedKeys = eligibleRows.filter((r) => checked.has(r.key)).map((r) => r.key);
+  const allChecked = eligible > 0 && selectedKeys.length === eligible;
+  const toggleRow = (k: string) =>
+    setChecked((prev) => {
+      const n = new Set(prev);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+  const toggleAll = () =>
+    setChecked((prev) => {
+      const n = new Set(prev);
+      if (allChecked) eligibleRows.forEach((r) => n.delete(r.key));
+      else eligibleRows.forEach((r) => n.add(r.key));
+      return n;
+    });
 
   if (rows.length === 0) {
     return (
@@ -235,37 +257,64 @@ export function OneScreenGrid({
       {/* 일괄 바 — 오늘 진도 있는 행만 대상(빈 행 skip). */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-md border px-4 py-2.5">
         <span className="text-text-dim text-[12px]">
-          표시 <span className="text-foreground font-bold">{rows.length}</span>행 · 발송가능(진도 입력){" "}
-          <span className="text-foreground font-bold">{eligible}</span>행
+          표시 <span className="text-foreground font-bold">{rows.length}</span> · 발송가능{" "}
+          <span className="text-foreground font-bold">{eligible}</span>
+          {selectedKeys.length ? (
+            <>
+              {" "}
+              · 선택 <span className="text-primary font-bold">{selectedKeys.length}</span>
+            </>
+          ) : null}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Button variant="ghost" size="sm" onClick={onAutoWriteAll} disabled={eligible === 0 || bulkGen}>
-            {bulkGen ? "자동작성 중…" : "전체 자동작성"}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onAutoWriteAll(selectedKeys)}
+            disabled={eligible === 0 || bulkGen}
+          >
+            {bulkGen ? "자동작성 중…" : selectedKeys.length ? `선택 ${selectedKeys.length} 자동작성` : "전체 자동작성"}
           </Button>
-          <Button variant="outline" size="sm" onClick={onSaveAll} disabled={eligible === 0 || bulkGen}>
-            일괄 저장
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSaveAll(selectedKeys)}
+            disabled={eligible === 0 || bulkGen}
+          >
+            {selectedKeys.length ? "선택 저장" : "일괄 저장"}
           </Button>
-          <Button size="sm" onClick={onSendAll} disabled={eligible === 0 || bulkGen}>
-            ClassNote 일괄 발송
+          <Button size="sm" onClick={() => onSendAll(selectedKeys)} disabled={eligible === 0 || bulkGen}>
+            {selectedKeys.length ? `선택 ${selectedKeys.length} 발송` : "ClassNote 일괄 발송"}
           </Button>
         </div>
       </div>
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
         {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
-        <table className="table-fixed border-collapse text-[12px]">
+        <table className="w-full min-w-[1240px] table-fixed border-collapse text-[12px]">
           <colgroup>
-            <col className="w-[132px]" /> {/* 학생·반 */}
-            <col className="w-[210px]" /> {/* 진도 */}
-            <col className="w-[92px]" /> {/* 일일 */}
-            <col className="w-[92px]" /> {/* 확인 */}
-            <col className="w-[104px]" /> {/* 태도 */}
-            <col className="w-[104px]" /> {/* 과제 */}
-            <col className="w-[160px]" /> {/* 교재명 · 보강 */}
-            <col className="w-[150px]" /> {/* 자동작성 · 카드 · 발송 */}
+            <col className="w-[34px]" /> {/* 선택 */}
+            <col className="w-[128px]" /> {/* 학생·반 */}
+            <col className="w-[200px]" /> {/* 진도 */}
+            <col className="w-[88px]" /> {/* 일일 */}
+            <col className="w-[88px]" /> {/* 확인 */}
+            <col className="w-[96px]" /> {/* 태도 */}
+            <col className="w-[96px]" /> {/* 과제 */}
+            <col className="w-[140px]" /> {/* 교재명 · 보강 */}
+            <col /> {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
+            <col className="w-[132px]" /> {/* 자동작성 · 카드 · 발송 */}
           </colgroup>
           <thead>
             <tr className="bg-bg-soft">
+              <th className={`${TH} text-center`}>
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={toggleAll}
+                  aria-label="발송가능 행 전체 선택"
+                  className="accent-primary size-3.5 align-middle"
+                />
+              </th>
               <th className={TH}>학생 · 반</th>
               <th className={TH}>진도(오늘)</th>
               <th className={`${TH} text-center`}>일일</th>
@@ -273,6 +322,7 @@ export function OneScreenGrid({
               <th className={TH}>태도</th>
               <th className={TH}>과제</th>
               <th className={TH}>교재명 · 보강</th>
+              <th className={TH}>학부모 문구</th>
               <th className={TH}>발송 · 편집</th>
             </tr>
           </thead>
@@ -286,6 +336,16 @@ export function OneScreenGrid({
               const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
               return (
                 <tr key={key} className="hover:bg-bg-soft/50">
+                  <td className={`${TD} text-center`}>
+                    <input
+                      type="checkbox"
+                      checked={checked.has(key)}
+                      disabled={!isReportEligible(subject)}
+                      onChange={() => toggleRow(key)}
+                      aria-label={`${student.name} ${subject.name} 선택`}
+                      className="accent-primary size-3.5 align-middle disabled:opacity-40"
+                    />
+                  </td>
                   <td className={TD}>
                     <div className="flex items-center gap-1.5">
                       <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
@@ -393,6 +453,16 @@ export function OneScreenGrid({
                         보강
                       </label>
                     </div>
+                  </td>
+                  <td className={TD}>
+                    {/* 학부모 문구(멘트) — 자동작성 채움 · 직접 편집 · 발송 전 확인. 우측 남는 폭 활용. */}
+                    <textarea
+                      value={rep?.draft ?? ""}
+                      onChange={(e) => onDraft(student.id, subject.name, e.target.value)}
+                      placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
+                      aria-label={`${student.name} ${subject.name} 학부모 문구`}
+                      className="border-line focus:border-primary scrollbar-thin h-[72px] w-full resize-none rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none"
+                    />
                   </td>
                   <td className={TD}>
                     <div className="flex flex-col items-stretch gap-1">
