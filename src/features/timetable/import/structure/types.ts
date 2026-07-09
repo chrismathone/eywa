@@ -156,6 +156,15 @@ export interface SchedulePlanItem {
   before?: { endTime: string | null; room: string | null; teacherNames: string[] };
 }
 
+/** classes 담임/기본강의실 갱신 계획 1건(apply payload) — teacherId/classroomId=null이면 그 필드 미변경. */
+export interface ApplyClassUpdate {
+  classId: string;
+  teacherId: string | null;
+  classroomId: string | null;
+  prevTeacherId: string | null; // 롤백 복원용
+  prevClassroomId: string | null;
+}
+
 /** 강의실 중복(같은 방·요일·시간 겹침 + 다른 수업/강사). */
 export interface RoomConflict {
   room: string;

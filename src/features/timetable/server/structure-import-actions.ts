@@ -12,6 +12,7 @@ import { TEACHER_SHEET_NAME } from "@/features/exports/english-timetable/teacher
 import { parseEywaTeacherGrid } from "@/features/timetable/import/structure/parse-eywa-grid";
 import { matchStructure } from "@/features/timetable/import/structure/match";
 import { computeStructureDiff } from "@/features/timetable/import/structure/diff";
+import { buildClassUpdates } from "@/features/timetable/import/structure/class-updates";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 import type {
   DryRunReport,
@@ -134,50 +135,6 @@ interface ApplyInsert {
   id: string; classId: string; day: DayOfWeek; startTime: string; endTime: string | null;
   teacherId: string | null; classroomId: string | null; slotTeacherLabel: string | null; slotRoomLabel: string | null;
 }
-interface ApplyClassUpdate {
-  classId: string; teacherId: string | null; classroomId: string | null;
-  prevTeacherId: string | null; prevClassroomId: string | null;
-}
-
-/**
- * classes 담임/기본강의실 계획 — 전 슬롯 **강사 이름 기준 최빈값**(apply-english-schedules.cjs 규칙:
- * 미해석 다수 강사가 해석 소수에게 담임을 뺏기지 않도록 이름으로 세고, 해석될 때만 반영). 강의실은 classroomId 최빈.
- * 해석·변경된 필드만(동률·미해석·기존동일은 제외). teacherId/classroomId=null이면 그 필드 미변경(RPC coalesce 유지).
- */
-function buildClassUpdates(match: MatchResult, ctx: ExistingContext): ApplyClassUpdate[] {
-  const prevById = new Map(ctx.classes.map((c) => [c.id, c]));
-  const nameToTeacherId = new Map<string, string | null>();
-  for (const s of match.resolved) if (!nameToTeacherId.has(s.teacherName)) nameToTeacherId.set(s.teacherName, s.teacherId);
-
-  const per = new Map<string, { names: Map<string, number>; rooms: Map<string, number> }>();
-  for (const s of match.resolved) {
-    if (!s.classId) continue;
-    const e = per.get(s.classId) ?? per.set(s.classId, { names: new Map(), rooms: new Map() }).get(s.classId)!;
-    e.names.set(s.teacherName, (e.names.get(s.teacherName) ?? 0) + 1);
-    if (s.classroomId) e.rooms.set(s.classroomId, (e.rooms.get(s.classroomId) ?? 0) + 1);
-  }
-  // 최빈값 — 동률(top2 동수)이면 null(모호 → 기존 유지).
-  const modal = (m: Map<string, number>): string | null => {
-    if (!m.size) return null;
-    const sorted = [...m.entries()].sort((a, b) => b[1] - a[1]);
-    if (sorted.length > 1 && sorted[0]![1] === sorted[1]![1]) return null;
-    return sorted[0]![0];
-  };
-
-  const updates: ApplyClassUpdate[] = [];
-  for (const [classId, e] of per) {
-    const prev = prevById.get(classId);
-    if (!prev) continue;
-    const modalName = modal(e.names);
-    const modalTeacherId = modalName ? nameToTeacherId.get(modalName) ?? null : null; // 미해석 최빈 → null(유지)
-    const modalRoomId = modal(e.rooms);
-    const setTeacher = modalTeacherId && modalTeacherId !== prev.teacherId ? modalTeacherId : null;
-    const setRoom = modalRoomId && modalRoomId !== prev.classroomId ? modalRoomId : null;
-    if (setTeacher || setRoom)
-      updates.push({ classId, teacherId: setTeacher, classroomId: setRoom, prevTeacherId: prev.teacherId, prevClassroomId: prev.classroomId });
-  }
-  return updates;
-}
 
 export type ApplyStructureState = {
   error?: string;
@@ -237,7 +194,11 @@ export async function applyStructureImport(expectedHash: string, subject: string
       slotRoomLabel: p.room,
     }));
 
-  const classUpdates = buildClassUpdates(match, ctx);
+  // classes 담임/강의실 동기화는 **변경된 반만**(수학 가져오기와 동일 원칙 — 변경분만 건드림).
+  const changedClassIds = new Set(
+    report.planItems.filter((p) => p.action !== "keep" && p.classId).map((p) => p.classId!),
+  );
+  const classUpdates = buildClassUpdates(match, ctx, changedClassIds);
   const today = kstToday();
   const payload = {
     label: "영어 시트 구조 import",
