@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { needsAttention, summarizeQueue, type QueueSummary } from "../classnote-queue";
 import { computeWritingRates, type TeacherRate, type TodayTarget } from "../writing-rate";
 
@@ -31,6 +32,7 @@ export type ClassnoteQueueView = {
   workers: WorkerStatus[];
   since: string; // 집계 시작일
   days: number;
+  sendEnabled: boolean; // ClassNote 실제 발송 스위치(false=dry-run, 재발송이 실제 전송 안 함)
 };
 
 // 워커 하트비트가 이 분(minutes) 이상 끊기면 오프라인(watch 데몬 15초 폴 → 넉넉히 3분).
@@ -88,7 +90,8 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
     return { hostname: w.hostname as string, lastSeenMinutes: Math.max(0, mins), online: mins < WORKER_OFFLINE_MINUTES };
   });
 
-  return { summary, items, workers, since, days };
+  const settings = await getTenantSettings();
+  return { summary, items, workers, since, days, sendEnabled: settings.report.classnoteSendEnabled };
 }
 
 export type WritingRatesView = { dates: string[]; rates: TeacherRate[] };

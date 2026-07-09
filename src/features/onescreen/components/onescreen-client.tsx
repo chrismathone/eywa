@@ -509,6 +509,10 @@ export function OneScreenClient({
       );
       return;
     }
+    if (res.status === "dry_run") {
+      toast.message(`${subjectName} — 저장됨(dry-run). 원장 설정(보고서)에서 'ClassNote 실제 발송'을 켜야 실제 전송됩니다`);
+      return;
+    }
     const msg =
       res.status === "queued"
         ? "발송 대기 — 워커가 자동으로 게시합니다"
@@ -535,6 +539,8 @@ export function OneScreenClient({
       toast.error(`${student.name} — 취소된 링크입니다(재발급 필요)`);
     } else if (res.status === "too_old") {
       toast.message(`${student.name} — 오래된 보고서라 발송에서 제외됩니다`);
+    } else if (res.status === "dry_run") {
+      toast.message(`${student.name} — 저장됨(dry-run · 승인 전 실제 발송 안 함)`);
     } else {
       toast.success(`${student.name} ${subjectName} — 발송 대기`);
     }
@@ -565,16 +571,19 @@ export function OneScreenClient({
     let queued = 0;
     let blocked = 0;
     let skipped = 0;
+    let dry = 0;
     let fail = 0;
     for (const r of rows) {
       const res = await queueOne(r.student, r.subject.name);
       if (!res.ok) fail++;
       else if (res.status === "queued") queued++;
+      else if (res.status === "dry_run") dry++;
       else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
       else skipped++; // success/processing/too_old
     }
     toast.success(
-      `발송 대기 ${queued}건` +
+      (dry ? `저장 ${dry}건(dry-run·발송 안 함) · ` : "") +
+        `발송 대기 ${queued}건` +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),

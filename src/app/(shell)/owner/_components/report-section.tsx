@@ -15,6 +15,30 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
 
   return (
     <SectionForm section="report" payload={r}>
+      {/* ClassNote 실제 발송 스위치 — 오발송 안전장치. 기본 OFF(dry-run): 발송 버튼이 저장만 함.
+          원장이 켜야 학부모에게 실제 전송(공유 DB+라이브 워커·이관분 오발송 방지). */}
+      <div
+        className={`mb-4 rounded-md border px-4 py-3 ${
+          r.classnoteSendEnabled ? "border-primary bg-primary/5" : "border-danger bg-danger/5"
+        }`}
+      >
+        <ToggleField
+          label="ClassNote 실제 발송 사용"
+          hint={
+            r.classnoteSendEnabled
+              ? "⚠️ 켜짐 — 발송 버튼이 실제로 학부모에게 전송합니다"
+              : "지금은 dry-run — 발송 버튼을 눌러도 저장만 하고 실제 전송하지 않습니다"
+          }
+          value={r.classnoteSendEnabled}
+          onChange={(v) => set({ classnoteSendEnabled: v })}
+        />
+        {!r.classnoteSendEnabled ? (
+          <p className="text-danger mt-1.5 text-[12px]">
+            안전을 위해 기본 꺼짐입니다. 실제 발송을 시작하려면 위 스위치를 켜세요(이관된 과거 보고서 오발송 방지).
+          </p>
+        ) : null}
+      </div>
+
       {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려
           내용이 짧아도 카드가 열을 끝까지 채운다(우측 하단 빈 배경 제거). */}
       <div className="grid items-stretch gap-4 xl:grid-cols-2">

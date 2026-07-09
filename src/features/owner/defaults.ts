@@ -139,6 +139,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
     noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).
+    classnoteSendEnabled: false, // 기본 OFF(dry-run) — 원장 승인 전까지 실제 발송 안 함(오발송 안전장치).
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   permissions: { overrides: [] },

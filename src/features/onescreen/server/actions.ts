@@ -152,6 +152,13 @@ export async function saveAndQueueClassnote(
   const saved = await saveLessonReport(input);
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
 
+  // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
+  // 공유 DB + 라이브 워커라 승인 전 실발송 방지(classnote_status 미변경 → 워커가 안 잡음).
+  const settings = await getTenantSettings();
+  if (!settings.report.classnoteSendEnabled) {
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "dry_run" };
+  }
+
   // 동명이인 감지 — ClassNote 이름 매칭이 첫 일치라 오발송 위험 → 자동 발송 차단(보고서 저장은 유지, 큐잉만 막음).
   // 강사가 학생 이름을 구분(예: "김민수(중2)")하거나 수동 확인 후 다시 시도. 워커는 'queued'만 잡아 name_conflict는 미처리.
   if (await hasClassnoteNameCollision(supabase, input.studentId)) {

@@ -38,7 +38,10 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
     setBusy(true);
     const res = await retryClassnote(ids);
     setBusy(false);
-    if (res.ok) {
+    if (res.ok && res.dryRun) {
+      toast.message("dry-run — 승인 전이라 실제 재발송 안 함. 원장 설정(보고서)에서 'ClassNote 실제 발송'을 켜야 전송됩니다");
+      setChecked(new Set());
+    } else if (res.ok) {
       toast.success(`${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}`);
       setChecked(new Set());
       router.refresh();
@@ -57,6 +60,12 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
 
   return (
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+      {!view.sendEnabled ? (
+        <div className="border-danger bg-danger/5 text-danger mb-3 rounded-md border px-3 py-2 text-[12px]">
+          <b>dry-run 모드</b> — 재발송을 눌러도 실제 전송되지 않습니다(저장/큐잉 안 함). 학원 설정 &gt; 보고서에서{" "}
+          <b>‘ClassNote 실제 발송’</b>을 켜야 전송됩니다.
+        </div>
+      ) : null}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-foreground text-[15px] font-semibold">ClassNote 발송 큐</h2>

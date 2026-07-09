@@ -7,13 +7,16 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { isClassnoteAllowed } from "@/features/onescreen/classnote-guard";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
  * **과거일(전 달 1일 이전)은 재차단**(isClassnoteAllowed) — 옛 보고서 대량 오발송 방지(edutrix 사고 교훈).
  */
-export async function retryClassnote(ids: string[]): Promise<{ ok: boolean; requeued?: number; skipped?: number; error?: string }> {
+export async function retryClassnote(
+  ids: string[],
+): Promise<{ ok: boolean; requeued?: number; skipped?: number; dryRun?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "owner"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
@@ -25,6 +28,12 @@ export async function retryClassnote(ids: string[]): Promise<{ ok: boolean; requ
   const allowed = (rows ?? []).filter((r) => isClassnoteAllowed(r.report_date as string)).map((r) => r.id as string);
   const skipped = (rows?.length ?? 0) - allowed.length;
   if (allowed.length === 0) return { ok: true, requeued: 0, skipped };
+
+  // 발송 안전 스위치 — 기본 OFF(dry-run). 원장 승인 전까지 실제 재발송(queued) 안 함.
+  const settings = await getTenantSettings();
+  if (!settings.report.classnoteSendEnabled) {
+    return { ok: true, requeued: 0, skipped, dryRun: true };
+  }
 
   const { error } = await supabase
     .from("lesson_reports")
