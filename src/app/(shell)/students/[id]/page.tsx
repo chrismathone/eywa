@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById } from "@/features/students/server/queries";
@@ -59,6 +59,8 @@ export default async function StudentDetailPage({
   const canEndEnrollment = (await accessLevelTenant(user.systemRole, "students")) === "full";
   // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
+  // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
+  const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
 
   return (
     <div className="space-y-6">
@@ -113,7 +115,7 @@ export default async function StudentDetailPage({
         {tab === "overview" ? (
           <OverviewTab student={student} />
         ) : tab === "classes" ? (
-          <ClassesTab student={student} canEnd={canEndEnrollment} canEditDates={canEditDates} />
+          <ClassesTab student={student} canEnd={canEndEnrollment} canEditDates={canEditDates} canEditSchedule={canEditSchedule} />
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} />
         ) : tab === "progress" ? (

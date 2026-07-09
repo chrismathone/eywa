@@ -5,9 +5,10 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
+import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
 import { kstToday } from "@/lib/date-kst";
 import {
   getClassAttendanceStats,
@@ -62,6 +63,8 @@ export default async function ClassDetailPage({
 
   // 수강 시작일 더블클릭 수정 = owner(원장) 권한 이상만(관리자 정정). 학생 상세 수업 탭과 동일 게이트.
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
+  // 분리등원 요일 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
+  const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
 
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -268,7 +271,17 @@ export default async function ClassDetailPage({
                       </p>
                     </WindowLink>
                     <div className="flex items-center gap-2">
-                      {attendanceBadge(s.attendanceDays) ? (
+                      {canEditSchedule && classDays.length > 1 ? (
+                        <EditableAttendanceCell enrollmentId={s.enrollmentId} classDays={classDays} attendanceDays={s.attendanceDays}>
+                          {attendanceBadge(s.attendanceDays) ? (
+                            <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 rounded-md border px-2 py-0.5 text-xs font-medium">
+                              {attendanceBadge(s.attendanceDays)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">모두</span>
+                          )}
+                        </EditableAttendanceCell>
+                      ) : attendanceBadge(s.attendanceDays) ? (
                         <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 rounded-md border px-2 py-0.5 text-xs font-medium">
                           {attendanceBadge(s.attendanceDays)}
                         </span>

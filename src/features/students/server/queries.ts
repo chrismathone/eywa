@@ -532,6 +532,9 @@ export type StudentClassRow = {
   schedule: ScheduleGroup[];
   // 등원요일로 필터링된 개별 슬롯(groupSchedule과 동일 필터) — 학생 주간 시간표 그리드 소스.
   slots: ClassSlot[];
+  // 분리등원 편집(EditableAttendanceCell)용: 실제 등원 요일(raw, []=전체) + 반 운영 요일(선택지).
+  attendanceDays: string[];
+  classDays: string[];
 };
 
 // 연속 교시 번호를 범위로 병합: [3,4,5,6]→"3-6교시", [2,3,5]→"2-3, 5교시", [2]→"2교시".
@@ -666,6 +669,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     const attDays = (Array.isArray(e.attendance_days) ? e.attendance_days : []) as string[];
     const attKo = attDays.map((d) => enumDayToKo(d as DayOfWeek));
     const rawSlots = schedByClass.get(e.class_id) ?? [];
+    // 반 운영 요일(분리등원 선택지) = 이 반 스케줄의 distinct 요일(요일순).
+    const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => rawSlots.some((s) => s.day === d));
     // 등원요일 필터(분리등원) = groupSchedule과 동일 규칙. 각 슬롯에 과목별 교시 라벨 부착(그리드 셀 힌트).
     const slots: ClassSlot[] = rawSlots
       .filter((s) => attKo.length === 0 || attKo.includes(enumDayToKo(s.day)))
@@ -693,6 +698,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
         periodsConfig,
       ),
       slots,
+      attendanceDays: attDays,
+      classDays,
     } satisfies StudentClassRow;
   });
 }
