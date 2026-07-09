@@ -78,7 +78,11 @@ export function computeStructureDiff(match: MatchResult, existing: ExistingSched
     const e = existingByKey.get(key);
     const tNames = t.teachers.map((x) => x.name);
     if (!e) {
-      planItems.push({ action: "create", classId: t.classId, className: t.className, day: t.day, startTime: t.startTime, endTime: t.endTime, room: t.room, teacherNames: tNames });
+      planItems.push({
+        action: "create", classId: t.classId, className: t.className, day: t.day, startTime: t.startTime,
+        endTime: t.endTime, room: t.room, teacherNames: tNames,
+        teacherId: t.teachers[0]?.teacherId ?? null, classroomId: t.classroomId,
+      });
       counts.create++;
       continue;
     }
@@ -92,6 +96,7 @@ export function computeStructureDiff(match: MatchResult, existing: ExistingSched
       planItems.push({
         action: "update", classId: t.classId, className: t.className, day: t.day, startTime: t.startTime,
         endTime: t.endTime, room: t.room, teacherNames: tNames, scheduleId: e.id,
+        teacherId: t.teachers[0]?.teacherId ?? null, classroomId: t.classroomId,
         before: { endTime: e.endTime, room: e.slotRoomLabel, teacherNames: e.slotTeacherLabel ? [e.slotTeacherLabel] : [] },
       });
       counts.update++;
@@ -136,6 +141,13 @@ export function computeStructureDiff(match: MatchResult, existing: ExistingSched
   // 5. 경고.
   for (const n of [...newClasses].sort((a, b) => a.localeCompare(b, "ko")))
     warnings.push(`반 "${n}"은 eywa에 없음 — 생성이 필요해 적용에서 제외됩니다.`);
+  // 합반(같은 반·요일·시각에 강사 복수) — v1은 단일 강사 행만 정합. 첫 강사로 기입되고 나머지는 미연결(경고).
+  for (const t of targetByKey.values()) {
+    if (t.teachers.length > 1)
+      warnings.push(
+        `합반 감지 "${t.className}" ${t.day} ${t.startTime}(강사 ${t.teachers.map((x) => x.name).join("·")}) — v1은 첫 강사만 연결됩니다(합반 구조 미지원).`,
+      );
+  }
   for (const cid of existingClassIds) {
     if (!targetClassIds.has(cid)) {
       const name = existing.find((e) => e.classId === cid)?.className ?? cid;

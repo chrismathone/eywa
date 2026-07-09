@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, Loader2, Sheet, X } from "lucide-react";
-import { previewStructureImport } from "@/features/timetable/server/structure-import-actions";
+import { AlertTriangle, Check, Loader2, RotateCcw, Sheet, X } from "lucide-react";
+import {
+  applyStructureImport,
+  previewStructureImport,
+  rollbackStructureImport,
+} from "@/features/timetable/server/structure-import-actions";
 import type { DryRunReport, SchedulePlanItem } from "@/features/timetable/import/structure/types";
 
 const KO_DAY: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
@@ -18,25 +22,76 @@ export function StructureImportDialog({ subject }: { subject: string }) {
   const [report, setReport] = useState<DryRunReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewing, startPreview] = useTransition();
+  // 적용/롤백 상태
+  const [confirming, setConfirming] = useState(false); // 2단계 확인(오적용 방지)
+  const [applying, startApply] = useTransition();
+  const [applied, setApplied] = useState<{ closed: number; inserted: number; classUpdated: number } | null>(null);
+  const [snapshotId, setSnapshotId] = useState<string | null>(null);
+  const [rolling, startRollback] = useTransition();
+  const [reverted, setReverted] = useState<string | null>(null);
 
+  function resetResult() {
+    setConfirming(false);
+    setApplied(null);
+    setSnapshotId(null);
+    setReverted(null);
+  }
   function preview() {
     setError(null);
     setReport(null);
+    resetResult();
     startPreview(async () => {
       const res = await previewStructureImport(subject);
       if (res.error) setError(res.error);
       else setReport(res.report ?? null);
     });
   }
+  function apply() {
+    if (!report) return;
+    setError(null);
+    startApply(async () => {
+      const res = await applyStructureImport(report.hash, subject);
+      if (res.error) {
+        setError(res.error);
+        // 스테일(시트/시간표 변경) — 미리보기 무효화, 재미리보기 유도.
+        if (res.staleHash) setReport(null);
+        setConfirming(false);
+      } else if (res.noop) {
+        setError("변경 사항이 없습니다(모두 최신).");
+        setConfirming(false);
+      } else {
+        setApplied(res.applied ?? null);
+        setSnapshotId(res.snapshotId ?? null);
+        setConfirming(false);
+      }
+    });
+  }
+  function rollback() {
+    if (!snapshotId) return;
+    setError(null);
+    startRollback(async () => {
+      const res = await rollbackStructureImport(snapshotId);
+      if (res.error) setError(res.error);
+      else {
+        setReverted(
+          `되돌리기 완료: 삭제 ${res.reverted?.deleted ?? 0} · 복원 ${res.reverted?.restored ?? 0} · 반 ${res.reverted?.classReverted ?? 0}`,
+        );
+        setSnapshotId(null);
+        setApplied(null);
+      }
+    });
+  }
   function close() {
     setOpen(false);
     setReport(null);
     setError(null);
+    resetResult();
   }
 
   const creates = report?.planItems.filter((p) => p.action === "create") ?? [];
   const updates = report?.planItems.filter((p) => p.action === "update") ?? [];
   const removes = report?.planItems.filter((p) => p.action === "remove") ?? [];
+  const changeCount = creates.length + updates.length + removes.length;
 
   return (
     <>
@@ -156,9 +211,64 @@ export function StructureImportDialog({ subject }: { subject: string }) {
                   <p className="text-text-faint text-[11px]">강의실 공유(같은 방·시간) {report.conflicts.length}건 — 정보용</p>
                 ) : null}
 
-                <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">
-                  미리보기 전용입니다. 실제 반영(class_schedules 쓰기)은 다음 단계에서 추가됩니다.
-                </p>
+                {/* 적용 / 롤백 */}
+                {applied ? (
+                  <div className="bg-blue-soft text-blue space-y-2 rounded-sm p-2 text-[12px]">
+                    <p className="flex items-center gap-1 font-semibold">
+                      <Check className="size-3" /> 적용 완료 — 마감 {applied.closed} · 삽입 {applied.inserted} · 반 갱신{" "}
+                      {applied.classUpdated}
+                    </p>
+                    <p className="text-text-dim text-[11px]">기본뷰·통합뷰·강사뷰에 반영됩니다. 문제가 있으면 되돌릴 수 있습니다.</p>
+                    {snapshotId ? (
+                      <button
+                        type="button"
+                        onClick={rollback}
+                        disabled={rolling}
+                        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition disabled:opacity-40"
+                      >
+                        {rolling ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
+                        이 적용 되돌리기
+                      </button>
+                    ) : null}
+                  </div>
+                ) : reverted ? (
+                  <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[12px]">{reverted}</p>
+                ) : changeCount === 0 ? (
+                  <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">변경 사항이 없습니다 — 시트와 시간표가 일치합니다.</p>
+                ) : confirming ? (
+                  <div className="border-amber/40 bg-amber-soft space-y-2 rounded-sm border p-2 text-[12px]">
+                    <p className="text-amber flex items-center gap-1 font-semibold">
+                      <AlertTriangle className="size-3" /> 적용하면 시간표(class_schedules)가 바뀝니다. 계속할까요?
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={apply}
+                        disabled={applying}
+                        className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                      >
+                        {applying ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                        적용 확정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirming(false)}
+                        disabled={applying}
+                        className="text-text-dim hover:text-foreground px-2 py-1 text-xs transition"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(true)}
+                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition"
+                  >
+                    <Check className="size-3" /> 이 계획 적용
+                  </button>
+                )}
               </div>
             ) : null}
           </div>

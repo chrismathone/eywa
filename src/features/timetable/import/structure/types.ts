@@ -148,6 +148,10 @@ export interface SchedulePlanItem {
   room: string | null;
   teacherNames: string[];
   scheduleId?: string; // update/keep/remove 대상 기존 행 id
+  /** create/update: 새 class_schedules 행에 넣을 해석된 강사 id(첫 강사=담임 후보, 미해석=null). */
+  teacherId?: string | null;
+  /** create/update: 새 class_schedules 행에 넣을 해석된 강의실 id(미해석=null → 라벨-only). */
+  classroomId?: string | null;
   /** update일 때 변경 전 값(화면 "이전→이후" 표시용). */
   before?: { endTime: string | null; room: string | null; teacherNames: string[] };
 }
