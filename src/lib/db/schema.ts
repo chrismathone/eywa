@@ -735,6 +735,95 @@ export const onescreenDailySessions = pgTable(
   ],
 );
 
+// === 진도 컨테이너 자동분석 (Edutrix 이식, 0090a) — 현행/선행 컨테이너 + 감사 이벤트 ===
+// CHECK(track/status/event_type)·부분 unique(active 1개·report_id 멱등)·updated_at 트리거는 0090a SQL에 정의.
+export const progressContainers = pgTable(
+  "progress_containers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    track: text("track").notNull(), // current | ahead
+    sequenceNumber: integer("sequence_number").notNull().default(1),
+    gradeScope: text("grade_scope"), // 개시 시 진도 학년
+    startPosition: integer("start_position"),
+    lastPosition: integer("last_position"),
+    chapterCount: integer("chapter_count").notNull().default(0), // 담긴 엔트리(보고서) 수
+    maxJump: integer("max_jump").notNull().default(0),
+    status: text("status").notNull().default("active"), // active | archived | errored
+    errorReason: text("error_reason"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("progress_containers_seq_key").on(t.studentId, t.track, t.sequenceNumber),
+    index("progress_containers_student_idx").on(t.studentId, t.track, t.status),
+    index("progress_containers_tenant_idx").on(t.tenantId),
+  ],
+);
+
+export const progressEntries = pgTable(
+  "progress_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    containerId: uuid("container_id")
+      .notNull()
+      .references(() => progressContainers.id, { onDelete: "cascade" }),
+    reportId: uuid("report_id").references(() => lessonReports.id, { onDelete: "set null" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    entryDate: date("entry_date").notNull(),
+    softChapterName: text("soft_chapter_name"), // 차시 문자열
+    globalPosition: integer("global_position"),
+    rawProgress: text("raw_progress"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("progress_entries_container_idx").on(t.containerId, t.entryDate),
+    index("progress_entries_student_idx").on(t.studentId, t.entryDate),
+  ],
+);
+
+export const progressEvents = pgTable(
+  "progress_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    containerId: uuid("container_id").references(() => progressContainers.id, { onDelete: "set null" }),
+    relatedContainerId: uuid("related_container_id").references(() => progressContainers.id, {
+      onDelete: "set null",
+    }),
+    eventType: text("event_type").notNull(), // forward|regression|jump_error|overlap_error|container_opened|container_closed|manual_note
+    fromPosition: integer("from_position"),
+    toPosition: integer("to_position"),
+    jumpSize: integer("jump_size"),
+    reportId: uuid("report_id").references(() => lessonReports.id, { onDelete: "set null" }),
+    details: jsonb("details"),
+    actor: text("actor"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("progress_events_student_idx").on(t.studentId, t.createdAt),
+    index("progress_events_container_idx").on(t.containerId, t.createdAt),
+    uniqueIndex("progress_events_report_type_key").on(t.reportId, t.eventType),
+  ],
+);
+
 // === consultation_ai_analysis (AI 분석 결과 — model_version 별 동결 스냅샷) ===
 export const consultationAiAnalysis = pgTable(
   "consultation_ai_analysis",

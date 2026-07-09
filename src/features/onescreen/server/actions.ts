@@ -8,6 +8,7 @@ import { generateJSON } from "@/lib/ai/generate";
 import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
 import { isClassnoteAllowed } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
+import { ingestReport } from "@/features/progress/server/ingest";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -84,6 +85,22 @@ export async function saveLessonReport(
     .select("id, share_token")
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
+
+  // 진도 컨테이너 반영(edutrix 이식) — 저장 성공 후 동기. 비수학·진도없음·이미반영은 내부에서 즉시 skip.
+  // 실패해도 저장은 유지(비치명적, 백필로 보정 가능). RLS는 supabase(테넌트 스코프)가 담당.
+  try {
+    await ingestReport(supabase, {
+      id: data.id,
+      tenantId: user.tenantId,
+      studentId: input.studentId,
+      reportDate,
+      subject: input.subject || null,
+      progress: input.progress || null,
+    });
+  } catch {
+    /* 진도 반영 실패는 보고서 저장을 막지 않음 */
+  }
+
   return { ok: true, id: data.id, shareToken: data.share_token };
 }
 
