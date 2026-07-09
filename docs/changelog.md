@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 활동 로그 target_label 디테일 — 수강/시간표/출결에 반·시간·날짜 조인 (2026-07-09) — ✅ 트랜잭션 E2E 4/4(라벨 확인 후 ROLLBACK)·프로덕션 0086a 적용 · 0086a
+사용자 제보: "수강 「김재윤」 생성"은 어느 반인지 안 보여 수강 생성인지 수업 배정인지 모르겠고, "시간표 생성"은 대상이 아예 없음(class_schedules는 이름 컬럼 없이 class_id·요일·교시만 → target_label NULL). 이 정보는 전부 FK(class_id=uuid) 뒤라 표시 레이어에선 못 풀어 **트리거에서 classes 조인해 라벨에 굽는다**([0086a](../supabase/migrations/0086a_activity_label_detail.sql), `log_activity()` create-or-replace — 0085a refund 예외·noise·redact·트리거부착 전부 보존, 라벨 enrichment만 추가):
+- **enrollments** → `학생명 · 반이름`(예: "김재윤 · 중2 수학A") = 사실상 수업 배정임을 라벨로 명시.
+- **class_schedules** → `반이름 · 요일(한글) 교시/시각`(예: "중2 수학A · 월 3교시", period_label 없으면 "· 수 17:00").
+- **attendance_records** → `학생명 · MM-DD 출결상태`(예: "홍길동 · 07-09 출석", 상태 한글 CASE 매핑).
+- 검증: 트랜잭션 안 테스트 학생·반 생성→수강/시간표/출결 insert→`target_label` 4종 기대치 일치 확인 후 ROLLBACK(프로덕션 무영향). 기존 로그는 소급 안 됨(트리거는 이후 쓰기에만; 필요 시 백필 별도).
+
 ### 겸직(관리자+강사) 뷰 전환 토글 — 강사뷰 ↔ 관리자뷰 (2026-07-09) — ✅ 라이브 E2E 4/4(겸직 계정 임시 더미반→검증→원복) + typecheck0/lint0/test775/build✓
 관리자 계열 역할이면서 실제 담당 반이 있는 겸직 사용자가 셸 뷰를 전환. **관리자뷰(풀셸) 사이드바 하단 '강사뷰로 전환' / 강사 미니셸 '내 메뉴' 드롭다운 맨 하단(구분선 아래) '관리자뷰로 전환'**. 뷰 전환 = 쿠키(`eywa-view`, httpOnly)만 바꿈 — 실 `system_role`은 그대로 authoritative(RLS·requireAccess·canWriteTenant), **권한 불변·락아웃 없음**.
 - **스코프 단일소스** [`effectiveTeacherId`/`effectiveTeacherScope`](../src/lib/auth/view-mode.ts): 실 강사면 본인 id(불변·회귀0), 겸직+쿠키teacher+담당반≥1이면 본인 id, 그 외 null. 기존 **26곳**의 `systemRole==="teacher" ? user.id` 스코프(classes·attendance·students·exams·consultations·search·timetable·retention·textbook·print·exports)를 이 헬퍼로 중앙화. 노출 판정 `canUseTeacherView`는 head:true 카운트(B2).
