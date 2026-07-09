@@ -362,6 +362,9 @@ export default async function EnrollmentDetailPage({
             generatedAt={consult.aiAnalysis.generatedAt}
             editedBy={consult.aiAnalysis.reportEditedBy}
             editedAt={consult.aiAnalysis.reportEditedAt}
+            studentName={consult.prospectName}
+            consultationDate={consult.consultedAt?.slice(0, 10)}
+            transcript={consult.transcription}
           />
         ) : consult.aiAnalysis ? (
           <AiAnalysisPanel

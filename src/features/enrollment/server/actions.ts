@@ -11,6 +11,9 @@ import { kstToday } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateJSON } from "@/lib/ai/generate";
+import { after } from "next/server";
+import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
+import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import {
   getMediaBackend,
@@ -813,6 +816,7 @@ export type UpdateConsultationReportState =
 // 인라인 수정 가능한 11개 audioReport 섹션(extracted는 구조화 데이터라 제외).
 const EDITABLE_AUDIO_KEYS = new Set([
   "consultationType",
+  "summary",
   "familyBackground",
   "parentConcerns",
   "parentQuestions",
@@ -820,6 +824,7 @@ const EDITABLE_AUDIO_KEYS = new Set([
   "parentSatisfaction",
   "studentTraits",
   "teacherResponse",
+  "salesPoints",
   "agreements",
   "followUps",
   "warnings",
@@ -873,4 +878,119 @@ export async function updateConsultationReportSection(
   if (consultationId) revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
   return { ok: true, editedBy: user.displayName, editedAt: now };
+}
+
+/**
+ * 등록상담 AI 분석 재실행(재분석) — 저장된 전사(완료 녹음 합본 또는 레거시 단일 전사)로 심층분석을
+ * 다시 돌려 print_payload.audioReport(섹션) + speakerRoles만 새로 덮는다. diagnosis/learning_plan/
+ * prospect/formSuggestions·폼 자동입력은 건드리지 않는다(상담사 수기 입력 보호). 무거운 분석은 after()
+ * 백그라운드 — 즉시 '분석 중' 표시(회의 재분석과 동일 UX). ⚠️ 프롬프트는 웹훅과 동일 단일 소스(consultation-analysis.ts).
+ */
+export async function regenerateConsultationAnalysis(
+  consultationId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "enrollment"))) return { error: "등록상담 권한이 없습니다" };
+  if (!consultationId) return { error: "상담 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: consult } = await supabase
+    .from("enrollment_consultations")
+    .select("id, prospect_name, prospect_grade, prospect_school, parent_name, parent_phone, transcription")
+    .eq("id", consultationId)
+    .single();
+  if (!consult) return { error: "상담을 찾을 수 없습니다" };
+
+  // 완료 녹음 합본 우선, 없으면 레거시 단일 전사.
+  const { data: recs } = await supabase
+    .from("consultation_recordings")
+    .select("transcription, speaker_labels, created_at")
+    .eq("consultation_id", consultationId)
+    .eq("processing_status", "completed")
+    .order("created_at", { ascending: true });
+  const inputs = (recs ?? []).map((r) => ({
+    utterances: Array.isArray(r.speaker_labels) ? (r.speaker_labels as SpeakerUtterance[]) : null,
+    plainText: r.transcription as string | null,
+    recordedAt: r.created_at as string,
+  }));
+  const nonEmpty = inputs.filter(
+    (i) => (i.utterances?.length ?? 0) > 0 || (i.plainText ?? "").trim().length > 0,
+  );
+  const formatted =
+    nonEmpty.length > 0
+      ? combineConsultationTranscripts(nonEmpty)
+      : (consult.transcription ?? "").trim();
+  const multi = nonEmpty.length > 1;
+  if (!formatted.trim())
+    return { error: "재분석할 전사가 없습니다. 녹음/전사가 남아 있어야 재분석할 수 있어요." };
+
+  // 기존 분석 행 — 재분석은 이 행의 섹션만 갱신(diagnosis/learning_plan 등 보존).
+  const { data: existing } = await supabase
+    .from("consultation_ai_analysis")
+    .select("id, print_payload")
+    .eq("consultation_id", consultationId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!existing) return { error: "기존 AI 분석이 없어 재분석할 수 없습니다. 먼저 분석을 실행하세요." };
+
+  // 즉시 '분석 중' — 페이지가 스켈레톤+StatusWatcher로 전환.
+  const admin = createAdminClient();
+  await admin
+    .from("enrollment_consultations")
+    .update({ processing_status: "analyzing", processing_error: null, updated_at: new Date().toISOString() })
+    .eq("id", consultationId);
+  revalidatePath(`/enrollment/${consultationId}`);
+  revalidatePath("/enrollment");
+
+  const ctx = {
+    prospect_name: consult.prospect_name,
+    prospect_grade: consult.prospect_grade,
+    prospect_school: consult.prospect_school,
+    parent_name: consult.parent_name,
+    parent_phone: consult.parent_phone,
+  };
+  const analysisId = existing.id;
+  const priorPayload =
+    existing.print_payload && typeof existing.print_payload === "object"
+      ? (existing.print_payload as Record<string, unknown>)
+      : {};
+
+  // 무거운 분석은 응답 후 백그라운드(after). 완료 시 StatusWatcher가 새 결과로 갱신.
+  after(async () => {
+    const bg = createAdminClient();
+    try {
+      const { data: report, model } = await runConsultationAnalysis(ctx, formatted, multi);
+      const { speakerRoles, ...sections } = report;
+      const now = new Date().toISOString();
+      await bg
+        .from("consultation_ai_analysis")
+        .update({
+          print_payload: {
+            ...priorPayload,
+            audioReport: sections,
+            speakerRoles: speakerRoles ?? priorPayload.speakerRoles ?? {},
+          },
+          model_version: `${model}-${now.slice(0, 10)}`,
+          generated_at: now,
+          // 재분석 = 새 AI 결과 → 이전 사람 수정 이력 초기화(덮어쓰기 의미 명확).
+          report_edited_by: null,
+          report_edited_at: null,
+        })
+        .eq("id", analysisId);
+      await bg
+        .from("enrollment_consultations")
+        .update({ processing_status: "completed", processing_error: null, updated_at: now })
+        .eq("id", consultationId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await bg
+        .from("enrollment_consultations")
+        .update({ processing_status: "failed", processing_error: `AI 재분석 실패: ${msg}` })
+        .eq("id", consultationId);
+    }
+  });
+
+  return { ok: true };
 }

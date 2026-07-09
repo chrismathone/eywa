@@ -46,19 +46,29 @@ async function runWrite(
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-// ijw-calander의 13섹션 등록상담 분석 스키마
+// 상담 흐름 수형도(대화 주제 트리) — ijw conversationFlow와 동일 구조.
+export type ConversationFlowNode = {
+  topic: string;
+  summary: string;
+  children?: ConversationFlowNode[];
+};
+
+// ijw-calander의 등록상담 심층분석 스키마(풀세트) — 섹션 순서 = 화면 아코디언 순서.
 type ConsultationReport13 = {
   consultationType: string; // 상담 성격
-  familyBackground: string; // 가정 배경
-  parentConcerns: string; // 학부모 걱정
-  parentQuestions: string; // 학부모 질문
-  parentRequests: string; // 학부모 요청
-  parentSatisfaction: string; // 학부모 만족도
+  summary: string; // 상담 요약
+  familyBackground: string; // 가정 배경/개인 맥락
+  parentConcerns: string; // 학부모 걱정/불안
+  parentQuestions: string; // 학부모 질문(답변 여부 포함)
+  parentRequests: string; // 학부모 요청(학부모 발의만)
+  parentSatisfaction: string; // 학부모 만족도/감정
   studentTraits: string; // 학생 특이사항
-  teacherResponse: string; // 상담자 대응
+  teacherResponse: string; // 상담자 대응/설명 요약
+  salesPoints: string; // 상담사 세일즈 포인트(등록상담 시)
   agreements: string; // 합의 사항
   followUps: string; // 후속 조치
   warnings: string; // 주의 신호
+  conversationFlow?: ConversationFlowNode[]; // 상담 흐름 수형도
   extracted: {
     prospectName: string | null;
     grade: string | null;
@@ -592,37 +602,45 @@ async function analyzeConsultationAndPersist(
     generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
       maxTokens: 8192,
       prompt: [
-        "다음은 학원 신입생 등록상담 녹음 전사입니다. 12개 섹션의 상담 분석 + 추출 정보를 JSON으로만 답해주세요.",
+        "다음은 학원 신입생 등록상담 녹음 전사입니다. 아래 지침대로 심층 분석한 보고서를 JSON으로만 답해주세요.",
+        "음성인식(ASR) 특성상 고유명사(인명·학교명·지명)가 잘못 인식될 수 있습니다. 같은 사람을 가리키는 유사 이름이 여러 형태로 나오면 하나로 통일하고, 통일한 사실을 상담 요약에 메모하세요.",
         "",
         "⚠️ 분석 원칙 (최우선·반드시 준수):",
         "- 팩트 기반: 전사에 실제로 나온 발화만 근거로 분석한다. 전사에 없는 내용은 창작·추측·환각 절대 금지(일반론·보편적 조언·있을 법한 시나리오·다른 학생에게도 통할 뻔한 문구 금지).",
         "- 상담 외 잡담 배제: 녹음이 상담 종료 후에도 계속돼 섞인, 등록상담과 무관한 대화(잡담·일상 대화·음식/식사·다른 사람 이야기·오가는 인사말 등)는 분석 대상에서 제외하고 실제 상담 내용만 분석한다.",
-        "- 근거 없으면 비운다: 각 섹션은 전사에 근거가 있을 때만 채우고, 근거가 없으면 빈 문자열(추출 정보는 null). 억지로 채우지 않는다.",
+        "- 근거 없으면 비운다: 각 섹션은 전사에 근거가 있을 때만 채우고, 근거가 없으면 빈 문자열(추출 정보는 null, conversationFlow는 빈 배열). 억지로 채우지 않는다.",
+        "- 모순 금지: 한 섹션의 내용이 다른 섹션과 어긋나면 안 된다. 예) '형제자매 없음'이라 적으면 '형제 할인' 요청을 만들어내지 말 것. 전사에 형제·할인 언급이 있으면 가정 배경에 형제 존재를 반영하고, 없으면 형제 관련 항목을 아예 넣지 않는다. 작성 전 전사 근거를 대조하라.",
+        "- 행간·감정·뉘앙스까지 읽어 학부모의 진짜 의도와 감정을 파악한다.",
         "",
-        "출력 형식 규칙(중요):",
-        "- 리스트형 섹션(parentQuestions/parentRequests/agreements/followUps/warnings 등 여러 항목)은 각 항목을 줄바꿈(\\n)으로 구분하고 항목 앞에 '- '를 붙이세요.",
-        "- 산문형 섹션(consultationType/familyBackground 등)도 2~3문장마다 줄바꿈(\\n)을 넣어 가독성을 높이세요.",
-        "- 핵심어(금액·과목·반·날짜·합의 키워드 등)는 **굵게**로 강조하세요(예: **형제 할인**, **커피왕 6레벨**).",
-        "- speakerRoles: 전사의 화자 라벨(A,B,…)을 상담 맥락으로 추론해 '상담자'/'학부모'/'학생'/'기타' 중 하나로 매핑하세요.",
+        "ASR 오류 처리: 문맥상 맞지 않는 표현·잘못 인식된 고유명사는 문맥으로 추론한 뒤 바로 뒤에 [?]를 붙여 사용자가 원본과 대조하게 한다(예: '대구일중[?]').",
+        "",
+        "출력 형식 규칙(중요 — 반드시 지킬 것):",
+        "- 각 JSON 문자열 값 안에서 항목을 구분할 때 반드시 줄바꿈(\\n)을 사용한다. 여러 항목이면 각 항목을 새 줄에 '- '로 시작한다(예: \"- 첫째 항목\\n- 둘째 항목\\n- 셋째 항목\").",
+        "- 산문형 섹션(consultationType/summary/familyBackground 등)도 2~3문장마다 줄바꿈(\\n)을 넣어 가독성을 높인다.",
+        "- 마크다운 볼드(**)·머리말(#)·코드블록을 쓰지 말 것. 순수 텍스트 + '- ' 불릿 + \\n 줄바꿈만 사용한다.",
+        "- speakerRoles: 전사의 화자 라벨(A,B,…)을 상담 맥락으로 추론해 '상담자'/'학부모'/'학생'/'기타' 중 하나로 매핑한다. 본문에서는 화자 기호 대신 파악된 역할(예: [상담자], [학부모])을 쓴다.",
         "",
             `학생 이름(현재 입력값): ${consult.prospect_name}`,
             `학년: ${consult.prospect_grade ?? "미상"}`,
             `학교: ${consult.prospect_school ?? "미상"}`,
             `학부모(현재 입력값): ${consult.parent_name ?? "미상"} / ${consult.parent_phone ?? "미상"}`,
             "",
-            "분석 가이드:",
-            "1. consultationType: 상담 성격 (예: 초기 탐색, 입학 결심, 환불/이탈 우려 등)",
-            "2. familyBackground: 가정 배경 (형제자매, 경제 상황 등 발화에 나온 것만)",
-            "3. parentConcerns: 학부모가 표현한 걱정·고민",
-            "4. parentQuestions: 학부모가 던진 질문 목록",
-            "5. parentRequests: 학부모가 요청한 사항",
-            "6. parentSatisfaction: 상담 중 만족/불만족 신호",
-            "7. studentTraits: 학생 특이사항 (성격, 학습 스타일)",
-            "8. teacherResponse: 상담자의 대응 방식 평가",
-            "9. agreements: 양측 합의 사항",
-            "10. followUps: 향후 후속 조치 (연락/방문/시범수업 등)",
-            "11. warnings: 상담 중 실제로 드러난 주의 신호만 — 명시적 이탈 의사·불만·미납/결제 우려 등 전사에 근거가 있는 것. 근거 없으면 빈 문자열(추측·미래 예측·일반론 창작 금지).",
-            "12. extracted: 전사에서 자동 추출한 핵심 정보 (학생 이름/학년/학교/학부모/연락처). 발화에 명시되지 않으면 null.",
+            "섹션별 작성 지침:",
+            "1. consultationType: 상담 성격 한 줄 (예: '등록 상담 - 진단 결과 설명 및 등록 유도', '초기 탐색', '환불/이탈 우려'). 등록/영업 상담이면 상담사가 등록을 유도하는 구조임을 명시.",
+            "2. summary: 상담 전체 요약 5~7문장. 상담 성격·핵심 흐름·주요 결론 포함. ASR로 이름이 혼재됐다면 통일 사실도 명시.",
+            "3. familyBackground: 가정 배경/개인 맥락 — 학부모 나이·직업·가족구성, 학생의 형제관계, 과거 학습 이력, 이전 학원·공부방 경험, 교육관 등 발화에 나온 것만. 언급 없는 항목은 생략.",
+            "4. parentConcerns: 학부모가 걱정·불안해하는 부분 — 직접 말한 것 + 말투·맥락에서 추론되는 것.",
+            "5. parentQuestions: 학부모가 질문한 사항. 각 질문마다 상담자가 어떻게 답했는지 요약. 형식: '- [질문] …\\n  → [답변] …'. 답변 없었으면 '→ [미답변]'.",
+            "6. parentRequests: 학부모가 '직접 발의해' 요청한 사항만(상담사가 제안하고 학부모가 수용한 건 제외 → teacherResponse/agreements로).",
+            "7. parentSatisfaction: 전반적 만족도·감정. 긍정 반응 / 불만·우려 / 아직 안 풀린 부분을 구분.",
+            "8. studentTraits: 학생 특이사항 — 학습 태도, 성적 변화, 심리 상태(자존감·자기효능감), 의사소통 패턴(눈치·표현 어려움), 교우관계, 강·약점.",
+            "9. teacherResponse: 상담자가 제시한 해결책·설명·제안 요약(상담사가 제안하고 학부모가 수용한 것 포함).",
+            "10. salesPoints: 상담사가 등록/유지를 위해 쓴 설득 논거(성공 사례, 입시 정보, 시설·프로그램 홍보, 지역 특수성 등). 등록/영업 성격이 아니면 빈 문자열.",
+            "11. agreements: 합의된 사항 — 구체적 일정·방법·학습 로드맵(시기별 목표·진도 계획) 포함. 누가 제안했는지(학부모/상담사) 표시.",
+            "12. followUps: 후속 조치 항목(담당자·기한 가능하면 포함).",
+            "13. warnings: 주의 신호 — '특이사항 없음'으로 넘기지 말고 꼼꼼히 확인: 학생 자존감/자기효능감 저하, 가정 내 갈등·압박(부부 갈등·과도한 기대·감정적 훈육), 학생 의사소통 문제(부모에게 말 못함·눈치), 퇴원/이탈 가능성, 학부모 번아웃/좌절. 전사에 근거 있는 것만. 해당 없으면 '확인된 위험 신호 없음'.",
+            "14. conversationFlow: 상담이 다룬 주제를 시간 순 트리로. 각 노드는 { topic, summary, children }. 근거 부족하면 빈 배열.",
+            "15. extracted: 전사에서 자동 추출한 핵심 정보 (학생 이름/학년/학교/학부모/연락처). 발화에 명시되지 않으면 null.",
             "",
             "녹음 전사 (화자 라벨 포함):",
             formatted,
@@ -631,6 +649,7 @@ async function analyzeConsultationAndPersist(
             "{",
             '  "speakerRoles": { "A": "상담자|학부모|학생|기타", "B": "상담자|학부모|학생|기타" },',
             '  "consultationType": string,',
+            '  "summary": string,',
             '  "familyBackground": string,',
             '  "parentConcerns": string,',
             '  "parentQuestions": string,',
@@ -638,9 +657,11 @@ async function analyzeConsultationAndPersist(
             '  "parentSatisfaction": string,',
             '  "studentTraits": string,',
             '  "teacherResponse": string,',
+            '  "salesPoints": string,',
             '  "agreements": string,',
             '  "followUps": string,',
             '  "warnings": string,',
+            '  "conversationFlow": [ { "topic": string, "summary": string, "children": [ { "topic": string, "summary": string } ] } ],',
             '  "extracted": {',
             '    "prospectName": string | null,',
             '    "grade": string | null,',
@@ -718,7 +739,7 @@ async function analyzeConsultationAndPersist(
     strengths: [],
     weaknesses: [],
     level: "—",
-    summary: report.consultationType + "\n" + report.parentConcerns,
+    summary: report.summary || report.consultationType || report.parentConcerns,
   };
   const learningPlanStub = {
     immediate: [report.followUps].filter(Boolean),

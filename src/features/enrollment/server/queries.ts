@@ -49,8 +49,15 @@ export type ConsultationProcessingStatus =
   | "failed";
 
 // ijw-calander 13-section consultation analysis (audio flow)
+export type ConversationFlowNode = {
+  topic: string;
+  summary: string;
+  children?: ConversationFlowNode[];
+};
+
 export type ConsultationAudioReport = {
   consultationType: string;
+  summary: string;
   familyBackground: string;
   parentConcerns: string;
   parentQuestions: string;
@@ -58,9 +65,11 @@ export type ConsultationAudioReport = {
   parentSatisfaction: string;
   studentTraits: string;
   teacherResponse: string;
+  salesPoints: string;
   agreements: string;
   followUps: string;
   warnings: string;
+  conversationFlow?: ConversationFlowNode[];
   extracted: {
     prospectName: string | null;
     grade: string | null;

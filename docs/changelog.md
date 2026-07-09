@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 등록상담 AI 분석 ijw 풀 이식 — 15섹션 아코디언 + 포맷·오분석 수정 (2026-07-09) — ✅ typecheck0/lint0/test33 + 실전사 dry-run(Solar)
+원장 제보: 등록상담 AI 분석이 ① 줄바꿈이 안 되고 `**`가 리터럴로 노출 ② 전사를 잘못 분석(형제자매 "없음"인데 "형제 할인" 나오는 모순). 스크린샷으로 **ijw-calander 분석 탭 풀세트로 회귀** 지시(교사 대응→상담자 대응만 리네임).
+- **원인**: `01465ef` 리팩터가 프롬프트를 얕게 바꾸며 ① "핵심어 `**굵게`" 지시를 넣었는데 Solar Pro 3가 `**` 짝을 자주 틀려 RichText가 리터럴로 노출 ② 세일즈포인트·요약·수형도 삭제 + 필드별 정밀 지침 상실 → 오분석.
+- **프롬프트 이식**([consultation-analysis.ts](../src/features/enrollment/server/consultation-analysis.ts), 단일 소스): ijw `functions/index.js` 프롬프트 이식 — 필드별 정밀 지침·분석 규칙(요청=학부모 발의만·warnings 감지 목록·로드맵)·화자역할·ASR `[?]`·**모순 금지 규칙**(형제자매 사례 명시). `**볼드` 지시 제거 → `- 불릿` + `\n 줄바꿈`만. `runConsultationAnalysis`를 웹훅·재분석 공유(provider 미지정=Solar, 한 줄로 Claude 라우팅 가능).
+- **3섹션 복원**: `summary`(상담 요약)·`salesPoints`(세일즈 포인트)·`conversationFlow`(상담 흐름 수형도, 트리). 타입([queries.ts](../src/features/enrollment/server/queries.ts) `ConsultationAudioReport`)·편집 화이트리스트·인쇄 페이지 배선.
+- **아코디언 UI**([consultation-report-editor.tsx](<../src/app/(shell)/enrollment/[id]/consultation-report-editor.tsx>)): ijw ReportViewer식 접기 15섹션 + 모두펼치기/접기 + 섹션별 인라인 수정 + **재분석**(전사 재분석, [regenerateConsultationAnalysis](../src/features/enrollment/server/actions.ts) — 완료 녹음 합본/레거시 전사로 after() 백그라운드 재실행, 섹션만 갱신·diagnosis 보존) + **TXT 다운로드** + 수형도 트리([conversation-flow-tree.tsx](<../src/app/(shell)/enrollment/[id]/conversation-flow-tree.tsx>)).
+- **검증**: typecheck0/lint0/test33 + **실전사 dry-run(Solar, 이주아 21,340자)**: `**`누출 0 / 리스트형 9섹션 줄바꿈 정상 / 수형도 6노드·세일즈포인트·요약 생성 / **형제 모순 없음**(첫 아이 명시)·speakerRoles 정확. → Solar만으로 품질 충분, Claude 미전환.
+- ⚠️ 프롬프트 이중 존재: 웹훅([route.ts](<../src/app/api/webhooks/assemblyai/route.ts>) 인라인)과 [consultation-analysis.ts]는 **동일 프롬프트**를 각자 보유(웹훅 인라인은 무손질 보존, 재분석은 공유 모듈 사용). 수정 시 양쪽 동기화.
+
 ### 자동 로그인(절대 로그아웃 안 함) — refresh 토큰 회전 끔 (2026-07-09) — ✅ Management API로 프로덕션 적용·재조회 검증(rotation=false)
 원장 제보: "밤새 자리 비우고 오면 로그아웃"(프로덕션). 코드(미들웨어 세션 갱신 [proxy.ts](../src/lib/supabase/proxy.ts)·`@supabase/ssr` 400일 지속 쿠키)는 정상이고 origin/main과 동일 → 원인은 **서버측 Supabase Auth 설정**으로 좁혀짐. Management API 실측: `sessions_timebox=0`·`sessions_inactivity_timeout=0`(원인 아님) → **진짜 원인 = refresh 토큰 회전(`refresh_token_rotation_enabled=true`) + 재사용 유예 10초**.
 - **메커니즘**: eywa는 메뉴마다 same-origin iframe이라 창 여러 개면 각 iframe 브라우저 클라가 **같은 refresh 토큰으로 동시 갱신**(특히 노트북 절전 후 깨어날 때 타이머 일괄 발화) → 첫 갱신이 회전시키면 10초 유예 넘긴 나머지가 "이미 쓴 토큰" 제출 → Supabase가 **탈취 의심으로 세션 전체 폐기** → 로그아웃(쿠키는 400일로 멀쩡, 토큰만 무효).
