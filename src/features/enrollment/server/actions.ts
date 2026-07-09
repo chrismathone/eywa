@@ -474,6 +474,23 @@ export async function setEnrollmentOutcome(
   if (!(OUTCOMES as readonly string[]).includes(outcome)) return { error: "유효한 상태가 아닙니다" };
 
   const supabase = await createClient();
+
+  // 배정 완료(등록) 상담은 이전 단계로 되돌릴 수 없다 — 학생이 이미 생성·연결됐기 때문(유령 '대기' 방지).
+  // 취소는 '거절'로만. (enrolled 유지 또는 declined만 허용; 그 외 backward·노쇼 차단.)
+  const { data: cur } = await supabase
+    .from("enrollment_consultations")
+    .select("outcome, student_id")
+    .eq("id", id)
+    .single();
+  if (!cur) return { error: "상담을 찾을 수 없습니다" };
+  const isConverted = cur.outcome === "enrolled" || !!cur.student_id;
+  if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
+    return {
+      error:
+        "이미 배정 완료(등록)된 상담은 대기·예약 등 이전 단계로 되돌릴 수 없습니다. 취소하려면 '거절'로 처리하거나 학생을 퇴원 처리하세요.",
+    };
+  }
+
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({ outcome, updated_at: new Date().toISOString() })
