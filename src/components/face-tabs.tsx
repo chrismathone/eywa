@@ -60,7 +60,7 @@ export function FaceTabs({
         ref={scrollerRef}
         role="tablist"
         aria-label={ariaLabel}
-        className="border-border bg-card flex items-center gap-0.5 overflow-x-auto rounded-md border px-1.5 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="scrollbar-hide border-border bg-card flex items-center gap-0.5 overflow-x-auto rounded-md border px-1.5 py-1.5"
       >
         {faces.map((f, i) => {
           const on = f.key === active;
