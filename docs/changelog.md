@@ -9,6 +9,20 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 상담↔학생 자동연결 트리거 — makeedu 왕복 중복 근본 차단 (2026-07-09) — ✅ main(f69b1d4)·프로덕션 0088a 적용·트랜잭션+실적용 검증
+원장 제보(스크린샷): 등록상담 "수업 배정"(convert) 시 `duplicate key ... ux_students_active_natural_key` **원본 Postgres 에러가 그대로 노출**. 근본원인(사용자 추론=실데이터 검증): eywa 상담 → **makeedu 역동기화(푸시)** → makeedu에서 학생화 → **정동기화로 eywa에 학생 재유입**. 상담·학생 makeedu_id가 서로 달라(이태경 5276/14104) **자연키(정규화 이름+학교+학년)만이 동일인을 연결**하는데, 학생 임포트([import-students.cjs](../scripts/_makeedu/import-students.cjs))가 기존 '학생'과만 매칭하고 '상담'은 안 봐 상담이 **orphan(student_id null)**으로 남고 → convert가 학생을 또 INSERT하려다 부분 유니크 위반. blast radius 실측: 미연결 상담 388 중 자연키 충돌 orphan 10(7건 makeedu 왕복, 매 왕복마다 +1 누적).
+- **트리거([0088a](../supabase/migrations/0088a_link_consultation_on_student.sql), security definer)**: 학생 INSERT/UPDATE(status·name·school·grade) 시 같은 자연키의 미연결 활성 상담을 자동 연결(student_id+outcome=enrolled). **sync·수동·convert·QR 어느 경로든 orphan 구조적 불가.** 정규화=students.name_normalized 동일(`lower(regexp_replace(name,'\s+','','g'))`).
+- **백필(동일 마이그)**: 현재 orphan 10건(**이태경 포함**) 즉시 연결. 멱등(student_id null 조건).
+- **convert 액션 B([convertConsultationToStudent](../src/features/enrollment/server/actions.ts))**: 자연키 충돌 시 원본 에러 대신 **기존 학생 재사용**(반 배정 — 이미 등록된 반 제외 + 상담 연결) → 매끄럽게 완료. 정확 매칭 실패 시만 친절 안내 + '기존 학생 정보 보기' 버튼(폴백, [convert-dialog.tsx](<../src/app/(shell)/enrollment/[id]/_components/convert-dialog.tsx>)).
+- 검증: 트랜잭션(백필 10→0·이태경 연결·트리거 자동연결→ROLLBACK) + 프로덕션 실적용(orphan 10→0·이태경 student_id 연결·트리거 설치). tsc0/lint0.
+
+### 출석부 공결 폐지·결석 통일 + 날짜별/입력폼 디자인 통일 + 과목 한글화 (2026-07-09) — ✅ main(bc75b9f·1bfcd4c)·육안 E2E 검증
+원장 육안 확인 후속. ① 날짜별·입력폼(`/attendance/[date]`·`[classId]`)이 옛 `chart-N` 색이라 월 매트릭스와 색체계 불일치 ② 빈 상태 "시드를 확인하세요"(데모 잔재) ③ 과목이 원본키(english/math/subject_1)로 노출 ④ '공결'이 안 와닿는 줄임말 + 결석과 이중.
+- **디자인 통일(1bfcd4c)**: 출결 상태색을 월 매트릭스와 동일 시맨틱(present→primary·absent→danger·late→amber·early_leave→rose·makeup→purple) + 구조토큰(border-line·text-text-dim·bg-bg-soft). "시드" 문구 → "이 날짜에 예정된 수업이 없습니다".
+- **공결 폐지·결석 통일(bc75b9f)**: 사용자 결정 — '공결(excused)'을 결석 하나로 통일(부연은 메모 필드). UI 6곳+도움말에서 제거. DB enum·`AttendanceStatus` 타입·집계는 존치(Postgres enum 값 제거 불가 + 프로덕션 excused 0/5799건), 죽은 경로는 결석 별칭으로 매핑. **⚠️ 재도입 금지.**
+- **과목 한글화**: 날짜별·입력 서버컴포넌트가 `buildSubjectMaps(getTenantSettings).labelOf`로 한글 라벨 표시(운영 enum 단일소스, getTenantSettings Promise.all 병합).
+- 검증: 색 통일 6상태 육안 E2E 정상 · src 전체 '공결' 0 · tsc0/lint0.
+
 ### 등록상담 AI 요약 산문화·화자기호 제거 + 질문 렌더 + 버튼 정리 (2026-07-09) — ✅ typecheck0/lint0/test108 + 실전사 dry-run(이태경·이주아)
 원장 실사용 후속 제보 다발. ① 요약이 "상담자(A)와 학부모(B)는…" 회의록 나열체 + 화자기호 누출, ② 이태경·이주아 요약 스타일 제각각, ③ 학부모 질문의 답변(→) 줄에도 불릿(●), ④ "덧붙이기" 반복 시 같은 요약 중복 누적, ⑤ 상담 내용 하단 AI 버튼 2종 크기 제각각.
 - **프롬프트(등록상담 전용, 웹훅 인라인 + [consultation-analysis.ts](../src/features/enrollment/server/consultation-analysis.ts) 동시 수정)**: summary=학생 주어 산문(불릿·회의록 나열 금지) · **모든 섹션 화자기호(A/B/C·(A)·화자 A·학생 C) 금지**(이름/역할로만) · 산문형 섹션 불릿 금지 · parentQuestions=한 줄('- 질문 → (답변) 답변'). ⚠️ 회의록 프롬프트(features/meetings)와는 **별도 유지**(용도 다름).
