@@ -1,4 +1,5 @@
 import { getStudentLessonReports, type LessonReportRow } from "@/features/students/server/queries";
+import { ProgressContainerPanel } from "@/features/progress/components/progress-panel";
 
 // ijw StudentDetail ProgressTab 이식 — 최근 수업보고서 표(날짜·선생님·진도·시험·숙제).
 // + P2a/P3 보강: ClassNote 발송 상태 · 학부모 링크(열람수/취소/만료) — "저장한 보고서 확인"을 여기서.
@@ -41,7 +42,10 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
   const reports = await getStudentLessonReports(studentId, 12);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* 진도 컨테이너 자동분석(3b) — 현행/선행 현재위치·속도·또래 백분위·예측·이상감지 */}
+      <ProgressContainerPanel studentId={studentId} />
+
       <header className="border-border flex items-baseline justify-between border-b pb-3">
         <h2 className="text-foreground text-base font-semibold">수업 진도</h2>
         <p className="text-muted-foreground num text-xs">최근 {reports.length}건</p>
