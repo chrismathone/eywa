@@ -53,6 +53,13 @@ describe("positionOf", () => {
     }
   });
 
+  it("edutrix 임포트 포맷(번호·여러 줄·총괄) 정규화 매핑", () => {
+    expect(positionOf("1.각")?.grade).toBe("중1"); // 앞 번호 제거
+    expect(positionOf("1.일차방정식의 활용(거리, 속력, 시간)")?.grade).toBe("중1");
+    expect(positionOf("1.순서쌍과 좌표평면(응용)\n2.그래프의 이해")?.lesson).toBe("그래프의 이해"); // 마지막 줄
+    expect(positionOf("1.좌표평면과 그래프 대단원 총괄")).toBeNull(); // 총괄=차시 아님
+  });
+
   it("미스/빈값 → null", () => {
     expect(positionOf("수학 존재하지않는차시xyz")).toBeNull();
     expect(positionOf("영어 Unit 8 p.90")).toBeNull();

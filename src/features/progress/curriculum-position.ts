@@ -40,16 +40,10 @@ export const LESSON_TO_POS: Map<string, LessonPosition> = (() => {
   return m;
 })();
 
-/**
- * 보고서 진도 텍스트 → 글로벌 위치. progress = "<과목라벨> <차시>" 형태(차시는 커리큘럼 정확 문자열).
- * 과목 라벨이 여러 단어("수학 (상)")여도 대응 — 전체→앞 토큰 제거를 반복하며 정확 조회(긴 것 우선).
- * 비수학·자유입력·오타는 전부 Map 미스 → null(ingest에서 skip). 학년 모호성 해소 불필요.
- */
-export function positionOf(progressText: string | null | undefined): LessonPosition | null {
-  if (!progressText) return null;
-  let s = progressText.trim();
+/** 라벨 토큰을 앞에서 하나씩 벗기며 정확 조회(긴 것 우선). eywa 네이티브 "수학 <차시>"용. */
+function lookupWithLabelStrip(text: string): LessonPosition | null {
+  let s = text.trim();
   if (!s) return null;
-  // 전체 → 첫 공백 뒤 → 둘째 공백 뒤 … (라벨 토큰 최대 4개까지). 첫 정확 일치 채택.
   for (let i = 0; i < 5; i++) {
     const hit = LESSON_TO_POS.get(s);
     if (hit) return hit;
@@ -58,6 +52,34 @@ export function positionOf(progressText: string | null | undefined): LessonPosit
     s = s.slice(sp + 1).trim();
   }
   return null;
+}
+
+/**
+ * edutrix 임포트 포맷 정규화 — 여러 줄이면 **마지막 항목**(그날 최종 진도), 앞 "N." 제거,
+ * "대단원 총괄"은 특정 차시가 아니므로 제외(null). 예: "1.순서쌍…\n2.그래프의 이해" → "그래프의 이해".
+ */
+function normalizeLegacy(text: string): string | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  const last = lines[lines.length - 1]!.replace(/^\d+\.\s*/, "").trim();
+  if (!last || /대단원\s*총괄/.test(last)) return null;
+  return last;
+}
+
+/**
+ * 보고서 진도 텍스트 → 글로벌 위치. progress = "<과목라벨> <차시>"(eywa 네이티브, 정확 문자열).
+ * 정확 미스 시 edutrix 임포트 포맷(번호·여러 줄·총괄)을 정규화해 재시도 — 초·중 실 데이터 백필용.
+ * 고등·자유입력·총괄·오타는 전부 Map 미스 → null(ingest에서 skip). 학년 모호성 해소 불필요.
+ */
+export function positionOf(progressText: string | null | undefined): LessonPosition | null {
+  if (!progressText) return null;
+  const direct = lookupWithLabelStrip(progressText.trim());
+  if (direct) return direct;
+  const norm = normalizeLegacy(progressText);
+  return norm ? lookupWithLabelStrip(norm) : null;
 }
 
 /** 글로벌 위치 → 커리큘럼 항목(학년/단원/차시). 범위 밖이면 null. */

@@ -32,7 +32,7 @@ export async function backfillProgressContainers(opts?: { dryRun?: boolean }): P
     const { data, error } = await supabase
       .from("lesson_reports")
       .select("id, student_id, report_date, subject, progress")
-      .eq("subject", "math")
+      .or("subject.eq.math,subject.is.null") // math(네이티브) + null(legacy 임포트) — ingest가 positionOf로 실질 필터
       .order("report_date", { ascending: true })
       .order("created_at", { ascending: true })
       .range(from, from + PAGE - 1);
