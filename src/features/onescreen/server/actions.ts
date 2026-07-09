@@ -7,7 +7,7 @@ import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
 import { buildTrendInput, trendBody } from "../trend-comment";
-import { assembleCombined, type PromptSection } from "../prompt-defaults";
+import { assembleCombined, MENT_AI_TUNING, type PromptSection } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -364,11 +364,12 @@ export async function generateReportComment(
 
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
-    // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성.
+    // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. Solar 후보정(temp 0.3·reasoning minimal) 적용.
     const { data } = await generateJSON<Record<string, string>>({
       prompt: assembleCombined(sections),
       maxTokens: 1000,
       keyName: "default",
+      ...MENT_AI_TUNING,
     });
     const pick = (k: string) => (data[k] ?? "").trim();
     const comment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");

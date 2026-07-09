@@ -38,6 +38,13 @@ export type GenerateJSONOptions = {
    * `"anthropic"`(Claude)을 우선한다. 미설정 시 tier/AI_PROVIDER 기본(보통 Upstage Solar).
    */
   provider?: AiProvider;
+  /** 생성 temperature(0~1). 미설정 시 provider 기본. 멘트=0.3(사실 서술 일관성, edutrix Solar 후보정 이식). */
+  temperature?: number;
+  /**
+   * Upstage(Solar) reasoning_effort. 멘트="minimal" — 안 하면 추론 과정이 본문에 섞임(edutrix 후보정).
+   * Anthropic엔 무시(extended thinking 미사용). 도메인별 opt-in(전역 기본 미변경).
+   */
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
 };
 
 /**
@@ -94,22 +101,28 @@ async function callProvider(
 ): Promise<string> {
   if (provider === "upstage") {
     const client = getUpstage(keyName);
-    const res = await client.chat.completions.create({
+    // 변수(리터럴 아님)로 만들어 reasoning_effort(Upstage 확장 파라미터, 표준 타입 밖)를 부착 —
+    // 리터럴 직접 전달 시 excess-property 검사에 걸리므로 base 변수로 우회. non-stream 오버로드(res.choices) 유지.
+    const base = {
       model,
       max_tokens: opts.maxTokens,
       // JSON mode — 프롬프트에 "JSON" 단어가 있어야 함(현 호출부 전부 "JSON만 출력" 포함).
-      response_format: { type: "json_object" },
+      response_format: { type: "json_object" as const },
+      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+      ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
       messages: [
         ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
         { role: "user" as const, content: opts.prompt },
       ],
-    });
+    };
+    const res = await client.chat.completions.create(base);
     return res.choices[0]?.message?.content ?? "";
   }
   const client = getAnthropic(keyName);
   const res = await client.messages.create({
     model,
     max_tokens: opts.maxTokens,
+    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
     ...(opts.system ? { system: opts.system } : {}),
     messages: [{ role: "user", content: opts.prompt }],
   });

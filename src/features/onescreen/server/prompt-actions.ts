@@ -9,6 +9,7 @@ import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import {
   DEFAULT_PROMPTS,
+  MENT_AI_TUNING,
   PROMPT_TYPES,
   PROMPT_TYPE_LABELS,
   REQUIRED_PLACEHOLDER,
@@ -212,7 +213,12 @@ export async function testPrompt(
   }
 
   try {
-    const { data } = await generateJSON<{ comment?: string; trend?: string }>({ prompt, maxTokens: 700, keyName: "default" });
+    const { data } = await generateJSON<{ comment?: string; trend?: string }>({
+      prompt,
+      maxTokens: 700,
+      keyName: "default",
+      ...MENT_AI_TUNING,
+    });
     const out = ((key === "comment" ? data.comment : data.trend) ?? "").trim();
     return { ok: true, output: out || "(빈 응답)" };
   } catch (e) {

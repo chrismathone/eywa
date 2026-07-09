@@ -12,6 +12,13 @@
 export const PROMPT_TYPES = ["comment", "trend", "comment_p1", "comment_p2"] as const;
 export type PromptType = (typeof PROMPT_TYPES)[number];
 
+/**
+ * 멘트/추세 생성 AI 후보정 — edutrix solar.ts 이식(Solar Pro 3 전용 튜닝).
+ * temperature 0.3 = 사실 서술 일관성(창작·변동 억제). reasoning_effort "minimal" = 추론 과정이 본문에
+ * 섞이는 것 방지. generateJSON에 opt-in으로 전달(전역 기본 미변경 — 타 도메인은 그대로).
+ */
+export const MENT_AI_TUNING = { temperature: 0.3, reasoningEffort: "minimal" } as const;
+
 export const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   comment: "학부모 멘트 (모드 A·단일)",
   trend: "학습 추세(종합분석)",
