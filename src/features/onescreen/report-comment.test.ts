@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildReportCommentInput, buildReportCommentPrompt } from "./report-comment";
+import {
+  buildReportCommentInput,
+  buildReportCommentPrompt,
+  buildFactBlock,
+  buildCommentP1Prompt,
+  buildCommentP2Prompt,
+  type ReportCommentInput,
+} from "./report-comment";
 import type { OneScreenStudent } from "./types";
 
 function student(overrides: Partial<OneScreenStudent> = {}): OneScreenStudent {
@@ -84,5 +91,78 @@ describe("buildReportCommentPrompt", () => {
     expect(sec).not.toContain("확인테스트");
     expect(sec).not.toContain("수업 태도");
     expect(sec).not.toContain("과제");
+  });
+});
+
+describe("공지 모드 B — P1/P2 + 특이사항 (4c)", () => {
+  const full: ReportCommentInput = {
+    studentName: "김민승",
+    subject: "수학(상)",
+    progress: "이차함수",
+    dailyTest: "20문제 중 16개",
+    checkTest: "",
+    attitude: "좋음",
+    homework: "완료",
+    textbook: "개념원리 중2-1",
+    specialNote: "개념 어려워함",
+  };
+
+  it("buildReportCommentInput이 교재·특이사항을 매핑한다", () => {
+    const input = buildReportCommentInput(
+      {
+        id: "s1",
+        name: "김민승",
+        grade: "초3",
+        tag: "월A",
+        attendance: "출석",
+        subjects: [{ name: "수학(상)", prev: "일차함수", today: "이차함수", textbook: "개념원리 중2-1" }],
+        tests: { daily: { score: null, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
+        attitude: "좋음",
+        homework: "완료",
+        note: "조퇴함",
+        progressConfirmed: false,
+        reportDraft: "",
+        reportSent: false,
+      },
+      0,
+    );
+    expect(input.textbook).toBe("개념원리 중2-1");
+    expect(input.specialNote).toBe("조퇴함");
+  });
+
+  it("모드 A 사실 블록에 특이사항이 포함된다", () => {
+    expect(buildFactBlock(full)).toContain("특이사항: 개념 어려워함");
+  });
+
+  it("P1 = 교재·진도·과제(태도 값 제외)", () => {
+    const p1 = buildCommentP1Prompt(full)!;
+    expect(p1).toContain("교재: 개념원리 중2-1");
+    expect(p1).toContain("진도: 수학(상) 이차함수");
+    expect(p1).toContain("과제: 완료");
+    expect(p1).not.toContain("태도: 좋음");
+    expect(p1).toContain('{"comment"');
+  });
+
+  it("P2 = 태도·특이사항(교재 값 제외)", () => {
+    const p2 = buildCommentP2Prompt(full)!;
+    expect(p2).toContain("태도: 좋음");
+    expect(p2).toContain("특이사항: 개념 어려워함");
+    expect(p2).not.toContain("교재:");
+  });
+
+  it("해당 문단 사실이 전무하면 null(문단 생략)", () => {
+    const empty: ReportCommentInput = {
+      studentName: "",
+      subject: "",
+      progress: "",
+      dailyTest: "",
+      checkTest: "",
+      attitude: "",
+      homework: "",
+      textbook: "",
+      specialNote: "",
+    };
+    expect(buildCommentP1Prompt(empty)).toBeNull();
+    expect(buildCommentP2Prompt(empty)).toBeNull();
   });
 });

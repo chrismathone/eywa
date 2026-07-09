@@ -183,6 +183,8 @@ export const reportSchema = z.object({
   showTrendNote: z.boolean(), // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식)
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
+  // AI 멘트 공지 모드 — 0093a(4c). A=단일 문단(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2) 2문단 분리.
+  noticeMode: z.enum(["A", "B"]).default("A"),
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

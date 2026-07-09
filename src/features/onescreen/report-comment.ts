@@ -16,6 +16,8 @@ export type ReportCommentInput = {
   checkTest: string;
   attitude: string; // "" = 미입력
   homework: string; // "" = 미입력/—
+  textbook: string; // 교재명 — 공지 모드 B의 P1(수업 내용)에 사용. "" = 미입력
+  specialNote: string; // 특이사항(강사 메모) — 0093a. 모드 A는 종합, B는 P2에 사용. "" = 미입력
 };
 
 /** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. */
@@ -40,10 +42,12 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
     checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore),
     attitude: st.attitude ?? "",
     homework: st.homework && st.homework !== "—" ? st.homework : "",
+    textbook: su?.textbook ?? "",
+    specialNote: st.note ?? "",
   };
 }
 
-/** 입력의 **채워진 사실만** 모은 [입력] 블록(빈 값은 침묵). 프롬프트 {{facts}}에 주입. */
+/** 입력의 **채워진 사실만** 모은 [입력] 블록(빈 값은 침묵). 모드 A 프롬프트 {{facts}}에 주입. */
 export function buildFactBlock(input: ReportCommentInput): string {
   const facts: string[] = [];
   const prog = [input.subject, input.progress].filter(Boolean).join(" ");
@@ -52,6 +56,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.checkTest) facts.push(`확인테스트(오늘 진도 범위): ${input.checkTest}`);
   if (input.attitude) facts.push(`수업 태도: ${input.attitude}`);
   if (input.homework) facts.push(`과제: ${input.homework}`);
+  if (input.specialNote) facts.push(`특이사항: ${input.specialNote}`);
   return facts.length ? facts.join("\n") : "(입력된 정보 없음)";
 }
 
@@ -61,4 +66,38 @@ export function buildFactBlock(input: ReportCommentInput): string {
  */
 export function buildReportCommentPrompt(input: ReportCommentInput, template?: string | null): string {
   return interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) });
+}
+
+// ── 공지 모드 B(2문단 분리) — P1(수업 내용) + P2(태도·특이사항) ──
+
+/** P1 사실(교재·진도·과제). 전부 비면 null(문단 생략). */
+export function buildP1FactBlock(input: ReportCommentInput): string | null {
+  const facts: string[] = [];
+  if (input.textbook) facts.push(`교재: ${input.textbook}`);
+  const prog = [input.subject, input.progress].filter(Boolean).join(" ");
+  if (prog) facts.push(`진도: ${prog}`);
+  if (input.homework) facts.push(`과제: ${input.homework}`);
+  return facts.length ? facts.join("\n") : null;
+}
+
+/** P2 사실(태도·특이사항). 전부 비면 null(문단 생략). */
+export function buildP2FactBlock(input: ReportCommentInput): string | null {
+  const facts: string[] = [];
+  if (input.attitude) facts.push(`태도: ${input.attitude}`);
+  if (input.specialNote) facts.push(`특이사항: ${input.specialNote}`);
+  return facts.length ? facts.join("\n") : null;
+}
+
+/** 모드 B P1 프롬프트. 사실 없으면 null(호출부가 이 문단 생략). template=원장 오버라이드. */
+export function buildCommentP1Prompt(input: ReportCommentInput, template?: string | null): string | null {
+  const p1facts = buildP1FactBlock(input);
+  if (!p1facts) return null;
+  return interpolate(template || DEFAULT_PROMPTS.comment_p1, { p1facts });
+}
+
+/** 모드 B P2 프롬프트. 사실 없으면 null. template=원장 오버라이드. */
+export function buildCommentP2Prompt(input: ReportCommentInput, template?: string | null): string | null {
+  const p2facts = buildP2FactBlock(input);
+  if (!p2facts) return null;
+  return interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts });
 }

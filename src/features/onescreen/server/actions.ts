@@ -5,10 +5,16 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
-import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
+import {
+  buildReportCommentPrompt,
+  buildCommentP1Prompt,
+  buildCommentP2Prompt,
+  type ReportCommentInput,
+} from "../report-comment";
 import { buildTrendInput, buildTrendPrompt } from "../trend-comment";
 import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory } from "./score-history";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { isClassnoteAllowed } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { ingestReport } from "@/features/progress/server/ingest";
@@ -254,6 +260,7 @@ export type SaveOnescreenSessionInput = {
   checkMax?: number | null;
   attitude?: string | null;
   homework?: string | null;
+  note?: string | null; // 특이사항(강사 메모) — 0093a
   progressConfirmed?: boolean;
 };
 
@@ -298,6 +305,7 @@ export async function saveOnescreenSession(
       check_max: input.checkMax ?? null,
       attitude: input.attitude ?? null,
       homework: input.homework ?? null,
+      special_note: input.note ?? null,
       progress_confirmed: input.progressConfirmed ?? false,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
@@ -320,6 +328,31 @@ export async function generateReportComment(
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   try {
     const supabase = await createClient();
+    const settings = await getTenantSettings();
+    const mode = settings.report.noticeMode ?? "A";
+
+    // 공지 모드 B: 수업내용(P1) + 태도·특이사항(P2) 2문단 분리 생성 후 join. 사실 없는 문단은 생략.
+    if (mode === "B") {
+      const [p1tpl, p2tpl] = await Promise.all([
+        loadActivePrompt(supabase, user.tenantId, "comment_p1"),
+        loadActivePrompt(supabase, user.tenantId, "comment_p2"),
+      ]);
+      const genPara = (prompt: string | null): Promise<string> =>
+        prompt
+          ? generateJSON<{ comment?: string }>({ prompt, maxTokens: 700, keyName: "default" }).then((r) =>
+              (r.data.comment ?? "").trim(),
+            )
+          : Promise.resolve("");
+      const [p1, p2] = await Promise.all([
+        genPara(buildCommentP1Prompt(input, p1tpl)),
+        genPara(buildCommentP2Prompt(input, p2tpl)),
+      ]);
+      const comment = [p1, p2].filter(Boolean).join("\n\n");
+      if (!comment) return { ok: false, error: "빈 응답" };
+      return { ok: true, comment };
+    }
+
+    // 모드 A(기본): 단일 문단(사실+특이사항 종합).
     const template = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
     const { data } = await generateJSON<{ comment?: string }>({
       prompt: buildReportCommentPrompt(input, template),

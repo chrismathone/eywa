@@ -722,6 +722,7 @@ export const onescreenDailySessions = pgTable(
     checkMax: integer("check_max"),
     attitude: text("attitude"),
     homework: text("homework"),
+    specialNote: text("special_note"), // 강사 특이사항(메모) — 0093a. AI 멘트 입력(공지 모드 A/B).
     progressConfirmed: boolean("progress_confirmed").notNull().default(false),
     updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

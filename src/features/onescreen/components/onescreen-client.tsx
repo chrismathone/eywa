@@ -146,6 +146,7 @@ export function OneScreenClient({
       checkMax: s.tests.check.max,
       attitude: s.attitude,
       homework: s.homework || null,
+      note: s.note || null,
       progressConfirmed: s.progressConfirmed,
     };
   }
@@ -252,6 +253,14 @@ export function OneScreenClient({
   }
   function setHomeworkValue(studentId: string, h: string) {
     patch(studentId, (s) => ({ ...s, homework: h }));
+  }
+  // 특이사항(강사 메모) — AI 멘트 입력(공지 모드 A/B). 학생별. 자동저장(patch→queueSave)에 실림.
+  function setNoteFor(studentId: string, text: string) {
+    patch(studentId, (s) => ({ ...s, note: text }));
+  }
+  function setNote(text: string) {
+    if (!selected) return;
+    setNoteFor(selected.id, text);
   }
   function setProgress(subjectIndex: number, today: string) {
     if (!selected) return;
@@ -770,6 +779,7 @@ export function OneScreenClient({
           onTextbook={setTextbookFor}
           onDraft={setDraftFor}
           onTrend={setTrendDraftFor}
+          onNote={setNoteFor}
           onSendRow={sendRow}
           onSaveAll={saveAllVisible}
           onSendAll={sendAllVisible}
@@ -826,6 +836,7 @@ export function OneScreenClient({
                 onMakeup={toggleMakeup}
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}
+                onNote={setNote}
                 onAutoWrite={autoWriteSubject}
                 generatingSubject={genSubject}
                 onSend={sendSubject}

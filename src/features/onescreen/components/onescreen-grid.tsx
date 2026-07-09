@@ -187,6 +187,7 @@ export function OneScreenGrid({
   onTextbook,
   onDraft,
   onTrend,
+  onNote,
   onSendRow,
   onSaveAll,
   onSendAll,
@@ -212,6 +213,7 @@ export function OneScreenGrid({
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
   onDraft: (studentId: string, subjectName: string, text: string) => void; // 학부모 문구(멘트) 편집
   onTrend: (studentId: string, subjectName: string, text: string) => void; // 학습 추세(종합분석) 편집(4a)
+  onNote: (studentId: string, text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
   onSendRow: (student: OneScreenStudent, subjectName: string) => void;
   onSaveAll: (keys?: string[]) => void; // keys(선택 행) 있으면 그 행만, 없으면 전체
   onSendAll: (keys?: string[]) => void;
@@ -457,8 +459,15 @@ export function OneScreenGrid({
                     </div>
                   </td>
                   <td className={TD}>
-                    {/* 학부모 문구(멘트) + 학습 추세 — 자동작성이 함께 채움 · 직접 편집 · 발송 전 확인. 우측 남는 폭 활용. */}
+                    {/* 특이사항(입력) + 학부모 문구(멘트) + 학습 추세 — 자동작성이 특이사항을 문장으로 풀어 씀. 우측 남는 폭 활용. */}
                     <div className="flex flex-col gap-1">
+                      <textarea
+                        value={student.note ?? ""}
+                        onChange={(e) => onNote(student.id, e.target.value)}
+                        placeholder="특이사항(메모) · 예: 조퇴함 / 개념 어려워함"
+                        aria-label={`${student.name} 특이사항`}
+                        className="border-amber/40 focus:border-primary scrollbar-thin h-[40px] w-full resize-none rounded-sm border bg-amber-soft/30 px-2 py-1 text-[11px] leading-snug outline-none"
+                      />
                       <textarea
                         value={rep?.draft ?? ""}
                         onChange={(e) => onDraft(student.id, subject.name, e.target.value)}

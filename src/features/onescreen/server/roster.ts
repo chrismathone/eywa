@@ -47,6 +47,7 @@ type OnescreenSessionRow = {
   check_max: number | null;
   attitude: string | null;
   homework: string | null;
+  special_note: string | null;
   progress_confirmed: boolean | null;
 };
 
@@ -142,6 +143,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         },
         attitude: null,
         homework: "",
+        note: "",
         progressConfirmed: false,
         reportDraft: "",
         reportSent: false,
@@ -194,7 +196,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       supabase
         .from("onescreen_daily_sessions")
         .select(
-          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, progress_confirmed",
+          "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
         )
         .eq("session_date", todayIso)
         .in("student_id", chunk),
@@ -292,6 +294,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       if (sess.check_max != null) os.tests.check.max = sess.check_max;
       if (sess.attitude != null) os.attitude = sess.attitude;
       if (sess.homework != null) os.homework = sess.homework;
+      if (sess.special_note != null) os.note = sess.special_note;
       if (sess.progress_confirmed != null) os.progressConfirmed = sess.progress_confirmed;
       const sp = sess.subject_progress ?? {};
       for (const su of os.subjects) {

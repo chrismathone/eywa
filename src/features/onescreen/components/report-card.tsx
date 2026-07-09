@@ -100,6 +100,7 @@ export function ReportCard({
   onMakeup,
   onSubjectDraft,
   onSubjectTrend,
+  onNote,
   onAutoWrite,
   generatingSubject,
   onSend,
@@ -121,6 +122,7 @@ export function ReportCard({
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
+  onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
   onAutoWrite: (subjectName: string) => void;
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
   onSend: (subjectName: string, channel: string) => void;
@@ -269,6 +271,17 @@ export function ReportCard({
               );
             })}
           </div>
+        </div>
+
+        {/* 특이사항(강사 메모) — AI 멘트 입력(4c). 자유서술. 학부모엔 생성 문구만 나감. */}
+        <div className="flex flex-col gap-1.5">
+          <p className="micro text-text-faint">특이사항 (메모)</p>
+          <textarea
+            value={student.note ?? ""}
+            onChange={(e) => onNote(e.target.value)}
+            placeholder="예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다"
+            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+          />
         </div>
 
         <div className="flex flex-1 flex-col gap-1.5">

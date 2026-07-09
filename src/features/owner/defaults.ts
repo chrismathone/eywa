@@ -138,6 +138,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showTrendNote: true, // 학습 추세(종합분석) 기본 표시 — 0091a
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
+    noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   permissions: { overrides: [] },

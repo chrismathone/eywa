@@ -67,6 +67,38 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
               onChange={(v) => set({ allowTeacherTestMax: v })}
             />
           </SettingsCard>
+
+          <SettingsCard
+            title="AI 멘트 공지 모드"
+            description="자동작성 학부모 멘트의 문단 구성입니다. 프롬프트 세부는 학원 운영 > AI 멘트에서 편집합니다."
+          >
+            <div className="flex flex-col gap-2">
+              {(
+                [
+                  ["A", "단일 문단", "진도·점수·태도·과제·특이사항을 종합한 한 문단"],
+                  ["B", "2문단 분리", "① 수업 내용(교재·진도·과제) ② 태도·특이사항"],
+                ] as const
+              ).map(([mode, title, desc]) => {
+                const on = (r.noticeMode ?? "A") === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => set({ noticeMode: mode })}
+                    aria-pressed={on}
+                    className={`rounded-md border px-3 py-2 text-left transition ${
+                      on ? "border-primary bg-primary/5" : "border-line hover:bg-bg-soft"
+                    }`}
+                  >
+                    <p className="text-foreground text-[13px] font-semibold">
+                      {title} <span className="text-text-faint font-normal">({mode})</span>
+                    </p>
+                    <p className="text-text-dim mt-0.5 text-[12px]">{desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </SettingsCard>
         </div>
 
         <SettingsCard

@@ -14,7 +14,12 @@ import {
   REQUIRED_PLACEHOLDER,
   type PromptType,
 } from "../prompt-defaults";
-import { buildReportCommentPrompt, type ReportCommentInput } from "../report-comment";
+import {
+  buildReportCommentPrompt,
+  buildCommentP1Prompt,
+  buildCommentP2Prompt,
+  type ReportCommentInput,
+} from "../report-comment";
 import { buildTrendInput, buildTrendPrompt } from "../trend-comment";
 import { fetchScoreHistory } from "./score-history";
 
@@ -169,15 +174,22 @@ export async function testPrompt(
   const supabase = await createClient();
   const { data: r } = await supabase
     .from("lesson_reports")
-    .select("student_id, subject, progress, daily_test, check_test, attitude, homework_score")
+    .select("student_id, subject, progress, daily_test, check_test, attitude, homework_score, textbook")
     .eq("id", reportId)
     .maybeSingle();
   if (!r) return { ok: false, error: "보고서를 찾을 수 없습니다" };
   const { data: stu } = await supabase.from("students").select("name").eq("id", r.student_id as string).maybeSingle();
 
-  let prompt: string;
+  let prompt: string | null;
   let key: "comment" | "trend";
-  if (type === "comment") {
+  if (type === "trend") {
+    key = "trend";
+    const history = await fetchScoreHistory(supabase, r.student_id as string, (r.subject as string) ?? undefined, kstToday());
+    const input = buildTrendInput(history);
+    if (!input) return { ok: false, error: "이 학생은 추세 표본이 부족합니다 — 다른 보고서를 선택하세요" };
+    prompt = buildTrendPrompt(input, trimmed);
+  } else {
+    // comment | comment_p1 | comment_p2 — 저장 보고서엔 특이사항이 없으므로 specialNote=""(P2는 태도만).
     key = "comment";
     const input: ReportCommentInput = {
       studentName: (stu?.name as string) ?? "",
@@ -187,14 +199,16 @@ export async function testPrompt(
       checkTest: (r.check_test as string) ?? "",
       attitude: (r.attitude as string) ?? "",
       homework: r.homework_score && r.homework_score !== "—" ? (r.homework_score as string) : "",
+      textbook: (r.textbook as string) ?? "",
+      specialNote: "",
     };
-    prompt = buildReportCommentPrompt(input, trimmed);
-  } else {
-    key = "trend";
-    const history = await fetchScoreHistory(supabase, r.student_id as string, (r.subject as string) ?? undefined, kstToday());
-    const input = buildTrendInput(history);
-    if (!input) return { ok: false, error: "이 학생은 추세 표본이 부족합니다 — 다른 보고서를 선택하세요" };
-    prompt = buildTrendPrompt(input, trimmed);
+    prompt =
+      type === "comment_p1"
+        ? buildCommentP1Prompt(input, trimmed)
+        : type === "comment_p2"
+          ? buildCommentP2Prompt(input, trimmed)
+          : buildReportCommentPrompt(input, trimmed);
+    if (!prompt) return { ok: false, error: "이 보고서엔 해당 문단의 입력이 없습니다 — 다른 보고서를 선택하세요" };
   }
 
   try {
