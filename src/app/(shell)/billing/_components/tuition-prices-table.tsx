@@ -182,6 +182,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
 
       {rows.length === 0 ? (
         <EmptyState
+          image="billing"
           icon={() => <Coins size={32} strokeWidth={1.5} />}
           title="등록된 단가가 없습니다"
           description="과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다."

@@ -183,6 +183,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
       {total === 0 ? (
         <EmptyState
+          image={q ? "search" : "billing"}
           icon={() => <ReceiptText size={32} strokeWidth={1.5} />}
           title={q ? "검색 결과 없음" : "이 달 청구 내역이 없습니다"}
           description={q ? "검색어를 조정해보세요." : "월을 이동하거나 신규 청구서를 생성하세요."}

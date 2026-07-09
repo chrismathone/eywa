@@ -144,6 +144,7 @@ export default async function StaffPayrollPage({
 
       {rows.length === 0 ? (
         <EmptyState
+          image="billing"
           icon={() => <Wallet size={32} strokeWidth={1.5} />}
           title="해당 조건의 급여 내역이 없습니다"
         />

@@ -159,6 +159,7 @@ export default async function AttendanceByDatePage({
 
       {records.length === 0 && processing.length === 0 ? (
         <EmptyState
+          image="attendance"
           icon={ClipboardCheck}
           title="이 날짜의 출석 기록이 없습니다"
           description="다른 날짜를 선택하거나 시드를 확인하세요."

@@ -111,6 +111,7 @@ export default async function ExamDetailPage({
 
       {classOptions.length === 0 ? null : rows.length === 0 ? (
         <EmptyState
+          image="students"
           icon={() => <BookOpen size={32} strokeWidth={1.5} />}
           title="이 반에 재원 학생이 없습니다"
         />

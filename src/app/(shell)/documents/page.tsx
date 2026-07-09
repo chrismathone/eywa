@@ -146,7 +146,7 @@ export default async function DocumentsPage({
           </div>
 
           {total === 0 ? (
-            <EmptyState title={empty.title} description={empty.description} />
+            <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

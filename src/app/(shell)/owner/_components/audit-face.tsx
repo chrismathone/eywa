@@ -79,6 +79,7 @@ export async function AuditFace({
 
       {total === 0 ? (
         <EmptyState
+          image="audit"
           icon={() => <ScrollText size={32} strokeWidth={1.5} />}
           title="기록된 작업이 없습니다"
           description="역할 변경·삭제·청구서·시험·급여 등 주요 작업이 발생하면 여기에 기록됩니다."

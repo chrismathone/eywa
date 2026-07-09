@@ -133,6 +133,7 @@ export default async function EnrollmentPage({
 
       {items.length === 0 ? (
         <EmptyState
+          image="enrollment"
           icon={() => <UserPlus size={32} strokeWidth={1.5} />}
           title="진행 중인 상담이 없습니다"
         />

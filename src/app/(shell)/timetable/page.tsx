@@ -286,6 +286,7 @@ export default async function TimetablePage({
 
       {slots.length === 0 ? (
         <EmptyState
+          image="classes"
           icon={() => <CalendarOff size={32} strokeWidth={1.5} />}
           title="해당 과목의 시간표가 없습니다"
         />

@@ -84,6 +84,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
 
       {all.length === 0 ? (
         <EmptyState
+          image="billing"
           icon={() => <ReceiptText size={32} strokeWidth={1.5} />}
           title="작성된 환불 요청서가 없습니다"
           description="'새 환불 요청서'로 종이 서식과 같은 항목을 웹에서 입력하세요 — 인쇄·작성·보관이 한 번에 됩니다."

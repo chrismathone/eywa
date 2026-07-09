@@ -193,6 +193,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
 
       {rows.length === 0 ? (
         <EmptyState
+          image="documents"
           icon={() => <BookText size={32} strokeWidth={1.5} />}
           title="등록된 교재가 없습니다"
           description="표준 교재·단가를 등록해두면 교재 신청 시 자동으로 채워집니다."
