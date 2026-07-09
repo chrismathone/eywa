@@ -10,7 +10,6 @@ const STATUS_LABEL: Record<string, string> = {
   absent: "결석",
   late: "지각",
   early_leave: "조퇴",
-  excused: "공결",
   makeup: "보강",
 };
 const STATUS_COLOR: Record<string, string> = {
@@ -18,7 +17,6 @@ const STATUS_COLOR: Record<string, string> = {
   absent: "bg-chart-4/15 text-chart-4 border-chart-4/30",
   late: "bg-chart-3/15 text-chart-3 border-chart-3/30",
   early_leave: "bg-chart-5/15 text-chart-5 border-chart-5/30",
-  excused: "bg-muted text-muted-foreground border-border",
   makeup: "bg-chart-1/15 text-chart-1 border-chart-1/30",
 };
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -52,7 +50,7 @@ export function AttendanceView({
 
   // 통계(현재 월·반 필터 기준)
   const stats = useMemo(() => {
-    const c = { present: 0, absent: 0, late: 0, early_leave: 0, excused: 0, makeup: 0 };
+    const c = { present: 0, absent: 0, late: 0, early_leave: 0, makeup: 0 };
     for (const r of monthRecords) if (r.status in c) c[r.status as keyof typeof c]++;
     const total = monthRecords.length;
     const rate = total > 0 ? Math.round(((c.present + c.late + c.makeup) / total) * 1000) / 10 : 0;

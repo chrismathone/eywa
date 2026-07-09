@@ -5,6 +5,8 @@ import {
   getAttendanceInputRows,
   getClassMeta,
 } from "@/features/attendance/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { AttendanceInputForm } from "./input-form";
 
 export const metadata = { title: "출석 입력 — eywa" };
@@ -27,11 +29,13 @@ export default async function AttendanceInputPage({
 }) {
   await requireAccess("attendance");
   const { date, classId } = await params;
-  const [klass, rows] = await Promise.all([
+  const [klass, rows, { operations }] = await Promise.all([
     getClassMeta(classId),
     getAttendanceInputRows(classId, date),
+    getTenantSettings(),
   ]);
   if (!klass) notFound();
+  const subjectMaps = buildSubjectMaps(operations.subjects);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -41,7 +45,7 @@ export default async function AttendanceInputPage({
         <p className="eyebrow">{formatKoreanDate(date)}</p>
         <h1 className="display text-foreground text-2xl">{klass.className}</h1>
         <p className="text-text-dim text-sm">
-          {klass.subject}
+          {subjectMaps.labelOf(klass.subject)}
           {klass.teacherName ? ` · 담임 ${klass.teacherName}` : ""} · 재원생{" "}
           <span className="num">{rows.length}</span>명
         </p>

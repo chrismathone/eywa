@@ -8,6 +8,8 @@ import {
   getDailyProcessingStatus,
   type AttendanceRow,
 } from "@/features/attendance/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 export const metadata = { title: "출석부 — eywa" };
 
@@ -16,7 +18,6 @@ const STATUS_LABEL: Record<string, string> = {
   absent: "결석",
   late: "지각",
   early_leave: "조퇴",
-  excused: "공결",
   makeup: "보강",
 };
 
@@ -25,7 +26,6 @@ const STATUS_COLOR: Record<string, string> = {
   absent: "text-danger bg-danger/10 border-danger/20",
   late: "text-amber bg-amber/10 border-amber/20",
   early_leave: "text-rose bg-rose/10 border-rose/20",
-  excused: "text-blue bg-blue/10 border-blue/20",
   makeup: "text-purple bg-purple/10 border-purple/20",
 };
 
@@ -50,10 +50,12 @@ export default async function AttendanceByDatePage({
   await requireAccess("attendance");
   const { date } = await params;
   const { saved } = await searchParams;
-  const [records, processing] = await Promise.all([
+  const [records, processing, { operations }] = await Promise.all([
     getAttendanceForDate(date),
     getDailyProcessingStatus(date),
+    getTenantSettings(),
   ]);
+  const subjectMaps = buildSubjectMaps(operations.subjects);
 
   // 처리 현황 집계 — 미처리 반·완료율(오늘 출결 누락 추적).
   const pendingClasses = processing.filter((p) => p.unprocessed > 0);
@@ -121,7 +123,7 @@ export default async function AttendanceByDatePage({
                   <p className="truncate text-sm font-medium">
                     {p.className}
                     <span className="text-text-dim ml-1.5 text-xs font-normal">
-                      {p.subject}
+                      {subjectMaps.labelOf(p.subject)}
                       {p.teacherName ? ` · ${p.teacherName}` : ""}
                     </span>
                   </p>
@@ -185,7 +187,7 @@ export default async function AttendanceByDatePage({
                     <div>
                       <h3 className="text-sm font-semibold">{group.className}</h3>
                       <p className="text-text-dim num text-xs">
-                        {group.subject} · {group.rows.length}명
+                        {subjectMaps.labelOf(group.subject)} · {group.rows.length}명
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5">

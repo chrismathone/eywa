@@ -12,7 +12,6 @@ import {
   Clock,
   ExternalLink,
   Loader2,
-  Mail,
   Pencil,
   RotateCcw,
   Save,
@@ -57,12 +56,6 @@ const STATUS_DEFS: {
     label: "조퇴",
     icon: Clock,
     activeClass: "text-rose bg-rose/10 border-rose/30",
-  },
-  {
-    value: "excused",
-    label: "공결",
-    icon: Mail,
-    activeClass: "text-blue bg-blue/10 border-blue/30",
   },
   {
     value: "makeup",
