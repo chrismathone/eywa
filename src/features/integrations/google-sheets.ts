@@ -1,5 +1,6 @@
 import "server-only";
 import { google } from "googleapis";
+import type { SheetGrid } from "@/features/timetable/import/structure/types";
 
 /**
  * Sheets/Drive 쓰기 호출을 429/503에 한해 지수 백오프 재시도.
@@ -206,6 +207,50 @@ export async function readSheetTabRows(spreadsheetId: string, tabName: string): 
     );
     const values = (res.data.values ?? []) as unknown[][];
     return values.map((row) => row.map((c) => (c == null ? "" : String(c))));
+  } catch (e) {
+    const msg = ((e as { message?: string })?.message || "").toLowerCase();
+    if (msg.includes("unable to parse range") || msg.includes("not found")) {
+      throw new Error(`시트에 '${tabName}' 탭이 없습니다. 먼저 시간표에서 '시트 반영'을 한 번 누르세요.`);
+    }
+    throw new Error(translateSheetsError(e));
+  }
+}
+
+/**
+ * 시트 탭을 **셀 + 병합** 포함으로 읽는다(구조 import용). `values.get`은 병합을 잃어(강사별 그리드는
+ * 병합=수업길이라 필수) `spreadsheets.get(includeGridData:true)`로 읽는다. cells=formattedValue(빈="") 0-based,
+ * merges=Sheets 원형(0-based, end-exclusive). 후행 완전 빈 행은 트림.
+ */
+export async function readSheetGridWithMerges(spreadsheetId: string, tabName: string): Promise<SheetGrid> {
+  const auth = getServiceAccountAuth();
+  await auth.authorize();
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    const res = await withSheetsRetry(() =>
+      sheets.spreadsheets.get({
+        spreadsheetId,
+        ranges: [`'${tabName}'`],
+        includeGridData: true,
+        fields: "sheets(data(rowData(values(formattedValue))),merges)",
+      }),
+    );
+    const sheet = res.data.sheets?.[0];
+    const rowData = sheet?.data?.[0]?.rowData ?? [];
+    const maxCol = Math.max(0, ...rowData.map((r) => (r.values ?? []).length));
+    const cells: string[][] = rowData.map((r) => {
+      const vs = r.values ?? [];
+      const row: string[] = [];
+      for (let c = 0; c < maxCol; c++) row.push(vs[c]?.formattedValue ?? "");
+      return row;
+    });
+    while (cells.length && cells[cells.length - 1]!.every((x) => x === "")) cells.pop();
+    const merges = (sheet?.merges ?? []).map((m) => ({
+      startRowIndex: m.startRowIndex ?? 0,
+      endRowIndex: m.endRowIndex ?? 0,
+      startColumnIndex: m.startColumnIndex ?? 0,
+      endColumnIndex: m.endColumnIndex ?? 0,
+    }));
+    return { tabName, cells, merges };
   } catch (e) {
     const msg = ((e as { message?: string })?.message || "").toLowerCase();
     if (msg.includes("unable to parse range") || msg.includes("not found")) {
