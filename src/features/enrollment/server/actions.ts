@@ -694,7 +694,9 @@ export async function runAiAnalysis(
 
 // ────────────────── 상담 → 학생 자동 전환 ──────────────────
 
-export type ConvertToStudentState = { error?: string; studentId?: string } | undefined;
+export type ConvertToStudentState =
+  | { error?: string; studentId?: string; existingStudentId?: string }
+  | undefined;
 
 /**
  * 등록상담 → 학생 자동 생성. 선택한 반들에 enrollments도 동시에 INSERT.
@@ -734,7 +736,7 @@ export async function convertConsultationToStudent(
     .eq("id", consultationId)
     .single();
 
-  if (cErr || !c) return { error: cErr?.message ?? "상담을 찾을 수 없습니다" };
+  if (cErr || !c) return { error: "상담 정보를 불러오지 못했습니다" };
 
   if (c.student_id) {
     // 이미 연결된 학생이 있으면 그 학생으로 이동
@@ -754,14 +756,19 @@ export async function convertConsultationToStudent(
 
   const today = kstToday();
 
+  // 자연키(같은 이름·학교·학년의 재원 학생) 값 — 중복 안내에도 재사용.
+  const studentName = overrideName || c.prospect_name;
+  const studentSchool = overrideSchool ?? c.prospect_school;
+  const studentGrade = overrideGrade ?? c.prospect_grade;
+
   // students INSERT
   const { data: stu, error: stuErr } = await supabase
     .from("students")
     .insert({
       tenant_id: c.tenant_id,
-      name: overrideName || c.prospect_name,
-      grade: overrideGrade ?? c.prospect_grade,
-      school: overrideSchool ?? c.prospect_school,
+      name: studentName,
+      grade: studentGrade,
+      school: studentSchool,
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",
@@ -770,42 +777,87 @@ export async function convertConsultationToStudent(
     .select("id")
     .single();
 
-  if (stuErr || !stu) {
-    return { error: stuErr?.message ?? "학생 생성 실패" };
+  // 학생 확정: 생성 성공이면 그 id, 자연키 충돌(이미 재원 학생 — 대개 makeedu 왕복)이면 기존 학생 재사용(B).
+  let studentId: string;
+  let reusedExisting = false;
+  if (stu && !stuErr) {
+    studentId = stu.id;
+  } else {
+    const isDuplicate =
+      stuErr?.code === "23505" || /duplicate key|natural_key/i.test(stuErr?.message ?? "");
+    if (!isDuplicate) {
+      console.error("[convertConsultationToStudent] 학생 생성 실패", stuErr);
+      return { error: "학생을 생성하지 못했습니다. 잠시 후 다시 시도하거나 관리자에게 문의하세요." };
+    }
+    // 같은 자연키(정규화 이름 + 학교·학년)의 기존 재원 학생을 찾아 재사용 — 원본 에러 노출 없이 매끄럽게 해소.
+    const norm = studentName.toLowerCase().replace(/\s+/g, "");
+    const { data: candidates } = await supabase
+      .from("students")
+      .select("id, school, grade")
+      .eq("tenant_id", c.tenant_id)
+      .eq("name_normalized", norm)
+      .neq("status", "withdrawn");
+    const existing = (candidates ?? []).find(
+      (s) => (s.school ?? "") === (studentSchool ?? "") && (s.grade ?? "") === (studentGrade ?? ""),
+    );
+    if (!existing) {
+      // 폴백(A): 충돌은 났으나 정확 매칭 실패(정규화 차이 등) → 친절 안내 + (있으면) 기존 학생 링크.
+      const who = [studentName, studentSchool, studentGrade].filter(Boolean).join(" · ");
+      return {
+        error: `이미 같은 이름·학교·학년의 재원 학생이 있습니다 (${who}). 학생 목록에서 그 학생에 반을 배정해 주세요.`,
+        existingStudentId: candidates?.[0]?.id,
+      };
+    }
+    studentId = existing.id;
+    reusedExisting = true;
   }
 
-  // enrollments 다중 INSERT
-  if (classIds.length > 0) {
-    const rows = classIds.map((classId) => ({
+  // enrollments 배정 — 기존 학생 재사용 시 이미 등록된 반은 제외(중복 배정·제약 위반 방지).
+  let assignClassIds = classIds;
+  if (reusedExisting) {
+    const { data: already } = await supabase
+      .from("enrollments")
+      .select("class_id")
+      .eq("student_id", studentId)
+      .in("class_id", classIds);
+    const inSet = new Set((already ?? []).map((e) => e.class_id as string));
+    assignClassIds = classIds.filter((id) => !inSet.has(id));
+  }
+  if (assignClassIds.length > 0) {
+    const rows = assignClassIds.map((classId) => ({
       tenant_id: c.tenant_id,
-      student_id: stu.id,
+      student_id: studentId,
       class_id: classId,
       start_date: today,
     }));
     const { error: enrErr } = await supabase.from("enrollments").insert(rows);
     if (enrErr) {
-      // 학생은 생성됐지만 enrollment 실패 — 사용자에게 알림 (학생 ID는 반환)
-      return { error: `학생은 생성됐으나 반 배정 실패: ${enrErr.message}`, studentId: stu.id };
+      // 원본 메시지 대신 친절 안내(학생 ID는 반환해 이동 유도).
+      console.error("[convertConsultationToStudent] 반 배정 실패", enrErr);
+      return {
+        error: "학생은 준비됐으나 반 배정에 실패했습니다. 학생 상세에서 반을 배정해 주세요.",
+        studentId,
+      };
     }
     // 배정된 반들의 담임에게 인앱 알림 — best-effort.
     await notifyClassAssignment({
       tenantId: c.tenant_id,
       actorId: user.id,
-      assignments: classIds.map((classId) => ({ classId, studentId: stu.id })),
+      assignments: assignClassIds.map((classId) => ({ classId, studentId })),
       type: "enrollment_assigned",
     });
   }
 
-  // 상담에 학생 ID + outcome=enrolled 연결
+  // 상담에 학생 ID + outcome=enrolled 연결(재사용/신규 모두 — orphan 상담 해소).
   await supabase
     .from("enrollment_consultations")
-    .update({ student_id: stu.id, outcome: "enrolled" })
+    .update({ student_id: studentId, outcome: "enrolled" })
     .eq("id", consultationId);
 
   revalidatePath("/enrollment");
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/students");
-  return { studentId: stu.id };
+  return { studentId };
 }
 
 
