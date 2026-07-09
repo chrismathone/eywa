@@ -25,7 +25,6 @@ import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import type { CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
-import { OneScreenHubBar } from "./hub-bar";
 import { StudentList } from "./student-list";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
@@ -720,9 +719,9 @@ export function OneScreenClient({
         total={students.length}
         view={view}
         onView={setView}
+        stats={hubStats}
+        todayClasses={todayClasses}
       />
-
-      <OneScreenHubBar stats={hubStats} todayClasses={todayClasses} />
 
       {view === "grid" ? (
         <OneScreenGrid

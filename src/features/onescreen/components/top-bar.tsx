@@ -1,6 +1,10 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
+import type { TodayClass } from "../server/roster";
 
-/** 상단 바 — 날짜 + 반 필터 칩 + "오늘 마감 X/N" 진행률 */
+/**
+ * 원스크린 상단 바 — 날짜 + 반 필터 + 오늘 수업 + 마감 통계 + 카드/표 토글을 **한 줄(반응형)**로.
+ * 예전 TopBar+HubBar 2개 카드를 하나의 flex-wrap 바로 합침 — 넓은 화면은 1줄, 좁으면 자연 wrap(불필요한 2줄 제거).
+ */
 export function OneScreenTopBar({
   today,
   classTags,
@@ -10,6 +14,8 @@ export function OneScreenTopBar({
   total,
   view,
   onView,
+  stats,
+  todayClasses,
 }: {
   today: string;
   classTags: readonly string[];
@@ -19,11 +25,13 @@ export function OneScreenTopBar({
   total: number;
   view: "card" | "grid";
   onView: (v: "card" | "grid") => void;
+  stats: { students: number; progressDone: number; testDone: number; reportDone: number };
+  todayClasses: TodayClass[];
 }) {
-  const pctDone = total ? Math.round((doneCount / total) * 100) : 0;
   return (
-    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
-      <div className="flex items-center gap-2">
+    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2">
+      {/* 날짜 */}
+      <div className="flex shrink-0 items-center gap-2">
         <span className="bg-primary-soft text-primary flex size-7 items-center justify-center rounded-sm">
           <EyIcon name="check" size={14} />
         </span>
@@ -33,8 +41,9 @@ export function OneScreenTopBar({
         </div>
       </div>
 
-      <span className="bg-line h-4 w-px" aria-hidden />
+      <span className="bg-line hidden h-5 w-px shrink-0 sm:block" aria-hidden />
 
+      {/* 반 필터 */}
       <div className="flex flex-wrap items-center gap-1.5">
         {classTags.map((tag) => {
           const on = tag === classFilter;
@@ -45,9 +54,7 @@ export function OneScreenTopBar({
               onClick={() => onFilter(tag)}
               aria-pressed={on}
               className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
-                on
-                  ? "bg-primary text-primary-foreground"
-                  : "border-line text-text-dim hover:bg-bg-soft border"
+                on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}
             >
               {tag}
@@ -56,7 +63,50 @@ export function OneScreenTopBar({
         })}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      {/* 오늘 수업 — 시각·인원(반 필터와 같은 반이지만 시각/인원 정보 유지) */}
+      {todayClasses.length ? (
+        <>
+          <span className="bg-line hidden h-5 w-px shrink-0 lg:block" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="micro text-text-faint">오늘</span>
+            {todayClasses.map((c) => (
+              <span
+                key={c.id}
+                className="border-line inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] whitespace-nowrap"
+              >
+                <span className="text-primary font-mono text-[10px] font-semibold">{c.startTime ?? "—"}</span>
+                <span className="text-foreground font-semibold">{c.name}</span>
+                <span className="text-text-faint">{c.studentCount}</span>
+              </span>
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {/* 우측: 마감 통계 + 카드/표 토글 */}
+      <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <div className="text-text-dim flex items-center gap-x-2.5 text-[12px]">
+          <span>
+            학생 <b className="text-foreground tabular">{stats.students}</b>
+          </span>
+          <span>
+            진도 <b className="text-primary tabular">{stats.progressDone}</b>
+            <span className="text-text-faint">/{stats.students}</span>
+          </span>
+          <span>
+            테스트 <b className="text-blue tabular">{stats.testDone}</b>
+            <span className="text-text-faint">/{stats.students}</span>
+          </span>
+          <span>
+            발송 <b className="text-gold tabular">{stats.reportDone}</b>
+            <span className="text-text-faint">/{stats.students}</span>
+          </span>
+          <span className="border-line rounded-md border px-1.5 py-0.5">
+            마감 <b className="text-foreground tabular">{doneCount}</b>
+            <span className="text-text-faint">/{total}</span>
+          </span>
+        </div>
+        <span className="bg-line h-5 w-px" aria-hidden />
         {/* 카드 ↔ 표(스프레드시트) 뷰 전환 */}
         <div className="border-line flex items-center rounded-md border p-0.5">
           {(["card", "grid"] as const).map((v) => (
@@ -73,16 +123,6 @@ export function OneScreenTopBar({
             </button>
           ))}
         </div>
-        <span className="bg-line h-4 w-px" aria-hidden />
-        <div className="bg-bg-soft relative h-2 w-28 overflow-hidden rounded-pill">
-          <div
-            className="bg-primary absolute inset-y-0 left-0 rounded-pill transition-all"
-            style={{ width: `${pctDone}%` }}
-          />
-        </div>
-        <span className="text-text-dim font-mono text-[11px]">
-          오늘 마감 <span className="text-foreground font-bold">{doneCount}</span>/{total}
-        </span>
       </div>
     </div>
   );
