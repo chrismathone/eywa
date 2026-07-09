@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { needsAttention, summarizeQueue, type QueueSummary } from "../classnote-queue";
+import { computeWritingRates, type TeacherRate, type TodayTarget } from "../writing-rate";
 
 /** KST 날짜에서 n일 전(YYYY-MM-DD) — 결정적 UTC 산술(date-kst 규칙). */
 function daysBefore(ymd: string, n: number): string {
@@ -87,4 +89,79 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   });
 
   return { summary, items, workers, since, days };
+}
+
+export type WritingRatesView = { dates: string[]; rates: TeacherRate[] };
+
+/**
+ * 강사별 주간 작성률(원장 보고서 관리 Part B) — 최근 7일 작성 건수(강사×일별) + 오늘 대상 대비 작성률·미작성.
+ * 오늘 대상 = 오늘 시작된 반(getTodaySchedule status≠upcoming)의 활성 수강생 − 결석. 작성 = 오늘 lesson_report 존재.
+ * RLS 테넌트 스코프. edutrix WeeklyTeacherSummary 이식(session snapshot 대신 스케줄+출결로 대상 산출).
+ */
+export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const supabase = await createClient();
+  const today = kstToday();
+  const dates = Array.from({ length: 7 }, (_, i) => daysBefore(today, 6 - i)); // 오름차순(오늘 포함)
+  const since = dates[0]!;
+
+  // 1) 최근 7일 작성 기록(강사 = teacher_name).
+  const { data: reps } = await supabase
+    .from("lesson_reports")
+    .select("teacher_name, report_date")
+    .gte("report_date", since)
+    .limit(5000);
+  const reports = (reps ?? []).map((r) => ({
+    teacher: (r.teacher_name as string | null) ?? "(미지정)",
+    date: r.report_date as string,
+  }));
+
+  // 2) 오늘 시작된 반 → 강사별 classIds.
+  const started = (await getTodaySchedule()).filter((s) => s.status !== "upcoming");
+  const teacherOfClass = new Map<string, string>();
+  for (const s of started) teacherOfClass.set(s.classId, s.teacherName ?? "(미지정)");
+  const classIds = [...new Set(started.map((s) => s.classId))];
+
+  let todayTargets: TodayTarget[] = [];
+  if (classIds.length > 0) {
+    // 3) 활성 수강생(오늘 시작 반).
+    const enr = await fetchInChunks<{ student_id: string; class_id: string }>(classIds, (chunk) =>
+      supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
+    );
+    const studentsByTeacher = new Map<string, Set<string>>();
+    for (const e of enr) {
+      const t = teacherOfClass.get(e.class_id);
+      if (!t) continue;
+      if (!studentsByTeacher.has(t)) studentsByTeacher.set(t, new Set());
+      studentsByTeacher.get(t)!.add(e.student_id);
+    }
+    const allStudentIds = [...new Set(enr.map((e) => e.student_id))];
+
+    // 4) 오늘 결석 + 오늘 작성 + 이름.
+    const [absRows, todayRepRows, nameRows] = await Promise.all([
+      fetchInChunks<{ student_id: string }>(allStudentIds, (chunk) =>
+        supabase.from("attendance_records").select("student_id").eq("session_date", today).eq("status", "absent").in("student_id", chunk),
+      ),
+      fetchInChunks<{ student_id: string }>(allStudentIds, (chunk) =>
+        supabase.from("lesson_reports").select("student_id").eq("report_date", today).in("student_id", chunk),
+      ),
+      fetchInChunks<{ id: string; name: string }>(allStudentIds, (chunk) =>
+        supabase.from("students").select("id, name").in("id", chunk),
+      ),
+    ]);
+    const absent = new Set(absRows.map((r) => r.student_id));
+    const reported = new Set(todayRepRows.map((r) => r.student_id));
+    const nameById = new Map(nameRows.map((s) => [s.id, s.name]));
+
+    // 5) 강사별 대상(결석 제외)/작성/미작성.
+    todayTargets = [...studentsByTeacher].map(([teacher, ids]) => {
+      const target = [...ids].filter((id) => !absent.has(id));
+      const written = target.filter((id) => reported.has(id)).length;
+      const missing = target.filter((id) => !reported.has(id)).map((id) => nameById.get(id) ?? "(학생)").slice(0, 20);
+      return { teacher, target: target.length, written, missing };
+    });
+  }
+
+  return { dates, rates: computeWritingRates(dates, reports, todayTargets) };
 }
