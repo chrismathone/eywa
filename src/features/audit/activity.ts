@@ -1,5 +1,6 @@
 // 활동 로그(activity_log) 표시 헬퍼 — 순수 함수(서버/클라 공용). DB 트리거가 남긴 원시 diff를 사람이 읽는 요약으로.
 // 운영 enum 라벨(과목/학년 등)과 무관한 '컬럼 이름' 매핑이라 하드코딩 예외 아님(테넌트 설정 대상 아님).
+import { normalizeRefund, refundFieldList } from "@/features/billing/refund-request";
 
 export type ActivityOp = "INSERT" | "UPDATE" | "DELETE";
 
@@ -161,9 +162,26 @@ export type ActivityChange = { redacted?: true; old?: unknown; new?: unknown };
 const CHANGES_CAP = 8; // 변경 목록 최대 표시 개수(초과분은 "외 N건")
 
 /**
+ * 환불요청서 form_data(중첩 jsonb)를 필드별 한글 변경 문장으로 펼침 — "총환불금액 300000→250000" 등.
+ * old/new를 정규화 후 같은 인덱스로 비교(refundFieldList가 고정 순서·한글 라벨 보장). 영문 컬럼명 미노출.
+ * form_data는 환불요청서(form_type='refund_request')만 트리거가 redact 해제(0085a) — 그 외 폼은 redacted로 들어와 여기 안 옴.
+ */
+function refundFormChanges(oldV: unknown, newV: unknown): string[] {
+  const fa = refundFieldList(normalizeRefund(oldV));
+  const fb = refundFieldList(normalizeRefund(newV));
+  const out: string[] = [];
+  for (let i = 0; i < fa.length; i++) {
+    const ov = fa[i].value.trim();
+    const nv = fb[i].value.trim();
+    if (ov !== nv) out.push(`${fa[i].label} ${shortVal(ov)}→${shortVal(nv)}`);
+  }
+  return out;
+}
+
+/**
  * 활동 1건을 머리말 + 변경 목록으로 구조화 — 뷰어가 변경 1건이면 인라인, 여러 건이면 줄바꿈 리스트로.
  * 예: head="등록상담 「이주아」 수정", changes=["형제자매 있음→비움","희망진로 신약개발연구원→비움","과목상세 변경"].
- * INSERT/DELETE는 changes=[](머리말만).
+ * form_data(환불요청서)는 필드별로 펼쳐지고, 그 외 jsonb/uuid는 "…변경"으로 축약. INSERT/DELETE는 changes=[](머리말만).
  */
 export function activityDetail(
   table: string,
@@ -176,14 +194,28 @@ export function activityDetail(
   const head = `${domain} ${who} ${OP_LABEL[op]}`.replace(/\s+/g, " ").trim();
   if (op !== "UPDATE" || !changed || typeof changed !== "object") return { head, changes: [] };
 
-  const all = Object.entries(changed as Record<string, ActivityChange>);
-  const changes = all.slice(0, CHANGES_CAP).map(([col, ch]) => {
-    if (ch && typeof ch === "object" && "redacted" in ch && ch.redacted) return `${colLabel(col)} 변경`;
+  const raw: string[] = [];
+  for (const [col, ch] of Object.entries(changed as Record<string, ActivityChange>)) {
+    if (ch && typeof ch === "object" && "redacted" in ch && (ch as ActivityChange).redacted) {
+      raw.push(`${colLabel(col)} 변경`);
+      continue;
+    }
     const c = ch as ActivityChange;
-    if (unreadableDiff(c.old, c.new)) return `${colLabel(col)} 변경`;
-    return `${colLabel(col)} ${shortVal(c.old)}→${shortVal(c.new)}`;
-  });
-  const more = all.length - Math.min(all.length, CHANGES_CAP);
+    // 환불요청서 서식 내용: 중첩 form_data(0085a redact 해제분)를 필드별 한글 변경으로 펼침.
+    if (col === "form_data") {
+      const fields = refundFormChanges(c.old, c.new);
+      raw.push(...(fields.length ? fields : [`${colLabel(col)} 변경`]));
+      continue;
+    }
+    if (unreadableDiff(c.old, c.new)) {
+      raw.push(`${colLabel(col)} 변경`);
+      continue;
+    }
+    raw.push(`${colLabel(col)} ${shortVal(c.old)}→${shortVal(c.new)}`);
+  }
+
+  const changes = raw.slice(0, CHANGES_CAP);
+  const more = raw.length - changes.length;
   if (more > 0) changes.push(`외 ${more}건`);
   return { head, changes };
 }

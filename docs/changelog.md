@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 활동 로그 — 환불요청서 서식 내용 필드별 노출 (2026-07-09) — ✅ 코드 main 반영·test(refund 3 추가)/tsc0/lint0 + 트랜잭션 E2E(트리거 form_data 객체 nest 확인·ROLLBACK) · 0085a
+사용자 요청: 지출·환불요청서·교재요청서 작성/수정/삭제도 활동 로그에 남는지 확인 + 남되 "영문 안 나오게 철저히 한글화". 조사: 셋 다 트리거 부착 테이블(`expenses`·`academy_documents`·`textbook_orders`)이라 이미 추적되나, **환불요청서만** 내용이 `academy_documents.form_data`(jsonb) 한 컬럼 + redact 대상이라 필드별 변경이 "서식내용 변경"으로만 남았음.
+- **트리거([0085a](../supabase/migrations/0085a_refund_form_activity.sql))**: `log_activity()` create-or-replace(0084a 커버리지 확장 위에) — UPDATE 시 `form_data`가 redact여도 **`form_type='refund_request'`이면 예외적으로 old/new 원본 기록**(이력서·전사·급여·토큰은 redact 유지 = 누수 방지). INSERT/DELETE 스냅샷은 form_data 계속 제외. ⚠️ **트레이드오프**: 환불요청서 계좌번호 등이 사무실(master/admin/manager) 활동 로그에 노출(사용자 승인).
+- **표시**: [refund-request.ts](../src/features/billing/refund-request.ts) `refundFieldList`(고정 순서·한글 라벨, `completedBy` 내부 id 제외) + [activity.ts](../src/features/audit/activity.ts) `refundFormChanges`가 중첩 form_data를 필드별로 펼침(총환불금액/환불사유/환불방식-계좌 등). 그 외 jsonb는 기존 `unreadableDiff`로 "…변경"(변경 없음). [activity.test.ts](../src/features/audit/activity.test.ts) refund 3케이스 추가.
+- 검증: 트랜잭션 안 실 UPDATE→트리거가 form_data old/new를 **객체로 nest**(총환불금액 300000→250000·환불사유·계좌) 확인 후 ROLLBACK. 실 refund_request 문서 5건 `jsonb_typeof=object`. ⚠️ 0085a는 코드 배포와 함께 적용(구 activity.ts는 unredacted form_data를 영문 렌더).
+
 ### 시간표 학생 hover 진도 스마트 줄바꿈 — 인라인 번호 run-on 분리 (2026-07-09) — ✅ 실브라우저 검증(dev 3000 — 정미선 hover 카드 3항목 각자 줄) + 신규 Vitest 8/lint0(내 파일 tsc 클린 — 트리 에러 2건은 타 세션 edutrix-sync WIP)
 "1.함수의 극한 2.함수의 좌극한과 우극한 3.함수의 극한값의 계산"처럼 수업 리포트 진도가 한 줄 run-on으로 접혀 hover 카드에서 읽기 어려움(기존 `line-clamp-2`는 절단까지). RichText `bulletize`는 줄바꿈/쉼표 기반이라 인라인 번호 마커는 못 쪼갬 → 전용 순수 함수 신설:
 - [`splitNumberedItems`](../src/lib/text/split-numbered.ts)(Vitest 8) — 공백 경계 "N."/"N)" 마커 2개+ & 연속 오름차순일 때만 분리(소수점 "3.5"·비연속·단독 번호·"중2.함수" 같은 오탐은 원문 유지). 서두 텍스트 첫 줄 보존, 원문 `\n` 있으면 그 줄바꿈 우선.

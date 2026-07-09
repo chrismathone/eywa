@@ -183,3 +183,38 @@ export function normalizeRefund(v: unknown): RefundRequestData {
 /** 저장 제목 — 데이터베이스 목록·환불 요청서 탭에 그대로 노출. */
 export const refundTitle = (d: RefundRequestData) =>
   `환불 요청서 — ${d.student.name || "(이름 미입력)"}`;
+
+/**
+ * 환불요청서 필드를 (한글 라벨, 값) 목록으로 평탄화 — 고정 순서.
+ * 활동 로그(activity.ts)가 old/new 두 목록을 같은 인덱스로 비교해 "라벨 old→new"로 펼친다(영문 컬럼명 미노출).
+ * completedBy(내부 user id)는 제외 — 사람이 읽는 completedByName으로 대체.
+ * ⚠️ RefundRequestData에 필드를 추가하면 여기에도 한글 라벨을 추가할 것(안 하면 그 필드 변경이 로그에서 누락).
+ */
+export function refundFieldList(d: RefundRequestData): { label: string; value: string }[] {
+  return [
+    { label: "결재-담당", value: d.approval.staff },
+    { label: "결재-부원장", value: d.approval.viceDirector },
+    { label: "결재-원장", value: d.approval.director },
+    { label: "학생명", value: d.student.name },
+    { label: "학교/학년", value: d.student.schoolGrade },
+    { label: "주소", value: d.student.address },
+    { label: "환불사유", value: d.student.reason },
+    { label: "담임선생님", value: d.student.homeroomTeacher },
+    { label: "수강반", value: d.student.className },
+    { label: "담당선생님", value: d.student.staffTeacher },
+    { label: "수업날짜", value: d.student.classDate },
+    { label: "총수업횟수", value: d.student.totalSessions },
+    { label: "환불요청일자", value: d.student.requestDate },
+    { label: "결제내역", value: d.refund.paymentDetails },
+    { label: "차감내역", value: d.refund.deductionDetails },
+    { label: "총환불금액", value: d.refund.totalAmount },
+    { label: "환불방식-계좌", value: d.refund.method.account },
+    { label: "환불방식-인터넷카드", value: d.refund.method.internetCard },
+    { label: "환불방식-카드", value: d.refund.method.card },
+    { label: "환불처리일자", value: d.result.processedDate },
+    { label: "전산처리여부", value: d.result.systemProcessed },
+    { label: "담당자", value: d.result.manager },
+    { label: "환불완료일자", value: d.result.completedDate },
+    { label: "완료처리자", value: d.result.completedByName },
+  ];
+}

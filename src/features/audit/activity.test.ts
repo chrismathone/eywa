@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyRefund } from "@/features/billing/refund-request";
 import { activityDetail } from "./activity";
 
 describe("activityDetail — 사람이 읽는 요약", () => {
@@ -58,5 +59,55 @@ describe("activityDetail — 사람이 읽는 요약", () => {
     const { changes } = activityDetail("students", "UPDATE", "홍길동", changed);
     expect(changes).toHaveLength(9);
     expect(changes[8]).toBe("외 2건");
+  });
+});
+
+// 환불요청서 서식 내용(academy_documents.form_data 중첩 jsonb)을 필드별 한글로 펼침(0085a redact 해제분).
+// 그 외 폼(이력서 등)은 트리거가 redacted로 남겨 위 "redacted" 경로로 처리된다.
+describe("activityDetail — 환불요청서 form_data 필드별 한글 펼침", () => {
+  const base = () => {
+    const d = emptyRefund();
+    d.student.name = "홍길동";
+    d.refund.totalAmount = "300000";
+    return d;
+  };
+
+  it("바뀐 필드만 한글 라벨로 펼친다(안 바뀐 필드 제외, 영문 키 미노출)", () => {
+    const before = base();
+    const after = base();
+    after.refund.totalAmount = "250000";
+    after.student.reason = "이사로 인한 퇴원";
+    after.refund.method.account = "1002-123-456789";
+
+    const { head, changes } = activityDetail("academy_documents", "UPDATE", "환불 요청서 — 홍길동", {
+      form_data: { old: before, new: after },
+    });
+    expect(head).toBe("문서 「환불 요청서 — 홍길동」 수정");
+    expect(changes).toContain("총환불금액 300000→250000");
+    expect(changes).toContain("환불사유 비움→이사로 인한 퇴원");
+    expect(changes).toContain("환불방식-계좌 비움→1002-123-456789");
+    expect(changes.some((c) => c.startsWith("학생명"))).toBe(false); // 안 바뀐 필드 제외
+    expect(changes.join(" ")).not.toMatch(/form_data|totalAmount|refund|student|reason/);
+  });
+
+  it("완료처리자는 이름(스냅샷)만, 내부 user id(completedBy)는 미노출", () => {
+    const before = base();
+    const after = base();
+    after.result.completedBy = "uuid-내부-식별자";
+    after.result.completedByName = "박원장";
+
+    const { changes } = activityDetail("academy_documents", "UPDATE", "환불 요청서 — 홍길동", {
+      form_data: { old: before, new: after },
+    });
+    expect(changes).toContain("완료처리자 비움→박원장");
+    expect(changes.join(" ")).not.toContain("uuid-내부-식별자");
+  });
+
+  it("정규화 후 실질 차이 없으면 '서식내용 변경' 폴백", () => {
+    const d = base();
+    const { changes } = activityDetail("academy_documents", "UPDATE", "환불 요청서 — 홍길동", {
+      form_data: { old: d, new: { ...d } },
+    });
+    expect(changes).toEqual(["서식내용 변경"]);
   });
 });
