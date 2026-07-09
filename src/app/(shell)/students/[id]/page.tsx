@@ -4,6 +4,7 @@ import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { BackLink } from "@/components/back-link";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { getStudentById } from "@/features/students/server/queries";
@@ -61,8 +62,17 @@ export default async function StudentDetailPage({
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
   // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
   const canEditSchedule = await canWriteTenant(user.systemRole, "classes");
-  // 입학 상담(등록상담) 상담탭 노출 = enrollment 접근권한 있을 때만(민감정보 — 상세는 자체 게이트).
-  const canSeeEnrollment = (await accessLevelTenant(user.systemRole, "enrollment")) !== "none";
+  // 입학 상담(등록상담) 상담탭 노출.
+  // ① enrollment 접근권한(원장·상담사 등) → 카드 + '상세 보기' 링크 모두.
+  // ② 권한 없어도 **강사가 본인 담당 학생**이면 카드는 노출(읽기) — 단 '상세 보기'(/enrollment/[id])는
+  //    여전히 enrollment 게이트라 링크는 숨김. (강사는 담당 학생의 입학 배경만 열람, 관리 상세는 불가.)
+  const enrollmentAccess = (await accessLevelTenant(user.systemRole, "enrollment")) !== "none";
+  let canSeeEnrollment = enrollmentAccess;
+  if (!enrollmentAccess) {
+    const scope = await effectiveTeacherScope(); // 강사(또는 겸직-강사뷰)면 담당 학생 id, 아니면 null
+    if (scope?.studentIds?.includes(student.id)) canSeeEnrollment = true;
+  }
+  const canOpenEnrollmentDetail = enrollmentAccess;
 
   return (
     <div className="space-y-6">
@@ -125,7 +135,11 @@ export default async function StudentDetailPage({
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (
-          <ConsultationsTab studentId={student.id} canSeeEnrollment={canSeeEnrollment} />
+          <ConsultationsTab
+            studentId={student.id}
+            canSeeEnrollment={canSeeEnrollment}
+            canOpenEnrollmentDetail={canOpenEnrollmentDetail}
+          />
         ) : tab === "memos" ? (
           <MemosTab studentId={student.id} />
         ) : tab === "billing" ? (
