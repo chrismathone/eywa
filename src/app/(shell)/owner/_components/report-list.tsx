@@ -5,10 +5,20 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
-import { listReports, type ReportListFilters, type ReportListRow } from "@/features/report-admin/server/actions";
+import { IMPORT_FILTER, listReports, type ReportListFilters, type ReportListRow } from "@/features/report-admin/server/actions";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 
 const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict"];
+
+/** 발송 상태 표시 — eywa 발송이력(classnote_status) 우선, 없으면 이관(edutrix)/미발송 구분. */
+function StatusCell({ status, source }: { status: string | null; source: string | null }) {
+  const badge = classnoteBadge(status ?? undefined);
+  if (badge) return <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>;
+  // 발송 이력 없음: 이관분(edutrix)은 "이관"(발송 아님, 오해 방지), 그 외는 진짜 "미발송".
+  if (source === "edutrix_import")
+    return <span className="text-text-faint text-[11px]" title="edutrix에서 이관된 기록(eywa 발송 아님)">이관</span>;
+  return <span className="text-amber text-[11px]">미발송</span>;
+}
 
 type Result = { rows: ReportListRow[]; total: number; page: number; pageSize: number };
 
@@ -68,6 +78,7 @@ export function ReportList({ options, initial }: { options: ReportFilterOptions;
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>{classnoteBadge(s)?.label ?? s}</option>
           ))}
+          <option value={IMPORT_FILTER}>이관(edutrix)</option>
         </select>
         {(filters.from || filters.to || filters.teacher || filters.subject || filters.status) ? (
           <Button size="sm" variant="ghost" onClick={() => run({ page: 0 })}>
@@ -96,27 +107,24 @@ export function ReportList({ options, initial }: { options: ReportFilterOptions;
                 </td>
               </tr>
             ) : (
-              rows.map((r) => {
-                const badge = classnoteBadge(r.classnoteStatus ?? undefined);
-                return (
-                  <tr key={r.id} className="border-line hover:bg-bg-soft border-b last:border-b-0">
-                    <td className="text-text-dim px-3 py-2">{r.reportDate}</td>
-                    <td className="px-3 py-2">
-                      <span className="text-foreground font-semibold">{r.studentName}</span>
-                      {r.subject ? <span className="text-text-faint ml-1.5">{r.subject}</span> : null}
-                    </td>
-                    <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      {badge ? <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span> : <span className="text-text-faint text-[11px]">미발송</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button size="sm" variant="outline" onClick={() => openReport(r)}>
-                        열람
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })
+              rows.map((r) => (
+                <tr key={r.id} className="border-line hover:bg-bg-soft border-b last:border-b-0">
+                  <td className="text-text-dim px-3 py-2">{r.reportDate}</td>
+                  <td className="px-3 py-2">
+                    <span className="text-foreground font-semibold">{r.studentName}</span>
+                    {r.subject ? <span className="text-text-faint ml-1.5">{r.subject}</span> : null}
+                  </td>
+                  <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
+                  <td className="px-3 py-2">
+                    <StatusCell status={r.classnoteStatus} source={r.source} />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button size="sm" variant="outline" onClick={() => openReport(r)}>
+                      열람
+                    </Button>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>

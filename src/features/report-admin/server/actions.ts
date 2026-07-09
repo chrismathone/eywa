@@ -71,7 +71,11 @@ export type ReportListRow = {
   classnoteStatus: string | null;
   teacherName: string | null;
   shareToken: string | null;
+  source: string | null; // edutrix_import=이관분(발송 아님) · onescreen=eywa 네이티브
 };
+
+// 상태 필터 특수값: 발송 이력 없는 이관분(edutrix_import). classnote_status가 아니라 source로 거른다.
+export const IMPORT_FILTER = "__import__";
 
 export type ReportListFilters = {
   from?: string;
@@ -98,12 +102,14 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, classnote_status, teacher_name, share_token", { count: "exact" })
+    .select("id, student_id, subject, report_date, classnote_status, teacher_name, share_token, source", { count: "exact" })
     .order("report_date", { ascending: false })
     .order("created_at", { ascending: false });
   if (filters.from) q = q.gte("report_date", filters.from);
   if (filters.to) q = q.lte("report_date", filters.to);
-  if (filters.status) q = q.eq("classnote_status", filters.status);
+  // "이관" 필터는 source, 그 외는 classnote_status.
+  if (filters.status === IMPORT_FILTER) q = q.eq("source", "edutrix_import");
+  else if (filters.status) q = q.eq("classnote_status", filters.status);
   if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
   if (filters.subject) q = q.eq("subject", filters.subject);
   q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
@@ -124,6 +130,7 @@ export async function listReports(
     classnoteStatus: r.classnote_status as string | null,
     teacherName: r.teacher_name as string | null,
     shareToken: r.share_token as string | null,
+    source: r.source as string | null,
   }));
   return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
 }
