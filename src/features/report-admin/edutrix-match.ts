@@ -108,3 +108,27 @@ export function resolveEywaIdByEdutrixId(
 ): string | null {
   return byEdutrixId.get(edutrixStudentId) ?? null;
 }
+
+/**
+ * Edutrix 미매핑 목록용 — 테스트/더미 학생 휴리스틱(순수).
+ * - 이름: 학원일·학원1·테스트 등
+ * - 학교+학년 둘 다 플레이스홀더(미입력/미정/없음/-)
+ * 한쪽만 비정상이면 실데이터 가능 → 더미로 안 봄.
+ */
+export function isEdutrixDummyStudent(opts: {
+  name: string;
+  school?: string | null;
+  grade?: string | null;
+}): boolean {
+  const name = (opts.name ?? "").trim();
+  if (!name) return true;
+  // 학원일/학원이/학원1/학원A, 테스트*, demo*
+  if (/^학원[일이삼사오육칠팔구십\dA-Za-z]+$/.test(name)) return true;
+  if (/^(테스트|test|demo)/i.test(name)) return true;
+
+  const school = (opts.school ?? "").trim();
+  const grade = (opts.grade ?? "").trim();
+  const placeholder = (s: string) => !s || /^(미입력|미정|없음|없음\.|unknown|-|—|n\/a)$/i.test(s);
+  if (placeholder(school) && placeholder(grade)) return true;
+  return false;
+}

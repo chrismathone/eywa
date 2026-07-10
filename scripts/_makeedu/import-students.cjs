@@ -6,10 +6,14 @@
  *    백필(ijw 값 절대 덮어쓰지 않음), ijw에 없는 학생만 신규 추가. dry-run도 DB를 읽어 매칭 건수를 측정.
  *
  * 사용:
- *   node --env-file=.env.local scripts/_makeedu/import-students.cjs          # dry-run(매칭 측정, DB write 0)
- *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --apply  # 백필 + 신규 추가
+ *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --recommended
+ *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --recommended --apply
+ *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --all          # 필터 없음(비권장)
+ *   node --env-file=.env.local scripts/_makeedu/import-students.cjs --enrolled-only
+ *   --withdrawn-since=2025-01-01  (recommended 기본값)
+ *   --file=C:/path/원생목록_….xlsx
  *
- * 입력: Downloads(또는 $MAKEEDU_DL)의 최신 '원생목록_*.xlsx'.
+ * 입력: --file 또는 Downloads(또는 $MAKEEDU_DL)의 최신 '원생목록_*.xlsx'.
  */
 const fs = require("fs");
 const path = require("path");
@@ -17,7 +21,15 @@ const ExcelJS = require("exceljs");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
 
-const APPLY = process.argv.includes("--apply");
+const argv = process.argv.slice(2);
+const APPLY = argv.includes("--apply");
+const RECOMMENDED = argv.includes("--recommended");
+const ENROLLED_ONLY = argv.includes("--enrolled-only");
+const ALL = argv.includes("--all");
+const fileArg = argv.find((a) => a.startsWith("--file="))?.slice("--file=".length);
+const sinceArg = argv.find((a) => a.startsWith("--withdrawn-since="))?.slice("--withdrawn-since=".length);
+const WITHDRAWN_SINCE = sinceArg || (RECOMMENDED ? "2025-01-01" : null);
+
 const DL = process.env.MAKEEDU_DL || "C:/Users/user/Downloads";
 
 function latestFile(prefix) {
@@ -36,7 +48,6 @@ function txt(v) {
   const s = String(v).trim();
   return s || null;
 }
-// makeedu 날짜: 'YYYYMMDD' / 'YYYY-MM-DD' / 'YYYY.MM.DD(요일)' → 'YYYY-MM-DD'
 function parseDate(v) {
   const s = txt(v);
   if (!s) return null;
@@ -51,6 +62,20 @@ function gender(v) {
   return null;
 }
 
+/** 잡음 이름 — 학부모·설명회·업장·테스트 등 (원생 아님). */
+function isJunkName(name) {
+  if (!name) return true;
+  const n = name.trim();
+  if (n.length <= 1) return true;
+  if (n === "?" || n === "-" || n === "—") return true;
+  if (/^\(모\)/.test(n)) return true;
+  if (/설명회|알바|식당|기사|학부모|교사|선생|직원|셔틀|버스|지원|풍미|단디|꼬치/.test(n)) return true;
+  if (/^\d/.test(n)) return true; // 0903설명회… / 1호차…
+  if (/^학원[일이삼사오육칠팔구십\dA-Za-z]/.test(n)) return true;
+  if (/^(테스트|test|demo)/i.test(n)) return true;
+  return false;
+}
+
 function mapRows(ws) {
   const head = (ws.getRow(1).values || []).map((v) => txt(v));
   const col = {};
@@ -63,7 +88,6 @@ function mapRows(ws) {
     const get = (name) => (col[name] != null ? txt(vals[col[name]]) : null);
     const id = get("원생고유번호");
     if (!id) continue;
-    // status 우선순위: 재원여부=O 면 무조건 재원(재등록생의 옛 퇴원일 잔존 무시) → 휴원 → 퇴원.
     const isEnrolled = get("재원여부") === "O";
     const onHold = get("휴원여부") === "O";
     const withdrawnDate = parseDate(get("퇴원일"));
@@ -94,23 +118,109 @@ function mapRows(ws) {
   return rows;
 }
 
+/**
+ * 추천 필터:
+ *  - 재원·휴원 전부
+ *  - 퇴원: 학교·학년 있음 + withdrawn_at >= since (기본 2025-01-01, --recommended 시)
+ *  - 잡음 이름 제외
+ * --enrolled-only: 재원·휴원만
+ * --all: 잡음 이름만 제외(퇴원 전량 — 비권장)
+ */
+function filterRows(rows) {
+  const stats = {
+    in: rows.length,
+    junkName: 0,
+    noName: 0,
+    droppedWithdrawnOld: 0,
+    droppedWithdrawnNoSg: 0,
+    droppedOther: 0,
+    keptEnrolled: 0,
+    keptOnHold: 0,
+    keptWithdrawn: 0,
+  };
+  const out = [];
+  for (const r of rows) {
+    if (!r.name) {
+      stats.noName++;
+      continue;
+    }
+    if (isJunkName(r.name)) {
+      stats.junkName++;
+      continue;
+    }
+    if (r.status === "enrolled" || r.status === "on_hold") {
+      if (r.status === "enrolled") stats.keptEnrolled++;
+      else stats.keptOnHold++;
+      out.push(r);
+      continue;
+    }
+    if (r.status === "withdrawn") {
+      if (ENROLLED_ONLY) {
+        stats.droppedOther++;
+        continue;
+      }
+      if (!ALL) {
+        // recommended / withdrawn-since 경로: 학교·학년 필수
+        if (!r.school || !r.grade) {
+          stats.droppedWithdrawnNoSg++;
+          continue;
+        }
+        if (WITHDRAWN_SINCE && (!r.withdrawn_at || r.withdrawn_at < WITHDRAWN_SINCE)) {
+          stats.droppedWithdrawnOld++;
+          continue;
+        }
+      }
+      stats.keptWithdrawn++;
+      out.push(r);
+      continue;
+    }
+    stats.droppedOther++;
+  }
+  stats.out = out.length;
+  return { rows: out, stats };
+}
+
 (async () => {
-  const file = latestFile("원생목록");
+  if (!RECOMMENDED && !ENROLLED_ONLY && !ALL && !WITHDRAWN_SINCE) {
+    console.log(
+      "필터 미지정 — 기본은 전체 파싱 후 additive(레거시).\n" +
+        "권장: --recommended  (재원 + 퇴원≥2025-01-01·학교학년 + 잡음제외)\n" +
+        "  또는 --enrolled-only / --all / --withdrawn-since=YYYY-MM-DD",
+    );
+  }
+
+  const file = fileArg || latestFile("원생목록");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
-  const rows = mapRows(wb.worksheets[0]);
+  let rows = mapRows(wb.worksheets[0]);
 
   console.log("file:", path.basename(file));
-  console.log("parsed students:", rows.length);
+  console.log("parsed (raw):", rows.length);
   console.log(
-    "status dist:",
+    "status dist raw:",
     rows.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {}),
   );
+
+  const useFilter = RECOMMENDED || ENROLLED_ONLY || ALL || !!WITHDRAWN_SINCE;
+  if (useFilter) {
+    const mode = ENROLLED_ONLY
+      ? "enrolled-only"
+      : ALL
+        ? "all(junk-name only)"
+        : `recommended/withdrawn-since=${WITHDRAWN_SINCE || "—"}`;
+    console.log("filter mode:", mode);
+    const filtered = filterRows(rows);
+    console.log("filter stats:", filtered.stats);
+    rows = filtered.rows;
+    console.log(
+      "status dist filtered:",
+      rows.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {}),
+    );
+  }
+
   console.log("dup makeedu_id:", rows.length - new Set(rows.map((r) => r.makeedu_id)).size);
   console.log("missing name:", rows.filter((r) => !r.name).length);
 
-  // ── additive: ijw 베이스가 정본. makeedu 학생을 (이름+학교+학년)로 ijw 학생에 매칭 →
-  //    매칭되면 makeedu_id만 백필(ijw 값 보존), 매칭 안 되면 신규 추가. ijw 값은 절대 덮어쓰지 않음.
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
@@ -118,8 +228,6 @@ function mapRows(ws) {
     const existing = await sql`
       select id, makeedu_id, name, school, grade, status from students where tenant_id = ${tenantId}`;
     const byMakeedu = new Map(existing.filter((e) => e.makeedu_id).map((e) => [e.makeedu_id, e.id]));
-    // 활성 학생 자연키(이름+학교+학년) 집합 — 부분유니크 ux_students_active_natural_key(status<>'withdrawn')와 동일.
-    // 매칭이 모호(동일 자연키 2건+)로 미연결된 makeedu 학생을 그냥 insert하면 이 제약에 걸리므로, 사전에 스킵.
     const activeNatural = new Set(
       existing.filter((e) => e.status !== "withdrawn").map((e) => `${L.normalizeName(e.name)}|${e.school || ""}|${e.grade || ""}`),
     );
@@ -129,31 +237,50 @@ function mapRows(ws) {
       (r) => L.normalizeName(r.name),
     ]);
 
-    const toLink = []; // 기존 ijw 행에 makeedu_id 백필
-    const toInsert = []; // ijw에 없는 신규 makeedu 학생
-    let alreadyLinked = 0, skippedDup = 0;
+    const toLink = [];
+    const toInsert = [];
+    let alreadyLinked = 0;
+    let skippedDup = 0;
     for (const r of rows) {
-      if (byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; } // 재실행 멱등
+      if (byMakeedu.has(r.makeedu_id)) {
+        alreadyLinked++;
+        continue;
+      }
       const id = match(r);
-      if (id) { toLink.push({ id, makeedu_id: r.makeedu_id }); continue; }
-      // 미매칭: 활성 동일 자연키가 이미 있으면(모호 미연결 케이스) 신규 생성 시 제약 위반 → 스킵(중복 방지).
-      if (activeNatural.has(`${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`)) { skippedDup++; continue; }
+      if (id) {
+        toLink.push({ id, makeedu_id: r.makeedu_id });
+        continue;
+      }
+      if (activeNatural.has(`${L.normalizeName(r.name)}|${r.school || ""}|${r.grade || ""}`)) {
+        skippedDup++;
+        continue;
+      }
       toInsert.push(r);
     }
-    console.log(`\n[additive] ijw 기존 학생 ${existing.length} | makeedu ${rows.length}`);
+    console.log(`\n[additive] eywa 기존 학생 ${existing.length} | makeedu(필터후) ${rows.length}`);
     console.log(`  이미 연결됨(재실행): ${alreadyLinked}`);
-    console.log(`  ijw 매칭 → makeedu_id 백필: ${toLink.length}`);
-    console.log(`  ijw에 없음 → 신규 추가: ${toInsert.length}`);
+    console.log(`  eywa 매칭 → makeedu_id 백필: ${toLink.length}`);
+    console.log(`  eywa에 없음 → 신규 추가: ${toInsert.length}`);
     if (skippedDup) console.log(`  활성 동일 자연키 존재(모호 미연결) → 스킵: ${skippedDup}`);
-    if (toInsert.length) console.log("  신규 표본:", toInsert.slice(0, 5).map((r) => `${r.name}/${r.school || "?"}/${r.grade || "?"}`).join(", "));
+    if (toInsert.length) {
+      const bySt = toInsert.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {});
+      console.log("  신규 status:", bySt);
+      console.log(
+        "  신규 표본:",
+        toInsert
+          .slice(0, 8)
+          .map((r) => `${r.name}/${r.school || "?"}/${r.grade || "?"}/${r.status}`)
+          .join(", "),
+      );
+    }
 
     if (!APPLY) {
       console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");
       return;
     }
-    let linked = 0, inserted = 0;
+    let linked = 0;
+    let inserted = 0;
     for (const t of toLink) {
-      // makeedu_id가 비어있는 경우에만 백필(ijw 다른 필드는 손대지 않음).
       const res = await sql`
         update students set makeedu_id = ${t.makeedu_id}, updated_at = now()
         where id = ${t.id} and makeedu_id is null`;
@@ -174,13 +301,18 @@ function mapRows(ws) {
           on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
         inserted++;
       } catch (e) {
-        // 안전망: 활성 동일 자연키(이름+학교+학년) 제약 위반이면 중복 생성 안 함(스킵). 그 외는 throw.
-        if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) { skippedDup++; continue; }
+        if (/ux_students_active_natural_key|unique|duplicate/i.test(e.message)) {
+          skippedDup++;
+          continue;
+        }
         throw e;
       }
     }
     await L.recordSync(sql, tenantId, "students", linked + inserted);
-    console.log(`\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}` + (skippedDup ? ` | skipped(자연키 중복): ${skippedDup}` : ""));
+    console.log(
+      `\nbackfilled makeedu_id: ${linked} | inserted new: ${inserted}` +
+        (skippedDup ? ` | skipped(자연키 중복): ${skippedDup}` : ""),
+    );
   } finally {
     await sql.end();
   }

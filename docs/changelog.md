@@ -16,6 +16,8 @@
 ### 수업보고서 탭 — Edutrix 미매핑 목록·수동 연결 (2026-07-10)
 - **UI** `/lesson-reports` `EdutrixUnmappedCard`: 보고서 있는 Edutrix 학생 중 `edutrix_student_id` 미연결 목록(보고 건수·동명 후보).
 - **액션** `linkEdutrixStudent`: 쓰기 권한 게이트 → UUID 연결 + 최근 12건 이관(`edutrix_report_id` 멱등). 후보 없으면 학생 등록 안내.
+- **더미 필터**: `isEdutrixDummyStudent`(학원N·테스트명·미입력/미정) — 기본 숨김, 「더미 표시」로 토글. 배지 실매핑 대상 vs 더미 분리.
+- **내부 탭**: ClassNote 큐 상단 고정 + FaceTabs **작성률 / 미매핑 / 목록** (`?tab=`). 활성 탭만 무거운 조회(스크롤·부하 단축).
 
 ### Edutrix 이관 정석화 — UUID 매핑 (이름 fan-out 폐기) (2026-07-10)
 치명: 기존 이관이 `students.name` exact만 써서 동명이인에 보고서 복제(오배정). Edutrix 내부 키는 `reports.student_id` UUID.

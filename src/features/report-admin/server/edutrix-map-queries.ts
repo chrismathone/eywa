@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { isEdutrixDummyStudent } from "../edutrix-match";
 
 export type EywaCandidate = {
   id: string;
@@ -22,6 +23,8 @@ export type UnmappedEdutrixRow = {
   grade: string | null;
   reportCount: number;
   candidates: EywaCandidate[];
+  /** 테스트/더미 휴리스틱 — UI 기본 숨김 */
+  likelyDummy: boolean;
 };
 
 export type EdutrixMapView = {
@@ -133,6 +136,7 @@ export async function getEdutrixUnmapped(): Promise<EdutrixMapView> {
       grade: es.grade,
       reportCount: rc,
       candidates,
+      likelyDummy: isEdutrixDummyStudent({ name: es.name, school: es.school, grade: es.grade }),
     });
   }
 

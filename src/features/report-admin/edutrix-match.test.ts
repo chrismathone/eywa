@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   candidatesByExactName,
   candidatesByNormName,
+  isEdutrixDummyStudent,
   pickEywaForEdutrixStudent,
   resolveEywaIdByEdutrixId,
   type EywaStudentLite,
@@ -73,5 +74,20 @@ describe("name helpers + resolve", () => {
     const m = new Map([["edu-uuid", "eywa-uuid"]]);
     expect(resolveEywaIdByEdutrixId("edu-uuid", m)).toBe("eywa-uuid");
     expect(resolveEywaIdByEdutrixId("other", m)).toBeNull();
+  });
+});
+
+describe("isEdutrixDummyStudent", () => {
+  it("학원N / 테스트 이름", () => {
+    expect(isEdutrixDummyStudent({ name: "학원삼", school: "미입력", grade: "미정" })).toBe(true);
+    expect(isEdutrixDummyStudent({ name: "테스트김", school: "칠성중", grade: "중1" })).toBe(true);
+  });
+
+  it("학교·학년 둘 다 플레이스홀더", () => {
+    expect(isEdutrixDummyStudent({ name: "김보미", school: "미입력", grade: "미정" })).toBe(true);
+  });
+
+  it("실학생 — 학교 있으면 더미 아님", () => {
+    expect(isEdutrixDummyStudent({ name: "김보미", school: "경명여중", grade: "중1" })).toBe(false);
   });
 });
