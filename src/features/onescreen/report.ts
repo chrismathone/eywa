@@ -88,8 +88,11 @@ export function buildReport(st: OneScreenStudent): string {
 export function buildSubjectReport(st: OneScreenStudent, subjectIndex: number): string {
   const su = st.subjects[subjectIndex];
   if (!su) return buildReport(st);
-  return [
+  const lines = [
     `${st.name} 학생, 오늘 ${su.name} ${su.today} 진도를 진행했습니다.`,
     ...testAndClosingLines(st),
-  ].join(" ");
+  ];
+  // 오늘 과제(0096a) — AI 멘트 프롬프트의 마무리 규칙("오늘 과제는 ~입니다")과 폴백 템플릿 대칭 유지.
+  if (su.homeworkToday?.trim()) lines.push(`오늘 과제는 ${su.homeworkToday.trim()}입니다.`);
+  return lines.join(" ");
 }

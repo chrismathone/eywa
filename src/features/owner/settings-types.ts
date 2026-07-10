@@ -178,6 +178,7 @@ export const reportSchema = z.object({
   showDailyTest: z.boolean(),
   showCheckTest: z.boolean(),
   showHomework: z.boolean(),
+  showHomeworkToday: z.boolean().default(true), // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티)
   showAttitude: z.boolean(),
   showParentNote: z.boolean(),
   showTrendNote: z.boolean(), // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식)

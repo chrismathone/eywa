@@ -657,6 +657,9 @@ export const lessonReports = pgTable(
     // 교재명·보강 — 0089a(edutrix 강사 필드 패리티). textbook=과목 교재(학부모 카드에도 표시), makeup=보강 수업 여부.
     textbook: text("textbook"),
     makeup: boolean("makeup").notNull().default(false),
+    // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티, 사용률 90%). homework_score(수행 상태)와 별개.
+    // 학부모 카드 표시(showHomeworkToday) + AI 멘트 마무리("오늘 과제는 ~입니다") 재료.
+    homeworkToday: text("homework_today"),
     // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식). 멘트(notes)와 별개. 자동작성 시 함께 생성, /r '학습 추세' 섹션.
     trendNote: text("trend_note"),
     // 학부모 공개 보고서 링크(/r/[token]) 토큰 — 0081a. 공개 페이지가 service_role로 이 토큰 단건 조회.

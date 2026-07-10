@@ -98,9 +98,13 @@ async function pullReportsForEdutrixStudent(
   const user = await getCurrentUser();
   if (!user) return 0;
 
+  // 리치 필드 포함 — cron(edutrix-sync contentOf)·full-import와 동형(2026-07-10 리뷰: 이 경로만 얇게
+  // 넣으면 cron 수정 전파 윈도(7일) 밖 행이 영구 얇은 상태로 남음).
   const { data: reps } = await edu
     .from("reports")
-    .select("id, date, progress, exam_info, assignment_score, classes(name)")
+    .select(
+      "id, date, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, homework_today, makeup_class, classnote_sent_at, classes(name)",
+    )
     .eq("student_id", edutrixStudentId)
     .order("date", { ascending: false })
     .limit(12);
@@ -130,6 +134,13 @@ async function pullReportsForEdutrixStudent(
       exam_info: rep.exam_info || null,
       homework_score: rep.assignment_score || null,
       teacher_name: extractTeacher(one(c)?.name ?? null),
+      textbook: rep.textbook_name || null,
+      attitude: rep.study_attitude || null,
+      notes: rep.notice || null,
+      homework_today: rep.homework_today || null,
+      makeup: !!rep.makeup_class,
+      classnote_sent_at: rep.classnote_sent_at || null,
+      classnote_status: rep.classnote_sent_at ? "success" : null,
       source: "edutrix_import",
       edutrix_report_id: rep.id,
     });

@@ -6,8 +6,9 @@
 //                 (Edutrix가 원본 — cron이 "수정 전파 안 됨" 한계도 여기서 해소)
 //   Pass2 INSERT: eywa에 없는 원본 행 전부(매핑 학생만 — 미매핑 189건은 edutrix_archive가 보존)
 // 필드 매핑: textbook_name→textbook · study_attitude→attitude · notice(AI 학부모 멘트)→notes ·
-//   makeup_class→makeup(truthy) · classnote_sent_at→classnote_sent_at + status='success'(발송 사실 이관 —
-//   원장 화면 "미발송" 오인 해소). homework_today·lateness 등 나머지는 아카이브 보존(운영 컬럼 없음).
+//   homework_today→homework_today(0096a) · makeup_class→makeup(truthy) · classnote_sent_at→
+//   classnote_sent_at + status='success'(발송 사실 이관 — 원장 화면 "미발송" 오인 해소).
+//   lateness·graph_eval 등 나머지는 아카이브(edutrix_archive) 보존(운영 컬럼 없음).
 // subject는 관례대로 NULL 유지(발송 게이트가 NULL 거부 = P0-2, 조회는 math에 NULL 포함 설계).
 //
 // 실행: node --env-file=.env.local scripts/_edutrix_retire/full-import-reports.cjs        # dry-run
@@ -54,7 +55,7 @@ async function fetchAllPaged(q, page = 1000) {
       edu
         .from("reports")
         .select(
-          "id, date, student_id, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, makeup_class, classnote_sent_at, classes(name)",
+          "id, date, student_id, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, homework_today, makeup_class, classnote_sent_at, classes(name)",
         )
         .order("date", { ascending: true })
         .range(a, b),
@@ -77,6 +78,7 @@ async function fetchAllPaged(q, page = 1000) {
     textbook: rep.textbook_name || null,
     attitude: rep.study_attitude || null,
     notes: rep.notice || null,
+    homework_today: rep.homework_today || null, // 오늘 과제(0096a)
     makeup: !!rep.makeup_class,
     classnote_sent_at: rep.classnote_sent_at || null,
   });
@@ -107,28 +109,32 @@ async function fetchAllPaged(q, page = 1000) {
   await sql`alter table lesson_reports disable trigger tg_log_activity_id`;
   await sql`alter table lesson_reports disable trigger tg_log_activity_u`;
   try {
-    // Pass1 — temp table 적재 후 단일 UPDATE 조인(postgres-js raw VALUES 바인딩 quirk 회피).
+    // Pass1 — temp table **청크 순환**(스테이징→UPDATE→truncate). 단일 대형 UPDATE는 풀 이력(1.6만 행)
+    // 규모에서 statement timeout에 걸림(2026-07-10 실측) — 청크당 짧은 문장으로 분할.
     await sql`create temp table _edutrix_imp (
       edutrix_report_id text primary key, progress text, exam_info text, homework_score text,
-      teacher_name text, textbook text, attitude text, notes text, makeup boolean, classnote_sent_at timestamptz
+      teacher_name text, textbook text, attitude text, notes text, homework_today text,
+      makeup boolean, classnote_sent_at timestamptz
     )`;
+    let updatedTotal = 0;
     for (let i = 0; i < updates.length; i += CHUNK) {
       const c = updates.slice(i, i + CHUNK).map(({ student_id: _sid, report_date: _rd, ...rest }) => rest);
+      await sql`truncate _edutrix_imp`;
       await sql`insert into _edutrix_imp ${sql(c)}`;
-      process.stdout.write(`\rPass1 stage ${Math.min(i + CHUNK, updates.length)}/${updates.length}`);
+      const updated = await sql`
+        update lesson_reports lr set
+          progress = v.progress, exam_info = v.exam_info, homework_score = v.homework_score,
+          teacher_name = v.teacher_name, textbook = v.textbook, attitude = v.attitude,
+          notes = v.notes, homework_today = v.homework_today, makeup = v.makeup,
+          classnote_sent_at = coalesce(v.classnote_sent_at, lr.classnote_sent_at),
+          classnote_status = case when v.classnote_sent_at is not null then 'success' else lr.classnote_status end
+        from _edutrix_imp v
+        where lr.tenant_id = ${TENANT} and lr.source = 'edutrix_import' and lr.edutrix_report_id = v.edutrix_report_id
+        returning lr.id`;
+      updatedTotal += updated.length;
+      process.stdout.write(`\rPass1 UPDATE ${Math.min(i + CHUNK, updates.length)}/${updates.length} (적용 ${updatedTotal})`);
     }
-    console.log();
-    const updated = await sql`
-      update lesson_reports lr set
-        progress = v.progress, exam_info = v.exam_info, homework_score = v.homework_score,
-        teacher_name = v.teacher_name, textbook = v.textbook, attitude = v.attitude,
-        notes = v.notes, makeup = v.makeup,
-        classnote_sent_at = coalesce(v.classnote_sent_at, lr.classnote_sent_at),
-        classnote_status = case when v.classnote_sent_at is not null then 'success' else lr.classnote_status end
-      from _edutrix_imp v
-      where lr.tenant_id = ${TENANT} and lr.source = 'edutrix_import' and lr.edutrix_report_id = v.edutrix_report_id
-      returning lr.id`;
-    console.log(`Pass1 UPDATE 적용 ${updated.length}행`);
+    console.log(`\nPass1 UPDATE 적용 ${updatedTotal}행`);
     // Pass2 — INSERT (신규만; 유니크 인덱스(edutrix_report_id)가 이중 방어)
     for (let i = 0; i < inserts.length; i += CHUNK) {
       const c = inserts.slice(i, i + CHUNK).map((r) => ({
@@ -142,6 +148,7 @@ async function fetchAllPaged(q, page = 1000) {
         textbook: r.textbook,
         attitude: r.attitude,
         notes: r.notes,
+        homework_today: r.homework_today,
         makeup: r.makeup,
         source: "edutrix_import",
         edutrix_report_id: r.edutrix_report_id,

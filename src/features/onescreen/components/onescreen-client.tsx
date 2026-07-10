@@ -137,7 +137,13 @@ export function OneScreenClient({
       subjectProgress: Object.fromEntries(
         s.subjects.map((su) => [
           su.subjectKey || su.name,
-          { today: su.today, draft: r?.[su.name]?.draft ?? "", textbook: su.textbook ?? "", makeup: su.makeup ?? false },
+          {
+            today: su.today,
+            draft: r?.[su.name]?.draft ?? "",
+            textbook: su.textbook ?? "",
+            makeup: su.makeup ?? false,
+            homeworkToday: su.homeworkToday ?? "",
+          },
         ]),
       ),
       dailyScore: s.tests.daily.score,
@@ -326,6 +332,17 @@ export function OneScreenClient({
     if (!selected) return;
     toggleMakeupFor(selected.id, subjectName);
   }
+  // 오늘 과제(숙제 내용) — 과목별(0096a). 자동저장에 실리고 AI 멘트·학부모 카드 재료.
+  function setHomeworkTodayFor(studentId: string, subjectName: string, text: string) {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, homeworkToday: text } : su)),
+    }));
+  }
+  function setHomeworkToday(subjectName: string, text: string) {
+    if (!selected) return;
+    setHomeworkTodayFor(selected.id, subjectName, text);
+  }
   // AI 학부모 멘트 + 학습 추세 생성 코어(카드·표 공용) — 멘트 실패 시 결정적 템플릿 폴백,
   // 추세는 표본 부족/실패면 조용히 생략(기존 값 유지). 둘을 학생별 병렬(Promise.all)로 생성해 지연 최소화.
   async function generateDraftFor(student: OneScreenStudent, subjectName: string) {
@@ -423,6 +440,7 @@ export function OneScreenClient({
         studentId: student.id,
         textbook: su?.textbook || "",
         makeup: su?.makeup ?? false,
+        homeworkToday: su?.homeworkToday || "",
         progress: su ? `${su.name} ${su.today}`.trim() : "",
         examInfo,
         homeworkScore: student.homework,
@@ -784,6 +802,7 @@ export function OneScreenClient({
           onAttitude={setAttitudeValue}
           onHomework={setHomeworkValue}
           onTextbook={setTextbookFor}
+          onHomeworkToday={setHomeworkTodayFor}
           onDraft={setDraftFor}
           onTrend={setTrendDraftFor}
           onNote={setNoteFor}
@@ -842,6 +861,7 @@ export function OneScreenClient({
                 onAttitude={setAttitude}
                 onHomework={setHomework}
                 onTextbook={setTextbook}
+                onHomeworkToday={setHomeworkToday}
                 onMakeup={toggleMakeup}
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}

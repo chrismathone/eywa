@@ -175,7 +175,7 @@ export async function testPrompt(
   const supabase = await createClient();
   const { data: r } = await supabase
     .from("lesson_reports")
-    .select("student_id, subject, progress, daily_test, check_test, attitude, homework_score, textbook")
+    .select("student_id, subject, progress, daily_test, check_test, attitude, homework_score, textbook, homework_today")
     .eq("id", reportId)
     .maybeSingle();
   if (!r) return { ok: false, error: "보고서를 찾을 수 없습니다" };
@@ -200,6 +200,7 @@ export async function testPrompt(
       checkTest: (r.check_test as string) ?? "",
       attitude: (r.attitude as string) ?? "",
       homework: r.homework_score && r.homework_score !== "—" ? (r.homework_score as string) : "",
+      homeworkToday: (r.homework_today as string) ?? "",
       textbook: (r.textbook as string) ?? "",
       specialNote: "",
     };

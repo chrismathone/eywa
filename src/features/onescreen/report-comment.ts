@@ -15,7 +15,8 @@ export type ReportCommentInput = {
   dailyTest: string; // "20문제 중 18개 (지난 회차 대비 ▲2)" | ""
   checkTest: string;
   attitude: string; // "" = 미입력
-  homework: string; // "" = 미입력/—
+  homework: string; // 지난 과제 수행 상태(완료/일부 미흡/미제출). "" = 미입력/—
+  homeworkToday: string; // 오늘 내준 과제(숙제 내용) — 0096a. 멘트 마무리 "오늘 과제는 ~입니다" 재료. "" = 미입력
   textbook: string; // 교재명 — 공지 모드 B의 P1(수업 내용)에 사용. "" = 미입력
   specialNote: string; // 특이사항(강사 메모) — 0093a. 모드 A는 종합, B는 P2에 사용. "" = 미입력
 };
@@ -42,6 +43,7 @@ export function buildReportCommentInput(st: OneScreenStudent, subjectIndex: numb
     checkTest: testLine(st.tests.check.score, st.tests.check.max, st.tests.check.prevScore),
     attitude: st.attitude ?? "",
     homework: st.homework && st.homework !== "—" ? st.homework : "",
+    homeworkToday: su?.homeworkToday ?? "",
     textbook: su?.textbook ?? "",
     specialNote: st.note ?? "",
   };
@@ -56,6 +58,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.checkTest) facts.push(`확인테스트(오늘 진도 범위): ${input.checkTest}`);
   if (input.attitude) facts.push(`수업 태도: ${input.attitude}`);
   if (input.homework) facts.push(`과제: ${input.homework}`);
+  if (input.homeworkToday) facts.push(`오늘 과제: ${input.homeworkToday}`); // 마무리 문장 재료(0096a)
   if (input.specialNote) facts.push(`특이사항: ${input.specialNote}`);
   return facts.length ? facts.join("\n") : "(입력된 정보 없음)";
 }
@@ -76,13 +79,16 @@ export function buildReportCommentPrompt(input: ReportCommentInput, template?: s
 
 // ── 공지 모드 B(2문단 분리) — P1(수업 내용) + P2(태도·특이사항) ──
 
-/** P1 사실(교재·진도·과제). 전부 비면 null(문단 생략). */
+/** P1 사실(교재·진도·과제). 전부 비면 null(문단 생략).
+ *  과제 = **오늘 과제(숙제 내용, 0096a) 우선** — P1 템플릿의 "오늘 과제는 ~입니다" 마무리와 정합.
+ *  미입력이면 기존처럼 수행 상태(homework)로 폴백(구 동작 보존). */
 export function buildP1FactBlock(input: ReportCommentInput): string | null {
   const facts: string[] = [];
   if (input.textbook) facts.push(`교재: ${input.textbook}`);
   const prog = [input.subject, input.progress].filter(Boolean).join(" ");
   if (prog) facts.push(`진도: ${prog}`);
-  if (input.homework) facts.push(`과제: ${input.homework}`);
+  const hw = input.homeworkToday || input.homework;
+  if (hw) facts.push(`과제: ${hw}`);
   return facts.length ? facts.join("\n") : null;
 }
 

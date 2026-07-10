@@ -185,6 +185,7 @@ export function OneScreenGrid({
   onAttitude,
   onHomework,
   onTextbook,
+  onHomeworkToday,
   onDraft,
   onTrend,
   onNote,
@@ -211,6 +212,7 @@ export function OneScreenGrid({
   onAttitude: (studentId: string, a: string | null) => void;
   onHomework: (studentId: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
+  onHomeworkToday: (studentId: string, subjectName: string, text: string) => void; // 오늘 과제(0096a)
   onDraft: (studentId: string, subjectName: string, text: string) => void; // 학부모 문구(멘트) 편집
   onTrend: (studentId: string, subjectName: string, text: string) => void; // 학습 추세(종합분석) 편집(4a)
   onNote: (studentId: string, text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
@@ -444,6 +446,15 @@ export function OneScreenGrid({
                         onChange={(e) => onTextbook(student.id, subject.name, e.target.value)}
                         placeholder="교재명"
                         aria-label={`${student.name} ${subject.name} 교재명`}
+                        className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+                      />
+                      {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
+                      <input
+                        type="text"
+                        value={subject.homeworkToday ?? ""}
+                        onChange={(e) => onHomeworkToday(student.id, subject.name, e.target.value)}
+                        placeholder="오늘 과제 (예: 개념편 p10~16)"
+                        aria-label={`${student.name} ${subject.name} 오늘 과제`}
                         className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
                       />
                       <label className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]">

@@ -48,6 +48,7 @@ export type ParentReportCardProps = {
     checkTest: string | null;
     examInfo: string | null; // 레거시 합본(일일/확인 분리값 없을 때 폴백)
     homeworkScore: string | null;
+    homeworkToday: string | null; // 오늘 과제(숙제 내용) — 0096a(showHomeworkToday 토글)
     attitude: string | null;
     notes: string | null;
     trendNote: string | null; // 학습 추세(종합분석) — 0091a(showTrendNote 토글)
@@ -94,6 +95,7 @@ export function ParentReportCard({
     (rpt.showCheckTest && report.checkTest) ||
     legacyTest ||
     (rpt.showHomework && report.homeworkScore) ||
+    (rpt.showHomeworkToday && report.homeworkToday) ||
     (rpt.showAttitude && report.attitude);
 
   return (
@@ -126,14 +128,18 @@ export function ParentReportCard({
           {rpt.showHomework && report.homeworkScore ? (
             <Field label="과제" value={report.homeworkScore} />
           ) : null}
+          {rpt.showHomeworkToday && report.homeworkToday ? (
+            <Field label="오늘 과제" value={report.homeworkToday} />
+          ) : null}
           {rpt.showAttitude && report.attitude ? <Field label="수업 태도" value={report.attitude} /> : null}
         </Section>
       ) : null}
 
-      {/* 성적 추이 그래프(시험·과제, 순수 SVG) — 지표별 유효점 2개 이상일 때만(위 showTrendGraph에서 판정).
-          위치: '학부모 전달 내용' 위(2026-07-10 원장 요청 — 숫자 추이를 먼저, 서술은 아래). */}
+      {/* 학습 추이 그래프(시험·과제, 순수 SVG) — 지표별 유효점 2개 이상일 때만(위 showTrendGraph에서 판정).
+          위치: '학부모 전달 내용' 위(2026-07-10 원장 요청 — 숫자 추이를 먼저, 서술은 아래).
+          제목 "성적 추이"→"학습 추이"(2026-07-10 원장 요청, 라벨만). */}
       {showTrendGraph ? (
-        <Section title="성적 추이">
+        <Section title="학습 추이">
           <ReportTrendGraph points={trend!} />
         </Section>
       ) : null}

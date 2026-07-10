@@ -97,6 +97,7 @@ export function ReportCard({
   onAttitude,
   onHomework,
   onTextbook,
+  onHomeworkToday,
   onMakeup,
   onSubjectDraft,
   onSubjectTrend,
@@ -119,6 +120,7 @@ export function ReportCard({
   onAttitude: (a: string) => void;
   onHomework: (h: string) => void;
   onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
+  onHomeworkToday: (subjectName: string, text: string) => void; // 오늘 과제(숙제 내용, 과목별) — 0096a
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
@@ -271,6 +273,16 @@ export function ReportCard({
               );
             })}
           </div>
+          {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
+              AI 멘트 마무리("오늘 과제는 ~입니다") 재료 + 학부모 카드 표시(설정 토글). */}
+          <input
+            type="text"
+            value={subject.homeworkToday ?? ""}
+            onChange={(e) => onHomeworkToday(subjectName, e.target.value)}
+            placeholder="오늘 과제 (예: 개념편 p10~16, 유형편 p6~11)"
+            aria-label={`${subjectName} 오늘 과제`}
+            className="border-line bg-card focus:border-primary mt-1.5 h-8 w-full min-w-0 rounded-sm border px-2 text-[12px] outline-none transition-colors"
+          />
         </div>
 
         {/* 특이사항(강사 메모) — AI 멘트 입력(4c). 자유서술. 학부모엔 생성 문구만 나감. */}

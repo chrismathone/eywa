@@ -133,6 +133,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showDailyTest: true,
     showCheckTest: true,
     showHomework: true,
+    showHomeworkToday: true, // 오늘 과제(숙제 내용) 기본 표시 — 0096a. 값 없으면 행 자체가 숨어 무해.
     showAttitude: true,
     showParentNote: true,
     showTrendNote: true, // 학습 추세(종합분석) 기본 표시 — 0091a

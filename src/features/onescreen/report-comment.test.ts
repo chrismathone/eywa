@@ -103,6 +103,7 @@ describe("공지 모드 B — P1/P2 + 특이사항 (4c)", () => {
     checkTest: "",
     attitude: "좋음",
     homework: "완료",
+    homeworkToday: "",
     textbook: "개념원리 중2-1",
     specialNote: "개념 어려워함",
   };
@@ -159,10 +160,52 @@ describe("공지 모드 B — P1/P2 + 특이사항 (4c)", () => {
       checkTest: "",
       attitude: "",
       homework: "",
+      homeworkToday: "",
       textbook: "",
       specialNote: "",
     };
     expect(buildCommentP1Prompt(empty)).toBeNull();
     expect(buildCommentP2Prompt(empty)).toBeNull();
+  });
+});
+
+describe("오늘 과제(homeworkToday, 0096a)", () => {
+  it("buildReportCommentInput이 과목별 homeworkToday를 매핑한다", () => {
+    const input = buildReportCommentInput(
+      student({
+        subjects: [{ name: "수학(상)", prev: "일차함수", today: "이차함수", homeworkToday: "개념편 p10~16" }],
+      }),
+      0,
+    );
+    expect(input.homeworkToday).toBe("개념편 p10~16");
+  });
+
+  it("모드 A 사실 블록에 '오늘 과제'가 별도 라인으로 들어간다(수행 상태 '과제'와 공존)", () => {
+    const input = buildReportCommentInput(
+      student({
+        subjects: [{ name: "수학(상)", prev: "일차함수", today: "이차함수", homeworkToday: "워크북 P32까지" }],
+      }),
+      0,
+    );
+    const facts = buildFactBlock(input);
+    expect(facts).toContain("과제: 완료");
+    expect(facts).toContain("오늘 과제: 워크북 P32까지");
+  });
+
+  it("P1의 '과제'는 오늘 과제 우선, 미입력이면 수행 상태 폴백", () => {
+    const withToday: ReportCommentInput = {
+      studentName: "김민승",
+      subject: "수학(상)",
+      progress: "이차함수",
+      dailyTest: "",
+      checkTest: "",
+      attitude: "",
+      homework: "완료",
+      homeworkToday: "워크북 P32까지",
+      textbook: "개념원리 중2-1",
+      specialNote: "",
+    };
+    expect(buildCommentP1Prompt(withToday)).toContain("과제: 워크북 P32까지");
+    expect(buildCommentP1Prompt({ ...withToday, homeworkToday: "" })).toContain("과제: 완료");
   });
 });

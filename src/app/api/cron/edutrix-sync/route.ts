@@ -44,6 +44,7 @@ type EdutrixReport = {
   textbook_name: string | null;
   study_attitude: string | null;
   notice: string | null;
+  homework_today: string | null;
   makeup_class: boolean | null;
   classnote_sent_at: string | null;
   classes: NameRef;
@@ -60,6 +61,7 @@ type ExistingRow = {
   textbook: string | null;
   attitude: string | null;
   notes: string | null;
+  homework_today: string | null;
   makeup: boolean;
   classnote_sent_at: string | null;
   classnote_status: string | null;
@@ -75,6 +77,7 @@ function contentOf(rep: EdutrixReport) {
     textbook: rep.textbook_name || null,
     attitude: rep.study_attitude || null,
     notes: rep.notice || null,
+    homework_today: rep.homework_today || null,
     makeup: !!rep.makeup_class,
   };
 }
@@ -117,7 +120,7 @@ export async function GET(req: Request) {
         edu
           .from("reports")
           .select(
-            "id, date, student_id, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, makeup_class, classnote_sent_at, classes(name)",
+            "id, date, student_id, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, homework_today, makeup_class, classnote_sent_at, classes(name)",
           )
           .gte("date", windowStart)
           .order("date", { ascending: false })
@@ -135,7 +138,7 @@ export async function GET(req: Request) {
         admin
           .from("lesson_reports")
           .select(
-            "id, edutrix_report_id, progress, exam_info, homework_score, teacher_name, textbook, attitude, notes, makeup, classnote_sent_at, classnote_status",
+            "id, edutrix_report_id, progress, exam_info, homework_score, teacher_name, textbook, attitude, notes, homework_today, makeup, classnote_sent_at, classnote_status",
           )
           .eq("tenant_id", TENANT)
           .eq("source", "edutrix_import")
@@ -171,6 +174,12 @@ export async function GET(req: Request) {
         }
         if (Object.keys(patch).length) updates.push({ id: cur.id, patch });
         else skippedExisting++;
+        continue;
+      }
+      // 같은 실행 내 중복 유입 방지 — fetchAllPaged가 비유니크 정렬키(date desc)로 range 페이징하므로
+      // 페이지 경계에서 같은 report가 두 번 올 수 있음(중복 insert = 유니크 위반으로 청크 전체 실패).
+      if (seenReportIds.has(rep.id)) {
+        skippedExisting++;
         continue;
       }
       const eywaId = resolveEywaIdByEdutrixId(rep.student_id, byEdutrixId);

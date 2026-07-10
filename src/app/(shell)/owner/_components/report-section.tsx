@@ -217,10 +217,11 @@ export function ReportSection({
                 ["일일테스트", "showDailyTest"],
                 ["확인테스트", "showCheckTest"],
                 ["과제", "showHomework"],
+                ["오늘 과제(숙제 내용)", "showHomeworkToday"],
                 ["수업 태도", "showAttitude"],
                 ["학부모 전달 내용", "showParentNote"],
                 ["학습 추세(종합분석)", "showTrendNote"],
-                ["성적 추이 그래프", "showTrendGraph"],
+                ["학습 추이 그래프", "showTrendGraph"],
                 ["학생 사진 첨부", "showAttachments"],
               ] as const
             ).map(([label, key]) => (

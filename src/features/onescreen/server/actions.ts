@@ -19,6 +19,7 @@ export type SaveLessonReportInput = {
   studentId: string;
   textbook?: string; // 교재명 — 0089a(학부모 카드 showTextbook)
   makeup?: boolean; // 보강 수업 여부 — 0089a
+  homeworkToday?: string; // 오늘 과제(숙제 내용) — 0096a(학부모 카드 showHomeworkToday, AI 멘트 재료)
   progress: string; // "영어 Unit 8 · p.90"
   examInfo: string; // "일일 18/20, 확인 19/20" (roster prev-score 파싱용 합본 — 보존)
   homeworkScore: string; // 과제 상태
@@ -76,6 +77,7 @@ export async function saveLessonReport(
         subject: input.subject || null,
         textbook: input.textbook || null,
         makeup: input.makeup ?? false,
+        homework_today: input.homeworkToday || null,
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: input.homeworkScore || null,
@@ -261,7 +263,10 @@ export type SaveOnescreenSessionInput = {
   studentId: string;
   classId?: string | null;
   studyGrade?: string | null;
-  subjectProgress?: Record<string, { today?: string; draft?: string; textbook?: string; makeup?: boolean }>;
+  subjectProgress?: Record<
+    string,
+    { today?: string; draft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
+  >;
   dailyScore?: number | null;
   dailyMax?: number | null;
   checkScore?: number | null;

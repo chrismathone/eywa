@@ -71,6 +71,8 @@ const COLUMN_LABEL: Record<string, string> = {
   session_date: "수업일", note: "메모", homework_required: "과제부여", homework_done: "과제완료",
   access_method: "기록방식", report_date: "리포트일", progress: "진도", homework_score: "과제점수",
   daily_test: "데일리테스트", check_test: "체크테스트", attitude: "태도", content: "내용", pinned: "고정",
+  // 리포트 리치 필드(0089a·0091a·0096a) — colLabel 폴백으로 raw 영문 노출되던 갭(2026-07-10 리뷰 적발)
+  homework_today: "오늘과제", textbook: "교재명", trend_note: "학습추세", exam_info: "시험정보", makeup: "보강",
   capacity: "정원", publisher: "출판사", book_detail: "교재상세", grade_level: "학년",
   expense_date: "지출일", vendor: "거래처", department: "부서", author: "작성자",
   payment_method: "결제수단", approval_status: "결재상태", line_items: "품목",
