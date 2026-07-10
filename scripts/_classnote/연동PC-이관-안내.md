@@ -52,6 +52,11 @@ CLASSNOTE_SHARE_BASE=https://eywa-alpha.vercel.app
 # CLASSNOTE_INTERNAL_SECRET=<앱과 동일한 내부 시크릿>
 ```
 
+> ⚠️ 주소 두 줄은 **복사-붙여넣기**로 넣으세요. 2026-07-10 실발송 테스트에서 수기 입력 오타
+> (`eywa-alpha-vercel.app` — 점 대신 하이픈)로 스크린샷 단계가 `ERR_NAME_NOT_RESOLVED`로
+> 전멸(3회 재시도 후 failed)한 실사례가 있습니다. 이미 오타가 났다면 **`발송PC-주소수정.bat`**
+> 더블클릭 한 번으로 백업→치환→데몬 재시작→자가검사까지 자동 수행됩니다.
+
 > ⚠️ `CLASSNOTE_UPLOAD_ID/PW`(ClassNote 계정)는 현재 저장소 `.env.local`에 **없습니다** — 실게시하려면
 > ClassNote 발송용 계정 정보를 여기서 채워야 합니다. 없으면 dry-run(게시 안 함)까지만 동작합니다.
 
@@ -91,6 +96,7 @@ CLASSNOTE_SHARE_BASE=https://eywa-alpha.vercel.app
 |---|---|
 | `발송PC-지정` 이 "playwright 없음"으로 중단 | 저장소 루트에서 `pnpm install` 후 재실행 |
 | dry-run 이 스크린샷에서 실패 | `CLASSNOTE_SCREENSHOT_BASE`가 실제 공개 도메인인지 (로컬 3113 아님) |
+| 발송이 `ERR_NAME_NOT_RESOLVED`로 실패 | 주소 오타(예: `eywa-alpha-vercel.app`) — **`발송PC-주소수정.bat`** 더블클릭 |
 | "테넌트 N개 — CLASSNOTE_TENANT_ID 필요" | `.env.local`에 `CLASSNOTE_TENANT_ID=becaa316-…` 추가 |
 | 화면에 여전히 옛 PC가 발송 PC로 뜸 | 옛 PC에서 `발송PC-해제.bat` 실행(중복 데몬 방지) |
 | 데몬이 자꾸 죽음/창이 뜸 | 콘솔 창을 닫지 말 것 — 작업 스케줄러가 `conhost --headless`로 창 없이 상주 |

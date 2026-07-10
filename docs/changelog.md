@@ -9,6 +9,14 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### ClassNote 구조 전수 분석 + 연동 PC 첫 실발송 E2E(env 오타 적발·수정 패키지) + 심층 문서 (2026-07-10)
+사용자 요청("classnote 구조도 파악" → "학원이로 실발송" → "문서로 남겨라"). 상세는 **[docs/classnote-integration.md](classnote-integration.md) 단일 참조 문서**(구조·운영·트러블슈팅·검증 이력) — ClassNote를 만질 땐 그 문서부터.
+- **구조 분석(멀티에이전트 4정독+크로스체크)**: Cloud Run `submitToClassNoteV2` 원본 = **`D:\edutrix\functions\index.js`(repo 밖)** — Puppeteer DOM 자동화(공개 API 없음), 학생모드 판정 `/^\((수학|영어)\)/`, 그룹핑=1알림장 N반 동시발송. 구조 구멍 확정: `classnoteSendEnabled` OFF는 **신규 큐잉 2곳만** 막음(queued 재고·멈춤복구는 --post 워커가 그대로 실게시 — 긴급 정지 단일점 부재), 워커 120s abort vs 함수 900s=중복게시 창, 전송버튼 못 찾아도 success(침묵 미발송).
+- **실브라우저 탐사(기관설정 포함, center 96575)**: 보드 ~495 = `(수학)학생명` ~256 + **`(영어)학생명` ~229(실존 — "영어 보드 미확인" 해소, `(영어)학원이` 有)** + `[EIE]` 그룹 ~10 + `[ALL] 전체방`(439명). **동명이인 = A~G 접미사 관례**(`(수학)박서연C`) → `students.classnote_name`은 실보드 접미사와 일치시켜야("김서윤(중2)" 예시는 실관례와 다름). 학부모 연결 승인 468/재원 ~527(커버리지 갭 — 발송 성공≠수신). 신규생 보드 자동생성 없음(수동). 내부 REST `api/v1` 실재(DOM→API 승격 후보). 관리자 12명 중 "인재원 프리미엄관"=봇 계정.
+- **연동 PC 첫 실발송 E2E(테스트 학생 '학원이', 전역 스위치 OFF 유지·단일 행 직접 큐잉)**: 워커 5초 클레임(데몬·자격증명 정상) → **스크린샷 `ERR_NAME_NOT_RESOLVED` — 연동 PC env 수기 오타 `eywa-alpha-vercel.app`(점→하이픈)** → 3회 재시도 후 failed(재시도 정책 정상). 안내문은 정타 — 수기 입력 실수.
+- **수정 패키지**: [`발송PC-주소수정.bat`](../scripts/_classnote/발송PC-주소수정.bat)+[`fix-classnote-base.ps1`](../scripts/_classnote/fix-classnote-base.ps1)(백업→오타 치환(SHARE_BASE 포함)→키 없으면 추가→setup 재실행=재시작+dry-run 자가검사, ps1은 UTF-8 BOM+파서 검증) + 이관 안내문 트러블슈팅 갱신 + zip `D:\tmp\eywa-발송PC-주소수정-20260710.zip`(경로 보존). ⏳ 연동 PC에서 .bat 실행 대기 — 데몬 재시작 감지 모니터가 잡히면 학원이 재큐잉해 완주 검증 예정.
+- 부수: 알림장 목록에서 **Edutrix가 7/9까지 현역 발송 중** 실화면 확인(`edutrix.vercel.app/share/…` 링크 — eywa 전환 시 이 링크만 `/r`로 교체되는 그림).
+
 ### 학부모 보고서 성적 추이 그래프 + ClassNote 발송 과목 게이트 (2026-07-10)
 - **성적 추이 그래프**(edutrix ReportPaper 이식): 순수 파서 [`report-trend.ts`](../src/features/onescreen/report-trend.ts)(시험 "n/m"·"N문제 중 M개"·과제 "%" → 0~100, Vitest) + 순수 SVG [`report-trend-graph.tsx`](../src/features/onescreen/components/report-trend-graph.tsx)(라이브러리 0 — ClassNote headless 스샷 호환, B5). `fetchReportTrendRows`로 `/r`(service_role→tenantId 격리)·`/print`(RLS) 배선, `parent-report-card` '성적 추이' 섹션. 설정 토글 `showTrendGraph`(유효점 2개 미만 자동 숨김). 실데이터 그래프조건 150그룹.
 - **ClassNote 발송 과목 게이트**: `report.classnoteSubjects`(명시 opt-in, 빈=아무것도 발송 안 함) + `isClassnoteSubjectEnabled`(null=레거시 math). `saveAndQueueClassnote`(신규)·`retryClassnote`(재발송) 공용 게이트 → 허용 과목 아니면 차단. report-section 발송 과목 체크칩(useSubjectMaps 단일소스, 하드코딩 금지). ⚠️ 실발송은 원장이 발송 과목을 `math`로 켜야 시작(기본 빈).
