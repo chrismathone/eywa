@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### Edutrix 완전 종료 대비 데이터 전체 이전 — lesson_reports 풀 이력 + 원본 아카이브 (2026-07-10) — ✅ 프로덕션 적용·검증
+원장 결정("유지할 것들 다 이전해서 Edutrix 완전히 끄자, Vercel 링크 사망 수용"). 스크립트 = [scripts/_edutrix_retire/](../scripts/_edutrix_retire/), 소등 순서는 [docs/classnote-integration.md](classnote-integration.md) **§10 체크리스트**.
+- **운영 반영**(`full-import-reports.cjs`, 멱등): lesson_reports 이관분 3,456 → **16,694행 풀 이력**(UUID 매핑 299명=원본 98.9%, 미매핑 189는 아카이브만). 리치 필드 신규 매핑: textbook_name→textbook 15,998 · **notice(AI 학부모 멘트)→notes 10,493** · study_attitude→attitude 5,098 · makeup_class→makeup 142 · **classnote_sent_at→status='success' 11,881**(원장 화면 "이관=미발송" 오인 근본 해소). 삭제 없음(2-pass UPDATE temp-join + INSERT, progress_entries FK 안전), 벌크 중 활동로그 트리거 off(선례).
+- **아카이브**(`archive-edutrix.cjs` + 0095a `edutrix_archive`, RLS 정책 0=service_role 전용): 원본 9테이블 **23,339행 raw 무손실**(reports 16,877 전량·en_reports 23·로스터·프로필·발송로그 4,145·열람이력 1,058 — service key라야 보이는 테이블 포함) + 로컬 `data/edutrix-archive/*.jsonl`. 자격증명 필드(`classnote_login_pw`·`profile_token`) 제거 후 적재.
+- 검증: 중복 edutrix_report_id 0 · 김준영 12→66건 · **/r 실렌더에서 빈칸이던 '학부모 전달 내용'에 Edutrix 발송 멘트 복원** · 추이 그래프(최근 10 limit)·진도 탭(12 limit) 무회귀 · 학원이 테스트 행 불변 · 최근 3일 status 행 221(큐 카드 1000 limit 여유).
+- ⚠️ 소등 순서 핵심: Vercel·Supabase는 최종 full-import 재실행(멱등) 후 꺼도 됨. **Firebase(Cloud Run 함수)는 마지막** — 워커에 게시 로직 내장(옵션 B, 권장) 완료 전 삭제 금지.
+
 ### ClassNote 구조 전수 분석 + 연동 PC 첫 실발송 E2E(env 오타 적발·수정 패키지) + 심층 문서 (2026-07-10)
 사용자 요청("classnote 구조도 파악" → "학원이로 실발송" → "문서로 남겨라"). 상세는 **[docs/classnote-integration.md](classnote-integration.md) 단일 참조 문서**(구조·운영·트러블슈팅·검증 이력) — ClassNote를 만질 땐 그 문서부터.
 - **구조 분석(멀티에이전트 4정독+크로스체크)**: Cloud Run `submitToClassNoteV2` 원본 = **`D:\edutrix\functions\index.js`(repo 밖)** — Puppeteer DOM 자동화(공개 API 없음), 학생모드 판정 `/^\((수학|영어)\)/`, 그룹핑=1알림장 N반 동시발송. 구조 구멍 확정: `classnoteSendEnabled` OFF는 **신규 큐잉 2곳만** 막음(queued 재고·멈춤복구는 --post 워커가 그대로 실게시 — 긴급 정지 단일점 부재), 워커 120s abort vs 함수 900s=중복게시 창, 전송버튼 못 찾아도 success(침묵 미발송).

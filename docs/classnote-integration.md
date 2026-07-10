@@ -205,3 +205,37 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
   삭제 시 eywa 발송 전면 즉사. 은퇴 정리 전에 **함수를 eywa 소유 프로젝트로 이전**(P2).
 - Edutrix `/share` 링크는 만료 게이트가 없어 앱 제거 시 과거 게시물 링크 대량사(이미지 본문은 ClassNote에 박제).
 - Edutrix 로컬 봇 경로엔 too_old 가드가 없음(가드는 cron 미등록 서버 경로에만) — 병행기 중 Edutrix에서 과거 보고서 재큐잉 조작 금지.
+
+## 10. Edutrix 완전 종료(소등) 체크리스트 — 데이터 이전 완료 (2026-07-10)
+
+> 원장 결정: "유지해야 하는 것들을 eywa로 다 이전해서 Edutrix를 완전히 꺼버린다. Vercel(공유 링크 주소)도
+> 종료 — 발송 이미지가 ClassNote에 박제돼 있으므로 옛 링크 사망은 수용."
+
+### ✅ 데이터 이전 — 완료 (스크립트 = [scripts/_edutrix_retire/](../scripts/_edutrix_retire/))
+- **운영 반영** `full-import-reports.cjs`: lesson_reports **풀 이력 16,694행**(기존 3,456 리치필드 보강 +
+  13,238 신규, UUID 매핑 299명 = 원본의 98.9%). 필드: 교재명 15,998·**AI 학부모 멘트(notice→notes) 10,493**·
+  태도 5,098·보강 142 + **발송 사실 11,881건**(sent_at→classnote_status='success' — "미발송" 오인 근본 해소).
+  멱등(edutrix_report_id 유니크) — **최종 소등 직전 한 번 더 실행**해 마지막 며칠분 흡수.
+- **아카이브** `archive-edutrix.cjs` → `edutrix_archive`(0095a, service_role 전용) + 로컬
+  `data/edutrix-archive/*.jsonl`: 9테이블 **23,339행 raw 무손실**(reports 16,877 전량 — 미매핑 189 포함,
+  en_reports 23, 로스터·강사 프로필, 발송 로그 4,145, 열람 이력 1,058). 자격증명(`classnote_login_pw`·
+  `profile_token`)은 제거 후 적재.
+- 검증: 중복 edutrix_report_id 0 · 김준영 66건(구 12) · /r 실렌더에서 과거 빈칸이던 '학부모 전달 내용'에
+  Edutrix 발송 멘트 복원 확인 · 추이 그래프(최근 10건 limit)·진도 탭(12건 limit) 무회귀 · 학원이 테스트 행 불변.
+
+### 소등 순서 (의존 역순 — 위부터)
+1. **강사 작성 eywa 전환 + Edutrix 발송 봇 종료**(봇 PC) → 며칠 안정화.
+2. **full-import 마지막 실행**(멱등) → 최종 스냅샷 흡수. archive도 재실행(멱등 upsert).
+3. **Edutrix Vercel 종료** — 앱·cron(학생 이름 미러 포함) 소멸. `/share` 옛 링크 사망 = 수용(원장 승인,
+   이미지는 ClassNote 게시물에 박제). eywa 측 부수 정리: `/api/cron/edutrix-sync`가 원본 소실 후 500을
+   내지 않는지 확인(Supabase가 살아있는 동안은 무해) — Supabase 소등과 함께 vercel.json에서 cron 제거.
+4. **Edutrix Supabase 종료** — 이전·아카이브 완료로 의존 0. eywa .env.local의 `EDUTRIX_*` 키와
+   `vercel.json` edutrix-sync cron, `instrumentation.ts` 권장 env를 같이 정리.
+5. **Edutrix Firebase(Cloud Run)** — ⚠️ **마지막까지 유지.** eywa 발송의 실게시 엔진. 끄려면 선행 필요:
+   - 권장 **옵션 B: 워커에 게시 로직 내장** — 연동 PC 워커가 이미 Playwright를 돌리므로 submitToClassNoteV2의
+     DOM 자동화(로그인→원아선택→업로드→전송)를 classnote-core.mjs에 포팅하면 GCP 의존이 통째로 사라짐
+     (가정용 IP라 봇 차단 리스크도 낮음). 그 후 Firebase 삭제 가능.
+   - 옵션 A: 함수를 eywa 소유 GCP/Firebase로 재배포(소스 `D:\edutrix\functions\index.js` — noticeAdd.js
+     부재 주의). 인프라 이중 관리가 남아 B보다 열위.
+6. 소등 후 잔여물: `edutrix_archive`(영구 보험) · lesson_reports 풀 이력(운영) · `D:\edutrix` 로컬 소스
+   (함수 원본 — 옵션 B 완료 전까지 보관 필수).

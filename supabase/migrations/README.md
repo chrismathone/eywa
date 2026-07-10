@@ -129,5 +129,7 @@ pnpm db:seed
 | `0088a_students_classnote_name` | **`students.classnote_name text`**(nullable) — ClassNote 보드명 오버라이드(동명이인 구분, P3 오발송 방지 옵션2). 지정 시 워커 보드명·동명이인 감지가 `(classnote_name \|\| name)` 유효이름 사용 → 동명이인을 `김서윤(중2)` 등으로 구분해 발송 허용. 비우면 name(기본 불변). nullable이라 rewrite 없음. |
 | `0087a_lesson_reports_attachments` | **`lesson_reports.attachments jsonb not null default '[]'`** — 수업 보고서 학생 사진 첨부(P2b). `[{path,name,size}]`, `report-attachments` 버킷(private, admin signed URL 양방향이라 storage RLS 불요 — document/branding 방식). `/r`·ClassNote 스샷에 `<img>` 렌더. 상수 default라 rewrite 없음(0035b `expenses.receipt_urls` 미러). 강사가 **저장된 보고서에만** 첨부(유령 row 방지), 첨부 변경 시 classnote_status 리셋. |
 
+| `0095a_edutrix_archive` | **`edutrix_archive`(source_table·source_id·row jsonb, unique(source_table,source_id)) + RLS 정책 0(=service_role 전용)** — Edutrix 은퇴 보험: 원본 Supabase 9테이블 23,339행 raw 스냅샷(reports 16,877·submission_logs 4,145·share_link_views 1,058·en_* 등). 적재 스크립트 `scripts/_edutrix_retire/archive-edutrix.cjs`(멱등 upsert, 자격증명 필드 `classnote_login_pw`·`profile_token` 제거). 운영 반영(lesson_reports 풀 이력)은 `full-import-reports.cjs` 별도. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
