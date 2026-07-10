@@ -8,6 +8,7 @@ import { useIsDesktop } from "./use-is-desktop";
 import { useInFrame } from "./use-in-frame";
 import { useWorkspaceEnabled } from "./workspace-enabled";
 import { withEmbed } from "./embed-context";
+import { cancelScheduledPrefetch, scheduleEmbedPrefetch } from "./prefetch-embed";
 
 /**
  * href(쿼리/해시 제외)를 창 id로 해석.
@@ -89,6 +90,8 @@ export function WindowLink({
   // 그 드릴인이 embed=1을 잃으면 하위 페이지가 풀 셸로 떠 사이드바가 이중 노출되므로, iframe 안의
   // 링크 href엔 embed=1을 유지한다(크롬리스 embed 분기로 self-heal). 최상위/모바일은 원본 href.
   const linkHref = inFrame ? withEmbed(href) : href;
+  // BL4 — 데스크톱 최상위(창 열기)면 embed document, 그 외(모바일·iframe 드릴인)는 실제 이동 URL 프리워밍.
+  const prefetchEmbed = isDesktop && workspaceEnabled && !inFrame;
   return (
     <Link
       href={linkHref}
@@ -98,8 +101,14 @@ export function WindowLink({
       // 네이티브 anchor 드래그(URL 고스트) 차단 — 시간표 편집에서 학생 행을 끌 때 링크 URL이
       // 딸려오던 것 방지. nav 링크는 클릭 전용이라 HTML5 drag가 필요 없다.
       draggable={false}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={(e) => {
+        scheduleEmbedPrefetch(href, { embed: prefetchEmbed });
+        onMouseEnter?.(e);
+      }}
+      onMouseLeave={(e) => {
+        cancelScheduledPrefetch();
+        onMouseLeave?.(e);
+      }}
       onMouseMove={onMouseMove}
     >
       {children}

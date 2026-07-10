@@ -5,7 +5,7 @@
 > **이 문서는 "나중에 요청 시 바로 실행"하기 위한 실행 카드** — 각 항목에 트리거·파일·방법·효과·위험을 적어둠.
 >
 > ▶ **사용법(트리거)**: 사용자가 코드명(BL3 등) 없이 **"속도 개선 / 새 창 더 빠르게 / 반응속도 더 줄여줘"** 같은 말을 하면 —
-> 아래 "보류 백로그"에서 **효과 큰 순으로 다음 레버**(현재 우선순위: BL3 → BL4 → QW4 → loading.tsx)를 골라 제안하고, 동의 시 실행한다.
+> 아래 "보류 백로그"에서 **효과 큰 순으로 다음 레버**(현재 우선순위: **BL3** iframe LRU — BL4·dashboard loading·QW4는 적용됨)를 골라 제안하고, 동의 시 실행한다.
 > "비권장" 항목은 제안하지 않는다.
 
 ## ✅ 이미 적용됨 (2026-07-01, main)
@@ -18,6 +18,14 @@
 - **QW1 — 등록상담 QR 첫 페인트 분리** ([intake-qr-section.tsx](<../src/app/(shell)/enrollment/_components/intake-qr-section.tsx>)):
   토큰 조회+QR SVG 생성을 Suspense 자식으로 분리(QR은 버튼 클릭 시에만 보임). qrcode는 서버 전용 유지.
 
+## ✅ 추가 적용 (2026-07-10)
+
+- **BL4 — 메뉴 hover document 프리워밍** ([prefetch-embed.ts](../src/components/workspace/prefetch-embed.ts)):
+  사이드바 RailItem + WindowLink hover → 120ms 디바운스 후 `<link rel="prefetch" as="document">` 1회.
+  자주 쓰는 메뉴 루트 allowlist · URL당 1회 · 데스크톱은 `?embed=1`(iframe과 동일 키). leave 시 스케줄 취소.
+- **dashboard `loading.tsx`** + **lesson-reports `loading.tsx`**(별 커밋): 무거운 첫 fetch·필터 드문 라우트 B7.
+- **QW4 출석 중복** — 코드상 이미 해소: `classId=null`이면 classes만, 반 선택 시에만 매트릭스 재조회(별도 리팩터 불요).
+
 ## ⏸️ 보류 — 요청 시 바로 실행 (효과 큰 순)
 
 ### BL3 — 닫은 창 hidden 보존 / iframe LRU 풀  ⭐효과 큼·노력 큼
@@ -26,23 +34,12 @@
 - **방법**: 닫기를 `display:none` 보존(또는 detached iframe LRU 2~3개)으로. 재오픈=즉시 표시 + `reloadWindow` nonce로 콘텐츠만 갱신(기존 인프라 재사용). [window-store.ts](../src/components/workspace/window-store.ts) close 경로 + [floating-window/route-window].
 - **효과**: 재오픈 즉시화(흔한 패턴). **위험(중)**: hidden iframe N개 = 메모리/백그라운드 타이머 누적 → **LRU 상한·메모리 가드 필수**. stale 콘텐츠(다른 창 저장 후 재오픈) → reloadWindow/router.refresh 연계(#55). 멀티윈도우 N배 비용(B6)과 트레이드오프.
 - **권장**: 측정 선행(재오픈 빈도) 또는 보수적으로 핵심 1~2개(대시보드·시간표)만 hidden 프리마운트.
+- ⚠️ BL4와 보완(첫 오픈=BL4, 재오픈=BL3).
 
-### BL4 — 메뉴 hover 시 ?embed=1 document 프리워밍  효과 중·노력 소
-- **트리거**: "메뉴 hover 프리페치/프리워밍"
-- **방법**: RailItem/WindowLink `onMouseEnter`(이미 forward됨)에 `<link rel="prefetch" as="document" href={withEmbed(href)}>` 1회 삽입(디바운스 ~120ms, 중복 가드, hover 취소 시 abort). 클릭 시 iframe src가 브라우저 HTTP 캐시 히트로 시작. [route-window.tsx](../src/components/workspace/route-window.tsx)/window-link.tsx/app-sidebar.tsx.
-- **효과**: 클릭→로드 시작 지연 단축. **위험(소)**: 과도하면 서버/대역 N배 → 디바운스+동시 1개+자주 쓰는 메뉴(시간표·학생·출석)만. ?embed=1은 GET·read-only라 부수효과 없음·쿠키 동봉(RLS 유지).
-- ⚠️ BL3 채택 시 가치 줄어듦(재오픈이 이미 즉시).
-
-### loading.tsx 추가 (attendance/enrollment/dashboard 3곳만)  효과 중(제한적)
-- **트리거**: "무거운 페이지 loading.tsx"
-- **방법**: 무거운 첫 fetch가 있고 필터 전환이 드문 라우트에만 `loading.tsx`. 서버 셸 HTML을 onLoad 전 스트리밍해 TTFB 체감 당김. (timetable엔 이미 있음.)
-- ⚠️ **한계**: RouteWindow 클라 스켈레톤이 이미 빈 화면을 가리므로 "빈 화면 제거"가 아니라 "서버 셸 먼저 도착" 목적. 트레이드오프: searchParam 필터 전환에도 스켈레톤 플래시 → students/classes/billing/consultations/meetings(이미 페이지네이션으로 가벼움)엔 적용 금지.
-
-### QW4 — 출석부 첫 진입 classes 중복 fetch 제거  효과 중·위험 중
-- **트리거**: "출석부 중복 쿼리"
-- **현재**: [attendance/page.tsx](<../src/app/(shell)/attendance/page.tsx>):76에서 `getMonthlyAttendanceMatrix(month, null)`(반 목록용) → 94-99에서 첫 반으로 **다시** 호출 → 첫 진입 시 classes를 2번 조회.
-- **방법**: classes 목록 조회와 matrix 조회를 분리(`getAttendanceClasses(month)` + `getMonthlyAttendanceMatrix(month, classId)`). [features/attendance/server/queries.ts](../src/features/attendance/server/queries.ts).
-- **위험(중)**: 강사 스코프·URL classId 가드 로직을 그대로 보존해야 함 → query 리팩터 회귀 주의.
+### loading.tsx 추가 (남은 후보)  효과 중(제한적)
+- **적용됨**: timetable · dashboard · lesson-reports.
+- **보류**: attendance(반 선택 후만 무거움·필터 많음) / enrollment — 필터 플래시 트레이드오프.
+- ⚠️ RouteWindow 클라 스켈레톤이 이미 있어 "빈 화면 제거"보다 서버 셸 TTFB 체감 목적.
 
 ### QW2 — QueryProvider를 top-frame 전용으로  효과 낮음
 - **트리거**: "QueryProvider iframe에서 빼기"

@@ -28,6 +28,10 @@ import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
+import {
+  cancelScheduledPrefetch,
+  scheduleEmbedPrefetch,
+} from "@/components/workspace/prefetch-embed";
 
 // 펼침/접힘 모핑 이징 — 창 스냅과 동일 톤. 모션 OFF면 적용 안 함.
 const EASE = "ease-[cubic-bezier(0.22,0.61,0.36,1)]";
@@ -515,6 +519,9 @@ function RailItem({
       href={item.href}
       draggable={false}
       onClick={handleNav}
+      // BL4 — hover 시 창 iframe용 ?embed=1 document 프리워밍(디바운스·메뉴 allowlist는 헬퍼).
+      onMouseEnter={() => scheduleEmbedPrefetch(item.href, { embed: isDesktop })}
+      onMouseLeave={() => cancelScheduledPrefetch()}
       onPointerDown={(e) => {
         if (!isDesktop || e.button !== 0) return;
         start.current = { x: e.clientX, y: e.clientY };

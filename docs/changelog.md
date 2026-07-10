@@ -9,6 +9,11 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 체감 성능 — BL4 hover document 프리워밍 + 대시보드 loading (2026-07-10)
+- **BL4**([prefetch-embed.ts](../src/components/workspace/prefetch-embed.ts)): 사이드바·WindowLink hover 120ms 후 `?embed=1` document `<link rel=prefetch>`(자주 쓰는 메뉴 루트만, URL 1회). 클릭 시 iframe이 HTTP 캐시부터 시작 → 새 창 체감 단축. leave 시 디바운스 취소.
+- **dashboard/loading.tsx**: 15-way 쿼리 대기 중 스켈레톤 스트리밍(B7). 필터 거의 없어 플래시 트레이드오프 작음.
+- 제외(노력 대비 체감 낮거나 고위험): BL3 iframe LRU, report-admin RPC 집계(정확성 축).
+
 ### 수업보고서 승격 후속 — 권한·로딩·죽은코드 정리 (2026-07-10)
 - **`listReports`**: `canAccessTenant("lesson_reports")` 읽기 게이트(로그인만 있던 역할 갭 해소; RLS 테넌트 스코프는 기존).
 - **`backfillProgressContainers`**: `await canWriteTenant` 누락 수정(Promise truthy로 권한 검사가 항상 통과하던 버그).
