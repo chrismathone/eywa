@@ -9,9 +9,6 @@ import { OperationsSection } from "./_components/operations-section";
 import { SubjectsSection } from "./_components/subjects-section";
 import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
-import { ReportSection } from "./_components/report-section";
-import { AiMentSection } from "./_components/ai-ment-section";
-import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { PermissionsSection } from "./_components/permissions-section";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
@@ -28,8 +25,6 @@ type OwnerTab =
   | "subjects"
   | "billing"
   | "notifications"
-  | "report"
-  | "ai_ment"
   | "permissions"
   | "popups"
   | "data"
@@ -42,8 +37,6 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   subjects: "과목 운영",
   billing: "수납·청구",
   notifications: "알림·약관",
-  report: "보고서",
-  ai_ment: "AI 멘트",
   permissions: "역할·권한",
   popups: "팝업 공지",
   data: "데이터 정리",
@@ -57,8 +50,6 @@ const VALID_TABS: OwnerTab[] = [
   "subjects",
   "billing",
   "notifications",
-  "report",
-  "ai_ment",
   "permissions",
   "popups",
   "data",
@@ -72,15 +63,14 @@ function resolveTab(sp: Sp): OwnerTab {
   return t && (VALID_TABS as string[]).includes(t) ? (t as OwnerTab) : "profile";
 }
 
-// 설정 5면 ┃ 관리 3면(데이터 정리[고아+중복 통합]·감사·연동, 구 /admin 흡수) — group 경계에 FaceTabs 세로 구분선.
+// 설정면 ┃ 관리면(데이터 정리[고아+중복 통합]·감사·연동, 구 /admin 흡수) — group 경계에 FaceTabs 세로 구분선.
+// 보고서 표시·AI 멘트 설정은 수업보고서(/lesson-reports) 탭으로 이관 — 발송 관리와 한 화면에서 관리(2026-07-10).
 const FACES: Face[] = [
   { key: "profile", label: TAB_LABEL.profile, href: "/owner", group: "설정" },
   { key: "operations", label: TAB_LABEL.operations, href: "/owner?tab=operations", group: "설정" },
   { key: "subjects", label: TAB_LABEL.subjects, href: "/owner?tab=subjects", group: "설정" },
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing", group: "설정" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
-  { key: "report", label: TAB_LABEL.report, href: "/owner?tab=report", group: "설정" },
-  { key: "ai_ment", label: TAB_LABEL.ai_ment, href: "/owner?tab=ai_ment", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
   { key: "popups", label: TAB_LABEL.popups, href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
@@ -115,15 +105,15 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const sp = await searchParams;
   // 옛 "보고서 관리" 면(?tab=report_mgmt)은 좌측 독립 메뉴 /lesson-reports로 승격 — 기존 북마크 리다이렉트.
   if (sp.tab === "report_mgmt") redirect("/lesson-reports");
+  // 보고서 표시·AI 멘트 설정 면은 수업보고서 탭으로 이관(2026-07-10) — 옛 ?tab=report·ai_ment 북마크 리다이렉트.
+  if (sp.tab === "report") redirect("/lesson-reports?tab=report");
+  if (sp.tab === "ai_ment") redirect("/lesson-reports?tab=ai_ment");
   const tab = resolveTab(sp);
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
-  // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' + 보고서 '작성률 예외 강사' 칩)은 해당 면에서만 로드.
-  const teacherLabelsBySubject =
-    tab === "subjects" || tab === "report" ? await getTeacherLabelsBySubject() : {};
-  // AI 멘트 프롬프트(타입별 활성 오버라이드 또는 기본값)는 그 면에서만 로드.
-  const aiPrompts = tab === "ai_ment" ? ((await getActivePrompts()).prompts ?? []) : [];
+  // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
+  const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
   // 관리 면(중복·감사) 페이지네이션용. 창(embed) 컨텍스트는 면 pageHref가 직접 유지.
   const page = Math.max(1, Number(sp.page) || 1);
   const isEmbed = sp.embed === "1";
@@ -151,10 +141,6 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       ) : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
-      {tab === "report" ? (
-        <ReportSection initial={settings.report} teachers={teacherLabelsBySubject} />
-      ) : null}
-      {tab === "ai_ment" ? <AiMentSection initial={aiPrompts} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
           <PermissionsSection initial={settings.permissions} />

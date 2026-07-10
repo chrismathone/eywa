@@ -8,6 +8,7 @@ export type ReportListRow = {
   studentName: string;
   subject: string | null;
   reportDate: string;
+  createdAt: string | null; // 작성/이관 시각(timestamptz) — 목록 hh:mm 표시·같은 날짜 내 최신순 정렬 키
   classnoteStatus: string | null;
   teacherName: string | null;
   shareToken: string | null;

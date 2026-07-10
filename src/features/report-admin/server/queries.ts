@@ -29,6 +29,7 @@ export type WorkerStatus = { hostname: string; lastSeenMinutes: number; online: 
 export type ClassnoteQueueView = {
   summary: QueueSummary;
   items: QueueItem[]; // 주의 필요(실패·오래됨·동명이인·멈춤) 목록 — 상한 100
+  pending: QueueItem[]; // 진행 중(대기·처리중, 정상 흐름) 목록 — 상한 100
   workers: WorkerStatus[];
   since: string; // 집계 시작일
   days: number;
@@ -68,12 +69,22 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   const attention = rows
     .filter((r) => needsAttention(r.classnote_status as string | null, r.classnote_processing_at as string | null, nowMs))
     .slice(0, 100);
-  const ids = [...new Set(attention.map((r) => r.student_id as string))];
+  // 진행 중(대기·처리중, 주의 대상 아닌 정상 흐름) — 원장이 발송 진행을 눈으로 확인. 상한 100.
+  const pendingRows = rows
+    .filter((r) => {
+      const s = r.classnote_status as string | null;
+      return (
+        (s === "queued" || s === "processing") &&
+        !needsAttention(s, r.classnote_processing_at as string | null, nowMs)
+      );
+    })
+    .slice(0, 100);
+  const ids = [...new Set([...attention, ...pendingRows].map((r) => r.student_id as string))];
   const nameRows = await fetchInChunks<{ id: string; name: string }>(ids, (chunk) =>
     supabase.from("students").select("id, name").in("id", chunk),
   );
   const nameById = new Map(nameRows.map((s) => [s.id, s.name]));
-  const items: QueueItem[] = attention.map((r) => ({
+  const toItem = (r: (typeof rows)[number]): QueueItem => ({
     id: r.id as string,
     studentName: nameById.get(r.student_id as string) ?? "(학생)",
     subject: r.subject as string | null,
@@ -82,7 +93,9 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
     error: r.classnote_error as string | null,
     processingAt: r.classnote_processing_at as string | null,
     shareToken: r.share_token as string | null,
-  }));
+  });
+  const items: QueueItem[] = attention.map(toItem);
+  const pending: QueueItem[] = pendingRows.map(toItem);
 
   const { data: wk } = await supabase.from("classnote_workers").select("hostname, last_seen");
   const workers: WorkerStatus[] = (wk ?? []).map((w) => {
@@ -91,7 +104,7 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   });
 
   const settings = await getTenantSettings();
-  return { summary, items, workers, since, days, sendEnabled: settings.report.classnoteSendEnabled };
+  return { summary, items, pending, workers, since, days, sendEnabled: settings.report.classnoteSendEnabled };
 }
 
 // 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.
@@ -114,15 +127,22 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
   const dates = Array.from({ length: 7 }, (_, i) => daysBefore(monday, -i)); // 월→일 오름차순
   const since = dates[0]!; // = 이번 주 월요일
 
-  // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨 — 상호 독립이라 병렬(B4).
-  const [{ data: reps }, schedule, settings, labelsBySubject] = await Promise.all([
+  // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨·퇴사(비활성) 직원 — 상호 독립이라 병렬(B4).
+  const [{ data: reps }, schedule, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
     supabase.from("lesson_reports").select("teacher_name, report_date").gte("report_date", since).limit(5000),
     getTodaySchedule(),
     getTenantSettings(),
     getTeacherLabelsBySubject(),
+    // 퇴사자 = users.status 'inactive'(RLS 테넌트 스코프, 직원 표라 소량). 이름으로 작성률에서 자동 제외.
+    supabase.from("users").select("display_name").eq("status", "inactive"),
   ]);
-  // 작성 예외 강사(학원설정 report.writingExemptTeachers) — 작성 의무 없는 강사는 주간 기록·오늘 대상 모두 제외.
+  // 작성 예외 강사 = 학원설정 report.writingExemptTeachers(수동 지정) + 퇴사(비활성) 처리된 직원(자동).
+  // 퇴사자는 수동 등록 없이도 주간 기록·오늘 대상 모두에서 빠진다 — 재직 중 미작성만 미작성으로 집계.
   const exempt = new Set(settings.report.writingExemptTeachers);
+  for (const u of inactiveStaff ?? []) {
+    const name = (u.display_name as string | null)?.trim();
+    if (name) exempt.add(name);
+  }
   const reports = (reps ?? [])
     .map((r) => ({
       teacher: (r.teacher_name as string | null) ?? "(미지정)",

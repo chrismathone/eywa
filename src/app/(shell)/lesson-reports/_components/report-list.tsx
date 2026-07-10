@@ -11,6 +11,17 @@ import type { ReportFilterOptions } from "@/features/report-admin/server/queries
 
 const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict"];
 
+// 작성/이관 시각의 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
+function hhmmKst(iso: string | null): string {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 /** 발송 상태 표시 — eywa 발송이력(classnote_status) 우선, 없으면 이관(edutrix)/미발송 구분. */
 function StatusCell({ status, source }: { status: string | null; source: string | null }) {
   const badge = classnoteBadge(status ?? undefined);
@@ -110,7 +121,10 @@ export function ReportList({ options, initial }: { options: ReportFilterOptions;
             ) : (
               rows.map((r) => (
                 <tr key={r.id} className="border-line hover:bg-bg-soft border-b last:border-b-0">
-                  <td className="text-text-dim px-3 py-2">{r.reportDate}</td>
+                  <td className="text-text-dim px-3 py-2 whitespace-nowrap">
+                    {r.reportDate}
+                    {r.createdAt ? <span className="text-text-faint ml-1.5">{hhmmKst(r.createdAt)}</span> : null}
+                  </td>
                   <td className="px-3 py-2">
                     <span className="text-foreground font-semibold">{r.studentName}</span>
                     {r.subject ? <span className="text-text-faint ml-1.5">{r.subject}</span> : null}

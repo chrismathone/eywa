@@ -1,56 +1,82 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates } from "@/features/report-admin/server/queries";
 import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
 import { listReports } from "@/features/report-admin/server/actions";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
+import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
 import { EdutrixUnmappedCard } from "./_components/edutrix-unmapped-card";
+import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
+import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — eywa" };
 
 type Sp = Record<string, string | undefined>;
-type Tab = "writing" | "unmapped" | "list";
+// 관리 3면(작성률·미매핑·목록) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
+type Tab = "writing" | "unmapped" | "list" | "report" | "ai_ment";
 
-const FACES: Face[] = [
-  { key: "writing", label: "작성률", href: "/lesson-reports?tab=writing" },
-  { key: "unmapped", label: "미매핑", href: "/lesson-reports?tab=unmapped" },
-  { key: "list", label: "목록", href: "/lesson-reports?tab=list" },
-];
-
-function resolveTab(sp: Sp): Tab {
+// 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
+// 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
+function resolveTab(sp: Sp, canOwner: boolean): Tab {
   const t = sp.tab;
   if (t === "unmapped" || t === "list" || t === "writing") return t;
+  if ((t === "report" || t === "ai_ment") && canOwner) return t;
   return "writing";
 }
 
 /**
- * 수업보고서(발송 관리) — ClassNote 큐는 상단 고정, 작성률·미매핑·목록은 내부 FaceTabs(스크롤 단축).
- * 활성 탭만 무거운 조회(서버 렌더). 강사 작성은 /onescreen.
+ * 수업보고서(발송 관리) — ClassNote 큐는 관리 탭 상단 고정, 작성률·미매핑·목록은 내부 FaceTabs(스크롤 단축).
+ * 보고서 표시·AI 멘트 설정(옛 학원설정 두 탭)은 뒤에 붙여 5탭 — owner 쓰기 권한이 있을 때만. 강사 작성은 /onescreen.
+ * 활성 탭만 무거운 조회(서버 렌더).
  */
 export default async function LessonReportsPage({ searchParams }: { searchParams: Promise<Sp> }) {
-  await requireAccess("lesson_reports");
+  const viewer = await requireAccess("lesson_reports");
+  const canOwner = await canWriteTenant(viewer.systemRole, "owner");
   const sp = await searchParams;
-  const tab = resolveTab(sp);
+  const tab = resolveTab(sp, canOwner);
+  const isSettings = tab === "report" || tab === "ai_ment";
 
-  // 큐는 전 탭 공통(발송 오버사이트). 나머지는 활성 탭만.
-  const queueP = getClassnoteQueue(3);
+  const FACES: Face[] = [
+    { key: "writing", label: "작성률", href: "/lesson-reports?tab=writing", group: "관리" },
+    { key: "unmapped", label: "미매핑", href: "/lesson-reports?tab=unmapped", group: "관리" },
+    { key: "list", label: "목록", href: "/lesson-reports?tab=list", group: "관리" },
+    ...(canOwner
+      ? ([
+          { key: "report", label: "보고서 설정", href: "/lesson-reports?tab=report", group: "설정" },
+          { key: "ai_ment", label: "AI 멘트", href: "/lesson-reports?tab=ai_ment", group: "설정" },
+        ] as Face[])
+      : []),
+  ];
+
+  // 큐는 관리 탭 공통(발송 오버사이트). 설정 탭에선 미표시(부하 0). 나머지는 활성 탭만.
+  const queueP = isSettings ? Promise.resolve(null) : getClassnoteQueue(3);
   const tabP =
     tab === "writing"
       ? getWeeklyWritingRates().then((rates) => ({ rates }))
       : tab === "unmapped"
         ? getEdutrixUnmapped().then((edutrixMap) => ({ edutrixMap }))
-        : Promise.all([getReportFilterOptions(), listReports({ page: 0 })]).then(([filterOptions, firstPage]) => ({
-            filterOptions,
-            initialList: {
-              rows: firstPage.rows ?? [],
-              total: firstPage.total ?? 0,
-              page: firstPage.page ?? 0,
-              pageSize: firstPage.pageSize ?? 30,
-            },
-          }));
+        : tab === "report"
+          ? Promise.all([getTenantSettings(), getTeacherLabelsBySubject()]).then(([settings, teachers]) => ({
+              reportSettings: settings.report,
+              teachers,
+            }))
+          : tab === "ai_ment"
+            ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
+            : Promise.all([getReportFilterOptions(), listReports({ page: 0 })]).then(([filterOptions, firstPage]) => ({
+                filterOptions,
+                initialList: {
+                  rows: firstPage.rows ?? [],
+                  total: firstPage.total ?? 0,
+                  page: firstPage.page ?? 0,
+                  pageSize: firstPage.pageSize ?? 30,
+                },
+              }));
 
   const [queue, tabData] = await Promise.all([queueP, tabP]);
 
@@ -65,11 +91,13 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
         </p>
       </header>
 
-      {queue ? (
-        <ClassnoteQueueCard view={queue} />
-      ) : (
-        <p className="text-text-faint text-sm">발송 현황을 불러올 수 없습니다.</p>
-      )}
+      {!isSettings ? (
+        queue ? (
+          <ClassnoteQueueCard view={queue} />
+        ) : (
+          <p className="text-text-faint text-sm">발송 현황을 불러올 수 없습니다.</p>
+        )
+      ) : null}
 
       <FaceTabs faces={FACES} active={tab} ariaLabel="수업보고서 면" />
 
@@ -86,6 +114,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
         <ReportList options={tabData.filterOptions} initial={tabData.initialList} />
       ) : null}
+
+      {tab === "report" && "reportSettings" in tabData ? (
+        <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers} />
+      ) : null}
+
+      {tab === "ai_ment" && "aiPrompts" in tabData ? <AiMentSection initial={tabData.aiPrompts} /> : null}
     </div>
   );
 }

@@ -11,6 +11,17 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { resetStuckClassnote, retryClassnote } from "@/features/report-admin/server/actions";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
 
+// 처리 시작 시각의 시:분(KST) — 대기·처리중 목록에서 언제 잡혔는지 표시. 값 없으면 "—".
+function hhmmKst(iso: string | null): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className={`rounded-md px-3 py-1.5 ${tone}`}>
@@ -22,7 +33,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
 
 export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
   const router = useRouter();
-  const { summary, items, workers, days } = view;
+  const { summary, items, pending, workers, days } = view;
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -177,6 +188,48 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
           </table>
         </div>
       )}
+
+      {/* 진행 중 목록 — 대기·처리중(정상 흐름). 재발송 대상이 아니라 관찰용(발송이 실제로 도는지 확인). */}
+      {pending.length > 0 ? (
+        <div className="mt-3">
+          <p className="text-text-faint mb-1.5 text-[12px] font-semibold">진행 중 · 대기 {summary.queued} · 처리중 {summary.processing}</p>
+          <div className="border-line overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[480px] text-left text-[12px]">
+              <thead>
+                <tr className="border-line text-text-faint border-b">
+                  <th className="px-3 py-2 font-semibold">학생 · 과목</th>
+                  <th className="px-3 py-2 font-semibold">날짜</th>
+                  <th className="px-3 py-2 font-semibold">상태</th>
+                  <th className="px-3 py-2 font-semibold">처리 시작</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((it) => {
+                  const badge = classnoteBadge(it.status ?? undefined);
+                  return (
+                    <tr key={it.id} className="border-line border-b last:border-b-0">
+                      <td className="px-3 py-2">
+                        <span className="text-foreground font-semibold">{it.studentName}</span>
+                        {it.subject ? <span className="text-text-faint ml-1.5">{subjects.labelOf(it.subject)}</span> : null}
+                      </td>
+                      <td className="text-text-dim px-3 py-2">{it.reportDate}</td>
+                      <td className="px-3 py-2">
+                        {badge ? (
+                          <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+                        ) : (
+                          <span className="text-text-dim text-[11px]" title={it.status ?? ""}>기타</span>
+                        )}
+                      </td>
+                      {/* 처리중이면 클레임 시각, 대기면 아직 안 잡혀 "—". */}
+                      <td className="text-text-faint px-3 py-2">{it.status === "processing" ? hhmmKst(it.processingAt) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

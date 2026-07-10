@@ -239,7 +239,7 @@ export function ReportSection({
         {/* 작성률 예외 강사 — 소비처: getWeeklyWritingRates(수업보고서 > 강사별 작성률에서 제외). */}
         <SettingsCard
           title="작성률 예외 강사"
-          description="체크한 강사는 수업보고서의 '강사별 작성률' 표에서 빠집니다(보고서 작성 대상이 아닌 보조·데스크 강사 등)."
+          description="체크한 강사는 수업보고서의 '강사별 작성률' 표에서 빠집니다(보고서 작성 대상이 아닌 보조·데스크 강사 등). 퇴사(비활성) 처리된 강사는 자동으로 제외되니 여기에 추가할 필요가 없습니다."
         >
           {exemptGroupKeys.length === 0 ? (
             <p className="text-text-faint text-[12px]">반을 담당 중인 강사가 없습니다.</p>
