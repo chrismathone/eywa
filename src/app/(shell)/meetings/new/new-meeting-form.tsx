@@ -13,7 +13,7 @@ import {
   type RecordingMeta,
 } from "@/lib/recording-recovery";
 import { useRecordingLock } from "@/components/workspace/use-recording-lock";
-import { startMeetingFromAudio } from "@/features/meetings/server/actions";
+import { startMeetingFromAudio, createTextMeeting } from "@/features/meetings/server/actions";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
@@ -42,6 +42,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [title, setTitle] = useState("");
   const [attendees, setAttendees] = useState("");
   const [heldAt, setHeldAt] = useState(nowLocalIso());
+  const [notepad, setNotepad] = useState("");
 
   const [file, setFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -167,12 +168,38 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
     e.preventDefault();
     setError(null);
 
-    if (!file) {
-      setError("음성 파일을 선택하거나 녹음해주세요");
-      return;
-    }
     if (!title.trim()) {
       setError("제목을 입력해주세요");
+      return;
+    }
+    // 녹음·메모 중 하나는 있어야 한다. 메모만 있으면 텍스트 회의로 생성(녹음 없이 'AI로 정리' 가능).
+    if (!file && !notepad.trim()) {
+      setError("음성을 녹음/업로드하거나 메모를 작성해주세요");
+      return;
+    }
+
+    if (!file) {
+      // 메모만 — 녹음 없이 텍스트 회의 생성.
+      setPhase("submitting");
+      const fd = new FormData();
+      fd.append("title", title);
+      fd.append("attendees", attendees);
+      fd.append("heldAt", new Date(heldAt).toISOString());
+      fd.append("notepad", notepad);
+      const result = await createTextMeeting(undefined, fd);
+      if (result?.error) {
+        setError(result.error);
+        setPhase("idle");
+        return;
+      }
+      if (onSuccess) {
+        onSuccess();
+        router.refresh();
+      } else if (result?.id) {
+        router.push(`/meetings/${result.id}`);
+      } else {
+        router.push("/meetings");
+      }
       return;
     }
 
@@ -214,6 +241,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       fd.append("heldAt", heldDate.toISOString());
       fd.append("audioPath", objectName);
       fd.append("audioSizeBytes", String(file.size));
+      fd.append("notepad", notepad);
 
       const result = await startMeetingFromAudio(undefined, fd);
       if (result?.error) {
@@ -393,6 +421,22 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         />
       </div>
 
+      {/* 메모장 — 회의 중 메모(선택). 녹음과 함께 'AI로 정리'에 결합되며, 녹음 없이 메모만으로도 회의록 생성 가능. */}
+      <div className="space-y-1.5">
+        <label htmlFor="notepad" className="text-foreground block text-sm font-medium">
+          메모장
+        </label>
+        <textarea
+          id="notepad"
+          value={notepad}
+          onChange={(e) => setNotepad(e.target.value)}
+          disabled={busy}
+          rows={4}
+          placeholder="회의 중 메모를 적어두세요. 녹음 전사와 함께 AI가 정리합니다. (녹음 없이 메모만으로도 생성 가능)"
+          className="border-input bg-background focus:ring-ring min-h-[6rem] w-full resize-y rounded-md border px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1"
+        />
+      </div>
+
       {error ? (
         <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 rounded-md border px-3 py-2 text-sm">
           {error}
@@ -400,13 +444,17 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       ) : null}
 
       <div className="flex items-center justify-end gap-2 border-t pt-5">
-        <Button type="submit" disabled={busy || !file}>
+        <Button type="submit" disabled={busy || (!file && !notepad.trim())}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
           {phase === "uploading"
             ? `업로드 중 ${uploadPct}%`
             : phase === "submitting"
-              ? "분석 시작 중…"
-              : "업로드 및 분석 시작"}
+              ? file
+                ? "분석 시작 중…"
+                : "저장 중…"
+              : file
+                ? "업로드 및 분석 시작"
+                : "메모로 회의록 만들기"}
         </Button>
       </div>
     </form>

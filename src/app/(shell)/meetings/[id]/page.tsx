@@ -1,14 +1,5 @@
 import { notFound } from "next/navigation";
-import {
-  AlertCircle,
-  CheckSquare,
-  FileText,
-  Loader2,
-  Mic,
-  Printer,
-  Sparkles,
-  Users,
-} from "lucide-react";
+import { AlertCircle, CheckSquare, Loader2, Mic, Printer, Sparkles, Users } from "lucide-react";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
@@ -19,7 +10,7 @@ import {
   type MeetingActionItem,
   type MeetingProcessingStatus,
 } from "@/features/meetings/server/queries";
-import { RunMeetingAiButton } from "./run-ai-button";
+import { MeetingNotepad } from "./meeting-notepad";
 import { SpeakerEditor } from "./speaker-editor";
 import {
   MeetingDeleteButton,
@@ -96,6 +87,10 @@ export default async function MeetingDetailPage({
     meeting.processingStatus === "analyzing";
   const hasAiReport = !!meeting.aiReport || !!meeting.aiSummary;
   const hasTranscription = !!meeting.transcription;
+  const hasNotepad = !!meeting.content?.trim();
+  // 전사·메모 중 하나라도 있으면 "AI로 정리"(regenerate) 가능. 결과가 이미 있으면 "다시 생성" 라벨.
+  const canOrganize = (hasTranscription || hasNotepad) && !isProcessing;
+  const organizeLabel = hasAiReport ? "AI 분석 다시 생성" : "AI로 정리";
 
   return (
     <div className="space-y-6">
@@ -154,12 +149,9 @@ export default async function MeetingDetailPage({
               aiActionItems={meeting.aiActionItems}
             />
           ) : null}
-          {!hasAudio && meeting.content && !hasAiReport ? (
-            <RunMeetingAiButton meetingId={meeting.id} hasExisting={false} />
-          ) : null}
-          {/* AI 분석 다시 생성 — 저장된 전사 텍스트로 8섹션 재생성(오디오·웹훅 불필요, 즉시 완료). */}
-          {hasTranscription && !isProcessing ? (
-            <MeetingRegenerateButton meetingId={meeting.id} />
+          {/* AI로 정리 — 저장된 전사 + 메모장으로 8섹션 (재)생성(오디오·웹훅 불필요, 즉시 완료). 메모만으로도 가능. */}
+          {canOrganize ? (
+            <MeetingRegenerateButton meetingId={meeting.id} label={organizeLabel} />
           ) : null}
           {/* 전사부터 다시 — 원본 오디오 재제출로 전사+분석 재생성. 옛 ijw 녹음은 Firebase에서 읽음. */}
           {hasAudio && hasAiReport && !isProcessing ? (
@@ -210,17 +202,10 @@ export default async function MeetingDetailPage({
         </section>
       ) : null}
 
-      {/* Manual text content — raw notes input by the user. Not AI output. AI 분석 섹션과 헤더 스타일 통일. */}
-      {!hasAudio && meeting.content ? (
-        <section className="bg-card border-border space-y-3 rounded-lg border p-5">
-          <header className="inline-flex items-center gap-2">
-            <FileText className="text-text-dim size-4 shrink-0" />
-            <h2 className="text-foreground text-sm font-semibold">원본 노트</h2>
-          </header>
-          <pre className="text-foreground font-sans text-sm whitespace-pre-wrap leading-relaxed">
-            {meeting.content}
-          </pre>
-        </section>
+      {/* 메모장 — 회의 중/후 직접 작성한 메모(편집 가능). 저장 후 'AI로 정리'로 전사와 함께 분석.
+          처리 중(전사/분석)엔 숨겨 화면 잡음을 줄인다(완료·대기·실패 상태에서 편집). */}
+      {!isProcessing ? (
+        <MeetingNotepad meetingId={meeting.id} content={meeting.content ?? ""} hasAudio={hasAudio} />
       ) : null}
 
       {/* 8-section AI report */}
@@ -235,9 +220,6 @@ export default async function MeetingDetailPage({
                 </h2>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                {!hasAudio && meeting.content ? (
-                  <RunMeetingAiButton meetingId={meeting.id} hasExisting variant="link" />
-                ) : null}
                 {meeting.aiGeneratedAt ? (
                   <span className="text-muted-foreground num text-[11px] whitespace-nowrap">
                     {formatCreatedAt(meeting.aiGeneratedAt)}

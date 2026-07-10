@@ -15,6 +15,15 @@
 - **UI** [report-list](<../src/app/(shell)/lesson-reports/_components/report-list.tsx>): 체크박스 열(+현재 페이지 전체선택) + "선택 발송" 버튼 — 미발송 native 행만 활성([isAdminSendable](../src/features/report-admin/report-filters.ts) 순수+Vitest 4, 서버 필터와 동일 계약), lesson_reports 쓰기 권한일 때만 노출(viewer 숨김). 페이지·필터 전환 시 선택 초기화(화면 밖 행 발송 방지). 과목 필터·행 과목 표기 = `labelOf` 한글 라벨(raw 키 노출 제거).
 - **라이브 E2E**: 발송완료·이관·queued 행 체크 비활성 확인 → 이연아(math·미발송) 선택 발송 = 실큐잉 확인(⚠️ classnoteSendEnabled가 이날 ON으로 전환돼 있었음) 후 워커 클레임 전 즉시 원복(sent_at null) → 박세인(subject NULL) = "1건 제외" 과목 게이트 확인. 테스트 흔적 0.
 
+### 회의록 메모장 — 메모 + 녹음 함께 분석해 정리 (2026-07-10) — ✅ tsc0/lint0, 실 E2E 통과
+원장 요청: 회의록에 메모장 추가, **메모장 + 녹음을 함께 분석해 정리.** DB 마이그레이션 없음(기존 `content` 필드를 메모장으로 재활용).
+- **분석 결합**: [analyzeMeeting](../src/features/meetings/server/ai.ts)이 `ctx.notepad`(메모)를 받아 전사와 **함께** 프롬프트에 결합 — 셋 중 하나(전사만/메모만/둘 다). 둘 다면 "전사=발화 그대로, 메모=작성자가 짚은 핵심, 상충 시 메모 우선" 지침 추가. **전사만(메모 없음)일 땐 프롬프트 바이트 동일** = 기존 품질 회귀 0. 웹훅([assemblyai/route](../src/app/api/webhooks/assemblyai/route.ts) handleMeeting)·재분석([regenerateMeetingAnalysis](../src/features/meetings/server/actions.ts)) 모두 `content` 전달.
+- **메모장 UI**: 상세 페이지에 편집 가능한 [MeetingNotepad](<../src/app/(shell)/meetings/[id]/meeting-notepad.tsx>)(항상 표시, 처리 중엔 숨김) + `updateMeetingNotepad` 액션(AI 호출 없음, 저장만). dirty는 **파생값**(현재값 vs 액션이 되돌려준 저장값) — ref render읽기·effect setState 회피([[#25]]). 저장 후 상단 "AI로 정리"가 전사+메모 결합 분석.
+- **메모만 정리**: `regenerateMeetingAnalysis`가 전사·메모 중 하나만 있어도 동작(녹음 없이 메모만으로 8섹션 정리). 버튼 라벨 = 결과 없으면 "AI로 정리", 있으면 "AI 분석 다시 생성".
+- **생성 폼**: [new-meeting-form](<../src/app/(shell)/meetings/new/new-meeting-form.tsx>)에 메모장 textarea + 녹음 시 함께 전송(`startMeetingFromAudio` content). **메모만으로도 생성**(`createTextMeeting`, 녹음 없이 → 상세로 이동 → "AI로 정리").
+- **죽은 코드 정리**: 레거시 2필드 텍스트 분석(runMeetingAiAnalysis + run-ai-button.tsx)을 8섹션 통합 흐름으로 대체·제거(옛 aiSummary-only 데이터 표시는 유지).
+- **E2E 검증(실 브라우저)**: 메모만 회의 생성 → "AI로 정리" → 8섹션이 메모 정확 반영(요약·안건·결정·액션·우려·향후 + 담당자 박부장/이연우·기한 6/15·강사 퇴사 우려까지) → 테스트 회의 삭제(프로덕션 원복). 콘솔 에러 0.
+
 ### 발송 스크린샷 networkidle 타임아웃 해소 + 에러 UI ANSI 원문 정리 (2026-07-10 후속) — ✅ tsc0/lint0/test962
 원장 제보: 발송 실패건 마우스오버 시 "알 수 없는 코딩 문자"(ANSI 색코드) 노출 + 학원이 테스트 건 계속 실패.
 - **에러 원문 정리 공용 헬퍼** [sanitizeErrorText](../src/lib/text/sanitize-error.ts): Playwright/Node 에러의 ANSI CSI 시퀀스(ESC`[2m` 등)·제어문자·개행을 지워 한 줄 가독 텍스트로(순수, `String.fromCharCode(27)`로 ESC 구성=소스에 제어문자 미포함). 적용: ClassNote 발송 큐 툴팁([classnote-queue-card](<../src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx>) `title`) + makeedu 동기화 이력([makeedu-sync-runs](<../src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>) 화면·title) + 녹음 처리 에러([recordings-section](<../src/app/(shell)/enrollment/[id]/recordings-section.tsx>)) + 시간표 가져오기([import-dialog](<../src/app/(shell)/timetable/_components/import-dialog.tsx>) `e.message` 경로). 화면 본문의 한글 요약(humanizeClassnoteError)은 유지, 툴팁만 정리 원문.

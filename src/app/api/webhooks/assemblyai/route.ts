@@ -109,7 +109,7 @@ export async function POST(req: Request) {
   // Dispatch: meeting first, then consultation. Each row carries the same transcript id.
   const { data: meeting } = await admin
     .from("meeting_minutes")
-    .select("id, tenant_id, title, attendees, held_at, processing_status")
+    .select("id, tenant_id, title, attendees, held_at, content, processing_status")
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
 
@@ -199,6 +199,7 @@ async function handleMeeting(
     title: string;
     attendees: unknown;
     held_at: string;
+    content: string | null;
   },
 ) {
   let transcript;
@@ -273,7 +274,13 @@ async function handleMeeting(
   let modelVersion = "";
 
   try {
-    const result = await analyzeMeeting(formatted, { title: meeting.title, heldAt, attendees });
+    // 메모장(content)이 있으면 전사와 함께 분석 — 작성자가 짚은 핵심을 회의록에 결합.
+    const result = await analyzeMeeting(formatted, {
+      title: meeting.title,
+      heldAt,
+      attendees,
+      notepad: meeting.content,
+    });
     report = result.report;
     speakerRoles = result.speakerRoles;
     modelVersion = result.model;

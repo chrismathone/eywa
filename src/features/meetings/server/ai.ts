@@ -35,22 +35,50 @@ export type MeetingAnalysisContext = {
   /** 표시용 한국어 날짜 문자열(예: 2026. 4. 17.). */
   heldAt: string;
   attendees: string[];
+  /**
+   * 작성자가 회의 중/후 직접 작성한 메모(메모장). 있으면 전사와 **함께** 분석 입력으로 결합한다.
+   * 메모만 있고 전사가 없으면 메모만으로 정리한다. 전사만일 땐(메모 없음) 프롬프트가 기존과 바이트 동일.
+   */
+  notepad?: string | null;
 };
 
 /**
  * 8섹션 회의록 분석(+화자→역할 추론) 생성. {report, speakerRoles, model} 반환. 호출부가 try/catch.
  * provider 미지정 = 기본(Solar). 녹음·텍스트 재분석 모두 이 함수를 거친다.
+ *
+ * 입력은 **전사 + 메모장 결합** — 셋 중 하나: (전사만) / (메모만) / (둘 다). 둘 다면 전사(발화 그대로)와
+ * 메모(작성자가 짚은 핵심)를 종합하고, 상충 시 메모의 의도를 우선하되 필요하면 둘 다 남긴다.
  */
 export async function analyzeMeeting(
   formattedTranscript: string,
   ctx: MeetingAnalysisContext,
 ): Promise<{ report: MeetingReport; speakerRoles: Record<string, string>; model: string }> {
+  const notepad = (ctx.notepad ?? "").trim();
+  const hasTranscript = formattedTranscript.trim().length > 0;
+  const hasNotepad = notepad.length > 0;
+
+  // 자료 블록 — 있는 것만. 둘 다면 전사 → 메모 순.
+  const sourceBlock: string[] = [];
+  if (hasTranscript) sourceBlock.push("녹음 전사 (화자 라벨 포함):", formattedTranscript, "");
+  if (hasNotepad) {
+    sourceBlock.push(
+      "작성자 메모 (회의 중 직접 작성 — 핵심·결정·강조사항. 전사와 상충하면 이 메모의 의도를 우선 반영):",
+      notepad,
+      "",
+    );
+  }
+
   const { data: parsed, model } = await generateJSON<
     MeetingReport & { speakerRoles?: Record<string, string> }
   >({
     maxTokens: 8192,
     prompt: [
-      "다음은 학원 회의 녹음 전사입니다. 회의록 형태로 분석해 JSON으로만 답해주세요.",
+      // 전사만(메모 없음)일 땐 기존과 바이트 동일한 인트로 — 기존 품질 회귀 방지.
+      hasTranscript && hasNotepad
+        ? "다음은 학원 회의의 녹음 전사와 작성자가 직접 남긴 메모입니다. 두 자료를 종합해 회의록 형태로 분석해 JSON으로만 답해주세요."
+        : hasNotepad
+          ? "다음은 학원 회의에서 작성자가 직접 남긴 메모입니다. 회의록 형태로 분석해 JSON으로만 답해주세요."
+          : "다음은 학원 회의 녹음 전사입니다. 회의록 형태로 분석해 JSON으로만 답해주세요.",
       "",
       `제목: ${ctx.title}`,
       `일시: ${ctx.heldAt}`,
@@ -68,10 +96,14 @@ export async function analyzeMeeting(
       "5. 참석자별 발언을 중립적으로 기록하세요.",
       "6. 미해결 이슈, 갈등, 위험 요소를 별도로 기록하세요.",
       "7. 향후 계획을 반드시 포함하세요.",
+      // 둘 다일 때만 결합 지침(전사만이면 미삽입 → 프롬프트 바이트 동일).
+      ...(hasTranscript && hasNotepad
+        ? [
+            "8. 전사(발화 그대로)와 메모(작성자가 짚은 핵심)를 대조해 하나의 회의록으로 정리하세요. 메모에만 있는 항목도 반드시 반영하고, 전사와 메모가 다르면 메모의 의도를 우선하되 필요하면 둘 다 남기세요. 메모의 축약·약어는 전사 맥락으로 풀어 쓰세요.",
+          ]
+        : []),
       "",
-      "녹음 전사 (화자 라벨 포함):",
-      formattedTranscript,
-      "",
+      ...sourceBlock,
       "JSON schema (모든 필드 한국어, 줄바꿈은 \\n):",
       "{",
       '  "speakerRoles": { "A": "역할/이름", "B": "역할/이름" },',

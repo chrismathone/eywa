@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
-import { generateJSON } from "@/lib/ai/generate";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
@@ -20,100 +19,6 @@ import {
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
 import { analyzeMeeting, formatMeetingTranscript } from "./ai";
-
-type ActionItem = {
-  action: string;
-  assignee?: string;
-  due?: string;
-};
-
-type AnalysisShape = {
-  summary: string;
-  actionItems: ActionItem[];
-};
-
-export type MeetingAiState = { error?: string } | undefined;
-
-/**
- * Legacy text-only flow: takes the `content` text already saved, runs Claude
- * for summary + action items. Kept for manually-typed meetings.
- */
-export async function runMeetingAiAnalysis(
-  _prev: MeetingAiState,
-  formData: FormData,
-): Promise<MeetingAiState> {
-  // 역할 게이트 — 유료 AI 호출은 회의록 접근권이 있는 역할만(비용통제, #S5 형제). RLS는 데이터만 막는다.
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "meetings"))) {
-    return { error: "회의록 권한이 없습니다" };
-  }
-
-  const meetingId = String(formData.get("meetingId") ?? "");
-  if (!meetingId) return { error: "회의록 ID가 누락되었습니다" };
-
-  const supabase = await createClient();
-  const { data: m } = await supabase
-    .from("meeting_minutes")
-    .select("id, title, content, attendees, held_at")
-    .eq("id", meetingId)
-    .single();
-
-  if (!m) return { error: "회의록을 찾을 수 없습니다" };
-
-  const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]).join(", ") : "미상";
-  const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR");
-
-  let analysis: AnalysisShape;
-  let modelVersion: string;
-  try {
-    const { data, model } = await generateJSON<AnalysisShape>({
-      maxTokens: 2048,
-      prompt: [
-        "다음 학원 회의록을 분석해 JSON으로만 답해주세요.",
-        "",
-        `제목: ${m.title}`,
-        `일시: ${heldAt}`,
-        `참석자: ${attendees}`,
-        "",
-        "본문:",
-        m.content,
-        "",
-        "JSON schema:",
-        "{",
-        '  "summary": string (2-3문장의 한국어 TLDR),',
-        '  "actionItems": [{ "action": string, "assignee"?: string, "due"?: string }]',
-        "}",
-        "",
-        "actionItems의 due는 명시되어 있으면 YYYY-MM-DD 또는 자유 텍스트, 명시 안 됐으면 생략.",
-        "assignee는 회의록에 명시된 담당자(예: 박지훈 강사 → 박지훈)만. 추측하지 말 것.",
-        "",
-        "JSON만 출력. 마크다운 코드 블록 없이.",
-      ].join("\n"),
-    });
-    analysis = data;
-    modelVersion = model;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { error: `AI 호출 실패: ${msg}` };
-  }
-
-  const { error } = await supabase
-    .from("meeting_minutes")
-    .update({
-      ai_summary: analysis.summary,
-      ai_action_items: analysis.actionItems,
-      ai_model_version: modelVersion,
-      ai_generated_at: new Date().toISOString(),
-    })
-    .eq("id", meetingId);
-
-  if (error) return { error: error.message };
-
-  revalidatePath(`/meetings/${meetingId}`);
-  revalidatePath("/meetings");
-  return undefined;
-}
 
 /**
  * Audio flow: client already uploaded the file to storage. Server creates the
@@ -144,6 +49,34 @@ export async function updateMeetingTitle(
   revalidatePath(`/meetings/${id}`);
   revalidatePath("/meetings");
   return { ok: true };
+}
+
+export type UpdateNotepadState = { error?: string; ok?: true; content?: string } | undefined;
+
+/**
+ * 회의 메모장(content) 저장 — 회의 중/후 직접 작성한 메모. AI 호출 없음(저장만).
+ * 이 메모는 "AI로 정리" 시 전사와 **함께** 분석 입력이 된다(regenerateMeetingAnalysis·웹훅).
+ * 저장한 content를 되돌려준다 — 클라가 이 값으로 dirty(수정됨) 여부를 파생(ref/effect 없이).
+ */
+export async function updateMeetingNotepad(
+  _prev: UpdateNotepadState,
+  formData: FormData,
+): Promise<UpdateNotepadState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "회의록 ID가 누락되었습니다" };
+  const content = String(formData.get("content") ?? "");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("meeting_minutes").update({ content }).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/meetings/${id}`);
+  revalidatePath("/meetings");
+  return { ok: true, content };
 }
 
 export type UpdateReportSectionState =
@@ -273,6 +206,8 @@ export async function startMeetingFromAudio(
   const heldAt = String(formData.get("heldAt") ?? "").trim();
   const audioPath = String(formData.get("audioPath") ?? "").trim();
   const audioSizeBytes = Number(formData.get("audioSizeBytes") ?? 0);
+  // 메모장(선택) — 회의 중 작성한 메모. content에 저장돼 나중에 전사와 함께 분석된다.
+  const notepad = String(formData.get("notepad") ?? "");
   const attendeesRaw = String(formData.get("attendees") ?? "");
   const attendees = attendeesRaw
     .split(",")
@@ -309,7 +244,7 @@ export async function startMeetingFromAudio(
     .insert({
       tenant_id: user.tenantId,
       title,
-      content: "",
+      content: notepad,
       attendees,
       held_at: heldAt,
       author_id: user.id,
@@ -355,6 +290,53 @@ export async function startMeetingFromAudio(
 
   revalidatePath("/meetings");
   redirect(`/meetings/${meeting.id}`);
+}
+
+export type CreateTextMeetingState = { error?: string; id?: string } | undefined;
+
+/**
+ * 메모장만으로 회의록 생성(녹음 없음) — 회의 중 메모만 남겼거나 음성이 없을 때.
+ * 성공 시 새 id를 반환(클라가 상세로 이동) — 거기서 "AI로 정리"로 8섹션 분석(메모 기반). AI 호출은 명시 트리거라 여기선 안 함.
+ * ⚠️ redirect() 미사용 — 클라 프로그램 호출이라 반환값으로 네비(창/스탠드얼론 분기를 호출부가 결정).
+ */
+export async function createTextMeeting(
+  _prev: CreateTextMeetingState,
+  formData: FormData,
+): Promise<CreateTextMeetingState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+
+  const title = String(formData.get("title") ?? "").trim();
+  const heldAt = String(formData.get("heldAt") ?? "").trim();
+  const content = String(formData.get("notepad") ?? "");
+  const attendees = String(formData.get("attendees") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (!title) return { error: "제목을 입력해주세요" };
+  if (!heldAt) return { error: "회의 일시를 입력해주세요" };
+  if (!content.trim()) return { error: "메모 내용을 입력해주세요" };
+
+  const admin = createAdminClient();
+  const { data: meeting, error } = await admin
+    .from("meeting_minutes")
+    .insert({
+      tenant_id: user.tenantId,
+      title,
+      content,
+      attendees,
+      held_at: heldAt,
+      author_id: user.id,
+      processing_status: "idle",
+    })
+    .select("id")
+    .single();
+  if (error || !meeting) return { error: `회의록 생성 실패: ${error?.message ?? "unknown"}` };
+
+  revalidatePath("/meetings");
+  return { id: meeting.id as string };
 }
 
 export type DeleteMeetingState = { error?: string } | undefined;
@@ -464,9 +446,10 @@ export async function retryMeetingProcessing(
 export type RegenerateMeetingState = { error?: string } | undefined;
 
 /**
- * 텍스트 기반 "AI 분석 다시 생성" — 저장된 transcription으로 8섹션을 재생성한다.
+ * 텍스트 기반 "AI로 정리 / 다시 생성" — 저장된 **전사 + 메모장(content)**으로 8섹션을 (재)생성한다.
  * ⭐ 오디오·AssemblyAI·웹훅 불필요(in-process generateJSON) → 원본 녹음이 삭제돼도 동작하고,
  * 로컬에서도 즉시 완주한다. ("전사부터 다시"=retryMeetingProcessing 과 의미 분리.)
+ * 전사·메모장 중 하나만 있어도 동작(메모만 작성한 회의도 정리 가능).
  */
 export async function regenerateMeetingAnalysis(
   _prev: RegenerateMeetingState,
@@ -482,17 +465,20 @@ export async function regenerateMeetingAnalysis(
   const supabase = await createClient();
   const { data: m } = await supabase
     .from("meeting_minutes")
-    .select("id, title, attendees, held_at, transcription, speaker_labels")
+    .select("id, title, attendees, held_at, transcription, speaker_labels, content")
     .eq("id", id)
     .single();
   if (!m) return { error: "회의록을 찾을 수 없습니다" };
-  if (!m.transcription || String(m.transcription).trim().length === 0) {
-    return { error: "전사 내용이 없어 AI 분석을 생성할 수 없습니다" };
+  const transcription = String(m.transcription ?? "").trim();
+  const notepad = String(m.content ?? "").trim();
+  if (!transcription && !notepad) {
+    return { error: "전사나 메모가 있어야 AI로 정리할 수 있습니다" };
   }
 
   const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]) : [];
   const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR");
-  const formatted = formatMeetingTranscript(m.transcription, m.speaker_labels);
+  // 전사가 있으면 화자 포맷, 없으면 빈 문자열(메모만 분석). analyzeMeeting이 둘을 결합.
+  const formatted = transcription ? formatMeetingTranscript(m.transcription as string, m.speaker_labels) : "";
   const admin = createAdminClient();
 
   // 즉시 analyzing으로 표시 → 페이지가 음성 분석과 동일한 '분석 중' 스켈레톤 + StatusWatcher 폴링을 띄운다.
@@ -510,6 +496,7 @@ export async function regenerateMeetingAnalysis(
         title: m.title,
         heldAt,
         attendees,
+        notepad,
       });
       await admin
         .from("meeting_minutes")
