@@ -2,8 +2,22 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TrendHistoryRow } from "../trend-comment";
 import type { TrendReportRow } from "../report-trend";
 
+/** 기준일 − N일(YYYY-MM-DD). 비정상 날짜면 null(호출부가 빈 결과로 처리). UTC 고정 산술 = KST 경계 무관. */
+function windowStartOf(date: string, days: number): string | null {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 학습 추세(AI 텍스트) 조회 윈도(일) — 2026-07-10 원장: 그래프 7일 제한 후 "추세 텍스트는 최근 30일".
+ *  풀 이력 이전(1.6만 행) 후 무윈도 최근 10회가 몇 달 전 점수까지 인용해 그래프(7일)와 모순 서술하던 것 차단.
+ *  30일 내 기록 2개 미만이면 추세 미생성(기존 표본 부족 경로와 동일). */
+const TREND_TEXT_WINDOW_DAYS = 30;
+
 /**
- * 추세용 점수 이력 — 같은 학생·과목의 저장 보고서 최근 N(beforeDate 이전, exam_info 있는 것) 날짜 오름차순.
+ * 추세용 점수 이력 — 같은 학생·과목의 저장 보고서, **beforeDate 기준 최근 30일 윈도** 안에서 최근 N
+ * (beforeDate 이전, exam_info 있는 것) 날짜 오름차순.
  * 과목 매칭: native math("math")는 legacy 임포트(subject=null, 대부분 수학)도 포함(progress ingest 동형).
  * 그 외 과목은 정확 매칭(혼선 방지), 미지정이면 null-subject만. generateReportComment(추세 섹션)·testPrompt 공용.
  */
@@ -14,11 +28,14 @@ export async function fetchScoreHistory(
   beforeDate: string,
   limit = 10,
 ): Promise<TrendHistoryRow[]> {
+  const windowStart = windowStartOf(beforeDate, TREND_TEXT_WINDOW_DAYS);
+  if (!windowStart) return []; // 비정상 beforeDate 방어 — 추세만 조용히 생략
   let q = supabase
     .from("lesson_reports")
     .select("report_date, exam_info, homework_score")
     .eq("student_id", studentId)
     .lt("report_date", beforeDate)
+    .gte("report_date", windowStart)
     .not("exam_info", "is", null)
     .order("report_date", { ascending: false })
     .limit(limit);
@@ -55,13 +72,10 @@ export async function fetchReportTrendRows(
   opts: { tenantId?: string; limit?: number } = {},
 ): Promise<TrendReportRow[]> {
   const limit = opts.limit ?? 10;
-  // YYYY-MM-DD 문자열 산술(UTC 고정 — KST 경계 무관: 날짜 문자열끼리의 뺄셈이라 타임존 영향 없음).
   // ⚠️ 양끝 포함(gte −7일 ~ lte 당일)이라 달력일로는 8일 — 이 −7일차 포함이 "지난주 같은 요일" 보고서를
   // 살리는 끈이므로 −6으로 조이지 말 것(주1회 학생 그래프가 전부 1점→소멸함).
-  const from = new Date(`${reportDate}T00:00:00Z`);
-  if (Number.isNaN(from.getTime())) return []; // 비정상 reportDate 방어 — throw 대신 그래프만 숨김
-  from.setUTCDate(from.getUTCDate() - TREND_WINDOW_DAYS);
-  const windowStart = from.toISOString().slice(0, 10);
+  const windowStart = windowStartOf(reportDate, TREND_WINDOW_DAYS);
+  if (!windowStart) return []; // 비정상 reportDate 방어 — throw 대신 그래프만 숨김
   let q = supabase
     .from("lesson_reports")
     .select("id, report_date, exam_info, homework_score")
