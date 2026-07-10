@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings, getSettingsMeta } from "@/features/owner/server/queries";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
@@ -12,7 +13,6 @@ import { ReportSection } from "./_components/report-section";
 import { AiMentSection } from "./_components/ai-ment-section";
 import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { PermissionsSection } from "./_components/permissions-section";
-import { ReportMgmtFace } from "./_components/report-mgmt-face";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { AuditFace } from "./_components/audit-face";
@@ -32,7 +32,6 @@ type OwnerTab =
   | "ai_ment"
   | "permissions"
   | "popups"
-  | "report_mgmt"
   | "data"
   | "audit"
   | "sheets";
@@ -47,7 +46,6 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   ai_ment: "AI 멘트",
   permissions: "역할·권한",
   popups: "팝업 공지",
-  report_mgmt: "보고서 관리",
   data: "데이터 정리",
   audit: "감사로그",
   sheets: "연동",
@@ -63,7 +61,6 @@ const VALID_TABS: OwnerTab[] = [
   "ai_ment",
   "permissions",
   "popups",
-  "report_mgmt",
   "data",
   "audit",
   "sheets",
@@ -86,7 +83,6 @@ const FACES: Face[] = [
   { key: "ai_ment", label: TAB_LABEL.ai_ment, href: "/owner?tab=ai_ment", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
   { key: "popups", label: TAB_LABEL.popups, href: "/owner?tab=popups", group: "관리" },
-  { key: "report_mgmt", label: TAB_LABEL.report_mgmt, href: "/owner?tab=report_mgmt", group: "관리" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
   { key: "audit", label: TAB_LABEL.audit, href: "/owner?tab=audit", group: "관리" },
   { key: "sheets", label: TAB_LABEL.sheets, href: "/owner?tab=sheets", group: "관리" },
@@ -117,6 +113,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 위임받은 admin/manager는 다른 설정 면은 편집 가능하되 이 면만 안내로 대체(저장이 실패할 폼을 보여주지 않음).
   const isMaster = viewer.systemRole === "master";
   const sp = await searchParams;
+  // 옛 "보고서 관리" 면(?tab=report_mgmt)은 좌측 독립 메뉴 /lesson-reports로 승격 — 기존 북마크 리다이렉트.
+  if (sp.tab === "report_mgmt") redirect("/lesson-reports");
   const tab = resolveTab(sp);
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
@@ -168,7 +166,6 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         )
       ) : null}
       {tab === "popups" ? <PopupsFace /> : null}
-      {tab === "report_mgmt" ? <ReportMgmtFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">
           <DataFace />

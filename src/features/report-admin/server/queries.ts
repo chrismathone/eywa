@@ -97,7 +97,7 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
 export type WritingRatesView = { dates: string[]; rates: TeacherRate[] };
 
 /**
- * 강사별 주간 작성률(원장 보고서 관리 Part B) — 최근 7일 작성 건수(강사×일별) + 오늘 대상 대비 작성률·미작성.
+ * 강사별 주간 작성률(원장 보고서 관리 Part B) — 이번 주(월~일) 작성 건수(강사×일별) + 오늘 대상 대비 작성률·미작성.
  * 오늘 대상 = 오늘 시작된 반(getTodaySchedule status≠upcoming)의 활성 수강생 − 결석. 작성 = 오늘 lesson_report 존재.
  * RLS 테넌트 스코프. edutrix WeeklyTeacherSummary 이식(session snapshot 대신 스케줄+출결로 대상 산출).
  */
@@ -106,10 +106,13 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
   if (!user) return null;
   const supabase = await createClient();
   const today = kstToday();
-  const dates = Array.from({ length: 7 }, (_, i) => daysBefore(today, 6 - i)); // 오름차순(오늘 포함)
-  const since = dates[0]!;
+  // 이번 주 월~일 — 요일 헤더가 월화수목금토일 순으로 읽히게(한국 표준 주 시작=월). daysBefore(음수)=이후 날짜.
+  const dowIdx = new Date(`${today}T00:00:00Z`).getUTCDay(); // 0=일 … 6=토
+  const monday = daysBefore(today, (dowIdx + 6) % 7); // 이번 주 월요일(월=0 기준 오프셋)
+  const dates = Array.from({ length: 7 }, (_, i) => daysBefore(monday, -i)); // 월→일 오름차순
+  const since = dates[0]!; // = 이번 주 월요일
 
-  // 1) 최근 7일 작성 기록(강사 = teacher_name).
+  // 1) 이번 주(월~일) 작성 기록(강사 = teacher_name).
   const { data: reps } = await supabase
     .from("lesson_reports")
     .select("teacher_name, report_date")

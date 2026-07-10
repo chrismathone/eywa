@@ -29,6 +29,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
   consultations: "학생상담",
   withdrawals: "퇴원관리",
   retention: "이탈 방어",
+  lesson_reports: "수업보고서",
   staff: "직원관리",
   billing: "수납관리",
   textbook_requests: "교재 요청",

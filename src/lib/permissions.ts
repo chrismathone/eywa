@@ -26,6 +26,7 @@ export const MENU_KEYS = [
   "consultations",
   "withdrawals",
   "retention",
+  "lesson_reports",
   "staff",
   "billing",
   "textbook_requests",
@@ -77,6 +78,10 @@ export const MENU_ACCESS: AccessMatrix = {
   withdrawals: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 이탈 방어(리텐션) — 위험도 기반 재등록 방어. 강사는 담당 학생만(scoped), 회계는 매출 위험 열람.
   retention: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "full", accountant: "readonly", viewer: "readonly", student: "none" },
+  // 수업보고서(발송 관리) — 학원 전체 보고서 발송 큐·작성률·목록 총괄(오버사이트). 구 학원설정 ?tab=report_mgmt에서
+  // 좌측 독립 메뉴로 승격(옛 Edutrix 외부링크 대체). 사무실(master/admin/manager)이 관리(재발송 등 쓰기 포함),
+  // 뷰어는 열람만. 강사=none(작성은 /onescreen 원스크린 담당, 여기는 전체 오버사이트라 스코핑 없음).
+  lesson_reports: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
   // 강사=none — 전체 직원 목록·상세(급여·계정 등 민감)라 누수. 강사 메뉴엔 없음.
   staff: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },

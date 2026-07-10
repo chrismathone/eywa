@@ -1,6 +1,6 @@
 "use server";
 
-// 원장 보고서 관리 — ClassNote 발송 큐 관리 액션(재발송·멈춤복구). 쓰기는 owner 메뉴 권한(위임 반영).
+// 수업보고서(발송 관리) — ClassNote 발송 큐 관리 액션(재발송·멈춤복구). 쓰기는 lesson_reports 메뉴 권한(위임 반영).
 // edutrix retrySelectedClassNoteReports/resetStuckClassNoteReports 이식. 과거일 재발송 사고 방지(isClassnoteAllowed).
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -20,7 +20,7 @@ export async function retryClassnote(
 ): Promise<{ ok: boolean; requeued?: number; skipped?: number; dryRun?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   if (!ids?.length) return { ok: false, error: "대상이 없습니다" };
   const supabase = await createClient();
 
@@ -56,7 +56,7 @@ export async function retryClassnote(
 export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: number; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   const supabase = await createClient();
   const cutoff = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
   const { data, error } = await supabase

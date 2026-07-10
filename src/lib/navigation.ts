@@ -88,6 +88,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/timetable", label: "시간표", icon: CalendarDays, menuKey: "timetable" },
       { href: "/attendance", label: "출석부", icon: ClipboardCheck, menuKey: "attendance" },
       { href: "/classes", label: "수업목록", icon: BookOpen, menuKey: "classes" },
+      // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
+      { href: "/lesson-reports", label: "수업보고서", icon: NotebookPen, menuKey: "lesson_reports" },
     ],
   },
   {
@@ -132,10 +134,9 @@ export const NAV_GROUPS: NavGroup[] = [
  * 사이드바가 `group` 라벨을 맞춰 해당 섹션 하단에 새 탭(_blank) 앵커로 렌더(창·권한·findNavItem 무관).
  */
 export type ExternalNavItem = { href: string; label: string; icon: LucideIcon; group: string };
-export const EXTERNAL_NAV: ExternalNavItem[] = [
-  // 수업보고서 = Edutrix(진도·수업보고서 별도 앱, eywa 시간표 hover 진도의 원본 시스템). 지원(05) 섹션.
-  { href: "https://edutrix.vercel.app/auth/login", label: "수업보고서", icon: NotebookPen, group: "지원" },
-];
+// 옛 "수업보고서 = Edutrix 외부링크"는 내부 /lesson-reports 메뉴(수업 그룹)로 교체·제거(2026-07-10).
+// 외부링크 렌더 인프라(app-sidebar ExternalRailItem)는 향후 다른 외부 앱용으로 보존 — 현재 항목 없음.
+export const EXTERNAL_NAV: ExternalNavItem[] = [];
 
 export function findNavItem(pathname: string): NavItem | undefined {
   for (const group of NAV_GROUPS) {
