@@ -109,8 +109,15 @@ export async function processQueueOnce(sql, browser, opts) {
         ...(INTERNAL_SECRET ? { extraHTTPHeaders: { "x-eywa-internal": INTERNAL_SECRET } } : {}),
       });
       const page = await ctx.newPage();
-      await page.goto(`${base}/r/${r.share_token}`, { waitUntil: "networkidle", timeout: 30000 });
+      // waitUntil은 'domcontentloaded' — 'networkidle'은 /r이 로고 이미지를 Firebase 서명 URL로 불러오는데
+      // 발송 PC 망에서 그 요청이 늘어지면 '네트워크 완전 정지'가 영영 안 떠 30초 타임아웃(실측 2026-07-10).
+      // DOM 로드 후 fonts.ready + 700ms 정착으로 렌더 완성도는 확보되므로 취약한 networkidle 의존을 뺀다.
+      await page.goto(`${base}/r/${r.share_token}`, { waitUntil: "domcontentloaded", timeout: 30000 });
       await page.evaluate(() => document.fonts?.ready).catch(() => {});
+      // 로고·학생사진 등 이미지가 스크린샷에 담기도록 로드 대기(최대 8초, 실패해도 진행 — 캡처는 계속).
+      await page
+        .waitForLoadState("load", { timeout: 8000 })
+        .catch(() => {});
       await new Promise((x) => setTimeout(x, 700));
       const card = page.locator(".report-capture").first(); // ParentReportCard 루트(공유 컴포넌트) — 폭 유틸과 분리된 안정 마커
       const buf = (await card.count())

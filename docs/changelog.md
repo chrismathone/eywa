@@ -9,6 +9,11 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 발송 스크린샷 networkidle 타임아웃 해소 + 에러 UI ANSI 원문 정리 (2026-07-10 후속) — ✅ tsc0/lint0/test962
+원장 제보: 발송 실패건 마우스오버 시 "알 수 없는 코딩 문자"(ANSI 색코드) 노출 + 학원이 테스트 건 계속 실패.
+- **에러 원문 정리 공용 헬퍼** [sanitizeErrorText](../src/lib/text/sanitize-error.ts): Playwright/Node 에러의 ANSI CSI 시퀀스(ESC`[2m` 등)·제어문자·개행을 지워 한 줄 가독 텍스트로(순수, `String.fromCharCode(27)`로 ESC 구성=소스에 제어문자 미포함). 적용: ClassNote 발송 큐 툴팁([classnote-queue-card](<../src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx>) `title`) + makeedu 동기화 이력([makeedu-sync-runs](<../src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>) 화면·title) + 녹음 처리 에러([recordings-section](<../src/app/(shell)/enrollment/[id]/recordings-section.tsx>)) + 시간표 가져오기([import-dialog](<../src/app/(shell)/timetable/_components/import-dialog.tsx>) `e.message` 경로). 화면 본문의 한글 요약(humanizeClassnoteError)은 유지, 툴팁만 정리 원문.
+- **워커 스크린샷 타임아웃 해소**([classnote-core.mjs](../scripts/_classnote/classnote-core.mjs)): `page.goto` `waitUntil: "networkidle"` → **`"domcontentloaded"`** + 이미지 로드 최대 8초 bounded 대기. `/r`이 학원 로고를 Firebase 서명 URL로 부르는데 발송 PC 망에서 늘어지면 networkidle이 영영 안 떠 30초 타임아웃→3회 실패(학원이 건 실측). 진단: `/r`은 realtime·폴링 없는 정적 페이지(TTFB 0.8s)라 서버 지연 아님 — networkidle 전략 자체가 취약(Playwright 비권장). ⚠️ 워커는 발송 PC 복사본 실행 → 전달 zip `D:\tmp\eywa-발송PC-워커수정-20260710.zip`(scripts\_classnote\ 경로보존 + 워커수정-안내.md) 재적용 필요.
+
 ### 저장 바 밀착·정렬 + 작성률 예외강사 후보 = 활성 직원만 (2026-07-10 후속) — ✅ tsc0
 원장 UI 폴리시 2건:
 - **저장 바(FormActionBar) 밀착·무점프·사이드바 정렬**: `sticky bottom-0`이 스크롤 컨테이너(`<main>`)의 **콘텐츠 박스 하단**에만 붙어, main의 `padding-bottom(20px)` 때문에 ① 바가 바닥에서 20px 떠 보이고 ② 그 틈으로 본문(칩)이 지나가 보이며 ③ 맨아래 스크롤 시 자연위치로 점프 ④ 좌측 사이드바 푸터 구분선과 어긋났다. → shell `main` 3곳(풀셸·미니셸·임베드)을 `py-4 lg:py-5` → **`pt-4 lg:pt-5`(하단 패딩 제거)**로 바꿔 진짜 바닥에 밀착(고정=자연 끝 위치라 점프0, top border가 사이드바 구분선과 정렬). [form-action-bar](../src/components/forms/form-action-bar.tsx)는 반투명+blur·`after:`밴드·음수margin 전부 제거하고 순수 불투명 `sticky bottom-0`. ⚠️ 실패한 시도 문서화: 음수 margin은 sticky 클램프 못 옮김, `after:` 밴드는 절대배치라도 스크롤 오버플로를 늘려 **점프 유발**.

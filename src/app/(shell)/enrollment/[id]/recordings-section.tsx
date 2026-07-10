@@ -1,5 +1,6 @@
 import { Loader2, Mic } from "lucide-react";
 import { TranscriptSection } from "@/components/transcript-section";
+import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import type { ConsultationRecordingRow } from "@/features/enrollment/server/queries";
 
 /**
@@ -80,7 +81,7 @@ export function RecordingsSection({
               </span>
             </div>
             {r.status === "failed" && r.error ? (
-              <p className="text-danger border-line border-t px-4 py-2 text-[12px]">{r.error}</p>
+              <p className="text-danger border-line border-t px-4 py-2 text-[12px]">{sanitizeErrorText(r.error)}</p>
             ) : null}
             {r.transcription || (r.speakerLabels?.length ?? 0) > 0 ? (
               <div className="border-line border-t">

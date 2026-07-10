@@ -10,6 +10,7 @@ import {
   type ApplyState,
 } from "@/features/timetable/server/import-actions";
 import type { ImportDiff } from "@/features/timetable/import/types";
+import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 
 const LARGE_CHANGE = 30;
 
@@ -296,7 +297,7 @@ export function TimetableImportDialog({
 
             {result ? (
               result.error ? (
-                <p className="text-chart-4 mt-3 text-[12px]">{result.error}</p>
+                <p className="text-chart-4 mt-3 text-[12px]">{sanitizeErrorText(result.error)}</p>
               ) : (
                 <p className="text-primary mt-3 text-[12px]">
                   적용 완료 — 이동 {result.applied?.moved} · 삭제 {result.applied?.removed} · 추가{" "}

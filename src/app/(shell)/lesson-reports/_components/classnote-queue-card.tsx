@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
+import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { resetStuckClassnote, retryClassnote } from "@/features/report-admin/server/actions";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
@@ -178,7 +179,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                       )}
                     </td>
                     {/* 사유 = 한글 요약(기술 원문은 마우스 오버 툴팁) — 원장이 바로 읽게. */}
-                    <td className="text-text-faint max-w-[260px] truncate px-3 py-2" title={it.error ?? ""}>
+                    <td className="text-text-faint max-w-[260px] truncate px-3 py-2" title={sanitizeErrorText(it.error)}>
                       {humanizeClassnoteError(it.error) ?? "—"}
                     </td>
                   </tr>

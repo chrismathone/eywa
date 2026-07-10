@@ -1,5 +1,6 @@
 import { Pill } from "@/components/atoms/pill";
 import { Pagination } from "@/components/pagination";
+import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import type { MakeeduSyncRun } from "@/features/integrations/server/makeedu-sync";
 
 /**
@@ -58,8 +59,8 @@ export function MakeeduSyncRunsList({
                   <span className="text-amber text-xs">실패: {run.failedDomains.join(", ")}</span>
                 ) : null}
                 {run.error ? (
-                  <span className="text-chart-4 min-w-0 flex-1 truncate text-xs" title={run.error}>
-                    {run.error}
+                  <span className="text-chart-4 min-w-0 flex-1 truncate text-xs" title={sanitizeErrorText(run.error)}>
+                    {sanitizeErrorText(run.error)}
                   </span>
                 ) : null}
               </div>
