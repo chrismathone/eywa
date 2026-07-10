@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수업보고서 승격 후속 — 권한·로딩·죽은코드 정리 (2026-07-10)
+- **`listReports`**: `canAccessTenant("lesson_reports")` 읽기 게이트(로그인만 있던 역할 갭 해소; RLS 테넌트 스코프는 기존).
+- **`backfillProgressContainers`**: `await canWriteTenant` 누락 수정(Promise truthy로 권한 검사가 항상 통과하던 버그).
+- **teacher-menu**: 빈 `EXTERNAL_NAV`의 Edutrix "수업보고서" 죽은 분기 제거. 작성률 카드 문구 = 이번 주(월~일) 쿼리와 정합.
+- **`/lesson-reports/loading.tsx`**: 4쿼리 로드 중 스켈레톤 스트리밍(B7).
+
 ### 영어 시간표 학생 반이동 가져오기 — '수강편집' 탭 영어 확장 + 과목 스코프(cross-subject 삭제 방지) (2026-07-10) — ✅ build✓/lint0/test926(diff +4)
 크리티컬 갭: 영어 **구조 가져오기**(강사별 그리드→`class_schedules`)는 배치만 재구축하고 **학생 수강(enrollments)은 안 건드려** 통합영어시간표의 학생 **반이동**이 반영 불가였음(강사별 시트엔 학생 없음). 수학은 `수강편집` 탭(enrollment 라운드트립)으로 반이동이 반영되나 영어엔 그 탭이 없었음.
 - **결정(사용자)**: Option A = **'수강편집' 탭 재사용**(수학의 검증된 enrollment 라운드트립을 영어로 확장). 통합=학생 '보기', 강사별=구조 편집, 수강편집=학생 반이동 편집.

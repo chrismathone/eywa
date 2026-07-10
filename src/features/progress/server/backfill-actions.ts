@@ -21,7 +21,8 @@ type BackfillResult = {
 export async function backfillProgressContainers(opts?: { dryRun?: boolean }): Promise<BackfillResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!canWriteTenant(user.systemRole, "students")) return { ok: false, error: "권한이 없습니다" };
+  // ⚠️ canWriteTenant는 async — await 없으면 Promise truthy라 권한 검사가 항상 통과(역할 게이트 무력화).
+  if (!(await canWriteTenant(user.systemRole, "students"))) return { ok: false, error: "권한이 없습니다" };
 
   const supabase = await createClient();
   // 테넌트 math 보고서 date ASC(같은 날 created_at ASC) — RLS 스코프. 페이지네이션(기본 1000행 캡 회피).

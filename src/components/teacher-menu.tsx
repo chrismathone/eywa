@@ -15,7 +15,6 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EXTERNAL_NAV } from "@/lib/navigation";
 import { switchToAdminView } from "@/features/shell/view-actions";
 import {
   DropdownMenu,
@@ -58,10 +57,8 @@ export function TeacherMenu({
   canReturnToAdmin?: boolean;
 }) {
   // 학원 권한 매트릭스에서 강사 접근이 '없음'인 탭은 숨긴다(설정 반영). teacher_onescreen은 항상 통과(locked full).
+  // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
   const links = LINKS.filter((l) => canAccess("teacher", l.menu, permMatrix));
-  // 수업보고서 = 외부 앱(Edutrix). 사이드바와 동일 소스(EXTERNAL_NAV)·동일 링크. cross-origin이라 새 탭(_blank).
-  const report = EXTERNAL_NAV.find((e) => e.label === "수업보고서");
-  const ReportIcon = report?.icon;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -77,13 +74,6 @@ export function TeacherMenu({
             <Icon className="size-4" /> {label}
           </DropdownMenuItem>
         ))}
-        {report && ReportIcon ? (
-          <DropdownMenuItem
-            render={<a href={report.href} target="_blank" rel="noopener noreferrer" className="cursor-pointer" />}
-          >
-            <ReportIcon className="size-4" /> {report.label}
-          </DropdownMenuItem>
-        ) : null}
         {/* 겸직(관리자 계열)만 — 맨 하단 구분선 아래 '관리자뷰로 전환'(쿠키만 지우고 관리자 홈 복귀, 권한 불변).
             액션이 착지경로를 반환 → window.location으로 확정 네비게이션(드롭다운 안에선 서버액션 redirect의
             클라 네비게이션이 유실되기 때문). closeOnClick=false로 액션 완료 전 메뉴가 닫히는 것을 방지. */}

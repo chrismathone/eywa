@@ -312,7 +312,7 @@ export function AppSidebar({
                   </div>
                 );
               })}
-              {/* 외부 링크 탭(수업보고서=Edutrix 등) — 이 섹션에 속한 외부 앱을 새 탭으로. 창·권한·subtab 없음. */}
+              {/* 외부 링크 탭(EXTERNAL_NAV) — 섹션별 외부 앱을 새 탭으로. 창·권한·subtab 없음. 현재 항목 0. */}
               {EXTERNAL_NAV.filter((x) => x.group === group.label).map((x) => (
                 <ExternalRailItem key={x.href} item={x} expanded={expanded} motion={motion} />
               ))}

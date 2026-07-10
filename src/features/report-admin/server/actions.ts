@@ -3,7 +3,7 @@
 // 수업보고서(발송 관리) — ClassNote 발송 큐 관리 액션(재발송·멈춤복구). 쓰기는 lesson_reports 메뉴 권한(위임 반영).
 // edutrix retrySelectedClassNoteReports/resetStuckClassNoteReports 이식. 과거일 재발송 사고 방지(isClassnoteAllowed).
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { isClassnoteAllowed } from "@/features/onescreen/classnote-guard";
@@ -76,14 +76,18 @@ export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: numb
 const REPORT_PAGE_SIZE = 30;
 
 /**
- * 보고서 목록 조회(원장 보고서 관리 Part C) — 강사·기간·상태·과목 필터 + 페이지네이션. 클라 필터 UI에서 호출(데이터 반환).
- * 읽기라 로그인만 확인(RLS 테넌트 스코프). 반 필터는 lesson_reports에 class_id가 없어 후속.
+ * 보고서 목록 조회(수업보고서 Part C) — 강사·기간·상태·과목 필터 + 페이지네이션. 클라 필터 UI에서 호출(데이터 반환).
+ * 읽기 게이트: lesson_reports 메뉴 접근(readonly 포함, canAccessTenant). RLS 테넌트 스코프.
+ * 반 필터는 lesson_reports에 class_id가 없어 후속.
  */
 export async function listReports(
   filters: ReportListFilters,
 ): Promise<{ ok: boolean; rows?: ReportListRow[]; total?: number; page?: number; pageSize?: number; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) {
+    return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  }
   const supabase = await createClient();
   const page = Math.max(0, filters.page ?? 0);
 

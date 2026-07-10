@@ -1,4 +1,4 @@
-// 원장 보고서 관리 > 강사별 주간 작성률(5단계-2 Part B) — 최근 7일 작성 건수 + 오늘 작성률·미작성.
+// 수업보고서 > 강사별 주간 작성률(Part B) — 이번 주(월~일) 작성 건수 + 오늘 작성률·미작성.
 // 순수 표시(상호작용 없음) → 서버 컴포넌트로 렌더 가능.
 import type { WritingRatesView } from "@/features/report-admin/server/queries";
 
@@ -27,7 +27,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
       <div className="mb-3">
         <h2 className="text-foreground text-[15px] font-semibold">강사별 작성률</h2>
-        <p className="text-text-faint text-[12px]">최근 7일 작성 건수 · 오늘 대상 대비 작성률(결석 제외)</p>
+        <p className="text-text-faint text-[12px]">이번 주(월~일) 작성 건수 · 오늘 대상 대비 작성률(결석 제외)</p>
       </div>
 
       {rates.length === 0 ? (
