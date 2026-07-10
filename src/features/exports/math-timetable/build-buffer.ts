@@ -60,6 +60,7 @@ export async function buildMathTimetableBuffer(opts?: {
     ...params,
     returnBufferOnly: true,
     // 라운드트립 import용 '수강편집' 시트를 직렬화 직전에 덧붙임(다운로드·구글시트 push 공유 버퍼).
-    appendSheets: (wb) => appendEnrollmentEditSheet(wb, supabase),
+    // 수학 파일엔 **수학 수강만** — 영어 학생이 섞이지 않게(과목별 시트 분리·cross-subject remove 방지).
+    appendSheets: (wb) => appendEnrollmentEditSheet(wb, supabase, "math"),
   })) as ArrayBuffer;
 }

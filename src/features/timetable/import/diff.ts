@@ -27,7 +27,11 @@ export function computeImportDiff(
   const cutoffDate = opts?.protectNewerThan ? opts.protectNewerThan.slice(0, 10) : null;
 
   const currentById = new Map(current.map((c) => [c.enrollmentId, c]));
+  const classSubjectById = new Map(classes.map((c) => [c.classId, c.subject]));
   const seen = new Set<string>();
+  // 이 시트가 "다루는" 과목 집합 — 시트 행이 참조한 수강/반의 과목. 삭제(종료)는 이 과목으로만 한정해
+  // 과목별 '수강편집' 시트(영어=영어 학생만)가 다른 과목 수강을 실수로 종료하지 못하게 한다(cross-subject 보호).
+  const presentSubjects = new Set<string>();
 
   for (const row of parsed) {
     if (row.enrollmentId) {
@@ -36,6 +40,7 @@ export function computeImportDiff(
         diff.warnings.push(`알 수 없는 수강 ID(${row.enrollmentId}) — 다른 시점 파일일 수 있음`);
         continue;
       }
+      if (cur.subject) presentSubjects.add(cur.subject); // 이 수강의 과목 = 시트가 다루는 과목
       seen.add(row.enrollmentId);
       // 반이름 변경 없음 → 무변경
       if (norm(row.className) === norm(cur.className)) {
@@ -73,6 +78,8 @@ export function computeImportDiff(
         );
         continue;
       }
+      const addSubject = classSubjectById.get(cls.value);
+      if (addSubject) presentSubjects.add(addSubject); // 추가 대상 반의 과목도 시트가 다루는 과목
       diff.adds.push({
         studentName: row.studentName,
         school: row.school,
@@ -87,6 +94,9 @@ export function computeImportDiff(
   // 시트에서 사라진 기존 수강 → 삭제
   for (const cur of current) {
     if (seen.has(cur.enrollmentId)) continue;
+    // cross-subject 보호: 이 시트가 다루지 않은 과목의 수강은 종료 후보에서 제외
+    // (영어 수강편집 시트로 수학 수강이 종료되는 사고 차단). presentSubjects가 비면 어떤 것도 종료 안 함(안전).
+    if (!presentSubjects.has(cur.subject)) continue;
     // 시트 생성 시점 이후 시작된 수강은 시트가 알 수 없음 → 삭제 후보에서 제외(stale-drift 보호).
     if (cutoffDate && cur.startDate && cur.startDate.slice(0, 10) > cutoffDate) {
       diff.warnings.push(

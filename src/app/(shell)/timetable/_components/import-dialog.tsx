@@ -14,11 +14,20 @@ import type { ImportDiff } from "@/features/timetable/import/types";
 const LARGE_CHANGE = 30;
 
 /**
- * 엑셀 가져오기 — 내보낸 xlsx의 '수강편집' 시트를 수정해 재업로드 → 미리보기 → 적용.
+ * 엑셀 가져오기 — 내보낸 xlsx의 '수강편집' 시트를 수정해 재업로드 → 미리보기 → 적용 = **학생 반이동**.
  * mode="sheet"면 파일 업로드 대신 **연결된 구글 시트의 '수강편집' 탭**을 읽어온다(master 전용).
- * diff 미리보기·적용(applyTimetableImport)은 두 모드 공유.
+ * subject = 과목별 시트 분리(math=레거시 provider·english=별도) — 시트 경로 미리보기가 그 과목 시트를 읽는다.
+ * label = 트리거 버튼 문구(영어는 '구조 가져오기'와 구분 위해 '학생 반이동' 계열로 지정). diff 적용은 두 모드 공유.
  */
-export function TimetableImportDialog({ mode = "file" }: { mode?: "file" | "sheet" }) {
+export function TimetableImportDialog({
+  mode = "file",
+  subject = "math",
+  label,
+}: {
+  mode?: "file" | "sheet";
+  subject?: string;
+  label?: string;
+}) {
   const sheet = mode === "sheet";
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -63,7 +72,7 @@ export function TimetableImportDialog({ mode = "file" }: { mode?: "file" | "shee
     setDiff(null);
     if (sheet) {
       startPreview(async () => {
-        const res = await previewSheetImport();
+        const res = await previewSheetImport(subject);
         if (res.error) setError(res.error);
         else setDiff(res.diff ?? null);
       });
@@ -110,7 +119,7 @@ export function TimetableImportDialog({ mode = "file" }: { mode?: "file" | "shee
         className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
       >
         {sheet ? <Sheet className="size-3" /> : <Upload className="size-3" />}
-        {sheet ? "시트에서 가져오기" : "가져오기"}
+        {label ?? (sheet ? "시트에서 가져오기" : "가져오기")}
       </button>
 
       {open ? (

@@ -1,10 +1,12 @@
 import "server-only";
+import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
 import { thisMonday } from "@/features/timetable/lib/week";
 import { buildTeacherGridModel } from "@/features/timetable/lib/teacher-grid-model";
+import { appendEnrollmentEditSheet } from "@/features/exports/enrollment-edit-sheet";
 import { appendTeacherGridSheet, computeTeacherGeometry, TEACHER_SHEET_NAME } from "./teacher-grid-sheet";
 import { appendInjaewonIntegratedSheet, type FormulaCell } from "./injaewon-integrated-sheet";
 
@@ -17,7 +19,8 @@ export const INTEGRATED_SHEET_NAME = "통합영어시간표";
  * emit해 화면과 배치가 일치한다. **라우트(다운로드)와 구글시트 동기화가 공유하는 단일 빌더**.
  *
  * - `teacherId`: 강사 본인 뷰면 담당 반만(스코핑). 미지정=전체(master/관리자 뷰).
- * - 영어는 내보내기 전용 — 수강편집(라운드트립) 탭 미포함(가져오기는 math 전용).
+ * - 3탭: 통합영어시간표(파생) → 강사별영어시간표(마스터·구조 편집) → **수강편집(학생 반이동 편집)**.
+ *   강사별=구조(반/방/강사) 가져오기, 수강편집=학생 반이동 가져오기(수학과 동일 enrollment 라운드트립·영어 학생만).
  */
 export async function buildEnglishTimetableBuffer(opts?: {
   teacherId?: string;
@@ -26,10 +29,11 @@ export async function buildEnglishTimetableBuffer(opts?: {
   /** '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일. */
   compactSections?: Set<number>;
 }): Promise<{ buffer: ArrayBuffer; formulaCells: FormulaCell[] }> {
-  const [slots, teacherColors, settings] = await Promise.all([
+  const [slots, teacherColors, settings, supabase] = await Promise.all([
     getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId }),
     getTeacherColorMap(),
     getTenantSettings(),
+    createClient(),
   ]);
   // ⚠️ 반 정원(통합 탭 '정원' 행)은 현 DB `classes`에 capacity 컬럼이 없어 공백 처리(스키마 확장 시 채움).
   const capacityByClassId: Record<string, number | null> = {};
@@ -86,6 +90,8 @@ export async function buildEnglishTimetableBuffer(opts?: {
     sheetName: TEACHER_SHEET_NAME,
     model: teacherModel,
   });
+  // 학생 반이동 라운드트립: '수강편집' 탭(영어 수강만) — 수학과 동일 enrollment import 경로가 영어에서도 닫힌다.
+  await appendEnrollmentEditSheet(wb, supabase, "english");
 
   return { buffer: (await wb.xlsx.writeBuffer()) as ArrayBuffer, formulaCells };
 }

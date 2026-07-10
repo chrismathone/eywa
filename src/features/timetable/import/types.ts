@@ -10,6 +10,9 @@ export interface EnrollmentSnapshotRow {
   grade: string | null;
   classId: string;
   className: string;
+  /** 반의 과목 키(수학=math·영어=english…). 삭제(종료)를 **시트에 등장한 과목으로만** 한정하는 데 쓴다
+   *  — 과목별 '수강편집' 시트가 다른 과목 수강을 실수로 종료하지 못하게(cross-subject remove 방지). */
+  subject: string;
   /** 수강 시작일(YYYY-MM-DD). 시트 stale-drift 보호용 — 시트 생성 시점 이후 시작한 수강은 삭제 후보에서 제외. */
   startDate?: string | null;
 }

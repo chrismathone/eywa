@@ -29,10 +29,13 @@ export function TimetableToolbarActions({
   const subjectLabel = useSubjectMaps().labelOf(subjectKey);
   const compactParam = compact1h.length ? `&compact1h=${[...compact1h].sort((a, b) => a - b).join(",")}` : "";
   const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subjectKey)}${compactParam}`;
-  // 가져오기(수강편집 라운드트립)는 math 전용(영어는 내보내기 전용). 파일·시트 두 경로 모두 게이트.
+  // 가져오기(수강편집 라운드트립 = 학생 반이동)는 math·english 둘 다(과목별 '수강편집' 시트). 파일·시트 두 경로 게이트.
   const canImport = supportsTimetableImport(subjectKey);
   // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
   const canStructureImport = supportsStructureImport(subjectKey);
+  // 영어는 '구조 가져오기'(강사별)와 '반이동 가져오기'(수강편집) 둘 다라 라벨을 구분(수학은 하나뿐 → 기본 라벨).
+  const enrollFileLabel = canStructureImport ? "반이동 가져오기" : undefined;
+  const enrollSheetLabel = canStructureImport ? "시트 반이동 가져오기" : undefined;
 
   function pushToSheet() {
     setSyncMsg(null);
@@ -50,13 +53,13 @@ export function TimetableToolbarActions({
   return (
     // flex-wrap — 좁은 화면(모바일)에서 버튼 5개가 한 줄로 강제돼 카드 밖으로 넘치지 않게 줄바꿈.
     <div className="print:hidden flex flex-wrap items-center gap-1">
-      {/* 엑셀 그룹: 내보내기(전 과목) + 가져오기(수강편집 라운드트립 = math 전용, 영어는 내보내기 전용) */}
+      {/* 엑셀 그룹: 내보내기(전 과목) + 가져오기(수강편집 라운드트립 = 학생 반이동, math·english) */}
       <div className="flex items-center gap-1">
         <a href={exportHref} className={btnCls}>
           <FileSpreadsheet className="size-3" />
           엑셀
         </a>
-        {canImport ? <TimetableImportDialog /> : null}
+        {canImport ? <TimetableImportDialog subject={subjectKey} label={enrollFileLabel} /> : null}
       </div>
 
       {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리(줄바꿈 시에도 그룹 단위 유지) */}
@@ -74,10 +77,12 @@ export function TimetableToolbarActions({
               시트 반영
             </button>
           ) : null}
-          {/* 시트→앱 되읽기: '수강편집' 탭의 반 변경을 미리보기→적용(원장 전용·math 전용). */}
-          {canSync && canImport ? <TimetableImportDialog mode="sheet" /> : null}
-          {/* 구조 되읽기: 강사별 그리드 편집 → class_schedules 미리보기(원장 전용·english 전용). */}
+          {/* 구조 되읽기: 강사별 그리드 편집 → class_schedules 미리보기(원장 전용·english 전용). 반이동보다 먼저(배치 먼저). */}
           {canSync && canStructureImport ? <StructureImportDialog subject={subjectKey} /> : null}
+          {/* 반이동 되읽기: '수강편집' 탭의 반 변경 → enrollment 미리보기→적용(원장 전용·math·english). */}
+          {canSync && canImport ? (
+            <TimetableImportDialog mode="sheet" subject={subjectKey} label={enrollSheetLabel} />
+          ) : null}
           {sheetUrl ? (
             <a
               href={sheetUrl}

@@ -46,8 +46,8 @@ describe("matchStudent", () => {
 });
 
 const CURRENT: EnrollmentSnapshotRow[] = [
-  { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3" },
-  { enrollmentId: "e2", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3" },
+  { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3", subject: "english" },
+  { enrollmentId: "e2", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3", subject: "english" },
 ];
 
 describe("computeImportDiff", () => {
@@ -109,10 +109,34 @@ describe("computeImportDiff", () => {
     expect(d.warnings).toHaveLength(0);
   });
 
+  it("cross-subject 보호: 영어 수강편집 시트는 수학 수강을 종료하지 않는다", () => {
+    // 영어 시트(영어 학생만) + 현재는 영어 e2 + 수학 mX 혼재. 영어 시트에서 e2가 빠져도
+    // 종료 대상은 영어(presentSubjects)로 한정 → e2만 remove, 수학 mX는 절대 안 건드림.
+    const current: EnrollmentSnapshotRow[] = [
+      { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3", subject: "english" },
+      { enrollmentId: "e2", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3", subject: "english" },
+      { enrollmentId: "mX", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cM1", className: "수학기초", subject: "math" },
+    ];
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP3" },
+    ];
+    const d = computeImportDiff(parsed, current, CLASSES, STUDENTS);
+    expect(d.removes.map((r) => r.enrollmentId)).toEqual(["e2"]); // 수학 mX는 제외됨
+  });
+
+  it("presentSubjects 비면(매칭 0) 아무 것도 종료하지 않는다", () => {
+    // 알 수 없는 ID만 있는 시트 → 다루는 과목 판단 불가 → 전건 보존(안전).
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "ghost", studentName: "유령", school: null, grade: null, className: "DP3" },
+    ];
+    const d = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS);
+    expect(d.removes).toHaveLength(0);
+  });
+
   it("protectNewerThan: 시트 push 이후 시작된 수강은 삭제 제외(stale-drift 보호)", () => {
     const current: EnrollmentSnapshotRow[] = [
-      { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3", startDate: "2026-06-01" },
-      { enrollmentId: "eNew", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3", startDate: "2026-07-05" },
+      { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3", subject: "english", startDate: "2026-06-01" },
+      { enrollmentId: "eNew", studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2", classId: "cA", className: "DP3", subject: "english", startDate: "2026-07-05" },
     ];
     // 시트엔 e1만(eNew는 push 후 등록). cutoff = push 시각.
     const parsed: ParsedEditRow[] = [

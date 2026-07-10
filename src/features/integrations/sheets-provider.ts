@@ -20,11 +20,12 @@ export function sheetsProvider(subject: string): string {
 }
 
 /**
- * 시간표 '가져오기'(수강편집 라운드트립 = 시트/파일 → 앱 반 배정 되읽기) 지원 과목.
- * 현재 **math 전용**(영어는 내보내기 전용 정책 — 수강편집 탭 없음, previewSheetImport는 수학 provider 고정).
+ * 시간표 '가져오기'(수강편집 라운드트립 = 시트/파일 → 앱 반 배정 되읽기 = **학생 반이동**) 지원 과목.
+ * math·english 둘 다 '수강편집' 탭을 export(과목별 스코프)하므로 라운드트립이 닫힌다.
+ * (영어의 '구조 가져오기'=강사별 그리드→class_schedules는 supportsStructureImport 별개.)
  */
 export function supportsTimetableImport(subject: string): boolean {
-  return subject === "math";
+  return subject === "math" || subject === "english";
 }
 
 /**
