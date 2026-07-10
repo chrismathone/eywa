@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
+import { studentStatusLabel } from "@/features/students/status-labels";
 import { isEdutrixDummyStudent } from "../edutrix-match";
 
 export type EywaCandidate = {
@@ -120,10 +121,11 @@ export async function getEdutrixUnmapped(): Promise<EdutrixMapView> {
       grade: p.grade,
       status: p.status,
       alreadyMapped: !!p.edutrix_student_id,
+      // 상태는 한글 라벨로 — raw enum(withdrawn 등) UI 노출 금지.
       label: [
         p.name,
         schoolGradeLabel(p.school, p.grade) || null,
-        p.status,
+        studentStatusLabel(p.status),
         p.edutrix_student_id ? "이미매핑" : null,
       ]
         .filter(Boolean)

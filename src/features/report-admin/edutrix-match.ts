@@ -110,10 +110,9 @@ export function resolveEywaIdByEdutrixId(
 }
 
 /**
- * Edutrix 미매핑 목록용 — 테스트/더미 학생 휴리스틱(순수).
- * - 이름: 학원일·학원1·테스트 등
- * - 학교+학년 둘 다 플레이스홀더(미입력/미정/없음/-)
- * 한쪽만 비정상이면 실데이터 가능 → 더미로 안 봄.
+ * Edutrix 미매핑 목록용 — 테스트 학생 휴리스틱(순수). **이름 패턴만** 본다(학원일·학원1·테스트·demo).
+ * ⚠️ "학교+학년 플레이스홀더(미입력/미정)" 규칙은 폐기(2026-07-10) — Edutrix 프로필을 안 채운
+ * **실학생**(보고서 수십 건 + eywa 동명 후보 존재)까지 더미로 숨겨 실매핑 대상이 과소집계됐다.
  */
 export function isEdutrixDummyStudent(opts: {
   name: string;
@@ -125,10 +124,5 @@ export function isEdutrixDummyStudent(opts: {
   // 학원일/학원이/학원1/학원A, 테스트*, demo*
   if (/^학원[일이삼사오육칠팔구십\dA-Za-z]+$/.test(name)) return true;
   if (/^(테스트|test|demo)/i.test(name)) return true;
-
-  const school = (opts.school ?? "").trim();
-  const grade = (opts.grade ?? "").trim();
-  const placeholder = (s: string) => !s || /^(미입력|미정|없음|없음\.|unknown|-|—|n\/a)$/i.test(s);
-  if (placeholder(school) && placeholder(grade)) return true;
   return false;
 }

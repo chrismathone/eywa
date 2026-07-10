@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { getTodaySchedule } from "@/features/timetable/server/queries";
+import { getTodaySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { needsAttention, summarizeQueue, type QueueSummary } from "../classnote-queue";
 import { computeWritingRates, type TeacherRate, type TodayTarget } from "../writing-rate";
@@ -94,7 +94,9 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   return { summary, items, workers, since, days, sendEnabled: settings.report.classnoteSendEnabled };
 }
 
-export type WritingRatesView = { dates: string[]; rates: TeacherRate[] };
+// 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.
+export type TeacherRateRow = TeacherRate & { subjects: string[] };
+export type WritingRatesView = { dates: string[]; rates: TeacherRateRow[] };
 
 /**
  * 강사별 주간 작성률(원장 보고서 관리 Part B) — 이번 주(월~일) 작성 건수(강사×일별) + 오늘 대상 대비 작성률·미작성.
@@ -112,22 +114,31 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
   const dates = Array.from({ length: 7 }, (_, i) => daysBefore(monday, -i)); // 월→일 오름차순
   const since = dates[0]!; // = 이번 주 월요일
 
-  // 1) 이번 주(월~일) 작성 기록(강사 = teacher_name).
-  const { data: reps } = await supabase
-    .from("lesson_reports")
-    .select("teacher_name, report_date")
-    .gte("report_date", since)
-    .limit(5000);
-  const reports = (reps ?? []).map((r) => ({
-    teacher: (r.teacher_name as string | null) ?? "(미지정)",
-    date: r.report_date as string,
-  }));
+  // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨 — 상호 독립이라 병렬(B4).
+  const [{ data: reps }, schedule, settings, labelsBySubject] = await Promise.all([
+    supabase.from("lesson_reports").select("teacher_name, report_date").gte("report_date", since).limit(5000),
+    getTodaySchedule(),
+    getTenantSettings(),
+    getTeacherLabelsBySubject(),
+  ]);
+  // 작성 예외 강사(학원설정 report.writingExemptTeachers) — 작성 의무 없는 강사는 주간 기록·오늘 대상 모두 제외.
+  const exempt = new Set(settings.report.writingExemptTeachers);
+  const reports = (reps ?? [])
+    .map((r) => ({
+      teacher: (r.teacher_name as string | null) ?? "(미지정)",
+      date: r.report_date as string,
+    }))
+    .filter((r) => !exempt.has(r.teacher));
 
-  // 2) 오늘 시작된 반 → 강사별 classIds.
-  const started = (await getTodaySchedule()).filter((s) => s.status !== "upcoming");
+  // 2) 오늘 시작된 반 → 강사별 classIds (예외 강사 반 제외).
+  const started = schedule.filter((s) => s.status !== "upcoming");
   const teacherOfClass = new Map<string, string>();
-  for (const s of started) teacherOfClass.set(s.classId, s.teacherName ?? "(미지정)");
-  const classIds = [...new Set(started.map((s) => s.classId))];
+  for (const s of started) {
+    const t = s.teacherName ?? "(미지정)";
+    if (exempt.has(t)) continue;
+    teacherOfClass.set(s.classId, t);
+  }
+  const classIds = [...teacherOfClass.keys()];
 
   let todayTargets: TodayTarget[] = [];
   if (classIds.length > 0) {
@@ -169,7 +180,17 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
     });
   }
 
-  return { dates, rates: computeWritingRates(dates, reports, todayTargets) };
+  // 강사→과목 태그(반 담당·슬롯 라벨 역인덱스) — 미지의 이름은 빈 배열(카드에서 '전체'에만 노출).
+  const subjectsOfTeacher = new Map<string, Set<string>>();
+  for (const [subj, names] of Object.entries(labelsBySubject))
+    for (const n of names)
+      (subjectsOfTeacher.get(n) ?? subjectsOfTeacher.set(n, new Set()).get(n)!).add(subj);
+
+  const rates: TeacherRateRow[] = computeWritingRates(dates, reports, todayTargets).map((r) => ({
+    ...r,
+    subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
+  }));
+  return { dates, rates };
 }
 
 export type ReportFilterOptions = { teachers: string[]; subjects: string[] };

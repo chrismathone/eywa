@@ -20,6 +20,15 @@
   토글+퇴사 잔존 이름 해제 UI) + 소비처(`getWeeklyWritingRates`가 주간 기록·오늘 대상 모두 제외). owner 페이지가
   report 탭에도 `getTeacherLabelsBySubject` 전달. 라이브 검증: 허은진 예외 저장→표 23→22행→원복(DB `[]`).
   ⚠️ 새 Zod 필드라 dev 서버 재시작 후 검증(#73).
+- **raw 코드 UI 노출 제거(사용자 반복 지적 → CLAUDE.md 작업 선호 규칙화)**: ①미매핑 후보 드롭다운
+  `withdrawn`→퇴원 — 공용 [status-labels.ts](../src/features/students/status-labels.ts) 신설(`studentStatusLabel`)
+  ②발송 큐 과목 `math`→수학(`useSubjectMaps.labelOf`) ③발송 실패 사유 = 기술 원문(`page.goto: net::ERR…`) 대신
+  한글 요약([classnote-error.ts](../src/features/report-admin/classnote-error.ts) `humanizeClassnoteError`, Vitest 5,
+  원문은 title 툴팁) ④미지의 상태 코드 폴백도 raw 대신 "기타"+툴팁.
+- **Edutrix 미매핑 '더미' 오분류 수정 + 라벨 개선**: `isEdutrixDummyStudent`의 "학교+학년 미입력=더미" 규칙 폐기 —
+  Edutrix 프로필 미기재 **실학생**(김보미 15건 등, eywa 동명 후보 존재)까지 숨겨 실매핑 대상 1로 과소집계됐음 →
+  이름 패턴(학원N·테스트·demo)만 판정. 실측: 실매핑 대상 1→**37**, 테스트 5(학원N)만 기본 숨김.
+  용어도 개발용어 '더미'→'테스트 (프로필)'로 전면 교체.
 
 ### Edutrix 완전 종료 대비 데이터 전체 이전 — lesson_reports 풀 이력 + 원본 아카이브 (2026-07-10) — ✅ 프로덕션 적용·검증
 원장 결정("유지할 것들 다 이전해서 Edutrix 완전히 끄자, Vercel 링크 사망 수용"). 스크립트 = [scripts/_edutrix_retire/](../scripts/_edutrix_retire/), 소등 순서는 [docs/classnote-integration.md](classnote-integration.md) **§10 체크리스트**.

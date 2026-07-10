@@ -1,5 +1,10 @@
+"use client";
+
 // 수업보고서 > 강사별 주간 작성률(Part B) — 이번 주(월~일) 작성 건수 + 오늘 작성률·미작성.
-// 순수 표시(상호작용 없음) → 서버 컴포넌트로 렌더 가능.
+// [전체/과목] 칩으로 강사 분류(반 담당 기준 태깅, 학원설정 승인 과목만 칩 노출 — 하드코딩 금지).
+// 예외 강사(report.writingExemptTeachers)는 서버 쿼리에서 이미 제외되어 여기 안 온다.
+import { useMemo, useState } from "react";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { WritingRatesView } from "@/features/report-admin/server/queries";
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
@@ -23,15 +28,51 @@ function nameList(names: string[], max = 4): string {
 
 export function WritingRateCard({ view }: { view: WritingRatesView }) {
   const { dates, rates } = view;
+  const subjects = useSubjectMaps();
+  const [sel, setSel] = useState("all");
+  // 칩 = 학원설정 승인 과목 중 실제 데이터에 등장하는 과목만(승인 밖 키·미태깅 강사는 '전체'에서만 보임).
+  const chipOptions = useMemo(() => {
+    const present = new Set(rates.flatMap((r) => r.subjects));
+    return subjects.options.filter((o) => present.has(o.value));
+  }, [rates, subjects.options]);
+  const showChips = chipOptions.length >= 2;
+  const filtered = sel === "all" || !showChips ? rates : rates.filter((r) => r.subjects.includes(sel));
+
   return (
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
-      <div className="mb-3">
-        <h2 className="text-foreground text-[15px] font-semibold">강사별 작성률</h2>
-        <p className="text-text-faint text-[12px]">이번 주(월~일) 작성 건수 · 오늘 대상 대비 작성률(결석 제외)</p>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div>
+          <h2 className="text-foreground text-[15px] font-semibold">강사별 작성률</h2>
+          <p className="text-text-faint text-[12px]">이번 주(월~일) 작성 건수 · 오늘 대상 대비 작성률(결석 제외)</p>
+        </div>
+        {showChips ? (
+          <div className="flex flex-wrap gap-1.5">
+            {[{ value: "all", label: "전체" }, ...chipOptions].map((o) => {
+              const on = sel === o.value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => setSel(o.value)}
+                  aria-pressed={on}
+                  className={`rounded-full border px-3 py-1 text-[12px] transition ${
+                    on
+                      ? "border-primary bg-primary/10 text-primary font-semibold"
+                      : "border-line text-text-dim hover:bg-bg-soft"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
-      {rates.length === 0 ? (
-        <p className="text-text-faint text-[13px]">최근 작성 기록이 없습니다.</p>
+      {filtered.length === 0 ? (
+        <p className="text-text-faint text-[13px]">
+          {rates.length === 0 ? "최근 작성 기록이 없습니다." : "이 과목 강사의 작성 기록이 없습니다."}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[620px] text-left text-[12px]">
@@ -48,7 +89,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
               </tr>
             </thead>
             <tbody>
-              {rates.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.teacher} className="border-line border-b last:border-b-0 align-top">
                   <td className="px-3 py-2">
                     <span className="text-foreground font-semibold">{r.teacher}</span>

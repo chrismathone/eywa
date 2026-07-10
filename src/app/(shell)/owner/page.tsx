@@ -119,8 +119,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
-  // 과목별 강사 라벨(강사뷰 '가로줄 제외 강사' 칩)은 과목 운영 면에서만 로드.
-  const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
+  // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' + 보고서 '작성률 예외 강사' 칩)은 해당 면에서만 로드.
+  const teacherLabelsBySubject =
+    tab === "subjects" || tab === "report" ? await getTeacherLabelsBySubject() : {};
   // AI 멘트 프롬프트(타입별 활성 오버라이드 또는 기본값)는 그 면에서만 로드.
   const aiPrompts = tab === "ai_ment" ? ((await getActivePrompts()).prompts ?? []) : [];
   // 관리 면(중복·감사) 페이지네이션용. 창(embed) 컨텍스트는 면 pageHref가 직접 유지.
@@ -150,7 +151,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       ) : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
-      {tab === "report" ? <ReportSection initial={settings.report} /> : null}
+      {tab === "report" ? (
+        <ReportSection initial={settings.report} teachers={teacherLabelsBySubject} />
+      ) : null}
       {tab === "ai_ment" ? <AiMentSection initial={aiPrompts} /> : null}
       {tab === "permissions" ? (
         isMaster ? (

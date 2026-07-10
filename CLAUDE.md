@@ -328,6 +328,10 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **"제목/이름 변경" 요청 = 라벨 문자열만** 바꾼다. 데이터 바인딩·소스를 임의로 갈아끼우지 말 것(기존 행이 "—"로 증발함). 바꾸는 게 낫다 싶으면 **제안만**. 리네임 후 기존 행이 동일 렌더되는지 확인이 완료 조건.
 - **병렬 세션 주의(#62)**: 공유 작업트리를 여러 세션이 동시 사용한다. 통째 `git add` 금지 → **내 파일 명시 경로만** 커밋. 큰 변경 후 `git fetch` + `HEAD..origin/main`으로 내 WIP가 물렸는지, 의존하는 신규 파일 누락은 없는지 점검.
 - **운영 enum 하드코딩 금지**: 과목/학년/직급/교시 = 학원설정 단일 소스. 서버 `buildSubjectMaps(getTenantSettings)`, 클라 `useSubjectMaps()`/`useGradeLevels()`. `SUBJECT_META`/`LABEL`/`COLOR` 등 코드 상수 신설 금지.
+- **UI에 raw 코드·기술 원문 노출 금지 (반복 지적, 2026-07-10 재발)**: 화면에 `withdrawn`·`math`·`page.goto: net::ERR…` 같은
+  영문 enum/키/에러 원문을 그대로 내보내지 말 것. 상태=`studentStatusLabel`([status-labels.ts](src/features/students/status-labels.ts)),
+  과목=`labelOf`, 에러=한글 요약+원문은 `title` 툴팁([classnote-error.ts](src/features/report-admin/classnote-error.ts) 선례).
+  **새 표시 문자열이 DB 값·에러 객체에서 오면 한글 매핑을 거쳤는지 확인이 완료 조건.**
 - **성능/병목 = 기능 버그 동급**: 새 쿼리·라우트·차트는 위 "성능/병목 절대 규칙(B1~B7)" 체크리스트 통과가 "완료" 조건.
 - **중요 배선은 문서화**: 권한/설정 등 배선을 구현할 때마다 소비처·갭을 `docs/changelog.md`(또는 여기)에 기록.
 - **2열 카드 높이 균형**: 한쪽이 짧아 빈 여백이 드러나면 `lg:items-stretch` + 짧은 카드 `flex flex-col` + 마지막 요소 `mt-auto`.

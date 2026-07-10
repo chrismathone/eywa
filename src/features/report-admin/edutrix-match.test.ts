@@ -83,8 +83,8 @@ describe("isEdutrixDummyStudent", () => {
     expect(isEdutrixDummyStudent({ name: "테스트김", school: "칠성중", grade: "중1" })).toBe(true);
   });
 
-  it("학교·학년 둘 다 플레이스홀더", () => {
-    expect(isEdutrixDummyStudent({ name: "김보미", school: "미입력", grade: "미정" })).toBe(true);
+  it("프로필 미기재(미입력/미정) 실학생은 더미 아님 — 이름 패턴만 판정(플레이스홀더 규칙 폐기, 2026-07-10)", () => {
+    expect(isEdutrixDummyStudent({ name: "김보미", school: "미입력", grade: "미정" })).toBe(false);
   });
 
   it("실학생 — 학교 있으면 더미 아님", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 // 수업보고서 — Edutrix UUID 미매핑 목록 + 수동 연결(오배정 방지 오버사이트).
-// 더미/테스트(학원N·미입력/미정)는 기본 숨김 — 실매핑 대상만 먼저 본다.
+// 테스트 프로필(학원N·테스트 이름)은 기본 숨김 — 실매핑 대상만 먼저 본다.
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -44,7 +44,7 @@ function RowLink({ row }: { row: UnmappedEdutrixRow }) {
           <span className="text-foreground text-[13px] font-medium">{eduLabel}</span>
           {row.likelyDummy ? (
             <span className="bg-bg-soft text-text-faint rounded px-1.5 py-0.5 text-[10px] font-semibold">
-              더미
+              테스트
             </span>
           ) : null}
         </div>
@@ -82,7 +82,7 @@ function RowLink({ row }: { row: UnmappedEdutrixRow }) {
 }
 
 export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
-  // 기본: 더미 숨김 — 실매핑 대상만 노출.
+  // 기본: 테스트 프로필 숨김 — 실매핑 대상만 노출.
   const [showDummy, setShowDummy] = useState(false);
 
   if (!view.ok) {
@@ -106,7 +106,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
           <h2 className="text-foreground text-[15px] font-semibold">Edutrix 미매핑</h2>
           <p className="text-text-faint text-[12px]">
             보고서가 있는 Edutrix 학생 중 UUID 미연결 · 자동 이관 제외(오배정 방지). 연결 시 최근 보고서도
-            이관됩니다. 테스트·미입력 프로필은 기본 숨김.
+            이관됩니다. 테스트 프로필(학원1·테스트 등 이름)은 기본 숨김.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
@@ -125,7 +125,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
           </span>
           {dummyCount > 0 ? (
             <span className="bg-bg-soft text-text-faint rounded-md px-2.5 py-1">
-              더미 <b className="tabular">{dummyCount}</b>
+              테스트 <b className="tabular">{dummyCount}</b>
             </span>
           ) : null}
           {dummyCount > 0 ? (
@@ -136,7 +136,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
                 checked={showDummy}
                 onChange={(e) => setShowDummy(e.target.checked)}
               />
-              더미 표시
+              테스트 프로필 표시
             </label>
           ) : null}
         </div>
@@ -146,7 +146,8 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
         <p className="text-primary text-[13px]">미매핑 없음 — 보고서 있는 Edutrix 학생이 모두 연결됨.</p>
       ) : visible.length === 0 ? (
         <p className="text-text-dim text-[13px]">
-          남은 미매핑 {dummyCount}건은 모두 더미/테스트로 분류됨. 우측 「더미 표시」로 확인할 수 있습니다.
+          남은 미매핑 {dummyCount}건은 모두 테스트 프로필(학원1·테스트 등 이름). 우측 「테스트 프로필
+          표시」로 확인할 수 있습니다.
         </p>
       ) : (
         <div className="overflow-x-auto">

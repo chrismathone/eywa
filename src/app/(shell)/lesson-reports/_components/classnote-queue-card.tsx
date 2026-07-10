@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
+import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { resetStuckClassnote, retryClassnote } from "@/features/report-admin/server/actions";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
 
@@ -21,6 +23,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
 export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
   const router = useRouter();
   const { summary, items, workers, days } = view;
+  const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
@@ -148,14 +151,24 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                     </td>
                     <td className="px-3 py-2">
                       <span className="text-foreground font-semibold">{it.studentName}</span>
-                      {it.subject ? <span className="text-text-faint ml-1.5">{it.subject}</span> : null}
+                      {it.subject ? (
+                        <span className="text-text-faint ml-1.5">{subjects.labelOf(it.subject)}</span>
+                      ) : null}
                     </td>
                     <td className="text-text-dim px-3 py-2">{it.reportDate}</td>
                     <td className="px-3 py-2">
-                      {badge ? <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span> : it.status}
+                      {/* 미지의 상태 코드도 raw 노출 금지 — 원문은 툴팁으로만. */}
+                      {badge ? (
+                        <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+                      ) : (
+                        <span className="text-text-dim text-[11px]" title={it.status ?? ""}>
+                          기타
+                        </span>
+                      )}
                     </td>
-                    <td className="text-text-faint max-w-[220px] truncate px-3 py-2" title={it.error ?? ""}>
-                      {it.error ?? "—"}
+                    {/* 사유 = 한글 요약(기술 원문은 마우스 오버 툴팁) — 원장이 바로 읽게. */}
+                    <td className="text-text-faint max-w-[260px] truncate px-3 py-2" title={it.error ?? ""}>
+                      {humanizeClassnoteError(it.error) ?? "—"}
                     </td>
                   </tr>
                 );

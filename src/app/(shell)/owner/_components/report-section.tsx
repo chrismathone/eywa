@@ -11,9 +11,23 @@ import { TextField, ToggleField } from "./fields";
  * 학원 운영 > 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정.
  * notifications-section 패턴(로컬 state + SectionForm이 저장 배관 담당). /r 페이지가 이 값을 읽어 렌더.
  */
-export function ReportSection({ initial }: { initial: ReportSettings }) {
+export function ReportSection({
+  initial,
+  teachers = {},
+}: {
+  initial: ReportSettings;
+  /** 과목별 강사 라벨(작성률 예외 강사 칩 선택지) — getTeacherLabelsBySubject. */
+  teachers?: Record<string, string[]>;
+}) {
   const [r, setR] = useState<ReportSettings>(initial);
   const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
+  // 작성률 예외 강사 토글 — 표시 이름 배열(강사별 작성률 표의 키와 동일).
+  const toggleExempt = (name: string) =>
+    set({
+      writingExemptTeachers: r.writingExemptTeachers.includes(name)
+        ? r.writingExemptTeachers.filter((n) => n !== name)
+        : [...r.writingExemptTeachers, name],
+    });
   // 발송 허용 과목 체크박스 — 학원 운영 과목(클라 단일 소스, 하드코딩 금지) 중 **발송 가능 과목만** 노출.
   // ClassNote 실보드 관례가 (수학)/(영어) 학생모드뿐이라, 매핑 없는 과목을 켜면 (수학) 보드 오게시로
   // 직결됐음(P0-3) — 화이트리스트(CLASSNOTE_SENDABLE_SUBJECTS) 밖 과목은 칩 자체를 안 보여준다.
@@ -27,6 +41,16 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
         ? r.classnoteSubjects.filter((k) => k !== key)
         : [...r.classnoteSubjects, key],
     });
+  // 작성률 예외 강사 후보 — 과목 운영 순서(승인 과목 먼저), 승인 밖 키(레거시)는 뒤에(labelOf 폴백 표시).
+  const exemptGroupKeys = [
+    ...subjects.options.map((o) => o.value).filter((k) => (teachers[k] ?? []).length > 0),
+    ...Object.keys(teachers).filter(
+      (k) => !subjects.options.some((o) => o.value === k) && (teachers[k] ?? []).length > 0,
+    ),
+  ];
+  // 저장돼 있지만 현재 반 담당 목록에 없는 이름(퇴사 등) — 해제할 수 있게 별도 노출.
+  const knownNames = new Set(Object.values(teachers).flat());
+  const orphanExempt = r.writingExemptTeachers.filter((n) => !knownNames.has(n));
 
   return (
     <SectionForm section="report" payload={r}>
@@ -179,6 +203,7 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
           </SettingsCard>
         </div>
 
+        <div className="flex flex-col gap-4">
         <SettingsCard
           title="표시 항목"
           description="학부모 보고서에 표시할 항목을 켜고 끕니다. 끈 항목은 보고서에서 숨겨집니다."
@@ -209,6 +234,66 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
             ))}
           </div>
         </SettingsCard>
+
+        {/* 작성률 예외 강사 — 소비처: getWeeklyWritingRates(수업보고서 > 강사별 작성률에서 제외). */}
+        <SettingsCard
+          title="작성률 예외 강사"
+          description="체크한 강사는 수업보고서의 '강사별 작성률' 표에서 빠집니다(보고서 작성 대상이 아닌 보조·데스크 강사 등)."
+        >
+          {exemptGroupKeys.length === 0 ? (
+            <p className="text-text-faint text-[12px]">반을 담당 중인 강사가 없습니다.</p>
+          ) : (
+            <div className="space-y-3">
+              {exemptGroupKeys.map((key) => (
+                <div key={key}>
+                  <p className="text-text-dim text-[12px]">{subjects.labelOf(key)}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {(teachers[key] ?? []).map((name) => {
+                      const on = r.writingExemptTeachers.includes(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => toggleExempt(name)}
+                          aria-pressed={on}
+                          className={`rounded-full border px-3 py-1 text-[13px] transition ${
+                            on
+                              ? "border-danger bg-danger/10 text-danger font-semibold line-through"
+                              : "border-line text-text-dim hover:bg-bg-soft"
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {orphanExempt.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-text-dim text-[12px]">현재 담당 반 없음(설정만 남음) — 클릭해 해제</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {orphanExempt.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => toggleExempt(name)}
+                    aria-pressed
+                    className="border-danger bg-danger/10 text-danger rounded-full border px-3 py-1 text-[13px] font-semibold line-through"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {r.writingExemptTeachers.length > 0 ? (
+            <p className="text-text-faint mt-3 text-[12px]">작성률 집계 제외 중: {r.writingExemptTeachers.length}명</p>
+          ) : null}
+        </SettingsCard>
+        </div>
       </div>
     </SectionForm>
   );
