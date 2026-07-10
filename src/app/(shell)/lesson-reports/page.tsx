@@ -36,7 +36,10 @@ function resolveTab(sp: Sp, canOwner: boolean): Tab {
  */
 export default async function LessonReportsPage({ searchParams }: { searchParams: Promise<Sp> }) {
   const viewer = await requireAccess("lesson_reports");
-  const canOwner = await canWriteTenant(viewer.systemRole, "owner");
+  const [canOwner, canSendReports] = await Promise.all([
+    canWriteTenant(viewer.systemRole, "owner"),
+    canWriteTenant(viewer.systemRole, "lesson_reports"), // 목록 탭 관리자 발송 열 노출(viewer는 열람만)
+  ]);
   const sp = await searchParams;
   const tab = resolveTab(sp, canOwner);
   const isSettings = tab === "report" || tab === "ai_ment";
@@ -112,7 +115,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       {tab === "unmapped" && "edutrixMap" in tabData ? <EdutrixUnmappedCard view={tabData.edutrixMap} /> : null}
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
-        <ReportList options={tabData.filterOptions} initial={tabData.initialList} />
+        <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} />
       ) : null}
 
       {tab === "report" && "reportSettings" in tabData ? (

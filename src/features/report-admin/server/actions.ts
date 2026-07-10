@@ -7,6 +7,7 @@ import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
+import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../report-filters";
@@ -65,6 +66,102 @@ export async function retryClassnote(
     .in("id", allowed);
   if (error) return { ok: false, error: error.message };
   return { ok: true, requeued: allowed.length, skipped };
+}
+
+/**
+ * 관리자 최초 발송 — 강사가 저장만 하고 발송 버튼을 안 누른 보고서(**classnote_status IS NULL**)를
+ * 관리자가 목록 탭에서 골라 큐에 올린다(2026-07-10 원장 요청 — 발송 트리거가 강사에게만 있던 갭 해소).
+ *
+ * **중복발송 방어(하드필터)**: 발송 이력이 있는 행(queued/processing/success/failed/too_old/name_conflict)은
+ * id를 직접 넘겨도 select 단계에서 제외 — 이미 발송된 건이 이 경로로 재게시되는 일이 구조적으로 없다.
+ * 재발송은 retryClassnote(큐 카드) 별도 버튼이 담당(역할 분리). 마지막 update에도 `.is(null)` 재확인을
+ * 걸어 동시 더블클릭·타 관리자 경합에도 한 번만 큐잉된다.
+ *
+ * 나머지 가드는 강사 발송 경로(saveAndQueueClassnote)와 동일: 이관(edutrix_import, Edutrix가 이미 학부모에게
+ * 발송 — 미발송 표시 4,813건이 최대 오발송 벡터) 제외 · 취소(revoked) 제외 · dry-run 스위치 · 과목 opt-in ·
+ * too_old(전 달 1일 이전) · 동명이인은 name_conflict 마킹(자동 발송 차단, 이름 구분 후 재시도).
+ */
+export async function sendClassnoteForUnsent(ids: string[]): Promise<{
+  ok: boolean;
+  queued?: number;
+  conflicts?: number;
+  skipped?: number;
+  dryRun?: boolean;
+  error?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  if (!ids?.length) return { ok: false, error: "대상이 없습니다" };
+  const supabase = await createClient();
+  const capped = ids.slice(0, 200);
+
+  // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
+  const { data: rows } = await supabase
+    .from("lesson_reports")
+    .select("id, report_date, subject, student_id")
+    .in("id", capped)
+    .is("classnote_status", null)
+    .or("source.is.null,source.neq.edutrix_import")
+    .is("revoked_at", null);
+
+  const settings = await getTenantSettings();
+  const eligible = (rows ?? []).filter(
+    (r) =>
+      isClassnoteAllowed(r.report_date as string) &&
+      isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
+  );
+  if (eligible.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length };
+
+  // 발송 안전 스위치 — 기본 OFF(dry-run). 어떤 행도 변경하지 않고 반환(동명이인 마킹도 안 함).
+  if (!settings.report.classnoteSendEnabled) {
+    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - eligible.length, dryRun: true };
+  }
+
+  // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
+  const studentIds = [...new Set(eligible.map((r) => r.student_id as string))];
+  const conflicted = new Set<string>();
+  for (let i = 0; i < studentIds.length; i += 25) {
+    const results = await Promise.all(
+      studentIds.slice(i, i + 25).map(async (sid) => [sid, await hasClassnoteNameCollision(supabase, sid)] as const),
+    );
+    for (const [sid, hit] of results) if (hit) conflicted.add(sid);
+  }
+  const conflictIds = eligible.filter((r) => conflicted.has(r.student_id as string)).map((r) => r.id as string);
+  const queueIds = eligible.filter((r) => !conflicted.has(r.student_id as string)).map((r) => r.id as string);
+
+  let conflicts = 0;
+  if (conflictIds.length) {
+    const { data } = await supabase
+      .from("lesson_reports")
+      .update({
+        classnote_status: "name_conflict",
+        classnote_queued_at: null,
+        classnote_error: "동명이인 감지 — 자동 발송 차단",
+      })
+      .in("id", conflictIds)
+      .is("classnote_status", null)
+      .select("id");
+    conflicts = (data ?? []).length;
+  }
+  let queued = 0;
+  if (queueIds.length) {
+    const { data, error } = await supabase
+      .from("lesson_reports")
+      .update({
+        classnote_status: "queued",
+        classnote_queued_at: new Date().toISOString(),
+        classnote_processing_at: null,
+        classnote_retry_count: 0,
+        classnote_error: null,
+      })
+      .in("id", queueIds)
+      .is("classnote_status", null) // 경합 이중 방어 — 그 사이 큐잉/발송된 행은 건드리지 않음
+      .select("id");
+    if (error) return { ok: false, error: error.message };
+    queued = (data ?? []).length;
+  }
+  return { ok: true, queued, conflicts, skipped: capped.length - queued - conflicts };
 }
 
 /**

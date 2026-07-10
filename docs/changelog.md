@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수업보고서 목록 탭 — 관리자 발송(미발송분) (2026-07-10) — ✅ tsc0/lint0/test25(report-admin)/라이브 E2E
+원장 요청: 관리자도 수업보고서 탭에서 발송할 수 있게 — 발송 트리거가 강사 원스크린에만 있던 갭 해소.
+- **서버** [sendClassnoteForUnsent](../src/features/report-admin/server/actions.ts): **미발송(classnote_status IS NULL) native만** 하드필터 — 발송 이력 있는 행(success 포함)은 id를 직접 넘겨도 거부 = **중복발송 구조적 차단**(재발송은 retryClassnote 별도 역할). 이관(edutrix_import, 미발송 표시 4,813건=최대 오발송 벡터)·취소(revoked) 제외 + dry-run 스위치·과목 opt-in(subject NULL 거부)·too_old·동명이인(name_conflict 마킹) = 강사 발송 경로와 동일 가드. update에 `.is(null)` 재확인 → 더블클릭·타 관리자 경합에도 1회만 큐잉.
+- **UI** [report-list](<../src/app/(shell)/lesson-reports/_components/report-list.tsx>): 체크박스 열(+현재 페이지 전체선택) + "선택 발송" 버튼 — 미발송 native 행만 활성([isAdminSendable](../src/features/report-admin/report-filters.ts) 순수+Vitest 4, 서버 필터와 동일 계약), lesson_reports 쓰기 권한일 때만 노출(viewer 숨김). 페이지·필터 전환 시 선택 초기화(화면 밖 행 발송 방지). 과목 필터·행 과목 표기 = `labelOf` 한글 라벨(raw 키 노출 제거).
+- **라이브 E2E**: 발송완료·이관·queued 행 체크 비활성 확인 → 이연아(math·미발송) 선택 발송 = 실큐잉 확인(⚠️ classnoteSendEnabled가 이날 ON으로 전환돼 있었음) 후 워커 클레임 전 즉시 원복(sent_at null) → 박세인(subject NULL) = "1건 제외" 과목 게이트 확인. 테스트 흔적 0.
+
 ### 발송 스크린샷 networkidle 타임아웃 해소 + 에러 UI ANSI 원문 정리 (2026-07-10 후속) — ✅ tsc0/lint0/test962
 원장 제보: 발송 실패건 마우스오버 시 "알 수 없는 코딩 문자"(ANSI 색코드) 노출 + 학원이 테스트 건 계속 실패.
 - **에러 원문 정리 공용 헬퍼** [sanitizeErrorText](../src/lib/text/sanitize-error.ts): Playwright/Node 에러의 ANSI CSI 시퀀스(ESC`[2m` 등)·제어문자·개행을 지워 한 줄 가독 텍스트로(순수, `String.fromCharCode(27)`로 ESC 구성=소스에 제어문자 미포함). 적용: ClassNote 발송 큐 툴팁([classnote-queue-card](<../src/app/(shell)/lesson-reports/_components/classnote-queue-card.tsx>) `title`) + makeedu 동기화 이력([makeedu-sync-runs](<../src/app/(shell)/owner/_components/makeedu-sync-runs.tsx>) 화면·title) + 녹음 처리 에러([recordings-section](<../src/app/(shell)/enrollment/[id]/recordings-section.tsx>)) + 시간표 가져오기([import-dialog](<../src/app/(shell)/timetable/_components/import-dialog.tsx>) `e.message` 경로). 화면 본문의 한글 요약(humanizeClassnoteError)은 유지, 툴팁만 정리 원문.
