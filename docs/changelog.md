@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### Edutrix 이관 정석화 — UUID 매핑 (이름 fan-out 폐기) (2026-07-10)
+치명: 기존 이관이 `students.name` exact만 써서 동명이인에 보고서 복제(오배정). Edutrix 내부 키는 `reports.student_id` UUID.
+- **0094a**: `students.edutrix_student_id` + `lesson_reports.edutrix_report_id` (테넌트 부분 유니크).
+- **매칭**: 런타임(import/cron) = UUID only. 백필 1회만 이름→학교/학년/재원 우선 해소, 모호하면 **미매핑**(복제 금지). 순수 [`edutrix-match.ts`](../src/features/report-admin/edutrix-match.ts)+Vitest.
+- **import-lesson-reports.cjs**: `--map` 백필 + UUID 재이관. **edutrix-sync cron**: 동일 키·`edutrix_report_id` 멱등.
+- 운영: 마이그 적용 → `node --env-file=.env.local scripts/_poc_migration/import-lesson-reports.cjs --map --dry` 확인 → `--map` → 본 이관(무 dry).
+
 ### 체감 성능 — BL4 hover document 프리워밍 + 대시보드 loading (2026-07-10)
 - **BL4**([prefetch-embed.ts](../src/components/workspace/prefetch-embed.ts)): 사이드바·WindowLink hover 120ms 후 `?embed=1` document `<link rel=prefetch>`(자주 쓰는 메뉴 루트만, URL 1회). 클릭 시 iframe이 HTTP 캐시부터 시작 → 새 창 체감 단축. leave 시 디바운스 취소.
 - **dashboard/loading.tsx**: 15-way 쿼리 대기 중 스켈레톤 스트리밍(B7). 필터 거의 없어 플래시 트레이드오프 작음.

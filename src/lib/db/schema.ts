@@ -289,6 +289,9 @@ export const students = pgTable(
     // makeedu 동기화 외부키 — makeedu 원생고유번호(예 09327). ⚠️ student_code와 분리(ijw studentCode 충돌 방지).
     // 부분 유니크 (tenant_id, makeedu_id) WHERE makeedu_id IS NOT NULL 는 손수 alpha SQL(0057a).
     makeeduId: text("makeedu_id"),
+    // Edutrix public.students.id — 수업보고서 이관·cron 매칭 키(0094a). 이름-only 매칭 금지(동명이인 fan-out).
+    // 부분 유니크 (tenant_id, edutrix_student_id) WHERE NOT NULL 는 0094a alpha.
+    edutrixStudentId: text("edutrix_student_id"),
     // "지난 동기화가 새로 추가한 학생" 표시용(목록의 ↻ 동기화 배지). 동기화 신규 insert 시 now(),
     // 다음 동기화가 성공하면 그 실행 시작에 전부 NULL로 클리어 → 라벨이 "다음 동기화까지만" 유지된다(0061a).
     syncAddedAt: timestamp("sync_added_at", { withTimezone: true }),
@@ -645,6 +648,8 @@ export const lessonReports = pgTable(
     teacherName: text("teacher_name"),
     notes: text("notes"),
     source: text("source"),
+    // Edutrix public.reports.id — 이관 멱등 키(0094a). source=edutrix_import 증분·재이관.
+    edutrixReportId: text("edutrix_report_id"),
     // 학부모 보고서 표시용 분리 필드 — 0082a(일일/확인테스트·수업태도). 기존 exam_info 합본의 3단계 분리.
     dailyTest: text("daily_test"),
     checkTest: text("check_test"),
