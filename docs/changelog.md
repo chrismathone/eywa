@@ -17,6 +17,17 @@
 - **수정 패키지**: [`발송PC-주소수정.bat`](../scripts/_classnote/발송PC-주소수정.bat)+[`fix-classnote-base.ps1`](../scripts/_classnote/fix-classnote-base.ps1)(백업→오타 치환(SHARE_BASE 포함)→키 없으면 추가→setup 재실행=재시작+dry-run 자가검사, ps1은 UTF-8 BOM+파서 검증) + 이관 안내문 트러블슈팅 갱신 + zip `D:\tmp\eywa-발송PC-주소수정-20260710.zip`(경로 보존). ⏳ 연동 PC에서 .bat 실행 대기 — 데몬 재시작 감지 모니터가 잡히면 학원이 재큐잉해 완주 검증 예정.
 - 부수: 알림장 목록에서 **Edutrix가 7/9까지 현역 발송 중** 실화면 확인(`edutrix.vercel.app/share/…` 링크 — eywa 전환 시 이 링크만 `/r`로 교체되는 그림).
 
+### 학생목록 Stat 카드 재원 중심 + 상태 필터 디폴트 재원 (2026-07-10)
+- **Stat 카드 교체**: 전체/재원/예비·상담/퇴원 4장 → **히어로 카드 1장**([enrolled-stat-card.tsx](../src/app/(shell)/students/_components/enrolled-stat-card.tsx))
+  = 재원 총원(큰 숫자) + 과목별 재원생 **비중 미니바**(재원 대비 %, 인원 내림차순). 과목이 늘어도 카드가 아니라 행만
+  늘어난다(레이아웃 고정 — 사용자 피드백). 과목·색은 학원설정 단일 소스(`subjects.options`/`colorOf`→SUBJECT_SOLID),
+  재원생 0명 과목은 숨김. 수치 = 재원+과목 필터 결과와 일치(라이브 검증: 재원512·영어243/47%·수학202/39%·수학(심화)34/7%).
+  ⚠️ 바 그리드에 `self-center` 금지 — column(좁은 창)에서 내용폭 수축으로 1fr 바가 0이 된다.
+- **쿼리**: `getStudentStatusCounts` → [`getEnrolledStatCounts`](../src/features/students/server/queries.ts) — 재원수는
+  `count(exact,head)`, 과목별 distinct 학생수는 재원생 활성 수강(휴원 제외) `fetchAllPaged` 전건 후 JS distinct(B2 준수). 강사 스코프 유지.
+- **상태 필터 디폴트 = 재원(항상)**: 무param `/students` = 재원, "전체"는 `status=all` 명시. localStorage 필터 복원에서
+  status는 **제외**(열 때마다 재원 시작 — 사용자 결정). pageHref·필터바 buildHref 디폴트 생략 로직 동기화, 엑셀 export는 화면과 동일 status 전달.
+
 ### 학부모 보고서 성적 추이 그래프 + ClassNote 발송 과목 게이트 (2026-07-10)
 - **성적 추이 그래프**(edutrix ReportPaper 이식): 순수 파서 [`report-trend.ts`](../src/features/onescreen/report-trend.ts)(시험 "n/m"·"N문제 중 M개"·과제 "%" → 0~100, Vitest) + 순수 SVG [`report-trend-graph.tsx`](../src/features/onescreen/components/report-trend-graph.tsx)(라이브러리 0 — ClassNote headless 스샷 호환, B5). `fetchReportTrendRows`로 `/r`(service_role→tenantId 격리)·`/print`(RLS) 배선, `parent-report-card` '성적 추이' 섹션. 설정 토글 `showTrendGraph`(유효점 2개 미만 자동 숨김). 실데이터 그래프조건 150그룹.
 - **ClassNote 발송 과목 게이트**: `report.classnoteSubjects`(명시 opt-in, 빈=아무것도 발송 안 함) + `isClassnoteSubjectEnabled`(null=레거시 math). `saveAndQueueClassnote`(신규)·`retryClassnote`(재발송) 공용 게이트 → 허용 과목 아니면 차단. report-section 발송 과목 체크칩(useSubjectMaps 단일소스, 하드코딩 금지). ⚠️ 실발송은 원장이 발송 과목을 `math`로 켜야 시작(기본 빈).

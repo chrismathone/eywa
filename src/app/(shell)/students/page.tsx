@@ -1,4 +1,4 @@
-import { UserCheck, UserMinus, UserPlus, Users, type LucideIcon } from "lucide-react";
+import { Users } from "lucide-react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
   getStudentsPage,
-  getStudentStatusCounts,
+  getEnrolledStatCounts,
   getTeacherOptions,
   type StudentSort,
   type SearchField,
@@ -22,6 +22,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentImportDialog } from "./_components/student-import-dialog";
 import { StudentFilterBar } from "./_components/student-filter-bar";
+import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 
 export const metadata = { title: "학생목록 — eywa" };
 
@@ -50,7 +51,8 @@ export default async function StudentsPage({
 }) {
   await requireAccess("students");
   const sp = await searchParams;
-  const status = sp.status ?? "all";
+  // 상태 필터 디폴트 = 재원(운영에서 당장 중요한 건 재원생). "전체"는 명시적 status=all로만.
+  const status = sp.status ?? "enrolled";
   const subject = sp.subject ?? "all";
   const q = sp.q ?? "";
   // 고급 필터
@@ -68,11 +70,11 @@ export default async function StudentsPage({
       page,
       PAGE_SIZE,
     ),
-    getStudentStatusCounts(),
+    getEnrolledStatCounts(),
     getTeacherOptions(),
     getTenantSettings(),
   ]);
-  const { all, enrolled, prospect, withdrawn } = counts;
+  const { enrolled, bySubject } = counts;
   // 과목·학년 필터·라벨·색은 학원설정(operations) 단일 소스 — 미등록 값은 드롭다운에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const gradeFilters = [
@@ -103,7 +105,8 @@ export default async function StudentsPage({
   // 페이지 이동 링크 — 현재 필터(고급 포함) 유지 + page 지정 (필터 변경은 page 미포함이라 자동 1페이지)
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
-    if (status !== "all") params.set("status", status);
+    // 디폴트(재원)만 생략 — "전체"는 status=all을 명시해야 유지된다(무param=재원).
+    if (status !== "enrolled") params.set("status", status);
     if (subject !== "all") params.set("subject", subject);
     if (q) params.set("q", q);
     for (const [k, v] of Object.entries(advParams)) params.set(k, v);
@@ -115,13 +118,20 @@ export default async function StudentsPage({
   return (
     <div className="space-y-4">
       <MakeeduSyncBadge domain="students" />
-      {/* Stat strip */}
-      <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체" value={all} unit="명" color="primary" icon={Users} />
-        <Stat label="재원" value={enrolled} unit="명" color="primary" icon={UserCheck} />
-        <Stat label="예비·상담" value={prospect} unit="명" color="gold" icon={UserPlus} />
-        <Stat label="퇴원" value={withdrawn} unit="명" color="neutral" icon={UserMinus} />
-      </section>
+      {/* 히어로 카드 — 재원 총원 + 과목별 재원생 비중(전체/퇴원은 상태 필터로). 과목이 늘어도 카드 1장 고정.
+          재원생 0명 과목은 숨김(미운영 과목 노이즈 방지), 인원 내림차순. */}
+      <EnrolledStatCard
+        enrolled={enrolled}
+        subjects={subjects.options
+          .map((s) => ({
+            key: s.value,
+            label: s.label,
+            color: subjects.colorOf(s.value),
+            count: bySubject[s.value] ?? 0,
+          }))
+          .filter((s) => s.count > 0)
+          .sort((a, b) => b.count - a.count)}
+      />
 
       {/* 필터바 — 전부 드롭다운(칩 나열 X) 한 줄, 좁은 창에선 2줄. 수업목록 ClassFilterBar와 동일 패러다임. */}
       <StudentFilterBar
@@ -239,37 +249,3 @@ export default async function StudentsPage({
   );
 }
 
-function Stat({
-  label,
-  value,
-  unit,
-  color,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  unit: string;
-  color: "primary" | "gold" | "blue" | "neutral";
-  icon: LucideIcon;
-}) {
-  const ICON_BG: Record<typeof color, string> = {
-    primary: "bg-primary-soft text-primary",
-    gold: "bg-gold-soft text-gold",
-    blue: "bg-blue-soft text-blue",
-    neutral: "bg-bg-soft text-text-dim",
-  };
-  return (
-    <div className="bg-card border-line shadow-card rounded-md border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
-        </span>
-      </header>
-      <p className="mt-2 flex items-baseline gap-1">
-        <span className="tabular text-foreground text-[28px] leading-none">{value}</span>
-        <span className="text-text-dim text-xs">{unit}</span>
-      </p>
-    </div>
-  );
-}

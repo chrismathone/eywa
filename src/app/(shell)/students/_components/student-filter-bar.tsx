@@ -6,7 +6,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 
 export type StudentFilterState = {
-  status: string; // all | enrolled | consulted | on_hold | withdrawn
+  status: string; // enrolled(디폴트) | all | consulted | on_hold | withdrawn — 무param=재원
   subject: string; // all | math | highmath | english | korean | science | arts
   grade: string; // all | 초1 … 고3
   teacher: string; // all | uuid
@@ -18,9 +18,10 @@ export type StudentFilterState = {
 
 type Teacher = { value: string; label: string };
 
+// 디폴트(재원)를 맨 앞에 — "전체"는 명시적으로 골라야 나온다.
 const STATUS_FILTERS = [
-  { value: "all", label: "전체" },
   { value: "enrolled", label: "재원" },
+  { value: "all", label: "전체" },
   { value: "consulted", label: "예비·상담" },
   { value: "on_hold", label: "휴원" },
   { value: "withdrawn", label: "퇴원" },
@@ -45,7 +46,8 @@ const SORT_FILTERS = [
 function buildHref(c: StudentFilterState, patch: Partial<StudentFilterState>): string {
   const n = { ...c, ...patch };
   const p = new URLSearchParams();
-  if (n.status !== "all") p.set("status", n.status);
+  // 디폴트(재원)만 생략 — "전체"는 status=all 명시(서버가 무param을 재원으로 해석).
+  if (n.status !== "enrolled") p.set("status", n.status);
   if (n.subject !== "all") p.set("subject", n.subject);
   if (n.grade !== "all") p.set("grade", n.grade);
   if (n.teacher !== "all") p.set("teacher", n.teacher);
@@ -62,7 +64,7 @@ const STORAGE_KEY = "eywa-students-filters";
 
 function isDefault(c: StudentFilterState): boolean {
   return (
-    c.status === "all" &&
+    c.status === "enrolled" &&
     c.subject === "all" &&
     c.grade === "all" &&
     c.teacher === "all" &&
@@ -224,9 +226,9 @@ function FilterGroup({ label, children }: { label: string; children: React.React
   );
 }
 
+// ⚠️ status는 저장·복원 대상이 아님 — "필터 디폴트는 항상 재원"(열 때마다 재원 시작, URL로만 변경).
 function serialize(c: StudentFilterState): string {
   return JSON.stringify({
-    status: c.status,
     subject: c.subject,
     grade: c.grade,
     teacher: c.teacher,
@@ -240,7 +242,7 @@ function deserialize(raw: string): StudentFilterState | null {
   try {
     const s = JSON.parse(raw) as Partial<StudentFilterState>;
     return {
-      status: typeof s.status === "string" ? s.status : "all",
+      status: "enrolled", // 복원 대상 아님 — 항상 재원 디폴트
       subject: typeof s.subject === "string" ? s.subject : "all",
       grade: typeof s.grade === "string" ? s.grade : "all",
       teacher: typeof s.teacher === "string" ? s.teacher : "all",

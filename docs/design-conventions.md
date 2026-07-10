@@ -384,7 +384,7 @@
     + `.select(cols, { count: "exact" })`. **필터는 가능한 한 SQL로** (eq/gte/ilike/or). 조인 컬럼
     검색은 별도 id 해석 후 `.or("base.ilike.%q%,fk.in.(ids)")` (상담 학생명 검색 참고).
   - **Stat 카드용 경량 집계** — 행을 fetch하지 말고 `.select("*", { count:"exact", head:true })`로 count만
-    (학생 `getStudentStatusCounts`, 상담 `getStudentConsultationCounts`). 카드는 페이지가 아니라 **전체**
+    (학생 `getEnrolledStatCounts`, 상담 `getStudentConsultationCounts`). 카드는 페이지가 아니라 **전체**
     기준이어야 하므로 페이지 rows에서 도출 금지.
   - 월 단위처럼 모집단이 이미 작으면(수납 ~400행/월) **한 번만 fetch 후 메모리에서 검색·슬라이스**해도
     됨(수납 `summarizeInvoices` + `filtered.slice`). 이중 fetch만 피하면 됨.

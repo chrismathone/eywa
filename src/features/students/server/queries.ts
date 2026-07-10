@@ -194,35 +194,60 @@ export async function getStudentsList(
 }
 
 /**
- * Stat 표시용 상태별 카운트 — SQL `count(exact, head)` 4개 병렬. 전건 row를 끌어와 JS로 세던 것을
- * 교체(#P2: docstring은 "전체 fetch 회피"였지만 구현은 정반대였고, 1000행 초과 시 무음 과소집계).
+ * Stat 표시용 카운트 — 재원생 수 + 재원생의 과목별 distinct 학생 수(운영 관점: 전체/퇴원 아님).
+ * 재원 수는 `count(exact, head)`(행 안 받음). 과목별은 distinct 학생이라 PostgREST count로 불가 →
+ * 재원생의 활성 수강(휴원 제외)만 `fetchAllPaged` 전건 수집 후 JS distinct(B2 "전건 필요" 경로).
+ * 과목별 수 = status=enrolled ∧ 그 과목 반 활성 수강(end_date null, on_hold false) — 재원+과목 필터 결과와 일치.
  */
-export async function getStudentStatusCounts(): Promise<{
-  all: number;
+export async function getEnrolledStatCounts(): Promise<{
   enrolled: number;
-  prospect: number;
-  withdrawn: number;
+  bySubject: Record<string, number>;
 }> {
   const supabase = await createClient();
   // 강사 스코프: Stat 카드도 본인 담당 학생 기준(페이지 목록과 일치). teacher 또는 겸직-강사뷰.
   const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0)
-    return { all: 0, enrolled: 0, prospect: 0, withdrawn: 0 };
-  const base = () => {
-    const q = supabase.from("students").select("*", { count: "exact", head: true });
+    return { enrolled: 0, bySubject: {} };
+  const scope = teacherStudentIds ? new Set(teacherStudentIds) : null;
+
+  const enrolledCountQ = () => {
+    const q = supabase
+      .from("students")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "enrolled");
     return teacherStudentIds ? q.in("id", teacherStudentIds) : q;
   };
-  const [all, enrolled, prospect, withdrawn] = await Promise.all([
-    base(),
-    base().eq("status", "enrolled"),
-    base().in("status", ["prospect", "consulted"]),
-    base().eq("status", "withdrawn"),
+  const [{ count }, ens] = await Promise.all([
+    enrolledCountQ(),
+    fetchAllPaged<{
+      student_id: string;
+      class: { subject?: string } | { subject?: string }[] | null;
+    }>((from, to) =>
+      supabase
+        .from("enrollments")
+        .select("student_id, class:class_id!inner ( subject ), student:student_id!inner ( status )")
+        .is("end_date", null)
+        .eq("on_hold", false)
+        .eq("student.status", "enrolled")
+        .range(from, to),
+    ),
   ]);
+
+  // 과목별 distinct 학생 — 강사 스코프는 JS로 교차(.in() 414 회피).
+  const bySubject = new Map<string, Set<string>>();
+  for (const e of ens) {
+    if (scope && !scope.has(e.student_id)) continue;
+    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
+      | { subject?: string }
+      | undefined;
+    if (!klass?.subject) continue;
+    const set = bySubject.get(klass.subject) ?? new Set<string>();
+    set.add(e.student_id);
+    bySubject.set(klass.subject, set);
+  }
   return {
-    all: all.count ?? 0,
-    enrolled: enrolled.count ?? 0,
-    prospect: prospect.count ?? 0,
-    withdrawn: withdrawn.count ?? 0,
+    enrolled: count ?? 0,
+    bySubject: Object.fromEntries([...bySubject].map(([k, v]) => [k, v.size])),
   };
 }
 
