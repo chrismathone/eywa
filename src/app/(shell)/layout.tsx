@@ -41,7 +41,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     return (
       <EmbedProvider embed>
         <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
-          <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+          <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {children}
           </main>
@@ -111,7 +111,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             />
           </div>
         </header>
-        <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+        <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
           {/* 미니멀 셸엔 WorkspaceCanvas가 없다 → WindowLink/새폼이 창을 열지 않고 드릴인(일반 네비)하게 false. */}
           <WorkspaceEnabledProvider enabled={false}>
             <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
@@ -158,7 +158,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <HideInFrame>
           <AppHeader brand={brand} />
         </HideInFrame>
-        <main className="flex-1 overflow-auto px-3 py-4 lg:px-6 lg:py-5 [scrollbar-gutter:stable]">
+        <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
           <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
             {children}
           </OperationsProvider></EditPresenceProvider>

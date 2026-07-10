@@ -9,6 +9,11 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 저장 바 밀착·정렬 + 작성률 예외강사 후보 = 활성 직원만 (2026-07-10 후속) — ✅ tsc0
+원장 UI 폴리시 2건:
+- **저장 바(FormActionBar) 밀착·무점프·사이드바 정렬**: `sticky bottom-0`이 스크롤 컨테이너(`<main>`)의 **콘텐츠 박스 하단**에만 붙어, main의 `padding-bottom(20px)` 때문에 ① 바가 바닥에서 20px 떠 보이고 ② 그 틈으로 본문(칩)이 지나가 보이며 ③ 맨아래 스크롤 시 자연위치로 점프 ④ 좌측 사이드바 푸터 구분선과 어긋났다. → shell `main` 3곳(풀셸·미니셸·임베드)을 `py-4 lg:py-5` → **`pt-4 lg:pt-5`(하단 패딩 제거)**로 바꿔 진짜 바닥에 밀착(고정=자연 끝 위치라 점프0, top border가 사이드바 구분선과 정렬). [form-action-bar](../src/components/forms/form-action-bar.tsx)는 반투명+blur·`after:`밴드·음수margin 전부 제거하고 순수 불투명 `sticky bottom-0`. ⚠️ 실패한 시도 문서화: 음수 margin은 sticky 클램프 못 옮김, `after:` 밴드는 절대배치라도 스크롤 오버플로를 늘려 **점프 유발**.
+- **작성률 예외강사 후보 = 활성 직원(users)만**: 후보 이름이 `class_schedules` 라벨(영어 슬롯 닉네임·보조T·부원장·LAB 등 비직원 + 퇴사자 포함)에서 와서 오염됐음. 신규 [getReportTeacherCandidates](../src/features/report-admin/server/queries.ts)가 `getTeacherLabelsBySubject`를 **`users.status≠inactive`(=직원 목록/staff와 동일 기준)로 필터** + `staffNames` 반환. [report-section](<../src/app/(shell)/owner/_components/report-section.tsx>)은 orphan·집계 카운트도 `staffNames`로 좁혀 비직원·퇴사자 이름이 어디에도 안 보이게. 실데이터: 저장된 예외 29명 → 활성 직원 13명만 노출(부원장·LAB·Charlie·Ellen·Zoe 등 16 제거). 소비처 = /lesson-reports report 탭(유일 렌더처).
+
 ### 수업보고서 — 보고서 설정 2탭 이관 + 퇴사자 작성률 자동 제외 + 목록 시각·큐 진행중 (2026-07-10) — ✅ tsc0/lint0
 죽은 세션(dffd7f3d) 마지막 지시 이어받기 + 원장 후속 요청. 4건:
 - **퇴사자 작성률 자동 예외**: [getWeeklyWritingRates](../src/features/report-admin/server/queries.ts)가 `users.status='inactive'`(=퇴사) display_name을 예외 집합에 자동 병합(Promise.all 5번째 조회, RLS 테넌트) → 수동 등록 없이 주간 기록·오늘 대상 모두에서 제외. [report-section](<../src/app/(shell)/owner/_components/report-section.tsx>) 예외강사 카드에 "퇴사(비활성)는 자동 제외" 안내. ⚠️ 무한 반복만 요구하는 재큐잉은 dry-run 분기뿐(실발송 실패는 3회 후 failed 확정)이라, `--post` 없는 워커는 대기↔처리중 무한순환(+INTERNAL_SECRET 없으면 열람수 오염).

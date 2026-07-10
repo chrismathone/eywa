@@ -128,8 +128,11 @@
 창(iframe)으로 열리는 **데이터 입력 폼**(생성/수정)은 저장 버튼이 폼 맨 아래에 있어 긴 폼일수록 스크롤해야 눌렀다(사용자
 제보: "위치가 다 제각각"). **모든 창 폼의 저장 액션은 우하단에 sticky로 고정**해 스크롤 위치와 무관하게 항상 보이고,
 같은 위치라 창마다 헷갈리지 않는다. + **작성 중(dirty)인 폼의 창을 닫으면(X/Esc) "저장하지 않고 닫을까요?" 확인**.
-- **저장 바** = [`<FormActionBar>`](src/components/forms/form-action-bar.tsx)(sticky bottom-0 z-20, 우측정렬 backdrop-blur).
-  폼의 제출 버튼(들)을 이 바로 감싼다. 손깎은 `justify-end border-t pt-N` footer는 이걸로 교체. 1·2차 버튼은 위 "버튼 크기" 규칙대로 바 안에.
+- **저장 바** = [`<FormActionBar>`](src/components/forms/form-action-bar.tsx)(sticky bottom-0 z-20, 우측정렬,
+  **완전 불투명 `bg-background`** + 상단 헤어라인·미세 그림자). 폼의 제출 버튼(들)을 이 바로 감싼다. 손깎은 `justify-end border-t pt-N` footer는 이걸로 교체. 1·2차 버튼은 위 "버튼 크기" 규칙대로 바 안에.
+  · ⚠️ **반투명+backdrop-blur 금지**(2026-07-10 사용자 제보): 스크롤되는 본문(칩·카드)이 바 뒤로 그대로 비쳐 지저분 — 초기 구현이 `bg-background/70 blur`였다가 불투명으로 교정.
+  · ⚠️ **스크롤 컨테이너(main)에 하단 패딩 금지 — 바를 진짜 바닥에 밀착**(2026-07-10 후속): `sticky bottom-0`은 스크롤포트의 **콘텐츠 박스 하단**에 붙는다. shell `main`이 `pb`를 가지면 바가 그만큼(≈20px) 떠 보이고, 그 틈으로 본문이 지나가며("저장 아래로 배경이 지나감"), 좌측 사이드바 푸터 구분선과 높이도 어긋나고, 맨아래 스크롤 시 "고정→자연위치"로 점프한다. → shell `main` 3곳을 **`pt-4 lg:pt-5`(하단 패딩 제거)**로 바꿔 밀착·정렬·무점프 동시 해결(고정 위치=자연 끝 위치). 하단 여백은 스크롤 본문엔 불필요.
+  · ⚠️ **하지 말 것(실패한 시도)**: 음수 margin-bottom은 sticky 클램프를 못 옮긴다. 바 밑을 `after:` 불투명 밴드로 덮는 것은 절대배치라도 **스크롤 오버플로를 늘려 오히려 맨아래 점프를 유발**한다. 정답은 오직 main의 하단 패딩 제거.
 - **미저장 닫기 가드** = [`useUnsavedGuard({ formRef, enabled? })`](src/components/workspace/use-unsaved-guard.ts) → `{ markSaved }`.
   · **전달 = iframe→부모 postMessage**(`eywa-window-dirty`) — winId를 경로로 추측하지 않고 부모([workspace-canvas](src/components/workspace/workspace-canvas.tsx))가
     `event.source`(=이 iframe의 contentWindow)를 iframeRegistry와 대조해 **정확한 창**을 찾는다(드릴인·복제창·새 창 안전). [[#69]]

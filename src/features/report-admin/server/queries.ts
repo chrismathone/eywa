@@ -13,6 +13,36 @@ function daysBefore(ymd: string, n: number): string {
   return new Date(Date.parse(`${ymd}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
 }
 
+/**
+ * 작성률 예외 강사 후보 — class_schedules에서 모은 강사 라벨(getTeacherLabelsBySubject)을 **활성 직원 목록
+ * (users.status≠inactive = /staff에 보이는 사람)으로 필터**해 반환한다. 영어 슬롯 닉네임(Dom·Ellen…)·보조T·
+ * 부원장·LAB 같은 users에 없는 자유입력 라벨과 퇴사(inactive) 직원은 후보에서 뺀다 — 예외 지정은 실재 직원에게만
+ * 의미가 있고, 퇴사자는 이미 작성률에서 자동 제외되기 때문(getWeeklyWritingRates). staffNames는 report-section이
+ * orphan(설정에만 남은 예외 이름)도 활성 직원으로 좁히는 데 쓴다(비직원 이름이 orphan으로 몰리는 것 방지).
+ */
+export async function getReportTeacherCandidates(): Promise<{
+  bySubject: Record<string, string[]>;
+  staffNames: string[];
+}> {
+  const supabase = await createClient();
+  // users는 단일 테넌트 직원 표라 ≤ 수십 행 — 무페이징 select 안전(B2 규칙 예외, getStaffList와 동일 패턴).
+  const [labels, staffRes] = await Promise.all([
+    getTeacherLabelsBySubject(),
+    supabase.from("users").select("display_name").neq("status", "inactive"),
+  ]);
+  const staffSet = new Set(
+    (staffRes.data ?? [])
+      .map((u) => (u.display_name as string | null)?.trim())
+      .filter((n): n is string => !!n),
+  );
+  const bySubject: Record<string, string[]> = {};
+  for (const [subject, names] of Object.entries(labels)) {
+    const filtered = names.filter((n) => staffSet.has(n));
+    if (filtered.length > 0) bySubject[subject] = filtered;
+  }
+  return { bySubject, staffNames: [...staffSet] };
+}
+
 export type QueueItem = {
   id: string;
   studentName: string;

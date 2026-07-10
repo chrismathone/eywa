@@ -14,10 +14,13 @@ import { TextField, ToggleField } from "./fields";
 export function ReportSection({
   initial,
   teachers = {},
+  staffNames = [],
 }: {
   initial: ReportSettings;
-  /** 과목별 강사 라벨(작성률 예외 강사 칩 선택지) — getTeacherLabelsBySubject. */
+  /** 과목별 강사 라벨(작성률 예외 강사 칩 선택지) — 활성 직원으로 이미 필터됨(getReportTeacherCandidates). */
   teachers?: Record<string, string[]>;
+  /** 활성 직원(users status≠inactive) 표시 이름 — orphan·집계 카운트를 실재 직원으로 좁히는 데 사용. */
+  staffNames?: string[];
 }) {
   const [r, setR] = useState<ReportSettings>(initial);
   const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
@@ -48,9 +51,15 @@ export function ReportSection({
       (k) => !subjects.options.some((o) => o.value === k) && (teachers[k] ?? []).length > 0,
     ),
   ];
-  // 저장돼 있지만 현재 반 담당 목록에 없는 이름(퇴사 등) — 해제할 수 있게 별도 노출.
+  // 저장돼 있지만 현재 반 담당 목록에 없는 이름 — 해제할 수 있게 별도 노출. 단 **활성 직원만**(staffSet):
+  // 비직원 라벨(영어 닉네임·보조T 등)·퇴사자가 예외로 남아 있어도 orphan에 몰리지 않게 숨긴다(직원 목록 기준).
+  // staffNames 미전달(빈 배열)이면 필터 안 함(하위호환) — 실사용 소비처(lesson-reports)는 항상 전달.
+  const staffSet = staffNames.length > 0 ? new Set(staffNames) : null;
+  const inStaff = (n: string) => staffSet === null || staffSet.has(n);
   const knownNames = new Set(Object.values(teachers).flat());
-  const orphanExempt = r.writingExemptTeachers.filter((n) => !knownNames.has(n));
+  const orphanExempt = r.writingExemptTeachers.filter((n) => !knownNames.has(n) && inStaff(n));
+  // 집계 카운트도 화면에 보이는(직원) 예외만 — 숨긴 비직원 이름까지 세면 "N명" 과 칩 수가 안 맞아 혼란.
+  const visibleExemptCount = r.writingExemptTeachers.filter(inStaff).length;
 
   return (
     <SectionForm section="report" payload={r}>
@@ -290,8 +299,8 @@ export function ReportSection({
               </div>
             </div>
           ) : null}
-          {r.writingExemptTeachers.length > 0 ? (
-            <p className="text-text-faint mt-3 text-[12px]">작성률 집계 제외 중: {r.writingExemptTeachers.length}명</p>
+          {visibleExemptCount > 0 ? (
+            <p className="text-text-faint mt-3 text-[12px]">작성률 집계 제외 중: {visibleExemptCount}명</p>
           ) : null}
         </SettingsCard>
         </div>

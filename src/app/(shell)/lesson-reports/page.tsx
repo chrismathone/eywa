@@ -1,11 +1,10 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { FaceTabs, type Face } from "@/components/face-tabs";
-import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates } from "@/features/report-admin/server/queries";
+import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
 import { listReports } from "@/features/report-admin/server/actions";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
@@ -62,9 +61,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       : tab === "unmapped"
         ? getEdutrixUnmapped().then((edutrixMap) => ({ edutrixMap }))
         : tab === "report"
-          ? Promise.all([getTenantSettings(), getTeacherLabelsBySubject()]).then(([settings, teachers]) => ({
+          ? Promise.all([getTenantSettings(), getReportTeacherCandidates()]).then(([settings, cand]) => ({
               reportSettings: settings.report,
-              teachers,
+              teachers: cand.bySubject,
+              staffNames: cand.staffNames,
             }))
           : tab === "ai_ment"
             ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
@@ -116,7 +116,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "report" && "reportSettings" in tabData ? (
-        <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers} />
+        <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers} staffNames={tabData.staffNames} />
       ) : null}
 
       {tab === "ai_ment" && "aiPrompts" in tabData ? <AiMentSection initial={tabData.aiPrompts} /> : null}
