@@ -9,12 +9,25 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수업보고서 — 제목 교정 + 강사별 작성률 과목 분류 + 작성률 예외 강사 설정 (2026-07-10)
+- **상단 제목**: 페이지 헤더가 eyebrow=수업보고서/h1=보고서 발송 관리로 뒤집혀 있던 것 스왑 → **h1=수업보고서**(사용자 지적).
+- **강사별 작성률 과목 분류**: [writing-rate-card](../src/app/(shell)/lesson-reports/_components/writing-rate-card.tsx)가
+  클라 컴포넌트로 전환, **[전체/과목] 칩**(useSubjectMaps — 승인 과목 중 데이터 등장 과목만). 태깅은
+  `getTeacherLabelsBySubject` 역인덱스(반 담당·슬롯 라벨 기준, `TeacherRateRow.subjects`) — lesson_reports.subject가
+  거의 전부 null이라 반 기준이 정답. 미태깅 강사(예: "(미지정)")는 전체에서만. 쿼리 4조회 Promise.all 병렬화(B4).
+- **작성률 예외 강사(설정 5단계 배선)**: `report.writingExemptTeachers`(표시 이름 배열) 신설 — 스키마+기본값+
+  폼([report-section](../src/app/(shell)/owner/_components/report-section.tsx) '작성률 예외 강사' 카드, 과목별 강사 칩
+  토글+퇴사 잔존 이름 해제 UI) + 소비처(`getWeeklyWritingRates`가 주간 기록·오늘 대상 모두 제외). owner 페이지가
+  report 탭에도 `getTeacherLabelsBySubject` 전달. 라이브 검증: 허은진 예외 저장→표 23→22행→원복(DB `[]`).
+  ⚠️ 새 Zod 필드라 dev 서버 재시작 후 검증(#73).
+
 ### Edutrix 완전 종료 대비 데이터 전체 이전 — lesson_reports 풀 이력 + 원본 아카이브 (2026-07-10) — ✅ 프로덕션 적용·검증
 원장 결정("유지할 것들 다 이전해서 Edutrix 완전히 끄자, Vercel 링크 사망 수용"). 스크립트 = [scripts/_edutrix_retire/](../scripts/_edutrix_retire/), 소등 순서는 [docs/classnote-integration.md](classnote-integration.md) **§10 체크리스트**.
 - **운영 반영**(`full-import-reports.cjs`, 멱등): lesson_reports 이관분 3,456 → **16,694행 풀 이력**(UUID 매핑 299명=원본 98.9%, 미매핑 189는 아카이브만). 리치 필드 신규 매핑: textbook_name→textbook 15,998 · **notice(AI 학부모 멘트)→notes 10,493** · study_attitude→attitude 5,098 · makeup_class→makeup 142 · **classnote_sent_at→status='success' 11,881**(원장 화면 "이관=미발송" 오인 근본 해소). 삭제 없음(2-pass UPDATE temp-join + INSERT, progress_entries FK 안전), 벌크 중 활동로그 트리거 off(선례).
 - **아카이브**(`archive-edutrix.cjs` + 0095a `edutrix_archive`, RLS 정책 0=service_role 전용): 원본 9테이블 **23,339행 raw 무손실**(reports 16,877 전량·en_reports 23·로스터·프로필·발송로그 4,145·열람이력 1,058 — service key라야 보이는 테이블 포함) + 로컬 `data/edutrix-archive/*.jsonl`. 자격증명 필드(`classnote_login_pw`·`profile_token`) 제거 후 적재.
 - 검증: 중복 edutrix_report_id 0 · 김준영 12→66건 · **/r 실렌더에서 빈칸이던 '학부모 전달 내용'에 Edutrix 발송 멘트 복원** · 추이 그래프(최근 10 limit)·진도 탭(12 limit) 무회귀 · 학원이 테스트 행 불변 · 최근 3일 status 행 221(큐 카드 1000 limit 여유).
 - ⚠️ 소등 순서 핵심: Vercel·Supabase는 최종 full-import 재실행(멱등) 후 꺼도 됨. **Firebase(Cloud Run 함수)는 마지막** — 워커에 게시 로직 내장(옵션 B, 권장) 완료 전 삭제 금지.
+- **후속(같은 날, "vercel cron은 안 되나?"): [edutrix-sync cron](../src/app/api/cron/edutrix-sync/route.ts) 승격** — 신규 행 리치 필드 적재 + 윈도 내 **수정 전파**(diff 후 변경분만 UPDATE, 상한 300·maxDuration 60) + 발송 사실 승격(sent_at→success, 다운그레이드 금지). full-import와 필드 동형(`contentOf`). 실검증: 401 게이트·멱등(updated 0)·**교란-복원 E2E**(textbook/attitude null 교란 → cron updated:1 → 원본값 복원). 소등 날 수동 = archive-edutrix.cjs 재실행 한 줄만.
 
 ### ClassNote 구조 전수 분석 + 연동 PC 첫 실발송 E2E(env 오타 적발·수정 패키지) + 심층 문서 (2026-07-10)
 사용자 요청("classnote 구조도 파악" → "학원이로 실발송" → "문서로 남겨라"). 상세는 **[docs/classnote-integration.md](classnote-integration.md) 단일 참조 문서**(구조·운영·트러블슈팅·검증 이력) — ClassNote를 만질 땐 그 문서부터.

@@ -225,7 +225,10 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 
 ### 소등 순서 (의존 역순 — 위부터)
 1. **강사 작성 eywa 전환 + Edutrix 발송 봇 종료**(봇 PC) → 며칠 안정화.
-2. **full-import 마지막 실행**(멱등) → 최종 스냅샷 흡수. archive도 재실행(멱등 upsert).
+2. ~~full-import 마지막 실행~~ → **✅ 자동화됨(2026-07-10)**: `/api/cron/edutrix-sync`를 리치 필드 +
+   윈도 내 **수정 전파**(diff 후 변경분만 UPDATE, 상한 300)로 승격 — full-import와 필드 동형이라 매일
+   새벽 cron이 신규·수정분을 완결 상태로 유지(교란-복원 E2E 검증: updated:1 → 원본값 복원).
+   소등 날 수동 작업 = **archive-edutrix.cjs 재실행 한 줄만**(원본 raw 최종 스냅샷).
 3. **Edutrix Vercel 종료** — 앱·cron(학생 이름 미러 포함) 소멸. `/share` 옛 링크 사망 = 수용(원장 승인,
    이미지는 ClassNote 게시물에 박제). eywa 측 부수 정리: `/api/cron/edutrix-sync`가 원본 소실 후 500을
    내지 않는지 확인(Supabase가 살아있는 동안은 무해) — Supabase 소등과 함께 vercel.json에서 cron 제거.
