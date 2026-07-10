@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ExternalLink, FileSpreadsheet, Loader2, Sheet } from "lucide-react";
 import { TimetableImportDialog } from "./import-dialog";
-import { StructureImportDialog } from "./structure-import-dialog";
+import { EnglishImportDialog } from "./english-import-dialog";
 import { syncSheetsNow } from "@/features/integrations/server/actions";
 import { supportsTimetableImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
 import { useSubjectMaps } from "@/features/owner/operations-context";
@@ -32,10 +32,8 @@ export function TimetableToolbarActions({
   // 가져오기(수강편집 라운드트립 = 학생 반이동)는 math·english 둘 다(과목별 '수강편집' 시트). 파일·시트 두 경로 게이트.
   const canImport = supportsTimetableImport(subjectKey);
   // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
+  // 영어는 구조+반이동을 하나의 '시트에서 가져오기'(EnglishImportDialog)로 통합 → canStructureImport로 분기.
   const canStructureImport = supportsStructureImport(subjectKey);
-  // 영어는 '구조 가져오기'(강사별)와 '반이동 가져오기'(수강편집) 둘 다라 라벨을 구분(수학은 하나뿐 → 기본 라벨).
-  const enrollFileLabel = canStructureImport ? "반이동 가져오기" : undefined;
-  const enrollSheetLabel = canStructureImport ? "시트 반이동 가져오기" : undefined;
 
   function pushToSheet() {
     setSyncMsg(null);
@@ -59,7 +57,8 @@ export function TimetableToolbarActions({
           <FileSpreadsheet className="size-3" />
           엑셀
         </a>
-        {canImport ? <TimetableImportDialog subject={subjectKey} label={enrollFileLabel} /> : null}
+        {/* 파일 업로드 가져오기 = 수학 전용(영어는 구글시트 기반 → 아래 '시트에서 가져오기'로 통합). */}
+        {canImport && !canStructureImport ? <TimetableImportDialog subject={subjectKey} /> : null}
       </div>
 
       {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리(줄바꿈 시에도 그룹 단위 유지) */}
@@ -77,11 +76,10 @@ export function TimetableToolbarActions({
               시트 반영
             </button>
           ) : null}
-          {/* 구조 되읽기: 강사별 그리드 편집 → class_schedules 미리보기(원장 전용·english 전용). 반이동보다 먼저(배치 먼저). */}
-          {canSync && canStructureImport ? <StructureImportDialog subject={subjectKey} /> : null}
-          {/* 반이동 되읽기: '수강편집' 탭의 반 변경 → enrollment 미리보기→적용(원장 전용·math·english). */}
-          {canSync && canImport ? (
-            <TimetableImportDialog mode="sheet" subject={subjectKey} label={enrollSheetLabel} />
+          {/* 시트에서 가져오기 — 영어=구조(강사별)+반이동(수강편집) 통합 1버튼, 수학=반이동(수강편집)만. 원장 전용. */}
+          {canSync && canStructureImport ? <EnglishImportDialog subject={subjectKey} /> : null}
+          {canSync && canImport && !canStructureImport ? (
+            <TimetableImportDialog mode="sheet" subject={subjectKey} />
           ) : null}
           {sheetUrl ? (
             <a
