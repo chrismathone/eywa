@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guard";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField, ToggleField } from "./fields";
 
@@ -13,8 +14,13 @@ import { TextField, ToggleField } from "./fields";
 export function ReportSection({ initial }: { initial: ReportSettings }) {
   const [r, setR] = useState<ReportSettings>(initial);
   const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
-  // 발송 허용 과목 체크박스 — 학원 운영 과목(클라 단일 소스, 하드코딩 금지). 체크된 과목만 발송.
+  // 발송 허용 과목 체크박스 — 학원 운영 과목(클라 단일 소스, 하드코딩 금지) 중 **발송 가능 과목만** 노출.
+  // ClassNote 실보드 관례가 (수학)/(영어) 학생모드뿐이라, 매핑 없는 과목을 켜면 (수학) 보드 오게시로
+  // 직결됐음(P0-3) — 화이트리스트(CLASSNOTE_SENDABLE_SUBJECTS) 밖 과목은 칩 자체를 안 보여준다.
   const subjects = useSubjectMaps();
+  const sendableOptions = subjects.options.filter((o) =>
+    (CLASSNOTE_SENDABLE_SUBJECTS as readonly string[]).includes(o.value),
+  );
   const toggleSubject = (key: string) =>
     set({
       classnoteSubjects: r.classnoteSubjects.includes(key)
@@ -53,13 +59,13 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
           <p className="text-text-dim mt-0.5 text-[12px]">
             체크한 과목만 학부모에게 발송됩니다. 아무것도 고르지 않으면 발송되지 않습니다.
           </p>
-          {subjects.options.length === 0 ? (
+          {sendableOptions.length === 0 ? (
             <p className="text-text-faint mt-2 text-[12px]">
-              등록된 과목이 없습니다 — 학원 운영 &gt; 과목에서 먼저 추가하세요.
+              발송 가능한 과목이 없습니다 — ClassNote 학생모드 보드가 있는 과목(수학·영어)만 발송할 수 있습니다.
             </p>
           ) : (
             <div className="mt-2 flex flex-wrap gap-2">
-              {subjects.options.map((o) => {
+              {sendableOptions.map((o) => {
                 const on = r.classnoteSubjects.includes(o.value);
                 return (
                   <button

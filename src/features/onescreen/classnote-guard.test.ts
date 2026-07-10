@@ -36,15 +36,24 @@ describe("isClassnoteSubjectEnabled (과목별 발송 게이트)", () => {
     expect(isClassnoteSubjectEnabled("math", ["math"])).toBe(true);
     expect(isClassnoteSubjectEnabled("english", ["math"])).toBe(false);
     expect(isClassnoteSubjectEnabled("math", ["math", "english"])).toBe(true);
+    expect(isClassnoteSubjectEnabled("subject_1", ["subject_1"])).toBe(true);
   });
   it("빈 목록 = 어떤 과목도 발송 안 함(명시 opt-in)", () => {
     expect(isClassnoteSubjectEnabled("math", [])).toBe(false);
     expect(isClassnoteSubjectEnabled("english", [])).toBe(false);
   });
-  it("레거시 subject=null/빈값은 math로 정규화", () => {
-    expect(isClassnoteSubjectEnabled(null, ["math"])).toBe(true);
-    expect(isClassnoteSubjectEnabled(undefined, ["math"])).toBe(true);
-    expect(isClassnoteSubjectEnabled("", ["math"])).toBe(true);
+  // P0-2(2026-07-10): 구버전은 null→math 정규화로 통과시켰음 — 이관/레거시 행이 math opt-in에
+  // 편승해 발송되는 벡터라 발송 경로에선 거부로 전환(조회용 정규화는 score-history 별도).
+  it("subject=null/빈값은 발송 거부(이관·레거시 편승 차단)", () => {
+    expect(isClassnoteSubjectEnabled(null, ["math"])).toBe(false);
+    expect(isClassnoteSubjectEnabled(undefined, ["math"])).toBe(false);
+    expect(isClassnoteSubjectEnabled("", ["math"])).toBe(false);
     expect(isClassnoteSubjectEnabled(null, ["english"])).toBe(false);
+  });
+  // P0-3(2026-07-10): 화이트리스트 밖 과목은 opt-in돼 있어도 거부 — 워커가 보드 라벨을 못 만들어
+  // 전부 "(수학)" 보드로 가던 오게시 구멍 차단.
+  it("발송 가능 화이트리스트 밖 과목은 opt-in돼도 거부", () => {
+    expect(isClassnoteSubjectEnabled("science", ["science"])).toBe(false);
+    expect(isClassnoteSubjectEnabled("subject_2", ["subject_2", "math"])).toBe(false);
   });
 });

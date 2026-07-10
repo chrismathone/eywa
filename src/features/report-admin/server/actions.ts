@@ -25,7 +25,17 @@ export async function retryClassnote(
   const supabase = await createClient();
 
   // 대상 보고서 날짜·과목 조회(과거일 + 과목 게이트 재확인). RLS 테넌트 스코프.
-  const { data: rows } = await supabase.from("lesson_reports").select("id, report_date, subject").in("id", ids.slice(0, 200));
+  // P0-1(2026-07-10 병행 발송 적대 검증): "재발송"은 발송 이력이 있는 행만 — classnote_status IS NULL
+  // (한 번도 큐에 안 오른 행)과 이관(edutrix_import, Edutrix가 이미 학부모에게 발송한 것)은 id를 직접
+  // 넘겨도 서버에서 거부. 이관 2,324건(윈도 내)이 큐에 오르는 과거 대량 오발송 재연 벡터 차단.
+  // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
+  const { data: rows } = await supabase
+    .from("lesson_reports")
+    .select("id, report_date, subject")
+    .in("id", ids.slice(0, 200))
+    .not("classnote_status", "is", null)
+    .neq("source", "edutrix_import")
+    .is("revoked_at", null);
   // 발송 안전 스위치·허용 과목 — allowed 계산 전에 설정 조회(과목 게이트에 필요).
   const settings = await getTenantSettings();
   const allowed = (rows ?? [])

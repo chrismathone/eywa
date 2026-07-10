@@ -116,7 +116,9 @@
 
 실발송 조건(신규 큐잉 기준) = 앱 스위치 `report.classnoteSendEnabled` ON × 워커 `--post`
 (run-classnote-worker.ps1에 하드코딩) × `CLASSNOTE_UPLOAD_ID/PW`. 발송 과목은
-`report.classnoteSubjects` **opt-in**(빈 목록 = 전부 차단, 현 운영 수학만).
+`report.classnoteSubjects` **opt-in**(빈 목록 = 전부 차단, 현 운영 수학만) — 단 opt-in해도
+**발송 가능 화이트리스트**(`CLASSNOTE_SENDABLE_SUBJECTS` = math·subject_1·english) 밖 과목과
+subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0-3).
 
 ⚠️ **스위치의 한계(구조 구멍)**: `classnoteSendEnabled` OFF는 **신규 큐 진입 2곳만** 막는다.
 이미 queued인 재고와 `resetStuckClassnote`(멈춤복구)는 스위치를 안 보고 워커가 그대로 실게시한다.
@@ -143,7 +145,7 @@
 3. **침묵 미발송** — 전송 버튼 못 찾아도 success(§4). 함수 수정 필요(edutrix repo).
 4. **신규생 보드 자동 생성 없음** — 수동 생성 or api/v1 승격 시 자동화.
 5. 좀비 queued(too_old 드리프트·revoked-while-queued)는 어떤 화면 주의 목록에도 안 잡힘.
-6. `retryClassnote`가 revoked_at 미확인 — 취소된 행 재발송 시 영구 대기 좀비화.
+6. ~~`retryClassnote`가 revoked_at 미확인~~ → **✅ 해소(2026-07-10 P0-1)**: 재발송 필터에 `revoked_at IS NULL` 포함.
 7. 워커 minDate는 PC 로컬 시간, 앱 가드는 KST — 연동 PC가 KST라 현재 무해하나 기준 이원화.
 
 ## 8. 과거 사고 (재발 방지 근거)
@@ -163,7 +165,15 @@
 > 두 번 안 간다"는 보장은 코드에 0줄** — 크로스시스템 중복확인·발송 멱등키 없음. 방어는 오직 운영 수칙.
 
 ### 전환(스위치 ON) 필수 순서
-1. **P0 코드픽스 3건 배포**(전부 난이도 하): ⓐ `retryClassnote`에 이관 행 방어필터(`.not('classnote_status','is',null)` 또는 source 필터 — 현재 서버액션에 필터가 없어 이관 2,324건(윈도 내)이 id 직접 호출로 큐잉 가능한 defense-in-depth 갭) ⓑ 발송 게이트에서 subject NULL 거부([classnote-guard.ts](../src/features/onescreen/classnote-guard.ts):33의 NULL→math 정규화가 발송 경로에선 이관 행을 과목 게이트 통과시킴 — 조회용 정규화는 유지) ⓒ `subjectLabel` 화이트리스트(math/english 외 발송 거부 — 현재는 **비수학 과목을 opt-in하면 그 보고서가 (수학) 보드로 오게시**되는 구멍).
+1. ~~**P0 코드픽스 3건 배포**~~ → **✅ 구현 완료(2026-07-10)**: ⓐ `retryClassnote` 방어필터 — 발송 이력 있는
+   행만(`classnote_status IS NOT NULL`) + 이관(`source='edutrix_import'`) 제외 + 취소(`revoked_at`) 제외
+   ([report-admin/server/actions.ts](../src/features/report-admin/server/actions.ts) — 실DB 검증: 이관 3행 배제·failed 1행만 통과)
+   ⓑ 발송 게이트 subject NULL/빈값 거부 + ⓒ **발송 가능 과목 화이트리스트** `CLASSNOTE_SENDABLE_SUBJECTS`
+   (math·subject_1→수학 보드, english→영어 보드 — [classnote-guard.ts](../src/features/onescreen/classnote-guard.ts), Vitest 10)
+   + 워커 `subjectLabel`도 동일 화이트리스트(매핑 없는 과목 = 즉시 failed + 명확 에러, boardClassName throw)
+   + 원장 발송 과목 칩을 화이트리스트 과목만 노출(report-section.tsx).
+   ⚠️ **워커 파일(classnote-core.mjs)은 연동 PC 자기 복사본으로 실행** — 코드 배포와 별개로 zip 재전달 필요
+   (주소수정 zip에 동봉, 앱 측 게이트 ⓐⓑ는 Vercel 배포만으로 유효).
 2. **Edutrix 쪽 수학 발송 중지** — 발송은 Vercel cron이 아니라 **로컬 상주 봇**(classnote-bot-student.ts, 30초 폴)이 담당. 봇 PC에서 봇 종료(process-ai cron이 큐를 계속 채우므로 재가동 금지).
 3. eywa `classnoteSubjects=['math']` → `classnoteSendEnabled` ON → 첫날 소량 표본 육안 확인.
 

@@ -22,15 +22,23 @@ export function minDate() {
   return `${y}-${String(m).padStart(2, "0")}-01`;
 }
 
-/** subject(subjectKey) → ClassNote 과목 라벨. injaewon ClassNote는 학생모드 보드 `(과목)학생명` 사용(실게시 검증됨). */
+/**
+ * subject(subjectKey) → ClassNote 과목 라벨. injaewon ClassNote는 학생모드 보드 `(과목)학생명` 사용(실게시 검증됨).
+ * P0-3(2026-07-10): 화이트리스트 — math·subject_1(고등수학)→수학, english→영어, **그 외/불명 = null(발송 불가)**.
+ * 구버전은 else→"수학"이라 비수학 과목이 전부 (수학) 보드로 오게시될 수 있었음. 앱 게이트(classnote-guard.ts
+ * CLASSNOTE_SENDABLE_SUBJECTS)와 동일 목록 유지할 것. (영어 학생모드 보드 실존 = 2026-07-10 기관설정 실사.)
+ */
 export function subjectLabel(subject) {
   if (subject === "english") return "영어";
-  return "수학"; // math·subject_1(고등수학) → 수학. ⚠️ 영어/기타 보드 관례는 실게시로 추가 확인 필요.
+  if (subject === "math" || subject === "subject_1") return "수학";
+  return null;
 }
 
 /** ClassNote 보드 target(className) = 학생모드 `(과목)학생명`. 함수가 이 prefix로 학생모드 판정. */
 export function boardClassName(subject, studentName) {
-  return `(${subjectLabel(subject)})${studentName}`;
+  const label = subjectLabel(subject);
+  if (!label) throw new Error(`지원하지 않는 발송 과목(${subject ?? "없음"}) — ClassNote 보드 매핑 없음`);
+  return `(${label})${studentName}`;
 }
 
 /** CLASSNOTE_TENANT_ID env 우선, 없으면 단일 테넌트 자동 해석, 여럿이면 오발송 방지 위해 중단. */
@@ -84,6 +92,15 @@ export async function processQueueOnce(sql, browser, opts) {
     const [stu] = await sql`select name, classnote_name from students where id=${r.student_id} and tenant_id=${tenant}`;
     // ClassNote 보드명·원아 = 유효이름(classnote_name 오버라이드 || name). 동명이인은 오버라이드로 구분(0088a).
     const studentName = (stu?.classnote_name?.trim() || stu?.name || "").trim();
+    // P0-3: 보드 라벨이 없는 과목(비수학·비영어·subject null)은 재시도 무의미한 결정적 실패 — 즉시 failed.
+    if (!subjectLabel(r.subject)) {
+      await sql`update lesson_reports set classnote_status='failed',
+        classnote_error=${`지원하지 않는 발송 과목(${r.subject ?? "없음"}) — ClassNote 보드 매핑이 없어 발송 불가`}
+        where id=${r.id}`;
+      summary.failed++;
+      log(`  · ${studentName}: 과목 ${r.subject ?? "없음"} — 보드 매핑 없음 → failed`);
+      continue;
+    }
     try {
       // 스크린샷 (INTERNAL_SECRET 헤더 → /r이 조회로그 skip)
       const ctx = await browser.newContext({
