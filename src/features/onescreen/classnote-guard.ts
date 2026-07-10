@@ -19,3 +19,17 @@ export function isClassnoteAllowed(reportDate: string, todayKst: string = kstTod
   if (!reportDate) return false;
   return reportDate >= classnoteMinDate(todayKst);
 }
+
+/**
+ * 과목별 ClassNote 발송 허용 여부 — 학원설정 `report.classnoteSubjects`(발송 허용 과목 키 목록)에 든 과목만 발송.
+ * **명시 opt-in**: 목록이 비면(기본) 어떤 과목도 발송 안 함(수학만 쓰는 현 운영 + 오발송 안전장치 겸용).
+ * 레거시 임포트(subject=null)는 대부분 수학이라 'math'로 정규화해 판정(score-history·progress ingest와 동형).
+ * 순수 함수(Vitest). 큐 진입(saveAndQueueClassnote)·재발송(retryClassnote) 공용 게이트.
+ */
+export function isClassnoteSubjectEnabled(
+  subject: string | null | undefined,
+  allowed: readonly string[],
+): boolean {
+  const key = subject && subject.trim() ? subject : "math"; // null/빈값 = 레거시 수학
+  return allowed.includes(key);
+}

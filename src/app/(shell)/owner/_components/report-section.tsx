@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField, ToggleField } from "./fields";
 
@@ -12,6 +13,14 @@ import { TextField, ToggleField } from "./fields";
 export function ReportSection({ initial }: { initial: ReportSettings }) {
   const [r, setR] = useState<ReportSettings>(initial);
   const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
+  // 발송 허용 과목 체크박스 — 학원 운영 과목(클라 단일 소스, 하드코딩 금지). 체크된 과목만 발송.
+  const subjects = useSubjectMaps();
+  const toggleSubject = (key: string) =>
+    set({
+      classnoteSubjects: r.classnoteSubjects.includes(key)
+        ? r.classnoteSubjects.filter((k) => k !== key)
+        : [...r.classnoteSubjects, key],
+    });
 
   return (
     <SectionForm section="report" payload={r}>
@@ -37,6 +46,45 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
             안전을 위해 기본 꺼짐입니다. 실제 발송을 시작하려면 위 스위치를 켜세요(이관된 과거 보고서 오발송 방지).
           </p>
         ) : null}
+
+        {/* 발송 허용 과목 — 체크한 과목만 학부모에게 발송(현 운영=수학만). 빈 목록이면 아무것도 발송 안 함. */}
+        <div className="border-line mt-3 border-t pt-3">
+          <p className="text-foreground text-[13px] font-semibold">발송 과목</p>
+          <p className="text-text-dim mt-0.5 text-[12px]">
+            체크한 과목만 학부모에게 발송됩니다. 아무것도 고르지 않으면 발송되지 않습니다.
+          </p>
+          {subjects.options.length === 0 ? (
+            <p className="text-text-faint mt-2 text-[12px]">
+              등록된 과목이 없습니다 — 학원 운영 &gt; 과목에서 먼저 추가하세요.
+            </p>
+          ) : (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {subjects.options.map((o) => {
+                const on = r.classnoteSubjects.includes(o.value);
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => toggleSubject(o.value)}
+                    aria-pressed={on}
+                    className={`rounded-full border px-3 py-1 text-[13px] transition ${
+                      on
+                        ? "border-primary bg-primary/10 text-primary font-semibold"
+                        : "border-line text-text-dim hover:bg-bg-soft"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {r.classnoteSendEnabled && r.classnoteSubjects.length === 0 ? (
+            <p className="text-danger mt-2 text-[12px]">
+              ⚠️ 발송이 켜져 있지만 선택된 과목이 없어 실제로는 아무것도 발송되지 않습니다. 발송할 과목을 선택하세요.
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려
@@ -141,6 +189,7 @@ export function ReportSection({ initial }: { initial: ReportSettings }) {
                 ["수업 태도", "showAttitude"],
                 ["학부모 전달 내용", "showParentNote"],
                 ["학습 추세(종합분석)", "showTrendNote"],
+                ["성적 추이 그래프", "showTrendGraph"],
                 ["학생 사진 첨부", "showAttachments"],
               ] as const
             ).map(([label, key]) => (

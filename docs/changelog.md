@@ -9,6 +9,10 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학부모 보고서 성적 추이 그래프 + ClassNote 발송 과목 게이트 (2026-07-10)
+- **성적 추이 그래프**(edutrix ReportPaper 이식): 순수 파서 [`report-trend.ts`](../src/features/onescreen/report-trend.ts)(시험 "n/m"·"N문제 중 M개"·과제 "%" → 0~100, Vitest) + 순수 SVG [`report-trend-graph.tsx`](../src/features/onescreen/components/report-trend-graph.tsx)(라이브러리 0 — ClassNote headless 스샷 호환, B5). `fetchReportTrendRows`로 `/r`(service_role→tenantId 격리)·`/print`(RLS) 배선, `parent-report-card` '성적 추이' 섹션. 설정 토글 `showTrendGraph`(유효점 2개 미만 자동 숨김). 실데이터 그래프조건 150그룹.
+- **ClassNote 발송 과목 게이트**: `report.classnoteSubjects`(명시 opt-in, 빈=아무것도 발송 안 함) + `isClassnoteSubjectEnabled`(null=레거시 math). `saveAndQueueClassnote`(신규)·`retryClassnote`(재발송) 공용 게이트 → 허용 과목 아니면 차단. report-section 발송 과목 체크칩(useSubjectMaps 단일소스, 하드코딩 금지). ⚠️ 실발송은 원장이 발송 과목을 `math`로 켜야 시작(기본 빈).
+
 ### 수업보고서 탭 — Edutrix 미매핑 목록·수동 연결 (2026-07-10)
 - **UI** `/lesson-reports` `EdutrixUnmappedCard`: 보고서 있는 Edutrix 학생 중 `edutrix_student_id` 미연결 목록(보고 건수·동명 후보).
 - **액션** `linkEdutrixStudent`: 쓰기 권한 게이트 → UUID 연결 + 최근 12건 이관(`edutrix_report_id` 멱등). 후보 없으면 학생 등록 안내.

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
+import { hasTrend, type TrendPoint } from "../report-trend";
+import { ReportTrendGraph } from "./report-trend-graph";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
 // /r/[token](공개 학부모 링크·ClassNote 워커 스샷 대상)과 /lesson_reports/[id]/print(강사 PDF 미리보기)가
@@ -55,6 +57,7 @@ export type ParentReportCardProps = {
   logoSrc: string | null; // 이미 해석된 로고 URL(없으면 null)
   settings: ReportSettings; // 학원 운영 > 보고서 표시 토글
   attachments: { path: string; name: string; url: string }[]; // 이미 signed URL 해석된 첨부(실패분 제외)
+  trend?: TrendPoint[]; // 성적 추이 그래프 점(fetchReportTrendRows→buildTrendPoints). 없으면 그래프 미표시.
 };
 
 /** 학부모 보고서 카드(max-w-md 컬럼) — /r·/print 공용. 표시 항목은 전부 settings 토글 준수. */
@@ -65,6 +68,7 @@ export function ParentReportCard({
   logoSrc,
   settings: rpt,
   attachments,
+  trend,
 }: ParentReportCardProps) {
   const reportDate = report.reportDate
     ? new Date(`${report.reportDate}T00:00:00`).toLocaleDateString("ko-KR", {
@@ -74,6 +78,9 @@ export function ParentReportCard({
       })
     : "-";
   const schoolGrade = fmtSchoolGrade(student?.school, student?.grade);
+  // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지).
+  const showTrendGraph =
+    rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));
 
   // 레거시(edutrix 임포트): 일일/확인 분리값 없이 exam_info 합본만 있으면 "테스트" 한 줄로 폴백.
   const legacyTest =
@@ -135,6 +142,13 @@ export function ParentReportCard({
       {rpt.showTrendNote && report.trendNote ? (
         <Section title="학습 추세">
           <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
+        </Section>
+      ) : null}
+
+      {/* 성적 추이 그래프(시험·과제, 순수 SVG) — 지표별 유효점 2개 이상일 때만(위 showTrendGraph에서 판정). */}
+      {showTrendGraph ? (
+        <Section title="성적 추이">
+          <ReportTrendGraph points={trend!} />
         </Section>
       ) : null}
 

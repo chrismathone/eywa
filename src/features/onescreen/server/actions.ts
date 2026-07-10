@@ -11,7 +11,7 @@ import { assembleCombined, MENT_AI_TUNING, type PromptSection } from "../prompt-
 import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { isClassnoteAllowed } from "../classnote-guard";
+import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { ingestReport } from "@/features/progress/server/ingest";
 
@@ -157,6 +157,11 @@ export async function saveAndQueueClassnote(
   const settings = await getTenantSettings();
   if (!settings.report.classnoteSendEnabled) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "dry_run" };
+  }
+
+  // 과목별 발송 게이트 — 학원설정 발송 허용 과목(현 운영=수학만)에 없으면 저장만 하고 큐잉 안 함(오발송 방지).
+  if (!isClassnoteSubjectEnabled(input.subject, settings.report.classnoteSubjects)) {
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off" };
   }
 
   // 동명이인 감지 — ClassNote 이름 매칭이 첫 일치라 오발송 위험 → 자동 발송 차단(보고서 저장은 유지, 큐잉만 막음).

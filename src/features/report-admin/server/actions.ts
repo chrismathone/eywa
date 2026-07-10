@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { isClassnoteAllowed } from "@/features/onescreen/classnote-guard";
+import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../report-filters";
@@ -24,14 +24,21 @@ export async function retryClassnote(
   if (!ids?.length) return { ok: false, error: "대상이 없습니다" };
   const supabase = await createClient();
 
-  // 대상 보고서 날짜 조회(과거일 차단 재확인). RLS 테넌트 스코프.
-  const { data: rows } = await supabase.from("lesson_reports").select("id, report_date").in("id", ids.slice(0, 200));
-  const allowed = (rows ?? []).filter((r) => isClassnoteAllowed(r.report_date as string)).map((r) => r.id as string);
+  // 대상 보고서 날짜·과목 조회(과거일 + 과목 게이트 재확인). RLS 테넌트 스코프.
+  const { data: rows } = await supabase.from("lesson_reports").select("id, report_date, subject").in("id", ids.slice(0, 200));
+  // 발송 안전 스위치·허용 과목 — allowed 계산 전에 설정 조회(과목 게이트에 필요).
+  const settings = await getTenantSettings();
+  const allowed = (rows ?? [])
+    .filter(
+      (r) =>
+        isClassnoteAllowed(r.report_date as string) &&
+        isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
+    )
+    .map((r) => r.id as string);
   const skipped = (rows?.length ?? 0) - allowed.length;
   if (allowed.length === 0) return { ok: true, requeued: 0, skipped };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장 승인 전까지 실제 재발송(queued) 안 함.
-  const settings = await getTenantSettings();
   if (!settings.report.classnoteSendEnabled) {
     return { ok: true, requeued: 0, skipped, dryRun: true };
   }

@@ -6,6 +6,8 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { fetchReportTrendRows } from "@/features/onescreen/server/score-history";
+import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 
@@ -38,7 +40,7 @@ export default async function LessonReportPrintPage({
   const { data: report } = await supabase
     .from("lesson_reports")
     .select(
-      "id, student_id, report_date, textbook, progress, exam_info, homework_score, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, student_id, subject, report_date, textbook, progress, exam_info, homework_score, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
     )
     .eq("id", id)
     .single();
@@ -49,10 +51,18 @@ export default async function LessonReportPrintPage({
     if (!report.student_id || !studentIds.includes(report.student_id)) notFound();
   }
 
-  const [{ data: student }, settings] = await Promise.all([
+  const [{ data: student }, settings, trendRows] = await Promise.all([
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
+    // 성적 추이 이력 — RLS 클라이언트라 테넌트 격리 자동(tenantId 불요). 실패해도 문서 안 깨짐.
+    fetchReportTrendRows(
+      supabase,
+      report.student_id as string,
+      report.subject as string | null,
+      report.report_date as string,
+    ).catch(() => []),
   ]);
+  const trend = buildTrendPoints(trendRows, report.id as string);
 
   const academyName = settings.profile.name || "인재원";
   const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭) — /r과 동일 소스
@@ -100,6 +110,7 @@ export default async function LessonReportPrintPage({
           logoSrc={logoSrc}
           settings={rpt}
           attachments={attachmentImgs}
+          trend={trend}
         />
       </div>
     </div>

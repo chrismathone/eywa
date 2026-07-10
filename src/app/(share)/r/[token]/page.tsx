@@ -6,6 +6,8 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { fetchReportTrendRows } from "@/features/onescreen/server/score-history";
+import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { ClosedReportScreen } from "./_closed";
 
@@ -29,7 +31,7 @@ export default async function PublicLessonReportPage({
   const { data: report } = await admin
     .from("lesson_reports")
     .select(
-      "id, tenant_id, student_id, report_date, revoked_at, textbook, progress, exam_info, homework_score, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, tenant_id, student_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
     )
     .eq("share_token", token)
     .maybeSingle();
@@ -59,10 +61,15 @@ export default async function PublicLessonReportPage({
     }
   }
 
-  const [{ data: student }, settings] = await Promise.all([
+  const [{ data: student }, settings, trendRows] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),
     getTenantSettingsByTenantId(report.tenant_id as string),
+    // 성적 추이 이력 — admin(service_role)이라 tenantId 필터로 테넌트 격리 필수(#B6 규약). 실패해도 페이지 안 깨짐.
+    fetchReportTrendRows(admin, report.student_id as string, report.subject as string | null, report.report_date as string, {
+      tenantId: report.tenant_id as string,
+    }).catch(() => []),
   ]);
+  const trend = buildTrendPoints(trendRows, report.id as string);
 
   const academyName = settings.profile.name || "인재원";
   const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭): 로고/학원명/제목/필드 토글/바닥글
@@ -108,6 +115,7 @@ export default async function PublicLessonReportPage({
         logoSrc={logoSrc}
         settings={rpt}
         attachments={attachmentImgs}
+        trend={trend}
       />
     </div>
   );

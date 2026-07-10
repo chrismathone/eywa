@@ -181,6 +181,7 @@ export const reportSchema = z.object({
   showAttitude: z.boolean(),
   showParentNote: z.boolean(),
   showTrendNote: z.boolean(), // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식)
+  showTrendGraph: z.boolean().default(true), // 성적 추이 그래프(시험·과제 순수 SVG) — edutrix ReportPaper 그래프 이식
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
   // AI 멘트 공지 모드 — 0093a(4c). A=단일 문단(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2) 2문단 분리.
@@ -188,6 +189,9 @@ export const reportSchema = z.object({
   // ClassNote 실제 발송 스위치 — **기본 false(dry-run)**. 원장이 켜기 전까지 발송 버튼은 저장만 하고 실제 전송 안 함.
   // 공유 DB+라이브 워커라 이관분 오발송 방지용 안전장치(메인 병합 후에도 원장 승인 전까지 OFF 유지).
   classnoteSendEnabled: z.boolean().default(false),
+  // ClassNote 발송 허용 과목(과목 키 배열) — **명시 opt-in**: 여기 든 과목만 학부모에게 발송. 빈 배열(기본)=아무것도
+  // 발송 안 함. 현 운영은 수학만 사용 → ['math']. classnoteSendEnabled와 이중 방어(큐 진입 시 isClassnoteSubjectEnabled).
+  classnoteSubjects: z.array(z.string()).default([]),
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 
