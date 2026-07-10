@@ -130,6 +130,14 @@ export function ParentReportCard({
         </Section>
       ) : null}
 
+      {/* 성적 추이 그래프(시험·과제, 순수 SVG) — 지표별 유효점 2개 이상일 때만(위 showTrendGraph에서 판정).
+          위치: '학부모 전달 내용' 위(2026-07-10 원장 요청 — 숫자 추이를 먼저, 서술은 아래). */}
+      {showTrendGraph ? (
+        <Section title="성적 추이">
+          <ReportTrendGraph points={trend!} />
+        </Section>
+      ) : null}
+
       {rpt.showParentNote ? (
         <Section title="학부모 전달 내용">
           <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">
@@ -142,13 +150,6 @@ export function ParentReportCard({
       {rpt.showTrendNote && report.trendNote ? (
         <Section title="학습 추세">
           <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
-        </Section>
-      ) : null}
-
-      {/* 성적 추이 그래프(시험·과제, 순수 SVG) — 지표별 유효점 2개 이상일 때만(위 showTrendGraph에서 판정). */}
-      {showTrendGraph ? (
-        <Section title="성적 추이">
-          <ReportTrendGraph points={trend!} />
         </Section>
       ) : null}
 
