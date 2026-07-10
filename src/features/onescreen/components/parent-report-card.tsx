@@ -23,7 +23,8 @@ function Field({ label, value }: { label: string; value: string }) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
-      <h2 className="text-text-faint mb-2.5 text-[13px] font-semibold">{title}</h2>
+      {/* 섹션 제목: 13px→26px(2배)·faint→dim(더 진한 회색) — 2026-07-10 원장 요청. */}
+      <h2 className="text-text-dim mb-3 text-[26px] font-semibold">{title}</h2>
       {children}
     </section>
   );
@@ -71,31 +72,29 @@ export function ParentReportCard({
   attachments,
   trend,
 }: ParentReportCardProps) {
-  const reportDate = report.reportDate
-    ? new Date(`${report.reportDate}T00:00:00`).toLocaleDateString("ko-KR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : "-";
+  // "2026년 07월 10일" — 제목에 합쳐 쓰므로 0패딩 고정 포맷(원장 요청 표기). YYYY-MM-DD 문자열 분해라 TZ 무관.
+  const [ry, rm, rd] = (report.reportDate ?? "").split("-");
+  const reportDate = ry && rm && rd ? `${ry}년 ${rm}월 ${rd}일` : "";
   const schoolGrade = fmtSchoolGrade(student?.school, student?.grade);
   // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지).
   const showTrendGraph =
     rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));
 
-  // 레거시(edutrix 임포트): 일일/확인 분리값 없이 exam_info 합본만 있으면 "테스트" 한 줄로 폴백.
+  // 레거시(edutrix 임포트): 일일/확인 분리값 없이 exam_info 합본만 있으면 "시험점수" 한 줄로 폴백.
   const legacyTest =
     (rpt.showDailyTest || rpt.showCheckTest) && !report.dailyTest && !report.checkTest
       ? report.examInfo
       : null;
+  // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
   const showToday =
     (rpt.showTextbook && report.textbook) ||
     (rpt.showProgress && report.progress) ||
+    (rpt.showHomeworkToday && report.homeworkToday);
+  const showEval =
     (rpt.showDailyTest && report.dailyTest) ||
     (rpt.showCheckTest && report.checkTest) ||
     legacyTest ||
     (rpt.showHomework && report.homeworkScore) ||
-    (rpt.showHomeworkToday && report.homeworkToday) ||
     (rpt.showAttitude && report.attitude);
 
   return (
@@ -108,28 +107,36 @@ export function ParentReportCard({
           <img src={logoSrc} alt={academyName} className="h-14 w-auto object-contain" />
         ) : null}
         {rpt.showAcademyName ? <p className="text-text-dim text-[15px]">{academyName}</p> : null}
-        <h1 className="text-foreground text-2xl font-bold tracking-[0.1em]">{rpt.title || "수업 보고서"}</h1>
+        {/* 제목에 보고일 합체("2026년 07월 10일 수업 보고서") — 별도 보고일 필드 제거(2026-07-10 원장 요청). */}
+        <h1 className="text-foreground text-2xl font-bold tracking-[0.05em]">
+          {[reportDate, rpt.title || "수업 보고서"].filter(Boolean).join(" ")}
+        </h1>
       </header>
 
       <Section title="학생 정보">
-        <Field label="학생" value={student?.name || "-"} />
+        <Field label="이름" value={student?.name || "-"} />
         <Field label="학교 · 학년" value={schoolGrade} />
-        <Field label="보고일" value={reportDate} />
-        <Field label="담당 강사" value={report.teacherName || "-"} />
+        <Field label="담임" value={report.teacherName || "-"} />
       </Section>
 
       {showToday ? (
         <Section title="오늘 수업">
           {rpt.showTextbook && report.textbook ? <Field label="교재" value={report.textbook} /> : null}
           {rpt.showProgress && report.progress ? <Field label="진도" value={report.progress} /> : null}
-          {rpt.showDailyTest && report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
-          {rpt.showCheckTest && report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}
-          {legacyTest ? <Field label="테스트" value={legacyTest} /> : null}
-          {rpt.showHomework && report.homeworkScore ? (
-            <Field label="과제" value={report.homeworkScore} />
-          ) : null}
           {rpt.showHomeworkToday && report.homeworkToday ? (
             <Field label="오늘 과제" value={report.homeworkToday} />
+          ) : null}
+        </Section>
+      ) : null}
+
+      {/* 평가 — 시험점수(일일/확인/레거시 합본)·지난 과제(수행 상태)·수업 태도(2026-07-10 원장 요청 분리). */}
+      {showEval ? (
+        <Section title="평가">
+          {rpt.showDailyTest && report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
+          {rpt.showCheckTest && report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}
+          {legacyTest ? <Field label="시험점수" value={legacyTest} /> : null}
+          {rpt.showHomework && report.homeworkScore ? (
+            <Field label="지난 과제" value={report.homeworkScore} />
           ) : null}
           {rpt.showAttitude && report.attitude ? <Field label="수업 태도" value={report.attitude} /> : null}
         </Section>
@@ -173,7 +180,7 @@ export function ParentReportCard({
 
       {rpt.showFooter ? (
         <footer className="text-text-faint mt-2 pb-4 text-center text-[12px]">
-          {rpt.footerNote || `${academyName} · ${reportDate}`}
+          {rpt.footerNote || [academyName, reportDate].filter(Boolean).join(" · ")}
         </footer>
       ) : null}
     </div>
