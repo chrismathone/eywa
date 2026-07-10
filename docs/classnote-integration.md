@@ -152,3 +152,46 @@
   → too_old 가드(전 달 1일 이후만, [classnote-guard.ts](../src/features/onescreen/classnote-guard.ts))와
   기본 dry-run 스위치(`classnoteSendEnabled=false`)의 존재 이유. **이 가드들을 완화하지 말 것.**
 - **2026-07-10**: 연동 PC env 도메인 수기 오타(§6). → 주소는 복사-붙여넣기 + `발송PC-주소수정.bat`.
+
+## 9. Edutrix 병행 운영·컷오버 평결 (2026-07-10 적대 검증 — 4방향 코드검증 + 실보드 대조)
+
+> 질문: "전환기에 Edutrix와 eywa가 같은 ClassNote로 같이 발송해도 이상 없나?"
+> **판정: 조건부 가능.** ① 지금 상태(eywa dry-run OFF = Edutrix 단독 발송)는 이미 병행 중이며 **안전**.
+> ② 인프라 병행(같은 Cloud Run 함수·같은 봇 계정 동시 호출)도 **안전** — concurrency=1 인스턴스 격리·
+> 모듈 전역상태 0·큐 DB 분리(edutrix Supabase vs eywa Postgres)·각자 원자 클레임·sessionId 충돌 불가,
+> Edutrix 스스로 같은 계정 봇 2개를 상시 동시운영해 온 실전 근거. ③ 그러나 **"같은 보고서가 학부모에게
+> 두 번 안 간다"는 보장은 코드에 0줄** — 크로스시스템 중복확인·발송 멱등키 없음. 방어는 오직 운영 수칙.
+
+### 전환(스위치 ON) 필수 순서
+1. **P0 코드픽스 3건 배포**(전부 난이도 하): ⓐ `retryClassnote`에 이관 행 방어필터(`.not('classnote_status','is',null)` 또는 source 필터 — 현재 서버액션에 필터가 없어 이관 2,324건(윈도 내)이 id 직접 호출로 큐잉 가능한 defense-in-depth 갭) ⓑ 발송 게이트에서 subject NULL 거부([classnote-guard.ts](../src/features/onescreen/classnote-guard.ts):33의 NULL→math 정규화가 발송 경로에선 이관 행을 과목 게이트 통과시킴 — 조회용 정규화는 유지) ⓒ `subjectLabel` 화이트리스트(math/english 외 발송 거부 — 현재는 **비수학 과목을 opt-in하면 그 보고서가 (수학) 보드로 오게시**되는 구멍).
+2. **Edutrix 쪽 수학 발송 중지** — 발송은 Vercel cron이 아니라 **로컬 상주 봇**(classnote-bot-student.ts, 30초 폴)이 담당. 봇 PC에서 봇 종료(process-ai cron이 큐를 계속 채우므로 재가동 금지).
+3. eywa `classnoteSubjects=['math']` → `classnoteSendEnabled` ON → 첫날 소량 표본 육안 확인.
+
+### 전환기 운영 수칙 (코드가 못 막아주는 것들)
+- **과목 단위 컷오버**: 한 과목의 작성+발송은 한 시스템에만. 이중 작성 시 eywa DB에 2행 영구 공존
+  (nulls-distinct 유니크) → 진도 탭 이중 표시·주간 작성률 2배·**학부모 추이 그래프 같은 날짜 2점**.
+- **학생 이름 변경 금지(전환 완료까지)**: Edutrix 쪽 cron이 eywa DB를 읽어 학생을 **이름으로만** 미러
+  (eywaSyncAction/syncActions) — 개명 시 Edutrix에 유령 학생 신설 + 기존 매핑 단절(보고서 조용히 skip),
+  동명이인은 Edutrix에서 1명으로 붕괴돼 남의 성적이 섞일 수 있음.
+- **동명이인 오버라이드 이원화 주의(가장 위험한 조용한 실패)**: eywa `classnote_name`과 Edutrix
+  `class_note_submission_name`을 대조하는 코드가 없음 — 오입력하면 동명이인 가드를 통과한 채
+  **남의 집 학부모에게 성적이 감**(성공으로 기록). 지정 시 실보드명(A~G 접미사)과 사람이 대조.
+- **원장 화면 해석**: 이관 행 '미요청' ≠ 미발송(Edutrix 발송 사실은 이관 안 됨 — 재발송 금지) ·
+  Edutrix로 쓰는 강사의 당일 작성률 0%는 정상(이관은 새벽 03:30 단발 — 독촉 금지) · 열람 수는 eywa
+  발송분만 집계(전환기 과소).
+- **회수 반쪽**: eywa revoke는 eywa 링크만 차단 — Edutrix로도 나간 내용은 그쪽에서 별도 처리.
+- **봇 계정 비번 회전** = Edutrix 코드(평문 하드코딩) + eywa 발송 PC env 두 곳 동시 갱신.
+
+### 보드 준비 실사 (2026-07-10, 재원 512·발송과목 수강 382명·기대 보드 479 vs 실보드 612 대조)
+| | 수학(첫 컷오버 대상) | 영어(확장 시) |
+|---|---|---|
+| 보드·학부모 연결 정상 → 즉시 발송 가능 | **~200명** | ~118명 |
+| **보드 없음 → 수동 생성 필요** | **33명** | 67명 |
+| 보드 있으나 학부모 미연결(발송해도 못 봄) | 6명 | 58명 |
+| 이름 매핑(`classnote_name`) 지정 필요 | 1명(박서준C→실보드 박서준) | 2명(전주원→전주원A·이서은→이서은A) |
+
+### Edutrix 은퇴 시 지뢰 (은퇴는 마지막에)
+- eywa 실게시 함수(submitToClassNoteV2)가 **Edutrix 소유 Firebase 프로젝트의 Cloud Run** — 프로젝트/빌링
+  삭제 시 eywa 발송 전면 즉사. 은퇴 정리 전에 **함수를 eywa 소유 프로젝트로 이전**(P2).
+- Edutrix `/share` 링크는 만료 게이트가 없어 앱 제거 시 과거 게시물 링크 대량사(이미지 본문은 ClassNote에 박제).
+- Edutrix 로컬 봇 경로엔 too_old 가드가 없음(가드는 cron 미등록 서버 경로에만) — 병행기 중 Edutrix에서 과거 보고서 재큐잉 조작 금지.
