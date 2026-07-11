@@ -14,6 +14,7 @@ import {
   getTopOutstanding,
   getTrendDataLast7Days,
   getUnassignedEnrolledStudents,
+  getEnrollmentChangeLast7d,
 } from "@/features/dashboard/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -55,6 +56,7 @@ export default async function DashboardPage() {
     enrollmentChanges,
     actionSignals,
     unassignedEnrolled,
+    enrollmentChange,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getMostRecentAttendanceSnapshot(),
@@ -73,6 +75,7 @@ export default async function DashboardPage() {
     getMonthlyEnrollmentChanges(),
     getTodayActionSignals(),
     getUnassignedEnrolledStudents(),
+    getEnrollmentChangeLast7d(),
   ]);
   const announcements = recentAnnouncements ?? manageAnnouncements.slice(0, 4);
   // "오늘 조치할 것" 불릿 — 전부 0건이면 빈 배열(패널이 '정상' 한 줄 표시).
@@ -98,11 +101,19 @@ export default async function DashboardPage() {
     viewer: "선생",
   };
   const honorific = user.jobTitle?.trim() || HONORIFIC[user.systemRole] || "선생";
-  const attendanceRate = attendance && attendance.total > 0 ? attendance.rate : null;
-  // 출석 스냅샷이 과거일 폴백이면 기준일을 정직하게 표기("M/D 기준") — 오래된 100%가 오늘처럼 보이는 것 방지.
+  // 출석 스냅샷 신선도 — 최근 기록이 7일 넘게 오래되면(예: eywa 출석 입력 중단) 낡은 비율(9건짜리 100% 등)이
+  // 현재처럼 크게 보이지 않게 rate를 숨기고("—"), 밴드 서브에 "M/D 이후 기록 없음"으로 정직하게 표기.
+  const attStaleDays = attendance
+    ? Math.floor((Date.parse(`${kstToday()}T00:00:00Z`) - Date.parse(`${attendance.date}T00:00:00Z`)) / 86_400_000)
+    : 0;
+  const attendanceStale = attStaleDays > 7;
+  const attendanceRate = attendance && attendance.total > 0 && !attendanceStale ? attendance.rate : null;
   const attendanceAsOf =
     attendance && attendance.date !== kstToday()
-      ? `${Number(attendance.date.slice(5, 7))}/${Number(attendance.date.slice(8, 10))}`
+      ? (() => {
+          const md = `${Number(attendance.date.slice(5, 7))}/${Number(attendance.date.slice(8, 10))}`;
+          return attendanceStale ? `${md} 이후 기록 없음` : `${md} 기준`;
+        })()
       : null;
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
@@ -133,6 +144,9 @@ export default async function DashboardPage() {
       {/* 오늘 조치할 것 — 조건부 신호 통합 패널(0건이면 '정상' 한 줄) */}
       <TodayActionsBand items={todayActions} />
 
+      {/* 최근 7일 — 학생 증감(전체·과목별 차트) 주역 + 출석·수납 추세 (원장 요청: 오늘 조치 아래로) */}
+      <SlimTrend data={trend} change={enrollmentChange} subjects={subjects} />
+
       {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr).
           ⚠️ minmax(0,Nfr): 그냥 Nfr은 min=min-content라 한 컬럼의 긴 내용이 다른 컬럼을 굶겨(좁은 창에서
           좌측 콕핏이 ~50px로 짜부) → min=0으로 비례(1.6:1:1) 나눔 강제. */}
@@ -152,9 +166,6 @@ export default async function DashboardPage() {
           />
         </div>
       </div>
-
-      {/* ③ 슬림 7일 추세 */}
-      <SlimTrend data={trend} />
     </div>
   );
 }

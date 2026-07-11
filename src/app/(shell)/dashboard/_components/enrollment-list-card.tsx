@@ -33,40 +33,37 @@ export function EnrollmentListCard({
       href="/enrollment"
       hrefLabel="전체 →"
     >
-      {/* 등록했지만 반 미배정 = 후속조치 필요 → 활성 상담 목록 위에 호박색 강조 밴드. */}
+      {/* 등록했지만 반 미배정 = 후속조치 필요 → 활성 상담 목록 위 호박색 강조 밴드(고정·컴팩트: 이름 인라인). */}
       {unassigned.length > 0 ? (
-        <div className="border-amber/30 bg-amber-soft mb-2.5 rounded-lg border px-3 py-2">
+        <div className="border-amber/30 bg-amber-soft mb-2 shrink-0 rounded-lg border px-3 py-2">
           <div className="flex items-center gap-1.5">
             <Pill color="amber">배정 필요 {unassigned.length}</Pill>
             <span className="text-text-dim text-[11px]">등록 완료 · 반 미배정</span>
           </div>
-          <ul className="mt-1.5 flex flex-col gap-1">
-            {unassigned.slice(0, 5).map((u) => (
-              <li key={u.studentId} className="flex items-center justify-between gap-2">
+          <p className="mt-1 text-[12px] leading-relaxed break-keep">
+            {unassigned.slice(0, 4).map((u, i) => (
+              <span key={u.studentId}>
+                {i > 0 ? <span className="text-text-faint"> · </span> : null}
                 <WindowLink
                   href={`/students/${u.studentId}`}
                   title={u.name}
-                  className="text-foreground truncate text-[12px] font-medium hover:underline"
+                  className="text-foreground hover:text-amber font-medium hover:underline"
                 >
                   {u.name}
-                  {u.meta ? <span className="text-text-faint ml-1 font-normal">{u.meta}</span> : null}
                 </WindowLink>
-                {u.enrolledAt ? (
-                  <span className="text-text-faint num shrink-0 text-[10px]">{u.enrolledAt.slice(5)}</span>
-                ) : null}
-              </li>
+              </span>
             ))}
-          </ul>
-          {unassigned.length > 5 ? (
-            <p className="text-text-faint mt-1 text-[11px]">외 {unassigned.length - 5}명 더</p>
-          ) : null}
+            {unassigned.length > 4 ? (
+              <span className="text-text-faint"> 외 {unassigned.length - 4}명</span>
+            ) : null}
+          </p>
         </div>
       ) : null}
 
       {list.rows.length === 0 ? (
         <DashEmpty>진행 중인 등록상담이 없습니다</DashEmpty>
       ) : (
-        <ul className="divide-border flex-1 divide-y">
+        <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
           {list.rows.map((c) => {
             const o = OUTCOME[c.outcome];
             return (

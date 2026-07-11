@@ -36,7 +36,7 @@ export function CommandBand({
   enrolled: number;
   enrolledDelta: number;
   attendanceRate: number | null;
-  /** 출석 스냅샷이 오늘이 아니면 기준일 "M/D" (오늘이거나 없음 = null) — 과거 폴백을 정직하게 표기 */
+  /** 출석 서브 라벨(오늘이거나 없음 = null) — 과거 폴백이면 "M/D 기준", 7일 초과 스테일이면 "M/D 이후 기록 없음". 정직 표기. */
   attendanceAsOf: string | null;
   paymentRate: number | null;
   unpaidCount: number;
@@ -95,7 +95,7 @@ export function CommandBand({
             valueColor={attendanceRate == null ? undefined : ACCENT_GREEN}
             sub={
               attendanceAsOf ? (
-                <div className="mt-1 font-mono text-[10px] text-white/45">{attendanceAsOf} 기준</div>
+                <div className="mt-1 font-mono text-[10px] text-white/45">{attendanceAsOf}</div>
               ) : undefined
             }
           />

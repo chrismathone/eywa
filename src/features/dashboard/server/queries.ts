@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -70,6 +71,71 @@ export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> 
       date: s.withdrawn_at,
     })),
   };
+}
+
+export type SubjectChange = { subject: string; newCount: number; withdrawnCount: number; net: number };
+export type EnrollmentChangeSummary = {
+  days: number;
+  newCount: number;
+  withdrawnCount: number;
+  net: number;
+  bySubject: SubjectChange[]; // 순증감 낮은 순(퇴원 많은 과목 먼저)
+};
+
+/**
+ * 최근 N일(기본 7) 학생 증감 — 신규 등록/퇴원 수(전체) + 과목별. 대시보드 "최근 7일" 카드.
+ * 전체 카운트는 count:exact head:true(행 미수신, B2). 과목별은 창 내 학생 id(7일 창=소량)를 받아 수강 반 과목으로
+ * 집계(fetchInChunks, B3) — 한 학생이 2과목이면 각 과목에 계수(과목별 합 ≠ 전체는 정상, 학생 중복 제거는 과목 단위).
+ * 신규=활성 수강(end_date null)의 과목, 퇴원=그 학생의 (종료 포함) 수강 과목.
+ */
+export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentChangeSummary> {
+  const supabase = await createClient();
+  const since = toIsoDate(new Date(Date.parse(`${kstToday()}T00:00:00Z`) - days * 86_400_000));
+
+  const [newCntRes, wdCntRes, newIdRes, wdIdRes] = await Promise.all([
+    supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "enrolled").gte("enrolled_at", since),
+    supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "withdrawn").gte("withdrawn_at", since),
+    // 과목별용 id — 7일 창이라 소량. limit로 이상 급증 시 상한(전체 카운트는 위 count가 정확).
+    supabase.from("students").select("id").eq("status", "enrolled").gte("enrolled_at", since).limit(2000),
+    supabase.from("students").select("id").eq("status", "withdrawn").gte("withdrawn_at", since).limit(2000),
+  ]);
+  const newCount = newCntRes.count ?? 0;
+  const withdrawnCount = wdCntRes.count ?? 0;
+
+  const subjOf = (row: { class: unknown }): string | null => {
+    const c = (Array.isArray(row.class) ? row.class[0] : row.class) as { subject?: string | null } | undefined;
+    return c?.subject ?? null;
+  };
+  const aggregate = async (ids: string[], activeOnly: boolean): Promise<Map<string, Set<string>>> => {
+    const bySubj = new Map<string, Set<string>>();
+    if (ids.length === 0) return bySubj;
+    const rows = await fetchInChunks<{ student_id: string; class: unknown }>(ids, (chunk) => {
+      let q = supabase.from("enrollments").select("student_id, class:class_id(subject)").in("student_id", chunk);
+      if (activeOnly) q = q.is("end_date", null);
+      return q;
+    });
+    for (const r of rows) {
+      const s = subjOf(r);
+      if (!s) continue;
+      (bySubj.get(s) ?? bySubj.set(s, new Set()).get(s)!).add(r.student_id);
+    }
+    return bySubj;
+  };
+  const [newBySubj, wdBySubj] = await Promise.all([
+    aggregate((newIdRes.data ?? []).map((r) => r.id as string), true),
+    aggregate((wdIdRes.data ?? []).map((r) => r.id as string), false),
+  ]);
+
+  const subjects = new Set([...newBySubj.keys(), ...wdBySubj.keys()]);
+  const bySubject: SubjectChange[] = [...subjects]
+    .map((subject) => {
+      const nc = newBySubj.get(subject)?.size ?? 0;
+      const wc = wdBySubj.get(subject)?.size ?? 0;
+      return { subject, newCount: nc, withdrawnCount: wc, net: nc - wc };
+    })
+    .sort((a, b) => a.net - b.net); // 순감 큰(퇴원 많은) 과목 먼저
+
+  return { days, newCount, withdrawnCount, net: newCount - withdrawnCount, bySubject };
 }
 
 export type AttendanceSnapshot = {
