@@ -64,6 +64,7 @@ export async function analyzeStudentConsultation(
       "5. actionItems: 상담 중 합의되거나 정해진 조치.",
       "6. followUps: 향후 후속 조치(연락·보강·재상담 등).",
       "7. warnings: 이탈·정서·가정 등 주의 신호. 없으면 '특이사항 없음'.",
+      "8. 녹음 전사인 경우, 상담 종료 후에도 녹음이 꺼지지 않아 뒤에 섞인 무관한 대화·잡담·인사·잡음은 분석에서 제외하고 실제 상담 내용만 분석하세요.",
       "",
       "상담 내용:",
       text,

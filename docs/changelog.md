@@ -24,6 +24,28 @@
   **덮어쓰기 확인은 '프리필 이후 사용자가 수정한 경우에만'**(untouched 프리필 전환은 무확인). 초안 복구(배너)와 무충돌.
 - 검증: 브라우저 실측(기본양식 프리필·양식 전환·무양식 비움·콘솔0) + Vitest 8(schema/resolve). ⚠️ 프로덕션 저장은 미실행(injaewon 무변경) — 스키마 순수 테스트로 저장 경로 방어.
 
+### 회의 녹음 — 종료 후 잡음 꼬리 자동 제외(B+C), 회의록부터 (2026-07-11) — ✅ tsc0/lint0/test1005/실데이터 검증
+원장 요청: 녹음 정지를 못 눌러 뒤에 붙은 빈 노이즈·잡담까지 전사·분석되던 문제. 전사(AssemblyAI)는 파일 전체를
+통째로 보내 비용이 나가고(=전사 前 차단은 무음에만 가능·별건), **전사 後 "분석 예외"**를 회의록에 먼저 구현:
+- **B — 코드 트림**([transcript-trim.ts](../src/lib/ai/transcript-trim.ts), 순수+Vitest 9): AssemblyAI가 준 발화별
+  타임스탬프·신뢰도로 "긴 침묵(90초+) 뒤 소수(<20% 텍스트)이며 잡음스러운(저신뢰 or 희소) 꼬리"를 감지해 분석 입력에서 제외.
+  **보수적** — 꼬리가 전체 텍스트의 20% 넘으면 절대 안 자름(진짜 내용 보호). 화자 라벨 없으면(옛 통짜 전사) 트림 불가 → 원문 유지.
+  · [buildMeetingAnalysisInput](../src/features/meetings/server/ai.ts)이 트림+포맷 → **웹훅·재분석 두 경로 공유**. **raw transcription·speaker_labels 저장분은 전체 보존**(분석 입력만 잘라냄, 비파괴).
+- **C — 프롬프트 backstop**([analyzeMeeting](../src/features/meetings/server/ai.ts)): "종료 후 섞인 회의 무관 잡담·잡음은 제외" 지침 추가
+  (전사 있을 때만; 등록상담 프롬프트 선례). gap 신호 없는 연속 잡담은 B가 못 잡으므로 모델이 한 번 더 거름 = 이중 방어.
+- **표시**([meetings/[id]](<../src/app/(shell)/meetings/[id]/page.tsx>)): 제외 시 "뒷부분 발화 N개(약 M분) AI 분석에서 제외" 안내(가위 아이콘). 전사 패널엔 전체 그대로.
+- 실검증: 50분·242발화 실회의 = 오탐 없음(안 잘림), 2발화 짧은 회의 = 미적용(<4발화). ⚠️ 비용 절감 아님(전사는 이미 됨) — 무음 전사 前 트림(A)은 별건.
+
+### 종료 후 잡음 꼬리 제외 — 학생상담·등록상담으로 확장 (2026-07-11) — ✅ tsc0/lint0/test1013/웹훅 401 컴파일 확인
+회의록의 B(코드 트림)+C(프롬프트)를 나머지 두 녹음 흐름으로 확장. 트림 순수함수를 공용 위치로 이동
+([transcript-trim.ts](../src/lib/ai/transcript-trim.ts) → `src/lib/ai/`, features/meetings 밖 — enrollment/consultations가 features/meetings를 import하지 않도록).
+- **재원생 학생상담**(B+C): [handleStudentConsultation](../src/app/api/webhooks/assemblyai/route.ts)이 `formatTrimmedTranscript`로
+  분석 입력만 꼬리 제외(저장 transcription/speaker_labels는 full). [analyzeStudentConsultation](../src/features/consultations/server/ai.ts) 프롬프트에 "종료 후 잡음 제외" 지침 추가(C).
+- **등록상담**(B): 다중 녹음 결합 경로 — `toCombineInputs(rows, trim)`로 **분석용 합본(`combinedForAnalysis`)만** 각 녹음 꼬리를 잘라내고
+  **저장 미러 `transcription`은 full 유지**(비파괴 — 상세 화면은 녹음별 full 전사 그대로). 레거시 단일(handleConsultation)·분석복구(recoverConsultationAnalysis)·다중(handleConsultationRecording) 3곳 적용. C는 등록상담 프롬프트에 **이미 존재**(무변).
+- **비파괴 일관**: 세 흐름 모두 raw 전사·화자 라벨 전체 보존, 분석 입력만 잘라냄. 화자 라벨 없는 옛 통짜 전사는 트림 불가 → C 프롬프트가 방어.
+- ⚠️ 표시 안내(가위 배지)는 현재 **회의록만**. 상담은 분석 예외만(silent — 등록상담은 원래 C로 silent 제외 중이라 일관). 상담 표시 안내는 후속 옵션. ⚠️ AssemblyAI 웹훅은 localhost 미도달이라 분석 E2E는 프로덕션 검증 필요(순수함수 Vitest+웹훅 컴파일로 방어).
+
 ### 학원설정 감사로그 전면 한글 풀어쓰기 — raw JSON·영문 키 노출 제거 (2026-07-11) — ✅ tsc0/lint0/test988/실데이터 3페이지 검증
 원장 요청: 감사로그 상세가 `{"section":"report"}`·`tenant_settings` 같은 원문이라 못 읽음. activity.ts(활동로그) 선례를 따라
 **[describe.ts](../src/features/audit/describe.ts) 순수 모듈 신설**(Vitest 24) — 액션별 metadata를 한글 문장으로("「보고서」 설정 저장",

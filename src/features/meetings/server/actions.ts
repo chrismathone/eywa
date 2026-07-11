@@ -18,7 +18,7 @@ import {
   resolveAudioReadUrl,
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
-import { analyzeMeeting, formatMeetingTranscript } from "./ai";
+import { analyzeMeeting, buildMeetingAnalysisInput } from "./ai";
 
 /**
  * Audio flow: client already uploaded the file to storage. Server creates the
@@ -477,8 +477,10 @@ export async function regenerateMeetingAnalysis(
 
   const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]) : [];
   const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR");
-  // 전사가 있으면 화자 포맷, 없으면 빈 문자열(메모만 분석). analyzeMeeting이 둘을 결합.
-  const formatted = transcription ? formatMeetingTranscript(m.transcription as string, m.speaker_labels) : "";
+  // 전사가 있으면 화자 포맷(+뒷부분 잡음 꼬리 트림, B), 없으면 빈 문자열(메모만 분석). analyzeMeeting이 둘을 결합.
+  const formatted = transcription
+    ? buildMeetingAnalysisInput(m.transcription as string, m.speaker_labels).formatted
+    : "";
   const admin = createAdminClient();
 
   // 즉시 analyzing으로 표시 → 페이지가 음성 분석과 동일한 '분석 중' 스켈레톤 + StatusWatcher 폴링을 띄운다.

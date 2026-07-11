@@ -1,11 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { generateJSON } from "@/lib/ai/generate";
-import { getTranscript, type SpeakerUtterance } from "@/lib/ai/assemblyai";
+import { getTranscript } from "@/lib/ai/assemblyai";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import {
   analyzeMeeting,
-  formatMeetingTranscript,
+  buildMeetingAnalysisInput,
   type MeetingReport,
 } from "@/features/meetings/server/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,6 +18,7 @@ import {
   type ExtractedConsultationForm,
 } from "@/features/enrollment/form-fill";
 import { combineConsultationTranscripts } from "@/features/enrollment/transcripts";
+import { trimTrailingNoise, type TrimUtterance } from "@/lib/ai/transcript-trim";
 import { syncMirrorAfterRecordingFailure } from "@/features/enrollment/server/recording-mirror";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -265,7 +266,8 @@ async function handleMeeting(
   );
 
   // 전사 포맷·8섹션 분석은 공유 단일 소스(features/meetings/server/ai.ts) — 재분석 액션과 동일.
-  const formatted = formatMeetingTranscript(transcript.text, transcript.utterances);
+  // B: 회의 종료 후 섞인 뒷부분 잡음 꼬리를 분석 입력에서 제외(raw transcription/speaker_labels 저장분은 위에서 전체 보존).
+  const { formatted } = buildMeetingAnalysisInput(transcript.text, transcript.utterances);
   const attendees = Array.isArray(meeting.attendees) ? (meeting.attendees as string[]) : [];
   const heldAt = new Date(meeting.held_at).toLocaleDateString("ko-KR");
 
@@ -364,13 +366,31 @@ type DoneRecordingRow = {
   created_at: string;
 };
 
-/** 완료 녹음 행들 → 합본 입력. */
-function toCombineInputs(rows: DoneRecordingRow[]) {
-  return rows.map((r) => ({
-    utterances: Array.isArray(r.speaker_labels) ? (r.speaker_labels as SpeakerUtterance[]) : null,
-    plainText: r.transcription,
-    recordedAt: r.created_at,
-  }));
+/**
+ * 완료 녹음 행들 → 합본 입력. trim=true면 각 녹음의 종료 후 잡음 꼬리(B)를 잘라낸 발화로 합본
+ * (분석 입력용). trim=false면 원본 그대로(저장 미러용 — raw 보존). 화자 라벨 없는 녹음(옛 통짜 전사)은
+ * 타임스탬프가 없어 트림 불가 → plainText 그대로(프롬프트 지침 C가 방어).
+ */
+function toCombineInputs(rows: DoneRecordingRow[], trim = false) {
+  return rows.map((r) => {
+    const raw = Array.isArray(r.speaker_labels) ? (r.speaker_labels as TrimUtterance[]) : null;
+    return {
+      utterances: raw && trim ? trimTrailingNoise(raw).kept : raw,
+      plainText: r.transcription,
+      recordedAt: r.created_at,
+    };
+  });
+}
+
+/**
+ * 단일 전사(레거시 상담·재원생 학생상담)를 [화자 X] 텍스트로 포맷 — 종료 후 잡음 꼬리(B) 트림 적용.
+ * 화자 라벨이 없으면(타임스탬프 없음) plainText 그대로(C 프롬프트가 방어). 저장 미러는 호출부가 별도로 full 저장.
+ */
+function formatTrimmedTranscript(utterances: unknown, plainText: string): string {
+  const utts = Array.isArray(utterances) ? (utterances as TrimUtterance[]) : [];
+  if (utts.length === 0) return plainText;
+  const kept = trimTrailingNoise(utts).kept;
+  return kept.length > 0 ? kept.map((s) => `[화자 ${s.speaker}] ${s.text}`).join("\n") : plainText;
 }
 
 /**
@@ -389,7 +409,9 @@ async function recoverConsultationAnalysis(admin: SupabaseClient, consult: Consu
   if (rows.length === 0) return NextResponse.json({ ok: true, skipped: "no completed recordings" });
 
   const inputs = toCombineInputs(rows);
-  const combined = combineConsultationTranscripts(inputs);
+  const combined = combineConsultationTranscripts(inputs); // full — 저장 미러(raw 보존)
+  // B: 분석 입력만 종료 후 잡음 꼬리를 잘라낸 합본으로.
+  const combinedForAnalysis = combineConsultationTranscripts(toCombineInputs(rows, true));
   const multi =
     inputs.filter((i) => (i.utterances?.length ?? 0) > 0 || (i.plainText ?? "").trim().length > 0)
       .length > 1;
@@ -408,7 +430,7 @@ async function recoverConsultationAnalysis(admin: SupabaseClient, consult: Consu
       .eq("id", consult.id),
   );
 
-  return analyzeConsultationAndPersist(admin, consult, combined, {
+  return analyzeConsultationAndPersist(admin, consult, combinedForAnalysis, {
     multi,
     analyzedIds: rows.map((r) => r.id),
   });
@@ -488,7 +510,9 @@ async function handleConsultationRecording(
     },
   ].sort((a, b) => a.created_at.localeCompare(b.created_at));
   const inputs = toCombineInputs(rows);
-  const combined = combineConsultationTranscripts(inputs);
+  const combined = combineConsultationTranscripts(inputs); // full — 저장 미러(raw 보존)
+  // B: 분석 입력만 종료 후 잡음 꼬리를 잘라낸 합본으로(미러는 full 유지 = 비파괴, 상세 전사 표시는 전체 그대로).
+  const combinedForAnalysis = combineConsultationTranscripts(toCombineInputs(rows, true));
   const nonEmptyCount = inputs.filter(
     (i) => (i.utterances?.length ?? 0) > 0 || (i.plainText ?? "").trim().length > 0,
   ).length;
@@ -512,7 +536,7 @@ async function handleConsultationRecording(
       .eq("id", consult.id),
   );
 
-  return analyzeConsultationAndPersist(admin, consult, combined, {
+  return analyzeConsultationAndPersist(admin, consult, combinedForAnalysis, {
     multi,
     analyzedIds: rows.map((r) => r.id),
   });
@@ -574,11 +598,8 @@ async function handleConsultation(
       .eq("id", consult.id),
   );
 
-  const formatted = (transcript.utterances ?? []).length > 0
-    ? (transcript.utterances as SpeakerUtterance[])
-        .map((s) => `[화자 ${s.speaker}] ${s.text}`)
-        .join("\n")
-    : transcript.text;
+  // B: 종료 후 잡음 꼬리를 분석 입력에서 제외(저장된 transcription/speaker_labels는 위에서 full 보존).
+  const formatted = formatTrimmedTranscript(transcript.utterances, transcript.text);
 
   return analyzeConsultationAndPersist(admin, consult, formatted, { multi: false });
 }
@@ -926,9 +947,8 @@ async function handleStudentConsultation(
       .eq("id", sc.id),
   );
 
-  const formatted = (transcript.utterances ?? []).length > 0
-    ? (transcript.utterances as SpeakerUtterance[]).map((s) => `[화자 ${s.speaker}] ${s.text}`).join("\n")
-    : transcript.text;
+  // B: 종료 후 잡음 꼬리를 분석 입력에서 제외(저장된 transcription/speaker_labels는 위에서 full 보존).
+  const formatted = formatTrimmedTranscript(transcript.utterances, transcript.text);
 
   const student = (Array.isArray(sc.student) ? sc.student[0] : sc.student) as
     | { name?: string; grade?: string | null; school?: string | null }

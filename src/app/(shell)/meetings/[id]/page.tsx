@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AlertCircle, CheckSquare, Loader2, Mic, Printer, Sparkles, Users } from "lucide-react";
+import { AlertCircle, CheckSquare, Loader2, Mic, Printer, Scissors, Sparkles, Users } from "lucide-react";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
@@ -22,6 +22,7 @@ import { TranscriptSection } from "@/components/transcript-section";
 import { MeetingReportAccordion } from "./ai-report";
 import { MeetingTitleEditor } from "./meeting-title-editor";
 import { MeetingTxtButton } from "./meeting-txt-button";
+import { trimTrailingNoise } from "@/lib/ai/transcript-trim";
 
 export const metadata = { title: "회의록 상세 — eywa" };
 
@@ -91,6 +92,11 @@ export default async function MeetingDetailPage({
   // 전사·메모 중 하나라도 있으면 "AI로 정리"(regenerate) 가능. 결과가 이미 있으면 "다시 생성" 라벨.
   const canOrganize = (hasTranscription || hasNotepad) && !isProcessing;
   const organizeLabel = hasAiReport ? "AI 분석 다시 생성" : "AI로 정리";
+
+  // B: 회의 종료 후 못 끈 뒷부분 잡음 꼬리가 분석에서 제외됐는지 — 저장된 화자 라벨로 재계산(분석 입력과 동일 함수).
+  const tailTrim =
+    meeting.speakerLabels && meeting.speakerLabels.length > 0 ? trimTrailingNoise(meeting.speakerLabels) : null;
+  const excludedTail = tailTrim && tailTrim.removed.length > 0 ? tailTrim : null;
 
   return (
     <div className="space-y-6">
@@ -298,6 +304,20 @@ export default async function MeetingDetailPage({
       {/* 전사(원본 음성인식) — 최하단 보조자료, 기본 접힘. 화자별로 끊어 렌더(ijw 패리티). */}
       {meeting.transcription ? (
         <div className="space-y-3">
+          {/* B: 뒷부분 잡음 꼬리가 AI 분석에서 제외됐음을 알림 — 전사에는 전체가 그대로 남는다(데이터 비파괴). */}
+          {excludedTail ? (
+            <p className="text-text-dim border-line bg-bg-soft flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+              <Scissors className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                회의 종료 후 녹음된 뒷부분 발화 <span className="num">{excludedTail.removed.length}</span>개
+                {excludedTail.removedDurationSec >= 60
+                  ? ` (약 ${Math.round(excludedTail.removedDurationSec / 60)}분)`
+                  : ""}
+                은 잡음으로 판단해 <b className="text-foreground font-semibold">AI 분석에서 제외</b>했습니다. 아래 전사에는
+                전체가 그대로 남아 있습니다.
+              </span>
+            </p>
+          ) : null}
           {/* 화자 지정 — 화자 라벨이 있을 때만(diarization 된 회의). 직원 연결로 교정. */}
           {meeting.speakerLabels && meeting.speakerLabels.length > 0 ? (
             <SpeakerEditor

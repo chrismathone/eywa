@@ -1,5 +1,6 @@
 import "server-only";
 import { generateJSON } from "@/lib/ai/generate";
+import { trimTrailingNoise, type TrimUtterance } from "@/lib/ai/transcript-trim";
 
 /**
  * 회의록 8섹션 분석 — 단일 소스. 웹훅(오디오 전사 후)·텍스트 재분석 액션(regenerateMeetingAnalysis)이 공유한다.
@@ -28,6 +29,28 @@ export function formatMeetingTranscript(transcription: string, speakerLabels: un
     return utts.map((s) => `[화자 ${s.speaker}] ${s.text}`).join("\n");
   }
   return transcription;
+}
+
+/**
+ * 분석 입력용 전사(B) — 회의 종료 후 못 끄고 섞인 뒷부분 잡음 꼬리를 잘라낸 뒤 포맷한다.
+ * 화자 라벨(타임스탬프)이 있을 때만 트림 가능 — 없으면(옛 통짜 전사) 원문 그대로(프롬프트 지침 C가 방어).
+ * removedCount/removedDurationSec는 호출부가 로깅·표시에 쓸 수 있다(안 잘렸으면 0).
+ * 저장(raw transcription·speaker_labels)은 건드리지 않음 — 오직 분석에 넣는 텍스트만 잘라낸다.
+ */
+export function buildMeetingAnalysisInput(
+  transcription: string,
+  speakerLabels: unknown,
+): { formatted: string; removedCount: number; removedDurationSec: number } {
+  const utts = Array.isArray(speakerLabels) ? (speakerLabels as TrimUtterance[]) : [];
+  if (utts.length === 0) {
+    return { formatted: transcription, removedCount: 0, removedDurationSec: 0 };
+  }
+  const { kept, removed, removedDurationSec } = trimTrailingNoise(utts);
+  return {
+    formatted: kept.map((s) => `[화자 ${s.speaker}] ${s.text}`).join("\n"),
+    removedCount: removed.length,
+    removedDurationSec,
+  };
 }
 
 export type MeetingAnalysisContext = {
@@ -96,10 +119,17 @@ export async function analyzeMeeting(
       "5. 참석자별 발언을 중립적으로 기록하세요.",
       "6. 미해결 이슈, 갈등, 위험 요소를 별도로 기록하세요.",
       "7. 향후 계획을 반드시 포함하세요.",
+      // 전사가 있을 때만(C) — 녹음을 못 끄고 섞인 회의 무관 잡음/잡담을 분석에서 제외. B(코드 트림)가 대부분 잘라내지만
+      // gap 신호가 없는 잡담(연속 대화)은 이 지침이 backstop. 메모만일 땐 미삽입.
+      ...(hasTranscript
+        ? [
+            "8. 녹음이 회의 종료 후에도 꺼지지 않아 뒤에 섞인, 회의와 무관한 대화·잡담·인사·잡음은 분석에서 제외하고 실제 회의 내용만 정리하세요. 전사 끝부분에 회의 주제와 동떨어진 사담이 이어지면 무시하세요.",
+          ]
+        : []),
       // 둘 다일 때만 결합 지침(전사만이면 미삽입 → 프롬프트 바이트 동일).
       ...(hasTranscript && hasNotepad
         ? [
-            "8. 전사(발화 그대로)와 메모(작성자가 짚은 핵심)를 대조해 하나의 회의록으로 정리하세요. 메모에만 있는 항목도 반드시 반영하고, 전사와 메모가 다르면 메모의 의도를 우선하되 필요하면 둘 다 남기세요. 메모의 축약·약어는 전사 맥락으로 풀어 쓰세요.",
+            "9. 전사(발화 그대로)와 메모(작성자가 짚은 핵심)를 대조해 하나의 회의록으로 정리하세요. 메모에만 있는 항목도 반드시 반영하고, 전사와 메모가 다르면 메모의 의도를 우선하되 필요하면 둘 다 남기세요. 메모의 축약·약어는 전사 맥락으로 풀어 쓰세요.",
           ]
         : []),
       "",
