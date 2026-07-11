@@ -137,11 +137,18 @@ export async function deleteExam(_prev: ExamActionState, formData: FormData): Pr
   if (!id) return { error: "시험 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 삭제 전 이름 확보 — 감사로그 대상이 uuid가 아니라 시험명으로 남도록.
+  const { data: exam } = await supabase.from("exams").select("name").eq("id", id).maybeSingle();
   // 연결된 점수(student_grades.exam_id)는 FK on delete cascade로 함께 삭제.
   const { error } = await supabase.from("exams").delete().eq("id", id);
   if (error) return { error: error.message };
 
-  await logAction({ action: "exam_delete", targetType: "exam", metadata: { examId: id } });
+  await logAction({
+    action: "exam_delete",
+    targetType: "exam",
+    targetLabel: (exam?.name as string | undefined) ?? null,
+    metadata: { examId: id },
+  });
   revalidatePath("/exams");
   return { ok: true };
 }

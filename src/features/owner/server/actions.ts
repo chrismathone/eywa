@@ -9,18 +9,9 @@ import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
 import { tenantSettingsTag } from "./queries";
-import { SECTION_SCHEMAS, type SectionKey } from "../settings-types";
+import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey } from "../settings-types";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
-
-const SECTION_LABELS: Record<SectionKey, string> = {
-  profile: "학원 프로필·브랜드",
-  operations: "운영 체계",
-  billing: "수납·청구 기본값",
-  notifications: "알림·약관",
-  report: "보고서",
-  permissions: "역할별 메뉴 권한",
-};
 
 /**
  * 학원 설정 섹션 1개 저장. 게이트 = 역할·권한 매트릭스(owner 메뉴, override 반영 — #58) —

@@ -247,3 +247,13 @@ export const SECTION_SCHEMAS = {
   permissions: permissionsSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;
+
+/** 섹션 한글 라벨 — 저장 액션 targetLabel(owner/server/actions)과 감사로그 상세 표시(features/audit/describe)가 공유. */
+export const SECTION_LABELS: Record<SectionKey, string> = {
+  profile: "학원 프로필·브랜드",
+  operations: "운영 체계",
+  billing: "수납·청구 기본값",
+  notifications: "알림·약관",
+  report: "보고서",
+  permissions: "역할별 메뉴 권한",
+};

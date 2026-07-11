@@ -164,6 +164,13 @@ export async function deleteNoticePopup(
   if (!id) return { error: "팝업 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 삭제 전 제목 확보 — 감사로그 targetLabel에 uuid 대신 사람이 읽는 제목을 남긴다.
+  const { data: popup } = await supabase
+    .from("notice_popups")
+    .select("title")
+    .eq("id", id)
+    .eq("tenant_id", g.user.tenantId)
+    .maybeSingle();
   const { error } = await supabase
     .from("notice_popups")
     .delete()
@@ -171,7 +178,11 @@ export async function deleteNoticePopup(
     .eq("tenant_id", g.user.tenantId);
   if (error) return { error: error.message };
 
-  await logAction({ action: "notice_popup_delete", targetType: "notice_popup", targetLabel: id });
+  await logAction({
+    action: "notice_popup_delete",
+    targetType: "notice_popup",
+    targetLabel: (popup?.title as string | undefined) ?? id,
+  });
   invalidate(g.user.tenantId);
   return { ok: true };
 }

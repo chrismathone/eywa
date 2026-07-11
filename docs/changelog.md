@@ -9,6 +9,18 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학원설정 감사로그 전면 한글 풀어쓰기 — raw JSON·영문 키 노출 제거 (2026-07-11) — ✅ tsc0/lint0/test988/실데이터 3페이지 검증
+원장 요청: 감사로그 상세가 `{"section":"report"}`·`tenant_settings` 같은 원문이라 못 읽음. activity.ts(활동로그) 선례를 따라
+**[describe.ts](../src/features/audit/describe.ts) 순수 모듈 신설**(Vitest 24) — 액션별 metadata를 한글 문장으로("「보고서」 설정 저장",
+"역할 강사 → 관리자", "새 담임 이성우 · 2026-07-09부터", "청구액 350,000원", "수학 · 주간 시험"). 원문 JSON은 title 툴팁으로만(raw 노출 금지 규칙).
+- **이름 해석**: metadata의 학생/직원/반 uuid를 [getAuditNameMap](../src/features/audit/server/log.ts)이 페이지 단위 일괄 해석
+  (`fetchInChunks`·B3, 실패해도 best-effort) — targetLabel 없는 행(인수인계 취소·퇴원 등)의 '대상' 열도 이름으로 보충.
+- **레지스트리 보강**: AUDIT_ACTIONS에 미등록 8종(반 종강 처리/취소·담임 인수인계 예약/취소/적용·강의실 자동배정·학생 일괄 등록·QR 접수 링크 생성)
+  등록(영문 키 원문 노출 해소 + 필터 드롭다운 편입). AUDIT_TYPE_LABEL(대상 유형 한글)도 describe.ts로 이동·확장(tenant_settings=학원 설정 등 6종 추가).
+- **쓰기 경로 2곳**: 팝업 공지 삭제·시험 삭제가 targetLabel에 uuid만 남기던 것 → 삭제 전 제목/시험명 확보해 기록(기존 행은 폴백 표시).
+- SECTION_LABELS는 [settings-types.ts](../src/features/owner/settings-types.ts)로 이동(단일 소스 — saveOwnerSection targetLabel과 감사로그 표시 공유).
+- ⚠️ 새 logAction 액션·targetType 추가 시 AUDIT_ACTIONS·AUDIT_TYPE_LABEL·auditDetail에 함께 등록할 것(안 하면 영문 키 폴백 노출).
+
 ### 수업보고서 목록 시각 = 실제 발송시각(classnote_sent_at) (2026-07-11) — ✅ tsc0/test25(report-admin)
 원장 제보: "발송시각이 새벽 4시". 진단(실데이터) — 목록 날짜 옆 시각이 `created_at`(=밤 edutrix-sync cron이 행을 INSERT한 순간)이라, cron 스케줄 `30 18 * * *`(UTC 18:30=**KST 03:30**) 때문에 이관·동기화분이 전부 새벽 3~4시로 표시됐음(실측: created 07-11 04:01 vs 실제 발송 07-10 19:00). cron/full-import INSERT가 `created_at` 미지정→DB `now()` 폴백이 근인. 실제 발송시각은 `classnote_sent_at`으로 정확히 이관돼 있으나 목록이 안 읽었음.
 - **A안 적용**: [listReports](../src/features/report-admin/server/actions.ts) select에 `classnote_sent_at` 추가 → `ReportListRow.sentAt`([report-filters](../src/features/report-admin/report-filters.ts)). [report-list](<../src/app/(shell)/lesson-reports/_components/report-list.tsx>) 날짜 옆 시각 = **`sentAt ?? createdAt`**(발송분=실제 발송시각 저녁, 미발송 native=작성/등록 시각 폴백). title 툴팁으로 "학부모 발송 시각"/"작성·등록 시각(발송 전)" 구분.

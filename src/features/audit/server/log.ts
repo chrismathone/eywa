@@ -1,8 +1,11 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { collectAuditNameIds } from "../describe";
 
 // 운영 감사로그 액션 키 + 라벨 — logAction 호출부와 뷰어 필터가 공유.
+// ⚠️ 새 logAction 액션 키는 반드시 여기 등록(안 하면 뷰어에 영문 키 원문 노출) + describe.ts에 상세 한글화 추가.
 export const AUDIT_ACTIONS = {
   staff_role_change: "역할 변경",
   staff_delete: "직원 삭제",
@@ -12,6 +15,13 @@ export const AUDIT_ACTIONS = {
   exam_scores: "성적 일괄입력",
   payroll_upsert: "급여 정산",
   withdrawal_update: "퇴원 사유",
+  student_import: "학생 일괄 등록",
+  class_end_term: "반 종강 처리",
+  class_reopen_term: "반 종강 취소",
+  class_handover_schedule: "담임 인수인계 예약",
+  class_handover_cancel: "담임 인수인계 취소",
+  class_handover_apply: "담임 인수인계 적용",
+  classroom_auto_assign: "강의실 자동배정",
   owner_settings_update: "학원 설정 변경",
   owner_subject_absorb: "과목 흡수·삭제",
   owner_subject_delete: "과목 삭제(미사용)",
@@ -19,6 +29,7 @@ export const AUDIT_ACTIONS = {
   notice_popup_delete: "팝업 공지 삭제",
   classroom_create: "강의실 추가",
   classroom_delete: "강의실 삭제",
+  intake_token_create: "QR 접수 링크 생성",
   resume_view_unlock: "이력서 열람(재인증)",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
@@ -95,4 +106,36 @@ export async function getAuditLogsPage(
     })),
     total: count ?? 0,
   };
+}
+
+/**
+ * 페이지 행들의 metadata에 든 학생/직원 uuid → 표시 이름 일괄 해석(상세 열 한글화).
+ * best-effort: 조회 실패해도 뷰어를 막지 않음(이름만 빠진 채 표시).
+ */
+export async function getAuditNameMap(
+  rows: Array<{ metadata: Record<string, unknown> | null }>,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { studentIds, userIds, classIds } = collectAuditNameIds(rows);
+  if (studentIds.length === 0 && userIds.length === 0 && classIds.length === 0) return map;
+  try {
+    const supabase = await createClient();
+    const [students, users, classes] = await Promise.all([
+      fetchInChunks<{ id: string; name: string | null }>(studentIds, (c) =>
+        supabase.from("students").select("id, name").in("id", c),
+      ),
+      fetchInChunks<{ id: string; display_name: string | null }>(userIds, (c) =>
+        supabase.from("users").select("id, display_name").in("id", c),
+      ),
+      fetchInChunks<{ id: string; class_name: string | null }>(classIds, (c) =>
+        supabase.from("classes").select("id, class_name").in("id", c),
+      ),
+    ]);
+    for (const s of students) if (s.name) map.set(s.id, s.name);
+    for (const u of users) if (u.display_name) map.set(u.id, u.display_name);
+    for (const k of classes) if (k.class_name) map.set(k.id, k.class_name);
+  } catch {
+    // 이름 해석은 표시 보강일 뿐 — 실패 시 uuid 항목만 생략된 채 렌더
+  }
+  return map;
 }

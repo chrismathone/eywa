@@ -4,7 +4,10 @@ import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { EmptyState } from "@/components/empty-state";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { getAuditLogsPage, AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
+import { getAuditLogsPage, getAuditNameMap, AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
+import { auditDetail, auditTargetName, AUDIT_TYPE_LABEL } from "@/features/audit/describe";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 const PAGE_SIZE = 50;
 
@@ -20,14 +23,6 @@ const ACTION_COLOR: Record<string, PillColor> = {
 };
 
 const ACTION_FILTERS = Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }));
-
-const TYPE_LABEL: Record<string, string> = {
-  staff: "직원",
-  student: "학생",
-  invoice: "청구서",
-  exam: "시험",
-  payroll: "급여",
-};
 
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", {
@@ -52,7 +47,14 @@ export async function AuditFace({
   page: number;
   isEmbed: boolean;
 }) {
-  const { rows: logs, total } = await getAuditLogsPage({ action }, page, PAGE_SIZE);
+  // 설정(과목 라벨)은 독립 조회라 병렬(B4) — 이름 맵만 rows에 의존.
+  const [{ rows: logs, total }, settings] = await Promise.all([
+    getAuditLogsPage({ action }, page, PAGE_SIZE),
+    getTenantSettings(),
+  ]);
+  const names = await getAuditNameMap(logs);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const nameOf = (id: unknown) => (typeof id === "string" ? (names.get(id) ?? null) : null);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageHref = (p: number) => {
     const sp = new URLSearchParams({ tab: "audit" });
@@ -109,12 +111,20 @@ export async function AuditFace({
                     </td>
                     <td className="text-foreground px-4 py-2.5">
                       {log.targetType ? (
-                        <span className="text-text-faint mr-1">{TYPE_LABEL[log.targetType] ?? log.targetType}</span>
+                        <span className="text-text-faint mr-1">
+                          {AUDIT_TYPE_LABEL[log.targetType] ?? log.targetType}
+                        </span>
                       ) : null}
-                      {log.targetLabel ?? "—"}
+                      {log.targetLabel ?? auditTargetName(log.metadata, nameOf) ?? "—"}
                     </td>
-                    <td className="text-text-dim px-4 py-2.5 font-mono text-[10px]">
-                      {log.metadata ? JSON.stringify(log.metadata) : "—"}
+                    {/* 상세 = 한글 요약, 원문 JSON은 title 툴팁으로만(raw 노출 금지 규칙) */}
+                    <td
+                      className="text-text-dim px-4 py-2.5 text-[11px]"
+                      title={log.metadata ? JSON.stringify(log.metadata) : undefined}
+                    >
+                      <span className="inline-block max-w-[420px] truncate align-bottom">
+                        {auditDetail(log.action, log.metadata, { nameOf, subjectLabel: subjects.labelOf }) ?? "—"}
+                      </span>
                     </td>
                   </tr>
                 ))}
