@@ -12,13 +12,10 @@ import {
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
+import { relativeTimeKo } from "@/lib/relative-time";
 import { OUTCOME_PILL } from "./outcome-meta";
 
 const PAGE_SIZE = 8;
-
-function daysSince(iso: string): number {
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
-}
 
 /**
  * 등록상담 칸반 컬럼 카드 목록 — 한 컬럼에 100+ 카드가 쏟아져 페이지가 끝없이 길어지는 걸 막는다.
@@ -85,7 +82,7 @@ export function ColumnCards({
                 ) : null}
                 <div className="text-text-faint mt-2 flex items-center justify-between text-[10px]">
                   <span>{c.consultantName ?? "—"}</span>
-                  <span className="num">{daysSince(c.consultedAt)}일 전</span>
+                  <span className="num">{relativeTimeKo(c.consultedAt)}</span>
                 </div>
               </WindowLink>
             </li>

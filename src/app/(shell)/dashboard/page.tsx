@@ -13,6 +13,7 @@ import {
   getTodayRecordedClassIds,
   getTopOutstanding,
   getTrendDataLast7Days,
+  getUnassignedEnrolledStudents,
 } from "@/features/dashboard/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -53,6 +54,7 @@ export default async function DashboardPage() {
     settings,
     enrollmentChanges,
     actionSignals,
+    unassignedEnrolled,
   ] = await Promise.all([
     getEnrolledStudentCount(),
     getMostRecentAttendanceSnapshot(),
@@ -70,6 +72,7 @@ export default async function DashboardPage() {
     getTenantSettings(),
     getMonthlyEnrollmentChanges(),
     getTodayActionSignals(),
+    getUnassignedEnrolledStudents(),
   ]);
   const announcements = recentAnnouncements ?? manageAnnouncements.slice(0, 4);
   // "오늘 조치할 것" 불릿 — 전부 0건이면 빈 배열(패널이 '정상' 한 줄 표시).
@@ -133,7 +136,7 @@ export default async function DashboardPage() {
       {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr).
           ⚠️ minmax(0,Nfr): 그냥 Nfr은 min=min-content라 한 컬럼의 긴 내용이 다른 컬럼을 굶겨(좁은 창에서
           좌측 콕핏이 ~50px로 짜부) → min=0으로 비례(1.6:1:1) 나눔 강제. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch">
         <NowCockpit slots={todaySchedule} subjects={subjects} unrecordedCount={unrecordedCount} />
         <div className="flex flex-col gap-4">
           <AbsenceRiskCard items={absenceRisks} />
@@ -141,7 +144,7 @@ export default async function DashboardPage() {
           <FollowUpCard items={followUps} />
         </div>
         <div className="flex flex-col gap-4">
-          <EnrollmentListCard list={enrollList} />
+          <EnrollmentListCard list={enrollList} unassigned={unassignedEnrolled} />
           <AnnouncementsCard
             items={announcements}
             canManage={canManageAnnouncements}

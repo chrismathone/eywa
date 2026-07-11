@@ -299,6 +299,32 @@ export async function getActiveEnrollmentConsultations(limit = 6): Promise<DashE
   return { total: count ?? 0, rows };
 }
 
+export type UnassignedEnrolled = {
+  studentId: string;
+  name: string;
+  meta: string | null; // 학교·학년 압축 라벨
+  enrolledAt: string | null; // 등록일(YYYY-MM-DD)
+};
+
+/**
+ * 등록됨(enrolled)인데 활성 수강(반)이 없는 학생 = "배정 필요". anti-join RPC(0097a, security invoker +
+ * auth_tenant_id 이중격리) — 대시보드 반응속도 1순위라 전건 fetch+JS 대신 DB 1쿼리. limit는 count 정확도용
+ * 안전 상한(현실적으로 소수 — 배정되면 목록에서 빠짐). 호출부가 rows.length를 "배정 필요 N명"으로 사용.
+ */
+export async function getUnassignedEnrolledStudents(limit = 30): Promise<UnassignedEnrolled[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("dashboard_unassigned_enrolled", { p_limit: limit });
+  if (error) throw new Error(`getUnassignedEnrolledStudents: ${error.message}`);
+  return (
+    (data ?? []) as Array<{ student_id: string; student_name: string; grade: string | null; school: string | null; enrolled_at: string | null }>
+  ).map((r) => ({
+    studentId: r.student_id,
+    name: r.student_name,
+    meta: schoolGradeLabel(r.school, r.grade) || null,
+    enrolledAt: r.enrolled_at,
+  }));
+}
+
 export type PaymentSnapshot = {
   period: string;
   totalCount: number;

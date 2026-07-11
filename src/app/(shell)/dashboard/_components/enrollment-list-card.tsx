@@ -5,7 +5,11 @@
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
 import { DashCard, DashEmpty } from "./dash-card";
-import type { DashEnrollmentList, DashEnrollmentRow } from "@/features/dashboard/server/queries";
+import type {
+  DashEnrollmentList,
+  DashEnrollmentRow,
+  UnassignedEnrolled,
+} from "@/features/dashboard/server/queries";
 
 // 라벨은 등록상담 칸반(OUTCOME_LABEL)과 동일 표기, 색은 대시보드 Pill 팔레트로.
 const OUTCOME: Record<DashEnrollmentRow["outcome"], { label: string; color: PillColor }> = {
@@ -15,7 +19,13 @@ const OUTCOME: Record<DashEnrollmentRow["outcome"], { label: string; color: Pill
   ai_done: { label: "AI 완료", color: "gold" },
 };
 
-export function EnrollmentListCard({ list }: { list: DashEnrollmentList }) {
+export function EnrollmentListCard({
+  list,
+  unassigned = [],
+}: {
+  list: DashEnrollmentList;
+  unassigned?: UnassignedEnrolled[];
+}) {
   return (
     <DashCard
       title="등록상담"
@@ -23,6 +33,36 @@ export function EnrollmentListCard({ list }: { list: DashEnrollmentList }) {
       href="/enrollment"
       hrefLabel="전체 →"
     >
+      {/* 등록했지만 반 미배정 = 후속조치 필요 → 활성 상담 목록 위에 호박색 강조 밴드. */}
+      {unassigned.length > 0 ? (
+        <div className="border-amber/30 bg-amber-soft mb-2.5 rounded-lg border px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <Pill color="amber">배정 필요 {unassigned.length}</Pill>
+            <span className="text-text-dim text-[11px]">등록 완료 · 반 미배정</span>
+          </div>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {unassigned.slice(0, 5).map((u) => (
+              <li key={u.studentId} className="flex items-center justify-between gap-2">
+                <WindowLink
+                  href={`/students/${u.studentId}`}
+                  title={u.name}
+                  className="text-foreground truncate text-[12px] font-medium hover:underline"
+                >
+                  {u.name}
+                  {u.meta ? <span className="text-text-faint ml-1 font-normal">{u.meta}</span> : null}
+                </WindowLink>
+                {u.enrolledAt ? (
+                  <span className="text-text-faint num shrink-0 text-[10px]">{u.enrolledAt.slice(5)}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {unassigned.length > 5 ? (
+            <p className="text-text-faint mt-1 text-[11px]">외 {unassigned.length - 5}명 더</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {list.rows.length === 0 ? (
         <DashEmpty>진행 중인 등록상담이 없습니다</DashEmpty>
       ) : (

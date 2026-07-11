@@ -14,6 +14,7 @@ import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { requireAccess } from "@/lib/auth/require-access";
+import { relativeDayKo } from "@/lib/relative-time";
 import {
   getWithdrawnStudents,
   getSubjectEndedStudents,
@@ -30,11 +31,10 @@ export const metadata = { title: "퇴원관리 — eywa" };
 
 const PAGE_SIZE = 50;
 
+/** 퇴원 후 경과 일수(필터용 수치 — 표시는 relativeDayKo). withdrawn_at는 date 컬럼. */
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  return Math.max(0, Math.floor((now - then) / 86_400_000));
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 }
 
 /** 퇴원 후 상담 시도 여부 — 3개 추적 플래그 중 하나라도 true면 "상담함"(재등록 평가용). */
@@ -377,7 +377,7 @@ export default async function WithdrawalsPage({
             </header>
             <ul className="divide-line divide-y">
               {pageRows.map((r) => {
-                const ago = daysSince(r.withdrawnAt);
+                const ago = relativeDayKo(r.withdrawnAt);
                 return (
                   <li key={r.id} className="hover:bg-bg-soft/50 px-5 py-3.5 transition">
                     <WindowLink href={`/withdrawals/${r.id}`} title={r.name} className="flex items-center gap-3">
@@ -397,8 +397,8 @@ export default async function WithdrawalsPage({
                         <p className="text-foreground num text-[11px] font-semibold">
                           {r.withdrawnAt ?? "—"}
                         </p>
-                        {ago !== null ? (
-                          <p className="text-text-faint num text-[10px]">{ago}일 전</p>
+                        {ago ? (
+                          <p className="text-text-faint num text-[10px]">{ago}</p>
                         ) : null}
                       </div>
                     </WindowLink>

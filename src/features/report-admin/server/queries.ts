@@ -3,10 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { getTodaySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
+import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { needsAttention, summarizeQueue, type QueueSummary } from "../classnote-queue";
-import { computeWritingRates, type TeacherRate, type TodayTarget } from "../writing-rate";
+import { computeWritingRates, type TeacherRate, type TodayTarget, type DailyTarget } from "../writing-rate";
+
+// 날짜(YYYY-MM-DD) → 요일 키("mon"~"sun") — 주간 스케줄 dayOfWeek와 매칭(결정적 UTC).
+const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+const weekdayKeyOf = (ymd: string): string => DOW_KEY[new Date(`${ymd}T00:00:00Z`).getUTCDay()]!;
 
 /** KST 날짜에서 n일 전(YYYY-MM-DD) — 결정적 UTC 산술(date-kst 규칙). */
 function daysBefore(ymd: string, n: number): string {
@@ -158,9 +162,10 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
   const since = dates[0]!; // = 이번 주 월요일
 
   // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨·퇴사(비활성) 직원 — 상호 독립이라 병렬(B4).
-  const [{ data: reps }, schedule, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
+  const [{ data: reps }, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
     supabase.from("lesson_reports").select("teacher_name, report_date").gte("report_date", since).limit(5000),
     getTodaySchedule(),
+    getWeeklySchedule(), // 요일별 대상(분모) 계산용 — 이번 주 전 요일 스케줄
     getTenantSettings(),
     getTeacherLabelsBySubject(),
     // 퇴사자 = users.status 'inactive'(RLS 테넌트 스코프, 직원 표라 소량). 이름으로 작성률에서 자동 제외.
@@ -230,13 +235,77 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
     });
   }
 
+  // 6) 과거일(월~어제) 강사×날짜 대상 — 오늘 로직(반 활성 수강생 − 그날 결석)을 이번 주 지난 요일로 일반화.
+  //    주간 스케줄로 그 요일 반→강사(예외 제외), 활성 수강(end_date null), 그날 결석을 빼 대상 수를 구한다.
+  //    오늘은 위 todayTargets(정밀)로 별도, 미래일은 대상 없음(pure 함수가 null 처리). 작성분은 min(건수,대상) 근사.
+  const pastDates = dates.filter((d) => d < today);
+  const dailyTargets: DailyTarget[] = [];
+  if (pastDates.length > 0) {
+    // 과거일별 반→강사(예외 제외) + 주간 반 id 집합.
+    const teacherOfClassByDate = new Map<string, Map<string, string>>();
+    const weekClassIds = new Set<string>();
+    for (const d of pastDates) {
+      const key = weekdayKeyOf(d);
+      const m = new Map<string, string>();
+      for (const s of weekly) {
+        if (s.dayOfWeek !== key) continue;
+        const t = s.teacherName ?? "(미지정)";
+        if (exempt.has(t)) continue;
+        m.set(s.classId, t);
+        weekClassIds.add(s.classId);
+      }
+      teacherOfClassByDate.set(d, m);
+    }
+    if (weekClassIds.size > 0) {
+      // 활성 수강(오늘 로직과 동일 근사: end_date null) + 주간(월~어제) 결석.
+      const wenr = await fetchInChunks<{ student_id: string; class_id: string }>([...weekClassIds], (chunk) =>
+        supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
+      );
+      const studentsByClass = new Map<string, Set<string>>();
+      const weekStudentIds = new Set<string>();
+      for (const e of wenr) {
+        (studentsByClass.get(e.class_id) ?? studentsByClass.set(e.class_id, new Set()).get(e.class_id)!).add(e.student_id);
+        weekStudentIds.add(e.student_id);
+      }
+      const absRows = weekStudentIds.size
+        ? await fetchInChunks<{ student_id: string; session_date: string }>([...weekStudentIds], (chunk) =>
+            supabase
+              .from("attendance_records")
+              .select("student_id, session_date")
+              .eq("status", "absent")
+              .gte("session_date", pastDates[0]!)
+              .lte("session_date", pastDates[pastDates.length - 1]!)
+              .in("student_id", chunk),
+          )
+        : [];
+      const absentByDate = new Map<string, Set<string>>();
+      for (const a of absRows)
+        (absentByDate.get(a.session_date) ?? absentByDate.set(a.session_date, new Set()).get(a.session_date)!).add(a.student_id);
+      // 강사×날짜 대상 = 그날 강사 반들의 활성 학생(중복 제거) − 그날 결석.
+      for (const d of pastDates) {
+        const absent = absentByDate.get(d) ?? new Set<string>();
+        const studentsByTeacher = new Map<string, Set<string>>();
+        for (const [classId, teacher] of teacherOfClassByDate.get(d)!) {
+          const set = studentsByClass.get(classId);
+          if (!set) continue;
+          const ts = studentsByTeacher.get(teacher) ?? studentsByTeacher.set(teacher, new Set()).get(teacher)!;
+          for (const id of set) ts.add(id);
+        }
+        for (const [teacher, ids] of studentsByTeacher) {
+          const target = [...ids].filter((id) => !absent.has(id)).length;
+          dailyTargets.push({ teacher, date: d, target });
+        }
+      }
+    }
+  }
+
   // 강사→과목 태그(반 담당·슬롯 라벨 역인덱스) — 미지의 이름은 빈 배열(카드에서 '전체'에만 노출).
   const subjectsOfTeacher = new Map<string, Set<string>>();
   for (const [subj, names] of Object.entries(labelsBySubject))
     for (const n of names)
       (subjectsOfTeacher.get(n) ?? subjectsOfTeacher.set(n, new Set()).get(n)!).add(subj);
 
-  const rates: TeacherRateRow[] = computeWritingRates(dates, reports, todayTargets).map((r) => ({
+  const rates: TeacherRateRow[] = computeWritingRates(dates, reports, todayTargets, dailyTargets, today).map((r) => ({
     ...r,
     subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
   }));

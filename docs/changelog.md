@@ -21,6 +21,24 @@
 - SECTION_LABELS는 [settings-types.ts](../src/features/owner/settings-types.ts)로 이동(단일 소스 — saveOwnerSection targetLabel과 감사로그 표시 공유).
 - ⚠️ 새 logAction 액션·targetType 추가 시 AUDIT_ACTIONS·AUDIT_TYPE_LABEL·auditDetail에 함께 등록할 것(안 하면 영문 키 폴백 노출).
 
+### 대시보드·작성률·상대시간·발송방어 4종 (2026-07-11) — ✅ tsc0/lint0/test996/실화면 검증
+원장 일괄 요청 4건(+발송 방어 2구멍). 스카우트 4에이전트 병렬 조사 후 구현.
+- **발송 방어 2구멍**([classnote-core.mjs](../scripts/_classnote/classnote-core.mjs)): ①긴급 킬스위치 — 워커가 매 폴 `tenant_settings.data->report->>classnoteSendEnabled`를 직접 읽어(postgres 직결=앱 캐시 무관, 즉시반영) OFF면 클레임·게시 통째 skip(`isClassnoteSendEnabled`). 앱 게이트가 못 막던 **queued 재고·resetStuckClassnote 복구분까지 단일 정지점**으로 차단(큐 보존→재켜면 이어서). ②중복 게시 — fetch abort 타임아웃 `120s→960s`(Cloud Run 상한 900s 위)로 "함수 실행 중 abort→재시도 중복게시" 창 봉쇄. 완전 멱등(함수측 reportId dedupe)은 edutrix repo 몫으로 잔여. ⚠️ 워커는 연동 PC 복사본 → zip 재전달 필요.
+- **상대시간 "0일 전"→"N시간 전"**([relative-time.ts](../src/lib/relative-time.ts) 신설, Vitest15): 공용 함수가 없어 중복 7개 흩어짐. `relativeTimeKo`(방금/N분/N시간/N일/7일+날짜, 24h 경과 시에만 '1일 전')·`relativeDayKo`(날짜 전용=오늘/어제/N일). 버그 호출처 재배선: 등록상담 column-cards·enrollment-table·학생상담·상담통계·공지카드=timestamp→relativeTimeKo, 퇴원관리=date컬럼→relativeDayKo. 이미 시/분 처리하던 3곳(makeedu-sync-badge·notification-bell·makeedu-worker-status)은 무변경.
+- **대시보드**([page](<../src/app/(shell)/dashboard/page.tsx>)): ①오늘의 일정(NowCockpit) 축소 — 컬럼 1.6fr→1.3fr + 밀도차트 58→44px + gap/max-h 축소(loading.tsx 동기). ②"등록됐지만 반 미배정" 강조 — 신규 anti-join RPC [0097a](../supabase/migrations/0097a_dashboard_unassigned_enrolled.sql)(`dashboard_unassigned_enrolled`, security invoker+auth_tenant_id, 0039a 패턴) → `getUnassignedEnrolledStudents` → 등록상담 카드 상단 호박색 밴드("배정 필요 N명" + 학생 링크). 실검증: injaewon 10명(이아언·강윤서…).
+- **작성률 요일별·주간도 %+n/n**([writing-rate.ts](../src/features/report-admin/writing-rate.ts)): 분모(대상)가 오늘만 있어 요일별은 건수만이었음. 서버가 `getWeeklySchedule`+주간 활성수강+주간 결석으로 **과거일 강사×날짜 대상** 계산(오늘 로직 7일 일반화, 오늘=정밀·과거=min(건수,대상)·미래='·'). `DailyCell{target,written,rate}`+주간 합계율. 실검증: 이성우 주간 78%(64/82). ⚠️ 부작용=예정수업 있고 0작성인 강사도 노출(미작성 갭 순기능, 노이즈는 예외강사 설정으로).
+- ⚠️ **0097a RPC는 검증 위해 프로덕션 DB에 이미 적용됨**(읽기전용 함수, 되돌리기=`drop function public.dashboard_unassigned_enrolled(int)`).
+
+### makeedu 예비상담 임포트 — 오래된 건 방어필터(옛 예비상담 자동유입 차단) (2026-07-11) — ✅ 문법0/dry-run 검증
+원장 제보: makeedu 목록 동기화가 2년+ 묵은 예비상담(스크린샷 786~788일 전)을 계속 등록상담에 자동 등록. 근인 —
+[import-prospects.cjs](../scripts/_makeedu/import-prospects.cjs)가 makeedu 예비원생 목록을 **날짜 필터 없이 전부** INSERT하고,
+지우면 다음 동기화가 `makeedu_id` 매칭 실패로 **재삽입**(삭제해도 부활). 실측: 자동삽입(sentinel) 243건 중 **230건이 1년 초과**
+(90일~1년 사이 0건 = 깨끗한 공백).
+- **방어**: `MAX_AGE_DAYS`(기본 90, env `MAKEEDU_PROSPECT_MAX_AGE_DAYS` 조정) — 상담일(`consulted_at`)이 컷오프보다 오래된
+  예비원생은 **신규 삽입 스킵**. 날짜 미상은 신규 가능성이라 **보호**(스킵 안 함). 백필(기존 행 makeedu_id 연결)·QR 접수(실제 신규 상담)는 무관.
+- 원장 결정: 컷오프 **90일**, 기존 230건은 **유지(앞으로만 차단)**. 삽입 경로는 import-prospects 하나뿐(sync-prospects는 update만).
+- 검증: `node --check` + 합성 dry-run(옛 2·최근 1·날짜없음 1 → 스킵 2·추가 2, DB write 0). ⚠️ 담당 PC(로컬 동기화)는 git pull로 스크립트 갱신 필요.
+
 ### 수업보고서 목록 시각 = 실제 발송시각(classnote_sent_at) (2026-07-11) — ✅ tsc0/test25(report-admin)
 원장 제보: "발송시각이 새벽 4시". 진단(실데이터) — 목록 날짜 옆 시각이 `created_at`(=밤 edutrix-sync cron이 행을 INSERT한 순간)이라, cron 스케줄 `30 18 * * *`(UTC 18:30=**KST 03:30**) 때문에 이관·동기화분이 전부 새벽 3~4시로 표시됐음(실측: created 07-11 04:01 vs 실제 발송 07-10 19:00). cron/full-import INSERT가 `created_at` 미지정→DB `now()` 폴백이 근인. 실제 발송시각은 `classnote_sent_at`으로 정확히 이관돼 있으나 목록이 안 읽었음.
 - **A안 적용**: [listReports](../src/features/report-admin/server/actions.ts) select에 `classnote_sent_at` 추가 → `ReportListRow.sentAt`([report-filters](../src/features/report-admin/report-filters.ts)). [report-list](<../src/app/(shell)/lesson-reports/_components/report-list.tsx>) 날짜 옆 시각 = **`sentAt ?? createdAt`**(발송분=실제 발송시각 저녁, 미발송 native=작성/등록 시각 폴백). title 툴팁으로 "학부모 발송 시각"/"작성·등록 시각(발송 전)" 구분.

@@ -28,17 +28,9 @@ import { Pagination } from "@/components/pagination";
 import { NewConsultationTrigger } from "./_components/new-consultation-trigger";
 import { ConsultationDeleteButton } from "./_components/consultation-delete-button";
 import { CATEGORY_META, URGENCY_META } from "./_components/consultation-meta";
+import { relativeTimeKo } from "@/lib/relative-time";
 
 export const metadata = { title: "학생상담 — eywa" };
-
-function relativeTime(iso: string): string {
-  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
-  const days = Math.floor(diff / 86_400_000);
-  if (days === 0) return "오늘";
-  if (days === 1) return "어제";
-  if (days < 7) return `${days}일 전`;
-  return new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
-}
 
 type RangeKey = "all" | "7d" | "30d";
 type CategoryKey = "all" | StudentConsultationCategory;
@@ -280,7 +272,7 @@ export default async function ConsultationsPage({
                     </div>
                   </div>
                   <div className="text-text-dim relative z-10 flex items-center gap-3 text-xs">
-                    <span className="num">{relativeTime(c.consultedAt)}</span>
+                    <span className="num">{relativeTimeKo(c.consultedAt)}</span>
                     <ConsultationDeleteButton id={c.id} studentId={c.studentId} label="" />
                   </div>
                 </header>

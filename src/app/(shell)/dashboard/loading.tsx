@@ -11,8 +11,8 @@ export default function DashboardLoading() {
       {/* 오늘 조치 */}
       <div className="bg-card border-line shadow-card h-14 animate-pulse rounded-lg border" />
       {/* 3열 콕핏 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="bg-card border-line shadow-card min-h-[280px] animate-pulse rounded-lg border" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="bg-card border-line shadow-card min-h-[260px] animate-pulse rounded-lg border" />
         <div className="flex flex-col gap-4">
           <div className="bg-card border-line shadow-card h-36 animate-pulse rounded-lg border" />
           <div className="bg-card border-line shadow-card h-36 animate-pulse rounded-lg border" />

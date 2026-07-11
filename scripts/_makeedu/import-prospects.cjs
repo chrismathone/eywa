@@ -12,6 +12,18 @@ const APPLY = process.argv.includes("--apply");
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 
+// 방어(2026-07-11): 상담일이 이보다 오래된 예비원생은 **신규 삽입 안 함**. makeedu 예비원생 목록에 2년+ 묵은
+// 예비상담이 남아 목록 동기화로 계속 eywa에 유입되던 문제 차단(삭제해도 다음 동기화가 재삽입하던 근본원인 봉쇄).
+// env(MAKEEDU_PROSPECT_MAX_AGE_DAYS)로 조정 가능. 백필(기존 행 makeedu_id 연결)·QR 접수(실제 신규 상담)는 무관.
+const MAX_AGE_DAYS = Number(process.env.MAKEEDU_PROSPECT_MAX_AGE_DAYS) || 90;
+// 상담일(consulted_at ISO)이 컷오프 이내면 삽입 허용. **날짜 미상은 신규 가능성이라 보호**(스킵 안 함).
+function isRecentEnough(consultedAtIso) {
+  if (!consultedAtIso) return true;
+  const t = new Date(consultedAtIso).getTime();
+  if (Number.isNaN(t)) return true; // 파싱 실패도 보호(옛것으로 오판해 진짜 신규 버리는 것 방지)
+  return t >= Date.now() - MAX_AGE_DAYS * 86_400_000;
+}
+
 // 등원가능성 자유텍스트 → enrollment_consultations.outcome enum.
 function outcome(v) {
   const s = L.txt(v) || "";
@@ -59,15 +71,17 @@ function outcome(v) {
       (r) => `${L.normalizeName(r.prospect_name)}|${r.prospect_grade || ""}`,
     ]);
     const toLink = [], toInsert = [];
-    let alreadyLinked = 0;
+    let alreadyLinked = 0, skippedOld = 0;
     for (const r of rows) {
       if (byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; }
       const id = match(r);
-      if (id) toLink.push({ id, makeedu_id: r.makeedu_id });
-      else toInsert.push(r);
+      if (id) { toLink.push({ id, makeedu_id: r.makeedu_id }); continue; }
+      // 신규 삽입 후보만 나이 게이트 적용 — 오래된 예비상담은 스킵(백필은 위에서 이미 처리돼 무관).
+      if (!isRecentEnough(r.consulted_at)) { skippedOld++; continue; }
+      toInsert.push(r);
     }
     console.log(`\n[additive] ijw 기존 예비상담 ${existing.length} | makeedu ${rows.length}`);
-    console.log(`  이미 연결됨: ${alreadyLinked} | ijw 매칭→백필: ${toLink.length} | 신규 추가: ${toInsert.length}`);
+    console.log(`  이미 연결됨: ${alreadyLinked} | ijw 매칭→백필: ${toLink.length} | 신규 추가: ${toInsert.length} | 오래돼 스킵(≥${MAX_AGE_DAYS}일): ${skippedOld}`);
 
     if (!APPLY) {
       console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0).");

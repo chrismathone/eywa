@@ -5,11 +5,8 @@ import { Pill } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";
 import { EditingBadge } from "@/features/presence/editing-badge";
+import { relativeTimeKo } from "@/lib/relative-time";
 import { outcomePill } from "./outcome-meta";
-
-function daysSince(iso: string): number {
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
-}
 
 function ymd(iso: string): string {
   const d = new Date(iso);
@@ -64,7 +61,7 @@ export function EnrollmentTable({ rows }: { rows: ConsultationListRow[] }) {
                 <td className="text-text-dim px-4 py-2.5 text-xs">{c.consultantName ?? "—"}</td>
                 <td className="text-text-dim num px-4 py-2.5 text-xs">{ymd(c.consultedAt)}</td>
                 <td className="text-text-faint num px-4 py-2.5 text-right text-xs">
-                  {daysSince(c.consultedAt)}일 전
+                  {relativeTimeKo(c.consultedAt)}
                 </td>
               </tr>
             );

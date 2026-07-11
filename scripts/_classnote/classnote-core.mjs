@@ -51,6 +51,19 @@ export async function resolveTenant(sql) {
 }
 
 /**
+ * 발송 안전 스위치(긴급 킬스위치) — tenant_settings.data->'report'->>'classnoteSendEnabled'가 true일 때만 실게시.
+ * 앱 게이트(saveAndQueue·retry·send)는 **신규 큐 진입만** 막고 이미 queued인 재고·멈춤복구분은 못 막았다(구조 구멍).
+ * 워커가 매 폴 이 값을 직접 읽어 OFF면 게시를 건너뛴다 → 앱에서 스위치를 끄면 폴 주기(~15초) 내 실게시가 완전히 정지.
+ * 워커는 postgres 직결이라 앱 unstable_cache와 무관하게 **커밋값을 즉시** 읽는다. 미저장/미토글/false = OFF
+ * (fail-safe: 모르면 안 보냄). tenant 스코프 필수(공유 DB 오발송 방지 원칙).
+ */
+export async function isClassnoteSendEnabled(sql, tenant) {
+  const [row] = await sql`select (data->'report'->>'classnoteSendEnabled')::boolean as on
+    from tenant_settings where tenant_id=${tenant}`;
+  return row?.on === true;
+}
+
+/**
  * ClassNote 발송 큐 한 주기 처리 — stale 복구 → 원자 클레임 → 건별 스크린샷·게시·상태전이.
  * browser는 호출자가 관리(데몬은 루프 밖 1회 launch 재사용, one-shot은 매 실행 launch). tenant 격리 필수.
  * @returns {Promise<{stale:number, claimed:number, success:number, failed:number, requeued:number}>}
@@ -64,6 +77,14 @@ export async function processQueueOnce(sql, browser, opts) {
     log = console.log,
   } = opts;
   const md = minDate();
+
+  // 0) 긴급 킬스위치 — 실게시 모드(post)인데 발송 스위치가 OFF면 이 주기를 통째로 건너뛴다.
+  // 앱 게이트가 못 막는 queued 재고·resetStuckClassnote 복구분까지 차단(단일 정지점). 큐는 손대지 않아
+  // (클레임·stale 복구도 안 함) 스위치를 다시 켜면 그대로 이어서 처리된다. dry-run(post=false)은 영향 없음.
+  if (post && !(await isClassnoteSendEnabled(sql, tenant))) {
+    log("[worker] classnoteSendEnabled OFF — 실게시 중단(큐 보존, 클레임 안 함)");
+    return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0 };
+  }
 
   // 1) stale 복구: processing 10분 초과 → queued (tenant 격리)
   const stale = await sql`update lesson_reports set classnote_status='queued'
@@ -152,8 +173,12 @@ export async function processQueueOnce(sql, browser, opts) {
         continue;
       }
       // 실게시
+      // ⚠️ 중복 게시 방지(구멍2): abort 타임아웃을 Cloud Run 함수 상한(900s) **위**로 둔다. 이전 120s는
+      // 함수가 아직 게시 중인데 워커가 중도 abort→catch에서 retry_count+1 후 queued로 되돌려 다음 폴에
+      // 재게시 = 같은 보고서가 학부모에게 2번 갔다(fetch를 끊어도 서버 실행은 안 멈춤). 함수 상한 위로 올리면
+      // 정상 실행 중 abort가 사라져 이 중복 창이 닫힌다. (완전 멱등은 함수측 reportId dedupe 필요 — edutrix repo.)
       const ac = new AbortController();
-      const to = setTimeout(() => ac.abort(), 120000);
+      const to = setTimeout(() => ac.abort(), 960000);
       const res = await fetch(CLOUD_RUN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: ac.signal });
       clearTimeout(to);
       const json = await res.json().catch(() => ({}));

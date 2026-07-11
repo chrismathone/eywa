@@ -102,7 +102,7 @@ export function NowCockpit({
       {slots.length === 0 ? (
         <div className="text-text-dim flex flex-1 items-center justify-center px-5 py-12 text-sm">오늘은 예정된 수업이 없습니다</div>
       ) : (
-        <div className="flex flex-1 flex-col gap-4 px-5 pb-5">
+        <div className="flex flex-1 flex-col gap-3 px-5 pb-4">
           {ongoing.length > 0 ? (
             <OngoingBySubject slots={slots} subjects={subjects} />
           ) : (
@@ -141,7 +141,7 @@ function DensityStrip({ slots, subjects }: { slots: TodaySlot[]; subjects: Subje
         <p className="text-text-faint font-mono text-[10px] tracking-wider uppercase">하루 밀도</p>
         <p className="text-text-faint text-[10px]">총 {slots.length}개 수업</p>
       </div>
-      <div className="border-line relative mt-3 flex h-[58px] items-end gap-[2px] border-b">
+      <div className="border-line relative mt-2 flex h-[44px] items-end gap-[2px] border-b">
         {buckets.map((b) => (
           <div
             key={b.idx}
@@ -215,8 +215,8 @@ function OngoingBySubject({ slots, subjects }: { slots: TodaySlot[]; subjects: S
             <span className="text-foreground text-[13px] font-bold">{g.label}</span>
             <span className="text-text-faint num font-mono text-[11px]">{g.slots.length}개 진행 중</span>
           </div>
-          {/* max-h-44 ≈ 행(≈31.5px)×5 + 간격 — 6개째부터 스크롤(전역 디자인 스크롤바). */}
-          <div className="max-h-44 space-y-1 overflow-y-auto">
+          {/* max-h-32 ≈ 행(≈31.5px)×4 + 간격 — 5개째부터 스크롤(전역 디자인 스크롤바, 카드 축소). */}
+          <div className="max-h-32 space-y-1 overflow-y-auto">
             {g.slots.map((s) => <OngoingRow key={s.id} slot={s} />)}
           </div>
         </div>

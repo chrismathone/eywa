@@ -2,6 +2,7 @@ import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
+import { relativeTimeKo } from "@/lib/relative-time";
 import {
   getConsultationByCategory,
   getConsultationFunnel,
@@ -83,7 +84,7 @@ export default async function ConsultationStatsPage() {
                   {s.lastConsultedAt === null ? (
                     <Pill color="danger">상담 이력 없음</Pill>
                   ) : (
-                    <span className="text-text-dim num text-xs">{s.daysSince}일 전 상담</span>
+                    <span className="text-text-dim num text-xs">{relativeTimeKo(s.lastConsultedAt)} 상담</span>
                   )}
                   <WindowLink
                     href={`/consultations/new?studentId=${s.id}`}
