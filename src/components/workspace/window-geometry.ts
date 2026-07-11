@@ -60,7 +60,7 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   "staff/new": { w: 620, h: 680 },
   "students/new": { w: 760, h: 680 },
   "enrollment/new": { w: 820, h: 700 },
-  "consultations/new": { w: 700, h: 660 },
+  "consultations/new": { w: 960, h: 720 }, // 2단 폼(좌 메타 + 우 큰 요약) — 넓은 창에서 요약이 시원하게 커짐(md 2단 트리거)
   "meetings/new": { w: 600, h: 640 },
   "billing/expenses": { w: 720, h: 860 }, // 지출결의서 A4 문서(세로형) — 폭보다 높이가 필요
   // 인쇄 문서 창(세로 A4). 창 id 규약 `print/<type>/<recordId>` → longest-prefix가 `print/<type>` 매칭.

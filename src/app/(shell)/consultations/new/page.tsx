@@ -22,7 +22,7 @@ export default async function NewConsultationPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <BackLink href="/consultations" label="학생상담으로" />
 
       <header className="border-border space-y-1 border-b pb-5">

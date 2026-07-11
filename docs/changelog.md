@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학생상담 등록 폼 — 2단 레이아웃(좌 메타 + 우 큰 요약)으로 "시원하게" (2026-07-11) — ✅ tsc0/lint0/폭별 DOM 검증
+원장 피드백: 등록 창이 좁고 답답(메이크에듀 대비). 원인 = 700×660 창에 **세로 1열 + 요약 4행**이라 양식 뼈대(8줄)가 바로 잘림.
+- **2단 재배치**([consultation-form.tsx](<../src/app/(shell)/consultations/_components/consultation-form.tsx>)): 좌=짧은 메타(학생·상담사·일시·대상/범주·과목·후속조치),
+  우=상담 양식 선택기 + **요약(창 높이를 채우는 주인공, flex-1)**. `grid md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]` + `md:items-stretch`로
+  요약이 좌열 높이에 맞춰 커짐(4행≈100px → **489px**). 창 기본 `consultations/new` 700×660 → **960×720**([window-geometry.ts](../src/components/workspace/window-geometry.ts)), 페이지 max-w-4xl→5xl.
+- **좁은 창 방어**(원장 요청): 모든 라벨·입력 `break-keep`(한글 어절 줄바꿈) + 그리드 `minmax(0,…)`(자식 overflow 차단). `md`(768) 미만 세로 1열 접힘.
+  실측: 960=2단(586×489)·720/420=세로 1열, **420px에서도 가로 스크롤 0·오버플로 0**, 대상/범주 2열 각 192px 유지.
+- ⚠️ 후속: 등록상담(`/enrollment/new`)도 같은 세로 1열 구조 → 동일 2단 패턴으로 정리 예정.
+
 ### 대시보드 — 최근 7일 학생 증감 카드(과목별 차트) + 등록상담 스크롤 + 출석 스테일 표시 (2026-07-11) — ✅ tsc0/lint0/test1013/실화면(DOM) 검증 · 커밋 00fd3b3
 원장 요청 3건.
 - **최근 7일 카드 승격**([slim-trend.tsx](<../src/app/(shell)/dashboard/_components/slim-trend.tsx>)): 슬림 스트립(출석·수납 sparkline만)을

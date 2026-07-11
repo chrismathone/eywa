@@ -180,153 +180,161 @@ export function ConsultationForm({
         <input type="hidden" name="id" value={initialValue.id} />
       ) : null}
 
-      {/* 상담 양식(등록 모드) — 기본양식은 요약을 자동 프리필. 다른 양식으로 바꾸거나 '무양식'으로 비울 수 있음. */}
-      {mode === "create" && templates && templates.length > 0 ? (
-        <Field label="상담 양식" htmlFor="__template">
-          <select
-            id="__template"
-            value={templateKey}
-            onChange={(e) => applyTemplate(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">무양식 (빈 요약으로 시작)</option>
-            {templates.map((t) => (
-              <option key={t.key} value={t.key}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      ) : null}
+      {/* 2단 배치 — 좌: 짧은 메타 필드(컴팩트) / 우: 상담 양식 + 큰 요약(주인공, 창 높이를 채움).
+          좁은 창(md 미만)에선 자동으로 세로 1열로 접힘. minmax(0,…)로 그리드 자식 overflow 방지(좁은 창 줄바꿈 깨짐 예방). */}
+      <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:items-stretch">
+        {/* 좌측 — 메타 필드(단일 열) */}
+        <div className="flex min-w-0 flex-col gap-4">
+          <Field label="학생 *" htmlFor="studentId" error={errors.studentId}>
+            <SearchableSelect
+              name="studentId"
+              defaultValue={v.studentId}
+              placeholder="학생 선택..."
+              searchPlaceholder="학생 이름 검색..."
+              options={students.map((s) => ({
+                value: s.id,
+                label: s.name,
+                hint: s.grade ? `(${s.grade})` : undefined,
+              }))}
+            />
+          </Field>
+          <Field label="상담사" htmlFor="counselorId">
+            <select
+              id="counselorId"
+              name="counselorId"
+              defaultValue={v.counselorId ?? ""}
+              className={inputClass}
+            >
+              <option value="">본인</option>
+              {counselors.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.displayName}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="상담 일시 *" htmlFor="consultedAt" error={errors.consultedAt}>
+            <input
+              id="consultedAt"
+              name="consultedAt"
+              type="datetime-local"
+              defaultValue={isoToLocal(v.consultedAt || new Date().toISOString())}
+              required
+              className={inputClass}
+            />
+          </Field>
+          {/* 대상·범주 — 짧은 select 2개는 좁은 열에서도 나란히(각 ~150px 확보). */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="대상" htmlFor="audience">
+              <select
+                id="audience"
+                name="audience"
+                ref={audienceRef}
+                defaultValue={initAudience}
+                className={inputClass}
+              >
+                {AUDIENCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="범주" htmlFor="category">
+              <select
+                id="category"
+                name="category"
+                ref={categoryRef}
+                defaultValue={initCategory}
+                className={inputClass}
+              >
+                {CATEGORY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label="과목 (선택)" htmlFor="subject">
+            <input
+              id="subject"
+              name="subject"
+              defaultValue={v.subject ?? ""}
+              placeholder="예: 수학"
+              className={inputClass}
+            />
+          </Field>
+          {/* 후속 조치 — 구분선으로 본 메타와 분리(영역 구분). */}
+          <div className="border-border flex flex-col gap-4 border-t pt-4">
+            <Field label="후속 조치" htmlFor="followUpAction">
+              <input
+                id="followUpAction"
+                name="followUpAction"
+                defaultValue={v.followUpAction ?? ""}
+                placeholder="예: 다음주 화요일 학부모 통화"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="후속 조치 기한" htmlFor="followUpDate">
+              <input
+                id="followUpDate"
+                name="followUpDate"
+                type="date"
+                defaultValue={v.followUpDate ?? ""}
+                className={inputClass}
+              />
+            </Field>
+            <label className="text-foreground inline-flex items-center gap-2 text-sm break-keep">
+              <input
+                type="checkbox"
+                name="followUpDone"
+                value="true"
+                defaultChecked={v.followUpDone}
+                className="size-4 shrink-0"
+              />
+              후속 조치 완료
+            </label>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="학생 *" htmlFor="studentId" error={errors.studentId}>
-          <SearchableSelect
-            name="studentId"
-            defaultValue={v.studentId}
-            placeholder="학생 선택..."
-            searchPlaceholder="학생 이름 검색..."
-            options={students.map((s) => ({
-              value: s.id,
-              label: s.name,
-              hint: s.grade ? `(${s.grade})` : undefined,
-            }))}
-          />
-        </Field>
-        <Field label="상담사" htmlFor="counselorId">
-          <select
-            id="counselorId"
-            name="counselorId"
-            defaultValue={v.counselorId ?? ""}
-            className={inputClass}
-          >
-            <option value="">본인</option>
-            {counselors.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.displayName}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {/* 우측 — 상담 양식 선택기 + 요약(창 높이를 채우는 주인공). 좁은 창에선 좌측 아래로 접힘. */}
+        <div className="flex min-h-0 min-w-0 flex-col gap-4 md:h-full">
+          {/* 상담 양식(등록 모드) — 기본양식은 요약을 자동 프리필. 다른 양식·'무양식'으로 변경 가능. */}
+          {mode === "create" && templates && templates.length > 0 ? (
+            <Field label="상담 양식" htmlFor="__template">
+              <select
+                id="__template"
+                value={templateKey}
+                onChange={(e) => applyTemplate(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">무양식 (빈 요약으로 시작)</option>
+                {templates.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="summary" className="text-foreground block text-sm font-medium break-keep">
+              요약 *
+            </label>
+            <textarea
+              id="summary"
+              name="summary"
+              ref={summaryRef}
+              defaultValue={initSummary}
+              required
+              placeholder="상담 내용 요약"
+              className={`${inputClass} min-h-[18rem] flex-1 resize-y break-keep`}
+            />
+            {errors.summary ? <p className="text-chart-4 text-xs">{errors.summary}</p> : null}
+          </div>
+        </div>
       </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field label="상담 일시 *" htmlFor="consultedAt" error={errors.consultedAt}>
-          <input
-            id="consultedAt"
-            name="consultedAt"
-            type="datetime-local"
-            defaultValue={isoToLocal(v.consultedAt || new Date().toISOString())}
-            required
-            className={inputClass}
-          />
-        </Field>
-        <Field label="대상" htmlFor="audience">
-          <select
-            id="audience"
-            name="audience"
-            ref={audienceRef}
-            defaultValue={initAudience}
-            className={inputClass}
-          >
-            {AUDIENCE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="범주" htmlFor="category">
-          <select
-            id="category"
-            name="category"
-            ref={categoryRef}
-            defaultValue={initCategory}
-            className={inputClass}
-          >
-            {CATEGORY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <Field label="과목 (선택)" htmlFor="subject">
-        <input
-          id="subject"
-          name="subject"
-          defaultValue={v.subject ?? ""}
-          placeholder="예: 수학"
-          className={inputClass}
-        />
-      </Field>
-
-      <Field label="요약 *" htmlFor="summary" error={errors.summary}>
-        <textarea
-          id="summary"
-          name="summary"
-          ref={summaryRef}
-          defaultValue={initSummary}
-          required
-          rows={4}
-          placeholder="상담 내용 요약"
-          className={`${inputClass} resize-y break-keep`}
-        />
-      </Field>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="후속 조치" htmlFor="followUpAction">
-          <input
-            id="followUpAction"
-            name="followUpAction"
-            defaultValue={v.followUpAction ?? ""}
-            placeholder="예: 다음주 화요일 학부모 통화"
-            className={inputClass}
-          />
-        </Field>
-        <Field label="후속 조치 기한" htmlFor="followUpDate">
-          <input
-            id="followUpDate"
-            name="followUpDate"
-            type="date"
-            defaultValue={v.followUpDate ?? ""}
-            className={inputClass}
-          />
-        </Field>
-      </div>
-
-      <label className="text-foreground inline-flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          name="followUpDone"
-          value="true"
-          defaultChecked={v.followUpDone}
-          className="size-4"
-        />
-        후속 조치 완료
-      </label>
 
       {state?.error ? (
         <p className="text-chart-4 bg-chart-4/10 border-chart-4/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
@@ -358,7 +366,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-foreground block text-sm font-medium">
+      <label htmlFor={htmlFor} className="text-foreground block text-sm font-medium break-keep">
         {label}
       </label>
       {children}
