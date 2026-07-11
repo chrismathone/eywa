@@ -8,8 +8,8 @@ export type ReportListRow = {
   studentName: string;
   subject: string | null;
   reportDate: string;
-  createdAt: string | null; // 작성/이관 등록 시각(timestamptz) — 같은 날짜 내 최신순 정렬 키
-  sentAt: string | null; // 실제 학부모 발송 시각(classnote_sent_at) — 목록 hh:mm 표시(발송분). 없으면 createdAt 폴백
+  createdAt: string | null; // 작성/이관 등록 시각(timestamptz) — 정렬 최종 tiebreak(이관분은 cron 배치 시각으로 동일)
+  sentAt: string | null; // 실제 학부모 발송 시각(classnote_sent_at) — 목록 hh:mm 표시 + 같은 날짜 내 최신 발송 정렬 키. 없으면 createdAt 폴백
   classnoteStatus: string | null;
   teacherName: string | null;
   shareToken: string | null;
