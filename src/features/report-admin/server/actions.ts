@@ -207,7 +207,7 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, created_at, classnote_status, teacher_name, share_token, source", { count: "exact" })
+    .select("id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, teacher_name, share_token, source", { count: "exact" })
     .order("report_date", { ascending: false })
     .order("created_at", { ascending: false });
   if (filters.from) q = q.gte("report_date", filters.from);
@@ -233,6 +233,7 @@ export async function listReports(
     subject: r.subject as string | null,
     reportDate: r.report_date as string,
     createdAt: r.created_at as string | null,
+    sentAt: r.classnote_sent_at as string | null,
     classnoteStatus: r.classnote_status as string | null,
     teacherName: r.teacher_name as string | null,
     shareToken: r.share_token as string | null,

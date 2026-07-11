@@ -19,7 +19,7 @@ import type { ReportFilterOptions } from "@/features/report-admin/server/queries
 
 const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict"];
 
-// 작성/이관 시각의 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
+// 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {
   if (!iso) return "";
   return new Intl.DateTimeFormat("ko-KR", {
@@ -209,7 +209,15 @@ export function ReportList({
                   ) : null}
                   <td className="text-text-dim px-3 py-2 whitespace-nowrap">
                     {r.reportDate}
-                    {r.createdAt ? <span className="text-text-faint ml-1.5">{hhmmKst(r.createdAt)}</span> : null}
+                    {/* 발송분은 실제 발송 시각(classnote_sent_at), 미발송분은 작성/등록 시각 폴백 */}
+                    {r.sentAt || r.createdAt ? (
+                      <span
+                        className="text-text-faint ml-1.5"
+                        title={r.sentAt ? "학부모 발송 시각" : "작성·등록 시각(발송 전)"}
+                      >
+                        {hhmmKst(r.sentAt ?? r.createdAt)}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2">
                     <span className="text-foreground font-semibold">{r.studentName}</span>

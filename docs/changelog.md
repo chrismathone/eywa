@@ -9,7 +9,9 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
-### 수업보고서 목록 탭 — 관리자 발송(미발송분) (2026-07-10) — ✅ tsc0/lint0/test25(report-admin)/라이브 E2E
+### 수업보고서 목록 시각 = 실제 발송시각(classnote_sent_at) (2026-07-11) — ✅ tsc0/test25(report-admin)
+원장 제보: "발송시각이 새벽 4시". 진단(실데이터) — 목록 날짜 옆 시각이 `created_at`(=밤 edutrix-sync cron이 행을 INSERT한 순간)이라, cron 스케줄 `30 18 * * *`(UTC 18:30=**KST 03:30**) 때문에 이관·동기화분이 전부 새벽 3~4시로 표시됐음(실측: created 07-11 04:01 vs 실제 발송 07-10 19:00). cron/full-import INSERT가 `created_at` 미지정→DB `now()` 폴백이 근인. 실제 발송시각은 `classnote_sent_at`으로 정확히 이관돼 있으나 목록이 안 읽었음.
+- **A안 적용**: [listReports](../src/features/report-admin/server/actions.ts) select에 `classnote_sent_at` 추가 → `ReportListRow.sentAt`([report-filters](../src/features/report-admin/report-filters.ts)). [report-list](<../src/app/(shell)/lesson-reports/_components/report-list.tsx>) 날짜 옆 시각 = **`sentAt ?? createdAt`**(발송분=실제 발송시각 저녁, 미발송 native=작성/등록 시각 폴백). title 툴팁으로 "학부모 발송 시각"/"작성·등록 시각(발송 전)" 구분. 정렬은 기존 `report_date DESC, created_at DESC` 유지(주 정렬=수업일이라 회귀 0).
 원장 요청: 관리자도 수업보고서 탭에서 발송할 수 있게 — 발송 트리거가 강사 원스크린에만 있던 갭 해소.
 - **서버** [sendClassnoteForUnsent](../src/features/report-admin/server/actions.ts): **미발송(classnote_status IS NULL) native만** 하드필터 — 발송 이력 있는 행(success 포함)은 id를 직접 넘겨도 거부 = **중복발송 구조적 차단**(재발송은 retryClassnote 별도 역할). 이관(edutrix_import, 미발송 표시 4,813건=최대 오발송 벡터)·취소(revoked) 제외 + dry-run 스위치·과목 opt-in(subject NULL 거부)·too_old·동명이인(name_conflict 마킹) = 강사 발송 경로와 동일 가드. update에 `.is(null)` 재확인 → 더블클릭·타 관리자 경합에도 1회만 큐잉.
 - **UI** [report-list](<../src/app/(shell)/lesson-reports/_components/report-list.tsx>): 체크박스 열(+현재 페이지 전체선택) + "선택 발송" 버튼 — 미발송 native 행만 활성([isAdminSendable](../src/features/report-admin/report-filters.ts) 순수+Vitest 4, 서버 필터와 동일 계약), lesson_reports 쓰기 권한일 때만 노출(viewer 숨김). 페이지·필터 전환 시 선택 초기화(화면 밖 행 발송 방지). 과목 필터·행 과목 표기 = `labelOf` 한글 라벨(raw 키 노출 제거).
