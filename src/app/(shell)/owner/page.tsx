@@ -9,6 +9,7 @@ import { OperationsSection } from "./_components/operations-section";
 import { SubjectsSection } from "./_components/subjects-section";
 import { BillingSection } from "./_components/billing-section";
 import { NotificationsSection } from "./_components/notifications-section";
+import { ConsultationsSection } from "./_components/consultations-section";
 import { PermissionsSection } from "./_components/permissions-section";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
@@ -25,6 +26,7 @@ type OwnerTab =
   | "subjects"
   | "billing"
   | "notifications"
+  | "consultations"
   | "permissions"
   | "popups"
   | "data"
@@ -37,6 +39,7 @@ const TAB_LABEL: Record<OwnerTab, string> = {
   subjects: "과목 운영",
   billing: "수납·청구",
   notifications: "알림·약관",
+  consultations: "상담 양식",
   permissions: "역할·권한",
   popups: "팝업 공지",
   data: "데이터 정리",
@@ -50,6 +53,7 @@ const VALID_TABS: OwnerTab[] = [
   "subjects",
   "billing",
   "notifications",
+  "consultations",
   "permissions",
   "popups",
   "data",
@@ -71,6 +75,7 @@ const FACES: Face[] = [
   { key: "subjects", label: TAB_LABEL.subjects, href: "/owner?tab=subjects", group: "설정" },
   { key: "billing", label: TAB_LABEL.billing, href: "/owner?tab=billing", group: "설정" },
   { key: "notifications", label: TAB_LABEL.notifications, href: "/owner?tab=notifications", group: "설정" },
+  { key: "consultations", label: TAB_LABEL.consultations, href: "/owner?tab=consultations", group: "설정" },
   { key: "permissions", label: TAB_LABEL.permissions, href: "/owner?tab=permissions", group: "설정" },
   { key: "popups", label: TAB_LABEL.popups, href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: TAB_LABEL.data, href: "/owner?tab=data", group: "관리" },
@@ -141,6 +146,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       ) : null}
       {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
+      {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
           <PermissionsSection initial={settings.permissions} />

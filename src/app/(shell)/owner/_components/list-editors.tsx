@@ -3,7 +3,7 @@
 // 배열형 설정(과목·직급·학년·교시·학기·공휴일) 편집기 — 행 추가/삭제 + 인라인 입력.
 import { useRef } from "react";
 import { Plus, X } from "lucide-react";
-import { SUBJECT_COLORS, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
+import { SUBJECT_COLORS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 
@@ -331,6 +331,127 @@ export function ShuttleEditor({
           label="노선 추가"
         />
       </div>
+    </div>
+  );
+}
+
+// 학생상담 양식(템플릿) — 이름 + 요약 뼈대 + (선택) 기본 범주/대상 + 기본양식 라디오. 상담 등록 폼이 소비.
+// 범주/대상 "기본값" 옵션(value="")은 양식이 값을 지정하지 않음을 뜻함(폼의 일반/학부모 기본을 유지).
+const CONSULT_CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "범주: 기본(일반)" },
+  { value: "general", label: "일반" },
+  { value: "academic", label: "학습/성적" },
+  { value: "emotional", label: "정서/심리" },
+  { value: "career", label: "진로" },
+  { value: "social", label: "교우관계" },
+  { value: "other", label: "기타" },
+];
+const CONSULT_AUDIENCE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "대상: 기본(학부모)" },
+  { value: "parent", label: "학부모" },
+  { value: "student", label: "학생" },
+  { value: "both", label: "학부모+학생" },
+];
+
+function nextTemplateKey(taken: Set<string>): string {
+  let n = 1;
+  while (taken.has(`template_${n}`)) n += 1;
+  return `template_${n}`;
+}
+
+export function ConsultationTemplateEditor({
+  value,
+  onChange,
+}: {
+  value: ConsultationTemplate[];
+  onChange: (v: ConsultationTemplate[]) => void;
+}) {
+  const set = (i: number, patch: Partial<ConsultationTemplate>) =>
+    onChange(value.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  // 기본양식은 1개만 — 한 행을 기본으로 지정하면 나머지는 자동 해제. i=null이면 전부 해제(기본 없음).
+  const setDefault = (i: number | null) =>
+    onChange(value.map((x, j) => ({ ...x, isDefault: i !== null && j === i })));
+  const noDefault = !value.some((t) => t.isDefault);
+
+  return (
+    <div className="space-y-3">
+      <label className="text-foreground flex items-center gap-2 text-[13px]">
+        <input
+          type="radio"
+          name="consultation-default"
+          checked={noDefault}
+          onChange={() => setDefault(null)}
+          className="size-4"
+        />
+        기본양식 지정 안 함 <span className="text-text-dim">(새 상담은 빈 요약으로 시작)</span>
+      </label>
+
+      {value.map((t, i) => (
+        <div key={t.key} className="border-line space-y-2 rounded-md border p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className={`${cellCls} min-w-[180px] flex-1`}
+              value={t.name}
+              placeholder="양식 이름 (예: 신입생 관리 #1 – 첫수업 전 전화)"
+              onChange={(e) => set(i, { name: e.target.value })}
+            />
+            <select
+              className={`${cellCls} w-[150px]`}
+              value={t.category ?? ""}
+              onChange={(e) => set(i, { category: (e.target.value || null) as ConsultationTemplate["category"] })}
+              aria-label="기본 범주"
+            >
+              {CONSULT_CATEGORY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <select
+              className={`${cellCls} w-[150px]`}
+              value={t.audience ?? ""}
+              onChange={(e) => set(i, { audience: (e.target.value || null) as ConsultationTemplate["audience"] })}
+              aria-label="기본 대상"
+            >
+              {CONSULT_AUDIENCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <label className="text-text-dim inline-flex items-center gap-1.5 text-[12px]">
+              <input
+                type="radio"
+                name="consultation-default"
+                checked={t.isDefault}
+                onChange={() => setDefault(i)}
+                className="size-4"
+              />
+              기본양식
+            </label>
+            <RemoveButton onClick={() => onChange(value.filter((_, j) => j !== i))} />
+          </div>
+          <textarea
+            className={`${cellCls} w-full resize-y break-keep`}
+            rows={4}
+            value={t.body}
+            placeholder="요약 뼈대 — 상담 등록 시 요약란에 이 내용이 채워집니다"
+            onChange={(e) => set(i, { body: e.target.value })}
+          />
+        </div>
+      ))}
+      <AddButton
+        onClick={() =>
+          onChange([
+            ...value,
+            {
+              key: nextTemplateKey(new Set(value.map((t) => t.key))),
+              name: "",
+              body: "",
+              category: null,
+              audience: null,
+              isDefault: false,
+            },
+          ])
+        }
+        label="양식 추가"
+      />
     </div>
   );
 }

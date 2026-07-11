@@ -63,6 +63,43 @@ const DEFAULT_SERVICE_TERMS = `[수강 등록 및 환불 안내]
 1. 규칙적인 학습을 위해 지각·결석에 대한 별도 보강이 없습니다. (단, 건강상의 문제나 증명 가능한 공식 사유는 1회 이내 예외 인정)
 2. 규정·예의를 지키지 않거나 수업 분위기를 해칠 경우 경고를 받으며, 2회 경고 시 퇴원 조치됩니다.`;
 
+// 학생상담 기본 양식(템플릿) — 상담 등록 시 요약 뼈대·기본 범주/대상을 프리필. 원장이 학원설정에서 편집.
+// '학생 상담일지'가 기본양식(isDefault) — 새 상담 폼이 자동으로 이 뼈대를 채운다. 원장이 다른 양식/무양식으로 바꿀 수 있음.
+const DEFAULT_CONSULTATION_TEMPLATES = [
+  {
+    key: "general",
+    name: "학생 상담일지",
+    body: "■ 상담 내용:\n\n■ 조치 사항:\n\n■ 건의 사항:\n\n■ 비고:",
+    category: "general" as const,
+    audience: "parent" as const,
+    isDefault: true,
+  },
+  {
+    key: "new_before",
+    name: "신입생 관리 #1 – 첫수업 전 전화",
+    body: "[첫수업 전 안내 전화]\n■ 통화 대상:\n■ 첫 수업 일정·준비물 안내:\n■ 학부모 문의·요청 사항:\n■ 특이사항:",
+    category: "general" as const,
+    audience: "parent" as const,
+    isDefault: false,
+  },
+  {
+    key: "new_after",
+    name: "신입생 관리 #2 – 첫수업 후 전화",
+    body: "[첫수업 후 점검 전화]\n■ 첫 수업 반응·소감:\n■ 수업 이해도·태도:\n■ 학부모 피드백:\n■ 조치 사항:",
+    category: "general" as const,
+    audience: "parent" as const,
+    isDefault: false,
+  },
+  {
+    key: "new_week",
+    name: "신입생 관리 #3 – 일주일 적응 점검 전화",
+    body: "[일주일 적응 점검 전화]\n■ 적응 상태(친구·수업·과제):\n■ 학습 습관·숙제 수행:\n■ 학부모 관찰 사항:\n■ 후속 계획:",
+    category: "general" as const,
+    audience: "parent" as const,
+    isDefault: false,
+  },
+];
+
 export const DEFAULT_SETTINGS: TenantSettings = {
   version: 1,
   profile: {
@@ -121,6 +158,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     privacyTerms: DEFAULT_PRIVACY_TERMS,
     serviceTerms: DEFAULT_SERVICE_TERMS,
   },
+  // 학생상담 양식(템플릿) — 기본 4종 프리셋(신입생 관리 시나리오 + 일반 상담일지). 원장이 학원설정에서 편집.
+  consultations: { templates: DEFAULT_CONSULTATION_TEMPLATES },
   // 학부모 보고서(/r)·ClassNote 게시 이미지 표시 — 기본은 전부 표시(기존 동작 유지). 로고 중복은 원장이 학원명 off로.
   report: {
     title: "수업 보고서",

@@ -165,6 +165,45 @@ export const notificationsSchema = z.object({
 });
 export type NotificationsSettings = z.infer<typeof notificationsSchema>;
 
+// === 학생상담 양식(템플릿) — 상담 등록 시 요약 뼈대·기본 범주/대상을 프리필 ===
+// 테넌트 공용 목록 + 기본양식(isDefault) 최대 1개. 소비처 = 상담 등록 폼(consultation-form.tsx)의 양식 선택기.
+// 범주·대상은 학생상담의 고정 도메인 enum(운영 enum 아님 — 코드 고정). 상담 폼(actions.ts CATEGORIES/AUDIENCES)과 동일 값.
+export const CONSULTATION_CATEGORIES = ["general", "academic", "emotional", "career", "social", "other"] as const;
+export const CONSULTATION_AUDIENCES = ["parent", "student", "both"] as const;
+
+// 빈 문자열/undefined → null 정규화(에디터 select "없음" 값이 "" 로 넘어와도 통과).
+const emptyToNull = (v: unknown) => (v === "" || v === undefined ? null : v);
+
+export const consultationTemplateSchema = z.object({
+  key: z.string().min(1).max(24),
+  name: z.string().min(1, "양식 이름을 입력하세요").max(40),
+  body: z.string().max(4000), // 요약 뼈대(빈 값 허용 — 제목만 있는 양식도 가능)
+  category: z.preprocess(emptyToNull, z.enum(CONSULTATION_CATEGORIES).nullable()),
+  audience: z.preprocess(emptyToNull, z.enum(CONSULTATION_AUDIENCES).nullable()),
+  isDefault: z.boolean().default(false),
+});
+export type ConsultationTemplate = z.infer<typeof consultationTemplateSchema>;
+
+export const consultationsSchema = z
+  .object({ templates: z.array(consultationTemplateSchema).max(30) })
+  .superRefine((v, ctx) => {
+    // 양식 ID(key) 중복 금지 + 기본양식은 최대 1개(라디오 UI와 이중 방어).
+    const keys = new Set<string>();
+    let defaults = 0;
+    v.templates.forEach((t, i) => {
+      const k = t.key.trim();
+      if (k && keys.has(k)) {
+        ctx.addIssue({ code: "custom", message: `양식 ID가 중복됩니다: ${k}`, path: ["templates", i, "key"] });
+      }
+      keys.add(k);
+      if (t.isDefault) defaults += 1;
+    });
+    if (defaults > 1) {
+      ctx.addIssue({ code: "custom", message: "기본양식은 하나만 지정할 수 있습니다", path: ["templates"] });
+    }
+  });
+export type ConsultationsSettings = z.infer<typeof consultationsSchema>;
+
 // === 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정 ===
 // 표시 세부를 하드코딩 대신 원장이 제어(로고/학원명 중복 제거, 항목 토글, 바닥글). 배열 없음(deepMerge 안전).
 export const reportSchema = z.object({
@@ -232,6 +271,7 @@ export const tenantSettingsSchema = z.object({
   operations: operationsSchema,
   billing: billingSchema,
   notifications: notificationsSchema,
+  consultations: consultationsSchema,
   report: reportSchema,
   permissions: permissionsSchema,
 });
@@ -243,6 +283,7 @@ export const SECTION_SCHEMAS = {
   operations: operationsSchema,
   billing: billingSchema,
   notifications: notificationsSchema,
+  consultations: consultationsSchema,
   report: reportSchema,
   permissions: permissionsSchema,
 } as const;
@@ -254,6 +295,7 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   operations: "운영 체계",
   billing: "수납·청구 기본값",
   notifications: "알림·약관",
+  consultations: "상담 양식",
   report: "보고서",
   permissions: "역할별 메뉴 권한",
 };

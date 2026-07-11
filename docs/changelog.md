@@ -9,6 +9,21 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 학생상담 등록 — 상담 양식(템플릿) + 기본양식 지정·프리필 (2026-07-11) — ✅ tsc0/lint0/test+8/브라우저 검증
+원장 요청(메이크에듀 패리티): 상담 등록 시 여러 양식 중 **기본양식**을 지정해두고 자동으로 채워지되, 상담사가 다른
+양식이나 **무양식**으로 바꿀 수 있게. 메이크에듀는 리치텍스트 HTML 통짜 양식이지만 eywa는 구조화 필드라 **요약(뼈대)
++ 기본 범주/대상**을 채우는 방식으로 번역(①테넌트 공용 ②요약+범주·대상).
+- **설정(단일 소스)**: `tenant_settings.data`에 **새 섹션 `consultations`**(`templates[]`: key·name·body·category?·audience?·isDefault)
+  — [settings-types.ts](../src/features/owner/settings-types.ts) Zod(superRefine: 기본양식 ≤1개·key 유일·이름 필수, "" → null 정규화).
+  [defaults.ts](../src/features/owner/defaults.ts) 기본 프리셋 4종(학생 상담일지[기본]·신입생 관리 #1~#3). DB 마이그레이션 0(jsonb).
+- **편집 UI**: 학원설정 새 탭 **'상담 양식'**([consultations-section.tsx](<../src/app/(shell)/owner/_components/consultations-section.tsx>)
+  + [list-editors.tsx](<../src/app/(shell)/owner/_components/list-editors.tsx>) `ConsultationTemplateEditor`) — 이름·범주·대상·기본양식 라디오·요약 뼈대.
+  저장·감사로그는 기존 `saveOwnerSection`/`SECTION_LABELS` 제네릭 경로 재사용(신규 배선 0).
+- **소비처**: [consultation-form.tsx](<../src/app/(shell)/consultations/_components/consultation-form.tsx>) 상단 양식 선택기 —
+  기본양식이 요약·범주·대상을 프리필, 선택 시 ref로 주입(uncontrolled+초안 훅 DOM 모델 유지). 무양식=요약 비움.
+  **덮어쓰기 확인은 '프리필 이후 사용자가 수정한 경우에만'**(untouched 프리필 전환은 무확인). 초안 복구(배너)와 무충돌.
+- 검증: 브라우저 실측(기본양식 프리필·양식 전환·무양식 비움·콘솔0) + Vitest 8(schema/resolve). ⚠️ 프로덕션 저장은 미실행(injaewon 무변경) — 스키마 순수 테스트로 저장 경로 방어.
+
 ### 학원설정 감사로그 전면 한글 풀어쓰기 — raw JSON·영문 키 노출 제거 (2026-07-11) — ✅ tsc0/lint0/test988/실데이터 3페이지 검증
 원장 요청: 감사로그 상세가 `{"section":"report"}`·`tenant_settings` 같은 원문이라 못 읽음. activity.ts(활동로그) 선례를 따라
 **[describe.ts](../src/features/audit/describe.ts) 순수 모듈 신설**(Vitest 24) — 액션별 metadata를 한글 문장으로("「보고서」 설정 저장",

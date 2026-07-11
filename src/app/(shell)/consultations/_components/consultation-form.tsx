@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Save } from "lucide-react";
@@ -23,6 +23,7 @@ import type {
   StudentOption,
 } from "@/features/consultations/server/queries";
 import type { TeacherOption } from "@/features/students/server/queries";
+import type { ConsultationTemplate } from "@/features/owner/settings-types";
 
 type Mode = "create" | "edit";
 
@@ -82,11 +83,14 @@ export function ConsultationForm({
   initialValue,
   students,
   counselors,
+  templates,
 }: {
   mode: Mode;
   initialValue?: ConsultationFormValue;
   students: StudentOption[];
   counselors: TeacherOption[];
+  /** 상담 양식(테넌트 공용) — 등록(create) 모드에서만 양식 선택기로 소비. 기본양식은 요약을 프리필. */
+  templates?: ConsultationTemplate[];
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
@@ -104,6 +108,37 @@ export function ConsultationForm({
     followUpDate: null,
     followUpDone: false,
   };
+
+  // 기본양식(등록 모드) — 요약·범주·대상 초기값을 프리필. 초안 복구는 배너(사용자 확인)라 여기 프리필과 충돌 없음.
+  const defaultTemplate = mode === "create" ? templates?.find((t) => t.isDefault) : undefined;
+  const initSummary = defaultTemplate ? defaultTemplate.body : v.summary;
+  const initCategory: string = defaultTemplate?.category ?? v.category ?? "general";
+  const initAudience: string = defaultTemplate?.audience ?? v.audience ?? "parent";
+
+  // 요약·범주·대상은 uncontrolled(defaultValue) — 양식 선택 시 ref로 값만 주입(초안 훅과 동일한 DOM 모델 유지).
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const categoryRef = useRef<HTMLSelectElement>(null);
+  const audienceRef = useRef<HTMLSelectElement>(null);
+  const [templateKey, setTemplateKey] = useState<string>(defaultTemplate?.key ?? "");
+
+  // 양식 선택 → 요약(+지정된 범주/대상) 주입. 이전 양식 프리필을 손대지 않았으면 무확인,
+  // 사용자가 직접 고친 내용이 있을 때만 덮어쓰기 확인(입력 유실 방지, design-conventions).
+  function applyTemplate(key: string) {
+    const t = templates?.find((x) => x.key === key);
+    const nextBody = t ? t.body : "";
+    const cur = summaryRef.current?.value ?? "";
+    const prevBody = templates?.find((x) => x.key === templateKey)?.body ?? ""; // 이전 선택 양식(무양식=빈값)
+    const dirty = cur.trim() !== "" && cur !== prevBody; // 프리필 이후 사용자가 수정했는가
+    if (dirty && cur !== nextBody && !window.confirm("작성 중인 요약을 선택한 양식으로 바꿀까요?")) {
+      return; // 취소 — 이전 선택·내용 유지
+    }
+    setTemplateKey(key);
+    if (summaryRef.current) summaryRef.current.value = nextBody;
+    if (t?.category && categoryRef.current) categoryRef.current.value = t.category;
+    if (t?.audience && audienceRef.current) audienceRef.current.value = t.audience;
+    // 자동저장·미저장 가드가 변경을 인지하도록 form에 input 이벤트 발화.
+    formRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 
   const errors = state?.fieldErrors ?? {};
 
@@ -143,6 +178,25 @@ export function ConsultationForm({
       {editScope ? <EditingBanner scope={editScope} /> : null}
       {mode === "edit" && initialValue?.id ? (
         <input type="hidden" name="id" value={initialValue.id} />
+      ) : null}
+
+      {/* 상담 양식(등록 모드) — 기본양식은 요약을 자동 프리필. 다른 양식으로 바꾸거나 '무양식'으로 비울 수 있음. */}
+      {mode === "create" && templates && templates.length > 0 ? (
+        <Field label="상담 양식" htmlFor="__template">
+          <select
+            id="__template"
+            value={templateKey}
+            onChange={(e) => applyTemplate(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">무양식 (빈 요약으로 시작)</option>
+            {templates.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </Field>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -191,7 +245,8 @@ export function ConsultationForm({
           <select
             id="audience"
             name="audience"
-            defaultValue={v.audience ?? "parent"}
+            ref={audienceRef}
+            defaultValue={initAudience}
             className={inputClass}
           >
             {AUDIENCE_OPTIONS.map((o) => (
@@ -205,7 +260,8 @@ export function ConsultationForm({
           <select
             id="category"
             name="category"
-            defaultValue={v.category ?? "general"}
+            ref={categoryRef}
+            defaultValue={initCategory}
             className={inputClass}
           >
             {CATEGORY_OPTIONS.map((o) => (
@@ -231,11 +287,12 @@ export function ConsultationForm({
         <textarea
           id="summary"
           name="summary"
-          defaultValue={v.summary}
+          ref={summaryRef}
+          defaultValue={initSummary}
           required
           rows={4}
           placeholder="상담 내용 요약"
-          className={`${inputClass} resize-y`}
+          className={`${inputClass} resize-y break-keep`}
         />
       </Field>
 
