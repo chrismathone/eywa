@@ -9,6 +9,21 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 대시보드 — 최근 7일 학생 증감 카드(과목별 차트) + 등록상담 스크롤 + 출석 스테일 표시 (2026-07-11) — ✅ tsc0/lint0/test1013/실화면(DOM) 검증 · 커밋 00fd3b3
+원장 요청 3건.
+- **최근 7일 카드 승격**([slim-trend.tsx](<../src/app/(shell)/dashboard/_components/slim-trend.tsx>)): 슬림 스트립(출석·수납 sparkline만)을
+  **학생 증감이 주역인 카드**로 승격 + 위치를 '오늘 조치' 아래로 이동. 신규/퇴원/순 큰 숫자(실측 +8/−135/−127) +
+  **과목별 발산형 막대 차트**(퇴원=왼쪽 빨강 ┃ 신규=오른쪽 녹색, 중앙 과목 라벨, 최대값 스케일 — CSS 막대라 무거운
+  차트 라이브러리 無, B5 회피). 데이터 [getEnrollmentChangeLast7d](../src/features/dashboard/server/queries.ts): 전체=`count:exact head`(B2),
+  과목별=창 내 학생 id→수강 반 과목 `fetchInChunks`(B3, 한 학생 2과목이면 각 과목 계수). 라벨은 `subjects.labelOf`(raw 키 금지). 실측 영어−64·수학+3/−41.
+- **등록상담 카드 스크롤 복구**([enrollment-list-card.tsx](<../src/app/(shell)/dashboard/_components/enrollment-list-card.tsx>)): 앞서 넣은 '배정 필요'
+  밴드가 세로목록(학교·학년·날짜)이라 카드 절반(flex-1)을 다 먹어 **활성 상담 목록을 0행으로 짓누르고 overflow-hidden으로 잘림**.
+  → 밴드를 **이름 인라인**으로 압축(150→64px) + 밴드 `shrink-0` 고정 + 활성 `<ul>` `min-h-0 overflow-y-auto`로 스크롤. 실검증 scrollTop 이동.
+- **출석 스테일 표시**([page.tsx](<../src/app/(shell)/dashboard/page.tsx>)·[command-band.tsx](<../src/app/(shell)/dashboard/_components/command-band.tsx>)): injaewon은
+  6/10 이후 eywa 출석 기록 0건이라 밴드가 마지막 스냅샷(6/9, 9건짜리 100%)로 폴백해 **낡은 100%가 현재처럼 크게** 보였음.
+  → 스냅샷이 **7일 초과** 오래되면 rate 숨김("—") + 서브 "M/D 이후 기록 없음"(command-band asOf 라벨 일반화, 기존 "M/D 기준"은 7일 이내 폴백 유지).
+- ⚠️ **07-10 대량 퇴원 120건 = 의도된 일괄 처리**(원장 확인). ⚠️ 커밋은 병렬 세션(회의-AI) 충돌 회피로 대시보드 5파일만 반영, 이 changelog는 후속 추가.
+
 ### 학생상담 등록 — 상담 양식(템플릿) + 기본양식 지정·프리필 (2026-07-11) — ✅ tsc0/lint0/test+8/브라우저 검증
 원장 요청(메이크에듀 패리티): 상담 등록 시 여러 양식 중 **기본양식**을 지정해두고 자동으로 채워지되, 상담사가 다른
 양식이나 **무양식**으로 바꿀 수 있게. 메이크에듀는 리치텍스트 HTML 통짜 양식이지만 eywa는 구조화 필드라 **요약(뼈대)
