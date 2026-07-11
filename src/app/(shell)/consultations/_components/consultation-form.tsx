@@ -24,6 +24,7 @@ import type {
 } from "@/features/consultations/server/queries";
 import type { TeacherOption } from "@/features/students/server/queries";
 import type { ConsultationTemplate } from "@/features/owner/settings-types";
+import { fillTemplate, formatConsultDate, type TemplateVars } from "@/features/consultations/template-vars";
 
 type Mode = "create" | "edit";
 
@@ -84,6 +85,7 @@ export function ConsultationForm({
   students,
   counselors,
   templates,
+  currentUserName,
 }: {
   mode: Mode;
   initialValue?: ConsultationFormValue;
@@ -91,6 +93,8 @@ export function ConsultationForm({
   counselors: TeacherOption[];
   /** 상담 양식(테넌트 공용) — 등록(create) 모드에서만 양식 선택기로 소비. 기본양식은 요약을 프리필. */
   templates?: ConsultationTemplate[];
+  /** 현재 로그인 사용자 표시명 — 상담사 "본인" 선택 시 {{담당}} 태그 치환값. */
+  currentUserName?: string;
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
@@ -111,7 +115,26 @@ export function ConsultationForm({
 
   // 기본양식(등록 모드) — 요약·범주·대상 초기값을 프리필. 초안 복구는 배너(사용자 확인)라 여기 프리필과 충돌 없음.
   const defaultTemplate = mode === "create" ? templates?.find((t) => t.isDefault) : undefined;
-  const initSummary = defaultTemplate ? defaultTemplate.body : v.summary;
+
+  // 양식 치환 태그({{날짜}}·{{담당}}·{{학생}}·{{학년}}) 값 해석 — 상담일시/상담사/학생 선택에서 도출.
+  const resolveVars = (consultedAt: string, counselorId: string, studentId: string): TemplateVars => {
+    const d = consultedAt ? new Date(consultedAt) : new Date();
+    const counselor = counselorId
+      ? counselors.find((c) => c.id === counselorId)?.displayName ?? currentUserName
+      : currentUserName;
+    const st = studentId ? students.find((s) => s.id === studentId) : undefined;
+    return {
+      date: formatConsultDate(Number.isNaN(d.getTime()) ? new Date() : d),
+      counselor: counselor || undefined,
+      student: st?.name,
+      grade: st?.grade ?? undefined,
+    };
+  };
+
+  // 마운트 프리필 — DOM 이전이라 props(초기값)에서 태그 치환.
+  const initSummary = defaultTemplate
+    ? fillTemplate(defaultTemplate.body, resolveVars(v.consultedAt, v.counselorId ?? "", v.studentId))
+    : v.summary;
   const initCategory: string = defaultTemplate?.category ?? v.category ?? "general";
   const initAudience: string = defaultTemplate?.audience ?? v.audience ?? "parent";
 
@@ -120,20 +143,30 @@ export function ConsultationForm({
   const categoryRef = useRef<HTMLSelectElement>(null);
   const audienceRef = useRef<HTMLSelectElement>(null);
   const [templateKey, setTemplateKey] = useState<string>(defaultTemplate?.key ?? "");
+  // 마지막으로 주입한(치환 완료) 요약 — 사용자가 그 뒤로 직접 고쳤는지 판정(덮어쓰기 확인)용.
+  const lastAppliedRef = useRef<string>(initSummary);
 
-  // 양식 선택 → 요약(+지정된 범주/대상) 주입. 이전 양식 프리필을 손대지 않았으면 무확인,
-  // 사용자가 직접 고친 내용이 있을 때만 덮어쓰기 확인(입력 유실 방지, design-conventions).
+  // 현재 폼 선택값(상담일시·상담사·학생)에서 치환 태그 값 수집.
+  const collectVars = (): TemplateVars => {
+    const form = formRef.current;
+    const val = (name: string) =>
+      (form?.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
+    return resolveVars(val("consultedAt"), val("counselorId"), val("studentId") || v.studentId);
+  };
+
+  // 양식 선택 → 요약(+지정된 범주/대상) 주입. 본문의 {{태그}}는 현재 선택값으로 치환. 이전 프리필을 손대지 않았으면
+  // 무확인, 사용자가 직접 고친 내용이 있을 때만 덮어쓰기 확인(입력 유실 방지, design-conventions).
   function applyTemplate(key: string) {
     const t = templates?.find((x) => x.key === key);
-    const nextBody = t ? t.body : "";
+    const nextBody = fillTemplate(t ? t.body : "", collectVars());
     const cur = summaryRef.current?.value ?? "";
-    const prevBody = templates?.find((x) => x.key === templateKey)?.body ?? ""; // 이전 선택 양식(무양식=빈값)
-    const dirty = cur.trim() !== "" && cur !== prevBody; // 프리필 이후 사용자가 수정했는가
+    const dirty = cur.trim() !== "" && cur !== lastAppliedRef.current; // 프리필 이후 사용자가 수정했는가
     if (dirty && cur !== nextBody && !window.confirm("작성 중인 요약을 선택한 양식으로 바꿀까요?")) {
       return; // 취소 — 이전 선택·내용 유지
     }
     setTemplateKey(key);
     if (summaryRef.current) summaryRef.current.value = nextBody;
+    lastAppliedRef.current = nextBody;
     if (t?.category && categoryRef.current) categoryRef.current.value = t.category;
     if (t?.audience && audienceRef.current) audienceRef.current.value = t.audience;
     // 자동저장·미저장 가드가 변경을 인지하도록 form에 input 이벤트 발화.

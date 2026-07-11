@@ -13,7 +13,7 @@ export default async function NewConsultationPage({
 }: {
   searchParams: Promise<{ studentId?: string }>;
 }) {
-  await requireAccess("consultations");
+  const viewer = await requireAccess("consultations");
   const { studentId } = await searchParams;
   const [students, counselors, settings] = await Promise.all([
     getStudentOptionsForConsultation(),
@@ -40,6 +40,7 @@ export default async function NewConsultationPage({
         students={students}
         counselors={counselors}
         templates={settings.consultations.templates}
+        currentUserName={viewer.displayName}
         initialValue={
           studentId
             ? {

@@ -12,7 +12,7 @@ export function ConsultationsSection({ initial }: { initial: ConsultationsSettin
     <SectionForm section="consultations" payload={c}>
       <SettingsCard
         title="상담 양식"
-        description="학생상담 등록 화면에서 요약란에 자동으로 채워지는 양식(뼈대)입니다. 기본양식을 지정하면 새 상담이 그 양식으로 시작하고, 상담사가 다른 양식이나 무양식으로 바꿀 수 있습니다."
+        description="학생상담 등록 화면에서 요약란에 자동으로 채워지는 양식(뼈대)입니다. 기본양식을 지정하면 새 상담이 그 양식으로 시작하고, 상담사가 다른 양식이나 무양식으로 바꿀 수 있습니다. 뼈대에 {{날짜}}·{{담당}} 같은 치환 태그를 넣으면 등록 시 실제 값으로 자동 입력됩니다."
       >
         <ConsultationTemplateEditor
           value={c.templates}

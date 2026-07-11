@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 상담 양식 치환 태그 — {{날짜}}·{{담당}}·{{학생}} 자동 입력 (2026-07-11) — ✅ tsc0/lint0/test22/실측
+원장 요청(메이크에듀 패리티): 양식에 `{{날짜}}` `{{담당}}` 같은 태그를 넣으면 등록 시 자동으로 값이 채워지게.
+- **순수 치환 모듈** [template-vars.ts](../src/features/consultations/template-vars.ts)(Vitest 8): `fillTemplate(body, vars)` — 알려진 태그+값→치환,
+  값 없음→빈칸 제거, **미지원 태그(오타)→원문 유지**. 별칭(`날짜=오늘=일자`·`담당=상담사=담당자`·`학생=학생명=이름`·`학년`) + `formatConsultDate`("2026년 07월 11일").
+- **폼 소비**([consultation-form.tsx](<../src/app/(shell)/consultations/_components/consultation-form.tsx>)): 마운트 프리필·양식 전환 시 현재 선택값(상담일시/상담사/학생)으로
+  치환. 상담사 "본인"=로그인 사용자([new/page.tsx](<../src/app/(shell)/consultations/new/page.tsx>) `currentUserName`), 선택 시 해당 상담사명. `lastAppliedRef`로 덮어쓰기 확인 판정(치환 후 값 기준).
+- **오너 편집기**([list-editors.tsx](<../src/app/(shell)/owner/_components/list-editors.tsx>)): 지원 태그 힌트 칩 + placeholder 안내. **기본 프리셋 4종에 태그 적용**([defaults.ts](../src/features/owner/defaults.ts)).
+- 실측: 기본양식=`2026년 07월 11일 · 담당 원일`(로그인 사용자), 상담사 박소선 선택→`담당 박소선`, 학생 미선택→빈칸(잔여물 없음). 1회 치환(적용 시점) = 메이크에듀와 동일.
+
 ### 학생상담 등록 폼 — 2단 레이아웃(좌 메타 + 우 큰 요약)으로 "시원하게" (2026-07-11) — ✅ tsc0/lint0/폭별 DOM 검증
 원장 피드백: 등록 창이 좁고 답답(메이크에듀 대비). 원인 = 700×660 창에 **세로 1열 + 요약 4행**이라 양식 뼈대(8줄)가 바로 잘림.
 - **2단 재배치**([consultation-form.tsx](<../src/app/(shell)/consultations/_components/consultation-form.tsx>)): 좌=짧은 메타(학생·상담사·일시·대상/범주·과목·후속조치),

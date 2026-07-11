@@ -69,7 +69,7 @@ const DEFAULT_CONSULTATION_TEMPLATES = [
   {
     key: "general",
     name: "학생 상담일지",
-    body: "■ 상담 내용:\n\n■ 조치 사항:\n\n■ 건의 사항:\n\n■ 비고:",
+    body: "{{날짜}} · 담당 {{담당}}\n\n■ 상담 내용:\n\n■ 조치 사항:\n\n■ 건의 사항:\n\n■ 비고:",
     category: "general" as const,
     audience: "parent" as const,
     isDefault: true,
@@ -77,7 +77,7 @@ const DEFAULT_CONSULTATION_TEMPLATES = [
   {
     key: "new_before",
     name: "신입생 관리 #1 – 첫수업 전 전화",
-    body: "[첫수업 전 안내 전화]\n■ 통화 대상:\n■ 첫 수업 일정·준비물 안내:\n■ 학부모 문의·요청 사항:\n■ 특이사항:",
+    body: "[첫수업 전 안내 전화] {{날짜}} · 담당 {{담당}}\n■ 대상: {{학생}} {{학년}}\n■ 첫 수업 일정·준비물 안내:\n■ 학부모 문의·요청 사항:\n■ 특이사항:",
     category: "general" as const,
     audience: "parent" as const,
     isDefault: false,
@@ -85,7 +85,7 @@ const DEFAULT_CONSULTATION_TEMPLATES = [
   {
     key: "new_after",
     name: "신입생 관리 #2 – 첫수업 후 전화",
-    body: "[첫수업 후 점검 전화]\n■ 첫 수업 반응·소감:\n■ 수업 이해도·태도:\n■ 학부모 피드백:\n■ 조치 사항:",
+    body: "[첫수업 후 점검 전화] {{날짜}} · 담당 {{담당}}\n■ 대상: {{학생}} {{학년}}\n■ 첫 수업 반응·소감:\n■ 수업 이해도·태도:\n■ 학부모 피드백:\n■ 조치 사항:",
     category: "general" as const,
     audience: "parent" as const,
     isDefault: false,
@@ -93,7 +93,7 @@ const DEFAULT_CONSULTATION_TEMPLATES = [
   {
     key: "new_week",
     name: "신입생 관리 #3 – 일주일 적응 점검 전화",
-    body: "[일주일 적응 점검 전화]\n■ 적응 상태(친구·수업·과제):\n■ 학습 습관·숙제 수행:\n■ 학부모 관찰 사항:\n■ 후속 계획:",
+    body: "[일주일 적응 점검 전화] {{날짜}} · 담당 {{담당}}\n■ 대상: {{학생}} {{학년}}\n■ 적응 상태(친구·수업·과제):\n■ 학습 습관·숙제 수행:\n■ 학부모 관찰 사항:\n■ 후속 계획:",
     category: "general" as const,
     audience: "parent" as const,
     isDefault: false,

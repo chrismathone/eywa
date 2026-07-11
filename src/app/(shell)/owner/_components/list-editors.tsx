@@ -386,6 +386,16 @@ export function ConsultationTemplateEditor({
         기본양식 지정 안 함 <span className="text-text-dim">(새 상담은 빈 요약으로 시작)</span>
       </label>
 
+      {/* 치환 태그 안내 — 요약 뼈대에 넣으면 상담 등록 시 실제 값으로 자동 치환. */}
+      <p className="text-text-dim border-line bg-bg-soft/40 rounded-md border px-3 py-2 text-[11px] leading-relaxed break-keep">
+        요약 뼈대에 치환 태그를 넣으면 상담 등록 시 자동으로 채워집니다 —{" "}
+        {["{{날짜}}", "{{담당}}", "{{학생}}", "{{학년}}"].map((tag) => (
+          <code key={tag} className="border-line text-foreground mx-0.5 rounded border bg-transparent px-1 font-mono">
+            {tag}
+          </code>
+        ))}
+      </p>
+
       {value.map((t, i) => (
         <div key={t.key} className="border-line space-y-2 rounded-md border p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -431,7 +441,7 @@ export function ConsultationTemplateEditor({
             className={`${cellCls} w-full resize-y break-keep`}
             rows={4}
             value={t.body}
-            placeholder="요약 뼈대 — 상담 등록 시 요약란에 이 내용이 채워집니다"
+            placeholder="요약 뼈대 — 상담 등록 시 요약란에 채워집니다. {{날짜}} {{담당}} 태그 사용 가능"
             onChange={(e) => set(i, { body: e.target.value })}
           />
         </div>
