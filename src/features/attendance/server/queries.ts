@@ -286,6 +286,8 @@ export type AttendanceMatrix = {
     subject: string;
     teacherId: string | null;
     teacherName: string | null;
+    // 담임 재직 여부 — 퇴직(inactive) 담임 반은 살아있는 한 노출하되, 강사 필터에 "(퇴직)" 표시.
+    teacherActive: boolean;
   }[];
   selectedClassId: string | null;
   month: string; // "2026-05"
@@ -342,17 +344,20 @@ export async function getMonthlyAttendanceMatrix(
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 selector·데이터를 본인 담당 반만(URL로 남의 classId 넘겨도 무시).
   const tId = await effectiveTeacherId();
 
-  // 모든 반 (selector용) — 강사면 본인 담당 반만.
+  // 활성 반만 (selector용) — 폐강 반 제외(getDailyProcessingStatus와 동일 기준). 강사면 본인 담당 반만.
+  // ⚠️ 담임이 퇴직(status=inactive)이어도 반이 살아있으면 노출 유지 — 재원생이 다니는 반을 숨기면 안 됨.
+  //    대신 teacherActive로 내려 강사 필터에 "(퇴직)"을 표시한다(담임 재배정 전까지의 정직한 표시).
   let classesQuery = supabase
     .from("classes")
-    .select("id, class_name, subject, teacher:teacher_id ( id, display_name )")
+    .select("id, class_name, subject, teacher:teacher_id ( id, display_name, status )")
+    .eq("is_active", true)
     .order("class_name");
   if (tId) classesQuery = classesQuery.eq("teacher_id", tId);
   const { data: classesData } = await classesQuery;
 
   const classes = (classesData ?? []).map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
-      | { id?: string; display_name?: string }
+      | { id?: string; display_name?: string; status?: string }
       | undefined;
     return {
       id: c.id,
@@ -360,6 +365,7 @@ export async function getMonthlyAttendanceMatrix(
       subject: c.subject,
       teacherId: teacher?.id ?? null,
       teacherName: teacher?.display_name ?? null,
+      teacherActive: teacher ? teacher.status !== "inactive" : true,
     };
   });
 

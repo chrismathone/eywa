@@ -94,7 +94,8 @@ export default async function AttendancePage({
   ];
   const effectiveSubject = subjectParam && presentSubjects.has(subjectParam) ? subjectParam : null;
 
-  // 강사 선택지 = (선택 과목의) 반 담임 distinct.
+  // 강사 선택지 = (선택 과목의) 반 담임 distinct. 퇴직 담임은 반이 살아있는 한 유지하되
+  // "(퇴직)"을 붙여 뒤로 정렬(재직자와 혼동 방지 — 담임 재배정이 끝나면 자연히 사라짐).
   const classesForSubject = effectiveSubject
     ? allClasses.filter((c) => c.subject === effectiveSubject)
     : allClasses;
@@ -102,11 +103,15 @@ export default async function AttendancePage({
     new Map(
       classesForSubject
         .filter((c) => c.teacherId && c.teacherName)
-        .map((c) => [c.teacherId as string, c.teacherName as string]),
+        .map((c) => [
+          c.teacherId as string,
+          { name: c.teacherName as string, retired: !c.teacherActive },
+        ]),
     ),
   )
-    .map(([value, label]) => ({ value, label }))
-    .sort((a, b) => a.label.localeCompare(b.label, "ko"));
+    .map(([value, t]) => ({ value, label: t.retired ? `${t.name} (퇴직)` : t.name, retired: t.retired }))
+    .sort((a, b) => Number(a.retired) - Number(b.retired) || a.label.localeCompare(b.label, "ko"))
+    .map(({ value, label }) => ({ value, label }));
   const effectiveTeacher =
     teacherParam && teacherOptions.some((t) => t.value === teacherParam) ? teacherParam : null;
 

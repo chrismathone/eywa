@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 출석부 셀렉터 — 폐강 반 제외 + 퇴직 담임 "(퇴직)" 표시 (2026-07-13) — ✅ tsc0/lint0/실브라우저 3시나리오
+원장 제보 "퇴직한 사람의 출석부가 여전히 노출". 전수조사(멀티에이전트) 결론: **출석부 한 곳만 빠진 국지 구멍** —
+[getMonthlyAttendanceMatrix](../src/features/attendance/server/queries.ts)의 selector 쿼리에 `is_active`·강사 status 필터가 둘 다 없었음
+(같은 파일 `getDailyProcessingStatus`·타 화면 전부는 필터 있음). 수정: ① 반 선택지 `.eq("is_active", true)`(폐강 4개 제거)
+② 담임 status를 `teacherActive`로 내려 [page.tsx](<../src/app/(shell)/attendance/page.tsx>) 강사 필터에 **"(퇴직)" 표시 + 뒤 정렬**(원장 선택).
+⚠️ **살아있는 반(재원생 有)은 담임이 퇴직자여도 노출 유지** — 숨기면 재원생 반이 접근 불가. 실브라우저: 퇴직 7명 "(퇴직)" 뒤정렬 ·
+신명진(퇴직) 반 8개→매트릭스 9명 정상 · 김화영 반 4→2(폐강 제외). 잔여 데이터 이슈(코드 아님): 퇴직 담임 stale 반 14개(전부 영어,
+재배정 필요)·빈 반 18개(폐강 후보) — 퇴직 처리(`deactivateStaff`)가 users.status만 바꾸고 반은 안 건드리는 구조 갭.
+
 ### ClassNote 보드 프로비저닝·배정 자동화 이식 (2026-07-10) — ✅ dry-run 실측 검증(수학 237명 전수)
 Edutrix 반 생성·배정 자동화를 eywa DB 기준·Playwright·**dry-run 기본**으로 이식(`scripts/_classnote/`): [provision-classnote-boards.mjs](../scripts/_classnote/provision-classnote-boards.mjs)(기대 보드 vs 실보드 diff → **누락 보드만 생성**, 동명이인 보류 분리) · [assign-classnote-students.mjs](../scripts/_classnote/assign-classnote-students.mjs)(학생 관리 반추가 모달 **1회 스캔 전수판정** — 보드별 배정 인원(N명) 표시 기반: assigned/ready/미가입/보드없음, `--apply`는 ready만 배정) · 공용 [classnote-admin-core.mjs](../scripts/_classnote/classnote-admin-core.mjs)(로그인·호칭 다이얼로그·무한스크롤 수집). 실측: assigned 196 · 보드없음 35(`(수학)박서준C`는 생성 아닌 `classnote_name` 매핑으로) · 미가입 5(초대 필요) · ready 1(주준호). §9 수기 실사(33/6/1)와 교차 일치. ⚠️ `--apply`(생성·배정)=실 ClassNote 변경 — 원장 승인 후. 배경·사용법 = docs/classnote-integration.md §3(학생 1명=반 1개 구조 근거 포함).
 
