@@ -28,6 +28,8 @@ import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
+import { withEmbed } from "@/components/workspace/embed-context";
+import { iframeRegistry } from "@/components/workspace/route-window";
 import {
   cancelScheduledPrefetch,
   scheduleEmbedPrefetch,
@@ -276,6 +278,8 @@ export function AppSidebar({
                     (!hasFocus && isItemActive(item.href, pathname))
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
+                // 이미 최상단(포커스)인 창 — 이 메뉴를 다시 누르면 "첫 화면"으로 리셋(아래 handleNav).
+                const atTop = isDesktop && hasFocus && focusedId === winId;
                 const subs = SUBTABS_BY_MENU[item.menuKey];
                 // 비활성 메뉴 + 하부탭 有 → hover 시 우측 플라이아웃(왼쪽 메뉴는 고정, 리플로우 없음).
                 const flyoutable = isDesktop && expanded && !!subs && !active;
@@ -294,6 +298,7 @@ export function AppSidebar({
                       item={item}
                       active={active}
                       openOnly={openOnly}
+                      atTop={atTop}
                       isDesktop={isDesktop}
                       expanded={expanded}
                       motion={motion}
@@ -478,6 +483,7 @@ function RailItem({
   item,
   active,
   openOnly,
+  atTop,
   isDesktop,
   expanded,
   motion,
@@ -485,6 +491,8 @@ function RailItem({
   item: NavItem;
   active: boolean;
   openOnly: boolean;
+  /** 이 메뉴 창이 이미 최상단(포커스)임 — 다시 누르면 "첫 화면"(메뉴 루트)으로 리셋. */
+  atTop: boolean;
   isDesktop: boolean;
   expanded: boolean;
   motion: boolean;
@@ -503,9 +511,22 @@ function RailItem({
     }
     const params = { id: item.menuKey, title: item.label, href: item.href };
     const store = useWindowStore.getState();
-    // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼), 일반 클릭 = 기존 창 포커스/열기.
-    if (e.shiftKey) store.openNewInstance("route", params);
-    else store.open("route", params);
+    // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼).
+    if (e.shiftKey) {
+      store.openNewInstance("route", params);
+      return;
+    }
+    // 이미 최상단(포커스)인 창을 다시 누르면 그 창을 "첫 화면"(메뉴 루트)으로 되돌린다 —
+    // 상세 드릴인·하부탭 전환에서 한 번에 처음으로(뒤로 버튼과 동일하게 그 창 iframe만 replace).
+    // 이미 루트면 homeNav가 null → 무동작. (닫았다 여는 번거로움 제거.)
+    if (atTop) {
+      const winId = windowId("route", item.menuKey);
+      const target = store.homeNav(winId);
+      if (target) iframeRegistry.get(winId)?.contentWindow?.location.replace(withEmbed(target));
+      return;
+    }
+    // 일반 클릭 = 기존 창 포커스/열기(비포커스면 최상단으로, 없으면 새로 열기).
+    store.open("route", params);
   }
 
   const fg = active

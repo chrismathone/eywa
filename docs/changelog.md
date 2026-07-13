@@ -20,6 +20,9 @@ DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)�
 ⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·대시보드 수납률 공식 불일치(I3)·
 upsert 임포터 삭제 미반영/unmatched 스킵(I4)·**연동 PC에 새 임포터 zip 이관 필요**(안 하면 구 임포터가 계속 3-key 유입).
 
+### ClassNote 자동 배정 방어 강화 — 적대 감사 F1~F6 전건 픽스 (2026-07-13) — ✅ 합성 테스트 13/13
+"학부모 미가입인데 엉뚱한 가족이 배정되는가?" 원장 질문에 독립 적대 감사 → **핵심 구멍: 유일성 검사의 우주가 '배정 타깃 목록'에 닫혀 있어, 목록 밖 동명 학생(퇴원 F1·비 opt-in 과목 F2·동명 보류 제외분 F3)의 가족 원아가 '유일 후보'로 위장** 가능(예: 퇴원한 김민수B의 잔존 원아 '김민수'가 신규생 김민수A 보드에 배정 → 남의 성적 수신). 픽스 4겹([classnote-admin-core](../scripts/_classnote/classnote-admin-core.mjs)·[provision-core](../scripts/_classnote/classnote-provision-core.mjs)·[assign](../scripts/_classnote/assign-classnote-students.mjs) 공통): ⓐ planChildMatches 우주를 **DB 전 학생(status·과목 무필터, fetchUniverseNames)**으로 확장(F1·F2·F3 동시 차단) ⓑ hasForeignStudentBoard — 원아가 이미 다른 학생 개인 보드 소속이면 보류(잔존 가족 직격) ⓒ POST 직전 보드 실시간 재확인(fetchBoardChildren, TOCTOU F5)+직후 2명+ 경보(해제 API 405라 사후 탐지 필수) ⓓ childKeys 괄호 승격을 영문닉(한글) 형식 한정(별명 오매칭 F6) + 수동판 targetsOf에 동명이인 norm 그룹핑 이식(F4, 공유 보드 오배정 차단). ⚠️연동 PC zip 재전달 필요(provision-core 변경).
+
 ### 직원 상세 '월간일정' 탭 — Notion 업무 DB 이식 (읽기 전용 + 댓글) (2026-07-13)
 안 쓰이던 `근무일정`(근무시간 편집기) 탭을 **`월간일정`**으로 대체 — Notion 업무 DB(업무 스케줄)를 마감일 기준으로 읽어와
 **월간 달력 그리드 ⇄ 리스트 토글**(월 이동·오늘·localStorage). 근무시간 편집기는 삭제 없이 휴면(한 줄로 복구).

@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   parseNotionTaskPage,
   groupTasksByDate,
+  taskSpans,
+  tasksOnDate,
+  notionBlocksToLines,
   humanizeNotionError,
   NOTION_TASK_PROPS,
   type NotionPage,
@@ -28,11 +31,30 @@ describe("parseNotionTaskPage", () => {
     expect(t).toEqual<NotionTask>({
       id: "p1",
       title: "전단지 배부 (경명여중)",
+      start: "2026-07-02", // 시작일 없으면 마감일과 동일
       due: "2026-07-02",
       done: true,
       dept: "개발팀",
       url: "https://notion.so/p1",
     });
+  });
+
+  it("시작일 속성이 있으면 기간 [시작일, 마감일]로 파싱", () => {
+    const t = parseNotionTaskPage(
+      page({
+        제목: { type: "title", title: [{ plain_text: "직원명부 작성" }] },
+        [NOTION_TASK_PROPS.start]: { type: "date", date: { start: "2026-06-29" } },
+        [NOTION_TASK_PROPS.due]: { type: "date", date: { start: "2026-07-03" } },
+      }),
+    );
+    expect(t).toMatchObject({ start: "2026-06-29", due: "2026-07-03" });
+  });
+
+  it("마감일이 range면 end가 anchor(due), start는 range 시작", () => {
+    const t = parseNotionTaskPage(
+      page({ 제목: { type: "title", title: [{ plain_text: "x" }] }, [NOTION_TASK_PROPS.due]: { type: "date", date: { start: "2026-07-01", end: "2026-07-04" } } }),
+    );
+    expect(t).toMatchObject({ start: "2026-07-01", due: "2026-07-04" });
   });
 
   it("마감일이 날짜+시각이어도 앞 10자(YYYY-MM-DD)만", () => {
@@ -44,7 +66,7 @@ describe("parseNotionTaskPage", () => {
 
   it("빈 값 방어 — 제목 없음/마감 없음/미완료/부서 없음", () => {
     const t = parseNotionTaskPage(page({ [NOTION_TASK_PROPS.due]: { type: "date", date: null } }));
-    expect(t).toMatchObject({ title: "(제목 없음)", due: null, done: false, dept: null });
+    expect(t).toMatchObject({ title: "(제목 없음)", start: null, due: null, done: false, dept: null });
   });
 
   it("부서가 rich_text여도 읽는다", () => {
@@ -62,18 +84,85 @@ describe("parseNotionTaskPage", () => {
   });
 });
 
+const T = (o: Partial<NotionTask> & { id: string; due: string | null }): NotionTask => ({
+  title: o.id,
+  start: o.start ?? o.due,
+  done: false,
+  dept: null,
+  url: null,
+  ...o,
+});
+
 describe("groupTasksByDate", () => {
   it("마감일별로 묶고, 마감일 없는 항목은 제외", () => {
-    const tasks: NotionTask[] = [
-      { id: "a", title: "A", due: "2026-07-02", done: false, dept: null, url: null },
-      { id: "b", title: "B", due: "2026-07-02", done: true, dept: null, url: null },
-      { id: "c", title: "C", due: "2026-07-05", done: false, dept: null, url: null },
-      { id: "d", title: "D", due: null, done: false, dept: null, url: null },
-    ];
+    const tasks = [T({ id: "a", due: "2026-07-02" }), T({ id: "b", due: "2026-07-02" }), T({ id: "c", due: "2026-07-05" }), T({ id: "d", due: null })];
     const g = groupTasksByDate(tasks);
     expect(g["2026-07-02"]).toHaveLength(2);
     expect(g["2026-07-05"]).toHaveLength(1);
-    expect(Object.keys(g)).toHaveLength(2); // due=null 제외
+    expect(Object.keys(g)).toHaveLength(2);
+  });
+});
+
+describe("taskSpans / tasksOnDate", () => {
+  it("taskSpans는 [start,end], start 없으면 due로", () => {
+    const spans = taskSpans([T({ id: "a", start: "2026-06-29", due: "2026-07-03" }), T({ id: "b", due: "2026-07-01" }), T({ id: "c", due: null })]);
+    expect(spans).toEqual([
+      { id: "a", start: "2026-06-29", end: "2026-07-03" },
+      { id: "b", start: "2026-07-01", end: "2026-07-01" },
+    ]); // due=null 제외
+  });
+  it("tasksOnDate는 그 날짜에 걸치는 업무(기간 포함)", () => {
+    const tasks = [T({ id: "a", start: "2026-06-29", due: "2026-07-03" }), T({ id: "b", due: "2026-07-01" }), T({ id: "c", due: "2026-07-05" })];
+    expect(tasksOnDate(tasks, "2026-07-01").map((t) => t.id)).toEqual(["a", "b"]);
+    expect(tasksOnDate(tasks, "2026-07-05").map((t) => t.id)).toEqual(["c"]);
+  });
+});
+
+describe("notionBlocksToLines", () => {
+  it("제목/문단/불릿/번호/체크/구분선/이미지/표를 라인으로, 미지 타입은 생략", () => {
+    const lines = notionBlocksToLines([
+      { type: "heading_3", heading_3: { rich_text: [{ plain_text: "체크리스트" }] } },
+      { type: "paragraph", paragraph: { rich_text: [{ plain_text: "본문 한 줄" }] } },
+      { type: "paragraph", paragraph: { rich_text: [] } }, // 빈 문단 생략
+      { type: "bulleted_list_item", bulleted_list_item: { rich_text: [{ plain_text: "항목" }] } },
+      { type: "to_do", to_do: { rich_text: [{ plain_text: "할일" }], checked: true } },
+      { type: "divider", divider: {} },
+      { type: "image", image: {} },
+      { type: "table", table: {} },
+      { type: "link_preview", link_preview: { url: "x" } }, // 생략
+    ]);
+    expect(lines).toEqual([
+      { kind: "heading", level: 3, spans: [{ text: "체크리스트" }] },
+      { kind: "text", spans: [{ text: "본문 한 줄" }] },
+      { kind: "bullet", spans: [{ text: "항목" }] },
+      { kind: "todo", spans: [{ text: "할일" }], checked: true },
+      { kind: "divider", spans: [] },
+      { kind: "image", spans: [{ text: "이미지" }] },
+      { kind: "table", spans: [{ text: "표" }] },
+    ]);
+  });
+
+  it("서식(굵게/기울임/취소선/코드/링크)과 이모지를 보존", () => {
+    const lines = notionBlocksToLines([
+      {
+        type: "paragraph",
+        paragraph: {
+          rich_text: [
+            { plain_text: "🗓 ", annotations: {} },
+            { plain_text: "중요", annotations: { bold: true } },
+            { plain_text: " 링크", href: "https://x.com", annotations: {} },
+          ],
+        },
+      },
+    ]);
+    expect(lines[0]).toEqual({
+      kind: "text",
+      spans: [
+        { text: "🗓 " },
+        { text: "중요", bold: true },
+        { text: " 링크", href: "https://x.com" },
+      ],
+    });
   });
 });
 

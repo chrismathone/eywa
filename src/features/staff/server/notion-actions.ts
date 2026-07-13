@@ -6,14 +6,16 @@ import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { canAccess } from "@/lib/permissions";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { humanizeNotionError } from "@/features/staff/notion-tasks";
+import type { ContentLine } from "@/features/staff/notion-tasks";
 import {
   resolveMonthlyTasks,
-  fetchNotionUserOptions,
+  prepareStaffNotionMappingRow,
   setStaffNotionUserIdRow,
   fetchTaskComments,
   addTaskComment,
+  fetchTaskContent,
   type MonthlyTasksResult,
-  type NotionUserOption,
+  type MappingPrep,
   type TaskComment,
 } from "./notion";
 
@@ -35,14 +37,25 @@ export async function getStaffMonthlyTasks(
   }
 }
 
-/** 매핑 드롭다운용 Notion 사람 목록 — 직원 관리 권한(사무실)만. */
-export async function listNotionUserOptions(): Promise<
-  { ok: true; options: NotionUserOption[] } | { ok: false; error: string }
-> {
+/**
+ * 미매핑 직원의 매핑 준비(지연 호출) — 이메일 자동연결 시도(+저장) 또는 수동 후보 목록.
+ * 담당자 스캔(수 초)이 여기서 돌므로 첫 페인트를 안 막는다. 후보 목록은 사무실(canManageStaff)만.
+ */
+export async function prepareNotionMapping(
+  staffId: string,
+): Promise<{ ok: true; prep: MappingPrep } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
-  if (!actor || !canManageStaff(actor.systemRole)) return { ok: false, error: "권한이 없습니다" };
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  const matrix = await getPermMatrix();
+  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
-    return { ok: true, options: await fetchNotionUserOptions() };
+    const prep = await prepareStaffNotionMappingRow(
+      staffId,
+      actor.tenantId,
+      canManageStaff(actor.systemRole),
+    );
+    if (prep.state === "matched") revalidatePath(`/staff/${staffId}`);
+    return { ok: true, prep };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }
@@ -58,6 +71,21 @@ export async function getTaskComments(
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     return { ok: true, comments: await fetchTaskComments(pageId) };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 태스크 본문 — 직원관리 열람 권한. 상세창 열 때 지연 로드(댓글과 함께). */
+export async function getTaskContent(
+  pageId: string,
+): Promise<{ ok: true; lines: ContentLine[] } | { ok: false; error: string }> {
+  const actor = await getCurrentUser();
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  const matrix = await getPermMatrix();
+  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  try {
+    return { ok: true, lines: await fetchTaskContent(pageId) };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }

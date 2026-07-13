@@ -8,14 +8,18 @@ import {
   queryDatabaseAll,
   listCommentsAll,
   createComment,
+  listBlockChildren,
 } from "@/lib/notion/client";
 import {
   NOTION_TASK_PROPS,
   parseNotionTaskPage,
+  notionBlocksToLines,
   humanizeNotionError,
   type NotionTask,
+  type ContentLine,
 } from "@/features/staff/notion-tasks";
-import { monthRange } from "@/lib/month-grid";
+import { monthRange, shiftMonth } from "@/lib/month-grid";
+import { kstMonth } from "@/lib/date-kst";
 
 // Notion 업무 DB → 직원 상세 '월간일정' 조회 + 직원↔Notion 사용자 매핑. 권한 게이트는 호출부(notion-actions.ts).
 // 토큰/DB id는 env(lib/notion/client.ts). notion_user_id는 users 컬럼(0100a).
@@ -30,10 +34,20 @@ export type NotionUserOption = { id: string; name: string; email: string | null 
 
 // 담당자 후보 = 업무의 담당자(정/부)에 등장하는 Notion 사람들. ⚠️ /users(멤버 목록)는 게스트를 안 주므로
 // (이 워크스페이스는 멤버 1명 + 나머지 담당자는 게스트) 쓸 수 없다 — 업무에서 직접 수집해야 이메일까지 잡힌다.
-// 워크스페이스 read-mostly라 dbId별 10분 cross-request 캐시(B6) — 매 미매핑 로드마다 전건 스캔 방지.
+// ⚠️ 전건 스캔 금지(B2/B7): 실 DB 4,000건+ = 순차 40+왕복 = 서버리스 타임아웃 → 탭이 안 열림(2026-07-13 실측,
+// 3개월 한정도 19페이지·65초). 그래서 ①이 스캔은 **페이지 첫 페인트에서 절대 부르지 않고**(미매핑=즉시 반환,
+// 매핑 준비는 클라가 액션으로 지연 호출) ②최신 마감순 정렬+8페이지(800행≈최근 5~6주) 상한 ③10분 캐시(B6).
 const loadNotionAssignees = unstable_cache(
   async (dbId: string): Promise<NotionUserOption[]> => {
-    const pages = await queryDatabaseAll(dbId, {});
+    const cutoff = `${shiftMonth(kstMonth(), -3)}-01`;
+    const pages = await queryDatabaseAll(
+      dbId,
+      {
+        filter: { property: NOTION_TASK_PROPS.due, date: { on_or_after: cutoff } },
+        sorts: [{ property: NOTION_TASK_PROPS.due, direction: "descending" }],
+      },
+      { maxPages: 8 },
+    );
     const seen = new Map<string, NotionUserOption>();
     for (const pg of pages) {
       for (const key of [NOTION_TASK_PROPS.assigneePrimary, NOTION_TASK_PROPS.assigneeSecondary]) {
@@ -78,24 +92,60 @@ async function staffMappingRow(
   return { notionUserId: (row?.notion_user_id ?? null) || null, email: (row?.email ?? null) || null };
 }
 
-/**
- * eywa 직원 이메일 == Notion 계정 이메일이면 자동 연결(+ 저장 → 다음부턴 즉시). 없으면 null(수동 폴백).
- * 최초 미매핑 로드에서만 사용자 목록을 조회(요청 캐시). 저장 실패(테넌트 유니크 충돌 등)해도 이번 표시엔 매칭 id 사용.
- */
-async function autoMatchByEmail(staffId: string, email: string): Promise<string | null> {
-  const target = normEmail(email);
-  if (!target) return null;
-  const people = await cachedNotionAssignees();
-  const hit = people.find((u) => normEmail(u.email) === target);
-  if (!hit) return null;
-  try {
-    const admin = createAdminClient();
-    const { error } = await admin.from("users").update({ notion_user_id: hit.id }).eq("id", staffId);
-    if (error) console.warn(`[notion] 이메일 자동매칭 저장 실패(${staffId}): ${error.message}`);
-  } catch (e) {
-    console.warn(`[notion] 이메일 자동매칭 저장 예외: ${e instanceof Error ? e.message : String(e)}`);
+export type TakenMapping = { notionName: string; staffName: string }; // 이미 다른 직원에 연결된 Notion 계정
+export type MappingPrep =
+  | { state: "matched" } // 연결됨(이미 매핑 or 이메일 자동연결+저장) — 호출부는 월간 업무 재조회
+  | { state: "options"; options: NotionUserOption[]; taken: TakenMapping[] } // 자동 불가 — 수동 후보(사무실만)
+  | { state: "none" }; // 자동 불가 + 후보 비노출(비사무실)
+
+/** 이 테넌트에서 이미 연결된 notion_user_id → 직원명(중복 연결 방지용). RLS 스코프. */
+async function usedNotionIds(): Promise<Map<string, string>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("display_name, notion_user_id")
+    .not("notion_user_id", "is", null);
+  const map = new Map<string, string>();
+  for (const u of (data as { display_name: string; notion_user_id: string }[] | null) ?? []) {
+    if (u.notion_user_id) map.set(u.notion_user_id, u.display_name);
   }
-  return hit.id;
+  return map;
+}
+
+/**
+ * 미매핑 직원의 매핑 준비 — 이메일 자동연결 시도(성공 시 저장) 또는 수동 후보 반환.
+ * ⚠️ 첫 페인트가 아니라 **클라 액션에서 지연 호출**되는 무거운 경로(담당자 스캔 수 초).
+ * 수동 후보에서 **이미 다른 직원에 연결된 Notion 계정은 제외**(중복 연결 방지, DB 부분유니크와 정합).
+ */
+export async function prepareStaffNotionMappingRow(
+  staffId: string,
+  actorTenantId: string,
+  includeOptions: boolean,
+): Promise<MappingPrep> {
+  const { notionUserId, email } = await staffMappingRow(staffId);
+  if (notionUserId) return { state: "matched" };
+
+  const people = await cachedNotionAssignees();
+  const target = normEmail(email);
+  const hit = target ? people.find((u) => normEmail(u.email) === target) : undefined;
+  if (hit) {
+    const saved = await setStaffNotionUserIdRow(staffId, hit.id, actorTenantId);
+    if (!saved.ok) console.warn(`[notion] 이메일 자동매칭 저장 실패(${staffId}): ${saved.error}`);
+    return { state: "matched" };
+  }
+  if (!includeOptions) return { state: "none" };
+
+  const used = await usedNotionIds();
+  const available: NotionUserOption[] = [];
+  const taken: TakenMapping[] = [];
+  for (const p of people) {
+    const owner = used.get(p.id);
+    if (owner) taken.push({ notionName: p.name, staffName: owner });
+    else available.push(p);
+  }
+  available.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  taken.sort((a, b) => a.notionName.localeCompare(b.notionName, "ko"));
+  return { state: "options", options: available, taken };
 }
 
 /**
@@ -109,17 +159,11 @@ export async function resolveMonthlyTasks(
   const dbId = notionTasksDatabaseId();
   if (!isNotionConfigured() || !dbId) return { ok: true, state: "not_configured" };
 
-  // 매핑 우선순위: 저장된 notion_user_id → (없으면) 이메일 자동매칭(+저장) → 그래도 없으면 수동 폴백.
-  const { notionUserId, email } = await staffMappingRow(staffId);
-  let resolvedId = notionUserId;
-  if (!resolvedId && email) {
-    try {
-      resolvedId = await autoMatchByEmail(staffId, email);
-    } catch (e) {
-      return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
-    }
-  }
-  if (!resolvedId) return { ok: true, state: "unmapped" };
+  // ⚠️ 여기(첫 페인트)선 Notion 스캔 금지 — 미매핑이면 즉시 반환하고, 이메일 자동매칭·후보 로드는
+  // 클라가 화면 표시 후 prepareStaffNotionMappingRow(액션)로 지연 호출한다(B7, 2026-07-13 타임아웃 실측).
+  const { notionUserId } = await staffMappingRow(staffId);
+  if (!notionUserId) return { ok: true, state: "unmapped" };
+  const resolvedId = notionUserId;
 
   const { start, endExclusive } = monthRange(month);
   try {
@@ -137,12 +181,6 @@ export async function resolveMonthlyTasks(
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }
-}
-
-/** 매핑 드롭다운용 담당자 후보(게스트 포함), 이름순. 자동매칭과 같은 캐시 재사용. */
-export async function fetchNotionUserOptions(): Promise<NotionUserOption[]> {
-  const people = await cachedNotionAssignees();
-  return [...people].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
 
 export type TaskComment = { id: string; author: string; time: string | null; text: string };
@@ -171,6 +209,12 @@ export async function addTaskComment(pageId: string, text: string, authorName: s
   await createComment(pageId, body);
 }
 
+/** 업무 본문(Notion 블록) → 표시 라인. 상세창이 열릴 때만 지연 호출(첫 페인트 밖). */
+export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
+  const blocks = await listBlockChildren(pageId);
+  return notionBlocksToLines(blocks);
+}
+
 /** 직원 ↔ Notion 사용자 매핑 저장(같은 테넌트 검증 후 admin update). account-actions.loadTarget 패턴. */
 export async function setStaffNotionUserIdRow(
   staffId: string,
@@ -186,6 +230,18 @@ export async function setStaffNotionUserIdRow(
   if (readErr || !target) return { ok: false, error: "대상 직원을 찾을 수 없습니다" };
   if ((target as { tenant_id: string }).tenant_id !== actorTenantId)
     return { ok: false, error: "다른 지점의 계정은 변경할 수 없습니다" };
+
+  // 중복 연결 방지 — 같은 테넌트의 다른 직원이 이미 이 Notion 계정을 쓰고 있으면 거부(UI 필터의 백스톱, DB 부분유니크와 정합).
+  if (notionUserId) {
+    const { data: dup } = await admin
+      .from("users")
+      .select("display_name")
+      .eq("tenant_id", actorTenantId)
+      .eq("notion_user_id", notionUserId)
+      .neq("id", staffId)
+      .maybeSingle();
+    if (dup) return { ok: false, error: `이 Notion 계정은 이미 ${(dup as { display_name: string }).display_name}에 연결되어 있습니다` };
+  }
 
   const { error } = await admin.from("users").update({ notion_user_id: notionUserId }).eq("id", staffId);
   if (error) return { ok: false, error: "매핑 저장에 실패했습니다" };

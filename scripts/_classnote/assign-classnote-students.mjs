@@ -27,10 +27,13 @@ import {
   fetchBoards,
   fetchChildren,
   fetchChildDetail,
+  fetchBoardChildren,
   enrollChild,
-  childKeys,
+  planChildMatches,
+  hasForeignStudentBoard,
   norm,
 } from "./classnote-admin-core.mjs";
+import { fetchUniverseNames } from "./classnote-provision-core.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const HEADED = process.argv.includes("--headed");
@@ -46,6 +49,8 @@ if (!groups.length) {
   process.exit(1);
 }
 
+/** 그룹별 타깃 — 유효이름 norm 그룹핑으로 동명이인은 제외(collisions 별도 반환, 적대 감사 F4:
+ *  같은 이름 2명이 같은 board 문자열 타깃 2건으로 들어가 한 가족이 공유 보드에 배정되는 것 차단). */
 async function targetsOf(sql, tenant, group) {
   const rows = await sql`
     select distinct s.id, s.name, s.classnote_name
@@ -55,33 +60,34 @@ async function targetsOf(sql, tenant, group) {
     where s.tenant_id = ${tenant}
       and s.status = 'enrolled'
       and c.subject in ${sql(group.subjectKeys)}`;
-  return rows
-    .map((r) => {
-      const eff = (r.classnote_name || r.name || "").trim();
-      return eff ? { studentName: eff, board: `${group.prefix}${eff}`, subject: group.label } : null;
-    })
-    .filter(Boolean);
+  const byName = new Map();
+  for (const r of rows) {
+    const eff = (r.classnote_name || r.name || "").trim();
+    if (!eff) continue;
+    const key = norm(eff);
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(eff);
+  }
+  const targets = [];
+  const collisions = [];
+  for (const [, effs] of byName) {
+    if (effs.length > 1) collisions.push({ name: effs[0], count: effs.length });
+    else targets.push({ studentName: effs[0], board: `${group.prefix}${effs[0]}`, subject: group.label });
+  }
+  return { targets, collisions };
 }
 
-/** ClassNote 가입 원아 중 이 학생과 이름 매칭되는 후보들(접미사 무시·괄호 한글 포함). */
-function matchChildren(t, children) {
-  const clean = t.studentName.replace(/[a-zA-Z]/g, "").trim();
-  return children.filter((c) => {
-    const keys = childKeys(c.name);
-    return keys.has(t.studentName) || keys.has(clean);
-  });
-}
-
-/** 판정 — 배정/배정가능/미가입/보드없음/동명이인. */
-function judge(t, boardByNorm, children) {
+/** 판정 — 배정/배정가능/미가입/보드없음/모호. 매칭은 planChildMatches(양방향 유일성 — 정방향 동명 원아
+ *  + 역방향(원아 1명↔접미사 다른 학생 2+) 모두 보류. 전체 타깃 기준이어야 완전해서 밖에서 1회 계산해 주입. */
+function judge(t, boardByNorm, plan) {
   const board = boardByNorm.get(norm(t.board));
   if (!board) return { status: "board_missing" };
   if (board.children >= 1) return { status: "assigned" };
-  const cands = matchChildren(t, children);
-  if (cands.length === 0) return { status: "not_signed_up" };
-  if (cands.length > 1)
-    return { status: "ambiguous", note: cands.map((c) => `${c.name}(${c.birth ?? "생일?"})`).join(", ") };
-  return { status: "ready", child: cands[0], boardId: board.id };
+  const heldReason = plan.heldByBoard.get(t.board);
+  if (heldReason) return { status: "ambiguous", note: heldReason };
+  const child = plan.matches.get(t.board);
+  if (!child) return { status: "not_signed_up" };
+  return { status: "ready", child, boardId: board.id };
 }
 
 (async () => {
@@ -89,12 +95,21 @@ function judge(t, boardByNorm, children) {
   const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 1 });
   const tenant = await resolveTenant(sql);
 
-  let targets = [];
-  for (const g of groups) targets.push(...(await targetsOf(sql, tenant, g)));
+  const allTargets = [];
+  for (const g of groups) {
+    const { targets: ts, collisions } = await targetsOf(sql, tenant, g);
+    allTargets.push(...ts);
+    for (const c of collisions)
+      console.log(`⚠️ [${g.label}] 동명이인 "${c.name}" ${c.count}명 — classnote_name 접미사 지정 전까지 제외`);
+  }
+  // 역방향 유일성 우주 = 전 학생(퇴원·타과목 포함) — --subject/--student 필터와 무관하게 항상 전수.
+  const universeNames = await fetchUniverseNames(sql, tenant);
   await sql.end({ timeout: 5 });
+  // ⚠️ --student 필터는 표시·실행 범위만 좁힌다 — 매칭 계획(역방향 유일성)은 반드시 전체 타깃 기준.
+  let targets = allTargets;
   if (studentArg) {
-    const exact = targets.filter((t) => t.studentName === studentArg);
-    targets = exact.length ? exact : targets.filter((t) => t.studentName.includes(studentArg));
+    const exact = allTargets.filter((t) => t.studentName === studentArg);
+    targets = exact.length ? exact : allTargets.filter((t) => t.studentName.includes(studentArg));
   }
   console.log(`대상 ${targets.length}건${studentArg ? ` (필터: ${studentArg})` : ""}`);
   if (!targets.length) return;
@@ -110,7 +125,15 @@ function judge(t, boardByNorm, children) {
     const children = await fetchChildren(page, centerId);
     console.log(`보드 ${boards.length}개 · 가입 원아 ${children.length}명 수집`);
 
-    const detail = targets.map((t) => ({ ...t, ...judge(t, boardByNorm, children) }));
+    // 매칭 계획 1회 — 우주=전 학생(universeNames), 타깃=전 그룹(allTargets). 필터는 표시·실행만 좁힘.
+    const { matches, held } = planChildMatches(
+      allTargets.map((t) => ({ student: t.studentName, board: t.board })),
+      children,
+      universeNames,
+    );
+    const plan = { matches, heldByBoard: new Map(held.map((h) => [h.board, h.reason])) };
+
+    const detail = targets.map((t) => ({ ...t, ...judge(t, boardByNorm, plan) }));
     const stats = {};
     for (const d of detail) stats[d.status] = (stats[d.status] ?? 0) + 1;
 
@@ -136,17 +159,26 @@ function judge(t, boardByNorm, children) {
     let ok = 0;
     let fail = 0;
     for (const [i, t] of ready.entries()) {
-      // 멱등 확인 — 그 사이 이미 배정됐으면 건너뜀
+      // 멱등 + 잔존 가족 가드(원아가 다른 학생 개인 보드 소속이면 보류) + POST 직전 보드 실시간 재확인.
       const before = await fetchChildDetail(page, t.child.id);
       if ((before.enrollment ?? []).some((e) => e.belong_to_class === t.boardId && !e.removed_child)) {
         console.log(`  [${i + 1}/${ready.length}] ${t.board} → 이미 배정됨(건너뜀)`);
         continue;
       }
+      if (hasForeignStudentBoard(before.enrollment, t.studentName)) {
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ⚠️ 보류(원아가 다른 학생 개인 보드에 이미 소속)`);
+        continue;
+      }
+      const live = await fetchBoardChildren(page, centerId, t.boardId).catch(() => null);
+      if (live === null || live.length > 0) {
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ⚠️ 중단(실행 중 보드에 다른 원아 합류)`);
+        continue;
+      }
       const res = await enrollChild(page, t.child.id, t.boardId);
       if (res.status >= 200 && res.status < 300) {
-        const after = await fetchChildDetail(page, t.child.id);
-        const found = (after.enrollment ?? []).some((e) => e.belong_to_class === t.boardId && !e.removed_child);
-        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ✅ ${res.status}${found ? " (재조회 확인)" : " ⚠️ 재조회 미확인"}`);
+        const after = await fetchBoardChildren(page, centerId, t.boardId).catch(() => []);
+        const extra = after.length > 1 ? ` ⚠️ 인원 ${after.length}명 — 수동 확인` : "";
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ✅ ${res.status} (보드 ${after.length}명)${extra}`);
         ok++;
       } else {
         console.log(`  [${i + 1}/${ready.length}] ${t.board} → ❌ ${res.status} ${res.body}`);

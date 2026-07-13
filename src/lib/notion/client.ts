@@ -71,14 +71,17 @@ async function notionFetch(path: string, init: RequestInit): Promise<Record<stri
   return json ?? {};
 }
 
-/** DB 쿼리 전건(페이지네이션 순회). filter/sorts는 Notion API 형식 그대로 전달. */
+/** DB 쿼리 전건(페이지네이션 순회). filter/sorts는 Notion API 형식 그대로 전달.
+ *  opts.maxPages: 왕복 상한(기본 MAX_PAGES) — 페이지당 수백ms~수초라 무거운 스캔은 반드시 낮게. */
 export async function queryDatabaseAll(
   databaseId: string,
   body: { filter?: unknown; sorts?: unknown },
+  opts: { maxPages?: number } = {},
 ): Promise<NotionPage[]> {
+  const cap = Math.min(opts.maxPages ?? MAX_PAGES, MAX_PAGES);
   const out: NotionPage[] = [];
   let cursor: string | undefined;
-  for (let i = 0; i < MAX_PAGES; i++) {
+  for (let i = 0; i < cap; i++) {
     const json = await notionFetch(`/databases/${databaseId}/query`, {
       method: "POST",
       body: JSON.stringify({ ...body, start_cursor: cursor, page_size: 100 }),
@@ -87,7 +90,7 @@ export async function queryDatabaseAll(
     if (!json.has_more) return out;
     cursor = json.next_cursor as string;
   }
-  console.warn(`[notion] queryDatabaseAll이 상한(${MAX_PAGES}페이지)에 도달 — 결과가 잘렸을 수 있음`);
+  console.warn(`[notion] queryDatabaseAll이 상한(${cap}페이지)에 도달 — 결과가 잘렸을 수 있음`);
   return out;
 }
 
@@ -122,6 +125,20 @@ export async function createComment(pageId: string, text: string): Promise<void>
     method: "POST",
     body: JSON.stringify({ parent: { page_id: pageId }, rich_text: [{ text: { content: text } }] }),
   });
+}
+
+/** 페이지(블록)의 자식 블록 = 업무 본문. 최대 4페이지(400블록)로 bounded(무거운 순회 방지, B2/B7). */
+export async function listBlockChildren(blockId: string): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 4; i++) {
+    const qs = new URLSearchParams({ page_size: "100", ...(cursor ? { start_cursor: cursor } : {}) });
+    const json = await notionFetch(`/blocks/${blockId}/children?${qs.toString()}`, { method: "GET" });
+    out.push(...((json.results as Record<string, unknown>[]) ?? []));
+    if (!json.has_more) return out;
+    cursor = json.next_cursor as string;
+  }
+  return out;
 }
 
 /** 워크스페이스 사용자 전건(사람/봇 구분은 호출부에서). */
