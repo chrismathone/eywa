@@ -37,7 +37,12 @@ export async function loginClassnote(page) {
   const btn = page.locator("button, input[type=submit]").filter({ hasText: /로그인/ }).first();
   if (await btn.count()) await btn.click();
   else await page.keyboard.press("Enter");
-  await page.waitForURL((u) => !String(u).includes("/login"), { timeout: 30000 });
+  // URL 폴링 — waitForURL은 load 이벤트 대기라 사이트가 느리면 로그인 성공 후에도 타임아웃(2026-07-13 실측).
+  for (let i = 0; i < 40; i++) {
+    if (!page.url().includes("/login")) return;
+    await page.waitForTimeout(1000);
+  }
+  throw new Error("ClassNote 로그인 실패 — 자격증명(CLASSNOTE_UPLOAD_ID/PW) 또는 화면 변경 확인");
 }
 
 /** 서비스 페이지 진입 시 뜨는 호칭 다이얼로그 — '관리자' 선택 후 확인(Cloud Run 함수와 동일 처리). */

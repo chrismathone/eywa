@@ -1,4 +1,4 @@
-# run-classnote-worker.ps1 — 작업 스케줄러용 ClassNote 발송 데몬 래퍼 (상시 실행).
+﻿# run-classnote-worker.ps1 — 작업 스케줄러용 ClassNote 발송 데몬 래퍼 (상시 실행).
 #
 # 강사가 원스크린에서 "ClassNote 발송"을 누르면 lesson_reports가 queued로 쌓이고(Vercel은 Playwright+ClassNote
 # 로그인 불가 = 로컬 PC 필요), 이 PC의 데몬(watch-classnote-queue.mjs)이 15초 폴링으로 잡아 실게시(--post)한다.

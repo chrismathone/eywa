@@ -1,4 +1,4 @@
-# setup-classnote-pc.ps1 — "이 PC를 ClassNote 발송 PC로 지정" 원커맨드.
+﻿# setup-classnote-pc.ps1 — "이 PC를 ClassNote 발송 PC로 지정" 원커맨드.
 #
 # 웹은 Playwright+ClassNote 로그인을 못 하므로(서버리스), 강사의 "ClassNote 발송"은 lesson_reports를 queued로만
 # 남긴다(P3). 지정 PC에서 이 스크립트를 한 번 실행하면: ① 사전요건 확인 ② 작업 스케줄러 등록(로그온+10분 부활)
