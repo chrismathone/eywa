@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { ExternalLink, FileSpreadsheet, Loader2, Sheet } from "lucide-react";
 import { TimetableImportDialog } from "./import-dialog";
 import { EnglishImportDialog } from "./english-import-dialog";
-import { syncSheetsNow } from "@/features/integrations/server/actions";
+import { checkSheetSyncBusy, syncSheetsNow } from "@/features/integrations/server/actions";
 import { supportsTimetableImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+
+/** 리스 진행 중 버튼 마우스오버 안내(비활성 사유) — 자동 반영(새벽 4시)·다른 관리자 실행 공통. */
+const SYNC_BUSY_TITLE =
+  "시트 동기화가 진행 중입니다(자동 반영 또는 다른 관리자의 반영/가져오기) — 잠시 후 자동으로 풀립니다.";
 
 export function TimetableToolbarActions({
   subject,
@@ -24,6 +28,8 @@ export function TimetableToolbarActions({
 }) {
   const [syncing, startSync] = useTransition();
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  // 시트 리스 진행 중(자동 반영·타 관리자 실행) — 반영/가져오기 버튼 선제 비활성. 서버 리스 거부가 2차 방어.
+  const [syncBusy, setSyncBusy] = useState(false);
   const subjectKey = subject ?? "math";
   // 과목 라벨(수학/영어…)은 학원설정 단일 소스에서 — 툴팁 등 문구 하드코딩 금지(클라는 useSubjectMaps 훅).
   const subjectLabel = useSubjectMaps().labelOf(subjectKey);
@@ -34,6 +40,26 @@ export function TimetableToolbarActions({
   // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
   // 영어는 구조+반이동을 하나의 '시트에서 가져오기'(EnglishImportDialog)로 통합 → canStructureImport로 분기.
   const canStructureImport = supportsStructureImport(subjectKey);
+
+  // 리스 상태 폴링(20s, makeedu 워커 카드 선례) — canSync(master, 시트 버튼 노출)일 때만.
+  useEffect(() => {
+    if (!canSync) return;
+    let alive = true;
+    const poll = () =>
+      void checkSheetSyncBusy(subjectKey)
+        .then((busy) => {
+          if (alive) setSyncBusy(busy);
+        })
+        .catch(() => {
+          /* 폴링 실패는 무시(다음 20초 재시도) — unhandled rejection 방지 */
+        });
+    poll();
+    const t = setInterval(poll, 20_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [canSync, subjectKey]);
 
   function pushToSheet() {
     setSyncMsg(null);
@@ -68,8 +94,10 @@ export function TimetableToolbarActions({
             <button
               type="button"
               onClick={pushToSheet}
-              disabled={syncing}
-              title={syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영(원장 전용)`}
+              disabled={syncing || syncBusy}
+              title={
+                syncBusy ? SYNC_BUSY_TITLE : (syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영(원장 전용)`)
+              }
               className={btnCls}
             >
               {syncing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
@@ -77,9 +105,16 @@ export function TimetableToolbarActions({
             </button>
           ) : null}
           {/* 시트에서 가져오기 — 영어=구조(강사별)+반이동(수강편집) 통합 1버튼, 수학=반이동(수강편집)만. 원장 전용. */}
-          {canSync && canStructureImport ? <EnglishImportDialog subject={subjectKey} /> : null}
+          {canSync && canStructureImport ? (
+            <EnglishImportDialog subject={subjectKey} disabled={syncBusy} disabledTitle={SYNC_BUSY_TITLE} />
+          ) : null}
           {canSync && canImport && !canStructureImport ? (
-            <TimetableImportDialog mode="sheet" subject={subjectKey} />
+            <TimetableImportDialog
+              mode="sheet"
+              subject={subjectKey}
+              disabled={syncBusy}
+              disabledTitle={SYNC_BUSY_TITLE}
+            />
           ) : null}
           {sheetUrl ? (
             <a

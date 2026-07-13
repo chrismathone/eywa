@@ -19,6 +19,13 @@ export function sheetsProvider(subject: string): string {
   return subject === "math" ? "google_sheets" : `google_sheets:${subject}`;
 }
 
+/** provider 키 → 과목(sheetsProvider 역방향, cron이 user_integrations 행에서 과목 복원). 미지원 키 = null. */
+export function subjectFromProvider(provider: string): SheetExportSubject | null {
+  if (provider === "google_sheets") return "math";
+  const m = provider.match(/^google_sheets:(.+)$/);
+  return m && isSheetExportSubject(m[1]!) ? (m[1] as SheetExportSubject) : null;
+}
+
 /**
  * 시간표 '가져오기'(수강편집 라운드트립 = 시트/파일 → 앱 반 배정 되읽기 = **학생 반이동**) 지원 과목.
  * math·english 둘 다 '수강편집' 탭을 export(과목별 스코프)하므로 라운드트립이 닫힌다.

@@ -115,7 +115,10 @@ export async function getInvoicesForPeriod(
        payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at,
        student:student_id ( id, name, grade, teacher:primary_teacher_id ( display_name ) )`,
     )
-    .eq("period", periodKey);
+    .eq("period", periodKey)
+    // void = makeedu에서 삭제된 청구(동기화가 무효 처리) — 수납 표·KPI·엑셀은 makeedu 미러라 제외.
+    // 행 자체는 DB에 보존(notes [동기화] 마커 = 근거), 학생 상세 수납 이력에는 '무효' 배지로 남는다.
+    .neq("status", "void");
 
   if (options?.category && options.category !== "all") {
     qb = qb.eq("category", options.category);

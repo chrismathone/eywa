@@ -9,14 +9,29 @@
  * 함께 고친 잠재버그: line_items 스키마({kind,description,amount})·sql.json 바인딩(문자열 스칼라 저장 방지)·
  * category(구분 도출)·makeedu_id 우선 매칭.
  *
- *   node --env-file=.env.local scripts/_makeedu/import-invoices.cjs [--apply]
+ * ⚠️ 2026-07-13 구조적 사각 2건 보완(머지 적대 리뷰 I4 — 분류·리포트는 invoice-stale.cjs):
+ * ① 삭제 미반영 — upsert는 스크랩에 있는 (학생,월)만 만지므로, makeedu에서 그 달 라인이 전부 삭제된 학생의
+ *   eywa 인보이스가 영구 stale(유령 미수)로 남았다(2026-07 실측 36건·미완납 잔액 ₩7.6M). 이제 스크랩이 커버한
+ *   청구월에서 eywa에만 남은 행을 감지해 **기본은 리포트만**, `--void-stale`(또는 env MAKEEDU_VOID_STALE=true)
+ *   + --apply일 때만 **미완납(unpaid/partial)을 status='void'**로 전환(notes 앞에 한글 마커 = 근거·직전 상태 보존).
+ *   완납/환불(수납 기록 보존)·수동 청구 추정(라인에 paid 필드 없음)·미매칭 의심(같은 이름이 미매칭 라인에 존재)·
+ *   커버리지 80% 미만 월(부분 스크랩 의심)은 **항상 보류**(오탐-void 방지). void 행은 미수 집계 제외(billing/calc.ts),
+ *   makeedu에 라인이 재등장하면 아래 upsert가 status 복원 + [동기화] 마커 자동 제거(self-healing).
+ *   ⚠️ 과거 월(스크랩 밖)의 삭제는 여기서 못 본다 — 전 기간 정합은 replace-invoices-from-excel.cjs.
+ * ② 미매칭 조용한 스킵 — 학생 매칭 실패 라인이 카운트만 남고 증발했다. 이제 라인 상세(이름/학년/금액/월)를
+ *   $MAKEEDU_OUT/import-invoices-report.json(최신 상세) + import-invoices-issues.log(한 줄 히스토리)로 남기고
+ *   makeedu_sync_state.error에 요약 기록(성공이어도 이슈 추적 가능. 위험군 = students.makeedu_id 누락 학생뿐).
+ *
+ *   node --env-file=.env.local scripts/_makeedu/import-invoices.cjs [--apply] [--void-stale]
  */
 const fs = require("fs");
 const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const S = require("./invoice-stale.cjs");
 
 const APPLY = process.argv.includes("--apply");
+const VOID_STALE = process.argv.includes("--void-stale") || process.env.MAKEEDU_VOID_STALE === "true";
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(\d{2})/); return m ? `${m[1]}-${m[2]}` : null; };
@@ -49,7 +64,17 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   try {
     const tenantId = await L.resolveTenantId(sql);
-    const studs = await sql`select id, name, grade, makeedu_id from students where tenant_id = ${tenantId}`;
+    // 스크랩이 커버한 청구월 — "eywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
+    const scrapedPeriods = [...new Set(lines.map((l) => l.period))].sort();
+    const [studs, existing] = await Promise.all([
+      sql`select id, name, grade, makeedu_id from students where tenant_id = ${tenantId}`,
+      scrapedPeriods.length
+        ? sql`select i.id, i.student_id, i.period, i.status, i.amount_total, i.amount_paid, i.amount_discount,
+                     i.notes, i.line_items, s.name, s.grade, s.makeedu_id
+              from invoices i join students s on s.id = i.student_id
+              where i.tenant_id = ${tenantId} and i.period = any(${scrapedPeriods}) and i.status <> 'void'`
+        : Promise.resolve([]),
+    ]);
     const byMkid = new Map();
     for (const s of studs) if (s.makeedu_id) byMkid.set(String(s.makeedu_id), s.id);
     // 동명+동학년 2명 이상은 모호 → null(오매칭 방지). makeedu_id 우선 → (이름·학년) 폴백.
@@ -62,10 +87,14 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
 
     // (student_id, period)로 집계
     const inv = new Map();
-    let unmatched = 0;
+    const unmatchedLines = []; // (b) 매칭 실패 라인 상세 — 리포트로 가시화(조용한 증발 방지)
     for (const l of lines) {
       const sid = resolve(l);
-      if (!sid) { unmatched++; continue; }
+      if (!sid) {
+        unmatchedLines.push({ name: l.name, grade: l.grade, mkid: l.mkid, period: l.period,
+          kind: l.gubun, item: l.item, total: l.total, paid: l.paid, unpaid: l.unpaid });
+        continue;
+      }
       const key = `${sid}|${l.period}`;
       let a = inv.get(key);
       if (!a) {
@@ -97,10 +126,25 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       const billed = a.dueDay ? `${a.period}-${String(a.dueDay).padStart(2, "0")}` : `${a.period}-01`;
       return { ...a, status, category, billed };
     });
-    console.log(`lines→invoices(학생×월): ${invoices.length} | unmatched lines: ${unmatched}`);
+    console.log(`lines→invoices(학생×월): ${invoices.length} | unmatched lines: ${unmatchedLines.length}`);
     console.log("status dist:", invoices.reduce((x, i) => ((x[i.status] = (x[i.status] || 0) + 1), x), {}));
 
-    if (!APPLY) { console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
+    // (a) 삭제 미반영 감지 — 스크랩 커버 월에서 eywa에만 남은 (학생,월) 분류(무효 후보/보존/보류).
+    const stale = S.classifyStale({
+      existing,
+      scrapedKeys: new Set(inv.keys()),
+      unmatchedNameKeys: new Set(unmatchedLines.map((u) => `${L.normalizeName(u.name)}|${u.period}`)),
+      normalizeName: L.normalizeName,
+    });
+    S.printIssues({ stale, unmatchedLines });
+    let voided = 0;
+    const writeReport = () => {
+      const p = S.writeReport(OUT, { ranAt: new Date().toISOString(), apply: APPLY, voidStale: VOID_STALE,
+        scrapedPeriods, unmatchedLines, stale, voidedCount: voided });
+      console.log(`리포트: ${p.jsonPath}`);
+    };
+
+    if (!APPLY) { writeReport(); console.log("\n[DRY-RUN] --apply 없이 종료 (DB write 0)."); return; }
     // ↻ 동기화 배지 = "지난 동기화가 새로 추가한 청구". 이 성공 실행 시작에 지난 신규 표시를 클리어(0062a).
     // upsert라 신규(insert)만 배지, 기존월 갱신(update)은 배지 없음(위에서 이미 null 처리됨).
     const cleared = await sql`update invoices set sync_added_at = null where tenant_id = ${tenantId} and sync_added_at is not null`;
@@ -120,12 +164,30 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
           line_items = excluded.line_items, payment_method = excluded.payment_method, card_company = excluded.card_company,
           cash_receipt_number = excluded.cash_receipt_number, discount_reason = excluded.discount_reason,
           billed_at = excluded.billed_at, due_date = excluded.due_date, paid_at = excluded.paid_at,
+          -- void였던 행이 makeedu에 재등장 = 복원 — notes 맨 앞의 [동기화] 무효 마커 1줄만 제거(사용자 메모 보존).
+          notes = case when invoices.status = 'void'
+                       then nullif(regexp_replace(coalesce(invoices.notes, ''), '^\\[동기화\\][^\\n]*\\n?', ''), '')
+                       else invoices.notes end,
           sync_added_at = invoices.sync_added_at, updated_at = now()
         returning (xmax = 0) as inserted`;
       upserted++;
       if (res[0] && res[0].inserted) inserted++;
     }
-    await L.recordSync(sql, tenantId, "invoices", inserted);
+    // (a) --void-stale: makeedu 부재가 확실한 미완납만 무효 전환. 직전 상태·금액은 notes 마커 + 리포트 JSON에 보존.
+    if (VOID_STALE && stale.voidable.length) {
+      const today = new Date().toISOString().slice(0, 10);
+      for (const e of stale.voidable) {
+        const marker = S.voidMarker(e, today);
+        const r = await sql`update invoices
+          set status = 'void', notes = ${e.notes ? `${marker}\n${e.notes}` : marker}, updated_at = now()
+          where id = ${e.id} and status = ${e.status}::invoice_status`; // 조회 후 동시 변경된 행은 건너뜀(낙관적)
+        voided += r.count;
+      }
+      console.log(`makeedu 부재 미완납 void 전환: ${voided}/${stale.voidable.length}건.`);
+    }
+    writeReport();
+    await L.recordSync(sql, tenantId, "invoices", inserted, "ok",
+      S.issueSummary({ stale, unmatchedLines, voidStale: VOID_STALE, voided }));
     console.log(`upsert ${upserted}건 (신규 ${inserted} · 갱신 ${upserted - inserted}).`);
   } finally {
     await sql.end();

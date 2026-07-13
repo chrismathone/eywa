@@ -12,6 +12,7 @@ import {
 } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { invoiceOutstanding } from "@/features/billing/calc";
 import { TabLink } from "../_components/tab-link";
 
 const won = (n: number) => n.toLocaleString();
@@ -43,8 +44,9 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
   const hasCareAi = student.aiCareSummary !== null;
 
   const activeClasses = enrollments.filter((e) => !e.endDate);
-  const unpaid = invoices.filter((i) => i.status !== "paid");
-  const unpaidTotal = unpaid.reduce((s, i) => s + Math.max(0, i.amountTotal - i.amountDiscount - i.amountPaid), 0);
+  // 미납 = unpaid/partial만(refunded/void 제외) + 행 레벨 clamp — calc.ts 단일 공식(수납관리 KPI와 일치).
+  const unpaid = invoices.filter((i) => i.status === "unpaid" || i.status === "partial");
+  const unpaidTotal = unpaid.reduce((s, i) => s + invoiceOutstanding(i), 0);
   const pinnedMemos = [...memos].sort((a, b) => Number(b.pinned) - Number(a.pinned));
   const base = `/students/${sid}`;
 

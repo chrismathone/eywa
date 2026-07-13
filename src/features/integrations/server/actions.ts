@@ -19,7 +19,11 @@ import {
   sheetsProvider,
   type SheetExportSubject,
 } from "@/features/integrations/sheets-provider";
-import { claimSheetSyncLease, SHEET_SYNC_BUSY_MSG } from "@/features/integrations/server/sheet-sync-lease";
+import {
+  claimSheetSyncLease,
+  isSheetSyncBusy,
+  SHEET_SYNC_BUSY_MSG,
+} from "@/features/integrations/server/sheet-sync-lease";
 
 import {
   getMakeeduSyncLock,
@@ -52,6 +56,17 @@ export async function checkMakeeduSyncLock(): Promise<MakeeduSyncLock> {
 export async function checkMakeeduSyncWorkers(): Promise<{ workers: MakeeduWorker[]; nowMs: number }> {
   const nowMs = Date.now();
   return { workers: await getMakeeduSyncWorkers(nowMs), nowMs };
+}
+
+/**
+ * 시트 동기화 리스 진행 여부 폴링용 — 시간표 툴바가 주기 호출해 '시트 반영/가져오기' 버튼을
+ * 선제 비활성+마우스오버 안내(새벽 자동 반영·다른 관리자 실행 모두). 서버 액션 리스 거부가 2차 방어.
+ * (읽기 전용. 게이트 불필요 — 잠금 상태는 민감정보 아님, RLS로 테넌트 격리.)
+ */
+export async function checkSheetSyncBusy(subject: string): Promise<boolean> {
+  if (!isSheetExportSubject(subject)) return false;
+  const supabase = await createClient();
+  return isSheetSyncBusy(supabase, sheetsProvider(subject));
 }
 
 /**

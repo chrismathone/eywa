@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import type { TenantSettings } from "@/features/owner/settings-types";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
 import { thisMonday } from "@/features/timetable/lib/week";
@@ -28,12 +29,15 @@ export async function buildEnglishTimetableBuffer(opts?: {
   withFormulas?: boolean;
   /** '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일. */
   compactSections?: Set<number>;
+  /** 세션 없는 호출(cron 자동 시트 반영)용 주입 — admin 클라이언트 + tenant 명시 + 설정(쿠키 경로 회피). */
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string; settings: TenantSettings };
 }): Promise<{ buffer: ArrayBuffer; formulaCells: FormulaCell[] }> {
+  const timetableDb = opts?.db ? { supabase: opts.db.supabase, tenantId: opts.db.tenantId } : undefined;
   const [slots, teacherColors, settings, supabase] = await Promise.all([
-    getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId }),
-    getTeacherColorMap(),
-    getTenantSettings(),
-    createClient(),
+    getWeeklyScheduleWithStudents({ subject: "english", teacherId: opts?.teacherId, db: timetableDb }),
+    getTeacherColorMap(timetableDb),
+    opts?.db ? Promise.resolve(opts.db.settings) : getTenantSettings(),
+    opts?.db ? Promise.resolve(opts.db.supabase) : createClient(),
   ]);
   // ⚠️ 반 정원(통합 탭 '정원' 행)은 현 DB `classes`에 capacity 컬럼이 없어 공백 처리(스키마 확장 시 채움).
   const capacityByClassId: Record<string, number | null> = {};
@@ -91,7 +95,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
     model: teacherModel,
   });
   // 학생 반이동 라운드트립: '수강편집' 탭(영어 수강만) — 수학과 동일 enrollment import 경로가 영어에서도 닫힌다.
-  await appendEnrollmentEditSheet(wb, supabase, "english");
+  await appendEnrollmentEditSheet(wb, supabase, "english", opts?.db?.tenantId);
 
   return { buffer: (await wb.xlsx.writeBuffer()) as ArrayBuffer, formulaCells };
 }

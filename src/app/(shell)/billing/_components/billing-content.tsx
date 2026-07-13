@@ -12,6 +12,7 @@ import {
   summarizeInvoices,
   type SortKey,
 } from "@/features/billing/server/queries";
+import { invoiceOutstanding } from "@/features/billing/calc";
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { SearchForm } from "@/components/search-form";
 import { BillingTable } from "./billing-table";
@@ -77,11 +78,8 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       r.dueDate !== null &&
       r.dueDate < today,
   );
-  // 미수금은 실청구(청구−할인) 기준 — 할인액을 미납으로 잡지 않는다(음수는 0).
-  const overdueAmount = overdue.reduce(
-    (s, r) => s + Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid),
-    0,
-  );
+  // 미수금은 실청구(청구−할인) 기준 — calc.ts 행 레벨 단일 공식(음수는 0).
+  const overdueAmount = overdue.reduce((s, r) => s + invoiceOutstanding(r), 0);
 
   const prevPeriod = shiftPeriod(period, -1);
   const nextPeriod = shiftPeriod(period, 1);
@@ -93,7 +91,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
     0,
     (monthRows
       .filter((r) => r.status === "partial")
-      .reduce((s, r) => s + Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid), 0) /
+      .reduce((s, r) => s + invoiceOutstanding(r), 0) /
       netBase) *
       100,
   );

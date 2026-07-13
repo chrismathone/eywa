@@ -18,6 +18,78 @@ docs/per-session-billing-plan.md 설계 그대로: **0102a** `invoice_session_te
 확정 폼, 단가 datalist=pricing_mode='per_session' 프리셋). **N1: 확정값만 청구값** / **N2: 청구액과 자동 일치화 금지**(참고
 열만) 화면 문구로 명시. 실E2E(injaewon): 계획 갱신 707행(반 단위 — 강수정 수학이 초등M 9회+JJ1H 5회로 분리) → 확정 12회×25,000=300,000원
 → 해제 원복. **반 일괄 확정에 회차 입력 추가**(비우면 학생별 계획 회차, 채우면 반 디폴트 회차 override — 9회 하드코딩 아님) + 개별 행 회차·단가 모두 수정 가능. **열 정렬 픽스**: 미확정 행이 colSpan으로 입력칸을 헤더 밖에 몰던 것 → 확정/미확정 모두 동일 8열 + **단일 table-fixed+colgroup**에 반 헤더를 밴드 행으로 통합(반마다 별도 표면 열 너비 각자 계산돼 카드끼리 어긋남="수업끼리 제각각" 해소). 셀 간 입력=`form` 속성 연결. Playwright 실측: 확정/단가/금액/청구액 x좌표 헤더=전 행·전 반 동일, FormData 수집, 998px 무 overflow. **과목 필터 칩**(전체/과목별 — 과목마다 단가 체계 상이) + **attendance 단가표 54종 이관**(INITIAL_SALARY_CONFIG→tuition_catalog per_session, 확정 폼 프리셋) + **반별 그룹 UI**(400+행 개별확정 대신 반 단위): 반 카드마다 회당 단가 1개 입력→`confirmClassTerms`가 전원 각자 계획N×단가 일괄 확정, 개인차는 행별 보정(원장 지시). 검색(학생명·반)+페이지네이션(반 25개/페이지).  **참고 청구액=그 반 라인만**([class-amount.ts](../src/features/billing/session-terms/class-amount.ts), Vitest8): 기존엔 학생 그 달 청구서 전체합(강수정 347,150)을 보여 makeedu 반 금액(192,150)과 커 보였음 → line_items에서 반 코드(BS2C·JJ3K)/서술명 2단계 매칭으로 그 반 라인만 합산(실측 BS2C 9/9 makeedu 정확일치), 못 맞추면 지어내지 않고 "—"(attendance 수납명 파싱 사고 지대 방어). 다음: 견적→청구 전환 시 terms 생성(4단계)·시수 검증 read-only 탭(2단계).
+### makeedu 수납 임포터 사각 2건 보완 — 삭제 미반영 감지(opt-in void)·미매칭 가시화 (2026-07-13) — ✅ 단위 8시나리오+픽스처 dry-run+SQL 롤백 스모크
+수납 머지 적대 리뷰 I4 후속. [import-invoices.cjs](../scripts/_makeedu/import-invoices.cjs) + 분류·리포트 공유 모듈
+[invoice-stale.cjs](../scripts/_makeedu/invoice-stale.cjs) 신설(순수 분류 — DB 접근 없음).
+- **(a) 삭제 미반영**: upsert는 스크랩 존재 (학생,월)만 만져 makeedu에서 그 달 라인이 전부 삭제된 학생의 인보이스가
+  영구 stale(유령 미수)로 남았다. 이제 **스크랩 커버 월 안에서** eywa에만 남은 행을 감지·4버킷 분류: voidable(미완납)
+  / settled(완납·환불 — 항상 보존) / holdUnmatched(같은 이름이 미매칭 라인에 존재 — 오탐 방지) / holdManual(수동 청구
+  추정 — 라인 kind 영문+paid 없음) + **월 커버리지 80% 미만이면 그 월 전건 보류**(부분 스크랩 오탐-void 방어).
+  기본은 **리포트만**, `--void-stale`(또는 env `MAKEEDU_VOID_STALE=true`)+`--apply`일 때만 미완납을 `status='void'`
+  전환(notes 앞 `[동기화] …` 한글 마커=근거·직전 상태 보존). makeedu에 재등장하면 upsert가 status 복원+마커 자동 제거.
+  과거 월(스크랩 밖)은 판정 불가 — 전 기간 정합은 replace-invoices-from-excel 유지.
+- **(b) 미매칭 조용한 스킵**: 매칭 실패 라인 상세(이름/학년/금액/월)를 `$MAKEEDU_OUT/import-invoices-report.json`(최신,
+  void 백업 겸용)+`import-invoices-issues.log`(실행당 1줄 append)로 기록, `makeedu_sync_state.error`에 요약(성공이어도 추적).
+- **실측(프로덕션 read-only)**: 2026-07 부재 36건 = 미완납 23~25건 잔액 ₩7.17~7.65M(대부분 퇴원생 유령 미수) + 완납 11건
+  (보존) + 미매칭 의심 2건(김인규·이승민 — students.makeedu_id 누락). 정상 스크랩 커버리지 91%(현재 청구월만 커버 확인).
+- ⚠️ **발견**: 07-01 옛 additive 임포트 행은 line_items 구스키마(paid 필드 없음) → 출처 판별은 한글 kind(구분)로
+  (수동 청구 createInvoice는 영문 kind). paid 유무만 보면 옛 행 전부 '수동'으로 오분류돼 영구 보류된다.
+- 검증: classifyStale 단위 8시나리오 / 프로덕션 파생 픽스처 dry-run(4버킷·미매칭 3건 재현) / void UPDATE·마커 제거
+  regexp = BEGIN→ROLLBACK 스모크(DB 순효과 0). ⚠️ 연동 PC zip 이관 필요(`Desktop\eywa-sync-pc-수납사각보완-20260713.zip`,
+  .env.local `MAKEEDU_VOID_STALE=true` 추가 포함).
+- **결정(사용자 승인): 자동 void 활성화.** 이에 맞춰 **void 소비처 전면 배선** — void = "makeedu에 없는 청구"로 취급:
+  · 수납 표·KPI·엑셀 = [getInvoicesForPeriod](../src/features/billing/server/queries.ts)에서 `.neq(status,void)` 제외(단일 소스)
+  · 대시보드 수납률 2쿼리(`getPaymentRateThisMonth`/`getTrendDataLast7Days`) 분모 제외 · retention 리스크 신호 제외 ·
+  super-admin 매출 합계 5쿼리 제외 · RPC 0101a/`invoiceOutstanding()`은 이미 void 제외라 무변경
+  · **학생 상세 수납 이력에는 남긴다**(회색 '무효' 배지+행 흐림, 통계·건수에서만 제외) — 이력·근거 보존.
+  [동기화] 시스템 메모는 수납명으로 안 쓰고 툴팁 원문으로만(billing-view `isSyncNote`).
+  ⚠️ 엣지: void 행이 있는 (학생,월)에 수동 청구(createInvoice)를 만들면 유니크 위반 안내가 뜬다 — makeedu에 재등록하면
+  동기화가 자동 복원하므로 정석 경로는 makeedu.
+
+### 시간표 → 구글시트 자동 반영 cron(새벽 4시) + 3중 안전판 (2026-07-13) — ✅ tsc0/lint0/test1064/적대리뷰
+원장 요청 "시트 반영 자동화 없나". 기존 '시트 반영'은 수동(master)뿐 → 매일 **04:00 KST cron** [/api/cron/sheets-sync](../src/app/api/cron/sheets-sync/route.ts)
+신설(수학·영어). 시트가 **양방향 표면**(가져오기 라운드트립)이라 무가드 자동 덮어쓰기 = 시트 편집 유실 → **3중 안전판**:
+① 사람-편집 가드([getSheetLastModifier](../src/features/integrations/google-sheets.ts): 최종수정자≠SA 또는 modifiedTime>last_synced+1분 → 건너뜀+안내)
+② 첫반영 가드(last_synced_at 없으면 제외, 온보딩은 수동) ③ 빈데이터 가드(빌더 동일 `getWeeklyScheduleWithStudents`로
+이번 주 유효 슬롯 0건이면 중단 — 학기전환/전체종강 시 빈 시트 방지). 세션 없음 → **admin 클라 + 명시 tenant 격리**
+(queries/builders에 `db` 주입, edutrix-sync 선례). 리스(`sync_started_at`) 공유로 수동 반영/가져오기와 직렬화.
+UI: 시간표 툴바가 리스 진행 중 '시트 반영/가져오기' **선제 비활성+마우스오버 안내**(20s 폴링 [checkSheetSyncBusy](../src/features/integrations/server/actions.ts)) +
+연동 카드 자동반영 안내(재개 조건='시트 반영'까지). **적대리뷰(4렌즈+검증, 확정 8종) 픽스**: 수학 referenceMonday
+KST 기준(UTC getDay 월요일 밀림 버그), 빈데이터 가드 시간유효성 반영, 사람편집 유예 10→1분, 성공 update 오류 표면화 등.
+⚠️ 병렬 세션이 착수하다 만 흔적(subjectFromProvider·getSheetLastModifier 스텁)을 채택·완성 — 그 세션 중복작업 금지.
+
+### 시간표 '수강편집' 가져오기 apply 서버 재검증 — stale diff 차단 (2026-07-13) — ✅ tsc0/lint0/test1027
+동시성 전수조사 발견분: 영어 구조 가져오기(applyStructureImport)는 apply 시 시트+DB 재읽기·hash 대조가 있는데
+**수학/수강편집 경로(applyTimetableImport)는 클라 diff를 그대로 적용** — preview~apply 사이 DB 변경(다른 관리자 이동·시트 반영)이
+그대로 덮였다. 영어 computeFresh 패턴으로 통일: ① 순수 [importDiffHash](../src/features/timetable/import/diff.ts)(FNV-1a, 쓰기내용
+moves(from 포함)/removes/adds만·정렬·순서무관, Vitest 6) ② preview 2종(파일/시트)이 hash 반환 ③ **apply는 diff를 안 받고**
+파일 재전송(클라 보관 파일) 또는 시트 재읽기(protectNewerThan 동일)로 서버가 재계산→hash 불일치 시 "미리보기 이후 변경" 에러+`staleHash`
+반환(일치 시 서버 재계산 diff 적용=클라 계획 불신). 시트 apply는 신규 `applySheetImport`(master 게이트=preview와 대칭). 클라 2곳
+([import-dialog](../src/app/(shell)/timetable/_components/import-dialog.tsx)·[english-import-dialog](../src/app/(shell)/timetable/_components/english-import-dialog.tsx))은
+staleHash 응답 시 미리보기 초기화+재미리보기 유도(영어 통합창은 반이동 섹션만 무효화 — 이미 적용된 구조 결과·롤백 버튼 보존).
+apply는 0098a 시트 리스도 함께 잡아(재읽기~적용 전 구간) '시트 반영'·다른 가져오기와 교차 실행 직렬화.
+
+### 시간표 전입 30일 창 + 퇴원 줄 정제(과목 수강 유지자 제외) (2026-07-13) — ✅ tsc0/lint0/실데이터 검증
+사용자 결정 2건을 [timetable/server/queries.ts](../src/features/timetable/server/queries.ts) 한 곳에 반영(기본뷰·통합뷰·강사뷰·엑셀 공용 쿼리):
+① **전입(반이동) 배지도 신입과 동일한 30일 창** — `isTransferredIn`에 `start >= newCutoff` 추가. 이동 30일 뒤엔 일반 재원 표시
+(수학 상단 배지 전입 15→4 실측. 영어 전입 88은 7/10 대량 반이동이 30일 이내라 정상 — 8월 초 자동 소멸).
+② **퇴원생 = 그 과목 수강이 하나도 안 남은 학생** — 같은 과목에 살아있는(기준일 미종료) 수강이 있으면 옛 반 퇴원 줄에서 제외.
+퇴원 후보만 별도 경량 조회(fetchInChunks, B3)로 보이는 슬롯 밖(다른 강사 반) 수강까지 포착. 실측 해당 95건(수학 69·영어 24·수학심화 2).
+검증: 로컬(3100)+웨일 실데이터 — 수강 유지 표본 5명(유희린·허유승 등) 취소선 0곳·재원만 / 진짜 퇴원 대조군 5명 취소선 유지(과잉 제거 없음).
+
+### 수납 지표 3원화 통일 — calc.ts 단일 공식 전면 배선 (2026-07-13) — ✅ tsc0/lint0/calc.test 18/프로덕션 read-only 대조
+수납 브랜치 머지 적대 리뷰 잔여(I3) 해소: 수납률·미수 공식이 화면마다 달라(대시보드=paid/gross·캡 없음,
+RPC=학생 합산 후 clamp, 엑셀=무clamp 음수 가능) 숫자가 어긋나던 것을 **[calc.ts](../src/features/billing/calc.ts)
+단일 공식으로 전면 통일**. 행 레벨 `invoiceOutstanding()`(= max(0, 청구−할인−수납), paid/refunded/void=0) +
+`paymentRateOf()`(수납/실청구, 100% 상한) 순수 헬퍼 추출(Vitest 9 추가) — **새 수납 지표는 재구현 금지, 이 두 함수만**.
+- 배선(8파일): 대시보드 `getPaymentRateThisMonth`(summarizeInvoices 위임+fetchAllPaged B2)·`getTrendDataLast7Days`
+  (분모=실청구·100% 상한·출결/청구 모두 fetchAllPaged), 엑셀 잔액([invoices-excel.ts](../src/features/exports/invoices-excel.ts)),
+  RPC **0101a**(행 clamp `greatest(0,…)` — 구 0039a는 학생 합산 후 clamp라 음수 잔차가 미수 상쇄), 학생 상세
+  overview-tab(구: refunded/void도 미납 합산하던 버그)·billing-view·수납 표 billing-table(paid 잔차를 미납으로 그리던 것 0)·billing-content(중복 제거).
+- 프로덕션 read-only 실측(injaewon, 2026-01~07 전월 할인 260만+): 증상 재현 — 구 대시보드 수납률이 매달 1.5~1.7%p 낮음
+  (07월 92.55%→94.16%, 06월 98.40%→100%). 미수도 paid 잔차 유령(07월 191,250원)·과납 상쇄(02월 28,750→30,000, 구가 과소)
+  전부 해소, 엑셀 잔액합=KPI 미수 일치. RPC는 현 데이터에선 구=신 동일(32명·9,486,762원=calc.ts와 정확 일치)이라 무위험 교체.
+- ✅ 0101a 프로덕션 적용 완료(2026-07-13, JWT claim 에뮬레이션 실호출 검증 — 32명·9,486,762원 일치).
 
 ### 원스크린 "지난 보고서" 뷰 — 강사 본인 보고서 이력 열람 (2026-07-13) — ✅ tsc0/lint0/실쿼리 probe
 원장 질문 "강사가 지난 보고서를 볼 수 있나" → 학생 상세 진도 탭(학생 1명씩)뿐이라 원스크린에 4번째 뷰 신설(A안).
@@ -36,7 +108,7 @@ DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)�
 ② 구형 3-key 인보이스 전부 '완납' 렌더(실측 미납 28건 ₩7.3M 은폐) → toLines 첫 라인 인보이스값 합성+미상 "—"
 ③ 완납 행 적립금 잔차가 유령 미수 합산(실측 7건 ₩351,250) → outstanding에서 paid 제외+테스트
 ④ 죽은 수납 편집 액션 3종 삭제(옛 deriveStatus는 할인 미차감이라 부활 시 848건 오판 재생산) + 레거시 영문 kind 한글 매핑.
-⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·대시보드 수납률 공식 불일치(I3)·
+⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·~~대시보드 수납률 공식 불일치(I3)~~(→ 위 "수납 지표 3원화 통일"로 해소)·
 upsert 임포터 삭제 미반영/unmatched 스킵(I4)·**연동 PC에 새 임포터 zip 이관 필요**(안 하면 구 임포터가 계속 3-key 유입).
 
 ### ClassNote 자동 배정 방어 강화 — 적대 감사 F1~F6 전건 픽스 (2026-07-13) — ✅ 합성 테스트 13/13
