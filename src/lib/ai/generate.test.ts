@@ -74,7 +74,7 @@ describe("resolveModel", () => {
     process.env.AI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "an";
     expect(resolveModel("balanced").provider).toBe("anthropic");
-    expect(resolveModel("balanced").model).toBe("claude-sonnet-4-6");
+    expect(resolveModel("balanced").model).toBe("claude-sonnet-5");
   });
 
   it("기본 Upstage지만 Upstage 키 없고 Anthropic만 있으면 폴백", () => {
@@ -101,7 +101,7 @@ describe("resolveModel", () => {
     process.env.ANTHROPIC_API_KEY = "an";
     const r = resolveModel("balanced", "default", "anthropic");
     expect(r.provider).toBe("anthropic");
-    expect(r.model).toBe("claude-sonnet-4-6");
+    expect(r.model).toBe("claude-sonnet-5");
   });
 
   it("prefer:anthropic이라도 Anthropic 키 없으면 Upstage로 폴백(무중단)", () => {
@@ -182,7 +182,7 @@ describe("generateJSON 폴백", () => {
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
     const { data, model } = await generateJSON<{ ok: boolean }>({ prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ ok: true });
-    expect(model).toBe("claude-sonnet-4-6");
+    expect(model).toBe("claude-sonnet-5");
     expect(upstageCreate).toHaveBeenCalledOnce();
     expect(anthropicCreate).toHaveBeenCalledOnce();
   });

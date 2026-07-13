@@ -85,14 +85,16 @@ eywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 
 provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 
-| Tier | Upstage (기본) | Anthropic (폴백/롤백) | 용도 |
+| Tier | Upstage (폴백) | Anthropic (**기본**, 2026-07-13~) | 용도 |
 |---|---|---|---|
 | `fast` | `solar-pro3` | `claude-haiku-4-5` | 짧은 분류, 태깅, 간단 요약 (현재 미사용) |
-| `balanced` | **`solar-pro3`** | `claude-sonnet-4-6` | **경량 호출 기본값**(텍스트 상담 메모 분석 등). |
+| `balanced` | `solar-pro3` | **`claude-sonnet-5`** | **경량 호출 기본값**(텍스트 상담 메모 분석 등). |
 | `reasoning` | — (없음) | `claude-opus-4-7` | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
-- **기본 provider = `AI_PROVIDER` env (미설정 시 `upstage` = Solar Pro 3).** 한국어 강점 + Sonnet 대비
-  ~20–25배 저렴($0.15/$0.60 per 1M, 128K). `AI_PROVIDER=anthropic` 한 줄로 즉시 Claude 롤백.
+- **운영 기본 provider = Anthropic Claude Sonnet 5** — 품질 A/B(2026-07-13)에서 Solar가 상담 분석의 warnings를
+  통째로 놓치고 잡담(주식 등)을 섞어 전환. 전환은 env: **Vercel(+로컬)에 `AI_PROVIDER=anthropic` 설정 필수.**
+  ⚠️ **코드 기본값(env 미설정)은 여전히 `upstage`(Solar)** — Vercel env가 안 걸리면 프로덕션이 Solar로 동작하니 반드시 확인.
+  롤백 = `AI_PROVIDER=upstage`(전역, Solar로) 또는 호출부 `provider:"upstage"`. (Solar: 한국어 강점 + ~20–25배 저렴이나 품질 열세.)
 
 ### 녹음 분석 = Solar 유지 + 폼 자동입력은 후보정 하네스로 방어 (2026-06-24)
 실 ijw 녹음 3건을 eywa 파이프라인에 흘려 ijw(Claude) 저장 결과와 대조한 결론: **전사(AssemblyAI `universal-3-pro`)는
@@ -100,7 +102,7 @@ ijw와 동일 엔진이라 품질 차 없음**(12분 회의 재전사 4,880자 v
 (서술형)도 Solar로 충분**. 유일한 약점은 **등록상담 "폼 자동입력"(구조화 추출)** — Solar(solar-pro3)가 ① 스키마 보기값을
 그대로 베끼고(`parentRelation=부/모/조부/조모/기타`, 이미 `pickEnum`이 폐기) ② 학생이름을 학교명에 복사(`schoolName=이윤건`)
 ③ 학원명 환각(`prevAcademy=수중학교`) ④ 일반호칭을 이름으로(`parentName=어머니`) ⑤ 한글자 잡음(`lastScore=6`).
-- **결정: 비용(Solar ~20–25배 저렴 + 무료크레딧) 위해 Solar 기본 유지.** 대신 **단일 후처리 함수 [`buildFormPatch`](src/features/enrollment/form-fill.ts)에
+- **결정(2026-06-24): 비용(Solar ~20–25배 저렴 + 무료크레딧) 위해 Solar 기본 유지.** ⚠️ **2026-07-13 뒤집힘 — 품질 A/B(상담 분석)에서 Solar가 warnings 통째 누락·잡담 혼입 → Claude Sonnet 5로 전환**(결정 로그 참조). 폼 자동입력 후보정 하네스는 Claude에서도 유효해 유지. 대신 **단일 후처리 함수 [`buildFormPatch`](src/features/enrollment/form-fill.ts)에
   후보정 하네스**를 넣어 위 오류를 DB 진입 전 차단(순수함수 + Vitest). 가드: `grounded`(고유명사는 전사에 실제 등장해야 통과
   =환각 차단)·`notEcho`(학생이름 복사 거부)·`realName`(호칭≠이름)·`meaningful`(한글자 잡음)·`phoneOk`(전화 형식)·`등록완료` 자동입력 금지(상담사 확인 영역).
   웹훅이 `buildFormPatch(extracted, current, { studentName, transcript })`로 전사·학생명을 넘겨 grounding 동작.
@@ -304,7 +306,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 이미 확정된 결정이다. **재제안·재질문 금지.** 바꿔야 할 새 근거가 생기면 "이건 이미 X로 정해졌는데, 이런 이유로 재검토할까요?"라고 **명시적으로** 물어라(조용히 뒤집지 말 것).
 
-- **AI provider 기본 = Upstage Solar Pro 3.** 모든 AI(JSON) 호출은 `src/lib/ai/generate.ts`의 `generateJSON()` 단일 진입점. 롤백 = `AI_PROVIDER=anthropic`(전역) 또는 호출부 `provider:"anthropic"`. `reasoning` 티어(Opus)는 **금지**(명시 요청 시만), Anthropic 고정.
+- **AI provider 기본 = Anthropic Claude Sonnet 5** (2026-07-13 품질 A/B로 Solar Pro 3에서 전환 — Solar가 상담 분석 warnings를 놓치고 잡담을 섞음). 운영 전환은 env: **Vercel+로컬 `AI_PROVIDER=anthropic` 필수**(코드 기본값 미설정은 여전히 upstage=Solar이므로 안 걸면 프로덕션이 Solar로 동작). 모든 AI(JSON) 호출은 `src/lib/ai/generate.ts`의 `generateJSON()` 단일 진입점. 롤백 = `AI_PROVIDER=upstage`(전역, Solar로) 또는 호출부 `provider:"upstage"`. `reasoning` 티어(Opus)는 **금지**(명시 요청 시만), Anthropic 고정.
 - **테넌트 `injaewon` = 프로덕션 실데이터** (ijw-calander 은퇴·전체 이식). 데모 아님 → **`db:seed` 절대 금지**, 검증 중 무심한 mutation 금지(읽기 전용·국소·원복 우선). "데모=일회용" 전제 폐기.
 - **의도적 비이식(영구 제외)**: 캘린더/간트/챗봇/시간표 시뮬레이션(시나리오)/계약서/양방향 자동 동기화. 마케팅·셔틀·자료실·역할관리 원본탭·매출분석·시간표배포·학부모포털도 12메뉴 정체성상 제외. (인앱 알림은 경량 `notifications`만 신설했고 ijw "알림센터"는 아님.)
 - **Excel/스프레드시트 = 내보내기·가져오기만.** 마법사·임의 컬럼매핑 불요(2026-06-23 결정).

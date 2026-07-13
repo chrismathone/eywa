@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### AI 분석 provider 전환 — Solar Pro 3 → Claude Sonnet 5 (전역) (2026-07-13) — ✅ 품질 A/B·tsc0/lint0/test
+원장 제보 "최근 분석본 퀄리티 하락". 실 상담 1건(전사 22,959자) 동일 프롬프트 A/B: **Solar가 warnings를 통째로 놓치고**
+(단독양육·학원 거부감·학생의견 미반영 3건 miss) 잡담(주식 3억)을 familyBackground에 혼입·ASR 깨진표현 방치. Claude Sonnet 5는
+3건 포착·잡담 배제·`[?]` 마커 준수 + Sonnet 4.6보다 40% 빠름(93s vs 149s). → **전역 Claude Sonnet 5 전환.**
+- 레지스트리 `balanced.anthropic` `claude-sonnet-4-6`→`claude-sonnet-5` ([models.ts](../src/lib/ai/models.ts)).
+- Anthropic 응답 파싱 하드닝: `content[0]`만 읽던 것 → **모든 text 블록 수집** ([generate.ts](../src/lib/ai/generate.ts)) — Sonnet 5는 첫 블록이 text가 아닐 수 있어 "no json" 파싱 실패 방지(실측).
+- 전환은 env(`AI_PROVIDER=anthropic`): **⚠️ Vercel 설정 필수**(코드 기본값 미설정은 여전히 upstage=Solar). 롤백 = `AI_PROVIDER=upstage`.
+- CLAUDE.md AI 정책·결정 로그 갱신("AI 기본=Solar" 뒤집음). 폼 자동입력 후보정 하네스는 Claude에서도 유효해 유지.
+
 ### 반 공지 기능 + ClassNote 게시 API 확보 (2026-07-13) — ✅ tsc0/lint0/test1027/전 구간 E2E
 수업보고서 > **반 공지** 탭 신설: 반(발송 opt-in 과목) 다중 선택 + 본문 → 각 재원생의 ClassNote 개별 보드로 일괄 게시. 반 구조는 eywa에 살고 1인 1반은 배달 레일(Edutrix NoticeWriteModal 패턴). **게시=내부 API 직접**(`POST /api/v1_2/reports/` 201·회수 `DELETE` 204 — 학원이 실검증, Cloud Run·Puppeteer 마법사 불필요). 파이프라인: [notice-face](<../src/app/(shell)/lesson-reports/_components/notice-face.tsx>)→[sendClassNotice](../src/features/report-admin/server/notice-actions.ts)(lesson_reports 쓰기+dry-run 스위치+과목 opt-in+동명이인 제외 — [resolveNoticeTargets](../src/features/report-admin/notice-targets.ts) 순수 Vitest6)→`classnote_notices` 큐(0099a, 프로덕션 적용)→연동 PC 데몬 [processNoticesOnce](../scripts/_classnote/classnote-notice-core.mjs)(--post+킬스위치 이중 게이트, 타깃별 실패 분리=partial). "테스트 발송(학원이)" 버튼 내장. E2E: dry-run 게이트→스위치 ON→큐 적재→실게시→API 확인→삭제→스위치 OFF 원복. ⚠️연동 PC zip 재전달 필요(`D:\tmp\eywa-발송PC-반공지-20260713.zip`). **부수 완료: 배정 API 전환+실배정 9건**(POST /api/v1/enrollments/ — ready6·주준호 부모계정2·박서준C 자녀 분리) → 수학 배정 204/미가입 33/잔여 0. ⚠️박서준 공유보드(두 가족 상호 노출) 제거는 원장 결정 대기(docs/classnote-integration.md §3).
 
