@@ -121,7 +121,9 @@ export function MonthlyScheduleView({
     return (
       <div className="bg-card border-line shadow-card rounded-lg border px-5 py-6">
         <h3 className="text-foreground text-[14px] font-semibold">Notion 계정 연결</h3>
-        <p className="text-text-faint mt-1 mb-3 text-[12px]">이 직원과 Notion 업무의 담당자를 이어주면 월간 업무가 표시됩니다.</p>
+        <p className="text-text-faint mt-1 mb-3 text-[12px]">
+          이메일이 같으면 자동 연결됩니다. 이메일이 달라 자동 연결되지 않았으니, Notion 담당자를 직접 골라 연결하세요.
+        </p>
         {userOptions.length === 0 ? (
           <p className="text-text-faint text-[12px]">Notion 사용자 목록을 불러오지 못했습니다. 연동 설정을 확인해주세요.</p>
         ) : (

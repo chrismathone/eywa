@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -26,11 +27,45 @@ export type MonthlyTasksResult =
 
 export type NotionUserOption = { id: string; name: string; email: string | null };
 
-/** 직원의 notion_user_id(RLS 스코프 — 같은 테넌트만). 없으면 null. */
-async function staffNotionUserId(staffId: string): Promise<string | null> {
+// 워크스페이스 사용자 목록은 요청 단위 1회만(자동매칭 + 매핑 드롭다운이 같은 렌더에서 각각 부름 → 중복 fetch 방지).
+const cachedNotionUsers = cache(() => listUsersAll());
+
+function normEmail(e: string | null | undefined): string {
+  return (e ?? "").trim().toLowerCase();
+}
+
+/** 직원의 매핑 상태(notion_user_id) + 이메일(자동매칭용). RLS 스코프 — 같은 테넌트만. */
+async function staffMappingRow(
+  staffId: string,
+): Promise<{ notionUserId: string | null; email: string | null }> {
   const supabase = await createClient();
-  const { data } = await supabase.from("users").select("notion_user_id").eq("id", staffId).single();
-  return ((data as { notion_user_id?: string | null } | null)?.notion_user_id ?? null) || null;
+  const { data } = await supabase
+    .from("users")
+    .select("notion_user_id, email")
+    .eq("id", staffId)
+    .single();
+  const row = data as { notion_user_id?: string | null; email?: string | null } | null;
+  return { notionUserId: (row?.notion_user_id ?? null) || null, email: (row?.email ?? null) || null };
+}
+
+/**
+ * eywa 직원 이메일 == Notion 계정 이메일이면 자동 연결(+ 저장 → 다음부턴 즉시). 없으면 null(수동 폴백).
+ * 최초 미매핑 로드에서만 사용자 목록을 조회(요청 캐시). 저장 실패(테넌트 유니크 충돌 등)해도 이번 표시엔 매칭 id 사용.
+ */
+async function autoMatchByEmail(staffId: string, email: string): Promise<string | null> {
+  const target = normEmail(email);
+  if (!target) return null;
+  const users = await cachedNotionUsers();
+  const hit = users.find((u) => u.type === "person" && normEmail(u.person?.email) === target);
+  if (!hit) return null;
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.from("users").update({ notion_user_id: hit.id }).eq("id", staffId);
+    if (error) console.warn(`[notion] 이메일 자동매칭 저장 실패(${staffId}): ${error.message}`);
+  } catch (e) {
+    console.warn(`[notion] 이메일 자동매칭 저장 예외: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return hit.id;
 }
 
 /**
@@ -44,15 +79,24 @@ export async function resolveMonthlyTasks(
   const dbId = notionTasksDatabaseId();
   if (!isNotionConfigured() || !dbId) return { ok: true, state: "not_configured" };
 
-  const notionUserId = await staffNotionUserId(staffId);
-  if (!notionUserId) return { ok: true, state: "unmapped" };
+  // 매핑 우선순위: 저장된 notion_user_id → (없으면) 이메일 자동매칭(+저장) → 그래도 없으면 수동 폴백.
+  const { notionUserId, email } = await staffMappingRow(staffId);
+  let resolvedId = notionUserId;
+  if (!resolvedId && email) {
+    try {
+      resolvedId = await autoMatchByEmail(staffId, email);
+    } catch (e) {
+      return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+    }
+  }
+  if (!resolvedId) return { ok: true, state: "unmapped" };
 
   const { start, endExclusive } = monthRange(month);
   try {
     const pages = await queryDatabaseAll(dbId, {
       filter: {
         and: [
-          { property: NOTION_TASK_PROPS.assigneePrimary, people: { contains: notionUserId } },
+          { property: NOTION_TASK_PROPS.assigneePrimary, people: { contains: resolvedId } },
           { property: NOTION_TASK_PROPS.due, date: { on_or_after: start } },
           { property: NOTION_TASK_PROPS.due, date: { before: endExclusive } },
         ],
@@ -65,9 +109,9 @@ export async function resolveMonthlyTasks(
   }
 }
 
-/** 워크스페이스 사람 목록(매핑 드롭다운) — 봇 제외, 이름순. */
+/** 워크스페이스 사람 목록(매핑 드롭다운) — 봇 제외, 이름순. 요청 캐시 재사용(자동매칭과 중복 fetch 방지). */
 export async function fetchNotionUserOptions(): Promise<NotionUserOption[]> {
-  const users = await listUsersAll();
+  const users = await cachedNotionUsers();
   return users
     .filter((u) => u.type === "person")
     .map((u) => ({ id: u.id, name: u.name?.trim() || "(이름 없음)", email: u.person?.email ?? null }))
