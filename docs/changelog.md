@@ -43,6 +43,20 @@ stale sheetId 400(허위 실패 토스트+서식 누락) + `syncSheetsNow`에 �
 신명진(퇴직) 반 8개→매트릭스 9명 정상 · 김화영 반 4→2(폐강 제외). 잔여 데이터 이슈(코드 아님): 퇴직 담임 stale 반 14개(전부 영어,
 재배정 필요)·빈 반 18개(폐강 후보) — 퇴직 처리(`deactivateStaff`)가 users.status만 바꾸고 반은 안 건드리는 구조 갭.
 
+### 직원 퇴사 처리 — 담임 반 인수인계 경고 다이얼로그 (2026-07-13) — ✅ tsc0/lint0/test1021/라이브 DOM 검증
+퇴직 강사가 살아있는 반 담임으로 남아 시간표·출석부에 "(퇴직)" 표시되는 구조 갭(`deactivateStaff`는 users.status만 변경,
+classes.teacher_id 무전파·FK는 on delete set null뿐) 대응 — **퇴사를 막지 않고 경고+안내**.
+- **경고 다이얼로그**([deactivate-button.tsx](<../src/app/(shell)/staff/[id]/_components/deactivate-button.tsx>)): 담임인 진행중 반이 있으면
+  confirm 대신 다이얼로그 — "담임인 진행중인 반 N개" 경고 + 반 목록(각 반 상세 WindowLink=거기 '강사 인수인계' 버튼으로 연계,
+  0044a pending 예약된 반은 "인수인계 예약됨 → 새담임·적용일" 표시) + `/classes?teacher=<id>` 수업목록 링크 + "그래도 퇴사 처리".
+  담임 반 0개·재직 복구는 기존 confirm 유지. 공용 Modal/Footer/SubmitBtn은 [dialog-bits.tsx](<../src/app/(shell)/staff/[id]/_components/dialog-bits.tsx>)로 추출.
+- **쿼리** `getActiveHomeroomClasses`([staff/server/queries.ts](../src/features/staff/server/queries.ts)) — pending_teacher 조인 포함,
+  basic-info-tab이 `Promise.all`(B4)로 조회해 AccountActions에 배선. **직원 삭제 다이얼로그**에도 "삭제하면 담임이 비워집니다" 경고 추가.
+- **액션 사후 안내**: `deactivateStaff`가 퇴사 후 담임 반 수를 세어(`count:exact head:true`, B2) 반환 — 렌더 시점 목록이 stale해
+  경고 없이 지나가도 사후 문구로 잡음(차단 아님).
+- 라이브 검증(injaewon, 읽기 전용): 보조T(담임 6반) → 다이얼로그 "반이 6개" + 드릴링 6반 링크 + 인수인계 없음 배지, 취소/재오픈 정상(#67 안전),
+  담임 0반(데모 강사)은 기존 confirm 폼 그대로. 잔여: 퇴직 담임 14반 재배정·빈 반 폐강은 별건(원장 승인 대기).
+
 ### ClassNote 보드 프로비저닝·배정 자동화 이식 (2026-07-10) — ✅ dry-run 실측 검증(수학 237명 전수)
 Edutrix 반 생성·배정 자동화를 eywa DB 기준·Playwright·**dry-run 기본**으로 이식(`scripts/_classnote/`): [provision-classnote-boards.mjs](../scripts/_classnote/provision-classnote-boards.mjs)(기대 보드 vs 실보드 diff → **누락 보드만 생성**, 동명이인 보류 분리) · [assign-classnote-students.mjs](../scripts/_classnote/assign-classnote-students.mjs)(학생 관리 반추가 모달 **1회 스캔 전수판정** — 보드별 배정 인원(N명) 표시 기반: assigned/ready/미가입/보드없음, `--apply`는 ready만 배정) · 공용 [classnote-admin-core.mjs](../scripts/_classnote/classnote-admin-core.mjs)(로그인·호칭 다이얼로그·무한스크롤 수집). 실측: assigned 196 · 보드없음 35(`(수학)박서준C`는 생성 아닌 `classnote_name` 매핑으로) · 미가입 5(초대 필요) · ready 1(주준호). §9 수기 실사(33/6/1)와 교차 일치. ⚠️ `--apply`(생성·배정)=실 ClassNote 변경 — 원장 승인 후. 배경·사용법 = docs/classnote-integration.md §3(학생 1명=반 1개 구조 근거 포함).
 

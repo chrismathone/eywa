@@ -132,6 +132,48 @@ export async function getStaffWorkSchedule(id: string): Promise<WorkSchedule> {
   return sanitizeWorkSchedule((data as { work_schedule?: unknown }).work_schedule);
 }
 
+// === 퇴사 처리 경고 — 이 직원이 담임(classes.teacher_id)인 진행중 반 ===
+// 퇴사해도 담임 배정은 자동 해제되지 않아(FK는 on delete set null뿐, status 변경은 무전파)
+// 시간표·출석부에 "(퇴직)" 담임으로 남는다 → 퇴사 확인 다이얼로그가 이 목록으로 사전 경고한다.
+export type HomeroomClassRow = {
+  id: string;
+  className: string;
+  /** 강사 인수인계(0044a)가 예약돼 있으면 새 담임 이름·적용일 — 이미 조치된 반임을 표시 */
+  pendingTeacherName: string | null;
+  pendingTeacherDate: string | null;
+};
+
+export async function getActiveHomeroomClasses(teacherId: string): Promise<HomeroomClassRow[]> {
+  const supabase = await createClient();
+  const actor = await getCurrentUser();
+  if (!actor) return [];
+
+  // 강사 1인의 담임 반은 수십 이하 — 절단 위험 없음(getStaffClasses와 동일 전제).
+  const { data } = await supabase
+    .from("classes")
+    .select(
+      "id, class_name, pending_teacher_date, pending_teacher:pending_teacher_id ( display_name )",
+    )
+    .eq("tenant_id", actor.tenantId)
+    .eq("teacher_id", teacherId)
+    .eq("is_active", true)
+    .order("class_name", { ascending: true });
+
+  return (data ?? []).map((c) => {
+    const pt = (Array.isArray(c.pending_teacher) ? c.pending_teacher[0] : c.pending_teacher) as
+      | { display_name?: string }
+      | null
+      | undefined;
+    return {
+      id: c.id,
+      className: c.class_name,
+      pendingTeacherName: pt?.display_name ?? null,
+      pendingTeacherDate:
+        (c as { pending_teacher_date?: string | null }).pending_teacher_date ?? null,
+    };
+  });
+}
+
 // === 강사 담당 수업 이력 ===
 export type StaffClassRow = {
   id: string;
