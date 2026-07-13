@@ -9,6 +9,18 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 → 구글시트 자동 반영 cron(새벽 4시) + 3중 안전판 (2026-07-13) — ✅ tsc0/lint0/test1064/적대리뷰
+원장 요청 "시트 반영 자동화 없나". 기존 '시트 반영'은 수동(master)뿐 → 매일 **04:00 KST cron** [/api/cron/sheets-sync](../src/app/api/cron/sheets-sync/route.ts)
+신설(수학·영어). 시트가 **양방향 표면**(가져오기 라운드트립)이라 무가드 자동 덮어쓰기 = 시트 편집 유실 → **3중 안전판**:
+① 사람-편집 가드([getSheetLastModifier](../src/features/integrations/google-sheets.ts): 최종수정자≠SA 또는 modifiedTime>last_synced+1분 → 건너뜀+안내)
+② 첫반영 가드(last_synced_at 없으면 제외, 온보딩은 수동) ③ 빈데이터 가드(빌더 동일 `getWeeklyScheduleWithStudents`로
+이번 주 유효 슬롯 0건이면 중단 — 학기전환/전체종강 시 빈 시트 방지). 세션 없음 → **admin 클라 + 명시 tenant 격리**
+(queries/builders에 `db` 주입, edutrix-sync 선례). 리스(`sync_started_at`) 공유로 수동 반영/가져오기와 직렬화.
+UI: 시간표 툴바가 리스 진행 중 '시트 반영/가져오기' **선제 비활성+마우스오버 안내**(20s 폴링 [checkSheetSyncBusy](../src/features/integrations/server/actions.ts)) +
+연동 카드 자동반영 안내(재개 조건='시트 반영'까지). **적대리뷰(4렌즈+검증, 확정 8종) 픽스**: 수학 referenceMonday
+KST 기준(UTC getDay 월요일 밀림 버그), 빈데이터 가드 시간유효성 반영, 사람편집 유예 10→1분, 성공 update 오류 표면화 등.
+⚠️ 병렬 세션이 착수하다 만 흔적(subjectFromProvider·getSheetLastModifier 스텁)을 채택·완성 — 그 세션 중복작업 금지.
+
 ### 시간표 '수강편집' 가져오기 apply 서버 재검증 — stale diff 차단 (2026-07-13) — ✅ tsc0/lint0/test1027
 동시성 전수조사 발견분: 영어 구조 가져오기(applyStructureImport)는 apply 시 시트+DB 재읽기·hash 대조가 있는데
 **수학/수강편집 경로(applyTimetableImport)는 클라 diff를 그대로 적용** — preview~apply 사이 DB 변경(다른 관리자 이동·시트 반영)이
