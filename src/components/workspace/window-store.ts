@@ -72,6 +72,17 @@ export function instanceLabel(winId: string, title: string) {
   return i === -1 ? title : `${title} (${Number(winId.slice(i + 1)) + 1})`;
 }
 
+/** embed=1 파라미터를 제거한 정규화 URL — homeNav의 "이미 첫 화면(루트)인가" 비교용
+ *  (창 iframe URL엔 항상 embed=1이 붙어 있어 raw 루트 href와 그대로 비교하면 안 맞는다). */
+function stripEmbed(url: string) {
+  const [path, query] = url.split("?");
+  if (!query) return path;
+  const params = new URLSearchParams(query);
+  params.delete("embed");
+  const rest = params.toString();
+  return rest ? `${path}?${rest}` : path;
+}
+
 /** 두 사각형이 (반올림 오차 내) 거의 같은지 — 스마트 코너 스냅의 "절반 차지 창" 판정용. */
 function rectsClose(a: Rect, b: Rect, tol = 6) {
   return (
@@ -164,6 +175,10 @@ type Actions = {
   observeIframe: (id: string, v: { title: string; url: string }) => void;
   /** 그 창의 nav 스택을 한 단계 pop하고 이동할 이전 URL을 반환(없으면 null). 뒤로(←) 버튼이 호출. */
   backNav: (id: string) => string | null;
+  /** 이미 최상단(포커스)인 라우트 창을 다시 클릭했을 때 그 창을 "첫 화면"(메뉴 루트 href)으로 리셋 —
+   *  nav 스택을 루트만 남기고 canBack=false로 되돌리고, 이동할 루트 URL을 반환한다(이미 루트면 null=무동작).
+   *  호출부(레일)가 반환 URL로 그 창 iframe만 location.replace(뒤로 버튼과 동일 패턴, joint history 회피). */
+  homeNav: (id: string) => string | null;
   /** 그 창의 iframe만 새로고침(전체 F5 대신) — nonce를 bump하면 RouteWindow가 현재 URL을 reload. */
   reloadWindow: (id: string) => void;
   /** 창 본문 폼의 미저장 변경 여부 세팅(workspace-canvas가 iframe postMessage 수신 시 호출). */
@@ -282,6 +297,22 @@ export const useWindowStore = create<State & Actions>()(
           },
         });
         return target;
+      },
+
+      homeNav: (id) => {
+        const s = get();
+        const w = s.windows[id];
+        if (!w || !w.params.href) return null;
+        const home = w.params.href;
+        const stack = s.nav[id] ?? [];
+        const top = stack[stack.length - 1];
+        // 이미 첫 화면(루트)이고 드릴인 이력도 없으면 무동작 — 불필요한 리로드/깜빡임 방지.
+        if (stack.length <= 1 && (!top || stripEmbed(top) === stripEmbed(home))) return null;
+        set({
+          nav: { ...s.nav, [id]: [home] },
+          live: { ...s.live, [id]: { title: s.live[id]?.title ?? w.params.title, canBack: false } },
+        });
+        return home;
       },
       reloadWindow: (id) =>
         set((s) => ({ reloadNonce: { ...s.reloadNonce, [id]: (s.reloadNonce[id] ?? 0) + 1 } })),
