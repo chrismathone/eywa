@@ -33,6 +33,14 @@ flex-1에 넣으면 폭 기준 종횡비로 부풀어 카드가 과대해짐 →
 ### ClassNote 수학 보드 34개 실생성 + 판독 API 전환 (2026-07-13) — ✅ 실측 검증·기존 데이터 무변경
 원장 승인으로 `provision-classnote-boards.mjs --apply` 실행: 카나리 1개→나머지 33개, 실패 0, API 재조회 검증 통과(기존 보드·멤버·게시물 무변경, eywa DB 쓰기 0, `--exclude=박서준C`=매핑 케이스 제외 플래그 신설). **판독을 내부 API로 전환**: 반 정보 관리 무한스크롤 스크래핑이 비결정(수집 누락→기존 보드 "누락" 오판, 단 ClassNote 중복 반명 거부가 백스톱)이라 `GET /api/v1/centers/{id}/classes`(+approved_children)·`/children`으로 교체 — 읽기=API(결정적)/쓰기=DOM. 생성 직후 전수 판정(수학 237명): assigned 196 · **ready 7**(가입돼 있어 배정만 남음: 김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령) · 미가입 33(초대 필요 명단 자동 산출) · 매핑 대기 1(박서준C). 상세 = docs/classnote-integration.md §3.
 
+### 청구=N회 키스톤 설계 확정 (2026-07-13) — 📐 설계만, 구현은 수납 브랜치 정리 후
+D:\attendance 이식 재검토(기존 NO-GO 유효, 5/22 이후 커밋 0) → 로드맵 1단계 착수. 4갈래 병렬 조사+교차검증으로
+**[docs/per-session-billing-plan.md](per-session-billing-plan.md) = 단일 진실**. 핵심: ⚠️옛 로드맵의 "line_items에
+sessions/unitPrice" 저장 폐기(`fix/billing-discount-status` 임포터 upsert가 line_items 통째 교체 — 커스텀 키 일 2회
+전멸) → **별도 테이블 `invoice_session_terms`**(invoice_id FK는 upsert 보존이라 안전). 원장 결정: N회=자동 산출(계획,
+`countSessions` 재사용) 프리필+**수기 확정만 청구값** / 착수=그 브랜치 main 정리 후(billing UI 3-way 충돌 회피).
+선행: tuition_catalog `pricing_mode`(회당/월 판별 — 없이 곱셈 금지). attendance 사고 이식 불변규칙 N1~N6 문서화.
+
 ### 시트 반영/가져오기 동시 실행 방지 — DB 리스 락 (2026-07-13) — ✅ tsc0/lint0/test1027/DB원자성 3종/라이브 busy·성공 E2E
 원장 질문 "여러 명이 동시에 시트 반영 누르면?" → 전수조사(멀티에이전트): 시트 셀 데이터는 `drive.files.update`
 **통째 교체(원자적 last-writer-wins)**라 파손 없음, 그러나 후속 CLIP 서식·수식 batchUpdate가 동시 재교체와 겹치면
