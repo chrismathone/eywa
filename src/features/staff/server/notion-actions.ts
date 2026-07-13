@@ -10,8 +10,11 @@ import {
   resolveMonthlyTasks,
   fetchNotionUserOptions,
   setStaffNotionUserIdRow,
+  fetchTaskComments,
+  addTaskComment,
   type MonthlyTasksResult,
   type NotionUserOption,
+  type TaskComment,
 } from "./notion";
 
 // 클라(월간뷰)에서 호출하는 서버 액션 — 월 이동/매핑. 권한은 tenant-aware 매트릭스로 게이트([[#58]]). RLS가 테넌트 격리.
@@ -40,6 +43,40 @@ export async function listNotionUserOptions(): Promise<
   if (!actor || !canManageStaff(actor.systemRole)) return { ok: false, error: "권한이 없습니다" };
   try {
     return { ok: true, options: await fetchNotionUserOptions() };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 태스크 댓글 목록 — 직원관리 열람 권한. 다이얼로그 열 때 지연 로드. */
+export async function getTaskComments(
+  pageId: string,
+): Promise<{ ok: true; comments: TaskComment[] } | { ok: false; error: string }> {
+  const actor = await getCurrentUser();
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  const matrix = await getPermMatrix();
+  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  try {
+    return { ok: true, comments: await fetchTaskComments(pageId) };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 태스크에 댓글 작성 — 직원관리 열람 권한. eywa 작성자명이 접두로 붙어 출처 보존. */
+export async function addTaskCommentAction(
+  pageId: string,
+  text: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const actor = await getCurrentUser();
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  const matrix = await getPermMatrix();
+  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  const t = text.trim();
+  if (!t) return { ok: false, error: "댓글 내용을 입력하세요" };
+  try {
+    await addTaskComment(pageId, t.slice(0, 1800), actor.displayName || "직원");
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }

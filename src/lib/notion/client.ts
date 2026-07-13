@@ -91,6 +91,39 @@ export async function queryDatabaseAll(
   return out;
 }
 
+export type NotionComment = {
+  id: string;
+  created_time?: string;
+  created_by?: { id?: string };
+  rich_text?: { plain_text?: string }[];
+};
+
+/** 페이지(=block)의 댓글 전건. "댓글 읽기" 권한 필요. */
+export async function listCommentsAll(blockId: string): Promise<NotionComment[]> {
+  const out: NotionComment[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const qs = new URLSearchParams({
+      block_id: blockId,
+      page_size: "100",
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    const json = await notionFetch(`/comments?${qs.toString()}`, { method: "GET" });
+    out.push(...((json.results as NotionComment[]) ?? []));
+    if (!json.has_more) return out;
+    cursor = json.next_cursor as string;
+  }
+  return out;
+}
+
+/** 페이지에 댓글 추가. "댓글 삽입" 권한 필요. API 댓글은 통합(봇)으로 표기됨(작성자 접두는 호출부). */
+export async function createComment(pageId: string, text: string): Promise<void> {
+  await notionFetch(`/comments`, {
+    method: "POST",
+    body: JSON.stringify({ parent: { page_id: pageId }, rich_text: [{ text: { content: text } }] }),
+  });
+}
+
 /** 워크스페이스 사용자 전건(사람/봇 구분은 호출부에서). */
 export async function listUsersAll(): Promise<NotionUser[]> {
   const out: NotionUser[] = [];

@@ -4,7 +4,7 @@
 // 근무일정 탭을 대체(근무시간 편집기는 휴면). 초기 데이터는 서버 탭에서 주입, 월 이동은 서버 액션 재호출.
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, ExternalLink } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmptyState } from "@/components/empty-state";
@@ -14,6 +14,7 @@ import { groupTasksByDate, type NotionTask } from "@/features/staff/notion-tasks
 import { getStaffMonthlyTasks, setStaffNotionUserId } from "@/features/staff/server/notion-actions";
 import type { MonthlyTasksResult, NotionUserOption } from "@/features/staff/server/notion";
 import { MonthGridView } from "./month-grid-view";
+import { TaskDetailDialog } from "./task-detail-dialog";
 
 const VIEW_KEY = "eywa-monthly-view";
 type ViewMode = "grid" | "list";
@@ -29,8 +30,16 @@ function Panel({ title, desc }: { title: string; desc?: string }) {
   );
 }
 
-/** 리스트 뷰 — 마감일순 그룹. 좁은 창·빠른 스캔용. */
-function MonthListView({ tasks, today }: { tasks: NotionTask[]; today: string }) {
+/** 리스트 뷰 — 마감일순 그룹. 좁은 창·빠른 스캔용. 항목 클릭 시 상세·댓글 다이얼로그. */
+function MonthListView({
+  tasks,
+  today,
+  onOpen,
+}: {
+  tasks: NotionTask[];
+  today: string;
+  onOpen: (t: NotionTask) => void;
+}) {
   const byDate = groupTasksByDate(tasks);
   const dates = Object.keys(byDate).sort();
   if (dates.length === 0)
@@ -44,16 +53,16 @@ function MonthListView({ tasks, today }: { tasks: NotionTask[]; today: string })
           </div>
           <div className="flex-1 space-y-1">
             {byDate[d]!.map((t) => (
-              <div key={t.id} className="flex items-center gap-1.5 text-[12px]">
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onOpen(t)}
+                className="hover:text-primary flex w-full items-center gap-1.5 text-left text-[12px]"
+              >
                 <span className={t.done ? "text-text-faint line-through" : "text-foreground"}>{t.title}</span>
                 {t.dept ? <span className="text-text-faint">· {t.dept}</span> : null}
                 {t.done ? <span className="text-primary text-[10px]">완료</span> : null}
-                {t.url ? (
-                  <a href={t.url} target="_blank" rel="noopener noreferrer" className="text-text-faint hover:text-primary ml-auto" title="Notion에서 열기">
-                    <ExternalLink size={12} />
-                  </a>
-                ) : null}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -85,6 +94,7 @@ export function MonthlyScheduleView({
   });
   const [selected, setSelected] = useState("");
   const [saving, setSaving] = useState(false);
+  const [openTask, setOpenTask] = useState<NotionTask | null>(null);
   const today = kstToday();
 
   function pickView(v: ViewMode) {
@@ -200,10 +210,14 @@ export function MonthlyScheduleView({
         <p className="text-text-faint px-1 pb-1 text-[12px]">이 달에 등록된 업무가 없습니다.</p>
       ) : null}
       {view === "grid" ? (
-        <MonthGridView weeks={weeks} tasks={tasks} today={today} />
+        <MonthGridView weeks={weeks} tasks={tasks} today={today} onOpen={setOpenTask} />
       ) : (
-        <MonthListView tasks={tasks} today={today} />
+        <MonthListView tasks={tasks} today={today} onOpen={setOpenTask} />
       )}
+
+      {openTask ? (
+        <TaskDetailDialog key={openTask.id} task={openTask} onClose={() => setOpenTask(null)} />
+      ) : null}
     </div>
   );
 }

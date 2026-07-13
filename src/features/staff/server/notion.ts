@@ -7,6 +7,8 @@ import {
   notionTasksDatabaseId,
   queryDatabaseAll,
   listUsersAll,
+  listCommentsAll,
+  createComment,
 } from "@/lib/notion/client";
 import {
   NOTION_TASK_PROPS,
@@ -17,7 +19,7 @@ import {
 import { monthRange } from "@/lib/month-grid";
 
 // Notion 업무 DB → 직원 상세 '월간일정' 조회 + 직원↔Notion 사용자 매핑. 권한 게이트는 호출부(notion-actions.ts).
-// 토큰/DB id는 env(lib/notion/client.ts). notion_user_id는 users 컬럼(0098a).
+// 토큰/DB id는 env(lib/notion/client.ts). notion_user_id는 users 컬럼(0099a).
 
 export type MonthlyTasksResult =
   | { ok: true; state: "ok"; tasks: NotionTask[] }
@@ -116,6 +118,32 @@ export async function fetchNotionUserOptions(): Promise<NotionUserOption[]> {
     .filter((u) => u.type === "person")
     .map((u) => ({ id: u.id, name: u.name?.trim() || "(이름 없음)", email: u.person?.email ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+}
+
+export type TaskComment = { id: string; author: string; time: string | null; text: string };
+
+/** 태스크(페이지) 댓글 목록 — 작성자명은 워크스페이스 사용자에서 해결(사용자 정보 권한). 실패해도 "Notion"으로 폴백. */
+export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> {
+  const [comments, users] = await Promise.all([
+    listCommentsAll(pageId),
+    cachedNotionUsers().catch(() => []),
+  ]);
+  const nameById = new Map(users.map((u) => [u.id, u.name?.trim() || ""]));
+  return comments.map((c) => ({
+    id: c.id,
+    author: (c.created_by?.id ? nameById.get(c.created_by.id) : "") || "Notion",
+    time: c.created_time ?? null,
+    text: (c.rich_text ?? [])
+      .map((t) => t.plain_text ?? "")
+      .join("")
+      .trim(),
+  }));
+}
+
+/** 태스크에 댓글 추가 — API 댓글은 통합(봇)으로 표기되므로 eywa 작성자명을 접두로 붙여 출처 보존. */
+export async function addTaskComment(pageId: string, text: string, authorName: string): Promise<void> {
+  const body = `[eywa · ${authorName}] ${text}`.slice(0, 2000);
+  await createComment(pageId, body);
 }
 
 /** 직원 ↔ Notion 사용자 매핑 저장(같은 테넌트 검증 후 admin update). account-actions.loadTarget 패턴. */

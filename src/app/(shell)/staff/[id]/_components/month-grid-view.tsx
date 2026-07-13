@@ -8,26 +8,17 @@ import { groupTasksByDate, type NotionTask } from "@/features/staff/notion-tasks
 
 const MAX_PER_CELL = 4;
 
-function TaskChip({ task }: { task: NotionTask }) {
-  const body = (
-    <>
+function TaskChip({ task, onOpen }: { task: NotionTask; onOpen: (t: NotionTask) => void }) {
+  const cls =
+    "block w-full truncate rounded-sm px-1 py-0.5 text-left text-[11px] " +
+    (task.done ? "bg-bg-soft hover:bg-bg-soft/70" : "bg-primary/10 hover:bg-primary/20");
+  return (
+    <button type="button" onClick={() => onOpen(task)} className={cls} title={task.title}>
       <span className={task.done ? "text-text-faint line-through" : "text-foreground"}>
         {task.title}
       </span>
       {task.dept ? <span className="text-text-faint ml-1">· {task.dept}</span> : null}
-    </>
-  );
-  const cls =
-    "block w-full truncate rounded-sm px-1 py-0.5 text-left text-[11px] " +
-    (task.done ? "bg-bg-soft" : "bg-primary/10 hover:bg-primary/15");
-  return task.url ? (
-    <a href={task.url} target="_blank" rel="noopener noreferrer" className={cls} title={task.title}>
-      {body}
-    </a>
-  ) : (
-    <span className={cls} title={task.title}>
-      {body}
-    </span>
+    </button>
   );
 }
 
@@ -35,10 +26,12 @@ export function MonthGridView({
   weeks,
   tasks,
   today,
+  onOpen,
 }: {
   weeks: MonthCell[][];
   tasks: NotionTask[];
   today: string;
+  onOpen: (t: NotionTask) => void;
 }) {
   const byDate = groupTasksByDate(tasks);
   const heads = weekdayHeaders(0);
@@ -87,7 +80,7 @@ export function MonthGridView({
                   </div>
                   <div className="space-y-0.5">
                     {dayTasks.slice(0, MAX_PER_CELL).map((t) => (
-                      <TaskChip key={t.id} task={t} />
+                      <TaskChip key={t.id} task={t} onOpen={onOpen} />
                     ))}
                     {dayTasks.length > MAX_PER_CELL ? (
                       <span className="text-text-faint px-1 text-[10px]">
