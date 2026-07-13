@@ -32,7 +32,9 @@ type NotionPropVal =
   | { type: "date"; date?: { start?: string | null } | null }
   | { type: "people"; people?: { id: string; name?: string }[] }
   | { type: "checkbox"; checkbox?: boolean }
-  | { type: "select"; select?: { name?: string } | null };
+  | { type: "select"; select?: { name?: string } | null }
+  | { type: "status"; status?: { name?: string } | null }
+  | { type: "formula"; formula?: { string?: string | null; number?: number | null; boolean?: boolean | null } };
 export type NotionPage = {
   id: string;
   url?: string;
@@ -61,10 +63,18 @@ export function parseNotionTaskPage(page: NotionPage): NotionTask {
   const doneVal = props[NOTION_TASK_PROPS.done];
   const done = !!(doneVal && doneVal.type === "checkbox" && doneVal.checkbox);
 
+  // 부서 — 실 DB에선 formula(문자)로 계산되나, select/status/rich_text도 방어적으로 처리.
   const deptVal = props[NOTION_TASK_PROPS.dept];
   let dept: string | null = null;
-  if (deptVal && deptVal.type === "select") dept = deptVal.select?.name ?? null;
-  else if (deptVal && deptVal.type === "rich_text") dept = plain(deptVal.rich_text) || null;
+  if (deptVal) {
+    if (deptVal.type === "select") dept = deptVal.select?.name ?? null;
+    else if (deptVal.type === "status") dept = deptVal.status?.name ?? null;
+    else if (deptVal.type === "rich_text") dept = plain(deptVal.rich_text) || null;
+    else if (deptVal.type === "formula") {
+      const f = deptVal.formula;
+      dept = (f?.string ?? (f?.number != null ? String(f.number) : null)) || null;
+    }
+  }
 
   return { id: page.id, title: title || "(제목 없음)", due, done, dept, url: page.url ?? null };
 }

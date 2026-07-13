@@ -53,6 +53,13 @@ describe("parseNotionTaskPage", () => {
     );
     expect(t.dept).toBe("영어과");
   });
+
+  it("부서가 formula(문자)면 그 문자열을 읽는다 (실 DB 형태)", () => {
+    const t = parseNotionTaskPage(
+      page({ 제목: { type: "title", title: [{ plain_text: "x" }] }, [NOTION_TASK_PROPS.dept]: { type: "formula", formula: { string: "회계/경리" } } }),
+    );
+    expect(t.dept).toBe("회계/경리");
+  });
 });
 
 describe("groupTasksByDate", () => {
