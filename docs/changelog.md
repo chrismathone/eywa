@@ -9,6 +9,14 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 입금 계좌 다계좌 모델 + 수강료 계산기 안내문 계좌 박스 (2026-07-13) — ✅ tsc0/lint0/test(resolve9)/실미리보기
+원장 "입금 계좌를 몇 개 등록해두고 연결된 곳(교재요청서·수강료 계산기)에 기본 계좌가 디폴트로 들어가게". 단일 계좌 → **다계좌 모델**로 확장.
+- **스키마** [settings-types.ts](../src/features/owner/settings-types.ts): `accountSchema`에 `label`·`isDefault` 추가 + `billing.accounts[]`(≤12, superRefine 기본 ≤1) + 헬퍼 `defaultAccountOf(billing)`(isDefault→첫 계좌→레거시 account 폴백).
+- **resolve** [resolve.ts](../src/features/owner/resolve.ts) `normalizeBilling`: 옛 단일 `account`만 있던 테넌트를 `accounts`로 **자동 승격**(기본 1개 보장) + **레거시 `account`를 기본 계좌 미러로 덮어씀** → 미이전 소비처(교재요청서 3곳)가 코드 변경 없이 기본 계좌를 봄("데이터 증발" 0). normalizeHolidays/Subjects와 같은 "읽기 시 승격" 패턴.
+- **폼** [billing-section.tsx](<../src/app/(shell)/owner/_components/billing-section.tsx>): 단일 3필드 → **목록 편집기**(별칭/은행/예금주/계좌번호 + 기본 라디오 + 추가·삭제, 저장 시 `account`=기본 계좌 미러 동기화).
+- **소비처**: 교재요청서(무변경, 미러) / 수강료 계산기 [tuition-calculator.tsx](<../src/app/(shell)/billing/_components/tuition-calculator.tsx>)= 견적저장 위 `입금 계좌 안내` 섹션(체크 토글 + 기본 계좌 프리필, 계좌 2개↑면 "저장된 계좌 불러오기" 드롭다운) / 안내문 [quote-document.tsx](<../src/app/(shell)/billing/_components/quote-document.tsx>)= **최종 납부 금액 위** 우측정렬 계좌 박스(인쇄 A4 1p 유지 `print:` 압축).
+- ⚠️ **새 계좌 소비처는 `defaultAccountOf(billing)`를 쓸 것**(`billing.account`는 deprecated 미러). 검증: tsc0/lint0/resolve.test 승격·미러·빈목록 3케이스 추가(9통과)/실미리보기(:3100).
+
 ### 단가표 회당 단가 배선 — `pricing_mode`를 CRUD UI에 노출(하드코딩·스크립트 의존 제거) (2026-07-13) — ✅ tsc0/lint0/test68/build✓
 회차 확정 datalist는 이미 DB(`tuition_catalog` where `pricing_mode='per_session'`)에서 읽었으나, 그 54행이 **일회성
 이관 스크립트**로만 들어갔고 기존 단가표 CRUD가 `pricing_mode`를 다루지 않아 **UI로 회당 단가를 추가·수정할 수 없었다**
