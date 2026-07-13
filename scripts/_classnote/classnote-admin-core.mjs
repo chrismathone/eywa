@@ -199,6 +199,84 @@ export function childKeys(name) {
   return keys;
 }
 
+// ── 반(보드) 생성 — DOM(반 정보 관리 > 반 추가하기). 생성만은 API 미확인이라 DOM 유지 ─────────
+
+/** 반 추가 form이 열려있으면 취소로 닫기(중복 거부 등 후처리). */
+export async function cancelBoardForm(page) {
+  const cancelled = await page.evaluate(() => {
+    const form = document.querySelector("form");
+    const input = form?.querySelector("input");
+    if (!input || input.offsetParent === null) return false;
+    const btn = Array.from(form.querySelectorAll("button")).find(
+      (b) => (b.querySelector("span")?.textContent || "").trim() === "취소",
+    );
+    if (btn) {
+      btn.click();
+      return true;
+    }
+    return false;
+  });
+  if (!cancelled) await page.keyboard.press("Escape").catch(() => {});
+  await page.waitForTimeout(600);
+}
+
+/**
+ * 반 정보 관리 페이지에서 보드 1개 생성 — 반 추가하기 → 이름 입력 → 추가 → form 닫힘=성공.
+ * ClassNote가 중복 반명을 거부(form 잔류)하므로 잘못된 diff에도 중복 생성은 안 됨(백스톱 실측).
+ * 호출 전 /service/setting/class 진입 + 호칭 다이얼로그 처리가 선행돼야 한다.
+ */
+export async function createBoard(page, name) {
+  // SPA 렌더 지연 대응 — 버튼이 나타날 때까지 최대 ~12초 폴링(단발 탐색은 첫 진입에서 실패했음).
+  let addClicked = false;
+  for (let i = 0; i < 15 && !addClicked; i++) {
+    addClicked = await page.evaluate(() => {
+      const el = Array.from(document.querySelectorAll("span, button")).find(
+        (e) => (e.textContent || "").trim() === "반 추가하기" && e.offsetParent !== null,
+      );
+      if (!el) return false;
+      (el.closest("button") || el).click();
+      return true;
+    });
+    if (!addClicked) await page.waitForTimeout(800);
+  }
+  if (!addClicked) return { ok: false, reason: "'반 추가하기' 버튼 없음" };
+  await page.waitForTimeout(800);
+
+  try {
+    await page.locator('input[placeholder*="초등반"], form input').first().fill(name, { timeout: 5000 });
+  } catch {
+    await cancelBoardForm(page);
+    return { ok: false, reason: "이름 입력창 없음" };
+  }
+  await page.waitForTimeout(300);
+
+  const submitted = await page.evaluate(() => {
+    const form = document.querySelector("form");
+    if (!form) return false;
+    const btn = Array.from(form.querySelectorAll("button")).find(
+      (b) => b.type === "submit" || (b.querySelector("span")?.textContent || "").trim() === "추가",
+    );
+    if (!btn || btn.disabled) return false;
+    btn.click();
+    return true;
+  });
+  if (!submitted) {
+    await cancelBoardForm(page);
+    return { ok: false, reason: "'추가' 버튼 클릭 실패" };
+  }
+
+  await page.waitForTimeout(1200);
+  const stillOpen = await page.evaluate(() => {
+    const input = document.querySelector('input[placeholder*="초등반"]');
+    return !!(input && input.offsetParent !== null);
+  });
+  if (stillOpen) {
+    await cancelBoardForm(page);
+    return { ok: false, reason: "거부됨(중복 추정)" };
+  }
+  return { ok: true };
+}
+
 /**
  * 모달([role=dialog]) 안 무한스크롤 수집 — collectStable의 모달 스코프 판. extract는 dialog 루트를 받는
  * 페이지 내 함수 문자열이 아니라, dialog 내부 button들의 innerText 배열을 그대로 돌려준다(분류는 호출측).

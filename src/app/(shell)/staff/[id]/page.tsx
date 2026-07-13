@@ -16,7 +16,7 @@ import { getStaffById } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { StaffTabsNav, isStaffTabKey } from "./_components/tabs-nav";
 import { BasicInfoTab } from "./_tabs/basic-info-tab";
-import { ScheduleTab } from "./_tabs/schedule-tab";
+import { MonthlyScheduleTab } from "./_tabs/monthly-schedule-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { ActivityLogTab } from "./_tabs/activity-log-tab";
 import { PAYROLL_ENABLED } from "@/features/payroll/config";
@@ -143,8 +143,8 @@ export default async function StaffDetailPage({
             showSalary={canSeeSalary}
             roleOptions={roleOptions}
           />
-        ) : tab === "schedule" ? (
-          <ScheduleTab staffId={staff.id} canManage={canManage} />
+        ) : tab === "monthly" ? (
+          <MonthlyScheduleTab staffId={staff.id} canManage={canManage} />
         ) : tab === "classes" ? (
           <ClassesTab staffId={staff.id} />
         ) : tab === "activity" ? (
