@@ -339,7 +339,8 @@ export async function getWeeklyScheduleWithStudents(
       endDate: status === "withdrawn" ? effectiveEnd : undefined,
       // 반이동 학생은 새 enrollment라 start_date가 최근이라 isNew 조건에도 걸리지만, "신입"이 아니라
       // "전입(반이동)"으로만 분류한다(전입 우선·상호배타) — 신입·전입 동시 배지/정렬 어긋남 방지(사용자 지적).
-      isTransferredIn: status !== "withdrawn" && r.is_transferred_in === true,
+      // 전입 배지도 신입과 동일한 30일 창(2026-07-13 사용자 결정) — 이동 30일 뒤엔 일반 재원으로 표시.
+      isTransferredIn: status !== "withdrawn" && r.is_transferred_in === true && start >= newCutoff,
       isNew: status !== "withdrawn" && start >= newCutoff && r.is_transferred_in !== true,
       enrollmentDate: start,
       attendanceDays: r.attendance_days ?? [],
@@ -355,6 +356,43 @@ export async function getWeeklyScheduleWithStudents(
         (line.enrollmentDate ?? "") > (prev.enrollmentDate ?? ""))
     ) {
       chosen.set(key, line);
+    }
+  }
+
+  // 퇴원 줄 정제(2026-07-13 사용자 결정): 퇴원생 = **그 과목 수강이 하나도 안 남은 학생**.
+  // 같은 과목에 살아있는(기준일 시점 미종료) 수강이 하나라도 있으면 — 다른 반 재원·대기, 반이동/재등록
+  // 포함 — 옛 반 퇴원 줄에 올리지 않는다(is_transferred 플래그 없는 이동·부분 종료의 "퇴원" 오표시 제거).
+  // 보이는 슬롯 밖(다른 강사 반·시간표 미배정 반)의 수강까지 잡아야 해서 퇴원 후보 학생만 별도 경량 조회(B3 청크).
+  {
+    const withdrawnEntries = [...chosen].filter(([, l]) => l.status === "withdrawn");
+    if (withdrawnEntries.length > 0) {
+      const wStudentIds = Array.from(new Set(withdrawnEntries.map(([, l]) => l.studentId)));
+      type AliveRow = {
+        student_id: string;
+        class: { subject: string | null } | { subject: string | null }[] | null;
+        student: { status: string | null; withdrawn_at: string | null } | { status: string | null; withdrawn_at: string | null }[] | null;
+      };
+      const aliveRows = await fetchInChunks<AliveRow>(wStudentIds, (chunk) =>
+        supabase
+          .from("enrollments")
+          .select("student_id, class:class_id ( subject ), student:student_id ( status, withdrawn_at )")
+          .in("student_id", chunk)
+          .or(`end_date.is.null,end_date.gt.${referenceDate}`), // daterange [start,end) — end>ref = 기준일 시점 수강 유지
+      );
+      const subjectOfClass = new Map(slots.map((s) => [s.classId, s.subject]));
+      const aliveSubj = new Set<string>(); // `${subject}:${studentId}`
+      for (const r of aliveRows) {
+        const st = Array.isArray(r.student) ? r.student[0] : r.student;
+        // 학생 단위 퇴원(withdrawn_at ≤ 기준일)은 열린 수강 행도 실효 종료로 본다(위 effectiveEnd와 동일 규칙).
+        if (st?.status === "withdrawn" && st.withdrawn_at && st.withdrawn_at <= referenceDate) continue;
+        const cls = Array.isArray(r.class) ? r.class[0] : r.class;
+        if (cls?.subject) aliveSubj.add(`${cls.subject}:${r.student_id}`);
+      }
+      for (const [key, line] of withdrawnEntries) {
+        const classId = key.slice(0, key.indexOf(":"));
+        const subj = subjectOfClass.get(classId);
+        if (subj && aliveSubj.has(`${subj}:${line.studentId}`)) chosen.delete(key);
+      }
     }
   }
 
