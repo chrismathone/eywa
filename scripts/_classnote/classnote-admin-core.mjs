@@ -105,6 +105,68 @@ export async function collectStable(page, extract, { rounds = 60, settleRounds =
   return [...names];
 }
 
+// ── 내부 REST(api/v1) 판독 — 로그인 세션 쿠키로 same-origin GET(읽기 전용) ──────────────────
+// 반 정보 관리 화면의 무한스크롤 스크래핑은 비결정적(가상 목록이 라운드마다 다르게 수집돼 기존 보드를
+// "누락"으로 오판 → 중복 생성 시도)이라, 실사에서 확인한 DRF 엔드포인트로 교체(2026-07-10).
+// count 613 실측 = 화면 전수와 일치. 쓰기는 여전히 DOM(반 추가하기) — API 쓰기는 미검증이라 안 씀.
+
+export async function fetchCenterId(page) {
+  const j = await page.evaluate(async () => {
+    const r = await fetch("/api/v1/me/info/", { headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error("me/info " + r.status);
+    return r.json();
+  });
+  const id = j?.center?.id;
+  if (!id) throw new Error("center id를 확인하지 못함(me/info)");
+  return id;
+}
+
+/** DRF 페이지네이션 전건 수집 — next가 페이지 번호로 오는 형식(실측). */
+export async function fetchAllDrf(page, path) {
+  const out = [];
+  let pageNo = 1;
+  for (let i = 0; i < 50; i++) {
+    const j = await page.evaluate(
+      async ([p, n]) => {
+        const sep = p.includes("?") ? "&" : "?";
+        const r = await fetch(`${p}${sep}page=${n}&page_size=100`, { headers: { accept: "application/json" } });
+        if (!r.ok) throw new Error(`${p} ${r.status}`);
+        return r.json();
+      },
+      [path, pageNo],
+    );
+    out.push(...(j.results ?? []));
+    if (!j.next) break;
+    pageNo = typeof j.next === "number" ? j.next : pageNo + 1;
+  }
+  return out;
+}
+
+/** 반(보드) 전건 — {id, name, children(배정 승인 원아 수)}. */
+export async function fetchBoards(page, centerId) {
+  const rows = await fetchAllDrf(page, `/api/v1/centers/${centerId}/classes`);
+  return rows.map((r) => ({ id: r.id, name: (r.name || "").trim(), children: r.approved_children ?? 0 }));
+}
+
+/** 가입(승인) 원아 전건 — 표시명 목록. 영문닉(한글) 형식 존재("Jay(이재희)") — 매칭은 호출측 childKeys로. */
+export async function fetchChildren(page, centerId) {
+  const rows = await fetchAllDrf(page, `/api/v1/centers/${centerId}/children`);
+  return rows.map((r) => (r.name || "").trim()).filter(Boolean);
+}
+
+/** ClassNote 원아 표시명 → 매칭 키 집합(원문·알파벳 제거·괄호 안 한글). */
+export function childKeys(name) {
+  const keys = new Set();
+  const t = (name || "").trim();
+  if (!t) return keys;
+  keys.add(t);
+  const stripped = t.replace(/[a-zA-Z]/g, "").replace(/[()]/g, "").trim();
+  if (stripped) keys.add(stripped);
+  const paren = t.match(/\(([가-힣]{2,6})\)/);
+  if (paren) keys.add(paren[1]);
+  return keys;
+}
+
 /**
  * 모달([role=dialog]) 안 무한스크롤 수집 — collectStable의 모달 스코프 판. extract는 dialog 루트를 받는
  * 페이지 내 함수 문자열이 아니라, dialog 내부 button들의 innerText 배열을 그대로 돌려준다(분류는 호출측).

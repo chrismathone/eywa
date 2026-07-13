@@ -121,16 +121,21 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
 
 | eywa 스크립트 | 역할 | 실행 |
 |---|---|---|
-| [`provision-classnote-boards.mjs`](../scripts/_classnote/provision-classnote-boards.mjs) | eywa 재원생(발송과목 활성 수강) 기대 보드 vs 실보드 diff → **누락 보드만 생성**. 동명이인(유효이름 중복)은 생성 보류로 분리 | `node --env-file=.env.local scripts/_classnote/provision-classnote-boards.mjs [--subject=math\|english\|all] [--apply] [--limit=N]` |
-| [`assign-classnote-students.mjs`](../scripts/_classnote/assign-classnote-students.mjs) | 학생 관리>반 추가 모달 1회 스캔으로 전수 판정(assigned/ready/not_signed_up/board_missing) + `--apply`로 ready만 배정 | 위와 동일 패턴. 판정은 보드별 **배정 인원(N명) 표시** 기반(2026-07 실DOM — Edutrix 원본의 per-학생 검색보다 견고) |
+| [`provision-classnote-boards.mjs`](../scripts/_classnote/provision-classnote-boards.mjs) | eywa 재원생(발송과목 활성 수강) 기대 보드 vs 실보드 diff → **누락 보드만 생성**. 동명이인(유효이름 중복)은 생성 보류, `--exclude=이름`으로 매핑 케이스 제외 | `node --env-file=.env.local scripts/_classnote/provision-classnote-boards.mjs [--subject=math\|english\|all] [--apply] [--limit=N] [--exclude=이름,…]` |
+| [`assign-classnote-students.mjs`](../scripts/_classnote/assign-classnote-students.mjs) | 전수 판정(assigned/ready/not_signed_up/board_missing) + `--apply`로 ready만 배정. **학부모 초대 필요 명단 자동 산출** | 위와 동일 패턴. ⚠️ `--apply` 배정 DOM 흐름은 아직 실전 미검증(ready 발생 시 1건으로 검증) |
 | (미이식) 강사 배정 | Edutrix `assign_teacher_to_classnote.js` — 강사 게시 알림용, 발송 필수 아님 | 필요 시 후속 |
 
+- **판독=내부 API(2026-07-13 전환)**: 반 정보 관리 화면 무한스크롤 스크래핑은 비결정(수집 누락→기존 보드를
+  "누락" 오판. 단 ClassNote가 중복 반명을 거부해 중복 생성은 안 됨 — 백스톱 실측). →
+  `GET /api/v1/centers/{id}/classes`(전 보드+`approved_children` 배정 인원)·`/children`(가입 원아)로 교체.
+  **읽기=API(결정적) / 쓰기=DOM(반 추가하기)** 구조. center id는 `/api/v1/me/info`.
 - **파이프라인**: ①빈 반 생성(자동, 가입 전 가능) → ②학부모 초대(전화번호를 반에 초대 — **자동화 안 함**,
   외부 발신이라 수동) → ③가입·승인(학부모 액션, "[ALL] 회원가입 후 반배정 필요") → ④학생→개별반 배정(자동).
-- **2026-07-10 실측(dry-run, 수학 재원 237명)**: assigned 196 · **보드 없음 35**(생성 대상 — 단
-  `(수학)박서준C`는 생성 금지: 실보드 `박서준`에 `classnote_name` 매핑으로 해소) · **미가입 5**(최수호·손민우·
-  정다온·박성혁·김수련 — 초대 필요) · **ready 1**(주준호 — 가입됐는데 배정만 누락, `--apply` 대상).
-  §9 수기 실사(33/6/1)와 교차 일치. ⚠️ `--apply`(생성·배정)는 실 ClassNote 변경 — 원장 승인 후 실행.
+- **✅ 2026-07-13 수학 보드 34개 생성 완료**(원장 승인, 카나리 1→33 일괄, 실패 0, API 재조회 검증 —
+  기존 보드·멤버·게시물 무변경, eywa DB 쓰기 0). 직후 전수 판정(재원 237명): **assigned 196 ·
+  ready 7**(김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령 — 가입돼 있어 `--apply`만 남음) ·
+  **미가입(초대 필요) 33** · **매핑 대기 1**(`(수학)박서준C`→실보드 `박서준`, `classnote_name` 지정).
+  ⚠️ `--apply`(생성·배정)는 실 ClassNote 변경 — 원장 승인 후 실행.
 - **신규생 운영**: 입회 후 이 두 스크립트 dry-run→apply가 표준 절차(연동 PC 정기 실행 후보).
 - **학부모 가입만은 자동화 불가**(학생 엔티티가 학부모 연결로 생기는 ClassNote 구조 제약).
 

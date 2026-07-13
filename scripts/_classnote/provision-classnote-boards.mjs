@@ -22,7 +22,8 @@ import {
   launchAdminBrowser,
   loginClassnote,
   dismissHonorificDialog,
-  scrapeStudentBoards,
+  fetchCenterId,
+  fetchBoards,
   norm,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
@@ -32,6 +33,13 @@ const HEADED = process.argv.includes("--headed");
 const subjectArg = (process.argv.find((a) => a.startsWith("--subject=")) || "--subject=math").slice(10);
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const LIMIT = limitArg ? Math.max(0, Number(limitArg.slice(8)) || 0) : Infinity;
+// --exclude=이름1,이름2 — 생성 제외(예: 박서준C는 실보드 '박서준'에 classnote_name 매핑으로 해소할 케이스).
+const EXCLUDE = new Set(
+  (process.argv.find((a) => a.startsWith("--exclude="))?.slice(10) || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
 
 const groups =
   subjectArg === "all" ? Object.values(BOARD_GROUPS) : [BOARD_GROUPS[subjectArg]].filter(Boolean);
@@ -87,14 +95,19 @@ async function cancelBoardForm(page) {
 
 /** 반 정보 관리에서 보드 1개 생성 — 반 추가하기 → 이름 입력 → 추가 → form 닫힘=성공(Edutrix 판정 동일). */
 async function createBoard(page, name) {
-  const addClicked = await page.evaluate(() => {
-    const el = Array.from(document.querySelectorAll("span, button")).find(
-      (e) => (e.textContent || "").trim() === "반 추가하기" && e.offsetParent !== null,
-    );
-    if (!el) return false;
-    (el.closest("button") || el).click();
-    return true;
-  });
+  // SPA 렌더 지연 대응 — 버튼이 나타날 때까지 최대 ~12초 폴링(단발 탐색은 첫 진입에서 실패했음).
+  let addClicked = false;
+  for (let i = 0; i < 15 && !addClicked; i++) {
+    addClicked = await page.evaluate(() => {
+      const el = Array.from(document.querySelectorAll("span, button")).find(
+        (e) => (e.textContent || "").trim() === "반 추가하기" && e.offsetParent !== null,
+      );
+      if (!el) return false;
+      (el.closest("button") || el).click();
+      return true;
+    });
+    if (!addClicked) await page.waitForTimeout(800);
+  }
   if (!addClicked) return { ok: false, reason: "'반 추가하기' 버튼 없음" };
   await page.waitForTimeout(800);
 
@@ -154,17 +167,23 @@ async function createBoard(page, name) {
   const page = await browser.newPage();
   try {
     await loginClassnote(page);
-    console.log("로그인 OK — 반 정보 관리 스캔 중…");
-    const existing = await scrapeStudentBoards(page);
+    const centerId = await fetchCenterId(page);
+    console.log(`로그인 OK — 실보드 조회(API, center ${centerId})…`);
+    const existing = (await fetchBoards(page, centerId)).map((b) => b.name);
     const existingNorm = new Set(existing.map(norm));
-    console.log(`실보드(학생모드) ${existing.length}개 수집`);
+    console.log(`실보드 ${existing.length}개(전체) 수집`);
 
-    // 3) diff
+    // 3) diff — --exclude 학생은 생성 대상에서 제외(매핑 등 별도 해소 케이스)
     let totalMissing = 0;
     for (const p of plan) {
-      p.missing = p.boards.filter((b) => !existingNorm.has(norm(b.board)));
+      const missingAll = p.boards.filter((b) => !existingNorm.has(norm(b.board)));
+      p.missing = missingAll.filter((m) => !EXCLUDE.has(m.student) && !EXCLUDE.has(m.board));
+      const excluded = missingAll.length - p.missing.length;
       totalMissing += p.missing.length;
-      console.log(`\n[${p.group.label}] 매칭 ${p.boards.length - p.missing.length} · 생성 필요 ${p.missing.length}`);
+      console.log(
+        `\n[${p.group.label}] 매칭 ${p.boards.length - missingAll.length} · 생성 필요 ${p.missing.length}` +
+          (excluded ? ` · 제외 ${excluded}(--exclude)` : ""),
+      );
       for (const m of p.missing) console.log(`  + ${m.board}`);
     }
 
@@ -197,14 +216,15 @@ async function createBoard(page, name) {
     }
     console.log(`\n=== 완료: 생성 ${ok} · 실패 ${fail}${Number.isFinite(LIMIT) ? ` (limit ${LIMIT})` : ""} ===`);
 
-    // 5) 재스캔 검증 — 방금 만든 이름이 실보드에 보이는지
+    // 5) 재조회 검증(API) — 방금 만든 이름이 실보드에 있는지 결정적으로 확인
     if (ok > 0) {
-      const after = new Set((await scrapeStudentBoards(page)).map(norm));
-      const stillMissing = plan.flatMap((p) => p.missing).filter((m) => !after.has(norm(m.board)));
+      const after = new Set((await fetchBoards(page, centerId)).map((b) => norm(b.name)));
+      const attempted = plan.flatMap((p) => p.missing).slice(0, Number.isFinite(LIMIT) ? LIMIT : undefined);
+      const stillMissing = attempted.filter((m) => !after.has(norm(m.board)));
       console.log(
         stillMissing.length === 0
-          ? "재스캔 검증: 계획분 전부 실보드 확인 ✅"
-          : `재스캔 검증: ${stillMissing.length}개 미확인 — ${stillMissing.map((m) => m.board).join(", ")}`,
+          ? "재조회 검증(API): 시도분 전부 실보드 확인 ✅"
+          : `재조회 검증(API): ${stillMissing.length}개 미확인 — ${stillMissing.map((m) => m.board).join(", ")}`,
       );
     }
   } finally {

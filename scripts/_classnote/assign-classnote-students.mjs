@@ -4,11 +4,11 @@
  * ClassNote 제약: 학생 엔티티는 **학부모가 가입·승인해야** 생긴다("회원가입 후 반배정 필요") — 그래서
  * 보드(provision-classnote-boards.mjs)는 미리 만들어도, 배정은 가입 후에만 가능.
  *
- * 판독(2026-07-10 실DOM 실사 기반, Edutrix 원본과 다른 개선): 학생 관리 > 반 추가 모달이 보드 아코디언
- * 목록이고 각 보드에 **배정 인원(N명)이 표시**된다 → 학생별 클릭 없이 모달 1회 스캔으로 전수 판정:
- *   assigned(자기 보드 1명) / ready(가입했는데 자기 보드 0명 = 배정 가능) /
+ * 판독(2026-07-13 API 전환 — Edutrix 원본의 per-학생 DOM 검색은 오탐·모달 스크롤 스캔은 비결정이라 폐기):
+ * 내부 REST로 보드별 배정 인원(centers/{id}/classes.approved_children)과 가입 원아 목록(children)을 전건
+ * 조회해 전수 판정(읽기 전용):
+ *   assigned(자기 보드 1명+) / ready(가입했는데 자기 보드 0명 = 배정 가능) /
  *   not_signed_up(가입 안 됨 = 학부모 초대 필요) / board_missing(보드 없음 = provision 먼저).
- * 가입 여부는 [ALL] 인재원 전체방 아코디언(가입 학생 전원이 멤버)을 펼쳐 학생 행으로 판정.
  *
  * 실행(기본 dry-run — 스캔·판정만, 아무것도 변경하지 않음):
  *   node --env-file=.env.local scripts/_classnote/assign-classnote-students.mjs [--subject=math|english|all] [--student=이름]
@@ -24,6 +24,10 @@ import {
   loginClassnote,
   dismissHonorificDialog,
   collectModalButtons,
+  fetchCenterId,
+  fetchBoards,
+  fetchChildren,
+  childKeys,
   norm,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
@@ -87,44 +91,14 @@ async function openAssignModal(page) {
   return true;
 }
 
-/**
- * 모달 전수 스캔 — 보드별 배정 인원 + [ALL] 멤버(가입 학생) 수집.
- * 버튼 innerText 규격(실사): 보드 = "(수학)강민준||0|1명" / [ALL] = "[ALL] 인재원 전체방|…|439명" /
- * 학생 행 = "강민준"(펼친 아코디언의 자식) / "반 전체"·"전체 선택"은 무시.
- */
-async function scanModal(page) {
-  const boardCount = new Map(); // norm(board) -> 인원수
-  const memberRows = new Set(); // 아코디언 자식 학생 행(플레인 이름)
-  let allClicked = false;
-  const texts = await collectModalButtons(page, {
-    onRound: async () => {
-      if (allClicked) return;
-      allClicked = await page.evaluate(() => {
-        const dlg = document.querySelector('div[role="dialog"]');
-        if (!dlg) return false;
-        for (const b of dlg.querySelectorAll("button")) {
-          const t = (b.innerText || "").trim();
-          if (/^\[ALL\]/.test(t) && /명/.test(t)) {
-            b.scrollIntoView({ block: "center" });
-            b.click();
-            return true;
-          }
-        }
-        return false;
-      });
-      if (allClicked) await page.waitForTimeout(1200);
-    },
-  });
-  for (const t of texts) {
-    const board = t.match(/^(\((수학|영어)\)[^|]+)\|.*?(\d+)명$/);
-    if (board) {
-      boardCount.set(norm(board[1]), Number(board[3]));
-      continue;
-    }
-    if (/^\[ALL\]|^반 전체$|^전체 선택$/.test(t) || t.includes("|")) continue;
-    if (/^[가-힣]{2,6}[A-Za-z]?$/.test(t)) memberRows.add(t);
-  }
-  return { boardCount, memberRows, allExpanded: allClicked };
+/** API 전수 스캔 — 보드별 배정 인원 + 가입 원아 매칭 키 집합(읽기 전용 GET). */
+async function scanViaApi(page) {
+  const centerId = await fetchCenterId(page);
+  const boards = await fetchBoards(page, centerId);
+  const boardCount = new Map(boards.map((b) => [norm(b.name), b.children]));
+  const memberKeys = new Set();
+  for (const name of await fetchChildren(page, centerId)) for (const k of childKeys(name)) memberKeys.add(k);
+  return { boardCount, memberKeys, centerId, boardsTotal: boards.length };
 }
 
 /** 판정 — 자기 보드 인원 ≥1: assigned / 가입멤버에 있고 보드 0명: ready / 멤버에 없음: not_signed_up. */
@@ -133,7 +107,7 @@ function judge(t, scan) {
   if (cnt === undefined) return { status: "board_missing" };
   if (cnt >= 1) return { status: "assigned" };
   const clean = t.studentName.replace(/[a-zA-Z]/g, "").trim();
-  const signedUp = scan.memberRows.has(t.studentName) || scan.memberRows.has(clean);
+  const signedUp = scan.memberKeys.has(t.studentName) || scan.memberKeys.has(clean);
   return signedUp ? { status: "ready" } : { status: "not_signed_up" };
 }
 
@@ -261,13 +235,9 @@ async function assignOne(page, t) {
   const page = await browser.newPage();
   try {
     await loginClassnote(page);
-    await openAssignModal(page);
-    console.log("모달 스캔 중(보드 인원 + [ALL] 가입 멤버)…");
-    const scan = await scanModal(page);
-    console.log(
-      `보드 ${scan.boardCount.size}개 · 가입 학생 행 ${scan.memberRows.size}명 수집` +
-        (scan.allExpanded ? "" : " ⚠️ [ALL] 아코디언 미발견 — 가입 판정은 자기 보드 멤버 기준만"),
-    );
+    console.log("전수 조회 중(API — 보드 인원 + 가입 원아)…");
+    const scan = await scanViaApi(page);
+    console.log(`보드 ${scan.boardsTotal}개 · 가입 원아 매칭키 ${scan.memberKeys.size}개 수집`);
 
     const detail = targets.map((t) => ({ ...t, ...judge(t, scan) }));
     const stats = {};
