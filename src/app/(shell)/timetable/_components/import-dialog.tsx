@@ -103,7 +103,8 @@ export function TimetableImportDialog({
       if (!confirm(lines.join("\n"))) return;
     }
     startApply(async () => {
-      const res = await applyTimetableImport(diff);
+      // subject 전달 = 그 과목 시트 리스 선점('시트 반영'과 교차 실행 직렬화). 파일 경로도 무해(미연동=스킵).
+      const res = await applyTimetableImport(diff, subject);
       setResult(res);
       if (!res.error) {
         setDiff(null);

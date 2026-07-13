@@ -94,7 +94,7 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
       // ② 학생 반이동(구조가 이미 적용됐어도 반이동만 실패 가능 — 부분 상태 안내).
       let eRes: typeof enrollRes = null;
       if (enroll && enrollChanges > 0) {
-        const r = await applyTimetableImport(enroll);
+        const r = await applyTimetableImport(enroll, subject);
         if (r.error) {
           setError("학생 반이동 적용 실패: " + r.error + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
           setStructRes(sRes); // 구조는 성공했으면 결과·롤백 노출

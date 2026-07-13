@@ -12,6 +12,12 @@ import { computeImportDiff } from "@/features/timetable/import/diff";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { readSheetTabRows } from "@/features/integrations/google-sheets";
 import { sheetsProvider, supportsTimetableImport } from "@/features/integrations/sheets-provider";
+import {
+  claimSheetSyncLease,
+  releaseSheetSyncLease,
+  SHEET_SYNC_BUSY_MSG,
+  type SheetSyncLease,
+} from "@/features/integrations/server/sheet-sync-lease";
 import type {
   ClassRef,
   EnrollmentSnapshotRow,
@@ -171,13 +177,24 @@ export type ApplyState = {
  * 미리보기에서 확인한 diff를 적용. 적용 직전 영향 enrollment를 timetable_snapshots에 백업하고
  * timetable_import_logs에 이력 기록. moves는 일괄이동 RPC, removes는 end_date, adds는 insert.
  * 모든 쓰기는 RLS(테넌트 격리) 하 — 조작된 diff도 본 테넌트를 벗어나지 못함.
+ *
+ * `subject`를 주면 그 과목 시트 리스를 선점해 '시트 반영'과의 교차 실행을 직렬화한다
+ * (시트 기반 가져오기 경로 — 다이얼로그가 넘김). 미연동(norow)·미지정이면 리스 없이 진행(파일 업로드 경로).
  */
-export async function applyTimetableImport(diff: ImportDiff): Promise<ApplyState> {
+export async function applyTimetableImport(diff: ImportDiff, subject?: string): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   const supabase = await createClient();
   const today = kstToday();
+
+  const provider = subject ? sheetsProvider(subject) : null;
+  let lease: SheetSyncLease = "norow";
+  if (provider) {
+    lease = await claimSheetSyncLease(supabase, provider);
+    if (lease === "busy") return { error: SHEET_SYNC_BUSY_MSG };
+  }
+  try {
 
   // 1) 스냅샷 — 영향 enrollment의 before 상태(이동·삭제 대상) 백업
   const affectedIds = [
@@ -261,4 +278,7 @@ export async function applyTimetableImport(diff: ImportDiff): Promise<ApplyState
     failed,
     snapshotId,
   };
+  } finally {
+    if (provider && lease === "claimed") await releaseSheetSyncLease(supabase, provider);
+  }
 }

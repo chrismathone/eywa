@@ -21,6 +21,19 @@ flex-1에 넣으면 폭 기준 종횡비로 부풀어 카드가 과대해짐 →
 ### ClassNote 수학 보드 34개 실생성 + 판독 API 전환 (2026-07-13) — ✅ 실측 검증·기존 데이터 무변경
 원장 승인으로 `provision-classnote-boards.mjs --apply` 실행: 카나리 1개→나머지 33개, 실패 0, API 재조회 검증 통과(기존 보드·멤버·게시물 무변경, eywa DB 쓰기 0, `--exclude=박서준C`=매핑 케이스 제외 플래그 신설). **판독을 내부 API로 전환**: 반 정보 관리 무한스크롤 스크래핑이 비결정(수집 누락→기존 보드 "누락" 오판, 단 ClassNote 중복 반명 거부가 백스톱)이라 `GET /api/v1/centers/{id}/classes`(+approved_children)·`/children`으로 교체 — 읽기=API(결정적)/쓰기=DOM. 생성 직후 전수 판정(수학 237명): assigned 196 · **ready 7**(가입돼 있어 배정만 남음: 김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령) · 미가입 33(초대 필요 명단 자동 산출) · 매핑 대기 1(박서준C). 상세 = docs/classnote-integration.md §3.
 
+### 시트 반영/가져오기 동시 실행 방지 — DB 리스 락 (2026-07-13) — ✅ tsc0/lint0/test1027/DB원자성 3종/라이브 busy·성공 E2E
+원장 질문 "여러 명이 동시에 시트 반영 누르면?" → 전수조사(멀티에이전트): 시트 셀 데이터는 `drive.files.update`
+**통째 교체(원자적 last-writer-wins)**라 파손 없음, 그러나 후속 CLIP 서식·수식 batchUpdate가 동시 재교체와 겹치면
+stale sheetId 400(허위 실패 토스트+서식 누락) + `syncSheetsNow`에 서버 락 전무(형제 `triggerMakeeduSyncNow`는 공유
+락 보유 — 비대칭). 창=iframe이라 클라 `disabled`는 한 창만 커버. 픽스 = **[sheet-sync-lease.ts](../src/features/integrations/server/sheet-sync-lease.ts)**:
+`user_integrations.sync_started_at`(0098a) 원자 claim UPDATE(`is.null or < now()-3분` stale 자가회복) → busy면
+"다른 관리자가 이 시트를 작업 중입니다" 토스트. 배선 3곳 공유(반영↔가져오기 교차 실행도 직렬화): `syncSheetsNow`
+(성공/실패 upsert가 리스 해제 원자 포함)·`applyStructureImport`(try/finally)·`applyTimetableImport`(신규 `subject?`
+파라미터, 다이얼로그 2곳 전달 — 미연동 norow는 통과=파일 업로드 경로 무해). makeedu식 큐+워처는 과설계라 비채택
+(advisory lock은 코드베이스 선례 0). 검증: DB 동시 claim 1승자·busy 0행·stale 회수 + 라이브(리스 선점 상태 클릭→busy
+토스트 / 해제 후 클릭→HELD ~20초→해제+last_synced_at 갱신+"시트에 반영됨"). ⚠️수학 수강편집 apply의 hash 재검증
+부재는 별건(작업 칩 발행).
+
 ### 출석부 셀렉터 — 폐강 반 제외 + 퇴직 담임 "(퇴직)" 표시 (2026-07-13) — ✅ tsc0/lint0/실브라우저 3시나리오
 원장 제보 "퇴직한 사람의 출석부가 여전히 노출". 전수조사(멀티에이전트) 결론: **출석부 한 곳만 빠진 국지 구멍** —
 [getMonthlyAttendanceMatrix](../src/features/attendance/server/queries.ts)의 selector 쿼리에 `is_active`·강사 status 필터가 둘 다 없었음
