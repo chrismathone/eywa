@@ -9,6 +9,17 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 '수강편집' 가져오기 apply 서버 재검증 — stale diff 차단 (2026-07-13) — ✅ tsc0/lint0/test1027
+동시성 전수조사 발견분: 영어 구조 가져오기(applyStructureImport)는 apply 시 시트+DB 재읽기·hash 대조가 있는데
+**수학/수강편집 경로(applyTimetableImport)는 클라 diff를 그대로 적용** — preview~apply 사이 DB 변경(다른 관리자 이동·시트 반영)이
+그대로 덮였다. 영어 computeFresh 패턴으로 통일: ① 순수 [importDiffHash](../src/features/timetable/import/diff.ts)(FNV-1a, 쓰기내용
+moves(from 포함)/removes/adds만·정렬·순서무관, Vitest 6) ② preview 2종(파일/시트)이 hash 반환 ③ **apply는 diff를 안 받고**
+파일 재전송(클라 보관 파일) 또는 시트 재읽기(protectNewerThan 동일)로 서버가 재계산→hash 불일치 시 "미리보기 이후 변경" 에러+`staleHash`
+반환(일치 시 서버 재계산 diff 적용=클라 계획 불신). 시트 apply는 신규 `applySheetImport`(master 게이트=preview와 대칭). 클라 2곳
+([import-dialog](../src/app/(shell)/timetable/_components/import-dialog.tsx)·[english-import-dialog](../src/app/(shell)/timetable/_components/english-import-dialog.tsx))은
+staleHash 응답 시 미리보기 초기화+재미리보기 유도(영어 통합창은 반이동 섹션만 무효화 — 이미 적용된 구조 결과·롤백 버튼 보존).
+apply는 0098a 시트 리스도 함께 잡아(재읽기~적용 전 구간) '시트 반영'·다른 가져오기와 교차 실행 직렬화.
+
 ### 시간표 전입 30일 창 + 퇴원 줄 정제(과목 수강 유지자 제외) (2026-07-13) — ✅ tsc0/lint0/실데이터 검증
 사용자 결정 2건을 [timetable/server/queries.ts](../src/features/timetable/server/queries.ts) 한 곳에 반영(기본뷰·통합뷰·강사뷰·엑셀 공용 쿼리):
 ① **전입(반이동) 배지도 신입과 동일한 30일 창** — `isTransferredIn`에 `start >= newCutoff` 추가. 이동 30일 뒤엔 일반 재원 표시
