@@ -13,6 +13,7 @@ import { autoSessions, quoteTotal } from "@/features/billing/quote-calc";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
 import type { QuoteDetail } from "@/features/billing/server/tuition-quote-queries";
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
+import type { AccountSetting } from "@/features/owner/settings-types";
 import { CatalogPicker, CourseEditor, ExtraEditor, DiscountEditor } from "./quote-editors";
 import { QuoteDocument } from "./quote-document";
 
@@ -47,6 +48,8 @@ export function TuitionCalculator({
   academyName,
   logoSrc,
   defaultPeriod,
+  defaultAccount,
+  accounts = [],
   holidays = [],
   catalog = [],
   textbooks = [],
@@ -55,6 +58,8 @@ export function TuitionCalculator({
   academyName: string;
   logoSrc?: string | null; // 학원 로고(서버에서 resolveBrandingSrc로 푼 signed URL) — 안내문 헤더
   defaultPeriod: string;
+  defaultAccount: AccountSetting; // 입금 계좌 기본값(학원설정 billing 기본 계좌) — 교재요청서와 동일 소스
+  accounts?: AccountSetting[]; // 학원설정에 등록된 입금 계좌 목록 — 여러 개면 드롭다운으로 골라 프리필
   holidays?: string[];
   catalog?: TuitionCatalogOption[];
   textbooks?: CatalogOption[]; // 교재 단가표(146권) — 교재/기타 picker에 합침
@@ -79,6 +84,12 @@ export function TuitionCalculator({
   // 표시 전용(견적 데이터 아님)이라 저장/복구엔 미포함.
   const [showLogo, setShowLogo] = useState(true);
   const [showName, setShowName] = useState(true);
+  // 입금 계좌 안내 — 기본값은 학원설정(billing.account, 교재요청서와 동일 소스). 계산기에서 수정 가능하고
+  // 체크박스로 안내문 표시 여부 토글. 표시 전용(견적 데이터 아님)이라 저장/복구엔 미포함(showLogo·showName과 동일).
+  const [account, setAccount] = useState<AccountSetting>(defaultAccount);
+  const [showAccount, setShowAccount] = useState(
+    !!(defaultAccount.bank || defaultAccount.holder || defaultAccount.number),
+  );
   const [state, formAction] = useActionState<SaveQuoteState, FormData>(saveTuitionQuote, undefined);
 
   const courseOpts = useMemo(
@@ -261,6 +272,66 @@ export function TuitionCalculator({
           <AddManual label="직접 입력 할인 추가" onAdd={() => setDiscounts((ds) => [...ds, { uid: nextUid(), name: "", amount: 0 }])} />
         </Group>
 
+        {/* 입금 계좌 안내 — 안내문(우측 최종 납부 금액 위)에 표시. 기본값=학원설정(수납) 계좌, 여기서 수정 가능. */}
+        <section className="bg-card border-line shadow-card space-y-2.5 rounded-md border p-4">
+          <label className="text-foreground inline-flex items-center gap-1.5 text-[15px] font-bold">
+            <input
+              type="checkbox"
+              checked={showAccount}
+              onChange={(e) => setShowAccount(e.target.checked)}
+              className="size-4"
+            />
+            입금 계좌 안내
+          </label>
+          <p className="text-text-faint text-[11px]">
+            체크하면 안내문 <b>최종 납부 금액 위</b>에 입금 계좌가 표시됩니다. 기본값은 학원설정(수납)의 계좌이며,
+            여기서 수정하면 이 안내문에만 반영됩니다.
+          </p>
+          {showAccount ? (
+            <div className="space-y-2">
+              {/* 등록 계좌가 여러 개면 골라서 프리필(필드는 그대로 수정 가능). 기본 계좌가 처음 채워져 있음. */}
+              {accounts.length > 1 ? (
+                <select
+                  className={inputCls}
+                  value=""
+                  onChange={(e) => {
+                    const a = accounts[Number(e.target.value)];
+                    if (a) setAccount(a);
+                  }}
+                >
+                  <option value="">저장된 계좌 불러오기…</option>
+                  {accounts.map((a, i) => (
+                    <option key={i} value={i}>
+                      {[a.label, a.bank, a.number].filter(Boolean).join(" · ")}
+                      {a.isDefault ? " (기본)" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  className={inputCls}
+                  placeholder="은행"
+                  value={account.bank}
+                  onChange={(e) => setAccount({ ...account, bank: e.target.value })}
+                />
+                <input
+                  className={inputCls}
+                  placeholder="예금주"
+                  value={account.holder}
+                  onChange={(e) => setAccount({ ...account, holder: e.target.value })}
+                />
+              </div>
+              <input
+                className={inputCls}
+                placeholder="계좌번호"
+                value={account.number}
+                onChange={(e) => setAccount({ ...account, number: e.target.value })}
+              />
+            </div>
+          ) : null}
+        </section>
+
         {/* 저장 */}
         <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
           <div className="flex items-baseline justify-between">
@@ -310,6 +381,8 @@ export function TuitionCalculator({
           logoSrc={logoSrc}
           showLogo={showLogo}
           showName={showName}
+          account={account}
+          showAccount={showAccount}
           student={student}
           courses={courses}
           extras={extras}

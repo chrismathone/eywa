@@ -148,7 +148,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     taxMode: "none",
     defaultMethod: "계좌이체",
     latePolicy: "",
-    account: { bank: "", holder: "", number: "" },
+    account: { label: "", bank: "", holder: "", number: "", isDefault: false }, // 기본 계좌 미러(resolve가 accounts에서 채움)
+    accounts: [],
   },
   notifications: {
     alimtalkSenderKey: "",
