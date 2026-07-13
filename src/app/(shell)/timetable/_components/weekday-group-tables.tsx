@@ -71,6 +71,10 @@ const GRID = "border-ink/25"; // 전 셀·헤더 공통 1px 격자
 const STICKY_EDGES =
   "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-ink/25 before:content-[''] " +
   "after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-ink/25 after:content-['']";
+// 요일 그룹(월목 / 화금 / 수) 사이 굵은 구분선 — 그룹의 **첫 컬럼 왼쪽**에 2px 진한 선(첫 그룹 제외).
+// 헤더 3단(그룹밴드/강사/요일)+본문 셀에 모두 얹어 세로 전체를 관통. border-collapse에선 2px가 인접
+// 1px GRID보다 넓어 자동 우선하므로 이웃 셀은 손대지 않아도 이중선이 안 생긴다.
+const GROUP_DIVIDER = "border-l-2 border-l-ink/50";
 
 // 요일 → 월요일로부터의 오프셋(일수). 요일 헤더 날짜 라벨 계산용.
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
@@ -291,11 +295,11 @@ function GroupTable({
             aria-hidden
             className={`bg-bg-soft ${GRID} ${periodHeadSticky} ${periodDivider} w-[80px] border-b p-2`}
           />
-          {groups.map((g) => (
+          {groups.map((g, gi) => (
             <th
               key={g.title}
               colSpan={g.dayCount}
-              className={`bg-card ${GRID} sticky top-0 z-10 border-b border-r`}
+              className={`bg-card ${GRID} sticky top-0 z-10 border-b border-r ${gi > 0 ? GROUP_DIVIDER : ""}`}
             >
               {/* sticky 헤더는 불투명 base(bg-card) 위에 반투명 밴드색을 얹는다 — soft 토큰은 12% 알파라
                   셀 자체를 그 색으로 두면 스크롤 시 본문(학생 이름)이 비쳐 보인다. */}
@@ -305,12 +309,12 @@ function GroupTable({
         </tr>
         {/* 강사 행 */}
         <tr>
-          {groups.flatMap((g) =>
-            g.teachers.map((t) => (
+          {groups.flatMap((g, gi) =>
+            g.teachers.map((t, ti) => (
               <th
                 key={`${g.title}-${t.name}`}
                 colSpan={t.days.length}
-                className={`bg-bg-soft ${GRID} sticky top-[30px] z-10 border-b border-r px-2 py-1.5 text-center`}
+                className={`bg-bg-soft ${GRID} sticky top-[30px] z-10 border-b border-r px-2 py-1.5 text-center ${gi > 0 && ti === 0 ? GROUP_DIVIDER : ""}`}
               >
                 <span className="text-foreground block overflow-hidden whitespace-nowrap text-clip text-[12px] font-bold">{t.name}</span>
               </th>
@@ -319,14 +323,14 @@ function GroupTable({
         </tr>
         {/* 요일 행 */}
         <tr>
-          {groups.flatMap((g) =>
-            g.teachers.flatMap((t) =>
-              t.days.map((d) => {
+          {groups.flatMap((g, gi) =>
+            g.teachers.flatMap((t, ti) =>
+              t.days.map((d, ci) => {
                 const date = dateOf?.(d);
                 return (
                   <th
                     key={`${g.title}-${t.name}-${d}`}
-                    className={`bg-card ${GRID} sticky top-[60px] z-10 border-b border-r`}
+                    className={`bg-card ${GRID} sticky top-[60px] z-10 border-b border-r ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                   >
                     {/* 불투명 base + 반투명 tint(위 그룹밴드와 동일 이유 — 비침 방지). */}
                     <div className={`${g.tint} text-text-dim px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}>
@@ -371,8 +375,8 @@ function GroupTable({
                   <div className="text-text-faint mt-0.5 font-mono text-[10px]">{row.time}</div>
                 </td>
               )}
-              {prepared.flatMap((g) =>
-                g.teachers.flatMap((t) =>
+              {prepared.flatMap((g, gi) =>
+                g.teachers.flatMap((t, ti) =>
                   t.days.map((d, ci) => {
                     const block = t.blocks.get(`${ri}:${ci}`);
                     if (!block) return null; // 위/왼쪽 병합에 피복됨 — 렌더 스킵
@@ -393,7 +397,7 @@ function GroupTable({
                         colSpan={block.colSpan > 1 ? block.colSpan : undefined}
                         className={`border-b border-r ${GRID} p-1.5 align-top ${
                           acc.length === 0 ? "bg-ink/[0.06]" : ""
-                        }`}
+                        } ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                       >
                         {acc.length === 0 ? null : (
                           <div className="flex flex-col" style={{ height: cellH }}>
