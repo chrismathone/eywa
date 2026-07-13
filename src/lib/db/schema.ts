@@ -724,7 +724,9 @@ export const onescreenDailySessions = pgTable(
       .notNull()
       .references(() => students.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
-    classId: uuid("class_id").references(() => classes.id, { onDelete: "set null" }),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }), // 반 단위(합산 금지 — 반마다 단가 상이)
     studyGrade: text("study_grade"),
     subjectProgress: jsonb("subject_progress").notNull().default({}),
     dailyScore: integer("daily_score"),
@@ -1201,6 +1203,7 @@ export const tuitionCatalog = pgTable(
     category: text("category").notNull().default("기타"), // 분류 라벨(수학/EIE/영어/국어/기타/할인) — ijw 충실 이식
     name: text("name").notNull(),
     price: numeric("price", { precision: 12, scale: 0 }).notNull().default("0"), // 회당/월 단가 또는 할인액
+    pricingMode: text("pricing_mode"), // per_session/monthly/discount — null=미지정(곱셈 금지, 0102a)
     note: text("note"), // 비고(예: "(3T2H)" 시수 표기, 적용 조건)
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1209,6 +1212,39 @@ export const tuitionCatalog = pgTable(
   (t) => [
     index("tuition_catalog_tenant_active_idx").on(t.tenantId, t.isActive),
     index("tuition_catalog_tenant_category_idx").on(t.tenantId, t.category),
+  ],
+);
+
+// === invoice_session_terms (청구=N회 — 청구서×과목 회차 확정, 0102a) ===
+// docs/per-session-billing-plan.md. line_items 밖 별도 테이블(임포터 upsert가 line_items를 통째 교체하므로).
+// planned_sessions=자동 산출(참고 전용, N1) / confirmed_sessions=수기 확정(청구값으로 인정되는 유일한 값).
+export const invoiceSessionTerms = pgTable(
+  "invoice_session_terms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }), // 반 단위(합산 금지 — 반마다 단가 상이)
+    plannedSessions: integer("planned_sessions"),
+    confirmedSessions: integer("confirmed_sessions"),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 0 }),
+    amount: numeric("amount", { precision: 12, scale: 0 }),
+    confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "set null" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("invoice_session_terms_invoice_class_uq").on(t.tenantId, t.invoiceId, t.classId),
+    index("invoice_session_terms_invoice_idx").on(t.tenantId, t.invoiceId),
   ],
 );
 

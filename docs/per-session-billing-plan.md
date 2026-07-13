@@ -28,7 +28,7 @@ create table invoice_session_terms (
   tenant_id uuid not null references tenants(id) on delete cascade,   -- + RLS tenant_isolation
   invoice_id uuid not null references invoices(id) on delete cascade,
   subject text not null,              -- 운영 enum key(설정 단일소스). 교재/차량비 등 비수업 항목 유입 금지
-  class_id uuid references classes(id) on delete set null,
+  class_id uuid not null references classes(id) on delete cascade, -- ⚠️반 단위 — 합산 금지(아래)
   planned_sessions int,               -- 자동 산출(계획 N): 스케줄×청구기간−공휴일. 프리필·참고 전용
   confirmed_sessions int,             -- 수기 확정 N — null=미확정. 청구값으로 인정되는 유일한 값
   unit_price numeric(12,0),           -- 회당 단가(tuition_catalog 프리필, 수기 수정 가능)
@@ -38,7 +38,8 @@ create table invoice_session_terms (
   note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (tenant_id, invoice_id, subject)  -- 청구서×과목 1행(같은 과목 복수 반은 class_id를 note로, v1 단순화)
+  unique (tenant_id, invoice_id, class_id)  -- ⚠️청구서×반 1행. 같은 과목 복수 반(중등+초등 수학 동시 수강)은
+                                            -- 반마다 회당 단가가 달라 **절대 합산 금지**(2026-07-13 원장 지시)
 );
 ```
 
@@ -71,7 +72,7 @@ create table invoice_session_terms (
 ## 시수 검증(a) — read-only 탭 설계 (로드맵 2단계, 이 키스톤의 직접 소비자)
 
 - **위치**: `/billing` FaceTabs 새 면 "시수 검증" (수납 다면 선례). **쓰기 0** — 화면 전체가 조회 전용.
-- **대조 쌍(검증 짝 확정)**: 행 = `invoice_session_terms`(학생×과목×청구월).
+- **대조 쌍(검증 짝 확정)**: 행 = `invoice_session_terms`(학생×반×청구월 — 반 단위라 출석 대조가 더 정확).
   · 분자(청구값) = `confirmed_sessions` — **확정값만**(N1). 미확정(null) 행은 "미확정" 뱃지 + 계획 N 회색 참고 표시(검증 대상 아님).
   · 분모(실제) = `attendance_records` count(그 학생, 그 `class_id`, 청구월) — 출석 인정 상태 = present·late·early_leave·makeup(수업 소비), absent 제외.
   ⚠️ 이 대조 짝이 가능한 건 session_terms가 과목·반 차원을 구조화했기 때문 — attendance가 수납명 문자열 파싱

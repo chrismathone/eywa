@@ -9,6 +9,16 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 청구=N회 키스톤 구현 — 회차 확정(invoice_session_terms) + 수납 '회차 확정' 면 (2026-07-13) — ✅ tsc0/lint0/test48/실E2E
+docs/per-session-billing-plan.md 설계 그대로: **0102a** `invoice_session_terms`(**청구서×반** — 같은 과목 복수 반도 합산 금지: 반마다 단가 상이(원장 지시), RLS+updated_at 트리거)
++ `tuition_catalog.pricing_mode`(회당/월/할인 판별 — null=곱셈 금지, N5). 계획 N = 순수 [plan.ts](../src/features/billing/session-terms/plan.ts)
+(`countSessions` 재사용: 요일×수강기간∩청구월−공휴일, 같은 과목 복수 반 합산, Vitest 8) → [actions.ts](../src/features/billing/session-terms/server/actions.ts)
+`refreshPlannedTerms`(B2 페이징·B3 청크, **confirmed_* 불가침 upsert** + 미확정 stale만 정리) / `confirmSessionTerm`
+(확정 N×단가 스냅샷+확정자·시각) / `unconfirmSessionTerm`. UI = /billing **'회차 확정' 면**(월 네비+계획 갱신+행 인라인
+확정 폼, 단가 datalist=pricing_mode='per_session' 프리셋). **N1: 확정값만 청구값** / **N2: 청구액과 자동 일치화 금지**(참고
+열만) 화면 문구로 명시. 실E2E(injaewon): 계획 갱신 707행(반 단위 — 강수정 수학이 초등M 9회+JJ1H 5회로 분리) → 확정 12회×25,000=300,000원
+→ 해제 원복. **반 일괄 확정에 회차 입력 추가**(비우면 학생별 계획 회차, 채우면 반 디폴트 회차 override — 9회 하드코딩 아님) + 개별 행 회차·단가 모두 수정 가능. **열 정렬 픽스**: 미확정 행이 colSpan으로 입력칸을 헤더 밖에 몰던 것 → 확정/미확정 모두 동일 8열 + **단일 table-fixed+colgroup**에 반 헤더를 밴드 행으로 통합(반마다 별도 표면 열 너비 각자 계산돼 카드끼리 어긋남="수업끼리 제각각" 해소). 셀 간 입력=`form` 속성 연결. Playwright 실측: 확정/단가/금액/청구액 x좌표 헤더=전 행·전 반 동일, FormData 수집, 998px 무 overflow. **과목 필터 칩**(전체/과목별 — 과목마다 단가 체계 상이) + **attendance 단가표 54종 이관**(INITIAL_SALARY_CONFIG→tuition_catalog per_session, 확정 폼 프리셋) + **반별 그룹 UI**(400+행 개별확정 대신 반 단위): 반 카드마다 회당 단가 1개 입력→`confirmClassTerms`가 전원 각자 계획N×단가 일괄 확정, 개인차는 행별 보정(원장 지시). 검색(학생명·반)+페이지네이션(반 25개/페이지).  **참고 청구액=그 반 라인만**([class-amount.ts](../src/features/billing/session-terms/class-amount.ts), Vitest8): 기존엔 학생 그 달 청구서 전체합(강수정 347,150)을 보여 makeedu 반 금액(192,150)과 커 보였음 → line_items에서 반 코드(BS2C·JJ3K)/서술명 2단계 매칭으로 그 반 라인만 합산(실측 BS2C 9/9 makeedu 정확일치), 못 맞추면 지어내지 않고 "—"(attendance 수납명 파싱 사고 지대 방어). 다음: 견적→청구 전환 시 terms 생성(4단계)·시수 검증 read-only 탭(2단계).
+
 ### 원스크린 "지난 보고서" 뷰 — 강사 본인 보고서 이력 열람 (2026-07-13) — ✅ tsc0/lint0/실쿼리 probe
 원장 질문 "강사가 지난 보고서를 볼 수 있나" → 학생 상세 진도 탭(학생 1명씩)뿐이라 원스크린에 4번째 뷰 신설(A안).
 뷰 토글 `카드·표·발송 현황·지난 보고서` — 본인(`teacher_name`=displayName, 저장 귀속과 동일 기준) 보고서를 날짜별
