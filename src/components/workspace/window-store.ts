@@ -49,6 +49,12 @@ export type Win = {
 
 export const MAX_WINDOWS = 6;
 /**
+ * BL3 — 닫은 라우트 창을 파괴하지 않고 iframe을 살려두는 warm 풀 상한(재오픈 즉시화).
+ * 초과 시 가장 오래 전에 닫힌 warm 창을 실제 파괴(메모리·백그라운드 타이머·realtime WS 가드).
+ * minimize된 창과 동급 비용이라 상한만 지키면 안전. 2 = 최근 닫은 2개까지 즉시 재오픈.
+ */
+export const CACHE_MAX = 2;
+/**
  * 창 식별 키. primary 인스턴스(instance 없음/0)는 `kind:paramId`(오늘과 동일 — 영속 레이아웃·배경 매핑 보존).
  * 복제본(instance≥1)만 `kind:paramId#n` 접미사를 단다. 기존 호출부는 전부 무인자라 영향 0.
  */
@@ -163,6 +169,10 @@ type State = {
   // 창별 미저장 변경 여부(런타임, 미영속) — 창 본문 iframe의 폼이 useUnsavedGuard로 부모에 postMessage하면
   // workspace-canvas가 iframe→win.id 매칭 후 세팅. FloatingWindow가 닫기(X)·Esc에서 확인을 띄우는 데 쓴다.
   dirty: Record<string, boolean>;
+  // BL3 warm 풀(런타임, 미영속) — 닫혔지만 iframe을 hidden으로 살려둔 라우트 창 id들(LRU, 끝=최근).
+  // windows엔 minimized:true로 남아 마운트 유지되고 order에선 빠져 모든 창 UI에서 사라진다(닫힌 것처럼).
+  // 같은 메뉴 재오픈 시 재렌더 없이 즉시 표시. 상한 CACHE_MAX 초과분은 close()가 실제 파괴.
+  cached: string[];
 };
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
@@ -239,6 +249,7 @@ export const useWindowStore = create<State & Actions>()(
       nav: {},
       reloadNonce: {},
       dirty: {},
+      cached: [],
 
       setStage: ({ left, top, width, height }) =>
         set((s) => {
@@ -396,6 +407,8 @@ export const useWindowStore = create<State & Actions>()(
               },
               order: bringToFront(st.order, id),
               focusedId: id,
+              // BL3 — warm 풀에서 꺼냄(가시화된 창이 LRU에 남아 evict당하는 것 차단).
+              cached: st.cached.filter((x) => x !== id),
               snapAssist: null,
             };
           });
@@ -552,7 +565,7 @@ export const useWindowStore = create<State & Actions>()(
           const windows = { ...s.windows };
           if (windows[winId]) {
             windows[winId] = { ...windows[winId], minimized: false };
-            return { background, activeBackgroundId, windows, order: bringToFront(order, winId), focusedId: winId, snapAssist: null };
+            return { background, activeBackgroundId, windows, order: bringToFront(order, winId), focusedId: winId, cached: s.cached.filter((x) => x !== winId), snapAssist: null };
           }
           while (order.length >= MAX_WINDOWS) {
             const victim = order.find((wid) => wid !== winId) ?? order[0];
@@ -629,33 +642,51 @@ export const useWindowStore = create<State & Actions>()(
             activeBackgroundId = background[background.length - 1]?.id ?? "dashboard";
           }
 
-          return { windows, order, background, activeBackgroundId, focusedId: winId, spotlight: true, spotlightRaised: [winId], snapAssist: null, snapPreview: null };
+          return { windows, order, background, activeBackgroundId, focusedId: winId, cached: s.cached.filter((x) => x !== winId), spotlight: true, spotlightRaised: [winId], snapAssist: null, snapPreview: null };
         }),
 
       close: (id) =>
         set((s) => {
+          const w = s.windows[id];
+          const order = s.order.filter((wid) => wid !== id);
+          // 스포트라이트 상단에서도 제거 — 비면 스포트라이트 해제(상단 빈 화면 방지).
+          const raised = s.spotlightRaised.filter((x) => x !== id);
+          const focusedId = s.focusedId === id ? (order[order.length - 1] ?? null) : s.focusedId;
+          const spotlight = s.spotlight && raised.length === 0 ? false : s.spotlight;
+          // BL3 — 라우트 창(비복제·비생성폼·비더티)은 파괴 대신 iframe을 살려 hidden 보존(재오픈 즉시).
+          //   minimized:true + order 제거 = 모든 창 UI에서 닫힌 것처럼 사라지되 마운트는 유지.
+          //   live/nav는 남겨 재오픈 시 제목·뒤로 스택이 즉시 복원. dirty만 정리.
+          // (학생 요약·복제본·생성폼·더티 창은 아래 완전 파괴 — 폼 초안을 warm 보존하지 않는다.)
+          const cacheable =
+            !!w && w.kind === "route" && !isDuplicate(id) && !w.params.autoClose && !s.dirty[id];
+          if (cacheable) {
+            const windows = { ...s.windows, [id]: { ...w, minimized: true, maximized: false, snapped: false } };
+            let cached = [...s.cached.filter((x) => x !== id), id]; // LRU — 최근이 끝
+            const live = { ...s.live };
+            const nav = { ...s.nav };
+            const dirty = { ...s.dirty };
+            delete dirty[id];
+            // 상한 초과 → 가장 오래된 warm 창 실제 파괴(메모리 가드).
+            while (cached.length > CACHE_MAX) {
+              const victim = cached[0]!;
+              cached = cached.slice(1);
+              delete windows[victim];
+              delete live[victim];
+              delete nav[victim];
+              delete dirty[victim];
+            }
+            return { windows, order, cached, live, nav, dirty, focusedId, spotlightRaised: raised, spotlight, snapAssist: null };
+          }
+          // 비캐시 대상 = 기존대로 완전 파괴.
           const windows = { ...s.windows };
           delete windows[id];
-          const order = s.order.filter((w) => w !== id);
           const live = { ...s.live };
           delete live[id];
           const nav = { ...s.nav };
           delete nav[id];
           const dirty = { ...s.dirty };
           delete dirty[id];
-          // 스포트라이트 상단에서도 제거 — 비면 스포트라이트 해제(상단 빈 화면 방지).
-          const raised = s.spotlightRaised.filter((x) => x !== id);
-          return {
-            windows,
-            order,
-            live,
-            nav,
-            dirty,
-            focusedId: s.focusedId === id ? (order[order.length - 1] ?? null) : s.focusedId,
-            spotlightRaised: raised,
-            spotlight: s.spotlight && raised.length === 0 ? false : s.spotlight,
-            snapAssist: null,
-          };
+          return { windows, order, live, nav, dirty, focusedId, spotlightRaised: raised, spotlight, snapAssist: null };
         }),
 
       focus: (id) =>
@@ -778,6 +809,7 @@ export const useWindowStore = create<State & Actions>()(
             windows: { ...s.windows, [id]: { ...w, minimized: false } },
             order: bringToFront(s.order, id),
             focusedId: id,
+            cached: s.cached.filter((x) => x !== id), // BL3 방어 — 가시화 시 warm 풀에서 제거
             snapAssist: null,
           };
         }),
@@ -864,7 +896,7 @@ export const useWindowStore = create<State & Actions>()(
       adoptOwner: (owner) =>
         set((s) => {
           if (s.owner && s.owner !== owner) {
-            return { owner, windows: {}, order: [], focusedId: null };
+            return { owner, windows: {}, order: [], focusedId: null, cached: [] };
           }
           const windows: Record<string, Win> = {};
           for (const [id, w] of Object.entries(s.windows)) {
@@ -882,8 +914,11 @@ export const useWindowStore = create<State & Actions>()(
       // autoClose(생성폼 /X/new) 창은 영속 제외 — 미제출로 떠난 빈 생성폼 창이 다음 세션에 부활하던 잔존
       // 방지(자동 닫힘은 초기경로에선 발화 안 함). 일반 라우트/학생 창의 영속은 그대로.
       partialize: (s) => {
+        // autoClose(생성폼) + BL3 cached(닫혀 hidden 보존된 warm 창)는 영속 제외 — cached를 저장하면
+        // 다음 세션에 order 밖 hidden iframe이 유령 부활(콜드 로드)해 stagger·성능을 깬다.
+        const cachedSet = new Set(s.cached);
         const persisted = Object.fromEntries(
-          Object.entries(s.windows).filter(([, w]) => !w.params.autoClose),
+          Object.entries(s.windows).filter(([id, w]) => !w.params.autoClose && !cachedSet.has(id)),
         );
         return {
           owner: s.owner,
