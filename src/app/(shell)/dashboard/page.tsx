@@ -147,24 +147,21 @@ export default async function DashboardPage() {
       {/* 최근 7일 — 학생 증감(전체·과목별 차트) 주역 + 출석·수납 추세 (원장 요청: 오늘 조치 아래로) */}
       <SlimTrend data={trend} change={enrollmentChange} subjects={subjects} />
 
-      {/* ② 운영 콕핏 — 지금(1.6fr) · 학생 위험/수납(1fr) · 상담/공지(1fr).
-          ⚠️ minmax(0,Nfr): 그냥 Nfr은 min=min-content라 한 컬럼의 긴 내용이 다른 컬럼을 굶겨(좁은 창에서
-          좌측 콕핏이 ~50px로 짜부) → min=0으로 비례(1.6:1:1) 나눔 강제. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch">
+      {/* ② 운영 콕핏 — 높이가 제각각인 카드들을 자연 높이 그대로 CSS 다단(columns) balanced-fill로
+          촘촘히 재배치(테트리스 packing). ⚠️ CSS Grid 기본이 align:stretch라 짧은 카드가 가장 큰 카드
+          높이까지 늘어나 거대한 빈칸을 만들었다(오늘일정 히어로 옆 결석위험이 통째로 늘어남) → 다단은
+          카드를 늘리지 않고 높이순으로 균형 있게 채운다. break-inside-avoid로 카드는 열 경계에서 안 쪼개짐. */}
+      <div className="columns-1 gap-4 md:columns-2 xl:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
         <NowCockpit slots={todaySchedule} subjects={subjects} unrecordedCount={unrecordedCount} />
-        <div className="flex flex-col gap-4">
-          <AbsenceRiskCard items={absenceRisks} />
-          <OutstandingCard items={outstanding} />
-          <FollowUpCard items={followUps} />
-        </div>
-        <div className="flex flex-col gap-4">
-          <EnrollmentListCard list={enrollList} unassigned={unassignedEnrolled} />
-          <AnnouncementsCard
-            items={announcements}
-            canManage={canManageAnnouncements}
-            manageItems={manageAnnouncements}
-          />
-        </div>
+        <AbsenceRiskCard items={absenceRisks} />
+        <OutstandingCard items={outstanding} />
+        <FollowUpCard items={followUps} />
+        <EnrollmentListCard list={enrollList} unassigned={unassignedEnrolled} />
+        <AnnouncementsCard
+          items={announcements}
+          canManage={canManageAnnouncements}
+          manageItems={manageAnnouncements}
+        />
       </div>
     </div>
   );

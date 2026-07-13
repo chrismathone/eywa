@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 대시보드 카드 정리 — 콕핏 masonry + 최근7일 전폭 컴팩트 (2026-07-13) — ✅ tsc0/lint0/실브라우저
+원장 제보 "카드 크기·세로높이 제각각·우측 여백 과다". ① **콕핏**([page.tsx](<../src/app/(shell)/dashboard/page.tsx>)):
+CSS Grid 기본 `align:stretch`가 짧은 카드(결석위험 2명)를 히어로(오늘일정) 높이까지 늘려 거대 빈칸을 만들던 것 →
+**CSS 다단(columns) balanced-fill**(`md:columns-2 xl:columns-3` + `break-inside-avoid`)로 자연 높이 그대로 Tetris packing.
+② **최근7일**([slim-trend.tsx](<../src/app/(shell)/dashboard/_components/slim-trend.tsx>)): 좌측 몰림(max-w)→**전폭 3패널**
+(학생증감 1.5fr + 출석률·수납률 각 1fr, items-stretch 높이 일치). ⚠️ Sparkline(`preserveAspectRatio=none`)을 높이 고정 없는
+flex-1에 넣으면 폭 기준 종횡비로 부풀어 카드가 과대해짐 → `absolute inset-0`로 흐름에서 분리(패널 높이=학생증감이 결정, 컴팩트).
+빈 데이터 메시지 중앙정렬 + 공지·상담후속 리스트 내부 스크롤 보강.
+
 ### ClassNote 수학 보드 34개 실생성 + 판독 API 전환 (2026-07-13) — ✅ 실측 검증·기존 데이터 무변경
 원장 승인으로 `provision-classnote-boards.mjs --apply` 실행: 카나리 1개→나머지 33개, 실패 0, API 재조회 검증 통과(기존 보드·멤버·게시물 무변경, eywa DB 쓰기 0, `--exclude=박서준C`=매핑 케이스 제외 플래그 신설). **판독을 내부 API로 전환**: 반 정보 관리 무한스크롤 스크래핑이 비결정(수집 누락→기존 보드 "누락" 오판, 단 ClassNote 중복 반명 거부가 백스톱)이라 `GET /api/v1/centers/{id}/classes`(+approved_children)·`/children`으로 교체 — 읽기=API(결정적)/쓰기=DOM. 생성 직후 전수 판정(수학 237명): assigned 196 · **ready 7**(가입돼 있어 배정만 남음: 김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령) · 미가입 33(초대 필요 명단 자동 산출) · 매핑 대기 1(박서준C). 상세 = docs/classnote-integration.md §3.
 

@@ -27,15 +27,18 @@ export function SlimTrend({
         <h2 className="text-foreground text-[15px] font-bold">최근 {change.days}일</h2>
         <span className="text-text-faint font-mono text-[10px]">{range}</span>
       </header>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-stretch">
+      {/* 전체 폭을 3개 지표 패널로 채운다(우측 빈 공간 제거): 학생증감(1.5fr) + 출석률·수납률(각 1fr).
+          items-stretch로 세 패널 높이 일치, 트렌드 패널의 sparkline이 flex-1로 커져 높이를 채운다.
+          트렌드 데이터가 없으면(초기) 학생증감만 전폭. */}
+      {data.length > 0 ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch">
+          <StudentChange change={change} subjects={subjects} />
+          <TrendRow label="출석률" values={attendance} colorVar="--color-chart-2" />
+          <TrendRow label="수납률" values={payment} colorVar="--color-chart-3" />
+        </div>
+      ) : (
         <StudentChange change={change} subjects={subjects} />
-        {data.length > 0 ? (
-          <div className="grid content-center gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <TrendRow label="출석률" values={attendance} colorVar="--color-chart-2" />
-            <TrendRow label="수납률" values={payment} colorVar="--color-chart-3" />
-          </div>
-        ) : null}
-      </div>
+      )}
     </section>
   );
 }
@@ -46,7 +49,7 @@ function StudentChange({ change, subjects }: { change: EnrollmentChangeSummary; 
   const netTone = net > 0 ? "text-primary" : net < 0 ? "text-danger" : "text-text-dim";
   const noChange = newCount === 0 && withdrawnCount === 0;
   return (
-    <div className="border-line flex flex-col rounded-xl border px-4 py-3">
+    <div className="border-line flex h-full flex-col rounded-xl border px-4 py-3">
       <span className="text-text-faint font-mono text-[10px] tracking-wider uppercase">학생 증감</span>
       {noChange ? (
         <div className="text-text-faint mt-2 flex flex-1 items-center text-[12px]">최근 {change.days}일 변동 없음</div>
@@ -127,31 +130,35 @@ function TrendRow({ label, values, colorVar }: { label: string; values: number[]
   const delta = trendDelta(values);
   const deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pt`;
   return (
-    <div className="border-line flex items-center gap-3 rounded-xl border px-3 py-2.5">
-      <div className="w-[52px] shrink-0">
-        <div className="font-mono text-[10px] tracking-wider uppercase" style={{ color: `var(${colorVar})` }}>
+    // 세로 패널: 라벨·증감 → 큰 값 → sparkline(flex-1로 남은 높이 채움). 전폭 3패널에서 옆 학생증감과 높이 맞춤.
+    <div className="border-line flex flex-col rounded-xl border px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] tracking-wider uppercase" style={{ color: `var(${colorVar})` }}>
           {label}
-        </div>
+        </span>
         {hasData ? (
-          <div className="num text-foreground text-[18px] font-extrabold leading-none">
-            {Math.round(last)}
-            <span className="text-text-dim text-[11px] font-medium">%</span>
-          </div>
-        ) : (
-          <div className="text-text-faint text-[11px] leading-none">기록 없음</div>
-        )}
-      </div>
-      {hasData ? (
-        <>
-          <div className="h-9 flex-1">
-            <Sparkline data={values} colorVar={colorVar} height={36} strokeWidth={2} />
-          </div>
           <span className={`shrink-0 font-mono text-[10px] ${delta >= 0 ? "text-primary" : "text-danger"}`}>
             {deltaText}
           </span>
+        ) : null}
+      </div>
+      {hasData ? (
+        <>
+          <div className="num text-foreground mt-0.5 text-[20px] font-extrabold leading-none">
+            {Math.round(last)}
+            <span className="text-text-dim text-[12px] font-medium">%</span>
+          </div>
+          {/* absolute: SVG를 흐름에서 빼 종횡비 높이 부풀림 차단 → 패널 높이는 옆 학생증감이 결정(컴팩트). */}
+          <div className="relative mt-2 min-h-[40px] flex-1">
+            <div className="absolute inset-0">
+              <Sparkline data={values} colorVar={colorVar} height={44} strokeWidth={2} />
+            </div>
+          </div>
         </>
       ) : (
-        <div className="text-text-faint flex h-9 flex-1 items-center text-[11px]">최근 7일 데이터가 아직 없습니다</div>
+        <div className="text-text-faint mt-2 flex min-h-[40px] flex-1 items-center justify-center text-center text-[11px]">
+          최근 7일 데이터가 아직 없습니다
+        </div>
       )}
     </div>
   );
