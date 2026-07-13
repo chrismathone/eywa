@@ -146,7 +146,14 @@ export async function SessionTermsFace({
       <p className="text-text-dim text-xs leading-relaxed">
         각 <b>반</b>의 회당 단가를 입력하고 <b>이 반 일괄 확정</b>을 누르면 그 반 학생 전원이 각자 계획 회차 ×
         단가로 확정됩니다. 학생마다 회차·단가가 다르면 아래 <b>개별</b> 행에서 보정하세요. 확정한 값만 청구
-        기준으로 인정되며, 청구액과의 차이는 자동으로 맞추지 않습니다(차이가 곧 점검 신호).
+        기준으로 인정되며, 청구액과의 차이는 자동으로 맞추지 않습니다(차이가 곧 점검 신호). 단가 후보는{" "}
+        <Link
+          href="/billing?tab=calculator&csub=prices&cpmode=per_session"
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          수강료 단가
+        </Link>
+        에서 <b>회당 단가</b>로 등록·수정할 수 있습니다.
       </p>
 
       {filtered.length === 0 ? (

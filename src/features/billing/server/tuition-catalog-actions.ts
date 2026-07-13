@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { normalizePricingMode, type PricingMode } from "@/features/billing/tuition-catalog";
 
 export type TuitionCatalogActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -17,6 +18,7 @@ type Fields = {
   category: string;
   name: string;
   price: string;
+  pricingMode: PricingMode | null;
   note: string | null;
   error?: string;
 };
@@ -25,8 +27,9 @@ function readForm(formData: FormData): Fields {
   const category = String(formData.get("category") ?? "").trim() || "기타";
   const name = String(formData.get("name") ?? "").trim();
   const price = String(formData.get("price") ?? "").trim() || "0";
+  const pricingMode = normalizePricingMode(String(formData.get("pricing_mode") ?? ""));
   const note = String(formData.get("note") ?? "").trim() || null;
-  return { category, name, price, note, error: name ? undefined : "항목명을 입력해주세요" };
+  return { category, name, price, pricingMode, note, error: name ? undefined : "항목명을 입력해주세요" };
 }
 
 export async function createTuitionItem(
@@ -46,6 +49,7 @@ export async function createTuitionItem(
     category: f.category,
     name: f.name,
     price: f.price,
+    pricing_mode: f.pricingMode,
     note: f.note,
   });
   if (error) return { error: error.message };
@@ -70,7 +74,7 @@ export async function updateTuitionItem(
   const supabase = await createClient();
   const { error } = await supabase
     .from("tuition_catalog")
-    .update({ category: f.category, name: f.name, price: f.price, note: f.note })
+    .update({ category: f.category, name: f.name, price: f.price, pricing_mode: f.pricingMode, note: f.note })
     .eq("id", id);
   if (error) return { error: error.message };
 

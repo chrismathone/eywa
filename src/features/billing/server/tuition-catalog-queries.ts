@@ -16,7 +16,7 @@ function sanitize(q: string): string {
 }
 
 export async function getTuitionCatalogPage(
-  opts: { q?: string; category?: string; active?: string } = {},
+  opts: { q?: string; category?: string; active?: string; pmode?: string } = {},
   page = 1,
   pageSize = PAGE_SIZE,
 ): Promise<{ rows: TuitionCatalogRow[]; total: number }> {
@@ -24,12 +24,13 @@ export async function getTuitionCatalogPage(
   const from = (page - 1) * pageSize;
   let q = supabase
     .from("tuition_catalog")
-    .select("id, category, name, price, note, is_active", { count: "exact" })
+    .select("id, category, name, price, pricing_mode, note, is_active", { count: "exact" })
     .order("category", { ascending: true })
     .order("name", { ascending: true })
     .range(from, from + pageSize - 1);
 
   if (opts.category && opts.category !== "all") q = q.eq("category", opts.category);
+  if (opts.pmode && opts.pmode !== "all") q = q.eq("pricing_mode", opts.pmode);
   if (opts.active === "active") q = q.eq("is_active", true);
   else if (opts.active === "inactive") q = q.eq("is_active", false);
   if (opts.q) {
@@ -45,6 +46,7 @@ export async function getTuitionCatalogPage(
       category: r.category,
       name: r.name,
       price: num(r.price),
+      pricingMode: (r.pricing_mode ?? null) as TuitionCatalogRow["pricingMode"],
       note: r.note,
       isActive: r.is_active,
     })),

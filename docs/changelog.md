@@ -9,6 +9,17 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 단가표 회당 단가 배선 — `pricing_mode`를 CRUD UI에 노출(하드코딩·스크립트 의존 제거) (2026-07-13) — ✅ tsc0/lint0/test68/build✓
+회차 확정 datalist는 이미 DB(`tuition_catalog` where `pricing_mode='per_session'`)에서 읽었으나, 그 54행이 **일회성
+이관 스크립트**로만 들어갔고 기존 단가표 CRUD가 `pricing_mode`를 다루지 않아 **UI로 회당 단가를 추가·수정할 수 없었다**
+(사실상 하드코딩). 이제 단가표 전 스택에 `pricing_mode`(회당/월/할인·미지정)를 배선:
+- **공유 타입** [tuition-catalog.ts](../src/features/billing/tuition-catalog.ts): `PRICING_MODES`·`PricingMode`·`pricingModeLabel`(raw enum→한글)·`normalizePricingMode`(허용값 외=null) + `TuitionCatalogRow.pricingMode`.
+- **쿼리** [tuition-catalog-queries.ts](../src/features/billing/server/tuition-catalog-queries.ts): `getTuitionCatalogPage`가 `pricing_mode` select·매핑 + `pmode` 필터.
+- **액션** [tuition-catalog-actions.ts](../src/features/billing/server/tuition-catalog-actions.ts): create/update가 `pricing_mode` 저장(normalize 검증).
+- **폼·표** [tuition-prices-table.tsx](<../src/app/(shell)/billing/_components/tuition-prices-table.tsx>): 다이얼로그에 "단가 종류" 셀렉트(신규 기본=회당 단가)+안내문, 표에 "단가 종류" 열(회당 단가=primary Pill, 그 외=미지정 라벨).
+- **필터** [tuition-prices-panel.tsx](<../src/app/(shell)/billing/_components/tuition-prices-panel.tsx>): 필터 바에 "단가 종류" 칩(전체/회당/월/할인) + `cpmode` 파라미터.
+- **소비처 연결(발견성)** [session-terms-face.tsx](<../src/app/(shell)/billing/_components/session-terms-face.tsx>): 회차 확정 안내문에 "수강료 단가에서 회당 단가로 등록·수정" 딥링크(`&csub=prices&cpmode=per_session`).
+- 관리 표면 = 기존 **/billing → 수강료 계산기 → 수강료 단가** 서브탭(단가표는 relational+RLS 테이블이라 owner jsonb 단일경로엔 부적합 — 학원 설정 이동 대신 전용 CRUD 유지). 회당 단가로 저장하면 회차 확정 datalist에 즉시 반영.
 ### 청구=N회 키스톤 구현 — 회차 확정(invoice_session_terms) + 수납 '회차 확정' 면 (2026-07-13) — ✅ tsc0/lint0/test48/실E2E
 docs/per-session-billing-plan.md 설계 그대로: **0102a** `invoice_session_terms`(**청구서×반** — 같은 과목 복수 반도 합산 금지: 반마다 단가 상이(원장 지시), RLS+updated_at 트리거)
 + `tuition_catalog.pricing_mode`(회당/월/할인 판별 — null=곱셈 금지, N5). 계획 N = 순수 [plan.ts](../src/features/billing/session-terms/plan.ts)

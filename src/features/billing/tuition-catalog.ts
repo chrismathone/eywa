@@ -7,11 +7,37 @@ export const TUITION_CATEGORIES = ["수학", "EIE", "영어", "국어", "기타"
 export type TuitionCategory = (typeof TUITION_CATEGORIES)[number];
 export const DISCOUNT_CATEGORY = "할인";
 
+/**
+ * 단가 종류(pricing_mode, 0102a) — price가 "회당/월/할인"으로 미구분이라 곱셈 사고 방지용 판별.
+ * `per_session`만 회차 확정('회차 확정' 면) 단가 프리셋으로 소비된다(datalist). null=미지정(곱셈·프리셋 제외).
+ */
+export const PRICING_MODES = [
+  { value: "per_session", label: "회당 단가" },
+  { value: "monthly", label: "월 단가" },
+  { value: "discount", label: "할인액" },
+] as const;
+export type PricingMode = (typeof PRICING_MODES)[number]["value"];
+const PRICING_LABELS: Record<PricingMode, string> = Object.fromEntries(
+  PRICING_MODES.map((m) => [m.value, m.label]),
+) as Record<PricingMode, string>;
+
+/** pricing_mode → 한글 라벨. 미지정(null)은 "미지정". (raw enum UI 노출 금지 규칙) */
+export function pricingModeLabel(mode: string | null | undefined): string {
+  return mode && mode in PRICING_LABELS ? PRICING_LABELS[mode as PricingMode] : "미지정";
+}
+
+/** 폼 입력값을 안전한 PricingMode|null로 정규화(허용값 외 = null). */
+export function normalizePricingMode(raw: string | null | undefined): PricingMode | null {
+  const v = (raw ?? "").trim();
+  return PRICING_MODES.some((m) => m.value === v) ? (v as PricingMode) : null;
+}
+
 export type TuitionCatalogRow = {
   id: string;
   category: string;
   name: string;
   price: number;
+  pricingMode: PricingMode | null;
   note: string | null;
   isActive: boolean;
 };

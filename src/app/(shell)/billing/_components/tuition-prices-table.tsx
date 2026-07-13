@@ -16,6 +16,8 @@ import {
 import {
   TUITION_CATEGORIES,
   DISCOUNT_CATEGORY,
+  PRICING_MODES,
+  pricingModeLabel,
   type TuitionCatalogRow,
 } from "@/features/billing/tuition-catalog";
 
@@ -92,6 +94,20 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <Field label="단가 종류">
+              <select
+                name="pricing_mode"
+                defaultValue={item ? (item.pricingMode ?? "") : "per_session"}
+                className={inputCls}
+              >
+                {PRICING_MODES.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+                <option value="">미지정</option>
+              </select>
+            </Field>
             <Field label="단가 · 할인액">
               <input
                 name="price"
@@ -102,10 +118,14 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
                 className={`${inputCls} num text-right`}
               />
             </Field>
-            <Field label="비고">
-              <input name="note" defaultValue={item?.note ?? ""} placeholder="시수·조건" className={inputCls} />
-            </Field>
           </div>
+          <p className="text-text-faint -mt-1 text-[11px] leading-snug">
+            <span className="text-primary font-medium">회당 단가</span>로 지정한 항목만 수납 ·{" "}
+            <span className="font-medium">회차 확정</span>에서 단가 후보로 나타납니다.
+          </p>
+          <Field label="비고">
+            <input name="note" defaultValue={item?.note ?? ""} placeholder="시수·조건" className={inputCls} />
+          </Field>
 
           {state?.error ? (
             <p className="text-danger bg-danger-soft border-danger/20 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm">
@@ -193,6 +213,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-4 py-3 text-left">분류</th>
+                <th className="micro px-4 py-3 text-left">단가 종류</th>
                 <th className="micro px-4 py-3 text-left">항목명</th>
                 <th className="micro px-4 py-3 text-right">단가 · 할인액</th>
                 <th className="micro px-4 py-3 text-left">상태</th>
@@ -206,6 +227,15 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
                     <Pill color={r.category === DISCOUNT_CATEGORY ? "rose" : "neutral"} soft>
                       {r.category}
                     </Pill>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {r.pricingMode === "per_session" ? (
+                      <Pill color="primary" soft>
+                        {pricingModeLabel(r.pricingMode)}
+                      </Pill>
+                    ) : (
+                      <span className="text-text-faint text-[11px]">{pricingModeLabel(r.pricingMode)}</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="text-foreground text-[13px] font-bold">{r.name}</span>

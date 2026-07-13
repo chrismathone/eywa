@@ -7,16 +7,21 @@ import {
   getTuitionCatalogStats,
   TUITION_CATEGORIES,
 } from "@/features/billing/server/tuition-catalog-queries";
+import { PRICING_MODES } from "@/features/billing/tuition-catalog";
 import { TuitionPricesTable } from "./tuition-prices-table";
 
 const CATEGORY_FILTERS = [{ key: "all", label: "전체" }, ...TUITION_CATEGORIES.map((c) => ({ key: c, label: c }))];
+const PMODE_FILTERS = [
+  { key: "all", label: "전체" },
+  ...PRICING_MODES.map((m) => ({ key: m.value, label: m.label })),
+];
 const ACTIVE_FILTERS = [
   { key: "all", label: "전체" },
   { key: "active", label: "사용" },
   { key: "inactive", label: "중지" },
 ];
 
-type Sp = { q?: string; cat?: string; cactive?: string; cpage?: string };
+type Sp = { q?: string; cat?: string; cpmode?: string; cactive?: string; cpage?: string };
 const PAGE_SIZE = 50;
 
 // 수강료 단가표 면(계산기 서브탭). 교재 단가표(catalog-panel) 패턴 미러 — 단, billing 면이 tab=calculator라
@@ -24,19 +29,21 @@ const PAGE_SIZE = 50;
 export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
   const q = sp.q ?? "";
   const category = sp.cat ?? "all";
+  const pmode = sp.cpmode ?? "all";
   const active = sp.cactive ?? "all";
   const page = Math.max(1, Number(sp.cpage) || 1);
 
   const [{ rows, total }, stats] = await Promise.all([
-    getTuitionCatalogPage({ q, category, active }, page, PAGE_SIZE),
+    getTuitionCatalogPage({ q, category, pmode, active }, page, PAGE_SIZE),
     getTuitionCatalogStats(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const build = (patch: Partial<Sp>) => {
-    const next = { q, cat: category, cactive: active, ...patch };
+    const next = { q, cat: category, cpmode: pmode, cactive: active, ...patch };
     const p = new URLSearchParams({ tab: "calculator", csub: "prices" });
     if (next.cat && next.cat !== "all") p.set("cat", next.cat);
+    if (next.cpmode && next.cpmode !== "all") p.set("cpmode", next.cpmode);
     if (next.cactive && next.cactive !== "all") p.set("cactive", next.cactive);
     if (next.q) p.set("q", next.q);
     if (patch.cpage && patch.cpage !== "1") p.set("cpage", String(patch.cpage));
@@ -56,6 +63,15 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
           <span className="micro mr-1">분류</span>
           {CATEGORY_FILTERS.map((f) => (
             <Chip key={f.key} href={build({ cat: f.key })} on={category === f.key}>
+              {f.label}
+            </Chip>
+          ))}
+        </div>
+        <span className="bg-line h-4 w-px" aria-hidden />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="micro mr-1">단가 종류</span>
+          {PMODE_FILTERS.map((f) => (
+            <Chip key={f.key} href={build({ cpmode: f.key })} on={pmode === f.key}>
               {f.label}
             </Chip>
           ))}
