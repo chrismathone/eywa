@@ -148,10 +148,42 @@ export async function fetchBoards(page, centerId) {
   return rows.map((r) => ({ id: r.id, name: (r.name || "").trim(), children: r.approved_children ?? 0 }));
 }
 
-/** 가입(승인) 원아 전건 — 표시명 목록. 영문닉(한글) 형식 존재("Jay(이재희)") — 매칭은 호출측 childKeys로. */
+/** 가입(승인) 원아 전건 — {id, name, birth}. 영문닉(한글) 형식 존재("Jay(이재희)") — 매칭은 childKeys로. */
 export async function fetchChildren(page, centerId) {
   const rows = await fetchAllDrf(page, `/api/v1/centers/${centerId}/children`);
-  return rows.map((r) => (r.name || "").trim()).filter(Boolean);
+  return rows
+    .map((r) => ({ id: r.id, name: (r.name || "").trim(), birth: r.date_birth ?? null }))
+    .filter((r) => r.name);
+}
+
+/** 원아 상세 — enrollment[](belong_to_class 멤버십, removed_child 플래그 포함). */
+export async function fetchChildDetail(page, childId) {
+  return page.evaluate(async (id) => {
+    const r = await fetch(`/api/v1/children/${id}`, { headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error(`children/${id} ${r.status}`);
+    return r.json();
+  }, childId);
+}
+
+/**
+ * 원아→반 배정(쓰기) — `POST /api/v1/enrollments/ {child, belong_to_class}` (2026-07-13 학원이로 실검증,
+ * 201 + is_approved:true 즉시). ID 기반이라 동명이인 안전. CSRF 쿠키 헤더 필요.
+ * ⚠️ 제거는 DELETE/PATCH 전부 405 — 해제는 ClassNote UI에서만(현재 미자동화).
+ */
+export async function enrollChild(page, childId, classId) {
+  return page.evaluate(
+    async ([child, cls]) => {
+      const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+      const res = await fetch("/api/v1/enrollments/", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) },
+        body: JSON.stringify({ child, belong_to_class: cls }),
+      });
+      const body = await res.text();
+      return { status: res.status, body: body.slice(0, 300) };
+    },
+    [childId, classId],
+  );
 }
 
 /** ClassNote 원아 표시명 → 매칭 키 집합(원문·알파벳 제거·괄호 안 한글). */
