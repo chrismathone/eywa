@@ -27,7 +27,14 @@ export const NOTION_TASK_PROPS = {
 
 // Notion API 페이지의 최소 형태(필요한 속성만 타이핑). 판별 유니온이라 catch-all 멤버는 두지 않음
 // (두면 type 좁히기가 깨진다) — 실제 페이지의 다른 속성 타입은 type-guard가 false로 흘려보냄.
-type NotionRichText = { plain_text?: string };
+type NotionAnnotations = {
+  bold?: boolean;
+  italic?: boolean;
+  strikethrough?: boolean;
+  underline?: boolean;
+  code?: boolean;
+};
+type NotionRichText = { plain_text?: string; href?: string | null; annotations?: NotionAnnotations };
 type NotionPropVal =
   | { type: "title"; title?: NotionRichText[] }
   | { type: "rich_text"; rich_text?: NotionRichText[] }
@@ -111,10 +118,18 @@ export function tasksOnDate(tasks: NotionTask[], date: string): NotionTask[] {
   return tasks.filter((t) => t.due && (t.start ?? t.due) <= date && date <= t.due);
 }
 
-// === 업무 본문(Notion 블록) → 표시용 라인 (상세창에서 렌더) ===
+// === 업무 본문(Notion 블록) → 표시용 라인 (상세창에서 렌더, 서식·이모지 보존) ===
+export type RichSpan = {
+  text: string; // 이모지는 텍스트에 그대로 포함됨
+  bold?: boolean;
+  italic?: boolean;
+  strike?: boolean;
+  code?: boolean;
+  href?: string; // 링크
+};
 export type ContentLine = {
   kind: "heading" | "text" | "bullet" | "number" | "todo" | "quote" | "divider" | "image" | "table" | "code";
-  text: string;
+  spans: RichSpan[]; // 텍스트 조각(서식 보존). divider/image/table은 라벨 한 조각 or 빈 배열.
   checked?: boolean; // todo
   level?: number; // heading 1..3
 };
@@ -125,12 +140,32 @@ type LooseBlock = {
   [key: string]: unknown;
 };
 
-function blockText(b: LooseBlock, key: string): string {
+/** rich_text → 서식 보존 span[]. 빈 조각은 제거. */
+function toSpans(rt?: NotionRichText[]): RichSpan[] {
+  return (rt ?? [])
+    .map((r) => {
+      const a = r.annotations ?? {};
+      const s: RichSpan = { text: r.plain_text ?? "" };
+      if (a.bold) s.bold = true;
+      if (a.italic) s.italic = true;
+      if (a.strikethrough) s.strike = true;
+      if (a.code) s.code = true;
+      if (r.href) s.href = r.href;
+      return s;
+    })
+    .filter((s) => s.text.length > 0);
+}
+function blockSpans(b: LooseBlock, key: string): RichSpan[] {
   const inner = b[key] as { rich_text?: NotionRichText[] } | undefined;
-  return plain(inner?.rich_text);
+  return toSpans(inner?.rich_text);
 }
 
-/** Notion 블록 배열 → 읽을 수 있는 라인들(제목/문단/불릿/번호/체크/인용/구분선/이미지/표/코드). 알 수 없는 타입은 생략. */
+/** span[]을 이어붙인 평문(검색·폴백용). */
+export function spansPlain(spans: RichSpan[]): string {
+  return spans.map((s) => s.text).join("");
+}
+
+/** Notion 블록 배열 → 서식 보존 라인들(제목/문단/불릿/번호/체크/인용/구분선/이미지/표/코드). 알 수 없는 타입은 생략. */
 export function notionBlocksToLines(blocks: LooseBlock[]): ContentLine[] {
   const out: ContentLine[] = [];
   for (const b of blocks) {
@@ -139,44 +174,44 @@ export function notionBlocksToLines(blocks: LooseBlock[]): ContentLine[] {
       case "heading_1":
       case "heading_2":
       case "heading_3": {
-        const text = blockText(b, t);
-        if (text) out.push({ kind: "heading", level: Number(t.slice(-1)), text });
+        const spans = blockSpans(b, t);
+        if (spans.length) out.push({ kind: "heading", level: Number(t.slice(-1)), spans });
         break;
       }
       case "paragraph": {
-        const text = blockText(b, t);
-        if (text) out.push({ kind: "text", text });
+        const spans = blockSpans(b, t);
+        if (spans.length) out.push({ kind: "text", spans });
         break;
       }
       case "bulleted_list_item":
-        out.push({ kind: "bullet", text: blockText(b, t) });
+        out.push({ kind: "bullet", spans: blockSpans(b, t) });
         break;
       case "numbered_list_item":
-        out.push({ kind: "number", text: blockText(b, t) });
+        out.push({ kind: "number", spans: blockSpans(b, t) });
         break;
       case "to_do": {
         const inner = b["to_do"] as { checked?: boolean } | undefined;
-        out.push({ kind: "todo", text: blockText(b, t), checked: !!inner?.checked });
+        out.push({ kind: "todo", spans: blockSpans(b, t), checked: !!inner?.checked });
         break;
       }
       case "quote":
       case "callout":
       case "toggle": {
-        const text = blockText(b, t);
-        if (text) out.push({ kind: "quote", text });
+        const spans = blockSpans(b, t);
+        if (spans.length) out.push({ kind: "quote", spans });
         break;
       }
       case "code":
-        out.push({ kind: "code", text: blockText(b, t) });
+        out.push({ kind: "code", spans: blockSpans(b, t) });
         break;
       case "divider":
-        out.push({ kind: "divider", text: "" });
+        out.push({ kind: "divider", spans: [] });
         break;
       case "image":
-        out.push({ kind: "image", text: "이미지" });
+        out.push({ kind: "image", spans: [{ text: "이미지" }] });
         break;
       case "table":
-        out.push({ kind: "table", text: "표" });
+        out.push({ kind: "table", spans: [{ text: "표" }] });
         break;
       // 그 외(link_preview·embed 등)는 생략 — 노이즈 방지.
     }

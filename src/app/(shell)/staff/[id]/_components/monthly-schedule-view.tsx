@@ -17,7 +17,7 @@ import {
   prepareNotionMapping,
   setStaffNotionUserId,
 } from "@/features/staff/server/notion-actions";
-import type { MonthlyTasksResult, NotionUserOption } from "@/features/staff/server/notion";
+import type { MonthlyTasksResult, NotionUserOption, TakenMapping } from "@/features/staff/server/notion";
 import { MonthGridView } from "./month-grid-view";
 import { TaskDetailDialog } from "./task-detail-dialog";
 import { DayTasksDialog } from "./day-tasks-dialog";
@@ -83,16 +83,19 @@ function MonthListView({
           <div className={`num w-16 shrink-0 text-[12px] ${d === today ? "text-primary font-semibold" : "text-text-dim"}`}>
             {d.slice(5).replace("-", "/")}
           </div>
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-0.5">
             {byDate[d]!.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => onOpen(t)}
-                className="hover:text-primary flex w-full items-center gap-1.5 text-left text-[12px]"
+                className="hover:bg-primary/10 hover:text-primary flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-[12px] transition"
               >
                 <span className={t.done ? "text-text-faint line-through" : "text-foreground"}>{t.title}</span>
                 {t.dept ? <span className="text-text-faint">· {t.dept}</span> : null}
+                {t.start && t.due && t.start !== t.due ? (
+                  <span className="text-text-faint num text-[10px]">({t.start.slice(5)}~{t.due.slice(5)})</span>
+                ) : null}
                 {t.done ? <span className="text-primary text-[10px]">완료</span> : null}
               </button>
             ))}
@@ -123,8 +126,10 @@ export function MonthlyScheduleView({
   const [saving, setSaving] = useState(false);
   const [openTask, setOpenTask] = useState<NotionTask | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
-  // 매핑 준비(지연) — "prepping"=스캔 중(초기), "none"=자동 불가(비사무실), 배열=수동 후보.
-  const [mapPrep, setMapPrep] = useState<"prepping" | "none" | NotionUserOption[]>("prepping");
+  // 매핑 준비(지연) — "prepping"=스캔 중(초기), "none"=자동 불가(비사무실), 객체=수동 후보(+이미 연결된 계정 목록).
+  const [mapPrep, setMapPrep] = useState<
+    "prepping" | "none" | { options: NotionUserOption[]; taken: TakenMapping[] }
+  >("prepping");
   const today = kstToday();
 
   const pickView = writeViewPref;
@@ -147,7 +152,7 @@ export function MonthlyScheduleView({
       } else if (res.prep.state === "matched") {
         start(async () => setResult(await getStaffMonthlyTasks(staffId, month)));
       } else if (res.prep.state === "options") {
-        setMapPrep(res.prep.options);
+        setMapPrep({ options: res.prep.options, taken: res.prep.taken });
       } else {
         setMapPrep("none");
       }
@@ -189,13 +194,17 @@ export function MonthlyScheduleView({
         <h3 className="text-foreground text-[14px] font-semibold">Notion 계정 연결</h3>
         <p className="text-text-faint mt-1 mb-3 text-[12px]">
           이메일이 같으면 자동 연결됩니다. 이메일이 달라 자동 연결되지 않았으니, Notion 담당자를 직접 골라 연결하세요.
+          <br />
+          이미 다른 직원에 연결된 계정은 목록에서 제외됩니다(중복 연결 방지).
         </p>
-        {mapPrep.length === 0 ? (
-          <p className="text-text-faint text-[12px]">Notion 담당자 후보를 찾지 못했습니다. 연동 설정을 확인해주세요.</p>
+        {mapPrep.options.length === 0 ? (
+          <p className="text-text-faint text-[12px]">
+            연결 가능한 Notion 담당자가 없습니다{mapPrep.taken.length > 0 ? " (후보 전원이 이미 다른 직원에 연결됨)" : " — 연동 설정을 확인해주세요"}.
+          </p>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <SearchableSelect
-              options={mapPrep.map((u) => ({ value: u.id, label: u.name, hint: u.email ?? undefined }))}
+              options={mapPrep.options.map((u) => ({ value: u.id, label: u.name, hint: u.email ?? undefined }))}
               value={selected}
               onValueChange={setSelected}
               placeholder="Notion 사용자 선택…"
@@ -207,6 +216,11 @@ export function MonthlyScheduleView({
             </Button>
           </div>
         )}
+        {mapPrep.taken.length > 0 ? (
+          <p className="text-text-faint mt-3 text-[11px]">
+            이미 연결됨: {mapPrep.taken.map((t) => `${t.notionName}→${t.staffName}`).join(", ")}
+          </p>
+        ) : null}
       </div>
     );
   }

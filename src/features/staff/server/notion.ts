@@ -92,14 +92,30 @@ async function staffMappingRow(
   return { notionUserId: (row?.notion_user_id ?? null) || null, email: (row?.email ?? null) || null };
 }
 
+export type TakenMapping = { notionName: string; staffName: string }; // 이미 다른 직원에 연결된 Notion 계정
 export type MappingPrep =
   | { state: "matched" } // 연결됨(이미 매핑 or 이메일 자동연결+저장) — 호출부는 월간 업무 재조회
-  | { state: "options"; options: NotionUserOption[] } // 자동 불가 — 수동 후보(사무실만)
+  | { state: "options"; options: NotionUserOption[]; taken: TakenMapping[] } // 자동 불가 — 수동 후보(사무실만)
   | { state: "none" }; // 자동 불가 + 후보 비노출(비사무실)
+
+/** 이 테넌트에서 이미 연결된 notion_user_id → 직원명(중복 연결 방지용). RLS 스코프. */
+async function usedNotionIds(): Promise<Map<string, string>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("display_name, notion_user_id")
+    .not("notion_user_id", "is", null);
+  const map = new Map<string, string>();
+  for (const u of (data as { display_name: string; notion_user_id: string }[] | null) ?? []) {
+    if (u.notion_user_id) map.set(u.notion_user_id, u.display_name);
+  }
+  return map;
+}
 
 /**
  * 미매핑 직원의 매핑 준비 — 이메일 자동연결 시도(성공 시 저장) 또는 수동 후보 반환.
  * ⚠️ 첫 페인트가 아니라 **클라 액션에서 지연 호출**되는 무거운 경로(담당자 스캔 수 초).
+ * 수동 후보에서 **이미 다른 직원에 연결된 Notion 계정은 제외**(중복 연결 방지, DB 부분유니크와 정합).
  */
 export async function prepareStaffNotionMappingRow(
   staffId: string,
@@ -118,7 +134,18 @@ export async function prepareStaffNotionMappingRow(
     return { state: "matched" };
   }
   if (!includeOptions) return { state: "none" };
-  return { state: "options", options: [...people].sort((a, b) => a.name.localeCompare(b.name, "ko")) };
+
+  const used = await usedNotionIds();
+  const available: NotionUserOption[] = [];
+  const taken: TakenMapping[] = [];
+  for (const p of people) {
+    const owner = used.get(p.id);
+    if (owner) taken.push({ notionName: p.name, staffName: owner });
+    else available.push(p);
+  }
+  available.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  taken.sort((a, b) => a.notionName.localeCompare(b.notionName, "ko"));
+  return { state: "options", options: available, taken };
 }
 
 /**
@@ -203,6 +230,18 @@ export async function setStaffNotionUserIdRow(
   if (readErr || !target) return { ok: false, error: "대상 직원을 찾을 수 없습니다" };
   if ((target as { tenant_id: string }).tenant_id !== actorTenantId)
     return { ok: false, error: "다른 지점의 계정은 변경할 수 없습니다" };
+
+  // 중복 연결 방지 — 같은 테넌트의 다른 직원이 이미 이 Notion 계정을 쓰고 있으면 거부(UI 필터의 백스톱, DB 부분유니크와 정합).
+  if (notionUserId) {
+    const { data: dup } = await admin
+      .from("users")
+      .select("display_name")
+      .eq("tenant_id", actorTenantId)
+      .eq("notion_user_id", notionUserId)
+      .neq("id", staffId)
+      .maybeSingle();
+    if (dup) return { ok: false, error: `이 Notion 계정은 이미 ${(dup as { display_name: string }).display_name}에 연결되어 있습니다` };
+  }
 
   const { error } = await admin.from("users").update({ notion_user_id: notionUserId }).eq("id", staffId);
   if (error) return { ok: false, error: "매핑 저장에 실패했습니다" };

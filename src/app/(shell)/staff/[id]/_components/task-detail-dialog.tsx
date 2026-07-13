@@ -8,7 +8,7 @@ import { ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { getTaskComments, addTaskCommentAction, getTaskContent } from "@/features/staff/server/notion-actions";
-import type { ContentLine, NotionTask } from "@/features/staff/notion-tasks";
+import type { ContentLine, NotionTask, RichSpan } from "@/features/staff/notion-tasks";
 import type { TaskComment } from "@/features/staff/server/notion";
 
 function timeLabel(iso: string | null): string {
@@ -21,6 +21,39 @@ function timeLabel(iso: string | null): string {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(iso));
+}
+
+/** 코드 블록은 서식 없이 평문으로. */
+function spansPlainInline(spans: RichSpan[]): string {
+  return spans.map((s) => s.text).join("");
+}
+
+/** rich_text span[] → 서식 보존 렌더(굵게/기울임/취소선/코드/링크). 이모지는 텍스트라 그대로. */
+function Spans({ spans }: { spans: RichSpan[] }) {
+  return (
+    <>
+      {spans.map((s, i) => {
+        let cls = "";
+        if (s.bold) cls += " font-semibold";
+        if (s.italic) cls += " italic";
+        if (s.strike) cls += " line-through";
+        if (s.code) cls += " bg-bg-soft rounded px-1 text-[11px] font-mono";
+        if (s.href)
+          return (
+            <a key={i} href={s.href} target="_blank" rel="noopener noreferrer" className={`text-primary underline${cls}`}>
+              {s.text}
+            </a>
+          );
+        return cls ? (
+          <span key={i} className={cls.trim()}>
+            {s.text}
+          </span>
+        ) : (
+          <span key={i}>{s.text}</span>
+        );
+      })}
+    </>
+  );
 }
 
 /** 업무 본문 라인 렌더 — 순수 매핑된 ContentLine[]을 읽기 좋게. 번호는 연속된 number 라인끼리 매김. */
@@ -44,40 +77,46 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
           case "heading":
             return (
               <p key={i} className={`text-foreground font-semibold ${l.level === 1 ? "text-[14px]" : "text-[13px]"} ${i > 0 ? "mt-2" : ""}`}>
-                {l.text}
+                <Spans spans={l.spans} />
               </p>
             );
           case "bullet":
             return (
               <p key={i} className="text-text-dim flex gap-1.5">
                 <span className="text-text-faint">•</span>
-                <span>{l.text}</span>
+                <span>
+                  <Spans spans={l.spans} />
+                </span>
               </p>
             );
           case "number":
             return (
               <p key={i} className="text-text-dim flex gap-1.5">
                 <span className="text-text-faint num">{numbers[i]}.</span>
-                <span>{l.text}</span>
+                <span>
+                  <Spans spans={l.spans} />
+                </span>
               </p>
             );
           case "todo":
             return (
               <p key={i} className="flex gap-1.5">
                 <span className={l.checked ? "text-primary" : "text-text-faint"}>{l.checked ? "☑" : "☐"}</span>
-                <span className={l.checked ? "text-text-faint line-through" : "text-text-dim"}>{l.text}</span>
+                <span className={l.checked ? "text-text-faint line-through" : "text-text-dim"}>
+                  <Spans spans={l.spans} />
+                </span>
               </p>
             );
           case "quote":
             return (
               <p key={i} className="border-line text-text-dim border-l-2 pl-2 italic">
-                {l.text}
+                <Spans spans={l.spans} />
               </p>
             );
           case "code":
             return (
               <pre key={i} className="bg-bg-soft text-text-dim overflow-x-auto rounded-sm px-2 py-1 text-[11px]">
-                {l.text}
+                {spansPlainInline(l.spans)}
               </pre>
             );
           case "divider":
@@ -97,7 +136,7 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
           default:
             return (
               <p key={i} className="text-text-dim">
-                {l.text}
+                <Spans spans={l.spans} />
               </p>
             );
         }

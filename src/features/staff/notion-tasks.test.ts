@@ -132,14 +132,37 @@ describe("notionBlocksToLines", () => {
       { type: "link_preview", link_preview: { url: "x" } }, // 생략
     ]);
     expect(lines).toEqual([
-      { kind: "heading", level: 3, text: "체크리스트" },
-      { kind: "text", text: "본문 한 줄" },
-      { kind: "bullet", text: "항목" },
-      { kind: "todo", text: "할일", checked: true },
-      { kind: "divider", text: "" },
-      { kind: "image", text: "이미지" },
-      { kind: "table", text: "표" },
+      { kind: "heading", level: 3, spans: [{ text: "체크리스트" }] },
+      { kind: "text", spans: [{ text: "본문 한 줄" }] },
+      { kind: "bullet", spans: [{ text: "항목" }] },
+      { kind: "todo", spans: [{ text: "할일" }], checked: true },
+      { kind: "divider", spans: [] },
+      { kind: "image", spans: [{ text: "이미지" }] },
+      { kind: "table", spans: [{ text: "표" }] },
     ]);
+  });
+
+  it("서식(굵게/기울임/취소선/코드/링크)과 이모지를 보존", () => {
+    const lines = notionBlocksToLines([
+      {
+        type: "paragraph",
+        paragraph: {
+          rich_text: [
+            { plain_text: "🗓 ", annotations: {} },
+            { plain_text: "중요", annotations: { bold: true } },
+            { plain_text: " 링크", href: "https://x.com", annotations: {} },
+          ],
+        },
+      },
+    ]);
+    expect(lines[0]).toEqual({
+      kind: "text",
+      spans: [
+        { text: "🗓 " },
+        { text: "중요", bold: true },
+        { text: " 링크", href: "https://x.com" },
+      ],
+    });
   });
 });
 
