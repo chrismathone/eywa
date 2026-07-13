@@ -144,7 +144,7 @@ export default async function StaffDetailPage({
             roleOptions={roleOptions}
           />
         ) : tab === "monthly" ? (
-          <MonthlyScheduleTab staffId={staff.id} canManage={canManage} />
+          <MonthlyScheduleTab staffId={staff.id} staffName={staff.displayName} canManage={canManage} />
         ) : tab === "classes" ? (
           <ClassesTab staffId={staff.id} />
         ) : tab === "activity" ? (

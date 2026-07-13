@@ -9,7 +9,11 @@ import {
   listCommentsAll,
   createComment,
   listBlockChildren,
+  updatePageProps,
+  createPage,
+  titlePropertyName,
 } from "@/lib/notion/client";
+import { shiftDays } from "@/features/timetable/lib/week";
 import {
   NOTION_TASK_PROPS,
   parseNotionTaskPage,
@@ -213,6 +217,58 @@ export async function addTaskComment(pageId: string, text: string, authorName: s
 export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
   const blocks = await listBlockChildren(pageId);
   return notionBlocksToLines(blocks);
+}
+
+// === 쓰기(eywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canManageStaff). ===
+
+/** 업무완료 체크박스 토글 → Notion 반영. */
+export async function setTaskDoneRow(pageId: string, done: boolean): Promise<void> {
+  await updatePageProps(pageId, { [NOTION_TASK_PROPS.done]: { checkbox: done } });
+}
+
+/**
+ * 마감일 이동 → Notion 반영. 기간 업무면 시작일도 같은 일수만큼 평행이동(기간 보존).
+ * newDue = 드롭한 날짜(YYYY-MM-DD). oldStart/oldDue로 delta 계산.
+ */
+export async function moveTaskDueRow(
+  pageId: string,
+  newDue: string,
+  oldStart: string | null,
+  oldDue: string,
+): Promise<void> {
+  const props: Record<string, unknown> = { [NOTION_TASK_PROPS.due]: { date: { start: newDue } } };
+  if (oldStart && oldStart !== oldDue) {
+    // 기간 보존: 시작일을 마감 이동량만큼 평행이동. delta = newDue - oldDue.
+    const deltaDays = Math.round(
+      (Date.parse(`${newDue}T00:00:00Z`) - Date.parse(`${oldDue}T00:00:00Z`)) / 86400000,
+    );
+    props[NOTION_TASK_PROPS.start] = { date: { start: shiftDays(oldStart, deltaDays) } };
+  }
+  await updatePageProps(pageId, props);
+}
+
+/** 이 직원의 저장된 notion_user_id(새 업무의 담당자로 필요). 미매핑이면 null. */
+export async function resolveStaffNotionId(staffId: string): Promise<string | null> {
+  const { notionUserId } = await staffMappingRow(staffId);
+  return notionUserId;
+}
+
+/** 새 업무 생성 → Notion. 담당자(정) = 이 직원(notionUserId), 제목/마감/시작. 생성 page id 반환. */
+export async function createStaffTaskRow(
+  dbId: string,
+  notionUserId: string,
+  input: { title: string; due: string; start?: string | null },
+): Promise<string> {
+  const titleProp = await titlePropertyName(dbId);
+  const properties: Record<string, unknown> = {
+    [titleProp]: { title: [{ text: { content: input.title.slice(0, 200) } }] },
+    [NOTION_TASK_PROPS.due]: { date: { start: input.due } },
+    [NOTION_TASK_PROPS.assigneePrimary]: { people: [{ id: notionUserId }] },
+  };
+  if (input.start && input.start !== input.due) {
+    properties[NOTION_TASK_PROPS.start] = { date: { start: input.start } };
+  }
+  return createPage(dbId, properties);
 }
 
 /** 직원 ↔ Notion 사용자 매핑 저장(같은 테넌트 검증 후 admin update). account-actions.loadTarget 패턴. */

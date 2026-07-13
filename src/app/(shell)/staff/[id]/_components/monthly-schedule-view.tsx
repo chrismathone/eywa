@@ -5,9 +5,10 @@
 // ⚠️ 미매핑이면 서버는 즉시 unmapped만 주고(첫 페인트 안 막음, B7), 자동연결·후보는 여기서 지연 호출.
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { kstToday } from "@/lib/date-kst";
 import { buildMonthGrid, monthLabel, shiftMonth } from "@/lib/month-grid";
@@ -16,11 +17,13 @@ import {
   getStaffMonthlyTasks,
   prepareNotionMapping,
   setStaffNotionUserId,
+  moveTaskDue,
 } from "@/features/staff/server/notion-actions";
 import type { MonthlyTasksResult, NotionUserOption, TakenMapping } from "@/features/staff/server/notion";
 import { MonthGridView } from "./month-grid-view";
 import { TaskDetailDialog } from "./task-detail-dialog";
 import { DayTasksDialog } from "./day-tasks-dialog";
+import { NewTaskDialog } from "./new-task-dialog";
 
 const VIEW_KEY = "eywa-monthly-view";
 type ViewMode = "grid" | "list";
@@ -108,11 +111,13 @@ function MonthListView({
 
 export function MonthlyScheduleView({
   staffId,
+  staffName,
   canManage,
   initialMonth,
   initial,
 }: {
   staffId: string;
+  staffName: string;
   canManage: boolean;
   initialMonth: string;
   initial: MonthlyTasksResult;
@@ -126,6 +131,9 @@ export function MonthlyScheduleView({
   const [saving, setSaving] = useState(false);
   const [openTask, setOpenTask] = useState<NotionTask | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
+  const [openNew, setOpenNew] = useState(false);
+  const [pendingMove, setPendingMove] = useState<{ task: NotionTask; newDue: string } | null>(null);
+  const [movingBusy, setMovingBusy] = useState(false);
   // 매핑 준비(지연) — "prepping"=스캔 중(초기), "none"=자동 불가(비사무실), 객체=수동 후보(+이미 연결된 계정 목록).
   const [mapPrep, setMapPrep] = useState<
     "prepping" | "none" | { options: NotionUserOption[]; taken: TakenMapping[] }
@@ -136,6 +144,23 @@ export function MonthlyScheduleView({
   function goMonth(next: string) {
     setMonth(next);
     start(async () => setResult(await getStaffMonthlyTasks(staffId, next)));
+  }
+  const refetch = () => start(async () => setResult(await getStaffMonthlyTasks(staffId, month)));
+
+  // 드래그 이동 → 확인 후 Notion 반영(안전장치).
+  async function confirmMove() {
+    if (!pendingMove) return;
+    const { task, newDue } = pendingMove;
+    setMovingBusy(true);
+    const res = await moveTaskDue(task.id, newDue, task.start, task.due ?? newDue);
+    setMovingBusy(false);
+    setPendingMove(null);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("마감일을 옮겼습니다 · Notion 반영됨");
+    refetch();
   }
 
   // 미매핑이면 화면 표시 후 자동연결·후보 로드를 지연 호출(무거운 담당자 스캔 = 첫 페인트 밖으로).
@@ -257,31 +282,49 @@ export function MonthlyScheduleView({
           </Button>
           {pending ? <span className="text-text-faint ml-1 text-[11px]">불러오는 중…</span> : null}
         </div>
-        <div className="border-line inline-flex overflow-hidden rounded-md border">
-          <button
-            type="button"
-            onClick={() => pickView("grid")}
-            aria-pressed={view === "grid"}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[12px] ${view === "grid" ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
-          >
-            <LayoutGrid size={13} /> 달력
-          </button>
-          <button
-            type="button"
-            onClick={() => pickView("list")}
-            aria-pressed={view === "list"}
-            className={`border-line inline-flex items-center gap-1 border-l px-2.5 py-1 text-[12px] ${view === "list" ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
-          >
-            <List size={13} /> 목록
-          </button>
+        <div className="flex items-center gap-2">
+          {canManage ? (
+            <Button size="sm" variant="outline" onClick={() => setOpenNew(true)}>
+              <Plus className="size-3.5" /> 새 업무
+            </Button>
+          ) : null}
+          <div className="border-line inline-flex overflow-hidden rounded-md border">
+            <button
+              type="button"
+              onClick={() => pickView("grid")}
+              aria-pressed={view === "grid"}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 text-[12px] ${view === "grid" ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
+            >
+              <LayoutGrid size={13} /> 달력
+            </button>
+            <button
+              type="button"
+              onClick={() => pickView("list")}
+              aria-pressed={view === "list"}
+              className={`border-line inline-flex items-center gap-1 border-l px-2.5 py-1 text-[12px] ${view === "list" ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"}`}
+            >
+              <List size={13} /> 목록
+            </button>
+          </div>
         </div>
       </div>
+      {canManage ? (
+        <p className="text-text-faint px-1 text-[11px]">달력에서 업무 막대를 다른 날짜로 끌어 마감일을 옮길 수 있습니다(확인 후 Notion 반영).</p>
+      ) : null}
 
       {tasks.length === 0 && view === "grid" ? (
         <p className="text-text-faint px-1 pb-1 text-[12px]">이 달에 등록된 업무가 없습니다.</p>
       ) : null}
       {view === "grid" ? (
-        <MonthGridView weeks={weeks} tasks={tasks} today={today} onOpen={setOpenTask} onOpenDay={setOpenDay} />
+        <MonthGridView
+          weeks={weeks}
+          tasks={tasks}
+          today={today}
+          onOpen={setOpenTask}
+          onOpenDay={setOpenDay}
+          canEdit={canManage}
+          onMove={(task, newDue) => setPendingMove({ task, newDue })}
+        />
       ) : (
         <MonthListView tasks={tasks} today={today} onOpen={setOpenTask} />
       )}
@@ -301,8 +344,42 @@ export function MonthlyScheduleView({
       ) : null}
 
       {openTask ? (
-        <TaskDetailDialog key={openTask.id} task={openTask} onClose={() => setOpenTask(null)} />
+        <TaskDetailDialog
+          key={openTask.id}
+          task={openTask}
+          canEdit={canManage}
+          onChanged={refetch}
+          onClose={() => setOpenTask(null)}
+        />
       ) : null}
+
+      {openNew ? (
+        <NewTaskDialog
+          staffId={staffId}
+          staffName={staffName}
+          defaultDue={today}
+          onCreated={refetch}
+          onClose={() => setOpenNew(false)}
+        />
+      ) : null}
+
+      {/* 드래그 이동 확인 — Notion 반영 안전장치 */}
+      <ConfirmDialog
+        open={!!pendingMove}
+        title="마감일 이동"
+        message={
+          pendingMove
+            ? `"${pendingMove.task.title}"의 마감일을 ${pendingMove.newDue}(으)로 옮기면 Notion에도 반영됩니다.${
+                pendingMove.task.start && pendingMove.task.due && pendingMove.task.start !== pendingMove.task.due
+                  ? " 기간 업무라 시작일도 함께 이동합니다."
+                  : ""
+              } 진행할까요?`
+            : ""
+        }
+        confirmLabel="이동"
+        onConfirm={confirmMove}
+        onCancel={() => (movingBusy ? null : setPendingMove(null))}
+      />
     </div>
   );
 }
