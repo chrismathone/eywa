@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Loader2, Sheet, UserMinus, UserPlus, Upload, X } from "lucide-react";
 import {
+  applySheetImport,
   applyTimetableImport,
   previewSheetImport,
   previewTimetableImport,
@@ -34,6 +35,8 @@ export function TimetableImportDialog({
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [diff, setDiff] = useState<ImportDiff | null>(null);
+  // 미리보기 hash — apply 시 서버가 재계산 결과와 대조(stale 미리보기 차단). diff와 항상 함께 세팅/해제.
+  const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplyState | null>(null);
   const [previewing, startPreview] = useTransition();
@@ -57,6 +60,7 @@ export function TimetableImportDialog({
   function reset() {
     setFile(null);
     setDiff(null);
+    setHash(null);
     setError(null);
     setResult(null);
   }
@@ -71,11 +75,15 @@ export function TimetableImportDialog({
     setError(null);
     setResult(null);
     setDiff(null);
+    setHash(null);
     if (sheet) {
       startPreview(async () => {
         const res = await previewSheetImport(subject);
         if (res.error) setError(res.error);
-        else setDiff(res.diff ?? null);
+        else {
+          setDiff(res.diff ?? null);
+          setHash(res.hash ?? null);
+        }
       });
       return;
     }
@@ -85,12 +93,20 @@ export function TimetableImportDialog({
     startPreview(async () => {
       const res = await previewTimetableImport(fd);
       if (res.error) setError(res.error);
-      else setDiff(res.diff ?? null);
+      else {
+        setDiff(res.diff ?? null);
+        setHash(res.hash ?? null);
+      }
     });
   }
 
   function apply() {
     if (!diff || total === 0) return;
+    if (!hash || (!sheet && !file)) {
+      // 정상 흐름에선 미리보기가 hash·파일을 항상 보장 — 방어적 안내만.
+      setError("미리보기 정보가 없습니다. 다시 미리보기 후 적용하세요.");
+      return;
+    }
     const rm = diff.removes.length;
     const warn = diff.warnings.length;
     // 한 번 더 확인 — 대량/삭제/무시 항목이 있으면 무엇이 적용·제외되는지 요약해 물어본다.
@@ -103,10 +119,27 @@ export function TimetableImportDialog({
       if (!confirm(lines.join("\n"))) return;
     }
     startApply(async () => {
-      const res = await applyTimetableImport(diff);
+      // 서버가 파일/시트+DB를 재읽어 hash 대조 후 적용 — 클라 diff는 보내지 않는다(표시용).
+      let res: ApplyState;
+      if (sheet) {
+        res = await applySheetImport(hash, subject);
+      } else {
+        const fd = new FormData();
+        fd.set("file", file!);
+        res = await applyTimetableImport(hash, fd);
+      }
+      if (res.staleHash) {
+        // 미리보기 이후 수강/시트 변경 감지 — 오래된 미리보기를 지우고 재미리보기 유도.
+        setDiff(null);
+        setHash(null);
+        setResult(null);
+        setError(res.error ?? "미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.");
+        return;
+      }
       setResult(res);
       if (!res.error) {
         setDiff(null);
+        setHash(null);
         router.refresh();
       }
     });
@@ -179,6 +212,7 @@ export function TimetableImportDialog({
                     onChange={(e) => {
                       setFile(e.target.files?.[0] ?? null);
                       setDiff(null);
+                      setHash(null);
                       setResult(null);
                     }}
                     className="text-text-dim flex-1 text-[12px]"

@@ -8,7 +8,7 @@ import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { EDIT_SHEET_NAME, parseEditSheet, rowsToEditRows } from "@/features/timetable/import/parse";
-import { computeImportDiff } from "@/features/timetable/import/diff";
+import { computeImportDiff, importDiffHash } from "@/features/timetable/import/diff";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { readSheetTabRows } from "@/features/integrations/google-sheets";
 import { sheetsProvider, supportsTimetableImport } from "@/features/integrations/sheets-provider";
@@ -90,7 +90,22 @@ async function loadContext(): Promise<Ctx> {
   return { current, classes, students };
 }
 
-export type PreviewState = { error?: string; diff?: ImportDiff };
+export type PreviewState = { error?: string; diff?: ImportDiff; hash?: string };
+
+/**
+ * 업로드 파일의 '수강편집' 시트 + 현 DB를 파싱·diff 재계산(무쓰기). preview·apply의 단일 소스 —
+ * apply는 클라가 재전송한 같은 파일로 이 결과를 다시 얻어 미리보기 hash와 대조한다(영어 구조 computeFresh 패턴).
+ */
+async function computeFreshFromFile(file: File): Promise<{ error: string } | { diff: ImportDiff }> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  const parsed = parseEditSheet(wb);
+  if (parsed.length === 0) {
+    return { error: "'수강편집' 시트를 찾을 수 없습니다 (eywa에서 내보낸 엑셀인지 확인)" };
+  }
+  const ctx = await loadContext();
+  return { diff: computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students) };
+}
 
 /** 업로드 xlsx의 '수강편집' 시트를 파싱해 현재 DB와 diff. 읽기 전용(DB 미변경). */
 export async function previewTimetableImport(formData: FormData): Promise<PreviewState> {
@@ -101,34 +116,19 @@ export async function previewTimetableImport(formData: FormData): Promise<Previe
   if (!(file instanceof File)) return { error: "파일을 선택해주세요" };
 
   try {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await file.arrayBuffer());
-    const parsed = parseEditSheet(wb);
-    if (parsed.length === 0) {
-      return { error: "'수강편집' 시트를 찾을 수 없습니다 (eywa에서 내보낸 엑셀인지 확인)" };
-    }
-    const ctx = await loadContext();
-    const diff = computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students);
-    return { diff };
+    const fresh = await computeFreshFromFile(file);
+    if ("error" in fresh) return { error: fresh.error };
+    return { diff: fresh.diff, hash: importDiffHash(fresh.diff) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "엑셀 파싱 실패" };
   }
 }
 
 /**
- * 연결된 구글 시트의 '수강편집' 탭을 읽어 현재 DB와 diff(읽기 전용, DB 미변경).
- * 파일 업로드(previewTimetableImport)의 구글시트판 — 운영자가 시트에서 '반'만 바꾼 걸 되읽는다.
- * ⚠️ master 전용: 시트 전체(테넌트 전 강사·전 학생 명단)를 읽어 enrollment를 바꾸므로 syncSheetsNow와 대칭(B5 PII).
- * ⚠️ subject별 시트 분리 — provider는 `sheetsProvider(subject)`(math=레거시 `google_sheets`, 영어=`google_sheets:english`).
- *    settings.notifications.googleSheetId 폴백은 **수학 전용**(레거시 단일 연동). 적용은 파일 경로와 동일한
- *    applyTimetableImport(diff) 재사용 — diff가 과목별 시트에서 나와도 삭제는 computeImportDiff가 시트 등장 과목으로 한정.
+ * 연결된 구글 시트의 '수강편집' 탭 + 현 DB를 지금 읽어 diff 재계산(무쓰기). preview·apply의 단일 소스 —
+ * apply는 이 결과의 hash를 클라 미리보기 hash와 대조하고, 이 결과로 적용한다(클라 diff 불신).
  */
-export async function previewSheetImport(subject: string = "math"): Promise<PreviewState> {
-  const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "구글 시트 가져오기는 원장(master)만 할 수 있습니다" };
-  if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
-
+async function computeFreshFromSheet(subject: string): Promise<{ error: string } | { diff: ImportDiff }> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("user_integrations")
@@ -143,18 +143,37 @@ export async function previewSheetImport(subject: string = "math"): Promise<Prev
   const spreadsheetId = data?.spreadsheet_id?.trim() || legacyFallback;
   if (!spreadsheetId) return { error: "대상 구글 시트가 설정되지 않았습니다(관리자에게 문의)" };
 
+  const grid = await readSheetTabRows(spreadsheetId, EDIT_SHEET_NAME);
+  const parsed = rowsToEditRows(grid);
+  if (parsed.length === 0) {
+    return { error: "'수강편집' 탭에 데이터가 없습니다(시트를 확인하세요)." };
+  }
+  const ctx = await loadContext();
+  // stale-drift 보호: 시트 push(last_synced_at) 이후 등록된 수강은 삭제 후보에서 제외.
+  const diff = computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students, {
+    protectNewerThan: data?.last_synced_at ?? null,
+  });
+  return { diff };
+}
+
+/**
+ * 연결된 구글 시트의 '수강편집' 탭을 읽어 현재 DB와 diff(읽기 전용, DB 미변경).
+ * 파일 업로드(previewTimetableImport)의 구글시트판 — 운영자가 시트에서 '반'만 바꾼 걸 되읽는다.
+ * ⚠️ master 전용: 시트 전체(테넌트 전 강사·전 학생 명단)를 읽어 enrollment를 바꾸므로 syncSheetsNow와 대칭(B5 PII).
+ * ⚠️ subject별 시트 분리 — provider는 `sheetsProvider(subject)`(math=레거시 `google_sheets`, 영어=`google_sheets:english`).
+ *    settings.notifications.googleSheetId 폴백은 **수학 전용**(레거시 단일 연동). 적용은 applySheetImport(hash 재검증)
+ *    — diff가 과목별 시트에서 나와도 삭제는 computeImportDiff가 시트 등장 과목으로 한정.
+ */
+export async function previewSheetImport(subject: string = "math"): Promise<PreviewState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") return { error: "구글 시트 가져오기는 원장(master)만 할 수 있습니다" };
+  if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
+
   try {
-    const grid = await readSheetTabRows(spreadsheetId, EDIT_SHEET_NAME);
-    const parsed = rowsToEditRows(grid);
-    if (parsed.length === 0) {
-      return { error: "'수강편집' 탭에 데이터가 없습니다(시트를 확인하세요)." };
-    }
-    const ctx = await loadContext();
-    // stale-drift 보호: 시트 push(last_synced_at) 이후 등록된 수강은 삭제 후보에서 제외.
-    const diff = computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students, {
-      protectNewerThan: data?.last_synced_at ?? null,
-    });
-    return { diff };
+    const fresh = await computeFreshFromSheet(subject);
+    if ("error" in fresh) return { error: fresh.error };
+    return { diff: fresh.diff, hash: importDiffHash(fresh.diff) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "시트 읽기 실패" };
   }
@@ -162,20 +181,70 @@ export async function previewSheetImport(subject: string = "math"): Promise<Prev
 
 export type ApplyState = {
   error?: string;
+  staleHash?: string; // hash 불일치 시 서버 재계산 hash — 클라가 미리보기를 지우고 재미리보기 유도
   applied?: { moved: number; removed: number; added: number };
   failed?: number;
   snapshotId?: string;
 };
 
 /**
- * 미리보기에서 확인한 diff를 적용. 적용 직전 영향 enrollment를 timetable_snapshots에 백업하고
- * timetable_import_logs에 이력 기록. moves는 일괄이동 RPC, removes는 end_date, adds는 insert.
- * 모든 쓰기는 RLS(테넌트 격리) 하 — 조작된 diff도 본 테넌트를 벗어나지 못함.
+ * 미리보기에서 확인한 변경을 적용 — **파일 경로**. 클라는 diff가 아니라 미리보기 hash + 같은 파일을
+ * 재전송하고, 서버가 파일+DB를 재읽어 diff를 재계산해 hash 대조(영어 applyStructureImport와 동일 재검증).
+ * 불일치 = preview~apply 사이 수강/반 변경(다른 관리자 이동, 시트 반영 등) → 중단 + staleHash 반환.
  */
-export async function applyTimetableImport(diff: ImportDiff): Promise<ApplyState> {
+export async function applyTimetableImport(expectedHash: string, formData: FormData): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "파일이 없습니다 — 다시 선택 후 미리보기하세요" };
+
+  let fresh;
+  try {
+    fresh = await computeFreshFromFile(file);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "엑셀 파싱 실패" };
+  }
+  if ("error" in fresh) return { error: fresh.error };
+
+  // 서버 재검증 — 미리보기 이후 수강/반이 바뀌면 hash 불일치 → 중단(재미리보기 유도).
+  const hash = importDiffHash(fresh.diff);
+  if (hash !== expectedHash)
+    return { error: "수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
+  return applyDiff(user, fresh.diff);
+}
+
+/**
+ * 미리보기에서 확인한 변경을 적용 — **구글 시트 경로**. 서버가 시트+DB를 재읽어 diff 재계산·hash 대조
+ * (protectNewerThan 포함, preview와 동일 계산). 게이트는 previewSheetImport와 대칭(master 전용).
+ */
+export async function applySheetImport(expectedHash: string, subject: string = "math"): Promise<ApplyState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (user.systemRole !== "master") return { error: "구글 시트 가져오기는 원장(master)만 할 수 있습니다" };
+  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
+  if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
+
+  let fresh;
+  try {
+    fresh = await computeFreshFromSheet(subject);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "시트 읽기 실패" };
+  }
+  if ("error" in fresh) return { error: fresh.error };
+
+  const hash = importDiffHash(fresh.diff);
+  if (hash !== expectedHash)
+    return { error: "시트 또는 수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
+  return applyDiff(user, fresh.diff);
+}
+
+/**
+ * 서버가 재계산·hash 검증한 diff를 실제 적용(내부 전용 — 클라 diff는 받지 않음).
+ * 적용 직전 영향 enrollment를 timetable_snapshots에 백업하고 timetable_import_logs에 이력 기록.
+ * moves는 일괄이동 RPC, removes는 end_date, adds는 insert. 모든 쓰기는 RLS(테넌트 격리) 하.
+ */
+async function applyDiff(user: { id: string; tenantId: string }, diff: ImportDiff): Promise<ApplyState> {
   const supabase = await createClient();
   const today = kstToday();
 

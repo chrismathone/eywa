@@ -8,7 +8,7 @@ import {
   previewStructureImport,
   rollbackStructureImport,
 } from "@/features/timetable/server/structure-import-actions";
-import { applyTimetableImport, previewSheetImport } from "@/features/timetable/server/import-actions";
+import { applySheetImport, previewSheetImport } from "@/features/timetable/server/import-actions";
 import type { DryRunReport, SchedulePlanItem } from "@/features/timetable/import/structure/types";
 import type { ImportDiff } from "@/features/timetable/import/types";
 
@@ -27,6 +27,8 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
   const [struct, setStruct] = useState<DryRunReport | null>(null);
   const [structErr, setStructErr] = useState<string | null>(null);
   const [enroll, setEnroll] = useState<ImportDiff | null>(null);
+  // 반이동 미리보기 hash — apply 시 서버 재계산과 대조(stale 차단). enroll과 함께 세팅/해제.
+  const [enrollHash, setEnrollHash] = useState<string | null>(null);
   const [enrollErr, setEnrollErr] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewing, startPreview] = useTransition();
@@ -56,6 +58,7 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
     setStruct(null);
     setStructErr(null);
     setEnroll(null);
+    setEnrollHash(null);
     setEnrollErr(null);
   }
   function preview() {
@@ -72,6 +75,7 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
       setStruct(s.report ?? null);
       setStructErr(s.error ?? null);
       setEnroll(e.diff ?? null);
+      setEnrollHash(e.hash ?? null);
       setEnrollErr(e.error ?? null);
     });
   }
@@ -92,11 +96,26 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
         setSnapshotId(r.snapshotId ?? null);
       }
       // ② 학생 반이동(구조가 이미 적용됐어도 반이동만 실패 가능 — 부분 상태 안내).
+      //    서버가 시트+DB 재읽기·hash 대조 후 적용(클라 diff 불신) — 스테일이면 미리보기 지우고 재불러오기 유도.
       let eRes: typeof enrollRes = null;
       if (enroll && enrollChanges > 0) {
-        const r = await applyTimetableImport(enroll);
+        if (!enrollHash) {
+          setError("반이동 미리보기 정보가 없습니다 — 다시 불러오세요." + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          setStructRes(sRes);
+          setConfirming(false);
+          return;
+        }
+        const r = await applySheetImport(enrollHash, subject);
         if (r.error) {
-          setError("학생 반이동 적용 실패: " + r.error + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          if (r.staleHash) {
+            // 반이동 미리보기만 무효화(구조는 이미 적용됐을 수 있음 — 결과·롤백은 유지).
+            setError("수강 또는 시트가 미리보기 이후 변경됐습니다 — 다시 불러오세요." + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+            setEnroll(null);
+            setEnrollHash(null);
+            setEnrollErr("미리보기 이후 변경됨 — 다시 불러오세요.");
+          } else {
+            setError("학생 반이동 적용 실패: " + r.error + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          }
           setStructRes(sRes); // 구조는 성공했으면 결과·롤백 노출
           setConfirming(false);
           return;

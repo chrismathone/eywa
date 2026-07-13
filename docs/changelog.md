@@ -9,6 +9,16 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 '수강편집' 가져오기 apply 서버 재검증 — stale diff 차단 (2026-07-13) — ✅ tsc0/lint0/test1027
+동시성 전수조사 발견분: 영어 구조 가져오기(applyStructureImport)는 apply 시 시트+DB 재읽기·hash 대조가 있는데
+**수학/수강편집 경로(applyTimetableImport)는 클라 diff를 그대로 적용** — preview~apply 사이 DB 변경(다른 관리자 이동·시트 반영)이
+그대로 덮였다. 영어 computeFresh 패턴으로 통일: ① 순수 [importDiffHash](../src/features/timetable/import/diff.ts)(FNV-1a, 쓰기내용
+moves(from 포함)/removes/adds만·정렬·순서무관, Vitest 6) ② preview 2종(파일/시트)이 hash 반환 ③ **apply는 diff를 안 받고**
+파일 재전송(클라 보관 파일) 또는 시트 재읽기(protectNewerThan 동일)로 서버가 재계산→hash 불일치 시 "미리보기 이후 변경" 에러+`staleHash`
+반환(일치 시 서버 재계산 diff 적용=클라 계획 불신). 시트 apply는 신규 `applySheetImport`(master 게이트=preview와 대칭). 클라 2곳
+([import-dialog](../src/app/(shell)/timetable/_components/import-dialog.tsx)·[english-import-dialog](../src/app/(shell)/timetable/_components/english-import-dialog.tsx))은
+staleHash 응답 시 미리보기 초기화+재미리보기 유도(영어 통합창은 반이동 섹션만 무효화 — 이미 적용된 구조 결과·롤백 버튼 보존).
+
 ### ClassNote 수학 보드 34개 실생성 + 판독 API 전환 (2026-07-13) — ✅ 실측 검증·기존 데이터 무변경
 원장 승인으로 `provision-classnote-boards.mjs --apply` 실행: 카나리 1개→나머지 33개, 실패 0, API 재조회 검증 통과(기존 보드·멤버·게시물 무변경, eywa DB 쓰기 0, `--exclude=박서준C`=매핑 케이스 제외 플래그 신설). **판독을 내부 API로 전환**: 반 정보 관리 무한스크롤 스크래핑이 비결정(수집 누락→기존 보드 "누락" 오판, 단 ClassNote 중복 반명 거부가 백스톱)이라 `GET /api/v1/centers/{id}/classes`(+approved_children)·`/children`으로 교체 — 읽기=API(결정적)/쓰기=DOM. 생성 직후 전수 판정(수학 237명): assigned 196 · **ready 7**(가입돼 있어 배정만 남음: 김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령) · 미가입 33(초대 필요 명단 자동 산출) · 매핑 대기 1(박서준C). 상세 = docs/classnote-integration.md §3.
 
