@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 원스크린 "지난 보고서" 뷰 — 강사 본인 보고서 이력 열람 (2026-07-13) — ✅ tsc0/lint0/실쿼리 probe
+원장 질문 "강사가 지난 보고서를 볼 수 있나" → 학생 상세 진도 탭(학생 1명씩)뿐이라 원스크린에 4번째 뷰 신설(A안).
+뷰 토글 `카드·표·발송 현황·지난 보고서` — 본인(`teacher_name`=displayName, 저장 귀속과 동일 기준) 보고서를 날짜별
+그룹 + 학생검색 + "더 보기"(200건 날짜경계 커서 페이징, B2)로 열람. 행 = 학생·학교학년(`schoolGradeLabel`)·과목(labelOf)·
+진도·시험·ClassNote 배지(`classnoteBadge`)·열람수·"보고서 보기 →"(/r 공개페이지, 90일 만료·회수 링크 자동 숨김).
+신규 [history-actions.ts](../src/features/onescreen/server/history-actions.ts)(서버 액션, 뷰 진입 시에만 로드=B7) +
+[history-board.tsx](../src/features/onescreen/components/history-board.tsx). RLS=테넌트 격리라 퇴원생 옛 보고서도 열람 가능(의도).
+Edutrix 이식분도 teacher_name 채워져 옛 이력 포함(실측 김은정 86/500). ⚠️강사 로그인 제약으로 브라우저 클릭검증 미실시(실쿼리 probe 대체).
+
 ### 수납 브랜치(fix/billing-discount-status) main 머지 — 검증 픽스 4종 동반 (2026-07-13) — ✅ tsc0/lint0/test1046/build✓/라이브 UI·콘솔0
 브랜치 2커밋(할인 완납 오판 848건·additive 임포트 누락·항목 뭉갬 해소 + 수납 표 라인 단위 재구성) 머지 — 프로덕션
 DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)이라 코드가 데이터를 따라잡는 머지.
