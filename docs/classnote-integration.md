@@ -136,7 +136,11 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
   ready 7**(김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령 — 가입돼 있어 `--apply`만 남음) ·
   **미가입(초대 필요) 33** · **매핑 대기 1**(`(수학)박서준C`→실보드 `박서준`, `classnote_name` 지정).
   ⚠️ `--apply`(생성·배정)는 실 ClassNote 변경 — 원장 승인 후 실행.
-- **신규생 운영**: 입회 후 이 두 스크립트 dry-run→apply가 표준 절차(연동 PC 정기 실행 후보).
+- **신규생 운영 = ✅ 일일 자동(2026-07-13)**: 발송 데몬이 **매일 KST 05시 이후 1회**
+  [provisionDailyOnce](../scripts/_classnote/classnote-provision-core.mjs) 실행 — 보드 없는 재원생(발송
+  opt-in 과목) 보드 자동 생성 + 가입됐는데 보드 빈 학생 자동 배정. 동명이인(학생·원아)은 자동 보류(로그).
+  --post 데몬에서만, 발송 스위치와 무관(인프라 준비). 마커=`CLASSNOTE_OUT/provision-last-run.txt`(멱등).
+  수동 실행판(위 두 스크립트)은 점검·복구용으로 유지.
 - **학부모 가입만은 자동화 불가**(학생 엔티티가 학부모 연결로 생기는 ClassNote 구조 제약).
 - **✅ 후속(2026-07-13)**: 배정도 내부 API로 전환 — `POST /api/v1/enrollments/ {child, belong_to_class}`
   (201 즉시 승인, 원아 ID 기반=동명이인 안전). 실배정 9건 완료(ready 6 + 주준호 부모계정 2 + 박서준C 자녀)

@@ -9,6 +9,9 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### ClassNote 일일 프로비저닝 자동화 — 데몬이 신규생 보드·배정을 매일 처리 (2026-07-13)
+발송 데몬(watch-classnote-queue)이 **매일 KST 05시 이후 1회** [provisionDailyOnce](../scripts/_classnote/classnote-provision-core.mjs) 실행: ①보드 없는 재원생(발송 opt-in 과목 활성 수강, 발송 게이트와 동일 기준=subjectKeys∩optIn) → `(과목)이름` 빈 보드 DOM 생성 ②가입됐는데 자기 보드 0명 → 원아 ID 기반 자동 배정(POST enrollments). 동명이인(eywa 유효이름 중복·ClassNote 동명 원아)은 자동 보류(로그만) — 오발송 방지. --post 데몬 한정, **발송 스위치와 무관**(보드·배정=발송 아닌 인프라 준비 — 스위치 OFF 기간에도 신규생 준비가 쌓임). 하루 1회 마커=로컬 파일(멱등, 지워도 안전). 보드 생성 DOM 헬퍼(createBoard)는 admin-core로 승격(수동 CLI와 단일 소스). ⚠️연동 PC zip 재전달: `D:\tmp\eywa-발송PC-일일프로비저닝-20260713.zip`. ⚠️같은 날 `.env.local` 키 6종 유실 발견(NOTION_TOKEN 추가 편집 때 잘림 추정) → EDUTRIX_*/UPSTAGE/FIREBASE SA(base64, edutrix src json 재인코딩)/CLASSNOTE_UPLOAD_ID 복구, **CLASSNOTE_UPLOAD_PW·CRON_SECRET은 사용자 직접 재기입 필요**.
+
 ### AI 분석 provider 전환 — Solar Pro 3 → Claude Sonnet 5 (전역) (2026-07-13) — ✅ 품질 A/B·tsc0/lint0/test
 원장 제보 "최근 분석본 퀄리티 하락". 실 상담 1건(전사 22,959자) 동일 프롬프트 A/B: **Solar가 warnings를 통째로 놓치고**
 (단독양육·학원 거부감·학생의견 미반영 3건 miss) 잡담(주식 3억)을 familyBackground에 혼입·ASR 깨진표현 방치. Claude Sonnet 5는

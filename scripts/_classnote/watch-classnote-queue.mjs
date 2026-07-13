@@ -20,6 +20,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
+import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -100,6 +101,12 @@ async function main() {
         return { processed: 0 };
       });
       if (nres.processed) log(`[notice] 공지 ${nres.processed}건 처리 완료`);
+      // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
+      const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[provision] 오류(내일 재시도): ${e.message}`);
+        return { ran: false };
+      });
+      if (pres.ran) log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();
