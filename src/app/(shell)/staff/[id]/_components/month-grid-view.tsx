@@ -4,7 +4,6 @@
 // 표시(주 경계에서 잘림/이어짐 표시). 막대 클릭=업무 상세, 빈 칸/"+N건 더" 클릭=그날 전체 목록.
 // canEdit면 막대를 다른 날짜로 드래그 이동(HTML5 DnD) → onMove(부모가 확인 후 Notion 반영).
 // 라이브러리 0: 막대는 퍼센트 기반 absolute(7열). 넘치면 드래그-스크롤.
-import { useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import {
   weekdayHeaders,
@@ -38,15 +37,25 @@ export function MonthGridView({
   const heads = weekdayHeaders(0);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const spans = taskSpans(tasks);
-  const [dragOver, setDragOver] = useState<string | null>(null); // 드롭 대상 하이라이트
 
-  const handleDrop = (date: string) => (e: React.DragEvent) => {
+  // ⚠️ 드래그 중 setState(하이라이트) 금지 — 리렌더가 끌던 막대 요소를 다시 그려 브라우저가 드래그를
+  // 취소한다(드롭 원상복구·no-drop 커서). 드롭 허용은 onDragOver의 preventDefault로만.
+  // ⚠️ 막대가 셀을 덮으므로 드롭존은 **주 행 전체**로 두고, 놓은 날짜는 커서 X위치로 계산(막대 위에 놓아도 동작).
+  const allowDrop = (e: React.DragEvent) => {
+    if (!canEdit) return;
     e.preventDefault();
-    setDragOver(null);
+    e.dataTransfer.dropEffect = "move";
+  };
+  const handleWeekDrop = (weekDates: string[]) => (e: React.DragEvent) => {
+    e.preventDefault();
     if (!canEdit || !onMove) return;
     const id = e.dataTransfer.getData("text/plain");
     const t = byId.get(id);
-    if (t && t.due !== date) onMove(t, date); // 같은 날 드롭은 무시
+    if (!t) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const col = Math.min(6, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * 7)));
+    const date = weekDates[col];
+    if (date && t.due !== date) onMove(t, date); // 같은 날 드롭은 무시
   };
 
   return (
@@ -85,7 +94,13 @@ export function MonthGridView({
           const weekH = NUM_ROW + Math.max(lanesShown, 0) * LANE_H + (hasOverflow ? 18 : 6);
 
           return (
-            <div key={wi} className="border-line relative border-b last:border-b-0" style={{ minHeight: Math.max(weekH, 84) }}>
+            <div
+              key={wi}
+              className="border-line relative border-b last:border-b-0"
+              style={{ minHeight: Math.max(weekH, 84) }}
+              onDragOver={canEdit ? allowDrop : undefined}
+              onDrop={canEdit ? handleWeekDrop(weekDates) : undefined}
+            >
               {/* 배경 셀 */}
               <div className="grid h-full grid-cols-7">
                 {week.map((cell) => {
@@ -96,12 +111,9 @@ export function MonthGridView({
                       type="button"
                       key={cell.date}
                       onClick={() => onOpenDay(cell.date)}
-                      onDragOver={canEdit ? (e) => { e.preventDefault(); setDragOver(cell.date); } : undefined}
-                      onDragLeave={canEdit ? () => setDragOver((d) => (d === cell.date ? null : d)) : undefined}
-                      onDrop={canEdit ? handleDrop(cell.date) : undefined}
                       className={`border-line hover:bg-bg-soft/60 relative border-r text-left transition last:border-r-0 ${
                         cell.inMonth ? "" : "bg-bg-soft/40"
-                      } ${dragOver === cell.date ? "bg-primary/15 ring-primary/40 ring-1 ring-inset" : ""}`}
+                      }`}
                     >
                       <span
                         className={`absolute top-1 right-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular ${
