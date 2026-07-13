@@ -127,6 +127,20 @@ export async function createComment(pageId: string, text: string): Promise<void>
   });
 }
 
+/** 페이지(블록)의 자식 블록 = 업무 본문. 최대 4페이지(400블록)로 bounded(무거운 순회 방지, B2/B7). */
+export async function listBlockChildren(blockId: string): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 4; i++) {
+    const qs = new URLSearchParams({ page_size: "100", ...(cursor ? { start_cursor: cursor } : {}) });
+    const json = await notionFetch(`/blocks/${blockId}/children?${qs.toString()}`, { method: "GET" });
+    out.push(...((json.results as Record<string, unknown>[]) ?? []));
+    if (!json.has_more) return out;
+    cursor = json.next_cursor as string;
+  }
+  return out;
+}
+
 /** 워크스페이스 사용자 전건(사람/봇 구분은 호출부에서). */
 export async function listUsersAll(): Promise<NotionUser[]> {
   const out: NotionUser[] = [];

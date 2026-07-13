@@ -67,3 +67,63 @@ export function weekdayHeaders(weekStartsOn: 0 | 1 = 0): string[] {
   const base = ["일", "월", "화", "수", "목", "금", "토"];
   return [...base.slice(weekStartsOn), ...base.slice(0, weekStartsOn)];
 }
+
+// === 기간 막대(Notion식 스팬 바) 배치 — 시작일~마감일이 여러 날에 걸치면 한 주 안에서 막대로 표시 ===
+export type TaskSpan = { id: string; start: string; end: string }; // YYYY-MM-DD, start<=end 보장
+export type SpanBar = {
+  id: string;
+  colStart: number; // 1..7 (그 주 안 시작 열)
+  colSpan: number; // 몇 칸 차지
+  lane: number; // 세로 레인(겹치지 않게 쌓는 줄, 0부터)
+  continuesLeft: boolean; // 이 주 이전(왼쪽)에서 이어짐
+  continuesRight: boolean; // 이 주 이후(오른쪽)로 이어짐
+};
+
+/**
+ * 한 주(날짜 7개)에 걸치는 업무 스팬들을 겹치지 않게 레인 배치. 그리디 구간 스케줄링(colStart 오름차순,
+ * 같은 시작이면 긴 것 먼저) — 각 레인은 마지막 점유 열을 넘는 스팬만 새로 얹는다. 주 경계로 잘린 스팬은
+ * continuesLeft/Right로 표시(막대 끝을 각져 보이게).
+ */
+export function buildWeekBars(weekDays: string[], spans: TaskSpan[]): { bars: SpanBar[]; lanes: number } {
+  const w0 = weekDays[0]!;
+  const w6 = weekDays[6]!;
+  const clipped = spans
+    .map((s) => {
+      const from = s.start > w0 ? s.start : w0;
+      const to = s.end < w6 ? s.end : w6;
+      if (from > w6 || to < w0 || from > to) return null;
+      const colStart = weekDays.indexOf(from) + 1;
+      const colEnd = weekDays.indexOf(to) + 1;
+      return {
+        id: s.id,
+        colStart,
+        colSpan: colEnd - colStart + 1,
+        continuesLeft: s.start < w0,
+        continuesRight: s.end > w6,
+      };
+    })
+    .filter((b): b is NonNullable<typeof b> => b !== null)
+    .sort((a, b) => a.colStart - b.colStart || b.colSpan - a.colSpan);
+
+  const laneEnd: number[] = []; // laneEnd[lane] = 그 레인의 마지막 점유 열
+  const bars: SpanBar[] = [];
+  for (const c of clipped) {
+    let lane = 0;
+    while (lane < laneEnd.length && laneEnd[lane]! >= c.colStart) lane++;
+    laneEnd[lane] = c.colStart + c.colSpan - 1;
+    bars.push({ ...c, lane });
+  }
+  return { bars, lanes: laneEnd.length };
+}
+
+/** 각 날짜별로 그날에 걸치는 스팬 개수 — 셀 "+N건 더" 계산용. */
+export function countSpansPerDay(weekDays: string[], spans: TaskSpan[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const d of weekDays) out[d] = 0;
+  for (const s of spans) {
+    for (const d of weekDays) {
+      if (s.start <= d && d <= s.end) out[d] = (out[d] ?? 0) + 1;
+    }
+  }
+  return out;
+}

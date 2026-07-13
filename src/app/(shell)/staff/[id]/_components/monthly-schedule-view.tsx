@@ -20,6 +20,7 @@ import {
 import type { MonthlyTasksResult, NotionUserOption } from "@/features/staff/server/notion";
 import { MonthGridView } from "./month-grid-view";
 import { TaskDetailDialog } from "./task-detail-dialog";
+import { DayTasksDialog } from "./day-tasks-dialog";
 
 const VIEW_KEY = "eywa-monthly-view";
 type ViewMode = "grid" | "list";
@@ -121,6 +122,7 @@ export function MonthlyScheduleView({
   const [selected, setSelected] = useState("");
   const [saving, setSaving] = useState(false);
   const [openTask, setOpenTask] = useState<NotionTask | null>(null);
+  const [openDay, setOpenDay] = useState<string | null>(null);
   // 매핑 준비(지연) — "prepping"=스캔 중(초기), "none"=자동 불가(비사무실), 배열=수동 후보.
   const [mapPrep, setMapPrep] = useState<"prepping" | "none" | NotionUserOption[]>("prepping");
   const today = kstToday();
@@ -265,10 +267,24 @@ export function MonthlyScheduleView({
         <p className="text-text-faint px-1 pb-1 text-[12px]">이 달에 등록된 업무가 없습니다.</p>
       ) : null}
       {view === "grid" ? (
-        <MonthGridView weeks={weeks} tasks={tasks} today={today} onOpen={setOpenTask} />
+        <MonthGridView weeks={weeks} tasks={tasks} today={today} onOpen={setOpenTask} onOpenDay={setOpenDay} />
       ) : (
         <MonthListView tasks={tasks} today={today} onOpen={setOpenTask} />
       )}
+
+      {/* 그날 전체 목록 → 항목 클릭 시 상세로 전환 */}
+      {openDay ? (
+        <DayTasksDialog
+          key={openDay}
+          date={openDay}
+          tasks={tasks}
+          onPick={(t) => {
+            setOpenDay(null);
+            setOpenTask(t);
+          }}
+          onClose={() => setOpenDay(null)}
+        />
+      ) : null}
 
       {openTask ? (
         <TaskDetailDialog key={openTask.id} task={openTask} onClose={() => setOpenTask(null)} />

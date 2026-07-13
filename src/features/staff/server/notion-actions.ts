@@ -6,12 +6,14 @@ import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { canAccess } from "@/lib/permissions";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { humanizeNotionError } from "@/features/staff/notion-tasks";
+import type { ContentLine } from "@/features/staff/notion-tasks";
 import {
   resolveMonthlyTasks,
   prepareStaffNotionMappingRow,
   setStaffNotionUserIdRow,
   fetchTaskComments,
   addTaskComment,
+  fetchTaskContent,
   type MonthlyTasksResult,
   type MappingPrep,
   type TaskComment,
@@ -69,6 +71,21 @@ export async function getTaskComments(
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     return { ok: true, comments: await fetchTaskComments(pageId) };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 태스크 본문 — 직원관리 열람 권한. 상세창 열 때 지연 로드(댓글과 함께). */
+export async function getTaskContent(
+  pageId: string,
+): Promise<{ ok: true; lines: ContentLine[] } | { ok: false; error: string }> {
+  const actor = await getCurrentUser();
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  const matrix = await getPermMatrix();
+  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  try {
+    return { ok: true, lines: await fetchTaskContent(pageId) };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }

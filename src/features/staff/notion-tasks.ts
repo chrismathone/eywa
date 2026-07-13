@@ -4,7 +4,8 @@
 export type NotionTask = {
   id: string;
   title: string;
-  due: string | null; // YYYY-MM-DD (마감일)
+  start: string | null; // YYYY-MM-DD 기간 시작(시작일 없으면 마감일과 동일)
+  due: string | null; // YYYY-MM-DD 기간 끝 = 마감일(anchor)
   done: boolean; // 업무완료 체크박스
   dept: string | null; // 부서
   url: string | null; // Notion 페이지 링크(새 탭 열람용)
@@ -17,6 +18,7 @@ export type NotionTask = {
  */
 export const NOTION_TASK_PROPS = {
   due: "마감일",
+  start: "시작일",
   assigneePrimary: "담당자(정)",
   assigneeSecondary: "담당자(부)",
   done: "업무완료",
@@ -29,7 +31,7 @@ type NotionRichText = { plain_text?: string };
 type NotionPropVal =
   | { type: "title"; title?: NotionRichText[] }
   | { type: "rich_text"; rich_text?: NotionRichText[] }
-  | { type: "date"; date?: { start?: string | null } | null }
+  | { type: "date"; date?: { start?: string | null; end?: string | null } | null }
   | { type: "people"; people?: { id: string; name?: string; person?: { email?: string } }[] }
   | { type: "checkbox"; checkbox?: boolean }
   | { type: "select"; select?: { name?: string } | null }
@@ -56,9 +58,17 @@ export function parseNotionTaskPage(page: NotionPage): NotionTask {
     if (val && val.type === "title") title = plain(val.title);
   }
 
+  // 기간 = [start, due]. due(anchor) = 마감일 range의 끝(end) ?? 마감일 start.
+  // start = 시작일 속성 ?? 마감일 start. start>due면 due로 클램프(데이터 방어).
   const dueVal = props[NOTION_TASK_PROPS.due];
-  const due =
-    dueVal && dueVal.type === "date" ? (dueVal.date?.start?.slice(0, 10) ?? null) : null;
+  const dueStart = dueVal && dueVal.type === "date" ? (dueVal.date?.start?.slice(0, 10) ?? null) : null;
+  const dueEnd = dueVal && dueVal.type === "date" ? (dueVal.date?.end?.slice(0, 10) ?? null) : null;
+  const startVal = props[NOTION_TASK_PROPS.start];
+  const startOwn =
+    startVal && startVal.type === "date" ? (startVal.date?.start?.slice(0, 10) ?? null) : null;
+  const due = dueEnd ?? dueStart;
+  let start = startOwn ?? dueStart;
+  if (start && due && start > due) start = due;
 
   const doneVal = props[NOTION_TASK_PROPS.done];
   const done = !!(doneVal && doneVal.type === "checkbox" && doneVal.checkbox);
@@ -76,15 +86,100 @@ export function parseNotionTaskPage(page: NotionPage): NotionTask {
     }
   }
 
-  return { id: page.id, title: title || "(제목 없음)", due, done, dept, url: page.url ?? null };
+  return { id: page.id, title: title || "(제목 없음)", start, due, done, dept, url: page.url ?? null };
 }
 
-/** 마감일(YYYY-MM-DD) 기준으로 묶기 — 그리드 셀 배치용. 마감일 없는 항목은 제외. */
+/** 마감일(YYYY-MM-DD) 기준으로 묶기 — 리스트 뷰용. 마감일 없는 항목은 제외. */
 export function groupTasksByDate(tasks: NotionTask[]): Record<string, NotionTask[]> {
   const out: Record<string, NotionTask[]> = {};
   for (const t of tasks) {
     if (!t.due) continue;
     (out[t.due] ??= []).push(t);
+  }
+  return out;
+}
+
+/** 그리드 기간막대용 스팬 [start, end] — 마감일 있는 업무만. start 없으면 due로. */
+export function taskSpans(tasks: NotionTask[]): { id: string; start: string; end: string }[] {
+  return tasks
+    .filter((t) => t.due)
+    .map((t) => ({ id: t.id, start: t.start ?? t.due!, end: t.due! }));
+}
+
+/** 한 날짜(YYYY-MM-DD)에 걸치는 업무들 — 그날 상세(그리드 셀 클릭) 목록용. */
+export function tasksOnDate(tasks: NotionTask[], date: string): NotionTask[] {
+  return tasks.filter((t) => t.due && (t.start ?? t.due) <= date && date <= t.due);
+}
+
+// === 업무 본문(Notion 블록) → 표시용 라인 (상세창에서 렌더) ===
+export type ContentLine = {
+  kind: "heading" | "text" | "bullet" | "number" | "todo" | "quote" | "divider" | "image" | "table" | "code";
+  text: string;
+  checked?: boolean; // todo
+  level?: number; // heading 1..3
+};
+
+type LooseBlock = {
+  type?: string;
+  has_children?: boolean;
+  [key: string]: unknown;
+};
+
+function blockText(b: LooseBlock, key: string): string {
+  const inner = b[key] as { rich_text?: NotionRichText[] } | undefined;
+  return plain(inner?.rich_text);
+}
+
+/** Notion 블록 배열 → 읽을 수 있는 라인들(제목/문단/불릿/번호/체크/인용/구분선/이미지/표/코드). 알 수 없는 타입은 생략. */
+export function notionBlocksToLines(blocks: LooseBlock[]): ContentLine[] {
+  const out: ContentLine[] = [];
+  for (const b of blocks) {
+    const t = b.type ?? "";
+    switch (t) {
+      case "heading_1":
+      case "heading_2":
+      case "heading_3": {
+        const text = blockText(b, t);
+        if (text) out.push({ kind: "heading", level: Number(t.slice(-1)), text });
+        break;
+      }
+      case "paragraph": {
+        const text = blockText(b, t);
+        if (text) out.push({ kind: "text", text });
+        break;
+      }
+      case "bulleted_list_item":
+        out.push({ kind: "bullet", text: blockText(b, t) });
+        break;
+      case "numbered_list_item":
+        out.push({ kind: "number", text: blockText(b, t) });
+        break;
+      case "to_do": {
+        const inner = b["to_do"] as { checked?: boolean } | undefined;
+        out.push({ kind: "todo", text: blockText(b, t), checked: !!inner?.checked });
+        break;
+      }
+      case "quote":
+      case "callout":
+      case "toggle": {
+        const text = blockText(b, t);
+        if (text) out.push({ kind: "quote", text });
+        break;
+      }
+      case "code":
+        out.push({ kind: "code", text: blockText(b, t) });
+        break;
+      case "divider":
+        out.push({ kind: "divider", text: "" });
+        break;
+      case "image":
+        out.push({ kind: "image", text: "이미지" });
+        break;
+      case "table":
+        out.push({ kind: "table", text: "표" });
+        break;
+      // 그 외(link_preview·embed 등)는 생략 — 노이즈 방지.
+    }
   }
   return out;
 }

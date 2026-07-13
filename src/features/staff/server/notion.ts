@@ -8,12 +8,15 @@ import {
   queryDatabaseAll,
   listCommentsAll,
   createComment,
+  listBlockChildren,
 } from "@/lib/notion/client";
 import {
   NOTION_TASK_PROPS,
   parseNotionTaskPage,
+  notionBlocksToLines,
   humanizeNotionError,
   type NotionTask,
+  type ContentLine,
 } from "@/features/staff/notion-tasks";
 import { monthRange, shiftMonth } from "@/lib/month-grid";
 import { kstMonth } from "@/lib/date-kst";
@@ -177,6 +180,12 @@ export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> 
 export async function addTaskComment(pageId: string, text: string, authorName: string): Promise<void> {
   const body = `[eywa · ${authorName}] ${text}`.slice(0, 2000);
   await createComment(pageId, body);
+}
+
+/** 업무 본문(Notion 블록) → 표시 라인. 상세창이 열릴 때만 지연 호출(첫 페인트 밖). */
+export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
+  const blocks = await listBlockChildren(pageId);
+  return notionBlocksToLines(blocks);
 }
 
 /** 직원 ↔ Notion 사용자 매핑 저장(같은 테넌트 검증 후 admin update). account-actions.loadTarget 패턴. */

@@ -5,7 +5,10 @@ import {
   shiftMonth,
   monthRange,
   weekdayHeaders,
+  buildWeekBars,
+  countSpansPerDay,
   type MonthCell,
+  type TaskSpan,
 } from "./month-grid";
 
 const flat = (weeks: MonthCell[][]) => weeks.flat();
@@ -73,5 +76,63 @@ describe("monthLabel / shiftMonth / monthRange / weekdayHeaders", () => {
     expect(weekdayHeaders()).toEqual(["일", "월", "화", "수", "목", "금", "토"]);
     expect(weekdayHeaders(1)[0]).toBe("월");
     expect(weekdayHeaders(1)[6]).toBe("일");
+  });
+});
+
+describe("buildWeekBars — 기간 막대 배치", () => {
+  const week = ["2026-06-28", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04"];
+
+  it("단일 날짜 = span 1 막대", () => {
+    const { bars, lanes } = buildWeekBars(week, [{ id: "a", start: "2026-07-01", end: "2026-07-01" }]);
+    expect(lanes).toBe(1);
+    expect(bars[0]).toMatchObject({ id: "a", colStart: 4, colSpan: 1, lane: 0, continuesLeft: false, continuesRight: false });
+  });
+
+  it("여러 날 기간 = colSpan이 늘고 열 계산 정확 (06-29~07-03 → 2열부터 5칸)", () => {
+    const { bars } = buildWeekBars(week, [{ id: "b", start: "2026-06-29", end: "2026-07-03" }]);
+    expect(bars[0]).toMatchObject({ id: "b", colStart: 2, colSpan: 5 });
+  });
+
+  it("겹치는 스팬은 다른 레인으로", () => {
+    const { bars, lanes } = buildWeekBars(week, [
+      { id: "a", start: "2026-06-28", end: "2026-06-30" },
+      { id: "b", start: "2026-06-29", end: "2026-07-02" },
+    ]);
+    expect(lanes).toBe(2);
+    expect(bars.find((x) => x.id === "a")!.lane).toBe(0);
+    expect(bars.find((x) => x.id === "b")!.lane).toBe(1);
+  });
+
+  it("안 겹치면 같은 레인 재사용", () => {
+    const { lanes } = buildWeekBars(week, [
+      { id: "a", start: "2026-06-28", end: "2026-06-29" },
+      { id: "b", start: "2026-07-01", end: "2026-07-02" },
+    ]);
+    expect(lanes).toBe(1);
+  });
+
+  it("주 경계로 잘리면 continuesLeft/Right + 열 클램프", () => {
+    const { bars } = buildWeekBars(week, [{ id: "c", start: "2026-06-25", end: "2026-07-10" }]);
+    expect(bars[0]).toMatchObject({ colStart: 1, colSpan: 7, continuesLeft: true, continuesRight: true });
+  });
+
+  it("주 밖 스팬은 제외", () => {
+    const { bars } = buildWeekBars(week, [{ id: "z", start: "2026-08-01", end: "2026-08-03" }]);
+    expect(bars).toHaveLength(0);
+  });
+});
+
+describe("countSpansPerDay", () => {
+  const week = ["2026-07-05", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-11"];
+  it("각 날짜에 걸치는 스팬 수를 센다", () => {
+    const spans: TaskSpan[] = [
+      { id: "a", start: "2026-07-06", end: "2026-07-08" },
+      { id: "b", start: "2026-07-07", end: "2026-07-07" },
+    ];
+    const c = countSpansPerDay(week, spans);
+    expect(c["2026-07-05"]).toBe(0);
+    expect(c["2026-07-06"]).toBe(1);
+    expect(c["2026-07-07"]).toBe(2);
+    expect(c["2026-07-08"]).toBe(1);
   });
 });
