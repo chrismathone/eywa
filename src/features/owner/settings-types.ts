@@ -138,22 +138,42 @@ export const operationsSchema = z
   });
 export type OperationsSettings = z.infer<typeof operationsSchema>;
 
-// 입금 계좌 — 교재요청서·청구 안내문에 표시되는 학원 계좌(은행/예금주/계좌번호).
+// 입금 계좌 — 교재요청서·수강료 안내문 등에 표시되는 학원 계좌(은행/예금주/계좌번호).
+// 여러 개 등록 가능하고 그 중 하나를 '기본'으로 지정(isDefault) → 소비처의 디폴트값.
 export const accountSchema = z.object({
+  label: z.string().max(24).default(""), // 계좌 별칭(예: "메인", "교재비 전용") — 목록 구분·선택 표시용(선택)
   bank: z.string().max(40),
   holder: z.string().max(40),
   number: z.string().max(40),
+  isDefault: z.boolean().default(false), // 기본 계좌 여부 — 목록 중 최대 1개(소비처 디폴트)
 });
 export type AccountSetting = z.infer<typeof accountSchema>;
 
-export const billingSchema = z.object({
-  dueDay: z.number().int().min(1).max(31),
-  taxMode: z.enum(["none", "include", "exclude"]),
-  defaultMethod: z.string().max(24),
-  latePolicy: z.string().max(300),
-  account: accountSchema,
-});
+export const billingSchema = z
+  .object({
+    dueDay: z.number().int().min(1).max(31),
+    taxMode: z.enum(["none", "include", "exclude"]),
+    defaultMethod: z.string().max(24),
+    latePolicy: z.string().max(300),
+    // ⚠️ deprecated 단일 계좌 — 하위호환용 "기본 계좌 미러". resolve(normalizeBilling)가 accounts의 기본 계좌로 덮어쓴다.
+    // 미이전 소비처(교재요청서 등)가 이 필드만 읽어도 기본 계좌를 보게 하는 안전장치. 새 소비처는 accounts + defaultAccountOf().
+    account: accountSchema,
+    // 입금 계좌 목록(여러 개). 소비처는 기본 계좌(isDefault)를 디폴트로 사용하고, 필요 시 목록에서 선택.
+    accounts: z.array(accountSchema).max(12),
+  })
+  .superRefine((v, ctx) => {
+    // 기본 계좌는 최대 1개(폼 라디오와 이중 방어).
+    if (v.accounts.filter((a) => a.isDefault).length > 1) {
+      ctx.addIssue({ code: "custom", message: "기본 계좌는 하나만 지정할 수 있습니다", path: ["accounts"] });
+    }
+  });
 export type BillingSettings = z.infer<typeof billingSchema>;
+
+/** 기본 입금 계좌 — 목록의 기본 지정(isDefault) → 첫 계좌 → 레거시 단일 account 순 폴백. 소비처의 디폴트값. */
+export function defaultAccountOf(billing: BillingSettings): AccountSetting {
+  const list = billing.accounts ?? [];
+  return list.find((a) => a.isDefault) ?? list[0] ?? billing.account;
+}
 
 export const notificationsSchema = z.object({
   alimtalkSenderKey: z.string().max(80),

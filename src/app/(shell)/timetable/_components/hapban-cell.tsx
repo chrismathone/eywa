@@ -1,17 +1,18 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { buildHapbanRoster, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
 import { HOLD_MAX_H, WD_MAX_H, type ClassDetailQuick } from "./class-cell";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
-import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, studentRowTone, ROW_CLASS } from "./student-rows";
+import { DraggableStudentRow, StudentRow, IndexBadge, metaLabel, ROW_CLASS } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
+import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
  * 합반 셀(ijw ClassCard 통합 명단 패턴) — 같은 강사·교시·요일의 2개 반+를 카드 1개로:
@@ -30,13 +31,17 @@ function shortTime(t: string) {
 function SegmentHeader({
   slot,
   index,
-  colorClass,
+  fallbackClass,
+  fallbackStyle,
   memberClasses,
   coveringDays,
 }: {
   slot: ClassDetailQuick;
   index: number;
-  colorClass: string;
+  /** 과목색 폴백 className(pastel 모드) — 반 지정색 없을 때. */
+  fallbackClass: string;
+  /** 과목색 폴백 인라인 스타일(mid/vivid 모드) — 반 지정색 없을 때. */
+  fallbackStyle?: CSSProperties;
   memberClasses: HapbanMemberClass[];
   coveringDays: string[];
 }) {
@@ -57,14 +62,15 @@ function SegmentHeader({
       hapbanZone: "segment" as const,
     },
   });
+  // 반 지정색(classBgColor) 우선(모드 무관), 없으면 과목색 폴백(모드별 강도).
   const style = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
-    : undefined;
+    : fallbackStyle;
   return (
     <div
       ref={setNodeRef}
       className={`border-line/60 min-w-0 flex-1 transition hover:brightness-95 [&:not(:first-child)]:border-l [&:not(:first-child)]:border-dashed ${
-        slot.classBgColor ? "" : colorClass
+        slot.classBgColor ? "" : fallbackClass
       } ${isOver ? "ring-primary ring-2 ring-inset" : ""}`}
       style={style}
     >
@@ -118,6 +124,7 @@ export function HapbanCell({
 }) {
   const { editing, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
+  const colorMode = useTimetableColorMode();
   const roster = buildHapbanRoster(slots);
   // 합반 구성 반 목록(드롭존 data 공용) — 멤버 재해석(resolveDropTarget)·반+요일 팝업 후보(shouldOpenClassPick) 양쪽에 사용.
   const memberClasses: HapbanMemberClass[] = roster.segments.map((s) => ({
@@ -168,16 +175,20 @@ export function HapbanCell({
       {subSlot === "bottom" ? <SubSlotBand /> : null}
       {/* 헤더 가로 N등분 — 반마다 자기 색·인덱스·재원수. 클릭=그 반 상세 창, 드롭=그 반으로 이동. */}
       <div className="flex shrink-0">
-        {slots.map((s, i) => (
-          <SegmentHeader
-            key={s.id}
-            slot={s}
-            index={i + 1}
-            colorClass={SUBJECT_SOFT[subjects.colorOf(s.subject)]}
-            memberClasses={memberClasses}
-            coveringDays={covers}
-          />
-        ))}
+        {slots.map((s, i) => {
+          const hf = subjectHeaderStyle(colorMode, subjects.colorOf(s.subject));
+          return (
+            <SegmentHeader
+              key={s.id}
+              slot={s}
+              index={i + 1}
+              fallbackClass={hf.className}
+              fallbackStyle={hf.style}
+              memberClasses={memberClasses}
+              coveringDays={covers}
+            />
+          );
+        })}
       </div>
       {subSlot === "top" ? <SubSlotBand /> : null}
 
@@ -200,7 +211,7 @@ export function HapbanCell({
                 editing={editing}
                 cap={activeCap}
                 draggable
-                tone={studentRowTone}
+                tone={(s) => timetableStudentTone(colorMode, s)}
                 slotId={rep.id}
                 coveringDays={covers}
                 label="재원"
@@ -234,7 +245,7 @@ export function HapbanCell({
                                   className={owner?.className ?? s.ownClassName}
                                   name={s.name}
                                   meta={metaLabel(s.school, s.grade)}
-                                  tone={studentRowTone(s)}
+                                  tone={timetableStudentTone(colorMode, s)}
                                   attendanceDays={owner?.attendanceDays ?? s.ownAttendanceDays}
                                   slotId={owner?.slotId ?? s.ownSlotId}
                                   coveringDays={covers}
@@ -247,7 +258,7 @@ export function HapbanCell({
                                   student={s}
                                   name={s.name}
                                   meta={metaLabel(s.school, s.grade)}
-                                  tone={studentRowTone(s)}
+                                  tone={timetableStudentTone(colorMode, s)}
                                   badge={s.label}
                                 />
                               );
@@ -337,7 +348,7 @@ export function HapbanCell({
                   editing={editing}
                   cap={SECTION_CAP}
                   draggable={false}
-                  tone={() => "text-text-faint line-through"}
+                  tone={() => withdrawnTone(colorMode)}
                   label="퇴원"
                   labelTone="bg-bg-soft text-text-faint"
                 />

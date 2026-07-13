@@ -12,6 +12,7 @@ import {
   type TeacherColorMap,
 } from "@/features/timetable/lib/class-grid";
 import { ClassInfoCard, HoverCard, StudentInfoCard } from "./hover-cards";
+import { useTimetableColorMode, withdrawnTone } from "./timetable-color";
 
 // 라벨열·카드가 공유하는 고정 섹션 높이(px) — 같은 y에서 행이 맞물려 "행=라벨, 열=수업" 스프레드시트 정렬.
 const NAME_H = 40;
@@ -274,13 +275,14 @@ function Cell({
   );
 }
 
-/** 학생 행 — 신입=빨강·전입=초록·퇴원=취소선/dim, 이름(영문), 학교/학년. 클릭=학생 창. */
+/** 학생 행 — 신입=빨강·전입=초록·퇴원=진회색 배경+흰 볼드, 이름(영문), 학교/학년. 클릭=학생 창. */
 function RosterRow({ s }: { s: GridStudent }) {
   const withdrawn = s.status === "withdrawn";
+  const colorMode = useTimetableColorMode();
   // ⚠️ 전입(반이동)을 신입보다 먼저 — 반이동 학생은 start_date가 최근이라 isNew에도 걸릴 수 있으나 "전입"으로.
   // (studentRowTone과 동일 순서. 데이터 계층에서 이미 상호배타지만 표시도 방어적으로.)
   const tone = withdrawn
-    ? "bg-card border-line text-text-dim border"
+    ? withdrawnTone(colorMode)
     : s.isTransferredIn
       ? "bg-primary-soft text-primary"
       : s.isNew
@@ -290,8 +292,8 @@ function RosterRow({ s }: { s: GridStudent }) {
   const name = s.englishName ? `${s.name} (${s.englishName})` : s.name;
   const inner = (
     <>
-      <span className={`overflow-hidden whitespace-nowrap text-clip ${withdrawn ? "line-through" : ""}`}>{name}</span>
-      {meta ? <span className="text-text-faint shrink-0 font-mono text-[9px]">{meta}</span> : null}
+      <span className="overflow-hidden whitespace-nowrap text-clip">{name}</span>
+      {meta ? <span className={`shrink-0 font-mono text-[9px] ${withdrawn ? "text-white/70" : "text-text-faint"}`}>{meta}</span> : null}
     </>
   );
   const cls = `flex items-baseline justify-between gap-1 rounded-[3px] px-1 text-[10px] leading-[18px] ${tone}`;

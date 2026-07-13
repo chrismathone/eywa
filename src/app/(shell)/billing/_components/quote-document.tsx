@@ -3,6 +3,7 @@
 import { splitCoursesByMonth, quoteTotal } from "@/features/billing/quote-calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import type { QuoteStudent, QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";
+import type { AccountSetting } from "@/features/owner/settings-types";
 import { RefundPolicy } from "./refund-policy";
 
 const KRW = new Intl.NumberFormat("ko-KR");
@@ -16,6 +17,8 @@ export function QuoteDocument({
   logoSrc,
   showLogo = true,
   showName = true,
+  account,
+  showAccount = false,
   student,
   courses,
   extras,
@@ -29,6 +32,10 @@ export function QuoteDocument({
   showLogo?: boolean;
   /** 헤더에 학원명 텍스트 표시 여부. */
   showName?: boolean;
+  /** 입금 계좌(은행/예금주/계좌번호) — 기본값은 학원설정(billing.account), 계산기에서 수정 가능. */
+  account?: AccountSetting;
+  /** 안내문에 입금 계좌 안내 박스를 표시할지(계산기 체크박스). off면 계좌가 있어도 숨김. */
+  showAccount?: boolean;
   student: QuoteStudent;
   courses: QuoteCourse[];
   extras: QuoteExtra[];
@@ -39,6 +46,8 @@ export function QuoteDocument({
   const lines = splitCoursesByMonth(courses, student.startDate, student.endDate, holidays);
   const totals = quoteTotal(courses, extras, discounts);
   const hasExtras = extras.length > 0 || discounts.length > 0;
+  // 계좌 안내 = 체크 ON + 값이 하나라도 있을 때만(빈 계좌 박스 방지).
+  const hasAccount = showAccount && !!(account?.bank || account?.holder || account?.number);
 
   return (
     <div className="quote-doc print-portrait bg-card text-foreground mx-auto w-full max-w-[760px] space-y-5 p-6 print:max-w-none print:space-y-2 print:p-0">
@@ -161,8 +170,21 @@ export function QuoteDocument({
         </table>
       ) : null}
 
-      {/* 최종 납부 금액 */}
-      <div className="flex justify-end">
+      {/* 입금 계좌 안내 + 최종 납부 금액 — 계좌 박스는 금액 바로 위(우측정렬 스택)로 묶어 배치 */}
+      <div className="flex flex-col items-end gap-2">
+        {hasAccount ? (
+          <div className="border-line bg-bg-soft w-full max-w-[380px] rounded-md border px-4 py-2 text-[12px] print:break-inside-avoid print:bg-white print:py-1">
+            <div className="text-text-faint mb-0.5 text-[11px] font-bold print:text-[9px]">입금 계좌</div>
+            <div className="text-foreground font-semibold print:text-[10px]">
+              {[account?.bank, account?.holder ? `예금주 ${account.holder}` : ""].filter(Boolean).join(" · ")}
+            </div>
+            {account?.number ? (
+              <div className="text-foreground num text-[13px] font-bold tracking-wide print:text-[11px]">
+                {account.number}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="border-line flex items-stretch overflow-hidden rounded-md border">
           <span className="bg-foreground/5 text-foreground flex items-center px-4 py-2 text-sm font-bold">
             최종 납부 금액

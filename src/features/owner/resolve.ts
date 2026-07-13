@@ -1,7 +1,7 @@
 // 저장된 부분 설정(jsonb)을 DEFAULT_SETTINGS에 deep-merge해 "완전한" 설정으로 해석.
 // 배열·원시는 저장값이 있으면 교체, 객체는 재귀 병합. 기본 객체는 절대 변형하지 않는다(공유 참조).
 import { DEFAULT_SETTINGS } from "./defaults";
-import type { SubjectSetting, TenantSettings } from "./settings-types";
+import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -59,6 +59,34 @@ function normalizeSubjects(arr: SubjectSetting[]): SubjectSetting[] {
   });
 }
 
+// 입금 계좌 역호환/정규화 — 옛 단일 계좌(account)만 있던 테넌트를 다계좌 목록(accounts)으로 승격하고,
+// 기본 계좌를 정확히 1개로 보장한 뒤 레거시 단일 account 필드를 "기본 계좌 미러"로 덮는다.
+// (deepMerge는 accounts 배열을 통째 교체하므로 여기서 형태·기본값·미러를 보장 → 미이전 소비처가 account만
+// 읽어도 항상 기본 계좌를 본다.) normalizeHolidays/normalizeSubjects와 같은 "읽기 시 승격" 패턴.
+function normalizeBilling(b: BillingSettings): BillingSettings {
+  const raw = Array.isArray(b.accounts) ? b.accounts : [];
+  let accounts: AccountSetting[] = raw.map((a) => ({
+    label: typeof a?.label === "string" ? a.label : "",
+    bank: a?.bank ?? "",
+    holder: a?.holder ?? "",
+    number: a?.number ?? "",
+    isDefault: a?.isDefault === true,
+  }));
+  // 목록이 비었는데 옛 단일 account에 값이 있으면 기본 계좌로 승격.
+  if (accounts.length === 0) {
+    const a = b.account;
+    if (a && (a.bank || a.holder || a.number)) {
+      accounts = [{ label: a.label ?? "", bank: a.bank, holder: a.holder, number: a.number, isDefault: true }];
+    }
+  }
+  // 기본 계좌 정확히 1개 보장(하나도 없으면 첫 번째를 기본).
+  if (accounts.length > 0 && !accounts.some((a) => a.isDefault)) {
+    accounts = accounts.map((a, i) => ({ ...a, isDefault: i === 0 }));
+  }
+  const def = accounts.find((a) => a.isDefault) ?? accounts[0] ?? b.account;
+  return { ...b, accounts, account: def };
+}
+
 /** 저장값(부분) + 테넌트 메타 → 완전한 설정. name 미입력 시 테넌트 학원명으로 폴백. */
 export function resolveSettings(stored: unknown, tenant: { name: string }): TenantSettings {
   const merged = deepMerge(DEFAULT_SETTINGS, stored);
@@ -70,5 +98,6 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
       subjects: normalizeSubjects(merged.operations.subjects),
       holidays: normalizeHolidays(merged.operations.holidays),
     },
+    billing: normalizeBilling(merged.billing),
   };
 }

@@ -20,6 +20,14 @@
 - **필터** [tuition-prices-panel.tsx](<../src/app/(shell)/billing/_components/tuition-prices-panel.tsx>): 필터 바에 "단가 종류" 칩(전체/회당/월/할인) + `cpmode` 파라미터.
 - **소비처 연결(발견성)** [session-terms-face.tsx](<../src/app/(shell)/billing/_components/session-terms-face.tsx>): 회차 확정 안내문에 "수강료 단가에서 회당 단가로 등록·수정" 딥링크(`&csub=prices&cpmode=per_session`).
 - 관리 표면 = 기존 **/billing → 수강료 계산기 → 수강료 단가** 서브탭(단가표는 relational+RLS 테이블이라 owner jsonb 단일경로엔 부적합 — 학원 설정 이동 대신 전용 CRUD 유지). 회당 단가로 저장하면 회차 확정 datalist에 즉시 반영.
+### 시간표 셀 색 강도 개인 토글(쨍/중간/옅게) + 헤더 줄맞춤 + 퇴원 진회색 표시 (2026-07-13) — ✅ tsc0/lint0/실브라우저 검증
+원장 "화면 시간표 가독성이 시트 내보내기보다 떨어진다"(화면=과목색 12% 알파 틴트 vs 시트=불투명 채움) → 기본뷰 셀 색을
+**개인 설정(usePrefs `timetableColor`, localStorage) 3중1택**으로. 기본값 **vivid(쨍하게, 시트식)**. 상단 툴바 토글(기본뷰만).
+- 단일 소스 [timetable-color.ts](<../src/app/(shell)/timetable/_components/timetable-color.ts>): `subjectHeaderStyle`(과목 CSS변수 `color-mix` 26%/46% — 하드코딩 색 X, 반 지정색은 모드 무관 존중)·`timetableStudentTone`(신입=빨강 채움/전입=민트 채움 시트색 이식, vivid 이름 semibold)·`withdrawnTone`(퇴원=진회색 배경+흰 볼드, **취소선 폐지**; 모드 따라 흰 글자 불투명도 65→85→100%, bg는 `!` important로 hover 세탁 방지).
+- 소비: class-cell·hapban-cell(기본뷰)·rich-card-group(통합뷰). 색모드 토글은 기본뷰 노출.
+- **줄맞춤 픽스**: 강의실 유무로 헤더가 1↔2줄(45/28px) 되며 인접 반 학생명단이 17px 어긋나던 것 → 강의실 줄 **항상 예약**(없으면 nbsp)해 헤더 45px 통일(실측 61헤더 전부 45·첫 학생 오프셋 52 균일). 셀 자체 높이는 이미 정확한 1:2:3(222/444/666).
+- 검증: typecheck0/lint0 + 로컬(3100)·웨일 실측(vivid 헤더 color-mix·신입 빨강채움·퇴원 oklab 진회색 흰볼드·취소선 0·모드별 흰글자 alpha 0.65↔1.0).
+
 ### 청구=N회 키스톤 구현 — 회차 확정(invoice_session_terms) + 수납 '회차 확정' 면 (2026-07-13) — ✅ tsc0/lint0/test48/실E2E
 docs/per-session-billing-plan.md 설계 그대로: **0102a** `invoice_session_terms`(**청구서×반** — 같은 과목 복수 반도 합산 금지: 반마다 단가 상이(원장 지시), RLS+updated_at 트리거)
 + `tuition_catalog.pricing_mode`(회당/월/할인 판별 — null=곱셈 금지, N5). 계획 N = 순수 [plan.ts](../src/features/billing/session-terms/plan.ts)

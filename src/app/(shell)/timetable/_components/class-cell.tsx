@@ -3,13 +3,13 @@
 import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
 import { useTimetableEdit } from "./edit-context";
 import { ClassInfoCard, HoverCard } from "./hover-cards";
-import { DraggableStudentRow, StudentRow, metaLabel, studentRowTone, ROW_CLASS, type StudentQuick } from "./student-rows";
+import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
+import { useTimetableColorMode, subjectHeaderStyle, timetableStudentTone, withdrawnTone } from "./timetable-color";
 
 /**
  * 시간표 셀(ClassCell·IntegratedCell)에 넘기는 반+학생 명단 슬롯.
@@ -73,13 +73,15 @@ export function ClassCell({
 }) {
   const { editing, incoming } = useTimetableEdit();
   const subjects = useSubjectMaps();
-  // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
-  const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
-  // 반 색(bg_color) 우선 — 통합뷰와 동일하게 헤더에 반영. 없으면 과목색 클래스 폴백.
+  const colorMode = useTimetableColorMode();
+  // 과목 헤더 색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지. 강도는 개인 색모드(vivid/mid/pastel).
+  const headerFallback = subjectHeaderStyle(colorMode, subjects.colorOf(slot.subject));
+  // 반 색(bg_color) 우선 — 통합뷰와 동일하게 헤더에 반영(모드 무관 존중). 없으면 과목색 폴백.
   // (WindowLink는 style 미지원이라 래퍼 div에 인라인 색.)
   const headerStyle = slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
-    : undefined;
+    : headerFallback.style;
+  const headerClass = slot.classBgColor ? "" : headerFallback.className;
   // 강사 인수인계 예약된 반 — 명단 영역에 은은한 blue 틴트(합반 앰버·전입 초록·신입 빨강과 구분). 상세는 hover 카드.
   const handover = slot.pendingHandover ?? null;
 
@@ -128,7 +130,7 @@ export function ClassCell({
         {/* 반이름 헤더 바 — 반 색 우선(인라인), 없으면 과목색 클래스. WindowLink는 style 미지원이라 래퍼 div에 색.
             hover 시 수업 정보 카드, 클릭 시 반 정보 창 팝업(/classes/[classId]). */}
         <div
-          className={`shrink-0 transition hover:brightness-95 ${slot.classBgColor ? "" : color}`}
+          className={`shrink-0 transition hover:brightness-95 ${headerClass}`}
           style={headerStyle}
         >
           <HoverCard
@@ -155,12 +157,14 @@ export function ClassCell({
                 <span className="overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
                 <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
               </div>
-              {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시. */}
-              {slot.classroomName ? (
-                <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
-                  <span className="overflow-hidden whitespace-nowrap text-clip font-mono">{slot.classroomName}</span>
-                </div>
-              ) : null}
+              {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시.
+                  ⚠️ 강의실 줄은 **항상 렌더**(없으면 nbsp 자리표시) — 셀마다 헤더 높이(2줄)를 일정하게 유지해
+                  인접 반의 학생 이름이 가로로 줄맞춤되게 한다(강의실 유무로 헤더가 1↔2줄 되며 명단이 17px 어긋나던 것 해소). */}
+              <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
+                <span className="overflow-hidden whitespace-nowrap text-clip font-mono">
+                  {slot.classroomName || " "}
+                </span>
+              </div>
             </WindowLink>
           </HoverCard>
         </div>
@@ -185,7 +189,7 @@ export function ClassCell({
                   editing={editing}
                   cap={activeCap}
                   draggable
-                  tone={studentRowTone}
+                  tone={(s) => timetableStudentTone(colorMode, s)}
                   slotId={slot.id}
                   coveringDays={covers}
                 />
@@ -213,7 +217,7 @@ export function ClassCell({
                                     className={slot.className}
                                     name={s.name}
                                     meta={metaLabel(s.school, s.grade)}
-                                    tone={studentRowTone(s)}
+                                    tone={timetableStudentTone(colorMode, s)}
                                     attendanceDays={s.attendanceDays}
                                     slotId={slot.id}
                                     coveringDays={covers}
@@ -224,7 +228,7 @@ export function ClassCell({
                                     student={s}
                                     name={s.name}
                                     meta={metaLabel(s.school, s.grade)}
-                                    tone={studentRowTone(s)}
+                                    tone={timetableStudentTone(colorMode, s)}
                                   />
                                 ),
                               )
@@ -314,7 +318,7 @@ export function ClassCell({
                   editing={editing}
                   cap={SECTION_CAP}
                   draggable={false}
-                  tone={() => "text-text-faint line-through"}
+                  tone={() => withdrawnTone(colorMode)}
                   label="퇴원"
                   labelTone="bg-bg-soft text-text-faint"
                 />
