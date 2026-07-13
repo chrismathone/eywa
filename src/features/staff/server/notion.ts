@@ -18,7 +18,7 @@ import {
 import { monthRange } from "@/lib/month-grid";
 
 // Notion 업무 DB → 직원 상세 '월간일정' 조회 + 직원↔Notion 사용자 매핑. 권한 게이트는 호출부(notion-actions.ts).
-// 토큰/DB id는 env(lib/notion/client.ts). notion_user_id는 users 컬럼(0099a).
+// 토큰/DB id는 env(lib/notion/client.ts). notion_user_id는 users 컬럼(0100a).
 
 export type MonthlyTasksResult =
   | { ok: true; state: "ok"; tasks: NotionTask[] }

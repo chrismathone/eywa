@@ -161,7 +161,7 @@ export const users = pgTable(
     // 강사 영문 닉네임(ijw staff.englishName) — 영어 시간표 슬롯 라벨이 영문닉네임이라, 라벨→강사색
     // 해결에 필요(통합뷰 셀 색 배선). 0055a.
     englishName: text("english_name"),
-    // Notion 사용자 매핑 외부키(0099a) — 직원 상세 '월간일정' 탭이 이 값으로 Notion 업무를 조회. nullable.
+    // Notion 사용자 매핑 외부키(0100a) — 직원 상세 '월간일정' 탭이 이 값으로 Notion 업무를 조회. nullable.
     // 부분 유니크(tenant당 1:1)는 alpha SQL(drizzle 미표현, [[#15]]).
     notionUserId: text("notion_user_id"),
     // 급여 정산용. 외부 노출은 master + 본인만 (RLS).
