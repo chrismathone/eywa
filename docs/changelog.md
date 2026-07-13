@@ -9,6 +9,26 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### makeedu 수납 임포터 사각 2건 보완 — 삭제 미반영 감지(opt-in void)·미매칭 가시화 (2026-07-13) — ✅ 단위 8시나리오+픽스처 dry-run+SQL 롤백 스모크
+수납 머지 적대 리뷰 I4 후속. [import-invoices.cjs](../scripts/_makeedu/import-invoices.cjs) + 분류·리포트 공유 모듈
+[invoice-stale.cjs](../scripts/_makeedu/invoice-stale.cjs) 신설(순수 분류 — DB 접근 없음).
+- **(a) 삭제 미반영**: upsert는 스크랩 존재 (학생,월)만 만져 makeedu에서 그 달 라인이 전부 삭제된 학생의 인보이스가
+  영구 stale(유령 미수)로 남았다. 이제 **스크랩 커버 월 안에서** eywa에만 남은 행을 감지·4버킷 분류: voidable(미완납)
+  / settled(완납·환불 — 항상 보존) / holdUnmatched(같은 이름이 미매칭 라인에 존재 — 오탐 방지) / holdManual(수동 청구
+  추정 — 라인 kind 영문+paid 없음) + **월 커버리지 80% 미만이면 그 월 전건 보류**(부분 스크랩 오탐-void 방어).
+  기본은 **리포트만**, `--void-stale`(또는 env `MAKEEDU_VOID_STALE=true`)+`--apply`일 때만 미완납을 `status='void'`
+  전환(notes 앞 `[동기화] …` 한글 마커=근거·직전 상태 보존). makeedu에 재등장하면 upsert가 status 복원+마커 자동 제거.
+  과거 월(스크랩 밖)은 판정 불가 — 전 기간 정합은 replace-invoices-from-excel 유지.
+- **(b) 미매칭 조용한 스킵**: 매칭 실패 라인 상세(이름/학년/금액/월)를 `$MAKEEDU_OUT/import-invoices-report.json`(최신,
+  void 백업 겸용)+`import-invoices-issues.log`(실행당 1줄 append)로 기록, `makeedu_sync_state.error`에 요약(성공이어도 추적).
+- **실측(프로덕션 read-only)**: 2026-07 부재 36건 = 미완납 23~25건 잔액 ₩7.17~7.65M(대부분 퇴원생 유령 미수) + 완납 11건
+  (보존) + 미매칭 의심 2건(김인규·이승민 — students.makeedu_id 누락). 정상 스크랩 커버리지 91%(현재 청구월만 커버 확인).
+- ⚠️ **발견**: 07-01 옛 additive 임포트 행은 line_items 구스키마(paid 필드 없음) → 출처 판별은 한글 kind(구분)로
+  (수동 청구 createInvoice는 영문 kind). paid 유무만 보면 옛 행 전부 '수동'으로 오분류돼 영구 보류된다.
+- 검증: classifyStale 단위 8시나리오 / 프로덕션 파생 픽스처 dry-run(4버킷·미매칭 3건 재현) / void UPDATE·마커 제거
+  regexp = BEGIN→ROLLBACK 스모크(DB 순효과 0). ⚠️ 연동 PC zip 이관 필요. ⚠️ void 활성화 여부=사용자 결정 대기
+  (void 행이 수납 목록 맨 뒤에 여전히 표시됨 — 활성화 시 UI 라벨/필터 후속 검토).
+
 ### 수납 브랜치(fix/billing-discount-status) main 머지 — 검증 픽스 4종 동반 (2026-07-13) — ✅ tsc0/lint0/test1046/build✓/라이브 UI·콘솔0
 브랜치 2커밋(할인 완납 오판 848건·additive 임포트 누락·항목 뭉갬 해소 + 수납 표 라인 단위 재구성) 머지 — 프로덕션
 DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)이라 코드가 데이터를 따라잡는 머지.
