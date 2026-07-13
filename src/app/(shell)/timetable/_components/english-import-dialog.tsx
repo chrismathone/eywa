@@ -21,7 +21,16 @@ const tch = (names: string[]) => (names.length ? names.join(", ") : "—");
  * 한 번 '불러오기'로 두 시트를 동시에 미리보고(두 섹션), '적용' 한 번에 둘 다 반영(구조 먼저 → 반이동).
  * 각 시트는 독립: 한쪽 탭이 없거나 변경이 없어도 다른 쪽은 정상 동작. 기존 서버 액션 재사용(합성만).
  */
-export function EnglishImportDialog({ subject = "english" }: { subject?: string }) {
+export function EnglishImportDialog({
+  subject = "english",
+  disabled = false,
+  disabledTitle,
+}: {
+  subject?: string;
+  /** 시트 리스 진행 중(새벽 자동 반영·타 관리자 실행) 트리거 선제 비활성 — 사유는 마우스오버(title). */
+  disabled?: boolean;
+  disabledTitle?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [struct, setStruct] = useState<DryRunReport | null>(null);
@@ -138,7 +147,9 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition disabled:opacity-50"
       >
         <Sheet className="size-3" /> 시트에서 가져오기
       </button>

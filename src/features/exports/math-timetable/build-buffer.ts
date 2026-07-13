@@ -2,21 +2,22 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import type { TenantSettings } from "@/features/owner/settings-types";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { reportWarning } from "@/lib/observability/report-error";
 import { appendEnrollmentEditSheet } from "@/features/exports/enrollment-edit-sheet";
+import { kstToday } from "@/lib/date-kst";
+import { thisMonday as thisMondayStr } from "@/features/timetable/lib/week";
 import { assembleMathParams } from "./assemble";
 import { exportMathTimetableToExcel } from "./exporter";
 
-/** 이번 주 월요일(00:00) — 시간표 내보내기 기준 주차. */
+/**
+ * 이번 주 월요일(UTC 00:00) — **KST 오늘 기준**. ⚠️ `new Date().getDay()`(서버 로컬=Vercel UTC) 금지:
+ * KST 월요일 04:00(=UTC 일요일 19:00)에 도는 새벽 cron이 getDay()=0 → 지난주 월요일로 밀린다(적대리뷰
+ * 2026-07-13). 문자열 기반 thisMonday(UTC 결정적) + UTC 자정 Date로 도출 → getMonth/getDate가 KST/UTC 동일.
+ */
 export function thisMonday(): Date {
-  const now = new Date();
-  const day = now.getDay(); // 0=일..6=토
-  const diff = day === 0 ? -6 : 1 - day;
-  const mon = new Date(now);
-  mon.setDate(now.getDate() + diff);
-  mon.setHours(0, 0, 0, 0);
-  return mon;
+  return new Date(`${thisMondayStr(kstToday())}T00:00:00Z`);
 }
 
 /**
@@ -29,16 +30,19 @@ export function thisMonday(): Date {
 export async function buildMathTimetableBuffer(opts?: {
   teacherId?: string;
   referenceMonday?: Date;
+  /** 세션 없는 호출(cron 자동 시트 반영)용 주입 — admin 클라이언트 + tenant 명시 + 설정(쿠키 경로 회피). */
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string; settings: TenantSettings };
 }): Promise<ArrayBuffer> {
+  const timetableDb = opts?.db ? { supabase: opts.db.supabase, tenantId: opts.db.tenantId } : undefined;
   const [slots, supabase, settings] = await Promise.all([
-    getWeeklyScheduleWithStudents({ teacherId: opts?.teacherId }),
-    createClient(),
-    getTenantSettings(),
+    getWeeklyScheduleWithStudents({ teacherId: opts?.teacherId, db: timetableDb }),
+    opts?.db ? Promise.resolve(opts.db.supabase) : createClient(),
+    opts?.db ? Promise.resolve(opts.db.settings) : getTenantSettings(),
   ]);
 
-  const { data: staff } = await supabase
-    .from("users")
-    .select("display_name, bg_color, text_color");
+  let staffQuery = supabase.from("users").select("display_name, bg_color, text_color");
+  if (opts?.db) staffQuery = staffQuery.eq("tenant_id", opts.db.tenantId); // admin(cron) 경로 — 명시 격리
+  const { data: staff } = await staffQuery;
   const teacherColors: Record<string, { bgColor?: string | null; textColor?: string | null }> = {};
   for (const u of staff ?? []) {
     if (u.bg_color || u.text_color) {
@@ -61,6 +65,6 @@ export async function buildMathTimetableBuffer(opts?: {
     returnBufferOnly: true,
     // 라운드트립 import용 '수강편집' 시트를 직렬화 직전에 덧붙임(다운로드·구글시트 push 공유 버퍼).
     // 수학 파일엔 **수학 수강만** — 영어 학생이 섞이지 않게(과목별 시트 분리·cross-subject remove 방지).
-    appendSheets: (wb) => appendEnrollmentEditSheet(wb, supabase, "math"),
+    appendSheets: (wb) => appendEnrollmentEditSheet(wb, supabase, "math", opts?.db?.tenantId),
   })) as ArrayBuffer;
 }

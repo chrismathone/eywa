@@ -11,15 +11,24 @@ import type { TeacherColorMap } from "../lib/class-grid";
 const todayStr = (): string => kstToday();
 
 /**
+ * 세션 없는 호출(cron 자동 시트 반영 등)용 DB 주입 — admin 클라이언트 + **명시 tenant 필터**.
+ * 미주입(기본) = 기존 그대로 쿠키 세션 createClient(RLS가 테넌트 격리). 주입 시 이 파일의 각 쿼리에
+ * `.eq("tenant_id", …)`가 붙는다(admin은 RLS 우회라 필터 누락 = 교차 테넌트 유출 — edutrix-sync cron 선례).
+ */
+export type TimetableDb = { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string };
+
+/**
  * 강사 라벨 → 저장된 색 맵(통합뷰 셀·담임색). display_name·english_name(영문닉네임 슬롯 라벨) 둘 다 키.
  * users(소수·테넌트 RLS)에서 색 있는 행만. 미해결 라벨은 렌더에서 teacherColor 해시 폴백.
  */
-export async function getTeacherColorMap(): Promise<TeacherColorMap> {
-  const supabase = await createClient();
-  const { data } = await supabase
+export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColorMap> {
+  const supabase = db?.supabase ?? (await createClient());
+  let q = supabase
     .from("users")
     .select("display_name, english_name, bg_color, text_color")
     .not("bg_color", "is", null);
+  if (db) q = q.eq("tenant_id", db.tenantId);
+  const { data } = await q;
   const map: TeacherColorMap = {};
   for (const u of data ?? []) {
     if (!u.bg_color) continue;
@@ -87,15 +96,15 @@ export type ScheduleSlot = {
   pendingHandover: { teacherName: string | null; date: string | null } | null;
 };
 
-async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
-  const supabase = await createClient();
+async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<ScheduleSlot[]> {
+  const supabase = db?.supabase ?? (await createClient());
   const weekEnd = weekEndOf(referenceDate);
   // 그 주 시점에 유효한 스케줄만: valid_from ≤ 그 주 일요일(미래 시작 스케줄 제외) + valid_to ≥ 기준일(만료 제외).
   // ⚠️ valid_from 상한은 weekEnd(ref+6 롤링 창)가 아니라 weekSundayOf(그 주 실제 끝) — 롤링 창이면
   // 과거 주(ref=일요일) 조회에 다음 주 시작 스케줄이 새어 스케줄 전환(temporal cutover) 시 중복 표시된다.
   // 폐지(is_active=false)된 반은 `!inner` 조인 + class.is_active 필터로 전체 주에서 제외.
   // 종강(class.closed_at)된 반은 종강일 이후 주에서만 제외(이전 주엔 수강이력으로 표시) — JS에서 거른다.
-  const { data } = await supabase
+  let slotQuery = supabase
     .from("class_schedules")
     .select(
       `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
@@ -111,6 +120,8 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
     .lte("valid_from", weekSundayOf(referenceDate))
     .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
     .order("start_time");
+  if (db) slotQuery = slotQuery.eq("tenant_id", db.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
+  const { data } = await slotQuery;
 
   if (!data) return [];
 
@@ -123,14 +134,15 @@ async function fetchSlots(referenceDate: string): Promise<ScheduleSlot[]> {
 
   // as-of-week 재원 카운트 — 그 주 끝(weekEnd)까지 시작했고 그 주 끝에 아직 안 끝난 enrollment.
   // (정확한 재원/대기/퇴원 분류는 getWeeklyScheduleWithStudents. 여기선 셀 헤더 카운트용 근사.) #54 페이지네이션.
-  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
-    supabase
+  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) => {
+    let q = supabase
       .from("enrollments")
       .select("class_id")
       .lte("start_date", weekEnd)
-      .or(`end_date.is.null,end_date.gt.${weekEnd}`)
-      .range(from, to),
-  );
+      .or(`end_date.is.null,end_date.gt.${weekEnd}`);
+    if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+    return q.range(from, to);
+  });
 
   const counts = new Map<string, number>();
   for (const e of enrollments) {
@@ -246,17 +258,19 @@ const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefine
  * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1년·반이동 제외(셀에서 status로 분리 렌더).
  */
 export async function getWeeklyScheduleWithStudents(
-  opts?: { referenceDate?: string; teacherId?: string; subject?: string },
+  // db = 세션 없는 호출(cron) 주입 — teacherId 스코핑은 세션 전제(getTeacherScope)라 db와 병용 불가.
+  opts?: { referenceDate?: string; teacherId?: string; subject?: string; db?: TimetableDb },
 ): Promise<ScheduleSlotWithStudents[]> {
   // 주차 기준일(미지정=오늘) 기준으로 그 시점의 반 명단을 재구성 — ijw 시간표 주간 이동(타임머신).
   const referenceDate = opts?.referenceDate ?? todayStr();
   const teacherId = opts?.teacherId;
   const subject = opts?.subject;
+  const db = opts?.db;
   const weekEnd = weekEndOf(referenceDate); // 재구성 윈도우 끝(ref+6, ijw useSubjectClassStudents)
   const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
   const withdrawnFloor = shiftDays(referenceDate, -365); // 퇴원 표시 윈도우: 기준일 1년 전까지(클러터 캡)
 
-  let slots = await fetchSlots(referenceDate);
+  let slots = await fetchSlots(referenceDate, db);
   // 과목 스코핑(선택) — 한 과목만 필요한 호출부(과목별 익스포터 등)는 classIds를 먼저 좁혀
   // 무거운 학생/수강/진도 조회량을 줄인다(전 과목 로딩 방지, B2). 필터 후 빈 결과는 아래 조기반환.
   if (subject) slots = slots.filter((s) => s.subject === subject);
@@ -271,7 +285,7 @@ export async function getWeeklyScheduleWithStudents(
   if (slots.length === 0) return [];
 
   const classIds = Array.from(new Set(slots.map((s) => s.classId)));
-  const supabase = await createClient();
+  const supabase = db?.supabase ?? (await createClient());
 
   // 그 주 시점(referenceDate/weekEnd) 명단 재구성 — ijw useSubjectClassStudents 이식.
   // 반별 enrollment를 청크로 한 번에(대량 .in() 414·1000행 절단 회피 #53): 현재 열린(end_date null) +
@@ -289,16 +303,18 @@ export async function getWeeklyScheduleWithStudents(
     attendance_days: string[] | null;
     student: StudentRef | StudentRef[];
   };
-  const rows = await fetchInChunks<Row>(classIds, (chunk) =>
-    supabase
+  const rows = await fetchInChunks<Row>(classIds, (chunk) => {
+    let q = supabase
       .from("enrollments")
       .select(
         "id, class_id, student_id, start_date, end_date, on_hold, is_transferred, is_transferred_in, attendance_days, student:student_id ( name, grade, school, english_name, status, withdrawn_at )",
       )
       .in("class_id", chunk)
       .lte("start_date", weekEnd)
-      .or(`end_date.is.null,end_date.gte.${withdrawnFloor}`),
-  );
+      .or(`end_date.is.null,end_date.gte.${withdrawnFloor}`);
+    if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+    return q;
+  });
 
   // (class_id:student_id) → 표시할 한 줄. 같은 반 다중 수강기록(재등록 등)은 재원>대기>퇴원 우선, 같으면 최신 시작.
   const statusRank = (st: StudentLine["status"]) => (st === "active" ? 0 : st === "hold" ? 1 : 2);
@@ -372,13 +388,15 @@ export async function getWeeklyScheduleWithStudents(
         class: { subject: string | null } | { subject: string | null }[] | null;
         student: { status: string | null; withdrawn_at: string | null } | { status: string | null; withdrawn_at: string | null }[] | null;
       };
-      const aliveRows = await fetchInChunks<AliveRow>(wStudentIds, (chunk) =>
-        supabase
+      const aliveRows = await fetchInChunks<AliveRow>(wStudentIds, (chunk) => {
+        let q = supabase
           .from("enrollments")
           .select("student_id, class:class_id ( subject ), student:student_id ( status, withdrawn_at )")
           .in("student_id", chunk)
-          .or(`end_date.is.null,end_date.gt.${referenceDate}`), // daterange [start,end) — end>ref = 기준일 시점 수강 유지
-      );
+          .or(`end_date.is.null,end_date.gt.${referenceDate}`); // daterange [start,end) — end>ref = 기준일 시점 수강 유지
+        if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+        return q;
+      });
       const subjectOfClass = new Map(slots.map((s) => [s.classId, s.subject]));
       const aliveSubj = new Set<string>(); // `${subject}:${studentId}`
       for (const r of aliveRows) {
@@ -424,20 +442,24 @@ export async function getWeeklyScheduleWithStudents(
     };
     // 교재·진도는 둘 다 studentIds에만 의존하는 독립 조회 → 병렬(직렬이면 두 청크 wave가 합산됨).
     const [tbRows, repRows] = await Promise.all([
-      fetchInChunks<TbRow>(studentIds, (chunk) =>
-        supabase
+      fetchInChunks<TbRow>(studentIds, (chunk) => {
+        let q = supabase
           .from("textbook_orders")
           .select("student_id, book_name, delivered_at, request_date")
-          .in("student_id", chunk),
-      ),
-      fetchInChunks<RepRow>(studentIds, (chunk) =>
-        supabase
+          .in("student_id", chunk);
+        if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+        return q;
+      }),
+      fetchInChunks<RepRow>(studentIds, (chunk) => {
+        let q = supabase
           .from("lesson_reports")
           .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
           .in("student_id", chunk)
           .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
-          .order("report_date", { ascending: false }),
-      ),
+          .order("report_date", { ascending: false });
+        if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
+        return q;
+      }),
     ]);
     const latestTb = new Map<string, { name: string; date: string | null }>();
     for (const r of tbRows) {

@@ -20,14 +20,16 @@ type EditEnr = {
  *
  * ⚠️ `subject` 지정 시 그 과목 반의 수강만 담는다(과목별 시트 분리 = 영어 파일엔 영어 학생만).
  *    미지정(제네릭 export)이면 전 과목. inner join(`class!inner`)으로 subject 필터가 실제 걸린다.
+ * ⚠️ `tenantId`는 세션 없는 호출(cron 자동 시트 반영 = admin 클라이언트, RLS 우회)에서 필수 — 명시 격리.
  */
 export async function appendEnrollmentEditSheet(
   wb: ExcelJS.Workbook,
   supabase: ServerClient,
   subject?: string,
+  tenantId?: string,
 ): Promise<void> {
   const enrRows = await fetchAllPaged<EditEnr>((from, to) => {
-    const q = subject
+    let q = subject
       ? supabase
           .from("enrollments")
           .select("id, class:class_id!inner ( class_name, subject ), student:student_id ( name, school, grade )")
@@ -35,6 +37,7 @@ export async function appendEnrollmentEditSheet(
       : supabase
           .from("enrollments")
           .select("id, class:class_id ( class_name ), student:student_id ( name, school, grade )");
+    if (tenantId) q = q.eq("tenant_id", tenantId); // admin(cron) 경로 — 명시 격리
     return q.is("end_date", null).range(from, to);
   });
   const edit = wb.addWorksheet(EDIT_SHEET_NAME);

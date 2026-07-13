@@ -24,10 +24,15 @@ export function TimetableImportDialog({
   mode = "file",
   subject = "math",
   label,
+  disabled = false,
+  disabledTitle,
 }: {
   mode?: "file" | "sheet";
   subject?: string;
   label?: string;
+  /** 시트 리스 진행 중(새벽 자동 반영·타 관리자 실행) 트리거 선제 비활성 — 사유는 마우스오버(title). */
+  disabled?: boolean;
+  disabledTitle?: string;
 }) {
   const sheet = mode === "sheet";
   const router = useRouter();
@@ -118,7 +123,9 @@ export function TimetableImportDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition disabled:opacity-50"
       >
         {sheet ? <Sheet className="size-3" /> : <Upload className="size-3" />}
         {label ?? (sheet ? "시트에서 가져오기" : "가져오기")}

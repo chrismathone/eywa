@@ -71,6 +71,35 @@ export function getServiceAccountEmail(): string | null {
   }
 }
 
+/**
+ * 시트 최종 수정 정보 — cron 자동 반영의 **사람-편집 가드**용.
+ * 마지막 수정자가 서비스계정이 아니면(=사람이 시트를 편집한 뒤 아직 '가져오기'를 안 함) 자동 덮어쓰기를
+ * 건너뛰어 시트 편집분 유실을 구조적으로 차단한다. emailAddress가 안 오는 케이스(외부 계정 프라이버시)는
+ * null — 호출부가 modifiedTime 폴백으로 판정.
+ */
+export async function getSheetLastModifier(
+  spreadsheetId: string,
+): Promise<{ modifiedTime: string | null; email: string | null }> {
+  const auth = getServiceAccountAuth();
+  await auth.authorize();
+  const drive = google.drive({ version: "v3", auth });
+  try {
+    const res = await withSheetsRetry(() =>
+      drive.files.get({
+        fileId: spreadsheetId,
+        fields: "modifiedTime, lastModifyingUser(emailAddress)",
+        supportsAllDrives: true,
+      }),
+    );
+    return {
+      modifiedTime: res.data.modifiedTime ?? null,
+      email: res.data.lastModifyingUser?.emailAddress ?? null,
+    };
+  } catch (e) {
+    throw new Error(translateSheetsError(e));
+  }
+}
+
 /** Drive/Sheets 오류 → 운영자가 바로 조치 가능한 한글 메시지. */
 function translateSheetsError(e: unknown): string {
   const code = (e as { code?: number; status?: number })?.code ?? (e as { status?: number })?.status;
