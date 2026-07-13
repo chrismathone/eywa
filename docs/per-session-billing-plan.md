@@ -66,7 +66,21 @@ create table invoice_session_terms (
    ⚠️ 브랜치의 라인 단위 표 재구성 **위에** 작업(중복 개편 금지).
 4. 견적→청구 전환(saved-quotes-list "청구서로 전환")이 현재 합계 숫자만 넘겨 견적의 sessions/perSession 구조가
    소실됨 → 전환 시 session_terms 생성으로 구조 보존.
-5. (로드맵 2단계 연결) 시수 검증 read-only 화면: confirmed N vs 실제 출석 대조.
+5. (로드맵 2단계 연결) 시수 검증 read-only 탭 — 아래 섹션.
+
+## 시수 검증(a) — read-only 탭 설계 (로드맵 2단계, 이 키스톤의 직접 소비자)
+
+- **위치**: `/billing` FaceTabs 새 면 "시수 검증" (수납 다면 선례). **쓰기 0** — 화면 전체가 조회 전용.
+- **대조 쌍(검증 짝 확정)**: 행 = `invoice_session_terms`(학생×과목×청구월).
+  · 분자(청구값) = `confirmed_sessions` — **확정값만**(N1). 미확정(null) 행은 "미확정" 뱃지 + 계획 N 회색 참고 표시(검증 대상 아님).
+  · 분모(실제) = `attendance_records` count(그 학생, 그 `class_id`, 청구월) — 출석 인정 상태 = present·late·early_leave·makeup(수업 소비), absent 제외.
+  ⚠️ 이 대조 짝이 가능한 건 session_terms가 과목·반 차원을 구조화했기 때문 — attendance가 수납명 문자열 파싱
+  ("초등M 초4 BS1J 화금")으로 풀다 사고 8건의 근원이 된 지대를 **원천 제거**.
+- **표시**: 확정 N vs 실출석 diff(색상: 일치=녹색·부족=주황·초과=적색) + 반·담임·단가. diff는 신호일 뿐 —
+  **어느 쪽도 자동 수정하지 않는다**(N2 확장: 검증 화면에 "일치시키기" 류 버튼 금지).
+- **한계 명시(v1)**: 청구월=달력월 근사(attendance의 기간 ranges 모델 미도입 — 월중 등록/퇴원은 diff에 자연 노출되며
+  note로 설명). 분리등원은 enrollment 단일이라 반 단위 카운트에 포함.
+- **게이트**: 여기까지가 (a). **(b) 금액차 산출·강사 분배(splits)는 골든마스터 테스트(N6) 통과 전 착수 금지** — 불변.
 
 ## 소비처/공존 체크 (구현 시 필수 확인)
 
