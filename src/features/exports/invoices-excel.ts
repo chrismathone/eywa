@@ -1,6 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import type { InvoiceRow } from "@/features/billing/server/queries";
+import { invoiceOutstanding } from "@/features/billing/calc";
 
 const STATUS_LABEL: Record<string, string> = {
   paid: "완납",
@@ -48,7 +49,9 @@ export async function buildInvoicesWorkbook(
   };
 
   for (const inv of invoices) {
-    const balance = inv.amountTotal - inv.amountPaid - inv.amountDiscount;
+    // 잔액 = 행 레벨 미수(청구−할인−수납, 0 바닥, paid/refunded/void = 0) — calc.ts 단일 공식.
+    // 컬럼 합계가 수납관리 KPI '미수 총액'과 일치한다(구: 무clamp라 음수·유령 미수 혼입).
+    const balance = invoiceOutstanding(inv);
     sheet.addRow({
       studentName: inv.studentName,
       studentGrade: inv.studentGrade ?? "—",

@@ -1,8 +1,9 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchInChunks, fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import { attendanceRate } from "@/lib/calc/attendance";
+import { summarizeInvoices, paymentRateOf } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { followUpUrgency, type FollowUpUrgency } from "@/features/consultations/server/queries";
 
@@ -403,25 +404,39 @@ export type PaymentSnapshot = {
 export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null> {
   const supabase = await createClient();
   const period = kstMonth();
-  const { data } = await supabase
-    .from("invoices")
-    .select("amount_total, amount_paid, amount_discount, status")
-    .eq("period", period);
-  if (!data || data.length === 0) return null;
+  // B2: 집계용 전건 fetch는 fetchAllPaged(무페이징 select는 1000행 silent 절단).
+  const data = await fetchAllPaged<{
+    amount_total: number;
+    amount_paid: number;
+    amount_discount: number | null;
+    status: string;
+  }>((from, to) =>
+    supabase
+      .from("invoices")
+      .select("amount_total, amount_paid, amount_discount, status")
+      .eq("period", period)
+      .range(from, to),
+  );
+  if (data.length === 0) return null;
 
-  const totalBilled = data.reduce((s, r) => s + Number(r.amount_total), 0);
-  const totalPaid = data.reduce((s, r) => s + Number(r.amount_paid), 0);
-  const totalDiscount = data.reduce((s, r) => s + Number(r.amount_discount ?? 0), 0);
-  const paidCount = data.filter((r) => r.status === "paid").length;
-  const unpaidCount = data.filter((r) => r.status === "unpaid" || r.status === "partial").length;
+  // 수납 지표 단일 진실 = billing/calc summarizeInvoices — 수납관리 KPI와 같은 숫자 보장.
+  // (수납률 = 수납/실청구(청구−할인)·100% 상한, 미수 = 행 레벨 clamp·refunded/void/paid 제외)
+  const s = summarizeInvoices(
+    data.map((r) => ({
+      amountTotal: Number(r.amount_total),
+      amountPaid: Number(r.amount_paid),
+      amountDiscount: Number(r.amount_discount ?? 0),
+      status: r.status,
+    })),
+    period,
+  );
   return {
     period,
-    totalCount: data.length,
-    paidCount,
-    unpaidCount,
-    paymentRate: totalBilled > 0 ? (totalPaid / totalBilled) * 100 : 0,
-    // 미수 총액 = 청구 - 납부 - 할인(할인 빼면 과대계상 — 밴드 '이번 달 미수'가 소비).
-    outstanding: Math.max(0, totalBilled - totalPaid - totalDiscount),
+    totalCount: s.totalCount,
+    paidCount: s.paidCount,
+    unpaidCount: s.unpaidCount + s.partialCount, // 밴드 '미수 N건' = 미수+부분납(기존 의미 유지)
+    paymentRate: s.paymentRate,
+    outstanding: s.outstanding,
   };
 }
 
@@ -434,36 +449,43 @@ export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
   const start = new Date(end);
   start.setDate(end.getDate() - 6);
 
-  const [{ data: attRows }, { data: invRows }] = await Promise.all([
-    supabase
-      .from("attendance_records")
-      .select("session_date, status")
-      .gte("session_date", toIsoDate(start))
-      .lte("session_date", toIsoDate(end)),
+  // B2: 둘 다 집계용 전건 fetch — fetchAllPaged(출결 7일·당월 invoices 모두 1000행 초과 가능).
+  const [attRows, invRows] = await Promise.all([
+    fetchAllPaged<{ session_date: string; status: string }>((from, to) =>
+      supabase
+        .from("attendance_records")
+        .select("session_date, status")
+        .gte("session_date", toIsoDate(start))
+        .lte("session_date", toIsoDate(end))
+        .range(from, to),
+    ),
     // 이번 달 invoices — 누적 수납률 계산용 (paid_at 일자별)
-    supabase
-      .from("invoices")
-      .select("amount_total, amount_paid, paid_at, status")
-      .eq("period", currentPeriod()),
+    fetchAllPaged<{ amount_total: number; amount_paid: number; amount_discount: number | null; paid_at: string | null }>(
+      (from, to) =>
+        supabase
+          .from("invoices")
+          .select("amount_total, amount_paid, amount_discount, paid_at")
+          .eq("period", currentPeriod())
+          .range(from, to),
+    ),
   ]);
 
   const byDate = new Map<string, { total: number; present: number }>();
-  for (const r of attRows ?? []) {
-    const d = r.session_date as string;
+  for (const r of attRows) {
+    const d = r.session_date;
     if (!byDate.has(d)) byDate.set(d, { total: 0, present: 0 });
     const g = byDate.get(d)!;
     g.total += 1;
     if (r.status === "present") g.present += 1;
   }
 
-  // invoices 누적: 이번 달 청구 총액 + 각 날짜까지 paid_at 누적
-  const totalBilled = (invRows ?? []).reduce((s, r) => s + Number(r.amount_total), 0);
+  // invoices 누적: 각 날짜까지 paid_at 누적 수납 / 실청구(청구−할인) — calc.ts 단일 공식(100% 상한).
+  const netBilled = invRows.reduce((s, r) => s + Number(r.amount_total) - Number(r.amount_discount ?? 0), 0);
   function paymentRateUpTo(isoDay: string): number {
-    if (totalBilled === 0) return 0;
-    const paidSoFar = (invRows ?? [])
+    const paidSoFar = invRows
       .filter((r) => r.paid_at && String(r.paid_at).slice(0, 10) <= isoDay)
       .reduce((s, r) => s + Number(r.amount_paid), 0);
-    return (paidSoFar / totalBilled) * 100;
+    return paymentRateOf(paidSoFar, netBilled);
   }
 
   const result: TrendPoint[] = [];

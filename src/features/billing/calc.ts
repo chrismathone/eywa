@@ -26,6 +26,23 @@ export function currentPeriod(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** 미수 잔액에서 제외하는 상태 — refunded/void(무효) + paid(완납 판정은 status가 진실 — 적립금 잔차 무시). */
+const NO_OUTSTANDING_STATUSES = new Set(["refunded", "void", "paid"]);
+
+/**
+ * 행 레벨 미수 잔액 = max(0, 청구−할인−수납). refunded/void/paid는 0.
+ * 수납 지표 단일 공식 — 대시보드·엑셀·학생 상세·RPC(0101a)가 전부 이 공식을 따른다. 재구현 금지.
+ */
+export function invoiceOutstanding(r: InvoiceSummaryInput): number {
+  if (NO_OUTSTANDING_STATUSES.has(r.status)) return 0;
+  return Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid);
+}
+
+/** 수납률(%) = 수납 / 실청구(청구−할인), 100% 상한. 실청구 ≤ 0이면 0(0-나눗셈 방어). */
+export function paymentRateOf(collected: number, netBilled: number): number {
+  return netBilled > 0 ? Math.min((collected / netBilled) * 100, 100) : 0;
+}
+
 /**
  * 청구서 배열 → 요약 KPI (순수, 네트워크 0).
  * 페이지가 월 전체를 한 번만 fetch한 뒤 이 함수로 요약을 도출해 이중 fetch를 없앤다.
@@ -42,10 +59,7 @@ export function summarizeInvoices(rows: InvoiceSummaryInput[], period?: string):
   const totalCollected = rows.reduce((s, r) => s + r.amountPaid, 0);
   const totalDiscount = rows.reduce((s, r) => s + r.amountDiscount, 0);
   const netBilled = totalBilled - totalDiscount;
-  const outstanding = rows.reduce((s, r) => {
-    if (r.status === "refunded" || r.status === "void" || r.status === "paid") return s;
-    return s + Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid);
-  }, 0);
+  const outstanding = rows.reduce((s, r) => s + invoiceOutstanding(r), 0);
   return {
     period: period ?? currentPeriod(),
     totalCount: rows.length,
@@ -56,6 +70,6 @@ export function summarizeInvoices(rows: InvoiceSummaryInput[], period?: string):
     totalCollected,
     totalDiscount,
     outstanding,
-    paymentRate: netBilled > 0 ? Math.min((totalCollected / netBilled) * 100, 100) : 0,
+    paymentRate: paymentRateOf(totalCollected, netBilled),
   };
 }

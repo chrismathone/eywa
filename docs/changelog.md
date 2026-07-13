@@ -9,6 +9,20 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 수납 지표 3원화 통일 — calc.ts 단일 공식 전면 배선 (2026-07-13) — ✅ tsc0/lint0/calc.test 18/프로덕션 read-only 대조
+수납 브랜치 머지 적대 리뷰 잔여(I3) 해소: 수납률·미수 공식이 화면마다 달라(대시보드=paid/gross·캡 없음,
+RPC=학생 합산 후 clamp, 엑셀=무clamp 음수 가능) 숫자가 어긋나던 것을 **[calc.ts](../src/features/billing/calc.ts)
+단일 공식으로 전면 통일**. 행 레벨 `invoiceOutstanding()`(= max(0, 청구−할인−수납), paid/refunded/void=0) +
+`paymentRateOf()`(수납/실청구, 100% 상한) 순수 헬퍼 추출(Vitest 9 추가) — **새 수납 지표는 재구현 금지, 이 두 함수만**.
+- 배선(8파일): 대시보드 `getPaymentRateThisMonth`(summarizeInvoices 위임+fetchAllPaged B2)·`getTrendDataLast7Days`
+  (분모=실청구·100% 상한·출결/청구 모두 fetchAllPaged), 엑셀 잔액([invoices-excel.ts](../src/features/exports/invoices-excel.ts)),
+  RPC **0101a**(행 clamp `greatest(0,…)` — 구 0039a는 학생 합산 후 clamp라 음수 잔차가 미수 상쇄), 학생 상세
+  overview-tab(구: refunded/void도 미납 합산하던 버그)·billing-view·수납 표 billing-table(paid 잔차를 미납으로 그리던 것 0)·billing-content(중복 제거).
+- 프로덕션 read-only 실측(injaewon, 2026-01~07 전월 할인 260만+): 증상 재현 — 구 대시보드 수납률이 매달 1.5~1.7%p 낮음
+  (07월 92.55%→94.16%, 06월 98.40%→100%). 미수도 paid 잔차 유령(07월 191,250원)·과납 상쇄(02월 28,750→30,000, 구가 과소)
+  전부 해소, 엑셀 잔액합=KPI 미수 일치. RPC는 현 데이터에선 구=신 동일(32명·9,486,762원=calc.ts와 정확 일치)이라 무위험 교체.
+- ⚠️ 0101a는 프로덕션 DB 적용 필요(적용 전까지 미수 상위 위젯은 구 공식 — 현 데이터 동일값이라 무해).
+
 ### 수납 브랜치(fix/billing-discount-status) main 머지 — 검증 픽스 4종 동반 (2026-07-13) — ✅ tsc0/lint0/test1046/build✓/라이브 UI·콘솔0
 브랜치 2커밋(할인 완납 오판 848건·additive 임포트 누락·항목 뭉갬 해소 + 수납 표 라인 단위 재구성) 머지 — 프로덕션
 DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)이라 코드가 데이터를 따라잡는 머지.
@@ -17,7 +31,7 @@ DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)�
 ② 구형 3-key 인보이스 전부 '완납' 렌더(실측 미납 28건 ₩7.3M 은폐) → toLines 첫 라인 인보이스값 합성+미상 "—"
 ③ 완납 행 적립금 잔차가 유령 미수 합산(실측 7건 ₩351,250) → outstanding에서 paid 제외+테스트
 ④ 죽은 수납 편집 액션 3종 삭제(옛 deriveStatus는 할인 미차감이라 부활 시 848건 오판 재생산) + 레거시 영문 kind 한글 매핑.
-⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·대시보드 수납률 공식 불일치(I3)·
+⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·~~대시보드 수납률 공식 불일치(I3)~~(→ 위 "수납 지표 3원화 통일"로 해소)·
 upsert 임포터 삭제 미반영/unmatched 스킵(I4)·**연동 PC에 새 임포터 zip 이관 필요**(안 하면 구 임포터가 계속 3-key 유입).
 
 ### ClassNote 자동 배정 방어 강화 — 적대 감사 F1~F6 전건 픽스 (2026-07-13) — ✅ 합성 테스트 13/13
