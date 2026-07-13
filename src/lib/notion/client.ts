@@ -119,11 +119,13 @@ export async function listCommentsAll(blockId: string): Promise<NotionComment[]>
   return out;
 }
 
-/** 페이지에 댓글 추가. "댓글 삽입" 권한 필요. API 댓글은 통합(봇)으로 표기됨(작성자 접두는 호출부). */
-export async function createComment(pageId: string, text: string): Promise<void> {
+export type CommentSpan = { text: { content: string }; annotations?: { bold?: boolean } };
+
+/** 페이지에 댓글 추가(서식 지원). "댓글 삽입" 권한 필요. API 댓글은 통합(봇)으로 표기됨(작성자 표기는 호출부). */
+export async function createComment(pageId: string, richText: CommentSpan[]): Promise<void> {
   await notionFetch(`/comments`, {
     method: "POST",
-    body: JSON.stringify({ parent: { page_id: pageId }, rich_text: [{ text: { content: text } }] }),
+    body: JSON.stringify({ parent: { page_id: pageId }, rich_text: richText }),
   });
 }
 

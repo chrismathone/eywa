@@ -189,29 +189,43 @@ export async function resolveMonthlyTasks(
 
 export type TaskComment = { id: string; author: string; time: string | null; text: string };
 
-/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. 못 찾으면 "Notion"으로 폴백. */
+/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. eywa가 남긴 댓글(봇 명의)은
+ *  본문 패턴을 파싱해 "이름 (eywa)"로 표시하고 표기용 접두는 본문에서 제거. 못 찾으면 "Notion" 폴백. */
 export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> {
   const [comments, people] = await Promise.all([
     listCommentsAll(pageId),
     cachedNotionAssignees().catch(() => [] as NotionUserOption[]),
   ]);
   const nameById = new Map(people.map((u) => [u.id, u.name]));
-  return comments.map((c) => ({
-    id: c.id,
-    author: (c.created_by?.id ? nameById.get(c.created_by.id) : "") || "Notion",
-    time: c.created_time ?? null,
-    text: (c.rich_text ?? [])
+  return comments.map((c) => {
+    let author = (c.created_by?.id ? nameById.get(c.created_by.id) : "") || "Notion";
+    let text = (c.rich_text ?? [])
       .map((t) => t.plain_text ?? "")
       .join("")
-      .trim(),
-  }));
+      .trim();
+    const m = EYWA_COMMENT_RE.exec(text) ?? EYWA_COMMENT_LEGACY_RE.exec(text);
+    if (m) {
+      author = `${m[1]} (eywa)`;
+      text = (m[2] ?? "").trim();
+    }
+    return { id: c.id, author, time: c.created_time ?? null, text };
+  });
 }
 
-/** 태스크에 댓글 추가 — API 댓글은 통합(봇)으로 표기되므로 eywa 작성자명을 접두로 붙여 출처 보존. */
+/**
+ * 태스크에 댓글 추가 — ⚠️ Notion API 한계로 작성자 명의는 항상 통합(봇). 대신 **굵은 이름 + " — eywa에서 작성"**
+ * 서식으로 실작성자를 표기(Notion에서 읽기 좋게). eywa 화면은 이 패턴을 파싱해 작성자로 표시.
+ */
 export async function addTaskComment(pageId: string, text: string, authorName: string): Promise<void> {
-  const body = `[eywa · ${authorName}] ${text}`.slice(0, 2000);
-  await createComment(pageId, body);
+  await createComment(pageId, [
+    { text: { content: authorName.slice(0, 40) }, annotations: { bold: true } },
+    { text: { content: ` — eywa에서 작성\n${text.slice(0, 1800)}` } },
+  ]);
 }
+
+// eywa가 남긴 댓글의 작성자 파싱(신형: "이름 — eywa에서 작성\n본문" / 구형: "[eywa · 이름] 본문").
+const EYWA_COMMENT_RE = /^(.{1,40}?) — eywa에서 작성\n?([\s\S]*)$/;
+const EYWA_COMMENT_LEGACY_RE = /^\[eywa · (.{1,40}?)\] ?([\s\S]*)$/;
 
 /** 업무 본문(Notion 블록) → 표시 라인. 상세창이 열릴 때만 지연 호출(첫 페인트 밖). */
 export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
