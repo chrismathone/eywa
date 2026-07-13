@@ -137,7 +137,7 @@ export function DraggableStudentRow({
       <span className={`overflow-hidden whitespace-nowrap text-clip ${moving ? "line-through" : ""}`}>
         <IndexBadge badge={badge} />
         {name}
-        {!target && meta ? <span className="opacity-60">/{meta}</span> : null}
+        {!target && meta ? <span className="opacity-90">/{meta}</span> : null}
       </span>
       {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌). */}
       {target ? (
@@ -173,7 +173,7 @@ export function StudentRow({
     <>
       <IndexBadge badge={badge} />
       {name}
-      {meta ? <span className="opacity-60">/{meta}</span> : null}
+      {meta ? <span className="opacity-90">/{meta}</span> : null}
     </>
   );
   const rowCls = "block overflow-hidden whitespace-nowrap text-clip px-2 py-[3px] leading-tight";

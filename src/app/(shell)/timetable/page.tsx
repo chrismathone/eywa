@@ -21,6 +21,7 @@ import {
   TimetableDndArea,
 } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
+import { TimetableColorToggle } from "./_components/color-mode-toggle";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TeacherGridView } from "./_components/teacher-grid";
@@ -260,6 +261,14 @@ export default async function TimetablePage({
 
         {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
             (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
+
+        {/* 셀 색 강도 개인 토글(쨍/중간/옅게) — 기본뷰에서만(셀 색이 있는 뷰). localStorage 영속. */}
+        {effView === "basic" ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <TimetableColorToggle />
+          </>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
           <span className="text-[color:var(--primary)]">재원 {enrolledCount}</span>

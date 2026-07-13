@@ -13,6 +13,9 @@ import { persist } from "zustand/middleware";
  * sidebarWidth=펼쳤을 때 너비(px). 오른쪽 경계선을 드래그해 조절하며(use-sidebar-resize),
  * 충분히 줄이면 접힘으로 스냅. 둘 다 새로고침해도 유지.
  */
+/** 시간표 셀 색 강도(개인 설정) — vivid=시트처럼 쨍한 채움(기본), mid=중간, pastel=옛 옅은 파스텔. */
+export type TimetableColorMode = "vivid" | "mid" | "pastel";
+
 type PrefsState = {
   animations: boolean;
   setAnimations: (v: boolean) => void;
@@ -23,6 +26,9 @@ type PrefsState = {
   /** 멀티윈도우 워크스페이스 첫 진입 코치마크를 봤는가(1회용). false면 데스크톱에서 안내 오버레이 노출. */
   onboarded: boolean;
   setOnboarded: (v: boolean) => void;
+  /** 시간표 기본뷰 셀 색 강도 — 상단 토글에서 3중1택. 기본 vivid(쨍하게). */
+  timetableColor: TimetableColorMode;
+  setTimetableColor: (v: TimetableColorMode) => void;
 };
 
 /** OS '동작 줄이기' 선호 — 설정 기본값 산정용(import 순환 피하려 motion.ts 대신 직접 검사). */
@@ -42,6 +48,8 @@ export const usePrefs = create<PrefsState>()(
       toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
       onboarded: false,
       setOnboarded: (onboarded) => set({ onboarded }),
+      timetableColor: "vivid", // 기본 쨍하게(시트식). 개인이 상단 토글로 mid/pastel 선택 시 영속.
+      setTimetableColor: (timetableColor) => set({ timetableColor }),
     }),
     { name: "eywa-prefs" },
   ),
