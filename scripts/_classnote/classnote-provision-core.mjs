@@ -22,12 +22,21 @@ import {
   fetchBoards,
   fetchChildren,
   fetchChildDetail,
+  fetchBoardChildren,
   enrollChild,
   createBoard,
-  childKeys,
+  planChildMatches,
+  hasForeignStudentBoard,
   norm,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
+
+/** 역방향 유일성 검사용 우주 — **status·과목 무필터 전 학생 유효이름**(퇴원 포함).
+ *  타깃 목록만 쓰면 퇴원 동명이인(F1)·과목 필터 뒤 동명(F2)·동명 보류 제외분(F3)이 안 보인다. */
+export async function fetchUniverseNames(sql, tenant) {
+  const rows = await sql`select name, classnote_name from students where tenant_id = ${tenant}`;
+  return [...new Set(rows.map((r) => (r.classnote_name || r.name || "").trim()).filter(Boolean))];
+}
 
 const STATE_DIR = process.env.CLASSNOTE_OUT || "D:/tmp/classnote";
 const STATE_FILE = path.join(STATE_DIR, "provision-last-run.txt");
@@ -57,7 +66,9 @@ function markRun(d) {
   }
 }
 
-/** 그룹별 기대 보드 — 재원 + 활성 수강(subjectKeys ∩ opt-in). 동명이인은 collisions로 분리. */
+/** 그룹별 기대 보드 — 재원 + 활성 수강(subjectKeys ∩ opt-in). 동명이인은 collisions로 분리.
+ *  ⚠️ 그룹핑 키 = norm(유효이름, 공백 제거) — "김 민수"와 "김민수"가 서로 다른 학생인데 같은 물리 보드로
+ *  합쳐지는 것을 동명이인으로 취급해 보류(2026-07-13 적대 검증 픽스). */
 async function expectedFor(sql, tenant, keys, prefix) {
   const rows = await sql`
     select distinct s.id, s.name, s.classnote_name
@@ -71,14 +82,15 @@ async function expectedFor(sql, tenant, keys, prefix) {
   for (const r of rows) {
     const eff = (r.classnote_name || r.name || "").trim();
     if (!eff) continue;
-    if (!byName.has(eff)) byName.set(eff, []);
-    byName.get(eff).push(r);
+    const key = norm(eff);
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push({ ...r, eff });
   }
   const targets = [];
   const collisions = [];
-  for (const [eff, students] of byName) {
-    if (students.length > 1) collisions.push({ name: eff, count: students.length });
-    else targets.push({ student: eff, board: `${prefix}${eff}` });
+  for (const [, students] of byName) {
+    if (students.length > 1) collisions.push({ name: students[0].eff, count: students.length });
+    else targets.push({ student: students[0].eff, board: `${prefix}${students[0].eff}` });
   }
   return { targets, collisions };
 }
@@ -140,26 +152,38 @@ export async function provisionDailyOnce(sql, browser, { tenant, post, log = con
       boardByNorm = new Map((await fetchBoards(page, centerId)).map((b) => [norm(b.name), b]));
     }
 
-    // ② 가입됐는데 자기 보드가 빈 학생 → 자동 배정(원아 ID 기반, 동명 원아는 보류)
+    // ② 가입됐는데 자기 보드가 빈 학생 → 자동 배정(원아 ID 기반). 방어 4겹(2026-07-13 적대 감사 반영):
+    //   ⓐ 양방향 유일성 — 원아가 DB 전체(퇴원·타과목 포함) 동명 학생 2+에 걸리면 보류(F1·F2·F3)
+    //   ⓑ 잔존 가족 직격 가드 — 원아가 이미 다른 학생의 개인 보드 소속이면 보류(F1 보조)
+    //   ⓒ POST 직전 보드 실시간 재확인 — 스냅샷 이후 진짜 가족이 합류했으면 중단(F5)
+    //   ⓓ POST 직후 인원 검증 — 2명 이상이면 경보(해제 API 불가라 사후 탐지 필수)
     let assigned = 0;
-    for (const p of plans) {
-      for (const t of p.targets) {
-        const board = boardByNorm.get(norm(t.board));
-        if (!board || board.children >= 1) continue;
-        const clean = t.student.replace(/[a-zA-Z]/g, "").trim();
-        const cands = children.filter((c) => {
-          const keys = childKeys(c.name);
-          return keys.has(t.student) || keys.has(clean);
-        });
-        if (cands.length !== 1) {
-          if (cands.length > 1) held.push(`${t.board}(동명 원아 ${cands.length}명 — 생일 대조 필요)`);
-          continue; // 0명 = 미가입(초대 대기) — 정상, 보류 아님
-        }
-        const detail = await fetchChildDetail(page, cands[0].id);
-        if ((detail.enrollment ?? []).some((e) => e.belong_to_class === board.id && !e.removed_child)) continue;
-        const res = await enrollChild(page, cands[0].id, board.id);
-        log(`[provision] 배정 ${t.board} → ${res.status < 300 ? "✅" : `❌ HTTP ${res.status}`}`);
-        if (res.status < 300) assigned++;
+    const allTargets = plans.flatMap((p) => p.targets);
+    const universeNames = await fetchUniverseNames(sql, tenant);
+    const { matches, held: matchHeld } = planChildMatches(allTargets, children, universeNames);
+    for (const h of matchHeld) held.push(`${h.board}(${h.reason})`);
+    for (const t of allTargets) {
+      const board = boardByNorm.get(norm(t.board));
+      if (!board || board.children >= 1) continue; // 빈 보드만 — 이미 배정된 보드는 절대 안 건드림
+      const child = matches.get(t.board);
+      if (!child) continue; // 미가입(초대 대기) 또는 모호 보류
+      const detail = await fetchChildDetail(page, child.id);
+      if ((detail.enrollment ?? []).some((e) => e.belong_to_class === board.id && !e.removed_child)) continue;
+      if (hasForeignStudentBoard(detail.enrollment, t.student)) {
+        held.push(`${t.board}(원아가 다른 학생 개인 보드에 이미 소속 — 잔존 가족 의심)`);
+        continue;
+      }
+      const live = await fetchBoardChildren(page, centerId, board.id).catch(() => null);
+      if (live === null || live.length > 0) {
+        if (live?.length) log(`[provision] ${t.board} — 실행 중 다른 원아 합류 감지, 배정 중단`);
+        continue;
+      }
+      const res = await enrollChild(page, child.id, board.id);
+      log(`[provision] 배정 ${t.board} → ${res.status < 300 ? "✅" : `❌ HTTP ${res.status}`}`);
+      if (res.status < 300) {
+        assigned++;
+        const after = await fetchBoardChildren(page, centerId, board.id).catch(() => []);
+        if (after.length > 1) log(`[provision] ⚠️ 경보: ${t.board} 인원 ${after.length}명 — 수동 확인 필요(기관설정>반)`);
       }
     }
 
