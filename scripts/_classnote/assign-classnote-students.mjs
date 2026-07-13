@@ -4,17 +4,18 @@
  * ClassNote 제약: 학생 엔티티는 **학부모가 가입·승인해야** 생긴다("회원가입 후 반배정 필요") — 그래서
  * 보드(provision-classnote-boards.mjs)는 미리 만들어도, 배정은 가입 후에만 가능.
  *
- * 판독(2026-07-13 API 전환 — Edutrix 원본의 per-학생 DOM 검색은 오탐·모달 스크롤 스캔은 비결정이라 폐기):
- * 내부 REST로 보드별 배정 인원(centers/{id}/classes.approved_children)과 가입 원아 목록(children)을 전건
- * 조회해 전수 판정(읽기 전용):
- *   assigned(자기 보드 1명+) / ready(가입했는데 자기 보드 0명 = 배정 가능) /
- *   not_signed_up(가입 안 됨 = 학부모 초대 필요) / board_missing(보드 없음 = provision 먼저).
+ * 판독·배정 모두 내부 API(2026-07-13 확정 — DOM 모달 자동화는 오탐·React 상태 미반영으로 폐기):
+ * - 판독: `centers/{id}/classes`(보드별 approved_children) + `children`(가입 원아) → 전수 판정
+ *   assigned(자기 보드 1명+) / ready(가입했는데 자기 보드 0명) / not_signed_up(학부모 초대 필요) /
+ *   board_missing(provision 먼저) / ambiguous(동명이인 원아 — 생일로 수동 대조).
+ * - 배정(--apply): `POST /api/v1/enrollments/ {child, belong_to_class}` — **원아 ID 기반**이라 동명이인
+ *   안전(이름 매칭이 유일 후보일 때만 자동, 2명+이면 ambiguous로 보류). 사후 재조회 검증 포함.
  *
- * 실행(기본 dry-run — 스캔·판정만, 아무것도 변경하지 않음):
+ * 실행(기본 dry-run — 조회·판정만, 아무것도 변경하지 않음):
  *   node --env-file=.env.local scripts/_classnote/assign-classnote-students.mjs [--subject=math|english|all] [--student=이름]
  * 실제 배정(ready 대상만):
- *   node --env-file=.env.local scripts/_classnote/assign-classnote-students.mjs --apply [--limit=N] [--headed]
- * ⚠️ --apply 배정 흐름(학생 행 클릭→반 선택→선택완료)은 Edutrix 원본 이식 — 첫 실대상 발생 시 1건으로 검증할 것.
+ *   node --env-file=.env.local scripts/_classnote/assign-classnote-students.mjs --apply [--limit=N]
+ * ⚠️ 배정은 실 ClassNote 변경(학부모 앱에 반 배정 알림 가능) — 원장 승인 후. 해제(제거)는 API 405라 UI에서만.
  */
 import postgres from "postgres";
 import { resolveTenant } from "./classnote-core.mjs";
@@ -22,15 +23,17 @@ import {
   BOARD_GROUPS,
   launchAdminBrowser,
   loginClassnote,
-  dismissHonorificDialog,
-  collectModalButtons,
   fetchCenterId,
   fetchBoards,
   fetchChildren,
-  childKeys,
+  fetchChildDetail,
+  fetchBoardChildren,
+  enrollChild,
+  planChildMatches,
+  hasForeignStudentBoard,
   norm,
-  CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
+import { fetchUniverseNames } from "./classnote-provision-core.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const HEADED = process.argv.includes("--headed");
@@ -46,6 +49,8 @@ if (!groups.length) {
   process.exit(1);
 }
 
+/** 그룹별 타깃 — 유효이름 norm 그룹핑으로 동명이인은 제외(collisions 별도 반환, 적대 감사 F4:
+ *  같은 이름 2명이 같은 board 문자열 타깃 2건으로 들어가 한 가족이 공유 보드에 배정되는 것 차단). */
 async function targetsOf(sql, tenant, group) {
   const rows = await sql`
     select distinct s.id, s.name, s.classnote_name
@@ -55,166 +60,34 @@ async function targetsOf(sql, tenant, group) {
     where s.tenant_id = ${tenant}
       and s.status = 'enrolled'
       and c.subject in ${sql(group.subjectKeys)}`;
-  return rows
-    .map((r) => {
-      const eff = (r.classnote_name || r.name || "").trim();
-      return eff ? { studentName: eff, board: `${group.prefix}${eff}`, subject: group.label } : null;
-    })
-    .filter(Boolean);
+  const byName = new Map();
+  for (const r of rows) {
+    const eff = (r.classnote_name || r.name || "").trim();
+    if (!eff) continue;
+    const key = norm(eff);
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(eff);
+  }
+  const targets = [];
+  const collisions = [];
+  for (const [, effs] of byName) {
+    if (effs.length > 1) collisions.push({ name: effs[0], count: effs.length });
+    else targets.push({ studentName: effs[0], board: `${group.prefix}${effs[0]}`, subject: group.label });
+  }
+  return { targets, collisions };
 }
 
-/** "반 추가" 모달 열기(학생 관리 페이지). */
-async function openAssignModal(page) {
-  await page.goto(`${CLASSNOTE_BASE}/service/setting/child`, { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.waitForTimeout(2000);
-  await dismissHonorificDialog(page);
-  // '반 추가' 버튼은 승인 완료 탭에서만 노출 — 탭 먼저 활성화.
-  await page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll("button")).find((b) =>
-      (b.innerText || "").includes("승인 완료"),
-    );
-    if (btn) btn.click();
-  });
-  await page.waitForTimeout(2000);
-  const opened = await page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll("button")).find((b) =>
-      ((b.innerText || "").trim() || "").includes("반 추가"),
-    );
-    if (btn && !btn.disabled) {
-      btn.click();
-      return true;
-    }
-    return false;
-  });
-  if (!opened) throw new Error("'반 추가' 버튼을 찾지 못함(학생 관리 페이지)");
-  await page.waitForTimeout(2200);
-  return true;
-}
-
-/** API 전수 스캔 — 보드별 배정 인원 + 가입 원아 매칭 키 집합(읽기 전용 GET). */
-async function scanViaApi(page) {
-  const centerId = await fetchCenterId(page);
-  const boards = await fetchBoards(page, centerId);
-  const boardCount = new Map(boards.map((b) => [norm(b.name), b.children]));
-  const memberKeys = new Set();
-  for (const name of await fetchChildren(page, centerId)) for (const k of childKeys(name)) memberKeys.add(k);
-  return { boardCount, memberKeys, centerId, boardsTotal: boards.length };
-}
-
-/** 판정 — 자기 보드 인원 ≥1: assigned / 가입멤버에 있고 보드 0명: ready / 멤버에 없음: not_signed_up. */
-function judge(t, scan) {
-  const cnt = scan.boardCount.get(norm(t.board));
-  if (cnt === undefined) return { status: "board_missing" };
-  if (cnt >= 1) return { status: "assigned" };
-  const clean = t.studentName.replace(/[a-zA-Z]/g, "").trim();
-  const signedUp = scan.memberKeys.has(t.studentName) || scan.memberKeys.has(clean);
-  return signedUp ? { status: "ready" } : { status: "not_signed_up" };
-}
-
-/** (--apply) ready 학생 1명 배정 — [ALL] 자식 행 클릭 → 반 드롭다운 → 보드 정확일치 선택 → 선택완료. */
-async function assignOne(page, t) {
-  const clean = t.studentName.replace(/[a-zA-Z]/g, "").trim();
-  // [ALL] 아코디언에서 학생 행 찾기(모달 스크롤하며)
-  let clicked = false;
-  await collectModalButtons(page, {
-    rounds: 60,
-    settleRounds: 4,
-    onRound: async () => {
-      if (clicked) return;
-      clicked = await page.evaluate(
-        ([wantA, wantB]) => {
-          const dlg = document.querySelector('div[role="dialog"]');
-          if (!dlg) return false;
-          const rows = Array.from(dlg.querySelectorAll("button")).filter((b) => {
-            const t2 = (b.innerText || "").trim();
-            return (t2 === wantA || t2 === wantB) && !t2.includes("|");
-          });
-          if (rows.length !== 1) return false; // 0=미노출(계속 스크롤) / 2+=동명이인(중단)
-          rows[0].scrollIntoView({ block: "center" });
-          rows[0].click();
-          return true;
-        },
-        [t.studentName, clean],
-      );
-    },
-  });
-  if (!clicked) {
-    await page.keyboard.press("Escape").catch(() => {});
-    return { status: "error", note: "학생 행 미발견/동명이인" };
-  }
-  await page.waitForTimeout(900);
-
-  // 반 드롭다운 → 보드 정확일치(공백제거) 선택
-  const ddOpened = await page.evaluate(() => {
-    const modal = document.querySelector('div[role="dialog"]') || document.body;
-    const dd =
-      modal.querySelector("button.css-13ac07v") ||
-      modal.querySelector('span[data-label="true"]')?.closest("button") ||
-      Array.from(modal.querySelectorAll("span"))
-        .find((s) => (s.innerText || "").includes("반배정 필요"))
-        ?.closest("button");
-    if (dd) {
-      dd.click();
-      return true;
-    }
-    return false;
-  });
-  if (!ddOpened) {
-    await page.keyboard.press("Escape").catch(() => {});
-    return { status: "error", note: "반 드롭다운 없음" };
-  }
-  await page.waitForTimeout(1200);
-
-  const selected = await page.evaluate((label) => {
-    const want = label.replace(/\s/g, "");
-    for (const el of document.querySelectorAll("div, li, button, span, option, p")) {
-      const t2 = (el.innerText || el.textContent || "").trim();
-      if (t2.replace(/\s/g, "") === want && !t2.includes("\n")) {
-        if (el.tagName === "OPTION") {
-          const sel = el.closest("select");
-          if (sel) {
-            sel.value = el.value;
-            sel.dispatchEvent(new Event("change", { bubbles: true }));
-            return true;
-          }
-        }
-        if (el.offsetParent !== null) {
-          el.click();
-          return true;
-        }
-      }
-    }
-    return false;
-  }, t.board);
-  if (!selected) {
-    await page.keyboard.press("Escape").catch(() => {});
-    return { status: "error", note: "보드 옵션 미발견" };
-  }
-  await page.waitForTimeout(800);
-
-  const LABELS = ["선택완료", "선택 완료", "반 추가", "추가", "확인", "저장"];
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await page.evaluate((labels) => {
-      const modal = document.querySelector('div[role="dialog"]') || document.body;
-      const buttons = Array.from(modal.querySelectorAll("button"));
-      for (const label of labels) {
-        const btn = buttons.find((b) => (b.innerText || "").trim() === label);
-        if (btn) {
-          if (btn.disabled) return { disabled: true };
-          btn.click();
-          return { ok: true };
-        }
-      }
-      return {};
-    }, LABELS);
-    if (res.ok) {
-      await page.waitForTimeout(2500);
-      return { status: "assigned" };
-    }
-    await page.waitForTimeout(1000);
-  }
-  await page.keyboard.press("Escape").catch(() => {});
-  return { status: "error", note: "제출 버튼 실패" };
+/** 판정 — 배정/배정가능/미가입/보드없음/모호. 매칭은 planChildMatches(양방향 유일성 — 정방향 동명 원아
+ *  + 역방향(원아 1명↔접미사 다른 학생 2+) 모두 보류. 전체 타깃 기준이어야 완전해서 밖에서 1회 계산해 주입. */
+function judge(t, boardByNorm, plan) {
+  const board = boardByNorm.get(norm(t.board));
+  if (!board) return { status: "board_missing" };
+  if (board.children >= 1) return { status: "assigned" };
+  const heldReason = plan.heldByBoard.get(t.board);
+  if (heldReason) return { status: "ambiguous", note: heldReason };
+  const child = plan.matches.get(t.board);
+  if (!child) return { status: "not_signed_up" };
+  return { status: "ready", child, boardId: board.id };
 }
 
 (async () => {
@@ -222,24 +95,45 @@ async function assignOne(page, t) {
   const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 1 });
   const tenant = await resolveTenant(sql);
 
-  let targets = [];
-  for (const g of groups) targets.push(...(await targetsOf(sql, tenant, g)));
+  const allTargets = [];
+  for (const g of groups) {
+    const { targets: ts, collisions } = await targetsOf(sql, tenant, g);
+    allTargets.push(...ts);
+    for (const c of collisions)
+      console.log(`⚠️ [${g.label}] 동명이인 "${c.name}" ${c.count}명 — classnote_name 접미사 지정 전까지 제외`);
+  }
+  // 역방향 유일성 우주 = 전 학생(퇴원·타과목 포함) — --subject/--student 필터와 무관하게 항상 전수.
+  const universeNames = await fetchUniverseNames(sql, tenant);
+  await sql.end({ timeout: 5 });
+  // ⚠️ --student 필터는 표시·실행 범위만 좁힌다 — 매칭 계획(역방향 유일성)은 반드시 전체 타깃 기준.
+  let targets = allTargets;
   if (studentArg) {
-    const exact = targets.filter((t) => t.studentName === studentArg);
-    targets = exact.length ? exact : targets.filter((t) => t.studentName.includes(studentArg));
+    const exact = allTargets.filter((t) => t.studentName === studentArg);
+    targets = exact.length ? exact : allTargets.filter((t) => t.studentName.includes(studentArg));
   }
   console.log(`대상 ${targets.length}건${studentArg ? ` (필터: ${studentArg})` : ""}`);
-  if (!targets.length) return sql.end({ timeout: 5 });
+  if (!targets.length) return;
 
   const browser = await launchAdminBrowser({ headed: HEADED });
   const page = await browser.newPage();
   try {
     await loginClassnote(page);
-    console.log("전수 조회 중(API — 보드 인원 + 가입 원아)…");
-    const scan = await scanViaApi(page);
-    console.log(`보드 ${scan.boardsTotal}개 · 가입 원아 매칭키 ${scan.memberKeys.size}개 수집`);
+    const centerId = await fetchCenterId(page);
+    console.log(`전수 조회 중(API, center ${centerId})…`);
+    const boards = await fetchBoards(page, centerId);
+    const boardByNorm = new Map(boards.map((b) => [norm(b.name), b]));
+    const children = await fetchChildren(page, centerId);
+    console.log(`보드 ${boards.length}개 · 가입 원아 ${children.length}명 수집`);
 
-    const detail = targets.map((t) => ({ ...t, ...judge(t, scan) }));
+    // 매칭 계획 1회 — 우주=전 학생(universeNames), 타깃=전 그룹(allTargets). 필터는 표시·실행만 좁힘.
+    const { matches, held } = planChildMatches(
+      allTargets.map((t) => ({ student: t.studentName, board: t.board })),
+      children,
+      universeNames,
+    );
+    const plan = { matches, heldByBoard: new Map(held.map((h) => [h.board, h.reason])) };
+
+    const detail = targets.map((t) => ({ ...t, ...judge(t, boardByNorm, plan) }));
     const stats = {};
     for (const d of detail) stats[d.status] = (stats[d.status] ?? 0) + 1;
 
@@ -251,7 +145,8 @@ async function assignOne(page, t) {
       for (const d of arr) console.log(`  - ${fmt(d)}`);
     };
     show("🏫 보드 없음(provision 먼저)", detail.filter((d) => d.status === "board_missing"), (d) => d.board);
-    show("✅ 배정 가능(가입 완료·보드 비어있음)", detail.filter((d) => d.status === "ready"), (d) => `${d.studentName} → ${d.board}`);
+    show("⚠️ 동명이인 원아(생일 대조 후 수동)", detail.filter((d) => d.status === "ambiguous"), (d) => `${d.board} ← 후보: ${d.note}`);
+    show("✅ 배정 가능(가입 완료·보드 비어있음)", detail.filter((d) => d.status === "ready"), (d) => `${d.studentName}(원아 ${d.child.id}·${d.child.birth ?? "?"}) → ${d.board}`);
     show("📨 학부모 초대 필요(미가입)", detail.filter((d) => d.status === "not_signed_up"), (d) => `${d.studentName} (${d.subject})`);
 
     if (!APPLY) {
@@ -260,22 +155,39 @@ async function assignOne(page, t) {
     }
 
     const ready = detail.filter((d) => d.status === "ready").slice(0, Number.isFinite(LIMIT) ? LIMIT : undefined);
-    console.log(`\n--apply: ready ${ready.length}건 배정 시작`);
-    let done = 0;
-    for (const t of ready) {
-      done++;
-      await openAssignModal(page); // 학생마다 모달 새로 열기(상태 오염 방지)
-      let r;
-      try {
-        r = await assignOne(page, t);
-      } catch (e) {
-        r = { status: "error", note: e.message };
-        await page.keyboard.press("Escape").catch(() => {});
+    console.log(`\n--apply: ready ${ready.length}건 배정 시작(POST /api/v1/enrollments/)`);
+    let ok = 0;
+    let fail = 0;
+    for (const [i, t] of ready.entries()) {
+      // 멱등 + 잔존 가족 가드(원아가 다른 학생 개인 보드 소속이면 보류) + POST 직전 보드 실시간 재확인.
+      const before = await fetchChildDetail(page, t.child.id);
+      if ((before.enrollment ?? []).some((e) => e.belong_to_class === t.boardId && !e.removed_child)) {
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → 이미 배정됨(건너뜀)`);
+        continue;
       }
-      console.log(`  [${done}/${ready.length}] ${t.board} → ${r.status}${r.note ? ` (${r.note})` : ""}`);
+      if (hasForeignStudentBoard(before.enrollment, t.studentName)) {
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ⚠️ 보류(원아가 다른 학생 개인 보드에 이미 소속)`);
+        continue;
+      }
+      const live = await fetchBoardChildren(page, centerId, t.boardId).catch(() => null);
+      if (live === null || live.length > 0) {
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ⚠️ 중단(실행 중 보드에 다른 원아 합류)`);
+        continue;
+      }
+      const res = await enrollChild(page, t.child.id, t.boardId);
+      if (res.status >= 200 && res.status < 300) {
+        const after = await fetchBoardChildren(page, centerId, t.boardId).catch(() => []);
+        const extra = after.length > 1 ? ` ⚠️ 인원 ${after.length}명 — 수동 확인` : "";
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ✅ ${res.status} (보드 ${after.length}명)${extra}`);
+        ok++;
+      } else {
+        console.log(`  [${i + 1}/${ready.length}] ${t.board} → ❌ ${res.status} ${res.body}`);
+        fail++;
+      }
+      await page.waitForTimeout(400);
     }
+    console.log(`\n=== 배정 완료: 성공 ${ok} · 실패 ${fail} ===`);
   } finally {
     await browser.close().catch(() => {});
-    await sql.end({ timeout: 5 }).catch(() => {});
   }
 })();

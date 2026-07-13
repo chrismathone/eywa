@@ -126,7 +126,9 @@ async function callProvider(
     ...(opts.system ? { system: opts.system } : {}),
     messages: [{ role: "user", content: opts.prompt }],
   });
-  return res.content[0]?.type === "text" ? res.content[0].text : "";
+  // content[0]만 보지 말고 모든 text 블록을 이어붙인다 — thinking 등 비-text 블록이 앞설 수 있어
+  // 첫 블록만 읽으면 빈 문자열이 되는 모델(Sonnet 5 등)에서 파싱 실패("no json")가 난다.
+  return res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
 }
 
 export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data: T; model: string }> {

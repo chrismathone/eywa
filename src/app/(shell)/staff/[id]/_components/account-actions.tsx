@@ -1,75 +1,21 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
-import { KeyRound, Loader2, Mail, ShieldCheck, Trash2, UserCheck, UserMinus, X } from "lucide-react";
+import { useActionState, useState } from "react";
+import { KeyRound, Mail, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
-import { changeStaffRole, deactivateStaff } from "@/features/staff/server/actions";
+import { changeStaffRole } from "@/features/staff/server/actions";
+import type { HomeroomClassRow } from "@/features/staff/server/queries";
 import {
   changeStaffEmail,
   deleteStaff,
   resetStaffPassword,
 } from "@/features/staff/server/account-actions";
+import { Footer, Modal, SubmitBtn } from "./dialog-bits";
+import { DeactivateButton } from "./deactivate-button";
 
 const INPUT = "border-border bg-card text-foreground w-full rounded-md border px-2.5 py-1.5 text-sm";
-
-function Modal({
-  title,
-  desc,
-  onClose,
-  children,
-}: {
-  title: string;
-  desc?: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        className="bg-background border-border w-full max-w-sm rounded-lg border p-5 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="mb-3 flex items-start justify-between gap-2">
-          <div>
-            <h2 className="text-foreground text-base font-semibold">{title}</h2>
-            {desc ? <p className="text-text-dim mt-0.5 text-xs">{desc}</p> : null}
-          </div>
-          <button type="button" onClick={onClose} aria-label="닫기" className="text-text-dim hover:text-foreground">
-            <X className="size-4" />
-          </button>
-        </header>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function SubmitBtn({ label, variant }: { label: string; variant?: "default" | "destructive" }) {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" size="sm" variant={variant} disabled={pending}>
-      {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
-      {label}
-    </Button>
-  );
-}
-
-function Footer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  return (
-    <footer className="flex items-center justify-end gap-2 pt-1">
-      <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-        취소
-      </Button>
-      {children}
-    </footer>
-  );
-}
 
 function EmailDialog({
   staffId,
@@ -214,46 +160,15 @@ function RoleDialog({
   );
 }
 
-/** 퇴사/재직복구 — 입력 없는 상태 토글이라 모달 대신 confirm 인라인(end-enrollment 패턴). 성공 시 revalidatePath로 갱신. */
-function DeactivateButton({
-  staffId,
-  displayName,
-  currentStatus,
-}: {
-  staffId: string;
-  displayName: string;
-  currentStatus: "active" | "inactive" | "pending";
-}) {
-  const [state, action] = useActionState(deactivateStaff, undefined);
-  const isInactive = currentStatus === "inactive";
-  return (
-    <form
-      action={action}
-      onSubmit={(e) => {
-        const msg = isInactive
-          ? `${displayName} 직원을 재직 복구할까요?`
-          : `${displayName} 직원을 퇴사 처리할까요? 로그인·목록에서 비활성됩니다 (기록은 보존).`;
-        if (!confirm(msg)) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="id" value={staffId} />
-      <input type="hidden" name="next" value={isInactive ? "active" : "inactive"} />
-      <Button type="submit" variant="outline" size="sm">
-        {isInactive ? <UserCheck className="size-3.5" /> : <UserMinus className="size-3.5" />}
-        {isInactive ? "재직 복구" : "퇴사 처리"}
-      </Button>
-      {state?.error ? <span className="text-chart-4 ml-2 text-xs">{state.error}</span> : null}
-    </form>
-  );
-}
-
 function DeleteDialog({
   staffId,
   displayName,
+  homeroomCount,
   onClose,
 }: {
   staffId: string;
   displayName: string;
+  homeroomCount: number;
   onClose: () => void;
 }) {
   const [state, action] = useActionState(deleteStaff, undefined);
@@ -262,6 +177,12 @@ function DeleteDialog({
     <Modal title="직원 삭제" desc={`${displayName} 계정을 완전히 삭제합니다.`} onClose={onClose}>
       <form action={action} className="space-y-3">
         <input type="hidden" name="id" value={staffId} />
+        {homeroomCount > 0 ? (
+          <p className="text-amber text-xs font-medium">
+            이 직원이 담임인 진행중인 반이 {homeroomCount}개 있습니다. 삭제하면 그 반들의 담임이
+            비워집니다 — 먼저 각 반에서 강사 인수인계를 진행하세요.
+          </p>
+        ) : null}
         <p className="text-text-dim text-xs">
           되돌릴 수 없습니다. 로그인 계정과 직원 정보가 모두 삭제됩니다. 출결 기록이 있으면 삭제 대신 ‘퇴사’ 처리를
           권장합니다.
@@ -282,6 +203,7 @@ export function AccountActions({
   currentRole,
   currentStatus,
   roleOptions,
+  homeroomClasses,
 }: {
   staffId: string;
   displayName: string;
@@ -289,6 +211,8 @@ export function AccountActions({
   currentRole: SystemRole;
   currentStatus: "active" | "inactive" | "pending";
   roleOptions: SystemRole[];
+  /** 이 직원이 담임인 진행중 반 — 퇴사/삭제 시 인수인계 경고에 사용 */
+  homeroomClasses: HomeroomClassRow[];
 }) {
   const [open, setOpen] = useState<"email" | "password" | "role" | "delete" | null>(null);
   const close = () => setOpen(null);
@@ -313,7 +237,12 @@ export function AccountActions({
           <KeyRound className="size-3.5" />
           비밀번호 재설정
         </Button>
-        <DeactivateButton staffId={staffId} displayName={displayName} currentStatus={currentStatus} />
+        <DeactivateButton
+          staffId={staffId}
+          displayName={displayName}
+          currentStatus={currentStatus}
+          homeroomClasses={homeroomClasses}
+        />
         <Button variant="destructive" size="sm" onClick={() => setOpen("delete")}>
           <Trash2 className="size-3.5" />
           직원 삭제
@@ -336,7 +265,12 @@ export function AccountActions({
         <PasswordDialog staffId={staffId} displayName={displayName} onClose={close} />
       ) : null}
       {open === "delete" ? (
-        <DeleteDialog staffId={staffId} displayName={displayName} onClose={close} />
+        <DeleteDialog
+          staffId={staffId}
+          displayName={displayName}
+          homeroomCount={homeroomClasses.length}
+          onClose={close}
+        />
       ) : null}
     </div>
   );

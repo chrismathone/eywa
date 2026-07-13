@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { invoiceOutstanding, paymentRateOf } from "@/features/billing/calc";
 import type { StudentBillingRow } from "@/features/students/server/queries";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -21,8 +22,12 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 };
 const PAGE_SIZES = [10, 20, 50, 100];
 const won = (n: number) => n.toLocaleString();
-const unpaidOf = (r: StudentBillingRow) => Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid);
-const billingName = (r: StudentBillingRow) => r.notes?.trim() || CATEGORY_LABEL[r.category] || "청구";
+// line_items(항목 내역)가 있으면 그 항목명을 대표 라벨로, 없으면 메모 → category 라벨 순.
+const billingName = (r: StudentBillingRow) =>
+  r.notes?.trim() ||
+  r.lineItems.map((li) => li.description).filter(Boolean).join(", ") ||
+  CATEGORY_LABEL[r.category] ||
+  "청구";
 
 export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
   const latestYear = invoices[0]?.period ? Number(invoices[0].period.slice(0, 4)) : new Date().getFullYear();
@@ -52,7 +57,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       billed += r.amountTotal;
       paid += r.amountPaid;
       if (r.status !== "paid") {
-        unpaid += unpaidOf(r);
+        unpaid += invoiceOutstanding(r); // 행 레벨 clamp·refunded/void 제외 — calc.ts 단일 공식
         pending++;
       }
     }
@@ -71,7 +76,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       if (r.status === "paid") paidCount++;
     }
     const net = billed - discount;
-    const rate = net > 0 ? Math.min((paid / net) * 100, 100) : 0;
+    const rate = paymentRateOf(paid, net);
     return { total: invoices.length, paidCount, pendingCount: invoices.length - paidCount, rate };
   }, [invoices]);
 
@@ -159,8 +164,20 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                     return (
                       <tr key={r.id} className="hover:bg-bg-soft/40">
                         <td className="num text-text-dim px-3 py-2 text-xs">{r.period}</td>
-                        <td className="text-foreground truncate px-3 py-2" title={billingName(r)}>
-                          {billingName(r)}
+                        <td className="text-foreground px-3 py-2" title={billingName(r)}>
+                          {r.lineItems.length > 1 ? (
+                            // 여러 항목이면 makeedu처럼 항목별로 펼쳐 보여준다(집계로 가려진 내역 복원).
+                            <div className="space-y-0.5">
+                              {r.lineItems.map((li, i) => (
+                                <div key={i} className="flex items-baseline justify-between gap-2">
+                                  <span className="truncate">{li.description || "항목"}</span>
+                                  <span className="num text-text-faint shrink-0 text-[11px]">{won(li.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="block truncate">{billingName(r)}</span>
+                          )}
                         </td>
                         <td className="num px-3 py-2 text-right">{won(r.amountTotal)}</td>
                         <td className="num text-chart-2 px-3 py-2 text-right">{r.amountPaid > 0 ? won(r.amountPaid) : "-"}</td>

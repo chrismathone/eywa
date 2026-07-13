@@ -304,7 +304,9 @@ export async function changeStaffRole(
   return { ok: true };
 }
 
-export type DeactivateState = { error?: string } | undefined;
+export type DeactivateState =
+  | { error?: string; ok?: true; homeroomCount?: number }
+  | undefined;
 
 export async function deactivateStaff(
   _prev: DeactivateState,
@@ -326,7 +328,21 @@ export async function deactivateStaff(
   const { error } = await supabase.from("users").update({ status: next }).eq("id", id);
   if (error) return { error: error.message };
 
+  // 퇴사 시 담임으로 남는 진행중 반 수 — 퇴사를 막지 않고 알림용으로만 반환.
+  // (status 변경은 classes.teacher_id에 아무 전파가 없어 "(퇴직)" 담임이 시간표·출석부에 남는다.
+  //  UI 사전 경고가 stale 데이터로 비었더라도 여기서 잡아 사후 안내.) 카운트는 head:true — 행 미전송(B2).
+  let homeroomCount = 0;
+  if (next === "inactive") {
+    const { count } = await supabase
+      .from("classes")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", actor.tenantId)
+      .eq("teacher_id", id)
+      .eq("is_active", true);
+    homeroomCount = count ?? 0;
+  }
+
   revalidatePath("/staff");
   revalidatePath(`/staff/${id}`);
-  return undefined;
+  return { ok: true, homeroomCount };
 }

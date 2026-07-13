@@ -12,6 +12,12 @@ import { computeImportDiff, importDiffHash } from "@/features/timetable/import/d
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { readSheetTabRows } from "@/features/integrations/google-sheets";
 import { sheetsProvider, supportsTimetableImport } from "@/features/integrations/sheets-provider";
+import {
+  claimSheetSyncLease,
+  releaseSheetSyncLease,
+  SHEET_SYNC_BUSY_MSG,
+  type SheetSyncLease,
+} from "@/features/integrations/server/sheet-sync-lease";
 import type {
   ClassRef,
   EnrollmentSnapshotRow,
@@ -191,32 +197,52 @@ export type ApplyState = {
  * 미리보기에서 확인한 변경을 적용 — **파일 경로**. 클라는 diff가 아니라 미리보기 hash + 같은 파일을
  * 재전송하고, 서버가 파일+DB를 재읽어 diff를 재계산해 hash 대조(영어 applyStructureImport와 동일 재검증).
  * 불일치 = preview~apply 사이 수강/반 변경(다른 관리자 이동, 시트 반영 등) → 중단 + staleHash 반환.
+ *
+ * `subject`를 주면 그 과목 시트 리스를 선점해 '시트 반영'과의 교차 실행을 직렬화한다(0098a, 다이얼로그가 넘김).
+ * 미연동(norow)·미지정이면 리스 없이 진행. 재계산~적용 전 구간이 리스 안 — 검증 중 교차 실행도 차단.
  */
-export async function applyTimetableImport(expectedHash: string, formData: FormData): Promise<ApplyState> {
+export async function applyTimetableImport(
+  expectedHash: string,
+  formData: FormData,
+  subject?: string,
+): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일이 없습니다 — 다시 선택 후 미리보기하세요" };
 
-  let fresh;
-  try {
-    fresh = await computeFreshFromFile(file);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "엑셀 파싱 실패" };
+  const supabase = await createClient();
+  const provider = subject ? sheetsProvider(subject) : null;
+  let lease: SheetSyncLease = "norow";
+  if (provider) {
+    lease = await claimSheetSyncLease(supabase, provider);
+    if (lease === "busy") return { error: SHEET_SYNC_BUSY_MSG };
   }
-  if ("error" in fresh) return { error: fresh.error };
+  try {
+    let fresh;
+    try {
+      fresh = await computeFreshFromFile(file);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "엑셀 파싱 실패" };
+    }
+    if ("error" in fresh) return { error: fresh.error };
 
-  // 서버 재검증 — 미리보기 이후 수강/반이 바뀌면 hash 불일치 → 중단(재미리보기 유도).
-  const hash = importDiffHash(fresh.diff);
-  if (hash !== expectedHash)
-    return { error: "수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
-  return applyDiff(user, fresh.diff);
+    // 서버 재검증 — 미리보기 이후 수강/반이 바뀌면 hash 불일치 → 중단(재미리보기 유도).
+    const hash = importDiffHash(fresh.diff);
+    if (hash !== expectedHash)
+      return { error: "수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
+    return await applyDiff(user, supabase, fresh.diff);
+  } finally {
+    // ⚠️ return await 필수(위) — 프로미스만 반환하면 적용 완료 전에 리스가 풀린다.
+    if (provider && lease === "claimed") await releaseSheetSyncLease(supabase, provider);
+  }
 }
 
 /**
  * 미리보기에서 확인한 변경을 적용 — **구글 시트 경로**. 서버가 시트+DB를 재읽어 diff 재계산·hash 대조
  * (protectNewerThan 포함, preview와 동일 계산). 게이트는 previewSheetImport와 대칭(master 전용).
+ * 시트 리스(0098a)를 잡고 재읽기~적용까지 수행 — '시트 반영'·다른 가져오기와 교차 실행 직렬화.
  */
 export async function applySheetImport(expectedHash: string, subject: string = "math"): Promise<ApplyState> {
   const user = await getCurrentUser();
@@ -225,27 +251,39 @@ export async function applySheetImport(expectedHash: string, subject: string = "
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
 
-  let fresh;
+  const supabase = await createClient();
+  const provider = sheetsProvider(subject);
+  // norow(연동 행 없음)는 통과 — computeFreshFromSheet가 "연동 꺼짐" 안내로 떨어진다.
+  const lease = await claimSheetSyncLease(supabase, provider);
+  if (lease === "busy") return { error: SHEET_SYNC_BUSY_MSG };
   try {
-    fresh = await computeFreshFromSheet(subject);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "시트 읽기 실패" };
-  }
-  if ("error" in fresh) return { error: fresh.error };
+    let fresh;
+    try {
+      fresh = await computeFreshFromSheet(subject);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "시트 읽기 실패" };
+    }
+    if ("error" in fresh) return { error: fresh.error };
 
-  const hash = importDiffHash(fresh.diff);
-  if (hash !== expectedHash)
-    return { error: "시트 또는 수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
-  return applyDiff(user, fresh.diff);
+    const hash = importDiffHash(fresh.diff);
+    if (hash !== expectedHash)
+      return { error: "시트 또는 수강 정보가 미리보기 이후 변경되었습니다. 다시 미리보기 후 적용하세요.", staleHash: hash };
+    return await applyDiff(user, supabase, fresh.diff);
+  } finally {
+    if (lease === "claimed") await releaseSheetSyncLease(supabase, provider);
+  }
 }
 
 /**
- * 서버가 재계산·hash 검증한 diff를 실제 적용(내부 전용 — 클라 diff는 받지 않음).
+ * 서버가 재계산·hash 검증한 diff를 실제 적용(내부 전용 — 클라 diff는 받지 않음, 리스는 호출부가 보유).
  * 적용 직전 영향 enrollment를 timetable_snapshots에 백업하고 timetable_import_logs에 이력 기록.
  * moves는 일괄이동 RPC, removes는 end_date, adds는 insert. 모든 쓰기는 RLS(테넌트 격리) 하.
  */
-async function applyDiff(user: { id: string; tenantId: string }, diff: ImportDiff): Promise<ApplyState> {
-  const supabase = await createClient();
+async function applyDiff(
+  user: { id: string; tenantId: string },
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  diff: ImportDiff,
+): Promise<ApplyState> {
   const today = kstToday();
 
   // 1) 스냅샷 — 영향 enrollment의 before 상태(이동·삭제 대상) 백업

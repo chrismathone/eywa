@@ -19,6 +19,8 @@ import os from "node:os";
 import path from "node:path";
 import postgres from "postgres";
 import { launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
+import { processNoticesOnce } from "./classnote-notice-core.mjs";
+import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -93,6 +95,18 @@ async function main() {
       const b = await getBrowser();
       const s = await processQueueOnce(db(), b, { tenant, post: POST, log });
       if (s.claimed) log(`처리 완료 — 성공 ${s.success} / 실패 ${s.failed} / 재큐 ${s.requeued} / stale복구 ${s.stale}`);
+      // 2) 반 공지 큐(classnote_notices) — 내부 API 게시(별 코어). 실패해도 보고서 큐와 독립.
+      const nres = await processNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        return { processed: 0 };
+      });
+      if (nres.processed) log(`[notice] 공지 ${nres.processed}건 처리 완료`);
+      // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
+      const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[provision] 오류(내일 재시도): ${e.message}`);
+        return { ran: false };
+      });
+      if (pres.ran) log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();

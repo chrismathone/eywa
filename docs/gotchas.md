@@ -580,5 +580,15 @@ realtime-js가 그 키로 WS URL을 만들며 `\n`이 `%0A`로 인코딩돼 **�
 - **수정**: 반투명 색을 셀에 직접 주지 말고 **불투명 base(`bg-card`) 셀 + 그 위에 반투명 색밴드를 얹는 자식 div**로 분리(색감 동일, 본문 비침 차단). 두 bg-color 클래스 스택(`bg-card bg-blue-soft`)은 Tailwind 출력 순서로 승자가 갈려 불안정 → 레이어(자식 div) 방식.
 - **교훈**: **sticky/fixed로 스크롤 본문 위에 겹치는 셀은 배경이 불투명해야 한다.** eywa `-soft`(12%)·`/50` 토큰을 스크롤 컨테이너 안 sticky로 쓰면 비친다 → 불투명 base + 색 레이어. (겹치는 요소는 배경/차단을 명시 — body-portal 오버레이 `print:hidden` [[#68]]과 같은 결.)
 
+### 75. localStorage를 lazy `useState` 초기값으로 읽으면 hydration 크래시(#418) — 페이지 전체 클릭 먹통 (2026-07-13)
+직원 상세 '월간일정' 탭이 **프로덕션에서 열리지 않았다**(콘솔 `Minified React error #418` = "Text content did not match" hydration mismatch). 원인 = 뷰 선호(달력/목록)를 `useState(() => localStorage.getItem(...))`로 **첫 렌더에서 읽어**, 서버 HTML(항상 "grid")과 클라 첫 렌더가 어긋남 → React가 hydration 도중 죽으면서 **그 페이지의 모든 이벤트 핸들러가 안 붙어 클릭이 전부 먹통**(탭이 "안 들어가짐"). #51(dnd-kit SSR id)과 같은 계열 — SSR/CSR 첫 렌더 불일치.
+- **수정**: `useSyncExternalStore(subscribe, () => localStorage값, () => "grid")` — **서버 스냅샷(3번째 인자)은 항상 "grid"**라 SSR HTML과 첫 클라 렌더가 일치하고, hydration 후 저장값으로 전환. localStorage 쓰기는 리스너로 리렌더 브로드캐스트.
+- **교훈**: **`'use client'`라도 SSR로 HTML이 먼저 나가는 컴포넌트에서 localStorage/window/Date를 첫 렌더 값으로 쓰면 안 된다**(lazy useState 초기값 포함). 클라 전용 값은 `useSyncExternalStore`(서버 스냅샷 상수) 또는 mount 후 effect로. 증상이 "프로덕션에서 페이지 클릭 전부 무반응 + 콘솔 #418/#425"면 이 케이스. (dev에선 non-minified라 더 요란하고, 프로덕션 minified는 페이지만 죽어 진단이 어렵다.)
+
+### 76. 외부 API 전건 스캔을 서버 컴포넌트 첫 페인트에서 await = 서버리스 타임아웃 → 화면 안 열림 (2026-07-13)
+월간일정 미매핑 직원 진입 시, 이메일 자동매칭용으로 Notion 업무 DB **담당자를 전건 스캔**(4,000행+ = 순차 40+ 왕복)했는데, 이게 **서버 탭 컴포넌트가 첫 페인트에서 `await`** → Vercel 함수 타임아웃 → 탭이 안 열림([[#54]] silent 절단의 시간축 버전, B2/B7 위반). 실측: 3개월 한정 필터도 19페이지·65초.
+- **수정**: ① 서버 첫 페인트는 **미매핑이면 즉시 반환**(Notion 호출 0) → 화면 먼저 뜸(B7). ② 무거운 담당자 스캔·자동매칭은 **클라가 화면 표시 후 서버 액션(`prepareNotionMapping`)으로 지연 호출**(effect+"확인 중…" 스켈레톤). ③ 스캔 자체도 **최신 마감순 정렬 + `maxPages` 상한(8p≈800행)**으로 bounded + `unstable_cache` 10분(B6). 활동 중 담당자는 최근 창에 반드시 등장하므로 커버리지 손실 없음.
+- **교훈**: **외부 API(Notion/시트 등) 페이지네이션 전건 순회는 페이지 로드 경로에서 절대 await하지 말 것** — 사용자 트리거 액션으로 빼고, 스캔은 항상 `maxPages`로 bounded + 캐시. "전건 스캔"은 행 수만이 아니라 **왕복 수 × 지연**이 타임아웃을 만든다. (Supabase 전건은 [[#54]] `fetchAllPaged`; 외부 REST 전건은 이 규칙.)
+
 ---
 

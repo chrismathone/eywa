@@ -8,10 +8,19 @@ export { summarizeInvoices };
 export type { BillingSummary };
 
 export type InvoiceLineItem = {
-  kind: string;
-  description: string;
+  kind: string; // 구분: 수업/교재/차량비/기타
+  description: string; // 수납명
   classId?: string;
-  amount: number;
+  amount: number; // 청구액
+  // 라인 단위 수납 표(makeedu 동일)용 항목별 상세(임포터 보강, 2026-07-08). 구데이터는 없을 수 있어 optional.
+  discount?: number; // 할인액
+  points?: number; // 적립금
+  paid?: number; // 실제낸금액
+  unpaid?: number; // 미납금액
+  method?: string | null; // 결제수단
+  paidDate?: string | null; // 수납일
+  receipt?: string | null; // 현금영수증
+  dueDay?: number | null; // 청구일
 };
 
 export type InvoiceRow = {
@@ -56,12 +65,15 @@ export type InvoiceFilters = {
   category?: string; // "all" | "tuition" | "material" | "exam" | "other"
 };
 
-// line_items jsonb는 소스마다 형태가 다르다: eywa 폼/POC 임포트는 {kind,description,amount},
-// makeedu 동기화(import-invoices.cjs)는 {name,amount}로 **description 키가 없다**. description을 단일
-// 소스로 정규화(makeedu는 name→description)해 검색 필터·표시가 `undefined.toLowerCase()`로 터지지
-// 않게 한다 — 검색어가 있을 때만 필터가 도므로, 정규화 전엔 makeedu 청구가 섞인 달에서 아무 검색이나 500.
+// line_items jsonb는 소스마다 형태가 다르다: 구 makeedu 동기화는 {name,amount}(description 없음),
+// eywa 폼/POC는 {kind,description,amount}, 2026-07-08 재적재 이후는 항목별 상세 11-key. description을
+// 단일 소스로 정규화(name→description)해 검색 필터가 `undefined.toLowerCase()`로 터지지 않게 하고,
+// ⚠️ 항목별 상세(할인/실납/미납/결제 등)는 **있으면 통과**시킨다 — 미지 키 무언 드랍은 라인 단위 표를
+// 조용히 비우는 write-only-orphan(2026-07-13 머지 검증에서 실측한 사고 — 타입만 확장되고 여기서 잘렸음).
 function normalizeInvoiceLineItems(raw: unknown): InvoiceLineItem[] {
   if (!Array.isArray(raw)) return [];
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   return raw.map((item) => {
     const o = (item ?? {}) as Record<string, unknown>;
     const description =
@@ -70,11 +82,23 @@ function normalizeInvoiceLineItems(raw: unknown): InvoiceLineItem[] {
         : typeof o.name === "string"
           ? o.name
           : "";
+    const opt = {
+      classId: str(o.classId),
+      discount: num(o.discount),
+      points: num(o.points),
+      paid: num(o.paid),
+      unpaid: num(o.unpaid),
+      method: str(o.method),
+      paidDate: str(o.paidDate),
+      receipt: str(o.receipt),
+      dueDay: num(o.dueDay),
+    };
     return {
       kind: typeof o.kind === "string" ? o.kind : "tuition",
       description,
-      ...(typeof o.classId === "string" ? { classId: o.classId } : {}),
       amount: Number(o.amount) || 0,
+      // undefined 필드는 키 자체를 생략(구데이터 optional 계약 유지)
+      ...Object.fromEntries(Object.entries(opt).filter(([, v]) => v !== undefined)),
     };
   });
 }

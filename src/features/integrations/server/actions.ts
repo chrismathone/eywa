@@ -19,6 +19,7 @@ import {
   sheetsProvider,
   type SheetExportSubject,
 } from "@/features/integrations/sheets-provider";
+import { claimSheetSyncLease, SHEET_SYNC_BUSY_MSG } from "@/features/integrations/server/sheet-sync-lease";
 
 import {
   getMakeeduSyncLock,
@@ -376,6 +377,11 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
   if (!spreadsheetId)
     return { error: "내보낼 구글 시트가 설정되지 않았습니다(학원 설정 › 연동에서 시트 ID 등록)" };
 
+  // 동시 실행 직렬화 — 창(iframe)마다 버튼 상태가 독립이라 클라 disabled로는 멀티창·복수 master를
+  // 못 막는다. 시트 가져오기 apply와 **같은 리스**를 공유(반영↔가져오기 교차 실행도 차단).
+  const lease = await claimSheetSyncLease(supabase, provider);
+  if (lease === "busy") return { error: SHEET_SYNC_BUSY_MSG };
+
   try {
     // 과목 익스포터 → 운영자가 미리 만들어 서비스계정에 공유한 기존 구글 시트에 통째 덮어쓰기
     // (서비스계정 용량 0이라 '생성' 불가 → '갱신'만). 대상 시트=과목당 전용 1개(수학·영어 분리).
@@ -390,6 +396,7 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
         spreadsheet_id: spreadsheetId,
         last_synced_at: new Date().toISOString(),
         last_error: null,
+        sync_started_at: null, // 리스 해제(성공 기록과 원자적)
       },
       { onConflict: "tenant_id,provider" },
     );
@@ -399,13 +406,15 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // best-effort: 즉시 토스트(return)가 1차 피드백 채널이고, 이 upsert는 다음 로드 때 보일 durable
-    // last_error 보존용. 이 쓰기 자체가 실패해도(RLS 엣지·일시) 토스트는 떠 사용자에게 오류가 전달된다.
+    // last_error 보존용. 이 쓰기 자체가 실패해도(RLS 엣지·일시) 토스트는 떠 사용자에게 오류가 전달되고,
+    // 리스는 3분 stale로 자가 해제된다.
     await supabase.from("user_integrations").upsert(
       {
         tenant_id: user.tenantId,
         provider,
         spreadsheet_id: spreadsheetId,
         last_error: msg,
+        sync_started_at: null, // 리스 해제
       },
       { onConflict: "tenant_id,provider" },
     );

@@ -24,6 +24,7 @@ import {
   dismissHonorificDialog,
   fetchCenterId,
   fetchBoards,
+  createBoard,
   norm,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
@@ -72,78 +73,6 @@ async function expectedBoards(sql, tenant, group) {
     else boards.push({ board: `${group.prefix}${eff}`, student: eff });
   }
   return { boards, collisions };
-}
-
-/** 반 추가 form이 열려있으면 취소로 닫기(중복 거부 등 후처리). */
-async function cancelBoardForm(page) {
-  const cancelled = await page.evaluate(() => {
-    const form = document.querySelector("form");
-    const input = form?.querySelector("input");
-    if (!input || input.offsetParent === null) return false;
-    const btn = Array.from(form.querySelectorAll("button")).find(
-      (b) => (b.querySelector("span")?.textContent || "").trim() === "취소",
-    );
-    if (btn) {
-      btn.click();
-      return true;
-    }
-    return false;
-  });
-  if (!cancelled) await page.keyboard.press("Escape").catch(() => {});
-  await page.waitForTimeout(600);
-}
-
-/** 반 정보 관리에서 보드 1개 생성 — 반 추가하기 → 이름 입력 → 추가 → form 닫힘=성공(Edutrix 판정 동일). */
-async function createBoard(page, name) {
-  // SPA 렌더 지연 대응 — 버튼이 나타날 때까지 최대 ~12초 폴링(단발 탐색은 첫 진입에서 실패했음).
-  let addClicked = false;
-  for (let i = 0; i < 15 && !addClicked; i++) {
-    addClicked = await page.evaluate(() => {
-      const el = Array.from(document.querySelectorAll("span, button")).find(
-        (e) => (e.textContent || "").trim() === "반 추가하기" && e.offsetParent !== null,
-      );
-      if (!el) return false;
-      (el.closest("button") || el).click();
-      return true;
-    });
-    if (!addClicked) await page.waitForTimeout(800);
-  }
-  if (!addClicked) return { ok: false, reason: "'반 추가하기' 버튼 없음" };
-  await page.waitForTimeout(800);
-
-  try {
-    await page.locator('input[placeholder*="초등반"], form input').first().fill(name, { timeout: 5000 });
-  } catch {
-    await cancelBoardForm(page);
-    return { ok: false, reason: "이름 입력창 없음" };
-  }
-  await page.waitForTimeout(300);
-
-  const submitted = await page.evaluate(() => {
-    const form = document.querySelector("form");
-    if (!form) return false;
-    const btn = Array.from(form.querySelectorAll("button")).find(
-      (b) => b.type === "submit" || (b.querySelector("span")?.textContent || "").trim() === "추가",
-    );
-    if (!btn || btn.disabled) return false;
-    btn.click();
-    return true;
-  });
-  if (!submitted) {
-    await cancelBoardForm(page);
-    return { ok: false, reason: "'추가' 버튼 클릭 실패" };
-  }
-
-  await page.waitForTimeout(1200);
-  const stillOpen = await page.evaluate(() => {
-    const input = document.querySelector('input[placeholder*="초등반"]');
-    return !!(input && input.offsetParent !== null);
-  });
-  if (stillOpen) {
-    await cancelBoardForm(page);
-    return { ok: false, reason: "거부됨(중복 추정)" };
-  }
-  return { ok: true };
 }
 
 (async () => {

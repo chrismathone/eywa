@@ -1,7 +1,7 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { Pill } from "@/components/atoms/pill";
-import type { StaffDetail } from "@/features/staff/server/queries";
+import { getActiveHomeroomClasses, type StaffDetail } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { AccountActions } from "../_components/account-actions";
@@ -30,7 +30,11 @@ export async function BasicInfoTab({
   showSalary: boolean;
   roleOptions: SystemRole[];
 }) {
-  const settings = await getTenantSettings();
+  // 독립 조회 병렬(B4). 담임 반 목록은 계정 관리 패널(퇴사/삭제 경고)에서만 쓰여 canManageThis일 때만 조회.
+  const [settings, homeroomClasses] = await Promise.all([
+    getTenantSettings(),
+    canManageThis ? getActiveHomeroomClasses(staff.id) : Promise.resolve([]),
+  ]);
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const isTeacherLike = displayRole === "teacher" || displayRole === "master";
@@ -87,6 +91,7 @@ export async function BasicInfoTab({
           currentRole={staff.systemRole}
           currentStatus={staff.status}
           roleOptions={roleOptions}
+          homeroomClasses={homeroomClasses}
         />
       ) : null}
     </div>

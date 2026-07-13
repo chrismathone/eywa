@@ -18,9 +18,102 @@ moves(from 포함)/removes/adds만·정렬·순서무관, Vitest 6) ② preview 
 반환(일치 시 서버 재계산 diff 적용=클라 계획 불신). 시트 apply는 신규 `applySheetImport`(master 게이트=preview와 대칭). 클라 2곳
 ([import-dialog](../src/app/(shell)/timetable/_components/import-dialog.tsx)·[english-import-dialog](../src/app/(shell)/timetable/_components/english-import-dialog.tsx))은
 staleHash 응답 시 미리보기 초기화+재미리보기 유도(영어 통합창은 반이동 섹션만 무효화 — 이미 적용된 구조 결과·롤백 버튼 보존).
+apply는 0098a 시트 리스도 함께 잡아(재읽기~적용 전 구간) '시트 반영'·다른 가져오기와 교차 실행 직렬화.
+
+### 수납 지표 3원화 통일 — calc.ts 단일 공식 전면 배선 (2026-07-13) — ✅ tsc0/lint0/calc.test 18/프로덕션 read-only 대조
+수납 브랜치 머지 적대 리뷰 잔여(I3) 해소: 수납률·미수 공식이 화면마다 달라(대시보드=paid/gross·캡 없음,
+RPC=학생 합산 후 clamp, 엑셀=무clamp 음수 가능) 숫자가 어긋나던 것을 **[calc.ts](../src/features/billing/calc.ts)
+단일 공식으로 전면 통일**. 행 레벨 `invoiceOutstanding()`(= max(0, 청구−할인−수납), paid/refunded/void=0) +
+`paymentRateOf()`(수납/실청구, 100% 상한) 순수 헬퍼 추출(Vitest 9 추가) — **새 수납 지표는 재구현 금지, 이 두 함수만**.
+- 배선(8파일): 대시보드 `getPaymentRateThisMonth`(summarizeInvoices 위임+fetchAllPaged B2)·`getTrendDataLast7Days`
+  (분모=실청구·100% 상한·출결/청구 모두 fetchAllPaged), 엑셀 잔액([invoices-excel.ts](../src/features/exports/invoices-excel.ts)),
+  RPC **0101a**(행 clamp `greatest(0,…)` — 구 0039a는 학생 합산 후 clamp라 음수 잔차가 미수 상쇄), 학생 상세
+  overview-tab(구: refunded/void도 미납 합산하던 버그)·billing-view·수납 표 billing-table(paid 잔차를 미납으로 그리던 것 0)·billing-content(중복 제거).
+- 프로덕션 read-only 실측(injaewon, 2026-01~07 전월 할인 260만+): 증상 재현 — 구 대시보드 수납률이 매달 1.5~1.7%p 낮음
+  (07월 92.55%→94.16%, 06월 98.40%→100%). 미수도 paid 잔차 유령(07월 191,250원)·과납 상쇄(02월 28,750→30,000, 구가 과소)
+  전부 해소, 엑셀 잔액합=KPI 미수 일치. RPC는 현 데이터에선 구=신 동일(32명·9,486,762원=calc.ts와 정확 일치)이라 무위험 교체.
+- ✅ 0101a 프로덕션 적용 완료(2026-07-13, JWT claim 에뮬레이션 실호출 검증 — 32명·9,486,762원 일치).
+
+### 원스크린 "지난 보고서" 뷰 — 강사 본인 보고서 이력 열람 (2026-07-13) — ✅ tsc0/lint0/실쿼리 probe
+원장 질문 "강사가 지난 보고서를 볼 수 있나" → 학생 상세 진도 탭(학생 1명씩)뿐이라 원스크린에 4번째 뷰 신설(A안).
+뷰 토글 `카드·표·발송 현황·지난 보고서` — 본인(`teacher_name`=displayName, 저장 귀속과 동일 기준) 보고서를 날짜별
+그룹 + 학생검색 + "더 보기"(200건 날짜경계 커서 페이징, B2)로 열람. 행 = 학생·학교학년(`schoolGradeLabel`)·과목(labelOf)·
+진도·시험·ClassNote 배지(`classnoteBadge`)·열람수·"보고서 보기 →"(/r 공개페이지, 90일 만료·회수 링크 자동 숨김).
+신규 [history-actions.ts](../src/features/onescreen/server/history-actions.ts)(서버 액션, 뷰 진입 시에만 로드=B7) +
+[history-board.tsx](../src/features/onescreen/components/history-board.tsx). RLS=테넌트 격리라 퇴원생 옛 보고서도 열람 가능(의도).
+Edutrix 이식분도 teacher_name 채워져 옛 이력 포함(실측 김은정 86/500). ⚠️강사 로그인 제약으로 브라우저 클릭검증 미실시(실쿼리 probe 대체).
+
+### 수납 브랜치(fix/billing-discount-status) main 머지 — 검증 픽스 4종 동반 (2026-07-13) — ✅ tsc0/lint0/test1046/build✓/라이브 UI·콘솔0
+브랜치 2커밋(할인 완납 오판 848건·additive 임포트 누락·항목 뭉갬 해소 + 수납 표 라인 단위 재구성) 머지 — 프로덕션
+DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)이라 코드가 데이터를 따라잡는 머지.
+충돌 1건(import-invoices.cjs)=브랜치 상위집합 채택. **머지 적대 리뷰(프로덕션 read-only 실측)가 잡은 픽스 4종**:
+① normalizeInvoiceLineItems가 확장 필드 8종 무언 드랍(main이 분기 후 추가 — 라인 표가 조용히 비는 write-only-orphan) → 통과
+② 구형 3-key 인보이스 전부 '완납' 렌더(실측 미납 28건 ₩7.3M 은폐) → toLines 첫 라인 인보이스값 합성+미상 "—"
+③ 완납 행 적립금 잔차가 유령 미수 합산(실측 7건 ₩351,250) → outstanding에서 paid 제외+테스트
+④ 죽은 수납 편집 액션 3종 삭제(옛 deriveStatus는 할인 미차감이라 부활 시 848건 오판 재생산) + 레거시 영문 kind 한글 매핑.
+⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·~~대시보드 수납률 공식 불일치(I3)~~(→ 위 "수납 지표 3원화 통일"로 해소)·
+upsert 임포터 삭제 미반영/unmatched 스킵(I4)·**연동 PC에 새 임포터 zip 이관 필요**(안 하면 구 임포터가 계속 3-key 유입).
+
+### ClassNote 자동 배정 방어 강화 — 적대 감사 F1~F6 전건 픽스 (2026-07-13) — ✅ 합성 테스트 13/13
+"학부모 미가입인데 엉뚱한 가족이 배정되는가?" 원장 질문에 독립 적대 감사 → **핵심 구멍: 유일성 검사의 우주가 '배정 타깃 목록'에 닫혀 있어, 목록 밖 동명 학생(퇴원 F1·비 opt-in 과목 F2·동명 보류 제외분 F3)의 가족 원아가 '유일 후보'로 위장** 가능(예: 퇴원한 김민수B의 잔존 원아 '김민수'가 신규생 김민수A 보드에 배정 → 남의 성적 수신). 픽스 4겹([classnote-admin-core](../scripts/_classnote/classnote-admin-core.mjs)·[provision-core](../scripts/_classnote/classnote-provision-core.mjs)·[assign](../scripts/_classnote/assign-classnote-students.mjs) 공통): ⓐ planChildMatches 우주를 **DB 전 학생(status·과목 무필터, fetchUniverseNames)**으로 확장(F1·F2·F3 동시 차단) ⓑ hasForeignStudentBoard — 원아가 이미 다른 학생 개인 보드 소속이면 보류(잔존 가족 직격) ⓒ POST 직전 보드 실시간 재확인(fetchBoardChildren, TOCTOU F5)+직후 2명+ 경보(해제 API 405라 사후 탐지 필수) ⓓ childKeys 괄호 승격을 영문닉(한글) 형식 한정(별명 오매칭 F6) + 수동판 targetsOf에 동명이인 norm 그룹핑 이식(F4, 공유 보드 오배정 차단). ⚠️연동 PC zip 재전달 필요(provision-core 변경).
+
+### 직원 상세 '월간일정' 탭 — Notion 업무 DB 이식 (읽기 전용 + 댓글) (2026-07-13)
+안 쓰이던 `근무일정`(근무시간 편집기) 탭을 **`월간일정`**으로 대체 — Notion 업무 DB(업무 스케줄)를 마감일 기준으로 읽어와
+**월간 달력 그리드 ⇄ 리스트 토글**(월 이동·오늘·localStorage). 근무시간 편집기는 삭제 없이 휴면(한 줄로 복구).
+- 순수: [month-grid.ts](../src/lib/month-grid.ts)(UTC 달력, 일요일 시작) + [notion-tasks.ts](../src/features/staff/notion-tasks.ts)(파싱·마감일 그룹·에러 한글화·부서 formula). 라이브러리 0, Vitest 15.
+- server-only [notion/client.ts](../src/lib/notion/client.ts)(SDK 없이 fetch, `has_more` 전건 순회=B2, 15s 타임아웃). 토큰=env(`NOTION_TOKEN`/`NOTION_TASKS_DATABASE_ID`, jsonb 금지).
+- **매칭**: eywa 이메일==Notion 이메일이면 자동연결(+저장), 아니면 수동 드롭다운. ⚠️ 실 워크스페이스는 Notion 멤버 1명(원장)+나머지 게스트라 `/users`론 원장만 잡힘 → **업무 담당자(정/부)에서 사람 수집**(게스트 이메일 포함, `unstable_cache` 600s). 실데이터 직원 40명 중 9명 자동연결.
+- **댓글**: 업무 클릭 → 다이얼로그에서 Notion 댓글 지연 로드 읽기/작성(`[eywa · 이름]` 접두로 출처 보존, API 댓글=봇 표기 보완).
+- 액션 tenant-aware 매트릭스 게이트([[#58]]), RLS 격리. 마이그 `0100a_users_notion_user_id`(nullable+부분유니크, 프로덕션 적용).
+- 검증: typecheck0/lint0/test15/build✓ + **실 Notion API E2E**(토큰·DB·2026-07 실데이터 40건·담당자 필터·9명 매칭). ⚠️ 인앱 브라우저 클릭은 로그인 비번 제약으로 미실시 → API/DB 레벨로 대체.
+
+### ClassNote 일일 프로비저닝 자동화 — 데몬이 신규생 보드·배정을 매일 처리 (2026-07-13)
+발송 데몬(watch-classnote-queue)이 **매일 KST 05시 이후 1회** [provisionDailyOnce](../scripts/_classnote/classnote-provision-core.mjs) 실행: ①보드 없는 재원생(발송 opt-in 과목 활성 수강, 발송 게이트와 동일 기준=subjectKeys∩optIn) → `(과목)이름` 빈 보드 DOM 생성 ②가입됐는데 자기 보드 0명 → 원아 ID 기반 자동 배정(POST enrollments). 동명이인(eywa 유효이름 중복·ClassNote 동명 원아)은 자동 보류(로그만) — 오발송 방지. --post 데몬 한정, **발송 스위치와 무관**(보드·배정=발송 아닌 인프라 준비 — 스위치 OFF 기간에도 신규생 준비가 쌓임). 하루 1회 마커=로컬 파일(멱등, 지워도 안전). 보드 생성 DOM 헬퍼(createBoard)는 admin-core로 승격(수동 CLI와 단일 소스). ⚠️연동 PC zip 재전달: `D:\tmp\eywa-발송PC-일일프로비저닝-20260713.zip`. ⚠️같은 날 `.env.local` 키 6종 유실 발견(NOTION_TOKEN 추가 편집 때 잘림 추정) → EDUTRIX_*/UPSTAGE/FIREBASE SA(base64, edutrix src json 재인코딩)/CLASSNOTE_UPLOAD_ID 복구, **CLASSNOTE_UPLOAD_PW·CRON_SECRET은 사용자 직접 재기입 필요**.
+
+### AI 분석 provider 전환 — Solar Pro 3 → Claude Sonnet 5 (전역) (2026-07-13) — ✅ 품질 A/B·tsc0/lint0/test
+원장 제보 "최근 분석본 퀄리티 하락". 실 상담 1건(전사 22,959자) 동일 프롬프트 A/B: **Solar가 warnings를 통째로 놓치고**
+(단독양육·학원 거부감·학생의견 미반영 3건 miss) 잡담(주식 3억)을 familyBackground에 혼입·ASR 깨진표현 방치. Claude Sonnet 5는
+3건 포착·잡담 배제·`[?]` 마커 준수 + Sonnet 4.6보다 40% 빠름(93s vs 149s). → **전역 Claude Sonnet 5 전환.**
+- 레지스트리 `balanced.anthropic` `claude-sonnet-4-6`→`claude-sonnet-5` ([models.ts](../src/lib/ai/models.ts)).
+- Anthropic 응답 파싱 하드닝: `content[0]`만 읽던 것 → **모든 text 블록 수집** ([generate.ts](../src/lib/ai/generate.ts)) — Sonnet 5는 첫 블록이 text가 아닐 수 있어 "no json" 파싱 실패 방지(실측).
+- 전환은 env(`AI_PROVIDER=anthropic`): **⚠️ Vercel 설정 필수**(코드 기본값 미설정은 여전히 upstage=Solar). 롤백 = `AI_PROVIDER=upstage`.
+- CLAUDE.md AI 정책·결정 로그 갱신("AI 기본=Solar" 뒤집음). 폼 자동입력 후보정 하네스는 Claude에서도 유효해 유지.
+
+### 반 공지 기능 + ClassNote 게시 API 확보 (2026-07-13) — ✅ tsc0/lint0/test1027/전 구간 E2E
+수업보고서 > **반 공지** 탭 신설: 반(발송 opt-in 과목) 다중 선택 + 본문 → 각 재원생의 ClassNote 개별 보드로 일괄 게시. 반 구조는 eywa에 살고 1인 1반은 배달 레일(Edutrix NoticeWriteModal 패턴). **게시=내부 API 직접**(`POST /api/v1_2/reports/` 201·회수 `DELETE` 204 — 학원이 실검증, Cloud Run·Puppeteer 마법사 불필요). 파이프라인: [notice-face](<../src/app/(shell)/lesson-reports/_components/notice-face.tsx>)→[sendClassNotice](../src/features/report-admin/server/notice-actions.ts)(lesson_reports 쓰기+dry-run 스위치+과목 opt-in+동명이인 제외 — [resolveNoticeTargets](../src/features/report-admin/notice-targets.ts) 순수 Vitest6)→`classnote_notices` 큐(0099a, 프로덕션 적용)→연동 PC 데몬 [processNoticesOnce](../scripts/_classnote/classnote-notice-core.mjs)(--post+킬스위치 이중 게이트, 타깃별 실패 분리=partial). "테스트 발송(학원이)" 버튼 내장. E2E: dry-run 게이트→스위치 ON→큐 적재→실게시→API 확인→삭제→스위치 OFF 원복. ⚠️연동 PC zip 재전달 필요(`D:\tmp\eywa-발송PC-반공지-20260713.zip`). **부수 완료: 배정 API 전환+실배정 9건**(POST /api/v1/enrollments/ — ready6·주준호 부모계정2·박서준C 자녀 분리) → 수학 배정 204/미가입 33/잔여 0. ⚠️박서준 공유보드(두 가족 상호 노출) 제거는 원장 결정 대기(docs/classnote-integration.md §3).
+
+### 대시보드 카드 정리 — 콕핏 masonry + 최근7일 전폭 컴팩트 (2026-07-13) — ✅ tsc0/lint0/실브라우저
+원장 제보 "카드 크기·세로높이 제각각·우측 여백 과다". ① **콕핏**([page.tsx](<../src/app/(shell)/dashboard/page.tsx>)):
+CSS Grid 기본 `align:stretch`가 짧은 카드(결석위험 2명)를 히어로(오늘일정) 높이까지 늘려 거대 빈칸을 만들던 것 →
+**CSS 다단(columns) balanced-fill**(`md:columns-2 xl:columns-3` + `break-inside-avoid`)로 자연 높이 그대로 Tetris packing.
+② **최근7일**([slim-trend.tsx](<../src/app/(shell)/dashboard/_components/slim-trend.tsx>)): 좌측 몰림(max-w)→**전폭 3패널**
+(학생증감 1.5fr + 출석률·수납률 각 1fr, items-stretch 높이 일치). ⚠️ Sparkline(`preserveAspectRatio=none`)을 높이 고정 없는
+flex-1에 넣으면 폭 기준 종횡비로 부풀어 카드가 과대해짐 → `absolute inset-0`로 흐름에서 분리(패널 높이=학생증감이 결정, 컴팩트).
+빈 데이터 메시지 중앙정렬 + 공지·상담후속 리스트 내부 스크롤 보강.
 
 ### ClassNote 수학 보드 34개 실생성 + 판독 API 전환 (2026-07-13) — ✅ 실측 검증·기존 데이터 무변경
 원장 승인으로 `provision-classnote-boards.mjs --apply` 실행: 카나리 1개→나머지 33개, 실패 0, API 재조회 검증 통과(기존 보드·멤버·게시물 무변경, eywa DB 쓰기 0, `--exclude=박서준C`=매핑 케이스 제외 플래그 신설). **판독을 내부 API로 전환**: 반 정보 관리 무한스크롤 스크래핑이 비결정(수집 누락→기존 보드 "누락" 오판, 단 ClassNote 중복 반명 거부가 백스톱)이라 `GET /api/v1/centers/{id}/classes`(+approved_children)·`/children`으로 교체 — 읽기=API(결정적)/쓰기=DOM. 생성 직후 전수 판정(수학 237명): assigned 196 · **ready 7**(가입돼 있어 배정만 남음: 김서윤·도성훈·주준호·유호성·윤규원·최현성·박소령) · 미가입 33(초대 필요 명단 자동 산출) · 매핑 대기 1(박서준C). 상세 = docs/classnote-integration.md §3.
+
+### 청구=N회 키스톤 설계 확정 (2026-07-13) — 📐 설계만, 구현은 수납 브랜치 정리 후
+D:\attendance 이식 재검토(기존 NO-GO 유효, 5/22 이후 커밋 0) → 로드맵 1단계 착수. 4갈래 병렬 조사+교차검증으로
+**[docs/per-session-billing-plan.md](per-session-billing-plan.md) = 단일 진실**. 핵심: ⚠️옛 로드맵의 "line_items에
+sessions/unitPrice" 저장 폐기(`fix/billing-discount-status` 임포터 upsert가 line_items 통째 교체 — 커스텀 키 일 2회
+전멸) → **별도 테이블 `invoice_session_terms`**(invoice_id FK는 upsert 보존이라 안전). 원장 결정: N회=자동 산출(계획,
+`countSessions` 재사용) 프리필+**수기 확정만 청구값** / 착수=그 브랜치 main 정리 후(billing UI 3-way 충돌 회피).
+선행: tuition_catalog `pricing_mode`(회당/월 판별 — 없이 곱셈 금지). attendance 사고 이식 불변규칙 N1~N6 문서화.
+
+### 시트 반영/가져오기 동시 실행 방지 — DB 리스 락 (2026-07-13) — ✅ tsc0/lint0/test1027/DB원자성 3종/라이브 busy·성공 E2E
+원장 질문 "여러 명이 동시에 시트 반영 누르면?" → 전수조사(멀티에이전트): 시트 셀 데이터는 `drive.files.update`
+**통째 교체(원자적 last-writer-wins)**라 파손 없음, 그러나 후속 CLIP 서식·수식 batchUpdate가 동시 재교체와 겹치면
+stale sheetId 400(허위 실패 토스트+서식 누락) + `syncSheetsNow`에 서버 락 전무(형제 `triggerMakeeduSyncNow`는 공유
+락 보유 — 비대칭). 창=iframe이라 클라 `disabled`는 한 창만 커버. 픽스 = **[sheet-sync-lease.ts](../src/features/integrations/server/sheet-sync-lease.ts)**:
+`user_integrations.sync_started_at`(0098a) 원자 claim UPDATE(`is.null or < now()-3분` stale 자가회복) → busy면
+"다른 관리자가 이 시트를 작업 중입니다" 토스트. 배선 3곳 공유(반영↔가져오기 교차 실행도 직렬화): `syncSheetsNow`
+(성공/실패 upsert가 리스 해제 원자 포함)·`applyStructureImport`(try/finally)·`applyTimetableImport`(신규 `subject?`
+파라미터, 다이얼로그 2곳 전달 — 미연동 norow는 통과=파일 업로드 경로 무해). makeedu식 큐+워처는 과설계라 비채택
+(advisory lock은 코드베이스 선례 0). 검증: DB 동시 claim 1승자·busy 0행·stale 회수 + 라이브(리스 선점 상태 클릭→busy
+토스트 / 해제 후 클릭→HELD ~20초→해제+last_synced_at 갱신+"시트에 반영됨"). ⚠️수학 수강편집 apply의 hash 재검증
+부재는 별건(작업 칩 발행).
 
 ### 출석부 셀렉터 — 폐강 반 제외 + 퇴직 담임 "(퇴직)" 표시 (2026-07-13) — ✅ tsc0/lint0/실브라우저 3시나리오
 원장 제보 "퇴직한 사람의 출석부가 여전히 노출". 전수조사(멀티에이전트) 결론: **출석부 한 곳만 빠진 국지 구멍** —
@@ -30,6 +123,20 @@ staleHash 응답 시 미리보기 초기화+재미리보기 유도(영어 통합
 ⚠️ **살아있는 반(재원생 有)은 담임이 퇴직자여도 노출 유지** — 숨기면 재원생 반이 접근 불가. 실브라우저: 퇴직 7명 "(퇴직)" 뒤정렬 ·
 신명진(퇴직) 반 8개→매트릭스 9명 정상 · 김화영 반 4→2(폐강 제외). 잔여 데이터 이슈(코드 아님): 퇴직 담임 stale 반 14개(전부 영어,
 재배정 필요)·빈 반 18개(폐강 후보) — 퇴직 처리(`deactivateStaff`)가 users.status만 바꾸고 반은 안 건드리는 구조 갭.
+
+### 직원 퇴사 처리 — 담임 반 인수인계 경고 다이얼로그 (2026-07-13) — ✅ tsc0/lint0/test1021/라이브 DOM 검증
+퇴직 강사가 살아있는 반 담임으로 남아 시간표·출석부에 "(퇴직)" 표시되는 구조 갭(`deactivateStaff`는 users.status만 변경,
+classes.teacher_id 무전파·FK는 on delete set null뿐) 대응 — **퇴사를 막지 않고 경고+안내**.
+- **경고 다이얼로그**([deactivate-button.tsx](<../src/app/(shell)/staff/[id]/_components/deactivate-button.tsx>)): 담임인 진행중 반이 있으면
+  confirm 대신 다이얼로그 — "담임인 진행중인 반 N개" 경고 + 반 목록(각 반 상세 WindowLink=거기 '강사 인수인계' 버튼으로 연계,
+  0044a pending 예약된 반은 "인수인계 예약됨 → 새담임·적용일" 표시) + `/classes?teacher=<id>` 수업목록 링크 + "그래도 퇴사 처리".
+  담임 반 0개·재직 복구는 기존 confirm 유지. 공용 Modal/Footer/SubmitBtn은 [dialog-bits.tsx](<../src/app/(shell)/staff/[id]/_components/dialog-bits.tsx>)로 추출.
+- **쿼리** `getActiveHomeroomClasses`([staff/server/queries.ts](../src/features/staff/server/queries.ts)) — pending_teacher 조인 포함,
+  basic-info-tab이 `Promise.all`(B4)로 조회해 AccountActions에 배선. **직원 삭제 다이얼로그**에도 "삭제하면 담임이 비워집니다" 경고 추가.
+- **액션 사후 안내**: `deactivateStaff`가 퇴사 후 담임 반 수를 세어(`count:exact head:true`, B2) 반환 — 렌더 시점 목록이 stale해
+  경고 없이 지나가도 사후 문구로 잡음(차단 아님).
+- 라이브 검증(injaewon, 읽기 전용): 보조T(담임 6반) → 다이얼로그 "반이 6개" + 드릴링 6반 링크 + 인수인계 없음 배지, 취소/재오픈 정상(#67 안전),
+  담임 0반(데모 강사)은 기존 confirm 폼 그대로. 잔여: 퇴직 담임 14반 재배정·빈 반 폐강은 별건(원장 승인 대기).
 
 ### ClassNote 보드 프로비저닝·배정 자동화 이식 (2026-07-10) — ✅ dry-run 실측 검증(수학 237명 전수)
 Edutrix 반 생성·배정 자동화를 eywa DB 기준·Playwright·**dry-run 기본**으로 이식(`scripts/_classnote/`): [provision-classnote-boards.mjs](../scripts/_classnote/provision-classnote-boards.mjs)(기대 보드 vs 실보드 diff → **누락 보드만 생성**, 동명이인 보류 분리) · [assign-classnote-students.mjs](../scripts/_classnote/assign-classnote-students.mjs)(학생 관리 반추가 모달 **1회 스캔 전수판정** — 보드별 배정 인원(N명) 표시 기반: assigned/ready/미가입/보드없음, `--apply`는 ready만 배정) · 공용 [classnote-admin-core.mjs](../scripts/_classnote/classnote-admin-core.mjs)(로그인·호칭 다이얼로그·무한스크롤 수집). 실측: assigned 196 · 보드없음 35(`(수학)박서준C`는 생성 아닌 `classnote_name` 매핑으로) · 미가입 5(초대 필요) · ready 1(주준호). §9 수기 실사(33/6/1)와 교차 일치. ⚠️ `--apply`(생성·배정)=실 ClassNote 변경 — 원장 승인 후. 배경·사용법 = docs/classnote-integration.md §3(학생 1명=반 1개 구조 근거 포함).

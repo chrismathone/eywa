@@ -7,6 +7,11 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { sheetsProvider, supportsStructureImport } from "@/features/integrations/sheets-provider";
+import {
+  claimSheetSyncLease,
+  releaseSheetSyncLease,
+  SHEET_SYNC_BUSY_MSG,
+} from "@/features/integrations/server/sheet-sync-lease";
 import { readSheetGridWithMerges } from "@/features/integrations/google-sheets";
 import { TEACHER_SHEET_NAME } from "@/features/exports/english-timetable/teacher-grid-sheet";
 import { parseEywaTeacherGrid } from "@/features/timetable/import/structure/parse-eywa-grid";
@@ -157,6 +162,14 @@ export async function applyStructureImport(expectedHash: string, subject: string
   if (!supportsStructureImport(subject)) return { error: "구조 가져오기는 영어 시간표만 지원합니다" };
 
   const supabase = await createClient();
+
+  // 동시 실행 직렬화 — '시트 반영'(DB→시트 통째 교체)과 같은 리스 공유. 재읽기(computeFresh)~RPC 사이에
+  // 반영이 시트를 갈아치우거나, 반대로 apply 중 반영이 끼어드는 교차 실행을 서버에서 차단.
+  const provider = sheetsProvider(subject);
+  const lease = await claimSheetSyncLease(supabase, provider);
+  if (lease === "busy") return { error: SHEET_SYNC_BUSY_MSG };
+
+  try {
   let fresh;
   try {
     fresh = await computeFresh(supabase, subject);
@@ -218,6 +231,9 @@ export async function applyStructureImport(expectedHash: string, subject: string
     applied: { closed: res.closed ?? 0, inserted: res.inserted ?? 0, classUpdated: res.classUpdated ?? 0 },
     snapshotId: res.snapshotId ?? null,
   };
+  } finally {
+    if (lease === "claimed") await releaseSheetSyncLease(supabase, provider);
+  }
 }
 
 export type RollbackStructureState = {

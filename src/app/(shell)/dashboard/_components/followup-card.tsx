@@ -21,7 +21,7 @@ export function FollowUpCard({ items }: { items: DashFollowUp[] }) {
       {items.length === 0 ? (
         <DashEmpty>임박한 후속조치가 없습니다</DashEmpty>
       ) : (
-        <ul className="divide-border flex-1 divide-y">
+        <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
           {items.map((f) => {
             const u = URGENCY[f.urgency];
             return (

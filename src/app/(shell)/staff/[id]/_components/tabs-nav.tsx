@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export const STAFF_TABS = [
   { key: "info", label: "기본정보" },
-  { key: "schedule", label: "근무일정" },
+  { key: "monthly", label: "월간일정" }, // Notion 업무(읽기 전용) — 옛 '근무일정'(근무시간 편집기)을 대체, 편집기는 휴면.
   { key: "classes", label: "수업이력" },
 ] as const;
 

@@ -288,7 +288,7 @@ async function main() {
   for (const g of byInv.values()) {
     const pm = Object.entries(g.pm).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null; // 최빈 결제수단(card/transfer)
     await ins("inv", () => sql`insert into invoices (id,tenant_id,student_id,period,category,amount_total,amount_paid,amount_discount,status,line_items,due_date,paid_at,payment_method,points_used)
-      values (${randomUUID()},${tenantId},${g.sid},${g.period},'tuition',${g.total},${g.paid},${g.disc},${mapInvoiceStatus(g.total, g.paid)},${sql.json(g.items)},${g.due},${g.paidAt},${pm},${g.points})`);
+      values (${randomUUID()},${tenantId},${g.sid},${g.period},'tuition',${g.total},${g.paid},${g.disc},${mapInvoiceStatus(g.total, g.paid, g.disc)},${sql.json(g.items)},${g.due},${g.paidAt},${pm},${g.points})`);
   }
 
   // meeting_reports → meeting_minutes (AI 텍스트 스냅샷; 오디오 파일은 GCS라 경로만)

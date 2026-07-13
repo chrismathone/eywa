@@ -120,13 +120,14 @@ export function TimetableImportDialog({
     }
     startApply(async () => {
       // 서버가 파일/시트+DB를 재읽어 hash 대조 후 적용 — 클라 diff는 보내지 않는다(표시용).
+      // subject 전달 = 그 과목 시트 리스 선점('시트 반영'과 교차 실행 직렬화). 파일 경로도 무해(미연동=스킵).
       let res: ApplyState;
       if (sheet) {
         res = await applySheetImport(hash, subject);
       } else {
         const fd = new FormData();
         fd.set("file", file!);
-        res = await applyTimetableImport(hash, fd);
+        res = await applyTimetableImport(hash, fd, subject);
       }
       if (res.staleHash) {
         // 미리보기 이후 수강/시트 변경 감지 — 오래된 미리보기를 지우고 재미리보기 유도.

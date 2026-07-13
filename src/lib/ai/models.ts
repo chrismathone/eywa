@@ -10,7 +10,7 @@ export type AiKeyName = "default" | "consultations";
 // 티어 → provider별 모델 id. reasoning은 Anthropic 전용(평소 금지 정책 + Solar reasoning 미사용).
 export const AI_MODELS: Record<AiTier, Record<AiProvider, string | null>> = {
   fast: { anthropic: "claude-haiku-4-5", upstage: "solar-pro3" },
-  balanced: { anthropic: "claude-sonnet-4-6", upstage: "solar-pro3" },
+  balanced: { anthropic: "claude-sonnet-5", upstage: "solar-pro3" },
   reasoning: { anthropic: "claude-opus-4-7", upstage: null },
 };
 
