@@ -8,7 +8,7 @@ import {
   previewStructureImport,
   rollbackStructureImport,
 } from "@/features/timetable/server/structure-import-actions";
-import { applyTimetableImport, previewSheetImport } from "@/features/timetable/server/import-actions";
+import { applySheetImport, previewSheetImport } from "@/features/timetable/server/import-actions";
 import type { DryRunReport, SchedulePlanItem } from "@/features/timetable/import/structure/types";
 import type { ImportDiff } from "@/features/timetable/import/types";
 
@@ -21,12 +21,23 @@ const tch = (names: string[]) => (names.length ? names.join(", ") : "—");
  * 한 번 '불러오기'로 두 시트를 동시에 미리보고(두 섹션), '적용' 한 번에 둘 다 반영(구조 먼저 → 반이동).
  * 각 시트는 독립: 한쪽 탭이 없거나 변경이 없어도 다른 쪽은 정상 동작. 기존 서버 액션 재사용(합성만).
  */
-export function EnglishImportDialog({ subject = "english" }: { subject?: string }) {
+export function EnglishImportDialog({
+  subject = "english",
+  disabled = false,
+  disabledTitle,
+}: {
+  subject?: string;
+  /** 시트 리스 진행 중(새벽 자동 반영·타 관리자 실행) 트리거 선제 비활성 — 사유는 마우스오버(title). */
+  disabled?: boolean;
+  disabledTitle?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [struct, setStruct] = useState<DryRunReport | null>(null);
   const [structErr, setStructErr] = useState<string | null>(null);
   const [enroll, setEnroll] = useState<ImportDiff | null>(null);
+  // 반이동 미리보기 hash — apply 시 서버 재계산과 대조(stale 차단). enroll과 함께 세팅/해제.
+  const [enrollHash, setEnrollHash] = useState<string | null>(null);
   const [enrollErr, setEnrollErr] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewing, startPreview] = useTransition();
@@ -56,6 +67,7 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
     setStruct(null);
     setStructErr(null);
     setEnroll(null);
+    setEnrollHash(null);
     setEnrollErr(null);
   }
   function preview() {
@@ -72,6 +84,7 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
       setStruct(s.report ?? null);
       setStructErr(s.error ?? null);
       setEnroll(e.diff ?? null);
+      setEnrollHash(e.hash ?? null);
       setEnrollErr(e.error ?? null);
     });
   }
@@ -92,11 +105,26 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
         setSnapshotId(r.snapshotId ?? null);
       }
       // ② 학생 반이동(구조가 이미 적용됐어도 반이동만 실패 가능 — 부분 상태 안내).
+      //    서버가 시트+DB 재읽기·hash 대조 후 적용(클라 diff 불신) — 스테일이면 미리보기 지우고 재불러오기 유도.
       let eRes: typeof enrollRes = null;
       if (enroll && enrollChanges > 0) {
-        const r = await applyTimetableImport(enroll, subject);
+        if (!enrollHash) {
+          setError("반이동 미리보기 정보가 없습니다 — 다시 불러오세요." + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          setStructRes(sRes);
+          setConfirming(false);
+          return;
+        }
+        const r = await applySheetImport(enrollHash, subject);
         if (r.error) {
-          setError("학생 반이동 적용 실패: " + r.error + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          if (r.staleHash) {
+            // 반이동 미리보기만 무효화(구조는 이미 적용됐을 수 있음 — 결과·롤백은 유지).
+            setError("수강 또는 시트가 미리보기 이후 변경됐습니다 — 다시 불러오세요." + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+            setEnroll(null);
+            setEnrollHash(null);
+            setEnrollErr("미리보기 이후 변경됨 — 다시 불러오세요.");
+          } else {
+            setError("학생 반이동 적용 실패: " + r.error + (sRes ? " (수업 배치는 이미 적용됨)" : ""));
+          }
           setStructRes(sRes); // 구조는 성공했으면 결과·롤백 노출
           setConfirming(false);
           return;
@@ -138,7 +166,9 @@ export function EnglishImportDialog({ subject = "english" }: { subject?: string 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition"
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition disabled:opacity-50"
       >
         <Sheet className="size-3" /> 시트에서 가져오기
       </button>

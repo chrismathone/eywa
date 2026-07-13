@@ -118,3 +118,28 @@ export function computeImportDiff(
 export function totalChanges(d: ImportDiff): number {
   return d.moves.length + d.removes.length + d.adds.length;
 }
+
+/** 결정적 FNV-1a 해시(env 무관) — 영어 구조 import(structure/diff.ts)와 동일 알고리즘. */
+function fnv1a(s: string): string {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/**
+ * 적용될 **쓰기 내용**(moves/removes/adds)의 결정적 해시 — preview가 반환하고 apply가
+ * 서버 재계산 결과와 대조해 stale 미리보기(preview~apply 사이 DB/시트 변경)를 차단한다.
+ * warnings·unchanged는 쓰기에 영향 없어 제외. move는 from 반까지 포함(미리보기 이후
+ * 다른 관리자가 이미 옮긴 수강을 모르고 덮어쓰는 것도 stale로 잡음). 항목 순서 무관(정렬).
+ */
+export function importDiffHash(diff: ImportDiff): string {
+  const keys = [
+    ...diff.moves.map((m) => `move|${m.enrollmentId}|${m.fromClassName}|${m.toClassId}`),
+    ...diff.removes.map((r) => `remove|${r.enrollmentId}`),
+    ...diff.adds.map((a) => `add|${a.studentId}|${a.classId}`),
+  ].sort();
+  return fnv1a(keys.join("\n"));
+}

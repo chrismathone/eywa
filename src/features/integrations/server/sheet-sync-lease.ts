@@ -21,26 +21,52 @@ export const SHEET_SYNC_BUSY_MSG =
  *
  * 반환: "claimed"=선점 성공 / "busy"=다른 실행 진행 중(3분 이내) / "norow"=연동 행 없음
  * (파일 업로드 가져오기 등 시트 미연동 경로 — 보호할 시트가 없으니 호출부는 그냥 진행).
+ *
+ * `tenantId`: 세션 없는 호출(cron 자동 반영 = admin 클라이언트, RLS 우회)에서 **필수** — 명시 격리.
+ * 세션(RLS) 경로는 생략(RLS가 테넌트를 이미 좁힘, 기존 호출 무변경).
  */
-export async function claimSheetSyncLease(supabase: Supa, provider: string): Promise<SheetSyncLease> {
+export async function claimSheetSyncLease(
+  supabase: Supa,
+  provider: string,
+  tenantId?: string,
+): Promise<SheetSyncLease> {
   const staleIso = new Date(Date.now() - LEASE_STALE_MS).toISOString();
-  const { data } = await supabase
+  let claim = supabase
     .from("user_integrations")
     .update({ sync_started_at: new Date().toISOString() })
     .eq("provider", provider)
-    .or(`sync_started_at.is.null,sync_started_at.lt.${staleIso}`)
-    .select("provider");
+    .or(`sync_started_at.is.null,sync_started_at.lt.${staleIso}`);
+  if (tenantId) claim = claim.eq("tenant_id", tenantId);
+  const { data } = await claim.select("provider");
   if ((data ?? []).length > 0) return "claimed";
   // 선점 실패 — 행이 있으면 진행 중(busy), 없으면 시트 미연동(norow).
-  const { data: row } = await supabase
-    .from("user_integrations")
-    .select("provider")
-    .eq("provider", provider)
-    .maybeSingle();
+  let probe = supabase.from("user_integrations").select("provider").eq("provider", provider);
+  if (tenantId) probe = probe.eq("tenant_id", tenantId);
+  const { data: row } = await probe.maybeSingle();
   return row ? "busy" : "norow";
 }
 
+/**
+ * 리스 진행 중 여부(read-only) — 시간표 툴바가 폴링해 '시트 반영/가져오기' 버튼을 선제 비활성+안내.
+ * (새벽 자동 반영·다른 관리자 수동 실행 모두 커버. 서버 액션 거부는 그대로 2차 방어.)
+ */
+export async function isSheetSyncBusy(supabase: Supa, provider: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("user_integrations")
+    .select("sync_started_at")
+    .eq("provider", provider)
+    .maybeSingle();
+  const at = data?.sync_started_at ? new Date(data.sync_started_at as string).getTime() : null;
+  return at != null && Date.now() - at < LEASE_STALE_MS;
+}
+
 /** 리스 해제 — 이 쓰기가 실패해도 3분 stale로 자가 회복하므로 best-effort면 충분. */
-export async function releaseSheetSyncLease(supabase: Supa, provider: string): Promise<void> {
-  await supabase.from("user_integrations").update({ sync_started_at: null }).eq("provider", provider);
+export async function releaseSheetSyncLease(
+  supabase: Supa,
+  provider: string,
+  tenantId?: string,
+): Promise<void> {
+  let q = supabase.from("user_integrations").update({ sync_started_at: null }).eq("provider", provider);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  await q;
 }

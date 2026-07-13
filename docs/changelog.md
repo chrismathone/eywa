@@ -37,6 +37,37 @@
   ⚠️ 엣지: void 행이 있는 (학생,월)에 수동 청구(createInvoice)를 만들면 유니크 위반 안내가 뜬다 — makeedu에 재등록하면
   동기화가 자동 복원하므로 정석 경로는 makeedu.
 
+### 시간표 → 구글시트 자동 반영 cron(새벽 4시) + 3중 안전판 (2026-07-13) — ✅ tsc0/lint0/test1064/적대리뷰
+원장 요청 "시트 반영 자동화 없나". 기존 '시트 반영'은 수동(master)뿐 → 매일 **04:00 KST cron** [/api/cron/sheets-sync](../src/app/api/cron/sheets-sync/route.ts)
+신설(수학·영어). 시트가 **양방향 표면**(가져오기 라운드트립)이라 무가드 자동 덮어쓰기 = 시트 편집 유실 → **3중 안전판**:
+① 사람-편집 가드([getSheetLastModifier](../src/features/integrations/google-sheets.ts): 최종수정자≠SA 또는 modifiedTime>last_synced+1분 → 건너뜀+안내)
+② 첫반영 가드(last_synced_at 없으면 제외, 온보딩은 수동) ③ 빈데이터 가드(빌더 동일 `getWeeklyScheduleWithStudents`로
+이번 주 유효 슬롯 0건이면 중단 — 학기전환/전체종강 시 빈 시트 방지). 세션 없음 → **admin 클라 + 명시 tenant 격리**
+(queries/builders에 `db` 주입, edutrix-sync 선례). 리스(`sync_started_at`) 공유로 수동 반영/가져오기와 직렬화.
+UI: 시간표 툴바가 리스 진행 중 '시트 반영/가져오기' **선제 비활성+마우스오버 안내**(20s 폴링 [checkSheetSyncBusy](../src/features/integrations/server/actions.ts)) +
+연동 카드 자동반영 안내(재개 조건='시트 반영'까지). **적대리뷰(4렌즈+검증, 확정 8종) 픽스**: 수학 referenceMonday
+KST 기준(UTC getDay 월요일 밀림 버그), 빈데이터 가드 시간유효성 반영, 사람편집 유예 10→1분, 성공 update 오류 표면화 등.
+⚠️ 병렬 세션이 착수하다 만 흔적(subjectFromProvider·getSheetLastModifier 스텁)을 채택·완성 — 그 세션 중복작업 금지.
+
+### 시간표 '수강편집' 가져오기 apply 서버 재검증 — stale diff 차단 (2026-07-13) — ✅ tsc0/lint0/test1027
+동시성 전수조사 발견분: 영어 구조 가져오기(applyStructureImport)는 apply 시 시트+DB 재읽기·hash 대조가 있는데
+**수학/수강편집 경로(applyTimetableImport)는 클라 diff를 그대로 적용** — preview~apply 사이 DB 변경(다른 관리자 이동·시트 반영)이
+그대로 덮였다. 영어 computeFresh 패턴으로 통일: ① 순수 [importDiffHash](../src/features/timetable/import/diff.ts)(FNV-1a, 쓰기내용
+moves(from 포함)/removes/adds만·정렬·순서무관, Vitest 6) ② preview 2종(파일/시트)이 hash 반환 ③ **apply는 diff를 안 받고**
+파일 재전송(클라 보관 파일) 또는 시트 재읽기(protectNewerThan 동일)로 서버가 재계산→hash 불일치 시 "미리보기 이후 변경" 에러+`staleHash`
+반환(일치 시 서버 재계산 diff 적용=클라 계획 불신). 시트 apply는 신규 `applySheetImport`(master 게이트=preview와 대칭). 클라 2곳
+([import-dialog](../src/app/(shell)/timetable/_components/import-dialog.tsx)·[english-import-dialog](../src/app/(shell)/timetable/_components/english-import-dialog.tsx))은
+staleHash 응답 시 미리보기 초기화+재미리보기 유도(영어 통합창은 반이동 섹션만 무효화 — 이미 적용된 구조 결과·롤백 버튼 보존).
+apply는 0098a 시트 리스도 함께 잡아(재읽기~적용 전 구간) '시트 반영'·다른 가져오기와 교차 실행 직렬화.
+
+### 시간표 전입 30일 창 + 퇴원 줄 정제(과목 수강 유지자 제외) (2026-07-13) — ✅ tsc0/lint0/실데이터 검증
+사용자 결정 2건을 [timetable/server/queries.ts](../src/features/timetable/server/queries.ts) 한 곳에 반영(기본뷰·통합뷰·강사뷰·엑셀 공용 쿼리):
+① **전입(반이동) 배지도 신입과 동일한 30일 창** — `isTransferredIn`에 `start >= newCutoff` 추가. 이동 30일 뒤엔 일반 재원 표시
+(수학 상단 배지 전입 15→4 실측. 영어 전입 88은 7/10 대량 반이동이 30일 이내라 정상 — 8월 초 자동 소멸).
+② **퇴원생 = 그 과목 수강이 하나도 안 남은 학생** — 같은 과목에 살아있는(기준일 미종료) 수강이 있으면 옛 반 퇴원 줄에서 제외.
+퇴원 후보만 별도 경량 조회(fetchInChunks, B3)로 보이는 슬롯 밖(다른 강사 반) 수강까지 포착. 실측 해당 95건(수학 69·영어 24·수학심화 2).
+검증: 로컬(3100)+웨일 실데이터 — 수강 유지 표본 5명(유희린·허유승 등) 취소선 0곳·재원만 / 진짜 퇴원 대조군 5명 취소선 유지(과잉 제거 없음).
+
 ### 수납 지표 3원화 통일 — calc.ts 단일 공식 전면 배선 (2026-07-13) — ✅ tsc0/lint0/calc.test 18/프로덕션 read-only 대조
 수납 브랜치 머지 적대 리뷰 잔여(I3) 해소: 수납률·미수 공식이 화면마다 달라(대시보드=paid/gross·캡 없음,
 RPC=학생 합산 후 clamp, 엑셀=무clamp 음수 가능) 숫자가 어긋나던 것을 **[calc.ts](../src/features/billing/calc.ts)

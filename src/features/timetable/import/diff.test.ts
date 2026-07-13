@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchClass, matchStudent } from "./match";
-import { computeImportDiff, totalChanges } from "./diff";
-import type { ClassRef, EnrollmentSnapshotRow, ParsedEditRow, StudentRef } from "./types";
+import { computeImportDiff, importDiffHash, totalChanges } from "./diff";
+import type { ClassRef, EnrollmentSnapshotRow, ImportDiff, ParsedEditRow, StudentRef } from "./types";
 
 const CLASSES: ClassRef[] = [
   { classId: "cA", className: "DP3", subject: "english" },
@@ -150,5 +150,69 @@ describe("computeImportDiff", () => {
     // cutoff 없으면 eNew가 삭제로 잡힘(대조)
     const d2 = computeImportDiff(parsed, current, CLASSES, STUDENTS);
     expect(d2.removes.map((r) => r.enrollmentId)).toEqual(["eNew"]);
+  });
+});
+
+describe("importDiffHash (apply 서버 재검증용)", () => {
+  const base: ImportDiff = {
+    moves: [
+      { enrollmentId: "e1", studentName: "김민준", fromClassName: "DP3", toClassName: "DP4", toClassId: "cB" },
+      { enrollmentId: "e2", studentName: "이서연", fromClassName: "DP4", toClassName: "DP3", toClassId: "cA" },
+    ],
+    removes: [{ enrollmentId: "e3", studentName: "박서준", className: "DP3" }],
+    adds: [{ studentName: "이서연", school: "한빛중", grade: "중2", className: "DP4", classId: "cB", studentId: "s2" }],
+    unchanged: 5,
+    warnings: ["경고 하나"],
+  };
+
+  it("결정적 + 항목 순서 무관(같은 쓰기 내용 = 같은 해시)", () => {
+    const shuffled: ImportDiff = {
+      ...base,
+      moves: [base.moves[1]!, base.moves[0]!],
+    };
+    expect(importDiffHash(shuffled)).toBe(importDiffHash(base));
+  });
+
+  it("warnings·unchanged는 해시에 영향 없음(쓰기 무관)", () => {
+    const noisy: ImportDiff = { ...base, unchanged: 999, warnings: [] };
+    expect(importDiffHash(noisy)).toBe(importDiffHash(base));
+  });
+
+  it("쓰기 내용이 바뀌면 해시가 바뀐다 — 이동 대상 반", () => {
+    const changed: ImportDiff = {
+      ...base,
+      moves: [{ ...base.moves[0]!, toClassId: "cA", toClassName: "DP3" }, base.moves[1]!],
+    };
+    expect(importDiffHash(changed)).not.toBe(importDiffHash(base));
+  });
+
+  it("from 반이 바뀌어도 stale — 미리보기 이후 남이 옮긴 수강을 덮어쓰지 않도록", () => {
+    const moved: ImportDiff = {
+      ...base,
+      moves: [{ ...base.moves[0]!, fromClassName: "DP9" }, base.moves[1]!],
+    };
+    expect(importDiffHash(moved)).not.toBe(importDiffHash(base));
+  });
+
+  it("삭제/추가 증감도 해시가 바뀐다", () => {
+    expect(importDiffHash({ ...base, removes: [] })).not.toBe(importDiffHash(base));
+    expect(importDiffHash({ ...base, adds: [] })).not.toBe(importDiffHash(base));
+  });
+
+  it("시나리오: preview~apply 사이 다른 관리자가 수강을 옮기면 재계산 hash가 달라진다(stale 차단)", () => {
+    // 시트: e1을 DP3→DP4로 이동 지시.
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP4" },
+      { enrollmentId: "e2", studentName: "이서연", school: "한빛중", grade: "중2", className: "DP3" },
+    ];
+    const previewDiff = computeImportDiff(parsed, CURRENT, CLASSES, STUDENTS); // move e1: DP3→DP4
+    expect(previewDiff.moves).toHaveLength(1);
+    // 그 사이 다른 관리자가 e1을 이미 DP4로 옮김 → apply 시 서버 재계산은 무변경.
+    const movedCurrent = CURRENT.map((c) =>
+      c.enrollmentId === "e1" ? { ...c, classId: "cB", className: "DP4" } : c,
+    );
+    const applyDiff = computeImportDiff(parsed, movedCurrent, CLASSES, STUDENTS);
+    expect(applyDiff.moves).toHaveLength(0);
+    expect(importDiffHash(applyDiff)).not.toBe(importDiffHash(previewDiff)); // → staleHash 반환
   });
 });
