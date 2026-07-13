@@ -113,18 +113,26 @@
   반 전체 클릭 = 전원 오발송. 개별 원아 선택(student picker)은 bulkText 모드에만 있고 그마저 "1명 클래스:
   child가 1개뿐이면 그것이 정답" 주석으로 1인반을 정상 전제한다.
 
-### 반 생성·배정 자동화 — Edutrix 스크립트 3종 (eywa 이식 후보, D:\edutrix\scripts\)
+### 반 생성·배정 자동화 — ✅ eywa 이식 완료 (2026-07-10, scripts/_classnote/)
 
-| 스크립트 | 역할 | 비고 |
+Edutrix 원본(D:\edutrix\scripts\ 3종: create_classnote_classes / assign_student_to_individual_class /
+assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**으로 이식. 공용 헬퍼 =
+[`classnote-admin-core.mjs`](../scripts/_classnote/classnote-admin-core.mjs)(로그인·호칭 다이얼로그·무한스크롤 수집).
+
+| eywa 스크립트 | 역할 | 실행 |
 |---|---|---|
-| `create_classnote_classes.js` | DB 수강생 기준 `(수학/영어)학생명A` **빈 반 일괄 생성**(Puppeteer, 기관설정>반 정보 관리>반 추가하기) | 학부모 가입 **전**에도 가능(빈 반 OK). 수학+영어 수강=보드 2개 |
-| `assign_student_to_individual_class.js` | **승인 완료** 탭에서 학생 검색→자기 개별반 배정 | 실UI 라벨 "[ALL] 회원가입 후 반배정 필요" = **학부모 가입·승인 후에만 배정 가능**. 동명이인 2명+ 매칭=수동확인 분기 |
-| `assign_teacher_to_classnote.js` | 강사에게 담당 학생 보드 일괄 체크 배정 | 강사 페이지(/service/setting/teacher) |
+| [`provision-classnote-boards.mjs`](../scripts/_classnote/provision-classnote-boards.mjs) | eywa 재원생(발송과목 활성 수강) 기대 보드 vs 실보드 diff → **누락 보드만 생성**. 동명이인(유효이름 중복)은 생성 보류로 분리 | `node --env-file=.env.local scripts/_classnote/provision-classnote-boards.mjs [--subject=math\|english\|all] [--apply] [--limit=N]` |
+| [`assign-classnote-students.mjs`](../scripts/_classnote/assign-classnote-students.mjs) | 학생 관리>반 추가 모달 1회 스캔으로 전수 판정(assigned/ready/not_signed_up/board_missing) + `--apply`로 ready만 배정 | 위와 동일 패턴. 판정은 보드별 **배정 인원(N명) 표시** 기반(2026-07 실DOM — Edutrix 원본의 per-학생 검색보다 견고) |
+| (미이식) 강사 배정 | Edutrix `assign_teacher_to_classnote.js` — 강사 게시 알림용, 발송 필수 아님 | 필요 시 후속 |
 
-- **파이프라인**: ①빈 반 생성(자동) → ②학부모 초대(전화번호를 반에 초대 — **자동화 코드 없음**, 외부 발신이라
-  수동 권장) → ③가입·승인(학부모 액션) → ④학생→개별반 배정(자동) → ⑤강사 배정(자동).
-- 즉 "보드 없음 33명" 해소와 신규생 보드 프로비저닝은 이 스크립트들을 eywa DB 기준으로 고쳐 연동 PC에서
-  돌리면 자동화 가능. **학부모 가입만은 자동화 불가**(학생 엔티티가 학부모 연결로 생기는 ClassNote 구조 제약).
+- **파이프라인**: ①빈 반 생성(자동, 가입 전 가능) → ②학부모 초대(전화번호를 반에 초대 — **자동화 안 함**,
+  외부 발신이라 수동) → ③가입·승인(학부모 액션, "[ALL] 회원가입 후 반배정 필요") → ④학생→개별반 배정(자동).
+- **2026-07-10 실측(dry-run, 수학 재원 237명)**: assigned 196 · **보드 없음 35**(생성 대상 — 단
+  `(수학)박서준C`는 생성 금지: 실보드 `박서준`에 `classnote_name` 매핑으로 해소) · **미가입 5**(최수호·손민우·
+  정다온·박성혁·김수련 — 초대 필요) · **ready 1**(주준호 — 가입됐는데 배정만 누락, `--apply` 대상).
+  §9 수기 실사(33/6/1)와 교차 일치. ⚠️ `--apply`(생성·배정)는 실 ClassNote 변경 — 원장 승인 후 실행.
+- **신규생 운영**: 입회 후 이 두 스크립트 dry-run→apply가 표준 절차(연동 PC 정기 실행 후보).
+- **학부모 가입만은 자동화 불가**(학생 엔티티가 학부모 연결로 생기는 ClassNote 구조 제약).
 
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 
@@ -179,8 +187,8 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
    DB 설정을 읽어 post 여부를 판단하게 하면 해소.
 2. **중복 게시 창** — 워커 120s abort vs 함수 900s + 멱등 키 없음(§4). reportId 기반 dedupe를 함수에 추가하거나 워커 타임아웃을 함수와 맞출 것.
 3. **침묵 미발송** — 전송 버튼 못 찾아도 success(§4). 함수 수정 필요(edutrix repo).
-4. **신규생 보드 자동 생성 없음(발송 봇 기준)** — Edutrix repo `scripts/create_classnote_classes.js` 등 3종
-   이식으로 자동화 가능(§3 "반 생성·배정 자동화" 표 참조). 학부모 초대·가입만 자동화 불가.
+4. ~~신규생 보드 자동 생성 없음~~ → **✅ 해소(2026-07-10)**: `provision-classnote-boards.mjs` +
+   `assign-classnote-students.mjs`(§3 표) — dry-run 기본, 학부모 초대·가입만 자동화 불가.
 5. 좀비 queued(too_old 드리프트·revoked-while-queued)는 어떤 화면 주의 목록에도 안 잡힘.
 6. ~~`retryClassnote`가 revoked_at 미확인~~ → **✅ 해소(2026-07-10 P0-1)**: 재발송 필터에 `revoked_at IS NULL` 포함.
 7. 워커 minDate는 PC 로컬 시간, 앱 가드는 KST — 연동 PC가 KST라 현재 무해하나 기준 이원화.

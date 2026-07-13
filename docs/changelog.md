@@ -9,6 +9,9 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### ClassNote 보드 프로비저닝·배정 자동화 이식 (2026-07-10) — ✅ dry-run 실측 검증(수학 237명 전수)
+Edutrix 반 생성·배정 자동화를 eywa DB 기준·Playwright·**dry-run 기본**으로 이식(`scripts/_classnote/`): [provision-classnote-boards.mjs](../scripts/_classnote/provision-classnote-boards.mjs)(기대 보드 vs 실보드 diff → **누락 보드만 생성**, 동명이인 보류 분리) · [assign-classnote-students.mjs](../scripts/_classnote/assign-classnote-students.mjs)(학생 관리 반추가 모달 **1회 스캔 전수판정** — 보드별 배정 인원(N명) 표시 기반: assigned/ready/미가입/보드없음, `--apply`는 ready만 배정) · 공용 [classnote-admin-core.mjs](../scripts/_classnote/classnote-admin-core.mjs)(로그인·호칭 다이얼로그·무한스크롤 수집). 실측: assigned 196 · 보드없음 35(`(수학)박서준C`는 생성 아닌 `classnote_name` 매핑으로) · 미가입 5(초대 필요) · ready 1(주준호). §9 수기 실사(33/6/1)와 교차 일치. ⚠️ `--apply`(생성·배정)=실 ClassNote 변경 — 원장 승인 후. 배경·사용법 = docs/classnote-integration.md §3(학생 1명=반 1개 구조 근거 포함).
+
 ### 상담 양식 치환 태그 — {{날짜}}·{{담당}}·{{학생}} 자동 입력 (2026-07-11) — ✅ tsc0/lint0/test22/실측
 원장 요청(메이크에듀 패리티): 양식에 `{{날짜}}` `{{담당}}` 같은 태그를 넣으면 등록 시 자동으로 값이 채워지게.
 - **순수 치환 모듈** [template-vars.ts](../src/features/consultations/template-vars.ts)(Vitest 8): `fillTemplate(body, vars)` — 알려진 태그+값→치환,
