@@ -26,8 +26,16 @@
 - ⚠️ **발견**: 07-01 옛 additive 임포트 행은 line_items 구스키마(paid 필드 없음) → 출처 판별은 한글 kind(구분)로
   (수동 청구 createInvoice는 영문 kind). paid 유무만 보면 옛 행 전부 '수동'으로 오분류돼 영구 보류된다.
 - 검증: classifyStale 단위 8시나리오 / 프로덕션 파생 픽스처 dry-run(4버킷·미매칭 3건 재현) / void UPDATE·마커 제거
-  regexp = BEGIN→ROLLBACK 스모크(DB 순효과 0). ⚠️ 연동 PC zip 이관 필요. ⚠️ void 활성화 여부=사용자 결정 대기
-  (void 행이 수납 목록 맨 뒤에 여전히 표시됨 — 활성화 시 UI 라벨/필터 후속 검토).
+  regexp = BEGIN→ROLLBACK 스모크(DB 순효과 0). ⚠️ 연동 PC zip 이관 필요(`Desktop\eywa-sync-pc-수납사각보완-20260713.zip`,
+  .env.local `MAKEEDU_VOID_STALE=true` 추가 포함).
+- **결정(사용자 승인): 자동 void 활성화.** 이에 맞춰 **void 소비처 전면 배선** — void = "makeedu에 없는 청구"로 취급:
+  · 수납 표·KPI·엑셀 = [getInvoicesForPeriod](../src/features/billing/server/queries.ts)에서 `.neq(status,void)` 제외(단일 소스)
+  · 대시보드 수납률 2쿼리(`getPaymentRateThisMonth`/`getTrendDataLast7Days`) 분모 제외 · retention 리스크 신호 제외 ·
+  super-admin 매출 합계 5쿼리 제외 · RPC 0101a/`invoiceOutstanding()`은 이미 void 제외라 무변경
+  · **학생 상세 수납 이력에는 남긴다**(회색 '무효' 배지+행 흐림, 통계·건수에서만 제외) — 이력·근거 보존.
+  [동기화] 시스템 메모는 수납명으로 안 쓰고 툴팁 원문으로만(billing-view `isSyncNote`).
+  ⚠️ 엣지: void 행이 있는 (학생,월)에 수동 청구(createInvoice)를 만들면 유니크 위반 안내가 뜬다 — makeedu에 재등록하면
+  동기화가 자동 복원하므로 정석 경로는 makeedu.
 
 ### 수납 지표 3원화 통일 — calc.ts 단일 공식 전면 배선 (2026-07-13) — ✅ tsc0/lint0/calc.test 18/프로덕션 read-only 대조
 수납 브랜치 머지 적대 리뷰 잔여(I3) 해소: 수납률·미수 공식이 화면마다 달라(대시보드=paid/gross·캡 없음,

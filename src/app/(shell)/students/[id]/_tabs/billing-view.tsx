@@ -22,12 +22,18 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 };
 const PAGE_SIZES = [10, 20, 50, 100];
 const won = (n: number) => n.toLocaleString();
-// line_items(항목 내역)가 있으면 그 항목명을 대표 라벨로, 없으면 메모 → category 라벨 순.
-const billingName = (r: StudentBillingRow) =>
-  r.notes?.trim() ||
-  r.lineItems.map((li) => li.description).filter(Boolean).join(", ") ||
-  CATEGORY_LABEL[r.category] ||
-  "청구";
+// 동기화가 남긴 시스템 메모(무효 처리 근거 등) — 수납명으로는 안 쓰고 툴팁으로만 노출.
+const isSyncNote = (s: string) => s.startsWith("[동기화]");
+// 사용자 메모가 있으면 대표 라벨로, 없으면 line_items 항목명 → category 라벨 순.
+const billingName = (r: StudentBillingRow) => {
+  const memo = r.notes?.trim();
+  return (
+    (memo && !isSyncNote(memo) ? memo : "") ||
+    r.lineItems.map((li) => li.description).filter(Boolean).join(", ") ||
+    CATEGORY_LABEL[r.category] ||
+    "청구"
+  );
+};
 
 export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
   const latestYear = invoices[0]?.period ? Number(invoices[0].period.slice(0, 4)) : new Date().getFullYear();
@@ -54,10 +60,11 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       unpaid = 0,
       pending = 0;
     for (const r of filtered) {
+      if (r.status === "void") continue; // makeedu에서 삭제된 청구 — 통계에서 제외(목록엔 '무효' 배지로 표시)
       billed += r.amountTotal;
       paid += r.amountPaid;
-      if (r.status !== "paid") {
-        unpaid += invoiceOutstanding(r); // 행 레벨 clamp·refunded/void 제외 — calc.ts 단일 공식
+      if (r.status === "unpaid" || r.status === "partial") {
+        unpaid += invoiceOutstanding(r); // 행 레벨 clamp — calc.ts 단일 공식
         pending++;
       }
     }
@@ -65,11 +72,13 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
   }, [filtered]);
 
   const overall = useMemo(() => {
+    // void(makeedu 삭제분)는 유효 청구가 아님 — 전 기간 통계 분모·건수에서 제외.
+    const rows = invoices.filter((r) => r.status !== "void");
     let billed = 0,
       paid = 0,
       discount = 0,
       paidCount = 0;
-    for (const r of invoices) {
+    for (const r of rows) {
       billed += r.amountTotal;
       paid += r.amountPaid;
       discount += r.amountDiscount;
@@ -77,7 +86,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
     }
     const net = billed - discount;
     const rate = paymentRateOf(paid, net);
-    return { total: invoices.length, paidCount, pendingCount: invoices.length - paidCount, rate };
+    return { total: rows.length, paidCount, pendingCount: rows.length - paidCount, rate };
   }, [invoices]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -161,10 +170,12 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                 <tbody className="divide-line divide-y">
                   {paged.map((r) => {
                     const badge = STATUS_BADGE[r.status] ?? { label: r.status, cls: "bg-bg-soft text-text-dim border-line" };
+                    // 무효(void) 행은 흐리게 — makeedu에서 삭제된 청구임을 시각적으로 구분
                     return (
-                      <tr key={r.id} className="hover:bg-bg-soft/40">
+                      <tr key={r.id} className={r.status === "void" ? "opacity-60 hover:bg-bg-soft/40" : "hover:bg-bg-soft/40"}>
                         <td className="num text-text-dim px-3 py-2 text-xs">{r.period}</td>
-                        <td className="text-foreground px-3 py-2" title={billingName(r)}>
+                        {/* 툴팁: 동기화 시스템 메모([동기화] 무효 근거 등)가 있으면 원문 노출 */}
+                        <td className="text-foreground px-3 py-2" title={r.notes?.trim() || billingName(r)}>
                           {r.lineItems.length > 1 ? (
                             // 여러 항목이면 makeedu처럼 항목별로 펼쳐 보여준다(집계로 가려진 내역 복원).
                             <div className="space-y-0.5">

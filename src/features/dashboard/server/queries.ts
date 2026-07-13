@@ -415,6 +415,8 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
       .from("invoices")
       .select("amount_total, amount_paid, amount_discount, status")
       .eq("period", period)
+      // void = makeedu에서 삭제된 청구(동기화 무효 처리) — 분모(청구 총액·수납률)에서도 제외.
+      .neq("status", "void")
       .range(from, to),
   );
   if (data.length === 0) return null;
@@ -459,13 +461,14 @@ export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
         .lte("session_date", toIsoDate(end))
         .range(from, to),
     ),
-    // 이번 달 invoices — 누적 수납률 계산용 (paid_at 일자별)
+    // 이번 달 invoices — 누적 수납률 계산용 (paid_at 일자별). void(makeedu 삭제분)는 분모에서 제외.
     fetchAllPaged<{ amount_total: number; amount_paid: number; amount_discount: number | null; paid_at: string | null }>(
       (from, to) =>
         supabase
           .from("invoices")
           .select("amount_total, amount_paid, amount_discount, paid_at")
           .eq("period", currentPeriod())
+          .neq("status", "void")
           .range(from, to),
     ),
   ]);

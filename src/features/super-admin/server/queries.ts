@@ -41,8 +41,9 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
     fetchAllPaged<{ tenant_id: string }>((from, to) =>
       admin.from("students").select("tenant_id").neq("status", "withdrawn").range(from, to),
     ),
+    // void(makeedu 삭제분)는 매출 집계에서 제외 — 이하 invoices 합계 쿼리 공통.
     fetchAllPaged<{ tenant_id: string; amount_total: number | string | null }>((from, to) =>
-      admin.from("invoices").select("tenant_id, amount_total").eq("period", period).range(from, to),
+      admin.from("invoices").select("tenant_id, amount_total").eq("period", period).neq("status", "void").range(from, to),
     ),
   ]);
 
@@ -133,7 +134,7 @@ export async function getTenantsPage(
             admin.from("students").select("tenant_id").neq("status", "withdrawn").in("tenant_id", ids).range(f, t),
           ),
           fetchAllPaged<{ tenant_id: string; amount_total: number | string | null }>((f, t) =>
-            admin.from("invoices").select("tenant_id, amount_total").eq("period", period).in("tenant_id", ids).range(f, t),
+            admin.from("invoices").select("tenant_id, amount_total").eq("period", period).neq("status", "void").in("tenant_id", ids).range(f, t),
           ),
         ]);
 
@@ -193,7 +194,7 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
     admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
     admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
     fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
-      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).range(from, to),
+      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).neq("status", "void").range(from, to),
     ),
   ]);
 
@@ -228,7 +229,7 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
     admin.from("users").select("id", { count: "exact", head: true }).eq("status", "active"),
     admin.from("students").select("id", { count: "exact", head: true }).neq("status", "withdrawn"),
     fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
-      admin.from("invoices").select("amount_total").eq("period", period).range(from, to),
+      admin.from("invoices").select("amount_total").eq("period", period).neq("status", "void").range(from, to),
     ),
   ]);
 
@@ -303,7 +304,7 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
       admin.from("users").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("system_role", "teacher"),
       admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
       fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
-        admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).range(from, to),
+        admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).neq("status", "void").range(from, to),
       ),
       admin
         .from("students")

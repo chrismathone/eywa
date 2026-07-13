@@ -103,6 +103,7 @@ async function computeRetentionRoster(tenantId: string, teacherId?: string): Pro
         .select("student_id, amount_total, period")
         .eq("tenant_id", tenantId)
         .in("student_id", c)
+        .neq("status", "void") // void = makeedu에서 삭제된 청구 — 리스크 신호에서 제외
         .order("period", { ascending: false }),
     ),
     fetchByStudentChunks(ids, (c) =>
