@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useWindowStore, windowId, instanceLabel, isDuplicate, baseWindowId, MAX_WINDOWS } from "./window-store";
+import { useWindowStore, windowId, instanceLabel, isDuplicate, baseWindowId, MAX_WINDOWS, CACHE_MAX } from "./window-store";
 
 const SID = windowId("route", "students/1");
 
@@ -13,6 +13,10 @@ function reset() {
     live: {},
     nav: {},
     reloadNonce: {},
+    dirty: {},
+    cached: [],
+    spotlight: false,
+    spotlightRaised: [],
   });
 }
 
@@ -179,5 +183,102 @@ describe("window-store openNewInstance() — shift+클릭", () => {
     s.openNewInstance("route", { id: "students", title: "학생목록", href: "/students" });
     expect(useWindowStore.getState().windows[`${primary}#2`]).toBeTruthy();
     expect(Object.keys(useWindowStore.getState().windows).length).toBe(3);
+  });
+});
+
+describe("window-store close() — BL3 warm 캐시(재오픈 즉시화)", () => {
+  beforeEach(reset);
+
+  const A = windowId("route", "a");
+  const B = windowId("route", "b");
+  const C = windowId("route", "c");
+  const openRoute = (id: string) =>
+    useWindowStore.getState().open("route", { id, title: id, href: `/${id}` });
+
+  it("라우트 창을 닫으면 파괴 대신 warm 보존 — mounted 유지·order서 제거·cached 추가·minimized", () => {
+    openRoute("a");
+    useWindowStore.getState().close(A);
+    const st = useWindowStore.getState();
+    expect(st.windows[A]).toBeTruthy(); // 여전히 마운트(iframe 보존)
+    expect(st.windows[A].minimized).toBe(true); // hidden
+    expect(st.order).not.toContain(A); // 모든 창 UI(스위처·점)에서 사라짐
+    expect(st.cached).toContain(A);
+    expect(st.focusedId).toBe(null); // 유일 창이었음
+  });
+
+  it("닫은 창을 다시 열면 즉시 복원 — cached서 제거·order 복귀·minimized 해제·포커스, 중복 생성 X", () => {
+    openRoute("a");
+    useWindowStore.getState().close(A);
+    openRoute("a"); // 재오픈
+    const st = useWindowStore.getState();
+    expect(st.cached).not.toContain(A);
+    expect(st.order).toContain(A);
+    expect(st.windows[A].minimized).toBe(false);
+    expect(st.focusedId).toBe(A);
+    expect(Object.keys(st.windows).length).toBe(1);
+  });
+
+  it("복제본·생성폼(autoClose)·더티·학생요약 창은 warm 보존 안 함 — 완전 파괴", () => {
+    // 복제본(#n)
+    openRoute("a");
+    useWindowStore.getState().duplicate(A);
+    const dup = `${A}#1`;
+    useWindowStore.getState().close(dup);
+    expect(useWindowStore.getState().windows[dup]).toBeFalsy();
+    expect(useWindowStore.getState().cached).not.toContain(dup);
+    // autoClose 생성폼
+    useWindowStore
+      .getState()
+      .open("route", { id: "enrollment/new", title: "새 상담", href: "/enrollment/new", autoClose: true });
+    const formId = windowId("route", "enrollment/new");
+    useWindowStore.getState().close(formId);
+    expect(useWindowStore.getState().windows[formId]).toBeFalsy();
+    expect(useWindowStore.getState().cached).not.toContain(formId);
+    // 더티(미저장) 창
+    openRoute("b");
+    useWindowStore.getState().setWindowDirty(B, true);
+    useWindowStore.getState().close(B);
+    expect(useWindowStore.getState().windows[B]).toBeFalsy();
+    expect(useWindowStore.getState().cached).not.toContain(B);
+    // 학생 요약(peek, kind student)
+    useWindowStore.getState().open("student", { id: "1", title: "박지율" });
+    const stu = windowId("student", "1");
+    useWindowStore.getState().close(stu);
+    expect(useWindowStore.getState().windows[stu]).toBeFalsy();
+    expect(useWindowStore.getState().cached).not.toContain(stu);
+  });
+
+  it("LRU 상한 — CACHE_MAX 초과 시 가장 오래된 warm 창을 실제 파괴(live/nav도 정리)", () => {
+    openRoute("a");
+    openRoute("b");
+    openRoute("c");
+    const s = useWindowStore.getState();
+    s.close(A); // cached [A]
+    s.close(B); // cached [A,B]
+    s.close(C); // cached [A,B,C] → 상한 초과 → A 파괴
+    const st = useWindowStore.getState();
+    expect(st.cached).toEqual([B, C]);
+    expect(st.cached.length).toBe(CACHE_MAX);
+    expect(st.windows[A]).toBeFalsy(); // 가장 오래된 것 파괴
+    expect(st.windows[B]).toBeTruthy();
+    expect(st.windows[C]).toBeTruthy();
+    expect(st.live[A]).toBeUndefined();
+    expect(st.nav[A]).toBeUndefined();
+  });
+
+  it("warm 창을 다시 열고 닫으면 LRU 끝으로 갱신 — 오래된 것으로 오인해 evict 안 됨", () => {
+    openRoute("a");
+    openRoute("b");
+    useWindowStore.getState().close(A); // cached [A]
+    useWindowStore.getState().close(B); // cached [A,B]
+    openRoute("a"); // A 재오픈 → cached [B]
+    expect(useWindowStore.getState().cached).toEqual([B]);
+    useWindowStore.getState().close(A); // cached [B,A]
+    expect(useWindowStore.getState().cached).toEqual([B, A]);
+    openRoute("c");
+    useWindowStore.getState().close(C); // cached [B,A,C] → B evict
+    const st = useWindowStore.getState();
+    expect(st.cached).toEqual([A, C]);
+    expect(st.windows[B]).toBeFalsy();
   });
 });

@@ -29,6 +29,29 @@
   regexp = BEGIN→ROLLBACK 스모크(DB 순효과 0). ⚠️ 연동 PC zip 이관 필요. ⚠️ void 활성화 여부=사용자 결정 대기
   (void 행이 수납 목록 맨 뒤에 여전히 표시됨 — 활성화 시 UI 라벨/필터 후속 검토).
 
+### 수납 지표 3원화 통일 — calc.ts 단일 공식 전면 배선 (2026-07-13) — ✅ tsc0/lint0/calc.test 18/프로덕션 read-only 대조
+수납 브랜치 머지 적대 리뷰 잔여(I3) 해소: 수납률·미수 공식이 화면마다 달라(대시보드=paid/gross·캡 없음,
+RPC=학생 합산 후 clamp, 엑셀=무clamp 음수 가능) 숫자가 어긋나던 것을 **[calc.ts](../src/features/billing/calc.ts)
+단일 공식으로 전면 통일**. 행 레벨 `invoiceOutstanding()`(= max(0, 청구−할인−수납), paid/refunded/void=0) +
+`paymentRateOf()`(수납/실청구, 100% 상한) 순수 헬퍼 추출(Vitest 9 추가) — **새 수납 지표는 재구현 금지, 이 두 함수만**.
+- 배선(8파일): 대시보드 `getPaymentRateThisMonth`(summarizeInvoices 위임+fetchAllPaged B2)·`getTrendDataLast7Days`
+  (분모=실청구·100% 상한·출결/청구 모두 fetchAllPaged), 엑셀 잔액([invoices-excel.ts](../src/features/exports/invoices-excel.ts)),
+  RPC **0101a**(행 clamp `greatest(0,…)` — 구 0039a는 학생 합산 후 clamp라 음수 잔차가 미수 상쇄), 학생 상세
+  overview-tab(구: refunded/void도 미납 합산하던 버그)·billing-view·수납 표 billing-table(paid 잔차를 미납으로 그리던 것 0)·billing-content(중복 제거).
+- 프로덕션 read-only 실측(injaewon, 2026-01~07 전월 할인 260만+): 증상 재현 — 구 대시보드 수납률이 매달 1.5~1.7%p 낮음
+  (07월 92.55%→94.16%, 06월 98.40%→100%). 미수도 paid 잔차 유령(07월 191,250원)·과납 상쇄(02월 28,750→30,000, 구가 과소)
+  전부 해소, 엑셀 잔액합=KPI 미수 일치. RPC는 현 데이터에선 구=신 동일(32명·9,486,762원=calc.ts와 정확 일치)이라 무위험 교체.
+- ✅ 0101a 프로덕션 적용 완료(2026-07-13, JWT claim 에뮬레이션 실호출 검증 — 32명·9,486,762원 일치).
+
+### 원스크린 "지난 보고서" 뷰 — 강사 본인 보고서 이력 열람 (2026-07-13) — ✅ tsc0/lint0/실쿼리 probe
+원장 질문 "강사가 지난 보고서를 볼 수 있나" → 학생 상세 진도 탭(학생 1명씩)뿐이라 원스크린에 4번째 뷰 신설(A안).
+뷰 토글 `카드·표·발송 현황·지난 보고서` — 본인(`teacher_name`=displayName, 저장 귀속과 동일 기준) 보고서를 날짜별
+그룹 + 학생검색 + "더 보기"(200건 날짜경계 커서 페이징, B2)로 열람. 행 = 학생·학교학년(`schoolGradeLabel`)·과목(labelOf)·
+진도·시험·ClassNote 배지(`classnoteBadge`)·열람수·"보고서 보기 →"(/r 공개페이지, 90일 만료·회수 링크 자동 숨김).
+신규 [history-actions.ts](../src/features/onescreen/server/history-actions.ts)(서버 액션, 뷰 진입 시에만 로드=B7) +
+[history-board.tsx](../src/features/onescreen/components/history-board.tsx). RLS=테넌트 격리라 퇴원생 옛 보고서도 열람 가능(의도).
+Edutrix 이식분도 teacher_name 채워져 옛 이력 포함(실측 김은정 86/500). ⚠️강사 로그인 제약으로 브라우저 클릭검증 미실시(실쿼리 probe 대체).
+
 ### 수납 브랜치(fix/billing-discount-status) main 머지 — 검증 픽스 4종 동반 (2026-07-13) — ✅ tsc0/lint0/test1046/build✓/라이브 UI·콘솔0
 브랜치 2커밋(할인 완납 오판 848건·additive 임포트 누락·항목 뭉갬 해소 + 수납 표 라인 단위 재구성) 머지 — 프로덕션
 DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)이라 코드가 데이터를 따라잡는 머지.
@@ -37,7 +60,7 @@ DB는 이미 선반영(2821건 11-key line_items, 백업 invoices_bak_20260708)�
 ② 구형 3-key 인보이스 전부 '완납' 렌더(실측 미납 28건 ₩7.3M 은폐) → toLines 첫 라인 인보이스값 합성+미상 "—"
 ③ 완납 행 적립금 잔차가 유령 미수 합산(실측 7건 ₩351,250) → outstanding에서 paid 제외+테스트
 ④ 죽은 수납 편집 액션 3종 삭제(옛 deriveStatus는 할인 미차감이라 부활 시 848건 오판 재생산) + 레거시 영문 kind 한글 매핑.
-⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·대시보드 수납률 공식 불일치(I3)·
+⚠️ 잔여: 수납 편집 경로 소멸(makeedu 우선 읽기 미러 — 수동 청구 완납 처리 별도 과제)·~~대시보드 수납률 공식 불일치(I3)~~(→ 위 "수납 지표 3원화 통일"로 해소)·
 upsert 임포터 삭제 미반영/unmatched 스킵(I4)·**연동 PC에 새 임포터 zip 이관 필요**(안 하면 구 임포터가 계속 3-key 유입).
 
 ### ClassNote 자동 배정 방어 강화 — 적대 감사 F1~F6 전건 픽스 (2026-07-13) — ✅ 합성 테스트 13/13

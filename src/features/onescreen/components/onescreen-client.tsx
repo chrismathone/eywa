@@ -32,6 +32,7 @@ import { TestCard } from "./test-card";
 import { ReportCard, type SubjectReport } from "./report-card";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
+import { HistoryBoard } from "./history-board";
 import { buildGridRows, isReportEligible } from "../grid";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
@@ -105,7 +106,7 @@ export function OneScreenClient({
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
-  const [view, setView] = useState<"card" | "grid" | "status">("card"); // 카드(학생별) ↔ 표(대량작성) ↔ 발송 현황
+  const [view, setView] = useState<"card" | "grid" | "status" | "history">("card"); // 카드(학생별) ↔ 표(대량작성) ↔ 발송 현황 ↔ 지난 보고서
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -820,6 +821,8 @@ export function OneScreenClient({
         />
       ) : view === "status" ? (
         <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
+      ) : view === "history" ? (
+        <HistoryBoard />
       ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
         <StudentList

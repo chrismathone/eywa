@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
+import { invoiceOutstanding } from "@/features/billing/calc";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 
@@ -84,7 +85,8 @@ function toLines(r: InvoiceRow): InvoiceLineItem[] {
   const invoiceLevel = {
     discount: r.amountDiscount,
     paid: r.amountPaid,
-    unpaid: Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid),
+    // 행 레벨 미수 = calc.ts 단일 공식(paid/refunded/void = 0 — 적립금 잔차를 미납으로 안 그림).
+    unpaid: invoiceOutstanding(r),
     points: r.pointsUsed,
     method: r.paymentMethod,
     paidDate: r.paidAt,

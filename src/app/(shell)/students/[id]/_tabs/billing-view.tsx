@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { invoiceOutstanding, paymentRateOf } from "@/features/billing/calc";
 import type { StudentBillingRow } from "@/features/students/server/queries";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -21,7 +22,6 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 };
 const PAGE_SIZES = [10, 20, 50, 100];
 const won = (n: number) => n.toLocaleString();
-const unpaidOf = (r: StudentBillingRow) => Math.max(0, r.amountTotal - r.amountDiscount - r.amountPaid);
 // line_items(항목 내역)가 있으면 그 항목명을 대표 라벨로, 없으면 메모 → category 라벨 순.
 const billingName = (r: StudentBillingRow) =>
   r.notes?.trim() ||
@@ -57,7 +57,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       billed += r.amountTotal;
       paid += r.amountPaid;
       if (r.status !== "paid") {
-        unpaid += unpaidOf(r);
+        unpaid += invoiceOutstanding(r); // 행 레벨 clamp·refunded/void 제외 — calc.ts 단일 공식
         pending++;
       }
     }
@@ -76,7 +76,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       if (r.status === "paid") paidCount++;
     }
     const net = billed - discount;
-    const rate = net > 0 ? Math.min((paid / net) * 100, 100) : 0;
+    const rate = paymentRateOf(paid, net);
     return { total: invoices.length, paidCount, pendingCount: invoices.length - paidCount, rate };
   }, [invoices]);
 
