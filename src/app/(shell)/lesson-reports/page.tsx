@@ -4,11 +4,13 @@ import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getEdutrixUnmapped } from "@/features/report-admin/server/edutrix-map-queries";
 import { listReports } from "@/features/report-admin/server/actions";
+import { getNoticeClassOptions, listClassNotices } from "@/features/report-admin/server/notice-actions";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
+import { NoticeFace } from "./_components/notice-face";
 import { EdutrixUnmappedCard } from "./_components/edutrix-unmapped-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
@@ -17,14 +19,14 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — eywa" };
 
 type Sp = Record<string, string | undefined>;
-// 관리 3면(작성률·미매핑·목록) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
-type Tab = "writing" | "unmapped" | "list" | "report" | "ai_ment";
+// 관리 4면(작성률·미매핑·목록·공지) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
+type Tab = "writing" | "unmapped" | "list" | "notice" | "report" | "ai_ment";
 
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
 function resolveTab(sp: Sp, canOwner: boolean): Tab {
   const t = sp.tab;
-  if (t === "unmapped" || t === "list" || t === "writing") return t;
+  if (t === "unmapped" || t === "list" || t === "writing" || t === "notice") return t;
   if ((t === "report" || t === "ai_ment") && canOwner) return t;
   return "writing";
 }
@@ -48,6 +50,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     { key: "writing", label: "작성률", href: "/lesson-reports?tab=writing", group: "관리" },
     { key: "unmapped", label: "미매핑", href: "/lesson-reports?tab=unmapped", group: "관리" },
     { key: "list", label: "목록", href: "/lesson-reports?tab=list", group: "관리" },
+    { key: "notice", label: "반 공지", href: "/lesson-reports?tab=notice", group: "관리" },
     ...(canOwner
       ? ([
           { key: "report", label: "보고서 설정", href: "/lesson-reports?tab=report", group: "설정" },
@@ -69,6 +72,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
               teachers: cand.bySubject,
               staffNames: cand.staffNames,
             }))
+          : tab === "notice"
+            ? Promise.all([getNoticeClassOptions(), listClassNotices()]).then(([cls, notices]) => ({
+                noticeClasses: cls.classes ?? [],
+                noticeRows: notices.rows ?? [],
+              }))
           : tab === "ai_ment"
             ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
             : Promise.all([getReportFilterOptions(), listReports({ page: 0 })]).then(([filterOptions, firstPage]) => ({
@@ -116,6 +124,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
 
       {tab === "list" && "filterOptions" in tabData && "initialList" in tabData ? (
         <ReportList options={tabData.filterOptions} initial={tabData.initialList} canSend={canSendReports} />
+      ) : null}
+
+      {tab === "notice" && "noticeClasses" in tabData && "noticeRows" in tabData ? (
+        <NoticeFace classes={tabData.noticeClasses} initial={tabData.noticeRows} canSend={canSendReports} />
       ) : null}
 
       {tab === "report" && "reportSettings" in tabData ? (

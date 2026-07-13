@@ -9,6 +9,9 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 반 공지 기능 + ClassNote 게시 API 확보 (2026-07-13) — ✅ tsc0/lint0/test1027/전 구간 E2E
+수업보고서 > **반 공지** 탭 신설: 반(발송 opt-in 과목) 다중 선택 + 본문 → 각 재원생의 ClassNote 개별 보드로 일괄 게시. 반 구조는 eywa에 살고 1인 1반은 배달 레일(Edutrix NoticeWriteModal 패턴). **게시=내부 API 직접**(`POST /api/v1_2/reports/` 201·회수 `DELETE` 204 — 학원이 실검증, Cloud Run·Puppeteer 마법사 불필요). 파이프라인: [notice-face](<../src/app/(shell)/lesson-reports/_components/notice-face.tsx>)→[sendClassNotice](../src/features/report-admin/server/notice-actions.ts)(lesson_reports 쓰기+dry-run 스위치+과목 opt-in+동명이인 제외 — [resolveNoticeTargets](../src/features/report-admin/notice-targets.ts) 순수 Vitest6)→`classnote_notices` 큐(0099a, 프로덕션 적용)→연동 PC 데몬 [processNoticesOnce](../scripts/_classnote/classnote-notice-core.mjs)(--post+킬스위치 이중 게이트, 타깃별 실패 분리=partial). "테스트 발송(학원이)" 버튼 내장. E2E: dry-run 게이트→스위치 ON→큐 적재→실게시→API 확인→삭제→스위치 OFF 원복. ⚠️연동 PC zip 재전달 필요(`D:\tmp\eywa-발송PC-반공지-20260713.zip`). **부수 완료: 배정 API 전환+실배정 9건**(POST /api/v1/enrollments/ — ready6·주준호 부모계정2·박서준C 자녀 분리) → 수학 배정 204/미가입 33/잔여 0. ⚠️박서준 공유보드(두 가족 상호 노출) 제거는 원장 결정 대기(docs/classnote-integration.md §3).
+
 ### 대시보드 카드 정리 — 콕핏 masonry + 최근7일 전폭 컴팩트 (2026-07-13) — ✅ tsc0/lint0/실브라우저
 원장 제보 "카드 크기·세로높이 제각각·우측 여백 과다". ① **콕핏**([page.tsx](<../src/app/(shell)/dashboard/page.tsx>)):
 CSS Grid 기본 `align:stretch`가 짧은 카드(결석위험 2명)를 히어로(오늘일정) 높이까지 늘려 거대 빈칸을 만들던 것 →

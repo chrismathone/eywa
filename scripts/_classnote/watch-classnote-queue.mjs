@@ -19,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import postgres from "postgres";
 import { launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
+import { processNoticesOnce } from "./classnote-notice-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -93,6 +94,12 @@ async function main() {
       const b = await getBrowser();
       const s = await processQueueOnce(db(), b, { tenant, post: POST, log });
       if (s.claimed) log(`처리 완료 — 성공 ${s.success} / 실패 ${s.failed} / 재큐 ${s.requeued} / stale복구 ${s.stale}`);
+      // 2) 반 공지 큐(classnote_notices) — 내부 API 게시(별 코어). 실패해도 보고서 큐와 독립.
+      const nres = await processNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        return { processed: 0 };
+      });
+      if (nres.processed) log(`[notice] 공지 ${nres.processed}건 처리 완료`);
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();

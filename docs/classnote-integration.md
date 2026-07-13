@@ -138,6 +138,33 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
   ⚠️ `--apply`(생성·배정)는 실 ClassNote 변경 — 원장 승인 후 실행.
 - **신규생 운영**: 입회 후 이 두 스크립트 dry-run→apply가 표준 절차(연동 PC 정기 실행 후보).
 - **학부모 가입만은 자동화 불가**(학생 엔티티가 학부모 연결로 생기는 ClassNote 구조 제약).
+- **✅ 후속(2026-07-13)**: 배정도 내부 API로 전환 — `POST /api/v1/enrollments/ {child, belong_to_class}`
+  (201 즉시 승인, 원아 ID 기반=동명이인 안전). 실배정 9건 완료(ready 6 + 주준호 부모계정 2 + 박서준C 자녀)
+  → **배정 204 / 미가입 33 / 잔여 0**. ⚠️ 배정 해제(제거)는 REST 전부 405 — ClassNote UI에서만.
+  ⚠️ **박서준 공유보드 잔여 이슈**: `(수학)박서준`에 두 가족(2014년생 초6 + 2011년생 중3)이 함께 연결돼
+  있던 것을 발견(Edutrix 시절부터 상호 성적 노출). 중3 자녀는 신설 `(수학)박서준C`로 분리 배정 완료했으나
+  **공유보드에서의 제거는 미실시**(과거 게시물 열람 단절 우려 — 원장 결정 대기, 제거는 UI 수동).
+
+### 반 공지 — eywa 반에서 골라 학생별 보드로 일괄 게시 (✅ 2026-07-13 구현·E2E)
+
+수업보고서 > **반 공지** 탭: 반(발송 opt-in 과목의 활성 반) 다중 선택 + 본문 → 각 재원생의 개별 보드로
+같은 내용 게시. **반 구조는 eywa에 살고 ClassNote 1인 1반은 배달 레일**(Edutrix NoticeWriteModal 패턴 계승).
+
+- **게시 = 내부 API 직접 호출**(Cloud Run·Puppeteer 마법사 불필요): `POST /api/v1_2/reports/
+  {cls, child, enrollment, content, date_written, author_name, tz}` → 201. **회수 = `DELETE /api/v1_2/reports/{id}/`**
+  → 204(학원이로 실검증). enrollment id는 원아 상세(`/api/v1/children/{id}`)의 배정 레코드에서.
+- **파이프라인**: [notice-face.tsx](<../src/app/(shell)/lesson-reports/_components/notice-face.tsx>) →
+  [sendClassNotice](../src/features/report-admin/server/notice-actions.ts)(게이트: lesson_reports 쓰기 +
+  `classnoteSendEnabled` dry-run + 과목 opt-in + 동명이인 제외 — [resolveNoticeTargets](../src/features/report-admin/notice-targets.ts)
+  순수·Vitest 6) → `classnote_notices` 큐(0099a) → 연동 PC 데몬 [watch-classnote-queue.mjs](../scripts/_classnote/watch-classnote-queue.mjs)가
+  매 폴 [processNoticesOnce](../scripts/_classnote/classnote-notice-core.mjs) 호출(--post + 킬스위치 이중 게이트,
+  타깃별 실패 분리 기록 = partial). 수동 1회 처리 = `process-classnote-notices.mjs`.
+- **테스트 경로**: 탭의 "테스트 발송(학원이)" 버튼 = 학원이 보드로만(실 학부모 무관, Edutrix 관리자 테스트 반 패턴).
+- **E2E(2026-07-13)**: dry-run 게이트 → 스위치 ON → 테스트 발송 큐 적재 → 로컬 프로세서 --post →
+  `(수학)학원이` 실게시(작성자 "인재원 학원") → API 확인 → 삭제 204 → 큐 행 정리 → 스위치 OFF 원복. 전 구간 통과.
+- ⚠️ **연동 PC 재전달 필요**: `D:\tmp\eywa-발송PC-반공지-20260713.zip`(경로보존 + [반공지-적용-안내.md](../scripts/_classnote/반공지-적용-안내.md)).
+  적용 전까지 공지는 큐에 대기(무해).
+- v2 후보: 이미지 첨부(업로드 CDN 경로 미조사) · 반 안 학생 개별 해제 · 게시 회수 버튼(DELETE API 확보됨).
 
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 
