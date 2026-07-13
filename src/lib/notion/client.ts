@@ -127,6 +127,32 @@ export async function createComment(pageId: string, text: string): Promise<void>
   });
 }
 
+/** 페이지 속성 수정(PATCH). properties는 Notion write 형식 그대로. "콘텐츠 업데이트" 권한 필요. */
+export async function updatePageProps(pageId: string, properties: Record<string, unknown>): Promise<void> {
+  await notionFetch(`/pages/${pageId}`, { method: "PATCH", body: JSON.stringify({ properties }) });
+}
+
+/** DB에 새 페이지(업무) 생성. "콘텐츠 삽입" 권한 필요. 생성된 page id 반환. */
+export async function createPage(databaseId: string, properties: Record<string, unknown>): Promise<string> {
+  const json = await notionFetch(`/pages`, {
+    method: "POST",
+    body: JSON.stringify({ parent: { database_id: databaseId }, properties }),
+  });
+  return json.id as string;
+}
+
+/** DB의 title 속성 이름 조회(쓰기 시 제목 속성명 필요). dbId별 캐시 — 스키마는 거의 안 바뀜. */
+const titlePropCache = new Map<string, string>();
+export async function titlePropertyName(databaseId: string): Promise<string> {
+  const cached = titlePropCache.get(databaseId);
+  if (cached) return cached;
+  const json = await notionFetch(`/databases/${databaseId}`, { method: "GET" });
+  const props = (json.properties ?? {}) as Record<string, { type?: string }>;
+  const name = Object.entries(props).find(([, p]) => p.type === "title")?.[0] ?? "이름";
+  titlePropCache.set(databaseId, name);
+  return name;
+}
+
 /** 페이지(블록)의 자식 블록 = 업무 본문. 최대 4페이지(400블록)로 bounded(무거운 순회 방지, B2/B7). */
 export async function listBlockChildren(blockId: string): Promise<Record<string, unknown>[]> {
   const out: Record<string, unknown>[] = [];

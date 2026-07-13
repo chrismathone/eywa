@@ -7,9 +7,11 @@ import { MonthlyScheduleView } from "../_components/monthly-schedule-view";
 // 클라(monthly-schedule-view)가 화면 표시 후 prepareNotionMapping 액션으로 지연 로드한다.
 export async function MonthlyScheduleTab({
   staffId,
+  staffName,
   canManage,
 }: {
   staffId: string;
+  staffName: string;
   canManage: boolean;
 }) {
   const month = kstMonth();
@@ -18,6 +20,7 @@ export async function MonthlyScheduleTab({
   return (
     <MonthlyScheduleView
       staffId={staffId}
+      staffName={staffName}
       canManage={canManage}
       initialMonth={month}
       initial={initial}

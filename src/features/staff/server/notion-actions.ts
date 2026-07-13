@@ -7,6 +7,7 @@ import { canAccess } from "@/lib/permissions";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
 import { humanizeNotionError } from "@/features/staff/notion-tasks";
 import type { ContentLine } from "@/features/staff/notion-tasks";
+import { notionTasksDatabaseId } from "@/lib/notion/client";
 import {
   resolveMonthlyTasks,
   prepareStaffNotionMappingRow,
@@ -14,10 +15,22 @@ import {
   fetchTaskComments,
   addTaskComment,
   fetchTaskContent,
+  setTaskDoneRow,
+  moveTaskDueRow,
+  createStaffTaskRow,
+  resolveStaffNotionId,
   type MonthlyTasksResult,
   type MappingPrep,
   type TaskComment,
 } from "./notion";
+
+// 쓰기 액션 공통 게이트 — 편집(완료/이동/생성)은 사무실(canManageStaff)만.
+async function requireEditor(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const actor = await getCurrentUser();
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  if (!canManageStaff(actor.systemRole)) return { ok: false, error: "편집 권한이 없습니다" };
+  return { ok: true };
+}
 
 // 클라(월간뷰)에서 호출하는 서버 액션 — 월 이동/매핑. 권한은 tenant-aware 매트릭스로 게이트([[#58]]). RLS가 테넌트 격리.
 
@@ -71,6 +84,60 @@ export async function getTaskComments(
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
     return { ok: true, comments: await fetchTaskComments(pageId) };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 업무완료 토글 → Notion 반영. 편집 권한(사무실)만. */
+export async function toggleTaskDone(
+  pageId: string,
+  done: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gate = await requireEditor();
+  if (!gate.ok) return gate;
+  try {
+    await setTaskDoneRow(pageId, done);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 마감일 이동(드래그) → Notion 반영. 기간 업무는 시작일도 평행이동. 편집 권한(사무실)만. */
+export async function moveTaskDue(
+  pageId: string,
+  newDue: string,
+  oldStart: string | null,
+  oldDue: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gate = await requireEditor();
+  if (!gate.ok) return gate;
+  try {
+    await moveTaskDueRow(pageId, newDue, oldStart, oldDue);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
+  }
+}
+
+/** 새 업무 생성(담당자=이 직원) → Notion. 편집 권한(사무실)만. 직원이 Notion 미매핑이면 거부. */
+export async function createStaffTask(
+  staffId: string,
+  input: { title: string; due: string; start?: string | null },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gate = await requireEditor();
+  if (!gate.ok) return gate;
+  const title = input.title.trim();
+  if (!title) return { ok: false, error: "업무명을 입력하세요" };
+  if (!input.due) return { ok: false, error: "마감일을 선택하세요" };
+  const dbId = notionTasksDatabaseId();
+  if (!dbId) return { ok: false, error: "Notion 연동이 설정되지 않았습니다" };
+  const notionId = await resolveStaffNotionId(staffId);
+  if (!notionId) return { ok: false, error: "이 직원의 Notion 계정이 연결되지 않아 업무를 만들 수 없습니다" };
+  try {
+    await createStaffTaskRow(dbId, notionId, { ...input, title });
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }

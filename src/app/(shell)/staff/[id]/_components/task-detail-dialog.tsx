@@ -4,10 +4,11 @@
 // eywa에서 남긴 댓글은 서버가 "[eywa · 이름]" 접두를 붙여 출처 보존(API 댓글은 Notion에서 통합=봇으로 표기되므로).
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
+import { Check, ExternalLink, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import { getTaskComments, addTaskCommentAction, getTaskContent } from "@/features/staff/server/notion-actions";
+import { getTaskComments, addTaskCommentAction, getTaskContent, toggleTaskDone } from "@/features/staff/server/notion-actions";
 import type { ContentLine, NotionTask, RichSpan } from "@/features/staff/notion-tasks";
 import type { TaskComment } from "@/features/staff/server/notion";
 
@@ -145,14 +146,41 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
   );
 }
 
-export function TaskDetailDialog({ task, onClose }: { task: NotionTask; onClose: () => void }) {
+export function TaskDetailDialog({
+  task,
+  canEdit = false,
+  onChanged,
+  onClose,
+}: {
+  task: NotionTask;
+  canEdit?: boolean;
+  onChanged?: () => void;
+  onClose: () => void;
+}) {
   const [comments, setComments] = useState<TaskComment[] | null>(null);
   const [content, setContent] = useState<ContentLine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [loading, startLoad] = useTransition();
   const [posting, setPosting] = useState(false);
+  const [done, setDone] = useState(task.done); // 낙관적 반영
+  const [confirmDone, setConfirmDone] = useState(false);
+  const [toggling, setToggling] = useState(false);
   const taskId = task.id;
+
+  async function applyToggle() {
+    setConfirmDone(false);
+    setToggling(true);
+    const res = await toggleTaskDone(taskId, !done);
+    setToggling(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    setDone((d) => !d);
+    toast.success(done ? "미완료로 되돌렸습니다" : "완료로 표시했습니다 · Notion 반영됨");
+    onChanged?.();
+  }
 
   // 열릴 때 본문+댓글 병렬 로드(인스턴스는 task별 key로 새 마운트 → taskId 고정). setState는 전이 콜백 안에서만([[#25]]).
   useEffect(() => {
@@ -202,7 +230,7 @@ export function TaskDetailDialog({ task, onClose }: { task: NotionTask; onClose:
             <span className="text-text-dim num">마감 {task.due}</span>
           ) : null}
           {task.dept ? <span className="text-text-faint">· {task.dept}</span> : null}
-          {task.done ? <span className="text-primary">· 완료</span> : null}
+          {done ? <span className="text-primary">· 완료</span> : null}
           {task.url ? (
             <a
               href={task.url}
@@ -214,6 +242,27 @@ export function TaskDetailDialog({ task, onClose }: { task: NotionTask; onClose:
             </a>
           ) : null}
         </div>
+
+        {/* 완료 토글 — 편집 권한 시. 누르면 확인 후 Notion 반영(안전장치). */}
+        {canEdit ? (
+          <Button
+            size="sm"
+            variant={done ? "outline" : "default"}
+            disabled={toggling}
+            onClick={() => setConfirmDone(true)}
+            className="w-full"
+          >
+            {done ? (
+              <>
+                <RotateCcw className="size-3.5" /> 미완료로 되돌리기
+              </>
+            ) : (
+              <>
+                <Check className="size-3.5" /> 완료로 표시
+              </>
+            )}
+          </Button>
+        ) : null}
 
         {/* 본문 */}
         <div className="border-line max-h-[38vh] overflow-y-auto border-t pt-3">
@@ -262,6 +311,15 @@ export function TaskDetailDialog({ task, onClose }: { task: NotionTask; onClose:
         </div>
         <p className="text-text-faint text-[11px]">작성 시 이름이 함께 기록됩니다.</p>
       </DialogContent>
+
+      <ConfirmDialog
+        open={confirmDone}
+        title={done ? "미완료로 되돌리기" : "완료로 표시"}
+        message={`이 업무를 ${done ? "미완료로 되돌리면" : "완료로 표시하면"} Notion에도 바로 반영됩니다. 진행할까요?`}
+        confirmLabel={done ? "되돌리기" : "완료 처리"}
+        onConfirm={applyToggle}
+        onCancel={() => setConfirmDone(false)}
+      />
     </Dialog>
   );
 }

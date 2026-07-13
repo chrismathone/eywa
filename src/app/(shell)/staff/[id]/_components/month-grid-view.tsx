@@ -2,7 +2,9 @@
 
 // 월간 달력 그리드(프레젠테이션) — 순수 계산은 month-grid.ts. 기간(시작일~마감일) 업무는 노션처럼 가로 막대로
 // 표시(주 경계에서 잘림/이어짐 표시). 막대 클릭=업무 상세, 빈 칸/"+N건 더" 클릭=그날 전체 목록.
+// canEdit면 막대를 다른 날짜로 드래그 이동(HTML5 DnD) → onMove(부모가 확인 후 Notion 반영).
 // 라이브러리 0: 막대는 퍼센트 기반 absolute(7열). 넘치면 드래그-스크롤.
+import { useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import {
   weekdayHeaders,
@@ -22,16 +24,30 @@ export function MonthGridView({
   today,
   onOpen,
   onOpenDay,
+  canEdit = false,
+  onMove,
 }: {
   weeks: MonthCell[][];
   tasks: NotionTask[];
   today: string;
   onOpen: (t: NotionTask) => void;
   onOpenDay: (date: string) => void;
+  canEdit?: boolean;
+  onMove?: (task: NotionTask, newDue: string) => void;
 }) {
   const heads = weekdayHeaders(0);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const spans = taskSpans(tasks);
+  const [dragOver, setDragOver] = useState<string | null>(null); // 드롭 대상 하이라이트
+
+  const handleDrop = (date: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(null);
+    if (!canEdit || !onMove) return;
+    const id = e.dataTransfer.getData("text/plain");
+    const t = byId.get(id);
+    if (t && t.due !== date) onMove(t, date); // 같은 날 드롭은 무시
+  };
 
   return (
     <DragScrollArea className="border-line bg-card rounded-md border">
@@ -80,9 +96,12 @@ export function MonthGridView({
                       type="button"
                       key={cell.date}
                       onClick={() => onOpenDay(cell.date)}
+                      onDragOver={canEdit ? (e) => { e.preventDefault(); setDragOver(cell.date); } : undefined}
+                      onDragLeave={canEdit ? () => setDragOver((d) => (d === cell.date ? null : d)) : undefined}
+                      onDrop={canEdit ? handleDrop(cell.date) : undefined}
                       className={`border-line hover:bg-bg-soft/60 relative border-r text-left transition last:border-r-0 ${
                         cell.inMonth ? "" : "bg-bg-soft/40"
-                      }`}
+                      } ${dragOver === cell.date ? "bg-primary/15 ring-primary/40 ring-1 ring-inset" : ""}`}
                     >
                       <span
                         className={`absolute top-1 right-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular ${
@@ -117,15 +136,18 @@ export function MonthGridView({
                     <button
                       type="button"
                       key={bar.id}
-                      title={t.title}
+                      title={canEdit ? `${t.title} — 드래그해 날짜 이동` : t.title}
                       onClick={() => onOpen(t)}
+                      draggable={canEdit}
+                      onPointerDown={canEdit ? (e) => e.stopPropagation() : undefined} // 드래그-팬 가로채기 방지
+                      onDragStart={canEdit ? (e) => e.dataTransfer.setData("text/plain", bar.id) : undefined}
                       style={{
                         left: `calc(${left}% + 2px)`,
                         width: `calc(${width}% - 4px)`,
                         top: NUM_ROW + bar.lane * LANE_H,
                         height: LANE_H - 3,
                       }}
-                      className={`pointer-events-auto absolute truncate rounded-sm px-1 text-left text-[11px] leading-[17px] ${rounded} ${
+                      className={`pointer-events-auto absolute truncate rounded-sm px-1 text-left text-[11px] leading-[17px] ${canEdit ? "cursor-grab active:cursor-grabbing" : ""} ${rounded} ${
                         t.done
                           ? "bg-bg-soft text-text-faint line-through hover:bg-bg-soft/70"
                           : "bg-primary/15 text-foreground hover:bg-primary/25"
