@@ -1,12 +1,11 @@
 import "server-only";
-import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   isNotionConfigured,
   notionTasksDatabaseId,
   queryDatabaseAll,
-  listUsersAll,
   listCommentsAll,
   createComment,
 } from "@/lib/notion/client";
@@ -29,8 +28,37 @@ export type MonthlyTasksResult =
 
 export type NotionUserOption = { id: string; name: string; email: string | null };
 
-// 워크스페이스 사용자 목록은 요청 단위 1회만(자동매칭 + 매핑 드롭다운이 같은 렌더에서 각각 부름 → 중복 fetch 방지).
-const cachedNotionUsers = cache(() => listUsersAll());
+// 담당자 후보 = 업무의 담당자(정/부)에 등장하는 Notion 사람들. ⚠️ /users(멤버 목록)는 게스트를 안 주므로
+// (이 워크스페이스는 멤버 1명 + 나머지 담당자는 게스트) 쓸 수 없다 — 업무에서 직접 수집해야 이메일까지 잡힌다.
+// 워크스페이스 read-mostly라 dbId별 10분 cross-request 캐시(B6) — 매 미매핑 로드마다 전건 스캔 방지.
+const loadNotionAssignees = unstable_cache(
+  async (dbId: string): Promise<NotionUserOption[]> => {
+    const pages = await queryDatabaseAll(dbId, {});
+    const seen = new Map<string, NotionUserOption>();
+    for (const pg of pages) {
+      for (const key of [NOTION_TASK_PROPS.assigneePrimary, NOTION_TASK_PROPS.assigneeSecondary]) {
+        const prop = pg.properties?.[key];
+        if (prop && prop.type === "people") {
+          for (const p of prop.people ?? []) {
+            if (p?.id && !seen.has(p.id)) {
+              seen.set(p.id, { id: p.id, name: p.name?.trim() || "(이름 없음)", email: p.person?.email ?? null });
+            }
+          }
+        }
+      }
+    }
+    return [...seen.values()];
+  },
+  ["notion-task-assignees"],
+  { revalidate: 600 },
+);
+
+/** 담당자 후보 목록(게스트 포함). DB 미설정이면 빈 배열. */
+async function cachedNotionAssignees(): Promise<NotionUserOption[]> {
+  const dbId = notionTasksDatabaseId();
+  if (!dbId) return [];
+  return loadNotionAssignees(dbId);
+}
 
 function normEmail(e: string | null | undefined): string {
   return (e ?? "").trim().toLowerCase();
@@ -57,8 +85,8 @@ async function staffMappingRow(
 async function autoMatchByEmail(staffId: string, email: string): Promise<string | null> {
   const target = normEmail(email);
   if (!target) return null;
-  const users = await cachedNotionUsers();
-  const hit = users.find((u) => u.type === "person" && normEmail(u.person?.email) === target);
+  const people = await cachedNotionAssignees();
+  const hit = people.find((u) => normEmail(u.email) === target);
   if (!hit) return null;
   try {
     const admin = createAdminClient();
@@ -111,24 +139,21 @@ export async function resolveMonthlyTasks(
   }
 }
 
-/** 워크스페이스 사람 목록(매핑 드롭다운) — 봇 제외, 이름순. 요청 캐시 재사용(자동매칭과 중복 fetch 방지). */
+/** 매핑 드롭다운용 담당자 후보(게스트 포함), 이름순. 자동매칭과 같은 캐시 재사용. */
 export async function fetchNotionUserOptions(): Promise<NotionUserOption[]> {
-  const users = await cachedNotionUsers();
-  return users
-    .filter((u) => u.type === "person")
-    .map((u) => ({ id: u.id, name: u.name?.trim() || "(이름 없음)", email: u.person?.email ?? null }))
-    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const people = await cachedNotionAssignees();
+  return [...people].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
 
 export type TaskComment = { id: string; author: string; time: string | null; text: string };
 
-/** 태스크(페이지) 댓글 목록 — 작성자명은 워크스페이스 사용자에서 해결(사용자 정보 권한). 실패해도 "Notion"으로 폴백. */
+/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. 못 찾으면 "Notion"으로 폴백. */
 export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> {
-  const [comments, users] = await Promise.all([
+  const [comments, people] = await Promise.all([
     listCommentsAll(pageId),
-    cachedNotionUsers().catch(() => []),
+    cachedNotionAssignees().catch(() => [] as NotionUserOption[]),
   ]);
-  const nameById = new Map(users.map((u) => [u.id, u.name?.trim() || ""]));
+  const nameById = new Map(people.map((u) => [u.id, u.name]));
   return comments.map((c) => ({
     id: c.id,
     author: (c.created_by?.id ? nameById.get(c.created_by.id) : "") || "Notion",

@@ -30,7 +30,7 @@ type NotionPropVal =
   | { type: "title"; title?: NotionRichText[] }
   | { type: "rich_text"; rich_text?: NotionRichText[] }
   | { type: "date"; date?: { start?: string | null } | null }
-  | { type: "people"; people?: { id: string; name?: string }[] }
+  | { type: "people"; people?: { id: string; name?: string; person?: { email?: string } }[] }
   | { type: "checkbox"; checkbox?: boolean }
   | { type: "select"; select?: { name?: string } | null }
   | { type: "status"; status?: { name?: string } | null }
