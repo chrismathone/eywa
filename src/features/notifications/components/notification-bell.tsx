@@ -101,14 +101,32 @@ export function NotificationBell() {
           <button
             type="button"
             aria-label={unread > 0 ? `알림 ${unread}개` : "알림"}
-            className="border-line bg-card text-foreground hover:bg-surface-hi relative flex size-9 items-center justify-center rounded-[4px] border transition"
+            className={`group relative flex size-9 items-center justify-center rounded-[4px] border bg-card transition-all duration-200 hover:bg-surface-hi hover:shadow-card-hover active:scale-95 ${
+              unread > 0 ? "border-danger/30 text-danger" : "border-line text-foreground"
+            }`}
           />
         }
       >
-        <EyIcon name="bell" size={15} />
+        {/* 벨 아이콘 — 안 읽음이면 은은히 "딸랑"(울린 뒤 쉼), 없으면 hover 시 1회 스윙(매단 것처럼 top 기준). */}
+        <EyIcon
+          name="bell"
+          size={15}
+          className={`origin-top transition-transform ${
+            unread > 0
+              ? "[animation:bell-swing_2.6s_ease-in-out_infinite]"
+              : "group-hover:[animation:bell-swing_0.7s_ease-in-out]"
+          }`}
+        />
         {unread > 0 ? (
-          <span className="bg-danger text-danger-foreground absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums">
-            {badge}
+          <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px]">
+            {/* 뒤에서 번지는 ping 링 — 살아있는 "새 알림" 인디케이터 */}
+            <span
+              className="bg-danger absolute inline-flex h-full w-full animate-ping rounded-full opacity-50"
+              aria-hidden
+            />
+            <span className="bg-danger text-danger-foreground ring-card relative inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums shadow-sm ring-2 [animation:badge-pop_0.35s_ease-out]">
+              {badge}
+            </span>
           </span>
         ) : null}
       </DropdownMenuTrigger>
