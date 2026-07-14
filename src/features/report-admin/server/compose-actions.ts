@@ -188,7 +188,8 @@ export type AdminComposeSubject = {
 export async function getAdminComposeContext(studentId: string): Promise<{
   ok: boolean;
   student?: { id: string; name: string; classnoteName: string | null };
-  subjects?: AdminComposeSubject[];
+  subjects?: AdminComposeSubject[]; // 이 학생의 수강 과목(담당 강사 포함)
+  sendableSubjects?: AdminComposeSubject[]; // 발송 가능 과목(수강 무관 폴백) — 미수강 학생도 직접 발송 가능
   nameCollision?: boolean;
   sendEnabled?: boolean;
   error?: string;
@@ -248,11 +249,25 @@ export async function getAdminComposeContext(studentId: string): Promise<{
     };
   });
 
+  // 발송 가능 과목(학원설정 opt-in ∩ 화이트리스트) — **수강 이력과 무관**한 폴백 옵션.
+  // 학생이 발송 과목 반에 수강 중이 아니어도(예: 테스트 학생 '학원이') 관리자가 직접 골라 보낼 수 있게 한다.
+  // 담당 강사는 없음(표시 강사명은 관리자명 폴백, 편집 가능). classnoteSubjects가 비면 빈 배열 = 발송 불가 안내.
+  const sendableSubjects: AdminComposeSubject[] = settings.report.classnoteSubjects
+    .filter((key) => isClassnoteSubjectEnabled(key, settings.report.classnoteSubjects))
+    .map((key) => ({
+      key,
+      label: subjectMaps.labelOf(key),
+      teacherName: null,
+      sendable: true,
+      board: BOARD_PREFIX[key] ? `${BOARD_PREFIX[key]}${effName}` : null,
+    }));
+
   const nameCollision = await hasClassnoteNameCollision(supabase, studentId);
   return {
     ok: true,
     student: { id: stu.id as string, name: stu.name as string, classnoteName: (stu.classnote_name as string | null) ?? null },
     subjects,
+    sendableSubjects,
     nameCollision,
     sendEnabled: settings.report.classnoteSendEnabled,
   };

@@ -50,7 +50,8 @@ export function ComposeFace({
   const [studentId, setStudentId] = useState("");
   const [ctx, setCtx] = useState<{
     student: { id: string; name: string; classnoteName: string | null };
-    subjects: AdminComposeSubject[];
+    subjects: AdminComposeSubject[]; // 수강 과목
+    sendableSubjects: AdminComposeSubject[]; // 발송가능 과목(수강 무관 폴백)
     nameCollision: boolean;
   } | null>(null);
   const [ctxPending, startCtx] = useTransition();
@@ -79,7 +80,12 @@ export function ComposeFace({
     label: s.name,
     hint: [s.school, s.grade].filter(Boolean).join(" · ") || undefined,
   }));
-  const curSubject = ctx?.subjects.find((s) => s.key === subject) ?? null;
+  // 선택 과목 메타 — 수강 과목 + 발송가능 폴백 둘 다에서 찾는다.
+  const curSubject = ctx ? [...ctx.subjects, ...ctx.sendableSubjects].find((s) => s.key === subject) ?? null : null;
+  // 과목 옵션 = 수강 중인 발송가능 과목이 있으면 그걸(담당 강사 표시), 없으면 학원 발송과목(폴백)으로.
+  const hasEnrolledSendable = !!ctx && ctx.subjects.some((s) => s.sendable);
+  const subjectOptions: AdminComposeSubject[] = ctx ? (hasEnrolledSendable ? ctx.subjects : ctx.sendableSubjects) : [];
+  const noSendableSubject = !!ctx && subjectOptions.length === 0; // 학원설정에 발송 과목 자체가 없음
 
   function pickStudent(id: string) {
     setStudentId(id);
@@ -93,8 +99,10 @@ export function ComposeFace({
         toast.error(res.error ?? "학생 정보를 불러오지 못했습니다");
         return;
       }
-      setCtx({ student: res.student, subjects: res.subjects ?? [], nameCollision: !!res.nameCollision });
-      const first = (res.subjects ?? []).find((s) => s.sendable) ?? (res.subjects ?? [])[0];
+      const fallback = res.sendableSubjects ?? [];
+      setCtx({ student: res.student, subjects: res.subjects ?? [], sendableSubjects: fallback, nameCollision: !!res.nameCollision });
+      // 자동 선택: 수강 중인 발송가능 과목 우선 → 없으면 학원 발송과목(폴백) 첫 번째.
+      const first = (res.subjects ?? []).find((s) => s.sendable) ?? fallback[0];
       if (first) {
         setSubject(first.key);
         setTeacherName(first.teacherName ?? "");
@@ -176,8 +184,30 @@ export function ComposeFace({
     }
   }
 
+  // 발송 확인창 열기 전 검증 — 막히면 조용히 넘어가지 않고 이유를 토스트로 알린다.
+  function tryOpenConfirm() {
+    if (!studentId) return;
+    if (!subject) {
+      toast.error(
+        noSendableSubject
+          ? "발송 가능한 과목이 없습니다 — 원장 설정 > 수업보고서 > 발송 과목(수학·영어)을 먼저 지정하세요"
+          : "발송할 과목을 먼저 선택하세요",
+      );
+      return;
+    }
+    if (!body.trim()) {
+      toast.error("학부모 보고서 본문을 작성한 뒤 발송하세요");
+      return;
+    }
+    setConfirmSend(true);
+  }
+
   async function doSave() {
-    if (!studentId || !subject) return;
+    if (!studentId) return;
+    if (!subject) {
+      toast.error(noSendableSubject ? "발송 가능한 과목이 없어 저장할 수 없습니다" : "저장할 과목을 선택하세요");
+      return;
+    }
     setBusy(true);
     const res = await saveAdminReport(buildInput());
     setBusy(false);
@@ -246,25 +276,34 @@ export function ComposeFace({
           {/* 과목 */}
           <div>
             <div className={LABEL}>과목</div>
-            {ctx.subjects.length === 0 ? (
-              <p className="text-text-faint text-[12px]">이 학생의 활성 수강 과목이 없습니다.</p>
+            {noSendableSubject ? (
+              <p className="border-amber/40 bg-amber/10 text-amber rounded-md border px-3 py-2 text-[12px]">
+                발송 가능한 과목이 없습니다 — 원장 설정 &gt; 수업보고서 &gt; <b>발송 과목</b>(수학·영어)을 먼저 지정해야 발송할 수 있어요.
+              </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {ctx.subjects.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => pickSubject(s)}
-                    className={`rounded-full border px-3 py-1 text-[12px] ${
-                      subject === s.key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"
-                    }`}
-                    title={s.sendable ? undefined : "발송 대상 과목이 아닙니다(저장만 됩니다)"}
-                  >
-                    {s.label}
-                    {!s.sendable ? " · 발송불가" : ""}
-                  </button>
-                ))}
-              </div>
+              <>
+                {!hasEnrolledSendable ? (
+                  <p className="text-text-dim mb-1.5 text-[12px]">
+                    이 학생은 발송 과목(수학·영어)에 <b>수강 중이 아니에요</b> — 아래에서 골라 직접 발송할 수 있어요.
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-1.5">
+                  {subjectOptions.map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => pickSubject(s)}
+                      className={`rounded-full border px-3 py-1 text-[12px] ${
+                        subject === s.key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"
+                      }`}
+                      title={s.sendable ? undefined : "발송 대상 과목이 아닙니다(저장만 됩니다)"}
+                    >
+                      {s.label}
+                      {!s.sendable ? " · 발송불가" : ""}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
             {curSubject?.board ? (
               <p className="text-text-faint mt-1 text-[11px]">
@@ -381,13 +420,22 @@ export function ComposeFace({
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={doSave} disabled={busy || !subject}>
-                저장만
-              </Button>
-              <Button size="sm" onClick={() => setConfirmSend(true)} disabled={busy || !subject}>
-                ClassNote 발송
-              </Button>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={doSave} disabled={busy}>
+                  저장만
+                </Button>
+                <Button size="sm" onClick={tryOpenConfirm} disabled={busy}>
+                  ClassNote 발송
+                </Button>
+              </div>
+              {!subject ? (
+                <p className="text-amber text-[11px]">
+                  {noSendableSubject
+                    ? "발송 가능한 과목이 없어 발송할 수 없습니다 — 원장 설정에서 발송 과목을 지정하세요."
+                    : "발송할 과목을 먼저 선택하세요."}
+                </p>
+              ) : null}
             </div>
           )}
         </div>
