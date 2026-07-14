@@ -32,6 +32,15 @@ function fmtFull(iso: string | null): string {
   return d.toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// 신청일 경과일수 — YYYY-MM-DD를 UTC로 파싱(TZ 무관 정수 일수). 7일↑ 라벨, 14일↑ 더 진하게(처리 지연 신호).
+function elapsedDays(requestDate: string | null, todayKst: string): number | null {
+  if (!requestDate) return null;
+  const [ry, rm, rd] = requestDate.split("-").map(Number);
+  const [ty, tm, td] = todayKst.split("-").map(Number);
+  if (!ry || !rm || !rd || !ty || !tm || !td) return null;
+  return Math.floor((Date.UTC(ty, tm - 1, td) - Date.UTC(ry, rm - 1, rd)) / 86_400_000);
+}
+
 export function TextbooksTable({
   rows,
   students,
@@ -39,6 +48,7 @@ export function TextbooksTable({
   academyName,
   logoUrl,
   account,
+  todayKst,
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
@@ -47,6 +57,7 @@ export function TextbooksTable({
   academyName: string;
   logoUrl: string | null;
   account: AccountSetting;
+  todayKst: string; // 서버(KST) 기준 오늘 — 신청일 경과 라벨 계산(클라 Date로 하면 하이드레이션 불일치).
 }) {
   const [dialog, setDialog] = useState<{ order: TextbookOrderRow | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -106,9 +117,26 @@ export function TextbooksTable({
           <tbody className="divide-line divide-y">
             {rows.map((r) => {
               const isBusy = busy === r.id;
+              const elapsed = elapsedDays(r.requestDate, todayKst);
               return (
                 <tr key={r.id} className={`hover:bg-bg-soft/30 ${isBusy ? "opacity-50" : ""}`}>
-                  <td className="num text-text-dim px-4 py-2 text-xs">{r.requestDate ?? "—"}</td>
+                  <td className="px-4 py-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="num text-text-dim">{r.requestDate ?? "—"}</span>
+                      {elapsed !== null && elapsed >= 7 ? (
+                        <span
+                          title={`신청 후 ${elapsed}일 경과`}
+                          className={`num inline-block rounded-sm border px-1 py-px text-[10px] font-medium whitespace-nowrap ${
+                            elapsed >= 14
+                              ? "bg-amber text-white border-amber"
+                              : "bg-amber-soft text-amber border-amber/30"
+                          }`}
+                        >
+                          {elapsed}일 경과
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="text-foreground px-4 py-2 text-xs">
                     {r.bookName}
                     {r.bookDetail ? <span className="text-text-faint"> · {r.bookDetail}</span> : null}

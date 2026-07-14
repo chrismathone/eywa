@@ -12,6 +12,7 @@ import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { kstToday } from "@/lib/date-kst";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TextbooksTable } from "./textbooks-table";
 
@@ -45,6 +46,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   const academyName = settings.profile.name || "인재원";
   const logoUrl = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
   const account = accountForTarget(settings.billing, "textbook");
+  const todayKst = kstToday(); // 신청일 경과 라벨 계산 기준(서버 KST) — 클라에 주입.
 
   const chipHref = (s: string) => {
     const p = new URLSearchParams({ tab: "textbooks" });
@@ -114,6 +116,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
           academyName={academyName}
           logoUrl={logoUrl}
           account={account}
+          todayKst={todayKst}
         />
       ) : (
         <>
@@ -124,6 +127,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
             academyName={academyName}
             logoUrl={logoUrl}
             account={account}
+            todayKst={todayKst}
           />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
