@@ -93,6 +93,22 @@ async function deleteReport(page, id) {
   }, id);
 }
 
+/** 리포트 제자리 수정 — PATCH /api/v1_2/reports/{id}/ {content} (200, 2026-07-14 학원이 실측). */
+async function patchReport(page, id, content) {
+  return page.evaluate(
+    async ([i, c]) => {
+      const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+      const res = await fetch(`/api/v1_2/reports/${i}/`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) },
+        body: JSON.stringify({ content: c }),
+      });
+      return { status: res.status };
+    },
+    [id, content],
+  );
+}
+
 /** 타깃 1건 처리 — 보드·원아·enrollment 해석 후 게시 + 리포트 id 캡처. 실패 사유는 한글 note. */
 async function processTarget(page, ctx, target) {
   const board = ctx.boardByNorm.get(norm(target.board));
@@ -184,9 +200,55 @@ async function revokeNotice(page, notice) {
   return { out, deleted, failed, missing };
 }
 
+/** 게시 공지 제자리 수정 1건 — 저장된 reports[].id를 GET 대조(cls/child) 후 PATCH {content: notice.body(새 내용)}. */
+async function editNotice(page, notice) {
+  const results = Array.isArray(notice.results) ? notice.results : [];
+  const content = notice.body ?? "";
+  let edited = 0;
+  let failed = 0;
+  let missing = 0;
+  const out = [];
+  for (const r of results) {
+    const reps = Array.isArray(r.reports) ? r.reports : [];
+    const patched = [];
+    for (const rep of reps) {
+      if (rep.id == null || rep.revoked) {
+        missing++;
+        patched.push({ ...rep }); // 회수됨/ id없음 = 수정 대상 아님(그대로 보존)
+        continue;
+      }
+      const chk = await getReport(page, rep.id).catch(() => ({ status: 0 }));
+      if (chk.status === 404) {
+        missing++;
+        patched.push({ ...rep, note: "이미 삭제됨" });
+        continue;
+      }
+      const mismatch =
+        chk.status !== 200 ||
+        (rep.cls != null && String(chk.cls) !== String(rep.cls)) ||
+        (rep.child != null && String(chk.child) !== String(rep.child));
+      if (mismatch) {
+        failed++;
+        patched.push({ ...rep, note: `대조 불일치/접근불가(${chk.status}) — 수정 안 함` });
+        continue;
+      }
+      const pt = await patchReport(page, rep.id, content).catch(() => ({ status: 0 }));
+      if (pt.status >= 200 && pt.status < 300) {
+        edited++;
+        patched.push({ ...rep });
+      } else {
+        failed++;
+        patched.push({ ...rep, note: `수정 실패(${pt.status})` });
+      }
+    }
+    out.push({ board: r.board, reports: patched });
+  }
+  return { out, edited, failed, missing };
+}
+
 /**
- * 큐 1회 처리 — 게시(queued) + 게시취소(revoke_requested). stale 복구 후 하나씩 클레임(SKIP LOCKED).
- * post=false(dry-run)면 클레임하지 않고 개수만 보고. 게시는 classnoteSendEnabled 킬스위치도 확인(회수는 정리라 미적용).
+ * 큐 1회 처리 — 게시(queued) + 게시취소(revoke_requested) + 게시본 수정(edit_requested). stale 복구 후 하나씩 클레임(SKIP LOCKED).
+ * post=false(dry-run)면 클레임하지 않고 개수만 보고. 게시는 classnoteSendEnabled 킬스위치도 확인(회수·수정은 정리/정정이라 미적용).
  */
 export async function processNoticesOnce(sql, browser, { tenant, post, log = console.log, authorName = "인재원 학원" }) {
   // stale 복구 — 크래시로 갇힌 처리중 상태
@@ -194,13 +256,16 @@ export async function processNoticesOnce(sql, browser, { tenant, post, log = con
     where tenant_id=${tenant} and status='processing' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
   await sql`update classnote_notices set status='revoke_requested', processing_at=null
     where tenant_id=${tenant} and status='revoking' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
+  await sql`update classnote_notices set status='edit_requested', processing_at=null
+    where tenant_id=${tenant} and status='editing' and processing_at < now() - interval '${sql.unsafe(String(STUCK_MIN))} minutes'`;
 
   const [{ n }] = await sql`select count(*)::int as n from classnote_notices where tenant_id=${tenant} and status='queued'`;
   const [{ r }] = await sql`select count(*)::int as r from classnote_notices where tenant_id=${tenant} and status='revoke_requested'`;
-  if (!n && !r) return { processed: 0 };
+  const [{ e }] = await sql`select count(*)::int as e from classnote_notices where tenant_id=${tenant} and status='edit_requested'`;
+  if (!n && !r && !e) return { processed: 0 };
   if (!post) {
-    log(`[notice] 대기 게시 ${n}건 · 회수 ${r}건 — dry-run(--post 없음)`);
-    return { processed: 0, pending: n + r };
+    log(`[notice] 대기 게시 ${n}건 · 회수 ${r}건 · 수정 ${e}건 — dry-run(--post 없음)`);
+    return { processed: 0, pending: n + r + e };
   }
   const sendOk = await isClassnoteSendEnabled(sql, tenant);
   if (n && !sendOk) log("[notice] classnoteSendEnabled OFF — 게시 중단(큐 보존). 회수는 진행.");
@@ -257,6 +322,22 @@ export async function processNoticesOnce(sql, browser, { tenant, post, log = con
       await sql`update classnote_notices set status=${status}, results=${sql.json(out)}, processed_at=now(),
         error=${failed ? `회수 실패 ${failed}건` : null} where id=${rev.id}`;
       log(`[notice] ${rev.id} 회수 → ${status} (삭제 ${deleted}·실패 ${failed}·id없음 ${missing})`);
+      processed++;
+    }
+
+    // ── 게시본 수정(edit_requested) — 저장된 리포트 id에 새 내용 PATCH ──
+    for (let i = 0; i < 5; i++) {
+      const [ed] = await sql`update classnote_notices set status='editing', processing_at=now()
+        where id = (select id from classnote_notices where tenant_id=${tenant} and status='edit_requested'
+                    order by created_at limit 1 for update skip locked)
+        returning id, body, results`;
+      if (!ed) break;
+      const { out, edited, failed, missing } = await editNotice(page, ed);
+      // 수정 후에도 게시 상태 유지(reports 보존 → 재수정·회수 가능). 전건 성공=success, 일부 실패=partial.
+      const status = failed === 0 ? "success" : "partial";
+      await sql`update classnote_notices set status=${status}, results=${sql.json(out)}, processed_at=now(),
+        error=${failed ? `수정 실패 ${failed}건` : null} where id=${ed.id}`;
+      log(`[notice] ${ed.id} 수정 → ${status} (반영 ${edited}·실패 ${failed}·대상아님 ${missing})`);
       processed++;
     }
   } finally {

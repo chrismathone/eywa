@@ -266,6 +266,55 @@ export async function cancelOnescreenNotice(noticeId: string): Promise<MutateRes
   return { ok: true };
 }
 
+/**
+ * 게시된 공지 제자리 수정 — 게시된 글의 내용을 새 본문으로 교체 요청(status='edit_requested').
+ * 연동 PC 워커가 저장된 리포트 id에 PATCH(비동기, 2026-07-14 학원이 실측 200). 본인 + 게시됨 + 캡처 id 있을 때만.
+ * 개별 내용(targets[].body)은 스트립해 전원 새 공통으로 통일(일괄 정정). 캡처 id 없는 구버전은 앱에서 직접 수정 안내.
+ */
+export async function editPostedNotice(noticeId: string, newBody: string): Promise<MutateResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const body = (newBody ?? "").trim();
+  if (!body) return { ok: false, error: "내용을 입력하세요" };
+  if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("classnote_notices")
+    .select("status, created_by, results, targets")
+    .eq("id", noticeId)
+    .maybeSingle();
+  if (!row) return { ok: false, reason: "not_found", error: "공지를 찾을 수 없습니다" };
+  if (row.created_by !== user.id) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 수정할 수 있습니다" };
+  if (row.status !== "success" && row.status !== "partial")
+    return { ok: false, error: "게시 완료된 공지만 제자리 수정할 수 있습니다" };
+  const links = flattenReportLinks(row.results);
+  if (!links.some((l) => !l.revoked))
+    return { ok: false, error: "수정할 게시글 정보가 없습니다(연동 PC 업데이트 전 발송분은 ClassNote 앱에서 직접 수정)" };
+
+  const strippedTargets = Array.isArray(row.targets)
+    ? (row.targets as Array<Record<string, unknown>>).map((t) => {
+        const rest = { ...t };
+        delete rest.body; // 개별 내용 제거 → 전원 새 공통으로 통일
+        return rest;
+      })
+    : undefined;
+  const { data } = await supabase
+    .from("classnote_notices")
+    .update({ body, status: "edit_requested", processing_at: null, ...(strippedTargets ? { targets: strippedTargets } : {}) })
+    .eq("id", noticeId)
+    .eq("created_by", user.id)
+    .in("status", ["success", "partial"])
+    .select("id");
+  if (!data || data.length === 0) return explainZeroRows(supabase, noticeId, user.id);
+  await logAction({
+    action: "classnote_notice_edit",
+    targetType: "classnote_notice",
+    targetLabel: "게시 공지 제자리 수정",
+    metadata: { noticeId, posted: true, reportCount: links.filter((l) => !l.revoked).length },
+  });
+  return { ok: true };
+}
+
 // 대기(queued) 상태에서만 수정/삭제 — 워커가 집어(processing 이상)가면 불가. ownership=created_by(본인 공지만).
 // 0행 = 이미 발송 처리됨/미소유/없음을 구분해 타입 결과로 반환(UI가 '게시취소'로 전환 유도). status='queued' 원자 가드로 레이스 방지.
 type MutateResult = { ok: boolean; reason?: "already_sent" | "forbidden" | "not_found"; error?: string };
