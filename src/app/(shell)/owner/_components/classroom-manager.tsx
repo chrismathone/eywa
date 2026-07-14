@@ -154,7 +154,7 @@ export function ClassroomManager({ rooms }: { rooms: ClassroomRow[] }) {
   return (
     <SettingsCard
       title="강의실"
-      description="강의실명·정원을 등록·수정합니다(추가·수정·삭제는 즉시 저장 — 위 '저장' 버튼과 별개). 반/시간표의 강의실 선택지로 쓰이며, 삭제해도 반 데이터는 유지되고 해당 반의 강의실만 미지정으로 바뀝니다."
+      description="강의실명·정원을 등록·수정합니다(추가·수정·삭제는 즉시 반영 — 운영 설정 '저장' 버튼과 별개). 반/시간표의 강의실 선택지로 쓰이며, 삭제해도 반 데이터는 유지되고 해당 반의 강의실만 미지정으로 바뀝니다."
       span2
     >
       <AddForm />
