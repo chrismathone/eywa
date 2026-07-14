@@ -49,16 +49,36 @@ const IMPORTERS = [
   ["consultations", "sync-consultations-incremental.cjs"],
 ];
 
+// 자식 stderr에서 "진짜 원인" 한 줄을 뽑는다 — DB(makeedu_sync_runs.error)엔 이 줄이 실려야
+// 화면에 "scrape.cjs exited 1"(무의미) 대신 "로그인 실패…/재인증 벽…/세션 만료…"가 뜬다. 로그인 오류엔 PII 없음.
+function lastMeaningfulLine(stderr) {
+  if (!stderr) return "";
+  const lines = String(stderr)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  // scrape.cjs 최종 catch는 `ERR <메시지>`로 뱉는다 — 있으면 그걸(접두어 제거), 없으면 마지막 비어있지 않은 줄.
+  const err = [...lines].reverse().find((l) => /^ERR\b/.test(l));
+  return (err ? err.replace(/^ERR\s*/, "") : lines[lines.length - 1]).slice(0, 300);
+}
+
 function run(label, file, args) {
   console.log(`\n──── ${label}: ${path.basename(file)} ${args.join(" ")} ────`);
   // timeout 8분 = 공통 안전망 — Playwright 임포터가 행 걸려도 워처/스케줄러를 영구 블록하지 않게
   // (킬되면 status가 0이 아니어서 아래 throw → 도메인 실패로 격리·기록).
+  // stderr만 pipe로 캡처(stdout은 그대로 스트리밍) → 실패 시 자식이 뱉은 실제 원인을 throw 메시지에 실어 DB까지 전달.
   const r = spawnSync(process.execPath, [path.join(HERE, file), ...args], {
-    stdio: "inherit",
+    stdio: ["inherit", "inherit", "pipe"],
     env: process.env,
     timeout: 8 * 60_000,
+    encoding: "utf8",
   });
-  if (r.status !== 0) throw new Error(`${file} exited ${r.status}`);
+  if (r.stderr) process.stderr.write(r.stderr); // 로그 파일(.makeedu-tmp\sync-local.log)엔 그대로 남긴다.
+  if (r.status !== 0) {
+    const reason = lastMeaningfulLine(r.stderr) || (r.signal ? `시그널 ${r.signal}(타임아웃 등)` : "");
+    throw new Error(`${file} exited ${r.status ?? r.signal ?? ""}${reason ? ` — ${reason}` : ""}`);
+  }
 }
 
 // 짧은 DB 작업용(스크래핑/임포트 동안 유휴 연결을 안 들고 있게 매번 열고 닫는다 — 기존 sql/sql2 패턴).
