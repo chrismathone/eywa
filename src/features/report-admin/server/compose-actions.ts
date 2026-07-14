@@ -8,6 +8,7 @@
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -171,6 +172,240 @@ export async function saveAndQueueAdminReport(
     .eq("id", saved.id);
   if (error) return { ok: false, error: error.message };
   return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
+}
+
+const BULK_BODY_MAX = 4000;
+const BULK_CLASS_CAP = 100;
+const BULK_TARGET_CAP = 400; // (학생,과목) 타깃 상한 — 초과분은 잘라내고 skipped로 알린다(타임아웃·오발송 폭 방어).
+const BULK_TEST_STUDENT_NAME = "학원이"; // 실 학부모에게 안 가는 테스트 학생(반 공지 TEST_TARGET과 동일 관례).
+
+export type BulkAdminReportInput = {
+  classIds: string[];
+  teacherName?: string; // 표시 강사명 오버라이드 — 비우면 각 반의 담당 강사(classes.teacher_id)
+  textbook?: string;
+  makeup?: boolean;
+  homeworkToday?: string;
+  progress?: string; // 오늘 진도(공유)
+  notes: string; // 학부모 보고서 본문(공유) — 필수
+  trendNote?: string;
+  test?: boolean; // 학원이 1명에게만(파이프라인 검증)
+};
+
+type BulkTarget = { studentId: string; subject: string; teacherName: string | null };
+
+/**
+ * 반 단위 대량 발송 — 선택 반들의 재원생 각자에게 **같은 내용**의 리포트 카드를 작성해 ClassNote 큐에 적재.
+ * 반 공지(sendClassNotice, 자유 텍스트)의 **리포트-카드 버전**. 학부모 발송이라 안전가드는 개별 발송
+ * (saveAndQueueAdminReport)과 동일하게 **학생별로** 태운다: dry-run 스위치 · 과목 opt-in/화이트리스트 ·
+ * 동명이인 name_conflict(sendClassnoteForUnsent 25청크 배치) · too_old(오늘=항상 통과). 실제 게시는 로컬 워커.
+ * ⚠️ 오늘 그 과목 보고서가 이미 있는 학생은 **건너뛴다**(강사 작성분 덮어쓰기·중복 발송 방지). dry-run이면 저장/큐잉 안 함.
+ */
+export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise<{
+  ok: boolean;
+  queued?: number;
+  conflicts?: number; // 동명이인으로 발송 차단된 학생 수
+  skippedExisting?: number; // 이미 오늘 보고서가 있어 제외된 학생 수
+  subjectOff?: number; // 발송 대상 과목이 아니라 제외된 (학생,과목) 수
+  overflow?: number; // 타깃 상한 초과로 잘린 수
+  wouldSend?: number; // dry-run 시 발송 예정 인원(상한)
+  dryRun?: boolean;
+  error?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  const body = (input.notes ?? "").trim();
+  if (!body) return { ok: false, error: "학부모 보고서 본문을 입력하세요" };
+  if (body.length > BULK_BODY_MAX) return { ok: false, error: `본문이 너무 깁니다(최대 ${BULK_BODY_MAX}자)` };
+
+  const supabase = await createClient();
+  const settings = await getTenantSettings();
+  const reportDate = kstToday();
+  const allowedSubjects = settings.report.classnoteSubjects;
+
+  // ── 1. 대상 (학생,과목,담당강사) 후보 해석 ──
+  let targets: BulkTarget[] = [];
+  let subjectOff = 0;
+  if (input.test) {
+    // 테스트 학생(학원이) — 탈원 상태일 수 있어 이름으로 조회(반 해석 경로로 안 뽑힘). 발송 과목 첫 번째로.
+    const firstSendable = allowedSubjects.find((k) => isClassnoteSubjectEnabled(k, allowedSubjects));
+    if (!firstSendable)
+      return { ok: false, error: "발송 가능한 과목이 없습니다 — 원장 설정 > 수업보고서 > 발송 과목을 먼저 지정하세요" };
+    const { data: t } = await supabase
+      .from("students")
+      .select("id")
+      .eq("name", BULK_TEST_STUDENT_NAME)
+      .limit(1)
+      .maybeSingle();
+    if (!t) return { ok: false, error: `테스트 학생(${BULK_TEST_STUDENT_NAME})을 찾을 수 없습니다` };
+    targets = [{ studentId: t.id as string, subject: firstSendable, teacherName: input.teacherName?.trim() || null }];
+  } else {
+    const classIds = [...new Set(input.classIds ?? [])].slice(0, BULK_CLASS_CAP);
+    if (!classIds.length) return { ok: false, error: "대상 반을 선택하세요" };
+    const { data: classes } = await supabase
+      .from("classes")
+      .select("id, subject, teacher_id")
+      .in("id", classIds)
+      .eq("is_active", true);
+    const subjectByClass = new Map((classes ?? []).map((c) => [c.id as string, c.subject as string | null]));
+    const teacherByClass = new Map((classes ?? []).map((c) => [c.id as string, c.teacher_id as string | null]));
+    const teacherIds = [...new Set([...teacherByClass.values()].filter(Boolean))] as string[];
+    const nameByTeacher = new Map<string, string | null>();
+    if (teacherIds.length) {
+      const { data } = await supabase.from("users").select("id, display_name").in("id", teacherIds);
+      for (const u of data ?? []) nameByTeacher.set(u.id as string, (u.display_name as string | null) ?? null);
+    }
+    // 활성 수강 rows(선택 반 한정) → 재원생만. B3: id 청크 .in().
+    const enr = await fetchInChunks<{ class_id: string; student_id: string }>([...subjectByClass.keys()], (chunk) =>
+      supabase.from("enrollments").select("class_id, student_id").in("class_id", chunk).is("end_date", null),
+    );
+    const studentIds = [...new Set(enr.map((e) => e.student_id))];
+    const students = await fetchInChunks<{ id: string; status: string }>(studentIds, (chunk) =>
+      supabase.from("students").select("id, status").in("id", chunk),
+    );
+    const statusById = new Map(students.map((s) => [s.id, s.status]));
+    const override = input.teacherName?.trim() || null;
+    // (학생,과목) dedup — 같은 학생이 같은 과목 반을 둘 이상 들어도 1건. 첫 반의 담당 강사 채택.
+    const byKey = new Map<string, BulkTarget>();
+    for (const e of enr) {
+      if (statusById.get(e.student_id) !== "enrolled") continue; // 재원생만
+      const subject = subjectByClass.get(e.class_id);
+      if (!subject) continue;
+      const key = `${e.student_id}|${subject}`;
+      if (byKey.has(key)) continue;
+      const tId = teacherByClass.get(e.class_id);
+      byKey.set(key, {
+        studentId: e.student_id,
+        subject,
+        teacherName: override || (tId ? nameByTeacher.get(tId) ?? null : null),
+      });
+    }
+    // 과목 게이트 — 발송 대상 과목(opt-in ∩ 화이트리스트)만. 반 목록은 이미 발송과목으로 좁혀졌지만 이중 방어.
+    const all = [...byKey.values()];
+    targets = all.filter((t) => isClassnoteSubjectEnabled(t.subject, allowedSubjects));
+    subjectOff = all.length - targets.length;
+  }
+
+  // 타깃 상한 — 초과분 잘라내고 알림(오발송 폭·타임아웃 방어).
+  let overflow = 0;
+  if (targets.length > BULK_TARGET_CAP) {
+    overflow = targets.length - BULK_TARGET_CAP;
+    targets = targets.slice(0, BULK_TARGET_CAP);
+  }
+  if (!targets.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, overflow };
+
+  // ── 2. 발송 안전 스위치(기본 OFF) — dry-run이면 저장/큐잉 없이 예정 인원만 반환 ──
+  if (!settings.report.classnoteSendEnabled) {
+    return { ok: true, dryRun: true, wouldSend: targets.length, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, overflow };
+  }
+
+  // ── 3. 오늘 그 과목 보고서가 이미 있는 학생 제외(덮어쓰기·중복 발송 방지) ──
+  const targetStudentIds = [...new Set(targets.map((t) => t.studentId))];
+  const existing = await fetchInChunks<{ student_id: string; subject: string | null }>(targetStudentIds, (chunk) =>
+    supabase
+      .from("lesson_reports")
+      .select("student_id, subject")
+      .eq("report_date", reportDate)
+      .in("student_id", chunk),
+  );
+  const existingKeys = new Set(existing.map((r) => `${r.student_id}|${r.subject ?? ""}`));
+  const fresh = targets.filter((t) => !existingKeys.has(`${t.studentId}|${t.subject}`));
+  const skippedExisting = targets.length - fresh.length;
+  if (!fresh.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, subjectOff, overflow };
+
+  // ── 4. 동명이인 감지 — 학생별 1회, 25명 청크(sendClassnoteForUnsent 패턴) ──
+  const freshStudentIds = [...new Set(fresh.map((t) => t.studentId))];
+  const conflicted = new Set<string>();
+  for (let i = 0; i < freshStudentIds.length; i += 25) {
+    const results = await Promise.all(
+      freshStudentIds.slice(i, i + 25).map(async (sid) => [sid, await hasClassnoteNameCollision(supabase, sid)] as const),
+    );
+    for (const [sid, hit] of results) if (hit) conflicted.add(sid);
+  }
+
+  // ── 5. 리포트 카드 일괄 작성(공유 내용 + 학생 과목 + 반 담당강사). 청크 upsert. ──
+  const nowIso = new Date().toISOString();
+  const rowsToAuthor = fresh.map((t) => ({
+    tenant_id: user.tenantId,
+    student_id: t.studentId,
+    report_date: reportDate,
+    subject: t.subject,
+    textbook: input.textbook?.trim() || null,
+    makeup: input.makeup ?? false,
+    homework_today: input.homeworkToday?.trim() || null,
+    progress: input.progress?.trim() || null,
+    exam_info: null,
+    homework_score: null,
+    daily_test: null,
+    check_test: null,
+    attitude: null,
+    teacher_name: t.teacherName || user.displayName || null,
+    notes: body,
+    trend_note: input.trendNote?.trim() || null,
+    source: "admin",
+  }));
+  const authored: { id: string; student_id: string; subject: string | null }[] = [];
+  for (let i = 0; i < rowsToAuthor.length; i += 100) {
+    const { data, error } = await supabase
+      .from("lesson_reports")
+      .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,subject" })
+      .select("id, student_id, subject");
+    if (error) return { ok: false, error: error.message };
+    authored.push(...((data ?? []) as typeof authored));
+  }
+
+  const conflictIds = authored.filter((r) => conflicted.has(r.student_id)).map((r) => r.id);
+  const queueIds = authored.filter((r) => !conflicted.has(r.student_id)).map((r) => r.id);
+
+  // ── 6. 상태 확정 — 동명이인 name_conflict / 나머지 queued(오늘=too_old 아님). .is(null) 경합 이중방어. ──
+  let conflicts = 0;
+  for (let i = 0; i < conflictIds.length; i += 100) {
+    const { data } = await supabase
+      .from("lesson_reports")
+      .update({ classnote_status: "name_conflict", classnote_queued_at: null, classnote_error: "동명이인 감지 — 자동 발송 차단" })
+      .in("id", conflictIds.slice(i, i + 100))
+      .is("classnote_status", null)
+      .select("id");
+    conflicts += (data ?? []).length;
+  }
+  let queued = 0;
+  for (let i = 0; i < queueIds.length; i += 100) {
+    const { data, error } = await supabase
+      .from("lesson_reports")
+      .update({
+        classnote_status: "queued",
+        classnote_queued_at: nowIso,
+        classnote_processing_at: null,
+        classnote_retry_count: 0,
+        classnote_error: null,
+      })
+      .in("id", queueIds.slice(i, i + 100))
+      .is("classnote_status", null)
+      .select("id");
+    if (error) return { ok: false, error: error.message };
+    queued += (data ?? []).length;
+  }
+
+  // ── 7. 진도 컨테이너 반영(수학·진도 있을 때만, 비치명적). 10건씩 동시. ──
+  const queuedIdSet = new Set(queueIds);
+  const subjectById = new Map(authored.map((r) => [r.id, r.subject]));
+  const queuedRows = authored.filter((r) => queuedIdSet.has(r.id));
+  for (let i = 0; i < queuedRows.length; i += 10) {
+    await Promise.all(
+      queuedRows.slice(i, i + 10).map((r) =>
+        ingestReport(supabase, {
+          id: r.id,
+          tenantId: user.tenantId,
+          studentId: r.student_id,
+          reportDate,
+          subject: subjectById.get(r.id) ?? null,
+          progress: input.progress?.trim() || null,
+        }).catch(() => {}),
+      ),
+    );
+  }
+
+  return { ok: true, queued, conflicts, skippedExisting, subjectOff, overflow };
 }
 
 export type AdminComposeSubject = {

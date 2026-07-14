@@ -11,7 +11,7 @@ import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
 import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
-import { ComposeFace } from "./_components/compose-face";
+import { ComposeTab } from "./_components/compose-tab";
 import { NoticeFace } from "./_components/notice-face";
 import { EdutrixUnmappedCard } from "./_components/edutrix-unmapped-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
@@ -85,12 +85,15 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                 noticeRows: notices.rows ?? [],
               }))
           : tab === "compose"
-            ? Promise.all([getStudentsList({ status: "enrolled" }), getTenantSettings()]).then(([rows, settings]) => ({
-                composeStudents: rows.map((s) => ({ id: s.id, name: s.name, school: s.school, grade: s.grade })),
-                composeSendEnabled: settings.report.classnoteSendEnabled,
-                composeShowDailyTest: settings.report.showDailyTest,
-                composeShowCheckTest: settings.report.showCheckTest,
-              }))
+            ? Promise.all([getStudentsList({ status: "enrolled" }), getTenantSettings(), getNoticeClassOptions()]).then(
+                ([rows, settings, cls]) => ({
+                  composeStudents: rows.map((s) => ({ id: s.id, name: s.name, school: s.school, grade: s.grade })),
+                  composeClasses: cls.classes ?? [],
+                  composeSendEnabled: settings.report.classnoteSendEnabled,
+                  composeShowDailyTest: settings.report.showDailyTest,
+                  composeShowCheckTest: settings.report.showCheckTest,
+                }),
+              )
           : tab === "ai_ment"
             ? getActivePrompts().then((r) => ({ aiPrompts: r.prompts ?? [] }))
             : Promise.all([getReportFilterOptions(), listReports({ page: 0 })]).then(([filterOptions, firstPage]) => ({
@@ -145,8 +148,9 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "compose" && "composeStudents" in tabData ? (
-        <ComposeFace
+        <ComposeTab
           students={tabData.composeStudents}
+          classes={tabData.composeClasses}
           sendEnabled={tabData.composeSendEnabled}
           showDailyTest={tabData.composeShowDailyTest}
           showCheckTest={tabData.composeShowCheckTest}
