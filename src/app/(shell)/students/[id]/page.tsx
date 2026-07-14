@@ -12,6 +12,7 @@ import { DupSuspectNotice } from "./_components/dup-suspect-notice";
 import { RunCareAiButton } from "./run-care-ai-button";
 import { StudentTabsNav, isStudentTabKey } from "./_components/tabs-nav";
 import { StatusAction } from "./_components/status-action";
+import { DeleteStudentButton } from "./_components/delete-student-button";
 import { OverviewTab } from "./_tabs/overview-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { BillingTab } from "./_tabs/billing-tab";
@@ -58,6 +59,8 @@ export default async function StudentDetailPage({
   const hasCareAi = student.aiCareSummary !== null;
   // 수강 종료 노출 = 학생 쓰기(full) 권한 이상만(master·admin·manager·counselor).
   const canEndEnrollment = (await accessLevelTenant(user.systemRole, "students")) === "full";
+  // 학생 영구 삭제 = 관리 도구(admin) 쓰기 권한(기본 master) — 파괴적이라 조임. 잘못 추가 정정용.
+  const canDeleteStudent = await canWriteTenant(user.systemRole, "admin");
   // 시작/종료일 더블클릭 수정 = owner(원장) 콘솔 권한 이상만(관리자 정정).
   const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
   // 분리등원 요일(스케줄) 더블클릭 편집 = 반 쓰기 권한(updateEnrollmentsAttendanceBatch와 동일 게이트).
@@ -116,6 +119,9 @@ export default async function StudentDetailPage({
             </Button>
             {student.status === "enrolled" ? (
               <RunCareAiButton studentId={student.id} hasExisting={hasCareAi} />
+            ) : null}
+            {canDeleteStudent ? (
+              <DeleteStudentButton studentId={student.id} studentName={student.name} />
             ) : null}
           </div>
         </div>

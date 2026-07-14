@@ -178,6 +178,40 @@ export async function createStudent(
   };
 }
 
+export type DeleteStudentState = { error?: string; ok?: true } | undefined;
+
+/**
+ * 학생 영구 삭제(단건) — 잘못 추가한 학생 즉시 정정용. 대부분 FK는 cascade지만 invoices는 restrict라
+ * 청구(수납) 기록이 있으면 삭제 불가(퇴원 처리 권장). 파괴적이라 관리 도구(admin) 쓰기 권한으로 조임
+ * (기본 master, 역할·권한에서 위임 시 admin/manager). 되돌릴 수 없음 → UI에서 2단계 확인.
+ */
+export async function deleteStudent(_prev: DeleteStudentState, formData: FormData): Promise<DeleteStudentState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "admin"))) return { error: "영구 삭제 권한이 없습니다(관리 도구 권한 필요)" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "학생 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  // 청구(invoices) 기록 있으면 FK restrict라 삭제 실패 → 미리 막고 퇴원 처리 안내(count head:true = 행 안 받음, B2).
+  const { count } = await supabase
+    .from("invoices")
+    .select("*", { count: "exact", head: true })
+    .eq("student_id", id);
+  if ((count ?? 0) > 0) {
+    return { error: "청구(수납) 기록이 있어 영구 삭제할 수 없습니다. 퇴원 처리를 이용하세요." };
+  }
+
+  const { error, count: deleted } = await supabase.from("students").delete({ count: "exact" }).eq("id", id);
+  if (error) return { error: translateDbError(error.message) };
+  if (!deleted) return { error: "학생을 찾을 수 없거나 권한이 없습니다" };
+
+  revalidatePath("/students");
+  revalidatePath("/withdrawals");
+  return { ok: true };
+}
+
 export async function updateStudent(
   _prev: StudentFormState,
   formData: FormData,
