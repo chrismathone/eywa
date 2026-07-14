@@ -58,8 +58,8 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
 };
 
 /**
- * NAV: 5그룹 (홈 / 수업 / 학생 / 운영 / 지원). 아이콘은 기능이 직관적으로 읽히는
- * Eywa 전용 아이콘(레일·모바일nav·검색팰릿·창 전환 공용). 그룹 번호는 사이드바에서 자동 인덱스.
+ * NAV: 5그룹 (홈 / 수업 / 학생 / 운영 / 지원). 아이콘은 식물 비유가 아닌 기능 중심
+ * Eywa 아이콘(레일·모바일nav·검색팰릿·창 전환 공용). 그룹 번호는 사이드바에서 자동 인덱스.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {

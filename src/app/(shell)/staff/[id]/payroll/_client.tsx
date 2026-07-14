@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { Calculator, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   autoComputePayroll,
@@ -79,15 +80,17 @@ export function PayrollClient({
           <Link
             href={`?period=${shiftMonth(period, -1)}`}
             className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-md border"
+            aria-label="이전 달"
           >
-            ◀
+            <EyIcon name="chevronLeft" size={14} />
           </Link>
           <h2 className="text-foreground num text-base font-semibold">{period}</h2>
           <Link
             href={`?period=${shiftMonth(period, 1)}`}
             className="text-muted-foreground hover:text-foreground inline-flex size-7 items-center justify-center rounded-md border"
+            aria-label="다음 달"
           >
-            ▶
+            <EyIcon name="chevronRight" size={14} />
           </Link>
         </div>
         <div className="text-muted-foreground text-xs">

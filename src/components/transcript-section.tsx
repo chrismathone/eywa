@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { breakIntoSentences } from "@/lib/text/split-sentences";
 
 /** 화자 발화 — 구조적 최소 타입(meetings SpeakerUtterance·enrollment speaker_labels 둘 다 만족). */
@@ -48,7 +49,7 @@ export function TranscriptSection({
         className="bg-bg-soft hover:bg-bg-soft/60 flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
       >
         <h2 className="text-foreground flex items-center gap-2 text-[13px] font-semibold">
-          <span className="text-[15px] leading-none">🎤</span>
+          <EyIcon name="mic" size={15} />
           전사 내용
           {hasSpeakers ? (
             <span className="text-text-faint text-[11px] font-normal whitespace-nowrap">
@@ -82,7 +83,10 @@ export function TranscriptSection({
                   onClick={() => setShowAll(true)}
                   className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft w-full rounded-md border py-2 text-xs transition"
                 >
-                  + {rest}개 발화 더 보기
+                  <span className="inline-flex items-center gap-1">
+                    <EyIcon name="chevronDown" size={12} aria-hidden="true" />
+                    {rest}개 발화 더 보기
+                  </span>
                 </button>
               ) : null}
             </>

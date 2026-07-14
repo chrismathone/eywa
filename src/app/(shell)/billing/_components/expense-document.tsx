@@ -68,10 +68,10 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
                   {author}
                 </td>
                 <td className="border-foreground/70 text-primary border px-5 py-4 text-center font-bold">
-                  {checks.director?.checked ? "✓" : ""}
+                  {checks.director?.checked ? <Check className="mx-auto size-3.5" /> : null}
                 </td>
                 <td className="border-foreground/70 text-primary border px-5 py-4 text-center font-bold">
-                  {checks.ceo?.checked ? "✓" : ""}
+                  {checks.ceo?.checked ? <Check className="mx-auto size-3.5" /> : null}
                 </td>
               </tr>
             </tbody>

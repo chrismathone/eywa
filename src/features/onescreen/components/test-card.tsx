@@ -1,5 +1,6 @@
 import { pct } from "../report";
 import { displayLessons } from "../curriculum";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { DeltaChip } from "./delta-chip";
 import type { OneScreenStudent, TestScore } from "../types";
 
@@ -65,17 +66,17 @@ function ScoreBlock({
             type="button"
             aria-label="점수 올림"
             onClick={() => setVal((test.score ?? 0) + 1)}
-            className="border-line text-text-dim hover:bg-bg-soft flex h-3.5 w-5 items-center justify-center rounded-t-sm border text-[8px]"
+            className="border-line text-text-dim hover:bg-bg-soft flex h-3.5 w-5 items-center justify-center rounded-t-sm border"
           >
-            ▲
+            <EyIcon name="chevronUp" size={9} strokeWidth={2} />
           </button>
           <button
             type="button"
             aria-label="점수 내림"
             onClick={() => setVal((test.score ?? 0) - 1)}
-            className="border-line text-text-dim hover:bg-bg-soft -mt-px flex h-3.5 w-5 items-center justify-center rounded-b-sm border text-[8px]"
+            className="border-line text-text-dim hover:bg-bg-soft -mt-px flex h-3.5 w-5 items-center justify-center rounded-b-sm border"
           >
-            ▼
+            <EyIcon name="chevronDown" size={9} strokeWidth={2} />
           </button>
         </div>
         {!empty ? <DeltaChip score={test.score} prev={test.prevScore} /> : null}

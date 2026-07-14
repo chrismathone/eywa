@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
 import { DEMO_STUDENT } from "@/features/my-learning/data";
 import { findSession } from "@/features/my-learning/history";
@@ -26,7 +27,8 @@ export default async function DailyReportPage({
         href="/my-learning"
         className="text-text-dim hover:text-foreground inline-flex items-center gap-1.5 text-sm transition"
       >
-        ← 누적 현황
+        <EyIcon name="arrowLeft" size={14} />
+        누적 현황
       </Link>
       <DailyReportView base={student} session={session} />
     </div>

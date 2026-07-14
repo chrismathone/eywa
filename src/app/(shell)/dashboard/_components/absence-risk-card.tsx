@@ -14,7 +14,7 @@ export function AbsenceRiskCard({ items }: { items: AbsenceRisk[] }) {
       title="결석 위험"
       count={items.length > 0 ? `${items.length}명` : undefined}
       href="/attendance"
-      hrefLabel="출결 →"
+      hrefLabel="출결"
     >
       {items.length === 0 ? (
         <DashEmpty>최근 14일 결석 위험 학생이 없습니다</DashEmpty>

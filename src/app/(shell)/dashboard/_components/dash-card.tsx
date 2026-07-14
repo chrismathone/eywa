@@ -4,12 +4,13 @@
  */
 import type { ReactNode } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 export function DashCard({
   title,
   count,
   href,
-  hrefLabel = "전체 →",
+  hrefLabel = "전체",
   action,
   children,
 }: {
@@ -35,9 +36,10 @@ export function DashCard({
         ) : href ? (
           <WindowLink
             href={href}
-            className="text-text-faint hover:text-foreground shrink-0 text-[11px]"
+            className="text-text-faint hover:text-foreground inline-flex shrink-0 items-center gap-1 text-[11px]"
           >
             {hrefLabel}
+            <EyIcon name="arrowRight" size={11} />
           </WindowLink>
         ) : null}
       </header>

@@ -5,6 +5,7 @@ import {
   type LucideIcon,
 } from "@/components/icons/eywa-icon-compat";
 import type { ReactNode } from "react";
+import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -407,11 +408,11 @@ export default async function EnrollmentDetailPage({
 
 // 공용 카드 — 좌측 정보·우측 AI 분석 섹션이 모두 이 단일 박스 스타일을 쓴다(좌우 통일).
 // 이모지 + 굵은 라벨 헤더(이중 박스 느낌의 별도 음영 바 없이) → 섹션 구분은 또렷하되 중복돼 보이지 않게.
-function Card({ title, emoji, children }: { title: string; emoji?: string; children: ReactNode }) {
+function Card({ title, icon, children }: { title: string; icon?: EywaIconName; children: ReactNode }) {
   return (
     <section className="bg-card border-line rounded-md border p-4">
       <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold">
-        {emoji ? <span className="text-[15px] leading-none">{emoji}</span> : null}
+        {icon ? <EyIcon name={icon} size={15} /> : null}
         {title}
       </h3>
       {children}
@@ -532,7 +533,7 @@ function AiAnalysisPanel({
           <ul className="space-y-1.5 text-sm">
             {diagnosis.strengths.map((s) => (
               <li key={s} className="text-foreground flex gap-2">
-                <span className="text-chart-2 shrink-0">＋</span>
+                <EyIcon name="plus" size={13} className="text-chart-2 mt-0.5 shrink-0" />
                 <span>{s}</span>
               </li>
             ))}
@@ -542,7 +543,7 @@ function AiAnalysisPanel({
           <ul className="space-y-1.5 text-sm">
             {diagnosis.weaknesses.map((w) => (
               <li key={w} className="text-foreground flex gap-2">
-                <span className="text-chart-4 shrink-0">－</span>
+                <EyIcon name="minus" size={13} className="text-chart-4 mt-0.5 shrink-0" />
                 <span>{w}</span>
               </li>
             ))}
@@ -615,7 +616,7 @@ function SubjectScoresCard({ details }: { details: Record<string, Record<string,
   if (entries.length === 0) return null;
   const ENG_TYPE: Record<string, string> = { ai: "AI 레벨테스트", nelt: "NELT", eie: "EiE" };
   return (
-    <Card emoji="📊" title="과목별 점수">
+    <Card icon="chart" title="과목별 점수">
       <div className="space-y-4">
         {entries.map(([subj, vals]) => {
           const tab = SUBJECT_TABS.find((t) => t.key === subj);

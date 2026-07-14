@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { campaignAdd, campaignSetStatus, campaignRemove, type CampaignResult } from "../server/actions";
 import type { CampaignBoard as Board, CampaignStatus } from "../server/campaign-queries";
 
@@ -88,9 +89,10 @@ export function CampaignBoard({ board }: { board: Board }) {
               <button
                 type="button"
                 onClick={() => setShowAllCandidates(true)}
-                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft rounded-lg border border-dashed px-3 py-2 text-[11px] transition"
+                className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border border-dashed px-3 py-2 text-[11px] transition"
               >
-                +{candidates.length - CANDIDATE_CAP}명 더 보기
+                <EyIcon name="chevronDown" size={12} aria-hidden="true" />
+                {candidates.length - CANDIDATE_CAP}명 더 보기
               </button>
             ) : null}
           </div>
@@ -172,9 +174,10 @@ export function CampaignBoard({ board }: { board: Board }) {
                       type="button"
                       data-no-drag-scroll
                       onClick={() => setExpandedCols((s) => new Set(s).add(col.key))}
-                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft w-full rounded-lg border border-dashed py-2 text-[11px] transition"
+                      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft flex w-full items-center justify-center gap-1 rounded-lg border border-dashed py-2 text-[11px] transition"
                     >
-                      +{rest}개 더 보기
+                      <EyIcon name="chevronDown" size={12} aria-hidden="true" />
+                      {rest}개 더 보기
                     </button>
                   ) : null}
                   </>

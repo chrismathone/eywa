@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 // 무인 키오스크 숫자패드 — 출석번호(4~5자리) 셀프입력 → 체크인 API → 등/하원 결과 + 발송 시뮬 배너.
 // 자동제출 대신 '확인' 버튼(4자리/5자리 공존 시 prefix 모호성 회피). 결과 후 자동 리셋.
@@ -197,10 +198,16 @@ function ResultCard({ res, onDismiss }: { res: CheckinResponse; onDismiss: () =>
           <div className="text-gold micro">알림톡 발송됨 (시뮬레이션)</div>
           <p className="text-text-dim mt-1 text-[12px] leading-relaxed">{res.message}</p>
           {res.recipientMasked ? (
-            <p className="text-text-faint mt-1 text-[11px]">→ {res.recipientMasked}</p>
+            <p className="text-text-faint mt-1 inline-flex items-center gap-1 text-[11px]">
+              <EyIcon name="send" size={12} />
+              {res.recipientMasked}
+            </p>
           ) : null}
           {isIn && res.reflectedClassName ? (
-            <p className="text-primary mt-2 text-[11px]">✓ {res.reflectedClassName} 출석부 기록</p>
+            <p className="text-primary mt-2 flex items-center justify-center gap-1 text-[11px]">
+              <EyIcon name="check" size={12} />
+              {res.reflectedClassName} 출석부 기록
+            </p>
           ) : null}
         </div>
       </button>

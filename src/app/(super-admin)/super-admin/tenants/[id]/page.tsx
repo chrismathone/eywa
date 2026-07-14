@@ -75,9 +75,10 @@ export default async function TenantDetailPage({
         action={
           <Link
             href="/super-admin/tenants"
-            className="border-line text-text-dim hover:text-foreground rounded-md border px-3 py-2 text-[12px] font-semibold"
+            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold"
           >
-            ← 목록
+            <EyIcon name="arrowLeft" size={14} />
+            목록
           </Link>
         }
       />

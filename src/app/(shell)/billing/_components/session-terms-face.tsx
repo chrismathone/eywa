@@ -6,6 +6,7 @@ import { SearchForm } from "@/components/search-form";
 import { Pagination } from "@/components/pagination";
 import { SessionTermGroups, RefreshPlanButton, type ClassGroup } from "./session-term-table";
 import Link from "next/link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
@@ -93,7 +94,7 @@ export async function SessionTermsFace({
             className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
             aria-label="이전 달"
           >
-            ◀
+            <EyIcon name="chevronLeft" size={14} />
           </Link>
           <span className="text-foreground num text-sm font-semibold">
             {y}년 {Number(m)}월
@@ -103,7 +104,7 @@ export async function SessionTermsFace({
             className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
             aria-label="다음 달"
           >
-            ▶
+            <EyIcon name="chevronRight" size={14} />
           </Link>
           <span className="text-text-dim ml-2 text-xs">
             반 <span className="num">{allGroups.length}</span>개 · 확정{" "}

@@ -70,18 +70,18 @@ export const MENU_INDEX: {
   group: string;
   core?: boolean;
 }[] = [
-  { no: "01", name: "대시보드", icon: "tree", desc: "오늘의 학원을 한눈에", time: "08:30", group: "홈", core: true },
-  { no: "02", name: "시간표", icon: "leaf", desc: "강사·교시·학생을 한 장에", time: "09:00", group: "수업" },
-  { no: "03", name: "출석부", icon: "pulse", desc: "학생 × 한 달, 매트릭스로", time: "16:02", group: "수업", core: true },
-  { no: "04", name: "수업목록", icon: "branch", desc: "반·과목·강사를 한 곳에", time: "10:00", group: "수업" },
-  { no: "05", name: "학생목록", icon: "seed", desc: "재원생 전원을 검색·필터로", time: "11:00", group: "학생", core: true },
-  { no: "06", name: "등록상담", icon: "sprout", desc: "상담에서 등록까지 칸반으로", time: "14:00", group: "학생" },
-  { no: "07", name: "학생상담", icon: "wave", desc: "상담 기록과 후속 관리", time: "15:00", group: "학생" },
-  { no: "08", name: "퇴원관리", icon: "falling", desc: "이탈 사유를 데이터로", time: "17:00", group: "학생" },
-  { no: "09", name: "직원관리", icon: "roots", desc: "강사·급여·휴가 정산", time: "13:00", group: "운영" },
-  { no: "10", name: "수납관리", icon: "pollen", desc: "청구·미납·할인을 한 번에", time: "18:00", group: "운영", core: true },
-  { no: "11", name: "회의록", icon: "rings", desc: "녹음하면 AI가 요약", time: "19:40", group: "운영" },
-  { no: "12", name: "도움말", icon: "spore", desc: "막힐 때, 바로 옆에서", group: "지원" },
+  { no: "01", name: "대시보드", icon: "layoutGrid", desc: "오늘의 학원을 한눈에", time: "08:30", group: "홈", core: true },
+  { no: "02", name: "시간표", icon: "calendar", desc: "강사·교시·학생을 한 장에", time: "09:00", group: "수업" },
+  { no: "03", name: "출석부", icon: "clipboardCheck", desc: "학생 × 한 달, 매트릭스로", time: "16:02", group: "수업", core: true },
+  { no: "04", name: "수업목록", icon: "book", desc: "반·과목·강사를 한 곳에", time: "10:00", group: "수업" },
+  { no: "05", name: "학생목록", icon: "users", desc: "재원생 전원을 검색·필터로", time: "11:00", group: "학생", core: true },
+  { no: "06", name: "등록상담", icon: "userPlus", desc: "상담에서 등록까지 칸반으로", time: "14:00", group: "학생" },
+  { no: "07", name: "학생상담", icon: "messages", desc: "상담 기록과 후속 관리", time: "15:00", group: "학생" },
+  { no: "08", name: "퇴원관리", icon: "userMinus", desc: "이탈 사유를 데이터로", time: "17:00", group: "학생" },
+  { no: "09", name: "직원관리", icon: "userSettings", desc: "강사·급여·휴가 정산", time: "13:00", group: "운영" },
+  { no: "10", name: "수납관리", icon: "wallet", desc: "청구·미납·할인을 한 번에", time: "18:00", group: "운영", core: true },
+  { no: "11", name: "회의록", icon: "note", desc: "녹음하면 AI가 요약", time: "19:40", group: "운영" },
+  { no: "12", name: "도움말", icon: "help", desc: "막힐 때, 바로 옆에서", group: "지원" },
 ];
 
 /** 의도적으로 뺀 탭들 — "뺀 것도 자랑" (절제 = 속도) */

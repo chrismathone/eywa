@@ -31,7 +31,7 @@ export function EnrollmentListCard({
       title="등록상담"
       count={list.total > 0 ? `${list.total}건` : undefined}
       href="/enrollment"
-      hrefLabel="전체 →"
+      hrefLabel="전체"
     >
       {/* 등록했지만 반 미배정 = 후속조치 필요 → 활성 상담 목록 위 호박색 강조 밴드(고정·컴팩트: 이름 인라인). */}
       {unassigned.length > 0 ? (

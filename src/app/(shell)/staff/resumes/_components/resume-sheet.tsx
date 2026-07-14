@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Loader2, Pencil, Save, X } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, CheckSquare, Loader2, Pencil, Save, Square, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
@@ -296,14 +296,16 @@ export function ResumeSheet({
                         onChange={() => toggleDay(d.key)}
                         className="sr-only"
                       />
-                      <span className="whitespace-nowrap">
-                        {workDays.includes(d.key) ? "☑" : "☐"} {d.label}
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                        {workDays.includes(d.key) ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
+                        {d.label}
                       </span>
                     </label>
                   ))
                 : WORKDAYS.map((d) => (
-                    <span key={d.key} className="mr-3 whitespace-nowrap">
-                      {c.workDays.includes(d.key) ? "☑" : "☐"} {d.label}
+                    <span key={d.key} className="mr-3 inline-flex items-center gap-1 whitespace-nowrap">
+                      {c.workDays.includes(d.key) ? <CheckSquare size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
+                      {d.label}
                     </span>
                   ))}
             </td>

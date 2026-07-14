@@ -1,6 +1,7 @@
 import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
 import { relativeTimeKo } from "@/lib/relative-time";
 import {
@@ -63,8 +64,9 @@ export default async function ConsultationStatsPage() {
           </h2>
         </header>
         {needed.rows.length === 0 ? (
-          <p className="text-muted-foreground py-6 text-center text-sm">
-            최근 30일 내 모든 재원생을 상담했습니다 👍
+          <p className="text-muted-foreground flex items-center justify-center gap-1.5 py-6 text-center text-sm">
+            <EyIcon name="success" size={16} className="text-primary" />
+            최근 30일 내 모든 재원생을 상담했습니다
           </p>
         ) : (
           <ul className="divide-border divide-y">

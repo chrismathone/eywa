@@ -179,7 +179,7 @@ export default async function HelpPage() {
 
       <section className="border-line bg-card shadow-card flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center">
         <span className="bg-primary-soft text-primary flex size-11 shrink-0 items-center justify-center rounded-lg">
-          <EyIcon name="rings" size={22} />
+          <EyIcon name="help" size={22} />
         </span>
         <div className="min-w-0 flex-1">
           <p className="micro">Product language</p>

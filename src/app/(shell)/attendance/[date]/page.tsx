@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, ClipboardCheck, Pencil } from "@/components/icons/eywa-icon-compat";
+import { CheckCircle2, ChevronRight, ClipboardCheck, Pencil } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -204,7 +204,7 @@ export default async function AttendanceByDatePage({
                       {gAbsent === 0 && gLate === 0 ? (
                         <span className="text-primary text-[11px]">전원 출석</span>
                       ) : null}
-                      <span className="text-text-faint font-mono text-[10px] transition group-open:rotate-90">▶</span>
+                      <ChevronRight className="text-text-faint size-3 transition group-open:rotate-90" />
                     </div>
                   </summary>
                   <div className="border-line border-t">

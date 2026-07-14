@@ -1,4 +1,5 @@
 import { Sparkles } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getStudentAttendanceStats,
@@ -183,7 +184,12 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
             <Empty>메모 없음</Empty>
           ) : (
             pinnedMemos.slice(0, 3).map((m) => (
-              <DigestRow key={m.id} left={m.pinned ? "📌" : m.category} right={m.content} truncate />
+              <DigestRow
+                key={m.id}
+                left={m.pinned ? <EyIcon name="pin" size={13} aria-label="고정 메모" /> : m.category}
+                right={m.content}
+                truncate
+              />
             ))
           )}
         </DigestCard>
@@ -275,7 +281,7 @@ function DigestRow({
   truncate,
   highlight,
 }: {
-  left: string;
+  left: React.ReactNode;
   right: string;
   mono?: boolean;
   truncate?: boolean;

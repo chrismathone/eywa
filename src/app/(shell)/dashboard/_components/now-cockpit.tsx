@@ -7,6 +7,7 @@
  */
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import type { TodaySlot } from "@/features/timetable/server/queries";
 import { groupOngoingBySubject } from "@/features/dashboard/ongoing";
 import { shortTime } from "@/features/dashboard/subject-meta";
@@ -94,7 +95,9 @@ export function NowCockpit({
           {ongoing.length > 0 ? (
             <Pill color="primary">● 진행 중 {ongoing.length}건</Pill>
           ) : (
-            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground text-xs">시간표 →</WindowLink>
+            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs">
+              시간표 <EyIcon name="arrowRight" size={12} />
+            </WindowLink>
           )}
         </div>
       </header>
@@ -124,7 +127,9 @@ export function NowCockpit({
                 </span>
               ))}
             </div>
-            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground shrink-0 text-xs">전체 시간표 →</WindowLink>
+            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs">
+              전체 시간표 <EyIcon name="arrowRight" size={12} />
+            </WindowLink>
           </div>
         </div>
       )}

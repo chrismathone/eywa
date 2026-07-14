@@ -2,6 +2,7 @@ import { buildReport } from "@/features/onescreen/report";
 import { subjectTone, toneSolidClass, toneTextClass } from "@/features/onescreen/data";
 import { Pill } from "@/components/atoms/pill";
 import { DeltaChip } from "@/features/onescreen/components/delta-chip";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import type { OneScreenStudent, TestScore } from "@/features/onescreen/types";
 import { dateKo, pctOf, sessionToStudent, type Session } from "../history";
 
@@ -84,7 +85,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
                   <p className={`text-[14px] font-bold ${toneTextClass(tone)}`}>{su.name}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px]">
                     <span className="text-text-faint">{su.prev}</span>
-                    <span className={toneTextClass(tone)}>→</span>
+                    <EyIcon name="arrowRight" size={13} className={toneTextClass(tone)} />
                     <span className="text-foreground font-semibold">{su.today}</span>
                   </p>
                 </div>

@@ -28,10 +28,10 @@ type Command = {
 type Item = { kind: "menu"; cmd: Command } | { kind: "data"; hit: PaletteHit };
 
 const DATA_ICON: Record<PaletteHit["kind"], EywaIconName> = {
-  student: "seed",
-  class: "branch",
-  consultation: "wave",
-  enrollment: "sprout",
+  student: "user",
+  class: "book",
+  consultation: "messages",
+  enrollment: "userPlus",
 };
 const SECTION_LABEL: Record<string, string> = {
   menu: "메뉴",

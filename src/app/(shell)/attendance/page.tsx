@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Clock, ListFilter, UserCheck, Users, UserX, type LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, Clock, ListFilter, UserCheck, Users, UserX, type LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -191,7 +191,7 @@ export default async function AttendancePage({
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="이전 달"
           >
-            ◀
+            <ChevronLeft className="size-3.5" />
           </Link>
           <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">
             {formatMonth(month)}
@@ -201,7 +201,7 @@ export default async function AttendancePage({
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="다음 달"
           >
-            ▶
+            <ChevronRight className="size-3.5" />
           </Link>
         </div>
 

@@ -1,4 +1,4 @@
-import { Files } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, Files } from "@/components/icons/eywa-icon-compat";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -133,13 +133,13 @@ export default async function DocumentsPage({
               // 스크롤 없이 바로 넘길 수 있게 표시기를 클릭 가능한 ◀ ▶로 승격(하단 페이저와 병존).
               <span className="inline-flex items-center whitespace-nowrap">
                 <PageStep href={pageHref(page - 1)} disabled={page <= 1}>
-                  ◀
+                  <ChevronLeft className="size-3" />
                 </PageStep>
                 <span className="num px-0.5">
                   {page}/{totalPages} 페이지
                 </span>
                 <PageStep href={pageHref(page + 1)} disabled={page >= totalPages}>
-                  ▶
+                  <ChevronRight className="size-3" />
                 </PageStep>
               </span>
             ) : null}

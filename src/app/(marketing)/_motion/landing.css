@@ -78,55 +78,6 @@
   }
 }
 
-/* leaf 호흡 (마감/푸터 미풍) */
-.ey-breathe {
-  transform-origin: bottom center;
-  animation: ey-breathe 6s ease-in-out infinite;
-}
-@keyframes ey-breathe {
-  0%,
-  100% {
-    transform: rotate(-1.6deg);
-  }
-  50% {
-    transform: rotate(1.6deg);
-  }
-}
-
-/* 낙엽 한 장 (13:30 통증 섹션 ambient — 과하지 않게 opacity 낮춤) */
-.ey-fall {
-  animation: ey-fall 22s linear infinite;
-}
-@keyframes ey-fall {
-  0% {
-    transform: translate(0, -8%) rotate(0deg);
-    opacity: 0;
-  }
-  8% {
-    opacity: 0.5;
-  }
-  92% {
-    opacity: 0.5;
-  }
-  100% {
-    transform: translate(36px, 460px) rotate(48deg);
-    opacity: 0;
-  }
-}
-
-/* 시그니처 16:02 — pollen 입자가 라인을 따라 흐름 (offset-path는 컴포넌트에서 지정) */
-.ey-pollen {
-  animation: ey-pollen-fade 0.5s ease-out forwards;
-}
-@keyframes ey-pollen-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 /* 시그니처 라인 stroke 드로잉 — data-in 시 dashoffset 0 */
 /* path는 pathLength=100으로 정규화 → dasharray/offset 100이면 정확히 전체 드로잉 */
 .ey-draw {
@@ -227,7 +178,7 @@
     radial-gradient(40% 40% at 85% 100%, rgba(184, 137, 58, 0.05), transparent 70%);
 }
 
-/* botanical 워터마크 — 평면 ivory에 질감 (opacity 매우 낮게) */
+/* 기능 아이콘 워터마크 — 평면 ivory에 질감 (opacity 매우 낮게) */
 .ey-watermark {
   position: absolute;
   pointer-events: none;
@@ -361,8 +312,6 @@
   }
   .ey-flip-in,
   .ey-cursor,
-  .ey-breathe,
-  .ey-fall,
   .ey-sparkle,
   .ey-float,
   .ey-float-b,

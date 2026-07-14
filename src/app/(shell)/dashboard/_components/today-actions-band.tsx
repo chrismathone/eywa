@@ -4,6 +4,7 @@
  * 칩 클릭 = 해당 메뉴 창으로 드릴다운.
  */
 import { WindowLink } from "@/components/workspace/window-link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import type { TodayActionItem } from "@/features/dashboard/today-actions";
 
 const DOT: Record<TodayActionItem["severity"], string> = {
@@ -21,8 +22,8 @@ export function TodayActionsBand({ items }: { items: TodayActionItem[] }) {
   if (items.length === 0) {
     return (
       <div className="bg-card border-line shadow-card flex items-center gap-2.5 rounded-2xl border px-5 py-3">
-        <span className="bg-primary-soft text-primary flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold">
-          ✓
+        <span className="bg-primary-soft text-primary flex size-5 shrink-0 items-center justify-center rounded-full">
+          <EyIcon name="check" size={12} />
         </span>
         <span className="text-text-dim text-[12.5px]">
           오늘 조치할 항목이 없습니다 — 확인 항목 모두 정상

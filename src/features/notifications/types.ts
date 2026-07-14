@@ -1,3 +1,5 @@
+import type { EywaIconName } from "@/components/icons/eywa-icons";
+
 // 알림 공용 타입/상수 — server-only 없음(클라 벨 컴포넌트도 import). 하드코딩 라벨은 여기 한 곳.
 
 export type NotificationType =
@@ -15,9 +17,9 @@ export type NotificationItem = {
   createdAt: string;
 };
 
-/** 유형별 이모지(벨 목록 아이콘). 미등록 유형은 기본 🔔. */
-export const NOTIFICATION_EMOJI: Record<string, string> = {
-  enrollment_assigned: "🎒",
-  enrollment_transferred_in: "🔁",
-  teacher_handover: "🧑‍🏫",
+/** 유형별 Eywa 아이콘. 미등록 유형은 벨 컴포넌트에서 기본 bell. */
+export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
+  enrollment_assigned: "book",
+  enrollment_transferred_in: "swap",
+  teacher_handover: "userCheck",
 };

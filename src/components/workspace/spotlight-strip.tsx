@@ -8,7 +8,7 @@ import { useWindowStore, instanceLabel } from "./window-store";
 
 const MAX_VISIBLE = 4; // 이보다 많으면 앞 3장 부채 + "+N" 페이지 스택(책 뒤장 …처리)
 
-// 라우트 menuKey → 아이콘(레일과 동일). 학생 요약창은 seed.
+// 라우트 menuKey → 아이콘(레일과 동일). 학생 요약창은 user.
 const ICON_BY_MENU: Record<string, EywaIconName> = {};
 for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] = it.icon;
 
@@ -33,7 +33,7 @@ type StripItem = {
   key: string;
   title: string;
   subtitle?: string;
-  iconName: EywaIconName | null; // null → 학생 요약(seed)
+  iconName: EywaIconName | null; // null → 학생 요약(user)
   isBackground: boolean; // 배경 라우트 카드 — "배경" 표식 + 클릭 시 그 배경을 위로 올림(swap)
   onClick: () => void;
 };
@@ -100,7 +100,7 @@ function FanCard({
           {item.iconName ? (
             <EyIcon name={item.iconName} size={18} strokeWidth={1.6} />
           ) : (
-            <EyIcon name="seed" size={17} />
+            <EyIcon name="user" size={17} />
           )}
         </span>
         <span className="mt-auto block min-w-0">

@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { fetchMyNotifications, markNotificationsRead } from "@/features/notifications/server/actions";
-import { NOTIFICATION_EMOJI, type NotificationItem } from "@/features/notifications/types";
+import { NOTIFICATION_ICON, type NotificationItem } from "@/features/notifications/types";
 
 const POLL_MS = 60_000;
 
@@ -157,8 +157,8 @@ export function NotificationBell() {
                   n.read ? "" : "bg-primary-soft/40"
                 }`}
               >
-                <span className="mt-0.5 text-[15px] leading-none">
-                  {NOTIFICATION_EMOJI[n.type] ?? "🔔"}
+                <span className="text-text-dim mt-0.5 flex size-5 shrink-0 items-center justify-center">
+                  <EyIcon name={NOTIFICATION_ICON[n.type] ?? "bell"} size={15} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">

@@ -14,6 +14,7 @@ import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { relativeTimeKo } from "@/lib/relative-time";
 import { OUTCOME_PILL } from "./outcome-meta";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 const PAGE_SIZE = 8;
 
@@ -102,7 +103,8 @@ export function ColumnCards({
             disabled={safePage === 0}
             className={`${PAGER_STEP_BASE} ${safePage === 0 ? PAGER_STEP_DISABLED : PAGER_STEP_ENABLED}`}
           >
-            ◀ 이전
+            <EyIcon name="chevronLeft" size={12} />
+            이전
           </button>
           <span className={PAGER_LABEL}>
             {safePage + 1} / {totalPages} · {cards.length}건
@@ -113,7 +115,8 @@ export function ColumnCards({
             disabled={safePage >= totalPages - 1}
             className={`${PAGER_STEP_BASE} ${safePage >= totalPages - 1 ? PAGER_STEP_DISABLED : PAGER_STEP_ENABLED}`}
           >
-            다음 ▶
+            다음
+            <EyIcon name="chevronRight" size={12} />
           </button>
         </nav>
       ) : null}

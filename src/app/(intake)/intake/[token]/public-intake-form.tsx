@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
 import {
   submitPublicIntake,
   type PublicIntakeState,
@@ -43,7 +43,7 @@ function SubmitBtn() {
         </>
       ) : (
         <>
-          상담 신청하기 <span className="text-lg">→</span>
+          상담 신청하기 <ArrowRight className="size-4" />
         </>
       )}
     </button>
@@ -232,7 +232,7 @@ export function PublicIntakeForm({
                     on ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground"
                   }`}
                 >
-                  {on ? "✓ " : ""}
+                  {on ? <Check className="mr-1 inline size-3.5" /> : null}
                   {opt}
                 </button>
               );

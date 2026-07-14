@@ -4,6 +4,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
 import { Pagination } from "@/components/pagination";
 import Link from "next/link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 const PAGE_SIZE = 50;
 
@@ -73,7 +74,7 @@ export async function SessionVerificationFace({
             className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
             aria-label="이전 달"
           >
-            ◀
+            <EyIcon name="chevronLeft" size={14} />
           </Link>
           <span className="text-foreground num text-sm font-semibold">
             {y}년 {Number(m)}월
@@ -83,7 +84,7 @@ export async function SessionVerificationFace({
             className="border-line text-text-dim hover:text-foreground rounded-md border px-2 py-1 text-xs"
             aria-label="다음 달"
           >
-            ▶
+            <EyIcon name="chevronRight" size={14} />
           </Link>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">

@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { displayLessons } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { buildGridRows, isReportEligible } from "../grid";
@@ -139,7 +140,7 @@ function PrevRow({
   return (
     <tr className="bg-bg-soft/40">
       <td className={`${PREV_TD} text-center`} aria-hidden>
-        <span className="text-text-faint/70 text-[13px] leading-none">⌃</span>
+        <EyIcon name="chevronUp" size={13} className="text-text-faint/70" />
       </td>
       <td className={PREV_TD}>
         <span className="whitespace-nowrap">이전 {shortDate(p.date)}</span>
@@ -541,7 +542,15 @@ export function OneScreenGrid({
                             hasDraft ? "text-primary" : "text-text-dim"
                           }`}
                         >
-                          {genRowBusy ? "…" : hasDraft ? "✓멘트" : "자동작성"}
+                          {genRowBusy ? (
+                            "…"
+                          ) : hasDraft ? (
+                            <span className="inline-flex items-center justify-center gap-0.5">
+                              <EyIcon name="check" size={11} /> 멘트
+                            </span>
+                          ) : (
+                            "자동작성"
+                          )}
                         </button>
                         <button
                           type="button"

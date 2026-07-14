@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Check, FileDown, Pencil, Search, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -290,7 +291,8 @@ export function RequestHistory({
             disabled={page <= 1}
             className={`${PAGER_STEP_BASE} ${page <= 1 ? PAGER_STEP_DISABLED : PAGER_STEP_ENABLED}`}
           >
-            ◀ 이전
+            <EyIcon name="chevronLeft" size={12} />
+            이전
           </button>
           <span className={PAGER_LABEL}>
             {page} / {totalPages} · {filtered.length}건
@@ -301,7 +303,8 @@ export function RequestHistory({
             disabled={page >= totalPages}
             className={`${PAGER_STEP_BASE} ${page >= totalPages ? PAGER_STEP_DISABLED : PAGER_STEP_ENABLED}`}
           >
-            다음 ▶
+            다음
+            <EyIcon name="chevronRight" size={12} />
           </button>
         </nav>
       ) : null}

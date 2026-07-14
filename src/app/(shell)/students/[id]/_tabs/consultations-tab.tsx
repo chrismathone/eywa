@@ -7,6 +7,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { ConsultationDeleteButton } from "../../../consultations/_components/consultation-delete-button";
 import { FollowUpToggle } from "../../../consultations/_components/follow-up-toggle";
 
@@ -104,8 +105,9 @@ export async function ConsultationsTab({
           </ul>
           {rest.length > 0 ? (
             <details className="group">
-              <summary className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft mt-3 cursor-pointer list-none rounded-md border py-2 text-center text-xs transition">
-                + {rest.length}건 더 보기
+              <summary className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft mt-3 flex cursor-pointer list-none items-center justify-center gap-1 rounded-md border py-2 text-center text-xs transition">
+                <EyIcon name="chevronDown" size={12} aria-hidden="true" />
+                {rest.length}건 더 보기
               </summary>
               <ul className="mt-3 space-y-3">
                 {rest.map((c) => (

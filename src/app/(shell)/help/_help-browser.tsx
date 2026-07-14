@@ -74,7 +74,7 @@ export function HelpBrowser({
                 aria-label="검색어 지우기"
                 className="rounded-full px-1.5 text-white/70 transition hover:text-white"
               >
-                ✕
+                <EyIcon name="close" size={14} />
               </button>
             ) : null}
           </div>
@@ -120,9 +120,11 @@ export function HelpBrowser({
             ))}
           </ol>
           {!q ? (
-            <p className="text-text-faint mt-2 px-1 text-[11px] leading-relaxed break-keep">
-              💡 메뉴를 누르면 <b>창</b>으로 열립니다. 여러 메뉴를 동시에 띄워두고, 창을 화면 가장자리로 끌면 나란히 볼 수
+            <p className="text-text-faint mt-2 flex items-start gap-1.5 px-1 text-[11px] leading-relaxed break-keep">
+              <EyIcon name="info" size={13} className="mt-0.5 shrink-0" />
+              <span>메뉴를 누르면 <b>창</b>으로 열립니다. 여러 메뉴를 동시에 띄워두고, 창을 화면 가장자리로 끌면 나란히 볼 수
               있어요. 최소화해도 작업 상태는 그대로 보존됩니다.
+              </span>
             </p>
           ) : null}
         </section>
@@ -173,7 +175,12 @@ export function HelpBrowser({
               <details key={item.q} className="group px-5 py-4">
                 <summary className="text-foreground flex cursor-pointer items-center justify-between text-[13px] font-bold">
                   <span className="break-keep">{item.q}</span>
-                  <span className="text-text-dim ml-2 text-lg transition-transform group-open:rotate-45">+</span>
+                  <EyIcon
+                    name="plus"
+                    size={16}
+                    className="text-text-dim ml-2 shrink-0 transition-transform group-open:rotate-45"
+                    aria-hidden="true"
+                  />
                 </summary>
                 <p className="text-text-dim mt-3 text-[12px] leading-relaxed break-keep">{item.a}</p>
               </details>

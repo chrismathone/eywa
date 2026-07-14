@@ -2,6 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";
@@ -276,7 +277,10 @@ export function ClassCell({
                     return (
                       <div key={s.enrollmentId} className={`${ROW_CLASS} bg-primary-soft/30 text-primary`}>
                         {/* 전입 예정: 좁은 칸에선 출발 반이름 대신 **학생이름**을 보여준다(누가 들어오는지 우선). */}
-                        <span className="overflow-hidden whitespace-nowrap text-clip">+ {s.name}</span>
+                        <span className="inline-flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap text-clip">
+                          <EyIcon name="userPlus" size={11} className="shrink-0" aria-hidden="true" />
+                          {s.name}
+                        </span>
                         {dayTag ? (
                           <span className="text-primary shrink-0 font-mono text-[10px] font-bold">[{dayTag}]</span>
                         ) : null}

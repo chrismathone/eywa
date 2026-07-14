@@ -9,26 +9,21 @@ import { requireAccess } from "@/lib/auth/require-access";
 
 export const metadata = { title: "아이콘 시스템 — eywa" };
 
-const FAMILY_ORDER: EywaIconFamily[] = ["botanical", "product", "interface"];
+const FAMILY_ORDER: EywaIconFamily[] = ["product", "interface"];
 
 const FAMILY_META: Record<
   EywaIconFamily,
   { label: string; description: string; index: string }
 > = {
-  botanical: {
-    label: "Botanical",
-    description: "성장과 돌봄을 말하는 Eywa의 고유 형태",
-    index: "A",
-  },
   product: {
     label: "Product",
     description: "학원 운영에서 실제로 만나는 업무 객체",
-    index: "B",
+    index: "A",
   },
   interface: {
     label: "Interface",
     description: "학습 없이 바로 이해되는 보편 조작",
-    index: "C",
+    index: "B",
   },
 };
 
@@ -57,13 +52,13 @@ export default async function IconSystemPage() {
                 Eywa icon system · v2
               </p>
               <h1 className="text-foreground mt-3 max-w-2xl text-[clamp(2rem,5vw,4.4rem)] leading-[1.05] font-extrabold tracking-[-0.045em]">
-                형태는 자라고,
+                형태는 통일하고,
                 <br />
-                의미는 고정됩니다.
+                기능은 바로 읽힙니다.
               </h1>
               <p className="text-text-dim mt-5 max-w-xl text-[14px] leading-[1.75] sm:text-[15px]">
-                식물의 생장 형태와 학원 운영의 익숙한 사물을 한 문법으로 그립니다. 누구나 같은 의미를 같은 모양으로
-                사용하기 위한 Eywa의 시각 언어입니다.
+                학원 운영의 익숙한 사물과 보편 조작을 한 문법으로 그립니다. 누구나 같은 기능을 같은 모양으로
+                알아볼 수 있게 만든 Eywa의 자체 아이콘입니다.
               </p>
             </div>
 
@@ -101,10 +96,10 @@ export default async function IconSystemPage() {
             </span>
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-primary/10 absolute">
-                <EyIcon name="rings" size={250} strokeWidth={0.8} />
+                <EyIcon name="columns2" size={250} strokeWidth={0.8} />
               </span>
               <span className="bg-card text-primary shadow-modal relative flex size-40 items-center justify-center rounded-full border border-primary/15 sm:size-48">
-                <EyIcon name="tree" size={94} strokeWidth={1.35} />
+                <EyIcon name="layoutGrid" size={94} strokeWidth={1.35} />
               </span>
             </div>
           </div>
@@ -133,7 +128,7 @@ export default async function IconSystemPage() {
               } ${index % 2 === 1 ? "max-sm:border-l" : ""} ${index > 1 ? "max-sm:border-t" : ""}`}
             >
               <span className="text-primary flex h-12 items-center justify-center">
-                <EyIcon name="sprout" size={size} strokeWidth={size <= 16 ? 1.8 : 1.6} />
+                <EyIcon name="calendar" size={size} strokeWidth={size <= 16 ? 1.8 : 1.6} />
               </span>
               <span className="text-center">
                 <span className="text-foreground block font-mono text-[11px] font-bold">{token}</span>
@@ -220,7 +215,7 @@ export default async function IconSystemPage() {
           <p className="micro">Code</p>
           <h2 className="text-foreground mt-1 text-xl font-extrabold">한 컴포넌트로 사용합니다</h2>
           <pre className="bg-bg-soft text-foreground mt-6 overflow-x-auto rounded-lg p-4 font-mono text-[11px] leading-6">
-            <code>{`<EyIcon name="sprout" size={20} />
+            <code>{`<EyIcon name="calendar" size={20} />
 
 <button aria-label="알림 열기">
   <EyIcon name="bell" size={16} strokeWidth={1.8} />

@@ -1,7 +1,7 @@
 /**
- * Eywa icon system — botanical forms, product objects, and interface actions.
+ * Eywa icon system — product objects and familiar interface actions.
  *
- * 사용: `<EyIcon name="tree" size={18} />`.
+ * 사용: `<EyIcon name="calendar" size={18} />`.
  * 모든 아이콘은 viewBox 24×24, currentColor, stroke 1.6, round cap/join.
  * 상세 규격: docs/icon-system.md
  */
@@ -16,7 +16,7 @@ export const EYWA_ICON_SIZES = {
   xl: 32,
 } as const;
 
-export type EywaIconFamily = "botanical" | "product" | "interface";
+export type EywaIconFamily = "product" | "interface";
 
 type EywaIconDefinition = {
   name: string;
@@ -27,18 +27,6 @@ type EywaIconDefinition = {
 
 /** 아이콘 갤러리·문서가 함께 읽는 단일 카탈로그. 새 아이콘은 렌더러와 여기에 같이 등록한다. */
 export const EYWA_ICON_CATALOG = [
-  { name: "tree", label: "나무", family: "botanical", meaning: "전체 현황과 성장의 중심" },
-  { name: "leaf", label: "잎", family: "botanical", meaning: "일정과 자연스러운 흐름" },
-  { name: "pulse", label: "맥박", family: "botanical", meaning: "출결과 실시간 상태" },
-  { name: "branch", label: "가지", family: "botanical", meaning: "수업과 구조화된 관계" },
-  { name: "seed", label: "씨앗", family: "botanical", meaning: "학생과 성장의 시작점" },
-  { name: "sprout", label: "새싹", family: "botanical", meaning: "등록과 새로운 시작" },
-  { name: "wave", label: "물결", family: "botanical", meaning: "대화와 이어지는 기록" },
-  { name: "falling", label: "낙하", family: "botanical", meaning: "종료와 이탈의 흐름" },
-  { name: "roots", label: "뿌리", family: "botanical", meaning: "직원과 운영의 기반" },
-  { name: "pollen", label: "꽃가루", family: "botanical", meaning: "수납과 순환하는 가치" },
-  { name: "rings", label: "나이테", family: "botanical", meaning: "축적된 회의와 시간" },
-  { name: "spore", label: "포자", family: "botanical", meaning: "도움과 퍼지는 지식" },
   { name: "screen", label: "화면", family: "product", meaning: "한 화면에서 마감하는 수업" },
   { name: "report", label: "보고서", family: "product", meaning: "정리되어 전달되는 기록" },
   { name: "exam", label: "시험지", family: "product", meaning: "평가와 확인된 결과" },
@@ -899,111 +887,6 @@ export function EyIcon({
   };
 
   switch (name) {
-    case "tree":
-      return (
-        <svg {...common}>
-          <path d="M12 22V11" />
-          <path d="M12 11c0-3 -2-4 -4-5 -3 -1.5 -3 -5 0-6 3-1 4 1 4 3" />
-          <path d="M12 11c0-3 2-4 4-5 3-1.5 3-5 0-6 -3-1 -4 1 -4 3" />
-          <path d="M9 22h6" />
-        </svg>
-      );
-    case "leaf":
-      return (
-        <svg {...common}>
-          <path d="M4 20c0-8 6-14 16-16-1 11-7 16-15 16" />
-          <path d="M4 20l8-8" />
-        </svg>
-      );
-    case "pulse":
-      return (
-        <svg {...common}>
-          <path d="M3 12h4l2-6 4 12 2-6h6" />
-        </svg>
-      );
-    case "branch":
-      return (
-        <svg {...common}>
-          <path d="M4 22V4" />
-          <path d="M4 10c4 0 6-2 6-6" />
-          <path d="M4 16c5 0 8-3 8-8" />
-          <circle cx="10" cy="4" r="1.4" />
-          <circle cx="12" cy="8" r="1.4" />
-        </svg>
-      );
-    case "seed":
-      return (
-        <svg {...common}>
-          <ellipse cx="12" cy="13" rx="6" ry="8" />
-          <path d="M12 5v16" />
-        </svg>
-      );
-    case "sprout":
-      return (
-        <svg {...common}>
-          <path d="M12 22V12" />
-          <path d="M12 12c0-4-4-6-8-6 0 6 4 9 8 9" />
-          <path d="M12 14c0-3 3-5 7-5 0 5-3 8-7 8" />
-        </svg>
-      );
-    case "wave":
-      return (
-        <svg {...common}>
-          <path d="M3 10c3-3 5-3 8 0s5 3 8 0" />
-          <path d="M3 16c3-3 5-3 8 0s5 3 8 0" />
-        </svg>
-      );
-    case "falling":
-      return (
-        <svg {...common}>
-          <path d="M12 3v14" />
-          <path d="M7 12l5 5 5-5" />
-          <path d="M5 21h14" />
-        </svg>
-      );
-    case "roots":
-      return (
-        <svg {...common}>
-          <path d="M12 3v8" />
-          <path d="M12 11c-3 0-5 2-5 5v5" />
-          <path d="M12 11c3 0 5 2 5 5v5" />
-          <path d="M12 11v10" />
-          <path d="M3 21h18" />
-        </svg>
-      );
-    case "pollen":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 4v2" />
-          <path d="M12 18v2" />
-          <path d="M4 12h2" />
-          <path d="M18 12h2" />
-          <path d="M6 6l1.5 1.5" />
-          <path d="M16.5 16.5L18 18" />
-          <path d="M6 18l1.5-1.5" />
-          <path d="M16.5 7.5L18 6" />
-        </svg>
-      );
-    case "rings":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="3" />
-          <circle cx="12" cy="12" r="6.5" />
-          <circle cx="12" cy="12" r="10" />
-        </svg>
-      );
-    case "spore":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="0.5" fill="currentColor" />
-          <path d="M12 8.5v0.5" />
-          <path d="M12 15v0.5" />
-          <path d="M8.5 12h-0.5" />
-          <path d="M15.5 12h0.5" />
-        </svg>
-      );
     case "screen":
       return (
         <svg {...common}>
@@ -1235,29 +1118,30 @@ export function EyIcon({
 }
 
 // ─────────────────────────── 메뉴 → 아이콘 매핑 ───────────────────────────
-// 메뉴 아이콘의 단일 소스. MenuKey가 늘면 여기서 어떤 시각 언어를 쓸지 반드시 결정한다.
+// 메뉴 아이콘의 단일 소스. 메인 내비게이션은 기능이 즉시 읽히는 보편 기호를 우선한다.
+// 식물·자연물 모티프를 쓰지 않고, 메뉴 기능을 자의적인 비유로 치환하지 않는다.
 export const MENU_ICON = {
-  dashboard: "tree",
-  timetable: "leaf",
-  attendance: "pulse",
-  classes: "branch",
-  students: "seed",
+  dashboard: "layoutGrid",
+  timetable: "calendar",
+  attendance: "clipboardCheck",
+  classes: "book",
+  students: "users",
   exams: "exam",
-  enrollment: "sprout",
-  consultations: "wave",
-  withdrawals: "falling",
+  enrollment: "userPlus",
+  consultations: "messages",
+  withdrawals: "userMinus",
   retention: "shield",
   lesson_reports: "report",
-  staff: "roots",
-  billing: "pollen",
-  textbook_requests: "book",
-  meetings: "rings",
+  staff: "userSettings",
+  billing: "wallet",
+  textbook_requests: "bookMarked",
+  meetings: "note",
   documents: "folder",
   integrations: "sync",
-  help: "spore",
-  admin: "settings",
-  owner: "building",
+  help: "help",
+  admin: "wrench",
+  owner: "settings",
   teacher_onescreen: "screen",
-  my_learning: "tree",
+  my_learning: "graduationCap",
   kiosk_settings: "settings",
 } as const satisfies Record<MenuKey, EywaIconName>;

@@ -126,7 +126,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="이전 달"
           >
-            ◀
+            <EyIcon name="chevronLeft" size={14} />
           </Link>
           <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">
             {formatPeriod(period)}
@@ -136,7 +136,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
             aria-label="다음 달"
           >
-            ▶
+            <EyIcon name="chevronRight" size={14} />
           </Link>
         </div>
 

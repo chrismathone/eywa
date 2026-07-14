@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { CheckCircle2, Loader2, Trash2, UserMinus, Wrench } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   closeOrphanEnrollments,
@@ -250,8 +251,9 @@ function OrphanList<T extends { id: string }>({
       {rest.length > 0 ? (
         <li>
           <details>
-            <summary className="text-muted-foreground hover:text-foreground cursor-pointer list-none text-xs">
-              + {rest.length}개 더보기
+            <summary className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer list-none items-center gap-1 text-xs">
+              <EyIcon name="chevronDown" size={12} aria-hidden="true" />
+              {rest.length}개 더보기
             </summary>
             <ul className="mt-1 space-y-1">{rest.map((item) => Row(item))}</ul>
           </details>

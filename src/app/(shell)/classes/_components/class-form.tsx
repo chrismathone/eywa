@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   createClass,
@@ -292,7 +293,10 @@ export function ClassForm({
 
       {state?.teacherConflict ? (
         <div className="border-amber/30 bg-amber/10 rounded-md border px-3 py-2.5">
-          <p className="text-amber text-sm font-medium">⚠️ 강사 시간 겹침: {state.teacherConflict}</p>
+          <p className="text-amber flex items-start gap-1.5 text-sm font-medium">
+            <EyIcon name="alert" size={16} className="mt-0.5 shrink-0" />
+            <span>강사 시간 겹침: {state.teacherConflict}</span>
+          </p>
           <p className="text-text-dim mt-0.5 text-xs">
             합반 등 의도된 겹침이면 아래 “겹침 무시하고 저장”을 누르세요. 아니면 강사·시간을 조정하세요.
           </p>

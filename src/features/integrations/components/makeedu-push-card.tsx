@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Loader2, Send } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { enqueueConsultationPush } from "@/features/integrations/server/actions";
@@ -150,9 +151,11 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
         </table>
       </div>
       )}
-      <p className="text-text-faint text-[11px]">
-        ⚠️ makeedu는 정본입니다 — 전송은 <strong>새로 추가만</strong> 하고 기존 makeedu 데이터는 건드리지 않습니다.
+      <p className="text-text-faint flex items-start gap-1.5 text-[11px]">
+        <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
+        <span>makeedu는 정본입니다 — 전송은 <strong>새로 추가만</strong> 하고 기존 makeedu 데이터는 건드리지 않습니다.
         전송 실패 건은 원인을 확인 후 다시 선택해 보낼 수 있습니다.
+        </span>
       </p>
     </section>
   );

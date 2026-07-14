@@ -419,10 +419,10 @@ export function ReportCard({
                     <button
                       type="button"
                       onClick={() => onRemoveAttachment(subjectName, a.path)}
-                      className="bg-danger absolute top-0.5 right-0.5 rounded px-1 text-[11px] leading-tight font-bold text-white opacity-0 transition group-hover:opacity-100"
+                      className="bg-danger absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded text-white opacity-0 transition group-hover:opacity-100"
                       aria-label={`${a.name} 삭제`}
                     >
-                      ×
+                      <EyIcon name="close" size={11} strokeWidth={2} />
                     </button>
                   </div>
                 ))}

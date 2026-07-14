@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarOff, Settings2 } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getTuitionCatalogActive } from "@/features/billing/server/tuition-catalog-queries";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
@@ -158,15 +159,15 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
           <h2 className="text-foreground text-[15px] font-bold">대한민국 공휴일</h2>
           <div className="flex items-center gap-1.5">
             {year > HOLIDAY_MIN_YEAR ? (
-              <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="이전 연도">◀</Link>
+              <Link href={hrefFor(year - 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="이전 연도"><EyIcon name="chevronLeft" size={14} /></Link>
             ) : (
-              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40">◀</span>
+              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40"><EyIcon name="chevronLeft" size={14} /></span>
             )}
             <span className="text-foreground num min-w-[64px] text-center text-[13px] font-bold">{year}년</span>
             {year < HOLIDAY_MAX_YEAR ? (
-              <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="다음 연도">▶</Link>
+              <Link href={hrefFor(year + 1, month)} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="다음 연도"><EyIcon name="chevronRight" size={14} /></Link>
             ) : (
-              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40">▶</span>
+              <span className="border-line text-text-faint inline-flex size-7 items-center justify-center rounded-sm border opacity-40"><EyIcon name="chevronRight" size={14} /></span>
             )}
           </div>
         </header>

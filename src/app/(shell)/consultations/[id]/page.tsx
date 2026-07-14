@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Pencil, Mic, Sparkles } from "@/components/icons/eywa-icon-compat";
+import { MessageSquare, Mic, Pencil, Pin, Sparkles } from "@/components/icons/eywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -117,7 +117,8 @@ export default async function ConsultationDetailPage({
       {/* 상담 내용 */}
       <section className="bg-card border-line rounded-md border p-4">
         <h2 className="text-primary mb-3 flex items-center gap-1.5 text-[13px] font-bold">
-          💬 상담 내용
+          <MessageSquare className="size-4" />
+          상담 내용
         </h2>
         <p className="text-foreground max-h-96 overflow-y-auto text-sm leading-relaxed whitespace-pre-wrap">
           {item.summary}
@@ -128,7 +129,8 @@ export default async function ConsultationDetailPage({
       {hasFollowUp ? (
         <section className="bg-card border-line rounded-md border p-4">
           <h2 className="text-primary mb-3 flex items-center gap-2 text-[13px] font-bold">
-            📌 후속 조치
+            <Pin className="size-4" />
+            후속 조치
             <FollowUpToggle id={item.id} done={item.followUpDone} />
           </h2>
           {item.followUpAction ? (

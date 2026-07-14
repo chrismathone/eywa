@@ -5,6 +5,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Check, ExternalLink, RotateCcw } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -102,7 +103,12 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
           case "todo":
             return (
               <p key={i} className="flex gap-1.5">
-                <span className={l.checked ? "text-primary" : "text-text-faint"}>{l.checked ? "☑" : "☐"}</span>
+                <EyIcon
+                  name={l.checked ? "checkbox" : "square"}
+                  size={13}
+                  className={l.checked ? "mt-0.5 shrink-0 text-primary" : "text-text-faint mt-0.5 shrink-0"}
+                  aria-hidden="true"
+                />
                 <span className={l.checked ? "text-text-faint line-through" : "text-text-dim"}>
                   <Spans spans={l.spans} />
                 </span>
@@ -124,14 +130,16 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
             return <hr key={i} className="border-line my-1.5" />;
           case "image":
             return (
-              <p key={i} className="text-text-faint text-[11px]">
-                🖼 이미지 (Notion에서 열어 확인)
+              <p key={i} className="text-text-faint flex items-center gap-1.5 text-[11px]">
+                <EyIcon name="image" size={13} />
+                이미지 (Notion에서 열어 확인)
               </p>
             );
           case "table":
             return (
-              <p key={i} className="text-text-faint text-[11px]">
-                ▦ 표 (Notion에서 열어 확인)
+              <p key={i} className="text-text-faint flex items-center gap-1.5 text-[11px]">
+                <EyIcon name="spreadsheet" size={13} />
+                표 (Notion에서 열어 확인)
               </p>
             );
           default:

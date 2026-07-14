@@ -186,8 +186,9 @@ export function TimetableImportDialog({
                 <p className="text-text-dim mt-1 text-[11px]">
                   연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요.
                 </p>
-                <p className="text-text-faint mt-1 text-[11px]">
-                  ⚠️ 시트에서 편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b> — 전체 덮어쓰기라 편집분이 사라집니다.
+                <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px]">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>시트에서 편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b> — 전체 덮어쓰기라 편집분이 사라집니다.</span>
                 </p>
                 <div className="mt-3">
                   <button

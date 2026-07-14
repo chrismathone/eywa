@@ -6,7 +6,7 @@ import type { ConversationFlowNode } from "@/features/enrollment/server/queries"
 
 /** 상담 흐름 수형도 — 주제 트리(재귀). ijw ConversationFlowTree 이식(eywa 토큰). */
 
-// 깊이별 좌측 색밴드(botanical/semantic 톤) — 중첩 레벨 구분.
+// 깊이별 좌측 색밴드(semantic 톤) — 중첩 레벨 구분.
 const DEPTH_ACCENT = [
   "border-primary/50",
   "border-gold/50",

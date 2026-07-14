@@ -36,7 +36,7 @@ function MarketingNav() {
       <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between px-6 sm:px-10 lg:px-16">
         <Link href="/" className="flex items-center gap-2.5">
           <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-md">
-            <EyIcon name="leaf" size={16} />
+            <EyIcon name="building" size={16} />
           </span>
           <span className="text-[19px] font-extrabold tracking-tight">EYWA</span>
         </Link>

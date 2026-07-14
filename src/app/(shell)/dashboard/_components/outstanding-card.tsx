@@ -17,7 +17,7 @@ export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
       title="누적 미수 상위"
       count={items.length > 0 ? `${items.length}명` : undefined}
       href="/billing"
-      hrefLabel="수납 →"
+      hrefLabel="수납"
     >
       {items.length === 0 ? (
         <DashEmpty>미납 항목이 없습니다</DashEmpty>

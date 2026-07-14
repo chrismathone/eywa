@@ -44,7 +44,7 @@ export function RichGridView({
       {groups.map((g) => (
         <section key={g.key} className="border-line bg-card shadow-card w-max max-w-full overflow-hidden rounded-xl border">
           <div className="bg-ink text-background flex items-center gap-2 px-4 py-1.5 text-[12px] font-bold">
-            <EyIcon name="rings" size={13} className="shrink-0" />
+            <EyIcon name="clock" size={13} className="shrink-0" />
             <span className="whitespace-nowrap">{g.label}</span>
             <span className="bg-background/20 rounded-[4px] px-1.5 py-0.5 text-[10px] font-normal whitespace-nowrap">
               {g.cards.length}개 수업
@@ -62,11 +62,11 @@ export function RichGridView({
                 }`}
               >
                 <span
-                  className={`flex size-3 items-center justify-center rounded-[2px] border text-[8px] leading-none ${
+                  className={`flex size-3 items-center justify-center rounded-[2px] border ${
                     g.compacted ? "border-background bg-background text-ink" : "border-background/50"
                   }`}
                 >
-                  {g.compacted ? "✓" : ""}
+                  {g.compacted ? <EyIcon name="check" size={9} /> : null}
                 </span>
                 1시간 단위
               </Link>

@@ -207,7 +207,7 @@ export function AppSidebar({
               <img src={logoSrc} alt={logoText} className="size-7 shrink-0 rounded-[5px] object-contain" />
             ) : (
               <span className="bg-primary shadow-primary-glow flex size-7 shrink-0 items-center justify-center rounded-[5px]">
-                <EyIcon name="sprout" size={16} strokeWidth={1.9} className="text-white" />
+                <EyIcon name="building" size={16} strokeWidth={1.9} className="text-white" />
               </span>
             )}
             <span

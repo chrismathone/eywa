@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, Loader2, RotateCcw, Sheet, UserMinus, UserPlus, X } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, ArrowRight, Check, Loader2, Minus, Plus, RotateCcw, Sheet, UserMinus, UserPlus, X } from "@/components/icons/eywa-icon-compat";
 import {
   applyStructureImport,
   previewStructureImport,
@@ -190,8 +190,9 @@ export function EnglishImportDialog({
             <p className="text-text-dim mt-1 text-[11px]">
               연결된 구글 시트를 편집한 뒤 불러오면 <b>수업 배치</b>(강사별 탭)와 <b>학생 반이동</b>(수강편집 탭) 변경을 한 번에 봅니다.
             </p>
-            <p className="text-text-faint mt-1 text-[11px]">
-              ⚠️ 편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b>(전체 덮어쓰기라 편집분이 사라집니다).
+            <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px]">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b>(전체 덮어쓰기라 편집분이 사라집니다).</span>
             </p>
             <div className="mt-3">
               <button
@@ -225,13 +226,13 @@ export function EnglishImportDialog({
                       </div>
                       <div className="border-line divide-line max-h-40 divide-y overflow-auto rounded-sm border">
                         {creates.map((p, i) => (
-                          <p key={`c${i}`} className="text-text-dim px-2 py-1"><span className="text-blue">＋</span> <b className="text-foreground">{p.className}</b> {dayT(p)} · {tch(p.teacherNames)}{p.room ? ` · ${p.room}` : ""}</p>
+                          <p key={`c${i}`} className="text-text-dim flex items-center gap-1 px-2 py-1"><Plus size={13} className="shrink-0 text-blue" aria-hidden="true" /> <span><b className="text-foreground">{p.className}</b> {dayT(p)} · {tch(p.teacherNames)}{p.room ? ` · ${p.room}` : ""}</span></p>
                         ))}
                         {updates.map((p, i) => (
                           <p key={`u${i}`} className="text-text-dim px-2 py-1"><span className="text-primary">↻</span> <b className="text-foreground">{p.className}</b> {KO_DAY[p.day] ?? p.day} {p.startTime} <span className="text-primary">→ {tch(p.teacherNames)}/{p.room ?? "—"}/{p.endTime ?? "—"}</span></p>
                         ))}
                         {removes.map((p, i) => (
-                          <p key={`r${i}`} className="text-text-dim px-2 py-1"><span className="text-amber">－</span> <b className="text-foreground">{p.className}</b> {dayT(p)} <span className="text-amber">종료</span></p>
+                          <p key={`r${i}`} className="text-text-dim flex items-center gap-1 px-2 py-1"><Minus size={13} className="shrink-0 text-amber" aria-hidden="true" /> <span><b className="text-foreground">{p.className}</b> {dayT(p)} <span className="text-amber">종료</span></span></p>
                         ))}
                       </div>
                     </>

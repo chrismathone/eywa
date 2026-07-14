@@ -11,6 +11,7 @@ import {
   type KioskActionState,
 } from "@/features/attendance/kiosk/server/actions";
 import type { KakaoChannelStatus } from "@/features/attendance/kiosk/server/queries";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 function Notice({ state }: { state: KioskActionState }) {
   if (!state) return null;
@@ -61,9 +62,9 @@ export function RegisterDeviceForm() {
       {state?.ok ? (
         <Link
           href="/kiosk"
-          className="bg-primary rounded-md px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          className="bg-primary inline-flex items-center gap-1 rounded-md px-4 py-2 text-sm font-medium text-white hover:opacity-90"
         >
-          키오스크 열기 →
+          키오스크 열기 <EyIcon name="arrowRight" size={14} />
         </Link>
       ) : null}
       <Notice state={state} />

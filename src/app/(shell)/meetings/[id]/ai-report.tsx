@@ -6,23 +6,24 @@ import type { MeetingReportSection } from "@/features/meetings/server/queries";
 import { updateMeetingReportSection } from "@/features/meetings/server/actions";
 import { RichText } from "@/components/rich-text";
 import { useEditPresence } from "@/features/presence/edit-presence";
+import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 /**
- * 회의별 AI 보고서 — 이모지 라벨 + 섹션별 접기/펼치기 + **섹션 인라인 수정**(staff가 인쇄/공유 전 AI 오류 교정).
+ * 회의별 AI 보고서 — Eywa 아이콘 라벨 + 섹션별 접기/펼치기 + **섹션 인라인 수정**(staff가 인쇄/공유 전 AI 오류 교정).
  * 수정 시 해당 섹션만 ai_report jsonb에 머지 + 마지막 수정자·시각 기록(updateMeetingReportSection).
  * 본문은 RichText로 렌더(나열형은 불릿화). 라이브 AI 호출 없음.
  */
 
 type SectionKey = Exclude<keyof MeetingReportSection, "meetingType">;
 
-const SECTIONS: { key: SectionKey; label: string; emoji: string; list?: boolean }[] = [
-  { key: "summary", label: "요약", emoji: "📋" },
-  { key: "agendaDiscussion", label: "안건별 논의", emoji: "📝", list: true },
-  { key: "decisions", label: "결정 사항", emoji: "✅", list: true },
-  { key: "actionItems", label: "액션 아이템", emoji: "🎯", list: true },
-  { key: "speakerSummary", label: "참석자별 발언", emoji: "🗣️", list: true },
-  { key: "concerns", label: "우려 / 위험 요소", emoji: "⚠️", list: true },
-  { key: "nextSteps", label: "다음 단계", emoji: "🔮", list: true },
+const SECTIONS: { key: SectionKey; label: string; icon: EywaIconName; list?: boolean }[] = [
+  { key: "summary", label: "요약", icon: "report" },
+  { key: "agendaDiscussion", label: "안건별 논의", icon: "note", list: true },
+  { key: "decisions", label: "결정 사항", icon: "clipboardCheck", list: true },
+  { key: "actionItems", label: "액션 아이템", icon: "target", list: true },
+  { key: "speakerSummary", label: "참석자별 발언", icon: "users", list: true },
+  { key: "concerns", label: "우려 / 위험 요소", icon: "alert", list: true },
+  { key: "nextSteps", label: "다음 단계", icon: "arrowRight", list: true },
 ];
 
 function fmtEdited(iso: string): string {
@@ -131,7 +132,7 @@ export function MeetingReportAccordion({
               className="bg-bg-soft hover:bg-bg-soft/60 flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
             >
               <h3 className="text-foreground flex items-center gap-2 text-[13px] font-semibold">
-                <span className="text-[15px] leading-none">{section.emoji}</span>
+                <EyIcon name={section.icon} size={15} />
                 {section.label}
               </h3>
               <ChevronDown

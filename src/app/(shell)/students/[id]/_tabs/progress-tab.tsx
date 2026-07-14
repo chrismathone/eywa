@@ -3,11 +3,11 @@ import { ProgressContainerPanel } from "@/features/progress/components/progress-
 
 // ijw StudentDetail ProgressTab 이식 — 최근 수업보고서 표(날짜·선생님·진도·시험·숙제).
 // + P2a/P3 보강: ClassNote 발송 상태 · 학부모 링크(열람수/취소/만료) — "저장한 보고서 확인"을 여기서.
-// 숙제: assignment_score>0 이면 ○, 아니면 ✕(ijw 동일).
+// 숙제: assignment_score>0 이면 완료, 아니면 미완료.
 function homeworkMark(score: string | null): string {
   if (score == null) return "—";
   const n = parseInt(score, 10);
-  return isNaN(n) || n > 0 ? "○" : "✕";
+  return isNaN(n) || n > 0 ? "완료" : "미완료";
 }
 
 /** ClassNote 발송 상태 → 라벨 + 색. null=미발송("—"). */

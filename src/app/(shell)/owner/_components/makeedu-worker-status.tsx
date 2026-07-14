@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { checkMakeeduSyncWorkers } from "@/features/integrations/server/actions";
 import type { MakeeduWorker } from "@/features/integrations/server/makeedu-sync";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 /**
  * 동기화 담당 PC 상태(0073a 심장박동) — 연동 면. 어느 PC가 makeedu 동기화를 실행하는지 + 온라인/오프라인.
@@ -76,8 +77,9 @@ export function MakeeduWorkerStatus({
       ) : null}
 
       {onlineCount >= 2 ? (
-        <p className="text-amber mt-2 text-xs">
-          ⚠️ {onlineCount}대가 동시에 동작 중입니다 — makeedu 이중 로그인 위험이 있어 <strong>한 대만</strong> 두는 게 좋습니다.
+        <p className="text-amber mt-2 flex items-start gap-1.5 text-xs">
+          <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+          <span>{onlineCount}대가 동시에 동작 중입니다 — makeedu 이중 로그인 위험이 있어 <strong>한 대만</strong> 두는 게 좋습니다.</span>
         </p>
       ) : null}
       {workers.length > 0 && onlineCount === 0 ? (

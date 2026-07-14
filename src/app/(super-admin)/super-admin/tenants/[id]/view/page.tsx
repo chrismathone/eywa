@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -34,9 +35,10 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
         action={
           <Link
             href={`/super-admin/tenants/${id}`}
-            className="border-line text-text-dim hover:text-foreground rounded-md border px-3 py-2 text-[12px] font-semibold"
+            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold"
           >
-            ← 나가기
+            <EyIcon name="arrowLeft" size={14} />
+            나가기
           </Link>
         }
       />

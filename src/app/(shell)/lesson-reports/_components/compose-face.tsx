@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { generateReportComment } from "@/features/onescreen/server/actions";
 import type { ReportCommentInput } from "@/features/onescreen/report-comment";
@@ -268,8 +269,9 @@ export function ComposeFace({
       {ctx ? (
         <div className="space-y-4">
           {ctx.nameCollision ? (
-            <p className="border-amber/40 bg-amber/10 text-amber rounded-md border px-3 py-2 text-[12px]">
-              ⚠️ 같은 이름의 학생이 또 있어 <b>자동 발송이 차단</b>됩니다(오발송 방지). 학생 구분 이름(classnote_name)을 지정한 뒤 발송하세요.
+            <p className="border-amber/40 bg-amber/10 text-amber flex items-start gap-1.5 rounded-md border px-3 py-2 text-[12px]">
+              <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+              <span>같은 이름의 학생이 또 있어 <b>자동 발송이 차단</b>됩니다(오발송 방지). 학생 구분 이름(classnote_name)을 지정한 뒤 발송하세요.</span>
             </p>
           ) : null}
 

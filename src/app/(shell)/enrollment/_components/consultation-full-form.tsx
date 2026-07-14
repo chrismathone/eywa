@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
-  MapPin, MessageSquare, Save, School, Sparkles, Tag, Target, Users, User, UserCheck, XCircle,
+  MapPin, MessageSquare, Mic, Save, School, Sparkles, Tag, Target, Users, User, UserCheck, XCircle,
   Droplet, type LucideIcon,
 } from "@/components/icons/eywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
@@ -292,7 +292,7 @@ export function ConsultationFullForm({
       <div className="border-primary/25 bg-primary/5 space-y-2.5 rounded-lg border p-3">
         {!isCreate && existingRecordings.length > 0 ? (
           <p className="text-text-dim flex items-center gap-1.5 text-[11px]">
-            <span className="text-[13px] leading-none">🎙️</span>
+            <Mic className="size-3.5" />
             이미 등록된 녹음 <span className="num text-foreground font-semibold">{existingRecordings.length}개</span>
             {" "}(마지막 {KST_REC_LABEL.format(new Date(existingRecordings[existingRecordings.length - 1].createdAt))})
             — 새 녹음은 기존 녹음을 지우지 않고 <span className="text-foreground font-semibold">추가</span>됩니다.

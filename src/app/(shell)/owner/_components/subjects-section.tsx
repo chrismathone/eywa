@@ -6,6 +6,7 @@
 // 과목별 편집기는 native <details>(기본 접힘 + 요약 배지) — 과목 수만큼 빈 풀폭 카드가 늘어지는 것 방지.
 import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import {
   DEFAULT_TEACHER_VIEW_PX_PER_MIN,
   TEACHER_VIEW_STEPS,
@@ -76,7 +77,7 @@ export function SubjectsSection({
             {o.subjects.map((s, i) => (
               <details key={s.key || `row-${i}`} className="group py-1">
                 <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 rounded px-1 py-2 select-none [&::-webkit-details-marker]:hidden">
-                  <span className="text-text-faint text-[10px] transition-transform group-open:rotate-90">▶</span>
+                  <EyIcon name="chevronRight" size={12} className="text-text-faint transition-transform group-open:rotate-90" />
                   <span className="text-foreground text-[13px] font-bold">{s.label.trim() || s.key}</span>
                   <span className="ml-auto flex flex-wrap items-center gap-1.5">
                     <span className={badgeCls}>

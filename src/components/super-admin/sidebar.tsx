@@ -7,9 +7,9 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 type NavItem = { href: string; label: string; icon: EywaIconName };
 
 const NAV: NavItem[] = [
-  { href: "/super-admin", label: "대시보드", icon: "tree" },
-  { href: "/super-admin/tenants", label: "학원 목록", icon: "rings" },
-  { href: "/super-admin/audit", label: "감사 로그", icon: "pulse" },
+  { href: "/super-admin", label: "대시보드", icon: "layoutGrid" },
+  { href: "/super-admin/tenants", label: "학원 목록", icon: "building" },
+  { href: "/super-admin/audit", label: "감사 로그", icon: "history" },
 ];
 
 export function SuperAdminSidebar({
@@ -26,10 +26,7 @@ export function SuperAdminSidebar({
       <div className="border-b border-white/10 px-5 py-5">
         <Link href="/super-admin" className="inline-flex items-center gap-2">
           <span className="bg-gold flex size-7 items-center justify-center rounded-[5px]">
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="8" cy="8" r="5" fill="none" stroke="#0d1110" strokeWidth="1.4" />
-              <circle cx="8" cy="8" r="2" fill="#0d1110" />
-            </svg>
+            <EyIcon name="building" size={14} strokeWidth={1.8} className="text-ink" />
           </span>
           <span className="text-[16px] font-extrabold tracking-tight">EYWA</span>
         </Link>
@@ -83,7 +80,8 @@ export function SuperAdminSidebar({
           href="/dashboard"
           className="text-white/60 hover:text-gold mt-3 inline-flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase"
         >
-          ← Academy로 돌아가기
+          <EyIcon name="arrowLeft" size={12} />
+          Academy로 돌아가기
         </Link>
       </div>
     </aside>

@@ -55,10 +55,7 @@ export function MobileTopNav({
             <img src={logoSrc} alt={brand} className="size-5 shrink-0 rounded-[3px] object-contain" />
           ) : (
             <span className="bg-ink flex size-5 items-center justify-center rounded-[3px]">
-              <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
-                <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
-                <circle cx="8" cy="8" r="2" fill="#fff" />
-              </svg>
+              <EyIcon name="building" size={12} strokeWidth={1.8} className="text-white" />
             </span>
           )}
           <span className="text-foreground text-[13px] font-extrabold tracking-tight">{brand}</span>

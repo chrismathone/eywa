@@ -14,6 +14,7 @@ import {
   Wallet,
   X,
 } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import type { CSSProperties, ReactNode } from "react";
 
 /**
@@ -37,10 +38,7 @@ export function MockWorkspace() {
         <div className="border-line bg-sidebar flex w-[52px] shrink-0 flex-col items-center overflow-hidden border-r">
           <div className="border-line flex h-11 w-full shrink-0 items-center justify-center border-b">
             <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
-              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
-                <circle cx="8" cy="8" r="2" fill="#fff" />
-              </svg>
+              <EyIcon name="building" size={16} strokeWidth={1.8} className="text-white" />
             </span>
           </div>
           <div className="flex flex-col items-center gap-1 py-2.5">

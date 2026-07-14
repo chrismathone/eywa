@@ -3,10 +3,10 @@ import { Reveal } from "../_motion/reveal";
 import { MockWorkspace } from "../_ui/mock-workspace";
 import { SectionShell } from "../_ui/section-shell";
 
-const POINTS: { icon: "branch" | "rings" | "wave"; title: string; desc: string }[] = [
-  { icon: "branch", title: "메뉴를 창으로", desc: "12개 메뉴를 각각 창으로 띄워 나란히 봅니다." },
-  { icon: "rings", title: "끌어서 스냅·타일", desc: "창을 가장자리에 대면 자동으로 타일 정렬." },
-  { icon: "wave", title: "배경으로 보내기", desc: "쓰던 화면은 배경으로, 진짜 멀티태스킹." },
+const POINTS: { icon: "window" | "columns2" | "layers"; title: string; desc: string }[] = [
+  { icon: "window", title: "메뉴를 창으로", desc: "12개 메뉴를 각각 창으로 띄워 나란히 봅니다." },
+  { icon: "columns2", title: "끌어서 스냅·타일", desc: "창을 가장자리에 대면 자동으로 타일 정렬." },
+  { icon: "layers", title: "배경으로 보내기", desc: "쓰던 화면은 배경으로, 진짜 멀티태스킹." },
 ];
 
 export function WorkspaceSection() {

@@ -14,6 +14,7 @@ import { MakeeduSyncCard } from "./makeedu-sync-card";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.
@@ -84,8 +85,9 @@ export async function SheetsFace({
           과목마다 <strong>전용 구글 시트</strong>를 등록하고 켜면 그 과목 시간표 화면에 ‘시트 반영’ 버튼이
           생깁니다(원장 전용). 누르면 등록한 시트에 현재 시간표가 <strong>통째로 덮어쓰기</strong>됩니다.
         </p>
-        <p className="text-muted-foreground mt-2 max-w-5xl text-sm text-balance">
-          ⚠️ 전체 덮어쓰기라 <strong>과목마다 서로 다른 시트</strong>를 써야 합니다(수학·영어를 한 시트에 섞지 마세요).
+        <p className="text-muted-foreground mt-2 flex max-w-5xl items-start gap-1.5 text-sm text-balance">
+          <EyIcon name="alert" size={16} className="mt-0.5 shrink-0" />
+          <span>전체 덮어쓰기라 <strong>과목마다 서로 다른 시트</strong>를 써야 합니다(수학·영어를 한 시트에 섞지 마세요).</span>
         </p>
       </header>
 
@@ -112,9 +114,11 @@ export async function SheetsFace({
             </li>
             <li>토글을 켜고, 시간표 화면의 ‘시트 반영’ 버튼으로 동기화합니다.</li>
           </ol>
-          <p className="text-text-faint mt-auto pt-3 text-[12px] text-balance">
-            ⚠️ 서비스계정은 저장공간이 없어 시트를 새로 만들 수 없습니다(미리 만든 시트 필요). 동기화는
+          <p className="text-text-faint mt-auto flex items-start gap-1.5 pt-3 text-[12px] text-balance">
+            <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+            <span>서비스계정은 저장공간이 없어 시트를 새로 만들 수 없습니다(미리 만든 시트 필요). 동기화는
             그 시트를 <strong>전체 덮어쓰기</strong>하므로 다른 내용과 섞지 말고 과목 전용 시트로 쓰세요.
+            </span>
           </p>
         </section>
 

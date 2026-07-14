@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import { buildSubjectReport, studentStatus } from "../report";
@@ -918,7 +919,7 @@ export function OneScreenClient({
             {/* 중앙 그룹 — 좌측 학생목록·우측 보고서와 함께 3열 워크플로 영역을 그룹 제목으로 구분. */}
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
-                <span className="text-[14px] leading-none">📈</span>
+                <EyIcon name="chart" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-semibold">오늘 진도 · 테스트</h2>
               </header>
               <ProgressCard
@@ -936,7 +937,7 @@ export function OneScreenClient({
             </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
-                <span className="text-[14px] leading-none">📋</span>
+                <EyIcon name="report" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-semibold">보고서</h2>
               </header>
               <ReportCard

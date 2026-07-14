@@ -3,6 +3,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 // 구분(수납 분류) = makeedu 고정 taxonomy(과목 enum 아님) → 여기 라벨/색 하드코딩 허용.
 const KIND_STYLE: Record<string, string> = {
@@ -72,7 +73,7 @@ function SortHeader({
       className={`text-text-dim hover:text-foreground inline-flex items-center gap-0.5 transition ${active ? "text-foreground font-bold" : ""} ${className ?? ""}`}
     >
       {label}
-      <span className="font-mono text-[9px]">{active ? (current.desc ? "▼" : "▲") : "▼"}</span>
+      <EyIcon name={active && !current.desc ? "chevronUp" : "chevronDown"} size={11} />
     </Link>
   );
 }

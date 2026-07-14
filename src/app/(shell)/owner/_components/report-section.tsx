@@ -6,6 +6,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guard";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField, ToggleField } from "./fields";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 /**
  * 학원 운영 > 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정.
@@ -74,7 +75,7 @@ export function ReportSection({
           label="ClassNote 실제 발송 사용"
           hint={
             r.classnoteSendEnabled
-              ? "⚠️ 켜짐 — 발송 버튼이 실제로 학부모에게 전송합니다"
+              ? "켜짐 — 발송 버튼이 실제로 학부모에게 전송합니다"
               : "지금은 dry-run — 발송 버튼을 눌러도 저장만 하고 실제 전송하지 않습니다"
           }
           value={r.classnoteSendEnabled}
@@ -119,8 +120,9 @@ export function ReportSection({
             </div>
           )}
           {r.classnoteSendEnabled && r.classnoteSubjects.length === 0 ? (
-            <p className="text-danger mt-2 text-[12px]">
-              ⚠️ 발송이 켜져 있지만 선택된 과목이 없어 실제로는 아무것도 발송되지 않습니다. 발송할 과목을 선택하세요.
+            <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+              <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+              <span>발송이 켜져 있지만 선택된 과목이 없어 실제로는 아무것도 발송되지 않습니다. 발송할 과목을 선택하세요.</span>
             </p>
           ) : null}
         </div>

@@ -5,6 +5,7 @@
 // 표시 규칙: 과목=labelOf(한글), 발송상태=classnoteBadge(한글), 학교·학년=schoolGradeLabel 압축.
 import { useEffect, useRef, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { getMyPastReports, type PastReportRow } from "../server/history-actions";
 import { isShareExpired } from "../share-expiry";
 import { classnoteBadge } from "./report-card";
@@ -136,9 +137,9 @@ export function HistoryBoard() {
                         href={`/r/${r.shareToken}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-primary shrink-0 text-[11px] hover:underline"
+                        className="text-primary inline-flex shrink-0 items-center gap-0.5 text-[11px] hover:underline"
                       >
-                        보고서 보기 →
+                        보고서 보기 <EyIcon name="arrowRight" size={11} />
                       </a>
                     ) : null}
                   </li>

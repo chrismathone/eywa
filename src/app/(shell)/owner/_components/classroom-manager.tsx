@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import {
   createClassroom,
   updateClassroom,
@@ -134,8 +135,9 @@ function RoomRow({ room }: { room: ClassroomRow }) {
         )}
       </div>
       {confirm && (room.classCount > 0 || room.slotCount > 0) ? (
-        <p className="text-amber w-full text-[11px]">
-          ⚠️{" "}
+        <p className="text-amber flex w-full items-start gap-1 text-[11px]">
+          <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
+          <span>
           {[
             room.classCount > 0 ? `반 ${room.classCount}개` : null,
             room.slotCount > 0 ? `시간표 슬롯 ${room.slotCount}개` : null,
@@ -143,6 +145,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
             .filter(Boolean)
             .join(" · ")}
           의 강의실이 미지정으로 바뀝니다.
+          </span>
         </p>
       ) : null}
       {delState?.error ? <span className="text-danger w-full text-xs">{delState.error}</span> : null}

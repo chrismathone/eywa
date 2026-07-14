@@ -38,7 +38,7 @@ export function OutcomesSection() {
             <div key={n.label} className="relative px-6 py-7">
               {n.accent ? (
                 <span className="ey-watermark right-3 bottom-2" aria-hidden="true">
-                  <EyIcon name="leaf" size={34} />
+                  <EyIcon name="chart" size={34} />
                 </span>
               ) : null}
               <div className="flex items-center gap-1.5">

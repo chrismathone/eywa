@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, Plus } from "@/components/icons/eywa-icon-compat";
 import {
   CURRICULUM_GRADES,
   curriculumForGrade,
@@ -134,9 +134,9 @@ export function ProgressSelector({
                         key={l}
                         type="button"
                         onClick={() => add(l)}
-                        className="border-primary/40 text-primary hover:bg-primary-soft rounded-pill border px-1.5 py-0.5 text-[11px] font-semibold"
+                        className="border-primary/40 text-primary hover:bg-primary-soft inline-flex items-center gap-0.5 rounded-pill border px-1.5 py-0.5 text-[11px] font-semibold"
                       >
-                        + {shortLesson(l)}
+                        <Plus size={10} /> {shortLesson(l)}
                       </button>
                     ))}
                   </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { BarChart3, LayoutGrid, List } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { OUTCOME_OPTIONS } from "./outcome-meta";
@@ -78,7 +79,7 @@ export function KanbanFilters({
           className="border-border hover:bg-accent/30 inline-flex size-7 items-center justify-center rounded-sm border text-xs"
           aria-label="이전 달"
         >
-          ◀
+          <EyIcon name="chevronLeft" size={14} />
         </Link>
         <span className="text-foreground min-w-[88px] text-center text-[13px] font-semibold tabular-nums">
           {formatMonth(displayMonth)}
@@ -88,7 +89,7 @@ export function KanbanFilters({
           className="border-border hover:bg-accent/30 inline-flex size-7 items-center justify-center rounded-sm border text-xs"
           aria-label="다음 달"
         >
-          ▶
+          <EyIcon name="chevronRight" size={14} />
         </Link>
         <Link
           href={`/enrollment${buildQuery({ ...base, month: null })}`}

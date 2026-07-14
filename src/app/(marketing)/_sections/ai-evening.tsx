@@ -81,7 +81,7 @@ export function AiEveningSection() {
             <div className="border-line relative mt-6 flex items-center justify-between border-t pt-4">
               <span className="text-text-faint text-[12px]">마지막 분석 · 06.16 19:41</span>
               <span className="border-line text-text-dim inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold">
-                <EyIcon name="rings" size={13} />
+                <EyIcon name="sparkle" size={13} />
                 갱신
               </span>
             </div>

@@ -6,7 +6,7 @@ import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { useWindowStore, instanceLabel } from "./window-store";
 
-// 라우트 창 칩 아이콘 — 레일과 동일한 Eywa 아이콘. 학생 요약창은 seed.
+// 라우트 창 칩 아이콘 — 레일과 동일한 Eywa 아이콘. 학생 요약창은 user.
 const ICON_BY_MENU: Record<string, EywaIconName> = {};
 for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] = it.icon;
 
@@ -88,7 +88,7 @@ export function WindowSwitcher() {
                   {iconName ? (
                     <EyIcon name={iconName} size={13} strokeWidth={1.8} />
                   ) : (
-                    <EyIcon name="seed" size={12} />
+                    <EyIcon name="user" size={12} />
                   )}
                   <span className="max-w-[120px] truncate">{label}</span>
                 </button>

@@ -25,7 +25,7 @@ export function BrowserFrame({
           <span className="size-2.5 rounded-full bg-[#5bb873]" />
         </span>
         <span className="bg-card border-line text-text-faint ml-3 flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1 font-mono text-[11px]">
-          <EyIcon name="leaf" size={11} className="text-primary" />
+          <EyIcon name="building" size={11} className="text-primary" />
           {url}
         </span>
       </div>

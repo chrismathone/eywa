@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createStaff,
@@ -305,7 +305,7 @@ export function StaffForm({
                       : "border-line text-text-dim hover:border-primary hover:text-primary rounded border px-2.5 py-1 text-xs transition"
                   }
                 >
-                  {active ? "✓ " : ""}
+                  {active ? <Check className="mr-1 inline size-3" /> : null}
                   {o.label}
                 </button>
               );
@@ -319,7 +319,8 @@ export function StaffForm({
                 title="학원 설정에 없는 과목 — 클릭하면 해제"
                 className={`${SUBJECT_SOFT[subjectMaps.colorOf(k)]} rounded border border-transparent px-2.5 py-1 text-xs font-medium transition`}
               >
-                ✓ {subjectMaps.labelOf(k)}
+                <Check className="mr-1 inline size-3" />
+                {subjectMaps.labelOf(k)}
               </button>
             ))}
           </div>

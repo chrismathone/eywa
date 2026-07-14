@@ -40,11 +40,11 @@ function Tile({
 export function PulseTiles({ stats }: { stats: RetentionStats }) {
   return (
     <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
-      <Tile label="위험 학생" value={stats.risk} icon="falling" color="danger" />
-      <Tile label="관심 학생" value={stats.warn} icon="pulse" color="amber" />
-      <Tile label="상담 예약" value={stats.scheduled} icon="wave" color="blue" />
+      <Tile label="위험 학생" value={stats.risk} icon="userMinus" color="danger" />
+      <Tile label="관심 학생" value={stats.warn} icon="alertCircle" color="amber" />
+      <Tile label="상담 예약" value={stats.scheduled} icon="messages" color="blue" />
       <Tile label="재등록 위험" value={stats.renewalRisk} icon="bell" color="rose" />
-      <Tile label="매출 위험" value={formatWonShort(stats.revenueRisk)} icon="pollen" color="primary" />
+      <Tile label="매출 위험" value={formatWonShort(stats.revenueRisk)} icon="wallet" color="primary" />
     </section>
   );
 }

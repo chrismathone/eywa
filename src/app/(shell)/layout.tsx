@@ -8,6 +8,7 @@ import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { TeacherMenu } from "@/components/teacher-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
@@ -58,7 +59,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const academyLine =
     [settings.profile.name, settings.profile.branchLabel].filter(Boolean).join(" · ") || brand;
   // 학원 로고 이미지(GCS 비공개 path는 signed URL, 외부 http URL은 그대로). 셸 크롬(사이드바·미니셸·모바일내비)에
-  // 공유. 미업로드/실패면 null → 각 표면이 기존 마크(sprout/동심원)로 폴백. 임베드는 위에서 이미 return(크롬 없음).
+  // 공유. 미업로드/실패면 null → 각 표면이 학원 building 마크로 폴백. 임베드는 위에서 이미 return(크롬 없음).
   const logoSrc = await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId);
 
   // 테넌트 권한 override 반영 매트릭스 — 강사 '내 메뉴'·사이드바·팰릿·모바일내비 메뉴 필터에 주입(클라 소비처).
@@ -84,10 +85,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               <img src={logoSrc} alt={brand} className="size-7 shrink-0 rounded-[3px] object-contain" />
             ) : (
               <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <circle cx="8" cy="8" r="5" fill="none" stroke="#fff" strokeWidth="1.2" />
-                  <circle cx="8" cy="8" r="2" fill="#fff" />
-                </svg>
+                <EyIcon name="building" size={16} strokeWidth={1.8} className="text-white" />
               </span>
             )}
             <div className="leading-none">

@@ -3,9 +3,55 @@ import path from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { EYWA_ICON_COMPAT_MAP } from "./eywa-icon-compat";
-import { EYWA_ICON_CATALOG } from "./eywa-icons";
+import { EYWA_ICON_CATALOG, MENU_ICON } from "./eywa-icons";
 
 const COMPAT_MODULE = "@/components/icons/eywa-icon-compat";
+const FORBIDDEN_NATURE_ICONS = new Set([
+  "tree",
+  "leaf",
+  "pulse",
+  "branch",
+  "seed",
+  "sprout",
+  "wave",
+  "falling",
+  "roots",
+  "pollen",
+  "rings",
+  "spore",
+]);
+const LEGACY_VISIBLE_GLYPHS = [
+  "⚠️",
+  "⚠",
+  "☑",
+  "☐",
+  "✅",
+  "❌",
+  "✓",
+  "✔",
+  "✕",
+  "✖",
+  "▲",
+  "▼",
+  "📈",
+  "📋",
+  "💬",
+  "📌",
+  "🎤",
+  "💡",
+  "🌱",
+  "🌿",
+  "🍃",
+  "🌳",
+] as const;
+const APPROVED_INLINE_SVG = [
+  "src/app/(marketing)/_sections/signature.tsx",
+  "src/app/(marketing)/_ui/mock-workspace.tsx",
+  "src/app/(shell)/dashboard/_components/command-band.tsx",
+  "src/app/(shell)/dashboard/_components/sparkline.tsx",
+  "src/app/(shell)/help/_help-browser.tsx",
+  "src/features/onescreen/components/report-trend-graph.tsx",
+] as const;
 
 function sourceFiles(directory: string): string[] {
   const result: string[] = [];
@@ -81,6 +127,45 @@ function filesImporting(moduleName: string): string[] {
   return importers;
 }
 
+function visibleLegacyIconGlyphs(): string[] {
+  const hits: string[] = [];
+
+  for (const file of sourceFiles(path.join(process.cwd(), "src")).filter((name) => name.endsWith(".tsx"))) {
+    const source = ts.createSourceFile(
+      file,
+      fs.readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+
+    const visit = (node: ts.Node) => {
+      if (ts.isJsxText(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+        const value = ts.isJsxText(node) ? node.getText(source) : node.text;
+        const glyph = LEGACY_VISIBLE_GLYPHS.find((candidate) => value.includes(candidate));
+        if (glyph) {
+          const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+          hits.push(`${path.relative(process.cwd(), file)}:${line + 1} ${glyph}`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+
+    visit(source);
+  }
+
+  return hits;
+}
+
+function inlineSvgFiles(): string[] {
+  return sourceFiles(path.join(process.cwd(), "src"))
+    .filter((file) => file.endsWith(".tsx"))
+    .filter((file) => path.basename(file) !== "eywa-icons.tsx")
+    .filter((file) => fs.readFileSync(file, "utf8").includes("<svg"))
+    .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))
+    .sort();
+}
+
 describe("Eywa icon compatibility mapping", () => {
   it(
     "maps every compatibility import exactly once without unused aliases",
@@ -100,6 +185,24 @@ describe("Eywa icon compatibility mapping", () => {
     for (const target of Object.values(EYWA_ICON_COMPAT_MAP)) {
       expect(registered.has(target)).toBe(true);
     }
+  });
+
+  it("does not register or map botanical metaphors", () => {
+    const registered = EYWA_ICON_CATALOG.map((icon) => icon.name);
+    const compatTargets = Object.values(EYWA_ICON_COMPAT_MAP);
+    const menuTargets = Object.values(MENU_ICON);
+
+    expect(registered.filter((name) => FORBIDDEN_NATURE_ICONS.has(name))).toEqual([]);
+    expect(compatTargets.filter((name) => FORBIDDEN_NATURE_ICONS.has(name))).toEqual([]);
+    expect(menuTargets.filter((name) => FORBIDDEN_NATURE_ICONS.has(name))).toEqual([]);
+  });
+
+  it("has no visible emoji or text glyph standing in for an icon", () => {
+    expect(visibleLegacyIconGlyphs()).toEqual([]);
+  });
+
+  it("keeps inline SVG limited to reviewed charts and decoration", () => {
+    expect(inlineSvgFiles()).toEqual([...APPROVED_INLINE_SVG].sort());
   });
 
   it(

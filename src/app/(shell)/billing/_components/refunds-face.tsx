@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Plus, ReceiptText } from "@/components/icons/eywa-icon-compat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -99,7 +100,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
                 className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
                 aria-label="이전 달"
               >
-                ◀
+                <EyIcon name="chevronLeft" size={14} />
               </Link>
               <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">
                 {formatPeriod(period)}
@@ -109,7 +110,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
                 className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
                 aria-label="다음 달"
               >
-                ▶
+                <EyIcon name="chevronRight" size={14} />
               </Link>
             </div>
             <span className="text-text-faint ml-auto font-mono text-[10px]">

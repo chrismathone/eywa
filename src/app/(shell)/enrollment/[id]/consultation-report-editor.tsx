@@ -20,6 +20,7 @@ import { RichText } from "@/components/rich-text";
 import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { ConversationFlowTree } from "./conversation-flow-tree";
 import { formatCreatedAt } from "@/lib/utils";
+import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 /**
  * 등록상담 AI 분석 — ijw ReportViewer식 아코디언(접기) + 섹션별 인라인 수정 + 재분석 + TXT 다운로드.
@@ -28,20 +29,20 @@ import { formatCreatedAt } from "@/lib/utils";
 
 type TextKey = Exclude<keyof ConsultationAudioReport, "extracted" | "conversationFlow">;
 
-const SECTIONS: { key: TextKey; label: string; emoji: string; list?: boolean }[] = [
-  { key: "consultationType", label: "상담 성격", emoji: "🧭" },
-  { key: "summary", label: "상담 요약", emoji: "📋" },
-  { key: "familyBackground", label: "가정 배경/개인 맥락", emoji: "🏠" },
-  { key: "parentConcerns", label: "학부모 걱정/불안", emoji: "😟", list: true },
-  { key: "parentQuestions", label: "학부모 질문", emoji: "❓", list: true },
-  { key: "parentRequests", label: "학부모 요청", emoji: "🙋", list: true },
-  { key: "parentSatisfaction", label: "학부모 만족도/감정", emoji: "💭" },
-  { key: "studentTraits", label: "학생 특이사항", emoji: "🎒", list: true },
-  { key: "teacherResponse", label: "상담자 대응/설명", emoji: "🧑‍🏫", list: true },
-  { key: "salesPoints", label: "상담사 세일즈 포인트", emoji: "💼", list: true },
-  { key: "agreements", label: "합의 사항", emoji: "🤝", list: true },
-  { key: "followUps", label: "후속 조치", emoji: "📞", list: true },
-  { key: "warnings", label: "주의 신호", emoji: "⚠️", list: true },
+const SECTIONS: { key: TextKey; label: string; icon: EywaIconName; list?: boolean }[] = [
+  { key: "consultationType", label: "상담 성격", icon: "messages" },
+  { key: "summary", label: "상담 요약", icon: "report" },
+  { key: "familyBackground", label: "가정 배경/개인 맥락", icon: "home" },
+  { key: "parentConcerns", label: "학부모 걱정/불안", icon: "alertCircle", list: true },
+  { key: "parentQuestions", label: "학부모 질문", icon: "help", list: true },
+  { key: "parentRequests", label: "학부모 요청", icon: "messagePlus", list: true },
+  { key: "parentSatisfaction", label: "학부모 만족도/감정", icon: "message" },
+  { key: "studentTraits", label: "학생 특이사항", icon: "user", list: true },
+  { key: "teacherResponse", label: "상담자 대응/설명", icon: "userCheck", list: true },
+  { key: "salesPoints", label: "상담사 세일즈 포인트", icon: "target", list: true },
+  { key: "agreements", label: "합의 사항", icon: "clipboardCheck", list: true },
+  { key: "followUps", label: "후속 조치", icon: "history", list: true },
+  { key: "warnings", label: "주의 신호", icon: "alert", list: true },
 ];
 
 const FLOW_KEY = "_conversationFlow";
@@ -220,7 +221,7 @@ export function ConsultationReportEditor({
       {error ? <p className="text-danger text-xs">{error}</p> : null}
 
       {/* 아코디언 섹션 */}
-      {visibleSections.map(({ key, label, emoji, list }) => {
+      {visibleSections.map(({ key, label, icon, list }) => {
         const body = ((report[key] as string) ?? "").trim();
         // 리스트 섹션은 후보정. 단일 항목으로 병합되면 bulletize를 꺼 RichText 콤마분할(병합 되돌림)을 피한다.
         const normalized = list ? normalizeAiListText(body) : body;
@@ -235,7 +236,7 @@ export function ConsultationReportEditor({
               className="hover:bg-bg-soft/60 flex w-full items-center justify-between px-3.5 py-2.5 text-left transition"
             >
               <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-semibold">
-                <span className="text-[15px] leading-none">{emoji}</span>
+                <EyIcon name={icon} size={15} />
                 {label}
               </h3>
               <div className="flex items-center gap-1">
@@ -326,7 +327,7 @@ export function ConsultationReportEditor({
             className="hover:bg-bg-soft/60 flex w-full items-center justify-between px-3.5 py-2.5 text-left transition"
           >
             <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-semibold">
-              <span className="text-[15px] leading-none">🌳</span>
+              <EyIcon name="layers" size={15} />
               상담 흐름 수형도
             </h3>
             {expanded.has(FLOW_KEY) ? (

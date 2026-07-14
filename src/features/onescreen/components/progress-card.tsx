@@ -64,7 +64,9 @@ export function ProgressCard({
                 <div className="mt-1 space-y-1 text-[12px]">
                   <p className="text-text-faint truncate">이전 · {displayLessons(su.prev) || su.prev || "기록 없음"}</p>
                   <div className="flex items-center gap-1.5">
-                    <span className={`shrink-0 font-semibold ${toneTextClass(tone)}`}>오늘 →</span>
+                    <span className={`inline-flex shrink-0 items-center gap-0.5 font-semibold ${toneTextClass(tone)}`}>
+                      오늘 <EyIcon name="arrowRight" size={11} />
+                    </span>
                     {isMath ? (
                       <ProgressSelector
                         value={su.today}

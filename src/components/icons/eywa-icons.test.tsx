@@ -24,7 +24,7 @@ describe("Eywa icon system", () => {
   });
 
   it("hides decorative icons from assistive technology by default", () => {
-    const { container } = render(<EyIcon name="tree" />);
+    const { container } = render(<EyIcon name="layoutGrid" />);
     const svg = container.querySelector("svg");
 
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
