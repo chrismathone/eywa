@@ -31,7 +31,7 @@ export default async function PublicLessonReportPage({
   const { data: report } = await admin
     .from("lesson_reports")
     .select(
-      "id, tenant_id, student_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments",
+      "id, tenant_id, student_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments, notice_only",
     )
     .eq("share_token", token)
     .maybeSingle();
@@ -110,6 +110,7 @@ export default async function PublicLessonReportPage({
           attitude: report.attitude,
           notes: report.notes,
           trendNote: report.trend_note,
+          noticeOnly: report.notice_only,
         }}
         student={student ?? null}
         academyName={academyName}

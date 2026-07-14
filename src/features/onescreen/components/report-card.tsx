@@ -15,6 +15,7 @@ import type { OneScreenStudent, Subject, TestScore } from "../types";
 export type SubjectReport = {
   draft: string;
   trendDraft?: string; // 학습 추세(종합분석) 초안 — 4a. 멘트(draft)와 별개, 자동작성 시 함께 채움.
+  noticeOnly?: boolean; // 공지사항 모드 — 0106a. 켜면 진도·평가·추세 무시하고 멘트(draft)만 발송.
   sent: boolean;
   shareToken?: string;
   classnoteStatus?: string;
@@ -118,6 +119,7 @@ export function ReportCard({
   onMakeup,
   onSubjectDraft,
   onSubjectTrend,
+  onToggleNotice,
   onNote,
   onAutoWrite,
   generatingSubject,
@@ -141,6 +143,7 @@ export function ReportCard({
   onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
+  onToggleNotice: (subjectName: string) => void; // 공지사항 모드 토글(과목별) — 0106a
   onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
   onAutoWrite: (subjectName: string) => void;
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
@@ -166,6 +169,7 @@ export function ReportCard({
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
+  const notice = rep.noticeOnly === true; // 공지사항 모드 — 진도·평가·추세·첨부를 숨기고 멘트만 발송(0106a)
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -180,6 +184,18 @@ export function ReportCard({
           {/* 실발송이 아니라 lesson_reports 기록 저장(PDF만 실제 인쇄). "발송 완료" 거짓 약속 방지. */}
           {rep.sent ? <Pill color="primary">기록 저장</Pill> : null}
         </div>
+        {/* 공지사항 모드(0106a) — 켜면 진도·평가·추세를 빼고 아래 멘트만 학부모에게 발송(edutrix 알림장 패리티). */}
+        <button
+          type="button"
+          onClick={() => onToggleNotice(subjectName)}
+          aria-pressed={notice}
+          title="공지사항 모드 — 진도·평가·추세를 빼고 멘트만 학부모에게 발송합니다"
+          className={`mt-2 inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+            notice ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
+          }`}
+        >
+          {notice ? <EyIcon name="check" size={11} /> : null} 공지사항 모드
+        </button>
         {/* 과목 선택 (여러 과목일 때만) — 발송한 과목엔 체크 */}
         {student.subjects.length > 1 ? (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -208,7 +224,15 @@ export function ReportCard({
       </header>
 
       <div className="flex flex-1 flex-col gap-3 px-4 py-3">
-        <MiniSummary st={student} subject={subject} />
+        {notice ? (
+          <div className="border-primary/40 bg-primary/5 text-text-dim rounded-md border px-3 py-2 text-[12px]">
+            <b className="text-primary">공지사항 모드</b> — 진도·평가·추세는 발송에서 제외되고 아래 <b>멘트</b>만 학부모에게 전송됩니다.
+          </div>
+        ) : null}
+        {/* 진도·평가·태도·과제·특이사항 — 공지사항 모드에선 발송에 무관하므로 숨김(멘트만). */}
+        {!notice ? (
+          <>
+            <MiniSummary st={student} subject={subject} />
 
         {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
         <div className="flex flex-col gap-1.5">
@@ -312,15 +336,24 @@ export function ReportCard({
             className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
+          </>
+        ) : null}
 
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <p className="micro text-text-faint">{subjectName} 보고서</p>
+            <p className="micro text-text-faint">{notice ? "공지 내용" : `${subjectName} 보고서`}</p>
+            {/* 공지 모드에선 AI 자동작성 비활성(사실 재료가 없음 — 멘트는 직접 작성). */}
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || !isReportEligible(subject)}
-              title={isReportEligible(subject) ? undefined : "오늘 진도를 먼저 입력하세요"}
+              disabled={generating || notice || !isReportEligible(subject)}
+              title={
+                notice
+                  ? "공지사항 모드에서는 멘트를 직접 작성합니다"
+                  : isReportEligible(subject)
+                    ? undefined
+                    : "오늘 진도를 먼저 입력하세요"
+              }
               onClick={() => onAutoWrite(subjectName)}
             >
               <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
@@ -329,21 +362,27 @@ export function ReportCard({
           <textarea
             value={rep.draft}
             onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
-            placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
+            placeholder={
+              notice
+                ? "학부모에게 보낼 공지 내용을 입력하세요 (예: 다음 주 월요일 휴강입니다 · 교재 p.29까지 풀어 오세요)"
+                : `'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`
+            }
             className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
 
-        {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 표본 부족 시 빈 채로 둠(수동 입력 가능). */}
-        <div className="flex flex-col gap-1.5">
-          <p className="micro text-text-faint">학습 추세 (종합분석)</p>
-          <textarea
-            value={rep.trendDraft ?? ""}
-            onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
-            placeholder="'자동 작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다."
-            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
-          />
-        </div>
+        {/* 학습 추세(종합분석) — 4a. '자동 작성'이 최근 시험·과제 흐름을 요약해 채운다. 공지 모드에선 숨김. */}
+        {!notice ? (
+          <div className="flex flex-col gap-1.5">
+            <p className="micro text-text-faint">학습 추세 (종합분석)</p>
+            <textarea
+              value={rep.trendDraft ?? ""}
+              onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
+              placeholder="'자동 작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다."
+              className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            />
+          </div>
+        ) : null}
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시. */}
         <div className="flex flex-wrap items-center gap-2">
@@ -374,7 +413,8 @@ export function ReportCard({
         </div>
 
         {/* P2b: 학생 사진 첨부 — 항상 노출. 미저장 상태에서 추가하면 첫 첨부 시 자동저장(핸들러). */}
-        {/* /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. */}
+        {/* /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. 공지 모드에선 첨부 미렌더라 숨김. */}
+        {!notice ? (
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-text-faint text-[11px] font-semibold">
@@ -433,6 +473,7 @@ export function ReportCard({
               </p>
             )}
           </div>
+        ) : null}
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
         {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}

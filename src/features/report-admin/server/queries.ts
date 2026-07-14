@@ -163,7 +163,8 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
 
   // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨·퇴사(비활성) 직원 — 상호 독립이라 병렬(B4).
   const [{ data: reps }, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
-    supabase.from("lesson_reports").select("teacher_name, report_date").gte("report_date", since).limit(5000),
+    // 공지행(notice_only)은 실 수업 보고서가 아니므로 작성률 집계에서 제외(공지 1회로 강사 작성률이 허위 100% 되는 것 차단).
+    supabase.from("lesson_reports").select("teacher_name, report_date").eq("notice_only", false).gte("report_date", since).limit(5000),
     getTodaySchedule(),
     getWeeklySchedule(), // 요일별 대상(분모) 계산용 — 이번 주 전 요일 스케줄
     getTenantSettings(),
@@ -216,7 +217,8 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
         supabase.from("attendance_records").select("student_id").eq("session_date", today).eq("status", "absent").in("student_id", chunk),
       ),
       fetchInChunks<{ student_id: string }>(allStudentIds, (chunk) =>
-        supabase.from("lesson_reports").select("student_id").eq("report_date", today).in("student_id", chunk),
+        // 공지행 제외 — 공지만 보낸 학생이 '작성됨'으로 잡혀 미작성 목록에서 빠지는 것 방지(작성률 오염 차단).
+        supabase.from("lesson_reports").select("student_id").eq("report_date", today).eq("notice_only", false).in("student_id", chunk),
       ),
       fetchInChunks<{ id: string; name: string }>(allStudentIds, (chunk) =>
         supabase.from("students").select("id, name").in("id", chunk),

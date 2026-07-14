@@ -38,6 +38,9 @@ export type SaveLessonReportInput = {
   // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
   // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
   outOfClass?: boolean;
+  // 공지사항 모드 — 0106a. true면 진도·평가·추세·첨부를 무시하고 멘트(notes)만 학부모 카드로 발송.
+  // 서버가 구조화 필드를 null 강제 + 진도 컨테이너 반영(ingest) skip + 실보고서 덮어쓰기 차단.
+  noticeOnly?: boolean;
 };
 
 /**
@@ -51,6 +54,15 @@ export async function saveLessonReport(
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
+
+  const notice = input.noticeOnly === true;
+  // 공지사항 모드 서버 가드(0106a) — UI 자동선택만으론 불충분(순수 서버 방어).
+  if (notice) {
+    // ① 과목 필수 — 유니크 인덱스가 NULLS DISTINCT라 subject=null 공지는 dedup·회수 불가한 死행이 무한 증식 + 워커 게이트 실패.
+    if (!input.subject) return { ok: false, error: "공지 발송은 과목이 필요합니다" };
+    // ② 멘트(notes) 필수 — 빈 공지 카드(placeholder만) 발송 방지.
+    if (!input.notes?.trim()) return { ok: false, error: "공지 내용을 입력하세요" };
+  }
 
   const supabase = await createClient();
 
@@ -84,8 +96,26 @@ export async function saveLessonReport(
   // KST 오늘 — Vercel UTC 오전에 report_date가 하루 밀리는 것 방지(saveOnescreenSession·too_old 가드와 동일 기준).
   const reportDate = kstToday();
 
+  // 공지 교차 덮어쓰기 방어 — 유니크키 (tenant,student,report_date,subject)에 notice_only가 없어, 같은
+  // (학생,오늘,과목)에 '실보고서'가 있으면 공지 full-row upsert가 progress/점수/멘트를 소실시킨다. 실보고서 존재 시 차단.
+  if (notice) {
+    const { data: existing } = await supabase
+      .from("lesson_reports")
+      .select("notice_only")
+      .eq("student_id", input.studentId)
+      .eq("report_date", reportDate)
+      .eq("subject", input.subject!)
+      .maybeSingle();
+    if (existing && existing.notice_only === false)
+      return {
+        ok: false,
+        error: "오늘 이 학생·과목은 수업 보고서가 이미 있어 공지로 덮어쓸 수 없습니다(회수/재발급 후 발송)",
+      };
+  }
+
   // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
+  // ⚠️ 공지 모드는 진도·평가·추세·교재를 null 강제 — 통계(작성률)·roster(이전 회차)·진도 컨테이너 오염 차단(카드도 멘트만 렌더).
   const { data, error } = await supabase
     .from("lesson_reports")
     .upsert(
@@ -94,18 +124,19 @@ export async function saveLessonReport(
         student_id: input.studentId,
         report_date: reportDate,
         subject: input.subject || null,
-        textbook: input.textbook || null,
-        makeup: input.makeup ?? false,
-        homework_today: input.homeworkToday || null,
-        progress: input.progress || null,
-        exam_info: input.examInfo || null,
-        homework_score: input.homeworkScore || null,
-        daily_test: input.dailyTest || null,
-        check_test: input.checkTest || null,
-        attitude: input.attitude || null,
+        textbook: notice ? null : input.textbook || null,
+        makeup: notice ? false : input.makeup ?? false,
+        homework_today: notice ? null : input.homeworkToday || null,
+        progress: notice ? null : input.progress || null,
+        exam_info: notice ? null : input.examInfo || null,
+        homework_score: notice ? null : input.homeworkScore || null,
+        daily_test: notice ? null : input.dailyTest || null,
+        check_test: notice ? null : input.checkTest || null,
+        attitude: notice ? null : input.attitude || null,
         teacher_name: user.displayName ?? null,
         notes: input.notes || null,
-        trend_note: input.trendNote || null,
+        trend_note: notice ? null : input.trendNote || null,
+        notice_only: notice,
         source: "onescreen",
       },
       { onConflict: "tenant_id,student_id,report_date,subject" },
@@ -116,17 +147,20 @@ export async function saveLessonReport(
 
   // 진도 컨테이너 반영(edutrix 이식) — 저장 성공 후 동기. 비수학·진도없음·이미반영은 내부에서 즉시 skip.
   // 실패해도 저장은 유지(비치명적, 백필로 보정 가능). RLS는 supabase(테넌트 스코프)가 담당.
-  try {
-    await ingestReport(supabase, {
-      id: data.id,
-      tenantId: user.tenantId,
-      studentId: input.studentId,
-      reportDate,
-      subject: input.subject || null,
-      progress: input.progress || null,
-    });
-  } catch {
-    /* 진도 반영 실패는 보고서 저장을 막지 않음 */
+  // ⚠️ 공지 모드는 진도가 없고 컨테이너를 오염시키므로 반영 자체를 skip.
+  if (!notice) {
+    try {
+      await ingestReport(supabase, {
+        id: data.id,
+        tenantId: user.tenantId,
+        studentId: input.studentId,
+        reportDate,
+        subject: input.subject || null,
+        progress: input.progress || null,
+      });
+    } catch {
+      /* 진도 반영 실패는 보고서 저장을 막지 않음 */
+    }
   }
 
   return { ok: true, id: data.id, shareToken: data.share_token };
@@ -573,10 +607,12 @@ export async function loadMakeupHistory(studentId: string): Promise<{
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
 
   // 오늘 이전(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
+  // 공지행(notice_only)은 진도·점수가 비어 있어 '이전 회차 참고행'/prev-score 소스에서 제외(오염 차단).
   const { data } = await supabase
     .from("lesson_reports")
     .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
     .eq("student_id", studentId)
+    .eq("notice_only", false)
     .lt("report_date", kstToday())
     .order("report_date", { ascending: false })
     .limit(50);

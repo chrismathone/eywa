@@ -204,13 +204,14 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       homework_score: string | null;
       attitude: string | null;
       notes: string | null;
+      notice_only: boolean;
     }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
           .select(
-            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments, textbook, homework_today, homework_score, attitude, notes",
+            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments, textbook, homework_today, homework_score, attitude, notes, notice_only",
           )
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
@@ -296,7 +297,8 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         });
         todayReportIds.push(r.id);
       }
-    } else {
+    } else if (!r.notice_only) {
+      // 공지행(notice_only)은 진도·점수가 비어 있어 '이전 회차 참고행'/prev-score 소스에서 제외(오염 차단).
       if (!priorReport.has(r.student_id))
         priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
       const pk = subjKey(r.student_id, r.subject);

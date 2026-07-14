@@ -53,6 +53,7 @@ export type ParentReportCardProps = {
     attitude: string | null;
     notes: string | null;
     trendNote: string | null; // 학습 추세(종합분석) — 0091a(showTrendNote 토글)
+    noticeOnly?: boolean; // 공지사항 모드 — 0106a. true면 헤더+notes(멘트)만, 제목 "[공지사항] 작성일".
   };
   student: { name: string | null; school: string | null; grade: string | null } | null;
   academyName: string;
@@ -76,9 +77,11 @@ export function ParentReportCard({
   const [ry, rm, rd] = (report.reportDate ?? "").split("-");
   const reportDate = ry && rm && rd ? `${ry}년 ${rm}월 ${rd}일` : "";
   const schoolGrade = fmtSchoolGrade(student?.school, student?.grade);
-  // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지).
+  // 공지사항 모드(0106a) — 헤더 + '학부모 전달 내용'(notes)만 렌더. 학생정보·진도·평가·추이·첨부 전부 숨김.
+  const notice = report.noticeOnly === true;
+  // 성적 추이 그래프 표시 여부 — 토글 ON + 시험 또는 과제 중 하나라도 유효점 2개 이상(빈 카드 방지). 공지 모드면 항상 숨김.
   const showTrendGraph =
-    rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));
+    !notice && rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));
 
   // 시험점수 표시 = **데이터 기준**(showDailyTest/showCheckTest 토글로 소급 숨기지 않음). 이미 값이 있는
   // (=발송된) 보고서는 학원설정에서 테스트를 꺼도 그대로 보여야 한다(발송분 예외). 새 보고서는 토글이
@@ -87,15 +90,17 @@ export function ParentReportCard({
   const legacyTest = !report.dailyTest && !report.checkTest ? report.examInfo : null;
   // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
   const showToday =
-    (rpt.showTextbook && report.textbook) ||
-    (rpt.showProgress && report.progress) ||
-    (rpt.showHomeworkToday && report.homeworkToday);
+    !notice &&
+    ((rpt.showTextbook && report.textbook) ||
+      (rpt.showProgress && report.progress) ||
+      (rpt.showHomeworkToday && report.homeworkToday));
   const showEval =
-    report.dailyTest ||
-    report.checkTest ||
-    legacyTest ||
-    (rpt.showHomework && report.homeworkScore) ||
-    (rpt.showAttitude && report.attitude);
+    !notice &&
+    (report.dailyTest ||
+      report.checkTest ||
+      legacyTest ||
+      (rpt.showHomework && report.homeworkScore) ||
+      (rpt.showAttitude && report.attitude));
 
   return (
     // ⚠️ report-capture = ClassNote 워커 스크린샷 대상 클래스(classnote-core.mjs가 이 선택자로 캡처).
@@ -107,17 +112,22 @@ export function ParentReportCard({
           <img src={logoSrc} alt={academyName} className="h-14 w-auto object-contain" />
         ) : null}
         {rpt.showAcademyName ? <p className="text-text-dim text-[15px]">{academyName}</p> : null}
-        {/* 제목에 보고일 합체("2026년 07월 10일 수업 보고서") — 별도 보고일 필드 제거(2026-07-10 원장 요청). */}
+        {/* 제목 — 공지 모드는 "[공지사항] 작성일"(요구사항), 일반은 보고일+제목("2026년 07월 10일 수업 보고서"). */}
         <h1 className="text-foreground text-2xl font-bold tracking-[0.05em]">
-          {[reportDate, rpt.title || "수업 보고서"].filter(Boolean).join(" ")}
+          {notice
+            ? `[공지사항]${reportDate ? ` ${reportDate}` : ""}`
+            : [reportDate, rpt.title || "수업 보고서"].filter(Boolean).join(" ")}
         </h1>
       </header>
 
-      <Section title="학생 정보">
-        <Field label="이름" value={student?.name || "-"} />
-        <Field label="학교 · 학년" value={schoolGrade} />
-        <Field label="담임" value={report.teacherName || "-"} />
-      </Section>
+      {/* 학생 정보 — 공지 모드에선 숨김(멘트만 발송). ⚠️ 이 섹션만 토글 게이트가 없어 공지 PII 누출 방지 위해 명시 래핑. */}
+      {!notice ? (
+        <Section title="학생 정보">
+          <Field label="이름" value={student?.name || "-"} />
+          <Field label="학교 · 학년" value={schoolGrade} />
+          <Field label="담임" value={report.teacherName || "-"} />
+        </Section>
+      ) : null}
 
       {showToday ? (
         <Section title="오늘 수업">
@@ -151,23 +161,24 @@ export function ParentReportCard({
         </Section>
       ) : null}
 
-      {rpt.showParentNote ? (
-        <Section title="학부모 전달 내용">
+      {/* 학부모 전달 내용(멘트) — 공지 모드에선 유일 본문이라 showParentNote 토글이 꺼져 있어도 강제 노출(빈 카드 방지). */}
+      {rpt.showParentNote || notice ? (
+        <Section title={notice ? "안내 말씀" : "학부모 전달 내용"}>
           <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">
             {report.notes || "작성된 보고 내용이 없습니다."}
           </p>
         </Section>
       ) : null}
 
-      {/* 학습 추세(종합분석) — 0091a. 내용 있을 때만 노출(빈 회차엔 섹션 자체를 숨김). */}
-      {rpt.showTrendNote && report.trendNote ? (
+      {/* 학습 추세(종합분석) — 0091a. 내용 있을 때만 노출(빈 회차엔 섹션 자체를 숨김). 공지 모드면 숨김. */}
+      {!notice && rpt.showTrendNote && report.trendNote ? (
         <Section title="학습 추세">
           <p className="text-foreground text-[16px] leading-relaxed whitespace-pre-wrap">{report.trendNote}</p>
         </Section>
       ) : null}
 
-      {/* 학생 사진 첨부(P2b) — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. 학원 설정 토글로 on/off. */}
-      {rpt.showAttachments && attachments.length ? (
+      {/* 학생 사진 첨부(P2b) — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. 학원 설정 토글로 on/off. 공지 모드면 숨김. */}
+      {!notice && rpt.showAttachments && attachments.length ? (
         <Section title="첨부">
           <div className="grid grid-cols-2 gap-2">
             {attachments.map((a) => (

@@ -380,6 +380,12 @@ export function OneScreenClient({
     if (!selected) return;
     setTrendDraftFor(selected.id, subjectName, text);
   }
+  // 공지사항 모드(0106a) 토글 — 과목별. 켜면 진도·평가·추세를 무시하고 멘트(draft)만 발송(서버가 null 강제).
+  // reports state에만 두는 UI 의도(세션 미영속) — 새로고침 시 리셋(일반 발송이 기본).
+  function toggleNoticeOnly(subjectName: string) {
+    if (!selected) return;
+    patchReport(selected.id, subjectName, (r) => ({ ...r, noticeOnly: !r.noticeOnly }));
+  }
   // 교재명·보강 — 과목별(subjectName으로 해당 과목만 갱신). 자동저장(patch→queueSave)에 실림.
   function setTextbookFor(studentId: string, subjectName: string, text: string) {
     patch(studentId, (s) => ({
@@ -496,7 +502,13 @@ export function OneScreenClient({
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     const su = student.subjects[idx];
     const existing = reports[student.id]?.[subjectName];
-    const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(student, idx);
+    const noticeOnly = existing?.noticeOnly ?? false;
+    // 공지 모드는 폴백 템플릿(buildSubjectReport '오늘 진도를 진행…')을 타지 않는다 — 멘트만 그대로(빈 멘트는 서버가 차단).
+    const draft = noticeOnly
+      ? existing?.draft ?? ""
+      : existing?.draft.trim()
+        ? existing.draft
+        : buildSubjectReport(student, idx);
     const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
     const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
@@ -522,6 +534,7 @@ export function OneScreenClient({
         trendNote, // 학습 추세(종합분석) — 4a
         subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
         outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
+        noticeOnly, // 공지사항 모드 — 0106a. 서버가 진도·점수 null 강제 + 멘트만 발송.
       },
     };
   }
@@ -953,6 +966,7 @@ export function OneScreenClient({
                 onMakeup={toggleMakeup}
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}
+                onToggleNotice={toggleNoticeOnly}
                 onNote={setNote}
                 onAutoWrite={autoWriteSubject}
                 generatingSubject={genSubject}

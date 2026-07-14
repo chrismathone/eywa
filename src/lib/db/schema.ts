@@ -656,6 +656,9 @@ export const lessonReports = pgTable(
     // 교재명·보강 — 0089a(edutrix 강사 필드 패리티). textbook=과목 교재(학부모 카드에도 표시), makeup=보강 수업 여부.
     textbook: text("textbook"),
     makeup: boolean("makeup").notNull().default(false),
+    // 공지사항 모드 — 0106a. true면 학부모 카드가 헤더+notes(멘트)만 렌더(진도·평가·추이·첨부 숨김), 제목 "[공지사항] 작성일".
+    // 진도/점수 구조화 필드는 saveLessonReport가 저장 시 null로 강제 → 통계·roster·진도컨테이너 오염 차단.
+    noticeOnly: boolean("notice_only").notNull().default(false),
     // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티, 사용률 90%). homework_score(수행 상태)와 별개.
     // 학부모 카드 표시(showHomeworkToday) + AI 멘트 마무리("오늘 과제는 ~입니다") 재료.
     homeworkToday: text("homework_today"),
