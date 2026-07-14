@@ -233,7 +233,7 @@ export async function updateStudent(
   // 다시 재원으로 돌리면 null로 비움. 이미 퇴원 상태였으면 손대지 않음.
   const { data: cur } = await supabase
     .from("students")
-    .select("status, withdrawal_metadata, withdrawn_at")
+    .select("status, withdrawal_metadata, withdrawn_at, name")
     .eq("id", id)
     .single();
   const prevStatus = cur?.status as string | undefined;
@@ -245,10 +245,27 @@ export async function updateStudent(
     withdrawalMetadata = null;
   }
 
+  // 이름을 새 값으로 바꾼 경우만 중복 검사 — 기존(=현재) 이름 유지 저장은 제외(원장 지시). 자기 자신(id)은 taken에서 빼서
+  // 자기 이름과 충돌로 오인되지 않게. 신규 이름이 다른 학생과 겹치면 접미사(A·B·C…) 강제.
+  const currentName = ((cur?.name as string | null) ?? "").trim();
+  let finalName = input.name;
+  let renamed = false;
+  if (input.name.trim() !== currentName) {
+    const existingNames = await fetchAllPaged<{ id: string; name: string | null }>((from, to) =>
+      supabase.from("students").select("id, name").eq("tenant_id", user.tenantId).range(from, to),
+    );
+    const taken = new Set(
+      existingNames.filter((r) => r.id !== id).map((r) => (r.name ?? "").trim()).filter(Boolean),
+    );
+    const resolved = resolveUniqueStudentName(input.name, taken);
+    finalName = resolved.name;
+    renamed = resolved.suffixed;
+  }
+
   const { error } = await supabase
     .from("students")
     .update({
-      name: input.name,
+      name: finalName,
       english_name: input.englishName,
       classnote_name: input.classnoteName,
       grade: input.grade,
@@ -309,7 +326,12 @@ export async function updateStudent(
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
   // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2). nonce로 연속 저장 구분.
-  return { ok: true, redirectTo: `/students/${id}`, nonce: Date.now() };
+  return {
+    ok: true,
+    redirectTo: `/students/${id}`,
+    nonce: Date.now(),
+    notice: renamed ? `이미 '${input.name}' 학생이 있어 '${finalName}'(으)로 저장했습니다.` : undefined,
+  };
 }
 
 /**
