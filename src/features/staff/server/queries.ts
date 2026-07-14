@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import type { SystemRole } from "@/lib/permissions";
 import {
@@ -30,7 +31,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
-  const [{ data: users }, { data: teaching }, { data: primaryS }] = await Promise.all([
+  const [{ data: users }, { data: teaching }] = await Promise.all([
     supabase
       .from("users")
       .select("id, display_name, email, phone, system_role, status")
@@ -38,20 +39,33 @@ export async function getStaffList(): Promise<StaffRow[]> {
       .order("system_role", { ascending: true })
       .order("display_name", { ascending: true }),
     supabase.from("classes").select("id, teacher_id").eq("is_active", true),
-    supabase.from("students").select("id, primary_teacher_id").eq("status", "enrolled"),
   ]);
 
   if (!users) return [];
 
   const classCount = new Map<string, number>();
+  const classTeacher = new Map<string, string>(); // class_id → teacher_id(과목 담당)
   for (const c of teaching ?? []) {
     if (!c.teacher_id) continue;
     classCount.set(c.teacher_id, (classCount.get(c.teacher_id) ?? 0) + 1);
+    classTeacher.set(c.id, c.teacher_id);
   }
-  const studentCount = new Map<string, number>();
-  for (const s of primaryS ?? []) {
-    if (!s.primary_teacher_id) continue;
-    studentCount.set(s.primary_teacher_id, (studentCount.get(s.primary_teacher_id) ?? 0) + 1);
+
+  // 담당 학생 수 = 강사의 활성 반에 수강 중(end_date null)인 distinct 학생(과목 담당=classes.teacher_id 기준).
+  // (구 primary_teacher_id 카운트 대체 — 과목제라 단일 담임 없음.)
+  const studentsByTeacher = new Map<string, Set<string>>();
+  const activeClassIds = [...classTeacher.keys()];
+  if (activeClassIds.length > 0) {
+    const ens = await fetchInChunks<{ class_id: string; student_id: string }>(activeClassIds, (chunk) =>
+      supabase.from("enrollments").select("class_id, student_id").is("end_date", null).in("class_id", chunk),
+    );
+    for (const e of ens) {
+      const tid = classTeacher.get(e.class_id);
+      if (!tid) continue;
+      const set = studentsByTeacher.get(tid) ?? new Set<string>();
+      set.add(e.student_id);
+      studentsByTeacher.set(tid, set);
+    }
   }
 
   return users.map((u) => ({
@@ -62,7 +76,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     systemRole: u.system_role as SystemRole,
     status: u.status,
     classesCount: classCount.get(u.id) ?? 0,
-    primaryStudentsCount: studentCount.get(u.id) ?? 0,
+    primaryStudentsCount: studentsByTeacher.get(u.id)?.size ?? 0,
   }));
 }
 

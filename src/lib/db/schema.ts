@@ -321,12 +321,6 @@ export const students = pgTable(
     // 부분 유니크 (tenant_id, attendance_code) WHERE status<>'withdrawn' 는 손수 alpha SQL에서.
     attendanceCode: text("attendance_code"),
     status: studentStatusEnum("status").notNull().default("prospect"),
-    primaryTeacherId: uuid("primary_teacher_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    secondaryTeacherId: uuid("secondary_teacher_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
     enrolledAt: date("enrolled_at"),
     withdrawnAt: date("withdrawn_at"),
     // Structured withdrawal record — reason category + memo + 3-step consultation tracking.
@@ -342,7 +336,6 @@ export const students = pgTable(
   },
   (t) => [
     index("students_tenant_status_idx").on(t.tenantId, t.status),
-    index("students_tenant_primary_teacher_idx").on(t.tenantId, t.primaryTeacherId),
     index("students_attendance_code_idx").on(t.tenantId, t.attendanceCode),
   ],
 );

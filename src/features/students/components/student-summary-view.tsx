@@ -25,7 +25,7 @@ export type StudentHeaderInfo = {
   grade?: string | null;
   school?: string | null;
   status?: string | null;
-  primaryTeacherName?: string | null;
+  teacherNames?: string[]; // 과목별 담당 강사(단일 담임 대체)
 };
 
 export function StudentSummaryView({
@@ -46,7 +46,7 @@ export function StudentSummaryView({
   const grade = summary?.grade ?? info.grade;
   const school = summary?.school ?? info.school;
   const status = summary?.status ?? info.status;
-  const teacher = summary?.primaryTeacherName ?? info.primaryTeacherName;
+  const teacherNames = summary?.teacherNames ?? info.teacherNames ?? [];
   const statusMeta = status ? (STATUS_META[status] ?? null) : null;
 
   return (
@@ -60,7 +60,7 @@ export function StudentSummaryView({
         <p className="text-text-dim text-xs">
           {grade ?? "—"}
           {school ? <> · {school}</> : null}
-          {teacher ? <> · 담임 {teacher}</> : null}
+          {teacherNames.length > 0 ? <> · 담당 {teacherNames.join("·")}</> : null}
         </p>
       </header>
 

@@ -10,7 +10,6 @@ import {
   updateStudent,
   type StudentFormState,
 } from "@/features/students/server/actions";
-import type { TeacherOption } from "@/features/students/server/queries";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
@@ -43,8 +42,6 @@ export type StudentFormValue = {
   parentPhone: string | null;
   parentRelation: string | null;
   status: string;
-  primaryTeacherId: string | null;
-  secondaryTeacherId: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
   notes: string | null;
@@ -87,13 +84,11 @@ function SubmitButton({ mode }: { mode: Mode }) {
 export function StudentForm({
   mode,
   initialValue,
-  teachers,
   gradeLevels,
   scope,
 }: {
   mode: Mode;
   initialValue?: StudentFormValue;
-  teachers: TeacherOption[];
   gradeLevels?: string[];
   /** 동시 편집 가드 스코프(예: `student:123`). 수정 모드에서만 전달 — 다른 창 저장 시 경고. */
   scope?: string;
@@ -151,8 +146,6 @@ export function StudentForm({
     parentPhone: null,
     parentRelation: null,
     status: "prospect",
-    primaryTeacherId: null,
-    secondaryTeacherId: null,
     enrolledAt: null,
     withdrawnAt: null,
     notes: null,
@@ -409,36 +402,6 @@ export function StudentForm({
             {Object.entries(STATUS_LABEL).map(([k, label]) => (
               <option key={k} value={k}>
                 {label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="담임" htmlFor="primaryTeacherId">
-          <select
-            id="primaryTeacherId"
-            name="primaryTeacherId"
-            defaultValue={v.primaryTeacherId ?? ""}
-            className={inputClass}
-          >
-            <option value="">선택</option>
-            {teachers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.displayName}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="부담임" htmlFor="secondaryTeacherId">
-          <select
-            id="secondaryTeacherId"
-            name="secondaryTeacherId"
-            defaultValue={v.secondaryTeacherId ?? ""}
-            className={inputClass}
-          >
-            <option value="">선택</option>
-            {teachers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.displayName}
               </option>
             ))}
           </select>

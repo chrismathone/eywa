@@ -86,8 +86,7 @@ export function generateRetentionFixture(
       school: `${a.grade.slice(0, 1)}학교`,
       notes: a.note || null,
       ai_care_summary: null,
-      primary_teacher_id: `tch-${(i % TEACHERS.length) + 1}`,
-      teacher: { display_name: teacher },
+      teacherNames: [teacher],
     });
 
     // 성적 2건(직전·최근)

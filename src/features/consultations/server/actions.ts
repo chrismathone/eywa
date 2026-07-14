@@ -41,10 +41,7 @@ export async function runStudentCareAnalysis(
     await Promise.all([
       supabase
         .from("students")
-        .select(
-          `id, name, grade, school, status, enrolled_at,
-           teacher:primary_teacher_id ( display_name )`,
-        )
+        .select(`id, name, grade, school, status, enrolled_at`)
         .eq("id", studentId)
         .single(),
       supabase
@@ -69,10 +66,6 @@ export async function runStudentCareAnalysis(
     ]);
 
   if (!student) return { error: "학생을 찾을 수 없습니다" };
-
-  const teacher = (Array.isArray(student.teacher) ? student.teacher[0] : student.teacher) as
-    | { display_name?: string }
-    | undefined;
 
   const consultationsBlock = (consults ?? [])
     .map((c) => {
@@ -116,7 +109,6 @@ export async function runStudentCareAnalysis(
         "재원생 한 명의 케어 종합 분석을 JSON으로만 답해주세요.",
         "",
         `학생: ${student.name} (${student.grade ?? "—"}, ${student.school ?? "—"})`,
-        `담임: ${teacher?.display_name ?? "—"}`,
         `등록일: ${student.enrolled_at ?? "—"}`,
         `수강 중인 반: ${enrolledClasses || "없음"}`,
         "",

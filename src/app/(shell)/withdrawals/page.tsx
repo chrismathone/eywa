@@ -390,7 +390,6 @@ export default async function WithdrawalsPage({
                         </p>
                         <p className="text-text-dim mt-0.5 text-[11px]">
                           {r.lastClassName ?? "수강 반 없음"}
-                          {r.primaryTeacherName ? <> · {r.primaryTeacherName} 강사</> : null}
                         </p>
                       </div>
                       <div className="text-right">
@@ -528,9 +527,6 @@ function SubjectEndedView({
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                {r.primaryTeacherName ? (
-                  <p className="text-text-dim text-[11px]">{r.primaryTeacherName} 강사</p>
-                ) : null}
                 {r.lastEndedAt ? (
                   <p className="text-text-faint num text-[10px]">{r.lastEndedAt} 종료</p>
                 ) : null}

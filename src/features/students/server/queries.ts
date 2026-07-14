@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
   slotPeriodRow,
@@ -39,13 +40,20 @@ function parseImportedNote(raw: string | null | undefined): {
   return { title, body: text || null, registrant };
 }
 
+// enrollments → class(subject·담당 강사) 조인 행 형태(PostgREST는 to-one도 배열로 줄 수 있어 유니온).
+type EnrollClass = {
+  subject?: string;
+  teacher_id?: string | null;
+  teacher?: { display_name?: string } | { display_name?: string }[] | null;
+};
+
 export type StudentListRow = {
   id: string;
   name: string;
   school: string | null;
   grade: string | null;
   status: string;
-  primaryTeacherName: string | null;
+  teacherNames: string[]; // 과목별 담당 강사(반의 teacher_id) distinct — 과목제라 학생당 단일 담임 없음
   enrolledAt: string | null;
   parentPhone: string | null;
   subjects: string[]; // 수강 중인 과목 unique list
@@ -113,13 +121,11 @@ export async function getStudentsList(
     let qb = supabase
       .from("students")
       .select(
-        `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect,
-         teacher:primary_teacher_id ( display_name )`,
+        `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect`,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
     if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
-    if (options?.teacherId && options.teacherId !== "all")
-      qb = qb.eq("primary_teacher_id", options.teacherId);
+    // 강사 필터는 아래 in-memory(과목별 담당 강사 기준) — primary_teacher_id 제거로 쿼리단 필터 없음.
     qb = applySearch(qb, options?.q, options?.searchField);
     const sorted =
       options?.sort === "name"
@@ -131,20 +137,23 @@ export async function getStudentsList(
   });
   if (data.length === 0) return [];
 
-  // 학생별 수강 과목 unique (active enrollments). id를 청크로 .in()(414 + error삼킴 방지).
+  // 학생별 수강 과목 unique + 과목별 담당 강사(반의 teacher_id). id를 청크로 .in()(414 + error삼킴 방지).
   const studentIds = data.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
+  const teachersByStudent = new Map<string, Map<string, string>>(); // student → teacher_id → 이름
   const enrolledSet = new Set<string>(); // 수강 중(end_date null, 휴원 포함) 반이 있는 학생
   {
     const ens = await fetchInChunks<{
       student_id: string;
       on_hold: boolean;
       end_date: string | null;
-      class: { subject?: string } | { subject?: string }[] | null;
+      class: EnrollClass | EnrollClass[] | null;
     }>(studentIds, (chunk) =>
       supabase
         .from("enrollments")
-        .select("student_id, on_hold, end_date, class:class_id ( subject )")
+        .select(
+          "student_id, on_hold, end_date, class:class_id ( subject, teacher_id, teacher:teacher_id ( display_name ) )",
+        )
         .in("student_id", chunk)
         .is("end_date", null),
     );
@@ -152,38 +161,49 @@ export async function getStudentsList(
     for (const e of ens) {
       enrolledSet.add(e.student_id); // 휴원 포함 — 반에 적힌 학생
       if (e.on_hold) continue;
-      const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as
-        | { subject?: string }
-        | undefined;
-      if (!klass?.subject) continue;
-      const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
-      set.add(klass.subject);
-      subjectsByStudent.set(e.student_id, set);
+      const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as EnrollClass | undefined;
+      if (klass?.subject) {
+        const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
+        set.add(klass.subject);
+        subjectsByStudent.set(e.student_id, set);
+      }
+      if (klass?.teacher_id) {
+        const t = (Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as
+          | { display_name?: string }
+          | undefined;
+        const tm = teachersByStudent.get(e.student_id) ?? new Map<string, string>();
+        tm.set(klass.teacher_id, t?.display_name ?? "");
+        teachersByStudent.set(e.student_id, tm);
+      }
     }
   }
 
-  let rows = data.map((r) => {
-    const teacher = (Array.isArray(r.teacher) ? r.teacher[0] : r.teacher) as
-      | { display_name?: string }
-      | undefined;
-    return {
-      id: r.id,
-      name: r.name,
-      school: r.school,
-      grade: r.grade,
-      status: r.status,
-      primaryTeacherName: teacher?.display_name ?? null,
-      enrolledAt: r.enrolled_at,
-      parentPhone: r.parent_phone,
-      subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
-      syncNew: r.sync_added_at != null,
-      dupSuspect: r.dup_suspect === true,
-    } satisfies StudentListRow;
-  });
+  let rows = data.map(
+    (r) =>
+      ({
+        id: r.id,
+        name: r.name,
+        school: r.school,
+        grade: r.grade,
+        status: r.status,
+        teacherNames: [
+          ...new Set(Array.from(teachersByStudent.get(r.id)?.values() ?? []).filter(Boolean)),
+        ].sort(),
+        enrolledAt: r.enrolled_at,
+        parentPhone: r.parent_phone,
+        subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
+        syncNew: r.sync_added_at != null,
+        dupSuspect: r.dup_suspect === true,
+      }) satisfies StudentListRow,
+  );
 
   // 과목 필터 (in-memory — subjects가 enrollments에서 옴)
   if (options?.subject && options.subject !== "all") {
     rows = rows.filter((r) => r.subjects.includes(options.subject!));
+  }
+  // 담당 강사 필터 (in-memory — 그 강사 반에 수강 중인 학생만)
+  if (options?.teacherId && options.teacherId !== "all") {
+    rows = rows.filter((r) => teachersByStudent.get(r.id)?.has(options.teacherId!));
   }
   // 미수강 제외 (in-memory — 전건을 이미 받았으므로)
   if (options?.excludeNoEnrollment) {
@@ -287,23 +307,28 @@ export async function getStudentsPage(
     unenrolledIds = await getUnenrolledStudentIds(supabase);
   }
 
+  // 담당 강사 필터 → 그 강사 반에 수강 중인 학생 id(getTeacherScope 재사용, primary_teacher_id 대체).
+  let teacherFilterIds: string[] | null = null;
+  if (options?.teacherId && options.teacherId !== "all") {
+    teacherFilterIds = (await getTeacherScope(options.teacherId)).studentIds;
+    if (teacherFilterIds.length === 0) return { rows: [], total: 0 };
+  }
+
   let qb = supabase
     .from("students")
     .select(
-      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect,
-       teacher:primary_teacher_id ( display_name )`,
+      `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect`,
       { count: "exact" },
     );
   if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
   if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
-  if (options?.teacherId && options.teacherId !== "all")
-    qb = qb.eq("primary_teacher_id", options.teacherId);
   qb = applySearch(qb, options?.q, options?.searchField);
-  // 과목 필터(subjectIds) ∩ 강사 스코프(teacherStudentIds) → 단일 id 화이트리스트.
+  // 과목(subjectIds) ∩ 강사 스코프(teacherStudentIds) ∩ 담당 강사 필터(teacherFilterIds) → 단일 id 화이트리스트.
   let idWhitelist: string[] | null = subjectIds;
-  if (teacherStudentIds) {
-    const t = new Set(teacherStudentIds);
-    idWhitelist = idWhitelist ? idWhitelist.filter((id) => t.has(id)) : teacherStudentIds;
+  for (const list of [teacherStudentIds, teacherFilterIds]) {
+    if (!list) continue;
+    const s = new Set(list);
+    idWhitelist = idWhitelist ? idWhitelist.filter((id) => s.has(id)) : list;
     if (idWhitelist.length === 0) return { rows: [], total: 0 };
   }
   if (idWhitelist) qb = qb.in("id", idWhitelist);
@@ -323,33 +348,44 @@ export async function getStudentsPage(
 
   const ids = pageData.map((r) => r.id);
   const subjectsByStudent = new Map<string, Set<string>>();
+  const teachersByStudent = new Map<string, Set<string>>(); // student → 담당 강사명 distinct
   if (ids.length > 0) {
     const { data: ens } = await supabase
       .from("enrollments")
-      .select("student_id, on_hold, end_date, class:class_id ( subject )")
+      .select(
+        "student_id, on_hold, end_date, class:class_id ( subject, teacher_id, teacher:teacher_id ( display_name ) )",
+      )
       .in("student_id", ids)
       .is("end_date", null);
-    for (const e of ens ?? []) {
+    for (const e of (ens ?? []) as { student_id: string; on_hold: boolean; class: EnrollClass | EnrollClass[] | null }[]) {
       if (e.on_hold) continue;
-      const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as { subject?: string } | undefined;
-      if (!klass?.subject) continue;
-      const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
-      set.add(klass.subject);
-      subjectsByStudent.set(e.student_id, set);
+      const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as EnrollClass | undefined;
+      if (klass?.subject) {
+        const set = subjectsByStudent.get(e.student_id) ?? new Set<string>();
+        set.add(klass.subject);
+        subjectsByStudent.set(e.student_id, set);
+      }
+      if (klass?.teacher_id) {
+        const t = (Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) as
+          | { display_name?: string }
+          | undefined;
+        if (t?.display_name) {
+          const set = teachersByStudent.get(e.student_id) ?? new Set<string>();
+          set.add(t.display_name);
+          teachersByStudent.set(e.student_id, set);
+        }
+      }
     }
   }
 
   const rows = pageData.map((r) => {
-    const teacher = (Array.isArray(r.teacher) ? r.teacher[0] : r.teacher) as
-      | { display_name?: string }
-      | undefined;
     return {
       id: r.id,
       name: r.name,
       school: r.school,
       grade: r.grade,
       status: r.status,
-      primaryTeacherName: teacher?.display_name ?? null,
+      teacherNames: Array.from(teachersByStudent.get(r.id) ?? []).sort(),
       enrolledAt: r.enrolled_at,
       parentPhone: r.parent_phone,
       subjects: Array.from(subjectsByStudent.get(r.id) ?? []).sort(),
@@ -391,10 +427,6 @@ export type StudentDetail = {
   parentName: string | null;
   parentPhone: string | null;
   parentRelation: string | null;
-  primaryTeacherId: string | null;
-  primaryTeacherName: string | null;
-  secondaryTeacherId: string | null;
-  secondaryTeacherName: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
   notes: string | null;
@@ -438,22 +470,12 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
        address, zip_code, address_detail, email, student_phone, home_phone, other_phone,
        enrolled_at, withdrawn_at, created_at, notes, dup_suspect,
        parent_name, parent_phone, parent_relation,
-       primary_teacher_id, secondary_teacher_id,
-       ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at,
-       teacher:primary_teacher_id ( display_name ),
-       secondary:secondary_teacher_id ( display_name )`,
+       ai_care_summary, ai_care_focus, ai_care_model_version, ai_care_generated_at`,
     )
     .eq("id", id)
     .single();
 
   if (!data) return null;
-
-  const teacher = (Array.isArray(data.teacher) ? data.teacher[0] : data.teacher) as
-    | { display_name?: string }
-    | undefined;
-  const secondary = (Array.isArray(data.secondary) ? data.secondary[0] : data.secondary) as
-    | { display_name?: string }
-    | undefined;
 
   return {
     id: data.id,
@@ -476,10 +498,6 @@ export async function getStudentById(id: string): Promise<StudentDetail | null> 
     studentPhone: data.student_phone,
     homePhone: data.home_phone,
     otherPhone: data.other_phone,
-    primaryTeacherId: data.primary_teacher_id,
-    primaryTeacherName: teacher?.display_name ?? null,
-    secondaryTeacherId: data.secondary_teacher_id,
-    secondaryTeacherName: secondary?.display_name ?? null,
     enrolledAt: data.enrolled_at,
     withdrawnAt: data.withdrawn_at,
     notes: data.notes,
@@ -502,6 +520,7 @@ export type StudentEnrollment = {
   classId: string;
   className: string;
   subject: string;
+  teacherName: string | null; // 이 반(과목)의 담당 강사 — 과목별 담당(단일 담임 대체)
   startDate: string;
   endDate: string | null;
   onHold: boolean;
@@ -513,7 +532,7 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
     .from("enrollments")
     .select(
       `id, start_date, end_date, on_hold,
-       class:class_id ( id, class_name, subject )`,
+       class:class_id ( id, class_name, subject, teacher:teacher_id ( display_name ) )`,
     )
     .eq("student_id", studentId)
     .order("start_date", { ascending: false });
@@ -522,13 +541,17 @@ export async function getStudentEnrollments(studentId: string): Promise<StudentE
 
   return data.map((r) => {
     const klass = (Array.isArray(r.class) ? r.class[0] : r.class) as
-      | { id?: string; class_name?: string; subject?: string }
+      | { id?: string; class_name?: string; subject?: string; teacher?: { display_name?: string } | { display_name?: string }[] | null }
+      | undefined;
+    const teacher = (Array.isArray(klass?.teacher) ? klass?.teacher[0] : klass?.teacher) as
+      | { display_name?: string }
       | undefined;
     return {
       id: r.id,
       classId: klass?.id ?? "",
       className: klass?.class_name ?? "?",
       subject: klass?.subject ?? "?",
+      teacherName: teacher?.display_name ?? null,
       startDate: r.start_date,
       endDate: r.end_date,
       onHold: r.on_hold,
@@ -1336,7 +1359,7 @@ export type StudentSummary = {
   school: string | null;
   grade: string | null;
   status: string;
-  primaryTeacherName: string | null;
+  teacherNames: string[]; // 과목별 담당 강사 distinct(단일 담임 대체)
   attendance: {
     rate: number;
     total: number;
@@ -1344,7 +1367,7 @@ export type StudentSummary = {
     absent: number;
     late: number;
   };
-  enrollments: { className: string; subject: string; onHold: boolean }[];
+  enrollments: { className: string; subject: string; teacherName: string | null; onHold: boolean }[];
   billing: {
     unpaidCount: number;
     overdueCount: number;
@@ -1378,7 +1401,9 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
     school: detail.school,
     grade: detail.grade,
     status: detail.status,
-    primaryTeacherName: detail.primaryTeacherName,
+    teacherNames: [
+      ...new Set(enrollments.filter((e) => e.endDate == null && e.teacherName).map((e) => e.teacherName as string)),
+    ].sort(),
     attendance: {
       rate: attendance.rate,
       total: attendance.total,
@@ -1388,7 +1413,7 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
     },
     enrollments: enrollments
       .filter((e) => e.endDate == null)
-      .map((e) => ({ className: e.className, subject: e.subject, onHold: e.onHold })),
+      .map((e) => ({ className: e.className, subject: e.subject, teacherName: e.teacherName, onHold: e.onHold })),
     billing: {
       unpaidCount: unpaid.length,
       overdueCount: overdue.length,

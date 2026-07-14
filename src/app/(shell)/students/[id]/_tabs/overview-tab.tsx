@@ -87,8 +87,6 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
             {student.graduationYear ? (
               <Field label="졸업연도" value={student.graduationYear} mono />
             ) : null}
-            <Field label="담임" value={student.primaryTeacherName} />
-            <Field label="부담임" value={student.secondaryTeacherName} />
             {student.studentPhone ? (
               <Field label="학생 연락처" value={student.studentPhone} mono />
             ) : null}
@@ -130,7 +128,11 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
             <Empty>수강 중인 반 없음</Empty>
           ) : (
             activeClasses.slice(0, 4).map((e) => (
-              <DigestRow key={e.id} left={e.className} right={subjects.labelOf(e.subject)} />
+              <DigestRow
+                key={e.id}
+                left={e.className}
+                right={[subjects.labelOf(e.subject), e.teacherName].filter(Boolean).join(" · ")}
+              />
             ))
           )}
         </DigestCard>

@@ -52,16 +52,11 @@ async function fetchByStudentChunks<T>(
 async function computeRetentionRoster(tenantId: string, teacherId?: string): Promise<RosterStudent[]> {
   const admin = createAdminClient();
 
-  let studentQuery = admin
+  const { data: students } = await admin
     .from("students")
-    .select(
-      `id, name, grade, school, notes, ai_care_summary, primary_teacher_id,
-       teacher:primary_teacher_id ( display_name )`,
-    )
+    .select(`id, name, grade, school, notes, ai_care_summary`)
     .eq("tenant_id", tenantId)
     .eq("status", "enrolled");
-  if (teacherId) studentQuery = studentQuery.eq("primary_teacher_id", teacherId);
-  const { data: students } = await studentQuery;
   if (!students || students.length === 0) return [];
 
   const ids = students.map((s) => s.id);
@@ -109,14 +104,42 @@ async function computeRetentionRoster(tenantId: string, teacherId?: string): Pro
     fetchByStudentChunks(ids, (c) =>
       admin
         .from("enrollments")
-        .select("student_id, end_date, on_hold")
+        .select("student_id, end_date, on_hold, class:class_id ( teacher_id, teacher:teacher_id ( display_name ) )")
         .eq("tenant_id", tenantId)
         .in("student_id", c),
     ),
   ]);
 
+  // 과목별 담당 강사(단일 담임 대체) — 활성 수강(end_date null) 반의 teacher_id/이름 집계.
+  const teacherNamesByStudent = new Map<string, Set<string>>();
+  const teacherIdsByStudent = new Map<string, Set<string>>();
+  for (const e of enrollments as {
+    student_id: string;
+    end_date: string | null;
+    class?: { teacher_id?: string | null; teacher?: { display_name?: string } | { display_name?: string }[] | null } | { teacher_id?: string | null; teacher?: unknown }[] | null;
+  }[]) {
+    if (e.end_date) continue;
+    const cls = (Array.isArray(e.class) ? e.class[0] : e.class) as
+      | { teacher_id?: string | null; teacher?: { display_name?: string } | { display_name?: string }[] | null }
+      | undefined;
+    if (!cls?.teacher_id) continue;
+    (teacherIdsByStudent.get(e.student_id) ?? teacherIdsByStudent.set(e.student_id, new Set()).get(e.student_id)!).add(cls.teacher_id);
+    const t = (Array.isArray(cls.teacher) ? cls.teacher[0] : cls.teacher) as { display_name?: string } | undefined;
+    if (t?.display_name) {
+      (teacherNamesByStudent.get(e.student_id) ?? teacherNamesByStudent.set(e.student_id, new Set()).get(e.student_id)!).add(t.display_name);
+    }
+  }
+
+  // 담당 강사 필터 → 그 강사 반에 수강 중인 학생만.
+  const scopedStudents = teacherId
+    ? students.filter((s) => teacherIdsByStudent.get(s.id)?.has(teacherId))
+    : students;
+
   const raw: RetentionRawData = {
-    students: students as RetentionRawData["students"],
+    students: scopedStudents.map((s) => ({
+      ...s,
+      teacherNames: [...(teacherNamesByStudent.get(s.id) ?? [])].sort(),
+    })) as RetentionRawData["students"],
     attendance: attendance as RetentionRawData["attendance"],
     grades: grades as RetentionRawData["grades"],
     consultations: consultations as RetentionRawData["consultations"],

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
-import { getStudentById, getTeacherOptions } from "@/features/students/server/queries";
+import { getStudentById } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../../_components/student-form";
 
@@ -14,11 +14,7 @@ export default async function EditStudentPage({
 }) {
   await requireAccess("students");
   const { id } = await params;
-  const [student, teachers, { operations }] = await Promise.all([
-    getStudentById(id),
-    getTeacherOptions(),
-    getTenantSettings(),
-  ]);
+  const [student, { operations }] = await Promise.all([getStudentById(id), getTenantSettings()]);
   if (!student) notFound();
 
   return (
@@ -33,7 +29,6 @@ export default async function EditStudentPage({
       <StudentForm
         mode="edit"
         scope={`student:${id}`}
-        teachers={teachers}
         gradeLevels={operations.gradeLevels}
         initialValue={{
           id: student.id,
@@ -59,8 +54,6 @@ export default async function EditStudentPage({
           parentPhone: student.parentPhone,
           parentRelation: student.parentRelation,
           status: student.status,
-          primaryTeacherId: student.primaryTeacherId,
-          secondaryTeacherId: student.secondaryTeacherId,
           enrolledAt: student.enrolledAt,
           withdrawnAt: student.withdrawnAt,
           notes: student.notes,

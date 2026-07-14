@@ -17,7 +17,6 @@ export type WithdrawalRow = {
   name: string;
   school: string | null;
   grade: string | null;
-  primaryTeacherName: string | null;
   enrolledAt: string | null;
   withdrawnAt: string | null;
   lastClassName: string | null;
@@ -49,8 +48,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
     supabase
       .from("students")
       .select(
-        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
-         teacher:primary_teacher_id ( display_name )`,
+        `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata`,
       )
       .eq("status", "withdrawn")
       .order("withdrawn_at", { ascending: false })
@@ -96,9 +94,6 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
   }
 
   return students.map((s) => {
-    const teacher = (Array.isArray(s.teacher) ? s.teacher[0] : s.teacher) as
-      | { display_name?: string }
-      | undefined;
     const last = lastByStudent.get(s.id);
     const md = parseMetadata(s.withdrawal_metadata);
     return {
@@ -106,7 +101,6 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       name: s.name,
       school: s.school,
       grade: s.grade,
-      primaryTeacherName: teacher?.display_name ?? null,
       enrolledAt: s.enrolled_at,
       withdrawnAt: s.withdrawn_at,
       lastClassName: last?.className ?? null,
@@ -141,8 +135,7 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
       .from("students")
       .select(
         `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata,
-         student_phone, parent_phone, parent_name,
-         teacher:primary_teacher_id ( display_name )`,
+         student_phone, parent_phone, parent_name`,
       )
       .eq("id", studentId)
       .single(),
@@ -179,9 +172,6 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
     }) ?? [];
 
   const lastEnded = history.find((h) => h.endDate !== null);
-  const teacher = (Array.isArray(s.teacher) ? s.teacher[0] : s.teacher) as
-    | { display_name?: string }
-    | undefined;
   const md = parseMetadata(s.withdrawal_metadata);
 
   return {
@@ -189,7 +179,6 @@ export async function getWithdrawalDetail(studentId: string): Promise<Withdrawal
     name: s.name,
     school: s.school,
     grade: s.grade,
-    primaryTeacherName: teacher?.display_name ?? null,
     enrolledAt: s.enrolled_at,
     withdrawnAt: s.withdrawn_at,
     lastClassName: lastEnded?.className ?? null,
@@ -210,7 +199,6 @@ export type SubjectEndedRow = {
   school: string | null;
   grade: string | null;
   status: string; // enrolled | on_hold
-  primaryTeacherName: string | null;
   endedSubjects: string[]; // 종료된 과목 코드
   activeSubjects: string[]; // 아직 수강 중인 과목 코드
   lastEndedAt: string | null; // 종료 과목 중 가장 최근 end_date
@@ -225,11 +213,10 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     school: string | null;
     grade: string | null;
     status: string;
-    teacher: { display_name?: string } | { display_name?: string }[] | null;
   }>((from, to) =>
     supabase
       .from("students")
-      .select("id, name, school, grade, status, teacher:primary_teacher_id ( display_name )")
+      .select("id, name, school, grade, status")
       .in("status", ["enrolled", "on_hold"])
       .range(from, to),
   );
@@ -269,16 +256,12 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
         lastEndedAt = e.endDate;
       }
     }
-    const teacher = (Array.isArray(s.teacher) ? s.teacher[0] : s.teacher) as
-      | { display_name?: string }
-      | undefined;
     rows.push({
       id: s.id,
       name: s.name,
       school: s.school,
       grade: s.grade,
       status: s.status,
-      primaryTeacherName: teacher?.display_name ?? null,
       endedSubjects: ended,
       activeSubjects: active,
       lastEndedAt,

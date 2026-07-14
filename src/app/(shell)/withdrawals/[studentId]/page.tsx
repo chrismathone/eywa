@@ -49,7 +49,6 @@ export default async function WithdrawalDetailPage({
           <p className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             {detail.grade ? <span>{detail.grade}</span> : null}
             {detail.school ? <span>· {detail.school}</span> : null}
-            {detail.primaryTeacherName ? <span>· 담임 {detail.primaryTeacherName}</span> : null}
           </p>
           {/* 연락처 — 사후 상담(전화) 시 학생관리로 우회하지 않게 상세에 노출(클릭 통화). */}
           {detail.studentPhone || detail.parentPhone ? (

@@ -188,7 +188,7 @@ export default async function StudentsPage({
                 <th className="micro px-5 py-3 text-left">학교</th>
                 <th className="micro px-5 py-3 text-left">상태</th>
                 <th className="micro px-5 py-3 text-left">수강 과목</th>
-                <th className="micro px-5 py-3 text-left">담임</th>
+                <th className="micro px-5 py-3 text-left">담당 강사</th>
                 <th className="micro px-5 py-3 text-right">학부모 연락처</th>
               </tr>
             </thead>
@@ -231,7 +231,7 @@ export default async function StudentsPage({
                       )}
                     </td>
                     <td className="text-text-dim px-5 py-3 text-xs">
-                      {s.primaryTeacherName ?? "—"}
+                      {s.teacherNames.length > 0 ? s.teacherNames.join("·") : "—"}
                     </td>
                     <td className="text-text-dim num px-5 py-3 text-right text-xs">
                       {s.parentPhone ?? "—"}

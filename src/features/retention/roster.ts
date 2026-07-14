@@ -30,9 +30,6 @@ function estimateFee(grade: string | null): number {
   if (g.includes("초")) return 380000;
   return 500000;
 }
-function rel<T>(field: T | T[] | null | undefined): T | undefined {
-  return (Array.isArray(field) ? field[0] : field) ?? undefined;
-}
 
 // === eywa 원시 행 형태(Supabase select 결과와 동일, snake_case) ===
 export type RawStudentRow = {
@@ -42,8 +39,7 @@ export type RawStudentRow = {
   school: string | null;
   notes: string | null;
   ai_care_summary: string | null;
-  primary_teacher_id: string | null;
-  teacher: { display_name?: string } | { display_name?: string }[] | null;
+  teacherNames: string[]; // 과목별 담당 강사(단일 담임 대체) — computeRetentionRoster가 수강 반에서 집계
 };
 export type RawAttendanceRow = {
   student_id: string;
@@ -171,7 +167,7 @@ export function buildRoster(raw: RetentionRawData, today: Date): RosterStudent[]
       enrollmentEndsInDays: endsIn.get(s.id) ?? null,
     };
     const risk = scoreStudent(signals);
-    const teacherName = rel<{ display_name?: string }>(s.teacher)?.display_name ?? null;
+    const teacherName = s.teacherNames.length > 0 ? s.teacherNames.join("·") : null;
 
     return {
       id: s.id,

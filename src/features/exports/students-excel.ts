@@ -26,7 +26,7 @@ export async function buildStudentsWorkbook(
     { header: "학교", key: "school", width: 18 },
     { header: "상태", key: "status", width: 10 },
     { header: "수강 과목", key: "subjects", width: 18 },
-    { header: "담임", key: "teacher", width: 12 },
+    { header: "담당 강사", key: "teacher", width: 14 },
     { header: "학부모 연락처", key: "parentPhone", width: 16 },
     { header: "등록일", key: "enrolledAt", width: 12 },
   ];
@@ -44,7 +44,7 @@ export async function buildStudentsWorkbook(
       school: s.school ?? "—",
       status: STATUS_LABEL[s.status] ?? s.status,
       subjects: s.subjects.map((sub) => subjectLabelOf(sub)).join(", "),
-      teacher: s.primaryTeacherName ?? "—",
+      teacher: s.teacherNames.length > 0 ? s.teacherNames.join(", ") : "—",
       parentPhone: s.parentPhone ?? "—",
       enrolledAt: s.enrolledAt ?? "—",
     });

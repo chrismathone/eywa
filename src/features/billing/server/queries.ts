@@ -38,7 +38,6 @@ export type InvoiceRow = {
   paidAt: string | null;
   notes: string | null;
   lineItems: InvoiceLineItem[];
-  teacherName: string | null;
   // 결제 상세(0042a)
   paymentMethod: string | null;
   cardCompany: string | null;
@@ -113,7 +112,7 @@ export async function getInvoicesForPeriod(
     .select(
       `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
        payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at,
-       student:student_id ( id, name, grade, teacher:primary_teacher_id ( display_name ) )`,
+       student:student_id ( id, name, grade )`,
     )
     .eq("period", periodKey)
     // void = makeedu에서 삭제된 청구(동기화가 무효 처리) — 수납 표·KPI·엑셀은 makeedu 미러라 제외.
@@ -133,11 +132,7 @@ export async function getInvoicesForPeriod(
           id: string;
           name: string;
           grade: string | null;
-          teacher?: { display_name?: string } | { display_name?: string }[];
         }
-      | undefined;
-    const teacher = (Array.isArray(stu?.teacher) ? stu?.teacher[0] : stu?.teacher) as
-      | { display_name?: string }
       | undefined;
     return {
       id: r.id,
@@ -154,7 +149,6 @@ export async function getInvoicesForPeriod(
       paidAt: r.paid_at,
       notes: r.notes ?? null,
       lineItems: normalizeInvoiceLineItems(r.line_items),
-      teacherName: teacher?.display_name ?? null,
       paymentMethod: (r as { payment_method?: string | null }).payment_method ?? null,
       cardCompany: (r as { card_company?: string | null }).card_company ?? null,
       cashReceiptNumber: (r as { cash_receipt_number?: string | null }).cash_receipt_number ?? null,

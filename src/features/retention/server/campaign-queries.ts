@@ -53,14 +53,15 @@ export async function getCampaignBoard(opts?: { teacherId?: string }): Promise<C
       .from("reenrollment_campaign_targets")
       .select(
         `id, student_id, status,
-         student:student_id ( name, grade, school, primary_teacher_id,
-           teacher:primary_teacher_id ( display_name ) )`,
+         student:student_id ( name, grade, school )`,
       )
       .order("created_at", { ascending: true }),
     getRetentionRoster(opts),
   ]);
 
   const feeById = new Map(roster.map((r) => [r.id, r.monthlyFee]));
+  const teacherNameById = new Map(roster.map((r) => [r.id, r.teacherName])); // 담당 강사(과목별) — roster에서
+  const rosterIds = new Set(roster.map((r) => r.id)); // teacherId 필터 시 그 강사 재원생만(roster가 이미 스코프)
   const targetStudentIds = new Set((targetRows ?? []).map((t) => t.student_id));
 
   const columns: Record<CampaignStatus, CampaignCard[]> = {
@@ -72,19 +73,11 @@ export async function getCampaignBoard(opts?: { teacherId?: string }): Promise<C
 
   for (const t of targetRows ?? []) {
     const s = (Array.isArray(t.student) ? t.student[0] : t.student) as
-      | {
-          name?: string;
-          grade?: string | null;
-          school?: string | null;
-          primary_teacher_id?: string | null;
-          teacher?: { display_name?: string } | { display_name?: string }[];
-        }
+      | { name?: string; grade?: string | null; school?: string | null }
       | undefined;
     if (!s) continue;
-    if (opts?.teacherId && s.primary_teacher_id !== opts.teacherId) continue;
-    const teacher = (Array.isArray(s.teacher) ? s.teacher[0] : s.teacher) as
-      | { display_name?: string }
-      | undefined;
+    // teacherId 필터: roster(getRetentionRoster)가 이미 담당 강사 기준으로 스코프됨 → 그 재원생 타깃만.
+    if (opts?.teacherId && !rosterIds.has(t.student_id)) continue;
     const status = (["pending", "contacted", "enrolled", "declined"].includes(t.status)
       ? t.status
       : "pending") as CampaignStatus;
@@ -94,7 +87,7 @@ export async function getCampaignBoard(opts?: { teacherId?: string }): Promise<C
       name: s.name ?? "?",
       grade: s.grade ?? null,
       school: s.school ?? null,
-      teacherName: teacher?.display_name ?? null,
+      teacherName: teacherNameById.get(t.student_id) ?? null,
       feeLabel: formatWonShort(feeById.get(t.student_id) ?? 0),
       status,
     });
