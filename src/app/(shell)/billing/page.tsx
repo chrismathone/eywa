@@ -5,11 +5,12 @@ import { ExpensesPanel } from "./_components/expenses-panel";
 import { CalculatorPanel } from "./_components/calculator-panel";
 import { RefundsFace } from "./_components/refunds-face";
 import { SessionTermsFace } from "./_components/session-terms-face";
+import { SessionVerificationFace } from "./_components/session-verification-face";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 
 type Sp = Record<string, string | undefined>;
-type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions";
+type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify";
 
 function resolveTab(sp: Sp): BillingTab {
   return sp.tab === "textbooks"
@@ -22,7 +23,9 @@ function resolveTab(sp: Sp): BillingTab {
           ? "refunds"
           : sp.tab === "sessions"
             ? "sessions"
-            : "billing";
+            : sp.tab === "verify"
+              ? "verify"
+              : "billing";
 }
 
 // 교재 단가표는 교재 면과 수강료 계산기 면의 "내부탭"으로 들어가 두 곳에서 쓰인다(최상위 면 아님).
@@ -32,6 +35,7 @@ const FACES: Face[] = [
   { key: "expenses", label: "지출", href: "/billing?tab=expenses" },
   { key: "calculator", label: "수강료 계산기", href: "/billing?tab=calculator" },
   { key: "sessions", label: "회차 확정", href: "/billing?tab=sessions" },
+  { key: "verify", label: "시수 검증", href: "/billing?tab=verify" },
   { key: "refunds", label: "환불 요청서", href: "/billing?tab=refunds" },
 ];
 
@@ -49,7 +53,9 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
             ? " · 환불 요청서"
             : tab === "sessions"
               ? " · 회차 확정"
-              : "";
+              : tab === "verify"
+                ? " · 시수 검증"
+                : "";
   return { title: `수납관리${suffix} — eywa` };
 }
 
@@ -78,6 +84,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <RefundsFace sp={sp} />
       ) : tab === "sessions" ? (
         <SessionTermsFace period={sp.period} subject={sp.subject} q={sp.q} page={sp.page} />
+      ) : tab === "verify" ? (
+        <SessionVerificationFace period={sp.period} subject={sp.subject} page={sp.page} />
       ) : (
         <BillingContent sp={sp} />
       )}

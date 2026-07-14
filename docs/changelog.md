@@ -9,6 +9,15 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시수 검증 read-only 탭 — 확정 회차(청구값) vs 실 소비 출석 대조 (2026-07-14) — ✅ tsc0/lint0/test1114(verification5)/build✓
+청구=N회 키스톤의 **직접 소비자**(로드맵 2단계, [per-session-billing-plan.md](per-session-billing-plan.md)). /billing FaceTabs에 **쓰기 0** 조회 전용 면 신설 — 회차 확정에서 사무실이 확정한 회차(청구 기준)와 그 반의 실제 소비 출석을 나란히 대조해 **과청구(부족)·미청구(초과)**를 신호로 노출.
+- **읽기전용 RPC** [0103a](../supabase/migrations/0103a_session_term_attendance.sql) `session_term_attendance(period)`: `invoice_session_terms`×`invoices`(그 달 청구 대상) ⋈ `attendance_records`. attendance는 append-only(`supersedes_id`)라 **(학생·반·날짜)별 최신 `recorded_at` 1건만 유효**(`distinct on` dedup) + 소비 인정 상태 = `present/late/early_leave/makeup`(absent·폐지된 excused 제외). term 중심(invoice_id·class_id 반환)이라 결과=회차 확정 행 수와 1:1. `security invoker`+`auth_tenant_id()` 이중격리(0101a 패턴), 호출부 `fetchAllPaged` 페이징(B2).
+- **순수 판정** [verification.ts](../src/features/billing/session-terms/verification.ts) `classifyVerification(확정, 실측)` → 일치(=)·부족(실측<확정)·초과(실측>확정)·미확정(확정 전) + Vitest 5. **확정값만 검증 분자**(N1) / **diff는 신호일 뿐 자동수정 없음**(N2 — "일치시키기" 류 버튼 금지).
+- **조인 쿼리** [verification-queries.ts](../src/features/billing/session-terms/server/verification-queries.ts): 기존 `getSessionTermsView` 재사용 + RPC 조인(B4 Promise.all). **면** [session-verification-face.tsx](<../src/app/(shell)/billing/_components/session-verification-face.tsx>): 월 네비·과목 칩·상태 요약칩·불일치 우선정렬·diff 색(녹/주/적)·미확정=계획 회차 회색 참고. 회차 수정은 회차 확정 딥링크로 유도.
+- **배선(면 2곳 미러)**: [page.tsx](<../src/app/(shell)/billing/page.tsx>) FACES `verify`(회차 확정↔환불 사이) + [navigation.ts](../src/lib/navigation.ts) `SUBTABS_BY_MENU.billing` 미러([[feedback_face-tab-mirror-sidebar-subtabs]]).
+- **v1 한계**: 청구월=달력월 근사(기간 ranges 모델 미도입 — 월중 등록/퇴원은 diff에 자연 노출). (b) 금액차·강사 분배(splits)는 골든마스터(N6) 통과 전 착수 금지 — 이 탭은 (a)까지만.
+- ⚠️ 0103a는 **머지 승인 시 프로덕션 적용**(RPC 생성). 현재 격리 워크트리 검증만 완료.
+
 ### 직원 상세 '최근 접속' 세션을 IP·기기별로 그룹핑 (2026-07-14) — ✅ tsc0/그룹핑 로직 실데이터 검증
 원장 "같은 IP 세션이 너무 많이 중복돼 보인다". 자동 로그인 정책(회전 off·timebox 0, [auth-session-policy.md](auth-session-policy.md))상
 재로그인마다 새 `auth.sessions` 행이 생기고 세션이 안 죽어 누적되는데, 집/학원망은 NAT 공인 IP 1개라 **같은 곳 세션이 목록을 도배**했다(중복처럼 보임).
