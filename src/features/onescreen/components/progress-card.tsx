@@ -16,11 +16,13 @@ export function ProgressCard({
   onConfirm,
   onProgress,
   onStudyGrade,
+  onLoadPrev,
 }: {
   student: OneScreenStudent;
   onConfirm: () => void;
   onProgress: (subjectIndex: number, today: string) => void;
   onStudyGrade: (grade: string) => void;
+  onLoadPrev?: () => void; // 보강 학생 '이전 진도 불러오기'(있을 때만 노출) — 직전 회차를 당겨온다.
 }) {
   const studyGrade = student.studyGrade ?? student.grade;
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
@@ -32,15 +34,22 @@ export function ProgressCard({
           <p className="micro text-text-faint">진도 확인</p>
           <p className="text-foreground text-[15px] font-bold">오늘 어디까지 나갔나요</p>
         </div>
-        <Button variant={student.progressConfirmed ? "outline" : "default"} size="sm" onClick={onConfirm}>
-          {student.progressConfirmed ? (
-            <>
-              <EyIcon name="check" size={13} /> 확정됨
-            </>
-          ) : (
-            "오늘 진도 확정"
+        <div className="flex items-center gap-2">
+          {onLoadPrev && (
+            <Button variant="outline" size="sm" onClick={onLoadPrev}>
+              <EyIcon name="history" size={13} /> 이전 진도 불러오기
+            </Button>
           )}
-        </Button>
+          <Button variant={student.progressConfirmed ? "outline" : "default"} size="sm" onClick={onConfirm}>
+            {student.progressConfirmed ? (
+              <>
+                <EyIcon name="check" size={13} /> 확정됨
+              </>
+            ) : (
+              "오늘 진도 확정"
+            )}
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-3 px-4 py-3">
