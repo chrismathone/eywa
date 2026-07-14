@@ -418,11 +418,14 @@ export async function generateReportComment(
 
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
-    // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. Solar 후보정(temp 0.3·reasoning minimal) 적용.
+    // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. temp 0.3·reasoning minimal(Solar 후보정) 적용.
+    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 4.5 / 키 죽으면 Solar 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
+    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 등록상담·회의록 분석은 balanced(Sonnet 5) 유지. Haiku도 Anthropic 키가 살아야 동작(아니면 Solar).
     const { data } = await generateJSON<Record<string, string>>({
       prompt: assembleCombined(sections),
       maxTokens: 1000,
       keyName: "default",
+      tier: "fast",
       ...MENT_AI_TUNING,
     });
     const pick = (k: string) => (data[k] ?? "").trim();
