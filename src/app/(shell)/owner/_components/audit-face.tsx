@@ -25,7 +25,9 @@ const ACTION_COLOR: Record<string, PillColor> = {
 const ACTION_FILTERS = Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }));
 
 function fmtTime(iso: string): string {
+  // ⚠️ 시각은 KST 고정 — 서버(Vercel=UTC) 렌더라 timeZone 안 박으면 UTC로 나온다(makeedu-sync-runs.tsx 동일 경고).
   return new Date(iso).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
