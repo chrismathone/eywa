@@ -75,11 +75,12 @@ function reportCell(map: Record<string, SubjectReport> | undefined, subjectCount
   return "todo";
 }
 
-/** 오늘 시험·테스트 합본("일일 18/20, 확인 19/20") — exam_info 규격(추세 조립·prev-score 파싱 공용). 미입력 항목은 생략. */
-function buildExamInfo(st: OneScreenStudent): string {
+/** 오늘 시험·테스트 합본("일일 18/20, 확인 19/20") — exam_info 규격(추세 조립·prev-score 파싱 공용).
+ * 미입력·**비활성 테스트(학원설정 off)** 항목은 생략 — 세션에서 복원된 옛 점수가 저장에 새는 것 차단. */
+function buildExamInfo(st: OneScreenStudent, dailyOn: boolean, checkOn: boolean): string {
   return [
-    st.tests.daily.score != null ? `일일 ${st.tests.daily.score}/${st.tests.daily.max}` : null,
-    st.tests.check.score != null ? `확인 ${st.tests.check.score}/${st.tests.check.max}` : null,
+    dailyOn && st.tests.daily.score != null ? `일일 ${st.tests.daily.score}/${st.tests.daily.max}` : null,
+    checkOn && st.tests.check.score != null ? `확인 ${st.tests.check.score}/${st.tests.check.max}` : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -96,12 +97,16 @@ export function OneScreenClient({
   classTags = CLASS_TAGS,
   todayClasses = [],
   allowTeacherTestMax = false,
+  showDailyTest = true,
+  showCheckTest = true,
 }: {
   initial: OneScreenStudent[];
   today?: string;
   classTags?: readonly string[];
   todayClasses?: TodayClass[];
   allowTeacherTestMax?: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(학원 설정)
+  showDailyTest?: boolean; // 일일테스트 사용(보고서 '표시 항목' 설정 재사용) — off면 입력칸 숨김
+  showCheckTest?: boolean; // 확인테스트 사용(보고서 '표시 항목' 설정 재사용) — off면 입력칸 숨김
 }) {
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
@@ -147,9 +152,10 @@ export function OneScreenClient({
           },
         ]),
       ),
-      dailyScore: s.tests.daily.score,
+      // 비활성 테스트는 세션에도 점수를 재기입하지 않는다(off 후 남은 옛 점수를 다음 저장이 되살리지 않도록 self-heal).
+      dailyScore: showDailyTest ? s.tests.daily.score : null,
       dailyMax: s.tests.daily.max,
-      checkScore: s.tests.check.score,
+      checkScore: showCheckTest ? s.tests.check.score : null,
       checkMax: s.tests.check.max,
       attitude: s.attitude,
       homework: s.homework || null,
@@ -356,7 +362,7 @@ export function OneScreenClient({
       const res = await generateReportComment(buildReportCommentInput(student, idx), {
         studentId: student.id,
         subject: subjectKey,
-        todayExamInfo: buildExamInfo(student),
+        todayExamInfo: buildExamInfo(student, showDailyTest, showCheckTest),
         todayHomework: student.homework,
       });
       const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
@@ -429,12 +435,13 @@ export function OneScreenClient({
     const existing = reports[student.id]?.[subjectName];
     const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(student, idx);
     const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
-    const examInfo = buildExamInfo(student);
+    const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
     // 학부모 보고서 일일/확인테스트 분리 표시용("N문제 중 M개"). exam_info(합본)는 roster prev-score 파싱용 별도 보존.
+    // 비활성 테스트(학원설정 off)는 세션에서 복원된 옛 점수가 남아 있어도 저장·발송하지 않는다(입력칸도 숨김 → 새 보고서엔 안 나감).
     const dailyTest =
-      student.tests.daily.score != null ? `${student.tests.daily.max}문제 중 ${student.tests.daily.score}개` : "";
+      showDailyTest && student.tests.daily.score != null ? `${student.tests.daily.max}문제 중 ${student.tests.daily.score}개` : "";
     const checkTest =
-      student.tests.check.score != null ? `${student.tests.check.max}문제 중 ${student.tests.check.score}개` : "";
+      showCheckTest && student.tests.check.score != null ? `${student.tests.check.max}문제 중 ${student.tests.check.score}개` : "";
     return {
       draft,
       input: {
@@ -811,6 +818,8 @@ export function OneScreenClient({
           onSaveAll={saveAllVisible}
           onSendAll={sendAllVisible}
           allowTestMax={allowTeacherTestMax}
+          dailyEnabled={showDailyTest}
+          checkEnabled={showCheckTest}
           onMax={setMaxFor}
           onMakeup={toggleMakeupFor}
           onAutoWrite={autoWriteRow}
@@ -848,7 +857,7 @@ export function OneScreenClient({
                 onStudyGrade={setStudyGrade}
                 onSemester={setSemester}
               />
-              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} />
+              <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
             </div>
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">

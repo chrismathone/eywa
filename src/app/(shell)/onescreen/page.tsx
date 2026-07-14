@@ -33,6 +33,8 @@ export default async function OneScreenPage() {
       classTags={roster.classTags}
       todayClasses={roster.todayClasses}
       allowTeacherTestMax={roster.allowTeacherTestMax}
+      showDailyTest={roster.showDailyTest}
+      showCheckTest={roster.showCheckTest}
     />
   );
 }

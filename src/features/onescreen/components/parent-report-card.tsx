@@ -80,19 +80,19 @@ export function ParentReportCard({
   const showTrendGraph =
     rpt.showTrendGraph && !!trend && (hasTrend(trend, "exam") || hasTrend(trend, "homework"));
 
+  // 시험점수 표시 = **데이터 기준**(showDailyTest/showCheckTest 토글로 소급 숨기지 않음). 이미 값이 있는
+  // (=발송된) 보고서는 학원설정에서 테스트를 꺼도 그대로 보여야 한다(발송분 예외). 새 보고서는 토글이
+  // 꺼지면 원스크린 입력칸이 사라져 값이 안 생기므로 자연히 미표시 → 결과적으로 "새 보고서만 숨김".
   // 레거시(edutrix 임포트): 일일/확인 분리값 없이 exam_info 합본만 있으면 "시험점수" 한 줄로 폴백.
-  const legacyTest =
-    (rpt.showDailyTest || rpt.showCheckTest) && !report.dailyTest && !report.checkTest
-      ? report.examInfo
-      : null;
+  const legacyTest = !report.dailyTest && !report.checkTest ? report.examInfo : null;
   // 섹션 2분할(2026-07-10 원장): '오늘 수업'=교재·진도·오늘 과제 / '평가'=시험점수·지난 과제·수업 태도.
   const showToday =
     (rpt.showTextbook && report.textbook) ||
     (rpt.showProgress && report.progress) ||
     (rpt.showHomeworkToday && report.homeworkToday);
   const showEval =
-    (rpt.showDailyTest && report.dailyTest) ||
-    (rpt.showCheckTest && report.checkTest) ||
+    report.dailyTest ||
+    report.checkTest ||
     legacyTest ||
     (rpt.showHomework && report.homeworkScore) ||
     (rpt.showAttitude && report.attitude);
@@ -132,8 +132,8 @@ export function ParentReportCard({
       {/* 평가 — 시험점수(일일/확인/레거시 합본)·지난 과제(수행 상태)·수업 태도(2026-07-10 원장 요청 분리). */}
       {showEval ? (
         <Section title="평가">
-          {rpt.showDailyTest && report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
-          {rpt.showCheckTest && report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}
+          {report.dailyTest ? <Field label="일일테스트" value={report.dailyTest} /> : null}
+          {report.checkTest ? <Field label="확인테스트" value={report.checkTest} /> : null}
           {legacyTest ? <Field label="시험점수" value={legacyTest} /> : null}
           {rpt.showHomework && report.homeworkScore ? (
             <Field label="지난 과제" value={report.homeworkScore} />

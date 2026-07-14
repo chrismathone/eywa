@@ -35,6 +35,10 @@ export type TeacherRoster = {
   students: OneScreenStudent[];
   todayClasses: TodayClass[]; // 오늘(또는 폴백 전체) 담당 반 — 시작시각순
   allowTeacherTestMax: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(report 설정) — 원스크린 입력 UI 분기
+  // 일일/확인테스트 사용 여부 = 보고서 '표시 항목' 토글(showDailyTest/showCheckTest) 재사용. off면 원스크린
+  // 점수 입력칸을 숨겨(입력 안 함) + 학부모 보고서에도 미표시(parent-report-card). 표시·입력 단일 스위치.
+  showDailyTest: boolean;
+  showCheckTest: boolean;
 };
 
 type OnescreenSessionRow = {
@@ -55,7 +59,7 @@ type OnescreenSessionRow = {
 };
 
 function emptyRoster(today: string, teacherName: string): TeacherRoster {
-  return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [], allowTeacherTestMax: false };
+  return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [], allowTeacherTestMax: false, showDailyTest: true, showCheckTest: true };
 }
 
 export async function getTeacherRoster(): Promise<TeacherRoster> {
@@ -74,6 +78,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 과목별 테스트 문항수(만점) — 원스크린 점수 입력 /N 기본값. 미설정 과목은 5.
   const subjectTestMax = new Map(settings.operations.subjects.map((su) => [su.key, su.testMax ?? 5]));
   const allowTeacherTestMax = settings.report.allowTeacherTestMax;
+  const { showDailyTest, showCheckTest } = settings.report;
 
   // 1) 강사 담당 활성 반
   const { data: classes } = await supabase
@@ -340,5 +345,5 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).
   const classTags = ["전체", ...todayClasses.map((c) => c.name)];
 
-  return { today, classTags, teacherName, students, todayClasses, allowTeacherTestMax };
+  return { today, classTags, teacherName, students, todayClasses, allowTeacherTestMax, showDailyTest, showCheckTest };
 }

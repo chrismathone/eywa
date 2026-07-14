@@ -94,11 +94,15 @@ export function TestCard({
   onScore,
   allowMax,
   onMax,
+  dailyEnabled = true,
+  checkEnabled = true,
 }: {
   student: OneScreenStudent;
   onScore: (which: "daily" | "check", v: number | null) => void;
   allowMax?: boolean; // 강사 문항수 변경 허용(학원 설정)
   onMax?: (which: "daily" | "check", v: number) => void;
+  dailyEnabled?: boolean; // 일일테스트 사용(off면 입력창 숨김)
+  checkEnabled?: boolean; // 확인테스트 사용(off면 입력창 숨김)
 }) {
   const prevRange = student.subjects.map((s) => s.prev.split("·")[0]?.trim()).join(" / ");
   const todayRange = student.subjects.map((s) => s.today.split("·")[0]?.trim()).join(" / ");
@@ -112,22 +116,29 @@ export function TestCard({
         <span className="text-text-faint text-[11px]">맞은 개수만 입력</span>
       </header>
       <div className="flex flex-col gap-2.5 px-4 py-3">
-        <ScoreBlock
-          kicker="일일테스트"
-          range={`이전 진도 · ${prevRange}`}
-          test={student.tests.daily}
-          onChange={(v) => onScore("daily", v)}
-          allowMax={allowMax}
-          onMax={onMax ? (v) => onMax("daily", v) : undefined}
-        />
-        <ScoreBlock
-          kicker="확인테스트"
-          range={`오늘 진도 · ${todayRange}`}
-          test={student.tests.check}
-          onChange={(v) => onScore("check", v)}
-          allowMax={allowMax}
-          onMax={onMax ? (v) => onMax("check", v) : undefined}
-        />
+        {dailyEnabled ? (
+          <ScoreBlock
+            kicker="일일테스트"
+            range={`이전 진도 · ${prevRange}`}
+            test={student.tests.daily}
+            onChange={(v) => onScore("daily", v)}
+            allowMax={allowMax}
+            onMax={onMax ? (v) => onMax("daily", v) : undefined}
+          />
+        ) : null}
+        {checkEnabled ? (
+          <ScoreBlock
+            kicker="확인테스트"
+            range={`오늘 진도 · ${todayRange}`}
+            test={student.tests.check}
+            onChange={(v) => onScore("check", v)}
+            allowMax={allowMax}
+            onMax={onMax ? (v) => onMax("check", v) : undefined}
+          />
+        ) : null}
+        {!dailyEnabled && !checkEnabled ? (
+          <p className="text-text-faint py-1 text-center text-[12px]">테스트를 사용하지 않는 학원 설정입니다.</p>
+        ) : null}
       </div>
     </div>
   );

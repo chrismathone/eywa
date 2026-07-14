@@ -193,6 +193,8 @@ export function OneScreenGrid({
   onSaveAll,
   onSendAll,
   allowTestMax,
+  dailyEnabled = true,
+  checkEnabled = true,
   onMax,
   onMakeup,
   onAutoWrite,
@@ -220,6 +222,8 @@ export function OneScreenGrid({
   onSaveAll: (keys?: string[]) => void; // keys(선택 행) 있으면 그 행만, 없으면 전체
   onSendAll: (keys?: string[]) => void;
   allowTestMax: boolean; // 강사 문항수 변경 허용(학원 설정)
+  dailyEnabled?: boolean; // 일일테스트 사용(off면 일일 열 숨김)
+  checkEnabled?: boolean; // 확인테스트 사용(off면 확인 열 숨김)
   onMax: (studentId: string, which: "daily" | "check", v: number) => void;
   onMakeup: (studentId: string, subjectName: string) => void; // 보강 토글
   onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
@@ -302,8 +306,8 @@ export function OneScreenGrid({
             <col className="w-[34px]" /> {/* 선택 */}
             <col className="w-[128px]" /> {/* 학생·반 */}
             <col className="w-[200px]" /> {/* 진도 */}
-            <col className="w-[88px]" /> {/* 일일 */}
-            <col className="w-[88px]" /> {/* 확인 */}
+            {dailyEnabled ? <col className="w-[88px]" /> : null} {/* 일일 */}
+            {checkEnabled ? <col className="w-[88px]" /> : null} {/* 확인 */}
             <col className="w-[96px]" /> {/* 태도 */}
             <col className="w-[96px]" /> {/* 과제 */}
             <col className="w-[140px]" /> {/* 교재명 · 보강 */}
@@ -323,8 +327,8 @@ export function OneScreenGrid({
               </th>
               <th className={TH}>학생 · 반</th>
               <th className={TH}>진도(오늘)</th>
-              <th className={`${TH} text-center`}>일일</th>
-              <th className={`${TH} text-center`}>확인</th>
+              {dailyEnabled ? <th className={`${TH} text-center`}>일일</th> : null}
+              {checkEnabled ? <th className={`${TH} text-center`}>확인</th> : null}
               <th className={TH}>태도</th>
               <th className={TH}>과제</th>
               <th className={TH}>교재명 · 보강</th>
@@ -382,26 +386,30 @@ export function OneScreenGrid({
                       onSemester={onSemester}
                     />
                   </td>
-                  <td className={`${TD} text-center`}>
-                    <ScoreInput
-                      value={student.tests.daily.score}
-                      max={student.tests.daily.max}
-                      onChange={(v) => onScore(student.id, "daily", v)}
-                      label={`${student.name} 일일테스트`}
-                      allowMax={allowTestMax}
-                      onMax={(v) => onMax(student.id, "daily", v)}
-                    />
-                  </td>
-                  <td className={`${TD} text-center`}>
-                    <ScoreInput
-                      value={student.tests.check.score}
-                      max={student.tests.check.max}
-                      onChange={(v) => onScore(student.id, "check", v)}
-                      label={`${student.name} 확인테스트`}
-                      allowMax={allowTestMax}
-                      onMax={(v) => onMax(student.id, "check", v)}
-                    />
-                  </td>
+                  {dailyEnabled ? (
+                    <td className={`${TD} text-center`}>
+                      <ScoreInput
+                        value={student.tests.daily.score}
+                        max={student.tests.daily.max}
+                        onChange={(v) => onScore(student.id, "daily", v)}
+                        label={`${student.name} 일일테스트`}
+                        allowMax={allowTestMax}
+                        onMax={(v) => onMax(student.id, "daily", v)}
+                      />
+                    </td>
+                  ) : null}
+                  {checkEnabled ? (
+                    <td className={`${TD} text-center`}>
+                      <ScoreInput
+                        value={student.tests.check.score}
+                        max={student.tests.check.max}
+                        onChange={(v) => onScore(student.id, "check", v)}
+                        label={`${student.name} 확인테스트`}
+                        allowMax={allowTestMax}
+                        onMax={(v) => onMax(student.id, "check", v)}
+                      />
+                    </td>
+                  ) : null}
                   <td className={TD}>
                     <Select
                       value={student.attitude ?? NONE}
