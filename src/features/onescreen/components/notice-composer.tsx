@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   sendOnescreenNotice,
@@ -57,7 +58,9 @@ export function NoticeComposer({
   onSent?: () => void;
 }) {
   const [checked, setChecked] = useState<Set<string>>(() => new Set(seedStudentIds ?? []));
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(""); // 공통 내용
+  const [individual, setIndividual] = useState<Record<string, string>>({}); // studentId → 개별 내용(공통 뒤 덧붙임)
+  const [showIndividual, setShowIndividual] = useState(false); // 개별 내용 섹션 펼침
   const [busy, setBusy] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
   const [rows, setRows] = useState<OnescreenNoticeRow[]>([]);
@@ -90,16 +93,20 @@ export function NoticeComposer({
       return n;
     });
 
-  // 선택 학생 → (학생, 첫 과목) — 과목이 보드 prefix 결정. 학생당 1건(첫 과목)으로 보드 중복(같은 부모 이중 게시) 방지.
+  // 선택 학생 → (학생, 첫 과목, 개별내용) — 과목이 보드 prefix 결정. 학생당 1건(첫 과목)으로 보드 중복 방지.
   function buildTargets() {
     return students
       .filter((s) => checked.has(s.id))
-      .map((s) => ({ studentId: s.id, subject: s.subjects[0]?.subjectKey ?? s.subjects[0]?.name ?? null }));
+      .map((s) => ({
+        studentId: s.id,
+        subject: s.subjects[0]?.subjectKey ?? s.subjects[0]?.name ?? null,
+        individualBody: individual[s.id]?.trim() || undefined,
+      }));
   }
 
   async function doSend(test: boolean) {
     if (!body.trim()) {
-      toast.error("공지 내용을 입력하세요");
+      toast.error("공통 내용을 입력하세요");
       return;
     }
     const targets = test ? [] : buildTargets();
@@ -128,6 +135,8 @@ export function NoticeComposer({
     if (!test) {
       setBody("");
       setChecked(new Set());
+      setIndividual({});
+      setShowIndividual(false);
       void refreshHistory();
       onSent?.();
     } else {
@@ -171,6 +180,7 @@ export function NoticeComposer({
   }
 
   const selectedCount = students.filter((s) => checked.has(s.id)).length;
+  const indivCount = students.filter((s) => checked.has(s.id) && (individual[s.id] ?? "").trim()).length;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
@@ -213,20 +223,60 @@ export function NoticeComposer({
               현재 <b>실제 발송이 꺼져</b> 있어 전송되지 않습니다(dry-run). 학부모에게 보내려면 원장 설정의 <b>ClassNote 실제 발송</b>을 켜세요.
             </p>
           ) : null}
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={5}
-            placeholder="예: 안녕하세요 어머님, 다음 주 월요일은 휴강입니다. 교재 p.29까지 풀어 오세요!"
-            className={BODY}
-          />
-          <p className="text-text-faint text-[11px]">
-            ℹ️ 학생마다 이름을 바꿔 보내는 개인화 태그(&#123;&#123;이름&#125;&#125;)는 연동 PC 업데이트 후 지원됩니다 — 지금은 같은 내용으로 발송됩니다.
-          </p>
+          <div>
+            <p className="text-text-dim mb-1 text-[11px] font-medium">공통 내용 (선택 학생 모두에게)</p>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={5}
+              placeholder="예: 안녕하세요 어머님, 다음 주 월요일은 휴강입니다. 교재 p.29까지 풀어 오세요!"
+              className={BODY}
+            />
+          </div>
+
+          {/* 학생별 개별 내용 — 선택 2명+일 때. 입력한 학생만 공통 뒤에 그 내용이 덧붙어 발송(없으면 공통 그대로). */}
+          {selectedCount >= 2 ? (
+            <div className="border-line rounded-md border">
+              <button
+                type="button"
+                onClick={() => setShowIndividual((v) => !v)}
+                className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-[12px] font-medium"
+              >
+                <span>학생별 개별 내용 추가 (선택){indivCount ? ` · ${indivCount}명 입력함` : ""}</span>
+                <span className="text-text-faint inline-flex items-center gap-0.5">
+                  {showIndividual ? "접기" : "펼치기"}
+                  <EyIcon name={showIndividual ? "chevronUp" : "chevronDown"} size={12} />
+                </span>
+              </button>
+              {showIndividual ? (
+                <div className="border-line max-h-[280px] space-y-2 overflow-y-auto border-t p-2">
+                  <p className="text-text-faint px-1 text-[11px]">
+                    입력한 학생은 <b>공통 내용 뒤에</b> 이 내용이 덧붙어 발송됩니다. 비우면 공통 내용만 나갑니다.
+                  </p>
+                  {students
+                    .filter((s) => checked.has(s.id))
+                    .map((s) => (
+                      <div key={s.id} className="flex items-start gap-2">
+                        <span className="text-foreground w-16 shrink-0 truncate pt-1.5 text-[12px]" title={s.name}>
+                          {s.name}
+                        </span>
+                        <textarea
+                          value={individual[s.id] ?? ""}
+                          onChange={(e) => setIndividual((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                          rows={2}
+                          placeholder="이 학생에게만 덧붙일 내용(선택)"
+                          className={`${BODY} text-[12px]`}
+                        />
+                      </div>
+                    ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
               <span className="text-foreground text-[12px]">
-                선택 <b>{selectedCount}명</b>의 학부모에게 공지를 발송할까요?{!sendEnabled ? " (실제 발송 OFF — 전송 안 됨)" : ""}
+                선택 <b>{selectedCount}명</b>{indivCount ? ` (개별 내용 ${indivCount}명)` : ""}의 학부모에게 공지를 발송할까요?{!sendEnabled ? " (실제 발송 OFF — 전송 안 됨)" : ""}
               </span>
               <Button size="sm" onClick={() => doSend(false)} disabled={busy}>
                 {busy ? "발송 중…" : "발송 확인"}

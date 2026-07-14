@@ -23,7 +23,6 @@ import {
   type NoticeSkip,
   type NoticeTarget,
 } from "@/features/report-admin/notice-targets";
-import { validateNoticeTemplate } from "@/features/report-admin/notice-render";
 import { logAction } from "@/features/audit/server/log";
 
 const BODY_MAX = 4000;
@@ -31,8 +30,9 @@ const BODY_MAX = 4000;
 const TEST_TARGET = { studentName: "학원이", board: "(수학)학원이" };
 
 export type OnescreenNoticeInput = {
-  body: string;
-  students: { studentId: string; subject: string | null }[]; // (학생, 과목) — 과목이 보드 prefix 결정. 카드=1건, 표=N건.
+  body: string; // 공통 내용(모든 대상 공통). 개별 내용이 없는 학생은 이 본문으로 발송.
+  // (학생, 과목) — 과목이 보드 prefix 결정. individualBody = 그 학생에게만 공통 뒤에 덧붙일 개별 내용(선택).
+  students: { studentId: string; subject: string | null; individualBody?: string }[];
   test?: boolean; // 학원이 1명에게만(파이프라인 검증)
 };
 
@@ -52,15 +52,9 @@ export type OnescreenNoticeResult = {
 export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<OnescreenNoticeResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  const body = (input.body ?? "").trim();
-  if (!body) return { ok: false, error: "공지 내용을 입력하세요" };
+  const body = (input.body ?? "").trim(); // 공통 내용
+  if (!body) return { ok: false, error: "공통 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
-
-  // Phase 1 태그 하드 게이트 — 워커 per-target 개인화 미지원 상태에선 태그 발송 차단(구 워커가 리터럴 게시).
-  const tv = validateNoticeTemplate(body);
-  if (!tv.ok) return { ok: false, error: `지원하지 않는 태그: ${tv.unknown.map((t) => `{{${t}}}`).join(", ")}` };
-  if (tv.hasTags)
-    return { ok: false, error: "개인화 태그({{이름}} 등)는 연동 PC 업데이트 후 지원됩니다 — 지금은 일반 공지만 보낼 수 있어요" };
 
   const supabase = await createClient();
   const settings = await getTenantSettings();
@@ -131,6 +125,22 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     targets = survivors;
   }
   if (!targets.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
+
+  // ── 개별 내용 — 공통 뒤에 덧붙여 그 학생 target.body에만 저장. resolve·동명이인 가드 **이후** studentId lookup으로
+  // 붙여 target↔student를 고정(오발송 방지). 개별 있는 학생만 personalized → 워커가 공유 보드(2가족+)엔 차단, 없으면 공통 발송. ──
+  if (!input.test) {
+    const indiv = new Map<string, string>();
+    for (const s of input.students ?? []) {
+      const t = (s.individualBody ?? "").trim();
+      if (s.studentId && t) indiv.set(s.studentId, t);
+    }
+    if (indiv.size) {
+      targets = targets.map((tg) => {
+        const add = indiv.get(tg.studentId);
+        return add ? { ...tg, body: `${body}\n\n${add}` } : tg;
+      });
+    }
+  }
 
   // ── 2. 발송 안전 스위치(기본 OFF) — dry-run이면 적재 안 함 ──
   if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
@@ -279,21 +289,33 @@ async function explainZeroRows(
   };
 }
 
-/** 대기 공지 본문 수정 — status='queued' + 본인만. 태그 게이트 동일 적용(Phase1). */
+/** 대기 공지 공통 내용 수정 — status='queued' + 본인만. 수정 시 개별 내용(targets[].body)은 스트립해 전원 공통으로 되돌림(일괄 정정). */
 export async function editQueuedNotice(noticeId: string, newBody: string): Promise<MutateResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const body = (newBody ?? "").trim();
-  if (!body) return { ok: false, error: "공지 내용을 입력하세요" };
+  if (!body) return { ok: false, error: "공통 내용을 입력하세요" };
   if (body.length > BODY_MAX) return { ok: false, error: `공지가 너무 깁니다(최대 ${BODY_MAX}자)` };
-  const tv = validateNoticeTemplate(body);
-  if (!tv.ok) return { ok: false, error: `지원하지 않는 태그: ${tv.unknown.map((t) => `{{${t}}}`).join(", ")}` };
-  if (tv.hasTags) return { ok: false, error: "개인화 태그는 연동 PC 업데이트 후 지원됩니다 — 지금은 일반 공지만 가능해요" };
 
   const supabase = await createClient();
+  // 개별 내용 스트립 — 수정된 공통을 전원에게 적용(개별을 남기면 옛 공통이 붙은 채 남아 오해). status='queued'라 아직 미게시.
+  const { data: cur } = await supabase
+    .from("classnote_notices")
+    .select("targets")
+    .eq("id", noticeId)
+    .eq("created_by", user.id)
+    .eq("status", "queued")
+    .maybeSingle();
+  const strippedTargets = Array.isArray(cur?.targets)
+    ? (cur.targets as Array<Record<string, unknown>>).map((t) => {
+        const rest = { ...t };
+        delete rest.body; // 개별 내용 제거 → 공통으로 통일
+        return rest;
+      })
+    : undefined;
   const { data } = await supabase
     .from("classnote_notices")
-    .update({ body })
+    .update(strippedTargets ? { body, targets: strippedTargets } : { body })
     .eq("id", noticeId)
     .eq("created_by", user.id)
     .eq("status", "queued")

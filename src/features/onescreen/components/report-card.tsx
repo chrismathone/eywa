@@ -360,9 +360,12 @@ export function ReportCard({
         {/* ⚠️ 게시된 보고서 수정 경고 — 수업보고서는 카드 '이미지'로 게시돼 텍스트 수정이 안 됨(교체=이미지 재생성 필요, 준비 중).
             이미 게시(success)된 뒤 내용을 고쳐 다시 보내면 게시판에 새 글이 추가되고 기존 이미지는 남는다. */}
         {rep.classnoteStatus === "success" ? (
-          <p className="border-amber/40 bg-amber-soft text-amber rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
-            ⚠️ 이미 학부모 게시판에 올라간 보고서입니다. 내용을 고쳐 <b>다시 보내면 새 글이 추가</b>되고, 기존 게시글(이미지)은
-            자동으로 교체되지 않습니다. <b>게시된 보고서 수정·교체는 준비 중</b>입니다.
+          <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed">
+            <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
+            <span>
+              이미 학부모 게시판에 올라간 보고서입니다. 내용을 고쳐 <b>다시 보내면 새 글이 추가</b>되고, 기존 게시글(이미지)은
+              자동으로 교체되지 않습니다. <b>게시된 보고서 수정·교체는 준비 중</b>입니다.
+            </span>
           </p>
         ) : null}
 
