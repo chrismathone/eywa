@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Layers, X, type LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -150,20 +149,16 @@ function PageStack({
 }
 
 /**
- * 스포트라이트(앨범) 하단 커버 스트립 — 상단에 안 올라온 창 + 배경 라우트를 "책 페이지"처럼 부채꼴로 세운다.
- * 창 카드 클릭 = 상단으로 올림(raiseToSpotlight, 최대 3 = 다중 스포트라이트). 배경 카드("배경") 클릭 = 그
- * 배경을 위로(swapFocusedWithBackground). 너무 많으면 "+N" 축약. 좌측 나가기·Esc·딤 클릭으로 해제.
- * (배경은 앨범 뒤에 딤으로 비치므로 헤더 배경탭 대신 여기 스트립으로 가져와 전환한다.)
+ * 스포트라이트(앨범) 하단 커버 스트립 — 상단에 안 올라온 창들을 "책 페이지"처럼 부채꼴로 세운다.
+ * 창 카드 클릭 = 상단으로 올림(raiseToSpotlight, 최대 3 = 다중 스포트라이트). 너무 많으면 "+N" 축약.
+ * 좌측 나가기·Esc·딤 클릭으로 해제.
  */
 export function SpotlightStrip() {
-  const router = useRouter();
   const spotlight = useWindowStore((s) => s.spotlight);
   const windows = useWindowStore((s) => s.windows);
   const order = useWindowStore((s) => s.order);
-  const background = useWindowStore((s) => s.background);
   const spotlightRaised = useWindowStore((s) => s.spotlightRaised);
   const raiseToSpotlight = useWindowStore((s) => s.raiseToSpotlight);
-  const swapFocusedWithBackground = useWindowStore((s) => s.swapFocusedWithBackground);
   const exitSpotlight = useWindowStore((s) => s.exitSpotlight);
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -178,17 +173,8 @@ export function SpotlightStrip() {
 
   if (!spotlight) return null;
 
-  // 배경 카드 클릭 = 그 배경을 위로 올림(포커스 창은 배경으로 내려감). 새 활성 배경으로 메인 프레임 이동.
-  function swapBg(bgId: string) {
-    swapFocusedWithBackground(bgId);
-    const st = useWindowStore.getState();
-    const active = st.background.find((b) => b.id === st.activeBackgroundId);
-    if (active?.href) router.push(active.href);
-  }
-
-  // 스트립 = 상단에 안 올라온 창(클릭=위로 올림, 최대 3 다중 스포트라이트) + **배경 라우트 카드**(클릭=그
-  // 배경을 위로). 배경은 앨범모드에서도 뒤에 비치므로(딤 처리) "배경탭"을 앨범 안으로 가져와 여기서 전환한다.
-  const windowItems: StripItem[] = order
+  // 스트립 = 상단에 안 올라온 창(클릭=위로 올림, 최대 3 다중 스포트라이트).
+  const items: StripItem[] = order
     .filter((id) => !spotlightRaised.includes(id) && !windows[id]?.minimized)
     .map((id) => windows[id])
     .reverse()
@@ -203,14 +189,6 @@ export function SpotlightStrip() {
       isBackground: false,
       onClick: () => raiseToSpotlight(w.id),
     }));
-  const bgItems: StripItem[] = background.map((b) => ({
-    key: `bg:${b.id}`,
-    title: b.title,
-    Icon: ICON_BY_MENU[b.id] ?? ICON_BY_MENU[b.id.split("/")[0]] ?? null,
-    isBackground: true,
-    onClick: () => swapBg(b.id),
-  }));
-  const items = [...windowItems, ...bgItems];
 
   const overflow = items.length > MAX_VISIBLE;
   const visible = overflow ? items.slice(0, MAX_VISIBLE - 1) : items;

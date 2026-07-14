@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
-import { findNavItem } from "@/lib/navigation";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { useWindowStore } from "./window-store";
 import { usePrefs } from "./use-prefs";
 import { SIDEBAR_COLLAPSED_W } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
+import Image from "next/image";
 import { FloatingWindow } from "./floating-window";
 import { iframeRegistry } from "./route-window";
 import { WindowSwitcher } from "./window-switcher";
-import { BackgroundDropZone } from "./background-drop-zone";
 import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
 import { SpotlightStrip } from "./spotlight-strip";
@@ -40,21 +38,12 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const bounds = useWindowStore((s) => s.bounds);
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
-  const setBackground = useWindowStore((s) => s.setBackground);
-  const pathname = usePathname();
 
   // 사이드바 실제 너비 = 펼침이면 저장 너비, 접힘이면 레일(52). 펼침/접힘·드래그 드롭으로 바뀌면
   // 스테이지가 따라가 창 최대치(최대화·스냅)가 사이드바 오른쪽에 정확히 맞는다.
   const sidebarExpanded = usePrefs((s) => s.sidebarExpanded);
   const sidebarWidth = usePrefs((s) => s.sidebarWidth);
   const rail = sidebarExpanded ? sidebarWidth : SIDEBAR_COLLAPSED_W;
-
-  // 메인 프레임 라우트 = 배경. pathname이 바뀔 때마다 store.background 동기 → 배경 교체가
-  // pathname 비동기 지연과 무관하게 결정적으로 동작(연타 레이스 방지).
-  useEffect(() => {
-    const item = findNavItem(pathname);
-    if (item) setBackground({ id: item.menuKey, title: item.label, href: item.href });
-  }, [pathname, setBackground]);
 
   // 스테이지 = 뷰포트 − 사이드바(rail) − 헤더. rail(사이드바 너비)이나 브라우저 크기가 바뀌면
   // 재계산 → setStage가 최대화·스냅 창을 새 영역에 재배치(reflow).
@@ -172,6 +161,8 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const preview = !spotlight && !dragLayout && snapPreview ? snapTarget(snapPreview, bounds) : null;
   // DOM 순서는 삽입순(안정) 유지, 쌓임순서는 z-index로만 → 포커스/스냅 시 DOM 이동 0 → iframe 리로드 0.
   const wins = Object.values(windows);
+  // 열린(비최소화) 창이 하나도 없으면 빈 데스크톱 안내를 띄운다.
+  const hasOpenWindow = order.some((id) => !windows[id]?.minimized);
 
   return (
     <>
@@ -181,7 +172,27 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       className="pointer-events-none fixed z-40 print:hidden"
       style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
-      {/* 앨범(스포트라이트) 딤 — 뒤 배경(메인 프레임)을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).
+      {/* 빈 데스크톱 바탕 — 뒤 라우트(메인 프레임)를 불투명하게 덮어 "아무것도 없는 바탕화면"으로 만든다.
+          창들(z≥1) 뒤(z-0). pointer-events-auto로 덮인 라우트에 클릭이 새지 않게 흡수(빈 곳 클릭=무동작).
+          창이 하나도 열려 있지 않으면 가운데 안내. 스포트라이트 중엔 아래 딤이 그 위를 덮는다. */}
+      <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden={hasOpenWindow}>
+        {!hasOpenWindow && !spotlight ? (
+          <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 p-8">
+            <Image
+              src="/empty-states/empty-workspace.png"
+              alt=""
+              width={240}
+              height={240}
+              className="mb-1 size-40 object-contain sm:size-44"
+            />
+            <div className="text-center">
+              <p className="text-foreground text-[15px] font-semibold">열린 창이 없어요</p>
+              <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {/* 앨범(스포트라이트) 딤 — 뒤 바탕을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).
           빈 딤 영역 클릭 = 앨범 나가기(클릭 아웃). 캔버스는 pointer-events-none이라 이 막만 클릭 흡수. */}
       {spotlight ? (
         <div
@@ -224,7 +235,6 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
         <>
           <SnapAssist />
           <SnapLayoutsBar />
-          <BackgroundDropZone />
           <WindowSwitcher />
         </>
       )}

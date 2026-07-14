@@ -20,6 +20,7 @@ const EMPTY_STATE_IMAGES = {
   staff: "/empty-states/empty-staff.png",
   students: "/empty-states/empty-students.png",
   withdrawals: "/empty-states/empty-withdrawals.png",
+  workspace: "/empty-states/empty-workspace.png",
 } as const;
 
 export type EmptyStateImage = keyof typeof EMPTY_STATE_IMAGES;

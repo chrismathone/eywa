@@ -1,13 +1,10 @@
 "use client";
 
 import { useRef, type PointerEvent as RPointerEvent, type RefObject } from "react";
-import { useWindowStore, isDuplicate } from "./window-store";
+import { useWindowStore } from "./window-store";
 import {
-  backgroundDropZone,
-  pointInRect,
   snapBarHitTest,
   snapZoneForPoint,
-  SNAP_BAR_BG_OFFSET,
   type LayoutTemplate,
   type Rect,
   type SnapZone,
@@ -36,7 +33,6 @@ const KEEP_TOP = 160; // 히스테리시스: 소환 후엔 이 아래로 내려�
 export function usePointerDrag(
   id: string,
   elRef: RefObject<HTMLDivElement | null>,
-  onDropBackground?: () => void,
 ) {
   const startRef = useRef<{ px: number; py: number; rect: Rect } | null>(null);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -44,7 +40,6 @@ export function usePointerDrag(
   const layoutRef = useRef<DragLayout | null>(null);
   const startedRef = useRef(false);
   const nearTopRef = useRef(false);
-  const bgRef = useRef(false); // 포인터가 배경 드롭 칩 위(드롭 시 swapToBackground)
 
   function onPointerDown(e: RPointerEvent<HTMLElement>) {
     if (e.button !== 0) return;
@@ -58,7 +53,6 @@ export function usePointerDrag(
     layoutRef.current = null;
     startedRef.current = false;
     nearTopRef.current = false;
-    bgRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     e.preventDefault();
   }
@@ -103,32 +97,8 @@ export function usePointerDrag(
       nearTopRef.current = nearTop;
       store.setDragNearTop(nearTop);
     }
-    // 배경 드롭 칩(라우트 창 한정, 복제본 제외) 위면 최우선 — "배경으로 보내기"(스냅보다 우선).
-    // 복제본(#n)은 배경 시스템에 안 들어가므로 드래그-투-배경 비활성(window-only).
-    const allowBgDrop = store.windows[id]?.kind === "route" && !isDuplicate(id);
-    if (allowBgDrop && nearTop && pointInRect(sx, sy, backgroundDropZone(bounds))) {
-      if (!bgRef.current) {
-        bgRef.current = true;
-        store.setDragBackground(true);
-      }
-      if (layoutRef.current) {
-        layoutRef.current = null;
-        store.setDragLayout(null);
-      }
-      if (zoneRef.current !== null) {
-        zoneRef.current = null;
-        store.setSnapPreview(null);
-      }
-      return;
-    }
-    if (bgRef.current) {
-      bgRef.current = false;
-      store.setDragBackground(false);
-    }
-    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존. 배경 칩이 떠 있으면(라우트·비복제)
-    // 스냅 바는 SNAP_BAR_BG_OFFSET만큼 아래로 밀리므로 히트테스트 py도 동일 보정.
-    const barOffset = allowBgDrop ? SNAP_BAR_BG_OFFSET : 0;
-    const hit = nearTop ? snapBarHitTest(sx, sy - barOffset, bounds, openCount()) : null;
+    // 상단 밴드 + 바 칸 위면 레이아웃 슬롯, 그 외엔 가장자리/모서리 존.
+    const hit = nearTop ? snapBarHitTest(sx, sy, bounds, openCount()) : null;
     if (hit) {
       if (!sameLayout(layoutRef.current, hit)) {
         layoutRef.current = hit;
@@ -163,21 +133,6 @@ export function usePointerDrag(
       return;
     }
     const store = useWindowStore.getState();
-    // 배경 드롭: 라우트 창을 배경 칩에 놓음 → 호출부(handleSwapToBackground)가 router.push + swapToBackground.
-    if (bgRef.current && onDropBackground) {
-      onDropBackground();
-      store.setSnapPreview(null);
-      store.setDragLayout(null);
-      store.setDragNearTop(false);
-      store.setDragBackground(false);
-      store.setDragging(null);
-      startedRef.current = false;
-      zoneRef.current = null;
-      layoutRef.current = null;
-      nearTopRef.current = false;
-      bgRef.current = false;
-      return;
-    }
     const layout = layoutRef.current;
     const zone = zoneRef.current;
     if (layout) store.applyDragLayout(id, layout.template, layout.slot);
@@ -201,7 +156,6 @@ export function usePointerDrag(
     zoneRef.current = null;
     layoutRef.current = null;
     nearTopRef.current = false;
-    bgRef.current = false;
   }
 
   return { onPointerDown, onPointerMove, onPointerUp };

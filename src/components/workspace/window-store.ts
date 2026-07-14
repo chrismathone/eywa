@@ -152,9 +152,6 @@ type State = {
   draggingId: string | null; // 드래그/리사이즈 중인 창(iframe 숨겨 부드럽게, 미영속)
   dragLayout: { template: LayoutTemplate; slot: number } | null; // 드래그 중 스냅 레이아웃 바 호버 슬롯
   dragNearTop: boolean; // 드래그 중 포인터가 상단 밴드 → 스냅 레이아웃 바 reveal
-  dragBackground: boolean; // 드래그 중 포인터가 배경 드롭 칩 위 → "배경으로 보내기" 하이라이트
-  background: WindowParams[]; // 배경 스택(첫=대시보드 기본). 삽입 순서 고정. 미영속, pathname 동기
-  activeBackgroundId: string; // 현재 메인 프레임에 보이는 배경 id(=하이라이트). 선택해도 스택 순서는 불변.
   spotlight: boolean; // 스포트라이트 모드(올라온 창 상단 타일, 나머지는 하단 커버 스트립). 런타임.
   spotlightRaised: string[]; // 스포트라이트에서 상단에 타일된 창들(최대 3). 진입 시 [포커스창]. 런타임.
   // 라우트 창의 iframe 현재 문서 제목/뒤로가능 여부(런타임, 미영속). RouteWindow가 iframe title·path를
@@ -180,7 +177,6 @@ type Actions = {
   setDragging: (id: string | null) => void;
   setDragLayout: (v: { template: LayoutTemplate; slot: number } | null) => void;
   setDragNearTop: (v: boolean) => void;
-  setDragBackground: (v: boolean) => void;
   /** RouteWindow가 iframe 제목·현재 URL 변화를 보고 → 타이틀바 제목 + 창별 nav 스택/canBack 갱신. */
   observeIframe: (id: string, v: { title: string; url: string }) => void;
   /** 그 창의 nav 스택을 한 단계 pop하고 이동할 이전 URL을 반환(없으면 null). 뒤로(←) 버튼이 호출. */
@@ -200,14 +196,6 @@ type Actions = {
   openNewInstance: (kind: WindowKind, params: WindowParams, anchor?: { x: number; y: number }) => void;
   /** 라우트 창을 같은 화면(현재 URL/제목)으로 한 벌 더 띄운다 — 복제본(#n, window-only). */
   duplicate: (winId: string) => void;
-  /** 라우트를 배경 스택 맨 위(보이는 배경)로 — 이미 있으면 이동, 없으면 추가. 캔버스가 pathname서 동기. */
-  setBackground: (params: WindowParams) => void;
-  /** 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위로(옛 배경은 스택에 남음). */
-  swapToBackground: (winId: string) => void;
-  /** 배경 탭을 창으로 꺼냄 — 스택서 제거 + 그 라우트 창 열기(스택 항상 ≥1 유지). */
-  backgroundToWindow: (id: string) => void;
-  /** 스포트라이트: 포커스(top) 창 ⇄ 배경 교체 — 포커스 라우트를 배경으로 보내고 선택 배경을 top 창으로. */
-  swapFocusedWithBackground: (bgId: string) => void;
   close: (id: string) => void;
   focus: (id: string) => void;
   setRect: (id: string, rect: Rect) => void;
@@ -240,9 +228,6 @@ export const useWindowStore = create<State & Actions>()(
       draggingId: null,
       dragLayout: null,
       dragNearTop: false,
-      dragBackground: false,
-      background: [{ id: "dashboard", title: "대시보드", href: "/dashboard" }],
-      activeBackgroundId: "dashboard",
       spotlight: false,
       spotlightRaised: [],
       live: {},
@@ -272,7 +257,6 @@ export const useWindowStore = create<State & Actions>()(
       setDragging: (id) => set({ draggingId: id }),
       setDragLayout: (v) => set({ dragLayout: v }),
       setDragNearTop: (v) => set({ dragNearTop: v }),
-      setDragBackground: (v) => set({ dragBackground: v }),
       // iframe 관찰값(제목·URL)을 받아 제목 + 창별 URL 스택을 갱신. pathname이 바뀌면(드릴인) push,
       // query만 바뀌면(예: billing ?tab=) top을 replace해 뒤로 단계로 안 센다. canBack = 스택 깊이>1.
       observeIframe: (id, { title, url }) =>
@@ -336,24 +320,6 @@ export const useWindowStore = create<State & Actions>()(
           else delete next[id];
           return { dirty: next };
         }),
-      // 라우트를 "보이는 배경"으로 표시 — 삽입 순서는 고정(재정렬 안 함). 스택에 없으면 끝에 추가.
-      // activeBackgroundId만 바뀌므로 탭을 클릭(=pathname 변경)해도 스트립 순서가 흔들리지 않는다.
-      setBackground: (params) =>
-        set((s) => {
-          // 같은 라우트가 이미 창으로 떠 있으면(비최소화) 배경 탭으로 중복 추가하지 않는다(#9).
-          // "라우트는 창이거나 배경이거나" 불변 — open()이 창 생성 시 배경에서 제거하는 것과 대칭.
-          const asWindow = s.windows[windowId("route", params.id)];
-          if (asWindow && !asWindow.minimized) return s;
-          if (s.activeBackgroundId === params.id && s.background.some((b) => b.id === params.id)) {
-            return s;
-          }
-          const exists = s.background.some((b) => b.id === params.id);
-          return {
-            activeBackgroundId: params.id,
-            background: exists ? s.background : [...s.background, params],
-          };
-        }),
-
       // 스냅 레이아웃 바 드롭: 지정 슬롯=드래그 창, 나머지 슬롯=다른 열린 창(order순), 초과=최소화.
       applyDragLayout: (id, template, slot) =>
         set((s) => {
@@ -434,28 +400,16 @@ export const useWindowStore = create<State & Actions>()(
           minimized: false,
           maximized: false,
         };
-        // 라우트가 배경 스택에 있으면 제거(이제 창이므로) — 스택 최소 1개 유지.
-        const removedActive =
-          kind === "route" && s.background.length > 1 && s.activeBackgroundId === params.id;
-        const bg =
-          kind === "route" && s.background.length > 1
-            ? s.background.filter((b) => b.id !== params.id)
-            : s.background;
-        const activeBackgroundId = removedActive
-          ? (bg[bg.length - 1]?.id ?? "dashboard")
-          : s.activeBackgroundId;
         set({
           windows,
           order: [...order, id],
           focusedId: id,
           snapAssist: null,
-          background: bg,
-          activeBackgroundId,
         });
       },
 
       // 탭/링크 shift+클릭 — 기존 창을 포커스(open)하지 않고 항상 새 인스턴스를 연다. primary가 비었으면
-      // primary, 이미 있으면 다음 빈 #n. 반복 shift+클릭 = 듀얼/멀티 창. primary 생성 시에만 배경에서 제거(open과 대칭).
+      // primary, 이미 있으면 다음 빈 #n. 반복 shift+클릭 = 듀얼/멀티 창.
       openNewInstance: (kind, params, anchor) =>
         set((s) => {
           const primary = windowId(kind, params.id);
@@ -477,22 +431,11 @@ export const useWindowStore = create<State & Actions>()(
             ? rectAtPoint(anchor.x - s.origin.left, anchor.y - s.origin.top, s.bounds, size)
             : cascadeNext(order.length, s.bounds, size);
           windows[targetId] = { id: targetId, kind, params, rect, minimized: false, maximized: false };
-          // primary(첫 인스턴스)를 새로 만들 때만 배경 스택에서 제거(open과 대칭). #n 복제본은 배경과 무관.
-          const isPrimary = targetId === primary;
-          const removedActive =
-            isPrimary && kind === "route" && s.background.length > 1 && s.activeBackgroundId === params.id;
-          const bg =
-            isPrimary && kind === "route" && s.background.length > 1
-              ? s.background.filter((b) => b.id !== params.id)
-              : s.background;
-          const activeBackgroundId = removedActive ? (bg[bg.length - 1]?.id ?? "dashboard") : s.activeBackgroundId;
           return {
             windows,
             order: [...order, targetId],
             focusedId: targetId,
             snapAssist: null,
-            background: bg,
-            activeBackgroundId,
           };
         }),
 
@@ -530,119 +473,6 @@ export const useWindowStore = create<State & Actions>()(
             maximized: false,
           };
           return { windows, order: [...order, newId], focusedId: newId, snapAssist: null };
-        }),
-
-      // 이 창을 배경으로 보냄 — 창 제거 + 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남음.
-      // (호출부가 router.push로 메인 프레임을 이 라우트로 이동.) focusedId=null → 배경이 메인 뷰.
-      // ⚠️ 복제본(#n)은 배경 시스템(라우트↔배경 1:1)에 안 들어간다 — window-only.
-      swapToBackground: (winId) =>
-        set((s) => {
-          if (isDuplicate(winId)) return s;
-          const w = s.windows[winId];
-          if (!w) return s;
-          const windows = { ...s.windows };
-          delete windows[winId];
-          const order = s.order.filter((id) => id !== winId);
-          const route = w.params;
-          // 삽입 순서 보존: 이미 배경에 있으면 그 자리 유지, 없으면 끝에 추가. 보이는 배경으로 표시.
-          const exists = s.background.some((b) => b.id === route.id);
-          const background = exists ? s.background : [...s.background, route];
-          return { windows, order, focusedId: null, snapAssist: null, background, activeBackgroundId: route.id };
-        }),
-
-      // 배경 탭을 창으로 꺼냄 — 스택서 제거 + 그 라우트 창 열기. 스택은 항상 ≥1 유지.
-      backgroundToWindow: (id) =>
-        set((s) => {
-          if (s.background.length <= 1) return s;
-          const params = s.background.find((b) => b.id === id);
-          if (!params) return s;
-          const background = s.background.filter((b) => b.id !== id);
-          // 꺼낸 배경이 "보이는 배경"이었으면, 남은 스택의 마지막을 새 보이는 배경으로(호출부가 push).
-          const activeBackgroundId =
-            s.activeBackgroundId === id ? (background[background.length - 1]?.id ?? "dashboard") : s.activeBackgroundId;
-          const winId = windowId("route", params.id);
-          let order = s.order;
-          const windows = { ...s.windows };
-          if (windows[winId]) {
-            windows[winId] = { ...windows[winId], minimized: false };
-            return { background, activeBackgroundId, windows, order: bringToFront(order, winId), focusedId: winId, cached: s.cached.filter((x) => x !== winId), snapAssist: null };
-          }
-          while (order.length >= MAX_WINDOWS) {
-            const victim = order.find((wid) => wid !== winId) ?? order[0];
-            delete windows[victim];
-            order = order.filter((wid) => wid !== victim);
-          }
-          windows[winId] = {
-            id: winId,
-            kind: "route",
-            params,
-            rect: cascadeNext(order.length, s.bounds, routeWindowSize(params.id)),
-            minimized: false,
-            maximized: false,
-          };
-          return { background, activeBackgroundId, windows, order: [...order, winId], focusedId: winId, snapAssist: null };
-        }),
-
-      // 스포트라이트 교체: 현재 포커스(top) 라우트 창을 배경으로 보내고, 선택한 배경을 top 창으로 꺼낸다.
-      // 포커스가 라우트가 아니면(학생 요약 등) 배경으로 못 보내므로, 배경이 2개 이상일 때만 꺼냄
-      // (마지막 배경은 메인 프레임 빈 화면 방지로 유지). 호출부가 새 활성 배경으로 router.push.
-      swapFocusedWithBackground: (bgId) =>
-        set((s) => {
-          const bg = s.background.find((b) => b.id === bgId);
-          if (!bg) return s;
-          const focused = s.focusedId ? s.windows[s.focusedId] : null;
-          // 복제본(#n)은 배경으로 못 보냄(window-only) → sendFocused 제외(선택 배경만 창으로 꺼냄).
-          const sendFocused = !!(
-            focused &&
-            focused.kind === "route" &&
-            focused.params.href &&
-            !isDuplicate(focused.id)
-          );
-          if (!sendFocused && s.background.length <= 1) return s; // 꺼낼 수 없음(배경 1개뿐)
-
-          const windows = { ...s.windows };
-          let order = s.order;
-          let background = s.background;
-          let activeBackgroundId = s.activeBackgroundId;
-
-          // 1) 포커스 라우트 창 → 배경(메인 프레임이 그 라우트가 됨)
-          if (sendFocused && focused) {
-            delete windows[focused.id];
-            order = order.filter((id) => id !== focused.id);
-            if (!background.some((b) => b.id === focused.params.id)) {
-              background = [...background, focused.params];
-            }
-            activeBackgroundId = focused.params.id;
-          }
-
-          // 2) 선택 배경 → top 창(포커스)
-          background = background.filter((b) => b.id !== bgId);
-          const winId = windowId("route", bg.id);
-          if (windows[winId]) {
-            windows[winId] = { ...windows[winId], minimized: false };
-            order = bringToFront(order, winId);
-          } else {
-            while (order.length >= MAX_WINDOWS) {
-              const victim = order.find((wid) => wid !== winId) ?? order[0];
-              delete windows[victim];
-              order = order.filter((wid) => wid !== victim);
-            }
-            windows[winId] = {
-              id: winId,
-              kind: "route",
-              params: bg,
-              rect: cascadeNext(order.length, s.bounds, routeWindowSize(bg.id)),
-              minimized: false,
-              maximized: false,
-            };
-            order = [...order, winId];
-          }
-
-          if (!background.some((b) => b.id === activeBackgroundId)) {
-            activeBackgroundId = background[background.length - 1]?.id ?? "dashboard";
-          }
-
-          return { windows, order, background, activeBackgroundId, focusedId: winId, cached: s.cached.filter((x) => x !== winId), spotlight: true, spotlightRaised: [winId], snapAssist: null, snapPreview: null };
         }),
 
       close: (id) =>
@@ -932,7 +762,7 @@ export const useWindowStore = create<State & Actions>()(
 );
 
 // ⚠️ skipHydration이라 수동 rehydrate 필요. 컴포넌트 effect에서 호출하면 그보다 먼저 도는 다른 effect
-// (setBackground/setStage)의 set이 **빈 초기상태를 persist에 써버려 영속된 창을 파괴**한다(새로고침 시 창 전멸).
+// (setStage 등)의 set이 **빈 초기상태를 persist에 써버려 영속된 창을 파괴**한다(새로고침 시 창 전멸).
 // 그래서 모듈 로드 시점(클라이언트, 어떤 set·effect보다 먼저)에 rehydrate해 영속본을 가장 먼저 적재한다.
 // (서버에선 window 없음 → 미실행 → SSR은 빈 상태로 렌더, 클라 첫 렌더도 빈 상태라 hydration mismatch 없음.)
 if (typeof window !== "undefined") {

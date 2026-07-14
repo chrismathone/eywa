@@ -15,7 +15,7 @@ const useHydrated = () => useSyncExternalStore(subscribeNoop, () => true, () => 
  * 첫 노출 시 사이드바를 펼쳐 메뉴 라벨을 보여줘 발견성도 함께 올린다.
  */
 const POINTS: { icon: typeof AppWindow; title: string; desc: string }[] = [
-  { icon: AppWindow, title: "메뉴를 클릭하면 창으로 열립니다", desc: "대시보드는 배경에 그대로 남아 흐름이 끊기지 않아요." },
+  { icon: AppWindow, title: "메뉴를 클릭하면 창으로 열립니다", desc: "필요한 화면만 창으로 띄워 자유롭게 배치하세요." },
   { icon: Columns2, title: "창을 화면 가장자리로 끌면 나란히 보기", desc: "수납을 보며 학생 정보를 동시에 확인하세요." },
   { icon: Layers, title: "여러 창을 띄워두고 전환", desc: "최소화해도 작업 상태가 그대로 보존됩니다." },
 ];

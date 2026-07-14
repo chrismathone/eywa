@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SendToBack, Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "lucide-react";
-import { useWindowStore, isDuplicate, instanceLabel, type Win } from "./window-store";
+import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "lucide-react";
+import { useWindowStore, instanceLabel, type Win } from "./window-store";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { usePointerDrag } from "./use-pointer-drag";
 import { usePointerResize } from "./use-pointer-resize";
@@ -37,8 +37,7 @@ export function FloatingWindow({
 }) {
   // outerRef: 위치/크기(transform·width·height)를 드래그/리사이즈가 직접 갱신(리렌더 0)
   const outerRef = useRef<HTMLDivElement>(null);
-  // 배경 드롭 칩에 놓으면 타이틀바 "배경으로 보내기" 버튼과 동일 동작(라우트 창 한정, 함수 호이스팅).
-  const drag = usePointerDrag(win.id, outerRef, () => handleSwapToBackground());
+  const drag = usePointerDrag(win.id, outerRef);
   const resize = usePointerResize(win.id, outerRef);
   const close = useWindowStore((s) => s.close);
   const minimize = useWindowStore((s) => s.minimize);
@@ -46,7 +45,6 @@ export function FloatingWindow({
   const focus = useWindowStore((s) => s.focus);
   const duplicate = useWindowStore((s) => s.duplicate);
   const reloadWindow = useWindowStore((s) => s.reloadWindow);
-  const swapToBackground = useWindowStore((s) => s.swapToBackground);
   const dragging = useWindowStore((s) => s.draggingId === win.id);
   const bounds = useWindowStore((s) => s.bounds);
   // 라이브 제목/뒤로가능(RouteWindow가 iframe 관찰로 갱신). 라우트 창은 현재 서브뷰 제목을 표시하고,
@@ -95,19 +93,6 @@ export function FloatingWindow({
       commit();
       if (keepMounted) setExiting(false); // 최소화는 마운트 유지 → 복원 위해 상태 리셋
     }, 150);
-  }
-
-  // 배경으로 보내기: 이 창을 닫고 라우트를 배경 스택 맨 위(보이는 배경)로. 옛 배경은 스택에 남아
-  // 하단/상단 배경 탭 스트립에서 다시 꺼낼 수 있다. (router.push로 메인 프레임 이동.)
-  function handleSwapToBackground() {
-    if (locked) return; // 녹음 중 — 배경으로 보내면 창(iframe)이 사라져 녹음 유실.
-    // 복제본(#n)은 배경 시스템(라우트↔배경 1:1)에 안 들어간다 — window-only.
-    if (win.kind !== "route" || !win.params.href || isDuplicate(win.id)) return;
-    const href = win.params.href;
-    runExit(() => {
-      router.push(href);
-      swapToBackground(win.id);
-    });
   }
 
   // 창을 닫을 때 부모(배경) 라우트를 새로고침 — 창(iframe)에서 한 저장/삭제가 별도 문서인 배경
@@ -216,18 +201,6 @@ export function FloatingWindow({
                 className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[3px] transition"
               >
                 <CopyPlus size={14} strokeWidth={2} />
-              </button>
-            ) : null}
-            {win.kind === "route" && !spot && !isDuplicate(win.id) ? (
-              <button
-                type="button"
-                aria-label="배경으로 보내기"
-                title={locked ? "녹음 중 — 정지 후 가능" : "배경으로 보내기"}
-                onClick={handleSwapToBackground}
-                disabled={exiting || locked}
-                className="text-text-dim hover:bg-primary/15 hover:text-primary flex h-7 w-9 items-center justify-center rounded-[3px] transition disabled:pointer-events-none disabled:opacity-40"
-              >
-                <SendToBack size={14} strokeWidth={2} />
               </button>
             ) : null}
           </span>

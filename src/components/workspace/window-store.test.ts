@@ -8,8 +8,6 @@ function reset() {
     windows: {},
     order: [],
     focusedId: null,
-    background: [{ id: "dashboard", title: "대시보드", href: "/dashboard" }],
-    activeBackgroundId: "dashboard",
     live: {},
     nav: {},
     reloadNonce: {},
@@ -146,28 +144,6 @@ describe("window-store duplicate()", () => {
     expect(Object.keys(st.windows).length).toBe(MAX_WINDOWS); // 상한 유지(다른 창 축출)
   });
 
-  it("복제본은 배경으로 못 감 — swapToBackground no-op + swapFocusedWithBackground 미전송", () => {
-    const s = useWindowStore.getState();
-    s.open("route", { id: "students/1", title: "박지율", href: "/students/1" });
-    s.duplicate(SID);
-    const dupId = `${SID}#1`;
-    // swapToBackground(복제본) = no-op
-    useWindowStore.getState().swapToBackground(dupId);
-    expect(useWindowStore.getState().windows[dupId]).toBeTruthy();
-    expect(useWindowStore.getState().background.some((b) => b.id === "students/1")).toBe(false);
-    // 스포트라이트 교체: 복제본 포커스여도 배경으로 안 보냄
-    useWindowStore.setState({
-      background: [
-        { id: "dashboard", title: "대시보드", href: "/dashboard" },
-        { id: "classes", title: "수업목록", href: "/classes" },
-      ],
-      activeBackgroundId: "dashboard",
-      focusedId: dupId,
-    });
-    useWindowStore.getState().swapFocusedWithBackground("classes");
-    expect(useWindowStore.getState().background.some((b) => b.id === "students/1")).toBe(false);
-    expect(useWindowStore.getState().windows[dupId]).toBeTruthy(); // 복제본은 창으로 남음
-  });
 });
 
 describe("window-store openNewInstance() — shift+클릭", () => {

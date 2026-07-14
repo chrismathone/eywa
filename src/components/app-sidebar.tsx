@@ -67,11 +67,10 @@ function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
  * 텍스트로 메뉴를 찾고 싶으면 검색 팰릿(command-palette, 헤더 검색 클릭)을 사용.
  * UserMenu(로그아웃 포함)는 하단에 고정.
  *
- * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 usePathname은
- * 항상 /dashboard에 머문다. 그래서 active는 윈도우 스토어로 구동한다 —
+ * 활성 표시(데스크톱): 메뉴 클릭이 라우트 이동이 아니라 플로팅 창을 열므로 active는 윈도우 스토어로 구동한다 —
  *  · 포커스된 창의 메뉴 = 풀 하이라이트
  *  · 열려 있지만 비포커스 = 점(dot)
- *  · 포커스된 창이 없음 = 바탕(배경) 라우트가 활성 (기본 대시보드, 배경 교체 시 그 라우트)
+ *  · 포커스된 창이 없음(빈 데스크톱) = 아무 메뉴도 활성 아님
  * 모바일(라우트 이동)에서는 기존 pathname 기준을 유지.
  *
  * 데스크톱 제스처: 클릭=창 열기(cascade 위치) / 오른쪽으로 드래그=드롭 지점에 창 꺼내기.
@@ -274,8 +273,7 @@ export function AppSidebar({
                 const winId = windowId("route", item.menuKey);
                 const isOpen = isDesktop && openIds.has(winId);
                 const active = isDesktop
-                  ? (hasFocus && focusedId === winId) ||
-                    (!hasFocus && isItemActive(item.href, pathname))
+                  ? hasFocus && focusedId === winId
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
                 // 이미 최상단(포커스)인 창 — 이 메뉴를 다시 누르면 "첫 화면"으로 리셋(아래 handleNav).

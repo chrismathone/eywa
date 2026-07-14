@@ -320,17 +320,6 @@ export function snapBarHitTest(
   return null;
 }
 
-/**
- * 배경 드롭 존 — 라우트 창을 드래그해 상단 중앙 이 칩에 놓으면 "배경으로 보내기"(swapToBackground).
- * 스냅 바(창 2개+에서만 노출)와 독립 → 창이 1개여도 동작. 충돌 회피용으로 스냅 바는
- * SNAP_BAR_BG_OFFSET만큼 아래로 밀어 그린다(렌더·히트테스트 동일 오프셋). 타이틀바 "배경으로 보내기"
- * 버튼과 공존(중복 경로).
- */
-export const SNAP_BAR_BG_OFFSET = 44;
-export function backgroundDropZone(bounds: Bounds): Rect {
-  const w = Math.min(240, Math.max(160, bounds.width - 40));
-  return { x: Math.round((bounds.width - w) / 2), y: 6, w, h: 30 };
-}
 export function pointInRect(px: number, py: number, r: Rect): boolean {
   return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 }

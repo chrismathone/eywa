@@ -3,16 +3,39 @@
 import { usePathname } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
-import { BackgroundTabs } from "@/components/workspace/background-tabs";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { findNavItem, findNavGroup } from "@/lib/navigation";
+import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowStore } from "@/components/workspace/window-store";
 
 export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
   const pathname = usePathname();
-  const current = findNavItem(pathname);
-  const group = findNavGroup(pathname);
-  const title = current?.label ?? "eywa";
-  const breadcrumb = group ? `${brand} · ${group.label}` : brand;
+  const isDesktop = useIsDesktop();
+  // 데스크톱은 메뉴=창이라 pathname이 항상 /dashboard에 머문다 → 헤더는 포커스된 창을 따른다.
+  // 창이 하나도 포커스돼 있지 않으면 "빈 데스크톱"이므로 홈으로 표기(배경 라우트 잔재 '대시보드' 방지).
+  // 모바일(라우트 이동)에선 기존 pathname 기준을 유지.
+  const focused = useWindowStore((s) => (s.focusedId ? s.windows[s.focusedId] : null));
+  const focusedLiveTitle = useWindowStore((s) => (s.focusedId ? s.live[s.focusedId]?.title : undefined));
+  const hasFocus = isDesktop && !!focused && !focused.minimized;
+
+  let title: string;
+  let breadcrumb: string;
+  if (isDesktop) {
+    if (hasFocus && focused) {
+      const item = findNavItem(focused.params.href ?? "");
+      const group = findNavGroup(focused.params.href ?? "");
+      title = focusedLiveTitle?.trim() || focused.params.title || item?.label || "eywa";
+      breadcrumb = group ? `${brand} · ${group.label}` : brand;
+    } else {
+      title = "홈";
+      breadcrumb = brand;
+    }
+  } else {
+    const current = findNavItem(pathname);
+    const group = findNavGroup(pathname);
+    title = current?.label ?? "eywa";
+    breadcrumb = group ? `${brand} · ${group.label}` : brand;
+  }
 
   function openCommandPalette() {
     window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT));
@@ -29,11 +52,8 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
         </h1>
       </div>
 
-      {/* 우측 클러스터 — 배경 탭(있을 때) · 검색 · 알림. 검색은 우측, 배경 탭은 그 왼쪽. */}
+      {/* 우측 클러스터 — 검색 · 알림. */}
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2.5">
-        {/* 배경 탭 스트립 — 배경 2개 이상일 때만. 검색 왼쪽에 인라인 배치. */}
-        <BackgroundTabs />
-
         {/* 검색 팰릿 트리거 — 클릭으로 메뉴·검색 팰릿을 연다 */}
         <button
           type="button"
