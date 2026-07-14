@@ -52,6 +52,31 @@ export async function fetchScoreHistory(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * 대상 날짜 '이후'(엄밀히 초과)에 이미 채점된(exam_info 또는 homework_score 있는) 보고서가 있는지.
+ * 과거 날짜 보고서 자동작성 시 **추세 반영 여부 판정** — 뒤에 이미 채점 이력이 있으면 뒤늦게 끼워넣는 과거 점이
+ * 추세 그래프/서술을 흐트러뜨리므로 추세를 생성하지 않는다(원장 2026-07-14). 과목 매칭은 fetchScoreHistory와 동일
+ * (math=legacy null 포함, 그 외 정확, 미지정=null-subject만). count/head라 행을 안 받음(B2). tenant는 RLS 위임.
+ */
+export async function hasLaterScoredReport(
+  supabase: SupabaseClient,
+  studentId: string,
+  subject: string | undefined,
+  date: string,
+): Promise<boolean> {
+  let q = supabase
+    .from("lesson_reports")
+    .select("*", { count: "exact", head: true })
+    .eq("student_id", studentId)
+    .gt("report_date", date)
+    .or("exam_info.not.is.null,homework_score.not.is.null");
+  if (!subject) q = q.is("subject", null);
+  else if (subject === "math") q = q.or("subject.eq.math,subject.is.null");
+  else q = q.eq("subject", subject);
+  const { count } = await q;
+  return (count ?? 0) > 0;
+}
+
 /** 학습 추이 그래프 조회 윈도(일) — 보고일 기준 최근 N일만(2026-07-10 원장: "너무 과거 것까지 나온다, 7일치만").
  *  풀 이력 이전(16,694행) 후 옛 이관분이 몇 달 전 점까지 끌고 오던 것 차단. 유효점 2개 미만이면 그래프 자체가 숨음. */
 const TREND_WINDOW_DAYS = 7;

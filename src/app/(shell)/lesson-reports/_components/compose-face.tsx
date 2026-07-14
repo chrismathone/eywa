@@ -170,6 +170,7 @@ export function ComposeFace({
       subject,
       todayExamInfo: input.dailyTest,
       todayHomework: homework,
+      date: reportDate, // 보고서 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
     });
     setAiBusy(false);
     if (res.ok && res.comment) {

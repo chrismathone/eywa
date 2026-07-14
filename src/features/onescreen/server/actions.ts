@@ -9,7 +9,7 @@ import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } fr
 import { buildTrendInput, trendBody } from "../trend-comment";
 import { assembleCombined, MENT_AI_TUNING, type PromptSection } from "../prompt-defaults";
 import { loadActivePrompt } from "./prompt-loader";
-import { fetchScoreHistory } from "./score-history";
+import { fetchScoreHistory, hasLaterScoredReport } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
@@ -359,7 +359,7 @@ export async function saveOnescreenSession(
  */
 export async function generateReportComment(
   input: ReportCommentInput,
-  trendCtx?: { studentId?: string; subject?: string; todayExamInfo?: string; todayHomework?: string },
+  trendCtx?: { studentId?: string; subject?: string; todayExamInfo?: string; todayHomework?: string; date?: string },
 ): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -402,20 +402,26 @@ export async function generateReportComment(
       sections.push({ type: "comment", field: "comment", body: commentBody(input, tpl) });
     }
 
-    // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 오늘(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
+    // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).
+    // ⚠️ 과거 날짜 보고서: 그 뒤에 이미 채점 이력이 있으면 추세 미반영 — 뒤늦게 끼우는 과거 점이 추세 그래프/서술을 흐트러뜨림(원장 2026-07-14).
     let hasTrend = false;
     if (trendCtx?.studentId) {
-      const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, kstToday());
-      history.push({
-        date: kstToday(),
-        examInfo: trendCtx.todayExamInfo?.trim() || null,
-        homeworkScore: trendCtx.todayHomework?.trim() || null,
-      });
-      const ti = buildTrendInput(history);
-      if (ti) {
-        const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
-        sections.push({ type: "trend", field: "trend", body: trendBody(ti, ttpl) });
-        hasTrend = true;
+      const anchorDate = resolveReportDate(trendCtx.date); // 대상 날짜(빈값·미래→오늘)
+      const skipTrend =
+        anchorDate < kstToday() && (await hasLaterScoredReport(supabase, trendCtx.studentId, trendCtx.subject, anchorDate));
+      if (!skipTrend) {
+        const history = await fetchScoreHistory(supabase, trendCtx.studentId, trendCtx.subject, anchorDate);
+        history.push({
+          date: anchorDate,
+          examInfo: trendCtx.todayExamInfo?.trim() || null,
+          homeworkScore: trendCtx.todayHomework?.trim() || null,
+        });
+        const ti = buildTrendInput(history);
+        if (ti) {
+          const ttpl = await loadActivePrompt(supabase, user.tenantId, "trend");
+          sections.push({ type: "trend", field: "trend", body: trendBody(ti, ttpl) });
+          hasTrend = true;
+        }
       }
     }
 

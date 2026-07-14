@@ -456,6 +456,7 @@ export function OneScreenClient({
         subject: subjectKey,
         todayExamInfo: buildExamInfo(student, showDailyTest, showCheckTest),
         todayHomework: student.homework,
+        date: date || undefined, // 보는 날짜 — 과거 날짜면 추세를 그 날짜 기준으로(이후 채점 이력 있으면 추세 생략)
       });
       const text = res.ok && res.comment ? res.comment : buildSubjectReport(student, idx);
       if (!res.ok) toast.message("AI 자동작성이 어려워 기본 문구로 작성했습니다");
