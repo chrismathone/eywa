@@ -9,7 +9,7 @@ import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { resolveReportDate } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
@@ -19,6 +19,7 @@ import { BOARD_PREFIX } from "../notice-targets";
 
 export type AdminSaveReportInput = {
   studentId: string;
+  reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 작성·발송용(report_date=카드·ClassNote 게시일).
   subject: string; // 과목키(math/english…) — 관리자 발송은 필수(보드·게이트·(student,date,subject) dedup 결정)
   teacherName?: string; // 학부모 카드에 표시할 강사명 — 기본=해당 과목 담당 강사, 미지정 시 관리자 본인
   textbook?: string;
@@ -48,7 +49,7 @@ async function upsertAdminReport(
   const { data: stu } = await supabase.from("students").select("id").eq("id", input.studentId).maybeSingle();
   if (!stu) return { ok: false, error: "학생을 찾을 수 없습니다" };
 
-  const reportDate = kstToday();
+  const reportDate = resolveReportDate(input.reportDate); // 빈값·미래→오늘, 과거는 그대로(too_old 가드가 발송 범위 강제)
   const { data, error } = await supabase
     .from("lesson_reports")
     .upsert(
@@ -122,9 +123,9 @@ export async function saveAndQueueAdminReport(
   if (!input.subject) return { ok: false, error: "과목을 선택하세요" };
 
   const supabase = await createClient();
-  const reportDate = kstToday();
+  const reportDate = resolveReportDate(input.reportDate); // 빈값·미래→오늘, 과거 그대로(아래 too_old 가드가 실발송 범위 강제)
 
-  // 저장 전 상태 pre-read(오늘 (student,subject) 행). 취소/게시중은 덮어쓰지 않는다.
+  // 저장 전 상태 pre-read((student,date,subject) 행). 취소/게시중은 덮어쓰지 않는다.
   const { data: prior } = await supabase
     .from("lesson_reports")
     .select("id, classnote_status, revoked_at")
@@ -181,6 +182,7 @@ const BULK_TEST_STUDENT_NAME = "학원이"; // 실 학부모에게 안 가는 �
 
 export type BulkAdminReportInput = {
   classIds: string[];
+  reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 대량 발송용(report_date=카드·ClassNote 게시일).
   teacherName?: string; // 표시 강사명 오버라이드 — 비우면 각 반의 담당 강사(classes.teacher_id)
   textbook?: string;
   makeup?: boolean;
@@ -197,7 +199,7 @@ type BulkTarget = { studentId: string; subject: string; teacherName: string | nu
  * 반 단위 대량 발송 — 선택 반들의 재원생 각자에게 **같은 내용**의 리포트 카드를 작성해 ClassNote 큐에 적재.
  * 반 공지(sendClassNotice, 자유 텍스트)의 **리포트-카드 버전**. 학부모 발송이라 안전가드는 개별 발송
  * (saveAndQueueAdminReport)과 동일하게 **학생별로** 태운다: dry-run 스위치 · 과목 opt-in/화이트리스트 ·
- * 동명이인 name_conflict(sendClassnoteForUnsent 25청크 배치) · too_old(오늘=항상 통과). 실제 게시는 로컬 워커.
+ * 동명이인 name_conflict(sendClassnoteForUnsent 25청크 배치) · too_old(전 달 1일 이전 날짜=발송 차단). 실제 게시는 로컬 워커.
  * ⚠️ 오늘 그 과목 보고서가 이미 있는 학생은 **건너뛴다**(강사 작성분 덮어쓰기·중복 발송 방지). dry-run이면 저장/큐잉 안 함.
  */
 export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise<{
@@ -207,6 +209,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   skippedExisting?: number; // 이미 오늘 보고서가 있어 제외된 학생 수
   subjectOff?: number; // 발송 대상 과목이 아니라 제외된 (학생,과목) 수
   overflow?: number; // 타깃 상한 초과로 잘린 수
+  tooOld?: number; // 전 달 1일 이전 날짜라 발송 차단(too_old)된 수 — 개별/원스크린 경로와 동일 가드
   wouldSend?: number; // dry-run 시 발송 예정 인원(상한)
   dryRun?: boolean;
   error?: string;
@@ -220,7 +223,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
 
   const supabase = await createClient();
   const settings = await getTenantSettings();
-  const reportDate = kstToday();
+  const reportDate = resolveReportDate(input.reportDate); // 빈값·미래→오늘, 과거 그대로(아래 too_old 가드가 실발송 범위 강제)
   const allowedSubjects = settings.report.classnoteSubjects;
 
   // ── 1. 대상 (학생,과목,담당강사) 후보 해석 ──
@@ -357,7 +360,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   const conflictIds = authored.filter((r) => conflicted.has(r.student_id)).map((r) => r.id);
   const queueIds = authored.filter((r) => !conflicted.has(r.student_id)).map((r) => r.id);
 
-  // ── 6. 상태 확정 — 동명이인 name_conflict / 나머지 queued(오늘=too_old 아님). .is(null) 경합 이중방어. ──
+  // ── 6. 상태 확정 — 동명이인 name_conflict / too_old(전 달 1일 이전) / 나머지 queued. .is(null) 경합 이중방어. ──
   let conflicts = 0;
   for (let i = 0; i < conflictIds.length; i += 100) {
     const { data } = await supabase
@@ -368,13 +371,17 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       .select("id");
     conflicts += (data ?? []).length;
   }
+  // reportDate 균일 → 개별/원스크린 경로(saveAndQueueAdminReport:164)와 동일하게 too_old 일괄 판정.
+  // 과거 날짜가 전 달 1일보다 오래면 워커가 어차피 안 집는다(classnote-core.mjs:100 report_date>=md) → too_old로 명시(큐 고아·오해성공 방지).
+  const allowed = isClassnoteAllowed(reportDate);
   let queued = 0;
+  let tooOld = 0;
   for (let i = 0; i < queueIds.length; i += 100) {
     const { data, error } = await supabase
       .from("lesson_reports")
       .update({
-        classnote_status: "queued",
-        classnote_queued_at: nowIso,
+        classnote_status: allowed ? "queued" : "too_old",
+        classnote_queued_at: allowed ? nowIso : null,
         classnote_processing_at: null,
         classnote_retry_count: 0,
         classnote_error: null,
@@ -383,7 +390,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
       .is("classnote_status", null)
       .select("id");
     if (error) return { ok: false, error: error.message };
-    queued += (data ?? []).length;
+    if (allowed) queued += (data ?? []).length;
+    else tooOld += (data ?? []).length;
   }
 
   // ── 7. 진도 컨테이너 반영(수학·진도 있을 때만, 비치명적). 10건씩 동시. ──
@@ -405,7 +413,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     );
   }
 
-  return { ok: true, queued, conflicts, skippedExisting, subjectOff, overflow };
+  return { ok: true, queued, conflicts, skippedExisting, subjectOff, overflow, tooOld };
 }
 
 export type AdminComposeSubject = {

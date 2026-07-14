@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { addDays } from "@/lib/date-kst";
 import type { TodayClass } from "../server/roster";
 
 /**
@@ -8,6 +9,9 @@ import type { TodayClass } from "../server/roster";
  */
 export function OneScreenTopBar({
   today,
+  date,
+  todayYmd,
+  onDateChange,
   classTags,
   classFilter,
   onFilter,
@@ -23,6 +27,9 @@ export function OneScreenTopBar({
   makeupAdder,
 }: {
   today: string;
+  date: string; // 대상 날짜(YYYY-MM-DD)
+  todayYmd: string; // KST 오늘(YYYY-MM-DD) — 다음날 이동 상한
+  onDateChange: (ymd: string) => void; // 날짜 이동(searchParam 네비)
   classTags: readonly string[];
   classFilter: string;
   onFilter: (tag: string) => void;
@@ -42,16 +49,56 @@ export function OneScreenTopBar({
     { value: "A", label: "단일 A" },
     { value: "B", label: "2문단 B" },
   ];
+  const isToday = date >= todayYmd; // 오늘(또는 이상) = 다음날 이동 막고 '오늘' 버튼 숨김
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2">
-      {/* 날짜 */}
-      <div className="flex shrink-0 items-center gap-2">
+      {/* 날짜 — 이전/다음 이동 + 날짜 선택(과거 날짜 마감·재발송). report_date=카드 표시일=ClassNote 게시일. */}
+      <div className="flex shrink-0 items-center gap-1.5">
         <span className="bg-primary-soft text-primary flex size-7 items-center justify-center rounded-sm">
           <EyIcon name="check" size={14} />
         </span>
-        <div>
-          <p className="micro text-text-faint">수업 마감</p>
-          <p className="text-foreground text-[13px] font-bold">{today}</p>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => onDateChange(addDays(date, -1))}
+            aria-label="이전 날짜"
+            className="text-text-dim hover:bg-bg-soft rounded-sm px-1 py-1"
+          >
+            <EyIcon name="chevronLeft" size={16} />
+          </button>
+          <div className="min-w-[128px] text-center">
+            <p className="micro text-text-faint">{isToday ? "수업 마감" : "지난 마감"}</p>
+            <label className="relative block cursor-pointer">
+              <p className="text-foreground text-[13px] font-bold">{today}</p>
+              {/* 네이티브 date input을 겹쳐 라벨 클릭 = 달력 열기(표시는 한글 날짜 유지). */}
+              <input
+                type="date"
+                value={date}
+                max={todayYmd}
+                onChange={(e) => e.target.value && onDateChange(e.target.value)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label="날짜 선택"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={() => onDateChange(addDays(date, 1))}
+            disabled={isToday}
+            aria-label="다음 날짜"
+            className="text-text-dim hover:bg-bg-soft rounded-sm px-1 py-1 disabled:opacity-30"
+          >
+            <EyIcon name="chevronRight" size={16} />
+          </button>
+          {!isToday ? (
+            <button
+              type="button"
+              onClick={() => onDateChange(todayYmd)}
+              className="border-line text-primary hover:bg-bg-soft ml-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold"
+            >
+              오늘
+            </button>
+          ) : null}
         </div>
       </div>
 

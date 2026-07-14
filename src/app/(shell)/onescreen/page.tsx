@@ -19,17 +19,25 @@ export const metadata = { title: "선생님 원스크린 — eywa" };
  * "실 teacher OR effectiveTeacherId(쿠키+담당반)"를 단일 소스로 판정 → roster는 어차피 teacher_id=본인으로
  * 좁혀 스코프 안전(관리자 권한이어도 자기 반만 로드).
  */
-export default async function OneScreenPage() {
+export default async function OneScreenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if ((await getShellView()) !== "teacher") {
     redirect(roleHome(user.systemRole, await getPermMatrix()));
   }
-  const roster = await getTeacherRoster();
+  const { date } = await searchParams;
+  const roster = await getTeacherRoster(date);
   return (
+    // key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만).
     <OneScreenClient
+      key={roster.date}
       initial={roster.students}
       today={roster.today}
+      date={roster.date}
       classTags={roster.classTags}
       todayClasses={roster.todayClasses}
       allowTeacherTestMax={roster.allowTeacherTestMax}

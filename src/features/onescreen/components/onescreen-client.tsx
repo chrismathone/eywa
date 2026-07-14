@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
 import { buildSubjectReport, studentStatus } from "../report";
@@ -98,6 +100,7 @@ function buildExamInfo(st: OneScreenStudent, dailyOn: boolean, checkOn: boolean)
 export function OneScreenClient({
   initial,
   today = TODAY,
+  date = "",
   classTags = CLASS_TAGS,
   todayClasses = [],
   allowTeacherTestMax = false,
@@ -108,6 +111,7 @@ export function OneScreenClient({
 }: {
   initial: OneScreenStudent[];
   today?: string;
+  date?: string; // 조회 대상 날짜(YYYY-MM-DD) — 저장/발송이 이 날짜로 report_date를 씀(빈값=서버가 오늘으로)
   classTags?: readonly string[];
   todayClasses?: TodayClass[];
   allowTeacherTestMax?: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(학원 설정)
@@ -116,12 +120,23 @@ export function OneScreenClient({
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
 }) {
+  const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
   const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
+  // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
+  const activeDate = date || kstToday();
+  const todayYmd = kstToday();
+  // 날짜 이동 전 대기 저장 flush — 저장 로직이 아래에 정의되므로 ref로 노출(effect에서 갱신, render 중 ref 쓰기 금지 규칙).
+  const flushSavesRef = useRef<() => void>(() => {});
+  const goToDate = (ymd: string) => {
+    if (!ymd || ymd > todayYmd || ymd === activeDate) return; // 미래·같은 날짜 무시
+    flushSavesRef.current(); // 대기 중(디바운스 800ms) 자동저장을 이동 전 커밋 — 이동=클라 재마운트라 미커밋분 유실 방어
+    router.push(ymd === todayYmd ? "/onescreen" : `/onescreen?date=${ymd}`);
+  };
   const [view, setView] = useState<"card" | "grid" | "status" | "history">("card"); // 카드(학생별) ↔ 표(대량작성) ↔ 발송 현황 ↔ 지난 보고서
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
@@ -146,9 +161,24 @@ export function OneScreenClient({
       for (const t of timers.values()) clearTimeout(t);
     };
   }, []);
+  // 대기 중 자동저장을 즉시 커밋(날짜 이동 전 호출) — 디바운스 800ms 안에 이동하면 유실되던 편집 방어.
+  useEffect(() => {
+    flushSavesRef.current = () => {
+      for (const [sid, t] of saveTimers.current) {
+        clearTimeout(t);
+        const s = studentsRef.current.find((x) => x.id === sid);
+        if (!s || s.isMakeup) continue;
+        void saveOnescreenSession(buildSessionInput(s, reportsRef.current[sid])).then((res) => {
+          if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
+        });
+      }
+      saveTimers.current.clear();
+    };
+  });
   function buildSessionInput(s: OneScreenStudent, r: Record<string, SubjectReport> | undefined) {
     return {
       studentId: s.id,
+      sessionDate: date || undefined, // 대상 날짜(빈값=서버 오늘) — 과거 날짜 작업분도 그 날짜 세션에 저장
       classId: s.classId ?? null,
       studyGrade: s.studyGrade ?? null,
       subjectProgress: Object.fromEntries(
@@ -509,6 +539,7 @@ export function OneScreenClient({
       draft,
       input: {
         studentId: student.id,
+        reportDate: date || undefined, // 대상 날짜(빈값=서버 오늘) — report_date가 곧 카드 표시일·ClassNote 게시일
         textbook: su?.textbook || "",
         makeup: su?.makeup ?? false,
         homeworkToday: su?.homeworkToday || "",
@@ -855,6 +886,9 @@ export function OneScreenClient({
     <div className="space-y-4">
       <OneScreenTopBar
         today={today}
+        date={activeDate}
+        todayYmd={todayYmd}
+        onDateChange={goToDate}
         classTags={classTags}
         classFilter={classFilter}
         onFilter={setClassFilter}

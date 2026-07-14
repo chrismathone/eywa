@@ -39,3 +39,40 @@ export function kstMinutesOfDay(d: Date = new Date()): number {
   const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? "0");
   return get("hour") * 60 + get("minute");
 }
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+/**
+ * 작성·발송 대상 날짜 정규화 — 사용자가 고른 날짜(YYYY-MM-DD)를 안전 범위로 클램프.
+ * 빈값·형식오류·미래(오늘 초과)는 KST 오늘로. **과거는 그대로**(저장 허용) — 발송 too_old 가드
+ * (isClassnoteAllowed=전 달 1일 이후)가 별도로 실발송 범위를 강제한다. 순수 함수(Vitest).
+ * report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일(worker) → 세 날짜 일치 보장.
+ */
+export function resolveReportDate(raw?: string | null, today: string = kstToday()): string {
+  if (!raw || !YMD.test(raw)) return today;
+  return raw > today ? today : raw; // 문자열 사전순 = 날짜순(YYYY-MM-DD)
+}
+
+/** YYYY-MM-DD의 요일 인덱스(0=일 … 6=토). UTC 파싱이라 서버 TZ와 무관하게 결정적. */
+export function weekdayIndexOf(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1)).getUTCDay();
+}
+
+/** YYYY-MM-DD에 n일 더한 날짜(YYYY-MM-DD). UTC 산술이라 DST·TZ 영향 없음. n 음수=이전. */
+export function addDays(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** YYYY-MM-DD → "2026년 7월 14일 (월)" 표시 문자열(요일은 UTC 파싱 결정적). */
+export function formatKoreanDate(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return `${y}년 ${m}월 ${d}일 (${DOW_KO[weekdayIndexOf(ymd)]})`;
+}

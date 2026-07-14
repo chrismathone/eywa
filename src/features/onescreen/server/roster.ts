@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores } from "../exam-info";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
@@ -18,7 +18,6 @@ import type { AttendanceMark, OneScreenStudent } from "../types";
  */
 
 const DOW_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const; // Date.getDay()
-const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
 /** 오늘 수업(반) 한 줄 — 원스크린 '오늘 일정' 위젯용 */
 export type TodayClass = {
@@ -30,7 +29,8 @@ export type TodayClass = {
 };
 
 export type TeacherRoster = {
-  today: string; // "2026년 6월 20일 (금)"
+  today: string; // 표시용 "2026년 6월 20일 (금)" — 조회 대상 날짜(오늘 또는 과거)
+  date: string; // 조회 대상 날짜(YYYY-MM-DD) — 저장/발송이 이 날짜로 report_date를 씀(오늘 기본, 과거 이동 가능)
   classTags: string[]; // ["전체", ...현재 로스터에 있는 학년]
   teacherName: string;
   students: OneScreenStudent[];
@@ -63,12 +63,14 @@ type OnescreenSessionRow = {
 
 function emptyRoster(
   today: string,
+  date: string,
   teacherName: string,
   noticeMode: "A" | "B" | null = null,
   academyNoticeMode: "A" | "B" = "A",
 ): TeacherRoster {
   return {
     today,
+    date,
     classTags: ["전체"],
     teacherName,
     students: [],
@@ -81,13 +83,15 @@ function emptyRoster(
   };
 }
 
-export async function getTeacherRoster(): Promise<TeacherRoster> {
-  const now = new Date();
-  const today = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${DOW_KO[now.getDay()]})`;
-  const dow = DOW_KEY[now.getDay()];
+export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster> {
+  // 대상 날짜 = 고른 날짜(YYYY-MM-DD) 클램프(미래·형식오류→오늘). 요일·표시·데이터 앵커를 **모두 이 날짜**로
+  // 통일(옛 코드는 요일=서버 로컬 now.getDay(), 데이터=KST kstToday()로 어긋날 수 있었음 — 함께 교정).
+  const targetDate = resolveReportDate(rawDate);
+  const today = formatKoreanDate(targetDate);
+  const dow = DOW_KEY[weekdayIndexOf(targetDate)];
 
   const user = await getCurrentUser();
-  if (!user) return emptyRoster(today, "");
+  if (!user) return emptyRoster(today, targetDate, "");
   const teacherName = user.displayName ?? "";
 
   const supabase = await createClient();
@@ -107,7 +111,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   ]);
   const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
   const allClasses = classes ?? [];
-  if (allClasses.length === 0) return emptyRoster(today, teacherName, noticeMode, academyNoticeMode);
+  if (allClasses.length === 0) return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode);
 
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
@@ -136,7 +140,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
   );
   const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
-  if (studentIds.length === 0) return emptyRoster(today, teacherName, noticeMode, academyNoticeMode);
+  if (studentIds.length === 0) return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode);
 
   // 4) 학생 기본 정보
   const studentRows = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
@@ -183,9 +187,10 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     }
   }
 
-  // 이전 진도/점수(직전 회차) + 오늘 발송 여부 + 오늘 출결을 실데이터로 채운다(하드코딩 초기값 대체).
+  // 이전 진도/점수(직전 회차) + 그날 발송 여부 + 그날 출결을 실데이터로 채운다(하드코딩 초기값 대체).
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
-  const todayIso = kstToday();
+  // 앵커 = 대상 날짜(오늘 또는 과거). session_date/report_date/attendance 필터가 모두 이 날짜.
+  const todayIso = targetDate;
   const [reportRows, attRows, sessionRows, textbookRows] = await Promise.all([
     fetchInChunks<{
       id: string;
@@ -284,7 +289,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   for (const r of reportRows) {
     if (r.report_date === todayIso) {
       sentToday.add(r.student_id);
-      // report_date desc 정렬이라 (학생,과목) 첫 건이 오늘 최신 → 뒤 건은 덮지 않음.
+      // report_date desc 정렬이라 (학생,과목) 첫 건이 그날 최신 → 뒤 건은 덮지 않음.
       const k = subjKey(r.student_id, r.subject);
       if (!todayBySubject.has(k)) {
         todayBySubject.set(k, {
@@ -296,12 +301,15 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         });
         todayReportIds.push(r.id);
       }
-    } else {
+    } else if (r.report_date < todayIso) {
+      // 직전 회차 = **대상 날짜보다 이전** 회차만(과거 날짜 조회 시 그 이후 회차를 참고행으로 잘못 쓰지 않도록).
+      // report_date desc라 (학생/과목) 첫 건이 대상 날짜 직전 회차.
       if (!priorReport.has(r.student_id))
         priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
       const pk = subjKey(r.student_id, r.subject);
       if (!priorBySubject.has(pk)) priorBySubject.set(pk, r); // (학생,과목) 첫(=직전) 회차
     }
+    // report_date > todayIso(대상 날짜 이후 회차)는 참고 대상 아님 — 무시.
   }
 
   // 오늘 보고서들의 학부모 열람 수(share_link_views) — PostgREST group-by 대신 행을 청크로 가져와 JS 집계(fetchInChunks).
@@ -430,6 +438,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
 
   return {
     today,
+    date: targetDate,
     classTags,
     teacherName,
     students,

@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { generateReportComment } from "@/features/onescreen/server/actions";
@@ -18,6 +19,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
   const router = useRouter();
   const subjects = useSubjectMaps();
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [reportDate, setReportDate] = useState(kstToday()); // 보고서 날짜(기본 오늘) — 카드 표시일·ClassNote 게시일
   const [teacherName, setTeacherName] = useState("");
   const [textbook, setTextbook] = useState("");
   const [progress, setProgress] = useState("");
@@ -89,6 +91,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
     setBusy(true);
     const res = await sendBulkAdminReports({
       classIds: [...checked],
+      reportDate, // 보고서 날짜(기본 오늘) — 서버가 미래는 오늘로 클램프
       teacherName: teacherName.trim() || undefined,
       textbook: textbook.trim() || undefined,
       makeup,
@@ -112,7 +115,8 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
     }
     const parts = [`${res.queued ?? 0}명 발송 대기(연동 PC가 순차 게시)`];
     if (res.conflicts) parts.push(`동명이인 제외 ${res.conflicts}명`);
-    if (res.skippedExisting) parts.push(`오늘 보고서 이미 있어 제외 ${res.skippedExisting}명`);
+    if (res.skippedExisting) parts.push(`${reportDate === kstToday() ? "오늘" : "해당 날짜"} 보고서 이미 있어 제외 ${res.skippedExisting}명`);
+    if (res.tooOld) parts.push(`발송기한(전 달 1일) 지나 제외 ${res.tooOld}건`);
     if (res.subjectOff) parts.push(`발송 과목 아님 ${res.subjectOff}건`);
     if (res.overflow) parts.push(`상한 초과 ${res.overflow}건 제외`);
     (res.queued ? toast.success : toast.message)(parts.join(" · "));
@@ -159,10 +163,23 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
+              <div className={LABEL}>보고서 날짜</div>
+              <input
+                type="date"
+                value={reportDate}
+                max={kstToday()}
+                onChange={(e) => setReportDate(e.target.value || kstToday())}
+                className={INPUT}
+              />
+              {reportDate !== kstToday() ? (
+                <p className="text-amber mt-0.5 text-[11px]">과거 날짜로 발송 — 카드·ClassNote 게시일이 이 날짜</p>
+              ) : null}
+            </div>
+            <div>
               <div className={LABEL}>표시 강사명(선택)</div>
               <input value={teacherName} onChange={(e) => setTeacherName(e.target.value)} placeholder="비우면 각 반 담당 강사" className={INPUT} />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <div className={LABEL}>교재</div>
               <input value={textbook} onChange={(e) => setTextbook(e.target.value)} placeholder="교재명" className={INPUT} />
             </div>

@@ -5,6 +5,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
@@ -57,6 +58,7 @@ export function ComposeFace({
   } | null>(null);
   const [ctxPending, startCtx] = useTransition();
 
+  const [reportDate, setReportDate] = useState(kstToday()); // 보고서 날짜(기본 오늘) — 카드 표시일·ClassNote 게시일
   const [subject, setSubject] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [progress, setProgress] = useState("");
@@ -131,6 +133,7 @@ export function ComposeFace({
       .join(", ");
     return {
       studentId,
+      reportDate, // 보고서 날짜(빈값 없음 — 기본 오늘) — 서버가 미래는 오늘로 클램프
       subject,
       teacherName: teacherName.trim() || undefined,
       textbook: textbook.trim() || undefined,
@@ -251,17 +254,32 @@ export function ComposeFace({
         </p>
       ) : null}
 
-      {/* 학생 선택 */}
-      <div className="max-w-sm">
-        <div className={LABEL}>학생</div>
-        <SearchableSelect
-          options={studentOptions}
-          value={studentId}
-          onValueChange={pickStudent}
-          placeholder="학생 선택…"
-          searchPlaceholder="이름 검색…"
-          ariaLabel="학생 선택"
-        />
+      {/* 학생 + 보고서 날짜 선택 */}
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1 sm:max-w-sm">
+          <div className={LABEL}>학생</div>
+          <SearchableSelect
+            options={studentOptions}
+            value={studentId}
+            onValueChange={pickStudent}
+            placeholder="학생 선택…"
+            searchPlaceholder="이름 검색…"
+            ariaLabel="학생 선택"
+          />
+        </div>
+        <div>
+          <div className={LABEL}>보고서 날짜</div>
+          <input
+            type="date"
+            value={reportDate}
+            max={kstToday()}
+            onChange={(e) => setReportDate(e.target.value || kstToday())}
+            className={INPUT}
+          />
+          {reportDate !== kstToday() ? (
+            <p className="text-amber mt-0.5 text-[11px]">과거 날짜로 발송 — 카드·ClassNote 게시일이 이 날짜가 됩니다</p>
+          ) : null}
+        </div>
       </div>
 
       {ctxPending ? <p className="text-text-faint text-[12px]">학생 정보를 불러오는 중…</p> : null}

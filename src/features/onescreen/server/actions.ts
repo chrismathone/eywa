@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { kstToday } from "@/lib/date-kst";
+import { kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
 import { buildTrendInput, trendBody } from "../trend-comment";
@@ -34,6 +34,7 @@ export type SaveLessonReportInput = {
   checkTest?: string; // "20문제 중 19개"
   attitude?: string; // "좋음"
   trendNote?: string; // 학습 추세(종합분석) 문구 — 0091a. 멘트(notes)와 별개 저장·표시.
+  reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 마감·재발송용(report_date=카드·ClassNote 게시일).
   subject?: string; // 과목키(math/english…) — (student,date,subject) 과목별 1행 dedup용
   // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
   // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
@@ -81,8 +82,8 @@ export async function saveLessonReport(
     if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
   }
 
-  // KST 오늘 — Vercel UTC 오전에 report_date가 하루 밀리는 것 방지(saveOnescreenSession·too_old 가드와 동일 기준).
-  const reportDate = kstToday();
+  // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
+  const reportDate = resolveReportDate(input.reportDate);
 
   // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
@@ -149,9 +150,10 @@ export async function saveAndQueueClassnote(
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
 
   const supabase = await createClient();
-  const reportDate = kstToday();
+  // 대상 날짜 = 고른 날짜 클램프(saveLessonReport와 동일 계산 → pre-read·too_old 게이트가 그 날짜 기준).
+  const reportDate = resolveReportDate(input.reportDate);
 
-  // 저장 전 상태 pre-read(오늘 (student,subject) 행). RLS로 테넌트 격리.
+  // 저장 전 상태 pre-read((student,date,subject) 행). RLS로 테넌트 격리.
   const base = supabase
     .from("lesson_reports")
     .select("id, classnote_status, revoked_at")
@@ -280,6 +282,7 @@ export async function reissueShareLink(
 
 export type SaveOnescreenSessionInput = {
   studentId: string;
+  sessionDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 작업분을 그 날짜 세션에 저장(report_date와 동일 기준).
   classId?: string | null;
   studyGrade?: string | null;
   subjectProgress?: Record<
@@ -327,7 +330,7 @@ export async function saveOnescreenSession(
     {
       tenant_id: user.tenantId,
       student_id: input.studentId,
-      session_date: kstToday(),
+      session_date: resolveReportDate(input.sessionDate),
       class_id: input.classId ?? null,
       study_grade: input.studyGrade ?? null,
       subject_progress: input.subjectProgress ?? {},
