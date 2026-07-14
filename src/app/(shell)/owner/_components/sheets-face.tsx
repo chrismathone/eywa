@@ -77,11 +77,14 @@ export async function SheetsFace({
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 외부 연동</p>
         <h2 className="text-foreground text-lg font-semibold">구글 시트 내보내기 (과목별)</h2>
-        <p className="text-muted-foreground mt-1 max-w-3xl text-sm">
+        {/* text-balance(text-wrap: balance) = 짧은 문단의 줄 너비를 균등하게 나눠 마지막 줄이 짧게 남는 고아 방지
+            (실측: 같은 폭에서 pretty는 [763,128] 고아, balance는 [447,444] 균등). max-w-3xl 고정폭도 풀어(max-w-5xl)
+            넓은 창에선 한 줄로 붙고 좁으면 균등 2줄로 접히게 — 창 폭에 따라 스마트하게. */}
+        <p className="text-muted-foreground mt-1 max-w-5xl text-sm text-balance">
           과목마다 <strong>전용 구글 시트</strong>를 등록하고 켜면 그 과목 시간표 화면에 ‘시트 반영’ 버튼이
           생깁니다(원장 전용). 누르면 등록한 시트에 현재 시간표가 <strong>통째로 덮어쓰기</strong>됩니다.
         </p>
-        <p className="text-muted-foreground mt-2 max-w-3xl text-sm">
+        <p className="text-muted-foreground mt-2 max-w-5xl text-sm text-balance">
           ⚠️ 전체 덮어쓰기라 <strong>과목마다 서로 다른 시트</strong>를 써야 합니다(수학·영어를 한 시트에 섞지 마세요).
         </p>
       </header>
@@ -109,7 +112,7 @@ export async function SheetsFace({
             </li>
             <li>토글을 켜고, 시간표 화면의 ‘시트 반영’ 버튼으로 동기화합니다.</li>
           </ol>
-          <p className="text-text-faint mt-auto pt-3 text-[12px]">
+          <p className="text-text-faint mt-auto pt-3 text-[12px] text-balance">
             ⚠️ 서비스계정은 저장공간이 없어 시트를 새로 만들 수 없습니다(미리 만든 시트 필요). 동기화는
             그 시트를 <strong>전체 덮어쓰기</strong>하므로 다른 내용과 섞지 말고 과목 전용 시트로 쓰세요.
           </p>
