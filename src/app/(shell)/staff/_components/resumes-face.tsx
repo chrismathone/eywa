@@ -10,7 +10,7 @@ import { getStaffResumes } from "@/features/staff/server/resume-queries";
 const PAGE_SIZE = 50;
 
 const dateLabel = (iso: string) =>
-  new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" });
+  new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric" });
 
 /**
  * 직원 이력서 면(/staff?tab=resumes) — 웹에서 작성한 이력서 목록. 작성본은 데이터베이스

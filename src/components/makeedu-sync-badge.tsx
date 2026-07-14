@@ -12,7 +12,7 @@ function relativeKo(iso: string): string {
   if (hr < 24) return `${hr}시간 전`;
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day}일 전`;
-  return new Date(iso).toLocaleDateString("ko-KR");
+  return new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 }
 function kstFull(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" });

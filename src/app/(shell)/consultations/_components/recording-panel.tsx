@@ -133,7 +133,7 @@ export function RecordingPanel({
         <div className="space-y-2">
           {aiGeneratedAt ? (
             <p className="text-text-faint text-[11px]">
-              생성 {new Date(aiGeneratedAt).toLocaleString("ko-KR")}
+              생성 {new Date(aiGeneratedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
             </p>
           ) : null}
           <dl className="divide-border bg-card border-border divide-y rounded-md border">

@@ -35,7 +35,7 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
         <BackLink href="/staff?tab=resumes" label="직원 이력서 목록으로" />
         <h1 className="text-foreground mt-1 text-lg font-bold">직원 이력서 — {name}</h1>
         <p className="text-text-dim text-xs">
-          {new Date(resume.createdAt).toLocaleDateString("ko-KR")} 작성
+          {new Date(resume.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 작성
           {resume.authorName ? ` · ${resume.authorName}` : ""} · 데이터베이스(인사·직원)에 저장됨
         </p>
       </header>

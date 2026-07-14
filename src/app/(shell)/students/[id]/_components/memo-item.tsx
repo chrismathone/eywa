@@ -98,6 +98,7 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
           ) : null}
           <span className="text-muted-foreground num text-[10px]">
             {new Date(memo.createdAt).toLocaleString("ko-KR", {
+              timeZone: "Asia/Seoul",
               year: "numeric",
               month: "short",
               day: "numeric",

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { kstToday } from "@/lib/date-kst";
+import { kstMonth, kstToday } from "@/lib/date-kst";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -36,8 +36,7 @@ function todayIso(): string {
   return kstToday();
 }
 function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 
 type Sp = { period?: string; q?: string; sort?: SortKey; desc?: string; page?: string };

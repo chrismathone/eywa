@@ -4,6 +4,7 @@
  * 로컬 상수(라이트그린/danger-light) — 다크 표면 전용이라 globals 토큰 추가 안 함.
  */
 const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   year: "numeric",
   month: "2-digit",
   day: "2-digit",

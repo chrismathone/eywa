@@ -8,6 +8,7 @@ import {
   summarizeExpenses,
 } from "@/features/billing/server/expense-queries";
 import { currencyMeta, formatMoney } from "@/features/billing/currencies";
+import { kstMonth } from "@/lib/date-kst";
 import { ExpensesTable } from "./expenses-table";
 
 const CATS = ["인건비", "운영비", "매입", "마케팅", "기타"];
@@ -22,8 +23,7 @@ function shiftPeriod(period: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 
 type Sp = { period?: string; cat?: string };

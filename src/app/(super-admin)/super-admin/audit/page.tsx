@@ -32,6 +32,7 @@ const ACTION_FILTERS = [
 
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

@@ -1,6 +1,7 @@
 // 성적 목표·코멘트 공용 메타 + 순수 계산. 클라(폼/표시)·서버(액션/쿼리) 양쪽이 import하므로
 // ⚠️ server-only 금지([[#61]]). PillColor는 타입만 import(빌드 시 소거).
 import type { PillColor } from "@/components/atoms/pill";
+import { kstMonth } from "@/lib/date-kst";
 
 // ── 성적 코멘트 카테고리(도메인 메타 — 운영 enum 아님, 하드코딩 허용) ─────────
 // ijw GradeComment 카테고리 이식. 이모지 대신 eywa Pill 색으로 톤 구분(이름앞 아바타·이모지 지양).
@@ -35,7 +36,7 @@ export function periodOf(d: Date): string {
 }
 /** 이번 달 'YYYY-MM'. (호출부에서 기본값으로 사용 — 렌더 본문 외) */
 export function currentPeriod(): string {
-  return periodOf(new Date());
+  return kstMonth();
 }
 
 // ── 목표 달성 계산(순수) ─────────────────────────────────────────

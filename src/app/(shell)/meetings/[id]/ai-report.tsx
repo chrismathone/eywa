@@ -28,7 +28,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: EywaIconName; list?: boo
 
 function fmtEdited(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export function MeetingReportAccordion({

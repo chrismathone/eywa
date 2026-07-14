@@ -43,7 +43,7 @@ export async function analyzeStudentConsultation(
   ctx: StudentConsultationContext,
   provider?: AiProvider,
 ): Promise<{ report: StudentConsultationReport; model: string }> {
-  const heldAt = ctx.consultedAt ? new Date(ctx.consultedAt).toLocaleDateString("ko-KR") : "미상";
+  const heldAt = ctx.consultedAt ? new Date(ctx.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "미상";
   const { data, model } = await generateJSON<StudentConsultationReport>({
     keyName: "consultations",
     provider,

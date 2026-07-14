@@ -1,4 +1,5 @@
 // 수강료(invoice) 요약 — 순수 함수(서버 전용 아님 → Vitest 가능, #Q2). queries.ts가 re-export한다.
+import { kstMonth } from "@/lib/date-kst";
 
 export type BillingSummary = {
   period: string;
@@ -22,8 +23,7 @@ export type InvoiceSummaryInput = {
 };
 
 export function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth(); // KST 당월(YYYY-MM) — 서버 UTC에서 new Date 계산 시 KST 자정~오전 오차 방지
 }
 
 /** 미수 잔액에서 제외하는 상태 — refunded/void(무효) + paid(완납 판정은 status가 진실 — 적립금 잔차 무시). */

@@ -49,6 +49,7 @@ const STATUS_BADGE: Record<
 function formatHeldAt(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("ko-KR", {
+    timeZone: "Asia/Seoul",
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -58,7 +59,7 @@ function formatHeldAt(iso: string): string {
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function formatDuration(sec: number): string {

@@ -8,6 +8,7 @@ import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";
+import { kstMonth } from "@/lib/date-kst";
 import {
   getMeetings,
   type MeetingProcessingStatus,
@@ -35,6 +36,7 @@ const STATUS_META: Record<
 function formatHeldAt(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("ko-KR", {
+    timeZone: "Asia/Seoul",
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -137,9 +139,7 @@ function inRange(iso: string, key: RangeKey): boolean {
   if (key === "7d") return now - then <= 7 * 86_400_000;
   if (key === "30d") return now - then <= 30 * 86_400_000;
   if (key === "month") {
-    const d = new Date(iso);
-    const today = new Date();
-    return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    return kstMonth(new Date(iso)) === kstMonth();
   }
   return true;
 }

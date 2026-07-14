@@ -87,7 +87,7 @@ export default async function EnrollmentDetailPage({
   const addr = [f.address, f.addressDetail].filter(Boolean).join(" ") || null;
   const subjectLabel = f.subject ? subjectMaps.labelOf(f.subject) : null;
   const consultationDateLabel =
-    f.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR");
+    f.consultationDate ?? new Date(consult.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
   const badge = OUTCOME_BADGE[consult.outcome] ?? OUTCOME_BADGE.pending!;
   const procBadge = PROCESSING_BADGE[consult.processingStatus];

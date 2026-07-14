@@ -22,7 +22,7 @@ export function DraftBanner({
       <div className="min-w-0 flex-1 space-y-1">
         <p className="text-foreground text-sm font-medium">작성하던 내용이 있습니다</p>
         <p className="text-text-dim text-xs">
-          {new Date(savedAt).toLocaleString("ko-KR")}에 자동 저장됨 — 이어서 작성하거나 새로 시작할 수 있습니다.
+          {new Date(savedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}에 자동 저장됨 — 이어서 작성하거나 새로 시작할 수 있습니다.
         </p>
         <div className="flex items-center gap-2 pt-1">
           <button type="button" onClick={onRestore} className="text-foreground hover:text-chart-3 text-xs font-medium">

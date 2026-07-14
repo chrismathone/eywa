@@ -41,7 +41,7 @@ export function MeetingTxtButton({
   const build = (): string => {
     const lines: string[] = [];
     lines.push(`[회의록] ${title}`);
-    lines.push(`일시: ${new Date(heldAt).toLocaleString("ko-KR")}`);
+    lines.push(`일시: ${new Date(heldAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`);
     if (attendees.length) lines.push(`참석자: ${attendees.join(", ")}`);
     lines.push("");
 

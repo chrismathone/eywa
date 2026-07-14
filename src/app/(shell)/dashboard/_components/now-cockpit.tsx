@@ -13,7 +13,7 @@ import { groupOngoingBySubject } from "@/features/dashboard/ongoing";
 import { shortTime } from "@/features/dashboard/subject-meta";
 import { SUBJECT_ICON_BG, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
 
-const KO_TODAY = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" });
+const KO_TODAY = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric" });
 // 30분 단위 슬롯 인덱스 (h*2 + 0|1) — 막대를 더 정교하게.
 const slotIdx = (t: string) => Number(t.slice(0, 2)) * 2 + (Number(t.slice(3, 5)) >= 30 ? 1 : 0);
 

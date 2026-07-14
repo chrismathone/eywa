@@ -4,6 +4,7 @@ import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { kstMonth } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -35,8 +36,7 @@ function attHref(p: {
 }
 
 function currentMonthKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 
 function shiftMonth(month: string, delta: number): string {

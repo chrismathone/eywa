@@ -24,7 +24,7 @@ function relTime(iso: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}시간 전`;
   const d = Math.floor(h / 24);
-  return d < 7 ? `${d}일 전` : new Date(iso).toLocaleDateString("ko-KR");
+  return d < 7 ? `${d}일 전` : new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 }
 
 export function NotificationBell() {

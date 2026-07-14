@@ -8,6 +8,7 @@ import {
   getPayrollHistory,
 } from "@/features/payroll/server/queries";
 import { PayrollClient } from "./_client";
+import { kstMonth } from "@/lib/date-kst";
 
 export const metadata = { title: "강사 정산 — eywa" };
 
@@ -23,8 +24,7 @@ export default async function StaffPayrollPage({
   const { id } = await params;
   const { period: periodParam } = await searchParams;
 
-  const today = new Date();
-  const defaultPeriod = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const defaultPeriod = kstMonth();
   const period = periodParam ?? defaultPeriod;
 
   const [staff, history, autoCalc] = await Promise.all([

@@ -29,7 +29,7 @@ function fmtShort(iso: string | null): string {
 function fmtFull(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // 신청일 경과일수 — YYYY-MM-DD를 UTC로 파싱(TZ 무관 정수 일수). 7일↑ 라벨, 14일↑ 더 진하게(처리 지연 신호).

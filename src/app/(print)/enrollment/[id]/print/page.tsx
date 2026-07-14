@@ -51,6 +51,7 @@ export default async function EnrollmentPrintPage({
 
   const p = consult.aiAnalysis.printPayload;
   const consultedDate = new Date(p.consultedAt).toLocaleDateString("ko-KR", {
+    timeZone: "Asia/Seoul",
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -199,7 +200,7 @@ export default async function EnrollmentPrintPage({
         </div>
         <p className="shrink-0 text-right font-mono">
           MODEL {consult.aiAnalysis.modelVersion} · GENERATED{" "}
-          {new Date(consult.aiAnalysis.generatedAt).toLocaleDateString("ko-KR")}
+          {new Date(consult.aiAnalysis.generatedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
         </p>
       </footer>
     </div>

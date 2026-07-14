@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { kstToday } from "@/lib/date-kst";
 
 export type StudentConsultationCategory =
   | "general"
@@ -150,13 +151,11 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-/** 로컬 기준 YYYY-MM-DD (offset일 가산). follow_up_date(date) 비교용. */
+/** KST 기준 YYYY-MM-DD (offset일 가산). follow_up_date(date) 비교용 — 서버 UTC 오차 방지. */
 function localDateStr(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+  if (offsetDays === 0) return kstToday();
+  const [y, m, d0] = kstToday().split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d0! + offsetDays)).toISOString().slice(0, 10);
 }
 
 export type StudentConsultationCounts = {
@@ -287,11 +286,10 @@ export function followUpUrgency(
 ): FollowUpUrgency {
   if (done) return "done";
   if (!date) return "none";
-  const target = new Date(date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  target.setHours(0, 0, 0, 0);
-  const diff = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  // 날짜-only 비교(KST 오늘 기준) — 양쪽 UTC 자정 파싱이라 TZ 영향 없음(relativeDayKo 패턴).
+  const diff = Math.round(
+    (Date.parse(`${date.slice(0, 10)}T00:00:00Z`) - Date.parse(`${kstToday()}T00:00:00Z`)) / 86_400_000,
+  );
   if (diff < 0) return "overdue";
   if (diff === 0) return "today";
   if (diff <= 3) return "soon";

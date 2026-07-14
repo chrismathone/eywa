@@ -37,7 +37,7 @@ export default async function MeetingPrintPage({
         <p className="text-xs uppercase tracking-wider text-gray-500">회의록</p>
         <h1 className="mt-1 text-2xl font-bold">{meeting.title}</h1>
         <p className="mt-1 text-xs text-gray-600">
-          {new Date(meeting.heldAt).toLocaleString("ko-KR")}
+          {new Date(meeting.heldAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
           {meeting.authorName ? ` · 작성: ${meeting.authorName}` : ""}
           {meeting.attendees.length > 0 ? ` · 참석: ${meeting.attendees.join(", ")}` : ""}
         </p>
@@ -94,7 +94,7 @@ export default async function MeetingPrintPage({
       ) : null}
 
       <footer className="mt-10 border-t border-gray-300 pt-3 text-center text-[10px] text-gray-500">
-        eywa · 인쇄 일시 {new Date().toLocaleString("ko-KR")}
+        eywa · 인쇄 일시 {new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
       </footer>
     </main>
   );

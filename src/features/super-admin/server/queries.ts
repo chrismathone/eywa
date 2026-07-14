@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { kstMonth } from "@/lib/date-kst";
 
 export type TenantRow = {
   id: string;
@@ -22,8 +23,7 @@ export type SaaSStats = {
 };
 
 function currentPeriod() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 
 // 전체 tenant 목록 + 카운트. multi-tenant read이므로 service_role 사용.
@@ -86,13 +86,12 @@ export async function getTenantPlanStats(): Promise<TenantPlanStats> {
   const rows = await fetchAllPaged<{ plan: string; created_at: string }>((from, to) =>
     admin.from("tenants").select("plan, created_at").range(from, to),
   );
-  const now = new Date();
+  const thisMonth = kstMonth();
   let free = 0;
   let thisMonthNew = 0;
   for (const t of rows) {
     if (t.plan === "free") free += 1;
-    const d = new Date(t.created_at);
-    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) thisMonthNew += 1;
+    if (kstMonth(new Date(t.created_at)) === thisMonth) thisMonthNew += 1;
   }
   return { total: rows.length, free, paid: rows.length - free, thisMonthNew };
 }

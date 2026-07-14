@@ -8,11 +8,12 @@ import { Pagination } from "@/components/pagination";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getRefundRequests, type RefundListRow } from "@/features/billing/server/refund-queries";
+import { kstMonth } from "@/lib/date-kst";
 
 const PAGE_SIZE = 50;
 
 const dateLabel = (iso: string) =>
-  new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" });
+  new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric" });
 
 // 수강반: 서식 textarea에 여러 반을 줄바꿈으로 입력 → 줄 단위로 분해(목록은 쉼표, 전체는 hover).
 const classLinesOf = (cn: string) =>
@@ -29,8 +30,7 @@ function shiftPeriod(period: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function currentPeriod(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 // 환불의 '월' = 환불처리일자(YYYY-MM-DD) 우선, 미입력이면 작성일 기준(월 필터에서 숨김 방지).
 function monthOf(r: RefundListRow): string {

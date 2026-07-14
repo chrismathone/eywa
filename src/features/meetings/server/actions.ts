@@ -476,7 +476,7 @@ export async function regenerateMeetingAnalysis(
   }
 
   const attendees = Array.isArray(m.attendees) ? (m.attendees as string[]) : [];
-  const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR");
+  const heldAt = new Date(m.held_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
   // 전사가 있으면 화자 포맷(+뒷부분 잡음 꼬리 트림, B), 없으면 빈 문자열(메모만 분석). analyzeMeeting이 둘을 결합.
   const formatted = transcription
     ? buildMeetingAnalysisInput(m.transcription as string, m.speaker_labels).formatted

@@ -14,7 +14,7 @@ export const metadata = { title: "Super Admin · 학원 상세 — eywa" };
 const USERS_PAGE_SIZE = 50;
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR");
+const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
 const ROLE_COLOR: Record<string, PillColor> = {
   master: "primary",

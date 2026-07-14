@@ -31,7 +31,7 @@ const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 const dash = (n: number) => (n > 0 ? won(n) : "—");
 const shortDate = (iso: string | null | undefined) =>
-  iso ? new Date(iso).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : "—";
+  iso ? new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit" }) : "—";
 
 type Props = {
   rows: InvoiceRow[];

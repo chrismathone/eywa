@@ -157,7 +157,7 @@ export function AudioRecorderField({
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-foreground text-sm font-medium">복구 가능한 녹음이 있습니다</p>
             <p className="text-muted-foreground text-xs">
-              {new Date(recoveryMeta.startedAt).toLocaleString("ko-KR")}에 시작 ·{" "}
+              {new Date(recoveryMeta.startedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}에 시작 ·{" "}
               <span className="num">{recoveryMeta.chunkCount}</span>개 청크
             </p>
             <div className="flex items-center gap-2 pt-1">

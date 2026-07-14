@@ -11,7 +11,7 @@ import type { LinkedDocRow } from "@/features/documents/linked";
 const titleCls = "text-foreground hover:text-primary min-w-0 truncate text-left font-medium hover:underline";
 
 function dateLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" });
+  return new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric" });
 }
 
 export function LinkedDocumentRow({ doc }: { doc: LinkedDocRow }) {

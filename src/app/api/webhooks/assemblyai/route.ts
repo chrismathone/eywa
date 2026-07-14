@@ -269,7 +269,7 @@ async function handleMeeting(
   // B: 회의 종료 후 섞인 뒷부분 잡음 꼬리를 분석 입력에서 제외(raw transcription/speaker_labels 저장분은 위에서 전체 보존).
   const { formatted } = buildMeetingAnalysisInput(transcript.text, transcript.utterances);
   const attendees = Array.isArray(meeting.attendees) ? (meeting.attendees as string[]) : [];
-  const heldAt = new Date(meeting.held_at).toLocaleDateString("ko-KR");
+  const heldAt = new Date(meeting.held_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
   let report: MeetingReport;
   let speakerRoles: Record<string, string> = {};

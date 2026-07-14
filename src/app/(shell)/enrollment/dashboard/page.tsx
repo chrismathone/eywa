@@ -8,19 +8,19 @@ import {
 } from "@/features/enrollment/server/queries";
 import { ConversionBars } from "./_components/conversion-bars";
 import { OutcomeDonut } from "./_components/outcome-donut";
+import { kstMonth } from "@/lib/date-kst";
 
 export const metadata = { title: "등록상담 대시보드 — eywa" };
 
 function currentMonthKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return kstMonth();
 }
 
 function monthOptions(count = 6): { key: string; label: string }[] {
-  const now = new Date();
+  const [ay, am] = kstMonth().split("-").map(Number); // KST 당월 기준 앵커
   const out: { key: string; label: string }[] = [];
   for (let i = 0; i < count; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(ay!, am! - 1 - i, 1);
     out.push({
       key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
       label: `${d.getFullYear()}년 ${d.getMonth() + 1}월`,

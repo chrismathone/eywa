@@ -255,7 +255,7 @@ const refOf = (r: { student: StudentRef | StudentRef[] }): StudentRef | undefine
 /**
  * 시간표 + 각 슬롯의 학생 명단. ijw 시간표 기본뷰/통합뷰의 셀 안에 표시되는 학생 리스트.
  * 재원(active)뿐 아니라 **대기(on_hold)·최근 퇴원(end_date)** 도 포함 — ijw 셀이 보여주던
- * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1년·반이동 제외(셀에서 status로 분리 렌더).
+ * 재원/대기/퇴원 섹션을 복원. 퇴원은 최근 1달(30일)·반이동 제외(셀에서 status로 분리 렌더).
  */
 export async function getWeeklyScheduleWithStudents(
   // db = 세션 없는 호출(cron) 주입 — teacherId 스코핑은 세션 전제(getTeacherScope)라 db와 병용 불가.
@@ -268,7 +268,7 @@ export async function getWeeklyScheduleWithStudents(
   const db = opts?.db;
   const weekEnd = weekEndOf(referenceDate); // 재구성 윈도우 끝(ref+6, ijw useSubjectClassStudents)
   const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
-  const withdrawnFloor = shiftDays(referenceDate, -365); // 퇴원 표시 윈도우: 기준일 1년 전까지(클러터 캡)
+  const withdrawnFloor = shiftDays(referenceDate, -30); // 퇴원 표시 윈도우: 기준일 1달(30일) 전까지(클러터 캡, 2026-07-14 원장 1년→1달)
 
   let slots = await fetchSlots(referenceDate, db);
   // 과목 스코핑(선택) — 한 과목만 필요한 호출부(과목별 익스포터 등)는 classIds를 먼저 좁혀

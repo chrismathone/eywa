@@ -9,7 +9,7 @@ import { logImpersonateView } from "@/features/super-admin/server/actions";
 export const metadata = { title: "Super Admin · 지점장 보기 — eywa" };
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ko-KR") : "—");
+const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "—");
 
 const STATUS_META: Record<string, { label: string; color: PillColor }> = {
   prospect: { label: "예비", color: "amber" },

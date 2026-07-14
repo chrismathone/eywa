@@ -119,7 +119,7 @@ export function SubjectSheetCard({
           <span>대상 시트를 등록하면 &apos;시트 반영&apos; 버튼이 시간표에 나타납니다.</span>
         )}
         {status.lastSyncedAt ? (
-          <span>마지막 동기화 {new Date(status.lastSyncedAt).toLocaleString("ko-KR")}</span>
+          <span>마지막 동기화 {new Date(status.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</span>
         ) : null}
         {msg ? <span className="text-primary">{msg}</span> : null}
       </div>

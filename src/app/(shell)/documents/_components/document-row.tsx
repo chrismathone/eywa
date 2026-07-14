@@ -49,7 +49,7 @@ function TypeIcon({ typeLabel, kind }: { typeLabel: string; kind: DocumentKind }
 }
 
 function dateLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" });
+  return new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric" });
 }
 
 export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite: boolean }) {

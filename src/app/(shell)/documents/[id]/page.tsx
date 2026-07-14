@@ -33,7 +33,7 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
         </div>
         <h1 className="text-foreground text-xl font-bold">{doc.title}</h1>
         <p className="text-text-dim text-sm">
-          {new Date(doc.createdAt).toLocaleDateString("ko-KR")} 등록
+          {new Date(doc.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 등록
           {doc.uploaderName ? ` · ${doc.uploaderName}` : ""}
           {doc.kind === "file" ? ` · ${formatFileSize(doc.fileSize)}` : ""}
         </p>

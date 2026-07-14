@@ -96,7 +96,7 @@ export function PayrollClient({
         <div className="text-muted-foreground text-xs">
           {existing
             ? existing.paidAt
-              ? `${new Date(existing.paidAt).toLocaleDateString("ko-KR")} 지급 완료`
+              ? `${new Date(existing.paidAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 지급 완료`
               : "저장됨 (미지급)"
             : "미정산"}
         </div>
@@ -215,7 +215,7 @@ export function PayrollClient({
                   <td className="num px-4 py-2 text-right text-xs">
                     {r.paidAt ? (
                       <span className="text-chart-2">
-                        {new Date(r.paidAt).toLocaleDateString("ko-KR")}
+                        {new Date(r.paidAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
                       </span>
                     ) : (
                       <span className="text-chart-4">미지급</span>

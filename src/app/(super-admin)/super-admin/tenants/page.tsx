@@ -9,7 +9,7 @@ export const metadata = { title: "Super Admin · 학원 목록 — eywa" };
 
 const PAGE_SIZE = 50;
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR");
+const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
 
 export default async function TenantsListPage({
   searchParams,

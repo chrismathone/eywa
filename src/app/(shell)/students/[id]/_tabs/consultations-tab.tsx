@@ -127,7 +127,7 @@ function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
     <li className="bg-card border-border space-y-2 rounded-md border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-3">
         <span className="num text-muted-foreground text-xs">
-          {new Date(c.consultedAt).toLocaleDateString("ko-KR")}
+          {new Date(c.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
         </span>
         {c.category ? (
           <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
@@ -188,7 +188,7 @@ function EnrollmentConsultItem({
         </span>
         {e.date ? (
           <span className="num text-muted-foreground text-xs">
-            {new Date(e.date).toLocaleDateString("ko-KR")}
+            {new Date(e.date).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
           </span>
         ) : null}
         {subjectLabel ? <span className="text-muted-foreground text-[10px]">· {subjectLabel}</span> : null}

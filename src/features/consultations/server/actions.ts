@@ -72,7 +72,7 @@ export async function runStudentCareAnalysis(
       const co = (Array.isArray(c.counselor) ? c.counselor[0] : c.counselor) as
         | { display_name?: string }
         | undefined;
-      const date = new Date(c.consulted_at).toLocaleDateString("ko-KR");
+      const date = new Date(c.consulted_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
       return [
         `[${date} · ${co?.display_name ?? "?"}]`,
         `요약: ${c.summary}`,
