@@ -316,6 +316,44 @@
     animation: eywa-pulse 1.8s ease-out infinite;
   }
 
+  /* 알림 벨 — 안 읽음 있을 때 은은히 "딸랑"(울린 뒤 쉼), hover 시 1회 스윙. transform-origin=top(매단 것처럼). */
+  @keyframes bell-swing {
+    0%,
+    55%,
+    100% {
+      transform: rotate(0deg);
+    }
+    8% {
+      transform: rotate(13deg);
+    }
+    18% {
+      transform: rotate(-11deg);
+    }
+    28% {
+      transform: rotate(8deg);
+    }
+    38% {
+      transform: rotate(-5deg);
+    }
+    46% {
+      transform: rotate(2deg);
+    }
+  }
+  /* 배지 등장 — 톡 튀어나오는 팝(새 알림이 생겼을 때 시선 유도). */
+  @keyframes badge-pop {
+    0% {
+      transform: scale(0.4);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.15);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
   @keyframes eywa-reveal-base {
     from {
       opacity: 0;
