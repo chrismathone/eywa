@@ -37,11 +37,13 @@ export type LinkedDocRow = {
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 
-export const TEXTBOOK_STATUS_LABEL: Record<string, string> = {
-  requested: "신청",
-  ordered: "주문",
-  paid: "납부",
-};
+// 교재 진행 라벨 — 하단 체크(등록·납부·주문) 기준. 3체크 전부면 완료, 아니면 첫 미완 단계 "대기".
+function textbookProgressLabel(o: { registered: boolean; paid: boolean; ordered: boolean }): string {
+  if (o.registered && o.paid && o.ordered) return "완료";
+  if (!o.registered) return "등록 대기";
+  if (!o.paid) return "납부 대기";
+  return "주문 대기";
+}
 
 /** textbook_orders 행 → 링크 행. 클릭 = 교재 요청서 인쇄 카드(/textbook/[id]/print). */
 export function textbookOrderDoc(o: {
@@ -51,7 +53,9 @@ export function textbookOrderDoc(o: {
   studentName: string | null;
   teacherName: string | null;
   price: number;
-  status: string;
+  registered: boolean;
+  paid: boolean;
+  ordered: boolean;
   requestDate: string | null;
   createdAt: string;
 }): LinkedDocRow {
@@ -59,7 +63,7 @@ export function textbookOrderDoc(o: {
     id: o.id,
     title: `${o.studentName ?? "학생 미지정"} — ${o.bookName}`,
     description:
-      [o.bookDetail, won(o.price), TEXTBOOK_STATUS_LABEL[o.status] ?? o.status]
+      [o.bookDetail, won(o.price), textbookProgressLabel(o)]
         .filter(Boolean)
         .join(" · ") || null,
     categoryLabel: "수납·결제",

@@ -18,7 +18,9 @@ describe("textbookOrderDoc", () => {
     studentName: "이윤건",
     teacherName: "김강사",
     price: 15000,
-    status: "paid",
+    registered: true,
+    paid: true,
+    ordered: true,
     requestDate: "2026-07-01",
     createdAt: "2026-06-30T09:00:00Z",
   };
@@ -31,10 +33,10 @@ describe("textbookOrderDoc", () => {
     expect(d.typeLabel).toBe("교재 요청서");
   });
 
-  it("설명 = 상세 · 가격 · 상태 한글 라벨", () => {
-    expect(textbookOrderDoc(base).description).toBe("3. 함수 · 15,000원 · 납부");
-    expect(textbookOrderDoc({ ...base, bookDetail: null, status: "requested" }).description).toBe(
-      "15,000원 · 신청",
+  it("설명 = 상세 · 가격 · 진행 라벨(등록·납부·주문 체크 기준)", () => {
+    expect(textbookOrderDoc(base).description).toBe("3. 함수 · 15,000원 · 완료");
+    expect(textbookOrderDoc({ ...base, bookDetail: null, paid: false, ordered: false }).description).toBe(
+      "15,000원 · 납부 대기",
     );
   });
 
@@ -44,8 +46,9 @@ describe("textbookOrderDoc", () => {
     expect(textbookOrderDoc({ ...base, studentName: null }).title).toBe("학생 미지정 — 쎈 수학 중2-1");
   });
 
-  it("미등록 상태 코드는 원문 그대로(깨짐 방지)", () => {
-    expect(textbookOrderDoc({ ...base, status: "delivered" }).description).toContain("delivered");
+  it("진행 라벨 = 첫 미완 단계(등록→납부→주문) 순, 전부면 완료", () => {
+    expect(textbookOrderDoc({ ...base, registered: false }).description).toContain("등록 대기");
+    expect(textbookOrderDoc({ ...base, ordered: false }).description).toContain("주문 대기");
   });
 });
 
