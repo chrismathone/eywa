@@ -4,13 +4,14 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { accountForTarget } from "@/features/owner/settings-types";
 import { getTextbookOrderById } from "@/features/billing/server/textbook-queries";
 import { TextbookRequestCard } from "./textbook-request-card";
 
 export const metadata = { title: "교재 요청서 — eywa" };
 
 // 교재요청서(ijw TextbookPreviewCard 이식) — 학부모 전달용 카드. 학원 입금 계좌는
-// 학원설정(billing.account)에서 읽어 자동 표시(소비처). PNG 저장/인쇄는 클라 카드가 담당.
+// 학원설정에서 '교재요청서'에 배선된 계좌를 자동 표시(accountForTarget). PNG 저장/인쇄는 클라 카드가 담당.
 // 게이트=textbook_requests(사무실 역할 전원 full + 강사 full) — 강사는 본인 담당 학생 요청서만(스코프).
 export default async function TextbookPrintPage({
   params,
@@ -39,7 +40,7 @@ export default async function TextbookPrintPage({
       order={order}
       academyName={settings.profile.name || "인재원"}
       logoUrl={logoUrl}
-      account={settings.billing.account}
+      account={accountForTarget(settings.billing, "textbook")}
       embedded={embedded}
       autoDownload={download === "1"}
     />

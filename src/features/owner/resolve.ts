@@ -60,9 +60,10 @@ function normalizeSubjects(arr: SubjectSetting[]): SubjectSetting[] {
 }
 
 // 입금 계좌 역호환/정규화 — 옛 단일 계좌(account)만 있던 테넌트를 다계좌 목록(accounts)으로 승격하고,
-// 기본 계좌를 정확히 1개로 보장한 뒤 레거시 단일 account 필드를 "기본 계좌 미러"로 덮는다.
-// (deepMerge는 accounts 배열을 통째 교체하므로 여기서 형태·기본값·미러를 보장 → 미이전 소비처가 account만
-// 읽어도 항상 기본 계좌를 본다.) normalizeHolidays/normalizeSubjects와 같은 "읽기 시 승격" 패턴.
+// 계좌마다 targets(배선 소비처)를 형태 보장한 뒤 레거시 단일 account 필드를 "첫 계좌 미러"로 덮는다.
+// (deepMerge는 accounts 배열을 통째 교체하므로 여기서 형태·미러를 보장 → 미이전 소비처가 account만 읽어도
+// 안전.) normalizeHolidays/normalizeSubjects와 같은 "읽기 시 승격" 패턴. 소비처는 accountForTarget로 읽는다.
+const ACCOUNT_TARGET_SET = new Set<string>(["textbook", "quote"]);
 function normalizeBilling(b: BillingSettings): BillingSettings {
   const raw = Array.isArray(b.accounts) ? b.accounts : [];
   let accounts: AccountSetting[] = raw.map((a) => ({
@@ -70,21 +71,20 @@ function normalizeBilling(b: BillingSettings): BillingSettings {
     bank: a?.bank ?? "",
     holder: a?.holder ?? "",
     number: a?.number ?? "",
-    isDefault: a?.isDefault === true,
+    // 알 수 없는 target 키는 걸러낸다(스키마 변경 시 유령 키 방어).
+    targets: (Array.isArray(a?.targets) ? a.targets : []).filter(
+      (t): t is AccountSetting["targets"][number] => typeof t === "string" && ACCOUNT_TARGET_SET.has(t),
+    ),
   }));
-  // 목록이 비었는데 옛 단일 account에 값이 있으면 기본 계좌로 승격.
+  // 목록이 비었는데 옛 단일 account에 값이 있으면 승격(targets 미지정 → 소비처는 첫 계좌로 폴백).
   if (accounts.length === 0) {
     const a = b.account;
     if (a && (a.bank || a.holder || a.number)) {
-      accounts = [{ label: a.label ?? "", bank: a.bank, holder: a.holder, number: a.number, isDefault: true }];
+      accounts = [{ label: a.label ?? "", bank: a.bank, holder: a.holder, number: a.number, targets: [] }];
     }
   }
-  // 기본 계좌 정확히 1개 보장(하나도 없으면 첫 번째를 기본).
-  if (accounts.length > 0 && !accounts.some((a) => a.isDefault)) {
-    accounts = accounts.map((a, i) => ({ ...a, isDefault: i === 0 }));
-  }
-  const def = accounts.find((a) => a.isDefault) ?? accounts[0] ?? b.account;
-  return { ...b, accounts, account: def };
+  const mirror = accounts[0] ?? b.account; // 하위호환 미러(첫 계좌)
+  return { ...b, accounts, account: mirror };
 }
 
 /** 저장값(부분) + 테넌트 메타 → 완전한 설정. name 미입력 시 테넌트 학원명으로 폴백. */
