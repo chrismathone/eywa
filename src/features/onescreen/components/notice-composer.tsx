@@ -89,14 +89,16 @@ export function NoticeComposer({
     };
   }, []);
 
-  const toggle = (id: string) =>
+  // ⚠️ setChecked 업데이터는 순수해야 함 — setConfirmSend를 updater 안에서 부르면 React 19에서 토글이 먹통(선택 안 됨).
+  const toggle = (id: string) => {
     setChecked((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
       else n.add(id);
-      setConfirmSend(false);
       return n;
     });
+    setConfirmSend(false);
+  };
 
   // 선택 학생 → (학생, 첫 과목, 개별내용) — 과목이 보드 prefix 결정. 학생당 1건(첫 과목)으로 보드 중복 방지.
   function buildTargets() {
