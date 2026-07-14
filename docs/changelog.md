@@ -9,6 +9,12 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 직접 발송 대량화 — 반 단위 리포트 카드 일괄 발송 (2026-07-14) — ✅ tsc0/lint0/test1131/DB read-only
+원장 요청 A안 = "반 공지의 리포트-카드 버전". 수업보고서 '직접 발송' 탭에 **개별 학생 / 반 단위(대량)** 모드 토글([ComposeTab](<../src/app/(shell)/lesson-reports/_components/compose-tab.tsx>)). 반 단위는 반을 골라 그 반 재원생 각자에게 **같은 내용**의 리포트 카드를 일괄 발송(반 공지 `sendClassNotice`는 자유 텍스트, 이건 lesson_reports 이미지 레일). 인재원 과목제 → 반=과목이라 반 선택이 리포트(과목별)에 자연스럽고, 안전가드는 개별 발송(saveAndQueueAdminReport)과 **동일하게 학생별로** 태운다.
+- **액션** [sendBulkAdminReports](../src/features/report-admin/server/compose-actions.ts): 반→재원생+과목+담당강사 해석(`sendClassNotice` 패턴) → **(학생,과목) dedup** → 과목 opt-in 게이트 → **dry-run이면 저장/큐잉 없이 예정 인원만 반환** → **오늘 그 과목 보고서 이미 있는 학생 제외**(강사 작성분 덮어쓰기·중복발송 방지) → 동명이인 25청크 배치(name_conflict, `sendClassnoteForUnsent` 패턴) → 청크 upsert(공유 내용+과목별 담당강사, `source='admin'`)→queued → 진도 ingest(비치명적). 타깃 상한 400. test=학원이 폴백(이름 조회).
+- **UI** [BulkComposeFace](<../src/app/(shell)/lesson-reports/_components/bulk-compose-face.tsx>): 반 체크박스(`getNoticeClassOptions` 재사용) + 공유 필드(진도·교재·과제·본문+AI 자동작성·추세) + 확인 후 발송 + 테스트 발송(학원이) + 집계 결과 토스트. **점수·태도는 학생별이라 대량에선 제외**. 페이지 compose 탭 로딩에 `getNoticeClassOptions()` 추가.
+- ⚠️ **프로덕션 classnoteSendEnabled=true**(실발송 ON) — 대량 발송은 즉시 학부모에게 감. 검증 시 실 액션 호출 금지, read-only 해석 미러로만(60 math반·203 타깃·과목게이트 통과·4 already-today 제외). ⚠️ N명 = N개 lesson_reports + 워커 N회 스크린샷(반 공지 1회 API보다 무거움). 워커/마이그 **무변경**(기존 queued 처리 재사용) → 연동 PC zip 재전달 불필요.
+
 ### 시수 검증 read-only 탭 — 확정 회차(청구값) vs 실 소비 출석 대조 (2026-07-14) — ✅ tsc0/lint0/test1114(verification5)/build✓
 청구=N회 키스톤의 **직접 소비자**(로드맵 2단계, [per-session-billing-plan.md](per-session-billing-plan.md)). /billing FaceTabs에 **쓰기 0** 조회 전용 면 신설 — 회차 확정에서 사무실이 확정한 회차(청구 기준)와 그 반의 실제 소비 출석을 나란히 대조해 **과청구(부족)·미청구(초과)**를 신호로 노출.
 - **읽기전용 RPC** [0103a](../supabase/migrations/0103a_session_term_attendance.sql) `session_term_attendance(period)`: `invoice_session_terms`×`invoices`(그 달 청구 대상) ⋈ `attendance_records`. attendance는 append-only(`supersedes_id`)라 **(학생·반·날짜)별 최신 `recorded_at` 1건만 유효**(`distinct on` dedup) + 소비 인정 상태 = `present/late/early_leave/makeup`(absent·폐지된 excused 제외). term 중심(invoice_id·class_id 반환)이라 결과=회차 확정 행 수와 1:1. `security invoker`+`auth_tenant_id()` 이중격리(0101a 패턴), 호출부 `fetchAllPaged` 페이징(B2).
