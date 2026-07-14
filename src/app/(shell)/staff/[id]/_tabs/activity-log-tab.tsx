@@ -19,27 +19,63 @@ const when = (iso: string) =>
     year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
   });
 
+type AccessGroup = {
+  key: string;
+  ip: string | null;
+  device: string;
+  count: number;
+  firstStarted: string;
+  lastActive: string;
+};
+
+const ms = (iso: string) => new Date(iso).getTime();
+
+/**
+ * 세션을 IP·기기 기준으로 묶는다 — 집/학원망은 공인 IP 1개(NAT)라 같은 곳에서 온 세션이 목록을 도배해
+ * "중복처럼" 보였다. 그룹당 세션 수 + 가장 최근 활동으로 요약해 낯선 IP만 한 줄로 또렷이 드러나게(보안 검토값 유지).
+ * 최신 활동순 정렬. 문자열 비교 대신 epoch(ms)로 비교(타임존/소수초 표기차 방어).
+ */
+function groupSessions(sessions: AccessSession[]): AccessGroup[] {
+  const map = new Map<string, AccessSession[]>();
+  for (const s of sessions) {
+    const key = `${s.ip ?? "?"}|${deviceLabel(s.userAgent)}`;
+    const arr = map.get(key);
+    if (arr) arr.push(s);
+    else map.set(key, [s]);
+  }
+  const groups = [...map.entries()].map(([key, arr]) => ({
+    key,
+    ip: arr[0].ip,
+    device: deviceLabel(arr[0].userAgent),
+    count: arr.length,
+    firstStarted: arr.reduce((m, s) => (ms(s.startedAt) < ms(m) ? s.startedAt : m), arr[0].startedAt),
+    lastActive: arr.reduce((m, s) => (ms(s.lastActive) > ms(m) ? s.lastActive : m), arr[0].lastActive),
+  }));
+  groups.sort((a, b) => ms(b.lastActive) - ms(a.lastActive));
+  return groups;
+}
+
 /**
  * 최근 접속(순수 프레젠테이션 — 데이터는 부모가 Promise.all로 병렬 조회해 주입, B4 준수). 사무실만(RLS + 탭 게이트).
- * 세션마다 로그인 시각(started)·마지막 활동을 함께 보여줘 "장시간 연속 사용"과 "재접속"을 사무실이 판단 가능.
- * `auto`(로그인 없이 유지된 지속세션)는 "세션 유지"로 표기 — 재로그인 없이 접속 중임을 나타냄(적대리뷰 오분류 완화).
+ * IP·기기별로 묶어 세션 수 + 첫 로그인~마지막 활동을 요약(중복감 제거). 아래 "로그인 기록"은 개별 로그인 이력(영구).
  */
 function RecentAccess({ sessions, logins }: { sessions: AccessSession[]; logins: LoginEventRow[] }) {
   if (sessions.length === 0 && logins.length === 0) return null;
+  const groups = groupSessions(sessions);
   return (
     <section className="bg-card border-line space-y-2 rounded-md border p-4">
       <p className="micro flex items-center gap-1.5">
         <LogIn className="text-text-dim size-3.5" /> 최근 접속
       </p>
-      {sessions.length > 0 ? (
+      {groups.length > 0 ? (
         <ul className="divide-line divide-y text-sm">
-          {sessions.map((s) => (
-            <li key={s.sessionId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5">
-              <Pill color={s.auto ? "neutral" : "primary"}>{s.auto ? "세션 유지" : "최근 로그인"}</Pill>
-              <span className="text-foreground">{deviceLabel(s.userAgent)}</span>
-              {s.ip ? <span className="text-text-faint num text-xs">{s.ip}</span> : null}
+          {groups.map((g) => (
+            <li key={g.key} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5">
+              <span className="text-foreground num">{g.ip ?? "IP 미상"}</span>
+              <span className="text-text-dim">{g.device}</span>
               <span className="text-text-dim num ml-auto text-xs">
-                로그인 {when(s.startedAt)} · 마지막 활동 {when(s.lastActive)}
+                세션 {g.count}개 ·{" "}
+                {g.count > 1 ? `${when(g.firstStarted)} ~ ` : ""}마지막 활동 {when(g.lastActive)}
               </span>
             </li>
           ))}

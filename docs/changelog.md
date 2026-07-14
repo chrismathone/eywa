@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 직원 상세 '최근 접속' 세션을 IP·기기별로 그룹핑 (2026-07-14) — ✅ tsc0/그룹핑 로직 실데이터 검증
+원장 "같은 IP 세션이 너무 많이 중복돼 보인다". 자동 로그인 정책(회전 off·timebox 0, [auth-session-policy.md](auth-session-policy.md))상
+재로그인마다 새 `auth.sessions` 행이 생기고 세션이 안 죽어 누적되는데, 집/학원망은 NAT 공인 IP 1개라 **같은 곳 세션이 목록을 도배**했다(중복처럼 보임).
+- [activity-log-tab.tsx](<../src/app/(shell)/staff/[id]/_tabs/activity-log-tab.tsx>): `groupSessions()` 추가 — `ip + deviceLabel(ua)` 키로 묶어 그룹당 **세션 수 + 첫 로그인~마지막 활동**으로 요약, 최신 활동순 정렬(문자열 대신 epoch(ms) 비교로 타임존/소수초 표기차 방어). `RecentAccess`를 그룹 단위 렌더로 교체.
+- 효과: 실데이터 10세션 → **5행**(집망 크롬 6세션이 한 줄 "세션 6개"로 접힘). 낯선 IP는 각 한 줄로 또렷 = 보안 검토값 유지. **데이터 쿼리·세션 정책은 불변(표시만)**.
+- ⚠️ 목록은 여전히 최근 10세션만 조회 후 그룹핑(`auth.sessions` 전체 개수 확인/오래된 세션 폐기는 별도 과제).
+
 ### 입금 계좌 다계좌 모델 + 수강료 계산기 안내문 계좌 박스 (2026-07-13) — ✅ tsc0/lint0/test(resolve9)/실미리보기
 원장 "입금 계좌를 몇 개 등록해두고 연결된 곳(교재요청서·수강료 계산기)에 기본 계좌가 디폴트로 들어가게". 단일 계좌 → **다계좌 모델**로 확장.
 - **스키마** [settings-types.ts](../src/features/owner/settings-types.ts): `accountSchema`에 `label`·`isDefault` 추가 + `billing.accounts[]`(≤12, superRefine 기본 ≤1) + 헬퍼 `defaultAccountOf(billing)`(isDefault→첫 계좌→레거시 account 폴백).
