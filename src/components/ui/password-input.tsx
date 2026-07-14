@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +27,7 @@ export function PasswordInput({
         title={show ? "비밀번호 숨기기" : "비밀번호 표시"}
         className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex items-center px-2.5 transition-colors"
       >
-        {show ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+        <EyIcon name={show ? "eyeOff" : "eye"} size={16} className="size-4" />
       </button>
     </div>
   );

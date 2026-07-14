@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ExternalLink, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ExternalLink, PanelLeftClose, PanelLeftOpen } from "@/components/icons/eywa-icon-compat";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import {
@@ -495,7 +495,6 @@ function RailItem({
   expanded: boolean;
   motion: boolean;
 }) {
-  const Icon = item.icon;
   const start = useRef<{ x: number; y: number } | null>(null);
   const dragged = useRef(false);
 
@@ -579,9 +578,10 @@ function RailItem({
               : "bg-sidebar-accent opacity-0 group-hover:opacity-100"
         } ${motion ? `transition-[left,right,opacity,box-shadow] duration-200 ${EASE}` : ""}`}
       />
-      <Icon
+      <EyIcon
+        name={item.icon}
         size={18}
-        strokeWidth={1.85}
+        strokeWidth={1.6}
         className={`relative z-10 shrink-0 ${fg} ${motion ? "transition-colors duration-200" : ""}`}
       />
       <span

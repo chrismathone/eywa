@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { BackLink } from "@/components/back-link";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";

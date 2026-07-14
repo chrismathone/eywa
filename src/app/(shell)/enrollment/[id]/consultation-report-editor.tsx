@@ -10,7 +10,7 @@ import {
   Pencil,
   RefreshCw,
   X,
-} from "lucide-react";
+} from "@/components/icons/eywa-icon-compat";
 import type { ConsultationAudioReport } from "@/features/enrollment/server/queries";
 import {
   regenerateConsultationAnalysis,

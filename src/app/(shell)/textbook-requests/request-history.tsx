@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Check, FileDown, Pencil, Search, Trash2 } from "lucide-react";
+import { Check, FileDown, Pencil, Search, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList } from "lucide-react";
+import { ClipboardList } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import type { LinkedDocRow } from "@/features/documents/linked";

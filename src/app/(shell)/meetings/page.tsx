@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { Mic, RefreshCw } from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { Mic, RefreshCw } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";

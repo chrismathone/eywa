@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { Columns3, LayoutGrid, CalendarOff, Users } from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { Columns3, LayoutGrid, CalendarOff, Users } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";

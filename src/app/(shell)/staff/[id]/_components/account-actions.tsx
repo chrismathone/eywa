@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { KeyRound, Mail, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, Mail, ShieldCheck, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";

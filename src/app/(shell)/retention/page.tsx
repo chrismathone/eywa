@@ -1,4 +1,4 @@
-import { CalendarClock, Bell, MessageCircle } from "lucide-react";
+import { CalendarClock, Bell, MessageCircle } from "@/components/icons/eywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {

@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "@/components/icons/eywa-icon-compat";
 
 /**
  * "동명이인 확인 필요" 배지 — makeedu 동기화가 **이름 충돌로 자동 접미사**(테스트→테스트A)를 붙여 만든

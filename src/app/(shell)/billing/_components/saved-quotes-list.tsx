@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { useFormStatus } from "react-dom";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import {

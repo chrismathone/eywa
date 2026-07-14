@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Pencil, Mic, Sparkles } from "lucide-react";
+import { Pencil, Mic, Sparkles } from "@/components/icons/eywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";

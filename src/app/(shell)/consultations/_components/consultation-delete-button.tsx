@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
 import {
   deleteStudentConsultation,
   type DeleteConsultationState,

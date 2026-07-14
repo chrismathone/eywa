@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Layers, X, type LucideIcon } from "lucide-react";
+import { Layers, X } from "@/components/icons/eywa-icon-compat";
 import { NAV_GROUPS } from "@/lib/navigation";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 import { useWindowStore, instanceLabel } from "./window-store";
 
 const MAX_VISIBLE = 4; // 이보다 많으면 앞 3장 부채 + "+N" 페이지 스택(책 뒤장 …처리)
 
 // 라우트 menuKey → 아이콘(레일과 동일). 학생 요약창은 seed.
-const ICON_BY_MENU: Record<string, LucideIcon> = {};
+const ICON_BY_MENU: Record<string, EywaIconName> = {};
 for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] = it.icon;
 
 // 아이콘 칩 tint + 책등(spine) 색 — 인덱스 순환(책 표지 느낌).
@@ -33,7 +33,7 @@ type StripItem = {
   key: string;
   title: string;
   subtitle?: string;
-  Icon: LucideIcon | null; // null → 학생 요약(seed)
+  iconName: EywaIconName | null; // null → 학생 요약(seed)
   isBackground: boolean; // 배경 라우트 카드 — "배경" 표식 + 클릭 시 그 배경을 위로 올림(swap)
   onClick: () => void;
 };
@@ -61,7 +61,6 @@ function FanCard({
     ? "rotate(0deg) rotateY(0deg) translateY(-22px) scale(1.07)"
     : `rotate(${spin}deg) rotateY(-${TILT}deg) translateY(${arc}px)`;
 
-  const Icon = item.Icon;
   return (
     <button
       type="button"
@@ -98,7 +97,11 @@ function FanCard({
       ) : null}
       <span className="absolute inset-0 flex flex-col px-3.5 py-3 pl-5 text-left">
         <span className={`flex size-9 items-center justify-center rounded-lg ${COVERS[index % COVERS.length]}`}>
-          {Icon ? <Icon size={18} strokeWidth={1.9} /> : <EyIcon name="seed" size={17} />}
+          {item.iconName ? (
+            <EyIcon name={item.iconName} size={18} strokeWidth={1.6} />
+          ) : (
+            <EyIcon name="seed" size={17} />
+          )}
         </span>
         <span className="mt-auto block min-w-0">
           <span className="text-foreground block truncate text-[12.5px] font-bold">{item.title}</span>
@@ -182,7 +185,7 @@ export function SpotlightStrip() {
       key: w.id,
       title: instanceLabel(w.id, w.params.title),
       subtitle: w.params.subtitle,
-      Icon:
+      iconName:
         w.kind === "route"
           ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]] ?? null)
           : null,

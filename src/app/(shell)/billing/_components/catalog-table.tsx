@@ -2,11 +2,11 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { AlertCircle, Loader2, Pencil, Plus, Save, Trash2, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { BookText } from "lucide-react";
+import { BookText } from "@/components/icons/eywa-icon-compat";
 import {
   createCatalogItem,
   updateCatalogItem,

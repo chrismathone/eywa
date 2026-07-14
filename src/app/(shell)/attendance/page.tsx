@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Clock, ListFilter, UserCheck, Users, UserX, type LucideIcon } from "lucide-react";
+import { Clock, ListFilter, UserCheck, Users, UserX, type LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";

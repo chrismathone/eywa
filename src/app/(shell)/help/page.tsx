@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
+import type { MenuKey } from "@/lib/permissions";
 import { HelpBrowser } from "./_help-browser";
 
 export const metadata = { title: "도움말 — eywa" };
@@ -37,7 +39,7 @@ const QUICKSTART: { title: string; desc: string; href: string; hrefLabel: string
   },
 ];
 
-const MENUS: { id: string; label: string; href: string; description: string }[] = [
+const MENUS: { id: MenuKey; label: string; href: string; description: string }[] = [
   {
     id: "dashboard",
     label: "대시보드",
@@ -174,6 +176,25 @@ export default async function HelpPage() {
   return (
     <div className="space-y-6">
       <HelpBrowser quickstart={QUICKSTART} menus={MENUS} faq={FAQ} />
+
+      <section className="border-line bg-card shadow-card flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center">
+        <span className="bg-primary-soft text-primary flex size-11 shrink-0 items-center justify-center rounded-lg">
+          <EyIcon name="rings" size={22} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="micro">Product language</p>
+          <h2 className="text-foreground mt-0.5 text-[15px] font-extrabold">Eywa 아이콘 시스템</h2>
+          <p className="text-text-dim mt-1 text-[11px] leading-relaxed">
+            제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
+          </p>
+        </div>
+        <Link
+          href="/help/icons"
+          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-[12px] font-bold transition-shadow"
+        >
+          아이콘 보기 <EyIcon name="arrowRight" size={12} />
+        </Link>
+      </section>
 
       {/* 1:1 문의 */}
       <div className="lg:max-w-md">

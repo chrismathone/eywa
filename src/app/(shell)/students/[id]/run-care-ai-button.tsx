@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Sparkles } from "lucide-react";
+import { AlertCircle, Sparkles } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   runStudentCareAnalysis,

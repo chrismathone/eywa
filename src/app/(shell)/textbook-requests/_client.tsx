@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { BookMarked, BookOpen, Eraser, Eye, Save, User, X } from "lucide-react";
+import { BookMarked, BookOpen, Eraser, Eye, Save, User, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";

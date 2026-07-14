@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { Pencil } from "@/components/icons/eywa-icon-compat";
 import { dedupeEditors } from "./presence-state";
 import { useEditingOthers } from "./edit-presence";
 

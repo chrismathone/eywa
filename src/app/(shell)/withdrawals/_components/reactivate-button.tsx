@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { reactivateStudent } from "@/features/withdrawals/server/actions";
 

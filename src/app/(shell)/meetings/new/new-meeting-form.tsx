@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleStop, History, Loader2, Mic, Upload, X } from "lucide-react";
+import { CircleStop, History, Loader2, Mic, Upload, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   checkRecovery,

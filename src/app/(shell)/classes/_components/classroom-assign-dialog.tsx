@@ -12,7 +12,7 @@ import {
   Loader2,
   Sparkles,
   X,
-} from "lucide-react";
+} from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   applyClassroomAssignments,

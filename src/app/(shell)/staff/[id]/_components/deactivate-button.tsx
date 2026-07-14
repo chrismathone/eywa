@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { ExternalLink, TriangleAlert, UserCheck, UserMinus } from "lucide-react";
+import { ExternalLink, TriangleAlert, UserCheck, UserMinus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { WindowLink } from "@/components/workspace/window-link";
 import { deactivateStaff } from "@/features/staff/server/actions";

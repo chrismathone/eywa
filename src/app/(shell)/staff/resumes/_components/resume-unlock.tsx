@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Lock } from "@/components/icons/eywa-icon-compat";
 import { unlockResumeView, type ResumeUnlockState } from "@/features/staff/server/resume-actions";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookText, CheckCircle2 } from "lucide-react";
+import { BookText, CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { SearchForm } from "@/components/search-form";
 import { Pagination } from "@/components/pagination";
 import { getCatalogPage, getCatalogStats } from "@/features/billing/server/catalog-queries";

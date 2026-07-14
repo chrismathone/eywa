@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Download, Eye, Loader2, Pencil, Save } from "lucide-react";
+import { AlertCircle, Download, Eye, Loader2, Pencil, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { updateDocument } from "@/features/documents/server/actions";

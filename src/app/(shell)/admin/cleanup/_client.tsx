@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, Loader2, Trash2, UserMinus, Users, Wrench } from "lucide-react";
+import { CheckCircle2, Loader2, Trash2, UserMinus, Users, Wrench } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   closeOrphanEnrollments,

@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { FileText, Loader2, Save } from "lucide-react";
+import { FileText, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { updateMeetingNotepad, type UpdateNotepadState } from "@/features/meetings/server/actions";
 import { useEditPresence } from "@/features/presence/edit-presence";
 

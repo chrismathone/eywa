@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2 } from "@/components/icons/eywa-icon-compat";
 import { deleteStudentGrade } from "@/features/students/server/actions";
 
 /** 성적 기록 삭제(휴지통) — student_grades 단일 행 삭제. ijw 성적탭 행 삭제 대응. */

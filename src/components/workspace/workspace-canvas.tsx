@@ -183,6 +183,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
               alt=""
               width={240}
               height={240}
+              loading="eager"
               className="mb-1 size-40 object-contain sm:size-44"
             />
             <div className="text-center">

@@ -76,8 +76,8 @@ config({ path: ".env.local" });
 
 해결: `const cutoff = Date.now() - 7 * 86_400_000`을 `// eslint-disable-next-line react-hooks/purity -- server component renders once per request` 코멘트와 함께 사용.
 
-### 12. Lucide React 화살표 아이콘이 한글 자모로 오인됨
-KPI 카드의 `<ArrowUpRight className="size-3" />` (12px, default strokeWidth=2)이 작은 화면에서 한글 "ㄱ"/"ㄴ"과 흡사하게 보임. "ㄱ +12 최근 7일" 식으로 읽힘.
+### 12. 작은 화살표 아이콘이 한글 자모로 오인됨
+구 Lucide 기반 KPI 카드의 12px 화살표가 작은 화면에서 한글 "ㄱ"/"ㄴ"과 흡사하게 보였음. "ㄱ +12 최근 7일" 식으로 읽힘.
 
 해결: `size-3.5 strokeWidth={2.5}`로 굵게 + 살짝 크게. 아이콘 모양이 명확해짐.
 

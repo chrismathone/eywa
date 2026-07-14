@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Trash2 } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Pill } from "@/components/atoms/pill";
 import type { QuoteCourse, QuoteExtra, QuoteDiscount } from "@/features/billing/quote-calc";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { EyIcon } from "@/components/icons/eywa-icons";
 
 export type ComboOption = { value: string; label: string; hint?: string };
 
@@ -83,12 +83,12 @@ export function SearchableSelect({
         <span className={`truncate ${selected ? "" : "text-text-faint"}`}>
           {selected ? selected.label : placeholder}
         </span>
-        <ChevronDown className="size-4 shrink-0 opacity-50" />
+        <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
       </button>
       {open ? (
         <div className="border-border bg-card absolute z-50 mt-1 w-full min-w-[12rem] overflow-hidden rounded-md border shadow-lg">
           <div className="border-border flex items-center gap-2 border-b px-2.5 py-1.5">
-            <Search className="size-3.5 shrink-0 opacity-50" />
+            <EyIcon name="search" size={14} className="size-3.5 shrink-0 opacity-50" />
             <input
               autoFocus
               value={q}
@@ -124,7 +124,9 @@ export function SearchableSelect({
                       {o.label}
                       {o.hint ? <span className="text-text-faint ml-1 text-xs">{o.hint}</span> : null}
                     </span>
-                    {o.value === current ? <Check className="text-primary size-3.5 shrink-0" /> : null}
+                    {o.value === current ? (
+                      <EyIcon name="check" size={14} className="text-primary size-3.5 shrink-0" />
+                    ) : null}
                   </button>
                 </li>
               ))

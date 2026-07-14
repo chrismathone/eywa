@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, AlertCircle, ShieldCheck, TrendingDown } from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, AlertCircle, ShieldCheck, TrendingDown } from "@/components/icons/eywa-icon-compat";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";

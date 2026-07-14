@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AlertCircle, CheckSquare, Loader2, Mic, Printer, Scissors, Sparkles, Users } from "lucide-react";
+import { AlertCircle, CheckSquare, Loader2, Mic, Printer, Scissors, Sparkles, Users } from "@/components/icons/eywa-icon-compat";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";

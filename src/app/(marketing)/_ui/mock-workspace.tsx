@@ -13,7 +13,7 @@ import {
   Users,
   Wallet,
   X,
-} from "lucide-react";
+} from "@/components/icons/eywa-icon-compat";
 import type { CSSProperties, ReactNode } from "react";
 
 /**

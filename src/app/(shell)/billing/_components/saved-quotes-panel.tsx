@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react";
+import { FileText } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { SearchForm } from "@/components/search-form";
 import { Pagination } from "@/components/pagination";

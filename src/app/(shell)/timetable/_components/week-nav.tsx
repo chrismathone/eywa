@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
 import { addWeeks, thisMonday, weekLabel, weekRelation } from "@/features/timetable/lib/week";
 
 /**

@@ -2,7 +2,7 @@
 
 import { Fragment, useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "@/components/icons/eywa-icon-compat";
 import {
   confirmSessionTerm,
   unconfirmSessionTerm,

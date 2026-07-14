@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { Sparkles } from "@/components/icons/eywa-icon-compat";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getStudentAttendanceStats,

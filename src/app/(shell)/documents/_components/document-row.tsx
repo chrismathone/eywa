@@ -14,7 +14,7 @@ import {
   Pin,
   StickyNote,
   Trash2,
-} from "lucide-react";
+} from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { deleteDocument, toggleDocumentPin } from "@/features/documents/server/actions";
 import { downloadDocument } from "@/features/documents/open-file";
