@@ -427,10 +427,11 @@ export async function getWeeklyScheduleWithStudents(
     list.sort(compareStudentLines);
   }
 
-  // 학생별 최근 교재 — ijw 학생 hover의 "교재" 줄. textbook_orders는 학생별이며 delivered_at(없으면 request_date) 최신 1건.
+  // 학생별 최근 교재 — ijw 학생 hover의 "교재" 줄. textbook_orders는 학생별이며 request_date 최신 1건.
+  // (delivered_at은 폐기 컬럼이라 미사용 — 최근일 기준 = request_date.)
   const studentIds = Array.from(new Set([...byClass.values()].flat().map((l) => l.studentId)));
   if (studentIds.length > 0) {
-    type TbRow = { student_id: string; book_name: string | null; delivered_at: string | null; request_date: string | null };
+    type TbRow = { student_id: string; book_name: string | null; request_date: string | null };
     // 학생별 최근 진도 — ijw 학생 hover의 "[진도]" 줄. lesson_reports 최신(report_date desc) 1건.
     type RepRow = {
       student_id: string;
@@ -445,7 +446,7 @@ export async function getWeeklyScheduleWithStudents(
       fetchInChunks<TbRow>(studentIds, (chunk) => {
         let q = supabase
           .from("textbook_orders")
-          .select("student_id, book_name, delivered_at, request_date")
+          .select("student_id, book_name, request_date")
           .in("student_id", chunk);
         if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
         return q;
@@ -464,7 +465,7 @@ export async function getWeeklyScheduleWithStudents(
     const latestTb = new Map<string, { name: string; date: string | null }>();
     for (const r of tbRows) {
       if (!r.book_name) continue;
-      const d = (r.delivered_at ?? r.request_date ?? "").slice(0, 10);
+      const d = (r.request_date ?? "").slice(0, 10);
       const cur = latestTb.get(r.student_id);
       if (!cur || (cur.date ?? "") < d) latestTb.set(r.student_id, { name: r.book_name, date: d || null });
     }
