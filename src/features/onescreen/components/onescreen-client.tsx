@@ -39,6 +39,7 @@ import { ReportCard, type SubjectReport } from "./report-card";
 import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
 import { HistoryBoard } from "./history-board";
+import { NoticeComposer } from "./notice-composer";
 import { buildGridRows, isReportEligible } from "../grid";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
@@ -108,6 +109,7 @@ export function OneScreenClient({
   showCheckTest = true,
   noticeMode: initialNoticeMode = null,
   academyNoticeMode = "A",
+  classnoteSendEnabled = false,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -119,6 +121,7 @@ export function OneScreenClient({
   showCheckTest?: boolean; // 확인테스트 사용(보고서 '표시 항목' 설정 재사용) — off면 입력칸 숨김
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
+  classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -137,7 +140,9 @@ export function OneScreenClient({
     flushSavesRef.current(); // 대기 중(디바운스 800ms) 자동저장을 이동 전 커밋 — 이동=클라 재마운트라 미커밋분 유실 방어
     router.push(ymd === todayYmd ? "/onescreen" : `/onescreen?date=${ymd}`);
   };
-  const [view, setView] = useState<"card" | "grid" | "status" | "history">("card"); // 카드(학생별) ↔ 표(대량작성) ↔ 발송 현황 ↔ 지난 보고서
+  const [view, setView] = useState<"card" | "grid" | "status" | "history" | "notice">("card"); // 카드 ↔ 표 ↔ 발송 현황 ↔ 지난 보고서 ↔ 공지
+  // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
+  const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -521,6 +526,19 @@ export function OneScreenClient({
   function openCard(studentId: string) {
     setSelId(studentId);
     setView("card");
+  }
+  // 학부모 공지 진입 — 카드=선택 학생 1명, 표=선택 행(없으면 보이는 전체) 학생. 공지 뷰로 전환하며 대상 seed.
+  function openNoticeForStudent(studentId: string) {
+    setNoticeSeed([studentId]);
+    setView("notice");
+  }
+  function openNoticeForRows(keys?: string[]) {
+    const ids =
+      keys && keys.length
+        ? [...new Set(keys.map((k) => k.split("::")[0]!))]
+        : visible.map((s) => s.id);
+    setNoticeSeed(ids);
+    setView("notice");
   }
   // 저장 입력(보고서 필드)을 (학생,과목)별로 조립 — 카드/표 공용. 초안 없으면 자동 작성분 사용.
   function buildSaveInputFor(student: OneScreenStudent, subjectName: string) {
@@ -932,6 +950,7 @@ export function OneScreenClient({
           onAutoWrite={autoWriteRow}
           onAutoWriteAll={autoWriteAllVisible}
           onOpenCard={openCard}
+          onClassNotice={openNoticeForRows}
           genKey={genKey}
           bulkGen={bulkGen}
         />
@@ -939,6 +958,14 @@ export function OneScreenClient({
         <StatusBoard students={visible} reports={reports} onOpenCard={openCard} />
       ) : view === "history" ? (
         <HistoryBoard />
+      ) : view === "notice" ? (
+        <NoticeComposer
+          key={`notice-${noticeSeed?.join(",") ?? ""}`}
+          students={visible}
+          seedStudentIds={noticeSeed}
+          sendEnabled={classnoteSendEnabled}
+          onSent={() => setNoticeSeed(null)}
+        />
       ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,380px)] lg:items-start">
         <StudentList
@@ -974,6 +1001,14 @@ export function OneScreenClient({
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-semibold">보고서</h2>
+                <button
+                  type="button"
+                  onClick={() => openNoticeForStudent(selected.id)}
+                  title="이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송"
+                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-md border px-2 py-0.5 text-[11px] font-semibold"
+                >
+                  학부모 공지
+                </button>
               </header>
               <ReportCard
                 key={selected.id}

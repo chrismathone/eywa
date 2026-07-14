@@ -31,6 +31,9 @@ export const AUDIT_ACTIONS = {
   classroom_delete: "강의실 삭제",
   intake_token_create: "QR 접수 링크 생성",
   resume_view_unlock: "이력서 열람(재인증)",
+  classnote_notice_send: "학부모 공지 발송",
+  classnote_notice_edit: "학부모 공지 수정",
+  classnote_notice_delete: "학부모 공지 삭제",
 } as const;
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
 

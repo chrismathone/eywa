@@ -16,6 +16,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   staff_resume: "직원 이력서",
   intake_token: "QR 접수 링크",
   notice_popup: "팝업 공지",
+  classnote_notice: "학부모 공지",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -154,6 +155,16 @@ export function auditDetail(
       if (applied === null && rooms === null) return null;
       return `강의실 ${rooms ?? "?"}곳에 반 ${applied ?? "?"}개 자동배정`;
     }
+    case "classnote_notice_send": {
+      const n = num(m.targetCount);
+      return n === null
+        ? "학부모 공지 발송 대기(큐 적재)"
+        : `대상 ${n}명 발송 대기(큐 적재 — 연동 PC가 순차 게시)`;
+    }
+    case "classnote_notice_edit":
+      return "발송 전(대기) 공지 내용 수정";
+    case "classnote_notice_delete":
+      return "발송 전(대기) 공지 삭제";
     case "student_import": {
       const inserted = num(m.inserted);
       if (inserted === null) return null;

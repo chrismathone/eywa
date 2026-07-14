@@ -200,6 +200,7 @@ export function OneScreenGrid({
   onAutoWrite,
   onAutoWriteAll,
   onOpenCard,
+  onClassNotice,
   genKey,
   bulkGen,
 }: {
@@ -228,6 +229,7 @@ export function OneScreenGrid({
   onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
   onAutoWriteAll: (keys?: string[]) => void; // 선택(또는 전체) 행 자동작성
   onOpenCard: (studentId: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
+  onClassNotice?: (keys?: string[]) => void; // 선택(없으면 표시 전체) 학생 학부모 공지 — 진도 무관
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
 }) {
@@ -294,6 +296,16 @@ export function OneScreenGrid({
           </label>
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {onClassNotice ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onClassNotice(selectedKeys)}
+              title="선택(없으면 표시 전체) 학생 학부모에게 공지 발송 — 진도와 무관"
+            >
+              {selectedKeys.length ? `선택 ${selectedKeys.length} 공지` : "반 전체 공지"}
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"

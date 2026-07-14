@@ -42,6 +42,7 @@ export type TeacherRoster = {
   showCheckTest: boolean;
   noticeMode: "A" | "B" | null; // 강사 본인의 AI 멘트 모드 오버라이드(null=학원 기본 따름) — 0104a
   academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드(report.noticeMode) — 토글 '학원 기본' 라벨 표시용
+  classnoteSendEnabled: boolean; // ClassNote 실제 발송 스위치 — 공지 컴포저 dry-run 안내용
 };
 
 type OnescreenSessionRow = {
@@ -80,6 +81,7 @@ function emptyRoster(
     showCheckTest: true,
     noticeMode,
     academyNoticeMode,
+    classnoteSendEnabled: false,
   };
 }
 
@@ -448,5 +450,6 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     showCheckTest,
     noticeMode,
     academyNoticeMode,
+    classnoteSendEnabled: settings.report.classnoteSendEnabled,
   };
 }
