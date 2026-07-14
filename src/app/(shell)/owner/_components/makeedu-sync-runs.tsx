@@ -1,6 +1,7 @@
 import { Pill } from "@/components/atoms/pill";
 import { Pagination } from "@/components/pagination";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
+import { humanizeMakeeduSyncError } from "@/features/integrations/sync-error";
 import type { MakeeduSyncRun } from "@/features/integrations/server/makeedu-sync";
 
 /**
@@ -59,8 +60,12 @@ export function MakeeduSyncRunsList({
                   <span className="text-amber text-xs">실패: {run.failedDomains.join(", ")}</span>
                 ) : null}
                 {run.error ? (
-                  <span className="text-chart-4 min-w-0 flex-1 truncate text-xs" title={sanitizeErrorText(run.error)}>
-                    {sanitizeErrorText(run.error)}
+                  // 화면 = 한글 요약(humanize), 원문(sanitize)은 title 툴팁으로만 — raw 코드 UI 노출 금지 규칙.
+                  <span
+                    className="text-chart-4 min-w-0 flex-1 truncate text-xs"
+                    title={sanitizeErrorText(run.error)}
+                  >
+                    {humanizeMakeeduSyncError(run.error) ?? sanitizeErrorText(run.error)}
                   </span>
                 ) : null}
               </div>
