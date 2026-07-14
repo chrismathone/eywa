@@ -87,9 +87,9 @@ function mapOrderRow(r: DbOrderRow): TextbookOrderRow {
   };
 }
 
-/** 등록·납부·주문 3체크 전부 = 완료(request-history isDone과 동일 판정). */
-function isOrderDone(r: TextbookOrderRow): boolean {
-  return r.registered && r.ordered && r.paid;
+/** 찍힌 체크 개수(0~3) — 등록·납부·주문. 0=미착수 … 3=완료(request-history isDone). 정렬 1순위. */
+function checkCount(r: TextbookOrderRow): number {
+  return (r.registered ? 1 : 0) + (r.paid ? 1 : 0) + (r.ordered ? 1 : 0);
 }
 
 export async function getTextbookOrdersPage(
@@ -109,10 +109,11 @@ export async function getTextbookOrdersPage(
   });
 
   const rows = all.map(mapOrderRow);
-  // 미완료(작업 대상)를 위로, 완료는 아래로. 각 그룹 안은 신청일 최신순 유지(날짜 없으면 뒤로).
+  // 1순위: 찍힌 체크 개수 오름차순(0→1→2→3) — 손 안 댄 것(0개)이 맨 위, 완료(3개)가 맨 아래.
+  // 2순위: 신청일 최신순(같은 개수 안에서, 날짜 없으면 뒤로).
   rows.sort((a, b) => {
-    const done = (isOrderDone(a) ? 1 : 0) - (isOrderDone(b) ? 1 : 0);
-    if (done !== 0) return done;
+    const c = checkCount(a) - checkCount(b);
+    if (c !== 0) return c;
     return (b.requestDate ?? "").localeCompare(a.requestDate ?? "");
   });
 
