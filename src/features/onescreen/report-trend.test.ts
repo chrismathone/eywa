@@ -40,9 +40,16 @@ describe("parseHomeworkPercent", () => {
     expect(parseHomeworkPercent("0%")).toBe(0);
     expect(parseHomeworkPercent("90")).toBe(90);
   });
-  it("정성값은 null(그래프 제외)", () => {
-    expect(parseHomeworkPercent("완료")).toBeNull();
+  it("정성 상태 → 퍼센트(온스크린 과제 칩: 완료=100·일부 미흡=50·미제출=0)", () => {
+    expect(parseHomeworkPercent("완료")).toBe(100);
+    expect(parseHomeworkPercent("일부 미흡")).toBe(50);
+    expect(parseHomeworkPercent("미제출")).toBe(0);
+    expect(parseHomeworkPercent(" 완료 ")).toBe(100); // trim
+  });
+  it("매핑 밖 정성값·빈값은 null(그래프 제외)", () => {
     expect(parseHomeworkPercent("미확인")).toBeNull();
+    expect(parseHomeworkPercent("—")).toBeNull();
+    expect(parseHomeworkPercent("")).toBeNull();
     expect(parseHomeworkPercent(null)).toBeNull();
   });
 });
@@ -51,7 +58,7 @@ describe("buildTrendPoints", () => {
   const rows: TrendReportRow[] = [
     { id: "b", date: "2026-07-05", examInfo: "4/5", homeworkScore: "90%" },
     { id: "a", date: "2026-07-01", examInfo: "3/5", homeworkScore: "100%" },
-    { id: "c", date: "2026-07-09", examInfo: null, homeworkScore: "완료" }, // 시험 null + 과제 null화 → 제외
+    { id: "c", date: "2026-07-09", examInfo: null, homeworkScore: "미확인" }, // 시험 null + 과제(매핑 밖) null → 제외
     { id: "d", date: "2026-07-07", examInfo: "5/5", homeworkScore: null },
   ];
   it("날짜 오름차순 + 무효행 제외 + 현재 표시", () => {
