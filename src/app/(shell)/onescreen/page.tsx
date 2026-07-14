@@ -45,6 +45,7 @@ export default async function OneScreenPage({
       showCheckTest={roster.showCheckTest}
       noticeMode={roster.noticeMode}
       academyNoticeMode={roster.academyNoticeMode}
+      classnoteSendEnabled={roster.classnoteSendEnabled}
     />
   );
 }

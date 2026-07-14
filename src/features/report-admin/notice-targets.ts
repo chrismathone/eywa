@@ -21,7 +21,9 @@ export type NoticeCandidate = {
   subject: string | null; // 선택된 반의 과목 키(보드 prefix 결정)
 };
 
-export type NoticeTarget = { studentId: string; studentName: string; board: string };
+// body?: 학생별 개별 내용(공통과 다르게 쓴 학생만). 워커는 target.body ?? notice.body(공통)를 게시.
+// ⚠️ body는 resolveNoticeTargets **이후** studentId lookup으로 붙일 것(target↔student 고정 — 오발송 방지).
+export type NoticeTarget = { studentId: string; studentName: string; board: string; body?: string };
 export type NoticeSkip = { name: string; reason: "subject_off" | "name_collision" | "no_name" };
 
 /**

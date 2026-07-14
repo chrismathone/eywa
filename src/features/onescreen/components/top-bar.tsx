@@ -35,8 +35,8 @@ export function OneScreenTopBar({
   onFilter: (tag: string) => void;
   doneCount: number;
   total: number;
-  view: "card" | "grid" | "status" | "history";
-  onView: (v: "card" | "grid" | "status" | "history") => void;
+  view: "card" | "grid" | "status" | "history" | "notice";
+  onView: (v: "card" | "grid" | "status" | "history" | "notice") => void;
   stats: { students: number; progressDone: number; testDone: number; reportDone: number };
   todayClasses: TodayClass[];
   noticeMode: "A" | "B" | null; // 강사 본인 멘트 모드(null=학원 기본)
@@ -190,7 +190,7 @@ export function OneScreenTopBar({
         <span className="bg-line h-5 w-px" aria-hidden />
         {/* 카드 ↔ 표(스프레드시트) ↔ 발송 현황 ↔ 지난 보고서 뷰 전환 */}
         <div className="border-line flex items-center rounded-md border p-0.5">
-          {(["card", "grid", "status", "history"] as const).map((v) => (
+          {(["card", "grid", "status", "history", "notice"] as const).map((v) => (
             <button
               key={v}
               type="button"
@@ -200,7 +200,15 @@ export function OneScreenTopBar({
                 view === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
               }`}
             >
-              {v === "card" ? "카드" : v === "grid" ? "표" : v === "status" ? "발송 현황" : "지난 보고서"}
+              {v === "card"
+                ? "카드"
+                : v === "grid"
+                  ? "표"
+                  : v === "status"
+                    ? "발송 현황"
+                    : v === "history"
+                      ? "지난 보고서"
+                      : "공지"}
             </button>
           ))}
         </div>
