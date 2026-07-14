@@ -1,0 +1,397 @@
+"use client";
+
+// 직접 작성·발송 — 관리자가 임의 학생을 골라 수업보고서를 작성해 ClassNote로 발송(강사 원스크린과 동일 포맷·레일).
+// 발송 안전가드(dry-run·과목·동명이인·too_old)는 서버 액션(saveAndQueueAdminReport)이 최종 강제 — 여기선 안내·확인만.
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
+import { generateReportComment } from "@/features/onescreen/server/actions";
+import type { ReportCommentInput } from "@/features/onescreen/report-comment";
+import {
+  getAdminComposeContext,
+  saveAdminReport,
+  saveAndQueueAdminReport,
+  type AdminComposeSubject,
+  type AdminSaveReportInput,
+} from "@/features/report-admin/server/compose-actions";
+
+const ATTITUDE = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"];
+const HOMEWORK = ["완료", "일부 미흡", "미제출"];
+const INPUT = "border-border bg-card text-foreground rounded-md border px-2.5 py-1.5 text-sm w-full";
+const LABEL = "text-text-dim text-[11px] font-medium";
+
+export type ComposeStudent = { id: string; name: string; school: string | null; grade: string | null };
+
+// 발송 결과(status) → 학부모/관리자용 한글 안내. raw enum 노출 금지(status-labels 원칙).
+const SEND_MESSAGE: Record<string, { kind: "success" | "info" | "warn"; text: string }> = {
+  queued: { kind: "success", text: "발송 대기열에 올렸습니다 — 연동 PC가 곧 학부모에게 전송합니다." },
+  dry_run: { kind: "info", text: "저장했습니다. 현재 실제 발송이 꺼져 있어 전송은 대기 상태입니다(원장 설정에서 켜야 전송)." },
+  subject_off: { kind: "warn", text: "저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)." },
+  name_conflict: { kind: "warn", text: "동명이인이 있어 자동 발송을 막았습니다. 학생 구분 이름(classnote_name) 지정 후 다시 시도하세요." },
+  too_old: { kind: "warn", text: "저장했지만 너무 오래된 보고서라 전송하지 않았습니다." },
+  revoked: { kind: "warn", text: "취소된 공유 링크입니다 — 재발급 후 발송하세요." },
+  processing: { kind: "info", text: "이미 발송 처리 중인 보고서입니다." },
+};
+
+export function ComposeFace({
+  students,
+  sendEnabled,
+  showDailyTest = true,
+  showCheckTest = true,
+}: {
+  students: ComposeStudent[];
+  sendEnabled: boolean;
+  showDailyTest?: boolean; // 일일테스트 사용(보고서 '표시 항목' 설정) — off면 입력칸 숨김
+  showCheckTest?: boolean; // 확인테스트 사용 — off면 입력칸 숨김
+}) {
+  const router = useRouter();
+  const [studentId, setStudentId] = useState("");
+  const [ctx, setCtx] = useState<{
+    student: { id: string; name: string; classnoteName: string | null };
+    subjects: AdminComposeSubject[];
+    nameCollision: boolean;
+  } | null>(null);
+  const [ctxPending, startCtx] = useTransition();
+
+  const [subject, setSubject] = useState("");
+  const [teacherName, setTeacherName] = useState("");
+  const [progress, setProgress] = useState("");
+  const [textbook, setTextbook] = useState("");
+  const [makeup, setMakeup] = useState(false);
+  const [dScore, setDScore] = useState("");
+  const [dMax, setDMax] = useState("");
+  const [cScore, setCScore] = useState("");
+  const [cMax, setCMax] = useState("");
+  const [attitude, setAttitude] = useState("");
+  const [homework, setHomework] = useState("");
+  const [homeworkToday, setHomeworkToday] = useState("");
+  const [note, setNote] = useState("");
+  const [body, setBody] = useState("");
+  const [trend, setTrend] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
+
+  const studentOptions: ComboOption[] = students.map((s) => ({
+    value: s.id,
+    label: s.name,
+    hint: [s.school, s.grade].filter(Boolean).join(" · ") || undefined,
+  }));
+  const curSubject = ctx?.subjects.find((s) => s.key === subject) ?? null;
+
+  function pickStudent(id: string) {
+    setStudentId(id);
+    setCtx(null);
+    setSubject("");
+    setConfirmSend(false);
+    if (!id) return;
+    startCtx(async () => {
+      const res = await getAdminComposeContext(id);
+      if (!res.ok || !res.student) {
+        toast.error(res.error ?? "학생 정보를 불러오지 못했습니다");
+        return;
+      }
+      setCtx({ student: res.student, subjects: res.subjects ?? [], nameCollision: !!res.nameCollision });
+      const first = (res.subjects ?? []).find((s) => s.sendable) ?? (res.subjects ?? [])[0];
+      if (first) {
+        setSubject(first.key);
+        setTeacherName(first.teacherName ?? "");
+      }
+    });
+  }
+
+  function pickSubject(s: AdminComposeSubject) {
+    setSubject(s.key);
+    setTeacherName(s.teacherName ?? "");
+    setConfirmSend(false);
+  }
+
+  function testStr(score: string, max: string): string {
+    return score.trim() ? `${max.trim() || "?"}문제 중 ${score.trim()}개` : "";
+  }
+  function buildInput(): AdminSaveReportInput {
+    const dailyTest = testStr(dScore, dMax);
+    const checkTest = testStr(cScore, cMax);
+    const examInfo = [
+      dScore.trim() && dMax.trim() ? `일일 ${dScore.trim()}/${dMax.trim()}` : "",
+      cScore.trim() && cMax.trim() ? `확인 ${cScore.trim()}/${cMax.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    return {
+      studentId,
+      subject,
+      teacherName: teacherName.trim() || undefined,
+      textbook: textbook.trim() || undefined,
+      makeup,
+      homeworkToday: homeworkToday.trim() || undefined,
+      progress: progress.trim(),
+      examInfo,
+      homeworkScore: homework,
+      notes: body.trim(),
+      dailyTest,
+      checkTest,
+      attitude: attitude || undefined,
+      trendNote: trend.trim() || undefined,
+    };
+  }
+
+  async function autoWrite() {
+    if (!ctx || !curSubject) return;
+    setAiBusy(true);
+    const input: ReportCommentInput = {
+      studentName: ctx.student.name,
+      subject: curSubject.label,
+      progress: progress.trim(),
+      dailyTest: testStr(dScore, dMax),
+      checkTest: testStr(cScore, cMax),
+      attitude,
+      homework,
+      homeworkToday: homeworkToday.trim(),
+      textbook: textbook.trim(),
+      specialNote: note.trim(),
+    };
+    const res = await generateReportComment(input, {
+      studentId,
+      subject,
+      todayExamInfo: input.dailyTest,
+      todayHomework: homework,
+    });
+    setAiBusy(false);
+    if (res.ok && res.comment) {
+      setBody(res.comment);
+      if (res.trend) setTrend(res.trend);
+      toast.success("AI가 본문을 작성했습니다 — 검토 후 발송하세요");
+    } else {
+      // 폴백: 사실 기반 간단 문장(빈 본문 방지).
+      const parts = [
+        progress.trim() ? `오늘 ${curSubject.label} ${progress.trim()} 진행했습니다.` : "",
+        attitude ? `수업 태도는 ${attitude}이었습니다.` : "",
+        homework ? `지난 과제는 ${homework} 상태입니다.` : "",
+      ].filter(Boolean);
+      setBody(parts.join(" ") || `오늘 ${curSubject.label} 수업을 진행했습니다.`);
+      toast.message("AI 생성에 실패해 기본 문구를 넣었습니다 — 직접 수정하세요");
+    }
+  }
+
+  async function doSave() {
+    if (!studentId || !subject) return;
+    setBusy(true);
+    const res = await saveAdminReport(buildInput());
+    setBusy(false);
+    if (res.ok) toast.success("저장했습니다 (발송 안 함)");
+    else toast.error(res.error ?? "저장에 실패했습니다");
+  }
+
+  async function doSend() {
+    if (!body.trim()) {
+      toast.error("본문을 작성한 뒤 발송하세요");
+      return;
+    }
+    setBusy(true);
+    const res = await saveAndQueueAdminReport(buildInput());
+    setBusy(false);
+    setConfirmSend(false);
+    if (!res.ok) {
+      toast.error(res.error ?? "발송에 실패했습니다");
+      return;
+    }
+    const msg = res.status ? SEND_MESSAGE[res.status] : undefined;
+    if (msg?.kind === "success") toast.success(msg.text);
+    else if (msg?.kind === "warn") toast.warning(msg.text);
+    else toast.message(msg?.text ?? "처리했습니다");
+    router.refresh(); // 상단 발송 큐 카드 갱신
+  }
+
+  return (
+    <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
+      <div>
+        <h2 className="text-foreground text-[15px] font-semibold">직접 작성·발송</h2>
+        <p className="text-text-faint text-[12px]">
+          학생을 선택해 수업보고서를 작성하고 ClassNote로 발송합니다(강사 원스크린과 동일 형식). 담당 반이 아니어도 발송할 수 있어요.
+        </p>
+      </div>
+
+      {!sendEnabled ? (
+        <p className="border-line bg-bg-soft text-text-dim rounded-md border px-3 py-2 text-[12px]">
+          현재 <b>실제 발송이 꺼져</b> 있어 저장만 됩니다(dry-run). 학부모에게 전송하려면 원장 설정의 <b>ClassNote 실제 발송</b>을 켜야 합니다.
+        </p>
+      ) : null}
+
+      {/* 학생 선택 */}
+      <div className="max-w-sm">
+        <div className={LABEL}>학생</div>
+        <SearchableSelect
+          options={studentOptions}
+          value={studentId}
+          onValueChange={pickStudent}
+          placeholder="학생 선택…"
+          searchPlaceholder="이름 검색…"
+          ariaLabel="학생 선택"
+        />
+      </div>
+
+      {ctxPending ? <p className="text-text-faint text-[12px]">학생 정보를 불러오는 중…</p> : null}
+
+      {ctx ? (
+        <div className="space-y-4">
+          {ctx.nameCollision ? (
+            <p className="border-amber/40 bg-amber/10 text-amber rounded-md border px-3 py-2 text-[12px]">
+              ⚠️ 같은 이름의 학생이 또 있어 <b>자동 발송이 차단</b>됩니다(오발송 방지). 학생 구분 이름(classnote_name)을 지정한 뒤 발송하세요.
+            </p>
+          ) : null}
+
+          {/* 과목 */}
+          <div>
+            <div className={LABEL}>과목</div>
+            {ctx.subjects.length === 0 ? (
+              <p className="text-text-faint text-[12px]">이 학생의 활성 수강 과목이 없습니다.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {ctx.subjects.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => pickSubject(s)}
+                    className={`rounded-full border px-3 py-1 text-[12px] ${
+                      subject === s.key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"
+                    }`}
+                    title={s.sendable ? undefined : "발송 대상 과목이 아닙니다(저장만 됩니다)"}
+                  >
+                    {s.label}
+                    {!s.sendable ? " · 발송불가" : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+            {curSubject?.board ? (
+              <p className="text-text-faint mt-1 text-[11px]">
+                발송 보드: <b className="text-text-dim">{curSubject.board}</b>
+              </p>
+            ) : null}
+          </div>
+
+          {/* 표시 강사명 + 진도/교재 */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className={LABEL}>표시 강사명</div>
+              <input value={teacherName} onChange={(e) => setTeacherName(e.target.value)} placeholder="담당 강사" className={INPUT} />
+            </div>
+            <div>
+              <div className={LABEL}>교재</div>
+              <input value={textbook} onChange={(e) => setTextbook(e.target.value)} placeholder="교재명" className={INPUT} />
+            </div>
+            <div className="sm:col-span-2">
+              <div className={LABEL}>오늘 진도</div>
+              <input value={progress} onChange={(e) => setProgress(e.target.value)} placeholder="예: 수학 1-2 · p.44" className={INPUT} />
+            </div>
+          </div>
+
+          {/* 점수 — 보고서 '표시 항목'에서 끈 테스트는 입력칸도 숨긴다(원스크린과 동일 게이팅). */}
+          {showDailyTest || showCheckTest ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {showDailyTest ? (
+                <div>
+                  <div className={LABEL}>일일 테스트 (점수 / 만점)</div>
+                  <div className="flex items-center gap-1.5">
+                    <input value={dScore} onChange={(e) => setDScore(e.target.value)} placeholder="점수" inputMode="numeric" className={INPUT} />
+                    <span className="text-text-faint">/</span>
+                    <input value={dMax} onChange={(e) => setDMax(e.target.value)} placeholder="만점" inputMode="numeric" className={INPUT} />
+                  </div>
+                </div>
+              ) : null}
+              {showCheckTest ? (
+                <div>
+                  <div className={LABEL}>확인 테스트 (점수 / 만점)</div>
+                  <div className="flex items-center gap-1.5">
+                    <input value={cScore} onChange={(e) => setCScore(e.target.value)} placeholder="점수" inputMode="numeric" className={INPUT} />
+                    <span className="text-text-faint">/</span>
+                    <input value={cMax} onChange={(e) => setCMax(e.target.value)} placeholder="만점" inputMode="numeric" className={INPUT} />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* 태도 / 과제 */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className={LABEL}>수업 태도</div>
+              <div className="flex flex-wrap gap-1.5">
+                {ATTITUDE.map((a) => (
+                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-[12px] ${attitude === a ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"}`}>
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className={LABEL}>과제 수행</div>
+              <div className="flex flex-wrap gap-1.5">
+                {HOMEWORK.map((h) => (
+                  <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"}`}>
+                    {h}
+                  </button>
+                ))}
+                <label className="text-text-dim ml-1 inline-flex items-center gap-1 text-[12px]">
+                  <input type="checkbox" checked={makeup} onChange={(e) => setMakeup(e.target.checked)} /> 보강
+                </label>
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <div className={LABEL}>오늘 과제</div>
+              <input value={homeworkToday} onChange={(e) => setHomeworkToday(e.target.value)} placeholder="예: 워크북 p.20~22" className={INPUT} />
+            </div>
+            <div className="sm:col-span-2">
+              <div className={LABEL}>특이사항(메모)</div>
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="AI 본문 작성에 참고됩니다" className={INPUT} />
+            </div>
+          </div>
+
+          {/* 본문 */}
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <div className={LABEL}>학부모 보고서 본문</div>
+              <Button size="sm" variant="outline" onClick={autoWrite} disabled={aiBusy || !subject}>
+                {aiBusy ? "작성 중…" : "AI 자동 작성"}
+              </Button>
+            </div>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} placeholder="학부모에게 보낼 보고서 본문" className={`${INPUT} resize-y`} />
+          </div>
+          <div>
+            <div className={LABEL}>학습 추세(선택)</div>
+            <textarea value={trend} onChange={(e) => setTrend(e.target.value)} rows={2} placeholder="종합 추세 코멘트(선택)" className={`${INPUT} resize-y`} />
+          </div>
+
+          {/* 액션 */}
+          {confirmSend ? (
+            <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
+              <span className="text-foreground text-[12px]">
+                <b>{ctx.student.name}</b>
+                {curSubject?.board ? <> · 보드 <b>{curSubject.board}</b></> : null} 에게 발송할까요?
+                {!sendEnabled ? " (실제 발송 OFF — 저장만 됨)" : ""}
+              </span>
+              <Button size="sm" onClick={doSend} disabled={busy}>
+                {busy ? "발송 중…" : "발송 확인"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmSend(false)} disabled={busy}>
+                취소
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={doSave} disabled={busy || !subject}>
+                저장만
+              </Button>
+              <Button size="sm" onClick={() => setConfirmSend(true)} disabled={busy || !subject}>
+                ClassNote 발송
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}

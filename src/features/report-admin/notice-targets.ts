@@ -8,7 +8,7 @@ import { isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard"
  */
 
 /** 발송 가능 과목 키 → 실보드 prefix. classnote-guard CLASSNOTE_SENDABLE_SUBJECTS와 동일 목록 유지. */
-const BOARD_PREFIX: Record<string, string> = {
+export const BOARD_PREFIX: Record<string, string> = {
   math: "(수학)",
   subject_1: "(수학)",
   english: "(영어)",
