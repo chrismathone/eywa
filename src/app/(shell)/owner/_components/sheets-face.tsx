@@ -80,7 +80,9 @@ export async function SheetsFace({
         <p className="text-muted-foreground mt-1 max-w-3xl text-sm">
           과목마다 <strong>전용 구글 시트</strong>를 등록하고 켜면 그 과목 시간표 화면에 ‘시트 반영’ 버튼이
           생깁니다(원장 전용). 누르면 등록한 시트에 현재 시간표가 <strong>통째로 덮어쓰기</strong>됩니다.
-          <br />⚠️ 전체 덮어쓰기라 <strong>과목마다 서로 다른 시트</strong>를 써야 합니다(수학·영어를 한 시트에 섞지 마세요).
+        </p>
+        <p className="text-muted-foreground mt-2 max-w-3xl text-sm">
+          ⚠️ 전체 덮어쓰기라 <strong>과목마다 서로 다른 시트</strong>를 써야 합니다(수학·영어를 한 시트에 섞지 마세요).
         </p>
       </header>
 
