@@ -162,7 +162,7 @@ export function auditDetail(
         : `대상 ${n}명 발송 대기(큐 적재 — 연동 PC가 순차 게시)`;
     }
     case "classnote_notice_edit":
-      return "발송 전(대기) 공지 내용 수정";
+      return m.posted ? "게시된 공지 내용 수정(게시글에 반영)" : "발송 전(대기) 공지 내용 수정";
     case "classnote_notice_delete":
       return "발송 전(대기) 공지 삭제";
     case "classnote_notice_revoke": {

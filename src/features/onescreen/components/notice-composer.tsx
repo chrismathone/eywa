@@ -12,6 +12,7 @@ import {
   sendOnescreenNotice,
   listMyOnescreenNotices,
   editQueuedNotice,
+  editPostedNotice,
   deleteQueuedNotice,
   cancelOnescreenNotice,
   type OnescreenNoticeRow,
@@ -37,6 +38,10 @@ function statusLabel(s: string): { label: string; cls: string } {
       return { label: "게시취소 요청됨(연동 PC 처리 대기)", cls: "text-text-dim" };
     case "revoking":
       return { label: "게시취소 처리 중", cls: "text-text-dim" };
+    case "edit_requested":
+      return { label: "수정 요청됨(연동 PC 처리 대기)", cls: "text-text-dim" };
+    case "editing":
+      return { label: "수정 처리 중", cls: "text-text-dim" };
     case "revoked":
       return { label: "게시취소됨(회수)", cls: "text-danger" };
     case "revoke_partial":
@@ -144,14 +149,16 @@ export function NoticeComposer({
     }
   }
 
-  async function saveEdit(id: string) {
-    const res = await editQueuedNotice(id, editBody);
+  // 대기건=editQueuedNotice(발송 전 본문 교체), 게시건=editPostedNotice(연동 PC가 게시글 PATCH). 상태로 라우팅.
+  async function saveEdit(row: OnescreenNoticeRow) {
+    const posted = row.status !== "queued";
+    const res = posted ? await editPostedNotice(row.id, editBody) : await editQueuedNotice(row.id, editBody);
     if (!res.ok) {
       toast.error(res.error ?? "수정에 실패했습니다");
       if (res.reason === "already_sent") void refreshHistory();
       return;
     }
-    toast.success("공지를 수정했습니다");
+    toast.success(posted ? "게시 공지 수정을 요청했습니다 — 연동 PC가 게시글에 반영합니다" : "공지를 수정했습니다");
     setEditingId(null);
     void refreshHistory();
   }
@@ -358,22 +365,24 @@ export function NoticeComposer({
                         ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
+                        {/* 수정 = 대기건(발송 전 교체) + 게시건(게시글 PATCH). 삭제 = 대기건만. 게시취소 = 게시건. */}
+                        {(r.status === "queued" || r.canRevoke) && !editing ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingId(r.id);
+                              setEditBody(r.body);
+                            }}
+                            title={r.status === "queued" ? "발송 전 내용 수정" : "게시된 글의 내용을 바로 수정"}
+                          >
+                            수정
+                          </Button>
+                        ) : null}
                         {r.status === "queued" && !editing ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingId(r.id);
-                                setEditBody(r.body);
-                              }}
-                            >
-                              수정
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => del(r.id)}>
-                              삭제
-                            </Button>
-                          </>
+                          <Button size="sm" variant="ghost" onClick={() => del(r.id)}>
+                            삭제
+                          </Button>
                         ) : null}
                         {r.canRevoke && !editing ? (
                           <Button size="sm" variant="ghost" onClick={() => revoke(r.id)} title="학부모 게시판에서 이 공지 글을 삭제(회수)">
@@ -382,7 +391,7 @@ export function NoticeComposer({
                         ) : null}
                         {editing ? (
                           <>
-                            <Button size="sm" onClick={() => saveEdit(r.id)}>
+                            <Button size="sm" onClick={() => saveEdit(r)}>
                               저장
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
