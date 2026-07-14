@@ -99,7 +99,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
       {/* KPI */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <Kpi label="전체 신청" value={`${stats.total}건`} icon={BookText} color="blue" />
-        <Kpi label="처리 대기" value={`${stats.pending}건`} icon={Clock} color="amber" hint="신청·주문·배부" />
+        <Kpi label="처리 대기" value={`${stats.pending}건`} icon={Clock} color="amber" hint="등록·납부·주문 미완" />
         <Kpi label="미납 합계" value={won(stats.unpaidAmount)} icon={CircleDollarSign} color="danger" />
         <Kpi label="총 신청액" value={won(stats.totalAmount)} icon={Receipt} color="primary" />
       </section>
