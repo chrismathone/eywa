@@ -165,6 +165,10 @@ export function auditDetail(
       return "발송 전(대기) 공지 내용 수정";
     case "classnote_notice_delete":
       return "발송 전(대기) 공지 삭제";
+    case "classnote_notice_revoke": {
+      const c = num(m.reportCount);
+      return c === null ? "게시된 공지 게시취소(회수)" : `게시된 공지 ${c}건 게시취소(회수)`;
+    }
     case "student_import": {
       const inserted = num(m.inserted);
       if (inserted === null) return null;

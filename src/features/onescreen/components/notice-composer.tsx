@@ -12,6 +12,7 @@ import {
   listMyOnescreenNotices,
   editQueuedNotice,
   deleteQueuedNotice,
+  cancelOnescreenNotice,
   type OnescreenNoticeRow,
 } from "../server/notice-actions";
 import type { OneScreenStudent } from "../types";
@@ -31,6 +32,14 @@ function statusLabel(s: string): { label: string; cls: string } {
       return { label: "일부 게시", cls: "text-amber" };
     case "failed":
       return { label: "게시 실패", cls: "text-danger" };
+    case "revoke_requested":
+      return { label: "게시취소 요청됨(연동 PC 처리 대기)", cls: "text-text-dim" };
+    case "revoking":
+      return { label: "게시취소 처리 중", cls: "text-text-dim" };
+    case "revoked":
+      return { label: "게시취소됨(회수)", cls: "text-danger" };
+    case "revoke_partial":
+      return { label: "일부 회수", cls: "text-amber" };
     default:
       return { label: s, cls: "text-text-faint" };
   }
@@ -150,6 +159,17 @@ export function NoticeComposer({
     void refreshHistory();
   }
 
+  async function revoke(id: string) {
+    if (!window.confirm("게시된 공지를 학부모 게시판에서 삭제(회수)할까요? 연동 PC가 순차 처리합니다.")) return;
+    const res = await cancelOnescreenNotice(id);
+    if (!res.ok) {
+      toast.error(res.error ?? "게시취소에 실패했습니다");
+      return;
+    }
+    toast.success("게시취소를 요청했습니다 — 연동 PC가 처리하면 게시판에서 삭제됩니다");
+    void refreshHistory();
+  }
+
   const selectedCount = students.filter((s) => checked.has(s.id)).length;
 
   return (
@@ -264,6 +284,28 @@ export function NoticeComposer({
                         <p className="text-text-faint mt-0.5 text-[11px]">
                           <span className={st.cls}>{st.label}</span> · 대상 {r.targetCount}명
                         </p>
+                        {/* 게시된 리포트 주소(회수·확인용) — 최대 5개 링크, 초과분은 개수만. */}
+                        {r.reportLinks.length ? (
+                          <p className="text-text-faint mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px]">
+                            <span>게시글 {r.reportLinks.length}개:</span>
+                            {r.reportLinks.slice(0, 5).map((l, i) =>
+                              l.url ? (
+                                <a
+                                  key={i}
+                                  href={l.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={`underline ${l.revoked ? "text-text-faint line-through" : "text-primary"}`}
+                                >
+                                  #{i + 1}
+                                </a>
+                              ) : (
+                                <span key={i} className="text-text-faint">#{i + 1}</span>
+                              ),
+                            )}
+                            {r.reportLinks.length > 5 ? <span>…</span> : null}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
                         {r.status === "queued" && !editing ? (
@@ -282,6 +324,11 @@ export function NoticeComposer({
                               삭제
                             </Button>
                           </>
+                        ) : null}
+                        {r.canRevoke && !editing ? (
+                          <Button size="sm" variant="ghost" onClick={() => revoke(r.id)} title="학부모 게시판에서 이 공지 글을 삭제(회수)">
+                            게시취소
+                          </Button>
                         ) : null}
                         {editing ? (
                           <>

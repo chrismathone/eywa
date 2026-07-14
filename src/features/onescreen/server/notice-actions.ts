@@ -161,32 +161,99 @@ export type OnescreenNoticeRow = {
   error: string | null;
   createdAt: string;
   processedAt: string | null;
+  reportLinks: { url: string; revoked: boolean }[]; // 게시된 리포트 주소(회수용 워커가 캡처) — 없으면 구버전/미게시
+  canRevoke: boolean; // 게시취소 가능(게시됨 + 캡처 id 있음 + 아직 회수 안 됨)
 };
 
-/** 내가 보낸 공지 이력(20건) — 대기건 수정/삭제 UI의 소스. created_by=본인만. */
+// results(jsonb)에서 게시된 리포트 링크 평탄화 — 게시 결과 results[].reports[] 또는 회수 결과 results[].revoked[].
+function flattenReportLinks(results: unknown): { url: string; revoked: boolean }[] {
+  if (!Array.isArray(results)) return [];
+  const out: { url: string; revoked: boolean }[] = [];
+  for (const r of results as Array<Record<string, unknown>>) {
+    const reps = (Array.isArray(r.reports) ? r.reports : Array.isArray(r.revoked) ? r.revoked : []) as Array<
+      Record<string, unknown>
+    >;
+    for (const rep of reps) {
+      if (typeof rep.url === "string" && rep.url) out.push({ url: rep.url, revoked: rep.revoked === true });
+      else if (rep.id != null) out.push({ url: "", revoked: rep.revoked === true }); // id는 있으나 url 조립 실패
+    }
+  }
+  return out;
+}
+
+/** 내가 보낸 공지 이력(20건) — 대기건 수정/삭제·게시건 게시취소 UI의 소스. created_by=본인만. */
 export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: OnescreenNoticeRow[]; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("classnote_notices")
-    .select("id, body, targets, status, error, created_at, processed_at")
+    .select("id, body, targets, status, results, error, created_at, processed_at")
     .eq("created_by", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) return { ok: false, error: error.message };
   return {
     ok: true,
-    rows: (data ?? []).map((r) => ({
-      id: r.id as string,
-      body: r.body as string,
-      targetCount: Array.isArray(r.targets) ? r.targets.length : 0,
-      status: r.status as string,
-      error: r.error as string | null,
-      createdAt: r.created_at as string,
-      processedAt: r.processed_at as string | null,
-    })),
+    rows: (data ?? []).map((r) => {
+      const status = r.status as string;
+      const links = flattenReportLinks(r.results);
+      // 게시취소 가능 = 게시됨(success/partial) + 캡처된 리포트 id(=워커 신버전) 있음 + 아직 회수 안 됨.
+      const hasLive = links.some((l) => !l.revoked);
+      const canRevoke = (status === "success" || status === "partial") && hasLive;
+      return {
+        id: r.id as string,
+        body: r.body as string,
+        targetCount: Array.isArray(r.targets) ? r.targets.length : 0,
+        status,
+        error: r.error as string | null,
+        createdAt: r.created_at as string,
+        processedAt: r.processed_at as string | null,
+        reportLinks: links,
+        canRevoke,
+      };
+    }),
   };
+}
+
+/**
+ * 게시취소(회수) — 게시된 공지의 실제 ClassNote 글을 삭제 요청(status='revoke_requested').
+ * 연동 PC 워커가 저장된 리포트 id를 대조 후 DELETE(비동기). 본인 공지 + 게시됨 + 캡처 id 있을 때만.
+ * ⚠️ 캡처 id 없는 구버전 발송분은 회수 불가(워커가 지울 대상 정보 없음) — 명확 안내.
+ */
+export async function cancelOnescreenNotice(noticeId: string): Promise<MutateResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("classnote_notices")
+    .select("status, created_by, results")
+    .eq("id", noticeId)
+    .maybeSingle();
+  if (!row) return { ok: false, reason: "not_found", error: "공지를 찾을 수 없습니다" };
+  if (row.created_by !== user.id) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 회수할 수 있습니다" };
+  if (row.status !== "success" && row.status !== "partial")
+    return { ok: false, error: "게시 완료된 공지만 게시취소할 수 있습니다" };
+  const links = flattenReportLinks(row.results);
+  if (!links.some((l) => !l.revoked))
+    return { ok: false, error: "회수할 게시글 정보가 없습니다(연동 PC 업데이트 전 발송분은 ClassNote 앱에서 직접 삭제)" };
+
+  // status='queued' 아닌 게시완료건이라 status 가드로 원자 전환(동시 회수 레이스 방지).
+  const { data } = await supabase
+    .from("classnote_notices")
+    .update({ status: "revoke_requested", processing_at: null })
+    .eq("id", noticeId)
+    .eq("created_by", user.id)
+    .in("status", ["success", "partial"])
+    .select("id");
+  if (!data || data.length === 0) return explainZeroRows(supabase, noticeId, user.id);
+  await logAction({
+    action: "classnote_notice_revoke",
+    targetType: "classnote_notice",
+    targetLabel: "학부모 공지 게시취소",
+    metadata: { noticeId, reportCount: links.filter((l) => !l.revoked).length },
+  });
+  return { ok: true };
 }
 
 // 대기(queued) 상태에서만 수정/삭제 — 워커가 집어(processing 이상)가면 불가. ownership=created_by(본인 공지만).
