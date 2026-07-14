@@ -8,6 +8,7 @@ import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
   buildMakeupStudent,
+  loadMakeupHistory,
   generateReportComment,
   reissueShareLink,
   revokeShareLink,
@@ -116,6 +117,8 @@ export function OneScreenClient({
 }) {
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
+  // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
+  const [prevLoaded, setPrevLoaded] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
   const [view, setView] = useState<"card" | "grid" | "status" | "history">("card"); // 카드(학생별) ↔ 표(대량작성) ↔ 발송 현황 ↔ 지난 보고서
@@ -277,6 +280,38 @@ export function OneScreenClient({
     setReports((prev) => ({ ...prev, [st.id]: initReports([st])[st.id] ?? {} }));
     setSelId(st.id);
     toast.success(`${st.name} (보강) 추가됨`);
+  }
+  // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
+  async function loadMakeupPrev(studentId: string) {
+    const res = await loadMakeupHistory(studentId);
+    if (!res.ok || !res.bySubject) {
+      toast.error(res.error ?? "이전 진도를 불러오지 못했습니다");
+      return;
+    }
+    const bySubject = res.bySubject;
+    const prevScore = res.prevScore;
+    setStudents((prev) =>
+      prev.map((s) => {
+        if (s.id !== studentId) return s;
+        return {
+          ...s,
+          subjects: s.subjects.map((su) => {
+            const h = bySubject[su.subjectKey ?? ""] ?? bySubject[su.name];
+            return h ? { ...su, prev: h.prev, prevReport: h.prevReport } : su;
+          }),
+          tests: prevScore
+            ? {
+                daily: { ...s.tests.daily, prevScore: prevScore.daily },
+                check: { ...s.tests.check, prevScore: prevScore.check },
+              }
+            : s.tests,
+        };
+      }),
+    );
+    setPrevLoaded((prev) => new Set(prev).add(studentId));
+    toast.success(
+      Object.keys(bySubject).length ? "이전 진도를 불러왔습니다" : "이전 보고서가 없습니다",
+    );
   }
   function setScoreFor(studentId: string, which: "daily" | "check", v: number | null) {
     patch(studentId, (s) => ({ ...s, tests: { ...s.tests, [which]: { ...s.tests[which], score: v } } }));
@@ -891,6 +926,11 @@ export function OneScreenClient({
                 onConfirm={confirmProgress}
                 onProgress={setProgress}
                 onStudyGrade={setStudyGrade}
+                onLoadPrev={
+                  selected.isMakeup && !prevLoaded.has(selected.id)
+                    ? () => loadMakeupPrev(selected.id)
+                    : undefined
+                }
               />
               <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
             </div>

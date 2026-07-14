@@ -18,7 +18,8 @@ import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import type { OneScreenStudent } from "../types";
+import { parseExamScores } from "../exam-info";
+import type { OneScreenStudent, PrevReport } from "../types";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -548,4 +549,63 @@ export async function buildMakeupStudent(
     reportSent: false,
   };
   return { ok: true, student };
+}
+
+/**
+ * 보강(수업외) 학생 '이전 진도 불러오기' — buildMakeupStudent는 경량이라 직전 회차를 안 담는다.
+ * 강사가 버튼을 누르면 그 학생의 (과목)별 직전 lesson_reports를 당겨와 prev/prevReport로 반환(roster와 동일 규격).
+ * prevScore(일일/확인)는 학생 단위 최신 회차의 exam_info로.
+ */
+export async function loadMakeupHistory(studentId: string): Promise<{
+  ok: boolean;
+  bySubject?: Record<string, { prev: string; prevReport: PrevReport }>;
+  prevScore?: { daily: number | null; check: number | null };
+  error?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!studentId) return { ok: false, error: "학생 정보가 없습니다" };
+  const supabase = await createClient();
+  const settings = await getTenantSettings();
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+
+  // 오늘 이전(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
+  const { data } = await supabase
+    .from("lesson_reports")
+    .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
+    .eq("student_id", studentId)
+    .lt("report_date", kstToday())
+    .order("report_date", { ascending: false })
+    .limit(50);
+  const rows = data ?? [];
+
+  const bySubject: Record<string, { prev: string; prevReport: PrevReport }> = {};
+  for (const r of rows) {
+    const key = (r.subject as string | null) ?? "";
+    if (key in bySubject) continue; // report_date desc라 (과목) 첫 건이 직전 회차
+    const label = subjectMaps.labelOf(key);
+    const rawProg = r.progress as string | null;
+    // 저장 progress는 "라벨 + 진도"라 라벨 접두를 벗겨 깨끗한 이전 진도 텍스트로.
+    const prog =
+      rawProg && label && rawProg.startsWith(label)
+        ? rawProg.slice(label.length).trim() || rawProg
+        : rawProg;
+    bySubject[key] = {
+      prev: prog ?? "",
+      prevReport: {
+        date: r.report_date as string,
+        progress: prog ?? null,
+        textbook: (r.textbook as string | null) ?? null,
+        homeworkToday: (r.homework_today as string | null) ?? null,
+        homeworkScore: (r.homework_score as string | null) ?? null,
+        attitude: (r.attitude as string | null) ?? null,
+        examInfo: (r.exam_info as string | null) ?? null,
+        note: (r.notes as string | null) ?? null,
+      },
+    };
+  }
+  // prevScore = 학생 단위 최신 직전 회차의 exam_info(과목 무관, DeltaChip 폴백과 동일).
+  const first = rows[0];
+  const prevScore = first ? parseExamScores(first.exam_info as string | null) : { daily: null, check: null };
+  return { ok: true, bySubject, prevScore };
 }
