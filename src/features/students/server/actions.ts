@@ -12,9 +12,17 @@ import {
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
 import { currentPeriod, isCommentCategory } from "../grades-meta";
+import { resolveUniqueStudentName } from "../name-suffix";
 
 export type StudentFormState =
-  | { error?: string; fieldErrors?: Record<string, string>; ok?: true; redirectTo?: string; nonce?: number }
+  | {
+      error?: string;
+      fieldErrors?: Record<string, string>;
+      ok?: true;
+      redirectTo?: string;
+      nonce?: number;
+      notice?: string; // 이름 중복으로 접미사(A·B·C)가 강제 부여됐을 때 안내.
+    }
   | undefined;
 
 const STATUSES = ["prospect", "consulted", "enrolled", "on_hold", "withdrawn"] as const;
@@ -107,11 +115,20 @@ export async function createStudent(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+
+  // 이름 중복 방지 — 같은 이름이 이미 있으면 다음 빈 알파벳 접미사(A·B·C…) 강제(ijw/makeedu 규약).
+  // 테넌트 전체 이름(퇴원 포함)과 대조해 표시 이름을 절대 유일하게. (수백 명 수준, fetchAllPaged=B2 안전)
+  const existingNames = await fetchAllPaged<{ name: string | null }>((from, to) =>
+    supabase.from("students").select("name").eq("tenant_id", user.tenantId).range(from, to),
+  );
+  const takenNames = new Set(existingNames.map((r) => (r.name ?? "").trim()).filter(Boolean));
+  const resolvedName = resolveUniqueStudentName(input.name, takenNames);
+
   const { data, error } = await supabase
     .from("students")
     .insert({
       tenant_id: user.tenantId,
-      name: input.name,
+      name: resolvedName.name,
       english_name: input.englishName,
       classnote_name: input.classnoteName,
       grade: input.grade,
@@ -151,7 +168,14 @@ export async function createStudent(
   revalidatePath("/students");
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·동시편집 신호·이동(B-2).
   // (redirect()면 NEXT_REDIRECT throw로 폼의 nonce 효과가 안 돌아 'student:new' 초안이 안 비워진다.)
-  return { ok: true, redirectTo: `/students/${data.id}`, nonce: Date.now() };
+  return {
+    ok: true,
+    redirectTo: `/students/${data.id}`,
+    nonce: Date.now(),
+    notice: resolvedName.suffixed
+      ? `이미 '${input.name}' 학생이 있어 '${resolvedName.name}'(으)로 등록했습니다.`
+      : undefined,
+  };
 }
 
 export async function updateStudent(

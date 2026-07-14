@@ -123,6 +123,7 @@ export function StudentForm({
       clearDraft();
       notifySaved();
       markSaved(); // dirty 해제 → 저장 후 닫아도 확인 안 뜸
+      if (state.notice) alert(state.notice); // 이름 중복으로 접미사(A·B·C) 강제된 경우 안내
       if (state.redirectTo) router.push(state.redirectTo);
     }
   }, [state, notifySaved, markSaved, router, clearDraft]);
