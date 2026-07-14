@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 
 // 교재신청(textbook_orders) — 수납관리 창의 '교재' 책갈피 면. tenant 스코프는 RLS가 강제.
 export type TextbookOrderRow = {
@@ -41,25 +41,30 @@ function sanitize(q: string) {
   return q.replace(/[%,()*\\]/g, " ").trim();
 }
 
-export async function getTextbookOrdersPage(
-  opts: { status?: string; q?: string } = {},
-  page = 1,
-  pageSize = PAGE,
-): Promise<{ rows: TextbookOrderRow[]; total: number }> {
-  const supabase = await createClient();
-  const from = (page - 1) * pageSize;
-  let qb = supabase
-    .from("textbook_orders")
-    .select(
-      "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
-      { count: "exact" },
-    );
-  if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
-  const term = opts.q ? sanitize(opts.q) : "";
-  if (term) qb = qb.or(`book_name.ilike.%${term}%,student_name.ilike.%${term}%`);
-  qb = qb.order("request_date", { ascending: false, nullsFirst: false }).range(from, from + pageSize - 1);
-  const { data, count } = await qb;
-  const rows: TextbookOrderRow[] = (data ?? []).map((r) => ({
+const ORDER_COLS =
+  "id, book_name, book_detail, student_id, student_name, teacher_name, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at";
+
+type DbOrderRow = {
+  id: string;
+  book_name: string;
+  book_detail: string | null;
+  student_id: string | null;
+  student_name: string | null;
+  teacher_name: string | null;
+  price: string | number;
+  status: string;
+  request_date: string | null;
+  notes: string | null;
+  registered_at: string | null;
+  ordered_at: string | null;
+  paid_at: string | null;
+  status_by_name: string | null;
+  status_at: string | null;
+  created_at: string;
+};
+
+function mapOrderRow(r: DbOrderRow): TextbookOrderRow {
+  return {
     id: r.id,
     bookName: r.book_name,
     bookDetail: r.book_detail,
@@ -79,8 +84,40 @@ export async function getTextbookOrdersPage(
     statusByName: r.status_by_name,
     statusAt: r.status_at,
     createdAt: r.created_at,
-  }));
-  return { rows, total: count ?? rows.length };
+  };
+}
+
+/** 등록·납부·주문 3체크 전부 = 완료(request-history isDone과 동일 판정). */
+function isOrderDone(r: TextbookOrderRow): boolean {
+  return r.registered && r.ordered && r.paid;
+}
+
+export async function getTextbookOrdersPage(
+  opts: { status?: string; q?: string } = {},
+  page = 1,
+  pageSize = PAGE,
+): Promise<{ rows: TextbookOrderRow[]; total: number }> {
+  const supabase = await createClient();
+  const term = opts.q ? sanitize(opts.q) : "";
+  // 완료(3체크)를 목록 맨 아래로 내리려면 페이지 경계를 넘는 전체 정렬이 필요 → 전건 fetch 후 JS 정렬·페이지네이션.
+  // 교재신청은 테넌트당 수백 건 수준이라 안전(B2: 무페이징 select가 아닌 fetchAllPaged). 강사 뷰(getTextbookOrdersForStudents)는 무관.
+  const all = await fetchAllPaged<DbOrderRow>((from, to) => {
+    let qb = supabase.from("textbook_orders").select(ORDER_COLS);
+    if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
+    if (term) qb = qb.or(`book_name.ilike.%${term}%,student_name.ilike.%${term}%`);
+    return qb.order("request_date", { ascending: false, nullsFirst: false }).order("id").range(from, to);
+  });
+
+  const rows = all.map(mapOrderRow);
+  // 미완료(작업 대상)를 위로, 완료는 아래로. 각 그룹 안은 신청일 최신순 유지(날짜 없으면 뒤로).
+  rows.sort((a, b) => {
+    const done = (isOrderDone(a) ? 1 : 0) - (isOrderDone(b) ? 1 : 0);
+    if (done !== 0) return done;
+    return (b.requestDate ?? "").localeCompare(a.requestDate ?? "");
+  });
+
+  const start = (page - 1) * pageSize;
+  return { rows: rows.slice(start, start + pageSize), total: rows.length };
 }
 
 // 교재요청서(인쇄·PNG)용 단건 조회. RLS가 테넌트 격리. 학생 학년·학교는 카드 부제로 노출.
