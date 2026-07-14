@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type ReactNode } from "react";
+import { useActionState, useEffect, useId, useRef, type ReactNode } from "react";
 import { saveOwnerSection, type OwnerSaveState } from "@/features/owner/server/actions";
 import type { SectionKey } from "@/features/owner/settings-types";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
@@ -15,14 +15,18 @@ export function SectionForm({
   section,
   payload,
   savedNonce,
+  footer,
   children,
 }: {
   section: SectionKey;
   payload: unknown;
   /** 폼 밖에서 서버 확정된 변경(과목 흡수 삭제 등) 신호 — baseline 재스냅샷(거짓 '미저장' 확인 방지). */
   savedNonce?: number;
+  /** 폼 밖 즉시저장 카드(예: 강의실 CRUD). 폼과 저장 바 사이에 렌더 — 중첩 <form> 없이 저장 바를 창 하단에 고정. */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
+  const formId = useId();
   const [state, formAction, pending] = useActionState<OwnerSaveState, FormData>(
     saveOwnerSection,
     undefined,
@@ -62,22 +66,28 @@ export function SectionForm({
   }, [savedNonce, markSaved, notifySaved]);
 
   return (
-    <form action={formAction} ref={formRef} className="space-y-5">
-      <input type="hidden" name="section" value={section} />
-      <input type="hidden" name="data" value={JSON.stringify(payload)} />
-      {children}
+    <div className="space-y-4">
+      <form id={formId} action={formAction} ref={formRef} className="space-y-5">
+        <input type="hidden" name="section" value={section} />
+        <input type="hidden" name="data" value={JSON.stringify(payload)} />
+        {children}
+      </form>
+      {/* 폼 밖 즉시저장 카드(예: 강의실 CRUD)는 폼과 저장 바 사이에 둔다 — 중첩 <form> 방지 + 저장 바가
+          전체 콘텐츠의 맨 아래(창 하단)에 sticky로 붙도록. 저장 버튼은 form 속성으로 위 폼과 연결. */}
+      {footer}
       <FormActionBar>
         {state?.ok ? <span className="text-primary mr-1 text-[12px] font-semibold">저장됨 · 테넌트 전체 적용</span> : null}
         {state?.error ? <span className="text-danger mr-1 text-[12px]">{state.error}</span> : null}
         <button
           type="submit"
+          form={formId}
           disabled={pending}
           className="bg-primary text-primary-foreground inline-flex items-center rounded-md px-4 py-2 text-[12px] font-bold disabled:opacity-60"
         >
           {pending ? "저장 중…" : "저장"}
         </button>
       </FormActionBar>
-    </form>
+    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import {
 } from "@/features/billing/server/textbook-queries";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TextbooksTable } from "./textbooks-table";
@@ -43,7 +44,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const academyName = settings.profile.name || "인재원";
   const logoUrl = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
-  const account = settings.billing.account;
+  const account = accountForTarget(settings.billing, "textbook");
 
   const chipHref = (s: string) => {
     const p = new URLSearchParams({ tab: "textbooks" });

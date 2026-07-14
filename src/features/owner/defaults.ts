@@ -148,7 +148,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     taxMode: "none",
     defaultMethod: "계좌이체",
     latePolicy: "",
-    account: { label: "", bank: "", holder: "", number: "", isDefault: false }, // 기본 계좌 미러(resolve가 accounts에서 채움)
+    account: { label: "", bank: "", holder: "", number: "", targets: [] }, // 하위호환 미러(resolve가 첫 계좌로 채움)
     accounts: [],
   },
   notifications: {

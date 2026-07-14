@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveSettings } from "./resolve";
+import { accountForTarget } from "./settings-types";
 import { DEFAULT_SETTINGS } from "./defaults";
 
 describe("resolveSettings", () => {
@@ -53,39 +54,38 @@ describe("resolveSettings", () => {
     expect(math).toEqual(subjects[1]);
   });
 
-  it("입금 계좌 역호환 — 옛 단일 account만 있으면 accounts로 승격 + 기본 계좌 미러", () => {
+  it("입금 계좌 역호환 — 옛 단일 account만 있으면 accounts로 승격(targets 미지정) + 첫 계좌 미러", () => {
     // 프로덕션 실저장 형태: accounts 없이 단일 account만(구버전)
     const r = resolveSettings(
       { billing: { account: { bank: "농협", holder: "원일", number: "302-1369-9501-91" } } },
       { name: "X" },
     );
     expect(r.billing.accounts).toHaveLength(1);
-    expect(r.billing.accounts[0]).toMatchObject({ bank: "농협", holder: "원일", number: "302-1369-9501-91", isDefault: true });
-    // 미러 — 레거시 account 필드도 기본 계좌를 가리킴(미이전 소비처 안전)
-    expect(r.billing.account.bank).toBe("농협");
-    expect(r.billing.account.isDefault).toBe(true);
+    expect(r.billing.accounts[0]).toMatchObject({ bank: "농협", holder: "원일", number: "302-1369-9501-91", targets: [] });
+    expect(r.billing.account.bank).toBe("농협"); // 미러 = 첫 계좌
   });
 
-  it("입금 계좌 — accounts 목록이 있으면 기본 지정 계좌가 미러, 기본 없으면 첫 계좌", () => {
+  it("입금 계좌 배선 — accountForTarget이 targets 지정 계좌를, 미지정 소비처는 첫 계좌로 폴백", () => {
     const accounts = [
-      { label: "A", bank: "국민", holder: "인재원", number: "111", isDefault: false },
-      { label: "B", bank: "신한", holder: "인재원", number: "222", isDefault: true },
+      { label: "메인", bank: "국민", holder: "인재원", number: "111", targets: [] },
+      { label: "교재비", bank: "신한", holder: "인재원", number: "222", targets: ["textbook"] },
     ];
     const r = resolveSettings({ billing: { accounts } }, { name: "X" });
-    expect(r.billing.account.bank).toBe("신한"); // isDefault 계좌가 미러
-    // 기본 지정이 하나도 없으면 첫 계좌를 기본으로 승격
-    const r2 = resolveSettings(
-      { billing: { accounts: accounts.map((a) => ({ ...a, isDefault: false })) } },
-      { name: "X" },
-    );
-    expect(r2.billing.accounts[0].isDefault).toBe(true);
-    expect(r2.billing.account.bank).toBe("국민");
+    expect(accountForTarget(r.billing, "textbook").bank).toBe("신한"); // 배선된 계좌
+    expect(accountForTarget(r.billing, "quote").bank).toBe("국민"); // 미배선 → 첫 계좌 폴백
+    expect(r.billing.account.bank).toBe("국민"); // 미러 = 첫 계좌
+  });
+
+  it("입금 계좌 — 알 수 없는 target 키는 걸러진다", () => {
+    const accounts = [{ label: "", bank: "우리", holder: "인재원", number: "333", targets: ["textbook", "bogus"] }];
+    const r = resolveSettings({ billing: { accounts } }, { name: "X" });
+    expect(r.billing.accounts[0].targets).toEqual(["textbook"]);
   });
 
   it("입금 계좌 — 저장값 없으면 빈 목록 + 빈 미러", () => {
     const r = resolveSettings(null, { name: "X" });
     expect(r.billing.accounts).toEqual([]);
-    expect(r.billing.account).toEqual({ label: "", bank: "", holder: "", number: "", isDefault: false });
+    expect(r.billing.account).toEqual({ label: "", bank: "", holder: "", number: "", targets: [] });
   });
 
   it("기본 객체를 변형하지 않는다(공유 참조 안전)", () => {

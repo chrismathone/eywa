@@ -7,7 +7,7 @@ import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
 import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { defaultAccountOf } from "@/features/owner/settings-types";
+import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TuitionCalculator } from "./tuition-calculator";
@@ -78,8 +78,7 @@ async function CalculatorTab({ qid }: { qid?: string }) {
       academyName={settings.profile.name || "인재원"}
       logoSrc={logoSrc}
       defaultPeriod={currentPeriod()}
-      defaultAccount={defaultAccountOf(settings.billing)}
-      accounts={settings.billing.accounts}
+      defaultAccount={accountForTarget(settings.billing, "quote")}
       holidays={settings.operations.holidays.map((h) => h.date)}
       catalog={catalog}
       textbooks={textbooks}

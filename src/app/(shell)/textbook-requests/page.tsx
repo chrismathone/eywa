@@ -2,6 +2,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { accountForTarget } from "@/features/owner/settings-types";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import {
@@ -50,7 +51,7 @@ export default async function TextbookRequestsPage() {
       isTeacher={isTeacher}
       academyName={settings.profile.name || "인재원"}
       logoUrl={logoUrl}
-      account={settings.billing.account}
+      account={accountForTarget(settings.billing, "textbook")}
       requesterName={user.displayName}
     />
   );

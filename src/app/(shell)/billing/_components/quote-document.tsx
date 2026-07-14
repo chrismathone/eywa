@@ -32,7 +32,7 @@ export function QuoteDocument({
   showLogo?: boolean;
   /** 헤더에 학원명 텍스트 표시 여부. */
   showName?: boolean;
-  /** 입금 계좌(은행/예금주/계좌번호) — 기본값은 학원설정(billing.account), 계산기에서 수정 가능. */
+  /** 입금 계좌(은행/예금주/계좌번호) — 학원설정에서 '수강료 계산기'에 배선된 계좌, 계산기에서 수정 가능. */
   account?: AccountSetting;
   /** 안내문에 입금 계좌 안내 박스를 표시할지(계산기 체크박스). off면 계좌가 있어도 숨김. */
   showAccount?: boolean;

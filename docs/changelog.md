@@ -25,13 +25,13 @@
 - 효과: 실데이터 10세션 → **5행**(집망 크롬 6세션이 한 줄 "세션 6개"로 접힘). 낯선 IP는 각 한 줄로 또렷 = 보안 검토값 유지. **데이터 쿼리·세션 정책은 불변(표시만)**.
 - ⚠️ 목록은 여전히 최근 10세션만 조회 후 그룹핑(`auth.sessions` 전체 개수 확인/오래된 세션 폐기는 별도 과제).
 
-### 입금 계좌 다계좌 모델 + 수강료 계산기 안내문 계좌 박스 (2026-07-13) — ✅ tsc0/lint0/test(resolve9)/실미리보기
-원장 "입금 계좌를 몇 개 등록해두고 연결된 곳(교재요청서·수강료 계산기)에 기본 계좌가 디폴트로 들어가게". 단일 계좌 → **다계좌 모델**로 확장.
-- **스키마** [settings-types.ts](../src/features/owner/settings-types.ts): `accountSchema`에 `label`·`isDefault` 추가 + `billing.accounts[]`(≤12, superRefine 기본 ≤1) + 헬퍼 `defaultAccountOf(billing)`(isDefault→첫 계좌→레거시 account 폴백).
-- **resolve** [resolve.ts](../src/features/owner/resolve.ts) `normalizeBilling`: 옛 단일 `account`만 있던 테넌트를 `accounts`로 **자동 승격**(기본 1개 보장) + **레거시 `account`를 기본 계좌 미러로 덮어씀** → 미이전 소비처(교재요청서 3곳)가 코드 변경 없이 기본 계좌를 봄("데이터 증발" 0). normalizeHolidays/Subjects와 같은 "읽기 시 승격" 패턴.
-- **폼** [billing-section.tsx](<../src/app/(shell)/owner/_components/billing-section.tsx>): 단일 3필드 → **목록 편집기**(별칭/은행/예금주/계좌번호 + 기본 라디오 + 추가·삭제, 저장 시 `account`=기본 계좌 미러 동기화).
-- **소비처**: 교재요청서(무변경, 미러) / 수강료 계산기 [tuition-calculator.tsx](<../src/app/(shell)/billing/_components/tuition-calculator.tsx>)= 견적저장 위 `입금 계좌 안내` 섹션(체크 토글 + 기본 계좌 프리필, 계좌 2개↑면 "저장된 계좌 불러오기" 드롭다운) / 안내문 [quote-document.tsx](<../src/app/(shell)/billing/_components/quote-document.tsx>)= **최종 납부 금액 위** 우측정렬 계좌 박스(인쇄 A4 1p 유지 `print:` 압축).
-- ⚠️ **새 계좌 소비처는 `defaultAccountOf(billing)`를 쓸 것**(`billing.account`는 deprecated 미러). 검증: tsc0/lint0/resolve.test 승격·미러·빈목록 3케이스 추가(9통과)/실미리보기(:3100).
+### 입금 계좌 다계좌 + 소비처별 배선(targets) 모델 + 수강료 계산기 안내문 계좌 박스 (2026-07-13) — ✅ lint0/owner test29/실미리보기
+원장 "입금 계좌를 몇 개 등록해두고, **학원설정에서 이 계좌가 어디에 배선될지(교재요청서·수강료 계산기)를 결정**". 단일 계좌 → **다계좌 + 소비처별 배선 모델**.
+- **스키마** [settings-types.ts](../src/features/owner/settings-types.ts): `accountSchema`에 `label`·`targets`(배선 소비처 키 목록) + `billing.accounts[]`(≤12) + 소비처 레지스트리 `ACCOUNT_TARGETS`(textbook/quote) + 헬퍼 **`accountForTarget(billing, key)`**(그 소비처 배선 계좌→첫 계좌→레거시 account 폴백). ⚠️ 새 계좌 소비처는 여기 한 줄 추가 + `accountForTarget`로 읽을 것(`billing.account`는 deprecated 미러).
+- **resolve** [resolve.ts](../src/features/owner/resolve.ts) `normalizeBilling`: 옛 단일 `account`만 있던 테넌트를 `accounts`로 **자동 승격**(targets 미지정 → 소비처는 첫 계좌 폴백) + 레거시 `account`를 첫 계좌 미러로 덮음(미이전 소비처 안전, "데이터 증발" 0) + 알 수 없는 target 키 필터. normalizeHolidays/Subjects와 같은 "읽기 시 승격" 패턴.
+- **폼** [billing-section.tsx](<../src/app/(shell)/owner/_components/billing-section.tsx>): 단일 3필드 → **목록 편집기**(별칭/은행/예금주/계좌번호 + **계좌별 '사용할 곳' 체크박스**(교재요청서/수강료 계산기, 한 화면=한 계좌 배타) + 추가·삭제).
+- **소비처 배선**: 교재요청서(print·목록·패널)=`accountForTarget(billing,"textbook")` / 수강료 계산기 [calculator-panel](<../src/app/(shell)/billing/_components/calculator-panel.tsx>)=`"quote"`. 계산기 안내문 [quote-document.tsx](<../src/app/(shell)/billing/_components/quote-document.tsx>)= **최종 납부 금액 위** 우측정렬 계좌 박스(체크 토글, 인쇄 A4 1p `print:` 압축). 계산기 계좌 드롭다운은 제거(선택=배선은 전부 학원설정에서), 필드는 자동채움+수정 가능.
+- 검증: eslint0/owner test29(resolve 승격·배선폴백·미지 키 필터·빈목록 4케이스)/실미리보기. ⚠️ 병렬 세션이 미커밋 재작성분을 stash로 쓸어담아 격리 워크트리로 복구 후 반영(직전 커밋 3868a6c의 isDefault 모델을 이 커밋이 대체).
 
 ### 단가표 회당 단가 배선 — `pricing_mode`를 CRUD UI에 노출(하드코딩·스크립트 의존 제거) (2026-07-13) — ✅ tsc0/lint0/test68/build✓
 회차 확정 datalist는 이미 DB(`tuition_catalog` where `pricing_mode='per_session'`)에서 읽었으나, 그 54행이 **일회성

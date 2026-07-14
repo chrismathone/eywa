@@ -138,41 +138,44 @@ export const operationsSchema = z
   });
 export type OperationsSettings = z.infer<typeof operationsSchema>;
 
+// 입금 계좌를 배선할 소비처(어느 화면의 기본 계좌로 쓸지) — 학원설정에서 계좌마다 지정.
+// ⚠️ 새 계좌 소비처를 추가하면 여기에 한 줄 추가 + 그 화면에서 accountForTarget(billing, key)로 읽을 것.
+export const ACCOUNT_TARGETS = [
+  { key: "textbook", label: "교재요청서" },
+  { key: "quote", label: "수강료 계산기" },
+] as const;
+export type AccountTargetKey = (typeof ACCOUNT_TARGETS)[number]["key"];
+const ACCOUNT_TARGET_KEYS = ACCOUNT_TARGETS.map((t) => t.key) as [AccountTargetKey, ...AccountTargetKey[]];
+
 // 입금 계좌 — 교재요청서·수강료 안내문 등에 표시되는 학원 계좌(은행/예금주/계좌번호).
-// 여러 개 등록 가능하고 그 중 하나를 '기본'으로 지정(isDefault) → 소비처의 디폴트값.
+// 여러 개 등록하고 계좌마다 '사용할 곳(targets)'을 지정 → 그 화면이 이 계좌를 기본으로 쓴다.
 export const accountSchema = z.object({
-  label: z.string().max(24).default(""), // 계좌 별칭(예: "메인", "교재비 전용") — 목록 구분·선택 표시용(선택)
+  label: z.string().max(24).default(""), // 계좌 별칭(예: "메인", "교재비 전용") — 목록 구분·표시용(선택)
   bank: z.string().max(40),
   holder: z.string().max(40),
   number: z.string().max(40),
-  isDefault: z.boolean().default(false), // 기본 계좌 여부 — 목록 중 최대 1개(소비처 디폴트)
+  // 이 계좌를 기본으로 쓸 소비처 키 목록(학원설정에서 지정). 한 소비처는 한 계좌에만(폼에서 배타 처리).
+  targets: z.array(z.enum(ACCOUNT_TARGET_KEYS)).default([]),
 });
 export type AccountSetting = z.infer<typeof accountSchema>;
 
-export const billingSchema = z
-  .object({
-    dueDay: z.number().int().min(1).max(31),
-    taxMode: z.enum(["none", "include", "exclude"]),
-    defaultMethod: z.string().max(24),
-    latePolicy: z.string().max(300),
-    // ⚠️ deprecated 단일 계좌 — 하위호환용 "기본 계좌 미러". resolve(normalizeBilling)가 accounts의 기본 계좌로 덮어쓴다.
-    // 미이전 소비처(교재요청서 등)가 이 필드만 읽어도 기본 계좌를 보게 하는 안전장치. 새 소비처는 accounts + defaultAccountOf().
-    account: accountSchema,
-    // 입금 계좌 목록(여러 개). 소비처는 기본 계좌(isDefault)를 디폴트로 사용하고, 필요 시 목록에서 선택.
-    accounts: z.array(accountSchema).max(12),
-  })
-  .superRefine((v, ctx) => {
-    // 기본 계좌는 최대 1개(폼 라디오와 이중 방어).
-    if (v.accounts.filter((a) => a.isDefault).length > 1) {
-      ctx.addIssue({ code: "custom", message: "기본 계좌는 하나만 지정할 수 있습니다", path: ["accounts"] });
-    }
-  });
+export const billingSchema = z.object({
+  dueDay: z.number().int().min(1).max(31),
+  taxMode: z.enum(["none", "include", "exclude"]),
+  defaultMethod: z.string().max(24),
+  latePolicy: z.string().max(300),
+  // ⚠️ deprecated 단일 계좌 — 하위호환용 미러. resolve(normalizeBilling)가 첫 계좌로 덮어쓴다(미이전 소비처 안전).
+  // 새 소비처는 accountForTarget(billing, key)로 배선된 계좌를 읽을 것(이 필드 직접 읽지 말 것).
+  account: accountSchema,
+  // 입금 계좌 목록(여러 개). 각 계좌의 targets로 소비처에 배선.
+  accounts: z.array(accountSchema).max(12),
+});
 export type BillingSettings = z.infer<typeof billingSchema>;
 
-/** 기본 입금 계좌 — 목록의 기본 지정(isDefault) → 첫 계좌 → 레거시 단일 account 순 폴백. 소비처의 디폴트값. */
-export function defaultAccountOf(billing: BillingSettings): AccountSetting {
+/** 소비처에 배선된 입금 계좌 — 그 소비처를 targets에 가진 계좌 → 첫 계좌 → 레거시 account 순 폴백. */
+export function accountForTarget(billing: BillingSettings, target: AccountTargetKey): AccountSetting {
   const list = billing.accounts ?? [];
-  return list.find((a) => a.isDefault) ?? list[0] ?? billing.account;
+  return list.find((a) => a.targets?.includes(target)) ?? list[0] ?? billing.account;
 }
 
 export const notificationsSchema = z.object({

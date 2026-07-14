@@ -23,8 +23,9 @@ export function OperationsSection({
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
 
   return (
-    <div className="space-y-4">
-    <SectionForm section="operations" payload={o}>
+    // 강의실은 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(중첩 <form> 방지 위해 폼 밖).
+    // footer로 넘겨 저장 바가 강의실 카드 아래(전체 콘텐츠 맨 끝)에 sticky로 붙게 한다(창 하단 고정).
+    <SectionForm section="operations" payload={o} footer={<ClassroomManager rooms={classrooms} />}>
       {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장.
           카드 배치는 키가 비슷한 것끼리 짝(평일|주말 = 교시 목록, 학년|직급 = 칩 목록) — 2열 그리드 빈 구멍 방지. */}
       <div className="grid items-start gap-4 xl:grid-cols-2">
@@ -82,9 +83,5 @@ export function OperationsSection({
       </SettingsCard>
       </div>
     </SectionForm>
-
-      {/* 강의실 = 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(SectionForm 밖). */}
-      <ClassroomManager rooms={classrooms} />
-    </div>
   );
 }
