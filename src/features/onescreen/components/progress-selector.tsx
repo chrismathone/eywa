@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import {
   CURRICULUM_GRADES,
   curriculumForGrade,
@@ -81,7 +81,7 @@ export function ProgressSelector({
             {selected.length}
           </span>
         ) : null}
-        <ChevronDownIcon className="text-text-faint pointer-events-none size-3.5 shrink-0" />
+        <ChevronDown className="text-text-faint pointer-events-none size-3.5 shrink-0" />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">

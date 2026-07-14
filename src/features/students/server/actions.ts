@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
   type WithdrawalMetadata,

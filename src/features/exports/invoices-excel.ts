@@ -30,7 +30,6 @@ export async function buildInvoicesWorkbook(
   sheet.columns = [
     { header: "학생명", key: "studentName", width: 14 },
     { header: "학년", key: "studentGrade", width: 8 },
-    { header: "담임", key: "teacher", width: 12 },
     { header: "카테고리", key: "category", width: 10 },
     { header: "청구액", key: "amountTotal", width: 12 },
     { header: "할인", key: "amountDiscount", width: 10 },
@@ -55,7 +54,6 @@ export async function buildInvoicesWorkbook(
     sheet.addRow({
       studentName: inv.studentName,
       studentGrade: inv.studentGrade ?? "—",
-      teacher: inv.teacherName ?? "—",
       category: CATEGORY_LABEL[inv.category] ?? inv.category,
       amountTotal: inv.amountTotal,
       amountDiscount: inv.amountDiscount,

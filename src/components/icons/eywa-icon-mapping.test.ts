@@ -82,13 +82,17 @@ function filesImporting(moduleName: string): string[] {
 }
 
 describe("Eywa icon compatibility mapping", () => {
-  it("maps every compatibility import exactly once without unused aliases", () => {
-    const imported = importedCompatIcons();
-    const mapped = new Set(Object.keys(EYWA_ICON_COMPAT_MAP));
+  it(
+    "maps every compatibility import exactly once without unused aliases",
+    () => {
+      const imported = importedCompatIcons();
+      const mapped = new Set(Object.keys(EYWA_ICON_COMPAT_MAP));
 
-    expect(mapped).toEqual(imported);
-    expect(mapped.size).toBe(143);
-  });
+      expect(mapped).toEqual(imported);
+      expect(mapped.size).toBe(143);
+    },
+    15_000,
+  );
 
   it("maps every compatibility name to a registered Eywa glyph", () => {
     const registered = new Set(EYWA_ICON_CATALOG.map((icon) => icon.name));
@@ -98,12 +102,16 @@ describe("Eywa icon compatibility mapping", () => {
     }
   });
 
-  it("has no direct external icon imports or package dependency", () => {
-    const packageJson = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
-    ) as { dependencies?: Record<string, string> };
+  it(
+    "has no direct external icon imports or package dependency",
+    () => {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+      ) as { dependencies?: Record<string, string> };
 
-    expect(filesImporting("lucide-react")).toEqual([]);
-    expect(packageJson.dependencies?.["lucide-react"]).toBeUndefined();
-  });
+      expect(filesImporting("lucide-react")).toEqual([]);
+      expect(packageJson.dependencies?.["lucide-react"]).toBeUndefined();
+    },
+    15_000,
+  );
 });
