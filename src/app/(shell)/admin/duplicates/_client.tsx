@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { GitMerge, Loader2 } from "lucide-react";
+import { GitMerge, Loader2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { mergeStudents, type MergeStudentsState } from "@/features/admin/server/actions";
 import type { DuplicateGroup } from "@/features/admin/server/queries";

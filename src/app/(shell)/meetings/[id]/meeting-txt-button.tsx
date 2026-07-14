@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import type {
   MeetingActionItem,

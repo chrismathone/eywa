@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import {
   AlertCircle, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
   type LucideIcon,
-} from "lucide-react";
+} from "@/components/icons/eywa-icon-compat";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";

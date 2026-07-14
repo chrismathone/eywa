@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, GraduationCap, MessagesSquare } from "lucide-react";
+import { CalendarClock, GraduationCap, MessagesSquare } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { ColumnCards } from "./column-cards";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";

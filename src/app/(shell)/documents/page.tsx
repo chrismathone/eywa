@@ -1,4 +1,4 @@
-import { Files } from "lucide-react";
+import { Files } from "@/components/icons/eywa-icon-compat";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";

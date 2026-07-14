@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { BookOpen, MessagesSquare, ScrollText } from "lucide-react";
+import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/eywa-icon-compat";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";

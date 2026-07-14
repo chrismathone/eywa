@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Loader2, Save } from "lucide-react";
+import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   updateWithdrawalReason,

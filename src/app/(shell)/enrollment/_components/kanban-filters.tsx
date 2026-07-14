@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
-import { BarChart3, LayoutGrid, List } from "lucide-react";
+import { BarChart3, LayoutGrid, List } from "@/components/icons/eywa-icon-compat";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { OUTCOME_OPTIONS } from "./outcome-meta";

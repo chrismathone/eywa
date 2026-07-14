@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Folder, FolderOpen } from "lucide-react";
+import { Folder, FolderOpen } from "@/components/icons/eywa-icon-compat";
 
 // 탐색기 좌측 폴더 팬 — 서식 분류 폴더 + (권한 있으면) 수납관리 연동 폴더(교재 요청서·수강료 견적서).
 // 서버 컴포넌트(함수 prop hrefFor는 같은 렌더 패스의 서버 부모가 넘김 — 클라 경계 없음).

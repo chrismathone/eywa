@@ -3,7 +3,7 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
-import { AlertTriangle, Loader2, Mic, Sparkles } from "lucide-react";
+import { AlertTriangle, Loader2, Mic, Sparkles } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   runStudentConsultationAnalysis,

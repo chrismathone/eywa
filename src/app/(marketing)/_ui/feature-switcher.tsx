@@ -9,11 +9,12 @@
 import { useState, type ReactNode } from "react";
 import { EyIcon, MENU_ICON } from "@/components/icons/eywa-icons";
 import { motionDisabled, prefersReducedMotion } from "@/components/workspace/motion";
+import type { MenuKey } from "@/lib/permissions";
 import { BrowserFrame } from "./browser-frame";
 
 export type Feature = {
   /** menuKey와 동일 — 아이콘은 MENU_ICON[key]에서 끌어온다(하드코딩 금지) */
-  key: string;
+  key: MenuKey;
   label: string;
   eyebrow: string;
   title: ReactNode;
@@ -54,7 +55,7 @@ export function FeatureSwitcher({ features }: { features: Feature[] }) {
                   : "text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <EyIcon name={MENU_ICON[t.key] ?? "spore"} size={15} className={on ? "text-white" : "text-text-faint"} />
+              <EyIcon name={MENU_ICON[t.key]} size={15} className={on ? "text-white" : "text-text-faint"} />
               {t.label}
             </button>
           );

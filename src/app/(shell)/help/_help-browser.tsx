@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { EyIcon, MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, MENU_ICON } from "@/components/icons/eywa-icons";
+import type { MenuKey } from "@/lib/permissions";
 
-type MenuItem = { id: string; label: string; href: string; description: string };
+type MenuItem = { id: MenuKey; label: string; href: string; description: string };
 type FaqItem = { q: string; a: string };
 type QuickStep = { title: string; desc: string; href: string; hrefLabel: string };
 
@@ -137,7 +138,7 @@ export function HelpBrowser({
           {/* 동질 목록(메뉴)은 개별 카드로 과박싱하지 않고 한 컨테이너 안 리스트로(영역 구분 규약: 과적용 금지, FAQ와 동일 톤). */}
           <div className="bg-card border-line shadow-card grid grid-cols-1 gap-1 rounded-2xl border p-2 sm:grid-cols-2">
             {filteredMenus.map((m) => {
-              const iconName: EywaIconName = MENU_ICON[m.id] ?? "spore";
+              const iconName = MENU_ICON[m.id];
               return (
                 <div
                   key={m.href}

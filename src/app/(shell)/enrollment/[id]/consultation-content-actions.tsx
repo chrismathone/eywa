@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { ExternalLink, Loader2, Sparkles } from "@/components/icons/eywa-icon-compat";
 import { appendAiSummaryToConsultationContent } from "@/features/enrollment/server/actions";
 
 /**

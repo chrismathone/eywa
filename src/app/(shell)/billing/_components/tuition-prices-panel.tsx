@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Coins, CheckCircle2 } from "lucide-react";
+import { Coins, CheckCircle2 } from "@/components/icons/eywa-icon-compat";
 import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
 import {

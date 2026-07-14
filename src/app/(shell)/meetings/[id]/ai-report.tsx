@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ChevronDown, Loader2, Pencil, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
 import type { MeetingReportSection } from "@/features/meetings/server/queries";
 import { updateMeetingReportSection } from "@/features/meetings/server/actions";
 import { RichText } from "@/components/rich-text";

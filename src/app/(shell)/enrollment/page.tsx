@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { QrCode, UserPlus } from "lucide-react";
+import { QrCode, UserPlus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";

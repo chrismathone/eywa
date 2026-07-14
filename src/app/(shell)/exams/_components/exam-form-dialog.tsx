@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
-import { AlertCircle, Loader2, Pencil, Plus, Save, X } from "lucide-react";
+import { AlertCircle, Loader2, Pencil, Plus, Save, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createExam,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CircleStop, History, Mic, Upload, X } from "lucide-react";
+import { CircleStop, History, Mic, Upload, X } from "@/components/icons/eywa-icon-compat";
 import {
   checkRecovery,
   clearRecovery,

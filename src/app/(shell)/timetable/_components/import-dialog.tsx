@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Loader2, Sheet, UserMinus, UserPlus, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Sheet, UserMinus, UserPlus, Upload, X } from "@/components/icons/eywa-icon-compat";
 import {
   applySheetImport,
   applyTimetableImport,

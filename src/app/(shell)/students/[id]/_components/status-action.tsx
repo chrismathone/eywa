@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { StatusDialog } from "./status-dialog";
 

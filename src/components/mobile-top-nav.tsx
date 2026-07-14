@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
 import { UserMenu } from "@/components/user-menu";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { NAV_GROUPS, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 
@@ -72,7 +72,7 @@ export function MobileTopNav({
             aria-expanded={open}
             className="text-text-dim hover:text-foreground hover:bg-bg-soft flex size-7 items-center justify-center rounded-sm transition"
           >
-            {open ? <X size={16} strokeWidth={2} /> : <Menu size={16} strokeWidth={2} />}
+            <EyIcon name={open ? "close" : "menu"} size={16} strokeWidth={2} />
           </button>
           <UserMenu email={email} />
         </div>
@@ -86,7 +86,6 @@ export function MobileTopNav({
       >
         {items.map((item) => {
           const active = isItemActive(item.href, pathname);
-          const Icon = item.icon;
           return (
             <li key={item.href}>
               <Link
@@ -99,7 +98,7 @@ export function MobileTopNav({
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
-                <Icon size={14} strokeWidth={1.85} />
+                <EyIcon name={item.icon} size={14} strokeWidth={1.8} />
                 <span className="truncate">{item.label}</span>
               </Link>
             </li>

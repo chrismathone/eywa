@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut } from "@/components/icons/eywa-icon-compat";
 import { endSingleEnrollment } from "@/features/students/server/actions";
 
 /** 수강 종료(×) — 단일 enrollment를 오늘자로 종료(end_date). ijw 수업탭 행 삭제(soft-delete) 대응. */

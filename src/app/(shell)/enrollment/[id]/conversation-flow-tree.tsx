@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, MessageCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageCircle } from "@/components/icons/eywa-icon-compat";
 import type { ConversationFlowNode } from "@/features/enrollment/server/queries";
 
 /** 상담 흐름 수형도 — 주제 트리(재귀). ijw ConversationFlowTree 이식(eywa 토큰). */

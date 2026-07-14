@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, Wallet } from "lucide-react";
+import { CalendarDays, Wallet } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";

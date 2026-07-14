@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "@/components/icons/eywa-icon-compat";
 import { triggerMakeeduSyncNow } from "@/features/integrations/server/actions";
 
 /**

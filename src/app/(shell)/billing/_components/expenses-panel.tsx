@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { Wallet, PieChart, Tags } from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { Wallet, PieChart, Tags } from "@/components/icons/eywa-icon-compat";
 import {
   getExpensesForMonth,
   getExpenseMonths,

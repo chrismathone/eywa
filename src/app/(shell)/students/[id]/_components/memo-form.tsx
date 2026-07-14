@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { createStudentMemo, type CreateMemoState } from "@/features/students/server/actions";
 

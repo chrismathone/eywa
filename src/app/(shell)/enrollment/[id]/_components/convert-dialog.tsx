@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Loader2, UserPlus, X } from "lucide-react";
+import { Loader2, UserPlus, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";

@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Save } from "lucide-react";
+import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createStudent,

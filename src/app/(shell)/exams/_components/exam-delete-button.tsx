@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { deleteExam, type ExamActionState } from "@/features/exams/server/actions";
 

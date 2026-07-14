@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { breakIntoSentences } from "@/lib/text/split-sentences";
 
 /** 화자 발화 — 구조적 최소 타입(meetings SpeakerUtterance·enrollment speaker_labels 둘 다 만족). */

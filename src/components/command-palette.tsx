@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
-import type { LucideIcon } from "lucide-react";
 import { NAV_GROUPS } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
@@ -20,7 +19,7 @@ type Command = {
   href: string;
   label: string;
   group: string;
-  icon: LucideIcon;
+  icon: EywaIconName;
   menuKey: MenuKey;
   keywords: string;
 };
@@ -250,7 +249,7 @@ export function CommandPalette({
                             }`}
                           >
                             {item.kind === "menu" ? (
-                              <item.cmd.icon size={14} />
+                              <EyIcon name={item.cmd.icon} size={14} strokeWidth={1.8} />
                             ) : (
                               <EyIcon name={DATA_ICON[item.hit.kind]} size={14} />
                             )}

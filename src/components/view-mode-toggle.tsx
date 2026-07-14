@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { GraduationCap } from "lucide-react";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { switchToTeacherView } from "@/features/shell/view-actions";
 
@@ -30,9 +30,10 @@ export function TeacherViewToggle({ expanded, motion }: { expanded: boolean; mot
           motion ? `transition-[left,right,opacity] duration-200 ${EASE}` : ""
         }`}
       />
-      <GraduationCap
+      <EyIcon
+        name="screen"
         size={18}
-        strokeWidth={1.85}
+        strokeWidth={1.6}
         className={`text-text-dim group-hover:text-foreground relative z-10 shrink-0 ${
           motion ? "transition-colors duration-200" : ""
         }`}

@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Check, GripVertical, Loader2, Pencil, X } from "lucide-react";
+import { Check, GripVertical, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
 import {
   moveEnrollmentsBatch,
   updateEnrollmentsAttendanceBatch,

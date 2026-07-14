@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { BookText, Clock, CircleDollarSign, Receipt } from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { BookText, Clock, CircleDollarSign, Receipt } from "@/components/icons/eywa-icon-compat";
 import { Pagination } from "@/components/pagination";
 import { SearchForm } from "@/components/search-form";
 import {

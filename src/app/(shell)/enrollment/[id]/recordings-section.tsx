@@ -1,4 +1,4 @@
-import { Loader2, Mic } from "lucide-react";
+import { Loader2, Mic } from "@/components/icons/eywa-icon-compat";
 import { TranscriptSection } from "@/components/transcript-section";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import type { ConsultationRecordingRow } from "@/features/enrollment/server/queries";

@@ -1,19 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import {
-  LayoutGrid,
-  Users,
-  CalendarCheck,
-  CalendarDays,
-  BookOpen,
-  BookMarked,
-  FolderOpen,
-  GraduationCap,
-  MessageCircle,
-  LayoutDashboard,
-} from "lucide-react";
+import { EyIcon, MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
 import { switchToAdminView } from "@/features/shell/view-actions";
 import {
@@ -34,18 +22,18 @@ import { canAccess, type AccessMatrix, type MenuKey } from "@/lib/permissions";
  * 끄면(teacher 접근=없음) 그 탭이 숨겨지고 페이지 접근도 차단된다(canWriteTenant/requireAccess 게이트와 일관).
  * teacher_onescreen(수업 마감)은 ROLE_LOCKED라 항상 표시.
  */
-const LINKS: { href: string; label: string; icon: LucideIcon; menu: MenuKey }[] = [
-  { href: "/onescreen", label: "수업 마감 (원스크린)", icon: LayoutGrid, menu: "teacher_onescreen" },
-  { href: "/students", label: "내 학생", icon: Users, menu: "students" },
-  { href: "/attendance", label: "출석부", icon: CalendarCheck, menu: "attendance" },
-  { href: "/classes", label: "내 수업", icon: BookOpen, menu: "classes" },
-  { href: "/timetable", label: "시간표", icon: CalendarDays, menu: "timetable" },
-  { href: "/exams", label: "성적관리", icon: GraduationCap, menu: "exams" },
-  { href: "/consultations", label: "학생상담", icon: MessageCircle, menu: "consultations" },
+const LINKS: { href: string; label: string; icon: EywaIconName; menu: MenuKey }[] = [
+  { href: "/onescreen", label: "수업 마감 (원스크린)", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
+  { href: "/students", label: "내 학생", icon: MENU_ICON.students, menu: "students" },
+  { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menu: "attendance" },
+  { href: "/classes", label: "내 수업", icon: MENU_ICON.classes, menu: "classes" },
+  { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menu: "timetable" },
+  { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menu: "exams" },
+  { href: "/consultations", label: "학생상담", icon: MENU_ICON.consultations, menu: "consultations" },
   // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
-  { href: "/textbook-requests", label: "교재 요청", icon: BookMarked, menu: "textbook_requests" },
+  { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
   // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
-  { href: "/documents", label: "데이터베이스", icon: FolderOpen, menu: "documents" },
+  { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menu: "documents" },
 ];
 
 export function TeacherMenu({
@@ -64,14 +52,14 @@ export function TeacherMenu({
       <DropdownMenuTrigger
         render={<Button variant="outline" size="sm" className="gap-1.5 rounded-md" />}
       >
-        <LayoutGrid className="size-4" /> 내 메뉴
+        <EyIcon name="screen" size={16} strokeWidth={1.8} /> 내 메뉴
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-text-faint">강사 메뉴</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {links.map(({ href, label, icon: Icon }) => (
+        {links.map(({ href, label, icon }) => (
           <DropdownMenuItem key={href} render={<Link href={href} className="cursor-pointer" />}>
-            <Icon className="size-4" /> {label}
+            <EyIcon name={icon} size={16} strokeWidth={1.8} /> {label}
           </DropdownMenuItem>
         ))}
         {/* 겸직(관리자 계열)만 — 맨 하단 구분선 아래 '관리자뷰로 전환'(쿠키만 지우고 관리자 홈 복귀, 권한 불변).
@@ -88,7 +76,7 @@ export function TeacherMenu({
                 window.location.assign(dest);
               }}
             >
-              <LayoutDashboard className="size-4" /> 관리자뷰로 전환
+              <EyIcon name="building" size={16} strokeWidth={1.8} /> 관리자뷰로 전환
             </DropdownMenuItem>
           </>
         ) : null}

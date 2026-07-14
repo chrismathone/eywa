@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Sparkles, User } from "lucide-react";
+import { LogOut, Sparkles, User } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

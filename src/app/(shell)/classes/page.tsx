@@ -1,4 +1,4 @@
-import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "lucide-react";
+import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";

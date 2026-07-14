@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Copy, Loader2, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Paperclip, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";

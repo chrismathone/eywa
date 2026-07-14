@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Pencil, Pin, PinOff } from "lucide-react";
+import { Loader2, Pencil, Pin, PinOff } from "@/components/icons/eywa-icon-compat";
 import {
   toggleStudentMemoPin,
   updateStudentMemo,

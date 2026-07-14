@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { invoiceOutstanding, paymentRateOf } from "@/features/billing/calc";
 import type { StudentBillingRow } from "@/features/students/server/queries";

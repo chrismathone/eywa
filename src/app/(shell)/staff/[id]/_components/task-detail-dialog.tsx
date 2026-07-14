@@ -4,7 +4,7 @@
 // eywa에서 남긴 댓글은 서버가 "[eywa · 이름]" 접두를 붙여 출처 보존(API 댓글은 Notion에서 통합=봇으로 표기되므로).
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, ExternalLink, RotateCcw } from "lucide-react";
+import { Check, ExternalLink, RotateCcw } from "@/components/icons/eywa-icon-compat";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";

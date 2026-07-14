@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "lucide-react";
+import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "@/components/icons/eywa-icon-compat";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";

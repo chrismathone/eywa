@@ -1,4 +1,4 @@
-import { UserCheck } from "lucide-react";
+import { UserCheck } from "@/components/icons/eywa-icon-compat";
 import type { PillColor } from "@/components/atoms/pill";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 

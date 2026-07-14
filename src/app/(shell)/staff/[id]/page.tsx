@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { CalendarDays, Pencil, Wallet } from "lucide-react";
+import { CalendarDays, Pencil, Wallet } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";

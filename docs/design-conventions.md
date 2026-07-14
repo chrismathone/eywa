@@ -44,11 +44,14 @@
 - **`Pill`** — mono 11px uppercase, soft/solid + color (primary/gold/blue/rose/amber/danger/purple/neutral)
 - **`SectionTitle`** — 14px 700 + action slot
 
-### Botanical 아이콘 (22개)
-- `src/components/icons/eywa-icons.tsx` — `<EyIcon name="tree" size={18} />` 단일 컴포넌트
-- 이름: tree/leaf/pulse/branch/seed/sprout/wave/falling/roots/pollen/rings/spore/search/bell/arrowUp/arrowDown/arrowRight/play/check/plus/dot/sparkle
-- 메뉴 매핑: `MENU_ICON[menuKey]` (대시보드=tree, 시간표=leaf, 출석부=pulse, 학생=seed, 등록상담=sprout, ...)
-- AI 강조는 모든 곳에서 `sparkle + gold-soft` 일관
+### Eywa 아이콘 시스템 (157개)
+- 전체 규격·사용 규칙·검수 절차: [`docs/icon-system.md`](icon-system.md)
+- `src/components/icons/eywa-icons.tsx` — `<EyIcon name="tree" size={18} />` 단일 진입점 + `EYWA_ICON_CATALOG`
+- 기존 화면의 컴포넌트형 호출은 `eywa-icon-compat.tsx`가 Eywa 도형으로 연결한다. 새 코드에서 외부 아이콘 import와 호환 별칭 추가 금지.
+- 24×24, 기본 stroke 1.6, round cap/join, currentColor. 16px 이하는 stroke 1.8 광학 보정 허용.
+- 패밀리: botanical / product / interface. 시각 갤러리: `/help/icons`.
+- 메뉴 매핑은 타입으로 완전성이 검증되는 `MENU_ICON[menuKey]`가 단일 소스다. 내비게이션에서 이름 하드코딩 금지.
+- AI 강조는 모든 곳에서 `sparkle + gold-soft` 일관.
 
 ### AppShell
 - **Sidebar = 너비 조절형 레일** (bgSoft 배경). 오른쪽 경계선을 잡고 끌면 너비가 따라오고,

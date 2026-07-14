@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, Loader2, Trash2 } from "lucide-react";
+import { Check, Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import {
   approveLeave,

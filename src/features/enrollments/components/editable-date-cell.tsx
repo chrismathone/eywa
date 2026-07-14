@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import {
   updateEnrollmentDates,
   type UpdateEnrollmentDatesState,

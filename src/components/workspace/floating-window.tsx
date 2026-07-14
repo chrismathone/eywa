@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "lucide-react";
+import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "@/components/icons/eywa-icon-compat";
 import { useWindowStore, instanceLabel, type Win } from "./window-store";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { usePointerDrag } from "./use-pointer-drag";

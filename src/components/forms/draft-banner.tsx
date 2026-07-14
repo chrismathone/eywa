@@ -1,6 +1,6 @@
 "use client";
 
-import { History } from "lucide-react";
+import { History } from "@/components/icons/eywa-icon-compat";
 
 /**
  * 로컬 초안 복구 배너 — useFormDraft의 draftSavedAt/restore/discard를 받아 폼 최상단에 렌더.

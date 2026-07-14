@@ -1,32 +1,11 @@
-import {
-  LayoutDashboard,
-  Presentation,
-  CalendarDays,
-  ClipboardCheck,
-  BookOpen,
-  Users,
-  ClipboardList,
-  UserPlus,
-  MessageSquare,
-  UserMinus,
-  ShieldAlert,
-  Briefcase,
-  Wallet,
-  BookMarked,
-  FileText,
-  FolderOpen,
-  HelpCircle,
-  Settings,
-  Building2,
-  NotebookPen,
-  type LucideIcon,
-} from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
 import type { MenuKey } from "@/lib/permissions";
 
 export type NavItem = {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: EywaIconName;
   menuKey: MenuKey;
   // 사이드바·모바일내비·팰릿에선 숨기되 findNavItem(창 해석)·아이콘맵엔 남긴다.
   // 예: 등록상담은 "상담" 메뉴의 FaceTabs 면이라 사이드바엔 안 뜨지만 창/링크 해석은 필요.
@@ -59,6 +38,10 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
     { label: "직원 목록", href: "/staff" },
     { label: "직원 이력서", href: "/staff?tab=resumes" },
   ],
+  help: [
+    { label: "도움말", href: "/help" },
+    { label: "아이콘 시스템", href: "/help/icons" },
+  ],
   owner: [
     { label: "프로필·브랜드", href: "/owner" },
     { label: "운영 체계", href: "/owner?tab=operations" },
@@ -76,56 +59,56 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
 
 /**
  * NAV: 5그룹 (홈 / 수업 / 학생 / 운영 / 지원). 아이콘은 기능이 직관적으로 읽히는
- * lucide 표준 아이콘(레일·모바일nav·검색팰릿 공용). 그룹 번호는 사이드바에서 자동 인덱스.
+ * Eywa 전용 아이콘(레일·모바일nav·검색팰릿·창 전환 공용). 그룹 번호는 사이드바에서 자동 인덱스.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "홈",
-    items: [{ href: "/dashboard", label: "대시보드", icon: LayoutDashboard, menuKey: "dashboard" }],
+    items: [{ href: "/dashboard", label: "대시보드", icon: MENU_ICON.dashboard, menuKey: "dashboard" }],
   },
   {
     label: "수업",
     items: [
-      { href: "/onescreen", label: "선생님 원스크린", icon: Presentation, menuKey: "teacher_onescreen" },
-      { href: "/timetable", label: "시간표", icon: CalendarDays, menuKey: "timetable" },
-      { href: "/attendance", label: "출석부", icon: ClipboardCheck, menuKey: "attendance" },
-      { href: "/classes", label: "수업목록", icon: BookOpen, menuKey: "classes" },
+      { href: "/onescreen", label: "선생님 원스크린", icon: MENU_ICON.teacher_onescreen, menuKey: "teacher_onescreen" },
+      { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menuKey: "timetable" },
+      { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
+      { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes" },
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
-      { href: "/lesson-reports", label: "수업보고서", icon: NotebookPen, menuKey: "lesson_reports" },
+      { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
     ],
   },
   {
     label: "학생",
     items: [
-      { href: "/students", label: "학생목록", icon: Users, menuKey: "students" },
-      { href: "/exams", label: "성적관리", icon: ClipboardList, menuKey: "exams" },
+      { href: "/students", label: "학생목록", icon: MENU_ICON.students, menuKey: "students" },
+      { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menuKey: "exams" },
       // 상담 = 학생상담(/consultations) + 등록상담(/enrollment) 2면(상단 FaceTabs로 교차). 사이드바엔 "상담" 한 항목.
-      { href: "/consultations", label: "상담", icon: MessageSquare, menuKey: "consultations" },
+      { href: "/consultations", label: "상담", icon: MENU_ICON.consultations, menuKey: "consultations" },
       // 등록상담은 "상담"의 FaceTabs 면 → 사이드바 숨김(hidden), 단 창 해석·아이콘맵엔 유지.
-      { href: "/enrollment", label: "등록상담", icon: UserPlus, menuKey: "enrollment", hidden: true },
-      { href: "/retention", label: "이탈 방어", icon: ShieldAlert, menuKey: "retention" },
-      { href: "/withdrawals", label: "퇴원관리", icon: UserMinus, menuKey: "withdrawals" },
+      { href: "/enrollment", label: "등록상담", icon: MENU_ICON.enrollment, menuKey: "enrollment", hidden: true },
+      { href: "/retention", label: "이탈 방어", icon: MENU_ICON.retention, menuKey: "retention" },
+      { href: "/withdrawals", label: "퇴원관리", icon: MENU_ICON.withdrawals, menuKey: "withdrawals" },
     ],
   },
   {
     label: "운영",
     items: [
-      { href: "/staff", label: "직원관리", icon: Briefcase, menuKey: "staff" },
-      { href: "/billing", label: "수납관리", icon: Wallet, menuKey: "billing" },
+      { href: "/staff", label: "직원관리", icon: MENU_ICON.staff, menuKey: "staff" },
+      { href: "/billing", label: "수납관리", icon: MENU_ICON.billing, menuKey: "billing" },
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
-      { href: "/textbook-requests", label: "교재 요청", icon: BookMarked, menuKey: "textbook_requests", hidden: true },
-      { href: "/meetings", label: "회의록", icon: FileText, menuKey: "meetings" },
+      { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true },
+      { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
       // 데이터베이스 = 학원 각종 서식(빈 양식 파일·앱 작성 문서) 저장소 — 윈도우 탐색기형 뷰.
-      { href: "/documents", label: "데이터베이스", icon: FolderOpen, menuKey: "documents" },
+      { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menuKey: "documents" },
     ],
   },
   {
     label: "지원",
     items: [
-      { href: "/help", label: "도움말", icon: HelpCircle, menuKey: "help" },
-      { href: "/owner", label: "학원 설정", icon: Building2, menuKey: "owner" },
+      { href: "/help", label: "도움말", icon: MENU_ICON.help, menuKey: "help" },
+      { href: "/owner", label: "학원 설정", icon: MENU_ICON.owner, menuKey: "owner" },
       // 관리자 도구는 학원 설정(/owner) "관리" 면들로 흡수 → 사이드바 숨김. menuKey는 /admin 리다이렉트 stub·창 해석용 유지.
-      { href: "/admin", label: "관리자 도구", icon: Settings, menuKey: "admin", hidden: true },
+      { href: "/admin", label: "관리자 도구", icon: MENU_ICON.admin, menuKey: "admin", hidden: true },
     ],
   },
 ];

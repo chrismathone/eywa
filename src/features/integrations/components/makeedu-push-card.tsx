@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { enqueueConsultationPush } from "@/features/integrations/server/actions";

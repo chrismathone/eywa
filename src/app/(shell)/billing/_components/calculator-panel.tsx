@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarOff, Settings2 } from "lucide-react";
+import { CalendarOff, Settings2 } from "@/components/icons/eywa-icon-compat";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { getTuitionCatalogActive } from "@/features/billing/server/tuition-catalog-queries";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";

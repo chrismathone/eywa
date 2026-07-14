@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@/components/icons/eywa-icon-compat";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 
 /** 개요 다이제스트 카드 → 해당 탭으로 이동. 창(embed) 안에선 embed=1 유지(풀셸 이중노출 방지). */

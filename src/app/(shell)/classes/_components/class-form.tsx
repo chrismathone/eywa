@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createClass,

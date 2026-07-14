@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, Loader2, RotateCcw, Sheet, UserMinus, UserPlus, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Loader2, RotateCcw, Sheet, UserMinus, UserPlus, X } from "@/components/icons/eywa-icon-compat";
 import {
   applyStructureImport,
   previewStructureImport,

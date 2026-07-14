@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check } from "@/components/icons/eywa-icon-compat";
 import { clearDupSuspect } from "@/features/students/server/actions";
 
 /**

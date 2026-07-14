@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "lucide-react";
+import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { kstToday } from "@/lib/date-kst";
 import { Pill } from "@/components/atoms/pill";

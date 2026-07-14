@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "@/components/icons/eywa-icon-compat";
 import { toggleConsultationStep } from "@/features/withdrawals/server/actions";
 import type { WithdrawalConsultation } from "@/features/withdrawals/types";
 

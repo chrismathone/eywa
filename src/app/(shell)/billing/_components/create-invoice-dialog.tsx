@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Loader2, Plus, Save, X } from "lucide-react";
+import { AlertCircle, Loader2, Plus, Save, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createInvoice, type CreateInvoiceState } from "@/features/billing/server/actions";

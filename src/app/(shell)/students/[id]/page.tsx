@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Pencil } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";

@@ -1,4 +1,4 @@
-import { History, LogIn } from "lucide-react";
+import { History, LogIn } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { Pagination } from "@/components/pagination";

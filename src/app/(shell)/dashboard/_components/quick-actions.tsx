@@ -2,7 +2,7 @@
  * 빠른 작업 — 대시보드를 작업 시작점으로. 자주 쓰는 신규 등록 경로를 한 줄로.
  * (모달 대신 해당 신규 화면을 플로팅 창으로 — 반응속도 철학 + 멀티윈도우 일관.)
  */
-import { UserPlus, BookPlus, MessageSquarePlus } from "lucide-react";
+import { UserPlus, BookPlus, MessageSquarePlus } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 
 const ACTIONS = [

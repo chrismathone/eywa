@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X } from "@/components/icons/eywa-icon-compat";
 import { useNoticeDismiss } from "../popup-store";
 import type { ActivePopup } from "../server/queries";
 

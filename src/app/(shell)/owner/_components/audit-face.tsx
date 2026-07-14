@@ -1,4 +1,4 @@
-import { ScrollText } from "lucide-react";
+import { ScrollText } from "@/components/icons/eywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";

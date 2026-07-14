@@ -1,6 +1,6 @@
 "use client";
 
-import { Palette } from "lucide-react";
+import { Palette } from "@/components/icons/eywa-icon-compat";
 import { usePrefs, type TimetableColorMode } from "@/components/workspace/use-prefs";
 
 // 시간표 셀 색 강도 개인 토글(vivid/mid/pastel) — 상단 툴바. localStorage(eywa-prefs) 영속, URL 무관(개인 설정).

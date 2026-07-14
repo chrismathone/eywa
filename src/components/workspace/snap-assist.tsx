@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/icons/eywa-icon-compat";
 import { useWindowStore } from "./window-store";
 import { snapTarget, MIN_W, MIN_H, type LayoutTemplate } from "./window-geometry";
 

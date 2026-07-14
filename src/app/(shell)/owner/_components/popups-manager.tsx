@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createNoticePopup,

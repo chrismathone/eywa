@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Printer, Trash2 } from "lucide-react";
+import { Loader2, Printer, Trash2 } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { deleteRefundRequest } from "@/features/billing/server/refund-actions";
 

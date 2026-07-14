@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { Calculator, Check, Loader2, Save } from "lucide-react";
+import { Calculator, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   autoComputePayroll,

@@ -1,4 +1,4 @@
-import { CalendarDays } from "lucide-react";
+import { CalendarDays } from "@/components/icons/eywa-icon-compat";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { kstToday } from "@/lib/date-kst";
 import { Pill } from "@/components/atoms/pill";

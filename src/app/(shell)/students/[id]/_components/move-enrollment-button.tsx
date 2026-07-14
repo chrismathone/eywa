@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft, Loader2, X } from "lucide-react";
+import { ArrowRightLeft, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";

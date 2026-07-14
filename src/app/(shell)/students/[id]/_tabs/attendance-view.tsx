@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays, List } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, List } from "@/components/icons/eywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { StudentAttendanceFull } from "@/features/students/server/queries";
 

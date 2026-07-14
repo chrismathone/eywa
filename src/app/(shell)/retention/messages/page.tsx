@@ -1,4 +1,4 @@
-import { MessageSquareOff } from "lucide-react";
+import { MessageSquareOff } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";

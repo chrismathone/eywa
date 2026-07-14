@@ -1,4 +1,4 @@
-import { SearchX } from "lucide-react";
+import { SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/eywa-icons";

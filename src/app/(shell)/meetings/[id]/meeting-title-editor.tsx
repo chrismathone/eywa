@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Check, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
 import {
   updateMeetingTitle,
   type UpdateMeetingTitleState,

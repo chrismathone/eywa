@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { AlertCircle, FilePlus2, Loader2, Search, Upload, UploadCloud, X } from "lucide-react";
+import { AlertCircle, FilePlus2, Loader2, Search, Upload, UploadCloud, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";

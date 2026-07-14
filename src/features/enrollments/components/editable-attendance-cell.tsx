@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
 import { updateEnrollmentsAttendanceBatch } from "@/features/enrollments/server/actions";
 
 const DAY_LABEL: Record<string, string> = {

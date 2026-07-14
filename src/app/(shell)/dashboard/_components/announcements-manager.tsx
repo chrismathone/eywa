@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Megaphone, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
+import { Loader2, Megaphone, Pencil, Pin, PinOff, Trash2, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createAnnouncement,

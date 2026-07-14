@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "@/components/icons/eywa-icon-compat";
 import {
   setSheetsExportEnabled,
   setSubjectSheetTarget,

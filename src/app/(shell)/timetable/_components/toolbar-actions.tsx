@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { ExternalLink, FileSpreadsheet, Loader2, Sheet } from "lucide-react";
+import { ExternalLink, FileSpreadsheet, Loader2, Sheet } from "@/components/icons/eywa-icon-compat";
 import { TimetableImportDialog } from "./import-dialog";
 import { EnglishImportDialog } from "./english-import-dialog";
 import { checkSheetSyncBusy, syncSheetsNow } from "@/features/integrations/server/actions";

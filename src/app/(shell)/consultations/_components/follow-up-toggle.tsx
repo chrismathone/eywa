@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Check, Circle } from "lucide-react";
+import { Check, Circle } from "@/components/icons/eywa-icon-compat";
 import { toggleConsultationFollowUp } from "@/features/consultations/server/actions";
 
 /** 후속 조치 완료 토글 — follow_up_done 반전. ijw 학생상담 후속 완료 체크 대응. */

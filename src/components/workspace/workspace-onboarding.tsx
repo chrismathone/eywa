@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { AppWindow, Columns2, Layers, X } from "lucide-react";
+import { AppWindow, Columns2, Layers, X } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { usePrefs } from "./use-prefs";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Archive, RotateCcw } from "lucide-react";
+import { Archive, RotateCcw } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { archiveClass } from "@/features/classes/server/actions";
 

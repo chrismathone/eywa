@@ -1,6 +1,6 @@
 "use client";
 
-import { Printer } from "lucide-react";
+import { Printer } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 
 // 지출결의서 in-place 인쇄(이미 플로팅 창이라 window.print()가 창 문서만 인쇄 — 계산기 패턴).

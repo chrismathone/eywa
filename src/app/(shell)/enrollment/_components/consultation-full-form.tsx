@@ -7,7 +7,7 @@ import {
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
   MapPin, MessageSquare, Save, School, Sparkles, Tag, Target, Users, User, UserCheck, XCircle,
   Droplet, type LucideIcon,
-} from "lucide-react";
+} from "@/components/icons/eywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
