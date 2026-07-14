@@ -755,3 +755,61 @@ export function semesterOfLesson(grade: string, lesson: string): Semester {
   }
   return 1;
 }
+
+// ───────────────────────── 다중 차시(진도) ─────────────────────────
+//   한 수업에서 여러 차시를 나갈 수 있어(edutrix 패리티) `today`는 여러 차시를 **개행**으로 이어 붙인 문자열이다.
+//   개행을 구분자로 쓰는 이유: 실제 차시 문자열에 "·"·"/"·","가 이미 들어 있어(예: 초5 "1-1-1 … 뺄셈 / 곱셈 …",
+//   초6 "1-3-5 (자연수)÷(자연수), 어림셈 …") 그 문자로 나누면 단일 차시조차 오분할된다. 개행은 어떤 차시에도 없고,
+//   progress-position.ts의 positionOf가 normalizeLegacy로 "마지막 줄=그날 최종 진도"를 채택하며,
+//   parent-report-card 등 표시부가 whitespace-pre-line로 이미 개행을 인지한다.
+export const PROGRESS_DELIM = "\n";
+
+/** `today`(합본) → 차시 배열(공백/빈 항목 제거). 단일·다중·빈값 모두 안전. */
+export function splitLessons(today: string | null | undefined): string[] {
+  if (!today) return [];
+  return today.split(PROGRESS_DELIM).map((s) => s.trim()).filter(Boolean);
+}
+
+/** 차시 배열 → `today` 합본 문자열(개행 조인). 순서 보존, 중복 제거. */
+export function joinLessons(lessons: string[]): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of lessons) {
+    const t = l.trim();
+    if (t && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out.join(PROGRESS_DELIM);
+}
+
+/** 첫 차시 — 학기 자동도출용(semesterOfLesson 인자). 없으면 "". */
+export function firstLesson(today: string | null | undefined): string {
+  return splitLessons(today)[0] ?? "";
+}
+
+/** 마지막 차시 — 그날 최종 진도(진도 위치 추적 대표). 없으면 "". */
+export function lastLesson(today: string | null | undefined): string {
+  const arr = splitLessons(today);
+  return arr[arr.length - 1] ?? "";
+}
+
+/** 표시용 — 다중 차시를 ", "로 이어 한 줄로(개행 저장값을 좁은 곳에서 읽기 좋게). */
+export function displayLessons(today: string | null | undefined): string {
+  return splitLessons(today).join(", ");
+}
+
+/** 학년 커리큘럼을 단원 순서대로 flatten한 차시 배열(추천 진도·다중선택 원본). */
+export function flatLessons(grade: string): string[] {
+  return curriculumForGrade(grade).flatMap((u) => u.lessons);
+}
+
+/** afterLesson 다음 n개 차시(학년 내, 단원 경계 넘음). 못 찾으면 처음부터. edutrix "추천 진도" 칩용. */
+export function nextLessons(grade: string, afterLesson: string, n = 3): string[] {
+  const flat = flatLessons(grade);
+  if (flat.length === 0) return [];
+  const idx = afterLesson ? flat.indexOf(afterLesson) : -1;
+  const start = idx >= 0 ? idx + 1 : 0;
+  return flat.slice(start, start + n);
+}

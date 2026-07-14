@@ -4,17 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { ATTITUDE, CLASS_TAGS, HOMEWORK, TODAY } from "../data";
-import { curriculumForGrade, curriculumForGradeSemester, type Semester } from "../curriculum";
 import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 import {
+  buildMakeupStudent,
   generateReportComment,
   reissueShareLink,
   revokeShareLink,
   saveAndQueueClassnote,
   saveLessonReport,
   saveOnescreenSession,
+  setMyNoticeMode,
 } from "../server/actions";
+import { MakeupAdder } from "./makeup-adder";
 import {
   issueReportAttachmentUploadTicket,
   registerReportAttachment,
@@ -99,6 +101,8 @@ export function OneScreenClient({
   allowTeacherTestMax = false,
   showDailyTest = true,
   showCheckTest = true,
+  noticeMode: initialNoticeMode = null,
+  academyNoticeMode = "A",
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -107,8 +111,11 @@ export function OneScreenClient({
   allowTeacherTestMax?: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(학원 설정)
   showDailyTest?: boolean; // 일일테스트 사용(보고서 '표시 항목' 설정 재사용) — off면 입력칸 숨김
   showCheckTest?: boolean; // 확인테스트 사용(보고서 '표시 항목' 설정 재사용) — off면 입력칸 숨김
+  noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
+  academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
 }) {
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
+  const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
   const [selId, setSelId] = useState<string>(initial[0]?.id ?? "");
   const [classFilter, setClassFilter] = useState<string>("전체");
   const [view, setView] = useState<"card" | "grid" | "status" | "history">("card"); // 카드(학생별) ↔ 표(대량작성) ↔ 발송 현황 ↔ 지난 보고서
@@ -172,7 +179,7 @@ export function OneScreenClient({
       setTimeout(() => {
         saveTimers.current.delete(studentId);
         const s = studentsRef.current.find((x) => x.id === studentId);
-        if (!s) return;
+        if (!s || s.isMakeup) return; // 보강 학생은 반이 없어 세션(onescreen_daily_sessions) 저장 스킵
         void saveOnescreenSession(buildSessionInput(s, reportsRef.current[studentId])).then((res) => {
           if (!res.ok) toast.error(res.error ?? "자동 저장에 실패했습니다");
         });
@@ -232,21 +239,44 @@ export function OneScreenClient({
     }));
   }
   function setStudyGradeFor(studentId: string, grade: string) {
-    // 진도 학년 변경(선행/후행) → 진도(prev/today)를 그 학년 1학기 첫 차시로 초기화(유효값 보장).
-    const first = curriculumForGrade(grade)[0]?.lessons[0] ?? "";
+    // 진도 학년 변경(선행/후행) → 다중선택은 그 학년 차시로 다시 고르도록 오늘 진도만 초기화(prev는 참고용이라 보존).
     patch(studentId, (s) => ({
       ...s,
       studyGrade: grade,
-      subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })),
+      subjects: s.subjects.map((su) => ({ ...su, today: "" })),
     }));
   }
-  function setSemesterFor(studentId: string, semester: Semester) {
-    // 학기 변경 → 진도를 그 학기 첫 차시로 초기화(차시 드롭다운 스코프와 일치 보장).
-    patch(studentId, (s) => {
-      const grade = s.studyGrade ?? s.grade;
-      const first = curriculumForGradeSemester(grade, semester)[0]?.lessons[0] ?? "";
-      return { ...s, subjects: s.subjects.map((su) => ({ ...su, prev: first, today: first })) };
-    });
+  // 강사 본인 AI 멘트 모드(단일 A / 2문단 B / 학원 기본 null) 저장 — 낙관적 반영 + 실패 롤백.
+  async function changeNoticeMode(mode: "A" | "B" | null) {
+    const prev = noticeMode;
+    setNoticeMode(mode);
+    const res = await setMyNoticeMode(mode);
+    if (!res.ok) {
+      setNoticeMode(prev);
+      toast.error(res.error ?? "멘트 모드 저장에 실패했습니다");
+    } else {
+      toast.success(
+        mode === null ? "멘트 모드: 학원 기본" : `멘트 모드: ${mode === "A" ? "단일 문단" : "2문단 분리"}`,
+      );
+    }
+  }
+  // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값). 세션 저장은 스킵(반 없음).
+  async function addMakeupStudent(studentId: string) {
+    if (students.some((s) => s.id === studentId)) {
+      setSelId(studentId);
+      toast.message("이미 목록에 있는 학생입니다");
+      return;
+    }
+    const res = await buildMakeupStudent(studentId);
+    if (!res.ok || !res.student) {
+      toast.error(res.error ?? "학생을 추가하지 못했습니다");
+      return;
+    }
+    const st = res.student;
+    setStudents((prev) => [...prev, st]);
+    setReports((prev) => ({ ...prev, [st.id]: initReports([st])[st.id] ?? {} }));
+    setSelId(st.id);
+    toast.success(`${st.name} (보강) 추가됨`);
   }
   function setScoreFor(studentId: string, which: "daily" | "check", v: number | null) {
     patch(studentId, (s) => ({ ...s, tests: { ...s.tests, [which]: { ...s.tests[which], score: v } } }));
@@ -282,10 +312,6 @@ export function OneScreenClient({
   function setStudyGrade(grade: string) {
     if (!selected) return;
     setStudyGradeFor(selected.id, grade);
-  }
-  function setSemester(semester: Semester) {
-    if (!selected) return;
-    setSemesterFor(selected.id, semester);
   }
   function setScore(which: "daily" | "check", v: number | null) {
     if (!selected) return;
@@ -407,6 +433,7 @@ export function OneScreenClient({
   }
   async function autoWriteAllVisible(keys?: string[]) {
     const rows = selectRows(keys);
+    const skipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 제외된 행
     if (rows.length === 0) {
       toast.message("자동작성할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
@@ -421,7 +448,7 @@ export function OneScreenClient({
       setGenKey(null);
       setBulkGen(false);
     }
-    toast.success(`${rows.length}건 자동작성 완료`);
+    toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`);
   }
   // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
   function openCard(studentId: string) {
@@ -458,6 +485,7 @@ export function OneScreenClient({
         notes: draft,
         trendNote, // 학습 추세(종합분석) — 4a
         subject: su?.subjectKey || su?.name || undefined, // (student,date,subject) 과목별 1행 dedup 키
+        outOfClass: student.isMakeup ?? false, // 보강(수업외) 학생 = 담당반 검사 우회(같은 학원이면 허용)
       },
     };
   }
@@ -573,6 +601,7 @@ export function OneScreenClient({
   }
   async function saveAllVisible(keys?: string[]) {
     const rows = selectRows(keys);
+    const skipped = keys ? keys.length - rows.length : 0;
     if (rows.length === 0) {
       toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
@@ -584,10 +613,13 @@ export function OneScreenClient({
       if (res.ok) ok++;
       else fail++;
     }
-    toast.success(`${ok}건 저장 완료${fail ? ` · ${fail}건 실패` : ""}`);
+    toast.success(
+      `${ok}건 저장 완료${fail ? ` · ${fail}건 실패` : ""}${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`,
+    );
   }
   async function sendAllVisible(keys?: string[]) {
     const rows = selectRows(keys);
+    const preSkipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 발송에서 제외
     if (rows.length === 0) {
       toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
@@ -612,6 +644,7 @@ export function OneScreenClient({
         `발송 대기 ${queued}건` +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
+        (preSkipped ? ` · 진도 미입력 ${preSkipped}건` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),
     );
   }
@@ -795,6 +828,10 @@ export function OneScreenClient({
         onView={setView}
         stats={hubStats}
         todayClasses={todayClasses}
+        noticeMode={noticeMode}
+        academyNoticeMode={academyNoticeMode}
+        onNoticeMode={changeNoticeMode}
+        makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
       />
 
       {view === "grid" ? (
@@ -805,7 +842,6 @@ export function OneScreenClient({
           homeworks={HOMEWORK}
           onProgress={setProgressFor}
           onStudyGrade={setStudyGradeFor}
-          onSemester={setSemesterFor}
           onScore={setScoreFor}
           onAttitude={setAttitudeValue}
           onHomework={setHomeworkValue}
@@ -855,7 +891,6 @@ export function OneScreenClient({
                 onConfirm={confirmProgress}
                 onProgress={setProgress}
                 onStudyGrade={setStudyGrade}
-                onSemester={setSemester}
               />
               <TestCard student={selected} onScore={setScore} allowMax={allowTeacherTestMax} onMax={setMax} dailyEnabled={showDailyTest} checkEnabled={showCheckTest} />
             </div>

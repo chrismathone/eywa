@@ -7,6 +7,18 @@
 /** 과목 톤 — eywa 디자인 토큰(globals.css)에 매핑된 색 키 */
 export type SubjectTone = "primary" | "blue" | "rose" | "purple" | "gold" | "neutral";
 
+/** 직전 회차(이전 작성) 스냅샷 — 표뷰 '이전 회차 참고행'에 읽기전용 렌더. lesson_reports 한 행에서 추출. */
+export type PrevReport = {
+  date: string; // 직전 회차 날짜 YYYY-MM-DD
+  progress: string | null; // 진도(과목 라벨 벗긴 텍스트, 다중차시면 개행 포함)
+  textbook: string | null; // 교재명
+  homeworkToday: string | null; // 오늘 과제(숙제 내용)
+  homeworkScore: string | null; // 과제 수행 상태
+  attitude: string | null; // 수업 태도
+  examInfo: string | null; // "일일 18/20, 확인 19/20"
+  note: string | null; // 학부모 멘트(notes)
+};
+
 export type Subject = {
   name: string; // "영어 독해", "수학 (상)", "국어 문학"
   prev: string; // 이전 진도 — "Unit 7 · p.82"
@@ -22,6 +34,10 @@ export type Subject = {
   // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티). 과목별. 학부모 카드 표시(showHomeworkToday)
   // + AI 멘트 마무리 문장("오늘 과제는 ~입니다")의 재료. homework(수행 상태)와 별개.
   homeworkToday?: string;
+
+  // 직전 회차(이전 작성) 참고용 — roster가 (학생×과목)별 직전 lesson_reports를 담아 표뷰 '이전 회차 참고행'에 렌더.
+  // 읽기 전용(편집 불가). 없으면(첫 수업) undefined.
+  prevReport?: PrevReport;
 
   // ── 오늘 보고서 발송 상태(과목별) — roster가 오늘 lesson_reports를 subject로 매칭해 채움 ──
   // 학생단위로 뭉개면 다과목(수학만 저장해도 영어까지 sent)이 오카운트되므로 과목별로 분리.
@@ -56,6 +72,9 @@ export type OneScreenStudent = {
   classId?: string;
   // 진도(수업) 학년 — 실제 학년과 다를 수 있음(선행/후행). 없으면 grade로 간주.
   studyGrade?: string;
+  // 보강·수업외 학생(수동 추가) — true면 세션 자동저장(onescreen_daily_sessions) 건너뛰고(반 없음),
+  // 저장 시 outOfClass로 담당반 검사 우회(같은 학원 학생이면 허용). roster엔 없고 클라에서만 추가됨.
+  isMakeup?: boolean;
   attendance: AttendanceMark;
   subjects: Subject[];
   tests: Tests;

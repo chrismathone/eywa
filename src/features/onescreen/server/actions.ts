@@ -11,9 +11,14 @@ import { assembleCombined, MENT_AI_TUNING, type PromptSection } from "../prompt-
 import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { ingestReport } from "@/features/progress/server/ingest";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
+import type { OneScreenStudent } from "../types";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -29,6 +34,9 @@ export type SaveLessonReportInput = {
   attitude?: string; // "좋음"
   trendNote?: string; // 학습 추세(종합분석) 문구 — 0091a. 멘트(notes)와 별개 저장·표시.
   subject?: string; // 과목키(math/english…) — (student,date,subject) 과목별 1행 dedup용
+  // 보강·수업외 학생(수동 추가) — true면 '내 담당 반 활성 수강생' 검사 대신 같은 학원(tenant) 학생이면 허용.
+  // 원장 승인 정책(보강 저장=학원 전체). RLS가 테넌트 격리(cross-tenant는 select null) → 학원 밖 학생은 여전히 거부.
+  outOfClass?: boolean;
 };
 
 /**
@@ -45,22 +53,32 @@ export async function saveLessonReport(
 
   const supabase = await createClient();
 
-  // 강사 스코프: 이 학생이 내 담당 반의 활성 수강생인지 확인.
-  const { data: myClasses } = await supabase
-    .from("classes")
-    .select("id")
-    .eq("teacher_id", user.id);
-  const myClassIds = (myClasses ?? []).map((c) => c.id);
-  if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
+  // 강사 스코프: 기본은 '내 담당 반 활성 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
+  // (원장 승인 정책). RLS가 테넌트 격리 → 학원 밖 학생은 select null로 걸러져 거부됨.
+  if (input.outOfClass) {
+    const { data: stu } = await supabase
+      .from("students")
+      .select("id")
+      .eq("id", input.studentId)
+      .maybeSingle();
+    if (!stu) return { ok: false, error: "학원 학생이 아닙니다" };
+  } else {
+    const { data: myClasses } = await supabase
+      .from("classes")
+      .select("id")
+      .eq("teacher_id", user.id);
+    const myClassIds = (myClasses ?? []).map((c) => c.id);
+    if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
 
-  const { data: enr } = await supabase
-    .from("enrollments")
-    .select("id")
-    .eq("student_id", input.studentId)
-    .is("end_date", null)
-    .in("class_id", myClassIds)
-    .limit(1);
-  if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
+    const { data: enr } = await supabase
+      .from("enrollments")
+      .select("id")
+      .eq("student_id", input.studentId)
+      .is("end_date", null)
+      .in("class_id", myClassIds)
+      .limit(1);
+    if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
+  }
 
   // KST 오늘 — Vercel UTC 오전에 report_date가 하루 밀리는 것 방지(saveOnescreenSession·too_old 가드와 동일 기준).
   const reportDate = kstToday();
@@ -341,10 +359,28 @@ export async function generateReportComment(
 ): Promise<{ ok: boolean; comment?: string; trend?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  // 방지로직 — 진도/태도/테스트/과제 등 최소 사실이 하나도 없으면 생성 거부(빈 껍데기 멘트 방지).
+  // 개별 자동작성 버튼은 클라에서 진도 없으면 비활성이지만, 서버에서도 이중 방어(edutrix 관례).
+  const hasFacts = !!(
+    input.progress?.trim() ||
+    input.attitude?.trim() ||
+    input.dailyTest?.trim() ||
+    input.checkTest?.trim() ||
+    input.homework?.trim() ||
+    input.homeworkToday?.trim() ||
+    input.specialNote?.trim()
+  );
+  if (!hasFacts) return { ok: false, error: "진도·태도 등을 입력한 뒤 자동작성할 수 있습니다" };
   try {
     const supabase = await createClient();
     const settings = await getTenantSettings();
-    const mode = settings.report.noticeMode ?? "A";
+    // 멘트 모드 — 강사 본인 오버라이드(users.report_notice_mode) > 학원 기본(report.noticeMode) > 'A'.
+    const { data: meRow } = await supabase
+      .from("users")
+      .select("report_notice_mode")
+      .eq("id", user.id)
+      .single();
+    const mode = (meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? settings.report.noticeMode ?? "A";
 
     const sections: PromptSection[] = [];
     // 멘트 섹션 — 모드 A=단일(사실+특이사항 종합), B=수업내용(P1)+태도·특이사항(P2). 사실 없는 문단은 생략.
@@ -396,4 +432,120 @@ export async function generateReportComment(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI 생성 실패" };
   }
+}
+
+/**
+ * 강사 본인의 AI 멘트 공지 모드(단일 A / 2문단 B) 저장 — 0104a. null=학원 기본 따름.
+ * users.report_notice_mode에 본인 행만. admin client + (id,tenant_id) 스코프(RLS 우회지만 자기 행만 강제).
+ * 소비: generateReportComment(강사값 > 학원기본 > 'A'). getTeacherRoster가 현재값을 클라 토글로 내려줌.
+ */
+export async function setMyNoticeMode(
+  mode: "A" | "B" | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (mode !== null && mode !== "A" && mode !== "B") return { ok: false, error: "잘못된 모드입니다" };
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("users")
+    .update({ report_notice_mode: mode })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** 보강(수업외) 학생 수동추가 picker — 같은 학원 재원·휴원 학생 이름검색(퇴원 제외), 최대 20건. */
+export async function searchTenantStudents(
+  query: string,
+): Promise<{ id: string; name: string; label: string }[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const q = query.trim();
+  if (q.length < 1) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("students")
+    .select("id, name, grade, school")
+    .neq("status", "withdrawn")
+    .ilike("name", `%${q}%`)
+    .order("name", { ascending: true })
+    .limit(20);
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    label: schoolGradeLabel(s.school ?? null, s.grade ?? null),
+  }));
+}
+
+/**
+ * 보강(수업외) 학생 1명을 원스크린에 추가할 OneScreenStudent로 조립.
+ * 과목 = 강사 담당 반의 과목들, 교재 = 그 학생 교재요청서 기본값. isMakeup=true(세션 미저장·보강 저장 스코프).
+ * prevReport(이전 회차)는 v1 미포함(ad-hoc 보강은 참고행 생략 — 정규 로스터와 달리 경량).
+ */
+export async function buildMakeupStudent(
+  studentId: string,
+): Promise<{ ok: boolean; student?: OneScreenStudent; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!studentId) return { ok: false, error: "학생 정보가 없습니다" };
+  const supabase = await createClient();
+  const settings = await getTenantSettings();
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const testMaxByKey = new Map(settings.operations.subjects.map((s) => [s.key, s.testMax ?? 5]));
+
+  const { data: stu } = await supabase
+    .from("students")
+    .select("id, name, grade")
+    .eq("id", studentId)
+    .maybeSingle();
+  if (!stu) return { ok: false, error: "학원 학생이 아닙니다" };
+
+  const [{ data: myClasses }, orders] = await Promise.all([
+    supabase.from("classes").select("subject").eq("teacher_id", user.id).eq("is_active", true),
+    getTextbookOrdersForStudents([studentId]),
+  ]);
+  const subjectKeys = [...new Set((myClasses ?? []).map((c) => c.subject).filter(Boolean) as string[])];
+  if (subjectKeys.length === 0) return { ok: false, error: "담당 과목이 없습니다" };
+
+  const bookPick = [...orders]
+    .filter((o) => o.bookName?.trim())
+    .sort((a, b) => {
+      const at = a.teacherName === user.displayName ? 0 : 1;
+      const bt = b.teacherName === user.displayName ? 0 : 1;
+      if (at !== bt) return at - bt;
+      return (b.requestDate ?? b.createdAt ?? "").localeCompare(a.requestDate ?? a.createdAt ?? "");
+    })[0];
+  const book = bookPick?.bookName?.trim() ?? "";
+  const tmax = testMaxByKey.get(subjectKeys[0]!) ?? 5;
+
+  const student: OneScreenStudent = {
+    id: stu.id,
+    name: stu.name,
+    grade: stu.grade ?? "",
+    tag: "보강",
+    className: "보강",
+    isMakeup: true,
+    attendance: "출석",
+    subjects: subjectKeys.map((key) => ({
+      name: subjectMaps.labelOf(key),
+      subjectKey: key,
+      prev: "",
+      today: "",
+      textbook: book,
+      makeup: true,
+      homeworkToday: "",
+    })),
+    tests: {
+      daily: { score: null, max: tmax, prevScore: null },
+      check: { score: null, max: tmax, prevScore: null },
+    },
+    attitude: null,
+    homework: "",
+    note: "",
+    progressConfirmed: false,
+    reportDraft: "",
+    reportSent: false,
+  };
+  return { ok: true, student };
 }

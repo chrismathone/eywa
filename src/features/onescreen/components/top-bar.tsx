@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { TodayClass } from "../server/roster";
 
@@ -16,6 +17,10 @@ export function OneScreenTopBar({
   onView,
   stats,
   todayClasses,
+  noticeMode,
+  academyNoticeMode,
+  onNoticeMode,
+  makeupAdder,
 }: {
   today: string;
   classTags: readonly string[];
@@ -27,7 +32,16 @@ export function OneScreenTopBar({
   onView: (v: "card" | "grid" | "status" | "history") => void;
   stats: { students: number; progressDone: number; testDone: number; reportDone: number };
   todayClasses: TodayClass[];
+  noticeMode: "A" | "B" | null; // 강사 본인 멘트 모드(null=학원 기본)
+  academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드
+  onNoticeMode: (mode: "A" | "B" | null) => void;
+  makeupAdder?: ReactNode; // 보강 학생 추가 컨트롤(슬롯)
 }) {
+  const noticeOptions: { value: "A" | "B" | null; label: string }[] = [
+    { value: null, label: `학원 기본(${academyNoticeMode})` },
+    { value: "A", label: "단일 A" },
+    { value: "B", label: "2문단 B" },
+  ];
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2">
       {/* 날짜 */}
@@ -105,6 +119,26 @@ export function OneScreenTopBar({
             마감 <b className="text-foreground tabular">{doneCount}</b>
             <span className="text-text-faint">/{total}</span>
           </span>
+        </div>
+        {makeupAdder}
+        {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode). */}
+        <div className="border-line flex items-center rounded-md border p-0.5" title="AI 자동작성 멘트 문단 구성(내 계정)">
+          {noticeOptions.map((o) => {
+            const on = noticeMode === o.value;
+            return (
+              <button
+                key={String(o.value)}
+                type="button"
+                onClick={() => onNoticeMode(o.value)}
+                aria-pressed={on}
+                className={`rounded-sm px-1.5 py-1 text-[11px] font-semibold transition ${
+                  on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
         </div>
         <span className="bg-line h-5 w-px" aria-hidden />
         {/* 카드 ↔ 표(스프레드시트) ↔ 발송 현황 ↔ 지난 보고서 뷰 전환 */}

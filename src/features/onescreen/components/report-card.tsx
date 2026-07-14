@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
+import { isReportEligible } from "../grid";
+import { splitLessons } from "../curriculum";
 import { DeltaChip } from "./delta-chip";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
@@ -67,9 +69,24 @@ function MiniSummary({ st, subject }: { st: OneScreenStudent; subject: Subject }
   return (
     <div className="border-line rounded-md border px-3 py-2">
       <Row label="오늘 진도">
-        <span className={`rounded-pill px-1.5 py-px text-[11px] font-semibold ${toneSoftClass(tone)}`}>
-          {key} · {subject.today}
-        </span>
+        {/* 다중 차시는 한 줄로 쏟지 않고 **차시별 줄바꿈**(pill 스택). 첫 줄에만 과목 접두. */}
+        {(() => {
+          const lessons = splitLessons(subject.today);
+          if (lessons.length === 0)
+            return <span className="text-text-faint text-[12px]">미입력</span>;
+          return (
+            <span className="flex flex-col items-end gap-0.5">
+              {lessons.map((l, i) => (
+                <span
+                  key={i}
+                  className={`rounded-pill px-1.5 py-px text-[11px] font-semibold ${toneSoftClass(tone)}`}
+                >
+                  {i === 0 ? `${key} · ${l}` : l}
+                </span>
+              ))}
+            </span>
+          );
+        })()}
       </Row>
       <Row label="일일테스트">
         <span className="tabular">{fmt(daily)}</span>
@@ -299,7 +316,13 @@ export function ReportCard({
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <p className="micro text-text-faint">{subjectName} 보고서</p>
-            <Button variant="ghost" size="sm" disabled={generating} onClick={() => onAutoWrite(subjectName)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={generating || !isReportEligible(subject)}
+              title={isReportEligible(subject) ? undefined : "오늘 진도를 먼저 입력하세요"}
+              onClick={() => onAutoWrite(subjectName)}
+            >
               <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
             </Button>
           </div>
