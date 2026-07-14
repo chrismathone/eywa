@@ -30,10 +30,14 @@ export type StudentOption = { id: string; name: string; grade: string | null };
 
 export type TextbookStats = {
   total: number;
-  byStatus: Record<string, number>;
+  // 하단 체크(등록·납부·주문)와 라벨 일치 — "그 단계가 아직 안 된 것" 카운트 + 완료(3체크 전부).
+  needReg: number; // 등록 미완(registered_at null)
+  needPay: number; // 납부 미완(paid_at null)
+  needOrder: number; // 주문 미완(ordered_at null)
+  done: number; // 등록·납부·주문 전부 완료
   totalAmount: number;
-  unpaidAmount: number; // status<>paid 합계
-  pending: number; // 청구 전(requested/ordered/delivered)
+  unpaidAmount: number; // 납부 미완(paid_at null) 합계
+  pending: number; // 완료 안 된 건수(= total - done)
 };
 
 const PAGE = 50;
@@ -93,22 +97,27 @@ function checkCount(r: TextbookOrderRow): number {
 }
 
 export async function getTextbookOrdersPage(
-  opts: { status?: string; q?: string } = {},
+  opts: { filter?: string; q?: string } = {},
   page = 1,
   pageSize = PAGE,
 ): Promise<{ rows: TextbookOrderRow[]; total: number }> {
   const supabase = await createClient();
   const term = opts.q ? sanitize(opts.q) : "";
-  // 완료(3체크)를 목록 맨 아래로 내리려면 페이지 경계를 넘는 전체 정렬이 필요 → 전건 fetch 후 JS 정렬·페이지네이션.
+  // 완료(3체크)를 목록 맨 아래로 내리려면 페이지 경계를 넘는 전체 정렬 필요 → 전건 fetch 후 JS 정렬·필터·페이지네이션.
   // 교재신청은 테넌트당 수백 건 수준이라 안전(B2: 무페이징 select가 아닌 fetchAllPaged). 강사 뷰(getTextbookOrdersForStudents)는 무관.
   const all = await fetchAllPaged<DbOrderRow>((from, to) => {
     let qb = supabase.from("textbook_orders").select(ORDER_COLS);
-    if (opts.status && opts.status !== "all") qb = qb.eq("status", opts.status);
     if (term) qb = qb.or(`book_name.ilike.%${term}%,student_name.ilike.%${term}%`);
     return qb.order("request_date", { ascending: false, nullsFirst: false }).order("id").range(from, to);
   });
 
-  const rows = all.map(mapOrderRow);
+  // 필터 = 하단 체크와 동일 의미: 등록/납부/주문 = 그 단계 미완, done = 3체크 전부.
+  let rows = all.map(mapOrderRow);
+  const f = opts.filter;
+  if (f === "reg") rows = rows.filter((r) => !r.registered);
+  else if (f === "pay") rows = rows.filter((r) => !r.paid);
+  else if (f === "order") rows = rows.filter((r) => !r.ordered);
+  else if (f === "done") rows = rows.filter((r) => r.registered && r.ordered && r.paid);
   // 1순위: 찍힌 체크 개수 오름차순(0→1→2→3) — 손 안 댄 것(0개)이 맨 위, 완료(3개)가 맨 아래.
   // 2순위: 신청일 최신순(같은 개수 안에서, 날짜 없으면 뒤로).
   rows.sort((a, b) => {
@@ -236,18 +245,32 @@ export async function getStudentOptions(): Promise<StudentOption[]> {
 // 카드용 경량 집계 — ~350행이라 status·price만 전건 fetch 후 메모리 집계(1000행 미만).
 export async function getTextbookStats(): Promise<TextbookStats> {
   const supabase = await createClient();
-  const { data } = await supabase.from("textbook_orders").select("status, price");
-  const rows = data ?? [];
-  const byStatus: Record<string, number> = {};
-  let totalAmount = 0;
-  let unpaidAmount = 0;
-  let pending = 0;
+  // 체크(등록·납부·주문) 기반 카운트 — 전건(B2: 무페이징 select 금지 → fetchAllPaged).
+  const rows = await fetchAllPaged<{
+    registered_at: string | null;
+    ordered_at: string | null;
+    paid_at: string | null;
+    price: string | number;
+  }>((from, to) =>
+    supabase.from("textbook_orders").select("registered_at, ordered_at, paid_at, price").range(from, to),
+  );
+  let needReg = 0,
+    needPay = 0,
+    needOrder = 0,
+    done = 0,
+    totalAmount = 0,
+    unpaidAmount = 0;
   for (const r of rows) {
-    byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
+    const reg = !!r.registered_at,
+      ord = !!r.ordered_at,
+      paid = !!r.paid_at;
+    if (!reg) needReg++;
+    if (!paid) needPay++;
+    if (!ord) needOrder++;
+    if (reg && ord && paid) done++;
     const p = Number(r.price);
     totalAmount += p;
-    if (r.status !== "paid") unpaidAmount += p;
-    if (r.status === "requested" || r.status === "ordered") pending++;
+    if (!paid) unpaidAmount += p;
   }
-  return { total: rows.length, byStatus, totalAmount, unpaidAmount, pending };
+  return { total: rows.length, needReg, needPay, needOrder, done, totalAmount, unpaidAmount, pending: rows.length - done };
 }

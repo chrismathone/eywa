@@ -7,6 +7,7 @@ import {
   getStudentOptions,
   getTextbookOrdersPage,
   getTextbookStats,
+  type TextbookStats,
 } from "@/features/billing/server/textbook-queries";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -19,10 +20,12 @@ import { TextbooksTable } from "./textbooks-table";
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 
-const STATUS: { key: string; label: string }[] = [
-  { key: "requested", label: "신청" },
-  { key: "ordered", label: "주문" },
-  { key: "paid", label: "납부" },
+// 하단 체크 버튼(등록·납부·주문)과 라벨·순서 일치. 각 칩 = "그 단계가 아직 안 된 것", 완료 = 3체크 전부.
+const FILTERS: { key: string; label: string; title: string; count: (s: TextbookStats) => number }[] = [
+  { key: "reg", label: "등록", title: "아직 등록 안 된 건", count: (s) => s.needReg },
+  { key: "pay", label: "납부", title: "아직 납부 안 된 건", count: (s) => s.needPay },
+  { key: "order", label: "주문", title: "아직 주문 안 된 건", count: (s) => s.needOrder },
+  { key: "done", label: "완료", title: "등록·납부·주문 모두 완료", count: (s) => s.done },
 ];
 
 type Sp = { status?: string; q?: string; page?: string };
@@ -35,7 +38,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
 
   // settings·user는 다이얼로그 실시간 미리보기(요청서 카드: 학원명·로고·계좌)용. 둘 다 React 캐시라 저비용.
   const [{ rows, total }, stats, students, catalog, settings, user] = await Promise.all([
-    getTextbookOrdersPage({ status, q }, page, PAGE_SIZE),
+    getTextbookOrdersPage({ filter: status, q }, page, PAGE_SIZE),
     getTextbookStats(),
     getStudentOptions(),
     getCatalogOptions(),
@@ -76,17 +79,18 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
         >
           전체 {stats.total}
         </Link>
-        {STATUS.map((s) => (
+        {FILTERS.map((s) => (
           <Link
             key={s.key}
             href={chipHref(s.key)}
+            title={s.title}
             className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
               status === s.key
                 ? "border-foreground bg-foreground text-background font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
             }`}
           >
-            {s.label} {stats.byStatus[s.key] ?? 0}
+            {s.label} {s.count(stats)}
           </Link>
         ))}
         <SearchForm placeholder="교재명·학생" defaultValue={q} />
