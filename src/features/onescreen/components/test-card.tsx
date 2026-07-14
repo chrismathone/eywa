@@ -1,4 +1,5 @@
 import { pct } from "../report";
+import { displayLessons } from "../curriculum";
 import { DeltaChip } from "./delta-chip";
 import type { OneScreenStudent, TestScore } from "../types";
 
@@ -104,8 +105,9 @@ export function TestCard({
   dailyEnabled?: boolean; // 일일테스트 사용(off면 입력창 숨김)
   checkEnabled?: boolean; // 확인테스트 사용(off면 입력창 숨김)
 }) {
-  const prevRange = student.subjects.map((s) => s.prev.split("·")[0]?.trim()).join(" / ");
-  const todayRange = student.subjects.map((s) => s.today.split("·")[0]?.trim()).join(" / ");
+  // 다중 차시도 한 줄로 이어 표시(", "). '·'로 쪼개던 옛 로직은 다중차시(개행)에서 깨져 제거.
+  const prevRange = student.subjects.map((s) => displayLessons(s.prev) || s.prev).filter(Boolean).join(" / ");
+  const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
   return (
     <div className="bg-card border-line shadow-card rounded-md border">
       <header className="border-line flex items-center justify-between border-b px-4 py-3">

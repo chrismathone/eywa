@@ -169,6 +169,9 @@ export const users = pgTable(
     monthlyBase: numeric("monthly_base", { precision: 10, scale: 0 }).notNull().default("0"),
     // 주간 근무 시간표 — { mon: ["09:00-12:00", …], … } 요일별 시간대 배열. null = 미설정.
     workSchedule: jsonb("work_schedule"),
+    // 강사별 AI 멘트 공지 모드 오버라이드(0104a) — 'A'(단일 문단)|'B'(2문단 분리). null = 학원 기본(report.noticeMode) 따름.
+    // 소비: generateReportComment(강사값 > 학원기본 > A). 쓰기: setMyNoticeMode(본인만, admin client).
+    reportNoticeMode: text("report_notice_mode"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -6,6 +6,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { parseExamScores } from "../exam-info";
+import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
 
 /**
@@ -39,6 +40,8 @@ export type TeacherRoster = {
   // 점수 입력칸을 숨겨(입력 안 함) + 학부모 보고서에도 미표시(parent-report-card). 표시·입력 단일 스위치.
   showDailyTest: boolean;
   showCheckTest: boolean;
+  noticeMode: "A" | "B" | null; // 강사 본인의 AI 멘트 모드 오버라이드(null=학원 기본 따름) — 0104a
+  academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드(report.noticeMode) — 토글 '학원 기본' 라벨 표시용
 };
 
 type OnescreenSessionRow = {
@@ -58,8 +61,24 @@ type OnescreenSessionRow = {
   progress_confirmed: boolean | null;
 };
 
-function emptyRoster(today: string, teacherName: string): TeacherRoster {
-  return { today, classTags: ["전체"], teacherName, students: [], todayClasses: [], allowTeacherTestMax: false, showDailyTest: true, showCheckTest: true };
+function emptyRoster(
+  today: string,
+  teacherName: string,
+  noticeMode: "A" | "B" | null = null,
+  academyNoticeMode: "A" | "B" = "A",
+): TeacherRoster {
+  return {
+    today,
+    classTags: ["전체"],
+    teacherName,
+    students: [],
+    todayClasses: [],
+    allowTeacherTestMax: false,
+    showDailyTest: true,
+    showCheckTest: true,
+    noticeMode,
+    academyNoticeMode,
+  };
 }
 
 export async function getTeacherRoster(): Promise<TeacherRoster> {
@@ -79,15 +98,16 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   const subjectTestMax = new Map(settings.operations.subjects.map((su) => [su.key, su.testMax ?? 5]));
   const allowTeacherTestMax = settings.report.allowTeacherTestMax;
   const { showDailyTest, showCheckTest } = settings.report;
+  const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
-  // 1) 강사 담당 활성 반
-  const { data: classes } = await supabase
-    .from("classes")
-    .select("id, class_name, subject")
-    .eq("teacher_id", user.id)
-    .eq("is_active", true);
+  // 1) 강사 담당 활성 반 + 본인 멘트 모드 오버라이드(독립 조회 → 병렬, B4)
+  const [{ data: classes }, { data: meRow }] = await Promise.all([
+    supabase.from("classes").select("id, class_name, subject").eq("teacher_id", user.id).eq("is_active", true),
+    supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
+  ]);
+  const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
   const allClasses = classes ?? [];
-  if (allClasses.length === 0) return emptyRoster(today, teacherName);
+  if (allClasses.length === 0) return emptyRoster(today, teacherName, noticeMode, academyNoticeMode);
 
   // 2) 오늘 요일에 수업 있는 반(없으면 전체 담당 반 폴백 — 주말/휴일에도 화면이 비지 않게)
   const allIds = allClasses.map((c) => c.id);
@@ -116,7 +136,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
   );
   const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
-  if (studentIds.length === 0) return emptyRoster(today, teacherName);
+  if (studentIds.length === 0) return emptyRoster(today, teacherName, noticeMode, academyNoticeMode);
 
   // 4) 학생 기본 정보
   const studentRows = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
@@ -166,7 +186,7 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 이전 진도/점수(직전 회차) + 오늘 발송 여부 + 오늘 출결을 실데이터로 채운다(하드코딩 초기값 대체).
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   const todayIso = kstToday();
-  const [reportRows, attRows, sessionRows] = await Promise.all([
+  const [reportRows, attRows, sessionRows, textbookRows] = await Promise.all([
     fetchInChunks<{
       id: string;
       student_id: string;
@@ -178,13 +198,19 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
       classnote_status: string | null;
       revoked_at: string | null;
       attachments: { path: string; name: string }[] | null;
+      // 이전 회차 참고행(prevReport)용 — 같은 lesson_reports 행에서 컬럼만 추가(새 쿼리 없음, B2 무위반).
+      textbook: string | null;
+      homework_today: string | null;
+      homework_score: string | null;
+      attitude: string | null;
+      notes: string | null;
     }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
           .select(
-            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments",
+            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments, textbook, homework_today, homework_score, attitude, notes",
           )
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
@@ -209,8 +235,32 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         .eq("session_date", todayIso)
         .in("student_id", chunk),
     ),
+    // 교재 자동입력 기본값 — 본인 담당 학생의 교재요청서(fetchInChunks, B3). studentIds 독립 → 같은 Promise.all(B4).
+    getTextbookOrdersForStudents(studentIds),
   ]);
   const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
+
+  // 학생별 대표 교재 — 강사 본인 주문 우선, (requestDate ?? createdAt) 최신, book_name 공란 제외.
+  // 교재요청서엔 과목 컬럼이 없어 (학생) 단위 대표 1건을 그 학생의 과목들에 기본값으로 적용(강사가 세션에서 덮어씀).
+  const bookByStudent = new Map<string, string>();
+  {
+    const byStudent = new Map<string, typeof textbookRows>();
+    for (const t of textbookRows) {
+      if (!t.studentId || !t.bookName?.trim()) continue;
+      const arr = byStudent.get(t.studentId) ?? [];
+      arr.push(t);
+      byStudent.set(t.studentId, arr);
+    }
+    for (const [sid, arr] of byStudent) {
+      const pick = [...arr].sort((a, b) => {
+        const at = a.teacherName === teacherName ? 0 : 1;
+        const bt = b.teacherName === teacherName ? 0 : 1;
+        if (at !== bt) return at - bt; // 강사 본인 주문 먼저
+        return (b.requestDate ?? b.createdAt ?? "").localeCompare(a.requestDate ?? a.createdAt ?? ""); // 최신
+      })[0];
+      if (pick?.bookName?.trim()) bookByStudent.set(sid, pick.bookName.trim());
+    }
+  }
 
   // student별: 오늘 저장된 보고서 존재(reportSent) + 오늘 이전 최신 보고서(prev 진도/prevScore).
   // 오늘 보고서는 **과목별**로도 적재(sentToday는 학생단위 폴백, todayBySubject는 과목별 발송상태·공유링크 수명).
@@ -226,7 +276,10 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
     }
   >();
   const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
+  type ReportRow = (typeof reportRows)[number];
   const priorReport = new Map<string, { progress: string | null; examInfo: string | null }>();
+  // (학생×과목)별 직전 회차 전체 행 — 이전 회차 참고행(prevReport). report_date desc라 (학생,과목) 첫 건이 직전.
+  const priorBySubject = new Map<string, ReportRow>();
   const todayReportIds: string[] = [];
   for (const r of reportRows) {
     if (r.report_date === todayIso) {
@@ -243,8 +296,12 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         });
         todayReportIds.push(r.id);
       }
-    } else if (!priorReport.has(r.student_id))
-      priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
+    } else {
+      if (!priorReport.has(r.student_id))
+        priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
+      const pk = subjKey(r.student_id, r.subject);
+      if (!priorBySubject.has(pk)) priorBySubject.set(pk, r); // (학생,과목) 첫(=직전) 회차
+    }
   }
 
   // 오늘 보고서들의 학부모 열람 수(share_link_views) — PostgREST group-by 대신 행을 청크로 가져와 JS 집계(fetchInChunks).
@@ -291,6 +348,32 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
         }
         if (!matched && os.subjects[0]) os.subjects[0].prev = pr.progress;
       }
+    }
+    // (학생×과목) 직전 회차 → 참고행(prevReport) + 과목 정확매칭 prev + 교재 자동입력 기본값(②교재요청서 > ③직전교재).
+    // ①오늘 입력값(세션)은 아래 sess 블록이 최종으로 덮으므로 항상 우선. su.textbook 초기값은 ""(과목 push).
+    const reqBook = bookByStudent.get(os.id);
+    for (const su of os.subjects) {
+      const pbs = priorBySubject.get(subjKey(os.id, su.subjectKey ?? null));
+      if (pbs) {
+        const prog =
+          pbs.progress && su.name && pbs.progress.startsWith(su.name)
+            ? pbs.progress.slice(su.name.length).trim() || pbs.progress
+            : pbs.progress;
+        su.prevReport = {
+          date: pbs.report_date,
+          progress: prog ?? null,
+          textbook: pbs.textbook ?? null,
+          homeworkToday: pbs.homework_today ?? null,
+          homeworkScore: pbs.homework_score ?? null,
+          attitude: pbs.attitude ?? null,
+          examInfo: pbs.exam_info ?? null,
+          note: pbs.notes ?? null,
+        };
+        if (prog) su.prev = prog; // 과목 정확매칭 prev 우선(위 startsWith 학생단위 폴백보다 정확)
+      }
+      const prevBook = su.prevReport?.textbook?.trim();
+      if (prevBook) su.textbook = prevBook; // ③ 직전 교재
+      if (reqBook) su.textbook = reqBook; // ② 교재요청서(덮음)
     }
     // Phase3: 오늘 세션(작업중) 복원 — 점수/진도/태도/과제/확정을 하드코딩 기본값 위에 덮어씀.
     const sess = sessionById.get(os.id);
@@ -345,5 +428,16 @@ export async function getTeacherRoster(): Promise<TeacherRoster> {
   // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).
   const classTags = ["전체", ...todayClasses.map((c) => c.name)];
 
-  return { today, classTags, teacherName, students, todayClasses, allowTeacherTestMax, showDailyTest, showCheckTest };
+  return {
+    today,
+    classTags,
+    teacherName,
+    students,
+    todayClasses,
+    allowTeacherTestMax,
+    showDailyTest,
+    showCheckTest,
+    noticeMode,
+    academyNoticeMode,
+  };
 }

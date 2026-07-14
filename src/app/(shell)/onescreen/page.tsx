@@ -35,6 +35,8 @@ export default async function OneScreenPage() {
       allowTeacherTestMax={roster.allowTeacherTestMax}
       showDailyTest={roster.showDailyTest}
       showCheckTest={roster.showCheckTest}
+      noticeMode={roster.noticeMode}
+      academyNoticeMode={roster.academyNoticeMode}
     />
   );
 }

@@ -1,27 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import {
-  CURRICULUM_GRADES,
-  curriculumForGradeSemester,
-  semesterOfLesson,
-  semestersForGrade,
-  type Semester,
-} from "../curriculum";
+import { displayLessons } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { buildGridRows, isReportEligible } from "../grid";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
+import { ProgressSelector } from "./progress-selector";
 
 function clamp(n: number, max: number) {
   return Math.max(0, Math.min(max, n));
@@ -29,22 +22,26 @@ function clamp(n: number, max: number) {
 
 const NONE = "__none__"; // Base UI Select는 빈 문자열 값을 안 좋아함 → 미입력 sentinel.
 
-/** 과목 진도 입력이 커리큘럼 드롭다운(math)인지 여부. 미지정은 math로 간주(progress-card와 동일 규칙). */
+/** 과목 진도 입력이 커리큘럼(math)인지. 미지정은 math로 간주(progress-card와 동일 규칙). */
 const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
 
-/** 진도 셀 — math면 [학년][학기][차시] 컴팩트 select(progress-card와 동일 헬퍼), 그 외는 텍스트. */
+/** "2026-07-10" → "07/10". 이전 회차 참고행 날짜. */
+function shortDate(ymd: string): string {
+  const [, m, d] = ymd.split("-");
+  return m && d ? `${m}/${d}` : ymd;
+}
+
+/** 진도 셀 — math면 다중 차시 ProgressSelector(edutrix 진도선택창), 그 외는 자유 텍스트. */
 function GridProgressCell({
   student,
   subjectIndex,
   onProgress,
   onStudyGrade,
-  onSemester,
 }: {
   student: OneScreenStudent;
   subjectIndex: number;
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
-  onSemester: (studentId: string, semester: Semester) => void;
 }) {
   const su = student.subjects[subjectIndex];
   if (!su) return null;
@@ -60,60 +57,16 @@ function GridProgressCell({
       />
     );
   }
-  const studyGrade = student.studyGrade ?? student.grade;
-  // 학기 = 현재 진도(첫 과목 today)에서 자동 도출(progress-card와 동일 — 학생 단위 진도 학년/학기).
-  const semester = semesterOfLesson(studyGrade, student.subjects[0]?.today ?? "");
-  const semesters = semestersForGrade(studyGrade);
-  const units = curriculumForGradeSemester(studyGrade, semester);
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1">
-        <Select value={studyGrade} onValueChange={(v) => v && onStudyGrade(student.id, v as string)}>
-          <SelectTrigger size="sm" aria-label={`${student.name} 진도 학년`}>
-            <SelectValue>{(v) => v as string}</SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            {CURRICULUM_GRADES.map((g) => (
-              <SelectItem key={g} value={g}>
-                {g}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={semester} onValueChange={(v) => v && onSemester(student.id, v as Semester)}>
-          <SelectTrigger size="sm" aria-label={`${student.name} 학기`}>
-            <SelectValue>{(v) => `${v}학기`}</SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            {semesters.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}학기
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {studyGrade !== student.grade ? (
-          <span className="bg-amber-soft text-amber shrink-0 rounded-[3px] px-1 py-0.5 text-[10px] font-bold">선행/후행</span>
-        ) : null}
-      </div>
-      <Select value={su.today} onValueChange={(v) => v && onProgress(student.id, subjectIndex, v as string)}>
-        <SelectTrigger size="sm" className="w-full" aria-label={`${student.name} 오늘 진도`}>
-          <SelectValue placeholder="차시 선택">{(v) => v as string}</SelectValue>
-        </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false} className="max-h-80">
-          {units.map((unit) => (
-            <SelectGroup key={unit.unit}>
-              <SelectLabel>{unit.unit}</SelectLabel>
-              {unit.lessons.map((l) => (
-                <SelectItem key={l} value={l}>
-                  {l}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <ProgressSelector
+      value={su.today}
+      onChange={(joined) => onProgress(student.id, subjectIndex, joined)}
+      studyGrade={student.studyGrade ?? student.grade}
+      onStudyGrade={(g) => onStudyGrade(student.id, g)}
+      studentGrade={student.grade}
+      prev={su.prev}
+      ariaLabel={`${student.name} ${su.name} 오늘 진도`}
+    />
   );
 }
 
@@ -167,6 +120,53 @@ function ScoreInput({
 
 const TH = "text-text-faint px-2 py-2 text-left text-[11px] font-semibold whitespace-nowrap";
 const TD = "border-line border-t px-2 py-1.5 align-top";
+const PREV_TD = "border-line/60 px-2 py-1 align-top text-[11px] text-text-faint";
+
+/** 이전 회차 참고행(edutrix식) — 편집행 위, 같은 열에 지난 보고서를 읽기전용으로 정렬. 테스트 열은 표시설정에 맞춰 정렬. */
+function PrevRow({
+  subject,
+  dailyEnabled,
+  checkEnabled,
+}: {
+  subject: OneScreenStudent["subjects"][number];
+  dailyEnabled: boolean;
+  checkEnabled: boolean;
+}) {
+  const p = subject.prevReport;
+  if (!p) return null;
+  const prog = displayLessons(p.progress) || p.progress || "—";
+  const testCols = (dailyEnabled ? 1 : 0) + (checkEnabled ? 1 : 0);
+  return (
+    <tr className="bg-bg-soft/40">
+      <td className={`${PREV_TD} text-center`} aria-hidden>
+        <span className="text-text-faint/70 text-[13px] leading-none">⌃</span>
+      </td>
+      <td className={PREV_TD}>
+        <span className="whitespace-nowrap">이전 {shortDate(p.date)}</span>
+      </td>
+      <td className={PREV_TD}>
+        <span className="line-clamp-3 whitespace-pre-line">{prog}</span>
+      </td>
+      {testCols > 0 ? (
+        <td className={`${PREV_TD} text-center`} colSpan={testCols}>
+          {p.examInfo || "—"}
+        </td>
+      ) : null}
+      <td className={PREV_TD}>{p.attitude || "—"}</td>
+      <td className={PREV_TD}>{p.homeworkScore || "—"}</td>
+      <td className={PREV_TD}>
+        <span className="line-clamp-2">{p.textbook || "—"}</span>
+        {p.homeworkToday ? (
+          <span className="text-text-faint/80 mt-0.5 block line-clamp-2">과제 {p.homeworkToday}</span>
+        ) : null}
+      </td>
+      <td className={PREV_TD}>
+        <span className="line-clamp-2">{p.note || "—"}</span>
+      </td>
+      <td className={PREV_TD} />
+    </tr>
+  );
+}
 
 /**
  * 선생님 원스크린 — 표(스프레드시트) 대량작성 뷰.
@@ -180,7 +180,6 @@ export function OneScreenGrid({
   homeworks,
   onProgress,
   onStudyGrade,
-  onSemester,
   onScore,
   onAttitude,
   onHomework,
@@ -209,7 +208,6 @@ export function OneScreenGrid({
   homeworks: readonly string[];
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
-  onSemester: (studentId: string, semester: Semester) => void;
   onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
   onAttitude: (studentId: string, a: string | null) => void;
   onHomework: (studentId: string, h: string) => void;
@@ -235,10 +233,14 @@ export function OneScreenGrid({
   const rows = buildGridRows(students);
   const eligibleRows = rows.filter((r) => isReportEligible(r.subject));
   const eligible = eligibleRows.length;
-  // 행 선택(체크) — 일괄 작업 대상. 선택 없으면 발송가능 전체가 대상.
+  // 행 선택(체크) — 일괄 작업 대상. **표시된 모든 행**을 선택 가능(진도 유무 무관).
+  // 실제 처리는 client의 selectRows가 발송가능(진도 입력) 행만 걸러내므로, 진도 없는 행은 안전히 건너뜀.
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const selectedKeys = eligibleRows.filter((r) => checked.has(r.key)).map((r) => r.key);
-  const allChecked = eligible > 0 && selectedKeys.length === eligible;
+  const [showPrev, setShowPrev] = useState(true); // 이전 회차 참고행 토글(기본 켜짐)
+  const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
+  const selectedEligible = eligibleRows.filter((r) => checked.has(r.key)).length; // 실제 처리될 수(발송가능)
+  const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
+  const allChecked = rows.length > 0 && selectedKeys.length === rows.length;
   const toggleRow = (k: string) =>
     setChecked((prev) => {
       const n = new Set(prev);
@@ -249,8 +251,8 @@ export function OneScreenGrid({
   const toggleAll = () =>
     setChecked((prev) => {
       const n = new Set(prev);
-      if (allChecked) eligibleRows.forEach((r) => n.delete(r.key));
-      else eligibleRows.forEach((r) => n.add(r.key));
+      if (allChecked) rows.forEach((r) => n.delete(r.key));
+      else rows.forEach((r) => n.add(r.key));
       return n;
     });
 
@@ -264,7 +266,7 @@ export function OneScreenGrid({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 일괄 바 — 오늘 진도 있는 행만 대상(빈 행 skip). */}
+      {/* 일괄 바 — 선택은 표시 전체, 처리는 발송가능 행만(client selectRows). */}
       <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-md border px-4 py-2.5">
         <span className="text-text-dim text-[12px]">
           표시 <span className="text-foreground font-bold">{rows.length}</span> · 발송가능{" "}
@@ -273,9 +275,23 @@ export function OneScreenGrid({
             <>
               {" "}
               · 선택 <span className="text-primary font-bold">{selectedKeys.length}</span>
+              {selectedKeys.length > selectedEligible ? (
+                <span className="text-text-faint"> (발송가능 {selectedEligible})</span>
+              ) : null}
             </>
           ) : null}
         </span>
+        {hasPrev ? (
+          <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-[12px]">
+            <input
+              type="checkbox"
+              checked={showPrev}
+              onChange={() => setShowPrev((v) => !v)}
+              className="accent-primary size-3.5"
+            />
+            이전 회차 참고
+          </label>
+        ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Button
             variant="ghost"
@@ -283,7 +299,11 @@ export function OneScreenGrid({
             onClick={() => onAutoWriteAll(selectedKeys)}
             disabled={eligible === 0 || bulkGen}
           >
-            {bulkGen ? "자동작성 중…" : selectedKeys.length ? `선택 ${selectedKeys.length} 자동작성` : "전체 자동작성"}
+            {bulkGen
+              ? "자동작성 중…"
+              : selectedKeys.length
+                ? `선택 ${selectedEligible} 자동작성`
+                : "전체 자동작성"}
           </Button>
           <Button
             variant="outline"
@@ -291,10 +311,10 @@ export function OneScreenGrid({
             onClick={() => onSaveAll(selectedKeys)}
             disabled={eligible === 0 || bulkGen}
           >
-            {selectedKeys.length ? "선택 저장" : "일괄 저장"}
+            {selectedKeys.length ? `선택 ${selectedEligible} 저장` : "일괄 저장"}
           </Button>
           <Button size="sm" onClick={() => onSendAll(selectedKeys)} disabled={eligible === 0 || bulkGen}>
-            {selectedKeys.length ? `선택 ${selectedKeys.length} 발송` : "ClassNote 일괄 발송"}
+            {selectedKeys.length ? `선택 ${selectedEligible} 발송` : "ClassNote 일괄 발송"}
           </Button>
         </div>
       </div>
@@ -321,7 +341,7 @@ export function OneScreenGrid({
                   type="checkbox"
                   checked={allChecked}
                   onChange={toggleAll}
-                  aria-label="발송가능 행 전체 선택"
+                  aria-label="표시 행 전체 선택"
                   className="accent-primary size-3.5 align-middle"
                 />
               </th>
@@ -344,22 +364,29 @@ export function OneScreenGrid({
               const att = student.attendance;
               const genRowBusy = genKey === key; // 이 행 자동작성 중
               const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
+              const canWrite = isReportEligible(subject); // 진도 입력됨 = 자동작성/발송 가능
               return (
-                <tr key={key} className="hover:bg-bg-soft/50">
+                <Fragment key={key}>
+                {showPrev ? <PrevRow subject={subject} dailyEnabled={dailyEnabled} checkEnabled={checkEnabled} /> : null}
+                <tr className="hover:bg-bg-soft/50">
                   <td className={`${TD} text-center`}>
                     <input
                       type="checkbox"
                       checked={checked.has(key)}
-                      disabled={!isReportEligible(subject)}
                       onChange={() => toggleRow(key)}
                       aria-label={`${student.name} ${subject.name} 선택`}
-                      className="accent-primary size-3.5 align-middle disabled:opacity-40"
+                      className="accent-primary size-3.5 align-middle"
                     />
                   </td>
                   <td className={TD}>
                     <div className="flex items-center gap-1.5">
                       <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
                       <span className="text-foreground font-semibold">{student.name}</span>
+                      {student.isMakeup ? (
+                        <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
+                          보강
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1">
                       <span className={`rounded-pill px-1.5 py-px text-[10px] font-semibold ${toneSoftClass(tone)}`}>
@@ -383,7 +410,6 @@ export function OneScreenGrid({
                       subjectIndex={subjectIndex}
                       onProgress={onProgress}
                       onStudyGrade={onStudyGrade}
-                      onSemester={onSemester}
                     />
                   </td>
                   {dailyEnabled ? (
@@ -509,8 +535,8 @@ export function OneScreenGrid({
                         <button
                           type="button"
                           onClick={() => onAutoWrite(student, subject.name)}
-                          disabled={genRowBusy || bulkGen}
-                          title="AI 학부모 멘트 자동작성 (발송 문구)"
+                          disabled={genRowBusy || bulkGen || !canWrite}
+                          title={canWrite ? "AI 학부모 멘트 자동작성 (발송 문구)" : "오늘 진도를 먼저 입력하세요"}
                           className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-semibold disabled:opacity-50 ${
                             hasDraft ? "text-primary" : "text-text-dim"
                           }`}
@@ -526,12 +552,7 @@ export function OneScreenGrid({
                           카드
                         </button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!isReportEligible(subject)}
-                        onClick={() => onSendRow(student, subject.name)}
-                      >
+                      <Button size="sm" variant="outline" disabled={!canWrite} onClick={() => onSendRow(student, subject.name)}>
                         발송
                       </Button>
                       {badge ? (
@@ -540,6 +561,7 @@ export function OneScreenGrid({
                     </div>
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>
