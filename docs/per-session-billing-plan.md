@@ -65,8 +65,13 @@ create table invoice_session_terms (
    ([tuition-calc.ts](../src/features/billing/tuition-calc.ts), Vitest 있음). enrollments+class_schedules+설정 공휴일 입력.
 3. 수납 표/다이얼로그에 "회차" 열 + 확정 UI(계획 N 프리필 → 수정 → 확정 버튼, confirmed_by/at 기록) —
    ⚠️ 브랜치의 라인 단위 표 재구성 **위에** 작업(중복 개편 금지).
-4. 견적→청구 전환(saved-quotes-list "청구서로 전환")이 현재 합계 숫자만 넘겨 견적의 sessions/perSession 구조가
-   소실됨 → 전환 시 session_terms 생성으로 구조 보존.
+4. ~~견적→청구 전환(saved-quotes-list "청구서로 전환")이 현재 합계 숫자만 넘겨 견적의 sessions/perSession 구조가
+   소실됨 → 전환 시 session_terms 생성으로 구조 보존.~~ **→ 불요 보류(2026-07-14 원장 판단).**
+   ① injaewon은 청구서를 **MakeEdu 동기화**로 받으므로 eywa 안에서 견적→청구서를 만들 일 자체가 없음 = 실익 0.
+   ② 견적(`tuition_quotes`)은 **신입생 상담용**이라 코스가 자유텍스트 반이름 + 느슨한 `category`만 갖고
+   `class_id`/`subject` FK가 없는데, `invoice_session_terms`는 **`class_id` NOT NULL · `subject` NOT NULL**(0102a)
+   요구 → "전환 시 즉시 session_terms 생성"은 **데이터 모델상 성립 안 함**. "eywa 안에서 직접 청구하는 테넌트"가
+   생기면 그때 **매핑 후 생성**(코스→실제 반+과목 매핑 단계) 또는 **참고 보존**(line_items 메타)으로 재설계 — 그 전엔 만들지 말 것.
 5. (로드맵 2단계 연결) 시수 검증 read-only 탭 — 아래 섹션.
 
 ## 시수 검증(a) — read-only 탭 설계 (로드맵 2단계, 이 키스톤의 직접 소비자)
