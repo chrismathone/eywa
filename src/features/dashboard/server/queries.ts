@@ -343,15 +343,22 @@ export type DashEnrollmentRow = {
 
 export type DashEnrollmentList = { total: number; rows: DashEnrollmentRow[] };
 
-/** 등록상담 목록(활성 = 대기·예약·상담완료·AI완료) — 최근 순 limit건 + 전체 활성 건수(count exact, 절단 무관). */
-export async function getActiveEnrollmentConsultations(limit = 6): Promise<DashEnrollmentList> {
+/**
+ * 등록상담 목록(활성 = 대기·예약·상담완료·AI완료) — 최근 순 limit건 + 건수(count exact, 절단 무관).
+ * 대시보드는 **최근 30일만** — 전체 기간은 활성 상담이 283건까지 쌓여(대부분 몇 달 전 '상담완료' 잔류)
+ * 카드 건수가 "지금 챙길 일"이 아니라 누적 재고를 뜻했다(원장 지적 2026-07-15). 전체는 '전체 →' 링크로.
+ * 기준 컬럼은 칸반 월 필터와 동일한 `consulted_at`(정렬 키와도 일치).
+ */
+export async function getActiveEnrollmentConsultations(limit = 6, days = 30): Promise<DashEnrollmentList> {
   const supabase = await createClient();
+  const since = toIsoDate(new Date(Date.parse(`${kstToday()}T00:00:00Z`) - days * 86_400_000));
   const { data, count } = await supabase
     .from("enrollment_consultations")
     .select("id, prospect_name, prospect_school, prospect_grade, outcome, consultation_date, consulted_at", {
       count: "exact",
     })
     .in("outcome", ["pending", "scheduled", "consulted", "ai_done"])
+    .gte("consulted_at", since)
     .order("consulted_at", { ascending: false })
     .limit(limit);
   const rows: DashEnrollmentRow[] = (data ?? []).map((r) => ({
