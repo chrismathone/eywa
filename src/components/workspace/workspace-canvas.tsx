@@ -39,6 +39,20 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
 
+  // 스테이지가 뜨면 셸 main(메인 프레임 라우트)은 **불투명 바탕에 완전히 가려진다**(배경창 폐지 2026-07-14).
+  // 그런데도 그 라우트가 main의 스크롤 높이를 그대로 만들어, 창 안 스크롤바와 **나란히 바깥 스크롤바가 하나 더**
+  // 생겼다 — 아무것도 안 보이는 콘텐츠를 스크롤하고, 길이는 뒤 라우트 길이(예: 직원관리 목록)라 쓸데없이 길다
+  // (원장 제보 2026-07-15). 스테이지가 켜진 동안 main 스크롤을 잠근다(CSS는 globals.css `html[data-stage="on"]`).
+  // ⚠️ isDesktop=false(모바일·미니셸·iframe 안)면 캔버스가 없어 main이 유일한 스크롤이므로 절대 잠그지 말 것.
+  useEffect(() => {
+    if (!isDesktop) return;
+    const root = document.documentElement;
+    root.dataset.stage = "on";
+    return () => {
+      delete root.dataset.stage;
+    };
+  }, [isDesktop]);
+
   // 사이드바 실제 너비 = 펼침이면 저장 너비, 접힘이면 레일(52). 펼침/접힘·드래그 드롭으로 바뀌면
   // 스테이지가 따라가 창 최대치(최대화·스냅)가 사이드바 오른쪽에 정확히 맞는다.
   const sidebarExpanded = usePrefs((s) => s.sidebarExpanded);
