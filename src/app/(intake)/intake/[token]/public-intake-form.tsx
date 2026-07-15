@@ -15,7 +15,7 @@ import {
 import type { ShuttleSetting } from "@/features/owner/settings-types";
 import { TurnstileWidget } from "./turnstile-widget";
 import { ChecklistStep } from "./checklist-step";
-import { Field, Section, inputCls as input, textareaCls } from "./intake-ui";
+import { AutoTextarea, Field, Section, inputCls as input } from "./intake-ui";
 
 // ijw 입학상담카드 충실 이식 — 컬러 구획(학생=gold·학부모=amber·셔틀=danger·동의서=ink) + 전체 필드/섹션.
 // 셔틀(요금·노선)·동의서 문구는 학원설정에서 주입(operations.shuttle / notifications.privacyTerms·serviceTerms).
@@ -326,11 +326,10 @@ export function PublicIntakeForm({
           <input name="address" placeholder="예: 침산동, 센트럴자이" className={input} />
         </Field>
         <Field label="상담 시 궁금한 점 / 요청사항">
-          <textarea
+          <AutoTextarea
             name="parentRequest"
-            rows={4}
+            minRows={4}
             placeholder="상담 시 문의하실 내용이나 학생에 대해 미리 알려주실 점을 자유롭게 적어주세요."
-            className={textareaCls}
           />
         </Field>
       </Section>

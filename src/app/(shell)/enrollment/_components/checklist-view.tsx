@@ -4,6 +4,7 @@
  * 응답이 없는 문항은 줄 자체를 그리지 않는다 — 빈 라벨만 늘어놓으면 읽을 게 뭔지 안 보인다.
  */
 import {
+  ADVANCED_REASON_OPTIONS,
   CHANGE_OPTIONS,
   ENGLISH_STATE_OPTIONS,
   GOAL_OPTIONS,
@@ -12,9 +13,7 @@ import {
   LEVEL_BASIS_OPTIONS,
   MATH_STATE_OPTIONS,
   PRIOR_REASON_OPTIONS,
-  PRIOR_SIDE_EFFECT_OPTIONS,
   PRIOR_STATUS_OPTIONS,
-  PROTECT_OPTIONS,
   WANT_OPTIONS,
   WORRY_OPTIONS,
   labelOf,
@@ -42,11 +41,11 @@ export function ChecklistView({ checklist }: { checklist: IntakeChecklist }) {
     ["영어 교재·과정", c.english?.course ?? null],
     ["선행학습 여부", c.priorStatus ? labelOf(PRIOR_STATUS_OPTIONS, c.priorStatus) : null],
     ["선행 이유", c.priorReason ? labelOf(PRIOR_REASON_OPTIONS, c.priorReason) : null],
-    ["선행 부작용", c.priorSideEffect ? labelOf(PRIOR_SIDE_EFFECT_OPTIONS, c.priorSideEffect) : null],
+    ["선행 안 하는 이유", c.priorNoneReason],
+    ["심화학습 여부", c.advancedStatus ? labelOf(PRIOR_STATUS_OPTIONS, c.advancedStatus) : null],
+    ["심화 이유", c.advancedReason ? labelOf(ADVANCED_REASON_OPTIONS, c.advancedReason) : null],
+    ["심화 안 하는 이유", c.advancedNoneReason],
     ["6개월 내 원하는 변화", joinLabels(CHANGE_OPTIONS, c.changes, c.changesEtc)],
-    ["주당 학습 가능", c.weeklyHours !== null ? `${c.weeklyHours}시간` : null],
-    ["희망 예산(월)", c.budget !== null ? `${c.budget.toLocaleString("ko-KR")}원` : null],
-    ["지켜주고 싶은 것", joinLabels(PROTECT_OPTIONS, c.protect, c.protectEtc)],
     ["학원에 바라는 것", joinLabels(WANT_OPTIONS, c.wants, c.wantsEtc)],
     ["학생의 강점·성공 경험", c.strengths],
     ["추가 전달 사항", c.extra],

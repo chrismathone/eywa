@@ -1,8 +1,11 @@
+"use client";
+
 /**
- * 공개 접수 폼 공용 UI — 컬러 구획 Section + Field + 입력 클래스.
+ * 공개 접수 폼 공용 UI — 컬러 구획 Section + Field + 입력 클래스 + 자동 증감 textarea.
  * (public-intake-form.tsx 하단에 있던 것을 체크리스트 스텝과 공유하려고 분리 — 한 파일 200줄 규칙.)
  */
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ComponentProps, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export const inputCls =
   "border-border bg-card text-foreground placeholder:text-text-faint h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30";
@@ -77,6 +80,45 @@ export function Section({
       </div>
       <div className={`bg-card mx-3 space-y-4 border-t-[3px] px-5 py-5 shadow-sm ${t.border}`}>{children}</div>
     </>
+  );
+}
+
+/**
+ * 자유입력 textarea — **입력 길이에 따라 스스로 늘고 줄어든다**(원장 지시 2026-07-15).
+ * 학부모가 폰에서 우측 하단 손잡이를 끌어 창을 키우는 건 사실상 불가능하고, 고정 높이면 긴 답이 좁은
+ * 스크롤 상자에 갇혀 다시 읽지 못한다 → 손잡이(resize)는 없애고 내용 높이에 맞춘다.
+ * · 최소 높이 = `minRows`(그 아래로는 안 줄어듦), 최대 = 없음(길게 쓰면 그만큼 커짐)
+ * · 상태 없이 ref+DOM만 만짐(렌더 유발 없음). `auto`로 리셋 후 scrollHeight를 재야 **줄어들 때도** 맞는다.
+ */
+export function AutoTextarea({
+  minRows = 2,
+  className,
+  onInput,
+  ...props
+}: ComponentProps<"textarea"> & { minRows?: number }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const fit = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  // 최초 마운트(초안 복원·자동완성으로 값이 이미 있을 수 있음) 1회 보정.
+  useEffect(() => {
+    if (ref.current) fit(ref.current);
+  }, []);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={minRows}
+      onInput={(e) => {
+        fit(e.currentTarget);
+        onInput?.(e);
+      }}
+      className={cn(textareaCls, "resize-none overflow-hidden", className)}
+      {...props}
+    />
   );
 }
 

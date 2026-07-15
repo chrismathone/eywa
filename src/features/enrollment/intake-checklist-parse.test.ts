@@ -58,12 +58,47 @@ describe("parseIntakeChecklist", () => {
     expect(c?.habits).toEqual({ self_start: 5 });
   });
 
-  it("주당 시간·예산 — 콤마 허용, 음수/과대값은 null", () => {
-    expect(parseIntakeChecklist(form({ weeklyHours: "6", budget: "300,000" }))).toMatchObject({
-      weeklyHours: 6,
-      budget: 300000,
+  it("선행·심화 — 여부/이유가 각각 독립 저장(이유 카탈로그는 서로 다름)", () => {
+    const c = parseIntakeChecklist(
+      form({
+        priorStatus: "partial",
+        priorReason: "exam",
+        advancedStatus: "active",
+        advancedReason: "peers",
+      }),
+    );
+    expect(c).toMatchObject({
+      priorStatus: "partial",
+      priorReason: "exam",
+      advancedStatus: "active",
+      advancedReason: "peers",
     });
-    expect(parseIntakeChecklist(form({ weeklyHours: "999", budget: "-1" }))).toBeNull();
+  });
+
+  it("'하지 않음' 이유는 자유입력으로 저장 — 선행·심화 각각", () => {
+    const c = parseIntakeChecklist(
+      form({
+        priorStatus: "none",
+        priorNoneReason: "현재 과정부터 다지려고",
+        advancedStatus: "none",
+        advancedNoneReason: "기본 개념이 먼저",
+      }),
+    );
+    expect(c).toMatchObject({
+      priorStatus: "none",
+      priorNoneReason: "현재 과정부터 다지려고",
+      advancedStatus: "none",
+      advancedNoneReason: "기본 개념이 먼저",
+    });
+  });
+
+  it("폐기된 문항(주당 시간·예산·선행 부작용)은 보내도 저장되지 않는다", () => {
+    const c = parseIntakeChecklist(
+      form({ goals: "level", weeklyHours: "6", budget: "300000", priorSideEffect: "severe" }),
+    );
+    expect(c).not.toHaveProperty("weeklyHours");
+    expect(c).not.toHaveProperty("budget");
+    expect(c).not.toHaveProperty("priorSideEffect");
   });
 
   it("자유입력은 clip — 초과 길이는 잘린다", () => {

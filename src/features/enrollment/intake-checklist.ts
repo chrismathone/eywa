@@ -37,7 +37,7 @@ export const WORRY_OPTIONS: ChoiceOption[] = [
   { value: "opaque_academy", label: "학원 수업과 관리가 어떻게 이루어지는지 모르겠다" },
 ];
 
-/** 4. 현재 수준을 무엇으로 판단하는가 (복수) */
+/** 현재 학생의 학업 수준을 무엇으로 판단하시나요 (복수). 저장 키 `levelBasis` 고정(라벨만 교체). */
 export const LEVEL_BASIS_OPTIONS: ChoiceOption[] = [
   { value: "school_grade", label: "학교 성적" },
   { value: "test_result", label: "학교·학원 시험 결과" },
@@ -87,7 +87,7 @@ export const HABIT_ITEMS: ChoiceOption[] = [
 export const HABIT_SCALE_MIN = 1;
 export const HABIT_SCALE_MAX = 5;
 
-/** 8. 선행학습 */
+/** 선행학습 — 진행 여부 + 이유. (부작용 문항 "복습·수면·독서·자신감이 줄고 있나요"는 폐기: 원장 지시 2026-07-15.) */
 export const PRIOR_STATUS_OPTIONS: ChoiceOption[] = [
   { value: "none", label: "하지 않음" },
   { value: "partial", label: "일부 진행 중" },
@@ -103,12 +103,20 @@ export const PRIOR_REASON_OPTIONS: ChoiceOption[] = [
   { value: "anxiety", label: "뒤처질 것 같은 불안 때문에" },
   { value: "not_considering", label: "선행을 고려하지 않음" },
 ];
-export const PRIOR_SIDE_EFFECT_OPTIONS: ChoiceOption[] = [
-  { value: "none", label: "전혀 아님" },
-  { value: "slight", label: "약간 있음" },
-  { value: "clear", label: "분명히 있음" },
-  { value: "severe", label: "매우 큼" },
-  { value: "unsure", label: "판단하기 어려움" },
+
+/**
+ * 심화학습 — 선행학습과 같은 구조(여부 + 이유), 문구만 심화에 맞춤(원장 지시 2026-07-15).
+ * 여부 선택지는 선행과 문구가 같아 PRIOR_STATUS_OPTIONS를 공유(같은 라벨을 두 벌 두면 한쪽만 고쳐져 어긋난다).
+ * 이유는 '선행'이 박힌 문구가 있어 별도 카탈로그 — 값(slug)은 선행과 같은 체계로 맞춰 읽기 쉽게.
+ */
+export const ADVANCED_REASON_OPTIONS: ChoiceOption[] = [
+  { value: "mastered", label: "현재 과정을 충분히 이해했기 때문" },
+  { value: "next_stage", label: "다음 학년 또는 학교급 전환 대비" },
+  { value: "exam", label: "시험·입시 대비" },
+  { value: "peers", label: "또래가 심화하고 있어서" },
+  { value: "academy", label: "현재 학원에서 권해서" },
+  { value: "anxiety", label: "뒤처질 것 같은 불안 때문에" },
+  { value: "not_considering", label: "심화를 고려하지 않음" },
 ];
 
 /** 9. 6개월 내 원하는 변화 (최대 2) */
@@ -121,16 +129,6 @@ export const CHANGE_OPTIONS: ChoiceOption[] = [
   { value: "exam_score", label: "학교·학원 시험 성적 향상" },
   { value: "confidence", label: "어려운 문제에 대한 자신감 회복" },
   { value: "less_stress", label: "과도한 학습량과 스트레스 감소" },
-];
-
-/** 9. 지켜 주고 싶은 것 (복수) */
-export const PROTECT_OPTIONS: ChoiceOption[] = [
-  { value: "sleep", label: "수면" },
-  { value: "reading", label: "독서" },
-  { value: "exercise", label: "운동" },
-  { value: "family", label: "친구·가족과의 시간" },
-  { value: "school_life", label: "학교생활" },
-  { value: "emotional", label: "정서적 안정" },
 ];
 
 /** 10. 학원에서 확인·제공받고 싶은 것 (최대 3) */
@@ -169,13 +167,13 @@ export type IntakeChecklist = {
   habits: Record<string, number>;
   priorStatus: string | null;
   priorReason: string | null;
-  priorSideEffect: string | null;
+  /** '하지 않음'을 고른 경우에만 묻는 자유입력 — 왜 안 하는지(학원이 제안을 맞추는 데 핵심). */
+  priorNoneReason: string | null;
+  advancedStatus: string | null;
+  advancedReason: string | null;
+  advancedNoneReason: string | null;
   changes: string[];
   changesEtc: string | null;
-  weeklyHours: number | null;
-  budget: number | null;
-  protect: string[];
-  protectEtc: string | null;
   wants: string[];
   wantsEtc: string | null;
   strengths: string | null;

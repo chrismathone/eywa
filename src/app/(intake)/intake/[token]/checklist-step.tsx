@@ -15,16 +15,15 @@ import {
   MAX_SUBJECT_STATES,
   MAX_WANTS,
   MAX_WORRIES,
+  ADVANCED_REASON_OPTIONS,
   PRIOR_REASON_OPTIONS,
-  PRIOR_SIDE_EFFECT_OPTIONS,
   PRIOR_STATUS_OPTIONS,
-  PROTECT_OPTIONS,
   WANT_OPTIONS,
   WORRY_OPTIONS,
   wantsSubject,
   type ChoiceOption,
 } from "@/features/enrollment/intake-checklist";
-import { Field, QuestionSection, inputCls, textareaCls } from "./intake-ui";
+import { AutoTextarea, Field, QuestionSection, inputCls } from "./intake-ui";
 
 /**
  * 사전 체크리스트(2단계) — 문항 카탈로그는 features/enrollment/intake-checklist.ts 단일 소스.
@@ -46,9 +45,9 @@ export function ChecklistStep({
   const [habits, setHabits] = useState<Record<string, number>>({});
   const [priorStatus, setPriorStatus] = useState("");
   const [priorReason, setPriorReason] = useState("");
-  const [priorSideEffect, setPriorSideEffect] = useState("");
+  const [advancedStatus, setAdvancedStatus] = useState("");
+  const [advancedReason, setAdvancedReason] = useState("");
   const [changes, setChanges] = useState<string[]>([]);
-  const [protect, setProtect] = useState<string[]>([]);
   const [wants, setWants] = useState<string[]>([]);
 
   // 부모(제출 버튼 게이트)에 goals 개수만 알린다. 렌더 중이 아니라 커밋 후 동기화 = 같은 값이면 부모가 bail-out.
@@ -76,14 +75,17 @@ export function ChecklistStep({
       {hidden("mathStates", mathStates)}
       {hidden("englishStates", englishStates)}
       {hidden("changes", changes)}
-      {hidden("protect", protect)}
       {hidden("wants", wants)}
       {Object.entries(habits).map(([k, v]) => (
         <input key={k} type="hidden" name={`habit_${k}`} value={v} />
       ))}
       <input type="hidden" name="priorStatus" value={priorStatus} />
-      <input type="hidden" name="priorReason" value={priorReason} />
-      <input type="hidden" name="priorSideEffect" value={priorSideEffect} />
+      {/* '하지 않음'으로 바꾸면 앞서 고른 이유는 제출하지 않는다(화면에서 사라진 답이 저장되면 유령 데이터). */}
+      {priorStatus !== "none" ? <input type="hidden" name="priorReason" value={priorReason} /> : null}
+      <input type="hidden" name="advancedStatus" value={advancedStatus} />
+      {advancedStatus !== "none" ? (
+        <input type="hidden" name="advancedReason" value={advancedReason} />
+      ) : null}
 
       <QuestionSection title={`${no()}학습 상담을 통해 가장 알고 싶은 문제`} tone="primary" hint={`최대 ${MAX_GOALS}개 · 필수`}>
         <Chips options={GOAL_OPTIONS} value={goals} max={MAX_GOALS} onToggle={toggler(setGoals, MAX_GOALS)} />
@@ -94,11 +96,11 @@ export function ChecklistStep({
         <Chips options={WORRY_OPTIONS} value={worries} max={MAX_WORRIES} onToggle={toggler(setWorries, MAX_WORRIES)} />
         <EtcInput name="worriesEtc" />
         <Field label="지금 계획을 그대로 유지하면 가장 걱정되는 결과">
-          <textarea name="worryOutcome" rows={3} placeholder="자유롭게 적어주세요 (선택)" className={textareaCls} />
+          <AutoTextarea name="worryOutcome" minRows={3} placeholder="자유롭게 적어주세요 (선택)" />
         </Field>
       </QuestionSection>
 
-      <QuestionSection title={`${no()}현재 수준을 무엇으로 판단하시나요`} tone="gold" hint="복수 선택">
+      <QuestionSection title={`${no()}현재 학생의 학업 수준을 무엇으로 판단하시나요`} tone="gold" hint="복수 선택">
         <Chips options={LEVEL_BASIS_OPTIONS} value={levelBasis} max={LEVEL_BASIS_OPTIONS.length} onToggle={toggler(setLevelBasis, LEVEL_BASIS_OPTIONS.length)} />
         <EtcInput name="levelBasisEtc" />
       </QuestionSection>
@@ -134,45 +136,51 @@ export function ChecklistStep({
         </div>
       </QuestionSection>
 
+      {/* 선행·심화 — 같은 구조(여부 → 이유). '하지 않음'이면 이유 선택지("왜 하는지")는 의미가 없어
+          숨기고, 대신 "왜 안 하는지" 자유입력을 띄운다(원장 지시 2026-07-15). */}
       <QuestionSection title={`${no()}선행학습`} tone="amber">
         <Field label="현재 선행학습 여부">
           <Radio options={PRIOR_STATUS_OPTIONS} value={priorStatus} onChange={setPriorStatus} />
         </Field>
-        <Field label="선행학습을 고려하거나 진행하는 가장 큰 이유">
-          <Radio options={PRIOR_REASON_OPTIONS} value={priorReason} onChange={setPriorReason} />
+        {priorStatus === "none" ? (
+          <Field label="선행학습을 하지 않는 이유">
+            <AutoTextarea name="priorNoneReason" minRows={2} placeholder="예: 현재 과정을 다지는 게 먼저라고 생각해서 (선택)" />
+          </Field>
+        ) : (
+          <Field label="선행학습을 고려하거나 진행하는 가장 큰 이유">
+            <Radio options={PRIOR_REASON_OPTIONS} value={priorReason} onChange={setPriorReason} />
+          </Field>
+        )}
+      </QuestionSection>
+
+      <QuestionSection title={`${no()}심화학습`} tone="amber">
+        <Field label="현재 심화학습 여부">
+          <Radio options={PRIOR_STATUS_OPTIONS} value={advancedStatus} onChange={setAdvancedStatus} />
         </Field>
-        <Field label="선행 때문에 복습·수면·독서·자신감이 줄고 있나요?">
-          <Radio options={PRIOR_SIDE_EFFECT_OPTIONS} value={priorSideEffect} onChange={setPriorSideEffect} />
-        </Field>
+        {advancedStatus === "none" ? (
+          <Field label="심화학습을 하지 않는 이유">
+            <AutoTextarea name="advancedNoneReason" minRows={2} placeholder="예: 아직 기본 개념부터 잡는 중이라 (선택)" />
+          </Field>
+        ) : (
+          <Field label="심화학습을 고려하거나 진행하는 가장 큰 이유">
+            <Radio options={ADVANCED_REASON_OPTIONS} value={advancedReason} onChange={setAdvancedReason} />
+          </Field>
+        )}
       </QuestionSection>
 
       <QuestionSection title={`${no()}앞으로 6개월, 가장 원하는 변화`} tone="primary" hint={`최대 ${MAX_CHANGES}개`}>
         <Chips options={CHANGE_OPTIONS} value={changes} max={MAX_CHANGES} onToggle={toggler(setChanges, MAX_CHANGES)} />
         <EtcInput name="changesEtc" />
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="주당 학습 가능 시간">
-            <input name="weeklyHours" type="number" min={0} max={168} inputMode="numeric" placeholder="예: 6" className={inputCls} />
-          </Field>
-          <Field label="희망 예산 (월)">
-            <input name="budget" inputMode="numeric" placeholder="예: 300000" className={inputCls} />
-          </Field>
-        </div>
-        <Field label="학습 과정에서 꼭 지켜 주고 싶은 것">
-          <Chips options={PROTECT_OPTIONS} value={protect} max={PROTECT_OPTIONS.length} onToggle={toggler(setProtect, PROTECT_OPTIONS.length)} />
-          <div className="mt-2">
-            <EtcInput name="protectEtc" />
-          </div>
-        </Field>
       </QuestionSection>
 
       <QuestionSection title={`${no()}학원에서 확인·제공받고 싶은 것`} tone="ink" hint={`최대 ${MAX_WANTS}개`}>
         <Chips options={WANT_OPTIONS} value={wants} max={MAX_WANTS} onToggle={toggler(setWants, MAX_WANTS)} />
         <EtcInput name="wantsEtc" />
         <Field label="상담자가 꼭 알아야 할 자녀의 강점이나 최근의 성공 경험">
-          <textarea name="strengths" rows={3} placeholder="자유롭게 적어주세요 (선택)" className={textareaCls} />
+          <AutoTextarea name="strengths" minRows={3} placeholder="자유롭게 적어주세요 (선택)" />
         </Field>
         <Field label="추가로 전달하고 싶은 내용">
-          <textarea name="extra" rows={3} placeholder="자유롭게 적어주세요 (선택)" className={textareaCls} />
+          <AutoTextarea name="extra" minRows={3} placeholder="자유롭게 적어주세요 (선택)" />
         </Field>
       </QuestionSection>
     </>
@@ -254,20 +262,33 @@ function Radio({
   value: string;
   onChange: (v: string) => void;
 }) {
+  // 다중선택 칩과 같은 1행 목록 배열(훑기 쉬움) — 단, 표시는 **동그라미**로 "하나만 고른다"를 알린다.
+  // (가로 wrap 칩은 항목 길이에 따라 줄이 들쭉날쭉해 읽기 어려웠음 — 원장 지적 2026-07-15.)
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-2">
       {options.map((o) => {
         const on = value === o.value;
         return (
           <button
             key={o.value}
             type="button"
+            role="radio"
+            aria-checked={on}
             onClick={() => onChange(on ? "" : o.value)}
-            className={`min-h-11 rounded-md border px-3 py-2 text-sm break-keep transition-colors ${
-              on ? "border-amber bg-amber text-white font-semibold" : "border-border bg-card text-foreground"
+            className={`flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+              on
+                ? "border-amber bg-amber-soft text-foreground font-semibold"
+                : "border-border bg-card text-foreground"
             }`}
           >
-            {o.label}
+            <span
+              className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${
+                on ? "border-amber" : "border-border"
+              }`}
+            >
+              {on ? <span className="bg-amber size-2 rounded-full" /> : null}
+            </span>
+            <span className="break-keep">{o.label}</span>
           </button>
         );
       })}

@@ -6,6 +6,7 @@
  * ④ 숫자는 범위 강제. 저장 전 마지막 관문이므로 여기서 통과한 것만 jsonb에 들어간다.
  */
 import {
+  ADVANCED_REASON_OPTIONS,
   CHANGE_OPTIONS,
   ENGLISH_STATE_OPTIONS,
   GOAL_OPTIONS,
@@ -20,9 +21,7 @@ import {
   MAX_WANTS,
   MAX_WORRIES,
   PRIOR_REASON_OPTIONS,
-  PRIOR_SIDE_EFFECT_OPTIONS,
   PRIOR_STATUS_OPTIONS,
-  PROTECT_OPTIONS,
   WANT_OPTIONS,
   WORRY_OPTIONS,
   type ChoiceOption,
@@ -64,15 +63,6 @@ function text(form: FormLike, name: string, max = 200): string | null {
   return clip(form.get(name), max) || null;
 }
 
-/** 0 이상 정수만(상한 초과·음수·비숫자는 null) — 주당 시간·예산 오입력 방어. */
-function num(form: FormLike, name: string, max: number): number | null {
-  const raw = clip(form.get(name), 20).replace(/[,\s]/g, "");
-  if (!raw) return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > max) return null;
-  return Math.round(n);
-}
-
 function subjectPart(form: FormLike, prefix: "math" | "english", options: ChoiceOption[]): SubjectChecklist | null {
   const states = pickMany(form, `${prefix}States`, options, MAX_SUBJECT_STATES);
   const course = text(form, `${prefix}Course`, 100);
@@ -108,13 +98,12 @@ export function parseIntakeChecklist(form: FormLike): IntakeChecklist | null {
     habits: habits(form),
     priorStatus: pickOne(form, "priorStatus", PRIOR_STATUS_OPTIONS),
     priorReason: pickOne(form, "priorReason", PRIOR_REASON_OPTIONS),
-    priorSideEffect: pickOne(form, "priorSideEffect", PRIOR_SIDE_EFFECT_OPTIONS),
+    priorNoneReason: text(form, "priorNoneReason", 300),
+    advancedStatus: pickOne(form, "advancedStatus", PRIOR_STATUS_OPTIONS),
+    advancedReason: pickOne(form, "advancedReason", ADVANCED_REASON_OPTIONS),
+    advancedNoneReason: text(form, "advancedNoneReason", 300),
     changes: pickMany(form, "changes", CHANGE_OPTIONS, MAX_CHANGES),
     changesEtc: text(form, "changesEtc", 100),
-    weeklyHours: num(form, "weeklyHours", 168), // 주 168시간 초과 = 오입력
-    budget: num(form, "budget", 100_000_000),
-    protect: pickMany(form, "protect", PROTECT_OPTIONS, PROTECT_OPTIONS.length),
-    protectEtc: text(form, "protectEtc", 100),
     wants: pickMany(form, "wants", WANT_OPTIONS, MAX_WANTS),
     wantsEtc: text(form, "wantsEtc", 100),
     strengths: text(form, "strengths", 500),
@@ -130,7 +119,6 @@ export function isEmptyChecklist(c: IntakeChecklist): boolean {
     c.worries.length === 0 &&
     c.levelBasis.length === 0 &&
     c.changes.length === 0 &&
-    c.protect.length === 0 &&
     c.wants.length === 0 &&
     Object.keys(c.habits).length === 0 &&
     !c.math &&
@@ -140,13 +128,13 @@ export function isEmptyChecklist(c: IntakeChecklist): boolean {
     !c.worryOutcome &&
     !c.levelBasisEtc &&
     !c.changesEtc &&
-    !c.protectEtc &&
     !c.wantsEtc &&
     !c.priorStatus &&
     !c.priorReason &&
-    !c.priorSideEffect &&
-    c.weeklyHours === null &&
-    c.budget === null &&
+    !c.priorNoneReason &&
+    !c.advancedStatus &&
+    !c.advancedReason &&
+    !c.advancedNoneReason &&
     !c.strengths &&
     !c.extra
   );
