@@ -177,7 +177,12 @@ export default async function ClassDetailPage({
           {klass.isActive ? (
             <ClassTermButton classId={klass.id} className={klass.className} closedAt={klass.closedAt} />
           ) : null}
-          <ArchiveClassButton classId={klass.id} isActive={klass.isActive} className={klass.className} />
+          <ArchiveClassButton
+            classId={klass.id}
+            isActive={klass.isActive}
+            className={klass.className}
+            enrolledCount={students.length}
+          />
         </div>
       </header>
 

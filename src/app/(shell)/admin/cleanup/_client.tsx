@@ -41,8 +41,9 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
           </span>
         </header>
         <p className="text-muted-foreground text-xs">
-          상태가 재원인데 수강 중인 반이 없습니다. 반을 배정하거나, 선택해서 퇴원·삭제
-          처리하세요.
+          상태가 재원인데 수강 중인 반이 없고, <b>마지막 수강이 끝난 지 30일이 지난</b> 학생입니다.
+          반을 배정하거나, 선택해서 퇴원·삭제 처리하세요. 최근에 반이 폐지·종강돼 수강이 끊긴
+          학생은 여기 대신 대시보드 &lsquo;반 미배정 재원생&rsquo;에서 바로 재배정하세요.
         </p>
         {report.studentsWithoutEnrollments.length > 0 ? (
           <OrphanStudentManager items={report.studentsWithoutEnrollments} />

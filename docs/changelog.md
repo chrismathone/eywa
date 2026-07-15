@@ -9,6 +9,35 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 반 폐지·종강 → 수강 자동 종료 + 정리도구 30일 게이트 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1228 + 프로덕션 실측)
+
+원장 제보: "반을 폐지하면 그 반 재원생 수강은 어떻게 되나?" → **아무 일도 안 일어나고 있었다.** `archiveClass`는
+`is_active`만, `endClassTerm`은 `closed_at`만 바꿔 그 반 학생 수강이 `end_date=NULL`(=수강중)로 영영 남았다.
+시간표·출석·회차청구는 `is_active`를 필터해 반을 숨기는데 **학생목록·학생상세·등록상담 칸반·대시보드 집계·
+teacher-scope는 필터하지 않아** 폐지된 반의 과목·강사가 계속 "수강중"으로 표시되는 사각지대(소비처 15곳 중 절반).
+`enrollments`엔 status 컬럼이 없어 활성 = `end_date IS NULL`이고, classes에 반응하는 트리거·FK·RPC는 **전무**했다.
+
+- **[enrollment-lifecycle.ts](src/features/classes/server/enrollment-lifecycle.ts) 신설(단일 소스)**: `closeClassEnrollments`
+  (반 활성 수강을 date로 종료 + reason 표식) / `reopenClassEnrollments`(그 표식 매칭분만 복원). 미래 시작 수강은
+  `end_date=start_date` 클램프(daterange lower>upper throw 방지 — students `closeActiveEnrollmentsClamped`와 동일 원리).
+  전건 whitelist는 `fetchAllPaged`(B2), DB 원문 에러는 한글 변환(raw 노출 금지).
+- **배선**: 폐지=오늘 종료(`반 폐지`)·재운영=복원 / 종강=종강일로 종료(`종강`)·재개강=복원. 셋 다 `logAction`에
+  `affectedStudents` 기록. 종강일 이전 주 시간표엔 그대로 남아(그 시점엔 활성) **수강이력 보존이라는 종강 성격과 일치**.
+- **⚠️ 학생 상태는 안 건드린다(원장 확정)**: "모든 과목 종료=퇴원" 안을 검토했으나 **철회** — `createEnrollment`가
+  status를 복구하지 않아 종강 후 새 반에 배정해도 퇴원으로 남아 학생목록(기본 필터=재원)에서 사라지는 함정.
+  수강 0이 된 학생은 **재원인 채로 대시보드 '반 미배정 재원생'(0097a)에 잡혀 재배정**한다.
+- **과목 이탈(퇴원관리 '수강종료') 판정은 기존 `getEndedSubjects` 그대로**(원장 확정: 그 과목에 다른 활성 수강이
+  있으면 이탈 아님, 하나도 없으면 그 과목 이탈이 맞다). 별도 제외 장치 **미도입** — 기존 로직이 이미 그 규칙.
+- **UI**: 폐지만 경고(재원생 N명 영향 명시), **종강은 무경고**(원장 지시 — 종강은 정상 운영 종료라 일상 동작).
+- **정리도구 30일 게이트**: `findOrphans`의 "수강 없는 재원생"이 즉시 퇴원 후보로 올라와, 폐지·종강 직후
+  재배정 대기 학생을 원장이 배정하기도 전에 퇴원시킬 수 있었다 → **마지막 수강 종료 후 30일 경과분만** 후보
+  ([withdraw-candidates.ts](src/features/admin/withdraw-candidates.ts) 순수함수+Vitest 8). 기준일 모르면 후보 제외(보수적).
+- **프로덕션 백필**([backfill-archived-class-enrollments.cjs](scripts/_poc_migration/backfill-archived-class-enrollments.cjs),
+  dry-run/--apply/롤백파일): 유령 수강 **73건·학생 34명 종료**(14개 반 전부 폐지, 종강 반은 0건). ⚠️ 폐지는 시점을
+  안 남겨(closed_at NULL) 종료일 근거가 DB에 전무 — 출석도 0건이나 **활성 반도 102개 중 58개만 출석**이 있어 근거로
+  못 씀 → 과거 날짜를 지어내지 않고 **오늘**로 종료(신규 archiveClass와 동일 의미). 실측 결과: '반 미배정 재원생'
+  **32명 노출**, 30일 게이트가 **31명 보호**(퇴원 후보 1명) = 사각지대는 걷어내고 재배정 유예는 확보.
+
 ### 직원 이력서 탭 — 적대적 검수 픽스 12건 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1195·build✓)
 
 원장 지시로 4방향 적대검수(권한·PII / 로직·상태 / 쿼리·성능 / UI·규약) → 확정 버그 6건 + 규약 위반 6건 수정.

@@ -10,6 +10,12 @@ import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { getClassroomAssignmentData } from "./queries";
+import {
+  ARCHIVE_REASON,
+  CLOSE_TERM_REASON,
+  closeClassEnrollments,
+  reopenClassEnrollments,
+} from "./enrollment-lifecycle";
 import type { ClassroomAssignData } from "../lib/classroom-assign";
 
 export type ClassFormState =
@@ -266,6 +272,12 @@ export async function updateClass(
 
 export type ArchiveClassState = { error?: string } | undefined;
 
+/**
+ * 반 폐지/재운영 토글.
+ * 폐지 = is_active=false + **그 반 활성 수강을 오늘로 종료**(reason='반 폐지'). 재운영 = 되돌림.
+ * ⚠️ 학생 상태(students.status)는 건드리지 않는다 — 수강이 0이 된 학생은 재원인 채로 남아
+ * 대시보드 '반 미배정 재원생'에서 재배정한다. 근거는 enrollment-lifecycle.ts 주석 참조.
+ */
 export async function archiveClass(
   _prev: ArchiveClassState,
   formData: FormData,
@@ -280,6 +292,12 @@ export async function archiveClass(
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  const { data: klass } = await supabase
+    .from("classes")
+    .select("class_name")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("classes")
     .update({ is_active: next })
@@ -287,9 +305,24 @@ export async function archiveClass(
 
   if (error) return { error: error.message };
 
+  // 수강 동기화는 classes 갱신이 성공한 뒤 — 실패해도 반 상태와 수강이 어긋나지 않게 순서를 고정.
+  const sync = next
+    ? await reopenClassEnrollments(supabase, id, ARCHIVE_REASON)
+    : await closeClassEnrollments(supabase, id, kstToday(), ARCHIVE_REASON);
+  if (sync.error) return { error: sync.error };
+
+  await logAction({
+    action: next ? "class_unarchive" : "class_archive",
+    targetType: "class",
+    targetLabel: klass?.class_name,
+    metadata: { classId: id, affectedStudents: sync.studentIds.length },
+  });
+
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
+  revalidatePath("/students");
+  revalidatePath("/");
   return undefined;
 }
 
@@ -312,15 +345,22 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
   const { error: updErr } = await supabase.from("classes").update({ closed_at: date }).eq("id", id);
   if (updErr) return { error: updErr.message };
 
+  // 종강 = 그 반 활성 수강도 종강일로 종료(reason='종강'). 종강일 이전 주 시간표엔 그대로 남는다
+  // (enrollment가 그 시점엔 활성이었으므로) → 수강이력 보존이라는 종강의 성격과 일치.
+  const sync = await closeClassEnrollments(supabase, id, date, CLOSE_TERM_REASON);
+  if (sync.error) return { error: sync.error };
+
   await logAction({
     action: "class_end_term",
     targetType: "class",
     targetLabel: klass?.class_name,
-    metadata: { classId: id, closedAt: date },
+    metadata: { classId: id, closedAt: date, affectedStudents: sync.studentIds.length },
   });
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
+  revalidatePath("/students");
+  revalidatePath("/");
   return undefined;
 }
 
@@ -337,15 +377,21 @@ export async function reopenClassTerm(_prev: ClassTermState, formData: FormData)
   const { error: updErr } = await supabase.from("classes").update({ closed_at: null }).eq("id", id);
   if (updErr) return { error: updErr.message };
 
+  // 종강이 종료시킨 수강만 되살린다(그 전에 수동 종료·반이동으로 끝난 수강은 그대로).
+  const sync = await reopenClassEnrollments(supabase, id, CLOSE_TERM_REASON);
+  if (sync.error) return { error: sync.error };
+
   await logAction({
     action: "class_reopen_term",
     targetType: "class",
     targetLabel: klass?.class_name,
-    metadata: { classId: id },
+    metadata: { classId: id, affectedStudents: sync.studentIds.length },
   });
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
+  revalidatePath("/students");
+  revalidatePath("/");
   return undefined;
 }
 

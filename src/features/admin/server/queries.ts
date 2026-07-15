@@ -1,6 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { WITHDRAW_CANDIDATE_DAYS, selectWithdrawCandidates } from "../withdraw-candidates";
 
 export type DuplicateGroup = {
   key: string;
@@ -98,7 +100,14 @@ export async function findDuplicateStudents(): Promise<DuplicateGroup[]> {
 }
 
 export type OrphanReport = {
-  studentsWithoutEnrollments: { id: string; name: string; status: string }[];
+  /** 재원인데 활성 수강 0 + **마지막 수강 종료가 30일 이상 지난** 학생만(자동 퇴원 후보). */
+  studentsWithoutEnrollments: {
+    id: string;
+    name: string;
+    status: string;
+    /** 마지막 수강 종료일(없으면 등록일) — 원장이 "왜 후보인지" 판단하는 근거. */
+    lastEndedAt: string | null;
+  }[];
   classesWithoutSchedules: { id: string; className: string; isActive: boolean }[];
   enrollmentsWithoutEndDate: number; // 모순 — withdrawn 학생인데 end_date=null
 };
@@ -111,22 +120,52 @@ export async function findOrphans(): Promise<OrphanReport> {
   //   오탐했음(F8/F1). 쿼리를 뒤집어 활성 enrollment의 student_id 집합을 먼저 받아 메모리 차집합을
   //   구한다. ⚠️ 그 집합/학생 목록이 무페이징이면 1000행 silent 절단으로 정합성 깨짐 → fetchAllPaged
   //   로 전건(셋 다 독립이라 병렬).
-  const [enrolled, activeEnrollments, withdrawnStudents] = await Promise.all([
-    fetchAllPaged<{ id: string; name: string; status: string }>((from, to) =>
-      supabase.from("students").select("id, name, status").eq("status", "enrolled").range(from, to),
+  const [enrolled, allEnrollments, withdrawnStudents] = await Promise.all([
+    fetchAllPaged<{ id: string; name: string; status: string; enrolled_at: string | null }>(
+      (from, to) =>
+        supabase
+          .from("students")
+          .select("id, name, status, enrolled_at")
+          .eq("status", "enrolled")
+          .range(from, to),
     ),
-    fetchAllPaged<{ student_id: string }>((from, to) =>
-      supabase.from("enrollments").select("student_id").is("end_date", null).range(from, to),
+    // 활성 판정 + 마지막 종료일(30일 게이트)을 한 번에 — end_date가 둘 다에 필요해 전건을 한 번만 읽는다.
+    fetchAllPaged<{ student_id: string; end_date: string | null }>((from, to) =>
+      supabase.from("enrollments").select("student_id, end_date").range(from, to),
     ),
     fetchAllPaged<{ id: string }>((from, to) =>
       supabase.from("students").select("id").eq("status", "withdrawn").range(from, to),
     ),
   ]);
 
-  const withEnrollment = new Set(activeEnrollments.map((e) => e.student_id));
-  const studentsWithoutEnrollments = enrolled
-    .filter((s) => !withEnrollment.has(s.id))
-    .map((s) => ({ id: s.id, name: s.name, status: s.status }));
+  const withEnrollment = new Set(
+    allEnrollments.filter((e) => e.end_date === null).map((e) => e.student_id),
+  );
+  // 학생별 마지막 수강 종료일 — 30일 게이트의 기준점.
+  const lastEndedByStudent = new Map<string, string>();
+  for (const e of allEnrollments) {
+    if (!e.end_date) continue;
+    const prev = lastEndedByStudent.get(e.student_id);
+    if (!prev || e.end_date > prev) lastEndedByStudent.set(e.student_id, e.end_date);
+  }
+
+  // ⚠️ 30일 게이트(원장 확정 2026-07-15): 수강이 없어졌다고 바로 퇴원 후보로 올리지 않는다.
+  // 반 폐지·종강은 그 반 수강을 종료시키므로(enrollment-lifecycle.ts) 학생이 '수업 없는 재원생'으로
+  // 잠시 남는데, 그건 **퇴원이 아니라 재배정 대기**다(대시보드 '반 미배정 재원생'이 잡아준다).
+  // 즉시 후보로 올리면 원장이 새 반에 배정하기도 전에 퇴원시켜버린다 → 마지막 수강 종료 후 30일 경과분만.
+  // 수강 이력이 아예 없는 학생은 등록일을 기준으로(신규 등록 직후 학생 보호). 둘 다 없으면 후보 제외(보수적).
+  const cutoff = addDays(kstToday(), -WITHDRAW_CANDIDATE_DAYS);
+  const studentsWithoutEnrollments = selectWithdrawCandidates(
+    enrolled
+      .filter((s) => !withEnrollment.has(s.id))
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        status: s.status,
+        lastEndedAt: lastEndedByStudent.get(s.id) ?? s.enrolled_at ?? null,
+      })),
+    cutoff,
+  );
 
   // 2) is_active=true 반 중 schedule 0개
   const { data: classes } = await supabase

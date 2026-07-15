@@ -34,7 +34,8 @@ const METADATA = {
     const targets = await sql`
       select s.id, s.name, s.school, s.grade, s.status, s.enrolled_at, s.withdrawn_at,
              s.withdrawal_metadata, s.makeedu_id is not null as from_makeedu,
-             (select count(*)::int from enrollments e where e.student_id = s.id) as total_enr
+             (select count(*)::int from enrollments e where e.student_id = s.id) as total_enr,
+             (select max(e.end_date)::text from enrollments e where e.student_id = s.id) as last_ended
       from students s
       where s.tenant_id = ${TENANT}
         and s.status = 'enrolled'
@@ -58,8 +59,20 @@ const METADATA = {
     // 최근 30일 내/미래 등록 = 반 배정 전 신입 가능성 → 자동 퇴원에서 보류(사람 확인).
     const CUTOFF = new Date("2026-06-10T00:00:00+09:00");
     const isRecent = (t) => t.enrolled_at && new Date(t.enrolled_at) >= CUTOFF;
+
+    // ⚠️ 30일 게이트(원장 확정 2026-07-15) — 앱 정리도구(withdraw-candidates.ts)와 같은 규칙.
+    // 반 폐지·종강은 그 반 수강을 종료시키므로 학생이 잠시 '수업 없는 재원생'이 된다. 그건 퇴원이 아니라
+    // **재배정 대기**(대시보드 '반 미배정 재원생'이 잡아준다) → 마지막 수강이 끝난 지 30일 안이면 보류.
+    // 이 게이트가 없으면 폐지 직후 이 스크립트를 돌리는 순간 재배정 대기 학생이 통째로 퇴원된다.
+    const ENDED_CUTOFF = new Date(Date.now() + 9 * 3600 * 1000 - 30 * 86400 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const isRecentlyEnded = (t) => t.last_ended && t.last_ended > ENDED_CUTOFF;
+
+    const held = targets.filter((t) => isRecent(t) || isRecentlyEnded(t));
     const recent = targets.filter(isRecent);
-    const apply = targets.filter((t) => !isRecent(t));
+    const recentlyEnded = targets.filter((t) => !isRecent(t) && isRecentlyEnded(t));
+    const apply = targets.filter((t) => !isRecent(t) && !isRecentlyEnded(t));
     const neverEnrolled = targets.filter((t) => t.total_enr === 0);
 
     console.log(`재원인데 활성 수강 0건: ${targets.length}명`);
@@ -67,7 +80,10 @@ const METADATA = {
     console.log(`  ├ 최근 30일 내·미래 등록(신입 가능성 → 보류): ${recent.length}명`);
     if (recent.length)
       console.log(`  │   ${recent.map((r) => `${r.name}(${r.grade ?? "?"}, ${new Date(r.enrolled_at).toISOString().slice(0, 10)})`).join(", ")}`);
-    console.log(`  ├ 퇴원 적용 대상: ${apply.length}명`);
+    console.log(`  ├ 최근 30일 내 수강 종료(반 폐지·종강 후 재배정 대기 → 보류): ${recentlyEnded.length}명`);
+    if (recentlyEnded.length)
+      console.log(`  │   ${recentlyEnded.map((r) => `${r.name}(${r.grade ?? "?"}, 종료 ${r.last_ended})`).join(", ")}`);
+    console.log(`  ├ 퇴원 적용 대상: ${apply.length}명 (보류 합계 ${held.length}명)`);
     console.log(`  └ makeedu 연동 학생: ${targets.filter((t) => t.from_makeedu).length}명`);
     console.log(`휴원 반만 있는 재원생 (제외, 유지): ${onHoldOnly.length}명`);
     if (onHoldOnly.length) console.log(`   ${onHoldOnly.map((r) => `${r.name}(${r.grade ?? "?"})`).join(", ")}`);
