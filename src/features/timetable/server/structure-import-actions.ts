@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
@@ -122,7 +123,7 @@ export type PreviewStructureState = { error?: string; report?: DryRunReport };
 export async function previewStructureImport(subject: string = SUBJECT): Promise<PreviewStructureState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "구조 가져오기는 원장(master)만 할 수 있습니다" };
+  if (!(await canManageSheetSync(user.systemRole))) return { error: SHEET_ACCESS_DENIED_MSG };
   if (!supportsStructureImport(subject)) return { error: "구조 가져오기는 영어 시간표만 지원합니다" };
 
   const supabase = await createClient();
@@ -157,7 +158,7 @@ export type ApplyStructureState = {
 export async function applyStructureImport(expectedHash: string, subject: string = SUBJECT): Promise<ApplyStructureState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "구조 가져오기는 원장(master)만 할 수 있습니다" };
+  if (!(await canManageSheetSync(user.systemRole))) return { error: SHEET_ACCESS_DENIED_MSG };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   if (!supportsStructureImport(subject)) return { error: "구조 가져오기는 영어 시간표만 지원합니다" };
 
@@ -245,7 +246,7 @@ export type RollbackStructureState = {
 export async function rollbackStructureImport(snapshotId: string): Promise<RollbackStructureState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (user.systemRole !== "master") return { error: "구조 가져오기는 원장(master)만 할 수 있습니다" };
+  if (!(await canManageSheetSync(user.systemRole))) return { error: SHEET_ACCESS_DENIED_MSG };
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
 
   const supabase = await createClient();

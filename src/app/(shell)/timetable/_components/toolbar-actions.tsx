@@ -19,7 +19,7 @@ export function TimetableToolbarActions({
   compact1h = [],
 }: {
   subject?: string;
-  /** 구글 시트 동기화(=테넌트 전체 시간표 외부 push)는 master + 지원 과목 + 연동 ON일 때만. */
+  /** 구글 시트 동기화(=테넌트 전체 시간표 외부 push)는 sheet_sync 권한 + 지원 과목 + 연동 ON일 때만. */
   canSync?: boolean;
   /** 연결된 구글 시트 URL(설정돼 있을 때만). 있으면 '시트 열기' 노출. */
   sheetUrl?: string | null;
@@ -41,7 +41,7 @@ export function TimetableToolbarActions({
   // 영어는 구조+반이동을 하나의 '시트에서 가져오기'(EnglishImportDialog)로 통합 → canStructureImport로 분기.
   const canStructureImport = supportsStructureImport(subjectKey);
 
-  // 리스 상태 폴링(20s, makeedu 워커 카드 선례) — canSync(master, 시트 버튼 노출)일 때만.
+  // 리스 상태 폴링(20s, makeedu 워커 카드 선례) — canSync(시트 버튼 노출)일 때만.
   useEffect(() => {
     if (!canSync) return;
     let alive = true;
@@ -83,8 +83,11 @@ export function TimetableToolbarActions({
           <FileSpreadsheet className="size-3" />
           엑셀
         </a>
-        {/* 파일 업로드 가져오기 = 수학 전용(영어는 구글시트 기반 → 아래 '시트에서 가져오기'로 통합). */}
-        {canImport && !canStructureImport ? <TimetableImportDialog subject={subjectKey} /> : null}
+        {/* 파일 업로드 가져오기 = math·english 공통(둘 다 내보내기 xlsx에 '수강편집' 시트 포함 = 라운드트립).
+            영어도 시트 연동 OFF·권한 없음일 때 유일한 가져오기 경로라 열어둔다(2026-07-15).
+            ⚠️ 이 경로는 '수강편집'만 읽어 **학생 반이동만** 반영 — 영어 배치(강사별 그리드) 변경은
+            구글시트 경로(EnglishImportDialog)만 지원. 다이얼로그가 그 한계를 문구로 명시한다. */}
+        {canImport ? <TimetableImportDialog subject={subjectKey} /> : null}
       </div>
 
       {/* 구글 시트 그룹: 반영(push) + 열기 — 구분선으로 엑셀 그룹과 분리(줄바꿈 시에도 그룹 단위 유지) */}
@@ -96,7 +99,7 @@ export function TimetableToolbarActions({
               onClick={pushToSheet}
               disabled={syncing || syncBusy}
               title={
-                syncBusy ? SYNC_BUSY_TITLE : (syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영(원장 전용)`)
+                syncBusy ? SYNC_BUSY_TITLE : (syncMsg ?? `${subjectLabel} 시간표 전체를 연결된 구글 시트에 반영`)
               }
               className={btnCls}
             >
@@ -104,7 +107,7 @@ export function TimetableToolbarActions({
               시트 반영
             </button>
           ) : null}
-          {/* 시트에서 가져오기 — 영어=구조(강사별)+반이동(수강편집) 통합 1버튼, 수학=반이동(수강편집)만. 원장 전용. */}
+          {/* 시트에서 가져오기 — 영어=구조(강사별)+반이동(수강편집) 통합 1버튼, 수학=반이동(수강편집)만. */}
           {canSync && canStructureImport ? (
             <EnglishImportDialog subject={subjectKey} disabled={syncBusy} disabledTitle={SYNC_BUSY_TITLE} />
           ) : null}

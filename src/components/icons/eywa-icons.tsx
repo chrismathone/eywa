@@ -1138,6 +1138,7 @@ export const MENU_ICON = {
   meetings: "note",
   documents: "folder",
   integrations: "sync",
+  sheet_sync: "spreadsheet",
   help: "help",
   admin: "wrench",
   owner: "settings",

@@ -11,6 +11,7 @@ import {
   previewTimetableImport,
   type ApplyState,
 } from "@/features/timetable/server/import-actions";
+import { supportsStructureImport } from "@/features/integrations/sheets-provider";
 import type { ImportDiff } from "@/features/timetable/import/types";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 
@@ -211,6 +212,17 @@ export function TimetableImportDialog({
                 <p className="text-text-faint mt-1 text-[11px]">
                   구글시트로 편집했다면 <b>파일 → 다운로드 → Microsoft Excel(.xlsx)</b>로 받아 올리면 됩니다.
                 </p>
+                {/* 구조 가져오기 지원 과목(영어)만 — 파일 경로는 '수강편집'만 읽어 배치 편집이 조용히 무시된다.
+                    사용자가 강사별 격자를 고쳐 올리고 "반영됐겠지" 하는 오해를 막는 안내(2026-07-15). */}
+                {supportsStructureImport(subject) ? (
+                  <p className="text-text-faint mt-1 flex items-start gap-1 text-[11px]">
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      이 경로는 <b>학생 반이동만</b> 반영합니다 — 강사별 시간표 탭에서 <b>수업 배치</b>를 바꿔도
+                      적용되지 않습니다. 배치 변경은 <b>‘시트에서 가져오기’</b>를 쓰세요.
+                    </span>
+                  </p>
+                ) : null}
 
                 <label className="text-foreground mt-3 block text-[12px] font-medium">
                   엑셀 파일 <span className="text-danger">*</span>

@@ -9,6 +9,7 @@ import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
+import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { isSheetExportSubject } from "@/features/integrations/sheets-provider";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
@@ -89,10 +90,11 @@ export default async function TimetablePage({
   const subject =
     subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
 
-  // '시트 반영' 버튼 = master + 지원 과목(math·english) + 연동 ON. 상태는 **현재 보는 과목** 기준.
-  // (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 — master 한정 1회 경량 쿼리.)
+  // '시트 반영' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
+  // 상태는 **현재 보는 과목** 기준. (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 —
+  // 권한자 한정 1회 경량 쿼리. 서버 액션도 같은 canManageSheetSync로 이중 방어.)
   const sheetsStatus =
-    user.systemRole === "master" && isSheetExportSubject(subject)
+    (await canManageSheetSync(user.systemRole)) && isSheetExportSubject(subject)
       ? await getGoogleSheetsStatus(subject)
       : null;
   const canSync = sheetsStatus?.enabled === true;

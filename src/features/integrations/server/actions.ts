@@ -7,6 +7,7 @@ import os from "node:os";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -361,10 +362,10 @@ async function buildTimetableBufferFor(
 export async function syncSheetsNow(subject: string, compact1h?: number[]): Promise<SyncState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // ⚠️ master 전용 (CLAUDE.md #58: 페이지가 아니라 액션을 게이트). 이 동기화는 **테넌트 전체 시간표**
-  // (전 강사·전 학생 명단)를 외부 공유 시트로 내보내므로 원장만. 버튼 숨김과 이중 방어.
-  if (user.systemRole !== "master") {
-    return { error: "구글 시트 동기화는 원장(master)만 할 수 있습니다" };
+  // ⚠️ 시간표 full 권한 전용 (CLAUDE.md #58: 페이지가 아니라 액션을 게이트). 이 동기화는 **테넌트 전체
+  // 시간표**(전 강사·전 학생 명단)를 외부 공유 시트로 내보내므로 scoped(강사)·readonly는 제외. 버튼 숨김과 이중 방어.
+  if (!(await canManageSheetSync(user.systemRole))) {
+    return { error: SHEET_ACCESS_DENIED_MSG };
   }
   if (!isSheetExportSubject(subject)) {
     return { error: "지원하지 않는 과목입니다" };
