@@ -435,7 +435,7 @@ export function PublicIntakeForm({
             <SubmitBtn disabled={goalCount === 0} />
             {goalCount === 0 ? (
               <p className="text-text-faint text-center text-xs">
-                &lsquo;상담을 통해 먼저 결정하고 싶은 것&rsquo;을 1개 이상 선택하면 제출할 수 있어요.
+                &lsquo;학습 상담을 통해 가장 알고 싶은 문제&rsquo;를 1개 이상 선택하면 제출할 수 있어요.
               </p>
             ) : null}
             <button

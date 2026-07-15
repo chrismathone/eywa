@@ -85,7 +85,7 @@ export function ChecklistStep({
       <input type="hidden" name="priorReason" value={priorReason} />
       <input type="hidden" name="priorSideEffect" value={priorSideEffect} />
 
-      <QuestionSection title={`${no()}상담을 통해 먼저 결정하고 싶은 것`} tone="primary" hint={`최대 ${MAX_GOALS}개 · 필수`}>
+      <QuestionSection title={`${no()}학습 상담을 통해 가장 알고 싶은 문제`} tone="primary" hint={`최대 ${MAX_GOALS}개 · 필수`}>
         <Chips options={GOAL_OPTIONS} value={goals} max={MAX_GOALS} onToggle={toggler(setGoals, MAX_GOALS)} />
         <EtcInput name="goalsEtc" />
       </QuestionSection>

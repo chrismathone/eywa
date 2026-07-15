@@ -32,7 +32,7 @@ function joinLabels(options: ChoiceOption[], values: string[], etc: string | nul
 export function ChecklistView({ checklist }: { checklist: IntakeChecklist }) {
   const c = checklist;
   const rows: [string, string | null][] = [
-    ["먼저 결정하고 싶은 것", joinLabels(GOAL_OPTIONS, c.goals, c.goalsEtc)],
+    ["가장 알고 싶은 문제", joinLabels(GOAL_OPTIONS, c.goals, c.goalsEtc)],
     ["가장 걱정되는 것", joinLabels(WORRY_OPTIONS, c.worries, c.worriesEtc)],
     ["유지 시 걱정되는 결과", c.worryOutcome],
     ["수준 판단 근거", joinLabels(LEVEL_BASIS_OPTIONS, c.levelBasis, c.levelBasisEtc)],

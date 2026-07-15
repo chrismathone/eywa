@@ -231,7 +231,7 @@ export async function submitPublicIntake(
   // 사전 체크리스트(2단계) — 화이트리스트·최대개수·범위를 순수함수가 재검증. 미작성이면 null.
   const checklist = parseIntakeChecklist(formData);
   if (!checklist || checklist.goals.length === 0) {
-    return { error: "상담을 통해 먼저 결정하고 싶은 것을 1개 이상 선택해주세요" };
+    return { error: "학습 상담을 통해 가장 알고 싶은 문제를 1개 이상 선택해주세요" };
   }
 
   const { error: insErr } = await admin.from("enrollment_consultations").insert({

@@ -12,7 +12,8 @@
 
 export type ChoiceOption = { value: string; label: string };
 
-/** 2. 이번 상담을 통해 가장 먼저 결정하고 싶은 것 (최대 2) */
+/** 학습 상담을 통해 가장 알고 싶은 문제 (최대 2). ⚠️ 저장 키는 `goals` 고정 — 문항 이름이 바뀌어도
+ *  기존 데이터가 그대로 읽히도록 값·키는 건드리지 않는다(라벨만 교체). */
 export const GOAL_OPTIONS: ChoiceOption[] = [
   { value: "level", label: "현재 영어·수학 수준" },
   { value: "priority", label: "3~6개월 학습 우선순위" },
