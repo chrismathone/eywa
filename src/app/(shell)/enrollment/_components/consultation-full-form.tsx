@@ -17,6 +17,8 @@ import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-ed
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { EditingBanner } from "@/features/presence/editing-badge";
+import type { IntakeChecklist } from "@/features/enrollment/intake-checklist";
+import { ChecklistView } from "./checklist-view";
 import { AudioRecorderField } from "./audio-recorder-field";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
@@ -87,6 +89,8 @@ export type ConsultationFormInitial = {
   privacyAgreement?: boolean;
   installmentAgreement?: boolean;
   subjectDetails?: SubjectDetails | null;
+  /** QR 공개접수 2단계에서 학부모가 낸 사전 체크리스트(0109a). 있으면 읽기 전용 탭으로 보여준다. */
+  intakeChecklist?: IntakeChecklist | null;
   // 완전 이식(0064a)
   counselor?: string | null;
   receivedDate?: string | null;
@@ -126,7 +130,14 @@ export function ConsultationFullForm({
   const busy = phase !== "idle";
 
   // 상단 탭(ijw 구조): 기본 정보 + 과목별 상담. AI 분석은 상세 화면에서 보여준다(폼은 입력 전용).
-  const TABS = [{ key: "basic", label: "기본 정보" }, ...SUBJECT_TABS.map((t) => ({ key: t.key, label: `${t.label} 상담` }))];
+  // + 사전 체크리스트(읽기 전용) — 학부모가 QR 2단계에서 낸 답변이라 직원이 고칠 값이 아니다. 있는 건에만 탭을
+  //   노출한다(수기 등록 건에 빈 탭을 띄우면 "왜 못 쓰지?" 혼란). 저장 페이로드에도 안 들어간다 = 덮어쓸 위험 0.
+  const checklist = v.intakeChecklist ?? null;
+  const TABS = [
+    { key: "basic", label: "기본 정보" },
+    ...SUBJECT_TABS.map((t) => ({ key: t.key, label: `${t.label} 상담` })),
+    ...(checklist ? [{ key: "checklist", label: "사전 체크리스트" }] : []),
+  ];
   const [activeTab, setActiveTab] = useState("basic");
 
   // 접을 수 있는 확장 섹션(기본 접힘) — ijw와 동일.
@@ -648,6 +659,19 @@ export function ConsultationFullForm({
           </Card>
         </div>
       ))}
+
+      {/* 사전 체크리스트 탭(읽기 전용) — 학부모가 QR 2단계에서 낸 답변. 입력 필드가 없어 저장 payload와 무관
+          = 직원이 다른 탭을 고쳐 저장해도 학부모 답변은 그대로 보존된다. */}
+      {checklist ? (
+        <div className={activeTab === "checklist" ? "" : "hidden"}>
+          <Card title="사전 체크리스트">
+            <p className="text-text-dim mb-3 text-xs">
+              학부모님이 QR 접수 2단계에서 직접 작성한 내용입니다 — 상담 참고용(수정 불가).
+            </p>
+            <ChecklistView checklist={checklist} />
+          </Card>
+        </div>
+      ) : null}
 
       {errorMsg ? (
         <p className="text-danger bg-danger/5 border-danger/20 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">

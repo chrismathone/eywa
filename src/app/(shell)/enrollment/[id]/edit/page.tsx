@@ -64,6 +64,7 @@ export default async function EditEnrollmentPage({
           privacyAgreement: f.privacyAgreement,
           installmentAgreement: f.installmentAgreement,
           subjectDetails: f.subjectDetails,
+          intakeChecklist: f.intakeChecklist,
           counselor: f.counselor,
           receivedDate: f.receivedDate,
           studentType: f.studentType,

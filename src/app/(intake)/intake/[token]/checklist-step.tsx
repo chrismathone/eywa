@@ -24,7 +24,7 @@ import {
   wantsSubject,
   type ChoiceOption,
 } from "@/features/enrollment/intake-checklist";
-import { Field, Section, inputCls, textareaCls } from "./intake-ui";
+import { Field, QuestionSection, inputCls, textareaCls } from "./intake-ui";
 
 /**
  * 사전 체크리스트(2단계) — 문항 카탈로그는 features/enrollment/intake-checklist.ts 단일 소스.
@@ -61,6 +61,12 @@ export function ChecklistStep({
   // 과목 판정이 둘 다 실패(예: 예체능만 선택)하면 어느 쪽도 강요하지 않되 문항 자체는 볼 수 있게 둘 다 노출.
   const showBoth = !showMath && !showEnglish;
 
+  // 문항 번호 — **보이는 문항 기준 순차**. 과목 문항(수학·영어)이 선택 과목에 따라 숨으므로 고정 번호를 쓰면
+  // "2·3·4·6·7"처럼 빠진 번호가 생겨 학부모가 "5번은 어디 갔지?" 한다. JSX가 소스 순서로 평가되는 걸 이용해
+  // 렌더된 섹션만 카운트(렌더마다 0에서 다시 시작 = 결정적).
+  let seq = 0;
+  const no = () => `${++seq}. `;
+
   return (
     <>
       <input type="hidden" name="checklistFilled" value="1" />
@@ -79,43 +85,43 @@ export function ChecklistStep({
       <input type="hidden" name="priorReason" value={priorReason} />
       <input type="hidden" name="priorSideEffect" value={priorSideEffect} />
 
-      <Section title="상담을 통해 먼저 결정하고 싶은 것" tone="primary" hint={`최대 ${MAX_GOALS}개 · 필수`}>
+      <QuestionSection title={`${no()}상담을 통해 먼저 결정하고 싶은 것`} tone="primary" hint={`최대 ${MAX_GOALS}개 · 필수`}>
         <Chips options={GOAL_OPTIONS} value={goals} max={MAX_GOALS} onToggle={toggler(setGoals, MAX_GOALS)} />
         <EtcInput name="goalsEtc" />
-      </Section>
+      </QuestionSection>
 
-      <Section title="현재 가장 걱정되는 것" tone="amber" hint={`최대 ${MAX_WORRIES}개`}>
+      <QuestionSection title={`${no()}현재 가장 걱정되는 것`} tone="amber" hint={`최대 ${MAX_WORRIES}개`}>
         <Chips options={WORRY_OPTIONS} value={worries} max={MAX_WORRIES} onToggle={toggler(setWorries, MAX_WORRIES)} />
         <EtcInput name="worriesEtc" />
         <Field label="지금 계획을 그대로 유지하면 가장 걱정되는 결과">
           <textarea name="worryOutcome" rows={3} placeholder="자유롭게 적어주세요 (선택)" className={textareaCls} />
         </Field>
-      </Section>
+      </QuestionSection>
 
-      <Section title="현재 수준을 무엇으로 판단하시나요" tone="gold" hint="복수 선택">
+      <QuestionSection title={`${no()}현재 수준을 무엇으로 판단하시나요`} tone="gold" hint="복수 선택">
         <Chips options={LEVEL_BASIS_OPTIONS} value={levelBasis} max={LEVEL_BASIS_OPTIONS.length} onToggle={toggler(setLevelBasis, LEVEL_BASIS_OPTIONS.length)} />
         <EtcInput name="levelBasisEtc" />
-      </Section>
+      </QuestionSection>
 
       {showMath || showBoth ? (
-        <Section title="수학 현재 상태" tone="primary" hint={`최대 ${MAX_SUBJECT_STATES}개`}>
+        <QuestionSection title={`${no()}수학 현재 상태`} tone="primary" hint={`최대 ${MAX_SUBJECT_STATES}개`}>
           <Chips options={MATH_STATE_OPTIONS} value={mathStates} max={MAX_SUBJECT_STATES} onToggle={toggler(setMathStates, MAX_SUBJECT_STATES)} />
           <Field label="현재 수학 학습 과정 또는 교재">
             <input name="mathCourse" placeholder="예: 쎈 중2-1, 개념원리" className={inputCls} />
           </Field>
-        </Section>
+        </QuestionSection>
       ) : null}
 
       {showEnglish || showBoth ? (
-        <Section title="영어 현재 상태" tone="primary" hint={`최대 ${MAX_SUBJECT_STATES}개`}>
+        <QuestionSection title={`${no()}영어 현재 상태`} tone="primary" hint={`최대 ${MAX_SUBJECT_STATES}개`}>
           <Chips options={ENGLISH_STATE_OPTIONS} value={englishStates} max={MAX_SUBJECT_STATES} onToggle={toggler(setEnglishStates, MAX_SUBJECT_STATES)} />
           <Field label="현재 영어 학습 과정 또는 교재">
             <input name="englishCourse" placeholder="예: 리딩튜터, 그래머인유즈" className={inputCls} />
           </Field>
-        </Section>
+        </QuestionSection>
       ) : null}
 
-      <Section title="평소 학습 행동" tone="gold" hint="1 도움 필요 ~ 5 스스로">
+      <QuestionSection title={`${no()}평소 학습 행동`} tone="gold" hint="1 도움 필요 ~ 5 스스로">
         <div className="space-y-3">
           {HABIT_ITEMS.map((item) => (
             <Scale
@@ -126,9 +132,9 @@ export function ChecklistStep({
             />
           ))}
         </div>
-      </Section>
+      </QuestionSection>
 
-      <Section title="선행학습" tone="amber">
+      <QuestionSection title={`${no()}선행학습`} tone="amber">
         <Field label="현재 선행학습 여부">
           <Radio options={PRIOR_STATUS_OPTIONS} value={priorStatus} onChange={setPriorStatus} />
         </Field>
@@ -138,9 +144,9 @@ export function ChecklistStep({
         <Field label="선행 때문에 복습·수면·독서·자신감이 줄고 있나요?">
           <Radio options={PRIOR_SIDE_EFFECT_OPTIONS} value={priorSideEffect} onChange={setPriorSideEffect} />
         </Field>
-      </Section>
+      </QuestionSection>
 
-      <Section title="앞으로 6개월, 가장 원하는 변화" tone="primary" hint={`최대 ${MAX_CHANGES}개`}>
+      <QuestionSection title={`${no()}앞으로 6개월, 가장 원하는 변화`} tone="primary" hint={`최대 ${MAX_CHANGES}개`}>
         <Chips options={CHANGE_OPTIONS} value={changes} max={MAX_CHANGES} onToggle={toggler(setChanges, MAX_CHANGES)} />
         <EtcInput name="changesEtc" />
         <div className="grid grid-cols-2 gap-3">
@@ -157,9 +163,9 @@ export function ChecklistStep({
             <EtcInput name="protectEtc" />
           </div>
         </Field>
-      </Section>
+      </QuestionSection>
 
-      <Section title="학원에서 확인·제공받고 싶은 것" tone="ink" hint={`최대 ${MAX_WANTS}개`}>
+      <QuestionSection title={`${no()}학원에서 확인·제공받고 싶은 것`} tone="ink" hint={`최대 ${MAX_WANTS}개`}>
         <Chips options={WANT_OPTIONS} value={wants} max={MAX_WANTS} onToggle={toggler(setWants, MAX_WANTS)} />
         <EtcInput name="wantsEtc" />
         <Field label="상담자가 꼭 알아야 할 자녀의 강점이나 최근의 성공 경험">
@@ -168,7 +174,7 @@ export function ChecklistStep({
         <Field label="추가로 전달하고 싶은 내용">
           <textarea name="extra" rows={3} placeholder="자유롭게 적어주세요 (선택)" className={textareaCls} />
         </Field>
-      </Section>
+      </QuestionSection>
     </>
   );
 }

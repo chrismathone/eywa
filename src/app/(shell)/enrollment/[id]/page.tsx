@@ -28,7 +28,7 @@ import { ConsultationContentActions } from "./consultation-content-actions";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
-import { ChecklistView } from "./_components/checklist-view";
+import { ChecklistView } from "../_components/checklist-view";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
