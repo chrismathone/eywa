@@ -21,6 +21,7 @@ import postgres from "postgres";
 import { launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
+import { pollParentPostsOnce } from "./classnote-feed-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -107,6 +108,12 @@ async function main() {
         return { ran: false };
       });
       if (pres.ran) log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
+      // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
+      //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
+      await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
+        return { ran: false };
+      });
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();

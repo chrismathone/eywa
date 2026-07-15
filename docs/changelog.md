@@ -31,6 +31,18 @@
   상시 감시 = [`scan-shared-boards.mjs`](../scripts/_classnote/scan-shared-boards.mjs)(read-only 전수 스캔).
 - ⚠️ **워커 파일은 연동 PC zip 재전달 필요**(git pull 아님). ⚠️ 새 발송 경로는 반드시 이 게이트를 태울 것.
 
+### ClassNote 학부모 **새 글** → 담당 강사 eywa 인앱 알림 (2026-07-15) — ✅ tsc0/lint0/test1167 · 실데이터 E2E(롤백)
+원장 제보: 학부모가 ClassNote에 "채원이 배가 아파서 좀 늦게 나가요" 같은 글을 올리는데 강사가 모른다. **인바운드 전용(읽기만) — ClassNote에 아무것도 쓰지 않는다.**
+- **실측으로 뒤집힌 전제**(3주 3,000건 표본): ClassNote는 반 연결 교사에게 자체 알림을 이미 보내고 있었다(내 "사각지대" 가설은 틀림). 진짜 문제는 **강사별 편차** — 수학 학부모 글 8건 중 수진T(이수진) 담당은 5/5 응답, 김윤하 담당은 0/2 무응답. 무응답 1건은 보드에 **퇴직 강사(김화영)** 가 연결돼 있었다. → 강사가 매일 보는 eywa 벨에 띄우는 게 답. **eywa 매핑이 ClassNote 보드 연결보다 정확**(퇴직자 배제 + 현직 담당 전원).
+- **API 계약 확정**(실측): 기관 전체 피드 `GET /api/v1_2/centers/{c}/reports/` = **child 필터 없이 200 → 폴당 요청 1개**. `author.type` ∈ {admin 1443 / teacher 1468 / **parent 89**}. **정렬 id desc는 API 계약** — DRF CursorPagination 커서가 base64(`p=<직전 페이지 마지막 id>`)라 id가 곧 위치 키(커서 파라미터명은 `page`, `page=2`는 "Invalid cursor" 404). `created`는 신뢰 금지(마이크로초 `.000000` 주입값 존재). 부수 발견: `GET /api/v1_2/centers/{c}/employments`(교사↔반 848건 한 번에), `GET /api/v1/reports/{id}/comments/`(응답자 확인 가능).
+- **매핑 = 보드명 기준**(원장 지적 반영): 피드의 `child_name`은 학부모가 등록한 원아명이라 제멋대로(보드 `(수학)박서연E`의 원아명이 그냥 "서연"). 보드명은 **우리가 eywa 유효이름으로 만든 것**이라 동명이인 접미사까지 정확 — 1인 보드 구조가 애초에 그러라고 있는 것. 그래서 발송(provision `expectedFor`)과 **동일 기준**(재원+활성수강+동명이인 자동 보류)으로 보드명→학생 확정. **실검증 8/8 매핑·보류 0**.
+- 파이프라인: [watch-classnote-queue](../scripts/_classnote/watch-classnote-queue.mjs) 매 폴 → [pollParentPostsOnce](../scripts/_classnote/classnote-feed-core.mjs)(1분 가드) → 피드 1요청 → [순수 필터](../scripts/_classnote/parent-post-filter.mjs)(Vitest 16) → 학생→활성 수학강사 → `notifications` insert + 워터마크 전진(**같은 트랜잭션** = 크래시 시 중복 알림 0). 워터마크 = **0108a `classnote_feed_state`**(파일 마커 불가 — 알림은 누적이라 유실 시 과거 재알림 폭탄. 선례 0058a).
+- 안전장치: **콜드 스타트 = 알림 0건**(현재 최대 id만 기록) · **age 가드 3일**(PC 꺼졌다 켜져도 밀린 알림 폭주 없음) · `--post` 게이트. 발송 킬스위치(`classnoteSendEnabled`)는 **따르지 않음** — 발송이 아니라 인바운드 감지(provision-core와 같은 논리).
+- ⚠️ **세션 유지 필수(실측 함정)**: 다른 코어는 "할 일 있을 때만" 로그인하지만 피드 폴러는 1분마다 돈다 → 매번 `browser.newPage()`(=새 컨텍스트=쿠키 없음)+로그인하면 **하루 1,440회 로그인**이라 봇 계정이 스로틀당한다(반복 로그인 중 실제로 ~50% 실패 실측). 로그인된 페이지를 모듈 스코프에 유지하고 **폴마다 same-origin fetch 1번만**(내비 0), 세션 죽으면 1회 재로그인.
+- **범위 = 수학 1인보드**(원장 결정). 학부모 글 89건 중 수학 8건뿐이고 89%가 영어/그룹반이지만, 영어는 강사들이 ClassNote를 실제 소통 채널로 쓰는 중이라 중복 알림 우려 + eywa 상주 여부 불확실. **댓글은 범위 밖**(새 report id가 안 생겨 워터마크로 못 잡음 — 학부모 안내문구로 "새 글로 남겨주세요" 유도).
+- ⚠️ 연동 PC zip 재전달 필요 · 0108a 프로덕션 적용 필요.
+- 부수 산출(위생 점검, 읽기 전용): 교사 0명 수학보드 **40개**(그중 재원 36명은 이 기능이 구제) · **퇴직자가 보드에 연결된 채 학부모 글 수신 중 11명·251건**(김화영 58·이승아 41·권나현 39). 교사 배정 **추가는 API 가능**(`POST /api/v1/employments/ {teacher, belong_to_class}` — 빈 본문 400 `teacher_required`로 확인), **해제는 405로 불가**(`/api/v1/employments/{id}/`는 GET 200인데 DELETE만 405 · 교사 제거 라우트는 부재) → 학생 배정과 동일 제약(DOM 또는 UI 수동).
+
 ### 등록상담 ↔ 학생 로버스트 자동연결 트리거 + 일회성 정리 (2026-07-15) — ✅ 프로덕션 적용·E2E 롤백검증
 원장: "등록·종료에 있는데 실제 수업이 존재하는 학생을 배정 완료로 옮겨달라" + "다른 곳에서 배정해도 자동 이전되게, 학교는 항상 ~초/중/고로, 이름+학교+학년·전화 다단 매칭, 전화 없으면 다른 걸로라도." **"배정 완료" 컬럼 = 저장 상태가 아니라 파생 배지**([column-cards](<../src/app/(shell)/enrollment/_components/column-cards.tsx>)·[page](<../src/app/(shell)/enrollment/page.tsx>)): `assignedClassCount>=1`(상담 `student_id` 연결 + 그 학생 활성수강≥1)이면 렌더 시 자동 표시·등록·종료에서 상호배타 제외. 그래서 "이동" = **orphan 상담(student_id NULL)을 실제 학생에 연결**.
 - **일회성 정리**(injaewon 프로덕션, 원장 승인): 등록·종료 112건 중 orphan 102 → 진급(3월 학년도 경계)·전화·정확 매칭으로 **23건 연결**(배정완료 73→96). 검토권장 4건(동레벨 초등 전학)·재원아님 63·동명이인 10·테스트 2는 제외. 롤백맵 기록.

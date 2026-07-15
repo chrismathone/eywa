@@ -50,11 +50,12 @@
 | 캡처 대상 | [features/onescreen/components/parent-report-card.tsx](../src/features/onescreen/components/parent-report-card.tsx) | 루트 class `report-capture` — **폭/클래스 변경 시 워커 셀렉터 동기 필수** |
 | 공개 페이지 | [app/(share)/r/[token]/page.tsx](<../src/app/(share)/r/[token]/page.tsx>) | 학부모 열람 + `x-eywa-internal` 헤더면 조회로그 스킵 |
 | 워커 코어 | [scripts/_classnote/classnote-core.mjs](../scripts/_classnote/classnote-core.mjs) | stale 복구→클레임→스크린샷→게시→재시도. one-shot/데몬 공용 |
+| **인바운드**(학부모 글) | [classnote-feed-core.mjs](../scripts/_classnote/classnote-feed-core.mjs) `pollParentPostsOnce` + 순수 [parent-post-filter.mjs](../scripts/_classnote/parent-post-filter.mjs) | 피드 폴링(읽기 전용)→학부모 새 글→담당 강사 `notifications`. 워터마크 0108a. **세션 유지 필수**(§3) |
 | 워커 실행 | [scripts/_classnote/watch-classnote-queue.mjs](../scripts/_classnote/watch-classnote-queue.mjs)(데몬)·[process-classnote-queue.mjs](../scripts/_classnote/process-classnote-queue.mjs)(1회) | 데몬=15초 폴+heartbeat(`classnote_workers` upsert) |
 | PC 운영 | [scripts/_classnote/setup-classnote-pc.ps1](../scripts/_classnote/setup-classnote-pc.ps1) + 발송PC-{지정,상태확인,해제,주소수정}.bat | 작업 스케줄러 등록(conhost --headless·10분 부활)·해제·env 오타 수정 |
 | 이관 안내 | [scripts/_classnote/연동PC-이관-안내.md](../scripts/_classnote/연동PC-이관-안내.md) | zip 물리이관 절차(연동 PC는 git pull 아님) |
 | 실게시 함수 | **`D:\edutrix\functions\index.js`** `exports.submitToClassNoteV2` | ⚠️ **repo 밖**. Firebase Functions v2 → Cloud Run `https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app` |
-| 마이그 | 0082a(report 필드)·0083a(classnote 큐 컬럼+유니크)·0084a(classnote_workers)·0087a(attachments)·0088a(students.classnote_name) | ⚠️ 같은 번호의 활동로그 계열 마이그와 **번호 중복 공존**(병렬 세션 산물) |
+| 마이그 | 0082a(report 필드)·0083a(classnote 큐 컬럼+유니크)·0084a(classnote_workers)·0087a(attachments)·0088a(students.classnote_name)·0099a(classnote_notices)·**0108a(classnote_feed_state=인바운드 워터마크)** | ⚠️ 같은 번호의 활동로그 계열 마이그와 **번호 중복 공존**(병렬 세션 산물) |
 
 ## 3. ClassNote 서비스 자체 구조 (2026-07-10 실브라우저 검증, center 96575)
 
@@ -173,6 +174,64 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
 - ⚠️ **연동 PC 재전달 필요**: `D:\tmp\eywa-발송PC-반공지-20260713.zip`(경로보존 + [반공지-적용-안내.md](../scripts/_classnote/반공지-적용-안내.md)).
   적용 전까지 공지는 큐에 대기(무해).
 - v2 후보: 이미지 첨부(업로드 CDN 경로 미조사) · 반 안 학생 개별 해제 · 게시 회수 버튼(DELETE API 확보됨).
+
+### 학부모 **새 글** → 담당 강사 eywa 인앱 알림 (✅ 2026-07-15 구현 · 인바운드 · 읽기 전용)
+
+지금까지의 ClassNote 연동은 전부 **아웃바운드**(우리가 게시)였다. 이건 유일한 **인바운드** — 학부모가 보드에
+올린 글을 감지해 그 학생 담당 강사의 eywa **알림 벨**에 띄운다. **ClassNote에 아무것도 쓰지 않는다**(구조상
+학부모에게 나가는 경로 자체가 없음 = 오발송 리스크 0).
+
+- **왜 필요한가(실측이 뒤집은 전제)**: ClassNote는 반 연결 교사에게 **자체 알림을 이미 보낸다** — "1인 보드엔
+  교사가 없어 글이 묻힌다"는 가설은 **틀렸다**(수학 1인보드 292개 중 252개에 실제 수학 강사 연결됨).
+  진짜 문제는 **강사별 편차**: 3주 표본에서 수학 학부모 글 8건 중 수진T(이수진) 담당은 **5/5 응답**,
+  김윤하 담당은 **0/2 무응답**. 무응답 1건("감기때문에 하루 쉬겠습니다")은 보드에 **퇴직 강사(김화영)** 가
+  연결돼 있었다. → 강사가 **매일 보는 화면(eywa)** 에 띄우는 게 답이고, **eywa 매핑이 ClassNote 보드 연결보다
+  정확**하다(퇴직자 배제 + 현직 담당 전원). 이 기능을 "묻힌 글 구제"로 설명하지 말 것 — 정확히는 **"안 보는 강사에게도 도달"**.
+- **매핑은 보드명 기준**(⚠️ child_name 쓰지 말 것): 피드 행의 `child_name`은 **학부모가 등록한 원아명**이라
+  제멋대로다(실측: 보드 `(수학)박서연E`의 원아명이 그냥 "서연"). 보드명은 우리가 **eywa 유효이름**으로 만든 것이라
+  동명이인 접미사(A~G)까지 정확 — 1인 보드 구조가 애초에 그러라고 있다. 그래서 발송(provision)의
+  `expectedFor`와 **동일 기준**(재원 + 활성 수강 + 동명이인 자동 보류)으로 보드명→학생을 확정한다.
+  **실검증: 수학 학부모 글 8/8 매핑, 보류 0.** ⚠️ 이 조건을 바꾸면 발송과 기준이 갈라진다 — provision-core도 같이.
+- **파이프라인**: 데몬 [watch-classnote-queue](../scripts/_classnote/watch-classnote-queue.mjs) 매 폴 →
+  [`pollParentPostsOnce`](../scripts/_classnote/classnote-feed-core.mjs)(**1분 가드**) → 기관 피드 **요청 1개** →
+  [순수 필터](../scripts/_classnote/parent-post-filter.mjs)(`selectNewParentPosts`/`buildNotificationText`, Vitest 16) →
+  학생 → 활성 수학 담당 강사 → `notifications` insert **+ 워터마크 전진(같은 트랜잭션)**.
+  수동 1회 = [`process-parent-posts.mjs`](../scripts/_classnote/process-parent-posts.mjs)(기본 점검모드, `--apply`로 실행).
+- **워터마크 = 0108a `classnote_feed_state`**(tenant×scope 1행). ⚠️ 프로비저닝처럼 **파일 마커로 하면 안 된다** —
+  프로비저닝은 diff 기반이라 마커가 유실돼도 멱등하지만, **알림은 누적**이라 워터마크가 날아가면 과거 글이
+  통째로 재알림된다. 선례 = `0058a_makeedu_sync_state`.
+- **안전장치**: ① **콜드 스타트 = 알림 0건**(현재 최대 id만 기록 — 과거 글 폭탄 방지, §8 사고의 내부 알림판)
+  ② **age 가드 3일**(연동 PC가 꺼졌다 켜져도 밀린 과거 글로 벨 도배 안 됨) ③ `--post` 게이트(dry-run 데몬은 알림 안 만듦)
+  ④ 동명이인 보드는 **알림 보류**(엉뚱한 강사에게 남의 집 얘기 금지). **발송 킬스위치(`classnoteSendEnabled`)는
+  따르지 않는다** — 발송이 아니라 인바운드 감지(provision-core와 같은 논리).
+- ⚠️ **세션 유지가 설계의 핵심**(2026-07-15 실측 함정): 다른 코어는 "할 일이 있을 때만" 로그인하지만 피드 폴러는
+  **할 일이 없어도 1분마다** 돈다. 매번 `browser.newPage()`(= 새 컨텍스트 = 쿠키 없음) + `loginClassnote`이면
+  **하루 1,440회 로그인** → 봇 계정 스로틀(조사 중 반복 로그인이 실제로 ~50% 실패했다). 그래서 로그인된 페이지를
+  **모듈 스코프에 유지**하고 폴마다 **same-origin fetch 1번만**(내비게이션 0), 세션이 죽으면 1회 재로그인.
+  **새 폴링형 인바운드를 만들면 반드시 이 패턴을 따를 것.**
+- **범위 = 수학 1인보드**(원장 결정 2026-07-15). 학부모 글 89건/3주 중 수학은 8건뿐이고 **89%가 영어/그룹반**이지만,
+  영어는 강사들이 ClassNote를 실제 양방향 채널로 쓰는 중(녹음 숙제 등)이라 중복 알림 우려 + eywa 상주 여부 불확실.
+  확장은 `BOARD_GROUPS.english` 추가 한 줄.
+- **댓글은 범위 밖**(구조적 한계): 학부모가 기존 알림장에 **댓글**로 답하면 새 report id가 안 생겨 워터마크로
+  못 잡는다(잡으려면 리포트별 `num_comments` 델타 추적 필요 — 비용 급증). 3주 표본에서 댓글 달린 글 311/3000.
+  → **학부모 안내문구로 "새 글로 남겨주세요" 유도**(원장 결정).
+
+### ClassNote 위생 — 교사 연결 실태 (2026-07-15 조사, 읽기 전용)
+
+`GET /api/v1_2/centers/{c}/employments`(교사↔반 **848건 한 번에**, next 없음)로 전수 확인:
+- **교사 0명인 수학 1인보드 40개** — 여기 올라온 학부모 글은 ClassNote 알림이 **아무에게도** 안 간다.
+  단 그중 **재원생 36명은 위 eywa 알림이 구제**(보드 교사 연결과 무관하게 eywa 담당 강사에게 감). 나머지 4개는 테스트/잔재.
+- **eywa 비활성(퇴직) 직원 11명이 보드 251건에 교사로 연결된 채 학부모 글을 계속 수신 중** —
+  김화영(Alice) 58 · 이승아 41 · 권나현 39 · Gina(신명진) 23 · 강보경 23 · Ellen T 13 · Jenny T 13 · 곽민정 13 ·
+  이수연(Hannah) 10 · 이희영 10 · 이지은 8. ⚠️ ClassNote 교사명↔eywa 직원은 **이름 추정 매칭**(ID 링크 없음) —
+  해제 전 사람이 확인 필요.
+- **eywa 기준 교사 배정 동기화 가능성**(원장 검토 지시): **추가는 API로 가능** —
+  `POST /api/v1/employments/ {teacher, belong_to_class}`(빈 본문 → 400 `teacher_required`로 확인. 학생 배정
+  `POST /api/v1/enrollments/`와 동일 패턴). **해제는 REST 불가** — `/api/v1/employments/{id}/`는 GET 200인데
+  **DELETE만 405**, 교사 제거 라우트(`/api/v1/teachers/{id}/`·`/api/v1/centers/{c}/teachers/{id}/`)는 **부재**(404).
+  = 학생 배정과 **정확히 같은 제약**(§3 "배정 해제는 UI에서만"). 해제 자동화는 DOM(Playwright)만 남는다.
+  ⚠️ **선행 조건**: "eywa 기준"이 성립하려면 이름 추정이 아니라 **ID 매핑**이 필요 —
+  `users.classnote_teacher_id`(센터 교사 24명, 1회 확정) 신설 후에야 안전하다.
 
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 

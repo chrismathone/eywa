@@ -5,7 +5,8 @@ import type { EywaIconName } from "@/components/icons/eywa-icons";
 export type NotificationType =
   | "enrollment_assigned" // 내 반에 학생 배정
   | "enrollment_transferred_in" // 반이동으로 내 반에 전입
-  | "teacher_handover"; // 강사 인수인계로 내가 새 담임 지정
+  | "teacher_handover" // 강사 인수인계로 내가 새 담임 지정
+  | "classnote_parent_post"; // 학부모가 ClassNote에 새 글 → 그 학생 담당 강사(연동 PC 워커가 insert)
 
 export type NotificationItem = {
   id: string;
@@ -22,4 +23,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   enrollment_assigned: "book",
   enrollment_transferred_in: "swap",
   teacher_handover: "userCheck",
+  classnote_parent_post: "message",
 };
