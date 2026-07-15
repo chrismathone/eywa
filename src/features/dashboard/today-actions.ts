@@ -26,6 +26,12 @@ export type TodayActionsRaw = {
   leavesToday: { name: string }[];
   /** 오늘 수업(시작됨)이 있는데 아직 보고서 0건인 학생 — 미작성 리마인더(5단계-1). */
   unwrittenReportsToday: { count: number; names: string[] };
+  /**
+   * 재원인데 활성 수강(반)이 0개인 학생 = 반 배정 필요(0097a RPC).
+   * ⚠️ 출처는 students 테이블이지 등록상담이 아니다 — 등록상담을 거치지 않은 학생(임포트·선등록)도 잡는 게
+   * 목적이라 상담 기준으로 재정의하지 말 것(2026-07-15 실측: 상담 기준은 89건 전원이 퇴원·과거 건 = 헛경보).
+   */
+  unassignedEnrolled: { studentId: string; name: string }[];
 };
 
 export type TodayActionItem = {
@@ -93,6 +99,19 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.unwrittenReportsToday.count,
       detail: nameList(raw.unwrittenReportsToday.names),
       href: "/onescreen",
+    });
+  }
+
+  if (raw.unassignedEnrolled.length > 0) {
+    // 소수(대개 1~2명)라 1명이면 그 학생 창으로 바로, 여럿이면 학생목록으로(목록엔 '미수강만' 필터가 없음).
+    const only = raw.unassignedEnrolled.length === 1 ? raw.unassignedEnrolled[0] : null;
+    items.push({
+      key: "unassigned-enrolled",
+      severity: "amber",
+      label: "반 미배정 재원생",
+      count: raw.unassignedEnrolled.length,
+      detail: nameList(raw.unassignedEnrolled.map((s) => s.name)),
+      href: only ? `/students/${only.studentId}` : "/students",
     });
   }
 

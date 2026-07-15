@@ -12,6 +12,7 @@ const EMPTY: TodayActionsRaw = {
   leavesPending: 0,
   leavesToday: [],
   unwrittenReportsToday: { count: 0, names: [] },
+  unassignedEnrolled: [],
 };
 
 describe("buildTodayActions", () => {
@@ -35,6 +36,33 @@ describe("buildTodayActions", () => {
       detail: "김민준·이서연",
       href: "/attendance",
     });
+  });
+
+  it("반 미배정 재원생 1명 = amber + 그 학생 창으로 직행", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      unassignedEnrolled: [{ studentId: "s1", name: "학원이" }],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      key: "unassigned-enrolled",
+      severity: "amber",
+      label: "반 미배정 재원생",
+      count: 1,
+      detail: "학원이",
+      href: "/students/s1",
+    });
+  });
+
+  it("반 미배정 재원생 여럿 = 학생목록 링크 + 명단 요약", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      unassignedEnrolled: [
+        { studentId: "s1", name: "김민준" },
+        { studentId: "s2", name: "이서연" },
+      ],
+    });
+    expect(items[0]).toMatchObject({ count: 2, detail: "김민준·이서연", href: "/students" });
   });
 
   it("미작성 보고서 = amber + 명단 요약 + /onescreen 링크", () => {

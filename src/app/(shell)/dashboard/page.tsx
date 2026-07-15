@@ -13,7 +13,6 @@ import {
   getTodayRecordedClassIds,
   getTopOutstanding,
   getTrendDataLast7Days,
-  getUnassignedEnrolledStudents,
   getEnrollmentChangeLast7d,
 } from "@/features/dashboard/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
@@ -55,7 +54,6 @@ export default async function DashboardPage() {
     settings,
     enrollmentChanges,
     actionSignals,
-    unassignedEnrolled,
     enrollmentChange,
   ] = await Promise.all([
     getEnrolledStudentCount(),
@@ -74,11 +72,12 @@ export default async function DashboardPage() {
     getTenantSettings(),
     getMonthlyEnrollmentChanges(),
     getTodayActionSignals(),
-    getUnassignedEnrolledStudents(),
     getEnrollmentChangeLast7d(),
   ]);
   const announcements = recentAnnouncements ?? manageAnnouncements.slice(0, 4);
   // "오늘 조치할 것" 불릿 — 전부 0건이면 빈 배열(패널이 '정상' 한 줄 표시).
+  // 반 미배정 재원생도 이 패널의 칩(← 등록상담 카드 밴드였던 것: 출처가 학생인데 등록상담 카드에 얹혀
+  // "등록상담을 거친 건"으로 오독됐다. 조치 신호는 이 패널이 단일 소스. 2026-07-15 원장 지적).
   const todayActions = buildTodayActions(actionSignals);
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
   const subjects = buildSubjectMaps(settings.operations.subjects);
@@ -156,7 +155,7 @@ export default async function DashboardPage() {
         <AbsenceRiskCard items={absenceRisks} />
         <OutstandingCard items={outstanding} />
         <FollowUpCard items={followUps} />
-        <EnrollmentListCard list={enrollList} unassigned={unassignedEnrolled} />
+        <EnrollmentListCard list={enrollList} />
         <AnnouncementsCard
           items={announcements}
           canManage={canManageAnnouncements}

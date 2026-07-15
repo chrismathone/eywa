@@ -4,6 +4,7 @@ import { kstToday } from "@/lib/date-kst";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { fetchInChunks } from "@/lib/supabase/batch";
+import { getUnassignedEnrolledStudents } from "./queries";
 import type { TodayActionsRaw } from "../today-actions";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
@@ -70,6 +71,7 @@ export async function getTodayActionSignals(): Promise<TodayActionsRaw> {
     leavesPendingRes,
     leavesTodayRes,
     unwrittenReports,
+    unassignedEnrolled,
   ] = await Promise.all([
     // 오늘 무단결석 — 명단 필요(이름 표시)라 행 조회, 상한으로 방어.
     supabase
@@ -104,6 +106,8 @@ export async function getTodayActionSignals(): Promise<TodayActionsRaw> {
       .gte("ends_on", today)
       .limit(20),
     unwrittenReportsSignal(supabase, today),
+    // 반 미배정 재원생 — students 기준 anti-join RPC(0097a). 등록상담이 아니라 학생이 출처다.
+    getUnassignedEnrolledStudents(),
   ]);
 
   // 무단결석 — 한 학생이 여러 반에서 결석해도 1명(학생 단위 dedupe).
@@ -150,5 +154,6 @@ export async function getTodayActionSignals(): Promise<TodayActionsRaw> {
       return { name: u?.display_name ?? "(직원)" };
     }),
     unwrittenReportsToday: unwrittenReports,
+    unassignedEnrolled: unassignedEnrolled.map((u) => ({ studentId: u.studentId, name: u.name })),
   };
 }
