@@ -92,6 +92,14 @@ describe("parseIntakeChecklist", () => {
     });
   });
 
+  it("'고려하지 않음' 이유는 폐기 — 위 '여부=하지 않음'과 중복이라 보내도 저장 안 됨", () => {
+    const c = parseIntakeChecklist(
+      form({ goals: "level", priorReason: "not_considering", advancedReason: "not_considering" }),
+    );
+    expect(c?.priorReason).toBeNull();
+    expect(c?.advancedReason).toBeNull();
+  });
+
   it("폐기된 문항(주당 시간·예산·선행 부작용)은 보내도 저장되지 않는다", () => {
     const c = parseIntakeChecklist(
       form({ goals: "level", weeklyHours: "6", budget: "300000", priorSideEffect: "severe" }),

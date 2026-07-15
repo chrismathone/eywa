@@ -94,6 +94,11 @@ export const PRIOR_STATUS_OPTIONS: ChoiceOption[] = [
   { value: "active", label: "적극적으로 진행 중" },
   { value: "unsure", label: "잘 모르겠음" },
 ];
+/**
+ * ⚠️ "선행을 고려하지 않음" 같은 선택지를 다시 넣지 말 것(원장 지적 2026-07-15) — 안 하는 사람은 위
+ * '여부'에서 '하지 않음'을 고르고 이 라디오는 숨겨진다. 여기 남기면 "진행 중"이라 해놓고 "고려하지 않음"을
+ * 고를 수 있는 모순된 중복이 된다. 이 목록은 **하는(또는 고려 중인) 사람의 이유**만 담는다.
+ */
 export const PRIOR_REASON_OPTIONS: ChoiceOption[] = [
   { value: "mastered", label: "현재 과정을 충분히 이해했기 때문" },
   { value: "next_stage", label: "다음 학년 또는 학교급 전환 대비" },
@@ -101,7 +106,6 @@ export const PRIOR_REASON_OPTIONS: ChoiceOption[] = [
   { value: "peers", label: "또래가 선행하고 있어서" },
   { value: "academy", label: "현재 학원에서 권해서" },
   { value: "anxiety", label: "뒤처질 것 같은 불안 때문에" },
-  { value: "not_considering", label: "선행을 고려하지 않음" },
 ];
 
 /**
@@ -116,7 +120,6 @@ export const ADVANCED_REASON_OPTIONS: ChoiceOption[] = [
   { value: "peers", label: "또래가 심화하고 있어서" },
   { value: "academy", label: "현재 학원에서 권해서" },
   { value: "anxiety", label: "뒤처질 것 같은 불안 때문에" },
-  { value: "not_considering", label: "심화를 고려하지 않음" },
 ];
 
 /** 9. 6개월 내 원하는 변화 (최대 2) */
