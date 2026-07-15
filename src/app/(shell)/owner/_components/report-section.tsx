@@ -307,11 +307,12 @@ export function ReportSection({
           ) : null}
         </SettingsCard>
 
-        {/* 공유 보드 발송 예외 — 소비처: ClassNote 워커 프리플라이트 게이트(classnote-core.mjs getClassnoteBoardAllowlist).
-            워커가 '연결 가족 2+' 보드를 오발송 방지로 보류하는데, 여기 등재된 보드만 예외로 발송한다. */}
+        {/* 발송 보류 예외 — 소비처: ClassNote 워커 프리플라이트 게이트(classnote-core.mjs getClassnoteBoardAllowlist).
+            ⚠️ 2026-07-15 판정 기준 변경: '연결 가족 2+' → **동명이인 매핑 검증**(board-safety.mjs). 문구도 함께 갱신했다
+            (계정 수는 위험과 겹치지 않았다 — 상세는 docs/classnote-integration.md §5.5). 여기 등재된 보드는 검증을 면제한다. */}
         <SettingsCard
-          title="공유 보드 발송 예외"
-          description="한 클래스노트 보드에 연결된 가족이 둘 이상이면 다른 가족에게 보고서가 노출될 수 있어 자동으로 발송이 보류됩니다. 클래스노트 운영관리에서 연락처·보호자를 직접 확인해 '같은 학생이 학부모·본인 등 여러 계정으로 연결된 것'이 맞는 보드만 아래에 보드명으로 등록하면 발송이 허용됩니다."
+          title="발송 보류 예외 (동명이인 확인 완료)"
+          description="이름이 같은 학생이 있으면(예: 박서준 · 박서준C) 클래스노트 보드는 둘 다 '박서준'이라 어느 집인지 구분이 안 됩니다. 학부모가 가입할 때 이름 뒤 알파벳을 붙이지 않기 때문입니다. 그래서 그런 이름은 원아 생년월일이 그 학생 학년과 맞는지 대조해 보고, 안 맞으면 발송을 보류합니다. 클래스노트 운영관리에서 직접 확인해 맞는 집이 확실한 보드만 아래에 등록하면 그 보드는 검증 없이 발송됩니다."
         >
           <StringListEditor
             value={r.classnoteSharedBoardAllowlist}
@@ -322,7 +323,8 @@ export function ReportSection({
           <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
             <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
             <span>
-              확인 없이 등록하면 실제로 다른 가족에게 보고서가 발송됩니다. 반드시 연락처를 대조한 뒤 등록하세요.
+              확인 없이 등록하면 실제로 다른 집에 보고서가 발송됩니다. 반드시 클래스노트 운영관리에서 연락처를
+              대조한 뒤 등록하세요. (테스트 학생 &apos;학원이&apos;는 원아 생일이 실제와 달라 보류되므로 등록이 필요합니다.)
             </span>
           </p>
         </SettingsCard>
