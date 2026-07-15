@@ -12,6 +12,11 @@ describe("isPresenceScope — 콜론 포함 접두 매칭", () => {
     expect(isPresenceScope("student-consultation:9")).toBe(true);
     expect(isPresenceScope("tenant-settings:profile")).toBe(true);
     expect(isPresenceScope("meeting:abc")).toBe(true);
+    expect(isPresenceScope("staff-resume:7")).toBe(true);
+  });
+  it("staff-resume은 staff와 별개 scope다(allowlist 누락 시 presence가 조용히 무시됨)", () => {
+    // 'staff:'로는 안 잡히므로 allowlist에 'staff-resume'이 따로 있어야 이력서 '수정중'이 동작한다.
+    expect("staff-resume:7".startsWith("staff:")).toBe(false);
   });
   it("느슨한 접두 오매칭 방지 — student가 student-consultation을 잡지 않음(콜론 기준)", () => {
     // 'student-consultation:9'는 'student-consultation:' 접두로만 매칭돼야 하며,

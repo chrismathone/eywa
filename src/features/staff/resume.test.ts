@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  CAREER_ROWS,
   EDU_ROWS,
   emptyResume,
   normalizeResume,
   parseResumeForm,
+  RESUME_DRAFT_EXCLUDE,
   resumeTitle,
 } from "./resume";
 
@@ -56,6 +58,33 @@ describe("normalizeResume", () => {
     expect(d.education[1].school).toBe("");
     expect(d.contract.workDays).toEqual(["mon"]);
     expect(d.contract.employmentType).toBe("아르바이트");
+  });
+});
+
+describe("RESUME_DRAFT_EXCLUDE", () => {
+  // 이 목록은 **보안 계약**이다 — 초안(IndexedDB)에 남으면 안 되는 폼 필드 이름.
+  // 오타가 나면 조용히 아무것도 제외되지 않아 주민번호가 평문으로 디스크에 남는다.
+  it("나열된 이름이 전부 실제 폼 필드다(오타 = 제외 실패)", () => {
+    const fd = new FormData();
+    for (const name of RESUME_DRAFT_EXCLUDE) fd.set(name, `채움-${name}`);
+    const d = parseResumeForm(fd);
+
+    // 각 필드가 파싱 결과 어딘가에 실제로 들어갔는지 = 그 name이 폼 계약에 존재한다는 증거.
+    const parsedValues = JSON.stringify(d);
+    for (const name of RESUME_DRAFT_EXCLUDE) {
+      expect(parsedValues, `${name}은 parseResumeForm이 읽지 않는다 — 오타이거나 폐기된 필드`).toContain(
+        `채움-${name}`,
+      );
+    }
+  });
+
+  it("민감 필드(주민번호·계좌·급여)를 빠짐없이 담는다", () => {
+    for (const name of ["p_residentId", "c_account", "c_bank", "c_salaryMonthly", "c_salaryAnnual"]) {
+      expect(RESUME_DRAFT_EXCLUDE).toContain(name);
+    }
+    // 경력 급여도 행마다 전부(행 수가 늘면 자동 확장돼야 한다).
+    expect(RESUME_DRAFT_EXCLUDE).toContain("car_0_salary");
+    expect(RESUME_DRAFT_EXCLUDE.filter((n) => n.endsWith("_salary"))).toHaveLength(CAREER_ROWS);
   });
 });
 

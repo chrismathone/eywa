@@ -10,7 +10,8 @@ import { deleteStaffResume } from "@/features/staff/server/resume-actions";
 /** 이력서 뷰 인쇄 — 플로팅 창(iframe) 안이라 이 문서만 A4(print-portrait)로 인쇄된다. */
 export function PrintResumeButton() {
   return (
-    <Button onClick={() => window.print()}>
+    // 2차 액션 = outline(1차는 '수정' 하나) — 채움 버튼 둘이 나란히 경쟁하지 않게.
+    <Button variant="outline" onClick={() => window.print()}>
       <Printer className="size-4" />
       인쇄
     </Button>

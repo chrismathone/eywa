@@ -22,6 +22,22 @@ export const WORKDAYS = [
 
 export const EMPLOYMENT_TYPES = ["정규직", "아르바이트", "프리랜서"] as const;
 
+/**
+ * 로컬 초안(IndexedDB)에 **남기면 안 되는** 필드 — 주민번호·주소·계좌·급여.
+ * 이력서 열람은 재인증(step-up)으로 잠그는데, 초안 자동저장이 같은 값을 브라우저 디스크에 평문으로
+ * 남기면 그 잠금이 통째로 무의미해진다(로그인조차 없이 DevTools에서 읽힘). `useFormDraft`의 exclude로 넘긴다.
+ * ⚠️ 새 민감 칸을 추가하면 여기에도 넣을 것 — 초안은 name 가진 폼 컨트롤을 **전부** 캡처한다.
+ */
+export const RESUME_DRAFT_EXCLUDE: string[] = [
+  "p_residentId",
+  "p_address",
+  "c_bank",
+  "c_account",
+  "c_salaryMonthly",
+  "c_salaryAnnual",
+  ...Array.from({ length: CAREER_ROWS }, (_, i) => `car_${i}_salary`),
+];
+
 export type ResumeEducation = { period: string; school: string; major: string; gpa: string; location: string };
 export type ResumeCareer = { company: string; period: string; duties: string; salary: string; leaveReason: string };
 export type ResumeCert = { name: string; date: string; issuer: string };

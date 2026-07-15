@@ -137,7 +137,9 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
               <Pin className={`size-4 ${doc.pinned ? "fill-current" : ""}`} strokeWidth={1.8} />
             </button>
           ) : null}
-          {canWrite ? (
+          {/* 폼 문서(이력서·환불요청서)는 여기서 못 지운다 — 자기 화면에서 관리한다. 이력서는 열람이
+              재인증으로 잠겨 있어, 탐색기에서 지울 수 있으면 "못 보는 문서를 지우는" 구멍이 된다(서버도 이중 차단). */}
+          {canWrite && doc.kind !== "form" ? (
             confirming ? (
               <span className="inline-flex items-center gap-1.5 text-xs">
                 <button type="button" onClick={() => void onDelete()} disabled={busy} className="text-danger font-semibold hover:underline">

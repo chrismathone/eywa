@@ -22,6 +22,7 @@ export const PRESENCE_SCOPE_PREFIXES = [
   "student",
   "class",
   "staff",
+  "staff-resume",
   "consultation",
   "student-consultation",
   "meeting",

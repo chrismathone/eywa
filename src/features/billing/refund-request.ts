@@ -20,6 +20,14 @@ export const APPROVAL_SLOTS = [
 ] as const;
 export type ApprovalKey = (typeof APPROVAL_SLOTS)[number]["key"];
 
+/**
+ * 로컬 초안(IndexedDB)에 **남기면 안 되는** 필드 — 계좌번호·카드정보·주소.
+ * 환불요청서도 restricted 문서(사무실 전용 열람)라, 초안이 같은 값을 브라우저 디스크에 평문으로 남기면
+ * 그 제한이 무의미해진다. `useFormDraft`의 exclude로 넘긴다(이력서 `RESUME_DRAFT_EXCLUDE`와 같은 규약).
+ * ⚠️ 새 민감 칸을 추가하면 여기에도 넣을 것 — 초안은 name 가진 폼 컨트롤을 **전부** 캡처한다.
+ */
+export const REFUND_DRAFT_EXCLUDE: string[] = ["s_address", "m_account", "m_internetCard", "m_card"];
+
 export type RefundRequestData = {
   approval: Record<ApprovalKey, string>;
   student: {

@@ -12,7 +12,10 @@ import {
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import type { UploadTicket } from "@/lib/storage/types";
+import { RESUME_FORM_TYPE } from "@/features/staff/resume";
+import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/server/resume-access";
 import { DOCUMENT_CATEGORIES } from "../categories";
 
 // 데이터베이스(서식 저장소) 변경 액션 — 쓰기는 canWriteTenant("documents")(master/admin/manager),
@@ -180,11 +183,24 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("academy_documents")
-    .select("file_path")
+    .select("file_path, form_type, uploaded_by")
     .eq("id", id)
     .maybeSingle();
-  const { error } = await supabase.from("academy_documents").delete().eq("id", id);
-  if (error) return { error: `삭제 실패: ${error.message}` };
+
+  // ⚠️ 이력서는 같은 행이 여기(탐색기)에도 뜨지만 **열람은 재인증으로 잠겨 있다** — 열람 못 하는 이력서를
+  // 이 경로로 삭제할 수 있으면 잠금이 무의미해진다(2026-07-15 적대검수 실적발). 뷰 페이지와 같은 게이트를 건다.
+  if (row?.form_type === RESUME_FORM_TYPE) {
+    const ok = await canViewResume(gate.user, id, (row.uploaded_by as string | null) ?? null);
+    if (!ok) return { error: RESUME_LOCKED_MSG };
+  }
+
+  const { data: deleted, error } = await supabase
+    .from("academy_documents")
+    .delete()
+    .eq("id", id)
+    .select("id"); // select 없으면 0행 삭제도 성공으로 보고된다.
+  if (error) return { error: humanizeDbError(error.message, "삭제") };
+  if (!deleted?.length) return { error: "문서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
   if (row?.file_path) await removeObject(row.file_path).catch(() => {});
   revalidatePath("/documents");
   return { ok: true };

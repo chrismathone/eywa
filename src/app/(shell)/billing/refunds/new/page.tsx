@@ -20,7 +20,7 @@ export default async function NewRefundPage() {
           종이 서식의 각 칸에 바로 입력하세요 — 저장하면 데이터베이스(수납·결제)에 보관되고 언제든 다시 수정·A4 인쇄할 수 있습니다.
         </p>
       </header>
-      <RefundSheet data={emptyRefund()} canWrite startEditing />
+      <RefundSheet data={emptyRefund()} userId={user.id} canWrite startEditing />
     </div>
   );
 }

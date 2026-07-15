@@ -27,7 +27,7 @@ export default async function RefundViewPage({ params }: { params: Promise<{ id:
           {refund.authorName ? ` · ${refund.authorName}` : ""} · 데이터베이스(수납·결제)에 저장됨
         </p>
       </header>
-      <RefundSheet data={refund.data} id={id} canWrite={canWrite} />
+      <RefundSheet data={refund.data} id={id} userId={user.id} canWrite={canWrite} />
     </div>
   );
 }

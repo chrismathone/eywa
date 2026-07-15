@@ -9,7 +9,14 @@ import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
-import { EMPLOYMENT_TYPES, WORKDAYS, type StaffResumeData } from "@/features/staff/resume";
+import { EditingBanner } from "@/features/presence/editing-badge";
+import { useEditPresence } from "@/features/presence/edit-presence";
+import {
+  EMPLOYMENT_TYPES,
+  RESUME_DRAFT_EXCLUDE,
+  WORKDAYS,
+  type StaffResumeData,
+} from "@/features/staff/resume";
 import { saveStaffResume, type ResumeActionState } from "@/features/staff/server/resume-actions";
 import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
 
@@ -57,11 +64,17 @@ function EditInput({
   );
 }
 
-function SaveButton() {
+/**
+ * @param done 저장은 끝났고 새 이력서 뷰로 **이동 중**일 때 true — 계속 잠가 둔다.
+ * `pending`은 액션 resolve 즉시 풀리는데 생성 경로는 router.push(RSC 네비)가 수백ms 더 걸려,
+ * 그 사이 재클릭하면 id 없는 폼이 한 번 더 제출돼 **같은 사람 이력서가 2건** 생긴다.
+ */
+function SaveButton({ done = false }: { done?: boolean }) {
   const { pending } = useFormStatus();
+  const busy = pending || done;
   return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+    <Button type="submit" disabled={busy}>
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
       저장
     </Button>
   );
@@ -70,11 +83,14 @@ function SaveButton() {
 export function ResumeSheet({
   data,
   id,
+  userId,
   canWrite = false,
   startEditing = false,
 }: {
   data: StaffResumeData;
   id?: string;
+  /** 초안 스코프 격리용 — 공용 PC에서 다른 사람의 초안이 복구 제안되지 않게 한다. */
+  userId: string;
   canWrite?: boolean;
   startEditing?: boolean;
 }) {
@@ -88,9 +104,12 @@ export function ResumeSheet({
   const [workDays, setWorkDays] = useState<string[]>(data.contract.workDays);
 
   const draft = useFormDraft({
-    scope: id ? `staff-resume:${id}` : "staff-resume:new",
+    // 스코프에 userId 포함 — 사무실 공용 PC에서 앞사람 초안이 뒷사람에게 복구 제안되면 안 된다.
+    scope: `staff-resume:${userId}:${id ?? "new"}`,
     formRef,
     enabled: editing,
+    // 주민번호·계좌·급여는 IDB에 아예 안 남긴다(재인증 잠금 우회 차단) — 복구 시 그 칸만 비어 있다.
+    exclude: RESUME_DRAFT_EXCLUDE,
     onRestore: (vals) => {
       setEmpType(vals.c_employmentType ?? "");
       setWorkDays(WORKDAYS.filter((d) => vals[`c_workday_${d.key}`] === "true").map((d) => d.key));
@@ -99,6 +118,8 @@ export function ResumeSheet({
   const clearDraft = draft.clear;
   // 편집 중일 때만 미저장 가드 활성(뷰 모드는 dirty 없음) → 편집 중 창 X 시 확인.
   const { markSaved } = useUnsavedGuard({ formRef, enabled: editing });
+  // "수정중" presence — 둘이 같은 이력서를 동시에 열면 나중 저장이 앞 저장을 조용히 덮는다(soft 경고).
+  useEditPresence(id ? `staff-resume:${id}` : undefined, editing);
   // 저장 성공 확정(nonce) 1회만 처리(#67 가드). 편집 종료(setEditing)는 렌더 중 조정(React 권장 #25 —
   // effect setState 금지 회피, enrollment-assign-dialog 패턴), 부수효과(초안 삭제·네비)는 아래 effect에서.
   const [seenNonce, setSeenNonce] = useState<number | undefined>(undefined);
@@ -122,6 +143,8 @@ export function ResumeSheet({
     setEditing(true);
   }
   function cancel() {
+    // 취소 = 명시적 폐기 → 초안도 함께 비운다. (창 X는 미저장 가드가 잡고, 그땐 초안이 남아 이어쓰기 가능)
+    clearDraft();
     if (id) setEditing(false);
     else router.push("/staff?tab=resumes");
   }
@@ -194,7 +217,10 @@ export function ResumeSheet({
               </td>
               <td className={cell}>{field(`edu_${i}_school`, r.school, { ph: "학교명" })}</td>
               <td className={cell}>{field(`edu_${i}_major`, r.major, { ph: "전공" })}</td>
-              <td className={`${cell} text-center`}>{field(`edu_${i}_gpa`, r.gpa, { align: "center" })}</td>
+              {/* 학점만 placeholder가 없어 빈 상자로 보이고 보조기술에도 이름이 없었다 — ph로 이름 부여. */}
+              <td className={`${cell} text-center`}>
+                {field(`edu_${i}_gpa`, r.gpa, { ph: "학점", align: "center" })}
+              </td>
               <td className={cell}>{field(`edu_${i}_location`, r.location, { ph: "소재지" })}</td>
             </tr>
           ))}
@@ -335,11 +361,14 @@ export function ResumeSheet({
             <th className={head}>근무형태</th>
             <td className={cell} colSpan={3}>
               <input type="hidden" name="c_employmentType" value={editing ? empType : ""} />
+              {/* ■/□는 종이 서식을 재현한 **그림**이라 보조기술엔 상태가 안 전달된다 —
+                  편집은 aria-pressed(토글 버튼), 뷰는 sr-only 텍스트로 선택 여부를 함께 알린다. */}
               {editing
                 ? EMPLOYMENT_TYPES.map((t) => (
                     <button
                       key={t}
                       type="button"
+                      aria-pressed={t === empType}
                       onClick={() => setEmpType((prev) => (prev === t ? "" : t))}
                       className="mr-3 inline-flex cursor-pointer items-center gap-1 whitespace-nowrap"
                     >
@@ -349,6 +378,7 @@ export function ResumeSheet({
                 : EMPLOYMENT_TYPES.map((t) => (
                     <span key={t} className="mr-3 whitespace-nowrap">
                       {t === c.employmentType ? "■" : "□"} {t}
+                      <span className="sr-only">{t === c.employmentType ? " 선택됨" : " 선택 안 함"}</span>
                     </span>
                   ))}
             </td>
@@ -419,9 +449,11 @@ export function ResumeSheet({
     <form action={formAction} ref={formRef} className="space-y-4">
       {id ? <input type="hidden" name="id" value={id} /> : null}
       {toolbar}
+      {id ? <EditingBanner scope={`staff-resume:${id}`} /> : null}
       <DraftBanner savedAt={draft.draftSavedAt} onRestore={draft.restore} onDiscard={draft.discard} />
       {state?.error ? (
-        <p className="text-danger flex items-center gap-1.5 text-sm">
+        // 한글 요약만 노출 — 기술 원문(detail)은 title 툴팁으로만(UI에 raw 에러 금지).
+        <p className="text-danger flex items-center gap-1.5 text-sm" title={state.detail}>
           <AlertCircle className="size-4 shrink-0" />
           {state.error}
         </p>
@@ -432,7 +464,8 @@ export function ResumeSheet({
           <X className="size-4" />
           취소
         </Button>
-        <SaveButton />
+        {/* 생성 성공 후 새 뷰로 이동할 때까지 잠금 유지 → 중복 INSERT 방지 */}
+        <SaveButton done={!id && !!state?.ok} />
       </FormActionBar>
     </form>
   );

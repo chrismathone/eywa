@@ -3,29 +3,58 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createClient as createRawClient } from "@supabase/supabase-js";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 import { logAction } from "@/features/audit/server/log";
 import { parseResumeForm, resumeTitle, RESUME_FORM_TYPE } from "../resume";
+import { canViewResume, RESUME_LOCKED_MSG } from "./resume-access";
+import { getStaffResumeById } from "./resume-queries";
 import { RESUME_VIEW_COOKIE, RESUME_VIEW_TTL_SEC, signResumeViewToken } from "./resume-view-token";
 
-// 직원 이력서(웹 작성 폼) 변경 액션 — 게이트는 canWriteTenant("staff")(직원관리 쓰기 = 사무실).
+// 직원 이력서(웹 작성 폼) 변경 액션 — 게이트 2단: ① 역할(canWriteTenant("staff") = 사무실)
+// ② 대상 이력서 열람 자격(canViewResume — 작성 본인·원장·재인증 토큰). ②가 없으면 화면에선 잠긴
+// 이력서를 서버액션 직접 호출로 덮어쓰기·삭제할 수 있다(2026-07-15 적대검수 실적발).
 // 저장소는 academy_documents(kind='form', restricted=true) — 데이터베이스 탐색기에도 같은 행이 보인다.
 // restricted 행은 RLS restrictive(0072a)가 DB 레벨에서도 사무실 역할만 통과시킨다.
 
 export type ResumeActionState =
-  | { ok?: boolean; error?: string; id?: string; nonce?: number; redirectTo?: string }
+  | { ok?: boolean; error?: string; detail?: string; id?: string; nonce?: number; redirectTo?: string }
   | undefined;
 
-async function requireStaffWrite() {
+type Gate = { error: string; detail?: string } | { user: CurrentUser };
+
+async function requireStaffWrite(): Promise<Gate> {
   const user = await getCurrentUser();
-  if (!user) return { error: "로그인이 필요합니다" as const };
+  if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "staff"))) {
-    return { error: "직원관리 권한이 없습니다" as const };
+    return { error: "직원관리 권한이 없습니다" };
   }
   return { user };
+}
+
+/**
+ * 역할 게이트 + **대상 이력서 열람 자격**까지 — 잠긴 이력서는 수정·삭제도 불가(화면 게이트와 동일 기준).
+ * 화면의 `canWrite = canView && canWriteRole`는 렌더용일 뿐이라 서버가 같은 기준을 다시 확인해야 한다.
+ */
+async function requireResumeAccess(id: string): Promise<Gate> {
+  const gate = await requireStaffWrite();
+  if ("error" in gate) return gate;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("academy_documents")
+    .select("uploaded_by")
+    .eq("id", id)
+    .eq("form_type", RESUME_FORM_TYPE)
+    .maybeSingle();
+  if (error) return { error: humanizeDbError(error.message, "확인"), detail: error.message };
+  if (!data) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
+  if (!(await canViewResume(gate.user, id, (data.uploaded_by as string | null) ?? null))) {
+    return { error: RESUME_LOCKED_MSG };
+  }
+  return { user: gate.user };
 }
 
 /** 생성/수정 겸용 — formData에 id가 있으면 해당 이력서 갱신, 없으면 신규 작성. */
@@ -33,22 +62,34 @@ export async function saveStaffResume(
   _prev: ResumeActionState,
   formData: FormData,
 ): Promise<ResumeActionState> {
-  const gate = await requireStaffWrite();
-  if ("error" in gate) return { error: gate.error };
+  const id = String(formData.get("id") ?? "").trim();
+  // 수정은 열람 자격까지(잠긴 이력서 덮어쓰기 차단), 생성은 역할만.
+  const gate = id ? await requireResumeAccess(id) : await requireStaffWrite();
+  if ("error" in gate) return { error: gate.error, detail: gate.detail };
 
   const data = parseResumeForm(formData);
   if (!data.personal.name) return { error: "성명을 입력하세요" };
 
   const supabase = await createClient();
-  const id = String(formData.get("id") ?? "").trim();
 
   if (id) {
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("academy_documents")
-      .update({ title: resumeTitle(data), form_data: data, updated_at: new Date().toISOString() })
+      .update({
+        title: resumeTitle(data),
+        form_data: data,
+        restricted: true, // 매 저장마다 재확인 — 어떤 경로로든 false로 뒤집힌 행이 평문 노출되지 않게.
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id)
-      .eq("form_type", RESUME_FORM_TYPE);
-    if (error) return { error: `저장 실패: ${error.message}` };
+      .eq("form_type", RESUME_FORM_TYPE)
+      .select("id"); // ⚠️ select 없으면 **0행 매칭도 error:null** → "저장됨"인데 아무것도 안 바뀜.
+    if (error) return { error: humanizeDbError(error.message, "저장"), detail: error.message };
+    if (!updated?.length) {
+      return {
+        error: "이력서를 찾을 수 없습니다 — 다른 사람이 삭제했을 수 있습니다. 입력한 내용을 복사해 두고 새로 작성하세요",
+      };
+    }
     revalidateResume(id);
     return { ok: true, id, nonce: Date.now(), redirectTo: `/staff/resumes/${id}` };
   }
@@ -68,22 +109,26 @@ export async function saveStaffResume(
     })
     .select("id")
     .single();
-  if (error || !row) return { error: `저장 실패: ${error?.message ?? "unknown"}` };
+  if (error || !row) return { error: humanizeDbError(error?.message, "저장"), detail: error?.message };
   revalidateResume(row.id);
   return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/staff/resumes/${row.id}` };
 }
 
-export async function deleteStaffResume(id: string): Promise<{ ok?: boolean; error?: string }> {
-  const gate = await requireStaffWrite();
-  if ("error" in gate) return { error: gate.error };
+export async function deleteStaffResume(
+  id: string,
+): Promise<{ ok?: boolean; error?: string; detail?: string }> {
+  const gate = await requireResumeAccess(id); // 잠긴 이력서는 삭제도 불가
+  if ("error" in gate) return { error: gate.error, detail: gate.detail };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from("academy_documents")
     .delete()
     .eq("id", id)
-    .eq("form_type", RESUME_FORM_TYPE);
-  if (error) return { error: `삭제 실패: ${error.message}` };
+    .eq("form_type", RESUME_FORM_TYPE)
+    .select("id"); // ⚠️ select 없으면 0행 삭제도 성공으로 보고된다.
+  if (error) return { error: humanizeDbError(error.message, "삭제"), detail: error.message };
+  if (!deleted?.length) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
   revalidateResume(id);
   return { ok: true };
 }
@@ -116,6 +161,9 @@ export async function unlockResumeView(
   if (!password) return { error: "비밀번호를 입력하세요" };
   const resumeId = String(formData.get("id") ?? "").trim();
   if (!resumeId) return { error: "이력서 정보가 없습니다" };
+  // 감사로그에 **대상**(누구 이력서인지)을 남기기 위해 미리 조회 — 없는 id면 재인증 자체가 무의미.
+  const target = await getStaffResumeById(resumeId);
+  if (!target) return { error: "이력서를 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
 
   // 격리 클라이언트: persistSession=false → 응답 쿠키를 안 쓴다(현재 세션 무손상). anon 키로 password grant만.
   const verifier = createRawClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -133,11 +181,14 @@ export async function unlockResumeView(
     path: "/",
     maxAge: RESUME_VIEW_TTL_SEC,
   });
-  // 누가 언제 열람 잠금을 풀었는지 감사로그(개인 계정 자책 방지 = 재인증의 핵심 가치).
+  // 누가 언제 **누구** 이력서의 잠금을 풀었는지 감사로그(개인 계정 자책 방지 = 재인증의 핵심 가치).
+  // ⚠️ actor(푼 사람)는 logAction이 actor_id/actor_name으로 자동 기록한다 — targetLabel엔 **대상**을 넣을 것.
+  //    여기에 actor를 넣으면 "누구 이력서를 열었나"가 로그에서 통째로 사라진다(2026-07-15 실적발).
   await logAction({
     action: "resume_view_unlock",
     targetType: "staff_resume",
-    targetLabel: user.displayName ?? user.email,
+    targetLabel: target.data.personal.name || "(이름 미입력)",
+    metadata: { resumeId },
   });
   return { ok: true, nonce: Date.now() };
 }

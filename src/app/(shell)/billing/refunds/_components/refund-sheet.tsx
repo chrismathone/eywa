@@ -7,7 +7,12 @@ import { AlertCircle, Loader2, Pencil, Save, X } from "@/components/icons/eywa-i
 import { Button } from "@/components/ui/button";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-import { APPROVAL_SLOTS, REFUND_METHODS, type RefundRequestData } from "@/features/billing/refund-request";
+import {
+  APPROVAL_SLOTS,
+  REFUND_DRAFT_EXCLUDE,
+  REFUND_METHODS,
+  type RefundRequestData,
+} from "@/features/billing/refund-request";
 import { saveRefundRequest, type RefundActionState } from "@/features/billing/server/refund-actions";
 import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
 
@@ -35,11 +40,14 @@ function SaveButton() {
 export function RefundSheet({
   data,
   id,
+  userId,
   canWrite = false,
   startEditing = false,
 }: {
   data: RefundRequestData;
   id?: string;
+  /** 초안 스코프 격리용 — 공용 PC에서 다른 사람의 초안이 복구 제안되지 않게 한다. */
+  userId: string;
   canWrite?: boolean;
   startEditing?: boolean;
 }) {
@@ -49,9 +57,12 @@ export function RefundSheet({
   const formRef = useRef<HTMLFormElement>(null);
 
   const draft = useFormDraft({
-    scope: id ? `billing-refund:${id}` : "billing-refund:new",
+    // 스코프에 userId 포함 — 사무실 공용 PC에서 앞사람 초안이 뒷사람에게 복구 제안되면 안 된다.
+    scope: `billing-refund:${userId}:${id ?? "new"}`,
     formRef,
     enabled: editing,
+    // 계좌·카드정보·주소는 IDB에 아예 안 남긴다 — 복구 시 그 칸만 비어 있다.
+    exclude: REFUND_DRAFT_EXCLUDE,
   });
   const clearDraft = draft.clear;
 
@@ -72,6 +83,8 @@ export function RefundSheet({
   }, [state, router, clearDraft, id]);
 
   function cancel() {
+    // 취소 = 명시적 폐기 → 초안도 함께 비운다(창 X는 미저장 가드가 잡고, 그땐 초안이 남아 이어쓰기 가능).
+    clearDraft();
     if (id) setEditing(false);
     else router.push("/billing?tab=refunds");
   }

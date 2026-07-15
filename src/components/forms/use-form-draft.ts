@@ -47,8 +47,15 @@ export function useFormDraft({
     if (!enabled) return;
     let cancelled = false;
     const ignore = ignoreKey ? ignoreKey.split(",") : [];
+    const excl = excludeKey ? excludeKey.split(",") : [];
     void loadDraft(scope).then((d) => {
       if (cancelled || !d) return;
+      // exclude가 생기기 전에 저장된 레거시 초안이 민감값을 품고 있으면 복구하지 않고 **즉시 폐기**한다.
+      // (이력서 주민번호·계좌처럼 애초에 IDB에 남으면 안 되는 값 — 배포 후 첫 열기에 자동 정리)
+      if (excl.some((k) => k in d.values)) {
+        void clearDraft(scope);
+        return;
+      }
       if (hasMeaningfulValues(d.values, ignore)) {
         draftRef.current = d.values;
         setDraftSavedAt(d.savedAt);
@@ -57,7 +64,7 @@ export function useFormDraft({
     return () => {
       cancelled = true;
     };
-  }, [scope, enabled, ignoreKey]);
+  }, [scope, enabled, ignoreKey, excludeKey]);
 
   // 디바운스 자동저장 — 폼 input/change에서 값 캡처 → IDB(의미 있는 값일 때만).
   useEffect(() => {

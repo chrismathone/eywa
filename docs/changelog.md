@@ -9,6 +9,54 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 직원 이력서 탭 — 적대적 검수 픽스 12건 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1195·build✓)
+
+원장 지시로 4방향 적대검수(권한·PII / 로직·상태 / 쿼리·성능 / UI·규약) → 확정 버그 6건 + 규약 위반 6건 수정.
+**두 건이 이력서의 핵심 방어(재인증 잠금)를 통째로 무력화**하고 있었다.
+
+- **🔴 초안이 주민번호·계좌·급여를 IndexedDB에 평문 영구 저장 — 잠금 우회**: `useFormDraft`가 `exclude` 없이
+  호출돼 name 가진 폼 컨트롤을 **전부** 캡처했고(훅 문서·`staff-form.tsx:121` `exclude:["password"]` 선례 위반),
+  `cancel()`은 `clearDraft()`를 안 불렀고, `form-draft.ts`엔 TTL·purge·로그아웃 정리가 0건, scope에 userId도 없었다.
+  → **로그인조차 없이** DevTools › IndexedDB에서 `p_residentId` 평문 조회 + 다음 사용자에게 DraftBanner가 앞사람
+  주민번호를 복구 제안. `resume-view-token`의 HMAC·이력서별 바인딩·10분 TTL이 전부 무의미했다.
+  픽스 = [`RESUME_DRAFT_EXCLUDE`](src/features/staff/resume.ts)(주민번호·주소·계좌·월급여·연봉·경력급여) +
+  `cancel()`에서 초안 폐기 + **scope에 userId**(공용 PC 교차복구 차단) + **레거시 초안 자동 폐기**
+  (use-form-draft 로드 시 exclude 대상이 담겨 있으면 복구 않고 즉시 clear → 배포 후 첫 열기에 기존 PII 잔재 정리).
+  환불요청서도 같은 결함이라 동일 처리([`REFUND_DRAFT_EXCLUDE`](src/features/billing/refund-request.ts): 계좌·카드·주소).
+  ⚠️ **회귀 그물 = [resume-sheet.draft.test.tsx](<src/app/(shell)/staff/resumes/_components/resume-sheet.draft.test.tsx>)** —
+  컴포넌트→훅→readFormValues→saveDraft 배선을 실제로 태워 저장값을 검사한다(`exclude`를 빼면 반드시 빨개짐, 확인 완료).
+- **🔴 열람 못 하는 이력서를 삭제할 수 있었다(클릭 경로)**: 이력서 행은 `/documents` 탐색기에도 뜨는데
+  `deleteDocument`는 `canWriteTenant("documents")`만 보고 `restricted`·`form_type`·열람토큰을 확인하지 않았다 →
+  작성자도 원장도 아닌 admin/manager가 **재인증 0회**로 원장 이력서 삭제 가능(권한 교집합 실측). 서버액션 직접
+  호출이면 `saveStaffResume`/`deleteStaffResume`로 덮어쓰기도 가능(화면의 `canWrite = canView && canWriteRole`는 렌더용).
+  픽스 = **공용 [`canViewResume`](src/features/staff/server/resume-access.ts) 단일 소스**(작성 본인 ∪ 원장 ∪ 재인증 토큰)를
+  뷰 페이지·쓰기 액션(`requireResumeAccess`)·`deleteDocument`가 **함께** 통과. 탐색기는 폼 문서 삭제 버튼 자체를 숨김
+  (폼은 자기 화면에서 관리). ⚠️ **새 이력서 표면(열람·수정·삭제·내보내기)은 반드시 `canViewResume` 경유.**
+- **🟠 감사로그가 "누구 이력서를 열었는지"를 안 남김**: `targetLabel`에 **actor 본인**을 넣었는데 `logAction`은 이미
+  `actor_id`/`actor_name`을 자동 기록 → 로그가 `이력서 열람(재인증) · 김실장 · 김실장`뿐이라 대상 식별 불가(재인증
+  설계 목적의 절반 상실). 픽스 = `targetLabel` = **이력서 주인 이름** + `metadata: { resumeId }`.
+  ⚠️ **규칙: `logAction`의 targetLabel엔 actor가 아니라 대상을 넣는다.**
+- **🟠 0행 update/delete를 성공으로 보고 → 입력 전량 증발**: `.select()` 없는 supabase update는 **0행 매칭도
+  `error:null`** → 무조건 `ok:true` → `clearDraft()`가 유일한 로컬 사본까지 삭제 → `notFound()`. 픽스 = `.select("id")` +
+  행 수 확인(이력서·문서 delete 공통). 동시편집 표면이라 [EditingBanner/EditingBadge](src/features/presence/editing-badge.tsx)
+  presence도 배선(배선된 폼 중 이력서만 빠져 있었음). ⚠️ **`PRESENCE_SCOPE_PREFIXES`에 `staff-resume` 추가 필수** —
+  allowlist 밖 scope는 **조용히 무시**된다(`"staff-resume:7".startsWith("staff:")`는 false).
+- **🟠 쿼리 error 삼킴 → 거짓 "이력서 없음"/거짓 404(B3)**: `const { data } = ...`로 error를 아예 안 받아
+  조회 실패가 "작성된 이력서가 없습니다"로 위장(인사 문서 false-negative). 픽스 = error throw.
+- **🟠 영문 Postgres 원문 UI 노출**: `저장 실패: new row violates row-level security policy for...`가 그대로 떴다.
+  픽스 = [`humanizeDbError`](src/lib/supabase/db-error.ts)(한글 요약) + 원문은 `title` 툴팁(`detail`) — classnote-error 선례.
+- **그 외**: 생성 이중 제출 → 이력서 2건(네비 대기 중 재클릭 — `SaveButton done` 잠금) / '새 이력서'가 드릴인
+  (`WindowLink`→[`NewResumeTrigger`](<src/app/(shell)/staff/_components/new-resume-trigger.tsx>) `useOpenFormWindow` 창 규약) /
+  B2 무페이징 count → `count:"exact"` + `.range()` 서버 페이지네이션(전 직원 PII 과다 fetch도 해소) /
+  목록 마스킹을 `canViewResume`로 통일(master 하드비교 제거) / 근무형태 `aria-pressed`+sr-only / 학점칸 접근이름 /
+  입사일 표기 통일 / 인쇄 버튼 outline(1차 버튼 중복 해소).
+- **오탐으로 확인(수정 안 함)**: "생성·수정·삭제 감사로그 없음"은 **틀림** — `academy_documents`엔 0081a
+  `tg_log_activity_*` 트리거가 붙어 `activity_log`에 남고 `form_data`는 0085a가 redact 유지.
+
+⚠️ **남은 판단 필요(미수정, 구조적)**: 재인증은 RSC에만 있고 RLS(0072a)는 admin/manager/accountant를 전부
+통과시킨다 — 브라우저 Supabase 클라이언트(공개 anon 키)가 있으므로 재인증의 **대상 집단이** devtools 한 줄로
+전 직원 `form_data`를 읽을 수 있다. DB로 step-up을 내리려면 restricted 행 SELECT를 `uploaded_by = auth.uid()`로
+좁히고 재인증분을 서버 전용 경로로 옮기는 설계 변경이 필요(승인 범위 밖이라 보고만).
 ### 강사 알림 강화 — 컴퓨터(OS) 알림 + 화면 중앙 팝업 + 권한 안내 3겹 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1190·build✓)
 원장: "선생님 개인화면 우상단 알림으로는 **너무 약하다**. 컴퓨터 알림과도 연동하고 화면 중앙에 팝업돼서 확실하게 알면 좋겠다."
 + "알림 승인을 해야 PC 알림이 오는 거지? **이 부분 안내가 꼭 필요**할 듯."

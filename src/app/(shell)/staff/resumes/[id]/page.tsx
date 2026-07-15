@@ -1,10 +1,9 @@
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { getStaffResumeById } from "@/features/staff/server/resume-queries";
-import { RESUME_VIEW_COOKIE, verifyResumeViewToken } from "@/features/staff/server/resume-view-token";
+import { canViewResume } from "@/features/staff/server/resume-access";
 import { ResumeSheet } from "../_components/resume-sheet";
 import { ResumeUnlock } from "../_components/resume-unlock";
 
@@ -13,20 +12,16 @@ export const metadata = { title: "직원 이력서 — eywa" };
 export default async function ResumeViewPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireAccess("staff");
   const { id } = await params;
-  const [resume, canWriteRole, jar] = await Promise.all([
+  const [resume, canWriteRole] = await Promise.all([
     getStaffResumeById(id),
     canWriteTenant(user.systemRole, "staff"),
-    cookies(),
   ]);
   if (!resume) notFound();
   const name = resume.data.personal.name || "(이름 미입력)";
 
-  // 열람 게이트: 작성 본인 · 원장(master) · 재인증 10분 창(서명 쿠키) 중 하나면 열람.
-  // 그 외 사무실 직원은 본인 비밀번호 재입력 필요 — 잠김일 땐 sheet(민감 데이터)를 렌더하지 않는다.
-  const canView =
-    resume.uploadedBy === user.id ||
-    user.systemRole === "master" ||
-    verifyResumeViewToken(jar.get(RESUME_VIEW_COOKIE)?.value, user.id, id);
+  // 열람 게이트 = 공용 canViewResume(작성 본인 · 원장 · 재인증 10분 창). 쓰기 액션·/documents 삭제도 같은 함수.
+  // 잠김일 땐 sheet(민감 데이터)를 렌더하지 않는다 — 클라로 전송 자체가 안 감.
+  const canView = await canViewResume(user, id, resume.uploadedBy);
   const canWrite = canView && canWriteRole; // 열람 못 하면 수정도 불가(sheet 인라인 편집)
 
   return (
@@ -40,7 +35,7 @@ export default async function ResumeViewPage({ params }: { params: Promise<{ id:
         </p>
       </header>
       {canView ? (
-        <ResumeSheet data={resume.data} id={id} canWrite={canWrite} />
+        <ResumeSheet data={resume.data} id={id} userId={user.id} canWrite={canWrite} />
       ) : (
         <ResumeUnlock id={id} name={name} />
       )}
