@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 // 워커 순수 모듈(.mjs · JSDoc 타입) — 워커 본체는 playwright/postgres를 물고 있어 순수 로직만 분리해 테스트.
 import {
   buildNotificationText,
+  countByEffectiveName,
   isParentPost,
   maxPostId,
   reachedWatermark,
@@ -98,6 +99,50 @@ describe("selectNewParentPosts", () => {
   it("created가 깨져도 버리지 않는다 — 순서·판정의 진실은 id", () => {
     const { picked } = selectNewParentPosts([row({ id: 50, created: "" })], { lastSeenId: 40, prefix });
     expect(picked.map((p: { id: number }) => p.id)).toEqual([50]);
+  });
+});
+
+// 워커의 norm(공백 제거)과 동형 — 순수 모듈이 정규화를 주입받으므로 테스트도 같은 규칙을 넘긴다.
+const norm = (s: string) => s.replace(/\s+/g, "");
+
+describe("countByEffectiveName — 동명이인 보류 판정 (실제 오배달 사고를 낸 규칙)", () => {
+  it("classnote_name이 있으면 그게 유효이름, 없으면 name", () => {
+    const c = countByEffectiveName(
+      [{ name: "박서준", classnote_name: "박서준C" }, { name: "이시우", classnote_name: null }],
+      norm,
+    );
+    expect(c.get("박서준C")).toBe(1);
+    expect(c.get("이시우")).toBe(1);
+    expect(c.has("박서준")).toBe(false); // 오버라이드가 원본을 대체
+  });
+
+  it("⭐ 완전히 같은 이름 2명을 **접지 않고 센다** — Set으로 접으면 F1(퇴원 동명) 구멍이 열린다", () => {
+    // 실제 사례: 재원 김채은(고1) + 퇴원 김채은(중1). 보드 (수학)김채은은 퇴원 가족이 쓰고 있었다.
+    const c = countByEffectiveName(
+      [
+        { name: "김채은", classnote_name: null }, // 재원
+        { name: "김채은", classnote_name: null }, // 퇴원 — 우주에 반드시 포함돼야 함
+        { name: "이시우", classnote_name: null },
+      ],
+      norm,
+    );
+    expect(c.get("김채은")).toBe(2); // 2 → 호출부가 보류
+    expect(c.get("이시우")).toBe(1); // 1 → 정상 알림
+  });
+
+  it("공백 차이는 같은 이름으로 센다(norm 주입)", () => {
+    const c = countByEffectiveName([{ name: "김 민수" }, { name: "김민수" }], norm);
+    expect(c.get("김민수")).toBe(2);
+  });
+
+  it("빈 이름·공백뿐인 이름은 세지 않는다", () => {
+    const c = countByEffectiveName([{ name: "" }, { name: "   " }, { name: null }, {}], norm);
+    expect(c.size).toBe(0);
+  });
+
+  it("빈 입력에 안전", () => {
+    expect(countByEffectiveName([], norm).size).toBe(0);
+    expect(countByEffectiveName(undefined, norm).size).toBe(0);
   });
 });
 

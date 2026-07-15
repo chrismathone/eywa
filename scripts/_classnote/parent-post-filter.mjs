@@ -83,6 +83,32 @@ export function selectNewParentPosts(rows, { lastSeenId = null, prefix, nowMs = 
 }
 
 /**
+ * 유효이름(`classnote_name ?? name`)별 **인원수** — 동명이인(신원 불명) 판정용.
+ *
+ * ⚠️ 이 함수에 넘기는 rows는 **status·과목 무필터 전 학생**이어야 한다(퇴원·예비 포함). 재원생만 넘기면
+ * F1 구멍이 열린다: ClassNote 보드는 학생 수명주기보다 오래 살아서 **퇴원한 동명 학생의 보드에 그 가족이
+ * 그대로 붙어 있고**, 그 보드를 재원 동명 학생으로 확정하면 **퇴원 가족의 사적인 글이 엉뚱한 강사에게** 간다
+ * (2026-07-15 적대리뷰가 프로덕션에서 실증: `(수학)김채은` 보드의 원아는 퇴원 김채은(중1), 재원 김채은은 고1).
+ *
+ * ⚠️ 이름 목록을 `Set`으로 접으면 **완전히 같은 이름 2명이 1개가 되어 안 잡힌다** — 반드시 센다.
+ * (provision의 `fetchUniverseNames`가 Set인 이유는 "다른 이름끼리의 충돌"을 보기 때문 — 용도가 다르다.)
+ *
+ * @param {Array<{ name?: string|null, classnote_name?: string|null }> | null | undefined} rows
+ * @param {(s: string) => string} normFn - 이름 정규화(공백 제거 등). 순수성 유지를 위해 주입받는다.
+ * @returns {Map<string, number>} 정규화 이름 → 인원수
+ */
+export function countByEffectiveName(rows, normFn) {
+  const counts = new Map();
+  for (const r of rows ?? []) {
+    const eff = String(r?.classnote_name || r?.name || "").trim();
+    if (!eff) continue;
+    const key = normFn(eff);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
  * 알림 문구 — 강사가 벨에서 **본문을 바로 읽고 판단**할 수 있어야 한다(ClassNote 앱을 안 열어도 되는 게 이 기능의 요점).
  * 벨은 body를 자르지 않고 그대로 렌더하므로 200자까지 싣는다. 첨부만 있는 글도 "왜 알림이 왔는지" 알려준다.
  * @param {FeedRow} post

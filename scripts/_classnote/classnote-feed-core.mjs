@@ -12,9 +12,9 @@
  *
  * 매핑이 보드명 기준인 이유: 피드 행의 `child_name`은 **학부모가 등록한 원아명**이라 제멋대로다
  * (실측: 보드 `(수학)박서연E`의 원아명이 그냥 "서연"). 반면 보드명은 **우리가 eywa 유효이름으로 만든 것**이라
- * 동명이인 접미사(A~G)까지 정확하다 — 애초에 1인 보드 구조가 그러라고 있는 것. 그래서 발송(provision)과
- * **완전히 같은 기준**(expectedFor: 재원 + 활성 수강 + 동명이인 자동 보류)으로 보드명→학생을 확정한다.
- * 실검증: 수학 학부모 글 8/8 매핑, 보류 0.
+ * 동명이인 접미사(A~G)까지 정확하다 — 애초에 1인 보드 구조가 그러라고 있는 것. 대상 집합은 발송(provision)의
+ * `expectedFor`와 같은 쿼리(재원 + 활성 수강)를 쓰되, **신원 유일성은 전 학생 우주**로 따로 본다
+ * (`boardsToStudents` 주석의 F1 참조 — 퇴원 동명이인의 보드가 재원 동명에게 붙는 사고를 막는다).
  *
  * 안전장치:
  *  - **읽기 전용**(GET) — ClassNote에 아무것도 쓰지 않는다. 구조상 학부모에게 나가는 경로 자체가 없다.
@@ -31,6 +31,7 @@ import {
 } from "./classnote-admin-core.mjs";
 import {
   buildNotificationText,
+  countByEffectiveName,
   maxPostId,
   reachedWatermark,
   selectNewParentPosts,
@@ -58,10 +59,19 @@ async function getFeedPage(browser) {
   if (cached && cached.browser === browser && !cached.page.isClosed()) return cached;
   await dropFeedPage();
   const page = await browser.newPage();
-  await loginClassnote(page);
-  const centerId = await fetchCenterId(page);
-  cached = { browser, page, centerId };
-  return cached;
+  try {
+    await loginClassnote(page);
+    const centerId = await fetchCenterId(page);
+    cached = { browser, page, centerId };
+    return cached;
+  } catch (e) {
+    // ⚠️ 여기서 안 닫으면 그 page는 **영영 안 닫힌다** — cached에 못 들어갔으므로 dropFeedPage()도 못 찾는다.
+    // 로그인 실패는 예외가 아니라 상시 시나리오다(위 스로틀 주석 참조 + 과거 CLASSNOTE_UPLOAD_PW 유실 사고).
+    // 데몬은 실패해도 60초 뒤 재시도하므로 누수가 분당 1개씩 쌓여 공유 브라우저가 OOM → 발송·공지까지 같이 죽는다.
+    // (형제 코어 provision-core:123·notice-core:273도 전부 newPage→try/finally close 패턴.)
+    await page.close().catch(() => {});
+    throw e;
+  }
 }
 
 async function dropFeedPage() {
@@ -115,36 +125,57 @@ async function fetchFeedSince(browser, lastSeenId, log) {
 }
 
 /**
- * 기대 보드 → 학생 — provision의 expectedFor와 **동일 쿼리·동일 그룹핑**(재원 + 활성 수강, 동명이인 보류).
- * ⚠️ 여기 조건을 바꾸면 발송과 기준이 갈라진다. 바꾸려면 provision-core도 같이.
+ * 동명이인 판정 우주 = **status·과목 무필터 전 학생**(퇴원·예비 포함) → 이름별 인원수.
+ *
+ * ⚠️ **재원생 안에서만 동명을 보면 안 된다(F1 구멍, 2026-07-15 적대리뷰가 프로덕션에서 실증)**:
+ * ClassNote 보드는 학생 수명주기보다 오래 산다(원아 해제·보드 삭제 자동화 없음 — REST 405).
+ * 그래서 **퇴원한 동명 학생의 보드에 그 가족이 그대로 붙어 있다.** 그 보드명을 재원 동명 학생에게
+ * 유일 매핑하면 **퇴원 가족의 사적인 글이 엉뚱한 강사에게** 간다.
+ * 실측(injaewon): `(수학)김채은` 보드의 원아 생년월일은 **퇴원 김채은(중1)** 것인데 재원 김채은은 고1로 딴 사람이고
+ * 담당 강사도 안 겹친다. `(수학)김서윤`도 동일. 수학 재원 237명 중 4건(김서윤·김채은·김수아·이지호A).
+ * provision은 `fetchUniverseNames`+`planChildMatches`로 이 F1을 이미 방어한다 — 이 코어가 그 층을 빠뜨렸었다.
+ *
+ * ⚠️ `fetchUniverseNames`를 그대로 재사용하면 **안 잡힌다** — 거긴 `Set`이라 **완전히 같은 이름 2명이 1개로 접힌다**
+ * (그 함수는 "다른 이름끼리의 충돌"용). 여기선 반드시 **인원수를 센다.**
  */
-async function boardsToStudents(sql, tenant, keys, prefix) {
-  const rows = await sql`
-    select distinct s.id, s.name, s.classnote_name
-    from students s
-    join enrollments e on e.student_id = s.id and e.end_date is null and e.tenant_id = ${tenant}
-    join classes c on c.id = e.class_id and c.tenant_id = ${tenant}
-    where s.tenant_id = ${tenant}
-      and s.status = 'enrolled'
-      and c.subject in ${sql(keys)}`;
-  const byName = new Map();
+async function duplicateNameCounts(sql, tenant) {
+  const rows = await sql`select name, classnote_name from students where tenant_id = ${tenant}`;
+  return countByEffectiveName(rows, norm); // 규칙 본체는 순수 모듈(Vitest) — 여기선 우주(전 학생)만 책임진다
+}
+
+/**
+ * 보드명 → 학생.
+ * - **대상 집합**(누구에게 보드가 있나) = provision `expectedFor`와 동일 쿼리(재원 + 활성 수강).
+ * - **신원 유일성**(그 보드가 정말 이 학생 건가) = **전 학생 우주**(위 duplicateNameCounts) — expectedFor에는
+ *   없는 층이다(provision은 planChildMatches가 담당). ⚠️ "provision과 완전히 같다"고 쓰지 말 것 — 두 층은 다르다.
+ */
+export async function boardsToStudents(sql, tenant, keys, prefix) {
+  const [rows, dupCounts] = await Promise.all([
+    sql`
+      select distinct s.id, s.name, s.classnote_name
+      from students s
+      join enrollments e on e.student_id = s.id and e.end_date is null and e.tenant_id = ${tenant}
+      join classes c on c.id = e.class_id and c.tenant_id = ${tenant}
+      where s.tenant_id = ${tenant}
+        and s.status = 'enrolled'
+        and c.subject in ${sql(keys)}`,
+    duplicateNameCounts(sql, tenant),
+  ]);
+  const board = new Map();
+  const collisions = [];
   for (const r of rows) {
     const eff = (r.classnote_name || r.name || "").trim();
     if (!eff) continue;
     const key = norm(eff);
-    if (!byName.has(key)) byName.set(key, []);
-    byName.get(key).push({ ...r, eff });
-  }
-  const board = new Map();
-  const collisions = [];
-  for (const [, students] of byName) {
-    if (students.length > 1) {
-      collisions.push(`${prefix}${students[0].eff}(동명이인 ${students.length}명)`);
-      continue; // 신원 불명 → 알림 보류(엉뚱한 강사에게 남의 집 얘기가 가면 안 됨)
+    const dup = dupCounts.get(key) ?? 1;
+    if (dup > 1) {
+      // 신원 불명(퇴원·타과목·예비 동명 포함) → 알림 보류. 엉뚱한 강사에게 남의 집 얘기가 가면 안 된다.
+      collisions.push(`${prefix}${eff}(전체 동명 ${dup}명)`);
+      continue;
     }
-    board.set(norm(`${prefix}${students[0].eff}`), { id: students[0].id, name: students[0].eff });
+    board.set(norm(`${prefix}${eff}`), { id: r.id, name: eff });
   }
-  return { board, collisions };
+  return { board, collisions: [...new Set(collisions)] };
 }
 
 /** 학생 → 담당 강사(활성 직원 · 활성 반 · 해당 과목). 학생 1명이 여러 반이면 강사 전원. */

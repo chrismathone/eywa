@@ -189,9 +189,20 @@ assign_teacher_to_classnote)을 eywa DB 기준·Playwright·**dry-run 기본**�
   정확**하다(퇴직자 배제 + 현직 담당 전원). 이 기능을 "묻힌 글 구제"로 설명하지 말 것 — 정확히는 **"안 보는 강사에게도 도달"**.
 - **매핑은 보드명 기준**(⚠️ child_name 쓰지 말 것): 피드 행의 `child_name`은 **학부모가 등록한 원아명**이라
   제멋대로다(실측: 보드 `(수학)박서연E`의 원아명이 그냥 "서연"). 보드명은 우리가 **eywa 유효이름**으로 만든 것이라
-  동명이인 접미사(A~G)까지 정확 — 1인 보드 구조가 애초에 그러라고 있다. 그래서 발송(provision)의
-  `expectedFor`와 **동일 기준**(재원 + 활성 수강 + 동명이인 자동 보류)으로 보드명→학생을 확정한다.
-  **실검증: 수학 학부모 글 8/8 매핑, 보류 0.** ⚠️ 이 조건을 바꾸면 발송과 기준이 갈라진다 — provision-core도 같이.
+  동명이인 접미사(A~G)까지 정확 — 1인 보드 구조가 애초에 그러라고 있다.
+  **대상 집합**(누구에게 보드가 있나) = provision `expectedFor`와 동일 쿼리(재원 + 활성 수강). **매핑 233 / 보류 4.**
+- ⚠️⚠️ **동명이인 우주는 "전 학생"이어야 한다 (F1 — 실제로 뚫렸던 구멍, 2026-07-15 적대리뷰가 프로덕션에서 실증)**:
+  **재원생 안에서만** 동명을 판정하면, 퇴원한 동명 학생의 보드가 재원 동명 학생에게 **유일 매핑**된다.
+  ClassNote 보드는 학생 수명주기보다 오래 살기 때문이다(원아 해제·보드 삭제 자동화 없음 — REST 405).
+  실측: `(수학)김채은` 보드의 원아 생년월일은 **퇴원 김채은(중1)** 것인데 재원 김채은은 **고1로 딴 사람**이고
+  담당 강사도 안 겹친다(김윤하·김은정 vs 노현진) → 퇴원 가족의 사적인 글이 엉뚱한 강사에게 갈 뻔했다.
+  `(수학)김서윤`도 동일. 수학 재원 237명 중 **4건**(김서윤·김채은·김수아·이지호A) → 전부 보류로 전환.
+  · 규칙 = [`countByEffectiveName`](../scripts/_classnote/parent-post-filter.mjs)(순수·Vitest)에 **status·과목 무필터
+  전 학생**을 넘겨 이름별 **인원수**를 세고, 2명 이상이면 보류.
+  · ⚠️ **`fetchUniverseNames`를 그대로 쓰면 안 잡힌다** — 거긴 `Set`이라 **완전히 같은 이름 2명이 1개로 접힌다**
+  (그 함수는 "다른 이름끼리의 충돌"용 — 용도가 다르다). 반드시 센다.
+  · ⚠️ 헤더·주석에 "provision과 완전히 같은 기준"이라고 쓰지 말 것 — provision은 `expectedFor` **위에**
+  `fetchUniverseNames`+`planChildMatches` 층이 더 있다. 그 문구를 믿고 유일성 층을 빠뜨린 게 이 사고의 원인이다.
 - **파이프라인**: 데몬 [watch-classnote-queue](../scripts/_classnote/watch-classnote-queue.mjs) 매 폴 →
   [`pollParentPostsOnce`](../scripts/_classnote/classnote-feed-core.mjs)(**1분 가드**) → 기관 피드 **요청 1개** →
   [순수 필터](../scripts/_classnote/parent-post-filter.mjs)(`selectNewParentPosts`/`buildNotificationText`, Vitest 16) →
