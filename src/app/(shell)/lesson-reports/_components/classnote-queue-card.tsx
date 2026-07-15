@@ -39,7 +39,11 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
-  // 동명이인은 이름 수정, 공유 보드 차단은 ClassNote 정리(또는 발송 예외 등재)가 선행돼야 해 재발송이 무의미.
+  // **일괄** 재발송 대상 — 동명이인(이름 수정 선행)·공유 보드 차단(ClassNote 정리 또는 발송 예외 등재 선행)은
+  // 원인을 안 고친 채 일괄로 밀어봐야 그대로 다시 막혀 헛돌기만 하므로 제외(버튼 제목이 범위를 명시).
+  // ⚠️ 단 **개별 '선택 재발송'은 열어둔다**(체크박스 활성) — 원장이 원인을 고친 뒤 보류된 건을 내보낼 길이
+  // 없으면 그 보고서는 영영 못 나가는 막다른 길이 된다. 공유 보드 게이트는 **매 시도마다 재평가**하므로
+  // 아직 안 고쳐졌으면 안전하게 다시 막힌다 = 개별 재발송을 열어둬도 위험하지 않다.
   const retriable = items.filter((i) => i.status !== "name_conflict" && i.status !== "blocked_shared");
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -155,12 +159,15 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                 return (
                   <tr key={it.id} className="border-line border-b last:border-b-0">
                     <td className="px-2 py-2">
+                      {/* 공유 보드 차단(blocked_shared)분은 **선택 가능** — 원장이 발송 예외 등재/보드 정리 후
+                          '선택 재발송'으로 내보낼 길이 있어야 한다(막으면 영영 못 나가는 막다른 길).
+                          게이트가 매 시도 재평가하므로 미해결이면 그대로 다시 안전하게 막힌다. */}
                       <input
                         type="checkbox"
                         checked={checked.has(it.id)}
                         onChange={() => toggle(it.id)}
                         aria-label={`${it.studentName} 선택`}
-                        disabled={it.status === "name_conflict" || it.status === "blocked_shared"}
+                        disabled={it.status === "name_conflict"}
                       />
                     </td>
                     <td className="px-3 py-2">
