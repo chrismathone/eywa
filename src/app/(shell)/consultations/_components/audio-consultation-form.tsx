@@ -220,7 +220,7 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
 
         {file ? (
           <p className="text-text-dim text-xs">
-            <span className="num">{Math.round(file.size / 1024)}</span> KB
+            파일 크기 <span className="num">{Math.round(file.size / 1024).toLocaleString("ko-KR")}</span> KB
           </p>
         ) : null}
 
