@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 등록상담 ↔ 학생 로버스트 자동연결 트리거 + 일회성 정리 (2026-07-15) — ✅ 프로덕션 적용·E2E 롤백검증
+원장: "등록·종료에 있는데 실제 수업이 존재하는 학생을 배정 완료로 옮겨달라" + "다른 곳에서 배정해도 자동 이전되게, 학교는 항상 ~초/중/고로, 이름+학교+학년·전화 다단 매칭, 전화 없으면 다른 걸로라도." **"배정 완료" 컬럼 = 저장 상태가 아니라 파생 배지**([column-cards](<../src/app/(shell)/enrollment/_components/column-cards.tsx>)·[page](<../src/app/(shell)/enrollment/page.tsx>)): `assignedClassCount>=1`(상담 `student_id` 연결 + 그 학생 활성수강≥1)이면 렌더 시 자동 표시·등록·종료에서 상호배타 제외. 그래서 "이동" = **orphan 상담(student_id NULL)을 실제 학생에 연결**.
+- **일회성 정리**(injaewon 프로덕션, 원장 승인): 등록·종료 112건 중 orphan 102 → 진급(3월 학년도 경계)·전화·정확 매칭으로 **23건 연결**(배정완료 73→96). 검토권장 4건(동레벨 초등 전학)·재원아님 63·동명이인 10·테스트 2는 제외. 롤백맵 기록.
+- **영구 자동연결** = 마이그 [`0107a_robust_consultation_autolink.sql`](../supabase/migrations/0107a_robust_consultation_autolink.sql): (1) `eywa_school_norm`(초등학교·초등·초교→초, 중학교→중, 고등학교·고교→고. **지역접두는 학교명 일부라 안 건드림** — '달성초'의 '달성' 훼손 방지) (2) `eywa_cs_match` 단일 매칭 = tier1 이름정규화+학교정규화+학년 / tier2 전화(≥9자리)+이름. **둘 다 비퇴원 학생 중 유일 매칭일 때만**(동명이인 방어, not-exists 가드). (3) **트리거 2개**: `trg_link_consultation_on_student`(students AFTER ins/upd of status·name·school·grade·**parent_phone**, 0088a 대체) + **신규** `trg_link_student_for_consultation`(enrollment_consultations **BEFORE** ins/upd → 기존 학생에 즉시 연결, "상담이 나중에 들어오는" orphan 갭 차단). enrollments 트리거는 **안 둠**(연결은 학생/상담 생성 시 끝나고 배정완료 배지는 파생이라 배정 순간 자동표시=중복 + 대량 임포트 성능위험). 백필로 박주완·우정우 2건 추가연결.
+- **검증**: E2E 롤백 트랜잭션 — tier1(옥산초↔옥산초등학교 표기차)·tier2(전화+이름, 학교/학년 무시) 둘 다 실발화 PASS, 프로덕션 무영향. ⚠️함정: `min(uuid)` 없음 → `(array_agg(id))[1]`(첫 적용 때 트리거 깨졌다 수정·재적용).
+- **후속(미룸)** = [docs/consultation-autolink-followups.md](consultation-autolink-followups.md): 진급 케이스 리뷰-후-연결 도구(owner 데이터 정리 버튼)·검토권장 4건 전학 확인·학교명 표시/저장 정규화.
+
 ### 하드코딩 상수 감사 후속 — 인쇄물 AI 모델명 노출 제거 + edutrix cron tenant env화 + Firebase 버킷 폴백 하드닝 (2026-07-15) — ✅ eslint0/tsc0(내 파일)
 "하드코딩된 상수값" 전수 감사(4축 병렬: 운영 enum·설정-무시·모델명·매직상수)에서 나온 상위 3건 정리. 셋 다 **오늘(단일 테넌트 injaewon)엔 값이 정답이라 라이브 버그가 아니라 미래 멀티테넌트 방어**.
 - **#1 모델명 UI 노출 제거**(`4f868b7`): 등록상담 인쇄물 푸터([(print)/enrollment/[id]/print](<../src/app/(print)/enrollment/[id]/print/page.tsx>):202)가 `MODEL solar-pro3-…`/`claude-…` 모델 id를 그대로 렌더 → 조각 삭제, `GENERATED` 생성시각만 표시(`model_version` DB 저장은 유지). "UI에 model 이름 노출 금지" 정면 위반이었고, 전 코드에서 모델 버전을 렌더하던 **유일 경로**.
