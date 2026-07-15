@@ -24,7 +24,20 @@ import {
   childKeys,
   norm,
 } from "./classnote-admin-core.mjs";
-import { evaluateBoardSafety } from "./board-safety.mjs";
+import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
+
+/**
+ * 학생 색인 — 매핑 검증에 필요한 두 가지를 한 쿼리로.
+ * ⚠️ **퇴원·예비 포함 전 학생**이어야 한다: 앱의 동명이인 게이트는 `status<>'withdrawn'`이라 퇴원하는 순간
+ * 풀리는데 ClassNote 보드엔 그 퇴원 가족이 그대로 남는다(실측 김서윤·김채은).
+ */
+async function loadStudentIndex(sql, tenant) {
+  const rows = await sql`select id, name, classnote_name, grade from students where tenant_id = ${tenant}`;
+  return {
+    allNames: rows.map((x) => (x.classnote_name || x.name || "").trim()).filter(Boolean),
+    gradeById: new Map(rows.map((x) => [x.id, x.grade])),
+  };
+}
 
 const STUCK_MIN = 10;
 
@@ -121,15 +134,23 @@ async function processTarget(page, ctx, target) {
   // 못 잡는다**(실사고 2026-07-15: `(수학)박서준`에 초6·중3 두 가족 동거). 총 연결 인원(approved_children)으로
   // 판정해야 잡힌다. 공통 본문도 그 보드의 모든 가족에게 fan-out되므로 **개인화 여부와 무관하게** 게이트한다.
   let verdict = evaluateBoardSafety({ className: target.board, boards: ctx.boards, allowlist: ctx.allowlist });
-  if (!verdict.ok && verdict.code === "shared") {
-    const live = await fetchBoardChildren(page, ctx.centerId, board.id).catch(() => null);
-    if (Array.isArray(live)) {
-      verdict = evaluateBoardSafety({ className: target.board, boards: ctx.boards, allowlist: ctx.allowlist, occupants: live.length });
-      if (!verdict.ok) {
-        const who = live.map((k) => `${k.name ?? "?"}(${k.date_birth ?? "?"})`).join(" / ");
-        verdict.reason = `${verdict.reason} 연결 가족: ${who}`;
-      }
-    }
+  // 모호한 이름(같은 이름 2명+ 퇴원 포함 / `이름+알파벳` 형제)일 때만 원아를 실시간 조회해 매핑 검증.
+  const amb = boardNameAmbiguity(target.studentName, ctx.allNames ?? []);
+  if (verdict.ok && amb.ambiguous) {
+    const live = await fetchBoardChildren(page, ctx.centerId, verdict.boardId ?? board.id).catch(() => null);
+    verdict = Array.isArray(live)
+      ? evaluateBoardSafety({
+          className: target.board,
+          boards: ctx.boards,
+          allowlist: ctx.allowlist,
+          mapping: { grade: ctx.gradeById?.get(target.studentId) ?? null, children: live, schoolYear: kstSchoolYear() },
+        })
+      : {
+          ok: false,
+          code: "mapping_unknown",
+          reason: `동명이인이 있는 이름이라 원아 확인이 필요한데 클래스노트 조회에 실패해 보류합니다(${target.board})`,
+        };
+    if (!verdict.ok && amb.siblings.length) verdict.reason = `${verdict.reason} (eywa 동명: ${amb.siblings.join(", ")})`;
   }
   if (!verdict.ok) return { board: target.board, ok: false, note: verdict.reason };
 
@@ -303,6 +324,7 @@ export async function processNoticesOnce(sql, browser, { tenant, post, log = con
         boardByNorm: new Map(boards.map((b) => [norm(b.name), b])),
         children: await fetchChildren(page, centerId),
         allowlist: await getClassnoteBoardAllowlist(sql, tenant), // 원장이 확인한 공유 보드 발송 예외
+        ...(await loadStudentIndex(sql, tenant)), // allNames(동명 판정 우주) + gradeById(매핑 검증용)
         authorName,
       };
       for (let i = 0; i < 5; i++) {

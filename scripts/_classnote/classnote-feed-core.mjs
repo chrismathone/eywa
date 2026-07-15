@@ -23,10 +23,11 @@
  *  - `--post` 데몬에서만 동작(dry-run 데몬 2대가 같이 돌아도 중복 알림 없음). 발송 킬스위치
  *    (classnoteSendEnabled)는 **따르지 않는다** — 이건 발송이 아니라 인바운드 감지다(provision-core와 같은 논리).
  */
-import { evaluateBoardSafety } from "./board-safety.mjs";
+import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 import { getClassnoteBoardAllowlist } from "./classnote-core.mjs";
 import {
   BOARD_GROUPS,
+  fetchBoardChildren,
   fetchBoards,
   fetchCenterId,
   loginClassnote,
@@ -175,7 +176,7 @@ async function duplicateNameCounts(sql, tenant) {
 export async function boardsToStudents(sql, tenant, keys, prefix) {
   const [rows, dupCounts] = await Promise.all([
     sql`
-      select distinct s.id, s.name, s.classnote_name
+      select distinct s.id, s.name, s.classnote_name, s.grade
       from students s
       join enrollments e on e.student_id = s.id and e.end_date is null and e.tenant_id = ${tenant}
       join classes c on c.id = e.class_id and c.tenant_id = ${tenant}
@@ -196,7 +197,7 @@ export async function boardsToStudents(sql, tenant, keys, prefix) {
       collisions.push(`${prefix}${eff}(전체 동명 ${dup}명)`);
       continue;
     }
-    board.set(norm(`${prefix}${eff}`), { id: r.id, name: eff });
+    board.set(norm(`${prefix}${eff}`), { id: r.id, name: eff, grade: r.grade });
   }
   return { board, collisions: [...new Set(collisions)] };
 }
@@ -276,12 +277,21 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     const held = [];
     let safeBoards = null;
     let allowlist = [];
+    let universeNames = [];
+    let feedPage = null;
+    let feedCenterId = null;
     try {
       const { page, centerId } = await getFeedPage(browser);
-      [safeBoards, allowlist] = await Promise.all([
+      feedPage = page;
+      feedCenterId = centerId;
+      let nameRows;
+      [safeBoards, allowlist, nameRows] = await Promise.all([
         fetchBoards(page, centerId),
         getClassnoteBoardAllowlist(sql, tenant),
+        // 동명 판정 우주 — **퇴원·예비 포함 전 학생**(재원만 보면 퇴원 동명이인의 보드가 무방비).
+        sql`select name, classnote_name from students where tenant_id = ${tenant}`,
       ]);
+      universeNames = nameRows.map((x) => (x.classnote_name || x.name || "").trim()).filter(Boolean);
     } catch (e) {
       // 보드 확인 실패 = 공유 보드인지 모름 → 알리지 않는다(오배달보다 미알림이 낫다). 워터마크도 안 전진 → 다음 폴 재시도.
       log(`[feed] ⚠️ 보드 안전 확인 실패 — 이번 폴은 알림 보류(다음 폴 재시도): ${e.message}`);
@@ -291,12 +301,26 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     const { board, collisions } = await boardsToStudents(sql, tenant, keys, group.prefix);
     const hits = [];
     for (const p of picked) {
-      const safety = evaluateBoardSafety({ className: p.class_name, boards: safeBoards, allowlist });
+      const s = board.get(norm(p.class_name));
+      // 매핑 검증 — 이 보드의 원아가 정말 이 학생인가. **모호한 이름일 때만** 원아를 조회한다
+      // (학부모는 가입 시 이름 뒤 알파벳을 안 붙여 `(수학)박서준` 하나가 초6·중3을 동시에 가리킬 수 있다).
+      // 아니면 남의 집 학부모 글이 엉뚱한 강사에게 간다.
+      const amb = s ? boardNameAmbiguity(s.name, universeNames) : { ambiguous: false, siblings: [] };
+      let mapping = null;
+      if (amb.ambiguous) {
+        const first = evaluateBoardSafety({ className: p.class_name, boards: safeBoards, allowlist });
+        const live = first.boardId
+          ? await fetchBoardChildren(feedPage, feedCenterId, first.boardId).catch(() => null)
+          : null;
+        mapping = Array.isArray(live)
+          ? { grade: s.grade ?? null, children: live, schoolYear: kstSchoolYear() }
+          : { grade: null, children: [], schoolYear: kstSchoolYear() }; // 조회 실패 = 확인 불가 → 아래서 보류
+      }
+      const safety = evaluateBoardSafety({ className: p.class_name, boards: safeBoards, allowlist, mapping });
       if (!safety.ok) {
         held.push(`${p.class_name}(${safety.code} — ${String(safety.reason).slice(0, 60)})`);
         continue;
       }
-      const s = board.get(norm(p.class_name));
       if (!s) {
         held.push(`${p.class_name}(재원·수강 아님 또는 동명이인 보류)`);
         continue;

@@ -6,7 +6,7 @@
 // ⚠️ tenant 격리 필수 — DATABASE_URL 직결(RLS 우회)이라 필터 없으면 다른 테넌트 보고서를 이 계정으로 게시.
 import { chromium } from "@playwright/test";
 import { loginClassnote, fetchCenterId, fetchBoards, fetchBoardChildren } from "./classnote-admin-core.mjs";
-import { evaluateBoardSafety } from "./board-safety.mjs";
+import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 
 export const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
@@ -178,16 +178,24 @@ export async function processQueueOnce(sql, browser, opts) {
   let centerId = null;
   let boards = null;
   let allowlist = [];
+  let allNames = [];
   if (post) {
     try {
       const admin = await getAdminSession(browser); // 세션 유지 — 폴마다 로그인하지 않는다(아래 주석)
       adminPage = admin.page;
       centerId = admin.centerId;
       // 독립 조회 — 직렬 대기 금지(B4).
-      [boards, allowlist] = await Promise.all([
+      // ⚠️ allNames = **퇴원·예비 포함 전 학생** 유효이름 — 동명 판정 우주(boardNameAmbiguity)에 쓴다.
+      // 재원만 보면 안 된다: 앱의 동명이인 게이트가 `status<>'withdrawn'`이라 **퇴원하는 순간 풀리는데**
+      // ClassNote 보드엔 그 퇴원 가족이 그대로 남는다(실측: 김서윤·김채은이 이 경로로 무방비였다).
+      const [b, a, nameRows] = await Promise.all([
         fetchBoards(adminPage, centerId),
         getClassnoteBoardAllowlist(sql, tenant),
+        sql`select name, classnote_name from students where tenant_id = ${tenant}`,
       ]);
+      boards = b;
+      allowlist = a;
+      allNames = nameRows.map((x) => (x.classnote_name || x.name || "").trim()).filter(Boolean);
       preflightFails = 0;
       preflightBackoffUntil = 0;
     } catch (e) {
@@ -215,7 +223,7 @@ export async function processQueueOnce(sql, browser, opts) {
 
   try {
   for (const r of claimed) {
-    const [stu] = await sql`select name, classnote_name from students where id=${r.student_id} and tenant_id=${tenant}`;
+    const [stu] = await sql`select name, classnote_name, grade from students where id=${r.student_id} and tenant_id=${tenant}`;
     // ClassNote 보드명·원아 = 유효이름(classnote_name 오버라이드 || name). 동명이인은 오버라이드로 구분(0088a).
     const studentName = (stu?.classnote_name?.trim() || stu?.name || "").trim();
     // P0-3: 보드 라벨이 없는 과목(비수학·비영어·subject null)은 재시도 무의미한 결정적 실패 — 즉시 failed.
@@ -234,18 +242,28 @@ export async function processQueueOnce(sql, browser, opts) {
     // `(수학)박서준`에 초6·중3 두 가족 동거 — 초6 보고서가 중3 집에 노출). eywa DB엔 보드 멤버십이 없어
     // **여기(ClassNote 조회 가능한 워커)가 유일한 차단 지점**. 판정=board-safety.mjs 순수함수(공지 워커와 공용).
     if (post) {
+      // 1차 = 보드 존재/중복 + 예외 등재 확인(보드 조회 캐시만 사용, 추가 요청 0).
       let verdict = evaluateBoardSafety({ className, boards, allowlist });
-      if (!verdict.ok && verdict.code === "shared") {
-        // TOCTOU 재확인 — 캐시(approved_children) 이후 원장이 정리했을 수 있으니 실시간 인원으로 재판정.
-        // 그래도 차단이면 사유에 연결 가족을 적어 원장이 운영관리에서 바로 대조할 수 있게 한다.
+      // 2차 = **모호한 이름일 때만** 원아를 실시간 조회해 매핑 검증(생일 ↔ 학년). 모호하지 않으면 요청 0.
+      // 모호 = 같은 이름 2명+(퇴원 포함) 또는 `이름+알파벳` 형제 — 학부모는 가입 시 알파벳을 안 붙이므로
+      // 보드명 하나가 여러 학생을 가리킬 수 있다(박서준 사고 경로).
+      const amb = boardNameAmbiguity(studentName, allNames);
+      if (verdict.ok && amb.ambiguous) {
         const live = await fetchBoardChildren(adminPage, centerId, verdict.boardId).catch(() => null);
-        if (Array.isArray(live)) {
-          verdict = evaluateBoardSafety({ className, boards, allowlist, occupants: live.length });
-          if (!verdict.ok) {
-            const who = live.map((k) => `${k.name ?? "?"}(${k.date_birth ?? "?"})`).join(" / ");
-            verdict.reason = `${verdict.reason} 연결 가족: ${who}`;
-          }
-        }
+        verdict = Array.isArray(live)
+          ? evaluateBoardSafety({
+              className,
+              boards,
+              allowlist,
+              mapping: { grade: stu?.grade ?? null, children: live, schoolYear: kstSchoolYear() },
+            })
+          : {
+              ok: false,
+              code: "mapping_unknown",
+              reason: `동명이인이 있는 이름이라 원아 확인이 필요한데 클래스노트 조회에 실패해 보류합니다(${className})`,
+            };
+        if (!verdict.ok && amb.siblings.length)
+          verdict.reason = `${verdict.reason} (eywa 동명: ${amb.siblings.join(", ")}${amb.sameName > 1 ? ` · 같은 이름 ${amb.sameName}명` : ""})`;
       }
       if (!verdict.ok) {
         await sql`update lesson_reports set classnote_status='blocked_shared',

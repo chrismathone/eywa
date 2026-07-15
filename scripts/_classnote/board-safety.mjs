@@ -11,84 +11,162 @@ export function normBoard(s) {
   return (s || "").replace(/\s/g, "");
 }
 
-/**
- * 예외 등재가 기본으로 면제해 주는 **연결 계정 수**.
- *
- * 예외 등재의 뜻 = "원장이 육안 확인 = 이 보드의 계정들은 **같은 학생**의 것"이다.
- * 실사례(원장 확인, 2026-07-15): **영어·수학을 따로 가입**했거나 **학부모와 학생이 각자 가입** — 전형적으로 2개.
- * 그 확인은 **그때 본 인원에 대한 것**이라, 나중에 계정이 하나 더 붙으면 확인의 근거가 사라진다 —
- * 그게 정확히 `(수학)박서준` 사고 모드("옛 보드에서 제거 누락")다. 그래서 기본 2를 넘으면 다시 차단해 사람이 한 번 더 본다.
- *
- * ⚠️ 다만 **3개가 정상인 집도 있을 수 있다**(아빠·엄마·학생 등). 그때 재차단이 영구 차단이 되면 등재해도 안 나가는
- * 막다른 길이 되므로, 예외 목록에 **`보드명|N`** 으로 인원을 지정할 수 있게 열어둔다(예: `(수학)홍길동|3`).
- * 기본값을 올리지 말고 **그 보드만** 올릴 것 — 전역 상향은 확인 안 된 가족까지 통과시킨다.
- */
-const ALLOWLIST_DEFAULT_MAX = 2;
+// ─────────────────────────────────────────────────────────────────────────────
+// 매핑 검증 — "이 보드의 원아가 정말 이 학생인가"
+//
+// **근본 원인**(원장 2026-07-15): eywa는 동명이인을 `박서준`/`박서준C`처럼 **이름 뒤 알파벳**으로 구분하는데,
+// **학부모는 ClassNote에 가입할 때 알파벳을 안 붙인다**(그냥 "박서준"). 그래서 보드명 `(수학)박서준` 하나가
+// 초6 박서준과 중3 박서준C를 **동시에 가리킬 수 있고**, 학원이 반에 초대를 넣을 때 헷갈리면 그대로 오발송이 된다.
+// 실제 사고: `(수학)박서준`에 초6·중3 두 가족이 동거 → 초6 성적표가 중3 집에 노출.
+//
+// **계정 수로는 못 막는다**(2026-07-15 실측): 모호한 보드 39개가 **전부 계정 1개**라 "2개 이상이면 차단"은
+// 이 위험을 **한 건도** 못 잡았고, 대신 같은 학생의 다계정(영어·수학 따로 가입 / 학부모·학생 각자 가입) 4건만
+// 오탐으로 막았다. 계정 수는 위험과 겹치지 않는 지표다.
+//
+// **쓸 수 있는 신호 = 원아 생년월일**. ClassNote가 원아 생일을 준다. 초6과 중3은 3년 차이라 생일로 갈린다.
+// eywa엔 생일이 없지만(807명 중 1명) **학년은 전원 있다** → 학년에서 출생연도를 역산해 대조한다.
+// 실측: 정상 보드 11개 전부 오차 0년(오탐 0), 진짜 오류 2건 검출(김서윤·김채은 — 보드에 퇴원 동명이인 가족이 붙어 있었다).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 학년 → (학년도 − 출생연도). 초1 = 만 6세 되는 해 3월 입학 → 2026학년도 초1 = 2019생(2026−2019=7). */
+const GRADE_AGE_OFFSET = {
+  초1: 7, 초2: 8, 초3: 9, 초4: 10, 초5: 11, 초6: 12,
+  중1: 13, 중2: 14, 중3: 15,
+  고1: 16, 고2: 17, 고3: 18,
+};
+
+/** 생일 대조 허용 오차(년). 조기입학·유급·학부모 오입력(실측: 자기 생일을 1년 틀리게 넣은 사례)을 흡수. */
+const BIRTH_YEAR_TOLERANCE = 1;
+
+/** eywa 학년 → 기대 출생연도. 모르는 학년이면 null(=대조 불가). */
+export function expectedBirthYear(grade, schoolYear) {
+  const off = GRADE_AGE_OFFSET[String(grade ?? "").trim()];
+  // ⚠️ `Number(null)`은 0이고 0은 유한수다 — null 체크를 따로 안 하면 학년도 없이 "-12년생"이 나온다(테스트가 잡음).
+  if (off == null || schoolYear == null) return null;
+  const y = Number(schoolYear);
+  return Number.isFinite(y) && y > 1900 ? y - off : null;
+}
+
+/** KST 기준 학년도 — 3월 시작(1~2월은 전 학년도). @param {Date} [now] */
+export function kstSchoolYear(now = new Date()) {
+  const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" })
+    .format(now)
+    .split("-")
+    .map(Number);
+  return m >= 3 ? y : y - 1;
+}
 
 /**
- * 예외 목록 한 줄을 판다: `"(수학)안은지"` → 최대 2 / `"(수학)홍길동|3"` → 최대 3.
- * ⚠️ 인원 지정은 **정규화 전에** 떼야 한다 — `normBoard`는 공백만 지우므로 `|3`이 붙은 채로는 보드명과 안 맞는다.
+ * 이 보드명이 **여러 학생을 가리킬 수 있는가**(= 매핑 검증이 필요한가).
+ *
+ * 두 경우가 모호하다:
+ *  ① 같은 유효이름이 2명 이상 — ⚠️ **퇴원생을 반드시 포함**해서 센다. 앱의 동명이인 게이트
+ *     (hasClassnoteNameCollision)는 `status<>'withdrawn'`이라 **퇴원하는 순간 풀리는데**, ClassNote 보드엔
+ *     그 퇴원 가족이 그대로 남아 있다. 실측: 김서윤(중1) 07-10 퇴원 → 고2 김서윤 보드가 무방비가 됨.
+ *  ② `이름+알파벳 한 글자`(A~G) 형제가 있음 — eywa `박서준` vs `박서준C`. eywa 이름이 **다르므로**
+ *     동명이인 게이트를 통과하는데, ClassNote 보드명엔 접미사가 없어 같은 이름을 공유한다(박서준 사고 경로).
+ *     ⚠️ `이윤` vs `이윤건`처럼 **여러 글자 차이는 다른 이름**이라 모호하지 않다(학부모가 "이윤건"으로 가입).
+ *
+ * @param {string} baseName - 보드명에서 `(과목)`을 뗀 학생 유효이름(정규화됨)
+ * @param {string[]} allNames - **퇴원·예비 포함 전 학생**의 정규화된 유효이름
  */
-function parseAllowEntry(entry) {
-  const raw = String(entry ?? "");
-  const m = raw.match(/^(.*?)\s*\|\s*(\d+)\s*$/);
-  if (m && Number(m[2]) >= 1) return { key: normBoard(m[1]), max: Number(m[2]) };
-  return { key: normBoard(raw), max: ALLOWLIST_DEFAULT_MAX };
+export function boardNameAmbiguity(baseName, allNames) {
+  const key = normBoard(baseName);
+  if (!key) return { ambiguous: false, sameName: 0, siblings: [] };
+  let sameName = 0;
+  const siblings = [];
+  for (const raw of allNames ?? []) {
+    const n = normBoard(raw);
+    if (n === key) sameName++;
+    else if (n.length === key.length + 1 && n.startsWith(key) && /^[A-G]$/.test(n.slice(-1))) siblings.push(n);
+  }
+  return { ambiguous: sameName > 1 || siblings.length > 0, sameName, siblings };
+}
+
+/**
+ * 모호한 보드의 **매핑 검증** — 원아 생일이 이 학생의 학년과 맞는가.
+ * @param {{ grade: string|null, children: Array<{name?:string, date_birth?:string|null}>, schoolYear: number }} p
+ * @returns {{ok:boolean, code:string, reason?:string}}
+ */
+export function evaluateBoardMapping({ grade, children, schoolYear }) {
+  const want = expectedBirthYear(grade, schoolYear);
+  if (want == null)
+    return { ok: false, code: "mapping_unknown", reason: `학년(${grade ?? "없음"})을 알 수 없어 원아가 이 학생이 맞는지 확인할 수 없습니다` };
+  const kids = children ?? [];
+  if (!kids.length) return { ok: true, code: "ok" }; // 아직 아무도 안 붙음 = 오발송 대상 없음
+
+  const bad = [];
+  for (const k of kids) {
+    const y = Number(String(k?.date_birth ?? "").slice(0, 4));
+    if (!Number.isFinite(y) || y < 1900)
+      return {
+        ok: false,
+        code: "mapping_unknown",
+        reason: `원아 "${k?.name ?? "?"}"의 생년월일이 없어 이 학생이 맞는지 확인할 수 없습니다(동명이인이 있는 이름이라 확인 없이는 보낼 수 없습니다)`,
+      };
+    if (Math.abs(y - want) > BIRTH_YEAR_TOLERANCE) bad.push({ name: k?.name ?? "?", y });
+  }
+  if (bad.length)
+    return {
+      ok: false,
+      code: "grade_mismatch",
+      reason:
+        `⚠️ 다른 학생의 가족일 수 있습니다 — 이 학생은 eywa에서 ${grade}(${want}년생)인데, 보드에 연결된 원아는 ` +
+        bad.map((b) => `"${b.name}" ${b.y}년생`).join(", ") +
+        ` 입니다. 동명이인이 있는 이름이라(학부모는 클래스노트 가입 시 이름 뒤 알파벳을 안 붙입니다) 반 초대가 엉뚱한 집에 갔을 수 있습니다. ` +
+        `클래스노트 운영관리에서 확인 후, 맞는 집이면 수업보고서 > 보고서 설정 > '공유 보드 발송 예외'에 등록, 아니면 연결을 바로잡아 주세요.`,
+    };
+  return { ok: true, code: "ok" };
 }
 
 /**
  * 발송 직전 보드 안전 판정.
+ *
+ * ⚠️ **계정 수(2가족+)로 막던 것을 폐기**하고 **매핑 검증**으로 대체했다(원장 결정 2026-07-15). 근거:
+ *  ① 위험의 실체는 "계정이 여럿"이 아니라 **"이 보드의 원아가 다른 학생"**이다(위 매핑 검증 절).
+ *  ② 실측: 모호한 보드 39개가 **전부 계정 1개** → 계정 수 게이트는 진짜 위험을 **한 건도** 못 잡았고,
+ *     같은 학생의 다계정(영어·수학 따로 가입 / 학부모·학생 각자 가입) 4건만 **오탐**으로 막았다.
+ *     심지어 계정이 1개여도 그게 **엉뚱한 집**이면 그대로 오발송이라(김서윤·김채은 실사례) 계정 수는 위험과 겹치지도 않는다.
+ *  ③ 반 초대는 **학원이 직접** 넣으므로 무관한 가족이 붙을 일은 사실상 없다(원장 확인). 헷갈리는 유일한 지점이
+ *     **동명이인**이고, 그건 매핑 검증이 직접 잡는다.
+ * **계정 수 기준으로 되돌리지 말 것.**
+ *
  * @param {object} p
  * @param {string} p.className  대상 보드명 "(과목)학생명"(boardClassName 결과)
  * @param {Array<{id:number,name:string,children?:number|null}>} p.boards  전체 보드
- *   (children=approved_children 연결 **계정** 수. **null=모름**, 0=학부모 미연결 — 둘은 다르다)
- * @param {number|null} [p.occupants]  실시간 연결 계정 수(fetchBoardChildren). 주면 우선, 없으면 board.children.
- * @param {string[]} [p.allowlist]  원장이 육안 확인한 발송 허용 공유 보드명(같은 학생 다계정 등)
- * @returns {{ok:boolean, code:string, reason?:string, boardId?:number, occupants?:number|null}}
+ * @param {string[]} [p.allowlist]  원장이 육안 확인해 통과시킨 보드명 — 매핑 검증의 **사람 탈출구**(막다른 길 방지)
+ * @param {null|{grade:string|null, children:Array<{name?:string,date_birth?:string|null}>, schoolYear:number}} [p.mapping]
+ *   **모호한 보드일 때만** 넘긴다(`boardNameAmbiguity`로 판정 후 `fetchBoardChildren`). null = 검증 불필요(비모호).
+ * @returns {{ok:boolean, code:string, reason?:string, boardId?:number}}
  *   ok=true면 발송 진행. ok=false면 blocked_shared로 보류(발송 안 함) + reason을 classnote_error에 저장.
  */
-export function evaluateBoardSafety({ className, boards, occupants = null, allowlist = [] }) {
+export function evaluateBoardSafety({ className, boards, allowlist = [], mapping = null }) {
   const key = normBoard(className);
   if (!key) return { ok: false, code: "no_class", reason: "발송 대상 보드명이 비어 있습니다" };
 
   const matched = (boards || []).filter((b) => normBoard(b.name) === key);
   if (matched.length === 0)
-    return { ok: false, code: "no_board", reason: `ClassNote 보드 없음 — "${className}" 보드가 없어 발송할 수 없습니다(프로비저닝/학부모 초대 필요)` };
+    return {
+      ok: false,
+      code: "no_board",
+      reason: `ClassNote 보드 없음 — "${className}" 보드가 없어 발송할 수 없습니다(프로비저닝/학부모 초대 필요)`,
+    };
   if (matched.length > 1)
-    return { ok: false, code: "dup_board", reason: `ClassNote 보드 중복 — "${className}" 이름의 보드가 ${matched.length}개라 대상을 특정할 수 없습니다` };
+    return {
+      ok: false,
+      code: "dup_board",
+      reason: `ClassNote 보드 중복 — "${className}" 이름의 보드가 ${matched.length}개라 대상을 특정할 수 없습니다`,
+    };
 
   const board = matched[0];
-  const n = occupants != null ? occupants : board.children;
-  // ⚠️ **인원을 모르면 안 보낸다**(fail-closed). 예전엔 `?? 0`이라 모름이 "0가족=안전"으로 뭉개져,
-  // ClassNote가 필드를 바꾸면 게이트가 무경고로 전부 통과시켰다(감시 스캔도 같은 식을 써서 동시에 실명).
-  if (n == null || Number.isNaN(Number(n)))
-    return {
-      ok: false,
-      code: "unknown_occupants",
-      reason: `연결 계정 수를 확인하지 못했습니다 — "${className}" 보드의 인원 정보를 ClassNote가 주지 않아 오발송 여부를 판단할 수 없어 보류합니다(ClassNote API 변경 가능성 — 개발자 확인 필요).`,
-      boardId: board.id,
-      occupants: null,
-    };
+  // 원장이 육안 확인해 등재한 보드 = 검증 면제(사람 판단이 최종). 이 탈출구가 없으면 확인해도 못 푸는 막다른 길이 된다.
+  // ⚠️ 옛 `보드명|N`(인원 지정) 입력이 남아 있어도 동작하게 숫자는 떼고 이름만 본다 — 계정 수 개념은 폐기됐다.
+  const allowed = new Set((allowlist || []).map((e) => normBoard(String(e ?? "").replace(/\s*\|\s*\d+\s*$/, ""))));
+  if (allowed.has(key)) return { ok: true, code: "ok", boardId: board.id };
 
-  const allowed = new Map((allowlist || []).map((e) => { const p = parseAllowEntry(e); return [p.key, p.max]; }));
-  if (n > 1 && !allowed.has(key))
-    return {
-      ok: false,
-      code: "shared",
-      reason: `공유 보드(연결 계정 ${n}) — 다른 가족에게 오발송될 수 있어 발송 보류. 클래스노트 운영관리에서 연락처 확인 후, 같은 학생의 계정이면(영어·수학 따로 가입, 학부모·학생 각자 가입 등) 수업보고서 > 보고서 설정 > '공유 보드 발송 예외'에 "${className}" 등록, 남의 가족이면 클래스노트에서 연결 제거.`,
-      boardId: board.id,
-      occupants: n,
-    };
-  // 등재돼 있어도 **확인한 범위**를 넘으면 재차단 — 등재 후 붙은 계정은 아무도 확인한 적이 없다(박서준 사고 모드).
-  const max = allowed.get(key) ?? ALLOWLIST_DEFAULT_MAX;
-  if (n > max)
-    return {
-      ok: false,
-      code: "shared_grown",
-      reason: `발송 예외로 등재된 보드지만 연결 계정이 ${n}개로 늘었습니다(확인 범위 ${max}개) — 새로 붙은 계정은 확인된 적이 없어 보류합니다. 클래스노트 운영관리에서 확인 후, ${n}개가 모두 같은 학생 것이면 예외 목록을 "${className}|${n}" 으로 고쳐 주세요. 남의 가족이면 클래스노트에서 연결 제거.`,
-      boardId: board.id,
-      occupants: n,
-    };
-
-  return { ok: true, code: "ok", boardId: board.id, occupants: n };
+  if (mapping) {
+    const v = evaluateBoardMapping(mapping);
+    if (!v.ok) return { ...v, boardId: board.id };
+  }
+  return { ok: true, code: "ok", boardId: board.id };
 }
