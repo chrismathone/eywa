@@ -590,5 +590,37 @@ realtime-js가 그 키로 WS URL을 만들며 `\n`이 `%0A`로 인코딩돼 **�
 - **수정**: ① 서버 첫 페인트는 **미매핑이면 즉시 반환**(Notion 호출 0) → 화면 먼저 뜸(B7). ② 무거운 담당자 스캔·자동매칭은 **클라가 화면 표시 후 서버 액션(`prepareNotionMapping`)으로 지연 호출**(effect+"확인 중…" 스켈레톤). ③ 스캔 자체도 **최신 마감순 정렬 + `maxPages` 상한(8p≈800행)**으로 bounded + `unstable_cache` 10분(B6). 활동 중 담당자는 최근 창에 반드시 등장하므로 커버리지 손실 없음.
 - **교훈**: **외부 API(Notion/시트 등) 페이지네이션 전건 순회는 페이지 로드 경로에서 절대 await하지 말 것** — 사용자 트리거 액션으로 빼고, 스캔은 항상 `maxPages`로 bounded + 캐시. "전건 스캔"은 행 수만이 아니라 **왕복 수 × 지연**이 타임아웃을 만든다. (Supabase 전건은 [[#54]] `fetchAllPaged`; 외부 REST 전건은 이 규칙.)
 
+### 77. "화면에서만 잠갔다" = 우회 폭 — 게이트는 **모든 표면**이 같은 함수를 통과해야 (2026-07-15, 이력서 적대검수)
+직원 이력서는 열람에 **재인증(본인 비밀번호 재입력 → 이력서별 10분 서명쿠키)** 을 걸어 뒀는데, 그 게이트가
+**뷰 페이지(RSC)에만** 있었다. 실제로 뚫린 구멍 2개:
+- **클릭으로 도달**: 같은 행이 `/documents`(탐색기)에도 뜨는데 `deleteDocument`는 `canWriteTenant("documents")`만
+  보고 `restricted`·`form_type`·열람토큰을 안 봤다 → **열람 못 하는 이력서를 삭제**할 수 있었다(재인증 0회).
+- **서버액션 직접 호출**: `saveStaffResume`/`deleteStaffResume`는 역할만 봤다. 화면의 `canWrite = canView && canWriteRole`는
+  **렌더용 계산일 뿐** — 액션 id는 클라 번들에 있으므로 폼 없이 호출 가능하다.
+- **수정**: 공용 [`canViewResume`](src/features/staff/server/resume-access.ts)(작성 본인 ∪ 원장 ∪ 재인증 토큰) **단일 소스**를
+  뷰·쓰기 액션(`requireResumeAccess`)·`deleteDocument`가 **함께** 통과. 탐색기는 폼 문서 삭제 버튼도 숨김(폼은 자기 화면에서 관리).
+- **교훈**: **UI 조건은 게이트가 아니다.** 한 레코드가 여러 표면(전용 화면 + 목록 + 탐색기 + 서버액션 + 내보내기)에
+  노출되면, "가장 느슨한 표면"이 그 레코드의 실제 권한이다. 새 표면을 만들 때 게이트를 **재구현하지 말고 공용 함수**를 태울 것.
+  ⚠️ **아직 남은 구조적 갭(원장 결정 = 지금은 그대로 둠, 2026-07-15)**: 재인증은 **RSC에만** 있고 RLS(0072a)는
+  `admin/manager/accountant`를 전부 통과시킨다. 이 앱은 브라우저 Supabase 클라이언트(공개 anon 키)를 쓰므로
+  **재인증의 대상 집단이** devtools 한 줄(`.from('academy_documents').select('form_data')`)로 전 직원 주민번호·계좌·급여를
+  읽을 수 있다. 즉 **앱 게이트가 RLS보다 엄격한 만큼이 그대로 우회 폭**이다(0072a 주석의 "거친 백스톱"은 쓰기 게이팅
+  얘기라 이 갭은 인지 밖이었음). 닫으려면 restricted 행 SELECT를 `uploaded_by = auth.uid() or auth_system_role()='master'`로
+  좁히고 재인증 열람분을 **서버 전용 경로**(admin client + 코드 tenant 스코프)로 내리는 설계 변경 필요.
+  **현재 전제 = 학원 내부 단일 운영**(로그인 세션 정책과 같은 결) — **외부/공개 SaaS로 가면 반드시 먼저 닫을 것.**
+
+### 78. 초안 자동저장(`useFormDraft`)은 **name 가진 칸을 전부** 캡처 — 민감 폼은 `exclude` 필수 (2026-07-15)
+이력서 폼이 `exclude` 없이 훅을 불러 **주민번호·계좌·월급여·연봉이 IndexedDB에 평문·무기한** 저장됐다.
+`cancel()`도 초안을 안 지웠고(성공 저장 경로에만 `clearDraft()`), `form-draft.ts`엔 TTL·purge·로그아웃 정리가 0건,
+scope에 userId도 없었다 → **로그인조차 없이** DevTools › Application › IndexedDB에서 평문 조회 + 공용 PC의
+다음 사용자에게 **DraftBanner가 앞사람 주민번호를 복구 제안**. 서버의 재인증·RLS·10분 TTL·httpOnly 쿠키가 전부 무의미.
+- **수정**: `RESUME_DRAFT_EXCLUDE`/`REFUND_DRAFT_EXCLUDE` + `cancel()`에서 폐기 + **scope에 userId**(교차복구 차단)
+  + **레거시 초안 자동 폐기**(use-form-draft 로드 시 exclude 대상 키가 담겨 있으면 복구 않고 즉시 clear — 배포 후 첫 열기에 잔재 정리).
+- **교훈**: **민감 폼에 초안을 붙일 땐 `exclude`가 기본값**(선례 `staff-form.tsx` `exclude:["password"]`). "서버에서 잠갔다"가
+  클라 영속 저장(IDB/localStorage)으로 새면 잠금은 0이다. **새 민감 칸을 추가하면 exclude 목록도 함께** 갱신할 것 —
+  회귀 그물은 [resume-sheet.draft.test.tsx](<src/app/(shell)/staff/resumes/_components/resume-sheet.draft.test.tsx>)처럼
+  **컴포넌트→훅→saveDraft 배선을 실제로 태워 저장값을 검사**해야 한다(`readFormValues(form, EXCLUDE)`를 테스트가 직접
+  부르면 컴포넌트 배선을 안 태워 **exclude를 빼도 통과하는 가짜 테스트**가 된다 — 실제로 처음에 그렇게 짰다가 잡음).
+
 ---
 
