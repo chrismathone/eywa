@@ -72,7 +72,7 @@ try {
     const blocked = rows.filter((r) => !r.allowed);
     if (blocked.length) {
       console.log(`\n조치 필요 ${blocked.length}건 — 클래스노트 **운영관리 > 학생관리**에서 보드를 골라 연락처·보호자 확인:`);
-      console.log("  · 같은 학생의 학부모/본인 계정이면 → 학원설정 > 보고서 > '공유 보드 발송 예외'에 보드명 등재");
+      console.log("  · 같은 학생의 학부모/본인 계정이면 → eywa 수업보고서 > 보고서 설정 > '공유 보드 발송 예외'에 보드명 등재");
       console.log("  · 남의 가족이면 → 클래스노트에서 그 가족 연결 제거(API로는 불가, UI에서만)");
     }
   }

@@ -38,7 +38,7 @@ export function evaluateBoardSafety({ className, boards, occupants = null, allow
     return {
       ok: false,
       code: "shared",
-      reason: `공유 보드(연결 가족 ${n}) — 다른 가족에게 오발송될 수 있어 발송 보류. 운영관리에서 확인 후 같은 학생 다계정이면 학원설정 '공유 보드 발송 예외'에 "${className}" 등록, 남의 가족이면 ClassNote에서 제거.`,
+      reason: `공유 보드(연결 가족 ${n}) — 다른 가족에게 오발송될 수 있어 발송 보류. 클래스노트 운영관리에서 연락처 확인 후, 같은 학생의 다계정이면 수업보고서 > 보고서 설정 > '공유 보드 발송 예외'에 "${className}" 등록, 남의 가족이면 클래스노트에서 연결 제거.`,
       boardId: board.id,
       occupants: n,
     };
