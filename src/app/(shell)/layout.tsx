@@ -8,6 +8,7 @@ import { MobileTopNav } from "@/components/mobile-top-nav";
 import { UserMenu } from "@/components/user-menu";
 import { TeacherMenu } from "@/components/teacher-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
+import { NotifyPermissionBanner } from "@/features/notifications/components/notify-permission-banner";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -109,6 +110,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             />
           </div>
         </header>
+        {/* 컴퓨터 알림 선제 안내 — 권한 미설정 강사에게만(허용/차단/닫음이면 스스로 사라짐). 학생은 알림 없음. */}
+        {view === "teacher" ? <NotifyPermissionBanner /> : null}
         <main className="flex-1 overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
           {/* 미니멀 셸엔 WorkspaceCanvas가 없다 → WindowLink/새폼이 창을 열지 않고 드릴인(일반 네비)하게 false. */}
           <WorkspaceEnabledProvider enabled={false}>

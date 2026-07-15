@@ -13,8 +13,34 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fetchMyNotifications, markNotificationsRead } from "@/features/notifications/server/actions";
 import { NOTIFICATION_ICON, type NotificationItem } from "@/features/notifications/types";
+import { mergeAlerted, pickAlertTargets } from "@/features/notifications/important";
+import { isTopFrame, showDesktopNotification } from "@/features/notifications/desktop-notify";
+import { enableDesktopNotify, useNotifyPermission } from "@/features/notifications/notify-permission-store";
+import { NotificationAlertDialog } from "./notification-alert-dialog";
 
 const POLL_MS = 60_000;
+
+// 이미 강하게 알린(OS 알림·중앙 팝업) 알림 id — 새로고침·다중 탭에서 같은 알림이 반복 팝업되는 것 차단.
+// ⚠️ lazy useState 초기화로 읽지 말 것(하이드레이션 불일치) — 반드시 effect에서 ref로 seed.
+const ALERTED_KEY = "eywa-notify-alerted";
+
+function loadAlerted(): string[] {
+  try {
+    const raw = localStorage.getItem(ALERTED_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return []; // 저장소 차단·손상 → 중복 팝업이 최악이라 조용히 빈 목록(기능은 계속)
+  }
+}
+
+function persistAlerted(addIds: string[]) {
+  try {
+    localStorage.setItem(ALERTED_KEY, JSON.stringify(mergeAlerted(loadAlerted(), addIds)));
+  } catch {
+    /* 저장 실패는 무시(메모리 ref로 이번 세션은 중복 방지됨) */
+  }
+}
 
 /** 앱 밖으로 나가는 링크인가 — 알림 link는 보통 앱 경로(`/students/1`)지만 ClassNote 글은 절대 URL이다. */
 function isExternal(link: string): boolean {
@@ -43,6 +69,38 @@ export function NotificationBell() {
   // 요청 순번 — 모든 서버 왕복(폴링·읽음처리·모두읽음)이 공유한다. 늦게 도착한 응답이
   // 최신 요청 결과를 덮지 않게(적대리뷰: mark 응답을 느린 폴링이 되돌리던 레이스).
   const reqRef = useRef(0);
+  // 강하게 알림(OS 알림 + 화면 중앙 팝업) — 중요 유형만(important.ts). 벨만으론 강사가 지나침(원장 2026-07-15).
+  const alertedRef = useRef<Set<string>>(new Set());
+  const [popup, setPopup] = useState<{ item: NotificationItem; extra: number } | null>(null);
+  // 권한은 브라우저가 들고 있는 외부 상태 → 스토어에서 구독(setState-in-effect·하이드레이션 함정 회피).
+  const perm = useNotifyPermission();
+
+  // 이미 알린 id seed — **ref 대입만**(setState 아님 → 캐스케이드 렌더 없음). lazy useState 초기화는 금지
+  // (SSR엔 localStorage 없음). 이 effect가 첫 refresh 응답(비동기)보다 먼저 동기 실행되므로,
+  // 앱을 켤 때 예전 알림이 무더기로 팝업되는 일은 없다.
+  useEffect(() => {
+    alertedRef.current = new Set(loadAlerted());
+  }, []);
+
+  /**
+   * 새로 관측된 **중요** 알림을 확실히 알린다 — OS 알림 + 중앙 팝업. 한 알림당 평생 1회
+   * (닫아도 벨엔 안 읽음으로 남음). 여러 건이면 최신 1건만 띄우고 나머지는 "외 N건".
+   * ⚠️ 최상위 프레임에서만 — iframe(창) 중복 발사 방어(현 구조상 임베드엔 벨이 없지만 방어로 유지).
+   * OS 알림 클릭은 **창 포커스까지만** — 실제 이동은 중앙 팝업의 '바로 가기'가 openItem으로 처리한다
+   * (외부 링크 확인창·새 탭 로직을 한 곳에만 두려고. router.push는 절대 URL에 안 먹는다).
+   */
+  const maybeAlert = useCallback((list: NotificationItem[]) => {
+    if (!isTopFrame()) return;
+    const targets = pickAlertTargets(list, alertedRef.current);
+    if (targets.length === 0) return;
+    const newest = targets[0]!; // 서버가 최신순 반환
+    // 관측 즉시 기록 — 다중 탭이 동시에 폴링해도 같은 알림이 두 번 뜨는 창을 최소화.
+    const ids = targets.map((t) => t.id);
+    ids.forEach((id) => alertedRef.current.add(id));
+    persistAlerted(ids);
+    showDesktopNotification({ title: newest.title, body: newest.body, tag: newest.id });
+    setPopup({ item: newest, extra: targets.length - 1 });
+  }, []);
 
   // seq를 발급하고, 응답 도착 시 그 seq가 아직 최신일 때만 반영하는 공용 러너.
   const run = useCallback(
@@ -54,13 +112,14 @@ export function NotificationBell() {
           if (seq === reqRef.current) {
             setItems(res.items);
             setUnread(res.unread);
+            maybeAlert(res.items); // 읽음처리 응답에도 태우지만 read=true라 대상에서 걸러짐
           }
         } catch {
           /* best-effort — 벨 갱신 실패는 조용히 무시 */
         }
       });
     },
-    [],
+    [maybeAlert],
   );
 
   const refresh = useCallback(() => run(fetchMyNotifications), [run]);
@@ -156,6 +215,23 @@ export function NotificationBell() {
           ) : null}
         </div>
         <DropdownMenuSeparator className="my-0" />
+        {/* 컴퓨터(OS) 알림 권한 — 중요 알림을 브라우저 밖에서도 확실히 받게. 권한 요청은 사용자 제스처(클릭)에서만
+            가능해 여기 버튼으로 노출한다. granted면 아무것도 안 보임(조용). */}
+        {perm === "default" ? (
+          <button
+            type="button"
+            onClick={() => void enableDesktopNotify()}
+            className="border-line hover:bg-bg-soft flex w-full items-center gap-1.5 border-b px-3 py-2 text-left text-[11px] transition"
+          >
+            <EyIcon name="bell" size={13} className="text-primary shrink-0" />
+            <span className="text-foreground font-semibold">컴퓨터 알림 켜기</span>
+            <span className="text-text-faint truncate">— 창 밖에서도 받기</span>
+          </button>
+        ) : perm === "denied" ? (
+          <p className="text-text-faint border-line border-b px-3 py-2 text-[11px] leading-snug break-keep">
+            컴퓨터 알림이 차단돼 있습니다 — 주소창의 자물쇠 &gt; 알림에서 &lsquo;허용&rsquo;으로 바꿔주세요.
+          </p>
+        ) : null}
         {items.length === 0 ? (
           <div className="text-text-dim px-2 py-8 text-center text-xs">새 알림이 없습니다</div>
         ) : (
@@ -203,6 +279,16 @@ export function NotificationBell() {
         if (url) window.open(url, "_blank", "noopener,noreferrer");
       }}
       onCancel={() => setPendingLink(null)}
+    />
+    {/* 중요 알림 화면 중앙 팝업 — 벨 드롭다운을 안 열어도 확실히 보이게(원장 2026-07-15).
+        '바로 가기'는 openItem을 태워 외부 링크(ClassNote 글)면 위 ConfirmDialog로 이어진다. */}
+    <NotificationAlertDialog
+      item={popup?.item ?? null}
+      extraCount={popup?.extra ?? 0}
+      perm={perm}
+      onEnableDesktop={() => void enableDesktopNotify()}
+      onClose={() => setPopup(null)}
+      onOpenItem={openItem}
     />
     </>
   );

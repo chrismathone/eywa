@@ -9,6 +9,28 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 강사 알림 강화 — 컴퓨터(OS) 알림 + 화면 중앙 팝업 + 권한 안내 3겹 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1190·build✓)
+원장: "선생님 개인화면 우상단 알림으로는 **너무 약하다**. 컴퓨터 알림과도 연동하고 화면 중앙에 팝업돼서 확실하게 알면 좋겠다."
++ "알림 승인을 해야 PC 알림이 오는 거지? **이 부분 안내가 꼭 필요**할 듯."
+- **대상 = 중요 알림만**(원장 결정 — 모든 알림을 중앙 팝업하면 수업 중 방해): [`important.ts`](../src/features/notifications/important.ts)
+  `IMPORTANT_NOTIFICATION_TYPES=['classnote_parent_post']`(학부모 새 글 → 담당 강사). 나머지(반 배정·전입·인수인계)는 기존 벨 배지만.
+  순수 함수 `pickAlertTargets`(안읽음+중요+미알림) / `mergeAlerted`(상한 200) + Vitest 6.
+- **전달 2종**: [`desktop-notify.ts`](../src/features/notifications/desktop-notify.ts) OS 알림(`requireInteraction` — 확인 전까지 유지)
+  + [`notification-alert-dialog.tsx`](../src/features/notifications/components/notification-alert-dialog.tsx) 화면 중앙 팝업(바로 가기/나중에).
+  한 알림당 **평생 1회**(alerted id를 localStorage 영속) — 닫아도 벨엔 안 읽음으로 남음. 여러 건이면 최신 1건 + "외 N건".
+- **범위(원장 결정)**: **브라우저가 열려 있을 때만**(최소화·백그라운드 탭 OK). 완전히 닫힌 상태 푸시는 Service Worker+Web Push+VAPID가
+  필요해 미도입 — 필요해지면 별도 작업.
+- **권한 안내 3겹**(가장 흔한 실패 = 강사가 권한 꺼진 줄 모르고 못 받음): ① **선제 배너**
+  ([`notify-permission-banner.tsx`](../src/features/notifications/components/notify-permission-banner.tsx), 강사 미니셸, 미설정자에게만·닫기 기억)
+  → 첫 알림을 **놓치기 전에** 켜게 함 ② **중앙 팝업 안 안내**(실제 알림이 온 순간 = 켜기 최적 타이밍) ③ 벨 드롭다운 버튼.
+  차단(denied) 상태면 "자물쇠 > 알림에서 허용" 안내. ⚠️ 권한 요청은 **클릭(사용자 제스처)에서만** 가능(브라우저 정책).
+- **중복 발사 방어**(원장 "혹시 모르니까"): `isTopFrame()` 가드 + 알림 id 기준 중복 차단. 현 구조상 iframe엔 벨이 없고
+  (`(shell)/layout` `if (embed) return`) 강사뷰는 창(iframe)을 안 쓰지만, 구조가 바뀌어도 두 번 울리지 않게 방어로 유지.
+- **클라 전용 상태는 `useSyncExternalStore`**([`notify-permission-store.ts`](../src/features/notifications/notify-permission-store.ts)) —
+  effect에서 setState하면 `react-hooks/set-state-in-effect` 위반([[#25]]), lazy useState 초기화는 하이드레이션 붕괴([[#75]]).
+  기존 `use-in-frame.ts`/`use-is-desktop.ts`와 동일 패턴(SSR 스냅샷 → 하이드레이션 후 확정).
+- ⚠️ **실사용 시각검증 미완** — 강사 계정 + 실제 학부모 새 글 알림이 있어야 팝업·OS 알림을 눈으로 확인 가능.
+
 ### 시간표 — 영어 엑셀 가져오기 개방 + 시트 권한 `sheet_sync` 설정 키 승격 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1184 + 브라우저 실측)
 
 원장 제보 2건("영어는 엑셀 가져오기가 없음" / "관리자인데 시트 내보내기·가져오기가 안 보임")이 같은 뿌리
