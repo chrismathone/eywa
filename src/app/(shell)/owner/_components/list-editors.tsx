@@ -123,6 +123,7 @@ export function SubjectListEditor({
           <span className="w-[110px]">과목명</span>
           <span className="w-[122px]">색</span>
           <span className="w-[160px]">시간표 요일 병합</span>
+          <span className="w-[92px]">QR 접수 노출</span>
           <span className="w-[70px]">내부 ID</span>
         </div>
       ) : null}
@@ -169,6 +170,17 @@ export function SubjectListEditor({
                   </option>
                 ))}
               </select>
+              {/* QR 공개접수 '상담 희망 과목' 노출 — 끄면 학부모 접수 폼에서 숨는다(재원생 전용 반 등).
+                  내부 화면·시간표엔 영향 없음. 체크=노출이 직관적이라 저장값(hiddenFromIntake)과 반전. */}
+              <label className="text-text-dim flex w-[92px] shrink-0 cursor-pointer items-center gap-1.5 text-[11px]">
+                <input
+                  type="checkbox"
+                  className="accent-primary size-3.5"
+                  checked={!s.hiddenFromIntake}
+                  onChange={(e) => set(i, { hiddenFromIntake: !e.target.checked })}
+                />
+                {s.hiddenFromIntake ? "숨김" : "노출"}
+              </label>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
                 className="text-text-faint w-[70px] shrink-0 truncate font-mono text-[11px]"

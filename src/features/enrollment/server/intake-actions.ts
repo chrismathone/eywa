@@ -193,8 +193,11 @@ export async function submitPublicIntake(
   // 필수·화이트리스트 검증 — 비인증 직접 POST가 설정 밖 값/빈 필수필드를 넣지 못하게 막는다.
   // 과목·학년은 운영 enum 단일소스(토큰 테넌트의 학원설정)와 대조. <select>는 클라 가드일 뿐이라 서버에서 재검증.
   const settings = await getTenantSettingsByTenantId(tok.tenant_id as string);
+  // 공개 접수에서 숨긴 과목(hiddenFromIntake)은 서버에서도 거부 — 폼에 없다고 위조 POST가 못 넣는 건 아니다.
   const allowedSubjects = new Set(
-    buildSubjectMaps(settings.operations.subjects).options.map((o) => o.value),
+    buildSubjectMaps(settings.operations.subjects.filter((s) => !s.hiddenFromIntake)).options.map(
+      (o) => o.value,
+    ),
   );
   const allowedGrades = new Set(settings.operations.gradeLevels);
   const has = (arr: readonly string[], v: string) => arr.includes(v);

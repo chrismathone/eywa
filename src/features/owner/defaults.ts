@@ -121,7 +121,15 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     subjects: [
       { key: "math", label: "수학", color: "primary", weekdayGrouping: "mon-thu", testMax: 5 },
       // 수학(심화)는 학원 고유 과목이라 표준키 대신 subject_N 계열로 통일(2026-06-19, highmath→subject_1 마이그레이션).
-      { key: "subject_1", label: "수학(심화)", color: "primary", weekdayGrouping: "mon-thu", testMax: 5 },
+      // hiddenFromIntake: 재원생 대상 반이라 QR 공개접수 '상담 희망 과목'에선 뺀다(2026-07-15 원장 지시).
+      {
+        key: "subject_1",
+        label: "수학(심화)",
+        color: "primary",
+        weekdayGrouping: "mon-thu",
+        testMax: 5,
+        hiddenFromIntake: true,
+      },
       {
         key: "english",
         label: "영어",

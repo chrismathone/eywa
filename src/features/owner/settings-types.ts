@@ -50,6 +50,10 @@ export const subjectSchema = z.object({
   testMax: z.number().int().min(1).max(100).default(5),
   // 과목 전용 평일 교시(미설정/빈 배열 = 폴백: 영어=내장 11교시, 그 외=전역 평일 교시). 주말은 전역 공통.
   weekdayPeriods: z.array(periodTimeSchema).max(20).optional(),
+  // QR 공개접수 폼의 '상담 희망 과목'에서 숨긴다(true = 학부모에게 안 보임). 재원생 대상 반(예: 수학(심화))처럼
+  // 신규 상담으로 받지 않는 과목용. 미설정/false = 노출(기존 동작 유지). 내부 화면·시간표엔 영향 없음.
+  // (.default(false)가 아니라 .optional() — 예외 플래그라 과목마다 적어넣게 만들지 않는다. weekdayPeriods와 동일.)
+  hiddenFromIntake: z.boolean().optional(),
   // 강사뷰(강사별시간표) 내부 가로줄 시각("HH:MM") — 큰 섹션 경계 표시. 미설정 = 영어 기본 6시각.
   teacherViewLines: z.array(z.string().regex(HHMM, "HH:MM 형식")).max(40).optional(),
   // 강사뷰 격자 단위(분). 미설정 = 10.
