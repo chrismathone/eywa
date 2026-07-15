@@ -21,7 +21,6 @@ import { resolveEywaIdByEdutrixId } from "@/features/report-admin/edutrix-match"
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const TENANT = "becaa316-e636-42e9-9d09-08b133e0b094";
 const OVERLAP_DAYS = 7;
 const INSERT_CHUNK = 500;
 const MAX_UPDATES = 300; // 수정 전파 상한(비정상 대량 diff 시 cron 타임아웃 방지 — 잔여는 다음 실행)
@@ -90,9 +89,10 @@ export async function GET(req: Request) {
   }
   const eduUrl = process.env.EDUTRIX_SUPABASE_URL;
   const eduKey = process.env.EDUTRIX_SUPABASE_ANON_KEY;
-  if (!eduUrl || !eduKey) {
+  const TENANT = process.env.EDUTRIX_TENANT_ID;
+  if (!eduUrl || !eduKey || !TENANT) {
     return NextResponse.json(
-      { error: "EDUTRIX_SUPABASE_URL / EDUTRIX_SUPABASE_ANON_KEY 미설정" },
+      { error: "EDUTRIX_SUPABASE_URL / EDUTRIX_SUPABASE_ANON_KEY / EDUTRIX_TENANT_ID 미설정" },
       { status: 500 },
     );
   }

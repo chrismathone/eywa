@@ -9,6 +9,13 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 하드코딩 상수 감사 후속 — 인쇄물 AI 모델명 노출 제거 + edutrix cron tenant env화 + Firebase 버킷 폴백 하드닝 (2026-07-15) — ✅ eslint0/tsc0(내 파일)
+"하드코딩된 상수값" 전수 감사(4축 병렬: 운영 enum·설정-무시·모델명·매직상수)에서 나온 상위 3건 정리. 셋 다 **오늘(단일 테넌트 injaewon)엔 값이 정답이라 라이브 버그가 아니라 미래 멀티테넌트 방어**.
+- **#1 모델명 UI 노출 제거**(`4f868b7`): 등록상담 인쇄물 푸터([(print)/enrollment/[id]/print](<../src/app/(print)/enrollment/[id]/print/page.tsx>):202)가 `MODEL solar-pro3-…`/`claude-…` 모델 id를 그대로 렌더 → 조각 삭제, `GENERATED` 생성시각만 표시(`model_version` DB 저장은 유지). "UI에 model 이름 노출 금지" 정면 위반이었고, 전 코드에서 모델 버전을 렌더하던 **유일 경로**.
+- **#2 edutrix-sync cron tenant env화**: 프로덕션 tenant UUID 하드코딩([api/cron/edutrix-sync/route.ts](../src/app/api/cron/edutrix-sync/route.ts))을 `EDUTRIX_TENANT_ID` **필수 env**로 이관(기존 `EDUTRIX_SUPABASE_*` 500 가드에 합류). admin client·RLS 우회 런타임 경로라 doctrine상 하드코딩 금지 대상(src/ 런타임 유일 소비처). ⚠️ Vercel prod env 선(先)추가 완료(원장) → 무중단. 스크립트/테스트의 동일 UUID는 유지(일회성 마이그·은퇴).
+- **#3 Firebase 버킷 silent 폴백 하드닝**([lib/storage/gcs-client.ts](../src/lib/storage/gcs-client.ts)): `FIREBASE_STORAGE_BUCKET || DEFAULT`를 **유지**하되(단일 테넌트엔 기본값이 정답 — 안전한 기본값 없던 `app-url.ts`와 상황 다름) 상수 리네임 `INJAEWON_PROD_FIREBASE_BUCKET` + 폴백 시 **1회 warn 로그**(미래 멀티테넌트 오적재 감지) + `.trim()`(공백-only env 엣지 견고화). 반환값 동작 불변 → 레거시 오디오("전사부터 다시") 그대로.
+- 나머지 감사 결과 = 대체로 clean: 운영 enum/설정 하드코딩은 문서화된 폴백·별개 축(`DEFAULT_SUBJECT_OPTIONS`·`GRADES`는 서버가 항상 설정 prop 전달하는 잠재 폴백), AI 단일 진입점(`generateJSON`)·모델 레지스트리 격리·커밋 시크릿 = 무이슈.
+
 ### 수업보고서 과거 날짜 발송 — 강사 원스크린 + 관리자 직접·대량 발송 날짜 지정 (2026-07-14) — ✅ tsc0/lint0/test1148/적대검증
 원장 요청: "지금 당일것만 발송 가능하고, 이전 날짜로 가는 곳이 없다." 강사·관리자 양쪽에 **보고서 날짜 지정**을 추가 — 요구 핵심은 **선택한 날짜 = 보고서 카드 안의 날짜 = ClassNote 게시 제목 날짜 3개가 일치**. 핵심 통찰: `lesson_reports.report_date`가 **단일 소스** — 학부모 카드 렌더([(share)/r/[token]](<../src/app/(share)/r/[token]/page.tsx>))와 워커 게시 제목([classnote-core.mjs](../scripts/_classnote/classnote-core.mjs) `reportDate:${r.report_date}T12:00:00`)이 **둘 다 report_date에서 파생** → 선택 날짜를 report_date에만 흘리면 3개 자동 일치, **워커 무변경**.
 - **순수 헬퍼** [date-kst.ts](../src/lib/date-kst.ts): `resolveReportDate(raw,today)`(빈값·미래→오늘, 과거 그대로) · `weekdayIndexOf` · `addDays` · `formatKoreanDate`(Vitest 7).

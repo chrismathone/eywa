@@ -4,9 +4,13 @@ import { Storage, type File } from "@google-cloud/storage";
 // ijw Firebase(GCS) Storage 클라이언트 — read/write/delete 공유 싱글톤.
 // (legacy-audio.ts에서 추출 — 서비스계정 키 파싱은 google-sheets.ts와 동일 포맷: JSON 또는 base64.)
 
-const DEFAULT_FIREBASE_BUCKET = "ijw-calander.firebasestorage.app";
+// injaewon(단일 테넌트) 프로덕션 Firebase(GCS) 버킷. 현재 유일 테넌트엔 이 값이 정답이라 기본값으로 유지
+// (app-url.ts와 달리 안전한 기본값 존재). ⚠️ 멀티테넌트 확장 시 이 폴백이 타 학원 미디어를 injaewon 버킷에
+// 오적재할 수 있으므로, 그 시점엔 FIREBASE_STORAGE_BUCKET을 테넌트별 필수화(폴백 제거)할 것.
+const INJAEWON_PROD_FIREBASE_BUCKET = "ijw-calander.firebasestorage.app";
 
 let gcs: Storage | null = null;
+let warnedBucketFallback = false;
 
 export function getGcsClient(): Storage {
   if (gcs) return gcs;
@@ -31,7 +35,16 @@ export function getGcsClient(): Storage {
 }
 
 export function getGcsBucketName(): string {
-  return process.env.FIREBASE_STORAGE_BUCKET || DEFAULT_FIREBASE_BUCKET;
+  const explicit = process.env.FIREBASE_STORAGE_BUCKET?.trim();
+  if (explicit) return explicit;
+  if (!warnedBucketFallback) {
+    warnedBucketFallback = true;
+    console.warn(
+      `[gcs] FIREBASE_STORAGE_BUCKET 미설정 — injaewon 기본 버킷(${INJAEWON_PROD_FIREBASE_BUCKET})으로 폴백. ` +
+        `멀티테넌트 배포라면 env로 버킷을 반드시 지정(교차 테넌트 오적재 위험).`,
+    );
+  }
+  return INJAEWON_PROD_FIREBASE_BUCKET;
 }
 
 /** 버킷 내 객체 핸들(read/write/delete/metadata 공용). */
