@@ -199,7 +199,7 @@ export default async function EnrollmentPrintPage({
           </div>
         </div>
         <p className="shrink-0 text-right font-mono">
-          MODEL {consult.aiAnalysis.modelVersion} · GENERATED{" "}
+          GENERATED{" "}
           {new Date(consult.aiAnalysis.generatedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
         </p>
       </footer>
