@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import postgres from "postgres";
-import { launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
+import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { pollParentPostsOnce } from "./classnote-feed-core.mjs";
@@ -63,6 +63,8 @@ async function getBrowser() {
 async function dropBrowser() {
   const b = browser;
   browser = null;
+  // 코어가 폴 사이에 유지하는 로그인 세션도 함께 버린다 — 안 버리면 죽은 브라우저의 page를 계속 들고 있는다.
+  await closeClassnoteAdminSession().catch(() => {});
   if (b) await b.close().catch(() => {});
 }
 

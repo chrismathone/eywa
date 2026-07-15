@@ -150,7 +150,12 @@ export async function fetchAllDrf(page, path) {
 /** 반(보드) 전건 — {id, name, children(배정 승인 원아 수)}. */
 export async function fetchBoards(page, centerId) {
   const rows = await fetchAllDrf(page, `/api/v1/centers/${centerId}/classes`);
-  return rows.map((r) => ({ id: r.id, name: (r.name || "").trim(), children: r.approved_children ?? 0 }));
+  // ⚠️ `children`은 **모르면 null**로 남긴다(0으로 뭉개지 말 것). 0 = "학부모 미연결"이라는 **사실**이고
+  // null = "인원을 모름"이라 의미가 정반대다. 예전엔 `?? 0`이라, ClassNote가 필드명을 바꾸면 전 보드가
+  // "0가족"으로 보여 공유 보드 게이트(board-safety)가 **무경고로 전부 통과**시켰다(fail-open).
+  // 소비처: board-safety=null이면 차단(fail-closed) · scan=인원 미확인으로 보고 ·
+  // provision/assign의 `children >= 1`은 null이든 0이든 false라 동작 불변.
+  return rows.map((r) => ({ id: r.id, name: (r.name || "").trim(), children: r.approved_children ?? null }));
 }
 
 /** 가입(승인) 원아 전건 — {id, name, birth}. 영문닉(한글) 형식 존재("Jay(이재희)") — 매칭은 childKeys로. */

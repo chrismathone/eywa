@@ -16,6 +16,44 @@ export const STALE_MIN = 10;
 // /r이 이 secret 헤더를 보면 조회로그(share_link_views)를 안 남김 — 워커 스크린샷을 "학부모 열람"으로 오집계 방지(P2a).
 const INTERNAL_SECRET = process.env.CLASSNOTE_INTERNAL_SECRET;
 
+const PREFLIGHT_BACKOFF_MAX_MS = 10 * 60_000; // 준비 실패 시 최대 백오프(10분) — 무한 로그인 루프 차단
+
+/**
+ * 프리플라이트용 **로그인 세션을 폴 사이에 유지**한다.
+ *
+ * ⚠️ 원래는 폴마다 `browser.newPage()`(= 새 컨텍스트 = 쿠키 없음) + `loginClassnote`이라 **BATCH(2)건마다 로그인 1회**였다.
+ * 이 경로는 게이트 도입 전엔 PC 로그인이 **0회**였다(Cloud Run이 payload 자격증명으로 서버측 로그인) → 전부 신규 부하.
+ * 실측 발송량이 하루 63~272건이라 85건이면 로그인 ~43회, 272건 버스트면 ~136회를 한 IP·한 계정으로 던진다.
+ * 반복 로그인은 **~50%가 실패**한다(2026-07-15 실측 봇 스로틀) → 실패가 재큐를 부르고 재큐가 또 로그인을 불러 자기강화.
+ * → 로그인된 페이지를 살려두고 폴마다 **fetch만** 한다(피드 폴러 classnote-feed-core.mjs와 같은 패턴).
+ * 세션이 죽으면(페이지 닫힘·브라우저 교체·조회 throw) 다음 시도에서 1회 재로그인.
+ */
+let adminCache = null; // { browser, page, centerId }
+let preflightFails = 0;
+let preflightBackoffUntil = 0;
+
+async function getAdminSession(browser) {
+  if (adminCache && adminCache.browser === browser && !adminCache.page.isClosed()) return adminCache;
+  await dropAdminSession();
+  const page = await browser.newPage(); // ⚠️ 스크린샷용 context(아래 newContext)와 분리 — 그건 매 건 닫힘
+  try {
+    await loginClassnote(page);
+    const centerId = await fetchCenterId(page);
+    adminCache = { browser, page, centerId };
+    return adminCache;
+  } catch (e) {
+    // cached에 못 넣은 page는 여기서 안 닫으면 영영 안 닫힌다 → 실패가 반복되면 컨텍스트가 쌓여 데몬 OOM.
+    await page.close().catch(() => {});
+    throw e;
+  }
+}
+
+async function dropAdminSession() {
+  const c = adminCache;
+  adminCache = null;
+  if (c) await c.page.close().catch(() => {});
+}
+
 /** too_old 최소날짜 = 오늘(로컬) 기준 전 달 1일. 워커도 belt-and-suspenders 가드. */
 export function minDate() {
   const d = new Date();
@@ -102,6 +140,13 @@ export async function processQueueOnce(sql, browser, opts) {
     return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
   }
 
+  // 0-b) 프리플라이트 백오프 — 준비가 연속 실패 중이면 **클레임조차 하지 않는다**.
+  // 클레임 후 실패하면 claim→requeue가 매 폴 반복되며 로그인 폭풍을 만든다(자기강화 스로틀). 큐는 그대로 보존.
+  if (post && Date.now() < preflightBackoffUntil) {
+    log(`[worker] 프리플라이트 백오프 중(${Math.round((preflightBackoffUntil - Date.now()) / 1000)}초 남음) — 이 주기 건너뜀`);
+    return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
+  }
+
   // 1) stale 복구: processing 10분 초과 → queued (tenant 격리)
   const stale = await sql`update lesson_reports set classnote_status='queued'
     where tenant_id = ${tenant} and classnote_status='processing'
@@ -135,16 +180,35 @@ export async function processQueueOnce(sql, browser, opts) {
   let allowlist = [];
   if (post) {
     try {
-      adminPage = await browser.newPage(); // ⚠️ 스크린샷용 context(아래 newContext)와 분리 — 그건 매 건 닫힘
-      await loginClassnote(adminPage);
-      centerId = await fetchCenterId(adminPage);
-      boards = await fetchBoards(adminPage, centerId);
-      allowlist = await getClassnoteBoardAllowlist(sql, tenant);
+      const admin = await getAdminSession(browser); // 세션 유지 — 폴마다 로그인하지 않는다(아래 주석)
+      adminPage = admin.page;
+      centerId = admin.centerId;
+      // 독립 조회 — 직렬 대기 금지(B4).
+      [boards, allowlist] = await Promise.all([
+        fetchBoards(adminPage, centerId),
+        getClassnoteBoardAllowlist(sql, tenant),
+      ]);
+      preflightFails = 0;
+      preflightBackoffUntil = 0;
     } catch (e) {
-      await adminPage?.close().catch(() => {});
+      await dropAdminSession(); // 세션이 상했을 수 있다 → 다음 시도는 새 로그인
+      adminPage = null;
       const ids = claimed.map((c) => c.id);
-      await sql`update lesson_reports set classnote_status='queued' where id in ${sql(ids)}`;
-      log(`[worker] 프리플라이트 준비 실패(${e instanceof Error ? e.message : e}) — 안전상 게시 보류, ${ids.length}건 재큐잉`);
+      const msg = e instanceof Error ? e.message : String(e);
+      preflightFails++;
+      // ⚠️ 지수 백오프 — 없으면 **조용한 무한 로그인 루프**가 된다: 비번 오류·CAPTCHA·스로틀이면
+      // 매 폴(15초) claim → 로그인 실패 → 재큐를 영원히 반복하고, 화면엔 "대기 N · 실패 0 · 워커 온라인"으로
+      // 완전 정상으로 보인다(하트비트는 이 함수 밖에서 찍힌다). 게다가 실패 로그인을 하루 수천 번 던져
+      // 스로틀을 자기강화한다(실측: 반복 로그인 ~50% 실패).
+      preflightBackoffUntil = Date.now() + Math.min(2 ** Math.min(preflightFails, 6) * 15_000, PREFLIGHT_BACKOFF_MAX_MS);
+      // 사유를 행에 남긴다 — 재큐만 하면 원장 화면에 아무 흔적이 없어 "왜 안 나가지"를 알 길이 없다.
+      await sql`update lesson_reports set classnote_status='queued',
+        classnote_error=${`발송 준비 실패(${preflightFails}회) — ClassNote 확인 불가라 안전상 보류: ${msg.slice(0, 120)}`}
+        where id in ${sql(ids)}`;
+      log(
+        `[worker] 프리플라이트 준비 실패 ${preflightFails}회(${msg}) — 안전상 게시 보류, ${ids.length}건 재큐잉 · ` +
+          `${Math.round((preflightBackoffUntil - Date.now()) / 1000)}초 백오프`,
+      );
       return { ...summary, requeued: ids.length };
     }
   }
@@ -276,11 +340,19 @@ export async function processQueueOnce(sql, browser, opts) {
       log(`  · ${studentName}: 처리 오류 → ${msg}`);
     }
   }
-  } finally {
-    // 프리플라이트용 로그인 페이지는 이 주기에서만 산다(데몬은 browser를 폴 간 재사용하므로 반드시 닫아 누수 방지).
-    await adminPage?.close().catch(() => {});
+  } catch (e) {
+    // 처리 중 예기치 못한 오류 → 세션이 상했을 수 있으니 버린다(다음 폴에서 새 로그인). 누수 방지도 겸함.
+    await dropAdminSession();
+    throw e;
   }
+  // ⚠️ 여기서 adminPage를 닫지 않는다 — **폴 사이에 세션을 유지**하는 게 이 코어의 비용 설계다(getAdminSession 주석).
+  // one-shot(process-classnote-queue.mjs)은 프로세스가 끝나며 browser가 닫히므로 함께 정리된다.
   return summary;
+}
+
+/** 세션 정리 — 데몬이 브라우저를 버릴 때(오류 복구) 함께 호출해 누수를 막는다. */
+export async function closeClassnoteAdminSession() {
+  await dropAdminSession();
 }
 
 /** Playwright chromium 실행 헬퍼(코어와 데몬 공용 — 옵션 통일). */

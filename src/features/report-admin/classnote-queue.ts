@@ -83,3 +83,14 @@ export function needsAttention(status: string | null, processingAtIso: string | 
     isStuck(status, processingAtIso, nowMs)
   );
 }
+
+/**
+ * **사람이 조치해야만 풀리는** 상태 — 큐 조회에서 **날짜 창을 적용하지 않는다**.
+ *
+ * ⚠️ 다른 상태는 워커가 스스로 끝을 본다(failed = 3회 자동재시도 후 확정, queued → 곧 처리). 그런데 이 둘은
+ * 밖에서 사람이 뭔가를 해야 풀린다: `blocked_shared` = 원장이 클래스노트 운영관리에서 연락처를 대조하고 발송 예외에
+ * 등재 / `name_conflict` = 동명이인 `classnote_name` 지정. 대조에 며칠 걸릴 수 있는데(주말 끼면 더),
+ * 큐 카드가 3일 창이라 그 사이 **행이 목록에서 사라지고 재발송 버튼도 함께 사라졌다**(재발송 UI는 이 카드가 유일).
+ * 조치가 가장 오래 걸리는 상태에 가장 짧은 창이 걸려 있던 셈 — 해소를 못 하는 막다른 길이었다.
+ */
+export const HUMAN_RESOLVED_STATUSES = ["blocked_shared", "name_conflict"] as const;

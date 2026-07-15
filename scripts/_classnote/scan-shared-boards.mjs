@@ -39,8 +39,20 @@ try {
   await loginClassnote(page);
   const centerId = await fetchCenterId(page);
   const boards = await fetchBoards(page, centerId);
-  const shared = boards
-    .filter((b) => STUDENT_BOARD.test(b.name) && (b.children ?? 0) > 1)
+  // ⚠️ 인원 미확인(children=null)도 **반드시 포함**한다. 예전엔 `(b.children ?? 0) > 1`이라 모름이 0으로
+  // 뭉개져 스캔에서 빠졌는데, 하필 게이트(board-safety)도 같은 식을 써서 **둘이 동시에 실명**했다
+  // (게이트는 전부 통과 + 스캔은 "공유 보드 0개" = 모든 지표 초록). 상관 실패라 교차검증이 안 된다.
+  const studentBoards = boards.filter((b) => STUDENT_BOARD.test(b.name));
+  const unknown = studentBoards.filter((b) => b.children == null);
+  if (unknown.length)
+    console.warn(
+      `⚠️ 연결 가족 수를 못 읽은 보드 ${unknown.length}개 — ClassNote API 변경 의심(발송 게이트도 이 보드들을 보류합니다). 예: ${unknown
+        .slice(0, 3)
+        .map((b) => b.name)
+        .join(", ")}`,
+    );
+  const shared = studentBoards
+    .filter((b) => b.children != null && b.children > 1)
     .sort((a, b) => b.children - a.children);
 
   const rows = [];

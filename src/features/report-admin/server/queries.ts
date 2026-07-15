@@ -5,7 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { needsAttention, summarizeQueue, type QueueSummary } from "../classnote-queue";
+import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
 import { computeWritingRates, type TeacherRate, type TodayTarget, type DailyTarget } from "../writing-rate";
 
 // 날짜(YYYY-MM-DD) → 요일 키("mon"~"sun") — 주간 스케줄 dayOfWeek와 매칭(결정적 UTC).
@@ -85,14 +85,30 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
   const since = daysBefore(today, days);
   const nowMs = Date.now();
 
-  const { data: rowsRaw } = await supabase
-    .from("lesson_reports")
-    .select("id, student_id, subject, report_date, classnote_status, classnote_error, classnote_processing_at, share_token")
-    .gte("report_date", since)
-    .not("classnote_status", "is", null)
-    .order("report_date", { ascending: false })
-    .limit(1000);
-  const rows = rowsRaw ?? [];
+  const COLS =
+    "id, student_id, subject, report_date, classnote_status, classnote_error, classnote_processing_at, share_token";
+  // 창 안 전체 + **창 무관 '사람이 풀어야 하는' 잔여분**(blocked_shared·name_conflict)을 함께 본다.
+  // 후자는 원장이 조치할 때까지 며칠이고 남는데, 창에 걸려 사라지면 재발송 UI(이 카드가 유일)도 같이 사라져
+  // 해소 불가능한 막다른 길이 된다(HUMAN_RESOLVED_STATUSES 주석 참조). 독립 조회라 병렬(B4).
+  const [{ data: rowsRaw }, { data: stuckRaw }] = await Promise.all([
+    supabase
+      .from("lesson_reports")
+      .select(COLS)
+      .gte("report_date", since)
+      .not("classnote_status", "is", null)
+      .order("report_date", { ascending: false })
+      .limit(1000),
+    supabase
+      .from("lesson_reports")
+      .select(COLS)
+      .in("classnote_status", [...HUMAN_RESOLVED_STATUSES])
+      .order("report_date", { ascending: false })
+      .limit(200), // 사람 조치 대기분이 200을 넘을 일은 없다(넘으면 운영이 이미 무너진 것)
+  ]);
+  // 창 안/밖이 겹치므로 id로 중복 제거 — 안 그러면 집계가 두 번 세어진다.
+  const byId = new Map<string, (typeof rowsRaw extends null ? never : NonNullable<typeof rowsRaw>)[number]>();
+  for (const r of [...(rowsRaw ?? []), ...(stuckRaw ?? [])]) byId.set(r.id as string, r);
+  const rows = [...byId.values()];
 
   const summary = summarizeQueue(
     rows.map((r) => ({ status: r.classnote_status as string | null, processingAt: r.classnote_processing_at as string | null })),
