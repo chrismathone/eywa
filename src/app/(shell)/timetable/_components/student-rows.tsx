@@ -24,6 +24,8 @@ export type StudentQuick = {
   endDate?: string | null;
   isNew?: boolean;
   isTransferredIn?: boolean;
+  /** 수강 시작일(YYYY-MM-DD) — hover에서 신입 시작일·전입일 표시용. 런타임엔 StudentLine 전체가 도착. */
+  enrollmentDate?: string | null;
   englishName?: string | null;
   attendanceDays?: string[];
   latestTextbook?: { name: string; date: string | null } | null;
@@ -201,6 +203,7 @@ export function StudentRow({
           status={student.status}
           isNew={student.isNew}
           isTransferredIn={student.isTransferredIn}
+          enrollmentDate={student.enrollmentDate}
           attendanceDays={student.attendanceDays}
           endDate={student.endDate}
           textbook={student.latestTextbook}

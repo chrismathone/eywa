@@ -21,8 +21,10 @@ export type GridStudent = {
   isNew?: boolean;
   isTransferredIn?: boolean;
   englishName?: string | null;
-  // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도.
+  // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도·수강 시작일.
   attendanceDays?: string[];
+  /** 수강 시작일(YYYY-MM-DD) — hover에서 신입 시작일·전입일 표시용. */
+  enrollmentDate?: string | null;
   endDate?: string | null;
   latestTextbook?: { name: string; date: string | null } | null;
   latestReport?: {

@@ -316,6 +316,7 @@ function RosterRow({ s }: { s: GridStudent }) {
           status={s.status}
           isNew={s.isNew}
           isTransferredIn={s.isTransferredIn}
+          enrollmentDate={s.enrollmentDate}
           attendanceDays={s.attendanceDays}
           endDate={s.endDate}
           textbook={s.latestTextbook}

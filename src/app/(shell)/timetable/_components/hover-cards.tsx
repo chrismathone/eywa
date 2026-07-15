@@ -139,6 +139,7 @@ export function StudentInfoCard({
   status,
   isNew,
   isTransferredIn,
+  enrollmentDate,
   attendanceDays,
   endDate,
   textbook,
@@ -153,6 +154,8 @@ export function StudentInfoCard({
   status?: "active" | "hold" | "withdrawn";
   isNew?: boolean;
   isTransferredIn?: boolean;
+  /** 수강 시작일(YYYY-MM-DD) — 신입=신입 시작일, 전입=전입일로 라벨 옆에 표시(라벨 없으면 미표시). */
+  enrollmentDate?: string | null;
   attendanceDays?: string[];
   endDate?: string | null;
   textbook?: { name: string; date: string | null } | null;
@@ -195,14 +198,22 @@ export function StudentInfoCard({
       </div>
       {hasDetail ? (
         <div className="border-line space-y-1 border-t pt-1.5">
-          {/* 신입·전입 상호배타 — 반이동 학생은 전입만(전입 우선). 데이터 계층에서 이미 배타지만 표시도 방어적으로. */}
+          {/* 신입·전입 상호배타 — 반이동 학생은 전입만(전입 우선). 데이터 계층에서 이미 배타지만 표시도 방어적으로.
+              날짜(enrollmentDate=수강 시작일)를 라벨 옆에 표기: 신입=신입 시작일, 전입=전입일. 라벨과 같은 블록이라
+              신입/전입 창(30일)이 지나 라벨이 사라지면 날짜도 함께 사라진다. */}
           {isTransferredIn ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Pill color="primary">전입</Pill>
+              {enrollmentDate ? (
+                <span className="text-text-dim num font-mono text-[10px]">{enrollmentDate}</span>
+              ) : null}
             </div>
           ) : isNew ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Pill color="danger">신입</Pill>
+              {enrollmentDate ? (
+                <span className="text-text-dim num font-mono text-[10px]">{enrollmentDate}</span>
+              ) : null}
             </div>
           ) : null}
           {partial ? <Row label="등원" value={partial} /> : null}
