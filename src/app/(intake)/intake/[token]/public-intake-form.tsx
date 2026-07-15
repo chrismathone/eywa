@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
 import {
   submitPublicIntake,
   type PublicIntakeState,
@@ -14,13 +14,15 @@ import {
 } from "@/features/enrollment/form-config";
 import type { ShuttleSetting } from "@/features/owner/settings-types";
 import { TurnstileWidget } from "./turnstile-widget";
+import { ChecklistStep } from "./checklist-step";
+import { Field, Section, inputCls as input, textareaCls } from "./intake-ui";
 
 // ijw 입학상담카드 충실 이식 — 컬러 구획(학생=gold·학부모=amber·셔틀=danger·동의서=ink) + 전체 필드/섹션.
 // 셔틀(요금·노선)·동의서 문구는 학원설정에서 주입(operations.shuttle / notifications.privacyTerms·serviceTerms).
-
-const input =
-  "border-border bg-card text-foreground placeholder:text-text-faint h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30";
-const label = "mb-1.5 block text-sm font-bold text-foreground";
+//
+// 2단계 구성(2026-07-15): 1단계=접수 정보(위 섹션들), 2단계=신규 상담 사전 체크리스트.
+// ⚠️ 스텝 전환은 **언마운트가 아니라 hidden** — 1단계 입력이 DOM에서 빠지면 제출 FormData에서 통째로 사라진다.
+// 필수 검증은 1단계에서 `reportValidity()`로 먼저 통과시키므로, 숨겨진 required가 제출을 막지 않는다.
 
 const SCHOOL_TYPES = [
   { type: "초등학교", prefix: "초" },
@@ -28,12 +30,12 @@ const SCHOOL_TYPES = [
   { type: "고등학교", prefix: "고" },
 ] as const;
 
-function SubmitBtn() {
+function SubmitBtn({ disabled }: { disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       className="bg-danger inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-md text-base font-bold text-white transition-opacity disabled:opacity-50"
     >
       {pending ? (
@@ -73,6 +75,11 @@ export function PublicIntakeForm({
 }) {
   const [state, formAction] = useActionState<PublicIntakeState, FormData>(submitPublicIntake, undefined);
 
+  const formRef = useRef<HTMLFormElement>(null);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const [goalCount, setGoalCount] = useState(0);
+
   // 버튼/다중선택은 상태로 보유 → hidden input으로 제출.
   const [subjects, setSubjects] = useState<string[]>([]);
   const [siblings, setSiblings] = useState("");
@@ -91,6 +98,30 @@ export function PublicIntakeForm({
   const toggleSubject = (v: string) =>
     setSubjects((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
 
+  // 1단계 → 2단계: 브라우저 기본 검증(required)으로 먼저 걸러내고, 버튼 그룹(HTML 검증 불가)은 직접 확인.
+  function goStep2() {
+    if (!formRef.current?.reportValidity()) return;
+    if (subjects.length === 0) {
+      setStepError("상담 희망 과목을 1개 이상 선택해주세요");
+      return;
+    }
+    setStepError(null);
+    setStep(2);
+    window.scrollTo({ top: 0 });
+  }
+  function goStep1() {
+    setStepError(null);
+    setStep(1);
+    window.scrollTo({ top: 0 });
+  }
+
+  // 2단계에서 고른 과목 = 5·6번 문항 노출 판정 재료(라벨까지 필요).
+  const selectedSubjectMeta = useMemo(
+    () =>
+      subjects.map((v) => ({ key: v, label: subjectOptions.find((o) => o.value === v)?.label ?? v })),
+    [subjects, subjectOptions],
+  );
+
   if (state?.ok) {
     return (
       <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
@@ -104,7 +135,7 @@ export function PublicIntakeForm({
   }
 
   return (
-    <form action={formAction} className="mx-auto max-w-[460px] pb-12">
+    <form ref={formRef} action={formAction} className="mx-auto max-w-[460px] pb-12">
       <input type="hidden" name="token" value={token} />
       {/* time-trap — 서버 렌더 시각. 제출 시 경과시간으로 봇(즉시 제출) 차단. */}
       <input type="hidden" name="renderedAt" value={serverNow} />
@@ -126,10 +157,30 @@ export function PublicIntakeForm({
       {/* 헤더 (네이비/ink) — 섹션 카드와 동일하게 mx-3 인셋(좌우 폭 일치). */}
       <header className="bg-foreground mx-3 mt-3 px-6 pt-8 pb-6 text-center">
         <p className="text-gold text-sm font-semibold">{academyName}</p>
-        <h1 className="text-background mt-1 text-[26px] font-extrabold">입학상담카드</h1>
-        <p className="text-background/60 mt-1.5 text-sm">상담 전 아래 정보를 입력해 주세요</p>
+        <h1 className="text-background mt-1 text-[26px] font-extrabold">
+          {step === 1 ? "입학상담카드" : "사전 체크리스트"}
+        </h1>
+        <p className="text-background/60 mt-1.5 text-sm">
+          {step === 1
+            ? "상담 전 아래 정보를 입력해 주세요"
+            : "학생에게 맞는 수업을 제안하기 위한 설문입니다"}
+        </p>
+        {/* 진행 표시 — 2단계뿐이라 점 2개로 충분(막대 게이지는 과함). */}
+        <div className="mt-4 flex items-center justify-center gap-2">
+          {[1, 2].map((n) => (
+            <span
+              key={n}
+              className={`h-1.5 rounded-full transition-all ${
+                step === n ? "bg-gold w-8" : "bg-background/30 w-4"
+              }`}
+            />
+          ))}
+          <span className="text-background/50 num ml-1.5 text-xs">{step}/2</span>
+        </div>
       </header>
 
+      {/* ⚠️ 1단계는 hidden으로만 감춘다(언마운트 금지 — FormData에서 사라짐). */}
+      <div className={step === 1 ? undefined : "hidden"}>
       {/* 학생 정보 (gold) */}
       <Section title="학생 정보" tone="gold">
         <Field label="학생 이름" required>
@@ -200,7 +251,8 @@ export function PublicIntakeForm({
         <Field label="학교 이름 (예: 경명여고, 칠성고)" required>
           <input name="prospectSchool" required placeholder="학교 이름 입력" className={input} />
         </Field>
-        <Field label="상담 희망 과목">
+        {/* 과목은 사전 체크리스트의 과목별 문항(수학·영어) 노출을 가르므로 필수 — 서버도 재검증. */}
+        <Field label="상담 희망 과목" required>
           <div className="flex flex-wrap gap-2">
             {subjectOptions.map((s) => {
               const on = subjects.includes(s.value);
@@ -278,7 +330,7 @@ export function PublicIntakeForm({
             name="parentRequest"
             rows={4}
             placeholder="상담 시 문의하실 내용이나 학생에 대해 미리 알려주실 점을 자유롭게 적어주세요."
-            className="border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            className={textareaCls}
           />
         </Field>
       </Section>
@@ -358,61 +410,47 @@ export function PublicIntakeForm({
           </div>
         ) : null}
       </Section>
+      </div>
+
+      {/* 2단계 — 사전 체크리스트. 1단계에서 넘어온 뒤에만 마운트(문항이 많아 초기 렌더 비용을 아낀다). */}
+      {step === 2 ? (
+        <ChecklistStep selectedSubjects={selectedSubjectMeta} onGoalsCountChange={setGoalCount} />
+      ) : null}
 
       {turnstileSiteKey ? <TurnstileWidget siteKey={turnstileSiteKey} /> : null}
 
       <div className="mx-3 mt-6">
+        {stepError ? <p className="text-danger mb-3 text-sm">{stepError}</p> : null}
         {state?.error ? <p className="text-danger mb-3 text-sm">{state.error}</p> : null}
-        <SubmitBtn />
+        {step === 1 ? (
+          <button
+            type="button"
+            onClick={goStep2}
+            className="bg-foreground text-background inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-md text-base font-bold"
+          >
+            다음 (사전 체크리스트) <ArrowRight className="size-4" />
+          </button>
+        ) : (
+          <div className="space-y-2.5">
+            <SubmitBtn disabled={goalCount === 0} />
+            {goalCount === 0 ? (
+              <p className="text-text-faint text-center text-xs">
+                &lsquo;상담을 통해 먼저 결정하고 싶은 것&rsquo;을 1개 이상 선택하면 제출할 수 있어요.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={goStep1}
+              className="border-border text-text-dim inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-md border text-sm font-medium"
+            >
+              <ArrowLeft className="size-4" /> 이전 (접수 정보)
+            </button>
+          </div>
+        )}
         <p className="text-text-faint mt-3 text-center text-xs">제출하신 정보는 상담 목적으로만 사용됩니다.</p>
       </div>
     </form>
   );
 }
 
-const TONE: Record<string, { bar: string; barText: string; border: string }> = {
-  gold: { bar: "bg-gold", barText: "text-foreground", border: "border-t-gold" },
-  amber: { bar: "bg-amber", barText: "text-white", border: "border-t-amber" },
-  danger: { bar: "bg-danger", barText: "text-white", border: "border-t-danger" },
-  ink: { bar: "bg-foreground", barText: "text-background", border: "border-t-foreground" },
-};
-
-function Section({
-  title,
-  tone,
-  children,
-}: {
-  title: string;
-  tone: keyof typeof TONE;
-  children: React.ReactNode;
-}) {
-  const t = TONE[tone]!;
-  return (
-    <>
-      <div className={`mx-3 mt-5 px-5 py-3 ${t.bar}`}>
-        <span className={`text-sm font-bold ${t.barText}`}>{title}</span>
-      </div>
-      <div className={`bg-card mx-3 space-y-4 border-t-[3px] px-5 py-5 shadow-sm ${t.border}`}>{children}</div>
-    </>
-  );
-}
-
-function Field({
-  label: lbl,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <span className={label}>
-        {lbl}
-        {required ? <span className="text-danger ml-0.5">*</span> : null}
-      </span>
-      {children}
-    </div>
-  );
-}
+// Section·Field·입력 클래스는 ./intake-ui 로 이동(체크리스트 스텝과 공유).

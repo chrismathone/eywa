@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import type { ExtractedConsultationForm } from "../form-fill";
+import type { IntakeChecklist } from "../intake-checklist";
 
 export type LearningHistory = {
   prevAcademy?: string;
@@ -266,6 +267,8 @@ export type FullConsultationFields = {
   privacyAgreement: boolean;
   installmentAgreement: boolean;
   subjectDetails: Record<string, Record<string, string>> | null;
+  /** 공개 QR 접수 2단계 사전 체크리스트(0109a). null = 미작성(직원 수기 등록 등). */
+  intakeChecklist: IntakeChecklist | null;
   // 완전 이식(0064a)
   counselor: string | null;
   receivedDate: string | null;
@@ -323,7 +326,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
        subject, career_goal, siblings, safety_notes, registration_status,
        payment_amount, payment_date, registrar, follow_up_date, follow_up_content,
        non_registration_reason, shuttle_bus_request, privacy_agreement,
-       installment_agreement, subject_details,
+       installment_agreement, subject_details, intake_checklist,
        counselor, received_date, student_type, siblings_details, consultation_date,
        consultant:consultant_id ( display_name )`,
     )
@@ -504,6 +507,7 @@ function mapFullFields(c: Record<string, unknown>): FullConsultationFields {
     privacyAgreement: !!c.privacy_agreement,
     installmentAgreement: !!c.installment_agreement,
     subjectDetails: (c.subject_details as Record<string, Record<string, string>> | null) ?? null,
+    intakeChecklist: (c.intake_checklist as IntakeChecklist | null) ?? null,
     counselor: s(c.counselor),
     receivedDate: s(c.received_date),
     studentType: s(c.student_type),

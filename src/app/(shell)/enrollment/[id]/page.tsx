@@ -28,6 +28,7 @@ import { ConsultationContentActions } from "./consultation-content-actions";
 import { ConsultationStatusWatcher } from "./status-watcher";
 import { ConvertToStudentDialog } from "./_components/convert-dialog";
 import { ConsultationManageButtons, ConsultationDeleteButton } from "./_components/consultation-manage";
+import { ChecklistView } from "./_components/checklist-view";
 
 export const metadata = { title: "신입생 상담 상세 — eywa" };
 
@@ -341,6 +342,13 @@ export default async function EnrollmentDetailPage({
 
         {/* 6. 과목별 점수 */}
         <SubjectScoresCard details={f.subjectDetails} />
+
+        {/* 7. 사전 체크리스트 — QR 공개접수 2단계 응답(0109a). 수기 등록 건은 없으니 카드 자체를 숨긴다. */}
+        {f.intakeChecklist ? (
+          <SectionCard title="사전 체크리스트">
+            <ChecklistView checklist={f.intakeChecklist} />
+          </SectionCard>
+        ) : null}
       </div>
 
       {/* ── AI 분석 ── */}

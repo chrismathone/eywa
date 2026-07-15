@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { parseIntakeChecklist } from "@/features/enrollment/intake-checklist-parse";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import {
   GENDER_OPTIONS,
@@ -221,6 +222,14 @@ export async function submitPublicIntake(
   const siblings = clip(formData.get("siblings"), 40) || null;
   const subjects = formData.getAll("subjects").map((s) => String(s)).filter(Boolean);
   const subject = subjects.find((s) => allowedSubjects.has(s)) ?? null;
+  // 과목은 사전 체크리스트의 과목별 문항 노출을 가르므로 필수(폼 가드와 이중 방어).
+  if (!subject) return { error: "상담 희망 과목을 선택해주세요" };
+
+  // 사전 체크리스트(2단계) — 화이트리스트·최대개수·범위를 순수함수가 재검증. 미작성이면 null.
+  const checklist = parseIntakeChecklist(formData);
+  if (!checklist || checklist.goals.length === 0) {
+    return { error: "상담을 통해 먼저 결정하고 싶은 것을 1개 이상 선택해주세요" };
+  }
 
   const { error: insErr } = await admin.from("enrollment_consultations").insert({
     tenant_id: tok.tenant_id,
@@ -238,6 +247,7 @@ export async function submitPublicIntake(
     career_goal: clip(formData.get("careerGoal"), 60) || null,
     siblings,
     subject,
+    intake_checklist: checklist,
     parent_request: clip(formData.get("parentRequest"), 2000) || null,
     shuttle_bus_request: String(formData.get("shuttleBusRequest") ?? "") === "true",
     privacy_agreement: true,
