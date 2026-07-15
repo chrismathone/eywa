@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  AlertCircle, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
+  AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
   type LucideIcon,
 } from "@/components/icons/eywa-icon-compat";
 import type { ReactNode } from "react";
@@ -77,6 +77,10 @@ export default async function EnrollmentDetailPage({
 
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
   const f = consult.fields;
+
+  // 사전 체크리스트 오른쪽 단 — 응답이 있거나 QR 접수 건이면 자리를 만든다(없으면 '없음'을 명시).
+  // 수기 등록 건은 애초에 해당 없음이라 단 자체를 안 만든다(빈 칸 = 노이즈, 왼쪽이 전폭 사용).
+  const showChecklistPane = !!f.intakeChecklist || consult.fromPublicIntake;
 
   // 녹음 분석이 추출한 상담 내용 — 이미 값이 있어 자동입력에서 버려진 경우, 읽기전용으로 되살려 보여준다
   // (수정에서 반영). 저장값과 동일하면 숨김.
@@ -210,6 +214,18 @@ export default async function EnrollmentDetailPage({
         </section>
       ) : null}
 
+      {/* ── 상담 기록(왼쪽) ↔ 사전 체크리스트(오른쪽) 2단 ──
+          전폭 적층이면 넓은 창에서 라벨↔값이 멀어지고 우측이 통째로 논다. 상담사는 상담 기록을 보면서
+          학부모 사전 답변을 곁에 두고 판단하므로 나란히 둔다(원장 지시 2026-07-15). 오른쪽 단은
+          체크리스트가 있거나 QR 접수 건일 때만 만든다 — 없으면 왼쪽이 전폭을 그대로 쓴다(빈 단 방지).
+          좁은 창(<xl)은 1단으로 접혀 위→아래 순서. */}
+      <div
+        className={
+          showChecklistPane
+            ? "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,23rem)] xl:items-start"
+            : undefined
+        }
+      >
       {/* ── 상담 기록 (입력 정보) — 수정 폼과 동일한 카드 구조/그룹핑(접수 → 학생정보|상담내용 → 학원관리 → 후속조치 → 등록결제). ── */}
       <div className="space-y-3">
         <SectionHeader icon={ClipboardList} title="상담 기록">
@@ -343,12 +359,26 @@ export default async function EnrollmentDetailPage({
         {/* 6. 과목별 점수 */}
         <SubjectScoresCard details={f.subjectDetails} />
 
-        {/* 7. 사전 체크리스트 — QR 공개접수 2단계 응답(0109a). 수기 등록 건은 없으니 카드 자체를 숨긴다. */}
-        {f.intakeChecklist ? (
-          <SectionCard title="사전 체크리스트">
-            <ChecklistView checklist={f.intakeChecklist} />
+      </div>
+
+      {/* 오른쪽 단 — 사전 체크리스트. **없어도 자리를 잡는다**(QR 접수 건 한정): 카드가 아예 없으면
+          상담사가 "있는데 안 보이나?" 싶어 수정 화면 탭까지 열어봐야 했다(원장 지적 2026-07-15). */}
+      {showChecklistPane ? (
+        <div className="space-y-3">
+          <SectionHeader icon={ClipboardCheck} iconClass="text-chart-1" title="사전 체크리스트">
+            <span className="text-text-faint text-[10px] whitespace-nowrap">학부모 작성</span>
+          </SectionHeader>
+          <SectionCard title="상담 전 응답">
+            {f.intakeChecklist ? (
+              <ChecklistView checklist={f.intakeChecklist} />
+            ) : (
+              <p className="text-text-faint text-sm leading-relaxed break-keep">
+                학부모가 작성한 사전 체크리스트가 없는 접수입니다. (체크리스트 도입 전 QR로 접수된 건)
+              </p>
+            )}
           </SectionCard>
-        ) : null}
+        </div>
+      ) : null}
       </div>
 
       {/* ── AI 분석 ── */}
