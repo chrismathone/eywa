@@ -184,6 +184,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).
     classnoteSendEnabled: false, // 기본 OFF(dry-run) — 원장 승인 전까지 실제 발송 안 함(오발송 안전장치).
     classnoteSubjects: [], // 발송 허용 과목(빈=아무것도 발송 안 함, 명시 opt-in). 현 운영은 ['math']를 원장이 설정.
+    classnoteSharedBoardAllowlist: [], // 공유 보드 발송 예외(빈=예외 없음 = 2가족+ 보드는 전부 보류). 확인된 '같은 학생 다계정' 보드명만.
   },
   // 권한 override는 sparse(빈 배열) — 진짜 기본값은 permissions.ts의 MENU_ACCESS. 매트릭스 복제 금지.
   permissions: { overrides: [] },

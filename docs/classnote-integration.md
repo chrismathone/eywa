@@ -15,6 +15,10 @@
                                             ▼  (15초 폴 · FOR UPDATE SKIP LOCKED · BATCH 2)
                               [연동 PC(학원동기화-PC) 상주 데몬 watch-classnote-queue.mjs]
                                             │
+                                            ▼  ⛔ **프리플라이트 보드 안전 게이트**(§5.5, board-safety.mjs)
+                                               ClassNote 실보드 조회 → 공유 보드(2가족+)·보드 없음/중복이면
+                                               `blocked_shared`로 보류(캡처·게시 안 함). 예외=원장 화이트리스트.
+                                            │
                                             ▼  Playwright로 공개 /r/{share_token} 페이지의
                                                `.report-capture`(ParentReportCard 루트)를 JPEG 캡처
                                             │
@@ -204,6 +208,53 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 이미 queued인 재고와 `resetStuckClassnote`(멈춤복구)는 스위치를 안 보고 워커가 그대로 실게시한다.
 긴급 전면 정지 = 연동 PC에서 `발송PC-해제.bat`(물리 접근 필요). 단일 킬스위치 부재는 개선 후보.
 
+## 5.5 프리플라이트 보드 안전 게이트 — 오발송 사전 차단 (2026-07-15 신설) ⚠️ 완화 금지
+
+> **한 줄 규칙: ClassNote 실보드를 조회해 "이 보드에 이 학생 가족만 있는가"를 확인하기 전엔 절대 게시하지 않는다.**
+
+**왜 필요한가**: ClassNote는 공개 API·고유 학생 ID가 없어 **보드명(`(과목)학생명`) 이름 매칭**으로 게시한다.
+그래서 한 보드에 다른 가족이 끼어 있으면 그 학생 보고서가 남의 집에 간다. **eywa DB엔 보드 멤버십이 없어**
+앱 게이트(동명이인·과목·too_old)로는 원천적으로 못 잡는다 — ClassNote를 조회할 수 있는 **워커가 유일한 차단 지점**.
+(실사고 = §8 2026-07-15 박서준.)
+
+| 구성 | 파일 | 역할 |
+|---|---|---|
+| **순수 판정** | [`scripts/_classnote/board-safety.mjs`](../scripts/_classnote/board-safety.mjs) | `evaluateBoardSafety({className, boards, occupants, allowlist})` → `{ok, code, reason}`. **의존성 0**(playwright import 금지 — 테스트가 끌어오면 안 됨). Vitest = `board-safety.test.mjs` |
+| 발송 워커 | [`classnote-core.mjs`](../scripts/_classnote/classnote-core.mjs) `processQueueOnce` | 폴마다 1회 로그인+`fetchBoards` 캐시 → 건별 게이트(캡처 **전**) → 차단 시 `blocked_shared` |
+| 반 공지 워커 | [`classnote-notice-core.mjs`](../scripts/_classnote/classnote-notice-core.mjs) `processTarget` | **같은 함수** 사용(경로 분기 방지). 공통·개인화 **둘 다** 게이트 |
+| 예외 목록 | 학원설정 `report.classnoteSharedBoardAllowlist` | 워커가 `getClassnoteBoardAllowlist(sql, tenant)`로 raw SQL 직독 |
+| 상시 감시 | [`scan-shared-boards.mjs`](../scripts/_classnote/scan-shared-boards.mjs) | **read-only** 전수 스캔 — 차단 대상 보드 + 연결 가족 표시 |
+
+**판정 규칙**(`evaluateBoardSafety`):
+- 보드 없음 → `no_board` 차단 · 이름 같은 보드 2+ → `dup_board` 차단
+- 연결 가족(`approved_children`) **2+ 이면 차단**(`shared`) — **단 화이트리스트 등재 보드는 통과**
+- 연결 가족 0·1 → 통과(0은 누수 아님)
+- 차단 직전 `fetchBoardChildren`로 **실시간 재확인**(TOCTOU: 원장이 방금 정리했을 수 있음) + 사유에 연결 가족 명시
+
+**왜 자동 판별(전화 대조)을 안 하나** — `(수학)안은지`처럼 **학생 본인+학부모가 각자 가입한 정상 2계정**이 있고,
+이를 leak과 구분할 유일한 권위 신호는 **연락처**인데 ClassNote API가 전화를 안 준다(`/api/v1/children/{id}`엔
+`parent.name`만, 전화 없음). 전화는 **운영관리(ERP) 화면**에서만 보인다 → **사람이 확인 → 화이트리스트**가 정답.
+🔭 **v2 후보**: `GET /api/v1_2/centers/{id}/erp-children/`(존재 확인됨, 200)에 보호자·연락처가 있는 것으로 보임 —
+다만 `?belong_to_class=` 필터가 안 먹고(전건 571 반환) 전화 필드 경로 미확정. 확정되면 eywa `parent_phone`/
+`student_phone`과 자동 대조해 "같은 학생 다계정"을 **자동 허용**하고 화이트리스트를 최소화할 수 있다.
+
+**fail-closed**: 로그인·보드 조회 실패로 **검증을 못 하면 보내지 않는다** — 클레임분을 즉시 `queued`로 되돌리고
+그 주기를 건너뛴다(다음 폴 재시도). 킬스위치와 같은 원칙("모르면 안 보냄"). dry-run(`post=false`)은 게이트도 skip.
+
+**`blocked_shared` 상태**(plain text 컬럼 — **마이그레이션 불필요**): 보고서 저장·`/r` 링크는 정상, ClassNote
+자동 게시만 보류. 라벨 단일 소스 = [`classnoteBadge`](../src/features/onescreen/components/report-card.tsx)
+("공유 보드 — 자동 발송 차단"). 큐 집계·주의목록 = [`classnote-queue.ts`](../src/features/report-admin/classnote-queue.ts)
+(`blockedShared` + `needsAttention` true). **재발송 불가**(보드 정리/예외 등재가 선행돼야 무의미하지 않음) →
+주의목록에서 체크박스 비활성. 사유(연결 가족 포함 한글)는 `classnote_error`에 저장돼 **그대로** 표시
+(`humanizeClassnoteError` 태우면 일반 문구로 뭉개짐 — 큐 카드가 status로 분기).
+
+**원장 조치 흐름**: 주의목록/스캔에서 차단 보드 확인 → **클래스노트 운영관리 > 학생관리**에서 그 보드 골라
+연락처·보호자 대조 → ① 같은 학생의 학부모/본인 계정이면 **학원설정 > 보고서 > '공유 보드 발송 예외'**에 보드명
+등재 → 자동 발송 재개. ② 남의 가족이면 **클래스노트 UI에서 연결 제거**(API는 405라 UI 전용) 후 재발송.
+
+⚠️ **새 발송 경로를 만들면 이 게이트를 반드시 태울 것.** 보드명으로 게시하는 모든 경로가 대상이다.
+⚠️ **화이트리스트는 안전 우회 장치** — 잘못 등재하면 실제로 남의 가족에게 발송된다(폼에 경고 문구 있음).
+
 ## 6. 실발송 E2E 검증 이력 + 테스트 방법
 
 - **테스트 전용 학생 = `학원이`**(students `6219e442-…`, status=withdrawn, 칠성초 중2).
@@ -231,6 +282,15 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 
 ## 8. 과거 사고 (재발 방지 근거)
 
+- **2026-07-15 공유 보드 오발송(실측)**: `(수학)박서준` 보드에 **두 가족**(초6 2014생 + 중3 2011생)이 함께
+  연결돼 있어 **초6 보고서가 중3 가족에게 계속 노출**되고 있었다. 중3은 2026-07-13에 전용 보드 `(수학)박서준C`를
+  받았지만 **옛 공유 보드에서 제거가 안 돼** leak이 남아 있었음(원장이 07-15 수동 제거로 정지).
+  전수 스캔 결과 학생모드 공유 보드가 8개(최성효T=퇴사 강사·학원삼=테스트 제외 시 실대상 5개)였다.
+  → **프리플라이트 보드 안전 게이트(§5.5)의 존재 이유.** eywa DB엔 보드 멤버십이 없어 앱 가드로는 원천적으로
+  못 잡는다(동명이인 가드도 통과 — eywa엔 박서준·박서준C가 **다른 이름**이라 충돌이 아니었음).
+  ⚠️ **"2가족=오발송"은 항상 참이 아니다**: `(수학)안은지`는 학생 본인 계정과 학부모(김경희) 계정이 각각
+  가입한 정상 케이스(두 전화가 eywa parent_phone·student_phone과 각각 일치, 학생이 자기 생일을 다르게 입력해
+  생년월일도 달랐다). 그래서 게이트는 **차단 기본 + 원장 확인 화이트리스트** 구조이고, 자동 판별을 하지 않는다.
 - **2026-05~06 (edutrix 시절)**: 과거 보고서 재발송 사고 — 1~4월 보고서 **3,500건이 학부모에게 오발송**.
   → too_old 가드(전 달 1일 이후만, [classnote-guard.ts](../src/features/onescreen/classnote-guard.ts))와
   기본 dry-run 스위치(`classnoteSendEnabled=false`)의 존재 이유. **이 가드들을 완화하지 말 것.**

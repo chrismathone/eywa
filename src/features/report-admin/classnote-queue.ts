@@ -25,6 +25,7 @@ export type QueueSummary = {
   failed: number;
   tooOld: number;
   nameConflict: number;
+  blockedShared: number; // 워커 프리플라이트 게이트가 오발송 위험으로 보류(공유 보드·보드 없음/중복)
   total: number; // classnote 요청된 전체(status non-null)
 };
 
@@ -38,6 +39,7 @@ export function summarizeQueue(rows: QueueRow[], nowMs: number): QueueSummary {
     failed: 0,
     tooOld: 0,
     nameConflict: 0,
+    blockedShared: 0,
     total: rows.length,
   };
   for (const r of rows) {
@@ -61,6 +63,9 @@ export function summarizeQueue(rows: QueueRow[], nowMs: number): QueueSummary {
       case "name_conflict":
         s.nameConflict++;
         break;
+      case "blocked_shared":
+        s.blockedShared++;
+        break;
       default:
         break; // revoked·기타
     }
@@ -68,12 +73,13 @@ export function summarizeQueue(rows: QueueRow[], nowMs: number): QueueSummary {
   return s;
 }
 
-/** 주의 필요(관리 액션 대상) 상태인가 — 실패·오래됨·동명이인·멈춤. */
+/** 주의 필요(관리 액션 대상) 상태인가 — 실패·오래됨·동명이인·공유보드차단·멈춤. */
 export function needsAttention(status: string | null, processingAtIso: string | null, nowMs: number): boolean {
   return (
     status === "failed" ||
     status === "too_old" ||
     status === "name_conflict" ||
+    status === "blocked_shared" ||
     isStuck(status, processingAtIso, nowMs)
   );
 }

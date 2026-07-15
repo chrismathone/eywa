@@ -12,17 +12,19 @@
  *
  * 안전장치: 실게시·회수는 --post + classnoteSendEnabled(킬스위치) 확인. 타깃별 실패는 그 타깃만 기록(results).
  */
-import { isClassnoteSendEnabled } from "./classnote-core.mjs";
+import { isClassnoteSendEnabled, getClassnoteBoardAllowlist } from "./classnote-core.mjs";
 import {
   CLASSNOTE_BASE,
   loginClassnote,
   fetchCenterId,
   fetchBoards,
+  fetchBoardChildren,
   fetchChildren,
   fetchChildDetail,
   childKeys,
   norm,
 } from "./classnote-admin-core.mjs";
+import { evaluateBoardSafety } from "./board-safety.mjs";
 
 const STUCK_MIN = 10;
 
@@ -113,6 +115,24 @@ async function patchReport(page, id, content) {
 async function processTarget(page, ctx, target) {
   const board = ctx.boardByNorm.get(norm(target.board));
   if (!board) return { board: target.board, ok: false, note: "보드 없음(프로비저닝 필요)" };
+
+  // ⛔ 보드 안전 게이트 — 발송 워커(classnote-core)와 **같은 순수 판정**(board-safety.mjs)으로 공유 보드 차단.
+  // ⚠️ 아래 `enrolled`는 target 이름과 일치하는 원아만 세므로 **이름이 다른 제3의 가족이 같은 보드에 붙어 있으면
+  // 못 잡는다**(실사고 2026-07-15: `(수학)박서준`에 초6·중3 두 가족 동거). 총 연결 인원(approved_children)으로
+  // 판정해야 잡힌다. 공통 본문도 그 보드의 모든 가족에게 fan-out되므로 **개인화 여부와 무관하게** 게이트한다.
+  let verdict = evaluateBoardSafety({ className: target.board, boards: ctx.boards, allowlist: ctx.allowlist });
+  if (!verdict.ok && verdict.code === "shared") {
+    const live = await fetchBoardChildren(page, ctx.centerId, board.id).catch(() => null);
+    if (Array.isArray(live)) {
+      verdict = evaluateBoardSafety({ className: target.board, boards: ctx.boards, allowlist: ctx.allowlist, occupants: live.length });
+      if (!verdict.ok) {
+        const who = live.map((k) => `${k.name ?? "?"}(${k.date_birth ?? "?"})`).join(" / ");
+        verdict.reason = `${verdict.reason} 연결 가족: ${who}`;
+      }
+    }
+  }
+  if (!verdict.ok) return { board: target.board, ok: false, note: verdict.reason };
+
   const clean = (target.studentName || "").replace(/[a-zA-Z]/g, "").trim();
   const cands = ctx.children.filter((c) => {
     const keys = childKeys(c.name);
@@ -127,12 +147,10 @@ async function processTarget(page, ctx, target) {
   }
   if (enrolled.length === 0) return { board: target.board, ok: false, note: "보드 미배정(배정 필요)" };
 
-  // 개인화 본문(target.body, 태그 치환됨)은 **공유 보드(2가족+)에 fan-out 금지** — 다른 가족에게 남 아이 이름 노출 차단.
-  const personalized = target.body != null;
-  const content = personalized ? target.body : ctx.body;
-  if (personalized && enrolled.length > 1) {
-    return { board: target.board, ok: false, note: "공유 보드(2가족+) — 개인화 공지 차단(일반 공지로 보내세요)" };
-  }
+  // 개인화 본문(target.body, 학생별) 우선, 없으면 공통 본문(ctx.body).
+  // 공유 보드 차단은 위 프리플라이트 게이트가 담당(개인화·공통 **둘 다**) — 옛 개인화-only 체크는 이름 매칭
+  // 기반이라 이름 다른 제3 가족을 못 잡아 폐기했다.
+  const content = target.body != null ? target.body : ctx.body;
 
   // 이중 등록(부모 계정 2개)이면 전원에게 게시. 성공한 글은 reports[]에 남겨 부분성공도 회수 가능하게.
   const reports = [];
@@ -281,8 +299,10 @@ export async function processNoticesOnce(sql, browser, { tenant, post, log = con
       const boards = await fetchBoards(page, centerId);
       const ctxBase = {
         centerId,
+        boards, // 보드 전건(원본 배열) — 프리플라이트 게이트가 보드명 중복 탐지에 필요(boardByNorm은 중복을 뭉갬)
         boardByNorm: new Map(boards.map((b) => [norm(b.name), b])),
         children: await fetchChildren(page, centerId),
+        allowlist: await getClassnoteBoardAllowlist(sql, tenant), // 원장이 확인한 공유 보드 발송 예외
         authorName,
       };
       for (let i = 0; i < 5; i++) {

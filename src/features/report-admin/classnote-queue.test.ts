@@ -23,6 +23,7 @@ describe("summarizeQueue", () => {
       { status: "failed", processingAt: null },
       { status: "too_old", processingAt: null },
       { status: "name_conflict", processingAt: null },
+      { status: "blocked_shared", processingAt: null }, // 프리플라이트 게이트 보류(공유 보드 등)
       { status: "revoked", processingAt: null }, // 기타(집계 제외)
     ];
     expect(summarizeQueue(rows, NOW)).toEqual({
@@ -33,16 +34,18 @@ describe("summarizeQueue", () => {
       failed: 1,
       tooOld: 1,
       nameConflict: 1,
-      total: 8,
+      blockedShared: 1,
+      total: 9,
     });
   });
 });
 
 describe("needsAttention", () => {
-  it("실패·오래됨·동명이인·멈춤만 true", () => {
+  it("실패·오래됨·동명이인·공유보드차단·멈춤만 true", () => {
     expect(needsAttention("failed", null, NOW)).toBe(true);
     expect(needsAttention("too_old", null, NOW)).toBe(true);
     expect(needsAttention("name_conflict", null, NOW)).toBe(true);
+    expect(needsAttention("blocked_shared", null, NOW)).toBe(true);
     expect(needsAttention("processing", minsAgo(30), NOW)).toBe(true); // 멈춤
     expect(needsAttention("processing", minsAgo(1), NOW)).toBe(false); // 정상
     expect(needsAttention("queued", null, NOW)).toBe(false);

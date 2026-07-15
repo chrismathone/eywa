@@ -9,7 +9,7 @@ describe("isAdminSendable", () => {
   });
 
   it("발송 이력이 있으면 상태 불문 거부(중복발송 방어) — success 포함", () => {
-    for (const status of ["queued", "processing", "success", "failed", "too_old", "name_conflict"]) {
+    for (const status of ["queued", "processing", "success", "failed", "too_old", "name_conflict", "blocked_shared"]) {
       expect(isAdminSendable({ classnoteStatus: status, source: "onescreen" })).toBe(false);
     }
   });

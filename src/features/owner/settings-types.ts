@@ -257,6 +257,14 @@ export const reportSchema = z.object({
   // ClassNote 발송 허용 과목(과목 키 배열) — **명시 opt-in**: 여기 든 과목만 학부모에게 발송. 빈 배열(기본)=아무것도
   // 발송 안 함. 현 운영은 수학만 사용 → ['math']. classnoteSendEnabled와 이중 방어(큐 진입 시 isClassnoteSubjectEnabled).
   classnoteSubjects: z.array(z.string()).default([]),
+  // ClassNote 공유 보드 발송 예외(보드명 배열, 예 '(수학)안은지') — 워커 프리플라이트 게이트는 한 보드에 연결된
+  // 가족이 2+이면 오발송(남의 가족에게 노출) 방지로 발송을 보류하는데, **원장이 운영관리에서 전화·보호자를 직접
+  // 확인해 "같은 학생이 학부모·본인 등 다계정으로 붙은 것"이라 판정한 보드만** 여기 등재해 예외 허용한다.
+  // 빈 배열(기본)=예외 없음(모든 공유 보드 차단 = fail-safe). ⚠️ 잘못 등재하면 실제 남의 가족에게 발송되므로
+  // 반드시 육안 확인 후 등재. 소비처 = ClassNote 워커(classnote-core.mjs `getClassnoteBoardAllowlist`)가
+  // raw SQL `data->'report'->'classnoteSharedBoardAllowlist'`로 직접 읽음(getTenantSettings 미경유).
+  // 값은 boardClassName(subject, studentName) 결과 `(과목)학생명`과 일치해야 함(비교는 공백 무시).
+  classnoteSharedBoardAllowlist: z.array(z.string()).default([]),
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

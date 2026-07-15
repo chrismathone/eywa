@@ -5,6 +5,8 @@
 //
 // ⚠️ tenant 격리 필수 — DATABASE_URL 직결(RLS 우회)이라 필터 없으면 다른 테넌트 보고서를 이 계정으로 게시.
 import { chromium } from "@playwright/test";
+import { loginClassnote, fetchCenterId, fetchBoards, fetchBoardChildren } from "./classnote-admin-core.mjs";
+import { evaluateBoardSafety } from "./board-safety.mjs";
 
 export const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
@@ -64,9 +66,23 @@ export async function isClassnoteSendEnabled(sql, tenant) {
 }
 
 /**
+ * 공유 보드 발송 예외 목록(학원설정 `report.classnoteSharedBoardAllowlist`) — 원장이 운영관리에서
+ * **직접 확인해** "같은 학생이 학부모·본인 등 다계정으로 붙은 것"이라 판정한 보드명 배열(`(수학)안은지` 형식).
+ * 프리플라이트 게이트는 연결 가족 2+ 보드를 기본 차단하는데, 여기 등재된 보드만 예외로 발송을 허용한다.
+ * 미설정/빈 배열 = 예외 없음(모든 공유 보드 차단 = fail-safe). isClassnoteSendEnabled와 동일하게 postgres
+ * 직결이라 커밋값을 즉시 읽는다(앱 캐시 무관). tenant 스코프 필수.
+ */
+export async function getClassnoteBoardAllowlist(sql, tenant) {
+  const [row] = await sql`select coalesce(data->'report'->'classnoteSharedBoardAllowlist', '[]'::jsonb) as list
+    from tenant_settings where tenant_id=${tenant}`;
+  return Array.isArray(row?.list) ? row.list.filter((s) => typeof s === "string" && s.trim()) : [];
+}
+
+/**
  * ClassNote 발송 큐 한 주기 처리 — stale 복구 → 원자 클레임 → 건별 스크린샷·게시·상태전이.
  * browser는 호출자가 관리(데몬은 루프 밖 1회 launch 재사용, one-shot은 매 실행 launch). tenant 격리 필수.
- * @returns {Promise<{stale:number, claimed:number, success:number, failed:number, requeued:number}>}
+ * @returns {Promise<{stale:number, claimed:number, success:number, failed:number, requeued:number, blocked:number}>}
+ *   blocked = 프리플라이트 보드 안전 게이트가 오발송 위험으로 보류한 건수(classnote_status='blocked_shared').
  */
 export async function processQueueOnce(sql, browser, opts) {
   const {
@@ -83,7 +99,7 @@ export async function processQueueOnce(sql, browser, opts) {
   // (클레임·stale 복구도 안 함) 스위치를 다시 켜면 그대로 이어서 처리된다. dry-run(post=false)은 영향 없음.
   if (post && !(await isClassnoteSendEnabled(sql, tenant))) {
     log("[worker] classnoteSendEnabled OFF — 실게시 중단(큐 보존, 클레임 안 함)");
-    return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0 };
+    return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
   }
 
   // 1) stale 복구: processing 10분 초과 → queued (tenant 격리)
@@ -105,10 +121,35 @@ export async function processQueueOnce(sql, browser, opts) {
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
     returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id`;
-  const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0 };
+  const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);
 
+  // 3) 프리플라이트 준비(실게시 모드만) — ClassNote 로그인 1회 + 보드 전건 1회 캐시 + 발송 예외 목록.
+  // 오발송 방지 게이트(공유 보드 차단)의 근거 데이터. **fail-closed**: 준비에 실패해 보드를 검증할 수 없으면
+  // 보내지 않는다 — 클레임분을 즉시 queued로 되돌리고 이 주기를 건너뛴다(다음 폴 재시도). 검증 못 하면 안 보냄이
+  // 킬스위치(위)와 같은 원칙. dry-run(post=false)은 게시 자체를 안 하므로 준비도 게이트도 건너뛴다.
+  let adminPage = null;
+  let centerId = null;
+  let boards = null;
+  let allowlist = [];
+  if (post) {
+    try {
+      adminPage = await browser.newPage(); // ⚠️ 스크린샷용 context(아래 newContext)와 분리 — 그건 매 건 닫힘
+      await loginClassnote(adminPage);
+      centerId = await fetchCenterId(adminPage);
+      boards = await fetchBoards(adminPage, centerId);
+      allowlist = await getClassnoteBoardAllowlist(sql, tenant);
+    } catch (e) {
+      await adminPage?.close().catch(() => {});
+      const ids = claimed.map((c) => c.id);
+      await sql`update lesson_reports set classnote_status='queued' where id in ${sql(ids)}`;
+      log(`[worker] 프리플라이트 준비 실패(${e instanceof Error ? e.message : e}) — 안전상 게시 보류, ${ids.length}건 재큐잉`);
+      return { ...summary, requeued: ids.length };
+    }
+  }
+
+  try {
   for (const r of claimed) {
     const [stu] = await sql`select name, classnote_name from students where id=${r.student_id} and tenant_id=${tenant}`;
     // ClassNote 보드명·원아 = 유효이름(classnote_name 오버라이드 || name). 동명이인은 오버라이드로 구분(0088a).
@@ -121,6 +162,34 @@ export async function processQueueOnce(sql, browser, opts) {
       summary.failed++;
       log(`  · ${studentName}: 과목 ${r.subject ?? "없음"} — 보드 매핑 없음 → failed`);
       continue;
+    }
+    const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
+
+    // ⛔ 프리플라이트 보드 안전 게이트(실게시 모드만) — **스크린샷·게시 전에** 판정(불필요한 캡처 회피).
+    // 한 보드에 서로 다른 2가족+가 연결돼 있으면 이 학생 보고서가 남의 가족에게도 게시된다(실제 사고: 2026-07-15
+    // `(수학)박서준`에 초6·중3 두 가족 동거 — 초6 보고서가 중3 집에 노출). eywa DB엔 보드 멤버십이 없어
+    // **여기(ClassNote 조회 가능한 워커)가 유일한 차단 지점**. 판정=board-safety.mjs 순수함수(공지 워커와 공용).
+    if (post) {
+      let verdict = evaluateBoardSafety({ className, boards, allowlist });
+      if (!verdict.ok && verdict.code === "shared") {
+        // TOCTOU 재확인 — 캐시(approved_children) 이후 원장이 정리했을 수 있으니 실시간 인원으로 재판정.
+        // 그래도 차단이면 사유에 연결 가족을 적어 원장이 운영관리에서 바로 대조할 수 있게 한다.
+        const live = await fetchBoardChildren(adminPage, centerId, verdict.boardId).catch(() => null);
+        if (Array.isArray(live)) {
+          verdict = evaluateBoardSafety({ className, boards, allowlist, occupants: live.length });
+          if (!verdict.ok) {
+            const who = live.map((k) => `${k.name ?? "?"}(${k.date_birth ?? "?"})`).join(" / ");
+            verdict.reason = `${verdict.reason} 연결 가족: ${who}`;
+          }
+        }
+      }
+      if (!verdict.ok) {
+        await sql`update lesson_reports set classnote_status='blocked_shared',
+          classnote_error=${verdict.reason}, classnote_queued_at=null where id=${r.id}`;
+        summary.blocked++;
+        log(`  · ${studentName}: 게시 보류(${verdict.code}) — ${className}`);
+        continue;
+      }
     }
     try {
       // 스크린샷 (INTERNAL_SECRET 헤더 → /r이 조회로그 skip)
@@ -146,7 +215,6 @@ export async function processQueueOnce(sql, browser, opts) {
         : await page.screenshot({ type: "jpeg", quality: 90, fullPage: true });
       await ctx.close();
       const imageBase64 = `data:image/jpeg;base64,${buf.toString("base64")}`;
-      const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
       const payload = {
         loginId: process.env.CLASSNOTE_UPLOAD_ID,
         loginPw: process.env.CLASSNOTE_UPLOAD_PW,
@@ -207,6 +275,10 @@ export async function processQueueOnce(sql, browser, opts) {
       summary.failed++;
       log(`  · ${studentName}: 처리 오류 → ${msg}`);
     }
+  }
+  } finally {
+    // 프리플라이트용 로그인 페이지는 이 주기에서만 산다(데몬은 browser를 폴 간 재사용하므로 반드시 닫아 누수 방지).
+    await adminPage?.close().catch(() => {});
   }
   return summary;
 }

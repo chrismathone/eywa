@@ -42,6 +42,9 @@ export function classnoteBadge(status?: string): { label: string; cls: string } 
       return { label: "링크 취소됨 — 재발급 필요", cls: "text-danger" };
     case "name_conflict":
       return { label: "동명이인 — 자동 발송 차단", cls: "text-danger" };
+    case "blocked_shared":
+      // 워커 프리플라이트 게이트가 오발송 위험(한 보드에 2가족+ 등)으로 보류 — 사유는 classnote_error에 한글로.
+      return { label: "공유 보드 — 자동 발송 차단", cls: "text-danger" };
     default:
       return null;
   }

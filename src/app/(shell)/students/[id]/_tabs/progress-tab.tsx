@@ -25,6 +25,8 @@ function classnoteBadge(status: string | null): { label: string; cls: string } {
       return { label: "제외", cls: "text-text-faint" };
     case "name_conflict":
       return { label: "동명이인", cls: "text-danger" };
+    case "blocked_shared":
+      return { label: "공유 보드", cls: "text-danger" };
     default:
       return { label: "—", cls: "text-text-faint" };
   }

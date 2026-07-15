@@ -17,7 +17,8 @@ import {
 } from "@/features/report-admin/report-filters";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
 
-const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict"];
+// 라벨은 classnoteBadge가 해석(한글) — 여기엔 상태 키만. blocked_shared = 프리플라이트 게이트 보류.
+const STATUS_OPTIONS = ["queued", "processing", "success", "failed", "too_old", "name_conflict", "blocked_shared"];
 
 // 시:분(KST). timestamptz → Asia/Seoul HH:mm. 값 없으면 빈 문자열.
 function hhmmKst(iso: string | null): string {

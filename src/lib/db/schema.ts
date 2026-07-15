@@ -665,7 +665,9 @@ export const lessonReports = pgTable(
     shareToken: uuid("share_token").notNull().defaultRandom(),
     // ClassNote 발송 큐 + 과목별 dedup — 0083a. 인덱스(부분 유니크·queued 부분)는 0083a alpha에 정의.
     subject: text("subject"),
-    classnoteStatus: text("classnote_status"), // NULL=미요청 / queued / processing / success / failed / too_old
+    // NULL=미요청 / queued / processing / success / failed / too_old / name_conflict / blocked_shared(프리플라이트 보드 안전 게이트 보류).
+    // plain text(체크제약 없음) — 새 상태 추가에 마이그레이션 불필요. 라벨은 classnoteBadge가 단일 소스.
+    classnoteStatus: text("classnote_status"),
     classnoteError: text("classnote_error"),
     classnoteQueuedAt: timestamp("classnote_queued_at", { withTimezone: true }),
     classnoteProcessingAt: timestamp("classnote_processing_at", { withTimezone: true }),

@@ -5,6 +5,7 @@ import type { ReportSettings } from "@/features/owner/settings-types";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guard";
 import { SectionForm, SettingsCard } from "./section-form";
+import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
@@ -304,6 +305,26 @@ export function ReportSection({
           {visibleExemptCount > 0 ? (
             <p className="text-text-faint mt-3 text-[12px]">작성률 집계 제외 중: {visibleExemptCount}명</p>
           ) : null}
+        </SettingsCard>
+
+        {/* 공유 보드 발송 예외 — 소비처: ClassNote 워커 프리플라이트 게이트(classnote-core.mjs getClassnoteBoardAllowlist).
+            워커가 '연결 가족 2+' 보드를 오발송 방지로 보류하는데, 여기 등재된 보드만 예외로 발송한다. */}
+        <SettingsCard
+          title="공유 보드 발송 예외"
+          description="한 클래스노트 보드에 연결된 가족이 둘 이상이면 다른 가족에게 보고서가 노출될 수 있어 자동으로 발송이 보류됩니다. 클래스노트 운영관리에서 연락처·보호자를 직접 확인해 '같은 학생이 학부모·본인 등 여러 계정으로 연결된 것'이 맞는 보드만 아래에 보드명으로 등록하면 발송이 허용됩니다."
+        >
+          <StringListEditor
+            value={r.classnoteSharedBoardAllowlist}
+            onChange={(v) => set({ classnoteSharedBoardAllowlist: v })}
+            addLabel="보드 추가"
+            placeholder="(수학)안은지"
+          />
+          <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+            <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+            <span>
+              확인 없이 등록하면 실제로 다른 가족에게 보고서가 발송됩니다. 반드시 연락처를 대조한 뒤 등록하세요.
+            </span>
+          </p>
         </SettingsCard>
         </div>
       </div>

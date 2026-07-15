@@ -39,7 +39,8 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
-  const retriable = items.filter((i) => i.status !== "name_conflict"); // 동명이인은 이름 수정 필요(재발송 무의미)
+  // 동명이인은 이름 수정, 공유 보드 차단은 ClassNote 정리(또는 발송 예외 등재)가 선행돼야 해 재발송이 무의미.
+  const retriable = items.filter((i) => i.status !== "name_conflict" && i.status !== "blocked_shared");
   const toggle = (id: string) =>
     setChecked((prev) => {
       const n = new Set(prev);
@@ -108,6 +109,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
         <Stat label="실패" value={summary.failed} tone="bg-danger/10 text-danger" />
         <Stat label="오래됨" value={summary.tooOld} tone="bg-amber-soft text-amber" />
         <Stat label="동명이인" value={summary.nameConflict} tone="bg-amber-soft text-amber" />
+        <Stat label="공유 보드" value={summary.blockedShared} tone="bg-amber-soft text-amber" />
         {summary.stuck > 0 ? <Stat label="멈춤" value={summary.stuck} tone="bg-danger/10 text-danger" /> : null}
       </div>
 
@@ -158,7 +160,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                         checked={checked.has(it.id)}
                         onChange={() => toggle(it.id)}
                         aria-label={`${it.studentName} 선택`}
-                        disabled={it.status === "name_conflict"}
+                        disabled={it.status === "name_conflict" || it.status === "blocked_shared"}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -178,9 +180,13 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                         </span>
                       )}
                     </td>
-                    {/* 사유 = 한글 요약(기술 원문은 마우스 오버 툴팁) — 원장이 바로 읽게. */}
+                    {/* 사유 = 한글 요약(기술 원문은 마우스 오버 툴팁) — 원장이 바로 읽게.
+                        ⚠️ blocked_shared는 워커가 이미 한글 안내문(연결 가족 포함)을 넣어주므로 그대로 노출한다
+                        — humanizeClassnoteError를 태우면 '발송 실패…' 일반 문구로 뭉개진다. */}
                     <td className="text-text-faint max-w-[260px] truncate px-3 py-2" title={sanitizeErrorText(it.error)}>
-                      {humanizeClassnoteError(it.error) ?? "—"}
+                      {it.status === "blocked_shared"
+                        ? (it.error ?? "—")
+                        : (humanizeClassnoteError(it.error) ?? "—")}
                     </td>
                   </tr>
                 );

@@ -8,7 +8,12 @@ export default defineConfig({
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    include: ["tests/unit/**/*.{test,spec}.{ts,tsx}", "src/**/*.{test,spec}.{ts,tsx}"],
+    include: [
+      "tests/unit/**/*.{test,spec}.{ts,tsx}",
+      "src/**/*.{test,spec}.{ts,tsx}",
+      // ClassNote 워커(plain .mjs)는 src TS를 못 import → 순수 로직을 워커·테스트가 공유하는 .mjs로 두고 여기서 픽업.
+      "scripts/_classnote/**/*.{test,spec}.mjs",
+    ],
     exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
     coverage: {
       provider: "v8",
