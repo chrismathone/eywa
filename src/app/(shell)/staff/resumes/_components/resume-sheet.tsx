@@ -313,7 +313,11 @@ export function ResumeSheet({
             <td className={cell} colSpan={3}>
               {editing
                 ? WORKDAYS.map((d) => (
-                    <label key={d.key} className="mr-3 inline-flex cursor-pointer items-center gap-1 select-none">
+                    // ⚠️ relative 필수 — 안의 `sr-only` input은 `position:absolute`라, 이 라벨이 static이면
+                    // 컨테이닝 블록이 문서(ICB)가 되어 셸 main의 overflow 클리핑을 **빠져나간다**. 그러면
+                    // 정적 위치(스크롤 안쪽 깊은 y)에 눌러앉아 문서 높이를 늘리고 → 창 안에 스크롤바가
+                    // **2개**(main + 문서) 생긴다(원장 제보 2026-07-15, 실측 html 606→1255). [[#79]]
+                    <label key={d.key} className="relative mr-3 inline-flex cursor-pointer items-center gap-1 select-none">
                       <input
                         type="checkbox"
                         name={`c_workday_${d.key}`}
@@ -376,7 +380,8 @@ export function ResumeSheet({
                     </button>
                   ))
                 : EMPLOYMENT_TYPES.map((t) => (
-                    <span key={t} className="mr-3 whitespace-nowrap">
+                    // relative — 안의 sr-only(absolute)가 main 클리핑을 빠져나가지 않게(위 라벨과 같은 이유).
+                    <span key={t} className="relative mr-3 whitespace-nowrap">
                       {t === c.employmentType ? "■" : "□"} {t}
                       <span className="sr-only">{t === c.employmentType ? " 선택됨" : " 선택 안 함"}</span>
                     </span>

@@ -622,5 +622,21 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
   **컴포넌트→훅→saveDraft 배선을 실제로 태워 저장값을 검사**해야 한다(`readFormValues(form, EXCLUDE)`를 테스트가 직접
   부르면 컴포넌트 배선을 안 태워 **exclude를 빼도 통과하는 가짜 테스트**가 된다 — 실제로 처음에 그렇게 짰다가 잡음).
 
+### 79. `sr-only`(=position:absolute)가 스크롤 컨테이너를 빠져나가 **창 안에 스크롤바 2개** (2026-07-15)
+원장: "이력서 적을 때 외부 스크롤이 쓸데없이 길게 되어있는데? 스크롤이 2개나 있네."
+이력서 **근무요일 체크박스 7개**가 `className="sr-only"`인데, Tailwind `sr-only` = **`position:absolute`**다.
+감싼 `<label>`이 static이고 셸 `main`(스크롤 컨테이너)도 `relative`가 아니라서, 이 input들의 **컨테이닝 블록이
+문서(ICB)** 가 됐다 → `main`의 `overflow:auto` **클리핑을 빠져나가** 정적 위치(스크롤 안쪽 깊은 y)에 눌러앉고,
+**문서 높이**를 그만큼 늘려 `main` 스크롤바 옆에 **문서 스크롤바가 하나 더** 생겼다.
+- **실측**(창 iframe): `html 606/1255` · `body 606/606` · `main 606/1544` → 범인 = `absolute INPUT.sr-only bot:1255` ×7
+  (= html.scrollHeight와 정확히 일치). 라벨에 `position:relative`를 주자 **`html 606/606`, 문서 스크롤 소멸**.
+- **수정**: sr-only를 감싼 라벨/스팬에 **`relative`**([resume-sheet.tsx](<src/app/(shell)/staff/resumes/_components/resume-sheet.tsx>)).
+- **교훈**: **`sr-only`는 시각적으로만 숨기지 레이아웃에서 사라지지 않는다 — absolute라서 positioned 조상이 없으면
+  스크롤 컨테이너를 뚫고 나가 문서를 늘린다.** `sr-only` 요소(특히 스크롤 영역 깊은 곳의 것)는 **항상 positioned
+  부모 안에** 둘 것. `fixed` 조상이 있으면(예: 다이얼로그 `fixed inset-0` — documents 드롭존) 컨테이닝 블록이 잡혀 안전.
+- **진단법**: `body`는 정상인데 `html.scrollHeight`만 크면 = **컨테이닝 블록이 ICB인 absolute가 클리핑을 탈출**한 것.
+  ⚠️ 스크롤 컨테이너를 `overflow:auto|scroll`로만 찾는 조회는 **문서 스크롤바를 못 잡는다**(html은 `overflow:visible`).
+  반드시 `document.scrollingElement.scrollHeight > clientHeight`를 따로 볼 것.
+
 ---
 
