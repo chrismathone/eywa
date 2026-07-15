@@ -114,21 +114,23 @@ export function NoticeFace({
           </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          {/* 반 선택 */}
-          <div className="border-line max-h-[360px] overflow-y-auto rounded-md border p-2">
-            {classes.length === 0 ? (
-              <p className="text-text-faint p-2 text-[12px]">발송 허용 과목의 활성 반이 없습니다.</p>
-            ) : (
-              classes.map((c) => (
-                <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]">
-                  <input type="checkbox" checked={checked.has(c.id)} onChange={() => toggle(c.id)} disabled={!canSend} />
-                  <span className="text-foreground min-w-0 flex-1 truncate">{c.name}</span>
-                  {c.subject ? <span className="text-text-faint text-[11px]">{subjects.labelOf(c.subject)}</span> : null}
-                  <span className="text-text-faint text-[11px]">{c.studentCount}명</span>
-                </label>
-              ))
-            )}
+        <div className="grid items-stretch gap-4 lg:grid-cols-[280px_1fr]">
+          {/* 반 선택 — 데스크톱에선 우측(공통+개별)이 길어지면 함께 늘어 내부 스크롤(높이 균형), 모바일은 360px 캡. */}
+          <div className="lg:relative lg:min-h-[240px]">
+            <div className="border-line flex max-h-[360px] flex-col overflow-y-auto rounded-md border p-2 lg:absolute lg:inset-0 lg:max-h-none">
+              {classes.length === 0 ? (
+                <p className="text-text-faint p-2 text-[12px]">발송 허용 과목의 활성 반이 없습니다.</p>
+              ) : (
+                classes.map((c) => (
+                  <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]">
+                    <input type="checkbox" checked={checked.has(c.id)} onChange={() => toggle(c.id)} disabled={!canSend} />
+                    <span className="text-foreground min-w-0 flex-1 truncate">{c.name}</span>
+                    {c.subject ? <span className="text-text-faint text-[11px]">{subjects.labelOf(c.subject)}</span> : null}
+                    <span className="text-text-faint text-[11px]">{c.studentCount}명</span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
 
           {/* 공통 본문 + 개별 내용 + 발송 */}
