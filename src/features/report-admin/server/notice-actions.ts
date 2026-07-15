@@ -7,9 +7,18 @@ import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { resolveNoticeTargets, type NoticeCandidate, type NoticeSkip } from "../notice-targets";
+import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
+import { logAction } from "@/features/audit/server/log";
+import { resolveNoticeTargets, type NoticeCandidate, type NoticeSkip, type NoticeTarget } from "../notice-targets";
 
-export type NoticeClassOption = { id: string; name: string; subject: string | null; studentCount: number };
+export type NoticeClassOption = {
+  id: string;
+  name: string;
+  subject: string | null;
+  studentCount: number;
+  // 반별 재원생 — 개별 내용 입력 UI가 학생별 박스를 그리는 데 사용(공통은 body, 개별은 이 학생들에게만).
+  students: { id: string; name: string; grade: string | null }[];
+};
 
 /** 공지 대상 반 옵션 — 활성 반(발송 opt-in 과목만) + 재원생 수. 읽기 게이트(viewer 포함). */
 export async function getNoticeClassOptions(): Promise<{ ok: boolean; classes?: NoticeClassOption[]; error?: string }> {
@@ -29,21 +38,37 @@ export async function getNoticeClassOptions(): Promise<{ ok: boolean; classes?: 
     .order("class_name");
   if (error) return { ok: false, error: error.message };
   const ids = (classes ?? []).map((c) => c.id as string);
-  // 반별 재원생 수 — 활성 수강 rows(선택 반 한정, 수백 행 규모)로 집계. 학생 상태는 큐 적재 시 재검증.
+  // 반별 재원생 — 활성 수강 rows(선택 반 한정, 수백 행 규모). 학생 상태는 큐 적재 시 재검증.
   const enr = await fetchInChunks<{ class_id: string; student_id: string }>(ids, (chunk) =>
     supabase.from("enrollments").select("class_id, student_id").in("class_id", chunk).is("end_date", null),
   );
-  const countByClass = new Map<string, number>();
-  for (const e of enr) countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1);
+  // 학생 이름·학년 — 개별 내용 입력 UI가 학생별 박스를 그리려면 로스터가 필요(수백 행, 청크 분할).
+  const studentIds = [...new Set(enr.map((e) => e.student_id))];
+  const studentRows = await fetchInChunks<{ id: string; name: string; grade: string | null }>(studentIds, (chunk) =>
+    supabase.from("students").select("id, name, grade").in("id", chunk),
+  );
+  const studentById = new Map(studentRows.map((s) => [s.id, s]));
+  const rosterByClass = new Map<string, NoticeClassOption["students"]>();
+  for (const e of enr) {
+    const s = studentById.get(e.student_id);
+    if (!s) continue;
+    const list = rosterByClass.get(e.class_id) ?? [];
+    list.push({ id: s.id, name: s.name, grade: s.grade });
+    rosterByClass.set(e.class_id, list);
+  }
   return {
     ok: true,
     classes: (classes ?? [])
-      .map((c) => ({
-        id: c.id as string,
-        name: c.class_name as string,
-        subject: c.subject as string | null,
-        studentCount: countByClass.get(c.id as string) ?? 0,
-      }))
+      .map((c) => {
+        const roster = rosterByClass.get(c.id as string) ?? [];
+        return {
+          id: c.id as string,
+          name: c.class_name as string,
+          subject: c.subject as string | null,
+          studentCount: roster.length,
+          students: roster,
+        };
+      })
       .filter((c) => c.studentCount > 0),
   };
 }
@@ -59,7 +84,8 @@ const TEST_TARGET = { studentName: "학원이", board: "(수학)학원이" };
  */
 export async function sendClassNotice(input: {
   classIds: string[];
-  body: string;
+  body: string; // 공통 내용(선택 반 재원생 모두에게). 개별 내용이 없는 학생은 이 본문만.
+  individual?: Record<string, string>; // studentId → 개별 내용(공통 뒤에 덧붙여 그 학생 보드에만)
   test?: boolean;
 }): Promise<{ ok: boolean; queued?: number; skipped?: NoticeSkip[]; dryRun?: boolean; error?: string }> {
   const user = await getCurrentUser();
@@ -72,10 +98,11 @@ export async function sendClassNotice(input: {
   const supabase = await createClient();
   const settings = await getTenantSettings();
 
-  let targets: { studentId: string | null; studentName: string; board: string }[] = [];
+  // body?: 개별 내용을 담을 수 있음. 테스트 타깃은 studentId null이라 유니온.
+  let targets: { studentId: string | null; studentName: string; board: string; body?: string }[] = [];
   let skipped: NoticeSkip[] = [];
   if (input.test) {
-    // 테스트 학생은 탈원 처리라 반 해석 경로로 못 뽑힘 — 고정 타깃(보드·학부모 연결 실존 확인됨).
+    // 테스트 학생은 탈원 처리라 반 해석 경로로 못 뽑힘 — 고정 타깃(보드·학부모 연결 실존 확인됨). 개별 내용 없음.
     targets = [{ studentId: null, ...TEST_TARGET }];
   } else {
     const classIds = (input.classIds ?? []).slice(0, 100);
@@ -107,21 +134,58 @@ export async function sendClassNotice(input: {
       });
     }
     const resolved = resolveNoticeTargets(candidates, settings.report.classnoteSubjects);
-    targets = resolved.targets;
     skipped = resolved.skipped;
+
+    // ⚠️ 학원 전체 동명이인 가드(원스크린 발송과 동일 강도) — resolveNoticeTargets는 배치-로컬 동명이인만 잡아
+    // 배치 밖 동명이인(선택 안 한 반의 같은 이름)이면 엉뚱한 보드로 갈 수 있음. 개별 내용이 붙으면 오발송=개인정보
+    // 사고라 재검(청크 25). 통과분만 발송.
+    const survivors: NoticeTarget[] = [];
+    for (let i = 0; i < resolved.targets.length; i += 25) {
+      const slice = resolved.targets.slice(i, i + 25);
+      const hits = await Promise.all(slice.map((t) => hasClassnoteNameCollision(supabase, t.studentId)));
+      slice.forEach((t, j) => {
+        if (hits[j]) skipped.push({ name: t.studentName, reason: "name_collision" });
+        else survivors.push(t);
+      });
+    }
+    targets = survivors;
   }
   if (!targets.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
+
+  // ── 개별 내용 — 공통 뒤에 덧붙여 그 학생 target.body에만 저장. 동명이인 가드 **이후** studentId lookup으로 붙여
+  // target↔student를 고정(오발송 방지). 개별 있는 학생만 personalized → 워커가 공유 보드(2가족+)엔 자동 차단. ──
+  if (!input.test && input.individual) {
+    const indiv = new Map<string, string>();
+    for (const [sid, txt] of Object.entries(input.individual)) {
+      const t = (txt ?? "").trim();
+      if (sid && t) indiv.set(sid, t);
+    }
+    if (indiv.size) {
+      targets = targets.map((tg) => {
+        const add = tg.studentId ? indiv.get(tg.studentId) : undefined;
+        return add ? { ...tg, body: `${body}\n\n${add}` } : tg;
+      });
+    }
+  }
 
   // 발송 안전 스위치 — OFF면 dry-run(큐 적재 안 함). 보고서 발송과 동일 스위치 공유.
   if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
 
-  const { error } = await supabase.from("classnote_notices").insert({
-    tenant_id: user.tenantId,
-    body,
-    targets,
-    created_by: user.id,
-  });
+  const { data: inserted, error } = await supabase
+    .from("classnote_notices")
+    .insert({ tenant_id: user.tenantId, body, targets, created_by: user.id })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
+
+  // 감사 로그 — '발송 대기(큐 적재)'(실제 게시는 연동 PC 워커). best-effort. source=class(반 공지 경로).
+  await logAction({
+    action: "classnote_notice_send",
+    targetType: "classnote_notice",
+    targetLabel: `대상 ${targets.length}명`,
+    metadata: { noticeId: inserted?.id ?? null, targetCount: targets.length, source: "class" },
+  });
+
   return { ok: true, queued: targets.length, skipped };
 }
 

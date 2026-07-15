@@ -5,6 +5,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/eywa-icons";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
 
@@ -39,11 +41,23 @@ export function NoticeFace({
 }) {
   const subjects = useSubjectMaps();
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(""); // 공통 내용
+  const [individual, setIndividual] = useState<Record<string, string>>({}); // studentId → 개별 내용(공통 뒤 덧붙임)
+  const [showIndividual, setShowIndividual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<NoticeRow[]>(initial);
 
-  const selectedCount = classes.filter((c) => checked.has(c.id)).reduce((a, c) => a + c.studentCount, 0);
+  // 선택 반들의 재원생 합집합(학생이 두 반에 걸치면 1회) — 개별 내용 입력 박스의 소스이자 실제 대상 수.
+  const selectedStudents = (() => {
+    const seen = new Map<string, { id: string; name: string; grade: string | null; className: string }>();
+    for (const c of classes) {
+      if (!checked.has(c.id)) continue;
+      for (const s of c.students) if (!seen.has(s.id)) seen.set(s.id, { ...s, className: c.name });
+    }
+    return [...seen.values()];
+  })();
+  const selectedCount = selectedStudents.length;
+  const indivCount = selectedStudents.filter((s) => (individual[s.id] ?? "").trim()).length;
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -59,8 +73,14 @@ export function NoticeFace({
   }
 
   async function doSend(test: boolean) {
+    // 개별 내용은 현재 선택된 학생 것만 추림(반 해제 후 남은 잔여 입력 제외).
+    const indiv: Record<string, string> = {};
+    for (const s of selectedStudents) {
+      const t = (individual[s.id] ?? "").trim();
+      if (t) indiv[s.id] = t;
+    }
     setBusy(true);
-    const res = await sendClassNotice({ classIds: [...checked], body, test });
+    const res = await sendClassNotice({ classIds: [...checked], body, individual: indiv, test });
     setBusy(false);
     if (res.ok && res.dryRun) {
       toast.message("dry-run — '보고서 설정' 탭에서 'ClassNote 실제 발송'을 켜야 큐에 올라갑니다");
@@ -71,12 +91,15 @@ export function NoticeFace({
       return;
     }
     const parts = [`${res.queued ?? 0}명 발송 대기(발송 PC가 순차 게시)`];
+    if (!test && indivCount) parts.push(`개별 내용 ${indivCount}명`);
     const collisions = (res.skipped ?? []).filter((s) => s.reason === "name_collision");
     if (collisions.length) parts.push(`동명이인 제외 ${collisions.length}명(${collisions.map((s) => s.name).join(", ")})`);
     toast.success(parts.join(" · "));
     if (!test) {
       setBody("");
       setChecked(new Set());
+      setIndividual({});
+      setShowIndividual(false);
     }
     refresh();
   }
@@ -108,19 +131,64 @@ export function NoticeFace({
             )}
           </div>
 
-          {/* 본문 + 발송 */}
+          {/* 공통 본문 + 개별 내용 + 발송 */}
           <div className="flex flex-col gap-2">
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              disabled={!canSend}
-              placeholder="공지 내용 (예: 다음 주 월요일은 학원 휴원입니다.)"
-              className="border-line bg-card focus:border-primary min-h-[200px] flex-1 rounded-md border p-3 text-[14px] outline-none"
-            />
+            <div>
+              <p className="text-text-dim mb-1 text-[11px] font-medium">공통 내용 (선택 반 재원생 모두에게)</p>
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                disabled={!canSend}
+                placeholder="공지 내용 (예: 다음 주 월요일은 학원 휴원입니다.)"
+                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-md border p-3 text-[14px] outline-none"
+              />
+            </div>
+
+            {/* 학생별 개별 내용 — 선택 학생 2명+일 때. 입력한 학생만 공통 뒤에 그 내용이 덧붙어 발송(없으면 공통 그대로). */}
+            {canSend && selectedCount >= 2 ? (
+              <div className="border-line rounded-md border">
+                <button
+                  type="button"
+                  onClick={() => setShowIndividual((v) => !v)}
+                  className="text-text-dim hover:bg-bg-soft flex w-full items-center justify-between px-3 py-2 text-[12px] font-medium"
+                >
+                  <span>학생별 개별 내용 추가 (선택){indivCount ? ` · ${indivCount}명 입력함` : ""}</span>
+                  <span className="text-text-faint inline-flex items-center gap-0.5">
+                    {showIndividual ? "접기" : "펼치기"}
+                    <EyIcon name={showIndividual ? "chevronUp" : "chevronDown"} size={12} />
+                  </span>
+                </button>
+                {showIndividual ? (
+                  <div className="border-line max-h-[300px] space-y-2 overflow-y-auto border-t p-2">
+                    <p className="text-text-faint px-1 text-[11px]">
+                      입력한 학생은 <b>공통 내용 뒤에</b> 이 내용이 덧붙어 발송됩니다. 비우면 공통 내용만 나갑니다.
+                    </p>
+                    {selectedStudents.map((s) => (
+                      <div key={s.id} className="flex items-start gap-2">
+                        <span className="w-24 shrink-0 pt-1.5" title={`${s.name} · ${s.className}`}>
+                          <span className="text-foreground block truncate text-[12px]">{s.name}</span>
+                          <span className="text-text-faint block truncate text-[10px]">
+                            {schoolGradeLabel(null, s.grade)} · {s.className}
+                          </span>
+                        </span>
+                        <textarea
+                          value={individual[s.id] ?? ""}
+                          onChange={(e) => setIndividual((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                          rows={2}
+                          placeholder="이 학생에게만 덧붙일 내용(선택)"
+                          className="border-line bg-card focus:border-primary w-full resize-y rounded-md border px-2 py-1.5 text-[12px] outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {canSend ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" disabled={busy || !body.trim() || checked.size === 0} onClick={() => doSend(false)}>
-                  발송 {selectedCount > 0 ? `(${selectedCount}명)` : ""}
+                  발송 {selectedCount > 0 ? `(${selectedCount}명${indivCount ? ` · 개별 ${indivCount}` : ""})` : ""}
                 </Button>
                 <Button
                   size="sm"
