@@ -9,6 +9,29 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 시간표 — 영어 엑셀 가져오기 개방 + 시트 권한 `sheet_sync` 설정 키 승격 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1184 + 브라우저 실측)
+
+원장 제보 2건("영어는 엑셀 가져오기가 없음" / "관리자인데 시트 내보내기·가져오기가 안 보임")이 같은 뿌리
+(`systemRole === "master"` 하드코딩)였다. 커밋 `eb929d2`.
+- **영어 파일 업로드 가져오기 개방**([toolbar-actions.tsx](<src/app/(shell)/timetable/_components/toolbar-actions.tsx>)):
+  영어 내보내기 xlsx도 수학과 **동일 헬퍼(`appendEnrollmentEditSheet`)·동일 헤더 상수**로 `수강편집` 시트를
+  포함해 라운드트립이 이미 닫혀 있었고, 서버 액션(`previewTimetableImport`/`applyTimetableImport`)에도 과목
+  제한이 없었다 — 막던 건 UI 조건 `!canStructureImport` 한 줄뿐(서버 변경 0). 시트 연동 OFF·권한 없음일 때
+  **영어만 가져오기 수단이 통째로 사라지던** 비대칭도 해소(수학은 파일 폴백이 있었음).
+  ⚠️ 파일 경로는 `수강편집`만 읽어 **배치 편집이 조용히 무시**되므로, 구조 가져오기 지원 과목(영어)엔
+  "학생 반이동만 반영 — 배치는 '시트에서 가져오기'로" 안내를 다이얼로그에 명시([import-dialog.tsx](<src/app/(shell)/timetable/_components/import-dialog.tsx>)).
+- **`sheet_sync`("구글 시트 연동") 액션 권한 키 신설**(permissions.ts): 시트 반영·가져오기 게이트 6곳
+  (page·syncSheetsNow·preview/applySheetImport·preview/apply/rollbackStructureImport)을 master 하드코딩에서
+  **owner 역할·권한 매트릭스**로 이관 → 원장이 화면에서 역할별 조정. `integrations` 선례 + 결정로그
+  "'이 기능만 다른 권한' = menuKey 승격이 정석". 기본값 = master·admin·manager 전체, 나머지 none.
+  실측 배경: 활성 admin 9 + manager 3이 관리자인데도 **안내 없이** 버튼이 통째로 숨었음(master는 2명뿐).
+  연동 자체는 정상(math·english 두 provider 모두 `sync_enabled=true`)이었다.
+  ⚠️ **게이트는 공용 [`canManageSheetSync`](src/features/integrations/server/sheet-access.ts) 단일 소스이며
+  `canWriteTenant` 금지** — scoped(강사)도 통과시킨다. 테넌트 전체 시간표(전 강사·전 학생 명단)를 외부 시트와
+  주고받는 경로라 `accessLevelTenant(role,"sheet_sync") === "full"`만 통과(전체/없음만 의미 있음).
+- ⚠️ `MENU_KEYS`에 키를 추가하면 `MENU_ICON`(eywa-icons.tsx)·`MENU_LABEL`(permissions-section.tsx)도 함께
+  채워야 한다(`satisfies Record<MenuKey,…>`라 타입체커가 잡아줌). owner 권한 표는 MENU_KEYS를 자동 순회 → 행은 저절로 생김.
+
 ### ClassNote 프리플라이트 보드 안전 게이트 — 공유 보드 오발송 사전 차단 (2026-07-15) — ✅ 검증(tsc0·lint0·vitest 1161)
 원장 제보로 시작: "발송단계에서 오발송되는 걸 사전에 차단 가능한가?" **실측 결과 실제 leak 진행 중이었다** —
 `(수학)박서준` 보드에 두 가족(초6 2014생 + 중3 2011생)이 연결돼 초6 보고서가 중3 가족에 노출(중3은 07-13에
