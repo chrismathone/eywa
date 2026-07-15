@@ -192,29 +192,31 @@ export function NoticeComposer({
   const indivCount = students.filter((s) => checked.has(s.id) && (individual[s.id] ?? "").trim()).length;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-      {/* 대상 선택 */}
-      <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-md border">
-        <div className="border-line border-b px-3 py-2">
-          <p className="text-foreground text-[13px] font-semibold">대상 학생 <span className="text-primary">{selectedCount}</span></p>
-          <p className="text-text-faint text-[11px]">보이는 반의 재원생 · 발송 과목(수학 등)만 실제 게시</p>
-        </div>
-        <div className="scrollbar-thin flex-1 overflow-y-auto p-1.5">
-          {students.length === 0 ? (
-            <p className="text-text-faint p-2 text-[12px]">표시할 학생이 없습니다.</p>
-          ) : (
-            students.map((s) => (
-              <label
-                key={s.id}
-                className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]"
-              >
-                <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggle(s.id)} />
-                <span className="text-foreground min-w-0 flex-1 truncate">{s.name}</span>
-                <span className="text-text-faint text-[11px]">{schoolGradeLabel(null, s.grade)}</span>
-                <span className="text-text-faint text-[11px]">{s.className}</span>
-              </label>
-            ))
-          )}
+    <div className="grid items-stretch gap-4 lg:grid-cols-[300px_1fr]">
+      {/* 대상 선택 — 데스크톱에선 우측(작성+이력)이 길어지면 함께 늘어 목록 내부 스크롤(높이 균형), 모바일은 520px 캡. */}
+      <div className="lg:relative lg:min-h-[320px]">
+        <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-md border lg:absolute lg:inset-0 lg:max-h-none">
+          <div className="border-line border-b px-3 py-2">
+            <p className="text-foreground text-[13px] font-semibold">대상 학생 <span className="text-primary">{selectedCount}</span></p>
+            <p className="text-text-faint text-[11px]">보이는 반의 재원생 · 발송 과목(수학 등)만 실제 게시</p>
+          </div>
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-1.5">
+            {students.length === 0 ? (
+              <p className="text-text-faint p-2 text-[12px]">표시할 학생이 없습니다.</p>
+            ) : (
+              students.map((s) => (
+                <label
+                  key={s.id}
+                  className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px]"
+                >
+                  <input type="checkbox" checked={checked.has(s.id)} onChange={() => toggle(s.id)} />
+                  <span className="text-foreground min-w-0 flex-1 truncate">{s.name}</span>
+                  <span className="text-text-faint text-[11px]">{schoolGradeLabel(null, s.grade)}</span>
+                  <span className="text-text-faint text-[11px]">{s.className}</span>
+                </label>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
