@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRight, Loader2, Sheet, UserMinus, UserPlus, Upload, X } from "@/components/icons/eywa-icon-compat";
+import { FilePickerButton } from "@/components/ui/file-picker-button";
 import {
   applySheetImport,
   applyTimetableImport,
@@ -215,16 +216,17 @@ export function TimetableImportDialog({
                   엑셀 파일 <span className="text-danger">*</span>
                 </label>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <input
-                    type="file"
+                  <FilePickerButton
                     accept=".xlsx"
-                    onChange={(e) => {
-                      setFile(e.target.files?.[0] ?? null);
+                    file={file}
+                    onSelect={(f) => {
+                      setFile(f);
                       setDiff(null);
                       setHash(null);
                       setResult(null);
                     }}
-                    className="text-text-dim flex-1 text-[12px]"
+                    label="엑셀 파일 선택"
+                    className="flex-1"
                   />
                   <button
                     type="button"

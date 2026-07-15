@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { History, Loader2, Mic, Square, Upload } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { FilePickerButton } from "@/components/ui/file-picker-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { downloadFile, kstTimestamp } from "@/lib/audio-upload";
 import { issueAudioUploadTicket } from "@/features/media/server/upload-actions";
@@ -206,21 +207,20 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
             </Button>
           )}
           <span className="text-text-faint text-xs">또는</span>
-          <input
-            type="file"
+          <FilePickerButton
             accept="audio/*"
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
+            file={file}
+            onSelect={(f) => {
+              setFile(f);
               setError(null);
             }}
-            className="text-text-dim text-[12px]"
+            label="음성 파일 선택"
           />
         </div>
 
         {file ? (
           <p className="text-text-dim text-xs">
-            선택됨: <span className="text-foreground">{file.name}</span> (
-            {Math.round(file.size / 1024)} KB)
+            <span className="num">{Math.round(file.size / 1024)}</span> KB
           </p>
         ) : null}
 

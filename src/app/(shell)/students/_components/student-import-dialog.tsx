@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Upload, X } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
+import { FilePickerButton } from "@/components/ui/file-picker-button";
 import {
   applyStudentImport,
   previewStudentImport,
@@ -123,16 +124,17 @@ export function StudentImportDialog() {
               엑셀 파일 <span className="text-danger">*</span>
             </label>
             <div className="mt-1.5 flex items-center gap-2">
-              <input
-                type="file"
+              <FilePickerButton
                 accept=".xlsx"
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] ?? null);
+                file={file}
+                onSelect={(f) => {
+                  setFile(f);
                   setRows(null);
                   setResult(null);
                   setError(null);
                 }}
-                className="text-text-dim flex-1 text-[12px]"
+                label="엑셀 파일 선택"
+                className="flex-1"
               />
               <button
                 type="button"
