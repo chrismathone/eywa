@@ -23,16 +23,21 @@
  *  - `--post` 데몬에서만 동작(dry-run 데몬 2대가 같이 돌아도 중복 알림 없음). 발송 킬스위치
  *    (classnoteSendEnabled)는 **따르지 않는다** — 이건 발송이 아니라 인바운드 감지다(provision-core와 같은 논리).
  */
+import { evaluateBoardSafety } from "./board-safety.mjs";
+import { getClassnoteBoardAllowlist } from "./classnote-core.mjs";
 import {
   BOARD_GROUPS,
+  fetchBoards,
   fetchCenterId,
   loginClassnote,
   norm,
 } from "./classnote-admin-core.mjs";
 import {
   buildNotificationText,
+  classnotePostUrl,
   countByEffectiveName,
   maxPostId,
+  pageOlderThanAgeGuard,
   reachedWatermark,
   selectNewParentPosts,
 } from "./parent-post-filter.mjs";
@@ -40,8 +45,20 @@ import {
 const SCOPE = "parent_posts";
 const POLL_INTERVAL_MS = 60_000; // 데몬 폴은 15초 — 피드는 1분에 1번이면 "즉시"에 충분
 const PAGE_SIZE = 100;
-const MAX_PAGES = 5; // 워터마크까지 거슬러 올라갈 상한(피드 ~140건/일이라 평소 1페이지로 끝)
 const MAX_AGE_DAYS = 3;
+/**
+ * 워터마크까지 거슬러 올라갈 **하드 백스톱**. 평소(1분 폴)엔 1페이지로 끝나고, 이 상한은 **따라잡기**
+ * (연동 PC가 며칠 꺼졌다 켜진 경우)에만 의미가 있다.
+ *
+ * ⚠️ 5(=500행)였다가 10으로 올림 — "피드 ~140건/일"이라는 내 추정이 **틀렸다**(2026-07-15 실측:
+ * 바쁜 날 **249~270건/일**. 07-13 270 · 07-14 249). 500행은 바쁜 이틀도 못 덮어서, age 가드(3일) 안에
+ * 있는 글인데도 조용히 건너뛰었다(실측: 2일 전 글이 565번째 행 = 6페이지째라 상한 밖).
+ * 따라잡기가 필요한 바로 그 순간에 못 따라잡는 셈. 3일 × 300건 = 900행 → 10페이지로 여유를 준다.
+ *
+ * 진짜 종료 조건은 아래 `collectFeed`의 **age 컷오프**다(그보다 오래된 글은 어차피 전부 tooOld라 볼 이유가 없다).
+ * MAX_PAGES는 그 조건이 어떤 이유로든 안 걸릴 때를 위한 안전망일 뿐 — 정상 경로에서 여기까지 오면 안 된다.
+ */
+const MAX_PAGES = 10;
 
 let lastRunAt = 0; // 모듈 스코프 인메모리 가드 — 재시작 시 즉시 1회 실행은 정상(워터마크가 중복을 막음)
 
@@ -95,7 +112,11 @@ async function fetchFeedPage(page, centerId, cursor) {
   );
 }
 
-/** 워터마크에 닿을 때까지(또는 상한까지) 피드를 거슬러 수집. 평소엔 1페이지. */
+/**
+ * 피드를 거슬러 수집 — 평소(1분 폴)엔 **1페이지**로 끝난다. 여러 페이지를 파는 건 따라잡기뿐.
+ * 종료: ① 워터마크 도달(= 이미 본 구간) ② **age 가드보다 오래된 구간 진입**(그 아래는 어차피 전부 tooOld)
+ * ③ 마지막 페이지 ④ MAX_PAGES 백스톱(여기까지 오면 비정상 — 경고).
+ */
 async function collectFeed(page, centerId, lastSeenId, log) {
   const all = [];
   let cursor = null;
@@ -104,9 +125,11 @@ async function collectFeed(page, centerId, lastSeenId, log) {
     all.push(...list);
     if (!list.length || !next) return all;
     if (reachedWatermark(list, lastSeenId)) return all;
+    if (pageOlderThanAgeGuard(list, { maxAgeDays: MAX_AGE_DAYS })) return all; // 더 파도 전부 버릴 글
     cursor = next;
   }
-  log(`[feed] ⚠️ ${MAX_PAGES}페이지(${all.length}건)까지 봤는데 워터마크 미도달 — 더 과거 글은 건너뜁니다`);
+  // 여기 도달 = 3일치가 1,000행을 넘었다는 뜻(밀도 급증). 건너뛴 구간은 age 가드 안일 수 있으니 경고를 남긴다.
+  log(`[feed] ⚠️ ${MAX_PAGES}페이지(${all.length}건)를 봤는데도 워터마크·age 컷오프 미도달 — 더 과거 글은 건너뜁니다`);
   return all;
 }
 
@@ -244,10 +267,35 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
       return { ran: true, detected: 0, notified: 0, tooOld: tooOld.length };
     }
 
+    // ⚠️ **공유 보드 게이트** — 발송 워커와 **같은 순수 판정**(evaluateBoardSafety)을 태운다.
+    // 동명이인 가드(boardsToStudents)로는 이 클래스를 **원천적으로 못 잡는다**: 공유 보드는 ClassNote 쪽
+    // 멤버십 문제인데 eywa DB엔 보드 멤버십이 없다. 실사례 `(수학)박서준`(초6+중3 두 가족 동거)에서
+    // eywa엔 "박서준"과 "박서준C"가 **다른 이름**이라 dup=1로 통과해버린다 → 중3 가족의 사적인 글이
+    // 초6 담당 강사에게 간다(2026-07-15 2차 적대리뷰가 프로덕션에서 실증. docs §8도 같은 취지).
+    // 보드 조회는 **잡힌 글이 있을 때만**(학부모 글 3주 8건 = 사실상 공짜). 실패 시 fail-closed(전건 보류).
+    const held = [];
+    let safeBoards = null;
+    let allowlist = [];
+    try {
+      const { page, centerId } = await getFeedPage(browser);
+      [safeBoards, allowlist] = await Promise.all([
+        fetchBoards(page, centerId),
+        getClassnoteBoardAllowlist(sql, tenant),
+      ]);
+    } catch (e) {
+      // 보드 확인 실패 = 공유 보드인지 모름 → 알리지 않는다(오배달보다 미알림이 낫다). 워터마크도 안 전진 → 다음 폴 재시도.
+      log(`[feed] ⚠️ 보드 안전 확인 실패 — 이번 폴은 알림 보류(다음 폴 재시도): ${e.message}`);
+      return { ran: true, detected: picked.length, notified: 0, held: picked.length };
+    }
+
     const { board, collisions } = await boardsToStudents(sql, tenant, keys, group.prefix);
     const hits = [];
-    const held = [];
     for (const p of picked) {
+      const safety = evaluateBoardSafety({ className: p.class_name, boards: safeBoards, allowlist });
+      if (!safety.ok) {
+        held.push(`${p.class_name}(${safety.code} — ${String(safety.reason).slice(0, 60)})`);
+        continue;
+      }
       const s = board.get(norm(p.class_name));
       if (!s) {
         held.push(`${p.class_name}(재원·수강 아님 또는 동명이인 보류)`);
@@ -272,7 +320,7 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
           type: "classnote_parent_post",
           title,
           body,
-          link: `/students/${h.student.id}`,
+          link: classnotePostUrl(h.post.id), // ClassNote 그 글로 직행(벨이 확인 팝업 후 새 창)
         });
       }
     }
@@ -285,13 +333,31 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     }
 
     // 알림 insert와 워터마크 전진을 **한 트랜잭션**으로 — 중간에 죽어도 같은 글을 두 번 알리지 않는다.
+    // ⚠️ 워터마크를 트랜잭션 밖에서 읽었으므로(피드 조회가 네트워크라 락을 오래 쥘 수 없다) 여기서 **다시 잠그고
+    // 확인**한다. 값이 그새 바뀌었다면 **다른 러너가 이 구간을 이미 처리한 것**(예: 데몬이 도는데 운영자가
+    // process-parent-posts.mjs --apply를 같이 돌림) → 그쪽이 이미 알렸으므로 **중복 insert 금지**, 워터마크만 최대로.
+    // notifications엔 유니크 제약이 없어 중복이 그대로 벨에 쌓이므로 이 확인이 유일한 방어다.
+    let raced = false;
     await sql.begin(async (tx) => {
+      const [fresh] = await tx`
+        select last_seen_post_id from classnote_feed_state
+        where tenant_id = ${tenant} and scope = ${SCOPE} for update`;
+      const freshId = fresh?.last_seen_post_id == null ? null : Number(fresh.last_seen_post_id);
+      if (freshId !== lastSeenId) {
+        raced = true;
+        await saveWatermark(tx, tenant, watermark);
+        return;
+      }
       if (plan.length) {
         await tx`insert into notifications ${tx(plan, "tenant_id", "recipient_id", "type", "title", "body", "link")}`;
       }
       await saveWatermark(tx, tenant, watermark);
     });
 
+    if (raced) {
+      log(`[feed] 다른 러너가 이 구간을 이미 처리함 — 중복 알림 방지로 ${plan.length}건 생략(워터마크만 전진)`);
+      return { ran: true, detected: picked.length, notified: 0, held: held.length, tooOld: tooOld.length };
+    }
     log(`[feed] 학부모 새 글 ${picked.length}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
     for (const h of held) log(`[feed]   보류: ${h}`);
     return { ran: true, detected: picked.length, notified: plan.length, held: held.length, tooOld: tooOld.length };
@@ -301,11 +367,19 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
   }
 }
 
+/**
+ * 워터마크 저장 — **단조증가만 허용**(`greatest`).
+ *
+ * ⚠️ 무조건 덮어쓰면 **역행**한다: 워터마크 읽기가 트랜잭션 밖이라, 데몬이 도는 중에 운영자가
+ * `process-parent-posts.mjs --apply`를 같이 돌리면(스크립트 안내는 "데몬이 죽었을 때"라고 하지만 오판 가능)
+ * 둘 다 같은 lastSeen을 읽고 → 늦게 커밋한 쪽이 **더 작은 값**으로 덮어 이미 알린 글이 재알림된다.
+ * greatest로 역행만은 구조적으로 막는다(같은 폴에서의 중복 insert는 그래도 가능 — 아래 주석 참조).
+ */
 async function saveWatermark(sql, tenant, id) {
   await sql`
     insert into classnote_feed_state (tenant_id, scope, last_seen_post_id, last_polled_at, status, error, updated_at)
     values (${tenant}, ${SCOPE}, ${id}, now(), 'ok', null, now())
     on conflict (tenant_id, scope) do update set
-      last_seen_post_id = excluded.last_seen_post_id,
+      last_seen_post_id = greatest(coalesce(classnote_feed_state.last_seen_post_id, 0), excluded.last_seen_post_id),
       last_polled_at = now(), status = 'ok', error = null, updated_at = now()`;
 }

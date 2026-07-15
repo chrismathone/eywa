@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +15,11 @@ import { fetchMyNotifications, markNotificationsRead } from "@/features/notifica
 import { NOTIFICATION_ICON, type NotificationItem } from "@/features/notifications/types";
 
 const POLL_MS = 60_000;
+
+/** 앱 밖으로 나가는 링크인가 — 알림 link는 보통 앱 경로(`/students/1`)지만 ClassNote 글은 절대 URL이다. */
+function isExternal(link: string): boolean {
+  return /^https?:\/\//i.test(link);
+}
 
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -32,6 +38,7 @@ export function NotificationBell() {
   const pathname = usePathname();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [pendingLink, setPendingLink] = useState<string | null>(null); // 확인 대기 중인 외부 링크
   const [, startTransition] = useTransition();
   // 요청 순번 — 모든 서버 왕복(폴링·읽음처리·모두읽음)이 공유한다. 늦게 도착한 응답이
   // 최신 요청 결과를 덮지 않게(적대리뷰: mark 응답을 느린 폴링이 되돌리던 레이스).
@@ -89,12 +96,17 @@ export function NotificationBell() {
       setUnread((u) => Math.max(0, u - 1));
       run(() => markNotificationsRead([n.id]));
     }
-    if (n.link) router.push(n.link);
+    if (!n.link) return;
+    // 외부 링크(ClassNote 학부모 글 등)는 eywa를 벗어나므로 먼저 확인받는다 — router.push는 앱 내부 경로 전용이라
+    // 절대 URL을 넘기면 동작하지 않는다. 확인 후 새 탭으로 열어 작업 중이던 eywa 화면을 잃지 않게 한다.
+    if (isExternal(n.link)) setPendingLink(n.link);
+    else router.push(n.link);
   }
 
   const badge = unread > 99 ? "99+" : String(unread);
 
   return (
+    <>
     <DropdownMenu onOpenChange={(open) => open && refresh()}>
       <DropdownMenuTrigger
         render={
@@ -178,5 +190,20 @@ export function NotificationBell() {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    {/* 드롭다운 **밖**에 둔다 — 안에 두면 메뉴가 닫힐 때 같이 언마운트돼 확인창이 뜨자마자 사라진다. */}
+    <ConfirmDialog
+      open={pendingLink !== null}
+      title="ClassNote로 이동"
+      message="해당 글로 이동하시겠습니까? ClassNote가 새 탭에서 열립니다."
+      confirmLabel="이동"
+      onConfirm={() => {
+        const url = pendingLink;
+        setPendingLink(null);
+        // noopener/noreferrer — 새 탭이 window.opener로 eywa 세션 창을 건드리지 못하게(탭내빙 방지).
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      }}
+      onCancel={() => setPendingLink(null)}
+    />
+    </>
   );
 }

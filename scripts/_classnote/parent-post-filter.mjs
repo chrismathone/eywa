@@ -83,6 +83,32 @@ export function selectNewParentPosts(rows, { lastSeenId = null, prefix, nowMs = 
 }
 
 /**
+ * 이 페이지가 **age 가드보다 오래된 구간에 진입했나** — 그렇다면 더 과거로 갈 이유가 없다
+ * (피드는 id desc이고, 그 아래는 어차피 전부 `tooOld`로 버려질 글이다).
+ *
+ * ⚠️ 페이지 수로 따라잡기 범위를 정하면 안 된다(2026-07-15 실측): "피드 ~140건/일"이라는 추정이 틀렸고
+ * (바쁜 날 **249~270건/일**) 500행 상한이 age 가드(3일) 안의 글을 조용히 건너뛰었다. 밀도는 계절·시기에 따라
+ * 계속 변하므로 **행 수가 아니라 시간으로** 멈춘다. `created`는 순서엔 못 쓰지만(주입값 존재) age 판정엔 쓴다 —
+ * 여기선 "그만 파도 되나"의 힌트일 뿐이고, 진짜 선별은 `selectNewParentPosts`가 행 단위로 다시 한다.
+ *
+ * @param {FeedRow[] | null | undefined} rows
+ * @param {{ nowMs?: number, maxAgeDays?: number }} [opts]
+ * @returns {boolean} 페이지에 **유효한 created가 하나라도 있고**, 그 중 가장 최근 것조차 age 컷오프보다 오래됨
+ */
+export function pageOlderThanAgeGuard(rows, { nowMs = Date.now(), maxAgeDays = 3 } = {}) {
+  const cutoff = nowMs - maxAgeDays * 24 * 60 * 60 * 1000;
+  let sawValid = false;
+  let newest = -Infinity;
+  for (const r of rows ?? []) {
+    const t = Date.parse(r?.created ?? "");
+    if (!Number.isFinite(t)) continue; // created가 깨진 행은 판단 근거로 쓰지 않는다
+    sawValid = true;
+    if (t > newest) newest = t;
+  }
+  return sawValid && newest < cutoff;
+}
+
+/**
  * 유효이름(`classnote_name ?? name`)별 **인원수** — 동명이인(신원 불명) 판정용.
  *
  * ⚠️ 이 함수에 넘기는 rows는 **status·과목 무필터 전 학생**이어야 한다(퇴원·예비 포함). 재원생만 넘기면
@@ -115,6 +141,22 @@ export function countByEffectiveName(rows, normFn) {
  * @param {string} studentName
  * @returns {{ title: string, body: string }}
  */
+/**
+ * 알림 클릭 시 열 **ClassNote 글 주소** — 강사가 그 자리에서 답글을 달 수 있도록(원장 요청 2026-07-15).
+ *
+ * 형식 확정(실측): `/service/report/{id}`가 그 글의 상세 화면을 렌더한다(`/service/report/detail/{id}`는 404).
+ * ⚠️ SPA라 **어떤 경로든 HTTP 200**을 준다 — 형식을 바꿀 땐 상태코드가 아니라 **렌더된 내용**으로 확인할 것
+ * (2026-07-15: 1.2초만 기다려 "내용 없음"으로 오판했다가 3.5초 기다리니 정상이었다).
+ * ⚠️ ClassNote 교사 계정이 없는 강사(예: 박민엽 — 24명 명단에 없음)는 로그인 화면을 보게 된다.
+ * 그래서 **본문(body)에 글 전문을 계속 싣는다** — 링크는 보조, 정보 전달은 본문이 책임진다.
+ *
+ * @param {number} postId
+ * @param {string} [base] - 도메인(테스트 주입용). 기본 = classnote.com.
+ */
+export function classnotePostUrl(postId, base = "https://www.classnote.com") {
+  return `${base}/service/report/${postId}`;
+}
+
 export function buildNotificationText(post, studentName) {
   const text = String(post?.content ?? "")
     .replace(/\s+/g, " ")

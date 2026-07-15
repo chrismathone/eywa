@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 // 워커 순수 모듈(.mjs · JSDoc 타입) — 워커 본체는 playwright/postgres를 물고 있어 순수 로직만 분리해 테스트.
 import {
   buildNotificationText,
+  classnotePostUrl,
   countByEffectiveName,
   isParentPost,
   maxPostId,
+  pageOlderThanAgeGuard,
   reachedWatermark,
   selectNewParentPosts,
 } from "../../scripts/_classnote/parent-post-filter.mjs";
@@ -102,6 +104,37 @@ describe("selectNewParentPosts", () => {
   });
 });
 
+describe("pageOlderThanAgeGuard — 따라잡기 종료 조건 (행 수가 아니라 시간으로 멈춘다)", () => {
+  const nowMs = Date.parse("2026-07-15T00:00:00Z");
+
+  it("페이지가 통째로 age 컷오프보다 오래되면 중단(그 아래는 어차피 전부 tooOld)", () => {
+    const rows = [row({ created: "2026-07-10T00:00:00Z" }), row({ created: "2026-07-09T00:00:00Z" })];
+    expect(pageOlderThanAgeGuard(rows, { nowMs, maxAgeDays: 3 })).toBe(true);
+  });
+
+  it("최신 글이 하나라도 컷오프 안이면 계속 판다", () => {
+    const rows = [row({ created: "2026-07-14T00:00:00Z" }), row({ created: "2026-07-01T00:00:00Z" })];
+    expect(pageOlderThanAgeGuard(rows, { nowMs, maxAgeDays: 3 })).toBe(false);
+  });
+
+  it("created가 전부 깨진 페이지에선 멈추지 않는다 — 근거 없이 따라잡기를 끊으면 글을 잃는다", () => {
+    const rows = [row({ created: "" }), row({ created: null })];
+    expect(pageOlderThanAgeGuard(rows, { nowMs, maxAgeDays: 3 })).toBe(false);
+  });
+
+  it("빈 페이지에선 멈추지 않는다(호출부가 !list.length로 먼저 처리)", () => {
+    expect(pageOlderThanAgeGuard([], { nowMs })).toBe(false);
+    expect(pageOlderThanAgeGuard(undefined, { nowMs })).toBe(false);
+  });
+
+  it("⭐ 실측 재현 — 07-13 글(2일 전)은 아직 컷오프 안이라 계속 파야 한다", () => {
+    // 2026-07-15 실측: 이 글이 565번째 행이라 옛 500행 상한(MAX_PAGES=5)에 잘렸다.
+    // 이제는 페이지 수가 아니라 age로 멈추므로 도달한다.
+    const rows = [row({ created: "2026-07-13T08:03:00Z" })];
+    expect(pageOlderThanAgeGuard(rows, { nowMs: Date.parse("2026-07-15T09:30:00Z"), maxAgeDays: 3 })).toBe(false);
+  });
+});
+
 // 워커의 norm(공백 제거)과 동형 — 순수 모듈이 정규화를 주입받으므로 테스트도 같은 규칙을 넘긴다.
 const norm = (s: string) => s.replace(/\s+/g, "");
 
@@ -143,6 +176,15 @@ describe("countByEffectiveName — 동명이인 보류 판정 (실제 오배달 
   it("빈 입력에 안전", () => {
     expect(countByEffectiveName([], norm).size).toBe(0);
     expect(countByEffectiveName(undefined, norm).size).toBe(0);
+  });
+});
+
+describe("classnotePostUrl", () => {
+  it("실측 확정 형식 — /service/report/{id}", () => {
+    expect(classnotePostUrl(1422758151)).toBe("https://www.classnote.com/service/report/1422758151");
+  });
+  it("절대 URL이어야 한다 — 벨이 이걸로 '외부 링크'를 판별해 확인 팝업을 띄운다", () => {
+    expect(classnotePostUrl(1)).toMatch(/^https?:\/\//);
   });
 });
 
