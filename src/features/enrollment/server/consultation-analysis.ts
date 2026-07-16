@@ -1,4 +1,5 @@
 import { generateJSON } from "@/lib/ai/generate";
+import type { AiProvider } from "@/lib/ai/models";
 
 /**
  * 등록상담 AI 심층분석 — 프롬프트·호출 단일 소스.
@@ -136,17 +137,19 @@ export function buildConsultationAnalysisPrompt(
 
 /**
  * 심층분석 실행 — generateJSON 결과({ data, model, ... })를 그대로 반환(웹훅 route가 기존 형태 그대로 소비).
- * provider 미지정 시 기본(Solar). 품질이 더 필요하면 provider:"anthropic"으로 Claude 라우팅(호출부 한 줄).
+ * provider 기본 = DeepSeek v4-pro(2026-07-16 전환 — 실측 A/B에서 warnings를 Sonnet급으로 생성, 비용 우위).
+ * 키 없으면 무중단 폴백(anthropic/upstage). 다른 모델로 되돌리려면 호출부에서 provider 한 줄로 오버라이드.
  */
 export function runConsultationAnalysis(
   consult: ConsultationPromptInput,
   formatted: string,
   multi: boolean,
-  provider?: "upstage" | "anthropic",
+  provider: AiProvider = "deepseek",
 ) {
   return generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
     maxTokens: 8192,
+    meta: { feature: "enrollment_analysis" },
     prompt: buildConsultationAnalysisPrompt(consult, formatted, multi),
-    ...(provider ? { provider } : {}),
+    provider,
   });
 }

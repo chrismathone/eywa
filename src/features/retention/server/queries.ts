@@ -49,7 +49,8 @@ async function fetchByStudentChunks<T>(
  * 없음) **admin client + 모든 쿼리에 명시적 `.eq(tenant_id)`** 로 테넌트를 직접 스코프하고(RLS 대체),
  * 캐시 키에 tenantId·teacherId를 넣어 교차테넌트/교차스코프 누수를 원천 차단한다.
  */
-async function computeRetentionRoster(tenantId: string, teacherId?: string): Promise<RosterStudent[]> {
+// export: 일일 브리핑 cron이 캐시 없이 직접 호출한다(새벽 1회라 unstable_cache 불필요, 세션 없음).
+export async function computeRetentionRoster(tenantId: string, teacherId?: string): Promise<RosterStudent[]> {
   const admin = createAdminClient();
 
   const { data: students } = await admin

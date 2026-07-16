@@ -13,6 +13,7 @@ import type {
   ConsultationProcessingStatus,
   StudentConsultationAiReport,
 } from "@/features/consultations/server/queries";
+import { modelDisplayLabel } from "@/lib/ai/model-label";
 
 const SECTIONS: { key: keyof StudentConsultationAiReport; label: string }[] = [
   { key: "summary", label: "요약" },
@@ -51,6 +52,7 @@ export function RecordingPanel({
   processingError,
   aiReport,
   aiGeneratedAt,
+  aiModelVersion,
 }: {
   id: string;
   processingStatus: ConsultationProcessingStatus;
@@ -59,7 +61,9 @@ export function RecordingPanel({
   processingError: string | null;
   aiReport: StudentConsultationAiReport | null;
   aiGeneratedAt: string | null;
+  aiModelVersion?: string | null;
 }) {
+  const modelLabel = modelDisplayLabel(aiModelVersion);
   const router = useRouter();
   const [state, formAction] = useActionState<RunConsultationAnalysisState, FormData>(
     runStudentConsultationAnalysis,
@@ -131,9 +135,20 @@ export function RecordingPanel({
 
       {aiReport ? (
         <div className="space-y-2">
-          {aiGeneratedAt ? (
-            <p className="text-text-faint text-[11px]">
-              생성 {new Date(aiGeneratedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+          {aiGeneratedAt || modelLabel ? (
+            <p className="text-text-faint inline-flex items-center gap-1.5 text-[11px]">
+              {aiGeneratedAt
+                ? `생성 ${new Date(aiGeneratedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`
+                : null}
+              {modelLabel ? (
+                <span
+                  className="border-line inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]"
+                  title="이 분석을 생성한 AI 모델"
+                >
+                  <Sparkles className="size-2.5" />
+                  {modelLabel}
+                </span>
+              ) : null}
             </p>
           ) : null}
           <dl className="divide-border bg-card border-border divide-y rounded-md border">

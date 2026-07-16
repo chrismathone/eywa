@@ -154,6 +154,45 @@ export function roleHome(role: SystemRole, matrix: AccessMatrix = MENU_ACCESS): 
   return canAccess(role, "dashboard", matrix) ? "/dashboard" : "/";
 }
 
+// (shell) 최상위 라우트 폴더 → 그 페이지가 게이트하는 MenuKey. 폴더명이 곧 키인 경우가 대부분이나
+// 하이픈/특수 케이스는 명시. integrations·sheet_sync는 라우트가 아니라 액션 권한 키라 여기 없음.
+const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
+  dashboard: "dashboard",
+  timetable: "timetable",
+  attendance: "attendance",
+  classes: "classes",
+  students: "students",
+  exams: "exams",
+  enrollment: "enrollment",
+  consultations: "consultations",
+  withdrawals: "withdrawals",
+  retention: "retention",
+  "lesson-reports": "lesson_reports",
+  staff: "staff",
+  billing: "billing",
+  "textbook-requests": "textbook_requests",
+  "expense-requests": "expense_requests",
+  meetings: "meetings",
+  documents: "documents",
+  help: "help",
+  admin: "admin",
+  owner: "owner",
+  onescreen: "teacher_onescreen",
+  "my-learning": "my_learning",
+  "kiosk-settings": "kiosk_settings",
+};
+
+/**
+ * URL 경로 → 그 페이지의 MenuKey(첫 세그먼트 기준). 매핑 없는 경로(신규/비메뉴 라우트)는 null.
+ * (shell) 레이아웃의 **뷰-경로 정합성 가드**가 쓴다 — 강사 뷰(겸직 강사뷰 포함)에서 강사가 접근 못 하는
+ * 페이지를 미니셸이 감싸는 것을 막기 위해 canAccess("teacher", menu)와 대조한다. null(모르는 경로)은
+ * fail-open — 페이지 자체의 requireAccess가 판정(신규 라우트를 이 맵 누락으로 과잉 차단하지 않음).
+ */
+export function menuKeyForPath(pathname: string): MenuKey | null {
+  const seg = pathname.split("/").filter(Boolean)[0];
+  return seg ? (PATH_SEGMENT_TO_MENU[seg] ?? null) : null;
+}
+
 // === 테넌트 권한 override (owner 설정 permissions 섹션) ===
 export type PermissionOverride = { menu: MenuKey; role: SystemRole; access: Access };
 

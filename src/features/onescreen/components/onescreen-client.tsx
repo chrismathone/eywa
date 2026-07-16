@@ -50,9 +50,11 @@ function initReports(students: OneScreenStudent[]): ReportsState {
     out[s.id] = {};
     // 발송상태·공유토큰·ClassNote 상태는 **과목별**(su)로 초기화 — 학생단위(s.reportSent) 뭉갬 금지.
     // 새로고침 시 워커가 쓴 최종 classnoteStatus(success/failed 등)도 roster 초기로드로 반영됨.
+    // 멘트/추세 초안도 roster 복원값(오늘 세션 > 오늘 발송본)으로 시딩 — 새로고침 유실 방지.
     for (const su of s.subjects)
       out[s.id]![su.name] = {
-        draft: "",
+        draft: su.draft ?? "",
+        trendDraft: su.trendDraft,
         sent: su.reportSent ?? false,
         shareToken: su.shareToken,
         classnoteStatus: su.classnoteStatus,
@@ -192,6 +194,7 @@ export function OneScreenClient({
           {
             today: su.today,
             draft: r?.[su.name]?.draft ?? "",
+            trendDraft: r?.[su.name]?.trendDraft ?? "",
             textbook: su.textbook ?? "",
             makeup: su.makeup ?? false,
             homeworkToday: su.homeworkToday ?? "",
@@ -835,8 +838,8 @@ export function OneScreenClient({
         }));
       }
       for (const original of files) {
-        // 업로드 전 클라 다운스케일(포맷 보존). 실패 시 원본 반환이라 업로드는 항상 진행.
-        const file = await resizeImageForUpload(original);
+        // 이미지만 업로드 전 클라 다운스케일(문서/오디오는 원본 그대로). 실패 시 원본 반환이라 업로드는 항상 진행.
+        const file = original.type.startsWith("image/") ? await resizeImageForUpload(original) : original;
         const ext = extFromType(file.type) ?? file.name.split(".").pop() ?? "jpg";
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
@@ -874,7 +877,7 @@ export function OneScreenClient({
           classnoteStatus: undefined,
         }));
       }
-      if (added) toast.success(`사진 ${added}장 첨부 — ClassNote는 다시 발송하세요`);
+      if (added) toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
     } finally {
       setUploadingSubject(null);
     }

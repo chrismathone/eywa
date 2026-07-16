@@ -36,9 +36,27 @@ const RECEIPT_MIME_TYPES = [
 ];
 const RECEIPT_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB — 영수증 1장에 충분
 
-// 수업 보고서 학생 사진 첨부(P2b) — 사진만(jpeg/png/webp). 학생 PII라 비공개 + admin signed URL.
-const REPORT_ATTACHMENT_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const REPORT_ATTACHMENT_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
+// 수업 보고서 첨부 — 사진 + 문서/오디오(pdf·word·excel·ppt·hwp·mp3·m4a). ClassNote 첨부파일 슬롯 + 앱
+// isReportAttachmentCT(src/lib/storage/media-storage.ts)와 **일치 필수**. 학생 PII라 비공개 + admin signed URL.
+const REPORT_ATTACHMENT_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/haansofthwp",
+  "application/x-hwp",
+  "application/octet-stream", // 한글/한셀/한쇼 등 브라우저가 타입 못 정하는 파일 폴백
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/x-m4a",
+];
+const REPORT_ATTACHMENT_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MB — 스캔 PDF 등
 
 const BUCKETS = [
   {

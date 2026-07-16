@@ -20,6 +20,7 @@ const EMPTY: TodayActionsRaw = {
   leavesToday: [],
   unwrittenReportsToday: { count: 0, names: [] },
   unassignedEnrolled: [],
+  classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
 };
 
 describe("buildTodayActions", () => {
@@ -89,6 +90,32 @@ describe("buildTodayActions", () => {
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
     });
+  });
+
+  it("ClassNote 발송 주의 = amber + 합산 count + 한글 구분 detail(raw 상태 키 없음)", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      classnoteAttention: { failed: 2, tooOld: 1, humanHold: 3, stuck: 1 },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      key: "classnote-attention",
+      severity: "amber",
+      count: 7,
+      detail: "발송 실패 2 · 기한 초과 1 · 확인 필요 3 · 멈춤 1",
+      href: "/lesson-reports?tab=writing",
+      menuKey: "lesson_reports",
+      requiredAccess: "read",
+    });
+    expect(items[0].detail).not.toMatch(/blocked_shared|name_conflict|too_old|failed/);
+  });
+
+  it("ClassNote 발송 주의는 0인 구분을 detail에서 생략", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      classnoteAttention: { failed: 0, tooOld: 0, humanHold: 2, stuck: 0 },
+    });
+    expect(items[0]).toMatchObject({ count: 2, detail: "확인 필요 2" });
   });
 
   it("어제 미기록은 어제 날짜의 일별 페이지로 링크", () => {

@@ -15,11 +15,19 @@ export type LessonPosition = {
   lesson: string; // 차시 문자열(원본)
 };
 
-/** MATH_CURRICULUM을 학년(CURRICULUM_GRADES)순 → 단원순 → 차시순으로 flatten. position은 1-based. */
+/**
+ * 진도 추적 대상 학년 = 초·중만. 고등(공통수학·대수·미적분·확률과 통계·기하)은 피커(curriculum.ts)엔
+ * 노출하되 여기 전역 타임라인에선 제외한다 — ① 과목 선택제라 gradeRank(초/중/고+숫자)에 안 맞고
+ * ② 과목 간 차시명이 중복(미적분1·2의 "접선의 방정식"·"속도와 가속도" 등)이라 전역 유일 위치 매핑이 깨진다.
+ * (positionOf가 고등 progress를 null로 두는 기존 계약도 그대로 유지 → ingest에서 skip.)
+ */
+const TRACKED_GRADES = CURRICULUM_GRADES.filter((g) => /^[초중]/.test(g));
+
+/** MATH_CURRICULUM을 학년(TRACKED_GRADES: 초·중)순 → 단원순 → 차시순으로 flatten. position은 1-based. */
 export const ALL_LESSONS: LessonPosition[] = (() => {
   const out: LessonPosition[] = [];
   let pos = 0;
-  for (const grade of CURRICULUM_GRADES) {
+  for (const grade of TRACKED_GRADES) {
     const units = MATH_CURRICULUM[grade] ?? [];
     for (const u of units) {
       for (const lesson of u.lessons) {

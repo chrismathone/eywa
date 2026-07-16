@@ -6,6 +6,7 @@ import {
   effectiveAttendanceRecords,
   type EffectiveAttendanceRecord,
 } from "@/features/attendance/effective-records";
+import { HUMAN_RESOLVED_STATUSES, STUCK_MINUTES } from "@/features/report-admin/classnote-queue";
 import { getUnassignedEnrolledStudents } from "./queries";
 import {
   enrollmentAttendsOnDay,
@@ -16,6 +17,28 @@ import {
 } from "../today-actions";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * cron(세션 없음) 주입 계약 — admin client는 RLS를 우회하므로 tenantId 명시 격리가 필수
+ * (TimetableDb 선례). 미주입(대시보드 세션 경로)이면 쿠키 createClient + RLS가 격리한다.
+ */
+export type DashboardSignalsDb = { supabase: Supabase; tenantId: string };
+/**
+ * 기준 시점 주입 — 아침 cron은 '어제'를 기준일로 신호를 만든다. 시각 게이트(unwrittenReports의
+ * "이미 시작한 수업")는 nowMinutes로 결정적: 지나간 날은 1440을 주입하면 전 수업이 대상이 된다.
+ */
+export type DashboardSignalsAsOf = { date: string; nowMinutes: number };
+
+type TenantScope = { tenantId: string } | undefined;
+
+/** db(admin) 주입 시에만 명시 tenant 필터 부착 — 세션 경로는 RLS가 격리(중복 필터 불필요). */
+function scopeTenant<T>(query: T, db: TenantScope): T {
+  if (!db) return query;
+  return (query as unknown as { eq(column: string, value: unknown): unknown }).eq(
+    "tenant_id",
+    db.tenantId,
+  ) as unknown as T;
+}
 
 type TodayAttendanceRow = EffectiveAttendanceRecord & {
   status: string;
@@ -94,17 +117,21 @@ type ClassScheduleRow = {
 async function unrecordedClassesSignal(
   supabase: Supabase,
   date: string,
+  db?: TenantScope,
 ): Promise<TodayActionsRaw["unrecordedYesterday"]> {
   const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
     new Date(`${date}T00:00:00Z`).getUTCDay()
   ]!;
-  const scheduleResult = await supabase
-    .from("class_schedules")
-    .select("class_id, class:class_id!inner ( id, class_name, is_active, closed_at )")
-    .eq("day_of_week", dayKey)
-    .eq("class.is_active", true)
-    .lte("valid_from", date)
-    .or(`valid_to.is.null,valid_to.gte.${date}`);
+  const scheduleResult = await scopeTenant(
+    supabase
+      .from("class_schedules")
+      .select("class_id, class:class_id!inner ( id, class_name, is_active, closed_at )")
+      .eq("day_of_week", dayKey)
+      .eq("class.is_active", true)
+      .lte("valid_from", date)
+      .or(`valid_to.is.null,valid_to.gte.${date}`),
+    db,
+  );
   const scheduleRows = rowsOrThrow(scheduleResult, "yesterday schedules") as unknown as ClassScheduleRow[];
   const classNames = new Map<string, string>();
   for (const row of scheduleRows) {
@@ -126,22 +153,28 @@ async function unrecordedClassesSignal(
       is_transferred: boolean;
       attendance_days: string[] | null;
     }>(classIds, (chunk, from, to) =>
-      supabase
-        .from("enrollments")
-        .select("id, student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
-        .lte("start_date", date)
-        .in("class_id", chunk)
-        .order("id", { ascending: true })
-        .range(from, to),
+      scopeTenant(
+        supabase
+          .from("enrollments")
+          .select("id, student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
+          .lte("start_date", date)
+          .in("class_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+        db,
+      ),
     ),
     fetchAllPagedInChunks<{ id: string; student_id: string; class_id: string }>(classIds, (chunk, from, to) =>
-      supabase
-        .from("attendance_records")
-        .select("id, student_id, class_id")
-        .eq("session_date", date)
-        .in("class_id", chunk)
-        .order("id", { ascending: true })
-        .range(from, to),
+      scopeTenant(
+        supabase
+          .from("attendance_records")
+          .select("id, student_id, class_id")
+          .eq("session_date", date)
+          .in("class_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+        db,
+      ),
     ),
   ]);
   const expectedByClass = new Map<string, Set<string>>();
@@ -188,23 +221,27 @@ async function unrecordedClassesSignal(
 async function unwrittenReportsSignal(
   supabase: Supabase,
   today: string,
+  nowMinutes: number,
+  db?: TenantScope,
 ): Promise<TodayActionsRaw["unwrittenReportsToday"]> {
   const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
     new Date(`${today}T00:00:00Z`).getUTCDay()
   ]!;
-  const scheduleResult = await supabase
-    .from("class_schedules")
-    .select(
-      `class_id, start_time,
+  const scheduleResult = await scopeTenant(
+    supabase
+      .from("class_schedules")
+      .select(
+        `class_id, start_time,
        class:class_id!inner ( subject, is_active, closed_at )`,
-    )
-    .eq("day_of_week", dayKey)
-    .eq("class.is_active", true)
-    .lte("valid_from", today)
-    .or(`valid_to.is.null,valid_to.gte.${today}`)
-    .order("start_time");
+      )
+      .eq("day_of_week", dayKey)
+      .eq("class.is_active", true)
+      .lte("valid_from", today)
+      .or(`valid_to.is.null,valid_to.gte.${today}`)
+      .order("start_time"),
+    db,
+  );
   const scheduleRows = rowsOrThrow(scheduleResult, "lesson report schedules") as unknown as ScheduleRow[];
-  const nowMinutes = kstMinutesOfDay();
   const subjectByClass = new Map<string, string>();
   for (const row of scheduleRows) {
     const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
@@ -227,11 +264,14 @@ async function unwrittenReportsSignal(
     is_transferred: boolean;
     attendance_days: string[] | null;
   }>(classIds, (chunk) =>
-    supabase
-      .from("enrollments")
-      .select("student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
-      .lte("start_date", today)
-      .in("class_id", chunk),
+    scopeTenant(
+      supabase
+        .from("enrollments")
+        .select("student_id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days")
+        .lte("start_date", today)
+        .in("class_id", chunk),
+      db,
+    ),
   );
   const targets = enrollmentRows
     .filter(
@@ -258,20 +298,26 @@ async function unwrittenReportsSignal(
     fetchInChunks<{ id: string; student_id: string; class_id: string; status: string; recorded_at: string }>(
       studentIds,
       (chunk) =>
-        supabase
-          .from("attendance_records")
-          .select("id, student_id, class_id, status, recorded_at")
-          .eq("session_date", today)
-          .in("student_id", chunk)
-          .order("recorded_at", { ascending: false })
-          .order("id", { ascending: false }),
+        scopeTenant(
+          supabase
+            .from("attendance_records")
+            .select("id, student_id, class_id, status, recorded_at")
+            .eq("session_date", today)
+            .in("student_id", chunk)
+            .order("recorded_at", { ascending: false })
+            .order("id", { ascending: false }),
+          db,
+        ),
     ),
     fetchInChunks<{ student_id: string; subject: string | null }>(studentIds, (chunk) =>
-      supabase
-        .from("lesson_reports")
-        .select("student_id, subject")
-        .eq("report_date", today)
-        .in("student_id", chunk),
+      scopeTenant(
+        supabase
+          .from("lesson_reports")
+          .select("student_id, subject")
+          .eq("report_date", today)
+          .in("student_id", chunk),
+        db,
+      ),
     ),
   ]);
 
@@ -293,7 +339,7 @@ async function unwrittenReportsSignal(
   if (missingStudentIds.length === 0) return { count: 0, names: [] };
 
   const studentRows = await fetchInChunks<{ id: string; name: string }>(missingStudentIds.slice(0, 100), (chunk) =>
-    supabase.from("students").select("id, name").in("id", chunk),
+    scopeTenant(supabase.from("students").select("id, name").in("id", chunk), db),
   );
   const nameById = new Map(studentRows.map((student) => [student.id, student.name]));
   return {
@@ -310,10 +356,19 @@ function daysBefore(ymd: string, n: number): string {
 /**
  * "오늘 조치할 것" 원시 신호 수집. 독립 조회는 병렬로 실행하고, scope=false 도메인은 DB 호출도 하지 않는다.
  * 조회 실패는 해당 도메인의 sourceIssues로 반환해 빈 배열/0건과 구분한다.
+ *
+ * opts.db = cron(세션 없음) 경로: admin client + 명시 tenant 필터(scopeTenant). ⚠️ 새 쿼리를 추가하면
+ * 반드시 scopeTenant를 감쌀 것 — admin은 RLS 우회라 한 곳만 빠져도 교차 테넌트 누수다.
+ * opts.asOf = 기준 시점 주입: 아침 브리핑 cron이 '어제'를 기준일로 수집할 때 사용(미주입 = 지금·오늘).
  */
-export async function getTodayActionSignals(scope: TodayActionSignalScope = {}): Promise<TodayActionsRaw> {
-  const supabase = await createClient();
-  const today = kstToday();
+export async function getTodayActionSignals(
+  scope: TodayActionSignalScope = {},
+  opts?: { db?: DashboardSignalsDb; asOf?: DashboardSignalsAsOf },
+): Promise<TodayActionsRaw> {
+  const db = opts?.db;
+  const supabase = db?.supabase ?? (await createClient());
+  const today = opts?.asOf?.date ?? kstToday();
+  const nowMinutes = opts?.asOf?.nowMinutes ?? kstMinutesOfDay();
   const yesterday = daysBefore(today, 1);
   const sevenDayStart = inclusiveDateWindowStart(today, 7);
   const failedCutoff = `${sevenDayStart}T00:00:00+09:00`;
@@ -323,13 +378,17 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
   const failedCount = async (
     table: "meeting_minutes" | "enrollment_consultations" | "student_consultations",
   ): Promise<number> => {
-    const result = await supabase
-      .from(table)
-      .select("*", { count: "exact", head: true })
-      .eq("processing_status", "failed")
-      .gte("updated_at", failedCutoff);
+    const result = await scopeTenant(
+      supabase
+        .from(table)
+        .select("*", { count: "exact", head: true })
+        .eq("processing_status", "failed")
+        .gte("updated_at", failedCutoff),
+      db,
+    );
     return countOrThrow(result, table);
   };
+
 
   const [
     absent,
@@ -344,6 +403,7 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
     leavesToday,
     unwrittenReports,
     unassignedEnrolled,
+    classnoteAttention,
   ] = await Promise.all([
     collectSignal(
       enabled("attendance"),
@@ -357,15 +417,18 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       [] as TodayAttendanceRow[],
       async () => {
         const rows = await fetchAllPaged<TodayAttendanceRow>((from, to) =>
-          supabase
-            .from("attendance_records")
-            .select(
-              "id, student_id, class_id, session_date, status, recorded_at, student:student_id ( name )",
-            )
-            .eq("session_date", today)
-            .order("recorded_at", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to),
+          scopeTenant(
+            supabase
+              .from("attendance_records")
+              .select(
+                "id, student_id, class_id, session_date, status, recorded_at, student:student_id ( name )",
+              )
+              .eq("session_date", today)
+              .order("recorded_at", { ascending: true })
+              .order("id", { ascending: true })
+              .range(from, to),
+            db,
+          ),
         );
         return effectiveAttendanceRecords(rows).filter((row) => row.status === "absent");
       },
@@ -380,7 +443,7 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
         requiredAccess: "read",
       },
       [] as TodayActionsRaw["unrecordedYesterday"],
-      () => unrecordedClassesSignal(supabase, yesterday),
+      () => unrecordedClassesSignal(supabase, yesterday, db),
     ),
     collectSignal(
       enabled("meetings"),
@@ -430,8 +493,11 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       { syncEnabled: false, rows: [] as { domain: string; status: string; synced_at: string }[] },
       async () => {
         const [stateResult, toggleResult] = await Promise.all([
-          supabase.from("makeedu_sync_state").select("domain, status, synced_at"),
-          supabase.from("user_integrations").select("sync_enabled").eq("provider", "makeedu").maybeSingle(),
+          scopeTenant(supabase.from("makeedu_sync_state").select("domain, status, synced_at"), db),
+          scopeTenant(
+            supabase.from("user_integrations").select("sync_enabled").eq("provider", "makeedu"),
+            db,
+          ).maybeSingle(),
         ]);
         const rows = rowsOrThrow(stateResult, "makeedu state") as {
           domain: string;
@@ -456,11 +522,14 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       },
       0,
       async () => {
-        const result = await supabase
-          .from("expenses")
-          .select("*", { count: "exact", head: true })
-          .eq("approval_status", "pending")
-          .gte("expense_date", sevenDayStart);
+        const result = await scopeTenant(
+          supabase
+            .from("expenses")
+            .select("*", { count: "exact", head: true })
+            .eq("approval_status", "pending")
+            .gte("expense_date", sevenDayStart),
+          db,
+        );
         return countOrThrow(result, "pending expenses");
       },
     ),
@@ -475,10 +544,13 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       },
       0,
       async () => {
-        const result = await supabase
-          .from("textbook_orders")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "requested");
+        const result = await scopeTenant(
+          supabase
+            .from("textbook_orders")
+            .select("*", { count: "exact", head: true })
+            .eq("status", "requested"),
+          db,
+        );
         return countOrThrow(result, "requested textbooks");
       },
     ),
@@ -493,11 +565,14 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       },
       0,
       async () => {
-        const result = await supabase
-          .from("staff_leaves")
-          .select("*", { count: "exact", head: true })
-          .is("approved_at", null)
-          .gte("ends_on", today);
+        const result = await scopeTenant(
+          supabase
+            .from("staff_leaves")
+            .select("*", { count: "exact", head: true })
+            .is("approved_at", null)
+            .gte("ends_on", today),
+          db,
+        );
         return countOrThrow(result, "pending leaves");
       },
     ),
@@ -512,13 +587,16 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       },
       [] as { user: { display_name?: string } | { display_name?: string }[] | null }[],
       async () => {
-        const result = await supabase
-          .from("staff_leaves")
-          .select("user:user_id ( display_name )")
-          .not("approved_at", "is", null)
-          .lte("starts_on", today)
-          .gte("ends_on", today)
-          .limit(20);
+        const result = await scopeTenant(
+          supabase
+            .from("staff_leaves")
+            .select("user:user_id ( display_name )")
+            .not("approved_at", "is", null)
+            .lte("starts_on", today)
+            .gte("ends_on", today)
+            .limit(20),
+          db,
+        );
         return rowsOrThrow(result, "today approved leaves");
       },
     ),
@@ -532,7 +610,7 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
         requiredAccess: "read",
       },
       { count: 0, names: [] },
-      () => unwrittenReportsSignal(supabase, today),
+      () => unwrittenReportsSignal(supabase, today, nowMinutes, db),
     ),
     collectSignal(
       enabled("students"),
@@ -545,7 +623,64 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       },
       [] as { studentId: string; name: string }[],
       // students 기준 anti-join RPC(0097a). 등록상담이 아니라 학생이 출처다.
-      () => getUnassignedEnrolledStudents(),
+      // db(cron) 경로는 p_tenant 변형 RPC — 세션용 RPC는 service_role에서 에러 없이 0행(silent 오보).
+      () => getUnassignedEnrolledStudents(30, db ? { supabase: db.supabase, tenantId: db.tenantId } : undefined),
+    ),
+    collectSignal(
+      enabled("lessonReports"),
+      {
+        key: "classnote-attention",
+        label: "리포트 발송 큐",
+        href: "/lesson-reports?tab=writing",
+        menuKey: "lesson_reports",
+        requiredAccess: "read",
+      },
+      { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+      async () => {
+        // 판정 기준은 classnote-queue.ts와 동일: failed/too_old는 7일 창(분석실패 신호 관례와 동형),
+        // 사람 조치 보류(blocked_shared·name_conflict)는 **창 없음**(3일 창 때문에 재발송 버튼과 함께
+        // 행이 사라져 해소 불가능해진 실사고 교훈), 멈춤 = processing 10분 초과. 전부 head-count(B2).
+        const stuckCutoff = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
+        const [failedRes, tooOldRes, holdRes, stuckRes] = await Promise.all([
+          scopeTenant(
+            supabase
+              .from("lesson_reports")
+              .select("*", { count: "exact", head: true })
+              .eq("classnote_status", "failed")
+              .gte("report_date", sevenDayStart),
+            db,
+          ),
+          scopeTenant(
+            supabase
+              .from("lesson_reports")
+              .select("*", { count: "exact", head: true })
+              .eq("classnote_status", "too_old")
+              .gte("report_date", sevenDayStart),
+            db,
+          ),
+          scopeTenant(
+            supabase
+              .from("lesson_reports")
+              .select("*", { count: "exact", head: true })
+              .in("classnote_status", [...HUMAN_RESOLVED_STATUSES]),
+            db,
+          ),
+          scopeTenant(
+            supabase
+              .from("lesson_reports")
+              .select("*", { count: "exact", head: true })
+              .eq("classnote_status", "processing")
+              .lte("classnote_processing_at", stuckCutoff),
+            db,
+          ),
+        ]);
+        return {
+          failed: countOrThrow(failedRes, "classnote failed"),
+          tooOld: countOrThrow(tooOldRes, "classnote too_old"),
+          humanHold: countOrThrow(holdRes, "classnote human-hold"),
+          stuck: countOrThrow(stuckRes, "classnote stuck"),
+        };
+      },
     ),
   ]);
 
@@ -581,6 +716,7 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
     leavesToday,
     unwrittenReports,
     unassignedEnrolled,
+    classnoteAttention,
   ];
 
   return {
@@ -605,6 +741,7 @@ export async function getTodayActionSignals(scope: TodayActionSignalScope = {}):
       studentId: student.studentId,
       name: student.name,
     })),
+    classnoteAttention: classnoteAttention.value,
     sourceIssues: collected.flatMap((result) => (result.issue ? [result.issue] : [])),
   };
 }

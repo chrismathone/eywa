@@ -4,7 +4,7 @@
 
 ## 진행 상황
 
-### 출석 시수(배수) 입력 + 시수 검증 시수 합 전환 + 강사별 분배(참고) (2026-07-16) — ✅ tsc0/lint0/test1389/실E2E(수학 JJ2B) — ⏳ main 반영 대기(원장 승인)
+### 출석 시수(배수) 입력 + 시수 검증 시수 합 전환 + 강사별 분배(참고) (2026-07-16) — ✅ tsc0/lint0/test1392/실E2E(수학 JJ2B), 원장 승인 후 main 반영
 구 출석부(D:\attendance)의 "셀 숫자 = 정규 수업 1회 기준 배수"(2h 수업 기준 3h=1.5, 보강 4h=2, 영어 U 유닛)를
 eywa로 이식 — 원장 실사용 근거로 로드맵 "숫자시수셀 영구 SKIP"을 뒤집은 결정(2026-07-16).
 - **0115a** `attendance_records.session_units numeric(4,1)`(null=기본 1, CHECK 0<x≤20) + **시수 검증 RPC를
@@ -23,6 +23,137 @@ eywa로 이식 — 원장 실사용 근거로 로드맵 "숫자시수셀 영구 
   (=0.5회×25,000) 정확 일치**. 검증 후 출석 5행 삭제·확정 2건 해제 원복(7월 출석 0·확정 0 확인).
 - ⚠️ 시수는 소비(present/late/early_leave/makeup)에만 의미 — 결석은 상태로(0 입력은 거부). 키오스크 자동
   기록은 null(=1). `confirmed_sessions`는 integer 유지(확정은 정수 회, 실측만 소수).
+### ClassNote 네이티브 파일 첨부 (Phase 2 — attached_files, 파일 있는 리포트만 내부 API) (2026-07-16) — ✅ tsc0/lint0 + 격리 E2E
+Phase 1은 파일을 /r 다운로드 링크로만 전달(학부모가 링크 클릭). Phase 2는 파일이 **ClassNote 앱 안에 네이티브 첨부**로 뜬다.
+내부 API 리버스엔지니어링·학원이 POC 검증: 업로드=kage 2단계(`GET /api/v1/kage/upload/?file_type=img|etc` → presigned → 네이티브
+file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스샷)/`attached_files`(파일) → 201.
+- **결정(원장, B-scoped)**: **파일 첨부가 있고 showAttachments ON인 리포트만** 내부 API로 게시(스샷=attached_images + 파일=attached_files
+  한 POST). 파일 없는 리포트는 검증된 Cloud Run(DOM 스샷) 경로 그대로. 발송 경로 2개 공존, 리스크 국소화.
+- **eywa**: 워커 전용 시크릿 엔드포인트 [`/api/internal/report-attachments/[reportId]`](<../src/app/api/internal/report-attachments/[reportId]/route.ts>)
+  (`x-eywa-internal`=CLASSNOTE_INTERNAL_SECRET 게이트) — 파일 첨부 signed URL 반환(워커에 스토리지 자격증명 불요, resolveTenantReadUrls 재사용).
+- **워커**([classnote-core.mjs](../scripts/_classnote/classnote-core.mjs) `sendReportViaApi` + [admin-core](../scripts/_classnote/classnote-admin-core.mjs)
+  `uploadToKage`·`resolveBoardChildEnrollments`·`postClassnoteReport`): 스샷 buffer→kage(img) + 엔드포인트로 파일 URL→fetch→kage(etc) →
+  board/child/enrollment 해석(notice-core 공용) → 게시. **보드 안전 게이트(§5.5) 그대로.** ⚠️ kage 업로드는 **작성폼 네이티브 input**
+  경유(수동 FormData는 415 거부).
+- **검증**: 격리 E2E(학원이, 원자 claim으로 프로덕션 워커 레이스 회피) — sendReportViaApi → ClassNote 게시글 **attached_images 1 + attached_files 1(PDF)**
+  확인 → DELETE 204. 각 조각(kage img/etc 업로드, POST+attachments, 엔드포인트)도 개별 검증. 테스트 데이터·게시글·설정 전부 원복.
+- ⚠️ **연동 PC zip 재전달 필요**(워커 변경). env 추가 없음(CLASSNOTE_INTERNAL_SECRET·SCREENSHOT_BASE 기존). 적용 전엔 파일 리포트가 Cloud Run으로 감(파일은 /r 링크로, Phase 1).
+
+### 운영실 일일 AI 브리핑 3종 세트 (2026-07-16) — ✅ tsc0/lint0/test1386, 원장 승인(cron AI·master만 알림·대화형 보류)
+전수 조사("운영실이 eywa 모든 데이터를 활용하는 AI 비서급이 될 수 있나") 결론 반영 — 기존 버튼형 AI 5종의 실사용이
+~20건 미만(케어 2/807·상담분석 0/1,542)이라 **"눌러야 나오는 AI"가 아니라 "워크플로에 자동으로 흘러드는 AI"**로 설계.
+계획 확정본 = `docs/dashboard-ai-briefing-plan.md`(부록: 대화형 tool-use 비서 재검토 자료 — **보류, 구현 금지**).
+- **PR0 usage 계측(0113a `ai_usage_logs`)**: `generateJSON`이 provider usage 토큰을 캡처해 best-effort 기록
+  (admin 동적 import — env 미설정·실패 시 스킵, 본 호출 절대 안 막음). 호출부 9곳 `meta.feature` 스레딩.
+  CLAUDE.md에 "외부 AI 전송 금지 필드"(주민번호·계좌·급여·이력서 form_data) 명문화.
+- **PR1 신호 리팩터**: `getTodayActionSignals`에 `opts.db`(cron admin + scopeTenant 명시 격리)·`opts.asOf`(기준일·시각)
+  주입. 새 신호 `classnote-attention`(발송 실패·기한 초과 7일 창 / 사람 확인 보류 **창 없음**(막다른 길 실사고 교훈) /
+  멈춤 10분 — head-count 4종 B2).
+- **PR2 일일 브리핑(0114a)**: cron `/api/cron/daily-briefing`(07:00 KST, CRON_SECRET) → 활성 master 있는 테넌트만
+  순회 → 다이제스트 = **어제 마감**(asOf=어제·nowMinutes=1440 — 아침엔 '오늘' 신호가 구조적으로 0) + **오늘 예정**
+  + retention 요약(`computeRetentionRoster` cron 계산 — 라이브 대시보드 금지, B7) → Sonnet 5가 **서술만** 생성
+  (프롬프트에 개인명 불포함, `validateNarrative` 숫자 grounding·영문 토큰 가드 탈락 시 결정론 요약 폴백) →
+  `daily_briefings` upsert(tenant×date 멱등). 카드는 저장분 렌더만 + '다시 생성'(원자 claim+5분 stuck 우회+after()+
+  5초 폴링 — Realtime 불가: **RLS 정책 0개 테이블**, payload가 master 관점 전신호라 devtools 우회 차단 #77).
+  카드·재생성 게이트 = `canManageStaff`(master/admin/manager). 벨 알림 = **master만·최초 생성 1회**(notified_at 게이트,
+  IMPORTANT 미등재 — 경보 피로 원칙). RPC p_tenant 변형 2종(`*_admin`) — auth_tenant_id()가 service_role에서
+  에러 없이 0행이 되는 silent 오보 방지, execute는 service_role만.
+- ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
+  (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
+  `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
+
+### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
+원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열
+순서로 기입해 **학력이 은행 열로 밀리는 실사고** → `ROSTER_COLUMNS`/`buildRosterRow`를 현재 시트(A~S 19열)와
+동기화. ⚠️ 시트 열을 추가/삭제하면 이 두 곳도 함께 — 열 대조표 주석 참조. (퇴사자 블록은 200행 고정 +
+채번 A2 ARRAYFORMULA 2~198 + U1/U200 점프 버튼 — 전부 시트 API로 적용, 원장 컨펌 후.)
+
+### 수업보고서 첨부 = admin 직접발송 배선 + 파일(문서/오디오)까지 확장 (2026-07-16) — ✅ tsc0/lint0
+기존 사진첨부(P2b)는 **강사 원스크린 카드 전용**이라 원장 admin 직접발송·비수강 학생(학원이)엔 첨부 UI 도달 불가였다.
+두 가지를 이어서 처리(함께 push):
+- **admin 경로 배선**(`11c4462`): 첨부 4액션 게이트를 `teacherOwnsStudent` **OR** `canWriteTenant('lesson_reports')`로
+  공용화(#77) + `findReportRow`에 reportDate 파라미터. 원스크린 업로드 오케스트레이션을 공용 컴포넌트
+  [`report-attachments.tsx`](../src/features/onescreen/components/report-attachments.tsx)로 추출(compose-face가 소비).
+- **파일 확장**: 사진뿐 아니라 **PDF·HWP·office·mp3/m4a**(≤20MB)까지 첨부. `report_attachment` allowCT를
+  `isReportAttachmentCT`(이미지+문서+오디오)로 확장, Supabase 버킷 `report-attachments`의 allowed_mime_types·크기도
+  동기([`setup-storage.ts`](../scripts/setup-storage.ts)). 학부모 렌더는 **이미지=인라인 / 파일=다운로드 링크(받기)**로
+  분기([`isImageAttachment`](../src/features/onescreen/attachment-utils.ts) 공용, `parent-report-card`가 /r·인쇄 공용 담당).
+- **배달 모델**: ClassNote 게시글의 **/r 링크**로 파일 수신(스샷 안에선 클릭 불가 링크칩). 네이티브 첨부(attached_files)는 Phase 2.
+- 검증: 라이브 E2E(학원이, supabase 백엔드 — GCS는 localhost 업로드 CORS 차단) — PDF 파일칩 + 이미지 인라인 혼합 →
+  /r에서 **PDF=받기 링크 · 이미지=인라인** 확인. 테스트 데이터·showAttachments 원복.
+
+### 직원명부 시트 운영성 3종 — 퇴사자 자동 탭·No. 자동 채번·갱신일 신호등 (2026-07-16) — ✅ 실시트 적용·검증 + tsc0/lint0/test41(staff)
+"2026신규 직원명부" 탭의 고정 퇴사자 블록(A13 `FILTER($A$2:$P$12,…)` = 12행 고정·범위 닫힘)이 직원 증가 시
+데이터와 충돌하는 문제(원장 제보) → 시트 구조를 API로 재편 + 앱 기입 열 조정.
+- **① 퇴사자 자동 탭** `2026퇴사자(자동)` 신설: `=IFERROR(FILTER('2026신규 직원명부'!A2:T, …M2:M="퇴사"), "")`
+  **열린 범위**라 인원 무관 자동 반영. 신규 탭의 12~13행 고정 블록은 제거(충돌 원인).
+- **② No. 자동 채번**: 신규 탭 A2 `=ARRAYFORMULA(IF(D2:D="",,ROW(D2:D)-1))` — 이름 있는 행만 1,2,3…,
+  행 삭제 시 자동 재번호. ⚠️ 앱은 이제 **B열부터 기입**(`updateSheetRow` startColumn, A열에 ""라도 쓰면 스필 깨짐).
+- **③ 갱신일 신호등**: N열(계약갱신일/퇴사일) 조건부서식 — 90일 이내 노랑 → 60일 주황 → 30일 이내·경과 빨강.
+  "2025.01.01" 텍스트·실날짜 둘 다 파싱(`DATEVALUE(SUBSTITUTE…)` + `ISNUMBER` 분기, 파싱 실패는 무색).
+
+### 기존 재원생 QR 새 상담이 '배정 완료'로 매몰되던 버그 + 반복접수 다중노출 (2026-07-16) — ✅ 0113a·c070d1e·d7d0c24
+원장 제보 "수학 재원생이 QR로 영어상담 오면 목록에 안 뜸". **원인**: 0107a 자동연결 BEFORE 트리거가 QR 접수를
+기존 학생에 연결하며 `outcome:='enrolled'`로 덮어씀 → 칸반이 연결학생 활성수강 있으면 "배정 완료"로 옮겨 대기큐에서
+빼 매몰. 실측(인재원): QR 20건 중 매칭 9건 전부 enrolled 매몰(장건욱=영어재원+수학QR).
+- **0113a**: 자동연결 트리거 2종(`link_student_for_consultation`·`link_consultations_for_student`)은 `student_id`
+  **연결만**, `outcome='enrolled'` 강제 제거. outcome=사람 소유 파이프라인 상태 → 신선한 QR은 `pending`으로 큐 노출 +
+  연결 유지로 학생 상세 상담탭 다건 노출. (연결은 convert 폭발 방지 목적이라 유지)
+- **배정완료 파생 = 상담 과목 수강 스코프**(`getEnrollmentConsultations`/`…ById`): 교차과목 수강이 다른 과목 상담을
+  매몰하지 않게(과목 미상은 전체 폴백). `setEnrollmentOutcome`: 단순 연결을 '전환됨'으로 오판하던 것 수정.
+- **백필 3건**(장건욱·이참결·박인유=상담과목 ∉ 활성수강) enrolled→pending 복원(연결 유지, UNDO 기록). math→math 6건 보존.
+- **반복접수 = 다중노출 + 힌트**(자동병합 비채택 — 손실·클로버링 위험·자동구분 불가): 같은 사람 상담 2건+면 카드 '상담 N건'
+  배지 + 학생탭 '입학 상담 N건' 헤더. 1주일 후 재방문=의도적 별건.
+
+### 전사 분석 3종 → DeepSeek v4-pro 전환 + 모델 라벨 노출 (2026-07-16) — ✅ tsc0/lint0/test42(ai) + 실API 검증
+회의록·등록상담·재원생 상담(전사 기반 분석)을 Sonnet 5 → **DeepSeek v4-pro**로 전환. 근거 = 실측 A/B(injaewon
+실전사 5건, `scripts/_oneoff/ab-deepseek-vs-sonnet.ts`): warnings(이탈·정서·학업 위험 신호) 섹션에서 —
+- **v4-pro**: 5/5 Sonnet급 생성(255·316·243·219·97자). ← 채택
+- **v4-flash·레거시 chat·Solar**: 2~3/5 "확인된 위험 신호 없음"으로 붕괴(2026-07-13 Solar 탈락과 동일 실패).
+- 초기 "DeepSeek이 학부모명·전화 환각" 의심은 전수 검증 결과 **환각 아님**(프롬프트 `현재 입력값` echo, 프로덕션은
+  빈 칸에만 기입해 무해). 비용은 Sonnet 대비 압도적 저렴. 트레이드오프 = v4-pro 추론형이라 ~1.2배 느림(백그라운드라 감수).
+- **인프라**: `AiProvider`에 `deepseek` 추가([models.ts](../src/lib/ai/models.ts)) + [deepseek.ts](../src/lib/ai/deepseek.ts)
+  클라이언트(OpenAI 호환, base `https://api.deepseek.com`) + [generate.ts](../src/lib/ai/generate.ts) deepseek 분기
+  (json mode + `reasoning_content` 폴백). balanced 티어 deepseek=`deepseek-v4-pro`, fast=`deepseek-v4-flash`.
+- **라우팅**: `analyzeMeeting`·`runConsultationAnalysis`·`analyzeStudentConsultation` provider 기본값 `"deepseek"` +
+  웹훅 인라인 등록상담 호출 `provider:"deepseek"`. form-extract(grounding 가드)·멘트(Haiku)·care insights는 불변.
+- **안전**: `DEEPSEEK_API_KEY` 없으면 `resolveModelChain`이 anthropic/upstage로 무중단 폴백(키 추가 전까지 Sonnet 유지,
+  롤백=Vercel 키 제거). 실 API로 라우팅(→v4-pro)·파싱·폴백(→Sonnet) end-to-end 검증 완료.
+- **모델 라벨 노출**(기존 "모델명 UI 노출 금지" 반전): [model-label.ts](../src/lib/ai/model-label.ts) `modelDisplayLabel`이
+  raw id를 짧은 라벨("DeepSeek v4-pro")로 매핑, 알 수 없으면 미표시. 등록상담·회의록 '펼치기' 옆 + 재원생 상담 '생성' 옆에 칩.
+  쿼리는 이미 modelVersion 반환(등록상담·재원생), 회의록만 `ai_model_version` SELECT 추가.
+- ⚠️ **Vercel `DEEPSEEK_API_KEY` 설정 전까지 전사 분석은 Sonnet으로 동작**(폴백). 키 넣으면 v4-pro로 전환.
+
+### 원스크린 미발송 멘트 초안 새로고침 유실 수정 (2026-07-16) — ✅ tsc0/lint0/test1371
+edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_sessions.subject_progress[key].draft`에 자동저장되지만
+① roster 세션 복원이 draft를 안 읽고 ② `initReports`가 항상 `draft:""`로 시작해 새로고침 시 화면에서 사라졌으며,
+③ 이후 그 학생에 아무 편집이나 하면 `buildSessionInput`이 빈 `draft:""`를 재저장해 **DB에 남은 초안까지 파괴**.
+학습추세(`trendDraft`)는 세션 저장 자체가 없었다.
+- **복원 배선**: roster가 `Subject.draft/trendDraft`로 복원 → `initReports`가 reports state 초기값으로 시딩(카드·표 공용).
+- **trendDraft 세션 저장+복원 추가**(`buildSessionInput`·`SaveOnescreenSessionInput`·세션 row 타입). jsonb라 마이그 불필요.
+- **우선순위**: 오늘 세션 초안(비어있지 않으면) > 오늘 발송본(lesson_reports `notes`/`trend_note`) > 빈 값.
+  발송본 폴백 덕에 발송 후 새로고침해도 발송 문구가 초안란에 남는다(빈 초안 재발송이 템플릿으로 덮던 부작용도 해소).
+  ⚠️ lesson_reports엔 `updated_at`이 없어(upsert 시 `created_at` 불변) 신구 타임스탬프 비교 불가 → 위 휴리스틱 고정.
+
+### 직원 이력서 → "신규 직원명부" 구글시트 기입 + 폼 3필드 (2026-07-16) — ✅ tsc0/lint0/test1380/build✓/실시트 append→대조→clear 검증
+이력서 **신규 작성** 저장 시 "2020~2026 직원명부" 스프레드시트의 `2026신규 직원명부` 탭(A~T 20열)에 한 행
+append(수정 저장은 재기입 안 함 — 중복 방지). **학력은 최상위(맨 위 실입력) 1건만** 기입(원장 요청).
+- **순수/IO 분리**: 행 변환 [resume-roster.ts](../src/features/staff/resume-roster.ts)(`ROSTER_COLUMNS` 열 순서 계약,
+  Vitest 11) ↔ IO [server/resume-roster-sheet.ts](../src/features/staff/server/resume-roster-sheet.ts) +
+  공용 [`updateSheetRow`](../src/features/integrations/google-sheets.ts)(RAW, 지정 행 기입).
+  ⚠️ **기입 위치 = 헤더(1행) 아래 첫 빈 행**(`firstEmptyRowIndex`) — values.append는 탭 중간 안내/샘플
+  블록 **아래**(13행)로 밀려 적혀 원장 제보로 교체(2026-07-16 "밑에 적히는데 위에 적혀야").
+  기입류라 withSheetsRetry 미적용 + 요청 timeout 8s·전체 상한 10s(저장 액션이 동기 대기 — 무한 pending
+  방지, 초과 시 "기입 여부 직접 확인" 안내). 읽기→쓰기 레이스는 작성 빈도상 감수.
+- **부가 효과 정책**: 시트 실패해도 이력서 저장은 유효 — `saveStaffResume`가 `notice`/`warning`을 돌려주고
+  폼이 sonner 토스트로만 노출(생성 경로는 즉시 새 뷰로 떠나므로 인라인 불가). env `HR_ROSTER_SPREADSHEET_ID`
+  (+`HR_ROSTER_SHEET_TAB`, 기본 "2026신규 직원명부") 미설정 = 의도적 비활성 → 토스트 없이 조용히 skip(로그만
+  — 거짓 '실패' 경고로 경고 피로 유발 금지, 적대검수 확정 결함 반영). 인증은 기존
+  서비스계정 키(GOOGLE_/FIREBASE_SERVICE_ACCOUNT_KEY) 재사용 — 시트는 그 계정에 편집자 공유 필요.
+- **폼 3필드**(계약사항 섹션): 회사 구분·소속부서 = 고정 선택지 드롭다운(`RESUME_COMPANIES`/`RESUME_DEPARTMENTS`,
+  EMPLOYMENT_TYPES 선례처럼 서식 상수 — 화이트리스트 검증), 담당자 = 자유입력. 민감값 아님 → 초안 exclude(#78) 비대상.
+  드롭다운은 규약대로 SearchableSelect(name=hidden input 제출, 컨트롤드 → 초안 복원은 onRestore rehydrate).
+- 학력사항 학교명 placeholder: 맨 아래 행 "고등학교", 그 위 "대학교"(최상위 학력을 맨 위에 쓰는 서식 관례).
 
 ### ClassNote 학부모 **댓글** → 담당 강사 알림 (2026-07-16) — ✅ tsc0/lint0/test1383/실데이터 감지 검증
 학부모 **새 글** 알림(07-15)의 자매 기능. 실측이 07-15 당시의 "댓글은 범위 밖" 판단을 뒤집었다 — 학부모 연락의

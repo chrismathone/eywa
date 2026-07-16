@@ -1,7 +1,15 @@
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
+import { getDeepseek } from "./deepseek";
 import { resolveModel, resolveModelChain, type AiKeyName, type AiProvider, type AiTier } from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
+
+/**
+ * DeepSeek(v4-pro 등 추론형) 전용 max_tokens 하한. 추론형은 reasoning_content가 max_tokens를 함께 소모해
+ * 호출부 값(8192 등)이 추론에 소진되면 답변 JSON이 truncate → 파싱 실패한다. 추론+답변이 모두 들어가도록
+ * 여유를 둔다. 상한일 뿐 실사용 토큰만 과금되므로 크게 잡아도 무비용(관측 실사용 ~5k~14k tok).
+ */
+const DEEPSEEK_MIN_MAX_TOKENS = 32000;
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
@@ -45,7 +53,57 @@ export type GenerateJSONOptions = {
    * Anthropic엔 무시(extended thinking 미사용). 도메인별 opt-in(전역 기본 미변경).
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  /**
+   * usage 계측 메타(0113a ai_usage_logs). feature = 호출부 식별자('meeting_analysis' 등),
+   * tenantId = 테넌트 귀속(미상이면 생략 → null 기록). 기록은 best-effort — 실패해도 본 호출을 안 막는다.
+   */
+  meta?: { tenantId?: string | null; feature?: string };
 };
+
+/** provider 응답의 토큰 usage(제공 안 하면 null). */
+type ProviderUsage = { inputTokens: number | null; outputTokens: number | null } | null;
+type ProviderCall = { text: string; usage: ProviderUsage };
+
+/**
+ * ai_usage_logs에 호출 1건 기록 — **best-effort**: env 미설정(테스트·로컬)이면 조용히 스킵, 실패는
+ * reportWarning만(AI 호출 흐름을 절대 안 깬다). admin client는 동적 import — generate.ts는 vitest가
+ * 직접 import하는 파일이라 `server-only` 모듈(admin.ts)을 정적 import하면 테스트가 깨진다.
+ * await 호출(fire-and-forget 금지 — 서버리스 응답 종료 후 floating promise는 드랍될 수 있음).
+ */
+async function recordUsage(entry: {
+  meta?: GenerateJSONOptions["meta"];
+  provider: AiProvider;
+  model: string;
+  keyName: AiKeyName;
+  usage?: ProviderUsage;
+  ok: boolean;
+  error?: string;
+}): Promise<void> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { error } = await createAdminClient()
+      .from("ai_usage_logs")
+      .insert({
+        tenant_id: entry.meta?.tenantId ?? null,
+        feature: entry.meta?.feature ?? "unknown",
+        provider: entry.provider,
+        model: entry.model,
+        key_name: entry.keyName,
+        input_tokens: entry.usage?.inputTokens ?? null,
+        output_tokens: entry.usage?.outputTokens ?? null,
+        ok: entry.ok,
+        error: entry.error ?? null,
+      });
+    if (error) throw new Error(error.message);
+  } catch (e) {
+    reportWarning("AI usage 기록 실패", {
+      scope: "generateJSON.usage",
+      feature: entry.meta?.feature,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
 
 /**
  * 모든 AI(JSON) 호출의 단일 진입점. `resolveModel`로 provider(기본 Solar Pro 3, env로 Claude 롤백)를
@@ -59,8 +117,13 @@ export type GenerateJSONOptions = {
  * 다시 throw한다. 그래야 processing_error에 영문 원문 대신 "키를 고쳐라"가 떠 관리자가 조치할 수 있다.
  * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
  */
-function rethrowAi(provider: "upstage" | "anthropic", err: unknown): never {
-  const label = provider === "upstage" ? "Upstage(Solar)" : "Anthropic(Claude)";
+function rethrowAi(provider: AiProvider, err: unknown): never {
+  const label =
+    provider === "upstage"
+      ? "Upstage(Solar)"
+      : provider === "deepseek"
+        ? "DeepSeek"
+        : "Anthropic(Claude)";
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status?: unknown }).status)
@@ -92,13 +155,13 @@ export function isRetryableProviderError(err: unknown): boolean {
   return /invalid.*api key|unauthorized|api key/i.test(raw);
 }
 
-/** provider별 1회 호출 — 응답 텍스트만 반환(throw는 generateJSON 루프가 처리). */
+/** provider별 1회 호출 — 응답 텍스트+usage 반환(throw는 generateJSON 루프가 처리). */
 async function callProvider(
   provider: AiProvider,
   model: string,
   keyName: AiKeyName,
   opts: GenerateJSONOptions,
-): Promise<string> {
+): Promise<ProviderCall> {
   if (provider === "upstage") {
     const client = getUpstage(keyName);
     // 변수(리터럴 아님)로 만들어 reasoning_effort(Upstage 확장 파라미터, 표준 타입 밖)를 부착 —
@@ -116,7 +179,41 @@ async function callProvider(
       ],
     };
     const res = await client.chat.completions.create(base);
-    return res.choices[0]?.message?.content ?? "";
+    return {
+      text: res.choices[0]?.message?.content ?? "",
+      usage: res.usage
+        ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
+        : null,
+    };
+  }
+  if (provider === "deepseek") {
+    const client = getDeepseek(keyName);
+    // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
+    // DeepSeek 파라미터가 아니라 미부착. v4-pro(추론형)는 답을 content에, 사고과정을 reasoning_content에
+    // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
+    // ⚠️ **reasoning_content가 max_tokens를 함께 소모**한다(2026-07-16 실측: 등록상담 프롬프트에서 추론만
+    // ~8k tok → 호출부 8192면 답변 JSON이 truncate돼 finish_reason=length → 파싱 실패 → 재분석 실패).
+    // 그래서 추론+답변이 모두 들어가도록 여유 floor(DEEPSEEK_MIN_MAX_TOKENS)를 준다. max_tokens는 상한일 뿐
+    // 실사용 토큰만 과금되므로(원장 지침) 넉넉히 둬도 비용 영향 없음(관측 실사용 ~5k~14k tok, v4-pro가 32000 수용).
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: Math.max(opts.maxTokens, DEEPSEEK_MIN_MAX_TOKENS),
+      response_format: { type: "json_object" as const },
+      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+      messages: [
+        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+        { role: "user" as const, content: opts.prompt },
+      ],
+    });
+    const msg = res.choices[0]?.message as
+      | { content?: string | null; reasoning_content?: string | null }
+      | undefined;
+    return {
+      text: (msg?.content?.trim() ? msg.content : msg?.reasoning_content) ?? "",
+      usage: res.usage
+        ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
+        : null,
+    };
   }
   const client = getAnthropic(keyName);
   const res = await client.messages.create({
@@ -128,7 +225,12 @@ async function callProvider(
   });
   // content[0]만 보지 말고 모든 text 블록을 이어붙인다 — thinking 등 비-text 블록이 앞설 수 있어
   // 첫 블록만 읽으면 빈 문자열이 되는 모델(Sonnet 5 등)에서 파싱 실패("no json")가 난다.
-  return res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  return {
+    text: res.content.map((b) => (b.type === "text" ? b.text : "")).join(""),
+    usage: res.usage
+      ? { inputTokens: res.usage.input_tokens ?? null, outputTokens: res.usage.output_tokens ?? null }
+      : null,
+  };
 }
 
 export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
@@ -141,13 +243,21 @@ export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data
   let lastErr: unknown;
   for (let i = 0; i < candidates.length; i++) {
     const { provider, model } = candidates[i];
+    let call: ProviderCall | null = null;
     try {
-      const text = await callProvider(provider, model, keyName, opts);
-      return { data: parseJsonLoose<T>(text), model };
+      call = await callProvider(provider, model, keyName, opts);
     } catch (e) {
       lastErr = e;
+      await recordUsage({
+        meta: opts.meta,
+        provider,
+        model,
+        keyName,
+        ok: false,
+        error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
+      });
       // 인증/한도 오류 + 다음 후보가 있으면 다른 provider로 폴백(B1: 무효·만료 키도 자동 회복).
-      // 그 외(파싱·400·5xx) 또는 마지막 후보면 즉시 한글화해 표면화.
+      // 그 외(400·5xx) 또는 마지막 후보면 즉시 한글화해 표면화.
       if (i < candidates.length - 1 && isRetryableProviderError(e)) {
         reportWarning(`AI ${provider} 호출 실패 → 다른 provider로 폴백`, {
           scope: "generateJSON.fallback",
@@ -159,6 +269,10 @@ export async function generateJSON<T>(opts: GenerateJSONOptions): Promise<{ data
       }
       rethrowAi(provider, e);
     }
+    if (!call) continue; // 도달 불가(위 catch는 continue 또는 throw) — 타입 안전용
+    // provider 호출 성공 = 토큰은 이미 소비됨 — 파싱 실패 여부와 무관하게 usage를 기록.
+    await recordUsage({ meta: opts.meta, provider, model, keyName, usage: call.usage, ok: true });
+    return { data: parseJsonLoose<T>(call.text), model };
   }
   // 도달 불가(루프가 항상 return 또는 throw) — 타입 종결용 terminator.
   rethrowAi(candidates[candidates.length - 1].provider, lastErr);

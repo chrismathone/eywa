@@ -287,7 +287,7 @@ export type SaveOnescreenSessionInput = {
   studyGrade?: string | null;
   subjectProgress?: Record<
     string,
-    { today?: string; draft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
+    { today?: string; draft?: string; trendDraft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
   >;
   dailyScore?: number | null;
   dailyMax?: number | null;
@@ -435,6 +435,7 @@ export async function generateReportComment(
       maxTokens: 1000,
       keyName: "default",
       tier: "fast",
+      meta: { feature: "classnote_ment" },
       ...MENT_AI_TUNING,
     });
     const pick = (k: string) => (data[k] ?? "").trim();

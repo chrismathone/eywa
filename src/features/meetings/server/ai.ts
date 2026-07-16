@@ -1,5 +1,6 @@
 import "server-only";
 import { generateJSON } from "@/lib/ai/generate";
+import type { AiProvider } from "@/lib/ai/models";
 import { trimTrailingNoise, type TrimUtterance } from "@/lib/ai/transcript-trim";
 
 /**
@@ -75,6 +76,7 @@ export type MeetingAnalysisContext = {
 export async function analyzeMeeting(
   formattedTranscript: string,
   ctx: MeetingAnalysisContext,
+  provider: AiProvider = "deepseek", // 전사 분석 기본 = DeepSeek v4-pro(2026-07-16). 키 없으면 무중단 폴백.
 ): Promise<{ report: MeetingReport; speakerRoles: Record<string, string>; model: string }> {
   const notepad = (ctx.notepad ?? "").trim();
   const hasTranscript = formattedTranscript.trim().length > 0;
@@ -95,6 +97,8 @@ export async function analyzeMeeting(
     MeetingReport & { speakerRoles?: Record<string, string> }
   >({
     maxTokens: 8192,
+    meta: { feature: "meeting_analysis" },
+    provider,
     prompt: [
       // 전사만(메모 없음)일 땐 기존과 바이트 동일한 인트로 — 기존 품질 회귀 방지.
       hasTranscript && hasNotepad
