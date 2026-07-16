@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
-import { isReportEligible, type GridRow } from "../grid";
+import { isRowActionable, type GridRow } from "../grid";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
+import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
 import { PillGroup } from "./pill-group";
 import { ProgressSelector } from "./progress-selector";
@@ -18,6 +19,7 @@ const AUTOSIZE = "field-sizing-content max-h-[200px] resize-y"; // Tailwind v4 �
 
 /** 필드 편집 핸들러(카드뷰와 같은 state·저장로직 공유 — studentId 파라미터 버전). */
 export type GridFieldHandlers = {
+  onAttendance: (studentId: string, classId: string, status: BasicAttendance) => void; // 출결 pill(2-2) — 출석부 기록에 저장
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;
   onStudyGrade: (studentId: string, grade: string) => void;
   onScore: (studentId: string, which: "daily" | "check", v: number | null) => void;
@@ -111,7 +113,8 @@ export function GridBodyRow({
   fields: GridFieldHandlers;
   actions: GridRowActions;
   config: GridConfig;
-  gen: { rowBusy: boolean; bulk?: boolean }; // 이 행 자동작성 중 / 전체 자동작성 진행중
+  // 로딩·잠금 상태 묶음: rowBusy=이 행 자동작성 중, bulk=전체 자동작성 진행중, attPending=출결 저장 중 (학생::반) 키.
+  gen: { rowBusy: boolean; bulk?: boolean; attPending: ReadonlySet<string> };
   // 키보드 세로 이동(3-1) 인덱스 — **표시 순서 기준**(assembler가 buildRowRenderMeta로 부여).
   // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
   nav: { row: number; studentRow?: number };
@@ -124,9 +127,10 @@ export function GridBodyRow({
   const genRowBusy = gen.rowBusy;
   const bulkGen = gen.bulk;
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
-  const canWrite = isReportEligible(subject); // 진도 입력됨 = 자동작성/발송 가능
+  const canSend = isRowActionable(subject, "send"); // 진도 입력됨 + 결석 아님(2-3) — 자동작성·발송 게이트
+  const isAbsent = subject.attendanceRaw === "absent";
   return (
-    <tr className="hover:bg-bg-soft/50">
+    <tr className={`hover:bg-bg-soft/50 ${isAbsent ? "opacity-60" : ""}`}>
       <td className={`${TD} text-center`}>
         {orderControls !== undefined ? (
           orderControls
@@ -155,7 +159,17 @@ export function GridBodyRow({
             {subject.name}
           </span>
           <span className="text-text-faint text-[10px]">{student.tag}</span>
-          {att !== "출석" ? (
+        </div>
+        {/* 출결 인라인 입력(2-2) — 행(반) 단위. 보강(수동추가)·반 모호(같은 과목 2반)는 pill 불가 → 배지만. */}
+        <div className="mt-1">
+          {!student.isMakeup && subject.classId ? (
+            <AttendancePills
+              value={subject.attendanceRaw}
+              pending={gen.attPending.has(`${student.id}::${subject.classId}`)}
+              onSet={(s) => fields.onAttendance(student.id, subject.classId!, s)}
+              studentName={student.name}
+            />
+          ) : att !== "출석" ? (
             <span
               className={`rounded-pill px-1.5 py-px text-[10px] font-semibold ${
                 att === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
@@ -288,8 +302,14 @@ export function GridBodyRow({
             <button
               type="button"
               onClick={() => actions.onAutoWrite(student, subject.name)}
-              disabled={genRowBusy || bulkGen || !canWrite}
-              title={canWrite ? "AI 학부모 멘트 자동작성 (발송 문구)" : "오늘 진도를 먼저 입력하세요"}
+              disabled={genRowBusy || bulkGen || !canSend}
+              title={
+                canSend
+                  ? "AI 학부모 멘트 자동작성 (발송 문구)"
+                  : isAbsent
+                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                    : "오늘 진도를 먼저 입력하세요"
+              }
               className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-semibold disabled:opacity-50 ${
                 hasDraft ? "text-primary" : "text-text-dim"
               }`}
@@ -313,7 +333,13 @@ export function GridBodyRow({
               카드
             </button>
           </div>
-          <Button size="sm" variant="outline" disabled={!canWrite} onClick={() => actions.onSendRow(student, subject.name)}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!canSend}
+            title={!canSend && isAbsent ? "결석 학생 — 발송 제외 (기록 저장은 가능)" : undefined}
+            onClick={() => actions.onSendRow(student, subject.name)}
+          >
             발송
           </Button>
           {badge ? (

@@ -45,6 +45,43 @@ export function isReportEligible(subject: Subject): boolean {
   return !!subject.today && subject.today.trim().length > 0;
 }
 
+// ───────────────────────── 결석 연동 — 작업별 대상 판정 (2-3) ─────────────────────────
+
+export type RowAction = "save" | "send" | "autowrite";
+
+/**
+ * 행이 액션 대상인가 — 진도 입력은 공통 필수(빈 보고서 방지).
+ * ⚠️ save=결석 포함(기록은 보존해야), send/autowrite=결석 제외(학부모 발송·AI 멘트 무의미).
+ * 결석 판정은 행(반) 단위 raw(absent)만 — 조퇴(early_leave)는 수업을 들었으므로 발송 유지.
+ */
+export function isRowActionable(subject: Subject, action: RowAction): boolean {
+  if (!isReportEligible(subject)) return false;
+  if (action === "save") return true;
+  return subject.attendanceRaw !== "absent";
+}
+
+/**
+ * 일괄 발송 confirm 누락 요약(2-4) — **고유 학생 수** 기준(과목 행 수 아님).
+ * 호출부가 결석 제외된(send 대상) 행만 넘기므로 결석 학생은 누락 카운트에 안 들어간다.
+ */
+export function summarizeSendGaps(
+  rows: GridRow[],
+  opts: { dailyEnabled: boolean; checkEnabled: boolean },
+): { missingAttitude: number; missingTest: number } {
+  const seen = new Set<string>();
+  let missingAttitude = 0;
+  let missingTest = 0;
+  for (const r of rows) {
+    if (seen.has(r.student.id)) continue;
+    seen.add(r.student.id);
+    if (!r.student.attitude) missingAttitude++;
+    const t = r.student.tests;
+    if ((opts.dailyEnabled && t.daily.score == null) || (opts.checkEnabled && t.check.score == null))
+      missingTest++;
+  }
+  return { missingAttitude, missingTest };
+}
+
 // ───────────────────────── 값 일괄 적용 (1-2) ─────────────────────────
 
 /** 값 일괄 적용 patch — **비어 있는(undefined/공백) 필드는 적용하지 않는다**(값 지우기 아님 — 지우기는 개별 셀에서). */

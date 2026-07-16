@@ -29,7 +29,7 @@ import {
 } from "../server/attachment-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
-import type { CellState, OneScreenStudent } from "../types";
+import type { AttendanceMark, CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { StudentList } from "./student-list";
 import type { TodayClass } from "../server/roster";
@@ -40,9 +40,19 @@ import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
 import { HistoryBoard } from "./history-board";
 import { NoticeComposer } from "./notice-composer";
-import { buildGridRows, isReportEligible, planBulkApply, planPrevFill, type BulkPatch } from "../grid";
+import {
+  buildGridRows,
+  isRowActionable,
+  planBulkApply,
+  planPrevFill,
+  summarizeSendGaps,
+  type BulkPatch,
+  type RowAction,
+} from "../grid";
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
+import { setAttendanceCell } from "@/features/attendance/server/actions";
+import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
 
@@ -156,6 +166,7 @@ export function OneScreenClient({
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   const [bulkGen, setBulkGen] = useState(false); // 표 일괄 자동작성 진행중
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
+  const [attPending, setAttPending] = useState<Set<string>>(new Set()); // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
   // 다른 창/기기 동시 열림 경고(3-3, 락 아님) — enabled=페이지 열림. 같은 계정 다른 탭/기기도 잡힌다(presence key 기준).
@@ -379,6 +390,44 @@ export function OneScreenClient({
       return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
     });
   }
+  // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
+  const markOf = (s: string): AttendanceMark =>
+    s === "late" ? "지각" : s === "absent" || s === "early_leave" ? "결석" : "출석";
+  function applyAttendanceLocal(studentId: string, classId: string, raw: string | null, mark?: AttendanceMark) {
+    patch(studentId, (s) => ({
+      ...s,
+      attendance: mark ?? (raw ? markOf(raw) : s.attendance),
+      subjects: s.subjects.map((su) => (su.classId === classId ? { ...su, attendanceRaw: raw } : su)),
+    }));
+  }
+  // 재클릭 no-op(삭제는 출석부에서만) + (학생×반) in-flight 잠금(연속 클릭 응답 역전 방지) + 실패 롤백.
+  // 낙관 갱신으로 pill 즉시 반응(반응속도 1순위) — 서버 검증(담당 반·수강생)은 setAttendanceCell이 강제.
+  async function setAttendanceFor(studentId: string, classId: string, status: BasicAttendance) {
+    const key = `${studentId}::${classId}`;
+    if (attPending.has(key)) return;
+    const stu = studentsRef.current.find((s) => s.id === studentId);
+    const prevRaw = stu?.subjects.find((su) => su.classId === classId)?.attendanceRaw ?? null;
+    const prevMark = stu?.attendance ?? "출석";
+    if (prevRaw === status) return;
+    setAttPending((p) => new Set(p).add(key));
+    applyAttendanceLocal(studentId, classId, status);
+    try {
+      const res = await setAttendanceCell({ studentId, classId, sessionDate: activeDate, status });
+      if ("error" in res) {
+        applyAttendanceLocal(studentId, classId, prevRaw, prevMark);
+        toast.error(res.error);
+      }
+    } catch {
+      applyAttendanceLocal(studentId, classId, prevRaw, prevMark);
+      toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+    } finally {
+      setAttPending((p) => {
+        const n = new Set(p);
+        n.delete(key);
+        return n;
+      });
+    }
+  }
   // 표=SET(선택값), 카드=TOGGLE(같은 값 재클릭 시 해제) — 카드 wrapper가 토글을 계산해 SET 호출.
   function setAttitudeValue(studentId: string, a: string | null) {
     patch(studentId, (s) => ({ ...s, attitude: a }));
@@ -514,15 +563,16 @@ export function OneScreenClient({
       setGenKey((cur) => (cur === key ? null : cur));
     }
   }
-  // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시된 발송가능(진도 입력) 행 전체.
-  function selectRows(keys?: string[]) {
-    const all = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+  // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
+  // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
+  function selectRows(action: RowAction, keys?: string[]) {
+    const all = buildGridRows(visible).filter((r) => isRowActionable(r.subject, action));
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
   }
   async function autoWriteAllVisible(keys?: string[]) {
-    const rows = selectRows(keys);
+    const rows = selectRows("autowrite", keys);
     const skipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 제외된 행
     if (rows.length === 0) {
       toast.message("자동작성할 행이 없습니다 — 오늘 진도를 입력하세요");
@@ -538,7 +588,7 @@ export function OneScreenClient({
       setGenKey(null);
       setBulkGen(false);
     }
-    toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`);
+    toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력·결석)` : ""}`);
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
   // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
@@ -773,7 +823,7 @@ export function OneScreenClient({
     }
   }
   async function saveAllVisible(keys?: string[]) {
-    const rows = selectRows(keys);
+    const rows = selectRows("save", keys);
     const skipped = keys ? keys.length - rows.length : 0;
     if (rows.length === 0) {
       toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
@@ -791,13 +841,29 @@ export function OneScreenClient({
     );
   }
   async function sendAllVisible(keys?: string[]) {
-    const rows = selectRows(keys);
-    const preSkipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 발송에서 제외
+    const rows = selectRows("send", keys);
+    const preSkipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없음·결석이라 발송에서 제외
     if (rows.length === 0) {
-      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요");
+      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)");
       return;
     }
-    if (!window.confirm(`${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)`))
+    // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 고유 학생 수 기준, 결석은 제외 카운트로 별도.
+    const absentCount = new Set(
+      selectRows("save", keys)
+        .filter((r) => r.subject.attendanceRaw === "absent")
+        .map((r) => r.student.id),
+    ).size;
+    const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
+    const gapLine =
+      gaps.missingAttitude || gaps.missingTest
+        ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
+        : "";
+    const absentLine = absentCount ? `\n결석 ${absentCount}명은 발송에서 제외됩니다` : "";
+    if (
+      !window.confirm(
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}`,
+      )
+    )
       return;
     let queued = 0;
     let blocked = 0;
@@ -817,7 +883,7 @@ export function OneScreenClient({
         `발송 대기 ${queued}건` +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
-        (preSkipped ? ` · 진도 미입력 ${preSkipped}건` : "") +
+        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),
     );
   }
@@ -1030,6 +1096,7 @@ export function OneScreenClient({
             checkEnabled: showCheckTest,
           }}
           fields={{
+            onAttendance: setAttendanceFor,
             onProgress: setProgressFor,
             onStudyGrade: setStudyGradeFor,
             onScore: setScoreFor,
@@ -1057,6 +1124,7 @@ export function OneScreenClient({
             onBulkApply: bulkApplyValues,
           }}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
+          attPending={attPending}
           genKey={genKey}
           bulkGen={bulkGen}
         />
@@ -1140,6 +1208,10 @@ export function OneScreenClient({
                 onRemoveAttachment={removeAttachment}
                 attachmentUrls={attUrls}
                 uploadingSubject={uploadingSubject}
+                attendance={{
+                  pendingKeys: attPending,
+                  onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
+                }}
               />
             </div>
           </>

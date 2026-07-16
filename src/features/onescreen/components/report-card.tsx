@@ -6,6 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
 import { isReportEligible } from "../grid";
 import { splitLessons } from "../curriculum";
+import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
 import { PillGroup } from "./pill-group";
 import { isImageAttachment } from "../attachment-utils";
@@ -134,6 +135,7 @@ export function ReportCard({
   onRemoveAttachment,
   attachmentUrls,
   uploadingSubject,
+  attendance,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -157,6 +159,8 @@ export function ReportCard({
   onRemoveAttachment: (subjectName: string, path: string) => void;
   attachmentUrls?: Record<string, string>; // path→signed 썸네일 URL
   uploadingSubject?: string | null; // 첨부 업로드 중인 과목
+  // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
+  attendance?: { pendingKeys: ReadonlySet<string>; onSet: (classId: string, status: BasicAttendance) => void };
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, student.subjects.length - 1);
@@ -238,7 +242,18 @@ export function ReportCard({
               보강
             </button>
           </div>
-          {student.attendance !== "출석" ? (
+          {/* 출결 인라인 입력(2-2) — 행(반) 단위(subject.classId). 보강·반 모호는 배지만(출석부에서 기록). */}
+          {attendance && !student.isMakeup && subject.classId ? (
+            <div className="flex items-center gap-1.5">
+              <span className="micro text-text-faint">출결</span>
+              <AttendancePills
+                value={subject.attendanceRaw}
+                pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+                onSet={(s) => attendance.onSet(subject.classId!, s)}
+                studentName={student.name}
+              />
+            </div>
+          ) : student.attendance !== "출석" ? (
             <span
               className={`self-start rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
                 student.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"

@@ -3,8 +3,10 @@ import {
   buildGridRows,
   buildRowRenderMeta,
   isReportEligible,
+  isRowActionable,
   planBulkApply,
   planPrevFill,
+  summarizeSendGaps,
   type BulkTarget,
 } from "./grid";
 import type { OneScreenStudent, PrevReport } from "./types";
@@ -42,6 +44,59 @@ describe("buildGridRows", () => {
 
   it("과목 없는 학생은 행을 만들지 않는다", () => {
     expect(buildGridRows([stu("a", [])])).toHaveLength(0);
+  });
+});
+
+describe("isRowActionable", () => {
+  const sub = (over: Partial<Parameters<typeof isRowActionable>[0]> = {}) => ({
+    name: "수학",
+    prev: "",
+    today: "1-1-1 받아올림",
+    ...over,
+  });
+
+  it("진도 없으면 어떤 액션도 불가(공통 필수)", () => {
+    expect(isRowActionable(sub({ today: "" }), "save")).toBe(false);
+    expect(isRowActionable(sub({ today: "" }), "send")).toBe(false);
+  });
+
+  it("결석 행 — save는 포함(기록 보존), send/autowrite는 제외", () => {
+    const absent = sub({ attendanceRaw: "absent" });
+    expect(isRowActionable(absent, "save")).toBe(true);
+    expect(isRowActionable(absent, "send")).toBe(false);
+    expect(isRowActionable(absent, "autowrite")).toBe(false);
+  });
+
+  it("조퇴(early_leave)·지각·기록없음은 발송 유지", () => {
+    expect(isRowActionable(sub({ attendanceRaw: "early_leave" }), "send")).toBe(true);
+    expect(isRowActionable(sub({ attendanceRaw: "late" }), "send")).toBe(true);
+    expect(isRowActionable(sub({}), "send")).toBe(true);
+  });
+});
+
+describe("summarizeSendGaps", () => {
+  it("고유 학생 수 기준으로 태도·테스트 미입력을 센다(과목 행 중복 아님)", () => {
+    const a = stu("a", [{ name: "수학", today: "x" }, { name: "영어", today: "y" }]); // 태도·테스트 둘 다 미입력
+    const b = stu("b", [{ name: "수학", today: "x" }]);
+    b.attitude = "좋음";
+    b.tests.daily.score = 18;
+    b.tests.check.score = 19;
+    const rows = buildGridRows([a, b]);
+    expect(summarizeSendGaps(rows, { dailyEnabled: true, checkEnabled: true })).toEqual({
+      missingAttitude: 1, // a 1명(행 2개여도 1명)
+      missingTest: 1,
+    });
+  });
+
+  it("비활성 테스트는 미입력으로 치지 않는다", () => {
+    const a = stu("a", [{ name: "수학", today: "x" }]);
+    a.attitude = "좋음";
+    a.tests.daily.score = 18; // check는 null이지만 checkEnabled=false
+    const rows = buildGridRows([a]);
+    expect(summarizeSendGaps(rows, { dailyEnabled: true, checkEnabled: false })).toEqual({
+      missingAttitude: 0,
+      missingTest: 0,
+    });
   });
 });
 

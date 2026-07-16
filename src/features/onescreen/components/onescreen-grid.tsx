@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { buildGridRows, buildRowRenderMeta, isReportEligible } from "../grid";
+import { buildGridRows, buildRowRenderMeta, isRowActionable } from "../grid";
 import { moveInOrder } from "../student-order";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
@@ -29,6 +29,7 @@ export function OneScreenGrid({
   rowActions,
   bulkActions,
   order,
+  attPending,
   genKey,
   bulkGen,
 }: {
@@ -40,12 +41,14 @@ export function OneScreenGrid({
   bulkActions: GridBulkActions;
   // 학생 순서변경(3-2) — 단일 반 필터일 때만 전달(전체 필터에선 undefined=버튼 숨김). onSave 성공 시 true.
   order?: { classId: string; onSave: (classId: string, studentIds: string[]) => Promise<boolean> };
+  attPending: ReadonlySet<string>; // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
 }) {
   const rows = buildGridRows(students);
-  const eligibleRows = rows.filter((r) => isReportEligible(r.subject));
-  const eligible = eligibleRows.length;
+  // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
+  const sendableRows = rows.filter((r) => isRowActionable(r.subject, "send"));
+  const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save"));
   // 행 선택(체크) — 일괄 작업 대상. **표시된 모든 행**을 선택 가능(진도 유무 무관).
   // 실제 처리는 client의 selectRows가 발송가능(진도 입력) 행만 걸러내므로, 진도 없는 행은 안전히 건너뜀.
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -67,7 +70,8 @@ export function OneScreenGrid({
     }
   }
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
-  const selectedEligible = eligibleRows.filter((r) => checked.has(r.key)).length; // 실제 처리될 수(발송가능)
+  const selectedSendable = sendableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 발송될 수
+  const selectedSaveable = saveableRows.filter((r) => checked.has(r.key)).length; // 선택 중 실제 저장될 수
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
   const allChecked = rows.length > 0 && selectedKeys.length === rows.length;
   const toggleRow = (k: string) =>
@@ -124,7 +128,13 @@ export function OneScreenGrid({
     <div className="flex flex-col gap-3">
       {/* 일괄 바 — 선택은 표시 전체, 처리는 발송가능 행만(client selectRows). 값 일괄 입력은 진도 무관(raw 행). */}
       <GridToolbar
-        counts={{ total: rows.length, eligible, selectedEligible }}
+        counts={{
+          total: rows.length,
+          sendable: sendableRows.length,
+          saveable: saveableRows.length,
+          selectedSendable,
+          selectedSaveable,
+        }}
         selectedKeys={selectedKeys}
         prev={{ has: hasPrev, show: showPrev, onToggle: () => setShowPrev((v) => !v) }}
         actions={bulkActions}
@@ -249,7 +259,7 @@ export function OneScreenGrid({
                     fields={fields}
                     actions={rowActions}
                     config={config}
-                    gen={{ rowBusy: genKey === row.key, bulk: bulkGen }}
+                    gen={{ rowBusy: genKey === row.key, bulk: bulkGen, attPending }}
                     nav={{ row: i, studentRow: firstOfStudent ? meta.studentRow : undefined }}
                     orderControls={orderControls}
                   />

@@ -22,25 +22,32 @@ export function GridToolbar({
   bulkGen,
   children,
 }: {
-  counts: { total: number; eligible: number; selectedEligible: number };
+  // sendable=진도+결석 제외(발송·자동작성 대상), saveable=진도만(저장 대상 — 결석 포함, 2-3 작업별 분리).
+  counts: {
+    total: number;
+    sendable: number;
+    saveable: number;
+    selectedSendable: number;
+    selectedSaveable: number;
+  };
   selectedKeys: string[];
   prev: { has: boolean; show: boolean; onToggle: () => void };
   actions: GridBulkActions;
   bulkGen?: boolean;
   children?: ReactNode;
 }) {
-  const { total, eligible, selectedEligible } = counts;
+  const { total, sendable, saveable, selectedSendable, selectedSaveable } = counts;
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-md border px-4 py-2.5">
       <span className="text-text-dim text-[12px]">
         표시 <span className="text-foreground font-bold">{total}</span> · 발송가능{" "}
-        <span className="text-foreground font-bold">{eligible}</span>
+        <span className="text-foreground font-bold">{sendable}</span>
         {selectedKeys.length ? (
           <>
             {" "}
             · 선택 <span className="text-primary font-bold">{selectedKeys.length}</span>
-            {selectedKeys.length > selectedEligible ? (
-              <span className="text-text-faint"> (발송가능 {selectedEligible})</span>
+            {selectedKeys.length > selectedSendable ? (
+              <span className="text-text-faint"> (발송가능 {selectedSendable})</span>
             ) : null}
           </>
         ) : null}
@@ -72,24 +79,24 @@ export function GridToolbar({
           variant="ghost"
           size="sm"
           onClick={() => actions.onAutoWriteAll(selectedKeys)}
-          disabled={eligible === 0 || bulkGen}
+          disabled={sendable === 0 || bulkGen}
         >
           {bulkGen
             ? "자동작성 중…"
             : selectedKeys.length
-              ? `선택 ${selectedEligible} 자동작성`
+              ? `선택 ${selectedSendable} 자동작성`
               : "전체 자동작성"}
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={() => actions.onSaveAll(selectedKeys)}
-          disabled={eligible === 0 || bulkGen}
+          disabled={saveable === 0 || bulkGen}
         >
-          {selectedKeys.length ? `선택 ${selectedEligible} 저장` : "일괄 저장"}
+          {selectedKeys.length ? `선택 ${selectedSaveable} 저장` : "일괄 저장"}
         </Button>
-        <Button size="sm" onClick={() => actions.onSendAll(selectedKeys)} disabled={eligible === 0 || bulkGen}>
-          {selectedKeys.length ? `선택 ${selectedEligible} 발송` : "ClassNote 일괄 발송"}
+        <Button size="sm" onClick={() => actions.onSendAll(selectedKeys)} disabled={sendable === 0 || bulkGen}>
+          {selectedKeys.length ? `선택 ${selectedSendable} 발송` : "ClassNote 일괄 발송"}
         </Button>
       </div>
     </div>

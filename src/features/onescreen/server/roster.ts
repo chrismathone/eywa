@@ -189,8 +189,13 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       };
       byStudent.set(stu.id, os);
     }
-    if (!os.subjects.some((su) => su.subjectKey === cls.subject)) {
-      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+    const dupSubject = os.subjects.find((su) => su.subjectKey === cls.subject);
+    if (!dupSubject) {
+      // classId = 이 과목 행의 반(출결 원장이 student+class+date라 행 단위 출결 입력(2단계)의 키).
+      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, classId: cls.id, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+    } else if (dupSubject.classId !== cls.id) {
+      // 같은 과목을 두 반에서 수강(subjectKey dedup으로 1행) — 행의 반이 모호 → 출결 pill 숨김(출석부에서 기록).
+      dupSubject.classId = null;
     }
   }
 
@@ -228,12 +233,12 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
     ),
-    fetchInChunks<{ student_id: string; status: string; recorded_at: string }>(
+    fetchInChunks<{ student_id: string; class_id: string; status: string; recorded_at: string }>(
       studentIds,
       (chunk) =>
         supabase
           .from("attendance_records")
-          .select("student_id, status, recorded_at")
+          .select("student_id, class_id, status, recorded_at")
           .eq("session_date", todayIso)
           .in("student_id", chunk)
           .order("recorded_at", { ascending: false }),
@@ -331,9 +336,15 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   );
   for (const v of viewRows)
     viewCountByReport.set(v.lesson_report_id, (viewCountByReport.get(v.lesson_report_id) ?? 0) + 1);
-  // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신).
+  // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신) — 학생 배지 표시용(축약).
   const attById = new Map<string, string>();
   for (const a of attRows) if (!attById.has(a.student_id)) attById.set(a.student_id, a.status);
+  // (학생×반) 최신 raw — 출결 pill(2단계)의 행 단위 값. 축약(toMark)과 별개로 raw 보존(조퇴·보강 되쓰기 방지).
+  const attByRow = new Map<string, string>();
+  for (const a of attRows) {
+    const k = `${a.student_id}::${a.class_id}`;
+    if (!attByRow.has(k)) attByRow.set(k, a.status);
+  }
   const toMark = (status: string | undefined): AttendanceMark =>
     status === "late" ? "지각" : status === "absent" || status === "early_leave" ? "결석" : "출석";
 
@@ -355,6 +366,10 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       }
     }
     os.attendance = toMark(attById.get(os.id));
+    // 행(반) 단위 raw 출결 — 출결 pill(2단계). classId 모호(null)면 미채움=pill 숨김.
+    for (const su of os.subjects) {
+      if (su.classId) su.attendanceRaw = attByRow.get(`${os.id}::${su.classId}`) ?? null;
+    }
     const pr = priorReport.get(os.id);
     if (pr) {
       const { daily, check } = parseExamScores(pr.examInfo);
