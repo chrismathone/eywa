@@ -137,7 +137,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
             <h2 id="operations-briefing-title" className="text-foreground mt-1 text-[17px] font-extrabold tracking-tight">
               Eywa의 운영 브리핑
             </h2>
-            <p className="text-text-dim mt-1 max-w-3xl text-[12.5px] leading-relaxed">{briefing.summary}</p>
+            <p className="text-text-dim mt-1 text-[12.5px] leading-relaxed">{briefing.summary}</p>
           </div>
         </div>
 
@@ -184,7 +184,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
                     </span>
                   ) : null}
                 </div>
-                <p className="text-text-dim mt-2 min-h-10 max-w-2xl text-[12.5px] leading-relaxed">
+                <p className="text-text-dim mt-2 min-h-10 text-[12.5px] leading-relaxed">
                   {briefing.focus.detail ?? "원본 화면에서 내용을 확인하고 다음 조치를 결정해 주세요."}
                 </p>
                 <div className="mt-auto pt-5">
