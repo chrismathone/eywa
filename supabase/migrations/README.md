@@ -136,5 +136,7 @@ pnpm db:seed
 
 | `0111a_expenses_amount_decimal` | **`expenses.amount` numeric(12,0)→(12,2)** — 달러·유로 등 소수 통화 지출($10.60) 지원. 통화별 소수 자릿수는 코드 단일 소스(`src/features/billing/currencies.ts` `decimals`: KRW/JPY=0, USD/EUR/CNY/GBP=2)가 관리하고 DB는 최대 2자리 저장. 기존 값 전부 정수라 scale 확대는 무손실·값 재작성 없음. `do $$` 가드로 scale=0일 때만 실행(멱등). 라인 총액·합계 반올림은 `roundMoney(amount, currency)` 단일 지점. |
 
+| `0114a_onescreen_student_order` | **`onescreen_student_order`(tenant·teacher·class PK, student_ids uuid[]) + tenant RLS** — 원스크린 학생 표시 순서(강사×반 개인 설정, edutrix '순서변경' 패리티). roster가 반 그룹 내부만 재배열(`student-order.ts` 순수함수). teacher own-스코프는 앱 레이어(`order-actions.ts`: teacher_id=`effectiveTeacherId` 서버 파생 + 담당 반 소유 확인 — 0112a 철학). |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

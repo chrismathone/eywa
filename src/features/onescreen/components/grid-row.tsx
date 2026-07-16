@@ -7,6 +7,7 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { isReportEligible, type GridRow } from "../grid";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
+import { handleGridNavKey } from "./grid-nav";
 import { PillGroup } from "./pill-group";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
@@ -101,6 +102,7 @@ export function GridBodyRow({
   config,
   genRowBusy,
   bulkGen,
+  orderControls,
 }: {
   row: GridRow;
   checked: boolean;
@@ -111,6 +113,7 @@ export function GridBodyRow({
   config: GridConfig;
   genRowBusy: boolean; // 이 행 자동작성 중
   bulkGen?: boolean; // 전체 자동작성 진행중
+  orderControls?: React.ReactNode; // 순서 모드(3-2) — 선택 체크박스 자리에 ↑↓(학생 묶음 첫 행만)
 }) {
   const { student, subject, subjectIndex, key } = row;
   const { tone } = subjectTone(subject.name);
@@ -121,13 +124,17 @@ export function GridBodyRow({
   return (
     <tr className="hover:bg-bg-soft/50">
       <td className={`${TD} text-center`}>
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={() => onToggle(key)}
-          aria-label={`${student.name} ${subject.name} 선택`}
-          className="accent-primary size-3.5 align-middle"
-        />
+        {orderControls !== undefined ? (
+          orderControls
+        ) : (
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => onToggle(key)}
+            aria-label={`${student.name} ${subject.name} 선택`}
+            className="accent-primary size-3.5 align-middle"
+          />
+        )}
       </td>
       <td className={TD}>
         <div className="flex items-center gap-1.5">
@@ -172,6 +179,7 @@ export function GridBodyRow({
             label={`${student.name} 일일테스트`}
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "daily", v)}
+            nav={{ col: "daily", row: row.index }}
           />
         </td>
       ) : null}
@@ -184,6 +192,7 @@ export function GridBodyRow({
             label={`${student.name} 확인테스트`}
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "check", v)}
+            nav={{ col: "check", row: row.index }}
           />
         </td>
       ) : null}
@@ -214,6 +223,9 @@ export function GridBodyRow({
             onChange={(e) => fields.onTextbook(student.id, subject.name, e.target.value)}
             placeholder="교재명"
             aria-label={`${student.name} ${subject.name} 교재명`}
+            data-nav-col="textbook"
+            data-nav-row={row.index}
+            onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
@@ -223,6 +235,9 @@ export function GridBodyRow({
             onChange={(e) => fields.onHomeworkToday(student.id, subject.name, e.target.value)}
             placeholder="오늘 과제 (예: 개념편 p10~16)"
             aria-label={`${student.name} ${subject.name} 오늘 과제`}
+            data-nav-col="homeworkToday"
+            data-nav-row={row.index}
+            onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />
           <label className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-[11px]">

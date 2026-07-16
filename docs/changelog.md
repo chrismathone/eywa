@@ -4,6 +4,20 @@
 
 ## 진행 상황
 
+### 원스크린 단체 작성 — edutrix 전수비교 갭 0·1·3단계 반영 (2026-07-17) — ✅ tsc0/lint0/test1425/test:rls4/0114a 적용·멱등✓
+2026-07-16 edutrix↔eywa 단체작성 전수비교 감사(확정 14건)의 승인 계획 이행. **0단계(분해)**: onescreen-grid
+593줄·props24 → 조립자+리프 5개(grid-toolbar/grid-row/prev-row/score-input/pill-group), 핸들러는
+fields/rowActions/bulkActions 그룹 객체(200줄·props10 회복). **1단계(작성 속도)**: ① 표뷰 태도·과제 드롭다운(2클릭)→
+1클릭 pill(재클릭 해제, 카드뷰 PillGroup 공용) ② "값 일괄 입력" 팝오버(선택/전체 행에 태도·과제·교재·오늘과제 —
+빈 필드=미적용, 빈 칸만 옵션, `planBulkApply` 순수함수) ③ 참고행 "가져오기"(빈 칸만 진도·태도·과제·오늘과제,
+`planPrevFill` — ⚠️특이사항 제외: prevReport.note=발송 본문) ④ 문구 3칸 field-sizing 자동 확장.
+**3단계(인체공학)**: ⑤ 점수·교재·오늘과제 Enter/↑↓ 세로 이동(`grid-nav.ts`, isComposing IME 가드) ⑥ 학생
+순서변경(0114a `onescreen_student_order`, 단일 반 필터에서만, 학생 묶음 ↑↓, teacher_id=`effectiveTeacherId`
+서버 파생, roster 반 그룹 내 재배열 `student-order.ts`) ⑦ 다른 창/기기 동시 열림 경고(presence scope
+`onescreen:{teacherId}:{date}`, 락 아님). **2단계(출결 직접 입력+발송 누락 안내)는 출결 시수 작업(a07c1d1) 병합
+대기** — 병합 후 setAttendanceCell 권한 보강(scoped=담당반)→출결 (student,class) 복합키→pill 순서로 진행.
+⚠️브라우저 시각검증 미완(강사 로그인 필요) — 다음 강사 세션에서 pill·일괄입력·순서 실측 권장.
+
 ### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열
 순서로 기입해 **학력이 은행 열로 밀리는 실사고** → `ROSTER_COLUMNS`/`buildRosterRow`를 현재 시트(A~S 19열)와

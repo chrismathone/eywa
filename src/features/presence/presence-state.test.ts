@@ -13,6 +13,7 @@ describe("isPresenceScope — 콜론 포함 접두 매칭", () => {
     expect(isPresenceScope("tenant-settings:profile")).toBe(true);
     expect(isPresenceScope("meeting:abc")).toBe(true);
     expect(isPresenceScope("staff-resume:7")).toBe(true);
+    expect(isPresenceScope("onescreen:t1:2026-07-16")).toBe(true); // 원스크린 날짜 단위(다른 창/기기 경고)
   });
   it("staff-resume은 staff와 별개 scope다(allowlist 누락 시 presence가 조용히 무시됨)", () => {
     // 'staff:'로는 안 잡히므로 allowlist에 'staff-resume'이 따로 있어야 이력서 '수정중'이 동작한다.

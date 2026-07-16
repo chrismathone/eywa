@@ -1,10 +1,13 @@
 "use client";
 
+import { handleGridNavKey } from "./grid-nav";
+
 function clamp(n: number, max: number) {
   return Math.max(0, Math.min(max, n));
 }
 
-/** 점수 셀 — 맞은 개수 입력 + /만점. allowMax면 만점(/N)도 편집 가능(학원 설정). (그리드 분해 0단계 이동) */
+/** 점수 셀 — 맞은 개수 입력 + /만점. allowMax면 만점(/N)도 편집 가능(학원 설정). (그리드 분해 0단계 이동)
+ *  nav를 주면 Enter/↑↓로 같은 열의 위·아래 행 점수칸으로 이동(3-1). */
 export function ScoreInput({
   value,
   max,
@@ -12,6 +15,7 @@ export function ScoreInput({
   label,
   allowMax,
   onMax,
+  nav,
 }: {
   value: number | null;
   max: number;
@@ -19,6 +23,7 @@ export function ScoreInput({
   label: string;
   allowMax?: boolean;
   onMax?: (v: number) => void;
+  nav?: { col: string; row: number };
 }) {
   return (
     <div className="flex items-center justify-center gap-0.5">
@@ -26,6 +31,9 @@ export function ScoreInput({
         inputMode="numeric"
         value={value == null ? "" : String(value)}
         aria-label={label}
+        data-nav-col={nav?.col}
+        data-nav-row={nav?.row}
+        onKeyDown={nav ? handleGridNavKey : undefined}
         onChange={(e) => {
           const raw = e.target.value.replace(/[^0-9]/g, "");
           onChange(raw === "" ? null : clamp(parseInt(raw, 10) || 0, max));

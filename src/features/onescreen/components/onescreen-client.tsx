@@ -41,6 +41,10 @@ import { StatusBoard } from "./status-board";
 import { HistoryBoard } from "./history-board";
 import { NoticeComposer } from "./notice-composer";
 import { buildGridRows, isReportEligible, planBulkApply, planPrevFill, type BulkPatch } from "../grid";
+import { applyStudentOrder } from "../student-order";
+import { saveStudentOrder } from "../server/order-actions";
+import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
+import { dedupeEditors } from "@/features/presence/presence-state";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -112,6 +116,7 @@ export function OneScreenClient({
   noticeMode: initialNoticeMode = null,
   academyNoticeMode = "A",
   classnoteSendEnabled = false,
+  presenceScope,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -124,6 +129,7 @@ export function OneScreenClient({
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
+  presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -152,6 +158,9 @@ export function OneScreenClient({
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
   const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
+  // 다른 창/기기 동시 열림 경고(3-3, 락 아님) — enabled=페이지 열림. 같은 계정 다른 탭/기기도 잡힌다(presence key 기준).
+  useEditPresence(presenceScope, true);
+  const sameDateEditors = dedupeEditors(useEditingOthers(presenceScope ?? ""));
 
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
   const studentsRef = useRef(students);
@@ -231,6 +240,9 @@ export function OneScreenClient({
 
   const visible =
     classFilter === "전체" ? students : students.filter((s) => s.tag === classFilter);
+  // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
+  const orderClass =
+    classFilter !== "전체" ? todayClasses.find((c) => c.name === classFilter) : undefined;
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
 
@@ -582,6 +594,17 @@ export function OneScreenClient({
     if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
     toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
+  }
+  // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
+  async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
+    const res = await saveStudentOrder({ classId, studentIds });
+    if ("error" in res) {
+      toast.error(res.error);
+      return false;
+    }
+    setStudents((prev) => applyStudentOrder(prev, new Map([[classId, studentIds]])));
+    toast.success("학생 순서를 저장했습니다 — 다음 작성에도 유지됩니다");
+    return true;
   }
   // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
   function openCard(studentId: string) {
@@ -984,6 +1007,14 @@ export function OneScreenClient({
         makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
       />
 
+      {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
+      {sameDateEditors.length > 0 ? (
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+          <span className="font-semibold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
+          <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
+        </div>
+      ) : null}
+
       {view === "grid" ? (
         <OneScreenGrid
           students={visible}
@@ -1022,6 +1053,7 @@ export function OneScreenClient({
             onClassNotice: openNoticeForRows,
             onBulkApply: bulkApplyValues,
           }}
+          order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           genKey={genKey}
           bulkGen={bulkGen}
         />

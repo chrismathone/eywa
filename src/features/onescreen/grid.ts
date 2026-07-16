@@ -10,6 +10,7 @@ export type GridRow = {
   subject: Subject;
   subjectIndex: number;
   key: string; // `${student.id}::${subject.name}` — React key·상태 인덱싱
+  index: number; // 표 전체 행 순번 — 키보드 세로 이동(data-nav-row, 3-1)
 };
 
 /** 학생 목록 → (학생 × 과목) 행 평탄화. 과목 순서 보존, 과목 없는 학생 제외(발송 단위가 과목). */
@@ -17,7 +18,7 @@ export function buildGridRows(students: OneScreenStudent[]): GridRow[] {
   const rows: GridRow[] = [];
   for (const student of students) {
     student.subjects.forEach((subject, subjectIndex) => {
-      rows.push({ student, subject, subjectIndex, key: `${student.id}::${subject.name}` });
+      rows.push({ student, subject, subjectIndex, key: `${student.id}::${subject.name}`, index: rows.length });
     });
   }
   return rows;

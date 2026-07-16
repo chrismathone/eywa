@@ -1,7 +1,9 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { buildGridRows, isReportEligible } from "../grid";
+import { moveInOrder } from "../student-order";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
 import { BulkApplyPopover } from "./bulk-apply";
@@ -10,6 +12,8 @@ import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActio
 import { PrevRow } from "./prev-row";
 
 const TH = "text-text-faint px-2 py-2 text-left text-[11px] font-semibold whitespace-nowrap";
+const ORDER_BTN =
+  "border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex size-5 items-center justify-center rounded-sm border text-[11px] font-bold disabled:opacity-40";
 
 /**
  * 선생님 원스크린 — 표(스프레드시트) 대량작성 뷰.
@@ -24,6 +28,7 @@ export function OneScreenGrid({
   fields,
   rowActions,
   bulkActions,
+  order,
   genKey,
   bulkGen,
 }: {
@@ -33,6 +38,8 @@ export function OneScreenGrid({
   fields: GridFieldHandlers;
   rowActions: GridRowActions;
   bulkActions: GridBulkActions;
+  // 학생 순서변경(3-2) — 단일 반 필터일 때만 전달(전체 필터에선 undefined=버튼 숨김). onSave 성공 시 true.
+  order?: { classId: string; onSave: (classId: string, studentIds: string[]) => Promise<boolean> };
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
 }) {
@@ -43,6 +50,10 @@ export function OneScreenGrid({
   // 실제 처리는 client의 selectRows가 발송가능(진도 입력) 행만 걸러내므로, 진도 없는 행은 안전히 건너뜀.
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [showPrev, setShowPrev] = useState(true); // 이전 회차 참고행 토글(기본 켜짐)
+  // 순서 모드(3-2) — 학생 묶음(과목 행 아님)을 ↑↓로 재배열해 (강사×반)에 영구 저장.
+  const [orderMode, setOrderMode] = useState(false);
+  const [draftOrder, setDraftOrder] = useState<string[]>([]);
+  const [savingOrder, setSavingOrder] = useState(false);
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
   const selectedEligible = eligibleRows.filter((r) => checked.has(r.key)).length; // 실제 처리될 수(발송가능)
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
@@ -62,6 +73,31 @@ export function OneScreenGrid({
       return n;
     });
 
+  // 순서 모드 표시 순서 — 초안 순서(학생 묶음)대로 행 정렬(같은 학생 안 과목 순서는 보존).
+  const displayRows = orderMode
+    ? (() => {
+        const pos = new Map(draftOrder.map((id, i) => [id, i]));
+        return rows
+          .map((r, i) => ({ r, i, p: pos.get(r.student.id) ?? Number.MAX_SAFE_INTEGER }))
+          .sort((a, b) => a.p - b.p || a.i - b.i)
+          .map((x) => x.r);
+      })()
+    : rows;
+  const startOrder = () => {
+    setDraftOrder([...new Set(rows.map((r) => r.student.id))]);
+    setOrderMode(true);
+  };
+  const saveOrder = async () => {
+    if (!order) return;
+    setSavingOrder(true);
+    try {
+      const ok = await order.onSave(order.classId, draftOrder);
+      if (ok) setOrderMode(false);
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
   if (rows.length === 0) {
     return (
       <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm">
@@ -80,14 +116,39 @@ export function OneScreenGrid({
         actions={bulkActions}
         bulkGen={bulkGen}
       >
-        <BulkApplyPopover
-          targetCount={selectedKeys.length || rows.length}
-          selectedCount={selectedKeys.length}
-          attitudes={config.attitudes}
-          homeworks={config.homeworks}
-          onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
-          disabled={bulkGen}
-        />
+        {orderMode ? (
+          <>
+            <span className="text-text-dim text-[11px]">↑↓로 학생 순서를 바꾼 뒤 저장하세요</span>
+            <Button variant="outline" size="sm" onClick={() => setOrderMode(false)} disabled={savingOrder}>
+              취소
+            </Button>
+            <Button size="sm" onClick={saveOrder} disabled={savingOrder}>
+              {savingOrder ? "저장 중…" : "순서 저장"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <BulkApplyPopover
+              targetCount={selectedKeys.length || rows.length}
+              selectedCount={selectedKeys.length}
+              attitudes={config.attitudes}
+              homeworks={config.homeworks}
+              onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
+              disabled={bulkGen}
+            />
+            {order ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={startOrder}
+                disabled={bulkGen}
+                title="학생 표시 순서 변경 — 이 반에 저장(좌석·채점지 순서). 다음 작성에도 유지"
+              >
+                순서
+              </Button>
+            ) : null}
+          </>
+        )}
       </GridToolbar>
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
@@ -128,29 +189,58 @@ export function OneScreenGrid({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <Fragment key={row.key}>
-                {showPrev ? (
-                  <PrevRow
-                    subject={row.subject}
-                    dailyEnabled={config.dailyEnabled}
-                    checkEnabled={config.checkEnabled}
-                    onImport={() => rowActions.onImportPrev(row.student, row.subject.name)}
+            {displayRows.map((row, i) => {
+              // 순서 모드: 학생 묶음 첫 행에만 ↑↓ 노출(과목 행 단위 이동 아님). 참고행은 숨김(시각 단순화).
+              const firstOfStudent = i === 0 || displayRows[i - 1]!.student.id !== row.student.id;
+              const orderControls = orderMode ? (
+                firstOfStudent ? (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setDraftOrder((p) => moveInOrder(p, row.student.id, -1))}
+                      aria-label={`${row.student.name} 위로`}
+                      className={ORDER_BTN}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDraftOrder((p) => moveInOrder(p, row.student.id, 1))}
+                      aria-label={`${row.student.name} 아래로`}
+                      className={ORDER_BTN}
+                    >
+                      ↓
+                    </button>
+                  </div>
+                ) : (
+                  <span aria-hidden />
+                )
+              ) : undefined;
+              return (
+                <Fragment key={row.key}>
+                  {showPrev && !orderMode ? (
+                    <PrevRow
+                      subject={row.subject}
+                      dailyEnabled={config.dailyEnabled}
+                      checkEnabled={config.checkEnabled}
+                      onImport={() => rowActions.onImportPrev(row.student, row.subject.name)}
+                    />
+                  ) : null}
+                  <GridBodyRow
+                    row={row}
+                    checked={checked.has(row.key)}
+                    onToggle={toggleRow}
+                    rep={reports[row.student.id]?.[row.subject.name]}
+                    fields={fields}
+                    actions={rowActions}
+                    config={config}
+                    genRowBusy={genKey === row.key}
+                    bulkGen={bulkGen}
+                    orderControls={orderControls}
                   />
-                ) : null}
-                <GridBodyRow
-                  row={row}
-                  checked={checked.has(row.key)}
-                  onToggle={toggleRow}
-                  rep={reports[row.student.id]?.[row.subject.name]}
-                  fields={fields}
-                  actions={rowActions}
-                  config={config}
-                  genRowBusy={genKey === row.key}
-                  bulkGen={bulkGen}
-                />
-              </Fragment>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
