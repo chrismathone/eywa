@@ -15,9 +15,17 @@ import { getUpstage } from "@/lib/ai/upstage";
 import { getAnthropic } from "@/lib/ai/anthropic";
 import { recordUsage, isRetryableProviderError } from "@/lib/ai/generate";
 import { resolveModelChain, type AiProvider } from "@/lib/ai/models";
+import { kstToday } from "@/lib/date-kst";
 import { reportWarning } from "@/lib/observability/report-error";
 import type { AssistantTurn } from "../turns";
+import { hasSpecialTokenNoise, parseInlineToolCalls, stripMarkdownEmphasis } from "../solar-tokens";
 import { assistantTools } from "./tools";
+
+/** Solar가 툴콜을 본문 토큰으로 뱉어 답을 못 만든 경우 — 다음 provider(Claude) 폴백 대상. */
+const FORMAT_ERROR_MARK = "모델이 툴 호출 형식을 본문으로 출력했습니다";
+function isFormatError(e: unknown): boolean {
+  return e instanceof Error && e.message.includes(FORMAT_ERROR_MARK);
+}
 
 /**
  * betaZodTool 반환(BetaRunnableTool)은 SDK 내장 툴들까지 포함한 유니온이라 custom 툴 필드
@@ -40,14 +48,18 @@ const MAX_ROUNDS = 5; // 툴 왕복 상한(무한 루프·비용 폭주 방지)
 const MAX_TOOL_RESULT_CHARS = 6000; // 툴 결과 1건 상한(컨텍스트 폭주 방지)
 const MAX_HISTORY_TURNS = 12; // 모델에 넘길 직전 대화 턴 수
 
-const SYSTEM_PROMPT = [
-  "당신은 학원 원장을 보좌하는 '매니저 팀' AI 비서입니다. 학원 데이터는 반드시 제공된 툴로 조회해 그 결과에만 근거해 답합니다.",
-  "- 한국어 존댓말, 간결하게(3~6문장, 목록이 나으면 짧은 불릿).",
-  "- 숫자·이름·날짜는 툴 결과 그대로. 조회로 확인 못 한 내용은 추정하지 말고 모른다고 답합니다.",
-  "- 학생 관련 질문은 search_students로 학생을 특정한 뒤 상세 툴을 씁니다. 동명이인이면 학교·학년을 되묻습니다.",
-  "- 영어 단어·코드·내부 키 이름을 답변에 노출하지 않습니다.",
-  "- 주민번호·계좌·급여 등 민감 정보 질문에는 도울 수 없다고 답합니다.",
-].join("\n");
+/** 시스템 프롬프트 — 오늘 날짜(KST)를 넣어야 "이번 달/오늘"류 기간 추측 오답을 막는다(2026-07-17 실측: 날짜 없인 2025-10을 지어냄). */
+function buildSystemPrompt(todayKst: string): string {
+  return [
+    `당신은 학원 원장을 보좌하는 '매니저 팀' AI 비서입니다. 오늘은 ${todayKst}(한국 시간)입니다. 학원 데이터는 반드시 제공된 툴로 조회해 그 결과에만 근거해 답합니다.`,
+    "- 한국어 존댓말, 간결하게(3~6문장, 목록이 나으면 짧은 불릿). 마크다운·별표·헤더 없이 일반 문장으로.",
+    "- 숫자·이름·날짜는 툴 결과 그대로. 조회로 확인 못 한 내용은 추정하지 말고 모른다고 답합니다.",
+    "- 날짜·기간 인자는 사용자가 명시했을 때만 지정합니다. '이번 달'·'오늘' 질문은 인자를 **생략**해 기본값(현재)을 쓰십시오.",
+    "- 학생 관련 질문은 search_students로 학생을 특정한 뒤 상세 툴을 씁니다. 동명이인이면 학교·학년을 되묻습니다.",
+    "- 영어 단어·코드·내부 키 이름을 답변에 노출하지 않습니다.",
+    "- 주민번호·계좌·급여 등 민감 정보 질문에는 도울 수 없다고 답합니다.",
+  ].join("\n");
+}
 
 export type AssistantLoopResult = {
   answer: string;
@@ -92,7 +104,7 @@ async function runOpenAiCompatLoop(
     },
   }));
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt(kstToday()) },
     ...history.map((turn) => ({ role: turn.role, content: turn.content }) as const),
     { role: "user", content: question },
   ];
@@ -112,9 +124,27 @@ async function runOpenAiCompatLoop(
     usage.output += res.usage?.completion_tokens ?? 0;
     const msg = res.choices[0]?.message;
     if (!msg) throw new Error("AI 응답이 비어 있습니다");
-    const calls = msg.tool_calls ?? [];
-    if (calls.length === 0) return { answer: (msg.content ?? "").trim(), toolCalls };
-    messages.push(msg);
+    let calls = msg.tool_calls ?? [];
+    if (calls.length === 0) {
+      // Solar가 툴콜을 구조화 필드가 아니라 **본문 텍스트 토큰**으로 뱉는 경우 실측(2026-07-17
+      // 프로덕션 첫 질문에서 raw 토큰이 답변으로 저장됨) — 파싱해 표준 툴 호출로 승격시킨다.
+      const inline = parseInlineToolCalls(msg.content ?? "");
+      if (inline.calls.length > 0 && round < MAX_ROUNDS) {
+        calls = inline.calls.map((call, index) => ({
+          id: call.id || `inline_${round}_${index}`,
+          type: "function" as const,
+          function: { name: call.name, arguments: call.args || "{}" },
+        }));
+        messages.push({ role: "assistant", content: inline.stripped || null, tool_calls: calls });
+      } else {
+        const answer = stripMarkdownEmphasis((msg.content ?? "").trim());
+        // 파싱 못 삼킨 특수 토큰이 남은 답은 사용자에게 절대 노출 금지(raw 코드 노출 금지) — 폐기.
+        if (hasSpecialTokenNoise(answer)) throw new Error(FORMAT_ERROR_MARK);
+        return { answer, toolCalls };
+      }
+    } else {
+      messages.push(msg);
+    }
     for (const call of calls) {
       if (call.type !== "function") continue;
       toolCalls++;
@@ -157,7 +187,7 @@ async function runAnthropicLoop(
       model,
       max_tokens: 1024,
       temperature: 0.2,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(kstToday()),
       messages,
       tools: toolDefs as never,
       ...(round === MAX_ROUNDS ? { tool_choice: { type: "none" as const } } : {}),
@@ -166,10 +196,12 @@ async function runAnthropicLoop(
     usage.output += res.usage?.output_tokens ?? 0;
     const toolUses = res.content.filter((block) => block.type === "tool_use");
     if (toolUses.length === 0 || res.stop_reason !== "tool_use") {
-      const answer = res.content
-        .map((block) => (block.type === "text" ? block.text : ""))
-        .join("")
-        .trim();
+      const answer = stripMarkdownEmphasis(
+        res.content
+          .map((block) => (block.type === "text" ? block.text : ""))
+          .join("")
+          .trim(),
+      );
       return { answer, toolCalls };
     }
     messages.push({ role: "assistant", content: res.content });
@@ -230,11 +262,13 @@ export async function runAssistantLoop(opts: {
         ok: false,
         error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
       });
-      if (i < chain.length - 1 && isRetryableProviderError(e)) {
+      // 키/한도 오류 + Solar 형식 오류(툴콜 본문 토큰 유출)는 다음 provider(Claude)로 폴백.
+      if (i < chain.length - 1 && (isRetryableProviderError(e) || isFormatError(e))) {
         reportWarning(`비서 ${provider} 실패 → 다음 provider 폴백`, {
           scope: "assistant.loop.fallback",
           provider,
           model,
+          reason: e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120),
         });
         continue;
       }

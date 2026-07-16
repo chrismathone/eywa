@@ -18,7 +18,15 @@ canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률�
   "페이지 로드 무호출" 원칙 무충돌. 대시보드 라우트 `maxDuration=60`(툴 왕복 여유).
 - **대화 저장(0117a `assistant_conversations`)**: own-row RLS(본인만), messages에 표시용 텍스트 턴만(툴 원시 블록·
   조회 스냅샷 미저장 → 권한 변화에 안전, [turns.ts](../src/features/assistant/turns.ts) 파싱 단일 소스·상한 60턴).
-- ⚠️ 실사용 E2E(로그인 세션)는 미완 — 원장이 운영실에서 첫 질문으로 확인. 강사 표면은 범위 밖(none).
+- **✅ 실브라우저 E2E(Chrome MCP, injaewon 로그인, 2026-07-17)**: 7질문 전부 Solar Pro 3 `ok=true`(Anthropic 폴백 0회).
+  수납률(툴 1)·이유하 학생 종합(search+summary 툴 2)·이탈 위험 3명 실명+사유+권장조치(retention 툴)·미수 상위(툴 2)
+  정상. **추민아 강사 월급? → 정중히 거절**(PII 방어 실동작). usage in 2.6k~18k·out 29~235 tok. 실측으로 잡은 함정 3건 수정:
+  · **Solar가 툴콜을 본문 텍스트 토큰으로 방출**(`<|tool_call:begin|>…`)해 raw가 답변으로 노출됨 →
+    순수 파서 [solar-tokens.ts](../src/features/assistant/solar-tokens.ts) `parseInlineToolCalls`로 표준 툴콜 승격 +
+    못 삼킨 특수 토큰 남으면 답 폐기·Claude 폴백(`hasSpecialTokenNoise`).
+  · **날짜 미주입 시 "이번 달"을 2025-10으로 환각** → 시스템 프롬프트에 오늘(KST) 주입 + 기간 인자는 명시 시만.
+  · **`**91.76%**` 마크다운 강조가 plain 패널에 별표째 노출** → `stripMarkdownEmphasis`(강조만 제거, 불릿·본문 보존).
+- 강사 표면은 범위 밖(none).
 
 ### 골든마스터 N6 + 강사 분배 splits 저장 (2026-07-16) — ✅ tsc0/lint0/test1471/DB E2E(원복) — 로드맵 2단계 (b) 완료
 attendance R2(정산 로직 변경 시 실데이터 3케이스 동시 통과 — 수동 live 검증)를 eywa에선 **자동화 골든마스터로 승격**,
