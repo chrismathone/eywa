@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { generateReportComment } from "@/features/onescreen/server/actions";
+import { ReportAttachments } from "@/features/onescreen/components/report-attachments";
 import type { ReportCommentInput } from "@/features/onescreen/report-comment";
 import {
   getAdminComposeContext,
@@ -220,6 +221,20 @@ export function ComposeFace({
     else toast.error(res.error ?? "저장에 실패했습니다");
   }
 
+  // 첨부 전 보고서 행 보장 — 현재 폼으로 저장(멱등 upsert). attachments 컬럼은 안 건드려 기존 첨부 보존.
+  async function ensureSavedForAttach(): Promise<boolean> {
+    if (!studentId || !subject) {
+      toast.error("학생과 과목을 먼저 선택하세요");
+      return false;
+    }
+    const res = await saveAdminReport(buildInput());
+    if (!res.ok) {
+      toast.error(res.error ?? "보고서 저장에 실패했습니다");
+      return false;
+    }
+    return true;
+  }
+
   async function doSend() {
     if (!body.trim()) {
       toast.error("본문을 작성한 뒤 발송하세요");
@@ -424,6 +439,20 @@ export function ComposeFace({
             <div className={LABEL}>학습 추세(선택)</div>
             <textarea value={trend} onChange={(e) => setTrend(e.target.value)} rows={2} placeholder="종합 추세 코멘트(선택)" className={`${INPUT} resize-y`} />
           </div>
+
+          {/* 학생 사진 첨부 — 저장된 행에만(첫 첨부 시 자동 저장). /r·ClassNote 스샷에 함께 실림. 과목 선택 시 노출. */}
+          {subject ? (
+            <div>
+              <div className={`${LABEL} mb-1`}>사진 첨부</div>
+              <ReportAttachments
+                studentId={studentId}
+                subject={subject}
+                reportDate={reportDate}
+                ensureSaved={ensureSavedForAttach}
+                onChanged={() => router.refresh()}
+              />
+            </div>
+          ) : null}
 
           {/* 액션 */}
           {confirmSend ? (

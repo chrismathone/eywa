@@ -4,6 +4,20 @@
 
 ## 진행 상황
 
+### 수업보고서 첨부 = admin 직접발송 배선 + 파일(문서/오디오)까지 확장 (2026-07-16) — ✅ tsc0/lint0
+기존 사진첨부(P2b)는 **강사 원스크린 카드 전용**이라 원장 admin 직접발송·비수강 학생(학원이)엔 첨부 UI 도달 불가였다.
+두 가지를 이어서 처리(함께 push):
+- **admin 경로 배선**(`11c4462`): 첨부 4액션 게이트를 `teacherOwnsStudent` **OR** `canWriteTenant('lesson_reports')`로
+  공용화(#77) + `findReportRow`에 reportDate 파라미터. 원스크린 업로드 오케스트레이션을 공용 컴포넌트
+  [`report-attachments.tsx`](../src/features/onescreen/components/report-attachments.tsx)로 추출(compose-face가 소비).
+- **파일 확장**: 사진뿐 아니라 **PDF·HWP·office·mp3/m4a**(≤20MB)까지 첨부. `report_attachment` allowCT를
+  `isReportAttachmentCT`(이미지+문서+오디오)로 확장, Supabase 버킷 `report-attachments`의 allowed_mime_types·크기도
+  동기([`setup-storage.ts`](../scripts/setup-storage.ts)). 학부모 렌더는 **이미지=인라인 / 파일=다운로드 링크(받기)**로
+  분기([`isImageAttachment`](../src/features/onescreen/attachment-utils.ts) 공용, `parent-report-card`가 /r·인쇄 공용 담당).
+- **배달 모델**: ClassNote 게시글의 **/r 링크**로 파일 수신(스샷 안에선 클릭 불가 링크칩). 네이티브 첨부(attached_files)는 Phase 2.
+- 검증: 라이브 E2E(학원이, supabase 백엔드 — GCS는 localhost 업로드 CORS 차단) — PDF 파일칩 + 이미지 인라인 혼합 →
+  /r에서 **PDF=받기 링크 · 이미지=인라인** 확인. 테스트 데이터·showAttachments 원복.
+
 ### 직원명부 시트 운영성 3종 — 퇴사자 자동 탭·No. 자동 채번·갱신일 신호등 (2026-07-16) — ✅ 실시트 적용·검증 + tsc0/lint0/test41(staff)
 "2026신규 직원명부" 탭의 고정 퇴사자 블록(A13 `FILTER($A$2:$P$12,…)` = 12행 고정·범위 닫힘)이 직원 증가 시
 데이터와 충돌하는 문제(원장 제보) → 시트 구조를 API로 재편 + 앱 기입 열 조정.
