@@ -6,6 +6,8 @@ import type { ResumeEducation, StaffResumeData } from "./resume";
 /**
  * 대상 탭 헤더(A~T 순서). 시트 쪽 열이 바뀌면 여기와 [buildRosterRow]를 **함께** 고칠 것 —
  * 순서가 어긋나면 주민번호가 전화번호 열에 들어가는 식으로 조용히 밀린다.
+ * ⚠️ A열(No.)은 시트의 ARRAYFORMULA가 자동 채번 — 앱은 첫 칸을 버리고 **B열부터** 기입한다
+ *    (resume-roster-sheet.ts). 여기 배열은 시트 열 대조표로 A열 포함 전체를 유지.
  */
 export const ROSTER_COLUMNS = [
   "No.",

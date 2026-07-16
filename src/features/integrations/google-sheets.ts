@@ -232,6 +232,8 @@ export async function updateSheetRow(
   tabName: string,
   rowIndex: number,
   values: string[],
+  // 기입 시작 열 — 시트 수식 열(예: 직원명부 A열 ARRAYFORMULA 채번)을 덮지 않으려면 "B" 등으로.
+  startColumn = "A",
 ): Promise<void> {
   try {
     // 인증도 try 안 — invalid_grant 등 인증 오류가 한글 메시지(translateSheetsError)로 떨어지게.
@@ -241,7 +243,7 @@ export async function updateSheetRow(
     await sheets.spreadsheets.values.update(
       {
         spreadsheetId,
-        range: `'${tabName}'!A${rowIndex}`,
+        range: `'${tabName}'!${startColumn}${rowIndex}`,
         valueInputOption: "RAW",
         requestBody: { values: [values] },
       },

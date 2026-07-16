@@ -34,7 +34,9 @@ export async function appendResumeToRoster(
         ? new Error(`시트에 '${tab}' 탭이 없습니다 — HR_ROSTER_SHEET_TAB 값을 확인하세요`)
         : e;
     });
-    await updateSheetRow(spreadsheetId, tab, firstEmptyRowIndex(rows), buildRosterRow(data));
+    // A열(No.)은 시트의 ARRAYFORMULA가 자동 채번(2026-07-16 원장 요청) — 앱이 A열에 ""라도 쓰면
+    // 수식 스필이 깨지므로 B열부터 기입한다(buildRosterRow의 첫 칸 No.는 버림).
+    await updateSheetRow(spreadsheetId, tab, firstEmptyRowIndex(rows), buildRosterRow(data).slice(1), "B");
   })();
   // race 패배 후 늦게 떨어지는 거부가 unhandledRejection으로 새지 않게 미리 handled 처리(원 promise는 race가 그대로 씀).
   job.catch(() => {});
