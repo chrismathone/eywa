@@ -36,8 +36,9 @@ export async function getSessionTermsView(period: string): Promise<SessionTermsV
   const supabase = await createClient();
 
   const [invoices, catalog] = await Promise.all([
+    // ⚠️ 페이징에는 안정 정렬 필수 — 무순서 offset 페이징은 1000행 초과 시 중복/누락 위험(적대 리뷰 픽스).
     fetchAllPaged<{ id: string; student_id: string; line_items: unknown }>((from, to) =>
-      supabase.from("invoices").select("id, student_id, line_items").eq("period", period).range(from, to),
+      supabase.from("invoices").select("id, student_id, line_items").eq("period", period).order("id").range(from, to),
     ),
     supabase
       .from("tuition_catalog")

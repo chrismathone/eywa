@@ -1,0 +1,134 @@
+{
+  "note": "시수 검증·분배 골든 — 2026-07-16 실E2E로 프로덕션에서 UI·RPC·DB 삼중 일치를 확인한 시나리오를 동결. 수학 JJ2B(박민엽)·영어 특별S(Elsa). consumed는 RPC session_term_attendance(0115a) 출력 형식(numeric 문자열) 그대로.",
+  "cases": [
+    {
+      "name": "수학 JJ2B — 배수 시수(보강 2)·부분 출석(0.5)",
+      "rows": [
+        {
+          "invoiceId": "inv-math-siwoo",
+          "classId": "cls-jj2b",
+          "subject": "math",
+          "className": "초등M 초6 JJ2B",
+          "teacherId": "t-park",
+          "teacherName": "박민엽",
+          "confirmedSessions": 4,
+          "unitPrice": 25000,
+          "amount": 100000,
+          "rpcConsumed": "4.0"
+        },
+        {
+          "invoiceId": "inv-math-jaeyong",
+          "classId": "cls-jj2b",
+          "subject": "math",
+          "className": "초등M 초6 JJ2B",
+          "teacherId": "t-park",
+          "teacherName": "박민엽",
+          "confirmedSessions": 2,
+          "unitPrice": 25000,
+          "amount": 50000,
+          "rpcConsumed": "1.5"
+        }
+      ],
+      "expected": {
+        "verdicts": [
+          { "status": "matched", "diff": 0 },
+          { "status": "short", "diff": -0.5 }
+        ],
+        "allocation": {
+          "teacherName": "박민엽",
+          "classCount": 1,
+          "confirmedSessions": 6,
+          "confirmedAmount": 150000,
+          "actualUnits": 5.5,
+          "actualAmount": 137500,
+          "diffAmount": -12500
+        },
+        "splits": [
+          { "confirmedAmount": 50000, "actualUnits": 1.5, "actualAmount": 37500, "diffAmount": -12500 },
+          { "confirmedAmount": 100000, "actualUnits": 4, "actualAmount": 100000, "diffAmount": 0 }
+        ],
+        "splitTotals": { "rowCount": 2, "confirmedAmount": 150000, "actualAmount": 137500, "diffAmount": -12500 }
+      }
+    },
+    {
+      "name": "영어 특별S — 하루 2유닛(EiE)·부족 1회",
+      "rows": [
+        {
+          "invoiceId": "inv-eng-eunho",
+          "classId": "cls-special-s",
+          "subject": "english",
+          "className": "고등E_고1 특별 S",
+          "teacherId": "t-elsa",
+          "teacherName": "Elsa",
+          "confirmedSessions": 4,
+          "unitPrice": 7500,
+          "amount": 30000,
+          "rpcConsumed": "4.0"
+        },
+        {
+          "invoiceId": "inv-eng-hyunsung",
+          "classId": "cls-special-s",
+          "subject": "english",
+          "className": "고등E_고1 특별 S",
+          "teacherId": "t-elsa",
+          "teacherName": "Elsa",
+          "confirmedSessions": 4,
+          "unitPrice": 7500,
+          "amount": 30000,
+          "rpcConsumed": "3.0"
+        }
+      ],
+      "expected": {
+        "verdicts": [
+          { "status": "matched", "diff": 0 },
+          { "status": "short", "diff": -1 }
+        ],
+        "allocation": {
+          "teacherName": "Elsa",
+          "classCount": 1,
+          "confirmedSessions": 8,
+          "confirmedAmount": 60000,
+          "actualUnits": 7,
+          "actualAmount": 52500,
+          "diffAmount": -7500
+        },
+        "splits": [
+          { "confirmedAmount": 30000, "actualUnits": 4, "actualAmount": 30000, "diffAmount": 0 },
+          { "confirmedAmount": 30000, "actualUnits": 3, "actualAmount": 22500, "diffAmount": -7500 }
+        ],
+        "splitTotals": { "rowCount": 2, "confirmedAmount": 60000, "actualAmount": 52500, "diffAmount": -7500 }
+      }
+    },
+    {
+      "name": "초과(over) — 실측이 확정보다 큼(미청구 신호, 양방향 실패모드 커버)",
+      "rows": [
+        {
+          "invoiceId": "inv-over",
+          "classId": "cls-x",
+          "subject": "math",
+          "className": "X반",
+          "teacherId": "t-x",
+          "teacherName": "X강사",
+          "confirmedSessions": 4,
+          "unitPrice": 25000,
+          "amount": 100000,
+          "rpcConsumed": "4.5"
+        }
+      ],
+      "expected": {
+        "verdicts": [{ "status": "over", "diff": 0.5 }],
+        "allocation": {
+          "teacherName": "X강사",
+          "classCount": 1,
+          "confirmedSessions": 4,
+          "confirmedAmount": 100000,
+          "actualUnits": 4.5,
+          "actualAmount": 112500,
+          "diffAmount": 12500
+        },
+        "splits": [{ "confirmedAmount": 100000, "actualUnits": 4.5, "actualAmount": 112500, "diffAmount": 12500 }],
+        "splitTotals": { "rowCount": 1, "confirmedAmount": 100000, "actualAmount": 112500, "diffAmount": 12500 }
+      }
+    }
+  ]
+}
