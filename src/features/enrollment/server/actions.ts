@@ -475,15 +475,17 @@ export async function setEnrollmentOutcome(
 
   const supabase = await createClient();
 
-  // 배정 완료(등록) 상담은 이전 단계로 되돌릴 수 없다 — 학생이 이미 생성·연결됐기 때문(유령 '대기' 방지).
-  // 취소는 '거절'로만. (enrolled 유지 또는 declined만 허용; 그 외 backward·노쇼 차단.)
+  // 실제 등록(전환) 완료된 상담만 이전 단계로 되돌릴 수 없다 — 취소는 '거절'로만.
+  // ⚠️ 단순 student_id 연결(연결됨)은 '전환됨'이 아니다(0113a): 기존 재원생이 QR로 새 상담을 내면
+  // 자동연결로 student_id는 붙지만 outcome은 'pending'이라 상담사가 파이프라인을 정상 진행해야 한다.
+  // 따라서 전환 판정은 outcome==='enrolled'만(연결 여부로 상태 이동을 막지 않음).
   const { data: cur } = await supabase
     .from("enrollment_consultations")
-    .select("outcome, student_id")
+    .select("outcome")
     .eq("id", id)
     .single();
   if (!cur) return { error: "상담을 찾을 수 없습니다" };
-  const isConverted = cur.outcome === "enrolled" || !!cur.student_id;
+  const isConverted = cur.outcome === "enrolled";
   if (isConverted && outcome !== "enrolled" && outcome !== "declined") {
     return {
       error:

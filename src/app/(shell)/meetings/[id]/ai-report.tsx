@@ -6,6 +6,7 @@ import type { MeetingReportSection } from "@/features/meetings/server/queries";
 import { updateMeetingReportSection } from "@/features/meetings/server/actions";
 import { RichText } from "@/components/rich-text";
 import { useEditPresence } from "@/features/presence/edit-presence";
+import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 /**
@@ -36,12 +37,16 @@ export function MeetingReportAccordion({
   meetingId,
   editedBy,
   editedAt,
+  modelVersion,
 }: {
   report: MeetingReportSection;
   meetingId: string;
   editedBy?: string | null;
   editedAt?: string | null;
+  modelVersion?: string | null;
 }) {
+  // 분석을 생성한 AI 모델의 짧은 라벨(원시 id 아님). 모델을 번갈아 쓰므로 직원이 확인 가능하게 노출.
+  const modelLabel = modelDisplayLabel(modelVersion);
   // 로컬 수정본(저장 후 즉시 반영) + 마지막 수정자/시각(저장 후 갱신).
   const [report, setReport] = useState(initialReport);
   const [attribution, setAttribution] = useState<{ by: string; at: string } | null>(
@@ -110,13 +115,24 @@ export function MeetingReportAccordion({
         ) : (
           <span />
         )}
-        <button
-          type="button"
-          onClick={toggleAll}
-          className="text-text-faint hover:text-primary text-[11px] transition"
-        >
-          {allOpen ? "모두 접기" : "모두 펼치기"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {modelLabel ? (
+            <span
+              className="border-line text-text-faint inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]"
+              title="이 분석을 생성한 AI 모델"
+            >
+              <EyIcon name="sparkle" size={10} />
+              {modelLabel}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-text-faint hover:text-primary text-[11px] transition"
+          >
+            {allOpen ? "모두 접기" : "모두 펼치기"}
+          </button>
+        </div>
       </div>
 
       {visible.map((section) => {

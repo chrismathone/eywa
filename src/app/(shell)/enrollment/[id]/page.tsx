@@ -13,9 +13,11 @@ import { BackLink } from "@/components/back-link";
 import { formatCreatedAt } from "@/lib/utils";
 import {
   getEnrollmentConsultationById,
+  getSiblingConsultations,
   type AiAnalysisDetail,
   type ConsultationProcessingStatus,
 } from "@/features/enrollment/server/queries";
+import { WindowLink } from "@/components/workspace/window-link";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -68,10 +70,11 @@ export default async function EnrollmentDetailPage({
 }) {
   await requireAccess("enrollment");
   const { id } = await params;
-  const [consult, allClasses, settings] = await Promise.all([
+  const [consult, allClasses, settings, siblings] = await Promise.all([
     getEnrollmentConsultationById(id),
     getClassesList({ active: "active" }),
     getTenantSettings(),
+    getSiblingConsultations(id), // 같은 학생의 다른 등록상담(반복 접수) — 없으면 빈 배열
   ]);
   if (!consult) notFound();
 
@@ -180,6 +183,50 @@ export default async function EnrollmentDetailPage({
           <ConsultationDeleteButton id={consult.id} />
         </div>
       </header>
+
+      {/* 같은 학생의 다른 등록상담(반복 접수) — 학생 연결 또는 자연키(이름+학교+학년)로 묶은 다른 상담 건.
+          카드의 '상담 N건' 배지와 동일 그룹. 각 건을 창으로 열어 나머지 상담을 확인·정리. 등록상담만 대상. */}
+      {siblings.length > 0 ? (
+        <section className="border-amber/30 bg-amber-soft/30 rounded-lg border p-4">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="text-amber size-4" />
+            <h2 className="text-foreground text-sm font-semibold">
+              같은 학생의 다른 등록상담 <span className="num">{siblings.length}</span>건
+            </h2>
+          </div>
+          <p className="text-text-dim mt-1 text-xs">
+            같은 이름·학교로 접수된 다른 상담입니다. 중복이면 정리하고, 다른 상담(과목·시기)이면 각각 진행하세요.
+          </p>
+          <ul className="mt-3 space-y-1.5">
+            {siblings.map((sib) => {
+              const sBadge = OUTCOME_BADGE[sib.outcome] ?? OUTCOME_BADGE.pending!;
+              const sSubject = sib.subject ? subjectMaps.labelOf(sib.subject) : null;
+              return (
+                <li key={sib.id}>
+                  <WindowLink
+                    href={`/enrollment/${sib.id}`}
+                    title={sib.prospectName}
+                    className="bg-card hover:bg-bg-soft border-border flex items-center justify-between gap-2 rounded-lg border px-3 py-2 transition"
+                  >
+                    <span className="text-foreground flex items-center gap-2 text-[13px]">
+                      <span className="num text-text-dim">
+                        {new Date(sib.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
+                      </span>
+                      {sSubject ? <span>· {sSubject}</span> : null}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${sBadge.class}`}>
+                        {sBadge.label}
+                      </span>
+                      <ExternalLink className="text-text-faint size-3.5" />
+                    </span>
+                  </WindowLink>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {consult.processingStatus === "failed" ? (
         <section className="border-chart-4/40 bg-chart-4/5 rounded-lg border p-4">
@@ -399,6 +446,7 @@ export default async function EnrollmentDetailPage({
             analysisId={consult.aiAnalysis.id}
             consultationId={consult.id}
             generatedAt={consult.aiAnalysis.generatedAt}
+            modelVersion={consult.aiAnalysis.modelVersion}
             editedBy={consult.aiAnalysis.reportEditedBy}
             editedAt={consult.aiAnalysis.reportEditedAt}
             studentName={consult.prospectName}

@@ -12,6 +12,7 @@ import { logAction } from "@/features/audit/server/log";
 import { parseResumeForm, resumeTitle, RESUME_FORM_TYPE } from "../resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "./resume-access";
 import { getStaffResumeById } from "./resume-queries";
+import { appendResumeToRoster } from "./resume-roster-sheet";
 import { RESUME_VIEW_COOKIE, RESUME_VIEW_TTL_SEC, signResumeViewToken } from "./resume-view-token";
 
 // 직원 이력서(웹 작성 폼) 변경 액션 — 게이트 2단: ① 역할(canWriteTenant("staff") = 사무실)
@@ -21,7 +22,18 @@ import { RESUME_VIEW_COOKIE, RESUME_VIEW_TTL_SEC, signResumeViewToken } from "./
 // restricted 행은 RLS restrictive(0072a)가 DB 레벨에서도 사무실 역할만 통과시킨다.
 
 export type ResumeActionState =
-  | { ok?: boolean; error?: string; detail?: string; id?: string; nonce?: number; redirectTo?: string }
+  | {
+      ok?: boolean;
+      error?: string;
+      detail?: string;
+      id?: string;
+      nonce?: number;
+      redirectTo?: string;
+      /** 저장은 성공했으나 부가 효과(직원명부 시트 기입)가 실패했을 때의 경고 — 토스트로만 노출. */
+      warning?: string;
+      /** 부가 효과 성공 안내(시트 기입 완료) — 토스트로만 노출. */
+      notice?: string;
+    }
   | undefined;
 
 type Gate = { error: string; detail?: string } | { user: CurrentUser };
@@ -110,8 +122,22 @@ export async function saveStaffResume(
     .select("id")
     .single();
   if (error || !row) return { error: humanizeDbError(error?.message, "저장"), detail: error?.message };
+  // 신규 작성만 "신규 직원명부" 구글시트에 한 행 기입(수정 저장은 재기입하지 않음 — 중복 행 방지).
+  // 실패해도 이력서 저장은 유효 — 경고 토스트만(시트 공유·env 미설정 등은 운영자가 조치).
+  const roster = await appendResumeToRoster(data);
   revalidateResume(row.id);
-  return { ok: true, id: row.id, nonce: Date.now(), redirectTo: `/staff/resumes/${row.id}` };
+  return {
+    ok: true,
+    id: row.id,
+    nonce: Date.now(),
+    redirectTo: `/staff/resumes/${row.id}`,
+    // env 미설정(의도적 비활성)은 skipped — 토스트 없음(거짓 '실패' 경고 금지).
+    ...(roster.ok
+      ? roster.skipped
+        ? {}
+        : { notice: "'신규 직원명부' 구글시트에도 기입했습니다" }
+      : { warning: `이력서는 저장됐지만 직원명부 시트 기입에 실패했습니다 — ${roster.error}` }),
+  };
 }
 
 export async function deleteStaffResume(

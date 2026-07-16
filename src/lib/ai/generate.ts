@@ -1,7 +1,15 @@
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
+import { getDeepseek } from "./deepseek";
 import { resolveModel, resolveModelChain, type AiKeyName, type AiProvider, type AiTier } from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
+
+/**
+ * DeepSeek(v4-pro 등 추론형) 전용 max_tokens 하한. 추론형은 reasoning_content가 max_tokens를 함께 소모해
+ * 호출부 값(8192 등)이 추론에 소진되면 답변 JSON이 truncate → 파싱 실패한다. 추론+답변이 모두 들어가도록
+ * 여유를 둔다. 상한일 뿐 실사용 토큰만 과금되므로 크게 잡아도 무비용(관측 실사용 ~5k~14k tok).
+ */
+const DEEPSEEK_MIN_MAX_TOKENS = 32000;
 
 /**
  * ```json 펜스 제거 + 첫 {…} 객체 추출 + JSON.parse. 5개 AI 호출지점에 흩어져 있던 파싱 로직을
@@ -109,8 +117,13 @@ async function recordUsage(entry: {
  * 다시 throw한다. 그래야 processing_error에 영문 원문 대신 "키를 고쳐라"가 떠 관리자가 조치할 수 있다.
  * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
  */
-function rethrowAi(provider: "upstage" | "anthropic", err: unknown): never {
-  const label = provider === "upstage" ? "Upstage(Solar)" : "Anthropic(Claude)";
+function rethrowAi(provider: AiProvider, err: unknown): never {
+  const label =
+    provider === "upstage"
+      ? "Upstage(Solar)"
+      : provider === "deepseek"
+        ? "DeepSeek"
+        : "Anthropic(Claude)";
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status?: unknown }).status)
@@ -168,6 +181,35 @@ async function callProvider(
     const res = await client.chat.completions.create(base);
     return {
       text: res.choices[0]?.message?.content ?? "",
+      usage: res.usage
+        ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
+        : null,
+    };
+  }
+  if (provider === "deepseek") {
+    const client = getDeepseek(keyName);
+    // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
+    // DeepSeek 파라미터가 아니라 미부착. v4-pro(추론형)는 답을 content에, 사고과정을 reasoning_content에
+    // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
+    // ⚠️ **reasoning_content가 max_tokens를 함께 소모**한다(2026-07-16 실측: 등록상담 프롬프트에서 추론만
+    // ~8k tok → 호출부 8192면 답변 JSON이 truncate돼 finish_reason=length → 파싱 실패 → 재분석 실패).
+    // 그래서 추론+답변이 모두 들어가도록 여유 floor(DEEPSEEK_MIN_MAX_TOKENS)를 준다. max_tokens는 상한일 뿐
+    // 실사용 토큰만 과금되므로(원장 지침) 넉넉히 둬도 비용 영향 없음(관측 실사용 ~5k~14k tok, v4-pro가 32000 수용).
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: Math.max(opts.maxTokens, DEEPSEEK_MIN_MAX_TOKENS),
+      response_format: { type: "json_object" as const },
+      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+      messages: [
+        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+        { role: "user" as const, content: opts.prompt },
+      ],
+    });
+    const msg = res.choices[0]?.message as
+      | { content?: string | null; reasoning_content?: string | null }
+      | undefined;
+    return {
+      text: (msg?.content?.trim() ? msg.content : msg?.reasoning_content) ?? "",
       usage: res.usage
         ? { inputTokens: res.usage.prompt_tokens ?? null, outputTokens: res.usage.completion_tokens ?? null }
         : null,

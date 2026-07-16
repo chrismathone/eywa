@@ -78,9 +78,14 @@ export async function ConsultationsTab({
         </Link>
       </header>
 
-      {/* 입학 상담(등록상담) — 아주 중요한 상담이라 상단 고정. 별도 테이블(enrollment_consultations). */}
+      {/* 입학 상담(등록상담) — 아주 중요한 상담이라 상단 고정. 별도 테이블(enrollment_consultations).
+          같은 학생이 QR로 여러 번(과목·시기별) 접수하면 모두 별건으로 누적되므로 건수를 명시. */}
       {enrollConsults.length > 0 ? (
-        <ul className="space-y-2">
+        <div className="space-y-2">
+          <p className="text-primary text-xs font-semibold">
+            입학 상담 <span className="num">{enrollConsults.length}</span>건
+          </p>
+          <ul className="space-y-2">
           {enrollConsults.map((e) => (
             <EnrollmentConsultItem
               key={e.id}
@@ -89,7 +94,8 @@ export async function ConsultationsTab({
               canOpenDetail={canOpenEnrollmentDetail}
             />
           ))}
-        </ul>
+          </ul>
+        </div>
       ) : null}
 
       {consults.length === 0 ? (

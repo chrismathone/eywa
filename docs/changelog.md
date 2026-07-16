@@ -26,6 +26,67 @@
 - ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
+### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
+원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열
+순서로 기입해 **학력이 은행 열로 밀리는 실사고** → `ROSTER_COLUMNS`/`buildRosterRow`를 현재 시트(A~S 19열)와
+동기화. ⚠️ 시트 열을 추가/삭제하면 이 두 곳도 함께 — 열 대조표 주석 참조. (퇴사자 블록은 200행 고정 +
+채번 A2 ARRAYFORMULA 2~198 + U1/U200 점프 버튼 — 전부 시트 API로 적용, 원장 컨펌 후.)
+
+### 수업보고서 첨부 = admin 직접발송 배선 + 파일(문서/오디오)까지 확장 (2026-07-16) — ✅ tsc0/lint0
+기존 사진첨부(P2b)는 **강사 원스크린 카드 전용**이라 원장 admin 직접발송·비수강 학생(학원이)엔 첨부 UI 도달 불가였다.
+두 가지를 이어서 처리(함께 push):
+- **admin 경로 배선**(`11c4462`): 첨부 4액션 게이트를 `teacherOwnsStudent` **OR** `canWriteTenant('lesson_reports')`로
+  공용화(#77) + `findReportRow`에 reportDate 파라미터. 원스크린 업로드 오케스트레이션을 공용 컴포넌트
+  [`report-attachments.tsx`](../src/features/onescreen/components/report-attachments.tsx)로 추출(compose-face가 소비).
+- **파일 확장**: 사진뿐 아니라 **PDF·HWP·office·mp3/m4a**(≤20MB)까지 첨부. `report_attachment` allowCT를
+  `isReportAttachmentCT`(이미지+문서+오디오)로 확장, Supabase 버킷 `report-attachments`의 allowed_mime_types·크기도
+  동기([`setup-storage.ts`](../scripts/setup-storage.ts)). 학부모 렌더는 **이미지=인라인 / 파일=다운로드 링크(받기)**로
+  분기([`isImageAttachment`](../src/features/onescreen/attachment-utils.ts) 공용, `parent-report-card`가 /r·인쇄 공용 담당).
+- **배달 모델**: ClassNote 게시글의 **/r 링크**로 파일 수신(스샷 안에선 클릭 불가 링크칩). 네이티브 첨부(attached_files)는 Phase 2.
+- 검증: 라이브 E2E(학원이, supabase 백엔드 — GCS는 localhost 업로드 CORS 차단) — PDF 파일칩 + 이미지 인라인 혼합 →
+  /r에서 **PDF=받기 링크 · 이미지=인라인** 확인. 테스트 데이터·showAttachments 원복.
+
+### 직원명부 시트 운영성 3종 — 퇴사자 자동 탭·No. 자동 채번·갱신일 신호등 (2026-07-16) — ✅ 실시트 적용·검증 + tsc0/lint0/test41(staff)
+"2026신규 직원명부" 탭의 고정 퇴사자 블록(A13 `FILTER($A$2:$P$12,…)` = 12행 고정·범위 닫힘)이 직원 증가 시
+데이터와 충돌하는 문제(원장 제보) → 시트 구조를 API로 재편 + 앱 기입 열 조정.
+- **① 퇴사자 자동 탭** `2026퇴사자(자동)` 신설: `=IFERROR(FILTER('2026신규 직원명부'!A2:T, …M2:M="퇴사"), "")`
+  **열린 범위**라 인원 무관 자동 반영. 신규 탭의 12~13행 고정 블록은 제거(충돌 원인).
+- **② No. 자동 채번**: 신규 탭 A2 `=ARRAYFORMULA(IF(D2:D="",,ROW(D2:D)-1))` — 이름 있는 행만 1,2,3…,
+  행 삭제 시 자동 재번호. ⚠️ 앱은 이제 **B열부터 기입**(`updateSheetRow` startColumn, A열에 ""라도 쓰면 스필 깨짐).
+- **③ 갱신일 신호등**: N열(계약갱신일/퇴사일) 조건부서식 — 90일 이내 노랑 → 60일 주황 → 30일 이내·경과 빨강.
+  "2025.01.01" 텍스트·실날짜 둘 다 파싱(`DATEVALUE(SUBSTITUTE…)` + `ISNUMBER` 분기, 파싱 실패는 무색).
+
+### 기존 재원생 QR 새 상담이 '배정 완료'로 매몰되던 버그 + 반복접수 다중노출 (2026-07-16) — ✅ 0113a·c070d1e·d7d0c24
+원장 제보 "수학 재원생이 QR로 영어상담 오면 목록에 안 뜸". **원인**: 0107a 자동연결 BEFORE 트리거가 QR 접수를
+기존 학생에 연결하며 `outcome:='enrolled'`로 덮어씀 → 칸반이 연결학생 활성수강 있으면 "배정 완료"로 옮겨 대기큐에서
+빼 매몰. 실측(인재원): QR 20건 중 매칭 9건 전부 enrolled 매몰(장건욱=영어재원+수학QR).
+- **0113a**: 자동연결 트리거 2종(`link_student_for_consultation`·`link_consultations_for_student`)은 `student_id`
+  **연결만**, `outcome='enrolled'` 강제 제거. outcome=사람 소유 파이프라인 상태 → 신선한 QR은 `pending`으로 큐 노출 +
+  연결 유지로 학생 상세 상담탭 다건 노출. (연결은 convert 폭발 방지 목적이라 유지)
+- **배정완료 파생 = 상담 과목 수강 스코프**(`getEnrollmentConsultations`/`…ById`): 교차과목 수강이 다른 과목 상담을
+  매몰하지 않게(과목 미상은 전체 폴백). `setEnrollmentOutcome`: 단순 연결을 '전환됨'으로 오판하던 것 수정.
+- **백필 3건**(장건욱·이참결·박인유=상담과목 ∉ 활성수강) enrolled→pending 복원(연결 유지, UNDO 기록). math→math 6건 보존.
+- **반복접수 = 다중노출 + 힌트**(자동병합 비채택 — 손실·클로버링 위험·자동구분 불가): 같은 사람 상담 2건+면 카드 '상담 N건'
+  배지 + 학생탭 '입학 상담 N건' 헤더. 1주일 후 재방문=의도적 별건.
+
+### 전사 분석 3종 → DeepSeek v4-pro 전환 + 모델 라벨 노출 (2026-07-16) — ✅ tsc0/lint0/test42(ai) + 실API 검증
+회의록·등록상담·재원생 상담(전사 기반 분석)을 Sonnet 5 → **DeepSeek v4-pro**로 전환. 근거 = 실측 A/B(injaewon
+실전사 5건, `scripts/_oneoff/ab-deepseek-vs-sonnet.ts`): warnings(이탈·정서·학업 위험 신호) 섹션에서 —
+- **v4-pro**: 5/5 Sonnet급 생성(255·316·243·219·97자). ← 채택
+- **v4-flash·레거시 chat·Solar**: 2~3/5 "확인된 위험 신호 없음"으로 붕괴(2026-07-13 Solar 탈락과 동일 실패).
+- 초기 "DeepSeek이 학부모명·전화 환각" 의심은 전수 검증 결과 **환각 아님**(프롬프트 `현재 입력값` echo, 프로덕션은
+  빈 칸에만 기입해 무해). 비용은 Sonnet 대비 압도적 저렴. 트레이드오프 = v4-pro 추론형이라 ~1.2배 느림(백그라운드라 감수).
+- **인프라**: `AiProvider`에 `deepseek` 추가([models.ts](../src/lib/ai/models.ts)) + [deepseek.ts](../src/lib/ai/deepseek.ts)
+  클라이언트(OpenAI 호환, base `https://api.deepseek.com`) + [generate.ts](../src/lib/ai/generate.ts) deepseek 분기
+  (json mode + `reasoning_content` 폴백). balanced 티어 deepseek=`deepseek-v4-pro`, fast=`deepseek-v4-flash`.
+- **라우팅**: `analyzeMeeting`·`runConsultationAnalysis`·`analyzeStudentConsultation` provider 기본값 `"deepseek"` +
+  웹훅 인라인 등록상담 호출 `provider:"deepseek"`. form-extract(grounding 가드)·멘트(Haiku)·care insights는 불변.
+- **안전**: `DEEPSEEK_API_KEY` 없으면 `resolveModelChain`이 anthropic/upstage로 무중단 폴백(키 추가 전까지 Sonnet 유지,
+  롤백=Vercel 키 제거). 실 API로 라우팅(→v4-pro)·파싱·폴백(→Sonnet) end-to-end 검증 완료.
+- **모델 라벨 노출**(기존 "모델명 UI 노출 금지" 반전): [model-label.ts](../src/lib/ai/model-label.ts) `modelDisplayLabel`이
+  raw id를 짧은 라벨("DeepSeek v4-pro")로 매핑, 알 수 없으면 미표시. 등록상담·회의록 '펼치기' 옆 + 재원생 상담 '생성' 옆에 칩.
+  쿼리는 이미 modelVersion 반환(등록상담·재원생), 회의록만 `ai_model_version` SELECT 추가.
+- ⚠️ **Vercel `DEEPSEEK_API_KEY` 설정 전까지 전사 분석은 Sonnet으로 동작**(폴백). 키 넣으면 v4-pro로 전환.
 
 ### 원스크린 미발송 멘트 초안 새로고침 유실 수정 (2026-07-16) — ✅ tsc0/lint0/test1371
 edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_sessions.subject_progress[key].draft`에 자동저장되지만
@@ -38,6 +99,27 @@ edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_ses
   발송본 폴백 덕에 발송 후 새로고침해도 발송 문구가 초안란에 남는다(빈 초안 재발송이 템플릿으로 덮던 부작용도 해소).
   ⚠️ lesson_reports엔 `updated_at`이 없어(upsert 시 `created_at` 불변) 신구 타임스탬프 비교 불가 → 위 휴리스틱 고정.
 
+### 직원 이력서 → "신규 직원명부" 구글시트 기입 + 폼 3필드 (2026-07-16) — ✅ tsc0/lint0/test1380/build✓/실시트 append→대조→clear 검증
+이력서 **신규 작성** 저장 시 "2020~2026 직원명부" 스프레드시트의 `2026신규 직원명부` 탭(A~T 20열)에 한 행
+append(수정 저장은 재기입 안 함 — 중복 방지). **학력은 최상위(맨 위 실입력) 1건만** 기입(원장 요청).
+- **순수/IO 분리**: 행 변환 [resume-roster.ts](../src/features/staff/resume-roster.ts)(`ROSTER_COLUMNS` 열 순서 계약,
+  Vitest 11) ↔ IO [server/resume-roster-sheet.ts](../src/features/staff/server/resume-roster-sheet.ts) +
+  공용 [`updateSheetRow`](../src/features/integrations/google-sheets.ts)(RAW, 지정 행 기입).
+  ⚠️ **기입 위치 = 헤더(1행) 아래 첫 빈 행**(`firstEmptyRowIndex`) — values.append는 탭 중간 안내/샘플
+  블록 **아래**(13행)로 밀려 적혀 원장 제보로 교체(2026-07-16 "밑에 적히는데 위에 적혀야").
+  기입류라 withSheetsRetry 미적용 + 요청 timeout 8s·전체 상한 10s(저장 액션이 동기 대기 — 무한 pending
+  방지, 초과 시 "기입 여부 직접 확인" 안내). 읽기→쓰기 레이스는 작성 빈도상 감수.
+- **부가 효과 정책**: 시트 실패해도 이력서 저장은 유효 — `saveStaffResume`가 `notice`/`warning`을 돌려주고
+  폼이 sonner 토스트로만 노출(생성 경로는 즉시 새 뷰로 떠나므로 인라인 불가). env `HR_ROSTER_SPREADSHEET_ID`
+  (+`HR_ROSTER_SHEET_TAB`, 기본 "2026신규 직원명부") 미설정 = 의도적 비활성 → 토스트 없이 조용히 skip(로그만
+  — 거짓 '실패' 경고로 경고 피로 유발 금지, 적대검수 확정 결함 반영). 인증은 기존
+  서비스계정 키(GOOGLE_/FIREBASE_SERVICE_ACCOUNT_KEY) 재사용 — 시트는 그 계정에 편집자 공유 필요.
+- **폼 3필드**(계약사항 섹션): 회사 구분·소속부서 = 고정 선택지 드롭다운(`RESUME_COMPANIES`/`RESUME_DEPARTMENTS`,
+  EMPLOYMENT_TYPES 선례처럼 서식 상수 — 화이트리스트 검증), 담당자 = 자유입력. 민감값 아님 → 초안 exclude(#78) 비대상.
+  드롭다운은 규약대로 SearchableSelect(name=hidden input 제출, 컨트롤드 → 초안 복원은 onRestore rehydrate).
+- 학력사항 학교명 placeholder: 맨 아래 행 "고등학교", 그 위 "대학교"(최상위 학력을 맨 위에 쓰는 서식 관례).
+
+### ClassNote 학부모 **댓글** → 담당 강사 알림 (2026-07-16) — ✅ tsc0/lint0/test1383/실데이터 감지 검증
 학부모 **새 글** 알림(07-15)의 자매 기능. 실측이 07-15 당시의 "댓글은 범위 밖" 판단을 뒤집었다 — 학부모 연락의
 **다수가 댓글**로 온다(**댓글 12건/일 vs 새 글 4.2건/일**). ClassNote 흐름이 "강사 알림장 → 학부모 댓글로 답"이라
 새 글이 오히려 예외였고, 내용도 결석·보강·입금확인·상담요청 등 조치가 필요한 것들이다.

@@ -1,29 +1,12 @@
 import Image from "next/image";
 import type { ComponentType, ReactNode } from "react";
 
+import { EMPTY_STATE_IMAGES, type EmptyStateImage } from "@/components/empty-state-assets";
 import { cn } from "@/lib/utils";
 
 type IconComponent = ComponentType<{ className?: string; size?: number }>;
 
-const EMPTY_STATE_IMAGES = {
-  attendance: "/empty-states/empty-attendance.png",
-  audit: "/empty-states/empty-audit.png",
-  billing: "/empty-states/empty-billing.png",
-  classes: "/empty-states/empty-classes.png",
-  documents: "/empty-states/empty-documents.png",
-  enrollment: "/empty-states/empty-enrollment.png",
-  exams: "/empty-states/empty-exams.png",
-  leaves: "/empty-states/empty-leaves.png",
-  meetings: "/empty-states/empty-meetings.png",
-  search: "/empty-states/empty-search.png",
-  sends: "/empty-states/empty-sends.png",
-  staff: "/empty-states/empty-staff.png",
-  students: "/empty-states/empty-students.png",
-  withdrawals: "/empty-states/empty-withdrawals.png",
-  workspace: "/empty-states/empty-workspace.png",
-} as const;
-
-export type EmptyStateImage = keyof typeof EMPTY_STATE_IMAGES;
+export type { EmptyStateImage } from "@/components/empty-state-assets";
 
 export function EmptyState({
   icon: Icon,
@@ -51,10 +34,11 @@ export function EmptyState({
         <Image
           src={EMPTY_STATE_IMAGES[image]}
           alt=""
-          width={220}
-          height={220}
+          width={640}
+          height={640}
+          sizes="(min-width: 640px) 160px, 144px"
           loading={imageLoading}
-          className="mb-1 size-36 object-contain sm:size-40"
+          className="mb-1 size-36 object-contain drop-shadow-[0_8px_10px_rgba(13,17,16,0.14)] sm:size-40"
         />
       ) : Icon ? (
         <div className="bg-bg-soft text-text-dim rounded-full p-3">

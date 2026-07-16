@@ -80,6 +80,15 @@ export type ConsultationAudioReport = {
   };
 };
 
+/** 같은 사람의 등록상담 1건 요약 — '상담 N건' 배지 팝오버·상세 '다른 상담' 목록의 각 행. */
+export type PersonConsultRef = {
+  id: string;
+  prospectName: string;
+  subject: string | null;
+  outcome: string;
+  consultedAt: string;
+};
+
 export type ConsultationListRow = {
   id: string;
   prospectName: string;
@@ -96,7 +105,11 @@ export type ConsultationListRow = {
   fromPublicIntake: boolean;
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
   studentId: string | null; // 수업 배정으로 생성된 학생(연결) — null이면 아직 학생 미생성
-  assignedClassCount: number; // 연결 학생의 미종료 수강(반) 수 → ≥1이면 "배정 완료"
+  assignedClassCount: number; // 연결 학생의 상담 과목 미종료 수강(반) 수 → ≥1이면 "배정 완료"
+  personConsultCount: number; // 같은 사람(학생/자연키)의 등록상담 총 건수 → ≥2면 "반복 접수" 힌트
+  // 반복 접수(≥2건)일 때만 그 사람의 상담 전건(시간역순, 자기 포함) — 배지 클릭 팝오버로 나머지 상담 열람.
+  // 1건이면 빈 배열(불필요한 데이터·팝오버 미노출).
+  personConsults: PersonConsultRef[];
 };
 
 export type ConsultationFilter = {
@@ -126,7 +139,7 @@ export async function getEnrollmentConsultations(
       .from("enrollment_consultations")
       .select(
         `id, prospect_name, prospect_grade, prospect_school,
-         parent_phone, parent_request, outcome, consulted_at,
+         parent_phone, parent_request, outcome, consulted_at, subject,
          processing_status, audio_path, from_public_intake, sync_added_at, student_id,
          consultant:consultant_id ( display_name )`,
       );
@@ -158,19 +171,59 @@ export async function getEnrollmentConsultations(
       supabase.from("consultation_ai_analysis").select("consultation_id").in("consultation_id", chunk),
     ),
     studentIds.length
-      ? fetchInChunks<{ student_id: string }>(studentIds, (chunk) =>
-          // 미종료 수강 = end_date IS NULL(진행) 또는 end_date >= 오늘(미래 종료 예정). 학생당 소수라 절단 없음.
-          supabase
-            .from("enrollments")
-            .select("student_id")
-            .in("student_id", chunk)
-            .or(`end_date.is.null,end_date.gte.${today}`),
+      ? fetchInChunks<{ student_id: string; class: { subject?: string } | { subject?: string }[] | null }>(
+          studentIds,
+          (chunk) =>
+            // 미종료 수강 = end_date IS NULL(진행) 또는 end_date >= 오늘(미래 종료 예정). 학생당 소수라 절단 없음.
+            // "배정 완료"는 상담 과목의 실제 수강으로 판정하므로 class subject까지 함께 조회(교차과목 오매몰 차단).
+            supabase
+              .from("enrollments")
+              .select("student_id, class:class_id ( subject )")
+              .in("student_id", chunk)
+              .or(`end_date.is.null,end_date.gte.${today}`),
         )
-      : Promise.resolve([] as { student_id: string }[]),
+      : Promise.resolve([] as { student_id: string; class: { subject?: string } | null }[]),
   ]);
   const hasAi = new Set(ai.map((a) => a.consultation_id));
-  const classCount = new Map<string, number>();
-  for (const row of enr) classCount.set(row.student_id, (classCount.get(row.student_id) ?? 0) + 1);
+  // 학생별 미종료 수강: 전체 수 + 과목별 수. "배정 완료" 판정은 상담 과목의 수강 수로(과목 없으면 전체 폴백).
+  const enrByStudent = new Map<string, { total: number; bySubject: Map<string, number> }>();
+  for (const row of enr) {
+    const rec = enrByStudent.get(row.student_id) ?? { total: 0, bySubject: new Map<string, number>() };
+    rec.total += 1;
+    const klass = (Array.isArray(row.class) ? row.class[0] : row.class) as { subject?: string } | undefined;
+    if (klass?.subject) rec.bySubject.set(klass.subject, (rec.bySubject.get(klass.subject) ?? 0) + 1);
+    enrByStudent.set(row.student_id, rec);
+  }
+  const assignedCountFor = (studentId: string | null, subject: string | null): number => {
+    if (!studentId) return 0;
+    const rec = enrByStudent.get(studentId);
+    if (!rec) return 0;
+    // 상담 과목이 있으면 그 과목의 수강만 = "이 상담이 실제 배정됐는가". 과목 미상이면 전체 수강 폴백(기존 동작).
+    return subject ? (rec.bySubject.get(subject) ?? 0) : rec.total;
+  };
+
+  // 같은 사람의 등록상담 반복 접수 힌트 — 학생 연결이 있으면 student_id, 없으면 자연키(정규화 이름+학교+학년)로
+  // 묶는다(아직 학생 아닌 순수 접수자의 재방문도 감지). 로드된 목록 기준(무필터 기본 칸반=전건이라 정확).
+  const personKey = (c: { student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) =>
+    c.student_id
+      ? `s:${c.student_id}`
+      : `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
+  const personCount = new Map<string, number>();
+  const personGroups = new Map<string, PersonConsultRef[]>();
+  for (const c of data) {
+    const k = personKey(c);
+    personCount.set(k, (personCount.get(k) ?? 0) + 1);
+    // data는 consulted_at desc 정렬이라 각 그룹도 시간역순으로 쌓인다(팝오버 최신순 표시).
+    const arr = personGroups.get(k) ?? [];
+    arr.push({
+      id: c.id,
+      prospectName: c.prospect_name,
+      subject: (c as { subject?: string | null }).subject ?? null,
+      outcome: c.outcome,
+      consultedAt: c.consulted_at,
+    });
+    personGroups.set(k, arr);
+  }
 
   return data.map((c) => {
     const consultant = (Array.isArray(c.consultant) ? c.consultant[0] : c.consultant) as
@@ -192,9 +245,53 @@ export async function getEnrollmentConsultations(
       fromPublicIntake: !!(c as { from_public_intake?: boolean }).from_public_intake,
       syncAddedAt: (c as { sync_added_at?: string | null }).sync_added_at ?? null,
       studentId: (c as { student_id?: string | null }).student_id ?? null,
-      assignedClassCount: c.student_id ? (classCount.get(c.student_id) ?? 0) : 0,
+      assignedClassCount: assignedCountFor(
+        c.student_id,
+        (c as { subject?: string | null }).subject ?? null,
+      ),
+      personConsultCount: personCount.get(personKey(c)) ?? 1,
+      // 반복 접수(≥2)일 때만 전건 첨부 — 1건이면 빈 배열(팝오버 미노출·데이터 절약).
+      personConsults: (personCount.get(personKey(c)) ?? 1) > 1 ? (personGroups.get(personKey(c)) ?? []) : [],
     };
   });
+}
+
+/**
+ * 상세 페이지용 — 이 등록상담과 **같은 사람**의 다른 등록상담 목록(자기 제외, 시간역순).
+ * 같은 사람 판별은 목록 배지와 동일 원칙: 학생 연결(student_id)이 있으면 그걸로, 없으면 자연키(이름+학교+학년).
+ * RLS 스코프 클라이언트라 같은 학원(tenant)만 반환 — 누수 없음. 등록상담 테이블만 대상(재원생 상담 미포함).
+ */
+export async function getSiblingConsultations(consultationId: string): Promise<PersonConsultRef[]> {
+  const supabase = await createClient();
+  const { data: self } = await supabase
+    .from("enrollment_consultations")
+    .select("id, student_id, prospect_name, prospect_school, prospect_grade")
+    .eq("id", consultationId)
+    .single();
+  if (!self) return [];
+
+  let q = supabase
+    .from("enrollment_consultations")
+    .select("id, prospect_name, subject, outcome, consulted_at")
+    .neq("id", consultationId)
+    .order("consulted_at", { ascending: false });
+  if (self.student_id) {
+    q = q.eq("student_id", self.student_id);
+  } else {
+    // 자연키 — 이름+학교+학년 일치(학생 미연결 순수 접수자의 재방문). null은 is null로 정확 매칭.
+    q = q.eq("prospect_name", self.prospect_name);
+    q = self.prospect_school ? q.eq("prospect_school", self.prospect_school) : q.is("prospect_school", null);
+    q = self.prospect_grade ? q.eq("prospect_grade", self.prospect_grade) : q.is("prospect_grade", null);
+  }
+  const { data, error } = await q;
+  if (error) throw error; // 조용히 삼키지 않음(B3)
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    prospectName: c.prospect_name,
+    subject: (c as { subject?: string | null }).subject ?? null,
+    outcome: c.outcome,
+    consultedAt: c.consulted_at,
+  }));
 }
 
 export type IntakeTokenRow = {
@@ -395,15 +492,22 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     | { display_name?: string }
     | undefined;
 
-  // 연결 학생의 미종료 수강 수(목록과 동일 기준) — 상세도 "배정 완료" 판정에 쓸 수 있게 채운다.
+  // 연결 학생의 미종료 수강 수(목록과 동일 기준: 상담 과목의 수강만 = 이 상담이 실제 배정됐는가).
+  // 상담 과목이 있으면 그 과목 수강만 카운트(교차과목 오매몰 차단), 미상이면 전체 수강 폴백.
   const linkedStudentId = (c as { student_id?: string | null }).student_id ?? null;
+  const consultSubject = (c as { subject?: string | null }).subject ?? null;
   let assignedClassCount = 0;
   if (linkedStudentId) {
-    const { count } = await supabase
+    let q = supabase
       .from("enrollments")
-      .select("*", { count: "exact", head: true })
+      .select(consultSubject ? "*, class:class_id!inner ( subject )" : "*", {
+        count: "exact",
+        head: true,
+      })
       .eq("student_id", linkedStudentId)
       .or(`end_date.is.null,end_date.gte.${kstToday()}`);
+    if (consultSubject) q = q.eq("class.subject", consultSubject);
+    const { count } = await q;
     assignedClassCount = count ?? 0;
   }
 
@@ -472,6 +576,8 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     recommendedClasses,
     studentId: linkedStudentId,
     assignedClassCount,
+    personConsultCount: 1, // 상세는 목록 카드 배지를 안 씀 — 타입 충족용(상세의 '다른 상담'은 getSiblingConsultations로 별도 조회).
+    personConsults: [],
     makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
     fields: mapFullFields(c as Record<string, unknown>),
   };

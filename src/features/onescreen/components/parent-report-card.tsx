@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { ReportSettings } from "@/features/owner/settings-types";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { hasTrend, type TrendPoint } from "../report-trend";
+import { isImageAttachment } from "../attachment-utils";
 import { ReportTrendGraph } from "./report-trend-graph";
 
 // 학부모 수업 보고서 카드 — 공유 서버 컴포넌트(순수 프레젠테이션, 데이터는 props로만).
@@ -166,15 +168,40 @@ export function ParentReportCard({
         </Section>
       ) : null}
 
-      {/* 학생 사진 첨부(P2b) — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. 학원 설정 토글로 on/off. */}
+      {/* 학생 사진·파일 첨부 — .max-w-md 안이라 ClassNote 워커 스크린샷에도 포함. 학원 설정 토글로 on/off.
+          이미지=인라인 / 문서·오디오=다운로드 링크(학부모가 /r 링크로 열어 받음. 스샷 안에선 링크가 클릭 불가). */}
       {rpt.showAttachments && attachments.length ? (
         <Section title="첨부">
-          <div className="grid grid-cols-2 gap-2">
-            {attachments.map((a) => (
-              // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
-              <img key={a.path} src={a.url} alt={a.name} className="max-h-72 w-full rounded-md object-contain" />
-            ))}
-          </div>
+          {attachments.some((a) => isImageAttachment(a.name || a.path)) ? (
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              {attachments
+                .filter((a) => isImageAttachment(a.name || a.path))
+                .map((a) => (
+                  // eslint-disable-next-line @next/next/no-img-element -- 공개/인쇄 페이지 첨부(signed URL, 최적화 불필요)
+                  <img key={a.path} src={a.url} alt={a.name} className="max-h-72 w-full rounded-md object-contain" />
+                ))}
+            </div>
+          ) : null}
+          {attachments.some((a) => !isImageAttachment(a.name || a.path)) ? (
+            <div className="space-y-1.5">
+              {attachments
+                .filter((a) => !isImageAttachment(a.name || a.path))
+                .map((a) => (
+                  <a
+                    key={a.path}
+                    href={a.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={a.name}
+                    className="border-line bg-bg-soft hover:bg-line/30 flex items-center gap-2 rounded-md border px-3 py-2.5 no-underline"
+                  >
+                    <EyIcon name="fileDownload" size={20} className="text-primary shrink-0" />
+                    <span className="text-foreground min-w-0 flex-1 truncate text-[14px] font-medium">{a.name}</span>
+                    <span className="text-text-faint shrink-0 text-[11px]">받기</span>
+                  </a>
+                ))}
+            </div>
+          ) : null}
         </Section>
       ) : null}
 

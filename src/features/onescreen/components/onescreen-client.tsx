@@ -838,8 +838,8 @@ export function OneScreenClient({
         }));
       }
       for (const original of files) {
-        // 업로드 전 클라 다운스케일(포맷 보존). 실패 시 원본 반환이라 업로드는 항상 진행.
-        const file = await resizeImageForUpload(original);
+        // 이미지만 업로드 전 클라 다운스케일(문서/오디오는 원본 그대로). 실패 시 원본 반환이라 업로드는 항상 진행.
+        const file = original.type.startsWith("image/") ? await resizeImageForUpload(original) : original;
         const ext = extFromType(file.type) ?? file.name.split(".").pop() ?? "jpg";
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
@@ -877,7 +877,7 @@ export function OneScreenClient({
           classnoteStatus: undefined,
         }));
       }
-      if (added) toast.success(`사진 ${added}장 첨부 — ClassNote는 다시 발송하세요`);
+      if (added) toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
     } finally {
       setUploadingSubject(null);
     }
