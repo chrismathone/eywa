@@ -13,7 +13,7 @@ import {
   type ExpenseState,
 } from "@/features/billing/server/expense-actions";
 import type { ExpenseRow } from "@/features/billing/server/expense-queries";
-import { DEFAULT_CURRENCY, formatMoney } from "@/features/billing/currencies";
+import { DEFAULT_CURRENCY, formatMoney, roundMoney } from "@/features/billing/currencies";
 import { ExpenseLineItems, lineTotal, type ExpenseItemRow } from "./expense-line-items";
 
 const CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"];
@@ -104,7 +104,11 @@ export function ExpenseDialog({
   const filteredRows = rows.filter(
     (r) => r.purpose.trim() || r.vendor.trim() || r.description.trim() || r.unitPrice > 0,
   );
-  const amount = filteredRows.reduce((s, r) => s + lineTotal(r), 0);
+  // 합계도 통화 정밀도로 한 번 더 반올림 — 센트 단위 라인을 더하면 부동소수 꼬리($0.30000000000000004)가 붙는다.
+  const amount = roundMoney(
+    filteredRows.reduce((s, r) => s + lineTotal(r, currency), 0),
+    currency,
+  );
 
   // 성공(ok:true) 시 초안 비우고 닫기(다음 열기 때 stale 복구 방지). 다이얼로그는 성공 시 부모가
   // 언마운트(조건부 마운트)하므로 이 마이크로태스크는 사실상 1회 실행 — clear/onClose 모두 멱등이라 안전.
@@ -117,7 +121,7 @@ export function ExpenseDialog({
 
   // 항목이 없으면 빈 문자열(초안 판정에서 "의미 없음"). 액션 parse()는 ""·"[]" 둘 다 null 처리(동치).
   const lineItemsJson = filteredRows.length
-    ? JSON.stringify(filteredRows.map((r) => ({ ...r, total: lineTotal(r) })))
+    ? JSON.stringify(filteredRows.map((r) => ({ ...r, total: lineTotal(r, currency) })))
     : "";
 
   return (

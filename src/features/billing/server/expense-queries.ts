@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_CURRENCY } from "../currencies";
+import { DEFAULT_CURRENCY, roundMoney } from "../currencies";
 
 // 지출관리(expenses) — 수납관리 창의 '지출' 책갈피 면. 월 단위(수납과 동일 톤). RLS가 tenant 강제.
 // line_items는 두 가지 형태가 섞여 있다: ① eywa 폼이 쓴 {description,quantity,unitPrice,vat,total}
@@ -118,7 +118,7 @@ export function normalizeApprovalChecks(raw: unknown): ApprovalChecks {
 
 // line_items raw(jsonb) → 정규화 배열. eywa(total/vat)·ijw(totalPrice/vatIncluded/purpose) 양쪽 흡수.
 // ⚠️ ijw 임포트본은 JSON.stringify로 넣어 jsonb에 "문자열"로 이중 인코딩됨(배열 아님) → 문자열이면 1회 파싱.
-function normalizeLineItems(raw: unknown): ExpenseLineItem[] | null {
+function normalizeLineItems(raw: unknown, currency: string): ExpenseLineItem[] | null {
   let arr: unknown = raw;
   if (typeof arr === "string") {
     try {
@@ -138,12 +138,13 @@ function normalizeLineItems(raw: unknown): ExpenseLineItem[] | null {
         : typeof o.vat === "boolean"
           ? o.vat
           : false;
+    // 저장된 total/totalPrice가 있으면 그대로, 없으면 통화 정밀도로 재계산($은 센트 반올림).
     const total =
       o.totalPrice != null
         ? Number(o.totalPrice)
         : o.total != null
           ? Number(o.total)
-          : Math.round(quantity * unitPrice * (vat ? 1.1 : 1));
+          : roundMoney(quantity * unitPrice * (vat ? 1.1 : 1), currency);
     return {
       purpose: typeof o.purpose === "string" && o.purpose.trim() ? o.purpose : null,
       vendor: typeof o.vendor === "string" && o.vendor.trim() ? o.vendor : null,
@@ -158,12 +159,13 @@ function normalizeLineItems(raw: unknown): ExpenseLineItem[] | null {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase row는 string-typed
 function mapExpenseRow(r: any): ExpenseRow {
+  const currency = typeof r.currency === "string" && r.currency ? r.currency : DEFAULT_CURRENCY;
   return {
     id: r.id,
     title: r.title,
     category: r.category,
     amount: Number(r.amount),
-    currency: typeof r.currency === "string" && r.currency ? r.currency : DEFAULT_CURRENCY,
+    currency,
     expenseDate: r.expense_date,
     createdDate: typeof r.created_at === "string" ? r.created_at.slice(0, 10) : null,
     vendor: r.vendor,
@@ -176,7 +178,7 @@ function mapExpenseRow(r: any): ExpenseRow {
     approvalChecks: normalizeApprovalChecks(r.approval_checks),
     paymentMethod: r.payment_method,
     memo: r.memo,
-    lineItems: normalizeLineItems(r.line_items),
+    lineItems: normalizeLineItems(r.line_items, currency),
     receiptType: r.receipt_type ?? null,
     receiptUrls: normalizeReceiptUrls(r.receipt_urls),
   };

@@ -16,7 +16,7 @@ import {
 } from "@/lib/storage/media-storage";
 import type { UploadTicket } from "@/lib/storage/types";
 import { normalizeApprovalChecks } from "./expense-queries";
-import { DEFAULT_CURRENCY, isValidCurrency } from "../currencies";
+import { DEFAULT_CURRENCY, isValidCurrency, roundMoney } from "../currencies";
 
 const RECEIPTS_BUCKET = "expense-receipts";
 const RECEIPT_TYPES = new Set([
@@ -95,11 +95,13 @@ function parse(formData: FormData) {
   const firstVendor = lineItems?.find((l) => typeof l.vendor === "string" && l.vendor.trim())?.vendor;
   const formVendor = String(formData.get("vendor") ?? "").trim();
   const curRaw = String(formData.get("currency") ?? "").trim();
+  const currency = isValidCurrency(curRaw) ? curRaw : DEFAULT_CURRENCY;
   return {
     title: String(formData.get("title") ?? "").trim(),
     category: VALID_CATEGORIES.has(categoryRaw) ? categoryRaw : "기타",
-    amount: won(formData.get("amount")),
-    currency: isValidCurrency(curRaw) ? curRaw : DEFAULT_CURRENCY,
+    // 통화 정밀도로 반올림 — 클라가 이미 roundMoney하지만 직접 제출 방어 + numeric(12,2) 정합.
+    amount: roundMoney(won(formData.get("amount")), currency),
+    currency,
     expenseDate: String(formData.get("expenseDate") ?? "").trim(),
     vendor: (typeof firstVendor === "string" ? firstVendor : formVendor) || null,
     department: String(formData.get("department") ?? "").trim() || null,

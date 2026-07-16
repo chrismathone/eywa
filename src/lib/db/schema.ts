@@ -1286,7 +1286,8 @@ export const expenses = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     category: text("category").notNull().default("기타"), // 인건비/운영비/매입/기타
-    amount: numeric("amount", { precision: 12, scale: 0 }).notNull().default("0"),
+    // scale 2 — 달러·유로 등 소수 통화 지출($10.60). 원·엔은 소수 자릿수 0으로 코드가 관리(currencies.ts). 0111a.
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
     expenseDate: date("expense_date").notNull(),
     vendor: text("vendor"),
     department: text("department"),

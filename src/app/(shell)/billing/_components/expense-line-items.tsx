@@ -1,7 +1,7 @@
 "use client";
 
 import { Copy, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
-import { CURRENCIES, formatMoney } from "@/features/billing/currencies";
+import { CURRENCIES, formatMoney, moneyStep, roundMoney } from "@/features/billing/currencies";
 
 // 지출결의서 라인아이템 편집기 — ijw 패리티(용도/거래처/사용내역/수량/금액/부가세).
 // 상태는 부모(다이얼로그)가 소유; 이 컴포넌트는 렌더 + onChange만. 좁은 창에 맞춰 줄 단위로 접는다.
@@ -14,8 +14,9 @@ export type ExpenseItemRow = {
   vat: boolean;
 };
 
-export const lineTotal = (r: ExpenseItemRow) =>
-  Math.round(r.quantity * r.unitPrice * (r.vat ? 1.1 : 1));
+// 라인 총액 — 반올림은 통화 정밀도로(₩는 정수, $는 센트). 통화 없이 Math.round하면 $10.6이 $11이 된다.
+export const lineTotal = (r: ExpenseItemRow, currency: string) =>
+  roundMoney(r.quantity * r.unitPrice * (r.vat ? 1.1 : 1), currency);
 
 // ⚠️ 폭(w-*)은 여기 넣지 않는다 — 사용처에서 w-full/flex-1 등을 붙일 때 Tailwind width 충돌이 나기 때문.
 const inputCls =
@@ -110,7 +111,8 @@ export function ExpenseLineItems({
                 수량
                 <input
                   type="number"
-                  min="1"
+                  min="0"
+                  step="any"
                   value={r.quantity || ""}
                   onChange={(e) => setRow(i, { quantity: Number(e.target.value) || 0 })}
                   placeholder="1"
@@ -123,7 +125,7 @@ export function ExpenseLineItems({
                 <input
                   type="number"
                   min="0"
-                  step="1"
+                  step={moneyStep(currency)}
                   value={r.unitPrice || ""}
                   onChange={(e) => setRow(i, { unitPrice: Number(e.target.value) || 0 })}
                   placeholder="0"
@@ -143,7 +145,7 @@ export function ExpenseLineItems({
               </button>
             </div>
             <p className="text-text-dim text-right text-[11px]">
-              총액 <span className="num text-foreground font-semibold">{formatMoney(lineTotal(r), currency)}</span>
+              총액 <span className="num text-foreground font-semibold">{formatMoney(lineTotal(r, currency), currency)}</span>
               {r.vat ? <span className="text-text-faint"> (VAT포함)</span> : null}
             </p>
           </div>
