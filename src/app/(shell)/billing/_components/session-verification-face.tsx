@@ -1,4 +1,5 @@
 import { getSessionVerificationView, type VerificationStatus } from "@/features/billing/session-terms/server/verification-queries";
+import { aggregateTeacherAllocations } from "@/features/billing/session-terms/allocation";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
@@ -7,6 +8,10 @@ import Link from "next/link";
 import { EyIcon } from "@/components/icons/eywa-icons";
 
 const PAGE_SIZE = 50;
+
+// 시수(배수 합) 표시 — 정수는 그대로("12"), 소수는 한 자리("12.5").
+const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+const fmtWon = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
 function shiftPeriod(period: string, delta: number): string {
   const [y, m] = period.split("-").map(Number);
@@ -53,6 +58,25 @@ export async function SessionVerificationFace({
   const c = view.counts;
   // 그 달 출석 기록이 통째로 없으면(월중·미입력) 전 행 실=0이 되어 고장처럼 보임 → 명시적 안내.
   const noAttendanceYet = sorted.length > 0 && sorted.every((r) => r.actualConsumed === 0);
+
+  // 강사별 분배(참고) — 현재 과목 필터가 적용된 행을 반 담당 강사 단위로 집계(표시 전용, 저장 없음).
+  const allocations = aggregateTeacherAllocations(
+    scoped.map((r) => ({
+      className: r.className,
+      teacherName: r.teacherName,
+      confirmedSessions: r.confirmedSessions,
+      unitPrice: r.unitPrice,
+      amount: r.amount,
+      actualConsumed: r.actualConsumed,
+    })),
+  );
+  const allocTotal = allocations.reduce(
+    (acc, t) => ({
+      confirmedAmount: acc.confirmedAmount + t.confirmedAmount,
+      actualAmount: acc.actualAmount + t.actualAmount,
+    }),
+    { confirmedAmount: 0, actualAmount: 0 },
+  );
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const curPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
@@ -138,6 +162,78 @@ export async function SessionVerificationFace({
         </div>
       ) : (
         <>
+          {/* 강사별 분배(참고) — 반 담당 강사 단위 확정 금액 vs 실측 금액. 표시 전용 집계(쓰기 0, 저장 없음). */}
+          <section className="border-line rounded-lg border">
+            <header className="border-line flex flex-wrap items-baseline justify-between gap-2 border-b px-3 py-2">
+              <h3 className="text-foreground text-sm font-semibold">강사별 분배 (참고)</h3>
+              <p className="text-text-dim text-[11px]">
+                반 담당 강사 기준 집계 — 표시 전용이며 어디에도 저장되지 않습니다. 단가 없는 행은 금액에서
+                제외하고 개수로 표시합니다.
+              </p>
+            </header>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[42rem] text-sm">
+                <thead>
+                  <tr className="border-line text-text-dim border-b text-xs">
+                    <th className="px-3 py-2 text-left font-medium">강사</th>
+                    <th className="px-3 py-2 text-right font-medium">반</th>
+                    <th className="px-3 py-2 text-right font-medium">확정 회차</th>
+                    <th className="px-3 py-2 text-right font-medium">확정 금액</th>
+                    <th className="px-3 py-2 text-right font-medium">실 시수</th>
+                    <th className="px-3 py-2 text-right font-medium">실측 금액</th>
+                    <th className="px-3 py-2 text-right font-medium">차액</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map((t) => (
+                    <tr key={t.teacherName} className="border-line/60 border-b last:border-0">
+                      <td className="text-foreground px-3 py-2">
+                        {t.teacherName}
+                        {t.missingPriceRows > 0 ? (
+                          <span
+                            className="text-text-dim ml-1 text-[10px]"
+                            title="단가가 없어 금액 집계에서 제외된 행"
+                          >
+                            (단가없음 {t.missingPriceRows})
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="num text-text-dim px-3 py-2 text-right">{t.classCount}</td>
+                      <td className="num px-3 py-2 text-right">{t.confirmedSessions}</td>
+                      <td className="num px-3 py-2 text-right">{fmtWon(t.confirmedAmount)}</td>
+                      <td className="num px-3 py-2 text-right">{fmtUnits(t.actualUnits)}</td>
+                      <td className="num px-3 py-2 text-right">{fmtWon(t.actualAmount)}</td>
+                      <td
+                        className={`num px-3 py-2 text-right font-semibold ${
+                          t.diffAmount === 0 ? "text-emerald-700" : t.diffAmount > 0 ? "text-red-700" : "text-amber-700"
+                        }`}
+                      >
+                        {t.diffAmount === 0 ? "0" : t.diffAmount > 0 ? `+${fmtWon(t.diffAmount)}` : `−${fmtWon(-t.diffAmount)}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-line bg-bg-soft/50 border-t text-xs">
+                    <td className="text-text-dim px-3 py-2" colSpan={3}>
+                      합계
+                    </td>
+                    <td className="num px-3 py-2 text-right font-semibold">{fmtWon(allocTotal.confirmedAmount)}</td>
+                    <td />
+                    <td className="num px-3 py-2 text-right font-semibold">{fmtWon(allocTotal.actualAmount)}</td>
+                    <td
+                      className={`num px-3 py-2 text-right font-semibold ${
+                        allocTotal.actualAmount - allocTotal.confirmedAmount === 0 ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {fmtWon(allocTotal.actualAmount - allocTotal.confirmedAmount)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+
           <div className="border-line overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[46rem] text-sm">
               <thead>
@@ -172,9 +268,9 @@ export async function SessionVerificationFace({
                           </span>
                         )}
                       </td>
-                      <td className="num text-foreground px-3 py-2 text-right">{r.actualConsumed}</td>
+                      <td className="num text-foreground px-3 py-2 text-right">{fmtUnits(r.actualConsumed)}</td>
                       <td className={`num px-3 py-2 text-right font-semibold ${meta.cell}`}>
-                        {r.diff === null ? "—" : r.diff > 0 ? `+${r.diff}` : r.diff}
+                        {r.diff === null ? "—" : r.diff > 0 ? `+${fmtUnits(r.diff)}` : fmtUnits(r.diff)}
                       </td>
                       <td className="px-3 py-2">
                         <span className={`rounded-full border px-2 py-0.5 text-xs ${meta.chip}`}>{meta.label}</span>

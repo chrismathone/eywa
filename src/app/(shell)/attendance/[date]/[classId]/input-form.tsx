@@ -26,6 +26,7 @@ import type {
   AttendanceInputRow,
   AttendanceStatus,
 } from "@/features/attendance/server/queries";
+import { formatSessionUnits } from "@/features/attendance/session-units";
 
 const STATUS_DEFS: {
   value: AttendanceStatus;
@@ -80,8 +81,14 @@ type CellState = {
   note: string;
   homeworkRequired: boolean;
   homeworkDone: boolean;
+  // 시수(정규 1회 기준 배수) raw 입력 — ""=기본 1. 서버(parseSessionUnits)에서 검증.
+  units: string;
   expanded: boolean;
 };
+
+function unitsToDraft(sessionUnits: number | null): string {
+  return sessionUnits === null || sessionUnits === 1 ? "" : formatSessionUnits(sessionUnits);
+}
 
 export function AttendanceInputForm({
   classId,
@@ -96,12 +103,14 @@ export function AttendanceInputForm({
   const [pending, setPending] = useState<Record<string, CellState>>(() => {
     const init: Record<string, CellState> = {};
     for (const r of rows) {
+      const units = unitsToDraft(r.sessionUnits);
       init[r.studentId] = {
         status: r.status,
         note: r.note ?? "",
         homeworkRequired: r.homeworkRequired,
         homeworkDone: r.homeworkDone,
-        expanded: !!(r.note || r.homeworkRequired),
+        units,
+        expanded: !!(r.note || r.homeworkRequired || units),
       };
     }
     return init;
@@ -133,6 +142,7 @@ export function AttendanceInputForm({
           note: "",
           homeworkRequired: false,
           homeworkDone: false,
+          units: "",
         };
       }
       return next;
@@ -145,7 +155,8 @@ export function AttendanceInputForm({
       c.status !== r.status ||
       c.note !== (r.note ?? "") ||
       c.homeworkRequired !== r.homeworkRequired ||
-      c.homeworkDone !== r.homeworkDone
+      c.homeworkDone !== r.homeworkDone ||
+      c.units !== unitsToDraft(r.sessionUnits)
     );
   });
   const filled = rows.filter((r) => pending[r.studentId].status != null).length;
@@ -211,6 +222,7 @@ export function AttendanceInputForm({
                       <span className="bg-purple/10 text-purple border-purple/20 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
                         {cell.note ? <Pencil className="size-2.5" /> : null}
                         {cell.homeworkRequired ? <BookOpen className="size-2.5" /> : null}
+                        {cell.units ? <span className="font-mono font-bold">{cell.units}</span> : null}
                       </span>
                     ) : null}
                   </div>
@@ -220,6 +232,9 @@ export function AttendanceInputForm({
                     name={`existing:${r.studentId}`}
                     value={r.existingRecordId ?? ""}
                   />
+                  {/* 서버 에러 메시지용 학생 이름(시수 검증 실패 시 누구인지 표시) */}
+                  <input type="hidden" name={`name:${r.studentId}`} value={r.studentName} />
+                  <input type="hidden" name={`units:${r.studentId}`} value={cell.units} />
                   <input
                     type="hidden"
                     name={`status:${r.studentId}`}
@@ -291,6 +306,21 @@ export function AttendanceInputForm({
                         className="border-line bg-card text-foreground flex-1 rounded-md border px-2 py-1.5 text-xs"
                       />
                     </div>
+                    {/* 시수(배수) — 정규 1회=1(빈 칸), 보강 연장 1.5·2, 부분 출석 0.5 */}
+                    <label className="text-foreground flex items-center gap-2 text-xs">
+                      <Clock className="text-text-dim size-3" />
+                      시수
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={cell.units}
+                        onChange={(e) => patchOne(r.studentId, { units: e.target.value })}
+                        placeholder="1"
+                        title="정규 수업 1회 = 1 (빈 칸). 보강 연장 1.5·2, 부분 출석 0.5 등"
+                        className="border-line bg-card text-foreground w-16 rounded-md border px-2 py-1.5 text-xs"
+                      />
+                      <span className="text-text-dim">회분 (빈 칸 = 1)</span>
+                    </label>
                     <div className="flex flex-wrap items-center gap-3">
                       <label className="text-foreground inline-flex items-center gap-1.5 text-xs">
                         <input

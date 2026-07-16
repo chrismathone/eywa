@@ -392,6 +392,8 @@ export const attendanceRecords = pgTable(
       .references(() => students.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
     status: attendanceStatusEnum("status").notNull(),
+    // 시수(정규 수업 1회 기준 배수, 0113a). null=1(기본). 보강 연장=1.5/2, 부분 출석=0.5 등.
+    sessionUnits: numeric("session_units", { precision: 4, scale: 1 }),
     note: text("note"),
     homeworkRequired: boolean("homework_required").notNull().default(false),
     homeworkDone: boolean("homework_done").notNull().default(false),

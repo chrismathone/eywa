@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
+import { COUNTABLE_STATUSES, formatSessionUnits, parseSessionUnits } from "@/features/attendance/session-units";
 
 const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present: "O",
@@ -30,7 +31,8 @@ const OPTIONS: { value: AttendanceStatus; name: string }[] = [
 
 /**
  * 출석부 매트릭스 인라인 셀 — 클릭 시 상태 팝오버, 낙관적 업데이트 후 단일 셀 저장.
- * 페이지 이동 없이 빠르게 출결을 찍는다(반응속도 1순위). 메모·숙제 상세는 일자 입력 화면에서.
+ * 페이지 이동 없이 빠르게 출결을 찍는다(반응속도 1순위). 숙제 상세는 일자 입력 화면에서.
+ * 시수(정규 1회 기준 배수): 기본 1은 상태 글자(O/L/보/조), 1이 아니면 숫자로 표시(구 출석부 표기 관행).
  */
 export function AttendanceCell({
   studentId,
@@ -38,38 +40,70 @@ export function AttendanceCell({
   sessionDate,
   initialStatus,
   note,
+  initialUnits,
 }: {
   studentId: string;
   classId: string;
   sessionDate: string;
   initialStatus: AttendanceStatus | null;
   note?: string | null;
+  initialUnits?: number | null;
 }) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus);
+  const [units, setUnits] = useState<number | null>(initialUnits ?? null);
   const [noteVal, setNoteVal] = useState(note ?? "");
   const [draft, setDraft] = useState(note ?? "");
+  const [unitsDraft, setUnitsDraft] = useState("");
+  const [unitsError, setUnitsError] = useState(false);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [, startTransition] = useTransition();
 
-  // noteArg 전달 시 메모도 갱신(undefined면 기존 메모 유지). 상태/메모 모두 낙관적.
-  const apply = (next: AttendanceStatus | null, noteArg?: string) => {
+  // noteArg/unitsArg 전달 시 함께 갱신(undefined면 기존 유지). 상태/메모/시수 모두 낙관적.
+  const apply = (next: AttendanceStatus | null, noteArg?: string, unitsArg?: string) => {
+    // 시수는 클라에서 선검증 — 서버 왕복 전에 잘못된 입력을 붙잡는다(서버도 동일 파서로 재검증).
+    let optimisticUnits: number | null | undefined = undefined;
+    if (unitsArg !== undefined) {
+      const parsed = parseSessionUnits(unitsArg);
+      if (!parsed.ok) {
+        setUnitsError(true);
+        return;
+      }
+      optimisticUnits = parsed.value;
+    }
+    setUnitsError(false);
     const prevStatus = status;
     const prevNote = noteVal;
+    const prevUnits = units;
     setStatus(next);
     if (noteArg !== undefined) setNoteVal(noteArg.trim());
+    if (next === null) setUnits(null);
+    else if (optimisticUnits !== undefined) setUnits(optimisticUnits);
     setOpen(false);
     startTransition(async () => {
-      const res = await setAttendanceCell({ studentId, classId, sessionDate, status: next, note: noteArg });
+      const res = await setAttendanceCell({
+        studentId,
+        classId,
+        sessionDate,
+        status: next,
+        note: noteArg,
+        units: unitsArg,
+      });
       if ("error" in res) {
         setStatus(prevStatus);
         setNoteVal(prevNote);
+        setUnits(prevUnits);
       }
     });
   };
 
   const cls = status ? STATUS_CLASS[status] : "";
-  const label = status ? STATUS_LABEL[status] : "·";
+  // 시수 ≠ 1 이면 숫자 표기(색은 상태 유지) — 구 출석부의 "숫자 = 몇 회분" 읽기 관행.
+  const showUnits = status !== null && COUNTABLE_STATUSES.has(status) && units !== null && units !== 1;
+  const label = status ? (showUnits ? formatSessionUnits(units!) : STATUS_LABEL[status]) : "·";
+  const titleText =
+    [showUnits ? `시수 ${formatSessionUnits(units!)}` : null, noteVal || null].filter(Boolean).join(" · ") ||
+    undefined;
 
   return (
     <>
@@ -79,9 +113,11 @@ export function AttendanceCell({
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           setPos({ x: r.left, y: r.bottom });
           setDraft(noteVal);
+          setUnitsDraft(units !== null && units !== 1 ? formatSessionUnits(units) : "");
+          setUnitsError(false);
           setOpen(true);
         }}
-        title={noteVal || undefined}
+        title={titleText}
         className={`relative mx-auto block size-7 text-center leading-7 font-mono text-[11px] font-bold ${cls} ${
           status ? "" : "text-text-faint hover:bg-bg-soft"
         }`}
@@ -121,8 +157,28 @@ export function AttendanceCell({
                 {o.name}
               </button>
             ))}
-            {/* 메모(사유) — 현재 상태와 함께 저장. 상태 없으면 비활성(메모만 단독 저장 불가). */}
+            {/* 시수(배수)·메모 — 현재 상태와 함께 저장. 상태 없으면 비활성(단독 저장 불가). */}
             <div className="border-line mt-0.5 flex flex-col gap-1 border-t pt-1">
+              <label className="flex items-center gap-1.5">
+                <span className="text-text-dim w-7 shrink-0 text-[11px]">시수</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={unitsDraft}
+                  onChange={(e) => {
+                    setUnitsDraft(e.target.value);
+                    setUnitsError(false);
+                  }}
+                  placeholder="1"
+                  title="정규 수업 1회 = 1. 보강 연장 1.5·2, 부분 출석 0.5 등"
+                  className={`bg-bg-soft text-foreground placeholder:text-text-faint w-full rounded-sm border px-2 py-1 text-xs focus:outline-none ${
+                    unitsError ? "border-danger" : "border-line"
+                  }`}
+                />
+              </label>
+              {unitsError ? (
+                <p className="text-danger text-[10px] leading-tight">숫자(소수 한 자리)만 — 예: 1, 1.5, 2</p>
+              ) : null}
               <input
                 type="text"
                 value={draft}
@@ -132,12 +188,12 @@ export function AttendanceCell({
               />
               <button
                 type="button"
-                onClick={() => apply(status, draft)}
+                onClick={() => apply(status, draft, unitsDraft)}
                 disabled={!status}
                 className="bg-foreground text-background rounded-sm px-2 py-1 text-xs font-medium transition disabled:opacity-40"
                 title={status ? undefined : "상태를 먼저 선택하세요"}
               >
-                메모 저장
+                저장
               </button>
             </div>
             {status ? (

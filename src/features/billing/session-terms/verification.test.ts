@@ -26,4 +26,14 @@ describe("classifyVerification", () => {
     expect(classifyVerification(0, 0).status).toBe("matched");
     expect(classifyVerification(null, 0).status).toBe("unconfirmed");
   });
+
+  it("배수 시수(소수 실측) — 12.5 vs 12 = over +0.5, 11.5 vs 12 = short -0.5", () => {
+    expect(classifyVerification(12, 12.5)).toEqual({ status: "over", diff: 0.5 });
+    expect(classifyVerification(12, 11.5)).toEqual({ status: "short", diff: -0.5 });
+  });
+
+  it("부동소수 잔차 방어 — 0.5×3 합(1.5000000000000002류)이 가짜 불일치를 안 만든다", () => {
+    expect(classifyVerification(1.5, 0.5 + 0.5 + 0.5)).toEqual({ status: "matched", diff: 0 });
+    expect(classifyVerification(3, 0.1 + 0.2 + 2.7)).toEqual({ status: "matched", diff: 0 });
+  });
 });
