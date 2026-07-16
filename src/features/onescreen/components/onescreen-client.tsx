@@ -350,7 +350,7 @@ export function OneScreenClient({
       toast.message("이미 목록에 있는 학생입니다");
       return;
     }
-    const res = await buildMakeupStudent(studentId);
+    const res = await buildMakeupStudent(studentId, date || undefined); // 조회 중인 날짜 전달(과거 백필 중복게시 방지)
     if (!res.ok || !res.student) {
       toast.error(res.error ?? "학생을 추가하지 못했습니다");
       return;

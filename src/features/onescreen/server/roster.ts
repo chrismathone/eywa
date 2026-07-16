@@ -171,10 +171,16 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
 
   // 5) 학생별 OneScreenStudent — 과목 = 그 학생이 듣는 (강사 담당) 반의 과목들
   const byStudent = new Map<string, OneScreenStudent>();
+  // 반 필터용 tags = 학생의 **수강 반 이름 전체**(enrollments 기준). ⚠️ subjects의 className에서 도출하면
+  //   같은 과목 두 반(dedup으로 className=null)인 학생이 그 반 필터에서 통째 누락된다(F4 후속 회귀) → enrollments로 도출.
+  const classNamesByStudent = new Map<string, Set<string>>();
   for (const e of enrollments) {
     const stu = studById.get(e.student_id);
     const cls = classById.get(e.class_id);
     if (!stu || !cls) continue;
+    const set = classNamesByStudent.get(stu.id) ?? new Set<string>();
+    set.add(cls.class_name);
+    classNamesByStudent.set(stu.id, set);
     const grade = stu.grade ?? "";
     // 테스트 만점 = 이 학생 (첫) 과목의 문항수 설정. 세션에 저장된 값이 있으면 아래에서 덮어씀.
     const tmax = subjectTestMax.get(cls.subject) ?? 5;
@@ -279,6 +285,10 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     attitude: string | null;
     notes: string | null;
   };
+  // RPC 에러는 무신호 삼킴 금지(B2/B3) — 다만 이전회차는 '보강' 데이터라 throw로 화면 전체를 죽이지 않고 로그+graceful.
+  // (0117a 미배포·일시장애 시 이전회차/prevScore/교재승계만 빠지고 당일 데이터·세션은 정상 렌더 → 진단 가능하게 로그.)
+  if (priorReports.error)
+    console.error("[roster] onescreen_prior_reports RPC 실패 — 이전 회차 데이터 생략:", priorReports.error.message);
   const priorRows = (priorReports.data ?? []) as PriorRow[];
   const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
 
@@ -463,9 +473,8 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
         if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
       }
     }
-    // 이 학생이 수강 중인 담당 반 전체(tags) — 반 필터가 다과목/다반 학생을 양쪽에서 잡도록(누락 방지).
-    // 과목 행의 className에서 도출(모호=null 제외). 비면 대표 tag 폴백.
-    const classNames = [...new Set(os.subjects.map((su) => su.className).filter((n): n is string => !!n))];
+    // 이 학생이 수강 중인 담당 반 전체(tags) — enrollments 기준(모호 과목 포함, 위 F4 후속 회귀 주석 참조). 비면 대표 tag 폴백.
+    const classNames = [...(classNamesByStudent.get(os.id) ?? [])];
     os.tags = classNames.length ? classNames : os.tag ? [os.tag] : [];
   }
 

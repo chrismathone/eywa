@@ -505,6 +505,7 @@ export async function searchTenantStudents(
  */
 export async function buildMakeupStudent(
   studentId: string,
+  reportDate?: string, // 조회 중인 날짜(과거 백필 지원) — 발송상태 복원 쿼리가 이 날짜 기준이어야 중복게시 방지
 ): Promise<{ ok: boolean; student?: OneScreenStudent; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -539,14 +540,15 @@ export async function buildMakeupStudent(
   const book = bookPick?.bookName?.trim() ?? "";
   const tmax = testMaxByKey.get(subjectKeys[0]!) ?? 5;
 
-  // ⚠️ 오늘 발송상태 복원 — 보강 학생은 세션 미저장이라 재추가 시 상태가 빈다. 그대로면 이미 발송(success)된 과목을
-  //    다시 눌러 ClassNote 중복 게시될 수 있다(#13 확정). 당일 lesson_reports를 과목별로 매핑해 sent/토큰/상태 복원.
-  const today = resolveReportDate(undefined);
+  // ⚠️ 대상 날짜 발송상태 복원 — 보강 학생은 세션 미저장이라 재추가 시 상태가 빈다. 그대로면 이미 발송(success)된 과목을
+  //    다시 눌러 ClassNote 중복 게시될 수 있다(#13 확정). **조회 중인 날짜**(과거 백필 포함) lesson_reports를 과목별로
+  //    매핑해 sent/토큰/상태 복원 — 저장/발송이 쓰는 reportDate와 동일 날짜여야 과거 날짜에서도 중복게시 방지.
+  const targetDate = resolveReportDate(reportDate);
   const { data: todayReports } = await supabase
     .from("lesson_reports")
     .select("subject, share_token, classnote_status, revoked_at, attachments")
     .eq("student_id", studentId)
-    .eq("report_date", today);
+    .eq("report_date", targetDate);
   const statusBySubject = new Map(
     (todayReports ?? []).map((r) => [r.subject ?? "", r]),
   );
