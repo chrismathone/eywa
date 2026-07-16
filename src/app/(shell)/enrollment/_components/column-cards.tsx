@@ -15,6 +15,12 @@ import { EditingBadge } from "@/features/presence/editing-badge";
 import { relativeTimeKo } from "@/lib/relative-time";
 import { OUTCOME_PILL } from "./outcome-meta";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const PAGE_SIZE = 8;
 
@@ -30,6 +36,7 @@ export function ColumnCards({
   cards: ConsultationListRow[];
 }) {
   const [page, setPage] = useState(0);
+  const subjectMaps = useSubjectMaps(); // 팝오버 상담 행의 과목 라벨(클라 단일소스)
   const totalPages = Math.max(1, Math.ceil(cards.length / PAGE_SIZE));
   // 필터로 카드 수가 줄어 현재 page가 범위를 벗어나면 마지막 페이지로 보정(렌더 중 파생값 — setState 아님).
   const safePage = Math.min(page, totalPages - 1);
@@ -65,12 +72,53 @@ export function ColumnCards({
                           </span>
                         ) : null}
                         {c.personConsultCount > 1 ? (
-                          <span
-                            className="bg-amber-soft text-amber rounded px-1 py-0.5 text-[9px] font-bold"
-                            title={`이 학생의 등록상담이 ${c.personConsultCount}건 있습니다 (반복 접수 — 중복이면 정리, 새 상담이면 각각 진행)`}
-                          >
-                            상담 {c.personConsultCount}건
-                          </span>
+                          // 배지 클릭 = 그 학생의 등록상담 전건 팝오버(나머지 상담 열람). base-ui Menu는 body로
+                          // portal되어 스크롤 컬럼에 안 잘리고, 트리거의 preventDefault/stopPropagation로 카드 창-내비를 막는다.
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  title={`이 학생의 등록상담 ${c.personConsultCount}건 — 눌러서 나머지 상담 보기`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  className="bg-amber-soft text-amber cursor-pointer rounded px-1 py-0.5 text-[9px] font-bold hover:brightness-95"
+                                />
+                              }
+                            >
+                              상담 {c.personConsultCount}건
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-60 p-1.5">
+                              <p className="text-text-faint px-1 pb-1 text-[10px] font-medium">
+                                이 학생의 등록상담 {c.personConsultCount}건
+                              </p>
+                              {c.personConsults.map((s) => {
+                                const op = OUTCOME_PILL[s.outcome] ?? OUTCOME_PILL.pending!;
+                                const sl = s.subject ? subjectMaps.labelOf(s.subject) : null;
+                                return (
+                                  <WindowLink
+                                    key={s.id}
+                                    href={`/enrollment/${s.id}`}
+                                    title={s.prospectName}
+                                    className={`hover:bg-bg-soft flex items-center justify-between gap-2 rounded-md px-2 py-1.5 ${
+                                      s.id === c.id ? "bg-bg-soft/60" : ""
+                                    }`}
+                                  >
+                                    <span className="num text-text-dim text-[11px]">
+                                      {new Date(s.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                      {sl ? <span className="text-foreground text-[11px]">{sl}</span> : null}
+                                      <Pill color={op.color}>{op.label}</Pill>
+                                    </span>
+                                  </WindowLink>
+                                );
+                              })}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         ) : null}
                         {c.syncAddedAt ? <MakeeduOriginTag /> : null}
                         <EditingBadge scope={`consultation:${c.id}`} />

@@ -80,6 +80,15 @@ export type ConsultationAudioReport = {
   };
 };
 
+/** 같은 사람의 등록상담 1건 요약 — '상담 N건' 배지 팝오버·상세 '다른 상담' 목록의 각 행. */
+export type PersonConsultRef = {
+  id: string;
+  prospectName: string;
+  subject: string | null;
+  outcome: string;
+  consultedAt: string;
+};
+
 export type ConsultationListRow = {
   id: string;
   prospectName: string;
@@ -98,6 +107,9 @@ export type ConsultationListRow = {
   studentId: string | null; // 수업 배정으로 생성된 학생(연결) — null이면 아직 학생 미생성
   assignedClassCount: number; // 연결 학생의 상담 과목 미종료 수강(반) 수 → ≥1이면 "배정 완료"
   personConsultCount: number; // 같은 사람(학생/자연키)의 등록상담 총 건수 → ≥2면 "반복 접수" 힌트
+  // 반복 접수(≥2건)일 때만 그 사람의 상담 전건(시간역순, 자기 포함) — 배지 클릭 팝오버로 나머지 상담 열람.
+  // 1건이면 빈 배열(불필요한 데이터·팝오버 미노출).
+  personConsults: PersonConsultRef[];
 };
 
 export type ConsultationFilter = {
@@ -197,7 +209,21 @@ export async function getEnrollmentConsultations(
       ? `s:${c.student_id}`
       : `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
   const personCount = new Map<string, number>();
-  for (const c of data) personCount.set(personKey(c), (personCount.get(personKey(c)) ?? 0) + 1);
+  const personGroups = new Map<string, PersonConsultRef[]>();
+  for (const c of data) {
+    const k = personKey(c);
+    personCount.set(k, (personCount.get(k) ?? 0) + 1);
+    // data는 consulted_at desc 정렬이라 각 그룹도 시간역순으로 쌓인다(팝오버 최신순 표시).
+    const arr = personGroups.get(k) ?? [];
+    arr.push({
+      id: c.id,
+      prospectName: c.prospect_name,
+      subject: (c as { subject?: string | null }).subject ?? null,
+      outcome: c.outcome,
+      consultedAt: c.consulted_at,
+    });
+    personGroups.set(k, arr);
+  }
 
   return data.map((c) => {
     const consultant = (Array.isArray(c.consultant) ? c.consultant[0] : c.consultant) as
@@ -224,8 +250,48 @@ export async function getEnrollmentConsultations(
         (c as { subject?: string | null }).subject ?? null,
       ),
       personConsultCount: personCount.get(personKey(c)) ?? 1,
+      // 반복 접수(≥2)일 때만 전건 첨부 — 1건이면 빈 배열(팝오버 미노출·데이터 절약).
+      personConsults: (personCount.get(personKey(c)) ?? 1) > 1 ? (personGroups.get(personKey(c)) ?? []) : [],
     };
   });
+}
+
+/**
+ * 상세 페이지용 — 이 등록상담과 **같은 사람**의 다른 등록상담 목록(자기 제외, 시간역순).
+ * 같은 사람 판별은 목록 배지와 동일 원칙: 학생 연결(student_id)이 있으면 그걸로, 없으면 자연키(이름+학교+학년).
+ * RLS 스코프 클라이언트라 같은 학원(tenant)만 반환 — 누수 없음. 등록상담 테이블만 대상(재원생 상담 미포함).
+ */
+export async function getSiblingConsultations(consultationId: string): Promise<PersonConsultRef[]> {
+  const supabase = await createClient();
+  const { data: self } = await supabase
+    .from("enrollment_consultations")
+    .select("id, student_id, prospect_name, prospect_school, prospect_grade")
+    .eq("id", consultationId)
+    .single();
+  if (!self) return [];
+
+  let q = supabase
+    .from("enrollment_consultations")
+    .select("id, prospect_name, subject, outcome, consulted_at")
+    .neq("id", consultationId)
+    .order("consulted_at", { ascending: false });
+  if (self.student_id) {
+    q = q.eq("student_id", self.student_id);
+  } else {
+    // 자연키 — 이름+학교+학년 일치(학생 미연결 순수 접수자의 재방문). null은 is null로 정확 매칭.
+    q = q.eq("prospect_name", self.prospect_name);
+    q = self.prospect_school ? q.eq("prospect_school", self.prospect_school) : q.is("prospect_school", null);
+    q = self.prospect_grade ? q.eq("prospect_grade", self.prospect_grade) : q.is("prospect_grade", null);
+  }
+  const { data, error } = await q;
+  if (error) throw error; // 조용히 삼키지 않음(B3)
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    prospectName: c.prospect_name,
+    subject: (c as { subject?: string | null }).subject ?? null,
+    outcome: c.outcome,
+    consultedAt: c.consulted_at,
+  }));
 }
 
 export type IntakeTokenRow = {
@@ -510,7 +576,8 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     recommendedClasses,
     studentId: linkedStudentId,
     assignedClassCount,
-    personConsultCount: 1, // 상세는 반복-접수 힌트를 쓰지 않음(목록 카드/학생 탭 전용) — 타입 충족용.
+    personConsultCount: 1, // 상세는 목록 카드 배지를 안 씀 — 타입 충족용(상세의 '다른 상담'은 getSiblingConsultations로 별도 조회).
+    personConsults: [],
     makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
     fields: mapFullFields(c as Record<string, unknown>),
   };
