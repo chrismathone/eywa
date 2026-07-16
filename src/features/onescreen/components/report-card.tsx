@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
-import { isReportEligible } from "../grid";
+import { isRowActionable } from "../grid";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
@@ -312,8 +312,14 @@ export function ReportCard({
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || !isReportEligible(subject)}
-              title={isReportEligible(subject) ? undefined : "오늘 진도를 먼저 입력하세요"}
+              disabled={generating || !isRowActionable(subject, "autowrite")}
+              title={
+                isRowActionable(subject, "autowrite")
+                  ? undefined
+                  : subject.attendanceRaw === "absent"
+                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                    : "오늘 진도를 먼저 입력하세요"
+              }
               onClick={() => onAutoWrite(subjectName)}
             >
               <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
@@ -338,11 +344,19 @@ export function ReportCard({
           />
         </div>
 
-        {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시. */}
+        {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.
+            ⚠️ 결석 게이트는 표뷰와 동일(isRowActionable send) — 카드만 우회되는 구멍 방지(#77, 리뷰 확정). */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            title="저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
+            disabled={!isRowActionable(subject, "send")}
+            title={
+              isRowActionable(subject, "send")
+                ? "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
+                : subject.attendanceRaw === "absent"
+                  ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                  : "오늘 진도를 먼저 입력하세요"
+            }
             onClick={() => onQueueClassnote(subjectName)}
           >
             ClassNote 발송

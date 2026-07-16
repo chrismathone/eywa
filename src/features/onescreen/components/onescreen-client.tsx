@@ -847,18 +847,16 @@ export function OneScreenClient({
       toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)");
       return;
     }
-    // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 고유 학생 수 기준, 결석은 제외 카운트로 별도.
-    const absentCount = new Set(
-      selectRows("save", keys)
-        .filter((r) => r.subject.attendanceRaw === "absent")
-        .map((r) => r.student.id),
-    ).size;
+    // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 누락은 고유 학생 수 기준.
+    // ⚠️ 결석 제외는 **행(과목) 단위 건수** — 다과목 학생은 결석 반 과목만 빠지고 다른 과목은 발송되므로
+    //    "N명 제외"로 쓰면 오안내(리뷰 확정). 발송 단위=행(lesson_reports 1건)이라 "건"이 정확.
+    const absentRows = selectRows("save", keys).filter((r) => r.subject.attendanceRaw === "absent").length;
     const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
     const gapLine =
       gaps.missingAttitude || gaps.missingTest
         ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
         : "";
-    const absentLine = absentCount ? `\n결석 ${absentCount}명은 발송에서 제외됩니다` : "";
+    const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
     if (
       !window.confirm(
         `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}`,
