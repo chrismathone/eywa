@@ -39,6 +39,11 @@ export type Subject = {
   // 읽기 전용(편집 불가). 없으면(첫 수업) undefined.
   prevReport?: PrevReport;
 
+  // 복원된 멘트/추세 초안 — roster가 오늘 세션(onescreen_daily_sessions) 우선, 없으면 오늘 발송본
+  // (lesson_reports notes/trend_note)에서 채워 initReports가 reports state 초기값으로 사용(새로고침 유지).
+  draft?: string;
+  trendDraft?: string;
+
   // ── 오늘 보고서 발송 상태(과목별) — roster가 오늘 lesson_reports를 subject로 매칭해 채움 ──
   // 학생단위로 뭉개면 다과목(수학만 저장해도 영어까지 sent)이 오카운트되므로 과목별로 분리.
   reportSent?: boolean; // 오늘 이 과목 보고서가 저장됨

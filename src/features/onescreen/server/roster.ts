@@ -50,7 +50,7 @@ type OnescreenSessionRow = {
   study_grade: string | null;
   subject_progress: Record<
     string,
-    { today?: string; draft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
+    { today?: string; draft?: string; trendDraft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
   > | null;
   daily_score: number | null;
   daily_max: number | null;
@@ -211,13 +211,14 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       homework_score: string | null;
       attitude: string | null;
       notes: string | null;
+      trend_note: string | null;
     }>(
       studentIds,
       (chunk) =>
         supabase
           .from("lesson_reports")
           .select(
-            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments, textbook, homework_today, homework_score, attitude, notes",
+            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments, textbook, homework_today, homework_score, attitude, notes, trend_note",
           )
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
@@ -280,6 +281,8 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       classnoteStatus: string | null;
       revokedAt: string | null;
       attachments: { path: string; name: string }[];
+      notes: string | null; // 발송본 멘트 — 세션 초안 없을 때 초안 복원 폴백
+      trendNote: string | null; // 발송본 학습 추세 — 동일 폴백
     }
   >();
   const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
@@ -300,6 +303,8 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
           classnoteStatus: r.classnote_status,
           revokedAt: r.revoked_at,
           attachments: r.attachments ?? [],
+          notes: r.notes,
+          trendNote: r.trend_note,
         });
         todayReportIds.push(r.id);
       }
@@ -339,6 +344,9 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
         su.revokedAt = t.revokedAt ?? undefined;
         su.viewCount = viewCountByReport.get(t.reportId) ?? 0;
         su.attachments = t.attachments;
+        // 발송본 멘트/추세 = 초안 복원 폴백 — 아래 세션 블록이 비어있지 않은 세션 초안으로 덮음(작업중 편집 우선).
+        if (t.notes) su.draft = t.notes;
+        if (t.trendNote) su.trendDraft = t.trendNote;
       }
     }
     os.attendance = toMark(attById.get(os.id));
@@ -404,6 +412,10 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
         if (entry?.textbook != null) su.textbook = entry.textbook;
         if (entry?.makeup != null) su.makeup = entry.makeup;
         if (entry?.homeworkToday != null) su.homeworkToday = entry.homeworkToday;
+        // 미발송 멘트/추세 초안 복원 — 세션에 실제 텍스트가 있을 때만 발송본 폴백 위에 덮는다.
+        // (lesson_reports엔 updated_at이 없어 신구 비교 불가 → 빈 세션 초안은 발송본 복원을 지우지 않음.)
+        if (entry?.draft?.trim()) su.draft = entry.draft;
+        if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
       }
     }
   }

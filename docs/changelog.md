@@ -4,7 +4,17 @@
 
 ## 진행 상황
 
-### ClassNote 학부모 **댓글** → 담당 강사 알림 (2026-07-16) — ✅ tsc0/lint0/test1383/실데이터 감지 검증
+### 원스크린 미발송 멘트 초안 새로고침 유실 수정 (2026-07-16) — ✅ tsc0/lint0/test1371
+edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_sessions.subject_progress[key].draft`에 자동저장되지만
+① roster 세션 복원이 draft를 안 읽고 ② `initReports`가 항상 `draft:""`로 시작해 새로고침 시 화면에서 사라졌으며,
+③ 이후 그 학생에 아무 편집이나 하면 `buildSessionInput`이 빈 `draft:""`를 재저장해 **DB에 남은 초안까지 파괴**.
+학습추세(`trendDraft`)는 세션 저장 자체가 없었다.
+- **복원 배선**: roster가 `Subject.draft/trendDraft`로 복원 → `initReports`가 reports state 초기값으로 시딩(카드·표 공용).
+- **trendDraft 세션 저장+복원 추가**(`buildSessionInput`·`SaveOnescreenSessionInput`·세션 row 타입). jsonb라 마이그 불필요.
+- **우선순위**: 오늘 세션 초안(비어있지 않으면) > 오늘 발송본(lesson_reports `notes`/`trend_note`) > 빈 값.
+  발송본 폴백 덕에 발송 후 새로고침해도 발송 문구가 초안란에 남는다(빈 초안 재발송이 템플릿으로 덮던 부작용도 해소).
+  ⚠️ lesson_reports엔 `updated_at`이 없어(upsert 시 `created_at` 불변) 신구 타임스탬프 비교 불가 → 위 휴리스틱 고정.
+
 학부모 **새 글** 알림(07-15)의 자매 기능. 실측이 07-15 당시의 "댓글은 범위 밖" 판단을 뒤집었다 — 학부모 연락의
 **다수가 댓글**로 온다(**댓글 12건/일 vs 새 글 4.2건/일**). ClassNote 흐름이 "강사 알림장 → 학부모 댓글로 답"이라
 새 글이 오히려 예외였고, 내용도 결석·보강·입금확인·상담요청 등 조치가 필요한 것들이다.

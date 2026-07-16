@@ -287,7 +287,7 @@ export type SaveOnescreenSessionInput = {
   studyGrade?: string | null;
   subjectProgress?: Record<
     string,
-    { today?: string; draft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
+    { today?: string; draft?: string; trendDraft?: string; textbook?: string; makeup?: boolean; homeworkToday?: string }
   >;
   dailyScore?: number | null;
   dailyMax?: number | null;

@@ -50,9 +50,11 @@ function initReports(students: OneScreenStudent[]): ReportsState {
     out[s.id] = {};
     // 발송상태·공유토큰·ClassNote 상태는 **과목별**(su)로 초기화 — 학생단위(s.reportSent) 뭉갬 금지.
     // 새로고침 시 워커가 쓴 최종 classnoteStatus(success/failed 등)도 roster 초기로드로 반영됨.
+    // 멘트/추세 초안도 roster 복원값(오늘 세션 > 오늘 발송본)으로 시딩 — 새로고침 유실 방지.
     for (const su of s.subjects)
       out[s.id]![su.name] = {
-        draft: "",
+        draft: su.draft ?? "",
+        trendDraft: su.trendDraft,
         sent: su.reportSent ?? false,
         shareToken: su.shareToken,
         classnoteStatus: su.classnoteStatus,
@@ -192,6 +194,7 @@ export function OneScreenClient({
           {
             today: su.today,
             draft: r?.[su.name]?.draft ?? "",
+            trendDraft: r?.[su.name]?.trendDraft ?? "",
             textbook: su.textbook ?? "",
             makeup: su.makeup ?? false,
             homeworkToday: su.homeworkToday ?? "",
