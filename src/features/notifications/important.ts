@@ -12,6 +12,17 @@ export const IMPORTANT_NOTIFICATION_TYPES: readonly string[] = [
   "classnote_parent_post", // 학부모가 ClassNote에 새 글 → 담당 강사가 바로 확인·응답해야 함
 ];
 
+/**
+ * ⚠️ **`classnote_parent_comment`(학부모 댓글)는 일부러 여기 없다 — 벨 배지로만 알린다.**
+ *
+ * 위 "즉시 응답이 필요한 것만"(원장 결정)에 댓글은 해당하지 않는다. 실측(2026-07-16): 학부모 댓글은
+ * **하루 ~12건으로 새 글(4.2건)의 3배**이고 표본 70건 중 **36건이 "감사합니다 ⭐️" 류 인사**다.
+ * 이걸 중앙 팝업으로 띄우면 하루 여러 번 **수업 중 화면을 가로막는데**, 그 절반이 인사다 — 팝업이 무시되기
+ * 시작하면 정작 새 글 팝업까지 같이 무시된다(경보 피로). 벨은 본문이 그대로 보여 1초면 넘길 수 있으므로
+ * 노이즈가 벨에 쌓이는 건 감당 가능하다.
+ * → 댓글을 이 목록에 넣지 말 것. 넣으려면 먼저 "인사성 댓글 거르기"가 있어야 한다(원장이 반응 보고 조정하기로 함).
+ */
+
 /** 이 유형이 강하게 알릴 대상인가. */
 export function isImportantNotification(type: string | null | undefined): boolean {
   return !!type && IMPORTANT_NOTIFICATION_TYPES.includes(type);

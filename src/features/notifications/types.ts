@@ -6,7 +6,8 @@ export type NotificationType =
   | "enrollment_assigned" // 내 반에 학생 배정
   | "enrollment_transferred_in" // 반이동으로 내 반에 전입
   | "teacher_handover" // 강사 인수인계로 내가 새 담임 지정
-  | "classnote_parent_post"; // 학부모가 ClassNote에 새 글 → 그 학생 담당 강사(연동 PC 워커가 insert)
+  | "classnote_parent_post" // 학부모가 ClassNote에 새 글 → 그 학생 담당 강사(연동 PC 워커가 insert)
+  | "classnote_parent_comment"; // 학부모가 ClassNote 알림장에 댓글 → 그 학생 담당 강사(위와 같은 워커)
 
 export type NotificationItem = {
   id: string;
@@ -24,4 +25,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   enrollment_transferred_in: "swap",
   teacher_handover: "userCheck",
   classnote_parent_post: "message",
+  classnote_parent_comment: "message",
 };

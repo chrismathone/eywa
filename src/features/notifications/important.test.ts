@@ -18,6 +18,9 @@ describe("isImportantNotification", () => {
     // 나머지는 벨 배지로만 — 수업 중 중앙 팝업 방해 방지(원장 결정).
     expect(isImportantNotification("enrollment_assigned")).toBe(false);
     expect(isImportantNotification("teacher_handover")).toBe(false);
+    // ⚠️ 학부모 **댓글**은 일부러 중요 아님 — 하루 ~12건(새 글의 3배)에 절반이 인사라 중앙 팝업하면 경보 피로.
+    //    벨 배지로만. 이 기대를 바꾸려면 먼저 "인사성 댓글 거르기"가 있어야 한다(important.ts 주석 참조).
+    expect(isImportantNotification("classnote_parent_comment")).toBe(false);
     expect(isImportantNotification(null)).toBe(false);
     expect(isImportantNotification("")).toBe(false);
   });

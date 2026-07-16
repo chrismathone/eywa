@@ -4,6 +4,29 @@
 
 ## 진행 상황
 
+### ClassNote 학부모 **댓글** → 담당 강사 알림 (2026-07-16) — ✅ tsc0/lint0/test1383/실데이터 감지 검증
+학부모 **새 글** 알림(07-15)의 자매 기능. 실측이 07-15 당시의 "댓글은 범위 밖" 판단을 뒤집었다 — 학부모 연락의
+**다수가 댓글**로 온다(**댓글 12건/일 vs 새 글 4.2건/일**). ClassNote 흐름이 "강사 알림장 → 학부모 댓글로 답"이라
+새 글이 오히려 예외였고, 내용도 결석·보강·입금확인·상담요청 등 조치가 필요한 것들이다.
+- **감지 = `num_comments` 스냅샷 대조**(마이그 0111a: `classnote_feed_state.counts jsonb`). 댓글은 전용 피드가
+  없어(centers/comments·reports/comments·feeds 전부 404, activities는 항상 빈 배열) 유일 신호가 피드 행의
+  `num_comments` 증가다. ⚠️ 델타 감지에 **추가 요청 0**(피드 행에 이미 있음) → 늘어난 글만 댓글 API를 연다(~12~24회/일).
+- **순수 로직** [parent-comment-filter.mjs](../scripts/_classnote/parent-comment-filter.mjs)(Vitest 21) — ⚠️ **API가
+  댓글을 id 내림차순(최신 먼저)으로 준다**(회귀 테스트가 실제 응답 순서로 고정), 강사 답글도 수를 올리므로
+  `author.type==="parent"`로 거름, 전건 미확인·삭제 감소는 추측 않고 self-correcting.
+- **폴러** [`pollParentCommentsOnce`](../scripts/_classnote/classnote-feed-core.mjs) — **10분 주기**(원장 수용 지연),
+  **감시 창 10일**. ⚠️ 창이 깊은 이유(직관 반대): 학부모는 알림장에 *답*하는 게 아니라 아이 보드 맨 위 글에 그냥
+  말을 걸어, **오래된 글에 급한 용건**이 달린다(가장 늦은 두 건 7일·8.7일이 둘 다 결석·상담요청). 백스톱 30페이지가
+  창보다 커야 age 컷오프가 먼저 걸림(방학 피크 = 10일이 20페이지).
+- **게이트 공유**: 공유보드·동명이인 매핑 검증을 새 글 폴러와 **같은 함수**(`loadGateInputs`+`gateBoard`)로 태워
+  한쪽만 취약해지는 구조를 원천 차단. 콜드 스타트=알림 0건(기준선만), 조회 실패=fail-closed.
+- **알림 = 벨 배지만**(중앙 팝업/OS 알림 제외): 하루 ~12건에 표본 절반이 "감사합니다" 류 인사라 중앙 팝업하면
+  경보 피로 → 새 글 팝업까지 무시된다. ⚠️ **실제 소음도 보고 조정**(원장 결정) — 인사성 거르기는 나중에 필요하면.
+  타입 `classnote_parent_comment`. 데몬·수동스크립트([process-parent-comments.mjs](../scripts/_classnote/process-parent-comments.mjs)) 배선.
+- **검증**: 실 프로덕션 dry-run — 콜드 스타트 수학 856글 기준선·알림 0건 / 뒤처진 스냅샷 심어 감지 경로 확인
+  (주준호 "7/19~8/8 영어캠프로 학원부재" 정확 감지, 강사 답글이 최신인 표본은 정상 제외). ⚠️ 연동 PC zip 적용 대기.
+
+
 **12개 메뉴 + ijw 패리티 + Admin 도구 + 제품 중심 랜딩 + UI 폴리시 + super-admin Phase 1
 + ijw 갭 P0·P1·P2 메우기 완성.**
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로

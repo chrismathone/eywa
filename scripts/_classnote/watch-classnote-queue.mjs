@@ -21,7 +21,7 @@ import postgres from "postgres";
 import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
-import { pollParentPostsOnce } from "./classnote-feed-core.mjs";
+import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -114,6 +114,13 @@ async function main() {
       //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
       await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
+        return { ran: false };
+      });
+      // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 10분 가드 내장.
+      //    ⚠️ 4)와 별 폴러인 이유 = 감지 방식이 다르다(글=워터마크 1페이지 / 댓글=감시 창 전체 재조회).
+      //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
+      await pollParentCommentsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[comment] 오류(다음 폴에서 재시도): ${e.message}`);
         return { ran: false };
       });
     } catch (e) {
