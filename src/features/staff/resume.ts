@@ -22,6 +22,19 @@ export const WORKDAYS = [
 
 export const EMPLOYMENT_TYPES = ["정규직", "아르바이트", "프리랜서"] as const;
 
+// 회사 구분 — 신규 직원명부(구글시트) '회사명' 열과 같은 선택지(2026-07-16 원장 지정 목록).
+export const RESUME_COMPANIES = [
+  "(주)곰돌이(강의하는아이들인재원)",
+  "고등수학관(지점)",
+  "북대구지점",
+  "EIE인재원",
+  "파라엑스",
+  "연구소",
+] as const;
+
+// 소속부서 — 고정 4개 선택지(원장 지정). 계약사항의 근무부서(자유입력)와는 별개 칸.
+export const RESUME_DEPARTMENTS = ["영어과", "수학과", "경영지원", "기타과목"] as const;
+
 /**
  * 로컬 초안(IndexedDB)에 **남기면 안 되는** 필드 — 주민번호·주소·계좌·급여.
  * 이력서 열람은 재인증(step-up)으로 잠그는데, 초안 자동저장이 같은 값을 브라우저 디스크에 평문으로
@@ -50,6 +63,9 @@ export type StaffResumeData = {
   certificates: ResumeCert[];
   languages: ResumeLanguage[];
   contract: {
+    company: string; // 회사 구분 — RESUME_COMPANIES 중 하나 또는 ""
+    division: string; // 소속부서 — RESUME_DEPARTMENTS 중 하나 또는 ""
+    manager: string; // 담당자(회사 측 채용 담당) — 자유입력
     department: string;
     workDays: string[]; // WORKDAYS key 배열
     salaryMonthly: string;
@@ -71,6 +87,9 @@ export function emptyResume(): StaffResumeData {
     certificates: rows(CERT_ROWS, () => ({ name: "", date: "", issuer: "" })),
     languages: rows(LANG_ROWS, () => ({ name: "", testDate: "", score: "" })),
     contract: {
+      company: "",
+      division: "",
+      manager: "",
       department: "",
       workDays: [],
       salaryMonthly: "",
@@ -82,6 +101,9 @@ export function emptyResume(): StaffResumeData {
     },
   };
 }
+
+/** 선택지 화이트리스트 — 목록 밖 값(변조·옛 데이터)은 빈 값으로 떨어뜨린다. */
+const pick = (v: string, allow: readonly string[]) => (allow.includes(v) ? v : "");
 
 /**
  * FormData → 구조화 데이터. 필드 name 규약: p_*, edu_N_*, car_N_*, cert_N_*, lang_N_*, c_*.
@@ -123,13 +145,14 @@ export function parseResumeForm(fd: FormData): StaffResumeData {
       score: s(`lang_${i}_score`),
     })),
     contract: {
+      company: pick(s("c_company"), RESUME_COMPANIES),
+      division: pick(s("c_division"), RESUME_DEPARTMENTS),
+      manager: s("c_manager"),
       department: s("c_department"),
       workDays: WORKDAYS.filter((d) => fd.get(`c_workday_${d.key}`)).map((d) => d.key),
       salaryMonthly: s("c_salaryMonthly"),
       salaryAnnual: s("c_salaryAnnual"),
-      employmentType: (EMPLOYMENT_TYPES as readonly string[]).includes(s("c_employmentType"))
-        ? s("c_employmentType")
-        : "",
+      employmentType: pick(s("c_employmentType"), EMPLOYMENT_TYPES),
       bank: s("c_bank"),
       account: s("c_account"),
       startDate: s("c_startDate"),
@@ -170,13 +193,14 @@ export function normalizeResume(v: unknown): StaffResumeData {
     certificates: padRows<ResumeCert>(o.certificates, CERT_ROWS, ["name", "date", "issuer"]),
     languages: padRows<ResumeLanguage>(o.languages, LANG_ROWS, ["name", "testDate", "score"]),
     contract: {
+      company: pick(str(c.company), RESUME_COMPANIES),
+      division: pick(str(c.division), RESUME_DEPARTMENTS),
+      manager: str(c.manager),
       department: str(c.department),
       workDays: Array.isArray(c.workDays) ? c.workDays.map(String).filter((d) => validDays.has(d)) : [],
       salaryMonthly: str(c.salaryMonthly),
       salaryAnnual: str(c.salaryAnnual),
-      employmentType: (EMPLOYMENT_TYPES as readonly string[]).includes(str(c.employmentType))
-        ? str(c.employmentType)
-        : "",
+      employmentType: pick(str(c.employmentType), EMPLOYMENT_TYPES),
       bank: str(c.bank),
       account: str(c.account),
       startDate: str(c.startDate),

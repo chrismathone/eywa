@@ -37,6 +37,23 @@ describe("parseResumeForm", () => {
     fd.set("c_employmentType", "해커");
     expect(parseResumeForm(fd).contract.employmentType).toBe("");
   });
+
+  it("회사 구분·소속부서는 선택지만 통과, 담당자는 자유입력(trim)", () => {
+    const fd = new FormData();
+    fd.set("c_company", "EIE인재원");
+    fd.set("c_division", "영어과");
+    fd.set("c_manager", " 김담당 ");
+    const d = parseResumeForm(fd);
+    expect(d.contract.company).toBe("EIE인재원");
+    expect(d.contract.division).toBe("영어과");
+    expect(d.contract.manager).toBe("김담당");
+
+    const bad = new FormData();
+    bad.set("c_company", "없는회사");
+    bad.set("c_division", "없는부서");
+    expect(parseResumeForm(bad).contract.company).toBe("");
+    expect(parseResumeForm(bad).contract.division).toBe("");
+  });
 });
 
 describe("normalizeResume", () => {
@@ -58,6 +75,24 @@ describe("normalizeResume", () => {
     expect(d.education[1].school).toBe("");
     expect(d.contract.workDays).toEqual(["mon"]);
     expect(d.contract.employmentType).toBe("아르바이트");
+  });
+
+  it("회사 구분·소속부서는 선택지 화이트리스트, 옛 데이터(필드 없음)는 빈 값으로 보정", () => {
+    const d = normalizeResume({
+      contract: { company: "파라엑스", division: "경영지원", manager: "김담당" },
+    });
+    expect(d.contract.company).toBe("파라엑스");
+    expect(d.contract.division).toBe("경영지원");
+    expect(d.contract.manager).toBe("김담당");
+
+    const legacy = normalizeResume({ contract: { department: "수학팀" } }); // 신 필드 없는 기존 저장본
+    expect(legacy.contract.company).toBe("");
+    expect(legacy.contract.division).toBe("");
+    expect(legacy.contract.manager).toBe("");
+
+    const tampered = normalizeResume({ contract: { company: "없는회사", division: 7 } });
+    expect(tampered.contract.company).toBe("");
+    expect(tampered.contract.division).toBe("");
   });
 });
 

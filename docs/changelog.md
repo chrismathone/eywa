@@ -47,6 +47,25 @@ edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_ses
   발송본 폴백 덕에 발송 후 새로고침해도 발송 문구가 초안란에 남는다(빈 초안 재발송이 템플릿으로 덮던 부작용도 해소).
   ⚠️ lesson_reports엔 `updated_at`이 없어(upsert 시 `created_at` 불변) 신구 타임스탬프 비교 불가 → 위 휴리스틱 고정.
 
+### 직원 이력서 → "신규 직원명부" 구글시트 기입 + 폼 3필드 (2026-07-16) — ✅ tsc0/lint0/test1380/build✓/실시트 append→대조→clear 검증
+이력서 **신규 작성** 저장 시 "2020~2026 직원명부" 스프레드시트의 `2026신규 직원명부` 탭(A~T 20열)에 한 행
+append(수정 저장은 재기입 안 함 — 중복 방지). **학력은 최상위(맨 위 실입력) 1건만** 기입(원장 요청).
+- **순수/IO 분리**: 행 변환 [resume-roster.ts](../src/features/staff/resume-roster.ts)(`ROSTER_COLUMNS` 열 순서 계약,
+  Vitest 7) ↔ IO [server/resume-roster-sheet.ts](../src/features/staff/server/resume-roster-sheet.ts) +
+  공용 [`appendSheetRows`](../src/features/integrations/google-sheets.ts)(RAW·INSERT_ROWS — 덮어쓰기 아님).
+  ⚠️ append는 **비멱등이라 withSheetsRetry 미적용**(503 재전송 = 같은 행 2번) + 요청 timeout 8s·전체 상한 10s
+  (저장 액션이 동기 대기 — 무한 pending 방지, 초과 시 "기입 여부 직접 확인" 안내).
+- **부가 효과 정책**: 시트 실패해도 이력서 저장은 유효 — `saveStaffResume`가 `notice`/`warning`을 돌려주고
+  폼이 sonner 토스트로만 노출(생성 경로는 즉시 새 뷰로 떠나므로 인라인 불가). env `HR_ROSTER_SPREADSHEET_ID`
+  (+`HR_ROSTER_SHEET_TAB`, 기본 "2026신규 직원명부") 미설정 = 의도적 비활성 → 토스트 없이 조용히 skip(로그만
+  — 거짓 '실패' 경고로 경고 피로 유발 금지, 적대검수 확정 결함 반영). 인증은 기존
+  서비스계정 키(GOOGLE_/FIREBASE_SERVICE_ACCOUNT_KEY) 재사용 — 시트는 그 계정에 편집자 공유 필요.
+- **폼 3필드**(계약사항 섹션): 회사 구분·소속부서 = 고정 선택지 드롭다운(`RESUME_COMPANIES`/`RESUME_DEPARTMENTS`,
+  EMPLOYMENT_TYPES 선례처럼 서식 상수 — 화이트리스트 검증), 담당자 = 자유입력. 민감값 아님 → 초안 exclude(#78) 비대상.
+  드롭다운은 규약대로 SearchableSelect(name=hidden input 제출, 컨트롤드 → 초안 복원은 onRestore rehydrate).
+- 학력사항 학교명 placeholder: 맨 아래 행 "고등학교", 그 위 "대학교"(최상위 학력을 맨 위에 쓰는 서식 관례).
+
+### ClassNote 학부모 **댓글** → 담당 강사 알림 (2026-07-16) — ✅ tsc0/lint0/test1383/실데이터 감지 검증
 학부모 **새 글** 알림(07-15)의 자매 기능. 실측이 07-15 당시의 "댓글은 범위 밖" 판단을 뒤집었다 — 학부모 연락의
 **다수가 댓글**로 온다(**댓글 12건/일 vs 새 글 4.2건/일**). ClassNote 흐름이 "강사 알림장 → 학부모 댓글로 답"이라
 새 글이 오히려 예외였고, 내용도 결석·보강·입금확인·상담요청 등 조치가 필요한 것들이다.
