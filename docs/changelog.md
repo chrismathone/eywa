@@ -13,6 +13,20 @@
 실E2E: 매니저 5영역 보고 + 스포트라이트 6명(상담 공백 177일 → "오늘 중 원장 직접 전화 상담") 생성, usage 1014/742 tok.
 **결정 로그 갱신**: 챗봇 영구 제외를 명시 재검토 — ijw 챗봇 '이식'은 여전히 제외, **운영실 대화형 비서(자체 설계, 세션 내
 tool-use)는 도입 승인** = Phase 2 다음 작업(설계 재료 docs/dashboard-ai-briefing-plan.md 부록). Phase 3 = 이벤트 감지 알림.
+### 원스크린 단체 작성 — edutrix 전수비교 갭 0·1·3단계 반영 (2026-07-17) — ✅ tsc0/lint0/test1425/test:rls4/0116a 적용·멱등✓
+2026-07-16 edutrix↔eywa 단체작성 전수비교 감사(확정 14건)의 승인 계획 이행. **0단계(분해)**: onescreen-grid
+593줄·props24 → 조립자+리프 5개(grid-toolbar/grid-row/prev-row/score-input/pill-group), 핸들러는
+fields/rowActions/bulkActions 그룹 객체(200줄·props10 회복). **1단계(작성 속도)**: ① 표뷰 태도·과제 드롭다운(2클릭)→
+1클릭 pill(재클릭 해제, 카드뷰 PillGroup 공용) ② "값 일괄 입력" 팝오버(선택/전체 행에 태도·과제·교재·오늘과제 —
+빈 필드=미적용, 빈 칸만 옵션, `planBulkApply` 순수함수) ③ 참고행 "가져오기"(빈 칸만 진도·태도·과제·오늘과제,
+`planPrevFill` — ⚠️특이사항 제외: prevReport.note=발송 본문) ④ 문구 3칸 field-sizing 자동 확장.
+**3단계(인체공학)**: ⑤ 점수·교재·오늘과제 Enter/↑↓ 세로 이동(`grid-nav.ts`, isComposing IME 가드) ⑥ 학생
+순서변경(0116a `onescreen_student_order`, 단일 반 필터에서만, 학생 묶음 ↑↓, teacher_id=`effectiveTeacherId`
+서버 파생, roster 반 그룹 내 재배열 `student-order.ts`) ⑦ 다른 창/기기 동시 열림 경고(presence scope
+`onescreen:{teacherId}:{date}`, 락 아님). 푸시 전 멀티에이전트 diff 리뷰로 확정 결함 4건(순서 모드 stale
+저장·다과목 점수 nav 밀림·동명 반·순서 모드 nav 어긋남) 수정. **2단계(출결 직접 입력+발송 누락 안내)는
+출석 시수(0115a) main 반영 후 별도 진행** — setAttendanceCell 권한 보강(scoped=담당반)→출결 (student,class)
+복합키→pill 순서. ⚠️브라우저 시각검증 미완(강사 로그인 필요) — 다음 강사 세션에서 pill·일괄입력·순서 실측 권장.
 
 ### 출석 시수(배수) 입력 + 시수 검증 시수 합 전환 + 강사별 분배(참고) (2026-07-16) — ✅ tsc0/lint0/test1392/실E2E(수학 JJ2B), 원장 승인 후 main 반영
 구 출석부(D:\attendance)의 "셀 숫자 = 정규 수업 1회 기준 배수"(2h 수업 기준 3h=1.5, 보강 4h=2, 영어 U 유닛)를
