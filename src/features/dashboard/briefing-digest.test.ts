@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDailyBriefingPayload,
-  buildFallbackNarrative,
-  buildNarrativePrompt,
+  narrativeNumberWhitelist,
   shouldGenerateNarrative,
-  validateNarrative,
   type BuildDailyBriefingInput,
 } from "./briefing-digest";
 import type { TodayActionsRaw } from "./today-actions";
@@ -31,6 +29,7 @@ const BASE: BuildDailyBriefingInput = {
   followUps: { overdue: 0, dueSoon: 0 },
   absenceRisks: [],
   retention: null,
+  retentionTop: [],
   todayClassSessions: 12,
 };
 
@@ -94,85 +93,60 @@ describe("buildDailyBriefingPayload", () => {
   });
 });
 
+describe("spotlights (매니저 팀 보고 재료)", () => {
+  it("retention 상위 + 반복 결석을 이름 중복 없이 병합(최대 6명)", () => {
+    const payload = buildDailyBriefingPayload({
+      ...BASE,
+      retentionTop: [
+        { name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
+        { name: "박지율", reasons: ["결석 2회"], action: null },
+      ],
+      absenceRisks: [
+        { studentName: "박지율", absences: 3 }, // retention과 중복 — 스킵
+        { studentName: "정호준", absences: 4 },
+      ],
+    });
+    expect(payload.spotlights).toEqual([
+      { name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" },
+      { name: "박지율", reasons: ["결석 2회"], action: null },
+      { name: "정호준", reasons: ["최근 14일 결석 4회"], action: null },
+    ]);
+  });
+
+  it("6명 상한 — retention 5명 + 결석 학생은 남는 자리만", () => {
+    const payload = buildDailyBriefingPayload({
+      ...BASE,
+      retentionTop: Array.from({ length: 5 }, (_, i) => ({ name: `학생${i}`, reasons: ["사유"], action: null })),
+      absenceRisks: [
+        { studentName: "결석1", absences: 3 },
+        { studentName: "결석2", absences: 3 },
+      ],
+    });
+    expect(payload.spotlights).toHaveLength(6);
+    expect(payload.spotlights[5].name).toBe("결석1");
+  });
+
+  it("스포트라이트 사유 속 숫자가 화이트리스트에 들어간다(LLM 인용 허용)", () => {
+    const payload = buildDailyBriefingPayload({
+      ...BASE,
+      retentionTop: [{ name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: null }],
+    });
+    const allowed = narrativeNumberWhitelist(payload);
+    expect(allowed.has("15")).toBe(true);
+    expect(allowed.has("45")).toBe(true);
+  });
+});
+
 describe("shouldGenerateNarrative", () => {
   it("조치 신호가 전혀 없으면 LLM 스킵", () => {
     expect(shouldGenerateNarrative(buildDailyBriefingPayload(BASE))).toBe(false);
   });
-  it("attention·후속·결석위험·이탈위험 중 하나라도 있으면 생성", () => {
+  it("attention·후속·결석위험·스포트라이트 중 하나라도 있으면 생성", () => {
     expect(shouldGenerateNarrative(buildDailyBriefingPayload({ ...BASE, followUps: { overdue: 1, dueSoon: 0 } }))).toBe(true);
     expect(
       shouldGenerateNarrative(
-        buildDailyBriefingPayload({ ...BASE, retention: { total: 10, risk: 1, warn: 0, revenueRisk: 0 } }),
+        buildDailyBriefingPayload({ ...BASE, retentionTop: [{ name: "a", reasons: ["r"], action: null }] }),
       ),
     ).toBe(true);
-  });
-});
-
-describe("buildNarrativePrompt", () => {
-  it("개인 이름을 프롬프트에 넣지 않는다(라벨+수치만)", () => {
-    const prompt = buildNarrativePrompt(
-      buildDailyBriefingPayload({
-        ...BASE,
-        yesterdayRaw: { ...EMPTY_RAW, absentToday: [{ studentId: "s1", name: "김민준" }] },
-        absenceRisks: [{ studentName: "이서연", absences: 4 }],
-        todayRaw: { ...EMPTY_RAW, leavesToday: [{ name: "박강사" }] },
-      }),
-    );
-    expect(prompt).not.toContain("김민준");
-    expect(prompt).not.toContain("이서연");
-    expect(prompt).not.toContain("박강사");
-    expect(prompt).toContain("어제 무단결석");
-    expect(prompt).toContain("JSON");
-  });
-});
-
-describe("validateNarrative", () => {
-  const payload = buildDailyBriefingPayload({
-    ...BASE,
-    yesterdayRaw: { ...EMPTY_RAW, absentToday: [{ studentId: "s1", name: "김민준" }, { studentId: "s2", name: "박서연" }, { studentId: "s3", name: "정호" }] },
-    followUps: { overdue: 2, dueSoon: 1 },
-  });
-
-  it("화이트리스트 숫자만 쓴 서술은 통과", () => {
-    expect(
-      validateNarrative("어제 무단결석 3명을 가장 먼저 확인해 주세요. 상담 후속조치 기한 지남 2건과 임박 1건이 있습니다.", payload),
-    ).toEqual({ ok: true });
-  });
-
-  it("근거 없는 숫자는 폐기", () => {
-    const result = validateNarrative("어제 무단결석 7명을 확인해 주세요. 수납률이 95%로 양호합니다.", payload);
-    expect(result.ok).toBe(false);
-  });
-
-  it("영문 토큰·과잉 길이 폐기", () => {
-    expect(validateNarrative("classnote_status failed 항목을 확인해 주세요. 어제 무단결석 3명이 있습니다.", payload).ok).toBe(false);
-    expect(validateNarrative("가".repeat(701), payload).ok).toBe(false);
-    expect(validateNarrative("짧음", payload).ok).toBe(false);
-  });
-
-  it("날짜(연·월·일) 숫자는 허용", () => {
-    expect(validateNarrative("7월 16일 아침 기준, 어제 무단결석 3명을 확인해 주세요.", payload).ok).toBe(true);
-  });
-});
-
-describe("buildFallbackNarrative", () => {
-  it("신호 없음 → 안전 문장 + 오늘 수업 수", () => {
-    expect(buildFallbackNarrative(buildDailyBriefingPayload(BASE))).toBe(
-      "어제 마감 기준 조치할 운영 신호가 없습니다. 오늘 수업 일정은 12건입니다.",
-    );
-  });
-  it("신호 있음 → 첫 신호 + 나머지 종수", () => {
-    const payload = buildDailyBriefingPayload({
-      ...BASE,
-      yesterdayRaw: {
-        ...EMPTY_RAW,
-        absentToday: [{ studentId: "s1", name: "a" }],
-        pendingExpenses: 2,
-      },
-    });
-    const text = buildFallbackNarrative(payload);
-    expect(text).toContain("가장 먼저");
-    expect(text).toContain("어제 무단결석 1건");
-    expect(text).toContain("1종");
   });
 });

@@ -27,6 +27,7 @@ export const PRESENCE_SCOPE_PREFIXES = [
   "student-consultation",
   "meeting",
   "tenant-settings",
+  "onescreen", // 원스크린 날짜 단위(`onescreen:{teacherId}:{date}`) — 같은 계정 다른 창/기기 동시 작성 경고(락 아님)
 ] as const;
 
 export function isPresenceScope(scope: string): boolean {

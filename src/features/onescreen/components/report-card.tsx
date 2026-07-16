@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
-import { isReportEligible } from "../grid";
+import { isRowActionable } from "../grid";
 import { splitLessons } from "../curriculum";
+import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
+import { PillGroup } from "./pill-group";
 import { isImageAttachment } from "../attachment-utils";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
@@ -133,6 +135,7 @@ export function ReportCard({
   onRemoveAttachment,
   attachmentUrls,
   uploadingSubject,
+  attendance,
 }: {
   student: OneScreenStudent;
   reports: Record<string, SubjectReport>;
@@ -156,6 +159,8 @@ export function ReportCard({
   onRemoveAttachment: (subjectName: string, path: string) => void;
   attachmentUrls?: Record<string, string>; // path→signed 썸네일 URL
   uploadingSubject?: string | null; // 첨부 업로드 중인 과목
+  // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
+  attendance?: { pendingKeys: ReadonlySet<string>; onSet: (classId: string, status: BasicAttendance) => void };
 }) {
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, student.subjects.length - 1);
@@ -237,7 +242,18 @@ export function ReportCard({
               보강
             </button>
           </div>
-          {student.attendance !== "출석" ? (
+          {/* 출결 인라인 입력(2-2) — 행(반) 단위(subject.classId). 보강·반 모호는 배지만(출석부에서 기록). */}
+          {attendance && !student.isMakeup && subject.classId ? (
+            <div className="flex items-center gap-1.5">
+              <span className="micro text-text-faint">출결</span>
+              <AttendancePills
+                value={subject.attendanceRaw}
+                pending={attendance.pendingKeys.has(`${student.id}::${subject.classId}`)}
+                onSet={(s) => attendance.onSet(subject.classId!, s)}
+                studentName={student.name}
+              />
+            </div>
+          ) : student.attendance !== "출석" ? (
             <span
               className={`self-start rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
                 student.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
@@ -250,50 +266,23 @@ export function ReportCard({
 
         <div>
           <p className="micro text-text-faint mb-1.5">수업 태도</p>
-          <div className="flex flex-wrap gap-1.5">
-            {attitudes.map((a) => {
-              const on = student.attitude === a;
-              return (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => onAttitude(a)}
-                  aria-pressed={on}
-                  className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
-                    on
-                      ? "bg-primary text-primary-foreground"
-                      : "border-line text-text-dim hover:bg-bg-soft border"
-                  }`}
-                >
-                  {a}
-                </button>
-              );
-            })}
-          </div>
+          {/* 1클릭 pill — 재클릭 해제는 부모 setAttitude가 처리(같은 값이면 null). */}
+          <PillGroup
+            options={attitudes}
+            value={student.attitude}
+            onSelect={onAttitude}
+            ariaLabel={`${student.name} 수업 태도`}
+          />
         </div>
 
         <div>
           <p className="micro text-text-faint mb-1.5">과제</p>
-          <div className="flex flex-wrap gap-1.5">
-            {homeworks.map((h) => {
-              const on = student.homework === h;
-              return (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => onHomework(h)}
-                  aria-pressed={on}
-                  className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
-                    on
-                      ? "bg-primary text-primary-foreground"
-                      : "border-line text-text-dim hover:bg-bg-soft border"
-                  }`}
-                >
-                  {h}
-                </button>
-              );
-            })}
-          </div>
+          <PillGroup
+            options={homeworks}
+            value={student.homework || null}
+            onSelect={onHomework}
+            ariaLabel={`${student.name} 과제 수행`}
+          />
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
               AI 멘트 마무리("오늘 과제는 ~입니다") 재료 + 학부모 카드 표시(설정 토글). */}
           <input
@@ -323,8 +312,14 @@ export function ReportCard({
             <Button
               variant="ghost"
               size="sm"
-              disabled={generating || !isReportEligible(subject)}
-              title={isReportEligible(subject) ? undefined : "오늘 진도를 먼저 입력하세요"}
+              disabled={generating || !isRowActionable(subject, "autowrite")}
+              title={
+                isRowActionable(subject, "autowrite")
+                  ? undefined
+                  : subject.attendanceRaw === "absent"
+                    ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                    : "오늘 진도를 먼저 입력하세요"
+              }
               onClick={() => onAutoWrite(subjectName)}
             >
               <EyIcon name="sparkle" size={13} /> {generating ? "생성 중…" : "자동 작성"}
@@ -349,11 +344,19 @@ export function ReportCard({
           />
         </div>
 
-        {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시. */}
+        {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.
+            ⚠️ 결석 게이트는 표뷰와 동일(isRowActionable send) — 카드만 우회되는 구멍 방지(#77, 리뷰 확정). */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            title="저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
+            disabled={!isRowActionable(subject, "send")}
+            title={
+              isRowActionable(subject, "send")
+                ? "저장 후 ClassNote 발송 큐에 올립니다 — 워커가 자동으로 게시합니다"
+                : subject.attendanceRaw === "absent"
+                  ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                  : "오늘 진도를 먼저 입력하세요"
+            }
             onClick={() => onQueueClassnote(subjectName)}
           >
             ClassNote 발송

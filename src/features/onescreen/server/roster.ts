@@ -6,6 +6,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores } from "../exam-info";
+import { applyStudentOrder } from "../student-order";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { AttendanceMark, OneScreenStudent } from "../types";
 
@@ -106,11 +107,15 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   const { showDailyTest, showCheckTest } = settings.report;
   const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
-  // 1) 강사 담당 활성 반 + 본인 멘트 모드 오버라이드(독립 조회 → 병렬, B4)
-  const [{ data: classes }, { data: meRow }] = await Promise.all([
+  // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) — 독립 조회 → 병렬(B4)
+  const [{ data: classes }, { data: meRow }, { data: orderRows }] = await Promise.all([
     supabase.from("classes").select("id, class_name, subject").eq("teacher_id", user.id).eq("is_active", true),
     supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
+    supabase.from("onescreen_student_order").select("class_id, student_ids").eq("teacher_id", user.id),
   ]);
+  const orderByClass = new Map(
+    (orderRows ?? []).map((r) => [r.class_id as string, (r.student_ids ?? []) as string[]]),
+  );
   const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
   const allClasses = classes ?? [];
   if (allClasses.length === 0) return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode);
@@ -184,8 +189,13 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       };
       byStudent.set(stu.id, os);
     }
-    if (!os.subjects.some((su) => su.subjectKey === cls.subject)) {
-      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+    const dupSubject = os.subjects.find((su) => su.subjectKey === cls.subject);
+    if (!dupSubject) {
+      // classId = 이 과목 행의 반(출결 원장이 student+class+date라 행 단위 출결 입력(2단계)의 키).
+      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, classId: cls.id, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+    } else if (dupSubject.classId !== cls.id) {
+      // 같은 과목을 두 반에서 수강(subjectKey dedup으로 1행) — 행의 반이 모호 → 출결 pill 숨김(출석부에서 기록).
+      dupSubject.classId = null;
     }
   }
 
@@ -223,12 +233,12 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
           .in("student_id", chunk)
           .order("report_date", { ascending: false }),
     ),
-    fetchInChunks<{ student_id: string; status: string; recorded_at: string }>(
+    fetchInChunks<{ student_id: string; class_id: string; status: string; recorded_at: string }>(
       studentIds,
       (chunk) =>
         supabase
           .from("attendance_records")
-          .select("student_id, status, recorded_at")
+          .select("student_id, class_id, status, recorded_at")
           .eq("session_date", todayIso)
           .in("student_id", chunk)
           .order("recorded_at", { ascending: false }),
@@ -326,9 +336,15 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   );
   for (const v of viewRows)
     viewCountByReport.set(v.lesson_report_id, (viewCountByReport.get(v.lesson_report_id) ?? 0) + 1);
-  // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신).
+  // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신) — 학생 배지 표시용(축약).
   const attById = new Map<string, string>();
   for (const a of attRows) if (!attById.has(a.student_id)) attById.set(a.student_id, a.status);
+  // (학생×반) 최신 raw — 출결 pill(2단계)의 행 단위 값. 축약(toMark)과 별개로 raw 보존(조퇴·보강 되쓰기 방지).
+  const attByRow = new Map<string, string>();
+  for (const a of attRows) {
+    const k = `${a.student_id}::${a.class_id}`;
+    if (!attByRow.has(k)) attByRow.set(k, a.status);
+  }
   const toMark = (status: string | undefined): AttendanceMark =>
     status === "late" ? "지각" : status === "absent" || status === "early_leave" ? "결석" : "출석";
 
@@ -350,6 +366,10 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       }
     }
     os.attendance = toMark(attById.get(os.id));
+    // 행(반) 단위 raw 출결 — 출결 pill(2단계). classId 모호(null)면 미채움=pill 숨김.
+    for (const su of os.subjects) {
+      if (su.classId) su.attendanceRaw = attByRow.get(`${os.id}::${su.classId}`) ?? null;
+    }
     const pr = priorReport.get(os.id);
     if (pr) {
       const { daily, check } = parseExamScores(pr.examInfo);
@@ -439,12 +459,16 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     .sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));
 
   // 학생 정렬: 반(시각순) → 그 안에서 학년 → 이름. 좌측 목록이 반별로 묶이도록.
+  // 그 위에 강사가 저장한 학생 순서(0116a)를 반 그룹 내부만 재배열(좌석·채점지 순서 — 미등재 학생은 기존 정렬 뒤).
   const classRank = new Map(todayClasses.map((c, i) => [c.name, i]));
-  const students = [...byStudent.values()].sort(
-    (a, b) =>
-      (classRank.get(a.className ?? "") ?? 999) - (classRank.get(b.className ?? "") ?? 999) ||
-      gradeRank(a.grade) - gradeRank(b.grade) ||
-      a.name.localeCompare(b.name, "ko"),
+  const students = applyStudentOrder(
+    [...byStudent.values()].sort(
+      (a, b) =>
+        (classRank.get(a.className ?? "") ?? 999) - (classRank.get(b.className ?? "") ?? 999) ||
+        gradeRank(a.grade) - gradeRank(b.grade) ||
+        a.name.localeCompare(b.name, "ko"),
+    ),
+    orderByClass,
   );
 
   // 반별 필터 칩 = 전체 + 오늘 담당 반(시각순).

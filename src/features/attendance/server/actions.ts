@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { parseSessionUnits } from "../session-units";
 
@@ -158,6 +158,32 @@ export async function setAttendanceCell(input: {
   }
 
   const supabase = await createClient();
+
+  // scoped(강사) 담당 반 강제 — 원스크린 인라인 출결(2단계)이 이 액션을 재사용하면서 서버 검증 추가.
+  // RLS는 tenant 격리뿐이라 여기서 막지 않으면 강사가 테넌트 내 아무 반에나 기록 가능(검수 지적).
+  // full(관리자 계열·겸직 포함)은 기존대로 전 반. 담당 확인 + 수강생 확인은 독립 조회 → 병렬(B4).
+  // ⚠️ 수강생 판정은 **세션 날짜 기준**(start≤date AND (end null OR end≥date)) — 출석부 매트릭스는 그 달 중
+  //    수강 종료(반이동·종강)된 학생의 과거 셀도 편집을 허용하므로, end_date IS NULL 고정이면 그 교정과
+  //    미래 end_date(퇴원 예정) 재원생의 오늘 출결까지 차단되는 회귀(리뷰 확정). getAttendanceInputRows와 동일 의미.
+  if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) return { error: "잘못된 날짜입니다" }; // .or() 보간 안전
+    const [{ count: ownClass }, { count: enrolled }] = await Promise.all([
+      supabase
+        .from("classes")
+        .select("*", { count: "exact", head: true })
+        .eq("id", classId)
+        .eq("teacher_id", user.id),
+      supabase
+        .from("enrollments")
+        .select("*", { count: "exact", head: true })
+        .eq("class_id", classId)
+        .eq("student_id", studentId)
+        .lte("start_date", sessionDate)
+        .or(`end_date.is.null,end_date.gte.${sessionDate}`),
+    ]);
+    if (!ownClass) return { error: "담당 반이 아닙니다" };
+    if (!enrolled) return { error: "이 반 수강생이 아닙니다" };
+  }
 
   // 지우기 — 해당 (반·학생·날짜) 기록 전부 삭제.
   if (status === null) {

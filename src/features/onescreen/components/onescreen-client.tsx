@@ -29,7 +29,7 @@ import {
 } from "../server/attachment-actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
-import type { CellState, OneScreenStudent } from "../types";
+import type { AttendanceMark, CellState, OneScreenStudent } from "../types";
 import { OneScreenTopBar } from "./top-bar";
 import { StudentList } from "./student-list";
 import type { TodayClass } from "../server/roster";
@@ -40,7 +40,21 @@ import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
 import { HistoryBoard } from "./history-board";
 import { NoticeComposer } from "./notice-composer";
-import { buildGridRows, isReportEligible } from "../grid";
+import {
+  buildGridRows,
+  isRowActionable,
+  planBulkApply,
+  planPrevFill,
+  summarizeSendGaps,
+  type BulkPatch,
+  type RowAction,
+} from "../grid";
+import { applyStudentOrder } from "../student-order";
+import { saveStudentOrder } from "../server/order-actions";
+import { setAttendanceCell } from "@/features/attendance/server/actions";
+import type { BasicAttendance } from "./attendance-pills";
+import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
+import { dedupeEditors } from "@/features/presence/presence-state";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -112,6 +126,7 @@ export function OneScreenClient({
   noticeMode: initialNoticeMode = null,
   academyNoticeMode = "A",
   classnoteSendEnabled = false,
+  presenceScope,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -124,6 +139,7 @@ export function OneScreenClient({
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
+  presenceScope?: string; // `onescreen:{teacherId}:{date}` — 다른 창/기기 동시 열림 경고(서버가 teacherId 파생)
 }) {
   const router = useRouter();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -150,8 +166,12 @@ export function OneScreenClient({
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   const [bulkGen, setBulkGen] = useState(false); // 표 일괄 자동작성 진행중
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
+  const [attPending, setAttPending] = useState<Set<string>>(new Set()); // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
   const openPrint = usePrintWindow(); // "PDF" = 저장된 보고서를 인쇄 문서 플로팅 창으로 연다
+  // 다른 창/기기 동시 열림 경고(3-3, 락 아님) — enabled=페이지 열림. 같은 계정 다른 탭/기기도 잡힌다(presence key 기준).
+  useEditPresence(presenceScope, true);
+  const sameDateEditors = dedupeEditors(useEditingOthers(presenceScope ?? ""));
 
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
   const studentsRef = useRef(students);
@@ -231,6 +251,12 @@ export function OneScreenClient({
 
   const visible =
     classFilter === "전체" ? students : students.filter((s) => s.tag === classFilter);
+  // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
+  // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
+  //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
+  const matchingClasses =
+    classFilter !== "전체" ? todayClasses.filter((c) => c.name === classFilter) : [];
+  const orderClass = matchingClasses.length === 1 ? matchingClasses[0] : undefined;
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
 
@@ -363,6 +389,44 @@ export function OneScreenClient({
       const score = cur.score != null ? Math.min(cur.score, max) : cur.score;
       return { ...s, tests: { ...s.tests, [which]: { ...cur, max, score } } };
     });
+  }
+  // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
+  const markOf = (s: string): AttendanceMark =>
+    s === "late" ? "지각" : s === "absent" || s === "early_leave" ? "결석" : "출석";
+  function applyAttendanceLocal(studentId: string, classId: string, raw: string | null, mark?: AttendanceMark) {
+    patch(studentId, (s) => ({
+      ...s,
+      attendance: mark ?? (raw ? markOf(raw) : s.attendance),
+      subjects: s.subjects.map((su) => (su.classId === classId ? { ...su, attendanceRaw: raw } : su)),
+    }));
+  }
+  // 재클릭 no-op(삭제는 출석부에서만) + (학생×반) in-flight 잠금(연속 클릭 응답 역전 방지) + 실패 롤백.
+  // 낙관 갱신으로 pill 즉시 반응(반응속도 1순위) — 서버 검증(담당 반·수강생)은 setAttendanceCell이 강제.
+  async function setAttendanceFor(studentId: string, classId: string, status: BasicAttendance) {
+    const key = `${studentId}::${classId}`;
+    if (attPending.has(key)) return;
+    const stu = studentsRef.current.find((s) => s.id === studentId);
+    const prevRaw = stu?.subjects.find((su) => su.classId === classId)?.attendanceRaw ?? null;
+    const prevMark = stu?.attendance ?? "출석";
+    if (prevRaw === status) return;
+    setAttPending((p) => new Set(p).add(key));
+    applyAttendanceLocal(studentId, classId, status);
+    try {
+      const res = await setAttendanceCell({ studentId, classId, sessionDate: activeDate, status });
+      if ("error" in res) {
+        applyAttendanceLocal(studentId, classId, prevRaw, prevMark);
+        toast.error(res.error);
+      }
+    } catch {
+      applyAttendanceLocal(studentId, classId, prevRaw, prevMark);
+      toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
+    } finally {
+      setAttPending((p) => {
+        const n = new Set(p);
+        n.delete(key);
+        return n;
+      });
+    }
   }
   // 표=SET(선택값), 카드=TOGGLE(같은 값 재클릭 시 해제) — 카드 wrapper가 토글을 계산해 SET 호출.
   function setAttitudeValue(studentId: string, a: string | null) {
@@ -499,15 +563,16 @@ export function OneScreenClient({
       setGenKey((cur) => (cur === key ? null : cur));
     }
   }
-  // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시된 발송가능(진도 입력) 행 전체.
-  function selectRows(keys?: string[]) {
-    const all = buildGridRows(visible).filter((r) => isReportEligible(r.subject));
+  // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
+  // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
+  function selectRows(action: RowAction, keys?: string[]) {
+    const all = buildGridRows(visible).filter((r) => isRowActionable(r.subject, action));
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
   }
   async function autoWriteAllVisible(keys?: string[]) {
-    const rows = selectRows(keys);
+    const rows = selectRows("autowrite", keys);
     const skipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 제외된 행
     if (rows.length === 0) {
       toast.message("자동작성할 행이 없습니다 — 오늘 진도를 입력하세요");
@@ -523,7 +588,76 @@ export function OneScreenClient({
       setGenKey(null);
       setBulkGen(false);
     }
-    toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`);
+    toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력·결석)` : ""}`);
+  }
+  // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
+  // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
+  function bulkApplyValues(keys: string[], patchFields: BulkPatch, onlyEmpty: boolean) {
+    const all = buildGridRows(visible);
+    const keySet = new Set(keys);
+    const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
+    const plan = planBulkApply(
+      rows.map((r) => ({
+        studentId: r.student.id,
+        subjectName: r.subject.name,
+        attitude: r.student.attitude,
+        homework: r.student.homework,
+        textbook: r.subject.textbook ?? "",
+        homeworkToday: r.subject.homeworkToday ?? "",
+      })),
+      patchFields,
+      onlyEmpty,
+    );
+    if (plan.length === 0) {
+      toast.message("적용할 칸이 없습니다");
+      return;
+    }
+    for (const p of plan) {
+      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
+      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
+      if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
+      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+    }
+    toast.success(`${plan.length}행에 일괄 적용했습니다`);
+  }
+  // 이전 회차 가져오기(1-3) — 그 행의 **빈 칸만** 채움(진도·태도·과제·오늘 과제).
+  // ⚠️ 특이사항은 채우지 않음 — prevReport.note는 학부모 발송 본문(notes)이라 특이사항이 아니다.
+  function importPrevFor(student: OneScreenStudent, subjectName: string) {
+    const idx = student.subjects.findIndex((su) => su.name === subjectName);
+    const su = student.subjects[idx];
+    if (!su) return;
+    const fill = planPrevFill({
+      prev: su.prevReport,
+      current: {
+        today: su.today,
+        attitude: student.attitude,
+        homework: student.homework,
+        homeworkToday: su.homeworkToday ?? "",
+      },
+      attitudes: ATTITUDE,
+      homeworks: HOMEWORK,
+    });
+    const count = Object.keys(fill).length;
+    if (!count) {
+      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      return;
+    }
+    if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
+    if (fill.attitude !== undefined) setAttitudeValue(student.id, fill.attitude);
+    if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
+    if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
+    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
+  }
+  // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
+  async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
+    const res = await saveStudentOrder({ classId, studentIds });
+    if ("error" in res) {
+      toast.error(res.error);
+      return false;
+    }
+    setStudents((prev) => applyStudentOrder(prev, new Map([[classId, studentIds]])));
+    toast.success("학생 순서를 저장했습니다 — 다음 작성에도 유지됩니다");
+    return true;
   }
   // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
   function openCard(studentId: string) {
@@ -689,7 +823,7 @@ export function OneScreenClient({
     }
   }
   async function saveAllVisible(keys?: string[]) {
-    const rows = selectRows(keys);
+    const rows = selectRows("save", keys);
     const skipped = keys ? keys.length - rows.length : 0;
     if (rows.length === 0) {
       toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
@@ -707,13 +841,27 @@ export function OneScreenClient({
     );
   }
   async function sendAllVisible(keys?: string[]) {
-    const rows = selectRows(keys);
-    const preSkipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 발송에서 제외
+    const rows = selectRows("send", keys);
+    const preSkipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없음·결석이라 발송에서 제외
     if (rows.length === 0) {
-      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요");
+      toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)");
       return;
     }
-    if (!window.confirm(`${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)`))
+    // 발송 전 누락 안내(2-4) — 차단 아님("누락=생략" 철학 유지). 누락은 고유 학생 수 기준.
+    // ⚠️ 결석 제외는 **행(과목) 단위 건수** — 다과목 학생은 결석 반 과목만 빠지고 다른 과목은 발송되므로
+    //    "N명 제외"로 쓰면 오안내(리뷰 확정). 발송 단위=행(lesson_reports 1건)이라 "건"이 정확.
+    const absentRows = selectRows("save", keys).filter((r) => r.subject.attendanceRaw === "absent").length;
+    const gaps = summarizeSendGaps(rows, { dailyEnabled: showDailyTest, checkEnabled: showCheckTest });
+    const gapLine =
+      gaps.missingAttitude || gaps.missingTest
+        ? `\n태도 미입력 ${gaps.missingAttitude}명 · 테스트 미입력 ${gaps.missingTest}명 — 미입력 항목은 보고서에서 생략됩니다`
+        : "";
+    const absentLine = absentRows ? `\n결석 행 ${absentRows}건은 발송에서 제외됩니다` : "";
+    if (
+      !window.confirm(
+        `${rows.length}건을 ClassNote로 일괄 발송할까요? (동명이인·취소·오래된 건은 자동 제외)${gapLine}${absentLine}`,
+      )
+    )
       return;
     let queued = 0;
     let blocked = 0;
@@ -733,7 +881,7 @@ export function OneScreenClient({
         `발송 대기 ${queued}건` +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
-        (preSkipped ? ` · 진도 미입력 ${preSkipped}건` : "") +
+        (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
         (fail ? ` · 실패 ${fail}건` : ""),
     );
   }
@@ -926,34 +1074,55 @@ export function OneScreenClient({
         makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
       />
 
+      {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
+      {sameDateEditors.length > 0 ? (
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
+          <span className="font-semibold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
+          <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
+        </div>
+      ) : null}
+
       {view === "grid" ? (
         <OneScreenGrid
           students={visible}
           reports={reports}
-          attitudes={ATTITUDE}
-          homeworks={HOMEWORK}
-          onProgress={setProgressFor}
-          onStudyGrade={setStudyGradeFor}
-          onScore={setScoreFor}
-          onAttitude={setAttitudeValue}
-          onHomework={setHomeworkValue}
-          onTextbook={setTextbookFor}
-          onHomeworkToday={setHomeworkTodayFor}
-          onDraft={setDraftFor}
-          onTrend={setTrendDraftFor}
-          onNote={setNoteFor}
-          onSendRow={sendRow}
-          onSaveAll={saveAllVisible}
-          onSendAll={sendAllVisible}
-          allowTestMax={allowTeacherTestMax}
-          dailyEnabled={showDailyTest}
-          checkEnabled={showCheckTest}
-          onMax={setMaxFor}
-          onMakeup={toggleMakeupFor}
-          onAutoWrite={autoWriteRow}
-          onAutoWriteAll={autoWriteAllVisible}
-          onOpenCard={openCard}
-          onClassNotice={openNoticeForRows}
+          config={{
+            attitudes: ATTITUDE,
+            homeworks: HOMEWORK,
+            allowTestMax: allowTeacherTestMax,
+            dailyEnabled: showDailyTest,
+            checkEnabled: showCheckTest,
+          }}
+          fields={{
+            onAttendance: setAttendanceFor,
+            onProgress: setProgressFor,
+            onStudyGrade: setStudyGradeFor,
+            onScore: setScoreFor,
+            onMax: setMaxFor,
+            onAttitude: setAttitudeValue,
+            onHomework: setHomeworkValue,
+            onTextbook: setTextbookFor,
+            onHomeworkToday: setHomeworkTodayFor,
+            onDraft: setDraftFor,
+            onTrend: setTrendDraftFor,
+            onNote: setNoteFor,
+            onMakeup: toggleMakeupFor,
+          }}
+          rowActions={{
+            onSendRow: sendRow,
+            onAutoWrite: autoWriteRow,
+            onOpenCard: openCard,
+            onImportPrev: importPrevFor,
+          }}
+          bulkActions={{
+            onSaveAll: saveAllVisible,
+            onSendAll: sendAllVisible,
+            onAutoWriteAll: autoWriteAllVisible,
+            onClassNotice: openNoticeForRows,
+            onBulkApply: bulkApplyValues,
+          }}
+          order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
+          attPending={attPending}
           genKey={genKey}
           bulkGen={bulkGen}
         />
@@ -1037,6 +1206,10 @@ export function OneScreenClient({
                 onRemoveAttachment={removeAttachment}
                 attachmentUrls={attUrls}
                 uploadingSubject={uploadingSubject}
+                attendance={{
+                  pendingKeys: attPending,
+                  onSet: (classId, s) => setAttendanceFor(selected.id, classId, s),
+                }}
               />
             </div>
           </>

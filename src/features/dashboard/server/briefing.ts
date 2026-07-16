@@ -21,12 +21,15 @@ import { getTodayActionSignals, type DashboardSignalsDb } from "./action-signals
 import { getAbsenceRiskStudents, getFollowUpConsultations } from "./queries";
 import {
   buildDailyBriefingPayload,
-  buildFallbackNarrative,
-  buildNarrativePrompt,
   shouldGenerateNarrative,
-  validateNarrative,
   type DailyBriefingPayload,
 } from "../briefing-digest";
+import {
+  buildFallbackTeamReport,
+  buildTeamPrompt,
+  validateTeamReport,
+  type TeamReport,
+} from "../briefing-team-report";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -36,7 +39,8 @@ export type DailyBriefingRow = {
   processing_status: string; // idle | analyzing | completed | failed
   processing_error: string | null;
   payload: DailyBriefingPayload | null;
-  narrative: string | null;
+  narrative: string | null; // v1 하위호환(구 행 표시용)
+  team_report: TeamReport | null;
   generated_at: string | null;
 };
 
@@ -50,7 +54,7 @@ export async function getDailyBriefing(tenantId: string, date: string): Promise<
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("daily_briefings")
-    .select("id, briefing_date, processing_status, processing_error, payload, narrative, generated_at")
+    .select("id, briefing_date, processing_status, processing_error, payload, narrative, team_report, generated_at")
     .eq("tenant_id", tenantId)
     .eq("briefing_date", date)
     .maybeSingle();
@@ -105,9 +109,20 @@ export async function generateDailyBriefing(
 
     // retention은 앱 최중량 읽기 — 실패해도 브리핑 본체는 살린다(B7 준수: 라이브가 아니라 cron에서만 계산).
     let retention: { total: number; risk: number; warn: number; revenueRisk: number } | null = null;
+    let retentionTop: { name: string; reasons: string[]; action: string | null }[] = [];
     try {
-      const stats = summarizeRoster(await computeRetentionRoster(tenantId));
+      const roster = await computeRetentionRoster(tenantId);
+      const stats = summarizeRoster(roster);
       retention = { total: stats.total, risk: stats.risk, warn: stats.warn, revenueRisk: stats.revenueRisk };
+      // roster는 위험도 내림차순 — 상위 위험 학생의 사유·권장 조치(전부 결정론)를 스포트라이트 재료로.
+      retentionTop = roster
+        .filter((student) => student.risk.level !== "ok")
+        .slice(0, 5)
+        .map((student) => ({
+          name: student.name,
+          reasons: student.risk.reasons,
+          action: student.primaryAction || null,
+        }));
     } catch (e) {
       reportWarning("브리핑 retention 계산 실패 — 이탈 신호 없이 진행", {
         scope: "briefing.retention",
@@ -126,35 +141,35 @@ export async function generateDailyBriefing(
       },
       absenceRisks: absenceRisks.map((risk) => ({ studentName: risk.studentName, absences: risk.absences })),
       retention,
+      retentionTop,
       todayClassSessions: classSessionsRes.error ? null : (classSessionsRes.count ?? null),
     });
 
-    let narrative: string | null = null;
+    let teamReport: TeamReport | null = null;
     let note: string | null = null;
     let modelVersion: string | null = null;
     if (shouldGenerateNarrative(payload)) {
       try {
-        const { data, model } = await generateJSON<{ narrative?: string }>({
-          prompt: buildNarrativePrompt(payload),
-          maxTokens: 700,
+        const { data, model } = await generateJSON<TeamReport>({
+          prompt: buildTeamPrompt(payload),
+          maxTokens: 1200,
           meta: { tenantId, feature: "daily_briefing" },
         });
         modelVersion = `${model}-${date}`;
-        const candidate = (data.narrative ?? "").trim();
-        const check = validateNarrative(candidate, payload);
-        if (check.ok) narrative = candidate;
+        const check = validateTeamReport(data, payload);
+        if (check.ok) teamReport = check.value;
         else {
-          note = "AI 서술이 검증에서 탈락해 결정론 요약으로 대체했습니다.";
-          reportWarning("브리핑 narrative 검증 탈락", {
-            scope: "briefing.narrative.guard",
+          note = "AI 팀 보고가 검증에서 탈락해 결정론 요약으로 대체했습니다.";
+          reportWarning("브리핑 팀 보고 검증 탈락", {
+            scope: "briefing.teamReport.guard",
             tenantId,
-            reason: check.ok ? undefined : check.reason,
+            reason: check.reason,
           });
         }
       } catch (e) {
         // generateJSON이 키/한도 오류를 이미 한글화(rethrowAi) — 그대로 표면화.
-        note = `AI 서술 생성 실패: ${e instanceof Error ? e.message : String(e)}`;
-        reportError(e, { scope: "briefing.narrative", tenantId });
+        note = `AI 팀 보고 생성 실패: ${e instanceof Error ? e.message : String(e)}`;
+        reportError(e, { scope: "briefing.teamReport", tenantId });
       }
     }
 
@@ -165,7 +180,8 @@ export async function generateDailyBriefing(
         processing_status: "completed",
         processing_error: note,
         payload,
-        narrative,
+        narrative: null, // v1 컬럼 — 새 행은 team_report 사용(구 행 표시 하위호환만)
+        team_report: teamReport,
         model_version: modelVersion,
         generated_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -221,7 +237,7 @@ async function notifyMasterOnce(tenantId: string, date: string, payload: DailyBr
       recipientId: master.id as string,
       type: "daily_briefing" as const,
       title: "오늘의 운영 브리핑이 준비됐습니다",
-      body: buildFallbackNarrative(payload).slice(0, 120),
+      body: buildFallbackTeamReport(payload).headline.slice(0, 120),
       link: "/dashboard",
     })),
   );

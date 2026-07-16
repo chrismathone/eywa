@@ -1807,8 +1807,9 @@ export const dailyBriefings = pgTable(
     briefingDate: date("briefing_date").notNull(), // KST 기준(kstToday)
     processingStatus: text("processing_status").notNull().default("idle"), // idle|analyzing|completed|failed
     processingError: text("processing_error"),
-    payload: jsonb("payload"), // DailyBriefingPayload(briefing-digest.ts)
-    narrative: text("narrative"),
+    payload: jsonb("payload"), // DailyBriefingPayload(briefing-digest.ts) — 결정론 전용(스포트라이트 포함)
+    narrative: text("narrative"), // v1 단문 서술(하위호환 표시용) — 새 행은 team_report 사용
+    teamReport: jsonb("team_report"), // TeamReport(briefing-team-report.ts) {headline, managers[]} — 0116a
     modelVersion: text("model_version"), // UI 미노출
     generatedAt: timestamp("generated_at", { withTimezone: true }),
     notifiedAt: timestamp("notified_at", { withTimezone: true }), // 알림 1회 게이트
