@@ -930,30 +930,34 @@ export function OneScreenClient({
         <OneScreenGrid
           students={visible}
           reports={reports}
-          attitudes={ATTITUDE}
-          homeworks={HOMEWORK}
-          onProgress={setProgressFor}
-          onStudyGrade={setStudyGradeFor}
-          onScore={setScoreFor}
-          onAttitude={setAttitudeValue}
-          onHomework={setHomeworkValue}
-          onTextbook={setTextbookFor}
-          onHomeworkToday={setHomeworkTodayFor}
-          onDraft={setDraftFor}
-          onTrend={setTrendDraftFor}
-          onNote={setNoteFor}
-          onSendRow={sendRow}
-          onSaveAll={saveAllVisible}
-          onSendAll={sendAllVisible}
-          allowTestMax={allowTeacherTestMax}
-          dailyEnabled={showDailyTest}
-          checkEnabled={showCheckTest}
-          onMax={setMaxFor}
-          onMakeup={toggleMakeupFor}
-          onAutoWrite={autoWriteRow}
-          onAutoWriteAll={autoWriteAllVisible}
-          onOpenCard={openCard}
-          onClassNotice={openNoticeForRows}
+          config={{
+            attitudes: ATTITUDE,
+            homeworks: HOMEWORK,
+            allowTestMax: allowTeacherTestMax,
+            dailyEnabled: showDailyTest,
+            checkEnabled: showCheckTest,
+          }}
+          fields={{
+            onProgress: setProgressFor,
+            onStudyGrade: setStudyGradeFor,
+            onScore: setScoreFor,
+            onMax: setMaxFor,
+            onAttitude: setAttitudeValue,
+            onHomework: setHomeworkValue,
+            onTextbook: setTextbookFor,
+            onHomeworkToday: setHomeworkTodayFor,
+            onDraft: setDraftFor,
+            onTrend: setTrendDraftFor,
+            onNote: setNoteFor,
+            onMakeup: toggleMakeupFor,
+          }}
+          rowActions={{ onSendRow: sendRow, onAutoWrite: autoWriteRow, onOpenCard: openCard }}
+          bulkActions={{
+            onSaveAll: saveAllVisible,
+            onSendAll: sendAllVisible,
+            onAutoWriteAll: autoWriteAllVisible,
+            onClassNotice: openNoticeForRows,
+          }}
           genKey={genKey}
           bulkGen={bulkGen}
         />

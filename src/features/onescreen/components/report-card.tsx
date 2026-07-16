@@ -7,6 +7,7 @@ import { subjectTone, toneSoftClass } from "../data";
 import { isReportEligible } from "../grid";
 import { splitLessons } from "../curriculum";
 import { DeltaChip } from "./delta-chip";
+import { PillGroup } from "./pill-group";
 import { isImageAttachment } from "../attachment-utils";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
@@ -250,50 +251,23 @@ export function ReportCard({
 
         <div>
           <p className="micro text-text-faint mb-1.5">수업 태도</p>
-          <div className="flex flex-wrap gap-1.5">
-            {attitudes.map((a) => {
-              const on = student.attitude === a;
-              return (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => onAttitude(a)}
-                  aria-pressed={on}
-                  className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
-                    on
-                      ? "bg-primary text-primary-foreground"
-                      : "border-line text-text-dim hover:bg-bg-soft border"
-                  }`}
-                >
-                  {a}
-                </button>
-              );
-            })}
-          </div>
+          {/* 1클릭 pill — 재클릭 해제는 부모 setAttitude가 처리(같은 값이면 null). */}
+          <PillGroup
+            options={attitudes}
+            value={student.attitude}
+            onSelect={onAttitude}
+            ariaLabel={`${student.name} 수업 태도`}
+          />
         </div>
 
         <div>
           <p className="micro text-text-faint mb-1.5">과제</p>
-          <div className="flex flex-wrap gap-1.5">
-            {homeworks.map((h) => {
-              const on = student.homework === h;
-              return (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => onHomework(h)}
-                  aria-pressed={on}
-                  className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
-                    on
-                      ? "bg-primary text-primary-foreground"
-                      : "border-line text-text-dim hover:bg-bg-soft border"
-                  }`}
-                >
-                  {h}
-                </button>
-              );
-            })}
-          </div>
+          <PillGroup
+            options={homeworks}
+            value={student.homework || null}
+            onSelect={onHomework}
+            ariaLabel={`${student.name} 과제 수행`}
+          />
           {/* 오늘 과제(숙제 내용) — 0096a(edutrix 패리티, 사용률 90%). 위 칩은 '지난 과제 수행', 이건 '오늘 내줄 숙제'.
               AI 멘트 마무리("오늘 과제는 ~입니다") 재료 + 학부모 카드 표시(설정 토글). */}
           <input
