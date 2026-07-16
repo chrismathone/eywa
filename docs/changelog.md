@@ -7,7 +7,7 @@
 ### 출석 시수(배수) 입력 + 시수 검증 시수 합 전환 + 강사별 분배(참고) (2026-07-16) — ✅ tsc0/lint0/test1389/실E2E(수학 JJ2B) — ⏳ main 반영 대기(원장 승인)
 구 출석부(D:\attendance)의 "셀 숫자 = 정규 수업 1회 기준 배수"(2h 수업 기준 3h=1.5, 보강 4h=2, 영어 U 유닛)를
 eywa로 이식 — 원장 실사용 근거로 로드맵 "숫자시수셀 영구 SKIP"을 뒤집은 결정(2026-07-16).
-- **0113a** `attendance_records.session_units numeric(4,1)`(null=기본 1, CHECK 0<x≤20) + **시수 검증 RPC를
+- **0115a** `attendance_records.session_units numeric(4,1)`(null=기본 1, CHECK 0<x≤20) + **시수 검증 RPC를
   count(*)→`sum(coalesce(session_units,1))`로 교체**(반환 numeric — drop 후 재생성). 기존 데이터 전부 null이라
   행동 불변(적용 시 707그룹 count↔sum 불일치 0건 실측). 프로덕션 적용 완료(코드가 데이터 따라잡는 형태).
 - **출석부 UI**: 매트릭스 셀 팝오버에 시수 입력(빈 칸=1, 0.5 단위 관행) — units≠1이면 셀에 상태색 숫자 표기

@@ -171,7 +171,7 @@ export type AttendanceInputRow = {
   note: string | null;
   homeworkRequired: boolean;
   homeworkDone: boolean;
-  // 시수(정규 1회 기준 배수, 0113a). null=기본 1.
+  // 시수(정규 1회 기준 배수, 0115a). null=기본 1.
   sessionUnits: number | null;
 };
 
@@ -337,7 +337,7 @@ export type AttendanceMatrix = {
   marks: Record<string, Record<string, AttendanceStatus>>;
   // studentId → date → note (사유) — 매트릭스 인디케이터/툴팁용
   notes: Record<string, Record<string, string>>;
-  // studentId → date → 시수(배수, 0113a). 기록이 없거나 기본(1)이면 키 없음 — 셀 표시·시수 합계용.
+  // studentId → date → 시수(배수, 0115a). 기록이 없거나 기본(1)이면 키 없음 — 셀 표시·시수 합계용.
   units: Record<string, Record<string, number>>;
   stats: {
     totalStudents: number;

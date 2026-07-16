@@ -66,7 +66,7 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
   ]);
 
   // 회차 확정 행은 (invoice_id, class_id) 유니크 → 실출석도 같은 키로 조인.
-  // consumed는 numeric(시수 합, 0113a) — 문자열로 올 수 있어 Number 변환.
+  // consumed는 numeric(시수 합, 0115a) — 문자열로 올 수 있어 Number 변환.
   const consumedByKey = new Map(
     attendance.map((a) => [`${a.invoice_id}:${a.class_id}`, Number(a.consumed) || 0]),
   );

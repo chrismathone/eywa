@@ -4,7 +4,7 @@
 
 export const MAX_SESSION_UNITS = 20;
 
-// 시수(배수)가 소비로 집계되는 상태 — 시수 검증 RPC(0113a)와 동일 기준. 결석(absent·excused)은 제외.
+// 시수(배수)가 소비로 집계되는 상태 — 시수 검증 RPC(0115a)와 동일 기준. 결석(absent·excused)은 제외.
 export const COUNTABLE_STATUSES: ReadonlySet<string> = new Set(["present", "late", "early_leave", "makeup"]);
 
 export type ParsedUnits = { ok: true; value: number | null } | { ok: false; error: string };

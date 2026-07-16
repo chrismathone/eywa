@@ -55,7 +55,7 @@ export async function saveAttendance(
       String(formData.get(`homeworkRequired:${studentId}`) ?? "") === "true";
     const homeworkDone =
       String(formData.get(`homeworkDone:${studentId}`) ?? "") === "true";
-    // 시수(배수, 0113a) — 빈 값·1 = 기본(null). 잘못된 입력은 행 단위로 즉시 반려.
+    // 시수(배수, 0115a) — 빈 값·1 = 기본(null). 잘못된 입력은 행 단위로 즉시 반려.
     const parsedUnits = parseSessionUnits(String(formData.get(`units:${studentId}`) ?? ""));
     if (!parsedUnits.ok) {
       const name = String(formData.get(`name:${studentId}`) ?? "").trim();
