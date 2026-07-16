@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -35,35 +36,43 @@ const CLASSNOTE_RESET = {
 type Attachment = { path: string; name: string; size: number };
 type ReportRow = { id: string; attachments: Attachment[] | null };
 
-/** (tenant,student,today,subject) 저장된 보고서 행. 없으면 null — 첨부는 저장된 행에만 붙는다. */
+/** (tenant,student,date,subject) 저장된 보고서 행. 없으면 null — 첨부는 저장된 행에만 붙는다. date 기본=오늘(admin 직접작성은 작성일 전달). */
 async function findReportRow(
   supabase: Awaited<ReturnType<typeof createClient>>,
   studentId: string,
   subject: string | undefined,
+  reportDate?: string,
 ): Promise<ReportRow | null> {
   const base = supabase
     .from("lesson_reports")
     .select("id, attachments")
     .eq("student_id", studentId)
-    .eq("report_date", kstToday());
+    .eq("report_date", reportDate || kstToday());
   const { data } = await (subject ? base.eq("subject", subject) : base.is("subject", null)).maybeSingle();
   return (data as ReportRow | null) ?? null;
 }
 
-/** 공용 게이트 — 로그인 + 담당 학생(teacherOwnsStudent). authed client(RLS tenant 격리) 재사용. */
+/**
+ * 공용 게이트 — 로그인 + (담당 강사 OR 보고서 관리 권한). 한 레코드의 두 첨부 표면(강사 원스크린·admin 직접작성)이
+ * 같은 게이트를 통과한다(#77): teacherOwnsStudent(활성 수강)나 canWriteTenant('lesson_reports') 중 하나면 허용.
+ * ⚠️ admin 경로는 비수강 학생(예: 테스트 '학원이')에도 첨부 가능 — RLS가 tenant 격리, 행 존재 확인이 유효성 보강.
+ */
 async function gate(studentId: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
   if (!studentId) return { error: "학생 정보가 없습니다" as const };
   const supabase = await createClient();
-  if (!(await teacherOwnsStudent(supabase, user.id, studentId)))
-    return { error: "담당 학생이 아닙니다" as const };
+  const authorized =
+    (await teacherOwnsStudent(supabase, user.id, studentId)) ||
+    (await canWriteTenant(user.systemRole, "lesson_reports"));
+  if (!authorized) return { error: "권한이 없습니다" as const };
   return { user, supabase };
 }
 
 export type IssueAttachmentTicketInput = {
   studentId: string;
   subject?: string;
+  reportDate?: string; // 대상 보고서 날짜(생략=오늘) — admin 직접작성이 과거 날짜 첨부 시 전달
   contentType: string;
   size: number;
   ext: string;
@@ -79,7 +88,7 @@ export async function issueReportAttachmentUploadTicket(
     return { error: "사진(jpeg/png/webp)만 첨부할 수 있습니다" };
   if (!Number.isFinite(input.size) || input.size <= 0 || input.size > MEDIA_KIND[KIND].maxBytes)
     return { error: "파일이 너무 큽니다 (최대 10MB)" };
-  const row = await findReportRow(g.supabase, input.studentId, input.subject);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
   if (!row) return { error: "먼저 보고서를 저장하세요" };
   if ((row.attachments ?? []).length >= MAX_ATTACHMENTS)
     return { error: `사진은 최대 ${MAX_ATTACHMENTS}장까지 첨부할 수 있습니다` };
@@ -96,6 +105,7 @@ export async function issueReportAttachmentUploadTicket(
 export type RegisterAttachmentInput = {
   studentId: string;
   subject?: string;
+  reportDate?: string; // 대상 보고서 날짜(생략=오늘)
   path: string;
   name: string;
   size: number;
@@ -110,7 +120,7 @@ export async function registerReportAttachment(
   if (!isTenantReportAttachmentPath(input.path, g.user.tenantId))
     return { ok: false, error: "잘못된 파일 경로입니다" };
 
-  const row = await findReportRow(g.supabase, input.studentId, input.subject);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
   if (!row) {
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
     return { ok: false, error: "먼저 보고서를 저장하세요" };
@@ -142,7 +152,7 @@ export async function registerReportAttachment(
   return { ok: true, attachments: next };
 }
 
-export type RemoveAttachmentInput = { studentId: string; subject?: string; path: string };
+export type RemoveAttachmentInput = { studentId: string; subject?: string; reportDate?: string; path: string };
 
 /** 첨부 삭제 — 행 attachments에서 path 제거 + storage 정리 + classnote 리셋. */
 export async function removeReportAttachment(
@@ -150,7 +160,7 @@ export async function removeReportAttachment(
 ): Promise<{ ok: boolean; attachments?: Attachment[]; error?: string }> {
   const g = await gate(input.studentId);
   if ("error" in g) return { ok: false, error: g.error };
-  const row = await findReportRow(g.supabase, input.studentId, input.subject);
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
   if (!row) return { ok: false, error: "보고서를 찾을 수 없습니다" };
   const current = row.attachments ?? [];
   const next = current.filter((a) => a.path !== input.path);
@@ -164,18 +174,23 @@ export async function removeReportAttachment(
   return { ok: true, attachments: next };
 }
 
-/** 강사 카드 썸네일용 signed URL — **그 보고서에 실제 포함된 path만** 서명(학생 스코프 + 소속 path). */
+/**
+ * 카드 썸네일용 signed URL — **그 보고서에 실제 포함된 path만** 서명(학생 스코프 + 소속 path).
+ * attachments 배열도 함께 반환(소비처가 초기 로드 시 path·name·개수를 얻도록 — 별도 조회 불필요).
+ */
 export async function signReportAttachmentUrls(input: {
   studentId: string;
   subject?: string;
-}): Promise<{ urls?: Record<string, string>; error?: string }> {
+  reportDate?: string;
+}): Promise<{ urls?: Record<string, string>; attachments?: Attachment[]; error?: string }> {
   const g = await gate(input.studentId);
   if ("error" in g) return { error: g.error };
-  const row = await findReportRow(g.supabase, input.studentId, input.subject);
-  const paths = (row?.attachments ?? []).map((a) => a.path);
-  if (paths.length === 0) return { urls: {} };
+  const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
+  const attachments = row?.attachments ?? [];
+  const paths = attachments.map((a) => a.path);
+  if (paths.length === 0) return { urls: {}, attachments: [] };
   try {
-    return { urls: await resolveTenantReadUrls(paths, KIND, g.user.tenantId) };
+    return { urls: await resolveTenantReadUrls(paths, KIND, g.user.tenantId), attachments };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "썸네일 URL 생성 실패" };
   }
