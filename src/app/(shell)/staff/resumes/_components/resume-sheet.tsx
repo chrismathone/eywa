@@ -3,8 +3,10 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
 import { AlertCircle, CheckSquare, Loader2, Pencil, Save, Square, X } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
@@ -13,6 +15,8 @@ import { EditingBanner } from "@/features/presence/editing-badge";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import {
   EMPLOYMENT_TYPES,
+  RESUME_COMPANIES,
+  RESUME_DEPARTMENTS,
   RESUME_DRAFT_EXCLUDE,
   WORKDAYS,
   type StaffResumeData,
@@ -102,6 +106,9 @@ export function ResumeSheet({
   // 근무형태(단일 선택)·근무요일(다중)은 컨트롤드 — 초안 복원 시 onRestore로 rehydrate.
   const [empType, setEmpType] = useState(data.contract.employmentType);
   const [workDays, setWorkDays] = useState<string[]>(data.contract.workDays);
+  // 회사 구분·소속부서(SearchableSelect = hidden input 제출)도 컨트롤드 — 초안 복원 동일 경로.
+  const [company, setCompany] = useState(data.contract.company);
+  const [division, setDivision] = useState(data.contract.division);
 
   const draft = useFormDraft({
     // 스코프에 userId 포함 — 사무실 공용 PC에서 앞사람 초안이 뒷사람에게 복구 제안되면 안 된다.
@@ -113,6 +120,8 @@ export function ResumeSheet({
     onRestore: (vals) => {
       setEmpType(vals.c_employmentType ?? "");
       setWorkDays(WORKDAYS.filter((d) => vals[`c_workday_${d.key}`] === "true").map((d) => d.key));
+      setCompany(vals.c_company ?? "");
+      setDivision(vals.c_division ?? "");
     },
   });
   const clearDraft = draft.clear;
@@ -133,6 +142,9 @@ export function ResumeSheet({
     doneNonce.current = state.nonce;
     clearDraft();
     markSaved();
+    // 부가 효과(직원명부 시트 기입) 결과는 토스트로 — 생성 경로는 곧장 새 뷰로 떠나므로 인라인 표시 불가.
+    if (state.notice) toast.success(state.notice);
+    if (state.warning) toast.warning(state.warning, { duration: 10000 });
     if (id) router.refresh(); // 수정: 배경 서버 데이터 재조회 → 뷰에 반영.
     else if (state.redirectTo) router.push(state.redirectTo); // 생성: 새 이력서 뷰로 이동.
   }, [state, router, clearDraft, markSaved, id]);
@@ -140,6 +152,8 @@ export function ResumeSheet({
   function startEdit() {
     setEmpType(data.contract.employmentType);
     setWorkDays(data.contract.workDays);
+    setCompany(data.contract.company);
+    setDivision(data.contract.division);
     setEditing(true);
   }
   function cancel() {
@@ -215,7 +229,10 @@ export function ResumeSheet({
               <td className={`${cell} num text-center`}>
                 {field(`edu_${i}_period`, r.period, { ph: "0000.00 ~ 0000.00", align: "center" })}
               </td>
-              <td className={cell}>{field(`edu_${i}_school`, r.school, { ph: "학교명" })}</td>
+              {/* 맨 아래 행 = 고등학교, 그 위 = 대학교(최상위 학력을 맨 위에 쓰는 서식 관례). */}
+              <td className={cell}>
+                {field(`edu_${i}_school`, r.school, { ph: i === data.education.length - 1 ? "고등학교" : "대학교" })}
+              </td>
               <td className={cell}>{field(`edu_${i}_major`, r.major, { ph: "전공" })}</td>
               {/* 학점만 placeholder가 없어 빈 상자로 보이고 보조기술에도 이름이 없었다 — ph로 이름 부여. */}
               <td className={`${cell} text-center`}>
@@ -303,10 +320,45 @@ export function ResumeSheet({
       <table className={T}>
         <tbody>
           <tr>
-            <th className={`${head} w-32`}>근무부서</th>
-            <td className={cell} colSpan={3}>
-              {field("c_department", c.department, { ph: "근무부서" })}
+            <th className={`${head} w-32`}>회사 구분</th>
+            <td className={cell}>
+              {editing ? (
+                // 드롭다운 규약: native select 금지 → SearchableSelect(name = hidden input 제출, 컨트롤드 = 초안 복원).
+                <SearchableSelect
+                  name="c_company"
+                  value={company}
+                  onValueChange={setCompany}
+                  options={RESUME_COMPANIES.map((v) => ({ value: v, label: v }))}
+                  placeholder="선택"
+                  ariaLabel="회사 구분"
+                  className="w-full"
+                />
+              ) : (
+                V(c.company)
+              )}
             </td>
+            <th className={`${head} w-24`}>소속부서</th>
+            <td className={cell}>
+              {editing ? (
+                <SearchableSelect
+                  name="c_division"
+                  value={division}
+                  onValueChange={setDivision}
+                  options={RESUME_DEPARTMENTS.map((v) => ({ value: v, label: v }))}
+                  placeholder="선택"
+                  ariaLabel="소속부서"
+                  className="w-full"
+                />
+              ) : (
+                V(c.division)
+              )}
+            </td>
+          </tr>
+          <tr>
+            <th className={head}>근무부서</th>
+            <td className={cell}>{field("c_department", c.department, { ph: "근무부서" })}</td>
+            <th className={head}>담당자</th>
+            <td className={cell}>{field("c_manager", c.manager, { ph: "담당자" })}</td>
           </tr>
           <tr>
             <th className={head}>근무요일</th>

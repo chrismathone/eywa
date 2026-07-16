@@ -221,6 +221,44 @@ export async function applySheetFormulas(
 }
 
 /**
+ * 시트 탭 맨 아래에 행들을 append(RAW·INSERT_ROWS) — "한 행 추가"형 기입용(직원 이력서 →
+ * 신규 직원명부 등). 탭의 마지막 채워진 행 다음에 붙는다(전체 덮어쓰기 아님 — 기존 행 무손상).
+ * ⚠️ append는 **비멱등**이라 withSheetsRetry(429/503 재전송)를 걸지 않는다 — 503이 "실행됐지만
+ *    응답 유실"일 수 있어 재시도가 같은 행을 2번 기입한다. 실패는 호출부가 경고로 사용자 확인 유도.
+ * ⚠️ 저장 액션이 이 호출을 동기 대기하므로 요청 timeout(8s)으로 지연 상한을 못박는다(무한 pending 방지).
+ */
+export async function appendSheetRows(
+  spreadsheetId: string,
+  tabName: string,
+  rows: string[][],
+): Promise<void> {
+  if (rows.length === 0) return;
+  try {
+    // 인증도 try 안 — invalid_grant 등 인증 오류가 한글 메시지(translateSheetsError)로 떨어지게.
+    const auth = getServiceAccountAuth();
+    await auth.authorize();
+    const sheets = google.sheets({ version: "v4", auth });
+    await sheets.spreadsheets.values.append(
+      {
+        spreadsheetId,
+        // 범위 = 탭명만(한글·공백 안전하게 작은따옴표) → 그 탭의 채워진 영역 끝에 append.
+        range: `'${tabName}'`,
+        valueInputOption: "RAW",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: rows },
+      },
+      { timeout: 8000 },
+    );
+  } catch (e) {
+    const msg = ((e as { message?: string })?.message || "").toLowerCase();
+    if (msg.includes("unable to parse range")) {
+      throw new Error(`시트에 '${tabName}' 탭이 없습니다 — 탭 이름을 확인하세요.`);
+    }
+    throw new Error(translateSheetsError(e));
+  }
+}
+
+/**
  * 구글 시트의 한 탭(`tabName`) 전체 셀 값을 2D 문자열 배열로 읽는다(1행=헤더).
  * '시트에서 가져오기'(라운드트립 import) — 시트 편집분을 앱으로 되읽는 단방향 반대 경로.
  * 탭이 없으면(예: '시트 반영' 전) Sheets가 400(Unable to parse range)을 주므로 친절 메시지로 변환.
