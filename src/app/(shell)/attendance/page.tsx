@@ -13,6 +13,7 @@ import {
   type AttendanceMatrix,
   type AttendanceStatus,
 } from "@/features/attendance/server/queries";
+import { COUNTABLE_STATUSES, formatSessionUnits } from "@/features/attendance/session-units";
 import { AttendanceCell } from "./_components/attendance-cell";
 
 export const metadata = { title: "출석부 — eywa" };
@@ -334,7 +335,11 @@ function MatrixTable({
                 </th>
               ),
             )}
-            <th className="bg-bg-soft border-line sticky right-0 z-10 border-b border-l px-2 py-2 text-right whitespace-nowrap">
+            {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
+            <th className="bg-bg-soft border-line sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l px-2 py-2 text-right whitespace-nowrap">
+              <span className="micro">시수</span>
+            </th>
+            <th className="bg-bg-soft border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b px-2 py-2 text-right whitespace-nowrap">
               <span className="micro">출석률</span>
             </th>
           </tr>
@@ -342,8 +347,16 @@ function MatrixTable({
         <tbody>
           {matrix.students.map((s, i) => {
             const studentMarks = matrix.marks[s.id] ?? {};
+            const studentUnits = matrix.units[s.id] ?? {};
             const recorded = Object.values(studentMarks);
             const present = recorded.filter((x) => x === "present").length;
+            // 시수 합 = 소비 상태 셀의 배수 합(배수 미입력 = 1). 0.1 단위 반올림(부동소수 방어).
+            const unitsTotal =
+              Math.round(
+                Object.entries(studentMarks)
+                  .filter(([, st]) => COUNTABLE_STATUSES.has(st))
+                  .reduce((sum, [date]) => sum + (studentUnits[date] ?? 1), 0) * 10,
+              ) / 10;
             const rate =
               recorded.length > 0 ? Math.round((present / recorded.length) * 100) : null;
             const rateColor =
@@ -391,12 +404,16 @@ function MatrixTable({
                         sessionDate={d.date}
                         initialStatus={mark}
                         note={matrix.notes[s.id]?.[d.date] ?? null}
+                        initialUnits={studentUnits[d.date] ?? null}
                       />
                     </td>
                   );
                 })}
+                <td className="border-line text-foreground sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right font-mono text-[12px] whitespace-nowrap">
+                  {unitsTotal > 0 ? formatSessionUnits(unitsTotal) : "—"}
+                </td>
                 <td
-                  className={`border-line sticky right-0 z-10 border-b border-l bg-card px-2 py-2 text-right font-mono text-[12px] font-bold whitespace-nowrap ${rateColor}`}
+                  className={`border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right font-mono text-[12px] font-bold whitespace-nowrap ${rateColor}`}
                 >
                   {rate === null ? "—" : `${rate}%`}
                 </td>
@@ -408,12 +425,12 @@ function MatrixTable({
           <tr>
             {/* 범례 1행: 좌측 요약 노트 + 우측(ml-auto) 범례 Pill 가로 나열(좁으면 가로 스크롤, 줄바꿈 X) */}
             <td
-              colSpan={days.length + 5}
+              colSpan={days.length + 6}
               className="bg-bg-soft border-line border-t px-3 py-2"
             >
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
                 <span className="text-text-faint font-mono text-[11px]">
-                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결 즉시 변경
+                  총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결·시수 즉시 변경 (시수: 정규 1회=1, 보강 연장 1.5·2)
                 </span>
                 <span className="micro ml-auto">범례</span>
                 {(["present", "absent", "late", "early_leave", "makeup"] as AttendanceStatus[]).map(
