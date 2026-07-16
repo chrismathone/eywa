@@ -335,16 +335,22 @@ export type DashFollowUp = {
   urgency: FollowUpUrgency;
 };
 
-/** 학생상담 후속조치 — 미완료 + 기한 임박/경과(긴급도 overdue/today/soon)만, 빠른 순. */
-export async function getFollowUpConsultations(limit = 8): Promise<DashFollowUp[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+/**
+ * 학생상담 후속조치 — 미완료 + 기한 임박/경과(긴급도 overdue/today/soon)만, 빠른 순.
+ * db = cron(admin) 주입 경로 — RLS 우회라 명시 tenant 필터 필수.
+ */
+export async function getFollowUpConsultations(
+  limit = 8,
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
+): Promise<DashFollowUp[]> {
+  const supabase = db?.supabase ?? (await createClient());
+  let query = supabase
     .from("student_consultations")
     .select("id, student_id, follow_up_action, follow_up_date, student:student_id ( name )")
     .eq("follow_up_done", false)
-    .not("follow_up_date", "is", null)
-    .order("follow_up_date", { ascending: true })
-    .limit(60);
+    .not("follow_up_date", "is", null);
+  if (db) query = query.eq("tenant_id", db.tenantId);
+  const { data, error } = await query.order("follow_up_date", { ascending: true }).limit(60);
   if (error) throw new Error(`dashboard follow-ups: ${error.message}`);
   const rows: DashFollowUp[] = [];
   for (const r of data ?? []) {
@@ -459,10 +465,18 @@ export type UnassignedEnrolled = {
  * 등록됨(enrolled)인데 활성 수강(반)이 없는 학생 = "배정 필요". anti-join RPC(0097a, security invoker +
  * auth_tenant_id 이중격리) — 대시보드 반응속도 1순위라 전건 fetch+JS 대신 DB 1쿼리. limit는 count 정확도용
  * 안전 상한(현실적으로 소수 — 배정되면 목록에서 빠짐). 호출부가 rows.length를 "배정 필요 N명"으로 사용.
+ *
+ * db(cron admin) 경로는 p_tenant 변형(0114a) — 세션용 RPC는 auth_tenant_id()가 service_role에서
+ * null이라 **에러 없이 0행**을 반환하는 silent 오보가 나기 때문(브리핑 cron 필수 분기).
  */
-export async function getUnassignedEnrolledStudents(limit = 30): Promise<UnassignedEnrolled[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("dashboard_unassigned_enrolled", { p_limit: limit });
+export async function getUnassignedEnrolledStudents(
+  limit = 30,
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
+): Promise<UnassignedEnrolled[]> {
+  const supabase = db?.supabase ?? (await createClient());
+  const { data, error } = db
+    ? await supabase.rpc("dashboard_unassigned_enrolled_admin", { p_limit: limit, p_tenant: db.tenantId })
+    : await supabase.rpc("dashboard_unassigned_enrolled", { p_limit: limit });
   if (error) throw new Error(`getUnassignedEnrolledStudents: ${error.message}`);
   return (
     (data ?? []) as Array<{ student_id: string; student_name: string; grade: string | null; school: string | null; enrolled_at: string | null }>
@@ -620,10 +634,15 @@ export type AbsenceRisk = {
  * 결석 위험 학생: 최근 14일 결석 ≥ 3건. 단 데모 출결이 과거에 몰려 있어 'today-14d'로는 0건이 되므로
  * 가장 최근 기록일을 앵커로 그 직전 14일 창을 본다(실데이터가 최신이면 today와 동일하게 동작).
  */
-export async function getAbsenceRiskStudents(): Promise<AbsenceRisk[]> {
-  const supabase = await createClient();
+export async function getAbsenceRiskStudents(
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
+): Promise<AbsenceRisk[]> {
+  const supabase = db?.supabase ?? (await createClient());
   // 최근 기록일 기준 14일 결석 ≥3 — DB group-by/having RPC 1쿼리(구: anchor + 전건 조인 + JS, 0039a).
-  const { data, error } = await supabase.rpc("dashboard_absence_risk", { p_min: 3 });
+  // db(cron admin) 경로는 p_tenant 변형(0114a) — 세션용 RPC는 service_role에서 에러 없이 0행(silent 오보).
+  const { data, error } = db
+    ? await supabase.rpc("dashboard_absence_risk_admin", { p_min: 3, p_tenant: db.tenantId })
+    : await supabase.rpc("dashboard_absence_risk", { p_min: 3 });
   if (error) throw new Error(`getAbsenceRiskStudents: ${error.message}`);
   return ((data ?? []) as Array<{ student_id: string; student_name: string; absences: number | string }>).map((r) => ({
     studentId: r.student_id,

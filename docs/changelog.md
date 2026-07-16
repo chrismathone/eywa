@@ -4,7 +4,7 @@
 
 ## 진행 상황
 
-### 원스크린 단체 작성 — edutrix 전수비교 갭 0·1·3단계 반영 (2026-07-17) — ✅ tsc0/lint0/test1425/test:rls4/0114a 적용·멱등✓
+### 원스크린 단체 작성 — edutrix 전수비교 갭 0·1·3단계 반영 (2026-07-17) — ✅ tsc0/lint0/test1425/test:rls4/0116a 적용·멱등✓
 2026-07-16 edutrix↔eywa 단체작성 전수비교 감사(확정 14건)의 승인 계획 이행. **0단계(분해)**: onescreen-grid
 593줄·props24 → 조립자+리프 5개(grid-toolbar/grid-row/prev-row/score-input/pill-group), 핸들러는
 fields/rowActions/bulkActions 그룹 객체(200줄·props10 회복). **1단계(작성 속도)**: ① 표뷰 태도·과제 드롭다운(2클릭)→
@@ -12,11 +12,70 @@ fields/rowActions/bulkActions 그룹 객체(200줄·props10 회복). **1단계(�
 빈 필드=미적용, 빈 칸만 옵션, `planBulkApply` 순수함수) ③ 참고행 "가져오기"(빈 칸만 진도·태도·과제·오늘과제,
 `planPrevFill` — ⚠️특이사항 제외: prevReport.note=발송 본문) ④ 문구 3칸 field-sizing 자동 확장.
 **3단계(인체공학)**: ⑤ 점수·교재·오늘과제 Enter/↑↓ 세로 이동(`grid-nav.ts`, isComposing IME 가드) ⑥ 학생
-순서변경(0114a `onescreen_student_order`, 단일 반 필터에서만, 학생 묶음 ↑↓, teacher_id=`effectiveTeacherId`
+순서변경(0116a `onescreen_student_order`, 단일 반 필터에서만, 학생 묶음 ↑↓, teacher_id=`effectiveTeacherId`
 서버 파생, roster 반 그룹 내 재배열 `student-order.ts`) ⑦ 다른 창/기기 동시 열림 경고(presence scope
-`onescreen:{teacherId}:{date}`, 락 아님). **2단계(출결 직접 입력+발송 누락 안내)는 출결 시수 작업(a07c1d1) 병합
-대기** — 병합 후 setAttendanceCell 권한 보강(scoped=담당반)→출결 (student,class) 복합키→pill 순서로 진행.
-⚠️브라우저 시각검증 미완(강사 로그인 필요) — 다음 강사 세션에서 pill·일괄입력·순서 실측 권장.
+`onescreen:{teacherId}:{date}`, 락 아님). 푸시 전 멀티에이전트 diff 리뷰로 확정 결함 4건(순서 모드 stale
+저장·다과목 점수 nav 밀림·동명 반·순서 모드 nav 어긋남) 수정. **2단계(출결 직접 입력+발송 누락 안내)는
+출석 시수(0115a) main 반영 후 별도 진행** — setAttendanceCell 권한 보강(scoped=담당반)→출결 (student,class)
+복합키→pill 순서. ⚠️브라우저 시각검증 미완(강사 로그인 필요) — 다음 강사 세션에서 pill·일괄입력·순서 실측 권장.
+
+### 출석 시수(배수) 입력 + 시수 검증 시수 합 전환 + 강사별 분배(참고) (2026-07-16) — ✅ tsc0/lint0/test1392/실E2E(수학 JJ2B), 원장 승인 후 main 반영
+구 출석부(D:\attendance)의 "셀 숫자 = 정규 수업 1회 기준 배수"(2h 수업 기준 3h=1.5, 보강 4h=2, 영어 U 유닛)를
+eywa로 이식 — 원장 실사용 근거로 로드맵 "숫자시수셀 영구 SKIP"을 뒤집은 결정(2026-07-16).
+- **0115a** `attendance_records.session_units numeric(4,1)`(null=기본 1, CHECK 0<x≤20) + **시수 검증 RPC를
+  count(*)→`sum(coalesce(session_units,1))`로 교체**(반환 numeric — drop 후 재생성). 기존 데이터 전부 null이라
+  행동 불변(적용 시 707그룹 count↔sum 불일치 0건 실측). 프로덕션 적용 완료(코드가 데이터 따라잡는 형태).
+- **출석부 UI**: 매트릭스 셀 팝오버에 시수 입력(빈 칸=1, 0.5 단위 관행) — units≠1이면 셀에 상태색 숫자 표기
+  (구 출석부 읽기 관행), 우측 sticky **시수 합계 열** 신설(출석률 왼쪽, 소비 상태만 합산). 일자 일괄 입력폼
+  확장영역에도 시수 입력. 순수 [`parseSessionUnits`](../src/features/attendance/session-units.ts)(Vitest 11)로
+  클라·서버 동일 검증, 1은 null 정규화(노이즈 방지).
+- **시수 검증**: `classifyVerification` diff 0.1 반올림(0.5×3 부동소수 잔차 방어, Vitest+2) — 소수 실측(12.5 vs 12
+  = 초과 +0.5) 판정. **강사별 분배(참고) 표** 신설([allocation.ts](../src/features/billing/session-terms/allocation.ts)
+  순수함수, Vitest 8): 반 담당 강사 기준 확정 회차·확정 금액 vs 실 시수·실측 금액(행 단위 반올림)·차액. **표시
+  전용(쓰기 0)** — invoice_teacher_splits 저장 기능은 여전히 골든마스터(N6) 게이트 뒤(불변).
+- **실E2E(수학 JJ2B, 전 항목 원복)**: 이시우 출석1+보강2+출석1=시수 4·확정 4회×25,000=100,000원 → **일치** /
+  이재용 출석1+0.5=1.5·확정 2회 → **부족 −0.5** / 분배: 박민엽 확정 150,000 vs 실측 137,500, **차액 −12,500원
+  (=0.5회×25,000) 정확 일치**. 검증 후 출석 5행 삭제·확정 2건 해제 원복(7월 출석 0·확정 0 확인).
+- ⚠️ 시수는 소비(present/late/early_leave/makeup)에만 의미 — 결석은 상태로(0 입력은 거부). 키오스크 자동
+  기록은 null(=1). `confirmed_sessions`는 integer 유지(확정은 정수 회, 실측만 소수).
+### ClassNote 네이티브 파일 첨부 (Phase 2 — attached_files, 파일 있는 리포트만 내부 API) (2026-07-16) — ✅ tsc0/lint0 + 격리 E2E
+Phase 1은 파일을 /r 다운로드 링크로만 전달(학부모가 링크 클릭). Phase 2는 파일이 **ClassNote 앱 안에 네이티브 첨부**로 뜬다.
+내부 API 리버스엔지니어링·학원이 POC 검증: 업로드=kage 2단계(`GET /api/v1/kage/upload/?file_type=img|etc` → presigned → 네이티브
+file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스샷)/`attached_files`(파일) → 201.
+- **결정(원장, B-scoped)**: **파일 첨부가 있고 showAttachments ON인 리포트만** 내부 API로 게시(스샷=attached_images + 파일=attached_files
+  한 POST). 파일 없는 리포트는 검증된 Cloud Run(DOM 스샷) 경로 그대로. 발송 경로 2개 공존, 리스크 국소화.
+- **eywa**: 워커 전용 시크릿 엔드포인트 [`/api/internal/report-attachments/[reportId]`](<../src/app/api/internal/report-attachments/[reportId]/route.ts>)
+  (`x-eywa-internal`=CLASSNOTE_INTERNAL_SECRET 게이트) — 파일 첨부 signed URL 반환(워커에 스토리지 자격증명 불요, resolveTenantReadUrls 재사용).
+- **워커**([classnote-core.mjs](../scripts/_classnote/classnote-core.mjs) `sendReportViaApi` + [admin-core](../scripts/_classnote/classnote-admin-core.mjs)
+  `uploadToKage`·`resolveBoardChildEnrollments`·`postClassnoteReport`): 스샷 buffer→kage(img) + 엔드포인트로 파일 URL→fetch→kage(etc) →
+  board/child/enrollment 해석(notice-core 공용) → 게시. **보드 안전 게이트(§5.5) 그대로.** ⚠️ kage 업로드는 **작성폼 네이티브 input**
+  경유(수동 FormData는 415 거부).
+- **검증**: 격리 E2E(학원이, 원자 claim으로 프로덕션 워커 레이스 회피) — sendReportViaApi → ClassNote 게시글 **attached_images 1 + attached_files 1(PDF)**
+  확인 → DELETE 204. 각 조각(kage img/etc 업로드, POST+attachments, 엔드포인트)도 개별 검증. 테스트 데이터·게시글·설정 전부 원복.
+- ⚠️ **연동 PC zip 재전달 필요**(워커 변경). env 추가 없음(CLASSNOTE_INTERNAL_SECRET·SCREENSHOT_BASE 기존). 적용 전엔 파일 리포트가 Cloud Run으로 감(파일은 /r 링크로, Phase 1).
+
+### 운영실 일일 AI 브리핑 3종 세트 (2026-07-16) — ✅ tsc0/lint0/test1386, 원장 승인(cron AI·master만 알림·대화형 보류)
+전수 조사("운영실이 eywa 모든 데이터를 활용하는 AI 비서급이 될 수 있나") 결론 반영 — 기존 버튼형 AI 5종의 실사용이
+~20건 미만(케어 2/807·상담분석 0/1,542)이라 **"눌러야 나오는 AI"가 아니라 "워크플로에 자동으로 흘러드는 AI"**로 설계.
+계획 확정본 = `docs/dashboard-ai-briefing-plan.md`(부록: 대화형 tool-use 비서 재검토 자료 — **보류, 구현 금지**).
+- **PR0 usage 계측(0113a `ai_usage_logs`)**: `generateJSON`이 provider usage 토큰을 캡처해 best-effort 기록
+  (admin 동적 import — env 미설정·실패 시 스킵, 본 호출 절대 안 막음). 호출부 9곳 `meta.feature` 스레딩.
+  CLAUDE.md에 "외부 AI 전송 금지 필드"(주민번호·계좌·급여·이력서 form_data) 명문화.
+- **PR1 신호 리팩터**: `getTodayActionSignals`에 `opts.db`(cron admin + scopeTenant 명시 격리)·`opts.asOf`(기준일·시각)
+  주입. 새 신호 `classnote-attention`(발송 실패·기한 초과 7일 창 / 사람 확인 보류 **창 없음**(막다른 길 실사고 교훈) /
+  멈춤 10분 — head-count 4종 B2).
+- **PR2 일일 브리핑(0114a)**: cron `/api/cron/daily-briefing`(07:00 KST, CRON_SECRET) → 활성 master 있는 테넌트만
+  순회 → 다이제스트 = **어제 마감**(asOf=어제·nowMinutes=1440 — 아침엔 '오늘' 신호가 구조적으로 0) + **오늘 예정**
+  + retention 요약(`computeRetentionRoster` cron 계산 — 라이브 대시보드 금지, B7) → Sonnet 5가 **서술만** 생성
+  (프롬프트에 개인명 불포함, `validateNarrative` 숫자 grounding·영문 토큰 가드 탈락 시 결정론 요약 폴백) →
+  `daily_briefings` upsert(tenant×date 멱등). 카드는 저장분 렌더만 + '다시 생성'(원자 claim+5분 stuck 우회+after()+
+  5초 폴링 — Realtime 불가: **RLS 정책 0개 테이블**, payload가 master 관점 전신호라 devtools 우회 차단 #77).
+  카드·재생성 게이트 = `canManageStaff`(master/admin/manager). 벨 알림 = **master만·최초 생성 1회**(notified_at 게이트,
+  IMPORTANT 미등재 — 경보 피로 원칙). RPC p_tenant 변형 2종(`*_admin`) — auth_tenant_id()가 service_role에서
+  에러 없이 0행이 되는 silent 오보 방지, execute는 service_role만.
+- ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
+  (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
+  `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
 
 ### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열

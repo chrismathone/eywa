@@ -16,13 +16,16 @@ export type VerificationVerdict = {
  * - matched:     실측 == 확정.
  * - short:       실측 < 확정 (청구보다 실제 덜 나옴 → 과청구 점검).
  * - over:        실측 > 확정 (실제 더 나옴 → 미청구 점검).
+ *
+ * 실측은 시수 합(배수 합, 0115a)이라 소수(0.5 단위)일 수 있다 — diff는 0.1 단위 반올림
+ * (0.5+0.5+0.5 같은 부동소수 잔차가 가짜 불일치를 만들지 않게).
  */
 export function classifyVerification(
   confirmedSessions: number | null,
   actualConsumed: number,
 ): VerificationVerdict {
   if (confirmedSessions === null) return { status: "unconfirmed", diff: null };
-  const diff = actualConsumed - confirmedSessions;
+  const diff = Math.round((actualConsumed - confirmedSessions) * 10) / 10;
   if (diff === 0) return { status: "matched", diff: 0 };
   return { status: diff > 0 ? "over" : "short", diff };
 }

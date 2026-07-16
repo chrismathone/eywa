@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * 원스크린 학생 표시 순서 저장(3-2, 0114a) — (tenant, teacher, class) 1행 upsert.
+ * 원스크린 학생 표시 순서 저장(3-2, 0116a) — (tenant, teacher, class) 1행 upsert.
  * ⚠️ teacher_id는 클라 입력을 신뢰하지 않고 서버에서 파생(effectiveTeacherId — 실 강사·겸직 강사뷰 단일소스).
  * RLS는 tenant-isolation만이므로 담당 반 소유 확인(classes.teacher_id)도 여기서 강제한다.
  */

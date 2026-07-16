@@ -48,6 +48,7 @@ export async function analyzeStudentConsultation(
     keyName: "consultations",
     provider,
     maxTokens: 4096,
+    meta: { feature: "consultation_analysis" },
     prompt: [
       "다음은 학원 재원생 상담 내용(녹음 전사 또는 상담 메모)입니다. 재원생 케어 관점에서 분석해 JSON으로만 답해주세요.",
       "",

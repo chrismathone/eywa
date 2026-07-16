@@ -1,4 +1,4 @@
--- 0114a_onescreen_student_order.sql (손수 alpha)
+-- 0116a_onescreen_student_order.sql (손수 alpha — 병렬 세션이 0114a=일일 브리핑·0115a=출석 시수 선점, 0114a→0116a 개명. 내용 동일·멱등이라 기적용 DB 무해)
 -- 원스크린 학생 표시 순서(강사×반 개인 설정) — edutrix '순서변경' 패리티(2026-07-16 단체작성 전수비교 감사 3-2).
 -- 강사가 좌석·채점지 순서대로 학생을 재배열해 저장하면, 다음 작성 때 roster가 그 반 그룹 내부만 재배열해 로드한다
 -- (반 시각순 등 상위 정렬 보존, 미등재 신규 학생은 기존 정렬대로 뒤 — src/features/onescreen/student-order.ts).

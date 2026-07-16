@@ -701,7 +701,7 @@ export const MATH_CURRICULUM: Record<string, CurriculumUnit[]> = {
   ],
 
   // ───────────────────────── 고등 (2022 개정 · edutrix 진도 이식) ─────────────────────────
-  //   고등은 과목 선택제 → 학년(고1~고3) 대신 **과목명**을 키로. 공통수학1·2(고1) + 선택과목(대수/미적분/확통/기하).
+  //   고등은 과목 선택제 → 학년(고1~고3) 대신 **과목명(2022 개정 정식명)**을 키로. 공통수학1·2(고1) + 선택과목(대수/미적분Ⅰ·Ⅱ/확률과 통계/기하).
   //   edutrix data/chapters.ts 원본을 그대로 이식(차시명·순서·원문 보존). 단원은 순번("N. 단원명") 접두 = 중등과 동일 스타일.
   //   ⚠️ 진도 위치추적(curriculum-position)은 초·중만 대상 — 고등은 과목 간 차시명이 중복(미적분1·2 등)이고
   //   선행 랭크(gradeRank)에 안 맞아 전역 타임라인에서 제외한다. 여기 과목들은 **진도 피커 노출 전용**.
@@ -905,7 +905,7 @@ export const MATH_CURRICULUM: Record<string, CurriculumUnit[]> = {
     },
   ],
 
-  미적분1: [
+  "미적분Ⅰ": [
     {
       unit: "1. 함수의 극한과 연속",
       lessons: [
@@ -951,7 +951,7 @@ export const MATH_CURRICULUM: Record<string, CurriculumUnit[]> = {
     },
   ],
 
-  확통: [
+  "확률과 통계": [
     {
       unit: "1. 경우의 수",
       lessons: [
@@ -1034,7 +1034,7 @@ export const MATH_CURRICULUM: Record<string, CurriculumUnit[]> = {
     },
   ],
 
-  미적분2: [
+  "미적분Ⅱ": [
     {
       unit: "1. 수열의 극한",
       lessons: [
@@ -1091,11 +1091,11 @@ export function curriculumForGrade(grade: string): CurriculumUnit[] {
 
 /**
  * 학생 학년 → 진도 피커 기본 진도학년(유효 커리큘럼 키). 초·중은 그대로("초3"/"중1").
- * 고등(고1~고3)은 과목 선택제라 학년명이 커리큘럼 키가 아니므로(키=공통수학1·대수·미적분2 …)
+ * 고등(고1~고3)은 과목 선택제라 학년명이 커리큘럼 키가 아니므로(키=공통수학1·대수·미적분Ⅱ …)
  * **시작 기본 과목**으로 보정한다 — 강사가 피커 드롭다운에서 실제 과목으로 바꾸면 세션에 저장된다.
  * 유효 키가 아니면 원값 유지(미정/성인 등은 빈 피커 = 현행 동작 동일).
  */
-const HS_DEFAULT_SUBJECT: Record<string, string> = { 고1: "공통수학1", 고2: "대수", 고3: "미적분2" };
+const HS_DEFAULT_SUBJECT: Record<string, string> = { 고1: "공통수학1", 고2: "대수", 고3: "미적분Ⅱ" };
 export function resolveStudyGrade(grade: string | null | undefined): string {
   const g = (grade ?? "").trim();
   if (CURRICULUM_GRADES.includes(g)) return g;

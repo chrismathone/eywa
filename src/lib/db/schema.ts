@@ -392,6 +392,8 @@ export const attendanceRecords = pgTable(
       .references(() => students.id, { onDelete: "cascade" }),
     sessionDate: date("session_date").notNull(),
     status: attendanceStatusEnum("status").notNull(),
+    // 시수(정규 수업 1회 기준 배수, 0115a). null=1(기본). 보강 연장=1.5/2, 부분 출석=0.5 등.
+    sessionUnits: numeric("session_units", { precision: 4, scale: 1 }),
     note: text("note"),
     homeworkRequired: boolean("homework_required").notNull().default(false),
     homeworkDone: boolean("homework_done").notNull().default(false),
@@ -1755,6 +1757,54 @@ export const auditLogs = pgTable(
   ],
 );
 
+// === daily_briefings (운영실 일일 AI 브리핑 — 0114a 손수 alpha) ===
+// 하루 1행(tenant×date 유니크 = upsert 타겟). payload=결정론 다이제스트, narrative=LLM 서술(가드 통과분만).
+// ⚠️ RLS 정책 없음(select도) — payload가 master 관점 전신호라 서버(admin)가 역할 게이트 후에만 읽는다(#77).
+export const dailyBriefings = pgTable(
+  "daily_briefings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    briefingDate: date("briefing_date").notNull(), // KST 기준(kstToday)
+    processingStatus: text("processing_status").notNull().default("idle"), // idle|analyzing|completed|failed
+    processingError: text("processing_error"),
+    payload: jsonb("payload"), // DailyBriefingPayload(briefing-digest.ts)
+    narrative: text("narrative"),
+    modelVersion: text("model_version"), // UI 미노출
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }), // 알림 1회 게이트
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("daily_briefings_tenant_date_uq").on(t.tenantId, t.briefingDate),
+    index("daily_briefings_tenant_date_idx").on(t.tenantId, t.briefingDate),
+  ],
+);
+
+// === ai_usage_logs (AI 호출 usage 계측 — 0113a 손수 alpha) ===
+// generateJSON 1회 = 1행. write는 서버(service_role)만(insert 정책 없음), read는 테넌트 select 정책.
+// tenant_id nullable: 컨텍스트를 안 넘기는 기존 호출부는 null(스레딩 점진 확장).
+export const aiUsageLogs = pgTable(
+  "ai_usage_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    feature: text("feature").notNull(), // 'meeting_analysis' | 'enrollment_analysis' | 'classnote_ment' | 'daily_briefing' …
+    provider: text("provider").notNull(), // 'anthropic' | 'upstage'
+    model: text("model").notNull(), // 실사용 모델 id (UI 미노출 — 계측 전용)
+    keyName: text("key_name").notNull(), // 빌링 버킷: 'default' | 'consultations'
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    ok: boolean("ok").notNull().default(true),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("ai_usage_logs_tenant_created_idx").on(t.tenantId, t.createdAt)],
+);
+
 // === tenant_settings (테넌트 단위 학원 설정 — owner 콘솔) ===
 // 단일 행/테넌트. data jsonb에 전체 설정 문서(앱단 Zod + DEFAULT_SETTINGS merge). master가 관리.
 export const tenantSettings = pgTable("tenant_settings", {
@@ -1833,3 +1883,7 @@ export type AttendanceNotification = typeof attendanceNotifications.$inferSelect
 export type NewAttendanceNotification = typeof attendanceNotifications.$inferInsert;
 export type KakaoChannel = typeof kakaoChannels.$inferSelect;
 export type NewKakaoChannel = typeof kakaoChannels.$inferInsert;
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+export type NewAiUsageLog = typeof aiUsageLogs.$inferInsert;
+export type DailyBriefing = typeof dailyBriefings.$inferSelect;
+export type NewDailyBriefing = typeof dailyBriefings.$inferInsert;

@@ -20,6 +20,7 @@ import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
+import { getDailyBriefing, type DailyBriefingRow } from "@/features/dashboard/server/briefing";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
 import { resolveDashboardAccess } from "@/features/dashboard/dashboard-access";
@@ -28,6 +29,7 @@ import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
 import { QuickActions } from "./_components/quick-actions";
 import { OperationsBriefing } from "./_components/operations-briefing";
+import { DailyBriefingCard } from "./_components/daily-briefing-card";
 import { NowCockpit } from "./_components/now-cockpit";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
@@ -71,6 +73,9 @@ export default async function TodayPage() {
   const access = resolveDashboardAccess(user.systemRole, permissionMatrix);
   const canManageAnnouncements =
     canManageStaff(user.systemRole) && canWrite(user.systemRole, "dashboard", permissionMatrix);
+  // 일일 브리핑은 master/admin/manager 전용 — payload가 master 관점 전신호(미수·결재 포함)라
+  // scoped 역할(counselor/accountant)에는 카드 자체를 렌더하지 않는다(#77, 0114a 주석 참조).
+  const canSeeDailyBriefing = canManageStaff(user.systemRole);
   const [
     enrolled,
     attendanceState,
@@ -87,6 +92,7 @@ export default async function TodayPage() {
     enrollmentChanges,
     actionSignals,
     enrollmentChange,
+    dailyBriefingResult,
   ] = await Promise.all([
     access.read.students ? getEnrolledStudentCount() : Promise.resolve(0),
     access.read.attendance
@@ -132,6 +138,10 @@ export default async function TodayPage() {
       owner: access.read.owner,
     }),
     access.read.students ? getEnrollmentChangeLast7d() : Promise.resolve(EMPTY_ENROLLMENT_CHANGE),
+    // 저장분 조회만(AI 호출 없음). 테이블 미적용 DB에서도 대시보드가 죽지 않게 실패 허용 래퍼.
+    canSeeDailyBriefing
+      ? dashboardQuery<DailyBriefingRow | null>("daily briefing", getDailyBriefing(user.tenantId, kstToday()), null)
+      : Promise.resolve({ data: null, unavailable: false }),
   ]);
   const attendance = attendanceState.snapshot;
   const followUps = followUpsResult.data;
@@ -285,6 +295,9 @@ export default async function TodayPage() {
         }}
         enrollmentChanges={access.read.students ? enrollmentChanges : null}
       />
+
+      {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
+      {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} /> : null}
 
       {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
       <OperationsBriefing briefing={briefing} />

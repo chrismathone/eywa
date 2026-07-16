@@ -5,7 +5,11 @@
 //
 // ⚠️ tenant 격리 필수 — DATABASE_URL 직결(RLS 우회)이라 필터 없으면 다른 테넌트 보고서를 이 계정으로 게시.
 import { chromium } from "@playwright/test";
-import { loginClassnote, fetchCenterId, fetchBoards, fetchBoardChildren } from "./classnote-admin-core.mjs";
+import {
+  CLASSNOTE_BASE, dismissHonorificDialog,
+  loginClassnote, fetchCenterId, fetchBoards, fetchBoardChildren,
+  fetchChildren, uploadToKage, resolveBoardChildEnrollments, postClassnoteReport,
+} from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 
 export const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
@@ -117,6 +121,71 @@ export async function getClassnoteBoardAllowlist(sql, tenant) {
 }
 
 /**
+ * 첨부 표시 토글(tenant_settings.data->'report'->>'showAttachments'). Phase 2 파일첨부 라우팅 게이트 —
+ * OFF면 파일 있는 리포트도 Cloud Run(스샷)만(첨부 안 실음). isClassnoteSendEnabled와 동일하게 커밋값 즉시.
+ */
+export async function isShowAttachmentsEnabled(sql, tenant) {
+  const [row] = await sql`select (data->'report'->>'showAttachments')::boolean as on
+    from tenant_settings where tenant_id=${tenant}`;
+  return row?.on === true;
+}
+
+const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
+
+/**
+ * 파일 첨부가 있는 리포트를 **내부 API로 게시**(Phase 2) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
+ * ① 스샷 buffer → kage(`img`) ② eywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
+ * 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }. 리버스엔지니어링·학원이 POC 검증(2026-07-16).
+ */
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, screenshot, shareUrl, base, fileAtts, children, log }) {
+  // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
+  // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
+  await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await dismissHonorificDialog(adminPage).catch(() => {});
+  await adminPage.waitForTimeout(1500);
+
+  // 1) 스샷 → kage(img input) → attached_images
+  const imgKage = await uploadToKage(adminPage, "media-attachment-add-input", { name: `report_${studentName}.jpg`, mimeType: "image/jpeg", buffer: screenshot });
+  const attachedImages = imgKage?.access_key
+    ? [{ access_key: imgKage.access_key, original_file_name: `report_${studentName}.jpg`,
+        file_size: imgKage.info?.img?.length ?? screenshot.length, width: imgKage.info?.img?.width, height: imgKage.info?.img?.height }]
+    : [];
+  if (!attachedImages.length) return { ok: false, error: "스샷 kage 업로드 실패" };
+
+  // 2) eywa 내부 엔드포인트 → 파일 signed URL → fetch(바이트) → kage(doc input) → attached_files
+  const ep = await fetch(`${base}/api/internal/report-attachments/${report.id}`, {
+    headers: INTERNAL_SECRET ? { "x-eywa-internal": INTERNAL_SECRET } : {},
+  }).then((r) => (r.ok ? r.json() : { files: [] })).catch(() => ({ files: [] }));
+  const attachedFiles = [];
+  for (const f of ep.files ?? []) {
+    try {
+      const bytes = Buffer.from(await fetch(f.url).then((r) => r.arrayBuffer()));
+      const fk = await uploadToKage(adminPage, "doc-attachment-add-input", { name: f.name, mimeType: "application/octet-stream", buffer: bytes });
+      if (fk?.access_key) attachedFiles.push({ access_key: fk.access_key, original_file_name: f.name, file_size: fk.info?.size ?? bytes.length });
+    } catch (e) {
+      log(`  · ${studentName}: 파일 "${f.name}" 처리 실패 — ${e.message}`);
+    }
+  }
+  if (attachedFiles.length !== fileAtts.length) log(`  · ${studentName}: 파일 ${attachedFiles.length}/${fileAtts.length} 업로드`);
+  if (!attachedFiles.length) return { ok: false, error: "파일 첨부 업로드 실패(전건) — eywa 엔드포인트/스토리지 확인" };
+
+  // 3) board → child → enrollment
+  const enrolled = await resolveBoardChildEnrollments(adminPage, boardId, studentName, children);
+  if (!enrolled.length) return { ok: false, error: "원아·enrollment 해석 실패(미가입/미배정)" };
+
+  // 4) 게시 — 이중 계정(부모·본인)이면 전원
+  for (const { child, enrollment } of enrolled) {
+    const res = await postClassnoteReport(adminPage, {
+      cls: boardId, child: child.id, enrollment: enrollment.id, content: shareUrl,
+      dateWritten: report.report_date, authorName: report.teacher_name || "인재원 학원",
+      attachedImages, attachedFiles,
+    });
+    if (res.status < 200 || res.status >= 300) return { ok: false, error: `게시 실패(HTTP ${res.status})` };
+  }
+  return { ok: true };
+}
+
+/**
  * ClassNote 발송 큐 한 주기 처리 — stale 복구 → 원자 클레임 → 건별 스크린샷·게시·상태전이.
  * browser는 호출자가 관리(데몬은 루프 밖 1회 launch 재사용, one-shot은 매 실행 launch). tenant 격리 필수.
  * @returns {Promise<{stale:number, claimed:number, success:number, failed:number, requeued:number, blocked:number}>}
@@ -165,7 +234,7 @@ export async function processQueueOnce(sql, browser, opts) {
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id`;
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments`;
   const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);
@@ -179,6 +248,8 @@ export async function processQueueOnce(sql, browser, opts) {
   let boards = null;
   let allowlist = [];
   let allNames = [];
+  let showAttachments = false; // Phase 2: 파일 리포트를 내부 API로 보낼지 라우팅 게이트
+  let childrenCache = null; // Phase 2: 파일 리포트 첫 만남에 fetchChildren 1회 캐시
   if (post) {
     try {
       const admin = await getAdminSession(browser); // 세션 유지 — 폴마다 로그인하지 않는다(아래 주석)
@@ -196,6 +267,7 @@ export async function processQueueOnce(sql, browser, opts) {
       boards = b;
       allowlist = a;
       allNames = nameRows.map((x) => (x.classnote_name || x.name || "").trim()).filter(Boolean);
+      showAttachments = await isShowAttachmentsEnabled(sql, tenant);
       preflightFails = 0;
       preflightBackoffUntil = 0;
     } catch (e) {
@@ -236,6 +308,7 @@ export async function processQueueOnce(sql, browser, opts) {
       continue;
     }
     const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
+    let boardId = null; // Phase 2 내부 API 경로용 — 보드안전 게이트 통과 시 verdict.boardId
 
     // ⛔ 프리플라이트 보드 안전 게이트(실게시 모드만) — **스크린샷·게시 전에** 판정(불필요한 캡처 회피).
     // 한 보드에 서로 다른 2가족+가 연결돼 있으면 이 학생 보고서가 남의 가족에게도 게시된다(실제 사고: 2026-07-15
@@ -272,6 +345,7 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`  · ${studentName}: 게시 보류(${verdict.code}) — ${className}`);
         continue;
       }
+      boardId = verdict.boardId ?? null;
     }
     try {
       // 스크린샷 (INTERNAL_SECRET 헤더 → /r이 조회로그 skip)
@@ -322,7 +396,32 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`  · ${studentName}: 취소됨 → 게시 skip`);
         continue;
       }
-      // 실게시
+
+      // ── Phase 2: 파일 첨부(비이미지) + showAttachments ON → 내부 API 경로(스샷=attached_images + 파일=attached_files) ──
+      const fileAtts = (r.attachments ?? []).filter((a) => a?.name && !IMG_ATTACHMENT_RE.test(a.name));
+      if (showAttachments && fileAtts.length && boardId) {
+        childrenCache ??= await fetchChildren(adminPage, centerId); // 파일 리포트 첫 만남에 1회
+        const result = await sendReportViaApi(adminPage, {
+          report: r, studentName, boardId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
+          base, fileAtts, children: childrenCache, log,
+        });
+        if (result.ok) {
+          await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
+          summary.success++;
+          log(`    → success (파일 ${fileAtts.length}건 네이티브 첨부, 내부 API)`);
+        } else {
+          await sql`update lesson_reports set
+            classnote_retry_count = classnote_retry_count + 1,
+            classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,
+            classnote_error = ${result.error}
+            where id=${r.id}`;
+          summary.failed++;
+          log(`    → 실패(API): ${result.error} (재시도+1)`);
+        }
+        continue;
+      }
+
+      // 실게시 (Cloud Run — 파일 없는 리포트, 기존 경로)
       // ⚠️ 중복 게시 방지(구멍2): abort 타임아웃을 Cloud Run 함수 상한(900s) **위**로 둔다. 이전 120s는
       // 함수가 아직 게시 중인데 워커가 중도 abort→catch에서 retry_count+1 후 queued로 되돌려 다음 폴에
       // 재게시 = 같은 보고서가 학부모에게 2번 갔다(fetch를 끊어도 서버 실행은 안 멈춤). 함수 상한 위로 올리면

@@ -15,8 +15,15 @@ vi.mock("./anthropic", () => ({
 import { generateJSON, isRetryableProviderError, parseJsonLoose } from "./generate";
 import { resolveModel, resolveModelChain } from "./models";
 
-const upstageOk = (json: string) => ({ choices: [{ message: { content: json } }] });
-const anthropicOk = (json: string) => ({ content: [{ type: "text", text: json }] });
+// usage 포함 — generateJSON이 usage를 캡처(0113a 계측)해도 파싱·폴백이 안 깨짐을 함께 검증.
+const upstageOk = (json: string) => ({
+  choices: [{ message: { content: json } }],
+  usage: { prompt_tokens: 100, completion_tokens: 50 },
+});
+const anthropicOk = (json: string) => ({
+  content: [{ type: "text", text: json }],
+  usage: { input_tokens: 100, output_tokens: 50 },
+});
 
 describe("parseJsonLoose", () => {
   it("plain JSON", () => {

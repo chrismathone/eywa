@@ -80,7 +80,7 @@ describe("학기 도출은 단일 차시 기준", () => {
 
 // 고등 진도(edutrix 이식) — 과목명 키 + 차시. 피커 노출 전용(위치추적은 초·중만).
 describe("고등 진도(과목 선택제)", () => {
-  const HS = ["공통수학1", "공통수학2", "대수", "미적분1", "확통", "기하", "미적분2"];
+  const HS = ["공통수학1", "공통수학2", "대수", "미적분Ⅰ", "확률과 통계", "기하", "미적분Ⅱ"];
 
   it("고등 과목이 모두 커리큘럼 학년에 존재하고 차시를 갖는다", () => {
     for (const g of HS) {
@@ -98,7 +98,7 @@ describe("고등 진도(과목 선택제)", () => {
   });
 
   it("고등 차시는 전역 위치추적에서 제외(피커 전용) → positionOf null", () => {
-    // 미적분2의 차시(초·중 커리큘럼엔 없음)는 위치 매핑되지 않는다.
+    // 미적분Ⅱ의 차시(초·중 커리큘럼엔 없음)는 위치 매핑되지 않는다.
     expect(positionOf("수학 등비급수")).toBeNull();
     expect(positionOf("수학 삼각함수의 덧셈정리")).toBeNull();
   });
@@ -112,11 +112,11 @@ describe("resolveStudyGrade(학생 학년 → 진도 피커 기본)", () => {
   it("고1~고3은 시작 기본 과목으로 보정", () => {
     expect(resolveStudyGrade("고1")).toBe("공통수학1");
     expect(resolveStudyGrade("고2")).toBe("대수");
-    expect(resolveStudyGrade("고3")).toBe("미적분2");
+    expect(resolveStudyGrade("고3")).toBe("미적분Ⅱ");
   });
   it("이미 유효한 고등 과목명은 그대로(강사가 고른 값 보존)", () => {
-    expect(resolveStudyGrade("미적분1")).toBe("미적분1");
-    expect(resolveStudyGrade("확통")).toBe("확통");
+    expect(resolveStudyGrade("미적분Ⅰ")).toBe("미적분Ⅰ");
+    expect(resolveStudyGrade("확률과 통계")).toBe("확률과 통계");
   });
   it("커리큘럼 밖 학년/빈값은 원값 유지(빈 피커 = 현행)", () => {
     expect(resolveStudyGrade("미정")).toBe("미정");

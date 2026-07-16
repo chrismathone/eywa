@@ -107,7 +107,7 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   const { showDailyTest, showCheckTest } = settings.report;
   const academyNoticeMode: "A" | "B" = settings.report.noticeMode ?? "A";
 
-  // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0114a, 강사×반 개인 설정) — 독립 조회 → 병렬(B4)
+  // 1) 강사 담당 활성 반 + 본인 멘트 모드 + 학생 표시 순서(0116a, 강사×반 개인 설정) — 독립 조회 → 병렬(B4)
   const [{ data: classes }, { data: meRow }, { data: orderRows }] = await Promise.all([
     supabase.from("classes").select("id, class_name, subject").eq("teacher_id", user.id).eq("is_active", true),
     supabase.from("users").select("report_notice_mode").eq("id", user.id).single(),
@@ -444,7 +444,7 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     .sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));
 
   // 학생 정렬: 반(시각순) → 그 안에서 학년 → 이름. 좌측 목록이 반별로 묶이도록.
-  // 그 위에 강사가 저장한 학생 순서(0114a)를 반 그룹 내부만 재배열(좌석·채점지 순서 — 미등재 학생은 기존 정렬 뒤).
+  // 그 위에 강사가 저장한 학생 순서(0116a)를 반 그룹 내부만 재배열(좌석·채점지 순서 — 미등재 학생은 기존 정렬 뒤).
   const classRank = new Map(todayClasses.map((c, i) => [c.name, i]));
   const students = applyStudentOrder(
     [...byStudent.values()].sort(

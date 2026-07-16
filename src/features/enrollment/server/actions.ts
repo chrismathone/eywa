@@ -633,6 +633,7 @@ export async function runAiAnalysis(
   try {
     const { data, model } = await generateJSON<AnalysisShape>({
       maxTokens: 2048,
+      meta: { feature: "enrollment_text_analysis" },
       prompt: [
         `다음 신입생 상담 정보를 분석해 JSON으로만 답해주세요.`,
         ``,

@@ -171,6 +171,8 @@ export type AttendanceInputRow = {
   note: string | null;
   homeworkRequired: boolean;
   homeworkDone: boolean;
+  // 시수(정규 1회 기준 배수, 0115a). null=기본 1.
+  sessionUnits: number | null;
 };
 
 export async function getClassMeta(classId: string): Promise<ClassMeta | null> {
@@ -229,12 +231,13 @@ export async function getAttendanceInputRows(
       note: string | null;
       homeworkRequired: boolean;
       homeworkDone: boolean;
+      sessionUnits: number | null;
     }
   >();
   if (studentIds.length > 0) {
     const { data: records } = await supabase
       .from("attendance_records")
-      .select("id, student_id, status, note, homework_required, homework_done, recorded_at")
+      .select("id, student_id, status, note, homework_required, homework_done, session_units, recorded_at")
       .eq("class_id", classId)
       .eq("session_date", date)
       .in("student_id", studentIds)
@@ -250,6 +253,7 @@ export async function getAttendanceInputRows(
           note: r.note,
           homeworkRequired: r.homework_required,
           homeworkDone: r.homework_done,
+          sessionUnits: r.session_units === null ? null : Number(r.session_units),
         });
       }
     }
@@ -272,6 +276,7 @@ export async function getAttendanceInputRows(
         note: existing?.note ?? null,
         homeworkRequired: existing?.homeworkRequired ?? false,
         homeworkDone: existing?.homeworkDone ?? false,
+        sessionUnits: existing?.sessionUnits ?? null,
       } satisfies AttendanceInputRow;
     })
     .filter((r): r is AttendanceInputRow => r !== null)
@@ -332,6 +337,8 @@ export type AttendanceMatrix = {
   marks: Record<string, Record<string, AttendanceStatus>>;
   // studentId → date → note (사유) — 매트릭스 인디케이터/툴팁용
   notes: Record<string, Record<string, string>>;
+  // studentId → date → 시수(배수, 0115a). 기록이 없거나 기본(1)이면 키 없음 — 셀 표시·시수 합계용.
+  units: Record<string, Record<string, number>>;
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -419,6 +426,7 @@ export async function getMonthlyAttendanceMatrix(
       students: [],
       marks: {},
       notes: {},
+      units: {},
       stats: {
         totalStudents: 0,
         presentRate: 0,
@@ -473,6 +481,7 @@ export async function getMonthlyAttendanceMatrix(
   const studentIds = students.map((s) => s.id);
   const marks: Record<string, Record<string, AttendanceStatus>> = {};
   const notes: Record<string, Record<string, string>> = {};
+  const units: Record<string, Record<string, number>> = {};
   let presentCount = 0;
   let absentCount = 0;
   let lateCount = 0;
@@ -482,7 +491,7 @@ export async function getMonthlyAttendanceMatrix(
   if (studentIds.length > 0) {
     const { data: records } = await supabase
       .from("attendance_records")
-      .select("student_id, session_date, status, note, recorded_at")
+      .select("student_id, session_date, status, note, session_units, recorded_at")
       .eq("class_id", classId)
       .in("student_id", studentIds)
       .gte("session_date", startIso)
@@ -501,6 +510,12 @@ export async function getMonthlyAttendanceMatrix(
       if (r.note) {
         notes[r.student_id] ??= {};
         notes[r.student_id]![r.session_date] = r.note as string;
+      }
+      // 시수(배수) — null=기본 1이라 저장 안 함(키 없음 = 1). numeric은 문자열로 올 수 있어 Number 변환.
+      const u = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
+      if (u !== null && Number.isFinite(u) && u !== 1) {
+        units[r.student_id] ??= {};
+        units[r.student_id]![r.session_date] = u;
       }
       totalRecords++;
       if (status === "present") presentCount++;
@@ -521,6 +536,7 @@ export async function getMonthlyAttendanceMatrix(
     students,
     marks,
     notes,
+    units,
     stats: {
       totalStudents: students.length,
       presentRate,
