@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import type { SystemRole } from "@/lib/permissions";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -79,6 +80,33 @@ function won(v: FormDataEntryValue | null): number {
 const VALID_ROLES = new Set(["author", "director", "ceo", "executor"]);
 const today = () => kstToday();
 
+// 지출결의서 쓰기 스코프 — 사무실(billing 쓰기)="full"(전건 관리·결재), 강사(expense_requests 쓰기)="own"(본인 것만).
+// ⚠️ 결재 승인 토글(toggleExpenseApproval)은 이 스코프가 아니라 billing 쓰기만 통과 → 강사가 자기 결의서를 셀프 승인 못 함.
+type WriteScope = "full" | "own";
+async function expenseWriteScope(role: SystemRole): Promise<WriteScope | null> {
+  if (await canWriteTenant(role, "billing")) return "full";
+  if (await canWriteTenant(role, "expense_requests")) return "own";
+  return null;
+}
+
+// own 스코프(강사)가 기존 결의서를 수정/삭제/증빙변경할 수 있는지 — 본인 작성분(created_by=본인) + 사무실 결재 착수 전.
+// 사무실이 원장/대표 결재를 시작(체크)하면 강사 편집을 잠근다(제출 후 변조 방지). 반환: 에러 메시지(불가) 또는 null(가능).
+async function guardOwnExpense(id: string, userId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("expenses")
+    .select("created_by, approval_checks")
+    .eq("id", id)
+    .maybeSingle();
+  if (!row) return "지출을 찾을 수 없습니다";
+  if (row.created_by !== userId) return "본인이 작성한 지출결의서만 수정할 수 있습니다";
+  const checks = normalizeApprovalChecks(row.approval_checks);
+  if (checks.director?.checked || checks.ceo?.checked) {
+    return "사무실 결재가 시작되어 수정할 수 없습니다 — 사무실에 문의하세요.";
+  }
+  return null;
+}
+
 function parse(formData: FormData) {
   const categoryRaw = String(formData.get("category") ?? "기타").trim();
   let lineItems: Array<Record<string, unknown>> | null = null;
@@ -127,7 +155,7 @@ function validate(f: ReturnType<typeof parse>): ExpenseState {
 export async function createExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  if (!(await expenseWriteScope(user.systemRole))) return { error: "지출결의서 작성 권한이 없습니다" };
   const f = parse(formData);
   const invalid = validate(f);
   if (invalid) return invalid;
@@ -149,21 +177,30 @@ export async function createExpense(_prev: ExpenseState, formData: FormData): Pr
     account_number: f.accountNumber,
     memo: f.memo,
     line_items: f.lineItems,
+    // 작성자 user id — 강사 "본인 것만" 스코프 소스(사무실이 만들어도 기록 = 실제 작성자 추적).
+    created_by: user.id,
     // 작성 단계는 저장 즉시 체크(ijw 패리티). 원장/대표/집행자는 목록에서 토글.
     approval_checks: { author: { checked: true, date: today() } },
   });
   if (error) return { error: error.message };
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 
 export async function updateExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
+  // 강사(own)는 본인 작성분 + 사무실 결재 착수 전만 수정 가능. 사무실(full)은 전건.
+  if (scope === "own") {
+    const denied = await guardOwnExpense(id, user.id);
+    if (denied) return { error: denied };
+  }
   const f = parse(formData);
   const invalid = validate(f);
   if (invalid) return invalid;
@@ -193,15 +230,22 @@ export async function updateExpense(_prev: ExpenseState, formData: FormData): Pr
   if (error) return { error: error.message };
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 
 export async function deleteExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
+  // 강사(own)는 본인 작성분 + 사무실 결재 착수 전만 삭제 가능. 사무실(full)은 전건.
+  if (scope === "own") {
+    const denied = await guardOwnExpense(id, user.id);
+    if (denied) return { error: denied };
+  }
 
   const supabase = await createClient();
   // 첨부 증빙 파일도 함께 정리(고아 객체 방지) — RLS로 같은 테넌트 행만 읽힌다.
@@ -218,6 +262,7 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
   if (error) return { error: error.message };
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 
@@ -266,7 +311,8 @@ export async function toggleExpenseApproval(
 export async function duplicateExpense(_prev: ExpenseState, formData: FormData): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
 
@@ -274,12 +320,16 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
   const { data: src, error: readErr } = await supabase
     .from("expenses")
     .select(
-      "title, category, amount, currency, vendor, department, payment_method, bank_name, account_number, memo, line_items",
+      "title, category, amount, currency, vendor, department, payment_method, bank_name, account_number, memo, line_items, created_by",
     )
     .eq("id", id)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
   if (!src) return { error: "원본 지출을 찾을 수 없습니다" };
+  // 강사(own)는 본인이 작성한 결의서만 복제 가능(타인 결의서 열람·복제 차단).
+  if (scope === "own" && src.created_by !== user.id) {
+    return { error: "본인이 작성한 지출결의서만 복제할 수 있습니다" };
+  }
 
   const { error } = await supabase.from("expenses").insert({
     tenant_id: user.tenantId,
@@ -297,12 +347,14 @@ export async function duplicateExpense(_prev: ExpenseState, formData: FormData):
     account_number: src.account_number,
     memo: src.memo,
     line_items: src.line_items,
+    created_by: user.id,
     approval_status: "pending",
     approval_checks: { author: { checked: true, date: today() } },
   });
   if (error) return { error: error.message };
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 
@@ -314,9 +366,14 @@ export async function setExpenseReceiptType(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
+  if (scope === "own") {
+    const denied = await guardOwnExpense(id, user.id);
+    if (denied) return { error: denied };
+  }
   const type = String(formData.get("receiptType") ?? "").trim();
   if (type && !RECEIPT_TYPES.has(type)) return { error: "잘못된 증빙 유형입니다" };
 
@@ -328,6 +385,7 @@ export async function setExpenseReceiptType(
   if (error) return { error: error.message };
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 
@@ -339,11 +397,16 @@ export async function issueReceiptUploadTicket(
 ): Promise<IssueReceiptTicketState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  const lvl = await accessLevelTenant(user.systemRole, "billing");
-  if (lvl !== "full" && lvl !== "scoped") return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
 
   const expenseId = String(formData.get("expenseId") ?? "").trim();
   if (!UUID_RE.test(expenseId)) return { error: "잘못된 지출 ID입니다" };
+  // 강사(own)는 본인 작성분 + 결재 착수 전만 증빙 첨부 가능.
+  if (scope === "own") {
+    const denied = await guardOwnExpense(expenseId, user.id);
+    if (denied) return { error: denied };
+  }
   // 소유 확인 — RLS 스코프로 내 테넌트의 expense인지.
   const supabase = await createClient();
   const { data: exp } = await supabase.from("expenses").select("id").eq("id", expenseId).maybeSingle();
@@ -373,9 +436,14 @@ export async function addExpenseReceipt(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
+  if (scope === "own") {
+    const denied = await guardOwnExpense(id, user.id);
+    if (denied) return { error: denied };
+  }
   const path = String(formData.get("path") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   if (!isTenantReceiptPath(path, user.tenantId, id)) return { error: "파일 경로가 잘못되었습니다" };
@@ -408,6 +476,7 @@ export async function addExpenseReceipt(
   }
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 
@@ -418,9 +487,14 @@ export async function removeExpenseReceipt(
 ): Promise<ExpenseState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "지출 관리 권한이 없습니다" };
+  const scope = await expenseWriteScope(user.systemRole);
+  if (!scope) return { error: "지출 관리 권한이 없습니다" };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "지출 ID가 누락되었습니다" };
+  if (scope === "own") {
+    const denied = await guardOwnExpense(id, user.id);
+    if (denied) return { error: denied };
+  }
   const path = String(formData.get("path") ?? "").trim();
   // 레거시 http(s) 증빙(ijw Firebase URL)은 우리 스토리지 객체가 아니라 목록에서만 제거(경로검증·객체삭제 건너뜀).
   const isLegacy = /^https?:\/\//i.test(path);
@@ -439,6 +513,7 @@ export async function removeExpenseReceipt(
   if (!isLegacy) await removeObject(path, { backend: getMediaBackend(), bucket: RECEIPTS_BUCKET }).catch(() => {});
 
   revalidatePath("/billing");
+  revalidatePath("/expense-requests");
   return { ok: true };
 }
 

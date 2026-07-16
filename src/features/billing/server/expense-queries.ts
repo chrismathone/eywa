@@ -46,6 +46,7 @@ export type ExpenseRow = {
   lineItems: ExpenseLineItem[] | null;
   receiptType: string | null; // 증빙 유형(영수증/세금계산서 등)
   receiptUrls: ExpenseReceipt[]; // 첨부 파일 목록
+  createdBy: string | null; // 작성자 user id(0112a) — 강사 "본인 것만" 스코프 소스. 사무실·임포트본은 null.
 };
 
 export type CurrencyTotal = { currency: string; total: number; count: number };
@@ -69,7 +70,7 @@ function monthRange(period: string): { start: string; end: string } {
 }
 
 const EXPENSE_COLS =
-  "id, title, category, amount, currency, expense_date, created_at, vendor, department, author, position, bank_name, account_number, approval_status, approval_checks, payment_method, memo, line_items, receipt_type, receipt_urls";
+  "id, title, category, amount, currency, expense_date, created_at, vendor, department, author, position, bank_name, account_number, approval_status, approval_checks, payment_method, memo, line_items, receipt_type, receipt_urls, created_by";
 
 // receipt_urls jsonb → 정규화. 문자열 이중 인코딩 방어 + {path,name}만 보존.
 function normalizeReceiptUrls(raw: unknown): ExpenseReceipt[] {
@@ -181,6 +182,7 @@ function mapExpenseRow(r: any): ExpenseRow {
     lineItems: normalizeLineItems(r.line_items, currency),
     receiptType: r.receipt_type ?? null,
     receiptUrls: normalizeReceiptUrls(r.receipt_urls),
+    createdBy: typeof r.created_by === "string" ? r.created_by : null,
   };
 }
 
@@ -193,6 +195,19 @@ export async function getExpensesForMonth(period: string): Promise<ExpenseRow[]>
     .gte("expense_date", start)
     .lt("expense_date", end)
     .order("expense_date", { ascending: false });
+  return (data ?? []).map(mapExpenseRow);
+}
+
+// 강사 '지출결의서' 면 — 본인이 작성(created_by=본인)한 결의서 전건(최신순). 강사 스코프의 단일 소스.
+// tenant RLS로 테넌트 격리 + created_by eq로 본인 것만(사무실 결의서·타 강사 제출분은 안 보임). 최근 200건.
+export async function getMyExpenseRequests(userId: string): Promise<ExpenseRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("expenses")
+    .select(EXPENSE_COLS)
+    .eq("created_by", userId)
+    .order("created_at", { ascending: false })
+    .limit(200);
   return (data ?? []).map(mapExpenseRow);
 }
 

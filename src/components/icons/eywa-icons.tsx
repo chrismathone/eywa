@@ -1135,6 +1135,7 @@ export const MENU_ICON = {
   staff: "userSettings",
   billing: "wallet",
   textbook_requests: "bookMarked",
+  expense_requests: "receipt",
   meetings: "note",
   documents: "folder",
   integrations: "sync",

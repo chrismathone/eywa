@@ -30,6 +30,7 @@ export const MENU_KEYS = [
   "staff",
   "billing",
   "textbook_requests",
+  "expense_requests",
   "meetings",
   "documents",
   "integrations",
@@ -57,6 +58,7 @@ export const TEACHER_MENU_KEYS = [
   "exams",
   "consultations",
   "textbook_requests",
+  "expense_requests", // 지출결의서 — 강사가 본인 지출을 작성·제출(사무실은 /billing 지출 면에서 결재)
   "documents", // 서식 저장소 — 강사는 readonly(빈 양식 다운로드 용도)
 ] as const satisfies readonly MenuKey[];
 
@@ -88,6 +90,12 @@ export const MENU_ACCESS: AccessMatrix = {
   billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   // 교재 요청 — 강사가 본인 담당 학생 교재를 요청(스코프)하는 전용 면. 사무실(master/admin/accountant)은 /billing 교재 면에서 처리하되 여기서도 열람 가능.
   textbook_requests: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "none", accountant: "full", viewer: "none", student: "none" },
+  // 지출결의서(강사 제출) — 강사가 본인 지출을 작성·제출하고 결재 진행상태를 조회하는 전용 면(강사=본인 것만).
+  // 사무실(master/admin/accountant)은 /billing 지출 면에서 결재·처리하므로 여기 접근 시 그쪽으로 이동(=full은 라우팅만,
+  // 생성 게이트엔 영향 없음 — 이들은 이미 billing 쓰기로 생성). manager는 billing=readonly라 여기서도 none(생성 권한
+  // 확장 방지 — 이 기능은 '강사 제출'에 한정). ⚠️ 결재 승인(원장/대표 토글)은 이 키가 아니라 billing 쓰기만 통과 →
+  // 강사가 자기 결의서를 셀프 승인 못 함(expense-actions 게이트).
+  expense_requests: { master: "full", admin: "full", manager: "none", teacher: "full", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   // 강사=none — 원장 회의 포함 전체 회의록(민감)이라 누수. 강사 메뉴엔 없음(화자 연결은 데이터일 뿐 열람권 아님).
   meetings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "full", accountant: "full", viewer: "readonly", student: "none" },
   // 데이터베이스(서식 저장소) — 사무실(master/admin/manager)이 업로드·작성, 나머지는 조회만. 학생은 미노출.

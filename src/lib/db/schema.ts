@@ -1296,12 +1296,16 @@ export const expenses = pgTable(
     approvalStatus: text("approval_status").notNull().default("pending"), // pending/approved
     lineItems: jsonb("line_items"),
     memo: text("memo"),
+    // 작성자 user id(0112a) — 강사가 제출한 결의서의 "본인 것만" 스코프 소스. 이름 문자열 author와 별개(동명이인 방지).
+    // 사무실이 만든 결의서·ijw 임포트본은 NULL. RLS는 tenant-isolation만, own-only는 앱 레이어가 강제.
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("expenses_tenant_date_idx").on(t.tenantId, t.expenseDate),
     index("expenses_tenant_category_idx").on(t.tenantId, t.category),
+    index("expenses_tenant_creator_idx").on(t.tenantId, t.createdBy),
   ],
 );
 

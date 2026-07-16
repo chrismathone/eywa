@@ -33,6 +33,7 @@ const MENU_LABEL: Record<MenuKey, string> = {
   staff: "직원관리",
   billing: "수납관리",
   textbook_requests: "교재 요청",
+  expense_requests: "지출결의서",
   meetings: "회의록",
   documents: "데이터베이스",
   integrations: "makeedu 연동",
