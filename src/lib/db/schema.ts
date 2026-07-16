@@ -1248,6 +1248,43 @@ export const invoiceSessionTerms = pgTable(
   ],
 );
 
+// === invoice_teacher_splits (강사 분배 스냅샷 — 로드맵 2단계 b, 0116a) ===
+// 시수 검증의 강사별 분배를 기간 단위로 저장(청구서×반 1행, 저장 시점 담당 강사 스냅샷).
+// 기록 전용 — invoices 절대 불변(N2). confirmed_amount(청구 기준)·actual_amount(실측 기준)는 합산 금지(R3).
+export const invoiceTeacherSplits = pgTable(
+  "invoice_teacher_splits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }),
+    period: text("period").notNull(), // 'YYYY-MM' — 기간 조회·재저장 키
+    subject: text("subject").notNull(),
+    teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }), // null=미배정
+    teacherName: text("teacher_name"), // 표시 스냅샷(개명·삭제 후에도 기록 보존)
+    confirmedSessions: integer("confirmed_sessions").notNull(),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 0 }).notNull(),
+    confirmedAmount: numeric("confirmed_amount", { precision: 12, scale: 0 }).notNull(),
+    actualUnits: numeric("actual_units", { precision: 6, scale: 1 }).notNull(),
+    actualAmount: numeric("actual_amount", { precision: 12, scale: 0 }).notNull(),
+    diffAmount: numeric("diff_amount", { precision: 12, scale: 0 }).notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("invoice_teacher_splits_invoice_class_uq").on(t.tenantId, t.invoiceId, t.classId),
+    index("invoice_teacher_splits_period_idx").on(t.tenantId, t.period),
+    index("invoice_teacher_splits_teacher_idx").on(t.tenantId, t.teacherId),
+  ],
+);
+
 // === tuition_quotes (수강료 견적 — 신입생 상담용 저장 청구서) ===
 // 수강료 계산기의 "청구서로 저장"은 재원생 invoices가 아니라 신입생 상담 견적이다(ijw tuition_invoices 이식).
 // 학생정보는 자유 입력(미등록 신입생), 과목·기타·할인은 jsonb 스냅샷. invoices와 완전 분리.
