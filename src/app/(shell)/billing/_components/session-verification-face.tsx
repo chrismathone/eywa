@@ -1,5 +1,8 @@
 import { getSessionVerificationView, type VerificationStatus } from "@/features/billing/session-terms/server/verification-queries";
+import { getTeacherSplitsStatus } from "@/features/billing/session-terms/server/splits-queries";
 import { aggregateTeacherAllocations, hasAllocationSignal } from "@/features/billing/session-terms/allocation";
+import { computeSplitRows, splitsFingerprint, totalSplits } from "@/features/billing/session-terms/splits";
+import { SplitsSnapshotPanel } from "./splits-snapshot-panel";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
@@ -44,8 +47,16 @@ export async function SessionVerificationFace({
   page?: string;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
-  const [view, settings] = await Promise.all([getSessionVerificationView(p), getTenantSettings()]);
+  const [view, settings, savedSplits] = await Promise.all([
+    getSessionVerificationView(p),
+    getTenantSettings(),
+    getTeacherSplitsStatus(p),
+  ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  // 분배 스냅샷 드리프트 대조용 — 과목 필터와 무관하게 그 달 전체(저장 단위와 동일 기준).
+  // 지문은 강사 귀속까지 포함 — 합계가 상쇄되는 변경(강사 재배정)도 드리프트로 잡는다.
+  const liveSplitRows = computeSplitRows(view.rows);
+  const liveSplits = { ...totalSplits(liveSplitRows), fingerprint: splitsFingerprint(liveSplitRows) };
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
   const presentSubjects = [...new Set(allRows.map((r) => r.subject))].sort();
@@ -237,6 +248,15 @@ export async function SessionVerificationFace({
               </table>
             </div>
           </section>
+          ) : null}
+
+          {/* 분배 스냅샷(2단계 b) — 확정 행의 강사 분배를 기간 단위로 저장(기록 전용, invoices 불변 N2).
+              분배 표가 숨겨져도(신호 0) 저장 이력이 있으면 표시해 stale 스냅샷을 가시화한다.
+              key=period: 월 이동 시 useActionState(저장 완료/에러 메시지)를 리셋(적대 리뷰 픽스). */}
+          {savedSplits !== null || liveSplits.rowCount > 0 ? (
+            <section className="border-line overflow-hidden rounded-lg border">
+              <SplitsSnapshotPanel key={p} period={p} live={liveSplits} saved={savedSplits} />
+            </section>
           ) : null}
 
           <div className="border-line overflow-x-auto rounded-lg border">

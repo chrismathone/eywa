@@ -12,6 +12,7 @@ export type VerificationRow = {
   studentName: string;
   studentGrade: string | null;
   subject: string;
+  classId: string | null; // splits 저장 키(invoice×class) — 반 미상 행은 분배 스킵
   className: string | null;
   // 강사별 분배(참고) 집계용 — 반 담당 강사(표시 전용, 저장 없음). 그룹 키는 id(동명이인 병합 방지).
   teacherId: string | null;
@@ -81,6 +82,7 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
       studentName: r.studentName,
       studentGrade: r.studentGrade,
       subject: r.subject,
+      classId: r.classId,
       className: r.className,
       teacherId: teacher?.id ?? null,
       teacherName: teacher?.name ?? null,

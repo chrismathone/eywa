@@ -1,0 +1,2413 @@
+{
+ "period": "2026-07",
+ "snapshotAt": "2026-07-16T14:31:36.939Z",
+ "note": "injaewon 실데이터 동결 스냅샷 — 라이브 DB는 makeedu 동기화로 변동하므로 이 파일이 기준",
+ "rows": [
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 640250,
+   "amountPaid": 620250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 723500,
+   "amountPaid": 723500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 663000,
+   "amountPaid": 653000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 324000,
+   "amountPaid": 324000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 337500,
+   "amountPaid": 327500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 300000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 317000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 338000,
+   "amountPaid": 338000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 630000,
+   "amountPaid": 620000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 745000,
+   "amountPaid": 725000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 210000,
+   "amountPaid": 200000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 674000,
+   "amountPaid": 654000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 599000,
+   "amountPaid": 579000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 180000,
+   "amountPaid": 180000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 339500,
+   "amountPaid": 339500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 643000,
+   "amountPaid": 633000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 367875,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 317000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 625000,
+   "amountPaid": 625000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 943500,
+   "amountPaid": 635500,
+   "amountDiscount": 20000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 479000,
+   "amountPaid": 459000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 640250,
+   "amountPaid": 630250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 0,
+   "amountDiscount": 105000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 340500,
+   "amountPaid": 340500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 639500,
+   "amountPaid": 629500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 204375,
+   "amountPaid": 204375,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 643000,
+   "amountPaid": 633000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 630000,
+   "amountPaid": 620000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 659250,
+   "amountPaid": 639250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 636250,
+   "amountPaid": 626250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 843750,
+   "amountPaid": 375000,
+   "amountDiscount": 0,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 642000,
+   "amountPaid": 632000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 606000,
+   "amountPaid": 308000,
+   "amountDiscount": 10000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 232500,
+   "amountPaid": 232500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 616250,
+   "amountPaid": 606250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 1231500,
+   "amountPaid": 645500,
+   "amountDiscount": 10000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 305000,
+   "amountPaid": 295000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 644250,
+   "amountPaid": 624250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 290000,
+   "amountPaid": 290000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 684500,
+   "amountPaid": 674500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 232500,
+   "amountPaid": 232500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 356250,
+   "amountPaid": 356250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 225000,
+   "amountPaid": 0,
+   "amountDiscount": 40000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 576000,
+   "amountPaid": 556000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 332000,
+   "amountPaid": 332000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 50000,
+   "amountPaid": 50000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 737500,
+   "amountPaid": 727500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 347000,
+   "amountPaid": 347000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 375000,
+   "amountPaid": 375000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 332000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 587500,
+   "amountPaid": 577500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 72000,
+   "amountPaid": 72000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 527750,
+   "amountPaid": 507750,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 320000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 300000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 324000,
+   "amountPaid": 324000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 362000,
+   "amountPaid": 362000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 599000,
+   "amountPaid": 589000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 405000,
+   "amountPaid": 405000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 320000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 620000,
+   "amountPaid": 610000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 317250,
+   "amountPaid": 317250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 340500,
+   "amountPaid": 340500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 300000,
+   "amountPaid": 290000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 252500,
+   "amountPaid": 252500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 667500,
+   "amountPaid": 657500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 687500,
+   "amountPaid": 667500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 847500,
+   "amountPaid": 837500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 617000,
+   "amountPaid": 597000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 614250,
+   "amountPaid": 594250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 332000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 447000,
+   "amountPaid": 437000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 624000,
+   "amountPaid": 614000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 599000,
+   "amountPaid": 579000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 619000,
+   "amountPaid": 609000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 306250,
+   "amountPaid": 306250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 400000,
+   "amountPaid": 400000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 317250,
+   "amountPaid": 317250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 202500,
+   "amountPaid": 202500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 315000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 334000,
+   "amountPaid": 324000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 662000,
+   "amountPaid": 652000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 412000,
+   "amountPaid": 412000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 278000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 375000,
+   "amountPaid": 375000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 326250,
+   "amountPaid": 306250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 330000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 600000,
+   "amountPaid": 590000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 340500,
+   "amountPaid": 340500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 324000,
+   "amountPaid": 324000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 595000,
+   "amountPaid": 585000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 0,
+   "amountDiscount": 110363,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 163500,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 332000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 230000,
+   "amountPaid": 230000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 302000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 324000,
+   "amountPaid": 324000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 348250,
+   "amountPaid": 348250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 431250,
+   "amountPaid": 431250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 278000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 306250,
+   "amountPaid": 306250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 576000,
+   "amountPaid": 576000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 318000,
+   "amountPaid": 308000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 72000,
+   "amountPaid": 72000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 362000,
+   "amountPaid": 352000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 408000,
+   "amountPaid": 388000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 655500,
+   "amountPaid": 645500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 654000,
+   "amountPaid": 634000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312500,
+   "amountPaid": 312500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 388000,
+   "amountPaid": 388000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 739000,
+   "amountPaid": 729000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 337500,
+   "amountPaid": 327500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 337500,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 630000,
+   "amountPaid": 620000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 619000,
+   "amountPaid": 609000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 524000,
+   "amountPaid": 514000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 534000,
+   "amountPaid": 524000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 667500,
+   "amountPaid": 657500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 367875,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 302000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 354000,
+   "amountPaid": 354000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 334000,
+   "amountPaid": 334000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 347150,
+   "amountPaid": 337150,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 285000,
+   "amountPaid": 285000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 320000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 684500,
+   "amountPaid": 664500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 192000,
+   "amountPaid": 182000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 843750,
+   "amountPaid": 365000,
+   "amountDiscount": 10000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 479250,
+   "amountPaid": 479250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 308000,
+   "amountPaid": 308000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 524000,
+   "amountPaid": 504000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 667500,
+   "amountPaid": 657500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 573000,
+   "amountPaid": 573000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 546500,
+   "amountPaid": 536500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 332000,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 599000,
+   "amountPaid": 579000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 278000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 37500,
+   "amountPaid": 37500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 577500,
+   "amountPaid": 577500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 630000,
+   "amountPaid": 620000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 612000,
+   "amountPaid": 592000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 285000,
+   "amountPaid": 275000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 278000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 399000,
+   "amountPaid": 389000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 932500,
+   "amountPaid": 922500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 232500,
+   "amountPaid": 41250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 1231500,
+   "amountPaid": 1221500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 364500,
+   "amountPaid": 364500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 318000,
+   "amountPaid": 318000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 354000,
+   "amountPaid": 354000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 425000,
+   "amountPaid": 425000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 383250,
+   "amountPaid": 373250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 334000,
+   "amountPaid": 334000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 210000,
+   "amountPaid": 210000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 87250,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 320000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 383250,
+   "amountPaid": 383250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 563000,
+   "amountPaid": 513000,
+   "amountDiscount": 50000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 330000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 192000,
+   "amountPaid": 192000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 364500,
+   "amountPaid": 364500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 604875,
+   "amountPaid": 584875,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 600000,
+   "amountPaid": 590000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 367875,
+   "amountPaid": 367875,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 399000,
+   "amountPaid": 399000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 718750,
+   "amountPaid": 250000,
+   "amountDiscount": 0,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 338000,
+   "amountPaid": 338000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 619000,
+   "amountPaid": 609000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 330000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 163500,
+   "amountPaid": 163500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 617000,
+   "amountPaid": 607000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 212000,
+   "amountPaid": 212000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 545500,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 613000,
+   "amountPaid": 603000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 667500,
+   "amountPaid": 657500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 364500,
+   "amountPaid": 364500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 308000,
+   "amountPaid": 298000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 546500,
+   "amountPaid": 526500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 332000,
+   "amountPaid": 332000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 612000,
+   "amountPaid": 602000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 497875,
+   "amountPaid": 497875,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 702000,
+   "amountPaid": 692000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 702000,
+   "amountPaid": 504500,
+   "amountDiscount": 197500,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 367875,
+   "amountPaid": 357875,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 300000,
+   "amountPaid": 290000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 308000,
+   "amountPaid": 308000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 300000,
+   "amountPaid": 300000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 324000,
+   "amountPaid": 324000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 202500,
+   "amountPaid": 202500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 440750,
+   "amountPaid": 430750,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 504000,
+   "amountPaid": 494000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 619000,
+   "amountPaid": 609000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 231000,
+   "amountPaid": 231000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 542000,
+   "amountPaid": 532000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 544000,
+   "amountPaid": 524000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 285000,
+   "amountPaid": 285000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 666250,
+   "amountPaid": 257500,
+   "amountDiscount": 0,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 317000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 308000,
+   "amountPaid": 308000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 192000,
+   "amountPaid": 192000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 594250,
+   "amountPaid": 584250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 599000,
+   "amountPaid": 589000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 843750,
+   "amountPaid": 365000,
+   "amountDiscount": 10000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 324000,
+   "amountPaid": 314000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 630000,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 364500,
+   "amountPaid": 354500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 300000,
+   "amountDiscount": 30000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 870000,
+   "amountPaid": 850000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 524000,
+   "amountPaid": 514000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 362500,
+   "amountPaid": 352500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 285000,
+   "amountPaid": 285000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 300000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 315000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 599000,
+   "amountPaid": 589000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 340500,
+   "amountPaid": 340500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 356250,
+   "amountPaid": 346250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 786000,
+   "amountPaid": 478000,
+   "amountDiscount": 20000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 520000,
+   "amountPaid": 510000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 493875,
+   "amountPaid": 483875,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 614250,
+   "amountPaid": 604250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 254000,
+   "amountPaid": 254000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 314000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 163500,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 360000,
+   "amountPaid": 360000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 204375,
+   "amountPaid": 204375,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 350250,
+   "amountPaid": 350250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 300000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 615000,
+   "amountPaid": 605000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 470000,
+   "amountPaid": 450000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 562000,
+   "amountPaid": 552000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 332000,
+   "amountPaid": 322000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 331000,
+   "amountPaid": 331000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 306250,
+   "amountPaid": 306250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 367875,
+   "amountPaid": 367875,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 318000,
+   "amountPaid": 318000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 210000,
+   "amountPaid": 210000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 305000,
+   "amountPaid": 305000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 594250,
+   "amountPaid": 574250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 317000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 594250,
+   "amountPaid": 584250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 362000,
+   "amountPaid": 362000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 128500,
+   "amountPaid": 128500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 532500,
+   "amountPaid": 512500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 300000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 310000,
+   "amountPaid": 310000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 332000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 1231500,
+   "amountPaid": 1211500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 375000,
+   "amountPaid": 375000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 1231500,
+   "amountPaid": 1211500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 100000,
+   "amountPaid": 100000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 353250,
+   "amountPaid": 343250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 342000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 288000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 273500,
+   "amountPaid": 273500,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 644250,
+   "amountPaid": 634250,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 478500,
+   "amountPaid": 468500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 644250,
+   "amountPaid": 624250,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 222500,
+   "amountPaid": 212500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 320000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 330000,
+   "amountPaid": 330000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 334000,
+   "amountPaid": 304000,
+   "amountDiscount": 30000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 0,
+   "amountDiscount": 10000,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 662000,
+   "amountPaid": 652000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 338000,
+   "amountPaid": 338000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 285000,
+   "amountPaid": 285000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 278000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 288000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 1251500,
+   "amountPaid": 665500,
+   "amountDiscount": 10000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 325000,
+   "amountPaid": 325000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 328500,
+   "amountPaid": 318500,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 963500,
+   "amountPaid": 655500,
+   "amountDiscount": 20000,
+   "status": "partial"
+  },
+  {
+   "amountTotal": 327000,
+   "amountPaid": 327000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 334000,
+   "amountPaid": 334000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 342000,
+   "amountPaid": 0,
+   "amountDiscount": 0,
+   "status": "unpaid"
+  },
+  {
+   "amountTotal": 619000,
+   "amountPaid": 609000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 465000,
+   "amountPaid": 445000,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 665500,
+   "amountPaid": 645500,
+   "amountDiscount": 20000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 639000,
+   "amountPaid": 629000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 367875,
+   "amountPaid": 367875,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 312000,
+   "amountPaid": 312000,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 230000,
+   "amountPaid": 220000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 326250,
+   "amountPaid": 326250,
+   "amountDiscount": 0,
+   "status": "paid"
+  },
+  {
+   "amountTotal": 314000,
+   "amountPaid": 304000,
+   "amountDiscount": 10000,
+   "status": "paid"
+  }
+ ]
+}

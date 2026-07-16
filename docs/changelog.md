@@ -20,6 +20,25 @@ canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률�
   조회 스냅샷 미저장 → 권한 변화에 안전, [turns.ts](../src/features/assistant/turns.ts) 파싱 단일 소스·상한 60턴).
 - ⚠️ 실사용 E2E(로그인 세션)는 미완 — 원장이 운영실에서 첫 질문으로 확인. 강사 표면은 범위 밖(none).
 
+### 골든마스터 N6 + 강사 분배 splits 저장 (2026-07-16) — ✅ tsc0/lint0/test1471/DB E2E(원복) — 로드맵 2단계 (b) 완료
+attendance R2(정산 로직 변경 시 실데이터 3케이스 동시 통과 — 수동 live 검증)를 eywa에선 **자동화 골든마스터로 승격**,
+게이트 통과 후 (b) 강사 분배 저장까지. 설계 입력 = attendance R1~R6 전문 + 돈 사고 5건(191,250→170,000 "(퇴)" suffix /
+72k→264k step3.5 / 191,250→63,750 N:M 이중계상 / +60.5M 합산 / 실급여 0원) 병렬 전수 조사.
+- **골든마스터** [`golden/`](../src/features/billing/golden/golden.test.ts): injaewon 실데이터 동결 픽스처 4계열
+  ([A] 반 라인 매칭 — 강수정 BS2C 192,150·유사코드 JJ2B↛MS2B·서술형 브릿지B 288,000·실패=null /
+  [B] 계획 N — JJ2B 실 스케줄 9회·월중 등록/종료 proration·조은호 반이동 2행 비합산·제헌절 차감 8회(DB planned 9는 stale 발견) /
+  [C] 시수 검증·분배 — 실E2E 삼중 일치값(수학 −12,500·영어 −7,500) + over 케이스 /
+  [D] 수납 지표 — 2026-07 실 401행 스냅샷: 총액 161,122,025·미수 12,860,387·수납률 91.76%·유령 미수 1행 0원 처리).
+  ⚠️ **깨지면 "테스트 수정" 전에 "돈 산식이 왜 달라졌는지" 설명이 먼저** — 의도적 변경만 핀 갱신(커밋 메시지에 사유).
+- **splits(0117a `invoice_teacher_splits`)**: 시수 검증의 강사별 분배를 **기간 단위 전량 교체 스냅샷**으로 저장 —
+  행=(청구서×반, 유니크), 저장 시점 담당 강사 id·이름 스냅샷(퇴직·개명 후에도 기록 불변), 확정 행만(N1),
+  **invoices 절대 불변(N2)**, 청구 기준(confirmed_amount)·실측 기준(actual_amount) 분리 저장·합산 금지(R3).
+  순수 [`computeSplitRows`](../src/features/billing/session-terms/splits.ts)(Vitest 9+골든) → 액션 `saveTeacherSplits`
+  (canWriteTenant billing, 200행 청크, 실패 가시화) → 시수 검증 면 **스냅샷 패널**(저장 이력·현재 집계 드리프트 배지·저장 버튼).
+- **DB E2E(전량 원복)**: 0117a 적용(RLS 정책·트리거 검증) → 수학 JJ2B 시나리오 재현 → 분배 저장(박민엽 2행·150,000/137,500/−12,500
+  정확) → 재저장 멱등 → splits·확정·출석 0/0/0 원복 확인.
+- ⚠️ v1 한계: 분배 확정치의 급여 연계는 미구현(PAYROLL_ENABLED=false 상위 결정) — splits는 기록·대사용.
+  replace-invoices-from-excel류 전기간 재실행 시 FK cascade로 splits 소실 가능(계획 문서 기존 경고와 동일 — UPDATE 경로 유지).
 ### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
 원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
 보고**(`briefing-team-report.ts`, 0116a `team_report` jsonb)로 전환: 수업·학생·상담·수납·운영 매니저가 영역별
