@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { buildGridRows, isReportEligible, planBulkApply, planPrevFill, type BulkTarget } from "./grid";
+import {
+  buildGridRows,
+  buildRowRenderMeta,
+  isReportEligible,
+  planBulkApply,
+  planPrevFill,
+  type BulkTarget,
+} from "./grid";
 import type { OneScreenStudent, PrevReport } from "./types";
 
 function stu(id: string, subjects: { name: string; today?: string }[]): OneScreenStudent {
@@ -35,6 +42,30 @@ describe("buildGridRows", () => {
 
   it("과목 없는 학생은 행을 만들지 않는다", () => {
     expect(buildGridRows([stu("a", [])])).toHaveLength(0);
+  });
+});
+
+describe("buildRowRenderMeta", () => {
+  it("다과목 학생은 첫 행만 firstOfStudent, studentRow는 학생 묶음 순번(밀집)", () => {
+    const rows = buildGridRows([
+      stu("a", [{ name: "수학" }]),
+      stu("b", [{ name: "수학" }, { name: "영어" }]),
+      stu("c", [{ name: "수학" }]),
+    ]);
+    expect(buildRowRenderMeta(rows)).toEqual([
+      { firstOfStudent: true, studentRow: 0 },
+      { firstOfStudent: true, studentRow: 1 },
+      { firstOfStudent: false, studentRow: 1 }, // b의 두 번째 과목 행 — 점수 nav 미부착 대상
+      { firstOfStudent: true, studentRow: 2 },
+    ]);
+  });
+
+  it("표시 순서 기준이라 재배열(순서 모드)된 목록에도 정합", () => {
+    const [a, b] = buildGridRows([stu("a", [{ name: "수학" }]), stu("b", [{ name: "수학" }])]);
+    expect(buildRowRenderMeta([b!, a!])).toEqual([
+      { firstOfStudent: true, studentRow: 0 },
+      { firstOfStudent: true, studentRow: 1 },
+    ]);
   });
 });
 

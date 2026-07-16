@@ -29,21 +29,25 @@ export async function saveStudentOrder(input: {
     return { error: "잘못된 학생 목록입니다" };
 
   const supabase = await createClient();
-  // 담당 반 소유 확인 — 남의 반 키로 개인 설정 행을 쌓지 않게(scoped 강제).
-  const { data: cls } = await supabase
-    .from("classes")
-    .select("id")
-    .eq("id", classId)
-    .eq("teacher_id", teacherId)
-    .maybeSingle();
+  // 담당 반 소유 확인 — 남의 반 키로 개인 설정 행을 쌓지 않게(scoped 강제). 소속 검증과 독립 조회 → 병렬(B4).
+  const [{ data: cls }, { data: enrolled }] = await Promise.all([
+    supabase.from("classes").select("id").eq("id", classId).eq("teacher_id", teacherId).maybeSingle(),
+    supabase.from("enrollments").select("student_id").eq("class_id", classId).is("end_date", null),
+  ]);
   if (!cls) return { error: "담당 반이 아닙니다" };
+
+  // ⚠️ 반 소속 검증(리뷰 확정 결함 방어): stale 순서 모드가 다른 반 학생 ids를 이 반 키로 저장해
+  // 기존 저장 순서를 조용히 파괴하는 사고 차단. 이 반 유효 수강생만 저장(보강 등 비소속 id는 조용히 제외).
+  const enrolledSet = new Set((enrolled ?? []).map((r) => r.student_id as string));
+  const ownIds = studentIds.filter((id) => enrolledSet.has(id));
+  if (ownIds.length === 0) return { error: "이 반 학생이 없습니다 — 화면을 새로고침한 뒤 다시 시도해 주세요" };
 
   const { error } = await supabase.from("onescreen_student_order").upsert(
     {
       tenant_id: user.tenantId,
       teacher_id: teacherId,
       class_id: classId,
-      student_ids: studentIds,
+      student_ids: ownIds,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "tenant_id,teacher_id,class_id" },

@@ -241,8 +241,11 @@ export function OneScreenClient({
   const visible =
     classFilter === "전체" ? students : students.filter((s) => s.tag === classFilter);
   // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
-  const orderClass =
-    classFilter !== "전체" ? todayClasses.find((c) => c.name === classFilter) : undefined;
+  // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
+  //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
+  const matchingClasses =
+    classFilter !== "전체" ? todayClasses.filter((c) => c.name === classFilter) : [];
+  const orderClass = matchingClasses.length === 1 ? matchingClasses[0] : undefined;
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
 

@@ -22,7 +22,6 @@ describe("summarizeSend", () => {
     subject: sub,
     subjectIndex: 0,
     key: `${id}::${sub.name}`,
-    index: 0,
   });
 
   it("미작성/작성중/발송/열람 집계 + unsent=draft+todo", () => {

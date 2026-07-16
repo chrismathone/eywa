@@ -14,7 +14,7 @@ import { ScoreInput } from "./score-input";
 
 const TD = "border-line border-t px-2 py-1.5 align-top";
 // 문구·특이사항 textarea — 내용에 따라 자동 확장(field-sizing, 미지원 브라우저는 min-h 고정 + resize-y 수동).
-const AUTOSIZE = "[field-sizing:content] max-h-[200px] resize-y";
+const AUTOSIZE = "field-sizing-content max-h-[200px] resize-y"; // Tailwind v4 내장 유틸리티
 
 /** 필드 편집 핸들러(카드뷰와 같은 state·저장로직 공유 — studentId 파라미터 버전). */
 export type GridFieldHandlers = {
@@ -100,8 +100,8 @@ export function GridBodyRow({
   fields,
   actions,
   config,
-  genRowBusy,
-  bulkGen,
+  gen,
+  nav,
   orderControls,
 }: {
   row: GridRow;
@@ -111,14 +111,18 @@ export function GridBodyRow({
   fields: GridFieldHandlers;
   actions: GridRowActions;
   config: GridConfig;
-  genRowBusy: boolean; // 이 행 자동작성 중
-  bulkGen?: boolean; // 전체 자동작성 진행중
+  gen: { rowBusy: boolean; bulk?: boolean }; // 이 행 자동작성 중 / 전체 자동작성 진행중
+  // 키보드 세로 이동(3-1) 인덱스 — **표시 순서 기준**(assembler가 buildRowRenderMeta로 부여).
+  // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
+  nav: { row: number; studentRow?: number };
   orderControls?: React.ReactNode; // 순서 모드(3-2) — 선택 체크박스 자리에 ↑↓(학생 묶음 첫 행만)
 }) {
   const { student, subject, subjectIndex, key } = row;
   const { tone } = subjectTone(subject.name);
   const badge = classnoteBadge(rep?.classnoteStatus);
   const att = student.attendance;
+  const genRowBusy = gen.rowBusy;
+  const bulkGen = gen.bulk;
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
   const canWrite = isReportEligible(subject); // 진도 입력됨 = 자동작성/발송 가능
   return (
@@ -179,7 +183,7 @@ export function GridBodyRow({
             label={`${student.name} 일일테스트`}
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "daily", v)}
-            nav={{ col: "daily", row: row.index }}
+            nav={nav.studentRow !== undefined ? { col: "daily", row: nav.studentRow } : undefined}
           />
         </td>
       ) : null}
@@ -192,7 +196,7 @@ export function GridBodyRow({
             label={`${student.name} 확인테스트`}
             allowMax={config.allowTestMax}
             onMax={(v) => fields.onMax(student.id, "check", v)}
-            nav={{ col: "check", row: row.index }}
+            nav={nav.studentRow !== undefined ? { col: "check", row: nav.studentRow } : undefined}
           />
         </td>
       ) : null}
@@ -224,7 +228,7 @@ export function GridBodyRow({
             placeholder="교재명"
             aria-label={`${student.name} ${subject.name} 교재명`}
             data-nav-col="textbook"
-            data-nav-row={row.index}
+            data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />
@@ -236,7 +240,7 @@ export function GridBodyRow({
             placeholder="오늘 과제 (예: 개념편 p10~16)"
             aria-label={`${student.name} ${subject.name} 오늘 과제`}
             data-nav-col="homeworkToday"
-            data-nav-row={row.index}
+            data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
             className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
           />

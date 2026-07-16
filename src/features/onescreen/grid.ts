@@ -10,7 +10,6 @@ export type GridRow = {
   subject: Subject;
   subjectIndex: number;
   key: string; // `${student.id}::${subject.name}` — React key·상태 인덱싱
-  index: number; // 표 전체 행 순번 — 키보드 세로 이동(data-nav-row, 3-1)
 };
 
 /** 학생 목록 → (학생 × 과목) 행 평탄화. 과목 순서 보존, 과목 없는 학생 제외(발송 단위가 과목). */
@@ -18,10 +17,27 @@ export function buildGridRows(students: OneScreenStudent[]): GridRow[] {
   const rows: GridRow[] = [];
   for (const student of students) {
     student.subjects.forEach((subject, subjectIndex) => {
-      rows.push({ student, subject, subjectIndex, key: `${student.id}::${subject.name}`, index: rows.length });
+      rows.push({ student, subject, subjectIndex, key: `${student.id}::${subject.name}` });
     });
   }
   return rows;
+}
+
+/**
+ * 표시 행 목록 → 렌더 메타(학생 묶음 첫 행 여부·학생 묶음 순번). **표시 순서 기준**이라 순서 모드 재배열에도 정합.
+ * 키보드 세로 이동(3-1)의 nav 인덱스 원천: 학생 단위 열(일일/확인 점수)은 studentRow(첫 행만),
+ * 과목 단위 열(교재·오늘과제)은 행 렌더 인덱스를 쓴다 — 다과목 학생의 중복 점수칸에 Enter가 멈추지 않게(리뷰 확정 결함).
+ */
+export type RowRenderMeta = { firstOfStudent: boolean; studentRow: number };
+export function buildRowRenderMeta(rows: readonly { student: { id: string } }[]): RowRenderMeta[] {
+  let seq = -1;
+  let prev: string | null = null;
+  return rows.map((r) => {
+    const first = r.student.id !== prev;
+    if (first) seq += 1;
+    prev = r.student.id;
+    return { firstOfStudent: first, studentRow: seq };
+  });
 }
 
 /** 저장·발송 대상 판정 — 오늘 진도가 입력된 행만(빈 보고서 방지). */

@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { buildGridRows, isReportEligible } from "../grid";
+import { buildGridRows, buildRowRenderMeta, isReportEligible } from "../grid";
 import { moveInOrder } from "../student-order";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
@@ -54,6 +54,18 @@ export function OneScreenGrid({
   const [orderMode, setOrderMode] = useState(false);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
+  // ⚠️ 반 필터 전환 방어(리뷰 확정 결함): 반 칩은 상단 바(그리드 밖)라 순서 모드 중에도 눌리는데, 그대로 두면
+  // stale draftOrder(이전 반 학생)가 새 반 키로 저장돼 그 반의 저장 순서를 조용히 파괴한다 → 대상 반이 바뀌면
+  // 순서 모드 강제 종료. 렌더 중 이전 값 비교 리셋(React 공식 패턴, #25 set-state-in-effect 회피).
+  const orderClassId = order?.classId ?? null;
+  const [prevOrderClassId, setPrevOrderClassId] = useState<string | null>(orderClassId);
+  if (prevOrderClassId !== orderClassId) {
+    setPrevOrderClassId(orderClassId);
+    if (orderMode) {
+      setOrderMode(false);
+      setDraftOrder([]);
+    }
+  }
   const selectedKeys = rows.filter((r) => checked.has(r.key)).map((r) => r.key);
   const selectedEligible = eligibleRows.filter((r) => checked.has(r.key)).length; // 실제 처리될 수(발송가능)
   const hasPrev = rows.some((r) => r.subject.prevReport); // 참고행 데이터가 있을 때만 토글 노출
@@ -83,6 +95,8 @@ export function OneScreenGrid({
           .map((x) => x.r);
       })()
     : rows;
+  // 렌더 메타(표시 순서 기준) — nav 인덱스·순서 모드 ↑↓ 배치 공유. 재배열(orderMode)에도 시각 순서와 정합.
+  const rowMeta = buildRowRenderMeta(displayRows);
   const startOrder = () => {
     setDraftOrder([...new Set(rows.map((r) => r.student.id))]);
     setOrderMode(true);
@@ -191,7 +205,8 @@ export function OneScreenGrid({
           <tbody>
             {displayRows.map((row, i) => {
               // 순서 모드: 학생 묶음 첫 행에만 ↑↓ 노출(과목 행 단위 이동 아님). 참고행은 숨김(시각 단순화).
-              const firstOfStudent = i === 0 || displayRows[i - 1]!.student.id !== row.student.id;
+              const meta = rowMeta[i]!;
+              const firstOfStudent = meta.firstOfStudent;
               const orderControls = orderMode ? (
                 firstOfStudent ? (
                   <div className="flex flex-col items-center gap-0.5">
@@ -234,8 +249,8 @@ export function OneScreenGrid({
                     fields={fields}
                     actions={rowActions}
                     config={config}
-                    genRowBusy={genKey === row.key}
-                    bulkGen={bulkGen}
+                    gen={{ rowBusy: genKey === row.key, bulk: bulkGen }}
+                    nav={{ row: i, studentRow: firstOfStudent ? meta.studentRow : undefined }}
                     orderControls={orderControls}
                   />
                 </Fragment>
