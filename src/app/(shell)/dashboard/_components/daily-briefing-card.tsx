@@ -61,7 +61,7 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                 브리핑 생성에 실패했습니다. 다시 생성해 주세요.
               </p>
             ) : narrative ? (
-              <p className="text-foreground mt-1 max-w-3xl text-[13px] leading-relaxed">{narrative}</p>
+              <p className="text-foreground mt-1 text-[13px] leading-relaxed">{narrative}</p>
             ) : (
               <p className="text-text-dim mt-1 text-[12.5px] leading-relaxed">
                 오늘 브리핑이 아직 없습니다. 매일 아침 자동으로 생성되며, 지금 바로 만들 수도 있습니다.
