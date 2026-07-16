@@ -6,6 +6,10 @@ import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
 import { compareStudentLines } from "../lib/student-sort";
 import type { TeacherColorMap } from "../lib/class-grid";
+import {
+  enrollmentAttendsOnDay,
+  isEnrollmentActiveOn,
+} from "@/features/enrollments/eligibility";
 
 /** 오늘(YYYY-MM-DD, 기준일 기본값) — KST 기준(서버 UTC라 새벽 시간대 하루 밀림 방지). */
 const todayStr = (): string => kstToday();
@@ -519,7 +523,7 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
 
   // 오늘 요일 스케줄만 — fetchSlots(전 요일 fetch 후 JS 필터)를 SQL 필터로 좁힘(데이터 ~1/7).
   // 폐지(is_active=false)·미래 시작·만료 스케줄 제외 + 종강(closed_at<오늘)은 JS에서 제외(시간표와 일관).
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("class_schedules")
     .select(
       `id, day_of_week, start_time, end_time, class_id,
@@ -534,6 +538,7 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
     .lte("valid_from", today)
     .or(`valid_to.is.null,valid_to.gte.${today}`)
     .order("start_time");
+  if (error) throw new Error(`today schedule: ${error.message}`);
   if (!data || data.length === 0) return [];
 
   // 종강 반(closed_at < 오늘)은 오늘 일정에서 제외.
@@ -547,16 +552,45 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   // 오늘 반의 활성 enrollment만 카운트 — 전체 enrollment 전건 페이지네이션 대신 오늘 반(classIds)으로 좁힘.
   // classIds는 수십 개라 .in() URL 안전 + range로 1000행 방어(#53/#54).
   const classIds = [...new Set(visible.map((r) => r.class_id as string))];
-  const enrollments = await fetchAllPaged<{ class_id: string }>((from, to) =>
+  const enrollments = await fetchAllPaged<{
+    id: string;
+    class_id: string;
+    student_id: string;
+    start_date: string;
+    end_date: string | null;
+    on_hold: boolean;
+    is_transferred: boolean | null;
+    attendance_days: string[] | null;
+  }>((from, to) =>
     supabase
       .from("enrollments")
-      .select("class_id")
-      .is("end_date", null)
+      .select("id, class_id, student_id, start_date, end_date, on_hold, is_transferred, attendance_days")
+      .lte("start_date", today)
       .in("class_id", classIds)
+      .order("id", { ascending: true })
       .range(from, to),
   );
-  const counts = new Map<string, number>();
-  for (const e of enrollments) counts.set(e.class_id, (counts.get(e.class_id) ?? 0) + 1);
+  const studentsByClass = new Map<string, Set<string>>();
+  for (const enrollment of enrollments) {
+    if (
+      !isEnrollmentActiveOn(
+        {
+          startDate: enrollment.start_date,
+          endDate: enrollment.end_date,
+          onHold: enrollment.on_hold,
+          isTransferred: enrollment.is_transferred === true,
+        },
+        today,
+      ) ||
+      !enrollmentAttendsOnDay(enrollment.attendance_days, todayKey)
+    ) {
+      continue;
+    }
+    const students = studentsByClass.get(enrollment.class_id) ?? new Set<string>();
+    students.add(enrollment.student_id);
+    studentsByClass.set(enrollment.class_id, students);
+  }
+  const counts = new Map([...studentsByClass].map(([classId, students]) => [classId, students.size]));
 
   const nowMins = kstMinutesOfDay();
   const toMins = (hms: string): number => {

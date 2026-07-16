@@ -28,12 +28,14 @@ export type EmptyStateImage = keyof typeof EMPTY_STATE_IMAGES;
 export function EmptyState({
   icon: Icon,
   image,
+  imageLoading = "lazy",
   title,
   description,
   action,
 }: {
   icon?: IconComponent;
   image?: EmptyStateImage;
+  imageLoading?: "eager" | "lazy";
   title: string;
   description?: string;
   action?: ReactNode;
@@ -51,6 +53,7 @@ export function EmptyState({
           alt=""
           width={220}
           height={220}
+          loading={imageLoading}
           className="mb-1 size-36 object-contain sm:size-40"
         />
       ) : Icon ? (

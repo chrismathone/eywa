@@ -15,10 +15,20 @@ const URGENCY: Record<DashFollowUp["urgency"], { label: string; color: PillColor
   none: { label: "-", color: "neutral" },
 };
 
-export function FollowUpCard({ items }: { items: DashFollowUp[] }) {
+export function FollowUpCard({
+  items,
+  canOpenStudents,
+  unavailable = false,
+}: {
+  items: DashFollowUp[];
+  canOpenStudents: boolean;
+  unavailable?: boolean;
+}) {
   return (
     <DashCard title="상담 후속조치" count={items.length > 0 ? `${items.length}건` : undefined} href="/consultations">
-      {items.length === 0 ? (
+      {unavailable ? (
+        <DashEmpty>후속조치를 불러오지 못했습니다. 상담 화면에서 확인해 주세요.</DashEmpty>
+      ) : items.length === 0 ? (
         <DashEmpty>임박한 후속조치가 없습니다</DashEmpty>
       ) : (
         <ul className="divide-border min-h-0 flex-1 divide-y overflow-y-auto">
@@ -28,13 +38,17 @@ export function FollowUpCard({ items }: { items: DashFollowUp[] }) {
               <li key={f.id} className="flex items-center justify-between gap-2 py-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <WindowLink
-                      href={`/students/${f.studentId}`}
-                      title={f.studentName}
-                      className="text-foreground truncate text-[13px] font-medium hover:underline"
-                    >
-                      {f.studentName}
-                    </WindowLink>
+                    {canOpenStudents ? (
+                      <WindowLink
+                        href={`/students/${f.studentId}`}
+                        title={f.studentName}
+                        className="text-foreground truncate text-[13px] font-medium hover:underline"
+                      >
+                        {f.studentName}
+                      </WindowLink>
+                    ) : (
+                      <span className="text-foreground truncate text-[13px] font-medium">{f.studentName}</span>
+                    )}
                   </div>
                   <p className="text-text-faint truncate text-[11px]">{f.followUpAction ?? "후속 연락"}</p>
                 </div>

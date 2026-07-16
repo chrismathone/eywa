@@ -7,6 +7,7 @@ import {
   resolveReportDate,
   weekdayIndexOf,
   addDays,
+  inclusiveDateWindowStart,
   formatKoreanDate,
 } from "./date-kst";
 
@@ -80,6 +81,12 @@ describe("weekdayIndexOf / addDays / formatKoreanDate — UTC 결정적 날짜 �
     expect(addDays("2026-07-01", -1)).toBe("2026-06-30"); // 월 경계
     expect(addDays("2026-01-01", -1)).toBe("2025-12-31"); // 연 경계
     expect(addDays("2026-02-28", 1)).toBe("2026-03-01"); // 비윤년 2월
+  });
+  it("inclusiveDateWindowStart: 오늘을 포함해 정확히 N일을 계산", () => {
+    expect(inclusiveDateWindowStart("2026-07-16", 7)).toBe("2026-07-10");
+    expect(inclusiveDateWindowStart("2026-07-16", 30)).toBe("2026-06-17");
+    expect(inclusiveDateWindowStart("2026-07-16", 1)).toBe("2026-07-16");
+    expect(inclusiveDateWindowStart("2026-07-16", 0)).toBe("2026-07-16");
   });
   it("formatKoreanDate: 한글 표시", () => {
     expect(formatKoreanDate("2026-07-14")).toBe("2026년 7월 14일 (화)");

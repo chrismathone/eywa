@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll } from "./queries";
@@ -143,7 +144,9 @@ export async function requestLeave(
 ): Promise<LeaveActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
+    return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+  }
 
   const userId = String(formData.get("userId") ?? "").trim();
   const leaveType = String(formData.get("leaveType") ?? "").trim();
@@ -179,7 +182,9 @@ export async function approveLeave(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
-  if (!canManageStaff(user.systemRole)) return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
+    return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
@@ -205,7 +210,9 @@ export async function deleteLeave(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
-  if (!canManageStaff(user.systemRole)) return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
+    return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();

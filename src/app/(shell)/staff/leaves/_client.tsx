@@ -15,7 +15,13 @@ function dur(a: string, b: string): string {
   return a === b ? a : `${a} ~ ${b}`;
 }
 
-export function LeavesAdminClient({ leaves }: { leaves: StaffLeaveRow[] }) {
+export function LeavesAdminClient({
+  leaves,
+  canManage,
+}: {
+  leaves: StaffLeaveRow[];
+  canManage: boolean;
+}) {
   return (
     <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
@@ -26,7 +32,7 @@ export function LeavesAdminClient({ leaves }: { leaves: StaffLeaveRow[] }) {
             <th className="px-4 py-3 font-normal">기간</th>
             <th className="px-4 py-3 font-normal">사유</th>
             <th className="px-4 py-3 font-normal">상태</th>
-            <th className="px-4 py-3 text-right font-normal">처리</th>
+            {canManage ? <th className="px-4 py-3 text-right font-normal">처리</th> : null}
           </tr>
         </thead>
         <tbody className="divide-line divide-y">
@@ -54,9 +60,11 @@ export function LeavesAdminClient({ leaves }: { leaves: StaffLeaveRow[] }) {
                   </span>
                 )}
               </td>
-              <td className="px-4 py-2.5 text-right">
-                <RowActions leave={l} />
-              </td>
+              {canManage ? (
+                <td className="px-4 py-2.5 text-right">
+                  <RowActions leave={l} />
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

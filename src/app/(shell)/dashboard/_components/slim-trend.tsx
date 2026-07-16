@@ -11,33 +11,42 @@ export function SlimTrend({
   data,
   change,
   subjects,
+  visible,
 }: {
   data: TrendPoint[];
   change: EnrollmentChangeSummary;
   subjects: SubjectMaps;
+  visible: { attendance: boolean; billing: boolean; enrollment: boolean };
 }) {
-  if (data.length === 0 && change.newCount === 0 && change.withdrawnCount === 0) return null;
-  const attendance = data.map((p) => p.attendance);
-  const payment = data.map((p) => p.payment);
+  const panelCount = Number(visible.enrollment) + Number(visible.attendance) + Number(visible.billing);
+  if (panelCount === 0) return null;
+  if (data.length === 0 && (!visible.enrollment || (change.newCount === 0 && change.withdrawnCount === 0))) return null;
+  const attendance = data.map((point) => ({ date: point.date, value: point.attendance }));
+  const payment = data.map((point) => ({ date: point.date, value: point.payment }));
   const range = data.length ? `${data[0].date} – ${data[data.length - 1].date}` : `최근 ${change.days}일`;
+  const panelGrid =
+    panelCount >= 3 ? "lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]" : panelCount === 2 ? "lg:grid-cols-2" : "grid-cols-1";
 
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
-      <header className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-foreground text-[15px] font-bold">최근 {change.days}일</h2>
-        <span className="text-text-faint font-mono text-[10px]">{range}</span>
+      <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="text-primary font-mono text-[10px] font-bold tracking-[0.12em] uppercase">Academy pulse</p>
+          <h2 className="text-foreground mt-0.5 text-[15px] font-bold">학원 펄스</h2>
+        </div>
+        <span className="text-text-dim font-mono text-[10px]">최근 {change.days}일 · {range}</span>
       </header>
       {/* 전체 폭을 3개 지표 패널로 채운다(우측 빈 공간 제거): 학생증감(1.5fr) + 출석률·수납률(각 1fr).
           items-stretch로 세 패널 높이 일치, 트렌드 패널의 sparkline이 flex-1로 커져 높이를 채운다.
           트렌드 데이터가 없으면(초기) 학생증감만 전폭. */}
       {data.length > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-stretch">
-          <StudentChange change={change} subjects={subjects} />
-          <TrendRow label="출석률" values={attendance} colorVar="--color-chart-2" />
-          <TrendRow label="수납률" values={payment} colorVar="--color-chart-3" />
+        <div className={`grid gap-4 lg:items-stretch ${panelGrid}`}>
+          {visible.enrollment ? <StudentChange change={change} subjects={subjects} /> : null}
+          {visible.attendance ? <TrendRow label="출석률" points={attendance} colorVar="--color-chart-2" /> : null}
+          {visible.billing ? <TrendRow label="수납률" points={payment} colorVar="--color-chart-3" /> : null}
         </div>
       ) : (
-        <StudentChange change={change} subjects={subjects} />
+        visible.enrollment ? <StudentChange change={change} subjects={subjects} /> : null
       )}
     </section>
   );
@@ -52,7 +61,7 @@ function StudentChange({ change, subjects }: { change: EnrollmentChangeSummary; 
     <div className="border-line flex h-full flex-col rounded-xl border px-4 py-3">
       <span className="text-text-faint font-mono text-[10px] tracking-wider uppercase">학생 증감</span>
       {noChange ? (
-        <div className="text-text-faint mt-2 flex flex-1 items-center text-[12px]">최근 {change.days}일 변동 없음</div>
+        <div className="text-text-dim mt-2 flex flex-1 items-center text-[12px]">최근 {change.days}일 변동 없음</div>
       ) : (
         <>
           <div className="mt-1.5 flex items-end gap-4">
@@ -123,15 +132,36 @@ function SubjectChangeChart({
   );
 }
 
-function TrendRow({ label, values, colorVar }: { label: string; values: number[]; colorVar: string }) {
-  // 창에 실데이터가 없으면(전부 0) 가짜 "0% 평탄선" 대신 정직하게 '기록 없음'.
-  const hasData = values.some((v) => v > 0);
-  const last = values[values.length - 1] ?? 0;
-  const delta = trendDelta(values);
+function TrendRow({
+  label,
+  points,
+  colorVar,
+}: {
+  label: string;
+  points: Array<{ date: string; value: number | null }>;
+  colorVar: string;
+}) {
+  // null은 원천 행 없음, 0은 실제 0%다. Sparkline에는 null 위치를 그대로 넘겨 결측 구간을 잇지 않는다.
+  const values = points.map((point) => point.value);
+  const recordedValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  const hasData = recordedValues.length > 0;
+  const last = recordedValues[recordedValues.length - 1] ?? 0;
+  const delta = trendDelta(recordedValues);
   const deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}pt`;
+  const lastRecordedIndex = points.findLastIndex(
+    (point) => point.value !== null && Number.isFinite(point.value),
+  );
+  const asOf =
+    lastRecordedIndex >= 0 && lastRecordedIndex < points.length - 1
+      ? `${points[lastRecordedIndex].date} 기준`
+      : null;
+  const accessibleSummary = points
+    .map((point) => `${point.date} ${point.value === null ? "데이터 없음" : `${point.value}%`}`)
+    .join(", ");
   return (
     // 세로 패널: 라벨·증감 → 큰 값 → sparkline(flex-1로 남은 높이 채움). 전폭 3패널에서 옆 학생증감과 높이 맞춤.
     <div className="border-line flex flex-col rounded-xl border px-3 py-2.5">
+      <p className="sr-only">{label} 날짜별 값: {accessibleSummary}</p>
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-[10px] tracking-wider uppercase" style={{ color: `var(${colorVar})` }}>
           {label}
@@ -148,6 +178,7 @@ function TrendRow({ label, values, colorVar }: { label: string; values: number[]
             {Math.round(last)}
             <span className="text-text-dim text-[12px] font-medium">%</span>
           </div>
+          {asOf ? <div className="text-text-faint mt-1 font-mono text-[10px]">{asOf}</div> : null}
           {/* absolute: SVG를 흐름에서 빼 종횡비 높이 부풀림 차단 → 패널 높이는 옆 학생증감이 결정(컴팩트). */}
           <div className="relative mt-2 min-h-[40px] flex-1">
             <div className="absolute inset-0">
@@ -156,7 +187,7 @@ function TrendRow({ label, values, colorVar }: { label: string; values: number[]
           </div>
         </>
       ) : (
-        <div className="text-text-faint mt-2 flex min-h-[40px] flex-1 items-center justify-center text-center text-[11px]">
+        <div className="text-text-dim mt-2 flex min-h-[40px] flex-1 items-center justify-center text-center text-[11px]">
           최근 7일 데이터가 아직 없습니다
         </div>
       )}

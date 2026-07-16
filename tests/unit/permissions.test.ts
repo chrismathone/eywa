@@ -90,6 +90,13 @@ describe("resolveMatrix — 테넌트 권한 override (sparse)", () => {
     expect(m.dashboard.student).toBe(MENU_ACCESS.dashboard.student);
   });
 
+  it("가드레일 무시 — 담당 범위 집계가 없는 동안 강사에게 오늘 화면을 부여할 수 없다", () => {
+    const m = resolveMatrix([{ menu: "dashboard", role: "teacher", access: "scoped" }]);
+
+    expect(m.dashboard.teacher).toBe("none");
+    expect(canAccess("teacher", "dashboard", m)).toBe(false);
+  });
+
   it("MENU_ACCESS 원본을 변형하지 않음", () => {
     resolveMatrix([{ menu: "billing", role: "teacher", access: "full" }]);
     expect(MENU_ACCESS.billing.teacher).toBe("none");

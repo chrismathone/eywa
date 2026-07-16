@@ -1,0 +1,67 @@
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import {
+  canAccess,
+  canWrite,
+  type AccessMatrix,
+  type SystemRole,
+} from "@/lib/permissions";
+
+/**
+ * `오늘` 화면이 다루는 도메인별 유효 권한.
+ *
+ * 페이지·브리핑·하단 카드·빠른 작업이 서로 다른 기준으로 판단하면 홈에서
+ * 민감 정보가 새거나, 눌러도 열리지 않는 링크가 생긴다. 한 번 계산한 작은
+ * boolean 집합을 서버 컴포넌트 안에서만 공유해 같은 기준으로 조회와 렌더를 건넌다.
+ */
+export type DashboardAccess = {
+  read: {
+    attendance: boolean;
+    billing: boolean;
+    classes: boolean;
+    consultations: boolean;
+    enrollment: boolean;
+    lessonReports: boolean;
+    meetings: boolean;
+    owner: boolean;
+    staff: boolean;
+    students: boolean;
+    timetable: boolean;
+  };
+  write: {
+    billing: boolean;
+    classes: boolean;
+    consultations: boolean;
+    enrollment: boolean;
+    meetings: boolean;
+    students: boolean;
+  };
+  /** 휴가 승인은 역할 계층과 테넌트 staff 쓰기 권한을 모두 충족해야 한다. */
+  manageStaff: boolean;
+};
+
+export function resolveDashboardAccess(role: SystemRole, matrix: AccessMatrix): DashboardAccess {
+  return {
+    read: {
+      attendance: canAccess(role, "attendance", matrix),
+      billing: canAccess(role, "billing", matrix),
+      classes: canAccess(role, "classes", matrix),
+      consultations: canAccess(role, "consultations", matrix),
+      enrollment: canAccess(role, "enrollment", matrix),
+      lessonReports: canAccess(role, "lesson_reports", matrix),
+      meetings: canAccess(role, "meetings", matrix),
+      owner: canAccess(role, "owner", matrix),
+      staff: canAccess(role, "staff", matrix),
+      students: canAccess(role, "students", matrix),
+      timetable: canAccess(role, "timetable", matrix),
+    },
+    write: {
+      billing: canWrite(role, "billing", matrix),
+      classes: canWrite(role, "classes", matrix),
+      consultations: canWrite(role, "consultations", matrix),
+      enrollment: canWrite(role, "enrollment", matrix),
+      meetings: canWrite(role, "meetings", matrix),
+      students: canWrite(role, "students", matrix),
+    },
+    manageStaff: canManageStaff(role) && canWrite(role, "staff", matrix),
+  };
+}

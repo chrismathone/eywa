@@ -24,16 +24,25 @@ function PlusBtn() {
   );
 }
 
-export function LeavesClient({ userId, leaves }: { userId: string; leaves: LeaveRow[] }) {
+export function LeavesClient({
+  userId,
+  leaves,
+  canManage,
+}: {
+  userId: string;
+  leaves: LeaveRow[];
+  canManage: boolean;
+}) {
   const [state, formAction] = useActionState<LeaveActionState, FormData>(requestLeave, undefined);
 
   return (
     <div className="space-y-4">
       {/* 신규 휴가 폼 */}
-      <form
-        action={formAction}
-        className="bg-card border-border space-y-3 rounded-md border p-4"
-      >
+      {canManage ? (
+        <form
+          action={formAction}
+          className="bg-card border-border space-y-3 rounded-md border p-4"
+        >
         <input type="hidden" name="userId" value={userId} />
         <h3 className="text-foreground text-sm font-semibold">신규 휴가</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -83,7 +92,8 @@ export function LeavesClient({ userId, leaves }: { userId: string; leaves: Leave
           />
         </div>
         {state?.error ? <p className="text-chart-4 text-xs">{state.error}</p> : null}
-      </form>
+        </form>
+      ) : null}
 
       {/* 휴가 목록 */}
       {leaves.length === 0 ? (
@@ -91,7 +101,7 @@ export function LeavesClient({ userId, leaves }: { userId: string; leaves: Leave
       ) : (
         <ul className="bg-card border-border divide-border divide-y rounded-md border">
           {leaves.map((l) => (
-            <LeaveRowItem key={l.id} leave={l} userId={userId} />
+            <LeaveRowItem key={l.id} leave={l} userId={userId} canManage={canManage} />
           ))}
         </ul>
       )}
@@ -99,7 +109,15 @@ export function LeavesClient({ userId, leaves }: { userId: string; leaves: Leave
   );
 }
 
-function LeaveRowItem({ leave, userId }: { leave: LeaveRow; userId: string }) {
+function LeaveRowItem({
+  leave,
+  userId,
+  canManage,
+}: {
+  leave: LeaveRow;
+  userId: string;
+  canManage: boolean;
+}) {
   const [, approveAction] = useActionState<LeaveActionState, FormData>(approveLeave, undefined);
   const [, deleteAction] = useActionState<LeaveActionState, FormData>(deleteLeave, undefined);
 
@@ -121,7 +139,7 @@ function LeaveRowItem({ leave, userId }: { leave: LeaveRow; userId: string }) {
             <Check className="size-3" />
             {leave.approvedByName ? `${leave.approvedByName} 승인` : "승인됨"}
           </span>
-        ) : (
+        ) : canManage ? (
           <form action={approveAction}>
             <input type="hidden" name="id" value={leave.id} />
             <input type="hidden" name="userId" value={userId} />
@@ -132,18 +150,22 @@ function LeaveRowItem({ leave, userId }: { leave: LeaveRow; userId: string }) {
               승인
             </button>
           </form>
+        ) : (
+          <span className="text-text-dim text-[11px]">승인 대기</span>
         )}
-        <form action={deleteAction}>
-          <input type="hidden" name="id" value={leave.id} />
-          <input type="hidden" name="userId" value={userId} />
-          <button
-            type="submit"
-            className="text-muted-foreground hover:text-chart-4"
-            aria-label="삭제"
-          >
-            <Trash2 className="size-3" />
-          </button>
-        </form>
+        {canManage ? (
+          <form action={deleteAction}>
+            <input type="hidden" name="id" value={leave.id} />
+            <input type="hidden" name="userId" value={userId} />
+            <button
+              type="submit"
+              className="text-muted-foreground hover:text-chart-4"
+              aria-label="삭제"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          </form>
+        ) : null}
       </div>
     </li>
   );

@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { COMMAND_PALETTE_OPEN_EVENT } from "@/components/command-palette";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
-import { findNavItem, findNavGroup } from "@/lib/navigation";
+import { findNavItem, findNavGroup, navPresentation } from "@/lib/navigation";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
 
@@ -12,7 +12,7 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
   // 데스크톱은 메뉴=창이라 pathname이 항상 /dashboard에 머문다 → 헤더는 포커스된 창을 따른다.
-  // 창이 하나도 포커스돼 있지 않으면 "빈 데스크톱"이므로 홈으로 표기(배경 라우트 잔재 '대시보드' 방지).
+  // 창이 하나도 포커스돼 있지 않으면 main 데스크톱 작업면(오늘)을 표기한다.
   // 모바일(라우트 이동)에선 기존 pathname 기준을 유지.
   const focused = useWindowStore((s) => (s.focusedId ? s.windows[s.focusedId] : null));
   const focusedLiveTitle = useWindowStore((s) => (s.focusedId ? s.live[s.focusedId]?.title : undefined));
@@ -27,8 +27,10 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
       title = focusedLiveTitle?.trim() || focused.params.title || item?.label || "eywa";
       breadcrumb = group ? `${brand} · ${group.label}` : brand;
     } else {
-      title = "홈";
-      breadcrumb = brand;
+      const current = findNavItem(pathname);
+      const group = findNavGroup(pathname);
+      title = current && navPresentation(current) === "desktop" ? current.label : "홈";
+      breadcrumb = group ? `${brand} · ${group.label}` : brand;
     }
   } else {
     const current = findNavItem(pathname);

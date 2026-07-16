@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
-import { POPUP_AUDIENCES, POPUP_POSITIONS } from "../audience";
+import { normalizeNoticeAudience, POPUP_POSITIONS } from "../audience";
 import { noticePopupsTag } from "./queries";
 
 export type NoticePopupActionState = { error?: string; ok?: boolean } | undefined;
@@ -18,8 +18,7 @@ function parseDt(v: string): string | null {
 
 function readForm(formData: FormData) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
-  const audienceRaw = get("audience") || "all";
-  const audience = (POPUP_AUDIENCES as readonly string[]).includes(audienceRaw) ? audienceRaw : "all";
+  const audience = normalizeNoticeAudience(get("audience"));
   const positionRaw = get("position") || "cascade";
   const position = (POPUP_POSITIONS as readonly string[]).includes(positionRaw) ? positionRaw : "cascade";
   const width = Math.min(720, Math.max(280, Number(get("width")) || 380));

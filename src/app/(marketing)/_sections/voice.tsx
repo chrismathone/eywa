@@ -33,7 +33,7 @@ export function VoiceSection() {
         <div className="bg-bg-soft border-line overflow-hidden rounded-2xl border">
           <EditorialPhoto
             src={directorDeskImg}
-            alt="아침 햇살이 드는 원장실 책상 위 노트북에 띄운 학원 관리 대시보드"
+            alt="아침 햇살이 드는 원장실 책상 위 노트북에 띄운 Eywa 운영실"
             aspect="aspect-[16/10]"
             bare
             sizes="(min-width: 1024px) 420px, 90vw"

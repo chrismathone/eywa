@@ -1,21 +1,37 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks, fetchAllPaged } from "@/lib/supabase/batch";
-import { kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
+import { inclusiveDateWindowStart, kstToday, kstMonthStart, kstMonth } from "@/lib/date-kst";
 import { attendanceRate } from "@/lib/calc/attendance";
-import { summarizeInvoices, paymentRateOf } from "@/features/billing/calc";
+import type { SystemRole } from "@/lib/permissions";
+import { summarizeInvoices } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
-import { followUpUrgency, type FollowUpUrgency } from "@/features/consultations/server/queries";
-
-const KO_DAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
+import {
+  buildDashboardTrendPoints,
+  invoicePeriodsForRange,
+  type TrendAttendanceRow,
+  type TrendInvoiceRow,
+  type TrendPoint,
+} from "@/features/dashboard/trend-data";
+import {
+  followUpUrgency,
+  type FollowUpUrgency,
+} from "@/features/consultations/follow-up-urgency";
+import {
+  getDailyProcessingStatus,
+  type ClassProcessing,
+} from "@/features/attendance/server/queries";
+import {
+  effectiveAttendanceRecords,
+  type EffectiveAttendanceRecord,
+} from "@/features/attendance/effective-records";
+import { audiencesForRole } from "@/features/notices/audience";
 
 function toIsoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-function shortMd(d: Date) {
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
+export type { TrendPoint };
 
 export async function getEnrolledStudentCount(): Promise<number> {
   const supabase = await createClient();
@@ -34,29 +50,39 @@ export type EnrollmentChangeStudent = {
   date: string | null;
 };
 export type EnrollmentChanges = {
+  newCount: number;
+  withdrawnCount: number;
   newStudents: EnrollmentChangeStudent[];
   withdrawn: EnrollmentChangeStudent[];
 };
 
-/** 이번 달 신규 등록 + 퇴원 학생 명단(드릴다운용). 밴드 카운트도 배열 길이로 도출(별도 count 쿼리 불요). */
+const MONTHLY_CHANGE_PREVIEW_LIMIT = 40;
+
+/** 이번 달 신규 등록 + 퇴원 학생. 정확한 count와 최근 명단 preview만 보내 RSC payload를 유한하게 유지한다. */
 export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
   const supabase = await createClient();
   const startIso = kstMonthStart();
-  const [{ data: nw }, { data: wd }] = await Promise.all([
+  const [{ data: nw, count: newCount }, { data: wd, count: withdrawnCount }] = await Promise.all([
     supabase
       .from("students")
-      .select("id, name, grade, school, enrolled_at")
+      .select("id, name, grade, school, enrolled_at", { count: "exact" })
       .eq("status", "enrolled")
       .gte("enrolled_at", startIso)
-      .order("enrolled_at", { ascending: false }),
+      .order("enrolled_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(MONTHLY_CHANGE_PREVIEW_LIMIT),
     supabase
       .from("students")
-      .select("id, name, grade, school, withdrawn_at")
+      .select("id, name, grade, school, withdrawn_at", { count: "exact" })
       .eq("status", "withdrawn")
       .gte("withdrawn_at", startIso)
-      .order("withdrawn_at", { ascending: false }),
+      .order("withdrawn_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(MONTHLY_CHANGE_PREVIEW_LIMIT),
   ]);
   return {
+    newCount: newCount ?? nw?.length ?? 0,
+    withdrawnCount: withdrawnCount ?? wd?.length ?? 0,
     newStudents: (nw ?? []).map((s) => ({
       id: s.id,
       name: s.name,
@@ -91,7 +117,7 @@ export type EnrollmentChangeSummary = {
  */
 export async function getEnrollmentChangeLast7d(days = 7): Promise<EnrollmentChangeSummary> {
   const supabase = await createClient();
-  const since = toIsoDate(new Date(Date.parse(`${kstToday()}T00:00:00Z`) - days * 86_400_000));
+  const since = inclusiveDateWindowStart(kstToday(), days);
 
   const [newCntRes, wdCntRes, newIdRes, wdIdRes] = await Promise.all([
     supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "enrolled").gte("enrolled_at", since),
@@ -151,12 +177,18 @@ export type AttendanceSnapshot = {
 
 async function snapshotForDate(date: string): Promise<AttendanceSnapshot | null> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("attendance_records")
-    .select("status")
-    .eq("session_date", date);
+  const rows = await fetchAllPaged<EffectiveAttendanceRecord & { status: string }>((from, to) =>
+    supabase
+      .from("attendance_records")
+      .select("id, student_id, class_id, session_date, status, recorded_at")
+      .eq("session_date", date)
+      .order("recorded_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const data = effectiveAttendanceRecords(rows);
 
-  if (!data || data.length === 0) return null;
+  if (data.length === 0) return null;
 
   const present = data.filter((r) => r.status === "present").length;
   const absent = data.filter((r) => r.status === "absent").length;
@@ -180,14 +212,70 @@ export async function getMostRecentAttendanceSnapshot(): Promise<AttendanceSnaps
   if (todaySnap) return todaySnap;
 
   const supabase = await createClient();
-  const { data: recent } = await supabase
+  const { data: recent, error } = await supabase
     .from("attendance_records")
     .select("session_date")
     .order("session_date", { ascending: false })
     .limit(1);
+  if (error) throw new Error(`recent attendance date: ${error.message}`);
   const fallback = recent?.[0]?.session_date;
   if (!fallback) return null;
   return snapshotForDate(fallback);
+}
+
+export type DashboardAttendanceState = {
+  snapshot: AttendanceSnapshot | null;
+  todayProcessing: ClassProcessing[];
+  snapshotProcessing: ClassProcessing[];
+  snapshotIssue: boolean;
+  todayProcessingIssue: boolean;
+  snapshotProcessingIssue: boolean;
+};
+
+async function collectProcessing(date: string): Promise<{
+  value: ClassProcessing[];
+  issue: boolean;
+}> {
+  try {
+    return { value: await getDailyProcessingStatus(date), issue: false };
+  } catch (error) {
+    console.error(`[dashboard/attendance] ${date} 처리 현황 조회 실패`, error);
+    return { value: [], issue: true };
+  }
+}
+
+async function collectAttendanceSnapshot(): Promise<{
+  value: AttendanceSnapshot | null;
+  issue: boolean;
+}> {
+  try {
+    return { value: await getMostRecentAttendanceSnapshot(), issue: false };
+  } catch (error) {
+    console.error("[dashboard/attendance] 최근 출결 스냅샷 조회 실패", error);
+    return { value: null, issue: true };
+  }
+}
+
+/** 헤더 출석률과 오늘 미처리 배지가 같은 예정학생 대비 처리 현황을 공유한다. */
+export async function getDashboardAttendanceState(): Promise<DashboardAttendanceState> {
+  const today = kstToday();
+  const [snapshotResult, todayCollected] = await Promise.all([
+    collectAttendanceSnapshot(),
+    collectProcessing(today),
+  ]);
+  const snapshot = snapshotResult.value;
+  const snapshotProcessingCollected =
+    snapshot && snapshot.date !== today
+      ? await collectProcessing(snapshot.date)
+      : todayCollected;
+  return {
+    snapshot,
+    todayProcessing: todayCollected.value,
+    snapshotProcessing: snapshotProcessingCollected.value,
+    snapshotIssue: snapshotResult.issue,
+    todayProcessingIssue: todayCollected.issue,
+    snapshotProcessingIssue: snapshotProcessingCollected.issue,
+  };
 }
 
 export type AnnouncementRow = {
@@ -200,7 +288,10 @@ export type AnnouncementRow = {
   authorName: string | null;
 };
 
-export async function getRecentAnnouncements(limit = 3): Promise<AnnouncementRow[]> {
+export async function getRecentAnnouncements(
+  role: SystemRole,
+  limit = 3,
+): Promise<AnnouncementRow[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("announcements")
@@ -208,6 +299,7 @@ export async function getRecentAnnouncements(limit = 3): Promise<AnnouncementRow
       `id, title, content, audience, pinned, created_at,
        author:author_id ( display_name )`,
     )
+    .in("audience", audiencesForRole(role))
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -234,17 +326,6 @@ export async function getRecentAnnouncements(limit = 3): Promise<AnnouncementRow
   });
 }
 
-/** 오늘 출석을 1건이라도 기록한 반 id 집합 — '미기록' 추적용(시작한 수업 기준 판정은 호출부에서). */
-export async function getTodayRecordedClassIds(): Promise<string[]> {
-  const supabase = await createClient();
-  const today = kstToday();
-  const { data } = await supabase
-    .from("attendance_records")
-    .select("class_id")
-    .eq("session_date", today);
-  return [...new Set((data ?? []).map((r) => r.class_id as string))];
-}
-
 export type DashFollowUp = {
   id: string;
   studentId: string;
@@ -257,13 +338,14 @@ export type DashFollowUp = {
 /** 학생상담 후속조치 — 미완료 + 기한 임박/경과(긴급도 overdue/today/soon)만, 빠른 순. */
 export async function getFollowUpConsultations(limit = 8): Promise<DashFollowUp[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("student_consultations")
     .select("id, student_id, follow_up_action, follow_up_date, student:student_id ( name )")
     .eq("follow_up_done", false)
     .not("follow_up_date", "is", null)
     .order("follow_up_date", { ascending: true })
     .limit(60);
+  if (error) throw new Error(`dashboard follow-ups: ${error.message}`);
   const rows: DashFollowUp[] = [];
   for (const r of data ?? []) {
     const u = followUpUrgency(r.follow_up_date as string | null, false);
@@ -324,13 +406,6 @@ export async function getAnnouncementsForManage(limit = 30): Promise<ManageAnnou
   });
 }
 
-export type TrendPoint = {
-  date: string; // "5/26"
-  day: string; // "월"
-  attendance: number; // 0–100
-  payment: number; // placeholder until invoices land
-};
-
 export type DashEnrollmentRow = {
   id: string;
   name: string;
@@ -351,14 +426,14 @@ export type DashEnrollmentList = { total: number; rows: DashEnrollmentRow[] };
  */
 export async function getActiveEnrollmentConsultations(limit = 6, days = 30): Promise<DashEnrollmentList> {
   const supabase = await createClient();
-  const since = toIsoDate(new Date(Date.parse(`${kstToday()}T00:00:00Z`) - days * 86_400_000));
+  const since = inclusiveDateWindowStart(kstToday(), days);
   const { data, count } = await supabase
     .from("enrollment_consultations")
     .select("id, prospect_name, prospect_school, prospect_grade, outcome, consultation_date, consulted_at", {
       count: "exact",
     })
     .in("outcome", ["pending", "scheduled", "consulted", "ai_done"])
-    .gte("consulted_at", since)
+    .gte("consulted_at", `${since}T00:00:00+09:00`)
     .order("consulted_at", { ascending: false })
     .limit(limit);
   const rows: DashEnrollmentRow[] = (data ?? []).map((r) => ({
@@ -413,6 +488,7 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
   const period = kstMonth();
   // B2: 집계용 전건 fetch는 fetchAllPaged(무페이징 select는 1000행 silent 절단).
   const data = await fetchAllPaged<{
+    id: string;
     amount_total: number;
     amount_paid: number;
     amount_discount: number | null;
@@ -420,10 +496,11 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
   }>((from, to) =>
     supabase
       .from("invoices")
-      .select("amount_total, amount_paid, amount_discount, status")
+      .select("id, amount_total, amount_paid, amount_discount, status")
       .eq("period", period)
       // void = makeedu에서 삭제된 청구(동기화 무효 처리) — 분모(청구 총액·수납률)에서도 제외.
       .neq("status", "void")
+      .order("id", { ascending: true })
       .range(from, to),
   );
   if (data.length === 0) return null;
@@ -449,74 +526,60 @@ export async function getPaymentRateThisMonth(): Promise<PaymentSnapshot | null>
   };
 }
 
-export async function getTrendDataLast7Days(): Promise<TrendPoint[]> {
+export type TrendDataScope = { attendance?: boolean; billing?: boolean };
+
+export async function getTrendDataLast7Days(scope: TrendDataScope = {}): Promise<TrendPoint[]> {
+  const includeAttendance = scope.attendance ?? true;
+  const includeBilling = scope.billing ?? true;
+  if (!includeAttendance && !includeBilling) return [];
   const supabase = await createClient();
   // Window ends yesterday — today is still in progress and shouldn't drag the
-  // line to 0% just because attendance hasn't been recorded yet.
-  const end = new Date();
-  end.setDate(end.getDate() - 1);
+  // line to 0% just because attendance hasn't been recorded yet. KST 날짜 문자열을
+  // UTC 자정 Date로 바꿔 서버 로컬 시간대와 무관하게 같은 7일 창을 만든다.
+  const end = new Date(`${kstToday()}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() - 1);
   const start = new Date(end);
-  start.setDate(end.getDate() - 6);
+  start.setUTCDate(end.getUTCDate() - 6);
+  const startIso = toIsoDate(start);
+  const endIso = toIsoDate(end);
+  const invoicePeriods = invoicePeriodsForRange(startIso, endIso);
 
-  // B2: 둘 다 집계용 전건 fetch — fetchAllPaged(출결 7일·당월 invoices 모두 1000행 초과 가능).
-  const [attRows, invRows] = await Promise.all([
-    fetchAllPaged<{ session_date: string; status: string }>((from, to) =>
-      supabase
-        .from("attendance_records")
-        .select("session_date, status")
-        .gte("session_date", toIsoDate(start))
-        .lte("session_date", toIsoDate(end))
-        .range(from, to),
-    ),
-    // 이번 달 invoices — 누적 수납률 계산용 (paid_at 일자별). void(makeedu 삭제분)는 분모에서 제외.
-    fetchAllPaged<{ amount_total: number; amount_paid: number; amount_discount: number | null; paid_at: string | null }>(
-      (from, to) =>
-        supabase
-          .from("invoices")
-          .select("amount_total, amount_paid, amount_discount, paid_at")
-          .eq("period", currentPeriod())
-          .neq("status", "void")
-          .range(from, to),
-    ),
+  // B2: 둘 다 집계용 전건 fetch — fetchAllPaged(출결 7일·겹치는 청구월 invoices 모두 1000행 초과 가능).
+  const [attendanceRows, invRows] = await Promise.all([
+    includeAttendance
+      ? fetchAllPaged<TrendAttendanceRow & EffectiveAttendanceRecord>((from, to) =>
+          supabase
+            .from("attendance_records")
+            .select("id, student_id, class_id, session_date, status, recorded_at")
+            .gte("session_date", startIso)
+            .lte("session_date", endIso)
+            .order("recorded_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to),
+        )
+      : Promise.resolve([]),
+    // 7일 창과 겹치는 청구월 invoices — 월 경계에서도 각 월 누적 수납률을 계산한다.
+    includeBilling
+      ? fetchAllPaged<TrendInvoiceRow>((from, to) =>
+          supabase
+            .from("invoices")
+            .select("id, period, amount_total, amount_paid, amount_discount, paid_at, line_items")
+            .in("period", invoicePeriods)
+            .neq("status", "void")
+            .order("id", { ascending: true })
+            .range(from, to),
+        )
+      : Promise.resolve([]),
   ]);
 
-  const byDate = new Map<string, { total: number; present: number }>();
-  for (const r of attRows) {
-    const d = r.session_date;
-    if (!byDate.has(d)) byDate.set(d, { total: 0, present: 0 });
-    const g = byDate.get(d)!;
-    g.total += 1;
-    if (r.status === "present") g.present += 1;
-  }
-
-  // invoices 누적: 각 날짜까지 paid_at 누적 수납 / 실청구(청구−할인) — calc.ts 단일 공식(100% 상한).
-  const netBilled = invRows.reduce((s, r) => s + Number(r.amount_total) - Number(r.amount_discount ?? 0), 0);
-  function paymentRateUpTo(isoDay: string): number {
-    const paidSoFar = invRows
-      .filter((r) => r.paid_at && String(r.paid_at).slice(0, 10) <= isoDay)
-      .reduce((s, r) => s + Number(r.amount_paid), 0);
-    return paymentRateOf(paidSoFar, netBilled);
-  }
-
-  const result: TrendPoint[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const day = new Date(end);
-    day.setDate(end.getDate() - i);
-    const iso = toIsoDate(day);
-    const stats = byDate.get(iso) ?? { total: 0, present: 0 };
-    const rate = stats.total > 0 ? (stats.present / stats.total) * 100 : 0;
-    result.push({
-      date: shortMd(day),
-      day: KO_DAYS[day.getDay()],
-      attendance: Number(rate.toFixed(1)),
-      payment: Number(paymentRateUpTo(iso).toFixed(1)),
-    });
-  }
-  return result;
-}
-
-function currentPeriod(): string {
-  return kstMonth();
+  return buildDashboardTrendPoints({
+    startIso,
+    endIso,
+    attendanceRows: effectiveAttendanceRecords(attendanceRows),
+    invoiceRows: invRows,
+    includeAttendance,
+    includeBilling,
+  });
 }
 
 // ─────────── 추가 대시보드 위젯 ───────────

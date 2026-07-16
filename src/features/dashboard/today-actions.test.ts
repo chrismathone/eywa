@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildTodayActions, nameList, type TodayActionsRaw } from "./today-actions";
+import {
+  buildTodayActions,
+  enrollmentAttendsOnDay,
+  findStudentsMissingLessonReports,
+  isEnrollmentActiveOn,
+  nameList,
+  type TodayActionsRaw,
+} from "./today-actions";
 
 const EMPTY: TodayActionsRaw = {
   absentToday: [],
@@ -35,6 +42,7 @@ describe("buildTodayActions", () => {
       count: 2,
       detail: "김민준·이서연",
       href: "/attendance",
+      menuKey: "attendance",
     });
   });
 
@@ -51,6 +59,8 @@ describe("buildTodayActions", () => {
       count: 1,
       detail: "학원이",
       href: "/students/s1",
+      menuKey: "students",
+      requiredAccess: "write",
     });
   });
 
@@ -65,7 +75,7 @@ describe("buildTodayActions", () => {
     expect(items[0]).toMatchObject({ count: 2, detail: "김민준·이서연", href: "/students" });
   });
 
-  it("미작성 보고서 = amber + 명단 요약 + /onescreen 링크", () => {
+  it("미작성 보고서 = amber + 명단 요약 + 수업보고서 총괄 링크", () => {
     const items = buildTodayActions({
       ...EMPTY,
       unwrittenReportsToday: { count: 4, names: ["김민준", "이서연", "박지호", "최유진"] },
@@ -76,7 +86,8 @@ describe("buildTodayActions", () => {
       severity: "amber",
       count: 4,
       detail: "김민준·이서연·박지호 외 1",
-      href: "/onescreen",
+      href: "/lesson-reports?tab=writing",
+      menuKey: "lesson_reports",
     });
   });
 
@@ -89,18 +100,49 @@ describe("buildTodayActions", () => {
     expect(items[0].severity).toBe("amber");
   });
 
-  it("분석 실패는 테이블별 분해 + 최다 실패 메뉴로 링크", () => {
+  it("분석 실패는 권한 도메인별 항목과 링크로 분리", () => {
     const items = buildTodayActions({
       ...EMPTY,
-      failedAnalysis: { meetings: 1, enrollment: 3, consultations: 0 },
+      failedAnalysis: { meetings: 1, enrollment: 3, consultations: 2 },
     });
-    expect(items[0]).toMatchObject({
-      key: "failed-analysis",
-      severity: "danger",
-      count: 4,
-      detail: "회의 1 · 등록상담 3",
-      href: "/enrollment",
+    expect(items).toHaveLength(3);
+    expect(items.map((item) => item.key)).toEqual([
+      "failed-analysis-enrollment",
+      "failed-analysis-consultations",
+      "failed-analysis-meetings",
+    ]);
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ count: 1, href: "/meetings", menuKey: "meetings", requiredAccess: "write" }),
+        expect.objectContaining({ count: 3, href: "/enrollment", menuKey: "enrollment", requiredAccess: "write" }),
+        expect.objectContaining({ count: 2, href: "/consultations", menuKey: "consultations", requiredAccess: "write" }),
+      ]),
+    );
+  });
+
+  it("조회 실패는 0건 대신 해당 메뉴의 명시적 확인 불가 신호", () => {
+    const items = buildTodayActions({
+      ...EMPTY,
+      sourceIssues: [
+        {
+          key: "attendance-today",
+          label: "오늘 출결",
+          href: "/attendance",
+          menuKey: "attendance",
+          requiredAccess: "read",
+        },
+      ],
     });
+    expect(items).toEqual([
+      expect.objectContaining({
+        key: "source-issue-attendance-today",
+        label: "오늘 출결 확인 불가",
+        count: null,
+        href: "/attendance",
+        menuKey: "attendance",
+        requiredAccess: "read",
+      }),
+    ]);
   });
 
   it("정렬: danger → amber → info, 같은 심각도는 건수 desc, 카운트 없는 신호는 뒤", () => {
@@ -145,5 +187,80 @@ describe("nameList", () => {
     expect(nameList(["a", "b", "c", "d", "e"])).toBe("a·b·c 외 2");
     expect(nameList(["a", "b"])).toBe("a·b");
     expect(nameList(["a", "b", "c"], 2)).toBe("a·b 외 1");
+  });
+});
+
+describe("수업보고서 작성 대상", () => {
+  it("수강 시작·종료일 경계를 포함하고 대기 수강은 제외", () => {
+    expect(isEnrollmentActiveOn({ startDate: "2026-07-16", endDate: "2026-07-16", onHold: false }, "2026-07-16")).toBe(true);
+    expect(isEnrollmentActiveOn({ startDate: "2026-07-17", endDate: null, onHold: false }, "2026-07-16")).toBe(false);
+    expect(isEnrollmentActiveOn({ startDate: "2026-07-01", endDate: "2026-07-15", onHold: false }, "2026-07-16")).toBe(false);
+    expect(isEnrollmentActiveOn({ startDate: "2026-07-01", endDate: null, onHold: true }, "2026-07-16")).toBe(false);
+  });
+
+  it("반이동 전출의 종료일은 반열림, 일반 퇴원 종료일은 기존처럼 포함", () => {
+    expect(
+      isEnrollmentActiveOn(
+        { startDate: "2026-07-01", endDate: "2026-07-16", onHold: false, isTransferred: true },
+        "2026-07-15",
+      ),
+    ).toBe(true);
+    expect(
+      isEnrollmentActiveOn(
+        { startDate: "2026-07-01", endDate: "2026-07-16", onHold: false, isTransferred: true },
+        "2026-07-16",
+      ),
+    ).toBe(false);
+    expect(
+      isEnrollmentActiveOn(
+        { startDate: "2026-07-01", endDate: "2026-07-16", onHold: false, isTransferred: false },
+        "2026-07-16",
+      ),
+    ).toBe(true);
+  });
+
+  it("분리등원은 빈 배열이면 전 요일, 지정 배열이면 해당 요일만 대상", () => {
+    expect(enrollmentAttendsOnDay([], "thu")).toBe(true);
+    expect(enrollmentAttendsOnDay(null, "thu")).toBe(true);
+    expect(enrollmentAttendsOnDay(["mon", "thu"], "thu")).toBe(true);
+    expect(enrollmentAttendsOnDay(["mon", "thu"], "wed")).toBe(false);
+  });
+
+  it("학생 보고서 1건이 다른 과목까지 완료 처리하지 않는다", () => {
+    const targets = [
+      { studentId: "s1", classId: "math-a", subject: "math" },
+      { studentId: "s1", classId: "english-a", subject: "english" },
+    ];
+    expect(findStudentsMissingLessonReports(targets, new Set(), [{ studentId: "s1", subject: "math" }])).toEqual(["s1"]);
+    expect(
+      findStudentsMissingLessonReports(targets, new Set(), [
+        { studentId: "s1", subject: "math" },
+        { studentId: "s1", subject: "english" },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("과목 없는 레거시 보고서는 해당 학생의 그날 과목을 완료로 간주해 거짓 미작성을 억제", () => {
+    const targets = [
+      { studentId: "s1", classId: "math-a", subject: "math" },
+      { studentId: "s1", classId: "english-a", subject: "english" },
+      { studentId: "s2", classId: "math-a", subject: "math" },
+    ];
+    expect(
+      findStudentsMissingLessonReports(targets, new Set(), [
+        { studentId: "s1", subject: null },
+        { studentId: "s2", subject: "math" },
+      ]),
+    ).toEqual([]);
+    expect(findStudentsMissingLessonReports(targets, new Set(), [{ studentId: "s1", subject: "" }])).toEqual(["s2"]);
+  });
+
+  it("같은 과목 반이 전부 결석일 때만 작성 대상에서 제외", () => {
+    const targets = [
+      { studentId: "s1", classId: "math-a", subject: "math" },
+      { studentId: "s1", classId: "math-b", subject: "math" },
+    ];
+    expect(findStudentsMissingLessonReports(targets, new Set(["s1::math-a"]), [])).toEqual(["s1"]);
+    expect(findStudentsMissingLessonReports(targets, new Set(["s1::math-a", "s1::math-b"]), [])).toEqual([]);
   });
 });

@@ -234,6 +234,7 @@ export default async function AttendancePage({
         // 반 미선택 — 무거운 출석 데이터를 안 불러오고 가운데 안내(전체는 학생 많아 렉이라 미표시).
         <EmptyState
           image="attendance"
+          imageLoading="eager"
           icon={() => <ListFilter size={32} strokeWidth={1.5} />}
           title="과목 · 선생님 · 반을 선택해 주세요"
           description="한 반을 선택하면 그 반의 출석부가 표시됩니다. 전체는 학생이 많아 표시하지 않습니다."

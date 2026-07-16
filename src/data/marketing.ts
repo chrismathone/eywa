@@ -23,7 +23,7 @@ export const FLOW_NODES: {
 }[] = [
   { actor: "학부모", color: "rose", arrive: "+0.1s", title: "어머니께 등원 알림", detail: "카카오톡 · 강OO 16:02 등원" },
   { actor: "강사", color: "blue", arrive: "+0.2s", title: "출석부 자동 체크", detail: "박OO 강사 · 중2 수학 A반" },
-  { actor: "원장", color: "primary", arrive: "+0.3s", title: "대시보드 갱신", detail: "오늘 출석률 94.2%로 상승" },
+  { actor: "원장", color: "primary", arrive: "+0.3s", title: "오늘 화면 갱신", detail: "오늘 출석률 94.2%로 상승" },
   { actor: "회계", color: "gold", arrive: "+0.4s", title: "수강권 1회 차감", detail: "6월 12회차 · 잔여 8회" },
 ];
 
@@ -70,7 +70,7 @@ export const MENU_INDEX: {
   group: string;
   core?: boolean;
 }[] = [
-  { no: "01", name: "대시보드", icon: "layoutGrid", desc: "오늘의 학원을 한눈에", time: "08:30", group: "홈", core: true },
+  { no: "01", name: "오늘", icon: "layoutGrid", desc: "Eywa가 정리한 오늘", time: "08:30", group: "홈", core: true },
   { no: "02", name: "시간표", icon: "calendar", desc: "강사·교시·학생을 한 장에", time: "09:00", group: "수업" },
   { no: "03", name: "출석부", icon: "clipboardCheck", desc: "학생 × 한 달, 매트릭스로", time: "16:02", group: "수업", core: true },
   { no: "04", name: "수업목록", icon: "book", desc: "반·과목·강사를 한 곳에", time: "10:00", group: "수업" },

@@ -71,6 +71,15 @@ export function addDays(ymd: string, n: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
+/**
+ * 오늘을 포함하는 최근 N일 창의 시작일.
+ * 예: 7일 창은 오늘과 이전 6일을 포함한다. 0 이하 입력도 최소 1일(오늘)로 안전하게 제한한다.
+ */
+export function inclusiveDateWindowStart(todayYmd: string, days: number): string {
+  const normalizedDays = Number.isFinite(days) ? Math.max(1, Math.trunc(days)) : 1;
+  return addDays(todayYmd, -(normalizedDays - 1));
+}
+
 /** YYYY-MM-DD → "2026년 7월 14일 (월)" 표시 문자열(요일은 UTC 파싱 결정적). */
 export function formatKoreanDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);

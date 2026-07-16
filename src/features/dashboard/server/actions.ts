@@ -3,19 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-
-const AUDIENCES = ["all", "staff", "teachers", "counselors", "accounting"] as const;
-type Audience = (typeof AUDIENCES)[number];
+import { normalizeNoticeAudience } from "@/features/notices/audience";
 
 export type AnnouncementActionState = { error?: string; ok?: boolean } | undefined;
 
 function readForm(formData: FormData) {
   const get = (k: string) => String(formData.get(k) ?? "").trim();
-  const audienceRaw = get("audience") || "all";
-  const audience: Audience = (AUDIENCES as readonly string[]).includes(audienceRaw)
-    ? (audienceRaw as Audience)
-    : "all";
+  const audience = normalizeNoticeAudience(get("audience"));
   return {
     id: get("id"),
     title: get("title"),
@@ -31,7 +27,9 @@ export async function createAnnouncement(
 ): Promise<AnnouncementActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "공지 작성 권한이 없습니다" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
+    return { error: "공지 작성 권한이 없습니다" };
+  }
 
   const input = readForm(formData);
   if (!input.title) return { error: "제목을 입력해주세요" };
@@ -58,7 +56,9 @@ export async function updateAnnouncement(
 ): Promise<AnnouncementActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "공지 수정 권한이 없습니다" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
+    return { error: "공지 수정 권한이 없습니다" };
+  }
 
   const input = readForm(formData);
   if (!input.id) return { error: "공지 ID가 누락되었습니다" };
@@ -88,7 +88,9 @@ export async function deleteAnnouncement(
 ): Promise<AnnouncementActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "공지 삭제 권한이 없습니다" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
+    return { error: "공지 삭제 권한이 없습니다" };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "공지 ID가 누락되었습니다" };
@@ -107,7 +109,9 @@ export async function toggleAnnouncementPin(
 ): Promise<AnnouncementActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "권한이 없습니다" };
+  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {
+    return { error: "권한이 없습니다" };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   const pinned = formData.get("pinned") === "true";

@@ -4,6 +4,13 @@
  * 불릿으로 모으고, 전부 0건이면 패널이 "모든 항목 정상"을 보여준다(ijw MasterDashboard 패턴).
  * server-only 미의존(타입+순수) → Vitest로 정렬·문구·링크를 결정적으로 검증.
  */
+import type { MenuKey } from "@/lib/permissions";
+export {
+  enrollmentAttendsOnDay,
+  isEnrollmentActiveOn,
+} from "@/features/enrollments/eligibility";
+
+export type TodayActionAccess = "read" | "write" | "manage-staff";
 
 export type TodayActionsRaw = {
   /** 오늘 무단결석(absent) 학생 — 학생 단위 dedupe 후 */
@@ -32,6 +39,16 @@ export type TodayActionsRaw = {
    * 목적이라 상담 기준으로 재정의하지 말 것(2026-07-15 실측: 상담 기준은 89건 전원이 퇴원·과거 건 = 헛경보).
    */
   unassignedEnrolled: { studentId: string; name: string }[];
+  /** 조회 실패를 0건으로 위장하지 않기 위한 권한·도메인별 원천 상태. */
+  sourceIssues?: TodaySignalSourceIssue[];
+};
+
+export type TodaySignalSourceIssue = {
+  key: string;
+  label: string;
+  href: string;
+  menuKey: MenuKey;
+  requiredAccess: TodayActionAccess;
 };
 
 export type TodayActionItem = {
@@ -42,6 +59,10 @@ export type TodayActionItem = {
   count: number | null;
   detail: string | null;
   href: string;
+  /** 현재 역할이 이 조치를 열 수 있는지 브리핑에서 판정할 메뉴 권한 키. */
+  menuKey: MenuKey;
+  /** 카드가 약속하는 조치를 실제로 수행하는 데 필요한 접근 수준. */
+  requiredAccess: TodayActionAccess;
 };
 
 /** "김A·이B·박C 외 2" — 명단 요약. */
@@ -51,6 +72,53 @@ export function nameList(names: string[], max = 3): string {
 }
 
 const SEVERITY_RANK: Record<TodayActionItem["severity"], number> = { danger: 0, amber: 1, info: 2 };
+
+/**
+ * 오늘 미작성 보고서 학생을 학생×과목으로 판정한다.
+ * lesson_reports에는 class_id가 없으므로 같은 학생의 같은 과목 여러 반은 한 대상으로 합치되,
+ * 그 과목을 듣는 시작된 반이 전부 결석이면 작성 대상에서 제외한다.
+ */
+export function findStudentsMissingLessonReports(
+  targets: readonly { studentId: string; classId: string; subject: string }[],
+  absentClassKeys: ReadonlySet<string>,
+  reports: readonly { studentId: string; subject: string | null }[],
+): string[] {
+  const classesByTarget = new Map<string, Set<string>>();
+  const studentOrder: string[] = [];
+  const seenStudents = new Set<string>();
+
+  for (const target of targets) {
+    const key = `${target.studentId}::${target.subject}`;
+    const classes = classesByTarget.get(key) ?? new Set<string>();
+    classes.add(target.classId);
+    classesByTarget.set(key, classes);
+    if (!seenStudents.has(target.studentId)) {
+      seenStudents.add(target.studentId);
+      studentOrder.push(target.studentId);
+    }
+  }
+
+  // 과목 컬럼 도입 전 레거시/cron 보고서는 subject=null일 수 있다. 이미 보고서가 존재하는 학생을
+  // 미작성으로 잘못 재촉하지 않도록 null/빈 과목 보고서는 그날 해당 학생의 모든 과목을 충족한 것으로 본다.
+  const legacyReportedStudents = new Set(
+    reports.filter((report) => !report.subject?.trim()).map((report) => report.studentId),
+  );
+  const reported = new Set(
+    reports
+      .filter((report): report is { studentId: string; subject: string } => !!report.subject?.trim())
+      .map((report) => `${report.studentId}::${report.subject}`),
+  );
+  const missingStudents = new Set<string>();
+  for (const [targetKey, classIds] of classesByTarget) {
+    const separator = targetKey.indexOf("::");
+    const studentId = targetKey.slice(0, separator);
+    if (legacyReportedStudents.has(studentId)) continue;
+    const hasAttendedTarget = [...classIds].some((classId) => !absentClassKeys.has(`${studentId}::${classId}`));
+    if (hasAttendedTarget && !reported.has(targetKey)) missingStudents.add(studentId);
+  }
+
+  return studentOrder.filter((studentId) => missingStudents.has(studentId));
+}
 
 export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
   const items: TodayActionItem[] = [];
@@ -63,31 +131,50 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.absentToday.length,
       detail: nameList(raw.absentToday.map((s) => s.name)),
       href: "/attendance",
+      menuKey: "attendance",
+      requiredAccess: "read",
     });
   }
 
-  const failedTotal =
-    raw.failedAnalysis.meetings + raw.failedAnalysis.enrollment + raw.failedAnalysis.consultations;
-  if (failedTotal > 0) {
-    const parts: string[] = [];
-    if (raw.failedAnalysis.meetings) parts.push(`회의 ${raw.failedAnalysis.meetings}`);
-    if (raw.failedAnalysis.enrollment) parts.push(`등록상담 ${raw.failedAnalysis.enrollment}`);
-    if (raw.failedAnalysis.consultations) parts.push(`학생상담 ${raw.failedAnalysis.consultations}`);
-    // 실패가 가장 많은 메뉴로 링크(동수면 회의→등록→상담 순).
-    const max = Math.max(raw.failedAnalysis.meetings, raw.failedAnalysis.enrollment, raw.failedAnalysis.consultations);
-    const href =
-      raw.failedAnalysis.meetings === max
-        ? "/meetings"
-        : raw.failedAnalysis.enrollment === max
-          ? "/enrollment"
-          : "/consultations";
+  const analysisItems: ReadonlyArray<{
+    key: string;
+    count: number;
+    label: string;
+    href: string;
+    menuKey: MenuKey;
+    requiredAccess: TodayActionItem["requiredAccess"];
+  }> = [
+    {
+      key: "failed-analysis-meetings",
+      count: raw.failedAnalysis.meetings,
+      label: "회의 녹음 분석 실패",
+      href: "/meetings",
+      menuKey: "meetings",
+      requiredAccess: "write",
+    },
+    {
+      key: "failed-analysis-enrollment",
+      count: raw.failedAnalysis.enrollment,
+      label: "등록상담 녹음 분석 실패",
+      href: "/enrollment",
+      menuKey: "enrollment",
+      requiredAccess: "write",
+    },
+    {
+      key: "failed-analysis-consultations",
+      count: raw.failedAnalysis.consultations,
+      label: "학생상담 녹음 분석 실패",
+      href: "/consultations",
+      menuKey: "consultations",
+      requiredAccess: "write",
+    },
+  ];
+  for (const analysis of analysisItems) {
+    if (analysis.count === 0) continue;
     items.push({
-      key: "failed-analysis",
+      ...analysis,
       severity: "danger",
-      label: "녹음 분석 실패",
-      count: failedTotal,
-      detail: parts.join(" · "),
-      href,
+      detail: "최근 7일",
     });
   }
 
@@ -98,7 +185,9 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       label: "오늘 미작성 보고서",
       count: raw.unwrittenReportsToday.count,
       detail: nameList(raw.unwrittenReportsToday.names),
-      href: "/onescreen",
+      href: "/lesson-reports?tab=writing",
+      menuKey: "lesson_reports",
+      requiredAccess: "read",
     });
   }
 
@@ -112,6 +201,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.unassignedEnrolled.length,
       detail: nameList(raw.unassignedEnrolled.map((s) => s.name)),
       href: only ? `/students/${only.studentId}` : "/students",
+      menuKey: "students",
+      requiredAccess: "write",
     });
   }
 
@@ -123,6 +214,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.unrecordedYesterday.length,
       detail: nameList(raw.unrecordedYesterday.map((c) => c.className), 2),
       href: `/attendance/${raw.yesterday}`,
+      menuKey: "attendance",
+      requiredAccess: "read",
     });
   }
 
@@ -134,6 +227,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.pendingExpenses,
       detail: "최근 7일",
       href: "/billing?tab=expenses",
+      menuKey: "billing",
+      requiredAccess: "write",
     });
   }
 
@@ -145,6 +240,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.requestedTextbooks,
       detail: null,
       href: "/billing?tab=textbooks&status=requested",
+      menuKey: "billing",
+      requiredAccess: "write",
     });
   }
 
@@ -156,6 +253,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.leavesPending,
       detail: null,
       href: "/staff/leaves",
+      menuKey: "staff",
+      requiredAccess: "manage-staff",
     });
   }
 
@@ -167,6 +266,8 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: null,
       detail: raw.makeeduIssue.detail,
       href: "/owner?tab=sheets",
+      menuKey: "owner",
+      requiredAccess: "read",
     });
   }
 
@@ -178,6 +279,21 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       count: raw.leavesToday.length,
       detail: nameList(raw.leavesToday.map((l) => l.name)),
       href: "/staff/leaves",
+      menuKey: "staff",
+      requiredAccess: "read",
+    });
+  }
+
+  for (const issue of raw.sourceIssues ?? []) {
+    items.push({
+      key: `source-issue-${issue.key}`,
+      severity: "amber",
+      label: `${issue.label} 확인 불가`,
+      count: null,
+      detail: "새로고침 후 다시 확인해 주세요",
+      href: issue.href,
+      menuKey: issue.menuKey,
+      requiredAccess: issue.requiredAccess,
     });
   }
 

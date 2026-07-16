@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
 import { CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { BackLink } from "@/components/back-link";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getAllStaffLeaves } from "@/features/payroll/server/queries";
 import { LeavesAdminClient } from "./_client";
 
@@ -12,7 +12,8 @@ export const metadata = { title: "휴가 관리 — eywa" };
 /** 전 직원 휴가 일괄 관리(master/admin/manager) — 대기 건 승인/삭제. ijw LeaveManagement 이식. */
 export default async function StaffLeavesPage() {
   const user = await requireAccess("staff");
-  if (!canManageStaff(user.systemRole)) redirect("/staff");
+  const canManage =
+    canManageStaff(user.systemRole) && (await canWriteTenant(user.systemRole, "staff"));
 
   const leaves = await getAllStaffLeaves();
   const pending = leaves.filter((l) => !l.approvedAt).length;
@@ -39,7 +40,7 @@ export default async function StaffLeavesPage() {
           description="강사 상세에서 휴가를 신청할 수 있습니다."
         />
       ) : (
-        <LeavesAdminClient leaves={leaves} />
+        <LeavesAdminClient leaves={leaves} canManage={canManage} />
       )}
     </div>
   );

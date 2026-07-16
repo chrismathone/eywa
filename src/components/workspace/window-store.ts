@@ -61,6 +61,15 @@ export const CACHE_MAX = 2;
 export function windowId(kind: WindowKind, paramId: string, instance?: number) {
   return instance ? `${kind}:${paramId}#${instance}` : `${kind}:${paramId}`;
 }
+const LEGACY_DASHBOARD_WINDOW_ID = windowId("route", "dashboard");
+
+/** 옛 구현에서 `/dashboard`를 iframe 창으로 저장한 흔적(기본 창·복제본·비정상 id)을 찾는다. */
+function isLegacyDashboardWindow(id: string, win?: Win) {
+  if (baseWindowId(id) === LEGACY_DASHBOARD_WINDOW_ID) return true;
+  if (!win || win.kind !== "route") return false;
+  const hrefPath = win.params.href?.split("?")[0].split("#")[0];
+  return win.params.id === "dashboard" || hrefPath === "/dashboard";
+}
 /** 복제본 창인지 — id에 #n 접미사가 있으면 복제(2번째+ 인스턴스). */
 export function isDuplicate(winId: string) {
   return winId.includes("#");
@@ -171,6 +180,47 @@ type State = {
   // 같은 메뉴 재오픈 시 재렌더 없이 즉시 표시. 상한 CACHE_MAX 초과분은 close()가 실제 파괴.
   cached: string[];
 };
+
+function omitWindowArtifacts<T>(source: Record<string, T>, removed: Set<string>) {
+  if (removed.size === 0) return source;
+  return Object.fromEntries(Object.entries(source).filter(([id]) => !removed.has(id))) as Record<
+    string,
+    T
+  >;
+}
+
+/** 영속본을 포함한 모든 창 상태 맵에서 옛 dashboard iframe 흔적을 원자적으로 제거한다. */
+function withoutLegacyDashboardWindows(s: State) {
+  const removed = new Set<string>();
+  const candidates = new Set([
+    ...Object.keys(s.windows),
+    ...s.order,
+    ...s.cached,
+    ...Object.keys(s.live),
+    ...Object.keys(s.nav),
+    ...Object.keys(s.reloadNonce),
+    ...Object.keys(s.dirty),
+    ...s.spotlightRaised,
+    ...(s.focusedId ? [s.focusedId] : []),
+  ]);
+  for (const id of candidates) {
+    if (isLegacyDashboardWindow(id, s.windows[id])) removed.add(id);
+  }
+  const spotlightRaised = s.spotlightRaised.filter((id) => !removed.has(id));
+  return {
+    windows: omitWindowArtifacts(s.windows, removed),
+    order: s.order.filter((id) => !removed.has(id)),
+    focusedId: s.focusedId && !removed.has(s.focusedId) ? s.focusedId : null,
+    live: omitWindowArtifacts(s.live, removed),
+    nav: omitWindowArtifacts(s.nav, removed),
+    reloadNonce: omitWindowArtifacts(s.reloadNonce, removed),
+    dirty: omitWindowArtifacts(s.dirty, removed),
+    cached: s.cached.filter((id) => !removed.has(id)),
+    spotlightRaised,
+    spotlight: s.spotlight && spotlightRaised.length > 0,
+  };
+}
+
 type Actions = {
   setStage: (rect: { left: number; top: number; width: number; height: number }) => void;
   setSnapPreview: (z: SnapZone) => void;
@@ -211,6 +261,8 @@ type Actions = {
   exitSpotlight: () => void;
   raiseToSpotlight: (id: string) => void; // 스트립 카드 → 상단으로 올림(최대 3, 초과 시 가장 오래된 것 내림)
   lowerFromSpotlight: (id: string) => void; // 상단 타일 창 → 스트립으로 내림(마지막 1개는 유지)
+  /** `/dashboard` main을 전면에 보이도록 모든 일반 창을 최소화하고 옛 dashboard iframe은 제거한다. */
+  showDesktop: () => void;
   adoptOwner: (owner: string) => void;
 };
 
@@ -722,20 +774,60 @@ export const useWindowStore = create<State & Actions>()(
           return { spotlightRaised: raised, focusedId, order: bringToFront(s.order, focusedId!) };
         }),
 
-      // 복원 직후 호출: 다른 계정/테넌트 레이아웃이면 초기화(메타 누수 방지), 같으면 viewport clamp.
+      // 오늘(`/dashboard`)은 iframe 창이 아니라 셸 main 자체인 데스크톱 작업면이다. 다른 창은 상태·폼을
+      // 보존한 채 최소화하고, 예전 버전이 만든 dashboard 창/복제본/warm 캐시는 완전 제거해 숨은 중복
+      // 데이터 요청이 다시 살아나지 않게 한다.
+      showDesktop: () =>
+        set((s) => {
+          const cleaned = withoutLegacyDashboardWindows(s);
+          const windows = Object.fromEntries(
+            Object.entries(cleaned.windows).map(([id, w]) => [
+              id,
+              w.minimized ? w : { ...w, minimized: true },
+            ]),
+          );
+          return {
+            ...cleaned,
+            windows,
+            focusedId: null,
+            spotlight: false,
+            spotlightRaised: [],
+            snapPreview: null,
+            snapAssist: null,
+            draggingId: null,
+            dragLayout: null,
+            dragNearTop: false,
+          };
+        }),
+
+      // 복원 직후 호출: 다른 계정/테넌트 레이아웃이면 초기화(메타 누수 방지), 같으면 옛 dashboard
+      // iframe을 제거하고 viewport clamp. 이 정리는 영속 마이그레이션 역할도 해 숨은 중복 fetch를 막는다.
       adoptOwner: (owner) =>
         set((s) => {
           if (s.owner && s.owner !== owner) {
-            return { owner, windows: {}, order: [], focusedId: null, cached: [] };
+            return {
+              owner,
+              windows: {},
+              order: [],
+              focusedId: null,
+              cached: [],
+              live: {},
+              nav: {},
+              reloadNonce: {},
+              dirty: {},
+              spotlight: false,
+              spotlightRaised: [],
+            };
           }
+          const cleaned = withoutLegacyDashboardWindows(s);
           const windows: Record<string, Win> = {};
-          for (const [id, w] of Object.entries(s.windows)) {
+          for (const [id, w] of Object.entries(cleaned.windows)) {
             windows[id] = {
               ...w,
               rect: clampRect(w.maximized ? snapTarget("max", s.bounds)! : w.rect, s.bounds),
             };
           }
-          return { owner, windows };
+          return { ...cleaned, owner, windows };
         }),
     }),
     {
@@ -748,7 +840,10 @@ export const useWindowStore = create<State & Actions>()(
         // 다음 세션에 order 밖 hidden iframe이 유령 부활(콜드 로드)해 stagger·성능을 깬다.
         const cachedSet = new Set(s.cached);
         const persisted = Object.fromEntries(
-          Object.entries(s.windows).filter(([id, w]) => !w.params.autoClose && !cachedSet.has(id)),
+          Object.entries(s.windows).filter(
+            ([id, w]) =>
+              !w.params.autoClose && !cachedSet.has(id) && !isLegacyDashboardWindow(id, w),
+          ),
         );
         return {
           owner: s.owner,
