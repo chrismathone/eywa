@@ -4,6 +4,28 @@
 
 ## 진행 상황
 
+### 이벤트 감지형 능동 알림 (2026-07-17, Phase 3) — ✅ tsc0/lint0/test14 + cron 3-run 실E2E, 0118a 적용
+"학원 매니저 팀" 로드맵 Phase 3. 하루 1회 배치 cron(daily-briefing 라우트)이 **상태 전이(edge) 이벤트**를 감지해
+담당자에게 인앱 벨 알림. v1 2종: **반복 결석 마일스톤**(14일 3/5/10회 도달 → master 집계 1건, link=/retention) +
+**상담 후속조치 기한**(오늘 마감 due / 지남 overdue → 담당 상담사 counselor_id 폴백 master, link=/consultations).
+- **dedup = `notification_events`(0118a)**: unique(tenant,event_type,subject_key,bucket)가 유일 방어선
+  (notifications엔 유니크 제약 0). bucket=결석 tier('3'/'5'/'10' — 3→4 재알림 안 함, 5 승격 시만) / 후속조치
+  '날짜:stage'. 원자 dedup = `upsert(onConflict, ignoreDuplicates).select()`가 돌려준 **신규 삽입분만** 발송
+  (bulk insert는 한 행 충돌로 문장 전체 23505 → 성공분 분리 불가라 이 패턴 필수).
+- **콜드스타트 무발송 시드**(적대 리뷰 blocker): 첫 실행((tenant,event_type) 행 0건)은 현재 감지분을 seeded=true로
+  기록만 하고 발송 스킵 — 실데이터 누적분(injaewon 결석위험·미완료 후속조치)이 벨 폭탄으로 터지는 것 방지(0108a 철학).
+- **수신자 라우팅**: 결석=master만(원장 '운영 벨=master' 결정 + 마일스톤이라 저빈도, 집계 1건). 후속조치=담당 상담사
+  (status active 검증, 퇴직/null이면 master 폴백). admin RLS 우회라 tenant_id 필터 필수. actorId=null(시스템). 벨 배지만
+  (IMPORTANT 미등재 — 경보 피로). 순수함수(tier·bucket·집계 문구) Vitest 14.
+- **cron 배선**: daily-briefing 라우트가 브리핑 생성 후 detectAndNotifyEvents를 **독립 try/catch**로 호출(브리핑
+  실패해도 감지 실행). 세션용 아닌 admin p_tenant RPC(getAbsenceRiskStudents(db)) 재사용. 07:00 KST(결석=전날 마감·
+  후속조치 due는 아직 안 지남 → 문구 분기). Vercel cron 슬롯 미추가(기존 라우트에 얹음).
+- **✅ 3-run 실E2E(injaewon)**: run1 콜드스타트 결석 2건 seeded·벨 0(폭탄 방지) → run2 신규 0(dedup) → run3(seeded 1행
+  삭제로 새 edge 모사) 신규 1 → **master 2명(원일·박소선)에게 집계 벨 발송**, 박소선 벨 UI에 "김보민 학생이 최근 14일
+  3회 결석으로 반복 결석 위험" 정확 렌더(userMinus 아이콘). ⚠️ 후속조치 경로는 injaewon에 오늘 due/overdue 0건이라
+  실데이터 미발화(순수함수+공유 machinery로 커버). ⚠️ 미해결(리뷰 minor): notification_events 정리 정책 TBD(저성장),
+  결석 3회 아래 회복 후 재발 시 tier3 기록 잔존으로 재알림 안 됨(edge를 count 근사한 v1 트레이드오프).
+
 ### 대화형 비서 "매니저 팀에게 물어보기" (2026-07-17, Phase 2) — ✅ tsc0/lint0/test86 + Solar 실스모크, 0117a 적용
 "학원 매니저 팀" 대화 채널. 운영실에 질문 패널([assistant-panel.tsx](../src/app/(shell)/dashboard/_components/assistant-panel.tsx),
 canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률은?"을 자연어로 물으면 AI가 **read-only 툴 9종**

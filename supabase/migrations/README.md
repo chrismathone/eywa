@@ -146,5 +146,7 @@ pnpm db:seed
 
 | `0117a_assistant_conversations` | **운영실 AI 비서 대화 저장**(Phase 2 — 대화형 비서 도입 승인 2026-07-16) — 대화 1건=1행, `messages` jsonb는 표시용 텍스트 턴만(툴 원시 블록·조회 스냅샷 미저장 → 권한 변화에 안전). RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(RLS·권한 자동 상속), service_role 불사용. |
 
+| `0118a_notification_events` | **이벤트 알림 dedup 원장**(Phase 3 이벤트 감지형 능동 알림) — 한 행 = "이 이벤트 1회 처리(발송/시드)". unique(tenant_id, event_type, subject_key, bucket)가 재발송 차단(bucket=결석 마일스톤 '3'/'5'/'10' · 후속조치 '날짜:due/overdue'). seeded=true=콜드스타트 무발송 시드(벨 폭탄 방지, 0108a 철학). write=서버(service_role)만(정책 없음), read=테넌트 select. 앱 표면 없음(부기용 — 알림은 기존 벨). |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
