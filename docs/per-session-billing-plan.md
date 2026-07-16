@@ -88,7 +88,7 @@ create table invoice_session_terms (
   note로 설명). 분리등원은 enrollment 단일이라 반 단위 카운트에 포함.
 - **게이트**: 여기까지가 (a). **(b) 금액차 산출·강사 분배(splits)는 골든마스터 테스트(N6) 통과 전 착수 금지** — 불변.
   → **✅ 게이트 통과·(b) 구현 완료(2026-07-16)**: 골든마스터 = [`src/features/billing/golden/`](../src/features/billing/golden/golden.test.ts)
-  (실데이터 동결 픽스처 4계열 — 반 라인 매칭·계획 N·시수 검증/분배·수납 지표 401행). splits = `invoice_teacher_splits`(0116a,
+  (실데이터 동결 픽스처 4계열 — 반 라인 매칭·계획 N·시수 검증/분배·수납 지표 401행). splits = `invoice_teacher_splits`(0117a,
   기간 단위 전량 교체 스냅샷·기록 전용·invoices 불변 N2) + [`computeSplitRows`](../src/features/billing/session-terms/splits.ts)
   + 시수 검증 면 스냅샷 패널(드리프트 표시). ⚠️ **이후 돈 산식을 바꾸는 모든 변경은 골든마스터 통과가 머지 조건**(attendance R2·R6 이식).
 

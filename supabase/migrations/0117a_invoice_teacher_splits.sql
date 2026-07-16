@@ -1,4 +1,4 @@
--- 0116a: 강사 분배 스냅샷(invoice_teacher_splits) — 로드맵 2단계 (b), 골든마스터(N6) 통과 후 착수.
+-- 0117a: 강사 분배 스냅샷(invoice_teacher_splits) — 로드맵 2단계 (b), 골든마스터(N6) 통과 후 착수.
 -- 설계 = docs/per-session-billing-plan.md + attendance payment_shares 교훈.
 --
 -- 시수 검증의 강사별 분배(참고 집계)를 기간 단위로 **스냅샷 저장**한다:

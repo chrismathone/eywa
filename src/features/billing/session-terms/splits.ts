@@ -1,6 +1,6 @@
 // 강사 분배(splits) 산출 — 순수 함수(Vitest + 골든마스터 N6).
 // 로드맵 2단계 (b): 확정 회차(청구 기준)와 실 소비 시수(실측 기준)의 강사 귀속 금액을 행 단위로 산출해
-// invoice_teacher_splits(0116a)에 스냅샷 저장한다. attendance 사고 이식 규칙:
+// invoice_teacher_splits(0117a)에 스냅샷 저장한다. attendance 사고 이식 규칙:
 // - 돈은 **확정 행만**(N1): confirmed_sessions·unit_price 둘 다 있어야 분배 행이 된다(미확정=돈 아님).
 // - 청구 기준(confirmedAmount)과 실측 기준(actualAmount)은 **같은 청구의 두 표현** — 절대 합산 금지(R3, +60.5M 사고).
 //   diff는 점검 신호일 뿐 어느 쪽도 자동 수정하지 않는다(N2).

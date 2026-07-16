@@ -1248,7 +1248,7 @@ export const invoiceSessionTerms = pgTable(
   ],
 );
 
-// === invoice_teacher_splits (강사 분배 스냅샷 — 로드맵 2단계 b, 0116a) ===
+// === invoice_teacher_splits (강사 분배 스냅샷 — 로드맵 2단계 b, 0117a) ===
 // 시수 검증의 강사별 분배를 기간 단위로 저장(청구서×반 1행, 저장 시점 담당 강사 스냅샷).
 // 기록 전용 — invoices 절대 불변(N2). confirmed_amount(청구 기준)·actual_amount(실측 기준)는 합산 금지(R3).
 export const invoiceTeacherSplits = pgTable(
