@@ -399,6 +399,7 @@ export default async function EnrollmentDetailPage({
             analysisId={consult.aiAnalysis.id}
             consultationId={consult.id}
             generatedAt={consult.aiAnalysis.generatedAt}
+            modelVersion={consult.aiAnalysis.modelVersion}
             editedBy={consult.aiAnalysis.reportEditedBy}
             editedAt={consult.aiAnalysis.reportEditedAt}
             studentName={consult.prospectName}

@@ -153,6 +153,7 @@ export default async function ConsultationDetailPage({
         processingError={item.processingError}
         aiReport={item.aiReport}
         aiGeneratedAt={item.aiGeneratedAt}
+        aiModelVersion={item.aiModelVersion}
       />
     </div>
   );

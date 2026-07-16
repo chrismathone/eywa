@@ -22,7 +22,7 @@
 - **모든 DB 테이블에 `tenant_id` + RLS**. 멀티테넌트 누수는 한 정책 빠지면 전사 노출 — pgTAP 테스트로 강제.
 - **출석/급여/수강료 등 계산 함수**는 순수 함수로 분리해서 Vitest 단위테스트 강제(coverage 게이트 70%+).
 - **AI 호출은 캐싱 + 명시적 트리거**: 재분석은 명시 버튼이 있을 때만. 페이지 로드만으로 절대 새 호출 안 함. 마지막 결과는 DB에 보존되며, "갱신" 버튼을 다시 누르기 전까지 그대로 표시.
-- **UI에 model 이름 노출 금지**. "claude-opus-4-7-2026-05-27" 같은 문자열은 학원장 입장에서 노이즈. 생성 시점만 표시.
+- **UI에 표시하는 모델은 "친화적 라벨"로 노출** (2026-07-16 반전 — 과거엔 '노출 금지, 생성 시점만'이었으나, 모델을 번갈아 쓰게 되면서 "어떤 모델로 분석됐는지"가 직원에게 유용해짐). 단 원시 id(`deepseek-v4-pro-2026-07-16`)는 노이즈라 [`modelDisplayLabel`](src/lib/ai/model-label.ts)로 짧게 매핑("DeepSeek v4-pro"·"Claude Sonnet 5"), 알 수 없는 모델은 미표시(raw 코드 노출 금지). 전사 분석 3화면(등록상담·회의록·재원생 상담)이 '펼치기' 옆에 이 라벨을 단다.
 
 ## 성능/병목 방지 — 절대 규칙 (반응속도 1순위, ⚠️ 새 쿼리·라우트·차트 추가 시 필수 점검)
 
@@ -85,16 +85,22 @@ eywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 
 provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 
-| Tier | Upstage (폴백) | Anthropic (**기본**, 2026-07-13~) | 용도 |
-|---|---|---|---|
-| `fast` | `solar-pro3` | `claude-haiku-4-5` | 짧은 분류, 태깅, 간단 요약 (현재 미사용) |
-| `balanced` | `solar-pro3` | **`claude-sonnet-5`** | **경량 호출 기본값**(텍스트 상담 메모 분석 등). |
-| `reasoning` | — (없음) | `claude-opus-4-7` | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
+| Tier | Upstage (폴백) | Anthropic | DeepSeek | 용도 |
+|---|---|---|---|---|
+| `fast` | `solar-pro3` | `claude-haiku-4-5` | `deepseek-v4-flash` | 짧은 분류, 태깅, 간단 요약 (현재 미사용) |
+| `balanced` | `solar-pro3` | `claude-sonnet-5` | **`deepseek-v4-pro`** | 경량 호출 기본값 + **전사 분석 3종 기본**(아래). |
+| `reasoning` | — (없음) | `claude-opus-4-7` | — | **금지** (명시 요청 시만). reasoning은 Anthropic 고정. |
 
-- **운영 기본 provider = Anthropic Claude Sonnet 5** — 품질 A/B(2026-07-13)에서 Solar가 상담 분석의 warnings를
-  통째로 놓치고 잡담(주식 등)을 섞어 전환. 전환은 env: **Vercel(+로컬)에 `AI_PROVIDER=anthropic` 설정 필수.**
-  ⚠️ **코드 기본값(env 미설정)은 여전히 `upstage`(Solar)** — Vercel env가 안 걸리면 프로덕션이 Solar로 동작하니 반드시 확인.
-  롤백 = `AI_PROVIDER=upstage`(전역, Solar로) 또는 호출부 `provider:"upstage"`. (Solar: 한국어 강점 + ~20–25배 저렴이나 품질 열세.)
+- **전역 기본 provider = Anthropic Claude Sonnet 5** (`AI_PROVIDER=anthropic`, 2026-07-13~) — 품질 A/B에서 Solar가
+  상담 분석의 warnings를 통째로 놓치고 잡담(주식 등)을 섞어 전환. ⚠️ **코드 기본값(env 미설정)은 여전히 `upstage`(Solar)** —
+  Vercel env가 안 걸리면 프로덕션이 Solar로 동작하니 확인. 롤백 = `AI_PROVIDER=upstage` 또는 호출부 `provider:"upstage"`.
+- **전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro** (2026-07-16, `AI_PROVIDER`과 무관하게 코드에서 우선) —
+  실측 A/B(injaewon 실전사 5건): v4-pro가 warnings를 5/5 Sonnet급으로 생성(255·316·243·219·97자), 비용은 압도적으로 저렴.
+  경량 v4-flash·레거시 chat·Solar는 warnings를 2~3/5 "확인된 위험 신호 없음"으로 붕괴(Solar 탈락과 동일 실패)라 v4-pro 채택.
+  ⚠️ 트레이드오프: v4-pro는 추론형이라 Sonnet보다 ~1.2배 느림(백그라운드 분석이라 감수). **Vercel에 `DEEPSEEK_API_KEY` 설정 필요** —
+  없으면 anthropic/upstage로 **무중단 폴백**(키 추가 전까지 프로덕션은 Sonnet 유지, 롤백=키 제거). 라우팅은 호출부 `provider:"deepseek"`
+  ([analyzeMeeting](src/features/meetings/server/ai.ts)·[runConsultationAnalysis](src/features/enrollment/server/consultation-analysis.ts)·
+  [analyzeStudentConsultation](src/features/consultations/server/ai.ts) 기본값 + 웹훅 인라인). form-extract·멘트(Haiku)·care는 불변.
 
 ### 녹음 분석 = Solar 유지 + 폼 자동입력은 후보정 하네스로 방어 (2026-06-24)
 실 ijw 녹음 3건을 eywa 파이프라인에 흘려 ijw(Claude) 저장 결과와 대조한 결론: **전사(AssemblyAI `universal-3-pro`)는
@@ -306,7 +312,9 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 
 이미 확정된 결정이다. **재제안·재질문 금지.** 바꿔야 할 새 근거가 생기면 "이건 이미 X로 정해졌는데, 이런 이유로 재검토할까요?"라고 **명시적으로** 물어라(조용히 뒤집지 말 것).
 
-- **AI provider 기본 = Anthropic Claude Sonnet 5** (2026-07-13 품질 A/B로 Solar Pro 3에서 전환 — Solar가 상담 분석 warnings를 놓치고 잡담을 섞음). 운영 전환은 env: **Vercel+로컬 `AI_PROVIDER=anthropic` 필수**(코드 기본값 미설정은 여전히 upstage=Solar이므로 안 걸면 프로덕션이 Solar로 동작). 모든 AI(JSON) 호출은 `src/lib/ai/generate.ts`의 `generateJSON()` 단일 진입점. 롤백 = `AI_PROVIDER=upstage`(전역, Solar로) 또는 호출부 `provider:"upstage"`. `reasoning` 티어(Opus)는 **금지**(명시 요청 시만), Anthropic 고정.
+- **AI provider 전역 기본 = Anthropic Claude Sonnet 5** (2026-07-13 품질 A/B로 Solar Pro 3에서 전환 — Solar가 상담 분석 warnings를 놓치고 잡담을 섞음). 운영 전환은 env: **Vercel+로컬 `AI_PROVIDER=anthropic` 필수**(코드 기본값 미설정은 여전히 upstage=Solar이므로 안 걸면 프로덕션이 Solar로 동작). 모든 AI(JSON) 호출은 `src/lib/ai/generate.ts`의 `generateJSON()` 단일 진입점. 롤백 = `AI_PROVIDER=upstage`(전역, Solar로) 또는 호출부 `provider:"upstage"`. `reasoning` 티어(Opus)는 **금지**(명시 요청 시만), Anthropic 고정.
+- **전사 분석 3종(회의록·등록상담·재원생 상담) = DeepSeek v4-pro** (2026-07-16, 위 전역 기본과 별개로 코드에서 `provider:"deepseek"` 우선). 실측 A/B(injaewon 실전사 5건)에서 v4-pro만 warnings를 5/5 Sonnet급 생성, 경량 v4-flash·레거시 chat·Solar는 warnings 2~3/5 붕괴(Solar 탈락 사유 재현). 비용 압도적 우위가 채택 근거. ⚠️ v4-pro는 추론형이라 ~1.2배 느림(백그라운드라 감수). **Vercel `DEEPSEEK_API_KEY` 필요**(없으면 anthropic/upstage 무중단 폴백 = 키 추가 전까지 Sonnet 유지, 롤백=키 제거 또는 호출부 provider 교체). form-extract(grounding 가드)·멘트(Haiku)·care insights는 불변. **재제안 금지** — 스왑 범위·모델은 확정.
+- **분석 화면에 AI 모델 라벨 노출** (2026-07-16, 기존 "모델명 노출 금지" 반전). 모델을 번갈아 쓰므로 어떤 모델로 분석됐는지 직원이 보게 함. `modelDisplayLabel`(친화적 라벨, raw id 아님)로 등록상담·회의록·재원생 상담 '펼치기' 옆에 표시. 다시 "숨김"으로 되돌리지 말 것.
 - **테넌트 `injaewon` = 프로덕션 실데이터** (ijw-calander 은퇴·전체 이식). 데모 아님 → **`db:seed` 절대 금지**, 검증 중 무심한 mutation 금지(읽기 전용·국소·원복 우선). "데모=일회용" 전제 폐기.
 - **의도적 비이식(영구 제외)**: 캘린더/간트/챗봇/시간표 시뮬레이션(시나리오)/계약서/양방향 자동 동기화. 마케팅·셔틀·자료실·역할관리 원본탭·매출분석·시간표배포·학부모포털도 12메뉴 정체성상 제외. (인앱 알림은 경량 `notifications`만 신설했고 ijw "알림센터"는 아님.)
 - **Excel/스프레드시트 = 내보내기·가져오기만.** 마법사·임의 컬럼매핑 불요(2026-06-23 결정).

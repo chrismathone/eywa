@@ -4,6 +4,25 @@
 
 ## 진행 상황
 
+### 전사 분석 3종 → DeepSeek v4-pro 전환 + 모델 라벨 노출 (2026-07-16) — ✅ tsc0/lint0/test42(ai) + 실API 검증
+회의록·등록상담·재원생 상담(전사 기반 분석)을 Sonnet 5 → **DeepSeek v4-pro**로 전환. 근거 = 실측 A/B(injaewon
+실전사 5건, `scripts/_oneoff/ab-deepseek-vs-sonnet.ts`): warnings(이탈·정서·학업 위험 신호) 섹션에서 —
+- **v4-pro**: 5/5 Sonnet급 생성(255·316·243·219·97자). ← 채택
+- **v4-flash·레거시 chat·Solar**: 2~3/5 "확인된 위험 신호 없음"으로 붕괴(2026-07-13 Solar 탈락과 동일 실패).
+- 초기 "DeepSeek이 학부모명·전화 환각" 의심은 전수 검증 결과 **환각 아님**(프롬프트 `현재 입력값` echo, 프로덕션은
+  빈 칸에만 기입해 무해). 비용은 Sonnet 대비 압도적 저렴. 트레이드오프 = v4-pro 추론형이라 ~1.2배 느림(백그라운드라 감수).
+- **인프라**: `AiProvider`에 `deepseek` 추가([models.ts](../src/lib/ai/models.ts)) + [deepseek.ts](../src/lib/ai/deepseek.ts)
+  클라이언트(OpenAI 호환, base `https://api.deepseek.com`) + [generate.ts](../src/lib/ai/generate.ts) deepseek 분기
+  (json mode + `reasoning_content` 폴백). balanced 티어 deepseek=`deepseek-v4-pro`, fast=`deepseek-v4-flash`.
+- **라우팅**: `analyzeMeeting`·`runConsultationAnalysis`·`analyzeStudentConsultation` provider 기본값 `"deepseek"` +
+  웹훅 인라인 등록상담 호출 `provider:"deepseek"`. form-extract(grounding 가드)·멘트(Haiku)·care insights는 불변.
+- **안전**: `DEEPSEEK_API_KEY` 없으면 `resolveModelChain`이 anthropic/upstage로 무중단 폴백(키 추가 전까지 Sonnet 유지,
+  롤백=Vercel 키 제거). 실 API로 라우팅(→v4-pro)·파싱·폴백(→Sonnet) end-to-end 검증 완료.
+- **모델 라벨 노출**(기존 "모델명 UI 노출 금지" 반전): [model-label.ts](../src/lib/ai/model-label.ts) `modelDisplayLabel`이
+  raw id를 짧은 라벨("DeepSeek v4-pro")로 매핑, 알 수 없으면 미표시. 등록상담·회의록 '펼치기' 옆 + 재원생 상담 '생성' 옆에 칩.
+  쿼리는 이미 modelVersion 반환(등록상담·재원생), 회의록만 `ai_model_version` SELECT 추가.
+- ⚠️ **Vercel `DEEPSEEK_API_KEY` 설정 전까지 전사 분석은 Sonnet으로 동작**(폴백). 키 넣으면 v4-pro로 전환.
+
 ### 원스크린 미발송 멘트 초안 새로고침 유실 수정 (2026-07-16) — ✅ tsc0/lint0/test1371
 edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_sessions.subject_progress[key].draft`에 자동저장되지만
 ① roster 세션 복원이 draft를 안 읽고 ② `initReports`가 항상 `draft:""`로 시작해 새로고침 시 화면에서 사라졌으며,

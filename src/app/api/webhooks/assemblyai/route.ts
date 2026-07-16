@@ -629,6 +629,8 @@ async function analyzeConsultationAndPersist(
   const [analysisRes, extractRes] = await Promise.allSettled([
     generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
       maxTokens: 8192,
+      // 전사 분석 기본 = DeepSeek v4-pro(2026-07-16). 재분석(runConsultationAnalysis)과 동일 라우팅. 키 없으면 폴백.
+      provider: "deepseek",
       prompt: [
         "다음은 학원 신입생 등록상담 녹음 전사입니다. 아래 지침대로 심층 분석한 보고서를 JSON으로만 답해주세요.",
         "음성인식(ASR) 특성상 고유명사(인명·학교명·지명)가 잘못 인식될 수 있습니다. 같은 사람을 가리키는 유사 이름이 여러 형태로 나오면 하나로 통일하고, 통일한 사실을 상담 요약에 메모하세요.",

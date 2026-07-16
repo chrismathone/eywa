@@ -1,5 +1,6 @@
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
+import { getDeepseek } from "./deepseek";
 import { resolveModel, resolveModelChain, type AiKeyName, type AiProvider, type AiTier } from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
 
@@ -59,8 +60,13 @@ export type GenerateJSONOptions = {
  * 다시 throw한다. 그래야 processing_error에 영문 원문 대신 "키를 고쳐라"가 떠 관리자가 조치할 수 있다.
  * (silent provider 폴백은 의도적으로 안 함 — 키가 무효면 표면에 드러나야 한다.)
  */
-function rethrowAi(provider: "upstage" | "anthropic", err: unknown): never {
-  const label = provider === "upstage" ? "Upstage(Solar)" : "Anthropic(Claude)";
+function rethrowAi(provider: AiProvider, err: unknown): never {
+  const label =
+    provider === "upstage"
+      ? "Upstage(Solar)"
+      : provider === "deepseek"
+        ? "DeepSeek"
+        : "Anthropic(Claude)";
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status?: unknown }).status)
@@ -117,6 +123,26 @@ async function callProvider(
     };
     const res = await client.chat.completions.create(base);
     return res.choices[0]?.message?.content ?? "";
+  }
+  if (provider === "deepseek") {
+    const client = getDeepseek(keyName);
+    // DeepSeek도 OpenAI 호환 — JSON mode 사용(프롬프트에 "JSON" 단어 필수, 현 호출부 충족). reasoning_effort는
+    // DeepSeek 파라미터가 아니라 미부착. v4-pro(추론형)는 답을 content에, 사고과정을 reasoning_content에
+    // 분리하므로 content 우선 + 비면 reasoning_content 폴백(빈 문자열이면 parseJsonLoose가 표면화).
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: opts.maxTokens,
+      response_format: { type: "json_object" as const },
+      ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+      messages: [
+        ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+        { role: "user" as const, content: opts.prompt },
+      ],
+    });
+    const msg = res.choices[0]?.message as
+      | { content?: string | null; reasoning_content?: string | null }
+      | undefined;
+    return (msg?.content?.trim() ? msg.content : msg?.reasoning_content) ?? "";
   }
   const client = getAnthropic(keyName);
   const res = await client.messages.create({

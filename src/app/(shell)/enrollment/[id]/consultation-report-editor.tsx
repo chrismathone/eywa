@@ -20,6 +20,7 @@ import { RichText } from "@/components/rich-text";
 import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { ConversationFlowTree } from "./conversation-flow-tree";
 import { formatCreatedAt } from "@/lib/utils";
+import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
 
 /**
@@ -52,6 +53,7 @@ export function ConsultationReportEditor({
   analysisId,
   consultationId,
   generatedAt,
+  modelVersion,
   editedBy,
   editedAt,
   studentName,
@@ -62,6 +64,7 @@ export function ConsultationReportEditor({
   analysisId: string;
   consultationId: string;
   generatedAt: string | null;
+  modelVersion?: string | null;
   editedBy?: string | null;
   editedAt?: string | null;
   studentName?: string | null;
@@ -90,6 +93,8 @@ export function ConsultationReportEditor({
     [visibleSections, hasFlow],
   );
   const allOpen = expanded.size >= allKeys.length && allKeys.length > 0;
+  // 이 분석을 생성한 AI 모델의 짧은 라벨(원시 id 아님). 모델을 번갈아 쓰므로 직원이 확인 가능하게 노출.
+  const modelLabel = modelDisplayLabel(modelVersion);
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -206,6 +211,15 @@ export function ConsultationReportEditor({
           >
             <Download className="size-3" /> TXT
           </button>
+          {modelLabel ? (
+            <span
+              className="border-line text-text-faint inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]"
+              title="이 분석을 생성한 AI 모델"
+            >
+              <EyIcon name="sparkle" size={10} />
+              {modelLabel}
+            </span>
+          ) : null}
           {allKeys.length > 0 ? (
             <button
               type="button"

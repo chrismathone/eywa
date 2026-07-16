@@ -244,6 +244,7 @@ export default async function MeetingDetailPage({
             meetingId={meeting.id}
             editedBy={meeting.aiReportEditedBy}
             editedAt={meeting.aiReportEditedAt}
+            modelVersion={meeting.aiModelVersion}
           />
         </section>
       ) : null}
