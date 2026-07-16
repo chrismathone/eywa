@@ -4,6 +4,29 @@
 
 ## 진행 상황
 
+### 운영실 일일 AI 브리핑 3종 세트 (2026-07-16) — ✅ tsc0/lint0/test1386, 원장 승인(cron AI·master만 알림·대화형 보류)
+전수 조사("운영실이 eywa 모든 데이터를 활용하는 AI 비서급이 될 수 있나") 결론 반영 — 기존 버튼형 AI 5종의 실사용이
+~20건 미만(케어 2/807·상담분석 0/1,542)이라 **"눌러야 나오는 AI"가 아니라 "워크플로에 자동으로 흘러드는 AI"**로 설계.
+계획 확정본 = `docs/dashboard-ai-briefing-plan.md`(부록: 대화형 tool-use 비서 재검토 자료 — **보류, 구현 금지**).
+- **PR0 usage 계측(0113a `ai_usage_logs`)**: `generateJSON`이 provider usage 토큰을 캡처해 best-effort 기록
+  (admin 동적 import — env 미설정·실패 시 스킵, 본 호출 절대 안 막음). 호출부 9곳 `meta.feature` 스레딩.
+  CLAUDE.md에 "외부 AI 전송 금지 필드"(주민번호·계좌·급여·이력서 form_data) 명문화.
+- **PR1 신호 리팩터**: `getTodayActionSignals`에 `opts.db`(cron admin + scopeTenant 명시 격리)·`opts.asOf`(기준일·시각)
+  주입. 새 신호 `classnote-attention`(발송 실패·기한 초과 7일 창 / 사람 확인 보류 **창 없음**(막다른 길 실사고 교훈) /
+  멈춤 10분 — head-count 4종 B2).
+- **PR2 일일 브리핑(0114a)**: cron `/api/cron/daily-briefing`(07:00 KST, CRON_SECRET) → 활성 master 있는 테넌트만
+  순회 → 다이제스트 = **어제 마감**(asOf=어제·nowMinutes=1440 — 아침엔 '오늘' 신호가 구조적으로 0) + **오늘 예정**
+  + retention 요약(`computeRetentionRoster` cron 계산 — 라이브 대시보드 금지, B7) → Sonnet 5가 **서술만** 생성
+  (프롬프트에 개인명 불포함, `validateNarrative` 숫자 grounding·영문 토큰 가드 탈락 시 결정론 요약 폴백) →
+  `daily_briefings` upsert(tenant×date 멱등). 카드는 저장분 렌더만 + '다시 생성'(원자 claim+5분 stuck 우회+after()+
+  5초 폴링 — Realtime 불가: **RLS 정책 0개 테이블**, payload가 master 관점 전신호라 devtools 우회 차단 #77).
+  카드·재생성 게이트 = `canManageStaff`(master/admin/manager). 벨 알림 = **master만·최초 생성 1회**(notified_at 게이트,
+  IMPORTANT 미등재 — 경보 피로 원칙). RPC p_tenant 변형 2종(`*_admin`) — auth_tenant_id()가 service_role에서
+  에러 없이 0행이 되는 silent 오보 방지, execute는 service_role만.
+- ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
+  (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
+  `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
+
 ### 원스크린 미발송 멘트 초안 새로고침 유실 수정 (2026-07-16) — ✅ tsc0/lint0/test1371
 edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_sessions.subject_progress[key].draft`에 자동저장되지만
 ① roster 세션 복원이 draft를 안 읽고 ② `initReports`가 항상 `draft:""`로 시작해 새로고침 시 화면에서 사라졌으며,

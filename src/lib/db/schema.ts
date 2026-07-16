@@ -1755,6 +1755,33 @@ export const auditLogs = pgTable(
   ],
 );
 
+// === daily_briefings (운영실 일일 AI 브리핑 — 0114a 손수 alpha) ===
+// 하루 1행(tenant×date 유니크 = upsert 타겟). payload=결정론 다이제스트, narrative=LLM 서술(가드 통과분만).
+// ⚠️ RLS 정책 없음(select도) — payload가 master 관점 전신호라 서버(admin)가 역할 게이트 후에만 읽는다(#77).
+export const dailyBriefings = pgTable(
+  "daily_briefings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    briefingDate: date("briefing_date").notNull(), // KST 기준(kstToday)
+    processingStatus: text("processing_status").notNull().default("idle"), // idle|analyzing|completed|failed
+    processingError: text("processing_error"),
+    payload: jsonb("payload"), // DailyBriefingPayload(briefing-digest.ts)
+    narrative: text("narrative"),
+    modelVersion: text("model_version"), // UI 미노출
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    notifiedAt: timestamp("notified_at", { withTimezone: true }), // 알림 1회 게이트
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("daily_briefings_tenant_date_uq").on(t.tenantId, t.briefingDate),
+    index("daily_briefings_tenant_date_idx").on(t.tenantId, t.briefingDate),
+  ],
+);
+
 // === ai_usage_logs (AI 호출 usage 계측 — 0113a 손수 alpha) ===
 // generateJSON 1회 = 1행. write는 서버(service_role)만(insert 정책 없음), read는 테넌트 select 정책.
 // tenant_id nullable: 컨텍스트를 안 넘기는 기존 호출부는 null(스레딩 점진 확장).
@@ -1856,3 +1883,5 @@ export type KakaoChannel = typeof kakaoChannels.$inferSelect;
 export type NewKakaoChannel = typeof kakaoChannels.$inferInsert;
 export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLogs.$inferInsert;
+export type DailyBriefing = typeof dailyBriefings.$inferSelect;
+export type NewDailyBriefing = typeof dailyBriefings.$inferInsert;

@@ -335,16 +335,22 @@ export type DashFollowUp = {
   urgency: FollowUpUrgency;
 };
 
-/** 학생상담 후속조치 — 미완료 + 기한 임박/경과(긴급도 overdue/today/soon)만, 빠른 순. */
-export async function getFollowUpConsultations(limit = 8): Promise<DashFollowUp[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+/**
+ * 학생상담 후속조치 — 미완료 + 기한 임박/경과(긴급도 overdue/today/soon)만, 빠른 순.
+ * db = cron(admin) 주입 경로 — RLS 우회라 명시 tenant 필터 필수.
+ */
+export async function getFollowUpConsultations(
+  limit = 8,
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
+): Promise<DashFollowUp[]> {
+  const supabase = db?.supabase ?? (await createClient());
+  let query = supabase
     .from("student_consultations")
     .select("id, student_id, follow_up_action, follow_up_date, student:student_id ( name )")
     .eq("follow_up_done", false)
-    .not("follow_up_date", "is", null)
-    .order("follow_up_date", { ascending: true })
-    .limit(60);
+    .not("follow_up_date", "is", null);
+  if (db) query = query.eq("tenant_id", db.tenantId);
+  const { data, error } = await query.order("follow_up_date", { ascending: true }).limit(60);
   if (error) throw new Error(`dashboard follow-ups: ${error.message}`);
   const rows: DashFollowUp[] = [];
   for (const r of data ?? []) {
@@ -628,10 +634,15 @@ export type AbsenceRisk = {
  * 결석 위험 학생: 최근 14일 결석 ≥ 3건. 단 데모 출결이 과거에 몰려 있어 'today-14d'로는 0건이 되므로
  * 가장 최근 기록일을 앵커로 그 직전 14일 창을 본다(실데이터가 최신이면 today와 동일하게 동작).
  */
-export async function getAbsenceRiskStudents(): Promise<AbsenceRisk[]> {
-  const supabase = await createClient();
+export async function getAbsenceRiskStudents(
+  db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string },
+): Promise<AbsenceRisk[]> {
+  const supabase = db?.supabase ?? (await createClient());
   // 최근 기록일 기준 14일 결석 ≥3 — DB group-by/having RPC 1쿼리(구: anchor + 전건 조인 + JS, 0039a).
-  const { data, error } = await supabase.rpc("dashboard_absence_risk", { p_min: 3 });
+  // db(cron admin) 경로는 p_tenant 변형(0114a) — 세션용 RPC는 service_role에서 에러 없이 0행(silent 오보).
+  const { data, error } = db
+    ? await supabase.rpc("dashboard_absence_risk_admin", { p_min: 3, p_tenant: db.tenantId })
+    : await supabase.rpc("dashboard_absence_risk", { p_min: 3 });
   if (error) throw new Error(`getAbsenceRiskStudents: ${error.message}`);
   return ((data ?? []) as Array<{ student_id: string; student_name: string; absences: number | string }>).map((r) => ({
     studentId: r.student_id,
