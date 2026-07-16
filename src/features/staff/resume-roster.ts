@@ -30,6 +30,19 @@ export const ROSTER_COLUMNS = [
   "경력증명서제출",
 ] as const;
 
+/**
+ * 명부 기입 위치 = 헤더(1행) 바로 아래의 **첫 빈 행**(1-based 행 번호 반환).
+ * values.append는 "탭의 마지막 채워진 행 다음"에 붙어서, 탭 중간에 있는 안내/샘플 블록(12행 등)
+ * **아래**로 밀려 적혔다(2026-07-16 원장 제보 "밑에 적히는데 위에 적혀야") — 그래서 append 대신
+ * 위에서부터 빈 자리를 찾아 그 행에 update한다. 공백만 있는 셀은 빈 것으로 본다.
+ */
+export function firstEmptyRowIndex(rows: string[][], headerRows = 1): number {
+  for (let i = headerRows; ; i++) {
+    const row = rows[i];
+    if (!row || row.every((c) => c.trim() === "")) return i + 1; // 배열 index → 1-based 행 번호
+  }
+}
+
 /** 학력사항 중 가장 상위(맨 위) 실입력 1건 — 시트엔 최상위 학력만 기입한다(원장 요청). */
 export function topEducation(d: StaffResumeData): ResumeEducation | null {
   return d.education.find((e) => e.school.trim() !== "") ?? null;

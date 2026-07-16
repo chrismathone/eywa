@@ -221,31 +221,29 @@ export async function applySheetFormulas(
 }
 
 /**
- * 시트 탭 맨 아래에 행들을 append(RAW·INSERT_ROWS) — "한 행 추가"형 기입용(직원 이력서 →
- * 신규 직원명부 등). 탭의 마지막 채워진 행 다음에 붙는다(전체 덮어쓰기 아님 — 기존 행 무손상).
- * ⚠️ append는 **비멱등**이라 withSheetsRetry(429/503 재전송)를 걸지 않는다 — 503이 "실행됐지만
- *    응답 유실"일 수 있어 재시도가 같은 행을 2번 기입한다. 실패는 호출부가 경고로 사용자 확인 유도.
- * ⚠️ 저장 액션이 이 호출을 동기 대기하므로 요청 timeout(8s)으로 지연 상한을 못박는다(무한 pending 방지).
+ * 시트 탭의 특정 행(1-based, A열부터)에 값 한 행을 update(RAW) — "지정 위치 기입"용(직원 이력서 →
+ * 신규 직원명부의 헤더 아래 첫 빈 행). values.append는 탭 중간의 안내/샘플 블록 **아래**에 붙어버려
+ * (2026-07-16 직원명부 실측) 위치를 호출부가 계산해 update로 못박는다.
+ * ⚠️ 기입류 호출이라 withSheetsRetry(429/503 재전송)를 걸지 않는다 — 실패는 호출부가 경고로 사용자
+ *    확인을 유도한다. 저장 액션이 동기 대기하므로 요청 timeout(8s)으로 지연 상한을 못박는다.
  */
-export async function appendSheetRows(
+export async function updateSheetRow(
   spreadsheetId: string,
   tabName: string,
-  rows: string[][],
+  rowIndex: number,
+  values: string[],
 ): Promise<void> {
-  if (rows.length === 0) return;
   try {
     // 인증도 try 안 — invalid_grant 등 인증 오류가 한글 메시지(translateSheetsError)로 떨어지게.
     const auth = getServiceAccountAuth();
     await auth.authorize();
     const sheets = google.sheets({ version: "v4", auth });
-    await sheets.spreadsheets.values.append(
+    await sheets.spreadsheets.values.update(
       {
         spreadsheetId,
-        // 범위 = 탭명만(한글·공백 안전하게 작은따옴표) → 그 탭의 채워진 영역 끝에 append.
-        range: `'${tabName}'`,
+        range: `'${tabName}'!A${rowIndex}`,
         valueInputOption: "RAW",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: { values: rows },
+        requestBody: { values: [values] },
       },
       { timeout: 8000 },
     );

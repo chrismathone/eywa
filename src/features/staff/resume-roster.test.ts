@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyResume } from "./resume";
-import { buildRosterRow, ROSTER_COLUMNS, topEducation } from "./resume-roster";
+import { buildRosterRow, firstEmptyRowIndex, ROSTER_COLUMNS, topEducation } from "./resume-roster";
 
 function sample() {
   const d = emptyResume();
@@ -34,6 +34,27 @@ describe("topEducation", () => {
 
   it("학력이 전부 비면 null", () => {
     expect(topEducation(emptyResume())).toBeNull();
+  });
+});
+
+describe("firstEmptyRowIndex", () => {
+  const H = ["No.", "회사명"];
+  it("헤더만 있으면 2행(헤더 바로 아래)", () => {
+    expect(firstEmptyRowIndex([H])).toBe(2);
+  });
+
+  it("실측 시나리오: 중간 안내 블록(12행 헤더·13행 데이터)이 있어도 위쪽 첫 빈 행(2행)을 고른다", () => {
+    // 1행 헤더, 2~11행 빈 행, 12행 안내용 헤더, 13행 데이터 — append였으면 14행으로 밀렸다.
+    const rows: string[][] = [H, [], [], [], [], [], [], [], [], [], [], ["No.", "회사명"], ["", "곰돌이"]];
+    expect(firstEmptyRowIndex(rows)).toBe(2);
+  });
+
+  it("헤더 아래가 차례로 차 있으면 그 다음 행", () => {
+    expect(firstEmptyRowIndex([H, ["", "A사"], ["", "B사"]])).toBe(4);
+  });
+
+  it("공백만 있는 셀은 빈 행으로 본다", () => {
+    expect(firstEmptyRowIndex([H, ["  ", " "]])).toBe(2);
   });
 });
 

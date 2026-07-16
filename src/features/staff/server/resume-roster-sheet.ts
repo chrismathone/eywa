@@ -1,7 +1,7 @@
 import "server-only";
-import { appendSheetRows } from "@/features/integrations/google-sheets";
+import { readSheetTabRows, updateSheetRow } from "@/features/integrations/google-sheets";
 import type { StaffResumeData } from "../resume";
-import { buildRosterRow } from "../resume-roster";
+import { buildRosterRow, firstEmptyRowIndex } from "../resume-roster";
 
 // 직원 이력서 저장(신규 작성) 시 "신규 직원명부" 구글시트에 한 행 기입 — 부가 효과.
 // 실패해도 이력서 저장 자체는 유효해야 하므로 throw하지 않고 {ok:false, error}로 돌려
@@ -23,8 +23,19 @@ export async function appendResumeToRoster(
   }
   const tab = process.env.HR_ROSTER_SHEET_TAB?.trim() || DEFAULT_TAB;
   // 저장 액션이 동기 대기하므로 전체 상한 10s — 초과 시 "실패"가 아니라 "확인 필요"로 안내
-  // (기입 자체는 그 뒤 성공했을 수 있다). 개별 요청 timeout(8s)은 appendSheetRows 쪽.
-  const job = appendSheetRows(spreadsheetId, tab, [buildRosterRow(data)]);
+  // (기입 자체는 그 뒤 성공했을 수 있다). 개별 요청 timeout(8s)은 updateSheetRow 쪽.
+  // 기입 위치 = 헤더 아래 첫 빈 행(위에서부터) — append는 탭 중간 안내 블록 아래로 밀림(원장 제보).
+  // 읽기→쓰기 사이 동시 저장 레이스는 이력서 작성 빈도(월 수 건)상 감수.
+  const job = (async () => {
+    const rows = await readSheetTabRows(spreadsheetId, tab).catch((e) => {
+      // readSheetTabRows의 "먼저 시간표에서 '시트 반영'…" 힌트는 시간표 전용 — 명부 맥락 메시지로 교체.
+      const m = (e as Error)?.message || "";
+      throw m.includes("탭이 없습니다")
+        ? new Error(`시트에 '${tab}' 탭이 없습니다 — HR_ROSTER_SHEET_TAB 값을 확인하세요`)
+        : e;
+    });
+    await updateSheetRow(spreadsheetId, tab, firstEmptyRowIndex(rows), buildRosterRow(data));
+  })();
   // race 패배 후 늦게 떨어지는 거부가 unhandledRejection으로 새지 않게 미리 handled 처리(원 promise는 race가 그대로 씀).
   job.catch(() => {});
   let timer: ReturnType<typeof setTimeout> | undefined;

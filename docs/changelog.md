@@ -51,10 +51,12 @@ edutrix 전수비교 감사 확정 버그. 멘트 초안은 `onescreen_daily_ses
 이력서 **신규 작성** 저장 시 "2020~2026 직원명부" 스프레드시트의 `2026신규 직원명부` 탭(A~T 20열)에 한 행
 append(수정 저장은 재기입 안 함 — 중복 방지). **학력은 최상위(맨 위 실입력) 1건만** 기입(원장 요청).
 - **순수/IO 분리**: 행 변환 [resume-roster.ts](../src/features/staff/resume-roster.ts)(`ROSTER_COLUMNS` 열 순서 계약,
-  Vitest 7) ↔ IO [server/resume-roster-sheet.ts](../src/features/staff/server/resume-roster-sheet.ts) +
-  공용 [`appendSheetRows`](../src/features/integrations/google-sheets.ts)(RAW·INSERT_ROWS — 덮어쓰기 아님).
-  ⚠️ append는 **비멱등이라 withSheetsRetry 미적용**(503 재전송 = 같은 행 2번) + 요청 timeout 8s·전체 상한 10s
-  (저장 액션이 동기 대기 — 무한 pending 방지, 초과 시 "기입 여부 직접 확인" 안내).
+  Vitest 11) ↔ IO [server/resume-roster-sheet.ts](../src/features/staff/server/resume-roster-sheet.ts) +
+  공용 [`updateSheetRow`](../src/features/integrations/google-sheets.ts)(RAW, 지정 행 기입).
+  ⚠️ **기입 위치 = 헤더(1행) 아래 첫 빈 행**(`firstEmptyRowIndex`) — values.append는 탭 중간 안내/샘플
+  블록 **아래**(13행)로 밀려 적혀 원장 제보로 교체(2026-07-16 "밑에 적히는데 위에 적혀야").
+  기입류라 withSheetsRetry 미적용 + 요청 timeout 8s·전체 상한 10s(저장 액션이 동기 대기 — 무한 pending
+  방지, 초과 시 "기입 여부 직접 확인" 안내). 읽기→쓰기 레이스는 작성 빈도상 감수.
 - **부가 효과 정책**: 시트 실패해도 이력서 저장은 유효 — `saveStaffResume`가 `notice`/`warning`을 돌려주고
   폼이 sonner 토스트로만 노출(생성 경로는 즉시 새 뷰로 떠나므로 인라인 불가). env `HR_ROSTER_SPREADSHEET_ID`
   (+`HR_ROSTER_SHEET_TAB`, 기본 "2026신규 직원명부") 미설정 = 의도적 비활성 → 토스트 없이 조용히 skip(로그만
