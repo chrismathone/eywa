@@ -1,12 +1,5 @@
 "use client";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { resolveStudyGrade } from "../curriculum";
@@ -14,11 +7,13 @@ import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { isReportEligible, type GridRow } from "../grid";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
+import { PillGroup } from "./pill-group";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
 
-const NONE = "__none__"; // Base UI Select는 빈 문자열 값을 안 좋아함 → 미입력 sentinel.
 const TD = "border-line border-t px-2 py-1.5 align-top";
+// 문구·특이사항 textarea — 내용에 따라 자동 확장(field-sizing, 미지원 브라우저는 min-h 고정 + resize-y 수동).
+const AUTOSIZE = "[field-sizing:content] max-h-[200px] resize-y";
 
 /** 필드 편집 핸들러(카드뷰와 같은 state·저장로직 공유 — studentId 파라미터 버전). */
 export type GridFieldHandlers = {
@@ -41,6 +36,7 @@ export type GridRowActions = {
   onSendRow: (student: OneScreenStudent, subjectName: string) => void;
   onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
   onOpenCard: (studentId: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
+  onImportPrev: (student: OneScreenStudent, subjectName: string) => void; // 이전 회차 값 → 빈 칸 채움(1-3)
 };
 
 /** 표 표시 설정(학원 설정 유래). */
@@ -192,40 +188,23 @@ export function GridBodyRow({
         </td>
       ) : null}
       <td className={TD}>
-        <Select
-          value={student.attitude ?? NONE}
-          onValueChange={(v) => fields.onAttitude(student.id, v === NONE ? null : (v as string))}
-        >
-          <SelectTrigger size="sm" className="min-w-[92px]" aria-label={`${student.name} 태도`}>
-            <SelectValue>{(v) => (v === NONE ? "—" : (v as string))}</SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectItem value={NONE}>—</SelectItem>
-            {config.attitudes.map((a) => (
-              <SelectItem key={a} value={a}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* 1클릭 pill(edutrix 라디오 패리티) — 재클릭 해제. 드롭다운(2클릭) 폐기(1-1). */}
+        <PillGroup
+          size="sm"
+          options={config.attitudes}
+          value={student.attitude}
+          onSelect={(a) => fields.onAttitude(student.id, student.attitude === a ? null : a)}
+          ariaLabel={`${student.name} 태도`}
+        />
       </td>
       <td className={TD}>
-        <Select
-          value={student.homework || NONE}
-          onValueChange={(v) => fields.onHomework(student.id, v === NONE ? "" : (v as string))}
-        >
-          <SelectTrigger size="sm" className="min-w-[92px]" aria-label={`${student.name} 과제`}>
-            <SelectValue>{(v) => (v === NONE ? "—" : (v as string))}</SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectItem value={NONE}>—</SelectItem>
-            {config.homeworks.map((h) => (
-              <SelectItem key={h} value={h}>
-                {h}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PillGroup
+          size="sm"
+          options={config.homeworks}
+          value={student.homework || null}
+          onSelect={(h) => fields.onHomework(student.id, student.homework === h ? "" : h)}
+          ariaLabel={`${student.name} 과제`}
+        />
       </td>
       <td className={TD}>
         <div className="flex flex-col gap-1">
@@ -266,21 +245,21 @@ export function GridBodyRow({
             onChange={(e) => fields.onNote(student.id, e.target.value)}
             placeholder="특이사항(메모) · 예: 조퇴함 / 개념 어려워함"
             aria-label={`${student.name} 특이사항`}
-            className="border-amber/40 focus:border-primary scrollbar-thin h-[40px] w-full resize-none rounded-sm border bg-amber-soft/30 px-2 py-1 text-[11px] leading-snug outline-none"
+            className={`border-amber/40 focus:border-primary scrollbar-thin min-h-[40px] w-full rounded-sm border bg-amber-soft/30 px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
           />
           <textarea
             value={rep?.draft ?? ""}
             onChange={(e) => fields.onDraft(student.id, subject.name, e.target.value)}
             placeholder={genRowBusy ? "자동작성 중…" : "'자동작성'으로 생성 · 직접 편집·확인 후 발송"}
             aria-label={`${student.name} ${subject.name} 학부모 문구`}
-            className="border-line focus:border-primary scrollbar-thin h-[72px] w-full resize-none rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none"
+            className={`border-line focus:border-primary scrollbar-thin min-h-[72px] w-full rounded-sm border bg-background px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
           />
           <textarea
             value={rep?.trendDraft ?? ""}
             onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
             placeholder="학습 추세(종합분석) · 기록 적으면 비어 있음"
             aria-label={`${student.name} ${subject.name} 학습 추세`}
-            className="border-line focus:border-primary scrollbar-thin h-[48px] w-full resize-none rounded-sm border bg-bg-soft px-2 py-1 text-[11px] leading-snug outline-none"
+            className={`border-line focus:border-primary scrollbar-thin min-h-[48px] w-full rounded-sm border bg-bg-soft px-2 py-1 text-[11px] leading-snug outline-none ${AUTOSIZE}`}
           />
         </div>
       </td>

@@ -1,6 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import type { BulkPatch } from "../grid";
 
 /** 표 일괄 작업 핸들러 — keys(선택 행) 있으면 그 행만, 없으면 전체. */
 export type GridBulkActions = {
@@ -8,21 +10,24 @@ export type GridBulkActions = {
   onSendAll: (keys?: string[]) => void;
   onAutoWriteAll: (keys?: string[]) => void; // 선택(또는 전체) 행 자동작성
   onClassNotice?: (keys?: string[]) => void; // 선택(없으면 표시 전체) 학생 학부모 공지 — 진도 무관
+  onBulkApply: (keys: string[], patch: BulkPatch, onlyEmpty: boolean) => void; // 값 일괄 적용(1-2) — 진도 필터 없는 raw 행 대상
 };
 
-/** 표 상단 일괄 바 — 카운트·이전 회차 토글·일괄 버튼. (그리드 분해 0단계 이동) */
+/** 표 상단 일괄 바 — 카운트·이전 회차 토글·일괄 버튼. children = 버튼 그룹 선두 슬롯(값 일괄 입력 팝오버). */
 export function GridToolbar({
   counts,
   selectedKeys,
   prev,
   actions,
   bulkGen,
+  children,
 }: {
   counts: { total: number; eligible: number; selectedEligible: number };
   selectedKeys: string[];
   prev: { has: boolean; show: boolean; onToggle: () => void };
   actions: GridBulkActions;
   bulkGen?: boolean;
+  children?: ReactNode;
 }) {
   const { total, eligible, selectedEligible } = counts;
   return (
@@ -52,6 +57,7 @@ export function GridToolbar({
         </label>
       ) : null}
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        {children}
         {actions.onClassNotice ? (
           <Button
             variant="ghost"

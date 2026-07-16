@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { buildGridRows, isReportEligible } from "../grid";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
+import { BulkApplyPopover } from "./bulk-apply";
 import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
 import { PrevRow } from "./prev-row";
@@ -71,14 +72,23 @@ export function OneScreenGrid({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 일괄 바 — 선택은 표시 전체, 처리는 발송가능 행만(client selectRows). */}
+      {/* 일괄 바 — 선택은 표시 전체, 처리는 발송가능 행만(client selectRows). 값 일괄 입력은 진도 무관(raw 행). */}
       <GridToolbar
         counts={{ total: rows.length, eligible, selectedEligible }}
         selectedKeys={selectedKeys}
         prev={{ has: hasPrev, show: showPrev, onToggle: () => setShowPrev((v) => !v) }}
         actions={bulkActions}
         bulkGen={bulkGen}
-      />
+      >
+        <BulkApplyPopover
+          targetCount={selectedKeys.length || rows.length}
+          selectedCount={selectedKeys.length}
+          attitudes={config.attitudes}
+          homeworks={config.homeworks}
+          onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
+          disabled={bulkGen}
+        />
+      </GridToolbar>
 
       <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
         {/* table-fixed + colgroup 고정 폭 — 헤더/본문 열 정렬 결정적, 표는 내용 폭(좌측 정렬)이라 진도가 남는 폭을 독식하지 않음. */}
@@ -89,8 +99,8 @@ export function OneScreenGrid({
             <col className="w-[200px]" /> {/* 진도 */}
             {config.dailyEnabled ? <col className="w-[88px]" /> : null} {/* 일일 */}
             {config.checkEnabled ? <col className="w-[88px]" /> : null} {/* 확인 */}
-            <col className="w-[96px]" /> {/* 태도 */}
-            <col className="w-[96px]" /> {/* 과제 */}
+            <col className="w-[130px]" /> {/* 태도 — 1클릭 pill(1-1) */}
+            <col className="w-[130px]" /> {/* 과제 */}
             <col className="w-[140px]" /> {/* 교재명 · 보강 */}
             <col /> {/* 학부모 문구(멘트) — 남는 폭 흡수(우측 공간 활용) */}
             <col className="w-[132px]" /> {/* 자동작성 · 카드 · 발송 */}
@@ -125,6 +135,7 @@ export function OneScreenGrid({
                     subject={row.subject}
                     dailyEnabled={config.dailyEnabled}
                     checkEnabled={config.checkEnabled}
+                    onImport={() => rowActions.onImportPrev(row.student, row.subject.name)}
                   />
                 ) : null}
                 <GridBodyRow

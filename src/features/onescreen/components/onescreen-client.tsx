@@ -40,7 +40,7 @@ import { OneScreenGrid } from "./onescreen-grid";
 import { StatusBoard } from "./status-board";
 import { HistoryBoard } from "./history-board";
 import { NoticeComposer } from "./notice-composer";
-import { buildGridRows, isReportEligible } from "../grid";
+import { buildGridRows, isReportEligible, planBulkApply, planPrevFill, type BulkPatch } from "../grid";
 
 type ReportsState = Record<string, Record<string, SubjectReport>>; // studentId → 과목명 → {draft, sent}
 
@@ -525,6 +525,64 @@ export function OneScreenClient({
     }
     toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`);
   }
+  // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
+  // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
+  function bulkApplyValues(keys: string[], patchFields: BulkPatch, onlyEmpty: boolean) {
+    const all = buildGridRows(visible);
+    const keySet = new Set(keys);
+    const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
+    const plan = planBulkApply(
+      rows.map((r) => ({
+        studentId: r.student.id,
+        subjectName: r.subject.name,
+        attitude: r.student.attitude,
+        homework: r.student.homework,
+        textbook: r.subject.textbook ?? "",
+        homeworkToday: r.subject.homeworkToday ?? "",
+      })),
+      patchFields,
+      onlyEmpty,
+    );
+    if (plan.length === 0) {
+      toast.message("적용할 칸이 없습니다");
+      return;
+    }
+    for (const p of plan) {
+      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.set.attitude);
+      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.set.homework);
+      if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
+      if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
+    }
+    toast.success(`${plan.length}행에 일괄 적용했습니다`);
+  }
+  // 이전 회차 가져오기(1-3) — 그 행의 **빈 칸만** 채움(진도·태도·과제·오늘 과제).
+  // ⚠️ 특이사항은 채우지 않음 — prevReport.note는 학부모 발송 본문(notes)이라 특이사항이 아니다.
+  function importPrevFor(student: OneScreenStudent, subjectName: string) {
+    const idx = student.subjects.findIndex((su) => su.name === subjectName);
+    const su = student.subjects[idx];
+    if (!su) return;
+    const fill = planPrevFill({
+      prev: su.prevReport,
+      current: {
+        today: su.today,
+        attitude: student.attitude,
+        homework: student.homework,
+        homeworkToday: su.homeworkToday ?? "",
+      },
+      attitudes: ATTITUDE,
+      homeworks: HOMEWORK,
+    });
+    const count = Object.keys(fill).length;
+    if (!count) {
+      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      return;
+    }
+    if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
+    if (fill.attitude !== undefined) setAttitudeValue(student.id, fill.attitude);
+    if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
+    if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
+    toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
+  }
   // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
   function openCard(studentId: string) {
     setSelId(studentId);
@@ -951,12 +1009,18 @@ export function OneScreenClient({
             onNote: setNoteFor,
             onMakeup: toggleMakeupFor,
           }}
-          rowActions={{ onSendRow: sendRow, onAutoWrite: autoWriteRow, onOpenCard: openCard }}
+          rowActions={{
+            onSendRow: sendRow,
+            onAutoWrite: autoWriteRow,
+            onOpenCard: openCard,
+            onImportPrev: importPrevFor,
+          }}
           bulkActions={{
             onSaveAll: saveAllVisible,
             onSendAll: sendAllVisible,
             onAutoWriteAll: autoWriteAllVisible,
             onClassNotice: openNoticeForRows,
+            onBulkApply: bulkApplyValues,
           }}
           genKey={genKey}
           bulkGen={bulkGen}

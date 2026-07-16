@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildGridRows, isReportEligible } from "./grid";
-import type { OneScreenStudent } from "./types";
+import { buildGridRows, isReportEligible, planBulkApply, planPrevFill, type BulkTarget } from "./grid";
+import type { OneScreenStudent, PrevReport } from "./types";
 
 function stu(id: string, subjects: { name: string; today?: string }[]): OneScreenStudent {
   return {
@@ -43,5 +43,133 @@ describe("isReportEligible", () => {
     expect(isReportEligible({ name: "수학", prev: "", today: "1-1-1 받아올림" })).toBe(true);
     expect(isReportEligible({ name: "수학", prev: "", today: "   " })).toBe(false);
     expect(isReportEligible({ name: "수학", prev: "", today: "" })).toBe(false);
+  });
+});
+
+function target(over: Partial<BulkTarget> = {}): BulkTarget {
+  return {
+    studentId: "a",
+    subjectName: "수학",
+    attitude: null,
+    homework: "",
+    textbook: "",
+    homeworkToday: "",
+    ...over,
+  };
+}
+
+describe("planBulkApply", () => {
+  it("빈(미지정·공백) patch 필드는 적용하지 않는다 — 값 지우기 아님", () => {
+    expect(planBulkApply([target()], {}, false)).toEqual([]);
+    expect(planBulkApply([target()], { textbook: "  " }, false)).toEqual([]);
+  });
+
+  it("채워진 필드만 대상 행 전체에 적용한다(기본=덮어쓰기)", () => {
+    const plan = planBulkApply(
+      [target({ textbook: "기존 교재" }), target({ studentId: "b" })],
+      { textbook: "쎈 중2-1", homeworkToday: "p10~16" },
+      false,
+    );
+    expect(plan).toEqual([
+      { studentId: "a", subjectName: "수학", set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
+      { studentId: "b", subjectName: "수학", set: { textbook: "쎈 중2-1", homeworkToday: "p10~16" } },
+    ]);
+  });
+
+  it("onlyEmpty면 이미 값 있는 칸은 건너뛴다", () => {
+    const plan = planBulkApply(
+      [target({ attitude: "좋음", textbook: "기존" }), target({ studentId: "b" })],
+      { attitude: "아주 좋음", textbook: "쎈" },
+      true,
+    );
+    expect(plan).toEqual([
+      { studentId: "b", subjectName: "수학", set: { attitude: "아주 좋음", textbook: "쎈" } },
+    ]);
+  });
+
+  it("태도·과제(학생 단위)는 같은 학생의 두 번째 행부터 중복 적용하지 않는다", () => {
+    const plan = planBulkApply(
+      [target({ subjectName: "수학" }), target({ subjectName: "영어" })],
+      { attitude: "좋음", homeworkToday: "복습" },
+      false,
+    );
+    expect(plan).toEqual([
+      { studentId: "a", subjectName: "수학", set: { attitude: "좋음", homeworkToday: "복습" } },
+      { studentId: "a", subjectName: "영어", set: { homeworkToday: "복습" } },
+    ]);
+  });
+});
+
+const ATTITUDES = ["아주 좋음", "좋음", "보통", "산만함", "피곤함"] as const;
+const HOMEWORKS = ["완료", "일부 미흡", "미제출"] as const;
+
+function prevReport(over: Partial<PrevReport> = {}): PrevReport {
+  return {
+    date: "2026-07-13",
+    progress: "1-1-1 받아올림",
+    textbook: "쎈",
+    homeworkToday: "p10~16",
+    homeworkScore: "완료",
+    attitude: "좋음",
+    examInfo: "일일 18/20",
+    note: "학부모 발송 본문",
+    ...over,
+  };
+}
+
+describe("planPrevFill", () => {
+  it("빈 칸만 채운다 — 이미 입력된 칸은 유지", () => {
+    const fill = planPrevFill({
+      prev: prevReport(),
+      current: { today: "이미 입력", attitude: null, homework: "미제출", homeworkToday: "" },
+      attitudes: ATTITUDES,
+      homeworks: HOMEWORKS,
+    });
+    expect(fill).toEqual({ attitude: "좋음", homeworkToday: "p10~16" });
+  });
+
+  it("이전 값이 없거나(prev 없음) 전부 입력돼 있으면 빈 계획", () => {
+    expect(
+      planPrevFill({
+        prev: undefined,
+        current: { today: "", attitude: null, homework: "", homeworkToday: "" },
+        attitudes: ATTITUDES,
+        homeworks: HOMEWORKS,
+      }),
+    ).toEqual({});
+    expect(
+      planPrevFill({
+        prev: prevReport(),
+        current: { today: "x", attitude: "보통", homework: "완료", homeworkToday: "y" },
+        attitudes: ATTITUDES,
+        homeworks: HOMEWORKS,
+      }),
+    ).toEqual({});
+  });
+
+  it("현 선택지에 없는 옛 태도·과제 값은 스킵한다", () => {
+    const fill = planPrevFill({
+      prev: prevReport({ attitude: "옛선택지", homeworkScore: "90%" }),
+      current: { today: "", attitude: null, homework: "", homeworkToday: "x" },
+      attitudes: ATTITUDES,
+      homeworks: HOMEWORKS,
+    });
+    expect(fill).toEqual({ today: "1-1-1 받아올림" });
+  });
+
+  it("특이사항(note=발송 본문)은 어떤 경우에도 계획에 포함되지 않는다", () => {
+    const fill = planPrevFill({
+      prev: prevReport(),
+      current: { today: "", attitude: null, homework: "", homeworkToday: "" },
+      attitudes: ATTITUDES,
+      homeworks: HOMEWORKS,
+    });
+    expect(Object.keys(fill)).not.toContain("note");
+    expect(fill).toEqual({
+      today: "1-1-1 받아올림",
+      attitude: "좋음",
+      homework: "완료",
+      homeworkToday: "p10~16",
+    });
   });
 });

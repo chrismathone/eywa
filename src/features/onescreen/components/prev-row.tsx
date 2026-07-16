@@ -17,10 +17,12 @@ export function PrevRow({
   subject,
   dailyEnabled,
   checkEnabled,
+  onImport,
 }: {
   subject: Subject;
   dailyEnabled: boolean;
   checkEnabled: boolean;
+  onImport?: () => void; // 이전 회차 값 → 오늘 행 빈 칸 채움(1-3). 특이사항은 제외(발송 본문 오염 방지).
 }) {
   const p = subject.prevReport;
   if (!p) return null;
@@ -53,7 +55,18 @@ export function PrevRow({
       <td className={PREV_TD}>
         <span className="line-clamp-2">{p.note || "—"}</span>
       </td>
-      <td className={PREV_TD} />
+      <td className={PREV_TD}>
+        {onImport ? (
+          <button
+            type="button"
+            onClick={onImport}
+            title="이전 회차 값을 이 행의 빈 칸에 채움 — 진도·태도·과제·오늘 과제 (특이사항 제외)"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-[10px] font-semibold"
+          >
+            가져오기
+          </button>
+        ) : null}
+      </td>
     </tr>
   );
 }
