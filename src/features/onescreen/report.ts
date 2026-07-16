@@ -18,21 +18,29 @@ export function delta(score: number | null, prev: number | null): number | null 
   return score - prev;
 }
 
+/** 테스트 사용 여부(학원 설정) — 비활성 테스트는 '테'·'마감' 카운트에서 요구하지 않는다(둘 다 off면 카운트 0 고정 방지, #25). */
+export type TestConfig = { dailyEnabled?: boolean; checkEnabled?: boolean };
+
 /** 학생 행의 진/테/보 상태 셀 (보고서는 student-level reportSent 기준 — 클라이언트가 과목별로 재정의 가능) */
-export function studentStatus(st: OneScreenStudent): StudentStatus {
+export function studentStatus(st: OneScreenStudent, cfg?: TestConfig): StudentStatus {
   const prog: CellState = st.progressConfirmed ? "ok" : "todo";
 
-  const hasDaily = st.tests.daily.score != null;
-  const hasCheck = st.tests.check.score != null;
-  const test: CellState = hasDaily && hasCheck ? "ok" : hasDaily || hasCheck ? "warn" : "todo";
+  const dailyOn = cfg?.dailyEnabled ?? true;
+  const checkOn = cfg?.checkEnabled ?? true;
+  const dailyReq = dailyOn && st.tests.daily.score == null; // 사용 중인데 미입력
+  const checkReq = checkOn && st.tests.check.score == null;
+  const anyEntered =
+    (dailyOn && st.tests.daily.score != null) || (checkOn && st.tests.check.score != null);
+  // 요구되는 테스트가 모두 입력=ok, 일부 입력=warn, 전무=todo. 둘 다 비활성이면 요구 0 → ok(항목 없음).
+  const test: CellState = !dailyReq && !checkReq ? "ok" : anyEntered ? "warn" : "todo";
 
   const rep: CellState = st.reportSent ? "ok" : st.reportDraft.trim() ? "warn" : "todo";
   return { prog, test, rep };
 }
 
 /** 진도·테스트·보고서 모두 완료 */
-export function isStudentDone(st: OneScreenStudent): boolean {
-  const s = studentStatus(st);
+export function isStudentDone(st: OneScreenStudent, cfg?: TestConfig): boolean {
+  const s = studentStatus(st, cfg);
   return s.prog === "ok" && s.test === "ok" && s.rep === "ok";
 }
 
