@@ -1,0 +1,127 @@
+import { describe, expect, it } from "vitest";
+import { buildDailyBriefingPayload, type BuildDailyBriefingInput } from "./briefing-digest";
+import { buildFallbackTeamReport, buildTeamPrompt, validateTeamReport } from "./briefing-team-report";
+import type { TodayActionsRaw } from "./today-actions";
+
+const EMPTY_RAW: TodayActionsRaw = {
+  absentToday: [],
+  unrecordedYesterday: [],
+  yesterday: "2026-07-15",
+  failedAnalysis: { meetings: 0, enrollment: 0, consultations: 0 },
+  makeeduIssue: null,
+  pendingExpenses: 0,
+  requestedTextbooks: 0,
+  leavesPending: 0,
+  leavesToday: [],
+  unwrittenReportsToday: { count: 0, names: [] },
+  unassignedEnrolled: [],
+  classnoteAttention: { failed: 0, tooOld: 0, humanHold: 0, stuck: 0 },
+};
+
+const BASE: BuildDailyBriefingInput = {
+  date: "2026-07-16",
+  yesterdayRaw: EMPTY_RAW,
+  todayRaw: EMPTY_RAW,
+  followUps: { overdue: 0, dueSoon: 0 },
+  absenceRisks: [],
+  retention: null,
+  retentionTop: [],
+  todayClassSessions: 12,
+};
+
+const RICH = buildDailyBriefingPayload({
+  ...BASE,
+  yesterdayRaw: {
+    ...EMPTY_RAW,
+    absentToday: [
+      { studentId: "s1", name: "김민준" },
+      { studentId: "s2", name: "박서연" },
+      { studentId: "s3", name: "정호" },
+    ],
+    pendingExpenses: 18,
+  },
+  followUps: { overdue: 2, dueSoon: 1 },
+  retentionTop: [{ name: "김보민", reasons: ["성적 15점 하락", "상담 공백 45일"], action: "학부모 상담 예약" }],
+});
+
+describe("buildTeamPrompt", () => {
+  it("위험 학생 명단(이름·사유·권장 조치)을 프롬프트에 포함한다", () => {
+    const prompt = buildTeamPrompt(RICH);
+    expect(prompt).toContain("김보민");
+    expect(prompt).toContain("성적 15점 하락");
+    expect(prompt).toContain("학부모 상담 예약");
+    expect(prompt).toContain("JSON");
+    expect(prompt).toContain("매니저");
+  });
+  it("스포트라이트가 없으면 명단 섹션을 생략한다", () => {
+    expect(buildTeamPrompt(buildDailyBriefingPayload(BASE))).not.toContain("[위험 학생");
+  });
+});
+
+describe("validateTeamReport", () => {
+  it("정상 팀 보고는 통과하고 값이 정규화된다", () => {
+    const result = validateTeamReport(
+      {
+        headline: "어제 무단결석 3명 확인이 최우선입니다",
+        managers: [
+          { area: "수업", report: "어제 무단결석 3명이 있었습니다. 오늘 등원 시 학부모 연락을 권합니다." },
+          { area: "학생", report: "김보민 학생은 성적 15점 하락과 상담 공백 45일이 겹쳤습니다. 학부모 상담 예약을 권합니다." },
+        ],
+      },
+      RICH,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.managers).toHaveLength(2);
+  });
+
+  it("근거 없는 숫자는 폐기", () => {
+    const result = validateTeamReport(
+      { headline: "수납률 95% 달성", managers: [{ area: "수납", report: "수납률이 95%로 양호합니다." }] },
+      RICH,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("알 수 없는 영역·영역 중복·영문 토큰·형식 오류 폐기", () => {
+    expect(
+      validateTeamReport({ headline: "오늘의 보고입니다", managers: [{ area: "마케팅", report: "보고입니다 열 자 이상." }] }, RICH).ok,
+    ).toBe(false);
+    expect(
+      validateTeamReport(
+        {
+          headline: "오늘의 보고입니다",
+          managers: [
+            { area: "수업", report: "보고입니다 열 자 이상 하나." },
+            { area: "수업", report: "보고입니다 열 자 이상 둘." },
+          ],
+        },
+        RICH,
+      ).ok,
+    ).toBe(false);
+    expect(
+      validateTeamReport({ headline: "오늘의 보고입니다", managers: [{ area: "수업", report: "classnote failed 상태를 확인하세요." }] }, RICH).ok,
+    ).toBe(false);
+    expect(validateTeamReport("문자열", RICH).ok).toBe(false);
+    expect(validateTeamReport({ headline: "짧", managers: [] }, RICH).ok).toBe(false);
+  });
+});
+
+describe("buildFallbackTeamReport", () => {
+  it("신호를 영역별로 묶고 스포트라이트를 학생 매니저 보고로", () => {
+    const report = buildFallbackTeamReport(RICH);
+    expect(report.headline).toContain("어제 무단결석");
+    const areas = report.managers.map((m) => m.area);
+    expect(areas).toContain("수업"); // 무단결석
+    expect(areas).toContain("수납"); // 지출 결재
+    expect(areas).toContain("학생"); // 스포트라이트
+    expect(areas).toContain("상담"); // 후속조치
+    const student = report.managers.find((m) => m.area === "학생");
+    expect(student?.report).toContain("김보민");
+  });
+
+  it("신호 없음 → 안전 헤드라인 + 빈 매니저", () => {
+    const report = buildFallbackTeamReport(buildDailyBriefingPayload(BASE));
+    expect(report.headline).toBe("어제 마감 기준 조치할 운영 신호가 없습니다.");
+    expect(report.managers).toEqual([]);
+  });
+});

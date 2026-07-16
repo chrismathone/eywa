@@ -4,6 +4,15 @@
 
 ## 진행 상황
 
+### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
+원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
+보고**(`briefing-team-report.ts`, 0116a `team_report` jsonb)로 전환: 수업·학생·상담·수납·운영 매니저가 영역별
+**판단 + "오늘 할 일" 제안**을 보고하고, **위험 학생 스포트라이트**(retention `risk.reasons`·`primaryAction` = 전부
+결정론, 카드가 payload를 직접 렌더)를 실명으로 짚는다. LLM은 명단 안 이름만 언급 가능(프롬프트) + `validateTeamReport`
+(숫자 grounding·영역 enum·영문 토큰·길이) 탈락 시 `buildFallbackTeamReport`(결정론, 같은 카드 구조)로 수렴.
+실E2E: 매니저 5영역 보고 + 스포트라이트 6명(상담 공백 177일 → "오늘 중 원장 직접 전화 상담") 생성, usage 1014/742 tok.
+**결정 로그 갱신**: 챗봇 영구 제외를 명시 재검토 — ijw 챗봇 '이식'은 여전히 제외, **운영실 대화형 비서(자체 설계, 세션 내
+tool-use)는 도입 승인** = Phase 2 다음 작업(설계 재료 docs/dashboard-ai-briefing-plan.md 부록). Phase 3 = 이벤트 감지 알림.
 ### 원스크린 단체 작성 — edutrix 전수비교 갭 0·1·3단계 반영 (2026-07-17) — ✅ tsc0/lint0/test1425/test:rls4/0116a 적용·멱등✓
 2026-07-16 edutrix↔eywa 단체작성 전수비교 감사(확정 14건)의 승인 계획 이행. **0단계(분해)**: onescreen-grid
 593줄·props24 → 조립자+리프 5개(grid-toolbar/grid-row/prev-row/score-input/pill-group), 핸들러는
