@@ -9,9 +9,10 @@ describe("navigation presentation", () => {
     expect(navPresentation(dashboard!)).toBe("desktop");
   });
 
-  it("등록 상담은 별도 권한을 가진 탐색 메뉴로 노출한다", () => {
+  it("등록상담은 별도 권한을 가진 탐색 메뉴로 노출한다", () => {
     const enrollment = findNavItem("/enrollment");
-    expect(enrollment).toMatchObject({ label: "등록 상담", menuKey: "enrollment" });
+    // 라벨 = 페이지 metadata.title("등록상담 — eywa")과 동일 — 창 타이틀바가 문서 제목을 보여주므로.
+    expect(enrollment).toMatchObject({ label: "등록상담", menuKey: "enrollment" });
     expect(enrollment!.hidden).not.toBe(true);
   });
 
@@ -24,6 +25,6 @@ describe("navigation presentation", () => {
 
   it("query와 hash가 붙은 창 경로도 메뉴와 그룹을 유지한다", () => {
     expect(findNavItem("/billing?tab=expenses")?.menuKey).toBe("billing");
-    expect(findNavGroup("/billing?tab=expenses#pending")?.label).toBe("경영");
+    expect(findNavGroup("/billing?tab=expenses#pending")?.label).toBe("운영");
   });
 });
