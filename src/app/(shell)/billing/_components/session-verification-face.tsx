@@ -1,5 +1,5 @@
 import { getSessionVerificationView, type VerificationStatus } from "@/features/billing/session-terms/server/verification-queries";
-import { aggregateTeacherAllocations } from "@/features/billing/session-terms/allocation";
+import { aggregateTeacherAllocations, hasAllocationSignal } from "@/features/billing/session-terms/allocation";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
@@ -59,17 +59,19 @@ export async function SessionVerificationFace({
   // 그 달 출석 기록이 통째로 없으면(월중·미입력) 전 행 실=0이 되어 고장처럼 보임 → 명시적 안내.
   const noAttendanceYet = sorted.length > 0 && sorted.every((r) => r.actualConsumed === 0);
 
-  // 강사별 분배(참고) — 현재 과목 필터가 적용된 행을 반 담당 강사 단위로 집계(표시 전용, 저장 없음).
+  // 강사별 분배(참고) — 현재 과목 필터가 적용된 행을 반 담당 강사(id) 단위로 집계(표시 전용, 저장 없음).
+  // 전부 0(미확정·출석 0)인 강사 행은 노이즈라 제외 — 신호 있는 강사가 없으면 섹션 자체를 숨긴다.
   const allocations = aggregateTeacherAllocations(
     scoped.map((r) => ({
       className: r.className,
+      teacherId: r.teacherId,
       teacherName: r.teacherName,
       confirmedSessions: r.confirmedSessions,
       unitPrice: r.unitPrice,
       amount: r.amount,
       actualConsumed: r.actualConsumed,
     })),
-  );
+  ).filter(hasAllocationSignal);
   const allocTotal = allocations.reduce(
     (acc, t) => ({
       confirmedAmount: acc.confirmedAmount + t.confirmedAmount,
@@ -162,7 +164,9 @@ export async function SessionVerificationFace({
         </div>
       ) : (
         <>
-          {/* 강사별 분배(참고) — 반 담당 강사 단위 확정 금액 vs 실측 금액. 표시 전용 집계(쓰기 0, 저장 없음). */}
+          {/* 강사별 분배(참고) — 반 담당 강사 단위 확정 금액 vs 실측 금액. 표시 전용 집계(쓰기 0, 저장 없음).
+              신호(확정·출석) 있는 강사가 하나도 없으면 통째로 숨김(전부-0 행 노이즈 방지). */}
+          {allocations.length > 0 ? (
           <section className="border-line rounded-lg border">
             <header className="border-line flex flex-wrap items-baseline justify-between gap-2 border-b px-3 py-2">
               <h3 className="text-foreground text-sm font-semibold">강사별 분배 (참고)</h3>
@@ -233,6 +237,7 @@ export async function SessionVerificationFace({
               </table>
             </div>
           </section>
+          ) : null}
 
           <div className="border-line overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[46rem] text-sm">

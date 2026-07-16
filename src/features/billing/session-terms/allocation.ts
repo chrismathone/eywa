@@ -10,7 +10,9 @@
 
 export type AllocationRowInput = {
   className: string | null;
-  teacherName: string | null; // null = 담당 강사 없음(미배정 반·반 미매칭)
+  // 그룹 키 = teacherId(동명이인 강사 병합 방지 — 이름 문자열 그룹핑 금지). name은 표시 라벨.
+  teacherId: string | null; // null = 담당 강사 없음(미배정 반·반 미매칭)
+  teacherName: string | null;
   confirmedSessions: number | null;
   unitPrice: number | null;
   amount: number | null; // 확정 시점 저장 금액(회차×단가)
@@ -38,11 +40,11 @@ export function aggregateTeacherAllocations(rows: AllocationRowInput[]): Teacher
   >();
 
   for (const r of rows) {
-    const key = r.teacherName?.trim() || UNASSIGNED;
+    const key = r.teacherId ?? UNASSIGNED;
     let agg = byTeacher.get(key);
     if (!agg) {
       agg = {
-        teacherName: key,
+        teacherName: r.teacherId ? r.teacherName?.trim() || "이름 없음" : UNASSIGNED,
         classCount: 0,
         rowCount: 0,
         confirmedSessions: 0,
@@ -86,4 +88,15 @@ export function aggregateTeacherAllocations(rows: AllocationRowInput[]): Teacher
         b.confirmedAmount - a.confirmedAmount ||
         a.teacherName.localeCompare(b.teacherName, "ko"),
     );
+}
+
+/** 표시할 가치가 있는 행 — 전부 0(미확정·출석 0·단가없음 0)인 강사는 노이즈라 표에서 제외. */
+export function hasAllocationSignal(t: TeacherAllocation): boolean {
+  return (
+    t.confirmedSessions !== 0 ||
+    t.confirmedAmount !== 0 ||
+    t.actualUnits !== 0 ||
+    t.actualAmount !== 0 ||
+    t.missingPriceRows !== 0
+  );
 }

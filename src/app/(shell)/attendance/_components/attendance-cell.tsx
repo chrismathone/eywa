@@ -56,7 +56,8 @@ export function AttendanceCell({
   const [unitsDraft, setUnitsDraft] = useState("");
   const [unitsError, setUnitsError] = useState(false);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  // top(아래로 열기) 또는 bottom(위로 플립) 중 하나만 설정 — 하단 행에서 저장 버튼이 뷰포트 밖으로 나가는 것 방지.
+  const [pos, setPos] = useState<{ x: number; top?: number; bottom?: number } | null>(null);
   const [, startTransition] = useTransition();
 
   // noteArg/unitsArg 전달 시 함께 갱신(undefined면 기존 유지). 상태/메모/시수 모두 낙관적.
@@ -111,7 +112,15 @@ export function AttendanceCell({
         type="button"
         onClick={(e) => {
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setPos({ x: r.left, y: r.bottom });
+          // 아래 공간이 팝오버 높이(시수·메모 포함 ~300px)보다 좁으면 위로 플립.
+          const EST_HEIGHT = 300;
+          const spaceBelow = (typeof window !== "undefined" ? window.innerHeight : 9999) - r.bottom;
+          const openUp = spaceBelow < EST_HEIGHT && r.top > spaceBelow;
+          setPos(
+            openUp
+              ? { x: r.left, bottom: (typeof window !== "undefined" ? window.innerHeight : 0) - r.top + 4 }
+              : { x: r.left, top: r.bottom + 4 },
+          );
           setDraft(noteVal);
           setUnitsDraft(units !== null && units !== 1 ? formatSessionUnits(units) : "");
           setUnitsError(false);
@@ -138,13 +147,19 @@ export function AttendanceCell({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden />
           <div
             className="bg-card border-line fixed z-50 flex flex-col gap-0.5 rounded-md border p-1 shadow-lg"
-            style={{ left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 132), top: pos.y + 4 }}
+            style={{
+              left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 132),
+              top: pos.top,
+              bottom: pos.bottom,
+            }}
           >
             {OPTIONS.map((o) => (
               <button
                 key={o.value}
                 type="button"
-                onClick={() => apply(o.value)}
+                // 시수 초안을 함께 커밋 — "시수 타이핑 → 상태 클릭" 순서에서 초안이 조용히 버려지는 것 방지.
+                // (초안이 잘못된 값이면 apply가 에러 표시 후 중단 — 팝오버 유지)
+                onClick={() => apply(o.value, undefined, unitsDraft)}
                 className={`flex items-center gap-2 rounded-sm px-2 py-1 text-left text-xs transition hover:bg-bg-soft ${
                   status === o.value ? "font-bold" : ""
                 }`}

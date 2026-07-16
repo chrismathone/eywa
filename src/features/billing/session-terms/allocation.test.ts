@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { aggregateTeacherAllocations, type AllocationRowInput } from "./allocation";
+import { aggregateTeacherAllocations, hasAllocationSignal, type AllocationRowInput } from "./allocation";
 
 const row = (over: Partial<AllocationRowInput>): AllocationRowInput => ({
   className: "BS2C",
+  teacherId: "t-kim",
   teacherName: "김강사",
   confirmedSessions: 12,
   unitPrice: 25000,
@@ -47,6 +48,15 @@ describe("aggregateTeacherAllocations", () => {
     expect(a!.actualAmount).toBe(600000);
   });
 
+  it("그룹 키 = teacherId — 동명이인 강사(같은 display_name, 다른 id)는 별도 행으로 분리", () => {
+    const out = aggregateTeacherAllocations([
+      row({ teacherId: "t-1", teacherName: "김민수" }),
+      row({ teacherId: "t-2", teacherName: "김민수", className: "JJ3K", confirmedSessions: 8, amount: 200000, actualConsumed: 8 }),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.map((t) => t.confirmedAmount).sort((a, b) => a - b)).toEqual([200000, 300000]);
+  });
+
   it("amount 없으면 confirmed × unitPrice로 폴백", () => {
     const [a] = aggregateTeacherAllocations([row({ amount: null })]);
     expect(a!.confirmedAmount).toBe(300000);
@@ -71,10 +81,10 @@ describe("aggregateTeacherAllocations", () => {
     expect(a!.missingPriceRows).toBe(1);
   });
 
-  it("강사 없음(null)은 '미배정'으로 묶여 맨 뒤 정렬", () => {
+  it("강사 없음(teacherId null)은 '미배정'으로 묶여 맨 뒤 정렬", () => {
     const out = aggregateTeacherAllocations([
-      row({ teacherName: null, className: "고아반" }),
-      row({ teacherName: "박강사", confirmedSessions: 1, amount: 10000, actualConsumed: 1 }),
+      row({ teacherId: null, teacherName: null, className: "고아반" }),
+      row({ teacherId: "t-park", teacherName: "박강사", confirmedSessions: 1, amount: 10000, actualConsumed: 1 }),
     ]);
     expect(out.map((t) => t.teacherName)).toEqual(["박강사", "미배정"]);
   });
@@ -87,5 +97,27 @@ describe("aggregateTeacherAllocations", () => {
     ]);
     expect(a!.actualUnits).toBe(1.5);
     expect(a!.actualAmount).toBe(37500);
+  });
+});
+
+describe("hasAllocationSignal", () => {
+  it("전부 0(미확정·출석 0)이면 노이즈 — 제외 대상", () => {
+    const [zero] = aggregateTeacherAllocations([
+      row({ confirmedSessions: null, amount: null, actualConsumed: 0 }),
+    ]);
+    expect(hasAllocationSignal(zero!)).toBe(false);
+  });
+
+  it("확정·실측·단가없음 중 하나라도 있으면 표시", () => {
+    const [confirmed] = aggregateTeacherAllocations([row({})]);
+    expect(hasAllocationSignal(confirmed!)).toBe(true);
+    const [actualOnly] = aggregateTeacherAllocations([
+      row({ confirmedSessions: null, amount: null, actualConsumed: 1 }),
+    ]);
+    expect(hasAllocationSignal(actualOnly!)).toBe(true);
+    const [missingPrice] = aggregateTeacherAllocations([
+      row({ confirmedSessions: null, amount: null, unitPrice: null, actualConsumed: 1 }),
+    ]);
+    expect(hasAllocationSignal(missingPrice!)).toBe(true);
   });
 });
