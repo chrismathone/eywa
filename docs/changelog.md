@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 기존 재원생 QR 새 상담이 '배정 완료'로 매몰되던 버그 + 반복접수 다중노출 (2026-07-16) — ✅ 0113a·c070d1e·d7d0c24
+원장 제보 "수학 재원생이 QR로 영어상담 오면 목록에 안 뜸". **원인**: 0107a 자동연결 BEFORE 트리거가 QR 접수를
+기존 학생에 연결하며 `outcome:='enrolled'`로 덮어씀 → 칸반이 연결학생 활성수강 있으면 "배정 완료"로 옮겨 대기큐에서
+빼 매몰. 실측(인재원): QR 20건 중 매칭 9건 전부 enrolled 매몰(장건욱=영어재원+수학QR).
+- **0113a**: 자동연결 트리거 2종(`link_student_for_consultation`·`link_consultations_for_student`)은 `student_id`
+  **연결만**, `outcome='enrolled'` 강제 제거. outcome=사람 소유 파이프라인 상태 → 신선한 QR은 `pending`으로 큐 노출 +
+  연결 유지로 학생 상세 상담탭 다건 노출. (연결은 convert 폭발 방지 목적이라 유지)
+- **배정완료 파생 = 상담 과목 수강 스코프**(`getEnrollmentConsultations`/`…ById`): 교차과목 수강이 다른 과목 상담을
+  매몰하지 않게(과목 미상은 전체 폴백). `setEnrollmentOutcome`: 단순 연결을 '전환됨'으로 오판하던 것 수정.
+- **백필 3건**(장건욱·이참결·박인유=상담과목 ∉ 활성수강) enrolled→pending 복원(연결 유지, UNDO 기록). math→math 6건 보존.
+- **반복접수 = 다중노출 + 힌트**(자동병합 비채택 — 손실·클로버링 위험·자동구분 불가): 같은 사람 상담 2건+면 카드 '상담 N건'
+  배지 + 학생탭 '입학 상담 N건' 헤더. 1주일 후 재방문=의도적 별건.
+
 ### 전사 분석 3종 → DeepSeek v4-pro 전환 + 모델 라벨 노출 (2026-07-16) — ✅ tsc0/lint0/test42(ai) + 실API 검증
 회의록·등록상담·재원생 상담(전사 기반 분석)을 Sonnet 5 → **DeepSeek v4-pro**로 전환. 근거 = 실측 A/B(injaewon
 실전사 5건, `scripts/_oneoff/ab-deepseek-vs-sonnet.ts`): warnings(이탈·정서·학업 위험 신호) 섹션에서 —
