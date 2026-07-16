@@ -50,8 +50,11 @@
 원장 피드백 "데이터 정리해서 알려주는 것뿐, 비서 느낌이 아니다" → 방향 확정: **능동 보고 + 대화, 둘 다**.
 - **Phase 1 ✅ 구현 완료**: 브리핑 v2 = 매니저 팀 보고(`briefing-team-report.ts`, 0116a `team_report`) — 영역별
   판단+"오늘 할 일" 제안, 위험 학생 스포트라이트(retention `risk.reasons`·`primaryAction` 결정론, LLM은 명단 안에서만 언급).
-- **Phase 2 (다음 작업)**: 대화 채널 — 아래 부록의 tool-use 비서. **보류 해제됨**(챗봇 영구 제외의 명시 재검토 통과,
-  결정 로그 갱신). 요건: 세션 내 실행(RLS 자동)·read-only 툴만·PII 금지 필드 제외·대화 저장 테이블·운영실 질문 UI.
+- **Phase 2 ✅ 구현 완료(2026-07-17)**: 대화 채널 "매니저 팀에게 물어보기" — 운영실 질문 패널(`assistant-panel.tsx`,
+  canManageStaff 게이트) + `runAssistantLoop`(`features/assistant/server/loop.ts`) + read-only 툴 9종(`tools-*.ts`,
+  기존 queries 래핑·PII 표면 제외·한글 라벨 상류 차단) + 대화 저장(0117a own-row RLS). **모델 = Solar Pro 3 기본**
+  (원장 지시 2026-07-17 — OpenAI 호환 function calling 실스모크 통과, ~20–25배 저렴) + 키 오류 시 Sonnet 5 폴백
+  (resolveModelChain prefer "upstage"). usage = feature "assistant_chat"(Solar vs Claude 비용·품질 비교 재료).
 - **Phase 3 (이후)**: 이벤트 감지 능동 알림(결석 연속·후속조치 D-day·미수 임계) — notifyUsers 재사용.
 
 ## 부록 — 대화형(tool-use) 비서 재검토 자료 (Phase 2 설계 재료 — 보류 해제, 2026-07-16)

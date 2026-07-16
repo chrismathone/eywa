@@ -144,9 +144,15 @@ pnpm db:seed
 
 | `0116a_onescreen_student_order` | **`onescreen_student_order`(tenant·teacher·class PK, student_ids uuid[]) + tenant RLS** — 원스크린 학생 표시 순서(강사×반 개인 설정, edutrix '순서변경' 패리티). roster가 반 그룹 내부만 재배열(`student-order.ts` 순수함수). teacher own-스코프는 앱 레이어(`order-actions.ts`: teacher_id=`effectiveTeacherId` 서버 파생 + 담당 반 소유·수강생 소속 검증 — 0112a 철학). (병렬 세션이 0114a=일일 브리핑·0115a=출석 시수 선점 → 0116a로 개명.) |
 
-| `0117a_onescreen_prior_reports_rpc` | **`onescreen_prior_reports(p_student_ids uuid[], p_before date)` RPC** — 원스크린 로스터가 (학생×과목)별 대상 날짜 직전 최신 lesson_reports 1건씩만 DISTINCT ON으로 반환. 옛 코드는 담당 학생 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 이전 회차 참고행·'가져오기'·prevScore·교재 승계가 오래된 학생부터 누락됐다(당일 행은 roster가 eq(date) 별도 조회). `security invoker`+`auth_tenant_id()` 이중격리(0039a/0040a 패턴). |
+| `0117a_assistant_conversations` | **운영실 AI 비서 대화 저장**(Phase 2 — 대화형 비서 도입 승인 2026-07-16) — 대화 1건=1행, `messages` jsonb는 표시용 텍스트 턴만(툴 원시 블록·조회 스냅샷 미저장 → 권한 변화에 안전). RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(RLS·권한 자동 상속), service_role 불사용. |
 
-| `0118a_onescreen_session_teacher_axis` | **`onescreen_daily_sessions` 유니크 (tenant,student,date)→(tenant,updated_by,student,date)** — 같은 학생을 같은 날 가르치는 두 강사가 서로의 '작업중' 세션(subject_progress·점수·태도)을 통째 덮어쓰던 문제. updated_by(=저장한 강사) 재사용(신규 컬럼 없이), 강사별 1행. `saveOnescreenSession` onConflict·roster 조회(`updated_by=본인`)도 함께. `do $$` 가드로 옛 제약 드롭(멱등). 기존 행 무손실(옛 유니크가 (tenant,student,date) 유일 보장). |
+| `0117a_invoice_teacher_splits` | **강사별 시수 분배 저장(수납, 골든마스터 게이트 뒤)** — 병렬 세션 splits 마이그레이션(0116a→0117a 리네임). 상세는 해당 세션 changelog. |
+
+| `0117a_onescreen_prior_reports_rpc` | **`onescreen_prior_reports(p_student_ids uuid[], p_before date)` RPC** — 원스크린 로스터가 (학생×과목)별 대상 날짜 직전 최신 lesson_reports 1건씩만 DISTINCT ON으로 반환. 옛 코드는 담당 학생 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 이전 회차 참고행·'가져오기'·prevScore·교재 승계가 오래된 학생부터 누락됐다(당일 행은 roster가 eq(date) 별도 조회). `security invoker`+`auth_tenant_id()` 이중격리(0039a/0040a 패턴). ⚠️ 0117a 3중복(assistant·splits·prior_reports) — 접미사 달라 db:alphas 사전순 적용, 전부 멱등이라 공존 안전(0111a·0116a 선례). |
+
+| `0118a_notification_events` | **이벤트 알림 dedup 원장**(Phase 3 이벤트 감지형 능동 알림) — 한 행 = "이 이벤트 1회 처리(발송/시드)". unique(tenant_id, event_type, subject_key, bucket)가 재발송 차단(bucket=결석 마일스톤 '3'/'5'/'10' · 후속조치 '날짜:due/overdue'). seeded=true=콜드스타트 무발송 시드(벨 폭탄 방지, 0108a 철학). write=서버(service_role)만(정책 없음), read=테넌트 select. 앱 표면 없음(부기용 — 알림은 기존 벨). |
+
+| `0118a_onescreen_session_teacher_axis` | **`onescreen_daily_sessions` 유니크 (tenant,student,date)→(tenant,updated_by,student,date)** — 같은 학생을 같은 날 가르치는 두 강사가 서로의 '작업중' 세션(subject_progress·점수·태도)을 통째 덮어쓰던 문제. updated_by(=저장한 강사) 재사용(신규 컬럼 없이), 강사별 1행. `saveOnescreenSession` onConflict·roster 조회(`updated_by=본인`)도 함께. `do $$` 가드로 옛 제약 드롭(멱등). 기존 행 무손실(옛 유니크가 (tenant,student,date) 유일 보장). ⚠️ 0118a 2중복(notification·session_teacher) — 접미사 달라 공존 안전. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

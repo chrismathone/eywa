@@ -21,6 +21,10 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
 import { getDailyBriefing, type DailyBriefingRow } from "@/features/dashboard/server/briefing";
+import {
+  getLatestAssistantConversation,
+  type AssistantConversation,
+} from "@/features/assistant/server/queries";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
 import { resolveDashboardAccess } from "@/features/dashboard/dashboard-access";
@@ -30,6 +34,7 @@ import { CommandBand } from "./_components/command-band";
 import { QuickActions } from "./_components/quick-actions";
 import { OperationsBriefing } from "./_components/operations-briefing";
 import { DailyBriefingCard } from "./_components/daily-briefing-card";
+import { AssistantPanel } from "./_components/assistant-panel";
 import { NowCockpit } from "./_components/now-cockpit";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
@@ -65,6 +70,8 @@ async function dashboardQuery<T>(label: string, query: Promise<T>, fallback: T):
 }
 
 export const metadata = { title: "운영실 — eywa" };
+// AI 비서(askAssistant) 툴 루프가 이 라우트로 POST된다 — 다중 툴 왕복(수 초~수십 초) 여유.
+export const maxDuration = 60;
 
 export default async function TodayPage() {
   const user = await requireAccess("dashboard");
@@ -93,6 +100,7 @@ export default async function TodayPage() {
     actionSignals,
     enrollmentChange,
     dailyBriefingResult,
+    assistantConversationResult,
   ] = await Promise.all([
     access.read.students ? getEnrolledStudentCount() : Promise.resolve(0),
     access.read.attendance
@@ -141,6 +149,13 @@ export default async function TodayPage() {
     // 저장분 조회만(AI 호출 없음). 테이블 미적용 DB에서도 대시보드가 죽지 않게 실패 허용 래퍼.
     canSeeDailyBriefing
       ? dashboardQuery<DailyBriefingRow | null>("daily briefing", getDailyBriefing(user.tenantId, kstToday()), null)
+      : Promise.resolve({ data: null, unavailable: false }),
+    canSeeDailyBriefing
+      ? dashboardQuery<AssistantConversation | null>(
+          "assistant conversation",
+          getLatestAssistantConversation(),
+          null,
+        )
       : Promise.resolve({ data: null, unavailable: false }),
   ]);
   const attendance = attendanceState.snapshot;
@@ -298,6 +313,14 @@ export default async function TodayPage() {
 
       {/* ①.5 일일 AI 브리핑 — cron 사전 생성분 표시 + 명시 '다시 생성'(master/admin/manager 전용) */}
       {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} /> : null}
+
+      {/* ①.6 매니저 팀에게 물어보기 — 대화형 비서(질문 1건 = 명시 트리거 1회, Phase 2) */}
+      {canSeeDailyBriefing ? (
+        <AssistantPanel
+          initialConversationId={assistantConversationResult.data?.id ?? null}
+          initialTurns={assistantConversationResult.data?.turns ?? []}
+        />
+      ) : null}
 
       {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
       <OperationsBriefing briefing={briefing} />

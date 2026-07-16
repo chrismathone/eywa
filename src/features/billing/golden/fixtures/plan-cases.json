@@ -1,0 +1,177 @@
+{
+  "classes": [
+    {
+      "id": "5b1cb60f-83c3-4031-bafe-d102429a512d",
+      "class_name": "초등M 초6 JJ2B",
+      "subject": "math",
+      "schedules": [
+        {
+          "dayOfWeek": "mon",
+          "start": "18:20:00",
+          "end": "19:15:00"
+        },
+        {
+          "dayOfWeek": "thu",
+          "start": "18:20:00",
+          "end": "19:15:00"
+        }
+      ]
+    },
+    {
+      "id": "34630db9-92fe-4d47-a416-0c10197987a9",
+      "class_name": "고등E_고1 정규 A",
+      "subject": "english",
+      "schedules": [
+        {
+          "dayOfWeek": "tue",
+          "start": "19:15:00",
+          "end": "20:10:00"
+        },
+        {
+          "dayOfWeek": "tue",
+          "start": "20:10:00",
+          "end": "21:05:00"
+        },
+        {
+          "dayOfWeek": "tue",
+          "start": "21:05:00",
+          "end": "22:00:00"
+        },
+        {
+          "dayOfWeek": "thu",
+          "start": "21:05:00",
+          "end": "22:00:00"
+        },
+        {
+          "dayOfWeek": "thu",
+          "start": "19:15:00",
+          "end": "20:10:00"
+        },
+        {
+          "dayOfWeek": "thu",
+          "start": "20:10:00",
+          "end": "21:05:00"
+        }
+      ]
+    },
+    {
+      "id": "2859b774-0e33-4a71-a805-3b0b1c0338bd",
+      "class_name": "고등E_고1 특별 S",
+      "subject": "english",
+      "schedules": [
+        {
+          "dayOfWeek": "fri",
+          "start": "19:20:00",
+          "end": "20:10:00"
+        },
+        {
+          "dayOfWeek": "fri",
+          "start": "21:05:00",
+          "end": "22:00:00"
+        },
+        {
+          "dayOfWeek": "fri",
+          "start": "19:15:00",
+          "end": "20:10:00"
+        },
+        {
+          "dayOfWeek": "fri",
+          "start": "20:20:00",
+          "end": "21:10:00"
+        },
+        {
+          "dayOfWeek": "fri",
+          "start": "21:10:00",
+          "end": "22:00:00"
+        },
+        {
+          "dayOfWeek": "fri",
+          "start": "20:10:00",
+          "end": "21:05:00"
+        },
+        {
+          "dayOfWeek": "sat",
+          "start": "15:00:00",
+          "end": "15:40:00"
+        },
+        {
+          "dayOfWeek": "sat",
+          "start": "16:00:00",
+          "end": "17:00:00"
+        },
+        {
+          "dayOfWeek": "sat",
+          "start": "15:00:00",
+          "end": "16:00:00"
+        },
+        {
+          "dayOfWeek": "sat",
+          "start": "15:40:00",
+          "end": "16:20:00"
+        },
+        {
+          "dayOfWeek": "sat",
+          "start": "14:00:00",
+          "end": "15:00:00"
+        },
+        {
+          "dayOfWeek": "sat",
+          "start": "14:20:00",
+          "end": "15:00:00"
+        }
+      ]
+    }
+  ],
+  "enrollments": [
+    {
+      "name": "류다인",
+      "class_id": "5b1cb60f-83c3-4031-bafe-d102429a512d",
+      "class_name": "초등M 초6 JJ2B",
+      "start_date": "2026-05-09T00:00:00.000Z",
+      "end_date": "2026-06-02T00:00:00.000Z",
+      "on_hold": false
+    },
+    {
+      "name": "이시우",
+      "class_id": "5b1cb60f-83c3-4031-bafe-d102429a512d",
+      "class_name": "초등M 초6 JJ2B",
+      "start_date": "2026-06-15T00:00:00.000Z",
+      "end_date": null,
+      "on_hold": false
+    },
+    {
+      "name": "이재용",
+      "class_id": "5b1cb60f-83c3-4031-bafe-d102429a512d",
+      "class_name": "초등M 초6 JJ2B",
+      "start_date": "2026-06-15T00:00:00.000Z",
+      "end_date": null,
+      "on_hold": false
+    },
+    {
+      "name": "조은호",
+      "class_id": "34630db9-92fe-4d47-a416-0c10197987a9",
+      "class_name": "고등E_고1 정규 A",
+      "start_date": "2019-01-17T00:00:00.000Z",
+      "end_date": "2026-04-06T00:00:00.000Z",
+      "on_hold": false
+    },
+    {
+      "name": "조은호",
+      "class_id": "2859b774-0e33-4a71-a805-3b0b1c0338bd",
+      "class_name": "고등E_고1 특별 S",
+      "start_date": "2026-04-07T00:00:00.000Z",
+      "end_date": null,
+      "on_hold": false
+    }
+  ],
+  "holidays": [
+    {
+      "date": "2026-06-03",
+      "name": "대통령선거"
+    },
+    {
+      "date": "2026-07-17",
+      "name": "제헌절"
+    }
+  ]
+}

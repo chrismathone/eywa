@@ -1248,6 +1248,43 @@ export const invoiceSessionTerms = pgTable(
   ],
 );
 
+// === invoice_teacher_splits (강사 분배 스냅샷 — 로드맵 2단계 b, 0117a) ===
+// 시수 검증의 강사별 분배를 기간 단위로 저장(청구서×반 1행, 저장 시점 담당 강사 스냅샷).
+// 기록 전용 — invoices 절대 불변(N2). confirmed_amount(청구 기준)·actual_amount(실측 기준)는 합산 금지(R3).
+export const invoiceTeacherSplits = pgTable(
+  "invoice_teacher_splits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }),
+    period: text("period").notNull(), // 'YYYY-MM' — 기간 조회·재저장 키
+    subject: text("subject").notNull(),
+    teacherId: uuid("teacher_id").references(() => users.id, { onDelete: "set null" }), // null=미배정
+    teacherName: text("teacher_name"), // 표시 스냅샷(개명·삭제 후에도 기록 보존)
+    confirmedSessions: integer("confirmed_sessions").notNull(),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 0 }).notNull(),
+    confirmedAmount: numeric("confirmed_amount", { precision: 12, scale: 0 }).notNull(),
+    actualUnits: numeric("actual_units", { precision: 6, scale: 1 }).notNull(),
+    actualAmount: numeric("actual_amount", { precision: 12, scale: 0 }).notNull(),
+    diffAmount: numeric("diff_amount", { precision: 12, scale: 0 }).notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("invoice_teacher_splits_invoice_class_uq").on(t.tenantId, t.invoiceId, t.classId),
+    index("invoice_teacher_splits_period_idx").on(t.tenantId, t.period),
+    index("invoice_teacher_splits_teacher_idx").on(t.tenantId, t.teacherId),
+  ],
+);
+
 // === tuition_quotes (수강료 견적 — 신입생 상담용 저장 청구서) ===
 // 수강료 계산기의 "청구서로 저장"은 재원생 invoices가 아니라 신입생 상담 견적이다(ijw tuition_invoices 이식).
 // 학생정보는 자유 입력(미등록 신입생), 과목·기타·할인은 jsonb 스냅샷. invoices와 완전 분리.
@@ -1785,6 +1822,55 @@ export const dailyBriefings = pgTable(
   ],
 );
 
+// === assistant_conversations (운영실 AI 비서 대화 — 0117a 손수 alpha) ===
+// 대화 1건 = 1행. messages jsonb는 표시용 텍스트 턴만([{role,content,at}] — turns.ts가 파싱 단일 소스).
+// RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(권한 자동 상속), service_role 불사용.
+export const assistantConversations = pgTable(
+  "assistant_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title"), // 첫 질문 앞 60자(목록 표시용)
+    messages: jsonb("messages").notNull().default([]), // StoredTurn[](turns.ts)
+    modelVersion: text("model_version"), // 마지막 응답 모델 id(계측용, UI 미노출)
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("assistant_conversations_tenant_user_idx").on(t.tenantId, t.userId, t.updatedAt)],
+);
+
+// === notification_events (이벤트 알림 dedup 원장 — 0118a 손수 alpha, Phase 3) ===
+// 한 행 = "이 이벤트를 1회 처리(발송/시드)했다". unique(tenant,event_type,subject_key,bucket)가 재발송 차단.
+// write=서버(service_role)만(정책 없음), read=테넌트 select. 앱 표면 없음(부기용) — 알림은 기존 벨.
+export const notificationEvents = pgTable(
+  "notification_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(), // 'absence_alert' | 'followup_due'
+    subjectKey: text("subject_key").notNull(), // 학생·상담 id
+    bucket: text("bucket").notNull(), // 상태 전이 표현('3' / '2026-07-17:overdue')
+    seeded: boolean("seeded").notNull().default(false), // true = 콜드스타트 무발송 시드
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("notification_events_tenant_type_subject_bucket_uq").on(
+      t.tenantId,
+      t.eventType,
+      t.subjectKey,
+      t.bucket,
+    ),
+    index("notification_events_tenant_type_idx").on(t.tenantId, t.eventType, t.createdAt),
+  ],
+);
+
 // === ai_usage_logs (AI 호출 usage 계측 — 0113a 손수 alpha) ===
 // generateJSON 1회 = 1행. write는 서버(service_role)만(insert 정책 없음), read는 테넌트 select 정책.
 // tenant_id nullable: 컨텍스트를 안 넘기는 기존 호출부는 null(스레딩 점진 확장).
@@ -1888,3 +1974,7 @@ export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLogs.$inferInsert;
 export type DailyBriefing = typeof dailyBriefings.$inferSelect;
 export type NewDailyBriefing = typeof dailyBriefings.$inferInsert;
+export type AssistantConversation = typeof assistantConversations.$inferSelect;
+export type NewAssistantConversation = typeof assistantConversations.$inferInsert;
+export type NotificationEvent = typeof notificationEvents.$inferSelect;
+export type NewNotificationEvent = typeof notificationEvents.$inferInsert;

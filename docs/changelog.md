@@ -22,7 +22,74 @@
 - **그룹D(UX)**: 결석 행 opacity→배경톤(입력 오인 제거)·Enter/↑↓ 힌트·순서 버튼 항상 노출(전체 필터 비활성+안내)·
   공지 라벨 학생 수·순서 모드 중 일괄 버튼 잠금. (행 높이 3필드 밀도는 원장 승인 레이아웃이라 유지.)
 - 검증: 신규 순수함수 테스트(rowInClass·studentStatus TestConfig·isRowActionable·summarizeSendGaps 등). 0117a·0118a
-  프로덕션 적용+멱등 재실행 확인. ⚠️ 강사뷰 브라우저 시각검증 미완(강사 로그인 필요).
+  프로덕션 적용+멱등 재실행 확인. ⚠️ 강사뷰 브라우저 시각검증 미완(강사 로그인 필요). ⚠️ 0117a·0118a는 병렬 세션과
+  동번호 3중복/2중복(assistant·splits / notification) — 접미사 달라 db:alphas 사전순 공존(0111a·0116a 선례).
+
+### 이벤트 감지형 능동 알림 (2026-07-17, Phase 3) — ✅ tsc0/lint0/test14 + cron 3-run 실E2E, 0118a 적용
+"학원 매니저 팀" 로드맵 Phase 3. 하루 1회 배치 cron(daily-briefing 라우트)이 **상태 전이(edge) 이벤트**를 감지해
+담당자에게 인앱 벨 알림. v1 2종: **반복 결석 마일스톤**(14일 3/5/10회 도달 → master 집계 1건, link=/retention) +
+**상담 후속조치 기한**(오늘 마감 due / 지남 overdue → 담당 상담사 counselor_id 폴백 master, link=/consultations).
+- **dedup = `notification_events`(0118a)**: unique(tenant,event_type,subject_key,bucket)가 유일 방어선
+  (notifications엔 유니크 제약 0). bucket=결석 tier('3'/'5'/'10' — 3→4 재알림 안 함, 5 승격 시만) / 후속조치
+  '날짜:stage'. 원자 dedup = `upsert(onConflict, ignoreDuplicates).select()`가 돌려준 **신규 삽입분만** 발송
+  (bulk insert는 한 행 충돌로 문장 전체 23505 → 성공분 분리 불가라 이 패턴 필수).
+- **콜드스타트 무발송 시드**(적대 리뷰 blocker): 첫 실행((tenant,event_type) 행 0건)은 현재 감지분을 seeded=true로
+  기록만 하고 발송 스킵 — 실데이터 누적분(injaewon 결석위험·미완료 후속조치)이 벨 폭탄으로 터지는 것 방지(0108a 철학).
+- **수신자 라우팅**: 결석=master만(원장 '운영 벨=master' 결정 + 마일스톤이라 저빈도, 집계 1건). 후속조치=담당 상담사
+  (status active 검증, 퇴직/null이면 master 폴백). admin RLS 우회라 tenant_id 필터 필수. actorId=null(시스템). 벨 배지만
+  (IMPORTANT 미등재 — 경보 피로). 순수함수(tier·bucket·집계 문구) Vitest 14.
+- **cron 배선**: daily-briefing 라우트가 브리핑 생성 후 detectAndNotifyEvents를 **독립 try/catch**로 호출(브리핑
+  실패해도 감지 실행). 세션용 아닌 admin p_tenant RPC(getAbsenceRiskStudents(db)) 재사용. 07:00 KST(결석=전날 마감·
+  후속조치 due는 아직 안 지남 → 문구 분기). Vercel cron 슬롯 미추가(기존 라우트에 얹음).
+- **✅ 3-run 실E2E(injaewon)**: run1 콜드스타트 결석 2건 seeded·벨 0(폭탄 방지) → run2 신규 0(dedup) → run3(seeded 1행
+  삭제로 새 edge 모사) 신규 1 → **master 2명(원일·박소선)에게 집계 벨 발송**, 박소선 벨 UI에 "김보민 학생이 최근 14일
+  3회 결석으로 반복 결석 위험" 정확 렌더(userMinus 아이콘). ⚠️ 후속조치 경로는 injaewon에 오늘 due/overdue 0건이라
+  실데이터 미발화(순수함수+공유 machinery로 커버). ⚠️ 미해결(리뷰 minor): notification_events 정리 정책 TBD(저성장),
+  결석 3회 아래 회복 후 재발 시 tier3 기록 잔존으로 재알림 안 됨(edge를 count 근사한 v1 트레이드오프).
+
+### 대화형 비서 "매니저 팀에게 물어보기" (2026-07-17, Phase 2) — ✅ tsc0/lint0/test86 + Solar 실스모크, 0117a 적용
+"학원 매니저 팀" 대화 채널. 운영실에 질문 패널([assistant-panel.tsx](../src/app/(shell)/dashboard/_components/assistant-panel.tsx),
+canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률은?"을 자연어로 물으면 AI가 **read-only 툴 9종**
+([features/assistant](../src/features/assistant)/server/tools-*.ts: 학생 검색·종합·타임라인·수업보고서 / 출결·수납요약·미수·상담검색·이탈위험)으로
+조회해 근거 기반 답변. 칩 세션(nice-satoshi-27f293)이 만든 스캐폴딩(툴·turns·0117a)을 인수해 완성.
+- **모델 = Solar Pro 3 기본(원장 지시 2026-07-17)**: [loop.ts](../src/features/assistant/server/loop.ts)가 provider 전환형
+  (OpenAI 호환 루프 + Anthropic 루프, resolveModelChain prefer "upstage") — 실키 스모크에서 solar-pro3가 tool_call→
+  grounded 답변 정상. 키 오류·한도 시 Sonnet 5 폴백. usage=feature "assistant_chat"(Solar vs Claude 비용·품질 비교 재료).
+- **안전 불변식**: 툴 전부 read-only + **사용자 세션(쿠키) 실행 = RLS·권한 자동 상속**(service_role 0) · 툴 인자
+  zod parse(인자 환각 차단, 실패는 모델에 오류로) · PII(주민번호·계좌·급여·이력서) 툴 표면 제외 · raw enum은 서버
+  라벨링([labels.ts](../src/features/assistant/server/labels.ts)) · 툴 왕복 ≤5·결과 6천자 clip. 질문=명시 트리거라
+  "페이지 로드 무호출" 원칙 무충돌. 대시보드 라우트 `maxDuration=60`(툴 왕복 여유).
+- **대화 저장(0117a `assistant_conversations`)**: own-row RLS(본인만), messages에 표시용 텍스트 턴만(툴 원시 블록·
+  조회 스냅샷 미저장 → 권한 변화에 안전, [turns.ts](../src/features/assistant/turns.ts) 파싱 단일 소스·상한 60턴).
+- **✅ 실브라우저 E2E(Chrome MCP, injaewon 로그인, 2026-07-17)**: 7질문 전부 Solar Pro 3 `ok=true`(Anthropic 폴백 0회).
+  수납률(툴 1)·이유하 학생 종합(search+summary 툴 2)·이탈 위험 3명 실명+사유+권장조치(retention 툴)·미수 상위(툴 2)
+  정상. **추민아 강사 월급? → 정중히 거절**(PII 방어 실동작). usage in 2.6k~18k·out 29~235 tok. 실측으로 잡은 함정 3건 수정:
+  · **Solar가 툴콜을 본문 텍스트 토큰으로 방출**(`<|tool_call:begin|>…`)해 raw가 답변으로 노출됨 →
+    순수 파서 [solar-tokens.ts](../src/features/assistant/solar-tokens.ts) `parseInlineToolCalls`로 표준 툴콜 승격 +
+    못 삼킨 특수 토큰 남으면 답 폐기·Claude 폴백(`hasSpecialTokenNoise`).
+  · **날짜 미주입 시 "이번 달"을 2025-10으로 환각** → 시스템 프롬프트에 오늘(KST) 주입 + 기간 인자는 명시 시만.
+  · **`**91.76%**` 마크다운 강조가 plain 패널에 별표째 노출** → `stripMarkdownEmphasis`(강조만 제거, 불릿·본문 보존).
+- 강사 표면은 범위 밖(none).
+
+### 골든마스터 N6 + 강사 분배 splits 저장 (2026-07-16) — ✅ tsc0/lint0/test1471/DB E2E(원복) — 로드맵 2단계 (b) 완료
+attendance R2(정산 로직 변경 시 실데이터 3케이스 동시 통과 — 수동 live 검증)를 eywa에선 **자동화 골든마스터로 승격**,
+게이트 통과 후 (b) 강사 분배 저장까지. 설계 입력 = attendance R1~R6 전문 + 돈 사고 5건(191,250→170,000 "(퇴)" suffix /
+72k→264k step3.5 / 191,250→63,750 N:M 이중계상 / +60.5M 합산 / 실급여 0원) 병렬 전수 조사.
+- **골든마스터** [`golden/`](../src/features/billing/golden/golden.test.ts): injaewon 실데이터 동결 픽스처 4계열
+  ([A] 반 라인 매칭 — 강수정 BS2C 192,150·유사코드 JJ2B↛MS2B·서술형 브릿지B 288,000·실패=null /
+  [B] 계획 N — JJ2B 실 스케줄 9회·월중 등록/종료 proration·조은호 반이동 2행 비합산·제헌절 차감 8회(DB planned 9는 stale 발견) /
+  [C] 시수 검증·분배 — 실E2E 삼중 일치값(수학 −12,500·영어 −7,500) + over 케이스 /
+  [D] 수납 지표 — 2026-07 실 401행 스냅샷: 총액 161,122,025·미수 12,860,387·수납률 91.76%·유령 미수 1행 0원 처리).
+  ⚠️ **깨지면 "테스트 수정" 전에 "돈 산식이 왜 달라졌는지" 설명이 먼저** — 의도적 변경만 핀 갱신(커밋 메시지에 사유).
+- **splits(0117a `invoice_teacher_splits`)**: 시수 검증의 강사별 분배를 **기간 단위 전량 교체 스냅샷**으로 저장 —
+  행=(청구서×반, 유니크), 저장 시점 담당 강사 id·이름 스냅샷(퇴직·개명 후에도 기록 불변), 확정 행만(N1),
+  **invoices 절대 불변(N2)**, 청구 기준(confirmed_amount)·실측 기준(actual_amount) 분리 저장·합산 금지(R3).
+  순수 [`computeSplitRows`](../src/features/billing/session-terms/splits.ts)(Vitest 9+골든) → 액션 `saveTeacherSplits`
+  (canWriteTenant billing, 200행 청크, 실패 가시화) → 시수 검증 면 **스냅샷 패널**(저장 이력·현재 집계 드리프트 배지·저장 버튼).
+- **DB E2E(전량 원복)**: 0117a 적용(RLS 정책·트리거 검증) → 수학 JJ2B 시나리오 재현 → 분배 저장(박민엽 2행·150,000/137,500/−12,500
+  정확) → 재저장 멱등 → splits·확정·출석 0/0/0 원복 확인.
+- ⚠️ v1 한계: 분배 확정치의 급여 연계는 미구현(PAYROLL_ENABLED=false 상위 결정) — splits는 기록·대사용.
+  replace-invoices-from-excel류 전기간 재실행 시 FK cascade로 splits 소실 가능(계획 문서 기존 경고와 동일 — UPDATE 경로 유지).
 
 ### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
 원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
