@@ -294,7 +294,7 @@ export const permissionsSchema = z
         ctx.addIssue({ code: "custom", message: "학생(student)은 '내 학습' 전용 역할이라 메뉴 권한을 부여할 수 없습니다" });
       }
       if (r.role === "master" && (r.menu === "owner" || r.menu === "admin" || r.menu === "dashboard") && r.access === "none") {
-        ctx.addIssue({ code: "custom", message: "원장(master)의 owner/admin/대시보드 접근은 잠글 수 없습니다" });
+        ctx.addIssue({ code: "custom", message: "원장(master)의 owner/admin/오늘 접근은 잠글 수 없습니다" });
       }
     }
   });

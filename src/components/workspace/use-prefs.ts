@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -31,15 +32,11 @@ type PrefsState = {
   setTimetableColor: (v: TimetableColorMode) => void;
 };
 
-/** OS '동작 줄이기' 선호 — 설정 기본값 산정용(import 순환 피하려 motion.ts 대신 직접 검사). */
-function osReducedMotion() {
-  return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-}
-
 export const usePrefs = create<PrefsState>()(
   persist(
     (set) => ({
-      animations: !osReducedMotion(), // 기본: OS 따름. 사용자가 토글하면 영속되어 그 값이 우선.
+      // SSR/첫 hydration은 결정적이어야 한다. 저장값이 없는 사용자의 OS 선호는 mount 뒤 아래 훅이 적용한다.
+      animations: true,
       setAnimations: (animations) => set({ animations }),
       sidebarExpanded: false, // 기본 접힘(컴팩트 레일). 드래그/토글하면 영속.
       sidebarWidth: 216, // 펼침 기본 너비. 드래그로 조절.
@@ -54,3 +51,22 @@ export const usePrefs = create<PrefsState>()(
     { name: "eywa-prefs" },
   ),
 );
+
+/** 저장한 선택이 없는 최초 사용자에게만 mount 뒤 OS '동작 줄이기' 기본값을 적용한다. */
+export function useApplyOsMotionDefault() {
+  useEffect(() => {
+    let hasStoredChoice = false;
+    try {
+      const raw = window.localStorage.getItem("eywa-prefs");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { state?: { animations?: unknown } };
+        hasStoredChoice = typeof parsed.state?.animations === "boolean";
+      }
+    } catch {
+      // 손상된 저장값은 Zustand persist가 기본값으로 복구한다.
+    }
+    if (!hasStoredChoice && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      usePrefs.getState().setAnimations(false);
+    }
+  }, []);
+}

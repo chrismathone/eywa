@@ -1,9 +1,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
+import {
+  enrollmentAttendsOnDay,
+  isEnrollmentActiveOn,
+} from "@/features/enrollments/eligibility";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -21,14 +25,17 @@ export type ClassProcessing = {
 
 export async function getDailyProcessingStatus(date: string): Promise<ClassProcessing[]> {
   const supabase = await createClient();
-  const dow = new Date(`${date}T00:00:00`).getDay();
+  const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
   const dayEnum = DOW_ENUM[dow];
 
   // 그 요일에 수업이 있는 반(중복 제거)
-  const { data: sched } = await supabase
+  const { data: sched, error: scheduleError } = await supabase
     .from("class_schedules")
     .select("class_id")
-    .eq("day_of_week", dayEnum);
+    .eq("day_of_week", dayEnum)
+    .lte("valid_from", date)
+    .or(`valid_to.is.null,valid_to.gte.${date}`);
+  if (scheduleError) throw new Error(`daily attendance schedules: ${scheduleError.message}`);
   const classIds = [...new Set((sched ?? []).map((s) => s.class_id as string))];
   if (classIds.length === 0) return [];
 
@@ -38,49 +45,77 @@ export async function getDailyProcessingStatus(date: string): Promise<ClassProce
     class_name: string;
     subject: string;
     is_active: boolean;
+    closed_at: string | null;
     teacher: { display_name?: string } | { display_name?: string }[] | null;
   }>(classIds, (chunk) =>
     supabase
       .from("classes")
-      .select("id, class_name, subject, is_active, teacher:teacher_id ( display_name )")
+      .select("id, class_name, subject, is_active, closed_at, teacher:teacher_id ( display_name )")
       .in("id", chunk)
       .eq("is_active", true),
   );
-  const activeClassIds = classes.map((c) => c.id);
+  const activeClasses = classes.filter((klass) => !klass.closed_at || klass.closed_at >= date);
+  const activeClassIds = activeClasses.map((c) => c.id);
   if (activeClassIds.length === 0) return [];
 
   // 활성 enrollment(예정) + 그 날짜 기록(처리) — 둘 다 id 청크
   const [enrollments, records] = await Promise.all([
-    fetchInChunks<{ class_id: string; student_id: string; start_date: string; end_date: string | null; on_hold: boolean }>(
+    fetchAllPagedInChunks<{
+      id: string;
+      class_id: string;
+      student_id: string;
+      start_date: string;
+      end_date: string | null;
+      on_hold: boolean;
+      is_transferred: boolean | null;
+      attendance_days: string[] | null;
+    }>(
       activeClassIds,
-      (chunk) =>
+      (chunk, from, to) =>
         supabase
           .from("enrollments")
-          .select("class_id, student_id, start_date, end_date, on_hold")
+          .select("id, class_id, student_id, start_date, end_date, on_hold, is_transferred, attendance_days")
           .in("class_id", chunk)
-          .lte("start_date", date),
+          .lte("start_date", date)
+          .order("id", { ascending: true })
+          .range(from, to),
     ),
-    fetchInChunks<{ class_id: string; student_id: string }>(activeClassIds, (chunk) =>
+    fetchAllPagedInChunks<{ id: string; class_id: string; student_id: string }>(activeClassIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
-        .select("class_id, student_id")
+        .select("id, class_id, student_id")
         .eq("session_date", date)
-        .in("class_id", chunk),
+        .in("class_id", chunk)
+        .order("id", { ascending: true })
+        .range(from, to),
     ),
   ]);
 
   const expectedByClass = new Map<string, Set<string>>();
   for (const e of enrollments) {
-    if (e.on_hold) continue;
-    if (e.end_date && e.end_date < date) continue;
+    if (
+      !isEnrollmentActiveOn(
+        {
+          startDate: e.start_date,
+          endDate: e.end_date,
+          onHold: e.on_hold,
+          isTransferred: e.is_transferred === true,
+        },
+        date,
+      ) ||
+      !enrollmentAttendsOnDay(e.attendance_days, dayEnum)
+    ) {
+      continue;
+    }
     (expectedByClass.get(e.class_id) ?? expectedByClass.set(e.class_id, new Set()).get(e.class_id)!).add(e.student_id);
   }
   const recordedByClass = new Map<string, Set<string>>();
   for (const r of records) {
+    if (!expectedByClass.get(r.class_id)?.has(r.student_id)) continue;
     (recordedByClass.get(r.class_id) ?? recordedByClass.set(r.class_id, new Set()).get(r.class_id)!).add(r.student_id);
   }
 
-  const rows: ClassProcessing[] = classes.map((c) => {
+  const rows: ClassProcessing[] = activeClasses.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as { display_name?: string } | undefined;
     const expected = expectedByClass.get(c.id)?.size ?? 0;
     const recorded = recordedByClass.get(c.id)?.size ?? 0;

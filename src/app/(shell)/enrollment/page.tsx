@@ -7,7 +7,6 @@ import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push
 import { getUnpushedIntakeConsultations } from "@/features/integrations/server/makeedu-sync";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { ConsultationTabs } from "../consultations/_components/consultation-tabs";
 import {
   getConsultantOptions,
   getEnrollmentConsultations,
@@ -93,7 +92,6 @@ export default async function EnrollmentPage({
   return (
     <div className="space-y-4">
       <MakeeduSyncBadge domain="prospects" />
-      <ConsultationTabs active="enrollment" />
       {/* 상단 헤더 — 통계 + 신규등록 (기존 AI 그래픽 배너 제거, 통계만 유지) */}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-text-dim text-[13px]">

@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
-import { NAV_GROUPS } from "@/lib/navigation";
+import { NAV_GROUPS, navPresentation } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
+import { useShowDesktop } from "@/components/workspace/use-show-desktop";
 import { windowIdForHref } from "@/components/workspace/window-link";
 import type { PaletteHit } from "@/features/search/server/queries";
 
@@ -21,6 +22,7 @@ type Command = {
   group: string;
   icon: EywaIconName;
   menuKey: MenuKey;
+  presentation: "desktop" | "window";
   keywords: string;
 };
 
@@ -56,6 +58,7 @@ export function CommandPalette({
   const router = useRouter();
   const isDesktop = useIsDesktop();
   const openWindow = useWindowStore((s) => s.open);
+  const showDesktop = useShowDesktop();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -74,6 +77,7 @@ export function CommandPalette({
           group: group.label,
           icon: item.icon,
           menuKey: item.menuKey,
+          presentation: navPresentation(item),
           // menuKey 포함 → 영문 입력("billing")으로도 검색됨
           keywords: `${item.label} ${group.label} ${item.menuKey}`.toLowerCase(),
         });
@@ -134,7 +138,8 @@ export function CommandPalette({
     closePalette();
     if (item.kind === "menu") {
       const cmd = item.cmd;
-      if (isDesktop) openWindow("route", { id: cmd.menuKey, title: cmd.label, href: cmd.href });
+      if (isDesktop && cmd.presentation === "desktop") showDesktop();
+      else if (isDesktop) openWindow("route", { id: cmd.menuKey, title: cmd.label, href: cmd.href });
       else router.push(cmd.href);
       return;
     }

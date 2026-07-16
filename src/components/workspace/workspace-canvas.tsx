@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { useWindowStore } from "./window-store";
 import { usePrefs } from "./use-prefs";
@@ -28,6 +29,8 @@ const HEADER = 48;
  */
 export function WorkspaceCanvas({ owner }: { owner: string }) {
   const isDesktop = useIsDesktop();
+  const pathname = usePathname();
+  const isDesktopSurface = pathname === "/dashboard";
   const order = useWindowStore((s) => s.order);
   const windows = useWindowStore((s) => s.windows);
   const focusedId = useWindowStore((s) => s.focusedId);
@@ -39,19 +42,20 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
   const setStage = useWindowStore((s) => s.setStage);
   const adoptOwner = useWindowStore((s) => s.adoptOwner);
 
-  // 스테이지가 뜨면 셸 main(메인 프레임 라우트)은 **불투명 바탕에 완전히 가려진다**(배경창 폐지 2026-07-14).
-  // 그런데도 그 라우트가 main의 스크롤 높이를 그대로 만들어, 창 안 스크롤바와 **나란히 바깥 스크롤바가 하나 더**
-  // 생겼다 — 아무것도 안 보이는 콘텐츠를 스크롤하고, 길이는 뒤 라우트 길이(예: 직원관리 목록)라 쓸데없이 길다
-  // (원장 제보 2026-07-15). 스테이지가 켜진 동안 main 스크롤을 잠근다(CSS는 globals.css `html[data-stage="on"]`).
-  // ⚠️ isDesktop=false(모바일·미니셸·iframe 안)면 캔버스가 없어 main이 유일한 스크롤이므로 절대 잠그지 말 것.
+  // 일반 라우트를 직접 연 데스크톱에선 스테이지가 main을 덮으므로 이중 스크롤을 막는다. 반면 오늘
+  //(`/dashboard`)은 main 자체가 AI 운영실 데스크톱 작업면이다. 이때는 캔버스가 떠 있어도 main을 가리거나
+  // 스크롤을 잠그면 안 된다. 모바일·미니셸·iframe 또한 main이 유일한 스크롤이므로 잠그지 않는다.
   useEffect(() => {
-    if (!isDesktop) return;
     const root = document.documentElement;
+    if (!isDesktop || isDesktopSurface) {
+      delete root.dataset.stage;
+      return;
+    }
     root.dataset.stage = "on";
     return () => {
       delete root.dataset.stage;
     };
-  }, [isDesktop]);
+  }, [isDesktop, isDesktopSurface]);
 
   // 사이드바 실제 너비 = 펼침이면 저장 너비, 접힘이면 레일(52). 펼침/접힘·드래그 드롭으로 바뀌면
   // 스테이지가 따라가 창 최대치(최대화·스냅)가 사이드바 오른쪽에 정확히 맞는다.
@@ -186,27 +190,29 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
       className="pointer-events-none fixed z-40 print:hidden"
       style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
-      {/* 빈 데스크톱 바탕 — 뒤 라우트(메인 프레임)를 불투명하게 덮어 "아무것도 없는 바탕화면"으로 만든다.
+      {/* 일반 라우트의 빈 데스크톱 바탕 — 뒤 main을 불투명하게 덮어 "아무것도 없는 바탕화면"으로 만든다.
           창들(z≥1) 뒤(z-0). pointer-events-auto로 덮인 라우트에 클릭이 새지 않게 흡수(빈 곳 클릭=무동작).
-          창이 하나도 열려 있지 않으면 가운데 안내. 스포트라이트 중엔 아래 딤이 그 위를 덮는다. */}
-      <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden={hasOpenWindow}>
-        {!hasOpenWindow && !spotlight ? (
-          <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 p-8">
-            <Image
-              src="/empty-states/empty-workspace.png"
-              alt=""
-              width={240}
-              height={240}
-              loading="eager"
-              className="mb-1 size-40 object-contain sm:size-44"
-            />
-            <div className="text-center">
-              <p className="text-foreground text-[15px] font-semibold">열린 창이 없어요</p>
-              <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+          오늘은 main 자체를 데스크톱으로 노출하므로 이 막을 렌더하지 않는다. */}
+      {!isDesktopSurface ? (
+        <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden={hasOpenWindow}>
+          {!hasOpenWindow && !spotlight ? (
+            <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 p-8">
+              <Image
+                src="/empty-states/empty-workspace.png"
+                alt=""
+                width={240}
+                height={240}
+                loading="eager"
+                className="mb-1 size-40 object-contain sm:size-44"
+              />
+              <div className="text-center">
+                <p className="text-foreground text-[15px] font-semibold">열린 창이 없어요</p>
+                <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
+              </div>
             </div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : null}
       {/* 앨범(스포트라이트) 딤 — 뒤 바탕을 흐려 앨범에 집중되게. 창들(z>=1) 뒤(z-0).
           빈 딤 영역 클릭 = 앨범 나가기(클릭 아웃). 캔버스는 pointer-events-none이라 이 막만 클릭 흡수. */}
       {spotlight ? (

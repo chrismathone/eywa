@@ -1,5 +1,5 @@
 /**
- * ① 커맨드 밴드 — 다크 ink 표면 위 인사말 + 재원/출석/수납/미수 4지표 한 줄.
+ * ① EYWA 운영실 헤더 — 다크 ink 표면 위 역할별 인사말 + 오늘 브리핑 + 핵심 4지표.
  * Daylight 라이트 페이지 위 '계기판' 액센트(테마 플립 아님). 밴드 전용 강조색은
  * 로컬 상수(라이트그린/danger-light) — 다크 표면 전용이라 globals 토큰 추가 안 함.
  */
@@ -19,41 +19,66 @@ const ACCENT_GREEN = "#5dcaa5"; // 다크 위 출석 강조 (forest green은 대
 const ACCENT_DANGER = "#f09595"; // 다크 위 미수 경고
 
 export function CommandBand({
-  name,
-  honorific,
-  enrolled,
-  enrolledDelta,
-  attendanceRate,
-  attendanceAsOf,
-  paymentRate,
-  unpaidCount,
-  outstanding,
-  newStudents,
-  withdrawn,
+  identity,
+  metrics,
+  enrollmentChanges,
 }: {
-  name: string;
-  /** 로그인 사용자 호칭 — 본인 직급(job_title) 우선, 없으면 역할 기반(원장/관리자/실장/선생…). */
-  honorific: string;
-  enrolled: number;
-  enrolledDelta: number;
-  attendanceRate: number | null;
-  /** 출석 서브 라벨(오늘이거나 없음 = null) — 과거 폴백이면 "M/D 기준", 7일 초과 스테일이면 "M/D 이후 기록 없음". 정직 표기. */
-  attendanceAsOf: string | null;
-  paymentRate: number | null;
-  unpaidCount: number;
-  /** 이번 달 미수 총액(원) — 원장에겐 '몇 건'보다 '얼마' */
-  outstanding: number;
-  newStudents: EnrollmentChangeStudent[];
-  withdrawn: EnrollmentChangeStudent[];
+  identity: {
+    name: string;
+    /** 로그인 사용자 호칭 — 본인 직급(job_title) 우선, 없으면 역할 기반(원장/관리자/실장/선생…). */
+    honorific: string;
+  };
+  metrics: {
+    enrollment: { count: number; delta: number } | null;
+    attendance: {
+      rate: number | null;
+      /** 출석 서브 라벨 — 과거 폴백이면 "M/D 기준", 스테일이면 "M/D 이후 기록 없음". */
+      asOf: string | null;
+    } | null;
+    billing: {
+      paymentRate: number | null;
+      unpaidCount: number;
+      /** 이번 달 미수 총액(원) — 원장에겐 '몇 건'보다 '얼마' */
+      outstanding: number;
+    } | null;
+  };
+  enrollmentChanges: {
+    newCount: number;
+    withdrawnCount: number;
+    newStudents: EnrollmentChangeStudent[];
+    withdrawn: EnrollmentChangeStudent[];
+  } | null;
 }) {
+  const { name, honorific } = identity;
+  const { enrollment, attendance, billing } = metrics;
+  const newStudents = enrollmentChanges?.newStudents ?? [];
+  const withdrawn = enrollmentChanges?.withdrawn ?? [];
   const parts = KO_DATE_FULL.formatToParts(new Date());
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  const eyebrow = `${get("year")}.${get("month")}.${get("day")} ${get("weekday")}`;
-  const deltaText = enrolledDelta === 0 ? "±0" : enrolledDelta > 0 ? `+${enrolledDelta}` : `${enrolledDelta}`;
-  const outstandingMan = Math.round(outstanding / 10000);
+  const eyebrow = `EYWA 운영실 · ${get("year")}.${get("month")}.${get("day")} ${get("weekday")}`;
+  const deltaText = enrollment
+    ? enrollment.delta === 0
+      ? "±0"
+      : enrollment.delta > 0
+        ? `+${enrollment.delta}`
+        : `${enrollment.delta}`
+    : "±0";
+  const outstandingDisplay = formatOutstandingAmount(billing?.outstanding ?? 0);
+  const metricCount = Number(enrollment !== null) + Number(attendance !== null) + (billing ? 2 : 0);
+  const metricGrid =
+    metricCount >= 4
+      ? "grid-cols-2 sm:grid-cols-4"
+      : metricCount === 3
+        ? "grid-cols-2 sm:grid-cols-3"
+        : metricCount === 2
+          ? "grid-cols-2"
+          : "grid-cols-1";
 
   return (
-    <section className="bg-ink relative overflow-hidden rounded-2xl px-6 py-5 text-white">
+    <section
+      className="bg-ink relative overflow-hidden rounded-2xl px-6 py-5 text-white"
+      aria-labelledby="assistant-home-title"
+    >
       <svg
         className="pointer-events-none absolute -top-8 right-0 opacity-10"
         width="200"
@@ -70,56 +95,76 @@ export function CommandBand({
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-gold font-mono text-[10px] tracking-wider uppercase">{eyebrow}</p>
-          <h1 className="mt-2 text-[25px] font-extrabold tracking-tight">안녕하세요, {name} {honorific}님.</h1>
-          <p className="mt-1.5 text-[12px] text-white/50">
-            {unpaidCount > 0 ? `오늘은 미수 ${unpaidCount}건만 챙기면 됩니다.` : "오늘도 잘 부탁드립니다."}
-          </p>
+          <h2 id="assistant-home-title" className="mt-2 text-[25px] font-extrabold tracking-tight">
+            안녕하세요, {name} {honorific}님.
+          </h2>
+          <p className="mt-1 text-[12px] text-white/55">Eywa가 지금 필요한 판단과 실행 순서를 정리했습니다.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-7 gap-y-4 sm:grid-cols-4 lg:gap-x-8">
-          <BandMetric
-            label="재원"
-            value={String(enrolled)}
-            unit="명"
-            sub={
-              <EnrollmentChangeModal
-                deltaText={deltaText}
-                newStudents={newStudents}
-                withdrawn={withdrawn}
+        {metricCount > 0 ? (
+          <div className={`grid gap-x-7 gap-y-4 lg:gap-x-8 ${metricGrid}`}>
+            {enrollment ? (
+              <BandMetric
+                label="재원"
+                value={String(enrollment.count)}
+                unit="명"
+                sub={
+                  <EnrollmentChangeModal
+                    deltaText={deltaText}
+                    newCount={enrollmentChanges?.newCount ?? 0}
+                    withdrawnCount={enrollmentChanges?.withdrawnCount ?? 0}
+                    newStudents={newStudents}
+                    withdrawn={withdrawn}
+                  />
+                }
               />
-            }
-          />
-          <BandMetric
-            label="출석"
-            value={attendanceRate == null ? "—" : String(Math.round(attendanceRate))}
-            unit={attendanceRate == null ? "" : "%"}
-            valueColor={attendanceRate == null ? undefined : ACCENT_GREEN}
-            sub={
-              attendanceAsOf ? (
-                <div className="mt-1 font-mono text-[10px] text-white/45">{attendanceAsOf}</div>
-              ) : undefined
-            }
-          />
-          <BandMetric
-            label="수납"
-            value={paymentRate == null ? "—" : String(Math.round(paymentRate))}
-            unit={paymentRate == null ? "" : "%"}
-          />
-          <BandMetric
-            label="이번 달 미수"
-            value={outstandingMan.toLocaleString()}
-            unit="만원"
-            valueColor={outstanding > 0 ? ACCENT_DANGER : undefined}
-            sub={
-              unpaidCount > 0 ? (
-                <div className="mt-1 font-mono text-[10px] text-white/45">{unpaidCount}건</div>
-              ) : undefined
-            }
-          />
-        </div>
+            ) : null}
+            {attendance ? (
+              <BandMetric
+                label="출석"
+                value={attendance.rate == null ? "—" : String(Math.round(attendance.rate))}
+                unit={attendance.rate == null ? "" : "%"}
+                valueColor={attendance.rate == null ? undefined : ACCENT_GREEN}
+                sub={
+                  attendance.asOf ? (
+                    <div className="mt-1 font-mono text-[10px] text-white/45">{attendance.asOf}</div>
+                  ) : undefined
+                }
+              />
+            ) : null}
+            {billing ? (
+              <>
+                <BandMetric
+                  label="수납"
+                  value={billing.paymentRate == null ? "—" : String(Math.round(billing.paymentRate))}
+                  unit={billing.paymentRate == null ? "" : "%"}
+                />
+                <BandMetric
+                  label="이번 달 미수"
+                  value={outstandingDisplay.value}
+                  unit={outstandingDisplay.unit}
+                  valueColor={billing.outstanding > 0 ? ACCENT_DANGER : undefined}
+                  sub={
+                    billing.unpaidCount > 0 ? (
+                      <div className="mt-1 font-mono text-[10px] text-white/45">{billing.unpaidCount}건</div>
+                    ) : undefined
+                  }
+                />
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );
+}
+
+export function formatOutstandingAmount(amount: number): { value: string; unit: "원" | "만원" } {
+  if (amount < 10_000) return { value: Math.max(0, amount).toLocaleString("ko-KR"), unit: "원" };
+  return {
+    value: (amount / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 }),
+    unit: "만원",
+  };
 }
 
 function BandMetric({

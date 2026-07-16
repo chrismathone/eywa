@@ -83,7 +83,7 @@ export function MockWorkspace() {
             <Win title="시간표 · 통합뷰" anim="ey-wsb" style={{ left: "30%", top: "36%", width: "42%", height: "44%", zIndex: 10 }}>
               <MiniTimetable />
             </Win>
-            <Win title="대시보드" focused anim="ey-wsa" style={{ left: "6%", top: "14%", width: "46%", height: "62%", zIndex: 20 }}>
+            <Win title="오늘" focused anim="ey-wsa" style={{ left: "6%", top: "14%", width: "46%", height: "62%", zIndex: 20 }}>
               <MiniDashboard />
             </Win>
 

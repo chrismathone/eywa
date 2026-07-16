@@ -1,9 +1,15 @@
 import type { SystemRole } from "@/lib/permissions";
 
-export const POPUP_AUDIENCES = ["all", "staff", "office", "teachers", "counselors", "accounting"] as const;
-export type PopupAudience = (typeof POPUP_AUDIENCES)[number];
+/** 팝업 공지와 오늘 화면 공지가 함께 쓰는 대상 단일 소스. */
+export const NOTICE_AUDIENCES = ["all", "staff", "office", "teachers", "counselors", "accounting"] as const;
+export type NoticeAudience = (typeof NOTICE_AUDIENCES)[number];
 
-export const AUDIENCE_LABEL: Record<PopupAudience, string> = {
+/** @deprecated 새 코드에서는 NOTICE_AUDIENCES/NoticeAudience를 사용한다. */
+export const POPUP_AUDIENCES = NOTICE_AUDIENCES;
+/** @deprecated 새 코드에서는 NoticeAudience를 사용한다. */
+export type PopupAudience = NoticeAudience;
+
+export const AUDIENCE_LABEL: Record<NoticeAudience, string> = {
   all: "전체",
   staff: "전 직원",
   office: "운영진 (강사 제외)",
@@ -53,4 +59,33 @@ export function audienceMatchesRole(audience: string, role: SystemRole): boolean
     default:
       return true;
   }
+}
+
+/** 폼/DB 경계에서 알 수 없는 값을 전체 공지로 정규화한다. office도 손실 없이 보존한다. */
+export function normalizeNoticeAudience(value: unknown): NoticeAudience {
+  const candidate = String(value ?? "").trim() || "all";
+  return (NOTICE_AUDIENCES as readonly string[]).includes(candidate)
+    ? (candidate as NoticeAudience)
+    : "all";
+}
+
+/** 현재 역할이 받을 수 있는 audience 목록. DB 쿼리의 `.in()`에도 그대로 사용한다. */
+export function audiencesForRole(role: SystemRole): NoticeAudience[] {
+  return NOTICE_AUDIENCES.filter((audience) => audienceMatchesRole(audience, role));
+}
+
+/** 관리 목록(전체)에서 실제 카드에 노출할 공지만 역할에 맞게 파생한다. */
+export function noticesForRole<T extends { audience: string }>(
+  items: readonly T[],
+  role: SystemRole,
+  limit = items.length,
+): T[] {
+  if (limit <= 0) return [];
+  const visible: T[] = [];
+  for (const item of items) {
+    if (!audienceMatchesRole(item.audience, role)) continue;
+    visible.push(item);
+    if (visible.length >= limit) break;
+  }
+  return visible;
 }

@@ -7,6 +7,11 @@ export type NavItem = {
   label: string;
   icon: EywaIconName;
   menuKey: MenuKey;
+  /**
+   * 데스크톱 셸에서 이 메뉴를 표시하는 방식. 생략하면 기존처럼 플로팅 창(`window`)으로 연다.
+   * `desktop`은 셸의 main 자체가 작업면이며 iframe 창을 만들지 않는다.
+   */
+  presentation?: "desktop" | "window";
   // 사이드바·모바일내비·팰릿에선 숨기되 findNavItem(창 해석)·아이콘맵엔 남긴다.
   // 예: 등록상담은 "상담" 메뉴의 FaceTabs 면이라 사이드바엔 안 뜨지만 창/링크 해석은 필요.
   hidden?: boolean;
@@ -17,14 +22,14 @@ export type NavGroup = {
   items: NavItem[];
 };
 
+export function navPresentation(item: Pick<NavItem, "presentation">): "desktop" | "window" {
+  return item.presentation ?? "window";
+}
+
 // 메뉴 하부탭(면) — 펼친 사이드바에서 현재 메뉴 아래 작게 노출. 클릭 시 같은 menuKey 창에서 면 전환.
 // 면 정의는 각 페이지 FaceTabs와 동기 유지(여기 라벨/href는 표시·이동용 미러).
 export type SubTab = { label: string; href: string };
 export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
-  consultations: [
-    { label: "학생상담", href: "/consultations" },
-    { label: "등록상담", href: "/enrollment" },
-  ],
   billing: [
     { label: "수납", href: "/billing" },
     { label: "교재", href: "/billing?tab=textbooks" },
@@ -58,52 +63,61 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
 };
 
 /**
- * NAV: 5그룹 (홈 / 수업 / 학생 / 운영 / 지원). 아이콘은 식물 비유가 아닌 기능 중심
+ * NAV: 5그룹 (EYWA / 수업 운영 / 학생 / 경영 / 설정). 사용자의 하루 실행 흐름에 맞춘 명칭이며,
+ * URL·menuKey는 기존 권한과 딥링크 호환을 위해 유지한다. 아이콘은 식물 비유가 아닌 기능 중심
  * Eywa 아이콘(레일·모바일nav·검색팰릿·창 전환 공용). 그룹 번호는 사이드바에서 자동 인덱스.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "홈",
-    items: [{ href: "/dashboard", label: "대시보드", icon: MENU_ICON.dashboard, menuKey: "dashboard" }],
+    label: "EYWA",
+    items: [
+      {
+        href: "/dashboard",
+        label: "운영실",
+        icon: MENU_ICON.dashboard,
+        menuKey: "dashboard",
+        presentation: "desktop",
+      },
+    ],
   },
   {
-    label: "수업",
+    label: "수업 운영",
     items: [
-      { href: "/onescreen", label: "선생님 원스크린", icon: MENU_ICON.teacher_onescreen, menuKey: "teacher_onescreen" },
+      { href: "/onescreen", label: "내 수업", icon: MENU_ICON.teacher_onescreen, menuKey: "teacher_onescreen" },
       { href: "/timetable", label: "시간표", icon: MENU_ICON.timetable, menuKey: "timetable" },
-      { href: "/attendance", label: "출석부", icon: MENU_ICON.attendance, menuKey: "attendance" },
-      { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes" },
+      { href: "/attendance", label: "출결 처리", icon: MENU_ICON.attendance, menuKey: "attendance" },
+      { href: "/classes", label: "반·수업", icon: MENU_ICON.classes, menuKey: "classes" },
       // 수업보고서 = 학원 전체 보고서 발송 총괄(구 학원설정 ?tab=report_mgmt에서 승격, 옛 Edutrix 외부링크 대체).
-      { href: "/lesson-reports", label: "수업보고서", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
+      { href: "/lesson-reports", label: "수업 보고", icon: MENU_ICON.lesson_reports, menuKey: "lesson_reports" },
     ],
   },
   {
     label: "학생",
     items: [
-      { href: "/students", label: "학생목록", icon: MENU_ICON.students, menuKey: "students" },
-      { href: "/exams", label: "성적관리", icon: MENU_ICON.exams, menuKey: "exams" },
+      { href: "/students", label: "학생", icon: MENU_ICON.students, menuKey: "students" },
+      { href: "/exams", label: "성적", icon: MENU_ICON.exams, menuKey: "exams" },
       // 상담 = 학생상담(/consultations) + 등록상담(/enrollment) 2면(상단 FaceTabs로 교차). 사이드바엔 "상담" 한 항목.
-      { href: "/consultations", label: "상담", icon: MENU_ICON.consultations, menuKey: "consultations" },
-      // 등록상담은 "상담"의 FaceTabs 면 → 사이드바 숨김(hidden), 단 창 해석·아이콘맵엔 유지.
-      { href: "/enrollment", label: "등록상담", icon: MENU_ICON.enrollment, menuKey: "enrollment", hidden: true },
-      { href: "/retention", label: "이탈 방어", icon: MENU_ICON.retention, menuKey: "retention" },
-      { href: "/withdrawals", label: "퇴원관리", icon: MENU_ICON.withdrawals, menuKey: "withdrawals" },
+      { href: "/consultations", label: "학생 상담", icon: MENU_ICON.consultations, menuKey: "consultations" },
+      // 등록상담은 별도 권한(menuKey=enrollment)을 가지므로 숨기지 않고 독립 진입점을 제공한다.
+      { href: "/enrollment", label: "등록 상담", icon: MENU_ICON.enrollment, menuKey: "enrollment" },
+      { href: "/retention", label: "이탈 신호", icon: MENU_ICON.retention, menuKey: "retention" },
+      { href: "/withdrawals", label: "퇴원", icon: MENU_ICON.withdrawals, menuKey: "withdrawals" },
     ],
   },
   {
-    label: "운영",
+    label: "경영",
     items: [
-      { href: "/staff", label: "직원관리", icon: MENU_ICON.staff, menuKey: "staff" },
-      { href: "/billing", label: "수납관리", icon: MENU_ICON.billing, menuKey: "billing" },
+      { href: "/staff", label: "팀", icon: MENU_ICON.staff, menuKey: "staff" },
+      { href: "/billing", label: "수납·청구", icon: MENU_ICON.billing, menuKey: "billing" },
       // 교재 요청 = 강사 미니셸 '내 메뉴' 전용 진입(강사 스코프). 사이드바엔 숨김, 창/타이틀 해석용 유지.
       { href: "/textbook-requests", label: "교재 요청", icon: MENU_ICON.textbook_requests, menuKey: "textbook_requests", hidden: true },
-      { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
+      { href: "/meetings", label: "회의", icon: MENU_ICON.meetings, menuKey: "meetings" },
       // 데이터베이스 = 학원 각종 서식(빈 양식 파일·앱 작성 문서) 저장소 — 윈도우 탐색기형 뷰.
-      { href: "/documents", label: "데이터베이스", icon: MENU_ICON.documents, menuKey: "documents" },
+      { href: "/documents", label: "문서함", icon: MENU_ICON.documents, menuKey: "documents" },
     ],
   },
   {
-    label: "지원",
+    label: "설정",
     items: [
       { href: "/help", label: "도움말", icon: MENU_ICON.help, menuKey: "help" },
       { href: "/owner", label: "학원 설정", icon: MENU_ICON.owner, menuKey: "owner" },
@@ -123,10 +137,15 @@ export type ExternalNavItem = { href: string; label: string; icon: LucideIcon; g
 // 외부링크 렌더 인프라(app-sidebar ExternalRailItem)는 향후 다른 외부 앱용으로 보존 — 현재 항목 없음.
 export const EXTERNAL_NAV: ExternalNavItem[] = [];
 
+function routePath(value: string): string {
+  return value.split(/[?#]/, 1)[0] ?? value;
+}
+
 export function findNavItem(pathname: string): NavItem | undefined {
+  const path = routePath(pathname);
   for (const group of NAV_GROUPS) {
     for (const item of group.items) {
-      if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
+      if (path === item.href || path.startsWith(`${item.href}/`)) {
         return item;
       }
     }
@@ -135,9 +154,10 @@ export function findNavItem(pathname: string): NavItem | undefined {
 }
 
 export function findNavGroup(pathname: string): NavGroup | undefined {
+  const path = routePath(pathname);
   for (const group of NAV_GROUPS) {
     for (const item of group.items) {
-      if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
+      if (path === item.href || path.startsWith(`${item.href}/`)) {
         return group;
       }
     }

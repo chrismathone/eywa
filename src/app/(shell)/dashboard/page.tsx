@@ -1,5 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { canAccess, canWrite } from "@/lib/permissions";
 import {
   getAbsenceRiskStudents,
   getActiveEnrollmentConsultations,
@@ -7,10 +9,9 @@ import {
   getEnrolledStudentCount,
   getFollowUpConsultations,
   getMonthlyEnrollmentChanges,
-  getMostRecentAttendanceSnapshot,
+  getDashboardAttendanceState,
   getPaymentRateThisMonth,
   getRecentAnnouncements,
-  getTodayRecordedClassIds,
   getTopOutstanding,
   getTrendDataLast7Days,
   getEnrollmentChangeLast7d,
@@ -20,27 +21,59 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { kstToday } from "@/lib/date-kst";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
+import { buildOperationsBriefing } from "@/features/dashboard/operations-briefing";
+import { resolveDashboardAccess } from "@/features/dashboard/dashboard-access";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { enrollmentDelta } from "@/features/dashboard/metrics";
 import { CommandBand } from "./_components/command-band";
 import { QuickActions } from "./_components/quick-actions";
-import { TodayActionsBand } from "./_components/today-actions-band";
+import { OperationsBriefing } from "./_components/operations-briefing";
 import { NowCockpit } from "./_components/now-cockpit";
-import { AbsenceRiskCard } from "./_components/absence-risk-card";
 import { OutstandingCard } from "./_components/outstanding-card";
 import { EnrollmentListCard } from "./_components/enrollment-list-card";
 import { FollowUpCard } from "./_components/followup-card";
 import { AnnouncementsCard } from "./_components/announcements-card";
 import { SlimTrend } from "./_components/slim-trend";
+import type { QuickActionKey } from "./_components/quick-actions";
 
-export const metadata = { title: "대시보드 — eywa" };
+const EMPTY_ENROLLMENT_CHANGES = {
+  newCount: 0,
+  withdrawnCount: 0,
+  newStudents: [],
+  withdrawn: [],
+};
+const EMPTY_ENROLLMENT_LIST = { total: 0, rows: [] };
+const EMPTY_ENROLLMENT_CHANGE = {
+  days: 7,
+  newCount: 0,
+  withdrawnCount: 0,
+  net: 0,
+  bySubject: [],
+};
 
-export default async function DashboardPage() {
+type DashboardQueryResult<T> = { data: T; unavailable: boolean };
+
+async function dashboardQuery<T>(label: string, query: Promise<T>, fallback: T): Promise<DashboardQueryResult<T>> {
+  try {
+    return { data: await query, unavailable: false };
+  } catch (error) {
+    console.error(`[dashboard] ${label} query failed`, error);
+    return { data: fallback, unavailable: true };
+  }
+}
+
+export const metadata = { title: "운영실 — eywa" };
+
+export default async function TodayPage() {
   const user = await requireAccess("dashboard");
-  const canManageAnnouncements = canManageStaff(user.systemRole);
+  // requireAccess에서 이미 읽은 요청 캐시 재사용 — 추가 DB 왕복 없이 브리핑 링크를 역할별로 거른다.
+  const permissionMatrix = await getPermMatrix();
+  const access = resolveDashboardAccess(user.systemRole, permissionMatrix);
+  const canManageAnnouncements =
+    canManageStaff(user.systemRole) && canWrite(user.systemRole, "dashboard", permissionMatrix);
   const [
     enrolled,
-    attendance,
+    attendanceState,
     trend,
     todaySchedule,
     payment,
@@ -49,44 +82,134 @@ export default async function DashboardPage() {
     outstanding,
     recentAnnouncements,
     manageAnnouncements,
-    followUps,
-    recordedClassIds,
+    followUpsResult,
     settings,
     enrollmentChanges,
     actionSignals,
     enrollmentChange,
   ] = await Promise.all([
-    getEnrolledStudentCount(),
-    getMostRecentAttendanceSnapshot(),
-    getTrendDataLast7Days(),
-    getTodaySchedule(),
-    getPaymentRateThisMonth(),
-    getActiveEnrollmentConsultations(),
-    getAbsenceRiskStudents(),
-    getTopOutstanding(),
-    // 관리 권한이면 관리 목록(상위집합)에서 카드 4건을 도출 → 이중 fetch 제거. 아니면 카드용 4건만.
-    canManageAnnouncements ? Promise.resolve(null) : getRecentAnnouncements(4),
+    access.read.students ? getEnrolledStudentCount() : Promise.resolve(0),
+    access.read.attendance
+      ? getDashboardAttendanceState()
+      : Promise.resolve({
+          snapshot: null,
+          todayProcessing: [],
+          snapshotProcessing: [],
+          snapshotIssue: false,
+          todayProcessingIssue: false,
+          snapshotProcessingIssue: false,
+        }),
+    access.read.attendance || access.read.billing
+      ? getTrendDataLast7Days({ attendance: access.read.attendance, billing: access.read.billing })
+      : Promise.resolve([]),
+    access.read.timetable || access.read.classes || access.read.attendance
+      ? getTodaySchedule()
+      : Promise.resolve([]),
+    access.read.billing ? getPaymentRateThisMonth() : Promise.resolve(null),
+    access.read.enrollment
+      ? getActiveEnrollmentConsultations()
+      : Promise.resolve(EMPTY_ENROLLMENT_LIST),
+    access.read.students && access.read.attendance ? getAbsenceRiskStudents() : Promise.resolve([]),
+    access.read.billing ? getTopOutstanding() : Promise.resolve([]),
+    // 관리 목록은 30건으로 잘리므로 카드용 역할 필터 쿼리를 별도로 유지해야 대상 공지가 누락되지 않는다.
+    getRecentAnnouncements(user.systemRole, 4),
     canManageAnnouncements ? getAnnouncementsForManage() : Promise.resolve([]),
-    getFollowUpConsultations(8),
-    getTodayRecordedClassIds(),
+    access.read.consultations
+      ? dashboardQuery("consultation follow-ups", getFollowUpConsultations(8), [])
+      : Promise.resolve({ data: [], unavailable: false }),
     getTenantSettings(),
-    getMonthlyEnrollmentChanges(),
-    getTodayActionSignals(),
-    getEnrollmentChangeLast7d(),
+    access.read.students ? getMonthlyEnrollmentChanges() : Promise.resolve(EMPTY_ENROLLMENT_CHANGES),
+    getTodayActionSignals({
+      students: access.write.students,
+      attendance: access.read.attendance,
+      meetings: access.write.meetings,
+      enrollment: access.write.enrollment,
+      consultations: access.write.consultations,
+      lessonReports: access.read.lessonReports,
+      billing: access.write.billing,
+      staff: access.read.staff,
+      staffApprovals: access.manageStaff,
+      owner: access.read.owner,
+    }),
+    access.read.students ? getEnrollmentChangeLast7d() : Promise.resolve(EMPTY_ENROLLMENT_CHANGE),
   ]);
-  const announcements = recentAnnouncements ?? manageAnnouncements.slice(0, 4);
-  // "오늘 조치할 것" 불릿 — 전부 0건이면 빈 배열(패널이 '정상' 한 줄 표시).
-  // 반 미배정 재원생도 이 패널의 칩(← 등록상담 카드 밴드였던 것: 출처가 학생인데 등록상담 카드에 얹혀
-  // "등록상담을 거친 건"으로 오독됐다. 조치 신호는 이 패널이 단일 소스. 2026-07-15 원장 지적).
-  const todayActions = buildTodayActions(actionSignals);
+  const attendance = attendanceState.snapshot;
+  const followUps = followUpsResult.data;
+  const announcements = recentAnnouncements;
+
+  // 출결 신선도는 브리핑과 계기판이 같은 KST 기준을 공유한다. 오래된 출결로 학생을
+  // 현재 긴급 위험처럼 보이지 않게 브리핑 조립 전에 계산한다.
+  const today = kstToday();
+  const attStaleDays = attendance
+    ? Math.max(
+        0,
+        Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${attendance.date}T00:00:00Z`)) / 86_400_000),
+      )
+    : null;
+  const attendanceStale = attStaleDays !== null && attStaleDays > 7;
+  const briefingAttendanceUnavailable =
+    attendanceState.snapshotIssue ||
+    attendanceState.todayProcessingIssue ||
+    attendanceState.snapshotProcessingIssue;
+
+  // 기존 운영 신호 + 이미 조회한 상담 후속/반복 결석 preview를 읽기 전용 브리핑으로 조립.
+  // 새 쿼리나 AI 호출 없이 순수 계산만 하며, 서로 단위가 다른 count는 합산하지 않는다.
+  const todayActions = buildTodayActions(actionSignals).filter((item) => {
+    if (!canAccess(user.systemRole, item.menuKey, permissionMatrix)) return false;
+    if (item.requiredAccess === "write") return canWrite(user.systemRole, item.menuKey, permissionMatrix);
+    if (item.requiredAccess === "manage-staff") return access.manageStaff;
+    return item.requiredAccess === "read";
+  });
+  const briefing = buildOperationsBriefing({
+    actions: todayActions,
+    followUps: access.read.consultations ? followUps : [],
+    followUpsUnavailable: access.read.consultations && followUpsResult.unavailable,
+    absenceRisks: access.read.students && access.read.attendance ? absenceRisks : [],
+    attendanceFreshness: access.read.attendance
+      ? {
+          referenceDate: attendance?.date ?? null,
+          staleDays: attStaleDays,
+          unavailable: briefingAttendanceUnavailable,
+        }
+      : null,
+  });
   // 과목 라벨·색은 학원설정(operations.subjects) 단일 소스 — 콕핏에 prop 주입(하드코딩 금지).
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
-  // 오늘 시작한(예정 제외) 수업 중 출석 미기록 수.
-  const recordedSet = new Set(recordedClassIds);
-  const unrecordedCount = todaySchedule.filter(
-    (s) => s.status !== "upcoming" && !recordedSet.has(s.classId),
-  ).length;
+  // 오늘 시작한 수업만 예정학생 대비 기록학생으로 판정한다. 한 명만 입력된 반을 완료로 보지 않는다.
+  const startedClassIds = new Set(
+    todaySchedule.filter((slot) => slot.status !== "upcoming").map((slot) => slot.classId),
+  );
+  const startedProcessing = attendanceState.todayProcessing.filter((row) =>
+    startedClassIds.has(row.classId),
+  );
+  const startedExpected = startedProcessing.reduce((sum, row) => sum + row.expected, 0);
+  const startedRecorded = startedProcessing.reduce(
+    (sum, row) => sum + Math.min(row.recorded, row.expected),
+    0,
+  );
+  const attendanceInProgress = startedExpected > 0 && startedRecorded < startedExpected;
+  const unrecordedCount = startedProcessing.filter((row) => row.unprocessed > 0).length;
+  const snapshotExpected = attendanceState.snapshotProcessing.reduce(
+    (sum, row) => sum + row.expected,
+    0,
+  );
+  const snapshotRecorded = attendanceState.snapshotProcessing.reduce(
+    (sum, row) => sum + Math.min(row.recorded, row.expected),
+    0,
+  );
+  const historicalSnapshotIncomplete =
+    !!attendance &&
+    attendance.date !== today &&
+    snapshotExpected > 0 &&
+    snapshotRecorded < snapshotExpected;
+  const snapshotProcessingUnavailable = attendance
+    ? attendance.date === today
+      ? attendanceState.todayProcessingIssue
+      : attendanceState.snapshotProcessingIssue
+    : attendanceState.todayProcessingIssue;
+  const snapshotSourceUnavailable =
+    attendanceState.snapshotIssue || snapshotProcessingUnavailable;
 
   const name = user.displayName ?? "선생";
   // 인사말 호칭 — 본인 직급(job_title) 우선, 없으면 역할 기반 한국어 호칭(누구나 "원장님" 금지).
@@ -100,68 +223,153 @@ export default async function DashboardPage() {
     viewer: "선생",
   };
   const honorific = user.jobTitle?.trim() || HONORIFIC[user.systemRole] || "선생";
-  // 출석 스냅샷 신선도 — 최근 기록이 7일 넘게 오래되면(예: eywa 출석 입력 중단) 낡은 비율(9건짜리 100% 등)이
-  // 현재처럼 크게 보이지 않게 rate를 숨기고("—"), 밴드 서브에 "M/D 이후 기록 없음"으로 정직하게 표기.
-  const attStaleDays = attendance
-    ? Math.floor((Date.parse(`${kstToday()}T00:00:00Z`) - Date.parse(`${attendance.date}T00:00:00Z`)) / 86_400_000)
-    : 0;
-  const attendanceStale = attStaleDays > 7;
-  const attendanceRate = attendance && attendance.total > 0 && !attendanceStale ? attendance.rate : null;
-  const attendanceAsOf =
-    attendance && attendance.date !== kstToday()
-      ? (() => {
-          const md = `${Number(attendance.date.slice(5, 7))}/${Number(attendance.date.slice(8, 10))}`;
-          return attendanceStale ? `${md} 이후 기록 없음` : `${md} 기준`;
-        })()
+  const attendanceRate =
+    attendance &&
+    attendance.total > 0 &&
+    !attendanceStale &&
+    !attendanceInProgress &&
+    !historicalSnapshotIncomplete &&
+    !snapshotSourceUnavailable
+      ? attendance.rate
       : null;
+  let attendanceAsOf: string | null = null;
+  if (snapshotSourceUnavailable) {
+    attendanceAsOf = "처리 현황 확인 불가";
+  } else if (attendanceInProgress) {
+    attendanceAsOf = `처리 중 ${startedRecorded}/${startedExpected}`;
+  } else if (attendance && attendance.date !== today) {
+    const md = `${Number(attendance.date.slice(5, 7))}/${Number(attendance.date.slice(8, 10))}`;
+    if (attendanceStale) attendanceAsOf = `${md} 이후 기록 없음`;
+    else if (historicalSnapshotIncomplete) {
+      attendanceAsOf = `${md} 미완료 ${snapshotRecorded}/${snapshotExpected}`;
+    } else attendanceAsOf = `${md} 기준`;
+  } else if (!attendance) {
+    attendanceAsOf = "기록 없음";
+  }
   const paymentRate = payment && payment.totalCount > 0 ? payment.paymentRate : null;
   const unpaidCount = payment?.unpaidCount ?? 0;
+  const quickActions: QuickActionKey[] = [];
+  if (access.write.students) quickActions.push("student");
+  if (access.write.classes) quickActions.push("class");
+  if (access.write.consultations) quickActions.push("consultation");
+  const showLiveSchedule = access.read.timetable || access.read.classes;
+  const showFollowUps = access.read.consultations;
+  const liveGrid =
+    showLiveSchedule && showFollowUps
+      ? "lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.55fr)]"
+      : "grid-cols-1";
 
   return (
-    <div className="space-y-4">
-      {/* ① 커맨드 밴드 */}
+    <div className="space-y-5 pb-4">
+      {/* ① EYWA 운영실 헤더 */}
       <CommandBand
-        name={name}
-        honorific={honorific}
-        enrolled={enrolled}
-        enrolledDelta={enrollmentDelta(
-          enrollmentChanges.newStudents.length,
-          enrollmentChanges.withdrawn.length,
-        )}
-        attendanceRate={attendanceRate}
-        attendanceAsOf={attendanceAsOf}
-        paymentRate={paymentRate}
-        unpaidCount={unpaidCount}
-        outstanding={payment?.outstanding ?? 0}
-        newStudents={enrollmentChanges.newStudents}
-        withdrawn={enrollmentChanges.withdrawn}
+        identity={{ name, honorific }}
+        metrics={{
+          enrollment: access.read.students
+            ? {
+                count: enrolled,
+                delta: enrollmentDelta(
+                  enrollmentChanges.newCount,
+                  enrollmentChanges.withdrawnCount,
+                ),
+              }
+            : null,
+          attendance: access.read.attendance ? { rate: attendanceRate, asOf: attendanceAsOf } : null,
+          billing: access.read.billing
+            ? {
+                paymentRate,
+                unpaidCount,
+                outstanding: payment?.outstanding ?? 0,
+              }
+            : null,
+        }}
+        enrollmentChanges={access.read.students ? enrollmentChanges : null}
       />
 
+      {/* ② 오늘 브리핑 — 조회·정리만, 실행은 원본 화면에서 */}
+      <OperationsBriefing briefing={briefing} />
+
       {/* 빠른 작업 */}
-      <QuickActions />
+      <QuickActions allowed={quickActions} />
 
-      {/* 오늘 조치할 것 — 조건부 신호 통합 패널(0건이면 '정상' 한 줄) */}
-      <TodayActionsBand items={todayActions} />
+      {showLiveSchedule || showFollowUps ? (
+        <section aria-labelledby="live-operations-title" className="space-y-3">
+          <header className="flex flex-wrap items-end justify-between gap-2 px-1">
+            <div>
+              <p className="text-primary font-mono text-[10px] font-bold tracking-[0.12em] uppercase">
+                Live operations
+              </p>
+              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-[17px] font-extrabold tracking-tight">
+                지금 진행 중
+              </h2>
+            </div>
+            <p className="text-text-dim text-[12px]">수업 흐름과 사람 후속조치를 한곳에서 봅니다.</p>
+          </header>
+          <div className={`grid items-start gap-4 ${liveGrid}`}>
+            {showLiveSchedule ? (
+              <NowCockpit
+                slots={todaySchedule}
+                subjects={subjects}
+                unrecordedCount={unrecordedCount}
+                attendanceProcessingUnavailable={
+                  access.read.attendance && attendanceState.todayProcessingIssue
+                }
+                canOpenClasses={access.read.classes}
+                canOpenTimetable={access.read.timetable}
+              />
+            ) : null}
+            {showFollowUps ? (
+              <FollowUpCard
+                items={followUps}
+                canOpenStudents={access.read.students}
+                unavailable={followUpsResult.unavailable}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
-      {/* 최근 7일 — 학생 증감(전체·과목별 차트) 주역 + 출석·수납 추세 (원장 요청: 오늘 조치 아래로) */}
-      <SlimTrend data={trend} change={enrollmentChange} subjects={subjects} />
+      {/* 학원 펄스 — 판단 큐 다음의 보조 맥락. */}
+      <SlimTrend
+        data={trend}
+        change={enrollmentChange}
+        subjects={subjects}
+        visible={{
+          attendance: access.read.attendance,
+          billing: access.read.billing,
+          enrollment: access.read.students,
+        }}
+      />
 
-      {/* ② 운영 콕핏 — 높이가 제각각인 카드들을 자연 높이 그대로 CSS 다단(columns) balanced-fill로
-          촘촘히 재배치(테트리스 packing). ⚠️ CSS Grid 기본이 align:stretch라 짧은 카드가 가장 큰 카드
-          높이까지 늘어나 거대한 빈칸을 만들었다(오늘일정 히어로 옆 결석위험이 통째로 늘어남) → 다단은
-          카드를 늘리지 않고 높이순으로 균형 있게 채운다. break-inside-avoid로 카드는 열 경계에서 안 쪼개짐. */}
-      <div className="columns-1 gap-4 md:columns-2 xl:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
-        <NowCockpit slots={todaySchedule} subjects={subjects} unrecordedCount={unrecordedCount} />
-        <AbsenceRiskCard items={absenceRisks} />
-        <OutstandingCard items={outstanding} />
-        <FollowUpCard items={followUps} />
-        <EnrollmentListCard list={enrollList} />
-        <AnnouncementsCard
-          items={announcements}
-          canManage={canManageAnnouncements}
-          manageItems={manageAnnouncements}
-        />
-      </div>
+      <section aria-labelledby="operations-context-title" className="space-y-3">
+        <header className="flex flex-wrap items-end justify-between gap-2 px-1">
+          <div>
+            <p className="text-text-dim font-mono text-[10px] font-bold tracking-[0.12em] uppercase">
+              Context
+            </p>
+            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-[17px] font-extrabold tracking-tight">
+              운영 맥락
+            </h2>
+          </div>
+          <p className="text-text-dim text-[12px]">결정 뒤에 참고할 수납·등록·팀 공지입니다.</p>
+        </header>
+        <div
+          className="grid items-start gap-4"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 19rem), 1fr))" }}
+        >
+          {access.read.billing ? (
+            <OutstandingCard items={outstanding} canOpenStudents={access.read.students} />
+          ) : null}
+          {access.read.enrollment ? (
+            <EnrollmentListCard list={enrollList} />
+          ) : null}
+          <AnnouncementsCard
+            items={announcements}
+            canManage={canManageAnnouncements}
+            manageItems={manageAnnouncements}
+          />
+        </div>
+      </section>
     </div>
   );
 }

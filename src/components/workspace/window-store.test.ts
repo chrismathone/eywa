@@ -5,6 +5,7 @@ const SID = windowId("route", "students/1");
 
 function reset() {
   useWindowStore.setState({
+    owner: null,
     windows: {},
     order: [],
     focusedId: null,
@@ -17,6 +18,62 @@ function reset() {
     spotlightRaised: [],
   });
 }
+
+describe("window-store showDesktop() — 오늘은 main 데스크톱", () => {
+  beforeEach(reset);
+
+  it("일반 창은 안전하게 최소화하고 legacy dashboard 창·복제본·warm 캐시와 런타임 흔적은 제거한다", () => {
+    const s = useWindowStore.getState();
+    s.open("route", { id: "students", title: "학생목록", href: "/students" });
+    const students = windowId("route", "students");
+    s.setWindowDirty(students, true);
+
+    s.open("route", { id: "dashboard", title: "오늘", href: "/dashboard" });
+    const dashboard = windowId("route", "dashboard");
+    s.observeIframe(dashboard, { title: "오늘", url: "/dashboard?embed=1" });
+    s.reloadWindow(dashboard);
+    s.duplicate(dashboard);
+    const duplicate = `${dashboard}#1`;
+    s.close(dashboard); // primary는 warm cache, 복제본은 열린 상태
+
+    useWindowStore.setState({
+      spotlight: true,
+      spotlightRaised: [duplicate],
+      dirty: { ...useWindowStore.getState().dirty, [duplicate]: true },
+    });
+    useWindowStore.getState().showDesktop();
+
+    const st = useWindowStore.getState();
+    expect(Object.keys(st.windows)).toEqual([students]);
+    expect(st.windows[students].minimized).toBe(true);
+    expect(st.dirty[students]).toBe(true); // 다른 창의 미저장 상태는 보존
+    expect(st.order).toEqual([students]);
+    expect(st.focusedId).toBe(null);
+    expect(st.cached).not.toContain(dashboard);
+    expect(st.live[dashboard]).toBeUndefined();
+    expect(st.nav[dashboard]).toBeUndefined();
+    expect(st.reloadNonce[dashboard]).toBeUndefined();
+    expect(st.dirty[duplicate]).toBeUndefined();
+    expect(st.spotlight).toBe(false);
+    expect(st.spotlightRaised).toEqual([]);
+  });
+
+  it("같은 owner의 영속 레이아웃 채택 때 legacy dashboard iframe만 제거하고 일반 창은 유지한다", () => {
+    const s = useWindowStore.getState();
+    s.open("route", { id: "students", title: "학생목록", href: "/students" });
+    s.open("route", { id: "dashboard", title: "오늘", href: "/dashboard" });
+    s.duplicate(windowId("route", "dashboard"));
+    useWindowStore.setState({ owner: "tenant:user" });
+
+    useWindowStore.getState().adoptOwner("tenant:user");
+
+    const st = useWindowStore.getState();
+    expect(st.windows[windowId("route", "students")]).toBeTruthy();
+    expect(st.windows[windowId("route", "students")].minimized).toBe(false);
+    expect(Object.keys(st.windows).some((id) => id.startsWith("route:dashboard"))).toBe(false);
+    expect(st.order.some((id) => id.startsWith("route:dashboard"))).toBe(false);
+  });
+});
 
 describe("window-store reloadWindow()", () => {
   beforeEach(reset);

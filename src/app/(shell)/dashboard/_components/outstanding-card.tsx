@@ -8,10 +8,17 @@ import { DashCard, DashEmpty } from "./dash-card";
 import type { OutstandingItem } from "@/features/dashboard/server/queries";
 
 function man(amount: number): string {
-  return `${Math.round(amount / 10000).toLocaleString()}만`;
+  if (amount < 10_000) return `${Math.max(0, amount).toLocaleString("ko-KR")}원`;
+  return `${(amount / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만`;
 }
 
-export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
+export function OutstandingCard({
+  items,
+  canOpenStudents,
+}: {
+  items: OutstandingItem[];
+  canOpenStudents: boolean;
+}) {
   return (
     <DashCard
       title="누적 미수 상위"
@@ -28,15 +35,21 @@ export function OutstandingCard({ items }: { items: OutstandingItem[] }) {
               — self-center로 띄우면 텍스트 그룹과 배지 중심이 ~3px 갈라진다(실측). */}
           {items.map((p) => (
             <li key={p.studentId} className="flex items-baseline justify-between gap-2 py-1.5">
-              <WindowLink
-                href={`/students/${p.studentId}?tab=billing`}
-                title={p.studentName}
-                className="group min-w-0 flex-1"
-              >
+              {canOpenStudents ? (
+                <WindowLink
+                  href={`/students/${p.studentId}?tab=billing`}
+                  title={p.studentName}
+                  className="group min-w-0 flex-1"
+                >
+                  <span className="text-foreground group-hover:text-primary block truncate text-[13px] font-medium">
+                    {p.studentName}
+                  </span>
+                </WindowLink>
+              ) : (
                 <span className="text-foreground group-hover:text-primary block truncate text-[13px] font-medium">
                   {p.studentName}
                 </span>
-              </WindowLink>
+              )}
               <span className="text-danger num shrink-0 text-[12px] font-semibold">
                 {man(p.amount)}
               </span>

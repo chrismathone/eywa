@@ -155,6 +155,9 @@ export type PermissionOverride = { menu: MenuKey; role: SystemRole; access: Acce
 const ROLE_LOCKED_MENUS = new Set<MenuKey>(["teacher_onescreen", "my_learning"]);
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
+  // 대시보드 집계는 테넌트 전체 데이터다. 강사 scoped 쿼리가 마련되기 전까지는
+  // 강사에게 메뉴를 열면 담당 범위를 넘어 학생·출결 데이터가 노출되므로 override를 막는다.
+  if (menu === "dashboard" && role === "teacher") return true;
   // 'student'는 '내 학습' 전용 역할(미니멀 셸) — 일반 메뉴를 부여하면 requireAccess(menu)가 통과해
   // 학생이 /billing 등에 직접 URL로 진입한다. 학생에게 줄 수 있는 일반 메뉴 자체가 없으므로 컬럼 전체를 잠근다.
   if (role === "student") return true;

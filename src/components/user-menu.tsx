@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePrefs } from "@/components/workspace/use-prefs";
+import { useApplyOsMotionDefault, usePrefs } from "@/components/workspace/use-prefs";
 import { signOut } from "@/app/(auth)/login/actions";
 
 export function UserMenu({
@@ -23,6 +23,7 @@ export function UserMenu({
   displayName?: string;
   jobTitle?: string;
 }) {
+  useApplyOsMotionDefault();
   const animations = usePrefs((s) => s.animations);
   const setAnimations = usePrefs((s) => s.setAnimations);
   return (

@@ -1,8 +1,15 @@
 import "server-only";
+import {
+  addIsoDateDays,
+  followUpUrgency,
+  type FollowUpUrgency,
+} from "@/features/consultations/follow-up-urgency";
+import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
-import { kstToday } from "@/lib/date-kst";
+
+export { followUpUrgency, type FollowUpUrgency };
 
 export type StudentConsultationCategory =
   | "general"
@@ -151,13 +158,6 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-/** KST 기준 YYYY-MM-DD (offset일 가산). follow_up_date(date) 비교용 — 서버 UTC 오차 방지. */
-function localDateStr(offsetDays = 0): string {
-  if (offsetDays === 0) return kstToday();
-  const [y, m, d0] = kstToday().split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1, d0! + offsetDays)).toISOString().slice(0, 10);
-}
-
 export type StudentConsultationCounts = {
   total: number;
   lastWeek: number;
@@ -168,7 +168,7 @@ export type StudentConsultationCounts = {
 /** Stat 카드용 경량 집계 (head:true count — 행 fetch 0). */
 export async function getStudentConsultationCounts(): Promise<StudentConsultationCounts> {
   const supabase = await createClient();
-  const today = localDateStr(0);
+  const today = kstToday();
   // 강사 스코프: Stat 카드도 **본인이 등록한 상담(counselor_id=나)** 기준(목록과 일치).
   // 담당 학생이어도 남이 쓴 상담은 제외 — 작성자 기준(사용자 요청 "내가 한 것만").
   const teacherId = await effectiveTeacherId();
@@ -227,8 +227,8 @@ export async function getStudentConsultationsPage(
   if (filters.cat && filters.cat !== "all") qb = qb.eq("category", filters.cat);
 
   // 후속 긴급도 — followUpUrgency()와 동일 의미를 SQL로
-  const today = localDateStr(0);
-  const in3 = localDateStr(3);
+  const today = kstToday();
+  const in3 = addIsoDateDays(today, 3);
   switch (filters.urg) {
     case "done":
       qb = qb.eq("follow_up_done", true);
@@ -275,25 +275,6 @@ export async function getStudentConsultationsPage(
     .range(from, from + pageSize - 1);
 
   return { rows: (data ?? []).map(mapRow), total: count ?? 0 };
-}
-
-/** follow-up 긴급도: ijw의 getFollowUpUrgency() 포팅 */
-export type FollowUpUrgency = "done" | "overdue" | "today" | "soon" | "later" | "none";
-
-export function followUpUrgency(
-  date: string | null,
-  done: boolean,
-): FollowUpUrgency {
-  if (done) return "done";
-  if (!date) return "none";
-  // 날짜-only 비교(KST 오늘 기준) — 양쪽 UTC 자정 파싱이라 TZ 영향 없음(relativeDayKo 패턴).
-  const diff = Math.round(
-    (Date.parse(`${date.slice(0, 10)}T00:00:00Z`) - Date.parse(`${kstToday()}T00:00:00Z`)) / 86_400_000,
-  );
-  if (diff < 0) return "overdue";
-  if (diff === 0) return "today";
-  if (diff <= 3) return "soon";
-  return "later";
 }
 
 export type StudentOption = {

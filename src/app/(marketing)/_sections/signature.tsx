@@ -42,7 +42,7 @@ export function SignatureSection() {
           </Reveal>
           <Reveal variant="up" delay={120}>
             <p className="text-text-dim mt-6 max-w-[32rem] text-[16px] leading-[1.75]">
-              학생이 등원해 체크되는 순간 — 학부모 알림, 강사 출석부, 원장 대시보드, 수강료 차감이{" "}
+              학생이 등원해 체크되는 순간 — 학부모 알림, 강사 출석부, 원장 화면, 수강료 차감이{" "}
               <span className="text-foreground font-semibold">0.4초</span> 만에 동시에. 원장님이 따로 입력할 일이 없습니다.
             </p>
           </Reveal>

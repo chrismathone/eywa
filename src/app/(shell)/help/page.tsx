@@ -42,9 +42,9 @@ const QUICKSTART: { title: string; desc: string; href: string; hrefLabel: string
 const MENUS: { id: MenuKey; label: string; href: string; description: string }[] = [
   {
     id: "dashboard",
-    label: "대시보드",
+    label: "운영실",
     href: "/dashboard",
-    description: "학원 상황을 한눈에 — 재원생·출석률·수납률·진행 중 상담과 오늘 일정, 공지사항.",
+    description: "Eywa가 우선순위를 정리하는 운영실 — 긴급·승인·오늘 할 일과 수업 흐름을 실행 순서로 봅니다.",
   },
   {
     id: "timetable",

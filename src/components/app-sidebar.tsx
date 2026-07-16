@@ -17,6 +17,7 @@ import {
   NAV_GROUPS,
   SUBTABS_BY_MENU,
   EXTERNAL_NAV,
+  navPresentation,
   type NavItem,
   type ExternalNavItem,
   type SubTab as SubTabItem,
@@ -28,6 +29,7 @@ import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarResize } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
+import { useShowDesktop } from "@/components/workspace/use-show-desktop";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { iframeRegistry } from "@/components/workspace/route-window";
 import {
@@ -47,6 +49,7 @@ function isItemActive(href: string, pathname: string) {
 
 /** 메뉴 창을 열고(이미 열렸으면 복원) 드롭 지점(스테이지 로컬, 타이틀바가 커서 아래)으로 배치. */
 function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
+  if (navPresentation(item) !== "window") return;
   const st = useWindowStore.getState();
   st.open("route", { id: item.menuKey, title: item.label, href: item.href });
   const winId = windowId("route", item.menuKey);
@@ -104,6 +107,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const currentTab = useSearchParams().get("tab"); // 활성 하부탭 표시용(배경 프레임 기준)
   const isDesktop = useIsDesktop();
+  const showDesktop = useShowDesktop();
   const { expanded, width, dragging, handleProps } = useSidebarResize();
   const animations = usePrefs((s) => s.animations);
   const toggleSidebar = usePrefs((s) => s.toggleSidebar); // 브랜드 줄 접기/펼치기 버튼(드래그·더블클릭과 동일 상태)
@@ -196,7 +200,12 @@ export function AppSidebar({
         <div className="border-line relative flex h-12 shrink-0 items-center overflow-hidden border-b pr-3 pl-3">
           <Link
             href="/dashboard"
-            aria-label="EYWA 대시보드"
+            aria-label="EYWA 운영실"
+            onClick={(e) => {
+              if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
+              e.preventDefault();
+              showDesktop();
+            }}
             tabIndex={expanded ? undefined : -1}
             className={`flex min-w-0 flex-1 items-center gap-2.5 pr-9 ${
               expanded ? "opacity-100" : "pointer-events-none opacity-0"
@@ -270,14 +279,18 @@ export function AppSidebar({
                 ) : null}
               </div>
               {group.items.map((item) => {
+                const presentation = navPresentation(item);
                 const winId = windowId("route", item.menuKey);
-                const isOpen = isDesktop && openIds.has(winId);
+                const isOpen = isDesktop && presentation === "window" && openIds.has(winId);
                 const active = isDesktop
-                  ? hasFocus && focusedId === winId
+                  ? presentation === "desktop"
+                    ? !hasFocus && isItemActive(item.href, pathname)
+                    : hasFocus && focusedId === winId
                   : isItemActive(item.href, pathname);
                 const openOnly = isOpen && !active; // 열려 있지만 비포커스 → 점
                 // 이미 최상단(포커스)인 창 — 이 메뉴를 다시 누르면 "첫 화면"으로 리셋(아래 handleNav).
-                const atTop = isDesktop && hasFocus && focusedId === winId;
+                const atTop =
+                  isDesktop && presentation === "window" && hasFocus && focusedId === winId;
                 const subs = SUBTABS_BY_MENU[item.menuKey];
                 // 비활성 메뉴 + 하부탭 有 → hover 시 우측 플라이아웃(왼쪽 메뉴는 고정, 리플로우 없음).
                 const flyoutable = isDesktop && expanded && !!subs && !active;
@@ -300,6 +313,7 @@ export function AppSidebar({
                       isDesktop={isDesktop}
                       expanded={expanded}
                       motion={motion}
+                      onShowDesktop={showDesktop}
                     />
                     {/* 하부탭(면) — 활성(클릭·네비된) 메뉴만 왼쪽에 인라인 노출. 비활성은 hover 우측 플라이아웃(위 참조). */}
                     {isDesktop && expanded && subs && active ? (
@@ -461,7 +475,9 @@ function SubTab({
       }}
       className={`block truncate rounded text-[11px] transition ${
         inFlyout ? "px-2.5 py-1" : "py-0.5 pr-2 pl-9"
-      } ${active ? "text-primary font-medium" : "text-text-faint hover:text-foreground hover:bg-bg-soft"}`}
+      } focus-visible:ring-primary/50 focus-visible:ring-inset focus-visible:ring-2 focus-visible:outline-none ${
+        active ? "text-primary font-medium" : "text-text-dim hover:text-foreground hover:bg-bg-soft"
+      }`}
     >
       {label}
     </Link>
@@ -485,6 +501,7 @@ function RailItem({
   isDesktop,
   expanded,
   motion,
+  onShowDesktop,
 }: {
   item: NavItem;
   active: boolean;
@@ -494,6 +511,7 @@ function RailItem({
   isDesktop: boolean;
   expanded: boolean;
   motion: boolean;
+  onShowDesktop: () => void;
 }) {
   const start = useRef<{ x: number; y: number } | null>(null);
   const dragged = useRef(false);
@@ -504,6 +522,10 @@ function RailItem({
     e.preventDefault();
     if (dragged.current) {
       dragged.current = false; // 드래그로 이미 열었으면 클릭 무시
+      return;
+    }
+    if (navPresentation(item) === "desktop") {
+      onShowDesktop();
       return;
     }
     const params = { id: item.menuKey, title: item.label, href: item.href };
@@ -538,10 +560,14 @@ function RailItem({
       draggable={false}
       onClick={handleNav}
       // BL4 — hover 시 창 iframe용 ?embed=1 document 프리워밍(디바운스·메뉴 allowlist는 헬퍼).
-      onMouseEnter={() => scheduleEmbedPrefetch(item.href, { embed: isDesktop })}
+      onMouseEnter={() =>
+        scheduleEmbedPrefetch(item.href, {
+          embed: isDesktop && navPresentation(item) === "window",
+        })
+      }
       onMouseLeave={() => cancelScheduledPrefetch()}
       onPointerDown={(e) => {
-        if (!isDesktop || e.button !== 0) return;
+        if (!isDesktop || navPresentation(item) !== "window" || e.button !== 0) return;
         start.current = { x: e.clientX, y: e.clientY };
         dragged.current = false;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -564,7 +590,7 @@ function RailItem({
       }}
       aria-current={active ? "page" : undefined}
       aria-label={item.label}
-      className="group relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus:outline-none"
+      className="group focus-visible:ring-primary/55 relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none"
     >
       {/* 모핑 하이라이트 — left/right 8↔4(접힘 사각형↔펼침 행). 라벨/아이콘 뒤(z-0). */}
       <span
@@ -634,7 +660,7 @@ function ExternalRailItem({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`${item.label} (새 탭으로 열림)`}
-      className="group relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus:outline-none"
+      className="group focus-visible:ring-primary/55 relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none"
     >
       <span
         aria-hidden="true"

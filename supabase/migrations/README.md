@@ -132,6 +132,7 @@ pnpm db:seed
 | `0095a_edutrix_archive` | **`edutrix_archive`(source_table·source_id·row jsonb, unique(source_table,source_id)) + RLS 정책 0(=service_role 전용)** — Edutrix 은퇴 보험: 원본 Supabase 9테이블 23,339행 raw 스냅샷(reports 16,877·submission_logs 4,145·share_link_views 1,058·en_* 등). 적재 스크립트 `scripts/_edutrix_retire/archive-edutrix.cjs`(멱등 upsert, 자격증명 필드 `classnote_login_pw`·`profile_token` 제거). 운영 반영(lesson_reports 풀 이력)은 `full-import-reports.cjs` 별도. |
 
 | `0100a_users_notion_user_id` | **`users.notion_user_id text`(nullable) + 부분 유니크 `(tenant_id, notion_user_id) where notion_user_id is not null`** — 직원 상세 '월간일정' 탭(근무일정 대체)이 이 값으로 Notion 업무 DB(담당자=이 사용자)를 마감일 기준 조회. makeedu_id(0057a)/edutrix_student_id(0094a) 외부키 패턴. nullable 추가라 rewrite 없음. 토큰은 env(`NOTION_TOKEN`), DB id도 env(`NOTION_TASKS_DATABASE_ID`) — 매핑만 이 컬럼. (병렬 세션이 0098a=시트락·0099a=반공지 선점 → 0100a로.) |
+| `0110a_dashboard_absence_effective` | **`dashboard_absence_risk` 유효 출결 정정 반영** — append-only `attendance_records`를 학생·반·수업일별 최신 `recorded_at` 1행으로 dedupe한 뒤 최근 14일 결석을 집계. `security invoker` + `auth_tenant_id()` 이중격리 유지. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

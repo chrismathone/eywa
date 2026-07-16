@@ -1,41 +1,51 @@
 import { describe, it, expect } from "vitest";
-import { audienceMatchesRole } from "./audience";
+import { SYSTEM_ROLES, type SystemRole } from "@/lib/permissions";
+import {
+  NOTICE_AUDIENCES,
+  audienceMatchesRole,
+  audiencesForRole,
+  normalizeNoticeAudience,
+  noticesForRole,
+  type NoticeAudience,
+} from "./audience";
 import { isHidden } from "./popup-store";
 
 describe("audienceMatchesRole", () => {
-  it("all → 모든 역할에 노출", () => {
-    for (const r of ["master", "teacher", "student", "accountant", "counselor", "viewer"] as const) {
-      expect(audienceMatchesRole("all", r)).toBe(true);
+  const expectedByRole: Record<SystemRole, NoticeAudience[]> = {
+    master: ["all", "staff", "office"],
+    admin: ["all", "staff", "office"],
+    manager: ["all", "staff", "office"],
+    teacher: ["all", "staff", "teachers"],
+    counselor: ["all", "staff", "office", "counselors"],
+    accountant: ["all", "staff", "office", "accounting"],
+    viewer: ["all", "staff", "office"],
+    student: ["all"],
+  };
+
+  it.each(SYSTEM_ROLES)("%s 역할의 전체 audience 매트릭스를 정확히 적용", (role) => {
+    const expected = expectedByRole[role];
+    for (const audience of NOTICE_AUDIENCES) {
+      expect(audienceMatchesRole(audience, role)).toBe(expected.includes(audience));
     }
-  });
-
-  it("staff → 학생만 제외", () => {
-    expect(audienceMatchesRole("staff", "teacher")).toBe(true);
-    expect(audienceMatchesRole("staff", "master")).toBe(true);
-    expect(audienceMatchesRole("staff", "viewer")).toBe(true);
-    expect(audienceMatchesRole("staff", "student")).toBe(false);
-  });
-
-  it("office → 강사·학생 제외 운영진", () => {
-    expect(audienceMatchesRole("office", "master")).toBe(true);
-    expect(audienceMatchesRole("office", "counselor")).toBe(true);
-    expect(audienceMatchesRole("office", "accountant")).toBe(true);
-    expect(audienceMatchesRole("office", "viewer")).toBe(true);
-    expect(audienceMatchesRole("office", "teacher")).toBe(false);
-    expect(audienceMatchesRole("office", "student")).toBe(false);
-  });
-
-  it("teachers/counselors/accounting → 해당 역할만", () => {
-    expect(audienceMatchesRole("teachers", "teacher")).toBe(true);
-    expect(audienceMatchesRole("teachers", "master")).toBe(false);
-    expect(audienceMatchesRole("counselors", "counselor")).toBe(true);
-    expect(audienceMatchesRole("counselors", "teacher")).toBe(false);
-    expect(audienceMatchesRole("accounting", "accountant")).toBe(true);
-    expect(audienceMatchesRole("accounting", "teacher")).toBe(false);
+    expect(audiencesForRole(role)).toEqual(expected);
   });
 
   it("알 수 없는 audience → 안전하게 전체 노출", () => {
     expect(audienceMatchesRole("weird", "teacher")).toBe(true);
+  });
+
+  it("office 폼 값을 보존하고 알 수 없는 값만 all로 정규화", () => {
+    expect(normalizeNoticeAudience("office")).toBe("office");
+    expect(normalizeNoticeAudience(" teachers ")).toBe("teachers");
+    expect(normalizeNoticeAudience("weird")).toBe("all");
+    expect(normalizeNoticeAudience(null)).toBe("all");
+  });
+
+  it("관리 목록은 유지하면서 카드용 목록만 역할과 limit에 맞게 파생", () => {
+    const rows = NOTICE_AUDIENCES.map((audience) => ({ audience, title: audience }));
+    expect(noticesForRole(rows, "teacher", 2).map((row) => row.audience)).toEqual(["all", "staff"]);
+    expect(noticesForRole(rows, "teacher", 0)).toEqual([]);
+    expect(rows).toHaveLength(NOTICE_AUDIENCES.length);
   });
 });
 

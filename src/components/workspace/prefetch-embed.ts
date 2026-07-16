@@ -11,7 +11,7 @@ import { withEmbed } from "./embed-context";
 
 /** 새 창으로 자주 여는 메뉴 루트(상세 id 경로는 제외 — 호버 낭비 방지). */
 const PREFETCH_ROOTS = new Set([
-  "/dashboard",
+  // /dashboard는 iframe이 아닌 셸 main 데스크톱 작업면이라 document embed prefetch 대상이 아니다.
   "/timetable",
   "/attendance",
   "/students",

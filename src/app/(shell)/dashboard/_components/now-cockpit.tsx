@@ -12,8 +12,13 @@ import type { TodaySlot } from "@/features/timetable/server/queries";
 import { groupOngoingBySubject } from "@/features/dashboard/ongoing";
 import { shortTime } from "@/features/dashboard/subject-meta";
 import { SUBJECT_ICON_BG, SUBJECT_SOLID, type SubjectMaps } from "@/features/owner/subjects";
+import { kstMinutesOfDay } from "@/lib/date-kst";
 
-const KO_TODAY = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric" });
+const KO_TODAY = new Intl.DateTimeFormat("ko-KR", {
+  month: "long",
+  day: "numeric",
+  timeZone: "Asia/Seoul",
+});
 // 30분 단위 슬롯 인덱스 (h*2 + 0|1) — 막대를 더 정교하게.
 const slotIdx = (t: string) => Number(t.slice(0, 2)) * 2 + (Number(t.slice(3, 5)) >= 30 ? 1 : 0);
 
@@ -21,9 +26,12 @@ type Bucket = { idx: number; total: number; segs: { color: PillColor; n: number 
 
 function buildDensity(slots: TodaySlot[], subjects: SubjectMaps) {
   const startIdx = Math.min(...slots.map((s) => slotIdx(s.startTime)));
-  const endIdx = Math.max(...slots.map((s) => slotIdx(s.endTime)));
+  const lastEndMinutes = Math.max(...slots.map((s) => timeMinutes(s.endTime)));
+  // 종료 시각은 축의 오른쪽 경계이지 새 30분 버킷이 아니다. 09:00~10:00만 있으면
+  // 09:00·09:30 두 칸으로 끝나야 하며 10:00 빈 칸을 하나 더 만들지 않는다.
+  const endIdxExclusive = Math.max(startIdx + 1, Math.ceil(lastEndMinutes / 30));
   const buckets: Bucket[] = [];
-  for (let i = startIdx; i <= endIdx; i++) {
+  for (let i = startIdx; i < endIdxExclusive; i++) {
     const inB = slots.filter((s) => slotIdx(s.startTime) === i);
     const byColor = new Map<PillColor, number>();
     for (const s of inB) {
@@ -37,29 +45,59 @@ function buildDensity(slots: TodaySlot[], subjects: SubjectMaps) {
       past: inB.length > 0 && inB.every((s) => s.status === "done"),
     });
   }
-  const active = [...slots].filter((s) => s.status !== "done").sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const span = endIdx - startIdx + 1;
-  // '지금' 마커는 하루가 진행 중일 때만(끝난 수업 有 + 남은 수업 有) 그 경계(첫 남은 수업 좌측 모서리)에.
-  // 시작 전(전부 예정)·종료 후엔 '다음' 섹션이 이미 알려주므로 마커 생략 → '지금/다음' 중복·혼동 방지.
-  const showMarker = active.length > 0 && active.length < slots.length;
-  const firstActiveIdx = active.length ? slotIdx(active[0].startTime) : endIdx + 1;
+  const markerPct = densityMarkerPercent(slots, kstMinutesOfDay());
+  const axis = densityAxisLabels(slots);
   return {
     buckets,
     max: Math.max(...buckets.map((b) => b.total), 1),
-    minH: Math.floor(startIdx / 2),
-    maxH: Math.ceil((endIdx + 1) / 2),
-    markerPct: showMarker ? Math.max(0, Math.min(100, ((firstActiveIdx - startIdx) / span) * 100)) : null,
+    startLabel: axis.start,
+    endLabel: axis.end,
+    markerPct: markerPct === null ? null : Math.max(0, Math.min(100, markerPct)),
   };
+}
+
+/** 실제 KST 시각을 하루 밀도 축의 위치로 바꾼다. 첫 미완료 수업 시각을 '지금'으로 오인하지 않는다. */
+export function densityMarkerPercent(
+  slots: readonly Pick<TodaySlot, "startTime" | "endTime">[],
+  nowMinutes: number,
+): number | null {
+  if (slots.length === 0) return null;
+  const firstStart = Math.min(...slots.map((slot) => timeMinutes(slot.startTime)));
+  const lastEnd = Math.max(...slots.map((slot) => timeMinutes(slot.endTime)));
+  if (nowMinutes < firstStart || nowMinutes > lastEnd) return null;
+  const span = lastEnd - firstStart;
+  return span > 0 ? ((nowMinutes - firstStart) / span) * 100 : 0;
+}
+
+export function densityAxisLabels(
+  slots: readonly Pick<TodaySlot, "startTime" | "endTime">[],
+): { start: string; end: string } {
+  if (slots.length === 0) return { start: "", end: "" };
+  const format = (minutes: number) => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+  return {
+    start: format(Math.min(...slots.map((slot) => timeMinutes(slot.startTime)))),
+    end: format(Math.max(...slots.map((slot) => timeMinutes(slot.endTime)))),
+  };
+}
+
+function timeMinutes(time: string): number {
+  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }
 
 export function NowCockpit({
   slots,
   subjects,
   unrecordedCount = 0,
+  attendanceProcessingUnavailable = false,
+  canOpenClasses,
+  canOpenTimetable,
 }: {
   slots: TodaySlot[];
   subjects: SubjectMaps;
   unrecordedCount?: number;
+  attendanceProcessingUnavailable?: boolean;
+  canOpenClasses: boolean;
+  canOpenTimetable: boolean;
 }) {
   const ongoing = slots.filter((s) => s.status === "ongoing");
   const upcoming = slots.filter((s) => s.status !== "ongoing" && s.status !== "done");
@@ -80,25 +118,42 @@ export function NowCockpit({
   })();
 
   return (
-    <section className="bg-card border-line shadow-card flex h-full flex-col overflow-hidden rounded-2xl border">
-      <header className="flex items-center justify-between px-5 pt-4 pb-3">
+    <section className="bg-card border-line shadow-card flex h-full flex-col overflow-hidden rounded-2xl border" aria-labelledby="today-schedule-title">
+      <header className="flex flex-wrap items-start justify-between gap-2 px-5 pt-4 pb-3">
         <div>
           <p className="text-primary font-mono text-[11px] tracking-wider uppercase">지금 · {todayLabel}</p>
-          <h2 className="text-foreground mt-1 text-[15px] font-bold">오늘의 일정</h2>
+          <h3 id="today-schedule-title" className="text-foreground mt-1 text-[15px] font-bold">오늘의 일정</h3>
         </div>
-        <div className="flex items-center gap-1.5">
-          {unrecordedCount > 0 ? (
-            <WindowLink href="/attendance" title="출석부" ariaLabel="출석 미기록 수업 보기">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {attendanceProcessingUnavailable ? (
+            <WindowLink
+              href="/attendance"
+              title="출석부"
+              ariaLabel="출결 처리 현황을 원본 화면에서 확인"
+              className="focus-visible:ring-primary/35 inline-flex min-h-7 items-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <Pill color="amber">출결 현황 확인 불가</Pill>
+            </WindowLink>
+          ) : unrecordedCount > 0 ? (
+            <WindowLink
+              href="/attendance"
+              title="출석부"
+              ariaLabel="출석 미기록 수업 보기"
+              className="focus-visible:ring-primary/35 inline-flex min-h-7 items-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
+            >
               <Pill color="amber">출석 미기록 {unrecordedCount}</Pill>
             </WindowLink>
           ) : null}
           {ongoing.length > 0 ? (
             <Pill color="primary">● 진행 중 {ongoing.length}건</Pill>
-          ) : (
-            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs">
+          ) : canOpenTimetable ? (
+            <WindowLink
+              href="/timetable"
+              className="text-text-dim hover:text-foreground focus-visible:ring-primary/35 inline-flex min-h-7 items-center gap-1 rounded-md px-1 text-xs focus-visible:ring-2 focus-visible:outline-none"
+            >
               시간표 <EyIcon name="arrowRight" size={12} />
             </WindowLink>
-          )}
+          ) : null}
         </div>
       </header>
 
@@ -107,7 +162,7 @@ export function NowCockpit({
       ) : (
         <div className="flex flex-1 flex-col gap-3 px-5 pb-4">
           {ongoing.length > 0 ? (
-            <OngoingBySubject slots={slots} subjects={subjects} />
+            <OngoingBySubject slots={slots} subjects={subjects} canOpenClasses={canOpenClasses} />
           ) : (
             <p className="text-text-dim border-line rounded-xl border border-dashed px-4 py-3 text-center text-[12px]">
               지금 진행 중인 수업이 없습니다
@@ -116,7 +171,9 @@ export function NowCockpit({
 
           <DensityStrip slots={slots} subjects={subjects} />
 
-          {nextClasses.length > 0 && nextStart ? <NextSlot time={nextStart} classes={nextClasses} subjects={subjects} /> : null}
+          {nextClasses.length > 0 && nextStart ? (
+            <NextSlot time={nextStart} classes={nextClasses} subjects={subjects} canOpenClasses={canOpenClasses} />
+          ) : null}
 
           <div className="border-line mt-auto flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t pt-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -127,9 +184,14 @@ export function NowCockpit({
                 </span>
               ))}
             </div>
-            <WindowLink href="/timetable" className="text-text-dim hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs">
-              전체 시간표 <EyIcon name="arrowRight" size={12} />
-            </WindowLink>
+            {canOpenTimetable ? (
+              <WindowLink
+                href="/timetable"
+                className="text-text-dim hover:text-foreground focus-visible:ring-primary/35 inline-flex min-h-7 shrink-0 items-center rounded-md px-1 text-xs focus-visible:ring-2 focus-visible:outline-none"
+              >
+                전체 시간표 <EyIcon name="arrowRight" size={12} />
+              </WindowLink>
+            ) : null}
           </div>
         </div>
       )}
@@ -138,15 +200,24 @@ export function NowCockpit({
 }
 
 function DensityStrip({ slots, subjects }: { slots: TodaySlot[]; subjects: SubjectMaps }) {
-  const { buckets, max, minH, maxH, markerPct } = buildDensity(slots, subjects);
+  const { buckets, max, startLabel, endLabel, markerPct } = buildDensity(slots, subjects);
+  const accessibleSummary = buckets
+    .filter((bucket) => bucket.total > 0)
+    .map((bucket) => `${Math.floor(bucket.idx / 2)}시 ${bucket.idx % 2 ? "30분" : "정각"} ${bucket.total}개`)
+    .join(", ");
 
   return (
-    <div>
+    <figure
+      role="img"
+      aria-label={`수업 시작 분포. ${accessibleSummary || "예정된 시작 수업 없음"}.${
+        markerPct === null ? " 현재 시각은 표시 범위 밖입니다." : " 세로선은 현재 KST 시각입니다."
+      }`}
+    >
       <div className="flex items-baseline justify-between">
-        <p className="text-text-faint font-mono text-[10px] tracking-wider uppercase">하루 밀도</p>
-        <p className="text-text-faint text-[10px]">총 {slots.length}개 수업</p>
+        <p className="text-text-dim font-mono text-[10px] tracking-wider uppercase">하루 밀도</p>
+        <p className="text-text-dim text-[10px]">총 {slots.length}개 수업</p>
       </div>
-      <div className="border-line relative mt-2 flex h-[44px] items-end gap-[2px] border-b">
+      <div className="border-line relative mt-2 flex h-[44px] items-end gap-[2px] border-b" aria-hidden="true">
         {buckets.map((b) => (
           <div
             key={b.idx}
@@ -165,15 +236,25 @@ function DensityStrip({ slots, subjects }: { slots: TodaySlot[]; subjects: Subje
           </span>
         ) : null}
       </div>
-      <div className="text-text-faint mt-1 flex justify-between font-mono text-[9px]">
-        <span>{minH}시</span>
-        <span>{maxH}시</span>
+      <div className="text-text-dim mt-1 flex justify-between font-mono text-[9px]">
+        <span>{startLabel}</span>
+        <span>{endLabel}</span>
       </div>
-    </div>
+    </figure>
   );
 }
 
-function NextSlot({ time, classes, subjects }: { time: string; classes: TodaySlot[]; subjects: SubjectMaps }) {
+function NextSlot({
+  time,
+  classes,
+  subjects,
+  canOpenClasses,
+}: {
+  time: string;
+  classes: TodaySlot[];
+  subjects: SubjectMaps;
+  canOpenClasses: boolean;
+}) {
   return (
     <div>
       <div className="flex items-baseline gap-2">
@@ -182,34 +263,51 @@ function NextSlot({ time, classes, subjects }: { time: string; classes: TodaySlo
         <p className="text-text-faint text-[11px]">· {classes.length}개 수업</p>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {classes.slice(0, 12).map((s) => {
-          return (
-            <WindowLink
-              key={s.id}
-              href={`/classes/${s.classId}`}
-              title={s.className}
-              ariaLabel={`${s.className} 수업 상세 열기`}
-              className={`${SUBJECT_ICON_BG[subjects.colorOf(s.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow hover:shadow-sm`}
-            >
-              {/* truncate(overflow-hidden)를 flex 자식에 직접 두면 baseline이 박스 하단으로 합성 → 내부 block span으로. */}
-              <span
-                className="max-w-[8rem] min-w-0"
-                title={`${s.className}${s.teacherName ? ` · ${s.teacherName}` : ""}${s.classroomName ? ` · ${s.classroomName}` : ""} · ${s.studentCount}명`}
-              >
-                <span className="block truncate">{s.className}</span>
-              </span>
-              <span className="num font-mono text-[9px] opacity-60">{s.studentCount}</span>
-            </WindowLink>
-          );
-        })}
+        {classes.slice(0, 12).map((slot) => (
+          <NextClassChip key={slot.id} slot={slot} subjects={subjects} canOpen={canOpenClasses} />
+        ))}
         {classes.length > 12 ? <span className="text-text-faint self-center text-[11px]">+{classes.length - 12}</span> : null}
       </div>
     </div>
   );
 }
 
+function NextClassChip({ slot, subjects, canOpen }: { slot: TodaySlot; subjects: SubjectMaps; canOpen: boolean }) {
+  const className = `${SUBJECT_ICON_BG[subjects.colorOf(slot.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow`;
+  const title = `${slot.className}${slot.teacherName ? ` · ${slot.teacherName}` : ""}${slot.classroomName ? ` · ${slot.classroomName}` : ""} · ${slot.studentCount}명`;
+  const content = (
+    <>
+      <span className="max-w-[8rem] min-w-0" title={title}>
+        <span className="block truncate">{slot.className}</span>
+      </span>
+      <span className="num font-mono text-[9px] opacity-60">{slot.studentCount}</span>
+    </>
+  );
+
+  return canOpen ? (
+    <WindowLink
+      href={`/classes/${slot.classId}`}
+      title={slot.className}
+      ariaLabel={`${slot.className} 수업 상세 열기`}
+      className={`${className} hover:shadow-sm`}
+    >
+      {content}
+    </WindowLink>
+  ) : (
+    <span className={className}>{content}</span>
+  );
+}
+
 /** 진행 중 수업을 과목별로 묶어 나열(과목 헤더 + 컴팩트 행). 그룹당 5행까지 보이고 넘치면 스크롤. */
-function OngoingBySubject({ slots, subjects }: { slots: TodaySlot[]; subjects: SubjectMaps }) {
+function OngoingBySubject({
+  slots,
+  subjects,
+  canOpenClasses,
+}: {
+  slots: TodaySlot[];
+  subjects: SubjectMaps;
+  canOpenClasses: boolean;
+}) {
   const groups = groupOngoingBySubject(slots, subjects);
   return (
     <div className="space-y-3">
@@ -222,7 +320,7 @@ function OngoingBySubject({ slots, subjects }: { slots: TodaySlot[]; subjects: S
           </div>
           {/* max-h-32 ≈ 행(≈31.5px)×4 + 간격 — 5개째부터 스크롤(전역 디자인 스크롤바, 카드 축소). */}
           <div className="max-h-32 space-y-1 overflow-y-auto">
-            {g.slots.map((s) => <OngoingRow key={s.id} slot={s} />)}
+            {g.slots.map((s) => <OngoingRow key={s.id} slot={s} canOpen={canOpenClasses} />)}
           </div>
         </div>
       ))}
@@ -231,14 +329,9 @@ function OngoingBySubject({ slots, subjects }: { slots: TodaySlot[]; subjects: S
 }
 
 /** 진행 중 수업 한 줄 — 시간대·반이름·강사/강의실·인원 + 라이브 펄스. 반 상세로 드릴인. */
-function OngoingRow({ slot }: { slot: TodaySlot }) {
-  return (
-    <WindowLink
-      href={`/classes/${slot.classId}`}
-      title={slot.className}
-      ariaLabel={`${slot.className} 수업 상세 열기`}
-      className="group hover:bg-bg-soft flex items-baseline gap-2.5 rounded-md px-2 py-1.5 transition-colors"
-    >
+function OngoingRow({ slot, canOpen }: { slot: TodaySlot; canOpen: boolean }) {
+  const content = (
+    <>
       <span className="num text-primary w-[86px] shrink-0 text-[11px] font-bold">
         {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
       </span>
@@ -254,9 +347,22 @@ function OngoingRow({ slot }: { slot: TodaySlot }) {
       </span>
       <span className="num text-text-faint shrink-0 text-[11px]">{slot.studentCount}명</span>
       <span
-        className="animate-pulse bg-primary size-1.5 shrink-0 self-center rounded-full"
+        className="animate-pulse bg-primary size-1.5 shrink-0 self-center rounded-full motion-reduce:animate-none"
         aria-hidden="true"
       />
+    </>
+  );
+
+  return canOpen ? (
+    <WindowLink
+      href={`/classes/${slot.classId}`}
+      title={slot.className}
+      ariaLabel={`${slot.className} 수업 상세 열기`}
+      className="group hover:bg-bg-soft flex items-baseline gap-2.5 rounded-md px-2 py-1.5 transition-colors"
+    >
+      {content}
     </WindowLink>
+  ) : (
+    <div className="group flex items-baseline gap-2.5 rounded-md px-2 py-1.5">{content}</div>
   );
 }

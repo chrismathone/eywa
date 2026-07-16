@@ -31,7 +31,7 @@ export function HeroSection() {
 
         <Reveal variant="up" delay={180}>
           <p className="text-text-dim mt-7 max-w-[31rem] text-[17px] leading-[1.75]">
-            학생이 등원하면 학부모 알림·출석부·대시보드·수강료가{" "}
+            학생이 등원하면 학부모 알림·출석부·원장 화면·수강료가{" "}
             <span className="text-foreground font-semibold">동시에</span> 처리됩니다. 매일 수십 번 여는 화면이라,
             누구보다 빠르고 깔끔하게 만들었습니다.
           </p>

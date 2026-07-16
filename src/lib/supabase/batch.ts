@@ -52,3 +52,22 @@ export async function fetchAllPaged<T>(
   }
   return out;
 }
+
+/**
+ * 큰 id 목록과 청크별 1,000행 제한을 동시에 피한다.
+ * 각 `run`은 OFFSET 페이지가 흔들리지 않도록 반드시 unique tie-break를 포함한 order를 적용해야 한다.
+ */
+export async function fetchAllPagedInChunks<T>(
+  ids: string[],
+  run: (chunk: string[], from: number, to: number) => PromiseLike<Res<T>>,
+  chunkSize: number = DEFAULT_CHUNK,
+  pageSize: number = PAGE_SIZE,
+): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
+  const results = await Promise.all(
+    chunks.map((chunk) => fetchAllPaged((from, to) => run(chunk, from, to), pageSize)),
+  );
+  return results.flat();
+}
