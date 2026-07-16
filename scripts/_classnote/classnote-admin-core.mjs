@@ -412,3 +412,67 @@ export async function scrapeStudentBoards(page) {
     return out;
   });
 }
+
+// ── Phase 2: 네이티브 파일첨부(attached_files) 게시 헬퍼 ───────────────────────────
+
+/**
+ * kage 업로드(ClassNote 내부 스토리지) — **알림장 작성폼의 네이티브 file input**에 버퍼를 세팅해 프론트가
+ * 정확한 형식(멀티파트·file_type)으로 kage에 올리게 하고 그 응답을 캡처한다(수동 FormData는 415로 거부됨 — 형식 상이).
+ * ⚠️ `page`는 반드시 `/service/report/add`에 있어야 함. inputTestId: 이미지=`media-attachment-add-input`(file_type=img) /
+ * 문서=`doc-attachment-add-input`(etc). 반환 `{ access_key, info }`(문서 info={orgname,size,ext} / 이미지 info={img:{length,width,height},…}).
+ */
+export async function uploadToKage(page, inputTestId, { name, mimeType, buffer }) {
+  let result = null;
+  const onResp = async (res) => {
+    if (/kids-kage\.kakao\.com/.test(res.url()) && res.request().method() === "POST") {
+      try { const j = await res.json(); if (j?.access_key) result = j; } catch { /* 무시 */ }
+    }
+  };
+  page.on("response", onResp);
+  try {
+    await page.locator(`input[data-testid='${inputTestId}']`).setInputFiles({ name, mimeType, buffer });
+    for (let i = 0; i < 40 && !result; i++) await page.waitForTimeout(300); // kage 업로드 완료 대기(최대 12s)
+  } finally {
+    page.off("response", onResp);
+  }
+  return result;
+}
+
+/**
+ * 보드 → 원아 → enrollment 해석 — 이름 매칭 원아들 중 이 보드에 활성 배정된 `{child, enrollment}` 목록.
+ * 이중 계정(부모·본인 각자 가입)이면 여럿. notice-core processTarget 해석부와 동일 로직(단일화).
+ */
+export async function resolveBoardChildEnrollments(page, boardId, studentName, children) {
+  const clean = (studentName || "").replace(/[a-zA-Z]/g, "").trim();
+  const cands = children.filter((c) => {
+    const keys = childKeys(c.name);
+    return keys.has(studentName) || keys.has(clean);
+  });
+  const enrolled = [];
+  for (const c of cands) {
+    const detail = await fetchChildDetail(page, c.id);
+    const e = (detail.enrollment ?? []).find((x) => x.belong_to_class === boardId && !x.removed_child);
+    if (e) enrolled.push({ child: c, enrollment: e });
+  }
+  return enrolled;
+}
+
+/** 알림장 게시(내부 API) — attached_images/attached_files 선택 포함. 응답은 빈 201이라 status만. */
+export async function postClassnoteReport(page, { cls, child, enrollment, content, dateWritten, authorName, attachedImages = [], attachedFiles = [] }) {
+  return page.evaluate(
+    async ([cls, child, enrollment, body, author, date, ai, af]) => {
+      const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1];
+      const res = await fetch("/api/v1_2/reports/", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", ...(csrf ? { "X-CSRFToken": csrf } : {}) },
+        body: JSON.stringify({
+          cls, child, enrollment, content: body, date_written: date, author_name: author, tz: "Asia/Seoul",
+          ...(ai.length ? { attached_images: ai } : {}),
+          ...(af.length ? { attached_files: af } : {}),
+        }),
+      });
+      return { status: res.status };
+    },
+    [cls, child, enrollment, content, authorName, dateWritten, attachedImages, attachedFiles],
+  );
+}

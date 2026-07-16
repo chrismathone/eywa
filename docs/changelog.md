@@ -4,6 +4,22 @@
 
 ## 진행 상황
 
+### ClassNote 네이티브 파일 첨부 (Phase 2 — attached_files, 파일 있는 리포트만 내부 API) (2026-07-16) — ✅ tsc0/lint0 + 격리 E2E
+Phase 1은 파일을 /r 다운로드 링크로만 전달(학부모가 링크 클릭). Phase 2는 파일이 **ClassNote 앱 안에 네이티브 첨부**로 뜬다.
+내부 API 리버스엔지니어링·학원이 POC 검증: 업로드=kage 2단계(`GET /api/v1/kage/upload/?file_type=img|etc` → presigned → 네이티브
+file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스샷)/`attached_files`(파일) → 201.
+- **결정(원장, B-scoped)**: **파일 첨부가 있고 showAttachments ON인 리포트만** 내부 API로 게시(스샷=attached_images + 파일=attached_files
+  한 POST). 파일 없는 리포트는 검증된 Cloud Run(DOM 스샷) 경로 그대로. 발송 경로 2개 공존, 리스크 국소화.
+- **eywa**: 워커 전용 시크릿 엔드포인트 [`/api/internal/report-attachments/[reportId]`](<../src/app/api/internal/report-attachments/[reportId]/route.ts>)
+  (`x-eywa-internal`=CLASSNOTE_INTERNAL_SECRET 게이트) — 파일 첨부 signed URL 반환(워커에 스토리지 자격증명 불요, resolveTenantReadUrls 재사용).
+- **워커**([classnote-core.mjs](../scripts/_classnote/classnote-core.mjs) `sendReportViaApi` + [admin-core](../scripts/_classnote/classnote-admin-core.mjs)
+  `uploadToKage`·`resolveBoardChildEnrollments`·`postClassnoteReport`): 스샷 buffer→kage(img) + 엔드포인트로 파일 URL→fetch→kage(etc) →
+  board/child/enrollment 해석(notice-core 공용) → 게시. **보드 안전 게이트(§5.5) 그대로.** ⚠️ kage 업로드는 **작성폼 네이티브 input**
+  경유(수동 FormData는 415 거부).
+- **검증**: 격리 E2E(학원이, 원자 claim으로 프로덕션 워커 레이스 회피) — sendReportViaApi → ClassNote 게시글 **attached_images 1 + attached_files 1(PDF)**
+  확인 → DELETE 204. 각 조각(kage img/etc 업로드, POST+attachments, 엔드포인트)도 개별 검증. 테스트 데이터·게시글·설정 전부 원복.
+- ⚠️ **연동 PC zip 재전달 필요**(워커 변경). env 추가 없음(CLASSNOTE_INTERNAL_SECRET·SCREENSHOT_BASE 기존). 적용 전엔 파일 리포트가 Cloud Run으로 감(파일은 /r 링크로, Phase 1).
+
 ### 운영실 일일 AI 브리핑 3종 세트 (2026-07-16) — ✅ tsc0/lint0/test1386, 원장 승인(cron AI·master만 알림·대화형 보류)
 전수 조사("운영실이 eywa 모든 데이터를 활용하는 AI 비서급이 될 수 있나") 결론 반영 — 기존 버튼형 AI 5종의 실사용이
 ~20건 미만(케어 2/807·상담분석 0/1,542)이라 **"눌러야 나오는 AI"가 아니라 "워크플로에 자동으로 흘러드는 AI"**로 설계.
@@ -26,6 +42,7 @@
 - ⚠️ **배포 조건**: ① 0113a·0114a 프로덕션 적용(`pnpm db:alphas` 또는 SQL Editor) ② Vercel cron 4번째 슬롯
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
+
 ### 직원명부 열 계약 19열 동기화 — '계약조건 history' 열 삭제 반영 (2026-07-17) — ✅ tsc0/lint0/test41/build✓
 원장이 시트에서 '계약조건 history' 열을 삭제(이력은 2026직원히스토리 탭으로 이관)했는데 앱이 옛 20열
 순서로 기입해 **학력이 은행 열로 밀리는 실사고** → `ROSTER_COLUMNS`/`buildRosterRow`를 현재 시트(A~S 19열)와
