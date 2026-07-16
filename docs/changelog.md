@@ -4,6 +4,22 @@
 
 ## 진행 상황
 
+### 대화형 비서 "매니저 팀에게 물어보기" (2026-07-17, Phase 2) — ✅ tsc0/lint0/test86 + Solar 실스모크, 0117a 적용
+"학원 매니저 팀" 대화 채널. 운영실에 질문 패널([assistant-panel.tsx](../src/app/(shell)/dashboard/_components/assistant-panel.tsx),
+canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률은?"을 자연어로 물으면 AI가 **read-only 툴 9종**
+([features/assistant](../src/features/assistant)/server/tools-*.ts: 학생 검색·종합·타임라인·수업보고서 / 출결·수납요약·미수·상담검색·이탈위험)으로
+조회해 근거 기반 답변. 칩 세션(nice-satoshi-27f293)이 만든 스캐폴딩(툴·turns·0117a)을 인수해 완성.
+- **모델 = Solar Pro 3 기본(원장 지시 2026-07-17)**: [loop.ts](../src/features/assistant/server/loop.ts)가 provider 전환형
+  (OpenAI 호환 루프 + Anthropic 루프, resolveModelChain prefer "upstage") — 실키 스모크에서 solar-pro3가 tool_call→
+  grounded 답변 정상. 키 오류·한도 시 Sonnet 5 폴백. usage=feature "assistant_chat"(Solar vs Claude 비용·품질 비교 재료).
+- **안전 불변식**: 툴 전부 read-only + **사용자 세션(쿠키) 실행 = RLS·권한 자동 상속**(service_role 0) · 툴 인자
+  zod parse(인자 환각 차단, 실패는 모델에 오류로) · PII(주민번호·계좌·급여·이력서) 툴 표면 제외 · raw enum은 서버
+  라벨링([labels.ts](../src/features/assistant/server/labels.ts)) · 툴 왕복 ≤5·결과 6천자 clip. 질문=명시 트리거라
+  "페이지 로드 무호출" 원칙 무충돌. 대시보드 라우트 `maxDuration=60`(툴 왕복 여유).
+- **대화 저장(0117a `assistant_conversations`)**: own-row RLS(본인만), messages에 표시용 텍스트 턴만(툴 원시 블록·
+  조회 스냅샷 미저장 → 권한 변화에 안전, [turns.ts](../src/features/assistant/turns.ts) 파싱 단일 소스·상한 60턴).
+- ⚠️ 실사용 E2E(로그인 세션)는 미완 — 원장이 운영실에서 첫 질문으로 확인. 강사 표면은 범위 밖(none).
+
 ### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
 원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
 보고**(`briefing-team-report.ts`, 0116a `team_report` jsonb)로 전환: 수업·학생·상담·수납·운영 매니저가 영역별

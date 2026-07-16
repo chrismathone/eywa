@@ -1785,6 +1785,28 @@ export const dailyBriefings = pgTable(
   ],
 );
 
+// === assistant_conversations (운영실 AI 비서 대화 — 0117a 손수 alpha) ===
+// 대화 1건 = 1행. messages jsonb는 표시용 텍스트 턴만([{role,content,at}] — turns.ts가 파싱 단일 소스).
+// RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(권한 자동 상속), service_role 불사용.
+export const assistantConversations = pgTable(
+  "assistant_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title"), // 첫 질문 앞 60자(목록 표시용)
+    messages: jsonb("messages").notNull().default([]), // StoredTurn[](turns.ts)
+    modelVersion: text("model_version"), // 마지막 응답 모델 id(계측용, UI 미노출)
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("assistant_conversations_tenant_user_idx").on(t.tenantId, t.userId, t.updatedAt)],
+);
+
 // === ai_usage_logs (AI 호출 usage 계측 — 0113a 손수 alpha) ===
 // generateJSON 1회 = 1행. write는 서버(service_role)만(insert 정책 없음), read는 테넌트 select 정책.
 // tenant_id nullable: 컨텍스트를 안 넘기는 기존 호출부는 null(스레딩 점진 확장).
@@ -1888,3 +1910,5 @@ export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLogs.$inferInsert;
 export type DailyBriefing = typeof dailyBriefings.$inferSelect;
 export type NewDailyBriefing = typeof dailyBriefings.$inferInsert;
+export type AssistantConversation = typeof assistantConversations.$inferSelect;
+export type NewAssistantConversation = typeof assistantConversations.$inferInsert;

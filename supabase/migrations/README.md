@@ -144,5 +144,7 @@ pnpm db:seed
 
 | `0116a_onescreen_student_order` | **`onescreen_student_order`(tenant·teacher·class PK, student_ids uuid[]) + tenant RLS** — 원스크린 학생 표시 순서(강사×반 개인 설정, edutrix '순서변경' 패리티). roster가 반 그룹 내부만 재배열(`student-order.ts` 순수함수). teacher own-스코프는 앱 레이어(`order-actions.ts`: teacher_id=`effectiveTeacherId` 서버 파생 + 담당 반 소유·수강생 소속 검증 — 0112a 철학). (병렬 세션이 0114a=일일 브리핑·0115a=출석 시수 선점 → 0116a로 개명.) |
 
+| `0117a_assistant_conversations` | **운영실 AI 비서 대화 저장**(Phase 2 — 대화형 비서 도입 승인 2026-07-16) — 대화 1건=1행, `messages` jsonb는 표시용 텍스트 턴만(툴 원시 블록·조회 스냅샷 미저장 → 권한 변화에 안전). RLS = (tenant, 본인) own-row 전권 — 실행·저장 전부 사용자 세션(RLS·권한 자동 상속), service_role 불사용. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
