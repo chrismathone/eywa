@@ -45,7 +45,16 @@
 2. env: CRON_SECRET·ANTHROPIC_API_KEY·AI_PROVIDER=anthropic (키 무효 시 조용히 Solar 폴백 전례).
 3. 마이그레이션 번호는 push 직전 origin/main 재확인(0111a 중복 실례) + README 표 갱신. DDL은 alpha 수동 + `pnpm db:alphas`.
 
-## 부록 — 대화형(tool-use) 비서 재검토 자료 (보류, 구현 금지)
+## 갱신 (2026-07-16 저녁) — 방향: "eywa = 학원 매니저 팀"
+
+원장 피드백 "데이터 정리해서 알려주는 것뿐, 비서 느낌이 아니다" → 방향 확정: **능동 보고 + 대화, 둘 다**.
+- **Phase 1 ✅ 구현 완료**: 브리핑 v2 = 매니저 팀 보고(`briefing-team-report.ts`, 0116a `team_report`) — 영역별
+  판단+"오늘 할 일" 제안, 위험 학생 스포트라이트(retention `risk.reasons`·`primaryAction` 결정론, LLM은 명단 안에서만 언급).
+- **Phase 2 (다음 작업)**: 대화 채널 — 아래 부록의 tool-use 비서. **보류 해제됨**(챗봇 영구 제외의 명시 재검토 통과,
+  결정 로그 갱신). 요건: 세션 내 실행(RLS 자동)·read-only 툴만·PII 금지 필드 제외·대화 저장 테이블·운영실 질문 UI.
+- **Phase 3 (이후)**: 이벤트 감지 능동 알림(결석 연속·후속조치 D-day·미수 임계) — notifyUsers 재사용.
+
+## 부록 — 대화형(tool-use) 비서 재검토 자료 (Phase 2 설계 재료 — 보류 해제, 2026-07-16)
 
 - 결정 로그 "챗봇 = 의도적 비이식(영구 제외)"의 실체 = ijw의 ChatbotFAB + **Gemini function-calling 에이전트(데이터 조회 툴 15종**: 학생검색·수강·성적·출결·수납·퇴원·상담·시험·숙제 등). 갭 감사 문서에 "(도입하려면 별도 결정)" 명문 — 재도입 문은 열려 있으나 원장 재결정 필요.
 - 기술 준비도: `@anthropic-ai/sdk 0.98.0`에 toolRunner·betaZodTool·prompt caching 내장(의존성 추가 불요). 격차 = generateJSON이 단발 JSON 전용(스트리밍·멀티턴·tool 루프·대화 저장 전무) → 별도 진입점(runAssistantLoop) 신설 필요.

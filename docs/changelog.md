@@ -4,6 +4,16 @@
 
 ## 진행 상황
 
+### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
+원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
+보고**(`briefing-team-report.ts`, 0116a `team_report` jsonb)로 전환: 수업·학생·상담·수납·운영 매니저가 영역별
+**판단 + "오늘 할 일" 제안**을 보고하고, **위험 학생 스포트라이트**(retention `risk.reasons`·`primaryAction` = 전부
+결정론, 카드가 payload를 직접 렌더)를 실명으로 짚는다. LLM은 명단 안 이름만 언급 가능(프롬프트) + `validateTeamReport`
+(숫자 grounding·영역 enum·영문 토큰·길이) 탈락 시 `buildFallbackTeamReport`(결정론, 같은 카드 구조)로 수렴.
+실E2E: 매니저 5영역 보고 + 스포트라이트 6명(상담 공백 177일 → "오늘 중 원장 직접 전화 상담") 생성, usage 1014/742 tok.
+**결정 로그 갱신**: 챗봇 영구 제외를 명시 재검토 — ijw 챗봇 '이식'은 여전히 제외, **운영실 대화형 비서(자체 설계, 세션 내
+tool-use)는 도입 승인** = Phase 2 다음 작업(설계 재료 docs/dashboard-ai-briefing-plan.md 부록). Phase 3 = 이벤트 감지 알림.
+
 ### 출석 시수(배수) 입력 + 시수 검증 시수 합 전환 + 강사별 분배(참고) (2026-07-16) — ✅ tsc0/lint0/test1392/실E2E(수학 JJ2B), 원장 승인 후 main 반영
 구 출석부(D:\attendance)의 "셀 숫자 = 정규 수업 1회 기준 배수"(2h 수업 기준 3h=1.5, 보강 4h=2, 영어 U 유닛)를
 eywa로 이식 — 원장 실사용 근거로 로드맵 "숫자시수셀 영구 SKIP"을 뒤집은 결정(2026-07-16).

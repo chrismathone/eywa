@@ -140,5 +140,7 @@ pnpm db:seed
 
 | `0114a_daily_briefings` | **운영실 일일 AI 브리핑** — ① `daily_briefings`(tenant×date 유니크=upsert 멱등, payload jsonb=결정론 다이제스트·narrative=가드 통과 LLM 서술·processing_status·notified_at 알림 1회 게이트). ⚠️ RLS 켜되 **정책 0개**(select도 없음) — payload가 master 관점 전신호라 서버(admin)가 canManageStaff 게이트 후에만 읽는다(#77). ② 세션용 RPC의 p_tenant 변형 2종(`dashboard_unassigned_enrolled_admin`·`dashboard_absence_risk_admin`) — auth_tenant_id()가 service_role에서 **에러 없이 0행**이 되는 silent 오보 방지. execute는 service_role만. |
 
+| `0116a_daily_briefings_team_report` | **브리핑 v2 "학원 매니저 팀" 보고 컬럼** — `team_report` jsonb `{headline, managers:[{area: 수업\|학생\|상담\|수납\|운영, report}]}`(validateTeamReport 가드 통과분만). 기존 `narrative`(v1 단문)는 하위호환 표시용 잔존, 새 행은 team_report만 기록. payload는 계속 결정론 전용(위험 학생 스포트라이트 포함). |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

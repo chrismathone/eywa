@@ -18,6 +18,12 @@ export type DailyBriefingPayload = {
   followUps: { overdue: number; dueSoon: number };
   absenceRisks: { count: number; names: string[] };
   retention: { total: number; risk: number; warn: number; revenueRiskManwon: number } | null;
+  /**
+   * 위험 학생 스포트라이트(결정론) — retention 상위 + 반복 결석 병합, 최대 6명.
+   * 이름·사유·권장 조치 전부 시스템 산출(retention risk.reasons·primaryAction) = 카드가 이걸 직접 렌더하고
+   * LLM은 이 명단 안에서만 언급 가능(매니저 팀 보고의 grounding 재료).
+   */
+  spotlights: { name: string; reasons: string[]; action: string | null }[];
   /** 조회 실패 도메인(확인 불가 정직성) — 라벨만 */
   sourceIssueLabels: string[];
 };
@@ -37,8 +43,29 @@ export type BuildDailyBriefingInput = {
   followUps: { overdue: number; dueSoon: number };
   absenceRisks: { studentName: string; absences: number }[];
   retention: { total: number; risk: number; warn: number; revenueRisk: number } | null;
+  /** retention 상위 위험 학생(위험도 내림차순, 사유·권장 조치 포함) — 서버가 roster에서 추출. */
+  retentionTop: { name: string; reasons: string[]; action: string | null }[];
   todayClassSessions: number | null;
 };
+
+const SPOTLIGHT_MAX = 6;
+
+/** retention 상위 + 반복 결석 병합(이름 중복 제거) — 결석만 걸린 학생은 결석 사유로 추가. */
+function buildSpotlights(input: BuildDailyBriefingInput): DailyBriefingPayload["spotlights"] {
+  const spotlights: DailyBriefingPayload["spotlights"] = input.retentionTop.slice(0, SPOTLIGHT_MAX).map((s) => ({
+    name: s.name,
+    reasons: s.reasons,
+    action: s.action,
+  }));
+  const seen = new Set(spotlights.map((s) => s.name));
+  for (const risk of input.absenceRisks) {
+    if (spotlights.length >= SPOTLIGHT_MAX) break;
+    if (seen.has(risk.studentName)) continue;
+    seen.add(risk.studentName);
+    spotlights.push({ name: risk.studentName, reasons: [`최근 14일 결석 ${risk.absences}회`], action: null });
+  }
+  return spotlights;
+}
 
 export function buildDailyBriefingPayload(input: BuildDailyBriefingInput): DailyBriefingPayload {
   const merged: TodayActionsRaw = {
@@ -80,6 +107,7 @@ export function buildDailyBriefingPayload(input: BuildDailyBriefingInput): Daily
           revenueRiskManwon: Math.round(input.retention.revenueRisk / 10_000),
         }
       : null,
+    spotlights: buildSpotlights(input),
     sourceIssueLabels: [...new Set(issueLabels)],
   };
 }
@@ -90,6 +118,7 @@ export function shouldGenerateNarrative(payload: DailyBriefingPayload): boolean 
     payload.attention.length > 0 ||
     payload.followUps.overdue + payload.followUps.dueSoon > 0 ||
     payload.absenceRisks.count > 0 ||
+    payload.spotlights.length > 0 ||
     (payload.retention?.risk ?? 0) > 0
   );
 }
@@ -123,6 +152,13 @@ export function narrativeNumberWhitelist(payload: DailyBriefingPayload): Set<str
     add(payload.retention.risk + payload.retention.warn);
     add(payload.retention.revenueRiskManwon);
   }
+  add(payload.spotlights.length);
+  // 스포트라이트 사유 문자열 속 숫자("성적 15점 하락", "결석 3회")도 LLM이 인용할 수 있는 근거.
+  for (const spotlight of payload.spotlights) {
+    for (const text of [...spotlight.reasons, spotlight.action ?? ""]) {
+      for (const token of text.match(/\d+/g) ?? []) numbers.add(String(Number(token)));
+    }
+  }
   return numbers;
 }
 
@@ -151,53 +187,5 @@ export function digestFactLines(payload: DailyBriefingPayload): string[] {
   return lines;
 }
 
-export function buildNarrativePrompt(payload: DailyBriefingPayload): string {
-  return [
-    "당신은 학원 운영실의 아침 브리핑 비서입니다. 아래 결정론 수치 요약만 근거로, 원장이 아침에 가장 먼저 읽을 운영 브리핑 서술을 JSON으로만 답하세요.",
-    "",
-    "규칙(반드시 준수):",
-    "- 한국어 존댓말 3~5문장. 첫 문장은 오늘 가장 먼저 확인할 일.",
-    "- 아래 요약에 있는 숫자만 그대로 사용. 새 숫자·비율·합산·추정 금지.",
-    "- 학생·직원 개인 이름 금지(요약에 없어도 만들지 말 것).",
-    "- 영어 단어·코드·키 이름 금지.",
-    `- 출력 형식: {"narrative": "..."}`,
-    "",
-    `[${payload.date} 아침 기준 운영 요약]`,
-    ...digestFactLines(payload),
-  ].join("\n");
-}
-
-/** LLM 서술 후검증 — 숫자 grounding(화이트리스트 밖 숫자 = 폐기)·영문 토큰·길이. */
-export function validateNarrative(
-  narrative: string,
-  payload: DailyBriefingPayload,
-): { ok: true } | { ok: false; reason: string } {
-  const text = narrative.trim();
-  if (text.length < 20) return { ok: false, reason: "서술이 너무 짧음" };
-  if (text.length > 700) return { ok: false, reason: "서술이 너무 김" };
-  if (/[A-Za-z]{3,}/.test(text)) return { ok: false, reason: "영문 토큰 포함" };
-  const allowed = narrativeNumberWhitelist(payload);
-  for (const token of text.match(/\d+/g) ?? []) {
-    const normalized = String(Number(token));
-    if (!allowed.has(normalized) && !allowed.has(token)) {
-      return { ok: false, reason: `근거 없는 숫자 ${token}` };
-    }
-  }
-  return { ok: true };
-}
-
-/** 결정론 폴백 요약 — LLM 실패·검증 탈락·신호 없음 모두 이 문장으로 안전하게 수렴한다. */
-export function buildFallbackNarrative(payload: DailyBriefingPayload): string {
-  if (payload.attention.length === 0) {
-    const todayPart =
-      payload.today.classSessions != null ? ` 오늘 수업 일정은 ${payload.today.classSessions}건입니다.` : "";
-    return `어제 마감 기준 조치할 운영 신호가 없습니다.${todayPart}`;
-  }
-  const first = payload.attention[0];
-  const firstPart = first.count != null ? `${first.label} ${first.count}건` : first.label;
-  const rest = payload.attention.length - 1;
-  const restPart = rest > 0 ? ` 그 외 확인할 신호가 ${rest}종 있습니다.` : "";
-  const todayPart =
-    payload.today.classSessions != null ? ` 오늘 수업 일정은 ${payload.today.classSessions}건입니다.` : "";
-  return `가장 먼저 ${firstPart}을(를) 확인해 주세요.${restPart}${todayPart}`;
-}
+// LLM 프롬프트·검증·폴백은 briefing-team-report.ts("학원 매니저 팀" 보고 v2)로 이동 —
+// 이 파일은 결정론 payload(숫자·명단의 진실)와 그 재료 함수만 담당한다.
