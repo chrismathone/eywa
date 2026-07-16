@@ -55,7 +55,11 @@ export async function saveLessonReport(
 
   const supabase = await createClient();
 
-  // 강사 스코프: 기본은 '내 담당 반 활성 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
+  // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
+  // 수강생 스코프 판정도 이 날짜 기준(과거 마감 시 그날 수강생) — roster·setAttendanceCell과 통일.
+  const reportDate = resolveReportDate(input.reportDate);
+
+  // 강사 스코프: 기본은 '내 담당 반, 대상 날짜 시점 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
   // (원장 승인 정책). RLS가 테넌트 격리 → 학원 밖 학생은 select null로 걸러져 거부됨.
   if (input.outOfClass) {
     const { data: stu } = await supabase
@@ -76,14 +80,12 @@ export async function saveLessonReport(
       .from("enrollments")
       .select("id")
       .eq("student_id", input.studentId)
-      .is("end_date", null)
+      .or(`start_date.is.null,start_date.lte.${reportDate}`)
+      .or(`end_date.is.null,end_date.gte.${reportDate}`)
       .in("class_id", myClassIds)
       .limit(1);
     if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
   }
-
-  // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
-  const reportDate = resolveReportDate(input.reportDate);
 
   // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
@@ -313,6 +315,7 @@ export async function saveOnescreenSession(
 
   const supabase = await createClient();
 
+  const sessionDate = resolveReportDate(input.sessionDate);
   const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", user.id);
   const myClassIds = (myClasses ?? []).map((c) => c.id);
   if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
@@ -321,16 +324,19 @@ export async function saveOnescreenSession(
     .from("enrollments")
     .select("id")
     .eq("student_id", input.studentId)
-    .is("end_date", null)
+    .or(`start_date.is.null,start_date.lte.${sessionDate}`)
+    .or(`end_date.is.null,end_date.gte.${sessionDate}`)
     .in("class_id", myClassIds)
     .limit(1);
   if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
 
+  // ⚠️ 강사축(0118a): onConflict에 updated_by(=강사)를 포함 — 같은 학생을 다른 강사가 같은 날 가르쳐도
+  //    각자 1행이라 subject_progress·점수·태도가 서로 안 덮인다(WIP 유실 방지). roster는 updated_by=본인만 복원.
   const { error } = await supabase.from("onescreen_daily_sessions").upsert(
     {
       tenant_id: user.tenantId,
       student_id: input.studentId,
-      session_date: resolveReportDate(input.sessionDate),
+      session_date: sessionDate,
       class_id: input.classId ?? null,
       study_grade: input.studyGrade ?? null,
       subject_progress: input.subjectProgress ?? {},
@@ -345,7 +351,7 @@ export async function saveOnescreenSession(
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "tenant_id,student_id,session_date" },
+    { onConflict: "tenant_id,updated_by,student_id,session_date" },
   );
   if (error) return { ok: false, error: error.message };
   return { ok: true };
@@ -533,6 +539,18 @@ export async function buildMakeupStudent(
   const book = bookPick?.bookName?.trim() ?? "";
   const tmax = testMaxByKey.get(subjectKeys[0]!) ?? 5;
 
+  // ⚠️ 오늘 발송상태 복원 — 보강 학생은 세션 미저장이라 재추가 시 상태가 빈다. 그대로면 이미 발송(success)된 과목을
+  //    다시 눌러 ClassNote 중복 게시될 수 있다(#13 확정). 당일 lesson_reports를 과목별로 매핑해 sent/토큰/상태 복원.
+  const today = resolveReportDate(undefined);
+  const { data: todayReports } = await supabase
+    .from("lesson_reports")
+    .select("subject, share_token, classnote_status, revoked_at, attachments")
+    .eq("student_id", studentId)
+    .eq("report_date", today);
+  const statusBySubject = new Map(
+    (todayReports ?? []).map((r) => [r.subject ?? "", r]),
+  );
+
   const student: OneScreenStudent = {
     id: stu.id,
     name: stu.name,
@@ -541,15 +559,23 @@ export async function buildMakeupStudent(
     className: "보강",
     isMakeup: true,
     attendance: "출석",
-    subjects: subjectKeys.map((key) => ({
-      name: subjectMaps.labelOf(key),
-      subjectKey: key,
-      prev: "",
-      today: "",
-      textbook: book,
-      makeup: true,
-      homeworkToday: "",
-    })),
+    subjects: subjectKeys.map((key) => {
+      const st = statusBySubject.get(key);
+      return {
+        name: subjectMaps.labelOf(key),
+        subjectKey: key,
+        prev: "",
+        today: "",
+        textbook: book,
+        makeup: true,
+        homeworkToday: "",
+        reportSent: !!st,
+        shareToken: st?.share_token ?? undefined,
+        classnoteStatus: st?.classnote_status ?? undefined,
+        revokedAt: st?.revoked_at ?? undefined,
+        attachments: (st?.attachments as { path: string; name: string }[] | null) ?? undefined,
+      };
+    }),
     tests: {
       daily: { score: null, max: tmax, prevScore: null },
       check: { score: null, max: tmax, prevScore: null },

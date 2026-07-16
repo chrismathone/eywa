@@ -144,5 +144,9 @@ pnpm db:seed
 
 | `0116a_onescreen_student_order` | **`onescreen_student_order`(tenant·teacher·class PK, student_ids uuid[]) + tenant RLS** — 원스크린 학생 표시 순서(강사×반 개인 설정, edutrix '순서변경' 패리티). roster가 반 그룹 내부만 재배열(`student-order.ts` 순수함수). teacher own-스코프는 앱 레이어(`order-actions.ts`: teacher_id=`effectiveTeacherId` 서버 파생 + 담당 반 소유·수강생 소속 검증 — 0112a 철학). (병렬 세션이 0114a=일일 브리핑·0115a=출석 시수 선점 → 0116a로 개명.) |
 
+| `0117a_onescreen_prior_reports_rpc` | **`onescreen_prior_reports(p_student_ids uuid[], p_before date)` RPC** — 원스크린 로스터가 (학생×과목)별 대상 날짜 직전 최신 lesson_reports 1건씩만 DISTINCT ON으로 반환. 옛 코드는 담당 학생 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 이전 회차 참고행·'가져오기'·prevScore·교재 승계가 오래된 학생부터 누락됐다(당일 행은 roster가 eq(date) 별도 조회). `security invoker`+`auth_tenant_id()` 이중격리(0039a/0040a 패턴). |
+
+| `0118a_onescreen_session_teacher_axis` | **`onescreen_daily_sessions` 유니크 (tenant,student,date)→(tenant,updated_by,student,date)** — 같은 학생을 같은 날 가르치는 두 강사가 서로의 '작업중' 세션(subject_progress·점수·태도)을 통째 덮어쓰던 문제. updated_by(=저장한 강사) 재사용(신규 컬럼 없이), 강사별 1행. `saveOnescreenSession` onConflict·roster 조회(`updated_by=본인`)도 함께. `do $$` 가드로 옛 제약 드롭(멱등). 기존 행 무손실(옛 유니크가 (tenant,student,date) 유일 보장). |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

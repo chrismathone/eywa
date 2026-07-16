@@ -45,6 +45,15 @@ export function isReportEligible(subject: Subject): boolean {
   return !!subject.today && subject.today.trim().length > 0;
 }
 
+/**
+ * 반 필터 매칭 — 특정 반 선택 시 그 반 소속 과목 행만(다과목/다반 학생의 타 반 행 혼입 차단).
+ * classFilter=null("전체")면 전부. 반 모호(className=null, 같은 과목 두 반)는 통과(어느 반인지 못 가르므로 표시).
+ */
+export function rowInClass(subject: Subject, classFilter: string | null): boolean {
+  if (!classFilter) return true;
+  return subject.className == null || subject.className === classFilter;
+}
+
 // ───────────────────────── 결석 연동 — 작업별 대상 판정 (2-3) ─────────────────────────
 
 export type RowAction = "save" | "send" | "autowrite";

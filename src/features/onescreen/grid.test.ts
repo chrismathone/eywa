@@ -6,6 +6,7 @@ import {
   isRowActionable,
   planBulkApply,
   planPrevFill,
+  rowInClass,
   summarizeSendGaps,
   type BulkTarget,
 } from "./grid";
@@ -44,6 +45,21 @@ describe("buildGridRows", () => {
 
   it("과목 없는 학생은 행을 만들지 않는다", () => {
     expect(buildGridRows([stu("a", [])])).toHaveLength(0);
+  });
+});
+
+describe("rowInClass", () => {
+  const sub = (className: string | null) => ({ name: "수학", prev: "", today: "", className });
+  it("전체(null)면 항상 통과", () => {
+    expect(rowInClass(sub("A반"), null)).toBe(true);
+    expect(rowInClass(sub(null), null)).toBe(true);
+  });
+  it("특정 반이면 그 반 소속 행만(타 반 혼입 차단)", () => {
+    expect(rowInClass(sub("A반"), "A반")).toBe(true);
+    expect(rowInClass(sub("B반"), "A반")).toBe(false);
+  });
+  it("반 모호(className=null)는 어느 필터에서도 통과(같은 과목 두 반)", () => {
+    expect(rowInClass(sub(null), "A반")).toBe(true);
   });
 });
 
