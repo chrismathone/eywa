@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
+import { isImageAttachment } from "../attachment-utils";
 import {
   issueReportAttachmentUploadTicket,
   registerReportAttachment,
@@ -17,6 +18,9 @@ import {
 
 type Attachment = { path: string; name: string };
 const MAX = 6;
+// 사진 + 문서/오디오(ClassNote 첨부파일 슬롯과 정렬). 서버 allowCT(isReportAttachmentCT)가 최종 검증.
+const ACCEPT =
+  "image/jpeg,image/png,image/webp,application/pdf,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.cell,.show,audio/mpeg,audio/mp4,.mp3,.m4a";
 
 const extFromType = (t: string): string | null =>
   t === "image/png" ? "png" : t === "image/webp" ? "webp" : t === "image/jpeg" ? "jpg" : null;
@@ -67,10 +71,11 @@ export function ReportAttachments({
       if (!(await ensureSaved())) return;
       for (const original of files) {
         if (base + added >= MAX) {
-          toast.warning(`사진은 최대 ${MAX}장까지 첨부할 수 있습니다`);
+          toast.warning(`첨부는 최대 ${MAX}개까지 가능합니다`);
           break;
         }
-        const file = await resizeImageForUpload(original); // 업로드 전 클라 다운스케일(실패 시 원본)
+        // 이미지만 업로드 전 클라 다운스케일(문서/오디오는 원본 그대로).
+        const file = original.type.startsWith("image/") ? await resizeImageForUpload(original) : original;
         const ext = extFromType(file.type) ?? file.name.split(".").pop() ?? "jpg";
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
@@ -109,7 +114,7 @@ export function ReportAttachments({
         const res = await signReportAttachmentUrls({ studentId, subject, reportDate });
         setUrls(res.urls ?? {});
         if (res.attachments) setAtts(res.attachments);
-        toast.success(`사진 ${added}장 첨부 — ClassNote는 다시 발송하세요`);
+        toast.success(`${added}개 첨부 — ClassNote는 다시 발송하세요`);
         onChanged?.();
       }
     } finally {
@@ -138,17 +143,17 @@ export function ReportAttachments({
     <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <p className="text-text-faint text-[11px] font-semibold">
-          학생 사진 첨부 <span className="text-text-dim">{atts.length}/{MAX}</span>
+          사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX}</span>
         </p>
         <label
           className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-semibold ${
             disabled || busy || full ? "pointer-events-none opacity-50" : ""
           }`}
         >
-          {busy ? "업로드 중…" : "사진 추가"}
+          {busy ? "업로드 중…" : "사진·파일 추가"}
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept={ACCEPT}
             multiple
             className="hidden"
             disabled={disabled || busy || full}
@@ -164,12 +169,14 @@ export function ReportAttachments({
         <div className="grid grid-cols-3 gap-1.5">
           {atts.map((a) => (
             <div key={a.path} className="group relative">
-              {urls[a.path] ? (
+              {urls[a.path] && isImageAttachment(a.name || a.path) ? (
                 // eslint-disable-next-line @next/next/no-img-element -- 세션 내 signed URL 썸네일(최적화 불필요)
                 <img src={urls[a.path]} alt={a.name} className="bg-card h-16 w-full rounded object-contain" />
               ) : (
-                <div className="bg-card text-text-faint flex h-16 w-full items-center justify-center rounded px-1 text-center text-[10px]">
-                  {a.name}
+                // 비이미지(문서·오디오) = 파일 칩(아이콘 + 파일명)
+                <div className="bg-card text-text-dim flex h-16 w-full flex-col items-center justify-center gap-0.5 rounded px-1 text-center">
+                  <EyIcon name="file" size={16} className="text-text-faint" />
+                  <span className="w-full truncate text-[10px]">{a.name}</span>
                 </div>
               )}
               <button
@@ -184,7 +191,7 @@ export function ReportAttachments({
           ))}
         </div>
       ) : (
-        <p className="text-text-faint text-[11px]">사진을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.</p>
+        <p className="text-text-faint text-[11px]">사진·파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.</p>
       )}
     </div>
   );

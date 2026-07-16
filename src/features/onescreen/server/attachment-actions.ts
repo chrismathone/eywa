@@ -85,9 +85,9 @@ export async function issueReportAttachmentUploadTicket(
   const g = await gate(input.studentId);
   if ("error" in g) return { error: g.error };
   if (!MEDIA_KIND[KIND].allowCT(input.contentType))
-    return { error: "사진(jpeg/png/webp)만 첨부할 수 있습니다" };
+    return { error: "사진·문서(pdf·hwp·office·mp3 등)만 첨부할 수 있습니다" };
   if (!Number.isFinite(input.size) || input.size <= 0 || input.size > MEDIA_KIND[KIND].maxBytes)
-    return { error: "파일이 너무 큽니다 (최대 10MB)" };
+    return { error: "파일이 너무 큽니다 (최대 20MB)" };
   const row = await findReportRow(g.supabase, input.studentId, input.subject, input.reportDate);
   if (!row) return { error: "먼저 보고서를 저장하세요" };
   if ((row.attachments ?? []).length >= MAX_ATTACHMENTS)

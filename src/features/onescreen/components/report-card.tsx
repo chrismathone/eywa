@@ -7,6 +7,7 @@ import { subjectTone, toneSoftClass } from "../data";
 import { isReportEligible } from "../grid";
 import { splitLessons } from "../curriculum";
 import { DeltaChip } from "./delta-chip";
+import { isImageAttachment } from "../attachment-utils";
 import type { OneScreenStudent, Subject, TestScore } from "../types";
 
 // shareToken: 저장 시 발급되는 학부모 공개 링크(/r/[token]) 토큰. 세션 내 저장 후에만 존재.
@@ -393,17 +394,17 @@ export function ReportCard({
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-text-faint text-[11px] font-semibold">
-                학생 사진 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
+                사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
               </p>
               <label
                 className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-semibold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >
-                {uploadingAtt ? "업로드 중…" : "사진 추가"}
+                {uploadingAtt ? "업로드 중…" : "사진·파일 추가"}
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,application/pdf,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.cell,.show,audio/mpeg,audio/mp4,.mp3,.m4a"
                   multiple
                   className="hidden"
                   disabled={uploadingAtt || atts.length >= MAX_ATTACHMENTS}
@@ -419,7 +420,7 @@ export function ReportCard({
               <div className="grid grid-cols-3 gap-1.5">
                 {atts.map((a) => (
                   <div key={a.path} className="group relative">
-                    {attachmentUrls?.[a.path] ? (
+                    {attachmentUrls?.[a.path] && isImageAttachment(a.name || a.path) ? (
                       // eslint-disable-next-line @next/next/no-img-element -- 세션 내 signed URL 썸네일(최적화 불필요)
                       <img
                         src={attachmentUrls[a.path]}
@@ -427,8 +428,10 @@ export function ReportCard({
                         className="bg-card h-16 w-full rounded object-contain"
                       />
                     ) : (
-                      <div className="bg-card text-text-faint flex h-16 w-full items-center justify-center rounded px-1 text-center text-[10px]">
-                        {a.name}
+                      // 비이미지(문서·오디오) = 파일 칩
+                      <div className="bg-card text-text-dim flex h-16 w-full flex-col items-center justify-center gap-0.5 rounded px-1 text-center">
+                        <EyIcon name="file" size={16} className="text-text-faint" />
+                        <span className="w-full truncate text-[10px]">{a.name}</span>
                       </div>
                     )}
                     <button
@@ -444,7 +447,7 @@ export function ReportCard({
               </div>
             ) : (
               <p className="text-text-faint text-[11px]">
-                사진을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
+                사진·파일을 추가하면 학부모 링크·ClassNote 게시글에 함께 실립니다.
               </p>
             )}
           </div>
