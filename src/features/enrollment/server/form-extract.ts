@@ -29,6 +29,7 @@ export async function extractConsultationForm(
     keyName,
     provider,
     maxTokens: 4096,
+    meta: { feature: "enrollment_form_extract" },
     prompt: [
       "당신은 학원 신입생 등록상담 녹음을 분석해 상담 기록 양식에 맞게 구조화하는 전문가입니다.",
       "아래 전사에서 명확히 언급된 정보만 추출해 JSON으로만 답하세요. 추측 금지 — 언급 안 된 필드는 빈 문자열(\"\").",

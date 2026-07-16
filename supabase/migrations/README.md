@@ -136,5 +136,7 @@ pnpm db:seed
 
 | `0111a_expenses_amount_decimal` | **`expenses.amount` numeric(12,0)→(12,2)** — 달러·유로 등 소수 통화 지출($10.60) 지원. 통화별 소수 자릿수는 코드 단일 소스(`src/features/billing/currencies.ts` `decimals`: KRW/JPY=0, USD/EUR/CNY/GBP=2)가 관리하고 DB는 최대 2자리 저장. 기존 값 전부 정수라 scale 확대는 무손실·값 재작성 없음. `do $$` 가드로 scale=0일 때만 실행(멱등). 라인 총액·합계 반올림은 `roundMoney(amount, currency)` 단일 지점. |
 
+| `0113a_ai_usage_logs` | **AI 호출 usage 계측 테이블** — `generateJSON` 1회 = 1행(feature·provider·model·key_name·input/output_tokens·ok·error). write=서버(service_role)만(insert 정책 없음, 0074a 선례), read=테넌트 select 정책(0108a 선례). tenant_id nullable(컨텍스트 미상 호출은 null). 기록은 best-effort — 실패해도 AI 호출을 안 막는다. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

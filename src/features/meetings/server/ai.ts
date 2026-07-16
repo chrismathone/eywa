@@ -95,6 +95,7 @@ export async function analyzeMeeting(
     MeetingReport & { speakerRoles?: Record<string, string> }
   >({
     maxTokens: 8192,
+    meta: { feature: "meeting_analysis" },
     prompt: [
       // 전사만(메모 없음)일 땐 기존과 바이트 동일한 인트로 — 기존 품질 회귀 방지.
       hasTranscript && hasNotepad

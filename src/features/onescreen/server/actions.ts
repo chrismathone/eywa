@@ -435,6 +435,7 @@ export async function generateReportComment(
       maxTokens: 1000,
       keyName: "default",
       tier: "fast",
+      meta: { feature: "classnote_ment" },
       ...MENT_AI_TUNING,
     });
     const pick = (k: string) => (data[k] ?? "").trim();

@@ -146,6 +146,7 @@ export function runConsultationAnalysis(
 ) {
   return generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
     maxTokens: 8192,
+    meta: { feature: "enrollment_analysis" },
     prompt: buildConsultationAnalysisPrompt(consult, formatted, multi),
     ...(provider ? { provider } : {}),
   });

@@ -83,6 +83,12 @@ eywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 **모든 AI(JSON) 호출은 단일 진입점 `src/lib/ai/generate.ts`의 `generateJSON()`을 거친다.**
 직접 `getAnthropic`/`getUpstage`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
 
+- **외부 AI 전송 금지 필드(불변, 2026-07-16 명문화)**: 주민번호·계좌/카드번호·급여(`users.hourly_rate/monthly_base`·`payroll_records`)·
+  이력서 `academy_documents.form_data`(restricted)·환불요청서 계좌 — **어떤 AI 프롬프트에도 넣지 않는다**(전송 전례 0,
+  restricted RLS+재인증으로 잠근 대상). 학생 이름·학교·상담 내용 수준은 기존 관행상 전송 허용선.
+- **usage 계측(0113a `ai_usage_logs`)**: 새 AI 호출부는 `generateJSON({ …, meta: { feature: "<호출부 식별자>", tenantId? } })`를
+  넘긴다(비용 실측 — 키 분리만으로는 기능별 구분 불가). 기록은 best-effort라 본 호출을 절대 안 막는다.
+
 provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 
 | Tier | Upstage (폴백) | Anthropic (**기본**, 2026-07-13~) | 용도 |
