@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
-import { displayLessons } from "../curriculum";
+import { displayLessons, resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { buildGridRows, isReportEligible } from "../grid";
 import type { OneScreenStudent } from "../types";
@@ -62,7 +62,7 @@ function GridProgressCell({
     <ProgressSelector
       value={su.today}
       onChange={(joined) => onProgress(student.id, subjectIndex, joined)}
-      studyGrade={student.studyGrade ?? student.grade}
+      studyGrade={resolveStudyGrade(student.studyGrade ?? student.grade)}
       onStudyGrade={(g) => onStudyGrade(student.id, g)}
       studentGrade={student.grade}
       prev={su.prev}

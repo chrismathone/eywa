@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { subjectTone, toneSolidClass, toneTextClass } from "../data";
-import { displayLessons } from "../curriculum";
+import { displayLessons, resolveStudyGrade } from "../curriculum";
 import { ProgressSelector } from "./progress-selector";
 import type { OneScreenStudent } from "../types";
 
@@ -24,7 +24,7 @@ export function ProgressCard({
   onStudyGrade: (grade: string) => void;
   onLoadPrev?: () => void; // 보강 학생 '이전 진도 불러오기'(있을 때만 노출) — 직전 회차를 당겨온다.
 }) {
-  const studyGrade = student.studyGrade ?? student.grade;
+  const studyGrade = resolveStudyGrade(student.studyGrade ?? student.grade);
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
 
   return (
