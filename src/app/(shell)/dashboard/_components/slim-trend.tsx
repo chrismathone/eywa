@@ -160,7 +160,8 @@ function TrendRow({
     .join(", ");
   return (
     // 세로 패널: 라벨·증감 → 큰 값 → sparkline(flex-1로 남은 높이 채움). 전폭 3패널에서 옆 학생증감과 높이 맞춤.
-    <div className="border-line flex flex-col rounded-xl border px-3 py-2.5">
+    <div className="border-line relative flex flex-col rounded-xl border px-3 py-2.5">
+      {/* relative 필수 — sr-only는 absolute라 positioned 부모가 없으면 main의 클리핑을 뚫고 문서를 늘린다(gotchas #79). */}
       <p className="sr-only">{label} 날짜별 값: {accessibleSummary}</p>
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-[10px] tracking-wider uppercase" style={{ color: `var(${colorVar})` }}>

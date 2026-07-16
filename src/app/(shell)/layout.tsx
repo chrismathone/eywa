@@ -43,11 +43,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     return (
       <EmbedProvider embed>
         <EditPresenceProvider user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels}>
-          <main
-            data-eywa-shell=""
-            style={brandStyle}
-            className="bg-background text-foreground h-screen overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]"
-          >
+          <main style={brandStyle} className="bg-background text-foreground h-screen overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {children}
           </main>
@@ -82,11 +78,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     return (
       // print:h-auto/overflow-visible — 인쇄 시 h-screen+overflow-hidden 래퍼가 문서를 1페이지 높이로
       // 클리핑하는 것 방지(globals.css의 html/body/main 인쇄 리셋과 세트 — 래퍼 div는 셀렉터 밖이라 여기서).
-      <div
-        data-eywa-shell=""
-        style={brandStyle}
-        className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible"
-      >
+      <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b px-5 lg:px-7">
           <div className="flex items-center gap-2.5">
             {logoSrc ? (
@@ -138,11 +130,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   return (
     // print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일).
-    <div
-      data-eywa-shell=""
-      style={brandStyle}
-      className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible lg:flex-row"
-    >
+    <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
           떨어져도 메뉴탭이 이중으로 뜨지 않도록 사전 차단(HideInFrame). 최상위 프레임은 그대로 노출. */}
       {/* 데스크톱(≥lg + 마우스) = 좌측 사이드바 / 그 외(좁은 폭·터치) = 숨김.

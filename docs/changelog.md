@@ -32,6 +32,11 @@
 디자인 시안 (Daylight: forest green + 라이트 톤) 전면 적용. (사이드바 메뉴는 retention·성적관리 추가로
 실제 14개 — "12메뉴 정체성"은 초기 사이드바 기준 표현.)
 
+### 운영실 이중 스크롤 근본 수정 — `sr-only` 탈출 차단 + 전역 잠금 CSS 제거 (2026-07-16) — ✅ tsc0(내 파일)/lint0/test(slim-trend·briefing 9)/A·B 메커니즘 실측
+운영실 개편(`6962b14`)이 남긴 **아래 620px 유령 스크롤 영역**을 근본 제거. 원인 = 슬림 추세 스파크라인·브리핑 갱신 안내의 `sr-only`(=`position:absolute`)가 **static 부모** 안에 있어 `main`의 클리핑을 뚫고 문서를 늘림(gotchas #79 재발). 실측: 뷰포트 674인데 `html.scrollHeight` 1294.
+- **수정**: 두 `sr-only`의 감싼 부모에 `relative` 추가([slim-trend.tsx](<../src/app/(shell)/dashboard/_components/slim-trend.tsx>)·[briefing-auto-refresh.tsx](<../src/app/(shell)/dashboard/_components/briefing-auto-refresh.tsx>)) — 컨테이닝 블록을 부모로 잡아 탈출 차단(A/B 실측: static→offsetParent=body, relative→offsetParent=부모div).
+- **마스킹 제거**: 같은 커밋이 근본원인 대신 넣은 전역 `html:has([data-eywa-shell]) { overflow:hidden }`(globals.css) + `data-eywa-shell` 속성 3곳(layout.tsx) 제거. 이 잠금은 스크롤바만 가릴 뿐 문서는 620px 넘쳐 있었고(`scrollTop=200` 먹힘), 대시보드 커밋에서 처음 생긴 것이라 제거 = 안정적 이전 상태 복귀. `layout.tsx`는 `6962b14` 직전과 완전 동일하게 환원.
+
 ### `오늘` → EYWA `운영실`: AI 실행 큐 + 데스크톱 작업면 (2026-07-16) — ✅ tsc0/lint0/test1341/build✓/실브라우저✓
 수동 현황판이던 첫 화면을 **"무엇을 먼저 판단하고 실행할지"를 정리하는 운영실**로 대규모 재구성했다.
 `/dashboard`·`menuKey=dashboard`는 딥링크와 권한 호환을 위해 유지하고, 사용자가 보는 이름과 정보 구조만 `운영실`로 바꿨다.

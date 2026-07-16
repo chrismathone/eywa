@@ -637,6 +637,8 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 - **진단법**: `body`는 정상인데 `html.scrollHeight`만 크면 = **컨테이닝 블록이 ICB인 absolute가 클리핑을 탈출**한 것.
   ⚠️ 스크롤 컨테이너를 `overflow:auto|scroll`로만 찾는 조회는 **문서 스크롤바를 못 잡는다**(html은 `overflow:visible`).
   반드시 `document.scrollingElement.scrollHeight > clientHeight`를 따로 볼 것.
+- **재발(2026-07-16, 운영실 대시보드)**: AI 운영실 개편(`6962b14`)이 슬림 추세 스파크라인 `p.sr-only`([slim-trend.tsx](<src/app/(shell)/dashboard/_components/slim-trend.tsx>))·브리핑 갱신 안내 `span.sr-only`([briefing-auto-refresh.tsx](<src/app/(shell)/dashboard/_components/briefing-auto-refresh.tsx>))를 **static 부모**에 넣어 재발(실측: 뷰포트 674인데 `html.scrollHeight` 1294 = 아래 620px 유령 스크롤 영역). **감싼 부모에 `relative`**로 해소.
+  ⚠️ **덮기(마스킹) 금지 — 이번 커밋은 근본원인 대신 전역 `html:has([data-eywa-shell]) { overflow:hidden }`(globals.css)로 스크롤바만 가렸다.** `overflow:hidden`은 스크롤바·사용자 조작만 막고 **프로그램적 스크롤은 허용**(`scrollTop=200` 실제로 먹힘) → 문서는 여전히 620px 넘쳐 있고, `scrollIntoView`/포커스 이동이 셸을 밀면 **스크롤바가 없어 새로고침 외 복구 불가**. 이 전역 잠금은 대시보드 커밋에서 처음 생긴 것(직전 커밋엔 없음)이라 **제거 = 안정적 이전 상태 복귀** + sr-only 근본수정으로 마무리.
 
 ---
 
