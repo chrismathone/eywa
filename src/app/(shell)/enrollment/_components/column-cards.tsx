@@ -64,6 +64,14 @@ export function ColumnCards({
                             QR
                           </span>
                         ) : null}
+                        {c.personConsultCount > 1 ? (
+                          <span
+                            className="bg-amber-soft text-amber rounded px-1 py-0.5 text-[9px] font-bold"
+                            title={`이 학생의 등록상담이 ${c.personConsultCount}건 있습니다 (반복 접수 — 중복이면 정리, 새 상담이면 각각 진행)`}
+                          >
+                            상담 {c.personConsultCount}건
+                          </span>
+                        ) : null}
                         {c.syncAddedAt ? <MakeeduOriginTag /> : null}
                         <EditingBadge scope={`consultation:${c.id}`} />
                       </p>

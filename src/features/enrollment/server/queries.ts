@@ -96,7 +96,8 @@ export type ConsultationListRow = {
   fromPublicIntake: boolean;
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
   studentId: string | null; // 수업 배정으로 생성된 학생(연결) — null이면 아직 학생 미생성
-  assignedClassCount: number; // 연결 학생의 미종료 수강(반) 수 → ≥1이면 "배정 완료"
+  assignedClassCount: number; // 연결 학생의 상담 과목 미종료 수강(반) 수 → ≥1이면 "배정 완료"
+  personConsultCount: number; // 같은 사람(학생/자연키)의 등록상담 총 건수 → ≥2면 "반복 접수" 힌트
 };
 
 export type ConsultationFilter = {
@@ -189,6 +190,15 @@ export async function getEnrollmentConsultations(
     return subject ? (rec.bySubject.get(subject) ?? 0) : rec.total;
   };
 
+  // 같은 사람의 등록상담 반복 접수 힌트 — 학생 연결이 있으면 student_id, 없으면 자연키(정규화 이름+학교+학년)로
+  // 묶는다(아직 학생 아닌 순수 접수자의 재방문도 감지). 로드된 목록 기준(무필터 기본 칸반=전건이라 정확).
+  const personKey = (c: { student_id?: string | null; prospect_name?: string | null; prospect_school?: string | null; prospect_grade?: string | null }) =>
+    c.student_id
+      ? `s:${c.student_id}`
+      : `n:${(c.prospect_name ?? "").toLowerCase().replace(/\s+/g, "")}|${c.prospect_school ?? ""}|${c.prospect_grade ?? ""}`;
+  const personCount = new Map<string, number>();
+  for (const c of data) personCount.set(personKey(c), (personCount.get(personKey(c)) ?? 0) + 1);
+
   return data.map((c) => {
     const consultant = (Array.isArray(c.consultant) ? c.consultant[0] : c.consultant) as
       | { display_name?: string }
@@ -213,6 +223,7 @@ export async function getEnrollmentConsultations(
         c.student_id,
         (c as { subject?: string | null }).subject ?? null,
       ),
+      personConsultCount: personCount.get(personKey(c)) ?? 1,
     };
   });
 }
@@ -499,6 +510,7 @@ export async function getEnrollmentConsultationById(id: string): Promise<Consult
     recommendedClasses,
     studentId: linkedStudentId,
     assignedClassCount,
+    personConsultCount: 1, // 상세는 반복-접수 힌트를 쓰지 않음(목록 카드/학생 탭 전용) — 타입 충족용.
     makeeduId: (c as { makeedu_id?: string | null }).makeedu_id ?? null,
     fields: mapFullFields(c as Record<string, unknown>),
   };
