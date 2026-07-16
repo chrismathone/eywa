@@ -93,6 +93,7 @@ const ACTION_LABEL_BY_KEY: Readonly<Record<string, string>> = {
   absent: "출결 확인",
   unrecorded: "출결 확인",
   "unwritten-reports": "보고서 작성",
+  "classnote-attention": "발송 확인",
   "unassigned-enrolled": "반 배정",
   expenses: "결재 확인",
   textbooks: "신청 확인",

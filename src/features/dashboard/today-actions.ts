@@ -39,6 +39,11 @@ export type TodayActionsRaw = {
    * 목적이라 상담 기준으로 재정의하지 말 것(2026-07-15 실측: 상담 기준은 89건 전원이 퇴원·과거 건 = 헛경보).
    */
   unassignedEnrolled: { studentId: string; name: string }[];
+  /**
+   * ClassNote 발송 주의(관리자 조치 대상) — failed/tooOld=워커 확정 실패(7일 창),
+   * humanHold=사람 조치 보류(blocked_shared·name_conflict, 창 없음), stuck=processing 10분 초과 멈춤.
+   */
+  classnoteAttention: { failed: number; tooOld: number; humanHold: number; stuck: number };
   /** 조회 실패를 0건으로 위장하지 않기 위한 권한·도메인별 원천 상태. */
   sourceIssues?: TodaySignalSourceIssue[];
 };
@@ -185,6 +190,28 @@ export function buildTodayActions(raw: TodayActionsRaw): TodayActionItem[] {
       label: "오늘 미작성 보고서",
       count: raw.unwrittenReportsToday.count,
       detail: nameList(raw.unwrittenReportsToday.names),
+      href: "/lesson-reports?tab=writing",
+      menuKey: "lesson_reports",
+      requiredAccess: "read",
+    });
+  }
+
+  const cn = raw.classnoteAttention;
+  const cnTotal = cn.failed + cn.tooOld + cn.humanHold + cn.stuck;
+  if (cnTotal > 0) {
+    // raw 상태 키(blocked_shared 등)는 화면에 내보내지 않는다 — 한글 구분만(UI raw 코드 노출 금지).
+    const cnParts = [
+      cn.failed > 0 ? `발송 실패 ${cn.failed}` : null,
+      cn.tooOld > 0 ? `기한 초과 ${cn.tooOld}` : null,
+      cn.humanHold > 0 ? `확인 필요 ${cn.humanHold}` : null,
+      cn.stuck > 0 ? `멈춤 ${cn.stuck}` : null,
+    ].filter((part): part is string => part !== null);
+    items.push({
+      key: "classnote-attention",
+      severity: "amber",
+      label: "리포트 발송 주의",
+      count: cnTotal,
+      detail: cnParts.join(" · "),
       href: "/lesson-reports?tab=writing",
       menuKey: "lesson_reports",
       requiredAccess: "read",
