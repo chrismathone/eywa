@@ -24,7 +24,8 @@ export const ROSTER_COLUMNS = [
   "계약조건",
   "재직",
   "계약갱신일/퇴사일",
-  "계약조건 history",
+  // "계약조건 history" 열은 원장이 2026-07-17 시트에서 삭제(이력은 2026직원히스토리 탭으로 이관) —
+  // 앱이 옛 20열로 기입해 학력이 은행 열로 밀렸던 실사고의 원인. 시트 열과 항상 동기화할 것.
   "학력",
   "은행",
   "계좌번호",
@@ -79,7 +80,6 @@ export function buildRosterRow(d: StaffResumeData): string[] {
     salary, // 계약조건 — 급여 계약(월급/연봉)
     "", // 재직
     "", // 계약갱신일/퇴사일
-    "", // 계약조건 history
     eduLabel, // 학력 — 최상위 1건만
     d.contract.bank, // 은행
     d.contract.account, // 계좌번호
