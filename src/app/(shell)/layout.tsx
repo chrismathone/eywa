@@ -19,6 +19,7 @@ import { OperationsProvider } from "@/features/owner/operations-context";
 import { EditPresenceProvider } from "@/features/presence/edit-presence";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { getShellView, canUseTeacherView, isFullShellRole } from "@/lib/auth/view-mode";
+import { canAccess, menuKeyForPath } from "@/lib/permissions";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
@@ -71,6 +72,21 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 셸 크롬 결정 — student=학생 미니셸, teacher(실 강사 or 겸직-강사뷰)=강사 미니셸, 그 외=풀셸.
   // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).
   const view = await getShellView();
+
+  // ── 뷰-경로 정합성 가드 — 강사 미니셸은 "강사가 접근 가능한 페이지"만 감싼다. ──
+  // 겸직(관리자 계열)이 '강사뷰로 전환' 후 브라우저 **뒤로가기**로 관리자 전용 URL(대시보드 등)로 돌아오면,
+  // 쿠키는 teacher라 미니셸이 관리자 페이지를 감싸 "강사뷰인데 관리자 화면"인 깨진 렌더가 났다(심각 버그).
+  // 강사 접근 불가 경로(canAccess("teacher", menu)=false)는 강사 홈(/onescreen)으로 되돌린다. 이건 **뷰 기준
+  // 크롬 정합성**이지 권한 변경이 아니다 — 실 system_role은 그대로라 관리자뷰로 전환하면 그대로 접근 가능.
+  // 원스크린이 관리자뷰에서 뜨는 반대 케이스는 onescreen 페이지 자체 가드가 이미 방어(대칭). menu=null(모르는
+  // 경로)은 fail-open — 페이지 requireAccess가 판정(신규 라우트 과잉 차단 방지).
+  if (view === "teacher") {
+    const pathname = (await headers()).get("x-pathname") ?? "";
+    const menu = menuKeyForPath(pathname);
+    if (menu && !canAccess("teacher", menu, permMatrix)) {
+      redirect("/onescreen");
+    }
+  }
 
   // 강사·학생: 사이드바·네비 없는 단일 화면 셸 — 미니멀 헤더(브랜드 + 로그아웃) + 풀폭 본문.
   // 강사=원스크린, 학생=내 학습 현황. (원장 등 나머지는 아래 12메뉴 풀 셸 그대로.)

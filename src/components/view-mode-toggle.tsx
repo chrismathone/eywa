@@ -18,7 +18,14 @@ export function TeacherViewToggle({ expanded, motion }: { expanded: boolean; mot
     <button
       type="button"
       disabled={pending}
-      onClick={() => start(() => switchToTeacherView())}
+      onClick={() =>
+        start(async () => {
+          // 액션이 착지 경로("/onescreen")를 반환 → window.location으로 **풀 문서 네비**(soft nav이 아님).
+          // 이래야 라우터 캐시가 강사 미니셸로 오염되지 않아 뒤로가기 시 깨진 렌더가 나지 않는다(view-actions 주석 참조).
+          const dest = await switchToTeacherView();
+          if (dest) window.location.assign(dest);
+        })
+      }
       aria-label="강사뷰로 전환"
       className="group relative flex h-9 w-full items-center gap-2.5 pl-[17px] focus:outline-none disabled:opacity-50"
     >

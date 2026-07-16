@@ -29,6 +29,11 @@ const PUBLIC_PATHS = new Set(["/"]);
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // 현재 경로를 x-pathname 요청 헤더로 승격 — (shell)/layout이 await headers()로 읽어 **뷰-경로 정합성 가드**에
+  // 쓴다(RSC 레이아웃은 pathname을 직접 못 받음, gotchas #29). 강사 뷰에서 관리자 페이지가 미니셸로 감싸지는
+  // 것을 막는다. ⚠️ request.headers를 직접 변형해야 아래 NextResponse.next({ request }) forward에 함께 실린다.
+  request.headers.set("x-pathname", pathname);
+
   const isPublicAsset = pathname.startsWith("/_next") || pathname === "/favicon.ico";
   // /api/* 라우트 (webhook 포함)는 자체 인증 (시크릿 헤더 등) 사용 — 세션 갱신 불필요.
   const isApiRoute = pathname.startsWith("/api/");
