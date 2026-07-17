@@ -101,15 +101,15 @@ export function absenceDigestBody(events: readonly AbsenceEvent[]): string | nul
 }
 
 /**
- * 결석 이벤트를 **담당 강사별**로 그룹핑(v2). studentTeachers = 학생id→담당 강사id 목록.
+ * 이벤트를 **담당 강사별**로 그룹핑(subjectKey=학생id 전제). studentTeachers = 학생id→담당 강사id 목록.
  * 한 학생이 여러 반이면 각 담당 강사에게, 강사는 자기 학생 이벤트만 받는다(스코프 격리).
  * ⚠️ studentTeachers는 호출부가 tenant 필터·활성 강사만 남긴 것이어야 한다(admin RLS 우회 방어).
  */
-export function groupAbsenceEventsByTeacher(
-  events: readonly AbsenceEvent[],
+export function groupEventsByTeacher<E extends { subjectKey: string }>(
+  events: readonly E[],
   studentTeachers: ReadonlyMap<string, readonly string[]>,
-): Map<string, AbsenceEvent[]> {
-  const byTeacher = new Map<string, AbsenceEvent[]>();
+): Map<string, E[]> {
+  const byTeacher = new Map<string, E[]>();
   for (const event of events) {
     for (const teacherId of studentTeachers.get(event.subjectKey) ?? []) {
       const list = byTeacher.get(teacherId) ?? [];
@@ -125,4 +125,74 @@ export function followupBody(event: FollowupEvent): string {
   return event.stage === "due"
     ? `${event.studentName} 학생 상담 후속조치가 오늘(${event.followUpDate}) 마감 예정입니다.`
     : `${event.studentName} 학생 상담 후속조치가 기한(${event.followUpDate})을 지났습니다.`;
+}
+
+// ─────────── 성적 급락 이벤트 ───────────
+// retention risk.ts와 동일 임계(≥15점 하락 = 심각). **같은 과목 내** 최신 vs 직전 점수(%) 비교.
+// (retention roster는 과목을 섞어 비교하는 한계가 있으나, 이벤트는 과목별로 정확히 판정한다.)
+// ⚠️ injaewon은 현재 성적 0건 — 학원이 성적 입력 시작 전까지 이 이벤트는 발화하지 않는다(거짓 알림 0).
+
+/** 성적 급락 판정 임계(점, %p). retention의 심각 tier(+30) 재사용 — 이벤트는 저빈도를 위해 이 값만. */
+export const GRADE_DROP_MIN = 15;
+
+export type GradeRow = {
+  studentId: string;
+  studentName: string;
+  subject: string;
+  subjectLabel: string; // 한글 라벨(서버에서 buildSubjectMaps 경유 — raw 키 노출 금지)
+  gradeId: string;
+  takenOn: string; // YYYY-MM-DD
+  pct: number | null; // score/max*100. null=계산 불가(제외)
+};
+export type GradeDropEvent = {
+  subjectKey: string; // studentId
+  bucket: string; // `${subject}:${latestGradeId}` — 새 점수가 들어올 때만 새 bucket(1회 알림)
+  studentName: string;
+  subjectLabel: string;
+  drop: number; // 하락폭(점)
+  latestPct: number;
+};
+
+/**
+ * 성적 급락 이벤트 후보 — (학생, 과목)별 최신 vs 직전 점수(%) 비교, 하락 ≥ minDrop만.
+ * bucket에 최신 gradeId를 넣어 "새 점수가 들어와 급락했을 때 1회"만 알린다(dedup은 호출부).
+ */
+export function buildGradeDropEvents(rows: readonly GradeRow[], minDrop = GRADE_DROP_MIN): GradeDropEvent[] {
+  const byStudentSubject = new Map<string, GradeRow[]>();
+  for (const row of rows) {
+    if (row.pct === null) continue;
+    const key = `${row.studentId}::${row.subject}`;
+    (byStudentSubject.get(key) ?? byStudentSubject.set(key, []).get(key)!).push(row);
+  }
+  const events: GradeDropEvent[] = [];
+  for (const group of byStudentSubject.values()) {
+    if (group.length < 2) continue; // 직전 점수 없으면 비교 불가
+    // 최신순 정렬(takenOn desc, 동일자면 gradeId로 안정). [0]=최신, [1]=직전.
+    const sorted = [...group].sort((a, b) =>
+      a.takenOn === b.takenOn ? (a.gradeId < b.gradeId ? 1 : -1) : a.takenOn < b.takenOn ? 1 : -1,
+    );
+    const latest = sorted[0];
+    const prev = sorted[1];
+    const drop = Math.round((prev.pct as number) - (latest.pct as number));
+    if (drop < minDrop) continue;
+    events.push({
+      subjectKey: latest.studentId,
+      bucket: `${latest.subject}:${latest.gradeId}`,
+      studentName: latest.studentName,
+      subjectLabel: latest.subjectLabel,
+      drop,
+      latestPct: Math.round(latest.pct as number),
+    });
+  }
+  return events;
+}
+
+/** 성적 급락 개별/집계 본문. 한 명이면 과목·하락폭, 여러 명이면 이름 집계. */
+export function gradeDropDigestBody(events: readonly GradeDropEvent[]): string | null {
+  if (events.length === 0) return null;
+  if (events.length === 1) {
+    const event = events[0];
+    return `${event.studentName} 학생 ${event.subjectLabel} 성적이 ${event.drop}점 하락했습니다(현재 ${event.latestPct}점).`;
+  }
+  return `${summarizeNames(events.map((event) => event.studentName))} 학생의 성적이 크게 하락했습니다(${GRADE_DROP_MIN}점 이상).`;
 }

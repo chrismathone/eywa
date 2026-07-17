@@ -4,6 +4,20 @@
 
 ## 진행 상황
 
+### 성적 급락 이벤트 (2026-07-17, Phase 3 v3) — ✅ tsc0/lint0/test20 + 합성 성적 E2E(원복)
+Phase 3 세 번째 이벤트 = **같은 과목 성적 급락**(최신 vs 직전 ≥15점 하락, retention risk.ts 심각 tier 재사용).
+master + 담당 강사(결석 v2와 동일 tenant 격리 역매핑). type 'grade_drop'(아이콘 trendingDown), link=/retention.
+- **정확 판정**([events-core.ts](../src/features/notifications/events-core.ts) `buildGradeDropEvents` 순수함수):
+  (학생,과목)별 최신 2건 비교 — retention roster가 과목 섞어 비교하는 한계를 이벤트는 과목별로 정확히. bucket=
+  `과목:최신gradeId`라 **새 점수 들어와 급락 시 1회**만(상승·직전없음·pct null 제외). 과목 라벨은 서버 buildSubjectMaps
+  한글화(raw 키 노출 금지). 180일 창 fetchAllPaged(B2).
+- **⚠️ injaewon 성적 0건**(합성 3,290행은 데모 테넌트였고 프로덕션은 미입력) — **거짓 알림 위험 0**, 학원이 성적 입력
+  시작 시 작동하는 dormant 상태. E2E는 합성 성적 2건(박지율 수학 90→68→50) 임시 삽입으로 검증 후 **전부 원복**
+  (성적·이벤트·벨 삭제 확인 0).
+- **✅ 합성 E2E**: 콜드스타트 시드(벨0) → 새 낮은 점수로 fresh edge → **4벨**(master 박소선·원일 "성적 급락" + 강사
+  이성우·김민주 "담당 학생 성적 급락 — 박지율 수학 18점 하락, 현재 50점"). groupEventsByTeacher 제네릭화(결석·성적 공용).
+  순수함수 Vitest +4(20). 끄려면 detectAndNotifyEvents의 gradeDrop 블록 제거.
+
 ### 결석 알림 담당 강사 라우팅 (2026-07-17, Phase 3 v2) — ✅ tsc0/lint0/test16 + 실E2E(다중 반)
 Phase 3 결석 알림을 master뿐 아니라 **담당 강사에게도**(리뷰가 tenant 격리 조인 필수라 v2로 분리했던 항목).
 - **학생→담당 강사 역매핑**([events.ts](../src/features/notifications/server/events.ts) `getStudentActiveTeachers`):

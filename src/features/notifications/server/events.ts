@@ -19,20 +19,26 @@ import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
 import { followUpUrgency } from "@/features/consultations/follow-up-urgency";
 import { getAbsenceRiskStudents } from "@/features/dashboard/server/queries";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
   absenceDigestBody,
   buildAbsenceEvents,
   buildFollowupEvents,
+  buildGradeDropEvents,
   followupBody,
-  groupAbsenceEventsByTeacher,
+  gradeDropDigestBody,
+  groupEventsByTeacher,
   type AbsenceEvent,
   type FollowupEvent,
+  type GradeDropEvent,
+  type GradeRow,
 } from "../events-core";
 
-type EventType = "absence_alert" | "followup_due";
+type EventType = "absence_alert" | "followup_due" | "grade_drop";
 type EventRow = { tenant_id: string; event_type: EventType; subject_key: string; bucket: string; seeded: boolean };
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -199,7 +205,7 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
     [...new Set(freshEvents.map((event) => event.subjectKey))],
     kstToday(),
   );
-  for (const [teacherId, teacherEvents] of groupAbsenceEventsByTeacher(freshEvents, studentTeachers)) {
+  for (const [teacherId, teacherEvents] of groupEventsByTeacher(freshEvents, studentTeachers)) {
     const body = absenceDigestBody(teacherEvents);
     if (!body) continue;
     items.push({
@@ -275,13 +281,89 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
 }
 
 /**
- * 테넌트 1건의 이벤트 감지·발송. cron이 브리핑 생성과 **독립된 try/catch**로 호출한다
- * (브리핑 실패해도 감지는 돌아야 함). 반환은 관측용 신규 이벤트 수(결석/후속조치).
+ * 성적 급락 감지(같은 과목 최신 vs 직전 ≥15점 하락) → master + 담당 강사(콜드스타트면 시드만).
+ * ⚠️ injaewon은 현재 성적 0건이라 미발화 — 학원이 성적 입력 시작 시 작동(거짓 알림 0). retention과
+ * 동일 180일 창에서 (학생,과목)별 최신 2건 비교. bucket=최신 gradeId라 새 점수 1회만 알린다.
  */
-export async function detectAndNotifyEvents(tenantId: string): Promise<{ absence: number; followup: number }> {
+async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const today = kstToday();
+  const since = new Date(Date.parse(`${today}T00:00:00Z`) - 180 * 86_400_000).toISOString().slice(0, 10);
+  const rows = await fetchAllPaged<{
+    id: string;
+    student_id: string;
+    subject: string;
+    score: string | null;
+    max_score: string | null;
+    taken_on: string;
+    student: { name?: string } | { name?: string }[] | null;
+  }>((from, to) =>
+    admin
+      .from("student_grades")
+      .select("id, student_id, subject, score, max_score, taken_on, student:student_id ( name )")
+      .eq("tenant_id", tenantId)
+      .gte("taken_on", since)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  if (rows.length === 0) return 0;
+
+  const { operations } = await getTenantSettingsByTenantId(tenantId);
+  const subjects = buildSubjectMaps(operations.subjects);
+  const gradeRows: GradeRow[] = rows.map((row) => {
+    const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
+    const score = row.score == null ? null : Number(row.score);
+    const max = row.max_score == null ? null : Number(row.max_score);
+    return {
+      studentId: row.student_id,
+      studentName: student?.name ?? "(학생)",
+      subject: row.subject,
+      subjectLabel: subjects.labelOf(row.subject) ?? row.subject,
+      gradeId: row.id,
+      takenOn: row.taken_on.slice(0, 10),
+      pct: score != null && max != null && max > 0 ? (score / max) * 100 : null,
+    };
+  });
+
+  const candidates = buildGradeDropEvents(gradeRows);
+  const cold = await isColdStart(admin, tenantId, "grade_drop");
+  const fresh = (await recordNew(admin, tenantId, "grade_drop", candidates, cold)) as GradeDropEvent[];
+  if (cold || fresh.length === 0) return 0;
+
+  const items: NotifyInput[] = [];
+  const masterBody = gradeDropDigestBody(fresh);
+  const masters = await activeMasterIds(admin, tenantId);
+  if (masterBody) {
+    for (const recipientId of masters) {
+      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락", body: masterBody, link: "/retention", actorId: null });
+    }
+  }
+  // 담당 강사 = 자기 학생 성적 급락만(결석 v2와 동일 tenant 격리 역매핑 재사용).
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
+    tenantId,
+    [...new Set(fresh.map((event) => event.subjectKey))],
+    today,
+  );
+  for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
+    const body = gradeDropDigestBody(teacherEvents);
+    if (!body) continue;
+    items.push({ tenantId, recipientId: teacherId, type: "grade_drop", title: "담당 학생 성적 급락", body, link: "/retention", actorId: null });
+  }
+  await notifyUsers(items);
+  return fresh.length;
+}
+
+/**
+ * 테넌트 1건의 이벤트 감지·발송. cron이 브리핑 생성과 **독립된 try/catch**로 호출한다
+ * (브리핑 실패해도 감지는 돌아야 함). 반환은 관측용 신규 이벤트 수(결석/후속조치/성적 급락).
+ */
+export async function detectAndNotifyEvents(
+  tenantId: string,
+): Promise<{ absence: number; followup: number; gradeDrop: number }> {
   const admin = createAdminClient();
   let absence = 0;
   let followup = 0;
+  let gradeDrop = 0;
   try {
     absence = await detectAbsence(admin, tenantId);
   } catch (e) {
@@ -292,5 +374,10 @@ export async function detectAndNotifyEvents(tenantId: string): Promise<{ absence
   } catch (e) {
     reportError(e, { scope: "events.followup", tenantId });
   }
-  return { absence, followup };
+  try {
+    gradeDrop = await detectGradeDrop(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.gradeDrop", tenantId });
+  }
+  return { absence, followup, gradeDrop };
 }

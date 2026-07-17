@@ -4,10 +4,13 @@ import {
   absenceTier,
   buildAbsenceEvents,
   buildFollowupEvents,
+  buildGradeDropEvents,
   followupBody,
-  groupAbsenceEventsByTeacher,
+  gradeDropDigestBody,
+  groupEventsByTeacher,
   summarizeNames,
   type AbsenceEvent,
+  type GradeRow,
 } from "./events-core";
 
 describe("absenceTier", () => {
@@ -65,7 +68,60 @@ describe("buildFollowupEvents", () => {
   });
 });
 
-describe("groupAbsenceEventsByTeacher (v2)", () => {
+describe("buildGradeDropEvents (성적 급락)", () => {
+  const g = (
+    studentId: string,
+    name: string,
+    subject: string,
+    gradeId: string,
+    takenOn: string,
+    pct: number | null,
+  ): GradeRow => ({ studentId, studentName: name, subject, subjectLabel: subject === "math" ? "수학" : "영어", gradeId, takenOn, pct });
+
+  it("같은 과목 최신 vs 직전 ≥15점 하락만 이벤트, bucket=과목:최신gradeId", () => {
+    const events = buildGradeDropEvents([
+      g("s1", "김", "math", "gA", "2026-06-01", 90),
+      g("s1", "김", "math", "gB", "2026-07-01", 70), // 20점 하락 → 이벤트
+      g("s2", "이", "math", "gC", "2026-06-01", 80),
+      g("s2", "이", "math", "gD", "2026-07-01", 72), // 8점 하락 → 임계 미달 제외
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ subjectKey: "s1", bucket: "math:gB", studentName: "김", drop: 20, latestPct: 70 });
+  });
+
+  it("과목이 다르면 섞어 비교하지 않는다(수학↓·영어는 별개)", () => {
+    const events = buildGradeDropEvents([
+      g("s1", "김", "math", "gA", "2026-06-01", 90),
+      g("s1", "김", "english", "gB", "2026-07-01", 60), // 다른 과목 — math 90과 비교 안 함
+    ]);
+    expect(events).toEqual([]); // 각 과목 1건씩뿐이라 비교 불가
+  });
+
+  it("직전 점수 없으면(과목 1건) 제외, 상승은 제외, pct null 제외", () => {
+    expect(buildGradeDropEvents([g("s1", "김", "math", "gA", "2026-07-01", 50)])).toEqual([]);
+    expect(
+      buildGradeDropEvents([
+        g("s1", "김", "math", "gA", "2026-06-01", 60),
+        g("s1", "김", "math", "gB", "2026-07-01", 85), // 상승
+      ]),
+    ).toEqual([]);
+    expect(
+      buildGradeDropEvents([
+        g("s1", "김", "math", "gA", "2026-06-01", 90),
+        g("s1", "김", "math", "gB", "2026-07-01", null), // 계산 불가
+      ]),
+    ).toEqual([]);
+  });
+
+  it("본문 — 1명 과목·하락폭, 여러명 집계", () => {
+    expect(gradeDropDigestBody([])).toBe(null);
+    const one = gradeDropDigestBody([{ subjectKey: "s1", bucket: "b", studentName: "김보민", subjectLabel: "수학", drop: 18, latestPct: 62 }]);
+    expect(one).toContain("김보민 학생 수학 성적이 18점 하락");
+    expect(one).toContain("현재 62점");
+  });
+});
+
+describe("groupEventsByTeacher (v2 제네릭)", () => {
   const ev = (studentId: string, name: string, tier: number): AbsenceEvent => ({
     subjectKey: studentId,
     bucket: String(tier),
@@ -81,13 +137,13 @@ describe("groupAbsenceEventsByTeacher (v2)", () => {
       ["s2", ["t1", "t2"]], // 박지율 → t1·t2 두 반
       ["s3", ["t2"]], // 정호 → t2
     ]);
-    const byTeacher = groupAbsenceEventsByTeacher(events, map);
+    const byTeacher = groupEventsByTeacher(events, map);
     expect(byTeacher.get("t1")?.map((e) => e.studentName)).toEqual(["김보민", "박지율"]);
     expect(byTeacher.get("t2")?.map((e) => e.studentName)).toEqual(["박지율", "정호"]);
   });
 
   it("담당 강사 없는 학생은 아무에게도 안 감(맵에 없으면 스킵)", () => {
-    const byTeacher = groupAbsenceEventsByTeacher([ev("s9", "무담당", 3)], new Map());
+    const byTeacher = groupEventsByTeacher([ev("s9", "무담당", 3)], new Map());
     expect(byTeacher.size).toBe(0);
   });
 });
