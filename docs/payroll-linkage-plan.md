@@ -71,10 +71,68 @@ computeTeacherSettlement(splitsRows[], comp) → 강사×기간 정산 참고
 | P5 | 급여 산식 변경 = **골든마스터 통과** 필수 | N6 / attendance R2 |
 | P6 | 열람 = 원장 전용. 급여 필드 = PII(activity_log 마스킹) | 현행 급여·PII 정책 |
 
-## Phase 2+ (별도 승인 시)
+## Phase 2 — payroll_records 자동 초안 (설계 확정, 2026-07-17)
 
-- **payroll_records 자동 초안 + 스냅샷 동결**: 회차 확정 시 급여 초안 생성. `payroll_records`에 `commission_base_amount`·`commission_rate`·`commission_amount`·`pay_basis` 컬럼 + splits 기간 링크 신설. 확정본 불변, 재계산은 초안만.
-- **`PAYROLL_ENABLED` 전환 / 기존 시간모델 통합**: 시급·월기본 모델과 매출배분 모델을 hybrid로 합류.
+v1은 강사 정산을 **화면에서만** 산정(저장 0). Phase 2는 그 산정값을 **`payroll_records`에 급여 초안으로 물질화**하고,
+사람이 **확정→지급**하는 흐름을 붙인다. 핵심은 **스냅샷 동결**: 초안은 재계산되지만 확정본은 불변(지난달 출석 수정이
+이미 확정·지급된 급여를 조용히 바꾸지 못하게 — 코드 전반 돈 규율·attendance R2 사고 방지).
+
+### 상태 3단계 (초안 → 확정 → 지급)
+
+- **초안(draft)**: `locked_at IS NULL`. splits/급여정책이 바뀌면 **재생성 시 갱신**(확정본 불가침 upsert, `refreshPlannedTerms` 패턴). 화면 라이브 산정(v1)과 동일 숫자.
+- **확정(locked)**: `locked_at` 설정. **동결** — 이후 splits/comp가 바뀌어도 숫자 불변. 화면은 확정본 + **드리프트 배지**(현재 산정과 다르면 "재확정 필요", splits 지문 비교). 재확정 = 새 스냅샷.
+- **지급(paid)**: `paid_at` 설정(기존 `markPayrollPaid` 재사용). locked 이후에만 가능.
+
+> ⚠️ 기존 파생 status(`paid_at`→paid / record존재→saved / 무record→draft)에 **locked 단계 추가**. saved=초안, locked=확정으로 재정의.
+
+### 스키마 — payroll_records 확장(신규 테이블 없음)
+
+```sql
+-- 기존 payroll_records(월기본+시급 시간모델)에 매출배분 라인 추가 — 강사×기간 1행 유지(unique 그대로).
+alter table payroll_records
+  add column salary_type text,              -- 확정 시점 급여방식 스냅샷(commission/fixed/hybrid)
+  add column commission_base_amount numeric(12,0), -- 배분 기준액 = Σ confirmed_amount(청구 기준, P1)
+  add column commission_rate numeric(5,2),  -- 확정 시점 배분율 % 스냅샷
+  add column commission_amount numeric(12,0),-- 배분액 = round(base × rate). fixed=0
+  add column source_period text,            -- 배분이 읽은 splits 청구월(보통 = period)
+  add column splits_fingerprint text,       -- 확정 시점 splits 지문(드리프트 감지)
+  add column locked_at timestamptz,         -- 확정(동결) 시점. null=초안
+  add column locked_by uuid references users(id) on delete set null;
+-- total 재정의: base_amount + hourly_amount + commission_amount + bonus − deduction (commission은 가산·대체 아님).
+```
+
+- **⚠️ PII redact 필수**: `commission_base_amount`·`commission_rate`·`commission_amount`를 **activity_log 트리거 redact 목록에 추가**(신규 마이그). 0084a가 base/hourly/bonus/deduction/total은 redact하나 신규 3컬럼은 누출(급여=원장 전용, 0120a와 동일 이유). `salary_type`은 users용으로 0120a에 이미 있음(공용 blocklist라 payroll_records에도 적용됨).
+
+### 순수 엔진 (Vitest + 골든마스터)
+
+- `payrollTotal` **확장**: `base + hourly + commission + bonus − deduction`(현재 4항 → commission 5항째). 골든마스터에 commission 포함 케이스 추가.
+- `buildPayrollDraft(settlement, existingRecord)`: v1 `computeTeacherSettlements` 결과 + 기존 수동필드(bonus/deduction/base/hourly) 병합 → 초안 payload. **확정(locked)본은 건드리지 않음**(불가침).
+- 드리프트 = `splitsFingerprint`(v1 재사용) 비교. 확정본 지문 ≠ 현재 → "재확정 필요".
+
+### 액션 (전부 master 전용 — 급여 PII)
+
+- `generatePayrollDrafts(period)`: 그 기간 산정된 강사 전원의 초안을 **upsert**(확정본 불가침, 미확정만 갱신). 미설정·미배정·회차 미확정 강사는 초안 생성 안 함(가시화). 멱등.
+- `lockPayroll(userId, period)`: 초안 → 확정(locked_at·locked_by·splits_fingerprint 스냅샷).
+- `unlockPayroll` / `markPayrollPaid`(기존): 확정 해제(지급 전만) / 지급.
+- ⚠️ 확정·지급본은 auto-generate가 **덮지 않음**(스냅샷 불변). 드리프트는 배지로만.
+
+### 배치(placement) — ⚠️ 결정 필요 (원장)
+
+Phase 2 급여 초안 생성·확정·지급 UI를 **어디에** 둘지는 원장 결정:
+- **(A, 권장) 수납관리 「강사 정산」 화면 확장**: v1 그 자리에서 초안 생성·확정·지급. **`PAYROLL_ENABLED` 계속 false**(옛 시간모델 `/staff/payroll` 잠든 채 유지 — 비활성은 원장 결정이었음). 급여 흐름 한 곳·원장 전용.
+- **(B) 직원관리 `/staff/payroll` 재활성**: `PAYROLL_ENABLED=true`로 켜고 그 페이지에 commission 컬럼 추가. 급여의 자연스러운 집. 단 옛 시간모델 UI 부활 + 그 페이지 commission 미표시 보강 필요.
+- payroll_records는 **통합 1행**이라 어느 쪽이든 데이터는 공유 — 나중에 (B)로 가도 데이터 이관 불필요.
+
+### 불변 규칙 추가
+
+| # | 규칙 | 근거 |
+|---|---|---|
+| P7 | 초안은 재계산, **확정·지급본은 동결**(스냅샷). 확정 후 출석/splits 변경은 드리프트 신호일 뿐 자동 변경 없음 | 코드 전반 돈 규율·R2 |
+| P8 | `total = base + hourly + commission + bonus − deduction` — commission은 **가산**(기존 항 대체 금지) | 시간모델·배분모델 공존 |
+| P9 | 신규 commission 컬럼 3종 **activity_log redact 필수** | 급여 PII(0120a·0084a 계열) |
+
+## Phase 3+ (더 뒤, 별도 승인)
+
 - **강사 셀프 열람** `/my-payroll`(본인 것만, 엄격 스코프).
 - **수수료·인센티브·티어**: `academyFee` 분리, 성과급, 과목×학년 티어 배율(인재원 패리티, 수요 낮아 보류).
 
