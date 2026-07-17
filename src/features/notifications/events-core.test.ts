@@ -5,6 +5,9 @@ import {
   buildAbsenceEvents,
   buildFollowupEvents,
   buildGradeDropEvents,
+  buildOutstandingEvents,
+  outstandingDigestBody,
+  outstandingTier,
   followupBody,
   gradeDropDigestBody,
   groupEventsByTeacher,
@@ -139,6 +142,42 @@ describe("buildGradeDropEvents (성적 급락)", () => {
     const one = gradeDropDigestBody([{ subjectKey: "s1", bucket: "b", studentName: "김보민", subjectLabel: "수학", drop: 18, latestPct: 62 }]);
     expect(one).toContain("김보민 학생 수학 성적이 18점 하락");
     expect(one).toContain("현재 62점");
+  });
+});
+
+describe("buildOutstandingEvents (미수 임계)", () => {
+  it("tier 도달자만, bucket=tier 문자열", () => {
+    const events = buildOutstandingEvents([
+      { studentId: "s1", studentName: "김", amount: 250_000 }, // 미달 제외
+      { studentId: "s2", studentName: "이", amount: 300_000 }, // tier 300k
+      { studentId: "s3", studentName: "박", amount: 620_000 }, // tier 500k
+      { studentId: "s4", studentName: "최", amount: 1_500_000 }, // tier 1M
+    ]);
+    expect(events).toEqual([
+      { subjectKey: "s2", bucket: "300000", studentName: "이", amount: 300_000, tier: 300_000 },
+      { subjectKey: "s3", bucket: "500000", studentName: "박", amount: 620_000, tier: 500_000 },
+      { subjectKey: "s4", bucket: "1000000", studentName: "최", amount: 1_500_000, tier: 1_000_000 },
+    ]);
+  });
+
+  it("outstandingTier 경계", () => {
+    expect(outstandingTier(299_999)).toBe(null);
+    expect(outstandingTier(300_000)).toBe(300_000);
+    expect(outstandingTier(499_999)).toBe(300_000);
+    expect(outstandingTier(1_000_000)).toBe(1_000_000);
+  });
+
+  it("본문 — 1명은 만원 압축 금액, 여러명은 집계", () => {
+    expect(outstandingDigestBody([])).toBe(null);
+    expect(
+      outstandingDigestBody([{ subjectKey: "s1", bucket: "500000", studentName: "이유하", amount: 620_000, tier: 500_000 }]),
+    ).toBe("이유하 학생의 미수금이 62만원에 이릅니다.");
+    const many = outstandingDigestBody([
+      { subjectKey: "s1", bucket: "300000", studentName: "김", amount: 300_000, tier: 300_000 },
+      { subjectKey: "s2", bucket: "1000000", studentName: "이", amount: 1_200_000, tier: 1_000_000 },
+    ]);
+    expect(many).toContain("김·이");
+    expect(many).toContain("100만원 이상");
   });
 });
 

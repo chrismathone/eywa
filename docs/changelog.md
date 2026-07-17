@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 미수 임계 도달 이벤트 (2026-07-17, Phase 3 v6) — ✅ tsc0/lint0/test26 + 실E2E(0121a)
+Phase 3 다섯 번째 이벤트 = **학생 총 미수 금액이 tier 도달**(결석과 동일 마일스톤: 30만/50만/100만원).
+- **집계·판정**([events-core.ts](../src/features/notifications/events-core.ts) `buildOutstandingEvents`·`outstandingTier`
+  순수함수): 학생별 총 미수(unpaid/partial 행 레벨 greatest(0,청구−할인−수납) 합)가 tier 넘으면 1회. 지불로 줄었다
+  다시 오르면 상위 tier에서만 재알림(스팸 방지). bucket=`tier`. 본문은 만원 압축("81만 7,500원").
+- **수신자 = master + 회계(accountant)** 활성만, 각자 전체 집계 1건(미수는 학생별이 아니라 billing 도메인 전체 →
+  담당 강사 아님, billing 접근=master/admin/accountant full). link=/billing. injaewon엔 회계 역할 없어 master만.
+- **0121a `dashboard_top_outstanding_admin(p_limit, p_tenant)`**: 0101a RPC의 cron 변형(auth_tenant_id()가
+  service_role서 silent 0행 방지, execute=service_role만). p_limit=500으로 tier 이상 전원 감지.
+- **⚠️ injaewon 실미수 크다**(44명·30만+ 28명·50만+ 7명) — 콜드스타트 무발송 시드가 특히 중요(없으면 첫 run
+  28벨 폭탄). **✅ 실E2E**: 콜드스타트 28 seed·벨0 → 윤나연(50만 tier) fresh edge → master 2명 "윤나연 학생의
+  미수금이 81만 7,500원에 이릅니다" 발송 확인 → 테스트 이벤트 리셋(다음 cron 콜드스타트 재시드). Vitest +3(26).
+
 ### 알림 데이터 정리(prune) 정책 (2026-07-17, Phase 3 v5) — ✅ tsc0/lint0/test23 + 합성 prune E2E(원복)
 Phase 3 마지막 미해결(무한 성장) 마감. daily-briefing cron이 테넌트 루프와 **독립 1회** 오래된 행 삭제
 ([prune.ts](../src/features/notifications/server/prune.ts), best-effort).

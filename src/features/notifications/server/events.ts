@@ -29,17 +29,20 @@ import {
   buildAbsenceEvents,
   buildFollowupEvents,
   buildGradeDropEvents,
+  buildOutstandingEvents,
   followupBody,
   weekKey,
   gradeDropDigestBody,
   groupEventsByTeacher,
+  outstandingDigestBody,
   type AbsenceEvent,
   type FollowupEvent,
   type GradeDropEvent,
   type GradeRow,
+  type OutstandingEvent,
 } from "../events-core";
 
-type EventType = "absence_alert" | "followup_due" | "grade_drop";
+type EventType = "absence_alert" | "followup_due" | "grade_drop" | "outstanding_alert";
 type EventRow = { tenant_id: string; event_type: EventType; subject_key: string; bucket: string; seeded: boolean };
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -83,16 +86,21 @@ async function recordNew<E extends { subjectKey: string; bucket: string }>(
   return candidates.filter((c) => inserted.has(`${c.subjectKey}::${c.bucket}`));
 }
 
-/** master(활성) 수신자 id 목록 — admin RLS 우회라 tenant 필터 필수. */
-async function activeMasterIds(admin: SupabaseClient, tenantId: string): Promise<string[]> {
+/** 지정 역할(활성) 수신자 id 목록 — admin RLS 우회라 tenant 필터 필수. */
+async function activeRoleIds(admin: SupabaseClient, tenantId: string, roles: readonly string[]): Promise<string[]> {
   const { data, error } = await admin
     .from("users")
     .select("id")
     .eq("tenant_id", tenantId)
-    .eq("system_role", "master")
+    .in("system_role", [...roles])
     .eq("status", "active");
-  if (error) throw new Error(`activeMasterIds: ${error.message}`);
-  return (data ?? []).map((r) => r.id as string);
+  if (error) throw new Error(`activeRoleIds: ${error.message}`);
+  return [...new Set((data ?? []).map((r) => r.id as string))];
+}
+
+/** master(활성) 수신자 id 목록. */
+function activeMasterIds(admin: SupabaseClient, tenantId: string): Promise<string[]> {
+  return activeRoleIds(admin, tenantId, ["master"]);
 }
 
 /** 활성 사용자 id 집합(수신자 유효성 검증용) — counselor가 퇴직/비활성이면 폴백 판정에 씀. */
@@ -356,16 +364,53 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
 }
 
 /**
+ * 미수 임계 감지(학생별 총 미수가 금액 tier 도달) → master + 회계(활성) 집계(콜드스타트면 시드만).
+ * 미수는 학생별이 아니라 청구 도메인 전체라 담당 강사가 아닌 billing 역할(master/accountant)에게 집계 1건.
+ */
+async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promise<number> {
+  // p_tenant 변형(0121a) — 세션용 RPC는 service_role에서 auth_tenant_id() null → silent 0행.
+  const { data, error } = await admin.rpc("dashboard_top_outstanding_admin", { p_limit: 500, p_tenant: tenantId });
+  if (error) throw new Error(`detectOutstanding rpc: ${error.message}`);
+  const candidates = buildOutstandingEvents(
+    ((data ?? []) as Array<{ student_id: string; student_name: string; amount: number | string }>).map((row) => ({
+      studentId: row.student_id,
+      studentName: row.student_name,
+      amount: Number(row.amount),
+    })),
+  );
+  const cold = await isColdStart(admin, tenantId, "outstanding_alert");
+  const fresh = (await recordNew(admin, tenantId, "outstanding_alert", candidates, cold)) as OutstandingEvent[];
+  if (cold || fresh.length === 0) return 0;
+
+  const body = outstandingDigestBody(fresh);
+  if (!body) return 0;
+  // billing 도메인 = master + 회계(accountant). 둘 다 활성만, 각자 전체 집계 1건.
+  const recipients = await activeRoleIds(admin, tenantId, ["master", "accountant"]);
+  const items: NotifyInput[] = recipients.map((recipientId) => ({
+    tenantId,
+    recipientId,
+    type: "outstanding_alert",
+    title: "미수금 주의 학생",
+    body,
+    link: "/billing",
+    actorId: null,
+  }));
+  await notifyUsers(items);
+  return fresh.length;
+}
+
+/**
  * 테넌트 1건의 이벤트 감지·발송. cron이 브리핑 생성과 **독립된 try/catch**로 호출한다
- * (브리핑 실패해도 감지는 돌아야 함). 반환은 관측용 신규 이벤트 수(결석/후속조치/성적 급락).
+ * (브리핑 실패해도 감지는 돌아야 함). 반환은 관측용 신규 이벤트 수(결석/후속조치/성적/미수).
  */
 export async function detectAndNotifyEvents(
   tenantId: string,
-): Promise<{ absence: number; followup: number; gradeDrop: number }> {
+): Promise<{ absence: number; followup: number; gradeDrop: number; outstanding: number }> {
   const admin = createAdminClient();
   let absence = 0;
   let followup = 0;
   let gradeDrop = 0;
+  let outstanding = 0;
   try {
     absence = await detectAbsence(admin, tenantId);
   } catch (e) {
@@ -381,5 +426,10 @@ export async function detectAndNotifyEvents(
   } catch (e) {
     reportError(e, { scope: "events.gradeDrop", tenantId });
   }
-  return { absence, followup, gradeDrop };
+  try {
+    outstanding = await detectOutstanding(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.outstanding", tenantId });
+  }
+  return { absence, followup, gradeDrop, outstanding };
 }

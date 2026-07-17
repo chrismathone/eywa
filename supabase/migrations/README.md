@@ -154,5 +154,7 @@ pnpm db:seed
 
 | `0118a_onescreen_session_teacher_axis` | **`onescreen_daily_sessions` 유니크 (tenant,student,date)→(tenant,updated_by,student,date)** — 같은 학생을 같은 날 가르치는 두 강사가 서로의 '작업중' 세션(subject_progress·점수·태도)을 통째 덮어쓰던 문제. updated_by(=저장한 강사) 재사용(신규 컬럼 없이), 강사별 1행. `saveOnescreenSession` onConflict·roster 조회(`updated_by=본인`)도 함께. `do $$` 가드로 옛 제약 드롭(멱등). 기존 행 무손실(옛 유니크가 (tenant,student,date) 유일 보장). ⚠️ 0118a 2중복(notification·session_teacher) — 접미사 달라 공존 안전. |
 
+| `0121a_top_outstanding_admin` | **`dashboard_top_outstanding`의 cron(service_role) 변형**(`dashboard_top_outstanding_admin(p_limit, p_tenant)`) — 미수 임계 이벤트(Phase 3)가 학생별 총 미수를 세션 없이 읽도록. 로직 0101a와 동일(행 레벨 greatest(0,…), unpaid/partial). auth_tenant_id()→p_tenant, execute는 service_role만. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.
