@@ -2,7 +2,7 @@
 //
 // splits(invoice_teacher_splits, 0117a)의 확정치를 강사별 급여로 환산한다. 원장 결정(2026-07-17):
 // - 지급 기준 = confirmed_amount(청구 기준). actual_amount/diff는 **검토 신호로만**(자동 조정 없음, N2).
-// - 급여 모델 = 강사별 개별(비율제/급여제/혼합). users.salary_type + commission_rate(0118a).
+// - 급여 모델 = 강사별 개별(비율제/급여제/혼합). users.salary_type + commission_rate(0119a).
 // - 귀속 = teacher_id(동명이인 병합 금지, P3). 미배정·미설정은 지어내지 않고 가시화(P4/N4).
 // - confirmed와 actual은 절대 합산 금지(P2/R3, +60.5M 이중계상 사고).
 //
@@ -10,7 +10,7 @@
 
 export type SalaryType = "commission" | "fixed" | "hybrid";
 
-/** 강사 급여 정책(users 0118a). */
+/** 강사 급여 정책(users 0119a). */
 export type TeacherComp = {
   salaryType: SalaryType | null; // null = 미설정
   commissionRate: number | null; // 배분율 %(commission/hybrid). null = 미설정

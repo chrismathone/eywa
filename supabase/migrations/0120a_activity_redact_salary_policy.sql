@@ -1,5 +1,5 @@
--- 0119a: 활동 로그 redact에 급여 정책 2컬럼 추가 — salary_type / commission_rate.
--- 배경: 0118a가 users에 salary_type·commission_rate(급여 배분율)를 추가했으나 log_activity() 트리거의
+-- 0120a: 활동 로그 redact에 급여 정책 2컬럼 추가 — salary_type / commission_rate.
+-- 배경: 0119a가 users에 salary_type·commission_rate(급여 배분율)를 추가했으나 log_activity() 트리거의
 --   redact 목록엔 없어, 원장이 급여 정책을 바꾸면 활동 로그(직원 활동 탭, admin/manager 열람)에 값이 그대로
 --   기록·노출된다(급여=원장 전용 PII 위반). 트리거 자신의 주석 경고("새 민감 컬럼은 여기에도 추가") 이행.
 -- 0086a log_activity()를 create-or-replace로 교체 — redact 배열에 2컬럼만 추가, 나머지 전부 보존(멱등).
@@ -35,7 +35,7 @@ declare
                         'usage_count', 'submission_count', 'last_seen_at', 'last_seen_ip', 'recorded_at'];
   -- redact = 대형/민감 내용("바뀜"만 남기고 원문 미복사) + 급여(원장 전용) + 공개링크 토큰.
   --   ⚠️ form_data는 아래 UPDATE 분기에서 환불요청서만 예외적으로 원본 기록(그 외 폼=이력서 등은 redact 유지).
-  --   ⚠️ 급여 컬럼 추가 시 여기에도 추가(0119a: salary_type·commission_rate).
+  --   ⚠️ 급여 컬럼 추가 시 여기에도 추가(0120a: salary_type·commission_rate).
   redact text[] := array['form_data', 'print_payload', 'ai_summary', 'subject_details',
                          'subject_progress', 'hourly_rate', 'monthly_base', 'salary_type', 'commission_rate',
                          'base_amount', 'hours_worked', 'hourly_amount', 'bonus', 'deduction', 'total',

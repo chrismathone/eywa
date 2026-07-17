@@ -1,4 +1,4 @@
--- 0118a: 강사 급여 정책 2필드 — 급여 연계 v1(splits→강사 정산). docs/payroll-linkage-plan.md.
+-- 0119a: 강사 급여 정책 2필드 — 급여 연계 v1(splits→강사 정산). docs/payroll-linkage-plan.md.
 --
 -- 원장 결정(2026-07-17): 강사별 개별 급여 모델(비율제/급여제/혼합) + 청구 기준(confirmed_amount) 지급.
 -- v1은 읽기전용 정산 참고 화면만 — payroll_records 자동기록·PAYROLL_ENABLED 전환은 하지 않는다.
@@ -16,6 +16,6 @@ alter table users
     check (commission_rate is null or (commission_rate >= 0 and commission_rate <= 100));
 
 comment on column users.salary_type is
-  '급여 방식(0118a): commission=비율제(매출 배분) / fixed=급여제(월기본) / hybrid=혼합 / null=미설정. docs/payroll-linkage-plan.md';
+  '급여 방식(0119a): commission=비율제(매출 배분) / fixed=급여제(월기본) / hybrid=혼합 / null=미설정. docs/payroll-linkage-plan.md';
 comment on column users.commission_rate is
   '매출 배분율 %(commission/hybrid). confirmed_amount(청구 기준)에 적용. null=미설정.';

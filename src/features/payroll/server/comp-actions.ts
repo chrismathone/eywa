@@ -11,7 +11,7 @@ import type { SalaryType } from "../settlement";
 const SALARY_TYPES: SalaryType[] = ["commission", "fixed", "hybrid"];
 
 // nonce = 성공 확정 신호(에디터가 저장 후 접히도록). ⚠️ 급여 변경은 users의 log_activity 트리거가
-// 이미 감사기록(0119a에서 salary_type/commission_rate는 redact) — 여기서 별도 audit_logs 기록 안 함(급여 PII 이중노출 방지).
+// 이미 감사기록(0120a에서 salary_type/commission_rate는 redact) — 여기서 별도 audit_logs 기록 안 함(급여 PII 이중노출 방지).
 export type SaveCompState = { error?: string; ok?: true; nonce?: number } | undefined;
 
 /**
@@ -86,7 +86,7 @@ export async function saveTeacherComp(
   const { error } = await supabase.from("users").update(patch).eq("id", targetId);
   if (error) return { error: error.message };
 
-  // 감사기록은 users의 log_activity 트리거에 위임(급여 컬럼은 0119a에서 redact = "바뀜"만 기록, 값 미노출).
+  // 감사기록은 users의 log_activity 트리거에 위임(급여 컬럼은 0120a에서 redact = "바뀜"만 기록, 값 미노출).
   // 여기서 별도 audit_logs를 남기지 않는다 — /owner 감사 화면이 admin/manager에도 열려 배분율 PII가 샐 수 있어서.
   revalidatePath("/billing");
   return { ok: true, nonce: Date.now() };
