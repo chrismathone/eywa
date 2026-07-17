@@ -1,4 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { BillingContent } from "./_components/billing-content";
 import { TextbooksFace } from "./_components/textbooks-face";
 import { ExpensesPanel } from "./_components/expenses-panel";
@@ -6,11 +7,12 @@ import { CalculatorPanel } from "./_components/calculator-panel";
 import { RefundsFace } from "./_components/refunds-face";
 import { SessionTermsFace } from "./_components/session-terms-face";
 import { SessionVerificationFace } from "./_components/session-verification-face";
+import { TeacherSettlementFace } from "./_components/teacher-settlement-face";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 
 type Sp = Record<string, string | undefined>;
-type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify";
+type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify" | "payroll";
 
 function resolveTab(sp: Sp): BillingTab {
   return sp.tab === "textbooks"
@@ -25,7 +27,9 @@ function resolveTab(sp: Sp): BillingTab {
             ? "sessions"
             : sp.tab === "verify"
               ? "verify"
-              : "billing";
+              : sp.tab === "payroll"
+                ? "payroll"
+                : "billing";
 }
 
 // 교재 단가표는 교재 면과 수강료 계산기 면의 "내부탭"으로 들어가 두 곳에서 쓰인다(최상위 면 아님).
@@ -39,9 +43,17 @@ const FACES: Face[] = [
   { key: "refunds", label: "환불 요청서", href: "/billing?tab=refunds" },
 ];
 
+// 강사 정산(급여)은 원장 전용 면 — master에게만 탭 노출(급여 PII).
+const PAYROLL_FACE: Face = { key: "payroll", label: "강사 정산", href: "/billing?tab=payroll" };
+
 // 면마다 문서 제목을 달리해 창 타이틀바가 "수납관리 · 교재"로 라이브 갱신(route-window 관찰).
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
-  const tab = resolveTab(await searchParams);
+  let tab = resolveTab(await searchParams);
+  // 강사 정산 탭은 원장 전용 — 비-master가 URL로 와도 제목에 "강사 정산"을 노출하지 않는다(본문도 수납으로 폴백).
+  if (tab === "payroll") {
+    const u = await getCurrentUser();
+    if (u?.systemRole !== "master") tab = "billing";
+  }
   const suffix =
     tab === "textbooks"
       ? " · 교재"
@@ -55,37 +67,45 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
               ? " · 회차 확정"
               : tab === "verify"
                 ? " · 시수 검증"
-                : "";
+                : tab === "payroll"
+                  ? " · 강사 정산"
+                  : "";
   return { title: `수납관리${suffix} — eywa` };
 }
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Sp> }) {
-  await requireAccess("billing");
+  const user = await requireAccess("billing");
   const sp = await searchParams;
   const tab = resolveTab(sp);
+  // 강사 정산 탭은 원장(master)에게만 노출. 비-master가 URL로 직접 오면 수납 면으로 폴백.
+  const isMaster = user.systemRole === "master";
+  const faces = isMaster ? [...FACES, PAYROLL_FACE] : FACES;
+  const effectiveTab = tab === "payroll" && !isMaster ? "billing" : tab;
 
   return (
     <div className="space-y-4 print:space-y-0">
-      {(tab === "billing" || tab === "textbooks") && (
+      {(effectiveTab === "billing" || effectiveTab === "textbooks") && (
         <div className="print:hidden">
-          <MakeeduSyncBadge domain={tab === "billing" ? "invoices" : "catalog"} />
+          <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "catalog"} />
         </div>
       )}
       <div className="print:hidden">
-        <FaceTabs faces={FACES} active={tab} ariaLabel="수납관리 면 전환" />
+        <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
       </div>
-      {tab === "textbooks" ? (
+      {effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />
-      ) : tab === "expenses" ? (
+      ) : effectiveTab === "expenses" ? (
         <ExpensesPanel sp={sp} />
-      ) : tab === "calculator" ? (
+      ) : effectiveTab === "calculator" ? (
         <CalculatorPanel sp={sp} />
-      ) : tab === "refunds" ? (
+      ) : effectiveTab === "refunds" ? (
         <RefundsFace sp={sp} />
-      ) : tab === "sessions" ? (
+      ) : effectiveTab === "sessions" ? (
         <SessionTermsFace period={sp.period} subject={sp.subject} q={sp.q} page={sp.page} />
-      ) : tab === "verify" ? (
+      ) : effectiveTab === "verify" ? (
         <SessionVerificationFace period={sp.period} subject={sp.subject} page={sp.page} />
+      ) : effectiveTab === "payroll" ? (
+        <TeacherSettlementFace period={sp.period} />
       ) : (
         <BillingContent sp={sp} />
       )}
