@@ -4,6 +4,28 @@
 
 ## 진행 상황
 
+### 급여 연계 v1 — 강사 정산 참고 화면(읽기전용) + 급여정책 (2026-07-17) — ✅ tsc0/lint0/test1543 + DB E2E(원복) — "쏙쏙 이전" 로드맵 최종 단계
+splits(0117a)의 확정치를 강사 급여로 환산하는 **읽기전용 정산 참고 화면**. 원장 결정(AskUserQuestion 4/4):
+강사별 개별 모델(비율제/급여제/혼합)·**청구 기준(confirmed_amount)** 지급·**단계적 도입**(payroll_records 미기록·
+`PAYROLL_ENABLED` 유지)·수업하는 모든 직원(teacher_id 귀속). 설계 = [payroll-linkage-plan.md](payroll-linkage-plan.md).
+- **[0119a](../supabase/migrations/0119a_teacher_salary_policy.sql)** `users.salary_type`(commission/fixed/hybrid/null)
+  + `commission_rate`(nullable, CHECK 0~100). ⚠️ 커밋 메시지엔 0118a로 적혔으나 병렬 세션 0118a 2건 선점→**0119a 리네임**.
+- **순수엔진** [`computeTeacherSettlements`](../src/features/payroll/settlement.ts)(Vitest 13): 비율제=청구×배분율% /
+  급여제=월기본 / 혼합=기본급+배분액. **미배정·미설정·배분율누락(missing_rate)·기본급누락(missing_base)은 산정 null로
+  가시화**(0을 '산정 완료'로 오표시 금지, P4/N4). 지급=청구 기준, 실측·diff는 **신호로만**(합산 금지 P2/R3).
+- **골든마스터 [E] 확장**([golden.test.ts](../src/features/billing/golden/golden.test.ts)): 실E2E splits→급여 산정값
+  동결(비율제 75,000·급여제·혼합) — 이후 급여 산식 변경은 골든마스터 통과가 머지 조건(N6).
+- **강사 정산 face**(`/billing?tab=payroll`, **원장 전용 탭**): 저장된 splits 스냅샷을 teacher_id로 묶어 급여 산정,
+  인라인 급여정책 편집([`saveTeacherComp`](../src/features/payroll/server/comp-actions.ts), master만). 비-master는
+  탭·본문·문서 타이틀 전부 차단.
+- **🔴급여 PII 누출 2경로 차단(적대리뷰 HIGH)**: ① **[0120a](../supabase/migrations/0120a_activity_redact_salary_policy.sql)**로
+  `log_activity` 트리거 redact에 salary_type·commission_rate 추가(직원활동탭 값노출 차단, DB검증 `{redacted:true}`) ②
+  comp-actions의 명시적 audit_logs 기록 제거(/owner 감사화면이 admin/manager에도 열려 배분율 누출 → 제거, DB 트리거가 이미 기록).
+- 적대리뷰 8건 전부 픽스(fixed 0원·stale rate·에디터 미접힘·타이틀 게이트 등). DB E2E: 박민엽 청구 150,000×50%=75,000
+  정확·CHECK 작동·PII redact·전량 원복. **0119a/0120a 프로덕션 DB 적용(행동 불변)**.
+- ⚠️ **선결(원장 인지)**: ① 회차 확정 707/707 미사용→오늘 confirmed=₩0, 회차확정 실사용 시작해야 급여 뜸 ② 급여정책 백지(48명 0명).
+  **Phase 2(별도 승인)**: payroll_records 자동 초안·스냅샷 동결, `PAYROLL_ENABLED` 전환, 강사 셀프열람(/my-payroll), 수수료·인센티브·티어.
+
 ### 알림 데이터 정리(prune) 정책 (2026-07-17, Phase 3 v5) — ✅ tsc0/lint0/test23 + 합성 prune E2E(원복)
 Phase 3 마지막 미해결(무한 성장) 마감. daily-briefing cron이 테넌트 루프와 **독립 1회** 오래된 행 삭제
 ([prune.ts](../src/features/notifications/server/prune.ts), best-effort).
