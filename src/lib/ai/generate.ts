@@ -156,6 +156,21 @@ export function isRetryableProviderError(err: unknown): boolean {
   return /invalid.*api key|unauthorized|api key/i.test(raw);
 }
 
+/**
+ * Anthropic 최신 모델(Claude 5 계열)이 temperature 파라미터를 거부하는 400인가 —
+ * "`temperature` is deprecated for this model." (2026-07-17 비서 프로덕션 실측). 이 오류는
+ * 모델 문제가 아니라 파라미터 문제라, temperature만 떼고 같은 모델로 1회 재시도하면 된다.
+ */
+export function isTemperatureDeprecatedError(err: unknown): boolean {
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === "object" && err !== null && "message" in err
+        ? String((err as { message?: unknown }).message ?? "")
+        : String(err);
+  return /temperature[\s\S]*deprecated/i.test(raw);
+}
+
 /** provider별 1회 호출 — 응답 텍스트+usage 반환(throw는 generateJSON 루프가 처리). */
 async function callProvider(
   provider: AiProvider,
@@ -217,12 +232,22 @@ async function callProvider(
     };
   }
   const client = getAnthropic(keyName);
-  const res = await client.messages.create({
+  const anthropicParams = (withTemperature: boolean) => ({
     model,
     max_tokens: opts.maxTokens,
-    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+    ...(withTemperature && opts.temperature != null ? { temperature: opts.temperature } : {}),
     ...(opts.system ? { system: opts.system } : {}),
-    messages: [{ role: "user", content: opts.prompt }],
+    messages: [{ role: "user" as const, content: opts.prompt }],
+  });
+  // Claude 5 계열은 temperature가 deprecated(400) — 호출부의 temperature 지정(멘트 0.3 등)은
+  // 지원 모델(Haiku 4.5 등)에선 유지하고, 거부하는 모델에서만 떼고 1회 재시도(자가 회복).
+  const res = await client.messages.create(anthropicParams(true)).catch((e: unknown) => {
+    if (opts.temperature == null || !isTemperatureDeprecatedError(e)) throw e;
+    reportWarning("Anthropic temperature deprecated — 파라미터 제거 후 재시도", {
+      scope: "generateJSON.temperature",
+      model,
+    });
+    return client.messages.create(anthropicParams(false));
   });
   // content[0]만 보지 말고 모든 text 블록을 이어붙인다 — thinking 등 비-text 블록이 앞설 수 있어
   // 첫 블록만 읽으면 빈 문자열이 되는 모델(Sonnet 5 등)에서 파싱 실패("no json")가 난다.

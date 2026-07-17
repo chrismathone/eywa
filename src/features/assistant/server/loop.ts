@@ -183,10 +183,11 @@ async function runAnthropicLoop(
 
   let toolCalls = 0;
   for (let round = 0; round <= MAX_ROUNDS; round++) {
+    // ⚠️ temperature 금지 — Claude 5 계열(sonnet-5)은 temperature가 deprecated라 400
+    // "`temperature` is deprecated for this model."로 폴백 경로 전체가 죽는다(2026-07-17 프로덕션 실측).
     const res = await client.messages.create({
       model,
       max_tokens: 1024,
-      temperature: 0.2,
       system: buildSystemPrompt(kstToday()),
       messages,
       tools: toolDefs as never,
