@@ -19,12 +19,15 @@ import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
 import { followUpUrgency } from "@/features/consultations/follow-up-urgency";
 import { getAbsenceRiskStudents } from "@/features/dashboard/server/queries";
+import { fetchInChunks } from "@/lib/supabase/batch";
+import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
 import {
   absenceDigestBody,
   buildAbsenceEvents,
   buildFollowupEvents,
   followupBody,
+  groupAbsenceEventsByTeacher,
   type AbsenceEvent,
   type FollowupEvent,
 } from "../events-core";
@@ -99,7 +102,69 @@ async function activeUserIds(admin: SupabaseClient, tenantId: string, ids: reado
   return new Set((data ?? []).map((r) => r.id as string));
 }
 
-/** 결석 마일스톤 감지 → master 집계 알림 1건(콜드스타트면 시드만). */
+/**
+ * 학생 → **담당 강사(활성)** 역매핑(v2). 활성 수강(반) 기준: enrollments(활성) → classes(본 테넌트·
+ * is_active·teacher_id) → users(활성). ⚠️ admin RLS 우회라 enrollments·classes 둘 다 tenant 필터 필수
+ * (notifyClassAssignment 적대리뷰 HIGH: 조작된 타 테넌트 class_id로 외부 강사 누수 차단).
+ * 반환 = studentId → 담당 강사 id 목록(중복 제거).
+ */
+async function getStudentActiveTeachers(
+  admin: SupabaseClient,
+  tenantId: string,
+  studentIds: readonly string[],
+  today: string,
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (studentIds.length === 0) return result;
+
+  const enrollments = await fetchInChunks<{
+    student_id: string;
+    class_id: string;
+    start_date: string;
+    end_date: string | null;
+    on_hold: boolean;
+    is_transferred: boolean;
+  }>([...studentIds], (chunk) =>
+    admin
+      .from("enrollments")
+      .select("student_id, class_id, start_date, end_date, on_hold, is_transferred")
+      .eq("tenant_id", tenantId)
+      .in("student_id", chunk),
+  );
+  const active = enrollments.filter((row) =>
+    isEnrollmentActiveOn(
+      { startDate: row.start_date, endDate: row.end_date, onHold: row.on_hold, isTransferred: row.is_transferred },
+      today,
+    ),
+  );
+  const classIds = [...new Set(active.map((row) => row.class_id))];
+  if (classIds.length === 0) return result;
+
+  // 반 → 담당 강사(본 테넌트·운영 중). teacher_id null(미지정)·타 테넌트·폐지 반은 제외.
+  const classes = await fetchInChunks<{ id: string; teacher_id: string | null; tenant_id: string; is_active: boolean }>(
+    classIds,
+    (chunk) => admin.from("classes").select("id, teacher_id, tenant_id, is_active").in("id", chunk),
+  );
+  const teacherByClass = new Map<string, string>();
+  const teacherIds = new Set<string>();
+  for (const klass of classes) {
+    if (klass.tenant_id !== tenantId || !klass.is_active || !klass.teacher_id) continue;
+    teacherByClass.set(klass.id, klass.teacher_id);
+    teacherIds.add(klass.teacher_id);
+  }
+  const activeTeachers = await activeUserIds(admin, tenantId, [...teacherIds]);
+
+  for (const row of active) {
+    const teacherId = teacherByClass.get(row.class_id);
+    if (!teacherId || !activeTeachers.has(teacherId)) continue;
+    const list = result.get(row.student_id) ?? [];
+    if (!list.includes(teacherId)) list.push(teacherId);
+    result.set(row.student_id, list);
+  }
+  return result;
+}
+
+/** 결석 마일스톤 감지 → master 집계 + **담당 강사(v2)** 알림(콜드스타트면 시드만). */
 async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<number> {
   const risks = await getAbsenceRiskStudents({ supabase: admin as unknown as ServerClient, tenantId });
   const candidates = buildAbsenceEvents(
@@ -109,18 +174,44 @@ async function detectAbsence(admin: SupabaseClient, tenantId: string): Promise<n
   const fresh = await recordNew(admin, tenantId, "absence_alert", candidates, cold);
   if (cold || fresh.length === 0) return 0;
 
-  const body = absenceDigestBody(fresh as AbsenceEvent[]);
-  if (!body) return 0;
+  const freshEvents = fresh as AbsenceEvent[];
+  const masterBody = absenceDigestBody(freshEvents);
+  if (!masterBody) return 0;
+
+  const items: NotifyInput[] = [];
+  // ① master 전원 = 신규 이벤트 전체 집계 1건(원장 결정 '운영 벨=master').
   const masters = await activeMasterIds(admin, tenantId);
-  const items: NotifyInput[] = masters.map((recipientId) => ({
+  for (const recipientId of masters) {
+    items.push({
+      tenantId,
+      recipientId,
+      type: "absence_alert",
+      title: "반복 결석 위험 학생",
+      body: masterBody,
+      link: "/retention",
+      actorId: null,
+    });
+  }
+  // ② v2 — 담당 강사 = 자기 학생 신규 이벤트만 집계 1건(스코프 격리, 활성 강사만).
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
     tenantId,
-    recipientId,
-    type: "absence_alert",
-    title: "반복 결석 위험 학생",
-    body,
-    link: "/retention",
-    actorId: null,
-  }));
+    [...new Set(freshEvents.map((event) => event.subjectKey))],
+    kstToday(),
+  );
+  for (const [teacherId, teacherEvents] of groupAbsenceEventsByTeacher(freshEvents, studentTeachers)) {
+    const body = absenceDigestBody(teacherEvents);
+    if (!body) continue;
+    items.push({
+      tenantId,
+      recipientId: teacherId,
+      type: "absence_alert",
+      title: "담당 학생 반복 결석 위험",
+      body,
+      link: "/retention",
+      actorId: null,
+    });
+  }
   await notifyUsers(items);
   return fresh.length;
 }

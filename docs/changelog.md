@@ -4,6 +4,18 @@
 
 ## 진행 상황
 
+### 결석 알림 담당 강사 라우팅 (2026-07-17, Phase 3 v2) — ✅ tsc0/lint0/test16 + 실E2E(다중 반)
+Phase 3 결석 알림을 master뿐 아니라 **담당 강사에게도**(리뷰가 tenant 격리 조인 필수라 v2로 분리했던 항목).
+- **학생→담당 강사 역매핑**([events.ts](../src/features/notifications/server/events.ts) `getStudentActiveTeachers`):
+  enrollments(활성=`isEnrollmentActiveOn`) → classes(**본 테넌트**·is_active·teacher_id) → users(활성). ⚠️ admin RLS
+  우회라 enrollments·classes 둘 다 `.eq(tenant_id)` 필수(notifyClassAssignment 적대리뷰 HIGH — 조작된 타 테넌트
+  class_id로 외부 강사 누수 차단). 강사는 **자기 학생 이벤트만** 집계 1건(`groupAbsenceEventsByTeacher` 순수함수),
+  master는 전체 집계(기존). 다중 반 학생은 여러 강사에게. dedup은 이벤트 단위(student,tier)라 master·강사 같은 run에
+  1회씩 — 재알림 없음. ⚠️ v1에서 이미 기록된 이벤트는 강사에게 소급 안 됨(신규 tier 크로싱부터).
+- **✅ 실E2E(injaewon)**: 박지율(담당=이성우·김민주 2반)을 fresh edge로 → **4벨**(master 박소선·원일 "반복 결석 위험
+  학생" 전체집계 + 강사 이성우·김민주 "담당 학생 반복 결석 위험" 박지율만). 김보민(담당 강사 없음)은 master만 → 강사
+  누수 0·스코프 격리 확인. 강사 link=/retention(teacher=scoped 접근). 순수함수 Vitest +2(16).
+- 강사에게 안 보내려면 detectAbsence의 ② 블록만 제거(master 경로 무변경).
 ### 원스크린 단체 작성 — 통합 상태 적대 점검 26건 전수 수정 (2026-07-17) — ✅ tsc0/lint0/test1475/0117a·0118a 프로덕션 적용·멱등
 0·1·2·3단계 반영 후 **main 통합 상태 전체**를 멀티에이전트로 적대 점검(파인더 4×검증) → 확정 12 + 직접확인 3 +
 유력 11 = **26건 전부 수정**. 4개 그룹으로 나눠 순차 처리(공유파일이라 병렬 워크트리 대신 단일 세션).

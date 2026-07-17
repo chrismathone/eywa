@@ -5,7 +5,9 @@ import {
   buildAbsenceEvents,
   buildFollowupEvents,
   followupBody,
+  groupAbsenceEventsByTeacher,
   summarizeNames,
+  type AbsenceEvent,
 } from "./events-core";
 
 describe("absenceTier", () => {
@@ -60,6 +62,33 @@ describe("buildFollowupEvents", () => {
     const overdue = buildFollowupEvents([{ consultationId: "c1", studentName: "김", followUpDate: "2026-07-17", counselorId: "u1", urgency: "overdue" }]);
     expect(due[0].bucket).toBe("2026-07-17:due");
     expect(overdue[0].bucket).toBe("2026-07-17:overdue");
+  });
+});
+
+describe("groupAbsenceEventsByTeacher (v2)", () => {
+  const ev = (studentId: string, name: string, tier: number): AbsenceEvent => ({
+    subjectKey: studentId,
+    bucket: String(tier),
+    studentName: name,
+    absences: tier,
+    tier,
+  });
+
+  it("강사는 자기 학생 이벤트만, 다중 반 학생은 여러 강사에게", () => {
+    const events = [ev("s1", "김보민", 3), ev("s2", "박지율", 5), ev("s3", "정호", 3)];
+    const map = new Map<string, string[]>([
+      ["s1", ["t1"]], // 김보민 → 강사 t1
+      ["s2", ["t1", "t2"]], // 박지율 → t1·t2 두 반
+      ["s3", ["t2"]], // 정호 → t2
+    ]);
+    const byTeacher = groupAbsenceEventsByTeacher(events, map);
+    expect(byTeacher.get("t1")?.map((e) => e.studentName)).toEqual(["김보민", "박지율"]);
+    expect(byTeacher.get("t2")?.map((e) => e.studentName)).toEqual(["박지율", "정호"]);
+  });
+
+  it("담당 강사 없는 학생은 아무에게도 안 감(맵에 없으면 스킵)", () => {
+    const byTeacher = groupAbsenceEventsByTeacher([ev("s9", "무담당", 3)], new Map());
+    expect(byTeacher.size).toBe(0);
   });
 });
 
