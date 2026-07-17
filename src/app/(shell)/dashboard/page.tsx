@@ -83,20 +83,23 @@ export default async function TodayPage() {
   // 일일 브리핑은 master/admin/manager 전용 — payload가 master 관점 전신호(미수·결재 포함)라
   // scoped 역할(counselor/accountant)에는 카드 자체를 렌더하지 않는다(#77, 0114a 주석 참조).
   const canSeeDailyBriefing = canManageStaff(user.systemRole);
+  // 비서 패널 노출 = 액션 게이트(askAssistant: canManageStaff + dashboard write)와 동일 조건(#77) —
+  // 노출만 넓으면 readonly 관리자에게 '항상 권한 오류 나는 죽은 패널'이 보인다(적대 리뷰 확정).
+  const canUseAssistant = canSeeDailyBriefing && canWrite(user.systemRole, "dashboard", permissionMatrix);
   const [
     enrolled,
     attendanceState,
     trend,
     todaySchedule,
     payment,
-    enrollList,
+    enrollListResult,
     absenceRisks,
     outstanding,
-    recentAnnouncements,
-    manageAnnouncements,
+    recentAnnouncementsResult,
+    manageAnnouncementsResult,
     followUpsResult,
     settings,
-    enrollmentChanges,
+    enrollmentChangesResult,
     actionSignals,
     enrollmentChange,
     dailyBriefingResult,
@@ -120,19 +123,25 @@ export default async function TodayPage() {
       ? getTodaySchedule()
       : Promise.resolve([]),
     access.read.billing ? getPaymentRateThisMonth() : Promise.resolve(null),
+    // 쿼리 실패를 빈 데이터('상담 없음'/'±0'/'공지 없음')로 위장하지 않게 실패 허용 래퍼로 감싼다 —
+    // 쿼리 자체는 error를 throw(위장 금지)하고, 카드는 fallback으로 렌더하되 실패가 로그에 남는다.
     access.read.enrollment
-      ? getActiveEnrollmentConsultations()
-      : Promise.resolve(EMPTY_ENROLLMENT_LIST),
+      ? dashboardQuery("enrollment consultations", getActiveEnrollmentConsultations(), EMPTY_ENROLLMENT_LIST)
+      : Promise.resolve({ data: EMPTY_ENROLLMENT_LIST, unavailable: false }),
     access.read.students && access.read.attendance ? getAbsenceRiskStudents() : Promise.resolve([]),
     access.read.billing ? getTopOutstanding() : Promise.resolve([]),
     // 관리 목록은 30건으로 잘리므로 카드용 역할 필터 쿼리를 별도로 유지해야 대상 공지가 누락되지 않는다.
-    getRecentAnnouncements(user.systemRole, 4),
-    canManageAnnouncements ? getAnnouncementsForManage() : Promise.resolve([]),
+    dashboardQuery("recent announcements", getRecentAnnouncements(user.systemRole, 4), []),
+    canManageAnnouncements
+      ? dashboardQuery("announcements manage", getAnnouncementsForManage(), [])
+      : Promise.resolve({ data: [], unavailable: false }),
     access.read.consultations
       ? dashboardQuery("consultation follow-ups", getFollowUpConsultations(8), [])
       : Promise.resolve({ data: [], unavailable: false }),
     getTenantSettings(),
-    access.read.students ? getMonthlyEnrollmentChanges() : Promise.resolve(EMPTY_ENROLLMENT_CHANGES),
+    access.read.students
+      ? dashboardQuery("monthly enrollment changes", getMonthlyEnrollmentChanges(), EMPTY_ENROLLMENT_CHANGES)
+      : Promise.resolve({ data: EMPTY_ENROLLMENT_CHANGES, unavailable: false }),
     getTodayActionSignals({
       students: access.write.students,
       attendance: access.read.attendance,
@@ -160,7 +169,10 @@ export default async function TodayPage() {
   ]);
   const attendance = attendanceState.snapshot;
   const followUps = followUpsResult.data;
-  const announcements = recentAnnouncements;
+  const enrollList = enrollListResult.data;
+  const announcements = recentAnnouncementsResult.data;
+  const manageAnnouncements = manageAnnouncementsResult.data;
+  const enrollmentChanges = enrollmentChangesResult.data;
 
   // 출결 신선도는 브리핑과 계기판이 같은 KST 기준을 공유한다. 오래된 출결로 학생을
   // 현재 긴급 위험처럼 보이지 않게 브리핑 조립 전에 계산한다.
@@ -315,7 +327,7 @@ export default async function TodayPage() {
       {canSeeDailyBriefing ? <DailyBriefingCard briefing={dailyBriefingResult.data} /> : null}
 
       {/* ①.6 매니저 팀에게 물어보기 — 대화형 비서(질문 1건 = 명시 트리거 1회, Phase 2) */}
-      {canSeeDailyBriefing ? (
+      {canUseAssistant ? (
         <AssistantPanel
           initialConversationId={assistantConversationResult.data?.id ?? null}
           initialTurns={assistantConversationResult.data?.turns ?? []}

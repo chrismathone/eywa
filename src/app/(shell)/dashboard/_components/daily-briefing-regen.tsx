@@ -18,7 +18,17 @@ export function DailyBriefingRegen({ analyzing }: { analyzing: boolean }) {
 
   useEffect(() => {
     if (!analyzing) return;
-    const timer = window.setInterval(() => router.refresh(), 5000);
+    // 폴링 상한 3분(36틱) — 정상 생성(<60s)보다 훨씬 길게 두되, after()가 죽어 analyzing으로
+    // 고착된 날 하루 종일 5초마다 대시보드 전체 RSC를 재실행하는 과호출을 끊는다(적대 리뷰 확정).
+    let ticks = 0;
+    const timer = window.setInterval(() => {
+      ticks += 1;
+      if (ticks > 36) {
+        window.clearInterval(timer);
+        return;
+      }
+      router.refresh();
+    }, 5000);
     return () => window.clearInterval(timer);
   }, [analyzing, router]);
 
@@ -28,7 +38,10 @@ export function DailyBriefingRegen({ analyzing }: { analyzing: boolean }) {
         type="button"
         variant="outline"
         size="sm"
-        disabled={pending || analyzing}
+        // analyzing이어도 클릭 가능해야 서버의 'updated_at 5분 stuck 우회'가 실행된다(잠그면 도달
+        // 불가능한 죽은 코드 — 고착 시 그날 복구 경로가 없었다). 진행 중 클릭은 서버가
+        // "이미 생성이 진행 중입니다"로 안전하게 거절한다.
+        disabled={pending}
         onClick={() => {
           setError(null);
           startTransition(async () => {
@@ -38,7 +51,7 @@ export function DailyBriefingRegen({ analyzing }: { analyzing: boolean }) {
           });
         }}
       >
-        {pending || analyzing ? "생성 중…" : "다시 생성"}
+        {pending ? "생성 중…" : analyzing ? "다시 시도" : "다시 생성"}
       </Button>
       {error ? <p className="text-danger max-w-56 text-right text-[11px] leading-snug">{error}</p> : null}
     </div>

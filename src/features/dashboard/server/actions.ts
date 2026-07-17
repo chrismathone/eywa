@@ -8,6 +8,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
+import { reportError } from "@/lib/observability/report-error";
 import { normalizeNoticeAudience } from "@/features/notices/audience";
 import { generateDailyBriefing } from "./briefing";
 
@@ -131,7 +132,11 @@ export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: 
     .eq("tenant_id", tenantId)
     .eq("briefing_date", date)
     .maybeSingle();
-  if (readError) return { error: `브리핑 상태 확인 실패: ${readError.message}` };
+  // UI raw 에러 원문 노출 금지 — DB 원문은 로그로만, 화면엔 한글 안내(classnote-error.ts 선례).
+  if (readError) {
+    reportError(readError, { scope: "briefing.regen.read", tenantId });
+    return { error: "브리핑 상태 확인에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+  }
 
   if (existing) {
     const stuck =
@@ -143,7 +148,10 @@ export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: 
       .eq("id", existing.id);
     if (!stuck) claim = claim.neq("processing_status", "analyzing");
     const { data: claimed, error: claimError } = await claim.select("id");
-    if (claimError) return { error: `브리핑 생성 시작 실패: ${claimError.message}` };
+    if (claimError) {
+      reportError(claimError, { scope: "briefing.regen.claim", tenantId });
+      return { error: "브리핑 생성을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    }
     if (!claimed || claimed.length === 0) {
       return { error: "이미 생성이 진행 중입니다. 완료되면 화면이 자동으로 갱신됩니다." };
     }
@@ -155,9 +163,11 @@ export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: 
     });
     // 23505 = 동시 클릭 경합에서 상대가 먼저 행을 만든 것 — 진행 중으로 안내.
     if (insertError) {
-      return insertError.code === "23505"
-        ? { error: "이미 생성이 진행 중입니다. 완료되면 화면이 자동으로 갱신됩니다." }
-        : { error: `브리핑 생성 시작 실패: ${insertError.message}` };
+      if (insertError.code === "23505") {
+        return { error: "이미 생성이 진행 중입니다. 완료되면 화면이 자동으로 갱신됩니다." };
+      }
+      reportError(insertError, { scope: "briefing.regen.insert", tenantId });
+      return { error: "브리핑 생성을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요." };
     }
   }
 

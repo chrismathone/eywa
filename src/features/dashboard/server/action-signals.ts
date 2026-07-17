@@ -255,7 +255,10 @@ async function unwrittenReportsSignal(
   const classIds = [...subjectByClass.keys()];
   if (classIds.length === 0) return { count: 0, names: [] };
 
-  const enrollmentRows = await fetchInChunks<{
+  // B2: 이 조회는 end_date 필터 없이 과거 수강 이력까지 받아 JS로 거른다 — 청크 1개 응답이 1000행을
+  // 넘으면 silent 절단돼 '오늘 미작성 보고서' 명단이 조용히 샌다. 같은 데이터를 읽는
+  // unrecordedClassesSignal·getDailyProcessingStatus와 동일하게 fetchAllPagedInChunks(페이징)로.
+  const enrollmentRows = await fetchAllPagedInChunks<{
     student_id: string;
     class_id: string;
     start_date: string;
@@ -263,7 +266,7 @@ async function unwrittenReportsSignal(
     on_hold: boolean;
     is_transferred: boolean;
     attendance_days: string[] | null;
-  }>(classIds, (chunk) =>
+  }>(classIds, (chunk, from, to) =>
     scopeTenant(
       supabase
         .from("enrollments")
@@ -271,7 +274,10 @@ async function unwrittenReportsSignal(
         .lte("start_date", today)
         .in("class_id", chunk),
       db,
-    ),
+    )
+      // OFFSET 페이지 안정화 — unique tie-break order 필수(batch.ts 계약)
+      .order("id")
+      .range(from, to),
   );
   const targets = enrollmentRows
     .filter(
