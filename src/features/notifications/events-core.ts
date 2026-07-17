@@ -203,6 +203,20 @@ export function buildGradeDropEvents(rows: readonly GradeRow[], minDrop = GRADE_
   return events;
 }
 
+// ─────────── 정리(prune) 정책 ───────────
+// dedup 이벤트·읽은 알림의 보존 기간. 순수 컷오프 계산(Vitest) — 실 삭제는 server/prune.ts.
+export const NOTIFICATION_EVENTS_RETENTION_DAYS = 180;
+export const READ_NOTIFICATIONS_RETENTION_DAYS = 90;
+
+/** now(ms) → 삭제 컷오프 ISO 2종. 이 시각보다 오래된 행을 삭제한다. */
+export function pruneCutoffs(nowMs: number): { eventsBefore: string; readNotificationsBefore: string } {
+  const DAY_MS = 86_400_000;
+  return {
+    eventsBefore: new Date(nowMs - NOTIFICATION_EVENTS_RETENTION_DAYS * DAY_MS).toISOString(),
+    readNotificationsBefore: new Date(nowMs - READ_NOTIFICATIONS_RETENTION_DAYS * DAY_MS).toISOString(),
+  };
+}
+
 /** 성적 급락 개별/집계 본문. 한 명이면 과목·하락폭, 여러 명이면 이름 집계. */
 export function gradeDropDigestBody(events: readonly GradeDropEvent[]): string | null {
   if (events.length === 0) return null;

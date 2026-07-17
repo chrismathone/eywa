@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { generateDailyBriefing } from "@/features/dashboard/server/briefing";
 import { detectAndNotifyEvents } from "@/features/notifications/server/events";
+import { pruneNotificationData } from "@/features/notifications/server/prune";
 
 /**
  * 운영실 일일 AI 브리핑 cron (매일 07:00 KST = 22:00 UTC, 원장 승인 2026-07-16 — 새벽 동기화
@@ -57,5 +58,14 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, results, events });
+  // 오래된 dedup 이벤트·읽은 알림 정리 — 전 테넌트 공통 1회, 브리핑/이벤트와 독립(실패해도 무해).
+  let pruned: { events: number; notifications: number } | string;
+  try {
+    pruned = await pruneNotificationData();
+  } catch (e) {
+    reportError(e, { scope: "cron.daily-briefing.prune" });
+    pruned = `실패: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  return NextResponse.json({ ok: true, tenants: tenantIds.length, results, events, pruned });
 }

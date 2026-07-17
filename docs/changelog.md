@@ -4,6 +4,17 @@
 
 ## 진행 상황
 
+### 알림 데이터 정리(prune) 정책 (2026-07-17, Phase 3 v5) — ✅ tsc0/lint0/test23 + 합성 prune E2E(원복)
+Phase 3 마지막 미해결(무한 성장) 마감. daily-briefing cron이 테넌트 루프와 **독립 1회** 오래된 행 삭제
+([prune.ts](../src/features/notifications/server/prune.ts), best-effort).
+- **notification_events(dedup): 180일 초과만.** ⚠️ dedup 행을 조건 살아있는 동안 지우면 재알림 — 그러나
+  대부분 bucket은 시간 지나면 재감지 안 됨(후속조치 `날짜:*`·성적 `과목:옛gradeId`는 새 점수가 최신). 유일한
+  재알림 여지=출결 180일 정지로 결석 tier 고정 학생(6개월 1회 재상기는 합당). uniform 180일이 안전.
+- **notifications(벨): 읽은 것(read_at not null) 90일 초과만. 안 읽은 것은 영구 보존**(배지·정보 유실 방지,
+  벨 목록은 최신 20건만 노출이라 무해). 컷오프 계산은 순수함수 `pruneCutoffs`(Vitest +2, 23).
+- **✅ 합성 prune E2E**: 오래된 이벤트(200일)+최근·읽은 알림(100일)+안읽은 알림(100일)+최근 읽음 삽입→cron
+  →이벤트 1·알림 1 삭제, **최근 이벤트·안읽은 알림·최근 읽음 보존** 확인→전부 원복. 임계 조정=events-core.ts 상수.
+
 ### 후속조치 overdue 주간 재알림 (2026-07-17, Phase 3 v4) — ✅ tsc0/lint0/test21 + 합성 E2E(원복)
 Phase 3 후속조치 이벤트 보강 — 리뷰가 짚은 "기한 지난 채 방치된 후속조치가 다시는 안 울리던" 갭 해소.
 - **overdue bucket에 주(週) 성분**([events-core.ts](../src/features/notifications/events-core.ts) `weekKey`=그 주 월요일

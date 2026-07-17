@@ -8,6 +8,9 @@ import {
   followupBody,
   gradeDropDigestBody,
   groupEventsByTeacher,
+  NOTIFICATION_EVENTS_RETENTION_DAYS,
+  pruneCutoffs,
+  READ_NOTIFICATIONS_RETENTION_DAYS,
   summarizeNames,
   weekKey,
   type AbsenceEvent,
@@ -190,5 +193,19 @@ describe("summarizeNames", () => {
   it("max 초과분은 '외 N명'", () => {
     expect(summarizeNames(["a", "b", "c", "d", "e"])).toBe("a·b·c 외 2명");
     expect(summarizeNames(["a", "b"])).toBe("a·b");
+  });
+});
+
+describe("pruneCutoffs (정리 정책)", () => {
+  const now = Date.parse("2026-07-17T00:00:00Z");
+  it("이벤트=180일 전, 읽은 알림=90일 전 컷오프(이벤트가 더 오래 보존)", () => {
+    const { eventsBefore, readNotificationsBefore } = pruneCutoffs(now);
+    expect(eventsBefore).toBe("2026-01-18T00:00:00.000Z");
+    expect(readNotificationsBefore).toBe("2026-04-18T00:00:00.000Z");
+    expect(Date.parse(eventsBefore)).toBeLessThan(Date.parse(readNotificationsBefore));
+  });
+  it("상수 값 고정(회귀 방지)", () => {
+    expect(NOTIFICATION_EVENTS_RETENTION_DAYS).toBe(180);
+    expect(READ_NOTIFICATIONS_RETENTION_DAYS).toBe(90);
   });
 });
