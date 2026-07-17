@@ -9,6 +9,7 @@ import {
   gradeDropDigestBody,
   groupEventsByTeacher,
   summarizeNames,
+  weekKey,
   type AbsenceEvent,
   type GradeRow,
 } from "./events-core";
@@ -46,25 +47,42 @@ describe("buildAbsenceEvents", () => {
   });
 });
 
+describe("weekKey", () => {
+  it("같은 주(월~일)는 같은 키(그 주 월요일), 다음 주는 다른 키", () => {
+    // 2026-07-17=금 → 그 주 월요일 2026-07-13
+    expect(weekKey("2026-07-17")).toBe("2026-07-13");
+    expect(weekKey("2026-07-13")).toBe("2026-07-13"); // 월
+    expect(weekKey("2026-07-19")).toBe("2026-07-13"); // 일
+    expect(weekKey("2026-07-20")).toBe("2026-07-20"); // 다음 주 월
+  });
+});
+
 describe("buildFollowupEvents", () => {
-  it("today=due, overdue=overdue만 이벤트(soon/later/done 제외)", () => {
-    const events = buildFollowupEvents([
-      { consultationId: "c1", studentName: "김", followUpDate: "2026-07-17", counselorId: "u1", urgency: "today" },
-      { consultationId: "c2", studentName: "이", followUpDate: "2026-07-10", counselorId: null, urgency: "overdue" },
-      { consultationId: "c3", studentName: "박", followUpDate: "2026-07-19", counselorId: "u2", urgency: "soon" },
-      { consultationId: "c4", studentName: "최", followUpDate: "2026-07-30", counselorId: "u3", urgency: "later" },
-    ]);
+  const WK = "2026-07-13";
+  it("today=due, overdue=overdue만 이벤트(soon/later/done 제외), overdue엔 주 성분", () => {
+    const events = buildFollowupEvents(
+      [
+        { consultationId: "c1", studentName: "김", followUpDate: "2026-07-17", counselorId: "u1", urgency: "today" },
+        { consultationId: "c2", studentName: "이", followUpDate: "2026-07-10", counselorId: null, urgency: "overdue" },
+        { consultationId: "c3", studentName: "박", followUpDate: "2026-07-19", counselorId: "u2", urgency: "soon" },
+        { consultationId: "c4", studentName: "최", followUpDate: "2026-07-30", counselorId: "u3", urgency: "later" },
+      ],
+      WK,
+    );
     expect(events).toEqual([
       { subjectKey: "c1", bucket: "2026-07-17:due", studentName: "김", followUpDate: "2026-07-17", stage: "due", counselorId: "u1" },
-      { subjectKey: "c2", bucket: "2026-07-10:overdue", studentName: "이", followUpDate: "2026-07-10", stage: "overdue", counselorId: null },
+      { subjectKey: "c2", bucket: "2026-07-10:overdue:2026-07-13", studentName: "이", followUpDate: "2026-07-10", stage: "overdue", counselorId: null },
     ]);
   });
 
-  it("같은 상담이 due→overdue로 넘어가면 다른 bucket(각 1회 알림)", () => {
-    const due = buildFollowupEvents([{ consultationId: "c1", studentName: "김", followUpDate: "2026-07-17", counselorId: "u1", urgency: "today" }]);
-    const overdue = buildFollowupEvents([{ consultationId: "c1", studentName: "김", followUpDate: "2026-07-17", counselorId: "u1", urgency: "overdue" }]);
-    expect(due[0].bucket).toBe("2026-07-17:due");
-    expect(overdue[0].bucket).toBe("2026-07-17:overdue");
+  it("due는 1회(주 무관), overdue는 주가 바뀌면 새 bucket(주간 재알림)", () => {
+    const c = { consultationId: "c1", studentName: "김", followUpDate: "2026-07-10", counselorId: "u1" };
+    // due는 주 성분 없음 → 같은 bucket
+    expect(buildFollowupEvents([{ ...c, followUpDate: "2026-07-17", urgency: "today" }], "2026-07-13")[0].bucket).toBe("2026-07-17:due");
+    expect(buildFollowupEvents([{ ...c, followUpDate: "2026-07-17", urgency: "today" }], "2026-07-20")[0].bucket).toBe("2026-07-17:due");
+    // overdue는 주마다 새 bucket → 매주 1회 재촉
+    expect(buildFollowupEvents([{ ...c, urgency: "overdue" }], "2026-07-13")[0].bucket).toBe("2026-07-10:overdue:2026-07-13");
+    expect(buildFollowupEvents([{ ...c, urgency: "overdue" }], "2026-07-20")[0].bucket).toBe("2026-07-10:overdue:2026-07-20");
   });
 });
 

@@ -30,6 +30,7 @@ import {
   buildFollowupEvents,
   buildGradeDropEvents,
   followupBody,
+  weekKey,
   gradeDropDigestBody,
   groupEventsByTeacher,
   type AbsenceEvent,
@@ -248,6 +249,7 @@ async function detectFollowup(admin: SupabaseClient, tenantId: string): Promise<
         urgency: followUpUrgency(date, false, today),
       };
     }),
+    weekKey(today), // overdue 주간 재알림 bucket 성분
   );
   const cold = await isColdStart(admin, tenantId, "followup_due");
   const fresh = (await recordNew(admin, tenantId, "followup_due", candidates, cold)) as FollowupEvent[];

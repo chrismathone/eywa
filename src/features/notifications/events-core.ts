@@ -58,15 +58,31 @@ export type FollowupInput = {
 };
 export type FollowupEvent = {
   subjectKey: string; // consultationId
-  bucket: string; // `${followUpDate}:${stage}`
+  bucket: string; // due=`${date}:due`(1회) / overdue=`${date}:overdue:${weekKey}`(주 1회 재알림)
   studentName: string;
   followUpDate: string;
   stage: FollowupStage;
   counselorId: string | null;
 };
 
-/** 후속조치 목록 → 알림 이벤트 후보(today=due / overdue=overdue만). soon/later/done/none 제외. */
-export function buildFollowupEvents(rows: readonly FollowupInput[]): FollowupEvent[] {
+/**
+ * KST 기준 이번 주 월요일(YYYY-MM-DD) — overdue 주간 재알림 bucket 성분.
+ * 같은 주 내 어느 날 cron이 돌아도 동일 키 → 주 1회만, 다음 주 월요일부터 새 키 → 재알림.
+ */
+export function weekKey(todayKst: string): string {
+  const ts = Date.parse(`${todayKst}T00:00:00Z`);
+  const dow = new Date(ts).getUTCDay(); // 0=일 … 6=토
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  return new Date(ts + toMonday * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * 후속조치 목록 → 알림 이벤트 후보(today=due / overdue=overdue만). soon/later/done/none 제외.
+ * - due: bucket=`${followUpDate}:due` — 기한 당일 1회.
+ * - overdue: bucket=`${followUpDate}:overdue:${weekKey}` — **미처리 방치 시 주 1회 재촉**(리뷰 지적:
+ *   기한 지난 채 아무도 안 하면 다시는 안 울리던 갭 해소). 처리(follow_up_done)되면 후보에서 빠져 멈춘다.
+ */
+export function buildFollowupEvents(rows: readonly FollowupInput[], overdueWeekKey: string): FollowupEvent[] {
   const events: FollowupEvent[] = [];
   for (const row of rows) {
     const stage: FollowupStage | null =
@@ -74,7 +90,7 @@ export function buildFollowupEvents(rows: readonly FollowupInput[]): FollowupEve
     if (stage === null) continue;
     events.push({
       subjectKey: row.consultationId,
-      bucket: `${row.followUpDate}:${stage}`,
+      bucket: stage === "overdue" ? `${row.followUpDate}:overdue:${overdueWeekKey}` : `${row.followUpDate}:due`,
       studentName: row.studentName,
       followUpDate: row.followUpDate,
       stage,

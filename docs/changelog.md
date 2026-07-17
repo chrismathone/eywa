@@ -4,6 +4,16 @@
 
 ## 진행 상황
 
+### 후속조치 overdue 주간 재알림 (2026-07-17, Phase 3 v4) — ✅ tsc0/lint0/test21 + 합성 E2E(원복)
+Phase 3 후속조치 이벤트 보강 — 리뷰가 짚은 "기한 지난 채 방치된 후속조치가 다시는 안 울리던" 갭 해소.
+- **overdue bucket에 주(週) 성분**([events-core.ts](../src/features/notifications/events-core.ts) `weekKey`=그 주 월요일
+  KST): due=`날짜:due`(기한 당일 1회, 불변) / overdue=`날짜:overdue:${weekKey}`(**미처리 방치 시 주 1회 재촉**).
+  같은 주 어느 날 cron이 돌아도 동일 키(주 1회), 다음 주 월요일부터 새 키→재알림. 처리(follow_up_done)되면 후보에서
+  빠져 멈춤. due는 주 무관(1회 유지).
+- **✅ 합성 E2E**: 임시 overdue 후속조치(박지율, 기한 07-06 11일 지남) + "지난 주 알림 기록"(bucket …:07-06) 선삽입
+  →non-cold-start→cron이 이번 주 bucket(…:07-13) 새 이벤트로 발화→master 2명 "기한 지난 상담 후속조치" 재촉 벨.
+  두 주 bucket 공존 확인(07-06·07-13). counselor null→master 폴백. 전부 원복(벨·이벤트·상담 0). Vitest +1(21).
+
 ### 성적 급락 이벤트 (2026-07-17, Phase 3 v3) — ✅ tsc0/lint0/test20 + 합성 성적 E2E(원복)
 Phase 3 세 번째 이벤트 = **같은 과목 성적 급락**(최신 vs 직전 ≥15점 하락, retention risk.ts 심각 tier 재사용).
 master + 담당 강사(결석 v2와 동일 tenant 격리 역매핑). type 'grade_drop'(아이콘 trendingDown), link=/retention.
