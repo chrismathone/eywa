@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { buildGridRows, buildRowRenderMeta, isRowActionable } from "../grid";
+import { buildGridRows, buildRowRenderMeta, isRowActionable, rowInClass } from "../grid";
 import { moveInOrder } from "../student-order";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
@@ -29,6 +29,7 @@ export function OneScreenGrid({
   rowActions,
   bulkActions,
   order,
+  classFilter,
   attPending,
   genKey,
   bulkGen,
@@ -41,11 +42,12 @@ export function OneScreenGrid({
   bulkActions: GridBulkActions;
   // 학생 순서변경(3-2) — 단일 반 필터일 때만 전달(전체 필터에선 undefined=버튼 숨김). onSave 성공 시 true.
   order?: { classId: string; onSave: (classId: string, studentIds: string[]) => Promise<boolean> };
+  classFilter: string | null; // 특정 반이면 그 반 소속 과목 행만 표시(다반 학생 타 반 행 혼입 차단)
   attPending: ReadonlySet<string>; // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
 }) {
-  const rows = buildGridRows(students);
+  const rows = buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter));
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
   const sendableRows = rows.filter((r) => isRowActionable(r.subject, "send"));
   const saveableRows = rows.filter((r) => isRowActionable(r.subject, "save"));
@@ -139,6 +141,8 @@ export function OneScreenGrid({
         prev={{ has: hasPrev, show: showPrev, onToggle: () => setShowPrev((v) => !v) }}
         actions={bulkActions}
         bulkGen={bulkGen}
+        locked={orderMode}
+        navHint={config.dailyEnabled || config.checkEnabled}
       >
         {orderMode ? (
           <>
@@ -160,17 +164,20 @@ export function OneScreenGrid({
               onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
               disabled={bulkGen}
             />
-            {order ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={startOrder}
-                disabled={bulkGen}
-                title="학생 표시 순서 변경 — 이 반에 저장(좌석·채점지 순서). 다음 작성에도 유지"
-              >
-                순서
-              </Button>
-            ) : null}
+            {/* 순서 버튼은 항상 노출 — '전체' 필터에선 비활성+안내로 기능 발견성 확보(#22). 단일 반 선택 시만 동작. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => order && startOrder()}
+              disabled={!order || bulkGen}
+              title={
+                order
+                  ? "학생 표시 순서 변경 — 이 반에 저장(좌석·채점지 순서). 다음 작성에도 유지"
+                  : "반을 하나 선택하면 학생 순서를 바꿀 수 있습니다"
+              }
+            >
+              순서
+            </Button>
           </>
         )}
       </GridToolbar>

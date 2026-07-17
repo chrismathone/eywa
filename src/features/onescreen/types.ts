@@ -47,6 +47,8 @@ export type Subject = {
   // ── 출결 인라인 입력(2단계) — 행(반) 단위. 출결 원장은 (student, class, date)라 행의 반을 보존한다 ──
   // classId: 이 과목 행의 반. null=모호(같은 과목을 두 반에서 수강 — pill 숨김, 출석부에서만 기록).
   classId?: string | null;
+  // 이 과목 행의 반 이름 — 반 필터 시 이 행이 그 반 소속인지 판정(다과목/다반 학생 필터 정확도). null=모호.
+  className?: string | null;
   // 이 반의 대상 날짜 raw status(present/late/absent/early_leave/excused/makeup). null=기록 없음.
   // ⚠️ 표시 축약(toMark)과 별개로 raw를 보존 — 조퇴·공결·보강을 pill이 축약값으로 되쓰는 사고 방지.
   attendanceRaw?: string | null;
@@ -79,7 +81,8 @@ export type OneScreenStudent = {
   id: string;
   name: string;
   grade: string; // 실제 학년 — "초3" ~ "중3"
-  tag: string; // 필터용 태그 (실데이터=반 이름, 데모=학년)
+  tag: string; // 필터용 태그 (실데이터=대표 반 이름=최초 반, 데모=학년) — 좌측 그룹 대표
+  tags?: string[]; // 이 학생이 수강 중인 담당 반 전체 — 반 필터가 다과목/다반 학생을 양쪽에서 잡도록(누락 방지)
   className?: string; // 강사 담당 반 이름 — 원스크린 좌측 반별 그룹/필터
   classId?: string;
   // 진도(수업) 학년 — 실제 학년과 다를 수 있음(선행/후행). 없으면 grade로 간주.

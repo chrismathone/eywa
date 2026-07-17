@@ -42,6 +42,16 @@ export function BulkApplyPopover({
     setHomeworkToday("");
   };
   const apply = () => {
+    // ⚠️ 선택 행이 없으면 **표시 전체**가 대상이라, 이미 개별 입력한 태도/과제를 통째 덮어쓸 수 있다(#4 확정).
+    //    "빈 칸만"이 꺼져 있으면(덮어쓰기 모드) 전체 대상일 때 한 번 확인한다(실수 방지, 되돌리기 없음).
+    if (selectedCount === 0 && !onlyEmpty) {
+      if (
+        !window.confirm(
+          `선택한 행이 없어 표시된 ${targetCount}행 전체에 적용됩니다. 이미 입력한 값도 덮어씁니다. 계속할까요?\n(빈 칸만 채우려면 '빈 칸만 채우기'를 켜세요)`,
+        )
+      )
+        return;
+    }
     onApply(
       { attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday },
       onlyEmpty,

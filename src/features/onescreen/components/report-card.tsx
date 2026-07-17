@@ -48,6 +48,9 @@ export function classnoteBadge(status?: string): { label: string; cls: string } 
     case "blocked_shared":
       // 워커 프리플라이트 게이트가 오발송 위험(한 보드에 2가족+ 등)으로 보류 — 사유는 classnote_error에 한글로.
       return { label: "공유 보드 — 자동 발송 차단", cls: "text-danger" };
+    case "subject_off":
+      // 원장 설정(classnoteSubjects) 밖 과목 — 저장만 되고 게시 안 됨. "발송 대기" 오인 방지(#2 확정).
+      return { label: "발송 대상 아님(과목 설정)", cls: "text-text-dim" };
     default:
       return null;
   }
@@ -379,15 +382,27 @@ export function ReportCard({
         {/* ClassNote 발송이 주 채널(위 행). 여기선 기록 저장 + PDF만. 카톡·문자 자동발송(알림톡)은 후속 —
             지금은 저장 후 아래 '학부모 공유 링크' 복사로 수동 전달. */}
         <div className="flex flex-wrap gap-1.5">
+          {/* 진도 미입력 게이트 — 표뷰와 동일(isRowActionable save). 카드만 우회해 빈 보고서를 만드는 구멍 방지(#15). */}
           <Button
             variant="outline"
             size="sm"
-            title="보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
+            disabled={!isRowActionable(subject, "save")}
+            title={
+              isRowActionable(subject, "save")
+                ? "보고서를 기록에 저장합니다 — 아래 학부모 공유 링크를 복사해 카톡·문자로 보낼 수 있습니다"
+                : "오늘 진도를 먼저 입력하세요"
+            }
             onClick={() => onSend(subjectName, "save")}
           >
             저장
           </Button>
-          <Button variant="ghost" size="sm" title="학부모 보고서 미리보기·인쇄" onClick={() => onSend(subjectName, "pdf")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!isRowActionable(subject, "save")}
+            title={isRowActionable(subject, "save") ? "학부모 보고서 미리보기·인쇄" : "오늘 진도를 먼저 입력하세요"}
+            onClick={() => onSend(subjectName, "pdf")}
+          >
             PDF
           </Button>
         </div>

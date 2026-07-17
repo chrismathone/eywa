@@ -20,6 +20,8 @@ export function GridToolbar({
   prev,
   actions,
   bulkGen,
+  locked,
+  navHint,
   children,
 }: {
   // sendable=진도+결석 제외(발송·자동작성 대상), saveable=진도만(저장 대상 — 결석 포함, 2-3 작업별 분리).
@@ -34,9 +36,13 @@ export function GridToolbar({
   prev: { has: boolean; show: boolean; onToggle: () => void };
   actions: GridBulkActions;
   bulkGen?: boolean;
+  locked?: boolean; // 순서 모드 중 — 선택이 ↑↓로 가려져 있어 일괄 액션 버튼을 잠근다(#24)
+  navHint?: boolean; // 점수·교재 칸 Enter/↑↓ 세로 이동 힌트 노출(#21)
   children?: ReactNode;
 }) {
   const { total, sendable, saveable, selectedSendable, selectedSaveable } = counts;
+  const off = bulkGen || locked;
+  const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
   return (
     <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-md border px-4 py-2.5">
       <span className="text-text-dim text-[12px]">
@@ -52,6 +58,9 @@ export function GridToolbar({
           </>
         ) : null}
       </span>
+      {navHint ? (
+        <span className="text-text-faint hidden text-[11px] lg:inline">· 점수·교재 칸은 Enter·↑↓로 위·아래 이동</span>
+      ) : null}
       {prev.has ? (
         <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-[12px]">
           <input
@@ -70,16 +79,17 @@ export function GridToolbar({
             variant="ghost"
             size="sm"
             onClick={() => actions.onClassNotice?.(selectedKeys)}
+            disabled={off}
             title="선택(없으면 표시 전체) 학생 학부모에게 공지 발송 — 진도와 무관"
           >
-            {selectedKeys.length ? `선택 ${selectedKeys.length} 공지` : "반 전체 공지"}
+            {noticeStudents ? `선택 ${noticeStudents}명 공지` : "반 전체 공지"}
           </Button>
         ) : null}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => actions.onAutoWriteAll(selectedKeys)}
-          disabled={sendable === 0 || bulkGen}
+          disabled={sendable === 0 || off}
         >
           {bulkGen
             ? "자동작성 중…"
@@ -91,11 +101,11 @@ export function GridToolbar({
           variant="outline"
           size="sm"
           onClick={() => actions.onSaveAll(selectedKeys)}
-          disabled={saveable === 0 || bulkGen}
+          disabled={saveable === 0 || off}
         >
           {selectedKeys.length ? `선택 ${selectedSaveable} 저장` : "일괄 저장"}
         </Button>
-        <Button size="sm" onClick={() => actions.onSendAll(selectedKeys)} disabled={sendable === 0 || bulkGen}>
+        <Button size="sm" onClick={() => actions.onSendAll(selectedKeys)} disabled={sendable === 0 || off}>
           {selectedKeys.length ? `선택 ${selectedSendable} 발송` : "ClassNote 일괄 발송"}
         </Button>
       </div>

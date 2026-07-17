@@ -16,6 +16,26 @@ Phase 3 결석 알림을 master뿐 아니라 **담당 강사에게도**(리뷰�
   학생" 전체집계 + 강사 이성우·김민주 "담당 학생 반복 결석 위험" 박지율만). 김보민(담당 강사 없음)은 master만 → 강사
   누수 0·스코프 격리 확인. 강사 link=/retention(teacher=scoped 접근). 순수함수 Vitest +2(16).
 - 강사에게 안 보내려면 detectAbsence의 ② 블록만 제거(master 경로 무변경).
+### 원스크린 단체 작성 — 통합 상태 적대 점검 26건 전수 수정 (2026-07-17) — ✅ tsc0/lint0/test1475/0117a·0118a 프로덕션 적용·멱등
+0·1·2·3단계 반영 후 **main 통합 상태 전체**를 멀티에이전트로 적대 점검(파인더 4×검증) → 확정 12 + 직접확인 3 +
+유력 11 = **26건 전부 수정**. 4개 그룹으로 나눠 순차 처리(공유파일이라 병렬 워크트리 대신 단일 세션).
+- **그룹A(서버 데이터, 마이그 2)**: ① 로스터 lesson_reports 무제한 fetch(B2 위반, 1000행 절단으로 이전회차·
+  Δ·교재 누락) → **0117a `onescreen_prior_reports` RPC**(당일 eq(date)+직전 DISTINCT ON 분리) ② 수강생 스코프
+  `end_date IS NULL` 고정 → 날짜 기준(roster·saveLessonReport·saveOnescreenSession·setAttendanceCell 통일, 과거 마감·
+  반이동 회귀 해소) ③ 학생 배지 attById 담당반 한정(타 강사 결석 모순 제거) ④ 다과목 두 반 학생 `tags[]` 필터+
+  `rowInClass`(누락·혼입 차단, 결정적 정렬) ⑤ **0118a 세션 강사축**(updated_by 유니크, 두 강사 세션 상호 덮어쓰기 방지).
+- **그룹B(발송/첨부 게이트)**: ⑥ subject_off "발송 대기" 오안내→명시 분기+배지+일괄 집계 ⑦ 첨부 4액션에 reportDate
+  전달(과거날짜 첨부가 오늘 행에 붙던 문제) ⑧ 카드 저장/PDF 진도 게이트(빈 보고서 차단) ⑨ 보강 학생 재추가 시
+  당일 발송상태 복원(중복 게시 방지) ⑩ 테스트 off 시 마감 카운트 0 고정 해소(studentStatus TestConfig).
+- **그룹C(상태 안전장치)**: ⑪ 진도학년 변경이 전 과목 today wipe→math만(다과목 영어 진도 보존) ⑫ 미선택 일괄
+  음수 카운트 guard ⑬ 일괄 저장/발송 잠금(bulkBusy)+최신값(ref)+초안 클로버 방지 ⑭ bulkGen/bulkBusy 중 행·카드
+  발송 잠금 ⑮ 값 일괄 입력 전체 대상 확인 다이얼로그 ⑯ 자동작성 일괄이 수동 멘트 보존(개별 버튼만 재생성)
+  ⑰ 출결 롤백 compare-and-swap(다른 반 갱신 보존) ⑱ 보고서 저장=진도 확정(표 모드 지표).
+- **그룹D(UX)**: 결석 행 opacity→배경톤(입력 오인 제거)·Enter/↑↓ 힌트·순서 버튼 항상 노출(전체 필터 비활성+안내)·
+  공지 라벨 학생 수·순서 모드 중 일괄 버튼 잠금. (행 높이 3필드 밀도는 원장 승인 레이아웃이라 유지.)
+- 검증: 신규 순수함수 테스트(rowInClass·studentStatus TestConfig·isRowActionable·summarizeSendGaps 등). 0117a·0118a
+  프로덕션 적용+멱등 재실행 확인. ⚠️ 강사뷰 브라우저 시각검증 미완(강사 로그인 필요). ⚠️ 0117a·0118a는 병렬 세션과
+  동번호 3중복/2중복(assistant·splits / notification) — 접미사 달라 db:alphas 사전순 공존(0111a·0116a 선례).
 
 ### 이벤트 감지형 능동 알림 (2026-07-17, Phase 3) — ✅ tsc0/lint0/test14 + cron 3-run 실E2E, 0118a 적용
 "학원 매니저 팀" 로드맵 Phase 3. 하루 1회 배치 cron(daily-briefing 라우트)이 **상태 전이(edge) 이벤트**를 감지해
@@ -82,6 +102,7 @@ attendance R2(정산 로직 변경 시 실데이터 3케이스 동시 통과 —
   정확) → 재저장 멱등 → splits·확정·출석 0/0/0 원복 확인.
 - ⚠️ v1 한계: 분배 확정치의 급여 연계는 미구현(PAYROLL_ENABLED=false 상위 결정) — splits는 기록·대사용.
   replace-invoices-from-excel류 전기간 재실행 시 FK cascade로 splits 소실 가능(계획 문서 기존 경고와 동일 — UPDATE 경로 유지).
+
 ### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
 원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
 보고**(`briefing-team-report.ts`, 0116a `team_report` jsonb)로 전환: 수업·학생·상담·수납·운영 매니저가 영역별

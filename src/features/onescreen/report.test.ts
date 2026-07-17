@@ -70,6 +70,17 @@ describe("studentStatus", () => {
     expect(studentStatus(one).test).toBe("warn");
     expect(studentStatus(makeStudent()).test).toBe("todo");
   });
+  it("비활성 테스트는 요구하지 않는다 — 둘 다 off면 항목 없음=ok(카운트 0 고정 방지 #25)", () => {
+    // 둘 다 off = 요구 0 → ok(입력 무관)
+    expect(studentStatus(makeStudent(), { dailyEnabled: false, checkEnabled: false }).test).toBe("ok");
+    // daily만 on: 일일 입력하면 ok(확인 off라 미요구)
+    const dailyOnly = makeStudent({
+      tests: { daily: { score: 10, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
+    });
+    expect(studentStatus(dailyOnly, { dailyEnabled: true, checkEnabled: false }).test).toBe("ok");
+    // daily on·미입력 + check off → 요구 미충족 → todo
+    expect(studentStatus(makeStudent(), { dailyEnabled: true, checkEnabled: false }).test).toBe("todo");
+  });
   it("보고서: 발송=ok, 초안=warn, 공백=todo", () => {
     expect(studentStatus(makeStudent({ reportSent: true })).rep).toBe("ok");
     expect(studentStatus(makeStudent({ reportDraft: "내용" })).rep).toBe("warn");

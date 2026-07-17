@@ -45,6 +45,7 @@ import {
   isRowActionable,
   planBulkApply,
   planPrevFill,
+  rowInClass,
   summarizeSendGaps,
   type BulkPatch,
   type RowAction,
@@ -165,6 +166,7 @@ export function OneScreenClient({
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
   const [bulkGen, setBulkGen] = useState(false); // 표 일괄 자동작성 진행중
+  const [bulkBusy, setBulkBusy] = useState<"save" | "send" | null>(null); // 일괄 저장/발송 진행중 — 재진입·행발송 잠금(#9/#10)
   const [attUrls, setAttUrls] = useState<Record<string, string>>({}); // 첨부 path→signed 썸네일 URL(P2b)
   const [attPending, setAttPending] = useState<Set<string>>(new Set()); // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   const [uploadingSubject, setUploadingSubject] = useState<string | null>(null); // 첨부 업로드 중인 과목
@@ -249,8 +251,15 @@ export function OneScreenClient({
     );
   }
 
+  // 반 필터 — 특정 반이면 그 반 수강생 전부(tags로 다과목/다반 학생도 양쪽에서 잡음, 누락 방지) + 좌측 그룹 라벨을
+  // 필터 반으로 리맵. 표 행은 activeClassFilter로 rowInClass 필터해 타 반 과목 행 혼입을 막는다.
+  const activeClassFilter = classFilter === "전체" ? null : classFilter;
   const visible =
-    classFilter === "전체" ? students : students.filter((s) => s.tag === classFilter);
+    activeClassFilter == null
+      ? students
+      : students
+          .filter((s) => (s.tags ?? [s.tag]).includes(activeClassFilter))
+          .map((s) => ({ ...s, className: activeClassFilter, tag: activeClassFilter }));
   // 순서변경(3-2)은 단일 반 필터에서만 — 저장 키가 (강사×반)이라 "전체"에선 반이 특정되지 않는다.
   // ⚠️ 동명 반(과목만 다른 같은 이름, 스키마 허용) 가드: 필터는 이름 기반이라 두 반 학생이 섞여 보이는데
   //    첫 반 id로 저장하면 남의 반 학생이 섞인다(리뷰 확정) → 이름 매칭이 유일할 때만 순서 기능 노출.
@@ -260,11 +269,13 @@ export function OneScreenClient({
   const effectiveId = visible.some((s) => s.id === selId) ? selId : (visible[0]?.id ?? "");
   const selected = visible.find((s) => s.id === effectiveId) ?? null;
 
-  // 보고서 셀(과목별 발송 반영) + "오늘 마감" 카운트
+  // 보고서 셀(과목별 발송 반영) + "오늘 마감" 카운트.
+  // 테스트 사용 여부(showDailyTest/showCheckTest)를 넘겨 비활성 테스트가 마감 카운트를 0에 고정하지 않게(#25).
+  const testCfg = { dailyEnabled: showDailyTest, checkEnabled: showCheckTest };
   const reportCellById: Record<string, CellState> = {};
   for (const s of students) reportCellById[s.id] = reportCell(reports[s.id], s.subjects.length);
   const doneCount = students.filter((s) => {
-    const st = studentStatus(s);
+    const st = studentStatus(s, testCfg);
     return st.prog === "ok" && st.test === "ok" && reportCellById[s.id] === "ok";
   }).length;
 
@@ -272,7 +283,7 @@ export function OneScreenClient({
   const hubStats = {
     students: students.length,
     progressDone: students.filter((s) => s.progressConfirmed).length,
-    testDone: students.filter((s) => studentStatus(s).test === "ok").length,
+    testDone: students.filter((s) => studentStatus(s, testCfg).test === "ok").length,
     reportDone: students.filter((s) => reportCellById[s.id] === "ok").length,
   };
 
@@ -307,11 +318,15 @@ export function OneScreenClient({
     }));
   }
   function setStudyGradeFor(studentId: string, grade: string) {
-    // 진도 학년 변경(선행/후행) → 다중선택은 그 학년 차시로 다시 고르도록 오늘 진도만 초기화(prev는 참고용이라 보존).
+    // 진도 학년 변경(선행/후행) → 그 학년 차시로 다시 고르도록 오늘 진도 초기화. ⚠️ **math(커리큘럼 피커) 과목만** —
+    // studyGrade는 math 진도선택창에서만 쓰이는데 전 과목을 지우면 다과목 학생의 영어 등 자유텍스트 진도가
+    // 소리 없이 삭제·영속된다(#6 확정). isMathSubject와 동일 규칙(미지정=math).
     patch(studentId, (s) => ({
       ...s,
       studyGrade: grade,
-      subjects: s.subjects.map((su) => ({ ...su, today: "" })),
+      subjects: s.subjects.map((su) =>
+        (su.subjectKey ?? "math") === "math" ? { ...su, today: "" } : su,
+      ),
     }));
   }
   // 강사 본인 AI 멘트 모드(단일 A / 2문단 B / 학원 기본 null) 저장 — 낙관적 반영 + 실패 롤백.
@@ -335,7 +350,7 @@ export function OneScreenClient({
       toast.message("이미 목록에 있는 학생입니다");
       return;
     }
-    const res = await buildMakeupStudent(studentId);
+    const res = await buildMakeupStudent(studentId, date || undefined); // 조회 중인 날짜 전달(과거 백필 중복게시 방지)
     if (!res.ok || !res.student) {
       toast.error(res.error ?? "학생을 추가하지 못했습니다");
       return;
@@ -400,6 +415,21 @@ export function OneScreenClient({
       subjects: s.subjects.map((su) => (su.classId === classId ? { ...su, attendanceRaw: raw } : su)),
     }));
   }
+  // 실패 롤백 — 행 raw는 되돌리되, 배지(학생단위)는 **내 낙관값이 아직 살아있을 때만** 복원(compare-and-swap).
+  // 그 사이 다른 반 pill 갱신이 배지를 바꿨으면 그걸 보존한다(#17: 앞 요청 롤백이 뒤 성공 배지를 지우던 문제).
+  function rollbackAttendance(
+    studentId: string,
+    classId: string,
+    prevRaw: string | null,
+    myMark: AttendanceMark,
+    prevMark: AttendanceMark,
+  ) {
+    patch(studentId, (s) => ({
+      ...s,
+      attendance: s.attendance === myMark ? prevMark : s.attendance,
+      subjects: s.subjects.map((su) => (su.classId === classId ? { ...su, attendanceRaw: prevRaw } : su)),
+    }));
+  }
   // 재클릭 no-op(삭제는 출석부에서만) + (학생×반) in-flight 잠금(연속 클릭 응답 역전 방지) + 실패 롤백.
   // 낙관 갱신으로 pill 즉시 반응(반응속도 1순위) — 서버 검증(담당 반·수강생)은 setAttendanceCell이 강제.
   async function setAttendanceFor(studentId: string, classId: string, status: BasicAttendance) {
@@ -409,16 +439,17 @@ export function OneScreenClient({
     const prevRaw = stu?.subjects.find((su) => su.classId === classId)?.attendanceRaw ?? null;
     const prevMark = stu?.attendance ?? "출석";
     if (prevRaw === status) return;
+    const myMark = markOf(status);
     setAttPending((p) => new Set(p).add(key));
     applyAttendanceLocal(studentId, classId, status);
     try {
       const res = await setAttendanceCell({ studentId, classId, sessionDate: activeDate, status });
       if ("error" in res) {
-        applyAttendanceLocal(studentId, classId, prevRaw, prevMark);
+        rollbackAttendance(studentId, classId, prevRaw, myMark, prevMark);
         toast.error(res.error);
       }
     } catch {
-      applyAttendanceLocal(studentId, classId, prevRaw, prevMark);
+      rollbackAttendance(studentId, classId, prevRaw, myMark, prevMark);
       toast.error("출결 저장에 실패했습니다 — 네트워크를 확인해 주세요");
     } finally {
       setAttPending((p) => {
@@ -566,34 +597,52 @@ export function OneScreenClient({
   // 표 일괄 작업 대상 — keys(체크된 행) 있으면 그 교집합, 없으면 표시 행 전체. 진도 필수 공통.
   // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
   function selectRows(action: RowAction, keys?: string[]) {
-    const all = buildGridRows(visible).filter((r) => isRowActionable(r.subject, action));
+    const all = buildGridRows(visible)
+      .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
+      .filter((r) => isRowActionable(r.subject, action));
     if (!keys || keys.length === 0) return all;
     const set = new Set(keys);
     return all.filter((r) => set.has(r.key));
   }
   async function autoWriteAllVisible(keys?: string[]) {
-    const rows = selectRows("autowrite", keys);
-    const skipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없어 제외된 행
+    if (bulkGen || bulkBusy) return; // 재진입·중첩 방지
+    const eligible = selectRows("autowrite", keys);
+    const skipped = keys?.length ? keys.length - eligible.length : 0; // 선택했지만 진도 없어 제외된 행(미선택=전체=0, 음수 방지 #11)
+    // ⚠️ 이미 멘트가 있는 행은 **건너뛴다** — 손으로 다듬은 문구를 일괄 재생성이 확인 없이 덮어쓰던 문제(#12 확정).
+    //    개별 '자동작성' 버튼(autoWriteRow)은 그 행만 명시 재생성하므로 재생성 의도는 그쪽으로.
+    const hasDraft = (r: (typeof eligible)[number]) =>
+      !!reportsRef.current[r.student.id]?.[r.subject.name]?.draft?.trim();
+    const rows = eligible.filter((r) => !hasDraft(r));
+    const preserved = eligible.length - rows.length;
     if (rows.length === 0) {
-      toast.message("자동작성할 행이 없습니다 — 오늘 진도를 입력하세요");
+      toast.message(
+        preserved
+          ? `자동작성할 새 행이 없습니다 — 멘트 있는 ${preserved}건은 보존(개별 '자동작성'으로 재생성)`
+          : "자동작성할 행이 없습니다 — 오늘 진도를 입력하세요",
+      );
       return;
     }
     setBulkGen(true);
     try {
       for (const r of rows) {
         setGenKey(`${r.student.id}::${r.subject.name}`);
-        await generateDraftFor(r.student, r.subject.name);
+        const student = latestRow(r.student.id, r.subject.name) ?? r.student;
+        await generateDraftFor(student, r.subject.name);
       }
     } finally {
       setGenKey(null);
       setBulkGen(false);
     }
-    toast.success(`${rows.length}건 자동작성 완료${skipped ? ` · 건너뜀 ${skipped}(진도 미입력·결석)` : ""}`);
+    toast.success(
+      `${rows.length}건 자동작성 완료` +
+        (preserved ? ` · 멘트 보존 ${preserved}건` : "") +
+        (skipped ? ` · 건너뜀 ${skipped}(진도 미입력·결석)` : ""),
+    );
   }
   // 값 일괄 적용(1-2) — 선택(없으면 표시 전체) 행에 채워진 필드만 반영. 빈 필드=미적용(지우기 아님).
   // 대상은 진도 필터 없는 raw 행(발송가능 selectRows와 별개 경로) — 값 채우기는 진도와 무관.
   function bulkApplyValues(keys: string[], patchFields: BulkPatch, onlyEmpty: boolean) {
-    const all = buildGridRows(visible);
+    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
     const plan = planBulkApply(
@@ -681,7 +730,8 @@ export function OneScreenClient({
   function buildSaveInputFor(student: OneScreenStudent, subjectName: string) {
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     const su = student.subjects[idx];
-    const existing = reports[student.id]?.[subjectName];
+    // ⚠️ 최신 초안은 ref에서(일괄 루프 중 사용자 편집·앞 행 patch 반영) — closure `reports`는 클릭 시점 스냅샷이라 유실 위험(#10).
+    const existing = reportsRef.current[student.id]?.[subjectName];
     const draft = existing?.draft.trim() ? existing.draft : buildSubjectReport(student, idx);
     const trendNote = existing?.trendDraft?.trim() || undefined; // 추세 초안 있으면 함께 저장(없으면 미저장)
     const examInfo = buildExamInfo(student, showDailyTest, showCheckTest);
@@ -717,18 +767,26 @@ export function OneScreenClient({
     return buildSaveInputFor(selected, subjectName);
   }
 
+  // 보고서 저장 시 그 학생 진도를 확정 처리 — 표 모드엔 카드의 '진도 확정' 버튼이 없어 상단 진도·마감 지표가
+  // 0에 고정되던 문제(#13). 이미 확정이면 no-op(불필요한 autosave 방지).
+  function confirmProgressOnSave(studentId: string) {
+    const cur = studentsRef.current.find((s) => s.id === studentId);
+    if (cur && !cur.progressConfirmed) patch(studentId, (s) => ({ ...s, progressConfirmed: true }));
+  }
   // ── 저장·발송 코어(카드·표 공용) — (학생,과목) 저장/큐잉 + reports state 반영. ──
   async function saveRecord(student: OneScreenStudent, subjectName: string) {
     const built = buildSaveInputFor(student, subjectName);
     const res = await saveLessonReport(built.input);
     if (res.ok) {
       // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
+      // draft는 사용자가 저장 중(await) 사이 더 고쳤으면 그 편집을 보존(built는 조립 시점 값 — 클로버 방지, #10).
       patchReport(student.id, subjectName, (r) => ({
         ...r,
-        draft: built.draft,
+        draft: r.draft?.trim() && r.draft !== built.draft ? r.draft : built.draft,
         sent: true,
         shareToken: res.shareToken ?? r.shareToken,
       }));
+      confirmProgressOnSave(student.id); // 보고서 저장=진도 확정(표 모드엔 확정 버튼이 없어 지표 0 고정되던 문제, #13)
     }
     return res;
   }
@@ -738,17 +796,28 @@ export function OneScreenClient({
     if (res.ok) {
       patchReport(student.id, subjectName, (r) => ({
         ...r,
-        draft: built.draft,
+        draft: r.draft?.trim() && r.draft !== built.draft ? r.draft : built.draft,
         sent: true,
         shareToken: res.shareToken ?? r.shareToken,
         classnoteStatus: res.status,
       }));
+      confirmProgressOnSave(student.id);
     }
     return res;
   }
 
   async function sendSubject(subjectName: string, channel: string) {
     if (!selected) return;
+    if (bulkGen || bulkBusy) {
+      toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+      return;
+    }
+    // 진도 미입력 게이트(방어층) — 버튼 disabled 우회·프로그램 호출 대비. 표뷰와 동일 기준(#15 확정).
+    const su = selected.subjects.find((s) => s.name === subjectName);
+    if (su && !isRowActionable(su, "save")) {
+      toast.message("오늘 진도를 먼저 입력하세요");
+      return;
+    }
     const res = await saveRecord(selected, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "보고서 저장에 실패했습니다");
@@ -771,6 +840,10 @@ export function OneScreenClient({
   // ClassNote 발송(카드) — 저장 + 큐 적재. 실제 게시는 로컬 워커가 백그라운드로(강사는 대기 안 함).
   async function queueClassnote(subjectName: string) {
     if (!selected) return;
+    if (bulkGen || bulkBusy) {
+      toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+      return;
+    }
     const res = await queueOne(selected, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "ClassNote 발송 큐 적재에 실패했습니다");
@@ -790,6 +863,11 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 저장됨(dry-run). 원장 설정(보고서)에서 'ClassNote 실제 발송'을 켜야 실제 전송됩니다`);
       return;
     }
+    // 발송 대상 과목이 아님(원장 설정 classnoteSubjects 밖) — 저장만 되고 큐에 안 들어감. 성공으로 오인 방지.
+    if (res.status === "subject_off") {
+      toast.message(`${subjectName} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)`);
+      return;
+    }
     const msg =
       res.status === "queued"
         ? "발송 대기 — 워커가 자동으로 게시합니다"
@@ -805,6 +883,10 @@ export function OneScreenClient({
 
   // ── 표(그리드) 행별/일괄 — 카드와 같은 코어(queueOne/saveRecord) 재사용. 오늘 진도 있는 행만. ──
   async function sendRow(student: OneScreenStudent, subjectName: string) {
+    if (bulkGen || bulkBusy) {
+      toast.message("일괄 작업이 진행 중입니다 — 완료 후 다시 시도하세요");
+      return;
+    }
     const res = await queueOne(student, subjectName);
     if (!res.ok) {
       toast.error(res.error ?? "발송에 실패했습니다");
@@ -818,31 +900,48 @@ export function OneScreenClient({
       toast.message(`${student.name} — 오래된 보고서라 발송에서 제외됩니다`);
     } else if (res.status === "dry_run") {
       toast.message(`${student.name} — 저장됨(dry-run · 승인 전 실제 발송 안 함)`);
+    } else if (res.status === "subject_off") {
+      // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
+      toast.message(`${student.name} ${subjectName} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다`);
     } else {
       toast.success(`${student.name} ${subjectName} — 발송 대기`);
     }
   }
+  // 일괄 루프 중 학생·과목의 **최신** 스냅샷(ref) — 루프 중 편집을 반영하고 stale closure로 되돌리지 않게(#10).
+  function latestRow(studentId: string, subjectName: string) {
+    const student = studentsRef.current.find((s) => s.id === studentId);
+    if (!student || !student.subjects.some((su) => su.name === subjectName)) return null;
+    return student;
+  }
   async function saveAllVisible(keys?: string[]) {
+    if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     const rows = selectRows("save", keys);
-    const skipped = keys ? keys.length - rows.length : 0;
+    const skipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
     if (rows.length === 0) {
       toast.message("저장할 행이 없습니다 — 오늘 진도를 입력하세요");
       return;
     }
+    setBulkBusy("save");
     let ok = 0;
     let fail = 0;
-    for (const r of rows) {
-      const res = await saveRecord(r.student, r.subject.name);
-      if (res.ok) ok++;
-      else fail++;
+    try {
+      for (const r of rows) {
+        const student = latestRow(r.student.id, r.subject.name) ?? r.student;
+        const res = await saveRecord(student, r.subject.name);
+        if (res.ok) ok++;
+        else fail++;
+      }
+    } finally {
+      setBulkBusy(null);
     }
     toast.success(
       `${ok}건 저장 완료${fail ? ` · ${fail}건 실패` : ""}${skipped ? ` · 건너뜀 ${skipped}(진도 미입력)` : ""}`,
     );
   }
   async function sendAllVisible(keys?: string[]) {
+    if (bulkBusy || bulkGen) return; // 재진입·중첩 방지(#10)
     const rows = selectRows("send", keys);
-    const preSkipped = keys ? keys.length - rows.length : 0; // 선택했지만 진도 없음·결석이라 발송에서 제외
+    const preSkipped = keys?.length ? keys.length - rows.length : 0; // 미선택=전체=0(음수 방지 #11)
     if (rows.length === 0) {
       toast.message("발송할 행이 없습니다 — 오늘 진도를 입력하세요 (결석 학생은 발송 제외)");
       return;
@@ -863,22 +962,31 @@ export function OneScreenClient({
       )
     )
       return;
+    setBulkBusy("send");
     let queued = 0;
     let blocked = 0;
     let skipped = 0;
+    let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
     let dry = 0;
     let fail = 0;
-    for (const r of rows) {
-      const res = await queueOne(r.student, r.subject.name);
-      if (!res.ok) fail++;
-      else if (res.status === "queued") queued++;
-      else if (res.status === "dry_run") dry++;
-      else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
-      else skipped++; // success/processing/too_old
+    try {
+      for (const r of rows) {
+        const student = latestRow(r.student.id, r.subject.name) ?? r.student;
+        const res = await queueOne(student, r.subject.name);
+        if (!res.ok) fail++;
+        else if (res.status === "queued") queued++;
+        else if (res.status === "dry_run") dry++;
+        else if (res.status === "subject_off") subjectOff++;
+        else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
+        else skipped++; // success/processing/too_old
+      }
+    } finally {
+      setBulkBusy(null);
     }
     toast.success(
       (dry ? `저장 ${dry}건(dry-run·발송 안 함) · ` : "") +
         `발송 대기 ${queued}건` +
+        (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
         (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
@@ -946,7 +1054,7 @@ export function OneScreenClient({
     void (async () => {
       const merged: Record<string, string> = {};
       for (const t of attTargets) {
-        const res = await signReportAttachmentUrls({ studentId: selected.id, subject: t.subject });
+        const res = await signReportAttachmentUrls({ studentId: selected.id, subject: t.subject, reportDate: date || undefined });
         if (res.urls) Object.assign(merged, res.urls);
       }
       if (!cancelled) setAttUrls(merged);
@@ -960,6 +1068,12 @@ export function OneScreenClient({
   // 파일별 순차 업로드(register read-modify-write clobber 방지). issue→uploadToTicket→register.
   async function addAttachments(subjectName: string, files: File[]) {
     if (!selected) return;
+    // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
+    const su0 = selected.subjects.find((s) => s.name === subjectName);
+    if (su0 && !reports[selected.id]?.[subjectName]?.sent && !isRowActionable(su0, "save")) {
+      toast.message("오늘 진도를 입력한 뒤 첨부하세요");
+      return;
+    }
     const studentId = selected.id;
     const subject = subjectKeyOf(subjectName);
     setUploadingSubject(subjectName);
@@ -992,6 +1106,7 @@ export function OneScreenClient({
         const issued = await issueReportAttachmentUploadTicket({
           studentId,
           subject,
+          reportDate: date || undefined, // 과거 날짜 첨부가 '오늘' 행에 붙지 않게 대상 날짜 명시(#5 확정)
           contentType: file.type,
           size: file.size,
           ext,
@@ -1009,6 +1124,7 @@ export function OneScreenClient({
         const reg = await registerReportAttachment({
           studentId,
           subject,
+          reportDate: date || undefined,
           path: issued.ticket.path,
           name: original.name,
           size: file.size,
@@ -1034,7 +1150,7 @@ export function OneScreenClient({
   async function removeAttachment(subjectName: string, path: string) {
     if (!selected) return;
     const studentId = selected.id;
-    const res = await removeReportAttachment({ studentId, subject: subjectKeyOf(subjectName), path });
+    const res = await removeReportAttachment({ studentId, subject: subjectKeyOf(subjectName), reportDate: date || undefined, path });
     if (!res.ok) {
       toast.error(res.error ?? "첨부 삭제에 실패했습니다");
       return;
@@ -1122,6 +1238,7 @@ export function OneScreenClient({
             onBulkApply: bulkApplyValues,
           }}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
+          classFilter={activeClassFilter}
           attPending={attPending}
           genKey={genKey}
           bulkGen={bulkGen}
@@ -1146,6 +1263,7 @@ export function OneScreenClient({
           onSelect={setSelId}
           reportCellById={reportCellById}
           classOrder={classTags.filter((t) => t !== "전체")}
+          testConfig={testCfg}
         />
 
         {selected ? (

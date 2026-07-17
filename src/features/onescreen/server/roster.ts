@@ -142,9 +142,22 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   const classById = new Map(activeClasses.map((c) => [c.id, c]));
   const activeIds = activeClasses.map((c) => c.id);
 
-  // 3) 활성 수강생(end_date null)
+  // 3) 대상 날짜 시점 수강생 — start≤date AND (end null OR end≥date). null 양단 허용(레거시 안전).
+  // ⚠️ end_date IS NULL 고정이면 과거 날짜 마감 시 그새 종료된 학생이 누락되고, 출결 write 게이트(날짜기준)와
+  //    어긋나 pill 클릭이 거부된다(회귀). 출석부·setAttendanceCell과 같은 날짜 기준으로 통일.
   const enrollments = await fetchInChunks<{ student_id: string; class_id: string }>(activeIds, (chunk) =>
-    supabase.from("enrollments").select("student_id, class_id").is("end_date", null).in("class_id", chunk),
+    supabase
+      .from("enrollments")
+      .select("student_id, class_id")
+      .or(`start_date.is.null,start_date.lte.${targetDate}`)
+      .or(`end_date.is.null,end_date.gte.${targetDate}`)
+      .in("class_id", chunk),
+  );
+  // 결정적 정렬(반 시작시각→class_id) — '대표 반'(tag=첫 반)·과목 행 순서를 새로고침 간 안정화(비결정 방지).
+  enrollments.sort(
+    (a, b) =>
+      (startByClass.get(a.class_id) ?? "99:99").localeCompare(startByClass.get(b.class_id) ?? "99:99") ||
+      a.class_id.localeCompare(b.class_id),
   );
   const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
   if (studentIds.length === 0) return emptyRoster(today, targetDate, teacherName, noticeMode, academyNoticeMode);
@@ -158,10 +171,16 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
 
   // 5) 학생별 OneScreenStudent — 과목 = 그 학생이 듣는 (강사 담당) 반의 과목들
   const byStudent = new Map<string, OneScreenStudent>();
+  // 반 필터용 tags = 학생의 **수강 반 이름 전체**(enrollments 기준). ⚠️ subjects의 className에서 도출하면
+  //   같은 과목 두 반(dedup으로 className=null)인 학생이 그 반 필터에서 통째 누락된다(F4 후속 회귀) → enrollments로 도출.
+  const classNamesByStudent = new Map<string, Set<string>>();
   for (const e of enrollments) {
     const stu = studById.get(e.student_id);
     const cls = classById.get(e.class_id);
     if (!stu || !cls) continue;
+    const set = classNamesByStudent.get(stu.id) ?? new Set<string>();
+    set.add(cls.class_name);
+    classNamesByStudent.set(stu.id, set);
     const grade = stu.grade ?? "";
     // 테스트 만점 = 이 학생 (첫) 과목의 문항수 설정. 세션에 저장된 값이 있으면 아래에서 덮어씀.
     const tmax = subjectTestMax.get(cls.subject) ?? 5;
@@ -192,10 +211,11 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     const dupSubject = os.subjects.find((su) => su.subjectKey === cls.subject);
     if (!dupSubject) {
       // classId = 이 과목 행의 반(출결 원장이 student+class+date라 행 단위 출결 입력(2단계)의 키).
-      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, classId: cls.id, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
+      os.subjects.push({ name: subjects.labelOf(cls.subject), subjectKey: cls.subject, classId: cls.id, className: cls.class_name, prev: "", today: "", textbook: "", makeup: false, homeworkToday: "" });
     } else if (dupSubject.classId !== cls.id) {
       // 같은 과목을 두 반에서 수강(subjectKey dedup으로 1행) — 행의 반이 모호 → 출결 pill 숨김(출석부에서 기록).
       dupSubject.classId = null;
+      dupSubject.className = null;
     }
   }
 
@@ -203,23 +223,16 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   // 앵커 = 대상 날짜(오늘 또는 과거). session_date/report_date/attendance 필터가 모두 이 날짜.
   const todayIso = targetDate;
-  const [reportRows, attRows, sessionRows, textbookRows] = await Promise.all([
+  const [todayReports, priorReports, attRows, sessionRows, textbookRows] = await Promise.all([
+    // (a) 당일 행만 — 발송상태·공유링크·초안복원용. eq(report_date)라 학생×과목 소량(절단 불가).
     fetchInChunks<{
       id: string;
       student_id: string;
-      report_date: string;
-      progress: string | null;
-      exam_info: string | null;
       subject: string | null;
       share_token: string | null;
       classnote_status: string | null;
       revoked_at: string | null;
       attachments: { path: string; name: string }[] | null;
-      // 이전 회차 참고행(prevReport)용 — 같은 lesson_reports 행에서 컬럼만 추가(새 쿼리 없음, B2 무위반).
-      textbook: string | null;
-      homework_today: string | null;
-      homework_score: string | null;
-      attitude: string | null;
       notes: string | null;
       trend_note: string | null;
     }>(
@@ -227,12 +240,14 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
       (chunk) =>
         supabase
           .from("lesson_reports")
-          .select(
-            "id, student_id, report_date, progress, exam_info, subject, share_token, classnote_status, revoked_at, attachments, textbook, homework_today, homework_score, attitude, notes, trend_note",
-          )
-          .in("student_id", chunk)
-          .order("report_date", { ascending: false }),
+          .select("id, student_id, subject, share_token, classnote_status, revoked_at, attachments, notes, trend_note")
+          .eq("report_date", todayIso)
+          .in("student_id", chunk),
     ),
+    // (b) (학생×과목)별 대상 날짜 **직전 최신 1건** — 이전 회차 참고행·prev·prevScore·교재 승계.
+    // ⚠️ 옛 코드는 전체 이력을 무페이징 select(B2 위반) → PostgREST 1000행 silent 절단으로 오래된 학생부터 누락.
+    // DISTINCT ON RPC(0117a)가 딱 필요한 만큼만 반환(절단 불가). studentIds 배열 파라미터라 청크 불필요(반환행 수백↓).
+    supabase.rpc("onescreen_prior_reports", { p_student_ids: studentIds, p_before: todayIso }),
     fetchInChunks<{ student_id: string; class_id: string; status: string; recorded_at: string }>(
       studentIds,
       (chunk) =>
@@ -244,6 +259,7 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
           .order("recorded_at", { ascending: false }),
     ),
     // Phase3: 오늘 "작업중" 세션(점수/진도/태도/과제/확정) 복원 — 새로고침에도 유지.
+    // ⚠️ 강사축(0118a): 같은 학생을 다른 강사가 가르쳐도 서로 안 덮게 updated_by=본인 세션만 복원.
     fetchInChunks<OnescreenSessionRow>(studentIds, (chunk) =>
       supabase
         .from("onescreen_daily_sessions")
@@ -251,11 +267,29 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
           "student_id, study_grade, subject_progress, daily_score, daily_max, check_score, check_max, attitude, homework, special_note, progress_confirmed",
         )
         .eq("session_date", todayIso)
+        .eq("updated_by", user.id)
         .in("student_id", chunk),
     ),
     // 교재 자동입력 기본값 — 본인 담당 학생의 교재요청서(fetchInChunks, B3). studentIds 독립 → 같은 Promise.all(B4).
     getTextbookOrdersForStudents(studentIds),
   ]);
+  type PriorRow = {
+    student_id: string;
+    subject: string | null;
+    report_date: string;
+    progress: string | null;
+    exam_info: string | null;
+    textbook: string | null;
+    homework_today: string | null;
+    homework_score: string | null;
+    attitude: string | null;
+    notes: string | null;
+  };
+  // RPC 에러는 무신호 삼킴 금지(B2/B3) — 다만 이전회차는 '보강' 데이터라 throw로 화면 전체를 죽이지 않고 로그+graceful.
+  // (0117a 미배포·일시장애 시 이전회차/prevScore/교재승계만 빠지고 당일 데이터·세션은 정상 렌더 → 진단 가능하게 로그.)
+  if (priorReports.error)
+    console.error("[roster] onescreen_prior_reports RPC 실패 — 이전 회차 데이터 생략:", priorReports.error.message);
+  const priorRows = (priorReports.data ?? []) as PriorRow[];
   const sessionById = new Map(sessionRows.map((r) => [r.student_id, r]));
 
   // 학생별 대표 교재 — 강사 본인 주문 우선, (requestDate ?? createdAt) 최신, book_name 공란 제외.
@@ -296,37 +330,35 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     }
   >();
   const subjKey = (studentId: string, subject: string | null) => `${studentId}::${subject ?? ""}`;
-  type ReportRow = (typeof reportRows)[number];
-  const priorReport = new Map<string, { progress: string | null; examInfo: string | null }>();
-  // (학생×과목)별 직전 회차 전체 행 — 이전 회차 참고행(prevReport). report_date desc라 (학생,과목) 첫 건이 직전.
-  const priorBySubject = new Map<string, ReportRow>();
+  // 학생단위 직전(prev 진도·prevScore 폴백) = 그 학생 과목행들 중 최신 회차.
+  const priorReport = new Map<string, { progress: string | null; examInfo: string | null; date: string }>();
+  // (학생×과목)별 직전 회차 — 이전 회차 참고행(prevReport). RPC가 이미 (학생,과목) 최신 1건씩 반환.
+  const priorBySubject = new Map<string, PriorRow>();
   const todayReportIds: string[] = [];
-  for (const r of reportRows) {
-    if (r.report_date === todayIso) {
-      sentToday.add(r.student_id);
-      // report_date desc 정렬이라 (학생,과목) 첫 건이 그날 최신 → 뒤 건은 덮지 않음.
-      const k = subjKey(r.student_id, r.subject);
-      if (!todayBySubject.has(k)) {
-        todayBySubject.set(k, {
-          reportId: r.id,
-          shareToken: r.share_token,
-          classnoteStatus: r.classnote_status,
-          revokedAt: r.revoked_at,
-          attachments: r.attachments ?? [],
-          notes: r.notes,
-          trendNote: r.trend_note,
-        });
-        todayReportIds.push(r.id);
-      }
-    } else if (r.report_date < todayIso) {
-      // 직전 회차 = **대상 날짜보다 이전** 회차만(과거 날짜 조회 시 그 이후 회차를 참고행으로 잘못 쓰지 않도록).
-      // report_date desc라 (학생/과목) 첫 건이 대상 날짜 직전 회차.
-      if (!priorReport.has(r.student_id))
-        priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info });
-      const pk = subjKey(r.student_id, r.subject);
-      if (!priorBySubject.has(pk)) priorBySubject.set(pk, r); // (학생,과목) 첫(=직전) 회차
+  // (a) 당일 행 — 발송상태·과목별 공유링크·초안 복원.
+  for (const r of todayReports) {
+    sentToday.add(r.student_id);
+    const k = subjKey(r.student_id, r.subject);
+    if (!todayBySubject.has(k)) {
+      todayBySubject.set(k, {
+        reportId: r.id,
+        shareToken: r.share_token,
+        classnoteStatus: r.classnote_status,
+        revokedAt: r.revoked_at,
+        attachments: r.attachments ?? [],
+        notes: r.notes,
+        trendNote: r.trend_note,
+      });
+      todayReportIds.push(r.id);
     }
-    // report_date > todayIso(대상 날짜 이후 회차)는 참고 대상 아님 — 무시.
+  }
+  // (b) 직전 회차(RPC, 대상 날짜 이전 최신) — 참고행 + 학생단위 최신.
+  for (const r of priorRows) {
+    const pk = subjKey(r.student_id, r.subject);
+    if (!priorBySubject.has(pk)) priorBySubject.set(pk, r);
+    const cur = priorReport.get(r.student_id);
+    if (!cur || r.report_date > cur.date)
+      priorReport.set(r.student_id, { progress: r.progress, examInfo: r.exam_info, date: r.report_date });
   }
 
   // 오늘 보고서들의 학부모 열람 수(share_link_views) — PostgREST group-by 대신 행을 청크로 가져와 JS 집계(fetchInChunks).
@@ -336,9 +368,12 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   );
   for (const v of viewRows)
     viewCountByReport.set(v.lesson_report_id, (viewCountByReport.get(v.lesson_report_id) ?? 0) + 1);
-  // student별 오늘 최신 출결 status(recorded_at desc 정렬이라 첫 건이 최신) — 학생 배지 표시용(축약).
+  // student별 오늘 최신 출결 status(recorded_at desc라 첫 건이 최신) — 학생 배지 표시용(축약).
+  // ⚠️ 강사 담당 반 기록만(myClassIdSet) — 타 강사·타 반의 그날 기록을 집으면 이 화면 배지가 행 pill과 모순된다.
+  const myClassIdSet = new Set(allIds); // 강사 담당 전 반
   const attById = new Map<string, string>();
-  for (const a of attRows) if (!attById.has(a.student_id)) attById.set(a.student_id, a.status);
+  for (const a of attRows)
+    if (myClassIdSet.has(a.class_id) && !attById.has(a.student_id)) attById.set(a.student_id, a.status);
   // (학생×반) 최신 raw — 출결 pill(2단계)의 행 단위 값. 축약(toMark)과 별개로 raw 보존(조퇴·보강 되쓰기 방지).
   const attByRow = new Map<string, string>();
   for (const a of attRows) {
@@ -438,6 +473,9 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
         if (entry?.trendDraft?.trim()) su.trendDraft = entry.trendDraft;
       }
     }
+    // 이 학생이 수강 중인 담당 반 전체(tags) — enrollments 기준(모호 과목 포함, 위 F4 후속 회귀 주석 참조). 비면 대표 tag 폴백.
+    const classNames = [...(classNamesByStudent.get(os.id) ?? [])];
+    os.tags = classNames.length ? classNames : os.tag ? [os.tag] : [];
   }
 
   const gradeRank = (g: string) => {
