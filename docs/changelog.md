@@ -4,6 +4,21 @@
 
 ## 진행 상황
 
+### 운영실 버그 체크 — 비서 temperature 400 + 적대 리뷰 확정 23건 중 16건 픽스 (2026-07-17) — ✅ tsc0/lint0/test1552 + 실API·실DB 검증
+원장 제보(비서 패널 "400 `temperature` is deprecated") 발단 → 5차원 멀티에이전트 전수 점검(발견별 3렌즈 적대 검증, 확정 23·기각 4).
+- **AI(치명)**: Claude 5 계열 temperature 거부 400([gotchas #80](gotchas.md)) — 비서 Anthropic 루프에서 제거 + `generateJSON`은
+  거부 모델만 파라미터 떼고 1회 재시도(자가 회복, haiku 0.3 유지). 실 API 재현(sonnet-5: 400→200, haiku: 200).
+- **비서 루프**: deepseek 후보가 Anthropic 클라로 라우팅되던 죽은 폴백 제거(`supportedChain`) · 빈 답변 usage 2중 기록 수정 +
+  빈 답변도 폴백 대상 · 에러 raw JSON UI 노출 한글화(한글 메시지만 통과).
+- **비서 데이터 정확성**: 수납률(`getInvoicesForPeriod`)·출결 하루치(`getAttendanceForDate`) fetchAllPaged 전환(B2, 1000행 절단+에러 삼킴) ·
+  학생 미납 건수 `invoiceOutstanding` 단일 공식으로(void/refunded를 미납으로 세던 실데이터 버그) · 출결 `makeup`·인보이스 `void/refunded` 라벨 추가.
+- **운영실/브리핑**: 브리핑 '오늘 수업'이 종강 반 포함(실DB 106→102 검증, 조인 or 필터) · 후속조치 건수 60행 절단→exact count 2건 ·
+  retention 직렬 await→Promise.all(B4) · unwrittenReports enrollments 페이징(B2) · analyzing 고착 시 '다시 시도' 가능(서버 5분 우회 도달) +
+  폴링 3분 상한 · 등록상담 날짜 UTC slice→KST · 공지/등록상담/월증감 에러 삼킴→throw+`dashboardQuery` 래퍼 · 비서 패널 게이트를 액션과 일치(#77) ·
+  실패 질문 낙관 버블 제거+입력 복원 · 스포트라이트 key 동명이인 충돌.
+- **백로그(설계 판단 필요, 미수정)**: max_tokens 절단 답변 감지, generateJSON 파싱 실패 시 잔여 provider 폴백, 대화 update 실패 삼킴,
+  동시 질문 lost-update(jsonb append RPC), 스포트라이트 payload에 studentId 포함.
+
 ### 미수 임계 도달 이벤트 (2026-07-17, Phase 3 v6) — ✅ tsc0/lint0/test26 + 실E2E(0121a)
 Phase 3 다섯 번째 이벤트 = **학생 총 미수 금액이 tier 도달**(결석과 동일 마일스톤: 30만/50만/100만원).
 - **집계·판정**([events-core.ts](../src/features/notifications/events-core.ts) `buildOutstandingEvents`·`outstandingTier`
