@@ -203,6 +203,64 @@ export function buildGradeDropEvents(rows: readonly GradeRow[], minDrop = GRADE_
   return events;
 }
 
+// ─────────── 미수 임계 이벤트 ───────────
+// 학생별 총 미수(unpaid/partial 합)가 금액 tier를 넘으면 1회 알림. 결석과 동일 마일스톤 방식이라
+// 지불로 줄었다가 다시 오르면 상위 tier에서만 재알림(스팸 방지). tier는 원(₩) 고정값(학원별 등록금
+// 차이로 의미가 다를 수 있어 향후 tenant_settings화 여지 — v1은 고정).
+
+/** 미수 금액 마일스톤(원). ~1개월/1.5~2개월/3개월+ 감각. */
+export const OUTSTANDING_TIERS = [300_000, 500_000, 1_000_000] as const;
+
+/** 미수 금액 → 도달한 최고 tier(원). 미달이면 null. */
+export function outstandingTier(amount: number): number | null {
+  let reached: number | null = null;
+  for (const tier of OUTSTANDING_TIERS) {
+    if (amount >= tier) reached = tier;
+  }
+  return reached;
+}
+
+export type OutstandingInput = { studentId: string; studentName: string; amount: number };
+export type OutstandingEvent = {
+  subjectKey: string; // studentId
+  bucket: string; // tier 문자열 '300000'|'500000'|'1000000'
+  studentName: string;
+  amount: number;
+  tier: number;
+};
+
+/** 미수 명단 → 마일스톤 이벤트 후보(tier 도달자만). dedup은 호출부 upsert. */
+export function buildOutstandingEvents(rows: readonly OutstandingInput[]): OutstandingEvent[] {
+  const events: OutstandingEvent[] = [];
+  for (const row of rows) {
+    const tier = outstandingTier(row.amount);
+    if (tier === null) continue;
+    events.push({ subjectKey: row.studentId, bucket: String(tier), studentName: row.studentName, amount: row.amount, tier });
+  }
+  return events;
+}
+
+/** 원 → "62만원" 압축(만원 단위, 만원 미만은 원). 알림 본문용. */
+function manwon(amount: number): string {
+  if (amount >= 10_000) {
+    const man = Math.floor(amount / 10_000);
+    const rest = amount % 10_000;
+    return rest === 0 ? `${man}만원` : `${man}만 ${rest.toLocaleString("en-US")}원`;
+  }
+  return `${amount.toLocaleString("en-US")}원`;
+}
+
+/** 미수 이벤트 → 집계 알림 본문(없으면 null). */
+export function outstandingDigestBody(events: readonly OutstandingEvent[]): string | null {
+  if (events.length === 0) return null;
+  if (events.length === 1) {
+    return `${events[0].studentName} 학생의 미수금이 ${manwon(events[0].amount)}에 이릅니다.`;
+  }
+  const names = summarizeNames(events.map((event) => event.studentName));
+  const topTier = Math.max(...events.map((event) => event.tier));
+  return `${names}의 미수금이 ${manwon(topTier)} 이상입니다.`;
+}
+
 // ─────────── 정리(prune) 정책 ───────────
 // dedup 이벤트·읽은 알림의 보존 기간. 순수 컷오프 계산(Vitest) — 실 삭제는 server/prune.ts.
 export const NOTIFICATION_EVENTS_RETENTION_DAYS = 180;
