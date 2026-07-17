@@ -167,6 +167,9 @@ export const users = pgTable(
     // 급여 정산용. 외부 노출은 master + 본인만 (RLS).
     hourlyRate: numeric("hourly_rate", { precision: 10, scale: 0 }).notNull().default("0"),
     monthlyBase: numeric("monthly_base", { precision: 10, scale: 0 }).notNull().default("0"),
+    // 급여 방식·배분율(0119a, 급여 연계 v1). null=미설정. commission/hybrid=비율%를 청구 기준에 적용.
+    salaryType: text("salary_type"), // 'commission' | 'fixed' | 'hybrid' | null
+    commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }),
     // 주간 근무 시간표 — { mon: ["09:00-12:00", …], … } 요일별 시간대 배열. null = 미설정.
     workSchedule: jsonb("work_schedule"),
     // 강사별 AI 멘트 공지 모드 오버라이드(0104a) — 'A'(단일 문단)|'B'(2문단 분리). null = 학원 기본(report.noticeMode) 따름.

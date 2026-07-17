@@ -21,6 +21,7 @@ import { mergeHolidays } from "../tuition-calc";
 import { classifyVerification } from "../session-terms/verification";
 import { aggregateTeacherAllocations } from "../session-terms/allocation";
 import { computeSplitRows, totalSplits } from "../session-terms/splits";
+import { computeTeacherSettlements, totalSettlements, type TeacherComp } from "@/features/payroll/settlement";
 
 // ─────────────────── [A] 반 라인 매칭 — classInvoiceAmount ───────────────────
 
@@ -209,5 +210,61 @@ describe("골든 [D] 수납 지표 — injaewon 2026-07 전건 스냅샷(401행)
     expect(paymentRateOf(145437525, 161122025 - 2632863)).toBeCloseTo(91.7649656069227, 10);
     expect(paymentRateOf(200, 100)).toBe(100);
     expect(paymentRateOf(100, 0)).toBe(0);
+  });
+});
+
+// ─────────────────── [E] 강사 정산(급여) — splits 확정치 → 급여 산정값 동결 ───────────────────
+// 실E2E splits(수학 JJ2B 박민엽 확정 150,000 / 영어 특별S Elsa 확정 60,000)에 가상 급여정책을 적용해
+// 세 모델(비율제·급여제·혼합)의 산정값을 핀. confirmed 기준·actual 신호 분리(P1/P2)를 회귀로 고정.
+
+describe("골든 [E] 강사 정산 — splits confirmed_amount → 급여(비율제/급여제/혼합)", () => {
+  // 실E2E splits를 강사별로 집계한 정산 입력(수학 JJ2B 이시우 100,000 + 이재용 50,000 = 박민엽 150,000 청구,
+  // actual 100,000+37,500 = 137,500). 담당 강사 박민엽(t-park).
+  const parkRows = [
+    { teacherId: "t-park", teacherName: "박민엽", classId: "cls-jj2b", confirmedAmount: 100000, actualAmount: 100000 },
+    { teacherId: "t-park", teacherName: "박민엽", classId: "cls-jj2b", confirmedAmount: 50000, actualAmount: 37500 },
+  ];
+  const comp = (over: Partial<TeacherComp>): Map<string, TeacherComp> =>
+    new Map([["t-park", { salaryType: "commission", commissionRate: 50, monthlyBase: 0, ...over }]]);
+
+  it("비율제 50% — 청구 150,000 × 50% = 75,000 (actual 137,500은 신호로만)", () => {
+    const [s] = computeTeacherSettlements(parkRows, comp({ salaryType: "commission", commissionRate: 50 }));
+    expect(s).toMatchObject({
+      teacherName: "박민엽",
+      confirmedTotal: 150000,
+      actualTotal: 137500,
+      diffTotal: -12500,
+      commissionAmount: 75000,
+      settlement: 75000,
+      status: "computed",
+    });
+  });
+
+  it("급여제 — 월 고정급 2,800,000 (splits 무관)", () => {
+    const [s] = computeTeacherSettlements(
+      parkRows,
+      comp({ salaryType: "fixed", monthlyBase: 2800000, commissionRate: null }),
+    );
+    expect(s!.settlement).toBe(2800000);
+    expect(s!.commissionAmount).toBe(0);
+  });
+
+  it("혼합 — 기본급 1,500,000 + 청구 150,000 × 40% = 1,560,000", () => {
+    const [s] = computeTeacherSettlements(
+      parkRows,
+      comp({ salaryType: "hybrid", monthlyBase: 1500000, commissionRate: 40 }),
+    );
+    expect(s!.commissionAmount).toBe(60000);
+    expect(s!.settlement).toBe(1560000);
+  });
+
+  it("합계 — 산정된 급여만 합산(비율제 75,000), 청구 총액 별도", () => {
+    const rows = computeTeacherSettlements(parkRows, comp({ commissionRate: 50 }));
+    expect(totalSettlements(rows)).toEqual({
+      teacherCount: 1,
+      settledTotal: 75000,
+      confirmedTotal: 150000,
+      pendingCount: 0,
+    });
   });
 });
