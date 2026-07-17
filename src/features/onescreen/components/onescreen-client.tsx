@@ -363,7 +363,7 @@ export function OneScreenClient({
   }
   // 보강 학생 '이전 진도 불러오기' — 직전 회차를 당겨 prev/prevReport/prevScore를 채운다(세션 저장 없음).
   async function loadMakeupPrev(studentId: string) {
-    const res = await loadMakeupHistory(studentId);
+    const res = await loadMakeupHistory(studentId, date || undefined); // 조회 중인 날짜 기준 직전 회차(과거 백필 정합)
     if (!res.ok || !res.bySubject) {
       toast.error(res.error ?? "이전 진도를 불러오지 못했습니다");
       return;

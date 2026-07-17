@@ -597,7 +597,10 @@ export async function buildMakeupStudent(
  * 강사가 버튼을 누르면 그 학생의 (과목)별 직전 lesson_reports를 당겨와 prev/prevReport로 반환(roster와 동일 규격).
  * prevScore(일일/확인)는 학생 단위 최신 회차의 exam_info로.
  */
-export async function loadMakeupHistory(studentId: string): Promise<{
+export async function loadMakeupHistory(
+  studentId: string,
+  reportDate?: string, // 조회 중인 날짜(과거 백필) — '직전 회차' 기준. roster RPC p_before와 동일 의미로 통일.
+): Promise<{
   ok: boolean;
   bySubject?: Record<string, { prev: string; prevReport: PrevReport }>;
   prevScore?: { daily: number | null; check: number | null };
@@ -610,12 +613,13 @@ export async function loadMakeupHistory(studentId: string): Promise<{
   const settings = await getTenantSettings();
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
 
-  // 오늘 이전(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
+  // 대상 날짜 **이전**(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
+  // ⚠️ 과거 백필 시 서버 오늘이 아니라 조회 중인 날짜 기준이어야 그 날짜 이후 회차를 '직전'으로 잘못 표시하지 않음.
   const { data } = await supabase
     .from("lesson_reports")
     .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
     .eq("student_id", studentId)
-    .lt("report_date", kstToday())
+    .lt("report_date", resolveReportDate(reportDate))
     .order("report_date", { ascending: false })
     .limit(50);
   const rows = data ?? [];
