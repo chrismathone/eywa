@@ -129,8 +129,9 @@ export function GridBodyRow({
   const hasDraft = !!rep?.draft?.trim(); // 학부모 멘트(draft) 준비됨 — 발송 시 사용
   const canSend = isRowActionable(subject, "send"); // 진도 입력됨 + 결석 아님(2-3) — 자동작성·발송 게이트
   const isAbsent = subject.attendanceRaw === "absent";
+  // 결석 행은 배경 톤으로 표시(입력은 여전히 가능=기록 보존). opacity로 전체를 흐리면 활성 입력칸이 disabled로 오인된다(#20).
   return (
-    <tr className={`hover:bg-bg-soft/50 ${isAbsent ? "opacity-60" : ""}`}>
+    <tr className={isAbsent ? "bg-danger-soft/25 hover:bg-danger-soft/40" : "hover:bg-bg-soft/50"}>
       <td className={`${TD} text-center`}>
         {orderControls !== undefined ? (
           orderControls
@@ -336,8 +337,14 @@ export function GridBodyRow({
           <Button
             size="sm"
             variant="outline"
-            disabled={!canSend}
-            title={!canSend && isAbsent ? "결석 학생 — 발송 제외 (기록 저장은 가능)" : undefined}
+            disabled={!canSend || bulkGen}
+            title={
+              bulkGen
+                ? "전체 자동작성 중 — 완료 후 발송"
+                : !canSend && isAbsent
+                  ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
+                  : undefined
+            }
             onClick={() => actions.onSendRow(student, subject.name)}
           >
             발송

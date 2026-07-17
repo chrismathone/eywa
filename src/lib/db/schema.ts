@@ -1847,6 +1847,33 @@ export const assistantConversations = pgTable(
   (t) => [index("assistant_conversations_tenant_user_idx").on(t.tenantId, t.userId, t.updatedAt)],
 );
 
+// === notification_events (이벤트 알림 dedup 원장 — 0118a 손수 alpha, Phase 3) ===
+// 한 행 = "이 이벤트를 1회 처리(발송/시드)했다". unique(tenant,event_type,subject_key,bucket)가 재발송 차단.
+// write=서버(service_role)만(정책 없음), read=테넌트 select. 앱 표면 없음(부기용) — 알림은 기존 벨.
+export const notificationEvents = pgTable(
+  "notification_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(), // 'absence_alert' | 'followup_due'
+    subjectKey: text("subject_key").notNull(), // 학생·상담 id
+    bucket: text("bucket").notNull(), // 상태 전이 표현('3' / '2026-07-17:overdue')
+    seeded: boolean("seeded").notNull().default(false), // true = 콜드스타트 무발송 시드
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("notification_events_tenant_type_subject_bucket_uq").on(
+      t.tenantId,
+      t.eventType,
+      t.subjectKey,
+      t.bucket,
+    ),
+    index("notification_events_tenant_type_idx").on(t.tenantId, t.eventType, t.createdAt),
+  ],
+);
+
 // === ai_usage_logs (AI 호출 usage 계측 — 0113a 손수 alpha) ===
 // generateJSON 1회 = 1행. write는 서버(service_role)만(insert 정책 없음), read는 테넌트 select 정책.
 // tenant_id nullable: 컨텍스트를 안 넘기는 기존 호출부는 null(스레딩 점진 확장).
@@ -1952,3 +1979,5 @@ export type DailyBriefing = typeof dailyBriefings.$inferSelect;
 export type NewDailyBriefing = typeof dailyBriefings.$inferInsert;
 export type AssistantConversation = typeof assistantConversations.$inferSelect;
 export type NewAssistantConversation = typeof assistantConversations.$inferInsert;
+export type NotificationEvent = typeof notificationEvents.$inferSelect;
+export type NewNotificationEvent = typeof notificationEvents.$inferInsert;

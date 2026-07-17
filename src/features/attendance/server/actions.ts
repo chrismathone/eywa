@@ -178,7 +178,7 @@ export async function setAttendanceCell(input: {
         .select("*", { count: "exact", head: true })
         .eq("class_id", classId)
         .eq("student_id", studentId)
-        .lte("start_date", sessionDate)
+        .or(`start_date.is.null,start_date.lte.${sessionDate}`)
         .or(`end_date.is.null,end_date.gte.${sessionDate}`),
     ]);
     if (!ownClass) return { error: "담당 반이 아닙니다" };

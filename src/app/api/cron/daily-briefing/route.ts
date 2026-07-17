@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { generateDailyBriefing } from "@/features/dashboard/server/briefing";
+import { detectAndNotifyEvents } from "@/features/notifications/server/events";
 
 /**
  * 운영실 일일 AI 브리핑 cron (매일 07:00 KST = 22:00 UTC, 원장 승인 2026-07-16 — 새벽 동기화
@@ -36,6 +37,7 @@ export async function GET(req: Request) {
 
   const tenantIds = [...new Set((masters ?? []).map((row) => row.tenant_id as string))];
   const results: Record<string, string> = {};
+  const events: Record<string, string> = {};
   for (const tenantId of tenantIds) {
     try {
       const result = await generateDailyBriefing(tenantId, { notifyOnFirstGeneration: true });
@@ -45,7 +47,15 @@ export async function GET(req: Request) {
       reportError(e, { scope: "cron.daily-briefing", tenantId });
       results[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
     }
+    // Phase 3 이벤트 감지 — 브리핑과 **독립된 try/catch**(브리핑 실패해도 이벤트 알림은 돌아야 함).
+    try {
+      const detected = await detectAndNotifyEvents(tenantId);
+      events[tenantId] = `결석 ${detected.absence}·후속 ${detected.followup}·성적 ${detected.gradeDrop}`;
+    } catch (e) {
+      reportError(e, { scope: "cron.daily-briefing.events", tenantId });
+      events[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, results });
+  return NextResponse.json({ ok: true, tenants: tenantIds.length, results, events });
 }

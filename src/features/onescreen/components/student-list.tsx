@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/eywa-icon-compat";
-import { studentStatus } from "../report";
+import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
 
@@ -23,13 +23,15 @@ function StudentRow({
   active,
   reportCell,
   onClick,
+  testConfig,
 }: {
   st: OneScreenStudent;
   active: boolean;
   reportCell?: CellState;
   onClick: () => void;
+  testConfig?: TestConfig;
 }) {
-  const s = studentStatus(st);
+  const s = studentStatus(st, testConfig);
   // 보(보고서) 셀은 과목별 발송 상태로 재정의 가능 (클라이언트가 reportCellById로 전달).
   const cellState = (key: "prog" | "test" | "rep"): CellState =>
     key === "rep" ? (reportCell ?? s.rep) : s[key];
@@ -89,6 +91,7 @@ export function StudentList({
   onSelect,
   reportCellById,
   classOrder,
+  testConfig,
 }: {
   students: OneScreenStudent[];
   selId: string;
@@ -96,6 +99,8 @@ export function StudentList({
   reportCellById?: Record<string, CellState>;
   /** 반 그룹 표시 순서(보통 시각순). 없으면 등장 순서. */
   classOrder?: readonly string[];
+  /** 테스트 사용 여부 — '테' 셀이 비활성 테스트를 요구하지 않게(#25). */
+  testConfig?: TestConfig;
 }) {
   // 반별 그룹 — className 없으면 "기타"로.
   const groups = new Map<string, OneScreenStudent[]>();
@@ -171,6 +176,7 @@ export function StudentList({
                         active={st.id === selId}
                         reportCell={reportCellById?.[st.id]}
                         onClick={() => onSelect(st.id)}
+                        testConfig={testConfig}
                       />
                     ))
                   : null}

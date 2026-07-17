@@ -4,6 +4,85 @@
 
 ## 진행 상황
 
+### 후속조치 overdue 주간 재알림 (2026-07-17, Phase 3 v4) — ✅ tsc0/lint0/test21 + 합성 E2E(원복)
+Phase 3 후속조치 이벤트 보강 — 리뷰가 짚은 "기한 지난 채 방치된 후속조치가 다시는 안 울리던" 갭 해소.
+- **overdue bucket에 주(週) 성분**([events-core.ts](../src/features/notifications/events-core.ts) `weekKey`=그 주 월요일
+  KST): due=`날짜:due`(기한 당일 1회, 불변) / overdue=`날짜:overdue:${weekKey}`(**미처리 방치 시 주 1회 재촉**).
+  같은 주 어느 날 cron이 돌아도 동일 키(주 1회), 다음 주 월요일부터 새 키→재알림. 처리(follow_up_done)되면 후보에서
+  빠져 멈춤. due는 주 무관(1회 유지).
+- **✅ 합성 E2E**: 임시 overdue 후속조치(박지율, 기한 07-06 11일 지남) + "지난 주 알림 기록"(bucket …:07-06) 선삽입
+  →non-cold-start→cron이 이번 주 bucket(…:07-13) 새 이벤트로 발화→master 2명 "기한 지난 상담 후속조치" 재촉 벨.
+  두 주 bucket 공존 확인(07-06·07-13). counselor null→master 폴백. 전부 원복(벨·이벤트·상담 0). Vitest +1(21).
+
+### 성적 급락 이벤트 (2026-07-17, Phase 3 v3) — ✅ tsc0/lint0/test20 + 합성 성적 E2E(원복)
+Phase 3 세 번째 이벤트 = **같은 과목 성적 급락**(최신 vs 직전 ≥15점 하락, retention risk.ts 심각 tier 재사용).
+master + 담당 강사(결석 v2와 동일 tenant 격리 역매핑). type 'grade_drop'(아이콘 trendingDown), link=/retention.
+- **정확 판정**([events-core.ts](../src/features/notifications/events-core.ts) `buildGradeDropEvents` 순수함수):
+  (학생,과목)별 최신 2건 비교 — retention roster가 과목 섞어 비교하는 한계를 이벤트는 과목별로 정확히. bucket=
+  `과목:최신gradeId`라 **새 점수 들어와 급락 시 1회**만(상승·직전없음·pct null 제외). 과목 라벨은 서버 buildSubjectMaps
+  한글화(raw 키 노출 금지). 180일 창 fetchAllPaged(B2).
+- **⚠️ injaewon 성적 0건**(합성 3,290행은 데모 테넌트였고 프로덕션은 미입력) — **거짓 알림 위험 0**, 학원이 성적 입력
+  시작 시 작동하는 dormant 상태. E2E는 합성 성적 2건(박지율 수학 90→68→50) 임시 삽입으로 검증 후 **전부 원복**
+  (성적·이벤트·벨 삭제 확인 0).
+- **✅ 합성 E2E**: 콜드스타트 시드(벨0) → 새 낮은 점수로 fresh edge → **4벨**(master 박소선·원일 "성적 급락" + 강사
+  이성우·김민주 "담당 학생 성적 급락 — 박지율 수학 18점 하락, 현재 50점"). groupEventsByTeacher 제네릭화(결석·성적 공용).
+  순수함수 Vitest +4(20). 끄려면 detectAndNotifyEvents의 gradeDrop 블록 제거.
+
+### 결석 알림 담당 강사 라우팅 (2026-07-17, Phase 3 v2) — ✅ tsc0/lint0/test16 + 실E2E(다중 반)
+Phase 3 결석 알림을 master뿐 아니라 **담당 강사에게도**(리뷰가 tenant 격리 조인 필수라 v2로 분리했던 항목).
+- **학생→담당 강사 역매핑**([events.ts](../src/features/notifications/server/events.ts) `getStudentActiveTeachers`):
+  enrollments(활성=`isEnrollmentActiveOn`) → classes(**본 테넌트**·is_active·teacher_id) → users(활성). ⚠️ admin RLS
+  우회라 enrollments·classes 둘 다 `.eq(tenant_id)` 필수(notifyClassAssignment 적대리뷰 HIGH — 조작된 타 테넌트
+  class_id로 외부 강사 누수 차단). 강사는 **자기 학생 이벤트만** 집계 1건(`groupAbsenceEventsByTeacher` 순수함수),
+  master는 전체 집계(기존). 다중 반 학생은 여러 강사에게. dedup은 이벤트 단위(student,tier)라 master·강사 같은 run에
+  1회씩 — 재알림 없음. ⚠️ v1에서 이미 기록된 이벤트는 강사에게 소급 안 됨(신규 tier 크로싱부터).
+- **✅ 실E2E(injaewon)**: 박지율(담당=이성우·김민주 2반)을 fresh edge로 → **4벨**(master 박소선·원일 "반복 결석 위험
+  학생" 전체집계 + 강사 이성우·김민주 "담당 학생 반복 결석 위험" 박지율만). 김보민(담당 강사 없음)은 master만 → 강사
+  누수 0·스코프 격리 확인. 강사 link=/retention(teacher=scoped 접근). 순수함수 Vitest +2(16).
+- 강사에게 안 보내려면 detectAbsence의 ② 블록만 제거(master 경로 무변경).
+### 원스크린 단체 작성 — 통합 상태 적대 점검 26건 전수 수정 (2026-07-17) — ✅ tsc0/lint0/test1475/0117a·0118a 프로덕션 적용·멱등
+0·1·2·3단계 반영 후 **main 통합 상태 전체**를 멀티에이전트로 적대 점검(파인더 4×검증) → 확정 12 + 직접확인 3 +
+유력 11 = **26건 전부 수정**. 4개 그룹으로 나눠 순차 처리(공유파일이라 병렬 워크트리 대신 단일 세션).
+- **그룹A(서버 데이터, 마이그 2)**: ① 로스터 lesson_reports 무제한 fetch(B2 위반, 1000행 절단으로 이전회차·
+  Δ·교재 누락) → **0117a `onescreen_prior_reports` RPC**(당일 eq(date)+직전 DISTINCT ON 분리) ② 수강생 스코프
+  `end_date IS NULL` 고정 → 날짜 기준(roster·saveLessonReport·saveOnescreenSession·setAttendanceCell 통일, 과거 마감·
+  반이동 회귀 해소) ③ 학생 배지 attById 담당반 한정(타 강사 결석 모순 제거) ④ 다과목 두 반 학생 `tags[]` 필터+
+  `rowInClass`(누락·혼입 차단, 결정적 정렬) ⑤ **0118a 세션 강사축**(updated_by 유니크, 두 강사 세션 상호 덮어쓰기 방지).
+- **그룹B(발송/첨부 게이트)**: ⑥ subject_off "발송 대기" 오안내→명시 분기+배지+일괄 집계 ⑦ 첨부 4액션에 reportDate
+  전달(과거날짜 첨부가 오늘 행에 붙던 문제) ⑧ 카드 저장/PDF 진도 게이트(빈 보고서 차단) ⑨ 보강 학생 재추가 시
+  당일 발송상태 복원(중복 게시 방지) ⑩ 테스트 off 시 마감 카운트 0 고정 해소(studentStatus TestConfig).
+- **그룹C(상태 안전장치)**: ⑪ 진도학년 변경이 전 과목 today wipe→math만(다과목 영어 진도 보존) ⑫ 미선택 일괄
+  음수 카운트 guard ⑬ 일괄 저장/발송 잠금(bulkBusy)+최신값(ref)+초안 클로버 방지 ⑭ bulkGen/bulkBusy 중 행·카드
+  발송 잠금 ⑮ 값 일괄 입력 전체 대상 확인 다이얼로그 ⑯ 자동작성 일괄이 수동 멘트 보존(개별 버튼만 재생성)
+  ⑰ 출결 롤백 compare-and-swap(다른 반 갱신 보존) ⑱ 보고서 저장=진도 확정(표 모드 지표).
+- **그룹D(UX)**: 결석 행 opacity→배경톤(입력 오인 제거)·Enter/↑↓ 힌트·순서 버튼 항상 노출(전체 필터 비활성+안내)·
+  공지 라벨 학생 수·순서 모드 중 일괄 버튼 잠금. (행 높이 3필드 밀도는 원장 승인 레이아웃이라 유지.)
+- 검증: 신규 순수함수 테스트(rowInClass·studentStatus TestConfig·isRowActionable·summarizeSendGaps 등). 0117a·0118a
+  프로덕션 적용+멱등 재실행 확인. ⚠️ 강사뷰 브라우저 시각검증 미완(강사 로그인 필요). ⚠️ 0117a·0118a는 병렬 세션과
+  동번호 3중복/2중복(assistant·splits / notification) — 접미사 달라 db:alphas 사전순 공존(0111a·0116a 선례).
+
+### 이벤트 감지형 능동 알림 (2026-07-17, Phase 3) — ✅ tsc0/lint0/test14 + cron 3-run 실E2E, 0118a 적용
+"학원 매니저 팀" 로드맵 Phase 3. 하루 1회 배치 cron(daily-briefing 라우트)이 **상태 전이(edge) 이벤트**를 감지해
+담당자에게 인앱 벨 알림. v1 2종: **반복 결석 마일스톤**(14일 3/5/10회 도달 → master 집계 1건, link=/retention) +
+**상담 후속조치 기한**(오늘 마감 due / 지남 overdue → 담당 상담사 counselor_id 폴백 master, link=/consultations).
+- **dedup = `notification_events`(0118a)**: unique(tenant,event_type,subject_key,bucket)가 유일 방어선
+  (notifications엔 유니크 제약 0). bucket=결석 tier('3'/'5'/'10' — 3→4 재알림 안 함, 5 승격 시만) / 후속조치
+  '날짜:stage'. 원자 dedup = `upsert(onConflict, ignoreDuplicates).select()`가 돌려준 **신규 삽입분만** 발송
+  (bulk insert는 한 행 충돌로 문장 전체 23505 → 성공분 분리 불가라 이 패턴 필수).
+- **콜드스타트 무발송 시드**(적대 리뷰 blocker): 첫 실행((tenant,event_type) 행 0건)은 현재 감지분을 seeded=true로
+  기록만 하고 발송 스킵 — 실데이터 누적분(injaewon 결석위험·미완료 후속조치)이 벨 폭탄으로 터지는 것 방지(0108a 철학).
+- **수신자 라우팅**: 결석=master만(원장 '운영 벨=master' 결정 + 마일스톤이라 저빈도, 집계 1건). 후속조치=담당 상담사
+  (status active 검증, 퇴직/null이면 master 폴백). admin RLS 우회라 tenant_id 필터 필수. actorId=null(시스템). 벨 배지만
+  (IMPORTANT 미등재 — 경보 피로). 순수함수(tier·bucket·집계 문구) Vitest 14.
+- **cron 배선**: daily-briefing 라우트가 브리핑 생성 후 detectAndNotifyEvents를 **독립 try/catch**로 호출(브리핑
+  실패해도 감지 실행). 세션용 아닌 admin p_tenant RPC(getAbsenceRiskStudents(db)) 재사용. 07:00 KST(결석=전날 마감·
+  후속조치 due는 아직 안 지남 → 문구 분기). Vercel cron 슬롯 미추가(기존 라우트에 얹음).
+- **✅ 3-run 실E2E(injaewon)**: run1 콜드스타트 결석 2건 seeded·벨 0(폭탄 방지) → run2 신규 0(dedup) → run3(seeded 1행
+  삭제로 새 edge 모사) 신규 1 → **master 2명(원일·박소선)에게 집계 벨 발송**, 박소선 벨 UI에 "김보민 학생이 최근 14일
+  3회 결석으로 반복 결석 위험" 정확 렌더(userMinus 아이콘). ⚠️ 후속조치 경로는 injaewon에 오늘 due/overdue 0건이라
+  실데이터 미발화(순수함수+공유 machinery로 커버). ⚠️ 미해결(리뷰 minor): notification_events 정리 정책 TBD(저성장),
+  결석 3회 아래 회복 후 재발 시 tier3 기록 잔존으로 재알림 안 됨(edge를 count 근사한 v1 트레이드오프).
+
 ### 대화형 비서 "매니저 팀에게 물어보기" (2026-07-17, Phase 2) — ✅ tsc0/lint0/test86 + Solar 실스모크, 0117a 적용
 "학원 매니저 팀" 대화 채널. 운영실에 질문 패널([assistant-panel.tsx](../src/app/(shell)/dashboard/_components/assistant-panel.tsx),
 canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률은?"을 자연어로 물으면 AI가 **read-only 툴 9종**
@@ -18,7 +97,15 @@ canManageStaff 게이트) — "김민준 요즘 어때?", "이번 달 수납률�
   "페이지 로드 무호출" 원칙 무충돌. 대시보드 라우트 `maxDuration=60`(툴 왕복 여유).
 - **대화 저장(0117a `assistant_conversations`)**: own-row RLS(본인만), messages에 표시용 텍스트 턴만(툴 원시 블록·
   조회 스냅샷 미저장 → 권한 변화에 안전, [turns.ts](../src/features/assistant/turns.ts) 파싱 단일 소스·상한 60턴).
-- ⚠️ 실사용 E2E(로그인 세션)는 미완 — 원장이 운영실에서 첫 질문으로 확인. 강사 표면은 범위 밖(none).
+- **✅ 실브라우저 E2E(Chrome MCP, injaewon 로그인, 2026-07-17)**: 7질문 전부 Solar Pro 3 `ok=true`(Anthropic 폴백 0회).
+  수납률(툴 1)·이유하 학생 종합(search+summary 툴 2)·이탈 위험 3명 실명+사유+권장조치(retention 툴)·미수 상위(툴 2)
+  정상. **추민아 강사 월급? → 정중히 거절**(PII 방어 실동작). usage in 2.6k~18k·out 29~235 tok. 실측으로 잡은 함정 3건 수정:
+  · **Solar가 툴콜을 본문 텍스트 토큰으로 방출**(`<|tool_call:begin|>…`)해 raw가 답변으로 노출됨 →
+    순수 파서 [solar-tokens.ts](../src/features/assistant/solar-tokens.ts) `parseInlineToolCalls`로 표준 툴콜 승격 +
+    못 삼킨 특수 토큰 남으면 답 폐기·Claude 폴백(`hasSpecialTokenNoise`).
+  · **날짜 미주입 시 "이번 달"을 2025-10으로 환각** → 시스템 프롬프트에 오늘(KST) 주입 + 기간 인자는 명시 시만.
+  · **`**91.76%**` 마크다운 강조가 plain 패널에 별표째 노출** → `stripMarkdownEmphasis`(강조만 제거, 불릿·본문 보존).
+- 강사 표면은 범위 밖(none).
 
 ### 골든마스터 N6 + 강사 분배 splits 저장 (2026-07-16) — ✅ tsc0/lint0/test1471/DB E2E(원복) — 로드맵 2단계 (b) 완료
 attendance R2(정산 로직 변경 시 실데이터 3케이스 동시 통과 — 수동 live 검증)를 eywa에선 **자동화 골든마스터로 승격**,
@@ -39,6 +126,7 @@ attendance R2(정산 로직 변경 시 실데이터 3케이스 동시 통과 —
   정확) → 재저장 멱등 → splits·확정·출석 0/0/0 원복 확인.
 - ⚠️ v1 한계: 분배 확정치의 급여 연계는 미구현(PAYROLL_ENABLED=false 상위 결정) — splits는 기록·대사용.
   replace-invoices-from-excel류 전기간 재실행 시 FK cascade로 splits 소실 가능(계획 문서 기존 경고와 동일 — UPDATE 경로 유지).
+
 ### 브리핑 v2 "학원 매니저 팀" 보고 (2026-07-16 저녁) — ✅ tsc0/lint0/test81(dashboard)/실E2E, 원장 방향 "eywa=매니저 팀"
 원장 피드백("데이터 정리해서 알려주는 것뿐, 비서 느낌 아님") 반영. 브리핑 LLM 출력을 단문 서술 → **매니저 팀
 보고**(`briefing-team-report.ts`, 0116a `team_report` jsonb)로 전환: 수업·학생·상담·수납·운영 매니저가 영역별

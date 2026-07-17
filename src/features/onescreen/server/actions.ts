@@ -55,7 +55,11 @@ export async function saveLessonReport(
 
   const supabase = await createClient();
 
-  // 강사 스코프: 기본은 '내 담당 반 활성 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
+  // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
+  // 수강생 스코프 판정도 이 날짜 기준(과거 마감 시 그날 수강생) — roster·setAttendanceCell과 통일.
+  const reportDate = resolveReportDate(input.reportDate);
+
+  // 강사 스코프: 기본은 '내 담당 반, 대상 날짜 시점 수강생'만. 단 outOfClass(보강·수업외 수동추가)면 같은 학원 학생 전체 허용
   // (원장 승인 정책). RLS가 테넌트 격리 → 학원 밖 학생은 select null로 걸러져 거부됨.
   if (input.outOfClass) {
     const { data: stu } = await supabase
@@ -76,14 +80,12 @@ export async function saveLessonReport(
       .from("enrollments")
       .select("id")
       .eq("student_id", input.studentId)
-      .is("end_date", null)
+      .or(`start_date.is.null,start_date.lte.${reportDate}`)
+      .or(`end_date.is.null,end_date.gte.${reportDate}`)
       .in("class_id", myClassIds)
       .limit(1);
     if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
   }
-
-  // 대상 날짜 = 고른 날짜 클램프(빈값·미래→KST 오늘). report_date 단일 소스 = 학부모 카드 표시일 = ClassNote 게시일.
-  const reportDate = resolveReportDate(input.reportDate);
 
   // (student, date, subject) 과목별 1행 upsert — 재발송 시 같은 행 갱신(중복 방지, 0083a 유니크).
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
@@ -313,6 +315,7 @@ export async function saveOnescreenSession(
 
   const supabase = await createClient();
 
+  const sessionDate = resolveReportDate(input.sessionDate);
   const { data: myClasses } = await supabase.from("classes").select("id").eq("teacher_id", user.id);
   const myClassIds = (myClasses ?? []).map((c) => c.id);
   if (myClassIds.length === 0) return { ok: false, error: "담당 반이 없습니다" };
@@ -321,16 +324,19 @@ export async function saveOnescreenSession(
     .from("enrollments")
     .select("id")
     .eq("student_id", input.studentId)
-    .is("end_date", null)
+    .or(`start_date.is.null,start_date.lte.${sessionDate}`)
+    .or(`end_date.is.null,end_date.gte.${sessionDate}`)
     .in("class_id", myClassIds)
     .limit(1);
   if (!enr || enr.length === 0) return { ok: false, error: "담당 학생이 아닙니다" };
 
+  // ⚠️ 강사축(0118a): onConflict에 updated_by(=강사)를 포함 — 같은 학생을 다른 강사가 같은 날 가르쳐도
+  //    각자 1행이라 subject_progress·점수·태도가 서로 안 덮인다(WIP 유실 방지). roster는 updated_by=본인만 복원.
   const { error } = await supabase.from("onescreen_daily_sessions").upsert(
     {
       tenant_id: user.tenantId,
       student_id: input.studentId,
-      session_date: resolveReportDate(input.sessionDate),
+      session_date: sessionDate,
       class_id: input.classId ?? null,
       study_grade: input.studyGrade ?? null,
       subject_progress: input.subjectProgress ?? {},
@@ -345,7 +351,7 @@ export async function saveOnescreenSession(
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "tenant_id,student_id,session_date" },
+    { onConflict: "tenant_id,updated_by,student_id,session_date" },
   );
   if (error) return { ok: false, error: error.message };
   return { ok: true };
@@ -499,6 +505,7 @@ export async function searchTenantStudents(
  */
 export async function buildMakeupStudent(
   studentId: string,
+  reportDate?: string, // 조회 중인 날짜(과거 백필 지원) — 발송상태 복원 쿼리가 이 날짜 기준이어야 중복게시 방지
 ): Promise<{ ok: boolean; student?: OneScreenStudent; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -533,6 +540,19 @@ export async function buildMakeupStudent(
   const book = bookPick?.bookName?.trim() ?? "";
   const tmax = testMaxByKey.get(subjectKeys[0]!) ?? 5;
 
+  // ⚠️ 대상 날짜 발송상태 복원 — 보강 학생은 세션 미저장이라 재추가 시 상태가 빈다. 그대로면 이미 발송(success)된 과목을
+  //    다시 눌러 ClassNote 중복 게시될 수 있다(#13 확정). **조회 중인 날짜**(과거 백필 포함) lesson_reports를 과목별로
+  //    매핑해 sent/토큰/상태 복원 — 저장/발송이 쓰는 reportDate와 동일 날짜여야 과거 날짜에서도 중복게시 방지.
+  const targetDate = resolveReportDate(reportDate);
+  const { data: todayReports } = await supabase
+    .from("lesson_reports")
+    .select("subject, share_token, classnote_status, revoked_at, attachments")
+    .eq("student_id", studentId)
+    .eq("report_date", targetDate);
+  const statusBySubject = new Map(
+    (todayReports ?? []).map((r) => [r.subject ?? "", r]),
+  );
+
   const student: OneScreenStudent = {
     id: stu.id,
     name: stu.name,
@@ -541,15 +561,23 @@ export async function buildMakeupStudent(
     className: "보강",
     isMakeup: true,
     attendance: "출석",
-    subjects: subjectKeys.map((key) => ({
-      name: subjectMaps.labelOf(key),
-      subjectKey: key,
-      prev: "",
-      today: "",
-      textbook: book,
-      makeup: true,
-      homeworkToday: "",
-    })),
+    subjects: subjectKeys.map((key) => {
+      const st = statusBySubject.get(key);
+      return {
+        name: subjectMaps.labelOf(key),
+        subjectKey: key,
+        prev: "",
+        today: "",
+        textbook: book,
+        makeup: true,
+        homeworkToday: "",
+        reportSent: !!st,
+        shareToken: st?.share_token ?? undefined,
+        classnoteStatus: st?.classnote_status ?? undefined,
+        revokedAt: st?.revoked_at ?? undefined,
+        attachments: (st?.attachments as { path: string; name: string }[] | null) ?? undefined,
+      };
+    }),
     tests: {
       daily: { score: null, max: tmax, prevScore: null },
       check: { score: null, max: tmax, prevScore: null },
@@ -569,7 +597,10 @@ export async function buildMakeupStudent(
  * 강사가 버튼을 누르면 그 학생의 (과목)별 직전 lesson_reports를 당겨와 prev/prevReport로 반환(roster와 동일 규격).
  * prevScore(일일/확인)는 학생 단위 최신 회차의 exam_info로.
  */
-export async function loadMakeupHistory(studentId: string): Promise<{
+export async function loadMakeupHistory(
+  studentId: string,
+  reportDate?: string, // 조회 중인 날짜(과거 백필) — '직전 회차' 기준. roster RPC p_before와 동일 의미로 통일.
+): Promise<{
   ok: boolean;
   bySubject?: Record<string, { prev: string; prevReport: PrevReport }>;
   prevScore?: { daily: number | null; check: number | null };
@@ -582,12 +613,13 @@ export async function loadMakeupHistory(studentId: string): Promise<{
   const settings = await getTenantSettings();
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
 
-  // 오늘 이전(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
+  // 대상 날짜 **이전**(직전) 보고서만, 최신순. RLS가 테넌트 격리. 한 학생이라 limit 소량.
+  // ⚠️ 과거 백필 시 서버 오늘이 아니라 조회 중인 날짜 기준이어야 그 날짜 이후 회차를 '직전'으로 잘못 표시하지 않음.
   const { data } = await supabase
     .from("lesson_reports")
     .select("report_date, subject, progress, exam_info, textbook, homework_today, homework_score, attitude, notes")
     .eq("student_id", studentId)
-    .lt("report_date", kstToday())
+    .lt("report_date", resolveReportDate(reportDate))
     .order("report_date", { ascending: false })
     .limit(50);
   const rows = data ?? [];
