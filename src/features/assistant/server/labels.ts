@@ -23,11 +23,14 @@ export const CONSULTATION_CATEGORY_LABEL: Record<string, string> = {
   other: "기타",
 };
 
-// 인보이스 상태(코드 고정) — 미수 명단 툴 표시용.
+// 인보이스 상태(코드 고정) — 미수 명단·학생 요약 툴 표시용. void/refunded도 실데이터에 존재
+// (makeedu 무효 처리·환불) — 누락 시 raw 영문이 모델 답변으로 유출된다.
 export const INVOICE_STATUS_LABEL: Record<string, string> = {
   unpaid: "미납",
   partial: "부분납",
   paid: "완납",
+  void: "무효",
+  refunded: "환불",
 };
 
 // 이탈 위험 레벨(코드 고정, retention/risk.ts RiskLevel).

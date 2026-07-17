@@ -20,6 +20,7 @@ const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
   late: "지각",
   early_leave: "조퇴",
   excused: "공결", // UI에서 폐지된 상태지만 과거 데이터에 잔존 가능
+  makeup: "보강", // 누락 시 raw 영문 키가 모델 답변으로 유출(2026-07-17 적대 리뷰 확정)
 };
 
 export const attendanceDayTool = betaZodTool({

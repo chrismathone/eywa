@@ -27,6 +27,25 @@ function isFormatError(e: unknown): boolean {
   return e instanceof Error && e.message.includes(FORMAT_ERROR_MARK);
 }
 
+/** 모델이 툴콜도 텍스트도 없이 빈 응답을 낸 경우 — 이 역시 다음 provider 폴백 가치가 있다. */
+const EMPTY_ANSWER_MARK = "AI 응답이 비어 있습니다";
+function isEmptyAnswerError(e: unknown): boolean {
+  return e instanceof Error && e.message.includes(EMPTY_ANSWER_MARK);
+}
+
+/**
+ * 이 루프가 실제 서빙할 수 있는 provider 체인 — 구현이 있는 upstage(OpenAI 호환)·anthropic만.
+ * ⚠️ resolveModelChain은 DEEPSEEK_API_KEY가 있으면 deepseek 후보도 주는데, 이 파일엔 deepseek
+ * 클라이언트 분기가 없어 그 후보가 runAnthropicLoop로 흘러 Anthropic API에 deepseek 모델 id를
+ * 보내는 죽은 폴백(404)이 됐었다(2026-07-17 적대 리뷰 확정). deepseek tool-use 루프를 붙이기
+ * 전까진 체인에서 제외한다.
+ */
+function supportedChain(): { provider: AiProvider; model: string }[] {
+  return resolveModelChain("balanced", "default", "upstage").filter(
+    ({ provider }) => provider === "upstage" || provider === "anthropic",
+  );
+}
+
 /**
  * betaZodTool 반환(BetaRunnableTool)은 SDK 내장 툴들까지 포함한 유니온이라 custom 툴 필드
  * (description·input_schema)가 타입에 안 잡힌다 — 우리 레지스트리는 전부 custom 툴이므로
@@ -230,7 +249,7 @@ export async function runAssistantLoop(opts: {
   tenantId: string;
 }): Promise<AssistantLoopResult> {
   const history = opts.history.slice(-MAX_HISTORY_TURNS);
-  const chain = resolveModelChain("balanced", "default", "upstage");
+  const chain = supportedChain();
   if (chain.length === 0) throw new Error("AI 키가 설정되어 있지 않습니다(UPSTAGE/ANTHROPIC).");
 
   let lastErr: unknown;
@@ -242,6 +261,9 @@ export async function runAssistantLoop(opts: {
         provider === "upstage"
           ? await runOpenAiCompatLoop(model, opts.question, history, usage)
           : await runAnthropicLoop(model, opts.question, history, usage);
+      // 빈 답변 검사는 recordUsage(ok:true) **이전** — 뒤에 두면 catch의 ok:false 기록과 합쳐져
+      // 같은 호출 usage가 2행(토큰 2배)으로 적재된다(비용 비교 데이터 오염, 적대 리뷰 확정).
+      if (!result.answer) throw new Error(EMPTY_ANSWER_MARK);
       await recordUsage({
         meta: { tenantId: opts.tenantId, feature: "assistant_chat" },
         provider,
@@ -250,7 +272,6 @@ export async function runAssistantLoop(opts: {
         usage: { inputTokens: usage.input || null, outputTokens: usage.output || null },
         ok: true,
       });
-      if (!result.answer) throw new Error("AI 응답이 비어 있습니다");
       return { ...result, model };
     } catch (e) {
       lastErr = e;
@@ -263,8 +284,8 @@ export async function runAssistantLoop(opts: {
         ok: false,
         error: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
       });
-      // 키/한도 오류 + Solar 형식 오류(툴콜 본문 토큰 유출)는 다음 provider(Claude)로 폴백.
-      if (i < chain.length - 1 && (isRetryableProviderError(e) || isFormatError(e))) {
+      // 키/한도 오류 + Solar 형식 오류(툴콜 본문 토큰 유출) + 빈 응답은 다음 provider(Claude)로 폴백.
+      if (i < chain.length - 1 && (isRetryableProviderError(e) || isFormatError(e) || isEmptyAnswerError(e))) {
         reportWarning(`비서 ${provider} 실패 → 다음 provider 폴백`, {
           scope: "assistant.loop.fallback",
           provider,
@@ -279,7 +300,7 @@ export async function runAssistantLoop(opts: {
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
-/** provider 노출용(디버그·문서) — 현재 체인 순서. */
+/** provider 노출용(디버그·문서) — 현재 체인 순서(이 루프가 실제 서빙 가능한 후보만). */
 export function assistantProviderChain(): { provider: AiProvider; model: string }[] {
-  return resolveModelChain("balanced", "default", "upstage").map(({ provider, model }) => ({ provider, model }));
+  return supportedChain().map(({ provider, model }) => ({ provider, model }));
 }

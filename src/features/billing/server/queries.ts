@@ -107,24 +107,26 @@ export async function getInvoicesForPeriod(
 ): Promise<InvoiceRow[]> {
   const supabase = await createClient();
   const periodKey = options?.period ?? currentPeriod();
-  let qb = supabase
-    .from("invoices")
-    .select(
-      `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
-       payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at,
-       student:student_id ( id, name, grade )`,
-    )
-    .eq("period", periodKey)
-    // void = makeedu에서 삭제된 청구(동기화가 무효 처리) — 수납 표·KPI·엑셀은 makeedu 미러라 제외.
-    // 행 자체는 DB에 보존(notes [동기화] 마커 = 근거), 학생 상세 수납 이력에는 '무효' 배지로 남는다.
-    .neq("status", "void");
-
-  if (options?.category && options.category !== "all") {
-    qb = qb.eq("category", options.category);
-  }
-
-  const { data } = await qb;
-  if (!data) return [];
+  // B2: 이 결과는 summarizeInvoices가 합계·수납률로 집계한다 — 무페이징 select는 1000행 silent 절단
+  // (invoices 전체 1606행 실측)이라 fetchAllPaged(에러도 throw — 실패가 '0건 요약'으로 위장되지 않게)로 전건.
+  const data = await fetchAllPaged((from, to) => {
+    let qb = supabase
+      .from("invoices")
+      .select(
+        `id, period, category, amount_total, amount_paid, amount_discount, status, due_date, paid_at, notes, line_items,
+         payment_method, card_company, cash_receipt_number, points_used, discount_reason, billed_at, sync_added_at,
+         student:student_id ( id, name, grade )`,
+      )
+      .eq("period", periodKey)
+      // void = makeedu에서 삭제된 청구(동기화가 무효 처리) — 수납 표·KPI·엑셀은 makeedu 미러라 제외.
+      // 행 자체는 DB에 보존(notes [동기화] 마커 = 근거), 학생 상세 수납 이력에는 '무효' 배지로 남는다.
+      .neq("status", "void");
+    if (options?.category && options.category !== "all") {
+      qb = qb.eq("category", options.category);
+    }
+    // OFFSET 페이지 안정화 — unique tie-break order 필수(batch.ts 계약)
+    return qb.order("id", { ascending: true }).range(from, to);
+  });
 
   let rows: InvoiceRow[] = data.map((r) => {
     const stu = (Array.isArray(r.student) ? r.student[0] : r.student) as
