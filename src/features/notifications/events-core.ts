@@ -100,6 +100,26 @@ export function absenceDigestBody(events: readonly AbsenceEvent[]): string | nul
     : `${names}이 반복 결석 위험 단계(최근 14일 ${topTier}회 이상)에 도달했습니다.`;
 }
 
+/**
+ * 결석 이벤트를 **담당 강사별**로 그룹핑(v2). studentTeachers = 학생id→담당 강사id 목록.
+ * 한 학생이 여러 반이면 각 담당 강사에게, 강사는 자기 학생 이벤트만 받는다(스코프 격리).
+ * ⚠️ studentTeachers는 호출부가 tenant 필터·활성 강사만 남긴 것이어야 한다(admin RLS 우회 방어).
+ */
+export function groupAbsenceEventsByTeacher(
+  events: readonly AbsenceEvent[],
+  studentTeachers: ReadonlyMap<string, readonly string[]>,
+): Map<string, AbsenceEvent[]> {
+  const byTeacher = new Map<string, AbsenceEvent[]>();
+  for (const event of events) {
+    for (const teacherId of studentTeachers.get(event.subjectKey) ?? []) {
+      const list = byTeacher.get(teacherId) ?? [];
+      list.push(event);
+      byTeacher.set(teacherId, list);
+    }
+  }
+  return byTeacher;
+}
+
 /** 후속조치 이벤트 → 개별 알림 본문(stage별 문구 분기 — 아침 cron엔 due가 아직 안 지남). */
 export function followupBody(event: FollowupEvent): string {
   return event.stage === "due"
