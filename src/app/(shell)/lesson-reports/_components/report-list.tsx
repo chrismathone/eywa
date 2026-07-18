@@ -32,12 +32,42 @@ function hhmmKst(iso: string | null): string {
 }
 
 /** 발송 상태 표시 — eywa 발송이력(classnote_status) 우선, 없으면 이관(edutrix)/미발송 구분. */
-function StatusCell({ status, source }: { status: string | null; source: string | null }) {
+/** 읽음 툴팁용 KST 일시("7월 18일 13:01"). */
+function readAtLabel(iso: string): string {
+  return new Date(iso).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function StatusCell({ status, source, readAt }: { status: string | null; source: string | null; readAt: string | null }) {
   const badge = classnoteBadge(status ?? undefined);
-  if (badge) return <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>;
+  // 학부모 읽음(0122a) — **양성 배지만**: 없음 = "미읽음"이 아니라 "동기화 안 됨"일 수 있어 표시하지 않는다
+  // (매칭 키 없는 행의 거짓 미확인 방지 — report-filters.ts readAt 주석 참조).
+  const read = readAt ? (
+    <span className="text-primary ml-1.5 text-[11px] font-semibold" title={`학부모 읽음 · ${readAtLabel(readAt)}`}>
+      읽음
+    </span>
+  ) : null;
+  if (badge)
+    return (
+      <>
+        <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+        {read}
+      </>
+    );
   // 발송 이력 없음: 이관분(edutrix)은 "이관"(발송 아님, 오해 방지), 그 외는 진짜 "미발송".
   if (source === "edutrix_import")
-    return <span className="text-text-faint text-[11px]" title="edutrix에서 이관된 기록(eywa 발송 아님)">이관</span>;
+    return (
+      <>
+        <span className="text-text-faint text-[11px]" title="edutrix에서 이관된 기록(eywa 발송 아님)">이관</span>
+        {read}
+      </>
+    );
   return <span className="text-amber text-[11px]">미발송</span>;
 }
 
@@ -226,7 +256,7 @@ export function ReportList({
                   </td>
                   <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>
                   <td className="px-3 py-2">
-                    <StatusCell status={r.classnoteStatus} source={r.source} />
+                    <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} />
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Button size="sm" variant="outline" onClick={() => openReport(r)}>

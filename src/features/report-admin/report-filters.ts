@@ -14,6 +14,12 @@ export type ReportListRow = {
   teacherName: string | null;
   shareToken: string | null;
   source: string | null; // edutrix_import=이관분(발송 아님) · onescreen=eywa 네이티브
+  /**
+   * 학부모 읽음 시각(classnote_read_at, 0122a — 연동 PC 워커가 ClassNote 피드에서 동기화).
+   * ⚠️ null = "안 읽음"이 **아니다** — 매칭 키(edutrix_share_token) 없는 행은 동기화 자체가 안 된다.
+   * 그래서 UI는 **양성 배지("읽음")만** 표시하고 "미읽음"은 표시하지 않는다(거짓 미확인 방지, 4단계에서 재론).
+   */
+  readAt: string | null;
 };
 
 export type ReportListFilters = {
