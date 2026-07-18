@@ -211,8 +211,11 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
     return {
       id: r.id,
       classId: r.class_id,
-      className: klass?.class_name ?? "?",
-      subject: klass?.subject ?? "?",
+      // 조인 미스(스케줄이 가리키는 반이 삭제됨) 폴백. ⚠️ 화면에 그대로 나가는 값이라 "?" 같은 기호 대신
+      // 사람이 읽는 한글로(UI에 raw 값 노출 금지 규약). subject는 어떤 과목 칩과도 안 맞아 필터 뷰에선
+      // 자연히 빠지고, 여기 라벨은 전체 뷰에서 셀 제목으로 보인다.
+      className: klass?.class_name ?? "(삭제된 반)",
+      subject: klass?.subject ?? "",
       dayOfWeek: r.day_of_week,
       startTime: r.start_time,
       endTime: r.end_time,

@@ -12,10 +12,13 @@ import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { splitNumberedItems } from "@/lib/text/split-numbered";
+import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 
-const DAY_KO: Record<string, string> = {
-  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
-};
+/**
+ * hover 카드 최대 높이 — 위치 클램프와 카드 max-height가 **같은 값**을 써야 화면 밖으로 안 나간다.
+ * (옛 코드는 높이를 210px로 추정해 클램프만 했고, 진도·교재·상태가 다 붙은 카드는 300px를 넘어 잘렸다.)
+ */
+const HOVER_MAX_H = 320;
 
 /**
  * 시간표 hover 정보 카드 — 커서 위치 기준 포털(고정·z최상위·pointer-events-none).
@@ -41,7 +44,10 @@ export function HoverCard({
     if (x + width > vw - 8) x = e.clientX - width - 16;
     if (x < 8) x = 8;
     let y = e.clientY + 16;
-    if (y > vh - 210) y = Math.max(8, vh - 230);
+    // ⚠️ 옛 코드는 카드 높이를 210/230px로 **고정 추정**해 클램프했는데, 진도(line-clamp-5)+교재+상태가
+    // 다 붙은 학생 카드는 300px를 넘어 창(기본 680px) 아래로 잘렸다. 실측 대신 카드에 max-height를
+    // 걸고(내부 스크롤) **같은 상수**로 클램프해 항상 화면 안에 들어오게 한다(적대 감사 UX).
+    if (y + HOVER_MAX_H > vh - 8) y = Math.max(8, vh - 8 - HOVER_MAX_H);
     setPos({ x, y });
   }
   const hide = () => setPos(null);
@@ -60,8 +66,8 @@ export function HoverCard({
       {pos
         ? createPortal(
             <div
-              className="border-line bg-card shadow-modal pointer-events-none fixed z-[9999] rounded-md border p-3"
-              style={{ left: pos.x, top: pos.y, width }}
+              className="border-line bg-card shadow-modal pointer-events-none fixed z-[9999] overflow-y-auto rounded-md border p-3"
+              style={{ left: pos.x, top: pos.y, width, maxHeight: HOVER_MAX_H }}
             >
               {card}
             </div>,
@@ -171,7 +177,7 @@ export function StudentInfoCard({
 }) {
   const partial =
     attendanceDays && attendanceDays.length > 0
-      ? attendanceDays.map((d) => DAY_KO[d] ?? d).join("·") + "만 등원"
+      ? attendanceDays.map((d) => DAY_LABEL[d] ?? d).join("·") + "만 등원"
       : null;
   const hasDetail =
     isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName;

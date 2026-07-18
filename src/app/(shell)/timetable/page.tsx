@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Columns3, LayoutGrid, CalendarOff, Users } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
+import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getWeeklyScheduleWithStudents, getTeacherColorMap } from "@/features/timetable/server/queries";
@@ -23,6 +24,7 @@ import {
   TimetableDndArea,
 } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
+import { EMPTY_DAYS_COOKIE, EmptyDaysPrefSync } from "./_components/prefs-sync";
 import { TimetableColorToggle } from "./_components/color-mode-toggle";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
@@ -45,7 +47,11 @@ export default async function TimetablePage({
   const user = await requireAccess("timetable");
   const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw } = await searchParams;
   // 강사뷰 '미사용 요일' 토글 — 기본 = 표시(강사마다 월~토 전 컬럼). emptydays=hide 일 때만 수업 요일만.
-  const hideEmptyDays = emptydaysRaw === "hide";
+  // ⚠️ URL 파라미터가 없으면 **기기에 저장된 선호(쿠키)** 를 기본으로 쓴다 — 창(iframe)은 항상 깨끗한
+  // URL로 열려서, 파라미터만으론 열 때마다 초기화됐다(주 2일 강사가 매번 넓은 표를 다시 접어야 했음).
+  // 파라미터가 있으면 그쪽 우선(공유 링크 존중). 쓰기는 EmptyDaysPrefSync(클라).
+  const savedHideEmptyDays = (await cookies()).get(EMPTY_DAYS_COOKIE)?.value === "hide";
+  const hideEmptyDays = emptydaysRaw ? emptydaysRaw === "hide" : savedHideEmptyDays;
   // 통합뷰 '1시간 단위' — **섹션별 토글**(사용자 결정 2026-07-06, 전역 아님). compact1h=쉼표구분 sectionKey
   // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다. 읽기전용이라 상태는 URL 파라미터.
   const compactSections = new Set(
@@ -176,6 +182,8 @@ export default async function TimetablePage({
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
       <div className="flex h-full min-h-0 flex-col gap-4">
+      {/* '미사용 요일' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
+      <EmptyDaysPrefSync hide={hideEmptyDays} />
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
@@ -186,8 +194,10 @@ export default async function TimetablePage({
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
-        {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰 비허용 과목으로 전환 시 기본뷰로. */}
-        <div className="flex items-center gap-1">
+        {/* 과목 chip — 전 뷰 과목별(클릭 = 과목 전환). 강사뷰 비허용 과목으로 전환 시 기본뷰로.
+            ⚠️ flex-wrap 필수 — 과목이 많은 학원(과학·국어·사회…)에서 칩이 한 줄로 강제되면 툴바가
+            가로로 넘친다(칩 자체가 shrink-0이라 줄지도 않음). 형제인 toolbar-actions와 동일 규약. */}
+        <div className="flex flex-wrap items-center gap-1">
           <span className="micro mr-1">과목</span>
           {available.map((k) => (
             <Link
@@ -199,6 +209,9 @@ export default async function TimetablePage({
                 week,
                 thisWk,
                 // 과목 전환 = 섹션 order가 과목마다 달라 '1시간 단위' 압축 집합을 초기화(엉뚱한 섹션 압축 방지).
+                // ⚠️ 단 '미사용 요일' 상태는 과목과 무관한 표시 취향이라 **유지**한다 — 다른 네비(주 이동·
+                // 뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
+                hideEmptyDays,
               })}
               className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
                 subject === k
