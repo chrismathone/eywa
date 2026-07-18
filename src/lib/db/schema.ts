@@ -678,6 +678,10 @@ export const lessonReports = pgTable(
     classnoteProcessingAt: timestamp("classnote_processing_at", { withTimezone: true }),
     classnoteSentAt: timestamp("classnote_sent_at", { withTimezone: true }),
     classnoteRetryCount: integer("classnote_retry_count").notNull().default(0),
+    // ClassNote 학부모 읽음(0122a) — 연동 PC 워커가 피드의 read_by_parent.date_read를 채운다(앱은 읽기만).
+    classnoteReadAt: timestamp("classnote_read_at", { withTimezone: true }),
+    // edutrix reports.share_token — ClassNote 본문 링크(edutrix.vercel.app/share/{uuid})와 잇는 매칭 키(0122a).
+    edutrixShareToken: text("edutrix_share_token"),
     // 공유 링크 폐기(취소) — 0085a. 만료(보고서일+90일)는 파생이라 컬럼 없음(share-expiry.ts).
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),

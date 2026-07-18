@@ -22,6 +22,7 @@ import { closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTen
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
+import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -121,6 +122,13 @@ async function main() {
       //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
       await pollParentCommentsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[comment] 오류(다음 폴에서 재시도): ${e.message}`);
+        return { ran: false };
+      });
+      // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → eywa lesson_reports.classnote_read_at.
+      //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
+      //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.
+      await pollReportReadsOnce(db(), b, { tenant, log }).catch((e) => {
+        log(`[읽음] 오류(다음 폴에서 재시도): ${e.message}`);
         return { ran: false };
       });
     } catch (e) {
