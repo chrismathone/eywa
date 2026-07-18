@@ -9,6 +9,7 @@ import type { TeacherColorMap } from "../lib/class-grid";
 import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
+  isEnrollmentEndedOn,
 } from "@/features/enrollments/eligibility";
 
 /** 오늘(YYYY-MM-DD, 기준일 기본값) — KST 기준(서버 UTC라 새벽 시간대 하루 밀림 방지). */
@@ -364,9 +365,14 @@ export async function getWeeklyScheduleWithStudents(
       [r.end_date, stuWithdraw].filter((x): x is string => !!x).sort()[0] ?? null;
     // ⚠️ "종료됨"은 **기준일(referenceDate) 시점** 기준 — 롤링 창 끝(weekEnd=ref+6)이 아니다.
     // weekEnd로 판정하면 기준일엔 재원 중인데 앞으로 6일 안에 끝나는(특히 반이동 전출 예정) 학생이
-    // 조기에 "퇴원/전출"로 숨겨져 시간표에서 사라진다(이동일 전인데 옛 반에서 증발). daterange [start,end)라
-    // end<=referenceDate면 기준일엔 이미 비활성 = 종료. (weekEnd는 아래 fetch의 '예정 학생' look-ahead 전용.)
-    const hasEnded = effectiveEnd != null && effectiveEnd <= referenceDate;
+    // 조기에 "퇴원/전출"로 숨겨져 시간표에서 사라진다(이동일 전인데 옛 반에서 증발).
+    // ⚠️ 종료일 포함/배타 규약은 **[isEnrollmentEndedOn](src/features/enrollments/eligibility.ts) 단일 소스**.
+    //    옛 코드는 여기서 `end <= ref`로 따로 구현해 일반 종료를 하루 일찍 퇴원 처리했다(적대 감사 M6 —
+    //    같은 날 getTodaySchedule은 재원, 주간뷰는 퇴원). 학생 단위 퇴원(withdrawn_at)은 enrollment 종료와
+    //    별개 개념이라 아래 aliveRows 정제와 같은 규약(<=)을 유지한다.
+    const endedByWithdrawal = stuWithdraw != null && stuWithdraw <= referenceDate;
+    const hasEnded =
+      isEnrollmentEndedOn(r.end_date, referenceDate, r.is_transferred ?? false) || endedByWithdrawal;
 
     // 반이동 전출(이 반 종료 + is_transferred): 새 반에서 보이므로 옛 반엔 표시 안 함.
     if (hasEnded && r.is_transferred) continue;
@@ -420,22 +426,32 @@ export async function getWeeklyScheduleWithStudents(
       const wStudentIds = Array.from(new Set(withdrawnEntries.map(([, l]) => l.studentId)));
       type AliveRow = {
         student_id: string;
+        end_date: string | null;
+        is_transferred: boolean | null;
         class: { subject: string | null } | { subject: string | null }[] | null;
         student: { status: string | null; withdrawn_at: string | null } | { status: string | null; withdrawn_at: string | null }[] | null;
       };
       // 청크당 1000행 캡 방어(위 rows와 동일 이유) — 한 학생이 여러 수강을 갖는 1:N이라 잘릴 수 있다.
+      // ⚠️ `start_date ≤ 기준일` 하한 필수 — 없으면 **아직 시작 안 한 미래 수강**이 "살아있는 수강"으로 잡혀
+      // 진짜 퇴원생의 퇴원 줄이 지워진다(강사뷰에선 그 반이 slots 밖이라 학생이 아예 증발, 적대 감사 M7).
+      // end_date 필터는 두 규약(전출 배타/일반 포함)의 **상위집합**으로 넓게 받고 판정은 아래 JS에서 정확히.
       const aliveRows = await fetchAllPagedInChunks<AliveRow>(wStudentIds, (chunk, from, to) => {
         let q = supabase
           .from("enrollments")
-          .select("student_id, class:class_id ( subject ), student:student_id ( status, withdrawn_at )")
+          .select(
+            "student_id, end_date, is_transferred, class:class_id ( subject ), student:student_id ( status, withdrawn_at )",
+          )
           .in("student_id", chunk)
-          .or(`end_date.is.null,end_date.gt.${referenceDate}`); // daterange [start,end) — end>ref = 기준일 시점 수강 유지
+          .lte("start_date", referenceDate)
+          .or(`end_date.is.null,end_date.gte.${referenceDate}`);
         if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
         return q.order("id").range(from, to);
       });
       const subjectOfClass = new Map(slots.map((s) => [s.classId, s.subject]));
       const aliveSubj = new Set<string>(); // `${subject}:${studentId}`
       for (const r of aliveRows) {
+        // 기준일 시점 실제 생존 판정 — 위 hasEnded와 **같은 단일 소스**(전출=반열림 배타 / 일반=종료일 포함).
+        if (isEnrollmentEndedOn(r.end_date, referenceDate, r.is_transferred ?? false)) continue;
         const st = Array.isArray(r.student) ? r.student[0] : r.student;
         // 학생 단위 퇴원(withdrawn_at ≤ 기준일)은 열린 수강 행도 실효 종료로 본다(위 effectiveEnd와 동일 규칙).
         if (st?.status === "withdrawn" && st.withdrawn_at && st.withdrawn_at <= referenceDate) continue;
