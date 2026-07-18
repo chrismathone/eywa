@@ -39,3 +39,33 @@ export const RISK_LEVEL_LABEL: Record<string, string> = {
   warn: "주의",
   ok: "안정",
 };
+
+// 시스템 역할(코드 고정 — 운영 enum 아님). master 표시 라벨 = "원장"(결정 로그 2026-07-07).
+export const SYSTEM_ROLE_LABEL: Record<string, string> = {
+  master: "원장",
+  admin: "관리자",
+  manager: "매니저",
+  teacher: "강사",
+  counselor: "상담사",
+  accountant: "회계",
+  viewer: "열람전용",
+  student: "학생",
+};
+
+// 직원 재직 상태(users.status, 코드 고정).
+export const STAFF_STATUS_LABEL: Record<string, string> = {
+  active: "재직",
+  inactive: "퇴직",
+  pending: "대기",
+};
+
+// 요일(코드 고정) — 시간표·근무 일정 표시용.
+export const DAY_LABEL: Record<string, string> = {
+  mon: "월",
+  tue: "화",
+  wed: "수",
+  thu: "목",
+  fri: "금",
+  sat: "토",
+  sun: "일",
+};

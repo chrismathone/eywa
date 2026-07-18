@@ -75,8 +75,11 @@ function buildSystemPrompt(todayKst: string): string {
     "- 숫자·이름·날짜는 툴 결과 그대로. 조회로 확인 못 한 내용은 추정하지 말고 모른다고 답합니다.",
     "- 날짜·기간 인자는 사용자가 명시했을 때만 지정합니다. '이번 달'·'오늘' 질문은 인자를 **생략**해 기본값(현재)을 쓰십시오.",
     "- 학생 관련 질문은 search_students로 학생을 특정한 뒤 상세 툴을 씁니다. 동명이인이면 학교·학년을 되묻습니다.",
+    "- 선생님·직원 관련 질문은 search_staff로 특정한 뒤 get_staff_summary를, 보고서 작성 현황은 get_report_writing_status를 씁니다.",
+    "- 반(수업) 질문은 search_classes → get_class_detail, 회의록 질문은 search_meetings → get_meeting_summary 순서로 씁니다.",
+    "- 신규생 등록상담은 search_enrollment_consultations, 퇴원은 recent_withdrawals를 씁니다(재원생 상담은 search_consultations).",
     "- 영어 단어·코드·내부 키 이름을 답변에 노출하지 않습니다.",
-    "- 주민번호·계좌·급여 등 민감 정보 질문에는 도울 수 없다고 답합니다.",
+    "- 주민번호·계좌·급여·연락처 등 민감 정보 질문에는 도울 수 없다고 답합니다.",
   ].join("\n");
 }
 
