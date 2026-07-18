@@ -76,12 +76,27 @@ async function getTenant() {
   return tenantId;
 }
 
+// 폴러별 마지막 결과(0123a) — 하트비트에 동봉해 웹 큐 카드가 "읽음 12:30 · 매칭 3"처럼 표시.
+// 이력이 아니라 **최신 상태만**(이력은 watch.log). 활동이 있었거나 오류일 때만 갱신(15초마다 at만 바뀌는 노이즈 방지).
+// 값은 숫자 필드만 추려 담는다(문자열 원문은 파일 로그 몫 — DB엔 error 한 줄만).
+const lastResults = {};
+function noteResult(key, value) {
+  const out = { at: new Date().toISOString() };
+  for (const [k, v] of Object.entries(value ?? {})) {
+    if (typeof v === "number") out[k] = v;
+  }
+  if (typeof value?.error === "string" && value.error) out.error = value.error.slice(0, 200);
+  lastResults[key] = out;
+}
+
 // 심장박동(0084a) — 이 PC가 발송 담당·살아있음을 매 폴마다 기록. best-effort(실패해도 처리 계속).
 async function heartbeat(tenant) {
-  await db()`
-    insert into classnote_workers (tenant_id, hostname, started_at, last_seen)
-    values (${tenant}, ${HOSTNAME}, ${STARTED_AT}, now())
-    on conflict (tenant_id, hostname) do update set last_seen = now(), started_at = excluded.started_at`;
+  const s = db();
+  await s`
+    insert into classnote_workers (tenant_id, hostname, started_at, last_seen, last_results)
+    values (${tenant}, ${HOSTNAME}, ${STARTED_AT}, now(), ${s.json(lastResults)})
+    on conflict (tenant_id, hostname) do update
+      set last_seen = now(), started_at = excluded.started_at, last_results = excluded.last_results`;
 }
 
 async function main() {
@@ -98,39 +113,56 @@ async function main() {
       // 1) 큐 한 주기 처리(공용 코어).
       const b = await getBrowser();
       const s = await processQueueOnce(db(), b, { tenant, post: POST, log });
-      if (s.claimed) log(`처리 완료 — 성공 ${s.success} / 실패 ${s.failed} / 재큐 ${s.requeued} / stale복구 ${s.stale}`);
+      if (s.claimed) {
+        log(`처리 완료 — 성공 ${s.success} / 실패 ${s.failed} / 재큐 ${s.requeued} / stale복구 ${s.stale}`);
+        noteResult("queue", s);
+      }
       // 2) 반 공지 큐(classnote_notices) — 내부 API 게시(별 코어). 실패해도 보고서 큐와 독립.
       const nres = await processNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("notice", { error: e.message });
         return { processed: 0 };
       });
-      if (nres.processed) log(`[notice] 공지 ${nres.processed}건 처리 완료`);
+      if (nres.processed) {
+        log(`[notice] 공지 ${nres.processed}건 처리 완료`);
+        noteResult("notice", nres);
+      }
       // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
       const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[provision] 오류(내일 재시도): ${e.message}`);
+        noteResult("provision", { error: e.message });
         return { ran: false };
       });
-      if (pres.ran) log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
+      if (pres.ran) {
+        log(`[provision] 일일 프로비저닝 완료 — 보드 생성 ${pres.created} · 배정 ${pres.assigned}${pres.held ? ` · 보류 ${pres.held}` : ""}`);
+        noteResult("provision", pres);
+      }
       // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
       //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
-      await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+      const fres = await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("posts", { error: e.message });
         return { ran: false };
       });
+      if (fres.ran) noteResult("posts", fres);
       // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 10분 가드 내장.
       //    ⚠️ 4)와 별 폴러인 이유 = 감지 방식이 다르다(글=워터마크 1페이지 / 댓글=감시 창 전체 재조회).
       //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
-      await pollParentCommentsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+      const cres = await pollParentCommentsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[comment] 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("comments", { error: e.message });
         return { ran: false };
       });
+      if (cres.ran) noteResult("comments", cres);
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → eywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.
-      await pollReportReadsOnce(db(), b, { tenant, log }).catch((e) => {
+      const rres = await pollReportReadsOnce(db(), b, { tenant, log }).catch((e) => {
         log(`[읽음] 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("reads", { error: e.message });
         return { ran: false };
       });
+      if (rres.ran) noteResult("reads", rres);
     } catch (e) {
       log(`폴링 오류(다음 폴에서 재시도): ${e.message}`);
       await dropDb();

@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 워커 관측성 — 폴러별 마지막 결과를 eywa로 (2026-07-19, 0123a) — ✅ tsc0/lint0/test75
+원장 지적("워처 로그 eywa 기록 안 해도 되나"). 실태: 보고서별 성패(`classnote_*`)·워커 생존(하트비트→큐 카드
+온라인/오프라인)·읽음(`classnote_read_at`)은 이미 DB에 있으나, **폴러별 마지막 실행·요약·오류는 연동 PC 파일
+로그에만** 남아 하트비트는 살아도 특정 폴러(읽음·댓글 등)만 조용히 실패하면 앱에서 안 보였다.
+- **0123a** `classnote_workers.last_results jsonb` — 데몬이 매 폴 하트비트에 폴러별 마지막 결과 동봉
+  (`{queue|notice|provision|posts|comments|reads: {at, 숫자요약|error(200자)}}`). **활동/오류 시에만 갱신**
+  (15초마다 at만 바뀌는 노이즈 방지). 이력 아님 — 최신 상태만(이력은 watch.log 유지).
+- **표시** = 발송 큐 카드 워커 줄 아래 "발송 12:30 · 성공 2 · 실패 1 · 읽음 12:30 · 매칭 3"(오류는 붉게,
+  truncate+title). 변환은 [worker-results.ts](../src/features/report-admin/worker-results.ts) 순수함수(Vitest 5) —
+  미등록 폴러 키·시각 없는 항목 스킵(raw 키 누출 방지), 구워커(null)는 빈 배열 하위호환.
+- ⚠️ **연동 PC zip 재적용 필요**(바탕화면 `eywa-연동PC-전체-20260718.zip` 갱신본 — 같은 절차: 풀고 지정.bat).
+  재적용 전까지는 카드에 새 줄이 안 뜰 뿐 기존 기능 전부 정상(컬럼 nullable·insert 컬럼 명시라 구워커 무영향).
+
 ### ClassNote 학부모 읽음 동기화 2·3단계 (2026-07-18, 0122a) — ✅ tsc0/lint0/test37 + 실E2E 165건 기록
 1단계 조사(ClassNote가 `read_by_parent.date_read`를 피드 행에 이미 노출)를 실제 파이프라인으로 연결.
 - **매칭 키가 이 작업의 핵심**: 학부모에게 실제 발송하는 주체는 eywa가 아니라 **edutrix**다(본문이
