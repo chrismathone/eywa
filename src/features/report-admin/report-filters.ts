@@ -28,6 +28,12 @@ export type ReportListFilters = {
   status?: string;
   teacher?: string;
   subject?: string;
+  /**
+   * 읽음 필터. "read"=읽음 기록 있음. "unread"=**판정 가능한 미읽음만** —
+   * 발송 성공(success) + 매칭 키 있음(edutrix분은 edutrix_share_token 필요, native분은 항상 매칭 가능)
+   * + 읽음 기록 없음. 매칭 키 없는 옛 이관분은 동기화 자체가 안 되므로 "안읽음"에 안 섞는다(거짓 미확인 방지).
+   */
+  read?: "read" | "unread";
   page?: number;
 };
 

@@ -220,6 +220,16 @@ export async function listReports(
   else if (filters.status) q = q.eq("classnote_status", filters.status);
   if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
   if (filters.subject) q = q.eq("subject", filters.subject);
+  // 읽음 필터 — "안읽음"은 판정 가능한 행만(발송 성공 + 매칭 키 + 읽음 없음). 매칭 키 없는 옛 이관분은
+  // 동기화 불가 = "안읽음" 아님(report-filters.ts ReportListFilters.read 주석 참조).
+  if (filters.read === "read") q = q.not("classnote_read_at", "is", null);
+  else if (filters.read === "unread") {
+    q = q
+      .eq("classnote_status", "success")
+      .is("classnote_read_at", null)
+      // 매칭 가능: edutrix분은 edutrix_share_token 백필된 행만, native분(source≠edutrix_import, NULL 포함)은 항상
+      .or("edutrix_share_token.not.is.null,source.is.null,source.neq.edutrix_import");
+  }
   q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
 
   const { data, count, error } = await q;
