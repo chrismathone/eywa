@@ -35,7 +35,19 @@ import {
 } from "./edit-context";
 import { IndexBadge } from "./student-rows";
 
-type Queued = PendingMove & { fromClassName: string; toClassName: string; name: string };
+type Queued = PendingMove & {
+  fromClassName: string;
+  toClassName: string;
+  name: string;
+  /**
+   * 큐잉 시점의 적용 **의도** — 저장이 "지금 보는 주"에 묶이지 않게 하는 앵커(F2).
+   * `null` = 즉시(이번 주에서 큐잉 — RPC엔 미지정으로 넘겨 current_date 적용).
+   * `'YYYY-MM-DD'` = 그 주 예약(미래 주 월요일).
+   * ⚠️ 즉시 의도를 절대 날짜로 얼리면 자정을 넘겨 저장할 때 그 날짜가 과거가 돼 서버 소급 가드에
+   * 거부된다(적대 리뷰 확정) — 즉시는 날짜가 아니라 null로 남긴다.
+   */
+  effectiveOn: string | null;
+};
 
 /** 도착 셀 slot.id → 반 id 매핑용 드롭 대상 data(요일 존/공통 존 공통). */
 type DropData = {
@@ -63,15 +75,27 @@ export function TimetableEditProvider({
   children,
   effectiveDate,
   today,
+  canEdit = true,
 }: {
   children: ReactNode;
   /** 이동 적용일(YYYY-MM-DD) — 미래 주 편집 시 그 주 월요일. 미지정=오늘 즉시. (Phase B 주간 이동) */
   effectiveDate?: string;
   /** 오늘(KST, YYYY-MM-DD) — 적용일 입력 기본·최소값. */
   today: string;
+  /**
+   * 이 주가 편집 가능한가(과거 주=false). ⚠️ **파생으로 강제**한다 — 옛 코드는 페이지가 편집 *컨트롤*만
+   * 숨기고 provider·DndArea는 항상 마운트했는데, 주 이동이 soft nav라 `editing` state가 리셋되지 않아
+   * **과거 주에서 컨트롤이 안 보이는 채 그리드가 계속 편집 가능**했다(드래그·Delete로 실제 수강 종료까지).
+   * 화면에서만 잠그는 건 잠근 게 아니다(#77). 2026-07-17 적대 감사 F1.
+   */
+  canEdit?: boolean;
 }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
+  const [editingRaw, setEditing] = useState(false);
+  // 과거 주로 이동하면 편집 의도가 남아 있어도 즉시 무효 — 아래 모든 소비처(Delete 핸들러·드롭·저장)가
+  // 이 파생값을 본다. state를 effect로 리셋하지 않는 이유는 렌더 중 setState 금지 규칙(#25)과,
+  // 되돌아왔을 때 대기 큐를 잃지 않기 위해서다.
+  const editing = canEdit && editingRaw;
   const [queue, setQueue] = useState<Queued[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +103,8 @@ export function TimetableEditProvider({
   // 사용자가 편집 바에서 정한 적용일(예정일). null이면 기본(조회 주 기준 effectiveDate ?? 오늘).
   const [scheduledDate, setScheduledDate] = useState<string | null>(null);
   const dateFloor = effectiveDate ?? today;
+  // 이 주에서 큐잉되는 이동의 적용 의도 — 이번 주=null(즉시), 미래 주=그 주 월요일(예약).
+  const queueIntent = effectiveDate ?? null;
 
   // 편집 모드 Delete = 오늘 수강 종료(그 반만). hover는 ref로 추적(hover마다 리렌더 방지), 확인 팝업만 state.
   const hoveredRef = useRef<HoveredStudent | null>(null);
@@ -198,9 +224,21 @@ export function TimetableEditProvider({
     toDays?: string[];
     fromDays?: string[];
   }) {
+    if (!canEdit) return; // 과거 주 등 편집 불가 주에서는 어떤 경로로도 큐잉되지 않는다(F1).
+    // 다른 주의 대기 이동이 남아 있으면 섞지 않는다 — 한 번의 저장은 하나의 적용일로 나가므로,
+    // 섞이면 어느 한쪽이 반드시 틀린 날짜로 적용된다(F2). 저장/취소로 정리한 뒤 편집하게 한다.
+    if (weekMismatch) {
+      setError("다른 주에서 대기 중인 이동이 있습니다. 저장하거나 취소한 뒤 편집하세요.");
+      return;
+    }
     setError(null);
     setFailed([]);
-    setQueue((prev) => [...prev, move]);
+    setQueue((prev) => {
+      // 전부 되돌린(net no-op) 낡은 배치는 새 배치를 시작하기 전에 비운다 — 안 비우면 raw 큐에 남은
+      // 낡은 앵커(effectiveOn)가 새 이동의 적용일을 오염시킨다(적대 리뷰 확정 결함의 나머지 반쪽).
+      const base = compressMoves(prev).length === 0 ? [] : prev;
+      return [...base, { ...move, effectiveOn: queueIntent }];
+    });
   }
 
   // 합반 반+요일 선택 팝업 적용 → 고른 반·요일로 이동 큐잉. toSlotId=그 반 세그먼트 slot(전입예정 배지 인덱스 정확).
@@ -239,11 +277,37 @@ export function TimetableEditProvider({
 
   const compressed = compressMoves(queue);
 
+  // 대기 배치의 적용 앵커(첫 항목의 큐잉 의도). 저장은 지금 보는 주가 아니라 이 값을 쓴다 — 큐가 주
+  // 이동을 넘어 살아남으므로, 저장 시점 화면에 묶으면 미래주 예약이 오늘자로 적용되거나 즉시 이동이
+  // 미래로 예약되는 뒤바뀜이 생긴다(적대 감사 F2).
+  // ⚠️ "배치가 살아있는가"는 raw 큐가 아니라 **compressed** 기준 — A→B→A처럼 전부 되돌린 net no-op
+  // 큐를 raw 기준으로 잡으면, 주 이동 후 '대기 0건'인데 편집이 잠기는 유령 잠금이 생긴다(적대 리뷰 확정).
+  const queueDate = compressed.length > 0 ? (queue[0]?.effectiveOn ?? null) : null;
+  const weekMismatch = compressed.length > 0 && (queue[0]?.effectiveOn ?? null) !== queueIntent;
+
+  // 미저장 이동이 있는 채로 새로고침·탭 닫기 하면 경고(가져오기 다이얼로그와 동일 패턴).
+  // 앱 내 주/과목 이동은 weekMismatch 경고 + queueDate 앵커로 이미 안전하므로 여기선 문서 이탈만 막는다(F7).
+  useEffect(() => {
+    if (compressed.length === 0) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [compressed.length]);
+
   async function save() {
     if (compressed.length === 0) {
       setEditing(false);
       setQueue([]);
       setScheduledDate(null);
+      return;
+    }
+    // 편집 불가 주(과거)에서는 저장 경로도 막는다 — 컨트롤이 숨겨져 정상적으론 못 부르지만,
+    // 게이트는 UI가 아니라 여기여야 한다(#77).
+    if (!canEdit) {
+      setError("과거 주는 편집할 수 없습니다. 현재 주로 이동한 뒤 저장하세요.");
       return;
     }
     setSaving(true);
@@ -260,7 +324,10 @@ export function TimetableEditProvider({
             newClassId: m.toClassId,
             attendanceDays: m.toDays ?? [],
           })),
-          scheduledDate ?? effectiveDate,
+          // ⚠️ 적용일 = 사용자가 명시한 날짜 > **큐의 앵커 의도**(null=즉시 → 미지정으로 넘겨 서버
+          // current_date). 지금 보는 주(effectiveDate)는 절대 안 쓴다 — 주를 옮겨도 저장 결과가 바뀌면
+          // 안 되고(F2), 즉시 의도를 날짜로 얼리면 자정 넘긴 저장이 소급 가드에 거부된다(적대 리뷰 확정).
+          scheduledDate ?? queueDate ?? undefined,
         );
         if (res.error) {
           setError(res.error);
@@ -314,6 +381,8 @@ export function TimetableEditProvider({
         scheduledDate,
         setScheduledDate,
         dateFloor,
+        queueDate,
+        weekMismatch,
         setHovered,
         openDayEdit,
         openClassPick,
@@ -645,7 +714,11 @@ export function TimetableEditControls() {
     scheduledDate,
     setScheduledDate,
     dateFloor,
+    queueDate,
+    weekMismatch,
   } = useTimetableEdit();
+  // 표시·저장 모두 "큐가 만들어진 주"를 앵커로 — 주를 옮겨도 적용일 표시가 실제 적용값과 어긋나지 않게(F2).
+  const anchorDate = queueDate ?? dateFloor;
   return (
     <div className="print:hidden flex flex-wrap items-center gap-2 text-xs">
       {!editing ? (
@@ -671,7 +744,7 @@ export function TimetableEditControls() {
               type="date"
               aria-label="이동 적용일"
               min={dateFloor}
-              value={scheduledDate ?? dateFloor}
+              value={scheduledDate ?? anchorDate}
               onChange={(e) => setScheduledDate(e.target.value || null)}
               disabled={saving}
               className="border-line rounded-md border px-1.5 py-0.5 text-xs disabled:opacity-50"
@@ -697,6 +770,14 @@ export function TimetableEditControls() {
           </button>
         </>
       )}
+      {/* 대기 이동이 다른 주에서 만들어졌음을 명시 — 저장은 그 앵커 기준으로 나가고, 새 편집은 막혀 있다(F2).
+          앵커 null=즉시 의도(이번 주에서 큐잉) — 미래 주로 이동해 온 경우에도 배너는 떠야 한다. */}
+      {weekMismatch ? (
+        <span className="text-amber">
+          다른 주에서 만든 이동 {pendingCount}건이 대기 중입니다 — <b>{queueDate ?? "오늘(즉시)"}</b> 기준으로
+          적용됩니다. 저장하거나 취소한 뒤 이 주를 편집하세요.
+        </span>
+      ) : null}
       {error ? <span className="text-chart-4">{error}</span> : null}
       {failed.length > 0 ? (
         <span className="text-amber">{failed.length}건 실패(시간겹침 등) — 나머지는 저장됨</span>

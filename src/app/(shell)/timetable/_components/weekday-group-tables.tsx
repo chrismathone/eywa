@@ -11,12 +11,11 @@ import {
 } from "@/features/timetable/lib/periods";
 import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell } from "./class-cell";
 import { HapbanCell } from "./hapban-cell";
 
-const DAY_LABEL: Record<string, string> = {
-  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
-};
+// 요일 라벨은 공용 단일 소스(split-attendance) — 파일마다 같은 맵을 다시 적지 않는다.
 
 // 요일 그룹 — 과목별 프리셋(weekdayPartition)으로 동적 구성. band=그룹타이틀 색, tint=요일헤더 색.
 type GroupDef = { title: string; days: DayOfWeek[]; band: string; tint: string; merge: boolean };

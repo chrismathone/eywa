@@ -269,6 +269,21 @@ export const reportSchema = z.object({
   // raw SQL `data->'report'->'classnoteSharedBoardAllowlist'`로 직접 읽음(getTenantSettings 미경유).
   // 값은 boardClassName(subject, studentName) 결과 `(과목)학생명`과 일치해야 함(비교는 공백 무시).
   classnoteSharedBoardAllowlist: z.array(z.string()).default([]),
+  // ClassNote 발송 허용 시간창(KST "HH:MM", 매일 동일) — 밤 수업 보고서가 밤에 학부모 폰을 울리지 않게
+  // 워커가 창 밖이면 발송을 미룬다(큐 보존, 창 진입 시 자동 발송). **둘 다 채워야 활성**, 하나라도 비면
+  // 무제한(기존 동작). start > end면 자정 넘김 창(예 06:00~22:00은 주간, 22:00~06:00은 야간만 발송).
+  // 소비처 = ClassNote 워커(classnote-core.mjs `getClassnoteSendWindow`, raw SQL 직독 — allowlist와 동일 패턴)
+  // + saveAndQueueClassnote(창 밖 발송 시 강사 대기 안내 문구).
+  classnoteSendWindowStart: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:MM 형식(예 09:00)")
+    .or(z.literal(""))
+    .default(""),
+  classnoteSendWindowEnd: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:MM 형식(예 21:00)")
+    .or(z.literal(""))
+    .default(""),
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

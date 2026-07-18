@@ -26,7 +26,10 @@
 
 압축 후 `<저장소>\scripts\_classnote\` 에 다음이 보이면 정상:
 - `발송PC-지정.bat` · `발송PC-상태확인.bat` · `발송PC-해제.bat`  ← 더블클릭용
-- `setup-classnote-pc.ps1` · `run-classnote-worker.ps1` · `watch-classnote-queue.mjs` · `classnote-core.mjs` · `process-classnote-queue.mjs`
+- `setup-classnote-pc.ps1` · `run-classnote-worker.ps1` · `watch-classnote-queue.mjs` · `classnote-core.mjs` · `process-classnote-queue.mjs` · `send-window.mjs`
+
+> ⚠️ 위는 확인용 표본일 뿐입니다 — zip은 반드시 **폴더 전체**를 풀어야 합니다(파일을 골라 복사하면
+> 코어가 import하는 모듈(`board-safety.mjs`·`send-window.mjs` 등)이 빠져 워커가 기동 자체를 못 합니다).
 
 ---
 

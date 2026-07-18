@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { classnoteMinDate, isClassnoteAllowed, isClassnoteSubjectEnabled } from "./classnote-guard";
+import {
+  classnoteMinDate,
+  classnoteSendWindowHint,
+  isClassnoteAllowed,
+  isClassnoteSubjectEnabled,
+} from "./classnote-guard";
 
 describe("classnoteMinDate", () => {
   it("전 달 1일", () => {
@@ -55,5 +60,31 @@ describe("isClassnoteSubjectEnabled (과목별 발송 게이트)", () => {
   it("발송 가능 화이트리스트 밖 과목은 opt-in돼도 거부", () => {
     expect(isClassnoteSubjectEnabled("science", ["science"])).toBe(false);
     expect(isClassnoteSubjectEnabled("subject_2", ["subject_2", "math"])).toBe(false);
+  });
+});
+
+// 발송 허용 시간창 안내 — 워커 send-window.mjs의 앱측 미러(의미론 동일: fail-open·자정 넘김·시작 포함/종료 제외).
+// 여긴 안내 문구만 담당(실제 지연은 워커 게이트) — 의미론이 어긋나면 안내만 틀리지만, 그래도 양쪽 함께 유지.
+describe("classnoteSendWindowHint", () => {
+  it("창 밖이면 창 라벨 반환(대기 안내 필요)", () => {
+    expect(classnoteSendWindowHint("09:00", "21:00", 22 * 60)).toBe("09:00~21:00"); // 밤 10시
+    expect(classnoteSendWindowHint("09:00", "21:00", 8 * 60)).toBe("09:00~21:00"); // 아침 8시
+    expect(classnoteSendWindowHint("09:00", "21:00", 21 * 60)).toBe("09:00~21:00"); // 종료 정각 제외
+  });
+  it("창 안이면 null(안내 불필요)", () => {
+    expect(classnoteSendWindowHint("09:00", "21:00", 9 * 60)).toBeNull(); // 시작 정각 포함
+    expect(classnoteSendWindowHint("09:00", "21:00", 12 * 60)).toBeNull();
+  });
+  it("무제한(빈 값·한쪽만·형식 오류·시작=종료) = null — fail-open, 워커와 동일", () => {
+    expect(classnoteSendWindowHint("", "", 22 * 60)).toBeNull();
+    expect(classnoteSendWindowHint("09:00", "", 22 * 60)).toBeNull();
+    expect(classnoteSendWindowHint("", "21:00", 22 * 60)).toBeNull();
+    expect(classnoteSendWindowHint("9시", "21:00", 22 * 60)).toBeNull();
+    expect(classnoteSendWindowHint("09:00", "09:00", 22 * 60)).toBeNull();
+  });
+  it("자정 넘김 창(21:00~08:00) — 낮이 창 밖", () => {
+    expect(classnoteSendWindowHint("21:00", "08:00", 12 * 60)).toBe("21:00~08:00");
+    expect(classnoteSendWindowHint("21:00", "08:00", 23 * 60)).toBeNull();
+    expect(classnoteSendWindowHint("21:00", "08:00", 3 * 60)).toBeNull();
   });
 });

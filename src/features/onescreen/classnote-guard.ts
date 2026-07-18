@@ -1,4 +1,4 @@
-import { kstToday } from "@/lib/date-kst";
+import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 
 /**
  * ClassNote 발송 too_old 가드 — edutrix 2026-05~06 과거보고서 재발송 사고(1~4월 3,500건이 학부모에게 오발송)
@@ -37,6 +37,30 @@ export const CLASSNOTE_SENDABLE_SUBJECTS = ["math", "subject_1", "english"] as c
  * 화이트리스트 밖 과목도 거부(P0-3) — 보드 매핑이 없어 "(수학)" 보드 오게시로 직결되기 때문.
  * 순수 함수(Vitest). 큐 진입(saveAndQueueClassnote)·재발송(retryClassnote) 공용 게이트.
  */
+/**
+ * 발송 허용 시간창 대기 안내 — 지금 큐잉하면 창 밖이라 대기하는가? 창 밖이면 "HH:MM~HH:MM" 라벨,
+ * 창 안·무제한이면 null. **워커(scripts/_classnote/send-window.mjs)의 앱측 미러**(같은 의미론:
+ * 한쪽만/형식 오류/시작=종료 = 무제한 fail-open, 시작>종료 = 자정 넘김 창, 시작 포함·종료 제외).
+ * 실제 지연은 워커 게이트가 담당하고 이 함수는 **강사 안내 문구만** 만든다 — 의미론이 어긋나도
+ * 발송은 안 깨지고 안내만 틀린다(그래도 어긋나면 양쪽을 함께 고칠 것). 앱↔워커 미러는
+ * isClassnoteAllowed↔minDate와 같은 기존 관례. 순수 함수(Vitest).
+ */
+export function classnoteSendWindowHint(
+  startStr: string,
+  endStr: string,
+  minutes: number = kstMinutesOfDay(),
+): string | null {
+  const parse = (s: string): number | null => {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s.trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const start = parse(startStr);
+  const end = parse(endStr);
+  if (start === null || end === null || start === end) return null; // 무제한 — 안내 불필요
+  const inside = start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+  return inside ? null : `${startStr.trim()}~${endStr.trim()}`;
+}
+
 export function isClassnoteSubjectEnabled(
   subject: string | null | undefined,
   allowed: readonly string[],

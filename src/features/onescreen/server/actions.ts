@@ -12,7 +12,7 @@ import { loadActivePrompt } from "./prompt-loader";
 import { fetchScoreHistory, hasLaterScoredReport } from "./score-history";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
+import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -146,7 +146,15 @@ export async function saveLessonReport(
  */
 export async function saveAndQueueClassnote(
   input: SaveLessonReportInput,
-): Promise<{ ok: boolean; id?: string; shareToken?: string; status?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  id?: string;
+  shareToken?: string;
+  status?: string;
+  error?: string;
+  /** 발송 허용 시간창 밖에 큐잉됨 — "HH:MM~HH:MM"(창 라벨). 워커가 창 진입 시 자동 발송(강사 안내용). */
+  sendWindowHint?: string;
+}> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!input.studentId) return { ok: false, error: "학생 정보가 없습니다" };
@@ -215,7 +223,15 @@ export async function saveAndQueueClassnote(
     })
     .eq("id", saved.id);
   if (error) return { ok: false, error: error.message };
-  return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old" };
+  // 발송 허용 시간창 밖이면 대기 안내(실제 지연은 워커 게이트 담당 — 여기선 문구만). 창 안·무제한 = undefined.
+  const sendWindowHint =
+    allowed
+      ? (classnoteSendWindowHint(
+          settings.report.classnoteSendWindowStart,
+          settings.report.classnoteSendWindowEnd,
+        ) ?? undefined)
+      : undefined;
+  return { ok: true, id: saved.id, shareToken: saved.shareToken, status: allowed ? "queued" : "too_old", sendWindowHint };
 }
 
 /**

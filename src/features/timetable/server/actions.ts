@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import {
   applyLevelChange,
@@ -30,10 +30,17 @@ export async function changeClassLevel(
   const supabase = await createClient();
   const { data: klass } = await supabase
     .from("classes")
-    .select("id, class_name, subject")
+    .select("id, class_name, subject, teacher_id")
     .eq("id", classId)
     .single();
   if (!klass) return { error: "반을 찾을 수 없습니다" };
+  // scoped(강사)는 **담당 반만** — canWriteTenant는 "강사가 어떤 반이든 쓸 수 있다"만 보장하지 이 반이
+  // 내 반인지는 보장하지 않는다. RLS도 tenant 격리뿐이라 여기서 막지 않으면 강사가 안 맡은 반 이름까지
+  // 바꿀 수 있었다(2026-07-17 적대 감사 M4). full(관리자 계열·겸직 포함)은 기존대로 전 반.
+  // 패턴은 setAttendanceCell의 scoped 담당 반 강제와 동일.
+  if ((await accessLevelTenant(user.systemRole, "classes")) === "scoped" && klass.teacher_id !== user.id) {
+    return { error: "담당 반만 변경할 수 있습니다" };
+  }
 
   const { data: levelRows } = await supabase
     .from("english_levels")
