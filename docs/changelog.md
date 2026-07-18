@@ -4,6 +4,15 @@
 
 ## 진행 상황
 
+### 시간표 적대 전수검사 — 잔여 확정 결함 전량 수정 (2026-07-18 2차) — ✅ tsc0/lint0/test1590/build✓
+1차(강사 스코프+절단) 반영 후 원장 지시 "나머지 확정 결함도 전부 수정" → 4그룹 순차 수정 + 적대 리뷰(5렌즈) → 리뷰가 잡은 내 회귀 3건 재수정. 커밋 5개(fea43dc7·74298640·e7773a14·22ab47dc·7d2b8b55).
+- **A 서버 정합 6**: ① M6 마지막날 off-by-one — 종료 규약을 [`isEnrollmentEndedOn`](../src/features/enrollments/eligibility.ts) 순수함수로 **단일화**(전출=[start,end) 배타 / 일반=종료일 포함, 회귀 핀 테스트 6) — 주간뷰가 `end<=ref`로 따로 구현해 일반 종료 학생이 마지막 날 '오늘 일정'=재원·'주간뷰'=퇴원으로 갈렸었다. ② M7 aliveRows `start_date<=ref` 하한(미래 수강이 퇴원 줄을 지움·강사뷰 증발) ③ M4 `changeClassLevel` scoped=담당 반 강제 ④ M5 import 이동 attendance_days 승계(전 요일 리셋 차단) ⑤ F6 `moveEnrollmentsBatch` 과거 적용일 거부 ⑥ F5 파일 import `protectNewerThan=wb.created`(낡은 파일 재적용이 신규 수강을 종료하던 것).
+- **B 편집 상태 3**: ① F1 과거주 편집 누수(#77) — `canEdit`을 provider에 넘겨 `editing=canEdit&&raw` **파생 강제**(컨트롤 숨김만으론 soft nav에 state가 살아남아 과거주 그리드가 편집 가능했다) + 저장 경로 가드. ② F2 적용일 앵커 — 큐 항목에 큐잉 의도 기록, 저장은 `scheduledDate ?? 앵커`(보는 주 아님)·주 불일치 시 새 큐잉 차단+배너. ③ F7 beforeunload 미저장 가드.
+- **C 성능·정리 4**: loadContext 직렬 3쿼리→`Promise.all`(B4) · getTodaySchedule raw `.in()`→`fetchAllPagedInChunks`(414) · 죽은 금지상수 `SUBJECT_THEMES` 삭제 · M8 수학 엑셀 라벨 `labelOf("math")` 배선.
+- **D UX 8**: loading 스켈레톤 2줄(CLS 제거) · 과목칩 flex-wrap+`hideEmptyDays` 보존 · 강사뷰 '미사용 요일' **쿠키 지속**([prefs-sync.tsx](../src/app/(shell)/timetable/_components/prefs-sync.tsx) — 창은 깨끗한 URL로 열려 매번 초기화됐다, #75 회피 위해 쿠키) · join-miss `"?"`→"(삭제된 반)" · hover 카드 max-height 클램프 · 무색 강사 sticky 헤더 불투명 폴백 · 요일맵 3파일 중복→`DAY_LABEL` 단일화.
+- **적대 리뷰 확정 3(내 회귀) 재수정(7d2b8b55)**: 🔴 emptydays **토글 사망** — buildHref가 hide만 직렬화해 "없음=쿠키 참조"와 충돌, 쿠키 hide 후 show로 못 돌아감 → **양방향 명시 직렬화** · 유령 잠금 — weekMismatch가 raw 큐 기준이라 net no-op 큐가 "0건 대기" 잠금 → compressed 기준+죽은 배치 purge · 자정 저장 거부 — 즉시 이동을 절대 날짜로 얼려 자정 후 F6에 걸림 → **의도 인코딩**(`effectiveOn: null=즉시|날짜=예약`, 즉시는 RPC 미지정=current_date).
+- ⏳ 보류: 기본뷰 빈 교시 압축(222px 밴드)은 신규 기능(통합뷰 '1시간 단위' 이식)이라 버그수정 범위에서 제외.
+
 ### 시간표 적대 전수검사 — 강사 스코프 우회 2건 + 청크당 1000행 절단 (2026-07-18) — ✅ tsc0/lint0/test1578/build✓
 멀티에이전트 6방향(정합·성능 B1~B7·테넌트권한·하드코딩·편집/가져오기·UX) 적대 감사 → 확정 HIGH 2 + MED 1 **수정**(나머지 확정분은 보고만, 원장 결정 대기).
 - **H1 export 강사 스코프 우회 2경로**: ① 폴백 익스포터 [`buildTimetableWorkbook()`](../src/features/exports/timetable-excel.ts)에 `teacherId`
