@@ -10,6 +10,11 @@ import {
   type TimetableSubject,
 } from "@/features/timetable/lib/periods";
 import { cellClassKey, computeBlocks, sortDaysByGroup } from "@/features/timetable/lib/grid";
+import {
+  PERIOD_ROW_H,
+  periodRowHeight,
+  stackedHeights,
+} from "@/features/timetable/lib/empty-period-rows";
 import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell } from "./class-cell";
@@ -59,7 +64,8 @@ const dayColW = (d: DayOfWeek, wide: Set<DayOfWeek>) => (wide.has(d) ? DAY_COL_W
 // 교시 1칸 높이 — 개별 교시 행(2026-07-07 ijw식). 수업은 실제 쓰는 연속 교시 수만큼 세로 rowSpan 병합(엑셀
 // 셀병합): 2교시 병합 = 2×222≈444(헤더+재원~10칸+대기+퇴원 여유), 1교시 수업 = 222(재원 ~7칸, 넘으면 스크롤).
 // 4-1만 하는 수업은 1칸(222)만 차지하고 4-2는 별도 빈칸 → "안 쓰는 교시까지 병합" 문제 해소. (주말도 교시 1칸 = ROW_H.)
-const ROW_H = 222;
+// 값은 empty-period-rows의 PERIOD_ROW_H 단일 소스 — '빈 교시 접기'의 편집 모드 확장(EmptyPeriodScope)이 같은 값을 쓴다.
+const ROW_H = PERIOD_ROW_H;
 // 격자선 — 전 격자를 **하나의 동일한 테두리**(색·굵기 통일)로. 얇은 --line(연회색)은 셀 경계가 뭉개져 가독성↓ → 진한 ink 1px.
 // ⚠️ 구조선/안쪽선 굵기 구분 없이 균일 + 셀 카드 중복 테두리 제거(사용자 요청). 색값은 아래 sticky 교시열 box-shadow와 동일.
 const GRID = "border-ink/25"; // 전 셀·헤더 공통 1px 격자
@@ -195,6 +201,7 @@ function GroupTable({
   config,
   dateOf,
   wideDays,
+  collapseEmpty = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   subject: TimetableSubject;
@@ -207,6 +214,8 @@ function GroupTable({
   dateOf?: (d: DayOfWeek) => string | undefined;
   /** 2배 폭으로 그릴 요일(단독 그룹·주말) — 그룹 구성에서 호출부가 도출. */
   wideDays: Set<DayOfWeek>;
+  /** '빈 교시 접기' — 이 표의 어느 열에도 수업이 없는 교시 행을 얇은 밴드로 축소(행 자체는 유지). */
+  collapseEmpty?: boolean;
 }) {
   // 교시열 좌측 고정(가로 스크롤) — 평일 표만(주말은 자체 교시열이라 겹침 방지로 비고정).
   // 헤더 상단 고정(세로 스크롤) — 두 표 모두(아래 thead th에 sticky top-0/30/60). 스크롤해도 강사·요일 헤더가 붙어 있음.
@@ -249,6 +258,12 @@ function GroupTable({
     }
   }
   const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
+
+  // '빈 교시 접기'(C안, 2026-07-19) — 이 표(모든 강사×요일)에서 슬롯이 하나도 없는 행만 접는다.
+  // 비표준(x-) 행은 슬롯이 있어야만 생기므로 접기 대상은 표준 교시 행뿐. 접힌 행도 tr/셀은 그대로라
+  // 편집 드롭 존이 살아 있고, 편집 모드에선 EmptyPeriodScope가 CSS 변수로 풀 높이로 펼친다.
+  const occupiedKeys = new Set(slots.map(rowKeyOf));
+  const isCollapsed = (key: string) => collapseEmpty && !occupiedKeys.has(key);
 
   // (teacher::day::rowKey) → slots
   const cell = new Map<string, ScheduleSlotWithStudents[]>();
@@ -349,29 +364,45 @@ function GroupTable({
         {rows.map((row, ri) => {
           // 라벨 셀 — 수학계열은 그룹(3교시/4교시)을 2행 rowSpan으로 묶어 표시(축은 8개로 안 늘어남),
           // 영어/주말/폴백은 개별 교시 라벨. 그룹 둘째 교시(짝수 id)는 위 rowSpan에 피복돼 라벨 셀 없음.
-          const labelCls = `bg-bg-soft text-foreground ${periodCellSticky} ${periodDivider} border-b ${GRID} px-2 py-2 align-top text-[12px] font-bold whitespace-nowrap`;
           const pid = /^p-(\d+)$/.exec(row.key)?.[1];
           const mathN = isMathFamily && pid ? Number(pid) : null;
           const isGroupSecond = mathN !== null && mathN % 2 === 0;
           const nextRow = rows[ri + 1];
           const nextPid = nextRow ? /^p-(\d+)$/.exec(nextRow.key)?.[1] : undefined;
           const paired = mathN !== null && nextPid !== undefined && Number(nextPid) === mathN + 1;
+          // '빈 교시 접기' 높이 — 접힌 행은 CSS 변수(편집 모드엔 EmptyPeriodScope가 풀 높이로 확장),
+          // 점유 행은 고정 px. 그룹 라벨(rowSpan=2)은 두 행 높이 합(접힌 행이 섞이면 calc()로 변수 보존).
+          const rowH = periodRowHeight(isCollapsed(row.key), rowHeight);
+          const labelH = paired
+            ? stackedHeights([rowH, periodRowHeight(isCollapsed(nextRow!.key), rowHeight)])
+            : rowH;
+          // 라벨이 덮는 행이 **전부** 접혔을 때만 한 줄 압축 라벨(36px 밴드엔 두 줄이 안 들어감).
+          // 접힌·점유 혼합 쌍(258px)은 공간이 충분해 기존 두 줄 라벨 유지.
+          const labelCollapsed = paired
+            ? isCollapsed(row.key) && isCollapsed(nextRow!.key)
+            : isCollapsed(row.key);
+          const labelBase = `bg-bg-soft ${periodCellSticky} ${periodDivider} border-b ${GRID} font-bold whitespace-nowrap`;
+          const labelCls = labelCollapsed
+            ? `${labelBase} text-text-dim overflow-hidden px-2 py-0 align-middle text-[10px]`
+            : `${labelBase} text-foreground px-2 py-2 align-top text-[12px]`;
+          const labelText = mathN !== null ? `${Math.ceil(mathN / 2)}교시` : row.label;
+          const timeText =
+            mathN !== null
+              ? `${row.time.split("~")[0]}~${(paired ? nextRow! : row).time.split("~")[1]}`
+              : row.time;
           return (
             // ⚠️ 교시 행 높이를 rowHeight로 **명시 고정** → 그룹 라벨(rowSpan=2)이 두 교시(예 4-1/4-2)를
             // 정확히 2등분(각 rowHeight). tr에 안 박으면 border-collapse 표에서 브라우저가 rowSpan=2 라벨의
             // 444를 두 행에 **내용량 비례로 분배** → 학생 많은 4-1이 커지고 4-2가 얇아짐(2026-07-07 사용자 지적).
-            <tr key={row.key} style={{ height: rowHeight }}>
-              {isGroupSecond ? null : mathN !== null ? (
-                <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (paired ? 2 : 1) }}>
-                  {Math.ceil(mathN / 2)}교시
-                  <div className="text-text-faint mt-0.5 font-mono text-[10px]">
-                    {row.time.split("~")[0]}~{(paired ? nextRow! : row).time.split("~")[1]}
-                  </div>
-                </td>
-              ) : (
-                <td className={labelCls} style={{ height: rowHeight }}>
-                  {row.label}
-                  <div className="text-text-faint mt-0.5 font-mono text-[10px]">{row.time}</div>
+            <tr key={row.key} style={{ height: rowH }}>
+              {isGroupSecond ? null : (
+                <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: labelH }}>
+                  {labelText}
+                  {labelCollapsed ? (
+                    <span className="text-text-faint ml-1 font-mono text-[9px] font-normal">{timeText}</span>
+                  ) : (
+                    <div className="text-text-faint mt-0.5 font-mono text-[10px]">{timeText}</div>
+                  )}
                 </td>
               )}
               {prepared.flatMap((g, gi) =>
@@ -425,6 +456,7 @@ export function WeekdayGroupTables({
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
   weekdayGrouping = "mon-thu",
+  collapseEmptyPeriods = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
@@ -432,6 +464,8 @@ export function WeekdayGroupTables({
   weekMonday?: string;
   /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
   weekdayGrouping?: WeekdayGrouping;
+  /** '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(평일·주말 표 각각 판정). 편집 모드는 자동 펼침. */
+  collapseEmptyPeriods?: boolean;
 }) {
   const subject = (slots[0]?.subject ?? "math") as TimetableSubject;
   // 요일 헤더 날짜 라벨(스프레드시트처럼 "월 6/29"). weekMonday 없으면 요일만.
@@ -465,6 +499,7 @@ export function WeekdayGroupTables({
             config={config}
             dateOf={dateOf}
             wideDays={weekdayWide}
+            collapseEmpty={collapseEmptyPeriods}
           />
         ) : null}
         {weekendGroups.length > 0 ? (
@@ -478,6 +513,7 @@ export function WeekdayGroupTables({
             config={config}
             dateOf={dateOf}
             wideDays={weekendWide}
+            collapseEmpty={collapseEmptyPeriods}
           />
         ) : null}
       </div>

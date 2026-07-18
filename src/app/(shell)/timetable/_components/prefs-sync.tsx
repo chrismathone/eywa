@@ -21,3 +21,18 @@ export function EmptyDaysPrefSync({ hide }: { hide: boolean }) {
   }, [hide]);
   return null;
 }
+
+export const EMPTY_PERIODS_COOKIE = "eywa-tt-emptyperiods";
+
+/**
+ * 기본뷰 '빈 교시 접기' 선호를 기기에 기억 — 이유·구조는 위 EmptyDaysPrefSync와 동일(창은 깨끗한
+ * URL로 열려 파라미터만으론 매번 초기화). URL 파라미터(`emptyperiods=collapse|expand`)가 있으면
+ * 그쪽 우선, 없을 때만 쿠키가 기본. 링크 직렬화는 **양방향 명시**(page.tsx buildHref 참조 — hide만
+ * 직렬화하다 토글이 한쪽으로 죽은 emptydays 전례 재발 방지).
+ */
+export function EmptyPeriodsPrefSync({ collapse }: { collapse: boolean }) {
+  useEffect(() => {
+    document.cookie = `${EMPTY_PERIODS_COOKIE}=${collapse ? "collapse" : "expand"}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+  }, [collapse]);
+  return null;
+}
