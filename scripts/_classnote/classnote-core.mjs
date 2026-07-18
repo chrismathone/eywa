@@ -11,6 +11,7 @@ import {
   fetchChildren, uploadToKage, resolveBoardChildEnrollments, postClassnoteReport,
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
+import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 
 export const CLOUD_RUN = "https://submittoclassnotev2-q4dmdhnkvq-uc.a.run.app";
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
@@ -105,6 +106,20 @@ export async function isClassnoteSendEnabled(sql, tenant) {
   const [row] = await sql`select (data->'report'->>'classnoteSendEnabled')::boolean as on
     from tenant_settings where tenant_id=${tenant}`;
   return row?.on === true;
+}
+
+/**
+ * 발송 허용 시간창(학원설정 `report.classnoteSendWindowStart/End`, KST "HH:MM") — 밤 수업 보고서가
+ * 밤에 학부모 폰을 울리지 않게. 창 밖이면 processQueueOnce가 실게시 주기를 건너뛴다(큐 보존 —
+ * 창 진입 시 그대로 이어서 발송). 미설정/한쪽만/형식 오류 = null(무제한, fail-open — 설정 실수로
+ * 발송이 영영 멈추지 않게. 긴급 정지는 킬스위치 담당). isClassnoteSendEnabled와 동일하게 postgres
+ * 직결이라 커밋값 즉시 반영. tenant 스코프 필수.
+ */
+export async function getClassnoteSendWindow(sql, tenant) {
+  const [row] = await sql`select data->'report'->>'classnoteSendWindowStart' as s,
+      data->'report'->>'classnoteSendWindowEnd' as e
+    from tenant_settings where tenant_id=${tenant}`;
+  return resolveSendWindow(row?.s ?? "", row?.e ?? "");
 }
 
 /**
@@ -207,6 +222,18 @@ export async function processQueueOnce(sql, browser, opts) {
   if (post && !(await isClassnoteSendEnabled(sql, tenant))) {
     log("[worker] classnoteSendEnabled OFF — 실게시 중단(큐 보존, 클레임 안 함)");
     return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
+  }
+
+  // 0-a) 발송 허용 시간창 — 실게시 모드(post)인데 창 밖이면 이 주기를 통째로 건너뛴다(킬스위치와 동형).
+  // 큐는 손대지 않아(클레임·stale 복구도 안 함) 창 진입 폴부터 그대로 이어서 발송된다. 캡처(/r)는 발송
+  // 시점에 일어나므로 지연은 무손실. dry-run(post=false)은 영향 없음(밤에도 파이프라인 점검 가능).
+  // 무제한(null) = 기존 동작. 창 라벨은 로그로 남겨 watch.log에서 대기 사유가 보이게.
+  if (post) {
+    const sendWindow = await getClassnoteSendWindow(sql, tenant);
+    if (!isWithinSendWindow(sendWindow)) {
+      log(`[worker] 발송 허용 시간대(${formatSendWindow(sendWindow)}) 밖 — 이 주기 대기(큐 보존)`);
+      return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
+    }
   }
 
   // 0-b) 프리플라이트 백오프 — 준비가 연속 실패 중이면 **클레임조차 하지 않는다**.

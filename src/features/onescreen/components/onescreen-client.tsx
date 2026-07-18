@@ -870,7 +870,9 @@ export function OneScreenClient({
     }
     const msg =
       res.status === "queued"
-        ? "발송 대기 — 워커가 자동으로 게시합니다"
+        ? res.sendWindowHint
+          ? `발송 예약됨 — 허용 시간대(${res.sendWindowHint})에 자동 발송됩니다`
+          : "발송 대기 — 워커가 자동으로 게시합니다"
         : res.status === "success"
           ? "이미 발송 완료된 보고서입니다"
           : res.status === "processing"
@@ -903,6 +905,9 @@ export function OneScreenClient({
     } else if (res.status === "subject_off") {
       // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
       toast.message(`${student.name} ${subjectName} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다`);
+    } else if (res.status === "queued" && res.sendWindowHint) {
+      // 발송 허용 시간창 밖 — 큐엔 정상 적재, 워커가 창 진입 시 자동 발송("왜 안 나가지?" 재발송 혼란 방지).
+      toast.success(`${student.name} ${subjectName} — 발송 예약됨(${res.sendWindowHint}에 자동 발송)`);
     } else {
       toast.success(`${student.name} ${subjectName} — 발송 대기`);
     }
@@ -969,13 +974,16 @@ export function OneScreenClient({
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
     let dry = 0;
     let fail = 0;
+    let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
       for (const r of rows) {
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
         const res = await queueOne(student, r.subject.name);
         if (!res.ok) fail++;
-        else if (res.status === "queued") queued++;
-        else if (res.status === "dry_run") dry++;
+        else if (res.status === "queued") {
+          queued++;
+          if (res.sendWindowHint) windowHint = res.sendWindowHint;
+        } else if (res.status === "dry_run") dry++;
         else if (res.status === "subject_off") subjectOff++;
         else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
         else skipped++; // success/processing/too_old
@@ -985,7 +993,7 @@ export function OneScreenClient({
     }
     toast.success(
       (dry ? `저장 ${dry}건(dry-run·발송 안 함) · ` : "") +
-        `발송 대기 ${queued}건` +
+        (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +

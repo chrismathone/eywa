@@ -29,7 +29,8 @@ export type ComposeStudent = { id: string; name: string; school: string | null; 
 
 // 발송 결과(status) → 학부모/관리자용 한글 안내. raw enum 노출 금지(status-labels 원칙).
 const SEND_MESSAGE: Record<string, { kind: "success" | "info" | "warn"; text: string }> = {
-  queued: { kind: "success", text: "발송 대기열에 올렸습니다 — 연동 PC가 곧 학부모에게 전송합니다." },
+  // "곧 전송" 단정 금지 — 발송 허용 시간대(원장 설정) 밖이면 창 진입까지 대기하므로 시점을 약속하지 않는다(리뷰 확정).
+  queued: { kind: "success", text: "발송 대기열에 올렸습니다 — 연동 PC가 자동으로 전송합니다(발송 허용 시간대 설정 시 그 시간에)." },
   dry_run: { kind: "info", text: "저장했습니다. 현재 실제 발송이 꺼져 있어 전송은 대기 상태입니다(원장 설정에서 켜야 전송)." },
   subject_off: { kind: "warn", text: "저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)." },
   name_conflict: { kind: "warn", text: "동명이인이 있어 자동 발송을 막았습니다. 학생 구분 이름(classnote_name) 지정 후 다시 시도하세요." },

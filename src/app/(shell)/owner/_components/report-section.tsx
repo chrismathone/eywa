@@ -127,6 +127,66 @@ export function ReportSection({
             </p>
           ) : null}
         </div>
+
+        {/* 발송 허용 시간대 — 밤 수업 보고서가 밤에 학부모 폰을 울리지 않게. 창 밖 발송분은 큐에 대기했다가
+            창 진입 시 워커가 자동 발송(강사는 평소처럼 발송 버튼만). 둘 다 채워야 활성, 비우면 무제한. */}
+        <div className="border-line mt-3 border-t pt-3">
+          <p className="text-foreground text-[13px] font-semibold">발송 허용 시간대</p>
+          {/* ⚠️ "수업 보고서" 한정 명시 — 반 공지(classnote_notices)는 이 창을 안 탄다(발신자 명시 발송 = 즉시
+              게시가 의도). 무한정 "발송"이라 쓰면 같은 박스의 킬스위치·발송 과목이 공지에도 적용되는 것과 섞여
+              공지까지 미뤄진다고 오독됨(리뷰 확정 — 과약속 금지). */}
+          <p className="text-text-dim mt-0.5 text-[12px]">
+            <b>수업 보고서</b>는 이 시간대에만 학부모에게 발송됩니다. 시간대 밖에 발송한 보고서는 대기했다가 자동
+            발송됩니다. 비우면 제한 없이 즉시 발송합니다. (반 공지는 이 설정과 무관하게 즉시 게시됩니다.)
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="time"
+              className="border-line focus:border-primary rounded-md border bg-white px-2 py-1.5 text-[13px] outline-none"
+              value={r.classnoteSendWindowStart}
+              onChange={(e) => set({ classnoteSendWindowStart: e.target.value })}
+            />
+            <span className="text-text-faint text-[12px]">~</span>
+            <input
+              type="time"
+              className="border-line focus:border-primary rounded-md border bg-white px-2 py-1.5 text-[13px] outline-none"
+              value={r.classnoteSendWindowEnd}
+              onChange={(e) => set({ classnoteSendWindowEnd: e.target.value })}
+            />
+            {r.classnoteSendWindowStart || r.classnoteSendWindowEnd ? (
+              <button
+                type="button"
+                className="text-text-dim hover:text-foreground text-[12px] underline underline-offset-2"
+                onClick={() => set({ classnoteSendWindowStart: "", classnoteSendWindowEnd: "" })}
+              >
+                제한 없음으로
+              </button>
+            ) : null}
+          </div>
+          {(r.classnoteSendWindowStart === "") !== (r.classnoteSendWindowEnd === "") ? (
+            <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+              <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+              <span>시작·종료를 둘 다 채워야 시간대 제한이 켜집니다. 하나만 채우면 제한 없이 동작합니다.</span>
+            </p>
+          ) : null}
+          {/* 시작=종료도 조용히 무제한(fail-open) — 한쪽만 채움과 동일 계열인데 이 케이스만 침묵하면
+              원장이 "제한 켜짐"으로 오신뢰(리뷰 확정: 폼 도달 가능한 무경고 무제한은 이것뿐). */}
+          {r.classnoteSendWindowStart &&
+          r.classnoteSendWindowEnd &&
+          r.classnoteSendWindowStart === r.classnoteSendWindowEnd ? (
+            <p className="text-danger mt-2 flex items-start gap-1.5 text-[12px]">
+              <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />
+              <span>시작과 종료가 같으면 제한 없이 동작합니다(즉시 발송). 시간대를 쓰려면 서로 다른 시각을 지정하세요.</span>
+            </p>
+          ) : null}
+          {r.classnoteSendWindowStart &&
+          r.classnoteSendWindowEnd &&
+          r.classnoteSendWindowStart > r.classnoteSendWindowEnd ? (
+            <p className="text-text-dim mt-2 text-[12px]">
+              종료가 시작보다 이르면 자정을 넘는 창으로 동작합니다(예 21:00~08:00 = 밤~다음날 아침에만 발송).
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려
