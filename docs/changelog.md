@@ -4,6 +4,14 @@
 
 ## 진행 상황
 
+### AI 비서 툴 9종 확장(직원·반·기록) + 적대 리뷰 픽스 + 주간작성률 절단 수정 (2026-07-18) — ✅ tsc0/lint0/test + 실DB 검증
+"김윤하 선생님 현황은?"에 학생만 답하던 커버리지 공백 해소 — 비서 툴 9종→18종(직원/강사·반/수업·등록상담·퇴원·회의록).
+전부 기존 queries.ts read-only 래핑, 세션 RLS 상속, PII 원천 차단(급여·연락처·인사 memo·전사 원문 미노출). 4렌즈 적대 리뷰
+확정 결함 반영(search_staff total 캡·search_meetings excerpt-only 검색+UTC 월/날짜·등록상담 UTC 날짜·퇴원 raw 사유·B4).
+- **주간 작성률 절단(B2)**: `getWeeklyWritingRates`의 `lesson_reports` 조회가 `.limit(5000)`인데 PostgREST max-rows(≈1000)가
+  명시 limit도 덮어 1000행 silent 절단(실측: 5000요청→1000반환, 15060행 범위 확인). 현재 주간 볼륨 ~574라 잠복이었으나 성장 시
+  작성률 과소집계 시한폭탄 → `fetchAllPaged`로 전건(실증: 15060 전건 일치). 원장 보고서 관리 화면·비서 툴 공용.
+
 ### 운영실 버그 체크 — 비서 temperature 400 + 적대 리뷰 확정 23건 중 16건 픽스 (2026-07-17) — ✅ tsc0/lint0/test1552 + 실API·실DB 검증
 원장 제보(비서 패널 "400 `temperature` is deprecated") 발단 → 5차원 멀티에이전트 전수 점검(발견별 3렌즈 적대 검증, 확정 23·기각 4).
 - **AI(치명)**: Claude 5 계열 temperature 거부 400([gotchas #80](gotchas.md)) — 비서 Anthropic 루프에서 제거 + `generateJSON`은
