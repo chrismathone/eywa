@@ -100,6 +100,31 @@ export type ScheduleSlot = {
   pendingHandover: { teacherName: string | null; date: string | null } | null;
 };
 
+type SlotClassRef = {
+  id?: string;
+  class_name?: string;
+  subject?: string;
+  bg_color?: string | null;
+  text_color?: string | null;
+  is_active?: boolean | null;
+  closed_at?: string | null;
+  pending_teacher_id?: string | null;
+  pending_teacher_date?: string | null;
+  teacher?: { display_name?: string } | { display_name?: string }[];
+  pendingTeacher?: { display_name?: string } | { display_name?: string }[];
+  classroom?: { name?: string } | { name?: string }[];
+};
+type SlotRow = {
+  id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+  class_id: string;
+  slot_teacher_label: string | null;
+  slot_room_label: string | null;
+  class?: SlotClassRef | SlotClassRef[];
+};
+
 async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<ScheduleSlot[]> {
   const supabase = db?.supabase ?? (await createClient());
   const weekEnd = weekEndOf(referenceDate);
@@ -108,10 +133,13 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
   // 과거 주(ref=일요일) 조회에 다음 주 시작 스케줄이 새어 스케줄 전환(temporal cutover) 시 중복 표시된다.
   // 폐지(is_active=false)된 반은 `!inner` 조인 + class.is_active 필터로 전체 주에서 제외.
   // 종강(class.closed_at)된 반은 종강일 이후 주에서만 제외(이전 주엔 수강이력으로 표시) — JS에서 거른다.
-  let slotQuery = supabase
-    .from("class_schedules")
-    .select(
-      `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
+  // ⚠️ 무페이징 select 금지(B2) — 이 쿼리는 시간표 화면의 **뿌리**라, 1000행에서 조용히 잘리면 반이
+  // 통째로 화면에서 사라진다. 익스포터 쪽 쌍둥이 쿼리와 동일하게 fetchAllPaged + id unique tie-break.
+  const data = await fetchAllPaged<SlotRow>((from, to) => {
+    let q = supabase
+      .from("class_schedules")
+      .select(
+        `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label,
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at,
          pending_teacher_id, pending_teacher_date,
@@ -119,15 +147,13 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
          pendingTeacher:pending_teacher_id ( display_name ),
          classroom:classroom_id ( name )
        )`,
-    )
-    .eq("class.is_active", true)
-    .lte("valid_from", weekSundayOf(referenceDate))
-    .or(`valid_to.is.null,valid_to.gte.${referenceDate}`)
-    .order("start_time");
-  if (db) slotQuery = slotQuery.eq("tenant_id", db.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
-  const { data } = await slotQuery;
-
-  if (!data) return [];
+      )
+      .eq("class.is_active", true)
+      .lte("valid_from", weekSundayOf(referenceDate))
+      .or(`valid_to.is.null,valid_to.gte.${referenceDate}`);
+    if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
+    return q.order("start_time").order("id").range(from, to);
+  });
 
   // 종강 반: closed_at < 기준일이면 그 주엔 이미 종강 → 제외(closed_at ≥ 기준일인 과거 주엔 표시).
   const visible = data.filter((r) => {
@@ -145,7 +171,8 @@ async function fetchSlots(referenceDate: string, db?: TimetableDb): Promise<Sche
       .lte("start_date", weekEnd)
       .or(`end_date.is.null,end_date.gt.${weekEnd}`);
     if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-    return q.range(from, to);
+    // order 없는 .range()는 OFFSET 페이지가 흔들려 행이 중복·누락될 수 있다(카운트가 틀어짐) → id tie-break.
+    return q.order("id").range(from, to);
   });
 
   const counts = new Map<string, number>();

@@ -51,6 +51,9 @@ async function loadContext(): Promise<Ctx> {
         "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
       )
       .is("end_date", null)
+      // ⚠️ order 없는 .range()는 페이지 경계에서 행이 누락·중복될 수 있다. 이 스냅샷은 diff의 '현재 DB'
+      // 쪽이라 누락 = 오판(중복 생성·잘못된 삭제)으로 이어진다 → id unique tie-break(batch.ts 계약).
+      .order("id")
       .range(from, to),
   );
   const current: EnrollmentSnapshotRow[] = enr.map((e) => {
@@ -74,7 +77,12 @@ async function loadContext(): Promise<Ctx> {
   });
 
   const cls = await fetchAllPaged<{ id: string; class_name: string; subject: string }>((from, to) =>
-    supabase.from("classes").select("id, class_name, subject").eq("is_active", true).range(from, to),
+    supabase
+      .from("classes")
+      .select("id, class_name, subject")
+      .eq("is_active", true)
+      .order("id")
+      .range(from, to),
   );
   const classes: ClassRef[] = cls.map((c) => ({
     classId: c.id,
@@ -87,7 +95,9 @@ async function loadContext(): Promise<Ctx> {
     name: string;
     school: string | null;
     grade: string | null;
-  }>((from, to) => supabase.from("students").select("id, name, school, grade").range(from, to));
+  }>((from, to) =>
+    supabase.from("students").select("id, name, school, grade").order("id").range(from, to),
+  );
   const students: StudentRef[] = stu.map((s) => ({
     studentId: s.id,
     name: s.name,

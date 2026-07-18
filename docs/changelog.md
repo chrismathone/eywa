@@ -4,6 +4,38 @@
 
 ## 진행 상황
 
+### 시간표 적대 전수검사 — 강사 스코프 우회 2건 + 청크당 1000행 절단 (2026-07-18) — ✅ tsc0/lint0/test1578/build✓
+멀티에이전트 6방향(정합·성능 B1~B7·테넌트권한·하드코딩·편집/가져오기·UX) 적대 감사 → 확정 HIGH 2 + MED 1 **수정**(나머지 확정분은 보고만, 원장 결정 대기).
+- **H1 export 강사 스코프 우회 2경로**: ① 폴백 익스포터 [`buildTimetableWorkbook()`](../src/features/exports/timetable-excel.ts)에 `teacherId`
+  인자가 **아예 없어**, subject가 math/english가 아니면(라우트 폴백) 강사가 `?subject=xyz`로 전 강사·전 학생 명단 + `_meta` UUID를 통째 받았다 →
+  `opts.teacherId`를 조인 필터(`.eq("class.teacher_id")`)로 받고 라우트가 화면과 동일한 `effectiveTeacherId`를 넘긴다(스코프 정의는
+  [teacher-scope.ts](../src/lib/auth/teacher-scope.ts) `classes.teacher_id`와 동일 = 화면·엑셀 일치). ② math/english는 그리드는 스코프돼도
+  [`appendEnrollmentEditSheet`](../src/features/exports/enrollment-edit-sheet.ts)(과목 전체 수강 명단, teacherId 인자 없음)를 붙여 **엑셀 버튼만 눌러도**
+  같은 과목 전 학생 이름·학교·학년이 나갔다 → `includeEditSheet` 신설(**기본 true** — cron 시트 push·'지금 반영'이 이 시트로 라운드트립을 닫으므로 보존),
+  라우트만 full 권한자에게 켠다.
+- **H2 파일 import가 강사에게 열려 있었다**: preview/apply가 `canWriteTenant(role,"classes")`라 **scoped(강사)도 통과** → 강사가 내보낸 xlsx의 '반' 열을
+  고쳐 재업로드하면 담당과 무관하게 학원 전체 수강을 이동·종료·생성할 수 있었다. 시트 경로는 이미 `canManageSheetSync`(full-only)라 **비대칭**이었던 것.
+  → [`canManageTimetableImport`](../src/features/timetable/server/import-access.ts)(classes=full) 신설, preview·apply·UI 버튼이 **같은 게이트**를 쓴다(#77).
+  ⚠️ 사무실(master/admin/manager)은 classes=full이라 기존 운영 흐름 무변경, 강사만 차단.
+- **M1 청크당 1000행 silent 절단(B2)**: `fetchInChunks`는 414만 막고 **청크 내부 페이지네이션을 안 한다**(docstring이 "청크당 <1000"을 *가정*만).
+  로스터(100반/청크 × 반당 수~수십 수강)가 넘기면 **셀에서 학생이 조용히 사라진다** → [queries.ts](../src/features/timetable/server/queries.ts) 4곳
+  (로스터·퇴원정제 aliveRows·교재·진도) + 폴백 익스포터 2곳을 `fetchAllPagedInChunks`/`fetchAllPaged` + `id` unique tie-break로 전환.
+  진도(lesson_reports)는 `report_date desc` + 첫행승리라 잘리면 오래된 행이 아니라 **학생 전체가 통째로** 사라져 hover 진도가 아예 안 떴다.
+  `id desc` tie-break로 같은 날짜 2건의 '최신'도 결정적으로 확정(옛 코드는 비결정).
+- **M1 후속(적대 리뷰가 잡은 같은 결함 5곳)**: 리뷰 4렌즈(16건 제기·전건 "이 diff의 회귀는 아님"으로 기각)에서 **기각 사유가
+  '기존 코드'일 뿐 결함 자체는 진짜인** 동류 5곳을 추가 수정 — ① **`fetchSlots` class_schedules**(시간표 화면의 **뿌리** 쿼리인데
+  무페이징 select라 1000행 절단 시 반이 통째로 화면에서 증발. 익스포터 쌍둥이만 고치고 화면을 안 고치면 반쪽) → `fetchAllPaged`
+  + `SlotRow` 타입. ② **`appendEnrollmentEditSheet`**: `.range()`인데 **order 없음** → 페이지 경계에서 행 누락 시 그 행은
+  '시트에 없음' = **삭제(수강 종료) 대상**으로 재해석된다(조용한 수강 종료). ③④⑤ `loadContext` 3쿼리(diff의 '현재 DB' 쪽)
+  + `fetchSlots` 수강 카운트도 order 없는 `.range()` → 전부 `id` unique tie-break 부여(`batch.ts` 계약).
+- ⚠️ **진도 조회 볼륨 트레이드오프(의도)**: `fetchAllPagedInChunks`는 학생별 전 이력을 받아 '최신 1건'만 쓴다. 실측 근거로
+  bounded(lesson_reports 16,694행/299명·활성 로스터 ≈209·`progress not null` 축소·청크는 `Promise.all` 병렬·짧은 페이지면 1왕복·
+  `loading.tsx` 스트리밍 뒤)라 **조용한 데이터 손실을 없애는 대가로 수용**. 더 줄이려면 onescreen `0117a onescreen_prior_reports`
+  같은 DISTINCT ON RPC가 정석(후속 과제).
+- ⚠️ **미수정(보고만, 결정 대기)**: 과거주 편집 누수(#77 UI-only 게이트)·effectiveDate 저장시점 바인딩·`changeClassLevel` 소유권 미검증·
+  import이 분리등원(attendance_days) 소실·마지막날 off-by-one(주간뷰 배타 vs `isEnrollmentActiveOn` 포함)·aliveRows `start_date` 하한 누락·
+  UX 다수. 상세는 메모리 `project_timetable-adversarial-audit`.
+
 ### AI 비서 grounding 하네스 — 팩트만 답하도록 날조 후검증 (2026-07-18) — ✅ tsc0/lint0/test36 + 실 Solar E2E
 "제안하라고 밀어주니 Solar가 정당화하려 없는 근거를 지어낸다"(전월 대비·지난주 평균·미납액 1천만원·계산 전환율)를
 **프롬프트만으론 완전 차단 불가**(약한 모델 한계)라 확인 → 생성 후 grounding 하네스 신설(원장 방향: Claude 전환 대신 하네스로).

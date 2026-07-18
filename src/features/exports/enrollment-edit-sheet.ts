@@ -38,7 +38,10 @@ export async function appendEnrollmentEditSheet(
           .from("enrollments")
           .select("id, class:class_id ( class_name ), student:student_id ( name, school, grade )");
     if (tenantId) q = q.eq("tenant_id", tenantId); // admin(cron) 경로 — 명시 격리
-    return q.is("end_date", null).range(from, to);
+    // ⚠️ order 없는 .range()는 OFFSET 페이지 경계가 흔들려 행이 **누락**될 수 있다. 이 시트는 라운드트립
+    // import의 입력이라, 누락된 행은 '시트에 없음' = **삭제(수강 종료) 대상**으로 해석된다 → 조용한 수강 종료.
+    // id unique tie-break 필수(fetchAllPaged 계약, batch.ts).
+    return q.is("end_date", null).order("id").range(from, to);
   });
   const edit = wb.addWorksheet(EDIT_SHEET_NAME);
   edit.columns = [
