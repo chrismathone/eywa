@@ -68,6 +68,8 @@ export default async function TimetablePage({
   const rel = weekRelation(week, today);
   const isFutureWeek = rel === "future";
   // 편집 = 이번 주(즉시 이동) 또는 미래 주(그 주에 예약). 과거 주는 조회 전용(소급 금지).
+  // ⚠️ 이 값은 편집 *컨트롤* 노출뿐 아니라 **provider에도** 넘겨야 한다 — 컨트롤만 숨기면 주 이동이
+  // soft nav라 provider의 editing state가 살아남아 과거 주에서도 그리드가 계속 편집 가능했다(적대 감사 F1).
   const canEdit = rel !== "past";
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
@@ -172,7 +174,7 @@ export default async function TimetablePage({
   const transferCount = [...transferIds].filter((id) => statusOf.get(id) === "active").length;
 
   return (
-    <TimetableEditProvider effectiveDate={effectiveDate} today={today}>
+    <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
       <div className="flex h-full min-h-0 flex-col gap-4">
       {/* Toolbar */}
       <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">

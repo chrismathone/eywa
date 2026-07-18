@@ -96,6 +96,14 @@ export interface TimetableEditState {
   setScheduledDate: (d: string | null) => void;
   /** 적용일 입력의 기본·최소값(= 조회 주 기준일 ?? 오늘). 편집 바가 date input 기본값으로 사용. */
   dateFloor: string;
+  /**
+   * 대기 중인 이동이 **만들어진 주**의 적용일. 저장은 "지금 보는 주"가 아니라 이 값을 쓴다 —
+   * 큐가 주 이동을 넘어 유지되므로, 저장 시점 화면 기준으로 묶으면 미래주 예약이 오늘자로 적용되거나
+   * 즉시 이동이 미래로 예약되는 뒤바뀜이 생긴다(2026-07-17 적대 감사 F2). 큐가 비면 null.
+   */
+  queueDate: string | null;
+  /** 대기 이동이 만들어진 주 ≠ 지금 보는 주 — 편집 바가 경고를 띄우고 새 이동 큐잉을 막는다. */
+  weekMismatch: boolean;
   /** 마우스 오버 중인 학생 등록(편집 모드 Delete=오늘 수강 종료). ref 세팅이라 리렌더 없음. null=해제. */
   setHovered: (h: HoveredStudent | null) => void;
   /** 편집 모드에서 학생 클릭 → 같은 반 요일 편집 팝오버 열기. */
@@ -120,6 +128,8 @@ export const TimetableEditContext = createContext<TimetableEditState>({
   scheduledDate: null,
   setScheduledDate: noop,
   dateFloor: "",
+  queueDate: null,
+  weekMismatch: false,
   setHovered: noop,
   openDayEdit: noop,
   openClassPick: noop,
