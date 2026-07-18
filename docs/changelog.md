@@ -22,6 +22,48 @@
 - 실측 검증(읽기 전용): 후보 2건 중 과목 null 1건은 과목 게이트로 제외(발송 불가 = 알리면 오탐), math 1건은 7일 창 밖 → **오늘 발화 0건**.
   cron E2E `결석 0·후속 0·성적 0·미수 0·미발송 0`. 마이그레이션 불요(`event_type`·`notifications.type`이 text).
 
+### AI 비서 grounding 하네스 — 팩트만 답하도록 날조 후검증 (2026-07-18) — ✅ tsc0/lint0/test36 + 실 Solar E2E
+"제안하라고 밀어주니 Solar가 정당화하려 없는 근거를 지어낸다"(전월 대비·지난주 평균·미납액 1천만원·계산 전환율)를
+**프롬프트만으론 완전 차단 불가**(약한 모델 한계)라 확인 → 생성 후 grounding 하네스 신설(원장 방향: Claude 전환 대신 하네스로).
+- **순수 로직** [grounding.ts](../src/features/assistant/grounding.ts)(Vitest 26): 답변에서 ① 없는 비교(전월/지난주/평소 평균 등 —
+  비서 툴은 이전기간·평균을 안 줌) ② 툴 결과에 없는 금액(만·억 표기 정규화 값비교, 반올림·합 허용) ③ 조회 안 된 비율(%)을
+  잡는다. 비율 필드(paymentRate·weekRatePercent)는 근거로 인정해 정당한 "28%·91.76%" 오탐 방지.
+- **배선** [loop.ts](../src/features/assistant/server/loop.ts) `enforceGrounding`: 툴 결과(팩트)를 모아 최종 답변 검증 →
+  이슈 있으면 **재생성 1회**(무엇이 날조인지 구체 교정) → 그래도 남으면 **근거 없는 문장 제거**. 툴 미사용 답(인사·거절)은 통과.
+  Solar·Anthropic 루프 양쪽 적용. best-effort(실패해도 답 흐름 안 깸). CLAUDE.md buildFormPatch·validateTeamReport와 동일 정신.
+- **실 Solar E2E**: "미납 조언"·"평소랑 비교"·"전환율" 미끼 질문에 초안이 75%·평소평균 8~9명·지난주 7명·100%·28.6% 날조 →
+  하네스가 전부 잡아 재생성 → **최종 이슈 0**. 정상 답변(미수·작성률 28%)은 그대로 통과(오탐 0).
+
+### AI 비서 "보고 → 판단·행동 제안" 전환 (2026-07-18) — ✅ tsc0/lint0/test + 실 모델 A/B
+비서가 "28건 작성, 28% 달성" 식 사실 나열에 그친다는 원장 지적 → 시스템 프롬프트([loop.ts](../src/features/assistant/server/loop.ts)
+`buildSystemPrompt`)를 "단순 조회 대행이 아니라 데이터를 읽고 판단해 다음 행동까지 제안하는 실무 매니저"로 전환.
+사실 요약 뒤 매니저 관점 판단 + 구체적 다음 행동(예: '주 후반 독려 필요', '이번 주 안내 문자 권장')을 덧붙이되
+**반드시 조회된 수치 근거**, 특이사항 없으면 '현재 특이사항 없습니다'로 담백 종료(억지 제안 금지). CLAUDE.md '매니저 팀 =
+판단+제안' 방향과 일치. 실 Solar A/B 검증: 작성률 28%→"내일까지 10건 이상 독려" / 정상 강사→"특이사항 없습니다"(억지 제안 안 함).
+
+### AI 비서 툴 9종 확장(직원·반·기록) + 적대 리뷰 픽스 + 주간작성률 절단 수정 (2026-07-18) — ✅ tsc0/lint0/test + 실DB 검증
+"김윤하 선생님 현황은?"에 학생만 답하던 커버리지 공백 해소 — 비서 툴 9종→18종(직원/강사·반/수업·등록상담·퇴원·회의록).
+전부 기존 queries.ts read-only 래핑, 세션 RLS 상속, PII 원천 차단(급여·연락처·인사 memo·전사 원문 미노출). 4렌즈 적대 리뷰
+확정 결함 반영(search_staff total 캡·search_meetings excerpt-only 검색+UTC 월/날짜·등록상담 UTC 날짜·퇴원 raw 사유·B4).
+- **주간 작성률 절단(B2)**: `getWeeklyWritingRates`의 `lesson_reports` 조회가 `.limit(5000)`인데 PostgREST max-rows(≈1000)가
+  명시 limit도 덮어 1000행 silent 절단(실측: 5000요청→1000반환, 15060행 범위 확인). 현재 주간 볼륨 ~574라 잠복이었으나 성장 시
+  작성률 과소집계 시한폭탄 → `fetchAllPaged`로 전건(실증: 15060 전건 일치). 원장 보고서 관리 화면·비서 툴 공용.
+
+### 운영실 버그 체크 — 비서 temperature 400 + 적대 리뷰 확정 23건 중 16건 픽스 (2026-07-17) — ✅ tsc0/lint0/test1552 + 실API·실DB 검증
+원장 제보(비서 패널 "400 `temperature` is deprecated") 발단 → 5차원 멀티에이전트 전수 점검(발견별 3렌즈 적대 검증, 확정 23·기각 4).
+- **AI(치명)**: Claude 5 계열 temperature 거부 400([gotchas #80](gotchas.md)) — 비서 Anthropic 루프에서 제거 + `generateJSON`은
+  거부 모델만 파라미터 떼고 1회 재시도(자가 회복, haiku 0.3 유지). 실 API 재현(sonnet-5: 400→200, haiku: 200).
+- **비서 루프**: deepseek 후보가 Anthropic 클라로 라우팅되던 죽은 폴백 제거(`supportedChain`) · 빈 답변 usage 2중 기록 수정 +
+  빈 답변도 폴백 대상 · 에러 raw JSON UI 노출 한글화(한글 메시지만 통과).
+- **비서 데이터 정확성**: 수납률(`getInvoicesForPeriod`)·출결 하루치(`getAttendanceForDate`) fetchAllPaged 전환(B2, 1000행 절단+에러 삼킴) ·
+  학생 미납 건수 `invoiceOutstanding` 단일 공식으로(void/refunded를 미납으로 세던 실데이터 버그) · 출결 `makeup`·인보이스 `void/refunded` 라벨 추가.
+- **운영실/브리핑**: 브리핑 '오늘 수업'이 종강 반 포함(실DB 106→102 검증, 조인 or 필터) · 후속조치 건수 60행 절단→exact count 2건 ·
+  retention 직렬 await→Promise.all(B4) · unwrittenReports enrollments 페이징(B2) · analyzing 고착 시 '다시 시도' 가능(서버 5분 우회 도달) +
+  폴링 3분 상한 · 등록상담 날짜 UTC slice→KST · 공지/등록상담/월증감 에러 삼킴→throw+`dashboardQuery` 래퍼 · 비서 패널 게이트를 액션과 일치(#77) ·
+  실패 질문 낙관 버블 제거+입력 복원 · 스포트라이트 key 동명이인 충돌.
+- **백로그(설계 판단 필요, 미수정)**: max_tokens 절단 답변 감지, generateJSON 파싱 실패 시 잔여 provider 폴백, 대화 update 실패 삼킴,
+  동시 질문 lost-update(jsonb append RPC), 스포트라이트 payload에 studentId 포함.
+
 ### 미수 임계 도달 이벤트 (2026-07-17, Phase 3 v6) — ✅ tsc0/lint0/test26 + 실E2E(0121a)
 Phase 3 다섯 번째 이벤트 = **학생 총 미수 금액이 tier 도달**(결석과 동일 마일스톤: 30만/50만/100만원).
 - **집계·판정**([events-core.ts](../src/features/notifications/events-core.ts) `buildOutstandingEvents`·`outstandingTier`

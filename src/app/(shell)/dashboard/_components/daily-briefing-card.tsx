@@ -107,8 +107,9 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                   살펴볼 학생
                 </p>
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                  {payload.spotlights.map((s) => (
-                    <li key={s.name}>
+                  {payload.spotlights.map((s, i) => (
+                    // 이름만으론 동명이인 key 충돌 — payload가 studentId를 안 담는 동안 index로 유일화.
+                    <li key={`${s.name}-${i}`}>
                       <WindowLink
                         href="/retention"
                         title="이탈 방어"

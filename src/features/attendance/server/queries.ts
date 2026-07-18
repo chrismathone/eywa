@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
@@ -551,17 +551,22 @@ export async function getMonthlyAttendanceMatrix(
 
 export async function getAttendanceForDate(date: string): Promise<AttendanceRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("attendance_records")
-    .select(
-      `id, status,
-       student:student_id ( id, name, grade ),
-       class:class_id ( id, class_name, subject )`,
-    )
-    .eq("session_date", date)
-    .order("class_id");
-
-  if (!data) return [];
+  // B2: 소비처(AI 비서 출결 집계 등)가 length·byStatus로 센다 — 하루 기록이 1000행을 넘으면
+  // 무페이징 select는 silent 절단, `!data` 폴백은 에러까지 삼킨다 → fetchAllPaged(throw)로 전건.
+  const data = await fetchAllPaged((from, to) =>
+    supabase
+      .from("attendance_records")
+      .select(
+        `id, status,
+         student:student_id ( id, name, grade ),
+         class:class_id ( id, class_name, subject )`,
+      )
+      .eq("session_date", date)
+      // OFFSET 페이지 안정화 — unique tie-break(id) 포함 order(batch.ts 계약)
+      .order("class_id")
+      .order("id")
+      .range(from, to),
+  );
 
   return data.map((r) => {
     const student = (Array.isArray(r.student) ? r.student[0] : r.student) as

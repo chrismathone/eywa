@@ -39,6 +39,10 @@ export function AssistantPanel({
     startTransition(async () => {
       const result = await askAssistant(conversationId, question);
       if (!result.ok) {
+        // 실패한 질문은 낙관 버블 제거 + 입력 복원 — DB에 없는 유령 버블이 다음 성공 응답의
+        // setTurns(서버 턴 교체)에서 조용히 증발하던 문제와 재시도 재타이핑 유실 방지(적대 리뷰 확정).
+        setTurns((prev) => prev.slice(0, -1));
+        setInput((current) => (current.trim() ? current : question));
         setError(result.error);
         return;
       }

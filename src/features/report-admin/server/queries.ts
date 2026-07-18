@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
@@ -178,8 +178,19 @@ export async function getWeeklyWritingRates(): Promise<WritingRatesView | null> 
   const since = dates[0]!; // = 이번 주 월요일
 
   // 1) 이번 주 작성 기록·오늘 스케줄·설정(예외 강사)·강사→과목 라벨·퇴사(비활성) 직원 — 상호 독립이라 병렬(B4).
-  const [{ data: reps }, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
-    supabase.from("lesson_reports").select("teacher_name, report_date").gte("report_date", since).limit(5000),
+  // ⚠️ 작성 기록은 강사×일 집계 소스라 절단되면 작성률이 과소집계된다. `.limit(5000)`은 방어가 안 됨 —
+  // PostgREST max-rows(≈1000)가 명시 limit도 덮어 1000행에서 silent 절단(실측 확인, #54). fetchAllPaged로 전건.
+  const [reps, schedule, weekly, settings, labelsBySubject, { data: inactiveStaff }] = await Promise.all([
+    fetchAllPaged<{ teacher_name: string | null; report_date: string }>((from, to) =>
+      supabase
+        .from("lesson_reports")
+        .select("teacher_name, report_date")
+        .gte("report_date", since)
+        // OFFSET 페이지 안정화 — unique tie-break(id) 포함 order(batch.ts 계약)
+        .order("report_date")
+        .order("id")
+        .range(from, to),
+    ),
     getTodaySchedule(),
     getWeeklySchedule(), // 요일별 대상(분모) 계산용 — 이번 주 전 요일 스케줄
     getTenantSettings(),

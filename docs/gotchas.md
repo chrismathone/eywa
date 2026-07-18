@@ -640,5 +640,18 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 - **재발(2026-07-16, 운영실 대시보드)**: AI 운영실 개편(`6962b14`)이 슬림 추세 스파크라인 `p.sr-only`([slim-trend.tsx](<src/app/(shell)/dashboard/_components/slim-trend.tsx>))·브리핑 갱신 안내 `span.sr-only`([briefing-auto-refresh.tsx](<src/app/(shell)/dashboard/_components/briefing-auto-refresh.tsx>))를 **static 부모**에 넣어 재발(실측: 뷰포트 674인데 `html.scrollHeight` 1294 = 아래 620px 유령 스크롤 영역). **감싼 부모에 `relative`**로 해소.
   ⚠️ **덮기(마스킹) 금지 — 이번 커밋은 근본원인 대신 전역 `html:has([data-eywa-shell]) { overflow:hidden }`(globals.css)로 스크롤바만 가렸다.** `overflow:hidden`은 스크롤바·사용자 조작만 막고 **프로그램적 스크롤은 허용**(`scrollTop=200` 실제로 먹힘) → 문서는 여전히 620px 넘쳐 있고, `scrollIntoView`/포커스 이동이 셸을 밀면 **스크롤바가 없어 새로고침 외 복구 불가**. 이 전역 잠금은 대시보드 커밋에서 처음 생긴 것(직전 커밋엔 없음)이라 **제거 = 안정적 이전 상태 복귀** + sr-only 근본수정으로 마무리.
 
+### 80. Anthropic **Claude 5 계열은 `temperature` 파라미터가 deprecated** — 보내면 400, 폴백 경로 전멸 (2026-07-17)
+운영실 비서에서 Solar 실패 → Claude(sonnet-5) 폴백이 `temperature: 0.2` 때문에
+**400 `{"type":"invalid_request_error","message":"\`temperature\` is deprecated for this model."}`** 로 죽고,
+그 영문 JSON 원문이 패널에 그대로 노출됐다(ai_usage_logs 실측 + 실 API 재현: sonnet-5 = temperature 포함 400/제거 200,
+**haiku-4-5는 temperature 수용**(200) — 모델별로 다르다).
+- **수정**: ① 비서 Anthropic 루프([loop.ts](<src/features/assistant/server/loop.ts>))에서 temperature 제거(금지 주석).
+  ② `generateJSON`([generate.ts](src/lib/ai/generate.ts))은 temperature 지정 호출(멘트 0.3 등)이 거부 모델을 만나면
+  `isTemperatureDeprecatedError`로 판별해 **파라미터만 떼고 같은 모델로 1회 재시도**(자가 회복 — 수용 모델에선 튜닝 유지).
+  ③ 사용자향 에러는 한글만 통과([actions.ts](src/features/assistant/server/actions.ts) — raw 원문 UI 노출 금지 규칙).
+- **교훈**: **새 Anthropic 모델에 sampling 파라미터(temperature 등)를 보낼 땐 deprecated 여부를 전제하지 말 것** —
+  Anthropic 직접 호출을 새로 만들면 temperature를 넣지 말거나 generateJSON 경유로. 에러 문구가 model-specific이라
+  모델 교체(레지스트리 갱신) 때마다 재발 가능 — 재시도 가드가 있는 generateJSON 경로가 안전하다.
+
 ---
 

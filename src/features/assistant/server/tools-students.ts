@@ -13,7 +13,7 @@ import {
   getStudentLessonReports,
 } from "@/features/students/server/queries";
 import { studentStatusLabel } from "@/features/students/status-labels";
-import { subjectLabeler } from "./labels";
+import { INVOICE_STATUS_LABEL, subjectLabeler } from "./labels";
 
 const TIMELINE_KIND_LABEL: Record<string, string> = {
   enrollment_start: "수강 시작",
@@ -67,6 +67,13 @@ export const studentSummaryTool = betaZodTool({
       ...summary,
       status: studentStatusLabel(summary.status),
       enrollments: summary.enrollments.map((e) => ({ ...e, subject: label(e.subject) ?? e.subject })),
+      // latestStatus raw enum(unpaid/void…)이 모델 답변으로 유출되지 않게 한글 라벨링(상류 차단).
+      billing: {
+        ...summary.billing,
+        latestStatus: summary.billing.latestStatus
+          ? (INVOICE_STATUS_LABEL[summary.billing.latestStatus] ?? summary.billing.latestStatus)
+          : null,
+      },
     });
   },
 });

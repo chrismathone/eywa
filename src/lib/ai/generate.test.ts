@@ -12,7 +12,7 @@ vi.mock("./anthropic", () => ({
   getAnthropic: () => ({ messages: { create: anthropicCreate } }),
 }));
 
-import { generateJSON, isRetryableProviderError, parseJsonLoose } from "./generate";
+import { generateJSON, isRetryableProviderError, isTemperatureDeprecatedError, parseJsonLoose } from "./generate";
 import { resolveModel, resolveModelChain } from "./models";
 
 // usage 포함 — generateJSON이 usage를 캡처(0113a 계측)해도 파싱·폴백이 안 깨짐을 함께 검증.
@@ -139,6 +139,19 @@ describe("isRetryableProviderError", () => {
   });
 });
 
+describe("isTemperatureDeprecatedError", () => {
+  const PROD_MESSAGE =
+    '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_x"}';
+  it("프로덕션 실측 메시지(Error/plain object 모두) 판별", () => {
+    expect(isTemperatureDeprecatedError(Object.assign(new Error(PROD_MESSAGE), { status: 400 }))).toBe(true);
+    expect(isTemperatureDeprecatedError({ status: 400, message: PROD_MESSAGE })).toBe(true);
+  });
+  it("무관한 400·기타 오류는 아님", () => {
+    expect(isTemperatureDeprecatedError(Object.assign(new Error("bad request"), { status: 400 }))).toBe(false);
+    expect(isTemperatureDeprecatedError(new Error("invalid API key"))).toBe(false);
+  });
+});
+
 describe("resolveModelChain", () => {
   const KEYS = ["AI_PROVIDER", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_CONSULTATIONS", "UPSTAGE_API_KEY", "UPSTAGE_API_KEY_CONSULTATIONS"];
   let saved: Record<string, string | undefined>;
@@ -205,5 +218,38 @@ describe("generateJSON 폴백", () => {
     upstageCreate.mockRejectedValueOnce({ status: 400, message: "bad request" });
     await expect(generateJSON({ prompt: "JSON 주세요", maxTokens: 100 })).rejects.toThrow();
     expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("anthropic temperature deprecated 400 → temperature만 떼고 같은 모델로 1회 재시도", async () => {
+    anthropicCreate.mockRejectedValueOnce(
+      Object.assign(new Error('400 {"error":{"message":"`temperature` is deprecated for this model."}}'), {
+        status: 400,
+      }),
+    );
+    anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
+    const { data, model } = await generateJSON<{ ok: boolean }>({
+      prompt: "JSON 주세요",
+      maxTokens: 100,
+      provider: "anthropic",
+      temperature: 0.3,
+    });
+    expect(data).toEqual({ ok: true });
+    expect(model).toBe("claude-sonnet-5");
+    expect(anthropicCreate).toHaveBeenCalledTimes(2);
+    expect(anthropicCreate.mock.calls[0][0]).toHaveProperty("temperature", 0.3);
+    expect(anthropicCreate.mock.calls[1][0]).not.toHaveProperty("temperature");
+    expect(upstageCreate).not.toHaveBeenCalled();
+  });
+
+  it("temperature 미지정이면 deprecated류 400도 재시도 없이 throw", async () => {
+    anthropicCreate.mockRejectedValueOnce(
+      Object.assign(new Error('400 {"error":{"message":"`temperature` is deprecated for this model."}}'), {
+        status: 400,
+      }),
+    );
+    await expect(
+      generateJSON({ prompt: "JSON 주세요", maxTokens: 100, provider: "anthropic" }),
+    ).rejects.toThrow();
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
 });

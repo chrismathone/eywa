@@ -55,9 +55,15 @@ export async function askAssistant(
     model = result.model;
   } catch (e) {
     reportError(e, { scope: "assistant.ask", userId: user.id });
-    // 루프가 키/한도 오류를 한글화하지 않는 경로도 있으니 사용자향 문구로 감싼다(원문은 로그).
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: `답변 생성에 실패했습니다: ${msg}` };
+    // UI에 raw 영문 에러/JSON 원문 노출 금지(CLAUDE.md) — 우리가 한글화한 메시지("AI 키 오류…" 등)만
+    // 그대로 통과시키고, provider SDK 원문(400 {"type":"error"…} 등)은 일반 안내로 대체(원문은 위 로그).
+    const raw = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      error: /[가-힣]/.test(raw)
+        ? `답변 생성에 실패했습니다: ${raw}`
+        : "답변 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+    };
   }
 
   const turns = appendTurns(history, trimmed, answer, new Date().toISOString());

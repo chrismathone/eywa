@@ -17,8 +17,9 @@ import { reportError, reportWarning } from "@/lib/observability/report-error";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { computeRetentionRoster } from "@/features/retention/server/queries";
 import { summarizeRoster } from "@/features/retention/roster";
+import { addIsoDateDays } from "@/features/consultations/follow-up-urgency";
 import { getTodayActionSignals, type DashboardSignalsDb } from "./action-signals";
-import { getAbsenceRiskStudents, getFollowUpConsultations } from "./queries";
+import { getAbsenceRiskStudents } from "./queries";
 import {
   buildDailyBriefingPayload,
   shouldGenerateNarrative,
@@ -47,6 +48,12 @@ export type DailyBriefingRow = {
 /** KST 날짜 문자열에서 n일 전(YYYY-MM-DD) — 결정적 UTC 산술(date-kst 주석 규칙). */
 function daysBefore(ymd: string, n: number): string {
   return new Date(Date.parse(`${ymd}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** count 응답 → 숫자. 실패는 throw — 브리핑 전체 try/catch가 processing_error로 정직하게 기록한다. */
+function countOrThrow(res: { count: number | null; error: { message: string } | null }, label: string): number {
+  if (res.error) throw new Error(`${label} count 실패: ${res.error.message}`);
+  return res.count ?? 0;
 }
 
 /** 오늘 브리핑 행 — ⚠️ 호출부가 canManageStaff 게이트 통과 후에만 부를 것(admin 읽기). */
@@ -79,65 +86,89 @@ export async function generateDailyBriefing(
     const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
       new Date(`${date}T00:00:00Z`).getUTCDay()
     ]!;
-    const [yesterdayRaw, todayRaw, followUpRows, absenceRisks, classSessionsRes] = await Promise.all([
-      // 어제 마감: asOf=어제 + nowMinutes=1440(전 수업 시작됨) — '어제 무단결석·어제 미작성'이 정확해진다.
-      getTodayActionSignals({}, { db, asOf: { date: yesterday, nowMinutes: 1440 } }),
-      // 오늘: 어제 미기록 반·오늘 휴가·승인 대기만(나머지 도메인은 어제 수집분과 중복이라 스킵).
-      getTodayActionSignals(
-        {
-          meetings: false,
-          enrollment: false,
-          consultations: false,
-          lessonReports: false,
-          students: false,
-          billing: false,
-          owner: false,
-        },
-        { db },
-      ),
-      getFollowUpConsultations(60, db),
-      getAbsenceRiskStudents(db),
-      supabase
-        .from("class_schedules")
-        .select("class_id, class:class_id!inner ( is_active )", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("day_of_week", dayKey)
-        .eq("class.is_active", true)
-        .lte("valid_from", date)
-        .or(`valid_to.is.null,valid_to.gte.${date}`),
-    ]);
-
     // retention은 앱 최중량 읽기 — 실패해도 브리핑 본체는 살린다(B7 준수: 라이브가 아니라 cron에서만 계산).
-    let retention: { total: number; risk: number; warn: number; revenueRisk: number } | null = null;
-    let retentionTop: { name: string; reasons: string[]; action: string | null }[] = [];
-    try {
-      const roster = await computeRetentionRoster(tenantId);
-      const stats = summarizeRoster(roster);
-      retention = { total: stats.total, risk: stats.risk, warn: stats.warn, revenueRisk: stats.revenueRisk };
-      // roster는 위험도 내림차순 — 상위 위험 학생의 사유·권장 조치(전부 결정론)를 스포트라이트 재료로.
-      retentionTop = roster
-        .filter((student) => student.risk.level !== "ok")
-        .slice(0, 5)
-        .map((student) => ({
-          name: student.name,
-          reasons: student.risk.reasons,
-          action: student.primaryAction || null,
-        }));
-    } catch (e) {
-      reportWarning("브리핑 retention 계산 실패 — 이탈 신호 없이 진행", {
-        scope: "briefing.retention",
-        tenantId,
-        error: e instanceof Error ? e.message : String(e),
+    // B4: 아래 신호 배치와 독립 조회라 직렬 await 금지 — 같은 Promise.all에 편입(cron 120s·regen 60s 예산 절약).
+    const retentionPromise = computeRetentionRoster(tenantId)
+      .then((roster) => {
+        const stats = summarizeRoster(roster);
+        return {
+          retention: { total: stats.total, risk: stats.risk, warn: stats.warn, revenueRisk: stats.revenueRisk },
+          // roster는 위험도 내림차순 — 상위 위험 학생의 사유·권장 조치(전부 결정론)를 스포트라이트 재료로.
+          retentionTop: roster
+            .filter((student) => student.risk.level !== "ok")
+            .slice(0, 5)
+            .map((student) => ({
+              name: student.name,
+              reasons: student.risk.reasons,
+              action: student.primaryAction || null,
+            })),
+        };
+      })
+      .catch((e: unknown) => {
+        reportWarning("브리핑 retention 계산 실패 — 이탈 신호 없이 진행", {
+          scope: "briefing.retention",
+          tenantId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return { retention: null, retentionTop: [] as { name: string; reasons: string[]; action: string | null }[] };
       });
-    }
+
+    const [yesterdayRaw, todayRaw, overdueRes, dueSoonRes, absenceRisks, classSessionsRes, retentionResult] =
+      await Promise.all([
+        // 어제 마감: asOf=어제 + nowMinutes=1440(전 수업 시작됨) — '어제 무단결석·어제 미작성'이 정확해진다.
+        getTodayActionSignals({}, { db, asOf: { date: yesterday, nowMinutes: 1440 } }),
+        // 오늘: 어제 미기록 반·오늘 휴가·승인 대기만(나머지 도메인은 어제 수집분과 중복이라 스킵).
+        getTodayActionSignals(
+          {
+            meetings: false,
+            enrollment: false,
+            consultations: false,
+            lessonReports: false,
+            students: false,
+            billing: false,
+            owner: false,
+          },
+          { db },
+        ),
+        // 후속조치는 **절대 건수**로 보고되므로 fetch-후-필터(60행 절단, B2) 대신 exact count 2건 —
+        // 경계는 followUpUrgency와 동일(overdue: <오늘 / today+soon: 오늘~오늘+3일).
+        supabase
+          .from("student_consultations")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .eq("follow_up_done", false)
+          .not("follow_up_date", "is", null)
+          .lt("follow_up_date", date),
+        supabase
+          .from("student_consultations")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .eq("follow_up_done", false)
+          .gte("follow_up_date", date)
+          .lte("follow_up_date", addIsoDateDays(date, 3)),
+        getAbsenceRiskStudents(db),
+        supabase
+          .from("class_schedules")
+          .select("class_id, class:class_id!inner ( is_active, closed_at )", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .eq("day_of_week", dayKey)
+          .eq("class.is_active", true)
+          // 종강 반 제외 — 종강은 is_active=true 유지 + closed_at만 찍는 별도 상태(classes/actions 주석).
+          // 다른 신호들(unrecorded/unwritten)은 JS에서 closed_at<date를 거르는데 이 카운트만 빠져 있었다.
+          .or(`closed_at.is.null,closed_at.gte.${date}`, { referencedTable: "class" })
+          .lte("valid_from", date)
+          .or(`valid_to.is.null,valid_to.gte.${date}`),
+        retentionPromise,
+      ]);
+    const { retention, retentionTop } = retentionResult;
 
     const payload = buildDailyBriefingPayload({
       date,
       yesterdayRaw,
       todayRaw,
       followUps: {
-        overdue: followUpRows.filter((row) => row.urgency === "overdue").length,
-        dueSoon: followUpRows.filter((row) => row.urgency === "today" || row.urgency === "soon").length,
+        overdue: countOrThrow(overdueRes, "후속조치 기한경과"),
+        dueSoon: countOrThrow(dueSoonRes, "후속조치 임박"),
       },
       absenceRisks: absenceRisks.map((risk) => ({ studentName: risk.studentName, absences: risk.absences })),
       retention,

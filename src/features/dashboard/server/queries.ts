@@ -9,6 +9,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   buildDashboardTrendPoints,
   invoicePeriodsForRange,
+  kstDateForTimestamp,
   type TrendAttendanceRow,
   type TrendInvoiceRow,
   type TrendPoint,
@@ -62,7 +63,7 @@ const MONTHLY_CHANGE_PREVIEW_LIMIT = 40;
 export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> {
   const supabase = await createClient();
   const startIso = kstMonthStart();
-  const [{ data: nw, count: newCount }, { data: wd, count: withdrawnCount }] = await Promise.all([
+  const [nwRes, wdRes] = await Promise.all([
     supabase
       .from("students")
       .select("id, name, grade, school, enrolled_at", { count: "exact" })
@@ -80,6 +81,11 @@ export async function getMonthlyEnrollmentChanges(): Promise<EnrollmentChanges> 
       .order("id", { ascending: false })
       .limit(MONTHLY_CHANGE_PREVIEW_LIMIT),
   ]);
+  // 조회 실패를 '이번 달 ±0'으로 위장하지 않는다 — 호출부(dashboardQuery)가 실패 허용을 담당.
+  if (nwRes.error) throw new Error(`신규 등록 조회 실패: ${nwRes.error.message}`);
+  if (wdRes.error) throw new Error(`퇴원 조회 실패: ${wdRes.error.message}`);
+  const { data: nw, count: newCount } = nwRes;
+  const { data: wd, count: withdrawnCount } = wdRes;
   return {
     newCount: newCount ?? nw?.length ?? 0,
     withdrawnCount: withdrawnCount ?? wd?.length ?? 0,
@@ -293,7 +299,7 @@ export async function getRecentAnnouncements(
   limit = 3,
 ): Promise<AnnouncementRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("announcements")
     .select(
       `id, title, content, audience, pinned, created_at,
@@ -304,6 +310,8 @@ export async function getRecentAnnouncements(
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  // 조회 실패를 '공지 없음'으로 위장하지 않는다 — 호출부(dashboardQuery)가 실패 허용을 담당.
+  if (error) throw new Error(`공지 조회 실패: ${error.message}`);
   if (!data) return [];
 
   return data.map((row) => {
@@ -386,7 +394,7 @@ export type ManageAnnouncementRow = {
  */
 export async function getAnnouncementsForManage(limit = 30): Promise<ManageAnnouncementRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("announcements")
     .select(
       `id, title, content, audience, pinned, created_at,
@@ -395,6 +403,8 @@ export async function getAnnouncementsForManage(limit = 30): Promise<ManageAnnou
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
+  // 조회 실패를 '공지 없음'으로 위장하지 않는다 — 호출부(dashboardQuery)가 실패 허용을 담당.
+  if (error) throw new Error(`공지 관리 목록 조회 실패: ${error.message}`);
   if (!data) return [];
   return data.map((row) => {
     const a = (Array.isArray(row.author) ? row.author[0] : row.author) as
@@ -433,7 +443,7 @@ export type DashEnrollmentList = { total: number; rows: DashEnrollmentRow[] };
 export async function getActiveEnrollmentConsultations(limit = 6, days = 30): Promise<DashEnrollmentList> {
   const supabase = await createClient();
   const since = inclusiveDateWindowStart(kstToday(), days);
-  const { data, count } = await supabase
+  const { data, count, error } = await supabase
     .from("enrollment_consultations")
     .select("id, prospect_name, prospect_school, prospect_grade, outcome, consultation_date, consulted_at", {
       count: "exact",
@@ -442,14 +452,17 @@ export async function getActiveEnrollmentConsultations(limit = 6, days = 30): Pr
     .gte("consulted_at", `${since}T00:00:00+09:00`)
     .order("consulted_at", { ascending: false })
     .limit(limit);
+  // 조회 실패를 '상담 0건'으로 위장하지 않는다 — 호출부(dashboardQuery)가 실패 허용을 담당.
+  if (error) throw new Error(`등록상담 목록 조회 실패: ${error.message}`);
   const rows: DashEnrollmentRow[] = (data ?? []).map((r) => ({
     id: r.id as string,
     name: (r.prospect_name as string | null) ?? "(이름 없음)",
     meta: schoolGradeLabel(r.prospect_school as string | null, r.prospect_grade as string | null) || null,
     outcome: r.outcome as DashEnrollmentRow["outcome"],
+    // consulted_at은 timestamptz(UTC ISO) — slice(0,10)은 UTC 날짜라 KST 오전 접수가 전날로 밀린다.
     date:
       (r.consultation_date as string | null) ??
-      (typeof r.consulted_at === "string" ? r.consulted_at.slice(0, 10) : null),
+      (typeof r.consulted_at === "string" ? kstDateForTimestamp(r.consulted_at) : null),
   }));
   return { total: count ?? 0, rows };
 }

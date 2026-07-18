@@ -5,6 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
+import { invoiceOutstanding } from "@/features/billing/calc";
 import {
   slotPeriodRow,
   settingsToPeriodsConfig,
@@ -1391,7 +1392,9 @@ export async function getStudentSummary(studentId: string): Promise<StudentSumma
   if (!detail) return null;
 
   const today = kstToday();
-  const unpaid = invoices.filter((i) => i.status !== "paid");
+  // 미납 판정은 수납 단일 공식(invoiceOutstanding — paid/void/refunded 제외)으로. status!=="paid" 재구현은
+  // void(makeedu 무효)·refunded까지 미납으로 세어 실데이터에서 미납 건수가 부풀었다(2026-07-17 적대 리뷰 확정).
+  const unpaid = invoices.filter((i) => invoiceOutstanding(i) > 0);
   const overdue = unpaid.filter((i) => i.dueDate != null && i.dueDate < today);
   const latest = invoices[0] ?? null; // period desc 정렬이라 [0]이 최신
 
