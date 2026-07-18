@@ -601,10 +601,11 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
   });
   if (visible.length === 0) return [];
 
-  // 오늘 반의 활성 enrollment만 카운트 — 전체 enrollment 전건 페이지네이션 대신 오늘 반(classIds)으로 좁힘.
-  // classIds는 수십 개라 .in() URL 안전 + range로 1000행 방어(#53/#54).
+  // 오늘 반의 활성 enrollment만 카운트 — 전체 enrollment 전건 대신 오늘 반(classIds)으로 좁힘.
+  // ⚠️ raw `.in(classIds)`는 반이 많은 날 URL이 414로 터진다(#53) — 학원이 커지면 "수십 개" 가정이
+  // 깨지므로 청크 분할 + 청크 안 페이지네이션(fetchAllPagedInChunks)으로 둘 다 방어한다(적대 감사 LOW).
   const classIds = [...new Set(visible.map((r) => r.class_id as string))];
-  const enrollments = await fetchAllPaged<{
+  const enrollments = await fetchAllPagedInChunks<{
     id: string;
     class_id: string;
     student_id: string;
@@ -613,12 +614,12 @@ export async function getTodaySchedule(): Promise<TodaySlot[]> {
     on_hold: boolean;
     is_transferred: boolean | null;
     attendance_days: string[] | null;
-  }>((from, to) =>
+  }>(classIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
       .select("id, class_id, student_id, start_date, end_date, on_hold, is_transferred, attendance_days")
       .lte("start_date", today)
-      .in("class_id", classIds)
+      .in("class_id", chunk)
       .order("id", { ascending: true })
       .range(from, to),
   );

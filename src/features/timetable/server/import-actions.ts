@@ -35,27 +35,48 @@ type Ctx = {
 
 async function loadContext(): Promise<Ctx> {
   const supabase = await createClient();
-  const enr = await fetchAllPaged<{
-    id: string;
-    class_id: string;
-    student_id: string;
-    start_date: string | null;
-    class?: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[];
-    student?:
-      | { name?: string; school?: string | null; grade?: string | null }
-      | { name?: string }[];
-  }>((from, to) =>
-    supabase
-      .from("enrollments")
-      .select(
-        "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
-      )
-      .is("end_date", null)
-      // ⚠️ order 없는 .range()는 페이지 경계에서 행이 누락·중복될 수 있다. 이 스냅샷은 diff의 '현재 DB'
-      // 쪽이라 누락 = 오판(중복 생성·잘못된 삭제)으로 이어진다 → id unique tie-break(batch.ts 계약).
-      .order("id")
-      .range(from, to),
-  );
+  // 셋은 서로의 결과를 안 쓰는 독립 조회 → 직렬 await 금지(B4). 미리보기·적용마다 도는 경로라
+  // 워터폴이면 라운드트립이 그대로 합산된다(구조 import의 loadStructureContext는 이미 Promise.all).
+  // ⚠️ 세 쿼리 모두 order 없는 .range()는 페이지 경계에서 행이 누락·중복될 수 있다. 이 스냅샷은 diff의
+  // '현재 DB' 쪽이라 누락 = 오판(중복 생성·잘못된 삭제)으로 이어진다 → id unique tie-break(batch.ts 계약).
+  const [enr, cls, stu] = await Promise.all([
+    fetchAllPaged<{
+      id: string;
+      class_id: string;
+      student_id: string;
+      start_date: string | null;
+      class?: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[];
+      student?:
+        | { name?: string; school?: string | null; grade?: string | null }
+        | { name?: string }[];
+    }>((from, to) =>
+      supabase
+        .from("enrollments")
+        .select(
+          "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
+        )
+        .is("end_date", null)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ id: string; class_name: string; subject: string }>((from, to) =>
+      supabase
+        .from("classes")
+        .select("id, class_name, subject")
+        .eq("is_active", true)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{
+      id: string;
+      name: string;
+      school: string | null;
+      grade: string | null;
+    }>((from, to) =>
+      supabase.from("students").select("id, name, school, grade").order("id").range(from, to),
+    ),
+  ]);
+
   const current: EnrollmentSnapshotRow[] = enr.map((e) => {
     const cls = (Array.isArray(e.class) ? e.class[0] : e.class) as
       | { class_name?: string; subject?: string }
@@ -76,28 +97,12 @@ async function loadContext(): Promise<Ctx> {
     };
   });
 
-  const cls = await fetchAllPaged<{ id: string; class_name: string; subject: string }>((from, to) =>
-    supabase
-      .from("classes")
-      .select("id, class_name, subject")
-      .eq("is_active", true)
-      .order("id")
-      .range(from, to),
-  );
   const classes: ClassRef[] = cls.map((c) => ({
     classId: c.id,
     className: c.class_name,
     subject: c.subject,
   }));
 
-  const stu = await fetchAllPaged<{
-    id: string;
-    name: string;
-    school: string | null;
-    grade: string | null;
-  }>((from, to) =>
-    supabase.from("students").select("id, name, school, grade").order("id").range(from, to),
-  );
   const students: StudentRef[] = stu.map((s) => ({
     studentId: s.id,
     name: s.name,
