@@ -286,9 +286,10 @@ export function pruneCutoffs(nowMs: number): { eventsBefore: string; readNotific
 // **발송 콘솔과 같은 게이트**(isClassnoteAllowed too_old · isClassnoteSubjectEnabled 과목 opt-in ·
 // classnoteSendEnabled 스위치 · edutrix_import 제외 · revoked 제외)를 호출부가 통과시킨 행만 넘긴다 —
 // 게이트를 따로 구현하면 "보낼 수 없는 보고서"를 재촉하는 거짓 알림이 된다(#77 공용 게이트 정신).
-// ⚠️ '학부모 미확인(읽음)' 이벤트는 **의도적으로 만들지 않았다**: ClassNote 앱 읽음이 eywa DB로 안 오고
-// share_link_views는 발송분의 1.5%만 잡아(실측) 98%가 거짓 '미확인'이 된다. 읽음 동기화는 별도 프로젝트
-// (docs/classnote-read-sync-plan.md).
+// ⚠️ '학부모 미확인(읽음)' 이벤트를 여기 만들지 않은 이유: eywa DB의 share_link_views가 발송분의 1.5%만
+// 잡아(실측) 그것만으론 98%가 거짓 '미확인'이 된다. **단 2026-07-18 조사로 ClassNote 피드가 읽음을
+// 노출함이 확인됐다**(read_by_parent.date_read) — 동기화(2~4단계)가 끝나면 정확한 이벤트가 가능하다.
+// 설계·주의사항: docs/classnote-read-sync-plan.md.
 
 /** 미발송 재촉 창(일). 이보다 오래된 건 재촉하지 않는다(무한 잔소리 방지 — too_old가 최종 방어). */
 export const UNSENT_REPORT_WINDOW_DAYS = 7;
