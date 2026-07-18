@@ -375,7 +375,13 @@ function buildHref(opts: {
   week: string; // 월요일 YYYY-MM-DD
   thisWk: string; // 이번 주 월요일(기본값이면 생략)
   compact1h?: number[]; // 통합뷰 '1시간 단위' 압축 섹션(sectionKey 집합) — 다른 네비 시 유지, 미지정=초기화
-  hideEmptyDays?: boolean; // 강사뷰 '미사용 요일' 해제 상태 — 기본(표시)이면 파라미터 생략
+  /**
+   * 강사뷰 '미사용 요일' 해제 상태. ⚠️ 값이 오면 **양방향 모두 명시 직렬화**(hide/show) — 파라미터
+   * 없음은 "쿠키(기기 선호) 참조"라는 제3의 상태다. hide만 직렬화하던 옛 방식은 쿠키가 hide로
+   * 저장된 순간 show 링크(=파라미터 생략)가 쿠키에 덮여 **토글이 show 방향으로 죽었다**(적대 리뷰
+   * 확정 HIGH). 미지정(undefined)만 생략 = 쿠키 기본.
+   */
+  hideEmptyDays?: boolean;
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
@@ -383,7 +389,7 @@ function buildHref(opts: {
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
   if (opts.compact1h && opts.compact1h.length)
     params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));
-  if (opts.hideEmptyDays) params.set("emptydays", "hide");
+  if (opts.hideEmptyDays !== undefined) params.set("emptydays", opts.hideEmptyDays ? "hide" : "show");
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

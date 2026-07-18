@@ -39,8 +39,14 @@ type Queued = PendingMove & {
   fromClassName: string;
   toClassName: string;
   name: string;
-  /** 이 이동이 **큐잉된 주**의 적용일(dateFloor). 저장이 "지금 보는 주"에 묶이지 않게 하는 앵커(F2). */
-  effectiveOn: string;
+  /**
+   * 큐잉 시점의 적용 **의도** — 저장이 "지금 보는 주"에 묶이지 않게 하는 앵커(F2).
+   * `null` = 즉시(이번 주에서 큐잉 — RPC엔 미지정으로 넘겨 current_date 적용).
+   * `'YYYY-MM-DD'` = 그 주 예약(미래 주 월요일).
+   * ⚠️ 즉시 의도를 절대 날짜로 얼리면 자정을 넘겨 저장할 때 그 날짜가 과거가 돼 서버 소급 가드에
+   * 거부된다(적대 리뷰 확정) — 즉시는 날짜가 아니라 null로 남긴다.
+   */
+  effectiveOn: string | null;
 };
 
 /** 도착 셀 slot.id → 반 id 매핑용 드롭 대상 data(요일 존/공통 존 공통). */
@@ -97,11 +103,8 @@ export function TimetableEditProvider({
   // 사용자가 편집 바에서 정한 적용일(예정일). null이면 기본(조회 주 기준 effectiveDate ?? 오늘).
   const [scheduledDate, setScheduledDate] = useState<string | null>(null);
   const dateFloor = effectiveDate ?? today;
-  // 대기 이동이 **만들어진 주**의 적용일(큐 첫 항목의 앵커). 저장은 지금 보는 주가 아니라 이 값을 쓴다 —
-  // 큐가 주 이동을 넘어 살아남으므로, 저장 시점 화면에 묶으면 미래주 예약이 오늘자로 적용되거나
-  // 즉시 이동이 미래로 예약되는 뒤바뀜이 생긴다(적대 감사 F2). 큐가 비면 null.
-  const queueDate = queue.length > 0 ? queue[0].effectiveOn : null;
-  const weekMismatch = queueDate != null && queueDate !== dateFloor;
+  // 이 주에서 큐잉되는 이동의 적용 의도 — 이번 주=null(즉시), 미래 주=그 주 월요일(예약).
+  const queueIntent = effectiveDate ?? null;
 
   // 편집 모드 Delete = 오늘 수강 종료(그 반만). hover는 ref로 추적(hover마다 리렌더 방지), 확인 팝업만 state.
   const hoveredRef = useRef<HoveredStudent | null>(null);
@@ -230,7 +233,12 @@ export function TimetableEditProvider({
     }
     setError(null);
     setFailed([]);
-    setQueue((prev) => [...prev, { ...move, effectiveOn: dateFloor }]);
+    setQueue((prev) => {
+      // 전부 되돌린(net no-op) 낡은 배치는 새 배치를 시작하기 전에 비운다 — 안 비우면 raw 큐에 남은
+      // 낡은 앵커(effectiveOn)가 새 이동의 적용일을 오염시킨다(적대 리뷰 확정 결함의 나머지 반쪽).
+      const base = compressMoves(prev).length === 0 ? [] : prev;
+      return [...base, { ...move, effectiveOn: queueIntent }];
+    });
   }
 
   // 합반 반+요일 선택 팝업 적용 → 고른 반·요일로 이동 큐잉. toSlotId=그 반 세그먼트 slot(전입예정 배지 인덱스 정확).
@@ -268,6 +276,14 @@ export function TimetableEditProvider({
   }
 
   const compressed = compressMoves(queue);
+
+  // 대기 배치의 적용 앵커(첫 항목의 큐잉 의도). 저장은 지금 보는 주가 아니라 이 값을 쓴다 — 큐가 주
+  // 이동을 넘어 살아남으므로, 저장 시점 화면에 묶으면 미래주 예약이 오늘자로 적용되거나 즉시 이동이
+  // 미래로 예약되는 뒤바뀜이 생긴다(적대 감사 F2).
+  // ⚠️ "배치가 살아있는가"는 raw 큐가 아니라 **compressed** 기준 — A→B→A처럼 전부 되돌린 net no-op
+  // 큐를 raw 기준으로 잡으면, 주 이동 후 '대기 0건'인데 편집이 잠기는 유령 잠금이 생긴다(적대 리뷰 확정).
+  const queueDate = compressed.length > 0 ? (queue[0]?.effectiveOn ?? null) : null;
+  const weekMismatch = compressed.length > 0 && (queue[0]?.effectiveOn ?? null) !== queueIntent;
 
   // 미저장 이동이 있는 채로 새로고침·탭 닫기 하면 경고(가져오기 다이얼로그와 동일 패턴).
   // 앱 내 주/과목 이동은 weekMismatch 경고 + queueDate 앵커로 이미 안전하므로 여기선 문서 이탈만 막는다(F7).
@@ -308,9 +324,10 @@ export function TimetableEditProvider({
             newClassId: m.toClassId,
             attendanceDays: m.toDays ?? [],
           })),
-          // ⚠️ `effectiveDate`(=지금 보는 주)가 아니라 **큐가 만들어진 주**(queueDate). 사용자가 편집 바에서
-          // 명시한 scheduledDate가 있으면 그게 최우선. (적대 감사 F2 — 주 이동 후 저장 시 날짜 뒤바뀜.)
-          scheduledDate ?? queueDate ?? effectiveDate,
+          // ⚠️ 적용일 = 사용자가 명시한 날짜 > **큐의 앵커 의도**(null=즉시 → 미지정으로 넘겨 서버
+          // current_date). 지금 보는 주(effectiveDate)는 절대 안 쓴다 — 주를 옮겨도 저장 결과가 바뀌면
+          // 안 되고(F2), 즉시 의도를 날짜로 얼리면 자정 넘긴 저장이 소급 가드에 거부된다(적대 리뷰 확정).
+          scheduledDate ?? queueDate ?? undefined,
         );
         if (res.error) {
           setError(res.error);
@@ -753,11 +770,12 @@ export function TimetableEditControls() {
           </button>
         </>
       )}
-      {/* 대기 이동이 다른 주에서 만들어졌음을 명시 — 저장은 그 주 기준으로 나가고, 새 편집은 막혀 있다(F2). */}
-      {weekMismatch && queueDate ? (
+      {/* 대기 이동이 다른 주에서 만들어졌음을 명시 — 저장은 그 앵커 기준으로 나가고, 새 편집은 막혀 있다(F2).
+          앵커 null=즉시 의도(이번 주에서 큐잉) — 미래 주로 이동해 온 경우에도 배너는 떠야 한다. */}
+      {weekMismatch ? (
         <span className="text-amber">
-          다른 주에서 만든 이동 {pendingCount}건이 대기 중입니다 — <b>{queueDate}</b> 기준으로 적용됩니다.
-          저장하거나 취소한 뒤 이 주를 편집하세요.
+          다른 주에서 만든 이동 {pendingCount}건이 대기 중입니다 — <b>{queueDate ?? "오늘(즉시)"}</b> 기준으로
+          적용됩니다. 저장하거나 취소한 뒤 이 주를 편집하세요.
         </span>
       ) : null}
       {error ? <span className="text-chart-4">{error}</span> : null}
