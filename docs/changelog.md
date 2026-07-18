@@ -4,6 +4,26 @@
 
 ## 진행 상황
 
+### ClassNote 발송 허용 시간대 = 예약발송 (2026-07-19) — ✅ tsc0/lint0/vitest1614 · 마이그 0 · 적대리뷰 확정 2건 반영
+밤 수업 보고서가 밤에 학부모 폰을 울리던 문제(원장이 잊었다 되찾은 아이디어) — 학원설정 > 보고서 >
+**발송 허용 시간대**(KST HH:MM 한 쌍, 매일 동일)를 넣으면 창 밖 발송분은 큐 보존 대기, 창 진입 시 워커가 자동 발송.
+- **워커**: [`send-window.mjs`](../scripts/_classnote/send-window.mjs)(순수: parseHM/resolveSendWindow/
+  isWithinSendWindow/formatSendWindow — Intl Asia/Seoul·자정 넘김 창·시작 포함/종료 제외, Vitest 21) +
+  `getClassnoteSendWindow`(raw SQL 직독, isClassnoteSendEnabled 패턴) + `processQueueOnce` **0-a 게이트**
+  (킬스위치 0과 동형: post 모드만·주기 통째 skip·큐 무손상. dry-run은 밤에도 점검 가능).
+- **fail-open 원칙**: 빈 값/한쪽만/형식오류/시작=종료 = 무제한 — 설정 실수로 발송이 영영 멈추지 않게(긴급 정지는
+  킬스위치 담당). 캡처(/r)가 발송 시점이라 지연 무손실, minDate=전달 1일이라 자정 넘김 이월도 클레임에서 안 잘림.
+- **앱**: `classnoteSendWindowHint`([classnote-guard.ts](../src/features/onescreen/classnote-guard.ts) —
+  워커 의미론 앱측 미러, 안내 문구만) → `saveAndQueueClassnote`가 queued 시 `sendWindowHint` 반환 →
+  원스크린 토스트 3곳(카드·행·일괄) "발송 예약됨 — HH:MM~HH:MM에 자동 발송"(재발송 헛클릭 방지).
+  설정 5단계 완결: reportSchema+defaults+report-section 폼+소비처(워커·hint)+검증.
+- **적대 리뷰(29 에이전트) 확정 2건 수정**: ①시작=종료 무경고 무제한(폼 도달 가능한 유일한 침묵 fail-open) →
+  danger 경고 추가 ②"이 시간대에만 발송" 과약속 → **수업 보고서 한정** 명시(반 공지는 창 미적용이 의도 —
+  같은 박스의 킬스위치·발송 과목은 공지에도 적용돼 오독 위험이 실재했음). + 관리자 compose-face "곧 전송" 단정 완화.
+- ⚠️ **배포 순서 결합**(리뷰 borderline): 앱 토스트는 Vercel 즉시, 워커 게이트는 연동 PC zip 적용 후 —
+  **시간대 설정 입력은 zip 적용+워커 재시작 뒤에**([예약발송-적용-안내.md](../scripts/_classnote/예약발송-적용-안내.md)).
+  zip 번들 = 예약발송+댓글알림(07-16)+읽음동기화(07-18) 통합(`eywa-발송PC-예약발송외통합-20260719.zip`).
+
 ### ClassNote 학부모 읽음 동기화 2·3단계 (2026-07-18, 0122a) — ✅ tsc0/lint0/test37 + 실E2E 165건 기록
 1단계 조사(ClassNote가 `read_by_parent.date_read`를 피드 행에 이미 노출)를 실제 파이프라인으로 연결.
 - **매칭 키가 이 작업의 핵심**: 학부모에게 실제 발송하는 주체는 eywa가 아니라 **edutrix**다(본문이
