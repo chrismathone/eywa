@@ -4,6 +4,18 @@
 
 ## 진행 상황
 
+### AI 비서 grounding 하네스 — 팩트만 답하도록 날조 후검증 (2026-07-18) — ✅ tsc0/lint0/test36 + 실 Solar E2E
+"제안하라고 밀어주니 Solar가 정당화하려 없는 근거를 지어낸다"(전월 대비·지난주 평균·미납액 1천만원·계산 전환율)를
+**프롬프트만으론 완전 차단 불가**(약한 모델 한계)라 확인 → 생성 후 grounding 하네스 신설(원장 방향: Claude 전환 대신 하네스로).
+- **순수 로직** [grounding.ts](../src/features/assistant/grounding.ts)(Vitest 26): 답변에서 ① 없는 비교(전월/지난주/평소 평균 등 —
+  비서 툴은 이전기간·평균을 안 줌) ② 툴 결과에 없는 금액(만·억 표기 정규화 값비교, 반올림·합 허용) ③ 조회 안 된 비율(%)을
+  잡는다. 비율 필드(paymentRate·weekRatePercent)는 근거로 인정해 정당한 "28%·91.76%" 오탐 방지.
+- **배선** [loop.ts](../src/features/assistant/server/loop.ts) `enforceGrounding`: 툴 결과(팩트)를 모아 최종 답변 검증 →
+  이슈 있으면 **재생성 1회**(무엇이 날조인지 구체 교정) → 그래도 남으면 **근거 없는 문장 제거**. 툴 미사용 답(인사·거절)은 통과.
+  Solar·Anthropic 루프 양쪽 적용. best-effort(실패해도 답 흐름 안 깸). CLAUDE.md buildFormPatch·validateTeamReport와 동일 정신.
+- **실 Solar E2E**: "미납 조언"·"평소랑 비교"·"전환율" 미끼 질문에 초안이 75%·평소평균 8~9명·지난주 7명·100%·28.6% 날조 →
+  하네스가 전부 잡아 재생성 → **최종 이슈 0**. 정상 답변(미수·작성률 28%)은 그대로 통과(오탐 0).
+
 ### AI 비서 "보고 → 판단·행동 제안" 전환 (2026-07-18) — ✅ tsc0/lint0/test + 실 모델 A/B
 비서가 "28건 작성, 28% 달성" 식 사실 나열에 그친다는 원장 지적 → 시스템 프롬프트([loop.ts](../src/features/assistant/server/loop.ts)
 `buildSystemPrompt`)를 "단순 조회 대행이 아니라 데이터를 읽고 판단해 다음 행동까지 제안하는 실무 매니저"로 전환.

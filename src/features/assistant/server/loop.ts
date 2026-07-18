@@ -19,6 +19,12 @@ import { kstToday } from "@/lib/date-kst";
 import { reportWarning } from "@/lib/observability/report-error";
 import type { AssistantTurn } from "../turns";
 import { hasSpecialTokenNoise, parseInlineToolCalls, stripMarkdownEmphasis } from "../solar-tokens";
+import {
+  buildGrounding,
+  findGroundingIssues,
+  stripUngroundedSentences,
+  type GroundingIssue,
+} from "../grounding";
 import { assistantTools } from "./tools";
 
 /** Solar가 툴콜을 본문 토큰으로 뱉어 답을 못 만든 경우 — 다음 provider(Claude) 폴백 대상. */
@@ -111,6 +117,58 @@ async function runTool(tools: RegisteredTool[], name: string, rawInput: unknown)
 
 type Usage = { input: number; output: number };
 
+/** grounding 이슈 → 모델에게 줄 교정 지시(무엇이 날조인지 구체적으로). */
+function buildGroundingCorrection(issues: GroundingIssue[]): string {
+  const uniq = (k: GroundingIssue["kind"]) => [...new Set(issues.filter((i) => i.kind === k).map((i) => i.token))];
+  const parts: string[] = [];
+  const cmp = uniq("comparison");
+  const money = uniq("money");
+  const pct = uniq("percent");
+  if (cmp.length) parts.push(`조회에 없는 비교(${cmp.join(", ")})`);
+  if (money.length) parts.push(`조회에 없는 금액(${money.join(", ")})`);
+  if (pct.length) parts.push(`조회에 없는 비율(${pct.join(", ")})`);
+  return `방금 답변에 ${parts.join(", ")}이(가) 들어갔습니다. 이는 조회된 사실이 아니라 지어낸 내용입니다. 그 부분을 완전히 빼고 조회된 수치·사실만으로 다시 답하십시오. 없는 비교·평균·추세·비율·금액은 절대 언급하지 마십시오.`;
+}
+
+/**
+ * 답변 grounding 하네스 — 툴 결과(팩트)에 근거하지 않은 수치·금액·비교가 있으면 ① 재생성 1회
+ * ② 그래도 남으면 근거 없는 문장 제거. 툴 미사용 답(인사·권한거절)은 대조 대상이 없어 그대로 통과.
+ * 약한 모델(Solar) 전제 방어(CLAUDE.md: buildFormPatch·validateTeamReport와 동일 정신).
+ */
+async function enforceGrounding(
+  answer: string,
+  toolResults: string[],
+  question: string,
+  todayKst: string,
+  regenerate: (correction: string) => Promise<string>,
+): Promise<string> {
+  if (!answer || toolResults.length === 0) return answer;
+  const g = buildGrounding([...toolResults, question, todayKst]);
+  const issues = findGroundingIssues(answer, g);
+  if (issues.length === 0) return answer;
+  reportWarning("비서 답변 grounding 이슈 → 교정", {
+    scope: "assistant.grounding",
+    kinds: [...new Set(issues.map((i) => i.kind))].join(","),
+    tokens: issues.map((i) => i.token).slice(0, 6).join(" | "),
+  });
+  let best = answer;
+  let bestIssues = issues;
+  try {
+    const retried = await regenerate(buildGroundingCorrection(issues));
+    if (retried) {
+      const retryIssues = findGroundingIssues(retried, g);
+      if (retryIssues.length < bestIssues.length) {
+        best = retried;
+        bestIssues = retryIssues;
+      }
+    }
+  } catch {
+    // 재생성 실패는 무시 — 아래 문장 제거로 안전하게 수렴.
+  }
+  if (bestIssues.length === 0) return best;
+  return stripUngroundedSentences(best, g); // 최후: 근거 없는 문장 제거
+}
+
 /** Upstage(OpenAI 호환) tool-use 루프. */
 async function runOpenAiCompatLoop(
   model: string,
@@ -128,11 +186,13 @@ async function runOpenAiCompatLoop(
       parameters: tool.input_schema as Record<string, unknown>,
     },
   }));
+  const todayKst = kstToday();
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: buildSystemPrompt(kstToday()) },
+    { role: "system", content: buildSystemPrompt(todayKst) },
     ...history.map((turn) => ({ role: turn.role, content: turn.content }) as const),
     { role: "user", content: question },
   ];
+  const toolResults: string[] = []; // grounding 대조용 팩트 원천
 
   let toolCalls = 0;
   for (let round = 0; round <= MAX_ROUNDS; round++) {
@@ -165,7 +225,15 @@ async function runOpenAiCompatLoop(
         const answer = stripMarkdownEmphasis((msg.content ?? "").trim());
         // 파싱 못 삼킨 특수 토큰이 남은 답은 사용자에게 절대 노출 금지(raw 코드 노출 금지) — 폐기.
         if (hasSpecialTokenNoise(answer)) throw new Error(FORMAT_ERROR_MARK);
-        return { answer, toolCalls };
+        const grounded = await enforceGrounding(answer, toolResults, question, todayKst, async (correction) => {
+          messages.push({ role: "assistant", content: answer });
+          messages.push({ role: "user", content: correction });
+          const r = await client.chat.completions.create({ model, max_tokens: 1024, temperature: 0.2, messages, tool_choice: "none" });
+          usage.input += r.usage?.prompt_tokens ?? 0;
+          usage.output += r.usage?.completion_tokens ?? 0;
+          return stripMarkdownEmphasis((r.choices[0]?.message?.content ?? "").trim());
+        });
+        return { answer: grounded, toolCalls };
       }
     } else {
       messages.push(msg);
@@ -180,6 +248,7 @@ async function runOpenAiCompatLoop(
         rawInput = { __parse_error: call.function.arguments };
       }
       const content = await runTool(tools, call.function.name, rawInput);
+      toolResults.push(content);
       messages.push({ role: "tool", tool_call_id: call.id, content });
     }
   }
@@ -201,10 +270,12 @@ async function runAnthropicLoop(
     input_schema: tool.input_schema,
   }));
   type MessageParam = Parameters<typeof client.messages.create>[0]["messages"][number];
+  const todayKst = kstToday();
   const messages: MessageParam[] = [
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
     { role: "user", content: question },
   ];
+  const toolResults: string[] = []; // grounding 대조용 팩트 원천
 
   let toolCalls = 0;
   for (let round = 0; round <= MAX_ROUNDS; round++) {
@@ -213,7 +284,7 @@ async function runAnthropicLoop(
     const res = await client.messages.create({
       model,
       max_tokens: 1024,
-      system: buildSystemPrompt(kstToday()),
+      system: buildSystemPrompt(todayKst),
       messages,
       tools: toolDefs as never,
       ...(round === MAX_ROUNDS ? { tool_choice: { type: "none" as const } } : {}),
@@ -228,16 +299,36 @@ async function runAnthropicLoop(
           .join("")
           .trim(),
       );
-      return { answer, toolCalls };
+      const grounded = await enforceGrounding(answer, toolResults, question, todayKst, async (correction) => {
+        const msgs: MessageParam[] = [
+          ...messages,
+          { role: "assistant", content: answer },
+          { role: "user", content: correction },
+        ];
+        const r = await client.messages.create({
+          model,
+          max_tokens: 1024,
+          system: buildSystemPrompt(todayKst),
+          messages: msgs,
+        });
+        usage.input += r.usage?.input_tokens ?? 0;
+        usage.output += r.usage?.output_tokens ?? 0;
+        return stripMarkdownEmphasis(
+          r.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim(),
+        );
+      });
+      return { answer: grounded, toolCalls };
     }
     messages.push({ role: "assistant", content: res.content });
     const results = [] as { type: "tool_result"; tool_use_id: string; content: string }[];
     for (const use of toolUses) {
       toolCalls++;
+      const toolContent = await runTool(tools, use.name, use.input);
+      toolResults.push(toolContent);
       results.push({
         type: "tool_result",
         tool_use_id: use.id,
-        content: await runTool(tools, use.name, use.input),
+        content: toolContent,
       });
     }
     messages.push({ role: "user", content: results });
