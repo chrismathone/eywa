@@ -4,6 +4,26 @@
 
 ## 진행 상황
 
+### ClassNote 학부모 읽음 동기화 2·3단계 (2026-07-18, 0122a) — ✅ tsc0/lint0/test37 + 실E2E 165건 기록
+1단계 조사(ClassNote가 `read_by_parent.date_read`를 피드 행에 이미 노출)를 실제 파이프라인으로 연결.
+- **매칭 키가 이 작업의 핵심**: 학부모에게 실제 발송하는 주체는 eywa가 아니라 **edutrix**다(본문이
+  `edutrix.vercel.app/share/{uuid}`). 그 uuid = edutrix `reports.share_token`이고 eywa가 갖고 있던
+  `edutrix_report_id`(=edutrix reports.id)와 **다른 값**이라 그대로는 못 이었다. 실측 체인:
+  ClassNote→edutrix.share_token **77/77(100%)**, edutrix.id→eywa.edutrix_report_id **64/77(83%**, 나머지는 당일분 미임포트).
+  → **0122a** `lesson_reports.edutrix_share_token` 신설 + edutrix-sync가 `contentOf`에 실어 임포트
+  (기존 행도 다음 동기화에서 diff-패치로 **자동 백필** — 별도 백필 스크립트 불요). `classnote_read_at`도 함께.
+- **워커(연동 PC)**: `classnote-read-core.mjs` 신설 — 순수함수(`extractReadToken`·`buildReadUpdates`·
+  `summarizeReadScan`, Vitest 12) + `pollReportReadsOnce`(30분 가드). edutrix·eywa 두 링크 형태를 모두 파싱해
+  각각 `edutrix_share_token`·`share_token`으로 조인. `feed-core.fetchReadWindow`가 기존 세션·페이지네이션 재사용.
+  ⚠️ **워터마크 미사용** — 읽음은 발송 뒤 며칠에 걸쳐 채워져 "본 데까지" 건너뛰면 영영 못 줍는다(창 14일 매번 재조회,
+  중복 비용은 SQL `classnote_read_at is null`이 흡수). ClassNote 쓰기 0(GET만)이라 `--post`와 무관하게 동작.
+- **실E2E(프로덕션)**: 토큰 319건 채움 → `--apply` → 피드 2,400건·학원발송 2,308(읽음 1,733/미읽음 575) →
+  **165건 기록**(edutrix 161 + eywa 자체발송 4 = 두 경로 검증). 미확인 이벤트 후보 117건 확보.
+  `링크없음` 1,444건은 **정상**(강사 직접 알림장·학원 공지 = 수업보고서 아님) — 코드 주석에 기록.
+- ⚠️ `/api/v1/reports/{id}/read/`(GET 405 = POST 추정)는 **호출 금지**(학원 계정이 읽음 표시를 남길 위험).
+- **연동 PC 배포 대기**: `D:/tmp/eywa-읽음동기화-20260718.zip` + `읽음동기화-적용-안내.md`(워처 재시작만 하면 끝).
+- 남은 것 = **4단계 `parent_unread_report` 이벤트**(임계 N일은 데이터 1주 쌓인 뒤 결정).
+
 ### 시간표 적대 전수검사 — 강사 스코프 우회 2건 + 청크당 1000행 절단 (2026-07-18) — ✅ tsc0/lint0/test1578/build✓
 멀티에이전트 6방향(정합·성능 B1~B7·테넌트권한·하드코딩·편집/가져오기·UX) 적대 감사 → 확정 HIGH 2 + MED 1 **수정**(나머지 확정분은 보고만, 원장 결정 대기).
 - **H1 export 강사 스코프 우회 2경로**: ① 폴백 익스포터 [`buildTimetableWorkbook()`](../src/features/exports/timetable-excel.ts)에 `teacherId`

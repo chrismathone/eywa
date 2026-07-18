@@ -156,5 +156,7 @@ pnpm db:seed
 
 | `0121a_top_outstanding_admin` | **`dashboard_top_outstanding`의 cron(service_role) 변형**(`dashboard_top_outstanding_admin(p_limit, p_tenant)`) — 미수 임계 이벤트(Phase 3)가 학생별 총 미수를 세션 없이 읽도록. 로직 0101a와 동일(행 레벨 greatest(0,…), unpaid/partial). auth_tenant_id()→p_tenant, execute는 service_role만. |
 
+| `0122a_lesson_reports_classnote_read` | **ClassNote 학부모 읽음 동기화**(A안 2단계) — `lesson_reports.classnote_read_at`(피드 `read_by_parent.date_read`) + `edutrix_share_token`(매칭 키: ClassNote 본문 `edutrix.vercel.app/share/{uuid}` = edutrix `reports.share_token`. eywa가 갖던 `edutrix_report_id`와 **다른 값**이라 신설). 부분 인덱스 2종(토큰 조인·미읽음 후보). 쓰기는 연동 PC 워커, 앱은 읽기만. |
+
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

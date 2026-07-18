@@ -1,7 +1,29 @@
 # ClassNote 읽음 동기화 (A안) — "학부모 미확인 보고서" 이벤트의 선결 과제
 
-> 상태: **1단계 조사 ✅ 완료(2026-07-18) — 결론: ClassNote가 읽음을 노출한다. A안 실현 가능.**
-> 2~4단계(스키마·워커·이벤트) 미착수. B안(미발송 보고서 이벤트)은 Phase 3 v7로 구현 완료.
+> 상태: **1·2·3단계 ✅ 완료(2026-07-18, 0122a).** 읽음이 eywa에 실제로 쌓이기 시작했다(첫 동기화 165건).
+> 남은 것 = **4단계(`parent_unread_report` 이벤트)** + 연동 PC에 워커 zip 적용.
+> 배포 zip: `D:/tmp/eywa-읽음동기화-20260718.zip`(안내 = `scripts/_classnote/읽음동기화-적용-안내.md`).
+
+## ✅ 2·3단계 구현 결과 (2026-07-18)
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| 2 (eywa) | `0122a`: `lesson_reports.classnote_read_at` + `edutrix_share_token`. edutrix-sync가 `share_token` 임포트(기존 행도 diff-패치로 자동 백필) | ✅ 프로덕션 적용 |
+| 3 (워커) | `classnote-read-core.mjs`(순수함수 3 + `pollReportReadsOnce` 30분 가드) · `feed-core.fetchReadWindow` · 데몬 루프 6) 배선 · `sync-classnote-reads.mjs`(수동) | ✅ 코드 완료, **연동 PC 적용 대기** |
+| 4 (이벤트) | `parent_unread_report` — 발송 후 N일 미읽음 → 담당 강사(+master) | ⏳ 미착수 |
+
+**실E2E(프로덕션)**: edutrix-sync로 토큰 319건 채움 → 읽음 동기화 `--apply` →
+피드 2,400건·학원발송 2,308(읽음 1,733/미읽음 575) → **165건 기록**(edutrix 161 + eywa 자체발송 4 = 두 경로 모두 검증).
+미확인 이벤트 후보(매칭키 有·미읽음) **117건** 확보.
+
+⚠️ **`링크없음` 다수는 정상**(14일 창 2,308건 중 1,444건) — 강사가 ClassNote에 직접 쓴 알림장(영어반)·학원 공지라
+수업 보고서가 아니다(eywa에 대응 행 없음 = 매칭 대상 아님).
+
+### 4단계 착수 시 유의
+- 후보 = `classnote_status='success' AND classnote_read_at IS NULL AND edutrix_share_token IS NOT NULL`
+  (매칭 키 없는 과거분을 넣으면 "동기화가 안 된 것"과 "안 읽은 것"을 혼동한다 — 반드시 키 보유 행만).
+- 임계(N일)는 **읽음 데이터가 1주 이상 쌓인 뒤** 실분포를 보고 정한다(지금 정하지 말 것).
+- Phase 3 불변식 그대로: 콜드스타트 무발송 시드 · bucket=report_id(1회) · admin tenant 필터 · 벨 배지만.
 
 ## ✅ 1단계 조사 결과 (2026-07-18, 읽기 전용 GET 실측) — **읽음 노출됨**
 
