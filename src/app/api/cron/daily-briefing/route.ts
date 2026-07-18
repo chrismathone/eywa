@@ -51,7 +51,7 @@ export async function GET(req: Request) {
     // Phase 3 이벤트 감지 — 브리핑과 **독립된 try/catch**(브리핑 실패해도 이벤트 알림은 돌아야 함).
     try {
       const detected = await detectAndNotifyEvents(tenantId);
-      events[tenantId] = `결석 ${detected.absence}·후속 ${detected.followup}·성적 ${detected.gradeDrop}·미수 ${detected.outstanding}`;
+      events[tenantId] = `결석 ${detected.absence}·후속 ${detected.followup}·성적 ${detected.gradeDrop}·미수 ${detected.outstanding}·미발송 ${detected.unsentReport}`;
     } catch (e) {
       reportError(e, { scope: "cron.daily-briefing.events", tenantId });
       events[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;

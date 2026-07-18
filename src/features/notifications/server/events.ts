@@ -24,25 +24,30 @@ import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { notifyUsers, type NotifyInput } from "./notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
+import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import {
   absenceDigestBody,
   buildAbsenceEvents,
   buildFollowupEvents,
   buildGradeDropEvents,
   buildOutstandingEvents,
+  buildUnsentReportEvents,
   followupBody,
   weekKey,
   gradeDropDigestBody,
   groupEventsByTeacher,
   outstandingDigestBody,
+  unsentReportDigestBody,
+  UNSENT_REPORT_WINDOW_DAYS,
   type AbsenceEvent,
   type FollowupEvent,
   type GradeDropEvent,
   type GradeRow,
   type OutstandingEvent,
+  type UnsentReportEvent,
 } from "../events-core";
 
-type EventType = "absence_alert" | "followup_due" | "grade_drop" | "outstanding_alert";
+type EventType = "absence_alert" | "followup_due" | "grade_drop" | "outstanding_alert" | "unsent_report";
 type EventRow = { tenant_id: string; event_type: EventType; subject_key: string; bucket: string; seeded: boolean };
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -400,17 +405,117 @@ async function detectOutstanding(admin: SupabaseClient, tenantId: string): Promi
 }
 
 /**
+ * 미발송 보고서 감지(저장만 하고 발송 안 누른 건) → master 집계 + 담당 강사(콜드스타트면 시드만).
+ *
+ * **게이트는 발송 콘솔(sendClassnoteForUnsent)과 동일**해야 한다 — 안 그러면 "보낼 수 없는 보고서"를
+ * 재촉하는 거짓 알림이 된다: ① classnote_status IS NULL(발송 이력 있는 건 PR1 'classnote-attention'
+ * 신호 담당) ② revoked 제외 ③ edutrix_import 제외(Edutrix가 이미 학부모에게 발송 — 최대 오발송 벡터)
+ * ④ isClassnoteAllowed(too_old: 전 달 1일 이후) ⑤ isClassnoteSubjectEnabled(과목 opt-in — injaewon은
+ * math만) ⑥ classnoteSendEnabled(발송 스위치 OFF면 아예 감지 안 함 — 보낼 수 없는데 재촉 금지).
+ * 창은 어제까지 최근 7일(오늘 작성분은 아직 발송 중일 수 있어 제외, 오래된 건 무한 잔소리 방지).
+ */
+async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const today = kstToday();
+  const settings = await getTenantSettingsByTenantId(tenantId);
+  // ⑥ 발송 자체가 꺼진 테넌트는 감지도 하지 않는다(시드도 남기지 않음 — 켜는 날 콜드스타트로 시작).
+  if (!settings.report.classnoteSendEnabled) return 0;
+
+  const dayMs = 86_400_000;
+  const todayMs = Date.parse(`${today}T00:00:00Z`);
+  const windowStart = new Date(todayMs - UNSENT_REPORT_WINDOW_DAYS * dayMs).toISOString().slice(0, 10);
+  const yesterday = new Date(todayMs - dayMs).toISOString().slice(0, 10);
+
+  const { data, error } = await admin
+    .from("lesson_reports")
+    .select("id, student_id, report_date, subject, student:student_id ( name )")
+    .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
+    .is("classnote_status", null)
+    .is("revoked_at", null)
+    .or("source.is.null,source.neq.edutrix_import")
+    .gte("report_date", windowStart)
+    .lte("report_date", yesterday)
+    .order("report_date", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(`detectUnsentReports query: ${error.message}`);
+
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const candidates = buildUnsentReportEvents(
+    (data ?? [])
+      .filter(
+        (row) =>
+          isClassnoteAllowed(row.report_date as string, today) &&
+          isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects),
+      )
+      .map((row) => {
+        const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
+        const subject = row.subject as string | null;
+        return {
+          reportId: row.id as string,
+          studentId: row.student_id as string,
+          studentName: student?.name ?? "(학생)",
+          subjectLabel: (subject ? subjects.labelOf(subject) : null) ?? subject ?? "수업",
+          reportDate: (row.report_date as string).slice(0, 10),
+        };
+      }),
+  );
+  const cold = await isColdStart(admin, tenantId, "unsent_report");
+  const fresh = (await recordNew(admin, tenantId, "unsent_report", candidates, cold)) as UnsentReportEvent[];
+  if (cold || fresh.length === 0) return 0;
+
+  const items: NotifyInput[] = [];
+  const masterBody = unsentReportDigestBody(fresh);
+  if (masterBody) {
+    for (const recipientId of await activeMasterIds(admin, tenantId)) {
+      items.push({
+        tenantId,
+        recipientId,
+        type: "unsent_report",
+        title: "미발송 수업 보고서",
+        body: masterBody,
+        // ⚠️ 발송 콘솔은 '목록'(tab=list, ReportList가 sendClassnoteForUnsent 호출)이다 —
+        // tab=writing은 '작성률' 표라 미발송 목록도 발송 버튼도 없다(적대 리뷰 확정 결함, 2026-07-17).
+        link: "/lesson-reports?tab=list",
+        actorId: null,
+      });
+    }
+  }
+  // 담당 강사 = 자기 학생 건만. ⚠️ subjectKey가 보고서 id라 studentIdOf 추출자 필수(안 넘기면 0건).
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
+    tenantId,
+    [...new Set(fresh.map((event) => event.studentId))],
+    today,
+  );
+  for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers, (e) => e.studentId)) {
+    const body = unsentReportDigestBody(teacherEvents);
+    if (!body) continue;
+    items.push({
+      tenantId,
+      recipientId: teacherId,
+      type: "unsent_report",
+      title: "미발송 보고서 확인",
+      body,
+      link: "/onescreen", // 강사는 lesson_reports 권한이 없다 — 원스크린에서 발송
+      actorId: null,
+    });
+  }
+  await notifyUsers(items);
+  return fresh.length;
+}
+
+/**
  * 테넌트 1건의 이벤트 감지·발송. cron이 브리핑 생성과 **독립된 try/catch**로 호출한다
  * (브리핑 실패해도 감지는 돌아야 함). 반환은 관측용 신규 이벤트 수(결석/후속조치/성적/미수).
  */
 export async function detectAndNotifyEvents(
   tenantId: string,
-): Promise<{ absence: number; followup: number; gradeDrop: number; outstanding: number }> {
+): Promise<{ absence: number; followup: number; gradeDrop: number; outstanding: number; unsentReport: number }> {
   const admin = createAdminClient();
   let absence = 0;
   let followup = 0;
   let gradeDrop = 0;
   let outstanding = 0;
+  let unsentReport = 0;
   try {
     absence = await detectAbsence(admin, tenantId);
   } catch (e) {
@@ -431,5 +536,10 @@ export async function detectAndNotifyEvents(
   } catch (e) {
     reportError(e, { scope: "events.outstanding", tenantId });
   }
-  return { absence, followup, gradeDrop, outstanding };
+  try {
+    unsentReport = await detectUnsentReports(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.unsentReport", tenantId });
+  }
+  return { absence, followup, gradeDrop, outstanding, unsentReport };
 }

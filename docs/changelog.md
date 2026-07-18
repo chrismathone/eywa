@@ -35,6 +35,23 @@
 - ⚠️ **미수정(보고만, 결정 대기)**: 과거주 편집 누수(#77 UI-only 게이트)·effectiveDate 저장시점 바인딩·`changeClassLevel` 소유권 미검증·
   import이 분리등원(attendance_days) 소실·마지막날 off-by-one(주간뷰 배타 vs `isEnrollmentActiveOn` 포함)·aliveRows `start_date` 하한 누락·
   UX 다수. 상세는 메모리 `project_timetable-adversarial-audit`.
+### 미발송 보고서 이벤트 + '학부모 미확인'은 데이터 불가 판정 (2026-07-17, Phase 3 v7) — ✅ tsc0/lint0/test32 + 실E2E
+원장 요청은 "학부모 미확인 보고서 이벤트"였으나 **데이터로 불가 판정 → 미발송으로 대체**(원장 승인: "A로 진행하되 지금은 B로").
+- **불가 근거(실측)**: 학부모 읽음 경로가 ①ClassNote 앱(eywa DB에 흔적 없음) ②공유링크 `/r/[token]`(`share_link_views`)로
+  갈리는데, 최근 30일 **발송 성공 1,844건 중 링크 열람 기록은 28건(1.5%)**뿐이고 `lesson_reports`엔 read/viewed 컬럼이 0개다.
+  → 열람 기록 부재를 '미확인'으로 보면 **발송분 ~98%가 거짓 알림**. 거짓 알림 0 원칙과 충돌해 **구현하지 않음**.
+  선결 과제(ClassNote 읽음 동기화)는 [`docs/classnote-read-sync-plan.md`](classnote-read-sync-plan.md)로 스코핑(⚠️ 재제안 전 필독).
+- **대체 구현 = `unsent_report`**(저장만 하고 발송 안 누른 보고서). **게이트를 발송 콘솔(`sendClassnoteForUnsent`)과
+  동일하게 재사용**한 것이 핵심 — `classnote_status IS NULL`·`revoked_at IS NULL`·`source<>edutrix_import`·
+  `isClassnoteAllowed`(too_old: 전 달 1일)·`isClassnoteSubjectEnabled`(과목 opt-in)·`classnoteSendEnabled`(발송 스위치 OFF면 감지 자체 안 함).
+  게이트를 따로 구현했다면 "보낼 수 없는 보고서"를 재촉하는 거짓 알림이 됐다(#77 공용 게이트 정신).
+- **창 = 어제까지 최근 7일**(오늘 작성분은 아직 발송 중일 수 있어 제외, 오래된 건 무한 잔소리 방지 — too_old가 최종 방어).
+  bucket=`unsent`(보고서당 1회). 수신자 = master 집계(`/lesson-reports?tab=writing`) + **담당 강사**(`/onescreen` — teacher는
+  lesson_reports 권한 none이라 링크가 다름).
+- ⚠️ **subjectKey가 학생이 아니라 보고서 id** → `groupEventsByTeacher`에 `studentIdOf` 추출자를 넘겨야 한다(기본값은
+  subjectKey=학생 전제라 안 넘기면 **강사에게 조용히 0건**). 추출자 없이 부르면 0건임을 회귀 테스트로 고정.
+- 실측 검증(읽기 전용): 후보 2건 중 과목 null 1건은 과목 게이트로 제외(발송 불가 = 알리면 오탐), math 1건은 7일 창 밖 → **오늘 발화 0건**.
+  cron E2E `결석 0·후속 0·성적 0·미수 0·미발송 0`. 마이그레이션 불요(`event_type`·`notifications.type`이 text).
 
 ### AI 비서 grounding 하네스 — 팩트만 답하도록 날조 후검증 (2026-07-18) — ✅ tsc0/lint0/test36 + 실 Solar E2E
 "제안하라고 밀어주니 Solar가 정당화하려 없는 근거를 지어낸다"(전월 대비·지난주 평균·미납액 1천만원·계산 전환율)를

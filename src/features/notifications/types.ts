@@ -12,7 +12,8 @@ export type NotificationType =
   | "absence_alert" // 학생이 반복 결석 마일스톤(14일 3/5/10회) 도달 → master(Phase 3, cron)
   | "followup_due" // 상담 후속조치 기한 당일/지남 → 담당 상담사 폴백 master(Phase 3, cron)
   | "grade_drop" // 같은 과목 성적 15점+ 급락 → master + 담당 강사(Phase 3, cron)
-  | "outstanding_alert"; // 학생 총 미수 금액 tier 도달 → master + 회계(Phase 3, cron)
+  | "outstanding_alert" // 학생 총 미수 금액 tier 도달 → master + 회계(Phase 3, cron)
+  | "unsent_report"; // 저장만 하고 발송 안 한 수업 보고서(발송 콘솔과 동일 게이트) → master + 담당 강사(Phase 3, cron)
 
 export type NotificationItem = {
   id: string;
@@ -36,4 +37,5 @@ export const NOTIFICATION_ICON: Record<string, EywaIconName> = {
   followup_due: "clock",
   grade_drop: "trendingDown",
   outstanding_alert: "wallet",
+  unsent_report: "send",
 };
