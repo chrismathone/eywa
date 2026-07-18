@@ -29,6 +29,12 @@ export async function buildEnglishTimetableBuffer(opts?: {
   withFormulas?: boolean;
   /** '1시간 단위' 압축 섹션(sectionKey) — 화면 통합뷰 토글과 동일. */
   compactSections?: Set<number>;
+  /**
+   * 라운드트립 '수강편집' 탭 포함 여부(기본 true — cron 시트 push는 이 탭이 있어야 가져오기가 닫힌다).
+   * ⚠️ 그리드는 teacherId로 스코프돼도 이 탭은 **영어 전체 수강 명단**이라 스코프가 안 걸린다 →
+   * 담당(scoped) 사용자에겐 false(2026-07-17 적대 감사).
+   */
+  includeEditSheet?: boolean;
   /** 세션 없는 호출(cron 자동 시트 반영)용 주입 — admin 클라이언트 + tenant 명시 + 설정(쿠키 경로 회피). */
   db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string; settings: TenantSettings };
 }): Promise<{ buffer: ArrayBuffer; formulaCells: FormulaCell[] }> {
@@ -95,7 +101,10 @@ export async function buildEnglishTimetableBuffer(opts?: {
     model: teacherModel,
   });
   // 학생 반이동 라운드트립: '수강편집' 탭(영어 수강만) — 수학과 동일 enrollment import 경로가 영어에서도 닫힌다.
-  await appendEnrollmentEditSheet(wb, supabase, "english", opts?.db?.tenantId);
+  // 담당(scoped) 사용자에겐 생략 — 이 탭만은 teacherId 스코프가 안 걸린다(영어 전체 명단).
+  if (opts?.includeEditSheet ?? true) {
+    await appendEnrollmentEditSheet(wb, supabase, "english", opts?.db?.tenantId);
+  }
 
   return { buffer: (await wb.xlsx.writeBuffer()) as ArrayBuffer, formulaCells };
 }

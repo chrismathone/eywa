@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
+import { canManageTimetableImport, TIMETABLE_IMPORT_DENIED_MSG } from "./import-access";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -50,6 +51,9 @@ async function loadContext(): Promise<Ctx> {
         "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
       )
       .is("end_date", null)
+      // ⚠️ order 없는 .range()는 페이지 경계에서 행이 누락·중복될 수 있다. 이 스냅샷은 diff의 '현재 DB'
+      // 쪽이라 누락 = 오판(중복 생성·잘못된 삭제)으로 이어진다 → id unique tie-break(batch.ts 계약).
+      .order("id")
       .range(from, to),
   );
   const current: EnrollmentSnapshotRow[] = enr.map((e) => {
@@ -73,7 +77,12 @@ async function loadContext(): Promise<Ctx> {
   });
 
   const cls = await fetchAllPaged<{ id: string; class_name: string; subject: string }>((from, to) =>
-    supabase.from("classes").select("id, class_name, subject").eq("is_active", true).range(from, to),
+    supabase
+      .from("classes")
+      .select("id, class_name, subject")
+      .eq("is_active", true)
+      .order("id")
+      .range(from, to),
   );
   const classes: ClassRef[] = cls.map((c) => ({
     classId: c.id,
@@ -86,7 +95,9 @@ async function loadContext(): Promise<Ctx> {
     name: string;
     school: string | null;
     grade: string | null;
-  }>((from, to) => supabase.from("students").select("id, name, school, grade").range(from, to));
+  }>((from, to) =>
+    supabase.from("students").select("id, name, school, grade").order("id").range(from, to),
+  );
   const students: StudentRef[] = stu.map((s) => ({
     studentId: s.id,
     name: s.name,
@@ -118,7 +129,8 @@ async function computeFreshFromFile(file: File): Promise<{ error: string } | { d
 export async function previewTimetableImport(formData: FormData): Promise<PreviewState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
+  // ⚠️ full만 — 미리보기도 전 테넌트 수강 명단(diff)을 돌려주므로 읽기 자체가 누수다. 시트 경로와 대칭.
+  if (!(await canManageTimetableImport(user.systemRole))) return { error: TIMETABLE_IMPORT_DENIED_MSG };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일을 선택해주세요" };
 
@@ -209,7 +221,8 @@ export async function applyTimetableImport(
 ): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
+  // ⚠️ full만(시트 경로와 대칭) — applyDiff는 담당 반과 무관하게 아무 수강이나 이동·종료·생성한다.
+  if (!(await canManageTimetableImport(user.systemRole))) return { error: TIMETABLE_IMPORT_DENIED_MSG };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일이 없습니다 — 다시 선택 후 미리보기하세요" };
 
