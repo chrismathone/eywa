@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { weekEndOf, weekSundayOf, shiftDays } from "../lib/week";
@@ -307,7 +307,11 @@ export async function getWeeklyScheduleWithStudents(
     attendance_days: string[] | null;
     student: StudentRef | StudentRef[];
   };
-  const rows = await fetchInChunks<Row>(classIds, (chunk) => {
+  // ⚠️ fetchAllPagedInChunks 필수(fetchInChunks 아님) — fetchInChunks는 414만 막고 **청크 안에서는
+  // 페이지네이션을 안 한다**. 100반/청크 × 반당 수~수십 수강이면 한 청크가 PostgREST 기본 1000행 캡을
+  // 넘겨 **에러 없이 잘리고 셀에서 학생이 조용히 사라진다**(B2, 2026-07-17 적대 감사). id 정렬 = OFFSET
+  // 페이지가 흔들리지 않게 하는 unique tie-break.
+  const rows = await fetchAllPagedInChunks<Row>(classIds, (chunk, from, to) => {
     let q = supabase
       .from("enrollments")
       .select(
@@ -317,7 +321,7 @@ export async function getWeeklyScheduleWithStudents(
       .lte("start_date", weekEnd)
       .or(`end_date.is.null,end_date.gte.${withdrawnFloor}`);
     if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-    return q;
+    return q.order("id").range(from, to);
   });
 
   // (class_id:student_id) → 표시할 한 줄. 같은 반 다중 수강기록(재등록 등)은 재원>대기>퇴원 우선, 같으면 최신 시작.
@@ -392,14 +396,15 @@ export async function getWeeklyScheduleWithStudents(
         class: { subject: string | null } | { subject: string | null }[] | null;
         student: { status: string | null; withdrawn_at: string | null } | { status: string | null; withdrawn_at: string | null }[] | null;
       };
-      const aliveRows = await fetchInChunks<AliveRow>(wStudentIds, (chunk) => {
+      // 청크당 1000행 캡 방어(위 rows와 동일 이유) — 한 학생이 여러 수강을 갖는 1:N이라 잘릴 수 있다.
+      const aliveRows = await fetchAllPagedInChunks<AliveRow>(wStudentIds, (chunk, from, to) => {
         let q = supabase
           .from("enrollments")
           .select("student_id, class:class_id ( subject ), student:student_id ( status, withdrawn_at )")
           .in("student_id", chunk)
           .or(`end_date.is.null,end_date.gt.${referenceDate}`); // daterange [start,end) — end>ref = 기준일 시점 수강 유지
         if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-        return q;
+        return q.order("id").range(from, to);
       });
       const subjectOfClass = new Map(slots.map((s) => [s.classId, s.subject]));
       const aliveSubj = new Set<string>(); // `${subject}:${studentId}`
@@ -446,16 +451,19 @@ export async function getWeeklyScheduleWithStudents(
       teacher_name: string | null;
     };
     // 교재·진도는 둘 다 studentIds에만 의존하는 독립 조회 → 병렬(직렬이면 두 청크 wave가 합산됨).
+    // ⚠️ 둘 다 학생당 N행(1:N)이라 fetchInChunks면 청크당 1000행 캡에 조용히 잘린다(B2).
+    // 특히 진도는 report_date desc + '첫 행 승리'라, 잘리면 오래된 행부터 사라지는 게 아니라
+    // **정렬 뒤쪽 학생의 전 행이 통째로** 없어져 hover 진도가 아예 안 뜬다 → fetchAllPagedInChunks.
     const [tbRows, repRows] = await Promise.all([
-      fetchInChunks<TbRow>(studentIds, (chunk) => {
+      fetchAllPagedInChunks<TbRow>(studentIds, (chunk, from, to) => {
         let q = supabase
           .from("textbook_orders")
           .select("student_id, book_name, request_date")
           .in("student_id", chunk);
         if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-        return q;
+        return q.order("id").range(from, to);
       }),
-      fetchInChunks<RepRow>(studentIds, (chunk) => {
+      fetchAllPagedInChunks<RepRow>(studentIds, (chunk, from, to) => {
         let q = supabase
           .from("lesson_reports")
           .select("student_id, report_date, progress, exam_info, homework_score, teacher_name")
@@ -463,7 +471,8 @@ export async function getWeeklyScheduleWithStudents(
           .not("progress", "is", null) // hover는 진도 있는 최신 1건(상세 '진도' 탭은 전건)
           .order("report_date", { ascending: false });
         if (db) q = q.eq("tenant_id", db.tenantId); // admin(cron) 경로 — 명시 격리
-        return q;
+        // id desc = 페이지 안정 tie-break 겸 같은 날짜 2건일 때 '최신' 결정(옛 코드는 비결정적이었다).
+        return q.order("id", { ascending: false }).range(from, to);
       }),
     ]);
     const latestTb = new Map<string, { name: string; date: string | null }>();

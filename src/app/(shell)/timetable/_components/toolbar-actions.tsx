@@ -15,12 +15,18 @@ const SYNC_BUSY_TITLE =
 export function TimetableToolbarActions({
   subject,
   canSync = false,
+  canManageImport = false,
   sheetUrl = null,
   compact1h = [],
 }: {
   subject?: string;
   /** 구글 시트 동기화(=테넌트 전체 시간표 외부 push)는 sheet_sync 권한 + 지원 과목 + 연동 ON일 때만. */
   canSync?: boolean;
+  /**
+   * 파일 업로드 가져오기 권한(classes=full) — 서버 `canManageTimetableImport`와 **같은 게이트**를
+   * 페이지가 계산해 내려준다. 화면에서만 숨기는 건 게이트가 아니므로 서버 액션도 같은 함수로 막는다(#77).
+   */
+  canManageImport?: boolean;
   /** 연결된 구글 시트 URL(설정돼 있을 때만). 있으면 '시트 열기' 노출. */
   sheetUrl?: string | null;
   /** 현재 화면의 '1시간 단위' 압축 섹션(sectionKey) — 엑셀·시트 내보내기에 그대로 반영. */
@@ -36,7 +42,8 @@ export function TimetableToolbarActions({
   const compactParam = compact1h.length ? `&compact1h=${[...compact1h].sort((a, b) => a - b).join(",")}` : "";
   const exportHref = `/api/exports/timetable?subject=${encodeURIComponent(subjectKey)}${compactParam}`;
   // 가져오기(수강편집 라운드트립 = 학생 반이동)는 math·english 둘 다(과목별 '수강편집' 시트). 파일·시트 두 경로 게이트.
-  const canImport = supportsTimetableImport(subjectKey);
+  // ⚠️ 권한(classes=full)도 AND — 옛 코드는 과목만 봐서 강사에게도 가져오기 버튼이 떴다(적대 감사 H2).
+  const canImport = supportsTimetableImport(subjectKey) && canManageImport;
   // 구조 가져오기(강사별 그리드 → class_schedules 재구축)는 english 전용. 시트→앱 되읽기라 canSync와 AND.
   // 영어는 구조+반이동을 하나의 '시트에서 가져오기'(EnglishImportDialog)로 통합 → canStructureImport로 분기.
   const canStructureImport = supportsStructureImport(subjectKey);

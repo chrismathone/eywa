@@ -10,6 +10,7 @@ import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
+import { canManageTimetableImport } from "@/features/timetable/server/import-access";
 import { isSheetExportSubject } from "@/features/integrations/sheets-provider";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
@@ -98,6 +99,9 @@ export default async function TimetablePage({
       ? await getGoogleSheetsStatus(subject)
       : null;
   const canSync = sheetsStatus?.enabled === true;
+  // '가져오기'(파일 업로드) 버튼 = classes "full"만. 서버 액션도 같은 canManageTimetableImport로 이중 방어
+  // (업로드 시트가 테넌트 전체 수강이라 담당 개념이 없다 — 시트 경로와 동일 규약).
+  const canManageImport = await canManageTimetableImport(user.systemRole);
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
   const sheetUrl = sheetsStatus?.spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${sheetsStatus.spreadsheetId}/edit`
@@ -292,7 +296,13 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <TimetableToolbarActions subject={subject} canSync={canSync} sheetUrl={sheetUrl} compact1h={compactList} />
+        <TimetableToolbarActions
+          subject={subject}
+          canSync={canSync}
+          canManageImport={canManageImport}
+          sheetUrl={sheetUrl}
+          compact1h={compactList}
+        />
       </div>
 
       {slots.length === 0 ? (

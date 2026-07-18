@@ -1,7 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { appendEnrollmentEditSheet } from "@/features/exports/enrollment-edit-sheet";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -32,13 +32,38 @@ const PILL_HEX: Record<PillColor, string> = {
   neutral: "FFEDE9DC",
 };
 
+type ClassRef = {
+  id: string;
+  class_name: string;
+  subject: string;
+  teacher_id?: string | null;
+  closed_at?: string | null;
+  teacher?: { id?: string; display_name?: string } | { id?: string; display_name?: string }[];
+  classroom?: { name?: string } | { name?: string }[];
+};
+type ScheduleRow = {
+  id: string;
+  class_id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+  class?: ClassRef | ClassRef[];
+};
+
 /**
- * 시간표를 exceljs workbook으로 변환.
+ * 시간표를 exceljs workbook으로 변환(수학·영어 전용 익스포터가 없는 과목의 범용 폴백).
  * - 시트 1: "전체" — 요일 × 강사 매트릭스
  * - 시트 N: 강사별 — 요일 × 교시 매트릭스
  * - _meta: 셀 좌표 ↔ class/enrollment id 매핑 (라운드트립 import 대비)
+ *
+ * ⚠️ `teacherId`(담당 스코프)는 **반드시** 화면과 같은 기준으로 넘길 것 — 옛 시그니처는 인자가 아예 없어
+ * 강사가 이 폴백을 타면(수학·영어가 아닌 과목) 전 강사·전 학생 명단이 그대로 나갔다(2026-07-17 적대 감사).
+ * ⚠️ `includeEditSheet`는 라운드트립 '수강편집' 시트(=테넌트 전체 수강 명단) — 가져오기 권한자(full)만.
  */
-export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
+export async function buildTimetableWorkbook(
+  opts: { teacherId?: string; includeEditSheet?: boolean } = {},
+): Promise<ExcelJS.Workbook> {
+  const { teacherId, includeEditSheet = true } = opts;
   const supabase = await createClient();
   // 과목 셀 색은 학원설정(operations.subjects) 단일 소스 — colorOf(PillColor) → PILL_HEX.
   const settings = await getTenantSettings();
@@ -47,17 +72,22 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
 
   // 데이터 수집: schedule + class + 학생. 폐지(is_active=false)·종강(closed_at<오늘) 반은 제외(시간표 화면과 일관).
   const todayIso = new Date().toISOString().slice(0, 10);
-  const { data: schedules } = await supabase
-    .from("class_schedules")
-    .select(
-      `id, class_id, day_of_week, start_time, end_time,
+  // B2: 무페이징 select는 1000행에서 조용히 잘려 반·교시가 통째로 증발한다 → fetchAllPaged(id tie-break).
+  // 강사 스코프는 조인 필터로 DB에서 건다(전건 받아 JS에서 버리지 않음).
+  const schedules = await fetchAllPaged<ScheduleRow>((from, to) => {
+    let q = supabase
+      .from("class_schedules")
+      .select(
+        `id, class_id, day_of_week, start_time, end_time,
        class:class_id!inner ( id, class_name, subject, is_active, closed_at, teacher_id, classroom:classroom_id ( name ),
                         teacher:teacher_id ( id, display_name ) )`,
-    )
-    .eq("class.is_active", true)
-    .order("start_time");
+      )
+      .eq("class.is_active", true);
+    if (teacherId) q = q.eq("class.teacher_id", teacherId);
+    return q.order("start_time").order("id").range(from, to);
+  });
 
-  const slots = (schedules ?? [])
+  const slots = schedules
     .filter((s) => {
       const k = (Array.isArray(s.class) ? s.class[0] : s.class) as { closed_at?: string | null } | undefined;
       const closedAt = k?.closed_at ?? null;
@@ -101,16 +131,18 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
     { name: string; grade: string | null }[]
   >();
   if (classIds.length > 0) {
-    // 전체 반×학생이 1000행 초과 시 단일 .in()이 silent 절단(엑셀에 명단 누락) → fetchInChunks(반
-    // 50개씩, 청크당 행<1000)로 414·절단 방어. 메인 시간표 쿼리와 동일 헬퍼.
-    const enr = await fetchInChunks<{ class_id: string; student: unknown }>(
+    // ⚠️ fetchInChunks는 414만 막고 청크 **안에서는** 페이지네이션을 안 한다 — 50반이라도 반당 20명이면
+    // 1000행을 넘겨 엑셀 명단이 조용히 잘린다(B2) → fetchAllPagedInChunks. 메인 시간표 쿼리와 동일 헬퍼.
+    const enr = await fetchAllPagedInChunks<{ class_id: string; student: unknown }>(
       classIds,
-      (chunk) =>
+      (chunk, from, to) =>
         supabase
           .from("enrollments")
           .select(`class_id, student:student_id ( name, grade )`)
           .in("class_id", chunk)
-          .is("end_date", null),
+          .is("end_date", null)
+          .order("id")
+          .range(from, to),
       50,
     );
     studentsByClass = new Map();
@@ -249,7 +281,8 @@ export async function buildTimetableWorkbook(): Promise<ExcelJS.Workbook> {
 
   // ─── 수강편집 시트 (라운드트립 import용 — enrollmentId 앵커, 운영자가 '반' 열만 편집) ───
   // 일반·수학 export 공유 단일 소스(enrollment-edit-sheet).
-  await appendEnrollmentEditSheet(wb, supabase);
+  // ⚠️ 이 시트는 과목 필터 없는 **테넌트 전체 수강 명단**(이름·학교·학년)이라 가져오기 권한자(full)에게만.
+  if (includeEditSheet) await appendEnrollmentEditSheet(wb, supabase);
 
   return wb;
 }

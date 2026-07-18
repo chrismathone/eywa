@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
+import { canManageTimetableImport, TIMETABLE_IMPORT_DENIED_MSG } from "./import-access";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -118,7 +119,8 @@ async function computeFreshFromFile(file: File): Promise<{ error: string } | { d
 export async function previewTimetableImport(formData: FormData): Promise<PreviewState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
+  // ⚠️ full만 — 미리보기도 전 테넌트 수강 명단(diff)을 돌려주므로 읽기 자체가 누수다. 시트 경로와 대칭.
+  if (!(await canManageTimetableImport(user.systemRole))) return { error: TIMETABLE_IMPORT_DENIED_MSG };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일을 선택해주세요" };
 
@@ -209,7 +211,8 @@ export async function applyTimetableImport(
 ): Promise<ApplyState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
+  // ⚠️ full만(시트 경로와 대칭) — applyDiff는 담당 반과 무관하게 아무 수강이나 이동·종료·생성한다.
+  if (!(await canManageTimetableImport(user.systemRole))) return { error: TIMETABLE_IMPORT_DENIED_MSG };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일이 없습니다 — 다시 선택 후 미리보기하세요" };
 

@@ -30,6 +30,13 @@ export function thisMonday(): Date {
 export async function buildMathTimetableBuffer(opts?: {
   teacherId?: string;
   referenceMonday?: Date;
+  /**
+   * 라운드트립 '수강편집' 시트 포함 여부(기본 true — cron 시트 push는 이 시트가 있어야 가져오기가 닫힌다).
+   * ⚠️ 그리드는 teacherId로 스코프돼도 이 시트는 **과목 전체 수강 명단**이라 스코프가 안 걸린다 →
+   * 담당(scoped) 사용자에겐 false로 끌 것(2026-07-17 적대 감사: 강사가 엑셀 버튼만 눌러도 같은 과목
+   * 전 학생 이름·학교·학년이 시트로 나갔다).
+   */
+  includeEditSheet?: boolean;
   /** 세션 없는 호출(cron 자동 시트 반영)용 주입 — admin 클라이언트 + tenant 명시 + 설정(쿠키 경로 회피). */
   db?: { supabase: Awaited<ReturnType<typeof createClient>>; tenantId: string; settings: TenantSettings };
 }): Promise<ArrayBuffer> {
@@ -65,6 +72,10 @@ export async function buildMathTimetableBuffer(opts?: {
     returnBufferOnly: true,
     // 라운드트립 import용 '수강편집' 시트를 직렬화 직전에 덧붙임(다운로드·구글시트 push 공유 버퍼).
     // 수학 파일엔 **수학 수강만** — 영어 학생이 섞이지 않게(과목별 시트 분리·cross-subject remove 방지).
-    appendSheets: (wb) => appendEnrollmentEditSheet(wb, supabase, "math", opts?.db?.tenantId),
+    // 담당(scoped) 사용자에겐 생략 — 이 시트만은 teacherId 스코프가 안 걸린다(과목 전체 명단).
+    appendSheets:
+      (opts?.includeEditSheet ?? true)
+        ? (wb) => appendEnrollmentEditSheet(wb, supabase, "math", opts?.db?.tenantId)
+        : undefined,
   })) as ArrayBuffer;
 }
