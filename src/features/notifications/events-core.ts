@@ -124,10 +124,16 @@ export function absenceDigestBody(events: readonly AbsenceEvent[]): string | nul
 export function groupEventsByTeacher<E extends { subjectKey: string }>(
   events: readonly E[],
   studentTeachers: ReadonlyMap<string, readonly string[]>,
+  /**
+   * 이벤트에서 학생 id를 뽑는 함수. 기본은 subjectKey(결석·성적 = 학생 단위 dedup).
+   * ⚠️ 미발송 보고서처럼 subjectKey가 학생이 아닌 이벤트(=보고서 id)는 반드시 이 추출자를 넘길 것 —
+   * 안 넘기면 map이 무매치라 담당 강사에게 조용히 0건 발송된다.
+   */
+  studentIdOf: (event: E) => string = (event) => event.subjectKey,
 ): Map<string, E[]> {
   const byTeacher = new Map<string, E[]>();
   for (const event of events) {
-    for (const teacherId of studentTeachers.get(event.subjectKey) ?? []) {
+    for (const teacherId of studentTeachers.get(studentIdOf(event)) ?? []) {
       const list = byTeacher.get(teacherId) ?? [];
       list.push(event);
       byTeacher.set(teacherId, list);
@@ -273,6 +279,67 @@ export function pruneCutoffs(nowMs: number): { eventsBefore: string; readNotific
     eventsBefore: new Date(nowMs - NOTIFICATION_EVENTS_RETENTION_DAYS * DAY_MS).toISOString(),
     readNotificationsBefore: new Date(nowMs - READ_NOTIFICATIONS_RETENTION_DAYS * DAY_MS).toISOString(),
   };
+}
+
+// ─────────── 미발송 보고서 이벤트 ───────────
+// "강사가 저장만 하고 발송을 안 누른 수업 보고서"(classnote_status IS NULL). 발송 가능 여부 판정은
+// **발송 콘솔과 같은 게이트**(isClassnoteAllowed too_old · isClassnoteSubjectEnabled 과목 opt-in ·
+// classnoteSendEnabled 스위치 · edutrix_import 제외 · revoked 제외)를 호출부가 통과시킨 행만 넘긴다 —
+// 게이트를 따로 구현하면 "보낼 수 없는 보고서"를 재촉하는 거짓 알림이 된다(#77 공용 게이트 정신).
+// ⚠️ '학부모 미확인(읽음)' 이벤트는 **의도적으로 만들지 않았다**: ClassNote 앱 읽음이 eywa DB로 안 오고
+// share_link_views는 발송분의 1.5%만 잡아(실측) 98%가 거짓 '미확인'이 된다. 읽음 동기화는 별도 프로젝트
+// (docs/classnote-read-sync-plan.md).
+
+/** 미발송 재촉 창(일). 이보다 오래된 건 재촉하지 않는다(무한 잔소리 방지 — too_old가 최종 방어). */
+export const UNSENT_REPORT_WINDOW_DAYS = 7;
+
+export type UnsentReportInput = {
+  reportId: string;
+  studentId: string;
+  studentName: string;
+  subjectLabel: string; // 한글 라벨(raw 과목 키 노출 금지)
+  reportDate: string; // YYYY-MM-DD
+};
+
+export type UnsentReportEvent = {
+  /** dedup 주체 = 보고서 id(학생이 아님 — groupEventsByTeacher에 studentIdOf 필수). */
+  subjectKey: string;
+  /**
+   * 보고서당 1회 고정 — 발송하면 status가 채워져 후보에서 빠지고, 안 하면 창(7일)을 벗어나 조용해진다.
+   * ⚠️ 알려진 한계(의도적): 공유링크 재발급·첨부 변경은 `classnote_status`를 null로 되돌리는데
+   * (onescreen `reissueShareLink`·`attachment-actions` CLASSNOTE_RESET), bucket이 고정이라 그 건은
+   * **재알림하지 않는다**. 스팸보다 조용한 미탐을 택한 것(적대 리뷰에서 major 아님으로 기각).
+   */
+  bucket: string;
+  studentId: string;
+  studentName: string;
+  subjectLabel: string;
+  reportDate: string;
+};
+
+/** 미발송 후보 행 → 이벤트(보고서당 1건). 날짜 오름차순(오래된 것 먼저 = 먼저 챙길 것). */
+export function buildUnsentReportEvents(rows: readonly UnsentReportInput[]): UnsentReportEvent[] {
+  return [...rows]
+    .sort((a, b) => a.reportDate.localeCompare(b.reportDate) || a.reportId.localeCompare(b.reportId))
+    .map((row) => ({
+      subjectKey: row.reportId,
+      bucket: "unsent",
+      studentId: row.studentId,
+      studentName: row.studentName,
+      subjectLabel: row.subjectLabel,
+      reportDate: row.reportDate,
+    }));
+}
+
+/** 미발송 이벤트 → 집계 본문(없으면 null). 한 건이면 학생·날짜, 여러 건이면 이름 집계 + 건수. */
+export function unsentReportDigestBody(events: readonly UnsentReportEvent[]): string | null {
+  if (events.length === 0) return null;
+  if (events.length === 1) {
+    const event = events[0];
+    return `${event.studentName} 학생 ${event.reportDate} ${event.subjectLabel} 수업 보고서가 저장만 되고 아직 발송되지 않았습니다.`;
+  }
+  const names = summarizeNames([...new Set(events.map((event) => event.studentName))]);
+  return `${names} 학생의 수업 보고서 ${events.length}건이 저장만 되고 아직 발송되지 않았습니다(${events[0].reportDate}~).`;
 }
 
 /** 성적 급락 개별/집계 본문. 한 명이면 과목·하락폭, 여러 명이면 이름 집계. */

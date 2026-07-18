@@ -6,6 +6,9 @@ import {
   buildFollowupEvents,
   buildGradeDropEvents,
   buildOutstandingEvents,
+  buildUnsentReportEvents,
+  unsentReportDigestBody,
+  UNSENT_REPORT_WINDOW_DAYS,
   outstandingDigestBody,
   outstandingTier,
   followupBody,
@@ -232,6 +235,69 @@ describe("summarizeNames", () => {
   it("max 초과분은 '외 N명'", () => {
     expect(summarizeNames(["a", "b", "c", "d", "e"])).toBe("a·b·c 외 2명");
     expect(summarizeNames(["a", "b"])).toBe("a·b");
+  });
+});
+
+describe("미발송 보고서 이벤트", () => {
+  const row = (reportId: string, studentId: string, studentName: string, reportDate: string) => ({
+    reportId,
+    studentId,
+    studentName,
+    subjectLabel: "수학",
+    reportDate,
+  });
+
+  it("보고서당 1건 — subjectKey=보고서 id, bucket 고정('unsent')", () => {
+    const events = buildUnsentReportEvents([row("r1", "s1", "김민준", "2026-07-15")]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ subjectKey: "r1", bucket: "unsent", studentId: "s1" });
+  });
+
+  it("날짜 오름차순(오래된 것 먼저) — 동일 날짜는 id로 안정 정렬", () => {
+    const events = buildUnsentReportEvents([
+      row("r2", "s2", "이서연", "2026-07-16"),
+      row("r1", "s1", "김민준", "2026-07-14"),
+      row("r3", "s3", "박지호", "2026-07-14"),
+    ]);
+    expect(events.map((e) => e.subjectKey)).toEqual(["r1", "r3", "r2"]);
+  });
+
+  it("⚠️ subjectKey는 학생이 아니라 보고서 — 담당 강사 그룹핑은 studentIdOf 추출자 필수", () => {
+    const events = buildUnsentReportEvents([row("r1", "s1", "김민준", "2026-07-15")]);
+    const teachers = new Map([["s1", ["t1"]]]);
+    // 추출자 없이 부르면(기본=subjectKey=보고서 id) 무매치 → 강사 0명(회귀 방지용 명시 검증)
+    expect(groupEventsByTeacher(events, teachers).size).toBe(0);
+    const grouped = groupEventsByTeacher(events, teachers, (e) => e.studentId);
+    expect([...grouped.keys()]).toEqual(["t1"]);
+    expect(grouped.get("t1")).toHaveLength(1);
+  });
+
+  it("본문 — 1건은 학생·날짜·과목, 여러 건은 이름 집계 + 건수(학생 중복 제거)", () => {
+    const one = unsentReportDigestBody(buildUnsentReportEvents([row("r1", "s1", "김민준", "2026-07-15")]));
+    expect(one).toContain("김민준");
+    expect(one).toContain("2026-07-15");
+    expect(one).toContain("수학");
+
+    const many = unsentReportDigestBody(
+      buildUnsentReportEvents([
+        row("r1", "s1", "김민준", "2026-07-14"),
+        row("r2", "s1", "김민준", "2026-07-15"), // 같은 학생 2건 → 이름은 1번만
+        row("r3", "s2", "이서연", "2026-07-16"),
+      ]),
+    );
+    expect(many).toContain("김민준·이서연");
+    expect(many).toContain("3건");
+    expect(many).toContain("2026-07-14"); // 가장 오래된 건 기준
+    expect(many).not.toContain("김민준·김민준");
+  });
+
+  it("빈 배열은 null(발송 스킵)", () => {
+    expect(unsentReportDigestBody([])).toBeNull();
+    expect(buildUnsentReportEvents([])).toEqual([]);
+  });
+
+  it("재촉 창 상수 고정(회귀 방지)", () => {
+    expect(UNSENT_REPORT_WINDOW_DAYS).toBe(7);
   });
 });
 
