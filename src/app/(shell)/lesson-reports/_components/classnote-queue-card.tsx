@@ -97,9 +97,25 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
             <span className="text-text-faint">발송 PC 미등록 — 로컬 워커 실행 필요</span>
           ) : (
             workers.map((w) => (
-              <span key={w.hostname} className={w.online ? "text-primary" : "text-danger"}>
-                발송 PC {w.hostname} · {w.online ? "온라인" : `오프라인(${w.lastSeenMinutes}분 전)`}
-              </span>
+              <div key={w.hostname} className="flex flex-col items-end gap-0.5">
+                <span className={w.online ? "text-primary" : "text-danger"}>
+                  발송 PC {w.hostname} · {w.online ? "온라인" : `오프라인(${w.lastSeenMinutes}분 전)`}
+                </span>
+                {/* 폴러별 마지막 실행(0123a) — 하트비트는 살아도 특정 폴러만 조용히 실패하는 걸 여기서 잡는다. */}
+                {w.results.length > 0 ? (
+                  <span
+                    className="text-text-faint max-w-[300px] truncate"
+                    title={w.results.map((r) => `${r.label} ${r.text}`).join(" · ")}
+                  >
+                    {w.results.map((r, i) => (
+                      <span key={r.key} className={r.error ? "text-danger" : undefined}>
+                        {i > 0 ? " · " : ""}
+                        {r.label} {r.text}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+              </div>
             ))
           )}
         </div>

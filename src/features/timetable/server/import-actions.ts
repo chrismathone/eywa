@@ -8,7 +8,7 @@ import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrat
 import { canManageTimetableImport, TIMETABLE_IMPORT_DENIED_MSG } from "./import-access";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { EDIT_SHEET_NAME, parseEditSheet, rowsToEditRows } from "@/features/timetable/import/parse";
 import { computeImportDiff, importDiffHash } from "@/features/timetable/import/diff";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -35,27 +35,48 @@ type Ctx = {
 
 async function loadContext(): Promise<Ctx> {
   const supabase = await createClient();
-  const enr = await fetchAllPaged<{
-    id: string;
-    class_id: string;
-    student_id: string;
-    start_date: string | null;
-    class?: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[];
-    student?:
-      | { name?: string; school?: string | null; grade?: string | null }
-      | { name?: string }[];
-  }>((from, to) =>
-    supabase
-      .from("enrollments")
-      .select(
-        "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
-      )
-      .is("end_date", null)
-      // ⚠️ order 없는 .range()는 페이지 경계에서 행이 누락·중복될 수 있다. 이 스냅샷은 diff의 '현재 DB'
-      // 쪽이라 누락 = 오판(중복 생성·잘못된 삭제)으로 이어진다 → id unique tie-break(batch.ts 계약).
-      .order("id")
-      .range(from, to),
-  );
+  // 셋은 서로의 결과를 안 쓰는 독립 조회 → 직렬 await 금지(B4). 미리보기·적용마다 도는 경로라
+  // 워터폴이면 라운드트립이 그대로 합산된다(구조 import의 loadStructureContext는 이미 Promise.all).
+  // ⚠️ 세 쿼리 모두 order 없는 .range()는 페이지 경계에서 행이 누락·중복될 수 있다. 이 스냅샷은 diff의
+  // '현재 DB' 쪽이라 누락 = 오판(중복 생성·잘못된 삭제)으로 이어진다 → id unique tie-break(batch.ts 계약).
+  const [enr, cls, stu] = await Promise.all([
+    fetchAllPaged<{
+      id: string;
+      class_id: string;
+      student_id: string;
+      start_date: string | null;
+      class?: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[];
+      student?:
+        | { name?: string; school?: string | null; grade?: string | null }
+        | { name?: string }[];
+    }>((from, to) =>
+      supabase
+        .from("enrollments")
+        .select(
+          "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
+        )
+        .is("end_date", null)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{ id: string; class_name: string; subject: string }>((from, to) =>
+      supabase
+        .from("classes")
+        .select("id, class_name, subject")
+        .eq("is_active", true)
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPaged<{
+      id: string;
+      name: string;
+      school: string | null;
+      grade: string | null;
+    }>((from, to) =>
+      supabase.from("students").select("id, name, school, grade").order("id").range(from, to),
+    ),
+  ]);
+
   const current: EnrollmentSnapshotRow[] = enr.map((e) => {
     const cls = (Array.isArray(e.class) ? e.class[0] : e.class) as
       | { class_name?: string; subject?: string }
@@ -76,28 +97,12 @@ async function loadContext(): Promise<Ctx> {
     };
   });
 
-  const cls = await fetchAllPaged<{ id: string; class_name: string; subject: string }>((from, to) =>
-    supabase
-      .from("classes")
-      .select("id, class_name, subject")
-      .eq("is_active", true)
-      .order("id")
-      .range(from, to),
-  );
   const classes: ClassRef[] = cls.map((c) => ({
     classId: c.id,
     className: c.class_name,
     subject: c.subject,
   }));
 
-  const stu = await fetchAllPaged<{
-    id: string;
-    name: string;
-    school: string | null;
-    grade: string | null;
-  }>((from, to) =>
-    supabase.from("students").select("id, name, school, grade").order("id").range(from, to),
-  );
   const students: StudentRef[] = stu.map((s) => ({
     studentId: s.id,
     name: s.name,
@@ -122,7 +127,20 @@ async function computeFreshFromFile(file: File): Promise<{ error: string } | { d
     return { error: "'수강편집' 시트를 찾을 수 없습니다 (eywa에서 내보낸 엑셀인지 확인)" };
   }
   const ctx = await loadContext();
-  return { diff: computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students) };
+  // stale-drift 보호(파일 경로) — 시트 경로가 `last_synced_at`을 쓰듯, 파일은 **워크북 생성 시각**을 쓴다.
+  // eywa 익스포터가 `wb.created`를 찍으므로 그 이후 시작된 수강은 이 파일이 알 수 없는 신규 →
+  // 삭제 후보에서 제외한다. 옛 코드는 이 인자를 안 넘겨(보호 0) 오래된 파일을 다시 올리면 그 사이
+  // 새로 만들어진 수강이 '시트에 없음' = 종료 대상이 됐다(적대 감사 F5).
+  // 엑셀에서 재저장돼 created가 늦춰져도 **보호 범위가 넓어지는** 안전한 방향이라 폴백이 위험하지 않다.
+  const createdAt =
+    wb.created instanceof Date && !Number.isNaN(wb.created.getTime())
+      ? wb.created.toISOString().slice(0, 10)
+      : null;
+  return {
+    diff: computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students, {
+      protectNewerThan: createdAt,
+    }),
+  };
 }
 
 /** 업로드 xlsx의 '수강편집' 시트를 파싱해 현재 DB와 diff. 읽기 전용(DB 미변경). */
@@ -330,8 +348,22 @@ async function applyDiff(
 
   // 2) 이동 — 일괄이동 RPC 재사용
   if (diff.moves.length > 0) {
+    // ⚠️ 분리등원(attendance_days) 승계 — RPC는 attendanceDays 미지정 시 '{}'(=전 요일)로 새 수강을 만든다.
+    // 그래서 목요일만 오던 학생이 시트 '반' 열 수정만으로 조용히 **전 요일 등원**이 됐다(적대 감사 M5).
+    // 시트엔 요일 열이 없어 사용자 의도를 알 수 없으므로 **원본 값을 그대로 승계**하는 것이 옳다.
+    // id(PK) 조회라 청크당 행 수 ≤ 청크 크기 → fetchInChunks로 충분(1000행 캡 무관).
+    const dayRows = await fetchInChunks<{ id: string; attendance_days: string[] | null }>(
+      diff.moves.map((m) => m.enrollmentId),
+      (chunk) => supabase.from("enrollments").select("id, attendance_days").in("id", chunk),
+    );
+    const daysByEnrollment = new Map(dayRows.map((r) => [r.id, r.attendance_days ?? []]));
+
     const { data, error } = await supabase.rpc("move_enrollments_batch", {
-      p_moves: diff.moves.map((m) => ({ enrollmentId: m.enrollmentId, newClassId: m.toClassId })),
+      p_moves: diff.moves.map((m) => ({
+        enrollmentId: m.enrollmentId,
+        newClassId: m.toClassId,
+        attendanceDays: daysByEnrollment.get(m.enrollmentId) ?? [],
+      })),
     });
     if (error) return { error: error.message, snapshotId };
     failed += ((data ?? []) as { ok: boolean }[]).filter((r) => !r.ok).length;

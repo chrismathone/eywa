@@ -22,7 +22,29 @@
   같은 박스의 킬스위치·발송 과목은 공지에도 적용돼 오독 위험이 실재했음). + 관리자 compose-face "곧 전송" 단정 완화.
 - ⚠️ **배포 순서 결합**(리뷰 borderline): 앱 토스트는 Vercel 즉시, 워커 게이트는 연동 PC zip 적용 후 —
   **시간대 설정 입력은 zip 적용+워커 재시작 뒤에**([예약발송-적용-안내.md](../scripts/_classnote/예약발송-적용-안내.md)).
-  zip 번들 = 예약발송+댓글알림(07-16)+읽음동기화(07-18) 통합(`eywa-발송PC-예약발송외통합-20260719.zip`).
+  zip 번들 = 예약발송+댓글알림(07-16)+읽음동기화(07-18)+워커 관측성(0123a) 통합(`eywa-발송PC-예약발송외통합-20260719.zip`).
+
+### 시간표 적대 전수검사 — 잔여 확정 결함 전량 수정 (2026-07-18 2차) — ✅ tsc0/lint0/test1590/build✓
+1차(강사 스코프+절단) 반영 후 원장 지시 "나머지 확정 결함도 전부 수정" → 4그룹 순차 수정 + 적대 리뷰(5렌즈) → 리뷰가 잡은 내 회귀 3건 재수정. 커밋 5개(fea43dc7·74298640·e7773a14·22ab47dc·7d2b8b55).
+- **A 서버 정합 6**: ① M6 마지막날 off-by-one — 종료 규약을 [`isEnrollmentEndedOn`](../src/features/enrollments/eligibility.ts) 순수함수로 **단일화**(전출=[start,end) 배타 / 일반=종료일 포함, 회귀 핀 테스트 6) — 주간뷰가 `end<=ref`로 따로 구현해 일반 종료 학생이 마지막 날 '오늘 일정'=재원·'주간뷰'=퇴원으로 갈렸었다. ② M7 aliveRows `start_date<=ref` 하한(미래 수강이 퇴원 줄을 지움·강사뷰 증발) ③ M4 `changeClassLevel` scoped=담당 반 강제 ④ M5 import 이동 attendance_days 승계(전 요일 리셋 차단) ⑤ F6 `moveEnrollmentsBatch` 과거 적용일 거부 ⑥ F5 파일 import `protectNewerThan=wb.created`(낡은 파일 재적용이 신규 수강을 종료하던 것).
+- **B 편집 상태 3**: ① F1 과거주 편집 누수(#77) — `canEdit`을 provider에 넘겨 `editing=canEdit&&raw` **파생 강제**(컨트롤 숨김만으론 soft nav에 state가 살아남아 과거주 그리드가 편집 가능했다) + 저장 경로 가드. ② F2 적용일 앵커 — 큐 항목에 큐잉 의도 기록, 저장은 `scheduledDate ?? 앵커`(보는 주 아님)·주 불일치 시 새 큐잉 차단+배너. ③ F7 beforeunload 미저장 가드.
+- **C 성능·정리 4**: loadContext 직렬 3쿼리→`Promise.all`(B4) · getTodaySchedule raw `.in()`→`fetchAllPagedInChunks`(414) · 죽은 금지상수 `SUBJECT_THEMES` 삭제 · M8 수학 엑셀 라벨 `labelOf("math")` 배선.
+- **D UX 8**: loading 스켈레톤 2줄(CLS 제거) · 과목칩 flex-wrap+`hideEmptyDays` 보존 · 강사뷰 '미사용 요일' **쿠키 지속**([prefs-sync.tsx](../src/app/(shell)/timetable/_components/prefs-sync.tsx) — 창은 깨끗한 URL로 열려 매번 초기화됐다, #75 회피 위해 쿠키) · join-miss `"?"`→"(삭제된 반)" · hover 카드 max-height 클램프 · 무색 강사 sticky 헤더 불투명 폴백 · 요일맵 3파일 중복→`DAY_LABEL` 단일화.
+- **적대 리뷰 확정 3(내 회귀) 재수정(7d2b8b55)**: 🔴 emptydays **토글 사망** — buildHref가 hide만 직렬화해 "없음=쿠키 참조"와 충돌, 쿠키 hide 후 show로 못 돌아감 → **양방향 명시 직렬화** · 유령 잠금 — weekMismatch가 raw 큐 기준이라 net no-op 큐가 "0건 대기" 잠금 → compressed 기준+죽은 배치 purge · 자정 저장 거부 — 즉시 이동을 절대 날짜로 얼려 자정 후 F6에 걸림 → **의도 인코딩**(`effectiveOn: null=즉시|날짜=예약`, 즉시는 RPC 미지정=current_date).
+- ⏳ 보류: 기본뷰 빈 교시 압축(222px 밴드)은 신규 기능(통합뷰 '1시간 단위' 이식)이라 버그수정 범위에서 제외.
+### 워커 관측성 — 폴러별 마지막 결과를 eywa로 (2026-07-19, 0123a) — ✅ tsc0/lint0/test75
+원장 지적("워처 로그 eywa 기록 안 해도 되나"). 실태: 보고서별 성패(`classnote_*`)·워커 생존(하트비트→큐 카드
+온라인/오프라인)·읽음(`classnote_read_at`)은 이미 DB에 있으나, **폴러별 마지막 실행·요약·오류는 연동 PC 파일
+로그에만** 남아 하트비트는 살아도 특정 폴러(읽음·댓글 등)만 조용히 실패하면 앱에서 안 보였다.
+- **0123a** `classnote_workers.last_results jsonb` — 데몬이 매 폴 하트비트에 폴러별 마지막 결과 동봉
+  (`{queue|notice|provision|posts|comments|reads: {at, 숫자요약|error(200자)}}`). **활동/오류 시에만 갱신**
+  (15초마다 at만 바뀌는 노이즈 방지). 이력 아님 — 최신 상태만(이력은 watch.log 유지).
+- **표시** = 발송 큐 카드 워커 줄 아래 "발송 12:30 · 성공 2 · 실패 1 · 읽음 12:30 · 매칭 3"(오류는 붉게,
+  truncate+title). 변환은 [worker-results.ts](../src/features/report-admin/worker-results.ts) 순수함수(Vitest 5) —
+  미등록 폴러 키·시각 없는 항목 스킵(raw 키 누출 방지), 구워커(null)는 빈 배열 하위호환.
+- ⚠️ **연동 PC zip 재적용 필요**(바탕화면 `eywa-연동PC-전체-20260718.zip` 갱신본 — 같은 절차: 풀고 지정.bat).
+  재적용 전까지는 카드에 새 줄이 안 뜰 뿐 기존 기능 전부 정상(컬럼 nullable·insert 컬럼 명시라 구워커 무영향).
+  → **07-19 예약발송 통합 zip(`eywa-발송PC-예약발송외통합-20260719.zip`)이 이 갱신본을 포함·대체**(그걸 적용하면 끝).
 
 ### ClassNote 학부모 읽음 동기화 2·3단계 (2026-07-18, 0122a) — ✅ tsc0/lint0/test37 + 실E2E 165건 기록
 1단계 조사(ClassNote가 `read_by_parent.date_read`를 피드 행에 이미 노출)를 실제 파이프라인으로 연결.

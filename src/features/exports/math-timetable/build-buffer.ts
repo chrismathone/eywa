@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getWeeklyScheduleWithStudents } from "@/features/timetable/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { reportWarning } from "@/lib/observability/report-error";
@@ -60,6 +61,9 @@ export async function buildMathTimetableBuffer(opts?: {
   const params = assembleMathParams(slots, {
     referenceMonday: opts?.referenceMonday ?? thisMonday(),
     teacherColors,
+    // 과목 라벨은 학원설정 단일 소스 — 안 넘기면 assemble이 "수학"으로 하드코딩 폴백해, 원장이 과목명을
+    // 바꿔도 시트명·파일명·요약행이 그대로 "수학"이었다(적대 감사 M8). key는 math로 고정(이 익스포터 전용).
+    subjectLabel: buildSubjectMaps(settings.operations.subjects).labelOf("math"),
     // 테넌트 교시 설정(과목 전용 포함) — 커스텀 교시 시각 슬롯이 엑셀/시트에서 무에러 증발하지 않게(적대리뷰 2026-07-06).
     periodsConfig: settingsToPeriodsConfig(settings.operations),
     onSkippedSlots: (count) =>

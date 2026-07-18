@@ -1,28 +1,11 @@
-/* eslint-disable -- ijw-calander gridUtils.ts 충실 이식(vendored). 로직 무변경. import만 eywa-로컬로. */
+// ijw-calander gridUtils.ts 충실 이식(vendored). 로직 무변경. import만 eywa-로컬로.
+//
+// ⚠️ 여기 있던 `SUBJECT_THEMES`/`getSubjectTheme`(과목 한글명 → 색 하드코딩 맵)은 삭제했다(2026-07-17
+// 적대 감사). 어디서도 import하지 않는 죽은 코드였고, 운영 enum(과목 라벨·색)을 코드에 박는 것은
+// 금지 패턴이라 그대로 두면 나중에 누가 집어 쓸 위험만 있었다.
+// 과목 색이 필요하면 학원설정 단일 소스 `buildSubjectMaps(settings.operations.subjects).colorOf(key)`를 쓸 것.
 import type { TimetableClass } from './types';
 import { convertLegacyPeriodId } from './constants';
-
-/**
- * 과목별 테마 색상 (styleUtils.ts SUBJECT_COLORS 기반)
- * - 수학: 골드 (#fdb813)
- * - 영어: 네이비 (#081429)
- * - 국어: 레드 (#ef4444)
- * - 과학: 에메랄드 (#10b981)
- *
- * Tailwind JIT는 동적 클래스를 지원하지 않으므로 정적 매핑 사용
- */
-const SUBJECT_THEMES: Record<string, { bg: string; text: string; studentText: string; border: string; header: string }> = {
-    '수학': { bg: 'bg-[#fef9e7]', text: 'text-[#fdb813]', studentText: 'text-gray-800', border: 'border-[#e5a60f]', header: 'bg-[#fdb813] text-[#081429]' },
-    '영어': { bg: 'bg-[#f0f4f8]', text: 'text-[#081429]', studentText: 'text-gray-800', border: 'border-[#1a2845]', header: 'bg-[#081429] text-white' },
-    '국어': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]', studentText: 'text-gray-800', border: 'border-[#dc2626]', header: 'bg-[#ef4444] text-white' },
-    '과학': { bg: 'bg-[#ecfdf5]', text: 'text-[#10b981]', studentText: 'text-gray-800', border: 'border-[#059669]', header: 'bg-[#10b981] text-white' },
-};
-
-const DEFAULT_THEME = { bg: 'bg-[#f9fafb]', text: 'text-[#6b7280]', studentText: 'text-gray-800', border: 'border-[#4b5563]', header: 'bg-[#6b7280] text-white' };
-
-export const getSubjectTheme = (subject: string) => {
-    return SUBJECT_THEMES[subject] || DEFAULT_THEME;
-};
 
 // Get classes for cell
 export const getClassesForCell = (

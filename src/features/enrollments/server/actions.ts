@@ -214,6 +214,10 @@ export async function moveEnrollmentsBatch(
 
   const eff =
     effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ? effectiveDate : null;
+  // ⚠️ 과거 적용일 거부 — RPC는 이 값을 **옛 수강의 end_date와 새 수강의 start_date에 그대로** 쓰므로,
+  // 과거 날짜를 넣으면 이미 지난 출결·청구 구간을 소급 조작한다. 클라 `min={dateFloor}`는 UI일 뿐
+  // 게이트가 아니다(#77 — 화면에서만 잠근 것은 잠근 게 아니다). 2026-07-17 적대 감사 F6.
+  if (eff && eff < kstToday()) return { error: "적용일은 오늘 이후여야 합니다" };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("move_enrollments_batch", {
     p_moves: moves.map((m) => ({

@@ -14,6 +14,7 @@ import {
   type ClassInterval,
 } from "@/features/timetable/lib/ten-minute-grid";
 import type { TeacherColorMap } from "@/features/timetable/lib/class-grid";
+import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import {
   ENGLISH_SHEET_TEACHERS,
   compareSheetTeachers,
@@ -29,9 +30,7 @@ import { TeacherChip } from "./teacher-chip";
 // - 셀: 반명+방 칩(TeacherChip) — 클릭하면 그 자리에서 재원 학생 명단으로 전환(다시 클릭=복귀).
 //   한 수업이 2교시 연속이어도 시트처럼 **교시별 셀 2개**(슬롯=블록 1:1, 접기 없음 — 검은 교시선 미러).
 
-const DAY_LABEL: Record<string, string> = {
-  mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
-};
+// 요일 라벨은 공용 단일 소스(split-attendance) — 파일마다 같은 맵을 다시 적지 않는다.
 const DAY_ORDER: DayOfWeek[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_OFFSET: Record<DayOfWeek, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
 
@@ -223,7 +222,10 @@ export function TeacherGridView({
               <th
                 key={t.name}
                 colSpan={t.cols.reduce((a, c) => a + c.laneCount, 0)}
-                className={`sticky top-0 z-20 border-b px-2 py-1 text-center ${TEACHER_EDGE} ${GRID}`}
+                // ⚠️ 색이 없는 강사(색 미지정 + 영어 시트 강사 목록 밖)면 th 자체가 투명이라, sticky 헤더
+                // 아래로 흐르는 본문이 px-2 py-1 패딩 링 사이로 비쳐 보였다(#74와 같은 부류). 안쪽 span만
+                // bg를 갖고 있었기 때문 → th에도 불투명 배경 폴백.
+                className={`sticky top-0 z-20 border-b px-2 py-1 text-center ${t.color ? "" : "bg-bg-soft"} ${TEACHER_EDGE} ${GRID}`}
                 style={{
                   height: HEAD_TEACHER_H,
                   ...(t.color ? { backgroundColor: t.color.bg, color: t.color.text } : {}),
