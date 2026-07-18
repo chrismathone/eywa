@@ -46,6 +46,8 @@ type EdutrixReport = {
   homework_today: string | null;
   makeup_class: boolean | null;
   classnote_sent_at: string | null;
+  /** ClassNote 본문 공유링크의 uuid — 읽음 동기화 매칭 키(0122a). */
+  share_token: string | null;
   classes: NameRef;
 };
 const one = (v: NameRef): { name: string } | null => (Array.isArray(v) ? (v[0] ?? null) : v);
@@ -78,6 +80,9 @@ function contentOf(rep: EdutrixReport) {
     notes: rep.notice || null,
     homework_today: rep.homework_today || null,
     makeup: !!rep.makeup_class,
+    // ClassNote 읽음 동기화 매칭 키(0122a) — ClassNote 본문의 edutrix.vercel.app/share/{uuid}가 이 값이다.
+    // contentOf에 넣어 두면 기존 행도 다음 동기화에서 diff-패치로 자동 백필된다(별도 백필 스크립트 불요).
+    edutrix_share_token: rep.share_token || null,
   };
 }
 
@@ -120,7 +125,7 @@ export async function GET(req: Request) {
         edu
           .from("reports")
           .select(
-            "id, date, student_id, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, homework_today, makeup_class, classnote_sent_at, classes(name)",
+            "id, date, student_id, progress, exam_info, assignment_score, textbook_name, study_attitude, notice, homework_today, makeup_class, classnote_sent_at, share_token, classes(name)",
           )
           .gte("date", windowStart)
           .order("date", { ascending: false })
@@ -138,7 +143,7 @@ export async function GET(req: Request) {
         admin
           .from("lesson_reports")
           .select(
-            "id, edutrix_report_id, progress, exam_info, homework_score, teacher_name, textbook, attitude, notes, homework_today, makeup, classnote_sent_at, classnote_status",
+            "id, edutrix_report_id, progress, exam_info, homework_score, teacher_name, textbook, attitude, notes, homework_today, makeup, classnote_sent_at, classnote_status, edutrix_share_token",
           )
           .eq("tenant_id", TENANT)
           .eq("source", "edutrix_import")

@@ -217,6 +217,15 @@ async function fetchWindow(browser, opts, log) {
 }
 
 /**
+ * 읽음 동기화(0122a)용 창 조회 — 유지 세션·페이지네이션·재로그인을 그대로 재사용한다.
+ * ⚠️ 워터마크를 쓰지 않는다: 읽음은 발송 뒤 며칠에 걸쳐 채워지므로 "본 데까지" 건너뛰면 영영 못 줍는다.
+ * (중복 갱신 비용은 SQL의 `classnote_read_at is null` 조건이 흡수한다.)
+ */
+export async function fetchReadWindow(browser, { maxAgeDays = 14, label = "읽음" } = {}, log = console.log) {
+  return fetchWindow(browser, { useWatermark: false, maxPages: COMMENT_MAX_PAGES, maxAgeDays, label }, log);
+}
+
+/**
  * 게이트 재료(보드 목록 · 예외 등재 · 동명 판정 우주) — **알릴 후보가 실제로 있을 때만** 부른다.
  * 두 폴러가 공유해서 한쪽만 취약해지는 구조를 막는다.
  */

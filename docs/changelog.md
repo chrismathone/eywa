@@ -12,6 +12,38 @@
 - **D UX 8**: loading 스켈레톤 2줄(CLS 제거) · 과목칩 flex-wrap+`hideEmptyDays` 보존 · 강사뷰 '미사용 요일' **쿠키 지속**([prefs-sync.tsx](../src/app/(shell)/timetable/_components/prefs-sync.tsx) — 창은 깨끗한 URL로 열려 매번 초기화됐다, #75 회피 위해 쿠키) · join-miss `"?"`→"(삭제된 반)" · hover 카드 max-height 클램프 · 무색 강사 sticky 헤더 불투명 폴백 · 요일맵 3파일 중복→`DAY_LABEL` 단일화.
 - **적대 리뷰 확정 3(내 회귀) 재수정(7d2b8b55)**: 🔴 emptydays **토글 사망** — buildHref가 hide만 직렬화해 "없음=쿠키 참조"와 충돌, 쿠키 hide 후 show로 못 돌아감 → **양방향 명시 직렬화** · 유령 잠금 — weekMismatch가 raw 큐 기준이라 net no-op 큐가 "0건 대기" 잠금 → compressed 기준+죽은 배치 purge · 자정 저장 거부 — 즉시 이동을 절대 날짜로 얼려 자정 후 F6에 걸림 → **의도 인코딩**(`effectiveOn: null=즉시|날짜=예약`, 즉시는 RPC 미지정=current_date).
 - ⏳ 보류: 기본뷰 빈 교시 압축(222px 밴드)은 신규 기능(통합뷰 '1시간 단위' 이식)이라 버그수정 범위에서 제외.
+### 워커 관측성 — 폴러별 마지막 결과를 eywa로 (2026-07-19, 0123a) — ✅ tsc0/lint0/test75
+원장 지적("워처 로그 eywa 기록 안 해도 되나"). 실태: 보고서별 성패(`classnote_*`)·워커 생존(하트비트→큐 카드
+온라인/오프라인)·읽음(`classnote_read_at`)은 이미 DB에 있으나, **폴러별 마지막 실행·요약·오류는 연동 PC 파일
+로그에만** 남아 하트비트는 살아도 특정 폴러(읽음·댓글 등)만 조용히 실패하면 앱에서 안 보였다.
+- **0123a** `classnote_workers.last_results jsonb` — 데몬이 매 폴 하트비트에 폴러별 마지막 결과 동봉
+  (`{queue|notice|provision|posts|comments|reads: {at, 숫자요약|error(200자)}}`). **활동/오류 시에만 갱신**
+  (15초마다 at만 바뀌는 노이즈 방지). 이력 아님 — 최신 상태만(이력은 watch.log 유지).
+- **표시** = 발송 큐 카드 워커 줄 아래 "발송 12:30 · 성공 2 · 실패 1 · 읽음 12:30 · 매칭 3"(오류는 붉게,
+  truncate+title). 변환은 [worker-results.ts](../src/features/report-admin/worker-results.ts) 순수함수(Vitest 5) —
+  미등록 폴러 키·시각 없는 항목 스킵(raw 키 누출 방지), 구워커(null)는 빈 배열 하위호환.
+- ⚠️ **연동 PC zip 재적용 필요**(바탕화면 `eywa-연동PC-전체-20260718.zip` 갱신본 — 같은 절차: 풀고 지정.bat).
+  재적용 전까지는 카드에 새 줄이 안 뜰 뿐 기존 기능 전부 정상(컬럼 nullable·insert 컬럼 명시라 구워커 무영향).
+
+### ClassNote 학부모 읽음 동기화 2·3단계 (2026-07-18, 0122a) — ✅ tsc0/lint0/test37 + 실E2E 165건 기록
+1단계 조사(ClassNote가 `read_by_parent.date_read`를 피드 행에 이미 노출)를 실제 파이프라인으로 연결.
+- **매칭 키가 이 작업의 핵심**: 학부모에게 실제 발송하는 주체는 eywa가 아니라 **edutrix**다(본문이
+  `edutrix.vercel.app/share/{uuid}`). 그 uuid = edutrix `reports.share_token`이고 eywa가 갖고 있던
+  `edutrix_report_id`(=edutrix reports.id)와 **다른 값**이라 그대로는 못 이었다. 실측 체인:
+  ClassNote→edutrix.share_token **77/77(100%)**, edutrix.id→eywa.edutrix_report_id **64/77(83%**, 나머지는 당일분 미임포트).
+  → **0122a** `lesson_reports.edutrix_share_token` 신설 + edutrix-sync가 `contentOf`에 실어 임포트
+  (기존 행도 다음 동기화에서 diff-패치로 **자동 백필** — 별도 백필 스크립트 불요). `classnote_read_at`도 함께.
+- **워커(연동 PC)**: `classnote-read-core.mjs` 신설 — 순수함수(`extractReadToken`·`buildReadUpdates`·
+  `summarizeReadScan`, Vitest 12) + `pollReportReadsOnce`(30분 가드). edutrix·eywa 두 링크 형태를 모두 파싱해
+  각각 `edutrix_share_token`·`share_token`으로 조인. `feed-core.fetchReadWindow`가 기존 세션·페이지네이션 재사용.
+  ⚠️ **워터마크 미사용** — 읽음은 발송 뒤 며칠에 걸쳐 채워져 "본 데까지" 건너뛰면 영영 못 줍는다(창 14일 매번 재조회,
+  중복 비용은 SQL `classnote_read_at is null`이 흡수). ClassNote 쓰기 0(GET만)이라 `--post`와 무관하게 동작.
+- **실E2E(프로덕션)**: 토큰 319건 채움 → `--apply` → 피드 2,400건·학원발송 2,308(읽음 1,733/미읽음 575) →
+  **165건 기록**(edutrix 161 + eywa 자체발송 4 = 두 경로 검증). 미확인 이벤트 후보 117건 확보.
+  `링크없음` 1,444건은 **정상**(강사 직접 알림장·학원 공지 = 수업보고서 아님) — 코드 주석에 기록.
+- ⚠️ `/api/v1/reports/{id}/read/`(GET 405 = POST 추정)는 **호출 금지**(학원 계정이 읽음 표시를 남길 위험).
+- **연동 PC 배포 대기**: `D:/tmp/eywa-읽음동기화-20260718.zip` + `읽음동기화-적용-안내.md`(워처 재시작만 하면 끝).
+- 남은 것 = **4단계 `parent_unread_report` 이벤트**(임계 N일은 데이터 1주 쌓인 뒤 결정).
 
 ### 시간표 적대 전수검사 — 강사 스코프 우회 2건 + 청크당 1000행 절단 (2026-07-18) — ✅ tsc0/lint0/test1578/build✓
 멀티에이전트 6방향(정합·성능 B1~B7·테넌트권한·하드코딩·편집/가져오기·UX) 적대 감사 → 확정 HIGH 2 + MED 1 **수정**(나머지 확정분은 보고만, 원장 결정 대기).
