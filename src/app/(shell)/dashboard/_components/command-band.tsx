@@ -11,7 +11,7 @@ const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
   weekday: "long",
 });
 
-import type { ReactNode } from "react";
+import { BigStat } from "@/components/atoms/big-stat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { EnrollmentChangeModal } from "./enrollment-change-modal";
 import type { EnrollmentChangeStudent } from "@/features/dashboard/server/queries";
@@ -77,13 +77,13 @@ export function CommandBand({
         </p>
       </div>
 
-      {/* KPI 카드 그리드 */}
+      {/* KPI 카드 그리드 — BigStat(문법 ②) 공용 atom */}
       <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
         {enrollment ? (
-          <KpiCard
+          <BigStat
             label="재원생"
-            icon="users"
-            iconTone="bg-blue-soft text-blue"
+            icon={<EyIcon name="users" size={16} />}
+            tone="blue"
             value={enrollment.count.toLocaleString("ko-KR")}
             unit="명"
             sub={
@@ -98,10 +98,10 @@ export function CommandBand({
           />
         ) : null}
         {attendance ? (
-          <KpiCard
+          <BigStat
             label="오늘 출석률"
-            icon="check"
-            iconTone="bg-primary-soft text-primary"
+            icon={<EyIcon name="check" size={16} />}
+            tone="primary"
             value={attendance.rate == null ? "—" : String(Math.round(attendance.rate))}
             unit={attendance.rate == null ? "" : "%"}
             sub={attendance.asOf ?? undefined}
@@ -109,17 +109,17 @@ export function CommandBand({
         ) : null}
         {billing ? (
           <>
-            <KpiCard
+            <BigStat
               label="수납률"
-              icon="chart"
-              iconTone="bg-gold-soft text-gold"
+              icon={<EyIcon name="chart" size={16} />}
+              tone="gold"
               value={billing.paymentRate == null ? "—" : String(Math.round(billing.paymentRate))}
               unit={billing.paymentRate == null ? "" : "%"}
             />
-            <KpiCard
+            <BigStat
               label="이번 달 미수"
-              icon="wallet"
-              iconTone={billing.outstanding > 0 ? "bg-danger-soft text-danger" : "bg-bg-soft text-text-dim"}
+              icon={<EyIcon name="wallet" size={16} />}
+              tone={billing.outstanding > 0 ? "danger" : "neutral"}
               value={outstandingDisplay.value}
               unit={outstandingDisplay.unit}
               valueClass={billing.outstanding > 0 ? "text-danger" : undefined}
@@ -140,44 +140,3 @@ export function formatOutstandingAmount(amount: number): { value: string; unit: 
   };
 }
 
-function KpiCard({
-  label,
-  icon,
-  iconTone,
-  value,
-  unit,
-  valueClass,
-  sub,
-}: {
-  label: string;
-  icon: Parameters<typeof EyIcon>[0]["name"];
-  iconTone: string;
-  value: string;
-  unit?: string;
-  /** 값 강조색(미수 danger 등). 기본은 잉크. */
-  valueClass?: string;
-  sub?: ReactNode;
-}) {
-  return (
-    <div className="bg-card shadow-card rounded-2xl p-4 xl:p-5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-text-dim text-[13px] font-medium">{label}</span>
-        <span
-          className={`${iconTone} flex size-8 shrink-0 items-center justify-center rounded-xl`}
-          aria-hidden="true"
-        >
-          <EyIcon name={icon} size={16} />
-        </span>
-      </div>
-      <div className="mt-2.5 flex items-baseline gap-1">
-        <span
-          className={`num text-[27px] font-extrabold leading-none tracking-tight ${valueClass ?? "text-foreground"}`}
-        >
-          {value}
-        </span>
-        {unit ? <span className="text-text-dim text-[13px] font-medium">{unit}</span> : null}
-      </div>
-      <div className="text-text-faint mt-1.5 min-h-[17px] text-[12px]">{sub ?? null}</div>
-    </div>
-  );
-}

@@ -287,6 +287,14 @@
     line-height: 1.5;
     color: var(--text-dim);
   }
+  /* editorial-eyebrow — Editorial 문법 ①의 상단 소라벨(한글 전제, PageHeader가 캡슐화).
+     ⚠️ 기존 .eyebrow(uppercase 영문 전제, 64파일 소비)는 호환용으로 불변 — 전역 재정의 금지. */
+  .editorial-eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary);
+  }
+
   /* micro — 라벨·메타. (2026-07-19 de-mono: 구 JetBrains Mono 11px 700 uppercase 자간 1.5px가
      "코딩 틱함"의 진원지라 Pretendard 톤으로 전환. mono는 .tabular/시간·숫자 데이터에만.) */
   .micro {

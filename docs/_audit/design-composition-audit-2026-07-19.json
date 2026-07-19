@@ -1,0 +1,543 @@
+{
+  "summary": "앱 전 화면의 현재 디자인 구성을 읽기 전용으로 감사 — injaewon.blog 문법 이식 계획 재료",
+  "agentCount": 10,
+  "logs": [],
+  "result": [
+    {
+      "screen": "students (학생목록 /students + 학생 상세 /students/[id])",
+      "layoutSummary": "학생목록은 상단에 재원 총원 빅넘버+과목별 미니바를 담은 히어로 스탯 카드(EnrolledStatCard), 그 아래 드롭다운 6종+검색 필터바(StudentFilterBar), 결과 카운트+엑셀/가져오기/신규 버튼 툴바, 그리고 rounded-md 카드 안의 7열 데이터 테이블+페이지네이션으로 구성된다. 페이지 자체엔 제목·헤드라인이 없어 필터바와 테이블이 바로 시작된다. 학생 상세는 BackLink → eyebrow(\"학생\")+display 이름+학년·학교 메타의 헤더(우측에 상태 배지+액션 버튼 클러스터) → 탭 내비(개요/수업/성적/진도/출결/상담/메모/수납/타임라인) → 탭 콘텐츠. 개요 탭은 30일 출결 KPI 카드(4스탯 그리드) + CSS columns 마조너리로 프로필·수업·성적·수납·상담·메모 카드를 패킹한다. 카드 라운드는 전부 rounded-md(작음), 패딩 p-5로 밀도 높음.",
+      "coderTickSignals": [
+        "globals.css:213 — .eyebrow가 uppercase+letter-spacing(영문 전제 코딩틱, 한글엔 uppercase 무의미하나 톤은 소문자 라벨 위계로 활용 중)",
+        "globals.css:292 — .micro 11px text-faint 잔글씨가 테이블 헤더·카운트·라벨 전반에 밀집",
+        "students/_components/student-import-dialog.tsx:157,177 — font-mono text-[12px] 통계·행번호",
+        "students/[id]/_tabs/student-period-grid.tsx:118,125,154 — font-mono text-[9px]/[10px] 교시·시간·강의실 잔글씨",
+        "students/[id]/_tabs/consultations-tab.tsx:139-202 — text-[10px] 배지·메타가 6곳 밀집(위계 없는 잔글씨 나열)",
+        "students/[id]/_tabs/attendance-view.tsx:182,188 / timeline-view.tsx:120 / memo-item.tsx:90,99 / billing-view.tsx:299 / overview-tab.tsx:227 — text-[10px] 마이크로 배지 산재",
+        "students/[id]/_components/delete-grade-button.tsx:34, end-enrollment-button.tsx:35 — 에러를 text-[10px] 인라인 잔글씨로",
+        "students/page.tsx:186-192 — 테이블 헤더 전부 micro(11px faint)로 위계 평탄",
+        "overview-tab.tsx:82-120 — 프로필 dl에 mono 플래그 다수(연락처·날짜 mono 표기)"
+      ],
+      "refactorOpportunities": [
+        "students/page.tsx:118-145 — 페이지 최상단에 eyebrow('학생 관리')→큰 헤드라인('학생목록')→서브텍스트 위계 헤더가 아예 없음. injaewon 문법 ①을 도입해 히어로 카드 위에 섹션 헤더 추가",
+        "students/_components/enrolled-stat-card.tsx:20 — 이미 빅 스탯(34px 숫자) 구조가 있으므로 rounded-md border p-5 → rounded-3xl 소프트 패널(bg-soft, 보더 제거)로 승격하고 '재원' micro 라벨을 eyebrow 위계로. 과목 미니바는 문법 ②의 빅 스탯 행(큰 숫자+작은 라벨)로 재배열 가능",
+        "students/page.tsx:182-244 — 7열 테이블을 문법 ⑤ 구조화 행 목록으로 전환 여지: 이름 bold(이미 있음)+학교·학년 dim 서브라인을 첫 열에 합치고, 우측에 연락처·액션 정렬. 최소한 rounded-md → rounded-2xl/3xl + row py 여백 확대(py-3→py-3.5~4)로 여백 리듬(⑥)",
+        "students/page.tsx:145-171 — 툴바 버튼(엑셀/가져오기/신규)을 알약 버튼(⑦, rounded-full) 스타일로 통일",
+        "students/[id]/page.tsx:84-128 — 헤더는 이미 eyebrow→display 위계를 갖춤(문법 ① 준수 사례). 다만 상태 배지(103-109 인라인 rounded-md 배지)를 알약(rounded-full Pill)으로, border-b 구분 대신 여백 리듬으로",
+        "students/[id]/_tabs/overview-tab.tsx:57-72 — 30일 출결 KPI 카드가 빅 스탯 후보의 정석 자리: Stat 컴포넌트를 큰 숫자(text-3xl)+eyebrow 라벨로 키우고 카드를 rounded-3xl 소프트 패널로",
+        "students/[id]/_tabs/overview-tab.tsx:75-120 — 마조너리 카드들(rounded-md border p-5)을 rounded-3xl 소프트 패널로 통일, 카드 h2(text-sm font-semibold)를 eyebrow+헤드라인 2줄 위계로",
+        "students/[id]/_tabs/consultations-tab.tsx:139-202 — text-[10px] 배지 나열을 이름 bold+설명 dim+우측 날짜/액션의 구조화 행 목록(⑤)으로 재구성",
+        "students/[id]/_components/tabs-nav — 탭을 알약 세그먼트(⑦)로 스타일 통일 검토"
+      ],
+      "imageOpportunities": [
+        "students/page.tsx:173-179 — EmptyState(결과 없음)가 이미 image prop('search'/'students')을 받음: 여기에 injaewon 톤의 일러스트를 제대로 넣을 자리",
+        "students/_components/enrolled-stat-card.tsx — 히어로 스탯 카드 우측/배경에 교실·학생 소재의 부드러운 일러스트 배경 여지(밀도 유지 조건이라 서브틀하게)",
+        "students/[id]/page.tsx:84-128 — 학생 상세 헤더가 텍스트뿐: 학생 사진 필드가 없으므로 문법 ④ 사진 카드 대신, 상태별 컬러 배너/일러스트 액센트 정도가 현실적. 향후 학생 프로필 사진 컬럼이 생기면 좌측 사진 카드+캡션 오버레이 적용 1순위",
+        "students/[id]/_tabs/overview-tab.tsx — AI 케어 요약(종합 요약/주의 영역) 섹션에 Sparkles 아이콘 대신 작은 일러스트 헤더 액센트 여지"
+      ]
+    },
+    {
+      "screen": "시간표 (src/app/(shell)/timetable)",
+      "layoutSummary": "페이지 상단에 단일 툴바 카드(rounded-xl, px-4 py-3)가 있고 그 안에 주간 내비(WeekNav)·과목 칩·뷰 토글(기본/통합/강사)·미사용요일/빈교시접기/색강도 토글·우측 font-mono 재원/신입/전입/대기/퇴원 카운트·편집 컨트롤·가져오기/시트반영 액션이 세로 구분선(h-4 w-px)으로 한 줄에 밀집 나열된다. 본문은 뷰에 따라 3종: 기본뷰=WeekdayGroupTables(교시×강사요일 밴드 표, DnD 편집), 통합뷰=RichGridView(섹션마다 bg-ink 검정 헤더 바 + 반=열 카드 그리드), 강사뷰=TeacherGridView(강사 세로 블록 격자). 페이지 제목·헤드라인·설명 텍스트는 전혀 없고 툴바가 곧 헤더 역할이다. 셀 내부는 9~11px 잔글씨와 font-mono 숫자·[요일] 태그가 고밀도로 채워진 표 UI다.",
+      "coderTickSignals": [
+        "page.tsx:339 — 툴바 우측 학생 집계가 font-mono text-[11px] 원시 나열(재원 N 신입 N…) — 빅 스탯 위계 없음",
+        "rich-grid-view.tsx:41 — '읽기 전용 · N개 수업 · 편집은 기본뷰'가 font-mono text-[11px] 우측 정렬 잔글씨",
+        "rich-grid-view.tsx:46-51 — 섹션 헤더가 bg-ink 검정 바 + text-[12px]/text-[10px] 배지(터미널 헤더 느낌)",
+        "class-cell.tsx:159,165 / hapban-cell.tsx:103 — 학생 수·반명이 font-mono",
+        "class-cell.tsx:270,285 / hapban-cell.tsx:300,314 — text-[10px] font-bold tracking-wide 섹션 라벨 + font-mono [요일] 대괄호 태그",
+        "student-rows.tsx:64 — 인덱스 배지 font-mono text-[9px]",
+        "teacher-grid.tsx:247,267-268 — 축 라벨 전부 font-mono text-[9~10px] font-bold",
+        "weekday-group-tables.tsx:176,351 — 밴드 헤더·경고 배지 font-mono text-[9~10px]",
+        "hover-cards.tsx:130,214,254 — 팝오버 메타행 font-mono text-[10px]",
+        "timetable-board.tsx:739 — 'N건 이동 대기' font-mono",
+        "import-dialog.tsx:264 / english-import-dialog.tsx:222,251 — 프리뷰 통계 font-mono 나열",
+        "rich-card-group.tsx:86-299 — 카드 내부 거의 전부 text-[9~10px] font-bold 밀집"
+      ],
+      "refactorOpportunities": [
+        "page.tsx 상단에 페이지 헤더 부재 — eyebrow('시간표')→헤드라인(현재 과목명+주 라벨, 예: '수학 · 7월 3주')→서브텍스트(뷰 설명) 위계를 툴바 위에 신설하고, 툴바는 그 아래 별도 컨트롤 행으로 분리",
+        "page.tsx:339-345 학생 집계를 font-mono 잔글씨 나열에서 빅 스탯 행(큰 숫자 tabular + 작은 한글 라벨 '재원/신입/전입/대기/퇴원')으로 승격 — 헤더 우측 또는 헤더 아래 스탯 스트립",
+        "page.tsx:202 툴바 카드를 rounded-xl→rounded-2xl/3xl 소프트 패널로, 세로 구분선(h-4 w-px) 나열 대신 그룹별(내비/필터/표시옵션/액션) 여백 리듬으로 구분",
+        "page.tsx:216-239, 246-268 과목 칩·뷰 토글을 rounded-md 사각 칩에서 rounded-full 알약 세그먼트로 전환 (injaewon 알약 버튼 문법)",
+        "rich-grid-view.tsx:44-77 섹션 bg-ink 검정 바를 소프트 패널 헤더(밝은 배경 + eyebrow 시각(교시 라벨) + '2개 수업' dim 서브텍스트)로 교체, section을 rounded-3xl로",
+        "rich-grid-view.tsx:41 '읽기 전용…' font-mono 캡션을 헤더 서브텍스트(일반 폰트, text-text-dim)로 이동",
+        "timetable-board.tsx:704-787 편집 컨트롤 바 — 'N건 이동 대기' font-mono 제거, 편집중 상태를 알약 배지 + bold 카운트로 구조화",
+        "hover-cards.tsx — 팝오버 내부를 구조화 행 목록(이름 bold + 메타 dim + 우측 액션) 문법으로 정리, font-mono 메타행 일반 폰트화",
+        "격자 셀 내부(class-cell/hapban-cell/rich-card-group)는 운영 밀도상 잔글씨 유지가 타당 — 단 font-mono 숫자는 num(tabular-nums) 일반 폰트로 통일하고 [목] 대괄호 태그는 소형 알약 배지로"
+      ],
+      "imageOpportunities": [
+        "page.tsx:368-373 EmptyState('해당 과목의 시간표가 없습니다') — 현재 아이콘 1개뿐, 교실/칠판 일러스트를 넣기 좋은 자리(이미 image='classes' prop 존재)",
+        "신설할 페이지 헤더 우측 — 작은 장식 일러스트(주간 캘린더/시계 모티프) 여지, 단 운영 밀도상 소형으로",
+        "import-dialog.tsx / english-import-dialog.tsx 업로드 초기 상태 — 파일 드롭존에 스프레드시트 일러스트 자리"
+      ]
+    },
+    {
+      "screen": "출석부 (/attendance)",
+      "layoutSummary": "상단에 단일 툴바 카드(rounded-md border)가 과목→강사→반 계단식 FilterSelect 3개 + 월 네비게이터 + 한달/2주 범위 토글을 한 줄에 세로 구분선(bg-line h-4 w-px)으로 나열한다. 반 미선택 시 EmptyState(일러스트+안내문)만 표시. 반 선택 시 Stat 카드 4개(등록 학생·출석률·결석·지각 — 아이콘 배지+28px 숫자) 그리드가 뜨고, 그 아래 DragScrollArea 안 border-collapse 매트릭스 테이블(sticky 좌측 #·이름, 31칸 고정 일자 컬럼, sticky 우측 시수·출석률)이 본문 전체를 차지한다. 셀은 클라이언트 AttendanceCell(클릭 팝오버로 O/X/L/보/조 + 시수 + 메모 즉시 저장). tfoot에 총 기록 수 요약 + 범례 Pill 나열.",
+      "coderTickSignals": [
+        "page.tsx:325 — 일자 헤더가 font-mono text-[10px] (잔글씨+모노스페이스 코딩틱)",
+        "page.tsx:412,416 — 시수·출석률 셀 font-mono text-[12px]",
+        "page.tsx:432 — tfoot 요약 노트가 text-text-faint font-mono text-[11px]로 괄호 설명문 통짜 나열",
+        "attendance-cell.tsx:130,168 — 셀 상태 글자(O/X/L) font-mono text-[11px]",
+        "page.tsx:151,163,176,213 — 툴바 라벨이 micro 클래스(잔글씨 uppercase 계열)로 '과목/강사/반/범위' 나열, 위계 없음",
+        "page.tsx:283-290 — 상태 라벨이 O/X/L 영문 단문자 코드 노출(범례로 보완되나 코드틱)",
+        "page.tsx:306-344 — 테이블 헤더 전부 micro 잔글씨, 헤드라인·eyebrow 위계 부재",
+        "attendance-cell.tsx:195 — 에러 문구 text-[10px]"
+      ],
+      "refactorOpportunities": [
+        "page.tsx:144-232 — 페이지 최상단에 eyebrow('ATTENDANCE'가 아닌 한글 소라벨 예: '출결 관리')→큰 헤드라인('7월 출석부' 또는 '{반이름} 출석부')→서브텍스트(선택 반·기간 요약) 위계 헤더를 신설하고, 현재 툴바는 그 아래 rounded-3xl 소프트 패널로 분리. 월 표시 text-[13px] font-bold(197행)를 헤드라인으로 승격",
+        "page.tsx:472-504 Stat 컴포넌트 — 28px 숫자는 있으나 rounded-md 딱딱한 카드. injaewon 빅 스탯 문법으로: rounded-3xl 소프트 패널, 숫자 더 크게(text-4xl~5xl), 라벨은 위 eyebrow 스타일, 아이콘 배지 대신 여백으로 호흡",
+        "page.tsx:214-229 범위 토글 — border rounded-sm 사각 토글을 알약(rounded-full) 세그먼트로",
+        "page.tsx:190-206 월 네비게이터 — size-7 rounded-sm 사각 버튼을 rounded-full 알약 버튼으로",
+        "page.tsx:424-446 tfoot 범례 — font-mono 괄호 설명문 통짜를 구조화: 범례 Pill은 유지하되 설명문은 테이블 밖 캡션 행(bold 키워드 + dim 설명)으로 이동",
+        "page.tsx:302 매트릭스 카드 — rounded-md를 rounded-3xl 소프트 패널로, 테이블 헤더 micro 라벨은 유지(밀도)하되 font-mono 일자를 일반 tabular 숫자로",
+        "page.tsx:234-242 EmptyState — 반 미선택 상태를 eyebrow→헤드라인 위계 + 최근 본 반 바로가기 행 목록(이름 bold + 강사 dim + 우측 '열기' 알약 액션)으로 확장하면 빈 화면이 아니라 진입 허브가 됨",
+        "전체 space-y-4(145행) — 섹션 간 여백을 space-y-6~8로 늘려 여백 리듬 확보"
+      ],
+      "imageOpportunities": [
+        "page.tsx:236-242 반 미선택 EmptyState — 이미 image='attendance' 일러스트 사용 중이나, injaewon 문법의 사진 카드+좌하단 캡션 오버레이(예: 교실/출석 체크 장면)로 승격할 최적 자리",
+        "page.tsx:265-271 학생 0명 EmptyState — image='students' 일러스트 자리, 동일하게 사진 카드화 가능",
+        "신설 제안 페이지 헤더 — 헤드라인 우측에 작은 계절/교실 일러스트 또는 사진 썸네일을 두면 텍스트뿐인 상단이 살아남 (현재 헤더 자체가 없어 신설과 함께)"
+      ]
+    },
+    {
+      "screen": "수업목록(/classes) + 수업보고서(/lesson-reports)",
+      "layoutSummary": "수업목록은 상단에 MakeeduSyncBadge → 4칸 Stat 스트립(아이콘+숫자 카드) → 필터바(과목·요일·강사·정렬 드롭다운+검색+뷰토글) → \"결과 N개\" 카운터+액션 버튼 2개 → 테이블뷰(8열) 또는 카드뷰(3열 그리드) + 페이지네이션. 수업보고서는 eyebrow→display 헤드라인→서브텍스트 헤더가 이미 있고, 그 아래 ClassNote 발송 큐 카드(상시 고정) → FaceTabs 7면(작성률·미매핑·목록·반 공지·직접 발송·보고서 설정·AI 멘트) → 활성 탭 콘텐츠. 큐 카드와 작성률 카드는 rounded-lg 카드 안에 소형 스탯 칩 + 밀집 테이블(text-[12px]/[11px]) 구조.",
+      "coderTickSignals": [
+        "classes/page.tsx:159 — DayChips 요일 배지가 font-mono text-[11px]",
+        "classes/page.tsx:172 — 요일별 시각이 text-[10px] 잔글씨",
+        "classes/page.tsx:226 — 강의실명 셀 font-mono text-[11px]",
+        "classes/page.tsx:300 — 카드뷰 강의실명 font-mono text-[11px]",
+        "classes/page.tsx:119,189-196,338 — 테이블 헤더·스탯 라벨·결과 카운터가 전부 .micro 클래스(잔글씨 uppercase 계열 라벨)에 의존",
+        "lesson-reports/_components/classnote-queue-card.tsx:95-121 — 워커 상태가 text-[11px] 잔글씨 다열 나열, 위계 없음",
+        "classnote-queue-card.tsx:126-133 — 상태 집계가 소형 칩 8개 가로 나열(위계 없는 나열, 빅 스탯 아님)",
+        "classnote-queue-card.tsx:162-254 — 주의 목록·진행 중 테이블 전체 text-[12px]/[11px] 밀집",
+        "writing-rate-card.tsx:78-139 — 작성률 테이블 text-[12px], 셀 내부 text-[11px] 이중 잔글씨",
+        "class-filter-bar.tsx:78-91 — 칩/뷰토글이 rounded-sm 각진 사각 칩(알약 아님)"
+      ],
+      "refactorOpportunities": [
+        "classes/page.tsx:98-131 — 페이지 최상단에 eyebrow('수업 운영')→헤드라인('수업목록')→서브텍스트 헤더가 아예 없음(수업보고서·수업상세는 있음). injaewon 문법 ① 위계를 추가해 3화면 통일",
+        "classes/page.tsx:317-349 — Stat 컴포넌트를 빅 스탯 문법(②)으로: 현재 28px 숫자+micro 라벨+아이콘 배지인데, rounded-3xl 소프트 패널 + 큰 숫자 + 아래 dim 한글 라벨 구조로 재구성하고 아이콘 배지 의존 축소",
+        "classes/page.tsx:185,336 — 테이블 래퍼·스탯 카드가 rounded-md border shadow-card. rounded-3xl(또는 rounded-2xl) 소프트 패널(③)로 스왑",
+        "classes/page.tsx:264-315 — CardsView를 구조화 행/카드 문법(⑤)으로: 반 이름 bold 헤드 + 담임·강의실 dim 서브 + 우측 재원수를 명확한 이름/설명/액션 3층으로, font-mono 제거",
+        "classes/page.tsx:153-181 — DayChips의 font-mono 요일 미니배지를 알약(⑦) 또는 일반 산세리프 배지로, 10px 시각 텍스트를 12px dim으로 승격",
+        "lesson-reports/_components/classnote-queue-card.tsx:124-134 — 상태 집계 칩 8개를 빅 스탯 3~4개(발송완료·대기+처리중·주의 합산) + 나머지는 서브 라벨로 위계화(②), 카드 자체를 rounded-3xl 소프트 패널로(③); 섹션 헤더에 eyebrow('발송 오버사이트')→'ClassNote 발송 큐' 위계(①)",
+        "classnote-queue-card.tsx:157-262 — 주의 목록/진행 중 테이블을 구조화 행 목록(⑤)으로: 학생명 bold + 사유 dim 서브텍스트 + 우측 재발송 액션, 체크박스 유지하되 행 간 py 여백 확대(⑥)",
+        "writing-rate-card.tsx:42-70 — 카드 헤더를 eyebrow→헤드라인 위계(①)로, 과목 칩은 이미 rounded-full이라 유지; 강사 열을 이름 bold+미작성 dim 서브의 행 목록 문법(⑤)으로 정돈하고 %는 tabular 큰 숫자 강조(②)",
+        "classes/_components/class-filter-bar.tsx:74-91 — triggerCls/chipCls/viewCls의 rounded-md/rounded-sm를 알약(rounded-full, ⑦)로 통일",
+        "lesson-reports/page.tsx:111-130 — 헤더는 이미 문법 ① 준수(eyebrow+display) — 이 패턴을 classes에 복제하는 레퍼런스로 사용; space-y-6 여백 리듬(⑥)은 큐 카드-탭-콘텐츠 사이 구획감을 위해 섹션별 mt 확대 검토"
+      ],
+      "imageOpportunities": [
+        "classes/page.tsx:133-134 — EmptyState(결과 없음)에 이미 image='classes' prop이 있음 — 일러스트 품질을 injaewon 톤(소프트 사진/일러스트 카드+캡션 ④)으로 교체할 자리",
+        "classes/page.tsx:264 — CardsView 반 카드 상단: 과목별 추상 일러스트/컬러 밴드 헤더(사진 카드+좌하단 캡션 문법 ④ 적용 가능한 유일한 카드 그리드)",
+        "lesson-reports/page.tsx:111-120 — 수업보고서 헤더 우측이 텍스트뿐 — 보고서/발송 컨셉 스팟 일러스트 배치 여지",
+        "classnote-queue-card.tsx:158-159 — '주의가 필요한 발송이 없습니다' 빈 상태가 한 줄 텍스트뿐 — 소형 축하/클린 상태 일러스트 자리"
+      ]
+    },
+    {
+      "screen": "수납관리 (/billing) — 수납·교재·지출·수강료 계산기·회차 확정·시수 검증·환불 요청서·강사 정산 8면",
+      "layoutSummary": "최상위는 FaceTabs로 8개 면을 전환하는 단일 페이지(page.tsx)이며, 기본 '수납' 면(billing-content.tsx)은 위에서부터 ① 월 이동 화살표+월칩+검색이 든 컨트롤 바 ② \"청구 N건·수납률\" 한 줄 텍스트+신규 청구/엑셀 버튼 ③ KPI 카드 5개(총청구·할인·수납완료·미수금·수납률, rounded-md + 글로우 블러 장식) ④ 수납 진행률 스택 바 ⑤ 기한 경과 미수금 경고 배너 ⑥ 14열 대형 인보이스 테이블+페이지네이션 순으로 쌓인다. 다른 면들(지출·교재·회차 등)도 동일하게 \"필터 바 → micro 라벨 KPI → micro/eyebrow 헤더 테이블\" 패턴을 반복한다. 카드 라운드는 rounded-md/lg 수준으로 소프트 패널 문법(rounded-3xl)보다 각지고, 페이지 차원의 헤드라인(eyebrow→큰 제목→서브텍스트)은 없다 — 탭 바로 아래 곧장 컨트롤 바가 온다.",
+      "coderTickSignals": [
+        "billing-content.tsx:208 — 진행률 퍼센트 표기가 font-mono text-[11px] (완납 x% · 부분 y% · 미수 z%)",
+        "billing-content.tsx:275, 280-282 — KPI 카드가 micro 라벨 + 18px 숫자 + 11px hint로 잔글씨 밀집, 빅 스탯 위계 약함",
+        "billing-table.tsx:119-142 — 14개 th 전부 eyebrow(대문자형 잔글씨) 클래스, 열 과밀(min-w-[1080px])",
+        "expenses-panel.tsx:73 — 'font-mono text-[10px] 지출 기록 N개월' 잔글씨",
+        "refunds-face.tsx:116 — font-mono text-[10px] 카운터",
+        "expense-receipts-modal.tsx:271-277 — text-[10px] uppercase 파일 확장자 라벨 + 10px 파일명",
+        "splits-snapshot-panel.tsx:85 / session-verification-face.tsx:209,292 / refund-policy.tsx:116 — text-[10px] 보조 문구 산재",
+        "billing-content.tsx:161-171 — 요약 정보('청구 N건 · 수납률 x%')가 위계 없는 한 줄 text-xs 나열",
+        "expenses-table.tsx:91-101 — micro 헤더 11열 나열"
+      ],
+      "refactorOpportunities": [
+        "billing-content.tsx: 페이지 상단에 eyebrow('수납 현황')→'2026년 7월' 큰 헤드라인→'청구 N건 · 수납률 x%' 서브텍스트 위계 블록 신설 — 현재 161-171행의 잔글씨 한 줄을 헤드라인 위계로 승격하고 월 네비게이션을 그 옆에 배치",
+        "billing-content.tsx KpiCard(246-288): 글로우 블러 장식 대신 injaewon 빅 스탯 — 숫자를 text-3xl~4xl로 키우고 라벨은 아래 작은 dim 텍스트, 패널은 rounded-3xl 소프트 배경. 수납률은 가장 큰 히어로 스탯으로 분리 가능",
+        "billing-content.tsx:205-217 수납 진행률 섹션: rounded-3xl 소프트 패널 + eyebrow 헤더로 전환, font-mono 퍼센트(208행)를 색 dot 범례+일반 num 폰트로",
+        "billing-content.tsx:219-236 기한 경과 배너: 빅 스탯(건수+금액 큰 숫자) + 우측 '목록 보기' 알약 버튼의 구조화 행으로",
+        "billing-table.tsx: 14열 평탄 테이블을 '학생 행(이름 bold + 학년·메모 dim) + 라인 서브행 + 우측 금액/상태' 구조화 행 목록으로 재편 검토 — 최소한 eyebrow th를 일반 케이스 한글 라벨로 완화",
+        "page.tsx FaceTabs: 8개 면 탭을 알약 버튼 스타일로 통일",
+        "expenses-panel.tsx·refunds-face.tsx·textbooks-panel.tsx의 micro 라벨 KPI(각 156/72/165행)도 동일 빅 스탯 문법으로 일괄 전환",
+        "여백 리듬: 전체 space-y-4를 섹션 그룹 단위 space-y-6~8로 완화(밀도는 테이블 내부에서 유지)"
+      ],
+      "imageOpportunities": [
+        "billing-content.tsx:188-194 EmptyState — '이 달 청구 내역이 없습니다' 빈 상태에 수납/영수증 일러스트(현재 아이콘 32px뿐)",
+        "환불 요청서 면(refunds-face.tsx) 빈 목록 상태 — 서류/봉투 일러스트 자리",
+        "수강료 계산기(calculator-panel.tsx) 초기 상태 — 견적서 목업 일러스트로 도구 성격 안내",
+        "지출 증빙 모달(expense-receipts-modal.tsx) — 업로드 전 드롭존에 영수증 사진 일러스트; 업로드된 증빙 이미지는 사진 카드+좌하단 캡션(파일명·일자) 오버레이 문법 적용 적합"
+      ]
+    },
+    {
+      "screen": "등록상담 칸반(/enrollment) + 학생상담 목록(/consultations)",
+      "layoutSummary": "등록상담은 상단에 13px 요약 텍스트 한 줄(전체/AI 완료/배정 완료 건수)과 QR·신규등록 버튼이 있는 얇은 헤더 → 필터 바(월 내비게이터·상담사·상태 드롭다운·칸반/목록 토글·검색) → xl 5열 칸반 그리드(좁으면 탭 전환)로 구성되며, 컬럼은 rounded-2xl 카드에 26px 아이콘 칩+13px 제목 헤더, 카드들은 bg-soft rounded-xl 미니 카드(이름 bold 13px + 학년·학교 dim 11px + 우측 Pill)에 컬럼 내 페이지네이션이 붙는다. 학생상담은 4개 스탯 카드(micro 라벨 + 28px 숫자 + 아이콘 칩) → 3그룹 필터 칩 바(기간·카테고리·후속 + 검색) → 결과 건수 줄 + 통계/신규 버튼 → rounded-2xl 상담 카드 목록(학생명 bold + Pill 다수 + 요약 2줄 + Follow-up 푸터) + 페이지네이션. 두 화면 다 페이지 자체의 큰 헤드라인(제목)이 없고 곧바로 데이터·컨트롤로 시작하며, 여백 리듬은 space-y-4 균일이다.",
+      "coderTickSignals": [
+        "consultations/page.tsx:283 — Follow-up 라벨이 font-mono·tracking-wider·uppercase 영문 그대로 노출(가장 강한 코딩틱)",
+        "consultations/page.tsx:260 — 'AI' 10px font-bold 영문 배지",
+        "enrollment/_components/enrollment-kanban.tsx:86 — 컬럼 건수에 font-mono text-[11px]",
+        "enrollment/_components/column-cards.tsx:70,88 — 'QR'·'상담 N건' 9px 초잔글씨 배지",
+        "enrollment/_components/column-cards.tsx:140 — 카드 푸터 상담사·시간 10px text-faint 밀집",
+        "enrollment/[id]/page.tsx:670 — 섹션 라벨 uppercase tracking-wide(영문 스타일 eyebrow의 코드틱 버전)",
+        "enrollment/_components/intake-qr-panel.tsx:120 — URL raw font-mono 10px 노출",
+        "enrollment/page.tsx:97-103 — 페이지 핵심 지표가 위계 없는 13px 한 줄 텍스트('전체 N건 · AI 완료 N건 · 배정 완료 N건')로 나열",
+        "consultations/page.tsx:126-181 — 필터 3그룹이 text-xs 칩 나열로 위계 약함, micro 라벨(기간/카테고리/후속)만 구분",
+        "enrollment/_components/kanban-filters.tsx:73-170 — 월/상담사/상태/뷰/검색/대시보드 링크가 한 줄에 xs 텍스트로 평평하게 나열"
+      ],
+      "refactorOpportunities": [
+        "enrollment/page.tsx 헤더: 13px 텍스트 한 줄 지표를 injaewon 문법의 eyebrow('등록상담')→큰 헤드라인→빅 스탯 3개(전체·AI 완료·배정 완료, 큰 숫자+작은 라벨)로 승격 — consultations의 Stat 컴포넌트 패턴 재사용 가능",
+        "consultations/page.tsx:304-332 Stat 컴포넌트: 이미 빅 스탯 구조이므로 rounded-3xl 소프트 패널 + 더 큰 숫자(text-3xl+)·여백으로 injaewon 톤 정렬만 하면 됨(양 화면 공용 atom으로 추출)",
+        "enrollment/_components/enrollment-kanban.tsx:71-97 칸반 컬럼: rounded-2xl→rounded-3xl 소프트 패널, 컬럼 헤더를 eyebrow(작은 라벨)+건수 빅넘버 위계로 재구성, font-mono 건수 제거",
+        "consultations/page.tsx:212-296 상담 카드: 이미 '이름 bold + dim 설명 + 우측 액션' 행 구조에 가까움 — Follow-up 영문 mono 라벨을 한글 eyebrow('후속 조치')로 교체하고 Pill 과밀(카테고리+긴급도+AI+Mic 동시)을 정리해 구조화 행 목록 문법으로 완성",
+        "kanban-filters.tsx / consultations 필터 바: xs 칩 나열을 알약(pill) 버튼 문법으로 통일(rounded-full, 넉넉한 px), 필터 바 자체를 소프트 패널로",
+        "column-cards.tsx 카드: 9px/10px 잔글씨 3단(이름·메타·푸터)을 이름 bold/설명 dim 2단 + 우측 Pill로 단순화, QR·상담N건 배지는 12px 알약으로 승격",
+        "양 화면 공통: space-y-4 균일 리듬을 섹션 간 space-y-6~8, 섹션 내 촘촘 유지로 여백 위계 부여"
+      ],
+      "imageOpportunities": [
+        "enrollment/page.tsx:132-137 빈 상태(EmptyState image='enrollment') — 이미 이미지 슬롯이 있으므로 injaewon 톤의 일러스트/사진 카드로 업그레이드 적합",
+        "consultations/page.tsx:204-209 빈 상태(image='meetings') — 상담 맥락에 맞는 전용 일러스트로 교체 기회",
+        "enrollment 페이지 상단 — 주석에 '기존 AI 그래픽 배너 제거' 이력이 있음: eyebrow+헤드라인 히어로를 만들 때 우측에 소형 사진 카드(좌하단 캡션 오버레이, 예: 상담실/학원 공간 사진)를 붙일 자연스러운 자리",
+        "칸반 컬럼 '없음' 빈 칸(enrollment-kanban.tsx:88-91) — 텍스트뿐인 빈 컬럼에 미니 일러스트 여지"
+      ]
+    },
+    {
+      "screen": "이탈방어(/retention) + 퇴원관리(/withdrawals)",
+      "layoutSummary": "retention/page.tsx는 상단에 탭(RetentionTabs)+한 줄 헤드라인 텍스트, 그 아래 학원 건강 스택바 게이지(rounded-2xl 카드) → 5칸 PulseTiles 스탯 그리드 → 좌(1.5fr) '오늘 큐' 액션 리스트 카드 + 우측 SignalSection 3장(예정 연락·재등록 위험·상담 공백) 2열 그리드. withdrawals/page.tsx는 유형 토글 칩(퇴원/수강종료) → 4칸 Stat 스트립 → 필터 바(기간·사유·과목·상담 칩+셀렉트, rounded-md 카드) → 월별 추이 차트+과목별 분포 바 2열 → 최근 퇴원 행 목록(1.4fr)+사유 분석 바차트·자동 요약 카드 2열, 하단 페이지네이션. 상세([studentId])는 eyebrow→display 헤드라인 위계가 이미 적용된 유일한 화면이고, 카드 2열(사유·상담 추적)+수강 이력 리스트로 구성.",
+      "coderTickSignals": [
+        "withdrawals/page.tsx:450 — `font-mono text-[10px] tracking-wider uppercase` '자동 요약' 라벨 = 대표적 코딩틱(한글인데 mono·uppercase 조합)",
+        "withdrawals/page.tsx:400,531 — text-[10px] 잔글씨(경과일·종료일) 목록 우측에 밀집",
+        "withdrawals/page.tsx:221,262,290,306 — 필터 칩이 rounded-sm border px-2 py-0.5 text-xs 각진 마이크로 칩 나열(알약 아님)",
+        "retention/components/action-queue.tsx:33 — text-[10px] truncate 위험 사유 잔글씨",
+        "retention/components/signal-section.tsx:48 — sub 정보 text-[10px] 잔글씨",
+        "retention/page.tsx:89 — 헤드라인 문장이 text-[12px] dim 텍스트로 격하(위계 없음)",
+        "globals.css:292 .micro(11px faint 라벨)가 두 화면 전반의 eyebrow 대용 — 카드 헤더가 micro+15px bold 뿐이라 위계가 납작함"
+      ],
+      "refactorOpportunities": [
+        "retention/page.tsx:85-93 — 페이지 상단에 섹션 히어로 신설: eyebrow('이탈 방어')→큰 헤드라인(현재 12px dim으로 격하된 headline 문장을 20px+ 헤드라인으로 승격)→서브텍스트. 탭은 그 아래 알약 그룹으로.",
+        "retention/components/pulse-tiles.tsx:27-36 + withdrawals/page.tsx:542-576(Stat) — 두 화면의 스탯 카드가 거의 동일 구조(micro 라벨+아이콘 배지+26~28px 숫자). 빅 스탯 문법(큰 숫자 32px+ tabular, 아래 작은 한글 라벨)으로 공용 BigStat atom 통합, rounded-3xl 소프트 패널화.",
+        "withdrawals/page.tsx:217-239,254-322 — 유형 토글·기간·과목·상담 필터의 rounded-sm 각진 칩을 알약 버튼(rounded-full)으로 전환, 필터 바 자체를 rounded-3xl 소프트 패널로.",
+        "withdrawals/page.tsx:368-413 + retention/components/action-queue.tsx — 행 목록은 이미 '이름 bold+설명 dim+우측 값' 구조라 문법 ⑤에 근접. 여백만 py-3.5→py-4~5로 늘리고 우측 날짜/뱃지를 액션(알약 '상세' 또는 명확한 뱃지)으로 정돈.",
+        "withdrawals/page.tsx:444-460 — '자동 요약' 블록의 font-mono uppercase 라벨을 한글 eyebrow(.micro 개선판)로 교체.",
+        "withdrawals/[studentId]/page.tsx:45-83 — 이미 eyebrow→display 위계가 있는 모범 사례. 이 헤더 패턴을 목록 페이지 2곳 상단으로 역수출.",
+        "retention/components/retention-gauge.tsx — '학원 건강' micro 라벨을 eyebrow→'재원생 N명 중 위험 N' 헤드라인 위계로 승격, rounded-3xl 패널 + 게이지 바 높이 확대(h-2.5→h-3~4)로 히어로화.",
+        "공통 — 카드 rounded-2xl/rounded-md 혼재(withdrawals 필터 바만 rounded-md:254) → rounded-3xl 소프트 패널로 통일, 섹션 간 space-y-4→space-y-6~8 여백 리듬."
+      ],
+      "imageOpportunities": [
+        "retention/components/action-queue.tsx:8-12 빈 상태 — 현재 텍스트 한 줄뿐. '위험 신호 없음' 안정 상태를 축하하는 일러스트 자리.",
+        "retention/components/signal-section.tsx:40 — 3개 신호 패널의 빈 상태가 12px 텍스트 한 줄. 소형 일러스트/아이콘 스팟.",
+        "withdrawals/page.tsx:358-364,477-486 — EmptyState는 이미 image='withdrawals'를 받으나 icon 폴백 사용 흔적. 전용 일러스트 확정 기회.",
+        "retention/page.tsx 상단 히어로 — 헤드라인 옆 우측에 '학생 케어' 무드의 일러스트/사진 카드(캡션 오버레이 문법 ④) 배치 여지 — 데이터 화면 중 유일하게 감성 톤이 어울리는 메뉴."
+      ]
+    },
+    {
+      "screen": "직원관리(/staff) + 회의록(/meetings) — 워크트리 app-reskin-precision-pine",
+      "layoutSummary": "두 화면 모두 동일한 4단 스택 구성: ① 상단 Stat strip(rounded-2xl 카드, micro 라벨+28px 숫자+우측 아이콘칩 — 이미 빅 스탯에 근접) ② rounded-md 필터 바(역할/상태·기간/상태 링크칩 + 검색폼) ③ \"결과 N명/건\" micro 카운트 + 우측 액션 버튼 줄 ④ 목록(직원=3열 rounded-2xl 카드 그리드, 회의=rounded-2xl 리스트 아이템 세로 스택) + Pagination. 직원 페이지는 FaceTabs(직원 목록/이력서)로 면 전환. 회의 상세는 eyebrow+제목 편집기+메타 헤더 후 AI 8섹션 아코디언·전사 섹션 스택. 전반적으로 space-y-4의 균일 간격이라 섹션 위계(eyebrow→헤드라인) 없이 스트립들이 평평하게 나열됨.",
+      "coderTickSignals": [
+        "staff/page.tsx:343 — Mini 라벨이 micro에 text-[9px] 재축소(9px 잔글씨)",
+        "staff/page.tsx:269 · meetings/page.tsx:88 — 메타를 text-[11px] num으로 잔글씨 밀집",
+        "meetings/page.tsx:82 — 영문 uppercase 'LIVE' Pill(한글 UI에 raw 영문 라벨)",
+        "staff/_components/staff-form.tsx:347 — font-mono로 hex 색코드 노출",
+        "staff/[id]/_components/task-detail-dialog.tsx:42 — 인라인 code에 font-mono text-[11px]",
+        "staff/[id]/_components/month-grid-view.tsx:130 · monthly-schedule-view.tsx:100 — text-[10px] 잔글씨",
+        "meetings/[id]/page.tsx:114 — 상태 배지 text-[10px]",
+        "양 page.tsx 필터 바 — rounded-sm 각진 사각 칩(px-2 py-0.5 text-xs)로 알약 문법 아님",
+        "양 page.tsx — 섹션 제목/eyebrow 없이 Stat→필터→목록이 위계 없는 등간격 나열(space-y-4)"
+      ],
+      "refactorOpportunities": [
+        "양 page.tsx: 각 스트립 위에 eyebrow(작은 라벨)→헤드라인 위계 도입 — 예: '팀 현황'→'직원 N명', '회의 기록'→'이번 달 N건' 헤더 블록을 목록 상단에 얹어 '결과 N명' micro 카운트를 헤드라인 빅 스탯으로 승격 (staff/page.tsx:215-223, meetings/page.tsx:268-276)",
+        "Stat 컴포넌트(staff/page.tsx:309-338, meetings/page.tsx:300-329): 이미 큰 숫자+작은 라벨 구조이나 p-4·28px로 소극적 — rounded-3xl 소프트 패널 + 숫자 32~36px + 라벨을 uppercase micro 대신 일반 한글 dim 텍스트로 키워 injaewon 빅 스탯화, 중복 정의를 공용 atom으로 통합",
+        "필터 칩(staff/page.tsx:176-206, meetings/page.tsx:233-262): rounded-sm 사각 칩 → rounded-full 알약 버튼(px-3 py-1)으로 전환, 필터 바 컨테이너도 rounded-md → rounded-3xl 소프트 패널(bg-bg-soft, border 제거)로",
+        "직원 카드(staff/page.tsx:254-301): 이름 bold+이메일 dim 구조는 있으나 카드 그리드 대신 injaewon '구조화 행 목록'(이름 bold + 직책·이메일 dim + 우측 Pill/화살표 액션) 옵션 검토 — 최소한 Mini의 9px 라벨을 12px dim으로 승격",
+        "회의 리스트(meetings/page.tsx:47-115): 이미 행 목록 구조 양호 — 'LIVE'를 한글('진행 중')로, 메타 11px→12~13px, 항목 간 space-y-2.5를 3~4로 늘려 여백 리듬 확보",
+        "meetings/[id]/page.tsx:108-174: 헤더에 eyebrow(날짜)는 있음 — 액션 버튼 6개 평면 나열을 주요 1~2개(알약 solid)+나머지 overflow 메뉴로 위계화, 상태 배지 10px 커스텀 span을 공용 Pill로",
+        "전체: space-y-4 균일 간격 → 섹션 그룹(스탯/필터+목록) 사이 space-y-6~8로 여백 리듬 차등화"
+      ],
+      "imageOpportunities": [
+        "staff/page.tsx:251 · meetings/page.tsx:281 — EmptyState가 이미 image prop('staff'/'meetings')을 받음: 빈 상태 일러스트 품질 업그레이드의 정착 지점",
+        "직원 카드(staff/page.tsx:262-273) — 이름만 텍스트인 헤더(아바타 금지 결정이므로 사진 대신) 배경에 은은한 보태니컬 일러스트/패턴 여지, 단 '이름 앞 아바타 금지' 결정 준수 필요",
+        "staff FaceTabs '직원 이력서' 면 — 서식 안내 히어로가 텍스트뿐이라면 문서 일러스트 캡션 카드 적합",
+        "meetings/[id] 오디오 없는 수동 회의록 — 전사/AI 섹션 부재 시 빈 영역에 회의 일러스트+안내 캡션 카드",
+        "회의 목록 상단 — 히어로 없이 Stat부터 시작: '이번 달 회의' 요약을 사진 카드+좌하단 캡션 오버레이(injaewon ④)로 만들 유일한 자리"
+      ]
+    },
+    {
+      "screen": "성적관리(/exams) · 도움말(/help) · 학원설정(/owner) — 워크트리 app-reskin-precision-pine",
+      "layoutSummary": "성적관리는 페이지 헤더 없이 필터바 카드(과목·유형 칩 + 검색·기간 폼) → \"결과 N개\" 카운터+새 시험 버튼 → 8열 밀집 테이블 → 페이지네이션으로 구성되고, 상세는 카드 헤더(Pill+제목+응시/평균/최고/최저 4스탯) 아래 반 선택 → 점수 일괄입력 그리드다. 도움말은 그라디언트 검색 히어로 → 빠른 시작 번호 리스트 카드 → 메뉴 2열 그리드 → FAQ 아코디언 → 아이콘 시스템 배너 → 1:1 문의 그라디언트 카드로, 세 화면 중 유일하게 eyebrow→헤드라인 위계가 이미 부분 적용돼 있다. 학원설정은 eyebrow+display 헤더 → FaceTabs 11면 탭 → 면별 SettingsCard(rounded-lg border p-5) 2열 그리드 + sticky 저장 바 구조다. 전반적으로 rounded-md/lg 얇은 보더 카드에 text-[11~12px] 잔글씨 밀도가 높고, 소프트 패널(rounded-3xl)·빅 스탯·이미지 요소는 거의 없다.",
+      "coderTickSignals": [
+        "exams/page.tsx:200 — 시험일 셀 font-mono text-[12px] (데이터 표시에 모노스페이스)",
+        "exams/page.tsx:184-191 — 테이블 헤더 전부 .micro(uppercase 잔라벨), 본문 대부분 text-[12px] dim 잔글씨",
+        "exams/page.tsx:149-157 — '결과 N개' micro 카운터가 헤드라인 없이 페이지 유일 타이틀 역할(위계 부재)",
+        "exams/[id]/page.tsx:68 — 시험일 font-mono text-xs",
+        "help/_help-browser.tsx:54 — 'HELP CENTER' font-mono text-[11px] tracking-wider uppercase 영문 라벨",
+        "help/_help-browser.tsx:155 — 메뉴 카드마다 raw 경로(/students 등) font-mono text-[10px] 노출 — 사용자 무의미 코딩틱",
+        "help/page.tsx:185 — 'Product language' 영문 eyebrow",
+        "help/page.tsx:202 — '1:1 문의' font-mono text-[10px] tracking-wider uppercase",
+        "owner/_components/subjects-section.tsx:34 — 과목 key 배지 font-mono text-[10px] (내부 키 raw 노출)",
+        "owner/_components/audit-face.tsx:79,107 — 타임스탬프 font-mono text-[11px]",
+        "owner/_components/list-editors.tsx:186 — key 칩 font-mono text-[11px] 70px truncate",
+        "owner/_components/profile-section.tsx:144-146, popups-manager.tsx:140-142 — '업로드됨/없음' text-[10px] 잔글씨 상태 표시",
+        "owner/page.tsx:154-160 외 다수 — 설정 카드가 위계 없는 2열 입력 나열(SettingsCard title 13px bold뿐, eyebrow/서브텍스트 리듬 없음)"
+      ],
+      "refactorOpportunities": [
+        "exams/page.tsx: 페이지 상단에 eyebrow('성적관리')→헤드라인('시험과 성적')→서브텍스트 헤더 블록 신설 + 그 아래 빅 스탯 행(이번 달 시험 수·응시 인원·평균 등 큰 숫자+작은 라벨) — 현재 '결과 N개' micro 텍스트를 빅 스탯으로 승격",
+        "exams/page.tsx:86 필터바를 rounded-3xl 소프트 패널(bg-bg-soft, 보더 대신 면)로 전환하고 필터 칩을 알약(rounded-full) 버튼으로 — 현재 rounded-sm 사각 칩",
+        "exams/page.tsx:178 ExamTable을 구조화 행 목록으로 재해석: 시험명 bold + (과목 Pill·유형·날짜) dim 서브라인 + 우측 스탯/화살표 — 밀도 유지하되 8열 균등 나열 대신 이름/설명/액션 위계",
+        "exams/[id]/page.tsx:83-88 4스탯을 injaewon 빅 스탯 문법(큰 숫자 text-3xl+작은 dim 라벨)으로 키우고 헤더 카드를 rounded-3xl 소프트 패널로",
+        "help/_help-browser.tsx:155 raw href 경로 표기 삭제(코딩틱 제거), 영문 eyebrow(HELP CENTER·Product language·1:1 문의 mono)를 한글 eyebrow 토큰으로 통일",
+        "help/_help-browser.tsx: 이미 eyebrow(micro)→17px 헤드라인 구조가 있으므로 헤드라인을 더 키우고(20px+) 섹션 간 여백 리듬(space-y-10+)을 넉넉하게 — injaewon 문법과 가장 근접한 화면이라 기준 레퍼런스로 먼저 정착",
+        "owner/page.tsx:127-136 헤더는 이미 eyebrow+display라 유지하되, 각 면(SettingsCard 그리드) 위에 면별 eyebrow→헤드라인→설명 블록 추가(현재 탭 클릭 후 바로 카드 나열)",
+        "owner/_components/section-form.tsx:107 SettingsCard를 rounded-lg border → rounded-3xl 소프트 패널(bg-bg-soft/보더리스)로 교체하고 카드 내부 패딩·카드 간 gap 확대(여백 리듬)",
+        "owner/_components/subjects-section.tsx:34 및 list-editors.tsx:186 font-mono key 배지를 툴팁/접힘으로 숨기고 과목명 bold + 설명 dim + 우측 액션의 구조화 행 목록으로",
+        "owner/_components/audit-face.tsx 로그 테이블을 행 목록 문법(액션명 bold + 대상 dim + 우측 mono 시간은 유지 가능하나 11px→12px)으로 정리"
+      ],
+      "imageOpportunities": [
+        "help/_help-browser.tsx:41-52 검색 히어로 — 현재 동심원 SVG 장식뿐, 학원 운영 일러스트(사진 카드+좌하단 캡션 오버레이) 적임 자리",
+        "help/page.tsx:199-219 1:1 문의 카드 — 그라디언트 배경 대신 상담/전화 사진 카드+캡션 오버레이로 전환 가능",
+        "help/_help-browser.tsx 빠른 시작 5단계 — 각 단계 우측에 해당 화면 스크린샷 썸네일 카드가 어울림(현재 텍스트만)",
+        "exams/page.tsx:161-167 빈 상태(EmptyState image='exams') — 이미 이미지 슬롯 존재, 일러스트 품질 업그레이드 자리",
+        "owner/page.tsx profile 면 — 브랜드 카드(profile-section.tsx:46)에 로고/직인 업로드 필드가 있으나 미리보기가 '업로드됨' 10px 텍스트뿐 → 실제 이미지 프리뷰 카드로 승격",
+        "owner 각 면 상단 — 설정 화면 자체엔 사진보다 면별 소형 일러스트(아이콘 확대) 정도가 적정, 사진 카드는 비권장"
+      ]
+    },
+    {
+      "screen": "(auth) 로그인 + (intake) QR 공개접수 폼",
+      "layoutSummary": "로그인은 2열 스플릿 — 좌측 BrandPanel(네이비 primary 배경, 반복 괘선 텍스처, 대형 display 헤드라인 + 장식용 출석부 미니 렌더링), 우측은 eyebrow→h1→서브텍스트 위계의 폼(max-w-sm, 이메일/비밀번호/에러박스/풀폭 로그인 버튼). 이미 injaewon 문법의 eyebrow 위계를 부분 적용한 상태. 공개접수(intake)는 모바일 풀스크린 단일 컬럼(max-w-460px), 상단 네이비 헤더(학원명 gold 라벨 + 26px 제목 + 진행 점 2개) 뒤 컬러 구획 Section(학생=gold·학부모=amber·셔틀=danger·동의서=ink) — 각 섹션은 색 바 헤더 + border-t-[3px] 카드(rounded 없음, mx-3 인셋). 2단계 체크리스트는 -soft 배경 + 좌측 액센트 막대의 QuestionSection. 하단은 고정 아닌 인라인 풀폭 CTA 버튼(rounded-md).",
+      "coderTickSignals": [
+        "src/app/(auth)/login/page.tsx:20 — eyebrow \"Sign in\" 영문 라벨(한글 화면에 영문 uppercase eyebrow)",
+        "src/app/(auth)/login/page.tsx:75-77 — font-mono text-[10px] 'v0.1.0 · DEMO · MADE WITH WARMTH IN SEOUL · 2026' 영문 uppercase 잔글씨 푸터",
+        "src/app/(auth)/login/page.tsx:93-96 — LedgerDecoration: 'Today · Class 3-A' 영문 uppercase tracking-[0.18em] 10px 라벨 + font-mono 10px P/L/A 마크 그리드(코더틱의 전형)",
+        "src/app/(auth)/login/login-form.tsx:81 — text-[11px] '관리자에게 문의' 잔글씨",
+        "src/app/(intake)/intake/[token]/public-intake-form.tsx:158-180 — 헤더가 위계 없이 단색 ink 블록, rounded 없음(각진 카드), 진행표시 num 클래스 잔글씨",
+        "src/app/(intake)/intake/[token]/intake-ui.tsx:52-58,77-81 — Section/QuestionSection 카드가 rounded 없는 각진 박스 + border-t-[3px] 컬러 바(injaewon 소프트 패널 문법과 상충)"
+      ],
+      "refactorOpportunities": [
+        "로그인 BrandPanel(src/app/(auth)/login/page.tsx:38-119): font-mono LedgerDecoration·영문 mono 푸터를 제거하고 injaewon식 사진 카드 + 좌하단 캡션 오버레이(학원 공간/수업 사진)로 교체. 헤드라인 위에 한글 eyebrow(예: '인재원 학원관리') 추가해 eyebrow→헤드라인 위계 완성.",
+        "로그인 우측 폼(page.tsx:17-33): 'Sign in' eyebrow를 한글화하고, 폼 전체를 rounded-3xl 소프트 패널로 감싸 여백 리듬 부여. 로그인 버튼을 알약(rounded-full) 버튼으로.",
+        "intake 헤더(public-intake-form.tsx:158-180): 단색 ink 블록 → rounded-3xl 소프트 패널 + eyebrow(학원명)→큰 헤드라인(입학상담카드)→서브텍스트 위계로 재구성. 진행 표시는 유지하되 num mono 제거.",
+        "intake Section/QuestionSection(intake-ui.tsx:38-84): 각진 카드+3px 컬러 톱보더 → rounded-3xl 소프트 패널(-soft 배경)로 전환, 색 구분은 좌측 액센트 막대(QuestionSection 방식)로 통일 — 채도 높은 컬러 바(gold/amber/danger 원색 헤더바) 축소.",
+        "intake 셔틀 노선 목록(public-intake-form.tsx:363-378): 번호 나열 → 구조화된 행 목록(정류장 bold + 시간/설명 dim) 패턴 적용.",
+        "제출 완료 화면(public-intake-form.tsx:125-135): 아이콘+2줄 텍스트뿐 → 빅 스탯/소프트 패널 카드로 격상(접수번호·다음 단계 안내 행 목록).",
+        "인풋·CTA 버튼(intake-ui.tsx:10-14, public-intake-form.tsx:39,428): rounded-md → rounded-full/2xl 알약 계열로 토큰 스윙과 정합."
+      ],
+      "imageOpportunities": [
+        "로그인 BrandPanel(page.tsx:38-81) — 현재 텍스트+CSS 괘선 텍스처+가짜 출석부 장식뿐. 학원 공간·수업 풍경 사진 카드(좌하단 캡션 오버레이)가 들어갈 최적 자리.",
+        "intake 헤더(public-intake-form.tsx:158) — 학원 외관/로고 사진 또는 따뜻한 일러스트 배경으로 학부모 첫인상 개선(현재 단색 네이비 블록).",
+        "intake 제출 완료 화면(public-intake-form.tsx:125-135) — 축하/환영 일러스트 자리(현재 체크 아이콘만).",
+        "셔틀버스 섹션(public-intake-form.tsx:338-380) — 노선 약도 일러스트/지도 이미지 자리."
+      ]
+    }
+  ],
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Audit"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "audit:students",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a4b6a90569c529429",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442744464,
+      "queuedAt": 1784442744408,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "students (학생목록 /students + 학생 상세 /students/[id])",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/students (학생목록 + 학생 상세).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④ 사진 카드+좌하단 캡션 오버레이 ⑤ 구조화된 행 목…",
+      "lastProgressAt": 1784442811318,
+      "tokens": 85764,
+      "toolCalls": 9,
+      "durationMs": 66854,
+      "resultPreview": "{\"screen\":\"students (학생목록 /students + 학생 상세 /students/[id])\",\"layoutSummary\":\"학생목록은 상단에 재원 총원 빅넘버+과목별 미니바를 담은 히어로 스탯 카드(EnrolledStatCard), 그 아래 드롭다운 6종+검색 필터바(StudentFilterBar), 결과 카운트+엑셀/가져오기/신규 버튼 툴바, 그리고 rounded-md 카드 안의 7열 데이터 테이블+페이지네이션으로 구성된다. 페이지 자체엔 제목·헤드라인이 없어 필터바와 테이블이 바로 시작된다. 학생 상세는 BackLink → eyebrow(\\\"학생\\\")+display 이름+학년·학교 메타의 헤더(우측에 상태 배지+액션 버튼 클러스터) → 탭 내비(개요/수업/성적/진도/출결/상담/메모/수납/…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "audit:timetable",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a6e20ae76317aaaf2",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442744467,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "시간표 (src/app/(shell)/timetable)",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/timetable (시간표).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④ 사진 카드+좌하단 캡션 오버레이 ⑤ 구조화된 행 목록(이름 bol…",
+      "lastProgressAt": 1784442809024,
+      "tokens": 104783,
+      "toolCalls": 8,
+      "durationMs": 64557,
+      "resultPreview": "{\"screen\":\"시간표 (src/app/(shell)/timetable)\",\"layoutSummary\":\"페이지 상단에 단일 툴바 카드(rounded-xl, px-4 py-3)가 있고 그 안에 주간 내비(WeekNav)·과목 칩·뷰 토글(기본/통합/강사)·미사용요일/빈교시접기/색강도 토글·우측 font-mono 재원/신입/전입/대기/퇴원 카운트·편집 컨트롤·가져오기/시트반영 액션이 세로 구분선(h-4 w-px)으로 한 줄에 밀집 나열된다. 본문은 뷰에 따라 3종: 기본뷰=WeekdayGroupTables(교시×강사요일 밴드 표, DnD 편집), 통합뷰=RichGridView(섹션마다 bg-ink 검정 헤더 바 + 반=열 카드 그리드), 강사뷰=TeacherGridView(강사 세로 블록 격자). 페이지 …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "audit:attendance",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a69a47595277476c0",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442744469,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "출석부 (/attendance)",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/attendance (출석부).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④ 사진 카드+좌하단 캡션 오버레이 ⑤ 구조화된 행 목록(이름 bo…",
+      "lastProgressAt": 1784442806026,
+      "tokens": 80658,
+      "toolCalls": 6,
+      "durationMs": 61557,
+      "resultPreview": "{\"screen\":\"출석부 (/attendance)\",\"layoutSummary\":\"상단에 단일 툴바 카드(rounded-md border)가 과목→강사→반 계단식 FilterSelect 3개 + 월 네비게이터 + 한달/2주 범위 토글을 한 줄에 세로 구분선(bg-line h-4 w-px)으로 나열한다. 반 미선택 시 EmptyState(일러스트+안내문)만 표시. 반 선택 시 Stat 카드 4개(등록 학생·출석률·결석·지각 — 아이콘 배지+28px 숫자) 그리드가 뜨고, 그 아래 DragScrollArea 안 border-collapse 매트릭스 테이블(sticky 좌측 #·이름, 31칸 고정 일자 컬럼, sticky 우측 시수·출석률)이 본문 전체를 차지한다. 셀은 클라이언트 AttendanceCell(클…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "audit:classes-lessons",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a227c35d9f77d425f",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442744470,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "수업목록(/classes) + 수업보고서(/lesson-reports)",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/classes, src/app/(shell)/lesson-reports (수업목록 + 수업보고서).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분…",
+      "lastProgressAt": 1784442814984,
+      "tokens": 93112,
+      "toolCalls": 11,
+      "durationMs": 70514,
+      "resultPreview": "{\"screen\":\"수업목록(/classes) + 수업보고서(/lesson-reports)\",\"layoutSummary\":\"수업목록은 상단에 MakeeduSyncBadge → 4칸 Stat 스트립(아이콘+숫자 카드) → 필터바(과목·요일·강사·정렬 드롭다운+검색+뷰토글) → \\\"결과 N개\\\" 카운터+액션 버튼 2개 → 테이블뷰(8열) 또는 카드뷰(3열 그리드) + 페이지네이션. 수업보고서는 eyebrow→display 헤드라인→서브텍스트 헤더가 이미 있고, 그 아래 ClassNote 발송 큐 카드(상시 고정) → FaceTabs 7면(작성률·미매핑·목록·반 공지·직접 발송·보고서 설정·AI 멘트) → 활성 탭 콘텐츠. 큐 카드와 작성률 카드는 rounded-lg 카드 안에 소형 스탯 칩 + 밀집 테이블(te…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "audit:billing",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a2b0dd06690509146",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442744472,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "수납관리 (/billing) — 수납·교재·지출·수강료 계산기·회차 확…",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/billing (수납관리).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④ 사진 카드+좌하단 캡션 오버레이 ⑤ 구조화된 행 목록(이름 bold…",
+      "lastProgressAt": 1784442797001,
+      "tokens": 84900,
+      "toolCalls": 6,
+      "durationMs": 52529,
+      "resultPreview": "{\"screen\":\"수납관리 (/billing) — 수납·교재·지출·수강료 계산기·회차 확정·시수 검증·환불 요청서·강사 정산 8면\",\"layoutSummary\":\"최상위는 FaceTabs로 8개 면을 전환하는 단일 페이지(page.tsx)이며, 기본 '수납' 면(billing-content.tsx)은 위에서부터 ① 월 이동 화살표+월칩+검색이 든 컨트롤 바 ② \\\"청구 N건·수납률\\\" 한 줄 텍스트+신규 청구/엑셀 버튼 ③ KPI 카드 5개(총청구·할인·수납완료·미수금·수납률, rounded-md + 글로우 블러 장식) ④ 수납 진행률 스택 바 ⑤ 기한 경과 미수금 경고 배너 ⑥ 14열 대형 인보이스 테이블+페이지네이션 순으로 쌓인다. 다른 면들(지출·교재·회차 등)도 동일하게 \\\"필터 바 → micro …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "audit:enrollment-consult",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "ab62884067c38a693",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442744473,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "등록상담 칸반(/enrollment) + 학생상담 목록(/consultations)",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/enrollment, src/app/(shell)/consultations (등록상담 칸반 + 학생상담).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영…",
+      "lastProgressAt": 1784442803354,
+      "tokens": 86228,
+      "toolCalls": 10,
+      "durationMs": 58881,
+      "resultPreview": "{\"screen\":\"등록상담 칸반(/enrollment) + 학생상담 목록(/consultations)\",\"layoutSummary\":\"등록상담은 상단에 13px 요약 텍스트 한 줄(전체/AI 완료/배정 완료 건수)과 QR·신규등록 버튼이 있는 얇은 헤더 → 필터 바(월 내비게이터·상담사·상태 드롭다운·칸반/목록 토글·검색) → xl 5열 칸반 그리드(좁으면 탭 전환)로 구성되며, 컬럼은 rounded-2xl 카드에 26px 아이콘 칩+13px 제목 헤더, 카드들은 bg-soft rounded-xl 미니 카드(이름 bold 13px + 학년·학교 dim 11px + 우측 Pill)에 컬럼 내 페이지네이션이 붙는다. 학생상담은 4개 스탯 카드(micro 라벨 + 28px 숫자 + 아이콘 칩) → 3그룹 필터 …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 7,
+      "label": "audit:retention-withdraw",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "aa698d1e3da123b80",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442797003,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "이탈방어(/retention) + 퇴원관리(/withdrawals)",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/retention, src/app/(shell)/withdrawals (이탈방어 + 퇴원관리).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④…",
+      "lastProgressAt": 1784442859215,
+      "tokens": 87474,
+      "toolCalls": 13,
+      "durationMs": 62212,
+      "resultPreview": "{\"screen\":\"이탈방어(/retention) + 퇴원관리(/withdrawals)\",\"layoutSummary\":\"retention/page.tsx는 상단에 탭(RetentionTabs)+한 줄 헤드라인 텍스트, 그 아래 학원 건강 스택바 게이지(rounded-2xl 카드) → 5칸 PulseTiles 스탯 그리드 → 좌(1.5fr) '오늘 큐' 액션 리스트 카드 + 우측 SignalSection 3장(예정 연락·재등록 위험·상담 공백) 2열 그리드. withdrawals/page.tsx는 유형 토글 칩(퇴원/수강종료) → 4칸 Stat 스트립 → 필터 바(기간·사유·과목·상담 칩+셀렉트, rounded-md 카드) → 월별 추이 차트+과목별 분포 바 2열 → 최근 퇴원 행 목록(1.4fr)+사유 분석…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 8,
+      "label": "audit:staff-meetings",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "aef8e60c586781704",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442803356,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "직원관리(/staff) + 회의록(/meetings) — 워크트리 app-reskin-…",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/staff, src/app/(shell)/meetings (직원관리 + 회의록).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④ 사진 카드+좌…",
+      "lastProgressAt": 1784442869893,
+      "tokens": 88480,
+      "toolCalls": 12,
+      "durationMs": 66537,
+      "resultPreview": "{\"screen\":\"직원관리(/staff) + 회의록(/meetings) — 워크트리 app-reskin-precision-pine\",\"layoutSummary\":\"두 화면 모두 동일한 4단 스택 구성: ① 상단 Stat strip(rounded-2xl 카드, micro 라벨+28px 숫자+우측 아이콘칩 — 이미 빅 스탯에 근접) ② rounded-md 필터 바(역할/상태·기간/상태 링크칩 + 검색폼) ③ \\\"결과 N명/건\\\" micro 카운트 + 우측 액션 버튼 줄 ④ 목록(직원=3열 rounded-2xl 카드 그리드, 회의=rounded-2xl 리스트 아이템 세로 스택) + Pagination. 직원 페이지는 FaceTabs(직원 목록/이력서)로 면 전환. 회의 상세는 eyebrow+제목 편집기+메타 헤…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 9,
+      "label": "audit:exams-help-owner",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "a7b344f6dd0d2afae",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442806028,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "성적관리(/exams) · 도움말(/help) · 학원설정(/owner) — 워크…",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(shell)/exams, src/app/(shell)/help, src/app/(shell)/owner (성적관리 + 도움말 + 학원설정).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3…",
+      "lastProgressAt": 1784442870486,
+      "tokens": 92985,
+      "toolCalls": 10,
+      "durationMs": 64457,
+      "resultPreview": "{\"screen\":\"성적관리(/exams) · 도움말(/help) · 학원설정(/owner) — 워크트리 app-reskin-precision-pine\",\"layoutSummary\":\"성적관리는 페이지 헤더 없이 필터바 카드(과목·유형 칩 + 검색·기간 폼) → \\\"결과 N개\\\" 카운터+새 시험 버튼 → 8열 밀집 테이블 → 페이지네이션으로 구성되고, 상세는 카드 헤더(Pill+제목+응시/평균/최고/최저 4스탯) 아래 반 선택 → 점수 일괄입력 그리드다. 도움말은 그라디언트 검색 히어로 → 빠른 시작 번호 리스트 카드 → 메뉴 2열 그리드 → FAQ 아코디언 → 아이콘 시스템 배너 → 1:1 문의 그라디언트 카드로, 세 화면 중 유일하게 eyebrow→헤드라인 위계가 이미 부분 적용돼 있다. 학원설정은 ey…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 10,
+      "label": "audit:auth-intake",
+      "phaseIndex": 1,
+      "phaseTitle": "Audit",
+      "agentId": "af2148c40dc0f5b20",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784442809026,
+      "queuedAt": 1784442744409,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "(auth) 로그인 + (intake) QR 공개접수 폼",
+      "promptPreview": "너는 READ-ONLY 디자인 감사 에이전트다. 절대 파일을 수정하지 말 것 — Read/Grep/Glob만 사용.\n워크트리 C:/Creative/eywa-worktrees/app-reskin-precision-pine 의 다음 경로를 읽어라: src/app/(auth), src/app/(intake) (로그인 + QR 공개접수 폼).\n각 경로의 page.tsx와 주요 _components를 읽고 화면의 \"디자인 구성\"을 감사하라.\n\n배경: 이 앱을 injaewon.blog의 구성 문법으로 리팩토링할 계획이다. 그 문법 = ① 섹션마다 eyebrow(작은 라벨)→큰 헤드라인→서브텍스트 위계 ② 빅 스탯(큰 숫자+작은 라벨) ③ rounded-3xl 소프트 패널로 영역 구분 ④ 사진 카드+좌하단 캡션 오버레이…",
+      "lastProgressAt": 1784442883240,
+      "tokens": 86327,
+      "toolCalls": 14,
+      "durationMs": 74214,
+      "resultPreview": "{\"screen\":\"(auth) 로그인 + (intake) QR 공개접수 폼\",\"layoutSummary\":\"로그인은 2열 스플릿 — 좌측 BrandPanel(네이비 primary 배경, 반복 괘선 텍스처, 대형 display 헤드라인 + 장식용 출석부 미니 렌더링), 우측은 eyebrow→h1→서브텍스트 위계의 폼(max-w-sm, 이메일/비밀번호/에러박스/풀폭 로그인 버튼). 이미 injaewon 문법의 eyebrow 위계를 부분 적용한 상태. 공개접수(intake)는 모바일 풀스크린 단일 컬럼(max-w-460px), 상단 네이비 헤더(학원명 gold 라벨 + 26px 제목 + 진행 점 2개) 뒤 컬러 구획 Section(학생=gold·학부모=amber·셔틀=danger·동의서=ink) — 각 섹션은 …"
+    }
+  ],
+  "totalTokens": 890711,
+  "totalToolCalls": 99
+}
