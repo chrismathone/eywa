@@ -38,7 +38,7 @@ export function HelpBrowser({
   return (
     <>
       {/* Search hero */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#15945a] p-8 text-white shadow-primary-deep">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#1e56a0] p-8 text-white shadow-primary-deep">
         <svg
           className="pointer-events-none absolute top-0 right-0 opacity-[0.18]"
           width="240"

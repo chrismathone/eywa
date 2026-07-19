@@ -15,7 +15,7 @@ import type { SubjectTone } from "@/features/onescreen/types";
 import { pctOf, type Session } from "../history";
 
 const TONE_HEX: Record<SubjectTone, string> = {
-  primary: "#0e7c46",
+  primary: "#153e75",
   blue: "#2d6be0",
   rose: "#d2447a",
   purple: "#6c50c8",
