@@ -97,6 +97,12 @@ export type OneScreenStudent = {
   homework: string; // "완료" | "일부 미흡" | "미제출" | "—"
   note?: string; // 특이사항(강사 메모) — 0093a. AI 멘트 입력(공지 모드 A/B). 학부모엔 생성 문구만. 미설정=빈 메모.
 
+  // ── 로스터 신호(읽기 전용, roster가 채움) — 판정은 roster-signals.ts 순수 함수 ──
+  // G3: 학부모 읽음 통계(0124a RPC). 추적 불가 학생은 trackableCount 0 → 배지 자연 침묵.
+  parentRead?: import("./roster-signals").ParentReadStats;
+  // G2: 진도 이상(수학 파이프라인 전용 — errored 컨테이너/최근 오류 이벤트). 소비처는 math 행에만 표시.
+  progressSignal?: import("./roster-signals").ProgressSignal;
+
   // ── 런타임 state (클라이언트에서만 변경, 새로고침 시 초기화) ──
   progressConfirmed: boolean;
   reportDraft: string;

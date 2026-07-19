@@ -5,6 +5,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { resolveStudyGrade } from "../curriculum";
 import { subjectTone, toneSoftClass, toneSolidClass } from "../data";
 import { isRowActionable, type GridRow } from "../grid";
+import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
@@ -123,6 +124,11 @@ export function GridBodyRow({
   const { student, subject, subjectIndex, key } = row;
   const { tone } = subjectTone(subject.name);
   const badge = classnoteBadge(rep?.classnoteStatus);
+  // 로스터 신호(G2·G3) — 판정은 순수 함수(roster-signals.ts). 진도 배지는 수학 파이프라인 데이터라 math 행에만
+  // (subjectKey 미지정=math 간주는 진도 입력 분기와 동일 규약, types.ts:26-29).
+  const unreadBadge = parentUnreadBadge(student.parentRead);
+  const isMathRow = !subject.subjectKey || subject.subjectKey === "math";
+  const showProgressBadge = isMathRow && progressAnomalyBadge(student.progressSignal);
   const att = student.attendance;
   const genRowBusy = gen.rowBusy;
   const bulkGen = gen.bulk;
@@ -152,6 +158,26 @@ export function GridBodyRow({
           {student.isMakeup ? (
             <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
               보강
+            </span>
+          ) : null}
+          {/* G3: 학부모 미확인 — 최근 추적 가능 보고서 3건+ 전부 나흘 넘게 미읽음(판정=roster-signals 순수함수).
+              카피는 "미확인"(읽음 신호 커버리지 75%라 "안 읽음" 단정 금지). 모든 행에 표시(반 필터에 숨지 않게). */}
+          {unreadBadge ? (
+            <span
+              className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+              title={`최근 보고서 ${unreadBadge.count}건을 학부모가 아직 확인하지 않았습니다 — 다른 경로(직접 안내 등) 확인이 필요할 수 있어요`}
+            >
+              학부모 미확인 {unreadBadge.count}회
+            </span>
+          ) : null}
+          {/* G2: 진도 확인 필요 — errored 컨테이너/최근 오류 이벤트(수학 파이프라인 전용 → math 행에만).
+              regression은 의도적 제외(실측 소음) — roster-signals.ts 참조. */}
+          {showProgressBadge ? (
+            <span
+              className="bg-danger-soft text-danger shrink-0 rounded-pill px-1 py-px text-[9px] font-bold"
+              title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
+            >
+              진도 확인 필요
             </span>
           ) : null}
         </div>

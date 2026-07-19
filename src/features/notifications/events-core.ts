@@ -343,6 +343,50 @@ export function unsentReportDigestBody(events: readonly UnsentReportEvent[]): st
   return `${names} 학생의 수업 보고서 ${events.length}건이 저장만 되고 아직 발송되지 않았습니다(${events[0].reportDate}~).`;
 }
 
+// ─────────── 진도 이상(수학) 이벤트 ───────────
+// G2 선알림 — ingest(progress/server/ingest.ts, math 전용)가 남긴 jump_error/overlap_error를 벨로.
+// ⚠️ regression은 의도적 제외 — 실측(2026-07-19) 최근 14일 80건/학생 50명(복습 재기록 소음),
+// 오류 2종은 같은 기간 한 자릿수(고신호). 배지(roster-signals.ts)와 같은 선정 기준.
+
+export type ProgressAnomalyRow = {
+  studentId: string;
+  studentName: string;
+  eventId: string; // progress_events.id
+  eventType: string; // jump_error | overlap_error (그 외는 build에서 제외)
+};
+export type ProgressAnomalyEvent = {
+  subjectKey: string; // studentId — 담당 강사 라우팅(groupEventsByTeacher 기본 추출자와 호환)
+  bucket: string; // `pe:${eventId}` — 이벤트 1건 = 전이 1회 = 알림 1회(앵커일 아님, dedup 규약 준수)
+  studentName: string;
+  label: string; // 한글 라벨(raw enum 노출 금지) — progress-panel과 동일 표현
+};
+
+/** 진도 이상 라벨 — 학생 상세 진도 탭(progress-panel.tsx)과 같은 한글 표현으로 통일. */
+export const PROGRESS_ANOMALY_LABEL: Record<string, string> = {
+  jump_error: "진도 점프",
+  overlap_error: "선행·현행 겹침",
+};
+
+export function buildProgressAnomalyEvents(rows: readonly ProgressAnomalyRow[]): ProgressAnomalyEvent[] {
+  const events: ProgressAnomalyEvent[] = [];
+  for (const row of rows) {
+    const label = PROGRESS_ANOMALY_LABEL[row.eventType];
+    if (!label) continue; // regression 등 미대상 유형 방어(쿼리 필터와 이중)
+    events.push({ subjectKey: row.studentId, bucket: `pe:${row.eventId}`, studentName: row.studentName, label });
+  }
+  return events;
+}
+
+/** 진도 이상 개별/집계 본문 — "수학" 명시(파이프라인이 math 전용, 리뷰 확정: 무표기 시 타과목 오인). */
+export function progressAnomalyDigestBody(events: readonly ProgressAnomalyEvent[]): string | null {
+  if (events.length === 0) return null;
+  if (events.length === 1) {
+    const event = events[0];
+    return `${event.studentName} 학생 수학 진도 기록에 ${event.label}이(가) 감지됐습니다 — 진도 입력을 확인해 주세요.`;
+  }
+  return `${summarizeNames([...new Set(events.map((event) => event.studentName))])} 학생의 수학 진도 기록에 이상(점프·겹침)이 감지됐습니다 — 진도 입력을 확인해 주세요.`;
+}
+
 /** 성적 급락 개별/집계 본문. 한 명이면 과목·하락폭, 여러 명이면 이름 집계. */
 export function gradeDropDigestBody(events: readonly GradeDropEvent[]): string | null {
   if (events.length === 0) return null;

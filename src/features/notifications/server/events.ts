@@ -31,12 +31,14 @@ import {
   buildFollowupEvents,
   buildGradeDropEvents,
   buildOutstandingEvents,
+  buildProgressAnomalyEvents,
   buildUnsentReportEvents,
   followupBody,
   weekKey,
   gradeDropDigestBody,
   groupEventsByTeacher,
   outstandingDigestBody,
+  progressAnomalyDigestBody,
   unsentReportDigestBody,
   UNSENT_REPORT_WINDOW_DAYS,
   type AbsenceEvent,
@@ -44,10 +46,11 @@ import {
   type GradeDropEvent,
   type GradeRow,
   type OutstandingEvent,
+  type ProgressAnomalyEvent,
   type UnsentReportEvent,
 } from "../events-core";
 
-type EventType = "absence_alert" | "followup_due" | "grade_drop" | "outstanding_alert" | "unsent_report";
+type EventType = "absence_alert" | "followup_due" | "grade_drop" | "outstanding_alert" | "unsent_report" | "progress_anomaly";
 type EventRow = { tenant_id: string; event_type: EventType; subject_key: string; bucket: string; seeded: boolean };
 /** admin client(RLS 우회)를 쿠키-클라 시그니처 db 주입에 넘길 때의 캐스트 별칭(briefing.ts 선례). */
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -133,6 +136,10 @@ async function getStudentActiveTeachers(
   tenantId: string,
   studentIds: readonly string[],
   today: string,
+  // 과목 스코프(선택) — 지정하면 그 과목 반의 담당 강사만 매핑. 진도 이상(수학 전용 파이프라인)처럼
+  // "그 강사가 실제로 할 수 있는 행동"이 특정 과목에 묶인 이벤트에 사용(#77형 거짓 재촉 방지, 리뷰 확정).
+  // 미지정 = 기존 동작(전 과목 담당 강사 — 결석·성적처럼 과목 무관 관심사).
+  subjectScope?: readonly string[],
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   if (studentIds.length === 0) return result;
@@ -160,15 +167,19 @@ async function getStudentActiveTeachers(
   const classIds = [...new Set(active.map((row) => row.class_id))];
   if (classIds.length === 0) return result;
 
-  // 반 → 담당 강사(본 테넌트·운영 중). teacher_id null(미지정)·타 테넌트·폐지 반은 제외.
-  const classes = await fetchInChunks<{ id: string; teacher_id: string | null; tenant_id: string; is_active: boolean }>(
-    classIds,
-    (chunk) => admin.from("classes").select("id, teacher_id, tenant_id, is_active").in("id", chunk),
-  );
+  // 반 → 담당 강사(본 테넌트·운영 중). teacher_id null(미지정)·타 테넌트·폐지 반·(스코프 지정 시) 타 과목 반 제외.
+  const classes = await fetchInChunks<{
+    id: string;
+    teacher_id: string | null;
+    tenant_id: string;
+    is_active: boolean;
+    subject: string | null;
+  }>(classIds, (chunk) => admin.from("classes").select("id, teacher_id, tenant_id, is_active, subject").in("id", chunk));
   const teacherByClass = new Map<string, string>();
   const teacherIds = new Set<string>();
   for (const klass of classes) {
     if (klass.tenant_id !== tenantId || !klass.is_active || !klass.teacher_id) continue;
+    if (subjectScope && (!klass.subject || !subjectScope.includes(klass.subject))) continue;
     teacherByClass.set(klass.id, klass.teacher_id);
     teacherIds.add(klass.teacher_id);
   }
@@ -369,6 +380,66 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
 }
 
 /**
+ * 진도 이상 감지(G2 선알림) — ingest(math 전용)가 남긴 jump_error/overlap_error 이벤트를 담당 강사+master 벨로.
+ * grade_drop 동형: recordNew dedup(bucket=`pe:${eventId}` — 이벤트 1건=전이 1회, 앵커일 아님)·콜드스타트 시드·
+ * groupEventsByTeacher 라우팅 재사용. regression은 의도적 제외(실측 14일 80건=복습 소음, events-core 참조).
+ * 창 = 최근 14일(cron 중단 공백 커버, dedup이 재실행 중복을 흡수). 볼륨 실측 한 자릿수라 스팸 위험 없음.
+ */
+async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): Promise<number> {
+  const today = kstToday();
+  const since = new Date(Date.parse(`${today}T00:00:00Z`) - 14 * 86_400_000).toISOString();
+  // admin=RLS 우회 → tenant 필터 필수(불변식). 학생 이름은 임베드 조인(grade_drop 패턴).
+  const { data, error } = await admin
+    .from("progress_events")
+    .select("id, student_id, event_type, student:student_id ( name )")
+    .eq("tenant_id", tenantId)
+    .in("event_type", ["jump_error", "overlap_error"])
+    .gte("created_at", since)
+    .order("created_at", { ascending: true })
+    .limit(500); // 실측 한 자릿수/14일 — 폭주(버그) 시에도 벨 폭탄 방지 상한
+  if (error) throw new Error(`detectProgressAnomaly query: ${error.message}`);
+  const candidates = buildProgressAnomalyEvents(
+    (data ?? []).map((row) => {
+      const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
+      return {
+        studentId: row.student_id as string,
+        studentName: student?.name ?? "(학생)",
+        eventId: row.id as string,
+        eventType: row.event_type as string,
+      };
+    }),
+  );
+  const cold = await isColdStart(admin, tenantId, "progress_anomaly");
+  const fresh = (await recordNew(admin, tenantId, "progress_anomaly", candidates, cold)) as ProgressAnomalyEvent[];
+  if (cold || fresh.length === 0) return 0;
+
+  const items: NotifyInput[] = [];
+  const masterBody = progressAnomalyDigestBody(fresh);
+  if (masterBody) {
+    for (const recipientId of await activeMasterIds(admin, tenantId)) {
+      items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body: masterBody, link: "/students", actorId: null });
+    }
+  }
+  // 담당 강사 = 자기 학생의 **수학 반** 강사만(리뷰 확정 #77형: 진도 파이프라인이 math 전용이라
+  // 영어만 담당하는 강사에게 보내면 배지도 안 보이고 진도 입력 주체도 아님 = 할 수 없는 일 재촉).
+  // "math" = ingest.ts MATH_SUBJECT와 짝(subject_1 등 비math 보고서는 ingest가 skip하므로 이벤트 원천 부재).
+  const studentTeachers = await getStudentActiveTeachers(
+    admin,
+    tenantId,
+    [...new Set(fresh.map((event) => event.subjectKey))],
+    today,
+    ["math"],
+  );
+  for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
+    const body = progressAnomalyDigestBody(teacherEvents);
+    if (!body) continue;
+    items.push({ tenantId, recipientId: teacherId, type: "progress_anomaly", title: "담당 학생 진도 기록 이상", body, link: "/onescreen", actorId: null });
+  }
+  await notifyUsers(items);
+  return fresh.length;
+}
+
+/**
  * 미수 임계 감지(학생별 총 미수가 금액 tier 도달) → master + 회계(활성) 집계(콜드스타트면 시드만).
  * 미수는 학생별이 아니라 청구 도메인 전체라 담당 강사가 아닌 billing 역할(master/accountant)에게 집계 1건.
  */
@@ -509,13 +580,14 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
  */
 export async function detectAndNotifyEvents(
   tenantId: string,
-): Promise<{ absence: number; followup: number; gradeDrop: number; outstanding: number; unsentReport: number }> {
+): Promise<{ absence: number; followup: number; gradeDrop: number; outstanding: number; unsentReport: number; progressAnomaly: number }> {
   const admin = createAdminClient();
   let absence = 0;
   let followup = 0;
   let gradeDrop = 0;
   let outstanding = 0;
   let unsentReport = 0;
+  let progressAnomaly = 0;
   try {
     absence = await detectAbsence(admin, tenantId);
   } catch (e) {
@@ -541,5 +613,10 @@ export async function detectAndNotifyEvents(
   } catch (e) {
     reportError(e, { scope: "events.unsentReport", tenantId });
   }
-  return { absence, followup, gradeDrop, outstanding, unsentReport };
+  try {
+    progressAnomaly = await detectProgressAnomaly(admin, tenantId);
+  } catch (e) {
+    reportError(e, { scope: "events.progressAnomaly", tenantId });
+  }
+  return { absence, followup, gradeDrop, outstanding, unsentReport, progressAnomaly };
 }
