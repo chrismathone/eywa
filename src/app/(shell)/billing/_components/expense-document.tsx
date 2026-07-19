@@ -41,7 +41,7 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
         {/* 상단: 제목 + 결재란 */}
         <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-extrabold tracking-wide whitespace-nowrap">지출결의서</h1>
+            <h1 className="text-2xl font-bold tracking-wide whitespace-nowrap">지출결의서</h1>
             <span
               className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px] ${
                 approved

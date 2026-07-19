@@ -12,7 +12,7 @@ function SaveBtn({ dirty }: { dirty: boolean }) {
     <button
       type="submit"
       disabled={pending || !dirty}
-      className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold transition disabled:opacity-50"
+      className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-bold transition disabled:opacity-50"
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
       메모 저장
@@ -55,7 +55,7 @@ export function MeetingNotepad({
       <header className="flex items-center justify-between gap-3">
         <div className="inline-flex items-center gap-2">
           <FileText className="text-text-dim size-4 shrink-0" />
-          <h2 className="text-foreground text-sm font-semibold">메모장</h2>
+          <h2 className="text-foreground text-sm font-bold">메모장</h2>
         </div>
         {justSaved ? <span className="text-primary text-[11px] font-medium">저장됨</span> : null}
       </header>

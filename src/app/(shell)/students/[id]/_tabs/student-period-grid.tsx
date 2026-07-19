@@ -73,7 +73,7 @@ function PeriodTable({
   const rowHeight = tableHeight / Math.max(1, rows.length);
   // 수학계열(평일·비영어)만 2교시 묶음 라벨(1교시=1·2교시 …). 영어·주말·폴백은 개별 교시 라벨.
   const isMathFamily = !weekend && subject !== "english";
-  const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-[11px] font-semibold whitespace-nowrap`;
+  const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-[11px] font-bold whitespace-nowrap`;
   return (
     <table className={`border-collapse border ${GRID} text-sm`} style={{ tableLayout: "fixed" }}>
       <colgroup>
@@ -144,7 +144,7 @@ function PeriodTable({
                         className={`flex flex-col rounded-md px-1.5 py-1 ${cellColor}`}
                         style={{ height: spanH - 8 }} // p-1(상하 8px) 보정 → 셀 전체 채움
                       >
-                        <span className="text-foreground text-[12px] leading-tight font-semibold break-keep">
+                        <span className="text-foreground text-[12px] leading-tight font-bold break-keep">
                           {c.className}
                         </span>
                         {c.teacherName ? (

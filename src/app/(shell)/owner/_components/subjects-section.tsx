@@ -562,7 +562,7 @@ function ExcludeTeacherChips({
             aria-pressed={on}
             className={`rounded-md border px-2.5 py-1 text-[12px] transition ${
               on
-                ? "border-primary bg-primary/10 text-primary font-semibold"
+                ? "border-primary bg-primary/10 text-primary font-bold"
                 : "border-line text-text-dim hover:border-primary/60"
             }`}
           >

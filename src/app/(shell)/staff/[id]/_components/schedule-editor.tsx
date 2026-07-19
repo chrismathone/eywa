@@ -119,7 +119,7 @@ export function ScheduleEditor({
       <ul className="divide-line divide-y">
         {DAYS.map(([day, label]) => (
           <li key={day} className="flex flex-wrap items-center gap-2 py-2.5">
-            <span className="text-foreground w-6 shrink-0 text-sm font-semibold">{label}</span>
+            <span className="text-foreground w-6 shrink-0 text-sm font-bold">{label}</span>
             <div className="flex flex-1 flex-wrap items-center gap-2">
               {byDay[day].length === 0 ? (
                 <span className="text-text-faint text-xs">휴무</span>

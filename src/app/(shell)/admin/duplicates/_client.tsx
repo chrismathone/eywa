@@ -50,7 +50,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
   return (
     <li className="bg-card border-border rounded-md border p-4">
       <header className="mb-3 flex items-baseline justify-between">
-        <h3 className="text-foreground text-sm font-semibold">
+        <h3 className="text-foreground text-sm font-bold">
           {group.students[0].name}
           <span className="text-muted-foreground ml-2 text-xs">
             {group.students[0].grade ?? "—"}

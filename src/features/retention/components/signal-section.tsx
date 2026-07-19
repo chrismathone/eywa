@@ -31,7 +31,7 @@ export function SignalSection({
     <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
       <header className="border-line flex items-center gap-2 border-b px-4 py-3">
         <span className="text-text-dim flex size-6 items-center justify-center">
-          <Icon size={14} strokeWidth={2} />
+          <Icon size={14} strokeWidth={1.8} />
         </span>
         <h3 className="text-foreground text-[13px] font-bold">{title}</h3>
         <span className="text-text-faint num ml-auto text-[11px]">{rows.length}</span>
@@ -44,7 +44,7 @@ export function SignalSection({
             <li key={r.id} className="hover:bg-bg-soft/50 transition">
               <WindowLink href={`/students/${r.id}`} title={r.name} className="flex items-center gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
-                  <p className="text-foreground text-[12px] font-semibold">
+                  <p className="text-foreground text-[12px] font-bold">
                     {r.name} <span className="text-text-faint text-[10px] font-normal">{r.sub}</span>
                   </p>
                 </div>

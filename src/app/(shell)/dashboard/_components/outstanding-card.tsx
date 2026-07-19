@@ -50,7 +50,7 @@ export function OutstandingCard({
                   {p.studentName}
                 </span>
               )}
-              <span className="text-danger num shrink-0 text-[12px] font-semibold">
+              <span className="text-danger num shrink-0 text-[12px] font-bold">
                 {man(p.amount)}
               </span>
               <Pill color={p.status === "partial" ? "amber" : "danger"}>

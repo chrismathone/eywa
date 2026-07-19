@@ -197,7 +197,7 @@ export function NoticeComposer({
       <div className="lg:relative lg:min-h-[320px]">
         <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-md border lg:absolute lg:inset-0 lg:max-h-none">
           <div className="border-line border-b px-3 py-2">
-            <p className="text-foreground text-[13px] font-semibold">대상 학생 <span className="text-primary">{selectedCount}</span></p>
+            <p className="text-foreground text-[13px] font-bold">대상 학생 <span className="text-primary">{selectedCount}</span></p>
             <p className="text-text-faint text-[11px]">보이는 반의 재원생 · 발송 과목(수학 등)만 실제 게시</p>
           </div>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -224,7 +224,7 @@ export function NoticeComposer({
       <div className="space-y-4">
         <section className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
           <div>
-            <h2 className="text-foreground text-[15px] font-semibold">학부모 공지</h2>
+            <h2 className="text-foreground text-[15px] font-bold">학부모 공지</h2>
             <p className="text-text-faint text-[12px]">
               선택 학생 학부모의 ClassNote 보드에 공지를 게시합니다 · 수업 보고서와 별개 글로 누적됩니다
             </p>
@@ -320,7 +320,7 @@ export function NoticeComposer({
 
         {/* 내가 보낸 공지 이력 — 대기건은 수정/삭제 */}
         <section className="bg-card border-line shadow-card rounded-md border px-4 py-3">
-          <p className="text-foreground mb-2 text-[13px] font-semibold">내가 보낸 공지</p>
+          <p className="text-foreground mb-2 text-[13px] font-bold">내가 보낸 공지</p>
           {rows.length === 0 ? (
             <p className="text-text-faint text-[12px]">아직 보낸 공지가 없습니다.</p>
           ) : (

@@ -344,10 +344,10 @@ export default async function TodayPage() {
         <section aria-labelledby="live-operations-title" className="space-y-3">
           <header className="flex flex-wrap items-end justify-between gap-2 px-1">
             <div>
-              <p className="text-primary text-[12px] font-semibold">
+              <p className="text-primary text-[12px] font-bold">
                 실시간 운영
               </p>
-              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-[17px] font-extrabold tracking-tight">
+              <h2 id="live-operations-title" className="text-foreground mt-0.5 text-[17px] font-bold tracking-tight">
                 지금 진행 중
               </h2>
             </div>
@@ -392,10 +392,10 @@ export default async function TodayPage() {
       <section aria-labelledby="operations-context-title" className="space-y-3">
         <header className="flex flex-wrap items-end justify-between gap-2 px-1">
           <div>
-            <p className="text-text-dim text-[12px] font-semibold">
+            <p className="text-text-dim text-[12px] font-bold">
               참고 지표
             </p>
-            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-[17px] font-extrabold tracking-tight">
+            <h2 id="operations-context-title" className="text-foreground mt-0.5 text-[17px] font-bold tracking-tight">
               운영 맥락
             </h2>
           </div>

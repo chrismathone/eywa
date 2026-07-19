@@ -61,7 +61,7 @@ export function WindowSwitcher() {
                 aria-label="스포트라이트"
                 className="text-text-dim hover:bg-bg-soft hover:text-foreground mr-0.5 flex size-7 items-center justify-center rounded-full transition"
               >
-                <LayoutPanelTop size={15} strokeWidth={2} />
+                <LayoutPanelTop size={15} strokeWidth={1.8} />
               </button>
             ) : null}
             {list.map((w) => {

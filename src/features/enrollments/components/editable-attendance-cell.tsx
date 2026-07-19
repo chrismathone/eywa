@@ -88,7 +88,7 @@ export function EditableAttendanceCell({
             key={d}
             type="button"
             onClick={() => toggle(d)}
-            className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-semibold transition ${
+            className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-bold transition ${
               sel.has(d) ? "bg-primary text-primary-foreground" : "bg-bg-soft text-text-faint hover:bg-bg-soft/70"
             }`}
           >

@@ -71,7 +71,7 @@ export async function AuditFace({
       {/* Editorial 문법 ① — 구분선 대신 여백 리듬(문법 ⑥) */}
       <header>
         <p className="editorial-eyebrow">관리 · 운영 감사로그</p>
-        <h2 className="text-foreground mt-1 text-lg font-semibold">작업 이력</h2>
+        <h2 className="text-foreground mt-1 text-lg font-bold">작업 이력</h2>
       </header>
 
       <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-2.5">
@@ -85,7 +85,7 @@ export async function AuditFace({
       {total === 0 ? (
         <EmptyState
           image="audit"
-          icon={() => <ScrollText size={32} strokeWidth={1.5} />}
+          icon={() => <ScrollText size={32} strokeWidth={1.8} />}
           title="기록된 작업이 없습니다"
           description="역할 변경·삭제·청구서·시험·급여 등 주요 작업이 발생하면 여기에 기록됩니다."
         />
@@ -95,11 +95,11 @@ export async function AuditFace({
             <table className="w-full text-[12px] [&_td]:whitespace-nowrap">
               <thead>
                 <tr className="bg-bg-soft text-text-dim border-line border-b [&_th]:whitespace-nowrap">
-                  <th className="px-4 py-2 text-left font-semibold">시각</th>
-                  <th className="px-4 py-2 text-left font-semibold">실행자</th>
-                  <th className="px-4 py-2 text-left font-semibold">액션</th>
-                  <th className="px-4 py-2 text-left font-semibold">대상</th>
-                  <th className="px-4 py-2 text-left font-semibold">상세</th>
+                  <th className="px-4 py-2 text-left font-bold">시각</th>
+                  <th className="px-4 py-2 text-left font-bold">실행자</th>
+                  <th className="px-4 py-2 text-left font-bold">액션</th>
+                  <th className="px-4 py-2 text-left font-bold">대상</th>
+                  <th className="px-4 py-2 text-left font-bold">상세</th>
                 </tr>
               </thead>
               <tbody className="divide-line divide-y">

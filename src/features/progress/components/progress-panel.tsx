@@ -84,7 +84,7 @@ function TrackCard({ t }: { t: TrackAnalytics }) {
       {t.anomalies.length ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {t.anomalies.map((a, i) => (
-            <span key={i} className="bg-danger rounded-pill px-2 py-0.5 text-[10px] font-semibold text-white">
+            <span key={i} className="bg-danger rounded-pill px-2 py-0.5 text-[10px] font-bold text-white">
               {anomalyLabel(a.type)}
             </span>
           ))}
@@ -100,7 +100,7 @@ export async function ProgressContainerPanel({ studentId }: { studentId: string 
   return (
     <div className="space-y-3">
       <header className="flex items-baseline justify-between">
-        <h2 className="text-foreground text-base font-semibold">진도 분석</h2>
+        <h2 className="text-foreground text-base font-bold">진도 분석</h2>
         <p className="text-text-faint text-[11px]">원스크린 진도 기록 기반 자동 산출</p>
       </header>
       {data.tracks.length === 0 ? (

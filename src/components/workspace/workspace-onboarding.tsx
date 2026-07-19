@@ -58,25 +58,25 @@ export function WorkspaceOnboarding() {
             onClick={dismiss}
             className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-7 items-center justify-center rounded-[3px] transition"
           >
-            <X size={16} strokeWidth={2} />
+            <X size={16} strokeWidth={1.8} />
           </button>
         </header>
 
-        <h2 className="text-foreground text-[19px] font-extrabold tracking-tight">
+        <h2 className="text-foreground text-[19px] font-bold tracking-tight">
           여러 화면을 한 번에
         </h2>
         <p className="text-text-dim mt-1.5 text-sm">
-          eywa는 메뉴가 <span className="text-foreground font-semibold">창</span>으로 열려, 동시에 보고 일할 수 있어요.
+          eywa는 메뉴가 <span className="text-foreground font-bold">창</span>으로 열려, 동시에 보고 일할 수 있어요.
         </p>
 
         <ul className="mt-5 space-y-3.5">
           {POINTS.map(({ icon: Icon, title, desc }) => (
             <li key={title} className="flex items-start gap-3">
               <span className="bg-primary-soft text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-sm">
-                <Icon size={17} strokeWidth={2} />
+                <Icon size={17} strokeWidth={1.8} />
               </span>
               <div className="min-w-0">
-                <p className="text-foreground text-[13px] font-semibold">{title}</p>
+                <p className="text-foreground text-[13px] font-bold">{title}</p>
                 <p className="text-text-dim mt-0.5 text-xs">{desc}</p>
               </div>
             </li>
@@ -86,7 +86,7 @@ export function WorkspaceOnboarding() {
         <button
           type="button"
           onClick={dismiss}
-          className="bg-primary shadow-primary-glow hover:bg-primary/90 mt-6 w-full rounded-md py-2.5 text-sm font-semibold text-white transition"
+          className="bg-primary shadow-primary-glow hover:bg-primary/90 mt-6 w-full rounded-md py-2.5 text-sm font-bold text-white transition"
         >
           시작하기
         </button>

@@ -73,10 +73,10 @@ export function AssistantPanel({
             <EyIcon name="message" size={18} />
           </span>
           <div className="min-w-0">
-            <p className="text-primary text-[12px] font-semibold">
+            <p className="text-primary text-[12px] font-bold">
               대화형 비서
             </p>
-            <h2 id="assistant-panel-title" className="text-foreground mt-0.5 text-[16px] font-extrabold tracking-tight">
+            <h2 id="assistant-panel-title" className="text-foreground mt-0.5 text-[16px] font-bold tracking-tight">
               매니저 팀에게 물어보기
             </h2>
           </div>

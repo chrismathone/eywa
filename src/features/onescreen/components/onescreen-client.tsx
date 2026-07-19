@@ -1258,7 +1258,7 @@ export function OneScreenClient({
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
       {sameDateEditors.length > 0 ? (
         <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
-          <span className="font-semibold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
+          <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
           <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
         </div>
       ) : null}
@@ -1353,7 +1353,7 @@ export function OneScreenClient({
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="chart" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-semibold">오늘 진도 · 테스트</h2>
+                <h2 className="text-foreground text-sm font-bold">오늘 진도 · 테스트</h2>
               </header>
               <ProgressCard
                 student={selected}
@@ -1371,12 +1371,12 @@ export function OneScreenClient({
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-semibold">보고서</h2>
+                <h2 className="text-foreground text-sm font-bold">보고서</h2>
                 <button
                   type="button"
                   onClick={() => openNoticeForStudent(selected.id)}
                   title="이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송"
-                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-md border px-2 py-0.5 text-[11px] font-semibold"
+                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-md border px-2 py-0.5 text-[11px] font-bold"
                 >
                   학부모 공지
                 </button>

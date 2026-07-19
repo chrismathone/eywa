@@ -185,7 +185,7 @@ export default async function AttendanceByDatePage({
                 <details key={classId} className="bg-card border-line group overflow-hidden rounded-lg border">
                   <summary className="hover:bg-bg-soft/40 flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3">
                     <div>
-                      <h3 className="text-sm font-semibold">{group.className}</h3>
+                      <h3 className="text-sm font-bold">{group.className}</h3>
                       <p className="text-text-dim num text-xs">
                         {subjectMaps.labelOf(group.subject)} · {group.rows.length}명
                       </p>
@@ -263,7 +263,7 @@ function Summary({
   return (
     <div className="space-y-1">
       <p className="eyebrow">{label}</p>
-      <p className={`num text-foreground text-xl font-semibold ${highlight ?? ""}`}>
+      <p className={`num text-foreground text-xl font-bold ${highlight ?? ""}`}>
         {value}
         <span className="text-text-dim ml-0.5 text-xs font-normal">{unit}</span>
         {suffix ? <span className="text-text-dim ml-2 text-xs font-normal">{suffix}</span> : null}

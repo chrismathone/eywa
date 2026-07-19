@@ -26,7 +26,7 @@ export function MakeeduSyncRunsList({
   if (total === 0) return null;
   return (
     <section className="bg-card border-border rounded-md border p-6">
-      <h3 className="text-foreground text-sm font-semibold">최근 동기화 실행</h3>
+      <h3 className="text-foreground text-sm font-bold">최근 동기화 실행</h3>
       <ul className="divide-border mt-3 divide-y">
         {runs.map((run) => {
           const affected = affectedRowCount(run);

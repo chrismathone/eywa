@@ -204,7 +204,7 @@ export function ExpenseReceiptsModal({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">증빙자료</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">{expense.title}</h2>
+            <h2 className="text-foreground mt-1 text-lg font-bold">{expense.title}</h2>
           </div>
           <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground" aria-label="닫기">
             <X className="size-4" />

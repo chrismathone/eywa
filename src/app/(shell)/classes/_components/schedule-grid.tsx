@@ -197,7 +197,7 @@ export function ScheduleGrid({
               {periodList.map((p) => (
                 <tr key={p.id}>
                   <th className="border-border bg-muted/20 text-muted-foreground border-b border-r py-1 font-normal leading-tight last:border-b-0">
-                    <div className="text-foreground text-[11px] font-semibold">{p.id}</div>
+                    <div className="text-foreground text-[11px] font-bold">{p.id}</div>
                     <div className="num text-[9px]">{p.startTime}</div>
                   </th>
                   {days.map((d) => {
@@ -223,7 +223,7 @@ export function ScheduleGrid({
                           }`}
                           title={on && override ? `부담임 · ${eff}` : undefined}
                         >
-                          <span className="block truncate text-[10px] font-semibold leading-none">
+                          <span className="block truncate text-[10px] font-bold leading-none">
                             {on ? (eff ?? "●") : "·"}
                           </span>
                         </button>
@@ -261,7 +261,7 @@ export function ScheduleGrid({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-xs">
-          <span className="text-foreground font-semibold">{rows.length}</span>개 교시 선택 · 칸을 눌러 수업 교시를 지정
+          <span className="text-foreground font-bold">{rows.length}</span>개 교시 선택 · 칸을 눌러 수업 교시를 지정
         </p>
         {rows.length > 0 ? (
           <button

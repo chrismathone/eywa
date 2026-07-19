@@ -46,7 +46,7 @@ function BigStatInline({
   return (
     <div>
       <p className="text-text-dim text-[12px] font-medium">{label}</p>
-      <p className={`num mt-1 text-[26px] font-extrabold leading-none ${valueClass ?? "text-foreground"}`}>
+      <p className={`num mt-1 text-[26px] font-bold leading-none ${valueClass ?? "text-foreground"}`}>
         {value}
       </p>
     </div>
@@ -113,7 +113,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
       ) : null}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-foreground text-[15px] font-semibold">ClassNote 발송 큐</h2>
+          <h2 className="text-foreground text-[15px] font-bold">ClassNote 발송 큐</h2>
           <p className="text-text-faint text-[12px]">최근 {days}일 · 발송 요청된 보고서 상태</p>
         </div>
         {/* 발송 담당 PC(워커) 상태 — 큐가 실제로 처리될지 한눈에. */}
@@ -193,10 +193,10 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
             <thead>
               <tr className="border-line text-text-faint border-b">
                 <th className="w-8 px-2 py-2"></th>
-                <th className="px-3 py-2 font-semibold">학생 · 과목</th>
-                <th className="px-3 py-2 font-semibold">날짜</th>
-                <th className="px-3 py-2 font-semibold">상태</th>
-                <th className="px-3 py-2 font-semibold">사유</th>
+                <th className="px-3 py-2 font-bold">학생 · 과목</th>
+                <th className="px-3 py-2 font-bold">날짜</th>
+                <th className="px-3 py-2 font-bold">상태</th>
+                <th className="px-3 py-2 font-bold">사유</th>
               </tr>
             </thead>
             <tbody>
@@ -217,7 +217,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                       />
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="text-foreground font-semibold">{it.studentName}</span>
+                      <span className="text-foreground font-bold">{it.studentName}</span>
                       {it.subject ? (
                         <span className="text-text-faint ml-1.5">{subjects.labelOf(it.subject)}</span>
                       ) : null}
@@ -226,7 +226,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                     <td className="px-3 py-2.5">
                       {/* 미지의 상태 코드도 raw 노출 금지 — 원문은 툴팁으로만. */}
                       {badge ? (
-                        <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+                        <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
                       ) : (
                         <span className="text-text-dim text-[11px]" title={it.status ?? ""}>
                           기타
@@ -252,15 +252,15 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
       {/* 진행 중 목록 — 대기·처리중(정상 흐름). 재발송 대상이 아니라 관찰용(발송이 실제로 도는지 확인). */}
       {pending.length > 0 ? (
         <div className="mt-3">
-          <p className="text-text-faint mb-1.5 text-[12px] font-semibold">진행 중 · 대기 {summary.queued} · 처리중 {summary.processing}</p>
+          <p className="text-text-faint mb-1.5 text-[12px] font-bold">진행 중 · 대기 {summary.queued} · 처리중 {summary.processing}</p>
           <div className="border-line overflow-x-auto rounded-md border">
             <table className="w-full min-w-[480px] text-left text-[12px]">
               <thead>
                 <tr className="border-line text-text-faint border-b">
-                  <th className="px-3 py-2 font-semibold">학생 · 과목</th>
-                  <th className="px-3 py-2 font-semibold">날짜</th>
-                  <th className="px-3 py-2 font-semibold">상태</th>
-                  <th className="px-3 py-2 font-semibold">처리 시작</th>
+                  <th className="px-3 py-2 font-bold">학생 · 과목</th>
+                  <th className="px-3 py-2 font-bold">날짜</th>
+                  <th className="px-3 py-2 font-bold">상태</th>
+                  <th className="px-3 py-2 font-bold">처리 시작</th>
                 </tr>
               </thead>
               <tbody>
@@ -269,13 +269,13 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                   return (
                     <tr key={it.id} className="border-line border-b last:border-b-0">
                       <td className="px-3 py-2">
-                        <span className="text-foreground font-semibold">{it.studentName}</span>
+                        <span className="text-foreground font-bold">{it.studentName}</span>
                         {it.subject ? <span className="text-text-faint ml-1.5">{subjects.labelOf(it.subject)}</span> : null}
                       </td>
                       <td className="text-text-dim px-3 py-2">{it.reportDate}</td>
                       <td className="px-3 py-2">
                         {badge ? (
-                          <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+                          <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
                         ) : (
                           <span className="text-text-dim text-[11px]" title={it.status ?? ""}>기타</span>
                         )}

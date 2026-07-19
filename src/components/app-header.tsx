@@ -49,7 +49,7 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
         <div className="text-text-faint text-[11px] leading-none font-medium">
           {breadcrumb}
         </div>
-        <h1 className="text-foreground mt-1 truncate text-[16px] leading-none font-extrabold tracking-tight">
+        <h1 className="text-foreground mt-1 truncate text-[16px] leading-none font-bold tracking-tight">
           {title}
         </h1>
       </div>

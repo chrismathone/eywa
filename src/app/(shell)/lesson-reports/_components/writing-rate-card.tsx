@@ -59,7 +59,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                   aria-pressed={on}
                   className={`rounded-full border px-3 py-1 text-[12px] transition ${
                     on
-                      ? "border-primary bg-primary/10 text-primary font-semibold"
+                      ? "border-primary bg-primary/10 text-primary font-bold"
                       : "border-line text-text-dim hover:bg-bg-soft"
                   }`}
                 >
@@ -80,21 +80,21 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
           <table className="w-full min-w-[760px] text-left text-[12px]">
             <thead>
               <tr className="border-line text-text-faint border-b">
-                <th className="px-3 py-2 font-semibold">강사</th>
-                <th className="px-3 py-2 text-center font-semibold">오늘</th>
+                <th className="px-3 py-2 font-bold">강사</th>
+                <th className="px-3 py-2 text-center font-bold">오늘</th>
                 {dates.map((d) => (
-                  <th key={d} className="px-2 py-2 text-center font-semibold" title={d}>
+                  <th key={d} className="px-2 py-2 text-center font-bold" title={d}>
                     {weekdayOf(d)}
                   </th>
                 ))}
-                <th className="px-3 py-2 text-center font-semibold">주간</th>
+                <th className="px-3 py-2 text-center font-bold">주간</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => (
                 <tr key={r.teacher} className="border-line border-b last:border-b-0 align-top">
                   <td className="px-3 py-2">
-                    <span className="text-foreground font-semibold">{r.teacher}</span>
+                    <span className="text-foreground font-bold">{r.teacher}</span>
                     {r.todayMissing.length > 0 ? (
                       <p className="text-danger mt-0.5 text-[11px]">미작성: {nameList(r.todayMissing)}</p>
                     ) : null}
@@ -116,7 +116,7 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                       {d.target == null ? (
                         <span className="text-text-faint text-[11px]">·</span>
                       ) : (
-                        <span className={`num text-[11px] font-semibold ${rateTone(d.rate)}`} title={`${d.written}/${d.target} 작성`}>
+                        <span className={`num text-[11px] font-bold ${rateTone(d.rate)}`} title={`${d.written}/${d.target} 작성`}>
                           {d.rate}%
                           <span className="text-text-faint num block font-normal">{d.written}/{d.target}</span>
                         </span>

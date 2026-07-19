@@ -43,7 +43,7 @@ export default async function AttendanceInputPage({
 
       <header className="border-line space-y-1 border-b pb-5">
         <p className="eyebrow">{formatKoreanDate(date)}</p>
-        <h1 className="display text-foreground text-2xl">{klass.className}</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{klass.className}</h1>
         <p className="text-text-dim text-sm">
           {subjectMaps.labelOf(klass.subject)}
           {klass.teacherName ? ` · 담임 ${klass.teacherName}` : ""} · 재원생{" "}

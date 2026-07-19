@@ -63,8 +63,8 @@ export function HelpBrowser({
           ))}
         </svg>
         <div className="relative max-w-2xl">
-          <p className="text-[12px] font-semibold text-[#e2b45f]">도움말 센터</p>
-          <h1 className="mt-2 text-[28px] font-extrabold leading-tight">무엇을 도와드릴까요?</h1>
+          <p className="text-[12px] font-bold text-[#e2b45f]">도움말 센터</p>
+          <h1 className="mt-2 text-[28px] font-bold leading-tight">무엇을 도와드릴까요?</h1>
           <p className="mt-2 text-[13px] text-white/85">
             처음이신가요? 아래 <b>빠른 시작</b>부터 따라 해보세요. 메뉴별 안내와 자주 묻는 질문도 한 곳에 있어요.
           </p>

@@ -23,7 +23,7 @@ export default async function EditStudentPage({
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">학생 수정</p>
-        <h1 className="display text-foreground text-2xl">{student.name}</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{student.name}</h1>
       </header>
 
       <StudentForm

@@ -216,7 +216,7 @@ export function BillingTable({ rows, sort, desc, period, q }: Props) {
           )}
         </tbody>
         <tfoot>
-          <tr className="border-border bg-bg-soft border-t font-semibold">
+          <tr className="border-border bg-bg-soft border-t font-bold">
             <td className="text-muted-foreground px-3 py-3 text-xs" colSpan={6}>
               이 페이지 합계 · <span className="num">{lineCount}</span>개 항목 / {groups.length}건
             </td>

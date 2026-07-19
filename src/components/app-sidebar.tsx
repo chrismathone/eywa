@@ -216,11 +216,11 @@ export function AppSidebar({
               <img src={logoSrc} alt={logoText} className="size-7 shrink-0 rounded-[5px] object-contain" />
             ) : (
               <span className="bg-primary shadow-primary-glow flex size-7 shrink-0 items-center justify-center rounded-[5px]">
-                <EyIcon name="building" size={16} strokeWidth={1.9} className="text-white" />
+                <EyIcon name="building" size={16} strokeWidth={1.8} className="text-white" />
               </span>
             )}
             <span
-              className={`text-foreground overflow-hidden text-[15px] font-extrabold tracking-tight whitespace-nowrap ${
+              className={`text-foreground overflow-hidden text-[15px] font-bold tracking-tight whitespace-nowrap ${
                 expanded ? "max-w-[120px] opacity-100" : "max-w-0 opacity-0"
               } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
             >
@@ -263,7 +263,7 @@ export function AppSidebar({
                 }`}
               >
                 <span
-                  className={`text-text-faint absolute left-[17px] text-[11px] font-semibold whitespace-nowrap ${
+                  className={`text-text-faint absolute left-[17px] text-[11px] font-bold whitespace-nowrap ${
                     expanded ? "opacity-100" : "opacity-0"
                   } ${motion ? "transition-opacity duration-200" : ""}`}
                 >
@@ -380,7 +380,7 @@ export function AppSidebar({
               expanded ? "max-w-[150px] opacity-100" : "max-w-0 opacity-0"
             } ${motion ? `transition-[max-width,opacity] duration-200 ${EASE}` : ""}`}
           >
-            <div className="text-foreground truncate text-[12px] font-semibold leading-tight">{name}</div>
+            <div className="text-foreground truncate text-[12px] font-bold leading-tight">{name}</div>
             <div className="text-text-dim truncate text-[11px] leading-tight">{title}</div>
           </div>
         </div>
@@ -415,7 +415,7 @@ export function AppSidebar({
               style={{ top: flyout.top, left: flyout.left }}
               className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-md border p-1"
             >
-              <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-[11px] font-semibold">
+              <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-[11px] font-bold">
                 {flyout.label}
               </p>
               <ul className="space-y-px">
@@ -607,7 +607,7 @@ function RailItem({
       <EyIcon
         name={item.icon}
         size={18}
-        strokeWidth={1.6}
+        strokeWidth={1.8}
         className={`relative z-10 shrink-0 ${fg} ${motion ? "transition-colors duration-200" : ""}`}
       />
       <span
@@ -671,7 +671,7 @@ function ExternalRailItem({
       />
       <Icon
         size={18}
-        strokeWidth={1.85}
+        strokeWidth={1.8}
         className={`text-text-dim group-hover:text-foreground relative z-10 shrink-0 ${
           motion ? "transition-colors duration-200" : ""
         }`}
@@ -682,7 +682,7 @@ function ExternalRailItem({
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >
         <span className="truncate">{item.label}</span>
-        <ExternalLink size={11} strokeWidth={2} className="text-text-faint shrink-0" aria-hidden="true" />
+        <ExternalLink size={11} strokeWidth={1.8} className="text-text-faint shrink-0" aria-hidden="true" />
       </span>
     </a>
   );

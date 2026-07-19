@@ -70,7 +70,7 @@ export function StatusDialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">학생 상태 전환</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">{studentName}</h2>
+            <h2 className="text-foreground mt-1 text-lg font-bold">{studentName}</h2>
             <p className="text-muted-foreground text-xs">현재 상태: {currentStatus}</p>
           </div>
           <button

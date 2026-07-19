@@ -53,7 +53,7 @@ function ToggleForm({ id, isActive }: { id: string; isActive: boolean }) {
       <input type="hidden" name="isActive" value={isActive ? "false" : "true"} />
       <button
         type="submit"
-        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold transition ${
+        className={`rounded-full px-2 py-0.5 text-[11px] font-bold transition ${
           isActive
             ? "bg-primary-soft text-primary hover:bg-primary-soft/70"
             : "bg-bg-soft text-text-faint hover:bg-line-strong/20"
@@ -83,7 +83,7 @@ function DeleteForm({ id }: { id: string }) {
   return (
     <form action={action} className="flex items-center gap-1">
       <input type="hidden" name="id" value={id} />
-      <button type="submit" className="text-danger text-[11px] font-semibold">
+      <button type="submit" className="text-danger text-[11px] font-bold">
         삭제
       </button>
       <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-[11px]">
@@ -186,7 +186,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
       {/* 작성/수정 폼 */}
       <section className="bg-card border-line shadow-card rounded-md border p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-foreground text-sm font-semibold">{e ? "팝업 수정" : "새 팝업 공지"}</h2>
+          <h2 className="text-foreground text-sm font-bold">{e ? "팝업 수정" : "새 팝업 공지"}</h2>
           {e ? (
             <Button type="button" variant="ghost" size="sm" onClick={startNew}>
               새로 작성
@@ -288,7 +288,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
                     <img src={p.imageSrc} alt="" className="border-line h-10 w-14 shrink-0 rounded border object-cover" />
                   ) : null}
                   <div className="min-w-0">
-                    <p className="text-foreground truncate text-[13px] font-semibold">{p.title}</p>
+                    <p className="text-foreground truncate text-[13px] font-bold">{p.title}</p>
                     <p className="text-text-faint mt-0.5 text-[11px]">
                       {AUDIENCE_LABEL[p.audience as PopupAudience] ?? p.audience} · {POSITION_LABEL[p.position as PopupPosition] ?? p.position} · 우선 {p.priority}
                     </p>

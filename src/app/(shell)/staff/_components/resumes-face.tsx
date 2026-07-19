@@ -55,7 +55,7 @@ export async function ResumesFace({ page }: { page: number }) {
       {total === 0 ? (
         <EmptyState
           image="documents"
-          icon={() => <ClipboardList size={32} strokeWidth={1.5} />}
+          icon={() => <ClipboardList size={32} strokeWidth={1.8} />}
           title="작성된 이력서가 없습니다"
           description="'새 이력서'로 종이 서식과 같은 항목을 웹에서 입력하세요 — 인쇄·업로드 단계가 필요 없습니다."
         />

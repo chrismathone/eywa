@@ -145,7 +145,7 @@ export default async function StaffPayrollPage({
       {rows.length === 0 ? (
         <EmptyState
           image="billing"
-          icon={() => <Wallet size={32} strokeWidth={1.5} />}
+          icon={() => <Wallet size={32} strokeWidth={1.8} />}
           title="해당 조건의 급여 내역이 없습니다"
         />
       ) : (
@@ -232,7 +232,7 @@ function PayrollTable({
               {totalBase.toLocaleString("ko-KR")}
             </td>
             <td colSpan={3} />
-            <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-extrabold">
+            <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
               {totalNet.toLocaleString("ko-KR")}
             </td>
             <td />
@@ -264,7 +264,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro truncate">{label}</p>
         <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
+          <Icon size={13} strokeWidth={1.8} />
         </span>
       </header>
       <p className="text-foreground mt-2 num text-[18px] font-bold leading-none">{value}</p>

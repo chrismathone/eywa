@@ -54,7 +54,7 @@ export default async function EnrollmentDashboardPage({
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">등록상담 대시보드</p>
-        <h1 className="display text-foreground text-2xl">사업 인사이트</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">사업 인사이트</h1>
         <p className="text-muted-foreground text-sm">월별 상태 분포 · 전환율 추세 · 상담사별 실적</p>
       </header>
 
@@ -86,7 +86,7 @@ export default async function EnrollmentDashboardPage({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="bg-card border-border rounded-lg border p-5">
           <header className="mb-3">
-            <h2 className="text-foreground text-sm font-semibold">월별 상태 분포</h2>
+            <h2 className="text-foreground text-sm font-bold">월별 상태 분포</h2>
             <p className="text-muted-foreground text-xs">{selectedMonth} 기준 outcome별 카운트</p>
           </header>
           <OutcomeDonut data={distribution} />
@@ -94,7 +94,7 @@ export default async function EnrollmentDashboardPage({
 
         <section className="bg-card border-border rounded-lg border p-5">
           <header className="mb-3">
-            <h2 className="text-foreground text-sm font-semibold">최근 6개월 전환율</h2>
+            <h2 className="text-foreground text-sm font-bold">최근 6개월 전환율</h2>
             <p className="text-muted-foreground text-xs">상담 완료율 (consulted+ai+enrolled) / 등록 완료율</p>
           </header>
           <ConversionBars data={trend} />
@@ -104,7 +104,7 @@ export default async function EnrollmentDashboardPage({
       <section className="bg-card border-border rounded-lg border">
         <header className="border-border flex items-center justify-between border-b px-5 py-3">
           <div>
-            <h2 className="text-foreground text-sm font-semibold">상담사별 실적</h2>
+            <h2 className="text-foreground text-sm font-bold">상담사별 실적</h2>
             <p className="text-muted-foreground text-xs">최근 3개월</p>
           </div>
           <span className="text-muted-foreground num text-xs">{consultants.length}명</span>
@@ -130,7 +130,7 @@ export default async function EnrollmentDashboardPage({
                   <td className="text-foreground num px-5 py-3 text-right">{c.total}</td>
                   <td className="text-muted-foreground num px-5 py-3 text-right">{c.consulted}</td>
                   <td className="text-chart-2 num px-5 py-3 text-right">{c.enrolled}</td>
-                  <td className="text-foreground num px-5 py-3 text-right font-semibold">
+                  <td className="text-foreground num px-5 py-3 text-right font-bold">
                     {c.conversionRate}%
                   </td>
                 </tr>
@@ -156,7 +156,7 @@ function Stat({
   return (
     <div className="space-y-1">
       <p className="eyebrow">{label}</p>
-      <p className={`text-foreground num text-2xl font-semibold ${highlight ?? ""}`}>{value}</p>
+      <p className={`text-foreground num text-2xl font-bold ${highlight ?? ""}`}>{value}</p>
     </div>
   );
 }

@@ -54,7 +54,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
     <section className="bg-card border-border space-y-4 rounded-md border p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-foreground text-base font-semibold">makeedu로 상담 보내기 (역동기화)</h2>
+          <h2 className="text-foreground text-base font-bold">makeedu로 상담 보내기 (역동기화)</h2>
           <p className="text-muted-foreground mt-1 text-sm">
             QR 공개접수로 들어온 신규 상담 중 <strong>makeedu에 아직 없는 건</strong>입니다. 선택해서 보내면
             동기화 PC가 makeedu 예비상담으로 등록합니다(1~2분). 전송된 건은 목록에서 사라집니다.

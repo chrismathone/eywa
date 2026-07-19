@@ -98,7 +98,7 @@ function FanCard({
       <span className="absolute inset-0 flex flex-col px-3.5 py-3 pl-5 text-left">
         <span className={`flex size-9 items-center justify-center rounded-lg ${COVERS[index % COVERS.length]}`}>
           {item.iconName ? (
-            <EyIcon name={item.iconName} size={18} strokeWidth={1.6} />
+            <EyIcon name={item.iconName} size={18} strokeWidth={1.8} />
           ) : (
             <EyIcon name="user" size={17} />
           )}
@@ -208,7 +208,7 @@ export function SpotlightStrip() {
         aria-label="스포트라이트 나가기"
         className="border-line bg-card/95 text-text-dim hover:text-foreground shadow-card mb-2 flex size-9 shrink-0 items-center justify-center rounded-full border backdrop-blur transition"
       >
-        <X size={15} strokeWidth={2} />
+        <X size={15} strokeWidth={1.8} />
       </button>
       <div className="flex items-end pr-4" onMouseLeave={() => setHovered(null)}>
         {visible.map((item, i) => (

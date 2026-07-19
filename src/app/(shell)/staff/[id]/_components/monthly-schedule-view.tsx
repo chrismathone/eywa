@@ -58,7 +58,7 @@ function Panel({ title, desc }: { title: string; desc?: string }) {
   return (
     <EmptyState
       image="staff"
-      icon={() => <CalendarDays size={30} strokeWidth={1.5} />}
+      icon={() => <CalendarDays size={30} strokeWidth={1.8} />}
       title={title}
       description={desc}
     />
@@ -83,7 +83,7 @@ function MonthListView({
     <div className="border-line bg-card divide-line divide-y rounded-md border">
       {dates.map((d) => (
         <div key={d} className="flex gap-3 px-3 py-2">
-          <div className={`num w-16 shrink-0 text-[12px] ${d === today ? "text-primary font-semibold" : "text-text-dim"}`}>
+          <div className={`num w-16 shrink-0 text-[12px] ${d === today ? "text-primary font-bold" : "text-text-dim"}`}>
             {d.slice(5).replace("-", "/")}
           </div>
           <div className="flex-1 space-y-0.5">
@@ -216,7 +216,7 @@ export function MonthlyScheduleView({
       return <Panel title="Notion 계정이 연결되지 않았습니다" desc="담당자가 이 직원의 Notion 계정을 연결하면 월간 업무가 표시됩니다." />;
     return (
       <div className="bg-card border-line shadow-card rounded-lg border px-5 py-6">
-        <h3 className="text-foreground text-[14px] font-semibold">Notion 계정 연결</h3>
+        <h3 className="text-foreground text-[14px] font-bold">Notion 계정 연결</h3>
         <p className="text-text-faint mt-1 mb-3 text-[12px]">
           이메일이 같으면 자동 연결됩니다. 이메일이 달라 자동 연결되지 않았으니, Notion 담당자를 직접 골라 연결하세요.
           <br />
@@ -273,7 +273,7 @@ export function MonthlyScheduleView({
           <Button size="sm" variant="ghost" aria-label="이전 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, -1))}>
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="text-foreground min-w-[92px] text-center text-[14px] font-semibold">{monthLabel(month)}</span>
+          <span className="text-foreground min-w-[92px] text-center text-[14px] font-bold">{monthLabel(month)}</span>
           <Button size="sm" variant="ghost" aria-label="다음 달" disabled={pending} onClick={() => goMonth(shiftMonth(month, 1))}>
             <ChevronRight className="size-4" />
           </Button>

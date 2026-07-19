@@ -115,7 +115,7 @@ export function ClassInfoCard({
         <Pill color={subjects.colorOf(subject)}>{subjects.labelOf(subject)}</Pill>
       </div>
       {pendingHandover ? (
-        <div className="bg-blue-soft text-blue rounded px-1.5 py-1 text-[10px] font-semibold">
+        <div className="bg-blue-soft text-blue rounded px-1.5 py-1 text-[10px] font-bold">
           강사 인수인계 예정
           {pendingHandover.teacherName ? ` → ${pendingHandover.teacherName}` : ""}
           {pendingHandover.date ? ` (${pendingHandover.date})` : ""}
@@ -241,7 +241,7 @@ export function StudentInfoCard({
       {report?.progress ? (
         <div className="border-line space-y-0.5 border-t pt-1.5">
           <div className="text-text-dim flex flex-wrap items-center gap-1.5">
-            <span className="text-primary font-semibold">진도</span>
+            <span className="text-primary font-bold">진도</span>
             <span className="num">{report.date}</span>
             {report.teacherName ? <span>· {report.teacherName}</span> : null}
           </div>

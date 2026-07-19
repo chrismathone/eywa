@@ -230,7 +230,7 @@ function Chips({
             onClick={() => onToggle(o.value)}
             className={`flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
               on
-                ? "border-primary bg-primary-soft text-foreground font-semibold"
+                ? "border-primary bg-primary-soft text-foreground font-bold"
                 : disabled
                   ? "border-border bg-bg-soft text-text-faint"
                   : "border-border bg-card text-foreground"
@@ -277,7 +277,7 @@ function Radio({
             onClick={() => onChange(on ? "" : o.value)}
             className={`flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
               on
-                ? "border-amber bg-amber-soft text-foreground font-semibold"
+                ? "border-amber bg-amber-soft text-foreground font-bold"
                 : "border-border bg-card text-foreground"
             }`}
           >

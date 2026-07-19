@@ -109,15 +109,15 @@ export default async function ClassesPage({
       <MakeeduSyncBadge domain="classes" />
       {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 보존 대상 EyIcon `check` 유지. */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat label="전체 반" value={stats.total} unit="개" tone="primary" icon={<BookOpen size={16} strokeWidth={2} />} />
+        <BigStat label="전체 반" value={stats.total} unit="개" tone="primary" icon={<BookOpen size={16} strokeWidth={1.8} />} />
         <BigStat label="운영 중" value={active} unit="개" tone="primary" icon={<EyIcon name="check" size={16} />} />
-        <BigStat label="등록 학생" value={totalSeats} unit="명" tone="blue" icon={<Users size={16} strokeWidth={2} />} />
+        <BigStat label="등록 학생" value={totalSeats} unit="명" tone="blue" icon={<Users size={16} strokeWidth={1.8} />} />
         <BigStat
           label="반당 평균"
           value={stats.total > 0 ? Math.round(totalSeats / stats.total) : 0}
           unit="명"
           tone="gold"
-          icon={<UserCheck size={16} strokeWidth={2} />}
+          icon={<UserCheck size={16} strokeWidth={1.8} />}
         />
       </section>
 
@@ -136,7 +136,7 @@ export default async function ClassesPage({
       </p>
 
       {total === 0 ? (
-        <EmptyState image="classes" icon={() => <SearchX size={32} strokeWidth={1.5} />} title="결과 없음" />
+        <EmptyState image="classes" icon={() => <SearchX size={32} strokeWidth={1.8} />} title="결과 없음" />
       ) : (
         <>
           {view === "table" ? (
@@ -161,7 +161,7 @@ function DayChips({ days, barClass }: { days: ClassDaySlot[]; barClass: string }
   const uniform = starts.length === days.length && new Set(starts).size === 1;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <div className="flex gap-0.5 text-[11px] font-semibold">
+      <div className="flex gap-0.5 text-[11px] font-bold">
         {days.map((d) => (
           <span
             key={d.day}
@@ -293,7 +293,7 @@ function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
             {/* 구조화 카드(문법 ⑤) — 반 이름 bold + 담임·강의실 dim 서브 + 우측 재원수 */}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-[17px] font-extrabold leading-tight">
+                <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-[17px] font-bold leading-tight">
                   {c.className}
                   <EditingBadge scope={`class:${c.id}`} />
                 </h3>
@@ -303,7 +303,7 @@ function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                 </p>
               </div>
               <p className="shrink-0 text-right">
-                <span className="num text-foreground text-[20px] font-extrabold leading-none">
+                <span className="num text-foreground text-[20px] font-bold leading-none">
                   {c.studentCount}
                 </span>
                 <span className="text-text-dim ml-0.5 text-[12px]">명</span>

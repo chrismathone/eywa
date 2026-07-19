@@ -61,7 +61,7 @@ export function PrevRow({
             type="button"
             onClick={onImport}
             title="이전 회차 값을 이 행의 빈 칸에 채움 — 진도·태도·과제·오늘 과제 (특이사항 제외)"
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-[10px] font-semibold"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground w-full rounded-sm border px-1 py-0.5 text-[10px] font-bold"
           >
             가져오기
           </button>

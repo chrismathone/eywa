@@ -116,15 +116,15 @@ export default async function EnrollmentPage({
         stats={
           <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-1 whitespace-nowrap">
             <span className="text-[13px]">
-              <b className="num text-foreground text-[17px] font-extrabold">{items.length}</b>{" "}
+              <b className="num text-foreground text-[17px] font-bold">{items.length}</b>{" "}
               <span className="text-text-dim">{filterActive ? "필터 결과" : "전체"}</span>
             </span>
             <span className="text-[13px]">
-              <b className="num text-gold text-[17px] font-extrabold">{aiDone}</b>{" "}
+              <b className="num text-gold text-[17px] font-bold">{aiDone}</b>{" "}
               <span className="text-text-dim">AI 분석 완료</span>
             </span>
             <span className="text-[13px]">
-              <b className="num text-primary text-[17px] font-extrabold">{assigned.length}</b>{" "}
+              <b className="num text-primary text-[17px] font-bold">{assigned.length}</b>{" "}
               <span className="text-text-dim">배정 완료</span>
             </span>
           </div>
@@ -148,7 +148,7 @@ export default async function EnrollmentPage({
       {items.length === 0 ? (
         <EmptyState
           image="enrollment"
-          icon={() => <UserPlus size={32} strokeWidth={1.5} />}
+          icon={() => <UserPlus size={32} strokeWidth={1.8} />}
           title="진행 중인 상담이 없습니다"
         />
       ) : view === "table" ? (

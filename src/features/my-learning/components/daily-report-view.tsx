@@ -35,10 +35,10 @@ function TestBlock({ kicker, sub, test }: { kicker: string; sub: string; test: T
     <div className="border-line rounded-md border px-3 py-2.5">
       {header}
       <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className={`tabular text-[22px] font-extrabold ${PERF_TEXT[tone]}`}>{test.score}</span>
+        <span className={`tabular text-[22px] font-bold ${PERF_TEXT[tone]}`}>{test.score}</span>
         <span className="text-text-faint tabular text-[13px]">/ {test.max}</span>
         <DeltaChip score={test.score} prev={test.prevScore} />
-        <span className="text-text-dim tabular ml-auto text-[12px] font-semibold">{p}%</span>
+        <span className="text-text-dim tabular ml-auto text-[12px] font-bold">{p}%</span>
       </div>
       <div className="bg-bg-soft mt-2 h-2 overflow-hidden rounded-pill">
         <div className={`h-full rounded-pill ${PERF_BG[tone]}`} style={{ width: `${p}%` }} />
@@ -66,7 +66,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
         <p className="font-mono text-[11px] opacity-70">
           {headDate} · {isLatest ? "오늘" : "지난"} 데일리 리포트
         </p>
-        <h1 className="mt-1 text-[21px] font-extrabold">오늘의 학습 리포트</h1>
+        <h1 className="mt-1 text-[21px] font-bold">오늘의 학습 리포트</h1>
         <p className="mt-1 text-[13px] opacity-80">
           {base.name} · {base.grade} {base.tag}
         </p>
@@ -86,7 +86,7 @@ export function DailyReportView({ base, session }: { base: OneScreenStudent; ses
                   <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px]">
                     <span className="text-text-faint">{su.prev}</span>
                     <EyIcon name="arrowRight" size={13} className={toneTextClass(tone)} />
-                    <span className="text-foreground font-semibold">{su.today}</span>
+                    <span className="text-foreground font-bold">{su.today}</span>
                   </p>
                 </div>
               </div>

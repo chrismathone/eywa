@@ -51,7 +51,7 @@ export default async function IconSystemPage() {
               <p className="text-primary mt-10 text-[11px] font-bold">
                 Eywa icon system · v2
               </p>
-              <h1 className="text-foreground mt-3 max-w-2xl text-[clamp(2rem,5vw,4.4rem)] leading-[1.05] font-extrabold tracking-[-0.045em]">
+              <h1 className="text-foreground mt-3 max-w-2xl text-[clamp(2rem,5vw,4.4rem)] leading-[1.05] font-bold tracking-[-0.045em]">
                 형태는 통일하고,
                 <br />
                 기능은 바로 읽힙니다.
@@ -65,17 +65,17 @@ export default async function IconSystemPage() {
             <dl className="border-line grid grid-cols-3 border-t pt-5">
               <div>
                 <dt className="text-text-faint text-[9px]">글리프</dt>
-                <dd className="text-foreground mt-1 text-xl font-extrabold tabular-nums">
+                <dd className="text-foreground mt-1 text-xl font-bold tabular-nums">
                   {EYWA_ICON_CATALOG.length}
                 </dd>
               </div>
               <div className="border-line border-l pl-4 sm:pl-6">
                 <dt className="text-text-faint text-[9px]">그리드</dt>
-                <dd className="text-foreground mt-1 text-xl font-extrabold tabular-nums">24</dd>
+                <dd className="text-foreground mt-1 text-xl font-bold tabular-nums">24</dd>
               </div>
               <div className="border-line border-l pl-4 sm:pl-6">
                 <dt className="text-text-faint text-[9px]">획 두께</dt>
-                <dd className="text-foreground mt-1 text-xl font-extrabold tabular-nums">1.6</dd>
+                <dd className="text-foreground mt-1 text-xl font-bold tabular-nums">1.6</dd>
               </div>
             </dl>
           </div>
@@ -110,7 +110,7 @@ export default async function IconSystemPage() {
         <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="micro">Core geometry</p>
-            <h2 id="geometry-title" className="text-foreground mt-1 text-xl font-extrabold">
+            <h2 id="geometry-title" className="text-foreground mt-1 text-xl font-bold">
               하나의 뼈대, 다섯 가지 크기
             </h2>
           </div>
@@ -142,7 +142,7 @@ export default async function IconSystemPage() {
       <section aria-labelledby="catalog-title">
         <header className="mb-5">
           <p className="micro">Complete catalog</p>
-          <h2 id="catalog-title" className="text-foreground mt-1 text-xl font-extrabold">
+          <h2 id="catalog-title" className="text-foreground mt-1 text-xl font-bold">
             전체 아이콘
           </h2>
         </header>
@@ -160,7 +160,7 @@ export default async function IconSystemPage() {
                 <div className="border-line mb-3 flex items-end gap-3 border-b pb-2.5">
                   <span className="text-primary num text-[11px] font-bold">{meta.index}</span>
                   <div>
-                    <h3 id={`family-${family}`} className="text-foreground text-[14px] font-extrabold">
+                    <h3 id={`family-${family}`} className="text-foreground text-[14px] font-bold">
                       {meta.label}
                     </h3>
                     <p className="text-text-faint mt-0.5 text-[10px]">{meta.description}</p>
@@ -194,7 +194,7 @@ export default async function IconSystemPage() {
       <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="bg-ink text-white rounded-2xl p-6 sm:p-8">
           <p className="text-[10px] font-bold text-[#e2b45f]">사용 규칙</p>
-          <h2 className="mt-2 text-xl font-extrabold">하나의 의미에는 하나의 모양</h2>
+          <h2 className="mt-2 text-xl font-bold">하나의 의미에는 하나의 모양</h2>
           <ul className="mt-6 space-y-4 text-[12px] leading-relaxed text-white/75">
             <li className="flex gap-3">
               <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e2b45f]" />
@@ -213,7 +213,7 @@ export default async function IconSystemPage() {
 
         <div className="border-line bg-card shadow-card rounded-2xl border p-6 sm:p-8">
           <p className="micro">Code</p>
-          <h2 className="text-foreground mt-1 text-xl font-extrabold">한 컴포넌트로 사용합니다</h2>
+          <h2 className="text-foreground mt-1 text-xl font-bold">한 컴포넌트로 사용합니다</h2>
           <pre className="bg-bg-soft text-foreground mt-6 overflow-x-auto rounded-lg p-4 font-mono text-[11px] leading-6">
             <code>{`<EyIcon name="calendar" size={20} />
 

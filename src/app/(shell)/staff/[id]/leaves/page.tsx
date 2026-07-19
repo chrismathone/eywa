@@ -31,7 +31,7 @@ export default async function StaffLeavesPage({
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">강사 휴가 관리</p>
-        <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
       </header>
 
       <LeavesClient userId={staff.id} leaves={leaves} canManage={canManage} />

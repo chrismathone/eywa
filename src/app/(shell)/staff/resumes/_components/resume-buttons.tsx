@@ -42,7 +42,7 @@ export function DeleteResumeButton({ id, name }: { id: string; name: string }) {
             toast.success("이력서를 삭제했습니다");
             router.push("/staff?tab=resumes");
           }}
-          className="text-danger font-semibold hover:underline"
+          className="text-danger font-bold hover:underline"
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
         </button>

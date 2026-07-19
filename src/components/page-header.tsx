@@ -27,7 +27,7 @@ export function PageHeader({
         <div className="min-w-0">
           {eyebrow ? <p className="editorial-eyebrow">{eyebrow}</p> : null}
           <h2
-            className={`text-foreground text-[21px] font-extrabold tracking-tight ${eyebrow ? "mt-1" : ""}`}
+            className={`text-foreground text-[21px] font-bold tracking-tight ${eyebrow ? "mt-1" : ""}`}
           >
             {title}
           </h2>

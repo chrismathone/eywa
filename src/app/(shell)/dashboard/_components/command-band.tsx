@@ -68,7 +68,7 @@ export function CommandBand({
         <p className="text-text-dim text-[13px] font-medium">{dateLabel}</p>
         <h2
           id="assistant-home-title"
-          className="text-foreground mt-1 text-[26px] font-extrabold tracking-tight"
+          className="text-foreground mt-1 text-[26px] font-bold tracking-tight"
         >
           안녕하세요, {name} {honorific}님
         </h2>

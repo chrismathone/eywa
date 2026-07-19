@@ -176,13 +176,13 @@ function ClassColumn({
           <span className="text-text-faint text-[11px]">-</span>
         ) : damimColor ? (
           <span
-            className="rounded px-1.5 py-0.5 text-[11px] font-semibold"
+            className="rounded px-1.5 py-0.5 text-[11px] font-bold"
             style={{ background: damimColor.bg, color: damimColor.text }}
           >
             {card.teacherName}
           </span>
         ) : (
-          <span className="text-foreground text-[11px] font-semibold">{card.teacherName}</span>
+          <span className="text-foreground text-[11px] font-bold">{card.teacherName}</span>
         )}
       </div>
       {/* 강의실(요일별) */}

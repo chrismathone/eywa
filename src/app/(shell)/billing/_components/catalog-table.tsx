@@ -65,7 +65,7 @@ function CatalogDialog({ item, onClose }: { item?: CatalogRow; onClose: () => vo
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">교재 단가표</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">{isEdit ? "교재 수정" : "교재 추가"}</h2>
+            <h2 className="text-foreground mt-1 text-lg font-bold">{isEdit ? "교재 수정" : "교재 추가"}</h2>
           </div>
           <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground" aria-label="닫기">
             <X className="size-4" />
@@ -194,7 +194,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
       {rows.length === 0 ? (
         <EmptyState
           image="documents"
-          icon={() => <BookText size={32} strokeWidth={1.5} />}
+          icon={() => <BookText size={32} strokeWidth={1.8} />}
           title="등록된 교재가 없습니다"
           description="표준 교재·단가를 등록해두면 교재 신청 시 자동으로 채워집니다."
         />
@@ -225,7 +225,7 @@ export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
                     {r.subject ? subjects.labelOf(r.subject) : "—"}
                   </td>
                   <td className="text-text-dim px-4 py-2.5 text-[12px]">{r.publisher ?? "—"}</td>
-                  <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-semibold">
+                  <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
                     {KRW.format(r.price)}
                   </td>
                   <td className="px-4 py-2.5">

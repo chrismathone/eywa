@@ -12,7 +12,7 @@ function FolderLink({ f, active, href }: { f: FolderItem; active: boolean; href:
     <Link
       href={href}
       className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
-        active ? "bg-primary/10 text-primary font-semibold" : "text-text-dim hover:bg-bg-soft hover:text-foreground"
+        active ? "bg-primary/10 text-primary font-bold" : "text-text-dim hover:bg-bg-soft hover:text-foreground"
       }`}
     >
       <Icon className={`size-4 shrink-0 ${active ? "text-primary" : "text-amber"}`} strokeWidth={1.8} />

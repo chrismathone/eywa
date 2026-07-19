@@ -12,7 +12,7 @@ import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
 import { PrevRow } from "./prev-row";
 
-const TH = "text-text-faint px-2 py-2 text-left text-[11px] font-semibold whitespace-nowrap";
+const TH = "text-text-faint px-2 py-2 text-left text-[11px] font-bold whitespace-nowrap";
 const ORDER_BTN =
   "border-line text-text-dim hover:bg-bg-soft hover:text-foreground flex size-5 items-center justify-center rounded-sm border text-[11px] font-bold disabled:opacity-40";
 

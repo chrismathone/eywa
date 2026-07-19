@@ -259,7 +259,7 @@ export function ComposeFace({
   return (
     <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
       <div>
-        <h2 className="text-foreground text-[15px] font-semibold">직접 작성·발송</h2>
+        <h2 className="text-foreground text-[15px] font-bold">직접 작성·발송</h2>
         <p className="text-text-faint text-[12px]">
           학생을 선택해 수업보고서를 작성하고 ClassNote로 발송합니다(강사 원스크린과 동일 형식). 담당 반이 아니어도 발송할 수 있어요.
         </p>
@@ -331,7 +331,7 @@ export function ComposeFace({
                       type="button"
                       onClick={() => pickSubject(s)}
                       className={`rounded-full border px-3 py-1 text-[12px] ${
-                        subject === s.key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"
+                        subject === s.key ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"
                       }`}
                       title={s.sendable ? undefined : "발송 대상 과목이 아닙니다(저장만 됩니다)"}
                     >
@@ -397,7 +397,7 @@ export function ComposeFace({
               <div className={LABEL}>수업 태도</div>
               <div className="flex flex-wrap gap-1.5">
                 {ATTITUDE.map((a) => (
-                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-[12px] ${attitude === a ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"}`}>
+                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-[12px] ${attitude === a ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
                     {a}
                   </button>
                 ))}
@@ -407,7 +407,7 @@ export function ComposeFace({
               <div className={LABEL}>과제 수행</div>
               <div className="flex flex-wrap gap-1.5">
                 {HOMEWORK.map((h) => (
-                  <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"}`}>
+                  <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
                     {h}
                   </button>
                 ))}

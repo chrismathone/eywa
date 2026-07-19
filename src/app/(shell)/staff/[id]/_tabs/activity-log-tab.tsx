@@ -121,7 +121,7 @@ export async function ActivityLogTab({ userId, page }: { userId: string; page: n
       {total === 0 ? (
         <EmptyState
           image="audit"
-          icon={() => <History size={32} strokeWidth={1.5} />}
+          icon={() => <History size={32} strokeWidth={1.8} />}
           title="기록된 활동이 없습니다"
           description="이 직원이 학생·반·수납·지출·출결·공지 등 핵심 데이터를 생성·수정·삭제하면 여기에 자동으로 남습니다."
         />

@@ -116,8 +116,8 @@ function SummaryBody({ summary }: { summary: StudentSummary }) {
 
       <div className="border-line flex items-center justify-between rounded-md border px-3 py-2 text-[11px]">
         <span className="text-text-dim">
-          결석 <span className="text-foreground font-semibold">{a.absent}</span> · 지각{" "}
-          <span className="text-foreground font-semibold">{a.late}</span>
+          결석 <span className="text-foreground font-bold">{a.absent}</span> · 지각{" "}
+          <span className="text-foreground font-bold">{a.late}</span>
         </span>
         <span className="text-text-faint">최근 30일 {a.total}회</span>
       </div>

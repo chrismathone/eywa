@@ -11,7 +11,7 @@ export async function DataFace() {
     <div className="space-y-4">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 데이터 정리</p>
-        <h2 className="text-foreground text-lg font-semibold">고아 데이터 점검</h2>
+        <h2 className="text-foreground text-lg font-bold">고아 데이터 점검</h2>
         <p className="text-muted-foreground mt-1 text-sm">
           수강 없는 재원생·스케줄 없는 반 등 정합성이 깨진 데이터를 검출합니다.
         </p>

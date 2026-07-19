@@ -32,7 +32,7 @@ export function PillGroup({
             onClick={() => onSelect(o)}
             aria-pressed={on}
             disabled={disabled}
-            className={`rounded-pill font-semibold transition disabled:opacity-50 ${sizeCls} ${
+            className={`rounded-pill font-bold transition disabled:opacity-50 ${sizeCls} ${
               on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
             }`}
           >

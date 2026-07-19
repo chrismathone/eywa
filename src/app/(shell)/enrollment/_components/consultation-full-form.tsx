@@ -304,9 +304,9 @@ export function ConsultationFullForm({
         {!isCreate && existingRecordings.length > 0 ? (
           <p className="text-text-dim flex items-center gap-1.5 text-[11px]">
             <Mic className="size-3.5" />
-            이미 등록된 녹음 <span className="num text-foreground font-semibold">{existingRecordings.length}개</span>
+            이미 등록된 녹음 <span className="num text-foreground font-bold">{existingRecordings.length}개</span>
             {" "}(마지막 {KST_REC_LABEL.format(new Date(existingRecordings[existingRecordings.length - 1].createdAt))})
-            — 새 녹음은 기존 녹음을 지우지 않고 <span className="text-foreground font-semibold">추가</span>됩니다.
+            — 새 녹음은 기존 녹음을 지우지 않고 <span className="text-foreground font-bold">추가</span>됩니다.
           </p>
         ) : null}
         <AudioRecorderField
@@ -347,7 +347,7 @@ export function ConsultationFullForm({
             onClick={() => setActiveTab(t.key)}
             className={`-mb-px shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap ${
               activeTab === t.key
-                ? "border-primary text-primary font-semibold"
+                ? "border-primary text-primary font-bold"
                 : "text-text-dim hover:text-foreground border-transparent"
             }`}
           >
@@ -690,8 +690,8 @@ export function ConsultationFullForm({
         >
           <h3 className="text-foreground text-sm font-bold">상담 완료로 변경할까요?</h3>
           <p className="text-text-dim mt-2 text-xs leading-relaxed">
-            QR로 접수된 <span className="text-foreground font-semibold">대기 · 예약</span> 상담입니다. 저장하면서
-            상태를 <span className="text-foreground font-semibold">상담 완료</span>로 옮길 수 있습니다.
+            QR로 접수된 <span className="text-foreground font-bold">대기 · 예약</span> 상담입니다. 저장하면서
+            상태를 <span className="text-foreground font-bold">상담 완료</span>로 옮길 수 있습니다.
           </p>
           <div className="mt-4 flex flex-wrap justify-end gap-2">
             <button
@@ -793,7 +793,7 @@ function GroupInputs({
 }) {
   return (
     <div className="space-y-2">
-      {group.title ? <p className="text-text-dim text-xs font-semibold">{group.title}</p> : null}
+      {group.title ? <p className="text-text-dim text-xs font-bold">{group.title}</p> : null}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${group.cols ?? 2}, minmax(0, 1fr))` }}>
         {group.fields.map((f) => {
           const val = details[subjectKey]?.[f.key] ?? "";

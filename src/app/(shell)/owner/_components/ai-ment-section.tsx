@@ -108,10 +108,10 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
   return (
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-foreground text-[14px] font-semibold">
+        <h2 className="text-foreground text-[14px] font-bold">
           {row.label}
           <span
-            className={`ml-2 rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
+            className={`ml-2 rounded-pill px-2 py-0.5 text-[11px] font-bold ${
               custom ? "bg-primary/10 text-primary" : "text-text-faint border-line border"
             }`}
           >
@@ -152,7 +152,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
 
       {/* 실데이터 미리보기 — 저장 없이 편집 중 프롬프트로 생성해 결과만 확인. */}
       <div className="border-line mt-3 rounded-md border p-3">
-        <p className="text-text-faint mb-1.5 text-[12px] font-semibold">실데이터로 테스트</p>
+        <p className="text-text-faint mb-1.5 text-[12px] font-bold">실데이터로 테스트</p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={testReport}
@@ -179,7 +179,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
 
       {history ? (
         <div className="border-line mt-3 rounded-md border p-3">
-          <p className="text-text-faint mb-1.5 text-[12px] font-semibold">버전 이력 (최근 {history.length})</p>
+          <p className="text-text-faint mb-1.5 text-[12px] font-bold">버전 이력 (최근 {history.length})</p>
           {history.length === 0 ? (
             <p className="text-text-faint text-[12px]">저장된 버전이 없습니다(기본값 사용 중).</p>
           ) : (
@@ -189,14 +189,14 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
                   <div className="min-w-0">
                     <p className="text-text-dim text-[11px]">
                       {new Date(v.createdAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
-                      {v.isActive ? <span className="text-primary ml-1 font-semibold">· 현재 사용 중</span> : null}
+                      {v.isActive ? <span className="text-primary ml-1 font-bold">· 현재 사용 중</span> : null}
                     </p>
                     <p className="text-text-faint mt-0.5 truncate text-[11px]">{v.text.slice(0, 80)}…</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setText(v.text)}
-                    className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-[11px] font-semibold"
+                    className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-[11px] font-bold"
                   >
                     이 버전 불러오기
                   </button>

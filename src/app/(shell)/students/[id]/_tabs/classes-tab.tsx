@@ -153,7 +153,7 @@ function Section({
     <section className="bg-card border-border rounded-md border">
       <header className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight">
+          <h2 className="text-sm font-bold tracking-tight">
             {title} <span className="text-muted-foreground num font-normal">({rows.length})</span>
           </h2>
           {note ? <p className="text-muted-foreground text-xs">{note}</p> : null}
@@ -259,7 +259,7 @@ function ScheduleCell({ schedule }: { schedule: StudentClassRow["schedule"] }) {
             {g.days.map((d) => (
               <span
                 key={d}
-                className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-semibold ${DAY_CHIP[d] ?? "bg-bg-soft text-text-dim"}`}
+                className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-bold ${DAY_CHIP[d] ?? "bg-bg-soft text-text-dim"}`}
               >
                 {d}
               </span>

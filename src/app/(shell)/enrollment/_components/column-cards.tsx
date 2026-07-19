@@ -67,7 +67,7 @@ export function ColumnCards({
                       <p className="text-foreground flex items-center gap-1.5 text-[13.5px] font-bold">
                         {c.prospectName}
                         {c.fromPublicIntake ? (
-                          <span className="bg-primary-soft text-primary rounded-full px-2 py-0.5 text-[11px] leading-none font-semibold" title="학부모 QR 접수">
+                          <span className="bg-primary-soft text-primary rounded-full px-2 py-0.5 text-[11px] leading-none font-bold" title="학부모 QR 접수">
                             QR
                           </span>
                         ) : null}
@@ -85,7 +85,7 @@ export function ColumnCards({
                                     e.preventDefault();
                                     e.stopPropagation();
                                   }}
-                                  className="bg-amber-soft text-amber cursor-pointer rounded-full px-2 py-0.5 text-[11px] leading-none font-semibold hover:brightness-95"
+                                  className="bg-amber-soft text-amber cursor-pointer rounded-full px-2 py-0.5 text-[11px] leading-none font-bold hover:brightness-95"
                                 />
                               }
                             >

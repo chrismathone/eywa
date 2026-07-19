@@ -108,7 +108,7 @@ function FilterBtn({ label, on, onClick }: { label: string; on: boolean; onClick
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+      className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
         on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
       }`}
     >

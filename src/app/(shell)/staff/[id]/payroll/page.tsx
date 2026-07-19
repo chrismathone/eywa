@@ -41,7 +41,7 @@ export default async function StaffPayrollPage({
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">강사 급여 정산</p>
-        <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {staff.jobTitle ?? staff.systemRole} · 시급 {staff.hourlyRate.toLocaleString("ko-KR")}원 ·
           기본급 {staff.monthlyBase.toLocaleString("ko-KR")}원

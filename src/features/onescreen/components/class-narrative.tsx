@@ -41,7 +41,7 @@ export function ClassNarrativePopover({
     >
       <Popover.Trigger
         disabled={disabled || !activeClass}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-[12.5px] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title={
           activeClass
             ? "이 반의 오늘 수업 맥락을 한 번 적어두면, 자동작성이 학생별 점수·태도와 결합해 서로 다른 멘트를 만듭니다"

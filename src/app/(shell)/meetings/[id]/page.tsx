@@ -178,7 +178,7 @@ export default async function MeetingDetailPage({
         <section className="border-chart-4/40 bg-chart-4/5 rounded-lg border p-4">
           <div className="inline-flex items-center gap-2">
             <AlertCircle className="text-chart-4 size-4" />
-            <h2 className="text-foreground text-sm font-semibold">처리 실패</h2>
+            <h2 className="text-foreground text-sm font-bold">처리 실패</h2>
           </div>
           <p className="text-muted-foreground mt-2 text-sm">
             {meeting.processingError ?? "알 수 없는 오류"}
@@ -192,7 +192,7 @@ export default async function MeetingDetailPage({
         <section className="bg-card border-border space-y-3 rounded-lg border p-5">
           <div className="inline-flex items-center gap-2">
             <Loader2 className="text-chart-3 size-4 animate-spin" />
-            <h2 className="text-foreground text-sm font-semibold">
+            <h2 className="text-foreground text-sm font-bold">
               {meeting.processingStatus === "uploaded" || meeting.processingStatus === "transcribing"
                 ? "녹음을 한국어로 전사 중입니다"
                 : "AI가 회의록을 8개 섹션으로 분석 중입니다"}
@@ -222,7 +222,7 @@ export default async function MeetingDetailPage({
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <Sparkles className="text-gold size-4 shrink-0" />
-                <h2 className="text-foreground shrink-0 text-sm font-semibold whitespace-nowrap">
+                <h2 className="text-foreground shrink-0 text-sm font-bold whitespace-nowrap">
                   AI 분석
                 </h2>
               </div>
@@ -255,7 +255,7 @@ export default async function MeetingDetailPage({
           <header className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <Sparkles className="text-gold size-4 shrink-0" />
-              <h2 className="text-foreground shrink-0 text-sm font-semibold whitespace-nowrap">
+              <h2 className="text-foreground shrink-0 text-sm font-bold whitespace-nowrap">
                 AI 분석
               </h2>
             </div>
@@ -315,7 +315,7 @@ export default async function MeetingDetailPage({
                 {excludedTail.removedDurationSec >= 60
                   ? ` (약 ${Math.round(excludedTail.removedDurationSec / 60)}분)`
                   : ""}
-                은 잡음으로 판단해 <b className="text-foreground font-semibold">AI 분석에서 제외</b>했습니다. 아래 전사에는
+                은 잡음으로 판단해 <b className="text-foreground font-bold">AI 분석에서 제외</b>했습니다. 아래 전사에는
                 전체가 그대로 남아 있습니다.
               </span>
             </p>

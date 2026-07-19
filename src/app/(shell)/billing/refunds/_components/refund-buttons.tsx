@@ -41,7 +41,7 @@ export function DeleteRefundButton({ id, name }: { id: string; name: string }) {
             toast.success("환불 요청서를 삭제했습니다");
             router.push("/billing?tab=refunds");
           }}
-          className="text-danger font-semibold hover:underline"
+          className="text-danger font-bold hover:underline"
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
         </button>

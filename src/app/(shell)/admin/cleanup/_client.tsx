@@ -35,7 +35,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
       {/* 1. 수강 없는 재원생 */}
       <section className="bg-card border-border rounded-md border p-5">
         <header className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-foreground text-sm font-semibold">수강 없는 재원생</h2>
+          <h2 className="text-foreground text-sm font-bold">수강 없는 재원생</h2>
           <span className="num text-muted-foreground text-xs">
             {report.studentsWithoutEnrollments.length}명
           </span>
@@ -58,7 +58,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
       {/* 2. 스케줄 없는 활성 반 */}
       <section className="bg-card border-border rounded-md border p-5">
         <header className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-foreground text-sm font-semibold">스케줄 없는 활성 반</h2>
+          <h2 className="text-foreground text-sm font-bold">스케줄 없는 활성 반</h2>
           <span className="num text-muted-foreground text-xs">
             {report.classesWithoutSchedules.length}개
           </span>
@@ -83,7 +83,7 @@ export function CleanupClient({ report }: { report: OrphanReport }) {
       {/* 3. 퇴원 학생의 활성 enrollment */}
       <section className="bg-card border-border rounded-md border p-5">
         <header className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-foreground text-sm font-semibold">
+          <h2 className="text-foreground text-sm font-bold">
             퇴원 학생의 활성 수강
           </h2>
           <span className="num text-muted-foreground text-xs">

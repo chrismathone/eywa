@@ -129,7 +129,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
   return (
     <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
       <div>
-        <h2 className="text-foreground text-[15px] font-semibold">반 단위 대량 발송</h2>
+        <h2 className="text-foreground text-[15px] font-bold">반 단위 대량 발송</h2>
         <p className="text-text-faint text-[12px]">
           선택한 반의 재원생 각자에게 <b>같은 내용</b>의 리포트 카드를 발송합니다 · 점수·태도는 학생별이라 대량에선 제외(진도·본문 위주) ·
           오늘 이미 보고서가 있는 학생은 자동 제외

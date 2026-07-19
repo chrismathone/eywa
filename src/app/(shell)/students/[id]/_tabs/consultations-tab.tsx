@@ -64,7 +64,7 @@ export async function ConsultationsTab({
   return (
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
-        <h2 className="text-foreground text-base font-semibold">
+        <h2 className="text-foreground text-base font-bold">
           상담 이력
           {consults.length > 0 ? (
             <span className="text-muted-foreground num ml-2 text-xs font-normal">{consults.length}건</span>
@@ -82,7 +82,7 @@ export async function ConsultationsTab({
           같은 학생이 QR로 여러 번(과목·시기별) 접수하면 모두 별건으로 누적되므로 건수를 명시. */}
       {enrollConsults.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-primary text-xs font-semibold">
+          <p className="text-primary text-xs font-bold">
             입학 상담 <span className="num">{enrollConsults.length}</span>건
           </p>
           <ul className="space-y-2">
@@ -189,7 +189,7 @@ function EnrollmentConsultItem({
   return (
     <li className="bg-primary/5 border-primary/20 space-y-2 rounded-md border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-2">
-        <span className="bg-primary/10 text-primary border-primary/20 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold">
+        <span className="bg-primary/10 text-primary border-primary/20 rounded-md border px-1.5 py-0.5 text-[10px] font-bold">
           입학 상담
         </span>
         {e.date ? (

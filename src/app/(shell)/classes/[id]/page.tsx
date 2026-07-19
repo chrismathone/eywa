@@ -116,7 +116,7 @@ export default async function ClassDetailPage({
         <div className="space-y-2">
           <p className="eyebrow">수업 · 반</p>
           <div className="flex flex-wrap items-baseline gap-2">
-            <h1 className="display text-foreground text-3xl">{klass.className}</h1>
+            <h1 className="font-bold tracking-tight text-foreground text-3xl">{klass.className}</h1>
             <Pill color={subjects.colorOf(klass.subject)}>{subjects.labelOf(klass.subject)}</Pill>
             {!klass.isActive ? (
               <span className="text-muted-foreground bg-muted border-border inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
@@ -202,7 +202,7 @@ export default async function ClassDetailPage({
           {/* 좌 그룹 제목 — 우측 '수강 중인 학생'과 대칭(영역 구분 규약). */}
           <header className="flex items-center gap-2">
             <Info className="text-primary size-4" />
-            <h2 className="text-foreground text-sm font-semibold">반 정보</h2>
+            <h2 className="text-foreground text-sm font-bold">반 정보</h2>
           </header>
           <Card title="시간표" icon={<CalendarClock className="size-3.5" />}>
             {klass.scheduleSlots.length === 0 ? (
@@ -251,7 +251,7 @@ export default async function ClassDetailPage({
           <header className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Users className="text-primary size-4" />
-              <h2 className="text-foreground text-sm font-semibold">수강 중인 학생</h2>
+              <h2 className="text-foreground text-sm font-bold">수강 중인 학생</h2>
             </div>
             <p className="text-muted-foreground num text-xs">{students.length}명</p>
           </header>
@@ -350,7 +350,7 @@ function Stat({
   return (
     <div className="space-y-1">
       <p className="eyebrow">{label}</p>
-      <p className={`num text-foreground text-xl font-semibold ${highlight ?? ""}`}>
+      <p className={`num text-foreground text-xl font-bold ${highlight ?? ""}`}>
         {value}
         {unit ? <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span> : null}
       </p>

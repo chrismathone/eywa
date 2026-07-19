@@ -121,7 +121,7 @@ export function NowCockpit({
     <section className="bg-card border-line shadow-card flex h-full flex-col overflow-hidden rounded-2xl border" aria-labelledby="today-schedule-title">
       <header className="flex flex-wrap items-start justify-between gap-2 px-5 pt-4 pb-3">
         <div>
-          <p className="text-primary text-[11px] font-semibold">지금 · {todayLabel}</p>
+          <p className="text-primary text-[11px] font-bold">지금 · {todayLabel}</p>
           <h3 id="today-schedule-title" className="text-foreground mt-1 text-[15px] font-bold">오늘의 일정</h3>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -180,7 +180,7 @@ export function NowCockpit({
               {dist.map((d) => (
                 <span key={d.label} className="text-text-dim inline-flex items-center gap-1 text-[11px]">
                   <span className={`${SUBJECT_SOLID[d.color]} size-2 rounded-[2px]`} />
-                  {d.label} <span className="num text-foreground font-semibold">{d.n}</span>
+                  {d.label} <span className="num text-foreground font-bold">{d.n}</span>
                 </span>
               ))}
             </div>
@@ -214,7 +214,7 @@ function DensityStrip({ slots, subjects }: { slots: TodaySlot[]; subjects: Subje
       }`}
     >
       <div className="flex items-baseline justify-between">
-        <p className="text-text-dim text-[11px] font-semibold">하루 밀도</p>
+        <p className="text-text-dim text-[11px] font-bold">하루 밀도</p>
         <p className="text-text-dim text-[10px]">총 {slots.length}개 수업</p>
       </div>
       <div className="border-line relative mt-2 flex h-[44px] items-end gap-[2px] border-b" aria-hidden="true">
@@ -258,7 +258,7 @@ function NextSlot({
   return (
     <div>
       <div className="flex items-baseline gap-2">
-        <p className="text-text-faint text-[11px] font-semibold">다음</p>
+        <p className="text-text-faint text-[11px] font-bold">다음</p>
         <p className="text-foreground num text-[13px] font-bold">{shortTime(time)}</p>
         <p className="text-text-faint text-[11px]">· {classes.length}개 수업</p>
       </div>
@@ -273,7 +273,7 @@ function NextSlot({
 }
 
 function NextClassChip({ slot, subjects, canOpen }: { slot: TodaySlot; subjects: SubjectMaps; canOpen: boolean }) {
-  const className = `${SUBJECT_ICON_BG[subjects.colorOf(slot.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-shadow`;
+  const className = `${SUBJECT_ICON_BG[subjects.colorOf(slot.subject)]} inline-flex items-baseline gap-1 rounded-md px-2 py-1 text-[11px] font-bold transition-shadow`;
   const title = `${slot.className}${slot.teacherName ? ` · ${slot.teacherName}` : ""}${slot.classroomName ? ` · ${slot.classroomName}` : ""} · ${slot.studentCount}명`;
   const content = (
     <>
@@ -336,7 +336,7 @@ function OngoingRow({ slot, canOpen }: { slot: TodaySlot; canOpen: boolean }) {
         {shortTime(slot.startTime)}~{shortTime(slot.endTime)}
       </span>
       {/* 13/11px 한 줄 = baseline 정렬. truncate는 flex 자식에 두면 baseline이 박스 하단으로 합성 → 내부 block span으로. */}
-      <span className="text-foreground group-hover:text-primary min-w-0 flex-1 text-[13px] font-semibold">
+      <span className="text-foreground group-hover:text-primary min-w-0 flex-1 text-[13px] font-bold">
         <span className="block truncate">{slot.className}</span>
       </span>
       <span className="text-text-dim hidden max-w-[9rem] shrink-0 text-[11px] sm:inline">

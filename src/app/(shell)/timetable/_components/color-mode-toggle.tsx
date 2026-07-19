@@ -17,7 +17,7 @@ export function TimetableColorToggle() {
   return (
     <div className="flex items-center gap-1">
       <span className="micro mr-1 inline-flex items-center gap-1">
-        <Palette size={11} strokeWidth={2} aria-hidden />색
+        <Palette size={11} strokeWidth={1.8} aria-hidden />색
       </span>
       {OPTIONS.map((o) => (
         <button

@@ -77,7 +77,7 @@ export async function SheetsFace({
       <div className="space-y-5">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 외부 연동</p>
-        <h2 className="text-foreground text-lg font-semibold">구글 시트 내보내기 (과목별)</h2>
+        <h2 className="text-foreground text-lg font-bold">구글 시트 내보내기 (과목별)</h2>
         {/* text-balance(text-wrap: balance) = 짧은 문단의 줄 너비를 균등하게 나눠 마지막 줄이 짧게 남는 고아 방지
             (실측: 같은 폭에서 pretty는 [763,128] 고아, balance는 [447,444] 균등). max-w-3xl 고정폭도 풀어(max-w-5xl)
             넓은 창에선 한 줄로 붙고 좁으면 균등 2줄로 접히게 — 창 폭에 따라 스마트하게. */}
@@ -94,7 +94,7 @@ export async function SheetsFace({
       <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
         {/* 좌 — 최초 1회 설정 안내(서비스계정은 새 시트를 못 만들어 사람이 만든 시트에 공유가 필요) */}
         <section className="border-border bg-card flex flex-col rounded-md border p-5 text-[13px] leading-relaxed">
-          <p className="text-foreground font-semibold">처음 한 번 설정 (과목마다)</p>
+          <p className="text-foreground font-bold">처음 한 번 설정 (과목마다)</p>
           <ol className="text-text-dim mt-2 list-decimal space-y-1.5 pl-5">
             <li>
               구글 드라이브에서 <strong>빈 구글 시트</strong>를 과목 수만큼 만듭니다(원장 계정 소유).

@@ -123,8 +123,8 @@ export function DocumentToolbar({
       {dragging ? (
         <div className="bg-background/80 fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm">
           <div className="border-primary/60 bg-primary/5 text-primary pointer-events-none flex flex-col items-center gap-2 rounded-lg border-2 border-dashed px-14 py-10">
-            <UploadCloud className="size-9" strokeWidth={1.5} />
-            <p className="text-base font-semibold">여기에 놓아 서식 업로드</p>
+            <UploadCloud className="size-9" strokeWidth={1.8} />
+            <p className="text-base font-bold">여기에 놓아 서식 업로드</p>
             <p className="text-text-dim text-xs">이미지 · PDF · Word · Excel · 한글(HWP)</p>
           </div>
         </div>
@@ -153,7 +153,7 @@ function DialogShell({ title, onClose, children }: { title: string; onClose: () 
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">데이터베이스</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">{title}</h2>
+            <h2 className="text-foreground mt-1 text-lg font-bold">{title}</h2>
           </div>
           <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground" aria-label="닫기">
             <X className="size-4" />
@@ -294,7 +294,7 @@ function UploadDialog({
               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.hwp,.hwpx"
               className="sr-only"
             />
-            <UploadCloud className={`size-6 ${file ? "text-primary" : "text-text-faint"}`} strokeWidth={1.5} />
+            <UploadCloud className={`size-6 ${file ? "text-primary" : "text-text-faint"}`} strokeWidth={1.8} />
             {file ? (
               <>
                 <span className="text-foreground max-w-full truncate text-sm font-medium">{file.name}</span>

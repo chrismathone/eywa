@@ -109,7 +109,7 @@ export function HistoryBoard() {
                 const linkOk = r.shareToken && !r.revoked && !isShareExpired(r.reportDate);
                 return (
                   <li key={r.id} className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-3 py-2">
-                    <span className="text-foreground w-24 shrink-0 truncate text-[13px] font-semibold">
+                    <span className="text-foreground w-24 shrink-0 truncate text-[13px] font-bold">
                       {r.studentName}
                     </span>
                     <span className="text-text-faint w-20 shrink-0 truncate text-[11px]">{r.studentLabel}</span>
@@ -125,7 +125,7 @@ export function HistoryBoard() {
                       <span className="text-text-faint hidden shrink-0 text-[11px] sm:inline">{r.examInfo}</span>
                     ) : null}
                     {badge ? (
-                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold ${badge.cls}`}>
+                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${badge.cls}`}>
                         {badge.label}
                       </span>
                     ) : null}
@@ -155,7 +155,7 @@ export function HistoryBoard() {
           type="button"
           onClick={() => void loadMore()}
           disabled={loadingMore}
-          className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-md border px-4 py-1.5 text-[12px] font-semibold disabled:opacity-50"
+          className="border-line text-text-dim hover:bg-bg-soft mx-auto rounded-md border px-4 py-1.5 text-[12px] font-bold disabled:opacity-50"
         >
           {loadingMore ? "불러오는 중…" : "이전 보고서 더 보기"}
         </button>

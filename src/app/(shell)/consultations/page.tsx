@@ -116,16 +116,16 @@ export default async function ConsultationsPage({
       <MakeeduSyncBadge domain="consultations" />
       {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat label="전체 상담" value={totalAll} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={2} />} />
-        <BigStat label="최근 7일" value={lastWeek} unit="건" tone="blue" icon={<CalendarClock size={16} strokeWidth={2} />} />
-        <BigStat label="진행 중 후속" value={pendingFollowUps} unit="건" tone="gold" icon={<BellRing size={16} strokeWidth={2} />} />
+        <BigStat label="전체 상담" value={totalAll} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={1.8} />} />
+        <BigStat label="최근 7일" value={lastWeek} unit="건" tone="blue" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
+        <BigStat label="진행 중 후속" value={pendingFollowUps} unit="건" tone="gold" icon={<BellRing size={16} strokeWidth={1.8} />} />
         <BigStat
           label="지연 후속"
           value={overdueFollowUps}
           unit="건"
           tone="danger"
           valueClass={overdueFollowUps > 0 ? "text-danger" : undefined}
-          icon={<AlarmClock size={16} strokeWidth={2} />}
+          icon={<AlarmClock size={16} strokeWidth={1.8} />}
         />
       </section>
 
@@ -201,7 +201,7 @@ export default async function ConsultationsPage({
             variant="outline"
             render={<WindowLink href="/consultations/stats" title="상담 통계" />}
           >
-            <MessagesSquare className="size-4" strokeWidth={2} />
+            <MessagesSquare className="size-4" strokeWidth={1.8} />
             통계 보기
           </Button>
           <NewConsultationTrigger />
@@ -211,7 +211,7 @@ export default async function ConsultationsPage({
       {total === 0 ? (
         <EmptyState
           image="meetings"
-          icon={() => <MessagesSquare size={32} strokeWidth={1.5} />}
+          icon={() => <MessagesSquare size={32} strokeWidth={1.8} />}
           title="기록된 상담이 없습니다"
         />
       ) : (
@@ -288,7 +288,7 @@ export default async function ConsultationsPage({
                   <div className="border-line mt-3 flex items-center justify-between gap-2 border-t pt-3">
                     {/* 구 font-mono uppercase 'Follow-up' 영문 라벨 → 한글 승격(코딩틱 제거) */}
                     <p className="text-text-dim text-[12px]">
-                      <span className="text-gold mr-2 font-semibold">후속 조치</span>
+                      <span className="text-gold mr-2 font-bold">후속 조치</span>
                       {c.followUpAction ?? "—"}
                       {c.followUpDate ? (
                         <span className="num text-text-faint ml-2">· 기한 {c.followUpDate}</span>

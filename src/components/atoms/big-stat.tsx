@@ -64,7 +64,7 @@ export function BigStat({
       </div>
       <div className={`${size === "lg" ? "mt-3" : "mt-2.5"} flex items-baseline gap-1`}>
         <span
-          className={`num font-extrabold leading-none tracking-tight ${
+          className={`num font-bold leading-none tracking-tight ${
             size === "lg" ? "text-[32px]" : "text-[27px]"
           } ${valueClass ?? "text-foreground"}`}
         >

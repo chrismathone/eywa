@@ -22,7 +22,7 @@ export function EnrolledStatCard({
         {/* 재원 총원 — 빅 스탯(문법 ②) 톤 */}
         <div className="flex shrink-0 items-center gap-3.5">
           <span className="bg-primary-soft text-primary flex size-10 items-center justify-center rounded-xl">
-            <UserCheck size={17} strokeWidth={2} />
+            <UserCheck size={17} strokeWidth={1.8} />
           </span>
           <div>
             <p className="text-text-dim text-[13px] font-medium">재원</p>

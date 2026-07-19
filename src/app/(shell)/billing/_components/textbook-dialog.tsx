@@ -104,7 +104,7 @@ export function TextbookDialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">{editing ? "교재신청 수정" : "교재신청 등록"}</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">
+            <h2 className="text-foreground mt-1 text-lg font-bold">
               {editing ? order.bookName : "새 교재신청"}
             </h2>
           </div>

@@ -31,7 +31,7 @@ import { DeleteResumeButton, PrintResumeButton } from "./resume-buttons";
 const T = "w-full border-collapse text-[12px] leading-relaxed print:text-[11px] print:leading-snug";
 const cell = "border-foreground/35 border px-2 py-1.5 align-middle print:py-1";
 // 화면(모바일)에선 헤더가 keep-all로 어절 단위 접혀 표가 카드폭에 수용됨. 인쇄만 nowrap(A4는 폭 여유).
-const head = `${cell} bg-bg-soft/70 text-center font-semibold print:whitespace-nowrap`;
+const head = `${cell} bg-bg-soft/70 text-center font-bold print:whitespace-nowrap`;
 const inputBase =
   "w-full min-w-0 rounded-sm bg-bg-soft/40 px-1.5 py-0.5 text-[12px] outline-none placeholder:text-text-faint/60 focus:bg-primary-soft/25 focus:ring-1 focus:ring-primary/50";
 

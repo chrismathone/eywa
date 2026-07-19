@@ -209,30 +209,30 @@ export default async function TimetablePage({
           actions={
             <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
               <span className="text-[13px]">
-                <b className="num text-primary text-[17px] font-extrabold">{enrolledCount}</b>{" "}
+                <b className="num text-primary text-[17px] font-bold">{enrolledCount}</b>{" "}
                 <span className="text-text-dim">재원</span>
               </span>
               {newCount > 0 ? (
                 <span className="text-[13px]">
-                  <b className="num text-danger text-[17px] font-extrabold">{newCount}</b>{" "}
+                  <b className="num text-danger text-[17px] font-bold">{newCount}</b>{" "}
                   <span className="text-text-dim">신입</span>
                 </span>
               ) : null}
               {transferCount > 0 ? (
                 <span className="text-[13px]">
-                  <b className="num text-blue text-[17px] font-extrabold">{transferCount}</b>{" "}
+                  <b className="num text-blue text-[17px] font-bold">{transferCount}</b>{" "}
                   <span className="text-text-dim">전입</span>
                 </span>
               ) : null}
               {holdCount > 0 ? (
                 <span className="text-[13px]">
-                  <b className="num text-amber text-[17px] font-extrabold">{holdCount}</b>{" "}
+                  <b className="num text-amber text-[17px] font-bold">{holdCount}</b>{" "}
                   <span className="text-text-dim">대기</span>
                 </span>
               ) : null}
               {withdrawnCount > 0 ? (
                 <span className="text-[13px]">
-                  <b className="num text-text-faint text-[17px] font-extrabold">{withdrawnCount}</b>{" "}
+                  <b className="num text-text-faint text-[17px] font-bold">{withdrawnCount}</b>{" "}
                   <span className="text-text-dim">퇴원</span>
                 </span>
               ) : null}
@@ -303,7 +303,7 @@ export default async function TimetablePage({
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
-                <Icon size={11} strokeWidth={2} />
+                <Icon size={11} strokeWidth={1.8} />
                 {v.label}
               </Link>
             );
@@ -332,7 +332,7 @@ export default async function TimetablePage({
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <CalendarOff size={11} strokeWidth={2} />
+              <CalendarOff size={11} strokeWidth={1.8} />
               미사용 요일
             </Link>
           </>
@@ -364,7 +364,7 @@ export default async function TimetablePage({
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <ListFilter size={11} strokeWidth={2} />
+              <ListFilter size={11} strokeWidth={1.8} />
               빈 교시 접기
             </Link>
           </>
@@ -405,7 +405,7 @@ export default async function TimetablePage({
       {slots.length === 0 ? (
         <EmptyState
           image="classes"
-          icon={() => <CalendarOff size={32} strokeWidth={1.5} />}
+          icon={() => <CalendarOff size={32} strokeWidth={1.8} />}
           title="해당 과목의 시간표가 없습니다"
         />
       ) : isIntegrated ? (

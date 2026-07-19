@@ -63,7 +63,7 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">수강료 단가표</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">
+            <h2 className="text-foreground mt-1 text-lg font-bold">
               {isEdit ? "항목 수정" : "항목 추가"}
             </h2>
           </div>
@@ -203,7 +203,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
       {rows.length === 0 ? (
         <EmptyState
           image="billing"
-          icon={() => <Coins size={32} strokeWidth={1.5} />}
+          icon={() => <Coins size={32} strokeWidth={1.8} />}
           title="등록된 단가가 없습니다"
           description="과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다."
         />
@@ -241,7 +241,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
                     <span className="text-foreground text-[13px] font-bold">{r.name}</span>
                     {r.note ? <span className="text-text-faint ml-1.5 text-[11px]">{r.note}</span> : null}
                   </td>
-                  <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-semibold">
+                  <td className="text-foreground num px-4 py-2.5 text-right text-[12px] font-bold">
                     {r.category === DISCOUNT_CATEGORY ? "−" : ""}
                     {KRW.format(r.price)}
                   </td>

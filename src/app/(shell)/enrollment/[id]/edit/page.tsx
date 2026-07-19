@@ -22,7 +22,7 @@ export default async function EditEnrollmentPage({
       <BackLink href={`/enrollment/${id}`} label="상세로" />
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">등록상담 수정</p>
-        <h1 className="display text-foreground text-2xl">{c.prospectName}</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{c.prospectName}</h1>
       </header>
 
       <ConsultationFullForm

@@ -39,7 +39,7 @@ export default async function EditStaffPage({
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">
           <p className="eyebrow">직원 수정</p>
-          <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>
+          <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
           <p className="text-muted-foreground text-sm">기본 정보 수정 (역할 변경은 별도)</p>
         </div>
         {(staff.systemRole === "teacher" || staff.systemRole === "master") ? (

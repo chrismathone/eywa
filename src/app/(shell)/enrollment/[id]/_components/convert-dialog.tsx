@@ -122,7 +122,7 @@ export function ConvertToStudentDialog({
             <header className="mb-4 flex items-start justify-between">
               <div>
                 <p className="eyebrow">상담 → 수업 배정</p>
-                <h2 className="text-foreground mt-1 text-lg font-semibold">
+                <h2 className="text-foreground mt-1 text-lg font-bold">
                   {defaults.name} 수업 배정
                 </h2>
                 <p className="text-muted-foreground text-xs">

@@ -35,7 +35,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-3 flex items-start justify-between gap-2">
-          <h2 className="text-foreground text-base font-semibold">{title}</h2>
+          <h2 className="text-foreground text-base font-bold">{title}</h2>
           <button type="button" onClick={onClose} aria-label="닫기" className="text-text-dim hover:text-foreground">
             <X className="size-4" />
           </button>

@@ -154,7 +154,7 @@ export function GridBodyRow({
       <td className={TD}>
         <div className="flex items-center gap-1.5">
           <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
-          <span className="text-foreground font-semibold">{student.name}</span>
+          <span className="text-foreground font-bold">{student.name}</span>
           {student.isMakeup ? (
             <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-1 py-px text-[9px] font-bold">
               보강
@@ -182,7 +182,7 @@ export function GridBodyRow({
           ) : null}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          <span className={`rounded-pill px-1.5 py-px text-[10px] font-semibold ${toneSoftClass(tone)}`}>
+          <span className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${toneSoftClass(tone)}`}>
             {subject.name}
           </span>
           <span className="text-text-faint text-[10px]">{student.tag}</span>
@@ -198,7 +198,7 @@ export function GridBodyRow({
             />
           ) : att !== "출석" ? (
             <span
-              className={`rounded-pill px-1.5 py-px text-[10px] font-semibold ${
+              className={`rounded-pill px-1.5 py-px text-[10px] font-bold ${
                 att === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
               }`}
             >
@@ -337,7 +337,7 @@ export function GridBodyRow({
                     ? "결석 학생 — 발송 제외 (기록 저장은 가능)"
                     : "오늘 진도를 먼저 입력하세요"
               }
-              className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-semibold disabled:opacity-50 ${
+              className={`border-line hover:bg-bg-soft flex-1 rounded-sm border px-1 py-1 text-[11px] font-bold disabled:opacity-50 ${
                 hasDraft ? "text-primary" : "text-text-dim"
               }`}
             >
@@ -355,7 +355,7 @@ export function GridBodyRow({
               type="button"
               onClick={() => actions.onOpenCard(student.id)}
               title="카드로 열어 본문·첨부·링크 편집"
-              className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-[11px] font-semibold"
+              className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-[11px] font-bold"
             >
               카드
             </button>
@@ -376,7 +376,7 @@ export function GridBodyRow({
             발송
           </Button>
           {badge ? (
-            <span className={`text-center text-[10px] font-semibold ${badge.cls}`}>{badge.label}</span>
+            <span className={`text-center text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}
         </div>
       </td>

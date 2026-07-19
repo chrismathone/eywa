@@ -89,7 +89,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
       <div className="bg-background border-border flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-lg">
         <header className="border-border flex items-start justify-between border-b px-6 py-4">
           <div>
-            <h2 className="text-foreground inline-flex items-center gap-1.5 text-lg font-semibold">
+            <h2 className="text-foreground inline-flex items-center gap-1.5 text-lg font-bold">
               <Sparkles className="text-gold size-4" />
               강의실 자동배정
             </h2>
@@ -156,7 +156,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
               {/* 기존 충돌 안내 */}
               {result.conflictsBefore.length > 0 ? (
                 <div className="border-amber/30 bg-amber/5 rounded-md border px-4 py-3 text-xs">
-                  <p className="text-amber inline-flex items-center gap-1.5 font-semibold">
+                  <p className="text-amber inline-flex items-center gap-1.5 font-bold">
                     <AlertTriangle className="size-3.5" />
                     현재 같은 강의실에 시간이 겹치는 반 {result.conflictsBefore.length}건
                   </p>
@@ -194,7 +194,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
                         <span className="text-text-dim inline-flex shrink-0 items-center gap-1.5 text-xs">
                           <span className="text-text-faint">{a.fromRoomName ?? "미정"}</span>
                           <ArrowRight className="text-text-faint size-3" />
-                          <span className="text-primary inline-flex items-center gap-1 font-semibold">
+                          <span className="text-primary inline-flex items-center gap-1 font-bold">
                             <DoorOpen className="size-3" />
                             {a.toRoomName}
                           </span>

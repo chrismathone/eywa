@@ -40,7 +40,7 @@ function GoalDialog({ studentId, onClose }: { studentId: string; onClose: () => 
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
-          <h2 className="text-foreground text-lg font-semibold">목표 설정</h2>
+          <h2 className="text-foreground text-lg font-bold">목표 설정</h2>
           <button
             type="button"
             onClick={onClose}
@@ -140,7 +140,7 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
     <section className="space-y-3">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-foreground text-sm font-semibold">시험 목표</h3>
+          <h3 className="text-foreground text-sm font-bold">시험 목표</h3>
           {rate.resolved > 0 ? (
             <span className="text-muted-foreground num text-xs">
               달성률{" "}
@@ -171,10 +171,10 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
                     <Pill color={subjects.colorOf(g.subject)} soft>
                       {subjects.labelOf(g.subject)}
                     </Pill>
-                    <span className="text-foreground text-[13px] font-semibold">{g.examName}</span>
+                    <span className="text-foreground text-[13px] font-bold">{g.examName}</span>
                     <span className="num text-muted-foreground text-[12px]">
                       목표{" "}
-                      <span className="text-foreground font-semibold">
+                      <span className="text-foreground font-bold">
                         {g.targetScore}
                         {g.maxScore ? `/${g.maxScore}` : ""}
                       </span>
@@ -185,12 +185,12 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
                         대기
                       </Pill>
                     ) : g.achieved ? (
-                      <span className="text-chart-2 inline-flex items-center gap-1 text-[12px] font-semibold">
+                      <span className="text-chart-2 inline-flex items-center gap-1 text-[12px] font-bold">
                         <Check className="size-3.5" /> 달성 {g.actualScore}
                         {actualPct != null ? ` (${actualPct}%)` : ""}
                       </span>
                     ) : (
-                      <span className="text-chart-4 inline-flex items-center gap-1 text-[12px] font-semibold">
+                      <span className="text-chart-4 inline-flex items-center gap-1 text-[12px] font-bold">
                         <X className="size-3.5" /> 미달 {g.actualScore}
                         {actualPct != null ? ` (${actualPct}%)` : ""}
                       </span>

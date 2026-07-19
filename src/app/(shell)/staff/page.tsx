@@ -175,11 +175,11 @@ export default async function StaffPage({
 
       {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        <BigStat label="전체" value={all.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={2} />} />
-        <BigStat label="원장·관리자" value={roleCount("master") + roleCount("admin")} unit="명" tone="danger" icon={<UserCog size={16} strokeWidth={2} />} />
-        <BigStat label="강사" value={roleCount("teacher")} unit="명" tone="primary" icon={<GraduationCap size={16} strokeWidth={2} />} />
-        <BigStat label="상담" value={roleCount("counselor")} unit="명" tone="rose" icon={<MessageCircle size={16} strokeWidth={2} />} />
-        <BigStat label="회계" value={roleCount("accountant")} unit="명" tone="purple" icon={<Calculator size={16} strokeWidth={2} />} />
+        <BigStat label="전체" value={all.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
+        <BigStat label="원장·관리자" value={roleCount("master") + roleCount("admin")} unit="명" tone="danger" icon={<UserCog size={16} strokeWidth={1.8} />} />
+        <BigStat label="강사" value={roleCount("teacher")} unit="명" tone="primary" icon={<GraduationCap size={16} strokeWidth={1.8} />} />
+        <BigStat label="상담" value={roleCount("counselor")} unit="명" tone="rose" icon={<MessageCircle size={16} strokeWidth={1.8} />} />
+        <BigStat label="회계" value={roleCount("accountant")} unit="명" tone="purple" icon={<Calculator size={16} strokeWidth={1.8} />} />
       </section>
 
       {/* Filter bar */}
@@ -262,7 +262,7 @@ export default async function StaffPage({
       ) : null}
 
       {total === 0 ? (
-        <EmptyState image="staff" icon={() => <Users size={32} strokeWidth={1.5} />} title="등록된 직원이 없습니다" />
+        <EmptyState image="staff" icon={() => <Users size={32} strokeWidth={1.8} />} title="등록된 직원이 없습니다" />
       ) : (
         <>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">

@@ -55,14 +55,14 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-primary text-[12px] font-semibold">
+              <p className="text-primary text-[12px] font-bold">
                 오늘 브리핑
               </p>
               {briefing?.generated_at ? (
                 <span className="text-text-faint text-[12px]">{kstTimeLabel(briefing.generated_at)} 보고</span>
               ) : null}
             </div>
-            <h2 id="daily-briefing-title" className="text-foreground mt-1.5 text-[17px] font-extrabold leading-snug tracking-tight">
+            <h2 id="daily-briefing-title" className="text-foreground mt-1.5 text-[17px] font-bold leading-snug tracking-tight">
               {completed && report ? report.headline : "매니저 팀 아침 보고"}
             </h2>
 
@@ -122,7 +122,7 @@ export function DailyBriefingCard({ briefing }: { briefing: DailyBriefingRow | n
                           {s.reasons.slice(0, 2).join(" · ")}
                         </span>
                         {s.action ? (
-                          <span className="bg-primary-soft text-primary hidden shrink-0 items-center rounded-pill px-2.5 py-1 text-[11px] font-semibold sm:inline-flex">
+                          <span className="bg-primary-soft text-primary hidden shrink-0 items-center rounded-pill px-2.5 py-1 text-[11px] font-bold sm:inline-flex">
                             {s.action}
                           </span>
                         ) : null}

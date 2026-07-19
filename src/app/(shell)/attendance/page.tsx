@@ -277,7 +277,7 @@ export default async function AttendancePage({
                     <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
                       {c.teacherName ?? ""}
                     </span>
-                    <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-2.5 py-1 text-[11px] font-semibold">
+                    <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-2.5 py-1 text-[11px] font-bold">
                       열기
                     </span>
                   </Link>
@@ -295,7 +295,7 @@ export default async function AttendancePage({
         <>
           {/* Stat 4 — 반을 선택했을 때만 */}
           <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-            <BigStat label="등록 학생" value={matrix.stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={2} />} />
+            <BigStat label="등록 학생" value={matrix.stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
             <BigStat
               label="출석률"
               value={matrix.stats.presentRate}
@@ -307,16 +307,16 @@ export default async function AttendancePage({
                     ? "amber"
                     : "danger"
               }
-              icon={<UserCheck size={16} strokeWidth={2} />}
+              icon={<UserCheck size={16} strokeWidth={1.8} />}
             />
-            <BigStat label="결석" value={matrix.stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={2} />} />
-            <BigStat label="지각" value={matrix.stats.lateCount} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={2} />} />
+            <BigStat label="결석" value={matrix.stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={1.8} />} />
+            <BigStat label="지각" value={matrix.stats.lateCount} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={1.8} />} />
           </section>
 
           {matrix.students.length === 0 ? (
             <EmptyState
               image="students"
-              icon={() => <Users size={32} strokeWidth={1.5} />}
+              icon={() => <Users size={32} strokeWidth={1.8} />}
               title="이 반에 등록된 학생이 없습니다"
               description="학생목록에서 등록 후 다시 확인하세요."
             />

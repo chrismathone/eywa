@@ -63,9 +63,9 @@ function MeetingItem({ m }: { m: MeetingRow }) {
               }`}
             >
               {isLive ? (
-                <RefreshCw size={16} strokeWidth={2} />
+                <RefreshCw size={16} strokeWidth={1.8} />
               ) : (
-                <Mic size={16} strokeWidth={2} />
+                <Mic size={16} strokeWidth={1.8} />
               )}
             </span>
             <div className="min-w-0">
@@ -223,9 +223,9 @@ export default async function MeetingsPage({
 
       {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
-        <BigStat label="전체 회의" value={all.length} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={2} />} />
+        <BigStat label="전체 회의" value={all.length} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={1.8} />} />
         <BigStat label="AI 분석 완료" value={completed} unit="건" tone="gold" icon={<EyIcon name="sparkle" size={16} />} />
-        <BigStat label="처리 중" value={inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={2} />} />
+        <BigStat label="처리 중" value={inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={1.8} />} />
       </section>
 
       {/* Filter bar */}
@@ -283,7 +283,7 @@ export default async function MeetingsPage({
       {total === 0 ? (
         <EmptyState
           image="meetings"
-          icon={() => <Mic size={32} strokeWidth={1.5} />}
+          icon={() => <Mic size={32} strokeWidth={1.8} />}
           title="기록된 회의가 없습니다"
         />
       ) : (

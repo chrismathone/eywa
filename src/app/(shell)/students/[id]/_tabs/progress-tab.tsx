@@ -49,7 +49,7 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
       <ProgressContainerPanel studentId={studentId} />
 
       <header className="border-border flex items-baseline justify-between border-b pb-3">
-        <h2 className="text-foreground text-base font-semibold">수업 진도</h2>
+        <h2 className="text-foreground text-base font-bold">수업 진도</h2>
         <p className="text-muted-foreground num text-xs">최근 {reports.length}건</p>
       </header>
 
@@ -80,7 +80,7 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
                     <td className="text-foreground break-keep px-4 py-2 text-xs">{r.progress ?? "—"}</td>
                     <td className="num px-4 py-2 text-center text-xs whitespace-nowrap">{r.examInfo ?? "—"}</td>
                     <td className="px-4 py-2 text-center text-xs">{homeworkMark(r.homeworkScore)}</td>
-                    <td className={`px-4 py-2 text-center text-xs font-semibold whitespace-nowrap ${cn.cls}`}>
+                    <td className={`px-4 py-2 text-center text-xs font-bold whitespace-nowrap ${cn.cls}`}>
                       {cn.label}
                     </td>
                     <td className={`px-4 py-2 text-center text-xs whitespace-nowrap ${link.cls}`}>{link.label}</td>

@@ -31,7 +31,7 @@ export function SlimTrend({
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-primary text-[11px] font-semibold">최근 추세</p>
+          <p className="text-primary text-[11px] font-bold">최근 추세</p>
           <h2 className="text-foreground mt-0.5 text-[15px] font-bold">학원 펄스</h2>
         </div>
         <span className="text-text-dim text-[11px]">최근 {change.days}일 · {range}</span>
@@ -67,15 +67,15 @@ function StudentChange({ change, subjects }: { change: EnrollmentChangeSummary; 
           <div className="mt-1.5 flex items-end gap-4">
             <div>
               <span className="text-text-dim text-[11px]">신규</span>{" "}
-              <span className="num text-primary text-[18px] font-extrabold">+{newCount}</span>
+              <span className="num text-primary text-[18px] font-bold">+{newCount}</span>
             </div>
             <div>
               <span className="text-text-dim text-[11px]">퇴원</span>{" "}
-              <span className="num text-danger text-[18px] font-extrabold">−{withdrawnCount}</span>
+              <span className="num text-danger text-[18px] font-bold">−{withdrawnCount}</span>
             </div>
             <div className="ml-auto text-right">
               <span className="text-text-dim text-[11px]">순증감</span>{" "}
-              <span className={`num text-[22px] font-extrabold ${netTone}`}>
+              <span className={`num text-[22px] font-bold ${netTone}`}>
                 {net > 0 ? "+" : net < 0 ? "−" : ""}
                 {Math.abs(net)}
               </span>
@@ -175,7 +175,7 @@ function TrendRow({
       </div>
       {hasData ? (
         <>
-          <div className="num text-foreground mt-0.5 text-[20px] font-extrabold leading-none">
+          <div className="num text-foreground mt-0.5 text-[20px] font-bold leading-none">
             {Math.round(last)}
             <span className="text-text-dim text-[12px] font-medium">%</span>
           </div>
@@ -183,7 +183,7 @@ function TrendRow({
           {/* absolute: SVG를 흐름에서 빼 종횡비 높이 부풀림 차단 → 패널 높이는 옆 학생증감이 결정(컴팩트). */}
           <div className="relative mt-2 min-h-[40px] flex-1">
             <div className="absolute inset-0">
-              <Sparkline data={values} colorVar={colorVar} height={44} strokeWidth={2} />
+              <Sparkline data={values} colorVar={colorVar} height={44} strokeWidth={1.8} />
             </div>
           </div>
         </>

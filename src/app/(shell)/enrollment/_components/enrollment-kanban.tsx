@@ -25,13 +25,13 @@ const ICON_BG: Record<ColColor, string> = {
 function columnIcon(key: string) {
   switch (key) {
     case "queue":
-      return <CalendarClock size={13} strokeWidth={2} />;
+      return <CalendarClock size={13} strokeWidth={1.8} />;
     case "consulted":
-      return <MessagesSquare size={13} strokeWidth={2} />;
+      return <MessagesSquare size={13} strokeWidth={1.8} />;
     case "ai_done":
       return <EyIcon name="sparkle" size={13} />;
     case "assigned":
-      return <GraduationCap size={13} strokeWidth={2} />;
+      return <GraduationCap size={13} strokeWidth={1.8} />;
     default:
       return <EyIcon name="check" size={13} />;
   }
@@ -85,7 +85,7 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
                 <h3 className="text-foreground text-[13px] font-bold">{col.label}</h3>
               </div>
               <span className="flex items-baseline gap-0.5">
-                <span className="num text-foreground text-[15px] leading-none font-extrabold">
+                <span className="num text-foreground text-[15px] leading-none font-bold">
                   {col.cards.length}
                 </span>
                 <span className="text-text-faint text-[11px]">건</span>

@@ -110,7 +110,7 @@ export function StudentImportDialog() {
             aria-label="학생 엑셀 가져오기"
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-extrabold">학생 엑셀 가져오기</h2>
+              <h2 className="text-foreground text-[15px] font-bold">학생 엑셀 가져오기</h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>

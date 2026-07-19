@@ -247,17 +247,17 @@ export default async function WithdrawalsPage({
         <>
       {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <BigStat label="전체 퇴원" value={all.length} unit="명" tone="rose" icon={<UserMinus size={16} strokeWidth={2} />} />
-        <BigStat label="최근 30일" value={recent} unit="명" tone="danger" icon={<CalendarClock size={16} strokeWidth={2} />} />
+        <BigStat label="전체 퇴원" value={all.length} unit="명" tone="rose" icon={<UserMinus size={16} strokeWidth={1.8} />} />
+        <BigStat label="최근 30일" value={recent} unit="명" tone="danger" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat
           label="상담 미완료"
           value={consultPending}
           unit="명"
           sub={`사후상담 완료율 ${consultRate}%`}
           tone="amber"
-          icon={<ListChecks size={16} strokeWidth={2} />}
+          icon={<ListChecks size={16} strokeWidth={1.8} />}
         />
-        <BigStat label="필터 결과" value={rows.length} unit="명" tone="blue" icon={<Filter size={16} strokeWidth={2} />} />
+        <BigStat label="필터 결과" value={rows.length} unit="명" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
       </section>
 
       {/* Filter bar — 소프트 패널 + 알약 칩 */}
@@ -350,7 +350,7 @@ export default async function WithdrawalsPage({
               {subjects.map((s) => (
                 <div key={s.label}>
                   <div className="mb-1 flex items-baseline justify-between">
-                    <span className="text-foreground text-[12px] font-semibold">{s.label}</span>
+                    <span className="text-foreground text-[12px] font-bold">{s.label}</span>
                     <span className="text-text-dim num text-[11px]">
                       <span className="text-foreground font-bold">{s.count}</span>명
                     </span>
@@ -368,7 +368,7 @@ export default async function WithdrawalsPage({
       {rows.length === 0 ? (
         <EmptyState
           image="withdrawals"
-          icon={() => <UserX size={32} strokeWidth={1.5} />}
+          icon={() => <UserX size={32} strokeWidth={1.8} />}
           title="퇴원 학생이 없습니다"
           description="퇴원 처리된 학생이 생기면 이곳에 표시됩니다."
         />
@@ -403,7 +403,7 @@ export default async function WithdrawalsPage({
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-foreground num text-[11px] font-semibold">
+                        <p className="text-foreground num text-[11px] font-bold">
                           {r.withdrawnAt ?? "—"}
                         </p>
                         {ago ? (
@@ -434,7 +434,7 @@ export default async function WithdrawalsPage({
                 return (
                   <div key={reason}>
                     <div className="mb-1 flex items-baseline justify-between">
-                      <span className="text-foreground text-[12px] font-semibold">{reason}</span>
+                      <span className="text-foreground text-[12px] font-bold">{reason}</span>
                       <span className="text-text-dim num text-[11px]">
                         <span className="text-foreground font-bold">{count}</span>명 ·{" "}
                         {((count / rows.length) * 100).toFixed(0)}%
@@ -454,11 +454,11 @@ export default async function WithdrawalsPage({
             <div className="border-line bg-amber-soft border-t px-5 py-4">
               <div className="flex items-start gap-2.5">
                 <span className="bg-amber/15 text-amber flex size-7 shrink-0 items-center justify-center rounded-md">
-                  <AlertCircle size={13} strokeWidth={2} />
+                  <AlertCircle size={13} strokeWidth={1.8} />
                 </span>
                 <div>
                   {/* 구 font-mono uppercase 코딩틱 라벨 → 한글 12px semibold 승격 */}
-                  <p className="text-amber text-[12px] font-semibold">자동 요약</p>
+                  <p className="text-amber text-[12px] font-bold">자동 요약</p>
                   <p className="text-foreground mt-0.5 text-[12px] leading-relaxed">
                     {topReasons[0]
                       ? `현재 가장 빈번한 퇴원 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
@@ -487,7 +487,7 @@ function SubjectEndedView({
     return (
       <EmptyState
         image="withdrawals"
-        icon={() => <UserX size={32} strokeWidth={1.5} />}
+        icon={() => <UserX size={32} strokeWidth={1.8} />}
         title="수강종료 학생이 없습니다"
         description="재원 중이지만 특정 과목을 모두 끊은 학생이 생기면 여기에 표시됩니다."
       />

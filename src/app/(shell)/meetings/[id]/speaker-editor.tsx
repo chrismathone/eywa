@@ -114,7 +114,7 @@ export function SpeakerEditor({
       <input type="hidden" name="id" value={meetingId} />
       <input type="hidden" name="mapping" value={JSON.stringify(mapping)} />
       <div className="flex items-center justify-between">
-        <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-semibold">
+        <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-bold">
           <Users className="size-3.5" />화자 지정
         </h3>
         <button
@@ -136,7 +136,7 @@ export function SpeakerEditor({
           const usingStaff = !!r.staffId && r.staffId !== FREE;
           return (
             <div key={sp} className="flex flex-wrap items-center gap-2">
-              <span className="text-primary w-12 shrink-0 text-[13px] font-semibold">화자 {sp}</span>
+              <span className="text-primary w-12 shrink-0 text-[13px] font-bold">화자 {sp}</span>
               <div className="min-w-[180px] flex-1">
                 <SearchableSelect
                   options={options}

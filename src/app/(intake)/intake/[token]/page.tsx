@@ -8,7 +8,7 @@ export const metadata = { title: "입학 상담 신청" };
 function ClosedScreen({ message }: { message: string }) {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
-      <p className="text-foreground text-lg font-semibold">접수를 받을 수 없습니다</p>
+      <p className="text-foreground text-lg font-bold">접수를 받을 수 없습니다</p>
       <p className="text-text-dim text-sm">{message}</p>
     </div>
   );

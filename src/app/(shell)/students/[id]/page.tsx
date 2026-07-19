@@ -85,7 +85,7 @@ export default async function StudentDetailPage({
         <div className="space-y-1.5">
           <p className="eyebrow">학생</p>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="display text-foreground text-3xl">{student.name}</h1>
+            <h1 className="font-bold tracking-tight text-foreground text-3xl">{student.name}</h1>
             {student.dupSuspect ? <DupSuspectTag /> : null}
           </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">

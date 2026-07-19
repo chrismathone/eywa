@@ -18,7 +18,7 @@ function SaveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition disabled:opacity-40"
+      className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold transition disabled:opacity-40"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
       저장

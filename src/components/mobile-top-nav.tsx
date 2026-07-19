@@ -58,7 +58,7 @@ export function MobileTopNav({
               <EyIcon name="building" size={12} strokeWidth={1.8} className="text-white" />
             </span>
           )}
-          <span className="text-foreground text-[13px] font-extrabold tracking-tight">{brand}</span>
+          <span className="text-foreground text-[13px] font-bold tracking-tight">{brand}</span>
         </Link>
         <div className="flex items-center gap-1">
           {/* 햄버거 토글 — 기본 접힘, 탭하면 메뉴 그리드 펼침(선택 시 자동 닫힘). */}
@@ -69,7 +69,7 @@ export function MobileTopNav({
             aria-expanded={open}
             className="text-text-dim hover:text-foreground hover:bg-bg-soft flex size-7 items-center justify-center rounded-sm transition"
           >
-            <EyIcon name={open ? "close" : "menu"} size={16} strokeWidth={2} />
+            <EyIcon name={open ? "close" : "menu"} size={16} strokeWidth={1.8} />
           </button>
           <UserMenu email={email} />
         </div>
@@ -89,7 +89,7 @@ export function MobileTopNav({
                 href={item.href}
                 onClick={() => setOpen(false)}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-sm px-2 text-[12px] font-semibold transition ${
+                className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-sm px-2 text-[12px] font-bold transition ${
                   active
                     ? "bg-primary text-primary-foreground shadow-primary-glow"
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft"

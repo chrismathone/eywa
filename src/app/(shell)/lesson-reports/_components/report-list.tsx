@@ -49,14 +49,14 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
   // 학부모 읽음(0122a) — **양성 배지만**: 없음 = "미읽음"이 아니라 "동기화 안 됨"일 수 있어 표시하지 않는다
   // (매칭 키 없는 행의 거짓 미확인 방지 — report-filters.ts readAt 주석 참조).
   const read = readAt ? (
-    <span className="text-primary ml-1.5 text-[11px] font-semibold" title={`학부모 읽음 · ${readAtLabel(readAt)}`}>
+    <span className="text-primary ml-1.5 text-[11px] font-bold" title={`학부모 읽음 · ${readAtLabel(readAt)}`}>
       읽음
     </span>
   ) : null;
   if (badge)
     return (
       <>
-        <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+        <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
         {read}
       </>
     );
@@ -146,7 +146,7 @@ export function ReportList({
   return (
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
       <div className="mb-3">
-        <h2 className="text-foreground text-[15px] font-semibold">보고서 목록</h2>
+        <h2 className="text-foreground text-[15px] font-bold">보고서 목록</h2>
         <p className="text-text-faint text-[12px]">강사·기간·상태·과목으로 조회 · 행 클릭 시 학부모 보고서 열람</p>
       </div>
 
@@ -220,11 +220,11 @@ export function ReportList({
                   />
                 </th>
               ) : null}
-              <th className="px-3 py-2 font-semibold">날짜</th>
-              <th className="px-3 py-2 font-semibold">학생 · 과목</th>
-              <th className="px-3 py-2 font-semibold">강사</th>
-              <th className="px-3 py-2 font-semibold">발송 상태</th>
-              <th className="px-3 py-2 text-right font-semibold">열람</th>
+              <th className="px-3 py-2 font-bold">날짜</th>
+              <th className="px-3 py-2 font-bold">학생 · 과목</th>
+              <th className="px-3 py-2 font-bold">강사</th>
+              <th className="px-3 py-2 font-bold">발송 상태</th>
+              <th className="px-3 py-2 text-right font-bold">열람</th>
             </tr>
           </thead>
           <tbody>
@@ -262,7 +262,7 @@ export function ReportList({
                     ) : null}
                   </td>
                   <td className="px-3 py-2">
-                    <span className="text-foreground font-semibold">{r.studentName}</span>
+                    <span className="text-foreground font-bold">{r.studentName}</span>
                     {r.subject ? <span className="text-text-faint ml-1.5">{subjects.labelOf(r.subject)}</span> : null}
                   </td>
                   <td className="text-text-dim px-3 py-2">{r.teacherName ?? "—"}</td>

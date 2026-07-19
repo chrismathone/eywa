@@ -863,7 +863,7 @@ export type EywaIconProps = {
 export function EyIcon({
   name,
   size = 18,
-  strokeWidth = 1.6,
+  strokeWidth = 1.8,
   className,
   ...rest
 }: EywaIconProps) {

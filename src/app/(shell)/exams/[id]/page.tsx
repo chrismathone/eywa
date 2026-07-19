@@ -70,7 +70,7 @@ export default async function ExamDetailPage({
                 <span className="text-text-faint text-xs">만점 {exam.maxScore}</span>
               ) : null}
             </div>
-            <h1 className="text-foreground text-xl font-extrabold leading-tight">{exam.name}</h1>
+            <h1 className="text-foreground text-xl font-bold leading-tight">{exam.name}</h1>
             {exam.notes ? <p className="text-text-dim text-sm">{exam.notes}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -112,7 +112,7 @@ export default async function ExamDetailPage({
       {classOptions.length === 0 ? null : rows.length === 0 ? (
         <EmptyState
           image="students"
-          icon={() => <BookOpen size={32} strokeWidth={1.5} />}
+          icon={() => <BookOpen size={32} strokeWidth={1.8} />}
           title="이 반에 재원 학생이 없습니다"
         />
       ) : (
@@ -128,7 +128,7 @@ function Stat({ label, value, unit }: { label: string; value: number | null; uni
     <div>
       <p className="text-text-dim text-[13px] font-medium">{label}</p>
       <p className="mt-1.5 flex items-baseline justify-center gap-1">
-        <span className="num text-foreground text-[27px] font-extrabold leading-none tracking-tight">
+        <span className="num text-foreground text-[27px] font-bold leading-none tracking-tight">
           {value ?? "—"}
         </span>
         {unit ? <span className="text-text-dim text-[13px] font-medium">{unit}</span> : null}

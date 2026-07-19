@@ -176,7 +176,7 @@ export function FloatingWindow({
                 }}
                 className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
               >
-                <ArrowLeft size={14} strokeWidth={2} />
+                <ArrowLeft size={14} strokeWidth={1.8} />
               </button>
             ) : null}
             {win.kind === "route" ? (
@@ -189,7 +189,7 @@ export function FloatingWindow({
                 disabled={locked}
                 className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition disabled:pointer-events-none disabled:opacity-40"
               >
-                <RotateCw size={13} strokeWidth={2} />
+                <RotateCw size={13} strokeWidth={1.8} />
               </button>
             ) : null}
             {win.kind === "route" && !spot ? (
@@ -200,14 +200,14 @@ export function FloatingWindow({
                 onClick={() => duplicate(win.id)}
                 className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
               >
-                <CopyPlus size={14} strokeWidth={2} />
+                <CopyPlus size={14} strokeWidth={1.8} />
               </button>
             ) : null}
           </span>
 
           {/* 정중앙: 창 이름 — 좌우 그룹 너비와 무관하게 바 한가운데 고정(absolute). 드래그 통과(pointer-events-none). */}
           <span className="pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[46%] -translate-x-1/2 items-center justify-center gap-1.5">
-            <span className="text-foreground truncate text-[12px] font-semibold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
+            <span className="text-foreground truncate text-[12px] font-bold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
             {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-[11px]">{win.params.subtitle}</span> : null}
           </span>
 
@@ -225,7 +225,7 @@ export function FloatingWindow({
                 onClick={() => lowerFromSpotlight(win.id)}
                 className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
               >
-                <ChevronDown size={15} strokeWidth={2} />
+                <ChevronDown size={15} strokeWidth={1.8} />
               </button>
             ) : null}
             <button
@@ -235,7 +235,7 @@ export function FloatingWindow({
               onClick={() => runExit(() => minimize(win.id), true)}
               className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
             >
-              <Minus size={15} strokeWidth={2} />
+              <Minus size={15} strokeWidth={1.8} />
             </button>
             {!spot ? (
               <button
@@ -245,7 +245,7 @@ export function FloatingWindow({
                 onClick={() => toggleMax(win.id)}
                 className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex h-7 w-9 items-center justify-center rounded-[6px] transition"
               >
-                {win.maximized ? <Copy size={13} strokeWidth={2} /> : <Square size={13} strokeWidth={2} />}
+                {win.maximized ? <Copy size={13} strokeWidth={1.8} /> : <Square size={13} strokeWidth={1.8} />}
               </button>
             ) : null}
             <button
@@ -256,7 +256,7 @@ export function FloatingWindow({
               disabled={locked}
               className="text-text-dim hover:bg-danger flex h-7 w-9 items-center justify-center rounded-[6px] transition hover:text-white disabled:pointer-events-none disabled:opacity-40"
             >
-              <X size={16} strokeWidth={2} />
+              <X size={16} strokeWidth={1.8} />
             </button>
           </span>
         </div>
@@ -275,7 +275,7 @@ export function FloatingWindow({
             }}
           >
             <div className="bg-card border-line shadow-modal w-full max-w-xs rounded-lg border p-5">
-              <p className="text-foreground text-sm font-semibold">저장하지 않고 닫을까요?</p>
+              <p className="text-foreground text-sm font-bold">저장하지 않고 닫을까요?</p>
               <p className="text-text-dim mt-1.5 text-xs leading-relaxed">
                 작성 중인 변경 내용이 있습니다. 닫으면 저장하지 않은 내용이 사라질 수 있어요.
               </p>

@@ -186,7 +186,7 @@ function Stat({
       <header className="flex items-center justify-between">
         <p className="micro truncate">{label}</p>
         <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
+          <Icon size={13} strokeWidth={1.8} />
         </span>
       </header>
       <p className="tabular text-foreground mt-2 text-[26px] leading-none">{value}</p>

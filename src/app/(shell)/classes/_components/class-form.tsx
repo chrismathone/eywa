@@ -269,7 +269,7 @@ export function ClassForm({
 
       <section className="space-y-3 border-t pt-4">
         <header>
-          <h3 className="text-foreground text-sm font-semibold">주간 스케줄</h3>
+          <h3 className="text-foreground text-sm font-bold">주간 스케줄</h3>
           <p className="text-muted-foreground text-xs">
             요일 × 교시 칸을 눌러 수업 교시를 지정하세요. 강의실·강사 시간 겹침은 저장 시 자동 감지(강사 겹침은 합반 등 의도 시 무시 가능).
           </p>

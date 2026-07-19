@@ -130,7 +130,7 @@ export function ExpenseDialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">{editing ? "지출 수정" : "지출 등록"}</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">
+            <h2 className="text-foreground mt-1 text-lg font-bold">
               {editing ? expense.title : "새 지출결의서"}
             </h2>
           </div>
@@ -204,7 +204,7 @@ export function ExpenseDialog({
 
           <div className="border-line bg-bg-soft/40 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
             <span className="text-text-dim">합계</span>
-            <span className="text-foreground num font-semibold">{formatMoney(amount, currency)}</span>
+            <span className="text-foreground num font-bold">{formatMoney(amount, currency)}</span>
           </div>
           {state?.fieldErrors?.amount ? <p className="text-danger text-xs">{state.fieldErrors.amount}</p> : null}
 

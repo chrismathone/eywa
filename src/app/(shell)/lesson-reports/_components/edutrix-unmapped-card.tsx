@@ -43,14 +43,14 @@ function RowLink({ row }: { row: UnmappedEdutrixRow }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-foreground text-[13px] font-medium">{eduLabel}</span>
           {row.likelyDummy ? (
-            <span className="bg-bg-soft text-text-faint rounded px-1.5 py-0.5 text-[10px] font-semibold">
+            <span className="bg-bg-soft text-text-faint rounded px-1.5 py-0.5 text-[10px] font-bold">
               테스트
             </span>
           ) : null}
         </div>
         <div className="text-text-faint font-mono text-[10px]">{row.edutrixId.slice(0, 8)}…</div>
       </td>
-      <td className="text-foreground tabular px-3 py-2 align-top text-[13px] font-semibold">
+      <td className="text-foreground tabular px-3 py-2 align-top text-[13px] font-bold">
         {row.reportCount}
       </td>
       <td className="px-3 py-2 align-top">
@@ -88,7 +88,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
   if (!view.ok) {
     return (
       <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
-        <h2 className="text-foreground text-[15px] font-semibold">Edutrix 미매핑</h2>
+        <h2 className="text-foreground text-[15px] font-bold">Edutrix 미매핑</h2>
         <p className="text-amber mt-2 text-[13px]">{view.error ?? "목록을 불러오지 못했습니다"}</p>
       </section>
     );
@@ -103,7 +103,7 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-foreground text-[15px] font-semibold">Edutrix 미매핑</h2>
+          <h2 className="text-foreground text-[15px] font-bold">Edutrix 미매핑</h2>
           <p className="text-text-faint text-[12px]">
             보고서가 있는 Edutrix 학생 중 UUID 미연결 · 자동 이관 제외(오배정 방지). 연결 시 최근 보고서도
             이관됩니다. 테스트 프로필(학원1·테스트 등 이름)은 기본 숨김.
@@ -117,8 +117,8 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
           <span
             className={
               realCount > 0
-                ? "bg-danger/10 text-danger rounded-md px-2.5 py-1 font-semibold"
-                : "bg-primary/10 text-primary rounded-md px-2.5 py-1 font-semibold"
+                ? "bg-danger/10 text-danger rounded-md px-2.5 py-1 font-bold"
+                : "bg-primary/10 text-primary rounded-md px-2.5 py-1 font-bold"
             }
           >
             실매핑 대상 <b className="tabular">{realCount}</b>
@@ -154,9 +154,9 @@ export function EdutrixUnmappedCard({ view }: { view: EdutrixMapView }) {
           <table className="w-full min-w-[640px] text-left text-[12px]">
             <thead>
               <tr className="border-line text-text-faint border-b">
-                <th className="px-3 py-2 font-semibold">Edutrix 학생</th>
-                <th className="px-3 py-2 font-semibold">보고서</th>
-                <th className="px-3 py-2 font-semibold">eywa 연결</th>
+                <th className="px-3 py-2 font-bold">Edutrix 학생</th>
+                <th className="px-3 py-2 font-bold">보고서</th>
+                <th className="px-3 py-2 font-bold">eywa 연결</th>
               </tr>
             </thead>
             <tbody>

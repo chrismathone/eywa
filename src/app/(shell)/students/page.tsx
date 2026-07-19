@@ -181,7 +181,7 @@ export default async function StudentsPage({
       {rows.length === 0 ? (
         <EmptyState
           image={q ? "search" : "students"}
-          icon={() => <Users size={32} strokeWidth={1.5} />}
+          icon={() => <Users size={32} strokeWidth={1.8} />}
           title="결과 없음"
           description="검색어/필터를 조정해보세요."
         />

@@ -26,7 +26,7 @@ export default async function NewClassPage() {
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">새 반 생성</p>
-        <h1 className="display text-foreground text-2xl">반 정보</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">반 정보</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           기본 정보 입력 후 주간 스케줄을 설정하세요.
         </p>

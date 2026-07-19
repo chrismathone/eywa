@@ -206,7 +206,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
                 className="mb-1 size-40 object-contain sm:size-44"
               />
               <div className="text-center">
-                <p className="text-foreground text-[15px] font-semibold">열린 창이 없어요</p>
+                <p className="text-foreground text-[15px] font-bold">열린 창이 없어요</p>
                 <p className="text-text-dim mt-1 text-[13px]">왼쪽 메뉴를 눌러 창을 여세요.</p>
               </div>
             </div>

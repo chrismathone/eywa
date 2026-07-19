@@ -56,7 +56,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
       {/* 최근 30일 출결 — 전체 폭 KPI */}
       <section className="bg-card border-border rounded-md border p-5">
         <header className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold tracking-tight">최근 30일 출결</h2>
+          <h2 className="text-sm font-bold tracking-tight">최근 30일 출결</h2>
           <p className="text-muted-foreground num text-xs">총 {attendance.total}건</p>
         </header>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -74,7 +74,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
       {/* 프로필 + 다이제스트 — CSS columns 마조너리(창 폭 따라 1/2/3열 자동 패킹, 빈칸 최소화) */}
       <div className="gap-4 sm:columns-2 xl:columns-3 [&>section]:mb-4 [&>section]:break-inside-avoid">
         <section className="bg-card border-border space-y-3 rounded-md border p-5">
-          <h2 className="text-sm font-semibold tracking-tight">프로필</h2>
+          <h2 className="text-sm font-bold tracking-tight">프로필</h2>
           <dl className="space-y-3 text-sm">
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
             {student.nickname ? <Field label="닉네임" value={student.nickname} /> : null}
@@ -200,7 +200,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
           <header className="flex items-baseline justify-between">
             <div className="inline-flex items-center gap-2">
               <Sparkles className="text-chart-4 size-4" />
-              <h2 className="text-foreground text-sm font-semibold">AI 케어 인사이트</h2>
+              <h2 className="text-foreground text-sm font-bold">AI 케어 인사이트</h2>
             </div>
             {student.aiCareGeneratedAt ? (
               <span className="text-muted-foreground num text-[11px]">
@@ -266,7 +266,7 @@ function DigestCard({
   return (
     <section className="bg-card border-border flex flex-col rounded-md border p-4">
       <header className="mb-2 flex items-center justify-between">
-        <h3 className="text-foreground text-sm font-semibold">{title}</h3>
+        <h3 className="text-foreground text-sm font-bold">{title}</h3>
         {more}
       </header>
       <div className="divide-border/60 flex-1 divide-y">{children}</div>
@@ -317,7 +317,7 @@ function Stat({
   return (
     <div className="space-y-1">
       <p className="eyebrow">{label}</p>
-      <p className={`num text-foreground text-xl font-semibold ${highlight ?? ""}`}>
+      <p className={`num text-foreground text-xl font-bold ${highlight ?? ""}`}>
         {value}
         {unit ? (
           <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span>

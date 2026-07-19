@@ -36,7 +36,7 @@ export function EditingBanner({ scope }: { scope: string }) {
     <div className="border-amber/40 bg-amber/5 text-amber flex items-start gap-2 rounded-md border px-3 py-2 text-sm">
       <Pencil className="mt-0.5 size-4 shrink-0" strokeWidth={2.5} aria-hidden />
       <span>
-        <strong className="font-semibold">{names}</strong>님이 지금 이 기록을 수정 중입니다 — 동시에 저장하면 서로의 변경이 덮어쓰일 수 있어요.
+        <strong className="font-bold">{names}</strong>님이 지금 이 기록을 수정 중입니다 — 동시에 저장하면 서로의 변경이 덮어쓰일 수 있어요.
       </span>
     </div>
   );

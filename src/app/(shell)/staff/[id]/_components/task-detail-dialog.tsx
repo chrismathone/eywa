@@ -36,7 +36,7 @@ function Spans({ spans }: { spans: RichSpan[] }) {
     <>
       {spans.map((s, i) => {
         let cls = "";
-        if (s.bold) cls += " font-semibold";
+        if (s.bold) cls += " font-bold";
         if (s.italic) cls += " italic";
         if (s.strike) cls += " line-through";
         if (s.code) cls += " bg-bg-soft rounded px-1 text-[11px] font-mono";
@@ -78,7 +78,7 @@ function ContentBody({ lines }: { lines: ContentLine[] }) {
         switch (l.kind) {
           case "heading":
             return (
-              <p key={i} className={`text-foreground font-semibold ${l.level === 1 ? "text-[14px]" : "text-[13px]"} ${i > 0 ? "mt-2" : ""}`}>
+              <p key={i} className={`text-foreground font-bold ${l.level === 1 ? "text-[14px]" : "text-[13px]"} ${i > 0 ? "mt-2" : ""}`}>
                 <Spans spans={l.spans} />
               </p>
             );
@@ -285,7 +285,7 @@ export function TaskDetailDialog({
 
         {/* 댓글 */}
         <div className="border-line max-h-[28vh] space-y-2.5 overflow-y-auto border-t pt-3">
-          <p className="text-text-faint text-[11px] font-semibold">댓글</p>
+          <p className="text-text-faint text-[11px] font-bold">댓글</p>
           {loading && comments === null ? (
             <p className="text-text-faint py-2 text-center text-[12px]">댓글 불러오는 중…</p>
           ) : error ? (
@@ -294,7 +294,7 @@ export function TaskDetailDialog({
             comments.map((c) => (
               <div key={c.id} className="text-[12px]">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-foreground font-semibold">{c.author}</span>
+                  <span className="text-foreground font-bold">{c.author}</span>
                   <span className="text-text-faint text-[11px]">{timeLabel(c.time)}</span>
                 </div>
                 <p className="text-text-dim whitespace-pre-wrap">{c.text}</p>

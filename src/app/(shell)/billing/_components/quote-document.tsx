@@ -54,7 +54,7 @@ export function QuoteDocument({
       {/* 헤더 — 로고/학원명은 토글(로고 워드마크에 학원명이 있으면 하나만 켜서 중복 방지). */}
       <header className="flex flex-col items-center gap-2">
         {showLogo || showName ? (
-          <div className="text-primary inline-flex items-center gap-2 text-xl font-extrabold tracking-tight">
+          <div className="text-primary inline-flex items-center gap-2 text-xl font-bold tracking-tight">
             {showLogo ? (
               logoSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), 인쇄 문서라 next/image 최적화 불필요
@@ -68,7 +68,7 @@ export function QuoteDocument({
             {showName ? academyName : null}
           </div>
         ) : null}
-        <h2 className="text-foreground text-2xl font-black tracking-[0.3em]">수강료 안내문</h2>
+        <h2 className="text-foreground text-2xl font-bold tracking-[0.3em]">수강료 안내문</h2>
       </header>
 
       {/* 학생 정보 */}
@@ -175,7 +175,7 @@ export function QuoteDocument({
         {hasAccount ? (
           <div className="border-line bg-bg-soft w-full max-w-[380px] rounded-md border px-4 py-2 text-[12px] print:break-inside-avoid print:bg-white print:py-1">
             <div className="text-text-faint mb-0.5 text-[11px] font-bold print:text-[9px]">입금 계좌</div>
-            <div className="text-foreground font-semibold print:text-[10px]">
+            <div className="text-foreground font-bold print:text-[10px]">
               {[account?.bank, account?.holder ? `예금주 ${account.holder}` : ""].filter(Boolean).join(" · ")}
             </div>
             {account?.number ? (
@@ -189,7 +189,7 @@ export function QuoteDocument({
           <span className="bg-foreground/5 text-foreground flex items-center px-4 py-2 text-sm font-bold">
             최종 납부 금액
           </span>
-          <span className="bg-gold text-ink num flex items-center px-5 py-2 text-lg font-black">
+          <span className="bg-gold text-ink num flex items-center px-5 py-2 text-lg font-bold">
             {won(totals.total)}
           </span>
         </div>

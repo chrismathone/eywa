@@ -33,7 +33,7 @@ export default async function EditConsultationPage({
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="space-y-1">
           <p className="eyebrow">상담 수정</p>
-          <h1 className="display text-foreground text-2xl">{item.studentName}</h1>
+          <h1 className="font-bold tracking-tight text-foreground text-2xl">{item.studentName}</h1>
         </div>
         <ConsultationDeleteButton
           id={item.id}

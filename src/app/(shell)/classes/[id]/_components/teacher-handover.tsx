@@ -51,7 +51,7 @@ function HandoverDialog({
       {/* ⚠️ overflow-y-auto/max-h를 두지 않는다 — SearchableSelect 팝업(absolute)이 잘린다(EnrollmentAssignDialog 패턴). 폼이 짧아 뷰포트 넘칠 일 없음. */}
       <div className="bg-background border-border w-full max-w-md rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
-          <h2 className="text-foreground text-lg font-semibold">강사 인수인계 예약</h2>
+          <h2 className="text-foreground text-lg font-bold">강사 인수인계 예약</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="닫기">
             <X className="size-4" />
           </button>
@@ -188,7 +188,7 @@ export function HandoverBanner({
         <p className="text-foreground mt-1 flex flex-wrap items-center gap-1.5 text-sm">
           <span className="font-medium">{currentTeacherName ?? "미정"}</span>
           <ArrowRight className="text-text-faint size-3.5" />
-          <span className="text-primary font-semibold">{pendingTeacherName ?? "—"}</span>
+          <span className="text-primary font-bold">{pendingTeacherName ?? "—"}</span>
           {pendingDate ? <span className="text-text-dim num text-xs">· 적용일 {pendingDate}</span> : null}
         </p>
         {reason ? <p className="text-text-dim mt-0.5 text-xs">{reason}</p> : null}

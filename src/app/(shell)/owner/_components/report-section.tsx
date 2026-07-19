@@ -90,7 +90,7 @@ export function ReportSection({
 
         {/* 발송 허용 과목 — 체크한 과목만 학부모에게 발송(현 운영=수학만). 빈 목록이면 아무것도 발송 안 함. */}
         <div className="border-line mt-3 border-t pt-3">
-          <p className="text-foreground text-[13px] font-semibold">발송 과목</p>
+          <p className="text-foreground text-[13px] font-bold">발송 과목</p>
           <p className="text-text-dim mt-0.5 text-[12px]">
             체크한 과목만 학부모에게 발송됩니다. 아무것도 고르지 않으면 발송되지 않습니다.
           </p>
@@ -110,7 +110,7 @@ export function ReportSection({
                     aria-pressed={on}
                     className={`rounded-full border px-3 py-1 text-[13px] transition ${
                       on
-                        ? "border-primary bg-primary/10 text-primary font-semibold"
+                        ? "border-primary bg-primary/10 text-primary font-bold"
                         : "border-line text-text-dim hover:bg-bg-soft"
                     }`}
                   >
@@ -131,7 +131,7 @@ export function ReportSection({
         {/* 발송 허용 시간대 — 밤 수업 보고서가 밤에 학부모 폰을 울리지 않게. 창 밖 발송분은 큐에 대기했다가
             창 진입 시 워커가 자동 발송(강사는 평소처럼 발송 버튼만). 둘 다 채워야 활성, 비우면 무제한. */}
         <div className="border-line mt-3 border-t pt-3">
-          <p className="text-foreground text-[13px] font-semibold">발송 허용 시간대</p>
+          <p className="text-foreground text-[13px] font-bold">발송 허용 시간대</p>
           {/* ⚠️ "수업 보고서" 한정 명시 — 반 공지(classnote_notices)는 이 창을 안 탄다(발신자 명시 발송 = 즉시
               게시가 의도). 무한정 "발송"이라 쓰면 같은 박스의 킬스위치·발송 과목이 공지에도 적용되는 것과 섞여
               공지까지 미뤄진다고 오독됨(리뷰 확정 — 과약속 금지). */}
@@ -264,7 +264,7 @@ export function ReportSection({
                       on ? "border-primary bg-primary/5" : "border-line hover:bg-bg-soft"
                     }`}
                   >
-                    <p className="text-foreground text-[13px] font-semibold">
+                    <p className="text-foreground text-[13px] font-bold">
                       {title} <span className="text-text-faint font-normal">({mode})</span>
                     </p>
                     <p className="text-text-dim mt-0.5 text-[12px]">{desc}</p>
@@ -331,7 +331,7 @@ export function ReportSection({
                           aria-pressed={on}
                           className={`rounded-full border px-3 py-1 text-[13px] transition ${
                             on
-                              ? "border-danger bg-danger/10 text-danger font-semibold line-through"
+                              ? "border-danger bg-danger/10 text-danger font-bold line-through"
                               : "border-line text-text-dim hover:bg-bg-soft"
                           }`}
                         >
@@ -354,7 +354,7 @@ export function ReportSection({
                     type="button"
                     onClick={() => toggleExempt(name)}
                     aria-pressed
-                    className="border-danger bg-danger/10 text-danger rounded-full border px-3 py-1 text-[13px] font-semibold line-through"
+                    className="border-danger bg-danger/10 text-danger rounded-full border px-3 py-1 text-[13px] font-bold line-through"
                   >
                     {name}
                   </button>

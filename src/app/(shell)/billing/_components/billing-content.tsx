@@ -184,7 +184,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       {total === 0 ? (
         <EmptyState
           image={q ? "search" : "billing"}
-          icon={() => <ReceiptText size={32} strokeWidth={1.5} />}
+          icon={() => <ReceiptText size={32} strokeWidth={1.8} />}
           title={q ? "검색 결과 없음" : "이 달 청구 내역이 없습니다"}
           description={q ? "검색어를 조정해보세요." : "월을 이동하거나 신규 청구서를 생성하세요."}
         />
@@ -197,7 +197,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               value={KRW.format(summary.totalBilled)}
               unit="원"
               tone="primary"
-              icon={<Receipt size={16} strokeWidth={2} />}
+              icon={<Receipt size={16} strokeWidth={1.8} />}
               sub={`${summary.totalCount}건`}
             />
             <BigStat
@@ -205,7 +205,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               value={KRW.format(summary.totalDiscount)}
               unit="원"
               tone="amber"
-              icon={<BadgePercent size={16} strokeWidth={2} />}
+              icon={<BadgePercent size={16} strokeWidth={1.8} />}
             />
             <BigStat
               label="수납 완료"
@@ -221,7 +221,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               unit="원"
               tone="danger"
               valueClass="text-danger"
-              icon={<CircleDollarSign size={16} strokeWidth={2} />}
+              icon={<CircleDollarSign size={16} strokeWidth={1.8} />}
               sub={`부분 ${summary.partialCount} · 미수 ${summary.unpaidCount}건`}
             />
             <BigStat
@@ -229,7 +229,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               value={summary.paymentRate.toFixed(1)}
               unit="%"
               tone="gold"
-              icon={<Percent size={16} strokeWidth={2} />}
+              icon={<Percent size={16} strokeWidth={1.8} />}
             />
           </section>
 
@@ -251,12 +251,12 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             /* 기한 경과 배너 — 굵은 건수+금액 위계 + 우측 '목록 보기'(납부기한 순 정렬로 이동) */
             <section className="bg-danger-soft flex flex-wrap items-center gap-4 rounded-2xl p-5">
               <span className="bg-danger/15 text-danger flex size-10 shrink-0 items-center justify-center rounded-xl">
-                <CircleDollarSign size={18} strokeWidth={2} />
+                <CircleDollarSign size={18} strokeWidth={1.8} />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-foreground text-[13px] font-bold">기한 경과 미수금</p>
                 <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="num text-danger text-[24px] font-extrabold leading-none">
+                  <span className="num text-danger text-[24px] font-bold leading-none">
                     {overdue.length}
                   </span>
                   <span className="text-text-dim text-[12px]">건</span>
@@ -265,7 +265,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
               </div>
               <Link
                 href={buildHref({ period, q, sort: "due_date", desc: false })}
-                className="border-danger/40 text-danger hover:bg-danger/10 shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition"
+                className="border-danger/40 text-danger hover:bg-danger/10 shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition"
               >
                 목록 보기
               </Link>

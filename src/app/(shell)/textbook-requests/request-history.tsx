@@ -169,7 +169,7 @@ function RequestRow({
       {canManage ? (
         confirmDel ? (
           <span className="flex shrink-0 items-center gap-1 text-[12px]">
-            <button type="button" onClick={remove} disabled={pending} className="text-danger font-semibold">삭제</button>
+            <button type="button" onClick={remove} disabled={pending} className="text-danger font-bold">삭제</button>
             <button type="button" onClick={() => setConfirmDel(false)} className="text-text-faint">취소</button>
           </span>
         ) : (

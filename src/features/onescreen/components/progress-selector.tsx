@@ -134,7 +134,7 @@ export function ProgressSelector({
                         key={l}
                         type="button"
                         onClick={() => add(l)}
-                        className="border-primary/40 text-primary hover:bg-primary-soft inline-flex items-center gap-0.5 rounded-pill border px-1.5 py-0.5 text-[11px] font-semibold"
+                        className="border-primary/40 text-primary hover:bg-primary-soft inline-flex items-center gap-0.5 rounded-pill border px-1.5 py-0.5 text-[11px] font-bold"
                       >
                         <Plus size={10} /> {shortLesson(l)}
                       </button>
@@ -167,7 +167,7 @@ export function ProgressSelector({
               ) : (
                 filteredUnits.map((u) => (
                   <div key={u.unit} className="mb-1">
-                    <p className="text-text-faint bg-bg-soft/60 sticky top-0 px-2 py-1 text-[10.5px] font-semibold">
+                    <p className="text-text-faint bg-bg-soft/60 sticky top-0 px-2 py-1 text-[10.5px] font-bold">
                       {u.unit}
                     </p>
                     {u.lessons.map((l) => {
@@ -176,7 +176,7 @@ export function ProgressSelector({
                         <label
                           key={l}
                           className={`hover:bg-bg-soft flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1 ${
-                            on ? "text-primary font-semibold" : "text-text-dim"
+                            on ? "text-primary font-bold" : "text-text-dim"
                           }`}
                         >
                           <input

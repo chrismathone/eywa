@@ -88,7 +88,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
     <tr className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""}`}>
       <td className="px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.5} /> : null}
+          {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.8} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
           {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산) */}
           <WindowLink
@@ -99,7 +99,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
             {doc.title}
           </WindowLink>
           {doc.kind === "file" && isPreviewableType(doc.typeLabel) ? (
-            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap">
+            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap">
               미리보기
             </span>
           ) : null}
@@ -142,7 +142,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
           {canWrite && doc.kind !== "form" ? (
             confirming ? (
               <span className="inline-flex items-center gap-1.5 text-xs">
-                <button type="button" onClick={() => void onDelete()} disabled={busy} className="text-danger font-semibold hover:underline">
+                <button type="button" onClick={() => void onDelete()} disabled={busy} className="text-danger font-bold hover:underline">
                   {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
                 </button>
                 <button type="button" onClick={() => setConfirming(false)} className="text-text-dim hover:underline">

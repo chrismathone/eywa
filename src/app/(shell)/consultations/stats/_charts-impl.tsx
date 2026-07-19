@@ -50,7 +50,7 @@ export function StatsCharts({
       <section className="bg-card border-border rounded-md border p-4">
         <header className="mb-2">
           <p className="eyebrow">사유별 분포</p>
-          <h2 className="text-foreground mt-1 text-sm font-semibold">학생상담 카테고리</h2>
+          <h2 className="text-foreground mt-1 text-sm font-bold">학생상담 카테고리</h2>
         </header>
         {pieData.length === 0 ? (
           <p className="text-muted-foreground py-12 text-center text-sm">데이터 없음</p>
@@ -79,7 +79,7 @@ export function StatsCharts({
       <section className="bg-card border-border rounded-md border p-4">
         <header className="mb-2">
           <p className="eyebrow">월별 추세</p>
-          <h2 className="text-foreground mt-1 text-sm font-semibold">상담 건수</h2>
+          <h2 className="text-foreground mt-1 text-sm font-bold">상담 건수</h2>
         </header>
         {trend.length === 0 ? (
           <p className="text-muted-foreground py-12 text-center text-sm">데이터 없음</p>
