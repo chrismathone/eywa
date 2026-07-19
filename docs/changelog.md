@@ -4,6 +4,28 @@
 
 ## 진행 상황
 
+### 출석 완료 → 담당 강사 벨 G4 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1653 · 마이그 0 · ClassNote 로드맵 완주
+**골: 보고서 쓰기가 "가는 일"이 아니라 "오는 일"** — 출석이 끝나는 순간 강사 벨 → 원스크린 →
+(G5 이전값 일괄+G6 반 서술+자동작성) 기존 파이프라인이 흐름 완성(136b40ae). 로드맵(plans/
+glowing-seeking-matsumoto.md) G1~G6 전 단계 main 반영 완료.
+- 완료 판정 = (반,날짜) 활성 수강생 전원 기록([attendance-complete.ts](../src/features/attendance/attendance-complete.ts)
+  순수, isEnrollmentActiveOn 규약). 훅 = 출결 저장 액션 **after() 백그라운드**(best-effort, 삭제 경로 미발화).
+- dedup = notification_events(subject=classId, bucket=날짜) 1회 + **최근 3일 밖 무발화**(과거 정정이 뒤늦은
+  완료 벨로 안 울리게). **본인이 찍으면 벨 없음**(actorId=notifyUsers 스킵) — 데스크가 찍었을 때만 강사 도착.
+- 자동화는 알림까지(MVP) — 프리필·행 생성은 G5 깊은판 provenance 선결(후속 별도 승인).
+  ⚠️ 멀티에이전트 적대 리뷰 미실시(세션 한도) — 셀프 점검 2건 반영(과거 정정 가드·B4 병렬), 리셋 후 재검 여지.
+
+### 원스크린 반 공통 서술 → 학생별 멘트 분기 G6 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1649 · 마이그 0 · 적대리뷰 major 2건 반영
+ClassNote 로드맵 4단계(d7f6037a). **골: 반 서술 1회 = 학생 N명의 서로 다른 멘트**(서술 = 생성 재료, 기록 아님).
+- 표 툴바 "반 서술" 팝오버(반 특정 시만 활성, #22) → sessionStorage(날짜 키)+useSyncExternalStore
+  (#75·#25 회피) → `generateDraftFor`(카드·표·일괄 공용)가 행의 **classId**로 조회해 `classContext`로 동봉.
+- fact 블록 동봉 가드("반 공통 수업 맥락(참고용 — 학생 정보 우선)") — 데이터에 실어 DB 프롬프트
+  오버라이드 무관 상시 적용. 모드 B는 P1만. **앵커**: 개별 사실 1개+일 때만(반 서술 단독 문단=환각 차단).
+- 적대 리뷰 major 2: ①여러 줄 서술 2번째 줄부터 무가드 개별 사실 위장 → **개행 접기**(빌더+서버 이중)
+  ②동명 반 이름 키 교차 주입 → **classId 키 + orderClass 가드**(순서 기능 동명 가드 동일).
+- 서버 300자 상한·hasFacts 게이트 불포함(반 서술만으론 생성 거부). 미입력 시 기존 동작과 완전 동일.
+- 후속 여지: 카드뷰 서술 입력 미노출(표=대량 작성 표면이 의도) · 직렬 15회 LLM 병목은 별도 perf 티켓(로드맵).
+
 ### 랜딩 리디자인 "Precision Pine" — 파스텔 크림 → 잉크 그린 정밀 톤 (2026-07-19) — ✅ tsc0/lint0 · 데스크톱/모바일 실렌더 검증 · main 07a04dee
 원장 지시("디자인이 파스텔틱해서 안 세련됨 → 랜딩부터 완전 최신화")의 1단계. **`.ey-landing` 스코프 토큰
 오버라이드만** 사용 — 앱 본체 globals.css 불변(전면 리스킨은 후속 단계, brandColor 3중 커플링 조사 완료).

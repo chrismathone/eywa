@@ -397,6 +397,13 @@ export async function generateReportComment(
     input.specialNote?.trim()
   );
   if (!hasFacts) return { ok: false, error: "진도·태도 등을 입력한 뒤 자동작성할 수 있습니다" };
+  // 반 공통 서술(G6) — 클라 입력이라 길이 상한(프롬프트 비대·토큰 남용 방지). ⚠️ hasFacts 게이트에는
+  // **불포함 유지** — 반 서술만으로 개별 학생 멘트를 생성하면 환각(학생 사실 0 + 반 맥락만)이라 거부가 맞다.
+  // 개행 접기 — 여러 줄 서술이 fact 블록의 가드 라벨을 탈출해 맨줄 개별 사실로 위장하는 것 차단(빌더와 이중 방어).
+  const safeInput: ReportCommentInput = {
+    ...input,
+    classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
+  };
   try {
     const supabase = await createClient();
     const settings = await getTenantSettings();
@@ -415,13 +422,13 @@ export async function generateReportComment(
         loadActivePrompt(supabase, user.tenantId, "comment_p1"),
         loadActivePrompt(supabase, user.tenantId, "comment_p2"),
       ]);
-      const p1 = commentP1Body(input, p1tpl);
-      const p2 = commentP2Body(input, p2tpl);
+      const p1 = commentP1Body(safeInput, p1tpl);
+      const p2 = commentP2Body(safeInput, p2tpl);
       if (p1) sections.push({ type: "comment_p1", field: "p1", body: p1 });
       if (p2) sections.push({ type: "comment_p2", field: "p2", body: p2 });
     } else {
       const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
-      sections.push({ type: "comment", field: "comment", body: commentBody(input, tpl) });
+      sections.push({ type: "comment", field: "comment", body: commentBody(safeInput, tpl) });
     }
 
     // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).

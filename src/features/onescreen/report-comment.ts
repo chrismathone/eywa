@@ -19,7 +19,18 @@ export type ReportCommentInput = {
   homeworkToday: string; // 오늘 내준 과제(숙제 내용) — 0096a. 멘트 마무리 "오늘 과제는 ~입니다" 재료. "" = 미입력
   textbook: string; // 교재명 — 공지 모드 B의 P1(수업 내용)에 사용. "" = 미입력
   specialNote: string; // 특이사항(강사 메모) — 0093a. 모드 A는 종합, B는 P2에 사용. "" = 미입력
+  // 반 공통 서술(G6) — 강사가 반 단위로 1회 쓴 수업 맥락("2단원 심화, 대체로 이해도 좋았다").
+  // 학생별 사실과 결합해 서로 다른 멘트로 분기되는 **생성 재료**(기록 아님 — 클라 sessionStorage).
+  // 가드 문구가 fact 블록에 동봉되므로(모순 시 학생 사실 우선) DB 프롬프트 오버라이드와 무관하게 항상 동행.
+  classContext?: string; // "" 또는 미지정 = 반 서술 없음(기존 동작과 동일)
 };
+
+/** 반 공통 서술을 가드 라벨 **한 줄 안에** 가두는 정규화 — 내부 개행을 공백으로 접는다.
+ *  fact 블록은 줄 단위 사실 계약이라, 여러 줄 서술의 2번째 줄부터는 '반 공통' 라벨도 '학생 정보 우선'
+ *  가드도 없는 맨줄 개별 사실로 위장 주입된다(리뷰 확정 major — textarea라 여러 줄 입력이 자연스러움). */
+function flatClassContext(s: string): string {
+  return s.replace(/\s*\n+\s*/g, " ").trim();
+}
 
 /** 점수 → 사람이 읽는 문장. 미입력이면 "". 직전 회차 있으면 증감(▲/▼) 부기. */
 function testLine(score: number | null, max: number, prev: number | null): string {
@@ -60,6 +71,13 @@ export function buildFactBlock(input: ReportCommentInput): string {
   if (input.homework) facts.push(`과제: ${input.homework}`);
   if (input.homeworkToday) facts.push(`오늘 과제: ${input.homeworkToday}`); // 마무리 문장 재료(0096a)
   if (input.specialNote) facts.push(`특이사항: ${input.specialNote}`);
+  // 반 공통 서술(G6) — 참고 맥락으로 동봉. 가드("모순 시 위 학생 정보 우선")를 데이터에 실어
+  // 프롬프트 템플릿(DB 오버라이드 가능)과 무관하게 항상 적용. 결석·진도미입력 행은 호출 전 구조 제외됨.
+  // ⚠️ **개별 사실이 1개+ 있을 때만**(facts 앵커) — 반 서술 단독으로 문단이 살아나면 학생 개인 멘트가
+  // 반 맥락만으로 지어지는 환각 벡터(서버 hasFacts 게이트와 이중 방어, 순수함수 단독 사용도 안전하게).
+  const ctx = input.classContext ? flatClassContext(input.classContext) : "";
+  if (facts.length && ctx)
+    facts.push(`반 공통 수업 맥락(참고용 — 위 학생 개별 정보와 다르면 학생 정보를 우선하세요): ${ctx}`);
   return facts.length ? facts.join("\n") : "(입력된 정보 없음)";
 }
 
@@ -89,6 +107,12 @@ export function buildP1FactBlock(input: ReportCommentInput): string | null {
   if (prog) facts.push(`진도: ${prog}`);
   const hw = input.homeworkToday || input.homework;
   if (hw) facts.push(`과제: ${hw}`);
+  // 반 공통 서술(G6)은 수업 내용 문단(P1)에만 — P2(태도·특이사항)에 새면 "항목 섞지 마세요" 규칙 위반.
+  // ⚠️ 개별 P1 사실(교재·진도·과제)이 있을 때만 동봉 — 없으면 P1은 원래대로 null(문단 생략).
+  // 반 서술 단독 P1은 "이 학생의 수업 내용"을 반 맥락만으로 지어내는 환각 벡터(태도만 입력된 케이스 등).
+  const ctx = input.classContext ? flatClassContext(input.classContext) : "";
+  if (facts.length && ctx)
+    facts.push(`반 공통 수업 맥락(참고용 — 위 학생 개별 정보와 다르면 학생 정보를 우선하세요): ${ctx}`);
   return facts.length ? facts.join("\n") : null;
 }
 

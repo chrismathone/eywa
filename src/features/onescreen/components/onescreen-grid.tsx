@@ -7,6 +7,7 @@ import { moveInOrder } from "../student-order";
 import type { OneScreenStudent } from "../types";
 import type { SubjectReport } from "./report-card";
 import { BulkApplyPopover } from "./bulk-apply";
+import { ClassNarrativePopover } from "./class-narrative";
 import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
 import { PrevRow } from "./prev-row";
@@ -30,6 +31,7 @@ export function OneScreenGrid({
   bulkActions,
   order,
   classFilter,
+  narrative,
   attPending,
   genKey,
   bulkGen,
@@ -43,6 +45,9 @@ export function OneScreenGrid({
   // 학생 순서변경(3-2) — 단일 반 필터일 때만 전달(전체 필터에선 undefined=버튼 숨김). onSave 성공 시 true.
   order?: { classId: string; onSave: (classId: string, studentIds: string[]) => Promise<boolean> };
   classFilter: string | null; // 특정 반이면 그 반 소속 과목 행만 표시(다반 학생 타 반 행 혼입 차단)
+  // 반 공통 서술(G6) — activeClass=특정된 단일 반 이름(전체·동명 모호=null → 비활성+안내, 순서 기능과 동일 가드).
+  // value=현재 반 서술, onSave=저장(빈값=삭제). 키는 부모(client)가 classId로 관리.
+  narrative?: { activeClass: string | null; value: string; onSave: (text: string) => void };
   attPending: ReadonlySet<string>; // 출결 저장 중 (학생::반) — pill 잠금(2-2)
   genKey?: string | null; // 자동작성 중인 행 키(studentId::과목)
   bulkGen?: boolean; // 전체 자동작성 진행중
@@ -164,6 +169,15 @@ export function OneScreenGrid({
               onApply={(patch, onlyEmpty) => bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty)}
               disabled={bulkGen}
             />
+            {/* 반 공통 서술(G6) — 항상 노출·반 미특정(전체/동명 모호)이면 비활성+안내(순서 버튼 #22 발견성 패턴). */}
+            {narrative ? (
+              <ClassNarrativePopover
+                activeClass={narrative.activeClass}
+                value={narrative.value}
+                onSave={narrative.onSave}
+                disabled={bulkGen}
+              />
+            ) : null}
             {/* 순서 버튼은 항상 노출 — '전체' 필터에선 비활성+안내로 기능 발견성 확보(#22). 단일 반 선택 시만 동작. */}
             <Button
               variant="ghost"
