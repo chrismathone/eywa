@@ -193,19 +193,19 @@ export default async function IconSystemPage() {
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="bg-ink text-white rounded-2xl p-6 sm:p-8">
-          <p className="font-mono text-[10px] font-bold tracking-[0.14em] text-[#e9c876] uppercase">Usage</p>
+          <p className="font-mono text-[10px] font-bold tracking-[0.14em] text-[#e2b45f] uppercase">Usage</p>
           <h2 className="mt-2 text-xl font-extrabold">하나의 의미에는 하나의 모양</h2>
           <ul className="mt-6 space-y-4 text-[12px] leading-relaxed text-white/75">
             <li className="flex gap-3">
-              <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e9c876]" />
+              <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e2b45f]" />
               메뉴 아이콘은 반드시 MENU_ICON을 통해 배정합니다.
             </li>
             <li className="flex gap-3">
-              <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e9c876]" />
+              <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e2b45f]" />
               텍스트가 의미를 설명하면 아이콘은 장식으로 숨깁니다.
             </li>
             <li className="flex gap-3">
-              <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e9c876]" />
+              <EyIcon name="check" size={15} className="mt-0.5 shrink-0 text-[#e2b45f]" />
               AI 기능은 sparkle과 gold 계열을 함께 사용합니다.
             </li>
           </ul>

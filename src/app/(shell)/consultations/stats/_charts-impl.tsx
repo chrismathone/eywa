@@ -24,11 +24,11 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const CATEGORY_COLOR: Record<string, string> = {
-  general: "#1f6ba8",
-  academic: "#1a5f3c",
-  emotional: "#c44d6d",
-  career: "#7a4ba8",
-  social: "#b8893a",
+  general: "#2d6be0",
+  academic: "#0e7c46",
+  emotional: "#d2447a",
+  career: "#6c50c8",
+  social: "#a97f24",
   other: "#9aa39d",
 };
 
@@ -92,8 +92,8 @@ export function StatsCharts({
                 <YAxis fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="enrollment" name="등록상담" fill="#1a5f3c" />
-                <Bar dataKey="student" name="학생상담" fill="#b8893a" />
+                <Bar dataKey="enrollment" name="등록상담" fill="#0e7c46" />
+                <Bar dataKey="student" name="학생상담" fill="#a97f24" />
               </BarChart>
             </ResponsiveContainer>
           </div>

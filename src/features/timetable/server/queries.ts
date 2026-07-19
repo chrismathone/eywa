@@ -37,7 +37,7 @@ export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColor
   const map: TeacherColorMap = {};
   for (const u of data ?? []) {
     if (!u.bg_color) continue;
-    const c = { bg: u.bg_color as string, text: (u.text_color as string | null) ?? "#1a1f1c" };
+    const c = { bg: u.bg_color as string, text: (u.text_color as string | null) ?? "#101613" };
     if (u.display_name) map[u.display_name as string] = c;
     if (u.english_name) map[u.english_name as string] = c;
   }

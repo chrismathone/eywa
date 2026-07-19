@@ -3,9 +3,10 @@
 @import "shadcn/tailwind.css";
 
 /*
- * eywa — Daylight palette (시안 토큰)
- * Forest green primary (#1a5f3c) + warm ivory bg (#fbf9f3) + JetBrains Mono meta.
- * Light-only. Dark mode 제거됨.
+ * eywa — Daylight palette v2 "Precision Pine" (2026-07-19 리스킨, 랜딩과 동일 계열)
+ * Sharp green primary (#0e7c46) + cool porcelain bg (#f8faf8) + JetBrains Mono meta.
+ * Light-only. Dark mode 제거됨. (구판: forest #1a5f3c + warm ivory #fbf9f3 — "파스텔" 원인이라 교체)
+ * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha 0.1/0.05)와 동기 필수.
  */
 
 @theme inline {
@@ -86,85 +87,85 @@
   --radius-3xl: 10px;
   --radius-pill: 4px;
 
-  /* shadow */
-  --shadow-card: 0 1px 3px rgba(13, 17, 16, 0.02);
-  --shadow-card-hover: 0 4px 14px rgba(13, 17, 16, 0.04);
-  --shadow-primary-glow: 0 6px 14px rgba(26, 95, 60, 0.22);
-  --shadow-primary-deep: 0 14px 32px rgba(26, 95, 60, 0.28);
-  --shadow-modal: 0 32px 80px rgba(13, 17, 16, 0.08);
+  /* shadow — 크리스프 레이어드(웜 글로우 축소) */
+  --shadow-card: 0 1px 2px rgba(11, 16, 13, 0.03);
+  --shadow-card-hover: 0 4px 14px rgba(11, 16, 13, 0.06);
+  --shadow-primary-glow: 0 6px 14px rgba(14, 124, 70, 0.25);
+  --shadow-primary-deep: 0 14px 32px rgba(14, 124, 70, 0.3);
+  --shadow-modal: 0 32px 80px rgba(11, 16, 13, 0.1);
 }
 
 :root {
-  /* page surface */
-  --background: #fbf9f3;
-  --bg-soft: #f1ede2;
-  --surface-hi: #fafaf5;
+  /* page surface — 쿨 포슬린/미스트 (구 웜 아이보리) */
+  --background: #f8faf8;
+  --bg-soft: #eef2ef;
+  --surface-hi: #fbfcfb;
 
-  /* text */
-  --foreground: #1a1f1c;
-  --ink: #0d1110;
-  --text-dim: #5a635f;
-  --text-faint: #9aa39d;
+  /* text — 그린캐스트 잉크, 대비 강화 */
+  --foreground: #101613;
+  --ink: #0b100d;
+  --text-dim: #4c5751;
+  --text-faint: #75807a;
 
-  /* lines */
-  --border: rgba(13, 17, 16, 0.08);
-  --line: rgba(13, 17, 16, 0.08);
-  --line-strong: rgba(13, 17, 16, 0.16);
-  --input: rgba(13, 17, 16, 0.08);
+  /* lines — 구 8%보다 또렷하게 */
+  --border: rgba(11, 16, 13, 0.1);
+  --line: rgba(11, 16, 13, 0.1);
+  --line-strong: rgba(11, 16, 13, 0.2);
+  --input: rgba(11, 16, 13, 0.1);
 
   /* shadcn semantic — map to eywa */
   --card: #ffffff;
-  --card-foreground: #1a1f1c;
+  --card-foreground: #101613;
   --popover: #ffffff;
-  --popover-foreground: #1a1f1c;
+  --popover-foreground: #101613;
 
-  --primary: #1a5f3c;
+  --primary: #0e7c46;
   --primary-foreground: #ffffff;
-  --primary-soft: rgba(26, 95, 60, 0.10);
-  --primary-softer: rgba(26, 95, 60, 0.05);
+  --primary-soft: rgba(14, 124, 70, 0.10);
+  --primary-softer: rgba(14, 124, 70, 0.05);
 
-  --secondary: #f1ede2;
-  --secondary-foreground: #1a1f1c;
+  --secondary: #eef2ef;
+  --secondary-foreground: #101613;
 
-  --muted: #f1ede2;
-  --muted-foreground: #5a635f;
+  --muted: #eef2ef;
+  --muted-foreground: #4c5751;
 
-  --accent: rgba(184, 137, 58, 0.14); /* gold-soft */
-  --accent-foreground: #b8893a;
+  --accent: rgba(169, 127, 36, 0.12); /* gold-soft */
+  --accent-foreground: #a97f24;
 
-  --destructive: #d04848;
-  --ring: #1a5f3c;
+  --destructive: #d33f3f;
+  --ring: #0e7c46;
 
   /* chart roles (semantic) */
-  --chart-1: #1f6ba8;  /* blue · 정보·학생 안정 */
-  --chart-2: #1a5f3c;  /* primary · 출석·완납·긍정 */
-  --chart-3: #d68f1a;  /* amber · 지각·경고 */
-  --chart-4: #d04848;  /* danger · 결석·미납 */
-  --chart-5: #c44d6d;  /* rose · 상담·학부모 */
+  --chart-1: #2d6be0;  /* blue · 정보·학생 안정 */
+  --chart-2: #0e7c46;  /* primary · 출석·완납·긍정 */
+  --chart-3: #c8720d;  /* amber · 지각·경고 */
+  --chart-4: #d33f3f;  /* danger · 결석·미납 */
+  --chart-5: #d2447a;  /* rose · 상담·학부모 */
 
   /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등) */
-  --gold: #b8893a;
-  --gold-soft: rgba(184, 137, 58, 0.14);
-  --blue: #1f6ba8;
-  --blue-soft: rgba(31, 107, 168, 0.12);
-  --purple: #7a4ba8;
-  --purple-soft: rgba(122, 75, 168, 0.12);
-  --rose: #c44d6d;
-  --rose-soft: rgba(196, 77, 109, 0.12);
-  --amber: #d68f1a;
-  --amber-soft: rgba(214, 143, 26, 0.14);
-  --danger: #d04848;
-  --danger-soft: rgba(208, 72, 72, 0.10);
+  --gold: #a97f24;
+  --gold-soft: rgba(169, 127, 36, 0.11);
+  --blue: #2d6be0;
+  --blue-soft: rgba(45, 107, 224, 0.09);
+  --purple: #6c50c8;
+  --purple-soft: rgba(108, 80, 200, 0.09);
+  --rose: #d2447a;
+  --rose-soft: rgba(210, 68, 122, 0.09);
+  --amber: #c8720d;
+  --amber-soft: rgba(200, 114, 13, 0.11);
+  --danger: #d33f3f;
+  --danger-soft: rgba(211, 63, 63, 0.09);
 
   /* sidebar = bgSoft */
-  --sidebar: #f1ede2;
-  --sidebar-foreground: #1a1f1c;
-  --sidebar-primary: #1a5f3c;
+  --sidebar: #eef2ef;
+  --sidebar-foreground: #101613;
+  --sidebar-primary: #0e7c46;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fafaf5;
-  --sidebar-accent-foreground: #1a5f3c;
-  --sidebar-border: rgba(13, 17, 16, 0.08);
-  --sidebar-ring: #1a5f3c;
+  --sidebar-accent: #f7faf8;
+  --sidebar-accent-foreground: #0e7c46;
+  --sidebar-border: rgba(11, 16, 13, 0.1);
+  --sidebar-ring: #0e7c46;
 
   --radius: 0.25rem;
 }
@@ -575,7 +576,7 @@ body {
  * ─────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
+  scrollbar-color: rgba(11, 16, 13, 0.18) transparent;
 }
 *::-webkit-scrollbar {
   width: 6px;
@@ -585,11 +586,11 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(13, 17, 16, 0.18);
+  background: rgba(11, 16, 13, 0.18);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 17, 16, 0.32);
+  background: rgba(11, 16, 13, 0.32);
 }
 *::-webkit-scrollbar-corner {
   background: transparent;
@@ -598,7 +599,7 @@ body {
 /* .scrollbar-thin — 이제 전역이 기본이라 사실상 별칭(기존 사용처 호환 유지). */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
+  scrollbar-color: rgba(11, 16, 13, 0.18) transparent;
 }
 
 /* .scrollbar-hide — 스크롤바 없이 스크롤만(휠·터치·키). 사이드바 레일처럼 폭이 좁고
@@ -680,19 +681,19 @@ body {
    color로 진하게 하고, webkit 규칙은 표준 미지원 브라우저용 폴백(굵게)로 둔다. */
 .scroll-x-always {
   overflow-x: scroll;
-  scrollbar-color: rgba(13, 17, 16, 0.4) transparent;
+  scrollbar-color: rgba(11, 16, 13, 0.4) transparent;
 }
 .scroll-x-always::-webkit-scrollbar {
   height: 12px;
 }
 .scroll-x-always::-webkit-scrollbar-thumb {
-  background: rgba(13, 17, 16, 0.34);
+  background: rgba(11, 16, 13, 0.34);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 .scroll-x-always::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 17, 16, 0.5);
+  background: rgba(11, 16, 13, 0.5);
   background-clip: padding-box;
 }
 

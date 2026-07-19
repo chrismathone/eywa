@@ -136,7 +136,7 @@ function ClassColumn({
   const gridCols = { gridTemplateColumns: `repeat(${days.length}, 1fr)` };
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
-    ? { background: card.bgColor, color: card.textColor ?? "#1a1f1c" }
+    ? { background: card.bgColor, color: card.textColor ?? "#101613" }
     : undefined;
   // 담임색 — ijw 강사 저장색(users.bg_color, display_name·영문닉네임으로 해결). 없으면 plain.
   const damimColor = card.teacherName ? teacherColors[card.teacherName] : undefined;

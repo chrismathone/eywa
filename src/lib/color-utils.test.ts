@@ -35,7 +35,11 @@ describe("hexToRgba", () => {
 describe("brandColorVars", () => {
   it("returns null for default color (no override needed)", () => {
     expect(brandColorVars(DEFAULT_BRAND_COLOR)).toBeNull();
-    expect(brandColorVars("#1A5F3C")).toBeNull(); // case-insensitive
+    expect(brandColorVars("#0E7C46")).toBeNull(); // case-insensitive
+  });
+  it("returns null for legacy default forest green (저장된 옛 기본값이 리스킨을 덮지 않게)", () => {
+    expect(brandColorVars("#1a5f3c")).toBeNull();
+    expect(brandColorVars("#1A5F3C")).toBeNull();
   });
   it("returns null for empty/invalid input", () => {
     expect(brandColorVars("")).toBeNull();

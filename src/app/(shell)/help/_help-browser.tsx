@@ -38,7 +38,7 @@ export function HelpBrowser({
   return (
     <>
       {/* Search hero */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#2a7a52] p-8 text-white shadow-primary-deep">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#15945a] p-8 text-white shadow-primary-deep">
         <svg
           className="pointer-events-none absolute top-0 right-0 opacity-[0.18]"
           width="240"
@@ -51,7 +51,7 @@ export function HelpBrowser({
           ))}
         </svg>
         <div className="relative max-w-2xl">
-          <p className="font-mono text-[11px] tracking-wider uppercase text-[#e9c876]">HELP CENTER</p>
+          <p className="font-mono text-[11px] tracking-wider uppercase text-[#e2b45f]">HELP CENTER</p>
           <h1 className="mt-2 text-[28px] font-extrabold leading-tight">무엇을 도와드릴까요?</h1>
           <p className="mt-2 text-[13px] text-white/85">
             처음이신가요? 아래 <b>빠른 시작</b>부터 따라 해보세요. 메뉴별 안내와 자주 묻는 질문도 한 곳에 있어요.

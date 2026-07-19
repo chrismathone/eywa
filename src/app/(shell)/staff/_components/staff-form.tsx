@@ -337,7 +337,7 @@ export function StaffForm({
         <div className="flex items-center gap-2">
           <input
             type="color"
-            value={bgColor || "#1a5f3c"}
+            value={bgColor || "#0e7c46"}
             onChange={(e) => setBgColor(e.target.value)}
             aria-label="강사 색"
             className="border-input h-8 w-12 cursor-pointer rounded border"
