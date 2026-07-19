@@ -4,6 +4,17 @@
 
 ## 진행 상황
 
+### Injaewon Editorial 전면 디자인 리팩토링 (2026-07-19) — ✅ tsc0/lint0/vitest1654/build✓ · 로직 무접촉
+**골: "상용 사이트 대비 허접함" 해소** — injaewon.blog의 구성 문법(eyebrow→헤드라인 위계·빅 스탯·소프트 패널·
+사진 캡션 카드·구조화 행 목록·여백 리듬·알약)을 전 화면에 이식 + 팔레트 v3 "Injaewon Navy"(#153e75 + 애플 뉴트럴).
+- 공용: [PageHeader](../src/components/page-header.tsx) 확장(eyebrow/stats 슬롯) · [BigStat](../src/components/atoms/big-stat.tsx)
+  (중복 Stat 6곳 수렴) · [PhotoCard](../src/components/atoms/photo-card.tsx)(Server, alt/sizes 필수, Next16 preload) ·
+  `.editorial-eyebrow`(기존 .eyebrow 불변) · `public/photos/` placeholder 10장(실사 덮어쓰기 계약 = [docs/photo-generation-prompts.md](photo-generation-prompts.md)).
+- 화면: 운영실(다크 밴드→KPI 카드·브리핑 행 목록·비서 챗) + P1 학생목록·시간표·출석부(PhotoCard 허브) +
+  P2 수업·수납(14열 돈 테이블 무접촉) + P3 상담·케어 + P4 운영·설정(도움말 사진 히어로) + P5 로그인·인테이크(사진 패널).
+- 브랜드색: color-utils LEGACY에 v1 forest·v2 pine 등록 — 테넌트 저장값 마이그 없이 자동 추종. chart-2 등 "긍정=그린" 시맨틱은 유지.
+- 감사 근거: docs/_audit/design-composition-audit-2026-07-19.json (10 에이전트 전 화면 감사). 기준선: work/design-baselines/(비커밋).
+
 ### 출석 완료 → 담당 강사 벨 G4 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1653 · 마이그 0 · ClassNote 로드맵 완주
 **골: 보고서 쓰기가 "가는 일"이 아니라 "오는 일"** — 출석이 끝나는 순간 강사 벨 → 원스크린 →
 (G5 이전값 일괄+G6 반 서술+자동작성) 기존 파이프라인이 흐름 완성(136b40ae). 로드맵(plans/

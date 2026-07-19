@@ -337,6 +337,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **커스텀 권한그룹(makeedu식 면/탭 전면 매트릭스) = 비채택.** "이 기능만 다른 권한" 요구는 **menuKey 승격**이 정석(textbook_requests·integrations 선례).
 - **과목 내부 키(`subjects[].key`) = 자동 확정·불변**, 학원장이 손대지 않음. key를 편집 input으로 되돌리지 말 것(orphan). 폐기·교체는 "삭제 → 다른 과목에 흡수"(`absorbSubject`).
 - **라이트 전용(Daylight)** — 다크모드 제거. 폰트 = Pretendard **정적 풀 한글 subset**(dynamic-subset 아님).
+- **앱 디자인 = "Injaewon Editorial" + 팔레트 v3 네이비 (2026-07-19 원장 확정).** injaewon.blog의 구성 문법(위계·빅 스탯·소프트 패널·사진 카드·알약)을 전 화면 표준으로, 브랜드색 = 딥 네이비 `#153e75` + 애플 뉴트럴(`#1d1d1f`/`#f5f5f7`) — "색감 대비 최대화" 지시 포함. 구 그린(v1 forest·v2 pine)은 color-utils LEGACY로 자동 추종(마이그 불필요). JetBrains Mono 시그니처는 폐기(숫자 `.num`·hex/URL/kbd만 mono). 상세 = `docs/design-conventions.md` Editorial 절.
 - **이름 앞 아바타/이니셜 배지 = 금지 (영구).** 사람 표시는 이름 텍스트만.
 - **master 시스템역할 표시 라벨 = "원장"** (2026-07-07 "owner→원장" 전역 환원, 최신). ⚠️ 07-02엔 "owner"로 통일했다가 뒤집힘 — **다시 owner로 되돌리지 말 것**.
 - **로그인 세션 = "절대 로그아웃 안 함"(자동 로그인).** Supabase Auth `refresh_token_rotation_enabled=false`(2026-07-09 적용 — 멀티 iframe 회전 경합이 "밤새고 오면 로그아웃"의 원인이었음). `sessions_timebox`·`sessions_inactivity_timeout`=0. **학원 내부 단일 운영 전제**의 트레이드오프(탈취 토큰 자동무효화 포기). ⚠️ 이 설정은 **코드가 아니라 Supabase 서버측**(Management API/Dashboard→Auth→Sessions). **외부/공개 SaaS로 가면 회전 복원 + 재사용 유예 확대**로 되돌린다 — 상세·명령 = `docs/auth-session-policy.md`.
@@ -455,12 +456,14 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#78** 초안 자동저장은 name 가진 칸을 **전부** 캡처 — 민감 폼은 `exclude` 필수(안 그러면 주민번호가 IDB에 평문) (⚠️ 새 민감 칸 = exclude도 갱신)
 - **#79** `sr-only`=absolute라 positioned 부모 없으면 스크롤 컨테이너를 뚫고 나가 **창 안 스크롤바 2개** (⚠️ sr-only는 항상 positioned 부모 안에)
 - **#80** Anthropic Claude 5 계열은 `temperature`가 deprecated(400) — 직접 호출에 넣지 말 것, generateJSON은 자가 재시도 (⚠️ 모델 교체 시 재발 주의)
+- **#81** node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 `pnpm install`(정션은 typecheck/lint까지만)
 - **#81** `"use client"` 모듈의 문자열 상수를 서버가 import = 런타임 undefined — 공유 상수는 일반 모듈로 (⚠️ 타입체크 통과하는 침묵 버그)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)
 
 > UI·화면·폼·컴포넌트를 만질 때 해당 규칙을 `docs/design-conventions.md`에서 열어라. 대부분 각 절 끝에 "한 줄 규칙" 요약이 있다.
 
+- **Editorial 구성 문법 — 새 화면 기본값** (PageHeader·BigStat·PhotoCard·소프트 패널·알약·de-mono 정책, ⚠️ 로컬 Stat/mono·영문 라벨 신설 금지)
 - 컬러 토큰 (`src/app/globals.css`)
 - 라운드 (ijw 운영 톤에 맞춰 시안에서 대폭 축소)
 - 타이포

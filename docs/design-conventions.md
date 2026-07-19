@@ -6,6 +6,22 @@
 
 `data/design_handoff_eywa/`의 픽셀 시안 → eywa 코드 매핑 완료. **라이트 전용**, 다크모드 제거.
 
+### Editorial 구성 문법 — injaewon.blog 이식 (2026-07-19, ⚠️ 새 화면 기본값)
+전 화면의 구성 표준. **새 화면·섹션은 이 7문법을 기본으로 조립**한다.
+| # | 문법 | 적용 |
+|---|---|---|
+| ① | eyebrow→헤드라인→서브 | [`PageHeader`](../src/components/page-header.tsx) 단일 소스(eyebrow 12px/타이틀 21px/서브 13px + actions·stats 슬롯). 섹션 소라벨은 `.editorial-eyebrow`(한글 전제) — 기존 `.eyebrow`(uppercase 영문 전제)는 호환용, 신규 사용 금지 |
+| ② | 빅 스탯 | [`BigStat`](../src/components/atoms/big-stat.tsx)(label/value/unit/sub/icon/tone/size). **화면 로컬 Stat 신설 금지** — 이걸 쓴다 |
+| ③ | 소프트 패널 | 카드·필터바 = `bg-card shadow-card rounded-2xl`(보더 제거). 대형 구획은 rounded-3xl |
+| ④ | 사진 캡션 카드 | [`PhotoCard`](../src/components/atoms/photo-card.tsx)(Server, `alt`·`sizes` 필수, LCP만 `preload` — Next16에서 `priority` 폐기). 이미지 = `public/photos/*.webp`(placeholder→실사 덮어쓰기, [photo-generation-prompts.md](photo-generation-prompts.md)) |
+| ⑤ | 구조화 행 목록 | 이름 bold(13.5px) + 설명 dim(12.5px, truncate) + 우측 액션 알약. 레퍼런스: 운영실 살펴볼 학생·출석부 바로 열기 |
+| ⑥ | 여백 리듬 | 섹션 그룹 간 space-y-5~6, 그룹 내 촘촘(운영 밀도 유지) |
+| ⑦ | 알약 | 필터 칩·토글·세그먼트 = `rounded-full`. 사각 칩(rounded-sm/md) 신설 금지 |
+
+**de-mono 정책**: 숫자·시간·집계 = `.num`(tabular, Pretendard) / 라벨·설명 = Pretendard(uppercase·wide tracking 금지) /
+**mono 잔존 허용 = hex 색코드·URL·코드/ID·kbd·로그 원문뿐.** 영문 장식 라벨(HELP CENTER류) 신설 금지 — 한글로.
+> 한 줄 규칙: 새 화면은 PageHeader+BigStat+소프트 패널+알약으로 조립하고, mono·영문 라벨을 새로 만들지 않는다.
+
 ### 컬러 토큰 (`src/app/globals.css`)
 | 토큰 | hex | 용도 |
 |---|---|---|

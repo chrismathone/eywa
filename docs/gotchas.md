@@ -668,3 +668,11 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 
 ---
 
+## #81 node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 pnpm install (2026-07-19)
+
+- **증상**: 격리 워크트리에 `mklink /J node_modules → 메인트리`로 정션을 걸고 `next dev`(Turbopack)를 띄우면
+  `FATAL: Symlink [project]/node_modules is invalid, it points out of the filesystem root` panic으로 서버가 즉사.
+  preview 프로세스 레지스트리에도 안 잡혀 "포트만 안 열리는" 침묵 실패처럼 보인다.
+- **원인**: Turbopack이 프로젝트 루트(락파일 기준) 밖을 가리키는 심링크/정션을 파일시스템 루트 위반으로 거부.
+- **결론**: **정션은 typecheck·lint까지만 유효.** 워크트리에서 dev 서버를 띄우려면 정션을 떼고(`cmd /c rmdir` — 링크만)
+  `pnpm install`로 실제 설치(스토어 하드링크라 ~30초). launch.json에 `pnpm -C <워크트리> dev` 항목을 추가해 쓴다.
