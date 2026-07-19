@@ -1,5 +1,6 @@
 import { Reveal } from "../_motion/reveal";
 import { FeatureSwitcher, type Feature } from "../_ui/feature-switcher";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 import { MockAttendance } from "../_ui/mock-attendance";
 import { MockBilling } from "../_ui/mock-billing";
@@ -56,10 +57,10 @@ export function FeaturesSection() {
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-[40rem]">
           <Reveal variant="up">
-            <p className="text-primary font-mono text-[11px] font-bold tracking-[0.16em] uppercase">핵심 기능</p>
+            <Eyebrow time="09:00" label="핵심 기능" />
           </Reveal>
           <Reveal variant="clip" delay={60}>
-            <h2 className="text-foreground mt-4 text-[clamp(1.9rem,4vw,3.1rem)] leading-[1.2] font-extrabold tracking-[-0.025em]">
+            <h2 className="text-ink mt-4 text-[clamp(1.9rem,4vw,3.1rem)] leading-[1.16] font-extrabold tracking-[-0.035em]">
               매일 여는 <span className="text-primary">세 화면.</span>
             </h2>
           </Reveal>

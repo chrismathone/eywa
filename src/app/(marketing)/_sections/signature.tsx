@@ -1,28 +1,18 @@
 import { FLOW_NODES } from "@/data/marketing";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { CountUp } from "../_motion/count-up";
 import { Reveal } from "../_motion/reveal";
 import { EditorialPhoto } from "../_ui/photo";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 import attendanceImg from "../_img/attendance-checkin.webp";
 
-const ENDPOINT_X = [100, 300, 500, 700];
-const STROKE: Record<string, string> = {
-  rose: "var(--rose)",
-  blue: "var(--blue)",
-  primary: "var(--primary)",
-  gold: "var(--gold)",
-};
-const CARD_ACCENT: Record<string, string> = {
-  rose: "text-rose",
-  blue: "text-blue",
-  primary: "text-primary",
-  gold: "text-gold",
-};
-const CARD_BAR: Record<string, string> = {
-  rose: "bg-rose",
-  blue: "bg-blue",
-  primary: "bg-primary",
-  gold: "bg-gold",
+/** 다크 콘솔 위 액터 도트 — 라이트 팔레트보다 한 단계 밝은 변형 (파인 서피스 전용) */
+const DOT: Record<string, string> = {
+  rose: "#f27ca3",
+  blue: "#7aa5f7",
+  primary: "#4ade97",
+  gold: "#e2b45f",
 };
 
 export function SignatureSection() {
@@ -31,10 +21,10 @@ export function SignatureSection() {
       <div className="grid items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
         <div>
           <Reveal variant="up">
-            <p className="text-primary font-mono text-[11px] font-bold tracking-[0.16em] uppercase">자동 연동</p>
+            <Eyebrow time="16:02" label="자동 연동" />
           </Reveal>
           <Reveal variant="clip" delay={60}>
-            <h2 className="text-foreground mt-4 text-[clamp(1.9rem,4vw,3.1rem)] leading-[1.2] font-extrabold tracking-[-0.025em]">
+            <h2 className="text-ink mt-4 text-[clamp(1.9rem,4vw,3.1rem)] leading-[1.16] font-extrabold tracking-[-0.035em]">
               출석 체크 한 번이면,
               <br />
               <span className="text-primary">네 곳이 자동으로.</span>
@@ -58,72 +48,68 @@ export function SignatureSection() {
         </Reveal>
       </div>
 
-      {/* 다이어그램 — Reveal 래퍼가 data-in을 박으면 라인이 그려지고 카드가 도착 */}
-      <Reveal variant="fade" delay={80} threshold={0.3} className="mt-14">
-        {/* 트리거 */}
-        <div className="flex justify-center">
-          <div className="bg-card border-line inline-flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-[0_8px_24px_-12px_rgba(13,17,16,0.18)]">
-            <span className="bg-primary-soft text-primary flex size-6 items-center justify-center rounded-md text-[11px] font-bold">
-              강
+      {/* 운영 콘솔 — 한 번의 등원이 네 곳으로 흐르는 로그 스트림 (시그니처) */}
+      <Reveal variant="fade" delay={80} threshold={0.35} className="mt-14">
+        <div className="ey-console border-[var(--pine-line)] relative overflow-hidden rounded-[20px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_44px_100px_-44px_rgba(11,16,13,0.55)]">
+          {/* 콘솔 헤더 */}
+          <div className="border-[var(--pine-line)] flex items-center justify-between border-b px-5 py-3 sm:px-7">
+            <span className="text-[var(--pine-dim)] font-mono text-[10.5px] font-bold tracking-[0.16em] uppercase">
+              EYWA 운영 콘솔 — 자동 연동 로그
             </span>
-            <span className="text-foreground text-[13px] font-semibold">강OO 학생이 등원했습니다</span>
-            <span className="text-text-faint font-mono text-[11px]">16:02</span>
+            <span className="text-[var(--mint)] flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.1em]">
+              <span className="ey-live bg-[var(--mint)] size-1.5 rounded-full" aria-hidden="true" />
+              LIVE
+            </span>
           </div>
-        </div>
 
-        {/* 분기선 (데스크톱) — pathLength=100으로 반응형 정확 드로잉 */}
-        <svg
-          viewBox="0 0 800 64"
-          className="mx-auto mt-2 hidden h-16 w-full max-w-[860px] lg:block"
-          fill="none"
-          aria-hidden="true"
-        >
-          {FLOW_NODES.map((n, i) => (
-            <g key={n.actor}>
-              <path
-                d={`M 400 0 Q 400 34 ${ENDPOINT_X[i]} 34 L ${ENDPOINT_X[i]} 64`}
-                className="ey-draw"
-                pathLength={100}
-                stroke={STROKE[n.color]}
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                style={{ transitionDelay: `${i * 120}ms` }}
-              />
-              <circle cx={ENDPOINT_X[i]} cy={64} r={3} fill={STROKE[n.color]} className="ey-arrive" style={{ transitionDelay: `${i * 120 + 360}ms` }} />
-            </g>
-          ))}
-        </svg>
-
-        {/* 결과 카드 4 */}
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {FLOW_NODES.map((n, i) => (
-            <article
-              key={n.actor}
-              className="ey-arrive bg-card border-line relative overflow-hidden rounded-xl border p-4"
-              style={{ transitionDelay: `${i * 120 + 280}ms` }}
-            >
-              <span className={`absolute inset-x-0 top-0 h-[3px] ${CARD_BAR[n.color]}`} aria-hidden="true" />
-              <div className="flex items-center justify-between">
-                <p className={`font-mono text-[10px] font-bold tracking-[0.1em] uppercase ${CARD_ACCENT[n.color]}`}>
-                  → {n.actor}
+          <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
+            {/* 좌 — 로그 스트림 */}
+            <div className="p-6 sm:p-8">
+              {/* 트리거 */}
+              <div className="ey-log flex items-baseline gap-3" style={{ transitionDelay: "60ms" }}>
+                <span className="text-[var(--mint)] w-[52px] shrink-0 text-right font-mono text-[11px] font-bold">
+                  16:02
+                </span>
+                <p className="text-[var(--pine-text)] text-[14px] font-bold">
+                  강OO 학생이 등원했습니다
+                  <span className="text-[var(--pine-dim)] ml-2 font-mono text-[11px] font-medium">check-in</span>
                 </p>
-                <span className={`font-mono text-[11px] font-bold ${CARD_ACCENT[n.color]}`}>{n.arrive}</span>
               </div>
-              <p className="text-foreground mt-2.5 text-[14px] font-bold">{n.title}</p>
-              <p className="text-text-dim mt-1 text-[12px] leading-relaxed">{n.detail}</p>
-            </article>
-          ))}
-        </div>
 
-        {/* 0.41초 — 동시성을 숫자로 못박음 */}
-        <div className="mt-9 flex flex-col items-center">
-          <p className="num text-foreground text-[clamp(3rem,7vw,5rem)] leading-none font-extrabold tracking-[-0.04em]">
-            <CountUp value={0.4} decimals={1} duration={1100} />
-            <span className="text-primary ey-serif text-[0.5em] align-baseline">s</span>
-          </p>
-          <p className="text-text-faint mt-3 font-mono text-[11px] tracking-[0.14em] uppercase">
-            4 events · 1 action · 0 입력
-          </p>
+              {/* 스트림 */}
+              <ul className="border-[var(--pine-line)] mt-4 ml-[58px] space-y-0 border-l pl-0">
+                {FLOW_NODES.map((n, i) => (
+                  <li
+                    key={n.actor}
+                    className="ey-log border-[var(--pine-line)] flex items-center gap-3 border-b py-3.5 pl-5 last:border-b-0 sm:gap-4"
+                    style={{ transitionDelay: `${260 + i * 150}ms` }}
+                  >
+                    <span className="text-[var(--mint)] w-11 shrink-0 font-mono text-[11px] font-bold">{n.arrive}</span>
+                    <span className="flex w-[64px] shrink-0 items-center gap-1.5">
+                      <span className="size-1.5 rounded-full" style={{ background: DOT[n.color] }} aria-hidden="true" />
+                      <span className="text-[var(--pine-text)] text-[12px] font-bold">{n.actor}</span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="text-[var(--pine-text)] block truncate text-[13.5px] font-semibold">{n.title}</span>
+                      <span className="text-[var(--pine-dim)] block truncate text-[11.5px]">{n.detail}</span>
+                    </span>
+                    <EyIcon name="check" size={14} className="text-[var(--mint)] shrink-0" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 우 — 0.4초 (동시성을 숫자로 못박음) */}
+            <div className="border-[var(--pine-line)] flex flex-col items-center justify-center border-t p-8 lg:border-t-0 lg:border-l">
+              <p className="num text-[var(--pine-text)] text-[clamp(3.4rem,7vw,5.4rem)] leading-none font-extrabold tracking-[-0.045em]">
+                <CountUp value={0.4} decimals={1} duration={1100} />
+                <span className="text-[var(--mint)] ml-0.5 font-mono text-[0.42em] font-bold">s</span>
+              </p>
+              <p className="text-[var(--pine-dim)] mt-4 font-mono text-[11px] tracking-[0.14em] uppercase">
+                4 events · 1 action · 0 입력
+              </p>
+            </div>
+          </div>
         </div>
       </Reveal>
     </SectionShell>
