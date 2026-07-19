@@ -697,6 +697,46 @@ export function OneScreenClient({
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
     toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
   }
+  // 이전 회차 **일괄** 가져오기(G5 얕은판) — 표시(또는 선택) 전 행에 planPrevFill을 돌려 빈 칸만 채운다.
+  // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
+  // 같은 순수 계획 함수를 쓰므로 특이사항·교재 제외(발송 본문 오염 방지·roster 자동 승계) 결정이 자동 준수된다.
+  // "평소와 같음" 기본값의 얕은 구현 — 강사는 일괄로 깔고 달라진 학생만 손댄다(깊은판 provenance는 G4에서).
+  function bulkImportPrev(keys?: string[]) {
+    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const keySet = new Set(keys ?? []);
+    const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
+    let filledRows = 0;
+    let filledCells = 0;
+    for (const r of rows) {
+      const idx = r.student.subjects.findIndex((su) => su.name === r.subject.name);
+      const su = r.student.subjects[idx];
+      if (!su) continue;
+      const fill = planPrevFill({
+        prev: su.prevReport,
+        current: {
+          today: su.today,
+          attitude: r.student.attitude,
+          homework: r.student.homework,
+          homeworkToday: su.homeworkToday ?? "",
+        },
+        attitudes: ATTITUDE,
+        homeworks: HOMEWORK,
+      });
+      const count = Object.keys(fill).length;
+      if (!count) continue;
+      if (fill.today !== undefined) setProgressFor(r.student.id, idx, fill.today);
+      if (fill.attitude !== undefined) setAttitudeValue(r.student.id, fill.attitude);
+      if (fill.homework !== undefined) setHomeworkValue(r.student.id, fill.homework);
+      if (fill.homeworkToday !== undefined) setHomeworkTodayFor(r.student.id, r.subject.name, fill.homeworkToday);
+      filledRows++;
+      filledCells += count;
+    }
+    if (!filledRows) {
+      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      return;
+    }
+    toast.success(`${filledRows}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
+  }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
     const res = await saveStudentOrder({ classId, studentIds });
@@ -1244,6 +1284,7 @@ export function OneScreenClient({
             onAutoWriteAll: autoWriteAllVisible,
             onClassNotice: openNoticeForRows,
             onBulkApply: bulkApplyValues,
+            onBulkImportPrev: bulkImportPrev,
           }}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
