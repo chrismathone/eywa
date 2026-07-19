@@ -1,9 +1,9 @@
 import Link from "next/link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/eywa-icon-compat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { kstMonth, kstToday } from "@/lib/date-kst";
-import { Pill } from "@/components/atoms/pill";
+import { BigStat } from "@/components/atoms/big-stat";
+import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,34 +117,42 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
-        <div className="flex items-center gap-1.5">
-          <Link
-            href={buildHref({ period: prevPeriod, q, sort, desc })}
-            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
-            aria-label="이전 달"
-          >
-            <EyIcon name="chevronLeft" size={14} />
-          </Link>
-          <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">
-            {formatPeriod(period)}
-          </span>
-          <Link
-            href={buildHref({ period: nextPeriod, q, sort, desc })}
-            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
-            aria-label="다음 달"
-          >
-            <EyIcon name="chevronRight" size={14} />
-          </Link>
-        </div>
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→월 헤드라인→서브(청구·수납률 승격). 월 네비게이션은 actions 슬롯. */}
+      <PageHeader
+        eyebrow="수납 현황"
+        title={formatPeriod(period)}
+        description={`청구 ${summary.totalCount}건 · 수납률 ${summary.paymentRate.toFixed(1)}%${
+          q ? ` · “${q}” 검색 결과 ${total}건` : ""
+        }${totalPages > 1 ? ` · ${page}/${totalPages} 페이지` : ""}`}
+        actions={
+          <>
+            <Link
+              href={buildHref({ period: prevPeriod, q, sort, desc })}
+              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-full border"
+              aria-label="이전 달"
+            >
+              <EyIcon name="chevronLeft" size={14} />
+            </Link>
+            <Link
+              href={buildHref({ period: nextPeriod, q, sort, desc })}
+              className="border-line hover:bg-bg-soft inline-flex size-8 items-center justify-center rounded-full border"
+              aria-label="다음 달"
+            >
+              <EyIcon name="chevronRight" size={14} />
+            </Link>
+          </>
+        }
+      />
 
+      {/* 툴바 — 최근 월 알약 칩 + 검색 + 액션(신규 청구·엑셀) */}
+      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
           {periods.slice(0, 6).map((p) => (
             <Link
               key={p}
               href={buildHref({ period: p, q, sort, desc })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 p === period
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -156,20 +164,8 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         </div>
 
         <SearchForm placeholder="학생명·항목" defaultValue={q} inputWidth="w-36" />
-      </div>
 
-      <div className="flex items-center justify-between">
-        <p className="text-text-dim text-xs">
-          {formatPeriod(period)} 청구 {summary.totalCount}건 · 수납률{" "}
-          <span className="num text-foreground font-semibold">{summary.paymentRate.toFixed(1)}%</span>
-          {q ? <span className="ml-2">· &ldquo;{q}&rdquo; 검색 결과 {total}건</span> : null}
-          {totalPages > 1 ? (
-            <span className="ml-2">
-              · {page}/{totalPages} 페이지
-            </span>
-          ) : null}
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <CreateInvoiceTrigger students={students} defaultPeriod={period} variant="outline" />
           <Button
             variant="outline"
@@ -194,18 +190,53 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         />
       ) : (
         <>
-          <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-            <KpiCard label="총 청구액" value={won(summary.totalBilled)} icon={Receipt} color="primary" hint={`${summary.totalCount}건`} />
-            <KpiCard label="할인 합계" value={won(summary.totalDiscount)} icon={BadgePercent} color="amber" />
-            <KpiCard label="수납 완료" value={won(summary.totalCollected)} icon="check" color="primary" hint={`${summary.paidCount}건`} />
-            <KpiCard label="미수금" value={won(summary.outstanding)} icon={CircleDollarSign} color="danger" hint={`부분 ${summary.partialCount} · 미수 ${summary.unpaidCount}건`} />
-            <KpiCard label="수납률" value={`${summary.paymentRate.toFixed(1)}%`} icon={Percent} color="gold" />
+          {/* KPI 5종 — Editorial 문법 ②(BigStat). 금액은 num tabular + "원" 단위 분리, 미수금만 danger 강조. */}
+          <section className="grid grid-cols-2 gap-3.5 md:grid-cols-3 2xl:grid-cols-5">
+            <BigStat
+              label="총 청구액"
+              value={KRW.format(summary.totalBilled)}
+              unit="원"
+              tone="primary"
+              icon={<Receipt size={16} strokeWidth={2} />}
+              sub={`${summary.totalCount}건`}
+            />
+            <BigStat
+              label="할인 합계"
+              value={KRW.format(summary.totalDiscount)}
+              unit="원"
+              tone="amber"
+              icon={<BadgePercent size={16} strokeWidth={2} />}
+            />
+            <BigStat
+              label="수납 완료"
+              value={KRW.format(summary.totalCollected)}
+              unit="원"
+              tone="primary"
+              icon={<EyIcon name="check" size={16} />}
+              sub={`${summary.paidCount}건`}
+            />
+            <BigStat
+              label="미수금"
+              value={KRW.format(summary.outstanding)}
+              unit="원"
+              tone="danger"
+              valueClass="text-danger"
+              icon={<CircleDollarSign size={16} strokeWidth={2} />}
+              sub={`부분 ${summary.partialCount} · 미수 ${summary.unpaidCount}건`}
+            />
+            <BigStat
+              label="수납률"
+              value={summary.paymentRate.toFixed(1)}
+              unit="%"
+              tone="gold"
+              icon={<Percent size={16} strokeWidth={2} />}
+            />
           </section>
 
-          <section className="bg-card border-line shadow-card rounded-md border p-5">
+          <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3 flex items-baseline justify-between">
               <h2 className="text-foreground text-sm font-bold">수납 진행률</h2>
-              <span className="text-text-dim font-mono text-[11px]">
+              <span className="text-text-dim num text-[12px]">
                 완납 {paidPct.toFixed(1)}% · 부분 {partialPct.toFixed(1)}% · 미수 {unpaidPct.toFixed(1)}%
               </span>
             </header>
@@ -217,21 +248,27 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           </section>
 
           {overdue.length > 0 ? (
-            <section className="bg-danger-soft border-danger/30 flex items-start gap-3 rounded-md border p-4">
-              <span className="bg-danger/15 text-danger flex size-9 shrink-0 items-center justify-center rounded-sm">
+            /* 기한 경과 배너 — 굵은 건수+금액 위계 + 우측 '목록 보기'(납부기한 순 정렬로 이동) */
+            <section className="bg-danger-soft flex flex-wrap items-center gap-4 rounded-2xl p-5">
+              <span className="bg-danger/15 text-danger flex size-10 shrink-0 items-center justify-center rounded-xl">
                 <CircleDollarSign size={18} strokeWidth={2} />
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <Pill color="danger" soft={false}>긴급</Pill>
-                  <p className="text-foreground text-sm font-bold">
-                    기한 경과 미수금 <span className="num">{overdue.length}</span>건
-                  </p>
-                </div>
-                <p className="text-text-dim mt-1 text-xs">
-                  합계 <span className="num text-foreground font-semibold">{won(overdueAmount)}</span>
+                <p className="text-foreground text-[13px] font-bold">기한 경과 미수금</p>
+                <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="num text-danger text-[24px] font-extrabold leading-none">
+                    {overdue.length}
+                  </span>
+                  <span className="text-text-dim text-[12px]">건</span>
+                  <span className="num text-foreground text-[17px] font-bold">{won(overdueAmount)}</span>
                 </p>
               </div>
+              <Link
+                href={buildHref({ period, q, sort: "due_date", desc: false })}
+                className="border-danger/40 text-danger hover:bg-danger/10 shrink-0 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition"
+              >
+                목록 보기
+              </Link>
             </section>
           ) : null}
 
@@ -240,49 +277,5 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         </>
       )}
     </div>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  hint,
-}: {
-  label: string;
-  value: string;
-  icon: LucideIcon | "check";
-  color: "primary" | "gold" | "danger" | "amber";
-  hint?: string;
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    gold: "bg-gold-soft text-gold",
-    danger: "bg-danger-soft text-danger",
-    amber: "bg-amber-soft text-amber",
-  } as const;
-  const GLOW = {
-    primary: "bg-primary/10",
-    gold: "bg-gold/10",
-    danger: "bg-danger/10",
-    amber: "bg-amber/10",
-  } as const;
-  return (
-    <article className="bg-card border-line shadow-card relative overflow-hidden rounded-md border p-5">
-      <span className={`pointer-events-none absolute -top-8 -right-8 size-[100px] rounded-pill blur-md ${GLOW[color]}`} aria-hidden="true" />
-      <header className="relative flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          {Icon === "check" ? <EyIcon name="check" size={14} /> : <Icon size={14} strokeWidth={2} />}
-        </span>
-      </header>
-      <p className="tabular text-foreground num relative mt-3 text-[18px] leading-tight">{value}</p>
-      {hint ? (
-        <p className="text-text-dim num border-line relative mt-3 border-t pt-3 text-[11px]">{hint}</p>
-      ) : (
-        <div className="relative mt-3 h-[24px]" />
-      )}
-    </article>
   );
 }

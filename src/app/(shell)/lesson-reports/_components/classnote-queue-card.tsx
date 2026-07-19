@@ -23,11 +23,32 @@ function hhmmKst(iso: string | null): string {
   }).format(new Date(iso));
 }
 
+// 세부 상태 칩(알약) — 위계는 위 BigStatInline 3개가 잡고, 여기는 내역 분해용 보조 라벨.
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className={`rounded-md px-3 py-1.5 ${tone}`}>
-      <span className="tabular text-[17px] font-bold">{value}</span>
-      <span className="ml-1 text-[12px] font-semibold">{label}</span>
+    <div className={`rounded-full px-3 py-1 ${tone}`}>
+      <span className="num text-[13px] font-bold">{value}</span>
+      <span className="ml-1 text-[11.5px] font-medium">{label}</span>
+    </div>
+  );
+}
+
+// 핵심 3계열 빅 스탯(문법 ② 인라인 변형) — 큰 num 숫자 + 작은 dim 라벨.
+function BigStatInline({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: number;
+  valueClass?: string;
+}) {
+  return (
+    <div>
+      <p className="text-text-dim text-[12px] font-medium">{label}</p>
+      <p className={`num mt-1 text-[26px] font-extrabold leading-none ${valueClass ?? "text-foreground"}`}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -78,8 +99,12 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
     } else toast.error(res.error ?? "멈춤복구에 실패했습니다");
   }
 
+  // 주의 = 사람이 손대야 할 계열 합(실패·오래됨·동명이인·공유 보드·멈춤) — 큰 숫자 하나로 위계.
+  const attention =
+    summary.failed + summary.tooOld + summary.nameConflict + summary.blockedShared + summary.stuck;
+
   return (
-    <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+    <section className="bg-card shadow-card rounded-2xl px-5 py-5">
       {!view.sendEnabled ? (
         <div className="border-danger bg-danger/5 text-danger mb-3 rounded-md border px-3 py-2 text-[12px]">
           <b>dry-run 모드</b> — 재발송을 눌러도 실제 전송되지 않습니다(저장/큐잉 안 함). 학원 설정 &gt; 보고서에서{" "}
@@ -121,9 +146,14 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
         </div>
       </div>
 
-      {/* 상태 집계 */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Stat label="발송완료" value={summary.success} tone="bg-primary/10 text-primary" />
+      {/* 상태 집계 — 핵심 3계열(발송완료·대기/처리중·주의)은 큰 숫자로 위계화(문법 ②),
+          세부 분해(대기·처리중·실패·오래됨·동명이인·공유 보드·멈춤)는 아래 알약 칩으로 유지. */}
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+        <BigStatInline label="발송완료" value={summary.success} valueClass="text-primary" />
+        <BigStatInline label="대기·처리중" value={summary.queued + summary.processing} />
+        <BigStatInline label="주의" value={attention} valueClass={attention > 0 ? "text-danger" : undefined} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Stat label="대기" value={summary.queued} tone="border-line text-text-dim border" />
         <Stat label="처리중" value={summary.processing} tone="border-line text-text-dim border" />
         <Stat label="실패" value={summary.failed} tone="bg-danger/10 text-danger" />
@@ -174,7 +204,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                 const badge = classnoteBadge(it.status ?? undefined);
                 return (
                   <tr key={it.id} className="border-line border-b last:border-b-0">
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2.5">
                       {/* 공유 보드 차단(blocked_shared)분은 **선택 가능** — 원장이 발송 예외 등재/보드 정리 후
                           '선택 재발송'으로 내보낼 길이 있어야 한다(막으면 영영 못 나가는 막다른 길).
                           게이트가 매 시도 재평가하므로 미해결이면 그대로 다시 안전하게 막힌다. */}
@@ -186,14 +216,14 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                         disabled={it.status === "name_conflict"}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
                       <span className="text-foreground font-semibold">{it.studentName}</span>
                       {it.subject ? (
                         <span className="text-text-faint ml-1.5">{subjects.labelOf(it.subject)}</span>
                       ) : null}
                     </td>
-                    <td className="text-text-dim px-3 py-2">{it.reportDate}</td>
-                    <td className="px-3 py-2">
+                    <td className="text-text-dim px-3 py-2.5">{it.reportDate}</td>
+                    <td className="px-3 py-2.5">
                       {/* 미지의 상태 코드도 raw 노출 금지 — 원문은 툴팁으로만. */}
                       {badge ? (
                         <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
@@ -206,7 +236,7 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
                     {/* 사유 = 한글 요약(기술 원문은 마우스 오버 툴팁) — 원장이 바로 읽게.
                         ⚠️ blocked_shared는 워커가 이미 한글 안내문(연결 가족 포함)을 넣어주므로 그대로 노출한다
                         — humanizeClassnoteError를 태우면 '발송 실패…' 일반 문구로 뭉개진다. */}
-                    <td className="text-text-faint max-w-[260px] truncate px-3 py-2" title={sanitizeErrorText(it.error)}>
+                    <td className="text-text-faint max-w-[260px] truncate px-3 py-2.5" title={sanitizeErrorText(it.error)}>
                       {it.status === "blocked_shared"
                         ? (it.error ?? "—")
                         : (humanizeClassnoteError(it.error) ?? "—")}

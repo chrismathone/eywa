@@ -1,8 +1,10 @@
-import { BookOpen, Users, UserCheck, SearchX, type LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { BookOpen, Users, UserCheck, SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
+import { BigStat } from "@/components/atoms/big-stat";
+import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -30,11 +32,6 @@ import {
 export const metadata = { title: "수업목록 — eywa" };
 
 const PAGE_SIZE = 50;
-
-// "운영 중" Stat은 보존 대상 EyIcon `check`를 유지 — Lucide 시그니처(size·strokeWidth) 어댑터로 감싸 Stat에 전달.
-const CheckIcon: LucideIcon = ((props: { size?: number | string }) => (
-  <EyIcon name="check" size={typeof props.size === "number" ? props.size : undefined} />
-)) as unknown as LucideIcon;
 
 const DAY_LABEL: Record<string, string> = {
   mon: "월",
@@ -96,39 +93,47 @@ export default async function ClassesPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(강의실 배정·신규 반) */}
+      <PageHeader
+        eyebrow="수업 운영"
+        title="수업목록"
+        description={`운영 ${active}개 반 · 등록 학생 ${totalSeats}명`}
+        actions={
+          <>
+            <ClassroomAssignButton />
+            <NewClassTrigger />
+          </>
+        }
+      />
       <MakeeduSyncBadge domain="classes" />
-      {/* Stat strip */}
+      {/* Stat strip — Editorial 문법 ②(BigStat). "운영 중"은 보존 대상 EyIcon `check` 유지. */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 반" value={stats.total} unit="개" icon={BookOpen} color="primary" />
-        <Stat label="운영 중" value={active} unit="개" icon={CheckIcon} color="primary" />
-        <Stat label="등록 학생" value={totalSeats} unit="명" icon={Users} color="blue" />
-        <Stat
+        <BigStat label="전체 반" value={stats.total} unit="개" tone="primary" icon={<BookOpen size={16} strokeWidth={2} />} />
+        <BigStat label="운영 중" value={active} unit="개" tone="primary" icon={<EyIcon name="check" size={16} />} />
+        <BigStat label="등록 학생" value={totalSeats} unit="명" tone="blue" icon={<Users size={16} strokeWidth={2} />} />
+        <BigStat
           label="반당 평균"
           value={stats.total > 0 ? Math.round(totalSeats / stats.total) : 0}
           unit="명"
-          icon={UserCheck}
-          color="gold"
+          tone="gold"
+          icon={<UserCheck size={16} strokeWidth={2} />}
         />
       </section>
 
       {/* 과목·요일·강사·정렬 드롭다운 + 검색/뷰 — 선택값 localStorage 영속(클라이언트) */}
       <ClassFilterBar current={current} teachers={teachers} subjectFilters={subjects.filters} />
 
-      <div className="flex items-center justify-between">
-        <p className="micro">
-          결과 <span className="text-foreground font-bold">{total}</span>개
-          {totalPages > 1 ? (
-            <span className="text-text-faint ml-2 normal-case">
-              · {page}/{totalPages} 페이지
-            </span>
-          ) : null}
-        </p>
-        <div className="flex items-center gap-2">
-          <ClassroomAssignButton />
-          <NewClassTrigger />
-        </div>
-      </div>
+      {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만 */}
+      <p className="text-text-dim px-1 text-[13px]">
+        결과 <span className="text-foreground font-bold">{total}</span>개
+        {totalPages > 1 ? (
+          <span className="ml-2">
+            {page}/{totalPages} 페이지
+          </span>
+        ) : null}
+        {q ? <span className="ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
+      </p>
 
       {total === 0 ? (
         <EmptyState image="classes" icon={() => <SearchX size={32} strokeWidth={1.5} />} title="결과 없음" />
@@ -156,20 +161,20 @@ function DayChips({ days, barClass }: { days: ClassDaySlot[]; barClass: string }
   const uniform = starts.length === days.length && new Set(starts).size === 1;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <div className="flex gap-0.5 font-mono text-[11px]">
+      <div className="flex gap-0.5 text-[11px] font-semibold">
         {days.map((d) => (
           <span
             key={d.day}
-            className={`inline-flex size-5 items-center justify-center rounded-sm ${barClass} text-white`}
+            className={`inline-flex size-5 items-center justify-center rounded-full ${barClass} text-white`}
           >
             {DAY_LABEL[d.day] ?? d.day}
           </span>
         ))}
       </div>
       {uniform ? (
-        <span className="text-text-dim tabular text-[11px]">{starts[0]}</span>
+        <span className="text-text-dim num text-[12px]">{starts[0]}</span>
       ) : starts.length > 0 ? (
-        <span className="text-text-faint tabular text-[10px]">
+        <span className="text-text-faint num text-[11px]">
           {days
             .filter((d) => d.start)
             .map((d) => `${DAY_LABEL[d.day] ?? d.day}${d.start}`)
@@ -182,7 +187,7 @@ function DayChips({ days, barClass }: { days: ClassDaySlot[]; barClass: string }
 
 function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: SubjectMaps }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+    <div className="bg-card shadow-card overflow-auto rounded-2xl">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
@@ -223,7 +228,7 @@ function TableView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
                     )}
                   </div>
                 </td>
-                <td className="text-text-dim font-mono px-4 py-2.5 text-[11px]">
+                <td className="text-text-dim px-4 py-2.5 text-[12px]">
                   {c.classroomName ?? "—"}
                 </td>
                 <td className="px-4 py-2.5">
@@ -271,79 +276,46 @@ function CardsView({ classes, subjects }: { classes: ClassListRow[]; subjects: S
             key={c.id}
             href={`/classes/${c.id}`}
             title={c.className}
-            className="bg-card border-line shadow-card hover:shadow-card-hover flex flex-col gap-4 rounded-md border p-5 transition"
+            className="bg-card shadow-card hover:shadow-card-hover flex flex-col gap-3 rounded-2xl p-5 transition"
           >
-            <header className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Pill color={meta.color}>{meta.label}</Pill>
-                {!c.isActive ? (
-                  <Pill color="neutral">폐지</Pill>
-                ) : c.closedAt ? (
-                  <Pill color="amber">종강</Pill>
-                ) : (
-                  <Pill color="primary" soft={false}>
-                    ● 운영
-                  </Pill>
-                )}
-              </div>
+            <header className="flex items-center gap-2">
+              <Pill color={meta.color}>{meta.label}</Pill>
+              {!c.isActive ? (
+                <Pill color="neutral">폐지</Pill>
+              ) : c.closedAt ? (
+                <Pill color="amber">종강</Pill>
+              ) : (
+                <Pill color="primary" soft={false}>
+                  운영
+                </Pill>
+              )}
             </header>
-            <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-[17px] font-extrabold leading-tight">
-              {c.className}
-              <EditingBadge scope={`class:${c.id}`} />
-            </h3>
-            <div className="text-[12px]">
-              <div className="flex items-center gap-2">
-                <span className="text-text-dim flex-1 truncate">
-                  {c.teacherName ?? "담임 미정"} 강사
-                </span>
-                {c.classroomName ? (
-                  <span className="text-text-faint font-mono text-[11px]">{c.classroomName}</span>
-                ) : null}
+            {/* 구조화 카드(문법 ⑤) — 반 이름 bold + 담임·강의실 dim 서브 + 우측 재원수 */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-foreground flex flex-wrap items-center gap-1.5 text-[17px] font-extrabold leading-tight">
+                  {c.className}
+                  <EditingBadge scope={`class:${c.id}`} />
+                </h3>
+                <p className="text-text-dim mt-1 truncate text-[12.5px]">
+                  {c.teacherName ?? "담임 미정"}
+                  {c.classroomName ? ` · ${c.classroomName}` : ""}
+                </p>
               </div>
+              <p className="shrink-0 text-right">
+                <span className="num text-foreground text-[20px] font-extrabold leading-none">
+                  {c.studentCount}
+                </span>
+                <span className="text-text-dim ml-0.5 text-[12px]">명</span>
+                <span className="text-text-faint block text-[11px]">재원</span>
+              </p>
             </div>
-            <div className="border-line flex items-center justify-between gap-2 border-t pt-3">
+            <div className="mt-auto pt-1">
               <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} />
-              <span className="text-foreground num shrink-0 text-[12px] font-bold">
-                재원 {c.studentCount}명
-              </span>
             </div>
           </WindowLink>
         );
       })}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  unit,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: number;
-  unit: string;
-  icon: LucideIcon;
-  color: "primary" | "blue" | "gold";
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    blue: "bg-blue-soft text-blue",
-    gold: "bg-gold-soft text-gold",
-  } as const;
-  return (
-    <div className="bg-card border-line shadow-card rounded-md border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
-        </span>
-      </header>
-      <p className="mt-2 flex items-baseline gap-1">
-        <span className="tabular text-foreground text-[28px] leading-none">{value}</span>
-        <span className="text-text-dim text-xs">{unit}</span>
-      </p>
     </div>
   );
 }

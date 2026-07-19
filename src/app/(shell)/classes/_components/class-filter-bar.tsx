@@ -74,17 +74,17 @@ function isDefault(c: ClassFilterState): boolean {
 const triggerCls =
   "border-border bg-card text-foreground flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm";
 
-// 요일 칩(팝오버 내부). 활성 = ink 솔리드.
+// 요일 칩(팝오버 내부). 활성 = ink 솔리드. Editorial 문법 ⑦ — 알약(rounded-full).
 const chipCls = (active: boolean) =>
-  `shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+  `shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
     active
       ? "border-foreground bg-foreground text-background font-medium"
       : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
   }`;
 
-// 뷰 토글. 활성 = primary.
+// 뷰 토글. 활성 = primary. 알약(rounded-full).
 const viewCls = (active: boolean) =>
-  `shrink-0 rounded-sm border px-2 py-1 text-xs transition ${
+  `shrink-0 rounded-full border px-2.5 py-1 text-xs transition ${
     active
       ? "border-primary bg-primary text-primary-foreground font-medium"
       : "border-line text-text-dim hover:bg-bg-soft"
