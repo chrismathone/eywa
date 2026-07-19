@@ -138,7 +138,7 @@ export function PublicIntakeForm({
           />
         </div>
         <CheckCircle2 className="text-primary mt-1 size-12" />
-        <p className="text-foreground text-xl font-extrabold">제출 완료</p>
+        <p className="text-foreground text-xl font-bold">제출 완료</p>
         <p className="text-text-dim text-sm leading-relaxed">
           입학상담카드가 접수되었습니다.<br />
           {academyName}에서 빠른 시일 내에 연락드리겠습니다.
@@ -178,10 +178,10 @@ export function PublicIntakeForm({
           preload
           className="object-cover"
         />
-        <div className="bg-foreground/80 absolute inset-0" aria-hidden />
+        <div className="bg-foreground/70 absolute inset-0" aria-hidden />
         <div className="relative">
-          <p className="text-gold text-sm font-semibold">{academyName}</p>
-          <h1 className="text-background mt-1 text-[26px] font-extrabold">
+          <p className="text-gold text-sm font-bold">{academyName}</p>
+          <h1 className="text-background mt-1 text-[26px] font-bold">
             {step === 1 ? "입학상담카드" : "사전 체크리스트"}
           </h1>
           <p className="text-background/70 mt-1.5 text-sm">
@@ -362,7 +362,7 @@ export function PublicIntakeForm({
       {/* 셔틀버스 (danger) — 학원설정 operations.shuttle. 표시 OFF면 섹션 자체를 숨김. */}
       {shuttle.enabled ? (
         <Section title="셔틀버스 신청" tone="danger">
-          <p className="text-foreground text-sm font-semibold">
+          <p className="text-foreground text-sm font-bold">
             셔틀버스를 신청하시겠습니까?{shuttle.fee ? ` (${shuttle.fee})` : ""}
           </p>
           <div className="flex gap-2">

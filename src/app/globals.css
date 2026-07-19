@@ -102,11 +102,12 @@
   --bg-soft: #e9e9ee;
   --surface-hi: #fafafc;
 
-  /* text — 뉴트럴 잉크(#1d1d1f) — 그린캐스트 제거, injaewon.blog와 동일 계열 */
+  /* text — 3단 시스템(2026-07-19 마디아/WCAG 정합): 기본 #1d1d1f(16.8:1) · 중간 #505050(8.1:1) ·
+     마지노선 #767676(4.54:1 — 화이트 표면 전용, 회색 캔버스 위 직상 텍스트는 dim 사용). */
   --foreground: #1d1d1f;
   --ink: #1d1d1f;
-  --text-dim: #6e6e73;
-  --text-faint: #a1a1a6;
+  --text-dim: #505050;
+  --text-faint: #767676;
 
   /* lines — 뉴트럴 헤어라인 */
   --border: rgba(29, 29, 31, 0.09);
@@ -129,10 +130,10 @@
   --secondary-foreground: #1d1d1f;
 
   --muted: #f5f5f7;
-  --muted-foreground: #6e6e73;
+  --muted-foreground: #505050;
 
-  --accent: rgba(169, 127, 36, 0.12); /* gold-soft */
-  --accent-foreground: #a97f24;
+  --accent: rgba(138, 104, 28, 0.12); /* gold-soft */
+  --accent-foreground: #8a681c;
 
   --destructive: #d33f3f;
   --ring: #153e75;
@@ -144,17 +145,18 @@
   --chart-4: #d33f3f;  /* danger · 결석·미납 */
   --chart-5: #d2447a;  /* rose · 상담·학부모 */
 
-  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등) */
-  --gold: #a97f24;
-  --gold-soft: rgba(169, 127, 36, 0.11);
+  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등)
+     — 텍스트로 쓰이는 accent는 전부 4.5:1↑(2026-07-19 마디아 정합: gold 5.15 · amber 5.09 · rose 5.09) */
+  --gold: #8a681c;
+  --gold-soft: rgba(138, 104, 28, 0.11);
   --blue: #2d6be0;
   --blue-soft: rgba(45, 107, 224, 0.09);
   --purple: #6c50c8;
   --purple-soft: rgba(108, 80, 200, 0.09);
-  --rose: #d2447a;
-  --rose-soft: rgba(210, 68, 122, 0.09);
-  --amber: #c8720d;
-  --amber-soft: rgba(200, 114, 13, 0.11);
+  --rose: #c23a6e;
+  --rose-soft: rgba(194, 58, 110, 0.09);
+  --amber: #a35d0a;
+  --amber-soft: rgba(163, 93, 10, 0.11);
   --danger: #d33f3f;
   --danger-soft: rgba(211, 63, 63, 0.09);
 
@@ -291,7 +293,7 @@
      ⚠️ 기존 .eyebrow(uppercase 영문 전제, 64파일 소비)는 호환용으로 불변 — 전역 재정의 금지. */
   .editorial-eyebrow {
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--primary);
   }
 
@@ -299,14 +301,14 @@
      "코딩 틱함"의 진원지라 Pretendard 톤으로 전환. mono는 .tabular/시간·숫자 데이터에만.) */
   .micro {
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: 0.02em;
     color: var(--text-faint);
   }
   .tabular {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum", "lnum";
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: -0.02em;
   }
 

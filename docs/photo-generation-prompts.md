@@ -20,6 +20,10 @@ glass partitions, clean minimalist design, subtle warm wood accents, photorealis
 professional architectural photography, no people, soft shadows, high key lighting
 ```
 
+## ⚠️ 텍스트 얹는 패널 사진 주의
+`login-panel`·`intake-header`는 흰 글자가 사진 위에 직접 올라간다 — **중앙부·상단이 과하게 밝은(백색 위주) 컷은 금지**,
+중간 톤 이상(유리·목재·그림자 낀 구도)으로 생성/선택할 것. 오버레이 딤은 70%를 넘기지 않는 게 규약(마디아 딤 15~70).
+
 ## 프롬프트 10개
 
 | # | 파일명 | 쓰이는 곳 | 비율 | 프롬프트 (접미사 앞부분) |

@@ -18,7 +18,7 @@ export default async function LoginPage({
         <div className="w-full max-w-sm space-y-10">
           <header className="space-y-3">
             <p className="editorial-eyebrow">로그인</p>
-            <h1 className="display text-foreground text-3xl">
+            <h1 className="font-bold tracking-tight text-foreground text-3xl">
               다시 만나서<br />
               반갑습니다.
             </h1>
@@ -54,22 +54,22 @@ function BrandPanel() {
       />
       {/* 텍스트 가독 오버레이 — 사진 위 흰 글자 대비 확보 */}
       <div
-        className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/30 to-black/25"
+        className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-black/35"
         aria-hidden
       />
 
       <div className="relative flex items-center gap-3">
-        <span className="text-primary inline-flex size-9 items-center justify-center rounded-xl bg-white text-lg font-black">
+        <span className="text-primary inline-flex size-9 items-center justify-center rounded-xl bg-white text-lg font-bold">
           e
         </span>
         <div className="leading-tight">
-          <p className="text-sm font-semibold tracking-tight">eywa</p>
+          <p className="text-sm font-bold tracking-tight">eywa</p>
           <p className="text-[11px] text-white/70">인재원 학원관리 시스템</p>
         </div>
       </div>
 
       <div className="relative my-auto space-y-7 py-12">
-        <h2 className="display text-5xl xl:text-[3.75rem]">
+        <h2 className="font-bold tracking-tight text-5xl xl:text-[3.75rem]">
           매일 같은 시간,<br />
           <span className="text-white/60">같은 자리,</span><br />
           한 권의 일지.
