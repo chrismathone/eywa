@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -50,6 +50,12 @@ import {
   type BulkPatch,
   type RowAction,
 } from "../grid";
+import {
+  getClassNarratives,
+  getServerClassNarratives,
+  setClassNarrative,
+  subscribeClassNarratives,
+} from "../class-narrative-store";
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
@@ -152,6 +158,13 @@ export function OneScreenClient({
   // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
   const activeDate = date || kstToday();
   const todayYmd = kstToday();
+  // 반 공통 서술(G6) — 반 이름→서술. sessionStorage(날짜 키)+외부 스토어(#75 lazy 초기값·#25 effect setState 회피).
+  // 생성 재료(기록 아님): 자동작성 시 그 행의 반 서술을 classContext로 동봉, 멘트 생성 후엔 잃어도 무해.
+  const classNarratives = useSyncExternalStore(
+    subscribeClassNarratives,
+    () => getClassNarratives(activeDate),
+    getServerClassNarratives,
+  );
   // 날짜 이동 전 대기 저장 flush — 저장 로직이 아래에 정의되므로 ref로 노출(effect에서 갱신, render 중 ref 쓰기 금지 규칙).
   const flushSavesRef = useRef<() => void>(() => {});
   const goToDate = (ymd: string) => {
@@ -552,9 +565,13 @@ export function OneScreenClient({
     if (idx < 0) return;
     const su = student.subjects[idx];
     const subjectKey = su?.subjectKey || su?.name || undefined;
+    // 반 공통 서술(G6) — 이 행의 반 서술을 생성 재료로 동봉(없으면 기존 동작). 카드·표·일괄 공용 경로라 전부 커버.
+    // ⚠️ 키 = classId(이름 아님) — 동명 반(수학·영어 같은 이름, 스키마 허용)에서 이름 키면 남의 반 수업
+    // 맥락이 교차 주입된다(리뷰 확정 major, 순서 기능 동명 가드와 같은 원인). classId null(모호 행·보강)=서술 없음.
+    const classContext = (su?.classId && classNarratives[su.classId]) || "";
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
-      const res = await generateReportComment(buildReportCommentInput(student, idx), {
+      const res = await generateReportComment({ ...buildReportCommentInput(student, idx), classContext }, {
         studentId: student.id,
         subject: subjectKey,
         todayExamInfo: buildExamInfo(student, showDailyTest, showCheckTest),
@@ -1288,6 +1305,21 @@ export function OneScreenClient({
           }}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
+          // 반 서술(G6) — 순서 기능과 동일한 동명 반 가드(orderClass = 이름 매칭이 유일할 때만).
+          // 키 = classId: 이름 키면 동명 두 반(수학·영어)에 서술이 교차 주입됨(리뷰 확정 major).
+          narrative={{
+            activeClass: orderClass ? orderClass.name : null,
+            value: orderClass ? (classNarratives[orderClass.id] ?? "") : "",
+            onSave: (text) => {
+              if (!orderClass) return;
+              setClassNarrative(activeDate, orderClass.id, text);
+              toast.success(
+                text.trim()
+                  ? `${orderClass.name} 반 서술 저장 — 이후 자동작성부터 학생별 멘트에 반영됩니다`
+                  : `${orderClass.name} 반 서술을 지웠습니다`,
+              );
+            },
+          }}
           attPending={attPending}
           genKey={genKey}
           bulkGen={bulkGen}
