@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 랜딩 리디자인 "Precision Pine" — 파스텔 크림 → 잉크 그린 정밀 톤 (2026-07-19) — ✅ tsc0/lint0 · 데스크톱/모바일 실렌더 검증 · main 07a04dee
+원장 지시("디자인이 파스텔틱해서 안 세련됨 → 랜딩부터 완전 최신화")의 1단계. **`.ey-landing` 스코프 토큰
+오버라이드만** 사용 — 앱 본체 globals.css 불변(전면 리스킨은 후속 단계, brandColor 3중 커플링 조사 완료).
+- 팔레트: 웜 아이보리 #fbf9f3/#f1ede2 → 쿨 포슬린 #f8faf8/미스트 #eef2ef, primary #1a5f3c → **#0e7c46**,
+  다크 파인 로컬 변수(--pine #0c1712·--mint #4ade97)로 **다크 북엔드**(시그니처 콘솔+클로징+푸터) 신설.
+- 시그니처: 16:02 파스텔 4색 카드 팬 → **다크 '운영 콘솔' 로그 스트림**(mono +0.1s~+0.4s 순차 점등 + 거대 0.4s).
+  전 섹션 eyebrow = `[HH:MM]` 타임스탬프 스파인([eyebrow.tsx](../src/app/(marketing)/_ui/eyebrow.tsx)) — "하루의 결" 시각화.
+- BrowserFrame 맥 신호등 → **eywa 플로팅 창 크롬**(실제 제품 창 시스템 재현). Fraunces serif 제거(폰트 로드 절감).
+  CTA 필 라운드, 세그먼트 탭 잉크 활성, AI 배지 "Claude · DeepSeek 엔진"(현 제품 사실 정합).
+- ⚠️ Tailwind v4 `@theme inline`: **색 유틸은 var() 참조라 스코프 오버라이드 가능, radius/shadow 토큰은 리터럴
+  인라인이라 불가**(랜딩은 마크업 arbitrary로 해결). 워크트리 dev는 `.env.local` 복사 필수(미추적).
+- 잔여: 사진 3장(_img/*.webp) 웜 그레이딩 구판 유지 — codex 재생성 프롬프트 전달됨(쿨 그레이드), 수령 시 교체.
+
 ### 원스크린 로스터 신호 배지 G3+G2 + 이전값 일괄 채우기 G5 (2026-07-19, 0124a) — ✅ tsc0/lint0/vitest1642 · 적대리뷰 확정 2계열 반영
 ClassNote 로드맵(plans/glowing-seeking-matsumoto.md) 2·3단계. 커밋 3: b634f6ea(G3+G2)·32523ec0(G5)·173c6dd5(리뷰픽스).
 - **G3 '학부모 미확인 N회' 배지**(그리드·카드): **0124a** RPC `onescreen_parent_read_stats`(학생별 최근 5건
