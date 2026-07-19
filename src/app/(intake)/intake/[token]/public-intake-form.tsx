@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
@@ -36,7 +37,7 @@ function SubmitBtn({ disabled }: { disabled?: boolean }) {
     <button
       type="submit"
       disabled={pending || disabled}
-      className="bg-danger inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-md text-base font-bold text-white transition-opacity disabled:opacity-50"
+      className="bg-danger inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-full text-base font-bold text-white transition-opacity disabled:opacity-50"
     >
       {pending ? (
         <>
@@ -123,12 +124,24 @@ export function PublicIntakeForm({
   );
 
   if (state?.ok) {
+    // 제출 완료 — Editorial 문법 ④: 환영 사진 카드 + 또렷한 완료 위계 (학부모 첫인상의 마지막 장면)
     return (
-      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
-        <CheckCircle2 className="text-primary size-14" />
-        <p className="text-foreground text-lg font-bold">제출 완료</p>
-        <p className="text-text-dim text-sm">
-          입학상담카드가 접수되었습니다. {academyName}에서 빠른 시일 내에 연락드리겠습니다.
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 py-10 text-center">
+        <div className="shadow-card w-full overflow-hidden rounded-3xl">
+          <Image
+            src="/photos/intake-done.webp"
+            alt=""
+            width={600}
+            height={400}
+            sizes="(max-width: 480px) 100vw, 400px"
+            className="w-full object-cover"
+          />
+        </div>
+        <CheckCircle2 className="text-primary mt-1 size-12" />
+        <p className="text-foreground text-xl font-extrabold">제출 완료</p>
+        <p className="text-text-dim text-sm leading-relaxed">
+          입학상담카드가 접수되었습니다.<br />
+          {academyName}에서 빠른 시일 내에 연락드리겠습니다.
         </p>
       </div>
     );
@@ -154,28 +167,40 @@ export function PublicIntakeForm({
       <input type="hidden" name="siblings" value={siblings} />
       <input type="hidden" name="shuttleBusRequest" value={applyShuttle ? "true" : ""} />
 
-      {/* 헤더 (네이비/ink) — 섹션 카드와 동일하게 mx-3 인셋(좌우 폭 일치). */}
-      <header className="bg-foreground mx-3 mt-3 px-6 pt-8 pb-6 text-center">
-        <p className="text-gold text-sm font-semibold">{academyName}</p>
-        <h1 className="text-background mt-1 text-[26px] font-extrabold">
-          {step === 1 ? "입학상담카드" : "사전 체크리스트"}
-        </h1>
-        <p className="text-background/60 mt-1.5 text-sm">
-          {step === 1
-            ? "상담 전 아래 정보를 입력해 주세요"
-            : "학생에게 맞는 수업을 제안하기 위한 설문입니다"}
-        </p>
-        {/* 진행 표시 — 2단계뿐이라 점 2개로 충분(막대 게이지는 과함). */}
-        <div className="mt-4 flex items-center justify-center gap-2">
-          {[1, 2].map((n) => (
-            <span
-              key={n}
-              className={`h-1.5 rounded-full transition-all ${
-                step === n ? "bg-gold w-8" : "bg-background/30 w-4"
-              }`}
-            />
-          ))}
-          <span className="text-background/50 num ml-1.5 text-xs">{step}/2</span>
+      {/* 헤더 — Editorial 문법 ④: 학원 공간 사진 + 잉크 오버레이(구 단색 ink 블록의 대비는 유지).
+          사진은 public/photos/intake-header.webp (placeholder → 실사 덮어쓰기, docs/photo-generation-prompts.md). */}
+      <header className="relative mx-3 mt-3 overflow-hidden rounded-2xl px-6 pt-8 pb-6 text-center">
+        <Image
+          src="/photos/intake-header.webp"
+          alt=""
+          fill
+          sizes="(max-width: 480px) 100vw, 460px"
+          preload
+          className="object-cover"
+        />
+        <div className="bg-foreground/80 absolute inset-0" aria-hidden />
+        <div className="relative">
+          <p className="text-gold text-sm font-semibold">{academyName}</p>
+          <h1 className="text-background mt-1 text-[26px] font-extrabold">
+            {step === 1 ? "입학상담카드" : "사전 체크리스트"}
+          </h1>
+          <p className="text-background/70 mt-1.5 text-sm">
+            {step === 1
+              ? "상담 전 아래 정보를 입력해 주세요"
+              : "학생에게 맞는 수업을 제안하기 위한 설문입니다"}
+          </p>
+          {/* 진행 표시 — 2단계뿐이라 점 2개로 충분(막대 게이지는 과함). */}
+          <div className="mt-4 flex items-center justify-center gap-2">
+            {[1, 2].map((n) => (
+              <span
+                key={n}
+                className={`h-1.5 rounded-full transition-all ${
+                  step === n ? "bg-gold w-8" : "bg-background/30 w-4"
+                }`}
+              />
+            ))}
+            <span className="text-background/60 num ml-1.5 text-xs">{step}/2</span>
+          </div>
         </div>
       </header>
 
@@ -261,7 +286,7 @@ export function PublicIntakeForm({
                   key={s.value}
                   type="button"
                   onClick={() => toggleSubject(s.value)}
-                  className={`h-11 flex-1 rounded-md border text-sm font-medium transition-colors ${
+                  className={`h-11 flex-1 rounded-xl border text-sm font-medium transition-colors ${
                     on ? "border-gold bg-gold text-foreground" : "border-border bg-card text-text-dim"
                   }`}
                 >
@@ -280,7 +305,7 @@ export function PublicIntakeForm({
                   key={opt}
                   type="button"
                   onClick={() => setSiblings(opt)}
-                  className={`h-11 flex-1 rounded-md border text-sm font-medium transition-colors ${
+                  className={`h-11 flex-1 rounded-xl border text-sm font-medium transition-colors ${
                     on ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground"
                   }`}
                 >
@@ -351,7 +376,7 @@ export function PublicIntakeForm({
                   key={String(opt.v)}
                   type="button"
                   onClick={() => setApplyShuttle(opt.v)}
-                  className={`h-11 flex-1 rounded-md border text-sm font-medium transition-colors ${
+                  className={`h-11 flex-1 rounded-xl border text-sm font-medium transition-colors ${
                     on ? "border-danger bg-danger text-white" : "border-border bg-card text-text-dim"
                   }`}
                 >
@@ -363,7 +388,7 @@ export function PublicIntakeForm({
           {shuttle.routes.length > 0 ? (
             <div className="space-y-2">
               {shuttle.routes.map((r, ri) => (
-                <div key={ri} className="bg-danger/5 rounded-md p-3">
+                <div key={ri} className="bg-danger/5 rounded-xl p-3">
                   <p className="text-danger text-[13px] font-bold">{r.label}</p>
                   <div className="text-text-dim mt-0.5 text-xs leading-relaxed">
                     {r.stops.map((stop, i) => (
@@ -386,7 +411,7 @@ export function PublicIntakeForm({
             개인정보 활용 동의서 <span className="text-danger">*</span>
           </h4>
           {showPrivacy ? (
-            <div className="bg-bg-soft rounded-md p-4 text-[13px] leading-relaxed">
+            <div className="bg-bg-soft rounded-xl p-4 text-[13px] leading-relaxed">
               <p className="text-text-dim whitespace-pre-line">{privacyTerms}</p>
             </div>
           ) : null}
@@ -399,7 +424,7 @@ export function PublicIntakeForm({
         {showService ? (
           <div className="space-y-3 pt-2">
             <h4 className="text-foreground text-sm font-bold">환불·학칙 안내 동의서</h4>
-            <div className="bg-bg-soft rounded-md p-4 text-[13px] leading-relaxed">
+            <div className="bg-bg-soft rounded-xl p-4 text-[13px] leading-relaxed">
               <p className="text-text-dim whitespace-pre-line">{serviceTerms}</p>
             </div>
             <label className="flex cursor-pointer items-center gap-2.5">

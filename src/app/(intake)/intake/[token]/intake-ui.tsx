@@ -8,17 +8,19 @@ import { useEffect, useRef, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export const inputCls =
-  "border-border bg-card text-foreground placeholder:text-text-faint h-11 w-full rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30";
+  "border-border bg-card text-foreground placeholder:text-text-faint h-11 w-full rounded-xl border px-3.5 text-sm outline-none focus:ring-2 focus:ring-primary/30";
 export const labelCls = "mb-1.5 block text-sm font-bold text-foreground";
 export const textareaCls =
-  "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30";
+  "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30";
 
-const TONE: Record<string, { bar: string; barText: string; border: string }> = {
-  gold: { bar: "bg-gold", barText: "text-foreground", border: "border-t-gold" },
-  amber: { bar: "bg-amber", barText: "text-white", border: "border-t-amber" },
-  danger: { bar: "bg-danger", barText: "text-white", border: "border-t-danger" },
-  ink: { bar: "bg-foreground", barText: "text-background", border: "border-t-foreground" },
-  primary: { bar: "bg-primary", barText: "text-white", border: "border-t-primary" },
+/** 접수 정보(1단계) 섹션 톤 — Editorial 전환(2026-07-19): 채도 높은 원색 바(gold/amber/danger 솔리드)는
+ *  QUESTION_TONE과 같은 이유(대비·탁함, 원장 지적 2026-07-15)로 폐기 — 음영(-soft) 바 + 좌측 색 액센트로 통일. */
+const TONE: Record<string, { bar: string; accent: string }> = {
+  gold: { bar: "bg-gold-soft", accent: "bg-gold" },
+  amber: { bar: "bg-amber-soft", accent: "bg-amber" },
+  danger: { bar: "bg-danger-soft", accent: "bg-danger" },
+  ink: { bar: "bg-bg-soft", accent: "bg-foreground" },
+  primary: { bar: "bg-primary-soft", accent: "bg-primary" },
 };
 
 /**
@@ -49,12 +51,12 @@ export function QuestionSection({
   const t = QUESTION_TONE[tone]!;
   return (
     <>
-      <div className={`mx-3 mt-5 flex items-baseline gap-2.5 px-4 py-3 ${t.bar}`}>
+      <div className={`mx-3 mt-5 flex items-baseline gap-2.5 rounded-t-2xl px-4 py-3 ${t.bar}`}>
         <span className={`mt-[3px] h-3.5 w-1 shrink-0 self-start rounded-full ${t.accent}`} aria-hidden />
         <span className="text-foreground flex-1 text-[15px] leading-snug font-bold break-keep">{title}</span>
         {hint ? <span className="text-text-dim shrink-0 text-[11px]">{hint}</span> : null}
       </div>
-      <div className={`bg-card mx-3 space-y-4 border-t-[3px] px-5 py-5 shadow-sm ${t.border}`}>{children}</div>
+      <div className="bg-card mx-3 space-y-4 rounded-b-2xl px-5 py-5 shadow-sm">{children}</div>
     </>
   );
 }
@@ -74,11 +76,12 @@ export function Section({
   const t = TONE[tone]!;
   return (
     <>
-      <div className={`mx-3 mt-5 flex items-baseline justify-between gap-2 px-5 py-3 ${t.bar}`}>
-        <span className={`text-sm font-bold ${t.barText}`}>{title}</span>
-        {hint ? <span className={`text-xs opacity-80 ${t.barText}`}>{hint}</span> : null}
+      <div className={`mx-3 mt-5 flex items-baseline gap-2.5 rounded-t-2xl px-4 py-3 ${t.bar}`}>
+        <span className={`mt-[3px] h-3.5 w-1 shrink-0 self-start rounded-full ${t.accent}`} aria-hidden />
+        <span className="text-foreground flex-1 text-sm font-bold break-keep">{title}</span>
+        {hint ? <span className="text-text-dim shrink-0 text-xs">{hint}</span> : null}
       </div>
-      <div className={`bg-card mx-3 space-y-4 border-t-[3px] px-5 py-5 shadow-sm ${t.border}`}>{children}</div>
+      <div className="bg-card mx-3 space-y-4 rounded-b-2xl px-5 py-5 shadow-sm">{children}</div>
     </>
   );
 }
