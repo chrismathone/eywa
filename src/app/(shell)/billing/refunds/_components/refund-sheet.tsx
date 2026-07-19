@@ -21,7 +21,7 @@ import { DeleteRefundButton, PrintRefundButton } from "./refund-buttons";
 
 const T = "w-full border-collapse text-[12px] leading-relaxed print:text-[11px] print:leading-snug";
 const cell = "border-foreground/35 border px-2 py-1.5 align-middle print:py-1";
-const head = `${cell} bg-bg-soft/70 text-center font-semibold whitespace-nowrap`;
+const head = `${cell} bg-bg-soft/70 text-center font-bold whitespace-nowrap`;
 const inputBase =
   "w-full min-w-0 rounded-sm bg-bg-soft/40 px-1.5 py-0.5 text-[12px] outline-none placeholder:text-text-faint/60 focus:bg-primary-soft/25 focus:ring-1 focus:ring-primary/50";
 
@@ -226,7 +226,7 @@ export function RefundSheet({
           </tr>
           <tr>
             <th className={head}>총 환불금액</th>
-            <td className={`${cell} num font-semibold`} colSpan={2}>
+            <td className={`${cell} num font-bold`} colSpan={2}>
               {field("r_totalAmount", r.totalAmount, { ph: "예: 200,000원" })}
             </td>
           </tr>

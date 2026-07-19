@@ -14,7 +14,7 @@ export function SuperAdminHeader({
     <header className="bg-background border-line sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-7">
       <div className="min-w-0">
         <div className="text-gold font-mono text-[11px] tracking-[1px] uppercase">{trail}</div>
-        <h1 className="text-foreground mt-0.5 truncate text-[19px] leading-none font-extrabold tracking-tight">
+        <h1 className="text-foreground mt-0.5 truncate text-[19px] leading-none font-bold tracking-tight">
           {title}
         </h1>
       </div>

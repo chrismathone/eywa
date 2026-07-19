@@ -7,7 +7,7 @@ function renderInline(text: string): ReactNode[] {
   return text.split(/(\*\*[\s\S]+?\*\*)/g).map((part, i) => {
     const m = part.match(/^\*\*([\s\S]+?)\*\*$/);
     return m ? (
-      <strong key={i} className="text-foreground font-semibold">
+      <strong key={i} className="text-foreground font-bold">
         {m[1]}
       </strong>
     ) : (

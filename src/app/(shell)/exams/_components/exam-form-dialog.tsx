@@ -94,7 +94,7 @@ function Dialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">시험 관리</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">
+            <h2 className="text-foreground mt-1 text-lg font-bold">
               {isEdit ? "시험 수정" : "시험 등록"}
             </h2>
           </div>

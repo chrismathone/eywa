@@ -63,7 +63,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
       <div className="bg-background border-border my-8 w-full max-w-lg rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-foreground inline-flex items-center gap-1.5 text-lg font-semibold">
+            <h2 className="text-foreground inline-flex items-center gap-1.5 text-lg font-bold">
               <QrCode className="text-primary size-5" />
               학부모 공개 접수 QR
             </h2>
@@ -114,7 +114,7 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                 />
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-foreground truncate text-sm font-semibold">{t.name}</p>
+                    <p className="text-foreground truncate text-sm font-bold">{t.name}</p>
                     {!t.isActive ? <span className="text-text-faint text-[10px]">(비활성)</span> : null}
                   </div>
                   <p className="text-text-faint break-all font-mono text-[10px]">{t.url}</p>

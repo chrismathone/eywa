@@ -57,7 +57,7 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             hint="강조색 · hex"
             value={p.brandColor}
             onChange={(v) => set({ brandColor: v })}
-            placeholder="#1a5f3c"
+            placeholder="#153e75"
           />
           <BrandingField
             label="로고 이미지"

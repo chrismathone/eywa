@@ -84,7 +84,7 @@ export default async function StaffDetailPage({
         <div className="flex items-center gap-3">
           <div className="space-y-1">
             <p className="eyebrow">직원</p>
-            <h1 className="display text-foreground text-2xl">{staff.displayName}</h1>
+            <h1 className="font-bold tracking-tight text-foreground text-2xl">{staff.displayName}</h1>
             <p className="text-text-dim num text-xs">{staff.email}</p>
           </div>
         </div>

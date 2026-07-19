@@ -249,7 +249,7 @@ export function ConsultationReportEditor({
               onClick={() => toggle(key)}
               className="hover:bg-bg-soft/60 flex w-full items-center justify-between px-3.5 py-2.5 text-left transition"
             >
-              <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-semibold">
+              <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-bold">
                 <EyIcon name={icon} size={15} />
                 {label}
               </h3>
@@ -340,7 +340,7 @@ export function ConsultationReportEditor({
             onClick={() => toggle(FLOW_KEY)}
             className="hover:bg-bg-soft/60 flex w-full items-center justify-between px-3.5 py-2.5 text-left transition"
           >
-            <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-semibold">
+            <h3 className="text-foreground flex items-center gap-1.5 text-[13px] font-bold">
               <EyIcon name="layers" size={15} />
               상담 흐름 수형도
             </h3>

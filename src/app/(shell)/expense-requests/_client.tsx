@@ -128,7 +128,7 @@ export function ExpenseRequestsClient({
                     </td>
                     <td className="px-2 py-2 text-center">
                       <span className="inline-flex items-center gap-1">
-                        {r.approvalStatus === "approved" ? <Check className="text-green size-3.5" strokeWidth={3} /> : null}
+                        {r.approvalStatus === "approved" ? <Check className="text-green size-3.5" strokeWidth={2.5} /> : null}
                         <Pill color={status.color}>{status.label}</Pill>
                       </span>
                     </td>

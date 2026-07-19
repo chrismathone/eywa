@@ -127,7 +127,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header className="border-border border-b pb-5">
         <p className="eyebrow">학원 설정</p>
-        <h1 className="display text-foreground text-2xl">{settings.profile.name || "학원"} 설정</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{settings.profile.name || "학원"} 설정</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)과
           역할·권한에서 위임받은 계정만 변경할 수 있고, 역할·권한 면은 원장 전용입니다.
@@ -152,7 +152,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           <PermissionsSection initial={settings.permissions} />
         ) : (
           <div className="bg-card border-line rounded-md border p-6">
-            <p className="text-foreground text-sm font-semibold">역할·권한은 원장(master)만 변경할 수 있습니다</p>
+            <p className="text-foreground text-sm font-bold">역할·권한은 원장(master)만 변경할 수 있습니다</p>
             <p className="text-text-dim mt-1 text-sm">
               위임받은 계정으로도 이 면(역할·권한)은 편집할 수 없어요 — 권한 자체를 바꾸는 일은 원장 계정 전용입니다.
               나머지 설정 면(프로필·운영 체계·과목·수납·알림)은 그대로 편집할 수 있습니다.

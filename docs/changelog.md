@@ -11,6 +11,124 @@ getTodaySchedule에 slot_teacher_label 배선). RTT2 라벨 4명(이주희·Sam�
 있어 행이 사라짐 — 영어 데이터 무변경(원장 "영어는 킵" 결정 존중). 반 담당 있는 반은 기존 귀속 불변(폴백만).
 함께 확인: 표의 '박소선' 행은 7/14 테스트 발송('학원이') 1건 때문이었고 주간 창 리셋(7/20 월)으로 자동 소멸.
 
+### Injaewon Editorial 전면 디자인 리팩토링 (2026-07-19) — ✅ tsc0/lint0/vitest1654/build✓ · 로직 무접촉
+**골: "상용 사이트 대비 허접함" 해소** — injaewon.blog의 구성 문법(eyebrow→헤드라인 위계·빅 스탯·소프트 패널·
+사진 캡션 카드·구조화 행 목록·여백 리듬·알약)을 전 화면에 이식 + 팔레트 v3 "Injaewon Navy"(#153e75 + 애플 뉴트럴).
+- 공용: [PageHeader](../src/components/page-header.tsx) 확장(eyebrow/stats 슬롯) · [BigStat](../src/components/atoms/big-stat.tsx)
+  (중복 Stat 6곳 수렴) · [PhotoCard](../src/components/atoms/photo-card.tsx)(Server, alt/sizes 필수, Next16 preload) ·
+  `.editorial-eyebrow`(기존 .eyebrow 불변) · `public/photos/` placeholder 10장(실사 덮어쓰기 계약 = [docs/photo-generation-prompts.md](photo-generation-prompts.md)).
+- 화면: 운영실(다크 밴드→KPI 카드·브리핑 행 목록·비서 챗) + P1 학생목록·시간표·출석부(PhotoCard 허브) +
+  P2 수업·수납(14열 돈 테이블 무접촉) + P3 상담·케어 + P4 운영·설정(도움말 사진 히어로) + P5 로그인·인테이크(사진 패널).
+- 브랜드색: color-utils LEGACY에 v1 forest·v2 pine 등록 — 테넌트 저장값 마이그 없이 자동 추종. chart-2 등 "긍정=그린" 시맨틱은 유지.
+- 감사 근거: docs/_audit/design-composition-audit-2026-07-19.json (10 에이전트 전 화면 감사). 기준선: work/design-baselines/(비커밋).
+
+### 수업보고서 발송 × 출결 연동 — 결석 게이트 서버 공용화(#77) (2026-07-19) — ✅ tsc0/lint0/vitest1661(+8) · 마이그 0 · 워커 무변경 · 적대리뷰(26에이전트) 확정 major 3건 반영
+6차원 병렬 조사(12에이전트)로 "결석=발송 제외"가 **클라 UI(grid.ts isRowActionable) 한 겹뿐**임을 확정 —
+서버 액션·관리자 발송 3경로·미발송 재촉 이벤트가 전부 무게이트(#77 우회 폭 + 결석 저장분을 '미발송'으로 재촉하는 거짓 알림 실재).
+- **순수 판정** [absence-gate.ts](../src/features/onescreen/absence-gate.ts)(Vitest 8): 차단 = 그날 그 과목 반들의
+  유효(최신 recorded_at, id tie-break=effective-records 동일) 출결이 **전부 absent/excused**일 때만. 기록 없음=통과
+  (fail-open), 조퇴·지각·보강 status=발송 유지(클라 규약 동일). 같은 과목 두 반(attendanceRaw 미채움 클라 사각)도 자연 판정.
+- **서버 게이트 5경로** + [server/absence-gate.ts](../src/features/onescreen/server/absence-gate.ts)(조회 헬퍼):
+  saveAndQueueClassnote(강사)·saveAndQueueAdminReport·sendBulkAdminReports(**결석 학생 행 생성 자체를 안 함**)·
+  retryClassnote(사후 결석 정정분 재발송 차단)·sendClassnoteForUnsent(발송 콘솔). status `"absent"` 반환 + 토스트/배지
+  안내 6곳. 출결 조회 실패 = **fail-closed**(모르면 안 보냄).
+- **v7 unsent_report 미러**: detectUnsentReports에 동일 게이트 — "게이트는 발송 콘솔과 동일" 불변식을 출결 축까지
+  복원(결석 저장분 거짓 재촉 해소). 원스크린 save=결석 포함(기록 보존) 정책은 불변.
+- **적대 리뷰 확정 3건 반영**: ① 출결 조회가 학생청크×다날짜 교차곱으로 1000행 silent 절단(B2/#54 — 절단=결석
+  학생 오발송) → `fetchAllPagedInChunks`+`order(id)` ② absent 반환이 기존 queued 재고를 방치 → "발송 안 함" 안내
+  직후 워커가 갱신 내용 게시 → **queued 회수**(`.eq queued` 조건부 null 복귀, processing 클레임은 불변)
+  ③ 보강 보고서(makeup·outOfClass)가 정규 반 결석 기록에 오차단(결석+같은 날 보강 참석 = 정당 발송) →
+  **makeup 신호는 전 경로 게이트 제외**(단건 input.makeup/outOfClass · 다건 lesson_reports.makeup).
+- ⚠️ 한계(의도·문서화): 게이트는 **큐잉 시점** — 이미 queued인 행은 출결 사후 정정을 미소급(킬스위치가 queued
+  재고를 못 막는 것과 동일 구조. 단 같은 행 재발송 시도 시엔 회수됨). 반 공지·resetStuckClassnote는 비대상.
+
+### G4 출석 완료 벨 — 멀티에이전트 적대 리뷰(사후) + 확정 결함 수정 (2026-07-19) — ✅ tsc0/lint0/vitest1653 · 마이그 0
+136b40ae의 미실시 적대 리뷰를 완료(6차원 파인더 + 발견당 반박·재현 2표, 44 에이전트). CONFIRMED 8이슈 중 6건 수정:
+- **[치명] `classes.name` 컬럼 부재** — select가 42703로 죽고 error는 삼켜져 **벨이 단 한 번도 안 울리는 완전 데드 기능**이었음
+  (admin client 무타입이라 tsc 미검출). `class_name`으로 수정 + 본문 `klass.class_name`.
+- **[상] 분리등원(attendance_days) 미반영** — 그 요일 비등원 학생을 예정 명단에 포함해 분리등원 있는 반은 완료 전이가
+  영원히 불가능했음 → 처리현황(getDailyProcessingStatus)과 동일 규약(enrollmentAttendsOnDay)으로 통일.
+- **[중] 키오스크 미훅 갭** — reflectPresent가 완결 기록이면 벨 미발화 → 삽입 성공 후 after() 훅 추가(actorId=null 시스템 이벤트).
+- **[중] 미래 날짜 가드 부재** — 매트릭스는 이번 달 미래 칸도 입력 가능해 "완료" 벨 선발화 + dedup 선소모 → `date > today` 무발화
+  (+비정규형 YMD 가드). **[하] dedup을 수신자 확인 뒤로** — 비활성 강사 순간에 dedup만 소모되는 것 방지(강사 확인을 B4 병렬에 편입).
+  **[하] 수신자 active 규약** — `status==="inactive"` 부정형이 pending을 통과시킴 → `.eq("status","active")` (events.ts 규약).
+- 조회 error 전부 throw→reportError(무발화 종료) — 컬럼 오타가 소리 없이 기능을 죽인 회귀 방지. REFUTED: dedup-후-notify 실패
+  창(베스트에포트 의도), 3일 창 표현(오늘+3일=의도). **미수정(알려진 한계, 낮음)**: 명단 축소(수강 종료 편집)로 완결되는 경로 미훅
+  (출결 쓰기가 아닌 enrollment 편집 훅 필요 — 벨 UX 자체가 재검토 대상), teacher_id 단일 수신(스키마 한계, 공동강사 개념 없음).
+
+### 출석 완료 → 담당 강사 벨 G4 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1653 · 마이그 0 · ClassNote 로드맵 완주
+**골: 보고서 쓰기가 "가는 일"이 아니라 "오는 일"** — 출석이 끝나는 순간 강사 벨 → 원스크린 →
+(G5 이전값 일괄+G6 반 서술+자동작성) 기존 파이프라인이 흐름 완성(136b40ae). 로드맵(plans/
+glowing-seeking-matsumoto.md) G1~G6 전 단계 main 반영 완료.
+- 완료 판정 = (반,날짜) 활성 수강생 전원 기록([attendance-complete.ts](../src/features/attendance/attendance-complete.ts)
+  순수, isEnrollmentActiveOn 규약). 훅 = 출결 저장 액션 **after() 백그라운드**(best-effort, 삭제 경로 미발화).
+- dedup = notification_events(subject=classId, bucket=날짜) 1회 + **최근 3일 밖 무발화**(과거 정정이 뒤늦은
+  완료 벨로 안 울리게). **본인이 찍으면 벨 없음**(actorId=notifyUsers 스킵) — 데스크가 찍었을 때만 강사 도착.
+- 자동화는 알림까지(MVP) — 프리필·행 생성은 G5 깊은판 provenance 선결(후속 별도 승인).
+  ~~⚠️ 멀티에이전트 적대 리뷰 미실시(세션 한도)~~ → **✅ 2026-07-19 재검 완료**(위 항목) — 치명 1건 포함 6건 수정.
+
+### 원스크린 반 공통 서술 → 학생별 멘트 분기 G6 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1649 · 마이그 0 · 적대리뷰 major 2건 반영
+ClassNote 로드맵 4단계(d7f6037a). **골: 반 서술 1회 = 학생 N명의 서로 다른 멘트**(서술 = 생성 재료, 기록 아님).
+- 표 툴바 "반 서술" 팝오버(반 특정 시만 활성, #22) → sessionStorage(날짜 키)+useSyncExternalStore
+  (#75·#25 회피) → `generateDraftFor`(카드·표·일괄 공용)가 행의 **classId**로 조회해 `classContext`로 동봉.
+- fact 블록 동봉 가드("반 공통 수업 맥락(참고용 — 학생 정보 우선)") — 데이터에 실어 DB 프롬프트
+  오버라이드 무관 상시 적용. 모드 B는 P1만. **앵커**: 개별 사실 1개+일 때만(반 서술 단독 문단=환각 차단).
+- 적대 리뷰 major 2: ①여러 줄 서술 2번째 줄부터 무가드 개별 사실 위장 → **개행 접기**(빌더+서버 이중)
+  ②동명 반 이름 키 교차 주입 → **classId 키 + orderClass 가드**(순서 기능 동명 가드 동일).
+- 서버 300자 상한·hasFacts 게이트 불포함(반 서술만으론 생성 거부). 미입력 시 기존 동작과 완전 동일.
+- 후속 여지: 카드뷰 서술 입력 미노출(표=대량 작성 표면이 의도) · 직렬 15회 LLM 병목은 별도 perf 티켓(로드맵).
+
+### 랜딩 리디자인 "Precision Pine" — 파스텔 크림 → 잉크 그린 정밀 톤 (2026-07-19) — ✅ tsc0/lint0 · 데스크톱/모바일 실렌더 검증 · main 07a04dee
+원장 지시("디자인이 파스텔틱해서 안 세련됨 → 랜딩부터 완전 최신화")의 1단계. **`.ey-landing` 스코프 토큰
+오버라이드만** 사용 — 앱 본체 globals.css 불변(전면 리스킨은 후속 단계, brandColor 3중 커플링 조사 완료).
+- 팔레트: 웜 아이보리 #fbf9f3/#f1ede2 → 쿨 포슬린 #f8faf8/미스트 #eef2ef, primary #1a5f3c → **#0e7c46**,
+  다크 파인 로컬 변수(--pine #0c1712·--mint #4ade97)로 **다크 북엔드**(시그니처 콘솔+클로징+푸터) 신설.
+- 시그니처: 16:02 파스텔 4색 카드 팬 → **다크 '운영 콘솔' 로그 스트림**(mono +0.1s~+0.4s 순차 점등 + 거대 0.4s).
+  전 섹션 eyebrow = `[HH:MM]` 타임스탬프 스파인([eyebrow.tsx](../src/app/(marketing)/_ui/eyebrow.tsx)) — "하루의 결" 시각화.
+- BrowserFrame 맥 신호등 → **eywa 플로팅 창 크롬**(실제 제품 창 시스템 재현). Fraunces serif 제거(폰트 로드 절감).
+  CTA 필 라운드, 세그먼트 탭 잉크 활성, AI 배지 "Claude · DeepSeek 엔진"(현 제품 사실 정합).
+- ⚠️ Tailwind v4 `@theme inline`: **색 유틸은 var() 참조라 스코프 오버라이드 가능, radius/shadow 토큰은 리터럴
+  인라인이라 불가**(랜딩은 마크업 arbitrary로 해결). 워크트리 dev는 `.env.local` 복사 필수(미추적).
+- 잔여: 사진 3장(_img/*.webp) 웜 그레이딩 구판 유지 — codex 재생성 프롬프트 전달됨(쿨 그레이드), 수령 시 교체.
+
+### 원스크린 로스터 신호 배지 G3+G2 + 이전값 일괄 채우기 G5 (2026-07-19, 0124a) — ✅ tsc0/lint0/vitest1642 · 적대리뷰 확정 2계열 반영
+ClassNote 로드맵(plans/glowing-seeking-matsumoto.md) 2·3단계. 커밋 3: b634f6ea(G3+G2)·32523ec0(G5)·173c6dd5(리뷰픽스).
+- **G3 '학부모 미확인 N회' 배지**(그리드·카드): **0124a** RPC `onescreen_parent_read_stats`(학생별 최근 5건
+  추적가능=edutrix_share_token∨classnote_sent_at 중 읽음 통계, security invoker+auth_tenant_id, 학생당 1행=절단
+  불가) → 로스터 블록5 합류(B4) → 순수 판정 [roster-signals.ts](../src/features/onescreen/roster-signals.ts).
+  ⚠️ **판정 = lastReadAt 실증 필수** — 실측(07-19) 이 조건 없이는 **155명 오탐**(읽음 파이프라인 갓 가동이라
+  read_at 희소 — "안 읽음"과 "추적 안 됨"을 구분 불가). 조건 추가로 현재 0명(무오탐 콜드스타트), 폴러 가동 후
+  '읽다가 끊긴' 학부모만 자연 부상. 한 번도 안 읽는 학부모는 v1 미커버 — **폴러 2~3주 가동 후 완화 재검토**(백로그).
+  aged 기준일=KST(UTC current_date는 00~09시 경계 하루 밀림, 리뷰)·last_read 창 30건 bound. 카피 "미확인"(단정 금지).
+- **G2 '진도 확인 필요' 배지**(math 행만) + **벨**(`detectProgressAnomaly`, grade_drop 동형·bucket=pe:{eventId}
+  전이·콜드스타트 시드): 최근 14일 jump/overlap 이벤트만. ⚠️ **regression 제외**(실측 14일 80건/50명=복습 소음)
+  + ⚠️ **errored 컨테이너 제외**(리뷰 확정 major — errored는 해제 경로가 없는 종결 묘비라 시간 bound 없이 쓰면
+  과거 점프 이력 전원 영구 배지=신호 붕괴. 모든 점프가 이벤트를 남겨 14일 창이 자연 소멸판). 벨 라우팅 =
+  `getStudentActiveTeachers`에 subjectScope 옵션 신설 → **수학 반 강사만**(리뷰 확정 #77형: 영어만 담당 강사에게
+  보내면 할 수 없는 일 재촉) + 본문 "수학" 명시.
+- **G5 '이전값 일괄 채우기'**(표 툴바): 선택(없으면 표시 전체) 행의 빈 칸을 이전 회차 값으로 일괄
+  채움(`bulkImportPrev`, bulkApplyValues 규약 대칭). planPrevFill 재사용 = 특이사항·교재 제외·빈 칸만 자동 준수.
+  깊은판(provenance)은 G4 설계로 이관(로드맵).
+- ⚠️ G3 데이터는 읽음동기화 폴러(연동 PC, 07-18 가동)가 채움 — 배지 자체는 즉시 유효(현재 0명=정상).
+  신호 조회 3곳 fail-soft + console.error(무로그 삼킴 금지, 리뷰). cron 관측 문자열에 진도이상 카운트 합류.
+
+### 시간표 기본뷰 '빈 교시 접기' (2026-07-19, C안) — ✅ tsc0/lint0/vitest1629/build✓ · 적대리뷰 확정 1건 반영
+07-18 감사에서 보류했던 빈 교시 222px 밴드 해소 — 원장 C안 채택: 숨김이 아니라 **축소**(36px 밴드, 교시 축·격자 지형 유지).
+- **토글 "빈 교시 접기"**(기본뷰 툴바, 기본=펼침) — URL `emptyperiods=collapse|expand` **양방향 명시 직렬화**(emptydays
+  토글 사망 전례 규약, buildHref 전 호출부 명시 전달) + 쿠키(`eywa-tt-emptyperiods`, [prefs-sync.tsx](../src/app/(shell)/timetable/_components/prefs-sync.tsx)) 기기 기억.
+- **접힌 행 높이 = CSS 변수** `var(--tt-empty-h, 36px)` — 편집 모드엔 [EmptyPeriodScope](../src/app/(shell)/timetable/_components/empty-period-scope.tsx)(클라, display:contents)가
+  변수 풀 높이 + `.tt-editing` 클래스로 **서버 리렌더 없이 즉시 평소 격자 복원**(편집 토글=soft state).
+- **rowSpan 안전 근거**: computeBlocks는 빈 셀을 병합 안 함 → 병합 블록은 점유(풀 높이) 행만 걸침 → 블록 높이 산식 불변.
+  가변 높이는 tr + 수학계열 그룹 라벨(2행 합산=stackedHeights calc, 변수 보존)뿐. 순수 함수 [empty-period-rows.ts](../src/features/timetable/lib/empty-period-rows.ts)(+Vitest 4, PERIOD_ROW_H 단일 소스화).
+- **적대 리뷰(7 에이전트) 확정 1건(LOW) 수정**: 편집 모드가 높이만 펼치고 접힌 교시 라벨은 압축 스타일(10px 한 줄)로
+  남아 이웃 라벨과 어긋남 → 접힌 라벨에 `[.tt-editing_&]` 변형으로 평소 두 줄 스타일 복원(듀얼 마크업, CSS만으로 전환).
+- 엑셀/시트 내보내기는 접기 **미반영**(기본뷰 엑셀=시트 라운드트립 소스라 구조 불변). 드롭 존은 점유 셀 안에만
+  등록되므로 접기가 편집 기능을 깨진 않음(자동 펼침은 편집 시야 원형 복원 목적).
+- **브라우저 실검증(원장 로그인) 중 잡은 후속 픽스(#81)**: 쿠키 이름 상수를 "use client"(prefs-sync)에서 서버가
+  import → **클라 참조 프록시로 런타임 undefined** → `cookieStore.get(undefined)` = 쿠키 기본값(기기 기억) 침묵 사망
+  (emptydays도 동병 — 어제 2차부터 잠복). 상수를 일반 모듈 [pref-cookies.ts](../src/features/timetable/lib/pref-cookies.ts)로
+  분리해 해소. 실측 검증: 접힘 36px/점유 222px·토글 양방향·편집 모드 확장+라벨 복원(`.tt-editing`)·서버 쿠키 파싱 정상.
+
 ### ClassNote 발송 허용 시간대 = 예약발송 (2026-07-19) — ✅ tsc0/lint0/vitest1614 · 마이그 0 · 적대리뷰 확정 2건 반영
 밤 수업 보고서가 밤에 학부모 폰을 울리던 문제(원장이 잊었다 되찾은 아이디어) — 학원설정 > 보고서 >
 **발송 허용 시간대**(KST HH:MM 한 쌍, 매일 동일)를 넣으면 창 밖 발송분은 큐 보존 대기, 창 진입 시 워커가 자동 발송.

@@ -70,44 +70,44 @@ export function KanbanFilters({
   const nextMonth = shiftMonth(displayMonth, 1);
 
   return (
-    <div className="border-border bg-card flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2.5">
+    <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
       {/* 월 navigator */}
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground shrink-0 text-xs">월</span>
+        <span className="micro mr-1 shrink-0">월</span>
         <Link
           href={`/enrollment${buildQuery({ ...base, month: prevMonth })}`}
-          className="border-border hover:bg-accent/30 inline-flex size-7 items-center justify-center rounded-sm border text-xs"
+          className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
           aria-label="이전 달"
         >
           <EyIcon name="chevronLeft" size={14} />
         </Link>
-        <span className="text-foreground min-w-[88px] text-center text-[13px] font-semibold tabular-nums">
+        <span className="text-foreground num min-w-[88px] text-center text-[13px] font-bold">
           {formatMonth(displayMonth)}
         </span>
         <Link
           href={`/enrollment${buildQuery({ ...base, month: nextMonth })}`}
-          className="border-border hover:bg-accent/30 inline-flex size-7 items-center justify-center rounded-sm border text-xs"
+          className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
           aria-label="다음 달"
         >
           <EyIcon name="chevronRight" size={14} />
         </Link>
         <Link
           href={`/enrollment${buildQuery({ ...base, month: null })}`}
-          className={`ml-1 rounded-md border px-2 py-0.5 text-xs transition ${
+          className={`ml-1 shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
             !selectedMonth
               ? "border-foreground bg-foreground text-background font-medium"
-              : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
+              : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
           }`}
         >
           전체
         </Link>
       </div>
 
-      <span className="text-muted-foreground/40 hidden text-xs sm:inline">·</span>
+      <span className="bg-line hidden h-4 w-px sm:block" aria-hidden />
 
       {/* 상담사 dropdown */}
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground shrink-0 text-xs">상담사</span>
+        <span className="micro shrink-0">상담사</span>
         <FilterSelect
           paramName="consultant"
           value={selectedConsultant}
@@ -118,7 +118,7 @@ export function KanbanFilters({
 
       {/* 진행 상태 dropdown (고급 필터) */}
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground shrink-0 text-xs">상태</span>
+        <span className="micro shrink-0">상태</span>
         <FilterSelect
           paramName="outcome"
           value={selectedOutcome}
@@ -129,14 +129,14 @@ export function KanbanFilters({
       </div>
 
       {/* 뷰 토글 — 칸반 ↔ 목록 */}
-      <div className="border-border inline-flex items-center gap-0.5 rounded-md border p-0.5">
+      <div className="border-line inline-flex items-center gap-0.5 rounded-full border p-0.5">
         <Link
           href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "kanban" })}`}
           aria-label="칸반 보기"
-          className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition ${
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition ${
             view === "kanban"
               ? "bg-foreground text-background font-medium"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-text-dim hover:text-foreground"
           }`}
         >
           <LayoutGrid className="size-3.5" />
@@ -145,10 +145,10 @@ export function KanbanFilters({
         <Link
           href={`/enrollment${buildQuery({ ...base, month: selectedMonth, view: "table" })}`}
           aria-label="목록 보기"
-          className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs transition ${
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition ${
             view === "table"
               ? "bg-foreground text-background font-medium"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-text-dim hover:text-foreground"
           }`}
         >
           <List className="size-3.5" />
@@ -162,7 +162,7 @@ export function KanbanFilters({
       <WindowLink
         href="/enrollment/dashboard"
         title="등록상담 대시보드"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs"
+        className="text-text-dim hover:text-foreground inline-flex items-center gap-1.5 text-xs"
       >
         <BarChart3 className="size-3.5" />
         대시보드 보기

@@ -43,7 +43,7 @@ function TreeNode({ node, depth }: { node: ConversationFlowNode; depth: number }
             <MessageCircle className="text-text-faint mt-0.5 size-3.5 shrink-0" />
           )}
           <div className="min-w-0">
-            <span className="text-foreground text-sm font-semibold break-keep">{node.topic}</span>
+            <span className="text-foreground text-sm font-bold break-keep">{node.topic}</span>
             {node.summary ? (
               <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed break-keep">
                 {node.summary}

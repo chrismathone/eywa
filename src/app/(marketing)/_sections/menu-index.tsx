@@ -1,6 +1,7 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { MENU_EXCLUDED, MENU_INDEX } from "@/data/marketing";
 import { Reveal } from "../_motion/reveal";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 
 export function MenuIndexSection() {
@@ -8,12 +9,10 @@ export function MenuIndexSection() {
     <SectionShell id="menus" tone="soft" bordered pad="lg">
       <div className="max-w-[44rem]">
         <Reveal variant="up">
-          <p className="text-text-faint font-mono text-[11px] font-bold tracking-[0.16em] uppercase">
-            12 메뉴 · 한 장의 운영 명세서
-          </p>
+          <Eyebrow label="12 메뉴 · 한 장의 운영 명세서" tone="dim" />
         </Reveal>
         <Reveal variant="clip" delay={60}>
-          <h2 className="text-foreground mt-5 text-[clamp(2rem,4.2vw,3.3rem)] leading-[1.18] font-extrabold tracking-[-0.025em]">
+          <h2 className="text-ink mt-5 text-[clamp(2rem,4.2vw,3.3rem)] leading-[1.15] font-extrabold tracking-[-0.035em]">
             하루를 움직이는
             <br />
             열두 개의 도구.
@@ -29,7 +28,7 @@ export function MenuIndexSection() {
 
       {/* 점선 리더 목차 */}
       <Reveal variant="up" delay={120} className="mt-10">
-        <ul className="bg-card border-line rounded-2xl border px-3 py-3 sm:px-5 sm:py-4">
+        <ul className="bg-card border-line rounded-[16px] border px-3 py-3 shadow-[0_1px_2px_rgba(11,16,13,0.04),0_16px_40px_-24px_rgba(11,16,13,0.12)] sm:px-5 sm:py-4">
           {MENU_INDEX.map((m, i) => {
             const showGroup = i === 0 || MENU_INDEX[i - 1].group !== m.group;
             return (
@@ -39,16 +38,16 @@ export function MenuIndexSection() {
                     {m.group}
                   </p>
                 ) : null}
-                <div className="ey-row group flex items-baseline gap-3 rounded-lg px-3 py-3">
+                <div className="ey-row group flex items-baseline gap-3 rounded-[10px] px-3 py-3">
                   <span className="text-text-faint w-6 shrink-0 font-mono text-[12px] font-bold">{m.no}</span>
-                  <span className="bg-primary-soft text-primary flex size-7 shrink-0 translate-y-[2px] items-center justify-center rounded-md transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <span className="bg-bg-soft text-text-dim group-hover:bg-ink flex size-7 shrink-0 translate-y-[2px] items-center justify-center rounded-[8px] transition-colors group-hover:text-[var(--mint)]">
                     <EyIcon name={m.icon} size={15} />
                   </span>
                   <span className="text-foreground flex shrink-0 items-center gap-1.5 text-[15px] font-bold">
                     {m.name}
                     {m.core ? (
                       <>
-                        <span className="bg-gold size-1.5 rounded-full" aria-hidden="true" />
+                        <span className="bg-primary size-1.5 rounded-full" aria-hidden="true" />
                         <span className="sr-only">핵심 메뉴</span>
                       </>
                     ) : null}

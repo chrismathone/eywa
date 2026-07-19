@@ -68,7 +68,7 @@ function ScoreBlock({
             onClick={() => setVal((test.score ?? 0) + 1)}
             className="border-line text-text-dim hover:bg-bg-soft flex h-3.5 w-5 items-center justify-center rounded-t-sm border"
           >
-            <EyIcon name="chevronUp" size={9} strokeWidth={2} />
+            <EyIcon name="chevronUp" size={9} strokeWidth={1.8} />
           </button>
           <button
             type="button"
@@ -76,12 +76,12 @@ function ScoreBlock({
             onClick={() => setVal((test.score ?? 0) - 1)}
             className="border-line text-text-dim hover:bg-bg-soft -mt-px flex h-3.5 w-5 items-center justify-center rounded-b-sm border"
           >
-            <EyIcon name="chevronDown" size={9} strokeWidth={2} />
+            <EyIcon name="chevronDown" size={9} strokeWidth={1.8} />
           </button>
         </div>
         {!empty ? <DeltaChip score={test.score} prev={test.prevScore} /> : null}
         {!empty ? (
-          <span className="text-text-dim tabular ml-auto text-[12px] font-semibold">
+          <span className="text-text-dim tabular ml-auto text-[12px] font-bold">
             {pct(test.score ?? 0, test.max)}%
           </span>
         ) : null}

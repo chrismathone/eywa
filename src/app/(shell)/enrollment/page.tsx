@@ -1,7 +1,8 @@
 import { Suspense } from "react";
-import { QrCode, UserPlus } from "@/components/icons/eywa-icon-compat";
+import { QrCode } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
 import { getUnpushedIntakeConsultations } from "@/features/integrations/server/makeedu-sync";
@@ -90,31 +91,46 @@ export default async function EnrollmentPage({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인 + 인라인 스탯 행(시간표 패턴: BigStat 카드 대신 밀도 우선).
+          '등록 전환율'(outcome=enrolled 라벨 기반)은 실제 학생 미생성 건까지 세어 과대였음 →
+          진짜 완료 지표인 '배정 완료(수업≥1)' 건수 유지(정직). */}
+      <PageHeader
+        eyebrow="등록 상담"
+        title="등록상담"
+        actions={
+          <>
+            <Suspense
+              fallback={
+                <Button variant="outline" size="sm" disabled>
+                  <QrCode className="size-4" />
+                  공개 접수 QR
+                </Button>
+              }
+            >
+              <IntakeQrSection />
+            </Suspense>
+            <NewEnrollmentTrigger />
+          </>
+        }
+        stats={
+          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-1 whitespace-nowrap">
+            <span className="text-[13px]">
+              <b className="num text-foreground text-[17px] font-bold">{items.length}</b>{" "}
+              <span className="text-text-dim">{filterActive ? "필터 결과" : "전체"}</span>
+            </span>
+            <span className="text-[13px]">
+              <b className="num text-gold text-[17px] font-bold">{aiDone}</b>{" "}
+              <span className="text-text-dim">AI 분석 완료</span>
+            </span>
+            <span className="text-[13px]">
+              <b className="num text-primary text-[17px] font-bold">{assigned.length}</b>{" "}
+              <span className="text-text-dim">배정 완료</span>
+            </span>
+          </div>
+        }
+      />
       <MakeeduSyncBadge domain="prospects" />
-      {/* 상단 헤더 — 통계 + 신규등록 (기존 AI 그래픽 배너 제거, 통계만 유지) */}
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-text-dim text-[13px]">
-          {/* '등록 전환율'(outcome=enrolled 라벨 기반)은 실제 학생 미생성 건까지 세어 과대였음 →
-              진짜 완료 지표인 '배정 완료(수업≥1)' 건수로 교체(정직). */}
-          {filterActive
-            ? `필터 적용 ${items.length}건 · AI 완료 ${aiDone}건 · 배정 완료 ${assigned.length}건`
-            : `전체 ${items.length}건 · AI 분석 완료 ${aiDone}건 · 배정 완료 ${assigned.length}건`}
-        </p>
-        <div className="flex items-center gap-2">
-          <Suspense
-            fallback={
-              <Button variant="outline" size="sm" disabled>
-                <QrCode className="size-4" />
-                공개 접수 QR
-              </Button>
-            }
-          >
-            <IntakeQrSection />
-          </Suspense>
-          <NewEnrollmentTrigger />
-        </div>
-      </header>
 
       <KanbanFilters
         selectedMonth={selectedMonth}
@@ -130,11 +146,16 @@ export default async function EnrollmentPage({
       {pushCandidates.length > 0 ? <MakeeduPushCard candidates={pushCandidates} /> : null}
 
       {items.length === 0 ? (
-        <EmptyState
-          image="enrollment"
-          icon={() => <UserPlus size={32} strokeWidth={1.5} />}
-          title="진행 중인 상담이 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/enrollment-hero.webp"
+            alt=""
+            caption="진행 중인 상담이 없습니다"
+            sub="QR 공개 접수 또는 신규 등록으로 첫 상담을 시작해 보세요"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : view === "table" ? (
         <EnrollmentTable rows={items} />
       ) : (

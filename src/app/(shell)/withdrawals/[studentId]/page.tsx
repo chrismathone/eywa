@@ -45,7 +45,7 @@ export default async function WithdrawalDetailPage({
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">
           <p className="eyebrow">퇴원 학생</p>
-          <h1 className="display text-foreground text-3xl">{detail.name}</h1>
+          <h1 className="font-bold tracking-tight text-foreground text-3xl">{detail.name}</h1>
           <p className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
             {detail.grade ? <span>{detail.grade}</span> : null}
             {detail.school ? <span>· {detail.school}</span> : null}
@@ -113,7 +113,7 @@ export default async function WithdrawalDetailPage({
         <header className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BookOpen className="text-primary size-4" />
-            <h2 className="text-foreground text-sm font-semibold">수강 이력</h2>
+            <h2 className="text-foreground text-sm font-bold">수강 이력</h2>
           </div>
           <p className="text-muted-foreground num text-xs">{detail.enrollmentHistory.length}건</p>
         </header>

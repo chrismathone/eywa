@@ -30,7 +30,7 @@ export default async function ConsultationStatsPage() {
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">상담 통계</p>
-        <h1 className="display text-foreground text-2xl">최근 6개월</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">최근 6개월</h1>
         <p className="text-muted-foreground mt-1 text-sm">전환율 · 사유 분포 · 월별 추세</p>
       </header>
 
@@ -56,7 +56,7 @@ export default async function ConsultationStatsPage() {
       {/* 상담 필요 학생 — 30일 이상 미상담(또는 미상담 이력) 재원생 워크리스트 */}
       <section className="bg-card border-border rounded-md border p-5">
         <header className="mb-3 flex items-baseline justify-between">
-          <h2 className="text-foreground text-sm font-semibold">
+          <h2 className="text-foreground text-sm font-bold">
             상담 필요 학생
             <span className="text-muted-foreground num ml-2 text-xs font-normal">
               30일+ 미상담 {needed.total}명

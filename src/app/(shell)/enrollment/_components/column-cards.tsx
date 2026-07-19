@@ -64,10 +64,10 @@ export function ColumnCards({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="min-w-0">
-                      <p className="text-foreground flex items-center gap-1 text-[13px] font-bold">
+                      <p className="text-foreground flex items-center gap-1.5 text-[13.5px] font-bold">
                         {c.prospectName}
                         {c.fromPublicIntake ? (
-                          <span className="bg-primary-soft text-primary rounded px-1 py-0.5 text-[9px] font-bold" title="학부모 QR 접수">
+                          <span className="bg-primary-soft text-primary rounded-full px-2 py-0.5 text-[11px] leading-none font-bold" title="학부모 QR 접수">
                             QR
                           </span>
                         ) : null}
@@ -85,14 +85,14 @@ export function ColumnCards({
                                     e.preventDefault();
                                     e.stopPropagation();
                                   }}
-                                  className="bg-amber-soft text-amber cursor-pointer rounded px-1 py-0.5 text-[9px] font-bold hover:brightness-95"
+                                  className="bg-amber-soft text-amber cursor-pointer rounded-full px-2 py-0.5 text-[11px] leading-none font-bold hover:brightness-95"
                                 />
                               }
                             >
                               상담 {c.personConsultCount}건
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" className="w-60 p-1.5">
-                              <p className="text-text-faint px-1 pb-1 text-[10px] font-medium">
+                              <p className="text-text-faint px-1 pb-1 text-[11px] font-medium">
                                 이 학생의 등록상담 {c.personConsultCount}건
                               </p>
                               {c.personConsults.map((s) => {
@@ -123,7 +123,7 @@ export function ColumnCards({
                         {c.syncAddedAt ? <MakeeduOriginTag /> : null}
                         <EditingBadge scope={`consultation:${c.id}`} />
                       </p>
-                      <p className="text-text-dim text-[11px]">
+                      <p className="text-text-dim mt-0.5 text-[12px]">
                         {c.prospectGrade ?? "—"}
                         {c.prospectSchool ? <> · {c.prospectSchool}</> : null}
                         {assigned ? <span className="text-primary"> · 수업 {c.assignedClassCount}개</span> : null}
@@ -133,11 +133,11 @@ export function ColumnCards({
                   <Pill color={pill.color}>{pill.label}</Pill>
                 </div>
                 {c.parentRequest ? (
-                  <p className="text-text-dim mt-2 line-clamp-2 text-[11px] leading-snug">
+                  <p className="text-text-dim mt-2 line-clamp-2 text-[12px] leading-snug">
                     {c.parentRequest}
                   </p>
                 ) : null}
-                <div className="text-text-faint mt-2 flex items-center justify-between text-[10px]">
+                <div className="text-text-faint mt-2 flex items-center justify-between text-[11.5px]">
                   <span>{c.consultantName ?? "—"}</span>
                   <span className="num">{relativeTimeKo(c.consultedAt)}</span>
                 </div>

@@ -53,7 +53,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           >
             <EyIcon name="chevronLeft" size={14} />
           </Link>
-          <span className="text-foreground num text-sm font-semibold">
+          <span className="text-foreground num text-sm font-bold">
             {y}년 {Number(m)}월
           </span>
           <Link
@@ -138,7 +138,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                       <span className="text-text-faint text-xs">—</span>
                     )}
                   </td>
-                  <td className="num px-3 py-2 text-right font-semibold">
+                  <td className="num px-3 py-2 text-right font-bold">
                     {isComputable(r) ? (
                       <span className="text-foreground">{fmtWon(r.settlement!)}</span>
                     ) : (
@@ -155,7 +155,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
                 <td className="text-text-dim px-3 py-2" colSpan={5}>
                   산정 급여 합계 (미설정·미배정 제외)
                 </td>
-                <td className="num px-3 py-2 text-right font-semibold">{fmtWon(view.totals.settledTotal)}</td>
+                <td className="num px-3 py-2 text-right font-bold">{fmtWon(view.totals.settledTotal)}</td>
               </tr>
             </tfoot>
           </table>

@@ -199,7 +199,7 @@ export function TextbookRequestClient({
                 <span className="text-text-dim block text-[12px] font-medium">
                   학생 이름 <span className="text-danger">*</span>
                   {studentIds.length > 0 ? (
-                    <span className="text-primary ml-1 font-semibold">· {studentIds.length}명</span>
+                    <span className="text-primary ml-1 font-bold">· {studentIds.length}명</span>
                   ) : null}
                 </span>
                 {/* 여러 명 추가 가능 — 같은 교재를 선택한 학생 전원에게 요청서 1장씩 발행 */}

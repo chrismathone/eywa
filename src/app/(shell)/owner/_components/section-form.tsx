@@ -67,7 +67,7 @@ export function SectionForm({
 
   return (
     <div className="space-y-4">
-      <form id={formId} action={formAction} ref={formRef} className="space-y-5">
+      <form id={formId} action={formAction} ref={formRef} className="space-y-6">
         <input type="hidden" name="section" value={section} />
         <input type="hidden" name="data" value={JSON.stringify(payload)} />
         {children}
@@ -76,7 +76,7 @@ export function SectionForm({
           전체 콘텐츠의 맨 아래(창 하단)에 sticky로 붙도록. 저장 버튼은 form 속성으로 위 폼과 연결. */}
       {footer}
       <FormActionBar>
-        {state?.ok ? <span className="text-primary mr-1 text-[12px] font-semibold">저장됨 · 테넌트 전체 적용</span> : null}
+        {state?.ok ? <span className="text-primary mr-1 text-[12px] font-bold">저장됨 · 테넌트 전체 적용</span> : null}
         {state?.error ? <span className="text-danger mr-1 text-[12px]">{state.error}</span> : null}
         <button
           type="submit"
@@ -104,7 +104,7 @@ export function SettingsCard({
   span2?: boolean;
 }) {
   return (
-    <section className={`border-border bg-card rounded-lg border p-5 ${span2 ? "xl:col-span-2" : ""}`}>
+    <section className={`bg-card shadow-card rounded-2xl p-5 ${span2 ? "xl:col-span-2" : ""}`}>
       <h3 className="text-foreground text-sm font-bold">{title}</h3>
       {description ? <p className="text-text-dim mt-1 text-[12px]">{description}</p> : null}
       <div className="mt-4">{children}</div>

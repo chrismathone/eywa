@@ -44,7 +44,7 @@ export function MeetingTitleEditor({ meetingId, title }: { meetingId: string; ti
 
   if (!editing) {
     return (
-      <h1 className="display text-foreground group flex items-center gap-2 text-3xl">
+      <h1 className="font-bold tracking-tight text-foreground group flex items-center gap-2 text-3xl">
         {title}
         <button
           type="button"

@@ -43,7 +43,7 @@ export function WeekNav({
           <ChevronRight size={13} strokeWidth={2.5} />
         </Link>
       </div>
-      <span className="text-text-dim font-mono text-[11px] whitespace-nowrap">{weekLabel(currentWeek)}</span>
+      <span className="text-text-dim num text-[11px] whitespace-nowrap">{weekLabel(currentWeek)}</span>
       {!isCurrent ? (
         <span
           className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { notifyIfClassAttendanceComplete } from "./complete-notify";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -119,6 +121,10 @@ export async function saveAttendance(
     saved += inserts.length;
   }
 
+  // G4: 전원 기록 완료 전이 감지 → 담당 강사 벨(백그라운드, 응답 안 막음 — 실패해도 저장 무사).
+  after(() =>
+    notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date, actorId: user.id }),
+  );
   revalidatePath(`/attendance/${date}`);
   revalidatePath(`/attendance/${date}/${classId}`);
   redirect(`/attendance/${date}?saved=${saved}`);
@@ -230,6 +236,10 @@ export async function setAttendanceCell(input: {
     if (error) return { error: error.message };
   }
 
+  // G4: 셀 저장(삽입/갱신)마다 완료 전이 검사 — 삭제 경로는 위에서 조기 반환이라 미발화(기록 제거는 완료가 아님).
+  after(() =>
+    notifyIfClassAttendanceComplete({ tenantId: user.tenantId, classId, date: sessionDate, actorId: user.id }),
+  );
   revalidatePath("/attendance");
   return { ok: true };
 }

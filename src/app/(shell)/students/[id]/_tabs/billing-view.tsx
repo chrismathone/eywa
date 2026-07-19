@@ -103,7 +103,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         <div className="flex items-center gap-1.5">
           <CircleDollarSign className="text-primary size-4" />
-          <h2 className="text-foreground text-sm font-semibold">수납 현황</h2>
+          <h2 className="text-foreground text-sm font-bold">수납 현황</h2>
         </div>
         <SearchableSelect
           className="ml-auto w-24"

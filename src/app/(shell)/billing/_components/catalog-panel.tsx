@@ -77,7 +77,7 @@ export async function CatalogPanel({ sp, base }: { sp: Sp; base: Record<string, 
 
       <div className="flex items-center justify-between">
         <p className="text-text-dim text-xs">
-          교재 <span className="num text-foreground font-semibold">{total}</span>종
+          교재 <span className="num text-foreground font-bold">{total}</span>종
           {totalPages > 1 ? (
             <span className="ml-2">· {page}/{totalPages} 페이지</span>
           ) : null}
@@ -127,7 +127,7 @@ function Kpi({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={14} strokeWidth={2} />
+          <Icon size={14} strokeWidth={1.8} />
         </span>
       </header>
       <p className="tabular text-foreground num mt-2 text-[22px] leading-none">{value}</p>

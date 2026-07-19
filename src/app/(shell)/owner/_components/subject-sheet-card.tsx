@@ -60,7 +60,7 @@ export function SubjectSheetCard({
   return (
     <section className="border-border bg-card space-y-3 rounded-md border p-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-foreground text-sm font-semibold">{label} 시간표</h3>
+        <h3 className="text-foreground text-sm font-bold">{label} 시간표</h3>
         <button
           type="button"
           role="switch"

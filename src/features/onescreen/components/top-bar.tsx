@@ -94,7 +94,7 @@ export function OneScreenTopBar({
             <button
               type="button"
               onClick={() => onDateChange(todayYmd)}
-              className="border-line text-primary hover:bg-bg-soft ml-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold"
+              className="border-line text-primary hover:bg-bg-soft ml-1 rounded-md border px-1.5 py-0.5 text-[11px] font-bold"
             >
               오늘
             </button>
@@ -114,7 +114,7 @@ export function OneScreenTopBar({
               type="button"
               onClick={() => onFilter(tag)}
               aria-pressed={on}
-              className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+              className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
                 on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}
             >
@@ -135,8 +135,8 @@ export function OneScreenTopBar({
                 key={c.id}
                 className="border-line inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] whitespace-nowrap"
               >
-                <span className="text-primary font-mono text-[10px] font-semibold">{c.startTime ?? "—"}</span>
-                <span className="text-foreground font-semibold">{c.name}</span>
+                <span className="text-primary font-mono text-[10px] font-bold">{c.startTime ?? "—"}</span>
+                <span className="text-foreground font-bold">{c.name}</span>
                 <span className="text-text-faint">{c.studentCount}</span>
               </span>
             ))}
@@ -178,7 +178,7 @@ export function OneScreenTopBar({
                 type="button"
                 onClick={() => onNoticeMode(o.value)}
                 aria-pressed={on}
-                className={`rounded-sm px-1.5 py-1 text-[11px] font-semibold transition ${
+                className={`rounded-sm px-1.5 py-1 text-[11px] font-bold transition ${
                   on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
                 }`}
               >
@@ -196,7 +196,7 @@ export function OneScreenTopBar({
               type="button"
               onClick={() => onView(v)}
               aria-pressed={view === v}
-              className={`rounded-sm px-2 py-1 text-[11px] font-semibold transition ${
+              className={`rounded-sm px-2 py-1 text-[11px] font-bold transition ${
                 view === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
               }`}
             >

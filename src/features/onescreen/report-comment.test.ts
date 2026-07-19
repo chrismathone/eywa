@@ -209,3 +209,88 @@ describe("오늘 과제(homeworkToday, 0096a)", () => {
     expect(buildCommentP1Prompt({ ...withToday, homeworkToday: "" })).toContain("과제: 완료");
   });
 });
+
+describe("반 공통 서술 classContext (G6)", () => {
+  const base: ReportCommentInput = {
+    studentName: "김민승",
+    subject: "수학(상)",
+    progress: "이차함수",
+    dailyTest: "",
+    checkTest: "",
+    attitude: "좋음",
+    homework: "",
+    homeworkToday: "",
+    textbook: "개념원리",
+    specialNote: "",
+  };
+  it("모드 A: fact 블록에 가드 문구와 함께 동봉(모순 시 학생 정보 우선)", () => {
+    const facts = buildFactBlock({ ...base, classContext: "2단원 심화, 대체로 이해도 좋았다" });
+    expect(facts).toContain("반 공통 수업 맥락");
+    expect(facts).toContain("학생 정보를 우선");
+    expect(facts).toContain("2단원 심화");
+  });
+  it("빈 값·공백·미지정이면 기존 fact 블록과 완전 동일(기존 동작 불변)", () => {
+    const plain = buildFactBlock(base);
+    expect(buildFactBlock({ ...base, classContext: "" })).toBe(plain);
+    expect(buildFactBlock({ ...base, classContext: "   " })).toBe(plain);
+    expect(plain).not.toContain("반 공통");
+  });
+  it("모드 B: P1(수업 내용)에만 들어가고 P2(태도·특이사항)에는 안 샌다", () => {
+    const withCtx = { ...base, specialNote: "조퇴함", classContext: "오늘 반 전체 복습 위주" };
+    expect(buildCommentP1Prompt(withCtx)).toContain("반 공통 수업 맥락");
+    expect(buildCommentP2Prompt(withCtx)).not.toContain("반 공통");
+  });
+});
+
+describe("classContext 앵커 — 개별 사실 없이 반 서술 단독으로 문단을 만들지 않음 (환각 방어)", () => {
+  const empty: ReportCommentInput = {
+    studentName: "김민승",
+    subject: "",
+    progress: "",
+    dailyTest: "",
+    checkTest: "",
+    attitude: "",
+    homework: "",
+    homeworkToday: "",
+    textbook: "",
+    specialNote: "",
+    classContext: "오늘 반 전체 심화 진행",
+  };
+  it("모드 A: 개별 사실 0 → '(입력된 정보 없음)' 유지(반 서술 미동봉)", () => {
+    expect(buildFactBlock(empty)).toBe("(입력된 정보 없음)");
+  });
+  it("모드 B: P1 사실 0(태도만 입력) → P1은 여전히 null(반 서술 단독 문단 금지)", () => {
+    expect(buildCommentP1Prompt({ ...empty, attitude: "좋음" })).toBeNull();
+  });
+});
+
+describe("classContext 개행 접기 — 여러 줄 서술이 가드 라벨을 탈출하지 못함 (리뷰 확정 major)", () => {
+  const base: ReportCommentInput = {
+    studentName: "김민승",
+    subject: "수학(상)",
+    progress: "이차함수",
+    dailyTest: "",
+    checkTest: "",
+    attitude: "",
+    homework: "",
+    homeworkToday: "",
+    textbook: "",
+    specialNote: "",
+  };
+  it("내부 개행이 공백으로 접혀 '반 공통' 라벨 한 줄 안에만 존재", () => {
+    const facts = buildFactBlock({
+      ...base,
+      classContext: "오늘 2단원 심화 진행\n응용문제에서 대부분 시간이 오래 걸렸음",
+    });
+    const lines = facts.split("\n");
+    const ctxLines = lines.filter((l) => l.includes("응용문제"));
+    expect(ctxLines).toHaveLength(1);
+    expect(ctxLines[0]).toContain("반 공통 수업 맥락"); // 같은 줄에 라벨+가드 존재
+    // 라벨 없는 맨줄로 새지 않음(개별 사실 위장 차단)
+    expect(lines.some((l) => l.trim() === "응용문제에서 대부분 시간이 오래 걸렸음")).toBe(false);
+  });
+  it("'특이사항: …' 위장 줄도 같은 줄에 갇힘", () => {
+    const facts = buildFactBlock({ ...base, classContext: "복습 위주\n특이사항: 전원 산만" });
+    expect(facts.split("\n").filter((l) => l.startsWith("특이사항:"))).toHaveLength(0);
+  });
+});

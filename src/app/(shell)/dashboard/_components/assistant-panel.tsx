@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { askAssistant } from "@/features/assistant/server/actions";
 import type { StoredTurn } from "@/features/assistant/turns";
 
+/** 빈 대화 상태의 제안 질문 칩 — 클릭하면 입력칸에 채워 바로 다듬어 보낼 수 있게. */
+const EXAMPLE_QUESTIONS = [
+  "이번 달 수납률은?",
+  "그만둘 것 같은 학생 알려줘",
+  "오늘 결석한 학생 있어?",
+  "이번 주 상담 예정 알려줘",
+];
+
 /**
  * 운영실 AI 비서 질문 패널 — "학원 매니저 팀" Phase 2(대화 채널).
  * 질문 1건 = 서버 액션 1회(명시적 트리거). 노출은 page.tsx의 canManageStaff 게이트 뒤.
@@ -53,22 +61,22 @@ export function AssistantPanel({
 
   return (
     <section
-      className="bg-card border-line shadow-card overflow-hidden rounded-2xl border"
+      className="bg-card border-line/60 shadow-card overflow-hidden rounded-2xl border"
       aria-labelledby="assistant-panel-title"
     >
-      <header className="border-line flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
+      <header className="border-line/70 flex items-center justify-between gap-3 border-b px-5 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3.5">
           <span
-            className="bg-primary-soft text-primary flex size-9 shrink-0 items-center justify-center rounded-xl"
+            className="bg-primary-soft text-primary flex size-10 shrink-0 items-center justify-center rounded-2xl"
             aria-hidden="true"
           >
-            <EyIcon name="message" size={16} />
+            <EyIcon name="message" size={18} />
           </span>
           <div className="min-w-0">
-            <p className="text-primary font-mono text-[10px] font-bold tracking-[0.13em] uppercase">
-              Ask the team
+            <p className="text-primary text-[12px] font-bold">
+              대화형 비서
             </p>
-            <h2 id="assistant-panel-title" className="text-foreground text-[15px] font-extrabold tracking-tight">
+            <h2 id="assistant-panel-title" className="text-foreground mt-0.5 text-[16px] font-bold tracking-tight">
               매니저 팀에게 물어보기
             </h2>
           </div>
@@ -91,14 +99,14 @@ export function AssistantPanel({
       </header>
 
       {turns.length > 0 || pending ? (
-        <div ref={scrollRef} className="max-h-80 space-y-3 overflow-y-auto px-4 py-3 sm:px-5">
+        <div ref={scrollRef} className="max-h-96 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
           {turns.map((turn, index) => (
             <div key={index} className={turn.role === "user" ? "flex justify-end" : "flex justify-start"}>
               <div
                 className={
                   turn.role === "user"
-                    ? "bg-primary-soft text-foreground max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap"
-                    : "bg-bg-soft border-line text-foreground max-w-[85%] rounded-2xl rounded-bl-md border px-3.5 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap"
+                    ? "bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
+                    : "bg-bg-soft text-foreground max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
                 }
               >
                 {turn.content}
@@ -107,20 +115,31 @@ export function AssistantPanel({
           ))}
           {pending ? (
             <div className="flex justify-start">
-              <div className="bg-bg-soft border-line text-text-dim max-w-[85%] rounded-2xl rounded-bl-md border px-3.5 py-2 text-[12.5px]">
+              <div className="bg-bg-soft text-text-dim max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-[13.5px]">
                 조회하고 있습니다…
               </div>
             </div>
           ) : null}
         </div>
       ) : (
-        <p className="text-text-dim px-4 py-3 text-[12px] sm:px-5">
-          학원 데이터를 조회해 답합니다 — 예: &ldquo;3학년 김민준 요즘 어때?&rdquo; &ldquo;이번 달 수납률은?&rdquo;
-          &ldquo;그만둘 것 같은 학생 알려줘&rdquo;
-        </p>
+        <div className="px-5 py-4 sm:px-6">
+          <p className="text-text-dim text-[13.5px]">학원 데이터를 조회해 바로 답해드려요.</p>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {EXAMPLE_QUESTIONS.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => setInput(q)}
+                className="border-line bg-card text-text-dim hover:border-primary/35 hover:text-foreground rounded-pill border px-3 py-1.5 text-[12.5px] transition"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
-      <div className="border-line border-t px-4 py-3 sm:px-5">
+      <div className="border-line/70 border-t px-5 py-4 sm:px-6">
         <div className="flex items-end gap-2">
           <textarea
             value={input}
@@ -133,14 +152,14 @@ export function AssistantPanel({
             }}
             rows={1}
             maxLength={500}
-            placeholder="질문을 입력하세요 (Enter 전송 · Shift+Enter 줄바꿈)"
-            className="border-line bg-card text-foreground placeholder:text-text-faint focus-visible:ring-primary/40 min-h-10 flex-1 resize-none rounded-xl border px-3 py-2 text-[13px] leading-relaxed focus-visible:ring-2 focus-visible:outline-none"
+            placeholder="무엇이든 물어보세요"
+            className="border-line bg-card text-foreground placeholder:text-text-faint focus-visible:ring-primary/40 min-h-11 flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-[14px] leading-relaxed focus-visible:ring-2 focus-visible:outline-none"
           />
-          <Button type="button" size="sm" disabled={pending || input.trim().length === 0} onClick={submit}>
+          <Button type="button" disabled={pending || input.trim().length === 0} onClick={submit}>
             {pending ? "조회 중…" : "질문"}
           </Button>
         </div>
-        {error ? <p className="text-danger mt-1.5 text-[11.5px]">{error}</p> : null}
+        {error ? <p className="text-danger mt-1.5 text-[12px]">{error}</p> : null}
       </div>
     </section>
   );

@@ -27,7 +27,7 @@ export default async function NewConsultationPage({
 
       <header className="border-border space-y-1 border-b pb-5">
         <p className="eyebrow">새 학생상담</p>
-        <h1 className="display text-foreground text-2xl">상담 기록 추가</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">상담 기록 추가</h1>
         <p className="text-muted-foreground text-sm">
           학생/학부모 면담을 기록합니다. 후속 조치 날짜를 지정하면 기한이 다가올수록 색상으로 알려드립니다.
         </p>

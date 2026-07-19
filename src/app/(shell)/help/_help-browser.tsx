@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { EyIcon, MENU_ICON } from "@/components/icons/eywa-icons";
 import type { MenuKey } from "@/lib/permissions";
 
@@ -37,8 +38,19 @@ export function HelpBrowser({
 
   return (
     <>
-      {/* Search hero */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#2a7a52] p-8 text-white shadow-primary-deep">
+      {/* Search hero — Editorial 문법 ④: 사진 배경 + 어두운 오버레이(텍스트 대비 유지) */}
+      <section className="relative overflow-hidden rounded-2xl p-8 text-white shadow-primary-deep">
+        <Image
+          src="/photos/help-hero.webp"
+          alt=""
+          fill
+          sizes="(max-width: 1024px) 100vw, 860px"
+          className="object-cover"
+        />
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-primary/85 to-[#1e56a0]/80"
+          aria-hidden="true"
+        />
         <svg
           className="pointer-events-none absolute top-0 right-0 opacity-[0.18]"
           width="240"
@@ -51,8 +63,8 @@ export function HelpBrowser({
           ))}
         </svg>
         <div className="relative max-w-2xl">
-          <p className="font-mono text-[11px] tracking-wider uppercase text-[#e9c876]">HELP CENTER</p>
-          <h1 className="mt-2 text-[28px] font-extrabold leading-tight">무엇을 도와드릴까요?</h1>
+          <p className="text-[12px] font-bold text-[#e2b45f]">도움말 센터</p>
+          <h1 className="mt-2 text-[28px] font-bold leading-tight">무엇을 도와드릴까요?</h1>
           <p className="mt-2 text-[13px] text-white/85">
             처음이신가요? 아래 <b>빠른 시작</b>부터 따라 해보세요. 메뉴별 안내와 자주 묻는 질문도 한 곳에 있어요.
           </p>
@@ -150,10 +162,7 @@ export function HelpBrowser({
                     <EyIcon name={iconName} size={14} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-foreground text-[13px] font-bold break-keep">{m.label}</h3>
-                      <span className="text-text-faint ml-auto shrink-0 font-mono text-[10px]">{m.href}</span>
-                    </div>
+                    <h3 className="text-foreground text-[13px] font-bold break-keep">{m.label}</h3>
                     <p className="text-text-dim mt-1 text-[12px] leading-relaxed break-keep">{m.description}</p>
                   </div>
                 </div>

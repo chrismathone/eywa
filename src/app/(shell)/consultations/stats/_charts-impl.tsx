@@ -24,11 +24,11 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const CATEGORY_COLOR: Record<string, string> = {
-  general: "#1f6ba8",
-  academic: "#1a5f3c",
-  emotional: "#c44d6d",
-  career: "#7a4ba8",
-  social: "#b8893a",
+  general: "#2d6be0",
+  academic: "#0e7c46",
+  emotional: "#d2447a",
+  career: "#6c50c8",
+  social: "#a97f24",
   other: "#9aa39d",
 };
 
@@ -50,7 +50,7 @@ export function StatsCharts({
       <section className="bg-card border-border rounded-md border p-4">
         <header className="mb-2">
           <p className="eyebrow">사유별 분포</p>
-          <h2 className="text-foreground mt-1 text-sm font-semibold">학생상담 카테고리</h2>
+          <h2 className="text-foreground mt-1 text-sm font-bold">학생상담 카테고리</h2>
         </header>
         {pieData.length === 0 ? (
           <p className="text-muted-foreground py-12 text-center text-sm">데이터 없음</p>
@@ -79,7 +79,7 @@ export function StatsCharts({
       <section className="bg-card border-border rounded-md border p-4">
         <header className="mb-2">
           <p className="eyebrow">월별 추세</p>
-          <h2 className="text-foreground mt-1 text-sm font-semibold">상담 건수</h2>
+          <h2 className="text-foreground mt-1 text-sm font-bold">상담 건수</h2>
         </header>
         {trend.length === 0 ? (
           <p className="text-muted-foreground py-12 text-center text-sm">데이터 없음</p>
@@ -92,8 +92,8 @@ export function StatsCharts({
                 <YAxis fontSize={11} allowDecimals={false} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="enrollment" name="등록상담" fill="#1a5f3c" />
-                <Bar dataKey="student" name="학생상담" fill="#b8893a" />
+                <Bar dataKey="enrollment" name="등록상담" fill="#0e7c46" />
+                <Bar dataKey="student" name="학생상담" fill="#a97f24" />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -145,7 +145,7 @@ export function ExpenseLineItems({
               </button>
             </div>
             <p className="text-text-dim text-right text-[11px]">
-              총액 <span className="num text-foreground font-semibold">{formatMoney(lineTotal(r, currency), currency)}</span>
+              총액 <span className="num text-foreground font-bold">{formatMoney(lineTotal(r, currency), currency)}</span>
               {r.vat ? <span className="text-text-faint"> (VAT포함)</span> : null}
             </p>
           </div>

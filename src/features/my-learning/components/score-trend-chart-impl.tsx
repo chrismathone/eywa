@@ -15,11 +15,11 @@ import type { SubjectTone } from "@/features/onescreen/types";
 import { pctOf, type Session } from "../history";
 
 const TONE_HEX: Record<SubjectTone, string> = {
-  primary: "#1a5f3c",
-  blue: "#1f6ba8",
-  rose: "#c44d6d",
-  purple: "#7a4ba8",
-  gold: "#b8893a",
+  primary: "#153e75",
+  blue: "#2d6be0",
+  rose: "#d2447a",
+  purple: "#6c50c8",
+  gold: "#a97f24",
   neutral: "#9aa39d",
 };
 const FAINT = "#9aa39d";
@@ -108,7 +108,7 @@ function FilterBtn({ label, on, onClick }: { label: string; on: boolean; onClick
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+      className={`rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
         on ? "bg-primary text-primary-foreground" : "border-line text-text-dim hover:bg-bg-soft border"
       }`}
     >

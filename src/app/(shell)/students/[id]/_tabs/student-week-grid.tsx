@@ -44,7 +44,7 @@ export function StudentWeekGrid({
     <section className="bg-card border-border rounded-md border">
       <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight">주간 시간표</h2>
+          <h2 className="text-sm font-bold tracking-tight">주간 시간표</h2>
           <p className="text-muted-foreground text-xs">
             과목별 교시 시간표 · 실제 등원 요일 기준 (읽기전용)
           </p>

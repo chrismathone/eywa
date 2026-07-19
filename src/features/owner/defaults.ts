@@ -111,7 +111,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     bizRegNo: "",
     branchLabel: "",
     logoText: "EYWA",
-    brandColor: "#1a5f3c", // --primary 포레스트 그린
+    brandColor: "#153e75", // --primary 인재원 네이비 — color-utils DEFAULT_BRAND_COLOR와 동일
     logoUrl: "",
     sealUrl: "",
   },

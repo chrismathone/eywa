@@ -56,7 +56,7 @@ export default async function ConsultationDetailPage({
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-5">
         <div className="min-w-0 space-y-1.5">
           <p className="eyebrow">학생상담 상세</p>
-          <h1 className="display text-foreground flex flex-wrap items-center gap-2 text-2xl">
+          <h1 className="font-bold tracking-tight text-foreground flex flex-wrap items-center gap-2 text-2xl">
             <WindowLink
               href={`/students/${item.studentId}`}
               title="학생 상세"

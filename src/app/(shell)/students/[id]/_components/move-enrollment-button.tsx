@@ -149,7 +149,7 @@ function MoveDialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">반 이동</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">
+            <h2 className="text-foreground mt-1 text-lg font-bold">
               {student.name || "학생"}
               <span className="text-muted-foreground ml-2 text-xs font-normal">
                 {student.grade ?? ""}

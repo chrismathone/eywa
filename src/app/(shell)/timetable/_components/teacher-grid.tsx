@@ -244,7 +244,7 @@ export function TeacherGridView({
                 <th
                   key={`${t.name}-${col.day}`}
                   colSpan={col.laneCount}
-                  className={`bg-bg-soft text-foreground sticky z-20 border-b px-1 py-0.5 text-center font-mono text-[10px] leading-tight font-bold ${GRID} ${
+                  className={`bg-bg-soft text-foreground sticky z-20 border-b px-1 py-0.5 text-center text-[10px] leading-tight font-bold ${GRID} ${
                     ci === t.cols.length - 1 ? TEACHER_EDGE : "border-r"
                   }`}
                   style={{ top: HEAD_TEACHER_H, height: HEAD_DAY_H }}
@@ -264,7 +264,7 @@ export function TeacherGridView({
               {/* 시각열 — sticky left. 매 행 라벨(시트 미러), 정시 라벨만 강조. separate 모드라 좌·우·하단
                   전부 **본문 셀과 동일한 실제 border**(같은 렌더 경로 = 굵기·위치가 본문 가로줄과 정확히 일치). */}
               <td
-                className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-middle font-mono leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
+                className={`bg-bg-soft sticky left-0 z-10 border-r border-l px-1 py-0 text-right align-middle num leading-none ${GRID} ${bottomEdge(ri + 1).cls} ${
                   row.isHour ? "text-foreground text-[9px] font-bold" : "text-ink/80 text-[9px] font-bold"
                 }`}
                 style={{ height: rowH }}
@@ -293,7 +293,7 @@ export function TeacherGridView({
                           className="flex items-center justify-center"
                           style={{ height: brk.span * rowH - bottom.px }}
                         >
-                          <span className="text-text-faint font-mono text-[10px] whitespace-nowrap">
+                          <span className="text-text-faint text-[10px] whitespace-nowrap">
                             쉬는 시간
                           </span>
                         </div>

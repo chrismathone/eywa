@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
+import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../report-filters";
@@ -18,7 +19,7 @@ import { IMPORT_FILTER, type ReportListFilters, type ReportListRow } from "../re
  */
 export async function retryClassnote(
   ids: string[],
-): Promise<{ ok: boolean; requeued?: number; skipped?: number; dryRun?: boolean; error?: string }> {
+): Promise<{ ok: boolean; requeued?: number; skipped?: number; absentSkipped?: number; dryRun?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
@@ -32,20 +33,18 @@ export async function retryClassnote(
   // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject")
+    .select("id, report_date, subject, student_id, makeup")
     .in("id", ids.slice(0, 200))
     .not("classnote_status", "is", null)
     .neq("source", "edutrix_import")
     .is("revoked_at", null);
   // 발송 안전 스위치·허용 과목 — allowed 계산 전에 설정 조회(과목 게이트에 필요).
   const settings = await getTenantSettings();
-  const allowed = (rows ?? [])
-    .filter(
-      (r) =>
-        isClassnoteAllowed(r.report_date as string) &&
-        isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
-    )
-    .map((r) => r.id as string);
+  const allowed = (rows ?? []).filter(
+    (r) =>
+      isClassnoteAllowed(r.report_date as string) &&
+      isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
+  );
   const skipped = (rows?.length ?? 0) - allowed.length;
   if (allowed.length === 0) return { ok: true, requeued: 0, skipped };
 
@@ -53,6 +52,40 @@ export async function retryClassnote(
   if (!settings.report.classnoteSendEnabled) {
     return { ok: true, requeued: 0, skipped, dryRun: true };
   }
+
+  // 결석 게이트(#77) — 보고서 날짜에 결석으로 기록된 학생은 재발송도 차단(발송 후 출결이 결석으로
+  // 정정된 건 포함). 보강 보고서(makeup)는 게이트 제외. 조회 실패 = fail-closed(아무것도 재큐잉 안 함).
+  let requeueIds: string[];
+  let absentSkipped: number;
+  try {
+    const gateTargets = allowed.filter((r) => !r.makeup);
+    const blocked = await getAbsenceBlockedKeys(
+      supabase,
+      user.tenantId,
+      gateTargets.map((r) => ({
+        studentId: r.student_id as string,
+        reportDate: (r.report_date as string).slice(0, 10),
+        subject: r.subject as string | null,
+      })),
+    );
+    requeueIds = allowed
+      .filter(
+        (r) =>
+          r.makeup ||
+          !blocked.has(
+            absenceKeyOf({
+              studentId: r.student_id as string,
+              reportDate: (r.report_date as string).slice(0, 10),
+              subject: r.subject as string | null,
+            }),
+          ),
+      )
+      .map((r) => r.id as string);
+    absentSkipped = allowed.length - requeueIds.length;
+  } catch {
+    return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
+  }
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
 
   const { error } = await supabase
     .from("lesson_reports")
@@ -63,9 +96,9 @@ export async function retryClassnote(
       classnote_retry_count: 0,
       classnote_error: null,
     })
-    .in("id", allowed);
+    .in("id", requeueIds);
   if (error) return { ok: false, error: error.message };
-  return { ok: true, requeued: allowed.length, skipped };
+  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped };
 }
 
 /**
@@ -86,6 +119,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   queued?: number;
   conflicts?: number;
   skipped?: number;
+  absentSkipped?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -99,7 +133,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
   const { data: rows } = await supabase
     .from("lesson_reports")
-    .select("id, report_date, subject, student_id")
+    .select("id, report_date, subject, student_id, makeup")
     .in("id", capped)
     .is("classnote_status", null)
     .or("source.is.null,source.neq.edutrix_import")
@@ -118,8 +152,40 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - eligible.length, dryRun: true };
   }
 
+  // 결석 게이트(#77) — 보고서 날짜에 결석으로 기록된 학생은 관리자 최초 발송에서도 제외(원스크린
+  // 클라 게이트·detectUnsentReports와 동일 규약). 보강 보고서(makeup)는 게이트 제외.
+  // 조회 실패 = fail-closed(아무것도 큐잉 안 함).
+  let sendable: typeof eligible;
+  try {
+    const gateTargets = eligible.filter((r) => !r.makeup);
+    const blocked = await getAbsenceBlockedKeys(
+      supabase,
+      user.tenantId,
+      gateTargets.map((r) => ({
+        studentId: r.student_id as string,
+        reportDate: (r.report_date as string).slice(0, 10),
+        subject: r.subject as string | null,
+      })),
+    );
+    sendable = eligible.filter(
+      (r) =>
+        r.makeup ||
+        !blocked.has(
+          absenceKeyOf({
+            studentId: r.student_id as string,
+            reportDate: (r.report_date as string).slice(0, 10),
+            subject: r.subject as string | null,
+          }),
+        ),
+    );
+  } catch {
+    return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
+  }
+  const absentSkipped = eligible.length - sendable.length;
+  if (sendable.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - absentSkipped, absentSkipped };
+
   // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
-  const studentIds = [...new Set(eligible.map((r) => r.student_id as string))];
+  const studentIds = [...new Set(sendable.map((r) => r.student_id as string))];
   const conflicted = new Set<string>();
   for (let i = 0; i < studentIds.length; i += 25) {
     const results = await Promise.all(
@@ -127,8 +193,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     );
     for (const [sid, hit] of results) if (hit) conflicted.add(sid);
   }
-  const conflictIds = eligible.filter((r) => conflicted.has(r.student_id as string)).map((r) => r.id as string);
-  const queueIds = eligible.filter((r) => !conflicted.has(r.student_id as string)).map((r) => r.id as string);
+  const conflictIds = sendable.filter((r) => conflicted.has(r.student_id as string)).map((r) => r.id as string);
+  const queueIds = sendable.filter((r) => !conflicted.has(r.student_id as string)).map((r) => r.id as string);
 
   let conflicts = 0;
   if (conflictIds.length) {
@@ -161,7 +227,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     if (error) return { ok: false, error: error.message };
     queued = (data ?? []).length;
   }
-  return { ok: true, queued, conflicts, skipped: capped.length - queued - conflicts };
+  return { ok: true, queued, conflicts, skipped: capped.length - queued - conflicts - absentSkipped, absentSkipped };
 }
 
 /**

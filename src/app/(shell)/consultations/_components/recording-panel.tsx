@@ -86,7 +86,7 @@ export function RecordingPanel({
   return (
     <section className="border-border bg-muted/20 space-y-3 rounded-lg border p-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-foreground inline-flex items-center gap-1.5 text-sm font-semibold">
+        <h2 className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">
           <Mic className="text-primary size-4" />
           상담 녹음 · AI 분석
         </h2>
@@ -155,7 +155,7 @@ export function RecordingPanel({
             {SECTIONS.map((s) =>
               aiReport[s.key]?.trim() ? (
                 <div key={s.key} className="px-3 py-2">
-                  <dt className="text-primary text-[11px] font-semibold">{s.label}</dt>
+                  <dt className="text-primary text-[11px] font-bold">{s.label}</dt>
                   <dd className="text-foreground mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed">
                     {aiReport[s.key]}
                   </dd>

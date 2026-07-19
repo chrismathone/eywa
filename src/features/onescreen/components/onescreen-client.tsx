@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/eywa-icons";
@@ -50,6 +50,12 @@ import {
   type BulkPatch,
   type RowAction,
 } from "../grid";
+import {
+  getClassNarratives,
+  getServerClassNarratives,
+  setClassNarrative,
+  subscribeClassNarratives,
+} from "../class-narrative-store";
 import { applyStudentOrder } from "../student-order";
 import { saveStudentOrder } from "../server/order-actions";
 import { setAttendanceCell } from "@/features/attendance/server/actions";
@@ -152,6 +158,13 @@ export function OneScreenClient({
   // 대상 날짜(빈값=오늘). 날짜 이동 = searchParam 네비 → 서버가 그 날짜 로스터 재조회 + key로 클라 재초기화.
   const activeDate = date || kstToday();
   const todayYmd = kstToday();
+  // 반 공통 서술(G6) — 반 이름→서술. sessionStorage(날짜 키)+외부 스토어(#75 lazy 초기값·#25 effect setState 회피).
+  // 생성 재료(기록 아님): 자동작성 시 그 행의 반 서술을 classContext로 동봉, 멘트 생성 후엔 잃어도 무해.
+  const classNarratives = useSyncExternalStore(
+    subscribeClassNarratives,
+    () => getClassNarratives(activeDate),
+    getServerClassNarratives,
+  );
   // 날짜 이동 전 대기 저장 flush — 저장 로직이 아래에 정의되므로 ref로 노출(effect에서 갱신, render 중 ref 쓰기 금지 규칙).
   const flushSavesRef = useRef<() => void>(() => {});
   const goToDate = (ymd: string) => {
@@ -552,9 +565,13 @@ export function OneScreenClient({
     if (idx < 0) return;
     const su = student.subjects[idx];
     const subjectKey = su?.subjectKey || su?.name || undefined;
+    // 반 공통 서술(G6) — 이 행의 반 서술을 생성 재료로 동봉(없으면 기존 동작). 카드·표·일괄 공용 경로라 전부 커버.
+    // ⚠️ 키 = classId(이름 아님) — 동명 반(수학·영어 같은 이름, 스키마 허용)에서 이름 키면 남의 반 수업
+    // 맥락이 교차 주입된다(리뷰 확정 major, 순서 기능 동명 가드와 같은 원인). classId null(모호 행·보강)=서술 없음.
+    const classContext = (su?.classId && classNarratives[su.classId]) || "";
     try {
       // 통합 1회 호출 — 멘트 + 추세를 한 번에 생성(비용·지연↓).
-      const res = await generateReportComment(buildReportCommentInput(student, idx), {
+      const res = await generateReportComment({ ...buildReportCommentInput(student, idx), classContext }, {
         studentId: student.id,
         subject: subjectKey,
         todayExamInfo: buildExamInfo(student, showDailyTest, showCheckTest),
@@ -696,6 +713,46 @@ export function OneScreenClient({
     if (fill.homework !== undefined) setHomeworkValue(student.id, fill.homework);
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
     toast.success(`이전 회차 값으로 빈 칸 ${count}개를 채웠습니다`);
+  }
+  // 이전 회차 **일괄** 가져오기(G5 얕은판) — 표시(또는 선택) 전 행에 planPrevFill을 돌려 빈 칸만 채운다.
+  // bulkApplyValues 대칭(대상 선정 규약 동일: keys 미선택=표시 전체, rowInClass 필터). 행별 importPrevFor와
+  // 같은 순수 계획 함수를 쓰므로 특이사항·교재 제외(발송 본문 오염 방지·roster 자동 승계) 결정이 자동 준수된다.
+  // "평소와 같음" 기본값의 얕은 구현 — 강사는 일괄로 깔고 달라진 학생만 손댄다(깊은판 provenance는 G4에서).
+  function bulkImportPrev(keys?: string[]) {
+    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const keySet = new Set(keys ?? []);
+    const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
+    let filledRows = 0;
+    let filledCells = 0;
+    for (const r of rows) {
+      const idx = r.student.subjects.findIndex((su) => su.name === r.subject.name);
+      const su = r.student.subjects[idx];
+      if (!su) continue;
+      const fill = planPrevFill({
+        prev: su.prevReport,
+        current: {
+          today: su.today,
+          attitude: r.student.attitude,
+          homework: r.student.homework,
+          homeworkToday: su.homeworkToday ?? "",
+        },
+        attitudes: ATTITUDE,
+        homeworks: HOMEWORK,
+      });
+      const count = Object.keys(fill).length;
+      if (!count) continue;
+      if (fill.today !== undefined) setProgressFor(r.student.id, idx, fill.today);
+      if (fill.attitude !== undefined) setAttitudeValue(r.student.id, fill.attitude);
+      if (fill.homework !== undefined) setHomeworkValue(r.student.id, fill.homework);
+      if (fill.homeworkToday !== undefined) setHomeworkTodayFor(r.student.id, r.subject.name, fill.homeworkToday);
+      filledRows++;
+      filledCells += count;
+    }
+    if (!filledRows) {
+      toast.message("채울 빈 칸이 없습니다 — 이미 입력됐거나 이전 값이 없습니다");
+      return;
+    }
+    toast.success(`${filledRows}행의 빈 칸 ${filledCells}개를 이전 회차 값으로 채웠습니다 (특이사항 제외)`);
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
   async function saveOrderForClass(classId: string, studentIds: string[]): Promise<boolean> {
@@ -868,6 +925,11 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)`);
       return;
     }
+    // 결석 게이트(#77 서버판) — 버튼 disabled를 우회한 경로(반 모호 행·stale 화면)도 서버가 막는다.
+    if (res.status === "absent") {
+      toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+      return;
+    }
     const msg =
       res.status === "queued"
         ? res.sendWindowHint
@@ -905,6 +967,9 @@ export function OneScreenClient({
     } else if (res.status === "subject_off") {
       // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
       toast.message(`${student.name} ${subjectName} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다`);
+    } else if (res.status === "absent") {
+      // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
+      toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
     } else if (res.status === "queued" && res.sendWindowHint) {
       // 발송 허용 시간창 밖 — 큐엔 정상 적재, 워커가 창 진입 시 자동 발송("왜 안 나가지?" 재발송 혼란 방지).
       toast.success(`${student.name} ${subjectName} — 발송 예약됨(${res.sendWindowHint}에 자동 발송)`);
@@ -972,6 +1037,7 @@ export function OneScreenClient({
     let blocked = 0;
     let skipped = 0;
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
+    let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
     let dry = 0;
     let fail = 0;
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
@@ -986,6 +1052,7 @@ export function OneScreenClient({
         } else if (res.status === "dry_run") dry++;
         else if (res.status === "subject_off") subjectOff++;
         else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
+        else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
         else skipped++; // success/processing/too_old
       }
     } finally {
@@ -995,6 +1062,7 @@ export function OneScreenClient({
       (dry ? `저장 ${dry}건(dry-run·발송 안 함) · ` : "") +
         (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
+        (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
         (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
@@ -1201,7 +1269,7 @@ export function OneScreenClient({
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 같은 학생을 양쪽에서 입력하면 마지막 저장이 이긴다. */}
       {sameDateEditors.length > 0 ? (
         <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-[12.5px]">
-          <span className="font-semibold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
+          <span className="font-bold">다른 창/기기에서 같은 날짜를 열어 두었습니다</span>
           <span>— 같은 학생을 양쪽에서 입력하면 마지막 저장이 덮어씁니다.</span>
         </div>
       ) : null}
@@ -1244,9 +1312,25 @@ export function OneScreenClient({
             onAutoWriteAll: autoWriteAllVisible,
             onClassNotice: openNoticeForRows,
             onBulkApply: bulkApplyValues,
+            onBulkImportPrev: bulkImportPrev,
           }}
           order={orderClass ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
+          // 반 서술(G6) — 순서 기능과 동일한 동명 반 가드(orderClass = 이름 매칭이 유일할 때만).
+          // 키 = classId: 이름 키면 동명 두 반(수학·영어)에 서술이 교차 주입됨(리뷰 확정 major).
+          narrative={{
+            activeClass: orderClass ? orderClass.name : null,
+            value: orderClass ? (classNarratives[orderClass.id] ?? "") : "",
+            onSave: (text) => {
+              if (!orderClass) return;
+              setClassNarrative(activeDate, orderClass.id, text);
+              toast.success(
+                text.trim()
+                  ? `${orderClass.name} 반 서술 저장 — 이후 자동작성부터 학생별 멘트에 반영됩니다`
+                  : `${orderClass.name} 반 서술을 지웠습니다`,
+              );
+            },
+          }}
           attPending={attPending}
           genKey={genKey}
           bulkGen={bulkGen}
@@ -1280,7 +1364,7 @@ export function OneScreenClient({
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="chart" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-semibold">오늘 진도 · 테스트</h2>
+                <h2 className="text-foreground text-sm font-bold">오늘 진도 · 테스트</h2>
               </header>
               <ProgressCard
                 student={selected}
@@ -1298,12 +1382,12 @@ export function OneScreenClient({
             <div className="flex flex-col gap-3">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
-                <h2 className="text-foreground text-sm font-semibold">보고서</h2>
+                <h2 className="text-foreground text-sm font-bold">보고서</h2>
                 <button
                   type="button"
                   onClick={() => openNoticeForStudent(selected.id)}
                   title="이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송"
-                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-md border px-2 py-0.5 text-[11px] font-semibold"
+                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-md border px-2 py-0.5 text-[11px] font-bold"
                 >
                   학부모 공지
                 </button>

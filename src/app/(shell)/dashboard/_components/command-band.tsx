@@ -1,22 +1,20 @@
 /**
- * ① EYWA 운영실 헤더 — 다크 ink 표면 위 역할별 인사말 + 오늘 브리핑 + 핵심 4지표.
- * Daylight 라이트 페이지 위 '계기판' 액센트(테마 플립 아님). 밴드 전용 강조색은
- * 로컬 상수(라이트그린/danger-light) — 다크 표면 전용이라 globals 토큰 추가 안 함.
+ * ① 운영실 히어로 — 라이트 인사말 + KPI 스탯카드 그리드 (2026-07-19 상용 톤 재구성).
+ * 구판 "다크 ink 계기판 밴드"(잔글씨 지표 산개)는 장식에 그쳐 폐기 — 상용 SaaS 문법
+ * (큰 인사말 + 카드형 지표: 라벨/아이콘 칩/큰 숫자/보조 라인)으로 재구성.
+ * 시맨틱 컬러는 값이 아니라 아이콘 칩·보조 라인에 — 숫자는 잉크로 차분하게(미수만 danger).
  */
 const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  weekday: "short",
+  month: "long",
+  day: "numeric",
+  weekday: "long",
 });
 
-import type { ReactNode } from "react";
+import { BigStat } from "@/components/atoms/big-stat";
+import { EyIcon } from "@/components/icons/eywa-icons";
 import { EnrollmentChangeModal } from "./enrollment-change-modal";
 import type { EnrollmentChangeStudent } from "@/features/dashboard/server/queries";
-
-const ACCENT_GREEN = "#5dcaa5"; // 다크 위 출석 강조 (forest green은 대비 부족)
-const ACCENT_DANGER = "#f09595"; // 다크 위 미수 경고
 
 export function CommandBand({
   identity,
@@ -53,9 +51,7 @@ export function CommandBand({
   const { enrollment, attendance, billing } = metrics;
   const newStudents = enrollmentChanges?.newStudents ?? [];
   const withdrawn = enrollmentChanges?.withdrawn ?? [];
-  const parts = KO_DATE_FULL.formatToParts(new Date());
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  const eyebrow = `EYWA 운영실 · ${get("year")}.${get("month")}.${get("day")} ${get("weekday")}`;
+  const dateLabel = KO_DATE_FULL.format(new Date());
   const deltaText = enrollment
     ? enrollment.delta === 0
       ? "±0"
@@ -64,95 +60,72 @@ export function CommandBand({
         : `${enrollment.delta}`
     : "±0";
   const outstandingDisplay = formatOutstandingAmount(billing?.outstanding ?? 0);
-  const metricCount = Number(enrollment !== null) + Number(attendance !== null) + (billing ? 2 : 0);
-  const metricGrid =
-    metricCount >= 4
-      ? "grid-cols-2 sm:grid-cols-4"
-      : metricCount === 3
-        ? "grid-cols-2 sm:grid-cols-3"
-        : metricCount === 2
-          ? "grid-cols-2"
-          : "grid-cols-1";
 
   return (
-    <section
-      className="bg-ink relative overflow-hidden rounded-2xl px-6 py-5 text-white"
-      aria-labelledby="assistant-home-title"
-    >
-      <svg
-        className="pointer-events-none absolute -top-8 right-0 opacity-10"
-        width="200"
-        height="200"
-        viewBox="0 0 200 200"
-        aria-hidden="true"
-      >
-        {[95, 72, 49, 26].map((r) => (
-          <circle key={r} cx="120" cy="80" r={r} fill="none" stroke="#fff" strokeWidth="1" />
-        ))}
-        <circle cx="120" cy="80" r="8" fill="var(--gold)" />
-      </svg>
+    <section aria-labelledby="assistant-home-title">
+      {/* 인사말 — 큰 타이포 위계(날짜 → 인사 → 안내) */}
+      <div className="px-1">
+        <p className="text-text-dim text-[13px] font-medium">{dateLabel}</p>
+        <h2
+          id="assistant-home-title"
+          className="text-foreground mt-1 text-[26px] font-bold tracking-tight"
+        >
+          안녕하세요, {name} {honorific}님
+        </h2>
+        <p className="text-text-dim mt-1 text-[14px]">
+          오늘 필요한 판단과 실행 순서를 정리해 두었어요.
+        </p>
+      </div>
 
-      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-gold font-mono text-[10px] tracking-wider uppercase">{eyebrow}</p>
-          <h2 id="assistant-home-title" className="mt-2 text-[25px] font-extrabold tracking-tight">
-            안녕하세요, {name} {honorific}님.
-          </h2>
-          <p className="mt-1 text-[12px] text-white/55">Eywa가 지금 필요한 판단과 실행 순서를 정리했습니다.</p>
-        </div>
-
-        {metricCount > 0 ? (
-          <div className={`grid gap-x-7 gap-y-4 lg:gap-x-8 ${metricGrid}`}>
-            {enrollment ? (
-              <BandMetric
-                label="재원"
-                value={String(enrollment.count)}
-                unit="명"
-                sub={
-                  <EnrollmentChangeModal
-                    deltaText={deltaText}
-                    newCount={enrollmentChanges?.newCount ?? 0}
-                    withdrawnCount={enrollmentChanges?.withdrawnCount ?? 0}
-                    newStudents={newStudents}
-                    withdrawn={withdrawn}
-                  />
-                }
+      {/* KPI 카드 그리드 — BigStat(문법 ②) 공용 atom */}
+      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
+        {enrollment ? (
+          <BigStat
+            label="재원생"
+            icon={<EyIcon name="users" size={16} />}
+            tone="blue"
+            value={enrollment.count.toLocaleString("ko-KR")}
+            unit="명"
+            sub={
+              <EnrollmentChangeModal
+                deltaText={deltaText}
+                newCount={enrollmentChanges?.newCount ?? 0}
+                withdrawnCount={enrollmentChanges?.withdrawnCount ?? 0}
+                newStudents={newStudents}
+                withdrawn={withdrawn}
               />
-            ) : null}
-            {attendance ? (
-              <BandMetric
-                label="출석"
-                value={attendance.rate == null ? "—" : String(Math.round(attendance.rate))}
-                unit={attendance.rate == null ? "" : "%"}
-                valueColor={attendance.rate == null ? undefined : ACCENT_GREEN}
-                sub={
-                  attendance.asOf ? (
-                    <div className="mt-1 font-mono text-[10px] text-white/45">{attendance.asOf}</div>
-                  ) : undefined
-                }
-              />
-            ) : null}
-            {billing ? (
-              <>
-                <BandMetric
-                  label="수납"
-                  value={billing.paymentRate == null ? "—" : String(Math.round(billing.paymentRate))}
-                  unit={billing.paymentRate == null ? "" : "%"}
-                />
-                <BandMetric
-                  label="이번 달 미수"
-                  value={outstandingDisplay.value}
-                  unit={outstandingDisplay.unit}
-                  valueColor={billing.outstanding > 0 ? ACCENT_DANGER : undefined}
-                  sub={
-                    billing.unpaidCount > 0 ? (
-                      <div className="mt-1 font-mono text-[10px] text-white/45">{billing.unpaidCount}건</div>
-                    ) : undefined
-                  }
-                />
-              </>
-            ) : null}
-          </div>
+            }
+          />
+        ) : null}
+        {attendance ? (
+          <BigStat
+            label="오늘 출석률"
+            icon={<EyIcon name="check" size={16} />}
+            tone="primary"
+            value={attendance.rate == null ? "—" : String(Math.round(attendance.rate))}
+            unit={attendance.rate == null ? "" : "%"}
+            sub={attendance.asOf ?? undefined}
+          />
+        ) : null}
+        {billing ? (
+          <>
+            <BigStat
+              label="수납률"
+              icon={<EyIcon name="chart" size={16} />}
+              tone="gold"
+              value={billing.paymentRate == null ? "—" : String(Math.round(billing.paymentRate))}
+              unit={billing.paymentRate == null ? "" : "%"}
+            />
+            <BigStat
+              label="이번 달 미수"
+              icon={<EyIcon name="wallet" size={16} />}
+              tone={billing.outstanding > 0 ? "danger" : "neutral"}
+              value={outstandingDisplay.value}
+              unit={outstandingDisplay.unit}
+              valueClass={billing.outstanding > 0 ? "text-danger" : undefined}
+              sub={billing.unpaidCount > 0 ? `${billing.unpaidCount}건` : undefined}
+            />
+          </>
         ) : null}
       </div>
     </section>
@@ -167,30 +140,3 @@ export function formatOutstandingAmount(amount: number): { value: string; unit: 
   };
 }
 
-function BandMetric({
-  label,
-  value,
-  unit,
-  sub,
-  valueColor,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  sub?: ReactNode;
-  valueColor?: string;
-}) {
-  return (
-    <div>
-      <div className="font-mono text-[10px] tracking-wider uppercase text-white/45">{label}</div>
-      <div
-        className="num mt-1.5 text-[26px] font-extrabold leading-none tracking-tight"
-        style={valueColor ? { color: valueColor } : undefined}
-      >
-        {value}
-        {unit ? <span className="text-[12px] font-medium text-white/45">{unit}</span> : null}
-      </div>
-      {sub ?? null}
-    </div>
-  );
-}

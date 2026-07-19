@@ -653,5 +653,26 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
   Anthropic 직접 호출을 새로 만들면 temperature를 넣지 말거나 generateJSON 경유로. 에러 문구가 model-specific이라
   모델 교체(레지스트리 갱신) 때마다 재발 가능 — 재시도 가드가 있는 generateJSON 경로가 안전하다.
 
+### 81. `"use client"` 모듈의 **비컴포넌트 export(문자열 상수)를 서버가 import하면 런타임 undefined** — 쿠키 기본값 침묵 사망 (2026-07-19)
+시간표 표시 선호 쿠키 이름(`EMPTY_DAYS_COOKIE`/`EMPTY_PERIODS_COOKIE`)을 클라 컴포넌트 파일
+([prefs-sync.tsx](<src/app/(shell)/timetable/_components/prefs-sync.tsx>))에서 export하고 서버 페이지가 import했더니,
+클라이언트 모듈의 모든 export가 서버 그래프에선 **클라이언트 참조 프록시**가 되어 문자열이 **런타임 undefined**로
+평가됐다(실측: 서버 로그 `JSON.stringify(EMPTY_PERIODS_COOKIE)` → `undefined`). 결과 `cookieStore.get(undefined)`가
+항상 미적중 → **쿠키 기본값(기기 기억) 경로가 조용히 죽고** URL 파라미터 경로만 동작. 쿠키는 요청에 실려 오고
+(`getAll()`엔 이름·값 정상) 클라 쪽 쓰기도 정상이라, 증상이 "가끔 초기화되는 것 같다" 수준으로만 보인다.
+- **⚠️ 타입체크·lint·빌드 전부 통과하는 침묵 버그** — TS는 타입만 보고, 번들러는 프록시를 만들 뿐 에러가 없다.
+- **수정**: 상수를 지시어 없는 일반 모듈([pref-cookies.ts](src/features/timetable/lib/pref-cookies.ts))로 분리 —
+  클라(쓰기)·서버(읽기)가 둘 다 거기서 import. 클라 파일엔 "여기서 재-export 금지" 주석.
+- **규칙**: **서버와 클라가 함께 쓰는 상수(쿠키/스토리지 키, 매직 문자열)는 절대 "use client" 파일에 두지 말 것.**
+  진단법: 서버에서 `JSON.stringify(그_상수)` 로그가 `undefined`면 이 병.
+
 ---
 
+## #81 node_modules 정션은 Turbopack dev에서 panic — 워크트리 dev 서버는 실제 pnpm install (2026-07-19)
+
+- **증상**: 격리 워크트리에 `mklink /J node_modules → 메인트리`로 정션을 걸고 `next dev`(Turbopack)를 띄우면
+  `FATAL: Symlink [project]/node_modules is invalid, it points out of the filesystem root` panic으로 서버가 즉사.
+  preview 프로세스 레지스트리에도 안 잡혀 "포트만 안 열리는" 침묵 실패처럼 보인다.
+- **원인**: Turbopack이 프로젝트 루트(락파일 기준) 밖을 가리키는 심링크/정션을 파일시스템 루트 위반으로 거부.
+- **결론**: **정션은 typecheck·lint까지만 유효.** 워크트리에서 dev 서버를 띄우려면 정션을 떼고(`cmd /c rmdir` — 링크만)
+  `pnpm install`로 실제 설치(스토어 하드링크라 ~30초). launch.json에 `pnpm -C <워크트리> dev` 항목을 추가해 쓴다.

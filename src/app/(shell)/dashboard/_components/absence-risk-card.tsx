@@ -30,7 +30,7 @@ export function AbsenceRiskCard({ items }: { items: AbsenceRisk[] }) {
                 <span className="text-foreground group-hover:text-primary text-[13px] font-medium">
                   {s.studentName}
                 </span>
-                <span className="text-danger num font-mono text-[11px]">14일 {s.absences}회</span>
+                <span className="text-danger num text-[11px]">14일 {s.absences}회</span>
               </WindowLink>
             </li>
           ))}

@@ -51,7 +51,7 @@ function Dialog({ studentId, onClose }: { studentId: string; onClose: () => void
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
-          <h2 className="text-foreground text-lg font-semibold">레벨테스트 추가</h2>
+          <h2 className="text-foreground text-lg font-bold">레벨테스트 추가</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground" aria-label="닫기">
             <X className="size-4" />
           </button>
@@ -157,7 +157,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
   return (
     <section className="space-y-3">
       <header className="flex items-center justify-between">
-        <h3 className="text-foreground text-sm font-semibold">레벨테스트</h3>
+        <h3 className="text-foreground text-sm font-bold">레벨테스트</h3>
         <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
           <Plus className="size-3.5" />
           추가
@@ -180,7 +180,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                     <Pill color={meta.color} soft>
                       {meta.label}
                     </Pill>
-                    <span className="text-foreground text-[13px] font-semibold">
+                    <span className="text-foreground text-[13px] font-bold">
                       {subjects.labelOf(t.subject)}
                     </span>
                     {t.level ? <span className="text-primary text-[12px] font-bold">{t.level}</span> : null}
@@ -192,7 +192,7 @@ export function LevelTests({ studentId, tests }: { studentId: string; tests: Lev
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {subs.map(([k, v]) => (
                       <span key={k} className="bg-bg-soft text-text-dim num rounded-sm px-1.5 py-0.5 text-[11px]">
-                        {k} <span className="text-foreground font-semibold">{v}</span>
+                        {k} <span className="text-foreground font-bold">{v}</span>
                       </span>
                     ))}
                   </div>

@@ -3,9 +3,11 @@
 @import "shadcn/tailwind.css";
 
 /*
- * eywa — Daylight palette (시안 토큰)
- * Forest green primary (#1a5f3c) + warm ivory bg (#fbf9f3) + JetBrains Mono meta.
- * Light-only. Dark mode 제거됨.
+ * eywa — Daylight palette v3 "Injaewon Navy" (2026-07-19, injaewon.blog 디자인 언어 동조)
+ * Deep navy primary (#153e75) + 애플 뉴트럴(#1d1d1f 잉크 · #f5f5f7 캔버스 · 화이트 카드/사이드바).
+ * Light-only. Dark mode 제거됨. (v1 forest+ivory → v2 pine+porcelain → v3 navy+neutral)
+ * chart-2는 그린 유지(출석·완납 "긍정" 시맨틱은 브랜드색과 분리).
+ * ⚠️ --primary 계열을 바꾸면 src/lib/color-utils.ts(DEFAULT_BRAND_COLOR·soft alpha 0.1/0.05)와 동기 필수.
  */
 
 @theme inline {
@@ -76,97 +78,99 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* radius — 시안보다 라운드 대폭 축소 (ijw 실 운영 톤에 맞춤) */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 5px;
-  --radius-xl: 6px;
-  --radius-2xl: 8px;
-  --radius-3xl: 10px;
-  --radius-pill: 4px;
+  /* radius — 소프트 프로덕트 톤 (2026-07-19 "코딩 틱함" 해소: 구 2~10px 각진 스케일에서 시안 방향 복원) */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 22px;
+  --radius-pill: 999px;
 
-  /* shadow */
-  --shadow-card: 0 1px 3px rgba(13, 17, 16, 0.02);
-  --shadow-card-hover: 0 4px 14px rgba(13, 17, 16, 0.04);
-  --shadow-primary-glow: 0 6px 14px rgba(26, 95, 60, 0.22);
-  --shadow-primary-deep: 0 14px 32px rgba(26, 95, 60, 0.28);
-  --shadow-modal: 0 32px 80px rgba(13, 17, 16, 0.08);
+  /* shadow — 소프트 엘리베이션, 뉴트럴 베이스 (2026-07-19 네이비 리스킨) */
+  --shadow-card: 0 1px 2px rgba(29, 29, 31, 0.04), 0 4px 16px rgba(29, 29, 31, 0.04);
+  --shadow-card-hover: 0 2px 4px rgba(29, 29, 31, 0.05), 0 10px 28px rgba(29, 29, 31, 0.08);
+  --shadow-primary-glow: 0 6px 16px rgba(21, 62, 117, 0.25);
+  --shadow-primary-deep: 0 14px 36px rgba(21, 62, 117, 0.28);
+  --shadow-modal: 0 32px 80px rgba(29, 29, 31, 0.12);
 }
 
 :root {
-  /* page surface */
-  --background: #fbf9f3;
-  --bg-soft: #f1ede2;
-  --surface-hi: #fafaf5;
+  /* page surface — 애플 뉴트럴 캔버스 (2026-07-19 injaewon.blog 동조: 그레이 캔버스 + 화이트 카드) */
+  --background: #f5f5f7;
+  --bg-soft: #e9e9ee;
+  --surface-hi: #fafafc;
 
-  /* text */
-  --foreground: #1a1f1c;
-  --ink: #0d1110;
-  --text-dim: #5a635f;
-  --text-faint: #9aa39d;
+  /* text — 3단 시스템(2026-07-19 마디아/WCAG 정합): 기본 #1d1d1f(16.8:1) · 중간 #505050(8.1:1) ·
+     마지노선 #767676(4.54:1 — 화이트 표면 전용, 회색 캔버스 위 직상 텍스트는 dim 사용). */
+  --foreground: #1d1d1f;
+  --ink: #1d1d1f;
+  --text-dim: #505050;
+  --text-faint: #767676;
 
-  /* lines */
-  --border: rgba(13, 17, 16, 0.08);
-  --line: rgba(13, 17, 16, 0.08);
-  --line-strong: rgba(13, 17, 16, 0.16);
-  --input: rgba(13, 17, 16, 0.08);
+  /* lines — 뉴트럴 헤어라인 */
+  --border: rgba(29, 29, 31, 0.09);
+  --line: rgba(29, 29, 31, 0.09);
+  --line-strong: rgba(29, 29, 31, 0.18);
+  --input: rgba(29, 29, 31, 0.12);
 
   /* shadcn semantic — map to eywa */
   --card: #ffffff;
-  --card-foreground: #1a1f1c;
+  --card-foreground: #1d1d1f;
   --popover: #ffffff;
-  --popover-foreground: #1a1f1c;
+  --popover-foreground: #1d1d1f;
 
-  --primary: #1a5f3c;
+  --primary: #153e75;
   --primary-foreground: #ffffff;
-  --primary-soft: rgba(26, 95, 60, 0.10);
-  --primary-softer: rgba(26, 95, 60, 0.05);
+  --primary-soft: rgba(21, 62, 117, 0.08);
+  --primary-softer: rgba(21, 62, 117, 0.04);
 
-  --secondary: #f1ede2;
-  --secondary-foreground: #1a1f1c;
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
 
-  --muted: #f1ede2;
-  --muted-foreground: #5a635f;
+  --muted: #f5f5f7;
+  --muted-foreground: #505050;
 
-  --accent: rgba(184, 137, 58, 0.14); /* gold-soft */
-  --accent-foreground: #b8893a;
+  --accent: rgba(138, 104, 28, 0.12); /* gold-soft */
+  --accent-foreground: #8a681c;
 
-  --destructive: #d04848;
-  --ring: #1a5f3c;
+  --destructive: #d33f3f;
+  --ring: #153e75;
 
-  /* chart roles (semantic) */
-  --chart-1: #1f6ba8;  /* blue · 정보·학생 안정 */
-  --chart-2: #1a5f3c;  /* primary · 출석·완납·긍정 */
-  --chart-3: #d68f1a;  /* amber · 지각·경고 */
-  --chart-4: #d04848;  /* danger · 결석·미납 */
-  --chart-5: #c44d6d;  /* rose · 상담·학부모 */
+  /* chart roles (semantic) — chart-2는 primary가 네이비로 바뀐 뒤에도 "긍정=그린" 시맨틱 유지 */
+  --chart-1: #2d6be0;  /* blue · 정보·학생 안정 */
+  --chart-2: #0e7c46;  /* green · 출석·완납·긍정 */
+  --chart-3: #c8720d;  /* amber · 지각·경고 */
+  --chart-4: #d33f3f;  /* danger · 결석·미납 */
+  --chart-5: #d2447a;  /* rose · 상담·학부모 */
 
-  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등) */
-  --gold: #b8893a;
-  --gold-soft: rgba(184, 137, 58, 0.14);
-  --blue: #1f6ba8;
-  --blue-soft: rgba(31, 107, 168, 0.12);
-  --purple: #7a4ba8;
-  --purple-soft: rgba(122, 75, 168, 0.12);
-  --rose: #c44d6d;
-  --rose-soft: rgba(196, 77, 109, 0.12);
-  --amber: #d68f1a;
-  --amber-soft: rgba(214, 143, 26, 0.14);
-  --danger: #d04848;
-  --danger-soft: rgba(208, 72, 72, 0.10);
+  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등)
+     — 텍스트로 쓰이는 accent는 전부 4.5:1↑(2026-07-19 마디아 정합: gold 5.15 · amber 5.09 · rose 5.09) */
+  --gold: #8a681c;
+  --gold-soft: rgba(138, 104, 28, 0.11);
+  --blue: #2d6be0;
+  --blue-soft: rgba(45, 107, 224, 0.09);
+  --purple: #6c50c8;
+  --purple-soft: rgba(108, 80, 200, 0.09);
+  --rose: #c23a6e;
+  --rose-soft: rgba(194, 58, 110, 0.09);
+  --amber: #a35d0a;
+  --amber-soft: rgba(163, 93, 10, 0.11);
+  --danger: #d33f3f;
+  --danger-soft: rgba(211, 63, 63, 0.09);
 
-  /* sidebar = bgSoft */
-  --sidebar: #f1ede2;
-  --sidebar-foreground: #1a1f1c;
-  --sidebar-primary: #1a5f3c;
+  /* sidebar — 화이트 레일(그레이 캔버스 위 부양, injaewon.blog 화이트 표면) */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #153e75;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fafaf5;
-  --sidebar-accent-foreground: #1a5f3c;
-  --sidebar-border: rgba(13, 17, 16, 0.08);
-  --sidebar-ring: #1a5f3c;
+  --sidebar-accent: #f5f5f7;
+  --sidebar-accent-foreground: #153e75;
+  --sidebar-border: rgba(29, 29, 31, 0.09);
+  --sidebar-ring: #153e75;
 
-  --radius: 0.25rem;
+  --radius: 0.5rem;
 }
 
 @layer base {
@@ -285,18 +289,26 @@
     line-height: 1.5;
     color: var(--text-dim);
   }
-  .micro {
-    font-family: var(--font-mono);
-    font-size: 11px;
+  /* editorial-eyebrow — Editorial 문법 ①의 상단 소라벨(한글 전제, PageHeader가 캡슐화).
+     ⚠️ 기존 .eyebrow(uppercase 영문 전제, 64파일 소비)는 호환용으로 불변 — 전역 재정의 금지. */
+  .editorial-eyebrow {
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
+    color: var(--primary);
+  }
+
+  /* micro — 라벨·메타. (2026-07-19 de-mono: 구 JetBrains Mono 11px 700 uppercase 자간 1.5px가
+     "코딩 틱함"의 진원지라 Pretendard 톤으로 전환. mono는 .tabular/시간·숫자 데이터에만.) */
+  .micro {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
     color: var(--text-faint);
   }
   .tabular {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum", "lnum";
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: -0.02em;
   }
 
@@ -575,7 +587,7 @@ body {
  * ─────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
+  scrollbar-color: rgba(29, 29, 31, 0.18) transparent;
 }
 *::-webkit-scrollbar {
   width: 6px;
@@ -585,11 +597,11 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(13, 17, 16, 0.18);
+  background: rgba(29, 29, 31, 0.18);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 17, 16, 0.32);
+  background: rgba(29, 29, 31, 0.32);
 }
 *::-webkit-scrollbar-corner {
   background: transparent;
@@ -598,7 +610,7 @@ body {
 /* .scrollbar-thin — 이제 전역이 기본이라 사실상 별칭(기존 사용처 호환 유지). */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(13, 17, 16, 0.18) transparent;
+  scrollbar-color: rgba(29, 29, 31, 0.18) transparent;
 }
 
 /* .scrollbar-hide — 스크롤바 없이 스크롤만(휠·터치·키). 사이드바 레일처럼 폭이 좁고
@@ -680,19 +692,19 @@ body {
    color로 진하게 하고, webkit 규칙은 표준 미지원 브라우저용 폴백(굵게)로 둔다. */
 .scroll-x-always {
   overflow-x: scroll;
-  scrollbar-color: rgba(13, 17, 16, 0.4) transparent;
+  scrollbar-color: rgba(29, 29, 31, 0.4) transparent;
 }
 .scroll-x-always::-webkit-scrollbar {
   height: 12px;
 }
 .scroll-x-always::-webkit-scrollbar-thumb {
-  background: rgba(13, 17, 16, 0.34);
+  background: rgba(29, 29, 31, 0.34);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 .scroll-x-always::-webkit-scrollbar-thumb:hover {
-  background: rgba(13, 17, 16, 0.5);
+  background: rgba(29, 29, 31, 0.5);
   background-clip: padding-box;
 }
 

@@ -113,7 +113,7 @@ export async function SessionVerificationFace({
           >
             <EyIcon name="chevronLeft" size={14} />
           </Link>
-          <span className="text-foreground num text-sm font-semibold">
+          <span className="text-foreground num text-sm font-bold">
             {y}년 {Number(m)}월
           </span>
           <Link
@@ -127,7 +127,7 @@ export async function SessionVerificationFace({
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {(["over", "short", "matched", "unconfirmed"] as VerificationStatus[]).map((s) => (
             <span key={s} className={`rounded-full border px-2 py-0.5 ${STATUS_META[s].chip}`}>
-              {STATUS_META[s].label} <span className="num font-semibold">{c[s]}</span>
+              {STATUS_META[s].label} <span className="num font-bold">{c[s]}</span>
             </span>
           ))}
         </div>
@@ -137,7 +137,7 @@ export async function SessionVerificationFace({
         <nav className="flex flex-wrap items-center gap-1.5" aria-label="과목별 보기">
           <Link
             href={`/billing?tab=verify&period=${p}`}
-            className={`rounded-md border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-foreground bg-foreground text-background font-semibold" : "border-line text-text-dim hover:text-foreground"}`}
+            className={`rounded-md border px-2.5 py-1 text-xs transition ${!activeSubject ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
           >
             전체
           </Link>
@@ -145,7 +145,7 @@ export async function SessionVerificationFace({
             <Link
               key={sk}
               href={`/billing?tab=verify&period=${p}&subject=${sk}`}
-              className={`rounded-md border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-foreground bg-foreground text-background font-semibold" : "border-line text-text-dim hover:text-foreground"}`}
+              className={`rounded-md border px-2.5 py-1 text-xs transition ${activeSubject === sk ? "border-foreground bg-foreground text-background font-bold" : "border-line text-text-dim hover:text-foreground"}`}
             >
               {subjects.labelOf(sk)}
             </Link>
@@ -180,7 +180,7 @@ export async function SessionVerificationFace({
           {allocations.length > 0 ? (
           <section className="border-line rounded-lg border">
             <header className="border-line flex flex-wrap items-baseline justify-between gap-2 border-b px-3 py-2">
-              <h3 className="text-foreground text-sm font-semibold">강사별 분배 (참고)</h3>
+              <h3 className="text-foreground text-sm font-bold">강사별 분배 (참고)</h3>
               <p className="text-text-dim text-[11px]">
                 반 담당 강사 기준 집계 — 표시 전용이며 어디에도 저장되지 않습니다. 단가 없는 행은 금액에서
                 제외하고 개수로 표시합니다.
@@ -219,7 +219,7 @@ export async function SessionVerificationFace({
                       <td className="num px-3 py-2 text-right">{fmtUnits(t.actualUnits)}</td>
                       <td className="num px-3 py-2 text-right">{fmtWon(t.actualAmount)}</td>
                       <td
-                        className={`num px-3 py-2 text-right font-semibold ${
+                        className={`num px-3 py-2 text-right font-bold ${
                           t.diffAmount === 0 ? "text-emerald-700" : t.diffAmount > 0 ? "text-red-700" : "text-amber-700"
                         }`}
                       >
@@ -233,11 +233,11 @@ export async function SessionVerificationFace({
                     <td className="text-text-dim px-3 py-2" colSpan={3}>
                       합계
                     </td>
-                    <td className="num px-3 py-2 text-right font-semibold">{fmtWon(allocTotal.confirmedAmount)}</td>
+                    <td className="num px-3 py-2 text-right font-bold">{fmtWon(allocTotal.confirmedAmount)}</td>
                     <td />
-                    <td className="num px-3 py-2 text-right font-semibold">{fmtWon(allocTotal.actualAmount)}</td>
+                    <td className="num px-3 py-2 text-right font-bold">{fmtWon(allocTotal.actualAmount)}</td>
                     <td
-                      className={`num px-3 py-2 text-right font-semibold ${
+                      className={`num px-3 py-2 text-right font-bold ${
                         allocTotal.actualAmount - allocTotal.confirmedAmount === 0 ? "text-emerald-700" : "text-red-700"
                       }`}
                     >
@@ -294,7 +294,7 @@ export async function SessionVerificationFace({
                         )}
                       </td>
                       <td className="num text-foreground px-3 py-2 text-right">{fmtUnits(r.actualConsumed)}</td>
-                      <td className={`num px-3 py-2 text-right font-semibold ${meta.cell}`}>
+                      <td className={`num px-3 py-2 text-right font-bold ${meta.cell}`}>
                         {r.diff === null ? "—" : r.diff > 0 ? `+${fmtUnits(r.diff)}` : fmtUnits(r.diff)}
                       </td>
                       <td className="px-3 py-2">

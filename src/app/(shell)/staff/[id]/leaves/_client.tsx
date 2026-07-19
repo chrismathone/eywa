@@ -44,7 +44,7 @@ export function LeavesClient({
           className="bg-card border-border space-y-3 rounded-md border p-4"
         >
         <input type="hidden" name="userId" value={userId} />
-        <h3 className="text-foreground text-sm font-semibold">신규 휴가</h3>
+        <h3 className="text-foreground text-sm font-bold">신규 휴가</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="space-y-1">
             <label className="text-muted-foreground block text-[11px] font-medium">유형</label>

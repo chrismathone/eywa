@@ -32,11 +32,11 @@ export function FeatureSwitcher({ features }: { features: Feature[] }) {
 
   return (
     <div>
-      {/* 탭 바 — 세그먼트 컨트롤 */}
+      {/* 탭 바 — 세그먼트 컨트롤 (잉크 활성) */}
       <div
         role="tablist"
         aria-label="기능 둘러보기"
-        className="border-line bg-card inline-flex flex-wrap gap-1 rounded-lg border p-1"
+        className="border-line bg-card inline-flex flex-wrap gap-1 rounded-full border p-1 shadow-[0_1px_2px_rgba(11,16,13,0.04)]"
       >
         {features.map((t, i) => {
           const on = i === view.idx;
@@ -49,13 +49,13 @@ export function FeatureSwitcher({ features }: { features: Feature[] }) {
               id={`feat-tab-${t.key}`}
               aria-controls="feat-panel"
               onClick={() => select(i)}
-              className={`flex items-center gap-2 rounded-md px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+              className={`flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-bold transition-colors ${
                 on
-                  ? "bg-primary text-white shadow-[0_8px_20px_-10px_rgba(26,95,60,0.7)]"
+                  ? "bg-ink text-white shadow-[0_8px_20px_-10px_rgba(11,16,13,0.6)]"
                   : "text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <EyIcon name={MENU_ICON[t.key]} size={15} className={on ? "text-white" : "text-text-faint"} />
+              <EyIcon name={MENU_ICON[t.key]} size={15} className={on ? "text-[var(--mint)]" : "text-text-faint"} />
               {t.label}
             </button>
           );
@@ -74,23 +74,23 @@ export function FeatureSwitcher({ features }: { features: Feature[] }) {
       >
         <div>
           <p className="text-primary font-mono text-[11px] font-bold tracking-[0.16em] uppercase">{f.eyebrow}</p>
-          <h3 className="text-foreground mt-4 text-[clamp(1.7rem,3.4vw,2.6rem)] leading-[1.2] font-extrabold tracking-[-0.025em]">
+          <h3 className="text-ink mt-4 text-[clamp(1.7rem,3.4vw,2.6rem)] leading-[1.18] font-extrabold tracking-[-0.03em]">
             {f.title}
           </h3>
           <p className="text-text-dim mt-5 max-w-[30rem] text-[16px] leading-[1.75]">{f.desc}</p>
           <ul className="mt-6 space-y-2.5">
             {f.points.map((p) => (
-              <li key={p} className="text-foreground flex items-center gap-2.5 text-[14px] font-medium">
-                <span className="bg-primary-soft text-primary flex size-5 shrink-0 items-center justify-center rounded-md">
-                  <EyIcon name="check" size={13} />
-                </span>
+              <li key={p} className="text-foreground flex items-center gap-2.5 text-[14px] font-semibold">
+                <EyIcon name="check" size={15} strokeWidth={2.2} className="text-primary shrink-0" />
                 {p}
               </li>
             ))}
           </ul>
         </div>
 
-        <BrowserFrame url={f.url}>{f.mock}</BrowserFrame>
+        <BrowserFrame title={`${f.label} · 인재원수학`} url={f.url}>
+          {f.mock}
+        </BrowserFrame>
       </div>
     </div>
   );

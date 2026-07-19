@@ -1,9 +1,15 @@
 // 학원 브랜드 색(settings.profile.brandColor)을 셸 CSS 변수로 주입하기 위한 순수 헬퍼.
-// globals.css의 --primary(#1a5f3c)와 그 파생 토큰을 테넌트별 hex로 덮어쓴다(layout.tsx).
+// globals.css의 --primary(#153e75)와 그 파생 토큰을 테넌트별 hex로 덮어쓴다(layout.tsx).
 import type { CSSProperties } from "react";
 
-/** globals.css의 기본 --primary. 이 값이면 오버라이드하지 않는다(불필요한 inline style 회피). */
-export const DEFAULT_BRAND_COLOR = "#1a5f3c";
+/** globals.css의 기본 --primary(Injaewon Navy). 이 값이면 오버라이드하지 않는다(불필요한 inline style 회피).
+ *  ⚠️ globals.css `--primary`와 항상 같은 값(소문자)이어야 한다 — 리스킨 시 함께 갱신. */
+export const DEFAULT_BRAND_COLOR = "#153e75";
+
+/** 과거 기본색들 — 옛 기본값이 tenant_settings에 그대로 저장된 테넌트가 있어(실측: injaewon #1a5f3c)
+ *  이 값들도 "기본"으로 간주해 주입을 생략한다(리스킨을 자동 추종, 데이터 마이그 불필요).
+ *  누군가 옛 기본색을 진짜 브랜드색으로 쓰고 싶다면 미세하게 다른 hex를 고르면 된다(엣지, 허용 트레이드오프). */
+const LEGACY_DEFAULT_BRAND_COLORS = new Set(["#1a5f3c", "#0e7c46"]);
 
 /** #RGB 또는 #RRGGBB(대소문자 무관)만 허용. */
 export function isHexColor(value: string): boolean {
@@ -20,12 +26,12 @@ function hexToRgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** 배경 hex에 대비되는 글자색(#1a1f1c 또는 #ffffff) — sRGB 휘도 기준. 유효하지 않으면 빈 문자열. */
+/** 배경 hex에 대비되는 글자색(#1d1d1f 또는 #ffffff) — sRGB 휘도 기준. 유효하지 않으면 빈 문자열. */
 export function readableTextColor(bgHex: string): string {
   const rgb = hexToRgb(bgHex);
   if (!rgb) return "";
   const lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-  return lum > 0.6 ? "#1a1f1c" : "#ffffff";
+  return lum > 0.6 ? "#1d1d1f" : "#ffffff";
 }
 
 /** hex + alpha → "rgba(r, g, b, a)". 유효하지 않으면 빈 문자열. */
@@ -43,7 +49,8 @@ export function hexToRgba(hex: string, alpha: number): string {
 export function brandColorVars(brandColor: string | undefined | null): CSSProperties | null {
   if (!brandColor) return null;
   const hex = brandColor.trim();
-  if (!isHexColor(hex) || hex.toLowerCase() === DEFAULT_BRAND_COLOR) return null;
+  const lower = hex.toLowerCase();
+  if (!isHexColor(hex) || lower === DEFAULT_BRAND_COLOR || LEGACY_DEFAULT_BRAND_COLORS.has(lower)) return null;
   return {
     "--primary": hex,
     "--primary-soft": hexToRgba(hex, 0.1),

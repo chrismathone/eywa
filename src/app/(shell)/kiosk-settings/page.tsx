@@ -61,7 +61,7 @@ export default async function KioskSettingsPage() {
           학생 휴대폰 뒷 4자리(없으면 학부모) 기준으로 발급되며, 겹치면 5자리로 분기합니다.
         </p>
         <p className="text-foreground mt-2 text-[13px]">
-          발급 완료 <span className="font-semibold">{stats.withCode}</span> / {stats.total}명
+          발급 완료 <span className="font-bold">{stats.withCode}</span> / {stats.total}명
         </p>
         <div className="mt-3">
           <AssignCodesForm />

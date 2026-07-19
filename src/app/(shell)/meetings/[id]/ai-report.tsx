@@ -147,7 +147,7 @@ export function MeetingReportAccordion({
               aria-expanded={isOpen}
               className="bg-bg-soft hover:bg-bg-soft/60 flex w-full items-center justify-between gap-2 px-4 py-2.5 transition"
             >
-              <h3 className="text-foreground flex items-center gap-2 text-[13px] font-semibold">
+              <h3 className="text-foreground flex items-center gap-2 text-[13px] font-bold">
                 <EyIcon name={section.icon} size={15} />
                 {section.label}
               </h3>

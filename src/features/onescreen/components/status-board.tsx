@@ -21,7 +21,7 @@ function Chip({ label, value, tone }: { label: string; value: number; tone: stri
   return (
     <div className={`rounded-md px-3 py-1.5 ${tone}`}>
       <span className="text-[18px] font-bold tabular">{value}</span>
-      <span className="ml-1 text-[12px] font-semibold">{label}</span>
+      <span className="ml-1 text-[12px] font-bold">{label}</span>
     </div>
   );
 }
@@ -63,11 +63,11 @@ export function StatusBoard({
         <table className="w-full min-w-[640px] text-left text-[12px]">
           <thead>
             <tr className="border-line text-text-faint border-b">
-              <th className="px-3 py-2 font-semibold">학생 · 반</th>
-              <th className="px-3 py-2 font-semibold">오늘 진도</th>
-              <th className="px-3 py-2 font-semibold">보고서</th>
-              <th className="px-3 py-2 font-semibold">ClassNote</th>
-              <th className="px-3 py-2 text-right font-semibold">열람</th>
+              <th className="px-3 py-2 font-bold">학생 · 반</th>
+              <th className="px-3 py-2 font-bold">오늘 진도</th>
+              <th className="px-3 py-2 font-bold">보고서</th>
+              <th className="px-3 py-2 font-bold">ClassNote</th>
+              <th className="px-3 py-2 text-right font-bold">열람</th>
             </tr>
           </thead>
           <tbody>
@@ -86,14 +86,14 @@ export function StatusBoard({
                   }`}
                 >
                   <td className="px-3 py-2">
-                    <span className="text-foreground font-semibold">{r.student.name}</span>
+                    <span className="text-foreground font-bold">{r.student.name}</span>
                     <span className="text-text-faint ml-1.5">
                       {r.subject.name}
                       {r.student.className ? ` · ${r.student.className}` : ""}
                     </span>
                     {r.student.attendance !== "출석" ? (
                       <span
-                        className={`ml-1.5 rounded-pill px-1.5 py-px text-[10px] font-semibold ${
+                        className={`ml-1.5 rounded-pill px-1.5 py-px text-[10px] font-bold ${
                           r.student.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
                         }`}
                       >
@@ -103,11 +103,11 @@ export function StatusBoard({
                   </td>
                   <td className="text-text-dim px-3 py-2">{r.subject.today?.trim() || "—"}</td>
                   <td className="px-3 py-2">
-                    <span className={`rounded-pill px-2 py-0.5 text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
+                    <span className={`rounded-pill px-2 py-0.5 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span>
                   </td>
                   <td className="px-3 py-2">
                     {badge ? (
-                      <span className={`text-[11px] font-semibold ${badge.cls}`}>{badge.label}</span>
+                      <span className={`text-[11px] font-bold ${badge.cls}`}>{badge.label}</span>
                     ) : (
                       <span className="text-text-faint text-[11px]">—</span>
                     )}

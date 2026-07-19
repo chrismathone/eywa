@@ -24,7 +24,7 @@ export default async function StaffLeavesPage() {
       <header className="border-border flex flex-wrap items-end justify-between gap-3 border-b pb-4">
         <div>
           <p className="eyebrow">직원 관리</p>
-          <h1 className="display text-foreground text-2xl">휴가 관리</h1>
+          <h1 className="font-bold tracking-tight text-foreground text-2xl">휴가 관리</h1>
         </div>
         <p className="text-muted-foreground text-sm">
           전체 <span className="num text-foreground font-bold">{leaves.length}</span>건 · 대기{" "}

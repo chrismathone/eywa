@@ -76,15 +76,15 @@ function QueueItem({ item, index }: { item: BriefingItem; index: number }) {
         ariaLabel={itemAriaLabel(item)}
         className="border-line bg-card hover:border-primary/25 hover:bg-primary-soft/25 focus-visible:ring-primary/35 group flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 transition focus-visible:ring-2 focus-visible:outline-none"
       >
-        <span className="text-text-faint num w-4 shrink-0 font-mono text-[10px] font-bold" aria-hidden="true">
+        <span className="text-text-faint num w-4 shrink-0 text-[10px] font-bold" aria-hidden="true">
           {String(index + 2).padStart(2, "0")}
         </span>
         <span className={`${LANE_DOT[item.lane]} size-2 shrink-0 rounded-full`} aria-hidden="true" />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-foreground text-[12.5px] font-semibold">{item.label}</span>
+            <span className="text-foreground text-[12.5px] font-bold">{item.label}</span>
             {item.countLabel ? (
-              <span className="text-text-dim num font-mono text-[10.5px] font-bold">{item.countLabel}</span>
+              <span className="text-text-dim num text-[10.5px] font-bold">{item.countLabel}</span>
             ) : null}
           </span>
           {item.detail ? (
@@ -126,15 +126,15 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-primary font-mono text-[10px] font-bold tracking-[0.13em] uppercase">
-                AI operations brief
+              <p className="text-primary text-[11px] font-bold">
+                AI 운영 브리핑
               </p>
               <span className={`${state.tone} inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10.5px] font-bold ring-1 ring-inset`}>
                 <span className={`${state.dot} size-1.5 rounded-full`} aria-hidden="true" />
                 {state.label}
               </span>
             </div>
-            <h2 id="operations-briefing-title" className="text-foreground mt-1 text-[17px] font-extrabold tracking-tight">
+            <h2 id="operations-briefing-title" className="text-foreground mt-1 text-[17px] font-bold tracking-tight">
               Eywa의 운영 브리핑
             </h2>
             <p className="text-text-dim mt-1 text-[12.5px] leading-relaxed">{briefing.summary}</p>
@@ -146,10 +146,10 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
             {activeSummary.map((item) => (
               <span
                 key={item.lane}
-                className={`${item.tone} inline-flex items-baseline gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ring-1 ring-inset`}
+                className={`${item.tone} inline-flex items-baseline gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ring-1 ring-inset`}
               >
                 {item.label}
-                <span className="num font-mono text-[12px] font-extrabold">{briefing.counts[item.lane]}</span>
+                <span className="num text-[12px] font-bold">{briefing.counts[item.lane]}</span>
               </span>
             ))}
           </div>
@@ -163,10 +163,10 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
               <div className="pointer-events-none absolute -right-10 -top-14 size-44 rounded-full border border-current opacity-[0.04]" aria-hidden="true" />
               <div className="relative flex min-h-full w-full flex-col">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-text-dim font-mono text-[10px] font-bold tracking-[0.13em] uppercase">
-                    01 · 먼저 할 일
+                  <p className="text-text-dim text-[11px] font-bold">
+                    먼저 할 일
                   </p>
-                  <span className={`${focusStyle.badge} rounded-full px-2.5 py-1 text-[10.5px] font-extrabold`}>
+                  <span className={`${focusStyle.badge} rounded-full px-2.5 py-1 text-[10.5px] font-bold`}>
                     {briefing.focus.lane === "urgent"
                       ? "긴급"
                       : briefing.focus.lane === "approval"
@@ -175,11 +175,11 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
                   </span>
                 </div>
                 <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <h3 className="text-foreground text-[20px] font-extrabold leading-tight tracking-tight sm:text-[22px]">
+                  <h3 className="text-foreground text-[20px] font-bold leading-tight tracking-tight sm:text-[22px]">
                     {briefing.focus.label}
                   </h3>
                   {briefing.focus.countLabel ? (
-                    <span className="text-foreground num font-mono text-[13px] font-extrabold">
+                    <span className="text-foreground num text-[13px] font-bold">
                       {briefing.focus.countLabel}
                     </span>
                   ) : null}
@@ -208,7 +208,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
                     <h3 id="assistant-queue-title" className="text-foreground text-[13px] font-bold">이어서 처리</h3>
                     <p className="text-text-dim mt-0.5 text-[11px]">긴급 → 승인 → 오늘 순서입니다.</p>
                   </div>
-                  <span className="text-text-dim num rounded-md bg-white/70 px-2 py-1 font-mono text-[10.5px] font-bold">
+                  <span className="text-text-dim num rounded-md bg-white/70 px-2 py-1 text-[10.5px] font-bold">
                     {briefing.queue.length}개
                   </span>
                 </header>
@@ -223,7 +223,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
         ) : (
           <div className="border-primary/20 bg-primary-soft/35 flex items-start gap-3 rounded-2xl border p-4 sm:p-5">
             <span className="bg-primary-soft text-primary flex size-9 shrink-0 items-center justify-center rounded-xl" aria-hidden="true">
-              <EyIcon name="check" size={17} strokeWidth={2} />
+              <EyIcon name="check" size={17} strokeWidth={1.8} />
             </span>
             <div>
               <h3 className="text-foreground text-[14px] font-bold">지금 바로 처리할 운영 신호가 없습니다</h3>
@@ -247,11 +247,11 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
                     href={item.href}
                     title={item.label}
                     ariaLabel={itemAriaLabel(item)}
-                    className="border-line bg-blue-soft/35 hover:border-blue/30 focus-visible:ring-primary/35 inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-semibold transition focus-visible:ring-2 focus-visible:outline-none"
+                    className="border-line bg-blue-soft/35 hover:border-blue/30 focus-visible:ring-primary/35 inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-bold transition focus-visible:ring-2 focus-visible:outline-none"
                   >
                     <span className="bg-blue size-1.5 rounded-full" aria-hidden="true" />
                     {item.label}
-                    {item.countLabel ? <span className="text-text-dim num font-mono text-[10.5px]">{item.countLabel}</span> : null}
+                    {item.countLabel ? <span className="text-text-dim num text-[10.5px]">{item.countLabel}</span> : null}
                   </WindowLink>
                 </li>
               ))}

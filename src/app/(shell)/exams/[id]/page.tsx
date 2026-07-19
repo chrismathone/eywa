@@ -57,20 +57,20 @@ export default async function ExamDetailPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
-      <header className="bg-card border-line shadow-card rounded-md border p-5">
+      <header className="bg-card shadow-card rounded-2xl p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <Pill color={meta.color}>{meta.label}</Pill>
               <span className="text-text-dim text-xs">{TYPE_LABEL[exam.examType] ?? exam.examType}</span>
-              <span className="text-text-faint font-mono text-xs">{exam.examDate}</span>
+              <span className="text-text-faint num text-xs">{exam.examDate}</span>
               {exam.maxScore != null ? (
                 <span className="text-text-faint text-xs">만점 {exam.maxScore}</span>
               ) : null}
             </div>
-            <h1 className="text-foreground text-xl font-extrabold leading-tight">{exam.name}</h1>
+            <h1 className="text-foreground text-xl font-bold leading-tight">{exam.name}</h1>
             {exam.notes ? <p className="text-text-dim text-sm">{exam.notes}</p> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -112,7 +112,7 @@ export default async function ExamDetailPage({
       {classOptions.length === 0 ? null : rows.length === 0 ? (
         <EmptyState
           image="students"
-          icon={() => <BookOpen size={32} strokeWidth={1.5} />}
+          icon={() => <BookOpen size={32} strokeWidth={1.8} />}
           title="이 반에 재원 학생이 없습니다"
         />
       ) : (
@@ -122,13 +122,16 @@ export default async function ExamDetailPage({
   );
 }
 
+// BigStat 톤(문법 ②) — 큰 tabular 숫자 + 작은 dim 라벨. 카드 안 in-place 스탯이라 아톰 대신 톤만 이식.
 function Stat({ label, value, unit }: { label: string; value: number | null; unit: string }) {
   return (
     <div>
-      <p className="micro">{label}</p>
-      <p className="mt-1 flex items-baseline justify-center gap-1">
-        <span className="tabular text-foreground text-2xl leading-none">{value ?? "—"}</span>
-        {unit ? <span className="text-text-dim text-xs">{unit}</span> : null}
+      <p className="text-text-dim text-[13px] font-medium">{label}</p>
+      <p className="mt-1.5 flex items-baseline justify-center gap-1">
+        <span className="num text-foreground text-[27px] font-bold leading-none tracking-tight">
+          {value ?? "—"}
+        </span>
+        {unit ? <span className="text-text-dim text-[13px] font-medium">{unit}</span> : null}
       </p>
     </div>
   );

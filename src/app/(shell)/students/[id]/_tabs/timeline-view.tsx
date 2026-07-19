@@ -50,7 +50,7 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
     return (
       <div className="space-y-4">
         <header className="border-border flex items-baseline justify-between border-b pb-3">
-          <h2 className="text-foreground text-base font-semibold">타임라인</h2>
+          <h2 className="text-foreground text-base font-bold">타임라인</h2>
         </header>
         <p className="text-muted-foreground py-8 text-center text-sm">이벤트가 없습니다</p>
       </div>
@@ -63,7 +63,7 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
     <div className="space-y-4">
       <header className="border-border flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <div className="flex items-baseline gap-2">
-          <h2 className="text-foreground text-base font-semibold">타임라인</h2>
+          <h2 className="text-foreground text-base font-bold">타임라인</h2>
           <span className="text-muted-foreground num text-xs">
             {safeIdx + 1}/{months.length}개월 · 총 {events.length}건
           </span>
@@ -128,7 +128,7 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
                 ) : null}
               </div>
               {/* 제목(굵게) — 본문과 위계 분리 */}
-              <p className="text-foreground mt-1 text-sm font-semibold break-keep">{e.title}</p>
+              <p className="text-foreground mt-1 text-sm font-bold break-keep">{e.title}</p>
               {/* 본문(흐리게) — 줄바꿈 보존 + 한글 어절 단위 */}
               {e.description ? (
                 <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed break-keep whitespace-pre-line">

@@ -224,7 +224,7 @@ export function NotificationBell() {
             className="border-line hover:bg-bg-soft flex w-full items-center gap-1.5 border-b px-3 py-2 text-left text-[11px] transition"
           >
             <EyIcon name="bell" size={13} className="text-primary shrink-0" />
-            <span className="text-foreground font-semibold">컴퓨터 알림 켜기</span>
+            <span className="text-foreground font-bold">컴퓨터 알림 켜기</span>
             <span className="text-text-faint truncate">— 창 밖에서도 받기</span>
           </button>
         ) : perm === "denied" ? (
@@ -250,7 +250,7 @@ export function NotificationBell() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
-                    <span className="text-foreground truncate text-[12px] font-semibold">{n.title}</span>
+                    <span className="text-foreground truncate text-[12px] font-bold">{n.title}</span>
                     {!n.read ? <span className="bg-primary size-1.5 shrink-0 rounded-full" /> : null}
                     <span className="text-text-faint ml-auto shrink-0 text-[10px]">
                       {relTime(n.createdAt)}

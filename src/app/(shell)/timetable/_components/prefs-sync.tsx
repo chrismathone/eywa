@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-
-export const EMPTY_DAYS_COOKIE = "eywa-tt-emptydays";
+// ⚠️ 쿠키 이름 상수는 pref-cookies(일반 모듈)가 단일 소스 — 이 "use client" 파일에서 다시 export하지
+// 말 것. 서버(page.tsx)가 클라 모듈 경유로 상수를 import하면 참조 프록시가 되어 런타임 undefined다
+// (2026-07-19 실측: 쿠키 기본값이 조용히 죽었다).
+import { EMPTY_DAYS_COOKIE, EMPTY_PERIODS_COOKIE } from "@/features/timetable/lib/pref-cookies";
 
 /**
  * 강사뷰 '미사용 요일' 토글을 **기기에 기억**한다.
@@ -19,5 +21,18 @@ export function EmptyDaysPrefSync({ hide }: { hide: boolean }) {
   useEffect(() => {
     document.cookie = `${EMPTY_DAYS_COOKIE}=${hide ? "hide" : "show"}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
   }, [hide]);
+  return null;
+}
+
+/**
+ * 기본뷰 '빈 교시 접기' 선호를 기기에 기억 — 이유·구조는 위 EmptyDaysPrefSync와 동일(창은 깨끗한
+ * URL로 열려 파라미터만으론 매번 초기화). URL 파라미터(`emptyperiods=collapse|expand`)가 있으면
+ * 그쪽 우선, 없을 때만 쿠키가 기본. 링크 직렬화는 **양방향 명시**(page.tsx buildHref 참조 — hide만
+ * 직렬화하다 토글이 한쪽으로 죽은 emptydays 전례 재발 방지).
+ */
+export function EmptyPeriodsPrefSync({ collapse }: { collapse: boolean }) {
+  useEffect(() => {
+    document.cookie = `${EMPTY_PERIODS_COOKIE}=${collapse ? "collapse" : "expand"}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+  }, [collapse]);
   return null;
 }

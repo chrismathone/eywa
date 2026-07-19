@@ -75,7 +75,7 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
             b.accounts.map((a, i) => (
               <div key={i} className="border-line bg-bg-soft/40 space-y-3 rounded-md border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-foreground text-[12px] font-semibold">계좌 {i + 1}</span>
+                  <span className="text-foreground text-[12px] font-bold">계좌 {i + 1}</span>
                   <button
                     type="button"
                     onClick={() => removeAccount(i)}
@@ -114,7 +114,7 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
                 </div>
                 {/* 사용할 곳(배선) — 이 계좌를 기본으로 쓸 화면. 한 화면은 한 계좌에만(배타). */}
                 <div className="border-line/70 border-t pt-2.5">
-                  <span className="text-foreground text-[12px] font-semibold">사용할 곳</span>
+                  <span className="text-foreground text-[12px] font-bold">사용할 곳</span>
                   <span className="text-text-dim ml-2 text-[11px]">이 계좌를 기본으로 쓸 화면</span>
                   <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
                     {ACCOUNT_TARGETS.map((t) => (

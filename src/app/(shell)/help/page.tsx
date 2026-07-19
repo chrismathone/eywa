@@ -182,8 +182,8 @@ export default async function HelpPage() {
           <EyIcon name="help" size={22} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="micro">Product language</p>
-          <h2 className="text-foreground mt-0.5 text-[15px] font-extrabold">Eywa 아이콘 시스템</h2>
+          <p className="editorial-eyebrow">디자인 시스템</p>
+          <h2 className="text-foreground mt-0.5 text-[15px] font-bold">Eywa 아이콘 시스템</h2>
           <p className="text-text-dim mt-1 text-[11px] leading-relaxed">
             제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
           </p>
@@ -198,11 +198,9 @@ export default async function HelpPage() {
 
       {/* 1:1 문의 */}
       <div className="lg:max-w-md">
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#185533] p-5 text-white shadow-primary-glow">
-          <p className="font-mono text-[10px] tracking-wider uppercase text-[#e9c876]">
-            1:1 문의
-          </p>
-          <h3 className="mt-1.5 text-[17px] font-extrabold leading-tight">
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#0d2b52] p-5 text-white shadow-primary-glow">
+          <p className="text-[12px] font-bold text-[#e2b45f]">1:1 문의</p>
+          <h3 className="mt-1.5 text-[17px] font-bold leading-tight">
             도움이 필요하시면 언제든
           </h3>
           <p className="mt-2 text-[12px] text-white/85">

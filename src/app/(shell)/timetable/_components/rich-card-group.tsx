@@ -96,7 +96,7 @@ function LabelColumn({
       {group.periodRows.map((p) => (
         <div
           key={p.order}
-          className="border-line text-text-faint flex flex-col items-center justify-center border-b font-mono leading-none"
+          className="border-line text-text-faint flex flex-col items-center justify-center border-b num leading-none"
           style={{ height: PERIOD_H }}
         >
           <span className="text-foreground text-[10px] font-bold">{p.label}</span>
@@ -136,7 +136,7 @@ function ClassColumn({
   const gridCols = { gridTemplateColumns: `repeat(${days.length}, 1fr)` };
   // 반 헤더색 — ijw bgColor 우선(인라인), 없으면 과목색 클래스.
   const headerStyle = card.bgColor
-    ? { background: card.bgColor, color: card.textColor ?? "#1a1f1c" }
+    ? { background: card.bgColor, color: card.textColor ?? "#1d1d1f" }
     : undefined;
   // 담임색 — ijw 강사 저장색(users.bg_color, display_name·영문닉네임으로 해결). 없으면 plain.
   const damimColor = card.teacherName ? teacherColors[card.teacherName] : undefined;
@@ -176,13 +176,13 @@ function ClassColumn({
           <span className="text-text-faint text-[11px]">-</span>
         ) : damimColor ? (
           <span
-            className="rounded px-1.5 py-0.5 text-[11px] font-semibold"
+            className="rounded px-1.5 py-0.5 text-[11px] font-bold"
             style={{ background: damimColor.bg, color: damimColor.text }}
           >
             {card.teacherName}
           </span>
         ) : (
-          <span className="text-foreground text-[11px] font-semibold">{card.teacherName}</span>
+          <span className="text-foreground text-[11px] font-bold">{card.teacherName}</span>
         )}
       </div>
       {/* 강의실(요일별) */}
@@ -293,7 +293,7 @@ function RosterRow({ s }: { s: GridStudent }) {
   const inner = (
     <>
       <span className="overflow-hidden whitespace-nowrap text-clip">{name}</span>
-      {meta ? <span className={`shrink-0 font-mono text-[9px] ${withdrawn ? "text-white/70" : "text-text-faint"}`}>{meta}</span> : null}
+      {meta ? <span className={`shrink-0 text-[9px] ${withdrawn ? "text-white/70" : "text-text-faint"}`}>{meta}</span> : null}
     </>
   );
   const cls = `flex items-baseline justify-between gap-1 rounded-[3px] px-1 text-[10px] leading-[18px] ${tone}`;

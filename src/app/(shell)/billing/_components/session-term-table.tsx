@@ -105,7 +105,7 @@ function ClassBatch({ period, group, catalog }: { period: string; group: ClassGr
       <button
         type="submit"
         disabled={pending}
-        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50"
+        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition disabled:opacity-50"
       >
         {pending ? <Loader2 className="size-3 animate-spin" /> : null}이 반 일괄 확정
       </button>
@@ -147,7 +147,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
       {/* 확정 회차 */}
       <td className="num px-3 py-2 text-center">
         {confirmed ? (
-          <span className="text-foreground font-semibold">{r.confirmedSessions}</span>
+          <span className="text-foreground font-bold">{r.confirmedSessions}</span>
         ) : (
           <input
             form={fid}
@@ -192,7 +192,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
         )}
       </td>
       {/* 확정 금액 */}
-      <td className="num text-foreground px-3 py-2 text-right font-semibold">
+      <td className="num text-foreground px-3 py-2 text-right font-bold">
         {confirmed && r.amount !== null ? won(r.amount) : "—"}
       </td>
       {/* 이 반 청구액(참고) */}
@@ -212,7 +212,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
           <button
             type="submit"
             form={fid}
-            className="bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-xs font-semibold"
+            className="bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-xs font-bold"
           >
             확정
           </button>
@@ -281,7 +281,7 @@ export function SessionTermGroups({
                   <td colSpan={8} className="px-3 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-foreground text-sm font-semibold">{g.className}</span>
+                        <span className="text-foreground text-sm font-bold">{g.className}</span>
                         <span className="text-text-dim text-xs">{g.subjectLabel}</span>
                         <span className="text-text-faint text-xs">
                           · {g.students.length}명 · 계획 {plannedSummary(g.students)} · 확정{" "}

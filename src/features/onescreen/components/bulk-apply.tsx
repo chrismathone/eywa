@@ -70,7 +70,7 @@ export function BulkApplyPopover({
     >
       <Popover.Trigger
         disabled={disabled}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-md px-2.5 text-[12.5px] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-md px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title="선택(없으면 표시 전체) 행에 같은 값을 한 번에 채우기"
       >
         값 일괄 입력

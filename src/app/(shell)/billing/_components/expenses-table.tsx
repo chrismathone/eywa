@@ -236,7 +236,7 @@ function StageMark({ checked, interactive }: { checked: boolean; interactive?: b
   if (checked) {
     // ⚠️ Tailwind preflight가 svg를 display:block으로 만들어, 버튼 없는 '작성' 셀에선 좌측 정렬돼
     // 헤더 라벨과 어긋난다 → mx-auto로 중앙 정렬(토글 셀의 inline-flex justify-center 안에선 무해).
-    return <Check className="text-primary mx-auto size-4" strokeWidth={3} />;
+    return <Check className="text-primary mx-auto size-4" strokeWidth={2.5} />;
   }
   return <span className={`text-text-faint text-xs ${interactive ? "hover:text-text-dim" : ""}`}>—</span>;
 }

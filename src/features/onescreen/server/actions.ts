@@ -14,6 +14,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
+import { isStudentAbsentForSend } from "./absence-gate";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -195,6 +196,36 @@ export async function saveAndQueueClassnote(
   // 과목별 발송 게이트 — 학원설정 발송 허용 과목(현 운영=수학만)에 없으면 저장만 하고 큐잉 안 함(오발송 방지).
   if (!isClassnoteSubjectEnabled(input.subject, settings.report.classnoteSubjects)) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off" };
+  }
+
+  // 결석 게이트(#77) — 그날 그 과목 출결이 결석이면 저장만 하고 큐잉 안 함(학부모 발송 무의미).
+  // 클라 게이트(grid.ts isRowActionable)와 동일 규약의 서버 이중 방어 — 버튼 disabled 우회·stale 화면 차단.
+  // ⚠️ 보강 보고서(makeup 체크·수업외 수동추가)는 게이트 제외 — 정규 반 결석 + 같은 날 보강 참석이
+  // 정당한 발송 흐름이고, 보강 강사에겐 그 학생 출결을 기록할 수단이 없다(적대 리뷰 확정).
+  // 조회 실패 = fail-closed(모르면 안 보냄, 저장은 이미 완료) — 명확 안내 후 재시도 유도.
+  if (!input.makeup && !input.outOfClass) {
+    try {
+      if (
+        await isStudentAbsentForSend(supabase, user.tenantId, {
+          studentId: input.studentId,
+          reportDate,
+          subject: input.subject ?? null,
+        })
+      ) {
+        // 대기 중(queued) 재고 회수 — 안 지우면 "발송하지 않았습니다" 안내 직후 워커가 방금 갱신된
+        // 내용을 그대로 게시한다(적대 리뷰 확정). .eq queued 조건 = 그새 클레임된 processing은 불변.
+        if (prior?.classnote_status === "queued") {
+          await supabase
+            .from("lesson_reports")
+            .update({ classnote_status: null, classnote_queued_at: null })
+            .eq("id", saved.id)
+            .eq("classnote_status", "queued");
+        }
+        return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "absent" };
+      }
+    } catch {
+      return { ok: false, error: "출결 확인에 실패해 발송하지 않았습니다 — 저장은 완료됐어요. 다시 시도해 주세요" };
+    }
   }
 
   // 동명이인 감지 — ClassNote 이름 매칭이 첫 일치라 오발송 위험 → 자동 발송 차단(보고서 저장은 유지, 큐잉만 막음).
@@ -397,6 +428,13 @@ export async function generateReportComment(
     input.specialNote?.trim()
   );
   if (!hasFacts) return { ok: false, error: "진도·태도 등을 입력한 뒤 자동작성할 수 있습니다" };
+  // 반 공통 서술(G6) — 클라 입력이라 길이 상한(프롬프트 비대·토큰 남용 방지). ⚠️ hasFacts 게이트에는
+  // **불포함 유지** — 반 서술만으로 개별 학생 멘트를 생성하면 환각(학생 사실 0 + 반 맥락만)이라 거부가 맞다.
+  // 개행 접기 — 여러 줄 서술이 fact 블록의 가드 라벨을 탈출해 맨줄 개별 사실로 위장하는 것 차단(빌더와 이중 방어).
+  const safeInput: ReportCommentInput = {
+    ...input,
+    classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
+  };
   try {
     const supabase = await createClient();
     const settings = await getTenantSettings();
@@ -415,13 +453,13 @@ export async function generateReportComment(
         loadActivePrompt(supabase, user.tenantId, "comment_p1"),
         loadActivePrompt(supabase, user.tenantId, "comment_p2"),
       ]);
-      const p1 = commentP1Body(input, p1tpl);
-      const p2 = commentP2Body(input, p2tpl);
+      const p1 = commentP1Body(safeInput, p1tpl);
+      const p2 = commentP2Body(safeInput, p2tpl);
       if (p1) sections.push({ type: "comment_p1", field: "p1", body: p1 });
       if (p2) sections.push({ type: "comment_p2", field: "p2", body: p2 });
     } else {
       const tpl = await loadActivePrompt(supabase, user.tenantId, "comment"); // DB 활성값 > 기본
-      sections.push({ type: "comment", field: "comment", body: commentBody(input, tpl) });
+      sections.push({ type: "comment", field: "comment", body: commentBody(safeInput, tpl) });
     }
 
     // 추세 섹션(선택) — 컨텍스트 있고 표본 충분할 때만. 대상 날짜(작업중, 미저장일 수 있음) 포함(edutrix 패리티).

@@ -80,14 +80,14 @@ export function SnapAssist() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-2.5 flex items-center justify-between gap-4">
-          <span className="text-text-dim text-[12px] font-semibold">창 배치</span>
+          <span className="text-text-dim text-[12px] font-bold">창 배치</span>
           <button
             type="button"
             aria-label="닫기"
             onClick={dismissAssist}
             className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-5 items-center justify-center rounded-[3px] transition"
           >
-            <X size={13} strokeWidth={2} />
+            <X size={13} strokeWidth={1.8} />
           </button>
         </div>
         <div className="flex items-start gap-2">
@@ -116,7 +116,7 @@ export function SnapAssist() {
                     }}
                   >
                     {s.anchor ? (
-                      <span className="text-primary max-w-full truncate px-0.5 text-[7px] leading-none font-semibold">
+                      <span className="text-primary max-w-full truncate px-0.5 text-[7px] leading-none font-bold">
                         {anchor.params.title}
                       </span>
                     ) : null}

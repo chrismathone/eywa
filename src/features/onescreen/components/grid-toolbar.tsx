@@ -11,6 +11,8 @@ export type GridBulkActions = {
   onAutoWriteAll: (keys?: string[]) => void; // 선택(또는 전체) 행 자동작성
   onClassNotice?: (keys?: string[]) => void; // 선택(없으면 표시 전체) 학생 학부모 공지 — 진도 무관
   onBulkApply: (keys: string[], patch: BulkPatch, onlyEmpty: boolean) => void; // 값 일괄 적용(1-2) — 진도 필터 없는 raw 행 대상
+  // 이전 회차 일괄 가져오기(G5 얕은판) — 선택(없으면 표시 전체) 행의 **빈 칸만** planPrevFill로 채움(특이사항·교재 제외).
+  onBulkImportPrev?: (keys?: string[]) => void;
 };
 
 /** 표 상단 일괄 바 — 카운트·이전 회차 토글·일괄 버튼. children = 버튼 그룹 선두 슬롯(값 일괄 입력 팝오버). */
@@ -74,6 +76,19 @@ export function GridToolbar({
       ) : null}
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {children}
+        {/* G5 얕은판 — 이전 회차 값으로 빈 칸 일괄 채우기. 값 일괄(팝오버=children) 옆이 자연 위치.
+            기존값은 절대 안 덮음(planPrevFill=빈 칸만)이라 confirm 불필요. 진도 게이트 무관(raw 행 대상). */}
+        {actions.onBulkImportPrev ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => actions.onBulkImportPrev?.(selectedKeys.length ? selectedKeys : undefined)}
+            disabled={off}
+            title="선택(없으면 표시 전체) 행의 빈 칸을 이전 회차 값으로 채웁니다 — 진도·태도·과제·오늘 과제만, 특이사항 제외. 이미 입력한 칸은 건드리지 않습니다"
+          >
+            {selectedKeys.length ? `선택 ${selectedKeys.length} 이전값 채우기` : "이전값 일괄 채우기"}
+          </Button>
+        ) : null}
         {actions.onClassNotice ? (
           <Button
             variant="ghost"

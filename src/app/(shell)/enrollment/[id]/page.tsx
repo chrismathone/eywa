@@ -117,7 +117,7 @@ export default async function EnrollmentDetailPage({
         <div className="space-y-1.5">
           <p className="eyebrow">신입생 등록상담</p>
           <div className="flex items-baseline gap-3">
-            <h1 className="display text-foreground text-3xl">{consult.prospectName}</h1>
+            <h1 className="font-bold tracking-tight text-foreground text-3xl">{consult.prospectName}</h1>
             <span
               className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${badge.class}`}
             >
@@ -190,7 +190,7 @@ export default async function EnrollmentDetailPage({
         <section className="border-amber/30 bg-amber-soft/30 rounded-lg border p-4">
           <div className="flex items-center gap-2">
             <ClipboardList className="text-amber size-4" />
-            <h2 className="text-foreground text-sm font-semibold">
+            <h2 className="text-foreground text-sm font-bold">
               같은 학생의 다른 등록상담 <span className="num">{siblings.length}</span>건
             </h2>
           </div>
@@ -232,7 +232,7 @@ export default async function EnrollmentDetailPage({
         <section className="border-chart-4/40 bg-chart-4/5 rounded-lg border p-4">
           <div className="inline-flex items-center gap-2">
             <AlertCircle className="text-chart-4 size-4" />
-            <h2 className="text-foreground text-sm font-semibold">처리 실패</h2>
+            <h2 className="text-foreground text-sm font-bold">처리 실패</h2>
           </div>
           <p className="text-muted-foreground mt-2 text-sm">
             {consult.processingError ?? "알 수 없는 오류"}
@@ -244,7 +244,7 @@ export default async function EnrollmentDetailPage({
         <section className="bg-card border-border space-y-3 rounded-lg border p-5">
           <div className="inline-flex items-center gap-2">
             <Loader2 className="text-chart-3 size-4 animate-spin" />
-            <h2 className="text-foreground text-sm font-semibold">
+            <h2 className="text-foreground text-sm font-bold">
               {consult.processingStatus === "uploaded" || consult.processingStatus === "transcribing"
                 ? "녹음을 한국어로 전사 중입니다"
                 : "AI가 상담록을 12개 섹션으로 분석 중입니다"}
@@ -497,7 +497,7 @@ export default async function EnrollmentDetailPage({
 function Card({ title, icon, children }: { title: string; icon?: EywaIconName; children: ReactNode }) {
   return (
     <section className="bg-card border-line rounded-md border p-4">
-      <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold">
+      <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-[13px] font-bold">
         {icon ? <EyIcon name={icon} size={15} /> : null}
         {title}
       </h3>
@@ -521,7 +521,7 @@ function SectionHeader({
   return (
     <header className="flex flex-wrap items-center gap-2 pt-1">
       <Icon className={`size-4 shrink-0 ${iconClass ?? "text-primary"}`} />
-      <h2 className="text-foreground text-sm font-semibold">{title}</h2>
+      <h2 className="text-foreground text-sm font-bold">{title}</h2>
       {children}
     </header>
   );
@@ -601,7 +601,7 @@ function AiAnalysisPanel({
         <header className="flex items-center justify-between gap-3">
           <div>
             <p className="eyebrow">AI 분석 결과</p>
-            <h3 className="text-foreground mt-1 text-base font-semibold">진단 요약</h3>
+            <h3 className="text-foreground mt-1 text-base font-bold">진단 요약</h3>
           </div>
           <span className="text-muted-foreground num text-[10px]">
             {formatCreatedAt(analysis.generatedAt)}
@@ -667,7 +667,7 @@ function AiAnalysisPanel({
 function Plan({ label, items }: { label: string; items: string[] }) {
   return (
     <div>
-      <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+      <p className="text-muted-foreground text-xs font-bold">
         {label}
       </p>
       <ul className="mt-1.5 space-y-1">
@@ -710,7 +710,7 @@ function SubjectScoresCard({ details }: { details: Record<string, Record<string,
           const items = Object.entries(vals).filter(([k, v]) => String(v).trim() && k !== "testType");
           return (
             <div key={subj}>
-              <p className="text-primary text-xs font-semibold">
+              <p className="text-primary text-xs font-bold">
                 {tab?.label ?? subj}
                 {subj === "english" && vals.testType
                   ? ` · ${ENG_TYPE[vals.testType] ?? vals.testType}`

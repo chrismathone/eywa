@@ -37,7 +37,7 @@ export function AttendancePills({
   if (value && !BASIC.includes(value as BasicAttendance)) {
     return (
       <span
-        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-semibold"
+        className="bg-bg-soft text-text-dim rounded-pill px-1.5 py-px text-[10px] font-bold"
         title="조퇴·공결·보강 상태는 출석부에서 변경하세요 (원스크린 pill은 출석/지각/결석만)"
       >
         {LABEL[value] ?? value}
@@ -58,7 +58,7 @@ export function AttendancePills({
             }}
             aria-pressed={on}
             title={on ? `${LABEL[s]} (기록 지우기는 출석부에서)` : `${LABEL[s]}로 기록`}
-            className={`rounded-pill px-1.5 py-px text-[10px] font-semibold transition disabled:opacity-50 ${
+            className={`rounded-pill px-1.5 py-px text-[10px] font-bold transition disabled:opacity-50 ${
               on ? ON_CLS[s] : "border-line text-text-faint hover:bg-bg-soft hover:text-text-dim border"
             }`}
           >

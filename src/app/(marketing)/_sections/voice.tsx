@@ -2,6 +2,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { TESTIMONIAL } from "@/data/marketing";
 import { Reveal } from "../_motion/reveal";
 import { EditorialPhoto } from "../_ui/photo";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 import directorDeskImg from "../_img/director-desk.webp";
 
@@ -13,13 +14,11 @@ export function VoiceSection() {
       <div>
         <h2 className="sr-only">도입 사례 — 원장님 인터뷰</h2>
         <Reveal variant="up">
-          <p className="text-text-faint font-mono text-[11px] font-bold tracking-[0.16em] uppercase">도입 사례</p>
+          <Eyebrow label={`도입 사례 · ${t.months}개월차 인터뷰`} tone="dim" />
         </Reveal>
         <Reveal variant="blur" delay={60}>
-          <p className="ey-serif text-gold mt-4 mb-[-0.35em] select-none text-[clamp(3.5rem,8vw,6rem)] leading-none" aria-hidden="true">
-            &ldquo;
-          </p>
-          <blockquote className="text-foreground text-[clamp(2rem,4.4vw,3.4rem)] leading-[1.28] font-extrabold tracking-[-0.025em] whitespace-pre-line">
+          <span className="bg-primary mt-7 block h-1 w-12 rounded-full" aria-hidden="true" />
+          <blockquote className="text-ink mt-6 text-[clamp(2rem,4.4vw,3.4rem)] leading-[1.26] font-extrabold tracking-[-0.035em] whitespace-pre-line">
             {t.headline}
           </blockquote>
         </Reveal>
@@ -30,7 +29,7 @@ export function VoiceSection() {
 
       {/* 우 — 환경 사진 + 메타 + 검증 칩 (둥근 프사 대신 원장실 풍경) */}
       <Reveal variant="up" delay={140}>
-        <div className="bg-bg-soft border-line overflow-hidden rounded-2xl border">
+        <div className="bg-card border-line overflow-hidden rounded-[16px] border shadow-[0_1px_2px_rgba(11,16,13,0.04),0_20px_48px_-26px_rgba(11,16,13,0.18)]">
           <EditorialPhoto
             src={directorDeskImg}
             alt="아침 햇살이 드는 원장실 책상 위 노트북에 띄운 Eywa 운영실"
@@ -61,7 +60,7 @@ export function VoiceSection() {
             {/* 증언 속 숫자 = 검증 칩 */}
             <ul className="mt-6 space-y-2.5">
               {t.chips.map((c) => (
-                <li key={c.label} className="bg-card border-line flex items-center justify-between rounded-lg border px-3.5 py-2.5">
+                <li key={c.label} className="bg-bg-soft flex items-center justify-between rounded-[10px] px-3.5 py-2.5">
                   <span className="text-text-dim text-[12px]">{c.label}</span>
                   <span className="flex items-center gap-1.5 font-mono text-[12px] font-bold">
                     {c.before ? <span className="text-text-faint line-through">{c.before}</span> : null}

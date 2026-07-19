@@ -1,6 +1,7 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Reveal } from "../_motion/reveal";
 import { EditorialPhoto } from "../_ui/photo";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 import aiEveningImg from "../_img/ai-evening.webp";
 
@@ -22,10 +23,10 @@ export function AiEveningSection() {
       {/* 좌 — 텍스트 */}
       <div>
         <Reveal variant="up">
-          <p className="text-primary font-mono text-[11px] font-bold tracking-[0.16em] uppercase">AI 분석</p>
+          <Eyebrow time="19:41" label="AI 분석" />
         </Reveal>
         <Reveal variant="clip" delay={60}>
-          <h2 className="text-foreground mt-4 text-[clamp(1.9rem,4vw,3.1rem)] leading-[1.2] font-extrabold tracking-[-0.025em]">
+          <h2 className="text-ink mt-4 text-[clamp(1.9rem,4vw,3.1rem)] leading-[1.16] font-extrabold tracking-[-0.035em]">
             상담·회의록을,
             <br />
             AI가 정리해 둡니다.
@@ -39,9 +40,9 @@ export function AiEveningSection() {
           </p>
         </Reveal>
         <Reveal variant="up" delay={220}>
-          <p className="bg-gold-soft text-gold mt-7 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[11px] font-bold tracking-[0.1em] uppercase">
+          <p className="border-line bg-card text-gold mt-7 inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-3 font-mono text-[11px] font-bold tracking-[0.1em] uppercase shadow-[0_1px_2px_rgba(11,16,13,0.04)]">
             <EyIcon name="sparkle" size={13} className="ey-sparkle" />
-            Powered by Claude
+            Claude · DeepSeek 엔진
           </p>
         </Reveal>
       </div>
@@ -55,10 +56,10 @@ export function AiEveningSection() {
             aspect="aspect-[3/2]"
             sizes="(min-width: 1024px) 480px, 90vw"
           />
-          <div className="bg-card border-line relative z-10 mx-auto -mt-16 w-[92%] overflow-hidden rounded-2xl border p-6 shadow-[0_28px_64px_-26px_rgba(13,17,16,0.4)] sm:-mt-20">
+          <div className="bg-card border-line relative z-10 mx-auto -mt-16 w-[92%] overflow-hidden rounded-[16px] border p-6 shadow-[0_1px_2px_rgba(11,16,13,0.05),0_32px_72px_-30px_rgba(11,16,13,0.42)] sm:-mt-20">
             <div
               className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full"
-              style={{ background: "radial-gradient(circle, rgba(184,137,58,0.10), transparent 70%)" }}
+              style={{ background: "radial-gradient(circle, rgba(169,127,36,0.09), transparent 70%)" }}
               aria-hidden="true"
             />
             <div className="relative flex items-center justify-between">
@@ -80,7 +81,7 @@ export function AiEveningSection() {
 
             <div className="border-line relative mt-6 flex items-center justify-between border-t pt-4">
               <span className="text-text-faint text-[12px]">마지막 분석 · 06.16 19:41</span>
-              <span className="border-line text-text-dim inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold">
+              <span className="border-line text-text-dim inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold">
                 <EyIcon name="sparkle" size={13} />
                 갱신
               </span>

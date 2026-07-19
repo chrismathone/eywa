@@ -40,7 +40,7 @@ export function TeacherViewToggle({ expanded, motion }: { expanded: boolean; mot
       <EyIcon
         name="screen"
         size={18}
-        strokeWidth={1.6}
+        strokeWidth={1.8}
         className={`text-text-dim group-hover:text-foreground relative z-10 shrink-0 ${
           motion ? "transition-colors duration-200" : ""
         }`}

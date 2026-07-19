@@ -66,7 +66,7 @@ export function MonthGridView({
           {heads.map((h, i) => (
             <div
               key={h}
-              className={`px-2 py-1.5 text-center text-[11px] font-semibold ${
+              className={`px-2 py-1.5 text-center text-[11px] font-bold ${
                 i === 0 ? "text-danger" : i === 6 ? "text-primary" : "text-text-faint"
               }`}
             >

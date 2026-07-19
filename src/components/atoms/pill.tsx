@@ -1,5 +1,5 @@
 /**
- * Pill — 시안 사양: mono 11px 700 uppercase, 3px·8px, 999px radius
+ * Pill — 소프트 프로덕트 톤: Pretendard 11px 600, 999px radius (2026-07-19 de-mono)
  * soft 버전은 color soft 배경 + 같은 색 텍스트.
  */
 import type { ReactNode } from "react";
@@ -47,7 +47,7 @@ export function Pill({ color = "neutral", soft = true, children, className }: Pr
   const cls = soft ? SOFT_CLASS[color] : SOLID_CLASS[color];
   return (
     <span
-      className={`micro inline-flex items-center justify-center whitespace-nowrap rounded-pill px-2 py-[3px] ${cls} ${className ?? ""}`}
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-pill px-2.5 py-[3px] text-[11px] font-bold ${cls} ${className ?? ""}`}
     >
       {children}
     </span>

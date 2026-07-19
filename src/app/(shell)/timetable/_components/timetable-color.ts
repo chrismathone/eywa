@@ -32,7 +32,7 @@ export function useTimetableColorMode(): TimetableColorMode {
  */
 export function withdrawnTone(mode: TimetableColorMode): string {
   if (mode === "pastel") return "bg-ink/80! font-medium text-white/65";
-  if (mode === "mid") return "bg-ink/80! font-semibold text-white/85";
+  if (mode === "mid") return "bg-ink/80! font-bold text-white/85";
   return "bg-ink/80! font-bold text-white"; // vivid = 가장 또렷
 }
 
@@ -69,10 +69,10 @@ export function timetableStudentTone(
   s: { isNew?: boolean; isTransferredIn?: boolean },
 ): string {
   if (mode === "vivid") {
-    // vivid = 이름을 semibold로 확실히 굵게(사용자 요청 "더 쨍하게"). 신입=빨강 채움, 전입=민트 채움.
-    if (s.isTransferredIn) return "bg-[#bbf7d0] font-semibold text-[#14512b]";
-    if (s.isNew) return "bg-danger font-semibold text-white";
-    return "font-semibold text-foreground";
+    // vivid = 이름을 bold로 확실히 굵게(사용자 요청 "더 쨍하게"). 신입=빨강 채움, 전입=민트 채움.
+    if (s.isTransferredIn) return "bg-[#bbf7d0] font-bold text-[#14512b]";
+    if (s.isNew) return "bg-danger font-bold text-white";
+    return "font-bold text-foreground";
   }
   if (mode === "mid") {
     if (s.isTransferredIn) return "bg-primary/15 font-medium text-primary";

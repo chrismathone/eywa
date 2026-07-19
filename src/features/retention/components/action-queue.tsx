@@ -1,14 +1,23 @@
 import { WindowLink } from "@/components/workspace/window-link";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { RiskBadge } from "./risk-badge";
 import type { RosterStudent } from "../server/queries";
 
 /** 위험도 우선순위 액션 큐 — "오늘 누구부터". 행 클릭 → 학생 상세. */
 export function ActionQueue({ rows }: { rows: RosterStudent[] }) {
   if (rows.length === 0) {
+    // 위험 0명 = 좋은 날 — Editorial 문법 ④ 감성 사진(자습 부스)으로 안정 상태를 보상
     return (
-      <p className="text-text-dim px-5 py-8 text-center text-[13px]">
-        오늘 급히 처리할 위험 신호가 없습니다. 안정 학생 정기 리포트를 챙기세요.
-      </p>
+      <div className="p-4">
+        <PhotoCard
+          src="/photos/retention-hero.webp"
+          alt=""
+          caption="오늘 급히 처리할 위험 신호가 없습니다"
+          sub="안정 학생 정기 리포트를 챙기기 좋은 날이에요"
+          aspect="21/9"
+          sizes="(max-width: 1024px) 100vw, 640px"
+        />
+      </div>
     );
   }
   return (

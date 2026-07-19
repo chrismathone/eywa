@@ -55,7 +55,7 @@ function CommentDialog({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
       <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
-          <h2 className="text-foreground text-lg font-semibold">
+          <h2 className="text-foreground text-lg font-bold">
             {editing ? "코멘트 수정" : "학습 코멘트 추가"}
           </h2>
           <button
@@ -185,7 +185,7 @@ export function GradeCommentsSection({
   return (
     <section className="space-y-3">
       <header className="flex items-center justify-between">
-        <h3 className="text-foreground text-sm font-semibold">학습 코멘트</h3>
+        <h3 className="text-foreground text-sm font-bold">학습 코멘트</h3>
         <Button size="sm" variant="outline" onClick={openNew}>
           <Plus className="size-3.5" />
           추가

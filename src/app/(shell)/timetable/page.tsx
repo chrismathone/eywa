@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, LayoutGrid, CalendarOff, Users } from "@/components/icons/eywa-icon-compat";
-import { EmptyState } from "@/components/empty-state";
+import { Columns3, LayoutGrid, CalendarOff, ListFilter, Users } from "@/components/icons/eywa-icon-compat";
+import { PhotoCard } from "@/components/atoms/photo-card";
+import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -24,7 +25,11 @@ import {
   TimetableDndArea,
 } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
-import { EMPTY_DAYS_COOKIE, EmptyDaysPrefSync } from "./_components/prefs-sync";
+// ⚠️ 쿠키 이름 상수는 반드시 pref-cookies(일반 모듈)에서 — prefs-sync("use client")의 export를
+// 서버가 import하면 참조 프록시로 런타임 undefined가 된다(쿠키 기본값 침묵 사망, 2026-07-19 실측).
+import { EMPTY_DAYS_COOKIE, EMPTY_PERIODS_COOKIE } from "@/features/timetable/lib/pref-cookies";
+import { EmptyDaysPrefSync, EmptyPeriodsPrefSync } from "./_components/prefs-sync";
+import { EmptyPeriodScope } from "./_components/empty-period-scope";
 import { TimetableColorToggle } from "./_components/color-mode-toggle";
 import { WeekNav } from "./_components/week-nav";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
@@ -42,16 +47,24 @@ type ViewMode = "basic" | "integrated" | "teacher";
 export default async function TimetablePage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact1h?: string; emptydays?: string }>;
+  searchParams: Promise<{ view?: ViewMode; subject?: string; week?: string; compact1h?: string; emptydays?: string; emptyperiods?: string }>;
 }) {
   const user = await requireAccess("timetable");
-  const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw } = await searchParams;
+  const { view: viewParam, subject: subjectParam, week: weekRaw, compact1h: compact1hRaw, emptydays: emptydaysRaw, emptyperiods: emptyperiodsRaw } = await searchParams;
   // 강사뷰 '미사용 요일' 토글 — 기본 = 표시(강사마다 월~토 전 컬럼). emptydays=hide 일 때만 수업 요일만.
   // ⚠️ URL 파라미터가 없으면 **기기에 저장된 선호(쿠키)** 를 기본으로 쓴다 — 창(iframe)은 항상 깨끗한
   // URL로 열려서, 파라미터만으론 열 때마다 초기화됐다(주 2일 강사가 매번 넓은 표를 다시 접어야 했음).
   // 파라미터가 있으면 그쪽 우선(공유 링크 존중). 쓰기는 EmptyDaysPrefSync(클라).
-  const savedHideEmptyDays = (await cookies()).get(EMPTY_DAYS_COOKIE)?.value === "hide";
+  const cookieStore = await cookies();
+  const savedHideEmptyDays = cookieStore.get(EMPTY_DAYS_COOKIE)?.value === "hide";
   const hideEmptyDays = emptydaysRaw ? emptydaysRaw === "hide" : savedHideEmptyDays;
+  // 기본뷰 '빈 교시 접기'(C안, 2026-07-19) — 수업 없는 교시 행을 222px → 36px 밴드로 축소(행 유지 =
+  // 교시 축 연속·편집 드롭 존 보존, 편집 모드는 자동 펼침). 기본 = 현행(펼침). 파라미터/쿠키 우선순위는
+  // emptydays와 동일(파라미터 → 쿠키 → 기본). 쓰기는 EmptyPeriodsPrefSync(클라).
+  const savedCollapseEmptyPeriods = cookieStore.get(EMPTY_PERIODS_COOKIE)?.value === "collapse";
+  const collapseEmptyPeriods = emptyperiodsRaw
+    ? emptyperiodsRaw === "collapse"
+    : savedCollapseEmptyPeriods;
   // 통합뷰 '1시간 단위' — **섹션별 토글**(사용자 결정 2026-07-06, 전역 아님). compact1h=쉼표구분 sectionKey
   // (=시작교시 order, 자정기준 분). 든 섹션만 사이 빈 교시 행을 숨긴다. 읽기전용이라 상태는 URL 파라미터.
   const compactSections = new Set(
@@ -152,6 +165,7 @@ export default async function TimetablePage({
         ? compactList.filter((k) => k !== sectionKey)
         : [...compactList, sectionKey],
       hideEmptyDays,
+      collapseEmptyPeriods,
     });
   // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
   // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
@@ -182,15 +196,57 @@ export default async function TimetablePage({
   return (
     <TimetableEditProvider effectiveDate={effectiveDate} today={today} canEdit={canEdit}>
       <div className="flex h-full min-h-0 flex-col gap-4">
-      {/* '미사용 요일' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
+      {/* '미사용 요일'·'빈 교시 접기' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
       <EmptyDaysPrefSync hide={hideEmptyDays} />
+      <EmptyPeriodsPrefSync collapse={collapseEmptyPeriods} />
+      {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(구 툴바 font-mono 나열의 승격판).
+          시간표는 세로 공간이 가장 귀한 화면이라 BigStat 카드 대신 인라인 스탯 행(밀도 우선). */}
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="수업 운영"
+          title="시간표"
+          description={`${subjectMaps.labelOf(subject)} 주간표`}
+          actions={
+            <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
+              <span className="text-[13px]">
+                <b className="num text-primary text-[17px] font-bold">{enrolledCount}</b>{" "}
+                <span className="text-text-dim">재원</span>
+              </span>
+              {newCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-danger text-[17px] font-bold">{newCount}</b>{" "}
+                  <span className="text-text-dim">신입</span>
+                </span>
+              ) : null}
+              {transferCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-blue text-[17px] font-bold">{transferCount}</b>{" "}
+                  <span className="text-text-dim">전입</span>
+                </span>
+              ) : null}
+              {holdCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-amber text-[17px] font-bold">{holdCount}</b>{" "}
+                  <span className="text-text-dim">대기</span>
+                </span>
+              ) : null}
+              {withdrawnCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-text-faint text-[17px] font-bold">{withdrawnCount}</b>{" "}
+                  <span className="text-text-dim">퇴원</span>
+                </span>
+              ) : null}
+            </div>
+          }
+        />
+      </div>
       {/* Toolbar */}
-      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
+      <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact1h: compactList, hideEmptyDays })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
         />
         <span className="bg-line h-4 w-px" aria-hidden />
 
@@ -209,11 +265,12 @@ export default async function TimetablePage({
                 week,
                 thisWk,
                 // 과목 전환 = 섹션 order가 과목마다 달라 '1시간 단위' 압축 집합을 초기화(엉뚱한 섹션 압축 방지).
-                // ⚠️ 단 '미사용 요일' 상태는 과목과 무관한 표시 취향이라 **유지**한다 — 다른 네비(주 이동·
-                // 뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
+                // ⚠️ 단 '미사용 요일'·'빈 교시 접기' 상태는 과목과 무관한 표시 취향이라 **유지**한다 — 다른
+                // 네비(주 이동·뷰 전환·강사 토글)는 전부 보존하는데 과목 칩만 떨궈 설정이 초기화됐다(적대 감사 LOW).
                 hideEmptyDays,
+                collapseEmptyPeriods,
               })}
-              className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 subject === k
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -239,14 +296,14 @@ export default async function TimetablePage({
             return (
               <Link
                 key={v.key}
-                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList, hideEmptyDays })}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+                href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
                 }`}
               >
-                <Icon size={11} strokeWidth={2} />
+                <Icon size={11} strokeWidth={1.8} />
                 {v.label}
               </Link>
             );
@@ -266,15 +323,16 @@ export default async function TimetablePage({
                 thisWk,
                 compact1h: compactList,
                 hideEmptyDays: !hideEmptyDays,
+                collapseEmptyPeriods,
               })}
               title="수업 없는 요일 컬럼 표시/숨김"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 !hideEmptyDays
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
               }`}
             >
-              <CalendarOff size={11} strokeWidth={2} />
+              <CalendarOff size={11} strokeWidth={1.8} />
               미사용 요일
             </Link>
           </>
@@ -282,6 +340,35 @@ export default async function TimetablePage({
 
         {/* 통합뷰 '1시간 단위' 토글은 전역이 아니라 **각 섹션 헤더(RichGridView)** 에 있다
             (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
+
+        {/* 기본뷰 '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(C안). 켜짐=강조.
+            편집 모드에선 접힌 행이 자동으로 펼쳐진다(평소 격자 지형 복원, EmptyPeriodScope). */}
+        {effView === "basic" ? (
+          <>
+            <span className="bg-line h-4 w-px" aria-hidden />
+            <Link
+              href={buildHref({
+                view: effView,
+                subject,
+                defaultSubject,
+                week,
+                thisWk,
+                compact1h: compactList,
+                hideEmptyDays,
+                collapseEmptyPeriods: !collapseEmptyPeriods,
+              })}
+              title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                collapseEmptyPeriods
+                  ? "border-primary bg-primary text-primary-foreground font-medium"
+                  : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
+              }`}
+            >
+              <ListFilter size={11} strokeWidth={1.8} />
+              빈 교시 접기
+            </Link>
+          </>
+        ) : null}
 
         {/* 셀 색 강도 개인 토글(쨍/중간/옅게) — 기본뷰에서만(셀 색이 있는 뷰). localStorage 영속. */}
         {effView === "basic" ? (
@@ -291,13 +378,8 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <div className="ml-auto flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
-          <span className="text-[color:var(--primary)]">재원 {enrolledCount}</span>
-          {newCount > 0 ? <span className="text-[color:var(--danger)]">신입 {newCount}</span> : null}
-          {transferCount > 0 ? <span className="text-[color:var(--blue)]">전입 {transferCount}</span> : null}
-          {holdCount > 0 ? <span className="text-[color:var(--amber)]">대기 {holdCount}</span> : null}
-          {withdrawnCount > 0 ? <span className="text-[color:var(--text-faint)]">퇴원 {withdrawnCount}</span> : null}
-        </div>
+        {/* 학생 집계는 PageHeader 우측으로 승격(문법 ②) — 툴바 mono 나열 제거 */}
+        <div className="ml-auto" aria-hidden />
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
@@ -321,11 +403,16 @@ export default async function TimetablePage({
       </div>
 
       {slots.length === 0 ? (
-        <EmptyState
-          image="classes"
-          icon={() => <CalendarOff size={32} strokeWidth={1.5} />}
-          title="해당 과목의 시간표가 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/timetable-empty.webp"
+            alt=""
+            caption="해당 과목의 시간표가 없습니다"
+            sub="가져오기 또는 편집으로 반을 배치해 보세요"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : isIntegrated ? (
         <RichGridView
           slots={slots}
@@ -354,12 +441,16 @@ export default async function TimetablePage({
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">
-            <WeekdayGroupTables
-              slots={slots}
-              config={periodsConfig}
-              weekMonday={week}
-              weekdayGrouping={weekdayGrouping}
-            />
+            {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
+            <EmptyPeriodScope>
+              <WeekdayGroupTables
+                slots={slots}
+                config={periodsConfig}
+                weekMonday={week}
+                weekdayGrouping={weekdayGrouping}
+                collapseEmptyPeriods={collapseEmptyPeriods}
+              />
+            </EmptyPeriodScope>
           </div>
         </TimetableDndArea>
       )}
@@ -382,6 +473,11 @@ function buildHref(opts: {
    * 확정 HIGH). 미지정(undefined)만 생략 = 쿠키 기본.
    */
   hideEmptyDays?: boolean;
+  /**
+   * 기본뷰 '빈 교시 접기' 상태 — hideEmptyDays와 동일 규약: 값이 오면 **양방향 명시 직렬화**
+   * (collapse/expand), 미지정(undefined)만 생략(=쿠키 기본). 인앱 링크는 전부 현재 상태를 명시로 넘긴다.
+   */
+  collapseEmptyPeriods?: boolean;
 }): string {
   const params = new URLSearchParams();
   if (opts.view !== "basic") params.set("view", opts.view);
@@ -390,6 +486,8 @@ function buildHref(opts: {
   if (opts.compact1h && opts.compact1h.length)
     params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));
   if (opts.hideEmptyDays !== undefined) params.set("emptydays", opts.hideEmptyDays ? "hide" : "show");
+  if (opts.collapseEmptyPeriods !== undefined)
+    params.set("emptyperiods", opts.collapseEmptyPeriods ? "collapse" : "expand");
   const q = params.toString();
   return q ? `/timetable?${q}` : "/timetable";
 }

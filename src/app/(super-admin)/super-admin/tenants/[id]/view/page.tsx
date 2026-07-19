@@ -35,7 +35,7 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
         action={
           <Link
             href={`/super-admin/tenants/${id}`}
-            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold"
+            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-bold"
           >
             <EyIcon name="arrowLeft" size={14} />
             나가기
@@ -44,7 +44,7 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
       />
       <div className="space-y-5 px-7 py-6">
         {/* read-only 배지 */}
-        <div className="bg-amber-soft text-amber flex items-center gap-2 rounded-md px-4 py-2.5 text-[12px] font-semibold">
+        <div className="bg-amber-soft text-amber flex items-center gap-2 rounded-md px-4 py-2.5 text-[12px] font-bold">
           <span className="bg-amber inline-block size-2 rounded-full" />
           읽기 전용 · {snap.name} 현황을 들여다보는 중입니다 (조작 불가)
         </div>
@@ -116,7 +116,7 @@ function Kpi({ label, value, unit }: { label: string; value: string; unit: strin
     <div className="bg-card border-line shadow-card rounded-md border p-4">
       <p className="text-text-dim font-mono text-[11px] tracking-wider uppercase">{label}</p>
       <p className="text-foreground mt-1.5 flex items-baseline gap-1">
-        <span className="text-[24px] font-extrabold tabular-nums">{value}</span>
+        <span className="text-[24px] font-bold tabular-nums">{value}</span>
         <span className="text-text-dim text-[11px]">{unit}</span>
       </p>
     </div>

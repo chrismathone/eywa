@@ -29,7 +29,7 @@ export function DashCard({
         <div className="flex items-baseline gap-2">
           <h3 id={titleId} className="text-foreground text-[13px] font-bold">{title}</h3>
           {count != null ? (
-            <span className="text-text-dim num font-mono text-[11px]">{count}</span>
+            <span className="text-text-dim num text-[11px]">{count}</span>
           ) : null}
         </div>
         {action ? (

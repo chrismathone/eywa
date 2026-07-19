@@ -736,7 +736,7 @@ export function TimetableEditControls() {
             <Pencil className="size-3" />
             편집 중
           </span>
-          <span className="text-text-faint font-mono">{pendingCount}건 이동 대기</span>
+          <span className="text-text-faint num">{pendingCount}건 이동 대기</span>
           {/* 적용일(즉시=오늘/조회 주, 예정일=날짜 지정). 이동은 이 날짜에 반영(옛 반은 그날 전까지 유지). */}
           <label className="text-text-dim inline-flex items-center gap-1">
             적용일

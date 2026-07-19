@@ -52,7 +52,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
             onClick={close}
             className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-6 shrink-0 items-center justify-center rounded-[3px] transition"
           >
-            <X size={15} strokeWidth={2} />
+            <X size={15} strokeWidth={1.8} />
           </button>
         </header>
 
@@ -78,7 +78,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
                 href={popup.linkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-primary hover:bg-primary/90 inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold text-white transition"
+                className="bg-primary hover:bg-primary/90 inline-flex items-center rounded-md px-3 py-1.5 text-xs font-bold text-white transition"
               >
                 {popup.linkLabel || "자세히 보기"}
               </a>

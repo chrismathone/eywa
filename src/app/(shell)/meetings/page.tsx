@@ -1,11 +1,12 @@
 import Link from "next/link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Mic, RefreshCw } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
-import { EmptyState } from "@/components/empty-state";
+import { BigStat } from "@/components/atoms/big-stat";
+import { PageHeader } from "@/components/page-header";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstMonth } from "@/lib/date-kst";
@@ -62,9 +63,9 @@ function MeetingItem({ m }: { m: MeetingRow }) {
               }`}
             >
               {isLive ? (
-                <RefreshCw size={16} strokeWidth={2} />
+                <RefreshCw size={16} strokeWidth={1.8} />
               ) : (
-                <Mic size={16} strokeWidth={2} />
+                <Mic size={16} strokeWidth={1.8} />
               )}
             </span>
             <div className="min-w-0">
@@ -72,20 +73,20 @@ function MeetingItem({ m }: { m: MeetingRow }) {
                 <h3 className="text-foreground text-[15px] font-bold">{m.title}</h3>
                 <EditingBadge scope={`meeting:${m.id}`} />
                 {m.hasAudio ? (
-                  <span className="text-text-faint inline-flex items-center gap-1 text-[11px]">
+                  <span className="text-text-faint inline-flex items-center gap-1 text-[12px]">
                     <EyIcon name="dot" size={10} />
                     음성
                   </span>
                 ) : null}
                 {isLive ? (
                   <Pill color="danger" soft={false}>
-                    LIVE
+                    진행 중
                   </Pill>
                 ) : badge ? (
                   <Pill color={badge.color}>{badge.label}</Pill>
                 ) : null}
               </div>
-              <p className="text-text-dim num mt-0.5 text-[11px]">{formatHeldAt(m.heldAt)}</p>
+              <p className="text-text-dim num mt-0.5 text-[12px]">{formatHeldAt(m.heldAt)}</p>
             </div>
           </div>
           {m.authorName ? (
@@ -103,7 +104,7 @@ function MeetingItem({ m }: { m: MeetingRow }) {
         </p>
 
         {m.attendees.length > 0 ? (
-          <div className="text-text-faint mt-3 flex items-center gap-2 text-[11px]">
+          <div className="text-text-faint mt-3 flex items-center gap-2 text-[12px]">
             <span className="num font-bold">{m.attendees.length}명</span>
             <span className="opacity-60">·</span>
             <span className="truncate">{m.attendees.join(", ")}</span>
@@ -212,21 +213,23 @@ export default async function MeetingsPage({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Stat strip */}
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 */}
+      <PageHeader
+        eyebrow="운영"
+        title="회의록"
+        description="녹음하면 전사와 AI 분석까지 자동으로 정리됩니다"
+      />
+
+      {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3">
-        <Stat label="전체 회의" value={all.length} icon={Mic} color="primary" />
-        <Stat
-          label="AI 분석 완료"
-          value={completed}
-          renderIcon={<EyIcon name="sparkle" size={13} />}
-          color="gold"
-        />
-        <Stat label="처리 중" value={inProgress} icon={RefreshCw} color="rose" />
+        <BigStat label="전체 회의" value={all.length} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={1.8} />} />
+        <BigStat label="AI 분석 완료" value={completed} unit="건" tone="gold" icon={<EyIcon name="sparkle" size={16} />} />
+        <BigStat label="처리 중" value={inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={1.8} />} />
       </section>
 
       {/* Filter bar */}
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">기간</span>
@@ -234,7 +237,7 @@ export default async function MeetingsPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...current, range: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   range === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -251,7 +254,7 @@ export default async function MeetingsPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...current, status: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   status === f.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -278,11 +281,16 @@ export default async function MeetingsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState
-          image="meetings"
-          icon={() => <Mic size={32} strokeWidth={1.5} />}
-          title="기록된 회의가 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/meetings-hero.webp"
+            alt=""
+            caption="기록된 회의가 없습니다"
+            sub="녹음을 올리면 전사와 AI 분석이 자동으로 정리됩니다"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : (
         <>
           <ul className="space-y-2.5">
@@ -293,37 +301,6 @@ export default async function MeetingsPage({
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-  renderIcon,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon?: LucideIcon;
-  renderIcon?: React.ReactNode;
-  color: "primary" | "gold" | "rose";
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    gold: "bg-gold-soft text-gold",
-    rose: "bg-rose-soft text-rose",
-  } as const;
-  return (
-    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          {renderIcon ?? (Icon ? <Icon size={13} strokeWidth={2} /> : null)}
-        </span>
-      </header>
-      <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>
     </div>
   );
 }

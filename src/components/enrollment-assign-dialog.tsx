@@ -147,7 +147,7 @@ export function EnrollmentAssignDialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">수강 배정</p>
-            <h2 className="text-foreground mt-1 text-lg font-semibold">
+            <h2 className="text-foreground mt-1 text-lg font-bold">
               {isStudentMode ? (
                 <>
                   {student?.name}
@@ -288,7 +288,7 @@ export function EnrollmentAssignDialog({
             <div className="border-chart-4/40 bg-chart-4/5 rounded-md border px-3 py-2 text-xs">
               <div className="text-chart-4 inline-flex items-center gap-1.5">
                 <AlertTriangle className="size-3.5" />
-                <span className="font-semibold">시간 충돌</span>
+                <span className="font-bold">시간 충돌</span>
               </div>
               <ul className="text-foreground mt-1 space-y-0.5">
                 {conflicts.map((c, i) => (

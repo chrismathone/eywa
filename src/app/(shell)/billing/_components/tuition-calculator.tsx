@@ -316,7 +316,7 @@ export function TuitionCalculator({
         <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-foreground text-[15px] font-bold">견적 저장</h2>
-            <span className="text-primary num text-lg font-extrabold">{won(totals.total)}</span>
+            <span className="text-primary num text-lg font-bold">{won(totals.total)}</span>
           </div>
           <p className="text-text-faint text-[11px]">신입생 상담 견적으로 저장됩니다(재원생 청구서와 별개). 저장 후 ‘저장된 청구서’ 탭에서 다시 열 수 있습니다.</p>
           <form action={formAction} className="flex items-center justify-end gap-2">

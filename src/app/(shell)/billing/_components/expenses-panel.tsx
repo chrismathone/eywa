@@ -70,7 +70,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
           ))}
         </div>
         {months.length > 0 ? (
-          <span className="text-text-faint ml-auto font-mono text-[10px]">지출 기록 {months.length}개월</span>
+          <span className="text-text-faint ml-auto num text-[10px]">지출 기록 {months.length}개월</span>
         ) : null}
       </div>
 
@@ -120,7 +120,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
 
           <div className="flex items-center justify-between">
             <p className="text-text-dim text-xs">
-              {formatPeriod(period)} 지출 <span className="num text-foreground font-semibold">{rows.length}</span>건
+              {formatPeriod(period)} 지출 <span className="num text-foreground font-bold">{rows.length}</span>건
               {cat !== "all" ? <span className="ml-1">· {cat}</span> : null}
             </p>
           </div>
@@ -155,7 +155,7 @@ function Kpi({
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={14} strokeWidth={2} />
+          <Icon size={14} strokeWidth={1.8} />
         </span>
       </header>
       <p className="tabular text-foreground num mt-3 text-[18px] leading-tight">{value}</p>

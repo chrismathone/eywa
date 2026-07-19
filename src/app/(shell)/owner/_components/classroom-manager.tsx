@@ -40,7 +40,7 @@ function AddForm() {
       </label>
       <button
         type="submit"
-        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold"
+        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-bold"
       >
         <SubmitInner>
           <Plus className="size-4" />
@@ -79,7 +79,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
           />
           <button
             type="submit"
-            className="bg-primary text-primary-foreground inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-semibold"
+            className="bg-primary text-primary-foreground inline-flex items-center rounded-md px-2.5 py-1.5 text-xs font-bold"
           >
             <SubmitInner>저장</SubmitInner>
           </button>
@@ -95,7 +95,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="text-foreground truncate text-[13px] font-semibold">{room.name}</span>
+        <span className="text-foreground truncate text-[13px] font-bold">{room.name}</span>
         {room.capacity != null ? <span className="text-text-faint text-[11px]">정원 {room.capacity}</span> : null}
         {room.classCount > 0 ? (
           <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-[11px]">{room.classCount}개 반</span>
@@ -116,7 +116,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
         {confirm ? (
           <form action={delAction} className="flex items-center gap-1">
             <input type="hidden" name="id" value={room.id} />
-            <button type="submit" className="text-danger text-[11px] font-semibold">
+            <button type="submit" className="text-danger text-[11px] font-bold">
               삭제
             </button>
             <button type="button" onClick={() => setConfirm(false)} className="text-text-faint text-[11px]">

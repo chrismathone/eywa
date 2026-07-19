@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import type { EnrollmentChangeStudent } from "@/features/dashboard/server/queries";
 
-/** 커맨드밴드 "재원" 변동 드릴다운 — 이번 달 신규/퇴원 명단 모달(다크 밴드 위 클릭). */
+/** 히어로 KPI "재원생" 변동 드릴다운 — 이번 달 신규/퇴원 명단 모달(라이트 KPI 카드 sub 라인). */
 export function EnrollmentChangeModal({
   deltaText,
   newCount,
@@ -27,7 +27,7 @@ export function EnrollmentChangeModal({
   const total = newCount + withdrawnCount;
 
   if (total === 0) {
-    return <span className="mt-1 block text-[10px] text-white/60">이번 달 {deltaText}</span>;
+    return <span className="text-text-faint text-[12px]">이번 달 {deltaText}</span>;
   }
 
   return (
@@ -36,7 +36,7 @@ export function EnrollmentChangeModal({
         render={
           <button
             type="button"
-            className="mt-1 block text-[10px] text-white/60 underline-offset-2 hover:text-white/80 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            className="text-text-dim hover:text-foreground text-[12px] underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           />
         }
       >

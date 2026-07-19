@@ -5,6 +5,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
 import { isRowActionable } from "../grid";
+import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
@@ -51,6 +52,9 @@ export function classnoteBadge(status?: string): { label: string; cls: string } 
     case "subject_off":
       // 원장 설정(classnoteSubjects) 밖 과목 — 저장만 되고 게시 안 됨. "발송 대기" 오인 방지(#2 확정).
       return { label: "발송 대상 아님(과목 설정)", cls: "text-text-dim" };
+    case "absent":
+      // 서버 결석 게이트(#77) 반환 상태(세션 내 표시 전용 — DB엔 안 남음). 저장만 되고 발송 제외.
+      return { label: "결석 — 발송 제외", cls: "text-text-dim" };
     default:
       return null;
   }
@@ -64,7 +68,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1">
       <span className="text-text-faint shrink-0 text-[12px]">{label}</span>
-      <span className="text-foreground flex flex-wrap items-center justify-end gap-1.5 text-[12px] font-semibold">
+      <span className="text-foreground flex flex-wrap items-center justify-end gap-1.5 text-[12px] font-bold">
         {children}
       </span>
     </div>
@@ -88,7 +92,7 @@ function MiniSummary({ st, subject }: { st: OneScreenStudent; subject: Subject }
               {lessons.map((l, i) => (
                 <span
                   key={i}
-                  className={`rounded-pill px-1.5 py-px text-[11px] font-semibold ${toneSoftClass(tone)}`}
+                  className={`rounded-pill px-1.5 py-px text-[11px] font-bold ${toneSoftClass(tone)}`}
                 >
                   {i === 0 ? `${key} · ${l}` : l}
                 </span>
@@ -178,6 +182,10 @@ export function ReportCard({
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
+  // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).
+  const unreadBadge = parentUnreadBadge(student.parentRead);
+  const hasMathSubject = student.subjects.some((su) => !su.subjectKey || su.subjectKey === "math");
+  const showProgressBadge = hasMathSubject && progressAnomalyBadge(student.progressSignal);
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -187,7 +195,27 @@ export function ReportCard({
             <p className="micro text-text-faint">
               {student.subjects.length > 1 ? "today 보고서 · 과목별" : "today 보고서"}
             </p>
-            <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+              {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
+                  수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
+              {unreadBadge ? (
+                <span
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title={`최근 보고서 ${unreadBadge.count}건을 학부모가 아직 확인하지 않았습니다 — 다른 경로(직접 안내 등) 확인이 필요할 수 있어요`}
+                >
+                  학부모 미확인 {unreadBadge.count}회
+                </span>
+              ) : null}
+              {showProgressBadge ? (
+                <span
+                  className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
+                >
+                  진도 확인 필요
+                </span>
+              ) : null}
+            </div>
           </div>
           {/* 실발송이 아니라 lesson_reports 기록 저장(PDF만 실제 인쇄). "발송 완료" 거짓 약속 방지. */}
           {rep.sent ? <Pill color="primary">기록 저장</Pill> : null}
@@ -204,7 +232,7 @@ export function ReportCard({
                 type="button"
                 onClick={() => setSelIdx(i)}
                 aria-pressed={on}
-                className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+                className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
                   on
                     ? "bg-primary text-primary-foreground"
                     : "border-line text-text-dim hover:bg-bg-soft border"
@@ -238,7 +266,7 @@ export function ReportCard({
               onClick={() => onMakeup(subjectName)}
               aria-pressed={!!subject.makeup}
               title="보강 수업 표시"
-              className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-semibold transition ${
+              className={`shrink-0 rounded-pill px-2.5 py-1 text-[12px] font-bold transition ${
                 subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
               }`}
             >
@@ -258,7 +286,7 @@ export function ReportCard({
             </div>
           ) : student.attendance !== "출석" ? (
             <span
-              className={`self-start rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
+              className={`self-start rounded-pill px-2 py-0.5 text-[11px] font-bold ${
                 student.attendance === "지각" ? "bg-amber-soft text-amber" : "bg-danger text-white"
               }`}
             >
@@ -364,7 +392,7 @@ export function ReportCard({
           >
             ClassNote 발송
           </Button>
-          {cnBadge ? <span className={`text-[11px] font-semibold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
+          {cnBadge ? <span className={`text-[11px] font-bold ${cnBadge.cls}`}>{cnBadge.label}</span> : null}
         </div>
 
         {/* ⚠️ 게시된 보고서 수정 경고 — 수업보고서는 카드 '이미지'로 게시돼 텍스트 수정이 안 됨(교체=이미지 재생성 필요, 준비 중).
@@ -411,11 +439,11 @@ export function ReportCard({
         {/* /r·ClassNote 스샷에 실림. 변경 시 재발송 필요. */}
         <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-semibold">
+              <p className="text-text-faint text-[11px] font-bold">
                 사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
               </p>
               <label
-                className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-semibold ${
+                className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-bold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >
@@ -458,7 +486,7 @@ export function ReportCard({
                       className="bg-danger absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded text-white opacity-0 transition group-hover:opacity-100"
                       aria-label={`${a.name} 삭제`}
                     >
-                      <EyIcon name="close" size={11} strokeWidth={2} />
+                      <EyIcon name="close" size={11} strokeWidth={1.8} />
                     </button>
                   </div>
                 ))}
@@ -475,12 +503,12 @@ export function ReportCard({
         {rep.sent && shareUrl ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="text-text-faint text-[11px] font-semibold">학부모 공유 링크</p>
+              <p className="text-text-faint text-[11px] font-bold">학부모 공유 링크</p>
               <div className="flex items-center gap-2 text-[10px]">
                 {typeof rep.viewCount === "number" && rep.viewCount > 0 ? (
                   <span className="text-text-dim">{rep.viewCount}회 열람</span>
                 ) : null}
-                {rep.revoked ? <span className="text-danger font-semibold">취소됨</span> : null}
+                {rep.revoked ? <span className="text-danger font-bold">취소됨</span> : null}
               </div>
             </div>
             {rep.revoked ? (

@@ -645,13 +645,13 @@ export const OUTCOME_LABEL: Record<OutcomeKey, string> = {
 };
 
 export const OUTCOME_COLOR: Record<OutcomeKey, string> = {
-  pending: "#d97706",
-  scheduled: "#f59e0b",
-  consulted: "#3b82f6",
-  ai_done: "#10b981",
-  enrolled: "#059669",
-  declined: "#6b7280",
-  no_show: "#dc2626",
+  pending: "#c8720d",
+  scheduled: "#e0a33a",
+  consulted: "#2d6be0",
+  ai_done: "#18a05f",
+  enrolled: "#0e7c46",
+  declined: "#75807a",
+  no_show: "#d33f3f",
 };
 
 export type OutcomeDistribution = { outcome: OutcomeKey; label: string; count: number; color: string }[];

@@ -50,7 +50,7 @@ export function MakeeduWorkerStatus({
   return (
     <section className="bg-card border-border rounded-md border p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-foreground text-sm font-semibold">동기화 담당 PC</span>
+        <span className="text-foreground text-sm font-bold">동기화 담당 PC</span>
         {workers.length === 0 ? (
           <span className="text-amber text-[13px]">
             아직 지정된 PC가 없습니다 — 담당 PC에서 <code className="text-xs">setup-sync-pc.ps1</code> 실행

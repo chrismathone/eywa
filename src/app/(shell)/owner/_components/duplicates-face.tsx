@@ -25,7 +25,7 @@ export async function DuplicatesFace({ page, isEmbed }: { page: number; isEmbed:
     <div className="space-y-4">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 중복 병합</p>
-        <h2 className="text-foreground text-lg font-semibold">
+        <h2 className="text-foreground text-lg font-bold">
           중복 의심 학생
           {total > 0 ? (
             <span className="text-muted-foreground num ml-2 text-base font-normal">

@@ -8,7 +8,7 @@ export async function MemosTab({ studentId }: { studentId: string }) {
   return (
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
-        <h2 className="text-foreground text-base font-semibold">메모</h2>
+        <h2 className="text-foreground text-base font-bold">메모</h2>
         <p className="text-muted-foreground num text-xs">{memos.length}건</p>
       </header>
 

@@ -173,11 +173,11 @@ export function PermissionsSection({ initial }: { initial: PermissionsSettings }
           <table className="w-full border-collapse text-[12px]">
             <thead>
               <tr className="bg-bg-soft">
-                <th className="bg-bg-soft sticky left-0 z-10 px-3 py-2 text-left font-semibold whitespace-nowrap">
+                <th className="bg-bg-soft sticky left-0 z-10 px-3 py-2 text-left font-bold whitespace-nowrap">
                   메뉴
                 </th>
                 {SYSTEM_ROLES.map((r) => (
-                  <th key={r} className="px-2 py-2 text-center font-semibold whitespace-nowrap">
+                  <th key={r} className="px-2 py-2 text-center font-bold whitespace-nowrap">
                     {ROLE_LABEL[r]}
                   </th>
                 ))}

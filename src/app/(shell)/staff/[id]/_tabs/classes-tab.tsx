@@ -22,7 +22,7 @@ export async function ClassesTab({ staffId }: { staffId: string }) {
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   if (classes.length === 0) {
-    return <EmptyState image="classes" icon={() => <GraduationCap size={32} strokeWidth={1.5} />} title="담당 수업이 없습니다" />;
+    return <EmptyState image="classes" icon={() => <GraduationCap size={32} strokeWidth={1.8} />} title="담당 수업이 없습니다" />;
   }
 
   return (

@@ -38,7 +38,7 @@ export default async function EditClassPage({
 
       <header className="border-border border-b pb-5">
         <p className="eyebrow">반 수정</p>
-        <h1 className="display text-foreground text-2xl">{klass.className}</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">{klass.className}</h1>
       </header>
 
       <ClassForm

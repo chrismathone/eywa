@@ -116,6 +116,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
     const parts = [`${res.queued ?? 0}명 발송 대기(연동 PC가 순차 게시)`];
     if (res.conflicts) parts.push(`동명이인 제외 ${res.conflicts}명`);
     if (res.skippedExisting) parts.push(`${reportDate === kstToday() ? "오늘" : "해당 날짜"} 보고서 이미 있어 제외 ${res.skippedExisting}명`);
+    if (res.absent) parts.push(`결석 기록이라 제외 ${res.absent}건`);
     if (res.tooOld) parts.push(`발송기한(전 달 1일) 지나 제외 ${res.tooOld}건`);
     if (res.subjectOff) parts.push(`발송 과목 아님 ${res.subjectOff}건`);
     if (res.overflow) parts.push(`상한 초과 ${res.overflow}건 제외`);
@@ -129,7 +130,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
   return (
     <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
       <div>
-        <h2 className="text-foreground text-[15px] font-semibold">반 단위 대량 발송</h2>
+        <h2 className="text-foreground text-[15px] font-bold">반 단위 대량 발송</h2>
         <p className="text-text-faint text-[12px]">
           선택한 반의 재원생 각자에게 <b>같은 내용</b>의 리포트 카드를 발송합니다 · 점수·태도는 학생별이라 대량에선 제외(진도·본문 위주) ·
           오늘 이미 보고서가 있는 학생은 자동 제외

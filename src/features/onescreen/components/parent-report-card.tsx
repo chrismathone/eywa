@@ -15,7 +15,7 @@ function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-line flex items-start justify-between gap-3 border-b py-3 last:border-b-0">
       <span className="text-text-faint shrink-0 text-[15px]">{label}</span>
-      <span className="text-foreground text-right text-[15px] font-semibold whitespace-pre-line">
+      <span className="text-foreground text-right text-[15px] font-bold whitespace-pre-line">
         {value.replace(/\r\n?/g, "\n")}
       </span>
     </div>
@@ -26,7 +26,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
       {/* 섹션 제목: 13px→26px(2배)·faint→dim(더 진한 회색) — 2026-07-10 원장 요청. */}
-      <h2 className="text-text-dim mb-3 text-[26px] font-semibold">{title}</h2>
+      <h2 className="text-text-dim mb-3 text-[26px] font-bold">{title}</h2>
       {children}
     </section>
   );

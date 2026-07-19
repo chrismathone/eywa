@@ -3,6 +3,7 @@ import { PRICING_PLANS } from "@/data/marketing";
 import { Reveal } from "../_motion/reveal";
 import { CtaButton } from "../_ui/cta-button";
 import { DrawUnderline } from "../_ui/draw-underline";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 
 export function PricingSection() {
@@ -11,14 +12,16 @@ export function PricingSection() {
       {/* 좌 — 선언 */}
       <div className="lg:pt-2">
         <Reveal variant="up">
-          <p className="text-text-faint font-mono text-[11px] font-bold tracking-[0.16em] uppercase">요금</p>
+          <Eyebrow label="요금" tone="dim" />
         </Reveal>
         <Reveal variant="clip" delay={60}>
-          <h2 className="text-foreground mt-5 text-[clamp(2.1rem,4.6vw,3.6rem)] leading-[1.15] font-extrabold tracking-[-0.025em]">
+          <h2 className="text-ink mt-5 text-[clamp(2.1rem,4.6vw,3.6rem)] leading-[1.14] font-extrabold tracking-[-0.035em]">
             지금은, 베타.
             <br />
-            그래서 <DrawUnderline tone="gold">무료</DrawUnderline>입니다.
-            <span className="ey-cursor" aria-hidden="true" />
+            그래서 <DrawUnderline>무료</DrawUnderline>입니다.
+            <span className="text-primary">
+              <span className="ey-cursor" aria-hidden="true" />
+            </span>
           </h2>
         </Reveal>
         <Reveal variant="up" delay={140}>
@@ -40,16 +43,18 @@ export function PricingSection() {
           {PRICING_PLANS.map((plan) => (
             <article
               key={plan.name}
-              className={`ey-lift bg-card relative rounded-2xl border p-6 ${
-                plan.highlight ? "border-primary shadow-[0_16px_40px_-20px_rgba(26,95,60,0.3)]" : "border-line"
+              className={`ey-lift bg-card relative rounded-[16px] border p-6 ${
+                plan.highlight
+                  ? "border-ink shadow-[0_1px_2px_rgba(11,16,13,0.05),0_24px_56px_-26px_rgba(11,16,13,0.3)]"
+                  : "border-line shadow-[0_1px_2px_rgba(11,16,13,0.04)]"
               }`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-foreground text-[17px] font-extrabold">{plan.name}</h3>
+                    <h3 className="text-ink text-[17px] font-extrabold">{plan.name}</h3>
                     {plan.highlight ? (
-                      <span className="bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-[10px] font-extrabold">
+                      <span className="bg-primary text-primary-foreground rounded-full px-2.5 py-0.5 text-[10px] font-extrabold">
                         추천
                       </span>
                     ) : null}
@@ -57,9 +62,9 @@ export function PricingSection() {
                   <p className="text-text-dim mt-1 text-[13px]">{plan.sub}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-foreground text-[22px] font-extrabold">
+                  <p className="text-ink text-[22px] font-extrabold">
                     무료
-                    <span className="bg-gold-soft text-gold ml-1.5 rounded px-1.5 py-0.5 align-middle font-mono text-[9px] font-bold tracking-[0.08em]">
+                    <span className="bg-gold-soft text-gold ml-1.5 rounded-full px-2 py-0.5 align-middle font-mono text-[9px] font-bold tracking-[0.08em]">
                       BETA
                     </span>
                   </p>

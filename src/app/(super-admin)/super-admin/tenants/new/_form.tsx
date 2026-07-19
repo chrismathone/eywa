@@ -75,7 +75,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-foreground text-[12px] font-semibold">{label}</span>
+      <span className="text-foreground text-[12px] font-bold">{label}</span>
       {type === "password" ? (
         <PasswordInput
           name={name}

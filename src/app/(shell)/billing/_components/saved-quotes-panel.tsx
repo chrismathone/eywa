@@ -45,7 +45,7 @@ export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
       {total === 0 ? (
         <EmptyState
           image={q ? "search" : "billing"}
-          icon={() => <FileText size={32} strokeWidth={1.5} />}
+          icon={() => <FileText size={32} strokeWidth={1.8} />}
           title={q ? "검색 결과 없음" : "저장된 견적이 없습니다"}
           description={q ? "검색어를 조정해보세요." : "계산기 탭에서 신입생 상담 견적을 만들어 저장하세요."}
         />

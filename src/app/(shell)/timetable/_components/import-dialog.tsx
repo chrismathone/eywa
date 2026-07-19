@@ -175,7 +175,7 @@ export function TimetableImportDialog({
             aria-label={sheet ? "구글 시트에서 가져오기" : "엑셀 가져오기"}
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-extrabold">
+              <h2 className="text-foreground text-[15px] font-bold">
                 {sheet ? "구글 시트에서 가져오기" : "시간표 엑셀 가져오기"}
               </h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
@@ -261,7 +261,7 @@ export function TimetableImportDialog({
             {diff ? (
               <div className="mt-4 space-y-3 text-[12px]">
                 {/* 요약 카운트 — 무엇이 얼마나 바뀌는지 */}
-                <div className="flex flex-wrap gap-3 font-mono">
+                <div className="flex flex-wrap gap-3 num">
                   <span className="text-primary">이동 {diff.moves.length}</span>
                   <span className="text-blue">추가 {diff.adds.length}</span>
                   <span className="text-amber">삭제 {diff.removes.length}</span>
@@ -274,7 +274,7 @@ export function TimetableImportDialog({
                 <div className="max-h-56 space-y-2 overflow-auto pr-1">
                   {diff.moves.length > 0 ? (
                     <section>
-                      <h4 className="text-primary mb-1 flex items-center gap-1 font-semibold">
+                      <h4 className="text-primary mb-1 flex items-center gap-1 font-bold">
                         <ArrowRight className="size-3" /> 이동 {diff.moves.length}건
                       </h4>
                       <div className="border-line divide-line divide-y rounded-sm border">
@@ -291,7 +291,7 @@ export function TimetableImportDialog({
 
                   {diff.adds.length > 0 ? (
                     <section>
-                      <h4 className="text-blue mb-1 flex items-center gap-1 font-semibold">
+                      <h4 className="text-blue mb-1 flex items-center gap-1 font-bold">
                         <UserPlus className="size-3" /> 추가 {diff.adds.length}건
                       </h4>
                       <div className="border-line divide-line divide-y rounded-sm border">
@@ -307,7 +307,7 @@ export function TimetableImportDialog({
 
                   {diff.removes.length > 0 ? (
                     <section>
-                      <h4 className="text-amber mb-1 flex items-center gap-1 font-semibold">
+                      <h4 className="text-amber mb-1 flex items-center gap-1 font-bold">
                         <UserMinus className="size-3" /> 삭제(수강 종료) {diff.removes.length}건
                       </h4>
                       <div className="border-line divide-line divide-y rounded-sm border">
@@ -325,7 +325,7 @@ export function TimetableImportDialog({
                 {/* 확인 필요 · 적용에서 제외되는 항목 */}
                 {diff.warnings.length > 0 ? (
                   <div className="bg-amber-soft text-amber rounded-sm p-2 text-[11px]">
-                    <p className="mb-1 flex items-center gap-1 font-semibold">
+                    <p className="mb-1 flex items-center gap-1 font-bold">
                       <AlertTriangle className="size-3" /> 확인 필요 · 적용에서 제외 {diff.warnings.length}건
                     </p>
                     <div className="max-h-24 space-y-0.5 overflow-auto">

@@ -1,10 +1,99 @@
 /* ──────────────────────────────────────────────────────────────
- * 랜딩 전용 모션 — (marketing) layout에서만 import (전역 globals.css 비오염).
- * 무거운 라이브러리 없이 CSS 전이 + IntersectionObserver(data-in)로만 구동.
- * 모션 단일 기준은 motionDisabled()(JS) + prefers-reduced-motion(CSS 폴백).
+ * 랜딩 전용 스타일 — (marketing) layout에서만 import (전역 globals.css 비오염).
+ * ① .ey-landing 스코프 팔레트 오버라이드 "Precision Pine" — 앱 본체 토큰은 불변.
+ *    웜 아이보리/파스텔 워시 → 쿨 포슬린 + 잉크 그린 + 샤프 그린. 다크 파인 서피스는
+ *    --pine* 로컬 변수(콘솔 패널·클로징·푸터 북엔드 전용, 앱과 무관).
+ * ② 모션 — 무거운 라이브러리 없이 CSS 전이 + IntersectionObserver(data-in)로만 구동.
+ *    모션 단일 기준은 motionDisabled()(JS) + prefers-reduced-motion(CSS 폴백).
  * ────────────────────────────────────────────────────────────── */
 
-/* 등장 reveal — data-in이 박히면 완성 상태로 전이 */
+.ey-landing {
+  /* 서피스 — 웜 크림 제거, 쿨 포슬린/미스트 */
+  --background: #f8faf8;
+  --bg-soft: #eef2ef;
+  --surface-hi: #ffffff;
+  --card: #ffffff;
+  --sidebar: #eef2ef;
+
+  /* 잉크 — 그린캐스트 블랙, 대비 강화 */
+  --foreground: #101613;
+  --ink: #0b100d;
+  --text-dim: #4c5751;
+  --text-faint: #6b766f;
+
+  /* 라인 — 기존 8%보다 또렷하게 */
+  --border: rgba(11, 16, 13, 0.1);
+  --line: rgba(11, 16, 13, 0.1);
+  --line-strong: rgba(11, 16, 13, 0.2);
+  --input: rgba(11, 16, 13, 0.1);
+
+  /* 브랜드 그린 — 더스티 포레스트(#1a5f3c)를 채도·명도 한 단계 끌어올림 */
+  --primary: #0e7c46;
+  --primary-foreground: #ffffff;
+  --primary-soft: rgba(14, 124, 70, 0.09);
+  --primary-softer: rgba(14, 124, 70, 0.05);
+  --ring: #0e7c46;
+
+  /* 보조 팔레트 — 워시 카드 금지, 도트·숫자·미세 액센트로만 */
+  --gold: #a97f24;
+  --gold-soft: rgba(169, 127, 36, 0.11);
+  --blue: #2d6be0;
+  --blue-soft: rgba(45, 107, 224, 0.09);
+  --purple: #6c50c8;
+  --purple-soft: rgba(108, 80, 200, 0.09);
+  --rose: #d2447a;
+  --rose-soft: rgba(210, 68, 122, 0.09);
+  --amber: #c8720d;
+  --amber-soft: rgba(200, 114, 13, 0.11);
+  --danger: #d33f3f;
+  --danger-soft: rgba(211, 63, 63, 0.09);
+
+  /* 다크 파인 서피스 (랜딩 로컬 — 콘솔·클로징·푸터) */
+  --pine: #0c1712;
+  --pine-2: #122019;
+  --pine-line: rgba(255, 255, 255, 0.09);
+  --pine-text: #f2f6f3;
+  --pine-dim: #9cafa4;
+  --mint: #4ade97;
+}
+
+/* ─────────────── 다크 파인 서피스 ─────────────── */
+
+/* 콘솔/북엔드 공통 바탕 — 파인 블랙 + 상단 민트 글로우 한 방울 */
+.ey-console {
+  background:
+    radial-gradient(72% 56% at 50% -8%, rgba(74, 222, 151, 0.07), transparent 62%),
+    var(--pine);
+}
+
+/* 콘솔 로그 행 — data-in 시 위에서 아래로 순차 점등(delay는 인라인) */
+.ey-log {
+  opacity: 0;
+  transform: translateY(7px);
+  transition:
+    opacity 0.45s ease-out,
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-in="true"] .ey-log {
+  opacity: 1;
+  transform: none;
+}
+
+/* 라이브 도트 — 다크 서피스 위 민트 펄스 */
+@keyframes ey-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.ey-live {
+  animation: ey-live 2.2s ease-in-out infinite;
+}
+
+/* ─────────────── 등장 reveal ─────────────── */
 [data-reveal] {
   opacity: 0;
   will-change: opacity, transform;
@@ -31,7 +120,7 @@
   filter: none;
 }
 
-/* gold/primary 언더라인 드로잉 — 부모 reveal이 data-in일 때 좌→우로 그어짐 */
+/* 언더라인 드로잉 — 부모 reveal이 data-in일 때 좌→우로 그어짐 */
 .ey-uline {
   position: relative;
   white-space: nowrap;
@@ -44,27 +133,30 @@
   bottom: 0.04em;
   height: 0.13em;
   border-radius: 999px;
-  background: var(--gold);
+  background: var(--primary);
   transform: scaleX(0);
   transform-origin: left center;
   transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.25s;
 }
-.ey-uline[data-tone="primary"]::after {
-  background: var(--primary);
+.ey-uline[data-tone="gold"]::after {
+  background: var(--gold);
+}
+.ey-uline[data-tone="mint"]::after {
+  background: var(--mint);
 }
 [data-in="true"] .ey-uline::after,
 .ey-uline[data-in="true"]::after {
   transform: scaleX(1);
 }
 
-/* 깜빡이는 mono 커서 ('무료입니다.|') */
+/* 깜빡이는 mono 커서 ('무료입니다.|') — 색은 currentColor(사용처에서 지정) */
 .ey-cursor {
   display: inline-block;
   width: 0.06em;
   height: 1em;
   margin-left: 0.08em;
   vertical-align: -0.08em;
-  background: var(--primary);
+  background: currentColor;
   animation: ey-blink 1.05s steps(1) infinite;
 }
 @keyframes ey-blink {
@@ -79,7 +171,6 @@
 }
 
 /* 시그니처 라인 stroke 드로잉 — data-in 시 dashoffset 0 */
-/* path는 pathLength=100으로 정규화 → dasharray/offset 100이면 정확히 전체 드로잉 */
 .ey-draw {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
@@ -89,7 +180,7 @@
   stroke-dashoffset: 0;
 }
 
-/* 시그니처 도착 카드 settle (라인 도달 후 살짝 가라앉음) */
+/* 도착 카드 settle (라인 도달 후 살짝 가라앉음) */
 .ey-arrive {
   opacity: 0;
   transform: translateY(8px) scale(0.985);
@@ -155,35 +246,22 @@
   transform: scaleX(1);
 }
 
-/* 랜딩 스코프 — caption/meta로 쓰이는 text-faint의 대비를 AA까지 끌어올림(앱 전역 토큰은 불변).
- * #9aa39d(2.2~2.6:1) → #6f7a74(≈4.5:1 on bg-soft). 장식용 점선/구분선은 border-line이라 무관. */
-.ey-landing {
-  --text-faint: #6f7a74;
-}
-
-/* Latin serif 악센트 (Fraunces) — 영문 단어/대형 숫자에만. 한글 미적용. */
-.ey-serif {
-  font-family: var(--font-serif), "Iowan Old Style", Georgia, "Times New Roman", serif;
-  font-feature-settings: "ss01";
-  letter-spacing: -0.01em;
-}
-
-/* 올라이트 깊이 — 아주 옅은 radial mesh (마감 등 한두 곳에만, 색이 아닌 '온도') */
+/* 올라이트 깊이 — 아주 옅은 radial mesh (히어로 등 한두 곳, 색이 아닌 '온도') */
 .ey-mesh {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(60% 50% at 50% 0%, rgba(26, 95, 60, 0.06), transparent 70%),
-    radial-gradient(40% 40% at 85% 100%, rgba(184, 137, 58, 0.05), transparent 70%);
+    radial-gradient(56% 48% at 68% 0%, rgba(14, 124, 70, 0.05), transparent 68%),
+    radial-gradient(38% 38% at 4% 90%, rgba(45, 107, 224, 0.035), transparent 70%);
 }
 
-/* 기능 아이콘 워터마크 — 평면 ivory에 질감 (opacity 매우 낮게) */
+/* 기능 아이콘 워터마크 — 평면 배경에 질감 (opacity 매우 낮게) */
 .ey-watermark {
   position: absolute;
   pointer-events: none;
   color: var(--primary);
-  opacity: 0.04;
+  opacity: 0.05;
 }
 
 /* 떠 있는 카드 미세 부유 (hero 플로팅 알림 등 — 정적이지 않게) */
@@ -271,7 +349,7 @@
   animation: ey-ws-cursor 15s ease-in-out infinite;
 }
 
-/* 기능 탭 전환 — mathlab식 Y축 3D 플립(페이지 넘김). 탭 클릭 시 패널이 제자리에서 넘어감.
+/* 기능 탭 전환 — Y축 3D 플립(페이지 넘김). 탭 클릭 시 패널이 제자리에서 넘어감.
  * key 변경으로 remount → 재생. 모션 게이트는 JS(view.anim)에서 클래스 토글로 처리, 여기선 reduce 폴백만. */
 .ey-flip-in {
   transform-origin: center;
@@ -306,7 +384,8 @@
     stroke-dashoffset: 0 !important;
     transition: none !important;
   }
-  .ey-arrive {
+  .ey-arrive,
+  .ey-log {
     opacity: 1 !important;
     transform: none !important;
   }
@@ -316,6 +395,7 @@
   .ey-float,
   .ey-float-b,
   .ey-bar-live,
+  .ey-live,
   .ey-wsa,
   .ey-wsb,
   .ey-wsc,

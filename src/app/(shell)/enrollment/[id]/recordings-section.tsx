@@ -54,7 +54,7 @@ export function RecordingsSection({
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <Mic className="text-text-dim size-3.5" />
-        <h2 className="text-foreground text-[13px] font-semibold">
+        <h2 className="text-foreground text-[13px] font-bold">
           상담 녹음 <span className="num text-text-faint font-normal">{recordings.length}개</span>
         </h2>
       </div>
@@ -69,7 +69,7 @@ export function RecordingsSection({
         return (
           <div key={r.id} className="border-line bg-card overflow-hidden rounded-md border">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-              <span className="text-foreground text-[12px] font-semibold whitespace-nowrap">
+              <span className="text-foreground text-[12px] font-bold whitespace-nowrap">
                 녹음 {i + 1}
               </span>
               <span className="text-text-dim text-[11px]">{meta.join(" · ")}</span>

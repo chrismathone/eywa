@@ -45,9 +45,8 @@ const LEGACY_VISIBLE_GLYPHS = [
   "🌳",
 ] as const;
 const APPROVED_INLINE_SVG = [
-  "src/app/(marketing)/_sections/signature.tsx",
+  // signature.tsx는 2026-07-19 랜딩 리디자인(운영 콘솔)에서 인라인 SVG 분기선이 제거되어 목록에서 빠짐.
   "src/app/(marketing)/_ui/mock-workspace.tsx",
-  "src/app/(shell)/dashboard/_components/command-band.tsx",
   "src/app/(shell)/dashboard/_components/sparkline.tsx",
   "src/app/(shell)/help/_help-browser.tsx",
   "src/features/onescreen/components/report-trend-graph.tsx",

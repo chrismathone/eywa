@@ -31,7 +31,7 @@ export default async function MyLearningPage() {
         </div>
         <div className="mt-2.5 flex items-center gap-3">
           <div>
-            <h1 className="text-foreground text-[22px] leading-tight font-extrabold">
+            <h1 className="text-foreground text-[22px] leading-tight font-bold">
               {student.name} 님, 환영해요
             </h1>
             <p className="text-text-dim text-[13px]">

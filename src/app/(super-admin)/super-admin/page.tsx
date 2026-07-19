@@ -63,7 +63,7 @@ function KpiCard({ label, value, unit }: { label: string; value: string; unit: s
     <div className="bg-card border-line shadow-card rounded-2xl border p-5">
       <p className="text-text-dim font-mono text-[11px] tracking-wider uppercase">{label}</p>
       <p className="text-foreground mt-2 flex items-baseline gap-1">
-        <span className="text-[32px] font-extrabold tabular-nums">{value}</span>
+        <span className="text-[32px] font-bold tabular-nums">{value}</span>
         <span className="text-text-dim text-[12px]">{unit}</span>
       </p>
     </div>

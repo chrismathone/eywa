@@ -31,13 +31,13 @@ export function LicenseSection({
 
       {/* 좌석형 */}
       <div className="space-y-2">
-        <p className="text-text-dim text-[11px] font-semibold tracking-wide uppercase">좌석 제한</p>
+        <p className="text-text-dim text-[11px] font-bold tracking-wide uppercase">좌석 제한</p>
         <table className="w-full text-[12px]">
           <thead>
             <tr className="text-text-dim border-line border-b">
-              <th className="py-1.5 text-left font-semibold">기능</th>
-              <th className="py-1.5 text-right font-semibold">사용 / 최대</th>
-              <th className="py-1.5 text-right font-semibold">설정</th>
+              <th className="py-1.5 text-left font-bold">기능</th>
+              <th className="py-1.5 text-right font-bold">사용 / 최대</th>
+              <th className="py-1.5 text-right font-bold">설정</th>
             </tr>
           </thead>
           <tbody className="divide-line divide-y">
@@ -57,7 +57,7 @@ export function LicenseSection({
 
       {/* 토글형 */}
       <div className="space-y-2">
-        <p className="text-text-dim text-[11px] font-semibold tracking-wide uppercase">기능 On / Off</p>
+        <p className="text-text-dim text-[11px] font-bold tracking-wide uppercase">기능 On / Off</p>
         <ul className="divide-line divide-y">
           {TOGGLE_FEATURES.map((f) => (
             <ToggleRow

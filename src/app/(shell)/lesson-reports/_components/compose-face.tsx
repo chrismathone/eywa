@@ -34,6 +34,7 @@ const SEND_MESSAGE: Record<string, { kind: "success" | "info" | "warn"; text: st
   dry_run: { kind: "info", text: "저장했습니다. 현재 실제 발송이 꺼져 있어 전송은 대기 상태입니다(원장 설정에서 켜야 전송)." },
   subject_off: { kind: "warn", text: "저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)." },
   name_conflict: { kind: "warn", text: "동명이인이 있어 자동 발송을 막았습니다. 학생 구분 이름(classnote_name) 지정 후 다시 시도하세요." },
+  absent: { kind: "warn", text: "저장했지만 그날 결석으로 기록된 학생이라 전송하지 않았습니다(출석부 확인)." },
   too_old: { kind: "warn", text: "저장했지만 너무 오래된 보고서라 전송하지 않았습니다." },
   revoked: { kind: "warn", text: "취소된 공유 링크입니다 — 재발급 후 발송하세요." },
   processing: { kind: "info", text: "이미 발송 처리 중인 보고서입니다." },
@@ -259,7 +260,7 @@ export function ComposeFace({
   return (
     <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
       <div>
-        <h2 className="text-foreground text-[15px] font-semibold">직접 작성·발송</h2>
+        <h2 className="text-foreground text-[15px] font-bold">직접 작성·발송</h2>
         <p className="text-text-faint text-[12px]">
           학생을 선택해 수업보고서를 작성하고 ClassNote로 발송합니다(강사 원스크린과 동일 형식). 담당 반이 아니어도 발송할 수 있어요.
         </p>
@@ -331,7 +332,7 @@ export function ComposeFace({
                       type="button"
                       onClick={() => pickSubject(s)}
                       className={`rounded-full border px-3 py-1 text-[12px] ${
-                        subject === s.key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"
+                        subject === s.key ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"
                       }`}
                       title={s.sendable ? undefined : "발송 대상 과목이 아닙니다(저장만 됩니다)"}
                     >
@@ -397,7 +398,7 @@ export function ComposeFace({
               <div className={LABEL}>수업 태도</div>
               <div className="flex flex-wrap gap-1.5">
                 {ATTITUDE.map((a) => (
-                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-[12px] ${attitude === a ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"}`}>
+                  <button key={a} type="button" onClick={() => setAttitude(attitude === a ? "" : a)} className={`rounded-full border px-2.5 py-1 text-[12px] ${attitude === a ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
                     {a}
                   </button>
                 ))}
@@ -407,7 +408,7 @@ export function ComposeFace({
               <div className={LABEL}>과제 수행</div>
               <div className="flex flex-wrap gap-1.5">
                 {HOMEWORK.map((h) => (
-                  <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-semibold" : "border-line text-text-dim"}`}>
+                  <button key={h} type="button" onClick={() => setHomework(homework === h ? "" : h)} className={`rounded-full border px-2.5 py-1 text-[12px] ${homework === h ? "border-primary bg-primary/10 text-primary font-bold" : "border-line text-text-dim"}`}>
                     {h}
                   </button>
                 ))}

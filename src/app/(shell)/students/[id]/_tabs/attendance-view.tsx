@@ -71,7 +71,7 @@ export function AttendanceView({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
         <div className="flex items-center gap-1.5">
           <CalendarDays className="text-primary size-4" />
-          <h2 className="text-foreground text-sm font-semibold">출결 현황</h2>
+          <h2 className="text-foreground text-sm font-bold">출결 현황</h2>
         </div>
         {/* 뷰 토글 */}
         <div className="border-line flex items-center gap-0.5 rounded-md border p-0.5">
@@ -264,7 +264,7 @@ function Card({ label, value, unit, highlight }: { label: string; value: string;
   return (
     <div className="bg-card border-line rounded-md border p-3">
       <p className="eyebrow">{label}</p>
-      <p className={`num text-foreground mt-1 text-xl font-semibold ${highlight ?? ""}`}>
+      <p className={`num text-foreground mt-1 text-xl font-bold ${highlight ?? ""}`}>
         {value}
         {unit ? <span className="text-muted-foreground ml-0.5 text-xs font-normal">{unit}</span> : null}
       </p>

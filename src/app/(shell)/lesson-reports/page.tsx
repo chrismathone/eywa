@@ -112,7 +112,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header className="border-border border-b pb-5">
         <p className="eyebrow">발송 관리</p>
-        <h1 className="display text-foreground text-2xl">수업보고서</h1>
+        <h1 className="font-bold tracking-tight text-foreground text-2xl">수업보고서</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           발송 큐는 위에서 상시 확인. 작성률·Edutrix 미매핑·보고서 목록은 탭으로 나눕니다. 작성은 선생님
           원스크린에서 진행합니다.

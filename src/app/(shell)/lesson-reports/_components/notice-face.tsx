@@ -108,7 +108,7 @@ export function NoticeFace({
     <div className="space-y-6">
       <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
         <div className="mb-3">
-          <h2 className="text-foreground text-[15px] font-semibold">반 공지 발송</h2>
+          <h2 className="text-foreground text-[15px] font-bold">반 공지 발송</h2>
           <p className="text-text-faint text-[12px]">
             선택한 반의 재원생 각자의 ClassNote 알림장으로 같은 내용이 발송됩니다 · 학부모 미가입 학생은 수신 불가
           </p>
@@ -212,7 +212,7 @@ export function NoticeFace({
 
       {/* 발송 이력 */}
       <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
-        <h2 className="text-foreground mb-3 text-[15px] font-semibold">공지 발송 이력</h2>
+        <h2 className="text-foreground mb-3 text-[15px] font-bold">공지 발송 이력</h2>
         {rows.length === 0 ? (
           <p className="text-text-faint text-[13px]">아직 발송한 공지가 없습니다.</p>
         ) : (
@@ -220,10 +220,10 @@ export function NoticeFace({
             <table className="w-full min-w-[560px] text-left text-[12px]">
               <thead>
                 <tr className="border-line text-text-faint border-b">
-                  <th className="px-3 py-2 font-semibold">발송 시각</th>
-                  <th className="px-3 py-2 font-semibold">내용</th>
-                  <th className="px-3 py-2 font-semibold">대상</th>
-                  <th className="px-3 py-2 font-semibold">상태</th>
+                  <th className="px-3 py-2 font-bold">발송 시각</th>
+                  <th className="px-3 py-2 font-bold">내용</th>
+                  <th className="px-3 py-2 font-bold">대상</th>
+                  <th className="px-3 py-2 font-bold">상태</th>
                 </tr>
               </thead>
               <tbody>
@@ -238,7 +238,7 @@ export function NoticeFace({
                       </td>
                       <td className="text-text-dim px-3 py-2">{r.targetCount}명</td>
                       <td className="px-3 py-2">
-                        <span className={`text-[11px] font-semibold ${st.cls}`}>{st.label}</span>
+                        <span className={`text-[11px] font-bold ${st.cls}`}>{st.label}</span>
                         {failNotes.length ? (
                           <span className="text-text-faint ml-1.5 text-[11px]" title={failNotes.map((f) => `${f.board}: ${f.note ?? ""}`).join("\n")}>
                             실패 {failNotes.length}

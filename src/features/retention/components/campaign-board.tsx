@@ -68,7 +68,7 @@ export function CampaignBoard({ board }: { board: Board }) {
                 className="border-line flex items-center gap-2.5 rounded-lg border px-3 py-2"
               >
                 <div className="min-w-0">
-                  <div className="text-foreground text-[12px] leading-tight font-semibold">{c.name}</div>
+                  <div className="text-foreground text-[12px] leading-tight font-bold">{c.name}</div>
                   <div className="text-text-faint text-[10px]">
                     {[c.grade, c.school].filter(Boolean).join(" · ")}
                   </div>
@@ -124,7 +124,7 @@ export function CampaignBoard({ board }: { board: Board }) {
                     <div key={card.targetId} className="bg-bg-soft/40 border-line rounded-lg border p-2.5">
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="text-foreground truncate text-[12px] font-semibold">{card.name}</div>
+                          <div className="text-foreground truncate text-[12px] font-bold">{card.name}</div>
                           <div className="text-text-faint truncate text-[10px]">
                             {[card.grade, card.school, card.teacherName].filter(Boolean).join(" · ")}
                           </div>

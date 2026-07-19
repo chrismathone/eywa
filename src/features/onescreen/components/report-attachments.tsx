@@ -142,11 +142,11 @@ export function ReportAttachments({
   return (
     <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="text-text-faint text-[11px] font-semibold">
+        <p className="text-text-faint text-[11px] font-bold">
           사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX}</span>
         </p>
         <label
-          className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-semibold ${
+          className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-bold ${
             disabled || busy || full ? "pointer-events-none opacity-50" : ""
           }`}
         >
@@ -185,7 +185,7 @@ export function ReportAttachments({
                 className="bg-danger absolute top-0.5 right-0.5 inline-flex size-4 items-center justify-center rounded text-white opacity-0 transition group-hover:opacity-100"
                 aria-label={`${a.name} 삭제`}
               >
-                <EyIcon name="close" size={11} strokeWidth={2} />
+                <EyIcon name="close" size={11} strokeWidth={1.8} />
               </button>
             </div>
           ))}

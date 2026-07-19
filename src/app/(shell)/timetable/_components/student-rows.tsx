@@ -61,7 +61,7 @@ export const ROW_CLASS =
 export function IndexBadge({ badge }: { badge?: string }) {
   if (!badge) return null;
   return (
-    <span className="bg-ink/50 mr-0.5 inline-block shrink-0 rounded-[2px] px-0.5 align-middle font-mono text-[9px] leading-tight font-bold text-white">
+    <span className="bg-ink/50 mr-0.5 inline-block shrink-0 rounded-[2px] px-0.5 align-middle num text-[9px] leading-tight font-bold text-white">
       {badge}
     </span>
   );
@@ -144,11 +144,11 @@ export function DraggableStudentRow({
       {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌). */}
       {target ? (
         target.sameClass ? (
-          <span className="text-primary shrink-0 font-mono text-[10px] font-bold">
+          <span className="text-primary shrink-0 text-[10px] font-bold">
             →{dayChangeLabel(target.toDays)}
           </span>
         ) : (
-          <span className="text-primary shrink-0 font-mono text-[12px]">→</span>
+          <span className="text-primary shrink-0 text-[12px]">→</span>
         )
       ) : null}
     </div>

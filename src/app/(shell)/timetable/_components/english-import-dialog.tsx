@@ -182,7 +182,7 @@ export function EnglishImportDialog({
             aria-label="시트에서 가져오기"
           >
             <header className="flex items-center justify-between">
-              <h2 className="text-foreground text-[15px] font-extrabold">시트에서 가져오기</h2>
+              <h2 className="text-foreground text-[15px] font-bold">시트에서 가져오기</h2>
               <button type="button" onClick={close} aria-label="닫기" className="text-text-dim hover:text-foreground">
                 <X className="size-4" />
               </button>
@@ -219,7 +219,7 @@ export function EnglishImportDialog({
                     <p className="text-text-faint text-[11px]">변경 없음 — 시트와 배치가 일치합니다.</p>
                   ) : (
                     <>
-                      <div className="mb-1.5 flex flex-wrap gap-3 font-mono">
+                      <div className="mb-1.5 flex flex-wrap gap-3 num">
                         <span className="text-blue">생성 {struct!.plan.create}</span>
                         <span className="text-primary">변경 {struct!.plan.update}</span>
                         <span className="text-amber">제거 {struct!.plan.remove}</span>
@@ -248,7 +248,7 @@ export function EnglishImportDialog({
                     <p className="text-text-faint text-[11px]">변경 없음 — 시트와 수강이 일치합니다.</p>
                   ) : (
                     <>
-                      <div className="mb-1.5 flex flex-wrap gap-3 font-mono">
+                      <div className="mb-1.5 flex flex-wrap gap-3 num">
                         <span className="text-primary">이동 {enroll!.moves.length}</span>
                         <span className="text-blue">추가 {enroll!.adds.length}</span>
                         <span className="text-amber">삭제 {enroll!.removes.length}</span>
@@ -272,7 +272,7 @@ export function EnglishImportDialog({
                 {/* 경고(구조) */}
                 {struct && struct.warnings.length > 0 ? (
                   <div className="bg-amber-soft text-amber rounded-sm p-2 text-[11px]">
-                    <p className="mb-1 flex items-center gap-1 font-semibold"><AlertTriangle className="size-3" /> 확인 필요 {struct.warnings.length}건</p>
+                    <p className="mb-1 flex items-center gap-1 font-bold"><AlertTriangle className="size-3" /> 확인 필요 {struct.warnings.length}건</p>
                     <div className="max-h-20 space-y-0.5 overflow-auto">{struct.warnings.map((w, i) => <p key={i}>· {w}</p>)}</div>
                   </div>
                 ) : null}
@@ -280,7 +280,7 @@ export function EnglishImportDialog({
                 {/* 적용 / 결과 / 롤백 */}
                 {applied ? (
                   <div className="bg-blue-soft text-blue space-y-2 rounded-sm p-2 text-[12px]">
-                    <p className="flex items-center gap-1 font-semibold"><Check className="size-3" /> 적용 완료</p>
+                    <p className="flex items-center gap-1 font-bold"><Check className="size-3" /> 적용 완료</p>
                     {structRes ? <p className="text-text-dim text-[11px]">· 배치: 마감 {structRes.closed} · 삽입 {structRes.inserted} · 반 {structRes.classUpdated}</p> : null}
                     {enrollRes ? <p className="text-text-dim text-[11px]">· 반이동: 이동 {enrollRes.moved} · 삭제 {enrollRes.removed} · 추가 {enrollRes.added}{enrollRes.failed ? ` · 실패 ${enrollRes.failed}` : ""}</p> : null}
                     {snapshotId ? (
@@ -295,7 +295,7 @@ export function EnglishImportDialog({
                   <p className="bg-bg-soft text-text-dim rounded-sm p-2 text-[11px]">변경 사항이 없습니다 — 시트와 시간표가 일치합니다.</p>
                 ) : confirming ? (
                   <div className="border-amber/40 bg-amber-soft space-y-2 rounded-sm border p-2 text-[12px]">
-                    <p className="text-amber flex items-center gap-1 font-semibold"><AlertTriangle className="size-3" /> 배치 {structChanges}건 · 반이동 {enrollChanges}건을 적용합니다. 계속할까요?</p>
+                    <p className="text-amber flex items-center gap-1 font-bold"><AlertTriangle className="size-3" /> 배치 {structChanges}건 · 반이동 {enrollChanges}건을 적용합니다. 계속할까요?</p>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={apply} disabled={applying} className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40">
                         {applying ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />} 적용 확정

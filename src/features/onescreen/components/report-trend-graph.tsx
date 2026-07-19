@@ -3,7 +3,7 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 
 // 학부모 보고서 성적 추이 — **순수 SVG**(라이브러리 0). ClassNote 워커가 headless로 스크린샷하므로
 // recharts(ResizeObserver) 불가 → edutrix ReportPaper의 PureSvgChart를 eywa 톤으로 이식(CLAUDE.md B5).
-// 색은 인라인 hex(스크린샷 안정): 시험=primary #1a5f3c, 과제=blue #1f6ba8. 격자/축은 회색.
+// 색은 인라인 hex(스크린샷 안정): 시험=primary #153e75, 과제=blue #2d6be0. 격자/축은 회색.
 
 const W = 660;
 const H = 200;
@@ -97,7 +97,7 @@ function MetricBlock({
   if (!hasTrend(points, metric)) return null;
   return (
     <div>
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold" style={{ color }}>
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-bold" style={{ color }}>
         <span className="inline-block size-2 rounded-full" style={{ backgroundColor: color }} aria-hidden />
         {title}
       </h3>
@@ -116,8 +116,8 @@ export function ReportTrendGraph({ points }: { points: TrendPoint[] }) {
   if (!showExam && !showHomework) return null;
   return (
     <div className="flex flex-col gap-5">
-      <MetricBlock points={points} metric="exam" color="#1a5f3c" title="시험 점수 추이" />
-      <MetricBlock points={points} metric="homework" color="#1f6ba8" title="과제 점수 추이" />
+      <MetricBlock points={points} metric="exam" color="#153e75" title="시험 점수 추이" />
+      <MetricBlock points={points} metric="homework" color="#2d6be0" title="과제 점수 추이" />
     </div>
   );
 }
