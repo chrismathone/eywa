@@ -207,7 +207,7 @@ export async function listReports(
 
   let q = supabase
     .from("lesson_reports")
-    .select("id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, teacher_name, share_token, source", { count: "exact" })
+    .select("id, student_id, subject, report_date, created_at, classnote_sent_at, classnote_status, classnote_read_at, teacher_name, share_token, source", { count: "exact" })
     // 같은 수업일 내 최신 발송이 위로 — 이관분은 created_at이 cron 배치 시각으로 전부 동일(정렬 무의미)해
     // 실제 발송시각(classnote_sent_at) 우선 정렬. 미발송(sent_at NULL)은 NULLS LAST로 아래, created_at이 최종 tiebreak.
     .order("report_date", { ascending: false })
@@ -220,6 +220,16 @@ export async function listReports(
   else if (filters.status) q = q.eq("classnote_status", filters.status);
   if (filters.teacher) q = q.eq("teacher_name", filters.teacher);
   if (filters.subject) q = q.eq("subject", filters.subject);
+  // 읽음 필터 — "안읽음"은 판정 가능한 행만(발송 성공 + 매칭 키 + 읽음 없음). 매칭 키 없는 옛 이관분은
+  // 동기화 불가 = "안읽음" 아님(report-filters.ts ReportListFilters.read 주석 참조).
+  if (filters.read === "read") q = q.not("classnote_read_at", "is", null);
+  else if (filters.read === "unread") {
+    q = q
+      .eq("classnote_status", "success")
+      .is("classnote_read_at", null)
+      // 매칭 가능: edutrix분은 edutrix_share_token 백필된 행만, native분(source≠edutrix_import, NULL 포함)은 항상
+      .or("edutrix_share_token.not.is.null,source.is.null,source.neq.edutrix_import");
+  }
   q = q.range(page * REPORT_PAGE_SIZE, page * REPORT_PAGE_SIZE + REPORT_PAGE_SIZE - 1);
 
   const { data, count, error } = await q;
@@ -241,6 +251,7 @@ export async function listReports(
     teacherName: r.teacher_name as string | null,
     shareToken: r.share_token as string | null,
     source: r.source as string | null,
+    readAt: r.classnote_read_at as string | null,
   }));
   return { ok: true, rows, total: count ?? rows.length, page, pageSize: REPORT_PAGE_SIZE };
 }
