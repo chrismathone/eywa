@@ -126,8 +126,8 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-primary font-mono text-[10px] font-bold tracking-[0.13em] uppercase">
-                AI operations brief
+              <p className="text-primary text-[11px] font-semibold">
+                AI 운영 브리핑
               </p>
               <span className={`${state.tone} inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10.5px] font-bold ring-1 ring-inset`}>
                 <span className={`${state.dot} size-1.5 rounded-full`} aria-hidden="true" />
@@ -163,8 +163,8 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
               <div className="pointer-events-none absolute -right-10 -top-14 size-44 rounded-full border border-current opacity-[0.04]" aria-hidden="true" />
               <div className="relative flex min-h-full w-full flex-col">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-text-dim font-mono text-[10px] font-bold tracking-[0.13em] uppercase">
-                    01 · 먼저 할 일
+                  <p className="text-text-dim text-[11px] font-semibold">
+                    먼저 할 일
                   </p>
                   <span className={`${focusStyle.badge} rounded-full px-2.5 py-1 text-[10.5px] font-extrabold`}>
                     {briefing.focus.lane === "urgent"

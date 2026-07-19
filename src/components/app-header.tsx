@@ -46,7 +46,7 @@ export function AppHeader({ brand = "EYWA" }: { brand?: string }) {
   return (
     <header className="bg-background border-line sticky top-0 z-30 flex h-12 shrink-0 items-center gap-4 border-b px-4 lg:px-6">
       <div className="min-w-0 shrink-0">
-        <div className="text-text-dim font-mono text-[10px] leading-none tracking-[1px] uppercase">
+        <div className="text-text-faint text-[11px] leading-none font-medium">
           {breadcrumb}
         </div>
         <h1 className="text-foreground mt-1 truncate text-[16px] leading-none font-extrabold tracking-tight">

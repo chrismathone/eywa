@@ -31,10 +31,10 @@ export function SlimTrend({
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-primary font-mono text-[10px] font-bold tracking-[0.12em] uppercase">Academy pulse</p>
+          <p className="text-primary text-[11px] font-semibold">최근 추세</p>
           <h2 className="text-foreground mt-0.5 text-[15px] font-bold">학원 펄스</h2>
         </div>
-        <span className="text-text-dim font-mono text-[10px]">최근 {change.days}일 · {range}</span>
+        <span className="text-text-dim text-[11px]">최근 {change.days}일 · {range}</span>
       </header>
       {/* 전체 폭을 3개 지표 패널로 채운다(우측 빈 공간 제거): 학생증감(1.5fr) + 출석률·수납률(각 1fr).
           items-stretch로 세 패널 높이 일치, 트렌드 패널의 sparkline이 flex-1로 커져 높이를 채운다.
@@ -59,7 +59,7 @@ function StudentChange({ change, subjects }: { change: EnrollmentChangeSummary; 
   const noChange = newCount === 0 && withdrawnCount === 0;
   return (
     <div className="border-line flex h-full flex-col rounded-xl border px-4 py-3">
-      <span className="text-text-faint font-mono text-[10px] tracking-wider uppercase">학생 증감</span>
+      <span className="text-text-faint text-[11px] font-medium">학생 증감</span>
       {noChange ? (
         <div className="text-text-dim mt-2 flex flex-1 items-center text-[12px]">최근 {change.days}일 변동 없음</div>
       ) : (
@@ -164,7 +164,7 @@ function TrendRow({
       {/* relative 필수 — sr-only는 absolute라 positioned 부모가 없으면 main의 클리핑을 뚫고 문서를 늘린다(gotchas #79). */}
       <p className="sr-only">{label} 날짜별 값: {accessibleSummary}</p>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-[10px] tracking-wider uppercase" style={{ color: `var(${colorVar})` }}>
+        <span className="text-[11px] font-medium" style={{ color: `var(${colorVar})` }}>
           {label}
         </span>
         {hasData ? (

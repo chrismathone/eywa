@@ -263,11 +263,11 @@ export function AppSidebar({
                 }`}
               >
                 <span
-                  className={`text-text-faint absolute left-[17px] font-mono text-[10px] font-bold tracking-wider whitespace-nowrap uppercase ${
+                  className={`text-text-faint absolute left-[17px] text-[11px] font-semibold whitespace-nowrap ${
                     expanded ? "opacity-100" : "opacity-0"
                   } ${motion ? "transition-opacity duration-200" : ""}`}
                 >
-                  {String(gi + 1).padStart(2, "0")} {group.label}
+                  {group.label}
                 </span>
                 {gi > 0 ? (
                   <span
@@ -415,7 +415,7 @@ export function AppSidebar({
               style={{ top: flyout.top, left: flyout.left }}
               className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-md border p-1"
             >
-              <p className="text-text-faint px-2.5 pt-1 pb-1.5 font-mono text-[10px] font-bold tracking-wide">
+              <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-[11px] font-semibold">
                 {flyout.label}
               </p>
               <ul className="space-y-px">
@@ -596,7 +596,7 @@ function RailItem({
       <span
         aria-hidden="true"
         style={{ left: expanded ? 4 : 8, right: expanded ? 4 : 8 }}
-        className={`pointer-events-none absolute inset-y-0 z-0 rounded-[6px] ${
+        className={`pointer-events-none absolute inset-y-0 z-0 rounded-[9px] ${
           active
             ? "bg-primary shadow-primary-glow opacity-100"
             : openOnly
@@ -665,7 +665,7 @@ function ExternalRailItem({
       <span
         aria-hidden="true"
         style={{ left: expanded ? 4 : 8, right: expanded ? 4 : 8 }}
-        className={`bg-sidebar-accent pointer-events-none absolute inset-y-0 z-0 rounded-[6px] opacity-0 group-hover:opacity-100 ${
+        className={`bg-sidebar-accent pointer-events-none absolute inset-y-0 z-0 rounded-[9px] opacity-0 group-hover:opacity-100 ${
           motion ? `transition-[left,right,opacity] duration-200 ${EASE}` : ""
         }`}
       />
