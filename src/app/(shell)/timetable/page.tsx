@@ -24,12 +24,10 @@ import {
   TimetableDndArea,
 } from "./_components/timetable-board";
 import { TimetableToolbarActions } from "./_components/toolbar-actions";
-import {
-  EMPTY_DAYS_COOKIE,
-  EMPTY_PERIODS_COOKIE,
-  EmptyDaysPrefSync,
-  EmptyPeriodsPrefSync,
-} from "./_components/prefs-sync";
+// ⚠️ 쿠키 이름 상수는 반드시 pref-cookies(일반 모듈)에서 — prefs-sync("use client")의 export를
+// 서버가 import하면 참조 프록시로 런타임 undefined가 된다(쿠키 기본값 침묵 사망, 2026-07-19 실측).
+import { EMPTY_DAYS_COOKIE, EMPTY_PERIODS_COOKIE } from "@/features/timetable/lib/pref-cookies";
+import { EmptyDaysPrefSync, EmptyPeriodsPrefSync } from "./_components/prefs-sync";
 import { EmptyPeriodScope } from "./_components/empty-period-scope";
 import { TimetableColorToggle } from "./_components/color-mode-toggle";
 import { WeekNav } from "./_components/week-nav";
