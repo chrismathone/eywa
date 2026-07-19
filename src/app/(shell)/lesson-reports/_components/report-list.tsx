@@ -174,7 +174,18 @@ export function ReportList({
           ))}
           <option value={IMPORT_FILTER}>이관(edutrix)</option>
         </select>
-        {(filters.from || filters.to || filters.teacher || filters.subject || filters.status) ? (
+        <select
+          value={filters.read ?? ""}
+          onChange={(e) => set({ read: (e.target.value || undefined) as ReportListFilters["read"] })}
+          className={selCls}
+          aria-label="읽음"
+          title="안읽음 = 발송 성공했고 읽음 확인이 가능한데 아직 안 읽은 건만 (확인 불가한 옛 이관분 제외)"
+        >
+          <option value="">읽음 전체</option>
+          <option value="read">읽음</option>
+          <option value="unread">안읽음</option>
+        </select>
+        {(filters.from || filters.to || filters.teacher || filters.subject || filters.status || filters.read) ? (
           <Button size="sm" variant="ghost" onClick={() => run({ page: 0 })}>
             초기화
           </Button>
