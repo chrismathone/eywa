@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
+import { addDays, resolveReportDate, weekdayIndexOf, formatKoreanDate } from "@/lib/date-kst";
 import { parseExamScores } from "../exam-info";
 import { applyStudentOrder } from "../student-order";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
@@ -223,7 +223,7 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
   // 셋 다 studentIds에만 의존하는 독립 조회 → Promise.all 병렬(B4). 전부 fetchInChunks(B2/B3).
   // 앵커 = 대상 날짜(오늘 또는 과거). session_date/report_date/attendance 필터가 모두 이 날짜.
   const todayIso = targetDate;
-  const [todayReports, priorReports, attRows, sessionRows, textbookRows] = await Promise.all([
+  const [todayReports, priorReports, attRows, sessionRows, textbookRows, readStats, erroredContainers, anomalyEvents] = await Promise.all([
     // (a) 당일 행만 — 발송상태·공유링크·초안복원용. eq(report_date)라 학생×과목 소량(절단 불가).
     fetchInChunks<{
       id: string;
@@ -272,6 +272,26 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     ),
     // 교재 자동입력 기본값 — 본인 담당 학생의 교재요청서(fetchInChunks, B3). studentIds 독립 → 같은 Promise.all(B4).
     getTextbookOrdersForStudents(studentIds),
+    // (f) G3 학부모 읽음 통계 — 학생별 group-by RPC(0124a, 반환 = 학생 수 행이라 절단 불가, B2).
+    // 실패해도 로스터는 떠야 하므로 배지만 침묵(then으로 에러 흡수 — 신호는 부가 정보).
+    supabase
+      .rpc("onescreen_parent_read_stats", { p_student_ids: studentIds, p_recent: 5 })
+      .then((r) => (r.error ? [] : (r.data ?? []))),
+    // (g) G2 진도 이상 ①: errored 컨테이너(판정 불능으로 닫힘) — 학생당 0~수 행(소량, fetchInChunks B3).
+    fetchInChunks<{ student_id: string }>(studentIds, (chunk) =>
+      supabase.from("progress_containers").select("student_id").eq("status", "errored").in("student_id", chunk),
+    ).catch(() => [] as { student_id: string }[]),
+    // (h) G2 진도 이상 ②: 대상 날짜 기준 최근 14일 오류 이벤트(jump/overlap). ⚠️ regression 제외 —
+    // 실측(07-19) 14일 80건/50명 = 복습 재기록 소음(roster-signals.ts 판정 규칙과 짝). 이벤트 희소(한 자릿수)라 절단 없음.
+    // 컷오프는 Date.now()가 아니라 로스터 대상 날짜(todayIso) 앵커(#11 lint + 과거 날짜 조회 시 그 시점 기준).
+    fetchInChunks<{ student_id: string }>(studentIds, (chunk) =>
+      supabase
+        .from("progress_events")
+        .select("student_id")
+        .in("event_type", ["jump_error", "overlap_error"])
+        .gte("created_at", `${addDays(todayIso, -14)}T00:00:00+09:00`)
+        .in("student_id", chunk),
+    ).catch(() => [] as { student_id: string }[]),
   ]);
   type PriorRow = {
     student_id: string;
@@ -495,6 +515,33 @@ export async function getTeacherRoster(rawDate?: string): Promise<TeacherRoster>
     }))
     .filter((c) => c.studentCount > 0)
     .sort((a, b) => (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"));
+
+  // ── 로스터 신호(G2·G3) 부착 — 학생 단위 부가정보. 조회 실패는 위에서 빈 배열로 흡수돼 배지만 침묵(로스터 무영향).
+  // 판정(배지 여부)은 클라의 roster-signals.ts 순수 함수 — 여기선 통계만 싣는다.
+  type ReadStatRow = {
+    student_id: string;
+    trackable_count: number;
+    aged_unread_count: number;
+    read_count: number;
+    last_read_at: string | null;
+  };
+  const readBySid = new Map((readStats as ReadStatRow[]).map((r) => [r.student_id, r]));
+  const erroredSet = new Set(erroredContainers.map((r) => r.student_id));
+  const anomalyCountBySid = new Map<string, number>();
+  for (const e of anomalyEvents) anomalyCountBySid.set(e.student_id, (anomalyCountBySid.get(e.student_id) ?? 0) + 1);
+  for (const s of byStudent.values()) {
+    const rs = readBySid.get(s.id);
+    if (rs && rs.trackable_count > 0)
+      s.parentRead = {
+        trackableCount: rs.trackable_count,
+        agedUnreadCount: rs.aged_unread_count,
+        readCount: rs.read_count,
+        lastReadAt: rs.last_read_at,
+      };
+    const errored = erroredSet.has(s.id);
+    const anomalyCount = anomalyCountBySid.get(s.id) ?? 0;
+    if (errored || anomalyCount > 0) s.progressSignal = { errored, anomalyCount };
+  }
 
   // 학생 정렬: 반(시각순) → 그 안에서 학년 → 이름. 좌측 목록이 반별로 묶이도록.
   // 그 위에 강사가 저장한 학생 순서(0116a)를 반 그룹 내부만 재배열(좌석·채점지 순서 — 미등재 학생은 기존 정렬 뒤).

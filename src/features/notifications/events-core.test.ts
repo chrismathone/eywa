@@ -6,6 +6,8 @@ import {
   buildFollowupEvents,
   buildGradeDropEvents,
   buildOutstandingEvents,
+  buildProgressAnomalyEvents,
+  progressAnomalyDigestBody,
   buildUnsentReportEvents,
   unsentReportDigestBody,
   UNSENT_REPORT_WINDOW_DAYS,
@@ -312,5 +314,42 @@ describe("pruneCutoffs (정리 정책)", () => {
   it("상수 값 고정(회귀 방지)", () => {
     expect(NOTIFICATION_EVENTS_RETENTION_DAYS).toBe(180);
     expect(READ_NOTIFICATIONS_RETENTION_DAYS).toBe(90);
+  });
+});
+
+describe("buildProgressAnomalyEvents / progressAnomalyDigestBody (G2 진도 이상)", () => {
+  const row = (p: Partial<import("./events-core").ProgressAnomalyRow>) => ({
+    studentId: "s1",
+    studentName: "김민수",
+    eventId: "e1",
+    eventType: "jump_error",
+    ...p,
+  });
+  it("bucket = pe:{eventId} — 이벤트 1건=전이 1회(앵커일 아님)", () => {
+    const [ev] = buildProgressAnomalyEvents([row({})]);
+    expect(ev).toMatchObject({ subjectKey: "s1", bucket: "pe:e1", label: "진도 점프" });
+  });
+  it("overlap_error 라벨 = 선행·현행 겹침(진도 탭과 동일 표현)", () => {
+    const [ev] = buildProgressAnomalyEvents([row({ eventType: "overlap_error", eventId: "e2" })]);
+    expect(ev.bucket).toBe("pe:e2");
+    expect(ev.label).toBe("선행·현행 겹침");
+  });
+  it("regression 등 미대상 유형은 제외(이중 방어 — 쿼리 필터와 짝)", () => {
+    expect(buildProgressAnomalyEvents([row({ eventType: "regression" })])).toEqual([]);
+    expect(buildProgressAnomalyEvents([row({ eventType: "forward" })])).toEqual([]);
+  });
+  it("본문 — 1건이면 라벨 포함, 여러 학생이면 이름 집계(중복 이름 1회)", () => {
+    const one = progressAnomalyDigestBody(buildProgressAnomalyEvents([row({})]));
+    expect(one).toContain("김민수");
+    expect(one).toContain("진도 점프");
+    const many = progressAnomalyDigestBody(
+      buildProgressAnomalyEvents([
+        row({}),
+        row({ eventId: "e2", eventType: "overlap_error" }),
+        row({ studentId: "s2", studentName: "이서연", eventId: "e3" }),
+      ]),
+    );
+    expect(many).toContain("이서연");
+    expect(progressAnomalyDigestBody([])).toBeNull();
   });
 });

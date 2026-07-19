@@ -5,6 +5,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { subjectTone, toneSoftClass } from "../data";
 import { isRowActionable } from "../grid";
+import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { splitLessons } from "../curriculum";
 import { AttendancePills, type BasicAttendance } from "./attendance-pills";
 import { DeltaChip } from "./delta-chip";
@@ -178,6 +179,10 @@ export function ReportCard({
   const cnBadge = classnoteBadge(rep.classnoteStatus); // ClassNote 발송 상태 배지
   const atts = rep.attachments ?? []; // 학생 사진 첨부(P2b)
   const uploadingAtt = uploadingSubject === subjectName;
+  // 로스터 신호(G2·G3) — 카드 헤더 배지. 진도 신호는 math 전용 데이터라 수학 과목 보유 학생만(표뷰와 동일 규약).
+  const unreadBadge = parentUnreadBadge(student.parentRead);
+  const hasMathSubject = student.subjects.some((su) => !su.subjectKey || su.subjectKey === "math");
+  const showProgressBadge = hasMathSubject && progressAnomalyBadge(student.progressSignal);
 
   return (
     <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
@@ -187,7 +192,27 @@ export function ReportCard({
             <p className="micro text-text-faint">
               {student.subjects.length > 1 ? "today 보고서 · 과목별" : "today 보고서"}
             </p>
-            <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-foreground text-[15px] font-bold">{student.name} · 학부모 보고</p>
+              {/* 로스터 신호(G2·G3) — 표뷰와 동일 판정(roster-signals.ts). 카드는 학생 단위라 진도 배지는
+                  수학 과목 보유 시(진도 파이프라인=math 전용). 카피 "미확인"(단정 금지). */}
+              {unreadBadge ? (
+                <span
+                  className="bg-amber-soft text-amber rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title={`최근 보고서 ${unreadBadge.count}건을 학부모가 아직 확인하지 않았습니다 — 다른 경로(직접 안내 등) 확인이 필요할 수 있어요`}
+                >
+                  학부모 미확인 {unreadBadge.count}회
+                </span>
+              ) : null}
+              {showProgressBadge ? (
+                <span
+                  className="bg-danger-soft text-danger rounded-pill px-1.5 py-px text-[10px] font-bold"
+                  title="진도 기록에 점프·겹침이 감지됐습니다 — 학생 상세 > 진도 탭에서 확인하세요"
+                >
+                  진도 확인 필요
+                </span>
+              ) : null}
+            </div>
           </div>
           {/* 실발송이 아니라 lesson_reports 기록 저장(PDF만 실제 인쇄). "발송 완료" 거짓 약속 방지. */}
           {rep.sent ? <Pill color="primary">기록 저장</Pill> : null}
