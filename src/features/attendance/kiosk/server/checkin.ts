@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging/provider";
+import { notifyIfClassAttendanceComplete } from "../../server/complete-notify";
 import {
   classesInWindow,
   decideCheckinAction,
@@ -121,6 +122,8 @@ async function reflectPresent(
     recorded_by: null,
   });
   if (error) return null; // best-effort — 실패해도 등하원/발송은 그대로
+  // G4: 이 삽입이 (반,날짜) 완료 전이일 수 있음 — 키오스크 완결도 벨(적대 리뷰: 미훅 갭). actorId=null(시스템 이벤트).
+  after(() => notifyIfClassAttendanceComplete({ tenantId, classId, date, actorId: null }));
   return nameByClass.get(classId) ?? "수업";
 }
 
