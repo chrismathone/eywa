@@ -55,14 +55,14 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
             type="button"
             onClick={() => setActive(i)}
             aria-pressed={i === active}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold transition ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-bold transition ${
               i === active
                 ? "bg-foreground text-background"
                 : "bg-bg-soft text-text-dim hover:text-foreground"
             }`}
           >
             {col.label}
-            <span className="num text-[10px] opacity-70">{col.cards.length}</span>
+            <span className="num text-[11px] opacity-70">{col.cards.length}</span>
           </button>
         ))}
       </div>
@@ -72,18 +72,24 @@ export function EnrollmentKanban({ columns }: { columns: KanbanColumn[] }) {
         {columns.map((col, i) => (
           <div
             key={col.key}
-            className={`bg-card border-line shadow-card min-h-[300px] flex-col rounded-2xl border xl:flex ${
+            className={`bg-card shadow-card min-h-[300px] flex-col rounded-3xl xl:flex ${
               i === active ? "flex" : "hidden"
             }`}
           >
+            {/* 컬럼 헤더 위계 — 라벨 bold + 건수 num(문법 ②의 미니판, 구 font-mono 제거) */}
             <header className="border-line flex items-center justify-between border-b px-4 py-3.5">
               <div className="flex items-center gap-2.5">
-                <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[col.color]}`}>
+                <span className={`flex size-[26px] items-center justify-center rounded-lg ${ICON_BG[col.color]}`}>
                   {columnIcon(col.key)}
                 </span>
                 <h3 className="text-foreground text-[13px] font-bold">{col.label}</h3>
               </div>
-              <span className="text-text-faint num font-mono text-[11px]">{col.cards.length}건</span>
+              <span className="flex items-baseline gap-0.5">
+                <span className="num text-foreground text-[15px] leading-none font-extrabold">
+                  {col.cards.length}
+                </span>
+                <span className="text-text-faint text-[11px]">건</span>
+              </span>
             </header>
             {col.cards.length === 0 ? (
               <div className="text-text-faint flex flex-1 items-center justify-center px-4 text-xs">

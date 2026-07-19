@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import {
   UserMinus,
   CalendarClock,
@@ -10,6 +9,8 @@ import {
 } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SearchForm } from "@/components/search-form";
+import { PageHeader } from "@/components/page-header";
+import { BigStat } from "@/components/atoms/big-stat";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -212,13 +213,15 @@ export default async function WithdrawalsPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인 위계 신설(상세 [studentId]의 헤더 패턴 역수출) */}
+      <PageHeader eyebrow="학생 케어" title="퇴원관리" />
       {/* 유형 토글 — 퇴원(완전) / 수강종료(과목 이탈) */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="micro mr-1">유형</span>
         <Link
           href="/withdrawals"
-          className={`shrink-0 rounded-sm border px-2.5 py-0.5 text-xs transition ${
+          className={`shrink-0 rounded-full border px-3 py-0.5 text-xs transition ${
             viewType === "withdrawn"
               ? "border-foreground bg-foreground text-background font-medium"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -228,7 +231,7 @@ export default async function WithdrawalsPage({
         </Link>
         <Link
           href="/withdrawals?type=subject-ended"
-          className={`shrink-0 rounded-sm border px-2.5 py-0.5 text-xs transition ${
+          className={`shrink-0 rounded-full border px-3 py-0.5 text-xs transition ${
             viewType === "subject-ended"
               ? "border-amber bg-amber text-white font-medium"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -242,16 +245,23 @@ export default async function WithdrawalsPage({
         <SubjectEndedView rows={subjectEnded} labelOf={subjectMaps.labelOf} />
       ) : (
         <>
-      {/* Stat strip */}
+      {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 퇴원" value={all.length} icon={UserMinus} color="rose" />
-        <Stat label="최근 30일" value={recent} icon={CalendarClock} color="danger" />
-        <Stat label="상담 미완료" value={consultPending} unit={`· ${consultRate}% 완료`} icon={ListChecks} color="amber" />
-        <Stat label="필터 결과" value={rows.length} unit="명" icon={Filter} color="blue" />
+        <BigStat label="전체 퇴원" value={all.length} unit="명" tone="rose" icon={<UserMinus size={16} strokeWidth={2} />} />
+        <BigStat label="최근 30일" value={recent} unit="명" tone="danger" icon={<CalendarClock size={16} strokeWidth={2} />} />
+        <BigStat
+          label="상담 미완료"
+          value={consultPending}
+          unit="명"
+          sub={`사후상담 완료율 ${consultRate}%`}
+          tone="amber"
+          icon={<ListChecks size={16} strokeWidth={2} />}
+        />
+        <BigStat label="필터 결과" value={rows.length} unit="명" tone="blue" icon={<Filter size={16} strokeWidth={2} />} />
       </section>
 
-      {/* Filter bar */}
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+      {/* Filter bar — 소프트 패널 + 알약 칩 */}
+      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">기간</span>
@@ -259,7 +269,7 @@ export default async function WithdrawalsPage({
               <Link
                 key={f.key}
                 href={buildWdHref({ ...current, range: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   range === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -287,7 +297,7 @@ export default async function WithdrawalsPage({
               <Link
                 key={f.value}
                 href={buildWdHref({ ...current, subject: f.value })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   subject === f.value
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -303,7 +313,7 @@ export default async function WithdrawalsPage({
               <Link
                 key={f.key}
                 href={buildWdHref({ ...current, consult: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   consult === f.key
                     ? "border-amber bg-amber text-white font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -324,14 +334,14 @@ export default async function WithdrawalsPage({
       {/* 통계(전체 기준) — 월별 추이 + 과목별 분포 */}
       {all.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-          <section className="bg-card border-line shadow-card rounded-2xl border p-5">
+          <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-2 flex items-baseline justify-between">
               <h2 className="text-foreground text-[15px] font-bold">월별 퇴원 추이</h2>
               <span className="text-text-faint text-[11px]">최근 12개월 · 전체 {all.length}명</span>
             </header>
             <WithdrawalTrendChart data={trend} />
           </section>
-          <section className="bg-card border-line shadow-card rounded-2xl border p-5">
+          <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3">
               <h2 className="text-foreground text-[15px] font-bold">과목별 분포</h2>
               <span className="text-text-faint text-[11px]">전체 기준</span>
@@ -365,7 +375,7 @@ export default async function WithdrawalsPage({
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
           {/* 최근 퇴원 리스트 */}
-          <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
+          <section className="bg-card shadow-card overflow-hidden rounded-2xl">
             <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
               <div>
                 <p className="micro">최근 퇴원</p>
@@ -413,7 +423,7 @@ export default async function WithdrawalsPage({
           </section>
 
           {/* 사유 분석 */}
-          <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
+          <section className="bg-card shadow-card overflow-hidden rounded-2xl">
             <header className="border-line border-b px-5 py-4">
               <p className="micro text-amber">사유 분석</p>
               <h2 className="text-foreground mt-1 text-[15px] font-bold">상위 퇴원 사유</h2>
@@ -447,9 +457,8 @@ export default async function WithdrawalsPage({
                   <AlertCircle size={13} strokeWidth={2} />
                 </span>
                 <div>
-                  <p className="text-amber font-mono text-[10px] font-bold tracking-wider uppercase">
-                    자동 요약
-                  </p>
+                  {/* 구 font-mono uppercase 코딩틱 라벨 → 한글 12px semibold 승격 */}
+                  <p className="text-amber text-[12px] font-semibold">자동 요약</p>
                   <p className="text-foreground mt-0.5 text-[12px] leading-relaxed">
                     {topReasons[0]
                       ? `현재 가장 빈번한 퇴원 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
@@ -485,7 +494,7 @@ function SubjectEndedView({
     );
   }
   return (
-    <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
+    <section className="bg-card shadow-card overflow-hidden rounded-2xl">
       <header className="border-line flex items-baseline justify-between border-b px-5 py-4">
         <div>
           <p className="micro text-amber">과목 이탈 신호</p>
@@ -536,41 +545,5 @@ function SubjectEndedView({
         ))}
       </ul>
     </section>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  unit,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: number | string;
-  unit?: string;
-  icon: LucideIcon;
-  color: "primary" | "rose" | "amber" | "danger" | "blue";
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    rose: "bg-rose-soft text-rose",
-    amber: "bg-amber-soft text-amber",
-    danger: "bg-danger-soft text-danger",
-    blue: "bg-blue-soft text-blue",
-  } as const;
-  return (
-    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro truncate">{label}</p>
-        <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
-        </span>
-      </header>
-      <p className="mt-2 flex items-baseline gap-1">
-        <span className="tabular text-foreground text-[28px] leading-none">{value}</span>
-        {unit ? <span className="text-text-dim text-xs">{unit}</span> : null}
-      </p>
-    </div>
   );
 }

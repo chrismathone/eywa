@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import {
   MessagesSquare,
   CalendarClock,
@@ -8,6 +7,7 @@ import {
   Mic,
   Sparkles,
 } from "@/components/icons/eywa-icon-compat";
+import { BigStat } from "@/components/atoms/big-stat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SearchForm } from "@/components/search-form";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
@@ -112,18 +112,25 @@ export default async function ConsultationsPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <MakeeduSyncBadge domain="consultations" />
-      {/* Stat strip */}
+      {/* Stat strip — Editorial 문법 ②(공용 BigStat, 구 로컬 Stat 대체) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <Stat label="전체 상담" value={totalAll} icon={MessagesSquare} color="primary" />
-        <Stat label="최근 7일" value={lastWeek} icon={CalendarClock} color="blue" />
-        <Stat label="진행 중 후속" value={pendingFollowUps} icon={BellRing} color="gold" />
-        <Stat label="지연 후속" value={overdueFollowUps} icon={AlarmClock} color="danger" />
+        <BigStat label="전체 상담" value={totalAll} unit="건" tone="primary" icon={<MessagesSquare size={16} strokeWidth={2} />} />
+        <BigStat label="최근 7일" value={lastWeek} unit="건" tone="blue" icon={<CalendarClock size={16} strokeWidth={2} />} />
+        <BigStat label="진행 중 후속" value={pendingFollowUps} unit="건" tone="gold" icon={<BellRing size={16} strokeWidth={2} />} />
+        <BigStat
+          label="지연 후속"
+          value={overdueFollowUps}
+          unit="건"
+          tone="danger"
+          valueClass={overdueFollowUps > 0 ? "text-danger" : undefined}
+          icon={<AlarmClock size={16} strokeWidth={2} />}
+        />
       </section>
 
-      {/* Filter bar */}
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+      {/* Filter bar — 소프트 패널 + 알약 칩 */}
+      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">기간</span>
@@ -131,7 +138,7 @@ export default async function ConsultationsPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...current, range: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   range === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -148,7 +155,7 @@ export default async function ConsultationsPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...current, cat: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   cat === f.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -166,7 +173,7 @@ export default async function ConsultationsPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...current, urg: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   urg === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -181,10 +188,10 @@ export default async function ConsultationsPage({
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="micro">
+        <p className="text-text-dim px-1 text-[13px]">
           결과 <span className="text-foreground font-bold">{total}</span>건
           {totalPages > 1 ? (
-            <span className="text-text-dim ml-2">
+            <span className="ml-2">
               {page}/{totalPages} 페이지
             </span>
           ) : null}
@@ -279,10 +286,9 @@ export default async function ConsultationsPage({
 
                 {c.followUpAction || c.followUpDate ? (
                   <div className="border-line mt-3 flex items-center justify-between gap-2 border-t pt-3">
-                    <p className="text-text-dim text-[11px]">
-                      <span className="text-gold font-mono mr-2 font-bold tracking-wider uppercase">
-                        Follow-up
-                      </span>
+                    {/* 구 font-mono uppercase 'Follow-up' 영문 라벨 → 한글 승격(코딩틱 제거) */}
+                    <p className="text-text-dim text-[12px]">
+                      <span className="text-gold mr-2 font-semibold">후속 조치</span>
                       {c.followUpAction ?? "—"}
                       {c.followUpDate ? (
                         <span className="num text-text-faint ml-2">· 기한 {c.followUpDate}</span>
@@ -297,36 +303,6 @@ export default async function ConsultationsPage({
         <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon: LucideIcon;
-  color: "primary" | "blue" | "gold" | "danger";
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    blue: "bg-blue-soft text-blue",
-    gold: "bg-gold-soft text-gold",
-    danger: "bg-danger-soft text-danger",
-  } as const;
-  return (
-    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
-        </span>
-      </header>
-      <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>
     </div>
   );
 }

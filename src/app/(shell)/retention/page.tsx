@@ -1,4 +1,5 @@
 import { CalendarClock, Bell, MessageCircle } from "@/components/icons/eywa-icon-compat";
+import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import {
@@ -83,17 +84,16 @@ export default async function RetentionPage() {
       : "급한 위험 신호는 없습니다. 안정 학생 관리를 이어가세요.";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <RetentionTabs />
-        <p className="text-text-dim text-[12px]">{headline}</p>
-      </div>
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — 구 12px dim으로 격하돼 있던 headline 문장을 헤더 description으로 승격 */}
+      <PageHeader eyebrow="학생 케어" title="이탈 방어" description={headline} />
+      <RetentionTabs />
 
       <RetentionGauge risk={stats.risk} warn={stats.warn} ok={stats.ok} />
       <PulseTiles stats={stats} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
+        <section className="bg-card shadow-card overflow-hidden rounded-2xl">
           <header className="border-line border-b px-5 py-4">
             <p className="micro">오늘 큐</p>
             <h2 className="text-foreground mt-1 text-[15px] font-bold">누구부터 챙길까</h2>

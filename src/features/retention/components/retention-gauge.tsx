@@ -11,14 +11,15 @@ export function RetentionGauge({ risk, warn, ok }: { risk: number; warn: number;
   const safe = total || 1;
   const values: Record<string, number> = { risk, warn, ok };
   return (
-    <div className="bg-card border-line shadow-card rounded-2xl border p-5">
+    <div className="bg-card shadow-card rounded-2xl p-5">
+      {/* 구 micro 단독 라벨 → 라벨 bold + 서브 dim 위계 */}
       <div className="flex items-baseline justify-between">
-        <p className="micro">학원 건강</p>
-        <span className="text-text-dim text-[11px]">
+        <p className="text-foreground text-[14px] font-bold">학원 건강</p>
+        <span className="text-text-dim text-[12px]">
           재원생 <span className="text-foreground num font-bold">{total}</span>명
         </span>
       </div>
-      <div className="bg-bg-soft mt-3 flex h-2.5 overflow-hidden rounded-full">
+      <div className="bg-bg-soft mt-3 flex h-3 overflow-hidden rounded-full">
         {SEGS.filter((s) => values[s.key] > 0).map((s) => (
           <span key={s.key} className={`${s.cls} h-full`} style={{ width: `${(values[s.key] / safe) * 100}%` }} />
         ))}
