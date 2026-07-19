@@ -4,6 +4,27 @@
 
 ## 진행 상황
 
+### 원스크린 로스터 신호 배지 G3+G2 + 이전값 일괄 채우기 G5 (2026-07-19, 0124a) — ✅ tsc0/lint0/vitest1642 · 적대리뷰 확정 2계열 반영
+ClassNote 로드맵(plans/glowing-seeking-matsumoto.md) 2·3단계. 커밋 3: b634f6ea(G3+G2)·32523ec0(G5)·173c6dd5(리뷰픽스).
+- **G3 '학부모 미확인 N회' 배지**(그리드·카드): **0124a** RPC `onescreen_parent_read_stats`(학생별 최근 5건
+  추적가능=edutrix_share_token∨classnote_sent_at 중 읽음 통계, security invoker+auth_tenant_id, 학생당 1행=절단
+  불가) → 로스터 블록5 합류(B4) → 순수 판정 [roster-signals.ts](../src/features/onescreen/roster-signals.ts).
+  ⚠️ **판정 = lastReadAt 실증 필수** — 실측(07-19) 이 조건 없이는 **155명 오탐**(읽음 파이프라인 갓 가동이라
+  read_at 희소 — "안 읽음"과 "추적 안 됨"을 구분 불가). 조건 추가로 현재 0명(무오탐 콜드스타트), 폴러 가동 후
+  '읽다가 끊긴' 학부모만 자연 부상. 한 번도 안 읽는 학부모는 v1 미커버 — **폴러 2~3주 가동 후 완화 재검토**(백로그).
+  aged 기준일=KST(UTC current_date는 00~09시 경계 하루 밀림, 리뷰)·last_read 창 30건 bound. 카피 "미확인"(단정 금지).
+- **G2 '진도 확인 필요' 배지**(math 행만) + **벨**(`detectProgressAnomaly`, grade_drop 동형·bucket=pe:{eventId}
+  전이·콜드스타트 시드): 최근 14일 jump/overlap 이벤트만. ⚠️ **regression 제외**(실측 14일 80건/50명=복습 소음)
+  + ⚠️ **errored 컨테이너 제외**(리뷰 확정 major — errored는 해제 경로가 없는 종결 묘비라 시간 bound 없이 쓰면
+  과거 점프 이력 전원 영구 배지=신호 붕괴. 모든 점프가 이벤트를 남겨 14일 창이 자연 소멸판). 벨 라우팅 =
+  `getStudentActiveTeachers`에 subjectScope 옵션 신설 → **수학 반 강사만**(리뷰 확정 #77형: 영어만 담당 강사에게
+  보내면 할 수 없는 일 재촉) + 본문 "수학" 명시.
+- **G5 '이전값 일괄 채우기'**(표 툴바): 선택(없으면 표시 전체) 행의 빈 칸을 이전 회차 값으로 일괄
+  채움(`bulkImportPrev`, bulkApplyValues 규약 대칭). planPrevFill 재사용 = 특이사항·교재 제외·빈 칸만 자동 준수.
+  깊은판(provenance)은 G4 설계로 이관(로드맵).
+- ⚠️ G3 데이터는 읽음동기화 폴러(연동 PC, 07-18 가동)가 채움 — 배지 자체는 즉시 유효(현재 0명=정상).
+  신호 조회 3곳 fail-soft + console.error(무로그 삼킴 금지, 리뷰). cron 관측 문자열에 진도이상 카운트 합류.
+
 ### 시간표 기본뷰 '빈 교시 접기' (2026-07-19, C안) — ✅ tsc0/lint0/vitest1629/build✓ · 적대리뷰 확정 1건 반영
 07-18 감사에서 보류했던 빈 교시 222px 밴드 해소 — 원장 C안 채택: 숨김이 아니라 **축소**(36px 밴드, 교시 축·격자 지형 유지).
 - **토글 "빈 교시 접기"**(기본뷰 툴바, 기본=펼침) — URL `emptyperiods=collapse|expand` **양방향 명시 직렬화**(emptydays
