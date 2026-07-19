@@ -14,6 +14,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
 import { hasClassnoteNameCollision } from "@/features/onescreen/server/scope";
+import { absenceKeyOf, getAbsenceBlockedKeys, isStudentAbsentForSend } from "@/features/onescreen/server/absence-gate";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { BOARD_PREFIX } from "../notice-targets";
 
@@ -148,6 +149,31 @@ export async function saveAndQueueAdminReport(
   if (!isClassnoteSubjectEnabled(input.subject, settings.report.classnoteSubjects)) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "subject_off" };
   }
+  // 결석 게이트(#77) — 그날 결석으로 기록된 학생은 저장만 하고 큐잉 안 함(원스크린 게이트의 서버 공용판).
+  // 보강 보고서(makeup)는 게이트 제외(결석+같은 날 보강 참석 = 정당한 발송). 조회 실패 = fail-closed(저장은 완료).
+  if (!input.makeup) {
+    try {
+      if (
+        await isStudentAbsentForSend(supabase, user.tenantId, {
+          studentId: input.studentId,
+          reportDate,
+          subject: input.subject,
+        })
+      ) {
+        // 대기 중(queued) 재고 회수 — 안 지우면 "전송하지 않았습니다" 안내 직후 워커가 갱신 내용을 게시.
+        if (prior?.classnote_status === "queued") {
+          await supabase
+            .from("lesson_reports")
+            .update({ classnote_status: null, classnote_queued_at: null })
+            .eq("id", saved.id)
+            .eq("classnote_status", "queued");
+        }
+        return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "absent" };
+      }
+    } catch {
+      return { ok: false, error: "출결 확인에 실패해 발송하지 않았습니다 — 저장은 완료됐습니다. 다시 시도하세요" };
+    }
+  }
   // 동명이인 — 자동 발송 차단(name_conflict 마킹). classnote_name 접미사로 구분 후 재시도.
   if (await hasClassnoteNameCollision(supabase, input.studentId)) {
     await supabase
@@ -207,6 +233,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   queued?: number;
   conflicts?: number; // 동명이인으로 발송 차단된 학생 수
   skippedExisting?: number; // 이미 오늘 보고서가 있어 제외된 학생 수
+  absent?: number; // 그날 결석 기록이라 제외된 (학생,과목) 수 — 카드 작성 자체를 안 함(#77 결석 게이트)
   subjectOff?: number; // 발송 대상 과목이 아니라 제외된 (학생,과목) 수
   overflow?: number; // 타깃 상한 초과로 잘린 수
   tooOld?: number; // 전 달 1일 이전 날짜라 발송 차단(too_old)된 수 — 개별/원스크린 경로와 동일 가드
@@ -316,8 +343,30 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   const skippedExisting = targets.length - fresh.length;
   if (!fresh.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, subjectOff, overflow };
 
+  // ── 3.5 결석 게이트(#77) — 그날 결석 기록 학생에겐 "오늘 수업" 카드를 만들지도, 보내지도 않는다
+  //    (원스크린 게이트와 동일 규약 — 결석 학생용 행을 안 만들어 미발송 재촉(unsent_report) 후보도 안 생김).
+  //    보강 카드(input.makeup)는 게이트 제외(결석+보강 참석이 전제인 발송). 조회 실패 = fail-closed. ──
+  let sendable: BulkTarget[];
+  let absent = 0;
+  if (input.makeup) {
+    sendable = fresh;
+  } else {
+    try {
+      const blocked = await getAbsenceBlockedKeys(
+        supabase,
+        user.tenantId,
+        fresh.map((t) => ({ studentId: t.studentId, reportDate, subject: t.subject })),
+      );
+      sendable = fresh.filter((t) => !blocked.has(absenceKeyOf({ studentId: t.studentId, reportDate, subject: t.subject })));
+    } catch {
+      return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
+    }
+    absent = fresh.length - sendable.length;
+  }
+  if (!sendable.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting, absent, subjectOff, overflow };
+
   // ── 4. 동명이인 감지 — 학생별 1회, 25명 청크(sendClassnoteForUnsent 패턴) ──
-  const freshStudentIds = [...new Set(fresh.map((t) => t.studentId))];
+  const freshStudentIds = [...new Set(sendable.map((t) => t.studentId))];
   const conflicted = new Set<string>();
   for (let i = 0; i < freshStudentIds.length; i += 25) {
     const results = await Promise.all(
@@ -328,7 +377,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
 
   // ── 5. 리포트 카드 일괄 작성(공유 내용 + 학생 과목 + 반 담당강사). 청크 upsert. ──
   const nowIso = new Date().toISOString();
-  const rowsToAuthor = fresh.map((t) => ({
+  const rowsToAuthor = sendable.map((t) => ({
     tenant_id: user.tenantId,
     student_id: t.studentId,
     report_date: reportDate,
@@ -413,7 +462,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     );
   }
 
-  return { ok: true, queued, conflicts, skippedExisting, subjectOff, overflow, tooOld };
+  return { ok: true, queued, conflicts, skippedExisting, absent, subjectOff, overflow, tooOld };
 }
 
 export type AdminComposeSubject = {

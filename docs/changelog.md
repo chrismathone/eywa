@@ -15,6 +15,40 @@
 - 브랜드색: color-utils LEGACY에 v1 forest·v2 pine 등록 — 테넌트 저장값 마이그 없이 자동 추종. chart-2 등 "긍정=그린" 시맨틱은 유지.
 - 감사 근거: docs/_audit/design-composition-audit-2026-07-19.json (10 에이전트 전 화면 감사). 기준선: work/design-baselines/(비커밋).
 
+### 수업보고서 발송 × 출결 연동 — 결석 게이트 서버 공용화(#77) (2026-07-19) — ✅ tsc0/lint0/vitest1661(+8) · 마이그 0 · 워커 무변경 · 적대리뷰(26에이전트) 확정 major 3건 반영
+6차원 병렬 조사(12에이전트)로 "결석=발송 제외"가 **클라 UI(grid.ts isRowActionable) 한 겹뿐**임을 확정 —
+서버 액션·관리자 발송 3경로·미발송 재촉 이벤트가 전부 무게이트(#77 우회 폭 + 결석 저장분을 '미발송'으로 재촉하는 거짓 알림 실재).
+- **순수 판정** [absence-gate.ts](../src/features/onescreen/absence-gate.ts)(Vitest 8): 차단 = 그날 그 과목 반들의
+  유효(최신 recorded_at, id tie-break=effective-records 동일) 출결이 **전부 absent/excused**일 때만. 기록 없음=통과
+  (fail-open), 조퇴·지각·보강 status=발송 유지(클라 규약 동일). 같은 과목 두 반(attendanceRaw 미채움 클라 사각)도 자연 판정.
+- **서버 게이트 5경로** + [server/absence-gate.ts](../src/features/onescreen/server/absence-gate.ts)(조회 헬퍼):
+  saveAndQueueClassnote(강사)·saveAndQueueAdminReport·sendBulkAdminReports(**결석 학생 행 생성 자체를 안 함**)·
+  retryClassnote(사후 결석 정정분 재발송 차단)·sendClassnoteForUnsent(발송 콘솔). status `"absent"` 반환 + 토스트/배지
+  안내 6곳. 출결 조회 실패 = **fail-closed**(모르면 안 보냄).
+- **v7 unsent_report 미러**: detectUnsentReports에 동일 게이트 — "게이트는 발송 콘솔과 동일" 불변식을 출결 축까지
+  복원(결석 저장분 거짓 재촉 해소). 원스크린 save=결석 포함(기록 보존) 정책은 불변.
+- **적대 리뷰 확정 3건 반영**: ① 출결 조회가 학생청크×다날짜 교차곱으로 1000행 silent 절단(B2/#54 — 절단=결석
+  학생 오발송) → `fetchAllPagedInChunks`+`order(id)` ② absent 반환이 기존 queued 재고를 방치 → "발송 안 함" 안내
+  직후 워커가 갱신 내용 게시 → **queued 회수**(`.eq queued` 조건부 null 복귀, processing 클레임은 불변)
+  ③ 보강 보고서(makeup·outOfClass)가 정규 반 결석 기록에 오차단(결석+같은 날 보강 참석 = 정당 발송) →
+  **makeup 신호는 전 경로 게이트 제외**(단건 input.makeup/outOfClass · 다건 lesson_reports.makeup).
+- ⚠️ 한계(의도·문서화): 게이트는 **큐잉 시점** — 이미 queued인 행은 출결 사후 정정을 미소급(킬스위치가 queued
+  재고를 못 막는 것과 동일 구조. 단 같은 행 재발송 시도 시엔 회수됨). 반 공지·resetStuckClassnote는 비대상.
+
+### G4 출석 완료 벨 — 멀티에이전트 적대 리뷰(사후) + 확정 결함 수정 (2026-07-19) — ✅ tsc0/lint0/vitest1653 · 마이그 0
+136b40ae의 미실시 적대 리뷰를 완료(6차원 파인더 + 발견당 반박·재현 2표, 44 에이전트). CONFIRMED 8이슈 중 6건 수정:
+- **[치명] `classes.name` 컬럼 부재** — select가 42703로 죽고 error는 삼켜져 **벨이 단 한 번도 안 울리는 완전 데드 기능**이었음
+  (admin client 무타입이라 tsc 미검출). `class_name`으로 수정 + 본문 `klass.class_name`.
+- **[상] 분리등원(attendance_days) 미반영** — 그 요일 비등원 학생을 예정 명단에 포함해 분리등원 있는 반은 완료 전이가
+  영원히 불가능했음 → 처리현황(getDailyProcessingStatus)과 동일 규약(enrollmentAttendsOnDay)으로 통일.
+- **[중] 키오스크 미훅 갭** — reflectPresent가 완결 기록이면 벨 미발화 → 삽입 성공 후 after() 훅 추가(actorId=null 시스템 이벤트).
+- **[중] 미래 날짜 가드 부재** — 매트릭스는 이번 달 미래 칸도 입력 가능해 "완료" 벨 선발화 + dedup 선소모 → `date > today` 무발화
+  (+비정규형 YMD 가드). **[하] dedup을 수신자 확인 뒤로** — 비활성 강사 순간에 dedup만 소모되는 것 방지(강사 확인을 B4 병렬에 편입).
+  **[하] 수신자 active 규약** — `status==="inactive"` 부정형이 pending을 통과시킴 → `.eq("status","active")` (events.ts 규약).
+- 조회 error 전부 throw→reportError(무발화 종료) — 컬럼 오타가 소리 없이 기능을 죽인 회귀 방지. REFUTED: dedup-후-notify 실패
+  창(베스트에포트 의도), 3일 창 표현(오늘+3일=의도). **미수정(알려진 한계, 낮음)**: 명단 축소(수강 종료 편집)로 완결되는 경로 미훅
+  (출결 쓰기가 아닌 enrollment 편집 훅 필요 — 벨 UX 자체가 재검토 대상), teacher_id 단일 수신(스키마 한계, 공동강사 개념 없음).
+
 ### 출석 완료 → 담당 강사 벨 G4 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1653 · 마이그 0 · ClassNote 로드맵 완주
 **골: 보고서 쓰기가 "가는 일"이 아니라 "오는 일"** — 출석이 끝나는 순간 강사 벨 → 원스크린 →
 (G5 이전값 일괄+G6 반 서술+자동작성) 기존 파이프라인이 흐름 완성(136b40ae). 로드맵(plans/
@@ -24,7 +58,7 @@ glowing-seeking-matsumoto.md) G1~G6 전 단계 main 반영 완료.
 - dedup = notification_events(subject=classId, bucket=날짜) 1회 + **최근 3일 밖 무발화**(과거 정정이 뒤늦은
   완료 벨로 안 울리게). **본인이 찍으면 벨 없음**(actorId=notifyUsers 스킵) — 데스크가 찍었을 때만 강사 도착.
 - 자동화는 알림까지(MVP) — 프리필·행 생성은 G5 깊은판 provenance 선결(후속 별도 승인).
-  ⚠️ 멀티에이전트 적대 리뷰 미실시(세션 한도) — 셀프 점검 2건 반영(과거 정정 가드·B4 병렬), 리셋 후 재검 여지.
+  ~~⚠️ 멀티에이전트 적대 리뷰 미실시(세션 한도)~~ → **✅ 2026-07-19 재검 완료**(위 항목) — 치명 1건 포함 6건 수정.
 
 ### 원스크린 반 공통 서술 → 학생별 멘트 분기 G6 MVP (2026-07-19) — ✅ tsc0/lint0/vitest1649 · 마이그 0 · 적대리뷰 major 2건 반영
 ClassNote 로드맵 4단계(d7f6037a). **골: 반 서술 1회 = 학생 N명의 서로 다른 멘트**(서술 = 생성 재료, 기록 아님).

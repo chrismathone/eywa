@@ -52,6 +52,9 @@ export function classnoteBadge(status?: string): { label: string; cls: string } 
     case "subject_off":
       // 원장 설정(classnoteSubjects) 밖 과목 — 저장만 되고 게시 안 됨. "발송 대기" 오인 방지(#2 확정).
       return { label: "발송 대상 아님(과목 설정)", cls: "text-text-dim" };
+    case "absent":
+      // 서버 결석 게이트(#77) 반환 상태(세션 내 표시 전용 — DB엔 안 남음). 저장만 되고 발송 제외.
+      return { label: "결석 — 발송 제외", cls: "text-text-dim" };
     default:
       return null;
   }
