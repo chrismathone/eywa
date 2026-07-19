@@ -10,7 +10,7 @@ export function ClosedReportScreen({ reason }: { reason: "expired" | "revoked" }
       : "이 보고서 링크는 더 이상 열람할 수 없습니다. 담당 선생님께 문의해 주세요.";
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
-      <p className="text-foreground text-lg font-semibold">{title}</p>
+      <p className="text-foreground text-lg font-bold">{title}</p>
       <p className="text-text-dim text-sm">{message}</p>
     </div>
   );

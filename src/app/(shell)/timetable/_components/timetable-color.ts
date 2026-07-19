@@ -69,7 +69,7 @@ export function timetableStudentTone(
   s: { isNew?: boolean; isTransferredIn?: boolean },
 ): string {
   if (mode === "vivid") {
-    // vivid = 이름을 semibold로 확실히 굵게(사용자 요청 "더 쨍하게"). 신입=빨강 채움, 전입=민트 채움.
+    // vivid = 이름을 bold로 확실히 굵게(사용자 요청 "더 쨍하게"). 신입=빨강 채움, 전입=민트 채움.
     if (s.isTransferredIn) return "bg-[#bbf7d0] font-bold text-[#14512b]";
     if (s.isNew) return "bg-danger font-bold text-white";
     return "font-bold text-foreground";

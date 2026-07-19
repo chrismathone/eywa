@@ -12,7 +12,7 @@ export function UpdateTenantForm({ id, name, plan }: { id: string; name: string;
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="id" value={id} />
       <label className="block">
-        <span className="text-foreground text-[12px] font-semibold">학원 이름</span>
+        <span className="text-foreground text-[12px] font-bold">학원 이름</span>
         <input
           type="text"
           name="name"
@@ -21,7 +21,7 @@ export function UpdateTenantForm({ id, name, plan }: { id: string; name: string;
         />
       </label>
       <label className="block">
-        <span className="text-foreground text-[12px] font-semibold">플랜</span>
+        <span className="text-foreground text-[12px] font-bold">플랜</span>
         <input
           type="text"
           name="plan"

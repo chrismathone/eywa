@@ -71,7 +71,7 @@ export default async function TenantsListPage({
             <input type="hidden" name="plan" value={planFilter} />
             <button
               type="submit"
-              className="border-line text-text-dim hover:text-foreground rounded-sm border px-3 py-1.5 text-[12px] font-semibold"
+              className="border-line text-text-dim hover:text-foreground rounded-sm border px-3 py-1.5 text-[12px] font-bold"
             >
               검색
             </button>
@@ -89,13 +89,13 @@ export default async function TenantsListPage({
           <table className="w-full text-[12px]">
             <thead>
               <tr className="bg-bg-soft text-text-dim border-line border-b">
-                <th className="px-4 py-2 text-left font-semibold">학원명</th>
-                <th className="px-4 py-2 text-left font-semibold">slug</th>
-                <th className="px-4 py-2 text-right font-semibold">사용자</th>
-                <th className="px-4 py-2 text-right font-semibold">학생</th>
-                <th className="px-4 py-2 text-right font-semibold">이번 달 청구</th>
-                <th className="px-4 py-2 text-left font-semibold">플랜</th>
-                <th className="px-4 py-2 text-left font-semibold">가입일</th>
+                <th className="px-4 py-2 text-left font-bold">학원명</th>
+                <th className="px-4 py-2 text-left font-bold">slug</th>
+                <th className="px-4 py-2 text-right font-bold">사용자</th>
+                <th className="px-4 py-2 text-right font-bold">학생</th>
+                <th className="px-4 py-2 text-right font-bold">이번 달 청구</th>
+                <th className="px-4 py-2 text-left font-bold">플랜</th>
+                <th className="px-4 py-2 text-left font-bold">가입일</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -149,7 +149,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-card border-line shadow-card rounded-md border p-3.5">
       <p className="text-text-dim font-mono text-[10px] tracking-wider uppercase">{label}</p>
-      <p className="text-foreground mt-1 text-[20px] font-extrabold tabular-nums">{value}</p>
+      <p className="text-foreground mt-1 text-[20px] font-bold tabular-nums">{value}</p>
     </div>
   );
 }

@@ -74,11 +74,11 @@ export default async function AuditPage({
           <table className="w-full text-[12px]">
             <thead>
               <tr className="bg-bg-soft text-text-dim border-line border-b">
-                <th className="px-4 py-2 text-left font-semibold">시각</th>
-                <th className="px-4 py-2 text-left font-semibold">실행자</th>
-                <th className="px-4 py-2 text-left font-semibold">액션</th>
-                <th className="px-4 py-2 text-left font-semibold">대상 학원</th>
-                <th className="px-4 py-2 text-left font-semibold">상세</th>
+                <th className="px-4 py-2 text-left font-bold">시각</th>
+                <th className="px-4 py-2 text-left font-bold">실행자</th>
+                <th className="px-4 py-2 text-left font-bold">액션</th>
+                <th className="px-4 py-2 text-left font-bold">대상 학원</th>
+                <th className="px-4 py-2 text-left font-bold">상세</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">

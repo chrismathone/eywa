@@ -75,7 +75,7 @@ export default async function TenantDetailPage({
         action={
           <Link
             href="/super-admin/tenants"
-            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold"
+            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-bold"
           >
             <EyIcon name="arrowLeft" size={14} />
             목록
@@ -88,7 +88,7 @@ export default async function TenantDetailPage({
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div>
-                <h2 className="text-foreground text-[18px] font-extrabold">{detail.name}</h2>
+                <h2 className="text-foreground text-[18px] font-bold">{detail.name}</h2>
                 <p className="text-text-dim font-mono text-[11px]">
                   {detail.slug} · 가입 {formatDate(detail.createdAt)}
                 </p>
@@ -135,11 +135,11 @@ export default async function TenantDetailPage({
           <table className="w-full text-[12px]">
             <thead>
               <tr className="bg-bg-soft text-text-dim border-line border-b">
-                <th className="px-4 py-2 text-left font-semibold">이름</th>
-                <th className="px-4 py-2 text-left font-semibold">이메일</th>
-                <th className="px-4 py-2 text-left font-semibold">역할</th>
-                <th className="px-4 py-2 text-left font-semibold">상태</th>
-                <th className="px-4 py-2 text-right font-semibold">관리</th>
+                <th className="px-4 py-2 text-left font-bold">이름</th>
+                <th className="px-4 py-2 text-left font-bold">이메일</th>
+                <th className="px-4 py-2 text-left font-bold">역할</th>
+                <th className="px-4 py-2 text-left font-bold">상태</th>
+                <th className="px-4 py-2 text-right font-bold">관리</th>
               </tr>
             </thead>
             <tbody className="divide-line divide-y">
@@ -210,7 +210,7 @@ function Kpi({ label, value, unit }: { label: string; value: string; unit: strin
     <div className="bg-card border-line shadow-card rounded-md border p-4">
       <p className="text-text-dim font-mono text-[11px] tracking-wider uppercase">{label}</p>
       <p className="text-foreground mt-1.5 flex items-baseline gap-1">
-        <span className="text-[26px] font-extrabold tabular-nums">{value}</span>
+        <span className="text-[26px] font-bold tabular-nums">{value}</span>
         <span className="text-text-dim text-[11px]">{unit}</span>
       </p>
     </div>

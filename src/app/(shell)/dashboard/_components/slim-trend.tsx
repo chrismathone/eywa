@@ -183,7 +183,7 @@ function TrendRow({
           {/* absolute: SVG를 흐름에서 빼 종횡비 높이 부풀림 차단 → 패널 높이는 옆 학생증감이 결정(컴팩트). */}
           <div className="relative mt-2 min-h-[40px] flex-1">
             <div className="absolute inset-0">
-              <Sparkline data={values} colorVar={colorVar} height={44} strokeWidth={1.8} />
+              <Sparkline data={values} colorVar={colorVar} height={44} strokeWidth={2} />
             </div>
           </div>
         </>

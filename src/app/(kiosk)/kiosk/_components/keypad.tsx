@@ -166,7 +166,7 @@ function KeyButton({
   variant?: "default" | "primary" | "muted";
 }) {
   const base =
-    "h-16 rounded-lg text-2xl font-semibold transition-colors select-none disabled:opacity-40 active:scale-[0.97]";
+    "h-16 rounded-lg text-2xl font-bold transition-colors select-none disabled:opacity-40 active:scale-[0.97]";
   const styles =
     variant === "primary"
       ? "bg-primary text-white hover:opacity-90"
@@ -192,7 +192,7 @@ function ResultCard({ res, onDismiss }: { res: CheckinResponse; onDismiss: () =>
         <div className={`text-4xl font-bold ${isIn ? "text-primary" : "text-blue"}`}>
           {isIn ? "등원" : "하원"}
         </div>
-        <div className="text-foreground mt-2 text-xl font-semibold">{res.studentName} 학생</div>
+        <div className="text-foreground mt-2 text-xl font-bold">{res.studentName} 학생</div>
         <div className="text-text-dim mt-1 text-sm">{res.time}</div>
         <div className="border-border mt-4 border-t pt-3">
           <div className="text-gold micro">알림톡 발송됨 (시뮬레이션)</div>
@@ -221,7 +221,7 @@ function ResultCard({ res, onDismiss }: { res: CheckinResponse; onDismiss: () =>
         onClick={onDismiss}
         className="border-border bg-card w-full max-w-xs rounded-xl border p-6 text-center"
       >
-        <div className="text-text-dim text-lg font-semibold">{res.studentName} 학생</div>
+        <div className="text-text-dim text-lg font-bold">{res.studentName} 학생</div>
         <p className="text-text-faint mt-2 text-sm">오늘 등원·하원이 이미 완료되었습니다.</p>
       </button>
     );
@@ -242,7 +242,7 @@ function ResultCard({ res, onDismiss }: { res: CheckinResponse; onDismiss: () =>
       onClick={onDismiss}
       className="border-danger/30 bg-danger/5 w-full max-w-xs rounded-xl border p-6 text-center"
     >
-      <div className="text-danger text-lg font-semibold">{msg}</div>
+      <div className="text-danger text-lg font-bold">{msg}</div>
     </button>
   );
 }
