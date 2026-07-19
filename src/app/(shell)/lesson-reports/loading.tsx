@@ -3,10 +3,13 @@
 export default function LessonReportsLoading() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
-      <header className="border-border border-b pb-5">
-        <div className="bg-bg-soft h-3 w-20 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-8 w-56 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-4 w-full max-w-xl animate-pulse rounded" />
+      {/* PageHeader 근사 스켈레톤 — 실제 헤더처럼 [.embed-main_&] CSS 변형으로 창=컴팩트 1줄 /
+          최상위=풀 3줄을 가른다(높이 불일치 = 로드 완료 시 본문 점프, 적대 리뷰). loading.tsx는
+          요청 컨텍스트를 못 읽지만 마커는 지속 layout <main> 클래스라 CSS만으로 정합. */}
+      <header className="px-1">
+        <div className="bg-bg-soft h-3 w-20 animate-pulse rounded [.embed-main_&]:hidden" />
+        <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded [.embed-main_&]:hidden" />
+        <div className="bg-bg-soft mt-2 h-4 w-full max-w-xl animate-pulse rounded [.embed-main_&]:mt-0" />
       </header>
       <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-lg border" />
       <div className="bg-card border-line shadow-card h-52 animate-pulse rounded-lg border" />

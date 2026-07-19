@@ -4,6 +4,13 @@
 export default function TimetableLoading() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
+      {/* PageHeader 근사 스켈레톤 — 실제 헤더처럼 [.embed-main_&] 변형으로 창=컴팩트 1줄 / 최상위=풀 3줄
+          (P1 리스킨이 헤더를 얹으며 생긴 스켈레톤↔실렌더 높이 불일치를 창 컴팩트 도입과 함께 정합). */}
+      <header className="shrink-0 px-1">
+        <div className="bg-bg-soft h-3 w-16 animate-pulse rounded [.embed-main_&]:hidden" />
+        <div className="bg-bg-soft mt-2 h-6 w-32 animate-pulse rounded [.embed-main_&]:hidden" />
+        <div className="bg-bg-soft mt-2 h-4 w-48 animate-pulse rounded [.embed-main_&]:mt-0" />
+      </header>
       {/* 툴바 스켈레톤 — ⚠️ 실제 툴바(주 이동·과목칩·뷰토글·미사용요일·색·인원요약·편집·시트/엑셀 4버튼)는
           기본 창 폭(1040px)에서 **두 줄로 감싸진다**. 한 줄짜리 스켈레톤을 쓰면 데이터가 도착하는 순간
           툴바가 늘어나며 그리드가 아래로 밀려 매번 눈에 띄는 레이아웃 점프가 생겼다(창=iframe이라 자주

@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 창(embed) 페이지 헤더 자동 컴팩트 — 제목 3중 노출·세로 잠식 해소 (2026-07-19) — ✅ tsc0/lint0/build✓/vitest1662 + 적대리뷰(13에이전트) major 1·minor 5 반영
+원장 지적: 창 안 Editorial 풀 헤더(eyebrow+21px 제목+설명)가 본문을 잠식하고, AppHeader·창 타이틀바와 제목이
+3중 노출("선택창 2중노출 무의미"). [PageHeader](../src/components/page-header.tsx)가 임베드 셸 `<main>`의
+`.embed-main` 마커 + `[.embed-main_&]` CSS 변형으로 **창 안에선 컴팩트 1행**(`embedLabel ?? description ?? title`
+13px + actions + stats)으로 접힘 — 소비처 12곳 무변경 자동 적용(~60px/창 회수). 수제 헤더 3곳(수업보고서·
+데이터베이스·학원설정)을 PageHeader로 수렴. 의도적 제외 = 도움말 히어로·성적 상세 카드·학생상담(헤더 없음).
+- **적대 리뷰 major**: 최초 구현(x-embed 요청 헤더 판정 async 컴포넌트)은 창 안 내비 대다수가 embed=1을 유실해
+  **클릭 한 번에 풀 헤더로 플립** → 지속 마커 클래스 + CSS 변형으로 재설계(soft nav 무관, 슬롯 이중 마운트 없음).
+- minor 반영: 수납 embedLabel에 검색/페이지 접미사 포함(창=기본 경로 검색 피드백 유실 방지) · 퇴원관리/등록상담
+  description 보강(title 폴백=타이틀바 중복) · 학원설정 짧은 embedLabel(110자 안내문 다중 줄 감김) · 컴팩트
+  actions 래퍼 shrink/wrap 허용(문서 툴바 좁은 창 가로 오버플로) · lesson-reports/timetable 스켈레톤을 동일
+  변형으로 컴팩트/풀 높이 정합. 규칙 = design-conventions "창(embed) 안 페이지 헤더".
+
 ### Injaewon Editorial 전면 디자인 리팩토링 (2026-07-19) — ✅ tsc0/lint0/vitest1654/build✓ · 로직 무접촉
 **골: "상용 사이트 대비 허접함" 해소** — injaewon.blog의 구성 문법(eyebrow→헤드라인 위계·빅 스탯·소프트 패널·
 사진 캡션 카드·구조화 행 목록·여백 리듬·알약)을 전 화면에 이식 + 팔레트 v3 "Injaewon Navy"(#153e75 + 애플 뉴트럴).

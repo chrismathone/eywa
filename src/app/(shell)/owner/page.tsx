@@ -4,6 +4,7 @@ import { getTenantSettings, getSettingsMeta } from "@/features/owner/server/quer
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { FaceTabs, type Face } from "@/components/face-tabs";
+import { PageHeader } from "@/components/page-header";
 import { ProfileSection } from "./_components/profile-section";
 import { OperationsSection } from "./_components/operations-section";
 import { SubjectsSection } from "./_components/subjects-section";
@@ -125,15 +126,16 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
-      <header className="border-border border-b pb-5">
-        <p className="eyebrow">학원 설정</p>
-        <h1 className="font-bold tracking-tight text-foreground text-2xl">{settings.profile.name || "학원"} 설정</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)과
-          역할·권한에서 위임받은 계정만 변경할 수 있고, 역할·권한 면은 원장 전용입니다.
-        </p>
-        <p className="text-text-faint mt-1 text-[12px]">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>
-      </header>
+      {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행으로 접힌다(제목은 창 타이틀바).
+          '최근 저장' 메타는 actions 슬롯(우측) — 컴팩트 행에서도 유지된다. */}
+      <PageHeader
+        eyebrow="학원 설정"
+        title={`${settings.profile.name || "학원"} 설정`}
+        description="학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)과 역할·권한에서 위임받은 계정만 변경할 수 있고, 역할·권한 면은 원장 전용입니다."
+        // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
+        embedLabel="학원 전체에 적용되는 설정 — 변경은 원장·위임 계정만"
+        actions={<p className="text-text-faint text-[12px]">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
+      />
 
       <FaceTabs faces={FACES} active={tab} ariaLabel="학원 설정·관리 면 전환" />
 

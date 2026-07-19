@@ -33,6 +33,24 @@
 | 컨트롤 높이 | 버튼 24/28/32/36(xs/sm/md/lg) — **같은 행의 인풋·셀렉트는 인접 버튼과 동일 높이** |
 | 사진 딤 오버레이 | ≤70% — 캡션존은 from-black/70, 텍스트 대비(큰 글씨 3:1↑) 우선 |
 
+### 창(embed) 안 페이지 헤더 = 자동 컴팩트 1행 (⚠️ 새 메뉴 헤더 기본값, 2026-07-19)
+플로팅 창은 **타이틀바가 이미 제목**이고 셸 AppHeader도 포커스 창을 에코한다 — 창 안에서 문법 ①
+풀 헤더(eyebrow+21px 헤드라인)를 또 그리면 **제목 3중 노출 + 세로 ~60px 잠식**(2026-07-19 원장 지적).
+- `PageHeader`가 단독 처리: 임베드 셸 `<main>`의 **`.embed-main` 마커 + `[.embed-main_&]` CSS 변형**으로
+  창 안에선 **컴팩트 1행**(`embedLabel ?? description ?? title` 13px dim + actions 우측 + stats 슬롯 유지)으로
+  접힌다. 최상위 프레임(모바일 라우트·직접 방문)은 마커가 없어 Editorial 풀 헤더 — 소비처는 아무것도 안 한다.
+- ⚠️ **판정을 요청 단위(x-embed 헤더/searchParams)로 하지 말 것** — 창 안 내비(주 이동·월 칩 등) 대다수
+  href 빌더가 `embed=1`을 안 실어, 요청 판정이면 **클릭 한 번에 풀 헤더로 플립**한다(적대 리뷰 major).
+  layout의 임베드 `<main>`은 soft nav에서 재렌더되지 않아 마커가 유지된다. 같은 이유로 loading.tsx
+  스켈레톤도 요청 컨텍스트 없이 이 변형으로 컴팩트/풀 높이를 정합시킨다(lesson-reports·timetable 선례).
+- `embedLabel` = ① title이 메뉴명이 아니라 **콘텐츠**일 때(수납 "2026년 7월" 월 헤드라인 — 접미사까지 통째
+  포함) ② description이 길어 창에서 여러 줄로 감길 때 짧은 대체(학원설정). **description 없는 소비처 금지** —
+  컴팩트 행이 title 폴백으로 창 타이틀바와 중복된다(퇴원관리·등록상담에 desc 보강 선례).
+- **새 메뉴 상단 헤더는 반드시 PageHeader로** — 수제 eyebrow/h1 마크업을 새로 만들면 창 컴팩트를 못 받는다
+  (2026-07-19 수제 3곳 lesson-reports·documents·owner를 PageHeader로 수렴). 의도적 예외 = 도움말 사진 히어로,
+  콘텐츠 카드형 상세 헤더(성적 상세), 헤더 자체가 없는 화면(학생상담).
+> 한 줄 규칙: 메뉴 상단 헤더는 PageHeader 하나로(+description 필수) — 창 컴팩트는 `.embed-main` CSS가 자동 처리하고, 콘텐츠 제목·긴 설명만 embedLabel로 지켜라.
+
 ### 컬러 토큰 (`src/app/globals.css`)
 | 토큰 | hex | 용도 |
 |---|---|---|

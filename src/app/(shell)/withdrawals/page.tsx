@@ -215,7 +215,12 @@ export default async function WithdrawalsPage({
   return (
     <div className="space-y-5">
       {/* Editorial 문법 ① — eyebrow→헤드라인 위계 신설(상세 [studentId]의 헤더 패턴 역수출) */}
-      <PageHeader eyebrow="학생 케어" title="퇴원관리" />
+      {/* description = 창 컴팩트 라벨 겸용 — 없으면 title 폴백이 창 타이틀바 '퇴원관리'와 순수 중복(적대 리뷰). */}
+      <PageHeader
+        eyebrow="학생 케어"
+        title="퇴원관리"
+        description="퇴원·수강 종료 내역과 사후 상담을 관리합니다"
+      />
       {/* 유형 토글 — 퇴원(완전) / 수강종료(과목 이탈) */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="micro mr-1">유형</span>

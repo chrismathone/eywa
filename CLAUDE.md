@@ -464,6 +464,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 > UI·화면·폼·컴포넌트를 만질 때 해당 규칙을 `docs/design-conventions.md`에서 열어라. 대부분 각 절 끝에 "한 줄 규칙" 요약이 있다.
 
 - **Editorial 구성 문법 — 새 화면 기본값** (PageHeader·BigStat·PhotoCard·소프트 패널·알약·de-mono 정책, ⚠️ 로컬 Stat/mono·영문 라벨 신설 금지)
+- 창(embed) 안 페이지 헤더 = PageHeader 자동 컴팩트 1행 (⚠️ 새 메뉴 헤더 기본값 — 수제 eyebrow/h1 신설 금지, 콘텐츠 제목은 embedLabel, 2026-07-19)
 - 컬러 토큰 (`src/app/globals.css`)
 - 라운드 (ijw 운영 톤에 맞춰 시안에서 대폭 축소)
 - 타이포
