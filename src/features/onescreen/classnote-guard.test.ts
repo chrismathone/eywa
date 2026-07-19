@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classnoteMinDate,
   classnoteSendWindowHint,
+  classnoteSendWindowLabel,
   isClassnoteAllowed,
   isClassnoteSubjectEnabled,
 } from "./classnote-guard";
@@ -86,5 +87,21 @@ describe("classnoteSendWindowHint", () => {
     expect(classnoteSendWindowHint("21:00", "08:00", 12 * 60)).toBe("21:00~08:00");
     expect(classnoteSendWindowHint("21:00", "08:00", 23 * 60)).toBeNull();
     expect(classnoteSendWindowHint("21:00", "08:00", 3 * 60)).toBeNull();
+  });
+});
+
+// 상시 안내 라벨 — 현재 시각 무관, "시간창이 활성인가"만 판정(활성 규약은 hint·워커와 공유).
+describe("classnoteSendWindowLabel", () => {
+  it("활성 창이면 시각 무관 라벨 반환(원스크린 상단 상시 안내)", () => {
+    expect(classnoteSendWindowLabel("09:00", "21:00")).toBe("09:00~21:00");
+    expect(classnoteSendWindowLabel("21:00", "08:00")).toBe("21:00~08:00"); // 자정 넘김도 활성
+    expect(classnoteSendWindowLabel(" 09:00 ", "21:00")).toBe("09:00~21:00"); // trim
+  });
+  it("무제한(빈 값·한쪽만·형식 오류·시작=종료) = null — 안내 미표시", () => {
+    expect(classnoteSendWindowLabel("", "")).toBeNull();
+    expect(classnoteSendWindowLabel("09:00", "")).toBeNull();
+    expect(classnoteSendWindowLabel("", "21:00")).toBeNull();
+    expect(classnoteSendWindowLabel("9시", "21:00")).toBeNull();
+    expect(classnoteSendWindowLabel("09:00", "09:00")).toBeNull();
   });
 });
