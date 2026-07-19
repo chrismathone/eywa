@@ -6,6 +6,10 @@
 --   토큰 유무가 곧 시대 컷오프라 별도 날짜 컷오프 불필요(2026-07-19 실측: 07-06주 이전 trackable 0).
 -- "aged" = report_date가 4일+ 지난 행 — 읽힘은 발송 뒤 며칠에 걸쳐 채워지므로(실측 3일 93%) 갓 보낸 건
 --   미확인으로 세지 않는다. 판정(배지 여부)은 앱 순수 함수가 담당, RPC는 집계만.
+--   ⚠️ 기준일은 KST(now() at time zone 'Asia/Seoul') — DB current_date는 UTC라 KST 00~09시에 경계가
+--   하루 밀려 aged 문턱이 실질 5일이 된다(적대 리뷰). 리포 전역 "비즈니스 날짜=KST" 규칙과 일치.
+-- last_read_at(추적 실증)은 최근 30건 창으로 bound — lateral이 전 이력을 학생 수만큼 재스캔하는
+--   O(S×R) 성장 비용 차단(리뷰). 30건 밖의 태곳적 읽음은 실증 증거로 안 쳐도 판정 의미가 같다.
 -- 학생별 group-by 1행 반환(수십 행, 절단 불가) — bare 전건 fetch는 B2 위반이라 RPC(0039a/0040a/0117a 패턴).
 -- security invoker + auth_tenant_id() 이중격리. ⚠️ drizzle journal 밖(손수 alpha) — pnpm db:alphas가 사전순 적용.
 
@@ -29,23 +33,24 @@ as $$
     where r.tenant_id = auth_tenant_id()
       and r.student_id = any(p_student_ids)
       and (r.edutrix_share_token is not null or r.classnote_sent_at is not null)
+  ), bounded as (
+    select * from recent where rn <= greatest(p_recent, 30)
   )
   select
     s.sid as student_id,
     coalesce(t.trackable, 0)::int as trackable_count,
     coalesce(t.aged_unread, 0)::int as aged_unread_count,
     coalesce(t.readc, 0)::int as read_count,
-    lr.last_read_at
+    t.last_read_at
   from unnest(p_student_ids) as s(sid)
   left join (
     select student_id,
-      count(*) as trackable,
-      count(*) filter (where classnote_read_at is null and report_date <= current_date - 4) as aged_unread,
-      count(*) filter (where classnote_read_at is not null) as readc
-    from recent where rn <= p_recent
+      count(*) filter (where rn <= p_recent) as trackable,
+      count(*) filter (where rn <= p_recent and classnote_read_at is null
+        and report_date <= (now() at time zone 'Asia/Seoul')::date - 4) as aged_unread,
+      count(*) filter (where rn <= p_recent and classnote_read_at is not null) as readc,
+      max(classnote_read_at) as last_read_at
+    from bounded
     group by student_id
   ) t on t.student_id = s.sid
-  left join lateral (
-    select max(classnote_read_at) as last_read_at from recent r2 where r2.student_id = s.sid
-  ) lr on true
 $$;

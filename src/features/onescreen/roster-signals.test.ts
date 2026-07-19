@@ -37,14 +37,11 @@ describe("parentUnreadBadge — G3 '학부모 미확인'", () => {
 });
 
 describe("progressAnomalyBadge — G2 '진도 확인 필요'", () => {
-  const sig = (p: Partial<ProgressSignal>): ProgressSignal => ({ errored: false, anomalyCount: 0, ...p });
-  it("errored 컨테이너 → 배지", () => {
-    expect(progressAnomalyBadge(sig({ errored: true }))).toBe(true);
-  });
+  const sig = (p: Partial<ProgressSignal>): ProgressSignal => ({ anomalyCount: 0, ...p });
   it("최근 14일 오류 이벤트 → 배지", () => {
     expect(progressAnomalyBadge(sig({ anomalyCount: 1 }))).toBe(true);
   });
-  it("둘 다 없으면 침묵 — regression은 의도적 미포함(실측 80건/14일 = 소음)", () => {
+  it("이벤트 없으면 침묵 — regression·errored 컨테이너는 의도적 미포함(소음·영구 묘비, 리뷰 확정)", () => {
     expect(progressAnomalyBadge(sig({}))).toBe(false);
     expect(progressAnomalyBadge(undefined)).toBe(false);
   });

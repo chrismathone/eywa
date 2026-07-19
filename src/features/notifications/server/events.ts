@@ -136,6 +136,10 @@ async function getStudentActiveTeachers(
   tenantId: string,
   studentIds: readonly string[],
   today: string,
+  // 과목 스코프(선택) — 지정하면 그 과목 반의 담당 강사만 매핑. 진도 이상(수학 전용 파이프라인)처럼
+  // "그 강사가 실제로 할 수 있는 행동"이 특정 과목에 묶인 이벤트에 사용(#77형 거짓 재촉 방지, 리뷰 확정).
+  // 미지정 = 기존 동작(전 과목 담당 강사 — 결석·성적처럼 과목 무관 관심사).
+  subjectScope?: readonly string[],
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   if (studentIds.length === 0) return result;
@@ -163,15 +167,19 @@ async function getStudentActiveTeachers(
   const classIds = [...new Set(active.map((row) => row.class_id))];
   if (classIds.length === 0) return result;
 
-  // 반 → 담당 강사(본 테넌트·운영 중). teacher_id null(미지정)·타 테넌트·폐지 반은 제외.
-  const classes = await fetchInChunks<{ id: string; teacher_id: string | null; tenant_id: string; is_active: boolean }>(
-    classIds,
-    (chunk) => admin.from("classes").select("id, teacher_id, tenant_id, is_active").in("id", chunk),
-  );
+  // 반 → 담당 강사(본 테넌트·운영 중). teacher_id null(미지정)·타 테넌트·폐지 반·(스코프 지정 시) 타 과목 반 제외.
+  const classes = await fetchInChunks<{
+    id: string;
+    teacher_id: string | null;
+    tenant_id: string;
+    is_active: boolean;
+    subject: string | null;
+  }>(classIds, (chunk) => admin.from("classes").select("id, teacher_id, tenant_id, is_active, subject").in("id", chunk));
   const teacherByClass = new Map<string, string>();
   const teacherIds = new Set<string>();
   for (const klass of classes) {
     if (klass.tenant_id !== tenantId || !klass.is_active || !klass.teacher_id) continue;
+    if (subjectScope && (!klass.subject || !subjectScope.includes(klass.subject))) continue;
     teacherByClass.set(klass.id, klass.teacher_id);
     teacherIds.add(klass.teacher_id);
   }
@@ -412,12 +420,15 @@ async function detectProgressAnomaly(admin: SupabaseClient, tenantId: string): P
       items.push({ tenantId, recipientId, type: "progress_anomaly", title: "진도 기록 이상", body: masterBody, link: "/students", actorId: null });
     }
   }
-  // 담당 강사 = 자기 학생 것만(grade_drop과 동일 역매핑). 링크는 배지가 보이는 원스크린.
+  // 담당 강사 = 자기 학생의 **수학 반** 강사만(리뷰 확정 #77형: 진도 파이프라인이 math 전용이라
+  // 영어만 담당하는 강사에게 보내면 배지도 안 보이고 진도 입력 주체도 아님 = 할 수 없는 일 재촉).
+  // "math" = ingest.ts MATH_SUBJECT와 짝(subject_1 등 비math 보고서는 ingest가 skip하므로 이벤트 원천 부재).
   const studentTeachers = await getStudentActiveTeachers(
     admin,
     tenantId,
     [...new Set(fresh.map((event) => event.subjectKey))],
     today,
+    ["math"],
   );
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
     const body = progressAnomalyDigestBody(teacherEvents);

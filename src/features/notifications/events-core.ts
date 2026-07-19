@@ -377,14 +377,14 @@ export function buildProgressAnomalyEvents(rows: readonly ProgressAnomalyRow[]):
   return events;
 }
 
-/** 진도 이상 개별/집계 본문. */
+/** 진도 이상 개별/집계 본문 — "수학" 명시(파이프라인이 math 전용, 리뷰 확정: 무표기 시 타과목 오인). */
 export function progressAnomalyDigestBody(events: readonly ProgressAnomalyEvent[]): string | null {
   if (events.length === 0) return null;
   if (events.length === 1) {
     const event = events[0];
-    return `${event.studentName} 학생 진도 기록에 ${event.label}이(가) 감지됐습니다 — 진도 입력을 확인해 주세요.`;
+    return `${event.studentName} 학생 수학 진도 기록에 ${event.label}이(가) 감지됐습니다 — 진도 입력을 확인해 주세요.`;
   }
-  return `${summarizeNames([...new Set(events.map((event) => event.studentName))])} 학생의 진도 기록에 이상(점프·겹침)이 감지됐습니다 — 진도 입력을 확인해 주세요.`;
+  return `${summarizeNames([...new Set(events.map((event) => event.studentName))])} 학생의 수학 진도 기록에 이상(점프·겹침)이 감지됐습니다 — 진도 입력을 확인해 주세요.`;
 }
 
 /** 성적 급락 개별/집계 본문. 한 명이면 과목·하락폭, 여러 명이면 이름 집계. */

@@ -338,9 +338,10 @@ describe("buildProgressAnomalyEvents / progressAnomalyDigestBody (G2 진도 이�
     expect(buildProgressAnomalyEvents([row({ eventType: "regression" })])).toEqual([]);
     expect(buildProgressAnomalyEvents([row({ eventType: "forward" })])).toEqual([]);
   });
-  it("본문 — 1건이면 라벨 포함, 여러 학생이면 이름 집계(중복 이름 1회)", () => {
+  it("본문 — 1건이면 라벨 포함 + '수학' 명시(타과목 오인 방지, 리뷰 확정), 여러 학생이면 이름 집계", () => {
     const one = progressAnomalyDigestBody(buildProgressAnomalyEvents([row({})]));
     expect(one).toContain("김민수");
+    expect(one).toContain("수학");
     expect(one).toContain("진도 점프");
     const many = progressAnomalyDigestBody(
       buildProgressAnomalyEvents([

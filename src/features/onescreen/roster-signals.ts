@@ -35,22 +35,24 @@ export function parentUnreadBadge(stats: ParentReadStats | undefined): { count: 
   return { count: stats.agedUnreadCount };
 }
 
-/** 학생별 진도 이상 신호 — roster가 progress_containers/progress_events에서 집계(수학 전용 파이프라인). */
+/** 학생별 진도 이상 신호 — roster가 progress_events에서 집계(수학 전용 파이프라인). */
 export type ProgressSignal = {
-  /** 활성 트랙이 판정 불능으로 닫힘(status=errored) — ingest가 점프/겹침으로 컨테이너를 닫은 상태 */
-  errored: boolean;
   /** 최근 14일 jump_error/overlap_error 이벤트 수 */
   anomalyCount: number;
 };
 
 /**
- * G2 배지: "진도 확인 필요" — errored 컨테이너 또는 최근 14일 이상(오류) 이벤트가 있을 때.
+ * G2 배지: "진도 확인 필요" — 최근 14일 이상(오류) 이벤트가 있을 때만.
  * ⚠️ regression(진도 되돌아감)은 **의도적으로 제외** — 실측(2026-07-19) 최근 14일 80건/학생 50명으로
- * 복습 재기록이 대부분(배지 폭탄 = 소음). 오류 2종(jump/overlap)+errored는 같은 기간 한 자릿수(고신호).
+ * 복습 재기록이 대부분(배지 폭탄 = 소음). 오류 2종(jump/overlap)은 같은 기간 한 자릿수(고신호).
  * 재포함하려면 "연속 2회+ regression" 같은 노이즈 필터를 함께 설계할 것.
+ * ⚠️ errored 컨테이너 조건도 **의도적으로 제외**(적대 리뷰 확정) — errored는 해제 경로가 없는 종결
+ * 기록(묘비: ingest가 점프 감지 시 닫고 즉시 새 active를 연다)이라 조건에 넣으면 과거 한 번이라도
+ * 점프했던 학생 전원이 영구 배지 = 신호 붕괴. 모든 점프/겹침이 이벤트를 남기므로 14일 이벤트 창이
+ * 같은 신호의 자연 소멸판. errored를 재도입하려면 archived_at 최근성 bound + 해제 UI를 함께 설계할 것.
  * 수학 전용 데이터(ingest.ts math 필터)라 소비처는 math 행에만 배지를 단다(영어 행 부재 = 정상).
  */
 export function progressAnomalyBadge(signal: ProgressSignal | undefined): boolean {
   if (!signal) return false;
-  return signal.errored || signal.anomalyCount > 0;
+  return signal.anomalyCount > 0;
 }
