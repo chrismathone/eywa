@@ -1,16 +1,17 @@
 /**
  * SectionShell — 랜딩 섹션 공통 셸 (수평 컨테이너 + 배경 톤 + 수직 리듬).
- * 종이가 겹친 듯한 층(base ↔ soft ↔ card)을 교대로 깔아 올라이트 깊이를 만든다.
+ * base(포슬린) ↔ soft(미스트) ↔ card(화이트) ↔ dark(파인 북엔드)로 콘트라스트 층을 만든다.
  */
 import type { ReactNode } from "react";
 
-type Tone = "base" | "soft" | "card";
+type Tone = "base" | "soft" | "card" | "dark";
 type Pad = "lg" | "tight" | "hero" | "none";
 
 const TONE: Record<Tone, string> = {
   base: "bg-background",
   soft: "bg-bg-soft",
   card: "bg-card",
+  dark: "ey-console text-[var(--pine-text)]",
 };
 
 const PAD: Record<Pad, string> = {

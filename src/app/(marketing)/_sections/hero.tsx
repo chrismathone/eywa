@@ -8,21 +8,22 @@ export function HeroSection() {
   return (
     <SectionShell
       id="hero"
-      tone="soft"
       pad="hero"
       containerClassName="grid items-center gap-14 lg:grid-cols-[0.94fr_1.06fr] lg:gap-16"
     >
+      <span className="ey-mesh" aria-hidden="true" />
+
       {/* 좌 — 구체적 가치 + CTA */}
-      <div>
+      <div className="relative">
         <Reveal variant="up">
-          <p className="bg-primary-soft text-primary inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12px] font-bold">
-            <EyIcon name="sparkle" size={13} />
+          <p className="border-line bg-card text-text-dim inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-3 text-[12px] font-semibold shadow-[0_1px_2px_rgba(11,16,13,0.04)]">
+            <span className="bg-primary size-1.5 animate-pulse rounded-full motion-reduce:animate-none" aria-hidden="true" />
             출결 · 수납 · 상담 · 학부모 알림 올인원
           </p>
         </Reveal>
 
         <Reveal variant="clip" delay={80}>
-          <h1 className="text-foreground mt-6 text-[clamp(2.4rem,5.2vw,4.6rem)] leading-[1.08] font-extrabold tracking-[-0.03em]">
+          <h1 className="text-ink mt-6 text-[clamp(2.5rem,5.3vw,4.7rem)] leading-[1.06] font-extrabold tracking-[-0.04em]">
             흩어진 학원 운영을
             <br />
             <span className="text-primary">한 화면으로</span> 모았습니다.
@@ -44,10 +45,10 @@ export function HeroSection() {
             </CtaButton>
             <a
               href="#signature"
-              className="text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-xl px-3 py-3.5 text-[15px] font-semibold transition-colors"
+              className="border-line bg-card text-foreground hover:border-line-strong inline-flex items-center gap-1.5 rounded-full border px-5 py-3.5 text-[14.5px] font-semibold transition-colors"
             >
               기능 둘러보기
-              <EyIcon name="arrowDown" size={15} />
+              <EyIcon name="arrowDown" size={15} className="text-text-faint" />
             </a>
           </div>
         </Reveal>
@@ -60,7 +61,7 @@ export function HeroSection() {
       </div>
 
       {/* 우 — 제품 쇼케이스 (주역) */}
-      <Reveal variant="up" delay={220} className="lg:pl-4">
+      <Reveal variant="up" delay={220} className="relative lg:pl-4">
         <ProductShowcase />
       </Reveal>
     </SectionShell>

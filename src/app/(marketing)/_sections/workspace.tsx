@@ -1,6 +1,7 @@
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Reveal } from "../_motion/reveal";
 import { MockWorkspace } from "../_ui/mock-workspace";
+import { Eyebrow } from "../_ui/eyebrow";
 import { SectionShell } from "../_ui/section-shell";
 
 const POINTS: { icon: "window" | "columns2" | "layers"; title: string; desc: string }[] = [
@@ -14,12 +15,10 @@ export function WorkspaceSection() {
     <SectionShell id="workspace" pad="lg">
       <div className="mx-auto max-w-[46rem] text-center">
         <Reveal variant="up">
-          <p className="text-gold font-mono text-[11px] font-bold tracking-[0.16em] uppercase">
-            워크스페이스 · 우리만의 차별점
-          </p>
+          <Eyebrow time="13:00" label="워크스페이스 · 우리만의 차별점" className="justify-center" />
         </Reveal>
         <Reveal variant="clip" delay={60}>
-          <h2 className="text-foreground mt-5 text-[clamp(2rem,4.4vw,3.4rem)] leading-[1.16] font-extrabold tracking-[-0.025em]">
+          <h2 className="text-ink mt-5 text-[clamp(2rem,4.4vw,3.4rem)] leading-[1.14] font-extrabold tracking-[-0.035em]">
             필요한 화면을, <span className="text-primary">한 책상 위에.</span>
           </h2>
         </Reveal>
@@ -38,7 +37,7 @@ export function WorkspaceSection() {
       <Reveal variant="up" delay={120} className="mx-auto mt-10 grid max-w-[860px] gap-5 sm:grid-cols-3">
         {POINTS.map((p) => (
           <div key={p.title} className="flex items-start gap-3">
-            <span className="bg-primary-soft text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+            <span className="bg-primary-soft text-primary flex size-9 shrink-0 items-center justify-center rounded-[10px]">
               <EyIcon name={p.icon} size={17} />
             </span>
             <div>

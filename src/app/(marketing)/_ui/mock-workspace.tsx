@@ -32,12 +32,12 @@ const RAIL_GROUPS: { Icon: LucideIcon; active?: boolean; dot?: boolean }[][] = [
 
 export function MockWorkspace() {
   return (
-    <div className="border-line bg-bg-soft relative overflow-hidden rounded-2xl border shadow-[0_50px_110px_-40px_rgba(13,17,16,0.42)]">
+    <div className="border-line-strong bg-bg-soft relative overflow-hidden rounded-[18px] border shadow-[0_1px_2px_rgba(11,16,13,0.05),0_50px_110px_-44px_rgba(11,16,13,0.45)]">
       <div className="flex" style={{ height: "clamp(360px, 44vw, 470px)" }}>
         {/* 좌측 아이콘 레일 — 실제 앱과 동일 */}
         <div className="border-line bg-sidebar flex w-[52px] shrink-0 flex-col items-center overflow-hidden border-r">
           <div className="border-line flex h-11 w-full shrink-0 items-center justify-center border-b">
-            <span className="bg-ink flex size-7 items-center justify-center rounded-[3px]">
+            <span className="bg-ink flex size-7 items-center justify-center rounded-[6px]">
               <EyIcon name="building" size={16} strokeWidth={1.8} className="text-white" />
             </span>
           </div>
@@ -48,8 +48,10 @@ export function MockWorkspace() {
                 {group.map(({ Icon, active, dot }, i) => (
                   <span
                     key={i}
-                    className={`relative flex size-8 items-center justify-center rounded-md ${
-                      active ? "bg-primary text-primary-foreground shadow-primary-glow" : "text-text-dim"
+                    className={`relative flex size-8 items-center justify-center rounded-[8px] ${
+                      active
+                        ? "bg-primary text-primary-foreground shadow-[0_6px_14px_rgba(14,124,70,0.32)]"
+                        : "text-text-dim"
                     }`}
                   >
                     <Icon size={16} strokeWidth={1.85} />
@@ -68,10 +70,10 @@ export function MockWorkspace() {
           </div>
 
           {/* 캔버스 무대 (헤더 아래) */}
-          <div className="absolute inset-x-0 bottom-0 top-9">
+          <div className="absolute inset-x-0 top-9 bottom-0">
             {/* 스냅 타일 고스트 — 타일 구간에만 점등 */}
             <span
-              className="ey-ws-ghost border-primary/35 bg-primary/5 absolute rounded-lg border-2 border-dashed"
+              className="ey-ws-ghost border-primary/40 bg-primary/5 absolute rounded-[10px] border-2 border-dashed"
               style={{ right: "4%", top: "6%", bottom: "7%", width: "43%" }}
               aria-hidden="true"
             />
@@ -101,10 +103,10 @@ export function MockWorkspace() {
 function Win({ title, focused, anim, style, children }: { title: string; focused?: boolean; anim: string; style: CSSProperties; children: ReactNode }) {
   return (
     <div
-      className={`ey-ws-win ${anim} bg-card flex flex-col overflow-hidden rounded-xl border ${
+      className={`ey-ws-win ${anim} bg-card flex flex-col overflow-hidden rounded-[12px] border ${
         focused
-          ? "border-primary/30 ring-primary/15 shadow-[0_30px_70px_-22px_rgba(13,17,16,0.45)] ring-2"
-          : "border-line shadow-[0_16px_40px_-18px_rgba(13,17,16,0.3)]"
+          ? "border-primary/35 ring-primary/15 shadow-[0_30px_70px_-24px_rgba(11,16,13,0.5)] ring-2"
+          : "border-line shadow-[0_16px_40px_-20px_rgba(11,16,13,0.35)]"
       }`}
       style={style}
     >
@@ -127,7 +129,7 @@ function MiniDashboard() {
     <div>
       <div className="grid grid-cols-3 gap-1.5">
         {[["재원생", "248"], ["출석", "94.2%"], ["수납", "87.1%"]].map(([l, v], i) => (
-          <div key={l} className="bg-bg-soft rounded-md px-2 py-1.5">
+          <div key={l} className="bg-bg-soft rounded-[8px] px-2 py-1.5">
             <p className="text-text-faint font-mono text-[7px] uppercase">{l}</p>
             <p className={`mt-0.5 text-[13px] leading-none font-extrabold ${i === 1 ? "text-primary" : "text-foreground"}`}>{v}</p>
           </div>
@@ -135,7 +137,7 @@ function MiniDashboard() {
       </div>
       <div className="mt-2 flex h-16 items-end gap-1">
         {[58, 70, 64, 84, 78, 92, 88].map((h, i) => (
-          <span key={i} className={`flex-1 rounded-sm ${i === 5 ? "bg-primary ey-bar-live" : "bg-primary/30"}`} style={{ height: `${h}%` }} />
+          <span key={i} className={`flex-1 rounded-sm ${i === 5 ? "bg-primary ey-bar-live" : "bg-primary/25"}`} style={{ height: `${h}%` }} />
         ))}
       </div>
     </div>
@@ -150,7 +152,7 @@ function MiniTimetable() {
       {Array.from({ length: 9 }).map((_, i) => {
         const key = `${i % 3}-${Math.floor(i / 3)}`;
         const c = blocks[key];
-        return <span key={i} className={`rounded-[3px] ${c ? tone[c] : "bg-bg-soft"}`} />;
+        return <span key={i} className={`rounded-[4px] ${c ? tone[c] : "bg-bg-soft"}`} />;
       })}
     </div>
   );
