@@ -107,7 +107,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             )}
             <div className="leading-none">
               <div className="text-foreground text-[17px] font-extrabold tracking-tight">{brand}</div>
-              <div className="text-text-dim mt-[3px] font-mono text-[10px] tracking-wider">
+              <div className="text-text-dim mt-[3px] text-[10px]">
                 {academyLine}
               </div>
             </div>

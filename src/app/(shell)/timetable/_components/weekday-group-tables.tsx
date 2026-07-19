@@ -173,7 +173,7 @@ function SubSlotContent({
       }`}
     >
       {isHapban ? (
-        <span className="text-amber bg-amber/15 -mx-1 -mt-1 mb-0.5 shrink-0 rounded-t-md px-1 py-0.5 text-center font-mono text-[9px] font-bold whitespace-nowrap">
+        <span className="text-amber bg-amber/15 -mx-1 -mt-1 mb-0.5 shrink-0 rounded-t-md px-1 py-0.5 text-center num text-[9px] font-bold whitespace-nowrap">
           합반 {merged.length}반
         </span>
       ) : null}
@@ -348,7 +348,7 @@ function GroupTable({
                     className={`bg-card ${GRID} sticky top-[60px] z-10 border-b border-r ${gi > 0 && ti === 0 && ci === 0 ? GROUP_DIVIDER : ""}`}
                   >
                     {/* 불투명 base + 반투명 tint(위 그룹밴드와 동일 이유 — 비침 방지). */}
-                    <div className={`${g.tint} text-text-dim px-1 py-1 text-center font-mono text-[10px] leading-tight font-bold`}>
+                    <div className={`${g.tint} text-text-dim px-1 py-1 text-center text-[10px] leading-tight font-bold`}>
                       {DAY_LABEL[d] ?? d}
                       {date ? (
                         <span className="text-text-faint block text-[9px] font-normal">{date}</span>
@@ -403,15 +403,15 @@ function GroupTable({
                   {labelText}
                   {labelCollapsed ? (
                     <>
-                      <span className="text-text-faint ml-1 font-mono text-[9px] font-normal [.tt-editing_&]:hidden">
+                      <span className="text-text-faint ml-1 num text-[9px] font-normal [.tt-editing_&]:hidden">
                         {timeText}
                       </span>
-                      <div className="text-text-faint mt-0.5 hidden font-mono text-[10px] [.tt-editing_&]:block">
+                      <div className="text-text-faint mt-0.5 hidden num text-[10px] [.tt-editing_&]:block">
                         {timeText}
                       </div>
                     </>
                   ) : (
-                    <div className="text-text-faint mt-0.5 font-mono text-[10px]">{timeText}</div>
+                    <div className="text-text-faint mt-0.5 num text-[10px]">{timeText}</div>
                   )}
                 </td>
               )}

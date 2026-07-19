@@ -219,7 +219,7 @@ export function EnglishImportDialog({
                     <p className="text-text-faint text-[11px]">변경 없음 — 시트와 배치가 일치합니다.</p>
                   ) : (
                     <>
-                      <div className="mb-1.5 flex flex-wrap gap-3 font-mono">
+                      <div className="mb-1.5 flex flex-wrap gap-3 num">
                         <span className="text-blue">생성 {struct!.plan.create}</span>
                         <span className="text-primary">변경 {struct!.plan.update}</span>
                         <span className="text-amber">제거 {struct!.plan.remove}</span>
@@ -248,7 +248,7 @@ export function EnglishImportDialog({
                     <p className="text-text-faint text-[11px]">변경 없음 — 시트와 수강이 일치합니다.</p>
                   ) : (
                     <>
-                      <div className="mb-1.5 flex flex-wrap gap-3 font-mono">
+                      <div className="mb-1.5 flex flex-wrap gap-3 num">
                         <span className="text-primary">이동 {enroll!.moves.length}</span>
                         <span className="text-blue">추가 {enroll!.adds.length}</span>
                         <span className="text-amber">삭제 {enroll!.removes.length}</span>

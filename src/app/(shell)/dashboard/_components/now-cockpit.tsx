@@ -232,11 +232,11 @@ function DensityStrip({ slots, subjects }: { slots: TodaySlot[]; subjects: Subje
         ))}
         {markerPct !== null ? (
           <span className="bg-foreground/75 absolute -top-1 -bottom-1 z-10 w-px" style={{ left: `${markerPct}%` }} aria-hidden="true">
-            <span className="bg-foreground text-background absolute -top-[13px] left-1/2 -translate-x-1/2 rounded-[3px] px-1 py-px font-mono text-[8px] leading-none font-bold whitespace-nowrap">지금</span>
+            <span className="bg-foreground text-background absolute -top-[13px] left-1/2 -translate-x-1/2 rounded-[3px] px-1 py-px text-[8px] leading-none font-bold whitespace-nowrap">지금</span>
           </span>
         ) : null}
       </div>
-      <div className="text-text-dim mt-1 flex justify-between font-mono text-[9px]">
+      <div className="text-text-dim mt-1 flex justify-between num text-[9px]">
         <span>{startLabel}</span>
         <span>{endLabel}</span>
       </div>
@@ -280,7 +280,7 @@ function NextClassChip({ slot, subjects, canOpen }: { slot: TodaySlot; subjects:
       <span className="max-w-[8rem] min-w-0" title={title}>
         <span className="block truncate">{slot.className}</span>
       </span>
-      <span className="num font-mono text-[9px] opacity-60">{slot.studentCount}</span>
+      <span className="num text-[9px] opacity-60">{slot.studentCount}</span>
     </>
   );
 
@@ -316,7 +316,7 @@ function OngoingBySubject({
           <div className="mb-1.5 flex items-baseline gap-2">
             <span className={`${SUBJECT_SOLID[g.color]} size-2.5 self-center rounded-[3px]`} aria-hidden="true" />
             <span className="text-foreground text-[13px] font-bold">{g.label}</span>
-            <span className="text-text-faint num font-mono text-[11px]">{g.slots.length}개 진행 중</span>
+            <span className="text-text-faint num text-[11px]">{g.slots.length}개 진행 중</span>
           </div>
           {/* max-h-32 ≈ 행(≈31.5px)×4 + 간격 — 5개째부터 스크롤(전역 디자인 스크롤바, 카드 축소). */}
           <div className="max-h-32 space-y-1 overflow-y-auto">

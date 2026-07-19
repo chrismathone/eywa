@@ -667,7 +667,7 @@ function AiAnalysisPanel({
 function Plan({ label, items }: { label: string; items: string[] }) {
   return (
     <div>
-      <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+      <p className="text-muted-foreground text-xs font-semibold">
         {label}
       </p>
       <ul className="mt-1.5 space-y-1">

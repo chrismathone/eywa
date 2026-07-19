@@ -156,13 +156,13 @@ export function ClassCell({
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="overflow-hidden whitespace-nowrap text-clip text-[14px] font-bold">{slot.className}</span>
-                <span className="num shrink-0 font-mono text-[12px] opacity-70">{active.length}</span>
+                <span className="num shrink-0 text-[12px] opacity-70">{active.length}</span>
               </div>
               {/* 시각은 hover 카드에 나오므로 셀에선 생략(사용자 요청). 강의실만 표시.
                   ⚠️ 강의실 줄은 **항상 렌더**(없으면 nbsp 자리표시) — 셀마다 헤더 높이(2줄)를 일정하게 유지해
                   인접 반의 학생 이름이 가로로 줄맞춤되게 한다(강의실 유무로 헤더가 1↔2줄 되며 명단이 17px 어긋나던 것 해소). */}
               <div className="flex items-center justify-end gap-1 text-[12px] opacity-75">
-                <span className="overflow-hidden whitespace-nowrap text-clip font-mono">
+                <span className="overflow-hidden whitespace-nowrap text-clip">
                   {slot.classroomName || " "}
                 </span>
               </div>
@@ -282,7 +282,7 @@ export function ClassCell({
                           {s.name}
                         </span>
                         {dayTag ? (
-                          <span className="text-primary shrink-0 font-mono text-[10px] font-bold">[{dayTag}]</span>
+                          <span className="text-primary shrink-0 text-[10px] font-bold">[{dayTag}]</span>
                         ) : null}
                       </div>
                     );

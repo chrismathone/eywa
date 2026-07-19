@@ -115,14 +115,14 @@ function PeriodTable({
                 // 앵커가 된 퇴화 케이스는 개별 라벨(다음 홀수와 오병합 금지).
                 <td rowSpan={oddPaired ? 2 : 1} className={labelCls} style={{ height: rowHeight * (oddPaired ? 2 : 1) }}>
                   {Math.ceil(mathN / 2)}교시
-                  <div className="text-text-faint mt-0.5 font-mono text-[9px] font-normal">
+                  <div className="text-text-faint num mt-0.5 text-[9px] font-normal">
                     {oddPaired ? `${row.time.split("~")[0]}~${nextRow!.time.split("~")[1]}` : row.time}
                   </div>
                 </td>
               ) : (
                 <td className={labelCls} style={{ height: rowHeight }}>
                   {row.label}
-                  <div className="text-text-faint mt-0.5 font-mono text-[9px] font-normal">{row.time}</div>
+                  <div className="text-text-faint num mt-0.5 text-[9px] font-normal">{row.time}</div>
                 </td>
               )}
               {days.map((d, ci) => {
@@ -151,7 +151,7 @@ function PeriodTable({
                           <span className="text-text-dim mt-0.5 text-[10px]">{c.teacherName}</span>
                         ) : null}
                         {c.room ? (
-                          <span className="text-text-faint mt-auto pt-0.5 font-mono text-[10px]">{c.room}</span>
+                          <span className="text-text-faint mt-auto pt-0.5 text-[10px]">{c.room}</span>
                         ) : null}
                       </div>
                     ) : null}

@@ -154,7 +154,7 @@ export function StudentImportDialog() {
 
             {summary ? (
               <div className="mt-4 flex min-h-0 flex-1 flex-col">
-                <div className="flex gap-3 font-mono text-[12px]">
+                <div className="num flex gap-3 text-[12px]">
                   <span className="text-primary">신규 {summary.new}</span>
                   <span className="text-text-faint">중복 {summary.duplicate}</span>
                   <span className="text-danger">오류 {summary.error}</span>
@@ -174,7 +174,7 @@ export function StudentImportDialog() {
                     <tbody className="divide-line divide-y">
                       {(rows ?? []).map((r) => (
                         <tr key={r.rowNum}>
-                          <td className="text-text-faint px-2 py-1 font-mono">{r.rowNum}</td>
+                          <td className="text-text-faint num px-2 py-1">{r.rowNum}</td>
                           <td className="text-foreground px-2 py-1">{r.name || "—"}</td>
                           <td className="text-text-dim px-2 py-1">
                             {r.grade ?? "—"}

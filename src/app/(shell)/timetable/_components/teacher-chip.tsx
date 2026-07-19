@@ -63,7 +63,7 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
               <span className="overflow-hidden text-[12px] leading-tight font-bold whitespace-nowrap text-clip">
                 {slot.className}
               </span>
-              <span className="num shrink-0 font-mono text-[10px] opacity-75">{active.length}</span>
+              <span className="num shrink-0 text-[10px] opacity-75">{active.length}</span>
             </div>
           ) : (
             /* 접힘 — 블록이 세로로 여유로우니 시트처럼 반명(줄바꿈 허용) 위 / 강의실 아랫줄.
@@ -71,7 +71,7 @@ export function TeacherChip({ slot }: { slot: ClassDetailQuick }) {
             <div className="text-center">
               <span className="block text-[12px] leading-tight font-bold break-keep">{slot.className}</span>
               {slot.classroomName ? (
-                <span className="mt-0.5 block font-mono text-[10px] opacity-75">{slot.classroomName}</span>
+                <span className="mt-0.5 block text-[10px] opacity-75">{slot.classroomName}</span>
               ) : null}
             </div>
           )}

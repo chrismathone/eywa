@@ -82,7 +82,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-text-dim shrink-0">{label}</span>
-      <span className={`text-foreground text-right ${mono ? "num font-mono" : ""}`}>{value}</span>
+      <span className={`text-foreground text-right ${mono ? "num" : ""}`}>{value}</span>
     </div>
   );
 }
@@ -127,7 +127,7 @@ export function ClassInfoCard({
         {schedule ? <Row label="시간" value={schedule} mono /> : null}
         {textbook ? <Row label="교재" value={textbook} /> : null}
       </div>
-      <div className="border-line flex flex-wrap items-center gap-x-2.5 border-t pt-1.5 font-mono text-[10px]">
+      <div className="border-line flex flex-wrap items-center gap-x-2.5 border-t pt-1.5 num text-[10px]">
         <span className="text-primary">재원 {counts.active}</span>
         {counts.hold > 0 ? <span className="text-amber">대기 {counts.hold}</span> : null}
         {counts.withdrawn > 0 ? <span className="text-text-faint">퇴원 {counts.withdrawn}</span> : null}
@@ -211,14 +211,14 @@ export function StudentInfoCard({
             <div className="flex flex-wrap items-center gap-1.5">
               <Pill color="primary">전입</Pill>
               {enrollmentDate ? (
-                <span className="text-text-dim num font-mono text-[10px]">{enrollmentDate}</span>
+                <span className="text-text-dim num text-[10px]">{enrollmentDate}</span>
               ) : null}
             </div>
           ) : isNew ? (
             <div className="flex flex-wrap items-center gap-1.5">
               <Pill color="danger">신입</Pill>
               {enrollmentDate ? (
-                <span className="text-text-dim num font-mono text-[10px]">{enrollmentDate}</span>
+                <span className="text-text-dim num text-[10px]">{enrollmentDate}</span>
               ) : null}
             </div>
           ) : null}
@@ -242,7 +242,7 @@ export function StudentInfoCard({
         <div className="border-line space-y-0.5 border-t pt-1.5">
           <div className="text-text-dim flex flex-wrap items-center gap-1.5">
             <span className="text-primary font-semibold">진도</span>
-            <span className="num font-mono">{report.date}</span>
+            <span className="num">{report.date}</span>
             {report.teacherName ? <span>· {report.teacherName}</span> : null}
           </div>
           {/* 진도 스마트 줄바꿈 — "1.극한 2.연속" 인라인 번호 run-on을 항목별 줄로(오탐 시 원문 1줄).
@@ -251,7 +251,7 @@ export function StudentInfoCard({
             {splitNumberedItems(report.progress).join("\n")}
           </p>
           {report.examInfo || report.homeworkScore ? (
-            <div className="text-text-dim flex flex-wrap gap-x-2.5 font-mono text-[10px]">
+            <div className="text-text-dim flex flex-wrap gap-x-2.5 num text-[10px]">
               {report.examInfo ? <span>시험 {report.examInfo}</span> : null}
               {report.homeworkScore ? <span>숙제 {report.homeworkScore}</span> : null}
             </div>

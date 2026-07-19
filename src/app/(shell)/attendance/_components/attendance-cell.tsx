@@ -127,7 +127,7 @@ export function AttendanceCell({
           setOpen(true);
         }}
         title={titleText}
-        className={`relative mx-auto block size-7 text-center leading-7 font-mono text-[11px] font-bold ${cls} ${
+        className={`relative mx-auto block size-7 text-center leading-7 text-[11px] font-bold ${cls} ${
           status ? "" : "text-text-faint hover:bg-bg-soft"
         }`}
         aria-label={noteVal ? `출결 상태 변경 (메모: ${noteVal})` : "출결 상태 변경"}
@@ -165,7 +165,7 @@ export function AttendanceCell({
                 }`}
               >
                 <span
-                  className={`inline-flex size-5 items-center justify-center rounded-sm font-mono text-[11px] font-bold ${STATUS_CLASS[o.value]}`}
+                  className={`inline-flex size-5 items-center justify-center rounded-sm text-[11px] font-bold ${STATUS_CLASS[o.value]}`}
                 >
                   {STATUS_LABEL[o.value]}
                 </span>

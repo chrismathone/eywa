@@ -168,7 +168,7 @@ function TrendRow({
           {label}
         </span>
         {hasData ? (
-          <span className={`shrink-0 font-mono text-[10px] ${delta >= 0 ? "text-primary" : "text-danger"}`}>
+          <span className={`shrink-0 num text-[10px] ${delta >= 0 ? "text-primary" : "text-danger"}`}>
             {deltaText}
           </span>
         ) : null}
@@ -179,7 +179,7 @@ function TrendRow({
             {Math.round(last)}
             <span className="text-text-dim text-[12px] font-medium">%</span>
           </div>
-          {asOf ? <div className="text-text-faint mt-1 font-mono text-[10px]">{asOf}</div> : null}
+          {asOf ? <div className="text-text-faint mt-1 num text-[10px]">{asOf}</div> : null}
           {/* absolute: SVG를 흐름에서 빼 종횡비 높이 부풀림 차단 → 패널 높이는 옆 학생증감이 결정(컴팩트). */}
           <div className="relative mt-2 min-h-[40px] flex-1">
             <div className="absolute inset-0">

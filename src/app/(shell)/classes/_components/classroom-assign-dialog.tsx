@@ -191,7 +191,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
                           {a.className}
                           <span className="text-text-faint ml-1.5 text-xs">{a.studentCount}명</span>
                         </span>
-                        <span className="text-text-dim inline-flex shrink-0 items-center gap-1.5 font-mono text-xs">
+                        <span className="text-text-dim inline-flex shrink-0 items-center gap-1.5 text-xs">
                           <span className="text-text-faint">{a.fromRoomName ?? "미정"}</span>
                           <ArrowRight className="text-text-faint size-3" />
                           <span className="text-primary inline-flex items-center gap-1 font-semibold">

@@ -261,7 +261,7 @@ export function TimetableImportDialog({
             {diff ? (
               <div className="mt-4 space-y-3 text-[12px]">
                 {/* 요약 카운트 — 무엇이 얼마나 바뀌는지 */}
-                <div className="flex flex-wrap gap-3 font-mono">
+                <div className="flex flex-wrap gap-3 num">
                   <span className="text-primary">이동 {diff.moves.length}</span>
                   <span className="text-blue">추가 {diff.adds.length}</span>
                   <span className="text-amber">삭제 {diff.removes.length}</span>

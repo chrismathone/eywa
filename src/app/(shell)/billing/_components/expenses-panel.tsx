@@ -70,7 +70,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
           ))}
         </div>
         {months.length > 0 ? (
-          <span className="text-text-faint ml-auto font-mono text-[10px]">지출 기록 {months.length}개월</span>
+          <span className="text-text-faint ml-auto num text-[10px]">지출 기록 {months.length}개월</span>
         ) : null}
       </div>
 

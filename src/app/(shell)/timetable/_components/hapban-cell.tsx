@@ -100,7 +100,7 @@ function SegmentHeader({
             <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-clip text-[13px] font-bold">
               {slot.className}
             </span>
-            <span className="num shrink-0 font-mono text-[11px] opacity-70">{active.length}</span>
+            <span className="num shrink-0 text-[11px] opacity-70">{active.length}</span>
           </div>
         </WindowLink>
       </HoverCard>
@@ -311,7 +311,7 @@ export function HapbanCell({
                           {st.name}
                         </span>
                         {dayTag ? (
-                          <span className="text-primary shrink-0 font-mono text-[10px] font-bold">[{dayTag}]</span>
+                          <span className="text-primary shrink-0 text-[10px] font-bold">[{dayTag}]</span>
                         ) : null}
                       </div>
                     );

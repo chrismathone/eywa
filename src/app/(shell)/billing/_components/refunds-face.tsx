@@ -113,7 +113,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
                 <EyIcon name="chevronRight" size={14} />
               </Link>
             </div>
-            <span className="text-text-faint ml-auto font-mono text-[10px]">
+            <span className="text-text-faint ml-auto num text-[10px]">
               환불 기록 {monthsWithData.length}개월
             </span>
           </div>

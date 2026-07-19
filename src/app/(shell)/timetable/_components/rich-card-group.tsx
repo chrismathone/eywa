@@ -96,7 +96,7 @@ function LabelColumn({
       {group.periodRows.map((p) => (
         <div
           key={p.order}
-          className="border-line text-text-faint flex flex-col items-center justify-center border-b font-mono leading-none"
+          className="border-line text-text-faint flex flex-col items-center justify-center border-b num leading-none"
           style={{ height: PERIOD_H }}
         >
           <span className="text-foreground text-[10px] font-bold">{p.label}</span>
@@ -293,7 +293,7 @@ function RosterRow({ s }: { s: GridStudent }) {
   const inner = (
     <>
       <span className="overflow-hidden whitespace-nowrap text-clip">{name}</span>
-      {meta ? <span className={`shrink-0 font-mono text-[9px] ${withdrawn ? "text-white/70" : "text-text-faint"}`}>{meta}</span> : null}
+      {meta ? <span className={`shrink-0 text-[9px] ${withdrawn ? "text-white/70" : "text-text-faint"}`}>{meta}</span> : null}
     </>
   );
   const cls = `flex items-baseline justify-between gap-1 rounded-[3px] px-1 text-[10px] leading-[18px] ${tone}`;
