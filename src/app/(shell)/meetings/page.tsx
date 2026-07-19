@@ -6,7 +6,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstMonth } from "@/lib/date-kst";
@@ -281,11 +281,16 @@ export default async function MeetingsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState
-          image="meetings"
-          icon={() => <Mic size={32} strokeWidth={1.8} />}
-          title="기록된 회의가 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/meetings-hero.webp"
+            alt=""
+            caption="기록된 회의가 없습니다"
+            sub="녹음을 올리면 전사와 AI 분석이 자동으로 정리됩니다"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : (
         <>
           <ul className="space-y-2.5">

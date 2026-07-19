@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Columns3, LayoutGrid, CalendarOff, ListFilter, Users } from "@/components/icons/eywa-icon-compat";
-import { EmptyState } from "@/components/empty-state";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -403,11 +403,16 @@ export default async function TimetablePage({
       </div>
 
       {slots.length === 0 ? (
-        <EmptyState
-          image="classes"
-          icon={() => <CalendarOff size={32} strokeWidth={1.8} />}
-          title="해당 과목의 시간표가 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/timetable-empty.webp"
+            alt=""
+            caption="해당 과목의 시간표가 없습니다"
+            sub="가져오기 또는 편집으로 반을 배치해 보세요"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : isIntegrated ? (
         <RichGridView
           slots={slots}

@@ -14,7 +14,7 @@ import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { Pill } from "@/components/atoms/pill";
-import { EmptyState } from "@/components/empty-state";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import {
@@ -209,11 +209,16 @@ export default async function ConsultationsPage({
       </div>
 
       {total === 0 ? (
-        <EmptyState
-          image="meetings"
-          icon={() => <MessagesSquare size={32} strokeWidth={1.8} />}
-          title="기록된 상담이 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/consultations-hero.webp"
+            alt=""
+            caption="기록된 상담이 없습니다"
+            sub="상담 추가로 첫 기록을 남겨 보세요"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : (
         <>
         <ul className="space-y-2.5">

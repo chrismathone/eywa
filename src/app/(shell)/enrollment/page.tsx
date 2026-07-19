@@ -1,8 +1,8 @@
 import { Suspense } from "react";
-import { QrCode, UserPlus } from "@/components/icons/eywa-icon-compat";
+import { QrCode } from "@/components/icons/eywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
+import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
 import { getUnpushedIntakeConsultations } from "@/features/integrations/server/makeedu-sync";
@@ -146,11 +146,16 @@ export default async function EnrollmentPage({
       {pushCandidates.length > 0 ? <MakeeduPushCard candidates={pushCandidates} /> : null}
 
       {items.length === 0 ? (
-        <EmptyState
-          image="enrollment"
-          icon={() => <UserPlus size={32} strokeWidth={1.8} />}
-          title="진행 중인 상담이 없습니다"
-        />
+        <div className="mx-auto max-w-xl py-4">
+          <PhotoCard
+            src="/photos/enrollment-hero.webp"
+            alt=""
+            caption="진행 중인 상담이 없습니다"
+            sub="QR 공개 접수 또는 신규 등록으로 첫 상담을 시작해 보세요"
+            aspect="3/2"
+            sizes="(max-width: 768px) 100vw, 576px"
+          />
+        </div>
       ) : view === "table" ? (
         <EnrollmentTable rows={items} />
       ) : (
