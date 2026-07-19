@@ -1,5 +1,6 @@
 import { SearchX } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
+import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/atoms/pill";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Button } from "@/components/ui/button";
@@ -81,9 +82,16 @@ export default async function ExamsPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브('결과 N개' micro가 유일 타이틀이던 상태 해소) */}
+      <PageHeader
+        eyebrow="학생 관리"
+        title="성적관리"
+        description="시험을 만들고 반별 점수를 일괄 입력합니다"
+      />
+
       {/* Filter bar */}
-      <div className="bg-card border-line shadow-card flex flex-col gap-3 rounded-md border px-4 py-3">
+      <div className="bg-card shadow-card flex flex-col gap-3 rounded-2xl px-4 py-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">과목</span>
@@ -91,7 +99,7 @@ export default async function ExamsPage({
               <a
                 key={f.value}
                 href={buildHref({ subject: f.value })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   subject === f.value
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -107,7 +115,7 @@ export default async function ExamsPage({
               <a
                 key={f.value}
                 href={buildHref({ type: f.value })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   examType === f.value
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -177,7 +185,7 @@ export default async function ExamsPage({
 
 function ExamTable({ rows, subjects }: { rows: ExamRow[]; subjects: SubjectMaps }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+    <div className="bg-card shadow-card overflow-auto rounded-2xl">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
@@ -197,7 +205,7 @@ function ExamTable({ rows, subjects }: { rows: ExamRow[]; subjects: SubjectMaps 
             const s = e.stats;
             return (
               <tr key={e.id} className="hover:bg-bg-soft/50">
-                <td className="text-text-dim font-mono px-4 py-2.5 text-[12px]">{e.examDate}</td>
+                <td className="text-text-dim num px-4 py-2.5 text-[12px]">{e.examDate}</td>
                 <td className="px-4 py-2.5">
                   <Pill color={meta.color}>{meta.label}</Pill>
                 </td>

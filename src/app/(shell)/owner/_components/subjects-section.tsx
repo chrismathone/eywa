@@ -31,7 +31,7 @@ const cellCls =
 const ghostBtnCls =
   "border-line text-text-dim hover:text-foreground hover:border-primary inline-flex items-center gap-1 rounded-md border border-dashed px-3 py-1.5 text-[12px]";
 const badgeCls =
-  "text-text-dim border-line rounded border px-1.5 py-0.5 font-mono text-[10px] whitespace-nowrap";
+  "text-text-dim border-line rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap";
 
 export function SubjectsSection({
   initial,
@@ -54,7 +54,7 @@ export function SubjectsSection({
 
   return (
     <SectionForm section="operations" payload={o} savedNonce={savedNonce}>
-      <div className="grid items-start gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-5 xl:grid-cols-2">
         <SettingsCard
           title="운영 과목"
           description="과목명과 색만 정하면 됩니다. 색은 전 화면의 과목 배지·시간표·엑셀에 적용됩니다. 내부 ID는 데이터 보존용으로 자동 생성·고정(편집 불가). 삭제 시 그 과목의 데이터를 다른 과목에 흡수시킵니다."

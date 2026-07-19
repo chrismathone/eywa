@@ -183,7 +183,7 @@ export function SubjectListEditor({
               </label>
               {/* 내부 ID — 읽기전용(데이터 보존용, 자동 확정·고정) */}
               <span
-                className="text-text-faint w-[70px] shrink-0 truncate font-mono text-[11px]"
+                className="text-text-faint w-[70px] shrink-0 truncate text-[11px]"
                 title={`내부 ID: ${s.key} (자동·변경 불가)`}
               >
                 {s.key}

@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, CalendarClock, type LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { Users, UserCog, GraduationCap, MessageCircle, Calculator, Wallet, CalendarClock } from "@/components/icons/eywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { Pill, type PillColor } from "@/components/atoms/pill";
+import { BigStat } from "@/components/atoms/big-stat";
+import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -98,7 +100,13 @@ export default async function StaffPage({
   ];
   if (sp.tab === "resumes") {
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
+        {/* Editorial 문법 ① — eyebrow→헤드라인→서브 */}
+        <PageHeader
+          eyebrow="운영"
+          title="직원관리"
+          description="웹 서식으로 작성하는 직원 이력서"
+        />
         <FaceTabs faces={FACES} active="resumes" ariaLabel="직원관리 면" />
         <ResumesFace page={Math.max(1, Number(sp.page) || 1)} />
       </div>
@@ -156,20 +164,26 @@ export default async function StaffPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 */}
+      <PageHeader
+        eyebrow="운영"
+        title="직원관리"
+        description="직원 계정·역할과 담당 현황을 관리합니다"
+      />
       <FaceTabs faces={FACES} active="list" ariaLabel="직원관리 면" />
 
-      {/* Stat strip */}
+      {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
       <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        <Stat label="전체" value={all.length} icon={Users} color="primary" />
-        <Stat label="원장·관리자" value={roleCount("master") + roleCount("admin")} icon={UserCog} color="danger" />
-        <Stat label="강사" value={roleCount("teacher")} icon={GraduationCap} color="primary" />
-        <Stat label="상담" value={roleCount("counselor")} icon={MessageCircle} color="rose" />
-        <Stat label="회계" value={roleCount("accountant")} icon={Calculator} color="purple" />
+        <BigStat label="전체" value={all.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={2} />} />
+        <BigStat label="원장·관리자" value={roleCount("master") + roleCount("admin")} unit="명" tone="danger" icon={<UserCog size={16} strokeWidth={2} />} />
+        <BigStat label="강사" value={roleCount("teacher")} unit="명" tone="primary" icon={<GraduationCap size={16} strokeWidth={2} />} />
+        <BigStat label="상담" value={roleCount("counselor")} unit="명" tone="rose" icon={<MessageCircle size={16} strokeWidth={2} />} />
+        <BigStat label="회계" value={roleCount("accountant")} unit="명" tone="purple" icon={<Calculator size={16} strokeWidth={2} />} />
       </section>
 
       {/* Filter bar */}
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+      <div className="bg-card shadow-card space-y-3 rounded-2xl px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">역할</span>
@@ -177,7 +191,7 @@ export default async function StaffPage({
               <Link
                 key={f.key}
                 href={buildStaffHref({ ...current, role: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   role === f.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -194,7 +208,7 @@ export default async function StaffPage({
               <Link
                 key={f.key}
                 href={buildStaffHref({ ...current, status: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   status === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -306,42 +320,11 @@ export default async function StaffPage({
   );
 }
 
-function Stat({
-  label,
-  value,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon: LucideIcon;
-  color: "primary" | "blue" | "rose" | "danger" | "purple";
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    blue: "bg-blue-soft text-blue",
-    rose: "bg-rose-soft text-rose",
-    danger: "bg-danger-soft text-danger",
-    purple: "bg-purple-soft text-purple",
-  } as const;
-  return (
-    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro truncate">{label}</p>
-        <span className={`flex size-[26px] shrink-0 items-center justify-center rounded-md ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
-        </span>
-      </header>
-      <p className="tabular text-foreground mt-2 text-[28px] leading-none">{value}</p>
-    </div>
-  );
-}
-
 function Mini({ label, value, unit }: { label: string; value: number | string; unit?: string }) {
   return (
     <div>
-      <p className="micro text-[9px]">{label}</p>
-      <p className="tabular text-foreground mt-1 text-base">
+      <p className="text-text-dim text-[12px]">{label}</p>
+      <p className="num text-foreground mt-1 text-base">
         {value}
         {unit ? <span className="text-text-dim ml-0.5 text-[11px]">{unit}</span> : null}
       </p>
