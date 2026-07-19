@@ -4,6 +4,19 @@
 
 ## 진행 상황
 
+### 시간표 기본뷰 '빈 교시 접기' (2026-07-19, C안) — ✅ tsc0/lint0/vitest1629/build✓ · 적대리뷰 확정 1건 반영
+07-18 감사에서 보류했던 빈 교시 222px 밴드 해소 — 원장 C안 채택: 숨김이 아니라 **축소**(36px 밴드, 교시 축·격자 지형 유지).
+- **토글 "빈 교시 접기"**(기본뷰 툴바, 기본=펼침) — URL `emptyperiods=collapse|expand` **양방향 명시 직렬화**(emptydays
+  토글 사망 전례 규약, buildHref 전 호출부 명시 전달) + 쿠키(`eywa-tt-emptyperiods`, [prefs-sync.tsx](../src/app/(shell)/timetable/_components/prefs-sync.tsx)) 기기 기억.
+- **접힌 행 높이 = CSS 변수** `var(--tt-empty-h, 36px)` — 편집 모드엔 [EmptyPeriodScope](../src/app/(shell)/timetable/_components/empty-period-scope.tsx)(클라, display:contents)가
+  변수 풀 높이 + `.tt-editing` 클래스로 **서버 리렌더 없이 즉시 평소 격자 복원**(편집 토글=soft state).
+- **rowSpan 안전 근거**: computeBlocks는 빈 셀을 병합 안 함 → 병합 블록은 점유(풀 높이) 행만 걸침 → 블록 높이 산식 불변.
+  가변 높이는 tr + 수학계열 그룹 라벨(2행 합산=stackedHeights calc, 변수 보존)뿐. 순수 함수 [empty-period-rows.ts](../src/features/timetable/lib/empty-period-rows.ts)(+Vitest 4, PERIOD_ROW_H 단일 소스화).
+- **적대 리뷰(7 에이전트) 확정 1건(LOW) 수정**: 편집 모드가 높이만 펼치고 접힌 교시 라벨은 압축 스타일(10px 한 줄)로
+  남아 이웃 라벨과 어긋남 → 접힌 라벨에 `[.tt-editing_&]` 변형으로 평소 두 줄 스타일 복원(듀얼 마크업, CSS만으로 전환).
+- 엑셀/시트 내보내기는 접기 **미반영**(기본뷰 엑셀=시트 라운드트립 소스라 구조 불변). 드롭 존은 점유 셀 안에만
+  등록되므로 접기가 편집 기능을 깨진 않음(자동 펼침은 편집 시야 원형 복원 목적).
+
 ### ClassNote 발송 허용 시간대 = 예약발송 (2026-07-19) — ✅ tsc0/lint0/vitest1614 · 마이그 0 · 적대리뷰 확정 2건 반영
 밤 수업 보고서가 밤에 학부모 폰을 울리던 문제(원장이 잊었다 되찾은 아이디어) — 학원설정 > 보고서 >
 **발송 허용 시간대**(KST HH:MM 한 쌍, 매일 동일)를 넣으면 창 밖 발송분은 큐 보존 대기, 창 진입 시 워커가 자동 발송.

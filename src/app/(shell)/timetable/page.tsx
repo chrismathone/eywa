@@ -302,7 +302,7 @@ export default async function TimetablePage({
             (사용자 결정 2026-07-06 — 각 교시 시작별로 세팅). 툴바 전역 토글 없음. */}
 
         {/* 기본뷰 '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(C안). 켜짐=강조.
-            편집 모드에선 접힌 행이 자동으로 펼쳐진다(빈 교시=드롭 존, EmptyPeriodScope). */}
+            편집 모드에선 접힌 행이 자동으로 펼쳐진다(평소 격자 지형 복원, EmptyPeriodScope). */}
         {effView === "basic" ? (
           <>
             <span className="bg-line h-4 w-px" aria-hidden />
@@ -401,7 +401,7 @@ export default async function TimetablePage({
       ) : (
         <TimetableDndArea>
           <div className="flex min-h-0 flex-1 flex-col">
-            {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수로 즉시 펼침(드롭 존 보존). */}
+            {/* '빈 교시 접기' 중 편집 모드가 켜지면 접힌 행을 CSS 변수·.tt-editing으로 즉시 펼침(평소 격자 지형 복원). */}
             <EmptyPeriodScope>
               <WeekdayGroupTables
                 slots={slots}

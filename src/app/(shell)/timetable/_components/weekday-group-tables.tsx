@@ -260,8 +260,9 @@ function GroupTable({
   const rows = Array.from(rowMap.values()).sort((a, b) => a.order - b.order);
 
   // '빈 교시 접기'(C안, 2026-07-19) — 이 표(모든 강사×요일)에서 슬롯이 하나도 없는 행만 접는다.
-  // 비표준(x-) 행은 슬롯이 있어야만 생기므로 접기 대상은 표준 교시 행뿐. 접힌 행도 tr/셀은 그대로라
-  // 편집 드롭 존이 살아 있고, 편집 모드에선 EmptyPeriodScope가 CSS 변수로 풀 높이로 펼친다.
+  // 비표준(x-) 행은 슬롯이 있어야만 생기므로 접기 대상은 표준 교시 행뿐. 접힌 행도 tr/셀은
+  // 그대로(숨김 아님)고, 편집 모드에선 EmptyPeriodScope가 CSS 변수·.tt-editing으로 평소 격자
+  // 지형 그대로 펼친다(드롭 존은 점유 셀 안에만 등록되므로 접기가 편집 기능을 깨진 않는다).
   const occupiedKeys = new Set(slots.map(rowKeyOf));
   const isCollapsed = (key: string) => collapseEmpty && !occupiedKeys.has(key);
 
@@ -378,12 +379,14 @@ function GroupTable({
             : rowH;
           // 라벨이 덮는 행이 **전부** 접혔을 때만 한 줄 압축 라벨(36px 밴드엔 두 줄이 안 들어감).
           // 접힌·점유 혼합 쌍(258px)은 공간이 충분해 기존 두 줄 라벨 유지.
+          // 편집 모드(.tt-editing, EmptyPeriodScope가 행을 펼칠 때)엔 `[.tt-editing_&]` 변형으로 평소
+          // 두 줄 스타일 복원 — 높이만 펼치면 라벨이 압축 스타일로 남아 이웃 라벨과 어긋난다(적대 리뷰 LOW).
           const labelCollapsed = paired
             ? isCollapsed(row.key) && isCollapsed(nextRow!.key)
             : isCollapsed(row.key);
           const labelBase = `bg-bg-soft ${periodCellSticky} ${periodDivider} border-b ${GRID} font-bold whitespace-nowrap`;
           const labelCls = labelCollapsed
-            ? `${labelBase} text-text-dim overflow-hidden px-2 py-0 align-middle text-[10px]`
+            ? `${labelBase} text-text-dim overflow-hidden px-2 py-0 align-middle text-[10px] [.tt-editing_&]:text-foreground [.tt-editing_&]:py-2 [.tt-editing_&]:align-top [.tt-editing_&]:text-[12px]`
             : `${labelBase} text-foreground px-2 py-2 align-top text-[12px]`;
           const labelText = mathN !== null ? `${Math.ceil(mathN / 2)}교시` : row.label;
           const timeText =
@@ -399,7 +402,14 @@ function GroupTable({
                 <td rowSpan={paired ? 2 : 1} className={labelCls} style={{ height: labelH }}>
                   {labelText}
                   {labelCollapsed ? (
-                    <span className="text-text-faint ml-1 font-mono text-[9px] font-normal">{timeText}</span>
+                    <>
+                      <span className="text-text-faint ml-1 font-mono text-[9px] font-normal [.tt-editing_&]:hidden">
+                        {timeText}
+                      </span>
+                      <div className="text-text-faint mt-0.5 hidden font-mono text-[10px] [.tt-editing_&]:block">
+                        {timeText}
+                      </div>
+                    </>
                   ) : (
                     <div className="text-text-faint mt-0.5 font-mono text-[10px]">{timeText}</div>
                   )}
