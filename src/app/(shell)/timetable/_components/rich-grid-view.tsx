@@ -38,32 +38,33 @@ export function RichGridView({
     // 세로 스크롤은 바깥(셸) 하나만: 명단 섹션이 고정 행수(재원12·대기3·퇴원5)로 캡되어 그룹 높이가
     // 유계라, 그룹들이 자연 문서 흐름으로 쌓이고 넘침은 셸이 스크롤한다.
     <div className="space-y-4">
-      <div className="text-text-faint text-right font-mono text-[11px]">
+      <div className="text-text-faint text-right text-[12px]">
         읽기 전용 · {total}개 수업 · 편집은 기본뷰
       </div>
       {groups.map((g) => (
-        <section key={g.key} className="border-line bg-card shadow-card w-max max-w-full overflow-hidden rounded-xl border">
-          <div className="bg-ink text-background flex items-center gap-2 px-4 py-1.5 text-[12px] font-bold">
-            <EyIcon name="clock" size={13} className="shrink-0" />
-            <span className="whitespace-nowrap">{g.label}</span>
-            <span className="bg-background/20 rounded-[4px] px-1.5 py-0.5 text-[10px] font-normal whitespace-nowrap">
-              {g.cards.length}개 수업
+        <section key={g.key} className="bg-card shadow-card w-max max-w-full overflow-hidden rounded-2xl">
+          {/* 섹션 헤더 — 구 bg-ink 검정 바(터미널 톤) → 라이트 소프트 헤더(Editorial 문법 ③) */}
+          <div className="border-line/70 flex items-center gap-2.5 border-b px-4 py-2.5">
+            <span className="bg-primary-soft text-primary flex size-6 shrink-0 items-center justify-center rounded-lg" aria-hidden="true">
+              <EyIcon name="clock" size={13} />
             </span>
+            <span className="text-foreground text-[13px] font-bold whitespace-nowrap">{g.label}</span>
+            <span className="text-text-dim text-[12px] whitespace-nowrap">{g.cards.length}개 수업</span>
             {/* 섹션별 '1시간 단위' 토글 — 이 시작 교시 섹션만 사이 빈 교시 행을 숨긴다(전역 아님).
                 주말 섹션은 교시 체계가 없어 압축 대상 아님 → 토글 숨김. */}
             {g.sectionKey !== WEEKEND_ORDER ? (
               <Link
                 href={hrefForSectionToggle(g.sectionKey)}
                 aria-pressed={g.compacted}
-                className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[10px] font-normal whitespace-nowrap transition ${
+                className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap transition ${
                   g.compacted
-                    ? "border-background/40 bg-background/20 text-background"
-                    : "border-background/25 text-background/70 hover:bg-background/10 hover:text-background"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-line text-text-dim hover:bg-bg-soft hover:text-foreground"
                 }`}
               >
                 <span
-                  className={`flex size-3 items-center justify-center rounded-[2px] border ${
-                    g.compacted ? "border-background bg-background text-ink" : "border-background/50"
+                  className={`flex size-3 items-center justify-center rounded-[3px] border ${
+                    g.compacted ? "border-primary-foreground bg-primary-foreground text-primary" : "border-line-strong"
                   }`}
                 >
                   {g.compacted ? <EyIcon name="check" size={9} /> : null}

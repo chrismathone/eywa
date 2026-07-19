@@ -17,15 +17,15 @@ export function EnrolledStatCard({
   subjects: SubjectStat[]; // count>0만, 정렬은 호출부(내림차순)
 }) {
   return (
-    <section className="bg-card border-line shadow-card rounded-md border p-5">
+    <section className="bg-card shadow-card rounded-2xl p-5">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-7">
-        {/* 재원 총원 */}
+        {/* 재원 총원 — 빅 스탯(문법 ②) 톤 */}
         <div className="flex shrink-0 items-center gap-3.5">
-          <span className="bg-primary-soft text-primary flex size-10 items-center justify-center rounded-sm">
+          <span className="bg-primary-soft text-primary flex size-10 items-center justify-center rounded-xl">
             <UserCheck size={17} strokeWidth={2} />
           </span>
           <div>
-            <p className="micro">재원</p>
+            <p className="text-text-dim text-[13px] font-medium">재원</p>
             <p className="mt-0.5 flex items-baseline gap-1">
               <span className="tabular text-foreground text-[34px] leading-none font-bold">
                 {enrolled}

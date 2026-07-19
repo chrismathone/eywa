@@ -17,6 +17,8 @@ import {
   type SearchField,
 } from "@/features/students/server/queries";
 import { WindowLink } from "@/components/workspace/window-link";
+import { PageHeader } from "@/components/page-header";
+import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
@@ -116,7 +118,35 @@ export default async function StudentsPage({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브 + 우측 액션(엑셀·가져오기·신규) */}
+      <PageHeader
+        eyebrow="학생 관리"
+        title="학생목록"
+        description={`재원 ${enrolled}명 · 학원설정 과목 기준`}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              render={
+                <a
+                  href={`/api/exports/students?${new URLSearchParams({
+                    ...(status !== "all" ? { status } : {}),
+                    ...(subject !== "all" ? { subject } : {}),
+                    ...(q ? { q } : {}),
+                    ...advParams,
+                  }).toString()}`}
+                />
+              }
+            >
+              <EyIcon name="arrowDown" size={13} />
+              엑셀 내보내기
+            </Button>
+            <StudentImportDialog />
+            <NewStudentTrigger />
+          </>
+        }
+      />
       <MakeeduSyncBadge domain="students" />
       {/* 히어로 카드 — 재원 총원 + 과목별 재원생 비중(전체/퇴원은 상태 필터로). 과목이 늘어도 카드 1장 고정.
           재원생 0명 과목은 숨김(미운영 과목 노이즈 방지), 인원 내림차순. */}
@@ -141,34 +171,12 @@ export default async function StudentsPage({
         gradeFilters={gradeFilters}
       />
 
-      {/* Toolbar — 좁은 폭(모바일/360px 창)에서 버튼 클러스터가 넘치지 않게 flex-wrap */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="micro">
-          결과 <span className="text-foreground font-bold">{total}</span>명
-          {totalPages > 1 ? <span className="text-text-dim ml-2">{page}/{totalPages} 페이지</span> : null}
-          {q ? <span className="text-text-dim ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            render={
-              <a
-                href={`/api/exports/students?${new URLSearchParams({
-                  ...(status !== "all" ? { status } : {}),
-                  ...(subject !== "all" ? { subject } : {}),
-                  ...(q ? { q } : {}),
-                  ...advParams,
-                }).toString()}`}
-              />
-            }
-          >
-            <EyIcon name="arrowDown" size={13} />
-            엑셀 내보내기
-          </Button>
-          <StudentImportDialog />
-          <NewStudentTrigger />
-        </div>
-      </div>
+      {/* 결과 카운트 — 액션은 PageHeader 우측으로 이동(문법 ①), 여기는 맥락 라인만 */}
+      <p className="text-text-dim px-1 text-[13px]">
+        결과 <span className="text-foreground font-bold">{total}</span>명
+        {totalPages > 1 ? <span className="ml-2">{page}/{totalPages} 페이지</span> : null}
+        {q ? <span className="ml-2">&ldquo;{q}&rdquo; 검색</span> : null}
+      </p>
 
       {rows.length === 0 ? (
         <EmptyState
@@ -179,13 +187,11 @@ export default async function StudentsPage({
         />
       ) : (
         <>
-        <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+        <div className="bg-card shadow-card overflow-x-auto rounded-2xl">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>
                 <th className="micro px-5 py-3 text-left">학생</th>
-                <th className="micro px-5 py-3 text-left">학년</th>
-                <th className="micro px-5 py-3 text-left">학교</th>
                 <th className="micro px-5 py-3 text-left">상태</th>
                 <th className="micro px-5 py-3 text-left">수강 과목</th>
                 <th className="micro px-5 py-3 text-left">담당 강사</th>
@@ -195,15 +201,17 @@ export default async function StudentsPage({
             <tbody className="divide-line divide-y">
               {rows.map((s) => {
                 const meta = STATUS_META[s.status] ?? { label: s.status, color: "neutral" as PillColor };
+                // 구조화 행(문법 ⑤) — 이름 bold + 학교·학년 압축 라벨("경명여중1") dim 서브라인
+                const sg = schoolGradeLabel(s.school, s.grade);
                 return (
                   <tr key={s.id} className="hover:bg-bg-soft/50 transition-colors">
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3.5">
                       <span className="flex items-center gap-1.5">
                         <WindowLink
                           href={`/students/${s.id}`}
                           title={s.name}
                           ariaLabel={`${s.name} 학생 정보`}
-                          className="text-foreground text-[13px] font-bold hover:underline"
+                          className="text-foreground text-[13.5px] font-bold hover:underline"
                         >
                           {s.name}
                         </WindowLink>
@@ -211,13 +219,12 @@ export default async function StudentsPage({
                         {s.dupSuspect ? <DupSuspectTag /> : null}
                         <EditingBadge scope={`student:${s.id}`} />
                       </span>
+                      <span className="text-text-dim mt-0.5 block text-[12px]">{sg || "—"}</span>
                     </td>
-                    <td className="text-text-dim px-5 py-3 text-xs">{s.grade ?? "—"}</td>
-                    <td className="text-text-dim px-5 py-3 text-xs">{s.school ?? "—"}</td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3.5">
                       <Pill color={meta.color}>{meta.label}</Pill>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3.5">
                       {s.subjects.length === 0 ? (
                         <span className="text-text-faint text-xs">—</span>
                       ) : (
@@ -230,10 +237,10 @@ export default async function StudentsPage({
                         </div>
                       )}
                     </td>
-                    <td className="text-text-dim px-5 py-3 text-xs">
+                    <td className="text-text-dim px-5 py-3.5 text-xs">
                       {s.teacherNames.length > 0 ? s.teacherNames.join("·") : "—"}
                     </td>
-                    <td className="text-text-dim num px-5 py-3 text-right text-xs">
+                    <td className="text-text-dim num px-5 py-3.5 text-right text-xs">
                       {s.parentPhone ?? "—"}
                     </td>
                   </tr>

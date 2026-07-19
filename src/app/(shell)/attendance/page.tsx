@@ -1,6 +1,9 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, ListFilter, UserCheck, Users, UserX, type LucideIcon } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, Clock, UserCheck, Users, UserX } from "@/components/icons/eywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
+import { BigStat } from "@/components/atoms/big-stat";
+import { PhotoCard } from "@/components/atoms/photo-card";
+import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
@@ -141,10 +144,24 @@ export default async function AttendancePage({
   // 그래야 셀 폭과 '출석률' 열 위치가 달마다 안 바뀐다(빈 칸은 여백). 패딩은 표시 전용(쿼리/집계 무관).
   const visibleDays = range === "2w" ? matrix.days.slice(-14) : padTo31(matrix.days);
 
+  const selectedClassLabel = effectiveClassId
+    ? classOptions.find((o) => o.value === effectiveClassId)?.label
+    : undefined;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브. 선택 반·월이 서브로 요약된다. */}
+      <PageHeader
+        eyebrow="출결 관리"
+        title="출석부"
+        description={
+          selectedClassLabel
+            ? `${formatMonth(month)} · ${selectedClassLabel}`
+            : "과목·선생님·반을 선택하면 그 반의 출석부가 열립니다"
+        }
+      />
       {/* Toolbar */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+      <div className="bg-card shadow-card flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         {/* 과목 → 강사 → 반 계층 필터(넓→좁). 위를 고르면 아래 선택지가 좁혀지고, 반을 골라야 출석부가 뜬다.
             반 선택 시 과목·강사는 그 반의 값으로 자동 표시(누구 선생님인지 바로 보이게). */}
         <div className="flex items-center gap-1.5">
@@ -189,7 +206,7 @@ export default async function AttendancePage({
         <div className="flex items-center gap-1.5">
           <Link
             href={attHref({ classId: effectiveClassId, month: prevMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
-            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
+            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
             aria-label="이전 달"
           >
             <ChevronLeft className="size-3.5" />
@@ -199,7 +216,7 @@ export default async function AttendancePage({
           </span>
           <Link
             href={attHref({ classId: effectiveClassId, month: nextMonth, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
-            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border"
+            className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-full border"
             aria-label="다음 달"
           >
             <ChevronRight className="size-3.5" />
@@ -218,7 +235,7 @@ export default async function AttendancePage({
             <Link
               key={key}
               href={attHref({ classId: effectiveClassId, month, range: key, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 range === key
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -232,34 +249,68 @@ export default async function AttendancePage({
       </div>
 
       {!effectiveClassId ? (
-        // 반 미선택 — 무거운 출석 데이터를 안 불러오고 가운데 안내(전체는 학생 많아 렉이라 미표시).
-        <EmptyState
-          image="attendance"
-          imageLoading="eager"
-          icon={() => <ListFilter size={32} strokeWidth={1.5} />}
-          title="과목 · 선생님 · 반을 선택해 주세요"
-          description="한 반을 선택하면 그 반의 출석부가 표시됩니다. 전체는 학생이 많아 표시하지 않습니다."
-        />
+        // 반 미선택 허브(Editorial 문법 ④+⑤) — 무거운 출석 데이터를 안 불러오는 원칙은 유지하되,
+        // 빈 화면 대신 사진 카드 + 반 바로가기 행 목록으로 "진입 허브"가 되게 한다.
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
+          <PhotoCard
+            src="/photos/attendance-empty.webp"
+            alt=""
+            caption="한 반을 선택하면 출석부가 열립니다"
+            sub="전체 반은 학생이 많아 한 번에 표시하지 않아요"
+            aspect="3/2"
+            sizes="(max-width: 1024px) 100vw, 40vw"
+            className="h-full"
+          />
+          <div className="bg-card shadow-card flex flex-col rounded-2xl p-5">
+            <p className="text-foreground text-[14px] font-bold">
+              바로 열기
+              <span className="text-text-faint ml-1.5 font-medium">{classesForFilters.length}개 반</span>
+            </p>
+            <ul className="mt-2 grid gap-x-2 sm:grid-cols-2">
+              {classesForFilters.slice(0, 8).map((c) => (
+                <li key={c.id}>
+                  <Link
+                    href={attHref({ classId: c.id, month, range, teacherId: effectiveTeacher, subjectId: effectiveSubject })}
+                    className="hover:bg-bg-soft -mx-2 flex items-center gap-2.5 rounded-xl px-2 py-2 transition"
+                  >
+                    <span className="text-foreground shrink-0 text-[13.5px] font-bold">{c.className}</span>
+                    <span className="text-text-dim min-w-0 flex-1 truncate text-[12.5px]">
+                      {c.teacherName ?? ""}
+                    </span>
+                    <span className="bg-primary-soft text-primary shrink-0 rounded-pill px-2.5 py-1 text-[11px] font-semibold">
+                      열기
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {classesForFilters.length > 8 ? (
+              <p className="text-text-faint mt-auto pt-2 text-[12px]">
+                나머지 반은 위 과목·강사 필터로 좁혀서 선택하세요.
+              </p>
+            ) : null}
+          </div>
+        </section>
       ) : (
         <>
           {/* Stat 4 — 반을 선택했을 때만 */}
           <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-            <Stat label="등록 학생" value={matrix.stats.totalStudents} unit="명" color="primary" icon={Users} />
-            <Stat
+            <BigStat label="등록 학생" value={matrix.stats.totalStudents} unit="명" tone="primary" icon={<Users size={16} strokeWidth={2} />} />
+            <BigStat
               label="출석률"
               value={matrix.stats.presentRate}
               unit="%"
-              color={
+              tone={
                 matrix.stats.presentRate >= 90
                   ? "primary"
                   : matrix.stats.presentRate >= 80
                     ? "amber"
                     : "danger"
               }
-              icon={UserCheck}
+              icon={<UserCheck size={16} strokeWidth={2} />}
             />
-            <Stat label="결석" value={matrix.stats.absentCount} unit="회" color="danger" icon={UserX} />
-            <Stat label="지각" value={matrix.stats.lateCount} unit="회" color="amber" icon={Clock} />
+            <BigStat label="결석" value={matrix.stats.absentCount} unit="회" tone="danger" icon={<UserX size={16} strokeWidth={2} />} />
+            <BigStat label="지각" value={matrix.stats.lateCount} unit="회" tone="amber" icon={<Clock size={16} strokeWidth={2} />} />
           </section>
 
           {matrix.students.length === 0 ? (
@@ -299,7 +350,7 @@ function MatrixTable({
   selectedClassId: string;
 }) {
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
+    <DragScrollArea className="bg-card shadow-card rounded-2xl">
       <table className="min-w-full border-collapse text-sm">
         <thead>
           <tr>
@@ -322,7 +373,7 @@ function MatrixTable({
               ) : (
                 <th
                   key={d.date}
-                  className={`border-line min-w-[34px] border-b border-r px-1 py-2 text-center font-mono text-[10px] ${
+                  className={`border-line min-w-[34px] border-b border-r px-1 py-2 text-center num text-[10px] ${
                     d.isToday
                       ? "bg-primary text-primary-foreground"
                       : d.isWeekend
@@ -409,11 +460,11 @@ function MatrixTable({
                     </td>
                   );
                 })}
-                <td className="border-line text-foreground sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right font-mono text-[12px] whitespace-nowrap">
+                <td className="border-line text-foreground sticky right-[64px] z-10 w-[52px] min-w-[52px] border-b border-l bg-card px-2 py-2 text-right num text-[12px] whitespace-nowrap">
                   {unitsTotal > 0 ? formatSessionUnits(unitsTotal) : "—"}
                 </td>
                 <td
-                  className={`border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right font-mono text-[12px] font-bold whitespace-nowrap ${rateColor}`}
+                  className={`border-line sticky right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right num text-[12px] font-bold whitespace-nowrap ${rateColor}`}
                 >
                   {rate === null ? "—" : `${rate}%`}
                 </td>
@@ -429,7 +480,7 @@ function MatrixTable({
               className="bg-bg-soft border-line border-t px-3 py-2"
             >
               <div className="flex items-center gap-2 overflow-x-auto text-[11px] [&>*]:shrink-0 [&_*]:whitespace-nowrap">
-                <span className="text-text-faint font-mono text-[11px]">
+                <span className="text-text-faint text-[11px]">
                   총 {matrix.stats.totalRecords}회 기록 · 셀 클릭 시 출결·시수 즉시 변경 (시수: 정규 1회=1, 보강 연장 1.5·2)
                 </span>
                 <span className="micro ml-auto">범례</span>
@@ -469,36 +520,3 @@ function labelFor(s: AttendanceStatus): string {
   return "보강";
 }
 
-function Stat({
-  label,
-  value,
-  unit,
-  color,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  unit: string;
-  color: "primary" | "amber" | "danger";
-  icon: LucideIcon;
-}) {
-  const ICON_BG = {
-    primary: "bg-primary-soft text-primary",
-    amber: "bg-amber-soft text-amber",
-    danger: "bg-danger-soft text-danger",
-  } as const;
-  return (
-    <div className="bg-card border-line shadow-card rounded-md border p-4">
-      <header className="flex items-center justify-between">
-        <p className="micro">{label}</p>
-        <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>
-          <Icon size={13} strokeWidth={2} />
-        </span>
-      </header>
-      <p className="mt-2 flex items-baseline gap-1">
-        <span className="tabular text-foreground text-[28px] leading-none">{value}</span>
-        <span className="text-text-dim text-xs">{unit}</span>
-      </p>
-    </div>
-  );
-}

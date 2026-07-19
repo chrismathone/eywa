@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
 import { Columns3, LayoutGrid, CalendarOff, ListFilter, Users } from "@/components/icons/eywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -198,8 +199,49 @@ export default async function TimetablePage({
       {/* '미사용 요일'·'빈 교시 접기' 선호를 기기에 기억(쿠키) — 창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. */}
       <EmptyDaysPrefSync hide={hideEmptyDays} />
       <EmptyPeriodsPrefSync collapse={collapseEmptyPeriods} />
+      {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(구 툴바 font-mono 나열의 승격판).
+          시간표는 세로 공간이 가장 귀한 화면이라 BigStat 카드 대신 인라인 스탯 행(밀도 우선). */}
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="수업 운영"
+          title="시간표"
+          description={`${subjectMaps.labelOf(subject)} 주간표`}
+          actions={
+            <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1 whitespace-nowrap">
+              <span className="text-[13px]">
+                <b className="num text-primary text-[17px] font-extrabold">{enrolledCount}</b>{" "}
+                <span className="text-text-dim">재원</span>
+              </span>
+              {newCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-danger text-[17px] font-extrabold">{newCount}</b>{" "}
+                  <span className="text-text-dim">신입</span>
+                </span>
+              ) : null}
+              {transferCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-blue text-[17px] font-extrabold">{transferCount}</b>{" "}
+                  <span className="text-text-dim">전입</span>
+                </span>
+              ) : null}
+              {holdCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-amber text-[17px] font-extrabold">{holdCount}</b>{" "}
+                  <span className="text-text-dim">대기</span>
+                </span>
+              ) : null}
+              {withdrawnCount > 0 ? (
+                <span className="text-[13px]">
+                  <b className="num text-text-faint text-[17px] font-extrabold">{withdrawnCount}</b>{" "}
+                  <span className="text-text-dim">퇴원</span>
+                </span>
+              ) : null}
+            </div>
+          }
+        />
+      </div>
       {/* Toolbar */}
-      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
+      <div className="bg-card shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl px-4 py-3">
         {/* 주간 이동(타임머신) — 과거/미래 주의 반 구성 조회 */}
         <WeekNav
           currentWeek={week}
@@ -228,7 +270,7 @@ export default async function TimetablePage({
                 hideEmptyDays,
                 collapseEmptyPeriods,
               })}
-              className={`shrink-0 rounded-md border px-2 py-0.5 text-xs transition ${
+              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 subject === k
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -255,7 +297,7 @@ export default async function TimetablePage({
               <Link
                 key={v.key}
                 href={buildHref({ view: v.key, subject, defaultSubject, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods })}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                   effView === v.key
                     ? "border-primary bg-primary text-primary-foreground font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -284,7 +326,7 @@ export default async function TimetablePage({
                 collapseEmptyPeriods,
               })}
               title="수업 없는 요일 컬럼 표시/숨김"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 !hideEmptyDays
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -316,7 +358,7 @@ export default async function TimetablePage({
                 collapseEmptyPeriods: !collapseEmptyPeriods,
               })}
               title="수업 없는 교시 행을 얇게 접기/펼치기 (편집 중엔 자동으로 펼쳐짐)"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                 collapseEmptyPeriods
                   ? "border-primary bg-primary text-primary-foreground font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -336,13 +378,8 @@ export default async function TimetablePage({
           </>
         ) : null}
 
-        <div className="ml-auto flex items-center gap-2 font-mono text-[11px] whitespace-nowrap">
-          <span className="text-[color:var(--primary)]">재원 {enrolledCount}</span>
-          {newCount > 0 ? <span className="text-[color:var(--danger)]">신입 {newCount}</span> : null}
-          {transferCount > 0 ? <span className="text-[color:var(--blue)]">전입 {transferCount}</span> : null}
-          {holdCount > 0 ? <span className="text-[color:var(--amber)]">대기 {holdCount}</span> : null}
-          {withdrawnCount > 0 ? <span className="text-[color:var(--text-faint)]">퇴원 {withdrawnCount}</span> : null}
-        </div>
+        {/* 학생 집계는 PageHeader 우측으로 승격(문법 ②) — 툴바 mono 나열 제거 */}
+        <div className="ml-auto" aria-hidden />
 
         {/* 편집 컨트롤 — 기본뷰 + 이번/미래 주(통합뷰·강사뷰=읽기전용, 과거=조회 전용).
             미래 주 편집은 그 주에 이동 예약(Phase B). */}
