@@ -9,7 +9,7 @@
 ## 1. 한눈에 보는 파이프라인
 
 ```
-[강사 /onescreen "ClassNote 발송"]──┐        (4중 게이트: 스위치·과목·too_old·동명이인)
+[강사 /onescreen "ClassNote 발송"]──┐        (5중 게이트: 스위치·과목·**결석**·too_old·동명이인)
 [원장 /lesson-reports 재발송·복구]──┴─▶ lesson_reports.classnote_status = 'queued'
                                             │
                                             ▼  (15초 폴 · FOR UPDATE SKIP LOCKED · BATCH 2)
@@ -47,6 +47,7 @@
 | 큐 뷰 | [features/report-admin/server/queries.ts](../src/features/report-admin/server/queries.ts) `getClassnoteQueue` | 최근 3일 집계 + 주의목록 + 워커 온라인(3분 무응답=오프라인) |
 | 순수 로직 | [features/report-admin/classnote-queue.ts](../src/features/report-admin/classnote-queue.ts) · [features/onescreen/classnote-guard.ts](../src/features/onescreen/classnote-guard.ts) | 멈춤 판정(10분)·too_old 가드(전 달 1일, KST)·과목 opt-in |
 | 동명이인 | [features/onescreen/server/scope.ts](../src/features/onescreen/server/scope.ts) `hasClassnoteNameCollision` | 유효이름(classnote_name‖name) 중복 감지 → 자동 발송 차단 |
+| **결석 게이트(#77, 2026-07-19)** | [features/onescreen/absence-gate.ts](../src/features/onescreen/absence-gate.ts)(순수·Vitest) + [server/absence-gate.ts](../src/features/onescreen/server/absence-gate.ts) | 그날 그 과목 유효 출결이 전부 absent/excused면 저장만·큐잉 차단(`status:"absent"`). 발송·재발송·콘솔·대량·unsent 재촉 이벤트 **6경로 공용**. 보강(makeup)은 제외, 조회 실패 fail-closed. ⚠️ 큐잉 시점 판정 — queued 재고 미소급(재발송 시도 시엔 회수) |
 | 캡처 대상 | [features/onescreen/components/parent-report-card.tsx](../src/features/onescreen/components/parent-report-card.tsx) | 루트 class `report-capture` — **폭/클래스 변경 시 워커 셀렉터 동기 필수** |
 | 공개 페이지 | [app/(share)/r/[token]/page.tsx](<../src/app/(share)/r/[token]/page.tsx>) | 학부모 열람 + `x-eywa-internal` 헤더면 조회로그 스킵 |
 | 워커 코어 | [scripts/_classnote/classnote-core.mjs](../scripts/_classnote/classnote-core.mjs) | stale 복구→클레임→스크린샷→게시→재시도. one-shot/데몬 공용 |

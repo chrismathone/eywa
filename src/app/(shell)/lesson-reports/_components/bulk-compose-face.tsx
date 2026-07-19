@@ -116,6 +116,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
     const parts = [`${res.queued ?? 0}명 발송 대기(연동 PC가 순차 게시)`];
     if (res.conflicts) parts.push(`동명이인 제외 ${res.conflicts}명`);
     if (res.skippedExisting) parts.push(`${reportDate === kstToday() ? "오늘" : "해당 날짜"} 보고서 이미 있어 제외 ${res.skippedExisting}명`);
+    if (res.absent) parts.push(`결석 기록이라 제외 ${res.absent}건`);
     if (res.tooOld) parts.push(`발송기한(전 달 1일) 지나 제외 ${res.tooOld}건`);
     if (res.subjectOff) parts.push(`발송 과목 아님 ${res.subjectOff}건`);
     if (res.overflow) parts.push(`상한 초과 ${res.overflow}건 제외`);

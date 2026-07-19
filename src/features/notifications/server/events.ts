@@ -25,6 +25,7 @@ import { notifyUsers, type NotifyInput } from "./notify";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isClassnoteAllowed, isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard";
+import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
 import {
   absenceDigestBody,
   buildAbsenceEvents,
@@ -498,7 +499,7 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
 
   const { data, error } = await admin
     .from("lesson_reports")
-    .select("id, student_id, report_date, subject, student:student_id ( name )")
+    .select("id, student_id, report_date, subject, makeup, student:student_id ( name )")
     .eq("tenant_id", tenantId) // admin RLS 우회 — 테넌트 필터가 유일한 격리선
     .is("classnote_status", null)
     .is("revoked_at", null)
@@ -510,12 +511,38 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   if (error) throw new Error(`detectUnsentReports query: ${error.message}`);
 
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const gated = (data ?? []).filter(
+    (row) =>
+      isClassnoteAllowed(row.report_date as string, today) &&
+      isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects),
+  );
+  // 결석 게이트(#77) — 발송 콘솔(sendClassnoteForUnsent)과 게이트 동일 불변식: 원스크린 save는 결석도
+  // 저장하는 게 정책이라, 결석이라 **보낼 수 없는** 저장분을 '미발송'으로 재촉하면 거짓 알림이 된다.
+  // 보강 보고서(makeup)는 게이트 제외(발송 콘솔과 동일). 조회 실패는 throw → 외곽 try/catch가 기록
+  // (그날 재촉 생략 = fail-closed, 다음 cron 재시도).
+  const absentBlocked = await getAbsenceBlockedKeys(
+    admin,
+    tenantId,
+    gated
+      .filter((row) => !row.makeup)
+      .map((row) => ({
+        studentId: row.student_id as string,
+        reportDate: (row.report_date as string).slice(0, 10),
+        subject: row.subject as string | null,
+      })),
+  );
   const candidates = buildUnsentReportEvents(
-    (data ?? [])
+    gated
       .filter(
         (row) =>
-          isClassnoteAllowed(row.report_date as string, today) &&
-          isClassnoteSubjectEnabled(row.subject as string | null, settings.report.classnoteSubjects),
+          row.makeup ||
+          !absentBlocked.has(
+            absenceKeyOf({
+              studentId: row.student_id as string,
+              reportDate: (row.report_date as string).slice(0, 10),
+              subject: row.subject as string | null,
+            }),
+          ),
       )
       .map((row) => {
         const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;

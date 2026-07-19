@@ -62,7 +62,9 @@ export function ClassnoteQueueCard({ view }: { view: ClassnoteQueueView }) {
       toast.message("dry-run — 승인 전이라 실제 재발송 안 함. 원장 설정(보고서)에서 'ClassNote 실제 발송'을 켜야 전송됩니다");
       setChecked(new Set());
     } else if (res.ok) {
-      toast.success(`${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}`);
+      toast.success(
+        `${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}${res.absentSkipped ? ` · ${res.absentSkipped}건 결석 제외` : ""}`,
+      );
       setChecked(new Set());
       router.refresh();
     } else toast.error(res.error ?? "재발송에 실패했습니다");

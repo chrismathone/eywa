@@ -34,6 +34,7 @@ const SEND_MESSAGE: Record<string, { kind: "success" | "info" | "warn"; text: st
   dry_run: { kind: "info", text: "저장했습니다. 현재 실제 발송이 꺼져 있어 전송은 대기 상태입니다(원장 설정에서 켜야 전송)." },
   subject_off: { kind: "warn", text: "저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)." },
   name_conflict: { kind: "warn", text: "동명이인이 있어 자동 발송을 막았습니다. 학생 구분 이름(classnote_name) 지정 후 다시 시도하세요." },
+  absent: { kind: "warn", text: "저장했지만 그날 결석으로 기록된 학생이라 전송하지 않았습니다(출석부 확인)." },
   too_old: { kind: "warn", text: "저장했지만 너무 오래된 보고서라 전송하지 않았습니다." },
   revoked: { kind: "warn", text: "취소된 공유 링크입니다 — 재발급 후 발송하세요." },
   processing: { kind: "info", text: "이미 발송 처리 중인 보고서입니다." },

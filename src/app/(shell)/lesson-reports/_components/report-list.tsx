@@ -132,6 +132,7 @@ export function ReportList({
     } else if (res.ok) {
       const parts = [`${res.queued ?? 0}건 발송 대기`];
       if (res.conflicts) parts.push(`${res.conflicts}건 동명이인 차단`);
+      if (res.absentSkipped) parts.push(`${res.absentSkipped}건 결석 제외`);
       if (res.skipped) parts.push(`${res.skipped}건 제외(이미 발송·과목 미허용·오래된 보고서)`);
       toast.success(parts.join(" · "));
       setChecked(new Set());

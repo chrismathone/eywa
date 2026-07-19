@@ -925,6 +925,11 @@ export function OneScreenClient({
       toast.message(`${subjectName} — 저장했지만 이 과목은 발송 대상이 아니라 전송하지 않았습니다(원장 설정의 발송 과목 확인)`);
       return;
     }
+    // 결석 게이트(#77 서버판) — 버튼 disabled를 우회한 경로(반 모호 행·stale 화면)도 서버가 막는다.
+    if (res.status === "absent") {
+      toast.message(`${subjectName} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
+      return;
+    }
     const msg =
       res.status === "queued"
         ? res.sendWindowHint
@@ -962,6 +967,9 @@ export function OneScreenClient({
     } else if (res.status === "subject_off") {
       // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
       toast.message(`${student.name} ${subjectName} — 저장했지만 발송 대상 과목이 아니라 전송하지 않았습니다`);
+    } else if (res.status === "absent") {
+      // 결석 게이트(#77 서버판) — 반 모호(attendanceRaw 미채움) 행 등 클라 게이트 사각을 서버가 막은 경우.
+      toast.message(`${student.name} — 수업일 출결이 결석으로 기록돼 있어 발송하지 않았습니다(기록 저장은 유지)`);
     } else if (res.status === "queued" && res.sendWindowHint) {
       // 발송 허용 시간창 밖 — 큐엔 정상 적재, 워커가 창 진입 시 자동 발송("왜 안 나가지?" 재발송 혼란 방지).
       toast.success(`${student.name} ${subjectName} — 발송 예약됨(${res.sendWindowHint}에 자동 발송)`);
@@ -1029,6 +1037,7 @@ export function OneScreenClient({
     let blocked = 0;
     let skipped = 0;
     let subjectOff = 0; // 발송 대상 과목 아님(저장만) — '발송 대기'로 뭉뚱그리지 않고 명시(#2 확정)
+    let absentSkip = 0; // 서버 결석 게이트에 걸린 행(클라 사전 필터의 사각 — 반 모호 행 등)
     let dry = 0;
     let fail = 0;
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
@@ -1043,6 +1052,7 @@ export function OneScreenClient({
         } else if (res.status === "dry_run") dry++;
         else if (res.status === "subject_off") subjectOff++;
         else if (res.status === "name_conflict" || res.status === "revoked") blocked++;
+        else if (res.status === "absent") absentSkip++; // 서버 결석 게이트(클라 사전 필터를 지난 반 모호 행 등)
         else skipped++; // success/processing/too_old
       }
     } finally {
@@ -1052,6 +1062,7 @@ export function OneScreenClient({
       (dry ? `저장 ${dry}건(dry-run·발송 안 함) · ` : "") +
         (windowHint ? `발송 예약 ${queued}건(${windowHint}에 자동 발송)` : `발송 대기 ${queued}건`) +
         (subjectOff ? ` · 과목 제외 ${subjectOff}건(발송 대상 과목 아님)` : "") +
+        (absentSkip ? ` · 결석 제외 ${absentSkip}건` : "") +
         (blocked ? ` · 차단 ${blocked}건(동명이인/취소)` : "") +
         (skipped ? ` · 제외 ${skipped}건` : "") +
         (preSkipped ? ` · 대상 제외 ${preSkipped}건(진도 미입력·결석)` : "") +
