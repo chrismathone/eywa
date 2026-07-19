@@ -15,10 +15,15 @@
 ## 공통 스타일 접미사 (모든 프롬프트 뒤에 붙일 것)
 
 ```
-bright white modern Korean private academy interior, abundant natural daylight,
-glass partitions, clean minimalist design, subtle warm wood accents, photorealistic,
-professional architectural photography, no people, soft shadows, high key lighting
+modern Korean private academy interior, abundant natural daylight, glass partitions,
+clean minimalist design, warm wood accents, photorealistic, professional architectural
+photography, no people, balanced exposure, natural contrast, visible depth and color
 ```
+
+> ⚠️ **1차 생성분(2026-07-19) 교훈**: 구 접미사의 `bright white … high key lighting`은 결과물이
+> 거의 백색으로 떠서 UI에서 빈 블록처럼 보였다(출석부 허브 실측). 위 개정 접미사(균형 노출·자연 대비)로
+> 재생성 권장 — 특히 `attendance-empty`·`login-panel`. 파일 덮어쓰기 후 dev는
+> `.next/dev/cache/images` 삭제+재시작해야 반영(Next16 이미지 캐시 TTL 4h).
 
 ## ⚠️ 텍스트 얹는 패널 사진 주의
 `login-panel`·`intake-header`는 흰 글자가 사진 위에 직접 올라간다 — **중앙부·상단이 과하게 밝은(백색 위주) 컷은 금지**,
