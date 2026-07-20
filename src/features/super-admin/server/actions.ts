@@ -1,9 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
+import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { logSuperAdminAction } from "./audit";
 
 export type CreateTenantState =
@@ -71,8 +73,9 @@ export async function createTenantWithMaster(
     user_metadata: { display_name: displayName },
   });
   if (authErr) {
-    // rollback tenant
+    // rollback tenant — insert~delete 사이에 단일 테넌트 판정이 캐시됐을 수 있어 롤백 후에도 비운다.
     await admin.from("tenants").delete().eq("id", tenantId);
+    updateTag(PUBLIC_BRANDING_TENANTS_TAG);
     return { error: `master 계정 생성 실패: ${authErr.message}` };
   }
 
@@ -94,6 +97,10 @@ export async function createTenantWithMaster(
 
   revalidatePath("/super-admin/tenants");
   revalidatePath("/super-admin");
+  // 비로그인 브랜딩(getPublicBranding)은 "학원이 정확히 1개"일 때만 그 학원 로고·이름을 로그인 화면에
+  // 쓴다 — 두 번째 학원이 생기는 이 순간 판정이 뒤집히므로 캐시를 즉시 비운다(안 비우면 TTL 1시간 동안
+  // 로그인 화면이 첫 학원 브랜드를 계속 보여준다 = 남의 학원 이름 노출).
+  updateTag(PUBLIC_BRANDING_TENANTS_TAG);
   redirect(`/super-admin/tenants/${tenantId}`);
 }
 
@@ -125,6 +132,12 @@ export async function updateTenant(
     metadata: { plan },
   });
 
+  // 학원명은 브랜딩 소스다 — `resolveSettings`가 `profile.name || tenants.name`으로 폴백하므로,
+  // /owner에서 학원명을 따로 넣지 않은 테넌트(신규 테넌트 기본값)는 **이 이름이 그대로** 로그인 화면·
+  // 탭 제목·인쇄물에 나간다. 설정 캐시가 그 값을 담고 있으니 saveOwnerSection과 같은 규약으로 비운다
+  // (경로 revalidate는 태그 캐시를 안 비운다 — 안 하면 최대 300초 옛 이름 노출).
+  updateTag(tenantSettingsTag(id));
+  revalidatePath("/", "layout");
   revalidatePath(`/super-admin/tenants/${id}`);
   revalidatePath("/super-admin/tenants");
   return { ok: true };

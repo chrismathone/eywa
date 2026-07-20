@@ -270,6 +270,12 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
   - ~~⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS` 하드코딩~~ → **✅ 해소(2026-07-06)**: 과목 운영 탭 `subjects[].weekdayPeriods`로 과목별 설정 가능(미설정=english 내장→전역 폴백).
+  - **(2026-07-20) 비로그인(pre-auth) 표면도 배선 완료** — 로그인 화면·루트 탭 제목이 제품 기본값/하드코딩 "인재원"이던 것을
+    [`getPublicBranding()`](src/features/owner/server/public-branding.ts)로 전환(profile `logoUrl`·`logoText`·`name`·`branchLabel` 소비).
+    ⚠️ **로그인 전엔 세션이 없어 테넌트를 모른다** — 그래서 이 헬퍼는 **학원이 정확히 1개일 때만** 그 학원으로 확정하고,
+    0개·2개 이상이면 **null을 돌려 제품 중립 표기로 폴백**한다(임의 선택 = 남의 학원 이름 노출). 호스트/서브도메인 기반
+    테넌트 라우팅이 생기면 **이 함수만** 교체하면 전 pre-auth 표면이 따라온다. 새 비로그인 화면에서 학원 브랜드가 필요하면
+    `getTenantSettings()`(세션 필요, 여기선 빈 값)가 아니라 **이 헬퍼**를 쓸 것.
   - **(2026-06-19) operations `subjects`/`gradeLevels` 하드코딩 소비처 전수 배선 완료(20건/17파일)** — 멀티에이전트
     전수감사로 "설정 무시" 위반 20건 적발·수정. 첫 발견은 학생목록·수업목록·성적관리 과목 드롭다운에 설정에 없는
     "예술(arts)" 누출(`SUBJECT_FILTERS`/`SUBJECT_META`)이었고, 이어 과목 라벨/색/선택지/엑셀출력을 하드코딩한

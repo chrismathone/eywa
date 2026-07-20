@@ -4,6 +4,24 @@
 
 ## 진행 상황
 
+### 로그인 화면·탭 제목을 학원설정에서 읽기 (2026-07-20) — ✅ tsc0/lint0/build✓ · 마이그 0 · 적대리뷰
+로그인 화면이 제품 기본값(`e` 배지 + "eywa")을 보여주고 "인재원"은 카피 3곳에 하드코딩돼 있던 것을
+**학원설정 단일 진입점으로 배선**. 이제 /owner에서 로고·학원명·지점을 바꾸면 로그인 화면과 탭 제목이 따라온다.
+- 신규 [public-branding.ts](../src/features/owner/server/public-branding.ts) — **비로그인(pre-auth) 표면 전용** 브랜딩 진입점.
+  로그인 전엔 세션이 없어 테넌트를 모르므로 **학원이 정확히 1개일 때만** 그 학원으로 확정(`limit(2)` + `length===1`),
+  0개·2개 이상이면 **null → 제품 중립 표기로 자동 폴백**(임의 선택 시 남의 학원 이름 노출 방지). 호스트/서브도메인
+  라우팅이 생기면 이 함수만 교체. 캐시 2겹(sole-tenant=`PUBLIC_BRANDING_TENANTS_TAG`/1h, settings=`tenantSettingsTag`/300s)
+  이라 /owner 저장 시 `updateTag`로 즉시 반영(read-your-writes). ⚠️ **signed URL은 캐시에 담지 않는다**(TTL 만료 서빙) —
+  호출부가 요청마다 `resolveBrandingSrc`((shell)/layout.tsx 동일 규약).
+- 로그인 [BrandPanel](<../src/app/(auth)/login/page.tsx>): 업로드 로고 이미지 → 없으면 building 마크(사이드바와 동일 폴백,
+  이니셜 배지 금지 규약). 워드마크=`logoText`, 학원줄=`name · branchLabel`, 본문·푸터 학원명=`profile.name`(없으면 "학원").
+- 루트 [layout.tsx](../src/app/layout.tsx): `metadata` → `generateMetadata`. 자체 metadata 없는 라우트(키오스크)의 탭 제목이
+  하드코딩 "인재원"이던 것 해소 — 키오스크 본문은 이미 테넌트 학원명을 읽고 있어 탭만 어긋나 있었다.
+- [super-admin/actions.ts](../src/features/super-admin/server/actions.ts): 학원 생성/롤백 시 `updateTag(PUBLIC_BRANDING_TENANTS_TAG)`
+  — 두 번째 학원이 생기는 순간 단일 테넌트 판정이 뒤집히므로 TTL(1h)을 기다리지 않고 즉시 무효화.
+- 실검증(dev 렌더): 로고 이미지·`INJAEWON`·`인재원 · 침산`·본문/푸터 학원명·키오스크 탭 `eywa — 인재원 학원관리` 전부 설정값.
+  폴백 5조합 시뮬레이션(무테넌트·공백·이름만·지점만)에서 어색한 한국어·중복·빈 문자열 없음.
+
 ### 작성률 "(미지정)" 행 해소 — 반 담당 없는 반은 슬롯 강사 라벨로 귀속 (2026-07-20) — ✅ tsc0/lint0/test38
 강사별 작성률 표에 "(미지정) 0/8"이 뜨던 원인 = 영어반 RTT2(반 teacher_id 없음, 슬롯 라벨로만 운영).
 작성률 귀속을 **반 담당 → 슬롯 라벨 → "(미지정)"** 폴백 체인으로 확장(getWeeklyWritingRates 오늘·과거일 경로 +
