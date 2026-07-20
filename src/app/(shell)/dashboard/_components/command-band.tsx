@@ -4,13 +4,6 @@
  * (큰 인사말 + 카드형 지표: 라벨/아이콘 칩/큰 숫자/보조 라인)으로 재구성.
  * 시맨틱 컬러는 값이 아니라 아이콘 칩·보조 라인에 — 숫자는 잉크로 차분하게(미수만 danger).
  */
-const KO_DATE_FULL = new Intl.DateTimeFormat("ko-KR", {
-  timeZone: "Asia/Seoul",
-  month: "long",
-  day: "numeric",
-  weekday: "long",
-});
-
 import { BigStat } from "@/components/atoms/big-stat";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { EnrollmentChangeModal } from "./enrollment-change-modal";
@@ -51,7 +44,6 @@ export function CommandBand({
   const { enrollment, attendance, billing } = metrics;
   const newStudents = enrollmentChanges?.newStudents ?? [];
   const withdrawn = enrollmentChanges?.withdrawn ?? [];
-  const dateLabel = KO_DATE_FULL.format(new Date());
   const deltaText = enrollment
     ? enrollment.delta === 0
       ? "±0"
@@ -63,12 +55,12 @@ export function CommandBand({
 
   return (
     <section aria-labelledby="assistant-home-title">
-      {/* 인사말 — 큰 타이포 위계(날짜 → 인사 → 안내) */}
+      {/* 인사말 — 큰 타이포 위계(인사 → 안내). 날짜 줄은 제거(2026-07-20 원장 "날짜 공간도 필요없어"
+          — OS 표시줄과 중복 + 창 위로 삐져나와 상단 밴드처럼 보였음). */}
       <div className="px-1">
-        <p className="text-text-dim text-[13px] font-medium">{dateLabel}</p>
         <h2
           id="assistant-home-title"
-          className="text-foreground mt-1 text-[26px] font-bold tracking-tight"
+          className="text-foreground text-[26px] font-bold tracking-tight"
         >
           안녕하세요, {name} {honorific}님
         </h2>
