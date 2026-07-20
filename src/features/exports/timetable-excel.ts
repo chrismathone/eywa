@@ -21,15 +21,21 @@ const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 // PillColor(과목 색, 학원설정 단일 소스) → 엑셀 셀 argb 소프트 톤. 과목별 하드코딩 맵 금지 —
 // 색은 buildSubjectMaps(operations.subjects).colorOf로 결정하고 여기선 PillColor→hex만 변환.
+// ⚠️ 이 표는 **화면 알약(pill.tsx SOFT_CLASS)의 엑셀 판본**이다 — globals.css 토큰을 바꾸면 여기도
+// 같은 커밋에서 갱신할 것(엑셀은 CSS 변수를 못 읽어 자동 추종하지 않는다. v1 그린 팔레트가 v3 네이비
+// 전환 때 그대로 남아 "화면=네이비, xlsx=민트그린"으로 갈렸던 것이 2026-07-20 감사에서 적발).
+// 값 = 각 토큰 hex를 흰 배경에 alpha 0.22로 합성(화면 soft는 0.08~0.11이라 엑셀 셀에선 거의 안 보여
+// 기존 표가 쓰던 시각 무게 0.19~0.27을 유지).
 const PILL_HEX: Record<PillColor, string> = {
-  primary: "FFCDE9D9",
-  blue: "FFD2E4F2",
-  rose: "FFF4D7DE",
-  purple: "FFE4D9F1",
-  amber: "FFF5E3C6",
-  gold: "FFF1E4C9",
-  danger: "FFF6D6D6",
-  neutral: "FFEDE9DC",
+  primary: "FFCCD5E1", // #153e75 navy
+  green: "FFCFE5DA", // #0e7c46 성공/완료
+  blue: "FFD1DEF8", // #2d6be0
+  rose: "FFF2D4DF", // #c23a6e
+  purple: "FFDFD8F3", // #6c50c8
+  amber: "FFEBDBC9", // #a35d0a
+  gold: "FFE5DECD", // #8a681c
+  danger: "FFF5D5D5", // #d33f3f
+  neutral: "FFE9E9EE", // --bg-soft
 };
 
 type ClassRef = {

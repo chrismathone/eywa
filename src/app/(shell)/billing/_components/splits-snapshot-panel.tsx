@@ -57,11 +57,11 @@ export function SplitsSnapshotPanel({
             <b className="num text-foreground">{fmtWon(saved.actualAmount)}</b> ·{" "}
             <span className="num">{fmtKst(saved.savedAt)}</span> 저장
             {drift ? (
-              <span className="ml-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">
+              <span className="ml-1.5 rounded-full border border-amber/30 bg-amber-soft px-2 py-0.5 text-amber">
                 현재 집계와 다릅니다 — 다시 저장하세요
               </span>
             ) : (
-              <span className="ml-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">
+              <span className="ml-1.5 rounded-full border border-green/30 bg-green-soft px-2 py-0.5 text-green">
                 현재 집계와 일치
               </span>
             )}
@@ -73,7 +73,7 @@ export function SplitsSnapshotPanel({
           </span>
         )}
         {state && "saved" in state && state.saved !== undefined ? (
-          <span className="text-emerald-700 ml-1.5">
+          <span className="text-green ml-1.5">
             저장 완료: {state.saved}행{state.skipped ? ` (미확정 ${state.skipped}행 제외)` : ""}
           </span>
         ) : null}

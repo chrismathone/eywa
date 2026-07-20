@@ -86,7 +86,7 @@ function FanCard({
       {/* 페이지 엣지(오른쪽 fore-edge) — 종이 결 음영 */}
       <span
         className="pointer-events-none absolute inset-y-1.5 right-0 w-3.5 rounded-r-xl"
-        style={{ background: "repeating-linear-gradient(90deg, rgba(13,17,16,0.06) 0 1px, transparent 1px 3px)" }}
+        style={{ background: "repeating-linear-gradient(90deg, rgba(29,29,31,0.06) 0 1px, transparent 1px 3px)" }}
         aria-hidden
       />
       {/* 배경 카드 표식 */}

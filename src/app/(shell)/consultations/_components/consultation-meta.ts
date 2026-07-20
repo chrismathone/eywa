@@ -9,13 +9,13 @@ export const CATEGORY_META: Record<StudentConsultationCategory, { label: string;
   general: { label: "일반", color: "neutral" },
   academic: { label: "학습", color: "primary" },
   emotional: { label: "정서", color: "rose" },
-  career: { label: "진로", color: "blue" },
+  career: { label: "진로", color: "purple" },
   social: { label: "교우", color: "gold" },
   other: { label: "기타", color: "neutral" },
 };
 
 export const URGENCY_META: Record<FollowUpUrgency, { label: string; color: PillColor } | null> = {
-  done: { label: "완료", color: "primary" },
+  done: { label: "완료", color: "green" },
   overdue: { label: "지연", color: "danger" },
   today: { label: "오늘", color: "danger" },
   soon: { label: "3일 내", color: "amber" },

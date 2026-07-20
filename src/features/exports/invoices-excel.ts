@@ -44,7 +44,7 @@ export async function buildInvoicesWorkbook(
   sheet.getRow(1).fill = {
     type: "pattern",
     pattern: "solid",
-    fgColor: { argb: "FFF1EDE2" },
+    fgColor: { argb: "FFE9E9EE" },
   };
 
   for (const inv of invoices) {

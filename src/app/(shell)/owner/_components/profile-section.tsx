@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ProfileSettings } from "@/features/owner/settings-types";
 import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
+import { isBrandColorApplied, DEFAULT_BRAND_COLOR } from "@/lib/color-utils";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextField, ColorField } from "./fields";
 
@@ -57,7 +58,14 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             hint="강조색 · hex"
             value={p.brandColor}
             onChange={(v) => set({ brandColor: v })}
-            placeholder="#153e75"
+            placeholder={DEFAULT_BRAND_COLOR}
+            // 저장은 됐는데 주입은 생략되는 값(빈값·형식오류·현/과거 기본색)이면 그 사실을 알린다 —
+            // 안 그러면 초록 스와치를 보면서 화면은 네이비인 상태가 설명되지 않는다.
+            note={
+              isBrandColorApplied(p.brandColor)
+                ? undefined
+                : `현재 기본 팔레트(${DEFAULT_BRAND_COLOR})로 표시됩니다 — 위 값은 기본색으로 간주되어 화면에 적용되지 않습니다. 다른 색을 넣으면 그 색이 적용됩니다.`
+            }
           />
           <BrandingField
             label="로고 이미지"

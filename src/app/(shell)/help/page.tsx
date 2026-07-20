@@ -198,8 +198,8 @@ export default async function HelpPage() {
 
       {/* 1:1 문의 */}
       <div className="lg:max-w-md">
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[#0d2b52] p-5 text-white shadow-primary-glow">
-          <p className="text-[12px] font-bold text-[#e2b45f]">1:1 문의</p>
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-[var(--primary-deep)] p-5 text-white shadow-primary-glow">
+          <p className="text-[12px] font-bold text-[var(--gold-bright)]">1:1 문의</p>
           <h3 className="mt-1.5 text-[17px] font-bold leading-tight">
             도움이 필요하시면 언제든
           </h3>

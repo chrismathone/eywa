@@ -200,7 +200,7 @@ export function WorkspaceCanvas({ owner }: { owner: string }) {
           {!hasOpenWindow && !spotlight ? (
             <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-2 p-8">
               <Image
-                src="/empty-states/empty-workspace.png"
+                src="/empty-states/empty-workspace-alpha.png"
                 alt=""
                 width={240}
                 height={240}

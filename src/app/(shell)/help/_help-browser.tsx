@@ -48,7 +48,7 @@ export function HelpBrowser({
           className="object-cover"
         />
         <div
-          className="absolute inset-0 bg-gradient-to-br from-primary/85 to-[#1e56a0]/80"
+          className="absolute inset-0 bg-gradient-to-br from-primary/85 to-primary/60"
           aria-hidden="true"
         />
         <svg
@@ -63,7 +63,7 @@ export function HelpBrowser({
           ))}
         </svg>
         <div className="relative max-w-2xl">
-          <p className="text-[12px] font-bold text-[#e2b45f]">도움말 센터</p>
+          <p className="text-[12px] font-bold text-[var(--gold-bright)]">도움말 센터</p>
           <h1 className="mt-2 text-[28px] font-bold leading-tight">무엇을 도와드릴까요?</h1>
           <p className="mt-2 text-[13px] text-white/85">
             처음이신가요? 아래 <b>빠른 시작</b>부터 따라 해보세요. 메뉴별 안내와 자주 묻는 질문도 한 곳에 있어요.
