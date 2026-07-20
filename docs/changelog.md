@@ -673,6 +673,17 @@ file input 업로드), 게시=`POST /api/v1_2/reports/` + `attached_images`(스�
   (플랜 한도 확인 — 거부되면 외부 스케줄러가 CRON_SECRET로 호출) ③ `AI_PROVIDER=anthropic`·`ANTHROPIC_API_KEY`·
   `CRON_SECRET` env 확인. 비용: 테넌트당 LLM ≤1콜/일(신호 0건 날 스킵) ≈ 월 $2~3.
 
+### 상담 텍스트 외부 AI 반출 API — 마스킹 + Bearer 토큰 (2026-07-20) — ✅ tsc0/lint0/test1680/실데이터 마스킹 검증
+원장의 외부 챗봇("AI 사무실")이 상담 텍스트를 분석용으로 읽는 **읽기 전용** 엔드포인트
+`GET /api/exports/consultations` (kind=student|enrollment, since/limit≤200/offset, include=transcript 옵션).
+- **인증**: `Authorization: Bearer <CONSULT_EXPORT_TOKEN>`(env, 미설정=503 꺼짐). 테넌트는 1개면 자동 확정,
+  2개+면 `CONSULT_EXPORT_TENANT_ID` 필수(타 학원 오노출 방지).
+- **마스킹**([export-masking.ts](../src/features/consultations/export-masking.ts) 순수·Vitest 12): 원시 PII 필드
+  (전화·주소·생년월일·주민번호)는 **SELECT 자체를 안 하고**, 본문은 ① 학생·학부모·전 직원 이름 치환(김○○)
+  ② 성 뺀 호칭("지안이가"→○○이가)·동명이인 접미사 저장명("박채원B"→채원) 커버 ③ 이관 상담일지 기록자 줄
+  휴리스틱 ④ 주민번호/휴대폰/유선/이메일 패턴 제거. 학생 식별은 안정 익명 코드 `학생#xxxxxx`(흐름 추적용).
+- 실데이터 검증: 재원생 상담 1,567건·등록상담 476건 표본 마스킹 결과 이름/연락처 잔존 0 확인.
+
 ### 직원명부 급여 라벨 이중 표기 가드 — "연봉 연봉" 수정 (2026-07-20) — ✅ tsc0/lint0/test45/build✓
 연봉 칸에 라벨 글자("연봉")가 입력돼 시트 계약조건이 "월급 2,900,000 / 연봉 연봉"으로 찍힌 실사고.
 `buildRosterRow`가 값 선두의 "월급"/"연봉" 라벨을 떼고 조립(라벨만 있으면 빈 값 취급) + 연봉 placeholder를
