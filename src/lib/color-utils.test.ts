@@ -3,6 +3,7 @@ import {
   isHexColor,
   hexToRgba,
   brandColorVars,
+  isBrandColorApplied,
   DEFAULT_BRAND_COLOR,
 } from "./color-utils";
 
@@ -56,5 +57,27 @@ describe("brandColorVars", () => {
     expect(vars["--ring"]).toBe("#1f6ba8");
     expect(vars["--chart-2"]).toBe("#1f6ba8");
     expect(vars["--sidebar-primary"]).toBe("#1f6ba8");
+  });
+});
+
+describe("isBrandColorApplied", () => {
+  // /owner 브랜드색 안내문의 분기 전제를 고정한다. 기본색은 "주입 생략"이지만 그건 **정상 상태**라
+  // 화면(profile-section)이 "적용되지 않습니다" 경고 대신 "기본 팔레트와 같은 색"으로 안내해야 한다 —
+  // 둘을 한 조건으로 묶으면 저장값이 네이비인데 문제로 보이는 오해가 생긴다(2026-07-20).
+  it("false for default color — 어긋남이 아니라 '기본색과 동일'(문구 분기용)", () => {
+    expect(isBrandColorApplied(DEFAULT_BRAND_COLOR)).toBe(false);
+    expect(isBrandColorApplied("#153E75")).toBe(false);
+  });
+  it("false for legacy defaults / invalid / empty — 진짜 '적용 안 됨'", () => {
+    expect(isBrandColorApplied("#1a5f3c")).toBe(false);
+    expect(isBrandColorApplied("#0e7c46")).toBe(false);
+    expect(isBrandColorApplied("#zzz")).toBe(false);
+    expect(isBrandColorApplied("")).toBe(false);
+    expect(isBrandColorApplied(undefined)).toBe(false);
+    // 이중 인코딩된 값(실제로 밟은 함정: jsonb에 `"#153e75"`가 통째 저장) — hex 검증 실패로 미적용.
+    expect(isBrandColorApplied('"#153e75"')).toBe(false);
+  });
+  it("true for a real custom brand color", () => {
+    expect(isBrandColorApplied("#1f6ba8")).toBe(true);
   });
 });

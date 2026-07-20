@@ -4,6 +4,20 @@
 
 ## 진행 상황
 
+### 저장된 브랜드색 그린 → v3 네이비 정리 (2026-07-20) — ✅ tsc0/lint0/test12 · 마이그 0(데이터 스크립트)
+injaewon `profile.brandColor`가 팔레트 v3 전환 후에도 옛 기본 그린 `#1a5f3c`로 남아 있던 것을 `#153e75`로 정리.
+`LEGACY_DEFAULT_BRAND_COLORS`가 옛 기본색 주입을 억제하고 있었으므로 **화면은 이미 네이비였고 시각 변화는 없다** —
+실익은 /owner 색상 스와치가 실제 화면과 어긋나 보이던 것(그린 스와치 ↔ 네이비 화면)의 해소.
+- [migrate-brand-color-navy.cjs](../scripts/_poc_migration/migrate-brand-color-navy.cjs) — 멱등·dry-run 기본.
+  **정확히 LEGACY 목록에 있는 값만** 교체(커스텀 브랜드색 테넌트는 건드리지 않음) + `audit_logs` 직접 기록.
+- /owner 안내문 분기 추가([profile-section.tsx](<../src/app/(shell)/owner/_components/profile-section.tsx>)):
+  저장값이 **기본색과 같으면** "기본 팔레트와 같은 색입니다"(정상), 어긋남(옛 기본색·형식오류·빈값)일 때만
+  기존 "적용되지 않습니다" 설명. 안 나누면 네이비를 저장하고도 경고가 떠 문제로 오해된다.
+- 🔴 **작업 중 밟은 함정(재발 방지)**: postgres.js에서 `${JSON.stringify(v)}::jsonb`는 **이중 인코딩**된다
+  (실측: `"#153e75"` 9자가 저장 → `isHexColor` 실패 → 설정이 조용히 무시됨). 스칼라는 `to_jsonb(${v}::text)`,
+  객체는 `sql.json(obj)`. 감사로그 metadata도 같은 실수로 `jsonb_typeof='string'`이 됐던 것 복구.
+  검증은 **길이까지** 볼 것(`length(...)=7`) — 눈으로는 따옴표가 잘 안 보인다. color-utils 테스트에 이 케이스 고정.
+
 ### 로그인 화면·탭 제목을 학원설정에서 읽기 (2026-07-20) — ✅ tsc0/lint0/build✓ · 마이그 0 · 적대리뷰
 로그인 화면이 제품 기본값(`e` 배지 + "eywa")을 보여주고 "인재원"은 카피 3곳에 하드코딩돼 있던 것을
 **학원설정 단일 진입점으로 배선**. 이제 /owner에서 로고·학원명·지점을 바꾸면 로그인 화면과 탭 제목이 따라온다.
