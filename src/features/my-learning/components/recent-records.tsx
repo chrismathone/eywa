@@ -11,7 +11,7 @@ const ATT_CLASS: Record<string, string> = {
 export function RecentRecords({ history }: { history: Session[] }) {
   const recs = [...history].reverse();
   return (
-    <section className="bg-card border-line shadow-card rounded-xl border p-5">
+    <section className="bg-card border-line shadow-card rounded-2xl border p-5">
       <h2 className="text-foreground text-[15px] font-bold">
         최근 수업 기록{" "}
         <span className="text-text-faint text-[12px] font-normal">· 날짜를 누르면 그날 리포트로</span>

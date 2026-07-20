@@ -80,11 +80,11 @@ export function ExpensesTable({ rows }: { rows: ExpenseRow[] }) {
       </div>
 
       {rows.length === 0 ? (
-        <div className="border-line text-text-faint rounded-md border border-dashed px-4 py-10 text-center text-sm">
+        <div className="border-line text-text-faint rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
           이 달 지출 내역이 없습니다. 위 “지출 등록”으로 추가하세요.
         </div>
       ) : (
-        <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
+        <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
           <table className="w-full min-w-[1000px] text-sm">
             <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
               <tr>

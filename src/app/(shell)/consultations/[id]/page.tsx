@@ -115,7 +115,7 @@ export default async function ConsultationDetailPage({
       </div>
 
       {/* 상담 내용 */}
-      <section className="bg-card border-line rounded-md border p-4">
+      <section className="bg-card border-line rounded-2xl border p-4">
         <h2 className="text-primary mb-3 flex items-center gap-1.5 text-[13px] font-bold">
           <MessageSquare className="size-4" />
           상담 내용
@@ -127,7 +127,7 @@ export default async function ConsultationDetailPage({
 
       {/* 후속 조치 — 내용 있을 때만 */}
       {hasFollowUp ? (
-        <section className="bg-card border-line rounded-md border p-4">
+        <section className="bg-card border-line rounded-2xl border p-4">
           <h2 className="text-primary mb-3 flex items-center gap-2 text-[13px] font-bold">
             <Pin className="size-4" />
             후속 조치

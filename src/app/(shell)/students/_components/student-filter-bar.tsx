@@ -121,7 +121,7 @@ export function StudentFilterBar({
   };
 
   return (
-    <div className="bg-card border-line shadow-card rounded-md border px-4 py-3">
+    <div className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         <FilterGroup label="상태">
           <SearchableSelect
@@ -184,7 +184,7 @@ export function StudentFilterBar({
             type="button"
             onClick={() => go({ noenr: !current.noenr })}
             aria-pressed={current.noenr}
-            className={`shrink-0 rounded-md border px-2.5 py-2 text-xs transition ${
+            className={`shrink-0 rounded-full border px-2.5 py-2 text-xs transition ${
               current.noenr
                 ? "border-primary bg-primary text-primary-foreground font-medium"
                 : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"
@@ -200,7 +200,7 @@ export function StudentFilterBar({
             }}
             className="flex items-center gap-2"
           >
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
               <EyIcon name="search" size={13} />
               <input
                 type="search"

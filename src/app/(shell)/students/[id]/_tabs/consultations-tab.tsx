@@ -111,7 +111,7 @@ export async function ConsultationsTab({
           </ul>
           {rest.length > 0 ? (
             <details className="group">
-              <summary className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft mt-3 flex cursor-pointer list-none items-center justify-center gap-1 rounded-md border py-2 text-center text-xs transition">
+              <summary className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft mt-3 flex cursor-pointer list-none items-center justify-center gap-1 rounded-lg border py-2 text-center text-xs transition">
                 <EyIcon name="chevronDown" size={12} aria-hidden="true" />
                 {rest.length}건 더 보기
               </summary>
@@ -130,13 +130,13 @@ export async function ConsultationsTab({
 
 function ConsultItem({ c, studentId }: { c: Consult; studentId: string }) {
   return (
-    <li className="bg-card border-border space-y-2 rounded-md border px-4 py-3">
+    <li className="bg-card border-border space-y-2 rounded-2xl border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-3">
         <span className="num text-muted-foreground text-xs">
           {new Date(c.consultedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}
         </span>
         {c.category ? (
-          <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 rounded-md border px-1.5 py-0.5 text-[10px] font-medium">
+          <span className="bg-chart-1/10 text-chart-1 border-chart-1/20 rounded-full border px-1.5 py-0.5 text-[10px] font-medium">
             {CATEGORY_LABEL[c.category] ?? c.category}
           </span>
         ) : null}
@@ -187,9 +187,9 @@ function EnrollmentConsultItem({
   canOpenDetail: boolean;
 }) {
   return (
-    <li className="bg-primary/5 border-primary/20 space-y-2 rounded-md border px-4 py-3">
+    <li className="bg-primary/5 border-primary/20 space-y-2 rounded-2xl border px-4 py-3">
       <header className="flex flex-wrap items-baseline gap-2">
-        <span className="bg-primary/10 text-primary border-primary/20 rounded-md border px-1.5 py-0.5 text-[10px] font-bold">
+        <span className="bg-primary/10 text-primary border-primary/20 rounded-full border px-1.5 py-0.5 text-[10px] font-bold">
           입학 상담
         </span>
         {e.date ? (

@@ -39,7 +39,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
   return (
     <>
       <div
-        className="pointer-events-auto bg-card border-line shadow-modal animate-in fade-in-0 zoom-in-95 flex max-h-[82vh] flex-col overflow-hidden rounded-xl border duration-200"
+        className="pointer-events-auto bg-card border-line shadow-modal animate-in fade-in-0 zoom-in-95 flex max-h-[82vh] flex-col overflow-hidden rounded-2xl border duration-200"
         style={{ width: popup.width, maxWidth: "calc(100vw - 2rem)" }}
         role="dialog"
         aria-label={popup.title}
@@ -78,7 +78,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
                 href={popup.linkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-primary hover:bg-primary/90 inline-flex items-center rounded-md px-3 py-1.5 text-xs font-bold text-white transition"
+                className="bg-primary hover:bg-primary/90 inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold text-white transition"
               >
                 {popup.linkLabel || "자세히 보기"}
               </a>
@@ -104,7 +104,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
           <button
             type="button"
             onClick={close}
-            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-md border px-2.5 py-1 text-xs transition"
+            className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-lg border px-2.5 py-1 text-xs transition"
           >
             닫기
           </button>

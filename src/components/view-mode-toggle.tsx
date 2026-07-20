@@ -33,7 +33,7 @@ export function TeacherViewToggle({ expanded, motion }: { expanded: boolean; mot
       <span
         aria-hidden="true"
         style={{ left: expanded ? 4 : 8, right: expanded ? 4 : 8 }}
-        className={`bg-sidebar-accent pointer-events-none absolute inset-y-0 z-0 rounded-[6px] opacity-0 group-hover:opacity-100 ${
+        className={`bg-sidebar-accent pointer-events-none absolute inset-y-0 z-0 rounded-lg opacity-0 group-hover:opacity-100 ${
           motion ? `transition-[left,right,opacity] duration-200 ${EASE}` : ""
         }`}
       />

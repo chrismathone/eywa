@@ -16,7 +16,7 @@ import { DeleteGradeButton } from "../_components/delete-grade-button";
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="bg-card border-border rounded-md border px-3 py-2.5">
+    <div className="bg-card border-border rounded-2xl border px-3 py-2.5">
       <p className="micro">{label}</p>
       <p className={`tabular mt-1 text-lg leading-none ${tone ?? "text-foreground"}`}>{value}</p>
     </div>
@@ -56,7 +56,7 @@ export async function GradesTab({ studentId }: { studentId: string }) {
             <Kpi label="최고 / 최저" value={`${stats.bestPct ?? "—"} / ${stats.worstPct ?? "—"}`} />
           </div>
           {series.length >= 2 ? (
-            <div className="bg-card border-border rounded-md border p-4">
+            <div className="bg-card border-border rounded-2xl border p-4">
               <p className="micro mb-2">점수 추이 (기준선 70%)</p>
               <GradesChart series={series} subjectLabels={subjectLabels} />
             </div>
@@ -73,7 +73,7 @@ export async function GradesTab({ studentId }: { studentId: string }) {
       {grades.length === 0 ? (
         <p className="text-muted-foreground py-8 text-center text-sm">기록된 성적이 없습니다</p>
       ) : (
-        <div className="bg-card border-border overflow-x-auto rounded-md border">
+        <div className="bg-card border-border overflow-x-auto rounded-2xl border">
           <table className="w-full text-sm">
             <thead className="border-border bg-bg-soft/40 border-b [&_th]:whitespace-nowrap">
               <tr>

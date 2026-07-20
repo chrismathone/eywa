@@ -234,7 +234,7 @@ export function AppSidebar({
             aria-label={expanded ? "사이드바 접기" : "사이드바 펼치기"}
             title={expanded ? "사이드바 접기" : "사이드바 펼치기"}
             aria-expanded={expanded}
-            className="bg-sidebar text-text-dim hover:bg-bg-soft hover:text-foreground absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded-[5px] transition-colors"
+            className="bg-sidebar text-text-dim hover:bg-bg-soft hover:text-foreground absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm transition-colors"
           >
             {expanded ? (
               <PanelLeftClose className="size-4" strokeWidth={1.8} />
@@ -439,7 +439,7 @@ export function AppSidebar({
               onMouseLeave={scheduleFlyoutClose}
               onClick={() => setFlyout(null)}
               style={{ top: flyout.top, left: flyout.left }}
-              className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-md border p-1"
+              className="bg-card border-line shadow-card fixed z-[46] min-w-[152px] rounded-lg border p-1"
             >
               <p className="text-text-faint px-2.5 pt-1 pb-1.5 text-[11px] font-bold">
                 {flyout.label}

@@ -146,7 +146,7 @@ export function ReportAttachments({
           사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX}</span>
         </p>
         <label
-          className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-bold ${
+          className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-[11px] font-bold ${
             disabled || busy || full ? "pointer-events-none opacity-50" : ""
           }`}
         >

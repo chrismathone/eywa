@@ -52,7 +52,7 @@ export function TeacherMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" size="sm" className="gap-1.5 rounded-md" />}
+        render={<Button variant="outline" size="sm" className="gap-1.5 rounded-lg (오버라이드 제거)" />}
       >
         <EyIcon name="screen" size={16} strokeWidth={1.8} /> 내 메뉴
       </DropdownMenuTrigger>

@@ -153,7 +153,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         isMaster ? (
           <PermissionsSection initial={settings.permissions} />
         ) : (
-          <div className="bg-card border-line rounded-md border p-6">
+          <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">역할·권한은 원장(master)만 변경할 수 있습니다</p>
             <p className="text-text-dim mt-1 text-sm">
               위임받은 계정으로도 이 면(역할·권한)은 편집할 수 없어요 — 권한 자체를 바꾸는 일은 원장 계정 전용입니다.

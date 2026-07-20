@@ -160,7 +160,7 @@ export function TimetableImportDialog({
         onClick={() => setOpen(true)}
         disabled={disabled}
         title={disabled ? disabledTitle : undefined}
-        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition disabled:opacity-50"
+        className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs transition disabled:opacity-50"
       >
         {sheet ? <Sheet className="size-3" /> : <Upload className="size-3" />}
         {label ?? (sheet ? "시트에서 가져오기" : "가져오기")}
@@ -197,7 +197,7 @@ export function TimetableImportDialog({
                     type="button"
                     onClick={preview}
                     disabled={previewing}
-                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
                   >
                     {previewing ? <Loader2 className="size-3 animate-spin" /> : <Sheet className="size-3" />}
                     시트에서 불러오기
@@ -244,7 +244,7 @@ export function TimetableImportDialog({
                     type="button"
                     onClick={preview}
                     disabled={!file || previewing}
-                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition disabled:opacity-40"
+                    className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
                   >
                     {previewing ? <Loader2 className="size-3 animate-spin" /> : null}
                     미리보기
@@ -344,7 +344,7 @@ export function TimetableImportDialog({
                   type="button"
                   onClick={apply}
                   disabled={total === 0 || applying}
-                  className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex w-full items-center justify-center gap-1.5 rounded-md py-2 text-[12px] font-bold transition disabled:opacity-40"
+                  className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold transition disabled:opacity-40"
                 >
                   {applying ? <Loader2 className="size-3 animate-spin" /> : null}
                   {total > 0 ? `${total}건 적용` : "변경 없음"}

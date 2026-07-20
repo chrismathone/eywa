@@ -29,7 +29,7 @@ export async function SavedQuotesPanel({ sp }: { sp: Sp }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
         <p className="text-foreground inline-flex items-center gap-1.5 text-sm font-bold">
           <FileText className="text-primary size-4" />
           저장된 청구서 <span className="num text-text-dim font-normal">{total}건</span>

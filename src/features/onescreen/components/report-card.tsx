@@ -188,7 +188,7 @@ export function ReportCard({
   const showProgressBadge = hasMathSubject && progressAnomalyBadge(student.progressSignal);
 
   return (
-    <div className="bg-card border-line shadow-card flex flex-col rounded-md border">
+    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border">
       <header className="border-line border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
@@ -259,7 +259,7 @@ export function ReportCard({
               onChange={(e) => onTextbook(subjectName, e.target.value)}
               placeholder="교재명 (예: 개념원리 중2-1)"
               aria-label={`${subjectName} 교재명`}
-              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-sm border px-2 text-[12px] outline-none transition-colors"
+              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-[12px] outline-none transition-colors"
             />
             <button
               type="button"
@@ -322,7 +322,7 @@ export function ReportCard({
             onChange={(e) => onHomeworkToday(subjectName, e.target.value)}
             placeholder="오늘 과제 (예: 개념편 p10~16, 유형편 p6~11)"
             aria-label={`${subjectName} 오늘 과제`}
-            className="border-line bg-card focus:border-primary mt-1.5 h-8 w-full min-w-0 rounded-sm border px-2 text-[12px] outline-none transition-colors"
+            className="border-line bg-card focus:border-primary mt-1.5 h-8 w-full min-w-0 rounded-lg border px-2 text-[12px] outline-none transition-colors"
           />
         </div>
 
@@ -333,7 +333,7 @@ export function ReportCard({
             value={student.note ?? ""}
             onChange={(e) => onNote(e.target.value)}
             placeholder="예: 조퇴함 / 개념이 어려워 연습문제 한 번 더 · 자동작성 시 학부모 문장으로 풀어 씁니다"
-            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
 
@@ -360,7 +360,7 @@ export function ReportCard({
             value={rep.draft}
             onChange={(e) => onSubjectDraft(subjectName, e.target.value)}
             placeholder={`'자동 작성'을 누르면 ${subjectName} 진도·테스트·태도로 초안을 만들어 줍니다. 그대로 보내거나 수정하세요.`}
-            className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[110px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
 
@@ -371,7 +371,7 @@ export function ReportCard({
             value={rep.trendDraft ?? ""}
             onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
             placeholder="'자동 작성'을 누르면 최근 시험·과제 점수 흐름을 요약해 줍니다. 기록이 적으면 비어 있을 수 있습니다."
-            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-md border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
+            className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-[13px] leading-relaxed outline-none"
           />
         </div>
 
@@ -443,7 +443,7 @@ export function ReportCard({
                 사진·파일 첨부 <span className="text-text-dim">{atts.length}/{MAX_ATTACHMENTS}</span>
               </p>
               <label
-                className={`border-line hover:bg-card cursor-pointer rounded-md border px-2 py-1 text-[11px] font-bold ${
+                className={`border-line hover:bg-card cursor-pointer rounded-lg border px-2 py-1 text-[11px] font-bold ${
                   uploadingAtt || atts.length >= MAX_ATTACHMENTS ? "pointer-events-none opacity-50" : ""
                 }`}
               >

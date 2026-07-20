@@ -58,7 +58,7 @@ export function SubjectSheetCard({
   const dirty = sheetId.trim() !== savedId;
 
   return (
-    <section className="border-border bg-card space-y-3 rounded-md border p-5">
+    <section className="border-border bg-card space-y-3 rounded-2xl border p-5">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-foreground text-sm font-bold">{label} 시간표</h3>
         <button
@@ -96,7 +96,7 @@ export function SubjectSheetCard({
             type="button"
             onClick={save}
             disabled={saving || !dirty}
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1 rounded-md border px-3 py-1.5 text-xs transition disabled:opacity-50"
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex shrink-0 items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3 animate-spin" /> : null}
             저장

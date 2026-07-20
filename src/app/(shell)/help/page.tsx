@@ -190,7 +190,7 @@ export default async function HelpPage() {
         </div>
         <Link
           href="/help/icons"
-          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-3 text-[12px] font-bold transition-shadow"
+          className="bg-primary text-primary-foreground hover:shadow-primary-glow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[12px] font-bold transition-shadow"
         >
           아이콘 보기 <EyIcon name="arrowRight" size={12} />
         </Link>
@@ -208,7 +208,7 @@ export default async function HelpPage() {
           </p>
           <a
             href="tel:1670-0000"
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-white px-3.5 py-2 text-[12px] font-bold text-primary"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-[12px] font-bold text-primary"
           >
             <EyIcon name="arrowRight" size={12} />
             상담 예약하기

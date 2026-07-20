@@ -23,7 +23,7 @@ export function LeavesAdminClient({
   canManage: boolean;
 }) {
   return (
-    <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+    <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line text-text-dim border-b text-left text-xs [&_th]:whitespace-nowrap">
           <tr>
@@ -79,7 +79,7 @@ function ApproveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="border-line text-primary hover:bg-primary-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition disabled:opacity-50"
+      className="border-line text-primary hover:bg-primary-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition disabled:opacity-50"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
       승인

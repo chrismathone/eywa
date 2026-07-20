@@ -195,7 +195,7 @@ export function ConsultationReportEditor({
             onClick={reanalyze}
             disabled={reanalyzing}
             title="녹음 전사를 다시 분석"
-            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition disabled:opacity-50"
+            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition disabled:opacity-50"
           >
             {reanalyzing ? (
               <Loader2 className="size-3 animate-spin" />
@@ -207,7 +207,7 @@ export function ConsultationReportEditor({
           <button
             type="button"
             onClick={downloadTxt}
-            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition"
+            className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition"
           >
             <Download className="size-3" /> TXT
           </button>
@@ -243,7 +243,7 @@ export function ConsultationReportEditor({
         const isOpen = expanded.has(key);
         const isEditing = editing === key;
         return (
-          <div key={key} className="border-line bg-card overflow-hidden rounded-md border">
+          <div key={key} className="border-line bg-card overflow-hidden rounded-2xl border">
             <button
               type="button"
               onClick={() => toggle(key)}
@@ -300,7 +300,7 @@ export function ConsultationReportEditor({
                         type="button"
                         onClick={() => setEditing(null)}
                         disabled={saving}
-                        className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition"
+                        className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition"
                       >
                         <X className="size-3.5" /> 취소
                       </button>
@@ -308,7 +308,7 @@ export function ConsultationReportEditor({
                         type="button"
                         onClick={() => save(key)}
                         disabled={saving}
-                        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
+                        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-50"
                       >
                         {saving ? (
                           <Loader2 className="size-3.5 animate-spin" />
@@ -334,7 +334,7 @@ export function ConsultationReportEditor({
 
       {/* 상담 흐름 수형도 */}
       {hasFlow ? (
-        <div className="border-line bg-card overflow-hidden rounded-md border">
+        <div className="border-line bg-card overflow-hidden rounded-2xl border">
           <button
             type="button"
             onClick={() => toggle(FLOW_KEY)}

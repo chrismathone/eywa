@@ -85,7 +85,7 @@ export function ProgressSelector({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-md border text-[12px] outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border text-[12px] outline-none">
             {/* 학년 필터 */}
             <div className="border-line flex items-center gap-2 border-b px-3 py-2">
               <span className="text-text-faint shrink-0">진도 학년</span>
@@ -175,7 +175,7 @@ export function ProgressSelector({
                       return (
                         <label
                           key={l}
-                          className={`hover:bg-bg-soft flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1 ${
+                          className={`hover:bg-bg-soft flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 ${
                             on ? "text-primary font-bold" : "text-text-dim"
                           }`}
                         >

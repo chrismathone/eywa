@@ -59,13 +59,13 @@ export default async function EnrollmentDashboardPage({
       </header>
 
       {/* Month selector */}
-      <div className="border-border bg-card flex flex-wrap items-center gap-1.5 rounded-lg border px-4 py-2.5">
+      <div className="border-border bg-card flex flex-wrap items-center gap-1.5 rounded-2xl border px-4 py-2.5">
         <span className="text-muted-foreground shrink-0 text-xs">월 선택</span>
         {monthOptions().map((m) => (
           <Link
             key={m.key}
             href={`/enrollment/dashboard?month=${m.key}`}
-            className={`rounded-md border px-2 py-0.5 text-xs transition ${
+            className={`rounded-full border px-2 py-0.5 text-xs transition ${
               selectedMonth === m.key
                 ? "border-foreground bg-foreground text-background font-medium"
                 : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/30"
@@ -77,14 +77,14 @@ export default async function EnrollmentDashboardPage({
       </div>
 
       {/* Stats KPI */}
-      <section className="bg-card border-border grid grid-cols-2 gap-4 rounded-lg border p-5 sm:grid-cols-3">
+      <section className="bg-card border-border grid grid-cols-2 gap-4 rounded-2xl border p-5 sm:grid-cols-3">
         <Stat label="전체 상담" value={`${monthTotal}건`} />
         <Stat label="등록 완료" value={`${monthEnrolled}건`} highlight="text-chart-2" />
         <Stat label="전환율" value={`${monthlyRate}%`} highlight="text-chart-1" />
       </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="bg-card border-border rounded-lg border p-5">
+        <section className="bg-card border-border rounded-2xl border p-5">
           <header className="mb-3">
             <h2 className="text-foreground text-sm font-bold">월별 상태 분포</h2>
             <p className="text-muted-foreground text-xs">{selectedMonth} 기준 outcome별 카운트</p>
@@ -92,7 +92,7 @@ export default async function EnrollmentDashboardPage({
           <OutcomeDonut data={distribution} />
         </section>
 
-        <section className="bg-card border-border rounded-lg border p-5">
+        <section className="bg-card border-border rounded-2xl border p-5">
           <header className="mb-3">
             <h2 className="text-foreground text-sm font-bold">최근 6개월 전환율</h2>
             <p className="text-muted-foreground text-xs">상담 완료율 (consulted+ai+enrolled) / 등록 완료율</p>
@@ -101,7 +101,7 @@ export default async function EnrollmentDashboardPage({
         </section>
       </div>
 
-      <section className="bg-card border-border rounded-lg border">
+      <section className="bg-card border-border rounded-2xl border">
         <header className="border-border flex items-center justify-between border-b px-5 py-3">
           <div>
             <h2 className="text-foreground text-sm font-bold">상담사별 실적</h2>

@@ -31,7 +31,7 @@ export function WeekNav({
         </Link>
         <Link
           href={hrefForWeek(thisMonday(today))}
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium transition ${
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium transition ${
             isCurrent
               ? "border-foreground bg-foreground text-background"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"

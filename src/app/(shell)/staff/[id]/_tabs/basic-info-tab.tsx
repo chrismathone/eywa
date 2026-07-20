@@ -42,7 +42,7 @@ export async function BasicInfoTab({
 
   return (
     <div className="space-y-5">
-      <div className="bg-card border-line shadow-card rounded-md border p-5">
+      <div className="bg-card border-line shadow-card rounded-2xl border p-5">
         <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
           <Field label="이메일" value={<span className="num">{staff.email}</span>} />
           <Field label="연락처" value={staff.phone ? <span className="num">{staff.phone}</span> : null} />
@@ -74,7 +74,7 @@ export async function BasicInfoTab({
       </div>
 
       {showSalary && isTeacherLike ? (
-        <div className="bg-card border-line shadow-card rounded-md border p-5">
+        <div className="bg-card border-line shadow-card rounded-2xl border p-5">
           <p className="micro mb-3">급여 기준</p>
           <div className="grid grid-cols-2 gap-5">
             <Field label="시급" value={<span className="tabular">{won(staff.hourlyRate)}</span>} />

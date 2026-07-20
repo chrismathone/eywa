@@ -193,7 +193,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
                         <td className="num px-3 py-2 text-right">{won(r.amountTotal)}</td>
                         <td className="num text-chart-2 px-3 py-2 text-right">{r.amountPaid > 0 ? won(r.amountPaid) : "-"}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`inline-block rounded-sm border px-1.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+                          <span className={`inline-block rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>
                             {badge.label}
                           </span>
                         </td>

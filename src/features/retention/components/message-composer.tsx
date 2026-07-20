@@ -39,7 +39,7 @@ export function MessageComposer({ studentId, input }: { studentId: string; input
             key={t}
             type="button"
             onClick={() => setTone(t)}
-            className={`rounded-sm border px-2 py-0.5 text-xs transition ${
+            className={`rounded-full border px-2 py-0.5 text-xs transition ${
               tone === t
                 ? "border-foreground bg-foreground text-background font-medium"
                 : "border-line text-text-dim hover:bg-bg-soft"
@@ -58,7 +58,7 @@ export function MessageComposer({ studentId, input }: { studentId: string; input
         <button
           type="button"
           onClick={copy}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm px-3 py-1.5 text-xs font-medium"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-3 py-1.5 text-xs font-medium"
         >
           메시지 복사
         </button>
@@ -68,7 +68,7 @@ export function MessageComposer({ studentId, input }: { studentId: string; input
           <button
             type="submit"
             disabled={pending}
-            className="border-line hover:bg-bg-soft rounded-sm border px-3 py-1.5 text-xs disabled:opacity-50"
+            className="border-line hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
           >
             {pending ? "기록 중…" : "발송 조치 기록"}
           </button>

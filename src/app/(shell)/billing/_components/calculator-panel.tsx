@@ -119,7 +119,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-5">
+      <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
         <header className="flex items-center justify-between">
           <h2 className="text-foreground inline-flex items-center gap-1.5 text-[15px] font-bold">
             <CalendarOff className="text-primary size-4" />
@@ -127,7 +127,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
           </h2>
           <Link
             href="/owner?tab=operations"
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition"
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
           >
             <Settings2 className="size-3.5" />
             학원설정에서 편집
@@ -153,7 +153,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
         )}
       </section>
 
-      <section className="bg-card border-line shadow-card space-y-3 rounded-md border p-5">
+      <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border p-5">
         {/* 연도 이동 */}
         <header className="flex items-center justify-between">
           <h2 className="text-foreground text-[15px] font-bold">대한민국 공휴일</h2>
@@ -178,7 +178,7 @@ async function HolidayPanel({ sp }: { sp: Sp }) {
             <Link
               key={m}
               href={hrefFor(year, m)}
-              className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
                 m === month
                   ? "border-foreground bg-foreground text-background font-medium"
                   : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"

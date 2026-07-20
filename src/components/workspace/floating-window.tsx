@@ -274,7 +274,7 @@ export function FloatingWindow({
               if (e.target === e.currentTarget) setConfirmClose(false);
             }}
           >
-            <div className="bg-card border-line shadow-modal w-full max-w-xs rounded-lg border p-5">
+            <div className="bg-card border-line shadow-modal w-full max-w-xs rounded-xl border p-5">
               <p className="text-foreground text-sm font-bold">저장하지 않고 닫을까요?</p>
               <p className="text-text-dim mt-1.5 text-xs leading-relaxed">
                 작성 중인 변경 내용이 있습니다. 닫으면 저장하지 않은 내용이 사라질 수 있어요.
@@ -284,14 +284,14 @@ export function FloatingWindow({
                   type="button"
                   autoFocus
                   onClick={() => setConfirmClose(false)}
-                  className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-md border px-3 py-1.5 text-xs font-medium transition"
+                  className="border-line text-text-dim hover:bg-bg-soft hover:text-foreground rounded-lg border px-3 py-1.5 text-xs font-medium transition"
                 >
                   계속 작성
                 </button>
                 <button
                   type="button"
                   onClick={() => { setConfirmClose(false); runExit(closeAndRefresh); }}
-                  className="bg-danger rounded-md px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+                  className="bg-danger rounded-lg px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
                 >
                   저장 안 함, 닫기
                 </button>

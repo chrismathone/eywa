@@ -117,7 +117,7 @@ export default async function WithdrawalDetailPage({
           </div>
           <p className="text-muted-foreground num text-xs">{detail.enrollmentHistory.length}건</p>
         </header>
-        <section className="bg-card border-border rounded-lg border">
+        <section className="bg-card border-border rounded-2xl border">
         {detail.enrollmentHistory.length === 0 ? (
           <div className="text-muted-foreground px-5 py-8 text-center text-sm">수강 기록이 없습니다</div>
         ) : (
@@ -170,7 +170,7 @@ function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="bg-card border-border space-y-3 rounded-lg border p-5">
+    <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
       <h3 className="eyebrow inline-flex items-center gap-1.5">
         {icon}
         {title}

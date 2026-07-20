@@ -34,7 +34,7 @@ export function RefreshPlanButton({ period }: { period: string }) {
           else router.refresh();
         })
       }
-      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition disabled:opacity-50"
+      className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition disabled:opacity-50"
       title="시간표·수강 기간·공휴일 기준으로 반별 계획 회차를 다시 계산합니다 (확정된 값은 유지)"
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
@@ -105,7 +105,7 @@ function ClassBatch({ period, group, catalog }: { period: string; group: ClassGr
       <button
         type="submit"
         disabled={pending}
-        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition disabled:opacity-50"
+        className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition disabled:opacity-50"
       >
         {pending ? <Loader2 className="size-3 animate-spin" /> : null}이 반 일괄 확정
       </button>
@@ -212,7 +212,7 @@ function TermRow({ r, catalog }: { r: Row; catalog: Catalog }) {
           <button
             type="submit"
             form={fid}
-            className="bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-xs font-bold"
+            className="bg-primary text-primary-foreground rounded-lg px-2.5 py-1 text-xs font-bold"
           >
             확정
           </button>
@@ -247,7 +247,7 @@ export function SessionTermGroups({
   period: string;
 }) {
   return (
-    <div className="border-border overflow-x-auto rounded-lg border">
+    <div className="border-border overflow-x-auto rounded-2xl border">
       <table className="w-full min-w-[860px] table-fixed text-sm">
         <colgroup>
           <col className="w-[7%]" />

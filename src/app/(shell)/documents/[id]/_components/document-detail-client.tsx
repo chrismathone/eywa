@@ -56,7 +56,7 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
 
   if (editing) {
     return (
-      <form action={formAction} className="bg-card border-line space-y-4 rounded-md border p-4">
+      <form action={formAction} className="bg-card border-line space-y-4 rounded-2xl border p-4">
         <input type="hidden" name="id" value={doc.id} />
         <div className="space-y-1.5">
           <span className="text-foreground block text-sm font-medium">제목 *</span>
@@ -116,14 +116,14 @@ export function DocumentDetailClient({ doc, canWrite }: { doc: DocumentDetailDat
       </div>
 
       {doc.kind === "file" ? (
-        <div className="bg-card border-line rounded-md border p-4">
+        <div className="bg-card border-line rounded-2xl border p-4">
           <p className="text-text-dim text-sm">
             원본 파일명: <span className="text-foreground font-medium">{doc.fileName ?? "—"}</span>
           </p>
           {doc.description ? <p className="text-text-dim mt-2 text-sm whitespace-pre-wrap">{doc.description}</p> : null}
         </div>
       ) : (
-        <div className="bg-card border-line rounded-md border p-4">
+        <div className="bg-card border-line rounded-2xl border p-4">
           {doc.description ? <p className="text-text-faint mb-3 text-xs">{doc.description}</p> : null}
           <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{doc.body}</p>
         </div>

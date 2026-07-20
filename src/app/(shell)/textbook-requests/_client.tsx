@@ -186,13 +186,13 @@ export function TextbookRequestClient({
       </header>
 
       {students.length === 0 ? (
-        <p className="text-text-dim border-line rounded-md border p-4 text-[13px]">
+        <p className="text-text-dim border-line rounded-2xl border p-4 text-[13px]">
           담당 학생이 없어 교재를 요청할 수 없습니다.
         </p>
       ) : (
         <form action={formAction} className="grid gap-6 lg:grid-cols-[minmax(320px,2fr)_minmax(0,3fr)] lg:items-start">
           {/* 좌: 작성 폼 (ijw 기본 정보 → 교재 내용 섹션 구조) */}
-          <section className="border-line bg-card space-y-5 rounded-md border p-4">
+          <section className="border-line bg-card space-y-5 rounded-2xl border p-4">
             <div className="space-y-3">
               <SectionLabel icon={<User className="size-3.5" />}>기본 정보</SectionLabel>
               <div className="space-y-1.5">
@@ -362,7 +362,7 @@ export function TextbookRequestClient({
                 같은 교재를 {studentIds.length}명에게 발행합니다 — 미리보기는 {firstStudentName} 기준(요청서는 학생별 1장씩 저장)
               </p>
             ) : null}
-            <div className="bg-bg-soft/60 border-line overflow-x-auto rounded-md border p-3 sm:p-6">
+            <div className="bg-bg-soft/60 border-line overflow-x-auto rounded-2xl border p-3 sm:p-6">
               <TextbookRequestCardBody
                 data={{
                   studentName: firstStudentName || null,

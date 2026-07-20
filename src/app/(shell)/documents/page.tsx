@@ -122,7 +122,7 @@ export default async function DocumentsPage({
       <div className="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:items-start lg:gap-4">
         <FolderNav folders={folders} linkedFolders={linkedFolders} activeKey={activeKey} hrefFor={folderHref} />
 
-        <section className="bg-card border-line rounded-md border">
+        <section className="bg-card border-line rounded-2xl border">
           <div className="border-line text-text-dim flex items-center justify-between border-b px-4 py-2 text-xs">
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Files className="size-3.5" />

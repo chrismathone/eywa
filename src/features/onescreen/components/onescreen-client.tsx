@@ -1387,7 +1387,7 @@ export function OneScreenClient({
                   type="button"
                   onClick={() => openNoticeForStudent(selected.id)}
                   title="이 학생 학부모에게 공지(진도·평가 없이 안내글만) 발송"
-                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-md border px-2 py-0.5 text-[11px] font-bold"
+                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-[11px] font-bold"
                 >
                   학부모 공지
                 </button>
@@ -1424,7 +1424,7 @@ export function OneScreenClient({
             </div>
           </>
         ) : (
-          <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-md border p-10 text-sm lg:col-span-2">
+          <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm lg:col-span-2">
             학생을 선택하세요
           </div>
         )}

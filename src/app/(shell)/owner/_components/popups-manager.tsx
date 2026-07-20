@@ -184,7 +184,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       {/* 작성/수정 폼 */}
-      <section className="bg-card border-line shadow-card rounded-md border p-5">
+      <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-foreground text-sm font-bold">{e ? "팝업 수정" : "새 팝업 공지"}</h2>
           {e ? (
@@ -274,7 +274,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
       </section>
 
       {/* 목록 */}
-      <section className="bg-card border-line shadow-card rounded-md border p-5">
+      <section className="bg-card border-line shadow-card rounded-2xl border p-5">
         <p className="micro mb-3">등록된 팝업 ({items.length})</p>
         {items.length === 0 ? (
           <p className="text-text-faint py-6 text-center text-sm">아직 팝업 공지가 없습니다</p>

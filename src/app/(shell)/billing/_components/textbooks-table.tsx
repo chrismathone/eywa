@@ -97,11 +97,11 @@ export function TextbooksTable({
       </div>
 
       {rows.length === 0 ? (
-        <div className="border-line text-text-faint rounded-md border border-dashed px-4 py-10 text-center text-sm">
+        <div className="border-line text-text-faint rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
           교재신청 내역이 없습니다. 위 “교재 신청 등록”으로 추가하세요.
         </div>
       ) : (
-      <div className="bg-card border-line shadow-card overflow-x-auto rounded-md border">
+      <div className="bg-card border-line shadow-card overflow-x-auto rounded-2xl border">
         <table className="w-full text-sm">
           <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
             <tr>

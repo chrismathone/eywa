@@ -15,7 +15,7 @@ import { goalAchievementRate, scorePct } from "@/features/students/grades-meta";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 
 const inputCls =
-  "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-border bg-background text-foreground placeholder:text-muted-foreground w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 function SubmitBtn() {
   const { pending } = useFormStatus();
@@ -38,7 +38,7 @@ function GoalDialog({ studentId, onClose }: { studentId: string; onClose: () => 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <h2 className="text-foreground text-lg font-bold">목표 설정</h2>
           <button
@@ -156,7 +156,7 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
       </header>
 
       {goals.length === 0 ? (
-        <p className="text-muted-foreground border-border rounded-md border border-dashed py-6 text-center text-xs">
+        <p className="text-muted-foreground border-border rounded-2xl border border-dashed py-6 text-center text-xs">
           설정된 목표가 없습니다
         </p>
       ) : (
@@ -165,7 +165,7 @@ export function GoalsSection({ studentId, goals }: { studentId: string; goals: G
             const targetPct = scorePct(g.targetScore, g.maxScore);
             const actualPct = scorePct(g.actualScore, g.actualMaxScore ?? g.maxScore);
             return (
-              <li key={g.id} className="bg-card border-border rounded-md border p-3">
+              <li key={g.id} className="bg-card border-border rounded-2xl border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill color={subjects.colorOf(g.subject)} soft>

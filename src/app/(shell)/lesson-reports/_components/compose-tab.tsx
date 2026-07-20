@@ -25,7 +25,7 @@ export function ComposeTab({
 
   return (
     <div className="space-y-4">
-      <div className="border-line inline-flex rounded-md border p-0.5 text-[13px]">
+      <div className="border-line inline-flex rounded-full border p-0.5 text-[13px]">
         {(
           [
             ["single", "개별 학생"],
@@ -36,7 +36,7 @@ export function ComposeTab({
             key={m}
             type="button"
             onClick={() => setMode(m)}
-            className={`rounded px-3 py-1.5 font-medium ${
+            className={`rounded-full px-3 py-1.5 font-medium ${
               mode === m ? "bg-primary/10 text-primary" : "text-text-dim hover:text-foreground"
             }`}
           >

@@ -93,7 +93,7 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
       ) : (
         <>
           {/* 월 navigator (지출 패널과 동일 스타일) */}
-          <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+          <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
             <div className="flex items-center gap-1.5">
               <Link
                 href={monthHref(shiftPeriod(period, -1))}
@@ -119,12 +119,12 @@ export async function RefundsFace({ sp }: { sp: { page?: string; period?: string
           </div>
 
           {monthRows.length === 0 ? (
-            <div className="bg-card border-line text-text-dim rounded-md border px-4 py-10 text-center text-sm">
+            <div className="bg-card border-line text-text-dim rounded-2xl border px-4 py-10 text-center text-sm">
               {formatPeriod(period)}에 작성된 환불 요청서가 없습니다.
             </div>
           ) : (
             <>
-              <div className="bg-card border-line overflow-x-auto rounded-md border">
+              <div className="bg-card border-line overflow-x-auto rounded-2xl border">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-text-dim border-line border-b text-left text-xs">

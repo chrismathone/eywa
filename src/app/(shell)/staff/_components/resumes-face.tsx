@@ -60,7 +60,7 @@ export async function ResumesFace({ page }: { page: number }) {
           description="'새 이력서'로 종이 서식과 같은 항목을 웹에서 입력하세요 — 인쇄·업로드 단계가 필요 없습니다."
         />
       ) : (
-        <div className="bg-card border-line overflow-x-auto rounded-md border">
+        <div className="bg-card border-line overflow-x-auto rounded-2xl border">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-text-dim border-line border-b text-left text-xs">

@@ -19,7 +19,7 @@ function anomalyLabel(type: string): string {
 function TrackCard({ t }: { t: TrackAnalytics }) {
   const top = t.percentile != null && t.poolSize >= MIN_POOL ? Math.max(0, 100 - t.percentile) : null;
   return (
-    <div className="bg-card border-line shadow-card rounded-md border p-4">
+    <div className="bg-card border-line shadow-card rounded-2xl border p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
@@ -104,7 +104,7 @@ export async function ProgressContainerPanel({ studentId }: { studentId: string 
         <p className="text-text-faint text-[11px]">원스크린 진도 기록 기반 자동 산출</p>
       </header>
       {data.tracks.length === 0 ? (
-        <div className="bg-card border-line text-text-faint rounded-md border p-6 text-center text-sm">
+        <div className="bg-card border-line text-text-faint rounded-2xl border p-6 text-center text-sm">
           아직 진도 기록이 없습니다. 원스크린에서 진도를 입력·저장하면 자동으로 분석됩니다.
         </div>
       ) : (

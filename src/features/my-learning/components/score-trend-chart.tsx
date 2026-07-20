@@ -7,7 +7,7 @@ import type { Session } from "../history";
 const Impl = dynamic(() => import("./score-trend-chart-impl").then((m) => m.ScoreTrendChart), {
   ssr: false,
   loading: () => (
-    <div className="bg-card border-line shadow-card h-[320px] animate-pulse rounded-xl border" />
+    <div className="bg-card border-line shadow-card h-[320px] animate-pulse rounded-2xl border" />
   ),
 });
 

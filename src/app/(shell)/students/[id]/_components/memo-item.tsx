@@ -80,14 +80,14 @@ export function MemoItem({ memo, studentId }: { memo: StudentMemoRow; studentId:
 
   return (
     <li
-      className={`space-y-1.5 rounded-md border px-3 py-2.5 ${
+      className={`space-y-1.5 rounded-2xl border px-3 py-2.5 ${
         memo.pinned ? "border-gold/40 bg-gold/5" : "bg-card border-border"
       }`}
     >
       <header className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <span
-            className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
               CATEGORY_COLOR[memo.category] ?? CATEGORY_COLOR.other
             }`}
           >

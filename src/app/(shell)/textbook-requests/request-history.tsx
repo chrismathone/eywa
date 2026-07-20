@@ -230,7 +230,7 @@ export function RequestHistory({
         setTab(key);
         setPageState(1);
       }}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
+      className={`rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
         tab === key ? "bg-foreground text-background" : "text-text-dim hover:bg-bg-soft"
       }`}
     >
@@ -263,7 +263,7 @@ export function RequestHistory({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-text-faint border-line rounded-md border border-dashed p-6 text-center text-[13px]">
+        <p className="text-text-faint border-line rounded-2xl border border-dashed p-6 text-center text-[13px]">
           {q.trim()
             ? "검색 결과가 없습니다."
             : tab === "incomplete"
@@ -273,7 +273,7 @@ export function RequestHistory({
       ) : (
         // 페이지 넘길 때 페이저가 위로 튀지 않게(클라 state 페이저 표준) 다페이지면 목록 높이 고정.
         <ul
-          className={`divide-line border-line divide-y rounded-md border ${
+          className={`divide-line border-line divide-y rounded-2xl border ${
             totalPages > 1 ? "h-[60vh] overflow-y-auto" : "overflow-hidden"
           }`}
         >

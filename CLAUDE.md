@@ -466,7 +466,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **Editorial 구성 문법 — 새 화면 기본값** (PageHeader·BigStat·PhotoCard·소프트 패널·알약·de-mono 정책, ⚠️ 로컬 Stat/mono·영문 라벨 신설 금지)
 - 창(embed) 안 페이지 헤더 = PageHeader 자동 컴팩트 1행 (⚠️ 새 메뉴 헤더 기본값 — 수제 eyebrow/h1 신설 금지, 콘텐츠 제목은 embedLabel, 2026-07-19)
 - 컬러 토큰 (`src/app/globals.css`)
-- 라운드 (ijw 운영 톤에 맞춰 시안에서 대폭 축소)
+- **라운드 = 역할별 캐논** (⚠️ 표면 2xl · 칩 full · 버튼/인풋 lg(공용 기본 승계) · 모달 xl · 스켈레톤=실표면 동일, 임의 px 금지, 2026-07-20)
 - 타이포
 - Atoms (`src/components/atoms/`)
 - Botanical 아이콘 (22개)

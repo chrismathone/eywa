@@ -140,7 +140,7 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
   }
 
   return (
-    <details className="border-border bg-muted/20 rounded-lg border p-4">
+    <details className="border-border bg-muted/20 rounded-2xl border p-4">
       <summary className="text-foreground inline-flex cursor-pointer items-center gap-1.5 text-sm font-bold">
         <Mic className="text-primary size-4" />
         녹음·음성 파일로 작성 (AI 자동 분석)

@@ -15,7 +15,7 @@ export default function TimetableLoading() {
           기본 창 폭(1040px)에서 **두 줄로 감싸진다**. 한 줄짜리 스켈레톤을 쓰면 데이터가 도착하는 순간
           툴바가 늘어나며 그리드가 아래로 밀려 매번 눈에 띄는 레이아웃 점프가 생겼다(창=iframe이라 자주
           열린다). 두 줄 + 실제와 같은 rounded-xl로 높이를 맞춘다(적대 감사 UX). */}
-      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-xl border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex shrink-0 flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
         <div className="bg-bg-soft h-6 w-36 animate-pulse rounded" />
         <span className="bg-line h-4 w-px" aria-hidden />
         <div className="bg-bg-soft h-6 w-44 animate-pulse rounded" />
@@ -31,7 +31,7 @@ export default function TimetableLoading() {
         </div>
       </div>
       {/* 그리드 스켈레톤 — 실제 그리드 카드와 같은 라운드(rounded-xl)로 전환 시 형태가 안 바뀌게 */}
-      <div className="bg-card border-line shadow-card min-h-0 flex-1 animate-pulse rounded-xl border" />
+      <div className="bg-card border-line shadow-card min-h-0 flex-1 animate-pulse rounded-2xl border" />
     </div>
   );
 }

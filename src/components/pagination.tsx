@@ -27,7 +27,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
  */
 
 // 페이저 스텝 버튼 공통 클래스(서버 Link / 클라 button 양쪽에서 동일 룩으로 복제).
-export const PAGER_STEP_BASE = "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition";
+export const PAGER_STEP_BASE = "inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs transition";
 export const PAGER_STEP_ENABLED = "text-text-dim hover:text-foreground hover:bg-bg-soft";
 export const PAGER_STEP_DISABLED = "text-text-faint cursor-default opacity-40";
 export const PAGER_LABEL = "num text-text-faint whitespace-nowrap px-1 text-xs";

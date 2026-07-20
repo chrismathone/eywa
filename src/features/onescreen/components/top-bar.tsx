@@ -51,7 +51,7 @@ export function OneScreenTopBar({
   ];
   const isToday = date >= todayYmd; // 오늘(또는 이상) = 다음날 이동 막고 '오늘' 버튼 숨김
   return (
-    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2">
+    <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border px-3 py-2">
       {/* 날짜 — 이전/다음 이동 + 날짜 선택(과거 날짜 마감·재발송). report_date=카드 표시일=ClassNote 게시일. */}
       <div className="flex shrink-0 items-center gap-1.5">
         <span className="bg-primary-soft text-primary flex size-7 items-center justify-center rounded-sm">
@@ -94,7 +94,7 @@ export function OneScreenTopBar({
             <button
               type="button"
               onClick={() => onDateChange(todayYmd)}
-              className="border-line text-primary hover:bg-bg-soft ml-1 rounded-md border px-1.5 py-0.5 text-[11px] font-bold"
+              className="border-line text-primary hover:bg-bg-soft ml-1 rounded-lg border px-1.5 py-0.5 text-[11px] font-bold"
             >
               오늘
             </button>
@@ -169,7 +169,7 @@ export function OneScreenTopBar({
         </div>
         {makeupAdder}
         {/* AI 멘트 모드(내 계정) — 학원 기본 / 단일 A / 2문단 B. 강사별 저장(users.report_notice_mode). */}
-        <div className="border-line flex items-center rounded-md border p-0.5" title="AI 자동작성 멘트 문단 구성(내 계정)">
+        <div className="border-line flex items-center rounded-full border p-0.5" title="AI 자동작성 멘트 문단 구성(내 계정)">
           {noticeOptions.map((o) => {
             const on = noticeMode === o.value;
             return (
@@ -178,7 +178,7 @@ export function OneScreenTopBar({
                 type="button"
                 onClick={() => onNoticeMode(o.value)}
                 aria-pressed={on}
-                className={`rounded-sm px-1.5 py-1 text-[11px] font-bold transition ${
+                className={`rounded-full px-1.5 py-1 text-[11px] font-bold transition ${
                   on ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
                 }`}
               >
@@ -189,14 +189,14 @@ export function OneScreenTopBar({
         </div>
         <span className="bg-line h-5 w-px" aria-hidden />
         {/* 카드 ↔ 표(스프레드시트) ↔ 발송 현황 ↔ 지난 보고서 뷰 전환 */}
-        <div className="border-line flex items-center rounded-md border p-0.5">
+        <div className="border-line flex items-center rounded-full border p-0.5">
           {(["card", "grid", "status", "history", "notice"] as const).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => onView(v)}
               aria-pressed={view === v}
-              className={`rounded-sm px-2 py-1 text-[11px] font-bold transition ${
+              className={`rounded-full px-2 py-1 text-[11px] font-bold transition ${
                 view === v ? "bg-primary text-primary-foreground" : "text-text-dim hover:bg-bg-soft"
               }`}
             >

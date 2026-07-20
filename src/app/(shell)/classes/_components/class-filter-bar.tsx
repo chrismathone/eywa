@@ -191,7 +191,7 @@ export function ClassFilterBar({
   }
 
   return (
-    <div className="bg-card border-line shadow-card rounded-md border px-4 py-3">
+    <div className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         {/* 과목 */}
         <div className="flex items-center gap-1.5">
@@ -243,7 +243,7 @@ export function ClassFilterBar({
             }}
             className="flex items-center gap-2"
           >
-            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-sm border px-2.5 py-1.5">
+            <div className="border-line bg-bg-soft text-text-dim flex items-center gap-2 rounded-lg border px-2.5 py-1.5">
               <EyIcon name="search" size={13} />
               <input
                 type="search"

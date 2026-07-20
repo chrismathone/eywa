@@ -110,7 +110,7 @@ export default async function RetentionBoardPage({
         <Stat label="매출 위험" value={formatWonShort(stats.revenueRisk)} icon={TrendingDown} color="rose" />
       </section>
 
-      <div className="bg-card border-line shadow-card space-y-3 rounded-md border px-4 py-3">
+      <div className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="micro mr-1">등급</span>
@@ -118,7 +118,7 @@ export default async function RetentionBoardPage({
               <Link
                 key={f.key}
                 href={buildHref({ ...state, level: f.key })}
-                className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${
+                className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${
                   state.level === f.key
                     ? "border-foreground bg-foreground text-background font-medium"
                     : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"

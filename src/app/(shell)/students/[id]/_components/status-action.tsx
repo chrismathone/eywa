@@ -58,7 +58,7 @@ export function StatusAction({
         <ChevronDown className="size-3.5" />
       </Button>
       {menuOpen ? (
-        <div className="bg-card border-border absolute right-0 z-30 mt-1 w-44 rounded-md border py-1 shadow-lg">
+        <div className="bg-card border-border absolute right-0 z-30 mt-1 w-44 rounded-lg border py-1 shadow-lg">
           {actions.map((a) => (
             <button
               key={a.target}

@@ -26,7 +26,7 @@ export function TimetableColorToggle() {
           onClick={() => setMode(o.key)}
           title={o.title}
           aria-pressed={mode === o.key}
-          className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs transition ${
+          className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs transition ${
             mode === o.key
               ? "border-primary bg-primary text-primary-foreground font-medium"
               : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"

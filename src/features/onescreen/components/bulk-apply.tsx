@@ -70,14 +70,14 @@ export function BulkApplyPopover({
     >
       <Popover.Trigger
         disabled={disabled}
-        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-md px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
+        className="text-text-dim hover:bg-bg-soft hover:text-foreground data-[popup-open]:bg-bg-soft inline-flex h-8 items-center rounded-lg px-2.5 text-[12.5px] font-bold transition-colors disabled:pointer-events-none disabled:opacity-50"
         title="선택(없으면 표시 전체) 행에 같은 값을 한 번에 채우기"
       >
         값 일괄 입력
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-md border p-3 text-[12px] outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-[12px] outline-none">
             <p className="text-text-dim text-[11px]">
               대상 <span className="text-foreground font-bold">{targetCount}</span>행
               {selectedCount ? " (선택 행)" : " (표시 전체)"} · 채운 필드만 적용됩니다
@@ -108,7 +108,7 @@ export function BulkApplyPopover({
               onChange={(e) => setTextbook(e.target.value)}
               placeholder="교재명 (비우면 적용 안 함)"
               aria-label="일괄 교재명"
-              className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+              className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
             />
             <input
               type="text"
@@ -116,7 +116,7 @@ export function BulkApplyPopover({
               onChange={(e) => setHomeworkToday(e.target.value)}
               placeholder="오늘 과제 (비우면 적용 안 함)"
               aria-label="일괄 오늘 과제"
-              className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-[12px] outline-none"
+              className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-[12px] outline-none"
             />
             <div className="flex items-center justify-between">
               <label className="text-text-dim flex cursor-pointer items-center gap-1 text-[11px]">

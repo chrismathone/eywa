@@ -16,7 +16,7 @@ function ymd(iso: string): string {
 /** 등록상담 목록(테이블) 뷰 — 칸반의 대안. 정렬은 상담일 내림차순(쿼리), 행 클릭=상세 창. ijw 테이블 뷰 이식. */
 export function EnrollmentTable({ rows }: { rows: ConsultationListRow[] }) {
   return (
-    <DragScrollArea className="bg-card border-line shadow-card rounded-md border">
+    <DragScrollArea className="bg-card border-line shadow-card rounded-2xl border">
       <table className="w-full text-sm [&_td]:whitespace-nowrap">
         <thead className="border-line text-text-dim border-b text-left text-xs [&_th]:whitespace-nowrap">
           <tr>

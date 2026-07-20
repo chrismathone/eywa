@@ -12,7 +12,7 @@ import { generateReportComment } from "@/features/onescreen/server/actions";
 import type { NoticeClassOption } from "@/features/report-admin/server/notice-actions";
 import { sendBulkAdminReports } from "@/features/report-admin/server/compose-actions";
 
-const INPUT = "border-border bg-card text-foreground rounded-md border px-2.5 py-1.5 text-sm w-full";
+const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
 const LABEL = "text-text-dim text-[11px] font-medium";
 
 export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClassOption[]; sendEnabled: boolean }) {
@@ -128,7 +128,7 @@ export function BulkComposeFace({ classes, sendEnabled }: { classes: NoticeClass
   }
 
   return (
-    <section className="bg-card border-line shadow-card space-y-4 rounded-lg border px-5 py-4">
+    <section className="bg-card border-line shadow-card space-y-4 rounded-2xl border px-5 py-4">
       <div>
         <h2 className="text-foreground text-[15px] font-bold">반 단위 대량 발송</h2>
         <p className="text-text-faint text-[12px]">

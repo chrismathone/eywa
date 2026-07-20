@@ -48,7 +48,7 @@ export function WorkspaceOnboarding() {
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-4 flex items-center justify-between">
-          <span className="bg-gold-soft text-gold inline-flex items-center gap-1.5 rounded-sm px-2 py-1">
+          <span className="bg-gold-soft text-gold inline-flex items-center gap-1.5 rounded-full px-2 py-1">
             <EyIcon name="sparkle" size={13} />
             <span className="micro">워크스페이스</span>
           </span>
@@ -56,7 +56,7 @@ export function WorkspaceOnboarding() {
             type="button"
             aria-label="닫기"
             onClick={dismiss}
-            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-7 items-center justify-center rounded-[3px] transition"
+            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-7 items-center justify-center rounded-xs transition"
           >
             <X size={16} strokeWidth={1.8} />
           </button>
@@ -86,7 +86,7 @@ export function WorkspaceOnboarding() {
         <button
           type="button"
           onClick={dismiss}
-          className="bg-primary shadow-primary-glow hover:bg-primary/90 mt-6 w-full rounded-md py-2.5 text-sm font-bold text-white transition"
+          className="bg-primary shadow-primary-glow hover:bg-primary/90 mt-6 w-full rounded-lg py-2.5 text-sm font-bold text-white transition"
         >
           시작하기
         </button>

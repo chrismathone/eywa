@@ -59,7 +59,7 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">수강료 단가표</p>
@@ -160,10 +160,10 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
           <form action={delAction} className="border-line mt-3 flex items-center justify-end gap-2 border-t pt-3">
             <input type="hidden" name="id" value={item.id} />
             <span className="text-danger mr-auto text-xs">정말 삭제할까요?</span>
-            <button type="button" onClick={() => setConfirmDel(false)} className="border-line rounded-md border px-2.5 py-1 text-xs">
+            <button type="button" onClick={() => setConfirmDel(false)} className="border-line rounded-lg border px-2.5 py-1 text-xs">
               취소
             </button>
-            <button type="submit" className="bg-danger rounded-md px-2.5 py-1 text-xs text-white">
+            <button type="submit" className="bg-danger rounded-lg px-2.5 py-1 text-xs text-white">
               예, 삭제
             </button>
           </form>
@@ -208,7 +208,7 @@ export function TuitionPricesTable({ rows }: { rows: TuitionCatalogRow[] }) {
           description="과목 단가·할인 프리셋을 등록하면 계산기에서 골라 자동으로 채워집니다."
         />
       ) : (
-        <div className="bg-card border-line shadow-card overflow-auto rounded-md border">
+        <div className="bg-card border-line shadow-card overflow-auto rounded-2xl border">
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>

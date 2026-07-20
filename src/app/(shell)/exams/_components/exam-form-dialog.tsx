@@ -16,7 +16,7 @@ export type ExamClassOption = { id: string; className: string; subject: string }
 export type ExamScopeValue = { type: "class" | "grade" | "academy"; classIds?: string[]; grades?: string[] } | null;
 
 const inputCls =
-  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "border-line bg-background text-foreground placeholder:text-text-faint w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 const TYPE_OPTIONS = [
   { value: "weekly", label: "주간" },
@@ -90,7 +90,7 @@ function Dialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border p-6 shadow-lg">
+      <div className="bg-background border-line max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">시험 관리</p>
@@ -182,7 +182,7 @@ function Dialog({
                   key={v}
                   type="button"
                   onClick={() => setScopeType(v)}
-                  className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                  className={`rounded-full border px-2.5 py-1 text-xs transition ${
                     scopeType === v
                       ? "border-foreground bg-foreground text-background font-medium"
                       : "border-line text-text-dim hover:bg-bg-soft"
@@ -202,7 +202,7 @@ function Dialog({
                       key={g}
                       type="button"
                       onClick={() => toggleIn(grades, g, setGrades)}
-                      className={`rounded-sm border px-2 py-0.5 text-xs transition ${
+                      className={`rounded-full border px-2 py-0.5 text-xs transition ${
                         grades.has(g)
                           ? "border-primary bg-primary-soft text-primary font-medium"
                           : "border-line text-text-dim hover:bg-bg-soft"
@@ -225,7 +225,7 @@ function Dialog({
                         key={c.id}
                         type="button"
                         onClick={() => toggleIn(classIds, c.id, setClassIds)}
-                        className={`rounded-sm border px-2 py-0.5 text-xs transition ${
+                        className={`rounded-full border px-2 py-0.5 text-xs transition ${
                           classIds.has(c.id)
                             ? "border-primary bg-primary-soft text-primary font-medium"
                             : "border-line text-text-dim hover:bg-bg-soft"

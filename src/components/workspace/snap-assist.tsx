@@ -85,7 +85,7 @@ export function SnapAssist() {
             type="button"
             aria-label="닫기"
             onClick={dismissAssist}
-            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-5 items-center justify-center rounded-[3px] transition"
+            className="text-text-dim hover:bg-line-strong/30 hover:text-foreground flex size-5 items-center justify-center rounded-xs transition"
           >
             <X size={13} strokeWidth={1.8} />
           </button>

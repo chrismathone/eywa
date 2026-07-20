@@ -144,8 +144,8 @@ function MiniSubmit({ label, tone }: { label: string; tone: "primary" | "ghost" 
       disabled={pending}
       className={
         tone === "primary"
-          ? "bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium disabled:opacity-50"
-          : "border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs disabled:opacity-50"
+          ? "bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-50"
+          : "border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs disabled:opacity-50"
       }
     >
       {pending ? <Loader2 className="size-3 animate-spin" /> : null}

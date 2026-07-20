@@ -57,16 +57,16 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
   return (
     <div className="space-y-4">
       {/* 월 navigator + 카테고리 필터 */}
-      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+      <div className="bg-card border-line shadow-card flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3">
         <div className="flex items-center gap-1.5">
           <Link href={hrefFor({ period: prevPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="이전 달"><EyIcon name="chevronLeft" size={14} /></Link>
           <span className="text-foreground min-w-[90px] text-center text-[13px] font-bold">{formatPeriod(period)}</span>
           <Link href={hrefFor({ period: nextPeriod })} className="border-line hover:bg-bg-soft inline-flex size-7 items-center justify-center rounded-sm border" aria-label="다음 달"><EyIcon name="chevronRight" size={14} /></Link>
         </div>
         <div className="scrollbar-thin flex items-center gap-1 overflow-x-auto">
-          <Link href={hrefFor({ cat: "all" })} className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${cat === "all" ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>전체</Link>
+          <Link href={hrefFor({ cat: "all" })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === "all" ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>전체</Link>
           {CATS.map((c) => (
-            <Link key={c} href={hrefFor({ cat: c })} className={`shrink-0 rounded-sm border px-2 py-0.5 text-xs transition ${cat === c ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>{c}</Link>
+            <Link key={c} href={hrefFor({ cat: c })} className={`shrink-0 rounded-full border px-2 py-0.5 text-xs transition ${cat === c ? "border-foreground bg-foreground text-background font-medium" : "border-line text-text-dim hover:text-foreground hover:bg-bg-soft"}`}>{c}</Link>
           ))}
         </div>
         {months.length > 0 ? (
@@ -96,7 +96,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
           </section>
 
           {/* 카테고리 분포 — primary 통화 기준(통화별 합계는 위 KPI 참조) */}
-          <section className="bg-card border-line shadow-card rounded-md border p-5">
+          <section className="bg-card border-line shadow-card rounded-2xl border p-5">
             <div className="mb-3 flex items-baseline justify-between gap-2">
               <h2 className="text-foreground text-sm font-bold">분류별 지출</h2>
               {multiCurrency ? (
@@ -151,7 +151,7 @@ function Kpi({
     blue: "bg-blue-soft text-blue",
   } as const;
   return (
-    <article className="bg-card border-line shadow-card rounded-md border p-5">
+    <article className="bg-card border-line shadow-card rounded-2xl border p-5">
       <header className="flex items-center justify-between">
         <p className="micro">{label}</p>
         <span className={`flex size-[26px] items-center justify-center rounded-sm ${ICON_BG[color]}`}>

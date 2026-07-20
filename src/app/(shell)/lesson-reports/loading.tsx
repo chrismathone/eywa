@@ -11,9 +11,9 @@ export default function LessonReportsLoading() {
         <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded [.embed-main_&]:hidden" />
         <div className="bg-bg-soft mt-2 h-4 w-full max-w-xl animate-pulse rounded [.embed-main_&]:mt-0" />
       </header>
-      <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-lg border" />
-      <div className="bg-card border-line shadow-card h-52 animate-pulse rounded-lg border" />
-      <div className="bg-card border-line shadow-card h-72 animate-pulse rounded-lg border" />
+      <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-2xl border" />
+      <div className="bg-card border-line shadow-card h-52 animate-pulse rounded-2xl border" />
+      <div className="bg-card border-line shadow-card h-72 animate-pulse rounded-2xl border" />
     </div>
   );
 }

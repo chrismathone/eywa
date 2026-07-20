@@ -4,7 +4,7 @@ import type { CurriculumItem } from "../history";
 /** 과목별 진도 진척 — done/total강 + 진행 바 */
 export function CurriculumProgress({ curriculum }: { curriculum: CurriculumItem[] }) {
   return (
-    <section className="bg-card border-line shadow-card rounded-xl border p-5">
+    <section className="bg-card border-line shadow-card rounded-2xl border p-5">
       <h2 className="text-foreground text-[15px] font-bold">과목별 진도 진척</h2>
       <div className="mt-3 space-y-3">
         {curriculum.map((c) => {

@@ -14,12 +14,12 @@ export default function TodayLoading() {
       <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-2xl border" />
       {/* 실제 카드와 같은 md 2열 / xl 3열 다단 리듬 */}
       <div className="columns-1 gap-4 md:columns-2 xl:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
-        <div className="bg-card border-line shadow-card h-[260px] animate-pulse rounded-lg border" />
-        <div className="bg-card border-line shadow-card h-36 animate-pulse rounded-lg border" />
-        <div className="bg-card border-line shadow-card h-36 animate-pulse rounded-lg border" />
-        <div className="bg-card border-line shadow-card h-28 animate-pulse rounded-lg border" />
-        <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-lg border" />
-        <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-lg border" />
+        <div className="bg-card border-line shadow-card h-[260px] animate-pulse rounded-2xl border" />
+        <div className="bg-card border-line shadow-card h-36 animate-pulse rounded-2xl border" />
+        <div className="bg-card border-line shadow-card h-36 animate-pulse rounded-2xl border" />
+        <div className="bg-card border-line shadow-card h-28 animate-pulse rounded-2xl border" />
+        <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-2xl border" />
+        <div className="bg-card border-line shadow-card h-40 animate-pulse rounded-2xl border" />
       </div>
     </div>
   );

@@ -485,7 +485,7 @@ function DayEditPopover({
           <button
             type="button"
             onClick={onCancel}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs font-medium transition"
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs font-medium transition"
           >
             취소
           </button>
@@ -493,7 +493,7 @@ function DayEditPopover({
             type="button"
             onClick={() => onApply(toDays)}
             disabled={none}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-md px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             적용
           </button>
@@ -616,7 +616,7 @@ function ClassPickPopover({
           <button
             type="button"
             onClick={onCancel}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs font-medium transition"
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs font-medium transition"
           >
             취소
           </button>
@@ -624,7 +624,7 @@ function ClassPickPopover({
             type="button"
             onClick={() => picked && onApply(picked, toDays)}
             disabled={!picked || noDay}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-md px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             이동
           </button>
@@ -681,7 +681,7 @@ function EndEnrollmentConfirm({
             type="button"
             onClick={onCancel}
             disabled={ending}
-            className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
+            className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50"
           >
             취소
           </button>
@@ -690,7 +690,7 @@ function EndEnrollmentConfirm({
             autoFocus
             onClick={onConfirm}
             disabled={ending}
-            className="bg-danger hover:bg-danger/90 rounded-md px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
+            className="bg-danger hover:bg-danger/90 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition disabled:opacity-50"
           >
             {ending ? "처리 중…" : "수강 종료"}
           </button>
@@ -725,7 +725,7 @@ export function TimetableEditControls() {
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 transition"
+          className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition"
         >
           <Pencil className="size-3" />
           편집
@@ -754,7 +754,7 @@ export function TimetableEditControls() {
             type="button"
             onClick={save}
             disabled={saving}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
             저장
@@ -763,7 +763,7 @@ export function TimetableEditControls() {
             type="button"
             onClick={cancel}
             disabled={saving}
-            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 transition disabled:opacity-50"
+            className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition disabled:opacity-50"
           >
             <X className="size-3" />
             취소

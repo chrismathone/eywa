@@ -106,7 +106,7 @@ export function NoticeFace({
 
   return (
     <div className="space-y-6">
-      <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+      <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
         <div className="mb-3">
           <h2 className="text-foreground text-[15px] font-bold">반 공지 발송</h2>
           <p className="text-text-faint text-[12px]">
@@ -142,7 +142,7 @@ export function NoticeFace({
                 onChange={(e) => setBody(e.target.value)}
                 disabled={!canSend}
                 placeholder="공지 내용 (예: 다음 주 월요일은 학원 휴원입니다.)"
-                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-md border p-3 text-[14px] outline-none"
+                className="border-line bg-card focus:border-primary min-h-[180px] w-full flex-1 resize-y rounded-lg border p-3 text-[14px] outline-none"
               />
             </div>
 
@@ -211,7 +211,7 @@ export function NoticeFace({
       </section>
 
       {/* 발송 이력 */}
-      <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+      <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
         <h2 className="text-foreground mb-3 text-[15px] font-bold">공지 발송 이력</h2>
         {rows.length === 0 ? (
           <p className="text-text-faint text-[13px]">아직 발송한 공지가 없습니다.</p>

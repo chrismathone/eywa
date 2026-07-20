@@ -93,7 +93,7 @@ export default async function AttendanceByDatePage({
 
       {/* 처리 현황 — 오늘 어느 반이 출결 미입력인지 추적(예정 학생 vs 기록). ijw DailyAttendance 이식. */}
       {processing.length > 0 ? (
-        <section className="bg-card border-line space-y-4 rounded-lg border p-5">
+        <section className="bg-card border-line space-y-4 rounded-2xl border p-5">
           <header className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="eyebrow">처리 현황</p>
@@ -168,7 +168,7 @@ export default async function AttendanceByDatePage({
         />
       ) : records.length === 0 ? null : (
         <>
-          <div className="bg-card border-line grid grid-cols-2 gap-4 rounded-lg border p-5 sm:grid-cols-4">
+          <div className="bg-card border-line grid grid-cols-2 gap-4 rounded-2xl border p-5 sm:grid-cols-4">
             <Summary label="전체" value={total} unit="건" />
             <Summary label="출석" value={present} unit="건" highlight="text-primary" suffix={`${rate.toFixed(1)}%`} />
             <Summary label="결석" value={absent} unit="건" highlight="text-danger" />

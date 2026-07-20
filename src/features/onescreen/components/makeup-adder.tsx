@@ -43,19 +43,19 @@ export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger className="border-line text-text-dim hover:bg-bg-soft rounded-md border px-2.5 py-1 text-[12px] font-bold">
+      <Popover.Trigger className="border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1 text-[12px] font-bold">
         + 보강 학생 추가
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card w-[280px] rounded-md border p-2 text-[12px] outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card w-[280px] rounded-lg border p-2 text-[12px] outline-none">
             <input
               autoFocus
               value={q}
               onChange={(e) => runSearch(e.target.value)}
               placeholder="학생 이름 검색"
               aria-label="보강 학생 이름 검색"
-              className="border-line bg-bg-soft focus:border-primary h-8 w-full rounded-sm border px-2 outline-none"
+              className="border-line bg-bg-soft focus:border-primary h-8 w-full rounded-lg border px-2 outline-none"
             />
             <div className="scrollbar-thin mt-1.5 max-h-64 overflow-y-auto">
               {loading ? (
@@ -74,7 +74,7 @@ export function MakeupAdder({ onAdd }: { onAdd: (studentId: string) => void }) {
                       setOpen(false);
                       setQ("");
                     }}
-                    className="hover:bg-bg-soft flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left"
+                    className="hover:bg-bg-soft flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left"
                   >
                     <span className="text-foreground font-bold">{s.name}</span>
                     <span className="text-text-faint text-[11px]">{s.label}</span>

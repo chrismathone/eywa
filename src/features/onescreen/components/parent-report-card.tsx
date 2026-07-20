@@ -24,7 +24,7 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="bg-card border-line shadow-card rounded-lg border px-5 py-4">
+    <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       {/* 섹션 제목: 13px→26px(2배)·faint→dim(더 진한 회색) — 2026-07-10 원장 요청. */}
       <h2 className="text-text-dim mb-3 text-[26px] font-bold">{title}</h2>
       {children}

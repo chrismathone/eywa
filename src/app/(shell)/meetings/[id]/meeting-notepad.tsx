@@ -12,7 +12,7 @@ function SaveBtn({ dirty }: { dirty: boolean }) {
     <button
       type="submit"
       disabled={pending || !dirty}
-      className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-bold transition disabled:opacity-50"
+      className="bg-primary text-primary-foreground inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold transition disabled:opacity-50"
     >
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
       메모 저장
@@ -51,7 +51,7 @@ export function MeetingNotepad({
   useEditPresence(`meeting:${meetingId}`, dirty);
 
   return (
-    <section className="bg-card border-border space-y-3 rounded-lg border p-5">
+    <section className="bg-card border-border space-y-3 rounded-2xl border p-5">
       <header className="flex items-center justify-between gap-3">
         <div className="inline-flex items-center gap-2">
           <FileText className="text-text-dim size-4 shrink-0" />

@@ -11,7 +11,7 @@ export function KpiGrid({ stat }: { stat: LearningStats }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {items.map((it) => (
-        <div key={it.k} className="bg-card border-line shadow-card rounded-xl border p-4">
+        <div key={it.k} className="bg-card border-line shadow-card rounded-2xl border p-4">
           <p className="micro text-text-faint">{it.k}</p>
           <p className="mt-2 flex items-baseline gap-0.5">
             <span className="tabular text-foreground text-[23px] leading-none font-bold">{it.v}</span>

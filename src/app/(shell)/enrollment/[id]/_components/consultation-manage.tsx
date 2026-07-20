@@ -78,7 +78,7 @@ function OutcomeDialog({ id, current, onClose }: { id: string; current: string; 
                 disabled={disabled}
                 onClick={() => setSelected(o.value)}
                 title={disabled ? "배정 완료된 상담은 이전 단계로 되돌릴 수 없습니다" : undefined}
-                className={`rounded-sm border px-2.5 py-1 text-xs transition ${
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
                   disabled
                     ? "border-line text-text-faint cursor-not-allowed opacity-40"
                     : selected === o.value
