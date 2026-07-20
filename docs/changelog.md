@@ -16,6 +16,10 @@
   description 보강(title 폴백=타이틀바 중복) · 학원설정 짧은 embedLabel(110자 안내문 다중 줄 감김) · 컴팩트
   actions 래퍼 shrink/wrap 허용(문서 툴바 좁은 창 가로 오버플로) · lesson-reports/timetable 스켈레톤을 동일
   변형으로 컴팩트/풀 높이 정합. 규칙 = design-conventions "창(embed) 안 페이지 헤더".
+- **2차 조임(07-20 원장 "여전히 많은 공간")**: 시간표는 창에서 **헤더 줄 통째 접기** — 학생 집계(StudentTally
+  공용 추출)를 툴바 우측으로 내림(리스킨 전 배치의 창 한정 회귀). 툴바 엑셀·시트 버튼을 ml-auto 스페이서
+  **앞**으로 이동(스페이서 뒤에 있으면 넓은 창에서도 상시 둘째 줄 강제) · 임베드 <main> pt-4/5→pt-3 ·
+  임베드 페이지 gap-4→3. 실측: 창 그리드 시작 ~255px→~100px.
 
 ### Injaewon Editorial 전면 디자인 리팩토링 (2026-07-19) — ✅ tsc0/lint0/vitest1654/build✓ · 로직 무접촉
 **골: "상용 사이트 대비 허접함" 해소** — injaewon.blog의 구성 문법(eyebrow→헤드라인 위계·빅 스탯·소프트 패널·

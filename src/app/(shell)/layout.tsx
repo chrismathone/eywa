@@ -48,7 +48,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
-          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-3 pt-4 lg:px-6 lg:pt-5 [scrollbar-gutter:stable]">
+          {/* pt-3(창 전용) — 타이틀바가 바로 위에 있어 상단 여백을 조인다(2026-07-20 세로 회수). */}
+          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-3 pt-3 lg:px-6 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
             {children}
           </main>
